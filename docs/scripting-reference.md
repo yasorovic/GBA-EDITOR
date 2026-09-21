@@ -72,6 +72,41 @@ C'est ce qui remplace une cascade `if sel == 1 then get_actor("Unit1") elseif �
 
 Le catalogue **Gameplay**, **Scripting** et **Hardware** du panneau **API** est la référence des fonctions du moteur. Il est tenu à jour par l'éditeur.
 
+## Variables exposées (`exports`)
+
+Une table `exports` déclarée au premier niveau expose des variables **réglables par instance** depuis l'inspecteur. Chaque acteur posé du même script garde sa propre valeur — un seul `Patrol.lua` sur trois gardes, chacun sa vitesse, au lieu de trois scripts jumeaux.
+
+```lua
+exports = {
+    speed = { type = "int",  default = 5 },
+    angry = { type = "bool", default = false },
+    team  = { type = "enum", default = "RED", values = {"RED", "BLUE"} },
+}
+
+function on_update()
+    self.position = self.position + vec2(speed, 0)   -- on la LIT comme une variable
+    if angry then speed = speed + 1 end              -- et on peut la RÉÉCRIRE
+end
+```
+
+- **On l'utilise par son nom nu**, comme n'importe quelle variable : la lire, la réassigner. Sa seule particularité est que sa valeur de départ vient de l'inspecteur, pas du script.
+- **La valeur réglée sur l'instance** l'emporte sur le `default` ; sans réglage, c'est le `default`.
+- **Types réglables par instance : `int`, `float`, `bool`, `enum`** (tous entiers au runtime — un `enum` vaut l'index de son étiquette). Les autres types (`string`, `vec2`/`rect`, les références) sont déclarables mais leur valeur d'instance n'est pas encore prise en compte au build : le `default` s'applique.
+- **Le nom d'un export ne peut pas être** celui d'un champ d'acteur (`position`, `velocity`…), d'une variable globale, ni d'un mot de l'API (`input`, `wait`…) — le build le refuse.
+- **Une variable seulement LUE ne coûte rien** (acteur posé) : le build la fond dans le code. Seule une variable réécrite occupe de la mémoire. Régler `speed` sur dix gardes qui ne font que la lire n'ajoute aucun octet.
+
+### Régler un prefab au spawn
+
+Une instance créée au runtime avec `actor.spawn` n'a pas de fiche éditeur : ses exports se règlent **au moment du spawn**, par une table facultative en 3ᵉ argument.
+
+```lua
+local b = actor.spawn("Bullet", vec2(116, 76), { speed = 8, team = "RED" })
+```
+
+- **Les clés absentes gardent la valeur réglée sur le prefab** (dans l'éditeur), sinon le `default` du script.
+- La table s'écrit **en début de ligne** ou dans un `local x = actor.spawn(...)` — pas au milieu d'une expression.
+- Ses clés doivent être des exports **réglables** (`int`/`bool`/`float`/`enum`) du prefab, et ses valeurs des littéraux. Sur un prefab poolé, chaque instance garde sa propre valeur.
+
 ## Séquences
 
 Une séquence est une fonction `on_sequence_<nom>`. Elle attend avec `wait(frames)` ou `wait_until(condition)`, et avance dans l'ordre de ses lignes.

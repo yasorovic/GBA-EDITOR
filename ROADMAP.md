@@ -377,7 +377,7 @@ jalon, mais référencé par son nom plutôt que par un numéro.
 | L'ouverture d'un projet, et l'écran blanc | 2026-09-13 | **Livré** — [archive](changelog-archive/open-white-screen.md) |
 | Les palettes, rangées avec les assets | 2026-09-18 | **Livré** — [archive](changelog-archive/palettes-in-assets.md) |
 | L'acteur appartient à sa scène | 2026-09-20 | **Livré** — [archive](changelog-archive/actor-scene-local.md) |
-| Les exports de script, câblés au jeu | 2026-09-20 | À ouvrir — conception seule, voir [ci-dessous](#les-exports-de-script-câblés-au-jeu--paramétrer-une-instance) |
+| Les exports de script, câblés au jeu | 2026-09-20 | **Ouvert — posé + poolé livrés (2026-09-21)** : int/float/bool/enum ; valeur d'instance au build (posé, pli read-only vérifié en ROM) et au spawn via table facultative (poolé, `actor.spawn("X", pos, {k=v})`). Reste les autres types (string/refs/vec) + prolongement locals. Voir [ci-dessous](#les-exports-de-script-câblés-au-jeu--paramétrer-une-instance) |
 | Le cache de scène | 2026-09-16 | À ouvrir — voir [ci-dessous](#le-cache-de-scène-rouvrir-une-scène-déjà-visitée-sans-tout-redécoder) |
 | L'écran resynchronisé à sa revisite | 2026-09-18 | **Livré (2026-09-20)** — [archive](changelog-archive/screen-resync-revisit.md) |
 | Undo/redo des sidecars d'éditeur | — | À ouvrir — envisagé pour **V2**, voir [ci-dessous](#undoredo-des-sidecars-déditeur-annuler-la-création-dun-groupe-un-déplacement-de-nœud) |
@@ -420,26 +420,123 @@ donne l'instance.
 - `editor/scripting/api.py` / `checker.py` : la syntaxe de lecture doit être connue et validée.
 - `docs/scripting-reference.md` : documenter la déclaration `exports` et sa lecture.
 
-### À trancher au démarrage
+### Décisions verrouillées (2026-09-20)
 
-- **D1 — Où vivent les valeurs (le fork posé / poolé).** Un acteur POSÉ a son propre `.c`
-  (`actor_<Scène>_<Nom>.c`) : ses valeurs d'export peuvent y être **bakées en constantes** au
-  build, gratuit et sans RAM. Un prefab POOLÉ, lui, partage UN `.c` entre toutes ses instances :
-  ses exports demandent un **stockage runtime par instance** — la piste existe déjà, l'état par
-  instance `g_state_<sym>[]` (v0.17). Deux implémentations pour un même concept, ou on n'ouvre
-  d'abord que le cas posé ?
-- **D2 — Comment une instance SPAWNÉE reçoit ses valeurs.** `actor.spawn("Prefab", pos)` ne passe
-  aucun paramètre aujourd'hui. Les exports d'un poolé viennent-ils d'un défaut unique, d'un
-  réglage au spawn (`actor.spawn` étendu), ou seulement du défaut du script ?
-- **D3 — La syntaxe de lecture côté script.** `self.speed` — mais `self.*` désigne les champs
-  FIXES de la struct `Actor` (position, velocity…), qu'on ne peut pas étendre par script ; une
-  collision de noms est possible. Un namespace dédié (`export.speed`, ou `self.export.speed`) ?
-  Lecture seule, ou l'instance peut-elle réécrire sa valeur ?
-- **D4 — Le sous-ensemble de types au runtime.** `int`/`bool`/`enum` tombent sur un entier
-  (facile). `float` → Q8 ? `string` → clé de table de texte ? `vec2`/`rect` → struct. Les
-  références (`actor_ref`/`scene_ref`/`sfx_ref`) doivent résoudre vers les mêmes constantes que
-  `get_actor`/`SCENE_IDX_*`/`SFX_*` — et un `actor_ref` se résout DANS la scène de l'instance
-  (cohérent avec « L'acteur appartient à sa scène »). Quels types pour un premier jet ?
+- **Un export EST une variable à valeur initiale posée par instance** (tranche D3). L'auteur
+  l'écrit par son **nom nu** (`speed`), et s'en sert comme de n'importe quelle variable — lecture
+  ET réassignation. Sa seule différence avec un `local` : sa valeur de départ vient de l'éditeur
+  (bakée au build), pas du source. Rien de spécial à apprendre côté auteur.
+
+  ```lua
+  exports = { speed = { default = 5 } }   -- déclaré en tête
+  actor.x = actor.x + speed   -- lecture
+  speed = speed + 1           -- réassignation permise
+  ```
+
+- **Le stockage est décidé par l'USAGE, pas par le type d'acteur** (D1 reprécisé). Chaque export est
+  émis comme variable C **initialisée** (`int speed = 5;`) ; l'optimiseur `arm-none-eabi-gcc -O2`
+  fond un export jamais réassigné en immédiat (**zéro RAM/ROM**), et ne garde une case que s'il est
+  muté. On ne code donc PAS nous-mêmes l'analyse d'assignation — le compilateur C la fait. À vérifier
+  au build ROM (comme v0.18) que le pli a bien lieu.
+
+- **Premier jet : acteur POSÉ seulement** (D2 écarté pour l'instant). Un posé a son propre
+  `actor_<Scène>_<Nom>.c`, sa valeur y est triviale à émettre. Le cas POOLÉ (passage de paramètres
+  à `actor.spawn`, stockage par instance `g_state_<sym>[]`) est une tranche suivante — **D2 se
+  rouvre à ce moment-là**, pas maintenant.
+
+- **Collision de noms interdite** (achève D3). Un nom d'export ne peut masquer ni un champ FIXE de la
+  struct `Actor` (`position`, `velocity`…), ni un global, ni un mot du langage. La règle vit dans le
+  `checker` — pas de namespace `export.` imposé à l'auteur, la validation suffit.
+
+- **Types du premier jet : `int` / `bool` / `enum`** (D4), qui tombent tous sur un entier au runtime.
+  `float` (→ Q8), `string` (→ clé de table de texte), `vec2`/`rect`, et les `*_ref`
+  (`actor_ref`/`scene_ref`/`sfx_ref`) sont **reportés** à une tranche suivante, sur cas réel — un
+  `actor_ref` devra alors se résoudre DANS la scène de l'instance (cohérent avec « L'acteur
+  appartient à sa scène »).
+
+### Ordre d'implémentation
+
+1. **Émission des valeurs.** ✅ **Fait.** `lua_compiler._export_inits(actor, script)` résout, par
+   export entier (int/float/bool/enum), l'override d'instance (`ScriptComponent.exports_values`) sinon
+   le `default` → un littéral C (bool→0/1, enum→index). Il lit le **même arbre** (`script.locals`) que
+   le codegen — pas un second parseur du fichier : le parser capte désormais les `values` d'enum sur
+   le `LuaLocal` (`export_values`). Passé au codegen via `CodegenContext.export_inits` ; `_local_decl`
+   l'utilise comme initialiseur prioritaire. Corrige au passage l'enum, qui émettait `0`.
+   Tests : `tests/test_export_values_codegen.py`.
+2. **Résolution du nom.** ✅ **Déjà couvert** par l'émission existante : un export est un local
+   top-level nommé (émis `static int <nom> = …` pour un posé), donc une référence nue `<nom>` dans le
+   corps du script résout vers cette variable sans travail supplémentaire. Reste la SÛRETÉ du nom
+   (collision) — c'est l'étape 3 (checker).
+3. **Checker.** ✅ **Fait.** `_check_export_names` **refuse** (erreur) un nom d'export qui masque un
+   champ fixe d'`Actor`, un global, ou un namespace/fonction d'API — la contrepartie du nom nu. Un
+   type dont la valeur d'instance n'est pas encore câblée (string/refs/composites ; int/float/bool/enum
+   le sont) donne un **avertissement non bloquant** (le défaut du script s'applique), pas un refus —
+   pour ne pas casser un projet existant. Tests dans `tests/test_export_values_codegen.py`.
+4. **Validation build/ROM.** ✅ **Fait (2026-09-21).** Projet test (acteur posé « Flying Note » de
+   MyGame, exports int/int/bool/enum, valeurs d'instance réglées) **compilé et lié en ROM** headless.
+   Le `.c` porte les valeurs d'instance (`speed=7`, `boost=5`, `spin=1`, `dir=1` — enum résolu, plus
+   de « non résolue »). Dans `rom.elf` (`nm`) : `boost` **muté** = vraie variable en IWRAM
+   (`03001228 d boost`) ; `speed`/`spin`/`dir` **lus seulement** = **absents**, fondus en immédiats
+   par gcc -O2, **zéro RAM**. Le pli read-only tient — la préoccupation « une constante prend de la
+   place » est levée en pratique.
+5. **Doc.** ✅ **Fait.** Section « Variables exposées (`exports`) » dans `docs/scripting-reference.md`
+   (déclaration, usage par nom nu, types réglables par instance, règle de nom, coût nul en lecture
+   seule). `api.py` : rien à faire — `exports` est une construction du parser, pas une fonction du
+   catalogue moteur.
+
+### Tranche suivante : le cas poolé (D2, ouverte le 2026-09-21)
+
+Le premier jet ne couvre que l'acteur POSÉ. Un **prefab poolé** partage un `.c` et ses instances
+naissent au runtime par `actor.spawn` — elles n'ont pas de fiche éditeur où régler une valeur. Fait
+clarifiant : une instance de prefab **posée dans une scène est un acteur posé** (`prefab_name` est
+purement informatif, `core/models/scene.py`) — donc déjà couverte. Le cas poolé ne concerne que les
+spawns runtime. **Décidé avec Victor (D2) :**
+
+- **`actor.spawn` accepte une table d'exports FACULTATIVE** : `actor.spawn("Bullet", pos, { speed = 8 })`.
+  C'est l'analogue au spawn du réglage éditeur du posé — une balle rapide vs lente se règle au moment
+  du spawn.
+- **Repli à trois niveaux, par clé.** Pour chaque export d'une instance spawnée : (1) la valeur donnée
+  dans la table de spawn si présente → sinon (2) la valeur d'export du **template prefab**
+  (`Prefab.exports_values`, réglée en éditant le prefab — un `Prefab` EST son acteur racine, il porte
+  donc un `ScriptComponent`) → sinon (3) le `default` du script. Les niveaux (2) et (3) sont connus au
+  **build** et forment l'init du pool ; seul (1) s'écrit au site d'appel du spawn.
+- **Stockage.** Un export réglable au spawn varie d'une instance à l'autre : il doit vivre en **état
+  par instance** (`g_state_<sym>[]`), même s'il n'est que lu — comme un export muté aujourd'hui. Un
+  export d'un prefab poolé jamais réglé au spawn ET jamais muté reste une constante partagée (le
+  défaut template/script, fondu).
+
+**Ordre d'implémentation (poolé) :**
+
+1. **Init du pool depuis le template.** ✅ **Fait (2026-09-21).** Le ctx poolé reçoit
+   `export_inits = _export_inits(pf, pf_ast)` — le même helper, mais sur le `Prefab` (qui porte
+   `exports_values` en tant qu'acteur racine) : l'init résout la valeur du template sinon le `default`,
+   pour un export muté (champ `g_state`) comme lu-seul (constante partagée). Vérifié : unit test
+   `test_poole_init_depuis_le_template` + build ROM headless de TacticsDemo (prefabs poolés) vert.
+2. **`actor.spawn` étendu.** ✅ **Fait (2026-09-21).** 3ᵉ argument facultatif = table `{ clé = valeur }`
+   (le parser retient les clés, nouveau champ `ExprTable.keys` ; `actor.spawn` devient `variadic`). Le
+   codegen émet, après le spawn, un **setter par clé** (`<Scène>_<Prefab>_set_<clé>`, extern, forward-
+   déclaré en tête du spawner) : forme `local b = actor.spawn(...)` ou spawn nu (temporaire). L'accès
+   passe par setter, jamais par `g_state` d'un autre `.c`. Enum/bool résolus en entier.
+3. **Stockage.** ✅ **Fait.** Uniformisation décidée avec Victor : sur un prefab poolé, TOUT export de
+   type réglable est un champ de `g_state` (même lu seulement), plus de constante partagée fondue — pas
+   de scan inter-script. `_emit_locals` force ces exports en état.
+4. **Checker.** ✅ **Fait.** `_check_spawn_table` : table à clés nommées, clés = exports réglables du
+   prefab visé (via `spawn_exports`), valeurs littérales, et **position statement** seulement (début de
+   ligne ou `local x =`, là où le codegen sait écrire).
+5. **Validation build/ROM + doc.** ✅ **Fait.** Build ROM headless (TacticsDemo : `Range` poolé avec
+   export `tint`, `actor.spawn("Range", pos, {tint=3})` dans `cursor.lua`) : le `.c` de Range porte le
+   champ d'état, le setter et l'init template ; celui de Cursor l'extern + l'appelle après le spawn ;
+   **compile + link vert**. Chaque instance écrit son propre slot (`g_state[pool_slot(inst)]`), donc
+   deux spawns = deux valeurs. Doc : `scripting-reference.md` (« Régler un prefab au spawn »).
+
+### Prolongement conditionnel
+
+- **Si les tests exports passent → généraliser le pli read-only aux LOCALS de script.** Périmètre
+  confirmé avec Victor : **locals seulement, globals EXCLUS** (un global est partagé et persistable
+  en SRAM — cf. v0.5/v0.20 — le baker casserait le partage et la sauvegarde). En pratique gcc -O2
+  fait déjà ce pli pour un `local` littéral non réassigné ; le vrai apport propre au chantier reste
+  l'export (valeur injectée au build). À ouvrir comme tranche distincte une fois les exports verts,
+  **pas d'office**.
 
 ---
 

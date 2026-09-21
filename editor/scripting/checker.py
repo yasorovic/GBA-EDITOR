@@ -96,6 +96,9 @@ class BuildContext:
     music_box_trigger_names: list[str] = None  # déclencheurs des MusicBox
     actor_names:  list[str]  = None    # noms des actors de la scène (pour get_actor)
     prefab_names: list[str]  = None    # noms de Prefab du projet (pour actor.spawn)
+    # Exports réglables par prefab (tranche poolé D2) : nom de prefab → { export →
+    # {"type", "values"} }. Sert à valider la table d'`actor.spawn("X", pos, {k=v})`.
+    spawn_exports: dict      = None
     global_names: list[str]  = None    # noms de GlobalVar déclarées dans le projet
     global_types: dict[str, str] = None  # nom -> type ("int"/"bool"/"u8"/"u16"/"s8"/"s16")
     # nom -> nombre de cases (ROADMAP v0.20). 1 = scalaire, ce qu'était toute
@@ -208,6 +211,11 @@ class Checker:
         # Remplis par `check()` — cf. les commentaires là-bas.
         self._sequences: list[str] = []
         self._assigned:  set[str]  = set()
+        # `id()` des appels `actor.spawn(...)` en position STATEMENT (début de
+        # ligne ou `local x = …`), les seules où le codegen sait écrire la table
+        # d'exports (tranche poolé D2). Rempli par `_check_stmt`, lu par
+        # `_check_spawn_table`.
+        self._spawn_stmt_ok: set = set()
 
     def check(self, script: LuaScript, check_event_names: bool = True) -> list[CheckError]:
         if check_event_names:
@@ -233,9 +241,49 @@ class Checker:
         self._assigned = assigned_names(script)
         for loc in script.locals:
             self._check_array_decl(loc.name, loc.value)
+        self._check_export_names(script)
         for fn in script.functions:
             self._check_function(fn, check_event_names)
         return self.errors
+
+    _EXPORT_WIRED_TYPES = frozenset({"int", "float", "bool", "enum"})
+
+    def _check_export_names(self, script: LuaScript) -> None:
+        """Un export est émis comme variable C à NOM NU (chantier « Les exports de
+        script, câblés au jeu »). Son nom ne doit donc rien masquer : ni un champ
+        FIXE de la struct Actor (`self.position`…), ni un global du projet, ni un
+        namespace/fonction de l'API — sinon le C émis casse ou trompe l'auteur.
+        C'est la contrepartie du choix du nom nu (pas de préfixe `export.`).
+
+        Signale aussi, en avertissement, un export d'un type dont la valeur
+        d'instance n'est pas ENCORE câblée au build (le premier jet ne règle par
+        instance que int/bool/float/enum) : le défaut du script s'applique alors.
+        """
+        from .expr_types import _ACTOR_PROP_FIELDS
+        globals_ = set(self.ctx.global_names or [])
+        reserved = self._NAMESPACES | frozenset(RUNTIME_API) | frozenset(VEC_CONSTRUCTORS)
+        for loc in script.locals:
+            if not loc.export_type:
+                continue
+            name = loc.name
+            if name in _ACTOR_PROP_FIELDS:
+                why = f"un champ de la struct Actor (self.{name})"
+            elif name in globals_:
+                why = "une variable globale du projet"
+            elif name in reserved:
+                why = "un mot réservé du langage ou de l'API"
+            else:
+                why = None
+            if why:
+                self.errors.append(CheckError(
+                    "error",
+                    f"export « {name} » : ce nom est déjà {why} — choisis-en un autre."))
+            if loc.export_type not in self._EXPORT_WIRED_TYPES:
+                self.errors.append(CheckError(
+                    "warning",
+                    f"export « {name} » de type '{loc.export_type}' : la valeur réglée "
+                    f"par instance n'est pas encore appliquée au build ; le défaut du "
+                    f"script s'applique."))
 
     def _check_helpers(self, helpers: list[LuaFunction]):
         """Contrat volontairement petit des fonctions privées.
@@ -1037,9 +1085,11 @@ class Checker:
             # descendre exactement comme en expression — ses arguments, et le
             # RÉCEPTEUR d'un `:méthode()` quand c'en est un autre
             # (`ui.get("Cusor"):show()` ne validait rien du tout).
+            self._mark_spawn_stmt(s.call)
             self._check_expr(s.call)
         elif isinstance(s, StmtLocalAssign):
             self._check_array_decl(s.name, s.value)
+            self._mark_spawn_stmt(s.value)
             self._check_expr(s.value)
         elif isinstance(s, StmtAssign):
             self._check_data_write(s.target)
@@ -1427,6 +1477,8 @@ class Checker:
                 self._check_unknown_call(key, e.args)
             else:
                 self._check_args(key, api, e.args)
+            if key == "actor.spawn":
+                self._check_spawn_table(e)
 
     def _check_unknown_call(self, key: str, args: list | None = None):
         """Un appel qui n'est pas dans le catalogue.
@@ -1937,6 +1989,68 @@ class Checker:
                 f"{call_key}('{name}') : prefab '{name}' introuvable dans le projet. "
                 f"Prefabs disponibles : {', '.join(self.ctx.prefab_names) or 'aucun'}.",
             ))
+
+    @staticmethod
+    def _spawn_call_table(call):
+        """La table d'exports d'un `actor.spawn(...)` (3ᵉ arg à clés), ou None."""
+        args = getattr(call, "args", None) or []
+        if (len(args) >= 3 and isinstance(args[2], ExprTable) and args[2].keys):
+            return args[2]
+        return None
+
+    def _mark_spawn_stmt(self, call) -> None:
+        """Note qu'un `actor.spawn(...)` occupe une position STATEMENT autorisée
+        (début de ligne ou `local x = …`) — la table d'exports n'y est permise
+        que là (tranche poolé D2)."""
+        if (isinstance(call, ExprCall) and self._call_key(call.func) == "actor.spawn"
+                and self._spawn_call_table(call) is not None):
+            self._spawn_stmt_ok.add(id(call))
+
+    def _check_spawn_table(self, e) -> None:
+        """Valide la table facultative d'`actor.spawn("X", pos, { clé = valeur })` :
+        position statement, entrées nommées, clés = exports réglables du prefab,
+        valeurs littérales (tranche poolé D2)."""
+        args = getattr(e, "args", None) or []
+        if len(args) < 3:
+            return                      # forme historique à deux arguments
+        tbl = args[2]
+        if not isinstance(tbl, ExprTable) or not tbl.keys:
+            self.errors.append(CheckError(
+                "error",
+                "actor.spawn : le 3e argument est une table de valeurs "
+                "« { vitesse = 8 } », pas un tableau."))
+            return
+        if id(e) not in self._spawn_stmt_ok:
+            self.errors.append(CheckError(
+                "error",
+                "actor.spawn avec des valeurs ne s'écrit qu'en début de ligne ou "
+                "« local x = actor.spawn(...) », pas au milieu d'une expression."))
+        if not isinstance(args[0], ExprString):
+            return                      # prefab non littéral — signalé par ailleurs
+        prefab = args[0].value
+        meta = (self.ctx.spawn_exports or {}).get(prefab) \
+            if self.ctx.spawn_exports is not None else None
+        for key, val in zip(tbl.keys, tbl.items):
+            if key is None:
+                self.errors.append(CheckError(
+                    "error",
+                    "actor.spawn : la table de valeurs n'accepte que des entrées "
+                    "nommées, « { vitesse = 8 } »."))
+                continue
+            if meta is None:
+                continue                # contexte relâché : on ne juge pas les clés
+            if key not in meta:
+                near = ", ".join(sorted(meta)) or "aucun"
+                self.errors.append(CheckError(
+                    "error",
+                    f"actor.spawn(\"{prefab}\", …) : « {key} » n'est pas un export "
+                    f"réglable de {prefab} ({near})."))
+                continue
+            if not isinstance(val, (ExprNumber, ExprBool, ExprString)):
+                self.errors.append(CheckError(
+                    "error",
+                    f"actor.spawn : la valeur de « {key} » doit être un littéral "
+                    f"(nombre, booléen, ou étiquette d'enum entre guillemets)."))
 
     def _check_actor(self, call_key: str, name: str):
         if self.ctx.actor_names is not None and name not in self.ctx.actor_names:

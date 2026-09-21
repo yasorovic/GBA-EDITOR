@@ -28,6 +28,78 @@ def _actor_script(actor: Actor) -> Optional[str]:
     return comp.script if comp and comp.active else None
 
 
+def _export_inits(actor: Actor, script) -> dict:
+    """Pour un acteur POSÉ : map nom d'export → initialiseur C, en préférant la
+    valeur d'INSTANCE (`ScriptComponent.exports_values`) au `default` déclaré dans
+    le script (chantier « Les exports de script, câblés au jeu »).
+
+    Ne couvre que les types entiers du premier jet — int / float / bool / enum,
+    qui tombent tous sur un entier au runtime. `string`, les `*_ref` et les
+    composites (`vec2`/`rect`) sont reportés : ils gardent le traitement par défaut
+    du codegen (`_local_decl`). On lit le MÊME arbre (`script.locals`) que le
+    codegen — jamais un second parseur du fichier, qui pourrait en diverger (les
+    `values` d'un enum sont désormais captées sur le `LuaLocal`, cf. parser)."""
+    from scripting.parser import ExprNumber, ExprBool, ExprString
+    comp = actor.get_component("script")
+    overrides = (getattr(comp, "exports_values", None) or {}) if comp else {}
+    out: dict = {}
+    for loc in script.locals:
+        typ = loc.export_type
+        if typ not in ("int", "float", "bool", "enum"):
+            continue
+        if loc.name in overrides:
+            val = overrides[loc.name]
+        elif isinstance(loc.value, (ExprNumber, ExprBool, ExprString)):
+            val = loc.value.value
+        else:
+            val = None
+        out[loc.name] = _export_c_literal(typ, val, loc.export_values)
+    return out
+
+
+def _spawn_exports_meta(p, prefabs) -> dict:
+    """Métadonnées des exports RÉGLABLES de chaque prefab, pour la table de
+    `actor.spawn("X", pos, {k=v})` (tranche poolé D2) : nom de prefab → { nom
+    d'export → {"type", "values"} }. Lue sur l'arbre du script (même source que
+    le reste), et servie à TOUS les scripts — n'importe lequel peut spawner."""
+    from scripting.parser import parse as lua_parse
+    out: dict = {}
+    for pf in prefabs:
+        sc = next((c for c in pf.components if isinstance(c, ScriptComponent)), None)
+        if not sc or not sc.script:
+            continue
+        sp = p.asset_abs(sc.script)
+        if not sp or not sp.exists() or sp.suffix.lower() != ".lua":
+            continue
+        try:
+            ast = lua_parse(sp.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        meta = {loc.name: {"type": loc.export_type, "values": loc.export_values}
+                for loc in ast.locals
+                if loc.export_type in ("int", "float", "bool", "enum")}
+        if meta:
+            out[pf.name] = meta
+    return out
+
+
+def _export_c_literal(typ: str, val, values: list) -> str:
+    """La valeur d'un export entier, en littéral C. bool → 0/1 ; enum → l'index de
+    l'étiquette dans `values` (0 si introuvable — le moteur est entièrement entier,
+    cf. codegen._EXPORT_C_TYPE) ; int/float → entier (pas de flottant au runtime)."""
+    if typ == "bool":
+        return "1" if val else "0"
+    if typ == "enum":
+        try:
+            return str(values.index(val))
+        except ValueError:
+            return "0"
+    try:
+        return str(int(val))
+    except (TypeError, ValueError):
+        return "0"
+
+
 def _sfx_component_name(owner) -> Optional[str]:
     """Le Sfx du SoundFxComponent d'un actor/prefab, si présent — ce que
     `self:play_sfx()` joue. Les triggers AUTOMATIQUES (on_spawn/on_destroy/
@@ -220,6 +292,9 @@ def transpile_all(
     # Les prefabs sont poolés au niveau PROJET : `actor.spawn("X")` vise la
     # liste entière, pas ce que la scène courante contient.
     _prefab_names = [pf.name for pf in prefabs]
+    # Exports réglables par prefab (tranche poolé D2) : servis à tous les scripts
+    # (ctx codegen ET ctx_check du checker), n'importe lequel peut spawner.
+    _spawn_meta = _spawn_exports_meta(p, prefabs)
     # Tables de données : {nom: (colonnes, nombre de lignes)}. Le checker en
     # tire ses refus (table ou colonne inconnue, index hors bornes, écriture sur
     # une const) et le codegen la taille pour `#data.X`. Une seule lecture du
@@ -330,6 +405,7 @@ def transpile_all(
             save_slots   = _save_slots,
             has_persistent = _has_persist,
             data_tables  = _data_tables,
+            spawn_exports = _spawn_meta,
         )
         script, ok = _compile_script(sp, ctx_check, emit, sp.name)
         if not ok:
@@ -384,6 +460,7 @@ def transpile_all(
                 save_slots   = _save_slots,
                 has_persistent = _has_persist,
                 data_tables  = _data_tables,
+                spawn_exports = _spawn_meta,
             )
             scene_script_ast, ok = _compile_script(sp, ctx_check, emit, sp.name)
             if not ok:
@@ -434,6 +511,8 @@ def transpile_all(
             save_slots    = _save_slots,
             has_persistent = _has_persist,
             data_tables   = _data_tables,
+            export_inits  = _export_inits(actor, script),
+            spawn_exports = _spawn_meta,
         )
         c_code, gen_warnings, _ = lua_generate(script, ctx)
         for w in gen_warnings:
@@ -501,6 +580,7 @@ def transpile_all(
             save_slots   = _save_slots,
             has_persistent = _has_persist,
             data_tables  = _data_tables,
+            spawn_exports = _spawn_meta,
         )
         pf_ast, ok = _compile_script(sp_path, ctx_check, emit, f"prefab {pf.name} ({sp_path.name})")
         if not ok:
@@ -539,6 +619,13 @@ def transpile_all(
             save_slots    = _save_slots,
             has_persistent = _has_persist,
             data_tables   = _data_tables,
+            # Le repli ÉDITEUR d'un export poolé (D2) : `Prefab.exports_values`
+            # réglé sur le template, sinon le `default` du script. Un `Prefab` EST
+            # son acteur racine, donc `get_component("script")` rend ses valeurs.
+            # C'est l'init du pool ; la table de spawn (tranche 2) l'écrasera par
+            # instance.
+            export_inits  = _export_inits(pf, pf_ast),
+            spawn_exports = _spawn_meta,
         )
         pf_c, pf_warnings, pf_state_bytes = lua_generate(pf_ast, ctx_pf)
         for w in pf_warnings:
@@ -593,6 +680,7 @@ def transpile_all(
             save_slots    = _save_slots,
             has_persistent = _has_persist,
             data_tables   = _data_tables,
+            spawn_exports = _spawn_meta,
         )
         c_code, sc_warnings, _ = lua_generate(scene_script_ast, ctx_sc)
         for w in sc_warnings:
@@ -659,6 +747,7 @@ def transpile_all(
             save_slots   = _save_slots,
             has_persistent = _has_persist,
             data_tables  = _data_tables,
+            spawn_exports = _spawn_meta,
         )
         cam_ast, ok = _compile_script(sp, ctx_check, emit, f"camera {cam.name} ({sp.name})")
         if not ok:
@@ -693,6 +782,7 @@ def transpile_all(
             save_slots    = _save_slots,
             has_persistent = _has_persist,
             data_tables   = _data_tables,
+            spawn_exports = _spawn_meta,
         )
         cam_c, cam_warnings, _ = lua_generate(cam_ast, ctx_cam)
         for w in cam_warnings:

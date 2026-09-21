@@ -55,6 +55,12 @@ class LuaLocal:
     # None pour un vrai `local`, dont le type C est alors déduit de la valeur.
     # Cf. scripting/exports_parser.KNOWN_TYPES et codegen._local_decl.
     export_type: Optional[str] = None
+    # Choix d'un export `enum` (étiquettes, dans l'ordre déclaré) — l'index d'une
+    # étiquette est sa valeur entière au runtime. Vide pour tout autre type. Capté
+    # ICI, avec le reste de la déclaration, pour que la résolution des valeurs
+    # d'instance (lua_compiler._export_inits) reste sur le MÊME arbre que le
+    # codegen — pas un second parseur (cf. chantier « Les exports de script »).
+    export_values: list = field(default_factory=list)
 
 
 # ── Statements ────────────────────────────────────────────────────
@@ -184,6 +190,11 @@ class ExprTable:
     écrit, il ne juge pas."""
     items:    list[Any] = field(default_factory=list)
     has_keys: bool      = False
+    # Nom de la clé de chaque entrée, ou None si positionnelle — parallèle à
+    # `items`. Retenu pour la table d'exports d'`actor.spawn("X", pos, {k=v})`
+    # (chantier « Les exports de script », tranche poolé) ; les tableaux ordinaires
+    # n'ont que des entrées positionnelles (keys = [None, …]).
+    keys:     list[Any] = field(default_factory=list)
 
 
 @dataclass
@@ -307,6 +318,7 @@ class _Converter:
                         # doit pas devenir un `int`), cf. codegen._local_decl.
                         default_val = None
                         decl_type   = None
+                        enum_values: list = []
                         if type(field_node.value).__name__ == "Table":
                             for sub in field_node.value.fields:
                                 sub_key = getattr(sub.key, "id", None)
@@ -316,8 +328,17 @@ class _Converter:
                                     typ_expr = self._expr(sub.value)
                                     if isinstance(typ_expr, ExprString):
                                         decl_type = typ_expr.value
+                                elif sub_key == "values" and \
+                                        type(sub.value).__name__ == "Table":
+                                    # Les étiquettes d'un enum, dans l'ordre : leur
+                                    # index EST leur valeur entière au runtime.
+                                    for v in sub.value.fields:
+                                        lbl = self._expr(v.value)
+                                        if isinstance(lbl, ExprString):
+                                            enum_values.append(lbl.value)
                         locals_.append(LuaLocal(name=key, value=default_val,
-                                                export_type=decl_type))
+                                                export_type=decl_type,
+                                                export_values=enum_values))
             # On ignore les autres statements top-level.
 
         # Le nom d'un module de behavior se lit sur les DEUX bouts : `local M =
@@ -485,10 +506,12 @@ class _Converter:
                 field = node.idx.id if hasattr(node.idx, "id") else str(node.idx)
                 return ExprIndex(obj=obj, field=field)
             case "Table":
-                items = [self._expr(f.value) for f in (node.fields or [])]
+                fields_ = node.fields or []
+                items = [self._expr(f.value) for f in fields_]
                 return ExprTable(
                     items    = items,
-                    has_keys = any(f.key is not None for f in (node.fields or [])),
+                    has_keys = any(f.key is not None for f in fields_),
+                    keys     = [getattr(f.key, "id", None) for f in fields_],
                 )
             case "Invoke":
                 return self._expr_invoke(node)

@@ -518,8 +518,12 @@ RUNTIME_API: dict[str, ApiFunc] = {
     "actor.spawn": ApiFunc(
         lua_name="actor.spawn", c_func="_spawn",     # résolu par codegen
         params=[Param("prefab", PARAM_STR, DOMAIN_PREFAB), Param("position", PARAM_VEC2)],
+        # 3e argument FACULTATIF : une table { export = valeur } réglant l'instance
+        # née (chantier « Les exports de script », tranche poolé). variadic pour
+        # que le checker l'accepte ; sa validation dédiée vit dans _check_spawn_table.
+        variadic=True,
         ret="actor",   # rend l'instance née, ou nil si le pool est plein (ROADMAP v0.17 T6)
-        doc='Instancie un prefab poolé à `position` (un vec2) et rend l\'instance née, ou nil si le pool est plein. Ex: local b = actor.spawn("Bullet", vec2(116, 76)); if b then b:set_velocity(0, -2) end.',
+        doc='Instancie un prefab poolé à `position` (un vec2) et rend l\'instance née, ou nil si le pool est plein. Une table facultative règle ses exports : actor.spawn("Bullet", pos, { speed = 8, team = "RED" }) ; les clés absentes gardent la valeur du prefab. Ex: local b = actor.spawn("Bullet", vec2(116, 76)); if b then b:set_velocity(0, -2) end.',
     ),
     "get_actor": ApiFunc(
         lua_name="get_actor", c_func="_get_actor",   # résolu par codegen

@@ -82,6 +82,10 @@ _EXPORT_C_TYPE: dict[str, str] = {
 # commentaire garde la trace de la variable côté C).
 _EXPORT_COMPOSITE = ("vec2", "vec3", "rect")
 
+# Types d'export réglables par instance (au build pour un posé, au spawn pour un
+# poolé) — tous entiers au runtime. Cf. chantier « Les exports de script ».
+_EXPORT_SETTABLE = frozenset({"int", "float", "bool", "enum"})
+
 # Ce qu'un champ d'état pèse par instance. Tout est aligné sur 4 octets côté
 # ARM, donc la somme des champs est la taille de la structure — ce que le build
 # annonce pour un prefab poolé (cf. CodeGen._emit_pool_state).
@@ -223,6 +227,18 @@ class CodegenContext:
     # avec la boucle de pool de main.c soit impossible.
     is_pooled: bool = False
     pool_size: int = 0
+    # Valeurs d'export résolues PAR INSTANCE (chantier « Les exports de script »).
+    # nom d'export → initialiseur C déjà prêt, calculé par lua_compiler : l'override
+    # d'instance (`ScriptComponent.exports_values`) s'il existe, sinon le `default`
+    # du script, résolu selon le type (bool/enum → entier). Ne couvre que les types
+    # entiers du premier jet (int/bool/float/enum) ; vide pour un prefab poolé
+    # (D2 = tranche suivante). `_local_decl` s'en sert comme initialiseur prioritaire.
+    export_inits: dict = field(default_factory=dict)
+    # Exports RÉGLABLES d'un prefab, pour la table d'`actor.spawn("X", pos, {k=v})`
+    # (chantier « Les exports de script », tranche poolé). nom de prefab → { nom
+    # d'export → {"type": t, "values": [...]} }. Sert au spawner à résoudre une
+    # valeur (bool→0/1, enum→index) et à nommer le setter. Rempli par lua_compiler.
+    spawn_exports: dict = field(default_factory=dict)
     # Symbole C de la scène qui compile ce script (ROADMAP v0.17, T1). Les pools
     # étant per-scène, `actor.spawn("Bullet")` cible `spawn_<Scène>_Bullet` : il
     # faut donc savoir DANS QUELLE scène on compile. "" pour les unités partagées
@@ -320,6 +336,7 @@ class CodeGen:
         # Le découpage des séquences vient d'abord : il dit quel état déclarer,
         # et `_emit_locals` en a besoin pour le poser au bon endroit (champ de
         # la structure de pool, ou statique de fichier).
+        self._script = script
         self._plan_sequences(script)
         self._local_names = local_names(script)
         self._helpers = {fn.name: fn for fn in script.functions
@@ -807,6 +824,14 @@ class CodeGen:
         # Toujours inclus, même sans table : l'en-tête est toujours généré, et
         # un include conditionnel serait un second chemin pour un cas vide.
         self._w('#include "data_tables.h"')
+        # Setters d'exports des prefabs que CE script spawne avec une table de
+        # valeurs (tranche poolé D2) : ils sont définis dans le `.c` du prefab
+        # visé, on les forward-déclare ici pour compiler l'appel.
+        externs = self._spawn_setter_externs(getattr(self, "_script", None))
+        if externs:
+            self._w("")
+            for e in externs:
+                self._w(e)
         # Forward declarations pour éviter les erreurs d'ordre (ex: destroy appelle on_destroy)
         if not self.ctx.is_scene:
             self._w("")
@@ -919,10 +944,18 @@ class CodeGen:
         # fois une valeur qui ne bouge jamais, et ferait mentir la mesure du
         # build — qui annoncerait la longueur de l'en-tête du fichier au lieu de
         # l'état. Un acteur de scène n'a qu'une instance : tout y reste partagé.
+        #
+        # EXCEPTION (chantier « Les exports de script », tranche poolé) : un export
+        # de type réglable est TOUJOURS par instance, même lu seulement — deux
+        # spawns du même prefab peuvent lui donner des valeurs différentes. On
+        # renonce donc à le fondre en constante (uniformisation décidée avec
+        # Victor : quelques octets par instance contre un scan inter-script).
         if self.ctx.is_pooled:
             written = assigned_names(script)
-            state  = [loc for loc in non_require if loc.name in written]
-            shared = [loc for loc in non_require if loc.name not in written]
+            def _instance(loc):
+                return loc.name in written or loc.export_type in _EXPORT_SETTABLE
+            state  = [loc for loc in non_require if _instance(loc)]
+            shared = [loc for loc in non_require if not _instance(loc)]
         else:
             state, shared = [], non_require
 
@@ -976,7 +1009,10 @@ class CodeGen:
         sym      = self.ctx.actor_sym
         struct_t = f"{sym}State"
         fields, inits, per_instance = [], [], 0
+        export_fields: list[str] = []   # exports réglables → un setter chacun
         for loc in locals_:
+            if loc.export_type in _EXPORT_SETTABLE:
+                export_fields.append(loc.name)
             dims = array_dims(loc.value)
             if dims:
                 self._arrays[loc.name] = dims
@@ -1035,6 +1071,14 @@ class CodeGen:
         self._w(f"static inline int {sym}_pool_slot(Actor* self) {{ "
                 f"return ((int)(self - g_actors) - POOL_{sym.upper()}_START) "
                 f"/ POOL_{sym.upper()}_GROUP; }}")
+        # Un setter par export réglable : c'est le SEUL point d'accès de l'état
+        # depuis un autre `.c` (le script qui spawne). `g_state`/`pool_slot`
+        # restent privés — le setter, lui, est extern (le spawner le forward-
+        # déclare, cf. `_emit_spawn_setter_externs`). Chantier « Les exports de
+        # script », tranche poolé (D2).
+        for name in export_fields:
+            self._w(f"void {sym}_set_{name}(Actor* self, int v) {{ "
+                    f"g_state_{sym}[{sym}_pool_slot(self)].{name} = v; }}")
         self._w("")
 
     @staticmethod
@@ -1054,6 +1098,15 @@ class CodeGen:
         typ = (loc.export_type or "").strip()
         if typ in _EXPORT_COMPOSITE:
             return None, "", f"type '{typ}' non représentable en scalaire C — non déclaré"
+
+        # Valeur d'INSTANCE prioritaire (chantier « Les exports de script ») :
+        # lua_compiler a déjà résolu l'override ou le défaut en un initialiseur C
+        # (bool/enum → entier). Elle prime sur le défaut du script déduit ci-dessous
+        # — c'est ce qui donne à CET acteur posé sa valeur propre. Absente = pas un
+        # export entier, ou un prefab poolé (map vide) : on retombe sur le défaut.
+        override = self.ctx.export_inits.get(loc.name)
+        if override is not None:
+            return _EXPORT_C_TYPE.get(typ, "int"), override, ""
 
         init = self._expr(loc.value) if loc.value is not None else None
 
@@ -1182,6 +1235,17 @@ class CodeGen:
             if (isinstance(s.call, ExprCall)
                     and self._call_key(s.call.func) == "sfx.play"):
                 self._w(self._emit_sfx_play(s.call.args, hold=False) + ";")
+            elif (isinstance(s.call, ExprCall)
+                    and self._call_key(s.call.func) == "actor.spawn"
+                    and self._spawn_table(s.call.args) is not None
+                    and isinstance(s.call.args[0], ExprString)):
+                # `actor.spawn("X", pos, {k=v})` posé seul : on tient l'instance
+                # dans un temporaire le temps d'écrire ses exports, puis on la
+                # lâche (chantier « Les exports de script », tranche poolé).
+                tmp = f"_spawn{self._next_spawn_tmp()}"
+                self._w(f"Actor* {tmp} = {self._emit_actor_spawn(s.call.args)};")
+                self._emit_spawn_setters(tmp, s.call.args[0].value,
+                                         self._spawn_table(s.call.args))
             else:
                 self._w(self._call_expr(s.call) + ";")
 
@@ -1271,6 +1335,14 @@ class CodeGen:
                 self._ref_types[s.name] = rt
             ctype = "Actor*" if is_actor_ref else (C_REF_TYPES[rt] if rt else "int")
             self._w(f"{ctype} {s.name} = {val};")
+            # `local b = actor.spawn("X", pos, {k=v})` : écrire les exports de
+            # l'instance née juste après (tranche poolé D2).
+            if (isinstance(s.value, ExprCall)
+                    and self._call_key(s.value.func) == "actor.spawn"
+                    and self._spawn_table(s.value.args) is not None
+                    and isinstance(s.value.args[0], ExprString)):
+                self._emit_spawn_setters(s.name, s.value.args[0].value,
+                                         self._spawn_table(s.value.args))
 
         elif isinstance(s, StmtIf):
             cond = self._expr(s.cond)
@@ -2026,6 +2098,99 @@ class CodeGen:
             e = self._expr(pos)
             px, py = f"({e}).x", f"({e}).y"
         return f"spawn_{sym}({px}, {py})"
+
+    def _spawn_setter_externs(self, script) -> list[str]:
+        """Les `extern void <Scène>_<Prefab>_set_<clé>(Actor*, int);` de tous les
+        `actor.spawn("X", pos, {k=v})` du script — dédupliqués. Walk sur les
+        statements (une table de spawn n'est valide qu'au niveau statement, cf.
+        checker), y compris dans les blocs if/while/for."""
+        if script is None or not self.ctx.scene_sym:
+            return []
+        from codegen.c_names import sym as c_sym
+        seen: set = set()
+        out: list[str] = []
+
+        def look(call):
+            if not (isinstance(call, ExprCall)
+                    and self._call_key(call.func) == "actor.spawn"):
+                return
+            tbl = self._spawn_table(call.args)
+            if tbl is None or not isinstance(call.args[0], ExprString):
+                return
+            sym = f"{self.ctx.scene_sym}_{c_sym(call.args[0].value)}"
+            for key in tbl.keys:
+                if key and (sym, key) not in seen:
+                    seen.add((sym, key))
+                    out.append(f"extern void {sym}_set_{key}(Actor* self, int v);")
+
+        def visit(stmts):
+            for s in stmts or []:
+                if isinstance(s, StmtCall):
+                    look(s.call)
+                elif isinstance(s, (StmtLocalAssign, StmtAssign)):
+                    look(getattr(s, "value", None))
+                visit(getattr(s, "then", None))
+                visit(getattr(s, "body", None))
+                visit(getattr(s, "else_", None))
+                for _cond, body in getattr(s, "elseifs", None) or []:
+                    visit(body)
+
+        for fn in script.functions:
+            visit(fn.body)
+        return out
+
+    def _next_spawn_tmp(self) -> int:
+        n = getattr(self, "_spawn_tmp_n", 0)
+        self._spawn_tmp_n = n + 1
+        return n
+
+    @staticmethod
+    def _spawn_table(args: list):
+        """La table d'exports d'`actor.spawn("X", pos, {k=v})` (3ᵉ argument), ou
+        None. Une table à clés seulement — un tableau positionnel n'en est pas une."""
+        if len(args) >= 3 and isinstance(args[2], ExprTable) and args[2].keys:
+            return args[2]
+        return None
+
+    def _emit_spawn_setters(self, dest: str, prefab_name: str, table) -> None:
+        """Écrit les exports fournis dans l'instance née, via les setters extern
+        du prefab (`<Scène>_<Prefab>_set_<clé>`). Seules les clés fournies sont
+        posées ; les autres gardent le défaut du pool (repli template, T1)."""
+        from codegen.c_names import sym as c_sym
+        sym = f"{self.ctx.scene_sym}_{c_sym(prefab_name)}"
+        calls = []
+        for key, val in zip(table.keys, table.items):
+            if key is None:
+                continue
+            cval = self._spawn_export_value(prefab_name, key, val)
+            if cval is None:
+                continue   # clé inconnue / type non réglable — signalé par le checker
+            calls.append(f"{sym}_set_{key}({dest}, {cval});")
+        if not calls:
+            return
+        self._w(f"if ({dest}) {{")
+        self._indent += 1
+        for c in calls:
+            self._w(c)
+        self._indent -= 1
+        self._w("}")
+
+    def _spawn_export_value(self, prefab_name: str, key: str, value_expr) -> Optional[str]:
+        """La valeur d'une clé de table de spawn, en littéral C entier. enum →
+        index de l'étiquette ; bool → 0/1 ; int/float → l'entier. None si la clé
+        n'est pas un export réglable du prefab (le checker l'aura signalé)."""
+        meta = (self.ctx.spawn_exports.get(prefab_name) or {}).get(key)
+        if not meta:
+            return None
+        typ = meta.get("type")
+        if typ == "enum":
+            if isinstance(value_expr, ExprString):
+                vals = meta.get("values") or []
+                return str(vals.index(value_expr.value)) if value_expr.value in vals else "0"
+            return self._expr(value_expr)
+        if typ == "bool" and isinstance(value_expr, ExprBool):
+            return "1" if value_expr.value else "0"
+        return self._expr(value_expr)
 
     def _emit_save_read(self, args: list) -> str:
         """save.read(slot, "nom") → save_read_var(slot, GLOBAL_NOM) — le nom
