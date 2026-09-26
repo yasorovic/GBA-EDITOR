@@ -23,6 +23,7 @@ from core.history import (get_history, SetFieldCmd, AddComponentCmd, RemoveCompo
 from core.selection_bus import get_bus
 from core.command_dispatcher import get_dispatcher
 from ui.common.theme import C, T, QSS
+from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import NotesEdit, CollapsibleCard
 from ui.common.field_binder import FieldBinder
 from ui.common.notice import notice
@@ -196,7 +197,7 @@ class ActorInspector(QWidget):
         self._fields = FieldBinder(self._set)
         self.setStyleSheet(f"background:{C.BG_DEEP};")
 
-        scroll = QScrollArea()
+        scroll = InspectorScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet(f"background:{C.BG_DEEP}; border:none;")
         outer = QVBoxLayout(self)

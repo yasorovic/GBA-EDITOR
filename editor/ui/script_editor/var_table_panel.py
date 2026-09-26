@@ -168,7 +168,7 @@ class VarTablePanel(QWidget):
         else:
             shown = entry.value if entry is not None else 0
         value_item = QTableWidgetItem(str(shown))
-        value_item.setForeground(QColor(C.ACCENT) if is_array else QColor("#b5cea8"))
+        value_item.setForeground(QColor(C.ACCENT) if is_array else QColor(C.SYNTAX_NUMBER))
         if is_array:
             value_item.setToolTip(label("vartbl.array_tip"))
         self._tbl.setItem(row, self._col_value, value_item)

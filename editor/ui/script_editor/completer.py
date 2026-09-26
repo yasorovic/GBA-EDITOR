@@ -90,7 +90,7 @@ class ScriptCompleter(QObject):
             f"QListView{{background:{C.BG_RAISED};color:{C.TEXT_HI};"
             f"border:1px solid {C.BORDER_MID};outline:none;padding:2px;}}"
             f"QListView::item{{padding:2px 6px;}}"
-            f"QListView::item:selected{{background:{C.ACCENT};color:#ffffff;}}"
+            f"QListView::item:selected{{background:{C.ACCENT};color:{C.ON_ACCENT};}}"
         )
 
     # ── Contexte (type de script) ────────────────────────────────

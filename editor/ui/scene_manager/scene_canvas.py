@@ -726,6 +726,12 @@ class SceneEditor(QWidget):
             if not layer.background_name:
                 continue
             ba = project.get_background(layer.background_name)
+            # La taille que le build verra (recadrage/redimensionnement compris),
+            # pas celle du PNG : celui-ci n'est plus qu'une SOURCE.
+            bw, bh = ba.pixel_size() if ba else (0, 0)
+            if bw and bh:
+                max_w, max_h = max(max_w, bw), max(max_h, bh)
+                continue
             png = ba.asset if ba and ba.asset else f"{layer.background_name}.png"
             ap = project.background_images_dir / png
             if ap.exists():

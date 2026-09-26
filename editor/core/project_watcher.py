@@ -106,6 +106,15 @@ def pair_renames(before: dict[str, tuple[int, int]],
     return pairs
 
 
+def _script_dirs(assets_root: Path) -> list[Path]:
+    """`scripts/` et tous ses sous-dossiers, quels qu'ils soient : un script vit à plat, mais
+    `behaviors/` et les rangements hérités d'anciens projets doivent rester surveillés."""
+    scripts = assets_root / "scripts"
+    if not scripts.is_dir():
+        return [scripts]
+    return [scripts, *sorted(d for d in scripts.rglob("*") if d.is_dir())]
+
+
 class ProjectWatcher(QObject):
     """
     Surveille le répertoire d'un projet et notifie les changements de fichiers.
@@ -164,10 +173,7 @@ class ProjectWatcher(QObject):
             assets_root / "sfx",
             assets_root / "music",
             assets_root / "fonts",
-            assets_root / "scripts",
-            assets_root / "scripts" / "actors",
-            assets_root / "scripts" / "scenes",
-            assets_root / "scripts" / "behaviors",
+            *_script_dirs(assets_root),
         ]
 
         # Dossiers project/ (éditeur uniquement)
@@ -256,10 +262,9 @@ class ProjectWatcher(QObject):
     def _index_files(self, project_path: Path):
         """Ajoute tous les fichiers pertinents à la surveillance."""
         assets_root = project_path / "assets"
-        asset_subdirs = ["sprites", "backgrounds", "sounds", "sfx", "music", "fonts",
-                         "scripts", "scripts/actors", "scripts/scenes", "scripts/behaviors"]
-        for subdir in asset_subdirs:
-            d = assets_root / subdir
+        asset_dirs = [assets_root / sub for sub in
+                      ("sprites", "backgrounds", "sounds", "sfx", "music", "fonts")]
+        for d in asset_dirs + _script_dirs(assets_root):
             if d.exists():
                 for f in d.iterdir():
                     # Le `.json` d'un sidecar est suivi comme le fichier source :

@@ -153,11 +153,14 @@
     "settings.toolchains.pick_mgba": {
       "text": "Exécutable mgba"
     },
-    "settings.theme.current": {
-      "text": "GBA : indigo / pervenche"
+    "settings.theme.dark": {
+      "text": "Sombre"
+    },
+    "settings.theme.light": {
+      "text": "Clair"
     },
     "settings.theme.note": {
-      "text": "Un seul thème existe aujourd’hui : aucun choix clair/sombre ou variante pour le moment."
+      "text": "Le thème s’appliquera au prochain démarrage de GBA Editor."
     },
     "settings.interface.show_tips": {
       "text": "Afficher les astuces"
@@ -672,6 +675,12 @@
     "scncanvas.graph_delete_selection_confirm": {
       "text": "Supprimer la sélection : {scenes} scène(s) et {folders} dossier(s) ? Les dossiers gardent leur contenu ; les scènes sont supprimées (Ctrl+Z)."
     },
+    "assf.script": {
+      "text": "Script"
+    },
+    "assf.behavior_script": {
+      "text": "Script behavior"
+    },
     "assf.edit_scene": {
       "text": "Éditer la scène"
     },
@@ -722,6 +731,126 @@
     },
     "rombar.free_space": {
       "text": "{size:,.1f} KiB libres"
+    },
+    "bginp.crop_tip": {
+      "text": "Recadrer la source — tirez les poignées, Entrée applique, Échap annule. Maj garde les proportions d'origine, Ctrl accroche à 8 px. Le fichier image n'est jamais modifié."
+    },
+    "bginp.resize_tip": {
+      "text": "Redimensionner l'image — tirez le bord droit ou le bas. Maj garde les proportions, Ctrl accroche à 8 px. Le fichier image n'est jamais modifié."
+    },
+    "bginp.prep_reset_tip": {
+      "text": "Revenir à l'image d'origine (annule le recadrage et le redimensionnement)"
+    },
+    "bgedit.analyze": {
+      "text": "Analyser pour le 4bpp"
+    },
+    "bgedit.analyze_tip": {
+      "text": "Mesure ce que le 4bpp demanderait à cette image — couleurs par tuile, couleurs partagées entre tuiles, palettes nécessaires — sans rien changer."
+    },
+    "bgedit.analyzing": {
+      "text": "Analyse…"
+    },
+    "bgedit.analysis_failed": {
+      "text": "Analyse impossible : {msg}"
+    },
+    "bgedit.an_k_colors": {
+      "text": "couleurs/tuile"
+    },
+    "bgedit.an_k_fit": {
+      "text": "≤ 15 couleurs"
+    },
+    "bgedit.an_k_mid": {
+      "text": "16–31"
+    },
+    "bgedit.an_k_high": {
+      "text": "≥ 32"
+    },
+    "bgedit.an_k_sets": {
+      "text": "jeux de couleurs"
+    },
+    "bgedit.an_k_shared": {
+      "text": "tuiles partagées"
+    },
+    "bgedit.an_k_palettes": {
+      "text": "palettes"
+    },
+    "bgedit.an_lossless": {
+      "text": "✓ sans perte en 4bpp"
+    },
+    "bgedit.an_lossy": {
+      "text": "✗ perte en 4bpp — {over} tuiles à réduire"
+    },
+    "bgedit.comp_title": {
+      "text": "Compression 4bpp"
+    },
+    "bgedit.comp_palettes": {
+      "text": "Palettes"
+    },
+    "bgedit.comp_palettes_tip": {
+      "text": "Combien des 16 sous-palettes l'image peut employer. Moins de palettes : moins de couleurs distinctes sur l'ensemble."
+    },
+    "bgedit.comp_colors": {
+      "text": "Couleurs / palette"
+    },
+    "bgedit.comp_colors_tip": {
+      "text": "Couleurs de chaque sous-palette (l'index 0 reste transparent). Moins de couleurs : plus plat, plus graphique."
+    },
+    "bgedit.comp_global": {
+      "text": "Couleurs globales"
+    },
+    "bgedit.comp_global_tip": {
+      "text": "Réduit TOUTE l'image à ce nombre de couleurs avant le découpage en tuiles, pour que les tuiles voisines s'accordent sur leurs couleurs. Désactivé = chaque tuile est réduite seule."
+    },
+    "bgedit.comp_tiles": {
+      "text": "Tuiles"
+    },
+    "bgedit.comp_tiles_tip": {
+      "text": "Tuiles uniques à garder. En dessous du compte de l'image, les tuiles qui se ressemblent sont fusionnées — les zones lisses d'abord. Le GBA en tient 512 (4bpp) ou 256 (8bpp) par charblock."
+    },
+    "bgedit.comp_method": {
+      "text": "Méthode"
+    },
+    "bgedit.comp_method_tip": {
+      "text": "Comment les couleurs sont fusionnées dans une tuile qui en a trop."
+    },
+    "bgedit.comp_reset": {
+      "text": "Réinitialiser la compression"
+    },
+    "bgedit.comp_reset_tip": {
+      "text": "Retour aux réglages par défaut"
+    },
+    "bgedit.comp_off": {
+      "text": "Non"
+    },
+    "bgedit.comp_nolimit": {
+      "text": "Aucune"
+    },
+    "bgedit.method_median_cut": {
+      "text": "Coupe médiane"
+    },
+    "bgedit.method_nearest_pair": {
+      "text": "Fusion des proches"
+    },
+    "bgedit.method_most_frequent": {
+      "text": "Plus fréquentes"
+    },
+    "bgedit.method_kmeans": {
+      "text": "k-means"
+    },
+    "bgedit.comp_title8": {
+      "text": "Compression 8bpp"
+    },
+    "bgedit.comp_colors8": {
+      "text": "Couleurs"
+    },
+    "bgedit.comp_colors8_tip": {
+      "text": "Couleurs de l'unique palette de 256 (l'index 0 reste transparent). Moins de couleurs : plus plat, plus graphique — et les tuiles voisines se ressemblent davantage, donc plus se fondent."
+    },
+    "bgedit.method_octree": {
+      "text": "Octree"
+    },
+    "bgedit.method_max_coverage": {
+      "text": "Couverture max"
     }
   }
 }

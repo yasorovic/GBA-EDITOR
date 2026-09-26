@@ -20,7 +20,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QPixmap, QFont, QDrag
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QMimeData
 
-from ui.common.theme import C, T, QSS
+from ui.common.theme import C, T, QSS, tint
+from ui.common.responsive import FlowLayout
 from ui.common.widgets import W, ScriptPickerPopup
 from ui.common.palette_swatch import bank_icon
 
@@ -60,12 +61,12 @@ class BgLayerRow(QFrame):
         self._bg_names: list = []
         self._drag_start = None
         self.setAcceptDrops(True)
-        self.setFixedHeight(40)
         self._update_style()
 
-        row = QHBoxLayout(self)
+        # Passe à la ligne quand l'inspecteur est étroit : la somme de ces
+        # widgets à taille fixe imposait sa largeur à tout le panneau.
+        row = FlowLayout(self, spacing=8)
         row.setContentsMargins(6, 4, 6, 4)
-        row.setSpacing(8)
 
         # Bouton collision layer
         self._radio = QPushButton("○")
@@ -73,7 +74,7 @@ class BgLayerRow(QFrame):
         self._radio.setCheckable(False)
         self._radio.setFont(QFont(T.UI, 11))
         self._radio.setStyleSheet(
-            f"QPushButton{{color:#3a3a3a;background:transparent;border:none;padding:0;}}"
+            f"QPushButton{{color:{C.TEXT_MUTED};background:transparent;border:none;padding:0;}}"
             f"QPushButton:hover{{color:{self._color};}}"
         )
         self._radio.setToolTip(label('bglayer.set_as_the_collision_layer'))
@@ -89,8 +90,8 @@ class BgLayerRow(QFrame):
         self._thumb.setGeometry(0, 0, 48, 32)
         self._thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._thumb.setStyleSheet(
-            "background:#2a2a2a;border:1px solid #333;border-radius:2px;"
-            f"color:#555;font-size:14px;"
+            f"background:{C.BG_INPUT};border:1px solid {C.BORDER_MID};border-radius:2px;"
+            f"color:{C.TEXT_MUTED};font-size:14px;"
         )
         self._thumb.setText("🖼")
         self._thumb.setToolTip(label('bglayer.click_or_drop_a_png'))
@@ -101,8 +102,8 @@ class BgLayerRow(QFrame):
         self._btn_clear.setGeometry(32, 0, 16, 16)
         self._btn_clear.setFont(QFont(T.UI, 7, QFont.Weight.DemiBold))
         self._btn_clear.setStyleSheet(
-            "QPushButton{background:#3a1a1a;color:#cc5555;border:none;border-radius:2px;}"
-            "QPushButton:hover{background:#cc3333;color:#fff;}"
+            f"QPushButton{{background:{tint(C.ACCENT_RED, 0.18)};color:{C.ACCENT_RED};border:none;border-radius:2px;}}"
+            f"QPushButton:hover{{background:{C.ACCENT_RED};color:#fff;}}"
         )
         self._btn_clear.setToolTip(label('bglayer.remove_this_background'))
         self._btn_clear.setVisible(False)
@@ -171,7 +172,7 @@ class BgLayerRow(QFrame):
         self._sync_blend_btn()
         row.addWidget(self._blend_btn)
 
-        row.addStretch()
+        row.add_trailing_break()
 
         # Sélecteur du layer peint par l'outil de peinture par palette (pinceau).
         from ui.common.icons import get as _ico
@@ -272,7 +273,7 @@ class BgLayerRow(QFrame):
         if self._highlight:
             self.setStyleSheet(
                 f"BgLayerRow{{border:2px dashed {self._color};"
-                f"background:#1a2a1a;border-radius:4px;}}"
+                f"background:{tint(C.POWER, 0.12)};border-radius:4px;}}"
             )
         else:
             self.setStyleSheet(
@@ -331,13 +332,13 @@ class BgLayerRow(QFrame):
             self._thumb.setText("UI" if is_ui else "🖼")
         if is_ui:
             self._thumb.setStyleSheet(
-                "background:#1a1a2a;border:1px solid #3a3a6a;border-radius:2px;"
-                "color:#5b5bd5;font-size:11px;font-weight:bold;"
+                f"background:{C.BG_BASE};border:1px solid {C.BORDER_MID};border-radius:2px;"
+                f"color:{C.TEXT_DIM};font-size:11px;font-weight:bold;"
             )
         else:
             self._thumb.setStyleSheet(
-                "background:#2a2a2a;border:1px solid #333;border-radius:2px;"
-                "color:#555;font-size:14px;"
+                f"background:{C.BG_INPUT};border:1px solid {C.BORDER_MID};border-radius:2px;"
+                f"color:{C.TEXT_MUTED};font-size:14px;"
             )
 
     def set_speed(self, value: float):
@@ -380,7 +381,7 @@ class BgLayerRow(QFrame):
         else:
             self._radio.setText("○")
             self._radio.setStyleSheet(
-                f"QPushButton{{color:#3a3a3a;background:transparent;border:none;padding:0;}}"
+                f"QPushButton{{color:{C.TEXT_MUTED};background:transparent;border:none;padding:0;}}"
                 f"QPushButton:hover{{color:{self._color};}}"
             )
 

@@ -254,20 +254,16 @@ def rename_in_text(text: str, domain: str, old: str, new: str) -> tuple[str, int
 # ── Portée projet ─────────────────────────────────────────────────
 
 def script_paths(project) -> list[Path]:
-    """Tous les .lua du projet (actors, scènes, caméras, behaviors).
+    """Tous les .lua du projet, où qu'ils soient rangés sous `scripts_dir`.
 
-    Les scripts de CAMÉRA manquaient à cette liste depuis leur apparition en
-    v0.6.1 : un `scene:switch("Arène")` écrit dans une caméra n'était donc pas
-    réécrit par un renommage de scène, et rien ne le signalait — la faute ne
-    remontait qu'au build suivant, sur un `SCENE_IDX_*` indéfini."""
-    dirs = [getattr(project, attr, None) for attr in
-            ("scripts_actors_dir", "scripts_scenes_dir", "scripts_cameras_dir",
-             "scripts_behaviors_dir")]
-    out: list[Path] = []
-    for d in dirs:
-        if d and Path(d).exists():
-            out += sorted(Path(d).rglob("*.lua"))
-    return out
+    Un dossier par famille de propriétaire faisait oublier des scripts : ceux de CAMÉRA
+    manquaient à la liste, donc un `scene:switch("Arène")` écrit dans l'un d'eux n'était
+    pas réécrit par un renommage de scène, et la faute ne remontait qu'au build suivant.
+    Parcourir `scripts_dir` d'un bloc ne peut plus rien oublier."""
+    scripts_dir = getattr(project, "scripts_dir", None)
+    if not scripts_dir or not Path(scripts_dir).exists():
+        return []
+    return sorted(Path(scripts_dir).rglob("*.lua"))
 
 
 def find_refs_in_project(project, domain: str, name: str) -> dict[Path, list[LuaRef]]:

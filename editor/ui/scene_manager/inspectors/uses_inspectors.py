@@ -20,6 +20,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 
 from core.selection_bus import get_bus
 from ui.common.theme import C, T
+from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import CollapsibleCard
 from ui.common import icons
 
@@ -91,7 +92,7 @@ class _UsesInspectorBase(QWidget):
         root.addWidget(self._card, 1)
 
         # ── Liste des utilisations ────────────────────────────────
-        scroll = QScrollArea()
+        scroll = InspectorScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)

@@ -10,6 +10,7 @@ from core.history import Command, get_history
 from ui.common.labels import label
 from ui.scene_manager.scene_graph_commands import EdgePresentationCmd
 from ui.common.theme import C, T
+from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import CollapsibleCard, NotesEdit, W
 
 
@@ -53,7 +54,7 @@ class EdgeInspector(QWidget):
         self._state: SceneGraphState | None = None
         self.setStyleSheet(f"background:{C.BG_PANEL};")
         outer = QVBoxLayout(self); outer.setContentsMargins(0, 0, 0, 0)
-        scroll = QScrollArea(); scroll.setWidgetResizable(True)
+        scroll = InspectorScrollArea(); scroll.setWidgetResizable(True)
         scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
         outer.addWidget(scroll)
         content = QWidget(); content.setStyleSheet(f"background:{C.BG_PANEL};")

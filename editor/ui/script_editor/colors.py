@@ -18,4 +18,4 @@ _C_EVENT    = COLOR_EVENT
 _C_BEHAVIOR = COLOR_BEHAVIOR
 _C_GLOBAL   = COLOR_GLOBAL
 _C_CONST    = COLOR_CONST
-_BG_SEL_REF = "#1a2a3a"   # fond "sélectionné" pour fichiers/refs — dérivé de _C_REF
+_BG_SEL_REF = C.BG_SEL   # fond "sélectionné" pour fichiers/refs — dérivé de _C_REF

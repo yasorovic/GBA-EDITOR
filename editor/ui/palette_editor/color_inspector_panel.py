@@ -18,6 +18,7 @@ from PyQt6.QtGui import QFont, QGuiApplication
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from ui.common.theme import C, T, QSS
+from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import W, CollapsibleCard
 from ui.common.labels import label
 
@@ -90,7 +91,7 @@ class ColorInspectorPanel(QWidget):
 
         # Corps défilant (QScrollArea) : plus aucun débordement quelle que soit
         # la hauteur / l'échelle HiDPI.
-        scroll = QScrollArea()
+        scroll = InspectorScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)

@@ -26,7 +26,7 @@ if _EDITOR_DIR not in sys.path:
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox
 from PyQt6.QtGui import QPalette, QColor
-from ui.common.theme import GLOBAL_QSS, C, install_app_fonts
+from ui.common.theme import GLOBAL_QSS, C
 from ui.common.numeric_drag import install_numeric_drag_behavior
 from ui.common import icons
 from ui.common import catalog
@@ -36,13 +36,12 @@ from core.interface_preferences import interface_language
 
 
 def dark_palette() -> QPalette:
-    """Thème sombre teinté indigo/violet (identité GBA) — accent primaire
-    périwinkle. Toutes les valeurs dérivent de ui.common.theme.C."""
+    """Palette Qt du thème actif (sombre ou clair, neutre). Toutes les valeurs dérivent de ui.common.theme.C."""
     p = QPalette()
     bg      = QColor(C.BG_PANEL)
     surface = QColor(C.BG_INPUT)
     border  = QColor(C.BORDER_MID)
-    text    = QColor("#d2d2e0")
+    text    = QColor(C.TEXT_BASE)
     muted   = QColor(C.TEXT_DIM)
     accent  = QColor(C.ACCENT)
 
@@ -55,7 +54,12 @@ def dark_palette() -> QPalette:
     p.setColor(QPalette.ColorRole.Button,          surface)
     p.setColor(QPalette.ColorRole.ButtonText,      text)
     p.setColor(QPalette.ColorRole.Highlight,       accent)
-    p.setColor(QPalette.ColorRole.HighlightedText, QColor("#000000"))
+    p.setColor(QPalette.ColorRole.HighlightedText, QColor(C.ON_ACCENT))
+    # Bulles d'aide : la règle `QToolTip` de la feuille globale ne suit pas une bulle
+    # dont le widget porte sa PROPRE feuille (boutons, curseurs…) — Qt retombait alors
+    # sur la palette, et le noir par défaut. Même couleurs que la règle, en repli.
+    p.setColor(QPalette.ColorRole.ToolTipBase, QColor(C.BG_RAISED))
+    p.setColor(QPalette.ColorRole.ToolTipText, QColor(C.TEXT_NORM))
     return p
 
 
@@ -90,7 +94,6 @@ if __name__ == "__main__":
     app.setStyle("Fusion")
     app.setPalette(dark_palette())
     install_numeric_drag_behavior(app)
-    install_app_fonts()
     # Les QSS référencent quelques icônes par chemin de fichier : il faut les
     # rendre maintenant (la QApplication existe) avant d'appliquer la feuille.
     icons.ensure_qss_assets()

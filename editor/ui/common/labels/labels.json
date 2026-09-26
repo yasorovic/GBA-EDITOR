@@ -51,11 +51,14 @@
     "settings.toolchains.pick_mgba": {
       "text": "mgba executable"
     },
-    "settings.theme.current": {
-      "text": "GBA : indigo / periwinkle"
+    "settings.theme.dark": {
+      "text": "Dark"
+    },
+    "settings.theme.light": {
+      "text": "Light"
     },
     "settings.theme.note": {
-      "text": "Only one theme exists today : no light/dark toggle or variant for now."
+      "text": "The theme applies after restarting GBA Editor."
     },
     "settings.interface.show_tips": {
       "text": "Show tips"
@@ -2469,15 +2472,6 @@
     "scred.new_script_btn": {
       "text": "+ Script"
     },
-    "scred.new_actor_btn": {
-      "text": "+ Actor"
-    },
-    "scred.new_scene_btn": {
-      "text": "+ Scene"
-    },
-    "scred.badge_behavior": {
-      "text": "Behavior"
-    },
     "scred.external_conflict": {
       "text": "⚠ {name} (external conflict)"
     },
@@ -2613,6 +2607,9 @@
     "assf.view_uses": {
       "text": "View uses"
     },
+    "assf.script": {
+      "text": "Script"
+    },
     "assf.behavior_script": {
       "text": "Behavior Script"
     },
@@ -2687,9 +2684,6 @@
     },
     "palslot.add_a_scene_palette": {
       "text": "Add a scene palette"
-    },
-    "palslot.free_bank": {
-      "text": "Free bank"
     },
     "palslot.compressed_tip": {
       "text": "{names}, compressed background{span_txt}\n(non-editable palette)"
@@ -3050,6 +3044,126 @@
     },
     "bginp.edit_image": {
       "text": "Edit image…"
+    },
+    "bginp.crop_tip": {
+      "text": "Crop the source — drag the handles, Enter applies, Esc cancels. Shift keeps the original proportions, Ctrl snaps to 8 px. The image file is never changed."
+    },
+    "bginp.resize_tip": {
+      "text": "Resize the image — drag the right or bottom edge. Shift keeps the proportions, Ctrl snaps to 8 px. The image file is never changed."
+    },
+    "bginp.prep_reset_tip": {
+      "text": "Back to the original image (undoes the crop and the resize)"
+    },
+    "bgedit.analyze": {
+      "text": "Analyze for 4bpp"
+    },
+    "bgedit.analyze_tip": {
+      "text": "Measure what 4bpp would ask of this image — colors per tile, colors shared between tiles, palettes needed — without changing anything."
+    },
+    "bgedit.analyzing": {
+      "text": "Analyzing…"
+    },
+    "bgedit.analysis_failed": {
+      "text": "Analysis failed: {msg}"
+    },
+    "bgedit.an_k_colors": {
+      "text": "colors/tile"
+    },
+    "bgedit.an_k_fit": {
+      "text": "≤ 15 colors"
+    },
+    "bgedit.an_k_mid": {
+      "text": "16–31"
+    },
+    "bgedit.an_k_high": {
+      "text": "≥ 32"
+    },
+    "bgedit.an_k_sets": {
+      "text": "color sets"
+    },
+    "bgedit.an_k_shared": {
+      "text": "shared tiles"
+    },
+    "bgedit.an_k_palettes": {
+      "text": "palettes"
+    },
+    "bgedit.an_lossless": {
+      "text": "✓ lossless in 4bpp"
+    },
+    "bgedit.an_lossy": {
+      "text": "✗ lossy in 4bpp — {over} tiles to reduce"
+    },
+    "bgedit.comp_title": {
+      "text": "4bpp compression"
+    },
+    "bgedit.comp_palettes": {
+      "text": "Palettes"
+    },
+    "bgedit.comp_palettes_tip": {
+      "text": "How many of the 16 sub-palettes the image may use. Fewer palettes: fewer distinct colors across the image."
+    },
+    "bgedit.comp_colors": {
+      "text": "Colors / palette"
+    },
+    "bgedit.comp_colors_tip": {
+      "text": "Colors in each sub-palette (index 0 stays transparent). Fewer colors: flatter, more graphic."
+    },
+    "bgedit.comp_global": {
+      "text": "Global colors"
+    },
+    "bgedit.comp_global_tip": {
+      "text": "Reduce the WHOLE image to this many colors before it is cut into tiles, so neighbouring tiles agree on their colors. Off = tiles are reduced one by one."
+    },
+    "bgedit.comp_tiles": {
+      "text": "Tiles"
+    },
+    "bgedit.comp_tiles_tip": {
+      "text": "Unique tiles to keep. Below the image's own count, similar tiles are merged — the picture gets blockier where it is smoothest first. The GBA holds 512 (4bpp) or 256 (8bpp) per charblock."
+    },
+    "bgedit.comp_method": {
+      "text": "Method"
+    },
+    "bgedit.comp_method_tip": {
+      "text": "How colors are merged inside a tile that has too many."
+    },
+    "bgedit.comp_reset": {
+      "text": "Reset compression"
+    },
+    "bgedit.comp_reset_tip": {
+      "text": "Back to the default settings"
+    },
+    "bgedit.comp_off": {
+      "text": "Off"
+    },
+    "bgedit.comp_nolimit": {
+      "text": "No limit"
+    },
+    "bgedit.method_median_cut": {
+      "text": "Median cut"
+    },
+    "bgedit.method_nearest_pair": {
+      "text": "Merge closest"
+    },
+    "bgedit.method_most_frequent": {
+      "text": "Most frequent"
+    },
+    "bgedit.method_kmeans": {
+      "text": "k-means"
+    },
+    "bgedit.comp_title8": {
+      "text": "8bpp compression"
+    },
+    "bgedit.comp_colors8": {
+      "text": "Colors"
+    },
+    "bgedit.comp_colors8_tip": {
+      "text": "Colors in the single 256-color palette (index 0 stays transparent). Fewer colors: flatter, more graphic — and neighbouring tiles look more alike, so more of them merge."
+    },
+    "bgedit.method_octree": {
+      "text": "Octree"
+    },
+    "bgedit.method_max_coverage": {
+      "text": "Max coverage"
     },
     "wdg.filter_by_name": {
       "text": "Filter by name"

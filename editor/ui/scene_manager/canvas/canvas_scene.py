@@ -530,9 +530,9 @@ class GBAScene(QGraphicsScene):
     # ── Fond damier ───────────────────────────────────────────────
 
     def drawBackground(self, painter: QPainter, rect: QRectF):
-        painter.fillRect(rect, QColor("#1a1a1a"))
+        painter.fillRect(rect, QColor(C.CANVAS_BG))
         size = 8
-        c1, c2 = QColor("#222222"), QColor("#2a2a2a")
+        c1, c2 = QColor(C.CHECKER_A), QColor(C.CHECKER_B)
         x0 = int(rect.left() / size) * size
         y0 = int(rect.top() / size) * size
         x1 = int(rect.right() / size + 1) * size

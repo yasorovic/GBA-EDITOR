@@ -17,7 +17,7 @@ from ui.common.labels import label
 from PyQt6.QtWidgets import QWidget, QGridLayout, QToolButton
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 
-from ui.common.theme import C
+from ui.common.theme import C, tint
 from ui.common.icons import get as _ico
 
 # (dir_id, icon_key, tooltip, row, col)
@@ -49,10 +49,10 @@ def _styles(radius: int) -> tuple[str, str, str]:
         f"background:{C.BG_SEL};}}"
     )
     mirrored = (
-        f"QToolButton{{color:#3a6a8a;background:#0d1a22;"
-        f"border:1px dashed #2a4a5a;border-radius:{radius}px;padding:0;}}"
+        f"QToolButton{{color:{C.ACCENT_COOL};background:{tint(C.ACCENT_COOL, 0.08)};"
+        f"border:1px dashed {tint(C.ACCENT_COOL, 0.45)};border-radius:{radius}px;padding:0;}}"
         f"QToolButton:checked{{color:{C.ACCENT_COOL};border:2px dashed {C.ACCENT_COOL};"
-        f"background:#0e1f2e;}}"
+        f"background:{tint(C.ACCENT_COOL, 0.18)};}}"
     )
     omni = (
         f"QToolButton{{color:{C.TEXT_DIM};background:{C.BG_DEEP};"
@@ -87,7 +87,7 @@ class DirectionButton(QToolButton):
             self.setIcon(_ico(self._icon_key, C.TEXT_DIM, C.ACCENT))
         elif mirrored:
             self.setStyleSheet(self._sty_mirrored)
-            self.setIcon(_ico(self._icon_key, "#3a6a8a", C.ACCENT_COOL))
+            self.setIcon(_ico(self._icon_key, tint(C.ACCENT_COOL, 0.6), C.ACCENT_COOL))
         else:
             self.setStyleSheet(self._sty_normal)
             self.setIcon(_ico(self._icon_key, C.TEXT_DIM, C.ACCENT))

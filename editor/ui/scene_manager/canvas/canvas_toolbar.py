@@ -143,7 +143,7 @@ class FloatingToolbar(QFrame):
 
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet("color:#2a2a2a; margin:2px 0;")
+        sep.setStyleSheet(f"color:{C.BORDER}; margin:2px 0;")
         sep.setFixedHeight(1)
         layout.addWidget(sep)
 
@@ -196,7 +196,7 @@ class FloatingToolbar(QFrame):
         # ── Séparateur + outil palette ────────────────────────────
         sep2 = QFrame()
         sep2.setFrameShape(QFrame.Shape.HLine)
-        sep2.setStyleSheet("color:#2a2a2a; margin:3px 0;")
+        sep2.setStyleSheet(f"color:{C.BORDER}; margin:3px 0;")
         sep2.setFixedHeight(1)
         layout.addWidget(sep2)
 

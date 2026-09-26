@@ -23,9 +23,11 @@ from PyQt6.QtWidgets import QApplication
 # par une teinte qui les suivrait dans tout l'éditeur. Un écran qui a besoin
 # de couleur (état actif, type de zone, rôle dans un outil) la définit dans
 # son propre contexte, avec sa propre règle de lecture.
-COLOR_DEFAULT = "#8a8aa0"   # neutre légèrement teinté indigo
-COLOR_ACTIVE  = "#5be08b"   # = C.POWER — état actif / live
-COLOR_FOLDER  = "#5a6b82"   # dossier — slate neutre
+from core.interface_preferences import interface_theme as _interface_theme
+_LIGHT = _interface_theme() == "light"
+COLOR_DEFAULT = "#666666" if _LIGHT else "#8c8c8c"   # gris neutre
+COLOR_ACTIVE  = "#1f9d55" if _LIGHT else "#5be08b"   # = C.POWER — état actif / live
+COLOR_FOLDER  = "#8a8a8a" if _LIGHT else "#6e6e6e"   # dossier — gris neutre
 
 # Alias de compatibilité : les consommateurs existants continuent à demander
 # une couleur, mais elle est volontairement neutre. Les nouveaux outils ne
@@ -209,6 +211,11 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     # Édition externe — ouvrir un asset image dans le logiciel de dessin
     # configuré par l'utilisateur (cf. ui/common/external_editor.py).
     "edit_external":          ("mdi.image-edit-outline",      "✎"),
+    # Préparation de la source d'un fond (Background Editor) — recadrer,
+    # redimensionner, revenir à l'original.
+    "prep_crop":              ("mdi.crop",                    "▣"),
+    "prep_resize":            ("mdi.resize",                  "⇲"),
+    "prep_reset":             ("mdi.backup-restore",          "↺"),
     # Finders — révéler le dossier RÉEL d'une famille dans l'explorateur du
     # système (cf. ui/common/reveal.py). Bouton standardisé, pas un par écran.
     "reveal_in_files":        ("mdi.folder-open-outline",     "⤢"),

@@ -34,6 +34,10 @@ _DEFAULTS = {
     # "" est le catalogue maître. Une langue d'interface est propre à la
     # machine : elle ne dépend ni du jeu ouvert, ni de sa langue de jeu.
     "language": "",
+    # "dark" ou "light". Comme la langue : propre à la machine, lu une fois au
+    # démarrage (les couleurs sont figées dans les feuilles de style à la
+    # construction des écrans), donc le changement prend effet au redémarrage.
+    "theme": "dark",
 }
 
 _cache: dict | None = None
@@ -71,6 +75,17 @@ def interface_language() -> str:
     """Code de langue choisi pour l'interface ("" = catalogue maître)."""
     value = _load().get("language", _DEFAULTS["language"])
     return value if isinstance(value, str) else _DEFAULTS["language"]
+
+
+def interface_theme() -> str:
+    """Thème de l'interface : "dark" (défaut) ou "light"."""
+    value = _load().get("theme", _DEFAULTS["theme"])
+    return value if value in ("dark", "light") else _DEFAULTS["theme"]
+
+
+def set_interface_theme(mode: str):
+    _load()["theme"] = "light" if mode == "light" else "dark"
+    _save()
 
 
 def set_interface_language(code: str):

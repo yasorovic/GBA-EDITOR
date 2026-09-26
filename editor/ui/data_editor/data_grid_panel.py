@@ -284,7 +284,7 @@ class DataGridPanel(QWidget):
                 if col.type == "text" and value:
                     item.setToolTip(self._text_preview(str(value)))
             else:
-                item.setForeground(QColor("#b5cea8"))
+                item.setForeground(QColor(C.SYNTAX_NUMBER))
         return item
 
     def _text_preview(self, key: str) -> str:

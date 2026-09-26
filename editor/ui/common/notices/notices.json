@@ -227,14 +227,6 @@
       "tone": "info",
       "text": "{w}×{h} tiles  ·  {oam} OAM, {tiles} OBJ tiles"
     },
-    "ui.text.key_auto": {
-      "tone": "info",
-      "text": "auto key, follows the filing  ·  edited in the Text screen too"
-    },
-    "ui.text.key_manual": {
-      "tone": "info",
-      "text": "key named by hand  ·  edited in the Text screen too"
-    },
     "ui.text.key_none": {
       "tone": "info",
       "text": "No entry yet — typing here creates one."

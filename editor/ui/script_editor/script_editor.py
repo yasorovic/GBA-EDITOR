@@ -37,7 +37,7 @@ from ui.common.theme import C, T
 from ui.common.labels import label
 from ui.common.icons import COLOR_SCRIPT
 from ui.common.build_panel import BuildPanel
-from .colors import _BG, _BG_HDR, _BORDER, _TEXT_HI, _TEXT_NORM, _C_API, _C_EVENT, _C_BEHAVIOR
+from .colors import _BG, _BG_HDR, _BORDER, _TEXT_HI, _TEXT_NORM, _C_EVENT
 from .lua_editor import LuaEditor
 from .sidebar_panel import SidebarPanel
 from .script_finder_panel import ScriptFinderPanel
@@ -103,23 +103,13 @@ class ScriptEditorScreen(QWidget):
         self._title_lbl.setStyleSheet(f"color:{COLOR_SCRIPT};")
         bar_l.addWidget(self._title_lbl, 1)
 
-        from ui.common.widgets import kind_colors as _badge_bg
-        self._ctx_badge = QLabel("")
-        self._ctx_badge.setFont(QFont(T.UI, T.XS, QFont.Weight.DemiBold))
-        self._ctx_badge.setStyleSheet(
-            f"color:{_C_API};background:{_badge_bg(_C_API)[0]};border:1px solid {_C_API};"
-            "border-radius:3px;padding:1px 6px;"
-        )
-        self._ctx_badge.setVisible(False)
-        bar_l.addWidget(self._ctx_badge)
-
         self._save_btn = QPushButton(label("common.save"))
         self._save_btn.setFont(QFont(T.UI, T.MD))
         self._save_btn.setFixedHeight(24)
         self._save_btn.setStyleSheet(
             f"QPushButton{{color:{_C_EVENT};background:none;border:1px solid {_C_EVENT};"
             "border-radius:3px;padding:0 8px;}"
-            f"QPushButton:hover{{background:#1a2a2a;}}"
+            f"QPushButton:hover{{background:{C.BG_HOVER};}}"
             f"QPushButton:disabled{{color:{C.TEXT_MUTED};border-color:{C.BORDER_DARK};}}"
         )
         self._save_btn.setEnabled(False)
@@ -132,19 +122,16 @@ class ScriptEditorScreen(QWidget):
         sep.setFixedWidth(1)
         bar_l.addWidget(sep)
 
-        for lbl_key, subdir in [("scred.new_script_btn", ""),
-                                ("scred.new_actor_btn", "actors"),
-                                ("scred.new_scene_btn", "scenes")]:
-            btn = QPushButton(label(lbl_key))
-            btn.setFont(QFont(T.UI, T.SM))
-            btn.setFixedHeight(24)
-            btn.setStyleSheet(
-                f"QPushButton{{color:{C.TEXT_NORM};background:none;border:1px solid {C.BORDER};"
-                f"border-radius:3px;padding:0 8px;}}"
-                f"QPushButton:hover{{color:{C.TEXT_HI};border-color:{C.BORDER_MID};}}"
-            )
-            btn.clicked.connect(lambda checked, sd=subdir: self._create_script(sd))
-            bar_l.addWidget(btn)
+        btn_new = QPushButton(label("scred.new_script_btn"))
+        btn_new.setFont(QFont(T.UI, T.SM))
+        btn_new.setFixedHeight(24)
+        btn_new.setStyleSheet(
+            f"QPushButton{{color:{C.TEXT_NORM};background:none;border:1px solid {C.BORDER};"
+            f"border-radius:3px;padding:0 8px;}}"
+            f"QPushButton:hover{{color:{C.TEXT_HI};border-color:{C.BORDER_MID};}}"
+        )
+        btn_new.clicked.connect(self._create_script)
+        bar_l.addWidget(btn_new)
 
         root.addWidget(bar)
 
@@ -217,7 +204,6 @@ class ScriptEditorScreen(QWidget):
         ctx = self._detect_context(path)
         self._sidebar.set_context(ctx)
         self._editor.set_completion_context(ctx)
-        self._update_context_badge(ctx)
         self._file_tree.highlight_file(path)
 
         if path.exists():
@@ -264,53 +250,17 @@ class ScriptEditorScreen(QWidget):
     # ── Détection contexte ────────────────────────────────────────────
 
     def _detect_context(self, path: Path) -> str:
-        # Le contexte d'un script est celui de son ATTACHE, pas de son dossier : un script
-        # posé sur une caméra ne propose pas `on_collision_enter`, où qu'il soit rangé.
-        # Un behavior est un module, sans propriétaire : son dossier le dit.
-        if path.parent.name != "behaviors" and self._project is not None:
+        """Ce que l'éditeur propose (événements, `self`) dépend de ce à quoi le script est
+        ATTACHÉ, jamais de son dossier. Seul un behavior se reconnaît à son dossier : c'est
+        un module, attaché à rien, référencé par son chemin."""
+        if path.parent == getattr(self._project, "scripts_behaviors_dir", None):
+            return "behavior"
+        if self._project is not None:
             from core.script_owners import family_of_script
             family = family_of_script(self._project, path)
             if family:
                 return family
-        # Script encore rattaché à rien : le dossier, à défaut de mieux.
-        if "actors" in {path.parent.name}:
-            return "actor"
-        if "scenes" in {path.parent.name}:
-            return "scene"
-        if "behaviors" in {path.parent.name}:
-            return "behavior"
-        if "cameras" in {path.parent.name}:
-            return "camera"
-        # deeper check via full path string
-        path_str = str(path)
-        if "/scripts/actors/" in path_str or "\\scripts\\actors\\" in path_str:
-            return "actor"
-        if "/scripts/scenes/" in path_str or "\\scripts\\scenes\\" in path_str:
-            return "scene"
-        if "/scripts/behaviors/" in path_str or "\\scripts\\behaviors\\" in path_str:
-            return "behavior"
         return "unknown"
-
-    def _update_context_badge(self, ctx: str):
-        from ui.common.widgets import kind_colors
-        _BADGE = {
-            "actor":    ("common.actor",    _C_EVENT),
-            "scene":    ("common.scene",    _C_API),
-            "camera":   ("common.camera",   _C_API),
-            "behavior": ("scred.badge_behavior", _C_BEHAVIOR),
-        }
-        if ctx in _BADGE:
-            text_key, fg = _BADGE[ctx]
-            text = label(text_key)
-            bg, _mid, _accent = kind_colors(fg)
-            self._ctx_badge.setText(text)
-            self._ctx_badge.setStyleSheet(
-                f"color:{fg};background:{bg};border:1px solid {fg};"
-                "border-radius:3px;padding:1px 6px;"
-            )
-            self._ctx_badge.setVisible(True)
-        else:
-            self._ctx_badge.setVisible(False)
 
     # ── Handlers ─────────────────────────────────────────────────────
 
@@ -377,7 +327,7 @@ class ScriptEditorScreen(QWidget):
 
     # ── Création de scripts ───────────────────────────────────────────
 
-    def _create_script(self, subdir: str):
+    def _create_script(self):
         if not self._root_scripts_dir:
             QMessageBox.warning(self, label("scred.no_project_title"),
                                 label("scred.no_project_msg"))
@@ -389,9 +339,8 @@ class ScriptEditorScreen(QWidget):
         name = name.strip()
         if not name.endswith(".lua"):
             name += ".lua"
-        target_dir = self._root_scripts_dir / subdir if subdir else self._root_scripts_dir
-        target_dir.mkdir(parents=True, exist_ok=True)
-        path = target_dir / name
+        self._root_scripts_dir.mkdir(parents=True, exist_ok=True)
+        path = self._root_scripts_dir / name
         if path.exists():
             QMessageBox.warning(self, label("scred.file_exists_title"),
                                 label("scred.file_exists_msg", name=name))

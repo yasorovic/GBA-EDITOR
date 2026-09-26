@@ -2742,6 +2742,17 @@ jamais silencieux : `bank_index` retombe sur la banque 0 et le validateur averti
   | Tuilé 8bpp | `bpp=8`, 1 palette de 256 | Mode 0, occupe toute la `PAL_BG_RAM` (1 seul layer) |
   | Bitmap | `mode="bitmap"` | Mode 4 plein écran (photos) — **éditable mais pas encore émis au build** |
 
+  **Préparation de la source** — une image « riche » (photo, plus grande que le budget de
+  tuiles) se recadre (`import_crop`, en pixels du PNG) puis se redimensionne (`import_size`)
+  **avant** l'encodage. Le PNG n'est jamais modifié : `bg_import.prepare_source` produit une
+  image PIL en mémoire, que reçoit `encode_by_mode(…, prep=ba.import_prep())` — le seul
+  endroit qui l'applique, donc le seul que lisent le worker de l'éditeur et la
+  réconciliation (`encode_background_asset`). Rééchantillonnage automatique : plus proche
+  voisin si la source est indexée, Lanczos sinon. Côté UI, `bg_prepare_geometry` (pur calcul,
+  testé) porte les règles de modificateurs, `bg_prepare_overlay` dessine les poignées, et
+  le canvas n'émet que `prepare_requested(crop, size)`. Toute la géométrie que le build ou
+  le Scene Manager affichent vient de `BackgroundAsset.pixel_size()`, jamais du PNG.
+
 ### Inpainting — repeindre la palette par tuile (non-destructif)
 
 Réassigner la banque de palette d'une tuile 8×8 sans toucher aux pixels. La baseline
@@ -2796,8 +2807,9 @@ La gomme restaure la palette d'origine (supprime l'override).
                             → build/src/actor_api.h
 
 ⑥ Transpilation Lua → C — toutes les scènes en une passe
-   assets/scripts/scenes/*.lua   → build/src/{scene}_scene.c
-   assets/scripts/actors/*.lua   → build/src/actor_{name}.c
+   script attaché à une scène   → build/src/{scene}_scene.c
+   script attaché à un acteur   → build/src/actor_{name}.c
+   (les scripts vivent à plat dans assets/scripts/ ; seul behaviors/ est un dossier à part)
    (globals partagés)            → build/src/globals.c / globals.h
 
 ⑦ Génération de main.c

@@ -334,7 +334,7 @@ class BuildPanel(QWidget):
         self.console = BuildConsole()
         self.console.setFont(QFont(T.MONO, T.SM))
         self.console.setStyleSheet(
-            f"background:{C.BG_DEEP}; color:#c8ffc8; border:none; padding:4px;"
+            f"background:{C.BG_DEEP}; color:{C.CONSOLE_TEXT}; border:none; padding:4px;"
         )
         # Plafond haut : un dump gcc verbeux ne doit pas pousser la VRAIE cause
         # (souvent la première erreur) hors du tampon.
@@ -366,7 +366,7 @@ class BuildPanel(QWidget):
         self.btn_build.setEnabled(False)
         self.btn_build.setVisible(False)
 
-    def log(self, text, color="#c8ffc8"):
+    def log(self, text, color=C.CONSOLE_TEXT):
         fmt = QTextCharFormat()
         fmt.setForeground(QColor(color))
         cursor = self.console.textCursor()

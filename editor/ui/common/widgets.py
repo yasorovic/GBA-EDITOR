@@ -29,7 +29,7 @@ from ui.common.theme import C, T, S, QSS
 
 
 # ── Constantes de style ───────────────────────────────────────────────
-#  UI (Inter) pour les labels/boutons, MONO réservé aux valeurs et axes.
+#  UI (police système) pour les labels/boutons, MONO réservé aux valeurs et axes.
 
 _FONT_UI_SM    = QFont(T.UI, T.SM)
 _FONT_UI_XS    = QFont(T.UI, T.XS)
@@ -1175,6 +1175,22 @@ class CollapsibleCard(QFrame):
         self._sep.setVisible(expanded)
         self._apply_size_policy()
 
+    def sizeHint(self) -> QSize:
+        # Hauteur POUR la largeur actuelle. Avec la politique verticale Fixed,
+        # Qt plafonne la carte à son sizeHint ; celui-ci, calculé sans largeur,
+        # ignore qu'une note repliée sur deux lignes (inspecteur étroit) a
+        # besoin de plus de place — la note passait alors sous le champ voisin.
+        hint = super().sizeHint()
+        layout = self.layout()
+        if layout is not None and layout.hasHeightForWidth() and self.width() > 0:
+            hint.setHeight(max(hint.height(), layout.heightForWidth(self.width())))
+        return hint
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if event.oldSize().width() != event.size().width():
+            self.updateGeometry()
+
     def add_header_widget(self, w: QWidget):
         """Bouton (+ / −...) à droite du titre, hors zone de bascule."""
         self._header_row.addWidget(w)
@@ -1230,7 +1246,7 @@ def kind_colors(accent: str) -> tuple[str, str, str]:
     from PyQt6.QtGui import QColor
     c = QColor(accent)
     h, s, _v, _a = c.getHsv()
-    bg  = QColor.fromHsv(h, max(0, int(s * 0.55)), 22).name()
+    bg  = QColor.fromHsv(h, max(0, int(s * 0.55)), C.HEADER_BG_VALUE).name()
     mid = QColor.fromHsv(h, s, 150).name()
     return bg, mid, accent
 
@@ -1309,7 +1325,7 @@ class AssetHeaderBar(QWidget):
                 "ui_image":   kind_colors(icons.COLOR_UI),
                 "ui_element": kind_colors(icons.COLOR_UI),
                 "ui_layout":  kind_colors(icons.COLOR_UI),
-                "empty":  ("#161616", "#333333", "#555555"),
+                "empty":  (C.BG_BASE, C.BORDER_MID, C.TEXT_MUTED),
             }
         return cls._PALETTE
 
@@ -1322,7 +1338,7 @@ class AssetHeaderBar(QWidget):
         self._type_lbl.setStyleSheet(f"color:{tc}; font-size:8pt; font-weight:bold;")
         self._name_edit.setStyleSheet(
             f"background:transparent; color:{nc}; font-size:13pt; font-weight:bold;"
-            f"border:none; border-bottom:1px solid {'rgba(255,255,255,30)' if editable else 'transparent'};"
+            f"border:none; border-bottom:1px solid {C.BORDER_MID if editable else 'transparent'};"
             f"padding:0;"
         )
         self._name_edit.setReadOnly(not editable)

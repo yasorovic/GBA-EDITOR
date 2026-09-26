@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont, QColor, QIcon
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QThread
 
-from ui.common.theme import C, T, QSS
+from ui.common.theme import C, T, QSS, tint
 from ui.common.widgets import W, HoverIconButton
 from ui.common.labels import label
 from ui.common.reveal import reveal_in_file_manager
@@ -116,7 +116,7 @@ class ToolchainStatus(QWidget):
             lbl = QLabel(f"{'✓' if ok else '✗'} {name}")
             lbl.setFont(QFont(T.UI, T.XS, QFont.Weight.DemiBold))
             lbl.setStyleSheet(
-                f"color:{'#5be08b' if ok else '#a05050'};background:transparent;"
+                f"color:{C.POWER if ok else C.ACCENT_RED};background:transparent;"
             )
             row_l.addWidget(lbl)
         row_l.addStretch()
@@ -175,7 +175,7 @@ class _ProjectItem(QWidget):
         path_lbl = QLabel(str(path))
         path_lbl.setFont(QFont(T.MONO, T.XS))
         path_lbl.setStyleSheet(
-            f"color:{'#e05555' if dead else C.TEXT_DIM};background:transparent;"
+            f"color:{C.ACCENT_RED if dead else C.TEXT_DIM};background:transparent;"
         )
         path_lbl.setWordWrap(False)
         col.addWidget(path_lbl)
@@ -186,7 +186,7 @@ class _ProjectItem(QWidget):
             dead_badge = QLabel(label("home.project.not_found"))
             dead_badge.setFont(QFont(T.UI, T.XS))
             dead_badge.setStyleSheet(
-                "color:#e05555;background:#2a1a1a;border:1px solid #e05555;"
+                f"color:{C.ACCENT_RED};background:{tint(C.ACCENT_RED, 0.15)};border:1px solid {C.ACCENT_RED};"
                 "border-radius:3px;padding:1px 5px;"
             )
             hl.addWidget(dead_badge)
@@ -431,10 +431,10 @@ class HomeScreen(QDialog):
         btn_clear.setFont(QFont(T.UI, T.SM))
         btn_clear.setFixedHeight(30)
         btn_clear.setStyleSheet(
-            f"QPushButton{{color:#e05555;background:{C.BG_INPUT};"
-            f"border:1px solid #3a2020;border-radius:4px;padding:0 12px;}}"
-            f"QPushButton:hover{{background:#2a1a1a;border-color:#e05555;}}"
-            f"QPushButton:pressed{{background:#1e1010;}}"
+            f"QPushButton{{color:{C.ACCENT_RED};background:{C.BG_INPUT};"
+            f"border:1px solid {tint(C.ACCENT_RED, 0.35)};border-radius:4px;padding:0 12px;}}"
+            f"QPushButton:hover{{background:{tint(C.ACCENT_RED, 0.15)};border-color:{C.ACCENT_RED};}}"
+            f"QPushButton:pressed{{background:{tint(C.ACCENT_RED, 0.25)};}}"
         )
         btn_clear.setToolTip(label("home.clear_tip"))
         btn_clear.clicked.connect(self._clear_dead)
@@ -470,10 +470,10 @@ class HomeScreen(QDialog):
         btn_new.setFont(QFont(T.UI, T.SM, QFont.Weight.DemiBold))
         btn_new.setFixedHeight(30)
         btn_new.setStyleSheet(
-            f"QPushButton{{color:#000;background:{C.ACCENT};"
+            f"QPushButton{{color:{C.ON_ACCENT};background:{C.ACCENT};"
             f"border:none;border-radius:4px;padding:0 14px;}}"
-            f"QPushButton:hover{{background:#5dc487;}}"
-            f"QPushButton:pressed{{background:#3d9060;}}"
+            f"QPushButton:hover{{background:{C.ACCENT_HOVER};}}"
+            f"QPushButton:pressed{{background:{C.ACCENT_PRESSED};}}"
         )
         btn_new.clicked.connect(self._new_project)
         fl.addWidget(btn_new)
@@ -789,10 +789,10 @@ class NewProjectDialog(QDialog):
         btn_ok.setFont(QFont(T.UI, T.SM, QFont.Weight.DemiBold))
         btn_ok.setFixedHeight(30)
         btn_ok.setStyleSheet(
-            f"QPushButton{{color:#000;background:{C.ACCENT};"
+            f"QPushButton{{color:{C.ON_ACCENT};background:{C.ACCENT};"
             f"border:none;border-radius:4px;padding:0 16px;}}"
-            f"QPushButton:hover{{background:#ab9eff;}}"
-            f"QPushButton:pressed{{background:#7d6ce0;}}"
+            f"QPushButton:hover{{background:{C.ACCENT_HOVER};}}"
+            f"QPushButton:pressed{{background:{C.ACCENT_PRESSED};}}"
         )
         btn_ok.clicked.connect(self._create)
         fl.addWidget(btn_cancel)

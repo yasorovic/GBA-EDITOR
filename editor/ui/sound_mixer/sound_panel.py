@@ -19,7 +19,7 @@ from PyQt6.QtCore import (
     Qt, QUrl, QSize, pyqtSignal, QBuffer, QByteArray, QIODevice, QTimer,
 )
 
-from ui.common.theme import C, T, QSS
+from ui.common.theme import C, T, QSS, tint
 from ui.common.widgets import W
 from ui.common.labels import label
 from ui.common.icons import get as _ico, COLOR_DEFAULT
@@ -90,9 +90,9 @@ class AudioPlayer(QWidget):
         self._btn.setFixedSize(28, 22)
         self._btn.setFont(QFont(T.MONO, T.MD))
         self._btn.setStyleSheet(
-            f"QPushButton{{background:{C.BG_SEL};color:{C.ACCENT};border:1px solid #3a3a5a;"
+            f"QPushButton{{background:{C.BG_SEL};color:{C.ACCENT};border:1px solid {C.BORDER_MID};"
             "border-radius:3px;}"
-            "QPushButton:hover{background:#2e2e3d;}"
+            f"QPushButton:hover{{background:{C.BG_HOVER};}}"
         )
         self._btn.clicked.connect(self._toggle)
         layout.addWidget(self._btn)
@@ -103,7 +103,7 @@ class AudioPlayer(QWidget):
         self._stop_btn.setStyleSheet(
             f"QPushButton{{background:{C.BORDER};color:{C.TEXT_DIM};border:1px solid {C.BORDER_MID};"
             "border-radius:3px;}"
-            f"QPushButton:hover{{background:#3a2a2a;color:{C.ACCENT_RED};}}"
+            f"QPushButton:hover{{background:{tint(C.ACCENT_RED, 0.15)};color:{C.ACCENT_RED};}}"
         )
         self._stop_btn.clicked.connect(self._stop)
         layout.addWidget(self._stop_btn)

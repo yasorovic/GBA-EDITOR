@@ -46,6 +46,7 @@ from core.models.background import (
 from ui.common.theme import C, T, QSS
 from ui.common.palette_bank_strip import PaletteBankStrip
 from ui.common.canvas_top_bar import CanvasTopBar, BAR_HEIGHT
+from ui.background_editor.bg_prepare_overlay import PrepareOverlay, MODE_CROP, MODE_RESIZE
 from ui.common.icons import get as _ico, COLOR_DEFAULT, COLOR_ACTIVE, COLOR_UI
 from ui.common import external_editor
 
@@ -643,6 +644,9 @@ class BgInpaintView(QGraphicsView):
     placement_moved = pyqtSignal(object, int, int)  # (placement, x, y)
     placement_selected = pyqtSignal(object)         # placement | None
     placement_deleted = pyqtSignal(object)
+    prepare_live = pyqtSignal(int, int)     # taille du recadrage / du redimensionnement en cours
+    resize_released = pyqtSignal(int, int)  # poignée lâchée → nouvelle taille
+    crop_finished = pyqtSignal(bool)        # Entrée (True) / Échap (False) en recadrage
 
     _ZOOM_LEVELS = [0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0]
 
@@ -678,6 +682,20 @@ class BgInpaintView(QGraphicsView):
         self.frames.setZValue(30)
         self.frames.setVisible(False)
         self._scene.addItem(self.frames)
+
+        # Préparation de la source (recadrer / redimensionner). Au-dessus de tout :
+        # tant qu'un de ces modes est actif, ses poignées priment sur le reste.
+        self._prep = PrepareOverlay()
+        self._prep.setZValue(40)
+        self._scene.addItem(self._prep)
+        # Le recadrage montre la SOURCE entière, à la place de l'image encodée.
+        self._src_item = QGraphicsPixmapItem()
+        self._src_item.setVisible(False)
+        self._scene.addItem(self._src_item)
+        self._crop_src_size: Optional[tuple] = None
+        self._zoom_before_crop = 2.0
+        self._hidden_by_crop: list = []
+        self.zoom_changed.connect(self._prep.set_zoom)
 
         # Dépôt d'un fond animé venu du finder.
         self.setAcceptDrops(True)
@@ -719,24 +737,115 @@ class BgInpaintView(QGraphicsView):
         chargement, la vue n'a pas toujours sa taille finale (layout du splitter).
         Le bouton « ajuster » reste là pour les grands fonds."""
         self._pix_item.setPixmap(self._ctrl.pixmap())
+        self.sync_image_size()
+        self._zoom = self._DEFAULT_ZOOM
+        self._apply_zoom()
+        self._center()
+        QTimer.singleShot(0, self._center)
+
+    def sync_image_size(self):
+        """Grille, calques et sceneRect sur les dimensions courantes de l'image
+        (elles changent au changement de mode ou à la recompression), sans
+        toucher au zoom. Sans effet pendant un recadrage : la vue y montre la
+        source, dont la taille est déjà posée."""
+        if self._crop_src_size:
+            return
         w, h = self._ctrl.image_size()
         self._grid.resize(w, h)
         self.slices.set_image_size(w, h)
         self.placements.set_image_size(w, h)
         self._sync_grid()
         self._scene.setSceneRect(0, 0, max(w, 1), max(h, 1))
-        self._zoom = self._DEFAULT_ZOOM
-        self._apply_zoom()
-        self._center()
-        QTimer.singleShot(0, self._center)
+
+    def _extent(self) -> tuple[int, int]:
+        """Ce que la vue montre : la source entière pendant un recadrage, l'image
+        encodée sinon. Centrage, cadrage et curseur se mesurent sur la même."""
+        return self._crop_src_size or self._ctrl.image_size()
 
     def _center(self):
-        w, h = self._ctrl.image_size()
+        w, h = self._extent()
         if w and h:
             self.centerOn(w / 2, h / 2)
 
     def set_tool(self, tool: str):
         self._tool = tool
+
+    # ── Préparation de la source ──────────────────────────────────
+    @property
+    def prepare_mode(self) -> Optional[str]:
+        return self._prep.mode
+
+    def begin_crop(self, png_path, crop: Optional[tuple]) -> bool:
+        """Entre en recadrage : la source entière remplace l'image encodée, le
+        rectangle part de `crop` (x, y, w, h) — ou de l'image entière. False si
+        la source est illisible."""
+        pm = QPixmap(str(png_path))
+        if pm.isNull():
+            return False
+        self.end_resize()
+        sw, sh = pm.width(), pm.height()
+        self._src_item.setPixmap(pm)
+        self._src_item.setVisible(True)
+        # Tout le reste décrit l'image ENCODÉE : dans les pixels de la source il
+        # dirait faux, on le range le temps du recadrage.
+        self._hidden_by_crop = [it for it in (self._pix_item, self._grid, self.placements,
+                                              self.slices, self.frames) if it.isVisible()]
+        for it in self._hidden_by_crop:
+            it.setVisible(False)
+        self._crop_src_size = (sw, sh)
+        self._scene.setSceneRect(-16, -16, sw + 32, sh + 32)   # place pour les poignées
+        # La source est souvent plus grande que ce que le zoom courant montre : on
+        # la cadre en entier (poignées comprises), le zoom d'avant revient à la sortie.
+        self._zoom_before_crop = self._zoom
+        self.fit(margin=12)
+        self._prep.set_zoom(self._zoom)
+        self._prep.start_crop((sw, sh), crop or (0, 0, sw, sh))
+        return True
+
+    def end_crop(self) -> Optional[tuple]:
+        """Sort du recadrage et rend le rectangle (x, y, w, h) de la SOURCE, ou
+        None si on n'y était pas."""
+        if self._prep.mode != MODE_CROP:
+            return None
+        rect = self._prep.crop_rect()
+        self._prep.stop()
+        self._src_item.setVisible(False)
+        self._crop_src_size = None
+        for it in self._hidden_by_crop:
+            it.setVisible(True)
+        self._hidden_by_crop = []
+        self.unsetCursor()
+        self.sync_image_size()
+        self._zoom = self._zoom_before_crop
+        self._apply_zoom()
+        self._center()
+        return rect
+
+    def begin_resize(self, size: tuple):
+        """Poignées de redimensionnement sur l'image préparée `size` (w, h)."""
+        if self._prep.mode == MODE_CROP:
+            return
+        # Les poignées de gauche et du haut sortent du repère de l'image quand on
+        # agrandit : on laisse de la place autour, sans bouger ce qu'on regarde.
+        centre = self.mapToScene(self.viewport().rect().center())
+        w, h = self._ctrl.image_size()
+        self._scene.setSceneRect(-max(w, size[0]), -max(h, size[1]),
+                                 3 * max(w, size[0]), 3 * max(h, size[1]))
+        self.centerOn(centre)
+        self._prep.set_zoom(self._zoom)
+        self._prep.start_resize(size)
+
+    def end_resize(self):
+        if self._prep.mode == MODE_RESIZE:
+            centre = self.mapToScene(self.viewport().rect().center())
+            self._prep.stop()
+            self.unsetCursor()
+            self.sync_image_size()
+            self.centerOn(centre)
+
+    def _emit_prepare_live(self):
+        w, h = self._prep.size() if self._prep.mode == MODE_RESIZE else self._prep.crop_rect()[2:]
+        self.prepare_live.emit(w, h)
 
     # ── Grille ───────────────────────────────────────────────────
     def _sync_grid(self):
@@ -767,10 +876,13 @@ class BgInpaintView(QGraphicsView):
         self._zoom = levels[max(0, min(idx + direction, len(levels) - 1))]
         self._apply_zoom()
 
-    def fit(self):
-        w, h = self._ctrl.image_size()
+    def fit(self, margin: int = 0):
+        """Cadre l'image entière. `margin` (pixels de l'image) laisse de la place
+        aux poignées, qui débordent du bord qu'elles tiennent."""
+        w, h = self._extent()
         if w and h:
-            self.fitInView(0, 0, w, h, Qt.AspectRatioMode.KeepAspectRatio)
+            self.fitInView(-margin, -margin, w + 2 * margin, h + 2 * margin,
+                           Qt.AspectRatioMode.KeepAspectRatio)
             self._zoom = self.transform().m11()
             self.zoom_changed.emit(self._zoom)
 
@@ -782,7 +894,7 @@ class BgInpaintView(QGraphicsView):
     def _emit_cursor(self, e):
         pos = self.mapToScene(e.position().toPoint())
         x, y = int(pos.x()), int(pos.y())
-        w, h = self._ctrl.image_size()
+        w, h = self._extent()
         inside = 0 <= x < w and 0 <= y < h
         self.cursor_moved.emit(x if inside else -1, y if inside else -1)
 
@@ -806,6 +918,13 @@ class BgInpaintView(QGraphicsView):
             self._panning = True
             self._pan_last = e.position().toPoint()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            e.accept()
+            return
+        if e.button() == Qt.MouseButton.LeftButton and self._prep.mode:
+            # Recadrage / redimensionnement actif : le clic est à ses poignées, ou
+            # à personne — jamais à la peinture ni aux fonds posés.
+            if self._prep.begin(*self._scene_pos(e)):
+                self._emit_prepare_live()
             e.accept()
             return
         if e.button() == Qt.MouseButton.LeftButton:
@@ -845,6 +964,18 @@ class BgInpaintView(QGraphicsView):
             self.verticalScrollBar().setValue(self.verticalScrollBar().value() - d.y())
             e.accept()
             return
+        if self._prep.mode:
+            x, y = self._scene_pos(e)
+            if self._prep.dragging:
+                mods = e.modifiers()
+                self._prep.drag(x, y, bool(mods & Qt.KeyboardModifier.ShiftModifier),
+                                bool(mods & Qt.KeyboardModifier.ControlModifier))
+                self._emit_prepare_live()
+            else:
+                cur = self._prep.cursor_at(x, y)
+                self.setCursor(cur) if cur else self.unsetCursor()
+            e.accept()
+            return
         if self._drag_guide:
             x, y = self._scene_pos(e)
             self.slice_dragged.emit(self._drag_guide,
@@ -877,6 +1008,12 @@ class BgInpaintView(QGraphicsView):
         if e.button() == Qt.MouseButton.MiddleButton and self._panning:
             self._panning = False
             self.unsetCursor()
+            e.accept()
+            return
+        if self._prep.dragging and e.button() == Qt.MouseButton.LeftButton:
+            self._prep.end()
+            if self._prep.mode == MODE_RESIZE:
+                self.resize_released.emit(*self._prep.size())
             e.accept()
             return
         if self._drag_guide and e.button() == Qt.MouseButton.LeftButton:
@@ -916,6 +1053,11 @@ class BgInpaintView(QGraphicsView):
             self.placement_deleted.emit(pl)
 
     def keyPressEvent(self, e):
+        if self._prep.mode == MODE_CROP and e.key() in (
+                Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Escape):
+            self.crop_finished.emit(e.key() != Qt.Key.Key_Escape)
+            e.accept()
+            return
         if e.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
             pl = self.placements.selected()
             if pl is not None:
@@ -1011,7 +1153,7 @@ class BgInpaintToolbar(QFrame):
 
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet("color:#2a2a2a; margin:2px 0;")
+        sep.setStyleSheet(f"color:{C.BORDER}; margin:2px 0;")
         sep.setFixedHeight(1)
         layout.addWidget(sep)
 
@@ -1068,6 +1210,10 @@ class BgInpaintCanvas(QWidget):
     slices_dragged = pyqtSignal(dict)      # marges posées au canvas → inspecteur
     placements_changed = pyqtSignal()      # fond animé posé/déplacé/retiré
     placement_selected = pyqtSignal(object)  # placement | None (relayé du view)
+    # Recadrage / taille voulus pour la source, (None, None) = « Original ». Le
+    # canvas ne compresse pas lui-même : l'écran le fait hors-thread et écrit le
+    # résultat sur le fond.
+    prepare_requested = pyqtSignal(object, object)
 
     # Cadence de la lecture : un tick GBA (60 Hz), l'unité dans laquelle les
     # vitesses sont DÉCLARÉES. Rejouer à l'unité près est ce qui rend l'aperçu
@@ -1097,6 +1243,20 @@ class BgInpaintCanvas(QWidget):
             "edit_external", label('bginp.edit_image'), self._on_edit_image)
         self._btn_edit.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._btn_edit.customContextMenuRequested.connect(self._on_edit_menu)
+        # Préparer la source d'une image « riche » : recadrer, redimensionner,
+        # revenir à l'original. Le PNG n'est jamais touché (cf. bg_import.prepare_source).
+        self._bar.add_spacing(8)
+        self._tb_crop = self._bar.add_toggle(
+            "prep_crop", label('bginp.crop_tip'), self._on_crop_toggled)
+        self._tb_resize = self._bar.add_toggle(
+            "prep_resize", label('bginp.resize_tip'), self._on_resize_toggled)
+        self._btn_prep_reset = self._bar.add_action(
+            "prep_reset", label('bginp.prep_reset_tip'), self._on_prep_reset)
+        self._crop_cancelled = False   # Échap / changement de fond : pas d'application
+        self._src_size = (0, 0)        # taille du PNG source, lue à la sélection
+        self._view.prepare_live.connect(self._bar.set_canvas_size)
+        self._view.resize_released.connect(self._on_resize_released)
+        self._view.crop_finished.connect(self._on_crop_finished)
         self._view.zoom_changed.connect(self._bar.set_zoom)
         self._view.cursor_moved.connect(self._on_cursor_moved)
         self._bar.set_zoom(self._view._zoom)
@@ -1200,6 +1360,122 @@ class BgInpaintCanvas(QWidget):
 
     def _on_cursor_moved(self, x: int, y: int):
         self._bar.set_cursor_px(*((None, None) if x < 0 else (x, y)))
+
+    # ── Préparation de la source ─────────────────────────────────
+    # Deux gestes, une seule sortie : `prepare_requested(crop, size)`. Le
+    # recadrage s'applique à la sortie du mode (Entrée ou bascule) — pendant qu'on
+    # règle, la vue montre la source, pas l'encodage, donc rien à recompresser à
+    # chaque poignée. Le redimensionnement, lui, s'applique au relâchement : c'est
+    # l'image encodée qu'il montre.
+
+    def _prep_available(self) -> bool:
+        ba = self._ba
+        return bool(ba and not ba.is_ui and not ba.is_animated and ba.image_name()
+                    and (ba.tileset or ba.bitmap) and self._src_size[0])
+
+    def _read_source_size(self) -> tuple:
+        path = self._source_png_path()
+        if path is None or not path.exists():
+            return (0, 0)
+        try:
+            from PIL import Image
+            with Image.open(path) as im:
+                return im.size
+        except Exception:
+            return (0, 0)
+
+    def _prepared_size(self) -> tuple:
+        """Taille de l'image préparée, avant le rembourrage à un multiple de 8."""
+        ba = self._ba
+        if ba.import_size:
+            return tuple(ba.import_size)
+        if ba.import_crop:
+            return tuple(ba.import_crop[2:])
+        return self._src_size
+
+    @staticmethod
+    def _set_checked(btn, on: bool):
+        btn.blockSignals(True)
+        btn.setChecked(on)
+        btn.blockSignals(False)
+
+    def _refresh_prepare_ui(self):
+        """Boutons et poignées d'après l'état du fond courant."""
+        ok = self._prep_available()
+        for b in (self._tb_crop, self._tb_resize):
+            b.setEnabled(ok)
+        self._btn_prep_reset.setEnabled(
+            ok and bool(self._ba.import_crop or self._ba.import_size))
+        if not ok:
+            self._set_checked(self._tb_crop, False)
+            self._set_checked(self._tb_resize, False)
+            self._view.end_crop()
+            self._view.end_resize()
+        elif self._tb_resize.isChecked():
+            self._view.begin_resize(self._prepared_size())
+
+    def _cancel_prepare_modes(self):
+        """Quitte recadrage/redimensionnement sans rien appliquer (autre fond
+        choisi, réinitialisation)."""
+        if self._tb_crop.isChecked():
+            self._crop_cancelled = True
+            self._tb_crop.setChecked(False)
+        if self._tb_resize.isChecked():
+            self._tb_resize.setChecked(False)
+
+    def _on_crop_toggled(self, on: bool):
+        if on:
+            if self._tb_resize.isChecked():
+                self._tb_resize.setChecked(False)
+            if not self._view.begin_crop(self._source_png_path(), self._ba.import_crop):
+                self._set_checked(self._tb_crop, False)
+                return
+            self._bar.set_canvas_size(*self._src_size)
+            self._view.setFocus()
+            return
+        rect = self._view.end_crop()
+        self._bar.set_canvas_size(*self._ctrl.image_size())
+        cancelled, self._crop_cancelled = self._crop_cancelled, False
+        if rect is not None and not cancelled:
+            self._apply_crop(rect)
+
+    def _on_crop_finished(self, accept: bool):
+        self._crop_cancelled = not accept
+        self._tb_crop.setChecked(False)
+
+    def _apply_crop(self, rect: tuple):
+        sw, sh = self._src_size
+        crop = None if tuple(rect) == (0, 0, sw, sh) else tuple(rect)
+        old = self._ba.import_crop
+        if crop == old:
+            return
+        # Recadrer ne change pas l'échelle : une taille déjà réglée suit le
+        # nouveau cadre, sinon le fond changerait de grain à chaque coup de ciseaux.
+        size = self._ba.import_size
+        if size:
+            ow, oh = old[2:] if old else (sw, sh)
+            nw, nh = crop[2:] if crop else (sw, sh)
+            size = (max(1, round(nw * size[0] / ow)), max(1, round(nh * size[1] / oh)))
+        self.prepare_requested.emit(crop, size)
+
+    def _on_resize_toggled(self, on: bool):
+        if not on:
+            self._view.end_resize()
+            return
+        if self._tb_crop.isChecked():
+            self._tb_crop.setChecked(False)   # applique le recadrage en cours
+        self._view.begin_resize(self._prepared_size())
+
+    def _on_resize_released(self, w: int, h: int):
+        crop = self._ba.import_crop
+        base = tuple(crop[2:]) if crop else self._src_size
+        size = None if (w, h) == base else (w, h)
+        if size != self._ba.import_size:
+            self.prepare_requested.emit(crop, size)
+
+    def _on_prep_reset(self):
+        self._cancel_prepare_modes()
+        self.prepare_requested.emit(None, None)
 
     # ── Édition externe ──────────────────────────────────────────
 
@@ -1369,6 +1645,7 @@ class BgInpaintCanvas(QWidget):
         self.placements_changed.emit()
 
     def load(self, project, ba):
+        self._cancel_prepare_modes()   # avant de changer de fond : rien n'est appliqué
         self._ba = ba
         self._project = project
         self._view.placements.set_selected(None)
@@ -1393,6 +1670,8 @@ class BgInpaintCanvas(QWidget):
         self._bar.set_canvas_size(*self._ctrl.image_size())
         self._bar.set_cursor_px(None, None)
         self._btn_edit.setEnabled(bool(ba and ba.image_name()))
+        self._src_size = self._read_source_size()
+        self._refresh_prepare_ui()
 
     def set_active_palette(self, idx: int):
         self._ctrl.set_active_palette(idx)
@@ -1407,7 +1686,11 @@ class BgInpaintCanvas(QWidget):
             self._position_paint_strip()
             self._ctrl.set_active_palette(self._paint_strip.active())
         self._ctrl.reload_render()
+        self._view.sync_image_size()
+        self._bar.set_canvas_size(*self._ctrl.image_size())
         self.reload_geometry()
+        self._src_size = self._read_source_size()
+        self._refresh_prepare_ui()
 
     def resizeEvent(self, e):
         super().resizeEvent(e)

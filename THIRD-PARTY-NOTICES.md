@@ -40,13 +40,9 @@ remplacement reste possible.
 
 | Fonte | Origine | Licence |
 | --- | --- | --- |
-| Inter | [rsms/inter](https://github.com/rsms/inter) | SIL OFL 1.1 |
 | Font Awesome 5 / 6 | via QtAwesome | SIL OFL 1.1 (fontes) + CC BY 4.0 (icônes) |
 | Elusive Icons | via QtAwesome | SIL OFL 1.1 |
 | Codicon | via QtAwesome | CC BY 4.0 |
-
-Le texte intégral de la licence d'Inter accompagne les fichiers de fonte, à
-`editor/ui/common/fonts/LICENSE.txt`, et il est embarqué dans la distribution.
 
 Les fontes de QtAwesome sont fournies par le paquet lui-même et leurs notices
 respectives se trouvent dans son arborescence.

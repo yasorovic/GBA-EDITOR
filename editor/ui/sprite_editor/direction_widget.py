@@ -5,7 +5,7 @@ from ui.common.labels import label
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QToolButton
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 
-from ui.common.theme import C, T
+from ui.common.theme import C, T, tint
 from ui.common.direction_grid import DirectionGrid
 from core.models.sprite import AnimState
 from core.models.sprite import resolve_direction_mirrors
@@ -44,7 +44,7 @@ class DirectionWidget(QWidget):
             f"border:1px solid {C.BORDER};border-radius:4px;"
             f"font-family:{T.UI_STACK};font-size:{T.XS}px;padding:4px 8px;}}"
             f"QToolButton:checked{{color:{C.ACCENT_COOL};border-color:{C.ACCENT_COOL};"
-            f"background:#0e1a22;}}"
+            f"background:{tint(C.ACCENT_COOL, 0.18)};}}"
             f"QToolButton:hover{{color:{C.TEXT_HI};background:{C.BG_HOVER};}}"
         )
 

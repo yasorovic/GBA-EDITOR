@@ -19,8 +19,12 @@ from typing import Optional
 
 from core.models.gba_color import (
     reduce_colors, nearest_rgb, rgb888_to_bgr555, bgr555_to_rgb888,
+    COMPRESSION_METHODS,
 )
 from core.models.gba_color import RESERVED_SLOT_COLOR
+from core.models.background import BackgroundCompression
+from core.bg_tile_merge import merge_tiles
+from core.bg_palette_cluster import cluster_palettes
 
 # Le format binaire lui-même (tuile <-> hex, miroirs, entrée de carte) vit
 # dans son propre module : les modèles, la génération et le canvas en ont
@@ -42,6 +46,32 @@ def open_image(source):
     Image est déjà passé, le renvoie tel quel."""
     from PIL import Image
     return source if hasattr(source, "mode") else Image.open(source)
+
+
+def prepare_source(source, crop=None, size=None):
+    """Image PIL préparée pour l'encodage : recadrée (`crop` = x, y, w, h en pixels
+    de la source), PUIS redimensionnée (`size` = w, h). Ni l'un ni l'autre : la
+    source est rendue telle quelle. Le fichier n'est jamais modifié — tout se
+    passe en mémoire, c'est ce qui laisse revenir à l'original.
+
+    Rééchantillonnage AUTOMATIQUE : plus proche voisin pour une source indexée (le
+    mode 'P' et sa palette d'auteur survivent, un pixel art n'est pas lissé),
+    Lanczos sinon (photo). Le recadrage est ramené dans l'image : une préparation
+    écrite pour une source plus grande, remplacée depuis, ne plante pas."""
+    from PIL import Image
+    img = open_image(source)
+    if crop:
+        x, y, w, h = crop
+        x = max(0, min(int(x), img.width - 1))
+        y = max(0, min(int(y), img.height - 1))
+        w = max(1, min(int(w), img.width - x))
+        h = max(1, min(int(h), img.height - y))
+        if (x, y, w, h) != (0, 0, img.width, img.height):
+            img = img.crop((x, y, x + w, y + h))
+    if size and tuple(size) != img.size:
+        filt = Image.NEAREST if is_indexed(img) else Image.LANCZOS
+        img = img.resize((max(1, int(size[0])), max(1, int(size[1]))), filt)
+    return img
 
 
 def is_indexed(img) -> bool:
@@ -258,6 +288,46 @@ def analyze_background_source(source, max_colors: int = 16,
         "max_tile_colors": max((len(c) for c in tile_colors), default=0),
         "tiles_reduced": sum(1 for cm in tile_cmap if cm),
         "pre_merge_palettes": len(palettes),
+    }
+
+
+def analyze_tile_colors(source) -> dict:
+    """Ce que le 4bpp demanderait à cette image, MESURÉ sans rien encoder :
+    couleurs par tuile, couleurs partagées d'une tuile à l'autre, palettes
+    nécessaires. `source` est l'image PRÉPARÉE (cf. `prepare_source`) — c'est la
+    taille qu'elle aura qui fait le nombre de tuiles.
+
+    Même extraction et même packing que la compression (`_extract_tile_colors`,
+    `_pack_palettes`) : le chiffre annoncé est celui que la compression trouvera.
+    Une tuile de plus de 15 couleurs (l'index 0 est le transparent) ne tient dans
+    aucune sous-palette telle quelle : elle serait RÉDUITE, donc avec perte. Les
+    palettes comptées ici sont celles des tuiles qui tiennent, sans cette
+    réduction — un minimum, jamais un optimiste.
+
+    Clés : tiles, colors_min/avg/max, tiles_fit, tiles_over, buckets ((≤15,
+    16–31, ≥32) en tuiles), distinct_sets, shared_tiles (tuiles dont le jeu de
+    couleurs est aussi celui d'une autre), palettes_needed."""
+    img, _w, _h, _tw, _th = _open_padded(source)
+    _, _, _, tile_colors = _extract_tile_colors(img)
+    counts = [len(c) for c in tile_colors]
+    fitting = [c for c in tile_colors if len(c) <= 15]
+    palettes, _, _ = _pack_palettes(fitting, 15, "median_cut")
+    by_set: dict = {}
+    for c in tile_colors:
+        by_set[frozenset(c)] = by_set.get(frozenset(c), 0) + 1
+    return {
+        "tiles": len(counts),
+        "colors_min": min(counts, default=0),
+        "colors_avg": sum(counts) / len(counts) if counts else 0.0,
+        "colors_max": max(counts, default=0),
+        "tiles_fit": len(fitting),
+        "tiles_over": len(counts) - len(fitting),
+        "buckets": (len(fitting),
+                    sum(1 for n in counts if 16 <= n <= 31),
+                    sum(1 for n in counts if n >= 32)),
+        "distinct_sets": len(by_set),
+        "shared_tiles": sum(n for n in by_set.values() if n > 1),
+        "palettes_needed": len(palettes),
     }
 
 
@@ -576,16 +646,23 @@ def compiled_background(ba, source_path, project=None) -> Optional[dict]:
         return compose_animations(ba, project, base)
     if source_path and source_path.is_file():
         try:
-            return encode_background(source_path)
+            return encode_background(
+                prepare_source(source_path, ba.import_crop if ba else None,
+                               ba.import_size if ba else None),
+                compression=ba.compression if ba else None)
         except (ValueError, OSError):
             return None
     return None
 
 
-def encode_background(source, max_palettes: int = 16, max_colors: int = 16,
-                        method: str = "median_cut") -> dict:
+def encode_background(source, method: str = "median_cut",
+                        compression: Optional[BackgroundCompression] = None,
+                        dither: bool = False) -> dict:
     """PNG -> représentation GBA (palettes BGR555 + tileset + tilemap). Ne modifie
-    jamais le source. `max_colors`=16 (dont index 0 transparent), `max_palettes`=16.
+    jamais le source. `compression` (cf. BackgroundCompression) fixe le nombre de
+    sous-palettes, leurs couleurs, la réduction globale préalable et la cible de
+    tuiles ; défauts = 16 sous-palettes de 15 couleurs (+ l'index 0 transparent).
+    `dither` ne joue que sur la réduction globale (rien à diffuser sans elle).
     Le résultat inclut un sous-dict `diagnostics` (pression de compression : couleurs
     par tuile, palettes avant fusion, dimensions) pour le validateur de l'éditeur.
 
@@ -595,53 +672,50 @@ def encode_background(source, max_palettes: int = 16, max_colors: int = 16,
     direct = _encode_background_indexed_4bpp(source)
     if direct is not None:
         return direct
+    params = compression or BackgroundCompression()
+    # Un fond passé du 8bpp ou du bitmap porte « quantize_256 » : c'est le nom du
+    # quantifieur de PIL, pas une méthode de réduction par tuile. On retombe sur le
+    # défaut plutôt que de refuser une image que l'auteur vient de basculer.
+    if method not in {token for token, _name in COMPRESSION_METHODS}:
+        method = "median_cut"
+    max_palettes = params.palettes_max
+    editable = params.colors_per_palette   # couleurs utiles (l'index 0 est le transparent)
     img, w, h, tw, th = _open_padded(source)
-    editable = max_colors - 1   # 15 couleurs utiles + index 0 transparent
+    if params.global_colors:
+        img = _reduce_globally(img, params.global_colors, dither)
 
     # 1. Grille de pixels + jeu de couleurs par tuile (couleurs snappées 5-bit).
     _, _, tile_grids, tile_colors = _extract_tile_colors(img)
 
-    # 2. Packing glouton des palettes (pré-fusion).
-    palettes, tile_pal, tile_cmap = _pack_palettes(tile_colors, editable, method)
-    pre_merge_palettes = len(palettes)
+    # 2. Répartition des tuiles entre sous-palettes. SANS PERTE d'abord : le packing
+    #    glouton exact, quand chaque tuile tient en `editable` couleurs et que les
+    #    palettes suffisent (pixel art). Sinon — une photo — on regroupe les tuiles
+    #    qui se ressemblent et on taille une palette par groupe (cf.
+    #    bg_palette_cluster) au lieu de garder les plus employées et de renvoyer
+    #    les autres au hasard, ce qui laissait l'océan sans ses bleus.
     max_tile_colors = max((len(c) for c in tile_colors), default=0)
-    tiles_reduced = sum(1 for cm in tile_cmap if cm)
-
-    # 2b. Cap RAPIDE à max_palettes. L'ancienne fusion des paires les plus proches
-    #     était en O(P³) (une photo → des centaines de palettes → l'éditeur gelait
-    #     ~7 min). On garde plutôt les palettes les plus utilisées et on réaffecte
-    #     les tuiles des autres à la palette gardée la plus proche (recouvrement de
-    #     couleurs max), en comblant ses emplacements libres pour limiter la perte ;
-    #     la perte résiduelle est absorbée par le nearest de l'étape 3. Coût O(P·k).
-    if len(palettes) > max_palettes:
-        usage = [0] * len(palettes)
-        for pi in tile_pal:
-            usage[pi] += 1
-        keep = sorted(range(len(palettes)), key=lambda i: usage[i], reverse=True)[:max_palettes]
-        keep_sets = [set(palettes[i]) for i in keep]
-        remap = {old: new for new, old in enumerate(keep)}   # kept -> index compacté
-        for old in range(len(palettes)):
-            if old in remap:
-                continue
-            cset = set(palettes[old])
-            best = max(range(len(keep)), key=lambda k: len(keep_sets[k] & cset))
-            kpal = palettes[keep[best]]
-            for c in palettes[old]:            # comble les slots libres (≤ editable)
-                if len(kpal) >= editable:
-                    break
-                if c not in keep_sets[best]:
-                    kpal.append(c)
-                    keep_sets[best].add(c)
-            remap[old] = best
-        palettes = [palettes[i] for i in keep]
-        tile_pal = [remap[pi] for pi in tile_pal]
+    tiles_reduced = sum(1 for c in tile_colors if len(c) > editable)
+    palettes = None
+    if max_tile_colors <= editable:
+        packed, tile_pal, tile_cmap = _pack_palettes(tile_colors, editable, method)
+        pre_merge_palettes = len(packed)
+        if len(packed) <= max_palettes:
+            palettes = packed
+    if palettes is None:
+        if max_tile_colors > editable:
+            # Minimum pour tenir sans perte : palettes des seules tuiles qui tiennent.
+            pre_merge_palettes = len(_pack_palettes(
+                [c for c in tile_colors if len(c) <= editable], editable, method)[0])
+        palettes, tile_pal = cluster_palettes(tile_grids, max_palettes, editable, method)
+        tile_cmap = [None] * len(tile_grids)
 
     # 3. Indexation des pixels dans la palette de chaque tuile + dédup (flips).
     pal_lists = [list(pal) for pal in palettes]
     pal_index = [{c: k + 1 for k, c in enumerate(pal)} for pal in pal_lists]
     tileset: list = []
     lookup: dict = {}
-    tilemap: list = []
+    cells: list = []
+    near: dict = {}     # (palette, couleur) -> index le plus proche, calculé une fois
     for i, grid in enumerate(tile_grids):
         pb = tile_pal[i]
         cmap = tile_cmap[i]
@@ -654,11 +728,18 @@ def encode_background(source, max_palettes: int = 16, max_colors: int = 16,
                 continue
             cc = cmap[c] if cmap else c
             k = pidx.get(cc)
-            if k is None:   # perdu à la fusion -> plus proche dans la palette
-                k = pidx[nearest_rgb(cc, pal)] if pal else 0
+            if k is None:   # hors palette -> la couleur la plus proche de CETTE palette
+                k = near.get((pb, cc))
+                if k is None:
+                    k = near[(pb, cc)] = pidx[nearest_rgb(cc, pal)] if pal else 0
             idxgrid.append(k)
         tid, fh, fv = _dedup_tile(tuple(idxgrid), lookup, tileset)
-        tilemap.append(pack_se(tid, pb, fh, fv))
+        cells.append((tid, pb, fh, fv))
+
+    # 4. Cible de tuiles : fusionne les moins employées (avec perte) — après la
+    #    dédup exacte, qui elle est sans perte et passe toujours d'abord.
+    tileset, cells, tiles_merged = merge_tiles(tileset, cells, pal_lists, params.tile_target)
+    tilemap = [pack_se(*cell) for cell in cells]
 
     return {
         "palettes": [[RESERVED_SLOT_COLOR] + [rgb888_to_bgr555(*c) for c in pal]
@@ -679,11 +760,52 @@ def encode_background(source, max_palettes: int = 16, max_colors: int = 16,
             "pre_merge_palettes": pre_merge_palettes,  # palettes avant le cap à 16
             "final_palettes": len(pal_lists),     # palettes après fusion
             "unique_tiles": len(tileset),         # budget VRAM
+            "tiles_merged": tiles_merged,         # tuiles retirées par la cible (perte)
         },
     }
 
 
-def encode_background_8bpp(source, dither: bool = False) -> dict:
+def _reduce_globally(img, colors: int, dither: bool):
+    """RGBA → RGBA dont les pixels opaques n'emploient que `colors` couleurs.
+    Fait AVANT le découpage en tuiles : deux tuiles voisines qui se ressemblent
+    tombent alors sur les mêmes couleurs, donc sur les mêmes palettes. La
+    transparence est rendue telle quelle."""
+    from PIL import Image
+    alpha = img.getchannel("A")
+    rgb = img.convert("RGB")
+    q = rgb.quantize(colors=max(2, colors), method=Image.Quantize.MEDIANCUT)
+    if dither:
+        # `quantize(dither=…)` est ignoré tant qu'on ne fournit pas de palette :
+        # on repasse l'image sur celle qu'on vient de calculer pour que la
+        # diffusion d'erreur ait vraiment lieu.
+        q = rgb.quantize(palette=q, dither=Image.Dither.FLOYDSTEINBERG)
+    out = q.convert("RGB").convert("RGBA")
+    out.putalpha(alpha)
+    return out
+
+
+# Quantifieurs de PIL offerts pour la palette unique (8bpp, bitmap). Le jeton est ce
+# qui est stocké dans le sidecar ; « median_cut » est aussi le nom de la méthode 4bpp.
+QUANTIZERS_8BPP = ("median_cut", "octree", "max_coverage")
+
+
+def _quantize_rgb(rgb, colors: int, method: str, dither: bool):
+    """Image PIL 'P' à `colors` couleurs. `quantize(dither=…)` est IGNORÉ tant qu'on
+    ne lui donne pas de palette — le dithering des modes 8bpp et bitmap n'a donc
+    jamais rien fait. On calcule la palette d'abord, puis on repasse l'image dessus
+    pour que la diffusion d'erreur ait lieu."""
+    from PIL import Image
+    algo = {"median_cut": Image.Quantize.MEDIANCUT,
+            "octree": Image.Quantize.FASTOCTREE,
+            "max_coverage": Image.Quantize.MAXCOVERAGE}.get(method, Image.Quantize.MEDIANCUT)
+    q = rgb.quantize(colors=max(2, colors), method=algo)
+    if dither:
+        q = rgb.quantize(palette=q, dither=Image.Dither.FLOYDSTEINBERG)
+    return q
+
+
+def encode_background_8bpp(source, dither: bool = False, method: str = "median_cut",
+                           compression: Optional[BackgroundCompression] = None) -> dict:
     """PNG -> représentation GBA 8bpp : UNE palette de ≤256 couleurs, tuiles en
     octets (index 0-255), dédup (flips). Ne modifie jamais le source. Rapide : le
     quantifieur C de PIL fait le gros du travail (pas de packing multi-palettes).
@@ -691,25 +813,31 @@ def encode_background_8bpp(source, dither: bool = False) -> dict:
 
     PNG INDEXÉ : la palette déclarée (≤256) est préservée telle quelle et les
     tuiles sont indexées directement (cf. `_encode_background_indexed_8bpp`),
-    au lieu d'être re-quantifiées depuis les seules couleurs peintes."""
+    au lieu d'être re-quantifiées depuis les seules couleurs peintes.
+
+    `compression` : `palette_colors` (taille de la palette, 255 par défaut — l'index
+    0 reste au transparent) et `tile_target` (fusion des tuiles, cf. bg_tile_merge) ;
+    `method` : un des `QUANTIZERS_8BPP`, sinon median-cut."""
     direct = _encode_background_indexed_8bpp(source)
     if direct is not None:
         return direct
-    from PIL import Image
+    params = compression or BackgroundCompression()
+    if method not in QUANTIZERS_8BPP:
+        method = "median_cut"
     img, w, h, tw, th = _open_padded(source)
     alpha = img.getchannel("A").load()
     rgb = img.convert("RGB")
-    dmode = Image.Dither.FLOYDSTEINBERG if dither else Image.Dither.NONE
-    # 255 couleurs : l'index 0 reste réservé au transparent.
-    q = rgb.quantize(colors=255, method=Image.Quantize.MEDIANCUT, dither=dmode)
+    q = _quantize_rgb(rgb, params.palette_colors, method, dither)
     qidx = q.load()
     pal_raw = q.getpalette() or []   # [r,g,b, ...]
 
     pal256 = [RESERVED_SLOT_COLOR]   # slot 0 réservé
+    pal_rgb: list = []               # couleurs 1..N, pour la fusion de tuiles
     for i in range(255):
         base = i * 3
-        if base + 2 < len(pal_raw):
-            pal256.append(rgb888_to_bgr555(pal_raw[base], pal_raw[base + 1], pal_raw[base + 2]))
+        if i < params.palette_colors and base + 2 < len(pal_raw):
+            pal_rgb.append((pal_raw[base], pal_raw[base + 1], pal_raw[base + 2]))
+            pal256.append(rgb888_to_bgr555(*pal_rgb[-1]))
         else:
             pal256.append(0)
 
@@ -718,7 +846,7 @@ def encode_background_8bpp(source, dither: bool = False) -> dict:
 
     tileset: list = []
     lookup: dict = {}
-    tilemap: list = []
+    cells: list = []
     for ty in range(th):
         for tx in range(tw):
             grid = []
@@ -730,7 +858,11 @@ def encode_background_8bpp(source, dither: bool = False) -> dict:
                     else:
                         grid.append((qidx[px, py] + 1) & 0xFF)   # 1..255
             tid, fh, fv = _dedup_tile(tuple(grid), lookup, tileset)
-            tilemap.append(pack_se(tid, 0, fh, fv))
+            cells.append((tid, 0, fh, fv))
+
+    # Cible de tuiles : après la dédup exacte, sans perte, qui passe toujours d'abord.
+    tileset, cells, tiles_merged = merge_tiles(tileset, cells, [pal_rgb], params.tile_target)
+    tilemap = [pack_se(*cell) for cell in cells]
 
     return {
         "palettes": [pal256],                              # UNE palette de 256
@@ -738,7 +870,7 @@ def encode_background_8bpp(source, dither: bool = False) -> dict:
         "tilemap": tilemap,
         "tiles_w": tw,
         "tiles_h": th,
-        "quantize_method": "quantize_256",
+        "quantize_method": method,
         "bpp": 8,
         "diagnostics": {
             "src_w": w, "src_h": h,
@@ -746,6 +878,7 @@ def encode_background_8bpp(source, dither: bool = False) -> dict:
             "tiles_w": tw, "tiles_h": th,
             "total_colors": total_colors,   # couleurs distinctes du source (-1 = >65536)
             "unique_tiles": len(tileset),
+            "tiles_merged": tiles_merged,   # tuiles retirées par la cible (perte)
             "dither": dither,
             "bpp": 8,
         },
@@ -836,8 +969,7 @@ def encode_background_bitmap(source, dither: bool = False) -> dict:
         img = img.resize((out_w, out_h), Image.LANCZOS)
     alpha = img.getchannel("A").load()
     rgb = img.convert("RGB")
-    dmode = Image.Dither.FLOYDSTEINBERG if dither else Image.Dither.NONE
-    q = rgb.quantize(colors=255, method=Image.Quantize.MEDIANCUT, dither=dmode)
+    q = _quantize_rgb(rgb, 255, "median_cut", dither)
     qidx = q.load()
     pal_raw = q.getpalette() or []
 
@@ -875,7 +1007,8 @@ def encode_background_bitmap(source, dither: bool = False) -> dict:
 
 
 def encode_by_mode(source, mode_token: str, method: str = "median_cut",
-                    dither: bool = False) -> dict:
+                    dither: bool = False, prep: Optional[dict] = None,
+                    compression: Optional[BackgroundCompression] = None) -> dict:
     """Dispatch unique vers `encode_background`/`encode_background_8bpp`/
     `encode_background_bitmap` selon un token de mode ("tiled4"|"tiled8"|
     "bitmap"|"bitmap16" — vocabulaire de `detect_import_mode`). Partagé par
@@ -884,12 +1017,18 @@ def encode_by_mode(source, mode_token: str, method: str = "median_cut",
     seul endroit qui décide quel encodeur appeler.
 
     "bitmap16" = vrai 16bpp direct (détecté), pas encore implémenté : repli
-    interim sur le Mode 4 paletté (quantif 256), cf. `detect_import_mode`."""
+    interim sur le Mode 4 paletté (quantif 256), cf. `detect_import_mode`.
+
+    `prep` (`BackgroundAsset.import_prep()`) recadre/redimensionne la source avant
+    d'encoder — le SEUL endroit où la préparation s'applique."""
+    if prep:
+        source = prepare_source(source, prep.get("crop"), prep.get("size"))
     if mode_token in ("bitmap", "bitmap16"):
         return encode_background_bitmap(source, dither=dither)
     if mode_token == "tiled8":
-        return encode_background_8bpp(source, dither=dither)
-    return encode_background(source, method=method)
+        return encode_background_8bpp(source, dither=dither, method=method,
+                                      compression=compression)
+    return encode_background(source, method=method, compression=compression, dither=dither)
 
 
 def render_bitmap_preview(compiled: dict):

@@ -23,6 +23,7 @@ from core.history import (
 )
 from core.command_dispatcher import get_dispatcher
 from ui.common.theme import C, T, QSS
+from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import W, ScriptPickerPopup, NotesEdit, CollapsibleCard
 from ui.common.labels import label
 from ui.common.palette_slot_grid import PaletteSlotGridAsset
@@ -176,7 +177,7 @@ class SceneInspector(QWidget):
         self._blocking = False
         self.setStyleSheet(f"background:{C.BG_PANEL};")
 
-        scroll = QScrollArea()
+        scroll = InspectorScrollArea()
         self._scroll = scroll
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
@@ -1480,13 +1481,9 @@ class SceneInspector(QWidget):
         if not self._scene or not self._project: return
         from ui.common.widgets import ScriptPickerPopup
 
-        # Collecter les scripts de scène existants
-        scenes_dir = self._project.scripts_scenes_dir
-        scripts: list[tuple[str, str]] = []
-        if scenes_dir.exists():
-            for f in sorted(scenes_dir.glob("*.lua")):
-                rel = str(f.relative_to(self._project.root)).replace("\\", "/")
-                scripts.append((f.name, rel))
+        # Les scripts attachables du projet : le contexte vient de l'attache, pas du dossier
+        scripts = [(f.name, str(f.relative_to(self._project.root)).replace("\\", "/"))
+                   for f in self._project.script_files()]
 
         popup = ScriptPickerPopup(scripts, icons.COLOR_SCRIPT, parent=self)
         popup.picked.connect(self._scene_script_assign)
@@ -1505,7 +1502,7 @@ class SceneInspector(QWidget):
         name, ok = QInputDialog.getText(self, label('sceneinsp.new_scene_script'), label('common.name_without_lua'))
         if not ok or not name.strip(): return
         from scripting.script_templates import ScriptTemplateContext, generate_script_template
-        d = self._project.scripts_scenes_dir
+        d = self._project.scripts_dir
         d.mkdir(parents=True, exist_ok=True)
         sp = d / f"{name.strip()}.lua"
         if not sp.exists():

@@ -48,6 +48,7 @@ from ui.common.labels import label
 from ui.common import catalog
 from core.interface_preferences import (
     tips_shown, set_tips_shown, interface_language, set_interface_language,
+    interface_theme, set_interface_theme,
 )
 from core.toolchain import Toolchain
 from core.external_tools import ExternalTools, TOOL_KINDS
@@ -138,8 +139,9 @@ class ToolchainsPanel(QWidget):
 # ── Theme ───────────────────────────────────────────────────────────────
 
 class ThemePanel(QWidget):
-    """Rien à régler pour l'instant — un seul thème existe. L'écran le dit
-    plutôt que de proposer un choix qui n'existe pas encore."""
+    """Thème sombre ou clair. Persisté à l'instant du choix ; appliqué au
+    prochain démarrage, car les couleurs sont figées dans les feuilles de
+    style à la construction des écrans."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -147,10 +149,15 @@ class ThemePanel(QWidget):
         lay.setSpacing(14)
         lay.addWidget(_category_title(label("settings.cat.theme")))
 
-        current = QLabel(label("settings.theme.current"))
-        current.setFont(QFont(T.UI, T.MD, QFont.Weight.DemiBold))
-        current.setStyleSheet(f"color:{C.ACCENT};")
-        lay.addWidget(current)
+        self._theme = QComboBox()
+        self._theme.setFont(QFont(T.UI, T.MD))
+        self._theme.setStyleSheet(QSS.combobox)
+        self._theme.addItem(label("settings.theme.dark"), "dark")
+        self._theme.addItem(label("settings.theme.light"), "light")
+        self._theme.setCurrentIndex(max(0, self._theme.findData(interface_theme())))
+        self._theme.currentIndexChanged.connect(
+            lambda index: set_interface_theme(str(self._theme.itemData(index))))
+        lay.addWidget(self._theme)
 
         note = QLabel(label("settings.theme.note"))
         note.setFont(QFont(T.UI, T.SM))

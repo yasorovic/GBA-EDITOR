@@ -16,6 +16,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtCore import pyqtSignal, QTimer, Qt
 
 from ui.common.theme import C, T, QSS
+from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import W, NotesEdit, CollapsibleCard
 from ui.common import icons
 from scripting.exports_parser import (
@@ -54,7 +55,7 @@ class ScriptInspector(QWidget):
         self._focus_var: Optional[str] = None   # nom de la ligne à focus après refresh
         self.setStyleSheet(f"background:{C.BG_PANEL};")
 
-        scroll = QScrollArea()
+        scroll = InspectorScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
         outer = QVBoxLayout(self)

@@ -41,6 +41,7 @@ from core.models.camera import Camera, CAM_FIXED, CAM_FOLLOW, CAM_SCRIPT
 from core.models.scene import Scene
 from core.project import Project
 from ui.common.theme import C, T, QSS
+from ui.common.responsive import InspectorScrollArea
 from ui.common.icons import COLOR_SCRIPT
 from ui.common.widgets import ScriptSlot, ScriptPickerPopup, CollapsibleCard, NotesEdit, W
 from ui.common.notice import notice
@@ -70,7 +71,7 @@ class CameraInspector(QWidget):
         self._blocking = False
         self._script_open_fn = None
 
-        scroll = QScrollArea()
+        scroll = InspectorScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
         outer = QVBoxLayout(self)
@@ -506,12 +507,8 @@ class CameraInspector(QWidget):
     def _script_new(self):
         if not self._project:
             return
-        d = self._project.scripts_cameras_dir
-        scripts: list[tuple[str, str]] = []
-        if d.exists():
-            for f in sorted(d.glob("*.lua")):
-                rel = str(f.relative_to(self._project.root)).replace("\\", "/")
-                scripts.append((f.name, rel))
+        scripts = [(f.name, str(f.relative_to(self._project.root)).replace("\\", "/"))
+                   for f in self._project.script_files()]
         popup = ScriptPickerPopup(scripts, COLOR_SCRIPT, parent=self)
         popup.picked.connect(self._script_assign)
         popup.new_requested.connect(self._script_create_new)
@@ -530,7 +527,7 @@ class CameraInspector(QWidget):
         if not ok or not name.strip():
             return
         from scripting.script_templates import ScriptTemplateContext, generate_script_template
-        d = self._project.scripts_cameras_dir
+        d = self._project.scripts_dir
         d.mkdir(parents=True, exist_ok=True)
         sp = d / f"{name.strip()}.lua"
         if not sp.exists():

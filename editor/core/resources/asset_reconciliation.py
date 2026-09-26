@@ -758,7 +758,7 @@ def encode_background_asset(ba: "BackgroundAsset", png_path: Path, method: str =
         mode_token = "bitmap" if getattr(ba, "mode", "tiled") == "bitmap" \
             else ("tiled8" if getattr(ba, "bpp", 4) == 8 else "tiled4")
         c = encode_by_mode(png_path, mode_token, method or ba.quantize_method,
-                           getattr(ba, "dither", False))
+                           getattr(ba, "dither", False), ba.import_prep(), ba.compression)
         apply_bg_encoding(ba, png_path.name, c)
     except Exception:
         pass

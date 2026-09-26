@@ -18,12 +18,12 @@ def projet(tmp_path):
 
     p = Project(tmp_path / "jeu")
     p.project_dir.mkdir(parents=True, exist_ok=True)
-    p.scripts_scenes_dir.mkdir(parents=True, exist_ok=True)
+    p.scripts_dir.mkdir(parents=True, exist_ok=True)
 
     t = p.new_text(content="Score")
     t.key = "score_label"
 
-    (p.scripts_scenes_dir / "Arena.lua").write_text(
+    (p.scripts_dir / "Arena.lua").write_text(
         'function on_start()\n'
         '    text:draw(2, 2, "score_label")\n'    # une vraie clé : pas un trou
         '    text:draw(4, 6, "Bonjour")\n'          # un littéral : LE trou

@@ -28,20 +28,20 @@ class LuaHighlighter(QSyntaxHighlighter):
             if italic: f.setFontItalic(True)
             return f
 
-        kw_fmt = fmt("#c586c0", bold=True)
+        kw_fmt = fmt(C.SYNTAX_KEYWORD, bold=True)
         for word in self._KEYWORDS:
             self._rules.append((QRegularExpression(rf"\b{word}\b"), kw_fmt))
 
-        api_fmt = fmt("#4ec9b0")
+        api_fmt = fmt(C.SYNTAX_API)
         for word in self._API_MODULES:
             self._rules.append((QRegularExpression(rf"\b{word}\b"), api_fmt))
 
         self._rules.append((QRegularExpression(r"\b0x[0-9a-fA-F]+\b|\b\d+\.?\d*\b"),
-                            fmt("#b5cea8")))
-        self._str_fmt = fmt("#ce9178")
+                            fmt(C.SYNTAX_NUMBER)))
+        self._str_fmt = fmt(C.SYNTAX_STRING)
         self._rules.append((QRegularExpression(r'"[^"\\]*(\\.[^"\\]*)*"'), self._str_fmt))
         self._rules.append((QRegularExpression(r"'[^'\\]*(\\.[^'\\]*)*'"), self._str_fmt))
-        self._cmt_fmt = fmt("#6a9955", italic=True)
+        self._cmt_fmt = fmt(C.SYNTAX_COMMENT, italic=True)
         self._rules.append((QRegularExpression(r"--[^\n]*"), self._cmt_fmt))
 
     def highlightBlock(self, text: str):

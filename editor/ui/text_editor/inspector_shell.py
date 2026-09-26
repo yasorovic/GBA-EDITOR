@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont
 
 from ui.common.theme import C, T
+from ui.common.responsive import InspectorScrollArea
 
 
 def insp_scroll(color: str, title: str) -> tuple[QWidget, QVBoxLayout, QLabel]:
@@ -39,7 +40,7 @@ def insp_scroll(color: str, title: str) -> tuple[QWidget, QVBoxLayout, QLabel]:
     hl.addWidget(name_lbl)
     outer.addWidget(hdr)
 
-    scroll = QScrollArea()
+    scroll = InspectorScrollArea()
     scroll.setWidgetResizable(True)
     scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
     inner = QWidget()

@@ -149,6 +149,20 @@ def _read_kind(raw) -> str:
     return raw if raw in BG_KINDS else KIND_SCENE
 
 
+def _read_ints(raw, minimums: tuple) -> Optional[tuple]:
+    """Entiers dont chacun atteint son minimum (`minimums` fixe aussi la
+    longueur), ou None. Une préparation illisible (mauvaise longueur, valeur
+    trop petite, texte) se relit comme « pas de préparation » : l'image
+    d'origine reste utilisable, c'est le repli le moins surprenant."""
+    try:
+        vals = tuple(int(v) for v in raw)
+    except (TypeError, ValueError):
+        return None
+    if len(vals) != len(minimums) or any(v < lo for v, lo in zip(vals, minimums)):
+        return None
+    return vals
+
+
 def _read_ui_role(raw) -> str:
     return raw if raw in UI_ROLES else UI_ROLE_NINE
 
@@ -158,6 +172,60 @@ def _read_animation_mode(raw) -> str:
     plutôt qu'en erreur. Un fichier écrit par une version plus récente reste
     ouvrable, et l'auteur voit dans l'inspecteur ce que le build fera."""
     return raw if raw in ANIM_MODES else ANIM_INSTANCE
+
+
+@dataclass
+class BackgroundCompression:
+    """Réglages de l'encodage TUILÉ 4bpp d'un fond — ce avec quoi l'auteur « joue »
+    pour faire tenir une image riche. Les valeurs par défaut sont le comportement
+    d'avant ces réglages : un fond qui n'y touche pas s'encode à l'identique, et
+    n'écrit rien dans son sidecar.
+
+    `palettes_max`        sous-palettes autorisées (1–16, le matériel en offre 16) ;
+    `colors_per_palette`  couleurs utiles par sous-palette (2–15 : l'index 0 est le
+                          transparent) ;
+    `global_colors`       réduire d'abord TOUTE l'image à ce nombre de couleurs
+                          (0 = non) — c'est ce qui rend les tuiles voisines
+                          compatibles entre elles avant le découpage ;
+    `tile_target`         nombre de tuiles uniques visé (0 = pas de fusion) : les
+                          tuiles sont regroupées par plus faible perte, chaque
+                          groupe garde sa tuile la plus centrale. Avec perte ;
+    `palette_colors`      8bpp : couleurs de l'UNIQUE palette (2–255, l'index 0 est
+                          le transparent). `tile_target` vaut aussi en 8bpp.
+    Les quatre premiers ne règlent que le 4bpp, le dernier que le 8bpp."""
+    palettes_max: int = 16
+    colors_per_palette: int = 15
+    global_colors: int = 0
+    tile_target: int = 0
+    palette_colors: int = 255
+
+    def is_default(self) -> bool:
+        return self == BackgroundCompression()
+
+    def to_dict(self) -> dict:
+        """Seulement ce qui s'écarte du défaut — le sidecar reste minimal."""
+        base = BackgroundCompression()
+        return {k: v for k, v in self.__dict__.items() if v != getattr(base, k)}
+
+    @classmethod
+    def from_dict(cls, d) -> "BackgroundCompression":
+        """Valeurs ramenées dans leur plage : un fichier écrit à la main ou par une
+        autre version ne doit pas pouvoir demander zéro palette."""
+        d = d if isinstance(d, dict) else {}
+
+        def _int(key: str, lo: int, hi: int, default: int) -> int:
+            try:
+                return max(lo, min(hi, int(d.get(key, default))))
+            except (TypeError, ValueError):
+                return default
+
+        return cls(
+            palettes_max=_int("palettes_max", 1, 16, 16),
+            colors_per_palette=_int("colors_per_palette", 2, 15, 15),
+            global_colors=_int("global_colors", 0, 256, 0),
+            tile_target=_int("tile_target", 0, 1024, 0),
+            palette_colors=_int("palette_colors", 2, 255, 255),
+        )
 
 
 @dataclass
@@ -254,6 +322,15 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
     # reposent l'ancienne date en enregistrant. Vide = origine inconnue (asset
     # d'avant ce champ). Cf. core.resources.asset_reconciliation.resync_background_png.
     source_stamp: str = ""
+    # Préparation de la source AVANT encodage — le PNG reste intact, c'est
+    # l'image en mémoire qu'on recadre puis redimensionne (cf.
+    # bg_import.prepare_source). `import_crop` = (x, y, w, h) en pixels du PNG ;
+    # `import_size` = (w, h) de l'image préparée, appliqué APRÈS le recadrage.
+    # None = pas de préparation (« Original »).
+    import_crop: Optional[tuple] = None
+    import_size: Optional[tuple] = None
+    # Réglages de l'encodage tuilé 4bpp (cf. BackgroundCompression).
+    compression: BackgroundCompression = field(default_factory=BackgroundCompression)
     # Origine des sous-palettes pour l'éditeur (modèle scène : grisé + override).
     # `source_palettes` = snapshot des palettes DÉRIVÉES du PNG à la compression
     # (baseline restaurable). Les indices < len(source_palettes) sont dérivés
@@ -305,6 +382,12 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
 
     def image_name(self) -> str:
         return self.asset
+
+    def import_prep(self) -> dict:
+        """La préparation de la source, sous la forme que prend `bg_import` —
+        les DEUX appelants qui encodent (worker de l'éditeur, chemin synchrone
+        de la réconciliation) la lisent ici, pour ne jamais diverger."""
+        return {"crop": self.import_crop, "size": self.import_size}
 
     # ── Type ──────────────────────────────────────────────────────
     @property
@@ -428,6 +511,12 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
         # la forme de l'encodage — elle vaut autant en tuilé qu'en bitmap.
         if self.source_stamp:
             d["source_stamp"] = self.source_stamp
+        if self.import_crop:
+            d["import_crop"] = list(self.import_crop)
+        if self.import_size:
+            d["import_size"] = list(self.import_size)
+        if not self.compression.is_default():
+            d["compression"] = self.compression.to_dict()
         if self.tileset:
             # ROADMAP v0.24 : couleurs en #RRGGBB et tilemap rangée en RANGÉES,
             # pour que deux personnes qui retouchent deux zones d'un même fond
@@ -479,6 +568,9 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
                 d.get("tile_palette_overrides")),
             diagnostics=dict(d.get("diagnostics") or {}),
             source_stamp=str(d.get("source_stamp", "")),
+            import_crop=_read_ints(d.get("import_crop"), (0, 0, 1, 1)),
+            import_size=_read_ints(d.get("import_size"), (1, 1)),
+            compression=BackgroundCompression.from_dict(d.get("compression")),
             bpp=int(d.get("bpp", 4)),
             dither=bool(d.get("dither", False)),
             mode=d.get("mode", "tiled"),

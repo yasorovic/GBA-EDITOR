@@ -385,6 +385,92 @@ jalon, mais référencé par son nom plutôt que par un numéro.
 | L'écran resynchronisé à sa revisite | 2026-09-18 | **Livré (2026-09-20)** — [archive](changelog-archive/screen-resync-revisit.md) |
 | Undo/redo des sidecars d'éditeur | — | À ouvrir — envisagé pour **V2**, voir [ci-dessous](#undoredo-des-sidecars-déditeur-annuler-la-création-dun-groupe-un-déplacement-de-nœud) |
 | La struct `Actor` allégée — l'OAM au composant sprite | 2026-09-21 | À ouvrir — **décidé : à faire quoi qu'il arrive**, voir [ci-dessous](#la-struct-actor-allégée--lacteur-entité-légère-le-sprite-et-loam-deviennent-un-composant) |
+| Préparer une image riche à l'import — recadrer, redimensionner | 2026-09-26 | **Livré (2026-09-26)**, validation à la souris dans l'éditeur à faire — voir [ci-dessous](#préparer-une-image-riche-à-limport--recadrer-redimensionner-sans-toucher-au-png) |
+
+---
+
+## Préparer une image riche à l'import — recadrer, redimensionner sans toucher au PNG
+
+### D'où vient la question (2026-09-26)
+
+Une photo de 474×314 importée en tuilé 8bpp donne 2194 tuiles uniques pour un budget de 256 : le
+Background Editor le **dit** (avertissement rouge « Exceeds VRAM ») mais ne laisse rien faire —
+l'auteur n'a que le mode (tuilé/bitmap, profondeur) et un logiciel externe. Et le tuilé tronque
+l'index de tuile à 10 bits (`pack_se`), donc au-delà de 1024 la carte se brouille en silence.
+
+### Le principe
+
+Deux gestes sur la **préparation de la source**, avant l'encodage, portés par le sidecar :
+
+- **Recadrer** (`import_crop`, en pixels de la source) puis **redimensionner** (`import_size`, en
+  pixels de l'image préparée), dans cet ordre ;
+- le PNG n'est **jamais** modifié : `prepare_source` produit une image PIL en mémoire, que
+  reçoit `encode_by_mode` — l'unique endroit qui choisit l'encodeur. Tous les chemins qui
+  encodent (recompression de l'inspecteur, import, resynchronisation d'un PNG retouché,
+  réconciliation au chargement) lisent la MÊME préparation, sinon la ROM et l'éditeur
+  divergeraient ;
+- revenir en arrière = effacer la préparation (bouton « Original »), le PNG étant intact.
+
+### Décisions verrouillées (2026-09-26)
+
+- **Barre du canvas** : deux bascules exclusives (Recadrer / Redimensionner) et une action
+  (Original), dans la même `CanvasTopBar` que les autres canvas.
+- **Redimensionner** : libre au pixel ; **Maj** = proportionnel ; **Ctrl** = accroche 8×8.
+- **Recadrer** : libre au pixel ; **Maj** = garde les proportions de l'image d'origine ; **Ctrl**
+  = accroche 8×8.
+- **Rééchantillonnage automatique** : plus proche voisin si le PNG source est indexé (palette
+  préservée), Lanczos sinon — aucun réglage exposé.
+- **Fonds de scène seulement** : un cadre d'UI ou une planche d'animation ont une géométrie qui
+  dépend des pixels d'origine (marges, grille de frames).
+- La taille affichée par le Scene Manager suit la taille **préparée** (`pixel_size()`), plus celle
+  du PNG.
+
+### Mesurer le 4bpp avant d'y passer (2026-09-26)
+
+Bouton « Analyser pour le 4bpp » dans l'inspecteur, sur l'image **préparée**, hors-thread :
+couleurs par tuile (min / moyenne / max et répartition), tuiles qui tiennent en 15 couleurs,
+jeux de couleurs distincts et tuiles qui en partagent un, palettes nécessaires, verdict « sans
+perte » ou non. `bg_import.analyze_tile_colors` réutilise l'extraction et le packing de la
+compression : le chiffre annoncé est celui que la compression trouvera. Les palettes comptées
+sont celles des tuiles qui tiennent, sans la réduction — un minimum, pas une promesse.
+
+### Jouer avec la compression — l'inspecteur contextuel (2026-09-26)
+
+L'auteur règle la compression avec des curseurs et voit le rendu au canvas ; un réglage relance
+l'encodage hors-thread après 250 ms. **L'inspecteur est contextuel** : chaque mode (tuilé
+4bpp / 8bpp, bitmap 8 / 16bpp) a sa boîte de réglages, absente des autres. Aucun refus d'office :
+une image hors budget s'encode quand même, et les mesures disent ce que ça coûte.
+
+**Tranche 1 — tuilé 4bpp (livrée).** Réglages portés par le sidecar (`BackgroundAsset.compression`,
+seuls les écarts au défaut sont écrits) :
+
+- **Palettes** (1–16) et **couleurs par palette** (2–15). Sans perte quand l'image le permet (pixel art :
+  packing exact) ; sinon `core/bg_palette_cluster.py` regroupe les tuiles qui se ressemblent, taille une
+  palette par groupe depuis ses pixels réels et affine — l'ancienne méthode (garder les 16 palettes les
+  plus employées, renvoyer le reste au plus proche) laissait l'océan d'une photo sans ses bleus, même
+  au réglage par défaut ;
+- **Couleurs globales** : réduire toute l'image avant le découpage en tuiles — c'est ce qui rend
+  les tuiles voisines compatibles, donc ce qui fait rentrer une photo (le 4bpp par défaut y perd
+  la moitié de l'image) ;
+- **Tuiles** : cible de tuiles uniques ; `core/bg_tile_merge.py` regroupe par **plus faible perte**
+  (agglomération de Ward, coût pondéré par les cases couvertes, distance qui pèse la luminance),
+  garde la tuile la plus centrale de chaque groupe et renvoie les autres cases vers la variante
+  gardée la plus proche. Le premier essai — garder « les plus employées » — écrasait le bas de
+  l'image : sur une photo toutes les tuiles sont employées une fois, et l'égalité tombait sur
+  l'ordre de balayage. Reste à explorer : réutiliser une tuile sous une autre banque de palette ;
+- **Méthode** de réduction dans une tuile, et le **dithering** (agit sur la réduction globale).
+
+**Tranche 2 — tuilé 8bpp (livrée).** Même boîte, contextuelle : **Couleurs** de l'unique palette
+(2–255, `palette_colors`), **Tuiles** (la même fusion par plus faible perte, budget 256 par charblock),
+**méthode** de quantification (median-cut, octree, couverture max — quantifieurs de PIL) et
+**dithering**. Le dithering des modes 8bpp et bitmap était sans effet : `Image.quantize(dither=…)`
+ignore l'option tant qu'on ne lui donne pas de palette. Corrigé pour les deux (`_quantize_rgb`),
+test à l'appui. Reste la tranche bitmap : son propre panneau.
+
+### Ce que ça ne fait pas
+
+Pas d'annulation pas-à-pas (Ctrl+Z) : la recompression est asynchrone et « Original » suffit à
+revenir. Pas de réglage de couleurs (le mode et la profondeur existent déjà dans l'inspecteur).
 
 ---
 
@@ -425,6 +511,7 @@ donne l'instance.
 - `core/script_owners.py` : la lecture « à quoi ce fichier est-il attaché ? », partagée par le
   validateur (refus multi-familles) et l'éditeur de script (le contexte vient de l'attache, plus du dossier).
 - Complétion : plus de `self.`/`self:` en scène ou caméra ; événements filtrés par famille.
+- Interface : plus de badge de type ni de boutons « + Acteur / + Scène » dans le Script Editor ; un seul « + Script », créé à plat dans `assets/scripts/` (seul `behaviors/` reste un dossier, car c'est un module importé par son chemin). `Project.scripts_actors_dir/scenes_dir/cameras_dir` supprimés au profit de `scripts_dir` et `script_files()` ; les sélecteurs de script de scène et de caméra listent tous les scripts attachables. Les projets existants gardent leurs fichiers où ils sont : rien n'est déplacé, le contexte venant de l'attache.
 - Tests : `tests/test_script_owner.py`. Les quatre projets de démo ne produisent aucun nouveau refus.
 
 **Décision 3 précisée (2026-09-26)** : un behavior reçoit son acteur en PREMIER PARAMÈTRE, que la

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QMenu, QFileDialog, QDialog
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QCursor, QShortcut, QKeySequence
 
 from ui.common.theme import QSS
@@ -173,10 +173,18 @@ class AssetsFinderPanel(QWidget):
         self.begin_rename_prefab(name)
 
     def _show_add_script_menu(self):
+        """« + » de la section Scripts : un script seul (à attacher ensuite), ou un behavior
+        (un module, importé par `require`). Ouvert sous le curseur, comme celui des scènes."""
         menu = QMenu(self)
         menu.setStyleSheet(QSS.menu)
+        menu.addAction(label("assf.script"), self._new_script)
         menu.addAction(label("assf.behavior_script"), self._new_behavior_script)
-        menu.exec(self.mapToGlobal(QPoint(0, 0)))
+        menu.exec(QCursor.pos())
+
+    def _new_script(self):
+        self._create_script("empty",
+                            self._project.scripts_dir if self._project else None,
+                            "Script")
 
     def _new_behavior_script(self):
         self._create_script("behavior",

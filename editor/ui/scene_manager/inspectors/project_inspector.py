@@ -30,6 +30,7 @@ from PyQt6.QtCore import QSize
 from core.project import Project
 from core.history import get_history, SetFieldCmd
 from ui.common.theme import C, T, QSS
+from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import CollapsibleCard
 from ui.common import icons
 
@@ -71,7 +72,7 @@ class ProjectInspector(QWidget):
         self._blocking = False
         self.setStyleSheet(f"background:{C.BG_PANEL};")
 
-        scroll = QScrollArea()
+        scroll = InspectorScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
         outer = QVBoxLayout(self)

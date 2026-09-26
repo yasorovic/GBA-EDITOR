@@ -8,6 +8,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtCore import pyqtSignal
 
 from ui.common.theme import C, T
+from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import W
 from ui.common.labels import label
 from core.models.sprite import AnimFrame, AnimState, SpriteAsset, StateDirection
@@ -54,7 +55,7 @@ class SpriteRightPanel(QWidget):
         root.addWidget(self._header)
 
         # ── Contenu scrollable ────────────────────────────────────
-        scroll = QScrollArea()
+        scroll = InspectorScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setStyleSheet(

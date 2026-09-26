@@ -210,11 +210,10 @@ def test_save_read_garde_son_nom_litteral():
 
 
 class _FakeProject:
-    """Le minimum que `refactor.script_paths` sait parcourir — il lit QUATRE
-    dossiers (actors, scenes, cameras, behaviors), jamais un `scripts_dir`."""
+    """Le minimum que `refactor.script_paths` sait parcourir : un `scripts_dir`."""
 
-    def __init__(self, actors_dir):
-        self.scripts_actors_dir = actors_dir
+    def __init__(self, scripts_dir):
+        self.scripts_dir = scripts_dir
 
 
 def _scripts(tmp_path, src: str) -> _FakeProject:

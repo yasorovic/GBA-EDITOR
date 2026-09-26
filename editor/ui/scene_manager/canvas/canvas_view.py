@@ -82,7 +82,7 @@ class GBAView(QGraphicsView):
     def drawBackground(self, painter: QPainter, rect):
         """Fond de travail mat avec repère pointillé très discret."""
         painter.save()
-        painter.fillRect(rect, QColor("#101018"))
+        painter.fillRect(rect, QColor(C.CANVAS_BG))
         # Repère régulier, volontairement plus grand que la grille de jeu : il
         # structure l'espace de travail sans être confondu avec les tuiles.
         pen = QPen(QColor(210, 205, 255, 28))

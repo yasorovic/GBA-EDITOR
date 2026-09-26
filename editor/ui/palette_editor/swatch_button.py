@@ -98,7 +98,7 @@ class SwatchButton(QPushButton):
             for yy in range(0, self.height(), step):
                 for xx in range(0, self.width(), step):
                     on = ((xx // step) + (yy // step)) % 2 == 0
-                    p.fillRect(xx, yy, step, step, QColor("#3a3a3a" if on else "#262626"))
+                    p.fillRect(xx, yy, step, step, QColor(C.CHECKER_B if on else C.CHECKER_A))
             return
 
         r, g, b = self._rgb

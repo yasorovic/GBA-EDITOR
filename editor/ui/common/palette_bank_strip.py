@@ -41,11 +41,11 @@ class PaletteBankStrip(QFrame):
         self._btns: dict = {}
         self._colors: dict = {}   # id -> couleurs, pour le repérage par contenu
         self.setStyleSheet(f"""
-            PaletteBankStrip {{ background:#1c1c1c; border:1px solid #333;
+            PaletteBankStrip {{ background:{C.BG_BASE}; border:1px solid {C.BORDER_MID};
                                 border-radius:8px; }}
-            QToolButton {{ border:1px solid #2a2a2a; background:transparent;
+            QToolButton {{ border:1px solid {C.BORDER}; background:transparent;
                           border-radius:4px; padding:1px; }}
-            QToolButton:hover   {{ border-color:#4a4a4a; }}
+            QToolButton:hover   {{ border-color:{C.TEXT_MUTED}; }}
             QToolButton:checked {{ border:2px solid {C.ACCENT}; }}
         """)
         self._layout = QHBoxLayout(self)

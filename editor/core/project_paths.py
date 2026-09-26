@@ -195,23 +195,19 @@ class ProjectPathsMixin:
         return self.assets_dir / "scripts"
 
     @property
-    def scripts_actors_dir(self) -> Path:
-        return self.scripts_dir / "actors"
-
-    @property
     def scripts_behaviors_dir(self) -> Path:
+        """Le seul sous-dossier de scripts qui ait un sens : un behavior est un module
+        importé par son chemin (`require("behaviors/nom")`). Tout autre script vit à plat
+        dans `scripts_dir` — c'est son attache, pas son dossier, qui lui donne son contexte."""
         return self.scripts_dir / "behaviors"
 
-    @property
-    def scripts_scenes_dir(self) -> Path:
-        return self.scripts_dir / "scenes"
-
-    @property
-    def scripts_cameras_dir(self) -> Path:
-        """Un dossier par famille de propriétaire, comme actors/ et scenes/ :
-        c'est le CHEMIN qui dit à l'éditeur de script quels points d'entrée
-        proposer (cf. ScriptEditor._detect_context)."""
-        return self.scripts_dir / "cameras"
+    def script_files(self) -> list[Path]:
+        """Les scripts qu'on peut ATTACHER à un acteur, une scène ou une caméra : tout .lua
+        de `scripts_dir`, sauf les behaviors (des modules, attachés à rien)."""
+        if not self.scripts_dir.is_dir():
+            return []
+        behaviors = self.scripts_behaviors_dir
+        return sorted(f for f in self.scripts_dir.rglob("*.lua") if behaviors not in f.parents)
 
     @property
     def build_dir(self) -> Path:

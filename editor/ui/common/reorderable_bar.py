@@ -29,8 +29,8 @@ _BTN_GHOST_SRC = (
 )
 # Bouton fantôme flottant
 _BTN_GHOST = (
-    f"QToolButton{{color:#ddd;border:1px solid {C.ACCENT};"
-    "padding:6px 14px;border-radius:4px;background:#1e2e1e;}"
+    f"QToolButton{{color:{C.TEXT_HI};border:1px solid {C.ACCENT};"
+    f"padding:6px 14px;border-radius:4px;background:{C.BG_SEL};}}"
 )
 
 

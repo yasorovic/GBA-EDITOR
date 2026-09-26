@@ -174,9 +174,9 @@ class ScriptEditor(BaseComponentEditor):
         name, ok = QInputDialog.getText(self.insp, label("comped.new_script_title"),
                                         label("common.name_without_lua"))
         if not ok or not name.strip(): return
-        actors_dir = proj.scripts_actors_dir
-        actors_dir.mkdir(parents=True, exist_ok=True)
-        sp = actors_dir / f"{name.strip()}.lua"
+        scripts_dir = proj.scripts_dir
+        scripts_dir.mkdir(parents=True, exist_ok=True)
+        sp = scripts_dir / f"{name.strip()}.lua"
         if not sp.exists():
             sp.write_text(self._build_template(name.strip()), encoding="utf-8")
         comp.script = proj.asset_rel(sp)

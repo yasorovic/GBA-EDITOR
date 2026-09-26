@@ -34,6 +34,7 @@ from core.models.ui_region import (
     forced_target,
 )
 from ui.common.theme import C, T, QSS
+from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import W, CollapsibleCard
 from ui.common.notice import note
 
@@ -57,7 +58,7 @@ class UINodeInspector(QWidget):
         self._project: Optional[Project] = None
         self._blocking = False
 
-        scroll = QScrollArea()
+        scroll = InspectorScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
         outer = QVBoxLayout(self)

@@ -29,34 +29,30 @@ from PyQt6.QtGui import QFont, QPainter, QColor, QCursor
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from ui.common.theme import C, T
-from ui.common.icons import (
-    COLOR_SFX, COLOR_BACKGROUND, COLOR_SPRITE, COLOR_UI, COLOR_SCRIPT,
-    COLOR_FONT, COLOR_DEFAULT,
-)
+from ui.common.icons import COLOR_DEFAULT
 from codegen.rom_report import RomReport, CARTRIDGE_SIZES_MIB
 
 _WARN_RATIO = 0.75  # même seuil que GbaStatusBar / SoundBudgetBar
 
-# Une couleur par catégorie de `rom_report.CATEGORY_ORDER`. Réutilise les
-# teintes de FAMILLE déjà établies (icons.py) là où le rapprochement est
-# direct (Audio, Fonds↔Background, Sprites, Interface↔UI, Collision↔Logique,
-# Polices↔Font) ; Palettes et Tables de données ne sont pas des types d'asset
-# (aucune famille ne les couvre) et prennent les accents génériques du thème ;
-# Code/Reste ne sont pas des assets non plus : les deux teintes les plus
-# discrètes du thème, pour qu'ils ne rivalisent pas visuellement avec ce sur
-# quoi l'auteur peut agir.
+# Une couleur par catégorie de `rom_report.CATEGORY_ORDER`. Propres à CETTE barre
+# (icons.py refuse toute teinte globale par famille d'asset) : en mode
+# répartition, des segments gris ne se distingueraient pas. Le vert et le rouge
+# sont laissés à l'état de remplissage (OK / dépassement), les catégories les
+# évitent. Code/Reste ne sont pas des assets : les deux gris du thème.
+_HUES_DARK = {
+    "Audio": "#e0a050", "Polices": "#b48ce8", "Fonds": "#4fb3d9", "Sprites": "#4fd9c0",
+    "Palettes": "#e07aa8", "Textes": "#e8e8e8", "Interface": "#5b8fe8",
+    "Tables de données": "#d98a5b", "Collision": "#8a8ae8",
+}
+_HUES_LIGHT = {
+    "Audio": "#b8741c", "Polices": "#7a4fc0", "Fonds": "#1f86ad", "Sprites": "#1f9d8a",
+    "Palettes": "#c04a80", "Textes": "#555555", "Interface": "#2f5fc4",
+    "Tables de données": "#b5602a", "Collision": "#5a5ac0",
+}
 _CATEGORY_COLORS: dict[str, str] = {
-    "Audio":              COLOR_SFX,
-    "Polices":            COLOR_FONT,
-    "Fonds":               COLOR_BACKGROUND,
-    "Sprites":            COLOR_SPRITE,
-    "Palettes":           C.ACCENT_WARM,
-    "Textes":             C.ACCENT,
-    "Interface":          COLOR_UI,
-    "Tables de données":  C.ACCENT_COOL,
-    "Collision":          COLOR_SCRIPT,
-    "Code":               C.TEXT_DIM,
-    "Reste":              C.TEXT_MUTED,
+    **(_HUES_LIGHT if C.IS_LIGHT else _HUES_DARK),
+    "Code":  C.TEXT_DIM,
+    "Reste": C.TEXT_MUTED,
 }
 
 
@@ -86,6 +82,9 @@ class _Gauge(QWidget):
         self._total = 0
         self._rom_bytes = 0
         self._mode = "fill"
+        # Couleur du remplissage : vert / jaune / rouge selon l'état, posée par
+        # la barre (elle seule connaît le seuil d'alerte).
+        self.fill_color = C.POWER
 
     def set_data(self, categories: dict[str, int], rom_bytes: int, cartridge_bytes: int):
         """`cartridge_bytes` est le dénominateur ACTUEL, pas forcément celui
@@ -119,13 +118,13 @@ class _Gauge(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor("#08080d"))
+        p.setBrush(QColor(C.TECH_BG))
         p.drawRect(0, 0, w, h)
 
         # Le quadrillage très discret donne une présence à l'espace libre :
         # il reste lisible sans concurrencer les segments de ressources.
         if self._mode == "fill":
-            p.setPen(QColor("#171722"))
+            p.setPen(QColor(C.TECH_GRID))
             for grid_x in range(16, w, 16):
                 p.drawLine(grid_x, 2, grid_x, h - 3)
         p.setPen(Qt.PenStyle.NoPen)
@@ -135,7 +134,7 @@ class _Gauge(QWidget):
             # Les catégories sont toujours retrouvées par `_segment_at` pour
             # le tooltip, sans fragmenter visuellement la progression.
             fill_w = round(w * self._rom_bytes / max(1, self._total))
-            p.setBrush(QColor(C.ACCENT))
+            p.setBrush(QColor(self.fill_color))
             p.drawRect(0, 0, min(w, fill_w), h)
         else:
             x = 0.0
@@ -148,7 +147,7 @@ class _Gauge(QWidget):
                 x += seg_w
 
         # Contour acier, volontairement droit comme les commandes du bandeau.
-        p.setPen(QColor("#3a3a46"))
+        p.setPen(QColor(C.TECH_OUTLINE))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawRect(0, 0, max(0, w - 1), max(0, h - 1))
         p.end()
@@ -180,8 +179,8 @@ class RomBudgetBar(QWidget):
 
     cartridge_mib_changed = pyqtSignal(int)
 
-    _TECH_BG = "#050506"
-    _TECH_TEXT = "#f2f2f5"
+    _TECH_BG = C.TECH_BG
+    _TECH_TEXT = C.TECH_TEXT
     _STYLE_OK   = f"color:{_TECH_TEXT};"
     _STYLE_WARN = f"color:{C.ACCENT_YLW};"
     _STYLE_CRIT = f"color:{C.ACCENT_RED};"
@@ -190,7 +189,7 @@ class RomBudgetBar(QWidget):
     def _tech_block(cls, color: str | None = None) -> str:
         """Pavé technique contrasté, sans relief ni coins arrondis."""
         return (f"background:{cls._TECH_BG}; color:{color or cls._TECH_TEXT}; "
-                f"border:1px solid #22222e; padding:0 8px;")
+                f"border:1px solid {C.TECH_BLOCK_BORDER}; padding:0 8px;")
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -331,6 +330,9 @@ class RomBudgetBar(QWidget):
         else:
             style = self._STYLE_OK
         color = style.removeprefix("color:").removesuffix(";")
+        self._gauge.fill_color = (C.ACCENT_RED if style == self._STYLE_CRIT
+                                  else C.ACCENT_YLW if style == self._STYLE_WARN
+                                  else C.POWER)
         self._value.setStyleSheet(self._tech_block(color))
         self._percent.setStyleSheet(self._tech_block(color))
         self._gauge.set_data(report.categories, report.rom_bytes, cartridge_bytes)

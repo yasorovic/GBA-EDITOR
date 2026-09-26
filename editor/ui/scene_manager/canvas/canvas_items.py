@@ -569,14 +569,14 @@ class CameraItem(QGraphicsItem):
         # sans affecter le nearest-neighbor des sprites/BG ailleurs sur le canvas.
         from ui.common.icons import scaled_pixmap
 
-        # Palette locale de l'outil Caméra : une présence périwinkle lisible
+        # Palette locale de l'outil Caméra : une présence gris clair lisible
         # au repos, un contraste clair au survol, puis l'ambre de sélection.
         if self.isSelected():
             color = "#ffdd44"
         elif self._hovered:
-            color = "#ded8ff"
+            color = "#f2f2f2"
         else:
-            color = "#9b8cff"
+            color = "#d0d0d0"
         px = scaled_pixmap("camera", color, _CAM_ICO_SIZE,
                            _screen_scale(painter, widget))
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)

@@ -51,6 +51,7 @@ from core.models.ui_region import (
 )
 from ui.common import icons
 from ui.common.theme import C, T, QSS
+from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import W, CollapsibleCard
 from ui.common.notice import note, notice, text
 from ui.common.labels import label
@@ -143,7 +144,7 @@ class UIInspector(QWidget):
         self._element = None
         self._scene = None
         self._blocking = False
-        scroll = QScrollArea()
+        scroll = InspectorScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
         outer = QVBoxLayout(self)
@@ -1005,10 +1006,10 @@ class UIInspector(QWidget):
             return
         users = self._text_users(t.key)
         # La clé n'est PLUS répétée ici : le combo « Entry », juste au-dessus du
-        # champ, la porte déjà. Ne reste que ce qu'il ne dit pas — d'où vient la
-        # clé, et qui d'autre affiche cette entrée.
-        self._key_lbl.show_text("ui.text.key_auto" if t.auto_key
-                                else "ui.text.key_manual")
+        # champ, la porte déjà. Son origine (dérivée ou nommée) n'apprenait rien
+        # d'exploitable non plus : seul reste ce qui appelle un geste — l'entrée
+        # absente, ou partagée avec d'autres éléments.
+        self._key_lbl.clear()
         # Une entrée partagée se corrige en un endroit — mais se casse aussi en
         # un endroit. Même règle que le badge « mise en page partagée » : c'est
         # une portée, donc du périwinkle sur sa propre ligne.

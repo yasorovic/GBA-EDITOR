@@ -8,7 +8,7 @@ Couleurs via C :
     C.ACCENT   C.POWER   C.BG_INPUT   C.TEXT_DIM ...
 
 Typographie via T — 3 familles, 3 rôles :
-    T.UI    Inter (fallback Segoe UI)  → labels, menus, titres, boutons
+    T.UI    police système (Segoe UI)  → labels, menus, titres, boutons
     T.MONO  monospace                  → valeurs numériques, compteurs, chemins
     T.CODE  Consolas                   → éditeur de code, callbacks Lua
     QFont(T.UI, T.MD)      f"font-family:{T.UI_STACK}; font-size:{T.SM}px"
@@ -39,14 +39,13 @@ from ui.common import icons as _icons
 # ──────────────────────────────────────────────────────────────────
 
 class _Typography:
-    # Familles — voir install_app_fonts() pour la résolution d'Inter
-    UI   = "Inter"       # labels, menus, titres, boutons — police interface
+    # Familles
+    UI   = "Segoe UI"    # labels, menus, titres, boutons — police système
     MONO = "monospace"   # valeurs numériques, compteurs, chemins
     CODE = "Consolas"    # éditeur de code, callbacks Lua
 
-    # Pile CSS pour les QSS : Inter n'existe parfois qu'en variantes
-    # optiques (« Inter 18pt ») ou pas du tout → fallbacks explicites.
-    UI_STACK = "'Inter','Inter 18pt','Segoe UI Variable Text','Segoe UI',sans-serif"
+    # Pile CSS pour les QSS : la police système de Windows 11, puis celle de 10.
+    UI_STACK = "'Segoe UI Variable Text','Segoe UI',sans-serif"
 
     # Tailles (points pour QFont / pixels pour QSS — traitées identiquement)
     XS  = 9    # hints, sous-labels très discrets
@@ -72,22 +71,6 @@ def ui_font(size: int = T.MD, *, bold: bool = False, family: str | None = None):
     if bold:
         f.setWeight(QFont.Weight.DemiBold)
     return f
-
-
-def install_app_fonts():
-    """Charge les fontes embarquées (ui/common/fonts/*.ttf) et déclare les
-    substituts d'Inter pour les QFont programmatiques. À appeler une fois
-    dans main.py, après la création de la QApplication et avant GLOBAL_QSS."""
-    from pathlib import Path
-    from PyQt6.QtGui import QFont, QFontDatabase
-    fonts_dir = Path(__file__).parent / "fonts"
-    if fonts_dir.is_dir():
-        for f in sorted(fonts_dir.glob("*.ttf")) + sorted(fonts_dir.glob("*.otf")):
-            QFontDatabase.addApplicationFont(str(f))
-    # Si « Inter » n'est pas résolue telle quelle, QFont bascule sur ces familles.
-    QFont.insertSubstitutions(T.UI, [
-        "Inter 18pt", "Inter 24pt", "Segoe UI Variable Text", "Segoe UI",
-    ])
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -125,60 +108,82 @@ S = _Spacing()
 #  Palette de couleurs
 # ──────────────────────────────────────────────────────────────────
 
+_DARK = dict(
+    # Fonds — ramp sombre NEUTRE (gris purs, aucune teinte), du plus profond au plus clair
+    BG_DEEP="#0b0b0b",     # barre statut, séparateurs forts
+    BG_BASE="#111111",     # fond panels principaux
+    BG_PANEL="#171717",    # fond widgets, inspector
+    BG_RAISED="#1e1e1e",   # menus, toolbars
+    BG_INPUT="#262626",    # inputs (spinbox, lineedit, combobox)
+    BG_HOVER="#303030",    # survol boutons
+    BG_SEL="#2c2c2c",      # fond sélection
+    BORDER="#2b2b2b", BORDER_MID="#383838", BORDER_DARK="#222222",
+    ACCENT="#d0d0d0",      # accent PRIMAIRE structurel (sélection, focus, onglet actif)
+    ACCENT_HOVER="#e6e6e6", ACCENT_PRESSED="#a8a8a8",
+    ON_ACCENT="#000000",   # texte posé sur un fond ACCENT
+    POWER="#5be08b",       # vert power-LED — RÉSERVÉ : Build, process actif, « live »
+    ACCENT_RED="#e05050", ACCENT_YLW="#e8c547",
+    ACCENT_WARM="#c48b3c", ACCENT_COOL="#82aaff",
+    TEXT_HI="#ececec", TEXT_NORM="#ababab", TEXT_DIM="#6e6e6e", TEXT_MUTED="#4a4a4a",
+    TEXT_BASE="#d4d4d4",   # texte de la palette Qt
+    AXIS_X="#c07070", AXIS_Y="#7090c0", AXIS_Z="#7aab7a",
+    SEL_BG="#2c2c2c", SEL_BORDER="#d0d0d0", SEL_TEXT="#f2f2f2",
+    BTN_PRIMARY="#3a3a3a", BTN_PRIMARY_HOVER="#4a4a4a", BTN_PRIMARY_PRESSED="#2a2a2a",
+    BTN_PRIMARY_DISABLED="#232323", BTN_PRIMARY_TEXT="#f2f2f2",
+    SCROLL_HANDLE="#3a3a3a", SCROLL_HANDLE_HOVER="#4c4c4c",
+    CANVAS_BG="#1a1a1a", CHECKER_A="#222222", CHECKER_B="#2a2a2a",
+    SYNTAX_KEYWORD="#c586c0", SYNTAX_API="#4ec9b0", SYNTAX_NUMBER="#b5cea8",
+    SYNTAX_STRING="#ce9178", SYNTAX_COMMENT="#6a9955",
+    CONSOLE_TEXT="#c8ffc8",   # texte de la console de build
+    # Instrument « technique » (barre ROM) : pavés noirs, quadrillage, filet acier.
+    TECH_BG="#040a06", TECH_TEXT="#b9f5c9", TECH_GRID="#0d1a11",
+    TECH_OUTLINE="#2f6a44", TECH_BLOCK_BORDER="#1b3a27",
+    HEADER_BG_VALUE=22,    # luminosité (0-255) du fond d'en-tête d'asset
+)
+
+_LIGHT = dict(
+    BG_DEEP="#d2d2d2", BG_BASE="#e4e4e4", BG_PANEL="#f1f1f1", BG_RAISED="#fafafa",
+    BG_INPUT="#ffffff", BG_HOVER="#dadada", BG_SEL="#cdcdcd",
+    BORDER="#c4c4c4", BORDER_MID="#acacac", BORDER_DARK="#d4d4d4",
+    ACCENT="#3a3a3a", ACCENT_HOVER="#555555", ACCENT_PRESSED="#222222",
+    ON_ACCENT="#ffffff",
+    POWER="#1f9d55", ACCENT_RED="#c62828", ACCENT_YLW="#b8860b",
+    ACCENT_WARM="#a86a10", ACCENT_COOL="#2f5fc4",
+    TEXT_HI="#0d0d0d", TEXT_NORM="#2e2e2e", TEXT_DIM="#575757", TEXT_MUTED="#828282",
+    TEXT_BASE="#262626",
+    AXIS_X="#b04040", AXIS_Y="#3f68b0", AXIS_Z="#3f8a3f",
+    SEL_BG="#cdcdcd", SEL_BORDER="#3a3a3a", SEL_TEXT="#0d0d0d",
+    BTN_PRIMARY="#3a3a3a", BTN_PRIMARY_HOVER="#555555", BTN_PRIMARY_PRESSED="#222222",
+    BTN_PRIMARY_DISABLED="#c4c4c4", BTN_PRIMARY_TEXT="#ffffff",
+    SCROLL_HANDLE="#b0b0b0", SCROLL_HANDLE_HOVER="#909090",
+    CANVAS_BG="#dcdcdc", CHECKER_A="#d4d4d4", CHECKER_B="#c8c8c8",
+    CONSOLE_TEXT="#1f6b3a",
+    TECH_BG="#f3fbf5", TECH_TEXT="#0e4023", TECH_GRID="#d3e9da",
+    TECH_OUTLINE="#3f8a5c", TECH_BLOCK_BORDER="#93c6a5",
+    SYNTAX_KEYWORD="#9c2f9a", SYNTAX_API="#0b7a6a", SYNTAX_NUMBER="#2a7a2a",
+    SYNTAX_STRING="#a8482a", SYNTAX_COMMENT="#5a8a3a",
+    HEADER_BG_VALUE=240,
+)
+
+
 class _Colors:
-    # Fonds — ramp sombre teintée indigo/violet (identité GameBoy Advance)
-    BG_DEEP   = "#0c0c12"   # barre statut, séparateurs forts
-    BG_BASE   = "#12121a"   # fond panels principaux
-    BG_PANEL  = "#181820"   # fond widgets, inspector
-    BG_RAISED = "#1e1e29"   # menus, toolbars
-    BG_INPUT  = "#242430"   # inputs (spinbox, lineedit, combobox)
-    BG_HOVER  = "#2e2e3d"   # survol boutons
-    BG_SEL    = "#241f3a"   # fond sélection périwinkle
+    """Les constantes de couleur du thème ACTIF (voir interface_theme()).
+    Lues une fois à l'import : un changement de thème prend effet au redémarrage."""
 
-    # Bordures
-    BORDER      = "#2c2c3a"  # bordure par défaut
-    BORDER_MID  = "#383848"  # bordure inputs
-    BORDER_DARK = "#22222e"  # séparateurs discrets
-
-    # ── Accents — RÔLES sémantiques (voir project_theme_gba_redesign) ──
-    ACCENT     = "#9b8cff"  # périwinkle — accent PRIMAIRE structurel
-    #                         (sélection, focus, onglet actif, survol)
-    POWER      = "#5be08b"  # vert power-LED — RÉSERVÉ : Build, process
-    #                         actif / tâche de fond, état « live ». Rare = fort.
-    ACCENT_RED = "#e05050"  # rouge     — erreurs, suppression
-    ACCENT_YLW = "#e8c547"  # jaune     — avertissements
-
-    # Accents de CONTEXTE — jamais une famille globale de type. Un outil les
-    # emploie seulement lorsqu'il doit distinguer deux rôles dans sa propre
-    # lecture (OBJ vs BG, API Lua vs référence projet, état secondaire). Le
-    # vert structurel `ACCENT_GRN` a été supprimé (→ ACCENT périwinkle, ou
-    # POWER pour le live).
-    ACCENT_WARM = "#c48b3c"
-    ACCENT_COOL = "#82aaff"
-
-    # Textes — gris légèrement teintés indigo, comme la ramp de fonds
-    TEXT_HI    = "#e9e9f2"  # titre, valeurs importantes
-    TEXT_NORM  = "#a9a9bd"  # texte courant
-    TEXT_DIM   = "#6a6a80"  # labels, hints
-    TEXT_MUTED = "#48485c"  # très discret
-
-    # Axes vecteurs
-    AXIS_X = "#c07070"   # rouge doux  — axe X
-    AXIS_Y = "#7090c0"   # bleu doux   — axe Y
-    AXIS_Z = "#7aab7a"   # vert doux   — axe Z
-
-    # Sélection panel (périwinkle) — SEL_BG aligné sur BG_SEL : un seul
-    # fond de sélection dans toute l'app (les deux noms restent pour compat).
-    SEL_BG     = "#241f3a"
-    SEL_BORDER = "#9b8cff"
-    SEL_TEXT   = "#ddd6ff"
+    def __init__(self, palette: dict, light: bool):
+        self.IS_LIGHT = light
+        for name, value in palette.items():
+            setattr(self, name, value)
 
 
-C = _Colors()
+from core.interface_preferences import interface_theme
+
+_LIGHT_MODE = interface_theme() == "light"
+C = _Colors(_LIGHT if _LIGHT_MODE else _DARK, _LIGHT_MODE)
 
 
 def tint(hex_color: str, alpha: float) -> str:
-    """`#9b8cff` + 0.3 → `rgba(155,140,255,0.30)`, pour poser une couleur de
+    """`#d0d0d0` + 0.3 → `rgba(208,208,208,0.30)`, pour poser une couleur de
     rôle en fond ou en filet sans inventer une seconde constante par opacité.
     Les QSS de Qt lisent `rgba()`, pas le `#rrggbbaa` du CSS moderne."""
     h = hex_color.lstrip("#")
@@ -366,15 +371,15 @@ QComboBox QAbstractItemView {{
 }}
 """
 
-    # Bouton d'action mis en avant, plein périwinkle (Ouvrir, Créer, Valider)
+    # Bouton d'action mis en avant, plein gris clair (Ouvrir, Créer, Valider)
     @property
     def button_primary(self) -> str:
-        # Action primaire « ordinaire » (Ouvrir, Créer…) → périwinkle.
+        # Action primaire « ordinaire » (Ouvrir, Créer…) → gris clair.
         # Le vert POWER est réservé au Build / process actif, pas ici.
         return f"""
 QPushButton {{
-    background: #3a2f6b;
-    color: #ddd6ff;
+    background: {C.BTN_PRIMARY};
+    color: {C.BTN_PRIMARY_TEXT};
     border: none;
     border-radius: 3px;
     padding: 4px 12px;
@@ -382,9 +387,9 @@ QPushButton {{
     font-size: {T.MD}px;
     font-weight: 600;
 }}
-QPushButton:hover  {{ background: #4a3d85; }}
-QPushButton:pressed {{ background: #2c2350; }}
-QPushButton:disabled {{ background: #241f3a; color: #555; }}
+QPushButton:hover  {{ background: {C.BTN_PRIMARY_HOVER}; }}
+QPushButton:pressed {{ background: {C.BTN_PRIMARY_PRESSED}; }}
+QPushButton:disabled {{ background: {C.BTN_PRIMARY_DISABLED}; color: {C.TEXT_MUTED}; }}
 """
 
     # Bouton discret transparent, texte seul + cadre (actions secondaires)
@@ -587,11 +592,11 @@ QScrollBar:vertical {{
     margin: 0;
 }}
 QScrollBar::handle:vertical {{
-    background: #3a3a4c;
+    background: {C.SCROLL_HANDLE};
     border-radius: 4px;
     min-height: 24px;
 }}
-QScrollBar::handle:vertical:hover {{ background: #4a4a5e; }}
+QScrollBar::handle:vertical:hover {{ background: {C.SCROLL_HANDLE_HOVER}; }}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: none; }}
 
@@ -602,11 +607,11 @@ QScrollBar:horizontal {{
     margin: 0;
 }}
 QScrollBar::handle:horizontal {{
-    background: #3a3a4c;
+    background: {C.SCROLL_HANDLE};
     border-radius: 4px;
     min-width: 24px;
 }}
-QScrollBar::handle:horizontal:hover {{ background: #4a4a5e; }}
+QScrollBar::handle:horizontal:hover {{ background: {C.SCROLL_HANDLE_HOVER}; }}
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
 QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{ background: none; }}
 """
@@ -684,11 +689,13 @@ QToolTip {{
     color: {C.TEXT_NORM};
     border: 1px solid {C.BORDER_MID};
     padding: 5px 8px;
-    border-radius: 4px;
     font-family: {T.UI_STACK};
     font-size: {T.MD}px;
 }}
 """
+    # PAS de `border-radius` ici : avec un arrondi, Qt rend la bulle dans une fenêtre
+    # translucide, et sur Windows le fond n'est alors pas peint — un rectangle noir
+    # sous le texte, à la place du fond du thème.
 
     # Menus contextuels et déroulants (clic droit, menus de la barre)
     @property

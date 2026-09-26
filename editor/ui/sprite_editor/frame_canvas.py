@@ -16,7 +16,7 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QMimeData, QPoint, QRect, QSize
 
-from ui.common.theme import C, T, QSS
+from ui.common.theme import C, T, QSS, tint
 from ui.common.labels import label
 from ui.common.icons import get as _ico
 from ui.common.palette_bank_strip import PaletteBankStrip
@@ -948,7 +948,7 @@ class _FrameCanvas(QWidget):
         cs = max(4, zoom * 2)
         for cy in range(0, dh, cs):
             for cx in range(0, dw, cs):
-                c = QColor("#1e1e1e") if (cx // cs + cy // cs) % 2 == 0 else QColor("#2a2a2a")
+                c = QColor(C.CHECKER_A) if (cx // cs + cy // cs) % 2 == 0 else QColor(C.CHECKER_B)
                 painter.fillRect(ox + cx, oy + cy,
                                  min(cs, dw - cx), min(cs, dh - cy), c)
 
@@ -1069,7 +1069,7 @@ class _CanvasFloatingToolbar(QFrame):
         def _sep():
             s = QFrame()
             s.setFrameShape(QFrame.Shape.VLine)
-            s.setStyleSheet("color:#2a2a2a;margin:2px 6px;")
+            s.setStyleSheet(f"color:{C.BORDER};margin:2px 6px;")
             layout.addWidget(s)
 
         def _icon_btn(icon_key: str, tip: str, checkable: bool = False) -> QToolButton:
@@ -1223,7 +1223,7 @@ class _FrameCanvasPanel(QWidget):
         self._ro_lbl = QLabel("", self)
         self._ro_lbl.setFont(QFont(T.UI, T.XS, QFont.Weight.DemiBold))
         self._ro_lbl.setStyleSheet(
-            f"color:{C.ACCENT_COOL};background:#0e1f2e;"
+            f"color:{C.ACCENT_COOL};background:{tint(C.ACCENT_COOL, 0.15)};"
             f"border:1px solid {C.ACCENT_COOL};border-radius:4px;padding:3px 8px;"
         )
         self._ro_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
