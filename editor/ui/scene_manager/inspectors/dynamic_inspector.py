@@ -302,7 +302,7 @@ class DynamicInspector(QWidget):
                 if self._actor_insp._is_prefab_template:
                     project.rename_prefab(actor, new_name)
                 else:
-                    # rename_actor s'occupe des get_actor("…") des scripts et
+                    # rename_actor s'occupe des actor:get("…") des scripts et
                     # du message de statut ; _persist() sauve la scène + les
                     # sprites du canvas.
                     project.rename_actor(actor, new_name)

@@ -43,7 +43,7 @@ Ajoutez une **Interface** à la scène, puis un élément **Texte** nommé `Scor
 
 ```lua
 function on_start()
-    text.draw_in("Score", "hud_score")
+    interface:get("Score"):draw("hud_score")
 end
 ```
 

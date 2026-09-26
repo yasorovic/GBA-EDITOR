@@ -457,7 +457,7 @@
       "text": "State"
     },
     "uiinsp.fill.state_tip": {
-      "text": "Initial animation state. A script can change it later with ui.image_set. A panel background gets an IMAGE_* constant of its own, like any image."
+      "text": "Initial animation state. A script can change it later by writing the image's state (interface:get(\"name\").state = \"state\"). A panel background gets an IMAGE_* constant of its own, like any image."
     },
     "uiinsp.fill.state_first": {
       "text": "(first state)"
@@ -574,7 +574,7 @@
       "text": "State"
     },
     "uiinsp.img.state_tip": {
-      "text": "State shown when the scene starts. A script can switch to any other state of this sprite (ui.image_set(\"name\", \"state\"))."
+      "text": "State shown when the scene starts. A script can switch to any other state of this sprite (interface:get(\"name\").state = \"state\")."
     },
     "uiinsp.img.state_first": {
       "text": "(first state)"
@@ -756,9 +756,6 @@
     "sceneinsp.prefab_spawn_calls": {
       "text": "{count} spawn call(s)"
     },
-    "sceneinsp.edit_caller": {
-      "text": "Edit {script}, line {line}"
-    },
     "sceneinsp.mode_btn": {
       "text": "MODE {n}"
     },
@@ -832,7 +829,7 @@
       "text": "Music:"
     },
     "sceneinsp.music_tip": {
-      "text": "<b>Track started when this scene opens</b><br><br><b>Keep playing</b>. The scene issues no order at all, so whatever is<br>already playing carries on. This is the default: walking through a<br>door should not restart the theme.<br><br><b>Silence</b>. Explicitly stops the music.<br><br>The track starts before the scene's <code>on_start</code>, so a <code>music.play()</code><br>in the script overrides it."
+      "text": "<b>Track started when this scene opens</b><br><br><b>Keep playing</b>. The scene issues no order at all, so whatever is<br>already playing carries on. This is the default: walking through a<br>door should not restart the theme.<br><br><b>Silence</b>. Explicitly stops the music.<br><br>The track starts before the scene's <code>on_start</code>, so a <code>music:play()</code><br>in the script overrides it."
     },
     "sceneinsp.music_keep": {
       "text": "Keep playing"
@@ -884,42 +881,6 @@
     },
     "sceneinsp.ui_font": {
       "text": "UI font:"
-    },
-    "sceneinsp.scene_actors": {
-      "text": "Scene slots:"
-    },
-    "sceneinsp.scene_actors_tip": {
-      "text": "Advanced override for the actor budget. Not an actor count.\n\n0 = automatic: the budget counts one slot per placed actor. Set a value only to pin the budget manually; leave it at 0 otherwise."
-    },
-    "sceneinsp.no_prefab": {
-      "text": "No prefab in this project yet. Nothing to pool."
-    },
-    "sceneinsp.pool_tip": {
-      "text": "How many '{name}' can be alive at once in this scene.\n\n0 = this scene never spawns it, and pays nothing for it."
-    },
-    "sceneinsp.pool_tip_parts": {
-      "text": "This prefab has {n} part(s), so one instance costs {slots} slots."
-    },
-    "sceneinsp.pool_cost_grouped": {
-      "text": "× {group} = {slots} slots"
-    },
-    "sceneinsp.pool_cost_single": {
-      "text": "= {n} slot(s)"
-    },
-    "sceneinsp.slots_hint_auto": {
-      "text": "auto ({placed} actors placed)"
-    },
-    "sceneinsp.slots_hint": {
-      "text": "{placed} actors placed"
-    },
-    "sceneinsp.pool_use_placed": {
-      "text": "placed"
-    },
-    "sceneinsp.pool_use_spawned": {
-      "text": "spawned"
-    },
-    "sceneinsp.pool_use_both": {
-      "text": "placed · spawned"
     },
     "sndmix.add_action": {
       "text": "+ Action"
@@ -1113,14 +1074,30 @@
     "edgeinsp.undo_note": {
       "text": "Edit transition note"
     },
-    "groupinsp.name": {"text": "Name"},
-    "groupinsp.color": {"text": "Color"},
-    "groupinsp.presentation": {"text": "PRESENTATION"},
-    "groupinsp.content": {"text": "CONTENTS"},
-    "groupinsp.collapsed": {"text": "Collapsed in graph"},
-    "groupinsp.empty": {"text": "No direct scene or subgroup"},
-    "groupinsp.scenes": {"text": "Scenes ({count})"},
-    "groupinsp.groups": {"text": "Subgroups ({count})"},
+    "groupinsp.name": {
+      "text": "Name"
+    },
+    "groupinsp.color": {
+      "text": "Color"
+    },
+    "groupinsp.presentation": {
+      "text": "PRESENTATION"
+    },
+    "groupinsp.content": {
+      "text": "CONTENTS"
+    },
+    "groupinsp.collapsed": {
+      "text": "Collapsed in graph"
+    },
+    "groupinsp.empty": {
+      "text": "No direct scene or subgroup"
+    },
+    "groupinsp.scenes": {
+      "text": "Scenes ({count})"
+    },
+    "groupinsp.groups": {
+      "text": "Subgroups ({count})"
+    },
     "bgedit.kind_ui": {
       "text": "UI"
     },
@@ -2317,23 +2294,14 @@
     "txttbl.search": {
       "text": "Filter: key, filing or content…"
     },
-    "txttbl.group_tip": {
-      "text": "Group by category (folds the table back into its filing).\nSorting then applies inside each group."
-    },
     "txttbl.add_tip": {
       "text": "New text (filed where the selection is)"
     },
     "txttbl.delete_tip": {
       "text": "Delete the selected texts"
     },
-    "txttbl.group_root_tip": {
-      "text": "Texts filed at the root. This is the absence of a category,\nnot a name: it cannot be renamed. File them from the level 1\nfield below."
-    },
     "txttbl.group_rename_tip": {
       "text": "Select and expand this filing, then click its label to rename it.\nIt renames the filing of every text it contains."
-    },
-    "txttbl.sec_tip": {
-      "text": "Filing (accents, spaces and duplicates allowed).\nNever resolved, never referenced: it organizes the table\nand suggests the key, without ever owning it."
     },
     "txttbl.key_auto": {
       "text": "Automatic key (follows the filing)"
@@ -2356,17 +2324,8 @@
     "txttbl.unused_cell_tip": {
       "text": "No script and no layout refers to this key."
     },
-    "txttbl.h_category": {
-      "text": "Category"
-    },
     "txttbl.h_path": {
       "text": "Filing"
-    },
-    "txttbl.h_section": {
-      "text": "Section"
-    },
-    "txttbl.h_variant": {
-      "text": "Variant"
     },
     "txttbl.h_key": {
       "text": "Key"
@@ -2408,9 +2367,6 @@
     "txtwb.translation_tab": {
       "text": "Translation ({name})"
     },
-    "txtwb.screen_preview": {
-      "text": "Screen preview"
-    },
     "txtwb.preview_font_tip": {
       "text": "Font used for the preview (doesn't affect the text)"
     },
@@ -2422,12 +2378,6 @@
     },
     "txtwb.source_ref": {
       "text": "SOURCE ({name})"
-    },
-    "txtwb.multi_ph": {
-      "text": "Content is edited one entry at a time"
-    },
-    "txtwb.empty_ph": {
-      "text": "Select a text entry to edit its content…"
     },
     "txtwb.key_tip_head": {
       "text": "<b>Key</b> (the handle Lua scripts write, resolved at build time).<br><br>"
@@ -2597,6 +2547,33 @@
     "scrsb.doc_soon": {
       "text": "? doc (coming soon)"
     },
+    "scrsb.go_further": {
+      "text": "Go further"
+    },
+    "scrsb.sec.actor": {
+      "text": "Actor"
+    },
+    "scrsb.sec.scenery": {
+      "text": "Scenery"
+    },
+    "scrsb.sec.sound": {
+      "text": "Sound"
+    },
+    "scrsb.sec.text_ui": {
+      "text": "Text & interface"
+    },
+    "scrsb.sec.data": {
+      "text": "Data"
+    },
+    "scrsb.sec.script": {
+      "text": "Script"
+    },
+    "scrsb.sec.scene": {
+      "text": "Scene"
+    },
+    "scrsb.sec.player": {
+      "text": "Player"
+    },
     "vartbl.globals": {
       "text": "Globals"
     },
@@ -2738,8 +2715,20 @@
     "rombar.target_tip": {
       "text": "Target cartridge: {_cartridge_mib} MiB (click to change)"
     },
-    "rombar.usage": {
-      "text": "{value} / {_cartridge_mib} MiB  ({pct:.1f}%)"
+    "rombar.target": {
+      "text": "ROM  {_cartridge_mib} MiB ▾"
+    },
+    "rombar.mode_fill": {
+      "text": "Fill"
+    },
+    "rombar.mode_breakdown": {
+      "text": "Breakdown"
+    },
+    "rombar.mode_tip": {
+      "text": "Bar display: fill shows free cartridge space; breakdown compares resource categories."
+    },
+    "rombar.free_space": {
+      "text": "{size:,.1f} KiB free"
     },
     "valfield.pixels": {
       "text": "Pixels"
@@ -2862,7 +2851,7 @@
       "text": "Select a scene\nor an actor to\nshow its properties"
     },
     "inputs.hint": {
-      "text": "Name an action and choose the buttons that must be held together. Use it in scripts with input.held(\"name\") or input.pressed(\"name\"). The arrows are the D-pad axes."
+      "text": "Name an action and choose the buttons that must be held together. Use it in scripts with input:held(\"name\") or input:pressed(\"name\"). The arrows are the D-pad axes."
     },
     "inputs.declare_an_input": {
       "text": "Declare an input"
@@ -2907,7 +2896,7 @@
       "text": "{start}  (not found)"
     },
     "projset.save_slots_tip": {
-      "text": "<b>Save slots</b><br><br>How many separate saves the game can hold in SRAM.<br>Scripts address them by number: <tt>save.write(0)</tt>.<br><br>Only the global variables marked <i>persist</i> are stored.<br>A project with none of them writes no save data at all."
+      "text": "<b>Save slots</b><br><br>How many separate saves the game can hold in SRAM.<br>Scripts address them by number: <tt>save:write(0)</tt>.<br><br>Only the global variables marked <i>persist</i> are stored.<br>A project with none of them writes no save data at all."
     },
     "projset.cartridge_tip": {
       "text": "<b>Cartridge size</b><br><br>The capacity the build report compares the ROM against.<br>Going over it is reported as an error. The ROM still exists,<br>it simply does not fit on that cartridge.<br><br>These are the mask-ROM sizes actually manufactured for the GBA."
@@ -2916,7 +2905,7 @@
       "text": "Debug build"
     },
     "projset.debug_tip": {
-      "text": "<b>Debug build</b><br><br>Enables <tt>debug.*</tt> in scripts: <tt>debug.log(...)</tt> writes to the mGBA log console,<br>and the engine measures frame time, OAM usage, sound channels and DMA<br>load once per frame, also logged there.<br><br>Unchecked (Release), every <tt>debug.*</tt> call and the measurement it costs<br>are removed at compile time, not just silenced at runtime."
+      "text": "<b>Debug build</b><br><br>Enables <tt>debug.*</tt> in scripts: <tt>debug:log(...)</tt> writes to the mGBA log console,<br>and the engine measures frame time, OAM usage, sound channels and DMA<br>load once per frame, also logged there.<br><br>Unchecked (Release), every <tt>debug.*</tt> call and the measurement it costs<br>are removed at compile time, not just silenced at runtime."
     },
     "projset.backdrop_tip": {
       "text": "<b>Project backdrop color</b><br><br>Index 0 of the BG palette. Shown wherever no layer or<br>sprite draws, including through a window that masks everything.<br><br>Default inherited by every scene that doesn't set its own.<br>Quantized to BGR555 (5 bits per channel) like on hardware."
@@ -3388,9 +3377,6 @@
     },
     "txtpnl.root": {
       "text": "(root)"
-    },
-    "txttbl.unfiled": {
-      "text": "(unfiled)"
     },
     "txttbl.empty_cell": {
       "text": "(empty)"

@@ -25,6 +25,28 @@
 
 /* Globaux définis dans main.c, visibles par tous les scripts */
 extern Actor g_actors[];
+extern OamEntry g_oam_entries[];
+/* L'entrée OAM qu'un acteur affiche, par le lien `Actor.oam_entry` (cf.
+   actor_types_static.h). Seuls les accesseurs de script passent par ici : le C
+   émis au build connaît l'indice et adresse `g_oam_entries[k]` directement.
+
+   Un acteur SANS sprite (contrôleur, déclencheur, marqueur de prefab) a un lien
+   à -1 : il n'affiche rien, donc il n'a pas d'entrée. Ses accesseurs restent
+   pourtant appelables — `self.frame`, `self.visible = true` — et le contrat est
+   « lecture = 0, écriture sans effet » : on leur rend une entrée NULLE remise à
+   zéro à chaque appel (`affine_slot` à -1 : pas de matrice), que rien ne lit. */
+static inline OamEntry* actor_oam_entry(const Actor* s) {
+    static OamEntry none;
+    if (s->oam_entry >= 0) return &g_oam_entries[s->oam_entry];
+    none = (OamEntry){0};
+    none.affine_slot = -1;
+    return &none;
+}
+/* Constantes d'activation des apparences de la scène active — une ligne par
+   apparence de chaque porteur multi-apparence (cf. AppearanceInit). Définie dans
+   main.c, repointée par chaque scene_init. */
+extern const AppearanceInit* g_appearance_init;
+
 /* get_actor par NOM résolu à l'exécution — pour un script PARTAGÉ (caméra) qui
    n'a pas de scène connue au build (« L'acteur appartient à sa scène »,
    décision C). Rend l'acteur VIVANT de ce nom dans la scène active, ou nil.
@@ -275,39 +297,64 @@ static inline Vec2 actor_get_velocity(const Actor* s)    { return (Vec2){ s->vx,
 static inline void actor_apply_velocity(Actor* s) { s->x+=s->vx; s->y+=s->vy; }
 
 /* Animation — play_anim reçoit l'index d'état (résolu à la compile par le transpileur) */
-static inline void actor_play_anim(Actor* s, int id) { if(s->sprite.anim_state!=id){s->sprite.anim_state=id;s->sprite.frame=0;s->timer=0;} }
+/* 255 = « cet état n'existe pas dans l'apparence courante » (marche 3c : la table de
+   correspondance d'un acteur multi-apparence le rend pour un nom absent) — un
+   no-op, jamais un index hors table. */
+static inline void actor_play_anim(Actor* s, int id) {
+    OamEntry* o = actor_oam_entry(s);
+    if (id == 255) return;
+    if (o->anim_state != id) { o->anim_state = id; o->frame = 0; o->timer = 0; }
+}
+
+/* Apparences (marche 3) : un acteur affiche UN sprite parmi plusieurs. Changer
+   d'apparence est un GESTE, comme play_anim : l'animation repart de l'état 0,
+   frame 0, et les constantes du sprite d'arrivée (tailles, palette, direction
+   auto) sont reposées depuis la table de la scène. Sans entrée OAM (acteur sans
+   sprite), sans effet ; le rang est celui d'un composant sprite de l'acteur,
+   résolu à la compile par le transpileur (SPRITE_*). */
+static inline void actor_set_appearance(Actor* s, int n) {
+    if (s->oam_entry < 0) return;
+    OamEntry* o = &g_oam_entries[s->oam_entry];
+    if (!o->appearance_base) return;                 /* une seule apparence : rien à activer */
+    const AppearanceInit* a = &g_appearance_init[o->appearance_base - 1 + n];
+    o->appearance = (u8)n;
+    o->frame = 0; o->timer = 0; o->anim_state = 0;
+    o->frame_w = a->frame_w; o->frame_h = a->frame_h;
+    o->pal_bank = a->pal_bank; o->auto_dir = a->auto_dir;
+}
+static inline int actor_get_appearance(const Actor* s) { return actor_oam_entry(s)->appearance; }
 /* État courant, en LECTURE — comparable par son nom (self.anim == "Walk"),
    symétrique de play_anim qui l'écrit par son nom. Pas de setter : changer
    d'état est un geste (self:play_anim), pas une propriété qu'on assigne. */
-static inline int  actor_get_anim(const Actor* s)    { return s->sprite.anim_state; }
-static inline int  actor_get_anim_speed(const Actor* s) { return s->sprite.anim_speed; }
-static inline void actor_set_anim_speed(Actor* s, int v) { s->sprite.anim_speed = v; }
+static inline int  actor_get_anim(const Actor* s)    { return actor_oam_entry(s)->anim_state; }
+static inline int  actor_get_anim_speed(const Actor* s) { return actor_oam_entry(s)->anim_speed; }
+static inline void actor_set_anim_speed(Actor* s, int v) { actor_oam_entry(s)->anim_speed = v; }
 /* Lecture seule : recopiées chaque tick depuis les tables du sprite, cf.
-   Actor.sprite.anim_length/anim_loop/anim_finished (actor_types_static.h). */
-static inline int  actor_get_anim_length(const Actor* s)   { return s->sprite.anim_length; }
-static inline int  actor_get_anim_loop(const Actor* s)     { return s->sprite.anim_loop; }
-static inline int  actor_get_anim_finished(const Actor* s) { return s->sprite.anim_finished; }
-/* Lecture seule : posées à l'init/au spawn, cf. Actor.sprite.frame_w/frame_h. */
-static inline int  actor_get_frame_w(const Actor* s) { return s->sprite.frame_w; }
-static inline int  actor_get_frame_h(const Actor* s) { return s->sprite.frame_h; }
-static inline int  actor_get_frame(const Actor* s)   { return s->sprite.frame; }
-static inline void actor_set_frame(Actor* s, int f)  { s->sprite.frame=f; }
-static inline int  actor_get_visible(const Actor* s) { return s->visible; }
-static inline void actor_set_visible(Actor* s, int v){ s->visible=v; }
+   OamEntry.anim_length/anim_loop/anim_finished (actor_types_static.h). */
+static inline int  actor_get_anim_length(const Actor* s)   { return actor_oam_entry(s)->anim_length; }
+static inline int  actor_get_anim_loop(const Actor* s)     { return actor_oam_entry(s)->anim_loop; }
+static inline int  actor_get_anim_finished(const Actor* s) { return actor_oam_entry(s)->anim_finished; }
+/* Lecture seule : posées à l'init/au spawn, cf. OamEntry.frame_w/frame_h. */
+static inline int  actor_get_frame_w(const Actor* s) { return actor_oam_entry(s)->frame_w; }
+static inline int  actor_get_frame_h(const Actor* s) { return actor_oam_entry(s)->frame_h; }
+static inline int  actor_get_frame(const Actor* s)   { return actor_oam_entry(s)->frame; }
+static inline void actor_set_frame(Actor* s, int f)  { actor_oam_entry(s)->frame=f; }
+static inline int  actor_get_visible(const Actor* s) { return actor_oam_entry(s)->visible; }
+static inline void actor_set_visible(Actor* s, int v){ actor_oam_entry(s)->visible=v; }
 static inline int  actor_get_active(const Actor* s)  { return s->active; }
 static inline void actor_set_active(Actor* s, int v) { s->active=v; }
 /* Booléens (self.flip_h = true/false) — le sens du flip est porté par l'état,
    pas par un signe passé à l'ancien self:set_flip_h. */
-static inline int  actor_get_flip_h(const Actor* s)  { return s->flip_h; }
-static inline void actor_set_flip_h(Actor* s, int v) { s->flip_h = v ? 1 : 0; }
-static inline int  actor_get_flip_v(const Actor* s)  { return s->flip_v; }
-static inline void actor_set_flip_v(Actor* s, int v) { s->flip_v = v ? 1 : 0; }
+static inline int  actor_get_flip_h(const Actor* s)  { return actor_oam_entry(s)->flip_h; }
+static inline void actor_set_flip_h(Actor* s, int v) { actor_oam_entry(s)->flip_h = v ? 1 : 0; }
+static inline int  actor_get_flip_v(const Actor* s)  { return actor_oam_entry(s)->flip_v; }
+static inline void actor_set_flip_v(Actor* s, int v) { actor_oam_entry(s)->flip_v = v ? 1 : 0; }
 
 /* ── Transform affine au runtime ──────────────────────────────────────────
    Champs PAR-ACTOR de la struct Actor (cf. actor_types_static.h), et non des
    globaux par slot : un script de prefab poolé est UNE fonction C partagée par
    toutes ses instances, mais chaque instance a sa propre struct Actor et un
-   slot différent (Actor.sprite.affine_slot). Des globaux dans ce header `static`
+   slot différent (OamEntry.affine_slot). Des globaux dans ce header `static`
    créaient une COPIE par unité de compilation (main.c vs actor_*.c) — les
    écritures self.rotation/self.scale n'atteignaient jamais le rendu.
    Pas de FPU sur GBA : SIN_LUT est une table degrés→Q8 (×256) écrite en dur.
@@ -348,7 +395,7 @@ static inline int gba_sin(int deg) { deg = ((deg % 360) + 360) % 360; return SIN
 static inline int gba_cos(int deg) { return gba_sin(deg + 90); }
 
 /* Un matrix slot est réservé au build quand « Affine transform » est coché sur
-   le SpriteComponent (cf. main_gen._compute_affine_info) ; sprite.affine_slot
+   le OamEntry (cf. main_gen._compute_affine_info) ; sprite.affine_slot
    est alors >= 0 et le rendu écrit une matrice.
 
    Ces accesseurs ne le CONSULTENT PAS. Ils l'ont fait — setter no-op et getter
@@ -377,33 +424,33 @@ static inline Vec2 actor_get_scale(const Actor* s) {
    self.sprite_offset), composé par-dessus le monde : la rotation s'AJOUTE,
    le scale se MULTIPLIE, l'offset déplace le sprite dans le repère de l'actor. */
 static inline void actor_set_sprite_rotation(Actor* s, int deg) {
-    s->sprite.rotation = deg;
+    actor_oam_entry(s)->rotation = deg;
 }
 static inline void actor_set_sprite_scale(Actor* s, Vec2 v) {
-    s->sprite.scale_x = v.x * 256 / 100;
-    s->sprite.scale_y = v.y * 256 / 100;
+    actor_oam_entry(s)->scale_x = v.x * 256 / 100;
+    actor_oam_entry(s)->scale_y = v.y * 256 / 100;
 }
 static inline void actor_set_sprite_offset(Actor* s, Vec2 o) {
-    s->sprite.offset_x = o.x;
-    s->sprite.offset_y = o.y;
+    actor_oam_entry(s)->offset_x = o.x;
+    actor_oam_entry(s)->offset_y = o.y;
 }
 static inline int  actor_get_sprite_rotation(const Actor* s) {
-    return s->sprite.rotation;
+    return actor_oam_entry(s)->rotation;
 }
 static inline Vec2 actor_get_sprite_scale(const Actor* s) {
-    return (Vec2){ s->sprite.scale_x * 100 / 256, s->sprite.scale_y * 100 / 256 };
+    return (Vec2){ actor_oam_entry(s)->scale_x * 100 / 256, actor_oam_entry(s)->scale_y * 100 / 256 };
 }
 static inline Vec2 actor_get_sprite_offset(const Actor* s) {
-    return (Vec2){ s->sprite.offset_x, s->sprite.offset_y };
+    return (Vec2){ actor_oam_entry(s)->offset_x, actor_oam_entry(s)->offset_y };
 }
 
 /* Direction 8-axes pour l'animation (0=override, 1=N..8=NW) */
 static inline int  actor_get_dir(const Actor* s)          { static const s8 _lut[3][3]={{8,1,2},{7,0,3},{6,5,4}}; return _lut[s->dir_y+1][s->dir_x+1]; }
 static inline void actor_set_dir(Actor* s, int dir)       { static const s8 _dx[]={0,0,1,1,1,0,-1,-1,-1}; static const s8 _dy[]={0,-1,-1,0,1,1,1,0,-1}; if(dir>=0&&dir<=8){s->dir_x=_dx[dir];s->dir_y=_dy[dir];} }
-static inline void actor_set_auto_dir(Actor* s, int v)    { s->sprite.auto_dir=v?1:0; }
+static inline void actor_set_auto_dir(Actor* s, int v)    { actor_oam_entry(s)->auto_dir=v?1:0; }
 /* La lecture manquait : `auto_dir` s'écrivait sans pouvoir se relire, donc un
    script qui voulait le basculer devait tenir son propre drapeau à côté. */
-static inline int  actor_get_auto_dir(const Actor* s)     { return s->sprite.auto_dir; }
+static inline int  actor_get_auto_dir(const Actor* s)     { return actor_oam_entry(s)->auto_dir; }
 
 /* Direction : vecteur discret (-1|0|1) indépendant du flip */
 static inline Vec2 actor_get_direction(const Actor* s) {
@@ -415,7 +462,7 @@ static inline void actor_set_direction(Actor* s, Vec2 v) {
 }
 
 /* Activation / destruction */
-static inline void actor_destroy_internal(Actor* s)  { s->active=0; s->visible=0; }
+static inline void actor_destroy_internal(Actor* s)  { s->active=0; actor_oam_entry(s)->visible=0; }
 
 /* Input */
 /* Un masque à un bit garde le comportement historique. Avec plusieurs bits,
@@ -449,6 +496,9 @@ static inline int box_overlap(int ax, int ay, const CollisionBox*ba,
     return (alx < blx+(int)bb->w) && (alx+(int)ba->w > blx) &&
            (aly < bly+(int)bb->h) && (aly+(int)ba->h > bly);
 }
+/* ax/ay et bx/by sont des PIXELS : les positions d'acteur sont en Q8 (v0.19).
+   Les passer telles quelles comparait du Q8 à des offsets en pixels, et faisait
+   rater tout chevauchement de deux acteurs distants de plus d'1/256 de pixel. */
 
 /* Vrai si au moins une paire de boxes se chevauche.
    Écrit les tags BOXTAG_* des boxes impliquées dans *my_box / *other_box. */
@@ -456,8 +506,9 @@ static inline int actors_overlap_boxes(const Actor*a, const Actor*b,
                                         u8*my_box, u8*other_box) {
     for (int i=0; i<a->collision.box_count; i++)
         for (int j=0; j<b->collision.box_count; j++)
-            if (box_overlap(a->x,a->y,&a->collision.boxes[i],
-                            b->x,b->y,&b->collision.boxes[j])) {
+            if (a->collision.boxes[i].active && b->collision.boxes[j].active &&
+                box_overlap(a->x>>8,a->y>>8,&a->collision.boxes[i],
+                            b->x>>8,b->y>>8,&b->collision.boxes[j])) {
                 *my_box    = a->collision.boxes[i].tag;
                 *other_box = b->collision.boxes[j].tag;
                 return 1;
@@ -474,20 +525,20 @@ static inline int actors_overlap(const Actor*a, const Actor*b) {
 static inline int actor_get_tag(const Actor* s) { return s->tag; }
 
 /* Palette (flash de dégâts, invincibilité…) */
-static inline int  actor_get_pal(const Actor* s)    { return s->pal_bank; }
-static inline void actor_set_pal(Actor* s, int bank) { s->pal_bank = bank & 0xF; }
+static inline int  actor_get_pal(const Actor* s)    { return actor_oam_entry(s)->pal_bank; }
+static inline void actor_set_pal(Actor* s, int bank) { actor_oam_entry(s)->pal_bank = bank & 0xF; }
 
 /* Mode OAM — 0 = sprite normal, 2 = fenêtre-objet : le sprite n'est plus
    dessiné, ses pixels opaques DÉCOUPENT la région window.OBJ (forme libre,
    animable, sans interruption). Mode 1 (semi-transparent) suppose le
    blending, pas encore câblé. */
-static inline void actor_set_obj_mode(Actor* s, int mode) { s->obj_mode = mode & 3; }
-static inline int  actor_get_obj_mode(const Actor* s)     { return s->obj_mode; }
+static inline void actor_set_obj_mode(Actor* s, int mode) { actor_oam_entry(s)->obj_mode = mode & 3; }
+static inline int  actor_get_obj_mode(const Actor* s)     { return actor_oam_entry(s)->obj_mode; }
 
 /* Ordre d'affichage face aux BG layers (self.priority) — même registre OAM
    que pal_bank/obj_mode ci-dessus, donc la même liberté de le lire/l'écrire. */
-static inline void actor_set_priority(Actor* s, int p) { s->priority = p & 3; }
-static inline int  actor_get_priority(const Actor* s)  { return s->priority; }
+static inline void actor_set_priority(Actor* s, int p) { actor_oam_entry(s)->priority = p & 3; }
+static inline int  actor_get_priority(const Actor* s)  { return actor_oam_entry(s)->priority; }
 
 /* Maths */
 static inline int math_abs  (int x)              { return x < 0 ? -x : x; }
@@ -531,8 +582,8 @@ static inline int math_ease(int a, int b, int num, int den, int kind) {
 extern int _g_frame;
 static inline int scene_frame(void) { return _g_frame; }
 
-/* Tile — lire la valeur brute d'une tile à une position monde */
-extern int tile_get(int px, int py);
+/* Carte de collision — le type de tile à une position monde (0 = vide) */
+extern int collision_map_tile(int px, int py);
 
 /* Aléatoire — LCG 32-bit, zéro overhead, pas de division flottante */
 static u32 _rand_seed = 73244475u;
@@ -688,7 +739,7 @@ static inline void camera_follow(Vec2 target, int mx, int my) {
    sans distinguer un bloc plein d'une pente, ce qui n'a plus de sens depuis que
    la résolution connaît la géométrie. Son dernier appelant était
    `actor_on_ground`, et aucune entrée de l'API Lua ne la citait. Un script qui
-   veut inspecter la carte lit `tile.get`.) */
+   veut inspecter la carte lit `collision_box.get_tile`.) */
 
 /* Layers BG vivants — définis dans main.c via GBA_ENGINE_IMPL (gba_engine.h).
    `bg` = bg_slot 0-3 ; tx/ty en tuiles dans la map du layer. */
@@ -728,6 +779,23 @@ static inline void camera_follow(Vec2 target, int mx, int my) {
    — seul `self:show()`/`self:hide()` en émettent un, vers celle-ci. */
 extern void ui_element_show(int idx, int on);
 
+/* `image.offset` — le décalage d'une image, un vec2. Le moteur le tient en deux entiers
+   (`ui_image_move`/`dx`/`dy`, dans gba_engine.h), qui ne connaissent pas `Vec2` : la
+   conversion vit ici, dans la façade que les scripts incluent. Ces trois prototypes ne
+   sont plus dans le catalogue — plus aucune entrée ne les nomme —, d'où l'`extern`. */
+/* `layer.scroll` — même raison : le moteur tient le décalage d'un fond en deux entiers. */
+extern void layer_set_scroll(int bg, int x, int y);
+extern int  layer_get_scroll_x(int bg);
+extern int  layer_get_scroll_y(int bg);
+static inline Vec2 layer_get_scroll(int bg) { return (Vec2){ layer_get_scroll_x(bg), layer_get_scroll_y(bg) }; }
+static inline void layer_set_scroll_to(int bg, Vec2 v) { layer_set_scroll(bg, v.x, v.y); }
+extern void ui_image_move(int img, int dx, int dy);
+
+extern int  ui_image_dx(int img);
+extern int  ui_image_dy(int img);
+static inline Vec2 ui_image_offset(int img) { return (Vec2){ ui_image_dx(img), ui_image_dy(img) }; }
+static inline void ui_image_set_offset(int img, Vec2 v) { ui_image_move(img, v.x, v.y); }
+
 /* ── Listes d'interface (ROADMAP v0.22) ───────────────────────────
    La NAVIGATION d'un menu, et rien d'autre : le moteur suit un index, le
    script écrit ce que chaque rangée affiche. `list.row(...)` rend la zone de
@@ -752,7 +820,7 @@ extern void ui_element_show(int idx, int on);
    ou somme de contrôle) : le jeu doit pouvoir distinguer « pas de partie » de
    « partie chargée » sans deviner. Lua appelle save_read `save.load` — cf.
    save_read_var juste dessous pour ce que `save.read` désigne côté Lua. */
-/* save.read(slot, "nom") côté Lua (ROADMAP v0.22) : la valeur d'UNE variable
+/* save:read(slot, "nom") côté Lua (ROADMAP v0.22) : la valeur d'UNE variable
    persistante dans un emplacement, sans toucher aux globales de la partie en
    cours — contrairement à save_read ci-dessus. `idx` est un GLOBAL_*, résolu
    par le codegen depuis le nom littéral (contrairement à global.nom, résolu
@@ -777,5 +845,99 @@ extern int save_read_var(int slot, int idx);
    collision, et le seul possible : pendant `on_update`, l'acteur n'a pas encore
    fini de bouger. */
 static inline int actor_on_ground(const Actor*a) { return a->collision.grounded; }
+
+/* ── Inspecteur → API : ce que l'éditeur règle, le script le lit ────────────
+   Lecture seule : ces deux drapeaux sont fixés au build (le C de rendu émis
+   dépend d'eux), les écrire en jeu n'aurait aucun effet. */
+static inline int actor_get_screen_space(const Actor* s) { return actor_oam_entry(s)->screen_space; }
+/* « Affine transform » du OamEntry : vrai si un slot de matrice OAM a
+   été réservé à ce sprite (affine_slot vaut -1 sinon). Rien de plus à stocker. */
+static inline int actor_get_affine(const Actor* s)       { return actor_oam_entry(s)->affine_slot >= 0; }
+static inline int actor_get_box_count(const Actor* s)    { return s->collision.box_count; }
+
+/* ── Boîtes de collision — la référence `collision_box` ─────────────────────
+   Une boîte est nommée par son tag (BOXTAG_*, le champ « Tag » du
+   CollisionBoxComponent), et un script la tient dans une variable :
+   `local hb = self:collision_box("hitbox")`. La référence est un ENTIER — le
+   rang de l'acteur dans g_actors, puis celui de la boîte, plus un — parce que
+   0 doit dire « pas de boîte » (`if not hb`), comme la référence d'un effet
+   sonore. Une boîte absente se lit vide et s'écrit sans effet (même politique
+   qu'un index hors plage). Deux boîtes de même tag sur un acteur : la première
+   répond. Le tag est la CLÉ, donc en lecture seule. */
+static inline int actor_get_box(const Actor* s, int tag) {
+    for (int i = 0; i < s->collision.box_count; i++)
+        if (s->collision.boxes[i].tag == tag)
+            return (int)(s - g_actors) * MAX_BOXES + i + 1;
+    return 0;
+}
+static inline CollisionBox* _box_of(int h)    { return h ? &g_actors[(h-1)/MAX_BOXES].collision.boxes[(h-1)%MAX_BOXES] : 0; }
+static inline Actor*        _box_owner(int h) { return &g_actors[(h-1)/MAX_BOXES]; }
+
+static inline int collision_box_get_tag(int h)    { const CollisionBox* b = _box_of(h); return b ? b->tag : 0; }
+static inline int collision_box_get_active(int h) { const CollisionBox* b = _box_of(h); return b ? b->active : 0; }
+static inline void collision_box_set_active(int h, int on) {
+    CollisionBox* b = _box_of(h);
+    if (b) b->active = on ? 1 : 0;
+}
+static inline int collision_box_get_grounded(int h) { const CollisionBox* b = _box_of(h); return b ? b->grounded : 0; }
+/* La carte de collision à un point MONDE. Le point ne dépend pas de la boîte : elle sert
+   de porte d'entrée (une boîte absente répond 0, comme toute lecture d'une boîte absente). */
+static inline int collision_box_get_collision_tile(int h, int x, int y) {
+    return h ? collision_map_tile(x, y) : 0;
+}
+static inline int collision_box_get_solid(int h)  { const CollisionBox* b = _box_of(h); return b ? b->solid : 0; }
+static inline void collision_box_set_solid(int h, int on) {
+    CollisionBox* b = _box_of(h);
+    if (b) b->solid = on ? 1 : 0;
+}
+static inline Vec2 collision_box_get_offset(int h) {
+    const CollisionBox* b = _box_of(h);
+    return b ? (Vec2){ b->x, b->y } : (Vec2){ 0, 0 };
+}
+static inline Vec2 collision_box_get_size(int h) {
+    const CollisionBox* b = _box_of(h);
+    return b ? (Vec2){ b->w, b->h } : (Vec2){ 0, 0 };
+}
+/* x/y tiennent dans un s8, w/h dans un u8 (cf. CollisionBox) : bornés ici, un
+   script ne peut pas corrompre la boîte voisine par débordement. */
+static inline void collision_box_set_offset(int h, Vec2 v) {
+    CollisionBox* b = _box_of(h);
+    if (!b) return;
+    b->x = (s8)(v.x < -128 ? -128 : v.x > 127 ? 127 : v.x);
+    b->y = (s8)(v.y < -128 ? -128 : v.y > 127 ? 127 : v.y);
+}
+static inline void collision_box_set_size(int h, Vec2 v) {
+    CollisionBox* b = _box_of(h);
+    if (!b) return;
+    b->w = (u8)(v.x < 0 ? 0 : v.x > 255 ? 255 : v.x);
+    b->h = (u8)(v.y < 0 ? 0 : v.y > 255 ? 255 : v.y);
+}
+/* Le rectangle MONDE, en pixels : position de l'acteur + décalage + taille. */
+static inline Rect collision_box_get_bounds(int h) {
+    const CollisionBox* b = _box_of(h);
+    if (!b) return (Rect){ 0, 0, 0, 0 };
+    const Actor* o = _box_owner(h);
+    return (Rect){ (o->x>>8) + b->x, (o->y>>8) + b->y, b->w, b->h };
+}
+/* Deux boîtes se chevauchent-elles ? Une boîte inactive ne touche personne. */
+static inline int collision_box_overlaps_box(int h, int other) {
+    const CollisionBox* a = _box_of(h);
+    const CollisionBox* b = _box_of(other);
+    if (!a || !b || !a->active || !b->active) return 0;
+    const Actor* oa = _box_owner(h);
+    const Actor* ob = _box_owner(other);
+    return box_overlap(oa->x>>8, oa->y>>8, a, ob->x>>8, ob->y>>8, b);
+}
+/* ... ou l'une des boîtes actives de cet acteur ? */
+static inline int collision_box_overlaps_actor(int h, const Actor* other) {
+    const CollisionBox* a = _box_of(h);
+    if (!a || !a->active || !other) return 0;
+    const Actor* oa = _box_owner(h);
+    for (int j = 0; j < other->collision.box_count; j++)
+        if (other->collision.boxes[j].active &&
+            box_overlap(oa->x>>8, oa->y>>8, a, other->x>>8, other->y>>8, &other->collision.boxes[j]))
+            return 1;
+    return 0;
+}
 
 #endif /* RUNTIME_API_INLINE_H */

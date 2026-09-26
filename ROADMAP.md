@@ -62,7 +62,7 @@ numéroté, jamais mélangé aux jalons produit.
 | v0.12 | Vue d'ensemble (graphe des scènes) | **Livrée** — carte, groupes, notes, mini-carte, recherche, inspecteur d'arête, retargetage et création de scène ; création de transition ex nihilo, cibles calculées (`?`), routage anti-croisement et tracé libre reportés à v2.0 — [archive](changelog-archive/v0.12.md) |
 | v0.13 | Édition mixte (appels d'API en blocs) | Non commencée |
 | v0.15 | Visibilité des éléments d'interface | **Livrée**, sous une autre forme que prévu — [archive](changelog-archive/v0.15.md) |
-| v0.16 | L'API : règle de construction et rangement | Non commencée |
+| v0.16 | L'API : règle de construction et rangement | En cours — cinq renommages faits (`actor.get`/`actor.count`, `ui`→`interface`, `text.*_in`→`interface.*`) + `REMOVED_API` vidé + **rangement en 8 sections livré** (sidebar : navigation unique par nom, sous-titres, couche moteur repliée sous « Aller plus loin ») ; restent les items « Ouvert » (doc) ; **amendement du 2026-09-24** (proposé, non verrouillé) : module fabrique / type opère, clé `actor:` au lieu de `self:`, 25 fonctions à ranger (`list`, `interface.image_*`, `window`) |
 | v0.17 | Le pool par scène | **Livrée le 2026-09-19** — pool déclaré sur la scène, budget OAM dérivé (`128 − posés − UI`) et compilation par scène, en sept tranches vérifiées au build ROM ; culling existence/OBJ reporté — [archive](changelog-archive/v0.17.md) |
 | v0.18 | La valeur affichée : d'où elle vient | **Livrée** — première tranche (`$locale` dans les littéraux `text.draw`/`text.draw_in`, limite `!1`…`!9`), validée au build ROM ; extensions à d'autres sources reportées — [archive](changelog-archive/v0.18.md) |
 | v0.25 | L'interface possède son chemin matériel | **Livrée** — [archive](changelog-archive/v0.25.md) |
@@ -179,11 +179,12 @@ consignés ici pour ne pas rester invisibles faute d'un jalon à qui les rattach
   liste des espaces de noms, parce que la fin de la branche `ExprIndex` visite `e.obj` — le
   `global` de `global.score` passe par là. (2) **Les membres d'une référence d'élément
   d'interface** : `ui_element` est déclaré comme type de retour mais absent de `REF_TYPES`,
-  donc `.y`, `.foo` et `:bouge()` passaient tous. Reconnue par sa FORME (`ui.get(...)`) et non
+  donc `.y`, `.foo` et `:bouge()` passaient tous. Reconnue par sa FORME (`interface:get(...)`) et non
   en l'inscrivant dans `REF_TYPES` — l'y mettre ferait chercher les méthodes sous
-  `ui_element:show` alors qu'elles vivent sous `self:show`, et casserait le `ui.get(x):show()`
-  qui marche. (3) **Les arguments d'un appel utilisé comme RÉCEPTEUR** :
-  `ui.get("Cusor"):show()` ne validait rien, alors que la même expression posée seule était
+  `ui_element:show` alors qu'elles vivent sous `self:show`, et casserait le `interface:get(x):show()`
+  qui marche [*levé le 2026-09-25 : `show`/`hide` vivent sous `ui_element:` et le type est dans
+  `REF_TYPE_TABLE` — cf. v0.16, étape (b)*]. (3) **Les arguments d'un appel utilisé comme RÉCEPTEUR** :
+  `interface:get("Cusor"):show()` ne validait rien, alors que la même expression posée seule était
   refusée — `_check_call_expr` s'arrête à un récepteur `ExprName`. Corrigé en faisant descendre
   un appel posé seul par `_check_expr` comme n'importe quelle expression.
 
@@ -236,17 +237,17 @@ toucheront TOUT projet non trivial, pas seulement ce genre. Les points 1 et 2 on
 relevés en construisant la boucle ; le 2 a été confirmé par le **test d'échelle** (40 scènes /
 200 sprites, cf. la note en fin de section).
 
-1. ~~**Aucun moyen d'adresser un acteur dynamique.**~~ **Corrigé (2026-09-20).** `get_actor`
+1. ~~**Aucun moyen d'adresser un acteur dynamique.**~~ **Corrigé (2026-09-20).** `actor.get`
    accepte désormais un **index dynamique 1-based** en plus d'un nom littéral :
-   `get_actor(i)` → `actor_at((i) - 1)` (repli 1→0 comme `data.Table[i]`), borné à la scène
-   active et filtré par `actor_live` (nil hors bornes ou détruit). `actor_count()` rend le
-   nombre d'acteurs posés — la borne de boucle. La cascade `if sel==1 then get_actor("Soldier1")…`
-   devient `get_actor(sel)`, vérifié de bout en bout sur la démo. Décisions verrouillées :
+   `actor:get(i)` → `actor_at((i) - 1)` (repli 1→0 comme `data.Table[i]`), borné à la scène
+   active et filtré par `actor_live` (nil hors bornes ou détruit). `actor:count()` rend le
+   nombre d'acteurs posés — la borne de boucle. La cascade `if sel==1 then actor:get("Soldier1")…`
+   devient `actor:get(sel)`, vérifié de bout en bout sur la démo. Décisions verrouillées :
    **1-based** (cohérent avec le langage) ; porte les acteurs **posés** de la scène active dans
    l'ordre d'authoring (l'ordre C correspond exactement) ; l'indexation des **pools spawnés**
    (`pool_at`) reste un chantier distinct différé. `runtime_api_inline.h` (`actor_at`,
    `g_scene_placed`), `main_gen` (pose `g_scene_placed` au scene_init), `scripting/codegen.py`,
-   `scripting/api.py` (`actor_count`). Tests : `test_actor_scene_naming.py`. Piste encore ouverte :
+   `scripting/api.py` (`actor.get`/`actor.count`). Tests : `test_actor_scene_naming.py`. Piste encore ouverte :
    les `exports_values` par instance (script exports) ne sont pas câblés au codegen — paramétrer
    une instance pour qu'elle se gère elle-même reste à faire.
 
@@ -272,7 +273,7 @@ relevés en construisant la boucle ; le 2 a été confirmé par le **test d'éch
 
 4. **`text.draw_num` retiré : afficher un nombre coûte trois artefacts.** Un PV à l'écran
    impose de créer un global, une entrée de table de texte contenant `$global`, puis
-   `text.draw(tx, ty, "clé")` après avoir posé le global. Pour un genre qui affiche *beaucoup*
+   `text:draw(tx, ty, "clé")` après avoir posé le global. Pour un genre qui affiche *beaucoup*
    de chiffres (PV, dégâts, portées, or, niveaux), l'indirection est lourde et se répète à
    chaque valeur (`editor/scripting/api.py`, entrée retirée `text.draw_num`).
 
@@ -283,11 +284,11 @@ relevés en construisant la boucle ; le 2 a été confirmé par le **test d'éch
    curseur de carte) rejouera ce conflit (runtime `ui_list_tick`, v0.22).
 
 6. **Deux idiomes non évidents du transpileur, et une doc qui mentait.**
-   ~~`get_actor(...):méthode()` en chaîne directe ne transpile pas (« invoke sur expression
+   ~~`actor:get(...):méthode()` en chaîne directe ne transpile pas (« invoke sur expression
    complexe ignoré »)~~ **Corrigé (2026-09-20)** : `_invoke` accepte désormais un receveur qui
-   est une expression de type connu — un actor (`get_actor(...)`, `actor.spawn(...)`,
-   `self.<enfant>`) ou une référence —, donc `get_actor("Foe"):move_to(p, 2)` marche sans local
-   intermédiaire ; une expression sans type reste refusée. La docstring de `get_actor`, qui
+   est une expression de type connu — un actor (`actor:get(...)`, `actor:spawn(...)`,
+   `self.<enfant>`) ou une référence —, donc `actor:get("Foe"):move_to(p, 2)` marche sans local
+   intermédiaire ; une expression sans type reste refusée. La docstring de `actor.get`, qui
    montrait la forme fautive, est corrigée. Tests : `test_lua_subset.py`
    (`test_get_actor_chaine_directe_une_methode`, …). **Reste** : un `vec2` ne se stocke toujours
    pas dans un local (`local c = …:get_position()` devient `int c = /* ignoré */`) — lire
@@ -377,10 +378,13 @@ jalon, mais référencé par son nom plutôt que par un numéro.
 | L'ouverture d'un projet, et l'écran blanc | 2026-09-13 | **Livré** — [archive](changelog-archive/open-white-screen.md) |
 | Les palettes, rangées avec les assets | 2026-09-18 | **Livré** — [archive](changelog-archive/palettes-in-assets.md) |
 | L'acteur appartient à sa scène | 2026-09-20 | **Livré** — [archive](changelog-archive/actor-scene-local.md) |
-| Les exports de script, câblés au jeu | 2026-09-20 | **Ouvert — posé + poolé livrés (2026-09-21)** : int/float/bool/enum ; valeur d'instance au build (posé, pli read-only vérifié en ROM) et au spawn via table facultative (poolé, `actor.spawn("X", pos, {k=v})`). Reste les autres types (string/refs/vec) + prolongement locals. Voir [ci-dessous](#les-exports-de-script-câblés-au-jeu--paramétrer-une-instance) |
+| Les exports de script, câblés au jeu | 2026-09-20 | **Livré (2026-09-21)** — les 10 types (int/float/bool/enum, string→TEXT_*, `*_ref`→index, vec2/vec3/rect) portent leur valeur d'instance au build (posé) et au spawn via table facultative (poolé) ; build/ROM headless vert, pli read-only vérifié au `nm`. Prolongement aux locals écarté (gcc -O2 le fait déjà). Voir [ci-dessous](#les-exports-de-script-câblés-au-jeu--paramétrer-une-instance) |
+| L'API dit tout ce que l'inspecteur règle | 2026-09-23 | **En cours** — tranche 1 (acteur, sprite, collision) livrée le 2026-09-23, sauf `parent` et `sprite_name` — **la collision est rouverte le 2026-09-24** (boîte = référence typée, `collision_box.get_tile`) ; tranches 2 (caméra, scène, calque) et 3 (interface) à suivre. Voir [ci-dessous](#lapi-dit-tout-ce-que-linspecteur-règle) |
+| Un seul type de script — le propriétaire donne le contexte | 2026-09-26 | **Livré (2026-09-26)** — refus au build (`self`, événements, fichier multi-familles, `self` en behavior), complétion contextuelle, `is_scene`/`hook_kind` remplacés par `owner_kind`/`has_self`. Voir [ci-dessous](#un-seul-type-de-script--le-propriétaire-donne-le-contexte) |
 | Le cache de scène | 2026-09-16 | À ouvrir — voir [ci-dessous](#le-cache-de-scène-rouvrir-une-scène-déjà-visitée-sans-tout-redécoder) |
 | L'écran resynchronisé à sa revisite | 2026-09-18 | **Livré (2026-09-20)** — [archive](changelog-archive/screen-resync-revisit.md) |
 | Undo/redo des sidecars d'éditeur | — | À ouvrir — envisagé pour **V2**, voir [ci-dessous](#undoredo-des-sidecars-déditeur-annuler-la-création-dun-groupe-un-déplacement-de-nœud) |
+| La struct `Actor` allégée — l'OAM au composant sprite | 2026-09-21 | À ouvrir — **décidé : à faire quoi qu'il arrive**, voir [ci-dessous](#la-struct-actor-allégée--lacteur-entité-légère-le-sprite-et-loam-deviennent-un-composant) |
 
 ---
 
@@ -389,7 +393,7 @@ jalon, mais référencé par son nom plutôt que par un numéro.
 ### D'où vient la question (2026-09-20)
 
 Relevé en réglant l'adressage dynamique (friction #1) : c'est le pendant « données » de
-`get_actor(i)`. Un script d'acteur peut déjà déclarer une table `exports` en tête
+`actor:get(i)`. Un script d'acteur peut déjà déclarer une table `exports` en tête
 (`editor/scripting/exports_parser.py`) — des variables réglables PAR INSTANCE depuis
 l'éditeur :
 
@@ -410,8 +414,24 @@ part** — `exports_values` n'apparaît que dans le modèle (`components.py`) et
 `editor/scripting` ni `editor/codegen`. Au runtime, le script n'a donc aucun moyen de LIRE sa
 valeur d'export : la fonctionnalité est à moitié construite (on remplit des champs sans effet en
 jeu). Le cas d'usage : un seul `Patrol.lua` posé sur trois gardes, chacun sa `speed` et sa
-`team`, au lieu de trois scripts jumeaux — l'identité propre d'une instance, quand `get_actor(i)`
+`team`, au lieu de trois scripts jumeaux — l'identité propre d'une instance, quand `actor:get(i)`
 donne l'instance.
+
+### Livré le 2026-09-26
+
+- `BuildContext.owner_kind` (`actor`/`prefab`/`scene`/`camera`) posé aux quatre sites de `lua_compiler.py` ;
+  le checker refuse `self` hors acteur/prefab et un événement d'une autre famille
+  (`api.KNOWN_EVENTS_BY_KIND` = source unique des événements par famille).
+- `core/script_owners.py` : la lecture « à quoi ce fichier est-il attaché ? », partagée par le
+  validateur (refus multi-familles) et l'éditeur de script (le contexte vient de l'attache, plus du dossier).
+- Complétion : plus de `self.`/`self:` en scène ou caméra ; événements filtrés par famille.
+- Tests : `tests/test_script_owner.py`. Les quatre projets de démo ne produisent aucun nouveau refus.
+
+**Décision 3 précisée (2026-09-26)** : un behavior reçoit son acteur en PREMIER PARAMÈTRE, que la
+convention nommait `actor` ou `self`. Pour que `self` désigne TOUJOURS l'instance attachée, le mot est
+interdit dans un behavior, en corps comme en paramètre : `function M.update(actor)`. Le refus bloque le
+build (`validator._check_behaviors_without_self` — les erreurs du checker sur un behavior ne sont que
+des avertissements) et le checker le dit aussi à l'inline (`owner_kind="behavior"`).
 
 ### Ce que ça touche
 
@@ -492,7 +512,7 @@ clarifiant : une instance de prefab **posée dans une scène est un acteur posé
 purement informatif, `core/models/scene.py`) — donc déjà couverte. Le cas poolé ne concerne que les
 spawns runtime. **Décidé avec Victor (D2) :**
 
-- **`actor.spawn` accepte une table d'exports FACULTATIVE** : `actor.spawn("Bullet", pos, { speed = 8 })`.
+- **`actor.spawn` accepte une table d'exports FACULTATIVE** : `actor:spawn("Bullet", pos, { speed = 8 })`.
   C'est l'analogue au spawn du réglage éditeur du posé — une balle rapide vs lente se règle au moment
   du spawn.
 - **Repli à trois niveaux, par clé.** Pour chaque export d'une instance spawnée : (1) la valeur donnée
@@ -515,7 +535,7 @@ spawns runtime. **Décidé avec Victor (D2) :**
 2. **`actor.spawn` étendu.** ✅ **Fait (2026-09-21).** 3ᵉ argument facultatif = table `{ clé = valeur }`
    (le parser retient les clés, nouveau champ `ExprTable.keys` ; `actor.spawn` devient `variadic`). Le
    codegen émet, après le spawn, un **setter par clé** (`<Scène>_<Prefab>_set_<clé>`, extern, forward-
-   déclaré en tête du spawner) : forme `local b = actor.spawn(...)` ou spawn nu (temporaire). L'accès
+   déclaré en tête du spawner) : forme `local b = actor:spawn(...)` ou spawn nu (temporaire). L'accès
    passe par setter, jamais par `g_state` d'un autre `.c`. Enum/bool résolus en entier.
 3. **Stockage.** ✅ **Fait.** Uniformisation décidée avec Victor : sur un prefab poolé, TOUT export de
    type réglable est un champ de `g_state` (même lu seulement), plus de constante partagée fondue — pas
@@ -524,19 +544,237 @@ spawns runtime. **Décidé avec Victor (D2) :**
    prefab visé (via `spawn_exports`), valeurs littérales, et **position statement** seulement (début de
    ligne ou `local x =`, là où le codegen sait écrire).
 5. **Validation build/ROM + doc.** ✅ **Fait.** Build ROM headless (TacticsDemo : `Range` poolé avec
-   export `tint`, `actor.spawn("Range", pos, {tint=3})` dans `cursor.lua`) : le `.c` de Range porte le
+   export `tint`, `actor:spawn("Range", pos, {tint=3})` dans `cursor.lua`) : le `.c` de Range porte le
    champ d'état, le setter et l'init template ; celui de Cursor l'extern + l'appelle après le spawn ;
    **compile + link vert**. Chaque instance écrit son propre slot (`g_state[pool_slot(inst)]`), donc
    deux spawns = deux valeurs. Doc : `scripting-reference.md` (« Régler un prefab au spawn »).
 
-### Prolongement conditionnel
+### Tranche : les types non-entiers (ouverte et livrée le 2026-09-21)
 
-- **Si les tests exports passent → généraliser le pli read-only aux LOCALS de script.** Périmètre
-  confirmé avec Victor : **locals seulement, globals EXCLUS** (un global est partagé et persistable
-  en SRAM — cf. v0.5/v0.20 — le baker casserait le partage et la sauvegarde). En pratique gcc -O2
-  fait déjà ce pli pour un `local` littéral non réassigné ; le vrai apport propre au chantier reste
-  l'export (valeur injectée au build). À ouvrir comme tranche distincte une fois les exports verts,
-  **pas d'office**.
+Le premier jet ne câblait que les types entiers (int/float/bool/enum). Les **six autres**
+types déclarables (`string`, `actor_ref`, `scene_ref`, `sfx_ref`, `vec2`/`vec3`, `rect`)
+étaient authorables et édités, mais retombaient sur leur défaut de source au build. Ils sont
+maintenant câblés jusqu'au C, réglables par instance (éditeur posé + template poolé) ET par la
+table de spawn.
+
+**Décisions verrouillées avec Victor (2026-09-21) :**
+
+- **`string` → entrée de texte ANONYME → index `TEXT_*`** (décision A). Le moteur est entièrement
+  entier et `text.draw` prend un index, pas un `const char *` : une string brute ne pourrait rien
+  alimenter. Le texte libre saisi (défaut OU valeur d'instance) devient une entrée anonyme de la
+  table de textes — le MÊME chemin qu'un littéral de `text:draw("…")` — et se résout en index. Donc
+  traduisible par le pipeline existant, et un `int` au runtime (le pli read-only s'y applique).
+  `core/project_texts.collect_literal_texts` collecte désormais aussi ces littéraux (défauts de
+  tous les scripts + overrides de chaque owner).
+
+- **`*_ref` → constante symbolique de la scène de compilation.** `sfx_ref`→`SFX_*`,
+  `scene_ref`→`SCENE_IDX_*`, `actor_ref`→`TAG_*` **qualifié par la scène** qui compile (cohérent
+  avec « L'acteur appartient à sa scène » — un nom d'acteur n'a de sens que dans sa scène). Une réf
+  vide tombe sur `0`. Toutes ces macros sont en portée dans le `.c` généré (l'en-tête les `#define`).
+
+- **`vec2`/`vec3`/`rect` → type composé du moteur** (`Vec2`/`Vec3`/`Rect`, cf. `expr_types.C_TYPES`),
+  déclaré `Vec2 home = { x, y };`. La valeur d'instance (liste `[x, y]`) ou le défaut de source
+  (table `{x, y}`) résolvent le littéral composé. Poids par instance : 8/12/16 octets (`_STATE_BYTES`).
+
+- **Réglables aussi à la table de spawn** (décision B). `actor:spawn("X", pos, { vel = vec2(1,2),
+  boom = "Pop", tgt = "Enemy" })` : le setter émis est **typé** (`int` pour un scalaire/handle,
+  `Vec2`/`Rect` pour un composite), défini dans le `.c` du prefab et forward-déclaré `extern` dans le
+  spawner. Les valeurs se résolvent au site du spawn, dans la scène du spawner.
+
+**Ce que ça a touché :** `codegen.py` (`_EXPORT_SETTABLE`/`_EXPORT_C_TYPE`, `_local_decl`,
+`_emit_pool_state`, `_emit_shared_local`, setters typés `_export_setter_c_type`,
+`_spawn_export_value`/`_ref_or_text_literal`) ; `lua_compiler.py` (`_make_export_resolver`
+scène-scopé, `_export_inits` reçoit le résolveur, `_spawn_exports_meta` élargi) ;
+`checker.py` (`_EXPORT_WIRED_TYPES` = tous, `_check_spawn_value`/`_check_spawn_ref_name`, **semage
+des types composites** pour valider `home + vec2(1,0)` / `box.x`) ; `core/project_texts.py`
+(collecte des littéraux d'export string). Tests : `tests/test_export_values_codegen.py` (résolveur
+par type, émission posé, table de spawn, setters composites typés, checker, régression composite).
+
+**Validation build/ROM ✅ (2026-09-21).** MyGame, acteur posé « Flying Note » réglé sur les six
+types (label string, boom sfx_ref vide, dest scene_ref, target actor_ref, home vec2 muté, box rect).
+Le `.c` porte les valeurs résolues : `label = TEXT__LIT_…` (littéral d'instant « Buzz buzz » →
+entrée anonyme), `boom = 0`, `dest = SCENE_IDX_TITLESCREEN`, `target = TAG_DIALOGUE_FLYING_NOTE`,
+`home = { 10, 20 }` (Vec2), `box = { 2, 3, 8, 9 }` (Rect) ; **compile + link vert**. Dans `rom.elf`
+(`nm`) : `home` **muté** = vraie variable IWRAM (`03001228 d home`) ; `box`/`dest`/`target`/`label`/
+`boom` **lus seuls** = **absents**, fondus en immédiats par gcc -O2 — le pli read-only tient aussi
+pour les index de texte, les refs et le rect. **Reste : rien** (le prolongement locals ci-dessous
+est une tranche à part).
+
+### Prolongement aux locals — écarté (2026-09-21)
+
+Envisagé un temps : généraliser le pli read-only aux `local` de script. **Écarté**, car il
+n'apporterait rien. `arm-none-eabi-gcc -O2` **fond déjà** un `local` littéral non réassigné en
+immédiat (c'est ce que le `nm` montre pour les exports lus seuls) — aucun code à écrire. Et
+contrairement à un export, un `local` n'a pas de valeur d'éditeur à injecter au build : le seul
+apport propre du chantier était justement l'export, livré. Les globals resteraient de toute façon
+exclus (partagés + persistables en SRAM, cf. v0.5/v0.20 : les baker casserait partage et
+sauvegarde). Chantier **clos**.
+
+---
+
+## L'API dit tout ce que l'inspecteur règle
+
+### D'où vient la question (2026-09-23)
+
+Vérification faite : plusieurs champs édités dans un inspecteur n'avaient aucune porte côté Lua
+(`screen_space`, les boîtes de collision, le mode de caméra, le défilement de scène, tout l'habillage
+des éléments d'interface…). Un auteur qui règle une chose à l'éditeur ne peut ni la lire ni, quand le
+matériel le permet, la changer en jeu.
+
+### La règle
+
+Tout champ d'inspecteur a une porte dans l'API, et la porte dépend de ce que le runtime sait faire :
+
+- **modifiable au runtime** → propriété (ou fonction, si elle est INDEXÉE) en lecture ET en écriture ;
+- **fixé au build** (l'écrire n'aurait aucun effet, ou changerait l'allocation du matériel) →
+  **lecture seule**, pour qu'un script puisse s'y adapter sans dupliquer la valeur.
+
+La forme suit la grammaire existante (état → propriété ; requête indexée → fonction ; cf.
+ARCHITECTURE.md « La grammaire de l'API »). Aucun mécanisme nouveau.
+
+### Décisions verrouillées (2026-09-23)
+
+- **Trois tranches**, chacune livrée, testée et documentée avant la suivante : (1) acteur + sprite +
+  collision ; (2) caméra + scène + calque de fond ; (3) éléments d'interface.
+- **Boîtes de collision** : ~~adressées par leur tag, en requêtes indexées~~ — **rouvert le
+  2026-09-24**, voir [l'amendement ci-dessous](#amendement-2026-09-24--la-boîte-de-collision-devient-une-référence-typée).
+  La forme initiale (`self:box_rect("hitbox")`, `self:set_box_solid(...)`) avait écarté l'idée
+  `self:box("tag").w` parce qu'une propriété sur une boîte exige un TYPE de référence dans le
+  checker et le codegen. Ce coût est maintenant accepté : la boîte est un composant à part entière
+  (id, tag, active, solid, offset, size), elle mérite son propre objet et son propre module.
+- **Interface** : décision remplacée par l'amendement v0.16 du 2026-09-25 : le singleton
+  `interface` acquiert un élément typé (`interface:get("Nom")`) ; l'élément porte ses
+  propriétés et méthodes. Les fonctions qui recevaient un nom d'élément en premier argument
+  migrent avec la surface décrite dans « Interface — singleton et éléments typés ».
+
+### Amendement (2026-09-24) — la boîte de collision devient une référence typée
+
+Le type `collision_box` rejoint `REF_TYPES` (à côté de `sfx`). Un script obtient une boîte par son
+tag ; le tag reste la CLÉ de la boîte, donc lecture seule.
+
+```lua
+local hb = self:collision_box("hitbox")   -- nil si l'acteur n'a pas de boîte de ce tag
+hb.active = false                         -- bool
+hb.solid  = false                         -- bool : arrêtée par la carte de collision, ou déclencheur
+hb.offset = vec2(8, -4)                   -- décalage relatif au pivot du sprite (valeur immuable)
+hb.size   = vec2(12, 8)                   -- largeur, hauteur
+local r = hb.bounds                       -- rect MONDE (position + offset + taille), lecture seule
+if hb:overlaps(other) then ... end        -- `other` : un acteur OU une autre boîte
+hb.is_grounded                            -- bool, lecture seule : cette boîte repose-t-elle sur le sol ?
+local t = hb:get_collision_tile(x, y)     -- type de tile de collision au point monde (x, y)
+```
+
+| Porte | Nature | Remplace |
+| --- | --- | --- |
+| `self:collision_box(tag)` | constructeur de référence, `nil` possible | — |
+| `hb.tag` | lecture seule | la clé des anciens appels |
+| `hb.active` | modifiable — **champ à créer au runtime** : la résolution contre la carte et le test de chevauchement doivent l'ignorer quand il est faux | (aucune porte) |
+| `hb.solid` | modifiable | `self:box_solid` / `self:set_box_solid` |
+| `hb.offset`, `hb.size` | modifiables, bornés (offset −128..127, taille 0..255) | `self:box_rect` / `self:set_box_rect` |
+| `hb.bounds` | lecture seule, rect monde | le calcul que chaque script refaisait |
+| `hb:overlaps(other)` | méthode, bool | — |
+| `hb.is_grounded` | lecture seule, bool | (aucune porte par boîte) — `self.grounded` reste, et en est le OU |
+| `hb:get_collision_tile(x, y)` | méthode, requête indexée (point monde ABSOLU) | `tile.get` (la carte lue est la carte de collision ; le verbe `get` est juste ici : le tile n'est pas un champ de la boîte) |
+| `self.box_count` | lecture seule, inchangée | — |
+
+`overlaps(other)` prend un acteur (« ma hitbox touche-t-elle N'IMPORTE QUELLE boîte de cet
+acteur ? ») ou une autre boîte (« ... précisément sa hurtbox ? ») — la même distinction que
+`on_collide(other, my_box, other_box)`. `touches_tile` a été écartée : `hb:get_collision_tile` sur
+`hb.bounds` fait la même chose sans nouvelle action. Le point de `get_collision_tile` est absolu : la
+boîte sert de porte d'entrée (une boîte absente répond 0) mais ne relativise rien.
+
+Ce que le chantier ajoute, hors renommage : des **propriétés sur une référence** (jusqu'ici une
+référence n'a que des méthodes — `sfx`, élément d'interface). Le checker doit typer la lecture et
+l'écriture `ref.champ`, refuser l'écriture d'un champ lecture seule, et le codegen émettre les
+`actor_get/set_box_*` existants. Les quatre fonctions `self:box_*` sont **supprimées** à la livraison
+(pas d'alias), de même que `tile.get`.
+
+**Livré (2026-09-24)** : le type `collision_box`, ses six propriétés, `hb:overlaps(x)`,
+`hb:get_collision_tile(x, y)`, `hb.is_grounded` ; `self:box_rect`, `self:set_box_rect`, `self:box_solid`,
+`self:set_box_solid` et `tile.get` sont **supprimées**, sans alias. Ce que le chantier a demandé en plus :
+
+- **`active` existe désormais au runtime** (`CollisionBox.active`). La case de l'inspecteur n'en fixe que
+  l'état de DÉPART : une boîte inactive au départ est émise quand même (ROM et tags), parce qu'un script
+  peut l'allumer. Les filtres de build (`actor_box_tags`, `has_solid_box`, `collision_tags`) ne lisent
+  plus `active`. La résolution contre la carte, `actors_overlap_boxes` (donc `on_collide`) et
+  `overlaps` l'ignorent tant qu'elle vaut 0.
+- **Bug trouvé en route, corrigé** : `box_overlap` recevait les positions d'acteur en Q8 (v0.19) et les
+  comparait à des offsets en pixels — deux boîtes à 5 px ne se voyaient pas comme se chevauchant, donc
+  `on_collide` / `on_collision_enter` ne se déclenchaient qu'à moins d'1/256 de pixel. Régression tenue
+  par la sonde native (`overlap_5px`, `actors_overlap`).
+- **La référence est un entier** (rang de l'acteur × `MAX_BOXES` + rang de la boîte + 1, 0 = absente),
+  comme le handle d'un `sfx` : `if not hb` compile en `!hb`. Les propriétés d'une référence passent par
+  `resolve_prop(expr, ref_types)`, sans jamais retomber sur les champs d'actor (`hb.tag` n'est pas
+  `self.tag`). Le renommage d'un tag suit aussi `hb.tag == "hitbox"` (`refactor._iter_prop_refs`).
+- **Vérifié** : sonde native (`actor_box_probe.c`), `test_inspector_api_parity.py`, et un build ROM complet
+  sur une copie d'OrbitTest (deux boîtes sur la tourelle dont une inactive au départ, une sur Moon, script
+  utilisant toute l'API) — `rom.gba` produite.
+
+### Tranche 1 — acteur, sprite, collision
+
+| Champ d'inspecteur | Porte Lua | Nature |
+| --- | --- | --- |
+| Actor `screen_space` | `self.screen_space` | lecture seule (le C émis diffère selon la valeur) |
+| SpriteComponent `affine_transform` | `self.affine` | lecture seule (réserve un slot OAM au build) |
+| CollisionBox `x, y` | `hb.offset` (`hb = self:collision_box(tag)`) | modifiable |
+| CollisionBox `w, h` | `hb.size` | modifiable |
+| CollisionBox `solid` | `hb.solid` | modifiable |
+| CollisionBox `active` | `hb.active` | modifiable (champ runtime à créer) |
+| CollisionBox `tag` | `hb.tag` ; `self.box_count` | lecture seule |
+
+**Livré (2026-09-23)** : les sept portes du tableau, la sonde C `tests/native/actor_box_probe.c`, 
+`tests/test_inspector_api_parity.py`, un build ROM complet sur une copie d'OrbitTest (boîte « hitbox » 
+ajoutée à la tourelle, script utilisant les sept portes). Le renommage d'un tag de collision 
+(`RenameCollisionTagCmd`) réécrit maintenant aussi les scripts.
+
+Le re-parentage (`parent`) et le changement d'asset de sprite (`sprite_name`) sont **explicitement
+laissés lecture-seule-à-venir** : ni l'un ni l'autre n'a de trace runtime aujourd'hui (la hiérarchie
+est composée au build), leur porte demande un champ par acteur. À trancher avant d'être ouverts.
+
+---
+
+## Un seul type de script — le propriétaire donne le contexte
+
+### D'où vient la question (2026-09-26)
+
+Les scripts se présentent en plusieurs « types » (scène, caméra, acteur/prefab, behavior) qui ont tous
+accès à la même API. Vérification faite : le type n'est jamais saisi, il est déduit de l'attache, et
+`self` n'existe déjà que pour un acteur ou un prefab (`CodegenContext.has_self` côté codegen). Ce qui distingue
+réellement ces « types » appartient au **propriétaire**, pas au script : le jeu d'événements admis, le
+symbole C émis, le stockage par instance d'un prefab poolé. Unity et Godot n'ont, eux aussi, qu'un seul
+concept de script.
+
+### La règle
+
+Un script est un fichier Lua. Son contexte vient de ce à quoi il est attaché.
+
+- `self` désigne sans ambiguïté l'instance à laquelle le script est attaché, et n'est admis que pour un
+  script attaché à un acteur ou à un prefab. Partout ailleurs, `self` est une **erreur**.
+- Le « type » est un attribut **dérivé**, jamais choisi par l'auteur.
+- Le **behavior** reste : c'est un module (`require`), sans propriétaire ni événements. `self` y est
+  refusé ; l'acteur passe en paramètre.
+
+### Décisions verrouillées (2026-09-26)
+
+1. **Un fichier, une famille de propriétaire.** Attacher le même script à des propriétaires de familles
+   différentes (par exemple un acteur et la scène) est **refusé au build**, avec une erreur nommant les
+   deux attaches. On n'autorise pas ce cas au prix d'un `self` ambigu : ce serait de la complexité.
+2. **Les événements sont validés par propriétaire.** `on_collision_enter` dans un script de caméra reste
+   refusé au build. L'éditeur le **filtre en amont** : l'auto-complétion ne propose que les événements de
+   la famille du propriétaire du script édité, et les modèles de nouveau script suivent le même critère.
+3. **Le behavior est conservé** comme module distinct.
+
+### Ce que ça touche
+
+- `scripting/codegen.py` / `checker.py` : `is_scene` et `hook_kind` deviennent une notion de
+  propriétaire ; erreur explicite sur `self` hors acteur/prefab ; refus de l'attache multi-familles.
+- `scripting/completion.py` : filtrage des événements selon le propriétaire (la fonction lit déjà un
+  `context` actor/scene/behavior/camera/unknown).
+- `scripting/script_templates.py` : le `kind` saisi devient « ce que l'éditeur propose selon l'endroit de
+  création ».
+- Docs : `docs/scripting.md`, `docs/scripting-reference.md`, `ARCHITECTURE.md`.
+
+Le comportement des projets valides ne change pas ; seuls les cas déjà ambigus deviennent des erreurs.
 
 ---
 
@@ -644,6 +882,452 @@ Deux obstacles durs empêchent de brancher naïvement ces gestes sur l'historiqu
 - **Portée.** Trancher quelles opérations entrent : la *structure* seule (groupes + appartenance),
   ou aussi la *présentation* (positions, géométrie des cadres). La présentation change à chaque
   petit glisser ; l'y inclure gonfle la pile pour un gain douteux.
+
+---
+
+## La struct `Actor` allégée — l'acteur entité légère, le sprite (et l'OAM) deviennent un composant
+
+**Décidé le 2026-09-21 : à faire quoi qu'il arrive.** Ce dossier fixe le POURQUOI et les marches ;
+les décisions fines se tranchent à l'ouverture.
+
+### D'où vient la question
+
+Le modèle runtime est aujourd'hui **plat** : une seule struct `Actor`
+([runtime/include/actor_types_static.h](runtime/include/actor_types_static.h)), un tableau
+`g_actors[]`, le `tag` distingue le type. Deux coûts assumés en découlent :
+
+1. **La struct grasse.** Chaque `Actor` porte l'union de tous les champs possibles — dont le
+   sous-struct `sprite` complet. Un acteur-logique (contrôleur, spawner, directeur d'IA, déclencheur)
+   qui ne veut que x/y paie tout. Ce n'est pas théorique : `g_actors[]` a dû **migrer en EWRAM** faute
+   de tenir en IWRAM (cf. Correctifs).
+2. **Le budget OAM ment par prudence.** `oam_alloc` compte `128 − acteurs actifs − UI`, alors que son
+   propre commentaire reconnaît qu'« un acteur sans sprite ne consomme aucune entrée OAM ; le budget
+   les compte quand même ». Un acteur-logique grignote donc un plafond matériel qu'il n'utilise pas.
+
+### Le principe
+
+Faire de `Actor` une **entité légère**, et déplacer la logique d'affichage sur un **composant sprite** :
+la règle « **1 acteur = 1 slot OAM** » devient « **un sprite component affiché = 1 slot OAM** ».
+Conséquences visées :
+
+- **Un acteur sans sprite est gratuit** (0 slot OAM, pas de sous-struct sprite) — les acteurs-logique
+  cessent de peser sur les 128 et sur l'IWRAM.
+- **Le budget OAM devient honnête** : `128 − sprites affichés − UI`, la vérité du matériel (OAM =
+  objets affichés, pas entités). Cohérent avec « le matériel façonne le langage ».
+- **Swap d'apparence** : un acteur peut porter **plusieurs** sprite components dont **un seul affiché**
+  — changer de planche sans second acteur ni second slot.
+
+### Le rôle de l'Actor — racine de composition, pas fourre-tout
+
+L'Actor est le **type stable et simple** que manipule le gameplay. Il porte ce qui existe pour
+toute entité : identité, durée de vie, transform (`position`, orientation), mouvement courant
+(`velocity`) et script. Les composants lui ajoutent une capacité optionnelle ; ils ne changent
+ni son identité ni le fait qu'un script peut tenir une référence d'Actor.
+
+| Porteur | Responsabilité publique | Coût matériel |
+| --- | --- | --- |
+| `Actor` | identité, `active`, `destroy`, position, vélocité, helpers de gameplay | aucun OAM par lui-même |
+| `Sprite` | dessin, animation, palette, priorité et taille de frame | une entrée OAM seulement s'il est affiché |
+| `Collision` | formes, contacts, résolution contre le monde | aucun OAM |
+| `CollisionBox` | une forme précise, ses réglages et ses requêtes avancées | aucun OAM |
+| `SoundFx` / script | émission sonore et logique de l'entité | aucun OAM |
+
+Cette composition est une **forme d'API et d'authoring**, pas l'obligation d'un ECS par pointeurs
+au runtime. La GBA peut garder une représentation compacte — champs à plat pour le chaud,
+side-array pour le Sprite optionnel — tant que le contrat public reste le même. Les composants
+ne sont donc pas un prétexte pour déplacer toute propriété derrière une indirection.
+
+L'Actor conserve des **helpers de gameplay agrégés**, parce qu'ils répondent à l'intention la
+plus fréquente sans obliger à connaître la forme qui la réalise. La forme cible est une
+propriété, jamais `is_grounded()` :
+
+```lua
+if self.grounded then                 -- au moins une collision porte l'Actor
+  self:add_velocity(vec2(0, -900))
+end
+
+local collision = self.collision      -- nil si l'Actor n'a pas cette capacité
+local feet = collision:get_box("feet")
+```
+
+`self.grounded` vaut `false` sans composant Collision. Il agrège les contacts porteurs de la
+capacité Collision, pas une box particulière : le helper survit donc à plusieurs boîtes, et
+plus tard à une autre représentation de collision. Les détails — tag, géométrie, activation,
+requêtes par boîte — restent sur `Collision` et `CollisionBox`.
+
+### Ce qui existe déjà à ne pas confondre
+
+- Les **AnimStates** : une entité, plusieurs visuels d'une MÊME planche, un slot. (déjà là)
+- Les **prefabs segmentés** (v0.23) : une entité, PLUSIEURS parties = plusieurs slots (enfants). (déjà là)
+- Le neuf ici : (a) l'acteur **zéro sprite** gratuit, (b) N planches **distinctes** swappables, 1 affichée.
+
+### Ce qu'il faudrait trancher avant d'ouvrir
+
+- **Quelle découpe compacte porte le Sprite optionnel** : index nullable vers un side-array de
+  sprite-components, ou bloc hot/cold absent des acteurs sans Sprite. Dans les deux cas, aucun
+  Actor logique ne garde le sous-struct sprite complet ; le choix doit éviter la fragmentation
+  d'identité vue à la tranche poolé des exports.
+- **La VRAM, pas l'OAM, est le vrai plafond du multi-apparence.** « 1 affiché » économise un slot OAM,
+  mais les tuiles + palette de CHAQUE apparence doivent être résidentes (ou streamées). À trancher :
+  tout résident vs streaming.
+- **Le budget reste au build mais devient un pire-cas.** Avec un affichage dynamique, le build borne le
+  **max concurrent de sprites affichés** par scène. Reste de l'allocation au build — **pas « un autre
+  moteur »**, contrairement au spawn dynamique.
+- **Ne PAS construire un ECS général.** Position, durée de vie et mouvement restent le socle
+  chaud de l'Actor. Collision devient une capacité publique parce qu'elle est déjà optionnelle
+  et porte ses propres formes ; cela ne justifie pas de mettre chaque champ dans une table de
+  composants. La séparation physique vise d'abord Sprite/OAM, là où la douleur matérielle est
+  concentrée.
+
+### Le verrou réel : un seul indice pour trois choses (constaté le 2026-09-25)
+
+Dans le C émis, `idx` est **à la fois** l'entrée `g_actors[idx]`, le slot `shadow_oam[idx]` et
+le numéro d'acteur que connaissent le tick d'animation, le writer OAM et le spawn. Le writer est
+**entièrement déroulé**, un bloc par acteur, avec les constantes du sprite écrites en dur
+(`sh`, `sz`, `bt`, `tiles_per_frame`) : `main_gen.py` (boucles « OAM actors scène » et « OAM
+prefab pool »), `gen_sprite.anim_tick_lines`, `gen_affine`. Deux conséquences :
+
+- **`g_actors` a la taille de l'empreinte OAM, pas du nombre d'acteurs.** Sa dimension est
+  `max(placed + ui + pool_slots)` sur les scènes (`Actor g_actors[n_actors]`, `main_gen.py`) : les
+  slots d'interface OBJ (`ui`), qui n'ont **aucun acteur**, réservent chacun une struct entière.
+  Le gaspillage existe déjà, indépendamment de ce chantier.
+- **Compter seulement les porteurs de sprite dans le budget ne libère rien** tant que l'indice
+  d'acteur EST le slot OAM : un acteur-logique garde son entrée `g_actors` et son numéro OAM.
+
+**Le side-array a un coût d'exécution nul dans le C généré, mais pas dans les accesseurs.**
+Le writer OAM et le tick d'animation étant déroulés par porteur, le build connaît l'emplacement
+de chaque entrée : `g_oam_entries[k].frame` est un accès à adresse fixe, comme
+`g_actors[idx].sprite.frame` aujourd'hui. En revanche, les accesseurs de script prennent un
+`Actor*` (`actor_get_frame(const Actor* s)`) : il leur faut `g_oam_entries[s->oam_entry]`, donc
+**un déréférencement** — celui que redoute le commentaire de `actor_types_static.h` (décision
+v0.25) — plus un cas « pas de sprite » (`oam_entry < 0` : lecture = 0, écriture = sans effet).
+Ce coût ne pèse que sur les lectures/écritures de script, pas sur le rendu ; il reste à peser
+contre le gain de RAM. Le commentaire de la struct sera à réécrire avec la marche 2.
+
+### Ce que le transpileur pèse (mesuré le 2026-09-25)
+
+Le transpileur est **découplé du layout C** : `editor/scripting/api.py` déclare chaque propriété
+`self.*` en `ApiProp(c_getter=…, c_setter=…)`, et `codegen.py` n'émet que l'appel à l'accesseur
+(`actor_get_frame(self)`). Aucun accès de champ n'est écrit par le transpileur. Le layout
+vit donc dans un seul fichier, `runtime/include/runtime_api_inline.h` (60 accesseurs, dont 26
+touchent `sprite.*`).
+
+- Sur les 29 propriétés `self.*` de `RUNTIME_PROPS`, une vingtaine sont du domaine Sprite :
+  `rotation`, `scale`, `sprite_rotation/scale/offset`, `visible`, `anim`, `anim_speed/length/
+  loop/finished`, `frame`, `frame_w/h`, `flip_h/v`, `pal`, `obj_mode`, `priority`, `auto_dir`,
+  `screen_space`, `affine`. Restent à l'Actor : `position`, `velocity`, `active`, `tag`,
+  `direction` ; à la Collision : `grounded`, `box_count`.
+- **Déplacer le layout (marche 2) ne change aucun script utilisateur** : seuls les accesseurs de
+  `runtime_api_inline.h` et le writer/tick/spawn changent. C'est ce qui rend la marche 2
+  invisible pour l'auteur.
+- **Compartimenter l'API** (`self.sprite.frame` au lieu de `self.frame`) est en revanche un
+  changement de surface : les noms passent par `RUNTIME_PROPS`, `api_reference.py` (catégories),
+  `api_reference.json`, le checker (`checker.py`, liste des propriétés de transform), la
+  complétion, le refactor, `SCRIPTING.md` / `docs/scripting-reference.md` et les tests
+  (`test_scripting_api.py`). Elle est indépendante de la marche 2 et peut la précéder.
+- Piège : `actor:get(i)` → `actor_at(i0)` (index 1-based côté Lua) expose l'indice `g_actors`.
+  Tant que l'indice d'acteur est le slot OAM, il n'y a pas de sujet ; **la marche 0 doit
+  garder cet indice stable et documenté** (un acteur-logique a un indice mais pas de slot).
+  De même, `UIImageInfo.actor` et la bande de texte OBJ référencent `g_actors` par indice
+  (`gba_engine.h`) : à réviser quand `ui` sort de `g_actors`.
+
+### Le modèle figé : `g_oam_entries[]` réserve l'OAM, `g_actors[]` ne porte que des acteurs
+
+**Proposé par Victor le 2026-09-25.** Le tableau qui réservait les slots OAM change de propriétaire :
+
+| Tableau | Un indice = | Taille (max sur les scènes) | Porte |
+| --- | --- | --- | --- |
+| `g_oam_entries[]` | **une entrée OAM** | `used` = sprites d'acteurs + OBJ d'interface/texte + sprites de pools (≤ 128) | l'état d'affichage |
+| `g_actors[]` | **un acteur** | acteurs posés + instances de pools × parties | identité, position, vélocité, tag, collision, lien `oam_entry` |
+
+- **L'invariant migre de l'acteur au sprite** : `shadow_oam[k]` ↔ `g_oam_entries[k]`, même `k`. Le writer
+  reste déroulé et à adresse fixe ; seule la clé change. `used` devient LE nombre honnête : un slot
+  par consommateur réel.
+- **Les consommateurs OAM réels** (inventaire du 2026-09-25 — quatre écrivains de `shadow_oam[]`) :
+  (1) sprites d'acteurs posés, (2) sprites des pools de prefabs (`main_gen`) ; (3) bandes de texte
+  OBJ et (4) images d'UI OBJ (`gba_engine.h`, via `g_obj_oam_base + oam_rel`). Chacun occupe une
+  bande contiguë de `g_oam_entries[]`, connue au build ; `oam_rel` des zones de texte/UI devient un
+  décalage dans cette table, plus dans un « slot fantôme » de `g_actors`.
+- **`Actor` → `OamEntry` par un lien nullable** : `Actor.oam_entry` = indice dans `g_oam_entries[]`, ou -1. Un
+  acteur-logique, un marqueur de prefab (point de tir, ancre de hitbox) n'ont **ni slot ni état
+  d'affichage**. Aujourd'hui un marqueur réserve quand même un slot (`attr0=0x0200`).
+- **Ce que porte une entrée `OamEntry`** : `frame`, `anim_state/speed/length/loop/finished`, `timer`
+  d'animation (le tick d'animation écrit `timer`, aujourd'hui sur l'Actor), `frame_w/h`, `auto_dir`,
+  les registres OAM (`visible`, `flip_h/v`, `pal_bank`, `obj_mode`, `priority`), le transform
+  **local** (`rotation`, `scale`, `offset`), `affine_slot`, `screen_space`. Le transform **monde**
+  (`rotation`, `scale_x/y`) reste sur l'Actor : c'est de l'état de jeu, lisible sans sprite.
+- **Table uniforme, types étroits.** Les slots d'UI/texte ont une entrée qu'ils n'utilisent pas ;
+  plutôt que des unions par nature de consommateur (complexité), l'entrée est **étroite** (`u8`/`s8`/
+  `s16`, ~24 o au lieu de ~100) : le rétrécissement des types n'est plus « à part », il rend la table
+  uniforme bon marché. Alternative écartée : un registre de propriétaires + un second tableau d'états.
+- **Accesseurs** : `actor_get_frame(const Actor*)` passe par `g_oam_entries[s->sprite]` ; `sprite < 0` →
+  lecture 0, écriture sans effet (`self.visible = true` sur un acteur sans sprite ne fait rien). Le
+  coût d'un déréférencement, décrit plus haut, reste borné aux accès de script.
+- **La marche 3 s'y loge sans changer le modèle** : les N apparences d'un acteur sont des données ROM ;
+  le slot porte l'identifiant de l'apparence courante. Un swap change l'état du slot, il n'ajoute pas
+  d'entrée. VRAM : tout résident (tranché, voir « Marche 3 »).
+- **Le budget** : `over_budget` porte sur `used` de `g_oam_entries[]`. Les acteurs sans sprite n'y figurent
+  pas ; le plafond de 128 vaut pour `g_oam_entries[]`, celui de `g_actors[]` est la RAM.
+- **Indices exposés à ne pas casser** : `actor:get(i)` → `actor_at(i0)` et `UIImageInfo.actor`
+  restent des indices de `g_actors[]`, désormais vraiment « d'acteur » (plus jamais un slot OAM).
+
+**Le nom (tranché le 2026-09-25).** Le type est `OamEntry`, le tableau `g_oam_entries[]`, le lien
+`Actor.oam_entry`. Écartés : `Sprite` (déjà défini par libgba, `gba_sprites.h`), `SpriteComponent` (le
+composant d'acteur de l'éditeur : un seul des consommateurs de la table), `SpriteOAM` (mêle le
+sprite et la mémoire OAM entière). « Entrée de l'OAM » est le mot que le code emploie déjà
+(`oam_alloc`, « OBJ »), et l'entrée est l'état logiciel derrière un `OBJATTR` de `shadow_oam`.
+
+À trancher à l'implémentation (0b) : la forme exacte du lien pour un groupe de pool dont certains
+membres n'ont pas d'entrée (table de build, pas un simple décalage).
+
+### Les marches (staging, sans réécriture ECS)
+
+0. **Introduire `g_oam_entries[]`.** En deux temps, pour rester vérifiable :
+   - **0a — miroir. LIVRÉE (2026-09-25).** `g_oam_entries[]` créé ; le sous-struct `sprite` et les
+     registres OAM de la racine (`visible`, `flip_h/v`, `pal_bank`, `obj_mode`, `priority`,
+     `screen_space`, `timer`) y migrent. `Actor.oam_entry` = même indice que l'acteur, `g_actors[]`
+     gardant sa taille. Le transform monde (`rotation`, `scale_x/y`) reste à l'Actor. Déplacement
+     mécanique de `runtime_api_inline.h`, du writer, du tick d'animation, de `gen_affine`, du spawn
+     et de `scene_init` ; `project_oam_entry_count` distingue déjà les deux tailles (égales en 0a).
+     Vérifié : 4 projets démo se buildent à froid, et leur `main.c` d'avant, renommé par les mêmes
+     règles, ne diffère de celui d'après que par les ajouts voulus (déclaration, remise à zéro,
+     pose du lien). Le code de la ROM grossit de 100 à 170 octets : l'indirection des accesseurs.
+   - **0b — géométrie. LIVRÉE (2026-09-25).** `oam_alloc.py` calcule deux espaces :
+     `g_actors[]` = `[posés][pools]`, `g_oam_entries[]` = `[posés à sprite][interface][pools à
+     sprite]`. `has_oam_entry` est LE prédicat (writer et budget le partagent) ; `Actor.oam_entry`
+     vaut -1 pour un acteur sans sprite ou un marqueur de prefab ; les accesseurs de script y sont
+     neutres (entrée nulle) ; les bandes texte/UI s'ancrent à `OamLayout.ui_start` ; le budget
+     (`actor_budget`, validateur) compte des entrées, plus des acteurs. Le spawn avance dans les
+     deux espaces (`_i += groupe`, `_e += entrées par instance`). MyGame : `g_actors[4]` → `[1]`.
+     Vérifié : 4 démos à froid, et une démo synthétique (contrôleur sans sprite en tête, marqueur
+     enfant de prefab, UI forcée à 2) qui compile et émet le C attendu. Non vérifié sur émulateur.
+     *Décision prise en route :* un budget qui compte les entrées fait que les tests d'allocation
+     doivent dire quels acteurs affichent (`tests/oam_fixtures.py`). Intention d'origine : on brise l'identité : `g_actors[]` se compacte (sans `ui`, sans marqueurs),
+     les bandes UI/texte s'ancrent dans `g_oam_entries[]`, `scene_oam_layout` calcule les deux tailles
+     (`test_0a_les_deux_tables_ont_la_meme_taille` marque cette frontière et devra changer).
+     C'est là que les prefabs poolés (groupes contigus) demandent une table de build.
+1. **Le budget compte les slots de `g_oam_entries[]`.** Conséquence de 0b, plus « `oam_alloc` seul ».
+2. **L'entrée OAM devient optionnelle** → LIVRÉE avec la 0b : `Actor.oam_entry` nullable (-1),
+   `g_actors[]` dimensionné sur les seuls acteurs. L'acteur ne porte plus aucun champ d'affichage.
+   Sans coût d'exécution (voir ci-dessus).
+3. **N sprite components, 1 actif** → swap d'apparence. **OUVERTE (2026-09-25), conception figée
+   ci-dessous, code non commencé.** La plus grosse marche.
+
+#### Marche 3 — le modèle (décisions de Victor, 2026-09-25)
+
+- **VRAM : tout résident.** Toutes les apparences déclarées restent en VRAM, comme tous les sprites le
+  sont déjà : `sprite_offsets_for` donne à chaque sprite une base fixe, calculée sur le PROJET (pas par
+  scène), et chaque `scene_init` recopie ceux de sa scène plus les sprites de prefab. N apparences =
+  N sprites de plus sous le même plafond de 1024 tuiles OBJ, vérifié au build par le contrôle
+  existant. Pas de streaming : ce serait un mécanisme nouveau (copie à la demande, allocation
+  dynamique, partage entre acteurs), sans besoin démontré.
+- **Un acteur affiche UN seul sprite (une entrée OAM) ; ses SpriteComponent sont actifs ou non, et
+  en activer un désactive le précédent.** `SpriteComponent.active` existe déjà : il devient le
+  SÉLECTEUR. Un acteur peut donc porter plusieurs `SpriteComponent` (le modèle le permet déjà : les
+  `id` de composants sont uniques au sein de l'acteur), avec l'invariant « au plus un actif ». Ce n'est
+  pas une liste d'apparences dans un composant.
+- **L'entrée OAM est réservée dès qu'au moins un composant a un sprite** (`has_oam_entry` ne teste
+  plus le seul composant actif : elle teste l'existence d'un sprite). Aucun actif au départ = entrée
+  réservée mais cachée.
+- **Swap = changer l'apparence de l'entrée, pas l'entrée.** `OamEntry` gagne un `u8 appearance`. Les
+  constantes aujourd'hui écrites en dur dans le C émis (base de tuiles `bt`, forme, taille,
+  `tiles_per_frame`, tailles de frame, tables d'animation `sprite_X_anim_dirs`…) passent dans une table
+  ROM par apparence ; le writer OAM et le tick d'animation lisent `appearance_table[entry.appearance]`.
+  C'est le SEUL coût d'exécution de la marche 3 sur le chemin chaud ; un acteur à une seule apparence
+  garde le C émis actuel (constantes), sans table. *Révisé à la 3a : pas de table ROM.* Le writer et le
+  tick étant déjà déroulés par entrée avec des constantes, on les déroule aussi PAR APPARENCE — un
+  `switch` sur `OamEntry.appearance`, chaque cas gardant ses constantes et ses tables d'animation
+  nommées. Pas de pointeurs, pas de test de NULL sur les tables optionnelles (sfx, événements de
+  frame) ; le coût est du code (proportionnel aux apparences), et un `switch` par entrée et par
+  frame — seulement pour les acteurs multi-apparence.
+- **À l'activation d'un composant** : l'état d'animation repart à l'`initial_state` de ce composant,
+  frame 0, timer 0 ; la palette OBJ est celle du composant ; `frame_w/h` sont réécrits.
+- **Affine** : le slot de matrice appartient à l'ENTRÉE (réservé au build). Si un composant de l'acteur
+  est affine, l'entrée l'est ; les autres apparences sont rendues avec la matrice de l'entrée (à
+  documenter à l'ouverture de 3b, ne pas laisser deviner).
+
+#### Marche 3 — l'API de script (à trancher avant 3c)
+
+**Tranché à l'ouverture de la 3c (2026-09-25) — à valider par Victor.** Forme proposée par Victor :
+`self.sprite = self.sprite.myID`, mais `self.sprite` y désignerait deux choses (le composant actif et le
+conteneur des composants), et un id valant un nom de propriété serait ambigu. Le code donne un précédent
+plus net : le commentaire de `self.anim` dit que changer d'état est un GESTE (il remet frame et timer à
+zéro), pas une propriété qu'on assigne — `self:play_anim(nom)`. Activer une apparence remet aussi
+l'animation, les tailles et la palette : c'est le même cas. Retenu, donc, sans type de référence :
+
+- `self:activate_sprite("id")` — le geste ; « activate » reprend le mot de la case « Active » de
+  l'inspecteur, et « activer l'une désactive l'autre ».
+- `self.active_sprite` — lecture seule, comparable par son nom (`self.active_sprite == "blesse"`).
+- `id` = celui du composant sprite ; résolu à la compile en `SPRITE_<ACTEUR>_<ID>` (domaine
+  `DOMAIN_SPRITE_ID`, comme `ANIM_*`). Un id inconnu est une ERREUR du checker ; l'appel sur un autre
+  acteur (`other:activate_sprite`) est refusé (l'id appartient à l'acteur qui exécute).
+- Les noms de `self.sprite` / `self.sprites` restent LIBRES pour la compartimentation de l'API
+  (`self.sprite.frame`) : aucun nom n'est réservé ici. Changer l'orthographe est un changement de
+  table dans `api.py` (`self:activate_sprite`, `self.active_sprite`).
+
+#### Marche 3 — les sous-étapes
+
+- **3a — l'apparence devient une donnée (sans changement visible). LIVRÉE (2026-09-25).**
+  `Appearance` (sprite, base de tuiles, origine) dans `gen_sprite.py` ; `oam_write_lines` et
+  `anim_tick_variants` émettent une apparence par cas, `OamEntry.appearance` (`u8`, +1 octet : 34
+  au total) choisit. Les deux writers de `main_gen` (acteurs posés, pools) et le tick passent par
+  ces helpers avec UNE apparence. Vérifié : le `main.c` des 4 démos est IDENTIQUE octet pour octet
+  avant/après ; un build OrbitTest où chaque acteur reçoit une 2e apparence factice (58 `switch`)
+  compile ; tests unitaires dans `tests/test_oam_appearances.py`. Reste pour 3b : construire la
+  liste d'apparences depuis les composants (aujourd'hui elle n'en a qu'une, le premier), et poser
+  `frame_w/h`, palette, `anim_state` initial et VRAM par apparence (init, spawn, pools).
+- **3b — le modèle éditeur. LIVRÉE (2026-09-25), sauf le swap à l'exécution (3c).**
+  - *Modèle* : trois fonctions dans `core/models/components.py` sont la SEULE façon de lire « le »
+    sprite d'un porteur — `sprite_components`, `displayed_sprite_component` (l'actif),
+    `affine_sprite_component` (l'affine appartient à l'entrée) — plus `competing_sprite_components`.
+    `get_sprite_comp` a disparu ; les 22 sites ont été repris.
+  - *Build* : `oam_alloc.owner_appearances/initial_appearance` (source unique) ; `has_oam_entry` =
+    « au moins une apparence » (une entrée cachée est réservée si aucune n'est active) ; `rom_build`
+    charge les sprites de TOUTES les apparences (`extra_sprites`, prefabs et parties compris) ;
+    l'init pose `appearance = n` et cache l'entrée si aucune n'est active ; writer et tick émis par
+    apparence (une apparence fixe, sans états, donne un `case` vide) ; palettes propres de chaque
+    apparence réservées (`palette_alloc._owner_sprites`).
+  - *Validation* : `_check_sprite_appearances` (deux actives = erreur) ; événements de frame vérifiés
+    pour chaque apparence.
+  - *Éditeur* : activer une apparence désactive l'autre en UNE entrée d'historique ; une apparence
+    ajoutée naît inactive si une autre est affichée ; aperçu, canvas et barre de statut suivent
+    l'apparence affichée (le canvas ne dessine plus un sprite que la ROM n'afficherait pas).
+  - *Vérifié* : `main.c` des 4 démos identique ; builds synthétiques (acteur et prefab poolé à 2
+    apparences : seconde inactive, seconde active, aucune active) compilent ; 13 tests de modèle et 5
+    tests d'inspecteur. *Correction (2026-09-25)* : la jauge « sprites / tuiles / cycles » de la barre
+    d'état (`GbaStatusBar.update_scene`) comptait tout acteur portant un composant sprite — même vide
+    ou sans sprite résolu — et plantait sur un sprite introuvable ; elle lit maintenant le prédicat du
+    build (`has_oam_entry`), compte les tuiles de toutes les apparences et le coût par scanline de la
+    seule apparence affichée (`tests/ui/test_gba_status_bar.py`). Le build et le budget de l'inspecteur
+    étaient déjà justes : un composant vide n'y réservait rien. *Changement de comportement* : un acteur dont le SEUL composant sprite est
+    inactif réserve désormais une entrée (cachée) au lieu de n'en avoir aucune.
+  - *Reste pour 3c* : les constantes propres à une apparence (`frame_w/h`, palette, `anim_state`
+    initial) ne sont posées que pour l'apparence de départ ; l'ACTIVATION à l'exécution doit les
+    reposer, et n'a pas encore d'API de script.
+- **3c — l'activation à l'exécution et l'API de script. LIVRÉE (2026-09-25).**
+  - *Primitif C* : `actor_set_appearance(Actor*, n)` repose `frame_w/h`, `pal_bank`, `auto_dir` depuis
+    `g_appearance_init` (table ROM PAR SCÈNE, `AppearanceInit`, une ligne par apparence des porteurs
+    multi-apparence — `gen_appearance.py`), remet frame/timer/état à 0 ; `OamEntry.appearance_base` =
+    1re ligne + 1 (0 = rien à activer : un acteur mono-apparence ne lit jamais la ligne d'un autre) ;
+    sans entrée OAM, sans effet. `OamEntry` = 36 octets.
+  - *Noms d'animation* : pour un acteur multi-apparence, `anim_names` est l'UNION des états de ses sprites
+    et `ANIM_*` une expression qui lit l'apparence de `self` (`<sym>_anim_map[apparence][k]`, 255 = état
+    absent, ignoré par `actor_play_anim`). Un acteur mono-apparence garde des constantes littérales.
+  - *Script* : `self:activate_sprite`, `self.active_sprite`, domaine `DOMAIN_SPRITE_ID`, checker,
+    transpileur, `sprite_ids` dans les deux contextes.
+  - *Vérifié* : sonde C native (constantes reposées, sans-entrée, mono-apparence, état absent) ; 10 tests
+    de script ; build TacticsDemo avec un script Lua réel (deux apparences, `Move` absent du soldat) ;
+    ids inconnus et appel sur `other` refusés. Démos : seule la ligne `g_appearance_init` est ajoutée.
+  - *Limites connues* : la constante `ANIM_*` d'un acteur multi-apparence utilise `self` — un helper
+    de script sans `self` qui cite une animation ne compilera pas ; les scripts de PREFAB poolé ne
+    reçoivent pas d'`anim_names` (héritage : `pf_anim` reste vide), donc `play_anim` y est déjà hors
+    contrat.
+  - *Suivi de renommage de l'`id` (livré, 2026-09-25)* : renommer l'`id` d'un composant sprite dans
+    l'inspecteur réécrit `self:activate_sprite("id")` et `self.active_sprite == "id"` dans le script
+    de SON propriétaire seulement (`Project.rename_sprite_id_refs`, `refactor.rename_in_files`) — deux
+    acteurs peuvent avoir chacun un « blesse ». La commande `RenameSpriteIdCmd` défait l'`id` ET le
+    script d'un seul Ctrl+Z. Un id vide ou déjà pris est refusé ; deux ids qui donnent la même
+    constante C (`c_ident`) sont une erreur du validateur. Le suivi couvre désormais aussi
+    `self.<propriété> == "nom"` (`self.anim`, `self.active_sprite`) : un renommage d'animation
+    réécrit `self.anim == "walk"`, ce qu'il oubliait. *Limite* : un behavior PARTAGÉ qui cite l'id
+    n'est pas réécrit — le checker signale l'id devenu inconnu au build.
+
+**Types étroits — LIVRÉ (2026-09-25).** `OamEntry` 92 → 32 octets, `Actor` 96 → 68, mesurés par
+le compilateur hôte (`test_les_tailles_des_structs_ne_regressent_pas` fige les plafonds). Champs 16
+bits d'abord, puis 8 bits : aucun remplissage. `s16` : `frame`, `timer`, `anim_speed`,
+`anim_length`, transform (rotation, scale Q8, offset), `tag`, `oam_entry`, `last_x`, `slope_acc` ;
+`u8` : drapeaux et registres OAM, `anim_state`, `frame_w/h`, `active`, `grounded`, `box_count` ;
+`s8` : `dir_*`, `affine_slot`. Position et vélocité restent en `int` (Q8, 32 bits requis). ROM
+plus petite d'environ 4 Ko sur OrbitTest et TacticsDemo (moins d'octets par instruction d'accès).
+*Limite assumée :* un script qui écrit une rotation locale hors de ±32767° ou une échelle hors de
+×127 voit la valeur tronquée à 16 bits ; les registres à valeurs bornées sont masqués par leurs
+accesseurs. Ancienne remarque, pour mémoire : les drapeaux étaient tous des `int` de 4 octets
+pour des valeurs qui tiennent sur 1. Les rétrécir gagne de la place sans toucher au layout logique — à peser à part.
+
+### Piste Collision — un `Contact` d'événement, pas une « dernière collision »
+
+Une boîte peut toucher plusieurs tuiles ou plusieurs acteurs dans une même frame. Lui demander
+`my_box:get_collision()` ou `get_collision_vector()` imposerait de choisir arbitrairement une
+« dernière » collision — information instable, perdue dès que deux contacts coexistent. La
+collision doit au contraire livrer un **Contact immuable** au moment où elle est observée.
+
+```lua
+function on_collision_enter(contact)
+  local other = contact.other
+  local mine = contact.self_box
+  local theirs = contact.other_box
+end
+
+function on_tile_collision(contact)
+  local point = contact.position       -- point monde, en pixels
+  local normal = contact.normal        -- vec2 : direction de la réponse, ex. vec2(0, -1)
+  local cell = contact.tile_position   -- coordonnée de tuile, distincte du point monde
+  local box = contact.self_box
+end
+```
+
+`Contact` est une valeur d'événement, pas une référence durable au moteur : `position`,
+`normal`, la tuile et les deux boîtes décrivent l'impact précis de CET appel. Il peut donc être
+étendu sans transformer `CollisionBox` en journal mutable. Un contact acteur↔acteur porte
+`other` et `other_box` ; un contact tuile porte `tile_position` et éventuellement son type.
+Les anciennes signatures (`on_collision_enter(other, my_box, other_box)`,
+`on_tile_collide(nx, ny)`) sont à migrer ensemble quand le type `Contact` sera introduit,
+après vérification que le sous-ensemble Lua sait porter cette valeur.
+
+La boîte conserve ses opérations stables (`active`, `solid`, `bounds`, `overlaps`) ; le
+`Contact` explique **ce qui vient d'arriver**. Cette frontière évite de mélanger configuration,
+requête de géométrie et événement de collision.
+
+#### Extension proposée (2026-09-25) — la normale vaut aussi pour un contact acteur↔acteur
+
+**Non verrouillée.** Aujourd'hui la normale n'existe que pour les tuiles (`on_tile_collide(normal_x,
+normal_y)`, deux entiers) ; un contact acteur↔acteur n'en porte aucune (`on_collision_enter(other,
+my_box, other_box)`). Distinguer « on me marche dessus » de « on me touche » impose donc deux boîtes
+Trigger dédiées (`tete`, `pieds`) et la comparaison de deux constantes `BOXTAG_*` (cf.
+`docs/user-guide/enemies.md`). Le `Contact` ci-dessus ne le règle que si la normale s'y trouve aussi :
+
+```lua
+function on_collision_enter(contact)
+  if contact.other.tag ~= "Joueur" then return end
+  if contact.normal.y < 0 then          -- poussé vers le haut : on me marche dessus
+    self:destroy()
+  else
+    global.hp = global.hp - 1
+    contact.self_box:deactivate()       -- cycle de vie (v0.16, critère 3)
+  end
+end
+```
+
+Un seul type d'événement, une seule forme de normale : `on_tile_collision(contact)` et
+`on_collision_enter(contact)` lisent `contact.normal` de la même façon. Sur l'ennemi du guide, le script
+passe de 21 à 17 lignes et perd ses deux boîtes de piétinement.
+
+- **Convention à fixer.** La normale est la direction de la **réponse de celui qui reçoit** l'événement :
+  la direction dans laquelle il serait repoussé. « On me marche dessus » donne `y < 0` (l'axe Y du GBA
+  descend). Pour le joueur qui piétine, le même contact lu de son côté donne `y > 0`. Chaque acteur
+  reçoit son propre `Contact` avec sa propre normale ; le contrat ne dépend pas de l'ordre des appels.
+- **Point ouvert — le calcul.** Le runtime ne dérive aujourd'hui aucune normale entre deux boîtes. Pour
+  deux AABB, la normale est l'axe de plus petit recouvrement, de signe donné par les centres. À
+  vérifier : coût par paire (le budget de détection est un budget de scanline), comportement en
+  diagonale (recouvrements égaux : choisir une règle et l'écrire), boîte contenue dans l'autre, et
+  vitesse relative très élevée (traversée en une frame). La normale d'un contact tuile, elle, est déjà
+  connue.
+- **Point ouvert — la valeur.** Comme pour le `Contact` de tuile, l'introduction attend la vérification
+  que le sous-ensemble Lua (`lua_subset.py`) sait porter une valeur structurée (`contact.normal.y`,
+  `contact.other.tag`) et qu'un paramètre de handler peut en être une.
+- **Migration.** Les trois signatures (`on_collision_enter(other, my_box, other_box)`,
+  `on_collision_exit`, `on_tile_collide(nx, ny)`) migrent ENSEMBLE vers un `Contact`, avec le renommage
+  `on_tile_collide` → `on_tile_collision`. Retrait sec, comme le reste. Le guide utilisateur
+  (`enemies.md`, `collectibles.md`, `gameplay-loop.md`, `boss.md`) et les démos sont à migrer avec la
+  tranche ; les boîtes `tete`/`pieds` du guide disparaissent au profit d'une seule boîte et de la normale.
+- **Ce que ça ne change pas.** `hb:overlaps(other)` reste la requête booléenne pour un test ponctuel
+  hors événement ; le `Contact` n'est délivré qu'aux handlers.
+
+### Ce que ça touche (au premier regard)
+
+`runtime/include/actor_types_static.h` (struct `Actor`), `editor/codegen/oam_alloc.py` (budget),
+le writer OAM et `scene_init`/spawn dans `main_gen.py`, le modèle éditeur (un acteur porte 0..N
+sprite components), et la validation (un budget par sprites affichés). À préciser à l'ouverture.
 
 ---
 
@@ -903,10 +1587,10 @@ Trois provenances, et trois seulement :
 | Provenance | Ce que c'est | Coût runtime |
 | --- | --- | --- |
 | `module.get("Nom")` | une chose **nommée du projet**, qui existe avant que le jeu démarre | un `#define` |
-| `module.spawn(…)` / `sfx.play(…)` | un **slot pris dans un pool dimensionné au build** ; rend une référence, ou rien si le pool est plein | une boucle sur une plage contiguë |
+| `module.spawn(…)` / `sfx:play(…)` | un **slot pris dans un pool dimensionné au build** ; rend une référence, ou rien si le pool est plein | une boucle sur une plage contiguë |
 | `module.verbe(n, …)` | le **matériel, numéroté par le matériel** : 4 calques, 2 fenêtres, 16 banques | un registre |
 
-Plus une quatrième, qui n'obtient rien et ne vise rien de numéroté : `text.draw(tx, ty, id)`
+Plus une quatrième, qui n'obtient rien et ne vise rien de numéroté : `text:draw(tx, ty, id)`
 dessine à des **coordonnées libres**. Elle est légitime — elle doit être nommée comme telle au
 lieu d'être subie.
 
@@ -975,13 +1659,33 @@ latérale en déduit un moteur à 22 sous-systèmes de poids comparable. Il en a
   question « où la frontière se voit-elle », sans laquelle la frontière ne survivrait pas
   trois versions.
 
-- **Quatre renommages, complets.** `get_actor` → `actor.get` (le verbe passe derrière, comme
-  `ui.get` — `global.get`/`const.get`, cités ici à l'origine, ont depuis quitté l'API
-  au profit de l'accès pointé, cf. [Chantiers techniques](#chantiers-techniques)) ; `ui` → `interface` (une abréviation, que la grammaire
-  de la maison refuse) ; les quatre `text.*_in` → `interface.draw_text` / `clear_text` /
-  `reading` / `skip` (elles visent une **zone nommée d'une mise en page**, pas des coordonnées
-  libres — c'est ce mélange qui rendait « Texte » illisible) ; les trois boîtes sonores
-  (v0.8.6).
+- **Cinq renommages, complets.** `get_actor` → `actor.get` (le verbe passe derrière, comme
+  `interface.get` — `global.get`/`const.get`, cités ici à l'origine, ont depuis quitté l'API
+  au profit de l'accès pointé, cf. [Chantiers techniques](#chantiers-techniques)) ; `actor_count`
+  → `actor.count` (acté en cours de chantier — même provenance module que `actor.get`/`actor.spawn`,
+  la dernière fonction du catalogue à porter un `_` de séparateur) ; `ui` → `interface` (une
+  abréviation, que la grammaire de la maison refuse) ; les quatre `text.*_in` →
+  `interface.draw_text` / `clear_text` / `reading` / `skip` (elles visent une **zone nommée
+  d'une mise en page**, pas des coordonnées libres — c'est ce mélange qui rendait « Texte »
+  illisible) ; les trois boîtes sonores (v0.8.6).
+
+- **Retrait sec, `REMOVED_API` vidé.** Un ancien nom (`get_actor`, `ui.get`…) devient
+  « inconnu », sans guide de migration — le blocage tient au checker (un `:` ou un module
+  hors catalogue est refusé), pas à `REMOVED_API`. Le dictionnaire, gonflé du churn pré-1.0,
+  est vidé ; le guidage de migration redevient un engagement quand la 1.0 fige l'API. Le
+  contrat « une suppression = une entrée » revient à ce moment-là, sur une surface promise stable.
+
+- **Rangement livré — le mécanisme.** Le JSON n'a PAS bougé (sa prose rédigée reste) : le
+  rangement vit dans le loader (`api_reference.py`). `SECTIONS` bucketise les 24 catégories en 8
+  (une catégorie hors table rend sa propre section, rien ne se perd) ; `_PROP_HOME` était déjà
+  bon (les propriétés tombent dans leurs catégories, qui tombent dans les sections). La couche
+  moteur est un **drapeau `engine` par ENTRÉE** (`_ENGINE_KEYS`), plus fin que la catégorie —
+  `sfx.play` reste itération quand `sound_box.set_state` est moteur, tous deux dans « Le son » ;
+  le calque garde une face simple (`show`/`scroll`) et replie l'avancé (`set_map`). Curé à la
+  main comme `_PROP_HOME` : aucune règle ne le dérive. La sidebar rend 8 sections (la seule
+  navigation), sous-titres statiques par ancienne catégorie, un fold « Aller plus loin » par
+  section. Le découpage à 3 groupes (`get_categories_by_group`) est retiré ; les libellés des
+  sections passent par le catalogue de traduction (base anglaise + FR d'office).
 
 - **`TextTable` n'a pas de module.** Sa surface Lua **est** `text.draw` plus les marqueurs
   `$variable` de l'entrée ; clés, balisage et traductions sont résolus au build. Pas de module
@@ -999,7 +1703,271 @@ Bilan : **112 fonctions de catalogue** (100 + 12 par v0.8.6), **24 propriétés*
 leur objet, **6 mots du langage** enfin listés (`vec2`, `vec3`, `rect`, `wait`, `wait_until`,
 `require`), **8 sections** au lieu de 22.
 
+### Amendement (2026-09-24) — le type du récepteur : module fabrique, type opère
+
+**D'où ça vient.** Un relevé du catalogue réel (`RUNTIME_API` : 23 modules, 129 fonctions) montre
+que la règle de provenance ci-dessus est posée mais **appliquée à moitié**. Une chose nommée du
+projet s'adresse aujourd'hui de quatre façons : par constructeur de référence (`actor.get`,
+`interface.get`, `self:collision_box`), par fonction de module qui reçoit son NOM en argument
+(`list.index("Menu")`, `interface.image_set("Icone", "on")`, `window.show("Panel", on)`), par numéro
+(`layer.*`, `tilemap.*` — légitime, provenance 3) ou par singleton (`music`, `camera` — sain). La
+deuxième est exactement ce que la provenance 1 interdit : « une chose nommée du projet → `module.get("Nom")` ».
+Ce n'est pas une règle nouvelle, c'est celle-ci **finie**. Le rappel vit dans `ARCHITECTURE.md`,
+« Module, type, instance ».
+
+**Ce qui manque à la règle : l'axe du TYPE.** Elle dit d'où vient la chose, pas dans quelle case du
+catalogue vivent ses méthodes. Résultat : le type acteur s'appelle `self:` (une clé qui sert de
+fourre-tout — `show`/`hide` d'un élément d'interface, `collision_box` constructeur), le type
+`interface` n'existe que par un cas spécial du checker, et « quelle valeur désigne quelque chose » a
+trois mécanismes.
+
+**Proposition — à relire, rien n'est verrouillé** (chaque point est une décision à prendre, cf. « Ouvert ») :
+
+- **Module fabrique, type opère.** Un module est un système ou une fabrique ; toute action ou donnée
+  sur UNE instance nommée est une méthode ou une propriété du type, sur la référence.
+- **La clé du catalogue est le nom du type** : `self:` → `actor:` (`self` reste l'instance implicite).
+- **Un seul mécanisme de référence** (type déclaré + représentation C), à la place des trois.
+- **Migration, par ordre de dette** : `interface` + `list` (18 fonctions : `list.*` 8, `image_*` 6,
+  `draw_text`/`clear_text`/`reading`/`skip` 4), puis `window` (7), puis le rangement des clés `self:`.
+  `layer.*` et `tilemap.*` ne bougent pas (numéros de matériel). `actor` et `sfx` ne changent presque rien.
+- **Coût nul pour le statique** : `interface:get("Menu")` / `window:get("Panel")` se résolvent au build
+  en constante ; seules les références de pool portent une valeur.
+- **Le catalogue se garde lui-même** : un test refuse une fonction `module.fonction` dont le premier
+  paramètre est un domaine d'instance. Sans lui, la règle retombe en trois versions.
+- **Retrait sec** (comme les cinq renommages) : pas de `REMOVED_API` avant la 1.0.
+- **Ce que ça touche** : `api.py` (clés, `REF_TYPES`), `expr_types.infer_ref_type`, `checker.py`
+  (le cas spécial `interface.get`, `_RECEIVER_DOMAINS`), `codegen.py` (`_INVOKE_CUSTOM`), les
+  prototypes C (`runtime_api.h`), `api_reference.json` + `_ENGINE_KEYS`, la doc de scripting, les
+  scripts des démos.
+
+**Prérequis vérifié (2026-09-24) — le chaînage n'est pas prêt, et c'est un blocage.** Passé dans le
+vrai parseur, checker et codegen (`interface:get("X").index` en une expression est la condition
+de « ne pas alourdir le cas simple ») :
+
+| Forme | Checker | C émis |
+| --- | --- | --- |
+| `actor:get("Foe"):move_to(...)` | OK | correct (sans test de `nil` : `runtime_get_actor` peut rendre `NULL`) |
+| `sfx:play("Bip"):set_volume(50)` | OK | correct |
+| `self:collision_box("hb"):overlaps(...)` | OK | correct |
+| `interface:get("Cursor"):show()` | OK | **rien** : `/* invoke sur expression complexe ignoré */` |
+| `actor:get("Foe").position` / `.velocity = …` | OK | **`runtime_get_actor(…).position`** : champ brut sur un pointeur, ne compile pas (`gcc`) |
+| `self:collision_box("hb").solid = false` | OK | **`actor_get_box(…).solid = 0`** : champ brut sur un `int`, ne compile pas |
+| même chose via un `local` (`local a = actor:get(…) ; a.position`) | OK | correct : `actor_get_position(a)` |
+
+**Étape (a) faite le 2026-09-24** — les deux défauts ci-dessous sont réparés, avec
+`tests/test_chained_receivers.py` (24 tests : parité chaîné/`local` au niveau du C, refus du
+checker ; chaque correction a été retirée à tour de rôle pour vérifier que les tests échouent).
+`resolve_prop` accepte un récepteur chaîné (`expr_types._resolve_chained_prop`), le codegen en
+tire le C de l'expression (`_prop_receiver_c`), `_invoke` accepte `interface:get(…)`, et le
+checker refuse un récepteur chaîné sans type (`math.abs(1):foo()`) ou une méthode/un champ
+inconnu sur un acteur ou une référence chaînés. `interface:get("X").y` et
+`interface:get("X"):bouge()` sont passés de l'avertissement à l'**erreur** (2026-09-25) : le C
+qu'ils émettaient ne compilait pas. Reste ouvert : le chaînage n'est pas testé sur
+`self.<enfant>` au-delà de la méthode.
+
+Deux défauts DÉJÀ présents, qui préexistent à l'amendement et que le checker laissait passer :
+
+1. **Un récepteur `interface:get(…)` chaîné est ignoré sans un mot.** `_invoke` n'accepte une
+   chaîne que si l'expression rend une référence de `REF_TYPES` ou un acteur ; `interface.get`
+   n'en est pas une (c'est le cas spécial du checker). `checker._is_ui_element` affirme pourtant
+   que `interface:get("x"):show()` « marche aujourd'hui » : faux côté C. Aucun test ne couvre le
+   codegen de cette forme (`test_checker_holes` ne juge que le checker).
+2. **Une propriété chaînée saute les getters/setters.** La lecture/écriture d'une propriété passe
+   par `_prop_read` quand le récepteur est un nom (`a.position` → `actor_get_position(a)`), pas quand
+   c'est un appel : le C émis est un accès de champ brut, accepté par le checker, refusé par `gcc`
+   sur une ligne que l'auteur n'a pas écrite. C'est la même famille de faute que
+   `test_checker_holes` a déjà fermée pour `interface:get(…).y`.
+
+**Conséquence : la forme `interface:get("Menu").index` n'existe pas.** L'amendement est viable
+seulement si le chaînage devient un citoyen de première classe : propriété ET méthode, sur tout
+type de référence, un seul chemin de traduction (`_prop_read` / `_invoke` partagés). Sinon la
+migration impose `local menu = …` pour chaque usage et contredit le principe d'itération de cette
+section (« faire une chose courante tient en quelques lignes »).
+
+**Critères d'acceptation** — l'amendement n'est pas livré tant qu'ils ne tiennent pas tous :
+
+1. **Le chaînage est complet et testé au niveau du C.** Chaque forme du tableau ci-dessus donne le
+   même C chaînée ou via un `local` ; un test compare les deux. Aucune forme ne passe le checker
+   pour être ignorée (ou refusée par `gcc`) plus loin.
+2. **Un type se déclare dans UNE table.** Nom, représentation C, fabrique, peut-il être absent,
+   méthodes, propriétés : ajouter un type touche cette table et les fonctions C, rien d'autre
+   (ni `REF_TYPES`, ni `C_REF_TYPES`, ni un cas dans le checker, ni `_INVOKE_CUSTOM`). Un test
+   déclare un type factice et vérifie qu'il n'a besoin de rien d'autre. Sans ce critère, on aura
+   remplacé trois mécanismes par un seul, écrit à la main aux mêmes cinq endroits.
+3. **Le cycle de vie s'écrit en cinq verbes, communs à tous les types (décision du 2026-09-25).**
+   `:show()`, `:hide()`, `:activate()`, `:deactivate()`, `:destroy()` — une seule porte d'ÉCRITURE
+   pour « visible », « actif » et « détruit », sur l'acteur, l'élément d'interface, la fenêtre, la
+   boîte de collision. L'ÉTAT se lit par deux propriétés **en lecture seule** (`visible`, `active`) :
+   `if menu.visible then`. Jamais `x.visible = false` ni `layer.show(n, on)` : deux portes pour un
+   même état, c'est ce que la grammaire refuse, et c'est ce que la v0.16 relevait déjà (cinq façons
+   de cacher une chose). Le cas courant tient sans variable : `interface:get("menu"):hide()`.
+
+   - **Chaque type déclare les verbes qu'il supporte**, le vocabulaire est commun mais pas obligatoire.
+     Une `collision_box` a `activate`/`deactivate` sans `show`/`hide` ; un `sfx` n'en a aucun. Le
+     checker refuse un verbe que le type ne déclare pas.
+   - **`destroy` ne s'applique qu'aux instances de POOL** (acteur, `sfx`). Un élément d'interface ou
+     une fenêtre est statique, défini au build : `destroy` y est refusé par le checker. Après
+     `destroy()`, la référence est périmée et se teste `nil`, comme toute référence de pool.
+   - **Le prix est assumé** : une valeur calculée s'écrit
+     `if flag then panel:show() else panel:hide() end` là où `window.show("Panel", flag)` tenait en
+     une ligne. On ne garde pas `visible = flag` en écriture pour l'éviter — ce serait la seconde porte.
+   - **Migration** : retire les écritures `self.visible = …` / `self.active = …` (les propriétés
+     restent, en lecture seule), `window.show`, `layer.show`, `list.set_active`. Retrait sec, comme
+     le reste. Les démos qui écrivent ces propriétés sont à migrer avec la tranche.
+4. **« Absent » a une règle par type, écrite et vérifiable.** Une référence statique n'est jamais
+   absente et n'appelle pas de test de `nil` ; une référence de pool peut l'être. Le checker refuse
+   ou signale le test inutile, plutôt que de laisser un débutant tester par précaution.
+5. **Chaque tranche se juge sur des scripts réels** (démo tactique) : on compte les appels migrés et
+   on compare la longueur avant/après. Une tranche qui allonge le cas courant est revue avant la suivante.
+
+**Ordre revu.** (a) ~~Réparer les deux défauts ci-dessus, avec leurs tests~~ — **fait** ;
+(b) ~~la table de types unique, appliquée d'abord à `sfx`/`collision_box`/`interface`~~ — **fait le
+2026-09-25**, cf. ci-dessous ; (c) ~~migrer `interface` + `list`~~ — **fait le 2026-09-26** (tranche 1 :
+les cinq verbes ; tranche 2 : les types d'élément) ; (d) ~~`window`~~ — **fait le 2026-09-26**, avec les fonds ; (e) ~~les clés `self:` → `actor:`~~ — **fait le 2026-09-26**.
+
+**Étape (b) faite (2026-09-25) — critère 2 tenu pour les types de référence.** `api.REF_TYPE_TABLE`
+déclare `sfx`, `collision_box` et `ui_element` (`RefType(c_type, variable, hint)`). Ce qui était écrit
+à la main aux mêmes endroits s'en dérive : `REF_TYPES` (vue vivante de la table), `C_REF_TYPES`
+(retiré), `_REF_VARIABLE` des snippets (retiré), et le cas spécial d'`interface.get` du checker
+(`_is_ui_element`, `_UI_ELEMENT_METHODS`, `_check_ui_element_field`, retirés) et du codegen
+(`is_ui_element_call`, retiré). `self:show` / `self:hide` ont rejoint `ui_element:` : la clé `self:`
+n'est plus un fourre-tout d'interface (17 méthodes, toutes d'acteur). Le checker juge un membre inconnu
+de n'importe quel type par deux aides génériques, l'`hint` du type s'ajoutant à l'erreur (celui
+d'`ui_element` reprend le guidage vers `interface.image_move` / `image_set`).
+`tests/test_ref_type_table.py` (12 tests) déclare un type factice `gizmo` par trois gestes (une ligne de
+table, ses entrées de catalogue, ses fonctions C) et vérifie qu'il se vérifie et se traduit — chaîné ou
+non — sans toucher `checker.py` ni `codegen.py`, ni aucune autre liste ; il fige aussi l'accord table ↔
+catalogue (pas de type sans fabrique, pas de clé `<type>:` inconnue).
+
+**Étape (c), tranche 1 faite (2026-09-25) — les cinq verbes sur les types existants.** `self:` gagne
+`show`/`hide`/`activate`/`deactivate` (`destroy` y était déjà), `collision_box:` gagne
+`activate`/`deactivate`, `ui_element:` garde `show`/`hide`. Les verbes sont de simples entrées du
+catalogue : « le type déclare ses verbes, le checker refuse les autres » est déjà ce que fait le catalogue
+(un `hb:show()` ou un `interface:get("X"):destroy()` est une méthode inconnue). `ApiFunc.fixed_args` porte
+la valeur constante d'un verbe (`:hide()` = `ui_element_show(h, 0)`), ce qui retire les deux émetteurs
+dédiés d'`ui_element` de `_INVOKE_CUSTOM`. `visible` / `active` sont en **lecture seule** sur l'acteur et la
+boîte, et `ui_element.visible` naît (lecture, `ui_element_is_visible` — elle remonte la chaîne des parents).
+`tests/test_lifecycle_verbs.py` fige le contrat (paires, `destroy` réservé au pool, état en lecture seule,
+C émis, refus) et tient `_PENDING` : les trois portes de module qui restent — `list.set_active`,
+`window.show`, `layer.show` — partiront avec leur tranche. Écritures migrées : les tests, les docs
+(`ARCHITECTURE.md`, `scripting-reference.md`, guide collision) ; aucune démo n'écrivait `visible`/`active`.
+Reste dans cette étape : voir la tranche 2, ci-dessous.
+
+**Étape (c), tranche 2 faite (2026-09-26) — `interface.get` rend le type RÉEL de l'élément.** Lu dans
+la mise en page au build (`scripting/project_names.ui_ref_kinds` → `BuildContext.ref_kinds`, même
+dictionnaire pour le checker et le codegen), le type d'`interface:get("X")` est `list`, `image`,
+`text_region`, ou `ui_element` pour un conteneur (aucune capacité propre : il EST le type de base).
+Les trois premiers HÉRITENT de `ui_element` (`RefType.base`) : `menu:hide()` et `menu.visible` sont
+ses membres, cherchés par `api.ref_member` sur le type puis ses ancêtres. Comme une liste est un
+index de `g_ui_lists` et que le cycle de vie veut l'index d'ÉLÉMENT, chaque type déclare sa conversion
+(`RefType.to_base` → `ui_list_element`/`ui_image_element`/`ui_region_element`, dans `gba_engine.h`) que
+le codegen applique au récepteur d'un membre hérité : `ui_element_show(ui_list_element(menu), 0)`.
+`UIListInfo` gagne `elem` (en dernier, pour les initialiseurs positionnels).
+
+Migré, retrait sec : `list.count/set_count/index/set_index/first/row/active/set_active`
+→ `menu.count`, `.index`, `.first`, `.active` (lecture seule), `menu:row(n)` (rend une `text_region`,
+donc `menu:row(1):draw("…")`), `menu:activate()`/`:deactivate()` ; `interface.image_set/state/play/
+move/dx/dy` → `heart.state = "vide"` (par NOM, dans le sprite de l'image que le récepteur désigne —
+`element_of` : le littéral d'`interface.get`, ou un `local` affecté une seule fois), `heart:play()`/
+`:pause()`, `cursor.offset` (un `vec2`, construit dans la façade sur les trois entiers du moteur) ;
+`interface.draw_text/clear_text/reading/skip` → `box:draw(…)`, `box:clear()`, `box.reading`,
+`box:skip()`. Aucune fonction de module ne prend plus un nom d'élément en premier argument. Trois
+domaines disparaissent (`region`, `image`, `ui_list`) ; le nom d'un élément se cite par un seul,
+`ui_element`, y compris pour renommer un conteneur — qu'aucun domaine ne couvrait. `infer_ref_type`
+suit `interface:get("Menu"):row(1)` et `menu:row(1)`, donc un type qui rend un autre type.
+Les paires (zone, texte) que le build mesure (`validator`, débordement et glyphes absents) se lisent
+sur `box:draw("clé")` par `refactor.iter_call_sites` (`DOMAIN_UI_ELEMENT`), chaîné ou via un `local`.
+
+Vérifié sur du VRAI : les trois démos (TacticsDemo — menu de liste —, MyGame et OrbitTest — dialogue,
+curseur d'image) sont migrées et se construisent en ROM complète, sur des copies ; le C émis compile.
+`tests/test_ui_typed_elements.py`, `tests/test_ref_type_table.py` (héritage) et `test_lifecycle_verbs.py`
+(`_PENDING` ne garde plus que `window.show` et `layer.show`) tiennent le contrat.
+
+Ce qui reste, dit franchement :
+
+- ~~**Les colonnes `region` / `image` d'une table de données** n'ont plus de consommateur~~ **Réglé le
+  2026-09-26.** La cellule d'une telle colonne est typée d'après sa colonne : `data.Dialogue[i].boite`
+  est une `text_region`, `data.Dialogue[i].icone` une `image` (`RefType.column`, `project_names.
+  data_column_kinds`, clé `data.Table.colonne` dans `ref_kinds` — un seul dictionnaire pour « ce que rend
+  une chose nommée », sans paramètre de plus). `data.Dialogue[i].boite:draw("…")`, `.reading`,
+  `icone.offset = …`, `icone:pause()` se jugent et se traduisent comme après `interface:get(…)`, le C lisant
+  l'entier de la cellule — que le build a rangé comme l'index de la zone : vérifié sur une copie
+  d'OrbitTest, ROM complète. Le handle se lit ; la CELLULE reste constante en ROM (l'écrire est refusé),
+  seule une propriété de l'élément désigné s'écrit. Limite : l'état d'une image par NOM (`icone.state =
+  "vide"`) reste refusé sur une cellule, le build ne sachant pas dans quel sprite chercher.
+- **Pas de `button` ni de `container` typé** : l'éditeur n'a pas ces natures. Un nouveau widget se
+  déclare dans la table (une ligne, ses membres, ses fonctions C), rien d'autre.
+- **L'état d'une image ne s'écrit que par un nom connu au build** : un `local` réaffecté à deux
+  images, ou un paramètre, est refusé (il faudrait deviner dans quel sprite chercher).
+**Étape (d) faite (2026-09-26) — les fonds et les régions de window.** `layer:get(n)` rend un
+`background_layer`, `window:get("Nom")` un `window_region` (types à part, sans le nom du module : un
+type `layer` donnerait à `layer.priority` deux lectures). Verbes `show`/`hide`, état `visible` en
+lecture seule ; `priority`, `scroll` (un `vec2`, converti dans la façade sur les deux entiers du
+moteur) et `map` sont des propriétés ; `scroll_by` et les tuiles de la carte (`set_tile`, `get_tile`,
+`set_tile_palette`, `set_tile_flip`, `fill`) des méthodes — le module `tilemap` disparaît, il
+adressait le même fond par son numéro. `window_region` garde `set`, `set_layer`, `get_layer`,
+`set_obj`, `set_blend`. Retrait sec ; `_PENDING` de `test_lifecycle_verbs.py` est vide. **Le numéro
+est borné par les fonds de la scène** (`api.LAYERS_BY_MODE` × `Scene.render_mode`, passé au checker par
+`lua_compiler` : `BuildContext.layer_numbers`) : un numéro écrit en clair qu'elle n'a pas est refusé, un
+numéro calculé n'est pas jugé. **Anticipé mais invisible** (décision de Victor, 2026-09-26) : les modes
+affine et bitmap ne sont pas offerts à l'utilisateur, donc rien de ce qu'il lit — doc, indice du type,
+messages du checker — ne parle de mode ; `tests/test_layer_window_refs.py` le garde. Aujourd'hui seul le
+mode 0 est offert, les quatre fonds existent toujours. Les fonds affines et bitmap auront leur propre type
+avec leur rendu. Vérifié sur une copie d'OrbitTest
+dont un script emploie toute la famille : ROM complète, C émis conforme. Aucune démo n'utilisait ces
+appels. Une limite : `layer:get(n)` s'est écrit `.` un temps comme `interface.get` — le passage de tous
+les modules à `:` est fait depuis (voir plus haut).
+
+- **`ui_list_row` rend -1 hors bornes**
+ : `menu:row(9):draw(…)` écrit dans la région -1, ignorée par le
+  moteur. Une valeur de garde et non un `nil`, comme pour `sfx` et les boîtes.
+
+
+Ce qui reste, dit franchement :
+
+- ~~**`actor` n'est pas dans la table.**~~ **Fait le 2026-09-26 (étape e).** `actor` est un type de
+  `REF_TYPE_TABLE` (`Actor*`, variable `self`) : ses méthodes sont `actor:<m>`, ses propriétés `actor.<champ>`
+  (52 entrées renommées, dont `api.REF_ACTOR`). **`self` n'est pas le type, c'est un récepteur** : tout nom
+  qui ne tient pas une référence typée est un acteur (`self`, `other`, un acteur de la scène), et une variable
+  qui tient `actor:get(…)` / `actor:spawn(…)` est désormais une référence du type `actor` — mêmes membres,
+  par le chemin générique. L'écriture ne change pas : `self:move_to(…)`, `other.velocity = …`. Deux
+  conséquences réglées : (1) le type et le MODULE partagent leur nom (`actor.position` vs `actor:get`),
+  donc les propriétés d'un type ne se lisent que sur une référence de ce type (`resolve_prop`,
+  `module_members`, la complétion), et `actor.position` — comme `camera.nawak`, silencieux avant — est une
+  erreur du checker qui nomme les membres du module ; (2) la référence affiche `self` dans les snippets
+  et les libellés (`api.module_call_form` / `canonical_key` traduisent dans les deux sens). Vérifié : les
+  quatre démos se construisent en ROM de MÊME taille qu'avant (C émis équivalent). Restent des chemins
+  propres à l'acteur, légitimes : les enfants de prefab (`self.bras`), la lecture `self.<enfant>` et
+  `_is_actor_expr` — un acteur n'est jamais « absent » de la même façon qu'un `sfx`.
+- **« Absent » n'a pas eu besoin d'un champ.** Dans le C émis, `nil` vaut 0 et une référence absente
+  vaut 0 : `if p ~= nil` marche pour un acteur, un effet et une boîte (test dédié). Les « trois façons »
+  n'en étaient qu'une. Reste le critère 4 : refuser le test de `nil` inutile sur une référence statique
+  (`ui_element`), et l'écrire par type.
+- **`ui_element` reste UN type** aux capacités déclarées (`show`, `hide`), comme l'accepte la relecture.
+  Le scinder en `ui_list` / `image` / `text_region` ajoute des lignes de table, pas du code — c'est
+  l'étape (c), et elle demande que le checker connaisse la nature de l'élément au build.
+- **La traduction C atypique reste un cas de `_INVOKE_CUSTOM`** (`ui_element:show` → `ui_element_show(h, 1)`,
+  `sfx:set_volume`, l'overload `collision_box:overlaps`) : ce qui s'émet change, pas ce que le type est.
+- **La suite `tests/ui` plante sur un accès mémoire Qt** (déjà avant ce changement) : aucun échec relevé
+  avant le plantage, mais je n'ai pas de verdict sur ses derniers tests.
+
 ### Ouvert
+
+- **Le récepteur direct `Boss:move_to()`.** Plus court, mais collision possible avec un local ou un
+  module (un acteur nommé « input »), et l'acteur peut être détruit. Recommandation : garder `get()`,
+  honnête sur le `nil`. À trancher.
+- ~~**Le type d'une référence d'interface.**~~ **Tranché le 2026-09-25 :**
+  `interface:get("X")` rend le type réel de l'élément (image, liste, bouton, région…), connu
+  du projet au build ; le checker le déduit et n'emploie pas un `ui_element` permissif.
+- **Dire « absent » d'une seule façon.** `nil` (acteur), `0` (`sfx`, boîte de collision), rien
+  (interface). À unifier, ou à écrire par type.
+- **Les calques par nom.** `layer:get("Fond")` en plus du numéro ? Recommandation : attendre un besoin.
+- ~~**Les calques et les cinq verbes.**~~ **Tranché le 2026-09-26 :** une seule porte, la référence
+  numérotée — `layer:get(0):hide()`. Un raccourci `layer:hide(0)` recréerait le doublon que la grammaire
+  refuse, et devrait reproduire le contrôle du numéro (borné par le mode de la scène) que la référence porte une fois.
+- **`self:collision_box("hitbox")`** : garder ce constructeur déguisé en méthode, ou le ranger sous
+  un module (`self.boxes.get`) ? Tant qu'aucun module n'y prétend, il reste — la règle doit le nommer
+  comme exception, pas le subir.
 
 - **`#data.Objets`** — le nombre de lignes d'une table de données. Évident, absent. À ouvrir,
   ou à refuser par écrit dans la référence de scripting.
@@ -1007,10 +1975,193 @@ leur objet, **6 mots du langage** enfin listés (`vec2`, `vec3`, `rect`, `wait`,
   API rouvriraient exactement le problème qu'on ferme ici.
 - **v0.13 hérite de ce rangement** : les palettes de blocs de l'édition mixte seront ces huit
   sections. À vérifier quand le chantier démarre, pas maintenant.
-- **`ARCHITECTURE.md` porte déjà les anciens noms** (`get_actor`, `ui.get`, `text.draw_in`
-  — huit endroits au moins). Ils y sont **justes tant que le renommage n'est pas fait** : ce
-  fichier décrit le code tel qu'il est. Il devient donc la liste de contrôle du renommage,
-  pas une dette à corriger d'avance.
+- **`ARCHITECTURE.md` a été renommé avec le catalogue** — il portait les anciens noms
+  (`get_actor`, `ui.get`, `text.draw_in`, une douzaine d'endroits) et a servi de liste de
+  contrôle du renommage, comme prévu. Fait ; `docs/scripting-reference.md`, le guide
+  utilisateur et `SCRIPTING.md` ont suivi.
+
+### Relecture de conception (2026-09-24) — conditions de verrouillage
+
+L'amendement donne une direction cohérente : la provenance rend l'acquisition d'une chose
+lisible, et « module fabrique, type opère » remet les opérations d'instance sur leur
+récepteur. Cela améliore déjà les trois objectifs : compréhension, usage courant et
+extensibilité. **Ce n'est toutefois pas encore suffisant pour verrouiller la règle** : les
+cas ouverts ci-dessous doivent devenir un contrat, sinon chaque nouveau type recréera un cas
+spécial.
+
+- **Le module ne « fabrique » pas toujours.** `actor.spawn` crée, `sfx.play` agit puis rend une
+  référence, `actor.get` et `interface.get` l'acquièrent. La phrase de règle devient donc :
+  **« le module gère, crée ou acquiert ; le type expose l'état et les opérations d'une
+  instance »**. Elle décrit les quatre provenances sans appeler constructeur une recherche
+  statique.
+
+- **Chaque type déclare un contrat de référence.** Pour toute référence, le catalogue doit
+  connaître son type, sa représentation C, sa durée de vie, son identité et sa valeur
+  d'absence. La recommandation est `nil` pour toute acquisition qui peut échouer ; si un type
+  conserve une autre forme, elle doit être écrite ici avec sa raison. Cela ferme l'actuel
+  triplet `nil` (acteur), `0` (SFX/boîte) et rien (interface).
+
+- **Interface — singleton et éléments typés (décision du 2026-09-25).** `interface` est le
+  singleton de la mise en page active de la scène. Il acquiert un élément par son nom ; le nom
+  et la nature de cet élément sont connus au build, donc cette acquisition ne fait ni recherche
+  ni allocation runtime. L'élément obtenu est une instance de son type réel — `list`, `image`,
+  `button`, `text_region`, `container`, ou un type futur — et porte lui-même état et actions.
+  Les éléments ne sont pas des modules qui reçoivent un nom en premier argument : ce sont les
+  objets typés que l'Interface contient et rend accessibles.
+
+  ```lua
+  local menu = interface:get("Menu")      -- type `list`, connu au build
+  menu.index = 2
+  menu:activate()
+  menu:show()
+  if menu.visible then ... end            -- lecture seule : l'écriture passe par les verbes
+
+  interface:get("Menu"):hide()            -- cas courant : un geste, sans variable
+
+  local heart = interface:get("Heart")    -- type `image`
+  heart.state = "empty"
+  heart:play()
+
+  local start = interface:get("Start")    -- type `button`
+  if start.pressed then ... end
+  ```
+
+  Le cycle de vie (`show`, `hide`, `activate`, `deactivate`, et les propriétés de lecture
+  `visible` / `active`) vit sur le type de base `ui_element` (critère 3 ci-dessus ; `destroy`
+  y est refusé, un élément est statique) ; les propriétés et actions spécialisées vivent sur leur
+  type concret. Ainsi `menu.index` est valable, `heart.state` est valable, mais
+  `heart.index` et `menu.state` sont refusés par le checker. Ajouter un widget revient à
+  déclarer un type et ses capacités dans la table unique des références, jamais à ajouter un
+  cas spécial à `checker.py` ou `codegen.py`.
+
+  Les portes actuelles qui prennent un nom d'élément migrent sans doublon : `list.*`,
+  `interface.image_*`, `interface.draw_text` / `clear_text` / `reading` / `skip` deviennent
+  les propriétés ou méthodes de `list`, `image` et `text_region`. Le déplacement de
+  `self:show` / `self:hide` est également achevé : l'acteur ne porte plus les gestes d'un
+  élément d'interface. La navigation montre d'abord les opérations ordinaires du type ; ses
+  capacités spécialisées restent sous « Aller plus loin ».
+
+- **Une acquisition dérivée est une forme nommée, pas une exception muette.**
+  `self:collision_box("hitbox")` reste légitime si elle est déclarée comme acquisition d'un
+  sous-objet de l'instance ; un futur capteur, inventaire ou équipement suivra alors la même
+  forme, au lieu d'inventer son propre constructeur déguisé.
+
+- **Le garde-fou doit porter sur toute opération d'instance.** Le test proposé refuse déjà
+  `module.fonction("nom_d_instance", …)`. Il doit aussi refuser une fonction de module qui
+  reçoit une référence d'instance (`interface.move(element, …)`) ou tout autre mécanisme qui
+  contourne méthode/propriété. La règle tient ainsi contre les futurs ajouts, pas seulement
+  contre les formes déjà présentes.
+
+- **Un module du moteur est un récepteur singleton.** Il ne se comporte pas grammaticalement
+  autrement qu'une instance : son état s'écrit `module.propriété`, son opération
+  `module:action(…)`. Ainsi `music.volume = 60` / `music:play("Combat")`,
+  `scene.frame` / `scene:switch("Village")`, `sfx:play("Clap")` et
+  `actor:spawn("Bullet", pos)` suivent exactement le même axe que
+  `clap.volume = 70` / `clap:stop()`. Le module et le type ne se distinguent que par leur
+  durée de vie et leur rôle (singleton système, fabrique ou type d'instance), jamais par une
+  ponctuation à mémoriser. **Exception nommée :** une bibliothèque sans état ni identité
+  runtime garde l'appel pointé (`math.abs(x)`), car `math` n'est pas un récepteur du moteur.
+  **Livrée le 2026-09-26** (décision de Victor : y compris `input`, `save` et `text`, sans autre
+  exception que `math`). Le catalogue garde ses clés `module.fonction` — `RUNTIME_API`, le checker,
+  le codegen et le renommage n'ont qu'une forme à traduire —, et seule l'ÉCRITURE change : le parseur
+  ramène `module:f(…)` à `ExprCall(module.f)` (`api.MODULE_CALLS` : les modules qui portent des
+  fonctions, moins `api.STATELESS_MODULES = {math}`), et retient le point écrit à l'ancienne
+  (`ExprCall.dotted`) que le checker refuse en disant quoi écrire. Retrait sec, comme le reste. Les
+  diagnostics et la référence parlent la forme écrite (`api.modernize_message`,
+  `api.module_call_form` / `canonical_key`) ; la complétion propose les ACTIONS derrière « : » et
+  l'ÉTAT derrière « . » (`camera.bound`, `scene.frame`, `input.axis` restent des propriétés). Ce qui a
+  suivi : le repérage structurel du renommage (`refactor._call_key`), la réservation de surface de
+  texte (`font_emit._FREE_WRITE_RE` lit `text:draw`), les tooltips de l'arbre de scène, les
+  démos (les six projets), les docs et 55 fichiers de tests. Les six démos se construisent en ROM. Le
+  tout est tenu par `tests/test_module_colon.py`, dont un test paramétré sur TOUTE fonction de module
+  du catalogue (le point est refusé pour chacune, sans en nommer aucune).
+
+
+#### Proposition — le singleton `mixer` : jouer simplement, diriger finement
+
+Le son possède déjà trois **bus de sortie** matériels : les effets, le module musical qui
+boucle et le jingle qui se superpose. Ils existent aujourd'hui, mais sont cachés derrière des
+noms de boîtes qui ont une autre responsabilité (`sound_box.set_volume`,
+`jingle_box.set_volume`, `music.set_volume`). Une `SoundBox` / `MusicBox` / `JingleBox` est
+un automate de **sélection** ; elle n'est pas un bus de **mixage**.
+
+**Décision proposée : `mixer` devient le singleton sonore d'itération.** Il porte les actions
+ordinaires et les trois niveaux de sortie, tous lisibles et modifiables. Un auteur qui veut
+entendre quelque chose n'a pas à connaître les boîtes :
+
+```lua
+mixer.music_volume   = 60
+mixer.effects_volume = 80
+
+local clap = mixer:play_sfx("Clap")
+clap.volume = 70
+
+local village = mixer:play_music("Village")
+local victoire = mixer:play_jingle("Victoire")
+```
+
+| Porte cible | Nature | Remplace |
+| --- | --- | --- |
+| `mixer.effects_volume` | propriété lecture/écriture : bus de tous les effets | `sound_box.set_volume` |
+| `mixer.music_volume` | propriété lecture/écriture : bus du module musical | `music.set_volume` |
+| `mixer.jingle_volume` | propriété lecture/écriture : bus du jingle | `jingle_box.set_volume` |
+| `mixer:play_sfx(name)` | action, rend une référence `sfx` | `sfx.play` |
+| `mixer:play_music(name)` | action, rend la référence `music` de l'unique lecture musicale | `music.play` |
+| `mixer:play_jingle(name)` | action, rend la référence `jingle` de l'unique jingle superposé | `music.jingle` |
+| `mixer.music` / `mixer.jingle` | propriétés lecture seule : lecture active, ou `nil` | — |
+
+**Les trois sorties passent directement par leur référence.** `mixer` acquiert ou remplace une
+lecture ; ensuite, le type opère. Il n'existe donc pas de raccourci parallèle
+`mixer:stop_music()` qui doublerait `music:stop()` :
+
+```lua
+local clap = mixer:play_sfx("Clap")
+if clap.playing then clap:stop() end
+
+local village = mixer:play_music("Village")
+village:pause()
+village:resume()
+village:fade_to("Combat", 30)
+
+local victoire = mixer:play_jingle("Victoire")
+if victoire.playing then victoire:stop() end
+```
+
+`sfx` porte l'état de CET effet (`playing`, `volume`, `pitch`, `panning`) et ses actions
+(`stop()`). `music` et `jingle` portent au minimum `playing` et leurs actions de transport ;
+leurs niveaux restent les propriétés de bus du `mixer`, car le matériel ne possède qu'un scaler
+pour chaque sortie. Une nouvelle musique ou un nouveau jingle remplace la lecture unique : la
+référence précédente devient périmée et toute opération dessus est sans effet. Le contrat
+unifie ainsi les trois types sans mentir sur leur cardinalité (`sfx` 0..N ; `music` et `jingle`
+0..1).
+
+Le module `sfx` cesse ainsi d'être à la fois fabrique et type : `sfx`, `music` et `jingle` sont
+les types de lecture ; `mixer` est le système qui les lance.
+
+**Avancé — les boîtes ne disparaissent pas, elles changent de niveau.** Elles restent des
+singletons spécialisés, repliés sous « Aller plus loin », et n'exposent plus les volumes :
+
+```lua
+sound_box:set_state("Caverne")   -- choisit les effets des actions animées
+music_box:trigger("combat")      -- laisse l'automate choisir morceau et transition
+jingle_box:set_state("Boss")     -- choisit vers quel jingle pointe une action
+```
+
+Cette séparation donne deux portes sans doublon : `mixer` règle **ce qui sort**, les boîtes
+décident **ce qui est choisi**. Elle rend aussi l'état du mixage interrogeable pour un jeu
+musical, sans exposer les canaux Maxmod : un canal matériel est volatile et peut être repris ;
+l'API doit dire quel bus, quelle lecture et quel état l'auteur a demandés. Une horloge musicale
+(mesure / temps / battement) est un besoin distinct à ouvrir sur les informations réellement
+accessibles au lecteur de modules ; elle ne doit pas être simulée avec `scene.frame`.
+
+Le `master_volume` n'est pas ajouté par symétrie : il demande un besoin réel et une vérification
+de la porte matérielle disponible. Les anciens noms seront retirés sans alias avec la migration
+v0.16, conformément à la règle pré-1.0.
+
+**Critère de verrouillage :** ajouter un type ne demande que sa déclaration (représentation,
+acquisition, absence, propriétés, méthodes) et aucun cas spécial dans le checker ou le
+codegen, hors traduction C réellement atypique. À cette condition, l'API est à la fois
+facile à comprendre, facile à employer et extensible sans dette de grammaire.
 
 ---
 
@@ -1201,14 +2352,17 @@ n'a de place dans le partitionnement build de la scène :
   repositionnés par frame. À laisser tels quels côté runtime ; ce qui change pour eux est la
   **source visuelle** (chantier séparé ci-dessous).
 
-**Décision de conception (2026-09-10) : on ne scinde PAS `Actor` en deux structs.** L'idée d'un
-`Actor` (logique) référençant un `Sprite` (affichage) par pointeur a été pesée puis écartée : sur un
-ARM7TDMI sans cache, l'indirection frappe le cas 1:1 majoritaire dans les boucles les plus chaudes
-(tick d'anim, compose OAM), et rouvre un second allocateur à durée de vie coordonnée — exactement ce
-que le merge de la v0.25 (`actor_types_static.h`, « Une seule entité runtime ») refuse. « Actor sans
-sprite » existe DÉJÀ (le marqueur : point de tir, ancre). Le seul cas neuf, « sprite sans actor »,
-est couvert soit par l'acteur poolé (projectile), soit par une primitive d'affichage légère posée
-sur un slot OAM (particule, UI) — jamais par un `Actor` amaigri.
+**Clarification de conception (2026-09-25).** On ne construit PAS deux hiérarchies générales
+`Actor`/`Sprite`, ni un ECS où chaque accès passe par un pointeur : ce coût reste injustifié dans les
+boucles chaudes ARM7TDMI. En revanche, le `Sprite` devient bien une **capacité optionnelle** : un
+Actor logique n'embarque ni sous-struct sprite imposée ni réservation OAM. La marche retenue est
+celle du chantier « Actor allégé » : side-array ou découpe hot/cold seulement pour les porteurs de
+Sprite, et OAM compté par Sprite affiché. L'API conserve un Actor unique, enrichi de composants ;
+seule sa représentation mémoire cesse de lui imposer un sprite.
+
+« Actor sans sprite » n'est donc plus seulement le marqueur déjà toléré : c'est une entité légère
+promise. « Sprite sans Actor » reste un cas distinct, couvert soit par une primitive d'affichage
+légère (particule, UI), soit par un Actor si elle a besoin de logique, collision ou script.
 
 **Ce qui reste ouvert** : la forme exacte de l'allocateur OAM de frame (une free-list de slots pour
 ce qui apparaît en jeu), et si les particules relèvent de l'OAM ou d'un effet BG. À trancher sur un
@@ -1229,8 +2383,9 @@ matériel (les 128 slots) ; celle-ci partage la DÉFINITION (l'asset). Un consom
 côté runtime (une particule ne porte pas de logique) tout en pointant le même Sprite qu'un acteur
 lourd.
 
-**Ce que ça ne fait pas** : ça ne touche pas la struct `Actor` (cf. décision ci-dessus) et ça ne
-crée pas de runtime commun. C'est la couche asset qui s'unifie, pas la couche entité.
+**Ce que ça ne décide pas** : cela ne choisit pas la représentation mémoire de l'Actor — la
+découpe Sprite optionnel relève du chantier « Actor allégé » ci-dessus — et ne crée pas de runtime
+commun. C'est la couche asset qui s'unifie, pas la couche entité.
 
 **Ouvert** : l'inventaire des pipelines actuels (SpriteAsset côté acteur, la voie image de l'UI) et
 lequel absorbe l'autre ; et si le décor animé (v0.4) relève de ce même `Sprite` ou reste une voie BG
@@ -1299,7 +2454,7 @@ ni recopier sa donnée.
 Le chantier dépasse un renommage de fonctions. Il relie l'inspecteur de Liste, l'écran Data (État +
 Catalogues), le modèle de globals, le checker Lua, le codegen, le runtime de navigation et le rendu
 de texte. Il faudra aussi remplacer le chemin actuel où le script pose explicitement le texte dans
-`text.draw_in(list.row(...), ...)` par un contrat de rendu lié aux rangées authorées, sans faire de
+`interface.draw_text(list.row(...), ...)` par un contrat de rendu lié aux rangées authorées, sans faire de
 l'item un nouvel objet d'interface.
 
 Les tableaux Lua actuels sont **de taille fixe au build** et `table.insert`/`table.remove` ne font

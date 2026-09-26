@@ -576,7 +576,7 @@ class UIInspector(QWidget):
 
         # ── Curseur — la liste le POSSÈDE ─────────────────────────
         # Elle NOMME une image de la même mise en page ; le moteur la déplace
-        # par le chemin de `ui.image_move`, un décalage relatif à la position
+        # par le chemin de `interface.image_move`, un décalage relatif à la position
         # authorée. L'auteur pose donc son curseur en face de la PREMIÈRE
         # rangée, et n'a rien à écrire pour qu'il suive la sélection.
         W.section(label("uiinsp.list.cursor_section"), self._list_card.body_layout)

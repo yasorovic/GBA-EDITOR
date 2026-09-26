@@ -1,7 +1,7 @@
 """scripting/project_names.py — l'univers des noms du projet, par domaine.
 
-« Quel nom un argument de ce domaine peut-il porter ? » — `sfx.play("…")` prend un
-nom de Sfx, `scene.switch("…")` un nom de scène. La réponse vivait en DOUBLE :
+« Quel nom un argument de ce domaine peut-il porter ? » — `sfx:play("…")` prend un
+nom de Sfx, `scene:switch("…")` un nom de scène. La réponse vivait en DOUBLE :
 inline dans `sidebar_panel.set_project` (pour les boutons de la sidebar) et dans
 `lua_compiler` (pour le `BuildContext` du checker). Cette fonction en est la source
 unique — la sidebar la lit pour ses boutons, et l'autocomplétion pour ne proposer
@@ -17,9 +17,9 @@ from __future__ import annotations
 from scripting.api import (
     DOMAIN_SCENE, DOMAIN_CAMERA, DOMAIN_SFX, DOMAIN_MUSIC, DOMAIN_PREFAB,
     DOMAIN_FONT, DOMAIN_PALETTE, DOMAIN_TEXT, DOMAIN_LANG, DOMAIN_ACTOR,
-    DOMAIN_REGION, DOMAIN_IMAGE, DOMAIN_UI_ELEMENT, DOMAIN_GLOBAL,
+    DOMAIN_UI_ELEMENT, DOMAIN_GLOBAL, REF_TYPE_TABLE,
     DOMAIN_SOUND_BOX_STATE, DOMAIN_JINGLE_BOX_STATE, DOMAIN_MUSIC_BOX_TRIGGER,
-    DOMAIN_KEY, DOMAIN_WIN_REGION, WIN_REGIONS,
+    DOMAIN_KEY, DOMAIN_WIN_REGION, WIN_REGIONS, DOMAIN_BOX_TAG,
 )
 from core.models.settings import BUTTON_NAMES
 
@@ -28,7 +28,37 @@ def _names(items) -> list[str]:
     return [n for n in (getattr(it, "name", None) for it in (items or [])) if n]
 
 
+def ui_ref_kinds(project) -> dict[str, str]:
+    """{nom d'élément d'interface → type de référence} : ce que `interface:get(nom)` rend.
+
+    La NATURE d'un élément (`UILayout` : liste, image, zone de texte, conteneur) se lit
+    dans la mise en page, et la table de types (`REF_TYPE_TABLE`) dit quel type la
+    porte — ni l'une ni l'autre n'est réécrite ici. Un `kind` que la table ne connaît
+    pas retombe sur le type de base : il garde au moins son cycle de vie."""
+    by_kind = {t.ui_kind: name for name, t in REF_TYPE_TABLE.items() if t.ui_kind}
+    base = next(name for name, t in REF_TYPE_TABLE.items() if t.ui_kind and not t.base)
+    all_elements = getattr(project, "all_elements", None)
+    return {el.name: by_kind.get(getattr(el, "kind", ""), base)
+            for _lay, el in (all_elements() if all_elements else [])}
+
+
+def data_column_kinds(project) -> dict[str, str]:
+    """{`data.Table.colonne` → type de référence} pour les colonnes de données qui stockent le
+    handle d'un type (`RefType.column` : `region` → `text_region`, `image` → `image`).
+
+    Le build range dans ces colonnes l'INDEX de la zone ou de l'image — exactement la valeur du
+    type —, donc `data.Dialogue[i].boite:draw("…")` se juge et se traduit comme
+    `interface:get("boite"):draw("…")`, sans nom d'élément à citer. Les clés se fabriquent par
+    `expr_types.data_column_key`, le même chemin que celui qui les lira."""
+    from scripting.expr_types import data_column_key
+    by_column = {t.column: name for name, t in REF_TYPE_TABLE.items() if t.column}
+    return {data_column_key(table.name, col.name): by_column[col.type]
+            for table in (getattr(project, "data_tables", None) or [])
+            for col in table.columns if col.type in by_column}
+
+
 def names_by_domain(project, scene=None) -> dict[str, list[str]]:
+
     """{domaine → noms valides}, pour ce projet (et sa scène active, ou `scene`
     si fournie). Les domaines vides sont OMIS.
 
@@ -68,6 +98,8 @@ def names_by_domain(project, scene=None) -> dict[str, list[str]]:
     # Caméras et fenêtres : des méthodes, pas des collections d'objets.
     if hasattr(project, "camera_names"):
         out[DOMAIN_CAMERA] = sorted(project.camera_names())
+    if hasattr(project, "collision_tags"):
+        out[DOMAIN_BOX_TAG] = list(project.collision_tags())
     windows = sorted(project.window_names()) if hasattr(project, "window_names") else []
     out[DOMAIN_WIN_REGION] = list(WIN_REGIONS) + windows
 
@@ -77,10 +109,6 @@ def names_by_domain(project, scene=None) -> dict[str, list[str]]:
         out[DOMAIN_LANG] = [l.code for l in settings.all_languages()]
 
     # Interfaces — toutes mises en page confondues.
-    if hasattr(project, "region_names"):
-        out[DOMAIN_REGION] = list(project.region_names())
-    if hasattr(project, "image_names"):
-        out[DOMAIN_IMAGE] = list(project.image_names())
     if hasattr(project, "ui_element_names"):
         out[DOMAIN_UI_ELEMENT] = list(project.ui_element_names())
 

@@ -8,7 +8,7 @@ Ce que ces tests protègent :
 - une langue non déclarée refuse de compiler, comme une scène inconnue ;
 - un projet monolingue (`lang_codes = []`) refuse TOUT code, sans cas
   spécial à écrire ;
-- `lang.set("fr")` résout au CODE C `LANG_FR`, jamais une chaîne au runtime —
+- `lang:set("fr")` résout au CODE C `LANG_FR`, jamais une chaîne au runtime —
   même mécanique que `TEXT_*`/`SCENE_IDX_*` ;
 - l'ordre des `#define LANG_*` suit `lang_codes` (source en 0).
 """
@@ -24,8 +24,8 @@ def _errors(src: str, **ctx_kw) -> list[str]:
     return [e.message for e in errs if e.level == "error"]
 
 
-_CALL_LANG = 'function on_update()\n    lang.set("fr")\nend\n'
-_CALL_GET  = 'function on_update()\n    if lang.get() == 0 then end\nend\n'
+_CALL_LANG = 'function on_update()\n    lang:set("fr")\nend\n'
+_CALL_GET  = 'function on_update()\n    if lang:get() == 0 then end\nend\n'
 
 
 def test_langue_declaree_compile():
@@ -45,7 +45,7 @@ def test_projet_monolingue_refuse_tout_code():
 
 
 def test_lang_get_ne_cite_aucun_domaine():
-    """`lang.get()` ne prend pas d'argument — rien à valider, aucun message."""
+    """`lang:get()` ne prend pas d'argument — rien à valider, aucun message."""
     assert _errors(_CALL_GET, lang_codes=[]) == []
 
 
@@ -66,7 +66,7 @@ def _gen(src: str, lang_codes):
     code, _warnings, _state = generate(script, CodegenContext(
         actor_name="Scene", actor_sym="Scene", anim_names=[], sfx_names=[],
         music_names=[], global_names=set(), const_names=set(),
-        all_actor_syms=[], is_scene=True, lang_codes=lang_codes))
+        all_actor_syms=[], owner_kind="scene", lang_codes=lang_codes))
     return errors, code
 
 
@@ -112,16 +112,16 @@ def _gen_value(src: str, lang_codes, global_names):
     code, _w, _s = generate(script, CodegenContext(
         actor_name="Scene", actor_sym="Scene", anim_names=[], sfx_names=[],
         music_names=[], global_names=set(global_names), const_names=set(),
-        all_actor_syms=[], is_scene=True, lang_codes=lang_codes))
+        all_actor_syms=[], owner_kind="scene", lang_codes=lang_codes))
     return errors, code
 
 
 def test_lang_set_accepte_une_valeur():
-    """`lang.set(global.langue)` — la forme que demande « relire la langue
+    """`lang:set(global.langue)` — la forme que demande « relire la langue
     choisie » : une globale persistante écrite par `global.langue =
-    lang.get()`, relue au démarrage."""
+    lang:get()`, relue au démarrage."""
     errors, code = _gen_value(
-        'function on_start()\n    lang.set(global.langue)\nend\n',
+        'function on_start()\n    lang:set(global.langue)\nend\n',
         ["en", "fr"], ["langue"])
     assert errors == []
     assert "lang_set(g_langue)" in code
@@ -129,7 +129,7 @@ def test_lang_set_accepte_une_valeur():
 
 def test_lang_get_se_range_dans_une_globale():
     errors, code = _gen_value(
-        'function on_start()\n    global.langue = lang.get()\nend\n',
+        'function on_start()\n    global.langue = lang:get()\nend\n',
         ["en", "fr"], ["langue"])
     assert errors == []
     assert "g_langue = lang_get()" in code

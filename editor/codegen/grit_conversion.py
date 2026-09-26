@@ -592,7 +592,7 @@ def referenced_sound_names(p: Project) -> tuple[set[str], set[str]]:
     pose pas ici, et aucun drapeau « garde-le quand même » n'est nécessaire.
 
     Cinq sources, parce qu'un son se cite de cinq façons :
-      ① un littéral d'appel — `sfx.play("GOAL")`, `music.play("Dreamy DX")` ;
+      ① un littéral d'appel — `sfx:play("GOAL")`, `music:play("Dreamy DX")` ;
       ② un `SoundFxComponent` posé sur un acteur ou un prefab, que
          `self:play_sfx()` joue sans jamais nommer le son dans le script ;
       ③ le MAPPING d'un état d'une boîte sonore (ROADMAP v0.8.7) ;

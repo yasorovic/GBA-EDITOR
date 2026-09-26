@@ -31,7 +31,7 @@ d'animation (`Sprite.frame_w`) et la frame vidéo.
 **Ce qui reste au script.** L'élément porte la GÉOMÉTRIE, pas l'enchaînement :
 rien ici ne dit quel texte s'affiche quand, ni sur quel événement. Un contenu
 authoré est posé une fois à l'init ; tout ce qui CHANGE reste au Lua
-(`text.draw_in("boite_bas", "village_garde")`) — c'est ce qui empêche cet objet
+(`interface.draw_text("boite_bas", "village_garde")`) — c'est ce qui empêche cet objet
 de devenir un éditeur de dialogue par accident, refus tenu depuis ROADMAP
 v0.3.2.
 
@@ -60,7 +60,7 @@ acceptent une référence de variable (`{"var": ...}`) ; une région ne le peut
 pas. Tout l'intérêt de déclarer la géométrie est que l'empreinte VRAM devienne
 connue AVANT le build (cf. `font_emit.scene_text_tiles`) : une position qui ne
 se connaît qu'au runtime rendrait ce chiffre faux, c'est-à-dire pire
-qu'absent. Une position calculée reste possible — par `text.draw(tx, ty, id)`,
+qu'absent. Une position calculée reste possible — par `text:draw(tx, ty, id)`,
 qui ne disparaît pas.
 """
 
@@ -318,7 +318,7 @@ class UIText(RectGeometryMixin):
     **Un seul type pour les deux façons d'y écrire.** `text_key` pointe une
     entrée de la table : renseignée, le build pose le contenu à l'init
     (`scene_init` émet le `text_draw_in`) ; vide, l'élément est un emplacement
-    que le script remplit quand il veut (`text.draw_in`). Rien n'interdit les
+    que le script remplit quand il veut (`interface.draw_text`). Rien n'interdit les
     deux — le dernier écrivain gagne, et c'est exactement ce qu'on veut pour un
     libellé par défaut qu'un script remplace.
 
@@ -775,7 +775,7 @@ class FillMixin:
     @property
     def playing(self) -> bool:
         # Un fond animé joue ; le figer se fait en choisissant un état d'une
-        # seule frame, ou depuis un script (`ui.image_play`). Un champ de plus
+        # seule frame, ou depuis un script (`interface.image_play`). Un champ de plus
         # ici doublerait ce que l'état dit déjà.
         return True
 
@@ -848,7 +848,7 @@ class UIList(RectGeometryMixin, FillMixin):
 
     **Ce que la liste ne fait PAS : dessiner.** Elle dit quel item est sélectionné
     et lequel s'affiche sur quelle rangée ; le contenu reste écrit par le script
-    (`text.draw_in(list.row(...), ...)`), avec les outils de texte qui existent.
+    (`interface.draw_text(list.row(...), ...)`), avec les outils de texte qui existent.
     C'est la même frontière que partout ailleurs ici — un item est une ligne de
     DONNÉE, pas un objet d'interface, et c'est ce qui fait qu'un inventaire, un
     arbre de compétences et un menu de sauvegarde partagent un seul mécanisme.
@@ -902,7 +902,7 @@ class UIList(RectGeometryMixin, FillMixin):
     # page et le moteur le pose sur la rangée choisie. Ce n'est pas un enfant
     # (les enfants sont les rangées) et ce n'est pas un type de plus — « le
     # curseur est ce qui existe déjà » (v0.22). Le déplacement passe par le même
-    # chemin que `ui.image_move` : une implémentation, deux portes.
+    # chemin que `interface.image_move` : une implémentation, deux portes.
     #
     # "" = aucun curseur ; la sélection se lit alors au surlignement plus bas.
     cursor_image: str = ""

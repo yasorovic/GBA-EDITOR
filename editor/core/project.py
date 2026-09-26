@@ -92,6 +92,7 @@ from core.models.settings import (ProjectSettings, GlobalVar, Constant,
 from core.models.text import Text
 from core.models.palette import PaletteBank, OWN_PAL_BANK
 from core.models.sprite import SpriteAsset
+from core.models.components import sprite_components
 from core.models.background import BackgroundAsset
 from core.models.audio import Sfx, Music
 from core.models.font import Font
@@ -385,10 +386,10 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         }
         sprite_names: set[str] = set()
         for actor in scene.actors:
-            component = actor.get_component("sprite")
-            name = getattr(component, "sprite_name", None)
-            if name:
-                sprite_names.add(name)
+            # Toutes les apparences : tout résident, donc tout chargé (marche 3).
+            for component in sprite_components(actor):
+                if component.sprite_name:
+                    sprite_names.add(component.sprite_name)
         # Nœuds Interface : sprites posés par leurs images, fonds de remplissage
         # (nine-slice / background). Les mises en page, elles, sont déjà chargées.
         from core.models.ui_region import FILL_BG, FILL_NINE
@@ -446,7 +447,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         """Noms de TOUTES les caméras du projet, toutes scènes confondues.
 
         Une caméra n'appartient qu'à une scène (`Scene.cameras`), mais son nom
-        doit rester unique au projet : `camera.switch("Nom")` n'est pas
+        doit rester unique au projet : `camera:switch("Nom")` n'est pas
         qualifié par scène côté Lua, et chaque caméra reçoit une constante C
         globale `CAM_<NOM>` (cf. models/camera.py)."""
         return {c.name for s in self.scenes for c in s.cameras}
@@ -658,7 +659,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         """Les états d'une famille, dans un ordre stable.
 
         UN espace par famille, et non un espace commun : depuis que les trois
-        boîtes sont trois assets, `sound_box.set_state("sable")` dit à qui il
+        boîtes sont trois assets, `sound_box:set_state("sable")` dit à qui il
         parle. Deux familles peuvent donc porter le même nom d'état sans que
         rien ne devienne ambigu — ce que le fichier unique interdisait.
         """
@@ -675,7 +676,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
     def sound_trigger_names(self) -> list[str]:
         """Les déclencheurs cités par les arêtes musicales, dans un ordre stable.
 
-        L'ordre devient l'entier que `music_box.trigger(...)` passe au runtime,
+        L'ordre devient l'entier que `music_box:trigger(...)` passe au runtime,
         et il est recalculé à chaque build : jamais sérialisé, donc jamais à
         tenir d'accord avec autre chose.
         """
@@ -839,7 +840,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         """(scripts Lua qu'une scène peut exécuter, en reste-t-il d'opaques ?).
 
         Le script de la scène, celui de chacun de ses actors, et ceux de TOUS
-        les prefabs : un prefab est poolé au niveau projet et `actor.spawn()`
+        les prefabs : un prefab est poolé au niveau projet et `actor:spawn()`
         s'appelle de n'importe où, donc rien ne dit qu'il ne tournera pas ici.
 
         Le second booléen dit qu'un script échappe à l'analyse : introuvable sur
@@ -1012,7 +1013,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
     def collision_tags(self) -> list:
         """Tags de collision du projet, DÉCLARÉS d'abord (dans leur ordre —
         celui que Project Settings > Collisions laisse glisser-déposer),
-        puis ceux seulement TROUVÉS sur un CollisionBoxComponent actif
+        puis ceux seulement TROUVÉS sur un CollisionBoxComponent (actif ou non : un script peut l'allumer)
         (scènes, prefabs, ET parties de prefabs), triés, à la suite.
 
         Source unique pour ses TROIS lecteurs : le sélecteur de tag du
@@ -1026,7 +1027,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         owners = [a for sc in self.scenes for a in sc.actors] + list(self.prefabs)
         owners += [ch for pf in self.prefabs for ch in (getattr(pf, "children", []) or [])]
         discovered = {c.tag or "body" for o in owners for c in getattr(o, "components", [])
-                     if isinstance(c, CollisionBoxComponent) and c.active}
+                     if isinstance(c, CollisionBoxComponent)}
         declared = list(self.settings.collision_tags)
         seen = set(declared)
         extra = sorted(t for t in discovered if t not in seen)

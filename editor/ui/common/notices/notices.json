@@ -98,18 +98,6 @@
       "tone": "info",
       "text": "Renaming a column is done in the grid header — it is written as code in scripts, so the rename rewrites them."
     },
-    "scene.budget.count": {
-      "tone": "info",
-      "text": "{actors} scene + {pool} pool = {used} / {total} OAM slots — {free} free"
-    },
-    "scene.budget.explain": {
-      "tone": "accent",
-      "text": "OAM slots are the GBA's 128 hardware sprite entries. The budget is derived, not split: placed actors (and UI sprites) are counted, and the pool is what's left. A pool declares instances, then pays one slot per prefab part. Placed actors, UI and pool share the same 128 entries."
-    },
-    "scene.budget.over_oam": {
-      "tone": "build",
-      "text": "{actors} scene + {pool} pool = {used} / {total} OAM slots — over the {limit} OAM entries, the surplus won't show"
-    },
     "settings.tips": {
       "tone": "info",
       "text": "Tips are the explanations: what a concept means, where an optimisation is worth it. Warnings about what the build or the screen will do are never hidden by this."
@@ -201,8 +189,8 @@
     },
     "ui.list.rows": {
       "tone": "info",
-      "one": "{n} row: {names}. The script writes their content — list.row(…) renders the zone.",
-      "other": "{n} rows: {names}. The script writes their content — list.row(…) renders the zone."
+      "one": "{n} row: {names}. The script writes their content — menu:row(n) gives the zone.",
+      "other": "{n} rows: {names}. The script writes their content — menu:row(n) gives the zone."
     },
     "ui.text.anim_bg": {
       "tone": "render",

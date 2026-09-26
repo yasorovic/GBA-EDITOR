@@ -30,10 +30,10 @@ function on_collision_enter(other, my_box, other_box)
     end
 
     if rencontre == 0 then
-        text.draw_in("Dialogue", "villageois_bonjour")
+        interface:get("Dialogue"):draw("villageois_bonjour")
         rencontre = 1
     else
-        text.draw_in("Dialogue", "villageois_apres_bonjour")
+        interface:get("Dialogue"):draw("villageois_apres_bonjour")
     end
 end
 ```
@@ -92,7 +92,7 @@ function on_update()
     self.position = self.position + vec2(sens * vitesse, 0)
 
     if scene.frame % 90 == 0 then
-        actor.spawn("Projectile", self.position)
+        actor:spawn("Projectile", self.position)
     end
 end
 ```
@@ -138,7 +138,7 @@ Dans le script de l'ennemi, distinguez ce contact du contact avec son corps :
 ```lua
 function on_collision_enter(other, my_box, other_box)
     if other.tag == "Joueur" and my_box == BOXTAG_TETE and other_box == BOXTAG_PIEDS then
-        sequence.start("mort")
+        sequence:start("mort")
     end
 end
 

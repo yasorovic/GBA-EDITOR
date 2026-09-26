@@ -15,6 +15,7 @@ import copy
 from typing import Optional
 
 from core.command_dispatcher import get_dispatcher
+from core.models.components import displayed_sprite_component
 from core.models.scene import Actor
 from core.project import Project
 from core.sprite_compose import compose_frame_image
@@ -416,7 +417,7 @@ class SceneEditor(QWidget):
             return
         from core.command_dispatcher import get_dispatcher
         disp = get_dispatcher()
-        # Via le projet : réécrit les get_actor("…") des scripts et poste le
+        # Via le projet : réécrit les actor:get("…") des scripts et poste le
         # message de statut (même chemin que le renommage par l'en-tête).
         if self._project:
             self._project.rename_actor(actor, new_name)
@@ -937,7 +938,9 @@ class SceneEditor(QWidget):
         scene = p.active_scene
         _placeholder: QPixmap | None = None
         for actor in scene.actors:
-            sprite_comp = actor.get_component("sprite")
+            # L'apparence AFFICHÉE, comme le build (cf. displayed_sprite_component) :
+            # le canvas ne dessine pas un sprite que la ROM n'afficherait pas.
+            sprite_comp = displayed_sprite_component(actor)
             sprite = (
                 p.get_sprite(sprite_comp.sprite_name)
                 if sprite_comp and sprite_comp.sprite_name

@@ -118,8 +118,13 @@ def exposed_engine_names() -> set[str]:
     """Les noms C exposés en Lua — fonctions de module et getters/setters de
     propriété. La méthode d'acteur (`self:`) et les cas résolus par un émetteur
     dédié n'y sont pas déclarés dans le moteur : ils tombent d'eux-mêmes."""
-    from scripting.api import RUNTIME_API, RUNTIME_PROPS
+    from scripting.api import RUNTIME_API, RUNTIME_PROPS, REF_TYPE_TABLE
     names: set[str] = set()
+    # La conversion d'un type de référence vers son parent (`RefType.to_base`) : le C émis
+    # l'appelle sans qu'aucune entrée du catalogue la nomme.
+    for decl in REF_TYPE_TABLE.values():
+        if decl.to_base:
+            names.add(decl.to_base)
     for f in RUNTIME_API.values():
         if f.c_func:
             names.add(f.c_func)

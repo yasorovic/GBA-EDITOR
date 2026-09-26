@@ -33,7 +33,7 @@ def _project(tmp_path):
         project.scenes.append(Scene(name=name))
     project.settings.start_scene = "Title"
     source = scripts / "title.lua"
-    source.write_text('scene.switch("Arena")\n', encoding="utf-8")
+    source.write_text('scene:switch("Arena")\n', encoding="utf-8")
     project.scenes[0].script = "assets/scripts/scenes/title.lua"
     return project, source
 
@@ -146,7 +146,7 @@ def test_une_edition_de_script_force_une_reprojection(qapp, tmp_path):
     # Le mtime en nanosecondes suffit à distinguer l'empreinte ; on l'assure.
     import os
     st = os.stat(source)
-    source.write_text('scene.switch("Title")\n', encoding="utf-8")
+    source.write_text('scene:switch("Title")\n', encoding="utf-8")
     os.utime(source, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000))
 
     view.refresh()
@@ -197,7 +197,7 @@ def test_rendu_agrege_porte_le_compteur(qapp, tmp_path):
     from ui.scene_manager.scene_graph_view import SceneGraphView
 
     project, source = _project(tmp_path)
-    source.write_text('scene.switch("Arena")\nscene.switch("Arena")\n', encoding="utf-8")
+    source.write_text('scene:switch("Arena")\nscene:switch("Arena")\n', encoding="utf-8")
     view = SceneGraphView()
     view.set_project(project)
     view.refresh()
@@ -226,7 +226,7 @@ def test_rendu_cible_absente_donne_un_marqueur_pas_une_carte(qapp, tmp_path):
     from ui.scene_manager.scene_graph_view import SceneGraphView
 
     project, source = _project(tmp_path)
-    source.write_text('scene.switch("Nowhere")\n', encoding="utf-8")
+    source.write_text('scene:switch("Nowhere")\n', encoding="utf-8")
     view = SceneGraphView()
     view.set_project(project)
     view.refresh()
@@ -404,7 +404,7 @@ def test_le_marqueur_de_cible_absente_est_inerte(qapp, tmp_path):
     from ui.scene_manager.scene_graph_view import SceneGraphView
 
     project, source = _project(tmp_path)
-    source.write_text('scene.switch("Nowhere")\n', encoding="utf-8")
+    source.write_text('scene:switch("Nowhere")\n', encoding="utf-8")
     view = SceneGraphView()
     view.set_project(project)
     view.refresh()
@@ -614,8 +614,8 @@ def _leveled_view(tmp_path):
     for name in ("A", "B", "C"):
         project.scenes.append(Scene(name=name))
     project.settings.start_scene = "A"
-    (scripts / "a.lua").write_text('scene.switch("B")\n', encoding="utf-8")
-    (scripts / "b.lua").write_text('scene.switch("C")\n', encoding="utf-8")
+    (scripts / "a.lua").write_text('scene:switch("B")\n', encoding="utf-8")
+    (scripts / "b.lua").write_text('scene:switch("C")\n', encoding="utf-8")
     project.scenes[0].script = "assets/scripts/scenes/a.lua"
     project.scenes[1].script = "assets/scripts/scenes/b.lua"
 
@@ -667,7 +667,7 @@ def test_le_lien_de_sortie_relie_le_noeud_a_la_porte(qapp, tmp_path):
     for name in ("Inside", "Outside"):
         project.scenes.append(Scene(name=name))
     project.settings.start_scene = "Inside"
-    (scripts / "inside.lua").write_text('scene.switch("Outside")\n', encoding="utf-8")
+    (scripts / "inside.lua").write_text('scene:switch("Outside")\n', encoding="utf-8")
     project.scenes[0].script = "assets/scripts/scenes/inside.lua"
 
     folders = AssetFolderStore(project.root)
@@ -1064,7 +1064,7 @@ def test_edge_inspector_liste_les_appels_et_saute_au_code(qapp, tmp_path):
 
     project, source = _project(tmp_path)
     # Deux appels Title→Arena pour vérifier l'agrégation.
-    source.write_text('scene.switch("Arena")\nscene.switch("Arena")\n', encoding="utf-8")
+    source.write_text('scene:switch("Arena")\nscene:switch("Arena")\n', encoding="utf-8")
     edge = next(e for e in scene_graph(project).edges
                 if (e.source, e.target) == ("Title", "Arena"))
 
@@ -1089,7 +1089,7 @@ def test_edge_inspector_signale_une_cible_introuvable(qapp, tmp_path):
     from ui.scene_manager.inspectors.edge_inspector import EdgeInspector
 
     project, source = _project(tmp_path)
-    source.write_text('scene.switch("Ghost")\n', encoding="utf-8")
+    source.write_text('scene:switch("Ghost")\n', encoding="utf-8")
     edge = next(e for e in scene_graph(project).edges if e.target == "Ghost")
 
     insp = EdgeInspector()

@@ -19,6 +19,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Optional, TYPE_CHECKING
 
+from core.models.components import sprite_components
+
 if TYPE_CHECKING:
     from core.project import Project
 
@@ -154,6 +156,8 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
     _check_ui_container_fill(ctx)
     _check_scene_font(ctx)
     _check_cameras(ctx)
+    _check_script_owner_families(ctx)
+    _check_behaviors_without_self(ctx)
     _check_window_regions(ctx)
     _check_actor_name_collisions(ctx)
     _check_actor_budget(ctx)
@@ -166,6 +170,7 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
     _check_module_channels(ctx)
     _check_sound_boxes(ctx)
     _check_frame_events(ctx)
+    _check_sprite_appearances(ctx)
 
     # ── Validateurs plugins ──────────────────────────────────────────
     for fn in _VALIDATORS:
@@ -566,7 +571,7 @@ def _check_text_overflow(ctx: ValidationContext):
     if not getattr(p, "texts", None) or not getattr(p, "fonts", None):
         return
     from scripting.refactor import find_call_sites_in_project
-    from scripting.api import DOMAIN_REGION, DOMAIN_TEXT
+    from scripting.api import DOMAIN_UI_ELEMENT, DOMAIN_TEXT
     from core.text_markup import parse, resolve, KIND_VALUE
     from core.engine_emulation.text_layout import layout_marked_text
 
@@ -603,8 +608,8 @@ def _check_text_overflow(ctx: ValidationContext):
         return lay_defaults.get(region_layout.get(el.name, ""), None) or ([first] if first else [])
 
     seen: set = set()
-    for site in find_call_sites_in_project(p, DOMAIN_REGION, DOMAIN_TEXT):
-        region = regions.get(site.values[DOMAIN_REGION])
+    for site in find_call_sites_in_project(p, DOMAIN_UI_ELEMENT, DOMAIN_TEXT):
+        region = regions.get(site.values[DOMAIN_UI_ELEMENT])
         text   = p.get_text(site.values[DOMAIN_TEXT])
         if region is None or text is None:
             continue          # le checker le dit déjà, et mieux
@@ -672,7 +677,7 @@ def _check_font_coverage(ctx: ValidationContext):
     if not getattr(p, "texts", None) or not getattr(p, "fonts", None):
         return
     from scripting.refactor import find_call_sites_in_project
-    from scripting.api import DOMAIN_REGION, DOMAIN_TEXT
+    from scripting.api import DOMAIN_UI_ELEMENT, DOMAIN_TEXT
     from core.text_markup import KIND_VALUE, SENTINEL
 
     regions = {r.name: r for _lay, r in p.all_regions()}
@@ -753,8 +758,8 @@ def _check_font_coverage(ctx: ValidationContext):
             f"en jeu. Ajoute-le à une police, ou change la traduction.")
 
     seen: set = set()
-    for site in find_call_sites_in_project(p, DOMAIN_REGION, DOMAIN_TEXT):
-        region = regions.get(site.values[DOMAIN_REGION])
+    for site in find_call_sites_in_project(p, DOMAIN_UI_ELEMENT, DOMAIN_TEXT):
+        region = regions.get(site.values[DOMAIN_UI_ELEMENT])
         text   = p.get_text(site.values[DOMAIN_TEXT])
         if region is None or text is None:
             continue
@@ -789,7 +794,7 @@ def _check_font_coverage(ctx: ValidationContext):
 
 
 def _check_literal_texts(ctx: ValidationContext):
-    """Un littéral passé à `text.draw("Bonjour")` reste compilable — une
+    """Un littéral passé à `text:draw("Bonjour")` reste compilable — une
     entrée ANONYME de la table, comme depuis la v0.3.2, un raccourci hors
     interface ASSUMÉ au prix de la traduction. Mais dès qu'une langue est
     déclarée, c'est un trou de traduction GARANTI (ROADMAP v0.9, décision 6) :
@@ -872,7 +877,7 @@ def _check_ui_text_key(ctx: ValidationContext):
 
     Une clé VIDE, elle, ne se signale plus : depuis la fusion des deux types de
     texte, c'est un choix d'authoring normal — l'élément est un emplacement
-    qu'un script remplira (`text.draw_in`). Le signaler ferait crier le
+    qu'un script remplira (`interface.draw_text`). Le signaler ferait crier le
     validateur sur chaque boîte de dialogue d'un projet qui pilote son texte au
     script, c'est-à-dire sur le cas le plus courant."""
     p = ctx.project
@@ -1043,14 +1048,20 @@ def _check_data_column_types(ctx: ValidationContext):
     inéditable sans que rien ne le dise."""
     from core.models.data_table import COLUMN_REFERENCES
     from core.project import DATA_COLUMN_SOURCES
-    from scripting.api import ALL_DOMAINS
+    from scripting.api import ALL_DOMAINS, REF_TYPE_TABLE
 
-    inconnus = sorted(set(COLUMN_REFERENCES) - ALL_DOMAINS)
+    # Une colonne cite un DOMAINE (un nom d'asset : `text`, `sfx`…) ou une RÉFÉRENCE typée
+    # (une zone de texte, une image : leur index EST le handle du type, `RefType.column`).
+    # Le nom d'un élément d'interface ne se cite plus dans un argument — `interface.get` est
+    # la seule porte —, mais sa colonne reste une donnée valide.
+    citables = ALL_DOMAINS | {t.column for t in REF_TYPE_TABLE.values() if t.column}
+    inconnus = sorted(set(COLUMN_REFERENCES) - citables)
     if inconnus:
         ctx.error(None,
                   f"Type(s) de colonne sans domaine de script correspondant : "
                   f"{', '.join(inconnus)}. Une colonne de référence porte le nom "
-                  f"de son domaine (scripting/api.py, DOMAIN_*).")
+                  f"de son domaine (scripting/api.py, DOMAIN_*) ou déclare `column` "
+                  f"sur le type de référence qui la porte (RefType).")
     sans_source = sorted(set(COLUMN_REFERENCES) - set(DATA_COLUMN_SOURCES))
     if sans_source:
         ctx.error(None,
@@ -1124,7 +1135,7 @@ def _check_cameras(ctx: ValidationContext):
     ② La scène désigne une caméra qui n'existe plus (dans sa propre liste) :
       elle retombe sur la caméra par défaut, donc un cadrage à l'origine sans
       bornes.
-    ③ Deux caméras du projet portent le même nom : `camera.switch("Nom")`
+    ③ Deux caméras du projet portent le même nom : `camera:switch("Nom")`
       n'est pas qualifié par scène, un doublon viserait la mauvaise caméra."""
     p = ctx.project
     seen: dict[str, str] = {}   # nom → scène qui l'a vu en premier
@@ -1143,7 +1154,7 @@ def _check_cameras(ctx: ValidationContext):
             if cam.name in seen and seen[cam.name] != scene.name:
                 ctx.warn(None,
                     f"Deux caméras nommées « {cam.name} » (scènes '{seen[cam.name]}' et "
-                    f"'{scene.name}') — camera.switch(\"{cam.name}\") viserait l'une des deux "
+                    f"'{scene.name}') — camera:switch(\"{cam.name}\") viserait l'une des deux "
                     f"au hasard du build.")
             seen.setdefault(cam.name, scene.name)
         want = getattr(scene, "camera", "") or ""
@@ -1151,6 +1162,53 @@ def _check_cameras(ctx: ValidationContext):
             ctx.warn(None,
                 f"Scène '{scene.name}' : la caméra « {want} » n'existe plus — la "
                 f"scène repart de la caméra par défaut (fixe à l'origine, sans bornes).")
+
+
+def _check_script_owner_families(ctx: ValidationContext):
+    """Un fichier de script a UNE famille de propriétaire : acteur/prefab, scène ou caméra.
+
+    C'est l'attache qui donne son contexte au script (ses événements, l'existence de
+    `self`). Un même fichier attaché à deux familles aurait deux contextes à la fois :
+    `self` y désignerait une instance dans un cas et rien dans l'autre. On le refuse
+    plutôt que de le tolérer — un fichier, un contexte. Plusieurs acteurs qui partagent
+    le même script, eux, restent permis : c'est la même famille."""
+    from core.script_owners import script_attachments, FAMILY_LABELS
+
+    for path, familles in script_attachments(ctx.project).items():
+        if len(familles) < 2:
+            continue
+        detail = " ; ".join(f"{FAMILY_LABELS[fam]} : {', '.join(owners[:3])}"
+                            f"{'…' if len(owners) > 3 else ''}"
+                            for fam, owners in familles.items())
+        ctx.error(None,
+            f"Le script « {path} » est attaché à plusieurs familles de propriétaires "
+            f"({detail}). Un script n'a qu'un contexte : `self` et les événements "
+            f"disponibles dépendent de ce à quoi il est attaché. Faites un script par famille, "
+            f"et mettez le code commun dans un behavior.")
+
+
+def _check_behaviors_without_self(ctx: ValidationContext):
+    """`self` désigne l'instance à laquelle le script est attaché ; un behavior n'est
+    attaché à rien, il REÇOIT un acteur en paramètre. Lui laisser le mot `self` le
+    rendrait ambigu (l'instance attachée ? le paramètre ?) — on le refuse, en
+    bloquant le build : les erreurs du checker sur un behavior ne sont que des
+    avertissements, ce qui ne suffit pas ici."""
+    from scripting.parser import parse as lua_parse, LuaParseError
+    from scripting.checker import uses_self
+
+    behaviors_dir = ctx.project.scripts_behaviors_dir
+    if not behaviors_dir.is_dir():
+        return
+    for path in sorted(behaviors_dir.glob("*.lua")):
+        try:
+            script = lua_parse(path.read_text(encoding="utf-8"))
+        except (LuaParseError, OSError):
+            continue          # le parse est déjà dit ailleurs
+        if uses_self(script):
+            ctx.error(None,
+                f"Behavior « {path.stem} » : `self` est réservé à l'instance à laquelle un "
+                f"script est attaché. Un behavior reçoit son acteur en premier paramètre : "
+                f"nommez-le autrement, `function M.update(actor)`.")
 
 
 def _check_actor_budget(ctx: ValidationContext):
@@ -1180,7 +1238,7 @@ def _check_actor_budget(ctx: ValidationContext):
         if lay.over_budget:
             ctx.error(None,
                 f"Scène '{scene.name}' : {lay.used} entrées OAM demandées "
-                f"({lay.placed} acteurs + {lay.ui} d'interface + {lay.pool_slots} de pool) "
+                f"({lay.placed_entries} acteurs à sprite + {lay.ui} d'interface + {lay.pool_entries} de pool) "
                 f"pour {OAM_LIMIT} disponibles — réduire un pavage de fond, passer "
                 f"une zone en cible BG, ou diminuer le pool.")
 
@@ -1355,7 +1413,7 @@ def _check_music_cut_compat(ctx: ValidationContext):
                 n_o = order_len(other)
                 if n_o is not None and n_o != n_t:
                     ctx.warn(None,
-                        f"{path.name} : music.cut_to(« {target} ») reprend à la position "
+                        f"{path.name} : music:cut_to(« {target} ») reprend à la position "
                         f"courante, mais « {other} » n'a pas la même structure "
                         f"({n_o} motifs contre {n_t}) — la reprise tomberait ailleurs "
                         f"dans le morceau.")
@@ -1514,30 +1572,67 @@ def _check_frame_events(ctx: ValidationContext):
     pas une erreur bloquante (ROADMAP v0.8.9)."""
     p = ctx.project
     for actor in ctx.actors:
-        sprite_comp = actor.get_component("sprite")
         script_comp = actor.get_component("script")
-        if not sprite_comp or not script_comp or not script_comp.active or not script_comp.script:
+        if not script_comp or not script_comp.active or not script_comp.script:
             continue
-        sprite = p.get_sprite(getattr(sprite_comp, "sprite_name", "") or "")
-        if not sprite:
+        # Chaque apparence de l'acteur : un sprite inactif au départ s'animera
+        # quand on l'activera, ses événements de frame appellent donc le même script.
+        for sprite_comp in sprite_components(actor):
+          sprite = p.get_sprite(getattr(sprite_comp, "sprite_name", "") or "")
+          if not sprite:
             continue
-        events = {
-            getattr(fr, "event_name", "") or ""
-            for stt in getattr(sprite, "states", []) or []
-            for sd in getattr(stt, "directions", []) or []
-            for fr in getattr(sd, "frames", []) or []
-        } - {""}
-        if not events:
+          events = {
+              getattr(fr, "event_name", "") or ""
+              for stt in getattr(sprite, "states", []) or []
+              for sd in getattr(stt, "directions", []) or []
+              for fr in getattr(sd, "frames", []) or []
+          } - {""}
+          if not events:
             continue
-        sp = p.asset_abs(script_comp.script)
-        declared = ctx.script_functions(sp) if sp and sp.exists() else set()
-        for ev in sorted(events):
+          sp = p.asset_abs(script_comp.script)
+          declared = ctx.script_functions(sp) if sp and sp.exists() else set()
+          for ev in sorted(events):
             if ev not in declared:
                 ctx.warn(actor,
                     f"Sprite « {sprite.name} » cite l'event « {ev} » sur une frame, "
                     f"mais le script de « {actor.name} » ne déclare aucune fonction "
                     f"« {ev} » — l'appel ne jouera rien. Ajoute "
                     f"`function {ev}(self) ... end` au script, ou retire l'appel.")
+
+
+def _check_sprite_appearances(ctx: ValidationContext):
+    """Un porteur affiche UN sprite : ses `SpriteComponent` sont des apparences dont
+    au plus une est active (marche 3 de « La struct Actor allégée »). Deux actives
+    seraient ambiguës — le build en afficherait une seule, sans le dire. Vaut pour
+    les acteurs de chaque scène, les prefabs poolés et leurs parties."""
+    p = ctx.project
+
+    def _check(owner, label):
+        # Les `id` deviennent des constantes C (SPRITE_<ACTEUR>_<ID>) : deux ids
+        # qui donnent le même identifiant ne se distingueraient plus à la compile.
+        from codegen.c_names import c_ident
+        seen: dict[str, str] = {}
+        for c in sprite_components(owner):
+            ident = c_ident(c.id)
+            if ident in seen and seen[ident] != c.id:
+                ctx.error(owner,
+                    f"« {label} » : les ids « {seen[ident]} » et « {c.id} » donnent la même "
+                    f"constante C (SPRITE_…_{ident}) — renomme l'un des deux.")
+            seen.setdefault(ident, c.id)
+        actives = [c for c in sprite_components(owner) if c.active and c.sprite_name]
+        if len(actives) > 1:
+            ctx.error(owner,
+                f"« {label} » a {len(actives)} apparences (composants sprite) actives "
+                f"({', '.join(c.id for c in actives)}) : une seule peut l'être. "
+                f"Activer l'une désactive l'autre — décoche les autres.")
+
+    for scene in p.scenes:
+        for actor in scene.actors:
+            _check(actor, actor.name)
+    for pf in p.prefabs:
+        _check(pf, pf.name)
+        for part in getattr(pf, "children", []) or []:
+            _check(part, f"{pf.name}/{part.name}")
 
 
 def _check_scene_font(ctx: ValidationContext):
@@ -1661,10 +1756,10 @@ def _check_pal_bank_reference(ctx: ValidationContext):
         return not (name and p.get_palette(name))
 
     def _sprite_of(entity):
-        comp = entity.get_component("sprite")
-        if not (comp and getattr(comp, "active", True) and comp.sprite_name):
-            return None
-        return p.get_sprite(comp.sprite_name)
+        # Le sprite CONSTRUIT d'une des apparences : la banque référencée vaut pour
+        # toutes (elle est à l'acteur, pas à l'apparence).
+        sprites = (p.get_sprite(c.sprite_name) for c in sprite_components(entity) if c.sprite_name)
+        return next((sp for sp in sprites if sp and sp.asset), None)
 
     # ── Actors (par scène) ───────────────────────────────────────────
     for scene in p.scenes:

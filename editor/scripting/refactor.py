@@ -10,7 +10,7 @@ Le repérage est **structurel**, jamais textuel : on relit l'AST luaparser et on
 ne retient que les arguments dont `RUNTIME_API` déclare le domaine (cf.
 api.Param.domain). Conséquence directe : un commentaire qui mentionne "PONG",
 ou un `local titre = "PONG"` sans rapport, ne sont pas touchés — seul
-`scene.switch("PONG")` l'est. C'est la même table que celle qui pilote le
+`scene:switch("PONG")` l'est. C'est la même table que celle qui pilote le
 checker et le codegen : ajouter un domaine profite aux trois.
 
 La réécriture remplace les littéraux par leur position exacte dans le texte
@@ -29,7 +29,9 @@ from typing import Iterator, Optional
 
 import re
 
-from .api import RUNTIME_API, PARAM_STR
+from .api import (RUNTIME_API, RUNTIME_PROPS, REF_TYPES, REF_ACTOR, PARAM_STR, DOMAIN_UI_ELEMENT,
+                  MODULE_CALLS)
+
 from .parser import DATA_NS
 
 try:
@@ -74,11 +76,16 @@ def _call_key(node) -> Optional[str]:
     """Clé RUNTIME_API d'un noeud d'appel luaparser, ou None.
 
     Reproduit la résolution du checker (`Checker._call_key`) sur l'AST brut :
-    `Name` → "get_actor", `Index(Name, field)` → "sfx.play", `Invoke` →
+    `Name` → "array", `Index(Name, field)` → "sfx.play", `Invoke` →
     "self:play_anim"."""
     if isinstance(node, _nodes.Invoke):
         method = getattr(node.func, "id", None)
-        return f"self:{method}" if method else None
+        # `sfx:play(…)`, `interface:get(…)` : la méthode d'un MODULE du moteur est l'entrée
+        # `module.fonction` du catalogue (cf. `api.MODULE_CALLS`).
+        source = node.source
+        if method and isinstance(source, _nodes.Name) and source.id in MODULE_CALLS:
+            return f"{source.id}.{method}"
+        return f"{REF_ACTOR}:{method}" if method else None
     if isinstance(node, _nodes.Call):
         func = node.func
         if isinstance(func, _nodes.Name):
@@ -87,6 +94,100 @@ def _call_key(node) -> Optional[str]:
             field = getattr(func.idx, "id", None)
             return f"{func.value.id}.{field}" if field else None
     return None
+
+
+def _element_of_source(source, elems: dict) -> Optional[str]:
+    """Le nom de l'élément d'interface qu'un récepteur désigne : `interface:get("Menu")`
+    lui-même, ou un `local` qui n'en a tenu qu'un seul (`elems`)."""
+    if isinstance(source, (_nodes.Call, _nodes.Invoke)) and _call_key(source) == "interface.get":
+        args = source.args or []
+        return args[0].raw if args and isinstance(args[0], _nodes.String) else None
+    if isinstance(source, _nodes.Name):
+        return elems.get(source.id)
+    return None
+
+
+def _element_locals(tree) -> dict[str, Optional[str]]:
+    """{variable: élément d'interface} — `local menu = interface:get("Menu")`. Un local
+    réaffecté à un AUTRE élément vaut None : on ne conclut rien."""
+    out: dict[str, Optional[str]] = {}
+    for node in _lua_ast.walk(tree):
+        if not isinstance(node, (_nodes.LocalAssign, _nodes.Assign)):
+            continue
+        for target, value in zip(node.targets or [], node.values or []):
+            if (isinstance(target, _nodes.Name) and isinstance(value, (_nodes.Call, _nodes.Invoke))
+                    and _call_key(value) == "interface.get"):
+                element = _element_of_source(value, {})
+                out[target.id] = None if target.id in out and out[target.id] != element else element
+    return out
+
+
+def _node_key(node, elems: dict) -> Optional[str]:
+    """`_call_key`, plus les méthodes d'un ÉLÉMENT d'interface : `box:draw("k")` sur
+    `interface:get("Box")` (ou un local qui le tient) est l'entrée `text_region:draw`.
+    Le repérage est structurel, comme le reste : la méthode se cherche dans le
+    catalogue, sur les types de référence, jamais dans une liste écrite ici."""
+    if isinstance(node, _nodes.Invoke):
+        method = getattr(node.func, "id", None)
+        if isinstance(node.source, _nodes.Name) and node.source.id in MODULE_CALLS:
+            return _call_key(node)            # `interface:get(…)` : la fonction d'un module
+        if method and _element_of_source(node.source, elems) is not None:
+
+            for ref in REF_TYPES:
+                if f"{ref}:{method}" in RUNTIME_API:
+                    return f"{ref}:{method}"
+        return f"{REF_ACTOR}:{method}" if method else None
+    return _call_key(node)
+
+
+def _ref_locals(tree) -> dict[str, str]:
+    """{variable: type de référence} — `local hb = self:collision_box("x")` fait
+    de `hb` une `collision_box`. Même relevé que le checker, sur l'AST brut."""
+    out: dict[str, str] = {}
+    for node in _lua_ast.walk(tree):
+        if not isinstance(node, (_nodes.LocalAssign, _nodes.Assign)):
+            continue
+        for target, value in zip(node.targets or [], node.values or []):
+            if isinstance(target, _nodes.Name) and isinstance(value, (_nodes.Call, _nodes.Invoke)):
+                api = RUNTIME_API.get(_call_key(value) or "")
+                if api and api.ret in REF_TYPES:
+                    out[target.id] = api.ret
+    return out
+
+
+def _iter_prop_refs(tree, text: str, path, domain, value) -> Iterator[LuaRef]:
+    """Les littéraux qu'une PROPRIÉTÉ à domaine se compare à — `hb.tag ==
+    "hitbox"`. Ils citent le nom du projet exactement comme l'argument d'une
+    fonction, et un renommage qui les oubliait laisserait une comparaison que le
+    checker refuse. Seul le type de la variable dit de quelle propriété il
+    s'agit (`self.tag` est l'acteur, `hb.tag` la boîte), d'où `_ref_locals`."""
+    refs = _ref_locals(tree)
+    # `self` est aussi un récepteur : `self.anim == "walk"`, `self.active_sprite ==
+    # "blesse"` citent un nom du projet comme `hb.tag == "hitbox"`. Le type est
+    # « self » : la clé RUNTIME_PROPS est `self.<propriété>`. (`other.anim` n'y
+    # figure pas : son nom appartient à un autre acteur, le checker le refuse.)
+    refs.setdefault("self", REF_ACTOR)
+    for node in _lua_ast.walk(tree):
+        if not isinstance(node, (_nodes.EqToOp, _nodes.NotEqToOp)):
+            continue
+        for side, other in ((node.left, node.right), (node.right, node.left)):
+            if not (isinstance(side, _nodes.Index) and isinstance(side.value, _nodes.Name)
+                    and isinstance(other, _nodes.String)):
+                continue
+            ref = refs.get(side.value.id)
+            prop = RUNTIME_PROPS.get(f"{ref}.{getattr(side.idx, 'id', '')}") if ref else None
+            if prop is None or not prop.domain:
+                continue
+            if domain is not None and prop.domain != domain:
+                continue
+            if value is not None and other.raw != value:
+                continue
+            yield LuaRef(
+                path=path or Path(""), domain=prop.domain, value=other.raw,
+                line=text.count("\n", 0, other.start_char) + 1,
+                start=other.start_char, stop=other.stop_char,
+                api_key=f"{ref}.{side.idx.id}",
+            )
 
 
 def iter_refs(text: str, path: Path | None = None,
@@ -102,10 +203,13 @@ def iter_refs(text: str, path: Path | None = None,
     except Exception:
         return   # script non parsable : aucune réécriture (cf. rename_in_text)
 
+    yield from _iter_prop_refs(tree, text, path, domain, value)
+
+    elems = _element_locals(tree)
     for node in _lua_ast.walk(tree):
         if not isinstance(node, (_nodes.Call, _nodes.Invoke)):
             continue
-        key = _call_key(node)
+        key = _node_key(node, elems)
         arg_domains = _SITES.get(key or "")
         if not arg_domains:
             continue
@@ -153,7 +257,7 @@ def script_paths(project) -> list[Path]:
     """Tous les .lua du projet (actors, scènes, caméras, behaviors).
 
     Les scripts de CAMÉRA manquaient à cette liste depuis leur apparition en
-    v0.6.1 : un `scene.switch("Arène")` écrit dans une caméra n'était donc pas
+    v0.6.1 : un `scene:switch("Arène")` écrit dans une caméra n'était donc pas
     réécrit par un renommage de scène, et rien ne le signalait — la faute ne
     remontait qu'au build suivant, sur un `SCENE_IDX_*` indéfini."""
     dirs = [getattr(project, attr, None) for attr in
@@ -209,14 +313,21 @@ def iter_call_sites(text: str, path: Path | None = None,
     except Exception:
         return
 
+    elems = _element_locals(tree)
     for node in _lua_ast.walk(tree):
         if not isinstance(node, (_nodes.Call, _nodes.Invoke)):
             continue
-        key = _call_key(node)
+        key = _node_key(node, elems)
         arg_domains = _SITES.get(key or "")
         if not arg_domains:
             continue
         values: dict = {}
+        # L'ÉLÉMENT sur lequel la méthode s'appelle est lui aussi un littéral du projet :
+        # `box:draw("k")` pose la paire (zone, texte) exactement comme `draw_text("box", "k")`.
+        if isinstance(node, _nodes.Invoke):
+            element = _element_of_source(node.source, elems)
+            if element is not None:
+                values[DOMAIN_UI_ELEMENT] = element
         first_at = None
         for i, arg in enumerate(node.args or []):
             dom = arg_domains.get(i)
@@ -256,10 +367,11 @@ def domain_args_in_text(text: str, domain: str) -> tuple[set[str], bool]:
 
     names: set[str] = set()
     dynamic = False
+    elems = _element_locals(tree)
     for node in _lua_ast.walk(tree):
         if not isinstance(node, (_nodes.Call, _nodes.Invoke)):
             continue
-        arg_domains = _SITES.get(_call_key(node) or "")
+        arg_domains = _SITES.get(_node_key(node, elems) or "")
         if not arg_domains:
             continue
         args = node.args or []
@@ -506,7 +618,7 @@ def rename_var_in_project(project, ns: str, old: str, new: str) -> dict[Path, in
     """Réécrit `global.<old>` (ou `const.<old>`) en `<new>` dans tous les
     scripts, quelle que soit la forme (nue, indexée). `Project.rename_variable`
     l'appelle EN PLUS de `rename_lua_refs(DOMAIN_GLOBAL, …)` — celui-ci reste
-    nécessaire pour `save.read(slot, "nom")`, qui cite le nom en chaîne."""
+    nécessaire pour `save:read(slot, "nom")`, qui cite le nom en chaîne."""
     return _rename_by_position(project, new,
                                lambda text, p: list(iter_var_refs(text, p, ns=ns, name=old)))
 
@@ -515,10 +627,17 @@ def rename_in_project(project, domain: str, old: str, new: str) -> dict[Path, in
     """Réécrit toutes les références `old` → `new` du domaine donné dans les
     scripts du projet. Retourne {script: nombre de remplacements} (vide si
     rien n'a bougé). Sans effet si old == new."""
+    return rename_in_files(script_paths(project), domain, old, new)
+
+
+def rename_in_files(paths, domain: str, old: str, new: str) -> dict[Path, int]:
+    """Comme `rename_in_project`, mais sur les seuls scripts donnés : un nom qui
+    n'a de sens que pour UN propriétaire (l'`id` d'un composant sprite d'un acteur)
+    ne se réécrit pas chez les autres, qui peuvent avoir le leur, identique."""
     if not old or not new or old == new:
         return {}
     changed: dict[Path, int] = {}
-    for p in script_paths(project):
+    for p in paths:
         try:
             text = p.read_text(encoding="utf-8")
         except OSError:

@@ -50,46 +50,6 @@ from ui.text_editor.font_screen_preview import FontScreenPreview
 from ui.text_editor.markup_toolbar import MarkupToolbar
 
 
-class _ContentEdit(QTextEdit):
-    """Éditeur de contenu qui ne commite qu'à la perte du focus.
-
-    Une commande par frappe rendrait l'historique inutilisable (modèle de
-    `NotesEdit`). `edited` reste émis à chaque frappe, pour l'aperçu.
-    """
-
-    committed = pyqtSignal(str, str)   # (avant, après)
-    edited = pyqtSignal(str)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._baseline = ""
-        self.textChanged.connect(lambda: self.edited.emit(self.toPlainText()))
-
-    def insertFromMimeData(self, source):
-        """Ne colle que du texte brut — la mise en forme du presse-papier
-        (gras, taille...) n'a aucun sens ici et ne doit pas s'afficher."""
-        self.insertPlainText(source.text())
-
-    def set_text_silent(self, text: str):
-        """Remplit le champ et repose la ligne de base, sans rien émettre."""
-        self._baseline = text or ""
-        self.blockSignals(True)
-        self.setPlainText(self._baseline)
-        self.blockSignals(False)
-
-    def commit(self):
-        """Force le commit — aussi appelé avant un changement de sélection, qui
-        ne provoque pas toujours un focus-out."""
-        text = self.toPlainText()
-        if text != self._baseline:
-            before, self._baseline = self._baseline, text
-            self.committed.emit(before, text)
-
-    def focusOutEvent(self, e):
-        super().focusOutEvent(e)
-        self.commit()
-
-
 class _LangTabs(QWidget):
     """Le contexte de langue de l'atelier — un onglet par langue déclarée,
     source comprise.

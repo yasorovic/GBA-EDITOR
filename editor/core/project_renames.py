@@ -31,8 +31,7 @@ from core.models.scene import Scene
 from core.models.sprite import SpriteAsset
 from scripting.api import (
     DOMAIN_SCENE, DOMAIN_CAMERA, DOMAIN_PREFAB, DOMAIN_SFX, DOMAIN_MUSIC, DOMAIN_FONT,
-    DOMAIN_ACTOR, DOMAIN_REGION, DOMAIN_IMAGE, DOMAIN_WIN_REGION,
-    DOMAIN_UI_LIST,
+    DOMAIN_ACTOR, DOMAIN_UI_ELEMENT, DOMAIN_WIN_REGION,
 )
 
 
@@ -125,7 +124,7 @@ class ProjectRenameMixin:
 
     def rename_camera(self, scene: Scene, camera, new_name: str):
         """Renomme une caméra POSSÉDÉE par `scene` et répare ce qui la cite :
-        le pointeur `scene.camera` s'il la désignait, et les `camera.switch(…)`
+        le pointeur `scene.camera` s'il la désignait, et les `camera:switch(…)`
         des scripts — non qualifiés par scène, donc potentiellement n'importe
         où dans le projet (cf. models/camera.py). Refuse en silence une
         collision avec une autre caméra du projet — même contrainte que la
@@ -204,10 +203,9 @@ class ProjectRenameMixin:
         expliquer pourquoi deux éléments homonymes coexistent parfois.
 
         Les enfants pointant le parent par NOM, on les rebranche
-        (`retarget_parent`) AVANT de figer le nouveau nom. Le domaine Lua suit
-        le type — un conteneur n'en a pas, rien à réécrire ; une LISTE, si
-        (`list.count("Menu")`), ce qu'un panneau-liste ne disait pas et qui
-        cassait les scripts en silence. Retourne le nom RÉELLEMENT appliqué
+        (`retarget_parent`) AVANT de figer le nouveau nom. Le nom se cite dans les
+        scripts par `interface:get("Nom")`, pour TOUS les types — c'est un seul
+        domaine, y compris pour un conteneur. Retourne le nom RÉELLEMENT appliqué
         (peut différer si collision)."""
         from core.models.ui_region import (
             KIND_TEXT, KIND_IMAGE, KIND_LIST, unique_element_name)
@@ -218,8 +216,9 @@ class ProjectRenameMixin:
         if new_name in taken:
             new_name = unique_element_name(taken, new_name)
         kind = getattr(element, "kind", KIND_TEXT)
-        domain = {KIND_TEXT: DOMAIN_REGION, KIND_IMAGE: DOMAIN_IMAGE,
-                  KIND_LIST: DOMAIN_UI_LIST}.get(kind)
+        # Un élément ne se cite que par `interface:get("Nom")`, quelle que soit sa nature :
+        # UN domaine, donc un conteneur — qu'aucun domaine ne couvrait — est réécrit aussi.
+        domain = DOMAIN_UI_ELEMENT
         label = {KIND_TEXT: "Text", KIND_IMAGE: "Image",
                  KIND_LIST: "List"}.get(kind, "UI element")
         old_name = element.name
@@ -439,6 +438,20 @@ class ProjectRenameMixin:
     # reste lisible. Repérage structurel via scripting/refactor.py : seuls
     # les arguments déclarés comme références bougent (jamais un commentaire
     # ni une string sans rapport).
+
+    def rename_sprite_id_refs(self, owner, old: str, new: str) -> dict:
+        """Propage le renommage de l'`id` d'un composant sprite dans le script de
+        SON propriétaire seulement. Deux acteurs peuvent avoir chacun un « normal » :
+        renommer celui de l'un ne doit pas toucher le script de l'autre (contrairement
+        à un nom d'asset, unique dans le projet). Un behavior partagé n'est pas
+        réécrit : le checker signalera l'id devenu inconnu au build."""
+        from core.models.components import ScriptComponent
+        from scripting.api import DOMAIN_SPRITE_ID
+        from scripting.refactor import rename_in_files
+        scripts = [self.asset_abs(c.script) for c in getattr(owner, "components", [])
+                   if isinstance(c, ScriptComponent) and c.active and c.script]
+        return rename_in_files([s for s in scripts if s and s.exists()],
+                               DOMAIN_SPRITE_ID, old, new)
 
     def rename_lua_refs(self, domain: str, old: str, new: str) -> dict:
         """Propage un renommage dans les scripts. Retourne {script: n} —

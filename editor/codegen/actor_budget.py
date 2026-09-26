@@ -49,9 +49,10 @@ def prefab_pool_instances(project, prefab) -> int:
 
 
 def scene_pool_slots(scene: Scene, project) -> int:
-    """Entrées de `g_actors` que les pools de cette scène consomment —
-    instances × parties, sommées sur les prefabs qu'elle déclare."""
-    return scene_oam_layout(project, scene).pool_slots
+    """Entrées OAM que les pools de cette scène consomment — instances × parties
+    QUI AFFICHENT UN SPRITE, sommées sur les prefabs qu'elle déclare. Un marqueur
+    (point de tir, ancre de hitbox) n'en coûte aucune."""
+    return scene_oam_layout(project, scene).pool_entries
 
 
 def scene_actor_budget(scene: Scene, project) -> dict:
@@ -65,9 +66,11 @@ def scene_actor_budget(scene: Scene, project) -> dict:
     (la géométrie réelle). Les deux ne divergent que si l'auteur a posé un
     override — aucune scène neuve ne le fait."""
     lay = scene_oam_layout(project, scene)
-    actors = scene_actor_slots(scene)   # override, sinon = acteurs actifs posés
+    # override, sinon = les acteurs posés QUI AFFICHENT un sprite (un contrôleur ou
+    # un déclencheur ne consomme aucune entrée OAM).
+    actors = scene.actor_slots if scene.actor_slots > 0 else lay.placed_entries
     ui     = lay.ui
-    pool   = lay.pool_slots
+    pool   = lay.pool_entries
     used   = actors + ui + pool
     return {
         "actors":      actors,

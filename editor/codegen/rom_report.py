@@ -328,43 +328,28 @@ def sound_weights(project, sfx_names: list[str], music_names: list[str]) -> dict
     return {(e.kind, e.name): e for e in sb.entries if e.name}
 
 
-# ── Rendu texte ───────────────────────────────────────────────────────
-
-_BAR_WIDTH = 48
-
-
 def format_report(report: RomReport) -> list[str]:
-    """La barre telle qu'elle apparaît dans le journal de build."""
+    """Résumé textuel de la répartition ROM dans le journal de build.
+
+    Le bandeau ``RomBudgetBar`` est la visualisation graphique persistante ;
+    le journal ne répète donc pas une seconde jauge ASCII.
+    """
     total = max(1, report.rom_bytes)
     lines = ["", "── Poids de la ROM ─────────────────────────────────────"]
 
     def kio(n: int) -> str:
-        return f"{n / 1024:,.1f} Kio".replace(",", " ")
+        return f"{n / 1024:,.1f} KiB".replace(",", " ")
 
     for cat, size in report.categories.items():
-        full = _BAR_WIDTH * size / total
-        # Un poste sous le bloc obtient « ▏ » et non un bloc plein : arrondir
-        # 0,1 % à un bloc entier le ferait ressembler à 0,6 %, et la barre
-        # servirait alors à comparer des postes qu'elle aurait égalisés.
-        bar = ("▏" if full < 0.5 else "█" * round(full)) if size else ""
-        lines.append(f"  {cat:<18}{bar:<{_BAR_WIDTH}} {kio(size):>12}  {100 * size / total:5.1f} %")
+        lines.append(f"  {cat} — {kio(size)} ({100 * size / total:.1f} %)")
 
     cap_mib = report.cartridge_bytes // (1024 * 1024)
-    lines.append(f"  {'':<18}{'─' * _BAR_WIDTH}")
-    lines.append(f"  {'TOTAL':<18}{'':<{_BAR_WIDTH}} {kio(report.rom_bytes):>12}")
-
-    # La barre d'occupation : ce que le jeu prend sur la cartouche visée.
-    used = min(_BAR_WIDTH, round(_BAR_WIDTH * report.fill_ratio))
-    if report.rom_bytes and used == 0:
-        used = 1                     # un jeu qui existe ne montre pas 0
-    gauge = "█" * used + "·" * (_BAR_WIDTH - used)
-    lines.append("")
-    lines.append(f"  Cartouche {cap_mib} Mio")
-    lines.append(f"  {'':<18}{gauge} {100 * report.fill_ratio:5.1f} %")
+    lines.append(f"  Total — {kio(report.rom_bytes)} / {cap_mib} MiB "
+                 f"({100 * report.fill_ratio:.1f} %)")
     if report.over_capacity:
         over = report.rom_bytes - report.cartridge_bytes
         lines.append(f"  DÉPASSEMENT de {kio(over)} — cette ROM ne tient pas "
-                     f"sur une cartouche de {cap_mib} Mio.")
+                     f"sur une cartouche de {cap_mib} MiB.")
 
     sb = report.soundbank
     if sb:

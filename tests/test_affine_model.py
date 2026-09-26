@@ -111,10 +111,11 @@ def test_oam_dynamic_compose_monde_local_et_offset():
 
     entry = affine_entry(a, sc, 0)
     lines = "\n".join(affine_oam_lines_dynamic(7, entry, SpriteShape(), bt=0, priority_expr="0"))
-    # Lecture des champs par-Actor, plus de globals par slot
+    # Lecture des champs, plus de globals par slot : le transform MONDE est sur
+    # l'Actor, le transform LOCAL sur son entrée OAM.
     assert "g_actors[7].rotation" in lines
-    assert "g_actors[7].sprite.rotation" in lines
-    assert "g_actors[7].sprite.offset_x" in lines
+    assert "g_oam_entries[7].rotation" in lines
+    assert "g_oam_entries[7].offset_x" in lines
     assert "g_affine" not in lines
     # Composition : la rotation effective est la SOMME monde+local
     assert "int _ang=_arot+_srot;" in lines
@@ -195,12 +196,12 @@ def test_seed_scene_ecrit_dans_la_struct_actor():
     for f in ("affine_slot", "rotation", "scale_x", "scale_y",
               "offset_x", "offset_y"):
         assert f in hdr
-    # Les deux blocs de la v0.25 : le transform local du sprite n'est plus une
-    # série de champs préfixés à plat, il vit dans `sprite`.
-    assert "} sprite;" in hdr and "} collision;" in hdr
+    # Deux tables depuis la marche 0a : l'état d'affichage (transform local
+    # compris) vit dans `OamEntry`, la collision reste un bloc de l'Actor.
+    assert "} OamEntry;" in hdr and "} collision;" in hdr
     assert "int sprite_rot;" not in hdr
-    # `affine_slot` a suivi la case : c'est du rendu, donc le bloc `sprite`.
-    assert hdr.index("int affine_slot;") < hdr.index("} sprite;")
+    # `affine_slot` a suivi la case : c'est du rendu, donc `OamEntry`.
+    assert hdr.index("s8 affine_slot;") < hdr.index("} OamEntry;")
     api = (Path(__file__).resolve().parent.parent
            / "runtime" / "include" / "runtime_api_inline.h").read_text(encoding="utf-8")
     # (régression) plus de globals par slot : chaque TU en aurait une copie

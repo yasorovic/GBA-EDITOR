@@ -13,7 +13,7 @@ n'existe pas de bascule automatique par zone — un script déclenché par une
 collision suffit à en faire une.
 
 Le nom d'une caméra reste unique à l'échelle du PROJET (pas seulement de sa
-scène) : `camera.switch("Nom")` n'est pas qualifié par scène côté Lua, et
+scène) : `camera:switch("Nom")` n'est pas qualifié par scène côté Lua, et
 chaque caméra reçoit une constante C globale `CAM_<NOM>` — deux scènes ne
 peuvent donc pas nommer leur caméra pareil.
 
@@ -27,7 +27,7 @@ Ce que la caméra ne porte PAS, et pourquoi :
   tourner ni se mettre à l'échelle. Ce sont des calques affines, donc la v2.0.
   Les proposer ici promettrait un rendu que le matériel ne sait pas produire ;
 - **les paramètres de secousse** : une secousse est un événement, pas un état.
-  Ses valeurs vivent à l'appel (`camera.shake(amplitude, frames)`).
+  Ses valeurs vivent à l'appel (`camera:shake(amplitude, frames)`).
 
 **Le viewport (`frame_w`/`frame_h`) est réglé le 2026-08-24** — la caméra PEUT
 rendre dans une zone plus petite que 240×160. Ce n'était pas possible avant que

@@ -143,7 +143,7 @@ class ProjectVariablesMixin:
             # `global.nom` / `const.nom` (chantier global/const) se citent par
             # IDENTIFIANT, pas par chaîne littérale — `rename_var_in_project`
             # couvre les DEUX. `rename_lua_refs`/DOMAIN_GLOBAL, en plus, pour
-            # `save.read(slot, "nom")` : seul site qui garde un nom entre
+            # `save:read(slot, "nom")` : seul site qui garde un nom entre
             # guillemets (une CONSTANTE n'a plus aucun site littéral).
             from scripting.refactor import rename_var_in_project
             ns = "const" if kind == "const" else "global"

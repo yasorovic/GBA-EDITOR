@@ -14,7 +14,7 @@ class RenameTextKeyCmd(Command):
     """Renomme une clé de texte.
 
     L'undo repasse par `Project.rename_text_key` en sens inverse : elle réécrit
-    aussi les `text.draw("clé")` des scripts, remettre le champ ne suffirait pas.
+    aussi les `text:draw("clé")` des scripts, remettre le champ ne suffirait pas.
     """
 
     def __init__(self, project, text, old_key: str, new_key: str,

@@ -99,7 +99,7 @@ class ScriptCompleter(QObject):
 
     def set_project_names(self, names: dict | None):
         """{domaine → noms du projet} — ce que proposent les arguments chaîne
-        (`sfx.play("`, `scene.switch("`). Recalculé par l'écran quand le projet
+        (`sfx:play("`, `scene:switch("`). Recalculé par l'écran quand le projet
         change, jamais ici : le modèle reste sans dépendance au projet."""
         self._project_names = names
 

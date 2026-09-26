@@ -39,7 +39,7 @@ from core.models.text import (
 class TextUsage:
     """Les citations d'une entrée de la table, par source.
 
-    **Deux sources, jamais une seule** : un script (`text.draw("clé")`) et une
+    **Deux sources, jamais une seule** : un script (`text:draw("clé")`) et une
     mise en page (`UIText.text_key`). N'en compter qu'une afficherait
     « orphelin » sur un texte posé dans une boîte de dialogue — et un orphelin,
     ça se supprime.
@@ -87,7 +87,7 @@ class TextUsageIndex:
 
 class ProjectTextsMixin:
     # ── Littéraux de script → entrées anonymes ────────────────────
-    # `text.draw` et `text.draw_in` acceptent un littéral en plus d'une clé :
+    # `text.draw` et `interface.draw_text` acceptent un littéral en plus d'une clé :
     # un accès rapide au prix assumé de la traduction. À la compilation il
     # devient une entrée ANONYME de la table, donc le runtime ne connaît qu'un
     # seul chemin (mêmes codepoints, même balisage, mêmes interpolations).
@@ -111,6 +111,40 @@ class ProjectTextsMixin:
             for ref in iter_refs(src, path=path, domain=DOMAIN_TEXT):
                 if ref.api_key in LITERAL_TEXT_CALLS and ref.value not in keys:
                     found.setdefault(anon_text_key(ref.value), ref.value)
+
+        # Exports de type `string` (chantier « Les exports de script ») : leur
+        # défaut ET chaque valeur d'instance (exports_values) suivent le MÊME
+        # chemin qu'un littéral de text.draw — une entrée ANONYME, résolue en
+        # index TEXT_* au build (le moteur est entièrement entier, une string
+        # n'est qu'un index de la table). Les défauts couvrent tous les scripts
+        # (y compris scène/caméra) ; les overrides ne vivent que sur un owner.
+        from scripting.exports_parser import parse_exports
+        from core.models.components import ScriptComponent
+
+        def _add(value) -> None:
+            if isinstance(value, str) and value and value not in keys:
+                found.setdefault(anon_text_key(value), value)
+
+        for path in script_paths(self):
+            for e in parse_exports(path):
+                if e.get("type") == "string":
+                    _add(e.get("default"))
+
+        owners = [a for sc in self.scenes for a in sc.actors] + list(self.prefabs)
+        for owner in owners:
+            comp = next((c for c in getattr(owner, "components", [])
+                         if isinstance(c, ScriptComponent)), None)
+            if not comp or not getattr(comp, "script", None):
+                continue
+            sp = self.asset_abs(comp.script)
+            if not sp or not sp.exists() or sp.suffix.lower() != ".lua":
+                continue
+            str_names = {e["name"] for e in parse_exports(sp)
+                         if e.get("type") == "string"}
+            for k, v in (getattr(comp, "exports_values", None) or {}).items():
+                if k in str_names:
+                    _add(v)
+
         return [Text(key=k, content=v) for k, v in sorted(found.items())]
     def build_texts(self) -> list:
         """La table de textes VUE PAR LE BUILD : les entrées du projet, puis les
@@ -198,7 +232,7 @@ class ProjectTextsMixin:
 
     def rename_text_key(self, text: Text, new_key: str) -> bool:
         """Renommage MANUEL. Retourne False si le nom est vide ou déjà pris —
-        l'appelant (UI) affiche l'erreur. Les appels text.draw("clé") des
+        l'appelant (UI) affiche l'erreur. Les appels text:draw("clé") des
         scripts suivent (cf. rename_lua_refs).
 
         La clé se DÉTACHE alors du chemin (`auto_key=False`) : elle appartient

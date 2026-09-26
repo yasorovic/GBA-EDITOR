@@ -1,7 +1,7 @@
 """Projection pure du graphe des scènes.
 
 Le graphe ne constitue pas un modèle à enregistrer : il est reconstruit à
-partir des appels ``scene.switch("…")`` qui figurent dans les scripts.  Cette
+partir des appels ``scene:switch("…")`` qui figurent dans les scripts.  Cette
 frontière permet à la vue Qt de rester un simple rendu et de conserver, pour
 chaque arête, l'emplacement précis à ouvrir ou à réécrire.
 """
@@ -20,7 +20,7 @@ class SceneGraphNode:
     """Une scène déclarée par le projet, dans son ordre de catalogue.
 
     `has_dynamic_exit` retient ce que les arêtes ne peuvent pas dire : la scène
-    contient un ``scene.switch(<calculé>)`` — une cible choisie au runtime, ou un
+    contient un ``scene:switch(<calculé>)`` — une cible choisie au runtime, ou un
     script illisible dont on ne sait rien. C'est le fait que le diagnostic traduit
     en « point de vigilance » ; il ne devient jamais une fausse arête.
     """
@@ -85,7 +85,7 @@ def scene_graph(project) -> SceneGraph:
                 if ref.api_key != "scene.switch":
                     continue
                 grouped.setdefault((scene.name, ref.value), []).append(ref)
-            # Une cible calculée (`scene.switch(var)`) ou un script illisible ne
+            # Une cible calculée (`scene:switch(var)`) ou un script illisible ne
             # produit aucune arête, mais reste un fait à signaler : la scène a une
             # sortie qu'on ne sait pas résoudre. Même primitive que la réservation
             # VRAM des polices — l'ignorance se propage, elle ne se confond pas

@@ -1,5 +1,32 @@
 {
   "labels": {
+    "scrsb.go_further": {
+      "text": "Aller plus loin"
+    },
+    "scrsb.sec.actor": {
+      "text": "Acteur"
+    },
+    "scrsb.sec.scenery": {
+      "text": "Décor"
+    },
+    "scrsb.sec.sound": {
+      "text": "Son"
+    },
+    "scrsb.sec.text_ui": {
+      "text": "Texte et interface"
+    },
+    "scrsb.sec.data": {
+      "text": "Données"
+    },
+    "scrsb.sec.script": {
+      "text": "Script"
+    },
+    "scrsb.sec.scene": {
+      "text": "Scène"
+    },
+    "scrsb.sec.player": {
+      "text": "Joueur"
+    },
     "uses.spawned_by": {
       "text": "SPAWNÉ PAR"
     },
@@ -23,45 +50,6 @@
     },
     "sceneinsp.prefab_spawn_calls": {
       "text": "{count} appel(s) de spawn"
-    },
-    "sceneinsp.edit_caller": {
-      "text": "Éditer {script}, ligne {line}"
-    },
-    "sceneinsp.scene_actors": {
-      "text": "Slots de scène :"
-    },
-    "sceneinsp.scene_actors_tip": {
-      "text": "Override avancé du budget d'acteurs. Ce n'est pas un compte d'acteurs.\n\n0 = automatique : le budget compte un slot par acteur posé. Ne règle une valeur que pour figer le budget à la main ; laisse 0 sinon."
-    },
-    "sceneinsp.no_prefab": {
-      "text": "Aucun prefab dans ce projet. Rien à mettre en pool."
-    },
-    "sceneinsp.pool_tip": {
-      "text": "Combien de « {name} » peuvent vivre en même temps dans cette scène.\n\n0 = cette scène ne le spawne jamais, et ne paie rien pour lui."
-    },
-    "sceneinsp.pool_tip_parts": {
-      "text": "Ce prefab a {n} partie(s), donc une instance coûte {slots} slots."
-    },
-    "sceneinsp.pool_cost_grouped": {
-      "text": "× {group} = {slots} slots"
-    },
-    "sceneinsp.pool_cost_single": {
-      "text": "= {n} slot(s)"
-    },
-    "sceneinsp.slots_hint_auto": {
-      "text": "auto ({placed} acteurs posés)"
-    },
-    "sceneinsp.slots_hint": {
-      "text": "{placed} acteurs posés"
-    },
-    "sceneinsp.pool_use_placed": {
-      "text": "posé"
-    },
-    "sceneinsp.pool_use_spawned": {
-      "text": "spawné"
-    },
-    "sceneinsp.pool_use_both": {
-      "text": "posé · spawné"
     },
     "common.browse": {
       "text": "Parcourir…"
@@ -129,14 +117,30 @@
     "edgeinsp.undo_note": {
       "text": "Modifier la note de transition"
     },
-    "groupinsp.name": {"text": "Nom"},
-    "groupinsp.color": {"text": "Couleur"},
-    "groupinsp.presentation": {"text": "PRÉSENTATION"},
-    "groupinsp.content": {"text": "CONTENU"},
-    "groupinsp.collapsed": {"text": "Replié dans le graphe"},
-    "groupinsp.empty": {"text": "Aucune scène ni sous-groupe direct"},
-    "groupinsp.scenes": {"text": "Scènes ({count})"},
-    "groupinsp.groups": {"text": "Sous-groupes ({count})"},
+    "groupinsp.name": {
+      "text": "Nom"
+    },
+    "groupinsp.color": {
+      "text": "Couleur"
+    },
+    "groupinsp.presentation": {
+      "text": "PRÉSENTATION"
+    },
+    "groupinsp.content": {
+      "text": "CONTENU"
+    },
+    "groupinsp.collapsed": {
+      "text": "Replié dans le graphe"
+    },
+    "groupinsp.empty": {
+      "text": "Aucune scène ni sous-groupe direct"
+    },
+    "groupinsp.scenes": {
+      "text": "Scènes ({count})"
+    },
+    "groupinsp.groups": {
+      "text": "Sous-groupes ({count})"
+    },
     "settings.cat.shortcuts": {
       "text": "Raccourcis"
     },
@@ -703,6 +707,21 @@
     },
     "fsprev.remove_markup": {
       "text": "Retirer le balisage"
+    },
+    "rombar.mode_fill": {
+      "text": "Remplissage"
+    },
+    "rombar.mode_breakdown": {
+      "text": "Répartition"
+    },
+    "rombar.mode_tip": {
+      "text": "Affichage de la barre : Remplissage montre l'espace libre ; Répartition compare les catégories."
+    },
+    "rombar.target": {
+      "text": "ROM  {_cartridge_mib} Mio ▾"
+    },
+    "rombar.free_space": {
+      "text": "{size:,.1f} KiB libres"
     }
   }
 }

@@ -11,9 +11,9 @@ C'est le piège que ARCHITECTURE.md nomme le plus coûteux de cette chaîne.
 2. **Un membre inconnu sur une référence d'élément d'interface.** `ui_element`
    est déclaré comme type de retour mais absent de `REF_TYPES` (qui ne contient
    que `sfx`), donc AUCUN membre n'y était validé : `.y`, `.foo`, `:bouge()`
-   passaient tous. `ui.get("Cursor").y` produisait `UIELEM_CURSOR.y` — `.y` sur
+   passaient tous. `interface:get("Cursor").y` produisait `UIELEM_CURSOR.y` — `.y` sur
    un `#define` entier.
-3. **Les arguments d'un appel utilisé comme RÉCEPTEUR.** `ui.get("Cusor"):show()`
+3. **Les arguments d'un appel utilisé comme RÉCEPTEUR.** `interface:get("Cusor"):show()`
    ne validait rien : `_check_call_expr` s'arrête à un récepteur `ExprName` et
    personne ne descendait dans le reste. La même expression posée seule était
    pourtant refusée.
@@ -37,7 +37,7 @@ def _msgs(src: str, **kw):
     from scripting.parser import parse
     from scripting.checker import check, BuildContext
     kw.setdefault("element_names", ["Cursor"])
-    kw.setdefault("image_names", ["Curseur"])
+    kw.setdefault("ref_kinds", {"Cursor": "image"})
     kw.setdefault("actor_names", ["paddle"])
     kw.setdefault("global_counts", {"score": 1})
     return check(parse(src), BuildContext(actor_name="T", **kw))
@@ -90,21 +90,28 @@ def test_cest_un_avertissement_pas_une_erreur():
 # ── 2. Les membres d'une référence d'élément d'interface ──────────
 
 
-def test_un_champ_sur_une_reference_delement_avertit():
-    warns = _warnings(_body('ui.get("Cursor").y = 4'))
-    assert len(warns) == 1
-    assert "ui.image_move" in warns[0]     # le message dit quoi écrire
+@pytest.mark.parametrize("src", ['interface:get("Cursor").y = 4',
+                                 'local y = interface:get("Cursor").y'])
+def test_un_champ_sur_une_reference_delement_est_une_erreur(src):
+    """Une ERREUR et non un avertissement : le C émis (`UIELEM_CURSOR.y`) ne compile
+    pas, donc laisser le build continuer ne fait que déplacer la faute vers gcc."""
+    errs = _errors(_body(src))
+    assert len(errs) == 1
+    assert "propres membres" in errs[0]           # le message dit où chercher
+    assert _warnings(_body(src)) == []
 
 
-def test_une_methode_inconnue_sur_une_reference_delement_avertit():
-    warns = _warnings(_body('ui.get("Cursor"):bouge()'))
-    assert len(warns) == 1
-    assert ":show()" in warns[0] and ":hide()" in warns[0]
+def test_une_methode_inconnue_sur_une_reference_delement_est_une_erreur():
+    """Une ERREUR : le C émis (`actor_bouge(UIELEM_CURSOR)`) ne compile pas."""
+    errs = _errors(_body('interface:get("Cursor"):bouge()'))
+    assert len(errs) == 1
+    assert ":show()" in errs[0] and ":hide()" in errs[0]
+    assert _warnings(_body('interface:get("Cursor"):bouge()')) == []
 
 
 @pytest.mark.parametrize("m", ["show", "hide"])
 def test_les_deux_methodes_reelles_restent_muettes(m):
-    assert _warnings(_body(f'ui.get("Cursor"):{m}()')) == []
+    assert _warnings(_body(f'interface:get("Cursor"):{m}()')) == []
 
 
 # ── 3. Le récepteur d'un `:méthode()` quand c'est un appel ────────
@@ -113,7 +120,7 @@ def test_les_deux_methodes_reelles_restent_muettes(m):
 def test_largument_du_recepteur_est_enfin_verifie():
     """La même expression posée seule était refusée depuis toujours ; en
     récepteur, elle ne l'était pas."""
-    errs = _errors(_body('ui.get("Cusor"):show()'))
+    errs = _errors(_body('interface:get("Cusor"):show()'))
     assert len(errs) == 1
     assert "Cusor" in errs[0] and "Cursor" in errs[0]
 
@@ -121,8 +128,8 @@ def test_largument_du_recepteur_est_enfin_verifie():
 def test_le_meme_nom_pose_seul_dit_la_meme_chose():
     """Les deux formes doivent parler pareil — c'est l'incohérence qui faisait
     le trou."""
-    seul = _errors(_body('ui.get("Cusor")'))
-    recepteur = _errors(_body('ui.get("Cusor"):show()'))
+    seul = _errors(_body('interface:get("Cusor")'))
+    recepteur = _errors(_body('interface:get("Cusor"):show()'))
     assert seul == recepteur
 
 
@@ -139,15 +146,15 @@ def test_le_meme_nom_pose_seul_dit_la_meme_chose():
     # Les espaces de noms — atteints par le `_check_expr(e.obj)` qui clôt la
     # branche ExprIndex, donc le vrai risque de faux positif.
     "function on_update()\n    global.score = 1\n    local w = screen.width\nend\n",
-    "function on_update()\n    local m = math.floor(3)\n    text.clear(0, 0, 4, 4)\nend\n",
+    "function on_update()\n    local m = math.floor(3)\n    text:clear(0, 0, 4, 4)\nend\n",
     # Un acteur nommé du projet, en récepteur de propriété.
     "function on_update()\n    local p = paddle.position\nend\n",
     # L'alias d'un behavior importé.
     'local AI = require("behaviors/ai")\nfunction on_update()\n    AI.update(self)\nend\n',
     # Les deux formes légitimes sur une référence d'élément.
-    'function on_update()\n    ui.get("Cursor"):show()\nend\n',
+    'function on_update()\n    interface:get("Cursor"):show()\nend\n',
     # Et la façon de déplacer une image.
-    'function on_update()\n    ui.image_move("Curseur", 0, 8)\nend\n',
+    'function on_update()\n    interface:get("Cursor").offset = vec2(0, 8)\nend\n',
 ])
 def test_aucun_faux_positif(src):
     assert _warnings(src) == []

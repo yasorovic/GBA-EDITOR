@@ -36,11 +36,6 @@
   },
   {
     "file": "editor/ui/common/rom_budget_bar.py",
-    "text": "f'{self._cartridge_mib} MiB ▾'",
-    "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
-  },
-  {
-    "file": "editor/ui/common/rom_budget_bar.py",
     "text": "f'{mib} MiB'",
     "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
   },

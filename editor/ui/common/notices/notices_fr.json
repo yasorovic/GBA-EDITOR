@@ -2,15 +2,6 @@
   "notices": {
     "settings.tips": {
       "text": "Les astuces expliquent un concept ou indiquent où une optimisation est utile. Les avertissements sur le build ou le rendu ne sont jamais masqués par ce réglage."
-    },
-    "scene.budget.count": {
-      "text": "{actors} scène + {pool} pool = {used} / {total} slots OAM — {free} libres"
-    },
-    "scene.budget.explain": {
-      "text": "Les slots OAM sont les 128 entrées de sprites matérielles de la GBA. Le budget est dérivé, pas réparti : les acteurs posés (et les sprites d'interface) se comptent, et le pool est ce qui reste. Un pool se déclare en instances, puis paie un slot par partie de prefab. Acteurs posés, interface et pool se partagent les mêmes 128 entrées."
-    },
-    "scene.budget.over_oam": {
-      "text": "{actors} scène + {pool} pool = {used} / {total} slots OAM — au-delà des {limit} entrées OAM, le surplus ne s'affichera pas"
     }
   }
 }

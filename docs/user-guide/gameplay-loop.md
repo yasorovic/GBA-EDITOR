@@ -16,12 +16,12 @@ Ajoutez un script de scène à `Titre` :
 
 ```lua
 function on_start()
-    text.draw_in("Invitation", "titre_invitation")
+    interface:get("Invitation"):draw("titre_invitation")
 end
 
 function on_update()
-    if input.pressed("a") then
-        scene.switch("Niveau1")
+    if input:pressed("a") then
+        scene:switch("Niveau1")
     end
 end
 ```
@@ -35,7 +35,7 @@ Créez dans `Niveau1` une zone de sortie : un acteur avec une boîte **Collision
 ```lua
 function on_collision_enter(other, my_box, other_box)
     if other.tag == "Joueur" then
-        scene.switch("Victoire")
+        scene:switch("Victoire")
     end
 end
 ```
@@ -46,7 +46,7 @@ Dans `Victoire`, ajoutez un texte de félicitations et un script qui retourne ve
 
 Ouvrez **Fichier → Réglages du projet** et choisissez une transition de scène, puis sa durée. Ce réglage s'applique à toutes les scènes. Vous pouvez aussi sélectionner une scène et remplacer ce choix dans son inspecteur, par exemple pour faire apparaître `Victoire` plus lentement.
 
-`scene.switch("Niveau1")` effectue le changement au début de la frame suivante ; la transition choisie masque ce rechargement.
+`scene:switch("Niveau1")` effectue le changement au début de la frame suivante ; la transition choisie masque ce rechargement.
 
 ## Continuer
 

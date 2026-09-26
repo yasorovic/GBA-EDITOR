@@ -57,7 +57,7 @@ ACCEPTED: dict[str, str] = {
     "Return":       "return  /  return v",
     "SemiColon":    ";  — ne produit rien, comme en Lua",
     # Appels
-    "Call":         'sfx.play("Bip")  /  vec2(x, y)  /  array(8)',
+    "Call":         'sfx:play("Bip")  /  vec2(x, y)  /  array(8)',
     "Invoke":       'self:play_anim("walk")',
     # Valeurs
     "Number":       "12  (entier — un littéral à virgule est tronqué)",
@@ -303,7 +303,7 @@ STDLIB: dict[str, Refusal] = {
         "print(x)",
         "`print` n'existe pas : la GBA n'a pas de console. Écrire au JOUEUR se "
         "fait avec `text.draw` (une police, une entrée de la table de textes, "
-        "donc traduisible). Une trace pour le DÉVELOPPEUR, c'est `debug.log(...)` "
+        "donc traduisible). Une trace pour le DÉVELOPPEUR, c'est `debug:log(...)` "
         "— elle sort par le journal mGBA, pas par l'écran du jeu, et disparaît "
         "des builds release."),
 

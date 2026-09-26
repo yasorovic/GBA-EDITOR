@@ -11,16 +11,19 @@ from __future__ import annotations
 
 from core.models.scene import Actor, Prefab, Scene
 from core.project import Project
+from oam_fixtures import tout_afficher, donner_un_sprite
 from codegen.oam_alloc import (
-    OAM_LIMIT, scene_oam_layout, project_actor_count, scene_pool_instances,
-    prefab_group,
+    OAM_LIMIT, scene_oam_layout, project_actor_count, project_oam_entry_count,
+    scene_pool_instances, prefab_group,
 )
 
 
-def _projet(tmp_path, *, scenes, prefabs=None) -> Project:
+def _projet(tmp_path, *, scenes, prefabs=None, sprites=True) -> Project:
     p = Project(tmp_path)
     p.scenes.items = list(scenes)
     p.prefabs.items = list(prefabs or [])
+    if sprites:
+        tout_afficher(p)
     return p
 
 
@@ -114,6 +117,71 @@ def test_taille_g_actors_est_le_max_pas_la_somme(tmp_path):
 def test_projet_vide_plancher_a_un(tmp_path):
     p = _projet(tmp_path, scenes=[Scene(name="S")])
     assert project_actor_count(p) == 1         # Actor g_actors[0] ne compile pas
+    assert project_oam_entry_count(p) == 1     # OamEntry g_oam_entries[0] non plus
+
+
+def test_sans_interface_les_deux_tables_ont_la_meme_taille(tmp_path):
+    """Sans OBJ d'interface, un acteur = une entrée de même indice : les deux
+    tables se dimensionnent pareil et le décalage des pools est nul."""
+    s = Scene(name="Level", actors=[Actor(name=f"E{i}") for i in range(4)])
+    s.prefab_pools = {"Ball": 6}
+    p = _projet(tmp_path, scenes=[s], prefabs=[Prefab(name="Ball")])
+    assert project_oam_entry_count(p) == project_actor_count(p) == 10
+    pool = scene_oam_layout(p, s).pools[0]
+    assert pool.entry_start == pool.start == 4
+
+
+# ── Marche 0b : seul un porteur de sprite occupe une entrée OAM ────────
+
+def test_un_acteur_sans_sprite_n_a_pas_d_entree(tmp_path):
+    """Un contrôleur ou un déclencheur existe (g_actors) sans rien afficher : il ne
+    réserve aucune entrée, et les entrées des autres se compactent."""
+    a, ctl, b = Actor(name="A"), Actor(name="Controller"), Actor(name="B")
+    scene = Scene(name="S", actors=[a, ctl, b])
+    p = _projet(tmp_path, scenes=[scene], sprites=False)
+    donner_un_sprite(p, a)
+    donner_un_sprite(p, b)
+    lay = scene_oam_layout(p, scene)
+    assert lay.placed == 3 and lay.placed_entry == [0, -1, 1]
+    assert lay.used == 2 and lay.actors == 3
+    assert project_actor_count(p) == 3 and project_oam_entry_count(p) == 2
+
+
+def test_un_marqueur_de_prefab_n_a_pas_d_entree(tmp_path):
+    """Racine + point de tir (sans sprite) + bras : 3 acteurs par instance, mais
+    2 entrées OAM. L'entrée d'un membre = début de l'instance + son rang."""
+    boss = Prefab(name="Boss")
+    muzzle, arm = Prefab(name="Muzzle"), Prefab(name="Arm")
+    boss.children = [muzzle, arm]
+    scene = Scene(name="S", actors=[Actor(name="Hero")])
+    scene.prefab_pools = {"Boss": 2}
+    p = _projet(tmp_path, scenes=[scene], prefabs=[boss], sprites=False)
+    donner_un_sprite(p, scene.actors[0])
+    donner_un_sprite(p, boss)
+    donner_un_sprite(p, arm)
+    lay = scene_oam_layout(p, scene)
+    (pool,) = lay.pools
+    assert pool.group == 3 and pool.member_entries == [0, -1, 1]
+    assert (pool.size, pool.entry_size) == (6, 4)
+    assert (pool.start, pool.entry_start) == (1, 1)
+    assert lay.actors == 7 and lay.used == 5
+
+
+def test_l_interface_s_intercale_dans_l_oam_pas_dans_les_acteurs(tmp_path, monkeypatch):
+    """3 OBJ d'interface entre les posés et les pools : ils occupent des entrées,
+    pas des acteurs. L'interface démarre juste après les posés à sprite."""
+    import codegen.oam_alloc as oam_alloc
+    monkeypatch.setattr(oam_alloc, "scene_ui_obj_slots", lambda scene, project: 3)
+    s = Scene(name="Level", actors=[Actor(name="C"), Actor(name="E0")])
+    s.prefab_pools = {"Ball": 6}
+    p = _projet(tmp_path, scenes=[s], prefabs=[Prefab(name="Ball")], sprites=False)
+    donner_un_sprite(p, s.actors[1])            # C n'affiche rien
+    donner_un_sprite(p, p.prefabs.items[0])
+    lay = scene_oam_layout(p, s)
+    assert lay.ui_start == 1
+    (pool,) = lay.pools
+    assert (pool.start, pool.entry_start) == (2, 4)     # 1 posé à sprite + 3 d'UI
+    assert lay.actors == 8 and lay.used == 10
 
 
 # ── Groupes (prefab à sous-arbre) ─────────────────────────────────────
@@ -144,7 +212,8 @@ def test_les_acteurs_inactifs_ne_sont_pas_comptes(tmp_path):
 def test_ui_obj_pousse_les_pools_apres_la_bande(tmp_path, monkeypatch):
     """Ordre OAM : acteurs, puis la bande d'interface en sprites, puis les pools
     (ROADMAP v0.17 T4). Le poste UI (résolu ailleurs) décale donc le départ des
-    pools de `placed` à `placed + ui`, et `g_actors` grandit d'autant."""
+    pools de `placed` à `placed + ui` DANS L'OAM ; `g_actors` ne grandit pas (0b :
+    les OBJ d'interface ne sont pas des acteurs), seul `g_oam_entries` le fait."""
     import codegen.oam_alloc as oa
     monkeypatch.setattr(oa, "scene_ui_obj_slots", lambda scene, project: 5)
     ball = Prefab(name="Ball")
@@ -153,8 +222,10 @@ def test_ui_obj_pousse_les_pools_apres_la_bande(tmp_path, monkeypatch):
     p = _projet(tmp_path, scenes=[scene], prefabs=[ball])
     lay = scene_oam_layout(p, scene)
     assert lay.placed == 2 and lay.ui == 5
-    assert lay.pools[0].start == 7          # 2 acteurs + 5 slots d'UI
-    assert lay.used == 11 and project_actor_count(p) == 11
+    assert lay.pools[0].entry_start == 7    # 2 acteurs + 5 slots d'UI, côté OAM
+    assert lay.pools[0].start == 2          # …mais côté acteurs, la bande n'existe pas
+    assert lay.used == 11 and project_oam_entry_count(p) == 11
+    assert project_actor_count(p) == 6
 
 
 # ── Déterminisme ──────────────────────────────────────────────────────

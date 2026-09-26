@@ -82,22 +82,22 @@ def _lua_handle(node_type: str, obj) -> str:
     """Poignée d'un nœud RÉFÉRENÇABLE en Lua, ou "" si authoring-only.
 
     C'est le cœur de l'idée « l'arbre montre ce qu'un script peut nommer » : un
-    actor (`get_actor`), un texte (`REGION_*` / `text.draw_in`) et une image
-    (`IMAGE_*` / `ui.image_set`) le sont ; un conteneur ne l'est pas — il n'a
-    pas de domaine (cf. api.py). Sert au tooltip ET à décider si le nœud
+    actor (`actor.get`), un texte, une image et une liste (`interface.get`, dont le type
+    suit la nature de l'élément) le sont ; un conteneur ne l'est pas ici — il n'a aucune
+    capacité propre (cf. api.py). Sert au tooltip ET à décider si le nœud
     s'affiche en clair (référençable) ou grisé (authoring)."""
     if node_type == T_ACTOR:
-        return f'get_actor("{obj.name}")'
+        return f'actor:get("{obj.name}")'
     if node_type == T_CAMERA:
-        return f'camera.switch("{obj.name}")'
+        return f'camera:switch("{obj.name}")'
     if node_type == T_UI_ELEM:
         kind = getattr(obj, "kind", "")
         if kind == KIND_TEXT:
-            return f'text.draw_in("{obj.name}", …)'
+            return f'interface:get("{obj.name}"):draw(…)'
         if kind == KIND_IMAGE:
-            return f'ui.image_set("{obj.name}", …)'
+            return f'interface:get("{obj.name}").state = …'
         if kind == KIND_LIST:
-            return f'list.index("{obj.name}")'
+            return f'interface:get("{obj.name}").index'
     return ""
 
 # ── Thème ─── surfaces indigo centralisées (cf. project_theme_gba_redesign) ──

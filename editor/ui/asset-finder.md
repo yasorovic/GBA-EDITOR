@@ -64,7 +64,7 @@ Deux conséquences :
    d'équivalent ailleurs.** Les neuf `ResourceStore` sont plats par
    construction : `_path()` s'écrit `dir / f"{name}.json"`, et le nom est
    l'identité globale de l'asset — celle que le codegen et les scripts citent
-   (`actor.spawn("Ball")`, `data.Heyo`).
+   (`actor:spawn("Ball")`, `data.Heyo`).
 
 C'est **le** point de décision du chantier : l'allure demandée repose sur une
 hiérarchie que neuf familles sur dix n'ont pas.

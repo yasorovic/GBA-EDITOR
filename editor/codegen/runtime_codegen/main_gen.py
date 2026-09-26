@@ -11,7 +11,8 @@ import shutil
 from typing import Optional
 
 from core.models.palette import OWN_PAL_BANK
-from core.models.components import CollisionBoxComponent, SpriteComponent
+from core.models.components import (CollisionBoxComponent, SpriteComponent,
+                                    affine_sprite_component)
 from core.models.sprite import SpriteAsset
 from core.models.scene import Actor, Scene
 from core.project import Project
@@ -32,6 +33,7 @@ from codegen.runtime_codegen.gen_save import save_fatal, save_lines
 # Table des caméras et suivi — extraite (A3). `project_cameras` est RÉ-EXPORTÉ ici :
 # data_tables.py et headers.py l'importent depuis main_gen (l'ordre de vérité de la
 # table runtime). `camera_target_index` reste privé à gen_camera.
+from codegen.runtime_codegen.headers import actorname_ids
 from codegen.runtime_codegen.gen_camera import (
     camera_sym, project_cameras, scene_camera_index, camera_follow_lines)
 # Palettes en RAM (scène) + catalogue — extraites (A3). `_layout_palette_words`
@@ -44,7 +46,7 @@ from codegen.runtime_codegen.gen_palette import (
 # sprite, ui…) l'importeront aussi, vers le bas, sans cycle.
 from codegen.runtime_codegen.gen_scene_query import (
     parent_depths, actors_can_collide, has_solid_box, scene_has_cmap,
-    get_sprite_comp, has_col_event,
+    has_col_event,
     bg_info, scene_world_size, scene_anim_descriptors,
     sprite_offsets_for, obj_tiles_used, ui_image_sprites, scene_ui_images,
     ui_item_geometry)
@@ -55,9 +57,10 @@ from codegen.runtime_codegen.gen_affine import (
 # Domaine sprite/animation — extrait (A3), au-dessus des requêtes (n'en dépend pas).
 # `frame_action_ids`/`frame_sfx_syms` rendent la donnée par frame ; les trois autres
 # émettent le C des tables et du tick.
+from codegen.runtime_codegen.gen_appearance import appearance_layout, appearance_table_lines
 from codegen.runtime_codegen.gen_sprite import (
     frame_action_ids, frame_sfx_syms, actor_frame_event_lines,
-    anim_tables_for, anim_tick_lines)
+    anim_tables_for, anim_tick_lines, anim_tick_variants, oam_write_lines, Appearance)
 # Tables d'interface au niveau PROJET — extraites (A3), au-dessus des requêtes.
 # `_ui_images_lines` reste ici (glue vers `obj_text_alloc`) et appelle
 # `emit_ui_images_c` d'ici ; `region_actor_index`/`ui_element_index` sont aussi
@@ -67,13 +70,14 @@ from codegen.runtime_codegen.gen_ui import (
     region_actor_index, ui_element_index)
 # Géométrie OAM per-scène (ROADMAP v0.17, T1+T2+T3) : source de vérité des plages
 # de pool et de la taille de `g_actors`. main_gen en est un LECTEUR.
-from codegen.oam_alloc import scene_oam_layout, project_actor_count
+from codegen.oam_alloc import (scene_oam_layout, project_actor_count, project_oam_entry_count, scene_obj_ui_slots,
+                               owner_appearances, initial_appearance)
 # Domaine texte/police — extrait (A3). Réservation VRAM du texte, analyse des
 # fonds de conteneur, émission des tables de polices/textes/zones. `main_gen`
 # n'en consomme que ce que son orchestration et ses émetteurs de scène relisent.
 from codegen.runtime_codegen.gen_text import (
     scene_text_reservation, obj_text_alloc, fonts_and_texts_lines,
-    scene_region_colors, scene_region_backdrops, gen_ui_texts, scene_obj_ui_slots)
+    scene_region_colors, scene_region_backdrops, gen_ui_texts)
 from codegen.window_alloc import scene_window_layout
 # `prefab_group` est réexporté : `headers.py` l'importe depuis ce module depuis
 # toujours, et sa définition a rejoint le budget d'acteurs (v0.17) — l'éditeur
@@ -267,6 +271,8 @@ def _scene_pi(p: Project, scene: Scene) -> list[dict]:
     return [
         {"prefab": pl.prefab, "sym": pl.sym, "prefab_sym": pl.prefab_sym,
          "start": pl.start, "size": pl.size,
+         "entry_start": pl.entry_start, "member_entries": pl.member_entries,
+         "entries_per_instance": pl.entries_per_instance,
          "instances": pl.instances, "group": pl.group}
         for pl in scene_oam_layout(p, scene).pools
     ]
@@ -290,16 +296,21 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
         return ev in actor_defined_events.get(sym, set())
 
     L = ["/* ── Spawn helpers (prefabs poolés) ────────────────────── */"]
+    _alay = appearance_layout(p, [], pool_info, obj_layout)   # mêmes numéros que scene_init
     for pi in pool_info:
         s, start, size, pf = pi["sym"], pi["start"], pi["size"], pi["prefab"]
-        sp = next((c for c in pf.components
-                   if isinstance(c, SpriteComponent) and c.sprite_name), None)
-        sprite = p.get_sprite(sp.sprite_name) if sp else None
+        _epi = pi["entries_per_instance"]
+        # L'entrée OAM du membre k de l'instance (0 = racine), ou None : un membre
+        # sans sprite — marqueur, point de tir — n'a ni entrée ni écriture d'affichage.
+        _ranks = pi["member_entries"]
+        _E = lambda k: f"_e+{_ranks[k]}" if _ranks[k] >= 0 else None
+        _e0 = _E(0)
+        sp, sprite = _shown(p, pf)      # l'apparence de départ fixe les constantes d'init
         own = list(sprite.own_palette) if (sprite and getattr(sprite, "own_palette", None)) else []
         pal = obj_layout.bank_index(getattr(pf, "pal_bank", OWN_PAL_BANK), own) if obj_layout else 0
         if pal is None:
             pal = 0
-        boxes = [c for c in pf.components if isinstance(c, CollisionBoxComponent) and c.active][:4]
+        boxes = [c for c in pf.components if isinstance(c, CollisionBoxComponent)][:4]
 
         # pool_init est toujours généré par le transpileur, extern inconditionnel
         L.append(f"extern void {s}_pool_init(Actor* self);")
@@ -327,7 +338,9 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
             # un tomberait sur l'enfant libre d'une instance vivante et
             # écrirait une racine au milieu d'un boss. Un prefab plat a un
             # groupe de 1 : la boucle est alors exactement celle d'avant.
-            f"    for(int _i={start}; _i<{start+size}; _i+={group}) {{",
+            # `_e` avance du nombre d'ENTRÉES de l'instance : les deux espaces
+            # (acteurs, entrées OAM) n'ont pas le même pas.
+            f"    for(int _i={start}, _e={pi['entry_start']}; _i<{start+size}; _i+={group}, _e+={_epi}) {{",
             f"        if(!g_actors[_i].active) {{",
         ]
 
@@ -339,9 +352,13 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
         # préserve. L'échelle et la rotation appartiennent au PREFAB : on les
         # repose comme au scene_init, c'est-à-dire à l'état neutre du template.
         _sp_aff = affine_entry(pf, sp, 0) if sp else None
+        _sp_aff = _sp_aff if _e0 else None    # sans entrée, aucun transform d'affichage
         if _sp_aff:
-            L.append(f"            int _aff = g_actors[_i].sprite.affine_slot;")
-        L.append(f"            g_actors[_i] = (Actor){{0}};")
+            L.append(f"            int _aff = g_oam_entries[{_e0}].affine_slot;")
+        # L'acteur ET son entrée repartent de zéro ; le lien se repose (-1 : sans sprite).
+        L.append(f"            g_actors[_i] = (Actor){{0}}; g_actors[_i].oam_entry = {_e0 or -1};")
+        if _e0:
+            L.append(f"            g_oam_entries[{_e0}] = (OamEntry){{0}};")
         # Échelle neutre par défaut, comme pour les PARTIES plus bas : `(Actor){0}`
         # laisse scale à ZÉRO. Pour un prefab racine non-affine servant de parent,
         # ce zéro écraserait ses enfants à la composition (même règle d'héritage
@@ -350,24 +367,28 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
         L.append(f"            g_actors[_i].scale_x = 256; g_actors[_i].scale_y = 256;")
         if _sp_aff:
             L += [
-                f"            g_actors[_i].sprite.affine_slot = _aff;",
+                f"            g_oam_entries[{_e0}].affine_slot = _aff;",
                 f"            g_actors[_i].rotation     = {_sp_aff['rotation']};",
                 f"            g_actors[_i].scale_x      = {_sp_aff['scale_x']};",
                 f"            g_actors[_i].scale_y      = {_sp_aff['scale_y']};",
-                f"            g_actors[_i].sprite.rotation   = {_sp_aff['sprite_rotation']};",
-                f"            g_actors[_i].sprite.scale_x = {_sp_aff['sprite_scale_x']};",
-                f"            g_actors[_i].sprite.scale_y = {_sp_aff['sprite_scale_y']};",
-                f"            g_actors[_i].sprite.offset_x     = {_sp_aff['offset_x']};",
-                f"            g_actors[_i].sprite.offset_y     = {_sp_aff['offset_y']};",
+                f"            g_oam_entries[{_e0}].rotation   = {_sp_aff['sprite_rotation']};",
+                f"            g_oam_entries[{_e0}].scale_x = {_sp_aff['sprite_scale_x']};",
+                f"            g_oam_entries[{_e0}].scale_y = {_sp_aff['sprite_scale_y']};",
+                f"            g_oam_entries[{_e0}].offset_x     = {_sp_aff['offset_x']};",
+                f"            g_oam_entries[{_e0}].offset_y     = {_sp_aff['offset_y']};",
             ]
         L += [
             # ROADMAP v0.19 : x/y en Q8 en interne. `x`/`y` ici sont les entiers
-            # pixels passés à actor.spawn() par le script — <<8 à l'entrée.
+            # pixels passés à actor:spawn() par le script — <<8 à l'entrée.
             f"            g_actors[_i].x = x<<8; g_actors[_i].y = y<<8;",
-            f"            g_actors[_i].active   = 1; g_actors[_i].visible = 1;",
-            f"            g_actors[_i].pal_bank = {pal};",
-            f"            g_actors[_i].sprite.frame_w  = {sprite.frame_w if sprite else 0};",
-            f"            g_actors[_i].sprite.frame_h  = {sprite.frame_h if sprite else 0};",
+            f"            g_actors[_i].active   = 1;",
+            *([f"            g_oam_entries[{_e0}].visible = 1;",
+               f"            g_oam_entries[{_e0}].pal_bank = {pal};",
+               f"            g_oam_entries[{_e0}].frame_w  = {sprite.frame_w if sprite else 0};",
+               f"            g_oam_entries[{_e0}].frame_h  = {sprite.frame_h if sprite else 0};",
+               *_appearance_init_lines(p, pf, _e0, "            ",
+                                       _alay.member_base.get((pi["sym"], 0)))]
+              if _e0 else []),
             f"            g_actors[_i].tag      = TAG_{s.upper()};",
             f"            g_actors[_i].collision.box_count = {len(boxes)};",
         ]
@@ -379,7 +400,7 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
             L += [
                 f"            g_actors[_i].collision.boxes[{bi}].x=(s8){bx}; g_actors[_i].collision.boxes[{bi}].y=(s8){by};",
                 f"            g_actors[_i].collision.boxes[{bi}].w=(u8){bw};  g_actors[_i].collision.boxes[{bi}].h=(u8){bh};",
-                f"            g_actors[_i].collision.boxes[{bi}].solid={1 if cb.solid else 0}; g_actors[_i].collision.boxes[{bi}].tag={tag_s};",
+                f"            g_actors[_i].collision.boxes[{bi}].solid={1 if cb.solid else 0}; g_actors[_i].collision.boxes[{bi}].active={1 if cb.active else 0}; g_actors[_i].collision.boxes[{bi}].tag={tag_s};",
             ]
         # ── Les ENFANTS de l'instance ─────────────────────────────
         # Posées juste après la racine, dans l'ordre du template. Leur position
@@ -387,30 +408,33 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
         # frame courante (cf. `_pool_compose_lines`), et l'écrire deux fois
         # laisserait croire qu'elle vient d'ici.
         for k, part in enumerate(getattr(pf, "children", []) or [], start=1):
-            p_sc = get_sprite_comp(part)
-            p_spr = (p.get_sprite(p_sc.sprite_name)
-                     if (p_sc and p_sc.sprite_name) else None)
+            p_sc, p_spr = _shown(p, part)
             p_own = list(p_spr.own_palette) if (p_spr and getattr(p_spr, "own_palette", None)) else []
             p_pal = (obj_layout.bank_index(getattr(part, "pal_bank", OWN_PAL_BANK), p_own)
                      if obj_layout else 0) or 0
             p_boxes = [c for c in part.components
-                       if isinstance(c, CollisionBoxComponent) and c.active][:4]
+                       if isinstance(c, CollisionBoxComponent)][:4]
+            _ek = _E(k)      # None : la partie est un marqueur, sans entrée OAM
             L += [
                 # Le slot de matrice appartient à la SCÈNE (scene_init le
                 # pose) ; `(Actor){0}` l'effacerait, comme il effaçait celui de
                 # la racine avant que le même garde-fou soit écrit pour elle.
-                f"            {{ int _affk = g_actors[_i+{k}].sprite.affine_slot;",
-                f"            g_actors[_i+{k}] = (Actor){{0}};",
-                f"            g_actors[_i+{k}].sprite.affine_slot = _affk; }}",
+                *([f"            {{ int _affk = g_oam_entries[{_ek}].affine_slot;"] if _ek else []),
+                f"            g_actors[_i+{k}] = (Actor){{0}}; g_actors[_i+{k}].oam_entry = {_ek or -1};",
+                *([f"            g_oam_entries[{_ek}] = (OamEntry){{0}};",
+                   f"            g_oam_entries[{_ek}].affine_slot = _affk; }}"] if _ek else []),
                 # Échelle neutre avant la première composition : `(Actor){0}`
                 # laisse un scale de ZÉRO, donc une matrice dégénérée si l'OAM
                 # sortait avant le tick qui recompose.
                 f"            g_actors[_i+{k}].scale_x = 256; g_actors[_i+{k}].scale_y = 256;",
-                f"            g_actors[_i+{k}].active   = 1; "
-                f"g_actors[_i+{k}].visible = {1 if getattr(part, 'visible', True) else 0};",
-                f"            g_actors[_i+{k}].pal_bank = {p_pal};",
-                f"            g_actors[_i+{k}].sprite.frame_w  = {p_spr.frame_w if p_spr else 0};",
-                f"            g_actors[_i+{k}].sprite.frame_h  = {p_spr.frame_h if p_spr else 0};",
+                f"            g_actors[_i+{k}].active   = 1;",
+                *([f"            g_oam_entries[{_ek}].visible = {1 if getattr(part, 'visible', True) else 0};",
+                   f"            g_oam_entries[{_ek}].pal_bank = {p_pal};",
+                   f"            g_oam_entries[{_ek}].frame_w  = {p_spr.frame_w if p_spr else 0};",
+                   f"            g_oam_entries[{_ek}].frame_h  = {p_spr.frame_h if p_spr else 0};",
+                   *_appearance_init_lines(p, part, _ek, "            ",
+                                           _alay.member_base.get((pi["sym"], k)))]
+                  if _ek else []),
                 # La partie porte le tag de sa RACINE : un bras de boss touché,
                 # c'est le boss qui est touché. Elle n'est pas un autre type
                 # d'acteur, elle est un enfant de celui-là.
@@ -426,6 +450,7 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
                     f"            g_actors[_i+{k}].collision.boxes[{bi}].x=(s8){bx}; g_actors[_i+{k}].collision.boxes[{bi}].y=(s8){by};",
                     f"            g_actors[_i+{k}].collision.boxes[{bi}].w=(u8){bw};  g_actors[_i+{k}].collision.boxes[{bi}].h=(u8){bh};",
                     f"            g_actors[_i+{k}].collision.boxes[{bi}].solid={1 if cb.solid else 0}; "
+                    f"g_actors[_i+{k}].collision.boxes[{bi}].active={1 if cb.active else 0}; "
                     f"g_actors[_i+{k}].collision.boxes[{bi}].tag={tag_s};",
                 ]
         L.append(f"            {s}_pool_init(&g_actors[_i]);")
@@ -489,7 +514,7 @@ def _gen_tile_helpers() -> list[str]:
     L += [
         "};",
         "",
-        "int tile_get(int px,int py){",
+        "int collision_map_tile(int px,int py){",
         "    if(!g_active_cmap) return 0;",
         "    int tx=px/TILE_SIZE, ty=py/TILE_SIZE;",
         "    if(tx<0||ty<0||tx>=g_cmap_w||ty>=g_cmap_h) return 0;",
@@ -603,7 +628,7 @@ def _gen_tile_helpers() -> list[str]:
         "    if(was_grounded && dx && moved<=TILE_SIZE){",
         "        for(int i=0;i<a->collision.box_count;i++){",
         "            CollisionBox*b=&a->collision.boxes[i];",
-        "            if(!b->solid) continue;",
+        "            if(!b->solid||!b->active) continue;",
         "            int l=a->collision.last_x+(int)b->x, r=l+(int)b->w-1;",
         "            int t=_py+(int)b->y;",
         "            tile_floor_at((l+r)>>1, t, t+(int)b->h-1);",
@@ -618,9 +643,10 @@ def _gen_tile_helpers() -> list[str]:
         "        }",
         "    }else a->collision.slope_acc=0;",
         "    a->collision.grounded=0;",
+        "    for(int i=0;i<a->collision.box_count;i++) a->collision.boxes[i].grounded=0;",
         "    for(int i=0;i<a->collision.box_count;i++){",
         "        CollisionBox*b=&a->collision.boxes[i];",
-        "        if(!b->solid) continue;",
+        "        if(!b->solid||!b->active) continue;",
         "        int left,right,top,bot;",
         "        /* ── X : seuls les blocs pleins repoussent ───────────── */",
         "        if(a->vx!=0){",
@@ -666,20 +692,20 @@ def _gen_tile_helpers() -> list[str]:
         "                   de marche — l'auteur a peint une pente, on la gravit. */",
         "                _py=g-(int)b->y-(int)b->h;",
         "                if(a->vy>0) a->vy=0;",
-        "                a->collision.grounded=1; if(cb)cb(a,0,1);",
+        "                a->collision.grounded=b->grounded=1; if(cb)cb(a,0,1);",
         "            }else if(feet==g){",
         "                /* Pile sur la surface : au sol, et une vitesse vers le",
         "                   bas n'a plus de sens — sans ça elle survit une frame",
         "                   de plus et l'acteur retraverse le sol avant d'être",
         "                   repoussé. */",
         "                if(a->vy>0) a->vy=0;",
-        "                a->collision.grounded=1;",
+        "                a->collision.grounded=b->grounded=1;",
         "            }else if(was_grounded&&a->vy>=0&&g-feet<=moved*2+1){",
         "                /* Collage en descente : l'écart maximal qu'une pente à",
         "                   63° peut creuser pour ce déplacement. Sans lui, toute",
         "                   descente décolle et retombe, donc tressaute. */",
         "                _py=g-(int)b->y-(int)b->h;",
-        "                a->collision.grounded=1;",
+        "                a->collision.grounded=b->grounded=1;",
         "            }",
         "        }",
         "    }",
@@ -693,7 +719,59 @@ def _gen_tile_helpers() -> list[str]:
 
 # ─── Helpers affine / origine ─────────────────────────────────────────────────
 
-def _parent_compose_lines(scene_actors: list, actor_offset: int) -> list[str]:
+def _appearances(p, owner, sprite_offsets: dict) -> list:
+    """Les `Appearance` d'un porteur, pour l'émission du writer OAM."""
+    return [Appearance(sp, sprite_offsets.get(sp.name, 0),
+                       getattr(c, "origin_x", 0), getattr(c, "origin_y", 0))
+            for c, sp in owner_appearances(p, owner)]
+
+
+def _shown(p, owner):
+    """(composant, sprite) de l'apparence dont les constantes d'INITIALISATION
+    valent pour l'entrée : l'apparence affichée au départ, à défaut la première.
+    (None, None) sans apparence. Les autres apparences reposent leurs propres
+    constantes à leur activation (3c)."""
+    apps = owner_appearances(p, owner)
+    if not apps:
+        return None, None
+    n = initial_appearance(p, owner)
+    return apps[max(n, 0)]
+
+
+def _appearance_init_lines(p, owner, entry_expr: str, indent: str, base=None) -> list[str]:
+    """Ce que l'init pose pour choisir l'apparence de départ : son rang quand ce
+    n'est pas 0 (la RAM démarre à 0), l'entrée CACHÉE si aucune n'est active, et la
+    1re ligne de ses constantes d'activation (`base`, cf. gen_appearance) pour un
+    porteur à plusieurs apparences."""
+    apps = owner_appearances(p, owner)
+    n = initial_appearance(p, owner)
+    out = []
+    if base is not None:
+        # `base + 1` : 0 = « rien à activer » (un porteur mono-apparence, dont
+        # `actor_set_appearance` doit rester sans effet).
+        out.append(f"{indent}g_oam_entries[{entry_expr}].appearance_base = {base + 1};")
+    if len(apps) > 1 and n > 0:
+        out.append(f"{indent}g_oam_entries[{entry_expr}].appearance = {n};")
+    if apps and n < 0:
+        out.append(f"{indent}g_oam_entries[{entry_expr}].visible = 0;")
+    return out
+
+
+def _visible_line(indent: str, entry, parent_entry, own_visible) -> list[str]:
+    """`visible` d'un enfant = celui de son parent ET le sien. Une entrée OAM
+    n'existe que pour un porteur de sprite : un enfant sans sprite n'a rien à
+    montrer (aucune ligne), et un parent sans sprite ne masque personne — son
+    « visible » vaut vrai. `entry`/`parent_entry` : indices d'entrée, -1 si aucune."""
+    if entry == -1:
+        return []
+    own = 1 if own_visible else 0
+    if parent_entry == -1:
+        return [f"{indent}g_oam_entries[{entry}].visible = {own};"]
+    return [f"{indent}g_oam_entries[{entry}].visible = g_oam_entries[{parent_entry}].visible && {own};"]
+
+
+def _parent_compose_lines(scene_actors: list, actor_offset: int,
+                          placed_entry: list[int]) -> list[str]:
     """Recompose, chaque frame, le transform monde des acteurs qui ont un parent.
 
     La formule n'est PAS nouvelle : c'est celle que le modèle affine applique
@@ -775,11 +853,17 @@ def _parent_compose_lines(scene_actors: list, actor_offset: int) -> list[str]:
             f"        g_actors[{c}].rotation = _pr + {rot};",
             f"        g_actors[{c}].scale_x  = (_px * {sx}) >> 8;",
             f"        g_actors[{c}].scale_y  = (_py * {sy}) >> 8;",
-            f"        g_actors[{c}].visible  = g_actors[{p}].visible && "
-            f"{1 if getattr(a, 'visible', True) else 0};",
+            *_visible_line("        ", placed_entry[c - actor_offset], placed_entry[p - actor_offset],
+                           getattr(a, "visible", True)),
             f"    }}",
         ]
     return L
+
+
+def _pool_entry_expr(rank: int):
+    """Entrée OAM d'un membre de pool dans `_pool_compose_lines` : `_eb` est la
+    1re entrée de l'instance, `rank` le rang du membre. -1 = aucune."""
+    return f"_eb+{rank}" if rank >= 0 else -1
 
 
 def _pool_compose_lines(pi: list[dict]) -> list[str]:
@@ -809,10 +893,12 @@ def _pool_compose_lines(pi: list[dict]) -> list[str]:
         if not parts:
             continue
         group, start, size = p2["group"], p2["start"], p2["size"]
+        ranks = p2["member_entries"]      # rang d'entrée de chaque membre, -1 si aucun
         by_name = {pt.name: pt for pt in parts}
         rank = {pt.name: k for k, pt in enumerate(parts, start=1)}
         L += [f"    /* {pf.name} — sous-arbre de chaque instance (ROADMAP v0.23) */",
-              f"    for(int _b={start}; _b<{start+size}; _b+={group}) {{",
+              f"    for(int _b={start}, _eb={p2['entry_start']}; _b<{start+size}; "
+              f"_b+={group}, _eb+={p2['entries_per_instance']}) {{",
               # Racine éteinte = groupe RENDU AU POOL. C'est ici, en un seul
               # endroit, que se tiennent les deux règles : « détruire la racine
               # détruit le sous-arbre », et « active = false libère tout le
@@ -822,7 +908,8 @@ def _pool_compose_lines(pi: list[dict]) -> list[str]:
               # groupe à la fois) : la libérer suffit à rendre l'instance.
               f"        if(!g_actors[_b].active) {{",
               f"            for(int _k=1; _k<{group}; _k++) {{",
-              f"                g_actors[_b+_k].active = 0; g_actors[_b+_k].visible = 0;",
+              # `active = 0` suffit à cacher : le writer OAM teste `active && visible`.
+              f"                g_actors[_b+_k].active = 0;",
               f"            }}",
               f"            continue;",
               f"        }}"]
@@ -861,8 +948,9 @@ def _pool_compose_lines(pi: list[dict]) -> list[str]:
                 f"            g_actors[_b+{k}].rotation = _pr + {rot};",
                 f"            g_actors[_b+{k}].scale_x  = (_px * {sx}) >> 8;",
                 f"            g_actors[_b+{k}].scale_y  = (_py * {sy}) >> 8;",
-                f"            g_actors[_b+{k}].visible  = g_actors[{src}].visible && "
-                f"{1 if getattr(pt, 'visible', True) else 0};",
+                *_visible_line("            ",
+                               _pool_entry_expr(ranks[k]), _pool_entry_expr(ranks[p_off]),
+                               getattr(pt, "visible", True)),
                 f"        }}",
             ]
         L.append("    }")
@@ -1029,7 +1117,7 @@ def _scene_music_lines(p: Project, scene: Scene, sound_assets: dict | None) -> l
     (douze salles qui nomment le même thème le relanceraient douze fois), mais
     `MUSIC_INHERIT` répond DÉJÀ à ce besoin : on nomme le thème dans la salle où
     il commence, les autres héritent. Retenir la piste courante en plus
-    demanderait un état que `music.play()` appelé depuis un script ne mettrait
+    demanderait un état que `music:play()` appelé depuis un script ne mettrait
     pas à jour — il suffirait d'un script pour le désynchroniser, et la scène
     déclarative se tairait alors sans raison visible. Un second mécanisme pour
     un problème déjà résolu, et faux par-dessus le marché.
@@ -1100,9 +1188,14 @@ def _gen_scene_init(
 ) -> list[str]:
     """Génère void scene_init_{sym}(void) { ... }"""
     sym = c_sym(scene.name)
+    _lay = scene_oam_layout(p, scene)
     obj_layout = scene_bank_layout(p, scene, "obj")
     bg_layout  = scene_bank_layout(p, scene, "bg")
     L: list[str] = []
+    # Constantes d'activation des apparences de la scène (marche 3c) : la table est
+    # ROM, avant la fonction ; le pointeur est repointé par scene_init.
+    _alay = appearance_layout(p, scene_actors, pi, obj_layout)
+    L += appearance_table_lines(sym, _alay)
     # ── Données des fonds IMAGE, en amont de la fonction ───────────
     # Les tuiles de l'asset source et la carte de screen entries de chaque
     # conteneur sont des CONSTANTES : calculées par l'éditeur (cf.
@@ -1149,11 +1242,16 @@ def _gen_scene_init(
     _sw, _sh = scene_world_size(p, scene)
     L.append(f"    g_scene_w = {_sw}; g_scene_h = {_sh};")
     # Acteurs POSÉS de cette scène, dans l'ordre d'authoring — la borne de
-    # `get_actor(i)`/`actor_count()` (ROADMAP « L'acteur appartient à sa scène »,
+    # `actor:get(i)`/`actor:count()` (ROADMAP « L'acteur appartient à sa scène »,
     # adressage dynamique). Les slots [0, placed) tiennent exactement ces
     # acteurs ; les pools spawnés vivent après et ne sont pas comptés ici.
     L.append(f"    g_scene_placed = {len(scene_actors)};")
-    L.append("    for(int _i=0; _i<G_ACTOR_COUNT; _i++) g_actors[_i]=(Actor){0};")
+    # Tout acteur repart SANS entrée OAM (-1) ; le lien est posé plus bas, pour les
+    # seuls acteurs qui affichent un sprite (posés ci-dessous, pools à leur init).
+    L.append("    for(int _i=0; _i<G_ACTOR_COUNT; _i++) { g_actors[_i]=(Actor){0}; g_actors[_i].oam_entry=-1; }")
+    L.append("    for(int _i=0; _i<G_OAM_ENTRY_COUNT; _i++) g_oam_entries[_i]=(OamEntry){0};")
+    if _alay.rows:
+        L.append(f"    g_appearance_init = {sym}_appearance_init;")
     L.append("    oam_hide_all();")
     L.append("    bg_maps_clear();")
     L.append("    display_reset();")
@@ -1233,7 +1331,9 @@ def _gen_scene_init(
     if tanims:
         L.append(f"    bg_tileanim_init(g_bgtileanim_{sym}, {len(tanims)});")
     # Sprites VRAM
-    all_sprites = scene_actors + (p._prefab_sprites_cache if hasattr(p, "_prefab_sprites_cache") else [])
+    # Tout résident (marche 3) : chaque apparence de chaque acteur a ses tuiles en VRAM.
+    all_sprites = ([(a, sp) for a, _ in scene_actors for _c, sp in owner_appearances(p, a)]
+                   + (p._prefab_sprites_cache if hasattr(p, "_prefab_sprites_cache") else []))
     done_vram: set[str] = set()
     for _, sprite in all_sprites:
         if not sprite or not sprite.asset or sprite.name in done_vram:
@@ -1259,7 +1359,7 @@ def _gen_scene_init(
     # afficher une couleur de fond).
     L.append(f"    PAL_BG_RAM[0] = 0x{resolve_backdrop_color(p, scene):04X};")
     # Texte (text.*) — le layer d'UI porte les glyphes ; la 1ère police du
-    # projet est chargée par défaut, `text.set_font()` en change.
+    # projet est chargée par défaut, `text:set_font()` en change.
     #
     # Plus d'init TTE ici : libtonc est sorti du workflow. TTE chargeait SA
     # police à partir de la tuile 1 de ce même charblock, là où text_set_font
@@ -1488,30 +1588,31 @@ def _gen_scene_init(
     # Init actors
     for j, (actor, sprite) in enumerate(scene_actors):
         idx = actor_offset + j
+        _e = _lay.placed_entry[j]   # son entrée OAM, -1 = sans sprite : rien à afficher
         s = scene_actor_sym(scene.name, actor.name)
-        boxes = [c for c in actor.components if isinstance(c, CollisionBoxComponent) and c.active][:4]
+        boxes = [c for c in actor.components if isinstance(c, CollisionBoxComponent)][:4]
         own = list(sprite.own_palette) if (sprite and getattr(sprite, "own_palette", None)) else []
         pal = obj_layout.bank_index(getattr(actor, "pal_bank", OWN_PAL_BANK), own)
-        L += [
+        _lines = [
             # ROADMAP v0.19 : x/y en Q8 en interne, l'auteur place l'acteur en pixels.
             f"    g_actors[{idx}].x       = ({_FV.parse(actor.x, _var_names(p)).c_expr()})<<8;",
             f"    g_actors[{idx}].y       = ({_FV.parse(actor.y, _var_names(p)).c_expr()})<<8;",
             f"    g_actors[{idx}].active  = {1 if actor.visible else 0};",
-            f"    g_actors[{idx}].visible = {1 if actor.visible else 0};",
-            f"    g_actors[{idx}].flip_h  = {1 if actor.flip_h else 0};",
-            f"    g_actors[{idx}].flip_v  = {1 if actor.flip_v else 0};",
+            f"    g_oam_entries[{_e}].visible = {1 if actor.visible else 0};",
+            f"    g_oam_entries[{_e}].flip_h  = {1 if actor.flip_h else 0};",
+            f"    g_oam_entries[{_e}].flip_v  = {1 if actor.flip_v else 0};",
             f"    g_actors[{idx}].dir_x   = {getattr(actor,'dir_x',0)};",
             f"    g_actors[{idx}].dir_y   = {getattr(actor,'dir_y',0)};",
-            f"    g_actors[{idx}].pal_bank= {pal if pal is not None else 0};",
-            f"    g_actors[{idx}].obj_mode= {int(getattr(actor, 'obj_mode', 0)) & 3};",
-            f"    g_actors[{idx}].priority= {int(getattr(actor, 'priority', 0)) & 3};",
-            f"    g_actors[{idx}].sprite.auto_dir= {1 if getattr(get_sprite_comp(actor),'auto_dir',True) else 0};",
-            f"    g_actors[{idx}].sprite.anim_state=0;",
+            f"    g_oam_entries[{_e}].pal_bank= {pal if pal is not None else 0};",
+            f"    g_oam_entries[{_e}].obj_mode= {int(getattr(actor, 'obj_mode', 0)) & 3};",
+            f"    g_oam_entries[{_e}].priority= {int(getattr(actor, 'priority', 0)) & 3};",
+            f"    g_oam_entries[{_e}].auto_dir= {1 if getattr(_shown(p, actor)[0], 'auto_dir', True) else 0};",
+            f"    g_oam_entries[{_e}].anim_state=0;",
             # self.frame_w/frame_h : posées une fois ici depuis le sprite,
             # jamais recalculées — un acteur sans sprite (rare, cf. `sprite`
             # potentiellement None plus haut) rend 0 des deux côtés.
-            f"    g_actors[{idx}].sprite.frame_w = {sprite.frame_w if sprite else 0};",
-            f"    g_actors[{idx}].sprite.frame_h = {sprite.frame_h if sprite else 0};",
+            f"    g_oam_entries[{_e}].frame_w = {sprite.frame_w if sprite else 0};",
+            f"    g_oam_entries[{_e}].frame_h = {sprite.frame_h if sprite else 0};",
             f"    g_actors[{idx}].tag     = TAG_{s.upper()};",
             # Transform MONDE : émise pour TOUT acteur, affine ou non. Un acteur
             # non-affine ne l'AFFICHE pas (aucun slot de matrice), mais un enfant
@@ -1524,21 +1625,28 @@ def _gen_scene_init(
             f"    g_actors[{idx}].rotation     = {int(round(getattr(actor, 'rotation', 0) or 0))};",
             f"    g_actors[{idx}].scale_x      = {int(round(float(getattr(actor, 'scale_x', 1.0) or 1.0) * 256))};",
             f"    g_actors[{idx}].scale_y      = {int(round(float(getattr(actor, 'scale_y', 1.0) or 1.0) * 256))};",
+            f"    g_oam_entries[{_e}].screen_space = {1 if getattr(actor, 'screen_space', False) else 0};",
             f"    g_actors[{idx}].collision.box_count = {len(boxes)};",
         ]
+        # Les lignes d'AFFICHAGE portent `g_oam_entries[-1]` quand l'acteur n'a pas
+        # de sprite : on les écarte, et le lien reste à -1 (posé par le reset).
+        L += [l for l in _lines if _e >= 0 or "g_oam_entries[-1]" not in l]
+        if _e >= 0:
+            L.append(f"    g_actors[{idx}].oam_entry = {_e};")
+            L += _appearance_init_lines(p, actor, str(_e), "    ", _alay.actor_base.get(j))
         _aff_i = (affine_info or {}).get(idx)
-        if _aff_i:
+        if _aff_i and _e >= 0:
             _aslot = _aff_i["slot"]
             L += [
-                f"    g_actors[{idx}].sprite.affine_slot = {_aslot};",
-                f"    g_actors[{idx}].sprite.rotation   = {_aff_i['sprite_rotation']};",
-                f"    g_actors[{idx}].sprite.scale_x = {_aff_i['sprite_scale_x']};",
-                f"    g_actors[{idx}].sprite.scale_y = {_aff_i['sprite_scale_y']};",
-                f"    g_actors[{idx}].sprite.offset_x     = {_aff_i['offset_x']};",
-                f"    g_actors[{idx}].sprite.offset_y     = {_aff_i['offset_y']};",
+                f"    g_oam_entries[{_e}].affine_slot = {_aslot};",
+                f"    g_oam_entries[{_e}].rotation   = {_aff_i['sprite_rotation']};",
+                f"    g_oam_entries[{_e}].scale_x = {_aff_i['sprite_scale_x']};",
+                f"    g_oam_entries[{_e}].scale_y = {_aff_i['sprite_scale_y']};",
+                f"    g_oam_entries[{_e}].offset_x     = {_aff_i['offset_x']};",
+                f"    g_oam_entries[{_e}].offset_y     = {_aff_i['offset_y']};",
             ]
-        else:
-            L.append(f"    g_actors[{idx}].sprite.affine_slot = -1;")
+        elif _e >= 0:
+            L.append(f"    g_oam_entries[{_e}].affine_slot = -1;")
         for bi2, cb in enumerate(boxes):
             tag_s = "BOXTAG_" + c_sym(cb.tag or "body").upper()
             _vn = _var_names(p)
@@ -1547,7 +1655,7 @@ def _gen_scene_init(
             L += [
                 f"    g_actors[{idx}].collision.boxes[{bi2}].x=(s8){bx}; g_actors[{idx}].collision.boxes[{bi2}].y=(s8){by};",
                 f"    g_actors[{idx}].collision.boxes[{bi2}].w=(u8){bw};  g_actors[{idx}].collision.boxes[{bi2}].h=(u8){bh};",
-                f"    g_actors[{idx}].collision.boxes[{bi2}].solid={1 if cb.solid else 0}; g_actors[{idx}].collision.boxes[{bi2}].tag={tag_s};",
+                f"    g_actors[{idx}].collision.boxes[{bi2}].solid={1 if cb.solid else 0}; g_actors[{idx}].collision.boxes[{bi2}].active={1 if cb.active else 0}; g_actors[{idx}].collision.boxes[{bi2}].tag={tag_s};",
             ]
     # SoundFxComponent en trigger="on_spawn" — TOUS les actors de la scène,
     # scriptés ou non : c'est une donnée du component, pas du script (ROADMAP,
@@ -1562,28 +1670,34 @@ def _gen_scene_init(
     # Pool init
     for p2 in pi:
         for slot in range(p2["start"], p2["start"] + p2["size"]):
+            _inst, _member = divmod(slot - p2["start"], p2["group"])
+            _rank = p2["member_entries"][_member]
+            # Son entrée OAM : la 1re de l'instance + son rang ; -1 pour un marqueur.
+            _e = (p2["entry_start"] + _inst * p2["entries_per_instance"] + _rank
+                  if _rank >= 0 else -1)
+            L.append(f"    g_actors[{slot}].oam_entry = {_e};")
             L.append(f"    g_actors[{slot}].tag = TAG_{p2['sym'].upper()};")
             L.append(f"    g_actors[{slot}].active = 0;")
             _aff_p = (affine_info or {}).get(slot)
-            if _aff_p:
+            if _aff_p and _e >= 0:
                 _aslot = _aff_p["slot"]
                 L += [
-                    f"    g_actors[{slot}].sprite.affine_slot = {_aslot};",
+                    f"    g_oam_entries[{_e}].affine_slot = {_aslot};",
                     f"    g_actors[{slot}].rotation     = {_aff_p['rotation']};",
                     f"    g_actors[{slot}].scale_x      = {_aff_p['scale_x']};",
                     f"    g_actors[{slot}].scale_y      = {_aff_p['scale_y']};",
-                    f"    g_actors[{slot}].sprite.rotation   = {_aff_p['sprite_rotation']};",
-                    f"    g_actors[{slot}].sprite.scale_x = {_aff_p['sprite_scale_x']};",
-                    f"    g_actors[{slot}].sprite.scale_y = {_aff_p['sprite_scale_y']};",
-                    f"    g_actors[{slot}].sprite.offset_x     = {_aff_p['offset_x']};",
-                    f"    g_actors[{slot}].sprite.offset_y     = {_aff_p['offset_y']};",
+                    f"    g_oam_entries[{_e}].rotation   = {_aff_p['sprite_rotation']};",
+                    f"    g_oam_entries[{_e}].scale_x = {_aff_p['sprite_scale_x']};",
+                    f"    g_oam_entries[{_e}].scale_y = {_aff_p['sprite_scale_y']};",
+                    f"    g_oam_entries[{_e}].offset_x     = {_aff_p['offset_x']};",
+                    f"    g_oam_entries[{_e}].offset_y     = {_aff_p['offset_y']};",
                 ]
-            else:
-                L.append(f"    g_actors[{slot}].sprite.affine_slot = -1;")
+            elif _e >= 0:
+                L.append(f"    g_oam_entries[{_e}].affine_slot = -1;")
     # ── Musique de la scène (ROADMAP v0.8.2) ───────────────────────
     # Posée AVANT les on_start : le réglage déclaratif passe en premier et le
     # script ajuste ensuite, exactement comme pour la caméra (v0.6.1). Un
-    # `music.play()` dans on_start gagne donc, ce qui est ce qu'on attend.
+    # `music:play()` dans on_start gagne donc, ce qui est ce qu'on attend.
     if has_sound:
         L += _scene_music_lines(p, scene, sound_assets)
 
@@ -1622,6 +1736,7 @@ def _gen_scene_tick(
 ) -> list[str]:
     """Génère void scene_tick_{sym}(void) { ... }"""
     sym = c_sym(scene.name)
+    _lay = scene_oam_layout(p, scene)
     L = [f"static void scene_tick_{sym}(void) {{"]
 
     def _def(s, ev):
@@ -1656,7 +1771,7 @@ def _gen_scene_tick(
     # Hiérarchie : APRÈS les scripts — un `on_update` peut avoir déplacé le
     # parent, et l'enfant doit suivre DANS la même frame — et AVANT la
     # collision et l'émission OAM, qui lisent la position monde recomposée.
-    L += _parent_compose_lines(scene_actors, actor_offset)
+    L += _parent_compose_lines(scene_actors, actor_offset, _lay.placed_entry)
     L += _pool_compose_lines(pi)
 
     # Résolution contre la carte de collision — pour TOUTE box solide, et non
@@ -1884,57 +1999,41 @@ def _gen_scene_tick(
         L.append(f"    bg_tileanim_update(g_bgtileanim_{sym}, {len(_tanims)});")
 
     # Animation (state machine + direction)
-    anim_actors = [(actor_offset + j, a, s2) for j, (a, s2) in enumerate(scene_actors) if s2 and s2.asset and s2.states]
-    for idx, actor, sprite in anim_actors:
-        # Le test d'effet par frame n'est émis que si le sprite en porte —
-        # même source de vérité que la table, `sprite_unique_frames`.
-        _has_fx = any(a >= 0 for a in frame_action_ids(p, sprite))
-        _has_dfx = any(s != "-1" for s, _v in frame_sfx_syms(p, sprite))
-        _evt_lines, _has_evt = actor_frame_event_lines(p, actor, sprite)
-        L += anim_tick_lines(idx, f"sprite_{c_sym(sprite.name)}", _has_fx, _has_dfx,
-                              _evt_lines, _has_evt, scene_actor_sym(scene.name, actor.name))
+    for j, (actor, _shown_sprite) in enumerate(scene_actors):
+        idx = actor_offset + j
+        variants = []
+        for _c, sprite in owner_appearances(p, actor):
+            if not sprite.states:
+                variants.append(None)        # une apparence fixe : rien à animer
+                continue
+            # Le test d'effet par frame n'est émis que si le sprite en porte —
+            # même source de vérité que la table, `sprite_unique_frames`.
+            _has_fx = any(a >= 0 for a in frame_action_ids(p, sprite))
+            _has_dfx = any(s != "-1" for s, _v in frame_sfx_syms(p, sprite))
+            _evt_lines, _has_evt = actor_frame_event_lines(p, actor, sprite)
+            variants.append(dict(
+                sym=f"sprite_{c_sym(sprite.name)}", has_frame_sfx=_has_fx,
+                has_frame_direct_sfx=_has_dfx, event_lines=_evt_lines,
+                has_frame_events=_has_evt, actor_sym=scene_actor_sym(scene.name, actor.name)))
+        if any(v is not None for v in variants):
+            L += anim_tick_variants(idx, _lay.placed_entry[j], variants)
 
     _aff = affine_info or {}
 
     # OAM actors scène
     for j, (actor, sprite) in enumerate(scene_actors):
         idx = actor_offset + j
+        _e = _lay.placed_entry[j]   # entrée OAM de l'acteur (>= 0 dès qu'il a un sprite)
         if not actor.visible:
             continue
-        if sprite and sprite.asset:
-            sh = sprite.oam_shape; sz = sprite.oam_size
-            bt = sprite_offsets.get(sprite.name, 0)
-            sc  = get_sprite_comp(actor)
-            ox  = getattr(sc, "origin_x", 0) if sc else 0
-            oy  = getattr(sc, "origin_y", 0) if sc else 0
-            ox_s = (f"-{ox}" if ox > 0 else f"+{-ox}") if ox else ""
-            oy_s = (f"-{oy}" if oy > 0 else f"+{-oy}") if oy else ""
+        apps = _appearances(p, actor, sprite_offsets)
+        if apps:
             # UI en sprite : x/y SONT déjà des pixels d'écran, la caméra ne les
             # touche pas. Décidé ici, au build — un acteur de monde émet
             # exactement le C qu'il émettait avant (cf. Actor.screen_space).
-            _ss = bool(getattr(actor, "screen_space", False))
-            _cx = "" if _ss else "-cam_x"
-            _cy = "" if _ss else "-cam_y"
-            if idx in _aff:
-                _lines_fn = affine_oam_lines_dynamic
-                inner = _lines_fn(idx, _aff[idx], sprite, bt,
-                                  f"g_actors[{idx}].priority", screen_space=_ss)
-                L += [
-                    f"    if(g_actors[{idx}].active && g_actors[{idx}].visible){{",
-                    *inner,
-                    f"    }}else{{ shadow_oam[{idx}].attr0=0x0200; }}",
-                ]
-            else:
-                L += [
-                    f"    if(g_actors[{idx}].active && g_actors[{idx}].visible){{",
-                    f"        int sx=(g_actors[{idx}].x>>8){_cx}{ox_s}; int sy=(g_actors[{idx}].y>>8){_cy}{oy_s};",
-                    f"        u16 ti=(u16)({bt}+g_actors[{idx}].sprite.frame*{sprite.tiles_per_frame});",
-                    f"        int fh=g_actors[{idx}].flip_h; int fv=g_actors[{idx}].flip_v;",
-                    f"        shadow_oam[{idx}].attr0=(sy&0xFF)|(g_actors[{idx}].obj_mode<<10)|({sh}<<14);",
-                    f"        shadow_oam[{idx}].attr1=(sx&0x1FF)|(fh<<12)|(fv<<13)|({sz}<<14);",
-                    f"        shadow_oam[{idx}].attr2=(ti&0x3FF)|(g_actors[{idx}].priority<<10)|(g_actors[{idx}].pal_bank<<12);",
-                    f"    }}else{{ shadow_oam[{idx}].attr0=0x0200; }}",
-                ]
+            L += oam_write_lines(
+                idx, _e, apps, aff=_aff.get(idx),
+                screen_space=bool(getattr(actor, "screen_space", False)))
 
     # OAM prefab pool
     for p2 in pi:
@@ -1945,43 +2044,17 @@ def _gen_scene_tick(
         # un bras n'est pas dessiné avec l'image du corps. Un prefab plat n'a
         # qu'un membre, et le C émis est alors mot pour mot celui d'avant.
         members = [pf] + list(getattr(pf, "children", []) or [])
-        for oam_slot in range(p2["start"], p2["start"] + p2["size"]):
-            owner = members[(oam_slot - p2["start"]) % group]
-            _own_sc = get_sprite_comp(owner)
-            pf_spr = (p.get_sprite(_own_sc.sprite_name)
-                      if (_own_sc and _own_sc.sprite_name) else None)
-            if not pf_spr or not pf_spr.asset:
-                # Sans sprite, l'enfant est un MARQUEUR : point de tir, ancre
-                # de hitbox. Elle ne coûte aucun OBJ — l'invariant s'écrit « un
-                # acteur = AU PLUS un OBJ ».
-                L.append(f"    shadow_oam[{oam_slot}].attr0=0x0200;")
+        for a_idx in range(p2["start"], p2["start"] + p2["size"]):
+            _inst, _member = divmod(a_idx - p2["start"], group)
+            owner = members[_member]
+            _rank = p2["member_entries"][_member]
+            if _rank < 0:
+                # Un marqueur (point de tir, ancre de hitbox) n'a pas d'entrée OAM :
+                # rien à écrire, rien à cacher.
                 continue
-            sh = pf_spr.oam_shape; sz = pf_spr.oam_size
-            bt = sprite_offsets.get(pf_spr.name, 0)
-            ox = getattr(_own_sc, "origin_x", 0) if _own_sc else 0
-            oy = getattr(_own_sc, "origin_y", 0) if _own_sc else 0
-            ox_s = (f"-{ox}" if ox > 0 else f"+{-ox}") if ox else ""
-            oy_s = (f"-{oy}" if oy > 0 else f"+{-oy}") if oy else ""
-            if oam_slot in _aff:
-                _lines_fn = affine_oam_lines_dynamic
-                inner = _lines_fn(oam_slot, _aff[oam_slot], pf_spr, bt,
-                                  f"g_actors[{oam_slot}].priority")
-                L += [
-                    f"    if(g_actors[{oam_slot}].active && g_actors[{oam_slot}].visible){{",
-                    *inner,
-                    f"    }}else{{ shadow_oam[{oam_slot}].attr0=0x0200; }}",
-                ]
-            else:
-                L += [
-                    f"    if(g_actors[{oam_slot}].active && g_actors[{oam_slot}].visible){{",
-                    f"        int sx=(g_actors[{oam_slot}].x>>8)-cam_x{ox_s}; int sy=(g_actors[{oam_slot}].y>>8)-cam_y{oy_s};",
-                    f"        u16 ti=(u16)({bt}+g_actors[{oam_slot}].sprite.frame*{pf_spr.tiles_per_frame});",
-                    f"        int fh=g_actors[{oam_slot}].flip_h; int fv=g_actors[{oam_slot}].flip_v;",
-                    f"        shadow_oam[{oam_slot}].attr0=(sy&0xFF)|(g_actors[{oam_slot}].obj_mode<<10)|({sh}<<14);",
-                    f"        shadow_oam[{oam_slot}].attr1=(sx&0x1FF)|(fh<<12)|(fv<<13)|({sz}<<14);",
-                    f"        shadow_oam[{oam_slot}].attr2=(ti&0x3FF)|(g_actors[{oam_slot}].priority<<10)|(g_actors[{oam_slot}].pal_bank<<12);",
-                    f"    }}else{{ shadow_oam[{oam_slot}].attr0=0x0200; }}",
-                ]
+            oam_slot = p2["entry_start"] + _inst * p2["entries_per_instance"] + _rank
+            L += oam_write_lines(a_idx, oam_slot, _appearances(p, owner, sprite_offsets),
+                                 aff=_aff.get(a_idx))
 
     # Après les scripts, avant le flush OAM : une lecture démarrée pendant le
     # tick avance dès cette frame, et les sprites des glyphes animés sont posés
@@ -2032,6 +2105,7 @@ def generate_main(
     # depuis 0. Les offsets sont donc tous nuls, et `g_actors` est dimensionné
     # sur la scène la plus gourmande (max, pas somme).
     n_actors = project_actor_count(p)
+    n_oam_entries = project_oam_entry_count(p)
     scene_offsets = [0] * len(all_scene_data)
     # `pi` par scène : plages de pool per-scène (symboles `<Scène>_<Prefab>`),
     # lues de `scene_oam_layout`. Chaque scène ne porte que les pools qu'elle
@@ -2041,7 +2115,7 @@ def generate_main(
     # ── Sprites : union de toutes les scènes ──────────────────────
     all_sprite_pairs: list = []
     for d in all_scene_data:
-        all_sprite_pairs += d["scene_actors"]
+        all_sprite_pairs += d["scene_actors"] + d["extra_sprites"]
     all_sprite_pairs += prefab_actor_sprites
     # Un sprite qui ne sert QU'à une image d'interface n'est porté par aucun
     # acteur : sans ceci, ses tuiles ne partiraient jamais en VRAM.
@@ -2103,9 +2177,9 @@ def generate_main(
             _by = {a.name: a for a, _ in _sa}
             for _j, (_a, _sp) in enumerate(_sa):
                 _par = _by.get(getattr(_a, "parent", None) or "")
-                if not _par or _j in _aff or not get_sprite_comp(_a):
+                if not _par or _j in _aff or not affine_sprite_component(_a):
                     continue
-                _par_sc = get_sprite_comp(_par)
+                _par_sc = affine_sprite_component(_par)
                 if not bool(getattr(_par_sc, "affine_transform", False)):
                     continue
                 emit("log_line",
@@ -2340,6 +2414,8 @@ def generate_main(
     # au code et aux petits états runtime.
     L += [
         f"Actor g_actors[{n_actors}] EWRAM_DATA;",
+        f"OamEntry g_oam_entries[{n_oam_entries}] EWRAM_DATA;",
+        "const AppearanceInit* g_appearance_init;   /* constantes d'activation de la scène active */",
     ]
     # SoundFxComponent en trigger="on_destroy" — tables PAR SCÈNE indexées par
     # TAG, plus un pointeur que chaque scene_init fait pointer sur la sienne
@@ -2371,7 +2447,7 @@ def generate_main(
         # manquait sa DÉFINITION, et le lien échouait sur tout projet.
         "int   g_scene_w = 0, g_scene_h = 0;",
         "int   g_current_scene = -1;",
-        "int   g_scene_placed = 0;   /* acteurs posés de la scène active (get_actor(i)) */",
+        "int   g_scene_placed = 0;   /* acteurs posés de la scène active (actor:get(i)) */",
         "int   g_next_scene    = -1;",
         "",
     ]
@@ -2395,7 +2471,7 @@ def generate_main(
             "/* ── Position et profondeur d'acteur pour l'UI ancrée ─── */",
             "static int _txt_actor_x(int i) { return g_actors[i].x>>8; }",
             "static int _txt_actor_y(int i) { return g_actors[i].y>>8; }",
-            "static int _txt_actor_prio(int i) { return g_actors[i].priority; }",
+            "static int _txt_actor_prio(int i) { return actor_oam_entry(&g_actors[i])->priority; }",
             "",
         ]
 
@@ -2447,7 +2523,7 @@ def generate_main(
         # n'a aucune UI en sprites. Les pools de `scene_oam_layout` démarrent à
         # `placed + ui`, donc la bande ne les chevauche jamais.
         _sc_lay = scene_oam_layout(p, sc)
-        sc_obj_oam = _sc_lay.placed if _sc_lay.ui else -1
+        sc_obj_oam = _sc_lay.ui_start if _sc_lay.ui else -1
         if emit and _sc_lay.ui:
             emit("log_line",
                  f"[text] scène '{sc.name}' : bande OBJ OAM "
@@ -2531,14 +2607,13 @@ def generate_main(
         L.append(entry)
     L += ["};", ""]
 
-    # get_actor par NOM résolu à l'exécution (« L'acteur appartient à sa scène »,
+    # actor.get par NOM résolu à l'exécution (« L'acteur appartient à sa scène »,
     # décision C) : la porte d'un script PARTAGÉ (caméra), qui n'a pas de scène
     # au build. Un script de SCÈNE, lui, résout son TAG à la compilation et ne
     # passe jamais par ici. On rend l'acteur du nom demandé DANS la scène active
     # (g_current_scene indexe g_scene_vtable), filtré par `actor_live` — donc nil
     # si le slot a été détruit (décision C'). Le TAG per-scène VAUT le slot (une
     # seule scène vit à la fois, g_actors repart de 0), d'où le renvoi direct.
-    from codegen.runtime_codegen.headers import actorname_ids
     _an = actorname_ids(p)
     L.append("Actor* runtime_get_actor(int name_id){")
     if _an:
@@ -2691,8 +2766,8 @@ def generate_main(
             "        /* Rechargement de langue (phase 4) : force le garde-fou ci-dessous",
             "           à réinitialiser la MÊME scène, comme un vrai changement. Le fondu",
             "           de FERMETURE ne joue pas cette fois (g_current_scene forcé à -1,",
-            "           donc « pas de scène sortante » côté transition) — un lang.set()",
-            "           et un scene.switch() la même frame perdraient ce fondu-là, cas",
+            "           donc « pas de scène sortante » côté transition) — un lang:set()",
+            "           et un scene:switch() la même frame perdraient ce fondu-là, cas",
             "           assez rare pour ne pas le traiter à part. */",
             "        if(g_lang_reload){ g_lang_reload=0; g_current_scene=-1; }",
             "        /* Fermeture : la scène qu'on QUITTE décide du fondu, et gèle",

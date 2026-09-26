@@ -38,13 +38,13 @@ def _errors(src: str, **ctx_kw) -> list[str]:
 # ── T6 : actor.spawn rend un Actor* (ROADMAP v0.17) ──────────────────
 
 def test_spawn_local_est_un_actor_pointer():
-    """`local b = actor.spawn(...)` tient un `Actor*` (l'instance née), pas un
+    """`local b = actor:spawn(...)` tient un `Actor*` (l'instance née), pas un
     int : `b:destroy()` doit chaîner et `if b then` tester le pool plein (NULL).
     Le local était typé `int` avant T6 — un -1 toujours vrai."""
     from scripting.parser import parse
     from scripting.codegen import generate, CodegenContext
     src = ("function on_update(self)\n"
-           "  local b = actor.spawn(\"Bullet\", vec2(10, 20))\n"
+           "  local b = actor:spawn(\"Bullet\", vec2(10, 20))\n"
            "  if b then b:destroy() end\n"
            "end\n")
     code, _, _ = generate(parse(src), CodegenContext(
@@ -85,18 +85,22 @@ def test_aucune_orthographe_en_methode_ne_double_une_propriete(prop, method):
                   f"et le C émis compile.")
 
 
-def test_api_retiree_bloque_sur_self():
+def test_orthographe_retiree_bloque_sur_self():
+    """Retrait sec (ROADMAP v0.16, REMOVED_API vidé) : une orthographe retirée
+    est bloquée comme « méthode inconnue », sans guide de migration. Le blocage
+    lui-même ne dépend pas de REMOVED_API — un « : » ne peut désigner qu'une
+    méthode du catalogue."""
     errs = _errors("function on_update(self)\n self:set_frame(0)\nend\n")
-    assert errs and "self.frame" in errs[0]
+    assert errs and "inconnue" in errs[0].lower()
 
 
-def test_api_retiree_bloque_aussi_sur_un_autre_recepteur():
+def test_orthographe_retiree_bloque_aussi_sur_un_autre_recepteur():
     """`other:set_position(p)` émettait `actor_set_position(other, p)` — du C qui
-    compile et marche. L'API retirée survivait tant qu'on ne l'écrivait pas sur
-    `self`."""
+    compile et marche. Il reste bloqué sur un récepteur autre que `self`, par la
+    même règle : le « : » n'a pas de méthode à traduire hors du catalogue."""
     errs = _errors("function on_collide(self, other)\n"
                    " other:set_position(vec2(1, 2))\nend\n")
-    assert errs and "other.<champ>" in errs[0]
+    assert errs and "inconnue" in errs[0].lower()
 
 
 def test_methode_inconnue_signalee_sur_tout_recepteur():
@@ -167,8 +171,8 @@ def test_les_valeurs_denum_saccordent_avec_le_moteur():
 
 def test_le_c_emis_cite_la_constante_pas_le_nombre():
     _, code = _lua("function on_update(self)\n"
-                   " window.set_layer('HudFrame', 1, true)\n"
-                   " blend.set_layer('top', 2, true)\nend\n",
+                   " window:get('HudFrame'):set_layer(1, true)\n"
+                   " blend:set_layer('top', 2, true)\nend\n",
                    window_names=["HudFrame"])
     assert "window_set_layer(WIN_HUDFRAME," in code
     assert "blend_set_layer(BLD_SIDE_TOP," in code
@@ -245,15 +249,18 @@ def test_la_direction_se_compare_par_son_nom():
     assert "actor_get_dir(self) == DIR_WEST" in code
 
 
-@pytest.mark.parametrize("old,prop", [
-    ('self:set_dir("north")',  "self.direction"),
-    ("self:get_dir()",         "self.direction"),
-    ("self:set_auto_dir(true)", "self.auto_dir"),
-    ("self:on_ground()",       "self.grounded"),
+@pytest.mark.parametrize("old", [
+    'self:set_dir("north")',
+    "self:get_dir()",
+    "self:set_auto_dir(true)",
+    "self:on_ground()",
 ])
-def test_les_anciennes_orthographes_guident_vers_la_propriete(old, prop):
+def test_les_anciennes_orthographes_sont_bloquees(old):
+    """Retrait sec (ROADMAP v0.16, REMOVED_API vidé) : une orthographe retirée
+    reste refusée — comme « méthode inconnue » — mais ne guide plus vers la
+    propriété. Le blocage tient au « : », pas à REMOVED_API."""
     errs = _errors(f"function on_update(self)\n local x = {old}\nend\n")
-    assert errs and prop in errs[0]
+    assert errs and "inconnue" in errs[0].lower()
 
 
 def test_auto_dir_se_lit_maintenant():
@@ -292,7 +299,8 @@ def _ui_errors(src: str) -> list[str]:
     from scripting.parser import parse
     from scripting.checker import check, BuildContext
 
-    ctx = BuildContext(actor_name="HUD", image_names=["coeur_1", "curseur"],
+    ctx = BuildContext(actor_name="HUD", element_names=["coeur_1", "curseur"],
+                       ref_kinds={"coeur_1": "image", "curseur": "image"},
                        image_states={"coeur_1": ["plein", "vide"],
                                      "curseur": ["on", "off"]})
     return [e.message for e in check(parse(src), ctx) if e.level == "error"]
@@ -300,20 +308,37 @@ def _ui_errors(src: str) -> list[str]:
 
 def test_etat_dimage_valide():
     assert _ui_errors('function on_update(self)\n'
-                      ' ui.image_set("coeur_1", "vide")\nend\n') == []
+                      ' interface:get("coeur_1").state = "vide"\nend\n') == []
+
+
+def test_l_etat_se_nomme_aussi_par_un_local_et_se_compare():
+    assert _ui_errors('function on_update(self)\n'
+                      ' local c = interface:get("coeur_1")\n'
+                      ' c.state = "plein"\n'
+                      ' if c.state == "vide" then c.state = "plein" end\nend\n') == []
+
+
+def test_un_etat_d_image_ecrit_sur_une_image_inconnue_du_build_est_refuse():
+    """Un paramètre, un local réaffecté : on ne sait pas dans quel sprite chercher l'état,
+    et deviner la constante écrirait l'état d'une autre image."""
+    errs = _ui_errors('function on_update(self)\n'
+                      ' local c = interface:get("coeur_1")\n'
+                      ' local c = interface:get("curseur")\n'
+                      ' c.state = "on"\nend\n')
+    assert len(errs) == 1 and "ne sait pas laquelle" in errs[0]
 
 
 def test_etat_dimage_inconnu_refuse_avec_les_etats_du_bon_sprite():
     """« vide » est valide sur coeur_1 et pas sur curseur : l'ensemble valide se
     lit sur l'IMAGE citée, jamais sur le projet entier."""
     errs = _ui_errors('function on_update(self)\n'
-                      ' ui.image_set("curseur", "vide")\nend\n')
+                      ' interface:get("curseur").state = "vide"\nend\n')
     assert errs and "on, off" in errs[0]
 
 
 def test_image_inconnue_ne_produit_quune_seule_erreur():
     errs = _ui_errors('function on_update(self)\n'
-                      ' ui.image_set("nawak", "vide")\nend\n')
+                      ' interface:get("nawak").state = "vide"\nend\n')
     assert len(errs) == 1 and "introuvable" in errs[0]
 
 
@@ -344,7 +369,7 @@ def test_toute_entree_du_catalogue_est_rangee_et_aucune_ne_finit_en_vrac():
                  for name in (*RUNTIME_API, *RUNTIME_PROPS)}
     manquants = {name for name, anchor in catalogue.items() if anchor not in anchors}
     assert manquants == set(), f"absents de l'écran : {sorted(manquants)}"
-    assert not any(c["name"] == "Autres" for c in cats), (
+    assert not any(c["name"] == "Other" for c in cats), (
         "une entrée est tombée dans le fourre-tout : donne-lui une catégorie "
         "dans api_reference.json ou dans _PROP_HOME")
     assert all(c["entries"] for c in cats), "catégorie sans entrée"
@@ -364,6 +389,46 @@ def test_lordre_du_json_gouverne_lecran():
     rendu   = [c["name"] for c in api_reference.get_categories()]
     assert rendu == [n for n in attendu if n in rendu]
     assert rendu[0] == "Transform"
+
+
+def test_les_huit_sections_ne_perdent_aucune_entree():
+    """Le rangement (ROADMAP v0.16) regroupe les 24 catégories en 8 sections
+    sans rien perdre : chaque entrée du catalogue atterrit dans une section, et
+    aucune section « orpheline » (un nom de catégorie brut) n'apparaît — signe
+    qu'une catégorie a échappé à `SECTIONS`."""
+    from scripting import api_reference
+
+    secs = api_reference.get_sections()
+    assert [s["label"] for s in secs] == [k for k, _ in api_reference.SECTIONS], (
+        "8 sections attendues, dans l'ordre de SECTIONS — une section orpheline "
+        "signale une catégorie hors de SECTIONS")
+
+    n_sec = sum(len(g["entries"])
+                for s in secs for side in ("iteration", "engine") for g in s[side])
+    n_cat = sum(len(c["entries"]) for c in api_reference.get_categories())
+    assert n_sec == n_cat, f"{n_cat - n_sec} entrées perdues au rangement"
+
+
+def test_la_couche_moteur_se_replie_la_bonne():
+    """Le drapeau moteur (« Aller plus loin ») est per-entrée, plus fin que la
+    catégorie : `sfx.play` reste itération quand `sound_box.set_state` est
+    moteur, tous deux dans « Le son »."""
+    from scripting import api_reference
+
+    secs = {s["label"]: s for s in api_reference.get_sections()}
+    def keys(groups):
+        return {e["label"].split("(")[0].strip() for g in groups for e in g["entries"]}
+
+    son = secs["scrsb.sec.sound"]
+    assert "sfx:play" in keys(son["iteration"])
+    assert "sound_box:set_state" in keys(son["engine"])
+
+
+    # Le décor a une face itération ET une face moteur pour le MÊME calque.
+    decor = secs["scrsb.sec.scenery"]
+    assert "background_layer:show" in keys(decor["iteration"])
+    assert "map" in keys(decor["engine"])      # propriété `background_layer.map`, libellé court
+
 
 
 # ── 7. L'identité d'un acteur se cite par son nom ──────────────────
@@ -483,7 +548,7 @@ def test_les_neuf_helpers_existent_en_c():
     facade = (REPO_DIR / "runtime" / "include" / "runtime_api_inline.h").read_text(
         encoding="utf-8", errors="ignore")
     for m in JUICE_METHODS:
-        fn = RUNTIME_API[f"self:{m}"].c_func
+        fn = RUNTIME_API[f"actor:{m}"].c_func
         assert re.search(r"\b" + re.escape(fn) + r"\s*\(", facade), (
             f"self:{m} : {fn}() n'existe pas dans runtime_api_inline.h")
 
@@ -515,7 +580,7 @@ def _lua_sfx(src: str):
 
 
 CINQ_METHODES = '''function on_update(self)
-  local pas = sfx.play("Pas")
+  local pas = sfx:play("Pas")
   pas:set_volume(80)
   pas:set_pitch(120)
   pas:set_panning(-40)
@@ -543,9 +608,9 @@ def test_chaque_pourcentage_part_dans_la_graduation_de_son_registre():
     panning (0–255, centré sur 128)."""
     errs, code = _lua_sfx(CINQ_METHODES.replace(
         "  if pas:playing() then pas:stop() end\n",
-        "  music.set_volume(60)\n"
-        "  sound_box.set_volume(60)\n"
-        "  jingle_box.set_volume(60)\n"))
+        "  music:set_volume(60)\n"
+        "  sound_box:set_volume(60)\n"
+        "  jingle_box:set_volume(60)\n"))
     assert errs == []
     assert "sfx_set_volume(pas, 204)" in code
     assert "sfx_set_pitch(pas, 1229)" in code
@@ -559,7 +624,7 @@ def test_un_pourcentage_calcule_se_convertit_a_lexecution():
     """Un niveau peut venir d'une variable : la conversion ne peut alors pas
     être pliée au build, mais elle doit avoir lieu quand même."""
     errs, code = _lua_sfx('function on_update(self)\n'
-                          '  local pas = sfx.play("Pas")\n'
+                          '  local pas = sfx:play("Pas")\n'
                           '  pas:set_volume(niveau)\n'
                           'end\n')
     assert errs == []
@@ -568,11 +633,11 @@ def test_un_pourcentage_calcule_se_convertit_a_lexecution():
 
 def test_une_methode_inconnue_sur_une_reference_est_refusee():
     errs, _ = _lua_sfx('function on_update(self)\n'
-                       '  local pas = sfx.play("Pas")\n'
+                       '  local pas = sfx:play("Pas")\n'
                        '  pas:set_speed(2)\n'
                        'end\n')
     assert len(errs) == 1
-    assert "référence d'effet" in errs[0]
+    assert "référence sfx" in errs[0]
     assert ":set_pitch()" in errs[0]
 
 
@@ -581,7 +646,7 @@ def test_une_reference_qui_traverse_une_attente_garde_son_champ_detat():
     nom nu produisait un identifiant que le C ne connaît pas — et le `make`
     échouait loin de la ligne fautive."""
     errs, code = _lua_sfx('function on_sequence_intro(self)\n'
-                          '  local pas = sfx.play("Pas")\n'
+                          '  local pas = sfx:play("Pas")\n'
                           '  wait(10)\n'
                           '  pas:stop()\n'
                           'end\n')
@@ -609,14 +674,14 @@ def test_les_portes_du_son_existent_dans_le_c_emis():
 
 
 DEUX_LECTURES = '''function on_update(self)
-  sfx.play("Pas")
-  local tenu = sfx.play("Pas")
+  sfx:play("Pas")
+  local tenu = sfx:play("Pas")
 end
 '''
 
 
 def test_un_effet_pose_seul_laisse_son_canal_volable():
-    """La règle de la v0.8.8 : `sfx.play(…)` posé seul n'a pas de référence à
+    """La règle de la v0.8.8 : `sfx:play(…)` posé seul n'a pas de référence à
     protéger, donc son canal reste volable (`hold = 0`) ; celui qu'on retient
     est protégé (`hold = 1`). C'est la seule décision du générateur qui dépend
     de la POSITION de l'appel — sans elle, huit bruitages intouchables

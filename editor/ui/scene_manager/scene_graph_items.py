@@ -3,7 +3,7 @@
 Trois formes, une par chose que la projection peut produire :
 
 - `SceneCardItem` : une scène du projet (carte nommée, marquée si c'est le départ).
-- `MissingTargetItem` : une cible ``scene.switch("X")`` dont aucune scène ne porte
+- `MissingTargetItem` : une cible ``scene:switch("X")`` dont aucune scène ne porte
   le nom. C'est un marqueur terminal d'erreur de liaison, JAMAIS un nœud : pas de
   départ possible, rien à ouvrir, rien à renommer. Un seul par nom manquant.
 - `SceneGraphEdgeItem` : une transition dirigée d'une carte vers une carte ou un

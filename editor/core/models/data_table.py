@@ -53,7 +53,7 @@ IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 # Les colonnes de RÉFÉRENCE portent exactement le nom de leur domaine de
 # script (`scripting/api.DOMAIN_*`) : une colonne « text » cite une clé de la
 # table de textes, et le checker la valide par le chemin qui valide déjà
-# `text.draw("…")`. La coïncidence des deux listes est vérifiée au build
+# `text:draw("…")`. La coïncidence des deux listes est vérifiée au build
 # (`validator._check_data_column_types`), pas supposée — ce module ne peut pas
 # importer `scripting` (cf. les couches, ARCHITECTURE.md).
 #

@@ -9,16 +9,19 @@ from __future__ import annotations
 
 from core.models.scene import Actor, Prefab, Scene
 from core.project import Project
+from oam_fixtures import tout_afficher, donner_un_sprite
 from codegen.actor_budget import (
     OAM_LIMIT, scene_actor_budget, scene_actor_slots, scene_ui_obj_slots,
     scene_pool_slots,
 )
 
 
-def _projet(tmp_path, *, scene: Scene, prefabs=None) -> Project:
+def _projet(tmp_path, *, scene: Scene, prefabs=None, sprites=True) -> Project:
     p = Project(tmp_path)
     p.scenes.items = [scene]
     p.prefabs.items = list(prefabs or [])
+    if sprites:
+        tout_afficher(p)
     return p
 
 

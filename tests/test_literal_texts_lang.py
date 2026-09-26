@@ -1,4 +1,4 @@
-"""Un littéral `text.draw("...")` devient un avertissement NOMMÉ dès qu'une
+"""Un littéral `text:draw("...")` devient un avertissement NOMMÉ dès qu'une
 langue est déclarée (ROADMAP v0.9, décision 6 / phase 3.5).
 
 C'était un raccourci ASSUMÉ au prix de la traduction depuis la v0.3.2 : rien
@@ -25,8 +25,8 @@ def projet(tmp_path):
 
     (p.scripts_scenes_dir / "Arena.lua").write_text(
         'function on_start()\n'
-        '    text.draw(2, 2, "score_label")\n'    # une vraie clé : pas un trou
-        '    text.draw(4, 6, "Bonjour")\n'          # un littéral : LE trou
+        '    text:draw(2, 2, "score_label")\n'    # une vraie clé : pas un trou
+        '    text:draw(4, 6, "Bonjour")\n'          # un littéral : LE trou
         'end\n',
         encoding="utf-8")
 
@@ -59,7 +59,7 @@ def test_un_litteral_est_signale_avec_fichier_et_ligne(projet):
 
 
 def test_une_vraie_cle_n_est_jamais_signalee(projet):
-    """`text.draw(2, 2, "score_label")` cite une entrée RÉELLE — ce n'est pas
+    """`text:draw(2, 2, "score_label")` cite une entrée RÉELLE — ce n'est pas
     un littéral, même si le repérage syntaxique est identique."""
     from core.models.settings import Language
     p = projet

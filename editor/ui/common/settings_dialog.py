@@ -272,6 +272,13 @@ class ShortcutsPanel(QWidget):
         "sprite.delete_frame": "settings.shortcuts.action.sprite.delete_frame",
         "sound.play_pause": "settings.shortcuts.action.sound.play_pause",
         "scene.group": "settings.shortcuts.action.scene.group",
+        "scene.graph_fit": "settings.shortcuts.action.scene.graph_fit",
+        "scene.graph_zoom_reset": "settings.shortcuts.action.scene.graph_zoom_reset",
+        "scene.graph_zoom_in": "settings.shortcuts.action.scene.graph_zoom_in",
+        "scene.graph_zoom_out": "settings.shortcuts.action.scene.graph_zoom_out",
+        "scene.graph_toggle_minimap": "settings.shortcuts.action.scene.graph_toggle_minimap",
+        "scene.graph_deselect": "settings.shortcuts.action.scene.graph_deselect",
+        "scene.graph_search": "settings.shortcuts.action.scene.graph_search",
     }
 
     def __init__(self, parent=None):

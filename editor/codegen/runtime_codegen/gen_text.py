@@ -9,7 +9,7 @@ Extrait de `main_gen` (A3), au-dessus de la couche de requêtes. Trois familles 
 
 Dépend vers le bas : `font_emit`, `gen_scene_query` (scene_ui_images), `gen_ui`
 (region_actor_index/ui_element_index), `gen_palette` (palettes_lines),
-`grit_conversion` (count_frames) et le modèle. Aucun n'importe ce module — pas de
+`oam_alloc` (layout_obj_budget_resolved) et le modèle. Aucun n'importe ce module — pas de
 cycle. `_declared_lang_codes`/`_emit_font_subsets` restent privés (consommés que
 d'ici). `region_ink_bank`/`region_is_composited` sont relus par l'éditeur
 (inspecteur, canvas), d'où leur nom public.
@@ -19,7 +19,7 @@ from __future__ import annotations
 from core.project import Project
 from core.models.ui_region import region_fill_container
 from codegen.c_names import sym as c_sym
-from codegen.grit_conversion import count_frames
+from codegen.oam_alloc import layout_obj_budget_resolved
 from codegen.font_emit import project_fonts, encodable_project_fonts
 from codegen.runtime_codegen.gen_scene_query import scene_ui_images
 from codegen.runtime_codegen.gen_ui import region_actor_index, ui_element_index
@@ -243,27 +243,6 @@ def scene_text_reservation(p, scene) -> dict:
     }
 
 
-def _layout_obj_budget(p: Project, lay) -> dict:
-    """Le budget OBJ d'UNE mise en page, noms d'asset résolus.
-
-    `layout_obj_budget` (modèle) ne résout ni les sprites ni la table de textes :
-    c'est ici, qui les connaît, de fournir les frames, les tailles de frame et
-    les glyphes animés — sous-réserver ferait écrire une image dans les tuiles de
-    la suivante. Source unique lue par `obj_text_alloc` (placement des zones) ET
-    `scene_obj_ui_slots` (le pic OBJ d'une scène, ROADMAP v0.17 T4), pour que les
-    deux comptent EXACTEMENT la même chose."""
-    from core.models.ui_region import layout_obj_budget
-    frames, sizes = {}, {}
-    for im in lay.images:
-        sprite = p.get_sprite(getattr(im, "sprite_name", "") or "")
-        if sprite is not None and sprite.asset:
-            frames[im.name] = count_frames(p, sprite)
-            sizes[im.name] = (int(getattr(sprite, "frame_w", 0) or 0),
-                              int(getattr(sprite, "frame_h", 0) or 0))
-    return layout_obj_budget(lay, image_frames=frames, image_frame_size=sizes,
-                             animated_by_name=p.layout_animated_glyphs(lay))
-
-
 def obj_text_alloc(p: Project) -> dict:
     """Placement OBJ de chaque zone : {nom: {oam_rel, tile_rel, ...}}.
 
@@ -273,32 +252,9 @@ def obj_text_alloc(p: Project) -> dict:
     alors qu'on n'en voit jamais qu'une."""
     out = {}
     for lay in getattr(p, "ui_layouts", []):
-        for name, place in _layout_obj_budget(p, lay)["place"].items():
+        for name, place in layout_obj_budget_resolved(p, lay)["place"].items():
             out[name] = place
     return out
-
-
-def scene_obj_ui_slots(p: Project, scene) -> int:
-    """Slots OAM que l'interface en sprites de CETTE scène occupe — son pic
-    (ROADMAP v0.17 T4). C'est le poste « UI » du budget OAM par scène
-    (`oam_alloc.scene_ui_obj_slots`), et la largeur de la bande OBJ que
-    `scene_init` réserve juste après les acteurs (ordre acteurs → UI → pools).
-
-    Max sur les mises en page que la scène référence : une seule bande OBJ est
-    active à la fois (base unique, `text_obj_set_base`), donc c'est la plus
-    gourmande qui commande — exactement le `max` que le build calculait
-    globalement avant, restreint à la scène. Les mises en page sont lues via leur
-    ASSET brut (`bound.layout`), même résolution que `obj_text_alloc`, pour que la
-    largeur réservée et le placement des zones concordent au slot près."""
-    peak = 0
-    seen = set()
-    for bound in p.scene_ui_layouts(scene):
-        lay = getattr(bound, "layout", bound)
-        if id(lay) in seen:
-            continue
-        seen.add(id(lay))
-        peak = max(peak, _layout_obj_budget(p, lay)["oam"])
-    return peak
 
 
 def _emit_font_subsets(p, encoded: list, emit=None) -> list[str]:
@@ -607,7 +563,7 @@ def gen_ui_texts(p: Project, scene, text_bg: int, emit=None) -> list[str]:
 
     Le build émet exactement l'appel que l'auteur aurait tapé — même fonction,
     même table, même index. Pas de chemin de rendu « statique » séparé : un
-    script peut réécrire le même slot ensuite (`text.draw_in`), dernier
+    script peut réécrire le même slot ensuite (`interface.draw_text`), dernier
     écrivain gagne.
 
     Posé une seule fois, à l'init : un texte qui doit CHANGER est le travail

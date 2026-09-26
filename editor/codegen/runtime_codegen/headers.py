@@ -14,7 +14,8 @@ from core.project import Project
 from codegen.c_names import sym as c_sym, scene_actor_sym
 from core.app_paths import RUNTIME_DIR
 import codegen.build_output as build_output
-from codegen.oam_alloc import scene_oam_layout, project_actor_count
+from codegen.runtime_codegen.gen_camera import project_cameras
+from codegen.oam_alloc import scene_oam_layout, project_actor_count, project_oam_entry_count
 
 
 def actorname_ids(p: Project) -> dict:
@@ -127,6 +128,7 @@ def generate_runtime_api(
     # Taille de `g_actors[]` : la scène la plus gourmande (MAX, pas somme) —
     # chaque scène repart de la base 0 et réutilise la même RAM (ROADMAP v0.17).
     total_actors = project_actor_count(p)
+    total_oam_entries = project_oam_entry_count(p)
 
     # Prototypes de l'API, DÉRIVÉS de gba_engine.h pour le sous-ensemble exposé
     # par le catalogue (cf. api_prototypes — le « 4e lecteur »). Émis AVANT
@@ -157,6 +159,7 @@ def generate_runtime_api(
         '#include "actor_types.h"',
         "",
         f"#define G_ACTOR_COUNT {total_actors}",
+        f"#define G_OAM_ENTRY_COUNT {total_oam_entries}",
         "",
         "/* Énumérations matérielles — générées depuis api.py (api_prototypes.py). */",
         *enum_defines,
@@ -286,7 +289,7 @@ def generate_runtime_api(
     else:
         a += [
             # Le type de la référence existe même sans son : un script qui
-            # écrit `local pas = sfx.play(...)` se compile dans un projet où
+            # écrit `local pas = sfx:play(...)` se compile dans un projet où
             # aucun asset audio n'est encore importé, et échouerait sinon sur
             # un type inconnu plutôt que sur ce qui manque vraiment.
             "typedef int mm_sfxhand;",
@@ -374,7 +377,7 @@ def generate_runtime_api(
 
     if all_scenes:
         a.append("")
-        a.append("/* Indices de scènes — utilisés par scene.switch() */")
+        a.append("/* Indices de scènes — utilisés par scene:switch() */")
         for i, sc in enumerate(all_scenes):
             a.append(f"#define SCENE_IDX_{c_sym(sc.name).upper()} {i}")
         a += [
@@ -406,14 +409,13 @@ def generate_runtime_api(
             a += layer_lines
 
     # Constantes CAM_* — l'index d'une caméra dans la table du runtime, tel que
-    # `camera.switch(CAM_X)` l'attend. Même ordre que `project_cameras`, qui
+    # `camera:switch(CAM_X)` l'attend. Même ordre que `project_cameras`, qui
     # émet la table : les deux dérivent de la même liste, sinon un script
     # activerait la mauvaise caméra.
-    from codegen.runtime_codegen.main_gen import project_cameras
     _cams = project_cameras(p)
     if len(_cams) > 1:
         a.append("")
-        a.append("/* Caméras du projet — utilisées par camera.switch() */")
+        a.append("/* Caméras du projet — utilisées par camera:switch() */")
         a.append("#define CAM_DEFAULT 0")
         for i, cam in enumerate(_cams):
             if cam is not None:

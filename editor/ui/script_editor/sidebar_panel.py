@@ -64,11 +64,11 @@ class SidebarPanel(QWidget):
             self._event_btns[ev] = btn
         self._cl.addWidget(self._sec_events)
 
-        # ── Sections API, éclatées en 3 grosses parties ───────────────
-        # Gameplay / Scripting / Hardware — la même API qu'avant sous un seul
-        # « API », désormais rangée par NATURE plutôt que par ordre du JSON
-        # seul. Une section vide (Hardware, tant qu'aucune catégorie n'y est
-        # rangée) ne se crée simplement pas — cf. api_reference.get_categories_by_group().
+        # ── Sections API — 8 sections, une par chose qu'on tient ──────
+        # ROADMAP v0.16 : le rangement remplace les 3 grosses parties
+        # (Gameplay/Scripting/Hardware) par une navigation unique par NOM. Les
+        # anciennes catégories deviennent des sous-titres ; le moteur se replie
+        # sous « Aller plus loin » — cf. api_reference.get_sections().
         self._api_sections: list[_Section] = []
         self._build_api_sections()
         for sec in self._api_sections:
@@ -83,21 +83,36 @@ class SidebarPanel(QWidget):
         outer.addWidget(scroll)
 
     # ── Sections API (statiques, depuis api_reference.json) ───────────
+    # Huit sections — une par CHOSE qu'on tient (ROADMAP v0.16). Les anciennes
+    # catégories deviennent des SOUS-SECTIONS repliables, plus des
+    # portes : la seule navigation est la section. Dans chacune, l'itération se
+    # montre, le moteur suit sous « Go further ».
+
+    def _api_button(self, entry: dict):
+        from scripting.api_reference import make_tooltip
+        display = entry['label'].removeprefix("self:")
+        snippet = entry.get("snippet", entry.get("label", ""))
+        btn = _EntryButton(f"  {display}", _BTN_API, make_tooltip(entry))
+        btn.clicked.connect(lambda _, s=snippet: self.snippet_requested.emit(s))
+        return btn
 
     def _build_api_sections(self):
-        from scripting.api_reference import get_categories_by_group, make_tooltip
-        for _group, grp_label, cats in get_categories_by_group():
-            sec = _Section(grp_label, _C_API, expanded=False)
-            for cat in cats:
-                sub = sec.sub_section(cat["name"])
-                for entry in cat.get("entries", []):
-                    display = entry['label'].removeprefix("self:")
-                    btn_label = f"  {display}"
-                    tooltip   = make_tooltip(entry)
-                    snippet   = entry.get("snippet", entry.get("label", ""))
-                    btn = _EntryButton(btn_label, _BTN_API, tooltip)
-                    btn.clicked.connect(lambda _, s=snippet: self.snippet_requested.emit(s))
-                    sub.add_widget(btn)
+        from scripting.api_reference import get_sections
+        for section in get_sections():
+            sec = _Section(label(section["label"]), _C_API, expanded=False)
+            # Une sous-section repliable par ancienne catégorie ; le moteur se
+            # range dans la sienne, sous l'annotation « Go further » — pas un
+            # troisième niveau de dépliage dans une colonne de 200 px.
+            iteration = {grp["name"]: grp["entries"] for grp in section["iteration"]}
+            engine = {grp["name"]: grp["entries"] for grp in section["engine"]}
+            for name in [*iteration, *(n for n in engine if n not in iteration)]:
+                sub = sec.sub_section(name)
+                for entry in iteration.get(name, []):
+                    sub.add_widget(self._api_button(entry))
+                if name in engine:
+                    sub.add_widget(_group_label(label("scrsb.go_further")))
+                    for entry in engine[name]:
+                        sub.add_widget(self._api_button(entry))
             self._api_sections.append(sec)
 
     # ── Références (dynamique, depuis le projet) ─────────────────────
@@ -159,7 +174,7 @@ class SidebarPanel(QWidget):
         if nbd.get(DOMAIN_ACTOR):
             sub = self._sec_refs.sub_section(label("scrsb.actors"))
             for name in nbd[DOMAIN_ACTOR]:
-                _add(sub, name, "get_actor", label("scrsb.active_scene"), actor=name)
+                _add(sub, name, "actor.get", label("scrsb.active_scene"), actor=name)
 
         # Prefabs
         if nbd.get(DOMAIN_PREFAB):
@@ -221,12 +236,12 @@ class SidebarPanel(QWidget):
                 # directement sa clé, et reste adressable (cf. KIND_SLOTS) pour
                 # être remplacé en cours de jeu.
                 key = getattr(r, "preview_text", "") or getattr(r, "text_key", "") or ""
-                doms = {"region": r.name}
-                if key:
-                    doms["text"] = key
-                _add(sub, r.name, "text.draw_in",
-                     label('scrsb.interface_name', name=layout.name)
-                     + (label('scrsb.preview_value', value=escape(key)) if key else ""), **doms)
+                doms = {"text": key} if key else {}
+                # La zone s'écrit sur SON acquisition : interface:get("zone"):draw(...).
+                sn = api_snippets.element_call(r.name, "text_region:draw", **doms)
+                extra = (label('scrsb.interface_name', name=layout.name)
+                         + (label('scrsb.preview_value', value=escape(key)) if key else ""))
+                sub.add_widget(_ref_btn(r.name, sn, _api_tip("text_region:draw", sn, extra)))
 
         # ── Polices ────────────────────────────────────────────────
         if nbd.get(DOMAIN_FONT):

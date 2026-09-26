@@ -38,37 +38,37 @@ end
 Une propriété s'écrit avec un point, une méthode avec deux points :
 
 ```lua
-self.visible = false
+self.position = vec2(8, 8)
 self:destroy()
-sfx.play("Bip")
+sfx:play("Bip")
 ```
 
 Certains appels renvoient une référence à un élément matériel. Une référence vaut `0` si aucun slot n'est libre ; une référence devenue périmée ne fait rien.
 
 ```lua
-local pas = sfx.play("Pas")
+local pas = sfx:play("Pas")
 if pas:playing() then pas:stop() end
 ```
 
-`get_actor("nom")` rend un acteur de la scène par son nom. **Un acteur appartient à sa scène** : le nom est local à la scène, donc « Cursor » peut exister dans autant de scènes qu'on veut, et `get_actor("Cursor")` vise toujours le Cursor de la scène en cours. La référence **peut valoir `nil`** — l'acteur a été détruit (`self:destroy()`), ou il n'existe pas dans cette scène — donc on la teste avant d'en appeler une méthode :
+`actor:get("nom")` rend un acteur de la scène par son nom. **Un acteur appartient à sa scène** : le nom est local à la scène, donc « Cursor » peut exister dans autant de scènes qu'on veut, et `actor:get("Cursor")` vise toujours le Cursor de la scène en cours. La référence **peut valoir `nil`** — l'acteur a été détruit (`self:destroy()`), ou il n'existe pas dans cette scène — donc on la teste avant d'en appeler une méthode :
 
 ```lua
-local cible = get_actor("Boss")
+local cible = actor:get("Boss")
 if cible ~= nil then
     cible:move_to(vec2(120, 80), 2)
 end
 ```
 
-On peut aussi adresser un acteur **par son index**, à partir de 1 (comme `data.Table[1]`), dans l'ordre où il est posé dans la scène. `actor_count()` donne le nombre d'acteurs posés — la borne de la boucle :
+On peut aussi adresser un acteur **par son index**, à partir de 1 (comme `data.Table[1]`), dans l'ordre où il est posé dans la scène. `actor:count()` donne le nombre d'acteurs posés — la borne de la boucle :
 
 ```lua
-for i = 1, actor_count() do
-    local a = get_actor(i)
+for i = 1, actor:count() do
+    local a = actor:get(i)
     if a ~= nil then a:play_anim("idle") end
 end
 ```
 
-C'est ce qui remplace une cascade `if sel == 1 then get_actor("Unit1") elseif …` : `get_actor(sel)` suffit.
+C'est ce qui remplace une cascade `if sel == 1 then actor:get("Unit1") elseif …` : `actor:get(sel)` suffit.
 
 Le catalogue **Gameplay**, **Scripting** et **Hardware** du panneau **API** est la référence des fonctions du moteur. Il est tenu à jour par l'éditeur.
 
@@ -91,7 +91,11 @@ end
 
 - **On l'utilise par son nom nu**, comme n'importe quelle variable : la lire, la réassigner. Sa seule particularité est que sa valeur de départ vient de l'inspecteur, pas du script.
 - **La valeur réglée sur l'instance** l'emporte sur le `default` ; sans réglage, c'est le `default`.
-- **Types réglables par instance : `int`, `float`, `bool`, `enum`** (tous entiers au runtime — un `enum` vaut l'index de son étiquette). Les autres types (`string`, `vec2`/`rect`, les références) sont déclarables mais leur valeur d'instance n'est pas encore prise en compte au build : le `default` s'applique.
+- **Tous les types sont réglables par instance**, avec la valeur portée jusqu'au jeu :
+  - `int`, `float`, `bool`, `enum` — entiers au runtime (`float` est tronqué, un `enum` vaut l'index de son étiquette).
+  - `string` — le texte devient une **entrée de la table de textes** (comme un littéral passé à `text.draw`) : traduisible, et un simple index au runtime. On l'utilise donc là où un texte est attendu (`text:draw(label)`).
+  - `actor_ref`, `scene_ref`, `sfx_ref` — une **référence** par son nom. Un `actor_ref` désigne un acteur **de la scène** de l'instance ; vide = aucune référence.
+  - `vec2`, `vec3`, `rect` — des **valeurs composées** (`{x, y}`, `{x, y, w, h}`), lisibles champ par champ (`home.x`).
 - **Le nom d'un export ne peut pas être** celui d'un champ d'acteur (`position`, `velocity`…), d'une variable globale, ni d'un mot de l'API (`input`, `wait`…) — le build le refuse.
 - **Une variable seulement LUE ne coûte rien** (acteur posé) : le build la fond dans le code. Seule une variable réécrite occupe de la mémoire. Régler `speed` sur dix gardes qui ne font que la lire n'ajoute aucun octet.
 
@@ -100,12 +104,12 @@ end
 Une instance créée au runtime avec `actor.spawn` n'a pas de fiche éditeur : ses exports se règlent **au moment du spawn**, par une table facultative en 3ᵉ argument.
 
 ```lua
-local b = actor.spawn("Bullet", vec2(116, 76), { speed = 8, team = "RED" })
+local b = actor:spawn("Bullet", vec2(116, 76), { speed = 8, team = "RED" })
 ```
 
 - **Les clés absentes gardent la valeur réglée sur le prefab** (dans l'éditeur), sinon le `default` du script.
-- La table s'écrit **en début de ligne** ou dans un `local x = actor.spawn(...)` — pas au milieu d'une expression.
-- Ses clés doivent être des exports **réglables** (`int`/`bool`/`float`/`enum`) du prefab, et ses valeurs des littéraux. Sur un prefab poolé, chaque instance garde sa propre valeur.
+- La table s'écrit **en début de ligne** ou dans un `local x = actor:spawn(...)` — pas au milieu d'une expression.
+- Ses clés doivent être des exports du prefab. Les valeurs suivent le type : un littéral pour un scalaire (`speed = 8`), un nom entre guillemets pour une référence ou une string (`boom = "Pop"`, `tgt = "Enemy"`), un constructeur pour un composite (`vel = vec2(1, 2)`). Sur un prefab poolé, chaque instance garde sa propre valeur.
 
 ## Séquences
 
@@ -124,12 +128,12 @@ Chaque attente ajoute une frame au déroulement de la séquence.
 `text.draw` accepte un littéral pour afficher rapidement un texte dans un projet monolingue :
 
 ```lua
-text.draw(2, 2, "Bonjour !")
+text:draw(2, 2, "Bonjour !")
 ```
 
 Au Build, ce littéral devient une entrée interne de la table de textes. Il n'est pas visible dans l'écran **Text** et ne peut donc pas être traduit. Dès qu'une langue est déclarée dans le projet, le Build le signale par un avertissement.
 
-Pour un texte traduisible ou qui contient une valeur, créez une entrée dans l'écran **Text**. Une clé, telle que `"dialogue_garde_01"`, est passée à `text.draw` ou `text.draw_in`. Pour afficher une valeur, utilisez un marqueur de valeur dans l'entrée de texte, plutôt qu'une concaténation :
+Pour un texte traduisible ou qui contient une valeur, créez une entrée dans l'écran **Text**. Une clé, telle que `"dialogue_garde_01"`, est passée à `text.draw` ou à `draw` sur une zone de texte (`interface:get("bulle"):draw("dialogue_garde_01")`). Pour afficher une valeur, utilisez un marqueur de valeur dans l'entrée de texte, plutôt qu'une concaténation :
 
 ```text
 Score : $score_joueur
@@ -137,7 +141,7 @@ Score : $score_joueur
 
 ```lua
 global.score_joueur = 12
-text.draw(2, 2, "score")
+text:draw(2, 2, "score")
 ```
 
 ### Balisage dans l'écran Text
@@ -159,9 +163,11 @@ propose les polices connues et entoure la sélection.
 Les mêmes textes acceptent aussi `[speed=n]`, `[pause=n]`, `[wave]…[/wave]`,
 `[shake]…[/shake]`, `[color=n]…[/color]`, `[icon=nom]` et `$valeur`.
 
-Les listes se pilotent avec `list.index`, `list.first`, `list.row` et `list.set_count`. Une liste fixe gère sa navigation sans script supplémentaire. `list.set_count` sert aux listes défilantes.
+Une liste se pilote par ses propriétés : `menu.index`, `menu.first`, `menu.count`, et sa méthode `menu:row(n)` qui rend la zone de texte d'une rangée (`local menu = interface:get("Menu")`). Une liste fixe gère sa navigation sans script supplémentaire. `menu.count` s'écrit pour les listes défilantes. `menu:activate()` et `menu:deactivate()` lui donnent ou lui retirent la croix directionnelle.
 
-`lang.get()` rend la langue active. `lang.set(code)` la modifie et recharge la scène courante. Pour mémoriser ce choix, conservez la valeur dans une globale persistante puis utilisez `save.write`.
+`interface:get("Nom")` rend une référence du **type réel** de l'élément — liste, image, zone de texte, ou conteneur. Le cycle de vie (`:show()`, `:hide()`, `.visible`) est commun ; le reste appartient au type : `heart.state = "vide"` et `cursor.offset = vec2(0, 16)` pour une image, `box:draw("clé")` et `box.reading` pour une zone de texte.
+
+`lang:get()` rend la langue active. `lang:set(code)` la modifie et recharge la scène courante. Pour mémoriser ce choix, conservez la valeur dans une globale persistante puis utilisez `save.write`.
 
 ## Écritures refusées
 
@@ -195,7 +201,7 @@ La bibliothèque standard de Lua n'est pas embarquée dans la ROM. Les cas usuel
 | Parcourir un tableau | `for i = 1, #t do`. |
 | Lire l'heure | `scene.frame` pour compter les frames. |
 | Ouvrir un fichier | `save.write` et `save.read` pour la SRAM. |
-| Afficher une trace | `debug.log(...)`, visible dans mGBA et retiré des builds release. |
+| Afficher une trace | `debug:log(...)`, visible dans mGBA et retiré des builds release. |
 | Gérer une erreur ou une exception | Un `if` qui contrôle et corrige la valeur. |
 | Charger un behavior | `require("behaviors/nom")`, résolu au build. |
 

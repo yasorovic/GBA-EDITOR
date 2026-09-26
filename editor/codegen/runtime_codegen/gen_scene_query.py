@@ -15,7 +15,7 @@ couche reste à la base (cf. TodoTechnique, A3).
 """
 from __future__ import annotations
 
-from core.models.components import CollisionBoxComponent, SpriteComponent
+from core.models.components import CollisionBoxComponent
 from codegen.grit_conversion import (bg_layer_sym, bg_layer_sym_for,
                                      bg_map_geometry, bg_map_sbb_count,
                                      count_frames)
@@ -68,10 +68,12 @@ def parent_depths(scene_actors: list) -> tuple[dict, list]:
 
 
 def actor_box_tags(owner) -> list[str]:
-    """Les tags des boxes ACTIVES d'un acteur (ou d'un prefab). « body » par
-    défaut, comme partout ailleurs dans le build."""
+    """Les tags des boxes d'un acteur (ou d'un prefab), inactives comprises :
+    « Active » de l'inspecteur n'est que l'état de DÉPART, un script peut
+    l'allumer (`hb:activate()`). « body » par défaut, comme partout ailleurs
+    dans le build."""
     return [c.tag or "body" for c in getattr(owner, "components", [])
-            if isinstance(c, CollisionBoxComponent) and c.active]
+            if isinstance(c, CollisionBoxComponent)]
 
 
 def actors_can_collide(p, a, b) -> bool:
@@ -95,8 +97,8 @@ def has_solid_box(owner) -> bool:
 
     C'est ce qui lui donne droit à la résolution contre la carte de collision —
     la définition que le modèle donne déjà de `solid` (cf. components.py)."""
-    return any(getattr(c, "solid", False) and getattr(c, "active", True)
-               and hasattr(c, "w") for c in getattr(owner, "components", []))
+    return any(getattr(c, "solid", False) and hasattr(c, "w")
+               for c in getattr(owner, "components", []))
 
 
 def scene_has_cmap(scene) -> bool:
@@ -104,14 +106,6 @@ def scene_has_cmap(scene) -> bool:
     carte, et n'a rien à faire heurter."""
     cmap = getattr(scene, "collision_map", None) or []
     return any(v != 0 for row in cmap for v in row)
-
-
-def get_sprite_comp(actor) -> "SpriteComponent | None":
-    """Retourne le SpriteComponent d'un Actor/Prefab, ou None."""
-    for c in getattr(actor, "components", []):
-        if isinstance(c, SpriteComponent):
-            return c
-    return None
 
 
 def has_col_event(defined, sym: str) -> bool:

@@ -67,7 +67,7 @@ def test_le_jeton_TROUVE_nest_pas_rapporte():
     """Sur `if x(...) :`, antlr nomme la parenthèse de l'appel, pas les
     deux-points — il désigne où il a renoncé, pas où l'auteur s'est trompé.
     Rapporter ce jeton enverrait corriger du code correct."""
-    e = _faute('function on_update()\n\tif input.pressed("a") :\n\t\tfoo()\n\tend\nend\n')
+    e = _faute('function on_update()\n\tif input:pressed("a") :\n\t\tfoo()\n\tend\nend\n')
     assert "(" not in str(e)
 
 
@@ -76,7 +76,7 @@ def test_le_jeton_TROUVE_nest_pas_rapporte():
 
 @pytest.mark.parametrize("src,attendu,ligne", [
     # Le script qui a révélé le défaut : « : » au lieu de « then ».
-    ('function on_update()\n\tif input.pressed("a") :\n\t\tfoo()\n\tend\nend\n',
+    ('function on_update()\n\tif input:pressed("a") :\n\t\tfoo()\n\tend\nend\n',
      "then", 2),
     ('function on_update()\n\tfor i = 1, 3 :\n\tend\nend\n',       "do", 2),
     # Le script qui a révélé le second défaut : « += », et rien pour le dire.

@@ -959,6 +959,10 @@ typedef struct UIListInfo {
        pas un redessin. */
     unsigned char selected_color;
     unsigned char selected_highlight;
+    /* Index de la liste dans `g_ui_elements` : le passage au type de base (cf.
+       `ui_list_element`). En dernier, pour que les initialiseurs positionnels des
+       sondes natives restent valides. */
+    short elem;
 } UIListInfo;
 
 /* Posé par la boucle de frame de main.c, une fois par frame. */
@@ -1078,7 +1082,14 @@ extern const int g_ui_element_count;
 
 void ui_elements_reset(void);          /* repose les bits authorés (par scène) */
 int  ui_element_is_visible(int idx);   /* remonte la chaîne des parents */
-void ui_element_show(int idx, int on); /* self:show() / self:hide() */
+void ui_element_show(int idx, int on); /* :show() / :hide() */
+/* Le passage d'un élément TYPÉ à son élément DE BASE : `interface:get("Menu")` rend un
+   index de LISTE (`UILIST_*`), une image son index d'IMAGE, une zone son index de
+   ZONE — et le cycle de vie (`:show()`, `.visible`) veut l'index d'ÉLÉMENT
+   ci-dessus. Hors bornes : -1, que `ui_element_show` ignore. */
+int  ui_list_element  (int l);
+int  ui_image_element (int img);
+int  ui_region_element(int r);
 
 /* Posés par scene_init, AVANT le premier ui_image_update. Les trois dépendent
    de la SCÈNE (charblock alloué, sélection de palettes) alors que `g_ui_images`
@@ -1679,7 +1690,7 @@ static inline u32 text_recolor(u32 row) {
 
 void lang_set(int code) {
     /* Borné sur le compte ÉMIS, comme `text_set_font` sur `g_font_count` :
-       depuis la phase 5.2 le code peut être une VALEUR (`lang.set(global.
+       depuis la phase 5.2 le code peut être une VALEUR (`lang:set(global.
        langue)`, relue d'une sauvegarde) et pas seulement un `LANG_*` résolu
        au build. Hors bornes, `g_texts[g_lang]` lirait un pointeur au hasard.
        Refus SILENCIEUX plutôt que repli sur 0 : une sauvegarde d'une version
@@ -3611,6 +3622,14 @@ int ui_list_row(int l, int r) {
     if (!ui_list_ok(l)) return -1;
     if (r < 1 || r > g_ui_lists[l].rows) return -1;
     return g_ui_list_rows[g_ui_lists[l].row0 + r - 1];
+}
+
+int ui_list_element(int l) { return ui_list_ok(l) ? g_ui_lists[l].elem : -1; }
+int ui_image_element(int img) {
+    return (img >= 0 && img < g_ui_image_count) ? g_ui_images[img].elem : -1;
+}
+int ui_region_element(int r) {
+    return (r >= 0 && r < g_ui_region_count) ? g_ui_regions[r].elem : -1;
 }
 
 int ui_list_active(int l) { return ui_list_ok(l) ? g_ui_list_active[l] : 0; }

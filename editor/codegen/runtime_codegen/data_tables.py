@@ -40,7 +40,7 @@ def reference_index(p) -> dict[str, dict[str, int]]:
     sont donc appelées ici, jamais recopiées.
     """
     from codegen.font_emit import project_fonts
-    from codegen.runtime_codegen.main_gen import project_cameras
+    from codegen.runtime_codegen.gen_camera import project_cameras
 
     def index_of(names) -> dict[str, int]:
         return {n: i for i, n in enumerate(names)}

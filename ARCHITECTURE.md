@@ -253,7 +253,7 @@ Ces concepts ont un équivalent direct dans le hardware ou la toolchain.
 | `SpriteAsset` | tiles OBJ VRAM | PNG converti par grit en tiles 8×8 chargées dans OBJ VRAM |
 | `TileCell` | tile index VRAM | Une tile 8×8 référencée par son index dans VRAM |
 | `AnimFrame` | plage de tile indices | Un état visuel = N tiles dans VRAM |
-| `Actor` | `struct Actor` + `OBJATTR` (OAM) | Une entrée de `g_actors[]` en EWRAM, affichée via une entrée OAM. Les composants de l'éditeur sont les blocs de la struct : `SpriteComponent` → `Actor.sprite`, `CollisionBoxComponent` → `Actor.collision` (cf. « Une seule entité runtime ») |
+| `Actor` | `struct Actor` + `OBJATTR` (OAM) | Une entrée de `g_actors[]` en EWRAM ; son affichage est une entrée de `g_oam_entries[]` (`OamEntry`), que `Actor.oam_entry` désigne. `CollisionBoxComponent` → `Actor.collision` (cf. « Deux tables runtime : acteurs et entrées OAM ») |
 | `BackgroundLayer` | charblock (CBB=`bg_slot`) + screenblock | `{image, bg_slot, scroll_speed, pal_bank, tile_palette_overrides}` — un plan BG physique **de la scène** |
 | `BackgroundAsset` | tileset + sous-palettes | Sidecar (`assets/backgrounds/{image}.json`), keyé par nom comme `SpriteAsset` — PNG source jamais modifié
 | `Scene.background_layers` | jusqu'à 4 `REG_BGxCNT` | Liste de `BackgroundLayer` inline dans le JSON de la scène (chacun référence un `BackgroundAsset` par nom d'asset) |
@@ -275,25 +275,66 @@ Ces concepts n'ont pas d'équivalent direct dans grit ou le hardware GBA.
 
 | Nom | Rôle | API Lua |
 |-----|------|---------|
-| `SpriteComponent` | Lien vers un `SpriteAsset`, état initial, vitesse d'animation... | `self:play_anim("state")` `self.anim` (lecture, comparable par nom) `self.anim_speed = n` (surcharge, 0 = vitesse de l'état) `self.anim_length` / `self.anim_loop` / `self.anim_finished` (lecture) `self.frame_w` / `self.frame_h` (lecture) `self.frame = n` `self.visible = bool` `self.flip_h = bool` `self.pal = n` `self.priority = n` |
+| `SpriteComponent` | Lien vers un `SpriteAsset`, état initial, vitesse d'animation... | `self:play_anim("state")` `self.anim` (lecture, comparable par nom) `self.anim_speed = n` (surcharge, 0 = vitesse de l'état) `self.anim_length` / `self.anim_loop` / `self.anim_finished` (lecture) `self.frame_w` / `self.frame_h` (lecture) `self.frame = n` `self:show()` / `self:hide()` (écriture) et `self.visible` (lecture seule) `self.flip_h = bool` `self.pal = n` `self.priority = n` |
 | `CollisionBoxComponent` | AABB de collision. `solid` ne décide que d'une chose : la box est-elle arrêtée par la carte de collision de la scène | handlers du script de l'actor (pas du composant) : `on_collision_enter(other, my_box, other_box)` `on_collision_exit(...)` `on_collide(...)` `on_tile_collide(nx, ny)` |
-| `SoundFxComponent` | Déclenche un effet sonore lié à l'acteur | `sfx.play("name")` |
+| `SoundFxComponent` | Déclenche un effet sonore lié à l'acteur | `sfx:play("name")` |
 | `ScriptComponent` | Attache un script Lua à l'acteur — **un seul actif par actor** (le compilateur n'en lit de toute façon qu'un seul) | `on_start()` `on_update()` `on_late_update()` |
 | `PathComponent` | Chemin de déplacement (waypoints) | — (en cours) |
 
-### Une seule entité runtime
+### Deux tables runtime : acteurs et entrées OAM
 
 L'éditeur distingue trois choses : un **actor** (logique de jeu), un **sprite** (son rendu),
-un **background** (le décor). L'API C n'a **qu'une struct**, `Actor`. Ce n'est pas un oubli,
-et les deux absences n'ont pas la même cause.
+un **background** (le décor). Le C a **deux tables**, et leur unité n'est pas la même :
 
-**Le sprite est dans l'`Actor`, et c'est assumé.** Un actor porte au plus un
-`SpriteComponent` : le rapport est 1:1, donc séparer coûterait un déréférencement par accès
-sur un ARM7TDMI sans cache, pour zéro gain de modèle. Ce qui EST séparé, c'est la
-**définition** du sprite — états, directions, vitesses, boucles — qui n'est pas une struct du
-tout mais des tables `static const` en ROM, émises par sprite (`sprite_{nom}_anim_dirs`,
-`_state_start`, `_state_speed`, `_state_loop`, et les `_frame_action`/`_frame_sfx`/
-`_frame_event` optionnelles). **La coupure est const/variable, pas classe/classe.**
+| Table | Un indice = | Type |
+|---|---|---|
+| `g_actors[]` | un **acteur** | `Actor` : identité, position, vélocité, transform monde, collision, lien `oam_entry` |
+| `g_oam_entries[]` | une **entrée de l'OAM** | `OamEntry` : tout l'état d'affichage (`frame`, animation, registres OAM, transform local, `affine_slot`) |
+
+`g_oam_entries[k]` double `shadow_oam[k]` entrée pour entrée : c'est l'état logiciel derrière un
+`OBJATTR`. Le nom dit ce qu'est la chose — une entrée de l'OAM — et non un composant d'acteur :
+elle n'est pas propre au sprite d'un acteur, les bandes de texte et l'interface en occupent aussi
+(cf. ROADMAP, « La struct `Actor` allégée »).
+
+**Pourquoi séparer.** Un acteur qui n'affiche rien (contrôleur, spawner, déclencheur) ne doit
+pas payer un état d'affichage, ni réserver un slot OAM qu'il n'utilise pas. Tant que la struct
+était plate, `g_actors[idx]` et `shadow_oam[idx]` partageaient le même indice : l'empreinte OAM
+d'une scène dimensionnait les acteurs. Deux tables permettent de compter chacune dans sa propre
+unité.
+
+**Le coût d'exécution est borné.** Le writer OAM et le tick d'animation sont **émis au build**,
+un bloc par entrée, et connaissent son indice : ils écrivent `g_oam_entries[k]` à adresse fixe,
+sans déréférencement. Seuls les accesseurs de script, qui reçoivent un `Actor*`
+(`actor_get_frame(const Actor*)`), traversent le lien : `actor_oam_entry(s)` =
+`&g_oam_entries[s->oam_entry]`, un déréférencement par accès de script.
+
+**Types étroits.** Un slot OAM se paie une entrée par frame d'écriture : `OamEntry` fait 32
+octets (`s16` puis `u8`, sans remplissage) et `Actor` 68, contre 92 et 96 quand tout était `int`.
+Position et vélocité restent en `int` (Q8). Les plafonds sont figés par un test qui mesure
+`sizeof` avec le compilateur hôte.
+
+**Les deux géométries.** Par scène, `codegen/oam_alloc.py` calcule :
+
+    g_actors[]      = [acteurs posés][pools : instances × parties]
+    g_oam_entries[] = [entrées des posés À SPRITE][interface & texte][entrées des pools À SPRITE]
+
+Seul un porteur de sprite (`has_oam_entry`) occupe une entrée : un contrôleur, un déclencheur ou
+un marqueur de prefab (point de tir, ancre de hitbox) existe dans `g_actors[]` avec
+`oam_entry = -1`. Les bandes de texte et les images d'interface OBJ occupent des entrées sans
+acteur, ancrées juste après les posés (`OamLayout.ui_start`). Les pools gardent un indice
+d'acteur (`POOL_*_START`, `self - &g_actors[START]`) et une entrée de départ distincte : le
+spawn avance dans les deux espaces à des pas différents (`_i += groupe`, `_e += entrées par
+instance`).
+
+**Acteur sans sprite : lecture = 0, écriture sans effet.** `self.frame`, `self:show()`
+restent appelables sur un acteur sans entrée : `actor_oam_entry()` lui rend alors une entrée
+nulle, remise à zéro à chaque appel, que rien ne lit.
+
+Ce qui EST séparé de longue date, c'est la **définition** du sprite — états, directions,
+vitesses, boucles — qui n'est pas une struct du tout mais des tables `static const` en ROM,
+émises par sprite (`sprite_{nom}_anim_dirs`, `_state_start`, `_state_speed`, `_state_loop`, et
+les `_frame_action`/`_frame_sfx`/`_frame_event` optionnelles). **La coupure est
+const/variable, pas classe/classe.**
 
 **Le background n'a pas de type parce que le calque EST le matériel.** `layer_show(int bg, …)`,
 `layer_set_scroll(int bg, …)`, `tilemap_set(int bg, …)` — l'état tient dans les registres
@@ -301,28 +342,26 @@ ombres `g_bgcnt_sh[4]` et `g_bg_ofs_x/y[4]`. Il y a quatre plans dans la machine
 un type instanciable suggérerait qu'on peut en créer un cinquième. Les seules structs BG sont
 `BgAnim` et `BgTileAnim`, qui sont des **états d'animation**, pas des backgrounds.
 
-**Le merge ne dispense pas de nommer ses parties** (ROADMAP — chantier technique *La grammaire
-de la struct `Actor`*). La struct porte trois
-familles, et ses deux blocs sont exactement les composants de l'éditeur — pour que le C émis
-se lise avec le vocabulaire de l'inspecteur, et pas un second :
+**Nommer ses parties** (ROADMAP — chantier technique *La grammaire de la struct `Actor`*). Les
+trois familles de champs se lisent avec le vocabulaire de l'inspecteur, pas un second :
 
 | Bloc C | Composant éditeur | Champs |
 |---|---|---|
-| `Actor` (racine) | `Actor` | `x, y, vx, vy, timer, tag, active, dir_x, dir_y, rotation, scale_x, scale_y, visible, priority, pal_bank, obj_mode, flip_h, flip_v` |
-| `Actor.sprite` | `SpriteComponent` | `frame, anim_state, anim_speed, anim_length, anim_loop, anim_finished, frame_w, frame_h, auto_dir, rotation, scale_x, scale_y, offset_x, offset_y, affine_slot` |
+| `Actor` (racine) | `Actor` | `x, y, vx, vy, tag, active, dir_x, dir_y, rotation, scale_x, scale_y, oam_entry` (rotation/scale = transform **monde**) |
+| `OamEntry` (`g_oam_entries[]`) | `SpriteComponent` (aujourd'hui, seul consommateur) | `frame, anim_state, timer, anim_speed, anim_length, anim_loop, anim_finished, frame_w, frame_h, auto_dir, visible, flip_h, flip_v, pal_bank, obj_mode, priority, screen_space, rotation, scale_x, scale_y, offset_x, offset_y, affine_slot` (rotation/scale = transform **local**) |
 | `Actor.collision` | `CollisionBoxComponent` | `grounded, last_x, slope_acc, box_count, boxes[]` |
 
 Le namespace a supprimé les trois abréviations qui n'existaient que parce que la struct était
-plate : `sprite_rot` → `sprite.rotation`, `sprite_scale_x/y` → `sprite.scale_x/y`,
-`offset_x/y` → `sprite.offset_x/y`.
+plate : `sprite_rot` → `rotation`, `sprite_scale_x/y` → `scale_x/y`, `offset_x/y` — désormais
+sur `OamEntry`, où « local » se lit par opposition au monde de l'acteur.
 
 **La surface Lua ne bouge pas** : `self.frame`, `self.sprite_scale`, `self.anim_length`
-passent par les accesseurs de `actor_api_static.h`, seul endroit du dépôt qui touche les
-champs. `scripting/api.py`, `codegen.py`, `checker.py` et `expr_types.py` n'en connaissent
+passent par les accesseurs de `runtime_api_inline.h`, seul endroit du dépôt (avec le C émis
+par le codegen) qui touche les champs. `scripting/api.py`, `codegen.py`, `checker.py` et `expr_types.py` n'en connaissent
 aucun — ils n'émettent que des `&g_actors[TAG_*]` et des appels `actor_get/set_*`. C'est cette
 couche d'accesseurs qui a rendu le découpage possible sans rupture pour les projets existants.
 
-**`self.anim_length`/`self.anim_loop`/`self.anim_finished` sont écrites sur `Actor.sprite`,
+**`self.anim_length`/`self.anim_loop`/`self.anim_finished` sont écrites sur `OamEntry`,
 pas lues dans la table du sprite — et ce n'est pas une duplication.** `{sprite}_state_loop[]`
 est `static`, déclarée dans le fichier où `scene_tick` est généré — invisible d'un script qui
 vit dans `actor_{sym}.c`. Mais la vraie raison est ailleurs : `anim_length` n'est pas
@@ -399,45 +438,66 @@ texte Lua → parser.py → AST Python → checker.py (validation) → codegen.p
 - **Important pour toute nouvelle fonction Lua** : si elle se traduit par un simple appel C avec conversion d'arguments, une entrée dans `RUNTIME_API` suffit *côté traduction*. Ce n'est que si elle a besoin de logique de traduction (nom C dynamique, arguments non présents côté Lua, émission multi-instructions) qu'elle doit aussi rejoindre `_INVOKE_CUSTOM`/`_CALL_CUSTOM`.
 - **Mais une fonction du moteur doit être déclarée DEUX fois** — voir « Deux listes de prototypes » ci-dessous. C'est le piège le plus coûteux de cette chaîne, parce qu'il ne se manifeste qu'au `make`.
 - **`lua_subset.py`** — la LISTE de ce que le langage accepte, et de ce qu'il refuse en le disant (`changelog-archive/v0.7.md`, v0.7.5). Chaque nœud de luaparser y est rangé dans une des trois cases — `ACCEPTED` (il se traduit), `REFUSED` (avec la phrase qui dit quoi écrire à la place) ou `STRUCTURAL` (jamais dispatché) — et la bibliothèque standard de Lua (`print`, `math.floor`, `table.*`…) reçoit le même traitement, par nom. Trois consommateurs : `checker.py` (refuser en nommant l'issue), `docs/scripting-reference.md` (expliquer — un test échoue si un refus n'y est pas documenté) et `validator._check_lua_subset` (**erreur bloquante** si un nœud de luaparser n'est classé nulle part, exactement comme `_check_api_domains` pour les domaines d'arguments). Avant elle, `parser.py` rendait `None` pour tout statement non géré — un `repeat` ou un `for … in` disparaissait du jeu sans un mot — et `ExprName("__unsupported_<Type>")` pour toute expression non gérée, qui n'échouait qu'au `make`. Les nœuds non traduits sont désormais PORTÉS (`StmtUnsupported`, `ExprUnsupported`, avec leur ligne) : le parser décrit, le checker juge. Ce qui n'atteint même pas l'AST — une faute de SYNTAXE — est le seul refus que le parser prononce lui-même, et il le prononce dans la même langue : `LuaParseError` porte sa `line` et une phrase, reconstruites depuis la chaîne d'exceptions d'antlr que luaparser jette en formatant son `syntax errors: None` (cf. `_syntax_message`, et la table de faux amis qui ne se balaie qu'après un échec).
-- **`expr_types.py`** — les deux exceptions au sous-ensemble Lua entièrement scalaire (ROADMAP v0.7.3 et v0.8.6) : `vec2(x, y)`/`vec3(x, y, z)` sont des constructeurs de langage, pas des entrées `RUNTIME_API`. `checker.py` et `codegen.py` partagent ce module pour savoir si une expression EST un vec2/vec3 (locals `self._vec_types`, remplie au fil d'un même parcours à plat dans les deux fichiers — même approximation que `self._arrays`) plutôt que de laisser chacun réinventer sa propre inférence. `+`/`-`/`*` (par un entier) s'y traduisent en appels `vec2_add`/`vec2_sub`/`vec2_scale` (`actor_api_static.h`) : le C n'a pas d'opérateur sur les structs. La seconde exception sont les **références** — ce qu'un appel REND (`local pas = sfx.play("Pas")`) : une valeur composée se copie, une référence DÉSIGNE un slot pris dans un pool du matériel, mais les deux répondent à la même question (« quel type porte ce nom ? ») et deux modules y auraient fini par répondre différemment. Le module s'appelait `vec_types.py` tant qu'il n'y avait qu'une exception.
+- **`expr_types.py`** — les deux exceptions au sous-ensemble Lua entièrement scalaire (ROADMAP v0.7.3 et v0.8.6) : `vec2(x, y)`/`vec3(x, y, z)` sont des constructeurs de langage, pas des entrées `RUNTIME_API`. `checker.py` et `codegen.py` partagent ce module pour savoir si une expression EST un vec2/vec3 (locals `self._vec_types`, remplie au fil d'un même parcours à plat dans les deux fichiers — même approximation que `self._arrays`) plutôt que de laisser chacun réinventer sa propre inférence. `+`/`-`/`*` (par un entier) s'y traduisent en appels `vec2_add`/`vec2_sub`/`vec2_scale` (`actor_api_static.h`) : le C n'a pas d'opérateur sur les structs. La seconde exception sont les **références** — ce qu'un appel REND (`local pas = sfx:play("Pas")`) : une valeur composée se copie, une référence DÉSIGNE un slot pris dans un pool du matériel, mais les deux répondent à la même question (« quel type porte ce nom ? ») et deux modules y auraient fini par répondre différemment. Le module s'appelait `vec_types.py` tant qu'il n'y avait qu'une exception.
 
-### La grammaire de l'API — trois formes, une par nature
+### La grammaire cible de l'API — trois formes, une par nature
 
-L'API expose trois formes syntaxiques, et chacune a UNE nature. La forme n'est pas
-un choix stylistique : c'est elle qui dit au parseur quoi produire (`Invoke` pour
-`:` — parser.py —, `Index` pour `.`), donc qui décide de la résolution.
+**Proposition v0.16 (2026-09-24, non verrouillée).** Le catalogue livré emploie encore
+`module.action(…)` ; la forme ci-dessous est la grammaire vers laquelle l'amendement le fait
+migrer. La forme n'est pas un choix stylistique : c'est elle qui dit au parseur quoi produire
+(`Invoke` pour `:` — parser.py —, `Index` pour `.`), donc qui décide de la résolution.
 
 | Syntaxe | Nature | Compile en |
 |---|---|---|
 | `identifier:member(...)` | **méthode** — opération sur une instance, qui peut produire un effet | `actor_member(récepteur, ...)`, ou `sfx_member(...)` sur une référence |
 | `identifier.member` | **propriété** — donnée que l'API expose comme un état, lue et écrite | `actor_get_member(...)` / `actor_set_member(...)` |
-| `module.member(...)` | **fonction module** — opération au niveau du système, sans instance | `module_member(...)` |
+| `module.member` | **propriété de singleton** — état d'un système moteur | `module_get_member()` / `module_set_member()` |
+| `module:member(...)` | **méthode de singleton** — opération au niveau du système | `module_member(...)` |
 
 `identifier` dans la forme méthode est une **instance** : un acteur (`self`, `other`, une
-variable d'actor) ou une **référence** rendue par un appel (`local pas = sfx.play("Pas")` →
+variable d'actor) ou une **référence** rendue par un appel (`local pas = sfx:play("Pas")` →
 `pas:set_volume(80)`, ROADMAP v0.8.6). Le catalogue range les méthodes d'acteur sous la clé
 `self:` et celles d'une référence sous le TYPE qu'elle porte (`sfx:`) : c'est ce type, relevé
 sur le `local` par `expr_types.infer_ref_type`, qui décide de la fonction C émise — sans lui,
 `pas:set_volume` retomberait sur le repli `actor_set_volume(pas, …)`, qui ne compile pas.
-`module` est un namespace (`sfx`, `math`, `camera`, `scene`,
-`input`, `blend`…). Le même namespace peut exposer des propriétés ET des
-fonctions (`camera.position` + `camera.follow(...)`) : les parenthèses lèvent
-l'ambiguïté.
+Une référence porte des méthodes ET, depuis la boîte de collision (ROADMAP « L'API dit tout ce que
+l'inspecteur règle », amendement du 2026-09-24), des **propriétés** : `hb.solid = false`. Le type
+`collision_box` les déclare dans `RUNTIME_PROPS` sous la clé `collision_box.champ`, et le checker
+refuse l'écriture d'un champ lecture seule (`hb.tag`).
+Un module du moteur est un **singleton**, donc un récepteur comme une instance : ses états
+sont des propriétés (`camera.position`, `music.volume`) et ses opérations des méthodes
+(`camera:follow(...)`, `music:play(...)`). Il n'y a pas une seconde grammaire à apprendre
+pour les systèmes du moteur. Une bibliothèque sans état ni identité runtime, telle que
+`math`, reste une exception nommée : ses fonctions pures gardent l'appel pointé
+`math.abs(x)`.
 
 La règle de décision pour TOUTE API future, dérivée des définitions ci-dessus :
 
 - **état intrinsèque** → propriété (`self.position`, `blend.mode`) — jamais un
   appel `get_*`/`set_*`.
-- **requête pure sans argument** (`input.get_axis()`, `scene.frame()`) → c'est
+- **requête pure sans argument** (`input.axis`, `scene.frame`) → c'est
   de l'état déguisé en fonction → propriété en lecture seule.
-- **requête INDEXÉE** (`tile.get(x, y)`, `save.read(slot, "nom")`, `layer.get_*(n)`) →
+- **requête INDEXÉE** (`hb:get_collision_tile(x, y)`, `save:read(slot, "nom")`, `layer.get_*(n)`) →
   reste une fonction : une propriété ne prend pas d'argument.
-- **action qui produit un effet** → méthode si elle porte sur une instance
-  (`self:move(...)`), fonction module si elle agit au niveau du système
-  (`scene.switch(...)`, `sfx.play(...)`).
+- **action qui produit un effet** → méthode sur son récepteur, qu'il soit une instance
+  (`self:move(...)`) ou un singleton moteur (`scene:switch(...)`, `sfx:play(...)`).
+- **cycle de vie** (décision du 2026-09-25, non encore migrée dans le catalogue) → **cinq verbes
+  communs**, `:show()`, `:hide()`, `:activate()`, `:deactivate()`, `:destroy()`, seule porte
+  d'ÉCRITURE ; l'état se lit par `visible` / `active` en **lecture seule**. C'est la seule
+  exception à « réglage runtime → lecture ET écriture » : `x.visible = false` n'existe pas, sinon
+  deux portes diraient la même chose. Voir « Cycle de vie » plus bas.
+- **réglage d'inspecteur** → il a TOUJOURS une porte, dont la nature dit ce que le runtime sait
+  faire : modifiable au runtime → lecture ET écriture ; fixé au build (le C émis en dépend, ou il
+  réserve du matériel) → lecture seule (`self.screen_space`, `self.affine`, `self.box_count`).
+  Un champ édité à l'éditeur mais invisible du script est un oubli, pas un choix. Un élément
+  adressé par un NOM du projet (une boîte par son tag) s'obtient par un CONSTRUCTEUR de référence
+  (`local hb = self:collision_box("hitbox")`) ; ses champs sont alors des propriétés
+  (`hb.solid`, `hb.size`) et ses actions des méthodes (`hb:overlaps(other)`).
 
-Deux cas hors des trois formes : les **fonctions libres** (`get_actor(name)`,
-`array`) et les **constructeurs** (`vec2(x, y)`) — ni instance, ni module.
+Deux cas hors des trois formes : la **fonction libre** `array` (une déclaration,
+pas un appel) et les **constructeurs** (`vec2(x, y)`) — ni instance, ni module.
+(`get_actor` en faisait partie ; renommé `actor:get`, il rentre dans la forme
+module — ROADMAP v0.16.)
 
 `global.nom` / `const.nom` (chantier global/const) sont de la forme PROPRIÉTÉ — lues et
 écrites comme `identifier.member` — sans compiler en getter/setter : `nom` est
@@ -473,6 +533,111 @@ Deux conséquences qui se paient cher si on les oublie :
   par la même fonction C que la forme ordinaire — `self.direction` est un vec2 côté
   calcul, une boussole côté nom — `c_getter_named`/`c_setter_named` portent la seconde
   porte. Une seule propriété, deux écritures.
+
+### Module, type, instance — d'où vient le récepteur (proposition du 2026-09-24, non verrouillée)
+
+Les trois formes ci-dessus disent **comment ça s'écrit**. La règle de provenance de la ROADMAP
+(v0.16, « La règle de construction ») dit **d'où vient la chose**. Il manque le maillon entre les
+deux : **de quel TYPE est le récepteur, et où le catalogue le range**. Le vocabulaire :
+
+| Mot | Ce que c'est | Exemple |
+|---|---|---|
+| **module** | un namespace : un système unique (singleton), ou une **fabrique** d'instances | `camera`, `scene`, `actor` (`get`/`spawn`/`count`) |
+| **type** | une sorte de chose qui a des instances ; **son nom est la clé du catalogue** | `sfx`, `collision_box`, `ui_element` (et `actor`, encore rangé sous `self:`) |
+| **instance** | une chose précise ; `self` et `other` en sont, une variable qui tient une référence aussi | `self`, `local hb = …` |
+| **référence** | la valeur qui désigne une instance quand elle ne se déduit pas du contexte | rendue par une acquisition (`actor.get`, `interface.get`) ou par une action (`sfx.play`) |
+
+**Le module gère, crée ou acquiert ; le type expose l'état et les opérations d'une instance**
+(ROADMAP v0.16, « Relecture de conception »). Un module et un type peuvent porter le même nom
+aujourd'hui (`sfx`, `collision_box`) ; ce sont deux choses, et la relecture propose de les
+séparer pour le son (`mixer` lance, `sfx` opère).
+
+**La règle.** Un module n'opère jamais sur UNE instance désignée par un nom du projet : il est
+soit un système sans instance (`scene`, `camera`), soit une fabrique (`actor`). Tout ce qui
+porte sur une instance nommée s'écrit en méthode ou en propriété **sur la référence** :
+
+```lua
+local menu = interface:get("Menu")     -- fabrique : une chose nommée du projet
+menu.index = 0                         -- propriété
+menu:show()                            -- méthode
+```
+
+Le numéro de matériel reste la porte des choses numérotées par le matériel, mais il est aussi une
+acquisition (`layer:get(n)`, provenance 3 de la ROADMAP) : le fond `n` est une référence du type
+`background_layer`, comme `interface:get("Menu")` en est une du type `list`. Les fonds qu'une scène a
+dépendent de son mode vidéo (`api.LAYERS_BY_MODE` × `Scene.render_mode`, passé au checker par
+`lua_compiler`) : un numéro écrit en clair qu'elle n'a pas est une erreur. C'est une ANTICIPATION
+INTERNE : seul le mode 0 est offert à l'auteur, et rien de ce qu'il lit (doc, indices, messages) ne parle
+de mode — un test le garde. Les fonds affines et bitmap auront leur propre type avec leur rendu.
+
+**Où le catalogue diverge aujourd'hui** (à migrer, ROADMAP v0.16 « Amendement du 2026-09-24 ») :
+
+| Écart | Où | Ce que dit la règle |
+|---|---|---|
+| ~~Le type acteur s'appelle `self:`~~ — **fait (v0.16, étape e)** | `RUNTIME_API["actor:…"]` et `RUNTIME_PROPS["actor.…"]` : `actor` est un type de `REF_TYPE_TABLE` (`Actor*`). `self` n'est pas le type : c'est le récepteur implicite, comme `other` ou un acteur de la scène — tout nom qui ne tient pas une référence typée est un acteur | la clé est le NOM DU TYPE : `actor:` |
+| ~~Une fonction de module reçoit le nom d'une instance~~ — **fait pour `interface` (v0.16, étape c)** | `list.*`, `interface.image_*`, `interface.draw_text`/`clear_text`/`reading`/`skip` ont disparu : `interface:get(nom)` rend une `list`, une `image`, une `text_region` ou un `ui_element` selon la nature de l'élément, lue dans la mise en page. Reste `window.*` (7), et `layer.*` (numéroté par le matériel) | méthodes/propriétés du type visé, obtenu par `interface.get` / `window.get` |
+| ~~Trois mécanismes de « valeur qui désigne »~~ — **fait (v0.16, étape b)** | `sfx`, `collision_box` et `ui_element` sont trois lignes de `api.REF_TYPE_TABLE` ; plus de cas spécial d'`interface.get` dans le checker. Reste `actor`, dont la clé `self:` est l'étape (e) | UN mécanisme : un type déclaré, avec sa représentation C |
+| ~~Trois façons de dire « absent »~~ | dans le C émis, c'est déjà UNE : `nil` vaut 0 et une référence absente vaut 0 (`if p ~= nil` → `(p != 0)` pour un acteur, un effet, une boîte — `tests/test_ref_type_table.py`). Une référence d'élément d'interface est un index connu au build : jamais absente | écrire la règle par type ; refuser le test de `nil` inutile sur un statique (critère 4) |
+
+**Ce que ça ne coûte pas.** Une référence à une chose STATIQUE du projet (`interface:get("Menu")`,
+`window:get("Panel")`) se résout au build en constante, comme `TEXT_<clé>` : aucun slot, aucun
+test à l'exécution. Seules les références de POOL (`actor.get`, `sfx.play`, `actor.spawn`) portent
+une valeur qui peut être périmée ou absente.
+
+**Déclarer un type de référence — trois gestes, aucun cas spécial** (livré, v0.16 étape b).
+
+1. UNE ligne dans `api.REF_TYPE_TABLE` : `RefType(c_type=…, variable=…, hint=…)`. Le type C du
+   `local` qui tient la référence, la variable des snippets, la phrase ajoutée à l'erreur
+   « méthode/champ inconnu ».
+2. Ses entrées de catalogue : la fabrique (`ApiFunc(ret="<type>")`), les méthodes sous
+   `"<type>:<méthode>"`, les propriétés sous `"<type>.<champ>"`.
+3. Les fonctions C, déclarées DEUX fois (section suivante).
+
+Tout le reste s'en dérive : le `local` typé (`codegen`), le refus d'un membre inconnu
+(`checker._unknown_ref_method` / `_unknown_ref_field`), les snippets (`api_snippets`), le
+renommage (`refactor`). `tests/test_ref_type_table.py` déclare un type factice `gizmo` par ces trois
+gestes seulement et vérifie qu'il se vérifie et se traduit — chaîné ou non — sans toucher
+`checker.py` ni `codegen.py`. Seule une traduction C réellement atypique reste un cas de
+`_INVOKE_CUSTOM` (`ui_element:show` → `ui_element_show(h, 1)`).
+
+**Le garde-fou.** Comme `_check_api_domains` et `test_inspector_api_parity`, un test échoue si une
+entrée de `RUNTIME_API` de la forme `module.fonction` prend en premier paramètre un domaine d'INSTANCE
+(`ui_list`, `image`, `region`, `win_region`…) : la règle ne tient pas sur la discipline, elle tient
+sur le catalogue.
+
+### Cycle de vie — cinq verbes, communs à tous les types (décision du 2026-09-25)
+
+Montrer, cacher, activer, désactiver et détruire s'écrivent pareil sur toute instance :
+
+```lua
+interface:get("menu"):hide()
+interface:get("menu"):deactivate()
+window:get("Panel"):hide()
+actor:get("Boss"):destroy()
+if menu.visible then ... end      -- lecture seule
+```
+
+| Verbe | Effet | Propriété de lecture |
+|---|---|---|
+| `show()` / `hide()` | rendre visible / invisible | `visible` |
+| `activate()` / `deactivate()` | participer / ne plus participer (collision, entrée, navigation) | `active` |
+| `destroy()` | libérer l'instance ; la référence devient périmée (`nil`) | — |
+
+Règles :
+
+- **Une porte d'écriture, une de lecture.** Pas de `x.visible = …` en écriture, pas de
+  `layer.show(n, on)` ni de `list.set_active(nom, on)` — ces portes n'existent plus. Une valeur
+  calculée s'écrit avec un `if`.
+- **Chaque type déclare les verbes qu'il supporte** (dans sa ligne du catalogue) ; le checker refuse
+  les autres. Une `collision_box` n'a pas `show`, un `sfx` n'a aucun des quatre premiers.
+- **`destroy` ne vaut que pour les instances de pool** (acteur, `sfx`). Un élément d'interface ou
+  une fenêtre est statique, connu au build : `destroy` y est une erreur du checker.
+- **Le type de base `ui_element` porte `show`/`hide`/`activate`/`deactivate`** ; les types concrets
+  (`list`, `image`, `button`…) ajoutent leurs propres états et actions.
+- **Migré** : acteur, boîte, `ui_element` et ses natures, fonds (`background_layer`) et régions de
+  window (`window_region`) — ROADMAP v0.16, étape (c) et (d). Reste `self:` → `actor:` (étape e).
+  Les types `background_layer` et `window_region` ne portent pas le nom de leur module : un type
+  `layer` aurait donné à `layer.priority` deux lectures (propriété du type, ou fonction du module).
 
 ### Deux listes de prototypes, et le garde-fou qui les tient d'accord
 
@@ -517,7 +682,7 @@ Même logique pour `api_reference.json`, qui ne décrit que la *présentation* (
 descriptions rédigées) : `api_reference.get_categories()` le filtre par le catalogue puis le
 complète avec lui. Une fonction retirée disparaît de l'écran, une fonction ajoutée y
 apparaît sans qu'on touche au JSON — les deux dérives que ce fichier avait accumulées
-(`display.print`, `display.clear`, `text.draw_box` encore proposées ; `text.draw_in`
+(`display.print`, `display.clear`, `text.draw_box` encore proposées ; `interface.draw_text`
 absente).
 
 ### Un domaine a TROIS consommateurs, et deux ne le disaient pas
@@ -549,7 +714,7 @@ t'est-il connu ? », pas la mécanique interne.
 ### Un nom se vérifie par son DOMAINE, pas par le nom de l'appel
 
 Cinq domaines étaient vérifiés par un contrôle accroché au nom de l'appel —
-`scene.switch`, `get_actor`, `global.get`/`set`, `const.get` — et
+`scene.switch`, `actor.get`, `global.get`/`set`, `const.get` — et
 `actor.spawn` ne l'était par rien. Deux conséquences, corrigées ensemble :
 
 - **une seconde fonction prenant le même domaine n'aurait rien déclenché.** Le
@@ -904,7 +1069,7 @@ scène peut en posséder plusieurs ; une seule est active à la fois — la GBA 
   constantes. Ailleurs (aucun acteur de ce nom dans la scène), la caméra reste immobile, et
   `_check_cameras` le dit avant le build.
 - **Le nom d'une caméra reste unique à l'échelle du PROJET**, même si elle n'appartient qu'à
-  une scène : `camera.switch("Nom")` n'est pas qualifié par scène côté Lua, et chaque caméra
+  une scène : `camera:switch("Nom")` n'est pas qualifié par scène côté Lua, et chaque caméra
   reçoit une constante C globale `CAM_<NOM>` (même mécanique que `LAYER_<NOM>`). Deux scènes
   ne peuvent donc pas nommer leur caméra pareil.
 - **`frame_w`/`frame_h` pilotent WIN0** (réglé le 2026-08-24, cf. « Windows — le pochoir » plus
@@ -912,7 +1077,7 @@ scène peut en posséder plusieurs ; une seule est active à la fois — la GBA 
   cadre est plus petit que 240×160, sinon WIN0 reste éteinte. 240×160 (le défaut) préserve le
   comportement d'avant que ces champs existent.
 - **Le script d'une caméra emprunte le chemin des scripts de scène** (pas de `self`), avec
-  `hook_kind="camera"` : seul le mot du symbole C change (`<sym>_camera_on_update`). Deux
+  `owner_kind="camera"` : seul le mot du symbole C change (`<sym>_camera_on_update`). Deux
   points d'entrée et non trois — le moteur n'exécute ce script qu'à un seul moment de la
   frame, un `on_late_update` s'y enchaînerait sans que rien ne l'en sépare.
 
@@ -1282,7 +1447,7 @@ courant laisse un emplacement illisible plutôt qu'une sauvegarde à moitié éc
 relit très bien. `save_read` (`save.load` côté Lua) repose d'abord tous les défauts : une
 lecture rend un état complet, jamais un mélange entre le fichier et la partie en cours.
 
-**`save.read(slot, "nom")` lit UNE variable sans les trois tests ci-dessus** (ROADMAP
+**`save:read(slot, "nom")` lit UNE variable sans les trois tests ci-dessus** (ROADMAP
 v0.22) : elle rend le défaut de la variable dès que `save_exists` répond faux, et sinon
 s'arrête au premier enregistrement du même format qui porte son id — sans jamais appeler
 `global_write_at`, donc sans toucher aux globales de la partie en cours. C'est le geste
@@ -1481,7 +1646,7 @@ les portées à cheval sur une valeur.
 le tempo est ignoré par un `text.draw` à coordonnées libres : une tête doit s'accrocher à
 quelque chose de nommé. Un texte sans marqueur de tempo s'affiche entier, immédiatement : ne
 pas en mettre est une décision d'auteur, pas un oubli à compenser par une vitesse par
-défaut. Et `text.draw_in` est **idempotent** tant que la lecture court, sinon un appel depuis
+défaut. Et `zone:draw` est **idempotent** tant que la lecture court, sinon un appel depuis
 `on_update` la relancerait soixante fois par seconde et le texte n'avancerait jamais.
 
 `[color=n]` ne fonctionne que sur les chemins COMPOSÉS : le chemin tilemap pose une tuile
@@ -1805,7 +1970,7 @@ sienne avant de préparer la surface.
 une référence de variable ; une zone ne le peut pas. Tout l'intérêt de déclarer la
 géométrie est que l'empreinte VRAM soit connue **avant** le build ; une position qui ne se
 connaîtrait qu'au runtime rendrait ce chiffre faux, c'est-à-dire pire qu'absent. Une
-position calculée reste possible par `text.draw(x, y, …)`, qui ne disparaît pas.
+position calculée reste possible par `text:draw(x, y, …)`, qui ne disparaît pas.
 
 `w` est **aussi** la largeur de coupe. Un champ séparé garantirait qu'un jour les deux
 divergent.
@@ -1880,10 +2045,10 @@ cosmétique, un dépassement d'OAM corrompt les sprites des acteurs.
 
 | Lua | Effet |
 | --- | --- |
-| `text.draw_in(zone, id)` | le texte de la table dans la zone |
+| `zone:draw(id)` (`interface:get("zone"):draw(id)`) | le texte de la table dans la zone |
 | `text.draw_in_upto(zone, id, n)` | idem, n premiers caractères (machine à écrire) |
 | `text.draw_num_in(zone, valeur)` | un nombre, aligné et polices héritées — **intérimaire** |
-| `text.clear_in(zone)` | vide la zone, BG **ou** OBJ |
+| `zone:clear()` | vide la zone, BG **ou** OBJ |
 
 **Grammaire : conteneur (ou position) d'abord, contenu ensuite**, tenue par toute la
 famille `text.*` — c'est le contenu qui grandira avec les valeurs interpolées, la géométrie
@@ -1891,8 +2056,8 @@ non. L'ordre est le même en Lua et en C, parce que `codegen._emit_api_call` map
 arguments par **position** : une permutation entre les deux couches serait invisible à la
 relecture de chacune, et tous les paramètres étant des `int`, le compilateur ne pourrait
 rien en dire. `validator._check_api_prototypes` compare donc aussi les deux ordres, et ne
-signale que les *permutations* — un renommage délibéré (`layer.show(n, on)` en Lua contre
-`layer_show(bg, on)` en C) reste juste sur le fond.
+signale que les *permutations* — un renommage délibéré (un paramètre `n` en Lua contre `bg` en C)
+reste juste sur le fond.
 
 `text_render_region_cp()` prend une suite de codepoints et non un id de table, pour la même
 raison que `text_render_cp` côté libre : la table n'est qu'une source parmi d'autres. Un
@@ -1926,8 +2091,8 @@ pour l'autre.
 sous chaque scène, un nœud racine par `Interface` référencé (`_populate_ui_branch` itère
 `scene_ui_layouts`) — étiqueté « Interface » tant qu'il n'y en a qu'un, par son NOM dès
 qu'il y en a plusieurs, badge « — N scènes » quand partagé. Objectif : l'arbre montre d'un
-coup d'œil ce qu'un **script Lua peut référencer** — un actor (`get_actor`) et une zone
-(`text.draw_in` / `REGION_*`) s'affichent en clair, un conteneur ou un texte authoré en grisé.
+coup d'œil ce qu'un **script Lua peut référencer** — un actor (`actor.get`) et une zone
+(`interface:get(…):draw` / `REGION_*`) s'affichent en clair, un conteneur ou un texte authoré en grisé.
 Le **+** crée un nouveau nœud (nouvel asset, comme un acteur — `_add_interface`) ; le menu
 contextuel du nœud ajoute un widget ou le supprime (`DeleteInterfaceCmd` : retire la référence
 de la scène, et emporte l'asset si plus aucune scène ne l'emploie). Création /
@@ -1984,7 +2149,7 @@ ancrage, son parent et sa profondeur se décident dans le canvas, jamais au runt
 au script reprendrait ce que la mise en page existe pour fermer.
 
 La **position d'une image** fait exception depuis la v0.22 (2026-09-02), et la nuance est la
-raison d'être de l'exception : `ui.image_move` pose un décalage **relatif** à la position
+raison d'être de l'exception : `image.offset` pose un décalage **relatif** à la position
 authorée, qui reste la vérité — `(0, 0)` rend l'image à sa mise en page sans que le script ait
 mémorisé quoi que ce soit. La géométrie n'est pas rendue au script, elle est **animée**, comme
 `self.position` anime un acteur sans que la scène cesse de décider où il commence. Le moteur
@@ -2002,13 +2167,14 @@ de composition d'une zone est alloué à un rectangle fixe par `scene_init` (`Re
 fond d'un panneau est peint une fois dans la tilemap. `DOMAIN_IMAGE` ne connaît que les images,
 donc citer autre chose est refusé au build sans qu'un contrôle dédié existe.
 
-**Pourquoi un appel de module et non une propriété** (`ui.get("X").y = 40`) : la forme
-propriété suppose un récepteur que le langage TIENT — `expr_types.resolve_prop` exige
-littéralement un `ExprName`, et une référence « ne se calcule pas, on n'en prend pas de champ »
-(`infer_ref_type`). Une image est adressée par son NOM à travers un module, comme un effet
-sonore, une liste ou une scène ; la forme voisine est `list.set_index("Menu", i)`. C'est aussi
-ce qui fait que ces trois entrées n'ont demandé **aucune ligne** de checker ni de codegen : un
-argument porteur d'un domaine déjà couvert passe par les chemins génériques.
+**Une propriété, pas un appel de module** (`interface:get("Cursor").offset = vec2(0, 40)`) —
+depuis l'étape (c) de la v0.16. La v0.22 avait écrit `interface.image_move("Cursor", 0, 40)` faute
+de récepteur que le langage TIENNE (`resolve_prop` exigeait un `ExprName`) : le chaînage
+(`_resolve_chained_prop`, étape a) et les types d'élément (`REF_TYPE_TABLE`, étapes b et c) ont
+levé l'obstacle. `offset` est un `vec2` de la famille des propriétés (`ui_image_offset` /
+`ui_image_set_offset`, construits dans la façade `runtime_api_inline.h` sur les trois entiers du
+moteur), et ne demande **aucune ligne** de checker ni de codegen : un membre déclaré sur un type
+passe par les chemins génériques.
 
 ### UI en sprite — `Actor.screen_space`
 
@@ -2105,9 +2271,9 @@ par un second chemin qui n'appliquait pas les mêmes conditions.
 `UIList` porte ce qu'un menu demande au MOTEUR : un index courant, des bornes, un pas et de
 quoi le faire bouger. Ses RANGÉES sont ses enfants de type texte, dans l'ordre de l'arbre —
 rien à déclarer, ce qu'on voit dans l'éditeur est ce que la liste parcourt. Le nombre
-d'ITEMS reste de la donnée (`list.set_count`), à défaut le compte de rangées, ce qui suffit
+d'ITEMS reste de la donnée (`menu.count = …`), à défaut le compte de rangées, ce qui suffit
 à un menu statique. Ce qu'elle ne fait pas : ÉCRIRE. Le contenu d'une rangée est posé par
-le script (`text.draw_in(list.row(...), ...)`), parce qu'un item est une ligne de donnée et
+le script (`menu:row(1):draw(...)`), parce qu'un item est une ligne de donnée et
 non un objet d'interface — c'est ce qui fait qu'un inventaire, un arbre de compétences et
 un menu de sauvegarde partagent un seul mécanisme.
 
@@ -2128,7 +2294,7 @@ déjà `list.*`, et `to_dict` écrivait cinq clés selon un booléen. Un `{"kind
   bouger toutes les listes au même appui — un menu et son sous-menu à l'écran ensemble était
   donc impossible.
 - **La liste possède son CURSEUR** : elle nomme un `UIImage` de la même mise en page, et le
-  moteur le déplace par le chemin de `ui.image_move` — un décalage RELATIF à la position
+  moteur le déplace par le chemin de `image.offset` — un décalage RELATIF à la position
   authorée. L'auteur pose son curseur en face de la première rangée ; la liste l'écarte de la
   distance qui sépare cette rangée de la rangée courante. Une implémentation, deux portes :
   l'authoring pour le cas courant, l'appel de script pour le reste.
@@ -2189,7 +2355,7 @@ frame, et le C émis n'écrit que la matrice composée.
 
 La décision vit sur le **sprite** : `SpriteComponent.affine_transform` (case « Affine
 transform » dans la carte du composant Sprite), portée dans la struct runtime par
-`Actor.sprite.affine_slot`. Un sprite coché **réserve un des 32 slots au build, même à
+`OamEntry.affine_slot`. Un sprite coché **réserve un des 32 slots au build, même à
 l'identité**. Décoché, aucun slot : les champs de transform gardent leur valeur, mais rien
 ne les affiche.
 
@@ -2212,7 +2378,7 @@ Deux niveaux de transform, séparés par qui les possède :
 | | Qui possède | Éditeur | API Lua | Runtime |
 | --- | --- | --- | --- | --- |
 | **Monde** | l'`Actor` | carte Transform : rotation (0-359°), scale X/Y | `self.rotation`, `self.scale` | `g_actors[i].rotation`, `.scale_x/y` (Q8, 256 = 100%) |
-| **Local** | le `SpriteComponent` | carte Sprite : rotation, scale X/Y, offset X/Y | `self.sprite_rotation`, `self.sprite_scale`, `self.sprite_offset` | `g_actors[i].sprite.rotation`, `.sprite.scale_x/y`, `.sprite.offset_x/y` |
+| **Local** | le `SpriteComponent` | carte Sprite : rotation, scale X/Y, offset X/Y | `self.sprite_rotation`, `self.sprite_scale`, `self.sprite_offset` | `g_oam_entries[i].rotation`, `.scale_x/y`, `.offset_x/y` |
 
 Le transform monde reste sur l'**Actor** alors que la case est passée au sprite, et ce n'est
 pas une incohérence : la rotation d'un actor est un fait de son état de jeu — un script la lit,

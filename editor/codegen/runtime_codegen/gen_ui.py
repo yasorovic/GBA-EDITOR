@@ -160,6 +160,10 @@ def emit_ui_lists_c(p: Project, emit=None) -> list[str]:
     # sans quoi elle en déplacerait un autre.
     images = {im.name: i for i, (_l, im) in
               enumerate(p.all_images() if hasattr(p, "all_images") else [])}
+    # Index d'ÉLÉMENT (celui de `g_ui_elements`, donc de `UIELEM_*`) : c'est ce que la
+    # liste rend quand on la traite comme un simple élément — `menu:hide()`.
+    elements = {el.name: i for i, (_l, el) in enumerate(
+        p.all_elements() if hasattr(p, "all_elements") else [])}
     rows_flat: list[int] = []
     row_counts: list[int] = []
     actives: list[int] = []
@@ -200,7 +204,8 @@ def emit_ui_lists_c(p: Project, emit=None) -> list[str]:
             f"{1 if getattr(lst, 'cursor_mode', '') == CURSOR_SLIDE else 0}, "
             f"{max(1, min(255, int(getattr(lst, 'cursor_speed', 2) or 2)))}, "
             f"{int(getattr(lst, 'selected_text_color', 0) or 0)}, "
-            f"{int(getattr(lst, 'selected_highlight_color', 0) or 0)}"
+            f"{int(getattr(lst, 'selected_highlight_color', 0) or 0)}, "
+            f"{elements.get(lst.name, -1)}"
             + "}" + f"   /* {lst.name} — {len(rows)} rangée(s) */")
         if emit and not rows:
             emit("log_line",
@@ -209,7 +214,7 @@ def emit_ui_lists_c(p: Project, emit=None) -> list[str]:
                  f"de texte posées DANS son conteneur.")
     n = len(lists)
     L.append("const UIListInfo g_ui_lists[] = {"
-             + (", ".join(infos) if infos else "{0,1,0,0,0,0,0,-1,0,1,0,0}") + "};")
+             + (", ".join(infos) if infos else "{0,1,0,0,0,0,0,-1,0,1,0,0,-1}") + "};")
     L.append("const short g_ui_list_rows[] = {"
              + (", ".join(str(r) for r in rows_flat) if rows_flat else "0") + "};")
     L.append(f"const int g_ui_list_count = {n};")

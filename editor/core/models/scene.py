@@ -7,7 +7,7 @@ from core.models.resource import Resource
 from core.models.palette import OWN_PAL_BANK
 from core.models.components import (
     ComponentOwnerMixin, components_to_list, components_from_list, ScriptComponent,
-    SpriteComponent,
+    SpriteComponent, affine_sprite_component,
 )
 from core.models.background import BackgroundLayer, decode_tile_palette_overrides
 from core.models.camera import Camera
@@ -292,8 +292,7 @@ class Prefab(Resource, ComponentOwnerMixin):
     def affine_transform(self):
         """La réservation affine vit sur le SpriteComponent (ARCHITECTURE.md
         « Le modèle affine ») : un prefab sans sprite n'en a pas."""
-        sc = next((c for c in self.actor.components
-                   if isinstance(c, SpriteComponent)), None)
+        sc = affine_sprite_component(self.actor)
         return bool(sc and sc.affine_transform)
 
     @property
@@ -602,7 +601,7 @@ class Scene(Resource):
     # référence un `UILayout` par nom ET porte SA cible de rendu (ancrage, cible
     # BG/OBJ, acteur suivi, slot BG). Une scène peut en poser plusieurs (un HUD
     # fixe en BG et une bulle qui suit un acteur en OBJ sont deux nœuds). Vide =
-    # aucune, le script place alors tout lui-même via text.draw(id, tx, ty).
+    # aucune, le script place alors tout lui-même via text:draw(id, tx, ty).
     # cf. models/ui_region.py (InterfaceNode) et project.scene_ui_layouts.
     ui_layouts: list = field(default_factory=list)   # list[InterfaceNode]
     # Police chargée par `scene_init`, celle qu'obtient tout texte qui n'en

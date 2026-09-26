@@ -10,13 +10,12 @@ conclut que l'API est cassée, pas que le bouton est périmé.
 Dériver du catalogue rend cette dérive impossible : une signature qui change
 change le snippet, une fonction qui disparaît fait disparaître son bouton.
 C'est aussi ce qui fait que le réordonnancement d'arguments à venir
-(`text.draw(x, y, contenu)`) n'aura à toucher que `api.py`.
+(`text:draw(x, y, contenu)`) n'aura à toucher que `api.py`.
 
 Deux entrées distinctes, parce que les deux usages ne veulent pas la même chose :
 
-  `example()` — section API : montre la fonction, donc préfère l'exemple écrit
-                à la main dans le `doc` (« Ex: … »), qui vaut mieux qu'un
-                gabarit générique.
+  `bare()`    — section API : le nom seul, sans argument ni exemple — ce que
+                le clic insère, à l'auteur de compléter.
   `call()`    — section RÉFÉRENCES : l'utilisateur a cliqué sur UN asset précis,
                 donc le nom vient de lui et l'exemple du `doc` serait un
                 contresens (il citerait un autre asset).
@@ -25,8 +24,9 @@ from __future__ import annotations
 
 from scripting.api import (
     RUNTIME_API, RUNTIME_PROPS, PARAM_STR, PARAM_STR_LITERAL, PARAM_ACTOR, ApiFunc,
-    HARDWARE_ENUMS,
+    HARDWARE_ENUMS, REF_TYPE_TABLE, module_call_form,
 )
+
 from scripting.expr_types import VEC_FIELDS, VEC_CONSTRUCTORS, C_TYPES
 
 # Marqueur d'exemple dans les `doc` d'api.py. Convention déjà en place là-bas ;
@@ -38,19 +38,39 @@ def _fn(name: str) -> ApiFunc | None:
     return RUNTIME_API.get(name)
 
 
+# Une référence s'écrit sur une VARIABLE, pas sur le nom de son type : le libellé
+# du bouton dit le type (`collision_box:overlaps`), le snippet inséré montre
+# l'usage (`hb:overlaps(other)`). Même convention que le JSON pour `sfx`
+# (`sfx:stop()` → `pas:stop()`). La variable se DÉCLARE avec le type
+# (`api.REF_TYPE_TABLE`) : pas de seconde liste ici.
+
+
+def _on_variable(name: str) -> str:
+    """`collision_box:overlaps` / `collision_box.solid` → `hb:overlaps` / `hb.solid`.
+    Une FONCTION de module (`collision_box.get_tile`) garde son nom : le point ne
+    dit une propriété que si le catalogue la connaît comme telle."""
+    for ref, decl in REF_TYPE_TABLE.items():
+        if name.startswith(f"{ref}:") or (name.startswith(f"{ref}.") and name in RUNTIME_PROPS):
+            return decl.variable + name[len(ref):]
+    # La fonction d'un MODULE s'écrit avec « : » (`input:pressed`) : la clé du catalogue reste
+    # `input.pressed`, seule sa forme écrite change (`api.module_call_form`).
+    return module_call_form(name)
+
+
 def _lua_str(value: str) -> str:
     return '"' + str(value).replace('"', '\\"') + '"'
 
 
 def signature(name: str) -> str:
-    """`text.draw_in(id, region)` — la forme, pour un libellé de bouton."""
+    """`interface.draw_text(region, id)` — la forme, pour un libellé de bouton."""
     f = _fn(name)
     if f is None:
         return name
     parts = [p.name for p in f.params]
     if f.variadic:
         parts.append("...")
-    return f"{name}({', '.join(parts)})"
+    return f"{module_call_form(name)}({', '.join(parts)})"
+
 
 
 def call(name: str, **by_domain: str) -> str:
@@ -86,7 +106,16 @@ def call(name: str, **by_domain: str) -> str:
             args.append(p.name)
     if f.variadic:
         args.append("...")
-    return f"{name}({', '.join(args)})"
+    return f"{_on_variable(name)}({', '.join(args)})"
+
+
+def element_call(element: str, name: str, **by_domain: str) -> str:
+    """Le snippet d'une méthode d'ÉLÉMENT d'interface, écrite sur son acquisition :
+    `text_region:draw` sur « boite_bas » → `interface:get("boite_bas"):draw("texte")`.
+    Les arguments de la méthode se remplissent par domaine, comme pour `call`."""
+    inner = call(name, **by_domain)
+    method = name.split(":", 1)[1]
+    return f"interface:get({_lua_str(element)}):{method}{inner[inner.index('('):]}"
 
 
 def description(name: str) -> str:
@@ -97,17 +126,19 @@ def description(name: str) -> str:
     return (f.doc or "").split(_EX)[0].strip()
 
 
-def example(name: str) -> str:
-    """Exemple écrit à la main s'il existe, sinon le gabarit de `call()`."""
-    f = _fn(name)
-    if f is None:
-        return name
-    doc = f.doc or ""
-    if _EX in doc:
-        ex = doc.split(_EX, 1)[1].strip()
-        if ex:
-            return ex
-    return call(name)
+def bare(name: str) -> str:
+    """Ce que le bouton INSÈRE dans le script : le nom, sans exemple.
+
+    `actor:spawn()`, `self:move()`, `hb:overlaps()`, et pour une propriété son nom
+    seul (`self.active`). Ni argument d'illustration ni valeur d'écriture : le
+    clic pose de quoi écrire, l'auteur complète. Un exemple inséré est un exemple
+    à effacer (`actor:spawn("Bullet", vec2(116, 76))` — un acteur qui n'existe
+    pas dans son projet), et la doc d'un appel dit déjà comment l'appeler."""
+    name = _on_variable(name)
+    return name if name in _PROP_NAMES else f"{name}()"
+
+
+_PROP_NAMES = frozenset(_on_variable(k) for k in RUNTIME_PROPS)
 
 
 def _param_type(p) -> str:
@@ -119,25 +150,6 @@ def _param_type(p) -> str:
     if p.ptype == "vec2" or p.ptype == "vec3":
         return p.ptype
     return "number"
-
-
-def _prop_label(name: str, p) -> str:
-    """Forme complète d'une propriété ÉCRIVABLE, pour le `snippet` inséré au
-    clic (pas le libellé du bouton, cf. `prop_entry_dict`) — une PROPRIÉTÉ
-    s'enseigne par son ÉCRITURE quand elle en a une : `camera.bound =
-    rect(x, y, w, h)` en dit plus que `camera.bound`."""
-    if p is None:
-        return name
-    if p.read_only or p.c_setter is None:
-        return name
-    fields = VEC_FIELDS.get(p.ptype, ())
-    if p.ptype in VEC_CONSTRUCTORS:
-        return f"{name} = {p.ptype}({', '.join(fields)})"
-    if p.domain in HARDWARE_ENUMS:
-        # Énumération matérielle : une VRAIE valeur, pas un gabarit — même
-        # raison que pour un argument du même domaine dans `call()`.
-        return f'{name} = {_lua_str(next(iter(HARDWARE_ENUMS[p.domain])))}'
-    return f"{name} = ..."
 
 
 def _short_type(p, enum) -> str:
@@ -167,7 +179,7 @@ def prop_entry_dict(name: str) -> dict:
     enum = (HARDWARE_ENUMS.get(p.domain)
             if p is not None and p.ptype not in VEC_CONSTRUCTORS else None)
     read_only = p is None or p.read_only or p.c_setter is None
-    snippet = name if read_only else _prop_label(name, p)
+    snippet = bare(name)
     short = name.rsplit(".", 1)[-1]
     typ = _short_type(p, enum) if p is not None else ""
     return {
@@ -196,7 +208,7 @@ def entry_dict(name: str) -> dict:
     ret = "" if f is None or f.ret == "void" else f.ret
     return {
         "label":       signature(name),
-        "snippet":     example(name),
+        "snippet":     bare(name),
         "description": description(name),
         "params": [
             {"name": p.name,

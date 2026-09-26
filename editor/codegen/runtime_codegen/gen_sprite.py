@@ -13,6 +13,7 @@ familles :
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Optional
 
 from core.models.sprite import SpriteAsset
@@ -20,6 +21,7 @@ from core.models.scene import Actor
 from core.project import Project
 from codegen.c_names import sym as c_sym
 from codegen.grit_conversion import sprite_unique_frames, seq_key
+from codegen.runtime_codegen.gen_affine import affine_oam_lines_dynamic
 
 
 def frame_action_ids(p: Project, sprite: SpriteAsset) -> list[int]:
@@ -55,7 +57,7 @@ def frame_sfx_syms(p: Project, sprite: SpriteAsset) -> list[tuple[str, int]]:
     `resolve_sound_assets` garde tout Sfx cité par une frame.
 
     Retourne (symbole C du volume, ou "-1") — le volume vient de la ressource
-    Sfx elle-même, même lecture que `self:play_sfx()`/`sfx.play()`
+    Sfx elle-même, même lecture que `self:play_sfx()`/`sfx:play()`
     (`Sfx.volume` → `volume_to_effect`), pas d'un réglage propre à la frame.
 
     Un nom qui ne correspond à aucun Sfx du projet rend ("-1", 0) — signalé
@@ -213,7 +215,10 @@ def anim_tick_lines(idx: int, sym: str, has_frame_sfx: bool = False,
                     has_frame_direct_sfx: bool = False,
                     event_lines: Optional[list[str]] = None,
                     has_frame_events: bool = False,
-                    actor_sym: str = "") -> list[str]:
+                    actor_sym: str = "",
+                    entry: int | None = None,
+                    label_suffix: str = "",
+                    with_auto_dir: bool = True) -> list[str]:
     """Génère le bloc C de tick d'animation pour un acteur (dans scene_tick).
 
     `has_frame_sfx` dit si le sprite porte des ACTIONS de SoundBox sur ses
@@ -229,26 +234,34 @@ def anim_tick_lines(idx: int, sym: str, has_frame_sfx: bool = False,
     deux fonctions différentes. Elle est donc déclarée `static` ICI, en
     portée LOCALE à ce bloc (un `static` de fonction est légal en C, même
     patron que `_dlut` juste en dessous), plutôt qu'au niveau fichier.
+
+    `label_suffix` : le `goto` interne s'appelle `_af<idx>` ; deux apparences du
+    même acteur dans un `switch` (cf. `anim_tick_variants`) ont donc besoin de
+    deux noms. `with_auto_dir` : le recalcul de la direction est PARTAGÉ entre les
+    apparences, il n'a pas à être émis dans chacune.
     """
-    return [
-        f"    if(g_actors[{idx}].sprite.auto_dir&&(g_actors[{idx}].vx||g_actors[{idx}].vy)){{",
+    e = idx if entry is None else entry   # entrée OAM ; `idx` reste l'acteur (vx, vy, dir, événements)
+    auto_dir = [
+        f"    if(g_oam_entries[{e}].auto_dir&&(g_actors[{idx}].vx||g_actors[{idx}].vy)){{",
         f"        g_actors[{idx}].dir_x=(g_actors[{idx}].vx>0)-(g_actors[{idx}].vx<0);",
         f"        g_actors[{idx}].dir_y=(g_actors[{idx}].vy>0)-(g_actors[{idx}].vy<0);",
         f"    }}",
+    ]
+    advance = [
         # dir_x/dir_y → indice 1-8 (NW=8,N=1,NE=2,W=7,0=0,E=3,SW=6,S=5,SE=4)
         f"    {{",
         *([f"        {line}" for line in event_lines] if has_frame_events and event_lines else []),
         f"        static const s8 _dlut[3][3]={{{{8,1,2}},{{7,0,3}},{{6,5,4}}}};",
         f"        int _ad=_dlut[g_actors[{idx}].dir_y+1][g_actors[{idx}].dir_x+1];",
-        f"        int _st=g_actors[{idx}].sprite.anim_state;",
+        f"        int _st=g_oam_entries[{e}].anim_state;",
         f"        int _b={sym}_state_start[_st];",
         f"        int _fs=0,_fc=1,_fb=-1,_fbc=1;",
         f"        for(int _e=_b;{sym}_anim_dirs[_e][0]!=255;_e++){{",
-        f"            if({sym}_anim_dirs[_e][0]==_ad){{_fs={sym}_anim_dirs[_e][1];_fc={sym}_anim_dirs[_e][2];goto _af{idx};}}",
+        f"            if({sym}_anim_dirs[_e][0]==_ad){{_fs={sym}_anim_dirs[_e][1];_fc={sym}_anim_dirs[_e][2];goto _af{idx}{label_suffix};}}",
         f"            if({sym}_anim_dirs[_e][0]==0){{_fb={sym}_anim_dirs[_e][1];_fbc={sym}_anim_dirs[_e][2];}}",
         f"        }}",
         f"        if(_fb>=0){{_fs=_fb;_fc=_fbc;}}",
-        f"        _af{idx}:;",
+        f"        _af{idx}{label_suffix}:;",
         # RESYNC : `frame` peut être hors de [_fs, _fs+_fc) — self:play_anim
         # le remet à 0 (frame ABSOLUE dans le sheet dédupliqué du sprite en
         # entier), qui ne tombe dans le bloc du nouvel état que si celui-ci
@@ -256,34 +269,34 @@ def anim_tick_lines(idx: int, sym: str, has_frame_sfx: bool = False,
         # dont le bloc de frames diffère. Sans ce recalage, `_fi` ci-dessous
         # part négatif et l'animation affiche des frames d'un AUTRE état le
         # temps de quelques ticks de vitesse, avant de reconverger par hasard.
-        f"        if(g_actors[{idx}].sprite.frame<_fs||g_actors[{idx}].sprite.frame>=_fs+_fc){{",
-        f"            g_actors[{idx}].sprite.frame=_fs; g_actors[{idx}].timer=0;",
+        f"        if(g_oam_entries[{e}].frame<_fs||g_oam_entries[{e}].frame>=_fs+_fc){{",
+        f"            g_oam_entries[{e}].frame=_fs; g_oam_entries[{e}].timer=0;",
         f"        }}",
-        f"        g_actors[{idx}].timer++;",
+        f"        g_oam_entries[{e}].timer++;",
         # self.anim_speed surcharge la vitesse de l'état ; 0 = celle du sprite
         # (même règle que UIImageInfo.speed, cf. ARCHITECTURE.md « Animation »).
-        f"        int _asp=g_actors[{idx}].sprite.anim_speed?g_actors[{idx}].sprite.anim_speed:{sym}_state_speed[_st];",
-        f"        if(g_actors[{idx}].timer>=_asp){{",
-        f"            g_actors[{idx}].timer=0;",
-        f"            int _fi=g_actors[{idx}].sprite.frame-_fs;",
-        f"            int _fprev=g_actors[{idx}].sprite.frame;",
-        f"            if({sym}_state_loop[_st]) g_actors[{idx}].sprite.frame=_fs+(_fc>1?(_fi+1)%_fc:0);",
-        f"            else if(_fi<_fc-1) g_actors[{idx}].sprite.frame=_fs+_fi+1;",
+        f"        int _asp=g_oam_entries[{e}].anim_speed?g_oam_entries[{e}].anim_speed:{sym}_state_speed[_st];",
+        f"        if(g_oam_entries[{e}].timer>=_asp){{",
+        f"            g_oam_entries[{e}].timer=0;",
+        f"            int _fi=g_oam_entries[{e}].frame-_fs;",
+        f"            int _fprev=g_oam_entries[{e}].frame;",
+        f"            if({sym}_state_loop[_st]) g_oam_entries[{e}].frame=_fs+(_fc>1?(_fi+1)%_fc:0);",
+        f"            else if(_fi<_fc-1) g_oam_entries[{e}].frame=_fs+_fi+1;",
         # L'effet se déclenche en ARRIVANT sur la frame, donc seulement quand
         # elle change — sinon une animation d'une seule frame, ou arrêtée sur
         # sa dernière, rejouerait le son à chaque tick de vitesse.
-        *(([f"            if(g_actors[{idx}].sprite.frame!=_fprev){{"]
-           + ([f"                int _ac={sym}_frame_action[g_actors[{idx}].sprite.frame];",
+        *(([f"            if(g_oam_entries[{e}].frame!=_fprev){{"]
+           + ([f"                int _ac={sym}_frame_action[g_oam_entries[{e}].frame];",
                # L'indirection : l'emplacement, puis ce vers quoi l'état courant le
                # résout. Un emplacement non réglé dans cet état vaut -1 et ne joue
                # rien — « pas de bruit de pas en vol » se dit sans réglage dédié.
                f"                if(_ac>=0&&g_sound_box_action[_ac]>=0)",
                f"                    sfx_play(g_sound_box_action[_ac],g_sound_box_action_vol[_ac],0);"]
               if has_frame_sfx else [])
-           + ([f"                int _as={sym}_frame_sfx[g_actors[{idx}].sprite.frame];",
-               f"                if(_as>=0) sfx_play(_as,{sym}_frame_sfxv[g_actors[{idx}].sprite.frame],0);"]
+           + ([f"                int _as={sym}_frame_sfx[g_oam_entries[{e}].frame];",
+               f"                if(_as>=0) sfx_play(_as,{sym}_frame_sfxv[g_oam_entries[{e}].frame],0);"]
               if has_frame_direct_sfx else [])
-           + ([f"                void (*_ev)(Actor*)={actor_sym}_frame_event[g_actors[{idx}].sprite.frame];",
+           + ([f"                void (*_ev)(Actor*)={actor_sym}_frame_event[g_oam_entries[{e}].frame];",
                f"                if(_ev) _ev(&g_actors[{idx}]);"]
               if has_frame_events else [])
            + [f"            }}"]) if (has_frame_sfx or has_frame_direct_sfx or has_frame_events)
@@ -300,9 +313,94 @@ def anim_tick_lines(idx: int, sym: str, has_frame_sfx: bool = False,
         # l'état ne change pas, comme `grounded` reste vrai tant qu'on ne
         # quitte pas le sol. Toujours faux pour un état qui boucle : il n'a
         # pas de dernière frame, il n'a qu'une case suivante.
-        f"        g_actors[{idx}].sprite.anim_length = _fc;",
-        f"        g_actors[{idx}].sprite.anim_loop = {sym}_state_loop[_st];",
-        f"        g_actors[{idx}].sprite.anim_finished = !{sym}_state_loop[_st] "
-        f"&& (g_actors[{idx}].sprite.frame - _fs) >= _fc - 1;",
+        f"        g_oam_entries[{e}].anim_length = _fc;",
+        f"        g_oam_entries[{e}].anim_loop = {sym}_state_loop[_st];",
+        f"        g_oam_entries[{e}].anim_finished = !{sym}_state_loop[_st] "
+        f"&& (g_oam_entries[{e}].frame - _fs) >= _fc - 1;",
         f"    }}",
     ]
+    return auto_dir + advance if with_auto_dir else advance
+
+
+# ── Apparences ────────────────────────────────────────────────────────
+# Un acteur affiche UN sprite (une entrée OAM), mais ce sprite peut être l'un de
+# plusieurs : `OamEntry.appearance` dit lequel (ROADMAP, marche 3). Chaque
+# apparence garde ses constantes de build (base de tuiles, forme, taille,
+# origine, tables d'animation) — le C reste déroulé par entrée, il l'est
+# désormais aussi par apparence. Un acteur à UNE apparence émet exactement le C
+# d'avant : pas de `switch`, pas de lecture de `appearance`.
+
+@dataclass(frozen=True)
+class Appearance:
+    """Ce qui distingue une apparence d'une autre au moment de l'émission."""
+    sprite: SpriteAsset
+    base_tile: int          # 1re tuile OBJ du sprite (sprite_offsets)
+    origin_x: int = 0       # SpriteComponent.origin_x/y
+    origin_y: int = 0
+
+
+def _signed_offset(v: int) -> str:
+    return (f"-{v}" if v > 0 else f"+{-v}") if v else ""
+
+
+def _oam_body_lines(idx: int, e: int, ap: Appearance, aff: Optional[dict],
+                    screen_space: bool) -> list[str]:
+    """Le corps d'écriture OAM d'UNE apparence (l'intérieur du `if` actif)."""
+    if aff:
+        return affine_oam_lines_dynamic(idx, aff, ap.sprite, ap.base_tile,
+                                        f"g_oam_entries[{e}].priority",
+                                        screen_space=screen_space, entry=e)
+    cx = "" if screen_space else "-cam_x"
+    cy = "" if screen_space else "-cam_y"
+    ox_s, oy_s = _signed_offset(ap.origin_x), _signed_offset(ap.origin_y)
+    sp = ap.sprite
+    return [
+        f"        int sx=(g_actors[{idx}].x>>8){cx}{ox_s}; int sy=(g_actors[{idx}].y>>8){cy}{oy_s};",
+        f"        u16 ti=(u16)({ap.base_tile}+g_oam_entries[{e}].frame*{sp.tiles_per_frame});",
+        f"        int fh=g_oam_entries[{e}].flip_h; int fv=g_oam_entries[{e}].flip_v;",
+        f"        shadow_oam[{e}].attr0=(sy&0xFF)|(g_oam_entries[{e}].obj_mode<<10)|({sp.oam_shape}<<14);",
+        f"        shadow_oam[{e}].attr1=(sx&0x1FF)|(fh<<12)|(fv<<13)|({sp.oam_size}<<14);",
+        f"        shadow_oam[{e}].attr2=(ti&0x3FF)|(g_oam_entries[{e}].priority<<10)|(g_oam_entries[{e}].pal_bank<<12);",
+    ]
+
+
+def oam_write_lines(idx: int, e: int, appearances: list[Appearance],
+                    aff: Optional[dict] = None, screen_space: bool = False) -> list[str]:
+    """L'écriture de `shadow_oam[e]` pour l'acteur `idx`, une apparence par cas.
+
+    `idx` = l'acteur (`g_actors[idx]`, sa position), `e` = son entrée OAM. L'affine
+    appartient à l'ENTRÉE (le slot de matrice est réservé au build) : `aff` est
+    commun à toutes les apparences, chacune n'apportant que sa géométrie."""
+    head = f"    if(g_actors[{idx}].active && g_oam_entries[{e}].visible){{"
+    tail = f"    }}else{{ shadow_oam[{e}].attr0=0x0200; }}"
+    if len(appearances) == 1:
+        return [head, *_oam_body_lines(idx, e, appearances[0], aff, screen_space), tail]
+    cases: list[str] = [f"        switch(g_oam_entries[{e}].appearance){{"]
+    for n, ap in enumerate(appearances):
+        cases += [f"        case {n}: {{",
+                  *_oam_body_lines(idx, e, ap, aff, screen_space),
+                  f"        }} break;"]
+    # Une apparence inconnue ne dessine rien plutôt que n'importe quoi.
+    cases += [f"        default: shadow_oam[{e}].attr0=0x0200; break;", "        }"]
+    return [head, *cases, tail]
+
+
+def anim_tick_variants(idx: int, e: int, variants: list) -> list[str]:
+    """Le tick d'animation d'un acteur : le bloc de chaque apparence, choisi par
+    `OamEntry.appearance`. `variants` : les arguments de `anim_tick_lines` de
+    chaque apparence (`sym`, `has_frame_sfx`, …), ou None pour une apparence FIXE
+    (sans état d'animation : rien à animer). Une seule = le bloc d'avant."""
+    if len(variants) == 1:
+        return anim_tick_lines(idx, entry=e, **variants[0])
+    first = next(v for v in variants if v is not None)
+    L = anim_tick_lines(idx, entry=e, **first)[:4]   # recalcul de la direction, commun
+    L.append(f"    switch(g_oam_entries[{e}].appearance){{")
+    for n, kw in enumerate(variants):
+        if kw is None:
+            L += [f"    case {n}: break;"]
+            continue
+        L += [f"    case {n}:",
+              *anim_tick_lines(idx, entry=e, label_suffix=f"_{n}", with_auto_dir=False, **kw),
+              "    break;"]
+    L.append("    }")
+    return L

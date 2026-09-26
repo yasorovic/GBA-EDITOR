@@ -32,7 +32,8 @@ from codegen.palette_alloc import (
     scene_bank_layout, effective_palette_colors, ui_image_sprite_pools,
 )
 from codegen.actor_budget import prefab_pool_instances
-from codegen.oam_alloc import scene_pool_instances
+from codegen.oam_alloc import scene_pool_instances, owner_appearances
+from core.models.components import displayed_sprite_component
 from core.app_paths import RUNTIME_DIR
 from codegen.runtime_codegen.headers import generate_actor_types, generate_runtime_api
 from codegen.runtime_codegen.lua_compiler import transpile_all
@@ -146,45 +147,47 @@ class BuildWorker(EventEmitter, threading.Thread):
 
                 # Actors
                 scene_actors: list[tuple[Actor, Optional[SpriteAsset]]] = []
+                # Les sprites des apparences AUTRES que celle de `scene_actors` : ils
+                # sont résidents en VRAM (marche 3, « tout résident ») sans être
+                # « le » sprite de l'acteur, donc hors de `scene_actors` (dont
+                # l'indice EST l'acteur) — d'où une liste à part.
+                extra_sprites: list[tuple[Actor, SpriteAsset]] = []
                 for actor in scene.actors:
                     if actor.active:
-                        sprite_comp = actor.get_component("sprite")
-                        sprite = (p.get_sprite(sprite_comp.sprite_name)
-                                  if sprite_comp and sprite_comp.active and sprite_comp.sprite_name
-                                  else None)
+                        # Le sprite AFFICHÉ au départ ; à défaut d'apparence active,
+                        # la première (l'entrée existe, cachée).
+                        shown = displayed_sprite_component(actor)
+                        sprite = p.get_sprite(shown.sprite_name) if shown else None
+                        apps = owner_appearances(p, actor)
+                        if sprite is None and apps:
+                            sprite = apps[0][1]
                         scene_actors.append((actor, sprite))
+                        extra_sprites += [(actor, sp) for _c, sp in apps if sp is not sprite]
 
                 all_scene_data.append({
                     "scene": scene,
                     "bg_pairs": bg_pairs,
                     "scene_actors": scene_actors,
+                    "extra_sprites": extra_sprites,
                 })
                 all_bg_pairs_flat += bg_pairs
-                all_actor_sprites_flat += scene_actors
+                all_actor_sprites_flat += scene_actors + extra_sprites
 
             # Prefab sprites (communs à toutes les scènes)
             prefab_actor_sprites: list[tuple[Actor, Optional[SpriteAsset]]] = []
             for pf in self.project.prefabs:
                 if prefab_pool_instances(self.project, pf) <= 0:
                     continue
-                _pf_sc = next((c for c in pf.components
-                               if isinstance(c, SpriteComponent) and c.sprite_name), None)
-                if _pf_sc:
-                    _pf_sprite = p.get_sprite(_pf_sc.sprite_name)
-                    if _pf_sprite:
-                        prefab_actor_sprites.append((pf, _pf_sprite))
+                # Toutes les apparences de la racine sont résidentes (marche 3).
+                for _c, _pf_sprite in owner_appearances(p, pf):
+                    prefab_actor_sprites.append((pf, _pf_sprite))
                 # Les PARTIES d'un prefab segmenté (ROADMAP v0.23) : chacune a
                 # son propre sprite, qui doit être chargé en VRAM comme celui de
                 # la racine. Sans ça, un bras serait émis en OAM sur des tuiles
                 # qui n'ont jamais été copiées. Une partie sans sprite est un
                 # marqueur : rien à charger.
                 for _part in (getattr(pf, "children", []) or []):
-                    _p_sc = next((c for c in _part.components
-                                  if isinstance(c, SpriteComponent) and c.sprite_name), None)
-                    if not _p_sc:
-                        continue
-                    _p_sprite = p.get_sprite(_p_sc.sprite_name)
-                    if _p_sprite:
+                    for _c, _p_sprite in owner_appearances(p, _part):
                         prefab_actor_sprites.append((_part, _p_sprite))
 
             ok = True
@@ -268,7 +271,7 @@ class BuildWorker(EventEmitter, threading.Thread):
             unique_sprites: list = []
             for d in all_scene_data:
                 scene = d["scene"]
-                for actor, sprite in d["scene_actors"]:
+                for actor, sprite in d["scene_actors"] + d["extra_sprites"]:
                     if sprite and sprite.asset and sprite.name not in seen_sprites:
                         seen_sprites.add(sprite.name)
                         colors = effective_palette_colors(

@@ -18,6 +18,8 @@ from ui.common.theme import C, T, QSS
 from ui.common.labels import label
 
 from codegen import BuildWorker
+from core.models.components import displayed_sprite_component
+from codegen.oam_alloc import has_oam_entry, owner_appearances
 from ui.scene_manager.scene_canvas import SceneEditor
 from ui.scene_manager.canvas.canvas_workspace import CanvasWorkspace
 from core.resources import asset_reconciliation
@@ -140,7 +142,10 @@ class GbaStatusBar(QWidget):
             return
 
         visible_actors = [a for a in scene.actors if a.visible and a.active]
-        oam_count = sum(1 for a in visible_actors if a.get_component("sprite"))
+        # Un acteur ne coûte une entrée OAM que s'il a une APPARENCE réelle — le même
+        # prédicat que le build (`has_oam_entry`). Un composant sprite vide ou dont le
+        # sprite est introuvable n'affiche rien et ne réserve rien.
+        oam_count = sum(1 for a in visible_actors if has_oam_entry(project, a))
 
         # Rectangles occupant l'écran : (y, hauteur, largeur). Servent à la fois
         # au coût par scanline et — pour le texte — au compte d'OAM.
@@ -149,13 +154,14 @@ class GbaStatusBar(QWidget):
         # Estimation tiles VRAM
         tiles = 0
         for a in visible_actors:
-            sc = a.get_component("sprite")
-            if not sc or not sc.sprite_name: continue
-            sp = project.get_sprite(sc.sprite_name)
-            if sp:
-                tw = max(1, sp.frame_w // 8)
-                th = max(1, sp.frame_h // 8)
-                tiles += tw * th
+            # Tout résident : les tuiles de CHAQUE apparence sont en VRAM.
+            for _comp, sp in owner_appearances(project, a):
+                tiles += max(1, sp.frame_w // 8) * max(1, sp.frame_h // 8)
+            # Le coût par scanline, lui, est celui du sprite AFFICHÉ : une seule
+            # apparence dessine à la fois, les autres ne pèsent que sur la VRAM.
+            shown = displayed_sprite_component(a)
+            sp = project.get_sprite(shown.sprite_name) if shown else None
+            if sp and sp.asset:
                 spans.append((a.y, sp.frame_h, sp.frame_w))
 
         # Zones de texte en cible sprite — leur coût est EXACT, pas estimé :

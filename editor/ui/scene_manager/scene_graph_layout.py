@@ -13,7 +13,7 @@ Deux règles portées par le plan (ROADMAP v0.12, étape 4) :
 - **Les scènes isolées sont rangées à part**, sous le bloc en couches, sans
   chevaucher les nœuds reliés.
 
-Les cibles introuvables (``scene.switch("X")`` sans scène nommée ``X``) sont des
+Les cibles introuvables (``scene:switch("X")`` sans scène nommée ``X``) sont des
 nœuds de placement comme les autres : elles reçoivent une couche à droite de leur
 source. La vue les dessine en marqueur d'erreur, mais la disposition les traite
 uniformément pour éviter qu'elles se superposent.

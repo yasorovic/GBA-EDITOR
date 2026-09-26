@@ -119,7 +119,7 @@ class TextInspector(QWidget):
         bl.addWidget(markup_card)
 
         # Contrepartie visible du renommage automatique : il réécrit les
-        # `text.draw("clé")`, encore faut-il savoir lesquels avant d'y toucher.
+        # `text:draw("clé")`, encore faut-il savoir lesquels avant d'y toucher.
         usage_card = CollapsibleCard(label("txtinsp.used_by"))
         usage_card.set_expanded(False)
         self._usage = QLabel("")

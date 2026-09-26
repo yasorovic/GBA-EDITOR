@@ -28,7 +28,7 @@ function on_update()
     local vitesse_x = input.axis.x * vitesse * 256
     local vitesse_y = self.velocity.y + gravite
 
-    if self.grounded and input.pressed("a") then
+    if self.grounded and input:pressed("a") then
         vitesse_y = -force_saut
     end
 

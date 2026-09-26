@@ -232,7 +232,7 @@ class PrefabUsesInspector(_UsesInspectorBase):
                 # Clic → sélectionner l'actor dans la scène active
                 self._add_leaf_row(actor.name, lambda a=actor: get_bus().select(a))
 
-        # « Spawné par » : les scripts qui appellent `actor.spawn("<ce prefab>")`.
+        # « Spawné par » : les scripts qui appellent `actor:spawn("<ce prefab>")`.
         # Troisième lien de dépendance, distinct des instances posées : le nom
         # du prefab est un littéral obligatoire, donc lisible statiquement sans
         # rien exécuter (ROADMAP v0.17). Même lecture que celle qui *propose* le

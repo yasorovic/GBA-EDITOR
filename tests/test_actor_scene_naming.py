@@ -64,7 +64,7 @@ def _gen(body: str, **ctx_kw):
 def test_get_actor_dans_un_script_de_scene_resout_a_la_compilation():
     """Une scène connue → TAG qualifié + filtre `actor_live` (nil si détruit,
     décision C')."""
-    code = _gen('    local u = get_actor("Foe")', scene_sym="Arena")
+    code = _gen('    local u = actor:get("Foe")', scene_sym="Arena")
     assert "actor_live(&g_actors[TAG_ARENA_FOE])" in code
     assert "runtime_get_actor" not in code
 
@@ -72,27 +72,27 @@ def test_get_actor_dans_un_script_de_scene_resout_a_la_compilation():
 def test_get_actor_dans_un_script_partage_resout_au_runtime():
     """Pas de scène (script de caméra partagé) → lookup runtime nullable par
     ACTORNAME (décision C)."""
-    code = _gen('    local u = get_actor("Foe")', scene_sym="")
+    code = _gen('    local u = actor:get("Foe")', scene_sym="")
     assert "runtime_get_actor(ACTORNAME_FOE)" in code
     assert "TAG_" not in code
 
 
 def test_get_actor_par_index_dynamique():
-    """get_actor(i) — adressage dynamique 1-based → slot 0-based borné
+    """actor:get(i) — adressage dynamique 1-based → slot 0-based borné
     (`actor_at`), même repli 1→0 que data.Table[i]."""
-    code = _gen('    local u = get_actor(i)', scene_sym="Arena")
+    code = _gen('    local u = actor:get(i)', scene_sym="Arena")
     assert "actor_at((i) - 1)" in code
     assert "Actor* u" in code           # typé Actor*, pas int
 
 
 def test_get_actor_index_litteral_est_replie():
-    """Un index littéral est replié tout de suite : get_actor(2) → actor_at(1)."""
-    code = _gen('    local u = get_actor(2)', scene_sym="Arena")
+    """Un index littéral est replié tout de suite : actor:get(2) → actor_at(1)."""
+    code = _gen('    local u = actor:get(2)', scene_sym="Arena")
     assert "actor_at(1)" in code
 
 
 def test_actor_count_rend_le_compte_de_la_scene_active():
-    code = _gen('    local n = actor_count()', scene_sym="Arena")
+    code = _gen('    local n = actor:count()', scene_sym="Arena")
     assert "g_scene_placed" in code
 
 

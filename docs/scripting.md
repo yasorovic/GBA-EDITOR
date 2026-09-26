@@ -25,6 +25,13 @@ Dans le **Scene Manager**, sélectionnez l'acteur auquel vous souhaitez donner u
 
 Un script attaché à un acteur connaît cet acteur sous le nom `self`. Les exemples peuvent donc écrire `self:play_anim(...)` ou changer `self.position` sans rechercher l'acteur par son nom.
 
+Un script n'a pas de « type » : c'est ce à quoi il est attaché (acteur, prefab, scène ou caméra) qui décide de ce qu'il peut faire. Deux conséquences, refusées au build :
+
+- `self` n'existe que pour un acteur ou un prefab. Dans un script de scène ou de caméra, il n'y a pas d'instance à désigner : utilisez `actor:get("Nom")`. Un behavior n'est attaché à rien non plus : il reçoit son acteur en paramètre, à nommer autrement que `self` (`function M.update(actor)`).
+- Un événement n'existe que pour les propriétaires qui le reçoivent. `on_collision_enter` n'a pas de sens pour une caméra ; le Script Editor ne le propose pas, et le build le refuse s'il est écrit.
+
+Un même fichier ne peut donc pas être attaché à des familles différentes (par exemple un acteur et une scène). Faites un script par famille, et mettez le code commun dans un **behavior**.
+
 ### 2. Écrivez un événement
 
 L'éditeur appelle certaines fonctions à des moments précis. Les événements disponibles pour le script sélectionné sont affichés dans le panneau **Events** du Script Editor. Les deux plus courants sont :
@@ -35,7 +42,7 @@ function on_start()
 end
 
 function on_update()
-    if input.held("right") then
+    if input:held("right") then
         self.position = self.position + vec2(1, 0)
     end
 end
@@ -70,12 +77,12 @@ Une fonction privée sert à ranger une action propre à ce script :
 ```lua
 function tirer(degats)
     self:play_anim("tir")
-    sfx.play("Laser")
+    sfx:play("Laser")
     return degats + 1
 end
 
 function on_update()
-    if input.pressed("a") then
+    if input:pressed("a") then
         local total = tirer(3)
     end
 end
@@ -90,18 +97,30 @@ Un point lit ou modifie une propriété. Deux points appellent une action :
 ```lua
 self.position = vec2(10, 20)
 self:play_anim("walk")
-sfx.play("Bip")
+sfx:play("Bip")
 ```
 
 Les noms entre guillemets, comme `"walk"` ou `"Arena"`, désignent le plus souvent une ressource du projet. Pour afficher un texte simple, vous pouvez l'écrire directement :
 
 ```lua
-text.draw(2, 16, "Bonjour !")
+text:draw(2, 16, "Bonjour !")
 ```
 
-Ce raccourci convient à un projet dans une seule langue. Pour un texte à traduire, créez une entrée dans l'écran **Text** et utilisez sa clé, par exemple `text.draw(2, 16, "village_garde_01")`.
+Ce raccourci convient à un projet dans une seule langue. Pour un texte à traduire, créez une entrée dans l'écran **Text** et utilisez sa clé, par exemple `text:draw(2, 16, "village_garde_01")`.
 
 Le panneau **API** du Script Editor donne la liste complète des fonctions et propriétés disponibles, avec leurs arguments.
+
+### Changer d'apparence
+
+Un acteur affiche un seul sprite à la fois, mais il peut porter **plusieurs composants sprite**, chacun avec son `id`. Dans l'inspecteur, cocher « Active » sur l'un décoche l'autre. Depuis un script, `activate_sprite` fait la même chose :
+
+```lua
+if self.active_sprite == "normal" and touche_par_un_ennemi then
+    self:activate_sprite("blesse")
+end
+```
+
+Comme `play_anim`, c'est un geste : l'animation repart de son premier état. Les noms d'animation cités ensuite (`self:play_anim("walk")`) s'entendent pour le sprite qui est affiché à cet instant ; un état absent de ce sprite ne fait rien. Toutes les apparences restent chargées en VRAM : chaque sprite supplémentaire occupe ses tuiles.
 
 ### Décider et répéter
 
@@ -119,7 +138,7 @@ Les tableaux ont une taille fixe, contiennent des entiers et commencent à l'ind
 ```lua
 local degats = {1, 2, 4, 8}
 for i = 1, #degats do
-    debug.log(degats[i])
+    debug:log(degats[i])
 end
 ```
 
@@ -132,12 +151,12 @@ function on_sequence_intro()
     self:move_to(vec2(120, 80), 60)
     wait_until(self.position.x >= 120)
     wait(30)
-    text.draw_in("bulle", "garde_01")
-    scene.switch("Arena")
+    interface:get("bulle"):draw("garde_01")
+    scene:switch("Arena")
 end
 
 function on_start()
-    sequence.start("intro")
+    sequence:start("intro")
 end
 ```
 
@@ -147,13 +166,13 @@ Une séquence se nomme `on_sequence_<nom>` et se pilote avec `sequence.start`, `
 
 ## Texte, menus et langue
 
-`text.draw(2, 16, "Bonjour !")` affiche un texte écrit directement dans le script. Au Build, ce littéral devient une entrée interne. C'est pratique pour un projet dans une seule langue.
+`text:draw(2, 16, "Bonjour !")` affiche un texte écrit directement dans le script. Au Build, ce littéral devient une entrée interne. C'est pratique pour un projet dans une seule langue.
 
 Pour un texte à traduire, ou qui contient une valeur, créez une entrée dans l'écran **Text**, puis affichez-la par sa clé. Utilisez un marqueur dans l'entrée, comme `Score : $score`, puis écrivez `global.score = 12` dans le script.
 
-Une **Liste** de l'interface gère déjà sa navigation. Le script lit l'élément choisi avec `list.index("Menu")`. Utilisez `list.set_count` seulement lorsqu'une liste défilante contient plus d'éléments que de rangées visibles.
+Une **Liste** de l'interface gère déjà sa navigation. Le script lit l'élément choisi avec `interface:get("Menu").index`. Écrivez `menu.count` seulement lorsqu'une liste défilante contient plus d'éléments que de rangées visibles.
 
-`lang.set(code)` change la langue active et recharge la scène courante. Conservez le choix dans une variable globale persistante si vous souhaitez le retrouver après l'extinction.
+`lang:set(code)` change la langue active et recharge la scène courante. Conservez le choix dans une variable globale persistante si vous souhaitez le retrouver après l'extinction.
 
 ## Quand le Build signale un problème
 
@@ -174,6 +193,6 @@ Embarquer un interpréteur coûterait la mémoire et le temps processeur qui fon
 | Pas de table, de closure ou de coroutine | Aucune allocation à l'exécution. La mémoire est décidée au build, donc mesurable. |
 | Que des entiers | Aucune émulation flottante. |
 | Taille des tableaux connue au build | Pas de vérification de bornes à l'exécution. |
-| Noms résolus au build | `sfx.play("Bip")` devient un index, pas une recherche par chaîne. |
+| Noms résolus au build | `sfx:play("Bip")` devient un index, pas une recherche par chaîne. |
 
 Les possibilités du langage évoluent à partir de besoins concrets. Si une écriture utile vous manque, signalez-la : elle pourra être étudiée sans vous laisser deviner si elle est prévue ou non.

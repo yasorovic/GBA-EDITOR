@@ -44,7 +44,7 @@ function on_start()
 end
 
 function on_update()
-    if input.held("right") then
+    if input:held("right") then
         self.position = self.position + vec2(1, 0)
     end
 end
@@ -59,16 +59,16 @@ Ajoutez les autres touches dans `on_update` :
 
 ```lua
 function on_update()
-    if input.held("left") then
+    if input:held("left") then
         self.position = self.position + vec2(-1, 0)
     end
-    if input.held("right") then
+    if input:held("right") then
         self.position = self.position + vec2(1, 0)
     end
-    if input.held("up") then
+    if input:held("up") then
         self.position = self.position + vec2(0, -1)
     end
-    if input.held("down") then
+    if input:held("down") then
         self.position = self.position + vec2(0, 1)
     end
 end

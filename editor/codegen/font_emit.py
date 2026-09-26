@@ -240,7 +240,7 @@ def text_vram_tiles(fonts, codepoints=None) -> int:
     """Réservation à faire pour le texte dans le charblock du layer d'UI.
 
     Le MAXIMUM sur toutes les polices du projet, pas la police initiale :
-    `text.set_font()` peut en charger une autre à tout moment, et la place doit
+    `text:set_font()` peut en charger une autre à tout moment, et la place doit
     déjà être là — trop petite, elle écraserait le voisin en silence."""
     return max((font_vram_tiles(f, codepoints) for f in fonts), default=0)
 
@@ -249,7 +249,7 @@ def text_vram_tiles(fonts, codepoints=None) -> int:
 # `scene_layout()` réclame un nombre de tuiles à réserver au texte, calculé PAR
 # SCÈNE (`scene_font_names`) à partir de deux sources : ce que la mise en page
 # DÉCLARE (`UIRegion.font_name`) et ce que les scripts de la scène CHARGENT
-# (`text.set_font("…")`, repéré par domaine).
+# (`text:set_font("…")`, repéré par domaine).
 #
 # La règle de sûreté est asymétrique : réserver trop coûte des tuiles au décor,
 # réserver trop peu fait écrire le texte DANS le décor, sans un signe avant
@@ -539,12 +539,14 @@ def scene_font_names(p, scene, default_font: str = "") -> "set | None":
     return names
 
 
-# `text.draw` / `text.clear` écrivent à des COORDONNÉES, sans rectangle
+# `text:draw` / `text:clear` écrivent à des COORDONNÉES, sans rectangle
 # auteur — les seules primitives qui aient encore besoin de la surface
 # PARTAGÉE (cf. `RegionSurf` dans gba_engine.h : une zone authorée reçoit son
-# bloc propre). Le `\s*\(` évite d'attraper `text.draw_in`/`text.clear_in`,
-# qui, elles, passent par une zone.
-_FREE_WRITE_RE = re.compile(r"\btext\.(?:draw|clear)\s*\(")
+# bloc propre). Le préfixe `text` évite d'attraper `box:draw(…)` /
+
+# `box:clear()` sur une zone d'interface, qui, eux, passent par une zone.
+_FREE_WRITE_RE = re.compile(r"\btext[:.](?:draw|clear)\s*\(")
+
 
 
 def scene_writes_free(p, scene) -> bool:

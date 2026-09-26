@@ -67,6 +67,11 @@
       ]
     },
     {
+      "name": "Collision",
+      "group": "gameplay",
+      "entries": []
+    },
+    {
       "name": "Animation",
       "group": "gameplay",
       "entries": [
@@ -303,8 +308,8 @@
       "group": "gameplay",
       "entries": [
         {
-          "label": "input.held(\"btn\")",
-          "snippet": "input.held(\"a\")",
+          "label": "input:held(\"btn\")",
+          "snippet": "input:held(\"a\")",
           "description": "Vrai si le bouton est maintenu appuyé ce frame.",
           "params": [
             {
@@ -317,8 +322,8 @@
           "doc_anchor": "input-held"
         },
         {
-          "label": "input.pressed(\"btn\")",
-          "snippet": "input.pressed(\"a\")",
+          "label": "input:pressed(\"btn\")",
+          "snippet": "input:pressed(\"a\")",
           "description": "Vrai uniquement le premier frame où le bouton est appuyé (front montant).",
           "params": [
             {
@@ -344,8 +349,8 @@
           "doc_anchor": "self-play_sfx"
         },
         {
-          "label": "sfx.play(\"name\")",
-          "snippet": "sfx.play(\"name\")",
+          "label": "sfx:play(\"name\")",
+          "snippet": "sfx:play(\"name\")",
           "description": "Joue un effet sonore one-shot (défini dans project/sfx/).",
           "params": [
             {
@@ -410,8 +415,8 @@
           "doc_anchor": "sfx-set_panning"
         },
         {
-          "label": "music.play(\"name\")",
-          "snippet": "music.play(\"name\")",
+          "label": "music:play(\"name\")",
+          "snippet": "music:play(\"name\")",
           "description": "Démarre une piste musicale en boucle.",
           "params": [
             {
@@ -423,36 +428,36 @@
           "doc_anchor": "music-play"
         },
         {
-          "label": "music.stop()",
-          "snippet": "music.stop()",
+          "label": "music:stop()",
+          "snippet": "music:stop()",
           "description": "Arrête la musique en cours.",
           "params": [],
           "doc_anchor": "music-stop"
         },
         {
-          "label": "music.pause()",
-          "snippet": "music.pause()",
+          "label": "music:pause()",
+          "snippet": "music:pause()",
           "description": "Suspend la musique là où elle en est.",
           "params": [],
           "doc_anchor": "music-pause"
         },
         {
-          "label": "music.resume()",
-          "snippet": "music.resume()",
+          "label": "music:resume()",
+          "snippet": "music:resume()",
           "description": "Reprend la musique suspendue, au même endroit.",
           "params": [],
           "doc_anchor": "music-resume"
         },
         {
-          "label": "music.is_playing()",
-          "snippet": "music.is_playing()",
-          "description": "Vrai tant qu'un module joue. Faux après `music.stop()`, vrai pendant une pause.",
+          "label": "music:is_playing()",
+          "snippet": "music:is_playing()",
+          "description": "Vrai tant qu'un module joue. Faux après `music:stop()`, vrai pendant une pause.",
           "params": [],
           "doc_anchor": "music-is_playing"
         },
         {
-          "label": "music.set_volume(percent)",
-          "snippet": "music.set_volume(60)",
+          "label": "music:set_volume(percent)",
+          "snippet": "music:set_volume(60)",
           "description": "Règle le volume de la musique, en pourcentage. C'est le seul niveau de la couche module : le matériel n'a qu'un scaler.",
           "params": [
             {
@@ -464,8 +469,8 @@
           "doc_anchor": "music-set_volume"
         },
         {
-          "label": "music.fade_to(\"name\", frames)",
-          "snippet": "music.fade_to(\"name\", 60)",
+          "label": "music:fade_to(\"name\", frames)",
+          "snippet": "music:fade_to(\"name\", 60)",
           "description": "Passe à une autre piste par un fondu traversant : le volume tombe à zéro, la piste change, il remonte. Marche entre deux morceaux quelconques, au prix d'un creux audible.",
           "params": [
             {
@@ -482,8 +487,8 @@
           "doc_anchor": "music-fade_to"
         },
         {
-          "label": "music.cut_to(\"name\")",
-          "snippet": "music.cut_to(\"name\")",
+          "label": "music:cut_to(\"name\")",
+          "snippet": "music:cut_to(\"name\")",
           "description": "Passe à une autre piste SANS creux, à la fin du motif en cours, en reprenant à la même position. C'est ce qui enchaîne deux variantes d'un même morceau. Les deux pistes doivent avoir la même structure.",
           "params": [
             {
@@ -495,8 +500,8 @@
           "doc_anchor": "music-cut_to"
         },
         {
-          "label": "music.jingle(\"name\")",
-          "snippet": "music.jingle(\"name\")",
+          "label": "music:jingle(\"name\")",
+          "snippet": "music:jingle(\"name\")",
           "description": "Joue un module PAR-DESSUS la musique en cours, sans l'arrêter. Il ne boucle jamais, un seul à la fois, et il prend jusqu'à 4 des 8 canaux. C'est la seule façon de faire sonner deux musiques ensemble sur cette console.",
           "params": [
             {
@@ -508,15 +513,15 @@
           "doc_anchor": "music-jingle"
         },
         {
-          "label": "music.jingle_playing()",
-          "snippet": "music.jingle_playing()",
+          "label": "music:jingle_playing()",
+          "snippet": "music:jingle_playing()",
           "description": "Vrai tant qu'un jingle sonne.",
           "params": [],
           "doc_anchor": "music-jingle_playing"
         },
         {
-          "label": "sound_box.set_state(\"name\")",
-          "snippet": "sound_box.set_state(\"sable\")",
+          "label": "sound_box:set_state(\"name\")",
+          "snippet": "sound_box:set_state(\"sable\")",
           "description": "Change l'état de la SoundBox — « le sol est du sable ». Les actions posées sur les frames d'animation se résolvent alors vers les échantillons de ce nouvel état : le même cycle de marche sonne le sable ou les cailloux sans être authoré deux fois.",
           "params": [
             {
@@ -528,8 +533,8 @@
           "doc_anchor": "sound_box-set_state"
         },
         {
-          "label": "sound_box.set_volume(percent)",
-          "snippet": "sound_box.set_volume(50)",
+          "label": "sound_box:set_volume(percent)",
+          "snippet": "sound_box:set_volume(50)",
           "description": "Règle le volume de TOUS les effets, en pourcentage. Un réglage de mixage : il multiplie le volume propre de chaque effet, il ne le remplace pas.",
           "params": [
             {
@@ -541,8 +546,8 @@
           "doc_anchor": "sound_box-set_volume"
         },
         {
-          "label": "jingle_box.set_state(\"name\")",
-          "snippet": "jingle_box.set_state(\"victoire\")",
+          "label": "jingle_box:set_state(\"name\")",
+          "snippet": "jingle_box:set_state(\"victoire\")",
           "description": "Change l'état de la JingleBox : vers quel module chaque action de jingle pointe désormais.",
           "params": [
             {
@@ -554,8 +559,8 @@
           "doc_anchor": "jingle_box-set_state"
         },
         {
-          "label": "jingle_box.set_volume(percent)",
-          "snippet": "jingle_box.set_volume(25)",
+          "label": "jingle_box:set_volume(percent)",
+          "snippet": "jingle_box:set_volume(25)",
           "description": "Règle le volume de la couche jingle, en pourcentage. Avec `music.set_volume`, c'est la moitié du duck : la musique s'efface pendant la fanfare, puis remonte.",
           "params": [
             {
@@ -567,8 +572,8 @@
           "doc_anchor": "jingle_box-set_volume"
         },
         {
-          "label": "music_box.trigger(\"name\")",
-          "snippet": "music_box.trigger(\"combat_start\")",
+          "label": "music_box:trigger(\"name\")",
+          "snippet": "music_box:trigger(\"combat_start\")",
           "description": "Émet un déclencheur de la MusicBox. C'est la BOÎTE qui décide vers quel état il mène et par quelle transition — le script dit seulement qu'il s'est passé quelque chose.",
           "params": [
             {
@@ -582,12 +587,12 @@
       ]
     },
     {
-      "name": "Caméra",
+      "name": "Camera",
       "group": "gameplay",
       "entries": [
         {
-          "label": "camera.follow(target, mx, my)",
-          "snippet": "camera.follow(self.position, 40, 20)",
+          "label": "camera:follow(target, mx, my)",
+          "snippet": "camera:follow(self.position, 40, 20)",
           "description": "Suit `target` (un vec2) avec une zone morte. Typiquement appelé dans on_late_update.",
           "params": [
             {
@@ -615,9 +620,9 @@
       "group": "gameplay",
       "entries": [
         {
-          "label": "get_actor(\"name\")",
-          "snippet": "get_actor(\"Player\")",
-          "description": "Un actor de la scène active, par NOM (littéral) ou par INDEX dynamique 1-based (get_actor(i), de 1 à actor_count(), dans l'ordre de la scène). Rend nil si absent ou détruit.",
+          "label": "actor:get(\"name\")",
+          "snippet": "actor:get(\"Player\")",
+          "description": "Un actor de la scène active, par NOM (littéral) ou par INDEX dynamique 1-based (actor:get(i), de 1 à actor:count(), dans l'ordre de la scène). Rend nil si absent ou détruit.",
           "params": [
             {
               "name": "name",
@@ -626,19 +631,19 @@
             }
           ],
           "returns": "actor — référence actor, ou nil si absent/détruit",
-          "doc_anchor": "get_actor"
+          "doc_anchor": "actor-get"
         },
         {
-          "label": "actor_count()",
-          "snippet": "actor_count()",
-          "description": "Nombre d'actors POSÉS de la scène active — la borne de get_actor(i). Ex: for i=1,actor_count() do local a=get_actor(i) ... end.",
+          "label": "actor:count()",
+          "snippet": "actor:count()",
+          "description": "Nombre d'actors POSÉS de la scène active — la borne de actor:get(i). Ex: for i=1,actor:count() do local a=actor:get(i) ... end.",
           "params": [],
           "returns": "int — nombre d'actors posés",
-          "doc_anchor": "actor_count"
+          "doc_anchor": "actor-count"
         },
         {
-          "label": "actor.spawn(\"prefab\", position)",
-          "snippet": "actor.spawn(\"Bullet\", vec2(116, 76))",
+          "label": "actor:spawn(\"prefab\", position)",
+          "snippet": "actor:spawn(\"Bullet\", vec2(116, 76))",
           "description": "Instancie un prefab poolé à `position` (un vec2). La scène doit déclarer un pool pour ce prefab (carte « Actor budget »). Retourne l'instance née (un actor), ou nil si le pool est plein — `if b then b:set_velocity(0, -2) end`.",
           "params": [
             {
@@ -658,12 +663,12 @@
       ]
     },
     {
-      "name": "Séquences",
+      "name": "Sequences",
       "group": "language",
       "entries": [
         {
-          "label": "sequence.start(name)",
-          "snippet": "sequence.start(\"intro\")",
+          "label": "sequence:start(name)",
+          "snippet": "sequence:start(\"intro\")",
           "description": "Démarre (ou redémarre depuis le début) une séquence de ce script — une fonction « on_sequence_<nom> », écrite en ligne droite, où wait(frames) et wait_until(condition) marquent les pauses.",
           "params": [
             {
@@ -676,8 +681,8 @@
           "doc_anchor": "sequence-start"
         },
         {
-          "label": "sequence.stop(name)",
-          "snippet": "sequence.stop(\"intro\")",
+          "label": "sequence:stop(name)",
+          "snippet": "sequence:stop(\"intro\")",
           "description": "Arrête la séquence en cours de route. Elle ne reprend pas où elle en était : un sequence.start la relance depuis sa première ligne.",
           "params": [
             {
@@ -690,8 +695,8 @@
           "doc_anchor": "sequence-stop"
         },
         {
-          "label": "sequence.running(name)",
-          "snippet": "if not sequence.running(\"intro\") then\n    \nend",
+          "label": "sequence:running(name)",
+          "snippet": "if not sequence:running(\"intro\") then\n    \nend",
           "description": "Vrai tant que la séquence n'a pas atteint sa dernière ligne. De quoi enchaîner deux séquences, ou geler une commande pendant une cinématique.",
           "params": [
             {
@@ -706,12 +711,12 @@
       ]
     },
     {
-      "name": "Sauvegarde",
+      "name": "Save",
       "group": "hardware",
       "entries": [
         {
-          "label": "save.write(slot)",
-          "snippet": "save.write(0)",
+          "label": "save:write(slot)",
+          "snippet": "save:write(0)",
           "description": "Écrit les variables globales marquées « persist » dans un emplacement de sauvegarde.",
           "params": [
             {
@@ -724,8 +729,8 @@
           "doc_anchor": "save-write"
         },
         {
-          "label": "save.load(slot)",
-          "snippet": "save.load(0)",
+          "label": "save:load(slot)",
+          "snippet": "save:load(0)",
           "description": "Relit un emplacement et REMPLACE TOUTES les variables persistantes de la partie en cours. Une variable absente du fichier reprend sa valeur par défaut ; si l'emplacement est vide ou illisible, rien n'est touché.",
           "params": [
             {
@@ -738,8 +743,8 @@
           "doc_anchor": "save-load"
         },
         {
-          "label": "save.read(slot, \"name\")",
-          "snippet": "save.read(0, \"chapitre\")",
+          "label": "save:read(slot, \"name\")",
+          "snippet": "save:read(0, \"chapitre\")",
           "description": "Rend la valeur d'UNE variable persistante dans un emplacement, SANS toucher à la partie en cours — de quoi peindre un écran de sélection de partie sans charger les autres. Rend le défaut si l'emplacement est vide/illisible ou si le fichier ne contient pas cette variable.",
           "params": [
             {
@@ -757,8 +762,8 @@
           "doc_anchor": "save-read"
         },
         {
-          "label": "save.exists(slot)",
-          "snippet": "if save.exists(0) then\n    \nend",
+          "label": "save:exists(slot)",
+          "snippet": "if save:exists(0) then\n    \nend",
           "description": "Vrai si l'emplacement contient une sauvegarde relisible. De quoi n'afficher « Continuer » que s'il y a une partie.",
           "params": [
             {
@@ -771,8 +776,8 @@
           "doc_anchor": "save-exists"
         },
         {
-          "label": "save.erase(slot)",
-          "snippet": "save.erase(0)",
+          "label": "save:erase(slot)",
+          "snippet": "save:erase(0)",
           "description": "Vide un emplacement : save.exists y répond faux ensuite.",
           "params": [
             {
@@ -787,7 +792,7 @@
       ]
     },
     {
-      "name": "Maths",
+      "name": "Math",
       "group": "language",
       "entries": [
         {
@@ -946,7 +951,7 @@
       ]
     },
     {
-      "name": "Tableaux",
+      "name": "Arrays",
       "group": "language",
       "entries": [
         {
@@ -966,12 +971,12 @@
       ]
     },
     {
-      "name": "Scène",
+      "name": "Scene",
       "group": "gameplay",
       "entries": [
         {
-          "label": "scene.switch(name)",
-          "snippet": "scene.switch(\"name\")",
+          "label": "scene:switch(name)",
+          "snippet": "scene:switch(\"name\")",
           "description": "Passe à une autre scène au début de la prochaine frame.",
           "params": [
             {
@@ -986,12 +991,12 @@
       ]
     },
     {
-      "name": "Langue",
+      "name": "Language",
       "group": "gameplay",
       "entries": [
         {
-          "label": "lang.set(code)",
-          "snippet": "lang.set(\"fr\")",
+          "label": "lang:set(code)",
+          "snippet": "lang:set(\"fr\")",
           "description": "Change la langue active et recharge la scène courante pour l'appliquer (comme un scene.switch vers elle-même — acteurs et état de scène repartent à zéro).",
           "params": [
             {
@@ -1004,8 +1009,8 @@
           "doc_anchor": "lang-set"
         },
         {
-          "label": "lang.get()",
-          "snippet": "lang.get()",
+          "label": "lang:get()",
+          "snippet": "lang:get()",
           "description": "La langue active — un index (0 = la source), comparable à LANG_<CODE>.",
           "params": [],
           "returns": "number — index de langue courant",
@@ -1014,213 +1019,17 @@
       ]
     },
     {
-      "name": "Tile",
-      "group": "gameplay",
-      "entries": [
-        {
-          "label": "tile.get(x, y)",
-          "snippet": "tile.get(self.position.x, self.position.y)",
-          "description": "Lit la valeur brute de la tile à la position monde (x, y) en pixels. 0 = vide. Utile pour des triggers non-solides (pièces, zones de spawn, poison…).",
-          "params": [
-            {
-              "name": "x",
-              "type": "number",
-              "description": "Position X monde en pixels"
-            },
-            {
-              "name": "y",
-              "type": "number",
-              "description": "Position Y monde en pixels"
-            }
-          ],
-          "returns": "number — valeur de la tile (0 = vide)",
-          "doc_anchor": "tile-get"
-        }
-      ]
-    },
-    {
       "name": "Layer",
       "group": "hardware",
-      "entries": [
-        {
-          "label": "layer.show(n, on)",
-          "snippet": "layer.show(2, false)",
-          "description": "Affiche ou cache un layer de fond. n = le slot de fond 0-3, celui de l'inspecteur de scène. Le layer garde son contenu : le rallumer le fait réapparaître tel quel.",
-          "params": [
-            {
-              "name": "n",
-              "type": "number",
-              "description": "Slot de fond (0-3)"
-            },
-            {
-              "name": "on",
-              "type": "boolean",
-              "description": "true = visible, false = caché"
-            }
-          ],
-          "doc_anchor": "layer-show"
-        },
-        {
-          "label": "layer.is_visible(n)",
-          "snippet": "layer.is_visible(2)",
-          "description": "Teste si le layer n est actuellement affiché.",
-          "params": [
-            {
-              "name": "n",
-              "type": "number",
-              "description": "Slot de fond (0-3)"
-            }
-          ],
-          "returns": "number — 1 si visible, 0 sinon",
-          "doc_anchor": "layer-is_visible"
-        },
-        {
-          "label": "layer.set_priority(n, prio)",
-          "snippet": "layer.set_priority(1, 0)",
-          "description": "Change l'ordre d'affichage du layer, sprites compris : 0 = devant, 3 = derrière. Permet de faire passer un décor devant le joueur (feuillage, pont) ou de remonter un panneau d'UI.",
-          "params": [
-            {
-              "name": "n",
-              "type": "number",
-              "description": "Slot de fond (0-3)"
-            },
-            {
-              "name": "prio",
-              "type": "number",
-              "description": "Priorité 0-3 (0 = premier plan)"
-            }
-          ],
-          "doc_anchor": "layer-set_priority"
-        },
-        {
-          "label": "layer.get_priority(n)",
-          "snippet": "layer.get_priority(1)",
-          "description": "Priorité actuelle du layer n (0 = devant).",
-          "params": [
-            {
-              "name": "n",
-              "type": "number",
-              "description": "Slot de fond (0-3)"
-            }
-          ],
-          "returns": "number — priorité 0-3",
-          "doc_anchor": "layer-get_priority"
-        },
-        {
-          "label": "layer.set_scroll(n, x, y)",
-          "snippet": "layer.set_scroll(0, 0, 0)",
-          "description": "Décalage propre du layer, en pixels. Il s'ajoute au scroll de la caméra (la vitesse de parallax du layer continue de s'appliquer). Sert à décaler un layer indépendamment du monde : nuages, secousse, panneau qui glisse.",
-          "params": [
-            {
-              "name": "n",
-              "type": "number",
-              "description": "Slot de fond (0-3)"
-            },
-            {
-              "name": "x",
-              "type": "number",
-              "description": "Décalage horizontal en pixels"
-            },
-            {
-              "name": "y",
-              "type": "number",
-              "description": "Décalage vertical en pixels"
-            }
-          ],
-          "doc_anchor": "layer-set_scroll"
-        },
-        {
-          "label": "layer.scroll_by(n, dx, dy)",
-          "snippet": "layer.scroll_by(0, 1, 0)",
-          "description": "Ajoute (dx, dy) au décalage propre du layer. Appelé chaque frame dans on_update, donne un défilement autonome (nuages qui dérivent, eau qui coule) sans bouger la caméra.",
-          "params": [
-            {
-              "name": "n",
-              "type": "number",
-              "description": "Slot de fond (0-3)"
-            },
-            {
-              "name": "dx",
-              "type": "number",
-              "description": "Pixels ajoutés horizontalement"
-            },
-            {
-              "name": "dy",
-              "type": "number",
-              "description": "Pixels ajoutés verticalement"
-            }
-          ],
-          "doc_anchor": "layer-scroll_by"
-        },
-        {
-          "label": "layer.get_scroll_x(n)",
-          "snippet": "layer.get_scroll_x(0)",
-          "description": "Décalage horizontal propre du layer (n'inclut pas la caméra).",
-          "params": [
-            {
-              "name": "n",
-              "type": "number",
-              "description": "Slot de fond (0-3)"
-            }
-          ],
-          "returns": "number — décalage en pixels",
-          "doc_anchor": "layer-get_scroll_x"
-        },
-        {
-          "label": "layer.get_scroll_y(n)",
-          "snippet": "layer.get_scroll_y(0)",
-          "description": "Décalage vertical propre du layer (n'inclut pas la caméra).",
-          "params": [
-            {
-              "name": "n",
-              "type": "number",
-              "description": "Slot de fond (0-3)"
-            }
-          ],
-          "returns": "number — décalage en pixels",
-          "doc_anchor": "layer-get_scroll_y"
-        },
-        {
-          "label": "layer.set_map(n, sbb)",
-          "snippet": "layer.set_map(1, 12)",
-          "description": "Avancé — bascule le layer sur un autre screenblock (0-31). Permet de composer une carte pendant qu'une autre est affichée, puis de l'afficher d'un coup, sans déchirure. Les appels tilemap.* suivants visent le nouveau screenblock.",
-          "params": [
-            {
-              "name": "n",
-              "type": "number",
-              "description": "Slot de fond (0-3)"
-            },
-            {
-              "name": "sbb",
-              "type": "number",
-              "description": "Numéro de screenblock (0-31)"
-            }
-          ],
-          "doc_anchor": "layer-set_map"
-        },
-        {
-          "label": "layer.get_map(n)",
-          "snippet": "layer.get_map(1)",
-          "description": "Avancé — screenblock actuellement affiché par le layer n.",
-          "params": [
-            {
-              "name": "n",
-              "type": "number",
-              "description": "Slot de fond (0-3)"
-            }
-          ],
-          "returns": "number — screenblock 0-31",
-          "doc_anchor": "layer-get_map"
-        }
-      ]
+      "entries": []
     },
     {
-      "name": "Texte",
+      "name": "Text",
       "group": "gameplay",
       "entries": [
         {
-          "label": "text.draw(tx, ty, id)",
-          "snippet": "text.draw(2, 16, \"village_garde_01\")",
+          "label": "text:draw(tx, ty, id)",
+          "snippet": "text:draw(2, 16, \"village_garde_01\")",
           "description": "Affiche un texte de la table du projet. tx/ty sont en tuiles (1 tuile = 8 px). Le texte se pose sur le layer d'interface de la scène — c'est là que vivent les glyphes de la police, donc il n'y a pas de layer à choisir. La position vient avant le contenu : c'est le contenu qui grandira (valeurs interpolées), pas la géométrie.",
           "params": [
             {
@@ -1242,8 +1051,8 @@
           "doc_anchor": "text-draw"
         },
         {
-          "label": "text.length(id)",
-          "snippet": "text.length(\"village_garde_01\")",
+          "label": "text:length(id)",
+          "snippet": "text:length(\"village_garde_01\")",
           "description": "Nombre de caractères d'un texte. C'est la borne de la machine à écrire : quand n l'atteint, le texte est entièrement révélé.",
           "params": [
             {
@@ -1256,8 +1065,8 @@
           "doc_anchor": "text-length"
         },
         {
-          "label": "text.clear(tx, ty, w, h)",
-          "snippet": "text.clear(0, 0, 30, 4)",
+          "label": "text:clear(tx, ty, w, h)",
+          "snippet": "text:clear(0, 0, 30, 4)",
           "description": "Efface un rectangle de w×h tuiles sur le layer d'interface.",
           "params": [
             {
@@ -1284,8 +1093,8 @@
           "doc_anchor": "text-clear"
         },
         {
-          "label": "text.set_font(f)",
-          "snippet": "text.set_font(\"Pixelia\")",
+          "label": "text:set_font(f)",
+          "snippet": "text:set_font(\"Pixelia\")",
           "description": "Charge une police en mémoire vidéo. Une seule police est résidente à la fois : rappeler cette fonction remplace la précédente. La première police du projet est chargée automatiquement au début de chaque scène.",
           "params": [
             {
@@ -1303,46 +1112,8 @@
       "group": "gameplay",
       "entries": [
         {
-          "label": "ui.image_set(image, state)",
-          "snippet": "ui.image_set(\"coeur_2\", \"vide\")",
-          "description": "Change l'état affiché par une image de l'interface.",
-          "params": [
-            {
-              "name": "image",
-              "type": "string",
-              "description": ""
-            },
-            {
-              "name": "state",
-              "type": "string",
-              "description": ""
-            }
-          ],
-          "returns": "",
-          "doc_anchor": "ui-image_set"
-        },
-        {
-          "label": "ui.image_play(image, on)",
-          "snippet": "ui.image_play(\"curseur\", false)",
-          "description": "Lance (true) ou fige (false) le défilement des frames.",
-          "params": [
-            {
-              "name": "image",
-              "type": "string",
-              "description": ""
-            },
-            {
-              "name": "on",
-              "type": "number",
-              "description": ""
-            }
-          ],
-          "returns": "",
-          "doc_anchor": "ui-image_play"
-        },
-        {
-          "label": "ui.get(\"name\")",
-          "snippet": "ui.get(\"alerte\")",
+          "label": "interface:get(\"name\")",
+          "snippet": "interface:get(\"alerte\")",
           "description": "Retourne une référence à l'élément d'interface nommé (texte, panel ou image) — appeler :show()/:hide() dessus.",
           "params": [
             {
@@ -1352,378 +1123,38 @@
             }
           ],
           "returns": "ui_element — référence, ou nil si absent",
-          "doc_anchor": "ui-get"
+          "doc_anchor": "interface-get"
         },
         {
-          "label": "self:show()",
-          "snippet": "ui.get(\"alerte\"):show()",
+          "label": "ui_element:show()",
+          "snippet": "interface:get(\"alerte\"):show()",
           "description": "Affiche l'élément — et implicitement ses enfants, sauf ceux cachés individuellement.",
           "params": [],
           "returns": "",
-          "doc_anchor": "self-show"
+          "doc_anchor": "ui_element-show"
         },
         {
-          "label": "self:hide()",
-          "snippet": "ui.get(\"alerte\"):hide()",
+          "label": "ui_element:hide()",
+          "snippet": "interface:get(\"alerte\"):hide()",
           "description": "Cache l'élément et tout son sous-arbre.",
           "params": [],
           "returns": "",
-          "doc_anchor": "self-hide"
-        },
-        {
-          "label": "ui.image_state(image)",
-          "snippet": "if ui.image_state(\"coeur_1\") == 0 then ... end",
-          "description": "Index de l'état affiché — de quoi enchaîner sans mémoriser.",
-          "params": [
-            {
-              "name": "image",
-              "type": "string",
-              "description": ""
-            }
-          ],
-          "returns": "int",
-          "doc_anchor": "ui-image_state"
-        },
-        {
-          "label": "ui.image_move(image, dx, dy)",
-          "snippet": "ui.image_move(\"Curseur\", 0, 16)",
-          "description": "Décale une image RELATIVEMENT à la position posée dans le canvas — (0, 0) l'y ramène. En cible BG l'origine se cale sur la grille de 8 px ; le pixel demande la cible OBJ.",
-          "params": [
-            {
-              "name": "image",
-              "type": "string",
-              "description": "Nom de l'image de la mise en page"
-            },
-            {
-              "name": "dx",
-              "type": "number",
-              "description": "Décalage horizontal en pixels"
-            },
-            {
-              "name": "dy",
-              "type": "number",
-              "description": "Décalage vertical en pixels"
-            }
-          ],
-          "doc_anchor": "ui-image_move"
-        },
-        {
-          "label": "ui.image_dx(image)",
-          "snippet": "ui.image_dx(\"Curseur\")",
-          "description": "Le décalage horizontal courant (0 = à sa place authorée).",
-          "params": [
-            {
-              "name": "image",
-              "type": "string",
-              "description": "Nom de l'image"
-            }
-          ],
-          "returns": "number — décalage en pixels",
-          "doc_anchor": "ui-image_dx"
-        },
-        {
-          "label": "ui.image_dy(image)",
-          "snippet": "ui.image_dy(\"Curseur\")",
-          "description": "Le décalage vertical courant (0 = à sa place authorée).",
-          "params": [
-            {
-              "name": "image",
-              "type": "string",
-              "description": "Nom de l'image"
-            }
-          ],
-          "returns": "number — décalage en pixels",
-          "doc_anchor": "ui-image_dy"
-        },
-        {
-          "label": "list.count(liste)",
-          "snippet": "list.count(\"liste\")",
-          "description": "Combien d'items cette liste parcourt. Vaut le nombre de rangées authorées par défaut — un menu statique navigue donc sans rien poser. list.set_count le change quand les items dépassent les rangées visibles (un inventaire qui défile).",
-          "params": [
-            {
-              "name": "liste",
-              "type": "string",
-              "description": ""
-            }
-          ],
-          "returns": "int",
-          "doc_anchor": "list-count"
-        },
-        {
-          "label": "list.set_count(liste, n)",
-          "snippet": "list.set_count(\"liste\", n)",
-          "description": "Dit combien d'items la liste parcourt, quand ça dépasse les rangées visibles — #mon_tableau, le nombre de lignes d'une table de données, ou un compte tenu à la main. Un menu statique (autant d'items que de rangées) n'en a pas besoin : c'est déjà le défaut.",
-          "params": [
-            {
-              "name": "liste",
-              "type": "string",
-              "description": ""
-            },
-            {
-              "name": "n",
-              "type": "number",
-              "description": ""
-            }
-          ],
-          "returns": "",
-          "doc_anchor": "list-set_count"
-        },
-        {
-          "label": "list.index(liste)",
-          "snippet": "list.index(\"liste\")",
-          "description": "L'item sélectionné, à partir de 1. 0 si la liste est vide.",
-          "params": [
-            {
-              "name": "liste",
-              "type": "string",
-              "description": ""
-            }
-          ],
-          "returns": "int",
-          "doc_anchor": "list-index"
-        },
-        {
-          "label": "list.set_index(liste, i)",
-          "snippet": "list.set_index(\"liste\", i)",
-          "description": "Place le curseur sur l'item i (à partir de 1). La fenêtre se recale d'elle-même pour que l'item soit visible.",
-          "params": [
-            {
-              "name": "liste",
-              "type": "string",
-              "description": ""
-            },
-            {
-              "name": "i",
-              "type": "number",
-              "description": ""
-            }
-          ],
-          "returns": "",
-          "doc_anchor": "list-set_index"
-        },
-        {
-          "label": "list.first(liste)",
-          "snippet": "list.first(\"liste\")",
-          "description": "Le premier item AFFICHÉ, à partir de 1 — la position de la fenêtre. L'item de la rangée r est first + r - 1.",
-          "params": [
-            {
-              "name": "liste",
-              "type": "string",
-              "description": ""
-            }
-          ],
-          "returns": "int",
-          "doc_anchor": "list-first"
-        },
-        {
-          "label": "list.row(liste, r)",
-          "snippet": "list.row(\"liste\", r)",
-          "description": "La zone de texte qui porte la rangée r (1 = la première visible), à passer à text.draw_in pour y écrire l'item. -1 hors bornes.",
-          "params": [
-            {
-              "name": "liste",
-              "type": "string",
-              "description": ""
-            },
-            {
-              "name": "r",
-              "type": "number",
-              "description": ""
-            }
-          ],
-          "returns": "int",
-          "doc_anchor": "list-row"
-        },
-        {
-          "label": "list.active(liste)",
-          "snippet": "list.active(\"liste\")",
-          "description": "Cette liste prend-elle la croix directionnelle ? C'est la SÉLECTION, pas l'affichage : une liste inactive reste à l'écran et garde son item courant.",
-          "params": [
-            {
-              "name": "liste",
-              "type": "string",
-              "description": ""
-            }
-          ],
-          "returns": "bool",
-          "doc_anchor": "list-active"
-        },
-        {
-          "label": "list.set_active(liste, on)",
-          "snippet": "list.set_active(\"liste\", true)",
-          "description": "Donne ou retire la main à cette liste. C'est ce qui permet un menu et son sous-menu à l'écran en même temps : sans ça, les deux bougent au même appui. Cacher la liste est autre chose — elle disparaît.",
-          "params": [
-            {
-              "name": "liste",
-              "type": "string",
-              "description": ""
-            },
-            {
-              "name": "on",
-              "type": "boolean",
-              "description": ""
-            }
-          ],
-          "doc_anchor": "list-set_active"
+          "doc_anchor": "ui_element-hide"
         }
       ]
     },
     {
       "name": "Window",
       "group": "hardware",
-      "entries": [
-        {
-          "label": "window.show(name, on)",
-          "snippet": "window.show(\"object\", true)",
-          "description": "Active ou désactive une window. Une window ne dessine rien : c'est un pochoir, qui dit par région de l'écran QUI a le droit de s'afficher. L'apparence vient de ce que vous mettez dedans. Régions réglé le 2026-08-25 : le nom d'un WindowSlot du projet, ou \"object\" (la window OBJ) — plus d'index brut, le rang matériel (WIN0/WIN1) est décidé par l'allocateur. Attention : dès qu'une window est active, \"outside\" régit tout le reste de l'écran.",
-          "params": [
-            {
-              "name": "name",
-              "type": "string",
-              "description": "Un nom de WindowSlot, ou \"object\""
-            },
-            {
-              "name": "on",
-              "type": "boolean",
-              "description": "true = active"
-            }
-          ],
-          "doc_anchor": "window-show"
-        },
-        {
-          "label": "window.is_visible(name)",
-          "snippet": "window.is_visible(\"object\")",
-          "description": "Teste si la window est active.",
-          "params": [
-            {
-              "name": "name",
-              "type": "string",
-              "description": "Un nom de WindowSlot, ou \"object\""
-            }
-          ],
-          "returns": "number — 1 si active, 0 sinon",
-          "doc_anchor": "window-is_visible"
-        },
-        {
-          "label": "window.set(name, x, y, w, h)",
-          "snippet": "window.set(\"HudFrame\", 24, 96, 192, 56)",
-          "description": "Définit le rectangle d'une window nommée, en pixels écran (240×160). Il n'y a que DEUX rectangles disponibles sur GBA — c'est une contrainte de la console, pas de l'éditeur ; lequel des deux cette window occupe est décidé par l'allocateur, pas par ce nom. Animer ce rectangle frame après frame donne les transitions (iris, volet, bandeau).",
-          "params": [
-            {
-              "name": "name",
-              "type": "string",
-              "description": "Un nom de WindowSlot du projet (pas \"object\"/\"outside\")"
-            },
-            {
-              "name": "x",
-              "type": "number",
-              "description": "Bord gauche, en pixels écran"
-            },
-            {
-              "name": "y",
-              "type": "number",
-              "description": "Bord haut, en pixels écran"
-            },
-            {
-              "name": "w",
-              "type": "number",
-              "description": "Largeur en pixels"
-            },
-            {
-              "name": "h",
-              "type": "number",
-              "description": "Hauteur en pixels"
-            }
-          ],
-          "doc_anchor": "window-set"
-        },
-        {
-          "label": "window.set_layer(region, bg, on)",
-          "snippet": "window.set_layer(\"HudFrame\", 2, true)",
-          "description": "Autorise ou non un layer de fond à s'afficher dans une région. Région : un nom de WindowSlot, \"object\" (window OBJ) ou \"outside\" (tout le reste). Un pixel obéit à la première région qui le contient, dans cet ordre matériel câblé. C'est ainsi qu'un layer plein écran ne se voit que dans un rectangle.",
-          "params": [
-            {
-              "name": "region",
-              "type": "string",
-              "description": "Un nom de WindowSlot, \"object\" ou \"outside\""
-            },
-            {
-              "name": "bg",
-              "type": "number",
-              "description": "Slot de fond 0-3"
-            },
-            {
-              "name": "on",
-              "type": "boolean",
-              "description": "true = autorisé dans cette région"
-            }
-          ],
-          "doc_anchor": "window-set_layer"
-        },
-        {
-          "label": "window.get_layer(region, bg)",
-          "snippet": "window.get_layer(\"HudFrame\", 2)",
-          "description": "Teste si le layer bg est autorisé dans la région.",
-          "params": [
-            {
-              "name": "region",
-              "type": "string",
-              "description": "Un nom de WindowSlot, \"object\" ou \"outside\""
-            },
-            {
-              "name": "bg",
-              "type": "number",
-              "description": "Slot de fond 0-3"
-            }
-          ],
-          "returns": "number — 1 si autorisé, 0 sinon",
-          "doc_anchor": "window-get_layer"
-        },
-        {
-          "label": "window.set_obj(region, on)",
-          "snippet": "window.set_obj(\"HudFrame\", false)",
-          "description": "Autorise ou non les sprites dans la région. Couper les sprites dans un rectangle empêche un personnage de passer par-dessus une zone d'interface.",
-          "params": [
-            {
-              "name": "region",
-              "type": "string",
-              "description": "Un nom de WindowSlot, \"object\" ou \"outside\""
-            },
-            {
-              "name": "on",
-              "type": "boolean",
-              "description": "true = sprites autorisés"
-            }
-          ],
-          "doc_anchor": "window-set_obj"
-        },
-        {
-          "label": "window.set_blend(region, on)",
-          "snippet": "window.set_blend(\"outside\", true)",
-          "description": "Autorise ou non le mélange de couleurs dans la région. Combinaison la plus utile : mélange activé dans \"outside\" et coupé dans votre window, ce qui estompe tout l'écran SAUF votre rectangle — sans dépenser le moindre octet de mémoire vidéo.",
-          "params": [
-            {
-              "name": "region",
-              "type": "string",
-              "description": "Un nom de WindowSlot, \"object\" ou \"outside\""
-            },
-            {
-              "name": "on",
-              "type": "boolean",
-              "description": "true = mélange appliqué ici"
-            }
-          ],
-          "doc_anchor": "window-set_blend"
-        }
-      ]
+      "entries": []
     },
     {
       "name": "Blend",
       "group": "hardware",
       "entries": [
         {
-          "label": "blend.set_layer(side, bg, on)",
-          "snippet": "blend.set_layer(0, 1, true)",
+          "label": "blend:set_layer(side, bg, on)",
+          "snippet": "blend:set_layer(0, 1, true)",
           "description": "Désigne un layer de fond comme participant au mélange. Il y a DEUX jeux de cibles : le dessus (side 0), ce qui est mélangé, et le dessous (side 1), ce avec quoi — c'est-à-dire ce qui se trouve derrière selon les priorités. En mode alpha, rien ne se passe là où un pixel du dessus n'a aucun pixel du dessous derrière lui : c'est la cause n°1 d'un effet qui « ne marche pas ».",
           "params": [
             {
@@ -1745,8 +1176,8 @@
           "doc_anchor": "blend-set_layer"
         },
         {
-          "label": "blend.set_obj(side, on)",
-          "snippet": "blend.set_obj(0, true)",
+          "label": "blend:set_obj(side, on)",
+          "snippet": "blend:set_obj(0, true)",
           "description": "Désigne les sprites comme cible du dessus ou du dessous. Note : un sprite passé en self.obj_mode = 1 se mélange de toute façon, indépendamment de ce réglage — pratique pour un seul fantôme translucide sans toucher aux autres.",
           "params": [
             {
@@ -1763,8 +1194,8 @@
           "doc_anchor": "blend-set_obj"
         },
         {
-          "label": "blend.set_backdrop(side, on)",
-          "snippet": "blend.set_backdrop(1, true)",
+          "label": "blend:set_backdrop(side, on)",
+          "snippet": "blend:set_backdrop(1, true)",
           "description": "Désigne la couleur de fond de la scène comme cible. C'est très souvent le dessous qui manque : là où aucun layer ne dessine, seul le fond est derrière.",
           "params": [
             {
@@ -1781,8 +1212,8 @@
           "doc_anchor": "blend-set_backdrop"
         },
         {
-          "label": "blend.set_alpha(eva, evb)",
-          "snippet": "blend.set_alpha(8, 8)",
+          "label": "blend:set_alpha(eva, evb)",
+          "snippet": "blend:set_alpha(8, 8)",
           "description": "Dosage du mode 1, en seizièmes (0 à 16) : eva pour le dessus, evb pour le dessous. (8, 8) donne moitié-moitié, (16, 0) rend le dessus complètement opaque. Les deux n'ont pas à totaliser 16 — les dépasser éclaircit l'image.",
           "params": [
             {
@@ -1799,8 +1230,8 @@
           "doc_anchor": "blend-set_alpha"
         },
         {
-          "label": "blend.set_fade(evy)",
-          "snippet": "blend.set_fade(8)",
+          "label": "blend:set_fade(evy)",
+          "snippet": "blend:set_fade(8)",
           "description": "Intensité des modes 2 et 3, en seizièmes : 0 = rien, 16 = blanc ou noir complet. Un fondu d'entrée ou de sortie, c'est cette valeur incrémentée frame après frame. Combiné à window.set_blend(), l'estompe ne s'applique que dans les régions choisies.",
           "params": [
             {
@@ -1818,8 +1249,8 @@
       "group": "gameplay",
       "entries": [
         {
-          "label": "palette.set_bg(bank, p)",
-          "snippet": "palette.set_bg(0, \"Nuit\")",
+          "label": "palette:set_bg(bank, p)",
+          "snippet": "palette:set_bg(0, \"Nuit\")",
           "description": "Remplace les couleurs de la banque de FOND `bank` (0-15).",
           "params": [
             {
@@ -1837,8 +1268,8 @@
           "doc_anchor": "palette-set_bg"
         },
         {
-          "label": "palette.set_obj(bank, p)",
-          "snippet": "palette.set_obj(1, \"Nuit\")",
+          "label": "palette:set_obj(bank, p)",
+          "snippet": "palette:set_obj(1, \"Nuit\")",
           "description": "Remplace les couleurs de la banque de SPRITES `bank` (0-15).",
           "params": [
             {
@@ -1860,168 +1291,16 @@
     {
       "name": "Tilemap",
       "group": "gameplay",
-      "entries": [
-        {
-          "label": "tilemap.set(n, tx, ty, tile)",
-          "snippet": "tilemap.set(1, 5, 3, 0)",
-          "description": "Pose une tuile sur le layer n. tx/ty sont en TUILES dans la carte du layer (1 tuile = 8 px), pas en pixels monde, et bouclent au bord comme le matériel. Le flip et la palette de la case sont conservés.",
-          "params": [
-            {
-              "name": "n",
-              "type": "number",
-              "description": "Slot de fond (0-3)"
-            },
-            {
-              "name": "tx",
-              "type": "number",
-              "description": "Colonne, en tuiles"
-            },
-            {
-              "name": "ty",
-              "type": "number",
-              "description": "Ligne, en tuiles"
-            },
-            {
-              "name": "tile",
-              "type": "number",
-              "description": "Index de tuile dans le tileset du layer (0-1023)"
-            }
-          ],
-          "doc_anchor": "tilemap-set"
-        },
-        {
-          "label": "tilemap.get(n, tx, ty)",
-          "snippet": "tilemap.get(1, 5, 3)",
-          "description": "Index de tuile actuellement posé en (tx, ty) sur le layer n. À ne pas confondre avec tile.get(), qui lit la carte de collision à une position monde en pixels.",
-          "params": [
-            {
-              "name": "n",
-              "type": "number",
-              "description": "Slot de fond (0-3)"
-            },
-            {
-              "name": "tx",
-              "type": "number",
-              "description": "Colonne, en tuiles"
-            },
-            {
-              "name": "ty",
-              "type": "number",
-              "description": "Ligne, en tuiles"
-            }
-          ],
-          "returns": "number — index de tuile (0-1023)",
-          "doc_anchor": "tilemap-get"
-        },
-        {
-          "label": "tilemap.set_palette(n, tx, ty, bank)",
-          "snippet": "tilemap.set_palette(1, 5, 3, 4)",
-          "description": "Repeint une case avec une autre sous-palette (0-15) sans changer son dessin — l'équivalent en jeu du pinceau de palette du Background Editor. Idéal pour une case qui s'allume, gèle, ou passe en nuit.",
-          "params": [
-            {
-              "name": "n",
-              "type": "number",
-              "description": "Slot de fond (0-3)"
-            },
-            {
-              "name": "tx",
-              "type": "number",
-              "description": "Colonne, en tuiles"
-            },
-            {
-              "name": "ty",
-              "type": "number",
-              "description": "Ligne, en tuiles"
-            },
-            {
-              "name": "bank",
-              "type": "number",
-              "description": "Sous-palette 0-15"
-            }
-          ],
-          "doc_anchor": "tilemap-set_palette"
-        },
-        {
-          "label": "tilemap.set_flip(n, tx, ty, h, v)",
-          "snippet": "tilemap.set_flip(1, 5, 3, true, false)",
-          "description": "Retourne une case horizontalement et/ou verticalement. Gratuit côté matériel : un miroir ne coûte aucune tuile supplémentaire.",
-          "params": [
-            {
-              "name": "n",
-              "type": "number",
-              "description": "Slot de fond (0-3)"
-            },
-            {
-              "name": "tx",
-              "type": "number",
-              "description": "Colonne, en tuiles"
-            },
-            {
-              "name": "ty",
-              "type": "number",
-              "description": "Ligne, en tuiles"
-            },
-            {
-              "name": "h",
-              "type": "boolean",
-              "description": "Miroir horizontal"
-            },
-            {
-              "name": "v",
-              "type": "boolean",
-              "description": "Miroir vertical"
-            }
-          ],
-          "doc_anchor": "tilemap-set_flip"
-        },
-        {
-          "label": "tilemap.fill(n, tx, ty, w, h, tile)",
-          "snippet": "tilemap.fill(1, 0, 0, 30, 20, 0)",
-          "description": "Remplit un rectangle de w×h tuiles avec la même tuile. Pratique pour effacer une zone (tuile 0) ou poser un fond de panneau.",
-          "params": [
-            {
-              "name": "n",
-              "type": "number",
-              "description": "Slot de fond (0-3)"
-            },
-            {
-              "name": "tx",
-              "type": "number",
-              "description": "Colonne du coin haut-gauche, en tuiles"
-            },
-            {
-              "name": "ty",
-              "type": "number",
-              "description": "Ligne du coin haut-gauche, en tuiles"
-            },
-            {
-              "name": "w",
-              "type": "number",
-              "description": "Largeur en tuiles"
-            },
-            {
-              "name": "h",
-              "type": "number",
-              "description": "Hauteur en tuiles"
-            },
-            {
-              "name": "tile",
-              "type": "number",
-              "description": "Index de tuile à poser"
-            }
-          ],
-          "doc_anchor": "tilemap-fill"
-        }
-      ]
+      "entries": []
     },
     {
       "name": "Debug",
       "group": "language",
       "entries": [
         {
-          "label": "debug.log(...)",
-          "snippet": "debug.log(...)",
-          "description": "Écrit une ligne dans le journal mGBA — jamais à l'écran du jeu. Concatène ses arguments, chacun déjà une chaîne ou un entier : debug.log(\"hp=\", hp, \" x=\", x). Sans effet, et retiré de la ROM, hors build debug (réglage du projet).",
+          "label": "debug:log(...)",
+          "snippet": "debug:log(...)",
+          "description": "Écrit une ligne dans le journal mGBA — jamais à l'écran du jeu. Concatène ses arguments, chacun déjà une chaîne ou un entier : debug:log(\"hp=\", hp, \" x=\", x). Sans effet, et retiré de la ROM, hors build debug (réglage du projet).",
           "params": [],
           "returns": "",
           "doc_anchor": "debug-log"

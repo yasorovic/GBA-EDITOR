@@ -70,13 +70,14 @@ def test_le_tag_d_une_partie_de_prefab_aussi(tmp_path):
     assert "#define BOXTAG_SWORD_HITBOX " in h
 
 
-def test_une_box_inactive_ne_reserve_pas_de_tag(tmp_path):
-    """Une box désactivée n'est pas émise : lui donner une constante ferait
-    croire à un tag qu'aucune ligne du C ne cite."""
+def test_une_box_inactive_garde_son_tag(tmp_path):
+    """« Active » de l'inspecteur n'est que l'état de DÉPART : un script peut
+    allumer la boîte (`hb:activate()`, après `self:collision_box("fantome")`),
+    donc son tag doit avoir une constante."""
     p = _projet(tmp_path)
     p.prefabs.items[0].actor.components.append(_box("fantome", active=False))
     h = _header(p, tmp_path)
-    assert "BOXTAG_FANTOME" not in h
+    assert "#define BOXTAG_FANTOME " in h
 
 
 def test_chaque_tag_a_un_numero_distinct(tmp_path):

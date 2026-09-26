@@ -191,7 +191,7 @@ class ExprTable:
     items:    list[Any] = field(default_factory=list)
     has_keys: bool      = False
     # Nom de la clé de chaque entrée, ou None si positionnelle — parallèle à
-    # `items`. Retenu pour la table d'exports d'`actor.spawn("X", pos, {k=v})`
+    # `items`. Retenu pour la table d'exports d'`actor:spawn("X", pos, {k=v})`
     # (chantier « Les exports de script », tranche poolé) ; les tableaux ordinaires
     # n'ont que des entrées positionnelles (keys = [None, …]).
     keys:     list[Any] = field(default_factory=list)
@@ -207,9 +207,16 @@ class ExprInvoke:
 
 @dataclass
 class ExprCall:
-    """func(args) ou module.func(args)"""
+    """func(args), `module:func(args)` ou `math.func(args)`.
+
+    Un appel de module s'écrit avec « : » (`input:pressed("A")`) : le parseur le ramène à
+    la forme `ExprIndex(ExprName(module), func)`, la même que l'ancien point, pour que
+    checker, codegen et refactor n'aient qu'une forme à traduire. `dotted` retient que
+    l'auteur a écrit un POINT sur un module qui s'appelle avec « : » — le checker le refuse
+    en disant quoi écrire."""
     func: Any            # ExprName ou ExprIndex
     args: list[Any]
+    dotted: bool = False
 
 
 @dataclass
@@ -539,15 +546,30 @@ class _Converter:
         obj    = self._expr(node.source)
         method = node.func.id if hasattr(node.func, "id") else str(node.func)
         args   = [self._expr(a) for a in (node.args or [])]
+        # `sfx:play("Bip")`, `input:pressed("A")` : la méthode d'un MODULE du moteur. Elle
+        # rejoint la forme d'appel de module — le reste du pipeline ne juge qu'elle.
+        if isinstance(obj, ExprName) and obj.name in _module_calls():
+            return ExprCall(func=ExprIndex(obj=obj, field=method), args=args)
         return ExprInvoke(obj=obj, method=method, args=args)
 
     def _expr_call(self, node) -> ExprCall:
         func = self._expr(node.func)
         args = [self._expr(a) for a in (node.args or [])]
-        return ExprCall(func=func, args=args)
+        dotted = (isinstance(func, ExprIndex) and isinstance(func.obj, ExprName)
+                  and func.obj.name in _module_calls())
+        return ExprCall(func=func, args=args, dotted=dotted)
+
+
+def _module_calls() -> frozenset:
+    """Les modules du moteur qui s'appellent avec « : » (`api.MODULE_CALLS`). Import local :
+    ce fichier ne dépend du catalogue que pour cette liste, et le catalogue n'importe pas ce
+    fichier."""
+    from .api import MODULE_CALLS
+    return MODULE_CALLS
 
 
 # ─── Déclaration d'un tableau ─────────────────────────────────────
+
 # Deux façons de déclarer, parce que ce sont deux besoins : `{1, 2, 4, 8}`
 # donne le CONTENU et en déduit la taille, `array(20, 12)` donne la TAILLE et
 # remplit de zéros. La reconnaissance vit ici, avec la forme d'AST qu'elle lit,

@@ -30,7 +30,9 @@ from dataclasses import dataclass
 from scripting.api import (
     RUNTIME_API, RUNTIME_PROPS, HARDWARE_ENUMS,
     KNOWN_EVENTS, KNOWN_EVENTS_BY_KIND, EVENT_REGISTRY,
+    STATELESS_MODULES, canonical_key,
 )
+
 from scripting.expr_types import VEC_CONSTRUCTORS
 from scripting import api_snippets
 from scripting.api_reference import make_tooltip
@@ -67,7 +69,7 @@ class Candidate:
 
 def _split(key: str) -> tuple[str, str, str]:
     """(module, séparateur, membre). `sfx.play` → (sfx, ., play) ;
-    `self:move` → (self, :, move) ; `get_actor` → ('', '', get_actor)."""
+    `self:move` → (self, :, move) ; `array` → ('', '', array)."""
     if ":" in key:
         mod, member = key.split(":", 1)
         return mod, ":", member
@@ -97,15 +99,17 @@ _MODULE_PROPS = _dotted_index(RUNTIME_PROPS)  # scene → [size, frame], camera 
 # distinction de Lua, celle que le checker fait déjà. Les méthodes viennent des
 # clés à deux-points de `RUNTIME_API` ; les propriétés des clés `self.` de
 # `RUNTIME_PROPS`, rangées ci-dessus.
-_SELF_METHODS = [_split(k)[2] for k in RUNTIME_API if k.startswith("self:")]
-_SELF_PROPS   = _MODULE_PROPS.pop("self", [])
+_SELF_METHODS = [_split(k)[2] for k in RUNTIME_API if k.startswith("actor:")]
+# Les champs d'un acteur sont sous `actor.` dans le catalogue — et NE sont pas ceux du module
+# `actor` (`actor:get`) : on les sort de `_MODULE_PROPS`.
+_SELF_PROPS   = _MODULE_PROPS.pop("actor", [])
 
 # Les modules du catalogue, source unique aussi pour la coloration syntaxique
 # (`lua_editor.py` la lit d'ici, au lieu d'une liste tenue à la main qui citait
 # encore `display`/`send`, disparus, et ignorait la moitié des modules vivants).
 MODULES: tuple[str, ...] = tuple(sorted(set(_MODULE_FUNCS) | set(_MODULE_PROPS)))
 
-# Fonctions globales — sans module (`get_actor`, `array`).
+# Fonctions globales — sans module (`array`).
 _GLOBAL_FUNCS = [k for k in RUNTIME_API if _split(k)[0] == ""]
 
 # Constructeurs de valeurs composées (`vec2`, `vec3`, `rect`) — leur arité vit
@@ -157,7 +161,7 @@ def _plain_tooltip(sig: str, desc: str) -> str:
 
 def _member_label(name: str) -> str:
     """Le libellé montré dans la liste : la signature, sans son préfixe de
-    module — `self:play_anim(name)` → `play_anim(name)`, `text.draw(...)` →
+    module — `self:play_anim(name)` → `play_anim(name)`, `text:draw(...)` →
     `draw(...)`."""
     is_prop = name in RUNTIME_PROPS
     entry = (api_snippets.prop_entry_dict(name) if is_prop
@@ -242,7 +246,7 @@ def _value_candidates(domain: str | None, project_names: dict | None) -> list[Ca
 
 def _string_arg(line_prefix: str, project_names: dict | None) -> list[Candidate]:
     """Candidats pour une CHAÎNE en cours de frappe, dans les deux endroits où une
-    valeur nommée s'écrit : un argument d'appel (`sfx.play("…`, `layer.set_blend
+    valeur nommée s'écrit : un argument d'appel (`sfx:play("…`, `layer.set_blend
     ("…`) et l'affectation ou la comparaison d'une propriété (`self.obj_mode ==
     "…`). La valeur peut être un enum matériel ou un nom du projet — cf.
     `_value_candidates`."""
@@ -250,7 +254,8 @@ def _string_arg(line_prefix: str, project_names: dict | None) -> list[Candidate]
     if open_paren >= 0:
         head = line_prefix[:open_paren]
         m = re.search(r"([A-Za-z_][\w.:]*)\s*$", head)
-        fn = RUNTIME_API.get(m.group(1)) if m else None
+        fn = RUNTIME_API.get(canonical_key(m.group(1))) if m else None
+
         if fn is None:
             return []
         idx = _arg_index(line_prefix[open_paren + 1:])
@@ -260,7 +265,8 @@ def _string_arg(line_prefix: str, project_names: dict | None) -> list[Candidate]
     # Hors parenthèses : une propriété dont la valeur est un NOM d'énumération
     # (`self.obj_mode = "window"`, ou la comparaison `== "window"`).
     m = re.search(r"([A-Za-z_][\w.:]*)\s*==?\s*[\"'][^\"']*$", line_prefix)
-    p = RUNTIME_PROPS.get(m.group(1)) if m else None
+    p = RUNTIME_PROPS.get(canonical_key(m.group(1))) if m else None
+
     return _value_candidates(p.domain, project_names) if p is not None else []
 
 
@@ -311,20 +317,30 @@ def _arg_index(seg: str) -> int:
     return n
 
 
-def _member_candidates(qual: str, sep: str, project_names: dict | None) -> list[Candidate]:
+def _member_candidates(qual: str, sep: str, project_names: dict | None,
+                       context: str = "unknown") -> list[Candidate]:
     """Les membres d'un qualificateur. `self` a deux espaces (méthode `:` /
     champ `.`) ; un module n'a que le point ; `global.`/`const.` sont des accès
     pointés aux scalaires DÉCLARÉS du projet. Un qualificateur inconnu ne rend
     rien : c'est le plus souvent un `local` porteur de référence, que la phase 2
     (l'AST) saura reconnaître."""
     if qual == "self":
+        # `self` est l'instance à laquelle le script est attaché : une scène et une
+        # caméra n'en ont pas, le build le refuserait — on ne le propose donc pas.
+        if context in ("scene", "camera"):
+            return []
         members = _SELF_METHODS if sep == ":" else _SELF_PROPS
-        pfx = "self:" if sep == ":" else "self."
+        pfx = "actor:" if sep == ":" else "actor."       # clés du catalogue ; s'écrit `self`
         return [_catalog_candidate(pfx + m) for m in members]
-    if sep == "." and qual in MODULES:
-        out = [_catalog_candidate(f"{qual}.{m}") for m in _MODULE_FUNCS.get(qual, [])]
-        out += [_catalog_candidate(f"{qual}.{m}") for m in _MODULE_PROPS.get(qual, [])]
-        return sorted(out, key=lambda c: c.insert)
+    if qual in MODULES:
+        # Un module du moteur : ses ACTIONS derrière « : » (`sfx:play`), son ÉTAT derrière
+        # « . » (`camera.bound`) ; une bibliothèque sans état (`math`) n'a que le point.
+        if qual in STATELESS_MODULES:
+            names = _MODULE_FUNCS.get(qual, []) if sep == "." else []
+        else:
+            names = _MODULE_FUNCS.get(qual, []) if sep == ":" else _MODULE_PROPS.get(qual, [])
+        return sorted((_catalog_candidate(f"{qual}.{m}") for m in names),
+                      key=lambda c: c.insert)
     # `global.nom` / `const.nom` — variables et constantes du projet, lues dans
     # `names_by_domain` sous la clé qui EST le qualificateur écrit.
     if sep == "." and qual in ("global", "const"):
@@ -430,6 +446,6 @@ def candidates_at(line_prefix: str, *, context: str = "unknown",
         return _string_arg(line_prefix, project_names)
     qual = _QUAL.search(line_prefix)
     if qual:
-        return _member_candidates(qual.group(1), qual.group(2), project_names)
+        return _member_candidates(qual.group(1), qual.group(2), project_names, context)
     # Mot nu : les locals d'abord (les plus proches), puis le catalogue.
     return _local_candidates(source, line) + _bare_candidates(context)

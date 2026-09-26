@@ -20,13 +20,17 @@ from scripting.api import (
 # ── 1. Un membre proposé est TOUJOURS une clé réelle du catalogue ──
 
 @pytest.mark.parametrize("qual, sep, table_key", [
-    ("self", ":", "self:{}"),          # méthodes d'actor
-    ("self", ".", "self.{}"),          # propriétés d'actor
-    ("sfx",  ".", "sfx.{}"),
-    ("scene", ".", "scene.{}"),
+    ("self", ":", "actor:{}"),         # méthodes d'acteur (clés `actor:`, écrites `self:`)
+    ("self", ".", "actor.{}"),         # propriétés d'acteur
+    ("sfx",  ":", "sfx.{}"),            # un module : ses actions derrière « : »
+    ("scene", ":", "scene.{}"),
+    ("scene", ".", "scene.{}"),         # ... son état derrière « . »
+    ("camera", ":", "camera.{}"),
     ("camera", ".", "camera.{}"),
-    ("math", ".", "math.{}"),
-    ("text", ".", "text.{}"),
+    ("input", ":", "input.{}"),
+    ("save", ":", "save.{}"),
+    ("math", ".", "math.{}"),           # la seule bibliothèque : le point
+    ("text", ":", "text.{}"),
 ])
 def test_member_candidates_existent_dans_le_catalogue(qual, sep, table_key):
     cands = C.candidates_at(f"{qual}{sep}", context="actor")
@@ -37,17 +41,21 @@ def test_member_candidates_existent_dans_le_catalogue(qual, sep, table_key):
             f"{key} proposé mais absent du catalogue"
 
 
-# ── 2. `sfx.` ≠ `sfx:` — le module n'expose pas les méthodes du handle ──
+# ── 2. `sfx:` ≠ `pas:` — le module n'expose pas les méthodes du handle ──
 # La régression exacte trouvée en développant : `sfx:stop` (méthode du TYPE de
-# référence rendu par `sfx.play`) fuyait dans les membres de `sfx.`, qui n'en a
+# référence rendu par `sfx:play`) fuyait dans les membres du module, qui n'en a
 # qu'un — `play`.
 
 def test_module_nexpose_pas_les_methodes_de_reference():
-    inserts = {c.insert for c in C.candidates_at("sfx.")}
+    inserts = {c.insert for c in C.candidates_at("sfx:")}
     assert inserts == {"play"}
-    # Un `:` derrière un nom de module n'est pas un appel légal : la méthode
-    # s'invoque sur un `local` qui tient le handle (phase 2), rien ici.
-    assert C.candidates_at("sfx:") == []
+    # Le point d'un module est son ÉTAT : `sfx` n'en a aucun, et `math` — la bibliothèque —
+    # n'a que le point.
+    assert C.candidates_at("sfx.") == []
+    assert C.candidates_at("math:") == []
+    assert {c.insert for c in C.candidates_at("camera.")} >= {"bound"}
+    assert "follow" not in {c.insert for c in C.candidates_at("camera.")}
+
 
 
 # ── 3. `self:` (méthode) et `self.` (champ) sont disjoints ──
@@ -78,9 +86,9 @@ def test_enum_dans_une_affectation_de_propriete():
 
 
 def test_argument_de_domaine_projet_attend_la_phase_3():
-    # sfx.play("…") cite un asset du PROJET (DOMAIN_SFX), pas un enum matériel :
+    # sfx:play("…") cite un asset du PROJET (DOMAIN_SFX), pas un enum matériel :
     # rien tant que la phase 3 n'a pas branché l'univers du projet.
-    assert C.candidates_at('sfx.play("') == []
+    assert C.candidates_at('sfx:play("') == []
 
 
 # ── 5. Ce qui NE doit pas se compléter ──
@@ -165,7 +173,7 @@ def test_locals_seulement_sur_un_mot_nu():
     assert not any(c.kind == C.KIND_LOCAL
                    for c in C.candidates_at("    self:", context="actor", source=_SRC, line=1))
     assert not any(c.kind == C.KIND_LOCAL
-                   for c in C.candidates_at('    sfx.play("', context="actor", source=_SRC, line=1))
+                   for c in C.candidates_at('    sfx:play("', context="actor", source=_SRC, line=1))
 
 
 def test_repli_regex_sur_tampon_desequilibre():
@@ -207,10 +215,10 @@ def _refs(prefix):
 
 
 def test_argument_projet_propose_les_noms():
-    assert _refs('sfx.play("') == {"Hit", "Jump"}
-    assert _refs('scene.switch("') == {"Arena", "Title"}
-    assert _refs('actor.spawn("') == {"Bullet"}       # DOMAIN_PREFAB
-    assert _refs('get_actor("') == {"Hero", "Boss"}   # DOMAIN_ACTOR — scène active
+    assert _refs('sfx:play("') == {"Hit", "Jump"}
+    assert _refs('scene:switch("') == {"Arena", "Title"}
+    assert _refs('actor:spawn("') == {"Bullet"}       # DOMAIN_PREFAB
+    assert _refs('actor:get("') == {"Hero", "Boss"}   # DOMAIN_ACTOR — scène active
 
 
 def test_argument_enum_reste_prioritaire_sur_le_projet():
@@ -224,7 +232,7 @@ def test_argument_enum_reste_prioritaire_sur_le_projet():
 def test_sans_projet_aucun_nom_projet():
     # Phase 1/2 préservées : sans project_names, un argument de domaine projet
     # ne propose rien (il reste à la charge de l'auteur).
-    assert C.candidates_at('sfx.play("', context="actor") == []
+    assert C.candidates_at('sfx:play("', context="actor") == []
 
 
 def test_names_by_domain_omet_les_domaines_vides():
@@ -248,7 +256,7 @@ def test_global_et_const_pointes_proposent_le_projet():
                 if c.kind == C.KIND_REF}
 
     assert members("    x = global.") == {"score", "lives"}
-    assert members("    debug.log(global.") == {"score", "lives"}   # même dans un argument
+    assert members("    debug:log(global.") == {"score", "lives"}   # même dans un argument
     assert members("    y = const.") == {"MAX_HP"}
 
 

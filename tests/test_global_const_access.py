@@ -16,8 +16,8 @@ tout) :
   échouerait sur le mot-clé `const` ;
 - un tableau ne se lit pas nu, un scalaire ne s'indexe pas ;
 - une constante ne s'écrit jamais ;
-- les anciennes orthographes guident vers la nouvelle plutôt que de tomber
-  sur un « module inconnu » ;
+- les anciennes orthographes (`global.get`/`const.get`) sont refusées comme
+  « module inconnu » — retrait sec, sans guide (ROADMAP v0.16, REMOVED_API vidé) ;
 - un renommage de variable réécrit les DEUX formes pointées dans les scripts.
 """
 from __future__ import annotations
@@ -171,17 +171,21 @@ def test_valeur_hors_plage_avertit_dans_la_grammaire_pointee():
     assert "global.set" not in warns[0]
 
 
-# ── 6. Les anciennes orthographes guident ─────────────────────────
+# ── 6. Les anciennes orthographes sont bloquées (retrait sec) ─────
 
 
-@pytest.mark.parametrize("src,attendu", [
-    ('local v = global.get("score")', "global.score"),
-    ('global.set("score", 1)',        "global.score = "),
-    ('local v = const.get("max_vies")', "const.max"),
+@pytest.mark.parametrize("src", [
+    'local v = global.get("score")',
+    'global.set("score", 1)',
+    'local v = const.get("max_vies")',
 ])
-def test_les_accesseurs_retires_guident_vers_lacces_pointe(src, attendu):
+def test_les_accesseurs_retires_sont_bloques(src):
+    """Retrait sec (ROADMAP v0.16, REMOVED_API vidé) : `global.get`/`const.get`
+    ne guident plus vers l'accès pointé — ils sont refusés comme un module
+    inexistant. Le blocage tient au checker (module hors catalogue), pas à
+    REMOVED_API."""
     errs = _check(_body(src))
-    assert errs and attendu in errs[0]
+    assert errs and "n'existe pas" in errs[0]
 
 
 def test_les_accesseurs_ont_quitte_le_catalogue():
@@ -198,7 +202,7 @@ def test_save_read_garde_son_nom_litteral():
     """Le seul site qui cite encore une globale entre guillemets : le premier
     argument est l'emplacement, pas le récepteur, et c'est `GLOBAL_NOM` (l'id
     de sauvegarde) qu'il faut, pas `g_nom` (la variable en RAM)."""
-    code = _gen(_body('local v = save.read(0, "score")'))
+    code = _gen(_body('local v = save:read(0, "score")'))
     assert "save_read_var(0, GLOBAL_SCORE)" in code
 
 
@@ -229,7 +233,7 @@ def test_renommer_une_globale_reecrit_les_formes_nue_et_indexee(tmp_path):
     src = _body("global.score = global.score + 1",
                 "global.coffres[1] = 1",
                 "local score = 3",                    # homonyme LOCAL : intouchable
-                'local v = save.read(0, "score")')
+                'local v = save:read(0, "score")')
     project = _scripts(tmp_path, src)
     changed = rename_var_in_project(project, "global", "score", "points")
 
@@ -237,7 +241,7 @@ def test_renommer_une_globale_reecrit_les_formes_nue_et_indexee(tmp_path):
     assert sum(changed.values()) == 2               # les deux citations pointées
     assert "global.points = global.points + 1" in out
     assert "local score = 3" in out                 # le local n'a pas bougé
-    assert 'save.read(0, "score")' in out           # le littéral non plus (autre chemin)
+    assert 'save:read(0, "score")' in out           # le littéral non plus (autre chemin)
     assert "global.coffres[1] = 1" in out           # une autre globale non plus
 
 

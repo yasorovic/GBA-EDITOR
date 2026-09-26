@@ -67,7 +67,7 @@ class InputBinding:
     en fait un vrai combo (ex: {up, a} pour un dash).
 
     Le nom devient une clé utilisable dans les scripts, par exemple
-    `input.pressed("jump")`. Les directions de la croix sont des boutons au
+    `input:pressed("jump")`. Les directions de la croix sont des boutons au
     même titre que A/B : `jump = up` et `dash = right + a` ne demandent donc
     aucun cas spécial au runtime."""
     name: str = ""

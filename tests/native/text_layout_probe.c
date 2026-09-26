@@ -218,7 +218,7 @@ int main(void) {
     tout_anime.end   = (unsigned short)slen;
     tout_anime.value = 0;
     tout_anime.kind  = TEXT_EV_WAVE;
-    tout_anime.pad   = 0;
+    tout_anime.limit = 0;
     g_ev  = &tout_anime;
     g_nev = 1;
 

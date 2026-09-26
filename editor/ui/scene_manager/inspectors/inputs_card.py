@@ -5,7 +5,7 @@ fenêtre Project Settings (catégorie Input).
 Nommer une action et lui associer un ou plusieurs boutons physiques du GBA
 pressés ENSEMBLE — un combo à un seul bouton est le cas courant, à plusieurs
 il en fait un vrai combo. Le nom est utilisable depuis Lua via
-`input.held("nom")` et `input.pressed("nom")`.
+`input:held("nom")` et `input:pressed("nom")`.
 
 Comme LanguagesCard, la carte ne mute rien : elle SIGNALE un geste — « ajoute »,
 « retire », « ce champ vaut ça » — et l'appelant (InputsPanel) en fait une

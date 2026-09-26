@@ -699,6 +699,10 @@ class RenameCollisionTagCmd(Command):
 
     def _apply(self, old: str, new: str):
         from core.models.settings import pair_key
+        from scripting.api import DOMAIN_BOX_TAG
+        # Les scripts citent le tag en chaîne (`self:collision_box("hitbox")`, `hb.tag == "hitbox"`) : ils
+        # suivent le renommage, dans un sens comme dans l'autre (annulation).
+        self._project.rename_lua_refs(DOMAIN_BOX_TAG, old, new)
         for c in self._components:
             c.tag = new
         s = self._project.settings
@@ -854,6 +858,38 @@ class AddComponentCmd(Command):
             self._actor.components.remove(self._comp)
         if self._persist:
             self._persist()
+
+
+class RenameSpriteIdCmd(Command):
+    """Renomme l'`id` d'un composant sprite ET les références du script de son
+    propriétaire (`self:activate_sprite("id")`, `self.active_sprite == "id"`).
+
+    Une commande à part, pas un `SetFieldCmd` : annuler doit défaire les DEUX —
+    rendre l'ancien `id` sans réécrire le script laisserait des références mortes,
+    que seul le build dénoncerait."""
+
+    def __init__(self, project, owner: Any, comp: Any, old: str, new: str, persist_fn=None):
+        self._project = project
+        self._owner = owner
+        self._comp = comp
+        self._old = old
+        self._new = new
+        self.label = f"Renommer sprite {old} → {new}"
+        self._persist = persist_fn
+
+    def _apply(self, frm: str, to: str):
+        with self._project._renaming():
+            refs = self._project.rename_sprite_id_refs(self._owner, frm, to)
+            self._comp.id = to
+        self._project._notify_renamed("Sprite id", frm, to, refs)
+        if self._persist:
+            self._persist()
+
+    def execute(self):
+        self._apply(self._old, self._new)
+
+    def undo(self):
+        self._apply(self._new, self._old)
 
 
 class RemoveComponentCmd(Command):

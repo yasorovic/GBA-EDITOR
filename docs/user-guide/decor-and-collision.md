@@ -33,6 +33,43 @@ sprite.
 Cette boîte est la partie de l'acteur qui rencontre les murs et le sol. Sans elle, la carte de
 collision existe mais l'acteur ne peut rien heurter.
 
+Chaque boîte porte un **Tag** (`body`, `hitbox`…). Un script demande la boîte à l'acteur par ce
+tag, la garde dans une variable, puis lit ou change ses champs pendant le jeu :
+
+```lua
+local corps = self:collision_box("body")       -- nil si l'acteur n'a pas de boîte de ce tag
+local frappe = self:collision_box("hitbox")
+
+frappe.offset = vec2(8, -4)                    -- décalage par rapport au pivot du sprite
+frappe.size = vec2(20, 8)                      -- une zone d'attaque qui s'allonge
+corps.solid = false                            -- devient un simple déclencheur : on traverse les murs
+frappe:deactivate()                            -- la boîte n'existe plus pour personne
+```
+
+| Champ | Nature | Sens |
+| --- | --- | --- |
+| `tag` | lecture seule | le tag de la boîte (`if boite.tag == "hitbox"`) |
+| `active` | lecture / écriture | la case **Active** de l'inspecteur n'en fixe que l'état de départ |
+| `solid` | lecture / écriture | arrêtée par la carte de collision, ou simple déclencheur |
+| `offset`, `size` | lecture / écriture | décalage et taille, en pixels (bornés à −128..127 et 0..255) |
+| `is_grounded` | lecture seule | cette boîte repose-t-elle sur le sol (toujours faux pour une boîte non solide) |
+| `bounds` | lecture seule | le rectangle de la boîte en coordonnées du monde |
+
+Deux actions complètent la boîte, dont une question posée à la carte :
+
+```lua
+if frappe:overlaps(ennemi) then ... end        -- touche-t-elle N'IMPORTE QUELLE boîte active de cet acteur ?
+if frappe:overlaps(ennemi:collision_box("body")) then ... end   -- ... ou celle-là seulement ?
+
+local sol = corps:get_collision_tile(corps.bounds.x, corps.bounds.y + corps.bounds.h)
+```
+
+`boite:get_collision_tile(x, y)` interroge la carte de collision à une position du monde, en pixels
+(absolue, elle ne dépend pas de la boîte) : elle rend le type de la tuile (0 = vide). Une boîte inactive ne touche personne.
+
+Un tag que le projet ne connaît pas est refusé au Build. Une boîte que l'acteur n'a pas donne `nil` :
+testez-la avec `if boite then`. `self.box_count` donne le nombre de boîtes de l'acteur.
+
 ## 4. Déplacer l'acteur en respectant les murs
 
 L'écriture directe dans `self.position` est pratique pour débuter, mais elle contourne la

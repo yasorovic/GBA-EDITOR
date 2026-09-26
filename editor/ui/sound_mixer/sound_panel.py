@@ -398,7 +398,7 @@ class _AssetInspectorBase(QWidget):
         new_name = new_name.strip()
         if new_name and new_name != self._asset.name:
             # Passe par le projet (pas le ResourceStore brut) : il met aussi
-            # à jour les sfx.play()/music.play() des scripts.
+            # à jour les sfx:play()/music:play() des scripts.
             self._project.rename_sound(self._asset, new_name)
             self.changed.emit()
 

@@ -1,13 +1,14 @@
 """codegen/runtime_codegen/gen_affine.py — les slots de matrice affine OAM.
 
 Extrait de `main_gen` (A3), au-dessus de la couche de requêtes : il consomme
-`get_sprite_comp` et `parent_depths` de `gen_scene_query` (vers le bas, sans
+`parent_depths` de `gen_scene_query` (vers le bas, sans
 cycle). `affine_entry`/`compute_affine_info` rendent de la donnée ; seul
 `affine_oam_lines_dynamic` émet du C (la matrice recalculée chaque frame).
 """
 from __future__ import annotations
 
-from codegen.runtime_codegen.gen_scene_query import get_sprite_comp, parent_depths
+from codegen.runtime_codegen.gen_scene_query import parent_depths
+from core.models.components import affine_sprite_component
 
 
 def affine_entry(actor, sc, slot: int, force: bool = False) -> dict | None:
@@ -63,7 +64,7 @@ def compute_affine_info(actor_offset: int, scene_actors: list, pi: list) -> dict
     for j, (actor, _) in enumerate(scene_actors):
         if slot >= 32:
             break
-        sc = get_sprite_comp(actor)
+        sc = affine_sprite_component(actor)
         if not sc:
             continue
         entry = affine_entry(actor, sc, slot)
@@ -93,7 +94,7 @@ def compute_affine_info(actor_offset: int, scene_actors: list, pi: list) -> dict
             if oam in result or not par or par not in idx_of:
                 continue
             base = result.get(idx_of[par])
-            sc = get_sprite_comp(actor)
+            sc = affine_sprite_component(actor)
             if not base or not sc:
                 continue
             if getattr(sc, "affine_transform", False):
@@ -119,7 +120,7 @@ def compute_affine_info(actor_offset: int, scene_actors: list, pi: list) -> dict
 
     for p2 in pi:
         pf = p2["prefab"]
-        sc = get_sprite_comp(pf)
+        sc = affine_sprite_component(pf)
         if not sc:
             continue
         for oam_idx in range(p2["start"], p2["start"] + p2["size"]):
@@ -134,7 +135,8 @@ def compute_affine_info(actor_offset: int, scene_actors: list, pi: list) -> dict
 
 
 def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr: str,
-                             screen_space: bool = False) -> list[str]:
+                             screen_space: bool = False,
+                             entry: int | None = None) -> list[str]:
     """Lignes C (intérieur du if actif) pour un sprite affine : PA/PB/PC/PD et
     position recalculés CHAQUE FRAME depuis les champs transform de la struct
     Actor via gba_sin/gba_cos (cf. runtime_api_inline.h), même formule que la
@@ -163,18 +165,19 @@ def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr
     # de la collision, cf. resolve_actor_tiles). >>8 tronque vers -inf sur un
     # entier signé avec ce compilateur (ARM/GCC, décalage arithmétique) —
     # cohérent, pas de saut à la traversée de 0.
+    e = idx if entry is None else entry   # entrée OAM ; `idx` reste l'acteur
     base_x = f"(g_actors[{idx}].x>>8)" + ("" if screen_space else "-cam_x")
     base_y = f"(g_actors[{idx}].y>>8)" + ("" if screen_space else "-cam_y")
 
     return [
         # Transform monde + local composés
         f"        int _arot=g_actors[{idx}].rotation;",
-        f"        int _srot=g_actors[{idx}].sprite.rotation;",
+        f"        int _srot=g_oam_entries[{e}].rotation;",
         f"        int _ang=_arot+_srot; int _cosA=gba_cos(_ang); int _sinA=gba_sin(_ang);",
         f"        int _asx=g_actors[{idx}].scale_x; int _asy=g_actors[{idx}].scale_y;",
-        f"        int _ssx=g_actors[{idx}].sprite.scale_x; int _ssy=g_actors[{idx}].sprite.scale_y;",
+        f"        int _ssx=g_oam_entries[{e}].scale_x; int _ssy=g_oam_entries[{e}].scale_y;",
         f"        int _sxq=_asx*_ssx/256; int _syq=_asy*_ssy/256;",
-        f"        int _fh=g_actors[{idx}].flip_h; int _fv=g_actors[{idx}].flip_v;",
+        f"        int _fh=g_oam_entries[{e}].flip_h; int _fv=g_oam_entries[{e}].flip_v;",
         f"        int _sxs=_fh?-_sxq:_sxq; int _sys=_fv?-_syq:_syq;",
         # Matrice 8.8 (base, sans flip)
         f"        int _pa=_sxq?_cosA*256/_sxq:0; int _pb=_sxq?_sinA*256/_sxq:0;",
@@ -185,19 +188,19 @@ def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr
         #   ox = R(rotation)·S(scale)·offset, avec le flip déjà dans le signe.
         f"        int _acos=gba_cos(_arot); int _asin=gba_sin(_arot);",
         f"        int _asxs=_fh?-_asx:_asx; int _asys=_fv?-_asy:_asy;",
-        f"        int _ofx=(_acos*_asxs*g_actors[{idx}].sprite.offset_x - _asin*_asys*g_actors[{idx}].sprite.offset_y)/65536;",
-        f"        int _ofy=(_asin*_asxs*g_actors[{idx}].sprite.offset_x + _acos*_asys*g_actors[{idx}].sprite.offset_y)/65536;",
+        f"        int _ofx=(_acos*_asxs*g_oam_entries[{e}].offset_x - _asin*_asys*g_oam_entries[{e}].offset_y)/65536;",
+        f"        int _ofy=(_asin*_asxs*g_oam_entries[{e}].offset_x + _acos*_asys*g_oam_entries[{e}].offset_y)/65536;",
         # Position : pivot de rotation au centre texture ; l'offset s'ajoute au monde.
         f"        int _ocx=({base_x})+_ofx; int _ocy=({base_y})+_ofy;",
         f"        int _u=(_cosA*_sxs*({dx}))/65536-(_sinA*_sys*({dy}))/65536;",
         f"        int _v=(_sinA*_sxs*({dx}))/65536+(_cosA*_sys*({dy}))/65536;",
         f"        int sx=_ocx+(-{W}-_u); int sy=_ocy+(-{H}-_v);",
-        f"        u16 ti=(u16)({bt}+g_actors[{idx}].sprite.frame*{tpf});",
+        f"        u16 ti=(u16)({bt}+g_oam_entries[{e}].frame*{tpf});",
         f"        shadow_oam[{aslot*4+0}].dummy=(u16)(s16)(_fh?-_pa:_pa);",
         f"        shadow_oam[{aslot*4+1}].dummy=(u16)(s16)(_fh?-_pb:_pb);",
         f"        shadow_oam[{aslot*4+2}].dummy=(u16)(s16)(_fv?-_pc:_pc);",
         f"        shadow_oam[{aslot*4+3}].dummy=(u16)(s16)(_fv?-_pd:_pd);",
-        f"        shadow_oam[{idx}].attr0=(sy&0xFF)|(1<<8)|(1<<9)|(g_actors[{idx}].obj_mode<<10)|({sh}<<14);",
-        f"        shadow_oam[{idx}].attr1=(sx&0x1FF)|({aslot}<<9)|({sz}<<14);",
-        f"        shadow_oam[{idx}].attr2=(ti&0x3FF)|({priority_expr}<<10)|(g_actors[{idx}].pal_bank<<12);",
+        f"        shadow_oam[{e}].attr0=(sy&0xFF)|(1<<8)|(1<<9)|(g_oam_entries[{e}].obj_mode<<10)|({sh}<<14);",
+        f"        shadow_oam[{e}].attr1=(sx&0x1FF)|({aslot}<<9)|({sz}<<14);",
+        f"        shadow_oam[{e}].attr2=(ti&0x3FF)|({priority_expr}<<10)|(g_oam_entries[{e}].pal_bank<<12);",
     ]

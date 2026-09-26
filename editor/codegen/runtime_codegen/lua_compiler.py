@@ -11,6 +11,8 @@ from typing import Optional
 
 from core.models.components import ScriptComponent
 from core.models.sprite import SpriteAsset
+from core.models.components import affine_sprite_component
+from codegen.oam_alloc import owner_appearances
 from core.models.scene import Actor, Scene
 from core.project import Project
 from scripting.parser  import parse as lua_parse, LuaParseError
@@ -18,6 +20,9 @@ from scripting.checker import check as lua_check, BuildContext
 from scripting.codegen import generate as lua_generate, CodegenContext
 from scripting.globals import write_globals
 from scripting.constants import write_constants
+from scripting.project_names import ui_ref_kinds, data_column_kinds
+from scripting.api import LAYERS_BY_MODE, LAYER_NUMBERS
+
 from codegen.c_names import sym as c_sym, scene_actor_sym
 import codegen.build_output as build_output
 from codegen.oam_alloc import scene_pool_instances
@@ -28,40 +33,99 @@ def _actor_script(actor: Actor) -> Optional[str]:
     return comp.script if comp and comp.active else None
 
 
-def _export_inits(actor: Actor, script) -> dict:
-    """Pour un acteur POSÉ : map nom d'export → initialiseur C, en préférant la
-    valeur d'INSTANCE (`ScriptComponent.exports_values`) au `default` déclaré dans
-    le script (chantier « Les exports de script, câblés au jeu »).
+# Types d'export câblés jusqu'au C — tous réglables par instance. Miroir de
+# codegen._EXPORT_SETTABLE (les deux doivent lister le même ensemble : ici on
+# décide QUOI résoudre, là-bas COMMENT le déclarer).
+_SETTABLE_EXPORTS = frozenset({
+    "int", "float", "bool", "enum",
+    "string", "actor_ref", "scene_ref", "sfx_ref",
+    "vec2", "vec3", "rect",
+})
+_COMPOSITE_ARITY = {"vec2": 2, "vec3": 3, "rect": 4}
 
-    Ne couvre que les types entiers du premier jet — int / float / bool / enum,
-    qui tombent tous sur un entier au runtime. `string`, les `*_ref` et les
-    composites (`vec2`/`rect`) sont reportés : ils gardent le traitement par défaut
-    du codegen (`_local_decl`). On lit le MÊME arbre (`script.locals`) que le
-    codegen — jamais un second parseur du fichier, qui pourrait en diverger (les
-    `values` d'un enum sont désormais captées sur le `LuaLocal`, cf. parser)."""
-    from scripting.parser import ExprNumber, ExprBool, ExprString
-    comp = actor.get_component("script")
+
+def _default_pyval(expr):
+    """La valeur Python d'un défaut d'export lu sur l'arbre (`loc.value`) :
+    scalaire pour un littéral, liste de nombres pour une table `{x, y}` (vec/
+    rect). None si le défaut n'est pas un littéral exploitable — le résolveur
+    tombera alors sur le neutre du type."""
+    from scripting.parser import ExprNumber, ExprBool, ExprString, ExprTable
+    if isinstance(expr, (ExprNumber, ExprBool, ExprString)):
+        return expr.value
+    if isinstance(expr, ExprTable):
+        return [it.value for it in expr.items
+                if isinstance(it, ExprNumber)]
+    return None
+
+
+def _make_export_resolver(p, scene_name: str, text_keys: list):
+    """Un callable `literal(typ, pyval, values) -> str` : la valeur d'un export
+    (venue de l'éditeur ou du défaut de source) → son initialiseur C, résolu
+    DANS `scene_name` (c'est là qu'un nom d'acteur a un sens). Les scalaires
+    tombent sur un entier ou une constante symbolique en portée dans le `.c`
+    généré (SFX_*, SCENE_IDX_*, TAG_*, TEXT_*) ; les composites sur un littéral
+    `{ x, y }`. Chantier « Les exports de script », types non-entiers."""
+    from scripting.api import (sfx_constant, scene_constant, text_constant,
+                               anon_text_key)
+    from codegen.c_names import scene_actor_sym
+
+    def ref_or_text(typ, name):
+        name = "" if name is None else str(name)
+        if not name:
+            return "0"
+        if typ == "sfx_ref":
+            return sfx_constant(name)
+        if typ == "scene_ref":
+            return scene_constant(name)
+        if typ == "actor_ref":
+            return f"TAG_{scene_actor_sym(scene_name, name).upper()}"
+        # string → index de texte : clé réelle du projet, sinon entrée anonyme
+        # (le littéral aura été collecté par project_texts.collect_literal_texts).
+        key = name if name in text_keys else anon_text_key(name)
+        return text_constant(key)
+
+    def literal(typ, pyval, values):
+        if typ in ("sfx_ref", "scene_ref", "actor_ref", "string"):
+            return ref_or_text(typ, pyval)
+        if typ in _COMPOSITE_ARITY:
+            n = _COMPOSITE_ARITY[typ]
+            seq = list(pyval) if isinstance(pyval, (list, tuple)) else []
+            seq = (seq + [0] * n)[:n]
+            return "{ " + ", ".join(str(int(v)) for v in seq) + " }"
+        return _export_c_literal(typ, pyval, values)
+
+    return literal
+
+
+def _export_inits(owner, script, resolver) -> dict:
+    """Map nom d'export → initialiseur C, en préférant la valeur d'INSTANCE
+    (`ScriptComponent.exports_values`) au `default` déclaré dans le script
+    (chantier « Les exports de script, câblés au jeu »).
+
+    `owner` est un acteur POSÉ (init au build) ou un `Prefab` template (init du
+    pool) — les deux portent un ScriptComponent, donc `exports_values`. Tous les
+    types câblés sont couverts (scalaires entiers, `string`, `*_ref`, vec/rect) ;
+    `resolver` sait résoudre chacun DANS la scène de compilation. On lit le MÊME
+    arbre (`script.locals`) que le codegen — jamais un second parseur du fichier
+    — et le défaut de source sert de repli quand l'éditeur n'a rien réglé."""
+    comp = owner.get_component("script")
     overrides = (getattr(comp, "exports_values", None) or {}) if comp else {}
     out: dict = {}
     for loc in script.locals:
         typ = loc.export_type
-        if typ not in ("int", "float", "bool", "enum"):
+        if typ not in _SETTABLE_EXPORTS:
             continue
-        if loc.name in overrides:
-            val = overrides[loc.name]
-        elif isinstance(loc.value, (ExprNumber, ExprBool, ExprString)):
-            val = loc.value.value
-        else:
-            val = None
-        out[loc.name] = _export_c_literal(typ, val, loc.export_values)
+        val = overrides[loc.name] if loc.name in overrides else _default_pyval(loc.value)
+        out[loc.name] = resolver(typ, val, loc.export_values)
     return out
 
 
 def _spawn_exports_meta(p, prefabs) -> dict:
     """Métadonnées des exports RÉGLABLES de chaque prefab, pour la table de
-    `actor.spawn("X", pos, {k=v})` (tranche poolé D2) : nom de prefab → { nom
+    `actor:spawn("X", pos, {k=v})` (tranche poolé D2) : nom de prefab → { nom
     d'export → {"type", "values"} }. Lue sur l'arbre du script (même source que
-    le reste), et servie à TOUS les scripts — n'importe lequel peut spawner."""
+    le reste), et servie à TOUS les scripts — n'importe lequel peut spawner.
+    Tous les types câblés sont réglables au spawn (scalaires, refs, vec/rect)."""
     from scripting.parser import parse as lua_parse
     out: dict = {}
     for pf in prefabs:
@@ -77,16 +141,18 @@ def _spawn_exports_meta(p, prefabs) -> dict:
             continue
         meta = {loc.name: {"type": loc.export_type, "values": loc.export_values}
                 for loc in ast.locals
-                if loc.export_type in ("int", "float", "bool", "enum")}
+                if loc.export_type in _SETTABLE_EXPORTS}
         if meta:
             out[pf.name] = meta
     return out
 
 
 def _export_c_literal(typ: str, val, values: list) -> str:
-    """La valeur d'un export entier, en littéral C. bool → 0/1 ; enum → l'index de
+    """La valeur d'un export ENTIER, en littéral C. bool → 0/1 ; enum → l'index de
     l'étiquette dans `values` (0 si introuvable — le moteur est entièrement entier,
-    cf. codegen._EXPORT_C_TYPE) ; int/float → entier (pas de flottant au runtime)."""
+    cf. codegen._EXPORT_C_TYPE) ; int/float → entier (pas de flottant au runtime).
+    Les types non-entiers (string/refs/vec) passent par `_make_export_resolver`,
+    qui délègue ici pour ce sous-ensemble entier."""
     if typ == "bool":
         return "1" if val else "0"
     if typ == "enum":
@@ -111,13 +177,40 @@ def _sfx_component_name(owner) -> Optional[str]:
     return comp.sfx_name
 
 
+def _sprite_ids(p, owner) -> list[str]:
+    """Les `id` des composants sprite d'un propriétaire, dans l'ordre de ses
+    apparences (`OamEntry.appearance` en est le rang) : ce que `self:activate_sprite`
+    peut citer. Même source que le writer OAM, `owner_appearances`."""
+    return [c.id for c, _sprite in owner_appearances(p, owner)]
+
+
+def _anim_union(p, owner, sprite) -> tuple[list[str], list[list[int]]]:
+    """(noms d'état, correspondances) d'un propriétaire de script.
+
+    Une apparence : ses états, sans correspondance (le C émis est celui d'avant).
+    Plusieurs : l'UNION des noms d'état de leurs sprites, dans l'ordre de première
+    apparition, et pour chaque apparence le rang de chacun dans SON sprite (255 =
+    absent). Un état `walk` peut être le 1 d'un sprite et le 3 d'un autre."""
+    apps = owner_appearances(p, owner)
+    if len(apps) <= 1:
+        return ([st.name for st in sprite.states] if sprite and sprite.states else []), []
+    names: list[str] = []
+    for _c, sp in apps:
+        for st in sp.states:
+            if st.name not in names:
+                names.append(st.name)
+    maps = [[next((i for i, st in enumerate(sp.states) if st.name == n), 255) for n in names]
+            for _c, sp in apps]
+    return names, maps
+
+
 def _affine_reserved(owner) -> bool:
     """Cet actor/prefab réserve-t-il un slot de matrice affine ? La case vit sur
     le SpriteComponent (cf. ARCHITECTURE.md « Le modèle affine ») ; sans sprite,
     rien n'est réservé. Le checker s'en sert pour avertir qu'un `self.rotation`
     ne se verra pas — il ne refuse plus le build : la valeur, elle, s'écrit et
     se relit."""
-    comp = owner.get_component("sprite")
+    comp = affine_sprite_component(owner)
     return bool(comp and comp.affine_transform)
 
 
@@ -258,8 +351,15 @@ def transpile_all(
     region_names = (p.region_names() if hasattr(p, "region_names") else [])
     image_names  = (p.image_names()  if hasattr(p, "image_names")  else [])
     # TOUS les éléments d'UI, tous types confondus — l'index de la table de
-    # visibilité plate (UIELEM_*), pour ui.get().
+    # visibilité plate (UIELEM_*), pour interface:get().
     element_names = (p.ui_element_names() if hasattr(p, "ui_element_names") else [])
+    # Le TYPE de chaque élément (liste, image, zone de texte, conteneur), lu dans la
+    # mise en page : c'est ce qui type `interface:get("X")` dans le script.
+    # Ce que rend une chose NOMMÉE : un élément d'interface par son nom, une cellule de
+    # colonne `region`/`image` par son chemin `data.Table.colonne`.
+    ref_kinds = {**ui_ref_kinds(p), **data_column_kinds(p)}
+    # Les fonds que CETTE scène a : `layer:get(n)` est borné dessus (`api.LAYERS_BY_MODE`).
+    layer_numbers = LAYERS_BY_MODE.get(int(getattr(scene, "render_mode", 0) or 0), LAYER_NUMBERS)
     # Les états que chaque image peut prendre, lus dans SON sprite : c'est le
     # seul endroit du build qui tienne les deux bouts (l'élément et l'asset).
     image_states = {}
@@ -270,6 +370,7 @@ def transpile_all(
     _actor_names = [a.name for a, _ in scene_actors]
     _scene_names = scene_names or []
     _camera_names = sorted(p.camera_names()) if hasattr(p, "camera_names") else []
+    _box_tag_names = list(p.collision_tags()) if hasattr(p, "collision_tags") else []
     _window_names = sorted(p.window_names()) if hasattr(p, "window_names") else []
     # Une famille, un espace de noms — depuis que les trois boîtes sont trois
     # assets, rien n'oblige leurs états à se distinguer entre familles.
@@ -289,12 +390,16 @@ def transpile_all(
         for _b in sorted(_store, key=lambda b: b.name):
             for _i, _st in enumerate(_b.states):
                 _index.setdefault(_st.name, _i)
-    # Les prefabs sont poolés au niveau PROJET : `actor.spawn("X")` vise la
+    # Les prefabs sont poolés au niveau PROJET : `actor:spawn("X")` vise la
     # liste entière, pas ce que la scène courante contient.
     _prefab_names = [pf.name for pf in prefabs]
     # Exports réglables par prefab (tranche poolé D2) : servis à tous les scripts
     # (ctx codegen ET ctx_check du checker), n'importe lequel peut spawner.
     _spawn_meta = _spawn_exports_meta(p, prefabs)
+    # Résolveur des valeurs d'export → initialiseur C, scopé à CETTE scène : un
+    # `actor_ref` se résout en TAG_* de la scène de compilation (cf. « L'acteur
+    # appartient à sa scène »), une `string` en TEXT_* de la table du build.
+    _export_resolver = _make_export_resolver(p, scene.name, text_keys)
     # Tables de données : {nom: (colonnes, nombre de lignes)}. Le checker en
     # tire ses refus (table ou colonne inconnue, index hors bornes, écriture sur
     # une const) et le codegen la taille pour `#data.X`. Une seule lecture du
@@ -321,7 +426,7 @@ def transpile_all(
     # Sauvegarde — deux faits du PROJET, les mêmes pour tous les scripts : le
     # nombre d'emplacements déclaré, et s'il y a seulement quelque chose à
     # sauver. Le checker s'en sert pour refuser un emplacement inexistant et
-    # signaler un save.write() qui ne sauverait rien.
+    # signaler un save:write() qui ne sauverait rien.
     _save_slots = max(1, int(getattr(p.settings, "save_slots", 1)))
     _has_persist = any(getattr(g, "persist", False) for g in p.globals)
 
@@ -343,7 +448,7 @@ def transpile_all(
         if sp.suffix.lower() != ".lua":
             continue
 
-        anim_names = [st.name for st in sprite.states] if sprite and sprite.states else []
+        anim_names, _anim_maps = _anim_union(p, actor, sprite)
         # EventCall (ROADMAP v0.8.9) : les `event_name` cités par CE sprite —
         # une fonction de premier niveau qui porte l'un de ces noms est un
         # point d'entrée légitime (cf. `checker._check_function`), pas une
@@ -358,14 +463,17 @@ def transpile_all(
         _rt_transform = _affine_reserved(actor)
         ctx_check = BuildContext(
             actor_name   = actor.name,
+            owner_kind   = "actor",
             input_names  = input_names,
             anim_names   = anim_names,
+            sprite_ids   = _sprite_ids(p, actor),
             frame_event_names = frame_event_names,
             affine_transform = _rt_transform,
             sfx_names    = sfx_names,
             music_names  = music_names,
             scene_names  = _scene_names,
             camera_names = _camera_names,
+            box_tag_names = _box_tag_names,
             window_names = _window_names,
             sound_box_state_names   = _snd_names,
             jingle_box_state_names  = _jgl_names,
@@ -373,9 +481,8 @@ def transpile_all(
             actor_names  = _actor_names,
             prefab_names = _prefab_names,
             global_names = list(global_names) if global_names else None,
-            ui_list_names = [pn.name for _l, pn in _project_lists(p)],
             global_types = {g.name: g.type for g in p.globals},
-            # ROADMAP v0.22 : sert le checker de save.read('nom') — un nom
+            # ROADMAP v0.22 : sert le checker de save:read('nom') — un nom
             # qui existe mais n'est pas persist ne sera jamais dans un fichier
             # de sauvegarde.
             global_persist = {g.name: bool(getattr(g, "persist", False)) for g in p.globals},
@@ -398,10 +505,10 @@ def transpile_all(
             font_names   = font_names,
             lang_codes   = lang_codes,
             palette_names = palette_names,
-            region_names = region_names,
-            image_names  = image_names,
             element_names = element_names,
             image_states = image_states,
+            ref_kinds    = ref_kinds,
+            layer_numbers = layer_numbers,
             save_slots   = _save_slots,
             has_persistent = _has_persist,
             data_tables  = _data_tables,
@@ -422,11 +529,13 @@ def transpile_all(
         if sp and sp.exists() and sp.suffix.lower() == ".lua":
             ctx_check = BuildContext(
                 actor_name   = scene.name,
+                owner_kind   = "scene",
                 input_names  = input_names,
                 sfx_names    = sfx_names,
                 music_names  = music_names,
                 scene_names  = _scene_names,
                 camera_names = _camera_names,
+                box_tag_names = _box_tag_names,
                 window_names = _window_names,
                 sound_box_state_names   = _snd_names,
                 jingle_box_state_names  = _jgl_names,
@@ -434,9 +543,8 @@ def transpile_all(
                 actor_names  = _actor_names,
             prefab_names = _prefab_names,
                 global_names = list(global_names) if global_names else None,
-                ui_list_names = [pn.name for _l, pn in _project_lists(p)],
             global_types = {g.name: g.type for g in p.globals},
-            # ROADMAP v0.22 : sert le checker de save.read('nom') — un nom
+            # ROADMAP v0.22 : sert le checker de save:read('nom') — un nom
             # qui existe mais n'est pas persist ne sera jamais dans un fichier
             # de sauvegarde.
             global_persist = {g.name: bool(getattr(g, "persist", False)) for g in p.globals},
@@ -453,10 +561,10 @@ def transpile_all(
                 font_names   = font_names,
                 lang_codes   = lang_codes,
                 palette_names = palette_names,
-                region_names = region_names,
-                image_names  = image_names,
                 element_names = element_names,
                 image_states = image_states,
+                ref_kinds    = ref_kinds,
+                layer_numbers = layer_numbers,
                 save_slots   = _save_slots,
                 has_persistent = _has_persist,
                 data_tables  = _data_tables,
@@ -470,7 +578,7 @@ def transpile_all(
     # Génération C — actors de scène
     for actor, sprite, script, sp in parsed_scripts:
         s    = scene_actor_sym(scene.name, actor.name)
-        anims = [st.name for st in sprite.states] if sprite and sprite.states else []
+        anims, anim_maps = _anim_union(p, actor, sprite)
         frame_events = sorted({
             getattr(fr, "event_name", "") or ""
             for state in (sprite.states if sprite else [])
@@ -485,6 +593,8 @@ def transpile_all(
             scene_sym     = c_sym(scene.name),
             input_masks   = input_masks,
             anim_names    = anims,
+            anim_maps     = anim_maps,
+            sprite_ids    = _sprite_ids(p, actor),
             sfx_names     = sfx_names,
             music_names   = music_names,
             global_names  = set(global_names),
@@ -508,10 +618,11 @@ def transpile_all(
             image_names   = image_names,
             element_names = element_names,
             image_states  = image_states,
+            ref_kinds     = ref_kinds,
             save_slots    = _save_slots,
             has_persistent = _has_persist,
             data_tables   = _data_tables,
-            export_inits  = _export_inits(actor, script),
+            export_inits  = _export_inits(actor, script, _export_resolver),
             spawn_exports = _spawn_meta,
         )
         c_code, gen_warnings, _ = lua_generate(script, ctx)
@@ -545,13 +656,16 @@ def transpile_all(
         _pf_rt_transform = _affine_reserved(pf)
         ctx_check = BuildContext(
             actor_name   = pf.name,
+            owner_kind   = "prefab",
             input_names  = input_names,
             anim_names   = pf_anim,
+            sprite_ids   = _sprite_ids(p, pf),
             affine_transform = _pf_rt_transform,
             sfx_names    = sfx_names,
             music_names  = music_names,
             scene_names  = _scene_names,
             camera_names = _camera_names,
+            box_tag_names = _box_tag_names,
             window_names = _window_names,
             sound_box_state_names   = _snd_names,
             jingle_box_state_names  = _jgl_names,
@@ -559,9 +673,8 @@ def transpile_all(
             actor_names  = _actor_names,
             prefab_names = _prefab_names,
             global_names = list(global_names) if global_names else None,
-            ui_list_names = [pn.name for _l, pn in _project_lists(p)],
             global_types = {g.name: g.type for g in p.globals},
-            # ROADMAP v0.22 : sert le checker de save.read('nom') — un nom
+            # ROADMAP v0.22 : sert le checker de save:read('nom') — un nom
             # qui existe mais n'est pas persist ne sera jamais dans un fichier
             # de sauvegarde.
             global_persist = {g.name: bool(getattr(g, "persist", False)) for g in p.globals},
@@ -573,10 +686,10 @@ def transpile_all(
             child_names  = list(_child_refs_for_prefab(pf).keys()),
             const_names  = list(const_names),
             sfx_component_name = pf_sfx_comp_name,
-            region_names = region_names,
-            image_names  = image_names,
             element_names = element_names,
             image_states = image_states,
+            ref_kinds    = ref_kinds,
+            layer_numbers = layer_numbers,
             save_slots   = _save_slots,
             has_persistent = _has_persist,
             data_tables  = _data_tables,
@@ -592,12 +705,14 @@ def transpile_all(
             scene_sym     = scene_sym,
             input_masks   = input_masks,
             anim_names    = pf_anim,
+            sprite_ids    = _sprite_ids(p, pf),
             sfx_names     = sfx_names,
             music_names   = music_names,
             global_names  = set(global_names),
             const_names   = set(const_names),
             all_actor_syms= all_syms,
             scripts_dir   = p.scripts_dir,
+            owner_kind    = "prefab",
             is_pooled     = True,
             pool_size     = pf_instances,
             scene_names   = _scene_names,
@@ -616,6 +731,7 @@ def transpile_all(
             image_names   = image_names,
             element_names = element_names,
             image_states  = image_states,
+            ref_kinds     = ref_kinds,
             save_slots    = _save_slots,
             has_persistent = _has_persist,
             data_tables   = _data_tables,
@@ -624,7 +740,7 @@ def transpile_all(
             # son acteur racine, donc `get_component("script")` rend ses valeurs.
             # C'est l'init du pool ; la table de spawn (tranche 2) l'écrasera par
             # instance.
-            export_inits  = _export_inits(pf, pf_ast),
+            export_inits  = _export_inits(pf, pf_ast, _export_resolver),
             spawn_exports = _spawn_meta,
         )
         pf_c, pf_warnings, pf_state_bytes = lua_generate(pf_ast, ctx_pf)
@@ -661,7 +777,7 @@ def transpile_all(
             global_names  = set(global_names),
             const_names   = set(const_names),
             all_actor_syms= all_syms,
-            is_scene      = True,
+            owner_kind    = "scene",
             scene_names   = _scene_names,
             sfx_volumes   = sfx_volumes,
             music_info    = music_info,
@@ -677,6 +793,7 @@ def transpile_all(
             image_names   = image_names,
             element_names = element_names,
             image_states  = image_states,
+            ref_kinds     = ref_kinds,
             save_slots    = _save_slots,
             has_persistent = _has_persist,
             data_tables   = _data_tables,
@@ -696,7 +813,7 @@ def transpile_all(
     # script est compilé comme n'importe quel script de projet : la garde
     # `compiled_cameras` reste par précaution (même mécanique que les prefabs
     # poolés) plutôt que par nécessité. Mêmes points d'entrée qu'un script de
-    # scène — `hook_kind="camera"` ne change que le mot dans le symbole C émis.
+    # scène — `owner_kind="camera"` ne change que le mot dans le symbole C émis.
     for cam in (c for s in p.scenes for c in s.cameras):
         if not getattr(cam, "script", ""):
             continue
@@ -710,23 +827,24 @@ def transpile_all(
             continue
         ctx_check = BuildContext(
             actor_name   = cam.name,
+            owner_kind   = "camera",
             input_names  = input_names,
             sfx_names    = sfx_names,
             music_names  = music_names,
             scene_names  = _scene_names,
             camera_names = _camera_names,
+            box_tag_names = _box_tag_names,
             window_names = _window_names,
             sound_box_state_names   = _snd_names,
             jingle_box_state_names  = _jgl_names,
             music_box_trigger_names = _snd_triggers,
             # Aucun `actor_names` : le script d'une caméra n'a pas de `self`
             # (même contrat qu'un script de scène), donc rien à valider contre
-            # une liste d'acteurs ici — `get_actor("Nom")` reste un appel
+            # une liste d'acteurs ici — `actor:get("Nom")` reste un appel
             # générique, non typé par domaine.
             global_names = list(global_names) if global_names else None,
-            ui_list_names = [pn.name for _l, pn in _project_lists(p)],
             global_types = {g.name: g.type for g in p.globals},
-            # ROADMAP v0.22 : sert le checker de save.read('nom') — un nom
+            # ROADMAP v0.22 : sert le checker de save:read('nom') — un nom
             # qui existe mais n'est pas persist ne sera jamais dans un fichier
             # de sauvegarde.
             global_persist = {g.name: bool(getattr(g, "persist", False)) for g in p.globals},
@@ -740,10 +858,10 @@ def transpile_all(
             font_names   = font_names,
             lang_codes   = lang_codes,
             palette_names = palette_names,
-            region_names = region_names,
-            image_names  = image_names,
             element_names = element_names,
             image_states = image_states,
+            ref_kinds    = ref_kinds,
+            layer_numbers = layer_numbers,
             save_slots   = _save_slots,
             has_persistent = _has_persist,
             data_tables  = _data_tables,
@@ -762,8 +880,7 @@ def transpile_all(
             global_names  = set(global_names),
             const_names   = set(const_names),
             all_actor_syms= all_syms,
-            is_scene      = True,
-            hook_kind     = "camera",
+            owner_kind    = "camera",
             scene_names   = _scene_names,
             sfx_volumes   = sfx_volumes,
             music_info    = music_info,
@@ -779,6 +896,7 @@ def transpile_all(
             image_names   = image_names,
             element_names = element_names,
             image_states  = image_states,
+            ref_kinds     = ref_kinds,
             save_slots    = _save_slots,
             has_persistent = _has_persist,
             data_tables   = _data_tables,

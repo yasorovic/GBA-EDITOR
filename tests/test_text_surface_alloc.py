@@ -121,7 +121,7 @@ def test_un_script_qui_ecrit_librement_la_fait_reserver(projet, monkeypatch):
     from codegen import font_emit
     p, scene, _lay, _t, _b = projet
     src = p.project_dir / "libre.lua"
-    src.write_text('text.draw(2, 2, "salut")\n', encoding="utf-8")
+    src.write_text('text:draw(2, 2, "salut")\n', encoding="utf-8")
     monkeypatch.setattr(type(p), "scene_scripts",
                         lambda self, sc: ([src], False), raising=False)
     font_emit.clear_font_scan_cache()
@@ -129,12 +129,12 @@ def test_un_script_qui_ecrit_librement_la_fait_reserver(projet, monkeypatch):
 
 
 def test_draw_in_nest_pas_une_ecriture_libre(projet, monkeypatch):
-    """`text.draw_in` passe par une zone, donc par le bloc de cette zone — le
+    """`box:draw(…)` passe par une zone, donc par le bloc de cette zone — le
     confondre avec `text.draw` ferait payer 240 tuiles à toute scène scriptée."""
     from codegen import font_emit
     p, scene, _lay, _t, _b = projet
     src = p.project_dir / "zone.lua"
-    src.write_text('text.draw_in("boite", "salut")\n', encoding="utf-8")
+    src.write_text('interface:get("boite"):draw("salut")\n', encoding="utf-8")
     monkeypatch.setattr(type(p), "scene_scripts",
                         lambda self, sc: ([src], False), raising=False)
     font_emit.clear_font_scan_cache()

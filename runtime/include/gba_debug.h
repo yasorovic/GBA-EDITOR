@@ -1,6 +1,6 @@
 /* runtime/include/gba_debug.h — canal de diagnostic (ROADMAP v0.14)
  *
- * Le C émis par le codegen pour `debug.log(...)` et pour la mesure de
+ * Le C émis par le codegen pour `debug:log(...)` et pour la mesure de
  * budget est LE MÊME en build debug et release (cf. codegen.py,
  * `_emit_debug_log` et main_gen.py) : ce header décide, en fournissant soit
  * les vraies fonctions (`-DGBA_DEBUG_BUILD`, posé par rom_build.py quand
@@ -18,7 +18,7 @@
  * silencieusement, sans geler ni corrompre quoi que ce soit — testé, ce
  * n'est pas une hypothèse.
  *
- * `debug.log(...)` (script) ne formate rien : chaque argument est déjà une
+ * `debug:log(...)` (script) ne formate rien : chaque argument est déjà une
  * chaîne littérale ou un entier, et le codegen émet une SÉQUENCE d'appels
  * à `debug_write_str`/`debug_write_int`, terminée par `debug_flush()` — pas
  * un `printf`, que le moteur évite partout ailleurs (ROADMAP v0.14,

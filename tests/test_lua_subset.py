@@ -73,8 +73,8 @@ def test_expression_refusee(expr, attendu):
 
 
 def test_get_actor_chaine_directe_une_methode():
-    """`get_actor("X"):méthode()` en CHAÎNE DIRECTE se transpile — sans imposer
-    un `local u = get_actor(...)` intermédiaire. Auparavant le receveur (un
+    """`actor:get("X"):méthode()` en CHAÎNE DIRECTE se transpile — sans imposer
+    un `local u = actor:get(...)` intermédiaire. Auparavant le receveur (un
     appel, pas un nom) partait dans `/* invoke sur expression complexe ignoré */`
     et la méthode disparaissait en silence."""
     from scripting.parser import parse
@@ -82,7 +82,7 @@ def test_get_actor_chaine_directe_une_methode():
 
     # Un acteur appartient à sa scène : le TAG émis est qualifié par la scène
     # qui compile le script (ROADMAP « L'acteur appartient à sa scène »).
-    src = _in_handler('    get_actor("Foe"):move_to(vec2(10, 20), 2)')
+    src = _in_handler('    actor:get("Foe"):move_to(vec2(10, 20), 2)')
     code, _, _ = generate(parse(src), CodegenContext(
         actor_name="Ball", actor_sym="Sc_Ball", scene_sym="Sc", anim_names=[],
         sfx_names=[], music_names=[], global_names=set(), const_names=set(),
@@ -92,12 +92,12 @@ def test_get_actor_chaine_directe_une_methode():
 
 
 def test_actor_spawn_chaine_directe_une_methode():
-    """Même chose pour l'instance rendue par `actor.spawn(...)` : on peut la
+    """Même chose pour l'instance rendue par `actor:spawn(...)` : on peut la
     piloter sans local (ROADMAP v0.17 T6)."""
     from scripting.parser import parse
     from scripting.codegen import generate, CodegenContext
 
-    src = _in_handler('    actor.spawn("Bul", vec2(0, 0)):move_to(vec2(1, 2), 3)')
+    src = _in_handler('    actor:spawn("Bul", vec2(0, 0)):move_to(vec2(1, 2), 3)')
     code, _, _ = generate(parse(src), CodegenContext(
         actor_name="Ball", actor_sym="Ball", anim_names=[], sfx_names=[],
         music_names=[], global_names=set(), const_names=set(),
@@ -142,7 +142,7 @@ def test_text_draw_litteral_interpole_une_locale():
     from scripting.parser import parse
     from scripting.codegen import generate, CodegenContext
 
-    src = _in_handler('    local hp = 7\n    text.draw(2, 2, "PV : $hp")')
+    src = _in_handler('    local hp = 7\n    text:draw(2, 2, "PV : $hp")')
     assert not _errors(src, global_names=[], const_names=[], text_keys=[])
     code, _, _ = generate(parse(src), CodegenContext(
         actor_name="Ball", actor_sym="Ball", anim_names=[], sfx_names=[],
@@ -153,14 +153,14 @@ def test_text_draw_litteral_interpole_une_locale():
 
 
 def test_text_draw_litteral_refuse_une_valeur_inconnue():
-    errs = _errors(_in_handler('    text.draw(2, 2, "PV : $hp")'),
+    errs = _errors(_in_handler('    text:draw(2, 2, "PV : $hp")'),
                    global_names=[], const_names=[], text_keys=[])
     assert any("n’est ni une locale" in err for err in errs), errs
 
 
 def test_text_draw_litteral_limite_les_locales_a_quatre():
     src = _in_handler("\n".join(f"    local v{i} = {i}" for i in range(5))
-                      + '\n    text.draw(2, 2, "$v0 $v1 $v2 $v3 $v4")')
+                      + '\n    text:draw(2, 2, "$v0 $v1 $v2 $v3 $v4")')
     errs = _errors(src, global_names=[], const_names=[], text_keys=[])
     assert any("au plus 4 valeurs" in err for err in errs), errs
 
@@ -169,11 +169,14 @@ def test_text_draw_in_litteral_interpole_une_locale():
     from scripting.parser import parse
     from scripting.codegen import generate, CodegenContext
 
-    src = _in_handler('    local hp = 7\n    text.draw_in("hud", "PV : $hp!3")')
-    assert not _errors(src, global_names=[], const_names=[], text_keys=[], region_names=["hud"])
+    src = _in_handler('    local hp = 7\n    interface:get("hud"):draw("PV : $hp!3")')
+    kinds = {"hud": "text_region"}
+    assert not _errors(src, global_names=[], const_names=[], text_keys=[],
+                       element_names=["hud"], ref_kinds=kinds)
     code, _, _ = generate(parse(src), CodegenContext(
         actor_name="Ball", actor_sym="Ball", anim_names=[], sfx_names=[],
-        music_names=[], global_names=[], const_names=[], text_keys=[], region_names=["hud"],
+        music_names=[], global_names=[], const_names=[], text_keys=[],
+        region_names=["hud"], element_names=["hud"], ref_kinds=kinds,
         all_actor_syms=["Ball"]))
     assert "text_arg_set(0, hp)" in code
     assert "text_draw_in(REGION_HUD, TEXT__LIT_" in code

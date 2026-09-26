@@ -20,7 +20,7 @@ class CollisionBoxComponent:
         solid=True  → l'acteur est repoussé par les tuiles, se pose sur les
                       pentes, se cogne aux plafonds (cf. ROADMAP v0.6.3)
         solid=False → la carte l'ignore : à un script de gérer les tuiles s'il
-                      le veut, via `tile.get`
+                      le veut, via `collision_box.get_tile`
 
     Les collisions acteur-contre-acteur ne le consultent PAS : les callbacks
     ci-dessous se déclenchent au recouvrement, quelle que soit la valeur. La
@@ -168,6 +168,41 @@ def components_from_list(data: list) -> list:
         valid = {f.name for f in fields(klass)}
         components.append(klass(**{k: v for k, v in cd.items() if k in valid}))
     return components
+
+
+# ── Les apparences d'un porteur (marche 3 de « La struct Actor allégée ») ──
+# Un acteur, un prefab ou une partie de prefab affiche UN sprite, mais peut porter
+# plusieurs `SpriteComponent` : chacun est une APPARENCE. `active` est le
+# sélecteur — au plus un composant actif à la fois, activer l'un désactive
+# l'autre. Ces trois fonctions sont la seule façon de lire « le » sprite d'un
+# porteur : aucun site ne doit reprendre `get_component("sprite")`, qui rend
+# le premier composant, actif ou non.
+
+def sprite_components(owner) -> list:
+    """Toutes les apparences d'un porteur, dans l'ordre de ses composants."""
+    return [c for c in getattr(owner, "components", []) if isinstance(c, SpriteComponent)]
+
+
+def displayed_sprite_component(owner):
+    """L'apparence AFFICHÉE au départ : le composant sprite actif qui désigne un
+    sprite, ou None (rien n'est affiché, même si des apparences existent)."""
+    return next((c for c in sprite_components(owner) if c.active and c.sprite_name), None)
+
+
+def competing_sprite_components(owner, comp) -> list:
+    """Les apparences à DÉSACTIVER quand on active `comp` : celles qui sont actives.
+    « Activer l'une désactive l'autre » — la règle vit ici, pas dans l'inspecteur."""
+    return [c for c in sprite_components(owner) if c is not comp and c.active]
+
+
+def affine_sprite_component(owner):
+    """Le composant qui décide de l'affine de l'entrée OAM. Le slot de matrice
+    appartient à l'ENTRÉE, pas à l'apparence : si un composant est affine,
+    l'entrée l'est. À défaut, l'apparence affichée, puis la première."""
+    comps = sprite_components(owner)
+    return (next((c for c in comps if c.affine_transform), None)
+            or displayed_sprite_component(owner)
+            or (comps[0] if comps else None))
 
 
 class ComponentOwnerMixin:

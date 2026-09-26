@@ -41,17 +41,18 @@ Préparez cinq états dans l'image d'interface : `vie_0` vide jusqu'à `vie_4` p
 
 ```lua
 function on_update()
+    local remplissage = interface:get("Remplissage")
     local etat = vie * 4 / vie_max
     if etat == 0 then
-        ui.image_set("Remplissage", "vie_0")
+        remplissage.state = "vie_0"
     elseif etat == 1 then
-        ui.image_set("Remplissage", "vie_1")
+        remplissage.state = "vie_1"
     elseif etat == 2 then
-        ui.image_set("Remplissage", "vie_2")
+        remplissage.state = "vie_2"
     elseif etat == 3 then
-        ui.image_set("Remplissage", "vie_3")
+        remplissage.state = "vie_3"
     else
-        ui.image_set("Remplissage", "vie_4")
+        remplissage.state = "vie_4"
     end
 end
 ```

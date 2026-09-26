@@ -264,6 +264,15 @@ class ScriptEditorScreen(QWidget):
     # ── Détection contexte ────────────────────────────────────────────
 
     def _detect_context(self, path: Path) -> str:
+        # Le contexte d'un script est celui de son ATTACHE, pas de son dossier : un script
+        # posé sur une caméra ne propose pas `on_collision_enter`, où qu'il soit rangé.
+        # Un behavior est un module, sans propriétaire : son dossier le dit.
+        if path.parent.name != "behaviors" and self._project is not None:
+            from core.script_owners import family_of_script
+            family = family_of_script(self._project, path)
+            if family:
+                return family
+        # Script encore rattaché à rien : le dossier, à défaut de mieux.
         if "actors" in {path.parent.name}:
             return "actor"
         if "scenes" in {path.parent.name}:

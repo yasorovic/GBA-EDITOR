@@ -6,8 +6,9 @@ Même langage visuel que `GbaStatusBar`/`SoundBudgetBar` (window.py,
 sound_budget_bar.py) : label gris, valeur en gras, tooltip qui porte le
 détail. Deux différences volontaires :
 
-  - la jauge est CUMULATIVE, un segment par catégorie d'asset (Audio, Fonds,
-    Sprites…), chacun dans SA couleur — l'exception à « une teinte par
+  - la jauge propose deux lectures : remplissage de la cartouche ou
+    répartition entre catégories ; chaque segment (Audio, Fonds, Sprites…)
+    garde SA couleur — l'exception à « une teinte par
     famille, la forme distingue le détail » (icons.py) que ce widget ne peut
     pas suivre : une icône a une forme, un pixel de barre n'en a pas, la
     teinte est ici la SEULE chose qui distingue un segment de son voisin ;
@@ -67,14 +68,16 @@ def _color_of(category: str) -> str:
 
 
 class _Gauge(QWidget):
-    """Jauge cumulative : un segment par catégorie, largeur proportionnelle à
-    son poids sur la capacité de la cartouche visée. Survoler un segment fait
-    apparaître l'info de CETTE catégorie — c'est la seule façon de lire le
-    détail, il n'y a plus de texte à côté."""
+    """Jauge de ROM dans deux lectures complémentaires.
+
+    ``fill`` mesure chaque segment contre la cartouche : la zone sombre est
+    vraiment libre. ``breakdown`` remplit toute la largeur : les proportions
+    entre consommateurs deviennent faciles à comparer.
+    """
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(14)
+        self.setFixedHeight(16)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setMouseTracking(True)
         # [(catégorie, octets, couleur)], et le total (octets de la cartouche
@@ -82,6 +85,7 @@ class _Gauge(QWidget):
         self._segments: list[tuple[str, int, str]] = []
         self._total = 0
         self._rom_bytes = 0
+        self._mode = "fill"
 
     def set_data(self, categories: dict[str, int], rom_bytes: int, cartridge_bytes: int):
         """`cartridge_bytes` est le dénominateur ACTUEL, pas forcément celui
@@ -93,13 +97,18 @@ class _Gauge(QWidget):
         self._rom_bytes = rom_bytes
         self.update()
 
+    def set_mode(self, mode: str):
+        self._mode = mode
+        self.update()
+
     def _segment_at(self, x: int) -> Optional[tuple[str, int]]:
         """Catégorie sous le pixel `x`, ou None (zone vide au-delà du poids
         réel — la cartouche a de la place libre, ce n'est pas un asset)."""
         w = self.width()
         pos = 0.0
+        denominator = self._rom_bytes if self._mode == "breakdown" else self._total
         for cat, size, _color in self._segments:
-            seg_w = w * size / self._total
+            seg_w = w * size / max(1, denominator)
             if pos <= x < pos + seg_w:
                 return cat, size
             pos += seg_w
@@ -110,26 +119,49 @@ class _Gauge(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor(C.BG_DEEP))
-        p.drawRoundedRect(0, 0, w, h, 3, 3)
+        p.setBrush(QColor("#08080d"))
+        p.drawRect(0, 0, w, h)
 
-        x = 0.0
-        for _cat, size, color in self._segments:
-            seg_w = w * size / self._total
-            p.setBrush(QColor(color))
-            p.drawRect(round(x), 0, max(1, round(x + seg_w) - round(x)), h)
-            x += seg_w
+        # Le quadrillage très discret donne une présence à l'espace libre :
+        # il reste lisible sans concurrencer les segments de ressources.
+        if self._mode == "fill":
+            p.setPen(QColor("#171722"))
+            for grid_x in range(16, w, 16):
+                p.drawLine(grid_x, 2, grid_x, h - 3)
+        p.setPen(Qt.PenStyle.NoPen)
 
-        # Coins arrondis par-dessus les rectangles carrés des segments — un
-        # masque, pas un `setClipPath` par segment (coûterait un
-        # antialiasing par segment pour un résultat identique).
+        if self._mode == "fill":
+            # Une seule information est utile ici : la capacité consommée.
+            # Les catégories sont toujours retrouvées par `_segment_at` pour
+            # le tooltip, sans fragmenter visuellement la progression.
+            fill_w = round(w * self._rom_bytes / max(1, self._total))
+            p.setBrush(QColor(C.ACCENT))
+            p.drawRect(0, 0, min(w, fill_w), h)
+        else:
+            x = 0.0
+            for _cat, size, color in self._segments:
+                seg_w = w * size / max(1, self._rom_bytes)
+                p.setBrush(QColor(color))
+                left, right = round(x), round(x + seg_w)
+                # Un interstice noir d'un pixel garde chaque catégorie lisible.
+                p.drawRect(left, 0, max(1, right - left - 1), h)
+                x += seg_w
+
+        # Contour acier, volontairement droit comme les commandes du bandeau.
+        p.setPen(QColor("#3a3a46"))
         p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRect(0, 0, max(0, w - 1), max(0, h - 1))
         p.end()
 
     def mouseMoveEvent(self, event):
         hit = self._segment_at(int(event.position().x()))
         if hit is None:
-            QToolTip.hideText()
+            if self._mode == "fill" and self._rom_bytes < self._total:
+                free_kib = (self._total - self._rom_bytes) / 1024
+                QToolTip.showText(event.globalPosition().toPoint(),
+                                  label('rombar.free_space', size=free_kib), self)
+            else:
+                QToolTip.hideText()
             return
         cat, size = hit
         pct = 100 * size / max(1, self._rom_bytes)
@@ -148,13 +180,21 @@ class RomBudgetBar(QWidget):
 
     cartridge_mib_changed = pyqtSignal(int)
 
-    _STYLE_OK   = f"color:{C.TEXT_NORM};"
+    _TECH_BG = "#050506"
+    _TECH_TEXT = "#f2f2f5"
+    _STYLE_OK   = f"color:{_TECH_TEXT};"
     _STYLE_WARN = f"color:{C.ACCENT_YLW};"
     _STYLE_CRIT = f"color:{C.ACCENT_RED};"
 
+    @classmethod
+    def _tech_block(cls, color: str | None = None) -> str:
+        """Pavé technique contrasté, sans relief ni coins arrondis."""
+        return (f"background:{cls._TECH_BG}; color:{color or cls._TECH_TEXT}; "
+                f"border:1px solid #22222e; padding:0 8px;")
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(28)
+        self.setFixedHeight(36)
         self.setStyleSheet(f"background:{C.BG_DEEP}; border-top:1px solid {C.BORDER};")
         self._cartridge_mib = 4
         # Dernier rapport mesuré — conservé à part de la cartouche choisie :
@@ -163,23 +203,44 @@ class RomBudgetBar(QWidget):
         self._report: Optional[RomReport] = None
 
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(12, 0, 12, 8)
-        lay.setSpacing(8)
+        lay.setContentsMargins(10, 0, 10, 5)
+        lay.setSpacing(6)
 
         self._lbl_rom = QLabel()
         self._lbl_rom.setFont(QFont(T.MONO, T.XS, QFont.Weight.DemiBold))
-        self._lbl_rom.setStyleSheet(f"color:{C.TEXT_MUTED};")
+        self._lbl_rom.setFixedHeight(24)
+        self._lbl_rom.setStyleSheet(self._tech_block())
         self._lbl_rom.setCursor(Qt.CursorShape.PointingHandCursor)
         self._lbl_rom.mousePressEvent = lambda e: self._open_cartridge_menu()
         lay.addWidget(self._lbl_rom)
 
         self._value = QLabel("—")
         self._value.setFont(QFont(T.MONO, T.XS, QFont.Weight.Bold))
-        self._value.setStyleSheet(self._STYLE_OK)
-        lay.addWidget(self._value)
+        self._value.setFixedHeight(24)
+        self._value.setStyleSheet(self._tech_block())
+
+        self._percent = QLabel()
+        self._percent.setFont(QFont(T.MONO, T.XS, QFont.Weight.DemiBold))
+        self._percent.setFixedHeight(24)
+        self._percent.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._percent.setStyleSheet(self._tech_block())
 
         self._gauge = _Gauge()
         lay.addWidget(self._gauge, 1)
+
+        # Les chiffres viennent après la jauge : lecture gauche → droite,
+        # capacité visuelle puis valeur mesurée et pourcentage exact.
+        lay.addWidget(self._value)
+        lay.addWidget(self._percent)
+
+        self._mode = "fill"
+        self._mode_button = QLabel()
+        self._mode_button.setFont(QFont(T.UI, T.XS, QFont.Weight.DemiBold))
+        self._mode_button.setFixedHeight(24)
+        self._mode_button.setStyleSheet(self._tech_block())
+        self._mode_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._mode_button.mousePressEvent = lambda e: self._open_mode_menu()
+        lay.addWidget(self._mode_button)
 
         self._refresh()
 
@@ -191,6 +252,28 @@ class RomBudgetBar(QWidget):
             act.setChecked(mib == self._cartridge_mib)
             act.triggered.connect(lambda _checked, m=mib: self._pick_cartridge(m))
         menu.exec(QCursor.pos())
+
+    def _open_mode_menu(self):
+        menu = QMenu(self)
+        for mode, key in (("fill", "rombar.mode_fill"),
+                          ("breakdown", "rombar.mode_breakdown")):
+            act = menu.addAction(label(key))
+            act.setCheckable(True)
+            act.setChecked(mode == self._mode)
+            act.triggered.connect(lambda _checked, m=mode: self._set_mode(m))
+        menu.exec(QCursor.pos())
+
+    def _set_mode(self, mode: str):
+        if mode == self._mode:
+            return
+        self._mode = mode
+        self._gauge.set_mode(mode)
+        self._refresh_mode_label()
+
+    def _refresh_mode_label(self):
+        key = "rombar.mode_fill" if self._mode == "fill" else "rombar.mode_breakdown"
+        self._mode_button.setText(f"{label(key).upper()} ▾")
+        self._mode_button.setToolTip(label('rombar.mode_tip'))
 
     def _pick_cartridge(self, mib: int):
         if mib == self._cartridge_mib:
@@ -222,7 +305,8 @@ class RomBudgetBar(QWidget):
         """Seul endroit qui écrit le libellé ROM, la valeur et la jauge —
         appelé aussi bien par un nouveau build que par un simple changement
         de cartouche, pour que les deux chemins ne divergent jamais."""
-        self._lbl_rom.setText(f"{self._cartridge_mib} MiB ▾")
+        self._lbl_rom.setText(label('rombar.target', _cartridge_mib=self._cartridge_mib))
+        self._refresh_mode_label()
         self._lbl_rom.setToolTip(
             label('rombar.target_tip', _cartridge_mib=self._cartridge_mib))
 
@@ -230,17 +314,23 @@ class RomBudgetBar(QWidget):
         report = self._report
         if report is None:
             self._value.setText("—")
-            self._value.setStyleSheet(self._STYLE_OK)
+            self._percent.setText("—")
+            self._value.setStyleSheet(self._tech_block())
+            self._percent.setStyleSheet(self._tech_block())
             self._gauge.set_data({}, 0, cartridge_bytes)
             return
 
         fill_ratio = report.rom_bytes / cartridge_bytes if cartridge_bytes else 0.0
         pct = 100 * fill_ratio
-        self._value.setText(label('rombar.usage', value=self._kio(report.rom_bytes), _cartridge_mib=self._cartridge_mib, pct=pct))
+        self._value.setText(self._kio(report.rom_bytes))
+        self._percent.setText(f"{pct:.1f}%")
         if report.rom_bytes > cartridge_bytes:
-            self._value.setStyleSheet(self._STYLE_CRIT)
+            style = self._STYLE_CRIT
         elif fill_ratio >= _WARN_RATIO:
-            self._value.setStyleSheet(self._STYLE_WARN)
+            style = self._STYLE_WARN
         else:
-            self._value.setStyleSheet(self._STYLE_OK)
+            style = self._STYLE_OK
+        color = style.removeprefix("color:").removesuffix(";")
+        self._value.setStyleSheet(self._tech_block(color))
+        self._percent.setStyleSheet(self._tech_block(color))
         self._gauge.set_data(report.categories, report.rom_bytes, cartridge_bytes)

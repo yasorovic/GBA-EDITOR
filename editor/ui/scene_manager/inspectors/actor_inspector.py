@@ -12,10 +12,14 @@ from PyQt6.QtGui import QFont, QCursor, QPixmap, QPainter
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 
 from core.models.resource import MIME_SCRIPT
-from core.models.components import component_type_name
+from core.models.components import (
+    SpriteComponent, component_type_name, competing_sprite_components,
+    displayed_sprite_component, sprite_components,
+)
 from core.models.scene import Actor, Scene, Prefab
 from core.project import Project
-from core.history import get_history, SetFieldCmd, AddComponentCmd, RemoveComponentCmd
+from core.history import (get_history, SetFieldCmd, AddComponentCmd, RemoveComponentCmd,
+                          MacroCmd, RenameSpriteIdCmd)
 from core.selection_bus import get_bus
 from core.command_dispatcher import get_dispatcher
 from ui.common.theme import C, T, QSS
@@ -834,6 +838,13 @@ class ActorInspector(QWidget):
         """Appelé par MainWindow quand ProjectWatcher détecte un changement Lua."""
         pass
 
+    def _previewed_sprite_component(self):
+        """Le composant que l'en-tête montre et modifie : l'apparence affichée au
+        départ, à défaut la première (aucune active = rien d'affiché en jeu, mais
+        l'auteur doit pouvoir la choisir)."""
+        comps = sprite_components(self._actor)
+        return displayed_sprite_component(self._actor) or (comps[0] if comps else None)
+
     def _refresh_sprite_preview(self):
         """Affiche la première frame de l'état initial dans le header."""
         self._sprite_preview.clear()
@@ -844,7 +855,7 @@ class ActorInspector(QWidget):
         )
         if not self._actor or not self._project:
             return
-        comp = self._actor.get_component("sprite")
+        comp = self._previewed_sprite_component()
         if not comp or not comp.sprite_name:
             return
         sprite = self._project.get_sprite(comp.sprite_name)
@@ -923,7 +934,7 @@ class ActorInspector(QWidget):
             with __import__("contextlib").suppress(Exception):
                 get_dispatcher().save_sprite(sprite)
 
-        comp = self._actor.get_component("sprite")
+        comp = self._previewed_sprite_component()
         if comp:
             comp.sprite_name = sprite_name
         else:
@@ -1061,7 +1072,12 @@ class ActorInspector(QWidget):
         menu.exec(QCursor.pos())
 
     def _add_component(self, type_name: str):
+        already_shown = displayed_sprite_component(self._actor) is not None
         comp = self._actor.add_component(type_name)
+        if type_name == "sprite" and already_shown:
+            # Une nouvelle apparence naît INACTIVE : en activer une désactive les
+            # autres, et ajouter ne doit pas changer ce qu'affiche l'acteur.
+            comp.active = False
         target_row = len(self._actor.components) - 1
 
         def undo_refresh():
@@ -1220,17 +1236,41 @@ class ActorInspector(QWidget):
             lbl.setFont(QFont(T.UI, T.SM)); lbl.setStyleSheet(f"color:{C.TEXT_MUTED};")
             self._editor_layout.addWidget(lbl)
 
+    def _rename_sprite_id(self, comp, old: str, new: str):
+        """L'`id` d'un composant sprite est CITÉ par le script de l'acteur : le
+        renommer réécrit ces références (et s'annule avec elles). Un id vide ou déjà
+        pris par une autre apparence est refusé, et le champ reprend l'ancien."""
+        taken = any(c is not comp and c.id == new for c in self._actor.components)
+        if not new or new == old or taken:
+            self._field_syncers["id"](old)
+            return
+        get_history().push(RenameSpriteIdCmd(
+            self._project, self._actor, comp, old, new,
+            persist_fn=lambda c=comp: self._save_component_change(c)))
+        self._refresh_list_labels()
+        self.changed.emit()
+
     def _set_comp(self, comp, field, value):
         if self._blocking or not self._actor: return
         old = getattr(comp, field, None)
         if old == value:
             return
+        if (isinstance(comp, SpriteComponent) and field == "id"
+                and self._project is not None):
+            self._rename_sprite_id(comp, str(old), str(value).strip())
+            return
         comp_id = getattr(comp, "id", "?")
-        get_history().push(SetFieldCmd(
-            comp, field, old, value,
-            label=f"{self._actor.name}.{comp_id}.{field}",
-            persist_fn=lambda c=comp: self._save_component_change(c),
-        ))
+        label_ = f"{self._actor.name}.{comp_id}.{field}"
+        persist = lambda c=comp: self._save_component_change(c)
+        cmd = SetFieldCmd(comp, field, old, value, label=label_, persist_fn=persist)
+        if isinstance(comp, SpriteComponent) and field == "active" and value:
+            # Activer une apparence désactive celle qui l'était : UN seul Ctrl+Z.
+            others = [SetFieldCmd(c, "active", True, False, label=label_,
+                                  persist_fn=lambda c=c: self._save_component_change(c))
+                      for c in competing_sprite_components(self._actor, comp)]
+            if others:
+                cmd = MacroCmd([*others, cmd], label_)
+        get_history().push(cmd)
         # Syncer les autres widgets du même comp sans rebuild (ex: label liste)
         self._refresh_list_labels()
         self.changed.emit()

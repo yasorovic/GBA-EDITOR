@@ -138,14 +138,15 @@ def effective_palette_colors(p: Project, pal_bank: int, png_path,
 
 # ── Sources d'assets « palette propre » d'une scène ──────────────────────────
 
-def _owner_sprite(p: Project, owner):
-    """Le sprite du premier `SpriteComponent` d'un porteur (prefab OU partie) —
-    None s'il n'en a pas. Un prefab segmenté a un sprite par partie, chacune
-    pouvant porter sa propre palette."""
-    from core.models.components import SpriteComponent
-    comp = next((c for c in getattr(owner, "components", [])
-                 if isinstance(c, SpriteComponent) and c.sprite_name), None)
-    return p.get_sprite(comp.sprite_name) if comp else None
+def _owner_sprites(p: Project, owner) -> list:
+    """Les sprites de TOUTES les apparences d'un porteur (prefab, partie ou
+    acteur). Tout résident (marche 3) : une apparence inactive au départ n'en a
+    pas moins besoin de sa banque quand on l'active, donc chacune la réserve.
+    Un prefab segmenté a un sprite par partie, chacune pouvant porter sa propre
+    palette."""
+    from core.models.components import sprite_components
+    sprites = (p.get_sprite(c.sprite_name) for c in sprite_components(owner) if c.sprite_name)
+    return [sp for sp in sprites if sp]
 
 
 def _sprite_own_palette(sp) -> list[int]:
@@ -214,12 +215,10 @@ def _actor_own_palettes(p: Project, scene: Scene) -> list[list[int]]:
     for a in scene.actors:
         if not a.active or getattr(a, "pal_bank", OWN_PAL_BANK) != OWN_PAL_BANK:
             continue
-        comp = a.get_component("sprite")
-        sp = (p.get_sprite(comp.sprite_name)
-              if comp and comp.active and comp.sprite_name else None)
-        cols = _sprite_own_palette(sp)
-        if cols:
-            out.append(cols)
+        for sp in _owner_sprites(p, a):
+            cols = _sprite_own_palette(sp)
+            if cols:
+                out.append(cols)
     return out
 
 
@@ -245,11 +244,12 @@ def _scene_prefab_own_palettes(p: Project, scene: Scene) -> list[list[int]]:
     def _add(owner):
         if getattr(owner, "pal_bank", OWN_PAL_BANK) != OWN_PAL_BANK:
             return
-        cols = _sprite_own_palette(_owner_sprite(p, owner))
-        key = tuple(cols)
-        if cols and key not in seen:
-            seen.add(key)
-            out.append(cols)
+        for sp in _owner_sprites(p, owner):
+            cols = _sprite_own_palette(sp)
+            key = tuple(cols)
+            if cols and key not in seen:
+                seen.add(key)
+                out.append(cols)
 
     for pf in p.prefabs:
         if scene_pool_instances(scene, pf) <= 0:
@@ -726,15 +726,13 @@ def _obj_instance_pairs(p: Project, scene: Scene) -> list[tuple[tuple, InstanceR
     for a in scene.actors:
         if not getattr(a, "active", True):
             continue
-        comp = a.get_component("sprite")
-        if not (comp and getattr(comp, "active", True) and getattr(comp, "sprite_name", "")):
-            continue
-        cols = _sprite_own_palette(p.get_sprite(comp.sprite_name))
-        if not cols:
-            continue
-        key = tuple(_own_bank_content(cols, "obj"))
-        out.append((key, InstanceRef("actor", a, a.name,
-                                     getattr(a, "pal_bank", OWN_PAL_BANK))))
+        for sp in _owner_sprites(p, a):
+            cols = _sprite_own_palette(sp)
+            if not cols:
+                continue
+            key = tuple(_own_bank_content(cols, "obj"))
+            out.append((key, InstanceRef("actor", a, a.name,
+                                         getattr(a, "pal_bank", OWN_PAL_BANK))))
     return out
 
 

@@ -37,9 +37,9 @@ def _gen(src: str, pooled: bool = False, pool_size: int = 8):
 
 _DEUX_ATTENTES = """
 function on_sequence_intro()
-    self.visible = false
+    self:hide()
     wait(30)
-    self.visible = true
+    self:show()
     wait_until(self.position.x >= 100)
     self:play_anim("idle")
 end
@@ -82,9 +82,9 @@ def test_un_wait_sans_duree_n_a_pas_de_compteur():
     à décompter."""
     _errs, code, _n = _gen("""
 function on_sequence_a()
-    self.visible = false
+    self:hide()
     wait_until(self.position.x >= 10)
-    self.visible = true
+    self:show()
 end
 """)
     assert "Hero_seq_a_step" in code
@@ -118,7 +118,7 @@ function on_sequence_a()
     local n = self.position.x
     self.position = vec2(n, 0)
     wait(10)
-    self.visible = true
+    self:show()
 end
 """)
     assert "int n = actor_get_position(self).x;" in code
@@ -131,7 +131,7 @@ end
 def test_le_pompage_est_en_fin_de_on_update():
     _errs, code, _n = _gen("""
 function on_update()
-    self.visible = true
+    self:show()
 end
 """ + _DEUX_ATTENTES)
     corps = code.split("void Hero_on_update(Actor* self) {")[1].split("\n}")[0]
@@ -177,11 +177,11 @@ function on_sequence_intro()
     wait(1)
 end
 function on_start()
-    sequence.start("intro")
+    sequence:start("intro")
 end
 function on_update()
-    if sequence.running("intro") then
-        sequence.stop("intro")
+    if sequence:running("intro") then
+        sequence:stop("intro")
     end
 end
 """)
@@ -243,7 +243,7 @@ end
      "ne peut pas changer"),
     ("function on_sequence_a()\n wait(-1)\nend\n", "écrite en clair et positive"),
     ("function on_sequence_a()\n wait(1)\nend\nfunction on_start()\n"
-     " sequence.start(\"autre\")\nend\n", "ne déclare pas de séquence"),
+     " sequence:start(\"autre\")\nend\n", "ne déclare pas de séquence"),
 ])
 def test_les_refus(src, attendu):
     errs, _code, _n = _gen(src)
