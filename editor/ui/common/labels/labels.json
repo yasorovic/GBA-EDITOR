@@ -2493,6 +2493,9 @@
     "scred.file_exists_msg": {
       "text": "{name} already exists."
     },
+    "scrsb.filter_placeholder": {
+      "text": "Type to filter…"
+    },
     "scrsb.events": {
       "text": "EVENTS"
     },
@@ -2545,7 +2548,7 @@
       "text": "Go further"
     },
     "scrsb.sec.actor": {
-      "text": "Actor"
+      "text": "Gameplay"
     },
     "scrsb.sec.scenery": {
       "text": "Scenery"
@@ -2582,6 +2585,9 @@
     },
     "vartbl.dup_msg": {
       "text": "“{name}” already exists."
+    },
+    "vartbl.rename": {
+      "text": "Rename"
     },
     "vartbl.array": {
       "text": "Array"

@@ -1,7 +1,7 @@
 """ui/script_editor/sidebar_panel.py — panneau gauche : sections EVENTS / API / RÉFÉRENCES."""
 from html import escape
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QScrollArea, QToolButton
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QScrollArea, QToolButton, QLineEdit
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, pyqtSignal
 
@@ -14,7 +14,7 @@ from core.models.text import SEP
 from core.text_markup import display_text
 from ui.common.theme import C, T
 from ui.common.labels import label
-from .colors import _BG, _TEXT_DIM, _TEXT_NORM, _C_API, _C_REF, _C_EVENT, _C_BEHAVIOR
+from .colors import _BG, _BG_HDR, _BORDER, _TEXT_DIM, _TEXT_NORM, _C_API, _C_REF, _C_EVENT, _C_BEHAVIOR
 from .sidebar_widgets import (
     _Section, _EntryButton, _group_label,
     _BTN_BASE, _BTN_API, _BTN_REF, _BTN_BEHAVIOR, _BTN_EVENT_DEFINED, _event_tooltip,
@@ -40,6 +40,16 @@ class SidebarPanel(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
+
+        # Filtre par nom — section, sous-section ou entrée (cf. _apply_filter).
+        self._filter = QLineEdit()
+        self._filter.setClearButtonEnabled(True)
+        self._filter.setPlaceholderText(label("scrsb.filter_placeholder"))
+        self._filter.setStyleSheet(
+            f"QLineEdit{{background:{_BG_HDR};color:{_TEXT_NORM};"
+            f"border:none;border-bottom:1px solid {_BORDER};padding:4px 8px;}}")
+        self._filter.textChanged.connect(self._apply_filter)
+        outer.addWidget(self._filter)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -82,6 +92,11 @@ class SidebarPanel(QWidget):
         scroll.setWidget(container)
         outer.addWidget(scroll)
 
+    def _apply_filter(self, text: str = ""):
+        query = text.strip().lower()
+        for sec in (self._sec_events, *self._api_sections, self._sec_refs):
+            sec.apply_filter(query)
+
     # ── Sections API (statiques, depuis api_reference.json) ───────────
     # Huit sections — une par CHOSE qu'on tient (ROADMAP v0.16). Les anciennes
     # catégories deviennent des SOUS-SECTIONS repliables, plus des
@@ -90,9 +105,16 @@ class SidebarPanel(QWidget):
 
     def _api_button(self, entry: dict):
         from scripting.api_reference import make_tooltip
-        display = entry['label'].removeprefix("self:")
+        # La sidebar montre le VERBE (`get("name")`) ; le clic insère la forme
+        # complète (`actor:get("name")`), gardée dans le snippet.
+        # Même règle pour `:` (méthode) et `.` (module, propriété).
+        raw = entry['label']
+        head = raw.split("(")[0]
+        cut = max(head.rfind(":"), head.rfind("."))
+        display = raw[cut + 1:] if cut >= 0 else raw
         snippet = entry.get("snippet", entry.get("label", ""))
         btn = _EntryButton(f"  {display}", _BTN_API, make_tooltip(entry))
+        btn.search_text = raw.lower()      # la forme complète : « spawn » ou « actor » trouvent
         btn.clicked.connect(lambda _, s=snippet: self.snippet_requested.emit(s))
         return btn
 
@@ -266,6 +288,8 @@ class SidebarPanel(QWidget):
                 sub.add_widget(_ref_btn(sp.name, sn,
                     _tip(f"require(\"{rel}\")",
                          label("scrsb.require_desc", name=sp.stem))))
+
+        self._apply_filter(self._filter.text())
 
     # ── Mise à jour état events ───────────────────────────────────────
 

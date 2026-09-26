@@ -18,6 +18,7 @@ from ui.common.widgets import FinderSection
 from ui.common.asset_finder import AssetFinder
 from ui.common.asset_kinds import SCRIPTS
 from ui.common.labels import label
+from ui.common.script_creation import show_add_script_menu
 from .colors import _BG
 from .var_table_panel import VarTablePanel
 
@@ -49,6 +50,9 @@ class ScriptFinderPanel(QWidget):
         self._scripts = AssetFinder(label('scrfind.script_finder'), [SCRIPTS],
                                     min_width=self._COL_MIN, max_width=self._COL_MAX)
         self._scripts.selected.connect(lambda _kind, p: self.file_requested.emit(str(p)))
+        # « + » : même menu que le Project viewer (script seul / behavior).
+        self._scripts.add_requested.connect(
+            lambda _label: show_add_script_menu(self, self._project, self._on_script_created))
         root.addWidget(self._scripts, 1)
         # Les deux sections ci-dessous rejoignent la MÊME colonne défilante que
         # les scripts : posées à côté, elles flotteraient en bas du panneau.
@@ -76,6 +80,11 @@ class ScriptFinderPanel(QWidget):
         self._scripts.load_project(project)
         self._constants_panel.set_project(project)
         self._globals_panel.set_project(project)
+
+    def _on_script_created(self, path: Path):
+        self._scripts.refresh()
+        self.highlight_file(path)
+        self.file_requested.emit(str(path))
 
     def set_root(self, _scripts_dir: Path = None):
         """Repeuple l'arbre. Le dossier n'est plus un paramètre — la famille

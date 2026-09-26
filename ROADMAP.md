@@ -386,6 +386,195 @@ jalon, mais référencé par son nom plutôt que par un numéro.
 | Undo/redo des sidecars d'éditeur | — | À ouvrir — envisagé pour **V2**, voir [ci-dessous](#undoredo-des-sidecars-déditeur-annuler-la-création-dun-groupe-un-déplacement-de-nœud) |
 | La struct `Actor` allégée — l'OAM au composant sprite | 2026-09-21 | À ouvrir — **décidé : à faire quoi qu'il arrive**, voir [ci-dessous](#la-struct-actor-allégée--lacteur-entité-légère-le-sprite-et-loam-deviennent-un-composant) |
 | Préparer une image riche à l'import — recadrer, redimensionner | 2026-09-26 | **Livré (2026-09-26)**, validation à la souris dans l'éditeur à faire — voir [ci-dessous](#préparer-une-image-riche-à-limport--recadrer-redimensionner-sans-toucher-au-png) |
+| Les inputs personnalisés — mini-langage d'actions et API d'historique | 2026-09-27 | **Conception posée, à valider** — voir [ci-dessous](#les-inputs-personnalisés--un-mini-langage-dactions-et-une-api-qui-lit-lhistorique) |
+
+---
+
+## Les inputs personnalisés — un mini-langage d'actions, et une API qui lit l'historique
+
+### D'où vient la question (2026-09-27)
+
+Une action d'input n'est aujourd'hui qu'un ET de boutons (`InputBinding.buttons`), saisi par dix cases
+à cocher qui débordent déjà de la ligne. L'API ne sait dire que `held` et `pressed`. Ce qu'un
+plateformer réclame en premier (relâcher = sauter moins haut, tampon de saut, appui long) et ce
+qu'un jeu de combat réclame (séquences : quart de cercle + A) n'a aucune expression.
+
+Décision de Victor : garder `held` / `pressed` **sans renommage**, ajouter `released`, `buffered`, la durée
+de maintien en **argument optionnel de `held`**, les axes nommés, et remplacer les cases par **une barre
+éditable** où l'action s'écrit dans un mini-langage (`+`, `-`, mouvements nommés).
+
+### Le principe
+
+Deux choses, une seule source de vérité chacune :
+
+- **L'expression est le texte.** `InputBinding.expression: str` remplace `buttons`. Un parseur pur
+  (`core/models/input_expression.py`) la transforme en `InputExpression` (liste de pas, un pas = un masque
+  de boutons). L'éditeur (barre + aperçu), le checker et le codegen appellent CE parseur — il n'existe
+  pas de seconde grammaire.
+- **Le runtime ne garde que ce qu'il faut, sans état par action.** Deux structures globales, alimentées une
+  fois par frame là où `_g_keys_held` est mis à jour :
+  - **dix compteurs `u8`, un par bouton physique** : le nombre de frames consécutifs où il est tenu, saturé
+    à 255. `held(nom, n)` en dérive EXACTEMENT : un accord est tenu depuis `n` frames si chacun de ses
+    boutons l'est. 10 octets, pas d'historique pour l'appui long ;
+  - **un anneau de masques `u16`** des derniers frames, pour `buffered` et les séquences (qui doivent
+    remonter le temps). Sa profondeur est **calculée au build** à partir du projet — le plus grand entre les
+    littéraux de `buffered` et l'étendue de chaque séquence (pas × fenêtre) — jamais plus de 255 : un jeu
+    sans séquence ni tampon n'en paie pas.
+  `released` ne lit que le masque du frame précédent. Aucune action déclarée ne coûte de RAM ; aucune ne
+  coûte de CPU tant qu'un script ne l'interroge pas.
+
+### Le mini-langage
+
+```
+expression := pas ( "-" pas )*          -- "-" : puis (séquence)
+pas        := atome ( "+" atome )*      -- "+" : en même temps (accord)
+atome      := bouton | direction | mouvement
+```
+
+| Famille | Jetons |
+| --- | --- |
+| Boutons | `a` `b` `l` `r` `start` `select` |
+| Directions | `up` `down` `left` `right` |
+| Mouvements (abrègent une séquence) | `quarter_circle_right` = `down - down + right - right` · `half_circle_right` = `left - down + left - down - down + right - right` · `dragon_punch_right` = `right - down - down + right` · et leurs trois versions `_left` (miroir) |
+
+- Noms complets, minuscules, espaces libres, aucune abréviation (règle de nommage du projet, valeurs
+  comprises). `right - right` dit « double appui », `down + a` dit « bas et A ensemble » : pas de jeton
+  dédié.
+- Un mouvement se lit comme une séquence de pas ; `+ bouton` derrière lui s'ajoute à son DERNIER pas
+  (`quarter_circle_right + a`). Le mouvement s'écrit donc en premier : `a + quarter_circle_right` est refusé
+  avec un message qui le dit.
+- Un pas est satisfait quand TOUS ses boutons sont tenus (contient, pas exact) : `down + right` reste vrai
+  si A est aussi tenu.
+- Les atomes sont matériels seulement : une action ne référence pas une autre action (composition écartée —
+  elle rendrait le parseur dépendant du projet et les cycles possibles).
+- **Fenêtre entre deux pas** : 15 frames par défaut, réglable par action (champ « Fenêtre »,
+  visible seulement quand l'expression est une séquence). Un réglage d'action, pas de la grammaire.
+
+### L'API
+
+Toutes les fonctions prennent le NOM d'une action ou d'un bouton (`DOMAIN_KEY`, inchangé). Toutes les durées
+sont en frames et tiennent dans un `u8` (≤ 255) — le checker refuse un littéral au-delà.
+
+| Appel | Vrai quand |
+| --- | --- |
+| `input:held(nom)` | l'accord est tenu ce frame (inchangé) |
+| `input:held(nom, frames)` | l'accord est tenu depuis au moins `frames` frames consécutifs (appui long, tir chargé). `frames` omis = 1 |
+| `input:pressed(nom)` | l'accord vient de devenir complet (inchangé). Pour une séquence : son DERNIER pas vient d'être pressé et les précédents se trouvent en amont, dans l'ordre, chacun dans la fenêtre |
+| `input:released(nom)` | l'accord était complet au frame précédent et ne l'est plus (saut à hauteur variable) |
+| `input:buffered(nom, frames)` | `pressed(nom)` a été vrai dans les `frames` derniers frames, celui-ci compris (tampon de saut), **et cet appui n'a pas déjà été consommé**. Répondre vrai CONSOMME l'appui : les appels suivants répondent faux jusqu'au prochain appui |
+| `input:get_axis(x)` | rend −1, 0 ou 1 : la position de l'axe `x` (cf. ci-dessous) |
+| `input:get_axis(x, y)` | rend un `Vec2` des deux axes (`get_axis("horizontal", "vertical")`) — la forme 2D de l'ancien `input.axis`. Le type du retour suit le NOMBRE d'arguments : le catalogue et le checker le portent, le codegen émet `input_get_axis` ou `input_get_vector` |
+
+- **Une séquence ne se « tient » pas** : `held` et `released` sur une action-séquence sont refusés au
+  build (« `held` n'a pas de sens sur une séquence — utiliser `pressed` »). Le matériel façonne le langage.
+- **`input.axis` disparaît, absorbé par `get_axis`** (décision de Victor, 2026-09-27) : la croix devient
+  deux axes PAR DÉFAUT, `"horizontal"` et `"vertical"`, fournis par l'application — non modifiables, non
+  supprimables, présents dans tout projet (même vide). Un seul vocabulaire pour la croix et pour les axes
+  du projet.
+- **Signe** : `horizontal` > 0 vers la droite, `vertical` > 0 vers le BAS — la convention écran de tout le
+  reste de l'éditeur (`self.y + get_axis("vertical")` descend), pas celle de Unity. Documenté.
+- **Axe déclaré** : `InputAxis {name, negative, positive}`, chaque côté = nom d'action ou de bouton. Un axe est
+  scalaire ; il permet de remapper la croix, ou de piloter un axe avec d'autres boutons, sans toucher au
+  script. Un nom d'axe ne peut pas être `horizontal`/`vertical` (réservés) ; un nom d'axe et un nom
+  d'action peuvent coexister (ce ne sont pas les mêmes appels).
+- **Migration de l'API** : `input.axis` est retiré (pas d'alias), et ses usages du guide (`first-playable-scene`,
+  `platformer-movement`, `decor-and-collision`) passent à `get_axis`.
+
+### L'écran
+
+- Une ligne = **nom** · **barre d'expression** (étirable) · retrait. Plus de cases.
+- La barre : complétion des jetons (`QCompleter` — mêmes tables que le parseur), et sous elle un **aperçu**
+  lisible (`↓ ↘ → ➜ Ⓐ`, `+` entre les boutons d'un accord, flèche entre les pas) qui prouve à l'auteur
+  ce que le parseur a compris.
+- Une expression invalide reste dans le champ, en rouge, avec le message et la colonne fautive ; elle est
+  **conservée** dans le projet et **refusée au build** en nommant l'action (même contrat que « Un seul
+  type de script » : on ne perd pas la saisie, on ne livre pas une ROM fausse).
+- Un avertissement (non bloquant) quand deux actions ont la même expression.
+- Le champ « Fenêtre » n'apparaît que pour une séquence.
+
+### Décisions verrouillées (2026-09-27, Victor)
+
+- `held` et `pressed` gardent leur nom ; `released` s'ajoute.
+- La durée de maintien est l'argument optionnel de `held`, pas une fonction `held_frames`.
+- `buffered(nom, frames)` et les axes nommés sont dans le chantier.
+- L'expression est saisie dans une barre éditable à mini-langage (`+` accord, `-` séquence, mouvements nommés).
+- `get_axis` unifie tout : `input.axis` disparaît au profit des axes par défaut `"horizontal"` et `"vertical"`.
+  `get_axis(x)` rend un scalaire, `get_axis(x, y)` un `Vec2` — le second argument est optionnel. Pas de
+  `get_vector`.
+- **Fenêtre d'une séquence : un réglage de l'action** (champ dans sa ligne), pas un argument d'appel — la
+  fenêtre est une propriété du mouvement, pas du site d'appel. 15 frames par défaut.
+- **Toutes les durées tiennent dans un `u8`** (1 à 255 frames ≈ 4 s) ; au-delà, le build refuse.
+
+### Proposé, à valider avant le code
+
+- Le jeu de mouvements : six (quarts de cercle, demi-cercles, dragon punch), chacun dans ses deux sens. Ajouter
+  un mouvement, c'est une ligne dans la table.
+- **`buffered` consomme quand il répond vrai** (idée de Victor, 2026-09-27). Sans cela, un appui reste vrai
+  N frames et peut faire re-sauter le personnage qui retouche le sol (plafond bas, rebond). Le runtime ne sait
+  pas si le script a « agi », mais il sait qu'il a répondu vrai — cela suffit. État : **un `u8` par action
+  interrogée par `buffered`** (âge depuis la dernière consommation, saturé à 255, incrémenté à chaque frame),
+  alloué par le codegen qui connaît statiquement ces actions ; les autres n'en paient pas. Un appui n'est
+  éligible que s'il est plus récent que la dernière consommation.
+  **Le piège devient l'ordre d'évaluation** : `if input:buffered("jump", 6) and au_sol` consomme l'appui
+  même en l'air, et le tampon est perdu ; il faut écrire `if au_sol and input:buffered("jump", 6)` (le
+  `and` court-circuite, `buffered` n'est évalué qu'au sol). Documenté dans `scripting.md` avec cet exemple ;
+  le checker ne peut pas le détecter de façon fiable. Deux scripts qui interrogent la même action se
+  partagent l'appui : le premier à répondre vrai le prend.
+
+### Ce que ça ne fait pas
+
+- Pas de composition d'actions, pas de parenthèses, pas d'alternatives (`a | b`) : les deux se
+  contournent par deux actions.
+- Pas de remappage des boutons par le joueur au runtime (le GBA n'a que 10 boutons).
+- Pas de remplacement des dix `on_button_*` avant la tranche finale (cf. plus bas) : ils dépendent du
+  runtime livré.
+
+### Ce que ça touche
+
+- `core/models/settings.py` : `InputBinding.expression` (+ `window`), `InputAxis` ; `from_dict` tolérant
+  (`buttons: [a, b]` → `"a + b"`), pour ne casser aucun projet existant.
+- `core/models/input_expression.py` (nouveau) : parseur, tables de jetons et de mouvements.
+- `scripting/api.py` : `input.released`, `input.buffered`, `input.get_axis`, `held` à 2e paramètre optionnel ;
+  `scripting/checker.py` (`_check_key`, bornes des frames, refus `held`/`released` sur séquence) ;
+  `scripting/codegen.py` (`input_masks` → masque OU index de séquence).
+- `runtime/include/runtime_api_inline.h` + point de mise à jour de `_g_keys_held` : l'anneau et les lecteurs ;
+  sonde C (comme `text_layout`) pour prouver l'équivalence Python ↔ C du parseur/matcheur.
+- `ui/scene_manager/inspectors/inputs_card.py` (refonte), nouvelle carte d'axes, `project_settings_dialog.py`,
+  `labels.json` + `labels_fr.json` ; `docs/scripting.md`, `api_reference.json` régénéré.
+
+### Ordre d'implémentation
+
+1. Parseur pur + tests (grammaire, mouvements, erreurs, migration `buttons`).
+2. Runtime : anneau, `released`, `held(n)`, `buffered`, séquences ; sonde C.
+3. Catalogue + checker + codegen ; build ROM headless d'un projet de test.
+4. Écran : barre, aperçu, fenêtre, carte d'axes.
+5. Docs, puis suppression de `buttons` (l'ancien sort avant de dire « terminé »).
+6. Tranche finale : les événements `on_button_*` (ci-dessous).
+
+### Tranche finale — les dix `on_button_*` disparaissent, le déclencheur SoundFx vise les actions
+
+À faire APRÈS le runtime, car le déclencheur SoundFx réutilise `pressed(nom)`.
+
+**Constat (2026-09-27).** Les dix noms `on_button_*` servent deux mécanismes : des événements de script
+(`function on_button_a()`, front montant, appelés sur les acteurs de la scène et la racine des prefabs
+poolés, cf. `_BTN_MAP` de `main_gen.py`) et la liste des déclencheurs du SoundFxComponent
+(`SFX_AUTO_TRIGGERS`).
+
+**Décision (recommandée, à confirmer par Victor avant de coder) :**
+
+- **Les événements de script sont supprimés.** Ils dupliquent `if input:pressed("a")` dans `on_update`,
+  ne voient que les dix boutons physiques (ni action, ni séquence, ni `released`), encombrent le panneau
+  Events (10 entrées sur ~20), et ne valent que pour les acteurs et racines de prefab. Aucun `.lua`, doc ou
+  démo du dépôt ne les utilise. Un script qui en définit encore un est **refusé au build**, avec un message
+  qui renvoie à `input:pressed(nom)` dans `on_update`.
+- **Le déclencheur SoundFx est gardé, mais vise les actions.** C'est le seul vrai gain (un item de menu qui
+  joue un son sans une ligne de Lua). Son champ `trigger` devient « manuel » ou un NOM d'action ou de bouton — la
+  même liste que `input:pressed(nom)` — et se déclenche quand `pressed(nom)` devient vrai : un combo ou une
+  séquence marche donc aussi. Migration : `on_button_a` → `"a"`, `on_button_up` → `"up"`, etc., à la
+  lecture du projet.
+- **Disparaissent** : les dix entrées de `EVENT_REGISTRY` (`scripting/api.py`), `_BTN_MAP` et ses boucles
+  (`main_gen.py`), `SFX_AUTO_TRIGGERS` (`core/models/components.py`), les dix libellés `comped.trig_*` du
+  `component_editors/sfx.py` (remplacés par un choix dans la liste des actions).
 
 ---
 

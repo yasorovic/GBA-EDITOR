@@ -105,6 +105,7 @@ class _Section(QWidget):
     def __init__(self, title: str, color: str, expanded: bool = True, parent=None):
         super().__init__(parent)
         self._expanded = True
+        self._pre_filter_expanded: bool | None = None   # état d'avant la recherche
         self.setStyleSheet(f"background:{_BG};")
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -201,6 +202,50 @@ class _Section(QWidget):
         self._body_layout.addWidget(ss)
         return ss
 
+    def apply_filter(self, query: str):
+        """Filtre par nom : le titre de la section, celui d'une sous-section ou
+        le libellé d'une entrée. Un titre qui correspond montre TOUT son
+        contenu (« actor » rend la catégorie entière) ; sinon seules les
+        entrées qui correspondent restent. Requête vide : tout revient, replié
+        ou déplié comme avant la recherche."""
+        if not query:
+            if self._pre_filter_expanded is not None:
+                self._set_expanded(self._pre_filter_expanded)
+                self._pre_filter_expanded = None
+            self.setVisible(True)
+            for w in self._body_children():
+                if isinstance(w, _SubSection):
+                    w.apply_filter("", False)
+                else:
+                    w.setVisible(True)
+            return
+        if self._pre_filter_expanded is None:
+            self._pre_filter_expanded = self._expanded
+        section_hit = query in self._title.lower()
+        any_hit = section_hit
+        for w in self._body_children():
+            if isinstance(w, _SubSection):
+                hit = w.apply_filter(query, section_hit)
+            elif isinstance(w, _EntryButton):
+                hit = section_hit or query in w.search_text
+                w.setVisible(hit)
+            else:                       # intertitre : suit le titre seul
+                hit = False
+                w.setVisible(section_hit)
+            any_hit = any_hit or hit
+        self.setVisible(any_hit)
+        if any_hit:
+            self._set_expanded(True)
+
+    def _body_children(self):
+        return [self._body_layout.itemAt(i).widget()
+                for i in range(self._body_layout.count())
+                if self._body_layout.itemAt(i).widget()]
+
+    def _set_expanded(self, expanded: bool):
+        if self._expanded != expanded:
+            self._do_toggle()
+
 
 class _SubSection(QWidget):
     """Sous-section collapsible (catégories API, ou dossiers du file tree si icon_key donné)."""
@@ -208,6 +253,7 @@ class _SubSection(QWidget):
     def __init__(self, title: str, expanded: bool = False, icon_key: str | None = None, parent=None):
         super().__init__(parent)
         self._expanded = True
+        self._pre_filter_expanded: bool | None = None   # état d'avant la recherche
         self.setStyleSheet(f"background:{_BG};")
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -282,6 +328,36 @@ class _SubSection(QWidget):
     def add_widget(self, w: QWidget):
         self._body_layout.addWidget(w)
 
+    def apply_filter(self, query: str, parent_hit: bool) -> bool:
+        """Cf. `_Section.apply_filter`. Rend True si la sous-section reste visible."""
+        children = [self._body_layout.itemAt(i).widget()
+                    for i in range(self._body_layout.count())
+                    if self._body_layout.itemAt(i).widget()]
+        if not query:
+            for w in children:
+                w.setVisible(True)
+            self.setVisible(True)
+            if self._pre_filter_expanded is not None:
+                self._set_expanded(self._pre_filter_expanded)
+                self._pre_filter_expanded = None
+            return True
+        if self._pre_filter_expanded is None:
+            self._pre_filter_expanded = self._expanded
+        all_hit = parent_hit or query in self._title.lower()
+        any_hit = all_hit
+        for w in children:
+            hit = all_hit or (isinstance(w, _EntryButton) and query in w.search_text)
+            w.setVisible(hit)
+            any_hit = any_hit or hit
+        self.setVisible(any_hit)
+        if any_hit:
+            self._set_expanded(True)
+        return any_hit
+
+    def _set_expanded(self, expanded: bool):
+        if self._expanded != expanded:
+            self._do_toggle()
+
 
 class _EntryButton(QPushButton):
     """Bouton d'entrée sidebar avec tooltip riche, icône optionnelle (ui/icons.py)."""
@@ -289,6 +365,7 @@ class _EntryButton(QPushButton):
     def __init__(self, label: str, style: str, tooltip_html: str,
                  icon_key: str | None = None, icon_color: str | None = None, parent=None):
         super().__init__(label, parent)
+        self.search_text = label.strip().lower()    # ce que la recherche compare
         self.setFont(QFont(T.CODE, T.MD))
         self.setFixedHeight(22)
         self.setCursor(Qt.CursorShape.PointingHandCursor)

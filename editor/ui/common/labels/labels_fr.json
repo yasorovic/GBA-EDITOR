@@ -1,10 +1,16 @@
 {
   "labels": {
+    "scrsb.filter_placeholder": {
+      "text": "Filtrer par nom…"
+    },
+    "vartbl.rename": {
+      "text": "Renommer"
+    },
     "scrsb.go_further": {
       "text": "Aller plus loin"
     },
     "scrsb.sec.actor": {
-      "text": "Acteur"
+      "text": "Gameplay"
     },
     "scrsb.sec.scenery": {
       "text": "Décor"

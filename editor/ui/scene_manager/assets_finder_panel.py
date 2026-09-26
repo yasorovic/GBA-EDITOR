@@ -21,6 +21,7 @@ from ui.common.theme import QSS
 from ui.common.asset_finder import AssetFinder
 from ui.common.asset_kinds import SCENES, PREFABS, SCRIPTS
 from ui.common.labels import label
+from ui.common.script_creation import show_add_script_menu
 
 from core.project import Project
 from core.selection_bus import get_bus
@@ -173,42 +174,14 @@ class AssetsFinderPanel(QWidget):
         self.begin_rename_prefab(name)
 
     def _show_add_script_menu(self):
-        """« + » de la section Scripts : un script seul (à attacher ensuite), ou un behavior
-        (un module, importé par `require`). Ouvert sous le curseur, comme celui des scènes."""
-        menu = QMenu(self)
-        menu.setStyleSheet(QSS.menu)
-        menu.addAction(label("assf.script"), self._new_script)
-        menu.addAction(label("assf.behavior_script"), self._new_behavior_script)
-        menu.exec(QCursor.pos())
+        """« + » de la section Scripts — menu partagé avec le Script finder. Le
+        script créé est rafraîchi puis ouvert dans le Script Editor interne
+        (window.open_script)."""
+        show_add_script_menu(self, self._project, self._on_script_created)
 
-    def _new_script(self):
-        self._create_script("empty",
-                            self._project.scripts_dir if self._project else None,
-                            "Script")
-
-    def _new_behavior_script(self):
-        self._create_script("behavior",
-                            self._project.scripts_behaviors_dir if self._project else None,
-                            "Behavior")
-
-    def _create_script(self, kind: str, directory, base: str):
-        """Crée un script au nommage automatique (pas de pop-up) et l'ouvre."""
-        if not self._project or directory is None:
-            return
-        from scripting.script_templates import ScriptTemplateContext, generate_script_template
-        directory.mkdir(parents=True, exist_ok=True)
-        name = unique_name(base, {f.stem for f in directory.glob("*.lua")})
-        sp = directory / f"{name}.lua"
-        # Pas d'actor précis à ce stade (créé depuis l'Assets finder) — contexte
-        # de composants vide, même template que component_editors/script.py.
-        sp.write_text(generate_script_template(ScriptTemplateContext(kind=kind, name=name)),
-                      encoding="utf-8")
+    def _on_script_created(self, path: Path):
         self.refresh()
-        # Ouvre le script dans le Script Editor interne (window.open_script), sur
-        # les trois OS. Un os.startfile Windows-only l'ouvrait EN PLUS dans
-        # l'éditeur externe du système — redondant avec l'éditeur interne et
-        # incohérent hors Windows ; retiré.
-        self.script_opened.emit(str(sp))
+        self.script_opened.emit(str(path))
 
     # ── Renommage inline d'un asset fraîchement créé (pas de pop-up) ──
 
