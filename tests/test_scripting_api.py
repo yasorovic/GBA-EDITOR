@@ -222,6 +222,51 @@ def test_aucune_enumeration_materielle_nest_orpheline():
     assert orphelins == [], f"énumérations citées par personne : {orphelins}"
 
 
+def test_aucune_fonction_de_module_ne_contourne_lacquisition():
+    """Garde-fou critère 5 (ROADMAP v0.16, amendement « module fabrique, type
+    opère ») : une fonction de MODULE (`module.fonction`, PAS `type:méthode`)
+    ne doit jamais agir sur une chose nommée en la recevant en argument
+    (`list.index("Menu")`, avant migration) ni recevoir une référence déjà
+    acquise (`interface.move(element, ...)`) — les deux détours qui
+    contournaient `module.get("Nom")` puis `ref:méthode()` / `ref.propriété`.
+
+    Sans ce test, la règle retombe en trois versions dès la prochaine
+    fonction ajoutée au catalogue : rien d'autre ne l'empêche.
+
+    `ALLOWED` liste les verbes établis qui GÈRENT, CRÉENT ou ACQUIÈRENT un
+    système singleton ou un pool (cf. ARCHITECTURE, « Module, type,
+    instance ») — le seul cas où un module reçoit légitimement un nom.
+    Ajouter une entrée y est une décision consciente, jamais un oubli."""
+    from scripting.api import RUNTIME_API, REF_TYPES
+
+    NAMED_INSTANCE_DOMAINS = {
+        "actor", "sfx", "music", "scene", "camera", "ui_element",
+        "prefab", "font", "palette", "win_region",
+    }
+    ALLOWED = {
+        "actor.spawn", "actor.get", "interface.get", "sfx.play",
+        "music.play", "music.jingle", "music.fade_to", "music.cut_to",
+        "scene.switch", "camera.switch", "text.set_font", "window.get",
+        "palette.set_bg", "palette.set_obj",
+    }
+    ref_types = set(REF_TYPES)
+
+    violations = []
+    for key, f in RUNTIME_API.items():
+        if ":" in key or key in ALLOWED:
+            continue   # méthode sur un type, ou verbe établi
+        for p in f.params:
+            if p.domain in NAMED_INSTANCE_DOMAINS or p.ptype in ref_types:
+                violations.append(f"{key} (param {p.name})")
+                break
+
+    assert violations == [], (
+        "fonction(s) de module qui agissent sur une chose nommée sans passer "
+        f"par l'acquisition : {violations} — router par une référence "
+        "(module.get(...) puis ref:méthode()/ref.propriété), ou ajouter "
+        "l'entrée à ALLOWED si c'est un verbe de gestion/création légitime.")
+
+
 # ── 4. Un état, une orthographe ────────────────────────────────────
 # La direction s'écrivait trois fois pour un seul couple `dir_x`/`dir_y` : un
 # vec2, une boussole nommée, et un entier 0-8 en lecture — qu'on POSAIT par un

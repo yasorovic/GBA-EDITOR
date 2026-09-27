@@ -45,13 +45,18 @@ documents en tête. Toute version livrée (v0.2 à v0.28 à ce jour) a son entr�
 [CHANGELOG](CHANGELOG.md) et son détail complet dans [changelog-archive/](changelog-archive/) ;
 elle ne reste pas ici en doublon.
 
-| Version | Sujet | État |
-| --- | --- | --- |
-| v0.13 | Édition mixte (appels d'API en blocs) | Non commencée |
-| v0.16 | L'API : règle de construction et rangement | En cours — cinq renommages faits (`actor.get`/`actor.count`, `ui`→`interface`, `text.*_in`→`interface.*`) + `REMOVED_API` vidé + **rangement en 8 sections livré** (sidebar : navigation unique par nom, sous-titres, couche moteur repliée sous « Aller plus loin ») ; restent les items « Ouvert » (doc) ; **amendement du 2026-09-24** (proposé, non verrouillé) : module fabrique / type opère, clé `actor:` au lieu de `self:`, 25 fonctions à ranger (`list`, `interface.image_*`, `window`) |
+**Aucun jalon produit n'est actuellement ouvert.** v0.16 (« L'API : règle de construction et
+rangement ») s'est fermé le 2026-09-27 — huit sections, cinq renommages, `REF_TYPE_TABLE`, cycle
+de vie en cinq verbes, éléments d'interface typés, `module:fonction()` généralisé, garde-fou du
+catalogue — voir le [CHANGELOG](CHANGELOG.md) et son [détail](changelog-archive/v0.16-api-construction.md).
+Le singleton `mixer`, seule chose restée non tranchée, est sorti en chantier transverse (route
+vers v1.0-stable, voir [ci-dessous](#au-delà-de-la-v10)) plutôt que de garder v0.16 ouvert pour
+une proposition qui ne le concerne plus vraiment.
 
-Ce sont, à ce jour, les deux seuls jalons produit encore ouverts. Sans priorité tranchée entre
-eux, ils restent dans leur ordre numérique.
+**v0.13** (« Édition mixte — les appels d'API en blocs ») a été retiré le 2026-09-27 : jamais
+engagé (aucune ligne de code), et hors scope — ce logiciel n'est pas un outil de visual
+scripting. Son numéro n'est pas réattribué (une version reste une identité, pas un rang) ; son
+détail (désormais purement historique) reste consultable dans l'historique git de ce fichier.
 
 ---
 
@@ -733,184 +738,6 @@ les polices de preview.
   l'aperçu) ou le jeton `$score` pour rappeler qu'elle est dynamique ?
 
 ---
-
-## v0.13 — Édition mixte — les appels d'API en blocs
-
-Un appel d'API d'un script apparaît comme un bloc éditable, et modifier le bloc réécrit
-l'appel là où il est. Du code ET du no-code, sans que ce soient deux chemins : **le script
-reste la source, le bloc en est une projection.**
-
-Référence assumée : GB Studio, dont l'ergonomie est le bon modèle. Son **architecture** ne
-l'est pas, et pour une raison précise — GB Studio n'a pas de texte du tout, ce qui rend son
-approche cohérente chez lui et inapplicable ici. Copier son modèle imposerait soit d'abandonner
-le Lua, soit d'accepter deux chemins d'authoring pour la même logique.
-
-La v0.12 (graphe des scènes) est la première instance de ce principe, appliquée à
-`scene.switch` seul. Cette version le généralise à tout le catalogue. Les deux reposent sur ce
-qui existe déjà : `iter_call_sites` pour trouver les appels, `RUNTIME_API` pour les décrire,
-la réécriture par offsets de `refactor.py` pour les modifier.
-
-### Décisions verrouillées
-
-- **Les appels seulement, jamais le flux de contrôle.** `if`, `while`, `for` restent du texte.
-  La raison est l'aller-retour : un appel dont les arguments sont des littéraux se relit et se
-  réécrit à l'identique, octet pour octet. Le flux de contrôle, lui, pose immédiatement la
-  question des commentaires, des lignes vides et de la mise en forme — et la première chose
-  qu'un éditeur structuré perd, c'est ce que l'auteur avait écrit autour de son code.
-- **La vue ne possède rien.** Chaque édition visuelle est une édition de texte à des offsets
-  connus (le mécanisme de `rename_in_text`). Aucun modèle parallèle, aucune sérialisation de
-  blocs, donc rien à tenir d'accord et rien à migrer.
-- **Les blocs DÉRIVENT de `RUNTIME_API`**, jamais écrits à la main. Même règle et même raison
-  mesurée que pour les snippets de la sidebar (cf. ARCHITECTURE, « Ce que l'éditeur INSÈRE
-  dérive du catalogue ») : écrits en dur, ils ont proposé pendant des mois `scene_goto("X")`
-  et `instantiate("X", x, y)`, deux noms qui n'ont jamais existé. Une fonction ajoutée à
-  `api.py` obtient son bloc gratuitement ; une fonction retirée perd le sien.
-- **Un argument s'édite selon son DOMAINE**, pas selon son rang. Un paramètre `DOMAIN_SCENE`
-  ouvre un sélecteur de scènes, `DOMAIN_SFX` un sélecteur d'effets, un entier un champ
-  numérique — tout vient de `Param.ptype` et `Param.domain`. Aucune interface par fonction à
-  écrire, et un réordonnancement de paramètres n'invalide rien.
-- **Ce qui n'est pas représentable s'affiche EN TEXTE, jamais masqué.** Un argument qui est une
-  expression (`self:move(dx * 2, 0)`), un appel hors catalogue, un helper de l'auteur :
-  fragment de code opaque dans la surface, éditable dans le Script Editor. **La surface ne
-  ment jamais par omission** — c'est la règle qui rend l'hybride honnête, et c'est exactement
-  celle dont GB Studio n'a pas besoin.
-
-### Ouvert
-
-- Où vit la surface : un panneau à côté du texte, une bascule qui le remplace, ou dans
-  l'inspecteur du composant Script qui porte le fichier ?
-- **Insérer un appel depuis la surface.** Contrairement à l'arête du graphe, une position par
-  défaut est ici défendable (fin de la fonction courante). À rouvrir sur un cas réel — c'est
-  la frontière entre « lire et ajuster » et « écrire », et elle mérite d'être franchie
-  sciemment.
-- Un argument qui référence une variable plutôt qu'un littéral. `FieldValue` traite déjà
-  exactement cette question pour les champs de composant (px / tuile / variable) ; c'est la
-  même, et sa réponse devrait être la même.
-
----
-
-## v0.16 — L'API : la règle de construction, et le rangement
-
-**L'essentiel est livré** — huit sections au lieu de 22, cinq renommages, `REMOVED_API`
-vidé, la règle des trois provenances (`module.get`/`spawn`/verbe numéroté), une table de
-types unique (`REF_TYPE_TABLE`), les cinq verbes de cycle de vie (`show`/`hide`/`activate`/
-`deactivate`/`destroy`), les éléments d'interface typés (`list`, `image`, `text_region`,
-`button`), et `module:fonction()` généralisé à tout le catalogue (sauf `math`) — vérifié sur
-les six projets démo, en ROM. Détail complet : [archive](changelog-archive/v0.16-api-construction.md).
-
-### Ouvert
-
-- **Le récepteur direct `Boss:move_to()`.** Plus court, mais collision possible avec un local ou un
-  module (un acteur nommé « input »), et l'acteur peut être détruit. Recommandation : garder `get()`,
-  honnête sur le `nil`. À trancher.
-- **Dire « absent » d'une seule façon.** `nil` (acteur), `0` (`sfx`, boîte de collision), rien
-  (interface). Reste le critère 4 de verrouillage : refuser le test de `nil` inutile sur une
-  référence STATIQUE (`ui_element`), et écrire la règle par type plutôt que la constater au cas
-  par cas.
-- **Les calques par nom.** `layer:get("Fond")` en plus du numéro ? Recommandation : attendre un besoin.
-- **`self:collision_box("hitbox")`** : garder ce constructeur déguisé en méthode, ou le ranger sous
-  un module (`self.boxes.get`) ? Tant qu'aucun module n'y prétend, il reste — la règle doit le nommer
-  comme exception, pas le subir.
-
-- **`#data.Objets`** — le nombre de lignes d'une table de données. Évident, absent. À ouvrir,
-  ou à refuser par écrit dans la référence de scripting.
-- **La référence de scripting adopte-t-elle les mêmes huit sections ?** Deux plans différents pour la même
-  API rouvriraient exactement le problème qu'on ferme ici.
-- **v0.13 hérite de ce rangement** : les palettes de blocs de l'édition mixte seront ces huit
-  sections. À vérifier quand le chantier démarre, pas maintenant.
-- **Le garde-fou du checker ne couvre qu'un cas.** Il refuse déjà
-  `module.fonction("nom_d_instance", …)`, mais pas encore une fonction de module qui reçoit
-  une référence d'instance (`interface.move(element, …)`) ni tout autre détour qui contourne
-  méthode/propriété — critère 5 de verrouillage, non confirmé fait.
-
-#### Proposition — le singleton `mixer` : jouer simplement, diriger finement
-
-Le son possède déjà trois **bus de sortie** matériels : les effets, le module musical qui
-boucle et le jingle qui se superpose. Ils existent aujourd'hui, mais sont cachés derrière des
-noms de boîtes qui ont une autre responsabilité (`sound_box.set_volume`,
-`jingle_box.set_volume`, `music.set_volume`). Une `SoundBox` / `MusicBox` / `JingleBox` est
-un automate de **sélection** ; elle n'est pas un bus de **mixage**.
-
-**Décision proposée : `mixer` devient le singleton sonore d'itération.** Il porte les actions
-ordinaires et les trois niveaux de sortie, tous lisibles et modifiables. Un auteur qui veut
-entendre quelque chose n'a pas à connaître les boîtes :
-
-```lua
-mixer.music_volume   = 60
-mixer.effects_volume = 80
-
-local clap = mixer:play_sfx("Clap")
-clap.volume = 70
-
-local village = mixer:play_music("Village")
-local victoire = mixer:play_jingle("Victoire")
-```
-
-| Porte cible | Nature | Remplace |
-| --- | --- | --- |
-| `mixer.effects_volume` | propriété lecture/écriture : bus de tous les effets | `sound_box.set_volume` |
-| `mixer.music_volume` | propriété lecture/écriture : bus du module musical | `music.set_volume` |
-| `mixer.jingle_volume` | propriété lecture/écriture : bus du jingle | `jingle_box.set_volume` |
-| `mixer:play_sfx(name)` | action, rend une référence `sfx` | `sfx.play` |
-| `mixer:play_music(name)` | action, rend la référence `music` de l'unique lecture musicale | `music.play` |
-| `mixer:play_jingle(name)` | action, rend la référence `jingle` de l'unique jingle superposé | `music.jingle` |
-| `mixer.music` / `mixer.jingle` | propriétés lecture seule : lecture active, ou `nil` | — |
-
-**Les trois sorties passent directement par leur référence.** `mixer` acquiert ou remplace une
-lecture ; ensuite, le type opère. Il n'existe donc pas de raccourci parallèle
-`mixer:stop_music()` qui doublerait `music:stop()` :
-
-```lua
-local clap = mixer:play_sfx("Clap")
-if clap.playing then clap:stop() end
-
-local village = mixer:play_music("Village")
-village:pause()
-village:resume()
-village:fade_to("Combat", 30)
-
-local victoire = mixer:play_jingle("Victoire")
-if victoire.playing then victoire:stop() end
-```
-
-`sfx` porte l'état de CET effet (`playing`, `volume`, `pitch`, `panning`) et ses actions
-(`stop()`). `music` et `jingle` portent au minimum `playing` et leurs actions de transport ;
-leurs niveaux restent les propriétés de bus du `mixer`, car le matériel ne possède qu'un scaler
-pour chaque sortie. Une nouvelle musique ou un nouveau jingle remplace la lecture unique : la
-référence précédente devient périmée et toute opération dessus est sans effet. Le contrat
-unifie ainsi les trois types sans mentir sur leur cardinalité (`sfx` 0..N ; `music` et `jingle`
-0..1).
-
-Le module `sfx` cesse ainsi d'être à la fois fabrique et type : `sfx`, `music` et `jingle` sont
-les types de lecture ; `mixer` est le système qui les lance.
-
-**Avancé — les boîtes ne disparaissent pas, elles changent de niveau.** Elles restent des
-singletons spécialisés, repliés sous « Aller plus loin », et n'exposent plus les volumes :
-
-```lua
-sound_box:set_state("Caverne")   -- choisit les effets des actions animées
-music_box:trigger("combat")      -- laisse l'automate choisir morceau et transition
-jingle_box:set_state("Boss")     -- choisit vers quel jingle pointe une action
-```
-
-Cette séparation donne deux portes sans doublon : `mixer` règle **ce qui sort**, les boîtes
-décident **ce qui est choisi**. Elle rend aussi l'état du mixage interrogeable pour un jeu
-musical, sans exposer les canaux Maxmod : un canal matériel est volatile et peut être repris ;
-l'API doit dire quel bus, quelle lecture et quel état l'auteur a demandés. Une horloge musicale
-(mesure / temps / battement) est un besoin distinct à ouvrir sur les informations réellement
-accessibles au lecteur de modules ; elle ne doit pas être simulée avec `scene.frame`.
-
-Le `master_volume` n'est pas ajouté par symétrie : il demande un besoin réel et une vérification
-de la porte matérielle disponible. Les anciens noms seront retirés sans alias avec la migration
-v0.16, conformément à la règle pré-1.0.
-
-**Critère de verrouillage :** ajouter un type ne demande que sa déclaration (représentation,
-acquisition, absence, propriétés, méthodes) et aucun cas spécial dans le checker ou le
-codegen, hors traduction C réellement atypique. À cette condition, l'API est à la fois
-facile à comprendre, facile à employer et extensible sans dette de grammaire.
-
----
-
 ## v1.0 — Le pipeline 2D complet
 
 ### L'objectif concret — cinq genres
@@ -1003,6 +830,114 @@ réglé** ; il reste trois.
 ---
 
 ## Au-delà de la v1.0
+
+### Chantier transverse — le singleton `mixer`
+
+**Route vers v1.0-stable, non prioritaire pour la release `-alpha` (extrait de v0.16 le
+2026-09-27).** Proposition intacte, rien n'est tranché ni codé.
+
+Le son possède déjà trois **bus de sortie** matériels : les effets, le module musical qui
+boucle et le jingle qui se superpose. Ils existent aujourd'hui, mais sont cachés derrière des
+noms de boîtes qui ont une autre responsabilité (`sound_box.set_volume`,
+`jingle_box.set_volume`, `music.set_volume`). Une `SoundBox` / `MusicBox` / `JingleBox` est
+un automate de **sélection** ; elle n'est pas un bus de **mixage**.
+
+**Décision proposée : `mixer` devient le singleton sonore d'itération.** Il porte les actions
+ordinaires et les trois niveaux de sortie, tous lisibles et modifiables. Un auteur qui veut
+entendre quelque chose n'a pas à connaître les boîtes :
+
+```lua
+mixer.music_volume   = 60
+mixer.effects_volume = 80
+
+local clap = mixer:play_sfx("Clap")
+clap.volume = 70
+
+local village = mixer:play_music("Village")
+local victoire = mixer:play_jingle("Victoire")
+```
+
+| Porte cible | Nature | Remplace |
+| --- | --- | --- |
+| `mixer.effects_volume` | propriété lecture/écriture : bus de tous les effets | `sound_box.set_volume` |
+| `mixer.music_volume` | propriété lecture/écriture : bus du module musical | `music.set_volume` |
+| `mixer.jingle_volume` | propriété lecture/écriture : bus du jingle | `jingle_box.set_volume` |
+| `mixer:play_sfx(name)` | action, rend une référence `sfx` | `sfx.play` |
+| `mixer:play_music(name)` | action, rend la référence `music` de l'unique lecture musicale | `music.play` |
+| `mixer:play_jingle(name)` | action, rend la référence `jingle` de l'unique jingle superposé | `music.jingle` |
+| `mixer.music` / `mixer.jingle` | propriétés lecture seule : lecture active, ou `nil` | — |
+
+**Les trois sorties passent directement par leur référence.** `mixer` acquiert ou remplace une
+lecture ; ensuite, le type opère. Il n'existe donc pas de raccourci parallèle
+`mixer:stop_music()` qui doublerait `music:stop()` :
+
+```lua
+local clap = mixer:play_sfx("Clap")
+if clap.playing then clap:stop() end
+
+local village = mixer:play_music("Village")
+village:pause()
+village:resume()
+village:fade_to("Combat", 30)
+
+local victoire = mixer:play_jingle("Victoire")
+if victoire.playing then victoire:stop() end
+```
+
+`sfx` porte l'état de CET effet (`playing`, `volume`, `pitch`, `panning`) et ses actions
+(`stop()`). `music` et `jingle` portent au minimum `playing` et leurs actions de transport ;
+leurs niveaux restent les propriétés de bus du `mixer`, car le matériel ne possède qu'un scaler
+pour chaque sortie. Une nouvelle musique ou un nouveau jingle remplace la lecture unique : la
+référence précédente devient périmée et toute opération dessus est sans effet. Le contrat
+unifie ainsi les trois types sans mentir sur leur cardinalité (`sfx` 0..N ; `music` et `jingle`
+0..1).
+
+Le module `sfx` cesse ainsi d'être à la fois fabrique et type : `sfx`, `music` et `jingle` sont
+les types de lecture ; `mixer` est le système qui les lance.
+
+**Avancé — les boîtes ne disparaissent pas, elles changent de niveau.** Elles restent des
+singletons spécialisés, repliés sous « Aller plus loin », et n'exposent plus les volumes :
+
+```lua
+sound_box:set_state("Caverne")   -- choisit les effets des actions animées
+music_box:trigger("combat")      -- laisse l'automate choisir morceau et transition
+jingle_box:set_state("Boss")     -- choisit vers quel jingle pointe une action
+```
+
+Cette séparation donne deux portes sans doublon : `mixer` règle **ce qui sort**, les boîtes
+décident **ce qui est choisi**. Elle rend aussi l'état du mixage interrogeable pour un jeu
+musical, sans exposer les canaux Maxmod : un canal matériel est volatile et peut être repris ;
+l'API doit dire quel bus, quelle lecture et quel état l'auteur a demandés. Une horloge musicale
+(mesure / temps / battement) est un besoin distinct à ouvrir sur les informations réellement
+accessibles au lecteur de modules ; elle ne doit pas être simulée avec `scene.frame`.
+
+Le `master_volume` n'est pas ajouté par symétrie : il demande un besoin réel et une vérification
+de la porte matérielle disponible. Les anciens noms seront retirés sans alias avec la migration
+v0.16, conformément à la règle pré-1.0.
+
+**Critère de verrouillage :** ajouter un type ne demande que sa déclaration (représentation,
+acquisition, absence, propriétés, méthodes) et aucun cas spécial dans le checker ou le
+codegen, hors traduction C réellement atypique. À cette condition, l'API est à la fois
+facile à comprendre, facile à employer et extensible sans dette de grammaire.
+
+---
+
+### Chantier transverse — nommer l'accès à un sous-objet de l'instance
+
+**Route vers v1.0-stable, non prioritaire pour la release `-alpha` (décidé le 2026-09-27).** Né du
+chantier v0.16 : `self:collision_box("hitbox")` est un constructeur déguisé en méthode — la règle de
+provenance ne le range nulle part (le garder tel quel comme exception nommée, ou le ranger sous un
+module `self.boxes.get` ?). Élargi en discutant ce point : le sprite est exactement le même genre de
+composant (il n'appartient qu'à l'acteur), mais suit une forme complètement différente — ses
+propriétés sont APLATIES sur `self` (`self.frame`, `self.visible`...), sans constructeur du tout,
+parce qu'un acteur n'affiche jamais qu'UN SEUL sprite à la fois (aucune ambiguïté sur « lequel »).
+Conséquence : on ne peut aujourd'hui interroger que l'apparence ACTIVE (`self.active_sprite`,
+`self:activate_sprite(id)`) — impossible de lire les propriétés d'une apparence sprite inactive sans
+l'activer d'abord.
+
+**Si ce point se rouvre**, il doit couvrir les DEUX cas ensemble (boîtes de collision multiples,
+apparences sprite inactives), pour ne pas trancher deux fois la même question — « comment
+nomme-t-on l'accès à un sous-objet précis d'une instance ? » — avec deux réponses différentes.
 
 ### Chantier transverse — l'allocateur de ressources matérielles
 
@@ -1235,6 +1170,34 @@ cette donnée ; elle ne l'implémentera pas.
 - Le comportement après mutation : le curseur conserve-t-il son index, se rabat-il sur le dernier
   item valide, ou peut-il suivre un identifiant stable ? Le bon choix dépend du modèle de données
   finalement retenu.
+
+### Chantier transverse — la destruction des éléments d'interface
+
+**D'où ça vient (2026-09-27).** En discutant du critère 4 de v0.16 (« unifier absent par type »),
+constat : un élément d'interface, un calque ou une fenêtre sont **statiques par construction** —
+`destroy()` n'existe QUE pour `actor`/`sfx` dans le catalogue ([api.py](editor/scripting/api.py)),
+posé une fois pour toutes à l'authoring, sans commande de script pour le faire disparaître. C'est
+ce qui rend `interface:get("Menu") ~= nil` toujours vrai, et c'est ce qui permettait de classer ces
+types comme « jamais absents » sans exception à traiter.
+
+**La piste, non développée.** Si un projet réel demande un jour de détruire dynamiquement un
+élément d'interface (un menu généré au runtime, une fenêtre jetable) plutôt que de se contenter de
+`hide()`, ça romprait l'hypothèse « statique = jamais nil » du critère 4 : ces types rejoindraient
+la catégorie des références de pool, avec tout ce que ça implique (`nil` testable, retrait du
+`REF_TYPE_TABLE.nullable=False`, etc.). **Aucune décision prise, aucun besoin démontré** — à
+rouvrir si un projet en butte contre la limite actuelle (`hide()` seul, l'élément reste en mémoire).
+
+### Chantier transverse — les calques par nom
+
+**D'où ça vient (v0.16).** `layer:get(n)` adresse un fond par son NUMÉRO (0 à 3, borné par le mode
+vidéo de la scène) — cohérent avec la provenance « le matériel, numéroté par le matériel » de la
+règle de construction. Question restée ouverte pendant le chantier : offrir aussi `layer:get("Fond")`
+par un nom authoré, comme pour un élément d'interface.
+
+**Pourquoi ce n'est pas fait maintenant.** Recommandation retenue à l'époque : attendre un besoin
+réel avant d'ajouter une seconde façon d'adresser la même chose — deux provenances pour un fond
+recréerait exactement le doublon que la grammaire de l'API refuse ailleurs. **Aucune décision
+prise, aucun besoin démontré.**
 
 ### v2.0 — Cible cartouche : le matériel embarqué façonne le langage — **JALON OUVERT**
 

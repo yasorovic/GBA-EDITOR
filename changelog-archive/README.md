@@ -28,6 +28,7 @@ Pour un résumé court, voir le [CHANGELOG](../CHANGELOG.md). Pour ce qui reste 
 | [v0.12](v0.12.md) | Vue d'ensemble — le graphe des scènes |
 | [v0.14](v0.14.md) | Diagnostic — ce que le jeu fait, et ce qu'il coûte |
 | [v0.15](v0.15.md) | Visibilité des éléments d'interface |
+| [v0.16](v0.16-api-construction.md) | L'API : la règle de construction, et le rangement |
 | [v0.17](v0.17.md) | Le pool par scène |
 | [v0.18](v0.18.md) | La valeur affichée : d'où elle vient |
 | [v0.19](v0.19.md) | Le sous-pixel |
@@ -40,7 +41,6 @@ Pour un résumé court, voir le [CHANGELOG](../CHANGELOG.md). Pour ce qui reste 
 | [v0.26](v0.26.md) | Les polices : sources, assets et aperçu |
 | [v0.27](v0.27.md) | L'éditeur souffle le mot juste (autocomplétion du Script Editor) |
 | [v0.28](v0.28.md) | Les inputs personnalisés |
-| [v0.16 (partiel)](v0.16-api-construction.md) | L'essentiel de « L'API : règle de construction et rangement » — le jalon reste **en cours** dans [ROADMAP.md](../ROADMAP.md#v016--lapi--la-règle-de-construction-et-le-rangement) pour le peu qui reste ouvert |
 
 ### Chantiers techniques
 

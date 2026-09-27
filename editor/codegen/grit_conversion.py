@@ -585,7 +585,7 @@ def referenced_sound_names(p: Project) -> tuple[set[str], set[str]]:
 
     Cette liste est EXHAUSTIVE, et ça tient à une propriété du langage plutôt
     qu'à la qualité du parcours : le sous-ensemble Lua n'a pas de chaîne
-    manipulable (docs/scripting-reference.md, « Texte, listes et langue »). Une chaîne y est toujours
+    manipulable (docs/scripting-reference.md, « Le langage »). Une chaîne y est toujours
     un nom cité du projet, résolu au build — il n'existe donc aucun moyen de
     ranger un nom de piste dans une variable. Le problème des « cibles
     dynamiques » laissé ouvert pour le graphe des scènes (ROADMAP v0.12) ne se

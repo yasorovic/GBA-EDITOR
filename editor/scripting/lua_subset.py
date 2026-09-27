@@ -64,10 +64,20 @@ ACCEPTED: dict[str, str] = {
     "String":       '"un_nom"  — un nom cité du projet ; `text.draw` accepte aussi un texte littéral',
     "TrueExpr":     "true",
     "FalseExpr":    "false",
-    "Nil":          "nil  (vaut 0 dans le C émis)",
+    "Nil":          "nil  (vaut 0 dans le C émis — cf. « La vérité » ci-dessous)",
     "Name":         "x",
     "Index":        "self.position  /  data.Objets  /  t[i]",
     "Table":        "{1, 2, 4, 8}  — un tableau, et rien d'autre",
+
+    # ── La vérité — décision volontaire (2026-09-27), PAS le vrai Lua ──
+    # En vrai Lua, seuls `nil` et `false` sont faux ; `0` est VRAI. Ici,
+    # `if`/`while`/`and`/`or`/`not` se traduisent tels quels vers leurs
+    # équivalents C (`if`/`while`/`&&`/`||`/`!`) : `0` y est FAUX, comme
+    # partout ailleurs dans ce moteur entièrement entier. Assumé pour que
+    # `if not hp then` marche comme on l'attend d'un `hp` qui peut valoir 0 —
+    # sans ça, un auteur qui connaît le vrai Lua se ferait piéger par un test
+    # qui « marche toujours », `0` y étant vrai. `nil` compile vers `0` pour
+    # la même raison : une seule notion de « rien/faux », pas deux.
     # Opérateurs
     "AddOp":              "a + b",
     "SubOp":              "a - b",

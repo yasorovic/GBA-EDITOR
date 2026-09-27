@@ -136,6 +136,57 @@ def test_aucun_identifiant_unsupported_dans_le_c():
     assert "non traduit" in code       # le trou est écrit, pas caché
 
 
+def test_zero_est_faux_pas_comme_le_vrai_lua():
+    """Décision volontaire (2026-09-27, cf. `lua_subset.ACCEPTED["Nil"]`) : en
+    vrai Lua, seuls `nil`/`false` sont faux et `0` est VRAI. Ici, `if`/`not`
+    se traduisent tels quels vers le C (`if`/`!`), où `0` est FAUX — pour que
+    `if not hp then` marche comme attendu d'un `hp` qui peut valoir 0. Ce test
+    fige ce choix : il doit échouer si quelqu'un « corrige » le codegen pour
+    restaurer la vérité du vrai Lua en pensant réparer un bug."""
+    from scripting.parser import parse
+    from scripting.codegen import generate, CodegenContext
+
+    src = _in_handler(
+        "    local hp = 0\n"
+        "    if not hp then hp = 1 end\n"
+        "    if hp then hp = hp - 1 end\n"
+    )
+    code, _, _ = generate(parse(src), CodegenContext(
+        actor_name="Ball", actor_sym="Ball", anim_names=[], sfx_names=[],
+        music_names=[], global_names=set(), const_names=set(),
+        all_actor_syms=["Ball"]))
+    assert "if ((!hp))" in code or "if (!hp)" in code
+    assert "if (hp)" in code
+
+
+def test_data_objets_longueur_accepte_par_le_checker():
+    """`#data.Objets` — le nombre de lignes d'une table de données — était listé
+    comme « Ouvert, absent » dans ROADMAP.md ; en réalité déjà validé
+    (`checker._check_length`, commentaire « #data.Objets — validée par ailleurs »).
+    Ce test fige que le checker ne le refuse PAS."""
+    from scripting.parser import parse
+    from scripting.checker import check, BuildContext
+
+    src = _in_handler("    local n = #data.Objets")
+    errs = check(parse(src), BuildContext(
+        actor_name="Ball", data_tables={"Objets": (["prix"], 4)}))
+    assert [e.message for e in errs if e.level == "error"] == []
+
+
+def test_data_objets_longueur_est_une_constante_de_build():
+    """Le nombre de lignes de la table est connu au build, comme `#t` sur un
+    tableau local — aucun appel runtime, un littéral C."""
+    from scripting.parser import parse
+    from scripting.codegen import generate, CodegenContext
+
+    src = _in_handler("    local n = #data.Objets")
+    code, _, _ = generate(parse(src), CodegenContext(
+        actor_name="Ball", actor_sym="Ball", anim_names=[], sfx_names=[],
+        music_names=[], global_names=set(), const_names=set(),
+        all_actor_syms=["Ball"], data_tables={"Objets": (["prix"], 4)}))
+    assert "int n = 4;" in code
+
+
 def test_text_draw_litteral_interpole_une_locale():
     """`$hp` dans un littéral reste lisible dans Lua et devient une valeur
     runtime, sans passer artificiellement par une globale."""

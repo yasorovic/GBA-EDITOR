@@ -2,7 +2,9 @@
 
 Cette référence complète le [guide de scripting](scripting.md). Utilisez-la lorsque vous voulez vérifier une écriture, plutôt que de la lire avant votre premier script.
 
-## Ce que le langage accepte
+Le catalogue exhaustif des fonctions du moteur (arguments, exemples) est tenu à jour dans le panneau **API** de l'éditeur, pas ici — cette page explique ce qui ne se lit pas d'un coup d'œil sur une fiche de fonction : la grammaire du langage, les pièges, les cas qui traversent plusieurs fonctions. Elle suit les **huit mêmes sections** que la barre latérale du panneau **API**, dans le même ordre, pour qu'apprendre par l'une n'oblige pas à réapprendre par l'autre.
+
+## Le langage
 
 Un script contient des variables, des événements proposés dans le panneau **Events**, des séquences `on_sequence_<nom>` et des fonctions privées déclarées au premier niveau.
 
@@ -16,16 +18,17 @@ Un script contient des variables, des événements proposés dans le panneau **E
 | Tableau | `{1, 2, 4}` ou `array(20, 12)` | Taille fixe, entiers, indexation à partir de 1. |
 | Chaîne | `"walk"`, `"Arena"` | Nom d'une ressource. Un littéral est aussi accepté par `text.draw`. |
 
+**La vérité, ce n'est pas celle du vrai Lua.** En vrai Lua, seuls `nil` et `false` sont faux dans un `if` — `0` y est VRAI. Ici, `0` est FAUX, comme en C, comme partout ailleurs dans ce moteur entièrement entier : `if not hp then` fonctionne comme on l'attend d'un `hp` qui peut valoir 0, sans avoir à écrire `if hp == 0 then`. Décision volontaire, assumée — pas un oubli.
+
 ```lua
 +  -  *  /  %              -- arithmétique entière
 == ~= < <= > >=           -- comparaison
 and or not                -- logique
 #t                         -- taille d'un tableau, connue au build
+#data.Objets               -- nombre de lignes d'une table de données, connu au build aussi
 ```
 
 Les boucles disponibles sont `while` et `for`. Un `for` accepte un début, une fin et un pas écrit en clair. `break` et `return` sont disponibles.
-
-## Fonctions et appels
 
 Une fonction privée prend et rend des entiers. `self` est fourni automatiquement dans un script d'acteur. Elle ne peut pas être récursive, directement ou indirectement, ni être placée dans une variable.
 
@@ -50,6 +53,10 @@ local pas = sfx:play("Pas")
 if pas:playing() then pas:stop() end
 ```
 
+## Gameplay
+
+Ce que tient et fait un acteur — transform, mouvement, physique, collision, animation, effets de game feel.
+
 `actor:get("nom")` rend un acteur de la scène par son nom. **Un acteur appartient à sa scène** : le nom est local à la scène, donc « Cursor » peut exister dans autant de scènes qu'on veut, et `actor:get("Cursor")` vise toujours le Cursor de la scène en cours. La référence **peut valoir `nil`** — l'acteur a été détruit (`self:destroy()`), ou il n'existe pas dans cette scène — donc on la teste avant d'en appeler une méthode :
 
 ```lua
@@ -70,60 +77,15 @@ end
 
 C'est ce qui remplace une cascade `if sel == 1 then actor:get("Unit1") elseif …` : `actor:get(sel)` suffit.
 
-Le catalogue **Gameplay**, **Scripting** et **Hardware** du panneau **API** est la référence des fonctions du moteur. Il est tenu à jour par l'éditeur.
+## Décor
 
-## Variables exposées (`exports`)
+Fonds tuilés, palettes, fenêtres et mélange de couleurs. Voir le panneau **API**, section **Décor** — rien de spécifique à documenter ici pour l'instant au-delà de ce que chaque fiche de fonction explique déjà.
 
-Une table `exports` déclarée au premier niveau expose des variables **réglables par instance** depuis l'inspecteur. Chaque acteur posé du même script garde sa propre valeur — un seul `Patrol.lua` sur trois gardes, chacun sa vitesse, au lieu de trois scripts jumeaux.
+## Son
 
-```lua
-exports = {
-    speed = { type = "int",  default = 5 },
-    angry = { type = "bool", default = false },
-    team  = { type = "enum", default = "RED", values = {"RED", "BLUE"} },
-}
+Effets, musique et jingles. Voir le panneau **API**, section **Son**.
 
-function on_update()
-    self.position = self.position + vec2(speed, 0)   -- on la LIT comme une variable
-    if angry then speed = speed + 1 end              -- et on peut la RÉÉCRIRE
-end
-```
-
-- **On l'utilise par son nom nu**, comme n'importe quelle variable : la lire, la réassigner. Sa seule particularité est que sa valeur de départ vient de l'inspecteur, pas du script.
-- **La valeur réglée sur l'instance** l'emporte sur le `default` ; sans réglage, c'est le `default`.
-- **Tous les types sont réglables par instance**, avec la valeur portée jusqu'au jeu :
-  - `int`, `float`, `bool`, `enum` — entiers au runtime (`float` est tronqué, un `enum` vaut l'index de son étiquette).
-  - `string` — le texte devient une **entrée de la table de textes** (comme un littéral passé à `text.draw`) : traduisible, et un simple index au runtime. On l'utilise donc là où un texte est attendu (`text:draw(label)`).
-  - `actor_ref`, `scene_ref`, `sfx_ref` — une **référence** par son nom. Un `actor_ref` désigne un acteur **de la scène** de l'instance ; vide = aucune référence.
-  - `vec2`, `vec3`, `rect` — des **valeurs composées** (`{x, y}`, `{x, y, w, h}`), lisibles champ par champ (`home.x`).
-- **Le nom d'un export ne peut pas être** celui d'un champ d'acteur (`position`, `velocity`…), d'une variable globale, ni d'un mot de l'API (`input`, `wait`…) — le build le refuse.
-- **Une variable seulement LUE ne coûte rien** (acteur posé) : le build la fond dans le code. Seule une variable réécrite occupe de la mémoire. Régler `speed` sur dix gardes qui ne font que la lire n'ajoute aucun octet.
-
-### Régler un prefab au spawn
-
-Une instance créée au runtime avec `actor.spawn` n'a pas de fiche éditeur : ses exports se règlent **au moment du spawn**, par une table facultative en 3ᵉ argument.
-
-```lua
-local b = actor:spawn("Bullet", vec2(116, 76), { speed = 8, team = "RED" })
-```
-
-- **Les clés absentes gardent la valeur réglée sur le prefab** (dans l'éditeur), sinon le `default` du script.
-- La table s'écrit **en début de ligne** ou dans un `local x = actor:spawn(...)` — pas au milieu d'une expression.
-- Ses clés doivent être des exports du prefab. Les valeurs suivent le type : un littéral pour un scalaire (`speed = 8`), un nom entre guillemets pour une référence ou une string (`boom = "Pop"`, `tgt = "Enemy"`), un constructeur pour un composite (`vel = vec2(1, 2)`). Sur un prefab poolé, chaque instance garde sa propre valeur.
-
-## Séquences
-
-Une séquence est une fonction `on_sequence_<nom>`. Elle attend avec `wait(frames)` ou `wait_until(condition)`, et avance dans l'ordre de ses lignes.
-
-- Elle s'arrête seule à la dernière ligne.
-- Ses variables locales survivent à une attente.
-- `wait_until` réévalue son expression à chaque frame.
-- Une attente est seule sur sa ligne, au premier niveau de la séquence ou dans un `for` borné.
-- Une condition qui ne peut jamais devenir vraie est refusée au Build.
-
-Chaque attente ajoute une frame au déroulement de la séquence.
-
-## Texte, listes et langue
+## Texte et interface
 
 `text.draw` accepte un littéral pour afficher rapidement un texte dans un projet monolingue :
 
@@ -167,7 +129,99 @@ Une liste se pilote par ses propriétés : `menu.index`, `menu.first`, `menu.cou
 
 `interface:get("Nom")` rend une référence du **type réel** de l'élément — liste, image, zone de texte, ou conteneur. Le cycle de vie (`:show()`, `:hide()`, `.visible`) est commun ; le reste appartient au type : `heart.state = "vide"` et `cursor.offset = vec2(0, 16)` pour une image, `box:draw("clé")` et `box.reading` pour une zone de texte.
 
+## Données
+
+Sauvegarde et tableaux. `save.write`/`save.read` — voir le panneau **API**, section **Données**. Pour une table de données du projet (`data.Objets`), voir `#data.Objets` ci-dessus (« Le langage ») et l'écran **Data**.
+
+## Script
+
+Ce qui étend le script lui-même : variables réglables par instance, séquences, fonctions mathématiques.
+
+### Variables exposées (`exports`)
+
+Une table `exports` déclarée au premier niveau expose des variables **réglables par instance** depuis l'inspecteur. Chaque acteur posé du même script garde sa propre valeur — un seul `Patrol.lua` sur trois gardes, chacun sa vitesse, au lieu de trois scripts jumeaux.
+
+```lua
+exports = {
+    speed = { type = "int",  default = 5 },
+    angry = { type = "bool", default = false },
+    team  = { type = "enum", default = "RED", values = {"RED", "BLUE"} },
+}
+
+function on_update()
+    self.position = self.position + vec2(speed, 0)   -- on la LIT comme une variable
+    if angry then speed = speed + 1 end              -- et on peut la RÉÉCRIRE
+end
+```
+
+- **On l'utilise par son nom nu**, comme n'importe quelle variable : la lire, la réassigner. Sa seule particularité est que sa valeur de départ vient de l'inspecteur, pas du script.
+- **La valeur réglée sur l'instance** l'emporte sur le `default` ; sans réglage, c'est le `default`.
+- **Tous les types sont réglables par instance**, avec la valeur portée jusqu'au jeu :
+  - `int`, `float`, `bool`, `enum` — entiers au runtime (`float` est tronqué, un `enum` vaut l'index de son étiquette).
+  - `string` — le texte devient une **entrée de la table de textes** (comme un littéral passé à `text.draw`) : traduisible, et un simple index au runtime. On l'utilise donc là où un texte est attendu (`text:draw(label)`).
+  - `actor_ref`, `scene_ref`, `sfx_ref` — une **référence** par son nom. Un `actor_ref` désigne un acteur **de la scène** de l'instance ; vide = aucune référence.
+  - `vec2`, `vec3`, `rect` — des **valeurs composées** (`{x, y}`, `{x, y, w, h}`), lisibles champ par champ (`home.x`).
+- **Le nom d'un export ne peut pas être** celui d'un champ d'acteur (`position`, `velocity`…), d'une variable globale, ni d'un mot de l'API (`input`, `wait`…) — le build le refuse.
+- **Une variable seulement LUE ne coûte rien** (acteur posé) : le build la fond dans le code. Seule une variable réécrite occupe de la mémoire. Régler `speed` sur dix gardes qui ne font que la lire n'ajoute aucun octet.
+
+#### Régler un prefab au spawn
+
+Une instance créée au runtime avec `actor.spawn` n'a pas de fiche éditeur : ses exports se règlent **au moment du spawn**, par une table facultative en 3ᵉ argument.
+
+```lua
+local b = actor:spawn("Bullet", vec2(116, 76), { speed = 8, team = "RED" })
+```
+
+- **Les clés absentes gardent la valeur réglée sur le prefab** (dans l'éditeur), sinon le `default` du script.
+- La table s'écrit **en début de ligne** ou dans un `local x = actor:spawn(...)` — pas au milieu d'une expression.
+- Ses clés doivent être des exports du prefab. Les valeurs suivent le type : un littéral pour un scalaire (`speed = 8`), un nom entre guillemets pour une référence ou une string (`boom = "Pop"`, `tgt = "Enemy"`), un constructeur pour un composite (`vel = vec2(1, 2)`). Sur un prefab poolé, chaque instance garde sa propre valeur.
+
+### Séquences
+
+Une séquence est une fonction `on_sequence_<nom>`. Elle attend avec `wait(frames)` ou `wait_until(condition)`, et avance dans l'ordre de ses lignes.
+
+- Elle s'arrête seule à la dernière ligne.
+- Ses variables locales survivent à une attente.
+- `wait_until` réévalue son expression à chaque frame.
+- Une attente est seule sur sa ligne, au premier niveau de la séquence ou dans un `for` borné.
+- Une condition qui ne peut jamais devenir vraie est refusée au Build.
+
+Chaque attente ajoute une frame au déroulement de la séquence.
+
+### Le module `math`
+
+`math` est le module du moteur, en entiers. Il expose exactement :
+
+```text
+abs   atan2   clamp   cos   ease   lerp   max   min   rand   sign   sin   sqrt
+```
+
+- `math.sin` et `math.cos` reçoivent des degrés, pas des radians.
+- Le hasard s'écrit `math.rand(min, max)`.
+- Il n'y a pas d'arrondi. Les valeurs sont déjà entières.
+
+| Vous écrivez | À la place |
+| --- | --- |
+| `math.floor(x)` | Rien : `/` tronque déjà. |
+| `math.ceil(a / b)` | `(a + b - 1) / b` pour une division positive arrondie au-dessus. |
+| `math.random(a, b)` | `math.rand(a, b)` |
+| `math.pi` | Des angles en degrés. |
+| `math.pow(x, n)` | Une multiplication explicite, par exemple `x * x`. |
+| `math.fmod(a, b)` | `a % b` |
+
+Les autres noms de Lua qui ne sont pas proposés sont `math.ceil(x)`, `math.huge`, `math.modf(x)` et `math.randomseed(n)`.
+
+Les décalages et opérations binaires `a >> b`, `a ~ b` et `~a` ne sont pas disponibles non plus.
+
+## Scène
+
+Scène, caméra et langue.
+
 `lang:get()` rend la langue active. `lang:set(code)` la modifie et recharge la scène courante. Pour mémoriser ce choix, conservez la valeur dans une globale persistante puis utilisez `save.write`.
+
+## Joueur
+
+Entrées (accords, séquences, axes). Voir le panneau **API**, section **Joueur**.
 
 ## Écritures refusées
 
@@ -219,31 +273,6 @@ Pour rechercher une forme Lua précise dans une erreur, voici les appels refusé
 | Coroutines | `coroutine.create(f)` |
 
 Une fonction écrite `function f() … end, dans un corps` ou `function objet:methode() … end` est également refusée. Déclarez une fonction privée au premier niveau. `local function f() … end` n'est pas une forme disponible.
-
-## Le module `math`
-
-`math` est le module du moteur, en entiers. Il expose exactement :
-
-```text
-abs   atan2   clamp   cos   ease   lerp   max   min   rand   sign   sin   sqrt
-```
-
-- `math.sin` et `math.cos` reçoivent des degrés, pas des radians.
-- Le hasard s'écrit `math.rand(min, max)`.
-- Il n'y a pas d'arrondi. Les valeurs sont déjà entières.
-
-| Vous écrivez | À la place |
-| --- | --- |
-| `math.floor(x)` | Rien : `/` tronque déjà. |
-| `math.ceil(a / b)` | `(a + b - 1) / b` pour une division positive arrondie au-dessus. |
-| `math.random(a, b)` | `math.rand(a, b)` |
-| `math.pi` | Des angles en degrés. |
-| `math.pow(x, n)` | Une multiplication explicite, par exemple `x * x`. |
-| `math.fmod(a, b)` | `a % b` |
-
-Les autres noms de Lua qui ne sont pas proposés sont `math.ceil(x)`, `math.huge`, `math.modf(x)` et `math.randomseed(n)`.
-
-Les décalages et opérations binaires `a >> b`, `a ~ b` et `~a` ne sont pas disponibles non plus.
 
 ## Comprendre les erreurs
 

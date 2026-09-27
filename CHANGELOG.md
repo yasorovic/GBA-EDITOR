@@ -124,6 +124,18 @@ une autre forme côté Lua que celle prévue (`ui.get("nom"):show()` plutôt que
 
 → [détail](changelog-archive/v0.15.md)
 
+## v0.16 — L'API : la règle de construction, et le rangement
+
+Huit sections au lieu de vingt-deux dans le catalogue de l'éditeur, groupées par ce qu'on tient
+(l'acteur, le décor, le son...) plutôt que par famille technique. Règle des trois provenances
+(`module.get`/`spawn`, verbe numéroté par le matériel) : une table de types unique remplace trois
+mécanismes de référence, cinq verbes de cycle de vie communs (`show`/`hide`/`activate`/
+`deactivate`/`destroy`), les éléments d'interface rendent leur type réel (liste, image, zone de
+texte), et `module:fonction()` remplace le point partout sauf `math`. Un garde-fou du catalogue
+refuse désormais toute future fonction qui contournerait l'acquisition par référence.
+
+→ [détail](changelog-archive/v0.16-api-construction.md)
+
 ## v0.17 — Le pool par scène
 
 *Livrée le 2026-09-19.* Combien d'exemplaires d'un prefab vivent en même temps se déclare

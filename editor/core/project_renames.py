@@ -25,7 +25,7 @@ from typing import Optional
 
 from core.models.audio import Music
 from core.models.background import BackgroundAsset
-from core.models.components import SpriteComponent
+from core.models.components import SpriteComponent, ScriptComponent
 from core.models.palette import PaletteBank, PaletteUsage, OWN_PAL_BANK
 from core.models.scene import Scene
 from core.models.sprite import SpriteAsset
@@ -188,10 +188,54 @@ class ProjectRenameMixin:
         old_name = actor.name
         with self._renaming():
             refs = self.rename_lua_refs(DOMAIN_ACTOR, old_name, new_name)
+            for path, n in self._rename_actor_ref_exports(old_name, new_name).items():
+                refs[path] = refs.get(path, 0) + n
             actor.name = new_name
             if scene is not None:
                 self.save_scene(scene)
         self._notify_renamed("Actor", old_name, new_name, refs)
+
+    def _rename_actor_ref_exports(self, old_name: str, new_name: str) -> dict:
+        """Un export `actor_ref` choisi dans l'inspecteur (menu déroulant, cf.
+        `component_editors/script.py`) stocke le NOM de l'acteur visé dans
+        `ScriptComponent.exports_values` — pas une référence vivante. Sans ce
+        suivi, renommer l'acteur visé laissait la valeur pointer dans le vide :
+        le même trou que celui déjà refermé pour l'`id` d'un composant sprite
+        (`rename_sprite_id_refs`). Retourne `{script: nombre de valeurs
+        corrigées}`, dans le même format que `rename_lua_refs`."""
+        from scripting.exports_parser import parse_exports
+        touched: dict = {}
+        export_types_by_script: dict = {}   # cache : un .lua peut être partagé par N instances
+
+        def actor_ref_names(script_rel: str) -> set[str]:
+            if script_rel not in export_types_by_script:
+                path = self.asset_abs(script_rel)
+                exports = parse_exports(path) if path else []
+                export_types_by_script[script_rel] = {
+                    e["name"] for e in exports if e["type"] == "actor_ref"
+                }
+            return export_types_by_script[script_rel]
+
+        def fix_component(comp) -> bool:
+            if not isinstance(comp, ScriptComponent) or not comp.script or not comp.exports_values:
+                return False
+            changed = False
+            for key in actor_ref_names(comp.script) & comp.exports_values.keys():
+                if comp.exports_values[key] == old_name:
+                    comp.exports_values[key] = new_name
+                    changed = True
+                    path = self.asset_abs(comp.script)
+                    touched[path] = touched.get(path, 0) + 1
+            return changed
+
+        for scn in self.scenes:
+            scn_touched = any([fix_component(c) for a in scn.actors for c in a.components])
+            if scn_touched:
+                self.save_scene(scn)
+        for pf in self.prefabs:
+            if any([fix_component(c) for c in pf.components]):
+                self.save_prefab(pf)
+        return touched
 
     def rename_ui_element(self, layout, element, new_name: str) -> str:
         """Renomme un élément d'une mise en page UI (texte, conteneur, image).
