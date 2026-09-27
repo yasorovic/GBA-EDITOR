@@ -13,7 +13,7 @@ from PyQt6.QtCore import Qt, QRect, QPoint, pyqtSignal
 from core.engine_emulation.text_layout import layout_marked_text, layout_projection_text
 from codegen.font_build import build_font_asset
 from core.font_rasterizer import FontRasterizerError, display_coverage
-from ui.common.theme import C, T
+from ui.common.theme import C, T, QSS
 from ui.common.labels import label
 from ui.common.backdrop_button import BackdropButton
 
@@ -404,6 +404,7 @@ class FontScreenPreview(QWidget):
         a, b = self.selection()
         edits = removable_markup_edits(self._text, a, b)
         menu = QMenu(self)
+        menu.setStyleSheet(QSS.menu)
         remove = menu.addAction(label("fsprev.remove_markup"))
         remove.setEnabled(bool(edits))
         if edits:

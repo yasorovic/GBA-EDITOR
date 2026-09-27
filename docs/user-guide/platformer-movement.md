@@ -25,7 +25,7 @@ exports = {
 local gravite = 24
 
 function on_update()
-    local vitesse_x = input.axis.x * vitesse * 256
+    local vitesse_x = input:get_axis("horizontal") * vitesse * 256
     local vitesse_y = self.velocity.y + gravite
 
     if self.grounded and input:pressed("a") then

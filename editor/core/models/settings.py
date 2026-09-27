@@ -69,7 +69,15 @@ class InputBinding:
     Le nom devient une clé utilisable dans les scripts, par exemple
     `input:pressed("jump")`. Les directions de la croix sont des boutons au
     même titre que A/B : `jump = up` et `dash = right + a` ne demandent donc
-    aucun cas spécial au runtime."""
+    aucun cas spécial au runtime.
+
+    Décision de Victor (2026-09-27, après coup) : un ACCORD simple reste des
+    cases à cocher (l'écran d'avant ce chantier, jugé plus clair) — le
+    mini-langage complet (`+`/`-`/`(a|b)`/mouvements) ne sert plus qu'aux
+    SÉQUENCES, cf. `InputSequence`. `input:held/pressed/released/buffered` ne
+    lisent donc que des accords, jamais une séquence — les deux ne partagent
+    plus le même espace de noms côté modèle (même s'ils restent tous deux des
+    clés `input:...(nom)` valides côté script)."""
     name: str = ""
     buttons: list = field(default_factory=list)   # sous-ensemble de BUTTON_NAMES
 
@@ -85,6 +93,75 @@ class InputBinding:
             name=str(d.get("name", "")),
             buttons=[b for b in (d.get("buttons") or []) if b in BUTTON_NAMES],
         )
+
+
+@dataclass
+class InputSequence:
+    """Une séquence de boutons nommée — un mouvement (quart de cercle, demi-
+    cercle, dragon punch, ou une composition personnalisée) reconnu par
+    `input:get_sequence("nom")`. Expression dans le mini-langage complet
+    (ROADMAP « Les inputs personnalisés » : `+` accord, `-` pas suivant,
+    `(a|b)` alternative, mouvements). Rôle distinct d'`InputBinding` : un
+    accord se lit avec held/pressed/released/buffered, une séquence avec
+    get_sequence — jamais l'inverse, décision de Victor (2026-09-27)."""
+    name: str = ""
+    expression: str = ""
+    window: int = 15   # fenêtre entre deux pas
+
+    def to_dict(self) -> dict:
+        d = {"name": self.name, "expression": self.expression}
+        if self.window != 15:
+            d["window"] = self.window
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "InputSequence":
+        return cls(
+            name=str(d.get("name", "")),
+            expression=str(d.get("expression", "") or ""),
+            window=int(d.get("window", 15) or 15),
+        )
+
+
+@dataclass
+class InputAxis:
+    """Un axe scalaire déclaré (ROADMAP « Les inputs personnalisés ») :
+    remappe la croix, ou pilote un axe avec d'autres boutons/actions, sans
+    toucher au script. `negative`/`positive` sont un nom de bouton ou
+    d'action — jamais `horizontal`/`vertical` (réservés à la croix par
+    défaut, toujours présente, même dans un projet qui ne déclare aucun axe)."""
+    name: str = ""
+    negative: str = ""
+    positive: str = ""
+
+    def to_dict(self) -> dict:
+        return {"name": self.name, "negative": self.negative, "positive": self.positive}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "InputAxis":
+        return cls(
+            name=str(d.get("name", "")),
+            negative=str(d.get("negative", "")),
+            positive=str(d.get("positive", "")),
+        )
+
+
+@dataclass
+class InputMovement:
+    """Un mouvement personnalisé (ROADMAP « Les inputs personnalisés ») : une
+    suite de pas dans le même mini-langage que les actions, mais qui ne
+    référence AUCUN mouvement (built-in ou personnalisé) — pas de cycle
+    possible par construction. S'utilise comme un mouvement built-in, en tête
+    d'une expression d'action (cf. `core/models/input_expression.py`)."""
+    name: str = ""
+    steps: str = ""
+
+    def to_dict(self) -> dict:
+        return {"name": self.name, "steps": self.steps}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "InputMovement":
+        return cls(name=str(d.get("name", "")), steps=str(d.get("steps", "")))
 
 
 @dataclass
@@ -177,8 +254,16 @@ class ProjectSettings:
     # d'une FontAsset explicite reste configurée dans cette FontAsset elle-même.
     default_font: str = ""
     # ── Inputs ──────────────────────────────────────────────────────
-    # Actions nommées du joueur, chacune liée à un ou plusieurs boutons.
+    # Actions nommées du joueur, chacune liée à un accord de boutons (cases
+    # à cocher — held/pressed/released/buffered).
     inputs: list = field(default_factory=list)
+    # Séquences nommées (mini-langage complet — get_sequence).
+    sequences: list = field(default_factory=list)
+    # Axes déclarés, en plus des deux par défaut ("horizontal"/"vertical", la
+    # croix — toujours présents, jamais stockés ici : cf. `get_axis`).
+    axes: list = field(default_factory=list)
+    # Mouvements personnalisés, en plus des six built-in du parseur.
+    movements: list = field(default_factory=list)
 
     def all_languages(self) -> list:
         """Source d'abord, puis les traductions — l'ordre du menu de choix.

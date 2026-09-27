@@ -95,14 +95,12 @@ class SpriteComponent:
 # MOTEUR, sans qu'aucun script n'existe sur l'actor (ROADMAP, 2026-08-24) :
 # le dispatch est piloté par la DONNÉE du component, pas par la présence d'une
 # fonction Lua compilée. "on_destroy" passe par une table indexée par tag
-# (cf. `actor_destroy_with_sfx`, runtime), les autres sont injectés en clair
-# au site d'appel connu au build (spawn de l'actor, appui bouton).
-SFX_AUTO_TRIGGERS: tuple[str, ...] = (
-    "on_spawn", "on_destroy",
-    "on_button_a", "on_button_b", "on_button_l", "on_button_r",
-    "on_button_start", "on_button_select",
-    "on_button_up", "on_button_down", "on_button_left", "on_button_right",
-)
+# (cf. `actor_destroy_with_sfx`, runtime), "on_spawn" est injecté au spawn de
+# l'actor ; tout AUTRE trigger est un NOM de bouton ou d'action déclarée (la
+# même liste que `input:pressed(nom)`, jamais une séquence — ROADMAP « Les
+# inputs personnalisés », tranche finale, 2026-09-27, qui a remplacé les dix
+# valeurs fixes `on_button_*` par ce nom libre).
+SFX_AUTO_TRIGGERS: tuple[str, ...] = ("on_spawn", "on_destroy")
 
 
 @dataclass
@@ -113,13 +111,15 @@ class SoundFxComponent:
     trigger="on_spawn"   : joue automatiquement au démarrage de l'actor, sans script.
     trigger="on_destroy" : joue juste avant que l'actor soit désactivé (self:destroy() ou
                             other:destroy() depuis N'IMPORTE QUEL script), sans script sur CET actor.
-    trigger="on_button_*": joue tant que cet actor est actif et que le bouton est pressé
-                            (front montant), sans script — pratique pour un item de menu.
+    trigger=<nom>         : un bouton ou une action déclarée (Project Settings → Input → Inputs,
+                            jamais une séquence) — joue tant que cet actor est actif et que
+                            l'accord vient d'être pressé (front montant), sans script. Pratique
+                            pour un item de menu qui joue un son sans une ligne de Lua.
     """
     id: str = "sound_fx"
     active: bool = True
     sfx_name: Optional[str] = None      # référence Sfx.name
-    trigger: str = "manual"             # "manual" | SFX_AUTO_TRIGGERS
+    trigger: str = "manual"             # "manual" | SFX_AUTO_TRIGGERS | un nom de bouton/action
 
 
 @dataclass
@@ -156,6 +156,18 @@ def components_to_list(components: list) -> list[dict]:
     ]
 
 
+# Migration à la lecture (ROADMAP « Les inputs personnalisés », tranche
+# finale, 2026-09-27) : `SoundFxComponent.trigger` visait un des dix
+# `on_button_*` — il vise désormais un NOM (bouton ou action déclarée), la
+# même liste que `input:pressed(nom)`. Un projet plus ancien ne perd rien.
+_LEGACY_SFX_TRIGGERS: dict = {
+    "on_button_a": "a", "on_button_b": "b", "on_button_l": "l", "on_button_r": "r",
+    "on_button_start": "start", "on_button_select": "select",
+    "on_button_up": "up", "on_button_down": "down",
+    "on_button_left": "left", "on_button_right": "right",
+}
+
+
 def components_from_list(data: list) -> list:
     """Inverse de components_to_list."""
     components = []
@@ -166,7 +178,10 @@ def components_from_list(data: list) -> list:
         if not klass:
             continue
         valid = {f.name for f in fields(klass)}
-        components.append(klass(**{k: v for k, v in cd.items() if k in valid}))
+        comp = klass(**{k: v for k, v in cd.items() if k in valid})
+        if isinstance(comp, SoundFxComponent) and comp.trigger in _LEGACY_SFX_TRIGGERS:
+            comp.trigger = _LEGACY_SFX_TRIGGERS[comp.trigger]
+        components.append(comp)
     return components
 
 

@@ -5,21 +5,6 @@ reste une identité, pas un rang — voir [ROADMAP.md](ROADMAP.md)). Pour le dé
 d'une version (décisions verrouillées, pièges rencontrés, mesures), voir
 [changelog-archive/](changelog-archive/). Pour ce qui reste à faire, voir [ROADMAP.md](ROADMAP.md).
 
-## Non publiée — v0.12, Graphe des scènes (session du 2026-09-19)
-
-Le Graphe de scènes devient un espace d'édition à part entière, tout en gardant le script comme
-source de vérité : fond à points et aimantation, arêtes attachées aux nœuds pendant leur
-déplacement, ports d'entrée/sortie et tracés droit/courbe persistants. Les liens sélectionnés se
-mettent en évidence et peuvent être reconnectés à la souris, seuls ou par lot ; une cible
-introuvable devient une carte rouge déplaçable, dotée de son port d'entrée pour la corriger.
-
-L'inspecteur de transition rassemble appels de script éditables, note, style de tracé et édition
-multiple ; note, style, réécriture de script et reconnexion participent à l'Undo/Redo. Les
-groupes gagnent leur inspecteur (nom, couleur, note, état replié et contenu direct). Le graphe
-crée aussi des scènes : clic-droit dans le vide « Créer une scène ici » pose une carte sous le
-curseur, rattachée au niveau ouvert. Enfin, le sélecteur « Scene / Graph » est centré et
-l'inspecteur revient au projet lorsqu'aucun élément du graphe n'est sélectionné.
-
 ## v0.2 — Gestion des palettes de couleurs
 
 Catalogue de palettes nommées, illimité, partagé par tout le projet, avec un écran dédié
@@ -95,6 +80,33 @@ elle plutôt que de disparaître. Garde-fous silencieux, même en projet monolin
 cas, littéraux non traduits, caractère qu'aucune police (ni l'active ni le repli) ne porte.
 
 → [détail](changelog-archive/v0.9.md)
+
+## v0.10 — Distribution Linux
+
+Format `.gba-project` : un manifeste unique, double-cliquable, qui remplace `project.json` et le
+`.bat` Windows — association MIME native sur Linux comme sur Windows, projets existants relus
+sans convertisseur. Réactivation du build AppImage dans la CI.
+
+→ [détail](changelog-archive/v0.10.md)
+
+## v0.11 — Traduction de l'éditeur (infra)
+
+Gabarit d'inspecteur à trois niveaux (note/notice/tip) et quatre tons, remplaçant les couleurs
+codées à la main. Tous les libellés de l'interface (~1 270) sortis du code vers un catalogue
+traduisible (`label()`, notices), vérifié par la CI dans les deux sens. Sélection de langue au
+démarrage — la traduction française elle-même est reportée au chantier « traduction fr » (v2.0).
+
+→ [détail](changelog-archive/v0.11.md)
+
+## v0.12 — Vue d'ensemble (graphe des scènes)
+
+Le Scene Canvas gagne un mode Graphe : chaque scène est un nœud, chaque transition une arête,
+dérivée directement des appels `scene.switch` du script — aucun second modèle à tenir d'accord.
+Retargetage d'une arête par glisser, création de scène depuis le graphe, groupes avec inspecteur,
+mini-carte et recherche ; double-clic sur une arête ouvre le script à la ligne de l'appel.
+Création de transition ex nihilo, cibles calculées et tracé libre reportés à v2.0.
+
+→ [détail](changelog-archive/v0.12.md)
 
 ## v0.14 — Diagnostic — ce que le jeu fait, et ce qu'il coûte
 
@@ -234,3 +246,17 @@ insère une ligne, `Échap` ferme, `↑`/`↓` naviguent, `Ctrl+Espace` ouvre à
 un correctif du moteur : un `local a, b, c` en corps de handler déclare enfin ses trois noms.
 
 → [détail](changelog-archive/v0.27.md)
+
+## v0.28 — Les inputs personnalisés
+
+*Livrée le 2026-09-27.* Un accord (cases à cocher à icônes) se lit avec `input:held`/`pressed`/
+`released`/`buffered`, une séquence (quart de cercle, demi-cercle, dragon punch, ou une
+composition personnelle — barre d'expression au mini-langage) se lit avec `input:get_sequence`,
+un axe se lit avec `input:get_axis` — trois espaces de noms séparés, trois écrans dans Project
+Settings → Input. `held(nom, n)` pour l'appui long, `released` pour le saut à hauteur variable,
+`buffered` pour le tampon de saut (consomme l'appui, piège d'ordre d'évaluation documenté). Le
+runtime ne paie rien pour une action non interrogée. Les dix events `on_button_*` disparaissent
+(un script écrit `input:pressed(nom)` dans `on_update`) ; le déclencheur automatique du
+SoundFxComponent survit, repointé sur un nom d'accord plutôt que sur un bouton fixe.
+
+→ [détail](changelog-archive/v0.28.md)

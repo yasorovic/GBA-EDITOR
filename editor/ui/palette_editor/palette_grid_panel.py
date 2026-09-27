@@ -674,6 +674,7 @@ class PaletteGridPanel(QWidget):
         if not self._selected_set:
             return
         menu = QMenu(self)
+        menu.setStyleSheet(QSS.menu)
         a_ramp = menu.addAction(label("palgrid.create_ramp"))
         # Rampe = interpolation le long d'index CONTIGUS → uniquement en mode
         # plage (Shift+drag / Shift+flèches), pas sur une sélection rectangle.

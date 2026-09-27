@@ -308,32 +308,103 @@
       "group": "gameplay",
       "entries": [
         {
-          "label": "input:held(\"btn\")",
-          "snippet": "input:held(\"a\")",
-          "description": "Vrai si le bouton est maintenu appuyé ce frame.",
+          "label": "input:held(\"nom\"[, frames])",
+          "snippet": "input:held(\"jump\")",
+          "description": "Vrai si l'accord (bouton, ou action déclarée dans Project Settings → Input → Inputs) est tenu ce frame. Avec `frames`, vrai depuis AU MOINS ce nombre de frames consécutives (appui long, tir chargé) — 1 à 255. Ne lit jamais une séquence : utiliser `get_sequence` pour un quart de cercle ou un combo.",
           "params": [
             {
-              "name": "btn",
+              "name": "nom",
               "type": "string",
-              "description": "Nom du bouton : \"a\", \"b\", \"l\", \"r\", \"start\", \"select\", \"up\", \"down\", \"left\", \"right\""
+              "description": "Bouton (\"a\", \"b\", \"l\", \"r\", \"start\", \"select\", \"up\", \"down\", \"left\", \"right\") ou action déclarée"
+            },
+            {
+              "name": "frames",
+              "type": "number",
+              "description": "Optionnel — durée minimale de maintien, en frames"
             }
           ],
           "returns": "bool",
           "doc_anchor": "input-held"
         },
         {
-          "label": "input:pressed(\"btn\")",
-          "snippet": "input:pressed(\"a\")",
-          "description": "Vrai uniquement le premier frame où le bouton est appuyé (front montant).",
+          "label": "input:pressed(\"nom\")",
+          "snippet": "input:pressed(\"jump\")",
+          "description": "Vrai uniquement le frame où l'accord vient de se compléter (front montant). Ne lit jamais une séquence.",
           "params": [
             {
-              "name": "btn",
+              "name": "nom",
               "type": "string",
-              "description": "Nom du bouton : \"a\", \"b\", \"l\", \"r\", \"start\", \"select\", \"up\", \"down\", \"left\", \"right\""
+              "description": "Bouton ou action déclarée"
             }
           ],
           "returns": "bool",
           "doc_anchor": "input-pressed"
+        },
+        {
+          "label": "input:released(\"nom\")",
+          "snippet": "input:released(\"jump\")",
+          "description": "Vrai le frame où l'accord était complet au frame précédent et ne l'est plus (saut à hauteur variable : relâcher tôt coupe l'élan). Ne lit jamais une séquence.",
+          "params": [
+            {
+              "name": "nom",
+              "type": "string",
+              "description": "Bouton ou action déclarée"
+            }
+          ],
+          "returns": "bool",
+          "doc_anchor": "input-released"
+        },
+        {
+          "label": "input:buffered(\"nom\", frames)",
+          "snippet": "input:buffered(\"jump\", 6)",
+          "description": "Vrai si l'accord vient d'être pressé dans les `frames` derniers frames (tampon de saut) ET que cet appui n'a pas déjà été consommé — répondre vrai CONSOMME l'appui. `frames` doit être un nombre écrit en clair (comme wait()) : il fixe la profondeur de l'anneau au build. Ne lit jamais une séquence. PIÈGE : évaluée avant un `and` qui la suit — `if input:buffered(\"jump\", 6) and au_sol` consomme l'appui même en l'air ; écrire `if au_sol and input:buffered(\"jump\", 6)` pour ne la consommer qu'au sol.",
+          "params": [
+            {
+              "name": "nom",
+              "type": "string",
+              "description": "Bouton ou action déclarée"
+            },
+            {
+              "name": "frames",
+              "type": "number",
+              "description": "Fenêtre de tampon, en frames — un nombre écrit en clair, 1 à 255"
+            }
+          ],
+          "returns": "bool",
+          "doc_anchor": "input-buffered"
+        },
+        {
+          "label": "input:get_sequence(\"nom\")",
+          "snippet": "input:get_sequence(\"quarter_circle\")",
+          "description": "Vrai le frame où la séquence déclarée (Project Settings → Input → Séquences) vient de se compléter : son DERNIER pas vient de se compléter, les précédents s'étant trouvés en amont, dans l'ordre, dans la fenêtre de la séquence. Espace de noms séparé des accords : jamais un bouton, jamais held/pressed/released/buffered.",
+          "params": [
+            {
+              "name": "nom",
+              "type": "string",
+              "description": "Séquence déclarée"
+            }
+          ],
+          "returns": "bool",
+          "doc_anchor": "input-get_sequence"
+        },
+        {
+          "label": "input:get_axis(\"x\"[, \"y\"])",
+          "snippet": "input:get_axis(\"horizontal\")",
+          "description": "Position de l'axe `x` : -1, 0 ou 1. Avec un 2e argument, rend un vec2 des deux axes. \"horizontal\" et \"vertical\" (la croix) existent toujours, même sans axe déclaré ; un `InputAxis` du projet (Project Settings → Input → Axes) s'utilise pareil.",
+          "params": [
+            {
+              "name": "x",
+              "type": "string",
+              "description": "\"horizontal\", \"vertical\", ou un axe déclaré"
+            },
+            {
+              "name": "y",
+              "type": "string",
+              "description": "Optionnel — un second axe, pour recevoir un vec2"
+            }
+          ],
+          "returns": "int",
+          "doc_anchor": "input-get_axis"
         }
       ]
     },

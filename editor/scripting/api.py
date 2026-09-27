@@ -213,6 +213,17 @@ DOMAIN_SPRITE_ID = "sprite_id"  # SPRITE_{actor}_{id} — l'id d'un composant sp
 DOMAIN_SFX    = "sfx"     # SFX_{name}
 DOMAIN_MUSIC  = "music"   # MUSIC_{name}
 DOMAIN_KEY    = "key"     # BTN_{name} — enum fixe du hardware, jamais renommé
+# Nom d'axe passé à `input:get_axis()` — "horizontal"/"vertical" (toujours
+# présents, jamais déclarés) ou un `InputAxis` du projet. Domaine distinct de
+# DOMAIN_KEY : un axe n'est pas un bouton ni une action, il ne s'utilise
+# jamais avec `held`/`pressed`/`released`/`buffered`.
+DOMAIN_AXIS   = "axis"
+# Nom d'une séquence déclarée (Project Settings → Input → Séquences), passé à
+# `input:get_sequence()`. Espace de noms SÉPARÉ de DOMAIN_KEY (décision de
+# Victor, 2026-09-27) : un accord se lit avec held/pressed/released/buffered,
+# une séquence avec get_sequence — jamais l'inverse, et jamais partagé avec
+# DOMAIN_SEQUENCE (qui, lui, nomme un `on_sequence_<nom>` de script).
+DOMAIN_INPUT_SEQUENCE = "input_sequence"
 # TAG_{name} — l'IDENTITÉ d'un acteur. L'espace de noms est celui des acteurs de
 # la scène et des prefabs poolés, un `#define` par nom (cf. headers.py) : il est
 # donc parfaitement énumérable, contrairement à ce que ce fichier a longtemps
@@ -869,20 +880,61 @@ RUNTIME_API: dict[str, ApiFunc] = {
     ),
 
     # ── Input ──────────────────────────────────────────────────────
+    # `held`/`pressed` gardent leur nom (ROADMAP « Les inputs personnalisés »,
+    # décision verrouillée) ; `n` optionnel sur `held` est vérifié à part
+    # (`checker._check_input_call`) — `variadic` n'existe que pour ça, ce
+    # n'est pas une vraie fonction à arité libre. Les quatre ne lisent qu'un
+    # ACCORD (bouton ou InputBinding) — jamais une séquence, qui a son propre
+    # nom d'appel (`get_sequence`, décision de Victor du 2026-09-27).
     "input.held": ApiFunc(
         lua_name="input.held", c_func="input_held",
-        params=[Param("btn", PARAM_STR, DOMAIN_KEY)],
+        params=[Param("btn", PARAM_STR, DOMAIN_KEY)], variadic=True,
         ret="bool",
-        doc="Vrai si le bouton est maintenu appuyé ce frame.",
+        doc="Vrai si l'accord est tenu ce frame. Avec un 2e argument (frames), "
+            "vrai depuis AU MOINS ce nombre de frames consécutives (appui long).",
     ),
     "input.pressed": ApiFunc(
         lua_name="input.pressed", c_func="input_pressed",
         params=[Param("btn", PARAM_STR, DOMAIN_KEY)],
         ret="bool",
-        doc="Vrai si le bouton vient d'être pressé.",
+        doc="Vrai si l'accord vient de se compléter (front montant).",
     ),
-    # input.axis (vec2, lecture seule) : cf. RUNTIME_PROPS — l'état de la croix
-    # directionnelle est une donnée, pas un appel.
+    "input.released": ApiFunc(
+        lua_name="input.released", c_func="input_released",
+        params=[Param("btn", PARAM_STR, DOMAIN_KEY)],
+        ret="bool",
+        doc="Vrai si l'accord était complet au frame précédent et ne l'est "
+            "plus (saut à hauteur variable).",
+    ),
+    "input.buffered": ApiFunc(
+        lua_name="input.buffered", c_func="input_buffered",
+        params=[Param("btn", PARAM_STR, DOMAIN_KEY), Param("frames", PARAM_INT)],
+        ret="bool",
+        doc="Vrai si l'accord vient d'être pressé dans les `frames` derniers "
+            "frames (tampon de saut) ET que cet appui n'a pas déjà été "
+            "consommé. Répondre vrai CONSOMME l'appui. `frames` doit être un "
+            "nombre écrit en clair (comme wait()) : il fixe la profondeur de "
+            "l'anneau au build. Piège : évaluée avant un `and` qui la suit — "
+            "écrire `if au_sol and input:buffered(...)`, jamais l'inverse, "
+            "pour ne la consommer qu'au bon moment.",
+    ),
+    "input.get_sequence": ApiFunc(
+        lua_name="input.get_sequence", c_func="input_seq_pressed",
+        params=[Param("nom", PARAM_STR, DOMAIN_INPUT_SEQUENCE)],
+        ret="bool",
+        doc="Vrai le frame où la séquence déclarée (Project Settings → Input "
+            "→ Séquences) vient de se compléter : son DERNIER pas vient de "
+            "se compléter, les précédents s'étant trouvés en amont, dans "
+            "l'ordre, dans la fenêtre de la séquence.",
+    ),
+    "input.get_axis": ApiFunc(
+        lua_name="input.get_axis", c_func="input_get_axis",
+        params=[Param("x", PARAM_STR, DOMAIN_AXIS)], variadic=True,
+        ret="int",
+        doc='Position de l\'axe `x` : -1, 0 ou 1. Avec un 2e argument (y), rend '
+            'un vec2 des deux axes — la forme 2D. "horizontal"/"vertical" sont '
+            "toujours définis (la croix) ; un axe déclaré s'y ajoute.",
+    ),
     # ── Audio ──────────────────────────────────────────────────────
     "sfx.play": ApiFunc(
         lua_name="sfx.play", c_func="sfx_play",
@@ -1991,15 +2043,6 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
             '"darken" (vers le noir). Ex: blend.mode = "alpha"',
     ),
 
-    # ── Input ──────────────────────────────────────────────────────
-    "input.axis": ApiProp(
-        lua_name="input.axis", c_getter="input_get_axis",
-        ptype=PARAM_VEC2, read_only=True,
-        doc="Croix directionnelle en vec2, chaque axe valant -1, 0 ou 1 "
-            "(.x = gauche/droite, .y = haut/bas). Lecture seule. "
-            "Ex: input.axis.x pour le seul axe horizontal.",
-    ),
-
     # ── Scène ──────────────────────────────────────────────────────
     "scene.frame": ApiProp(
         lua_name="scene.frame", c_getter="scene_frame",
@@ -2028,6 +2071,26 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
 # suppression retrouvera son sens, sur une surface qu'on promet stable.
 
 REMOVED_API: dict[str, str] = {}
+
+
+# Les dix `on_button_*` sont un cas à part : ce ne sont pas des appels d'API
+# mais des noms de fonction de PREMIER NIVEAU (des handlers), qui ne passent
+# jamais par `REMOVED_API` (celui-ci ne couvre que les appels `récepteur:méthode`
+# ou `module.fonction`). Retrait sec ailleurs, mais Victor a explicitement
+# demandé un message ici (ROADMAP « Les inputs personnalisés », tranche
+# finale, 2026-09-27) : aucun `.lua`/doc/démo du dépôt ne les utilisait déjà,
+# donc un guide ne coûte rien et évite la confusion avec `input:pressed`.
+REMOVED_EVENTS: dict[str, str] = {
+    name: (f"L'événement '{name}' n'existe plus : écrivez "
+          f"if input:pressed(\"{btn}\") then ... end dans on_update.")
+    for name, btn in (
+        ("on_button_a", "a"), ("on_button_b", "b"),
+        ("on_button_l", "l"), ("on_button_r", "r"),
+        ("on_button_start", "start"), ("on_button_select", "select"),
+        ("on_button_up", "up"), ("on_button_down", "down"),
+        ("on_button_left", "left"), ("on_button_right", "right"),
+    )
+}
 
 
 # ─── Registre des événements ──────────────────────────────────────
@@ -2112,86 +2175,6 @@ EVENT_REGISTRY: dict[str, dict] = {
             {"name": "other_box", "type": "int",   "description": "BOXTAG_* de la box adverse"},
         ],
         "c_sig": "void {prefix}_on_collision_exit(Actor* self, Actor* other, u8 my_box, u8 other_box)",
-    },
-    "on_button_a": {
-        "icon": "🅐",
-        "icon_key": "btn_a",
-        "stub": "function on_button_a()\n    \nend\n",
-        "desc": "Appui sur le bouton A (front montant).",
-        "params": [],
-        "c_sig": "void {prefix}_on_button_a(Actor* self)",
-    },
-    "on_button_b": {
-        "icon": "🅑",
-        "icon_key": "btn_b",
-        "stub": "function on_button_b()\n    \nend\n",
-        "desc": "Appui sur le bouton B (front montant).",
-        "params": [],
-        "c_sig": "void {prefix}_on_button_b(Actor* self)",
-    },
-    "on_button_l": {
-        "icon": "L",
-        "icon_key": "btn_l",
-        "stub": "function on_button_l()\n    \nend\n",
-        "desc": "Appui sur la gâchette L.",
-        "params": [],
-        "c_sig": "void {prefix}_on_button_l(Actor* self)",
-    },
-    "on_button_r": {
-        "icon": "R",
-        "icon_key": "btn_r",
-        "stub": "function on_button_r()\n    \nend\n",
-        "desc": "Appui sur la gâchette R.",
-        "params": [],
-        "c_sig": "void {prefix}_on_button_r(Actor* self)",
-    },
-    "on_button_start": {
-        "icon": "⏎",
-        "icon_key": "btn_start",
-        "stub": "function on_button_start()\n    \nend\n",
-        "desc": "Appui sur Start.",
-        "params": [],
-        "c_sig": "void {prefix}_on_button_start(Actor* self)",
-    },
-    "on_button_select": {
-        "icon": "≡",
-        "icon_key": "btn_select",
-        "stub": "function on_button_select()\n    \nend\n",
-        "desc": "Appui sur Select.",
-        "params": [],
-        "c_sig": "void {prefix}_on_button_select(Actor* self)",
-    },
-    "on_button_up": {
-        "icon": "↑",
-        "icon_key": "dir_n",
-        "stub": "function on_button_up()\n    \nend\n",
-        "desc": "Appui sur ↑.",
-        "params": [],
-        "c_sig": "void {prefix}_on_button_up(Actor* self)",
-    },
-    "on_button_down": {
-        "icon": "↓",
-        "icon_key": "dir_s",
-        "stub": "function on_button_down()\n    \nend\n",
-        "desc": "Appui sur ↓.",
-        "params": [],
-        "c_sig": "void {prefix}_on_button_down(Actor* self)",
-    },
-    "on_button_left": {
-        "icon": "←",
-        "icon_key": "dir_w",
-        "stub": "function on_button_left()\n    \nend\n",
-        "desc": "Appui sur ←.",
-        "params": [],
-        "c_sig": "void {prefix}_on_button_left(Actor* self)",
-    },
-    "on_button_right": {
-        "icon": "→",
-        "icon_key": "dir_e",
-        "stub": "function on_button_right()\n    \nend\n",
-        "desc": "Appui sur →.",
-        "params": [],
-        "c_sig": "void {prefix}_on_button_right(Actor* self)",
     },
     "on_destroy": {
         "icon": "✕",

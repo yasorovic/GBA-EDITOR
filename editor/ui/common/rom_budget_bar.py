@@ -28,7 +28,7 @@ from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QSizePolicy, QToolTip,
 from PyQt6.QtGui import QFont, QPainter, QColor, QCursor
 from PyQt6.QtCore import Qt, pyqtSignal
 
-from ui.common.theme import C, T
+from ui.common.theme import C, T, QSS
 from ui.common.icons import COLOR_DEFAULT
 from codegen.rom_report import RomReport, CARTRIDGE_SIZES_MIB
 
@@ -245,6 +245,7 @@ class RomBudgetBar(QWidget):
 
     def _open_cartridge_menu(self):
         menu = QMenu(self)
+        menu.setStyleSheet(QSS.menu)
         for mib in CARTRIDGE_SIZES_MIB:
             act = menu.addAction(f"{mib} MiB")
             act.setCheckable(True)
@@ -254,6 +255,7 @@ class RomBudgetBar(QWidget):
 
     def _open_mode_menu(self):
         menu = QMenu(self)
+        menu.setStyleSheet(QSS.menu)
         for mode, key in (("fill", "rombar.mode_fill"),
                           ("breakdown", "rombar.mode_breakdown")):
             act = menu.addAction(label(key))

@@ -477,15 +477,136 @@ static inline int input_pressed(int b) {
             (_g_keys_pressed & (u32)b)) ? 1 : 0;
 }
 
-/* Axe -1/0/1 par composante, dérivé de la croix directionnelle — pas d'état
-   propre, juste la différence des deux boutons opposés lus sur _g_keys_held.
-   Un seul appel côté script (input.get_axis()) plutôt que deux fonctions à
-   recombiner soi-même : x et y sont lus le même frame, jamais désynchronisés. */
-static inline Vec2 input_get_axis(void) {
-    Vec2 a;
-    a.x = ((_g_keys_held & BTN_RIGHT) ? 1 : 0) - ((_g_keys_held & BTN_LEFT) ? 1 : 0);
-    a.y = ((_g_keys_held & BTN_DOWN)  ? 1 : 0) - ((_g_keys_held & BTN_UP)   ? 1 : 0);
-    return a;
+/* Anneau des masques des derniers frames — `released`, `held(n)` et les
+   séquences en dérivent. Profondeur et emplacements réels définis dans main.c
+   (ROADMAP « Les inputs personnalisés » : calculée au build à partir du plus
+   grand besoin du projet — un jeu sans séquence ni tampon n'en paie pas). */
+extern u16      _g_input_ring[];
+extern int      _g_input_ring_pos;
+extern const int g_input_ring_depth;
+
+static inline u16 _input_ring_at(int frames_ago) {
+    int idx = _g_input_ring_pos - frames_ago;
+    while (idx < 0) idx += g_input_ring_depth;
+    return _g_input_ring[idx % g_input_ring_depth];
+}
+static inline void _input_ring_push(u32 mask) {
+    _g_input_ring_pos = (_g_input_ring_pos + 1) % g_input_ring_depth;
+    _g_input_ring[_g_input_ring_pos] = (u16)mask;
+}
+/* Vrai si `mask` est complet à `frames_ago` et ne l'était pas au frame
+   d'avant — un front montant, à une profondeur donnée de l'anneau. */
+static inline int _input_edge_at(u16 mask, int frames_ago) {
+    u16 now  = _input_ring_at(frames_ago);
+    u16 prev = _input_ring_at(frames_ago + 1);
+    return (((now & mask) == mask) && ((prev & mask) != mask)) ? 1 : 0;
+}
+
+/* Compteur de frames consécutives, un par bouton PHYSIQUE (BTN_* — bit i du
+   masque). `held(nom, n)` en dérive exactement : un accord est tenu depuis n
+   frames si CHACUN de ses boutons l'est. Défini dans main.c. */
+extern u8 _g_key_hold_frames[10];
+
+/* Appelé une fois par frame par main.c, juste après `_g_keys_held = keysHeld()`. */
+static inline void _input_update_hold_frames(u32 mask) {
+    for (int bit = 0; bit < 10; bit++) {
+        if (mask & (1u << bit)) {
+            if (_g_key_hold_frames[bit] < 255) _g_key_hold_frames[bit]++;
+        } else {
+            _g_key_hold_frames[bit] = 0;
+        }
+    }
+}
+
+static inline int input_held_n(int mask, int n) {
+    if (n <= 1) return input_held(mask);
+    for (int bit = 0; bit < 10; bit++)
+        if ((mask & (1 << bit)) && _g_key_hold_frames[bit] < n) return 0;
+    return 1;
+}
+
+/* `released` ne lit que le masque du frame précédent — aucun état propre. */
+static inline int input_released(int mask) {
+    u16 prev = _input_ring_at(1);
+    return (((prev & (u16)mask) == (u16)mask) &&
+            ((_g_keys_held & (u32)mask) != (u32)mask)) ? 1 : 0;
+}
+
+/* Un pas de séquence enchaîne le précédent en général sans relâcher tous ses
+   boutons (down+right → right ne relâche QUE down) : le bouton du dernier pas
+   est souvent déjà tenu depuis le pas d'avant, donc `_input_edge_at` (édition
+   PAR BOUTON) n'y voit jamais de front. Ce qui marque vraiment l'entrée dans
+   un pas est que le masque TOTAL des boutons tenus vient de changer — peu
+   importe lequel a bougé. */
+static inline int _input_step_entered_at(u16 mask, int frames_ago) {
+    u16 now  = _input_ring_at(frames_ago);
+    u16 prev = _input_ring_at(frames_ago + 1);
+    return (((now & mask) == mask) && (now != prev)) ? 1 : 0;
+}
+
+/* `pressed` sur une séquence : le DERNIER pas vient de se compléter ce frame,
+   et chaque pas précédent se trouve en amont, dans l'ordre, dans la fenêtre
+   qui suit le pas suivant (pas celle qui suit le début de la séquence). */
+static inline int input_seq_pressed(const u16* masks, int n, int window) {
+    if (n <= 0 || !_input_step_entered_at(masks[n - 1], 0)) return 0;
+    int cursor = 0;
+    for (int i = n - 2; i >= 0; i--) {
+        int found = -1;
+        for (int d = cursor + 1; d <= cursor + window && d < g_input_ring_depth; d++) {
+            if ((_input_ring_at(d) & masks[i]) == masks[i]) { found = d; break; }
+        }
+        if (found < 0) return 0;
+        cursor = found;
+    }
+    return 1;
+}
+
+/* `buffered` consomme quand il répond vrai : un flag 1 bit par action
+   interrogée (bitset, défini dans main.c — les autres actions n'en paient
+   pas), remis à faux exactement au frame où l'appui redevient frais.
+   PIÈGE (documenté dans scripting.md) : `if buffered("jump",6) and au_sol`
+   consomme l'appui même en l'air puisque `buffered` s'évalue avant le `and` ;
+   écrire `if au_sol and buffered("jump",6)` (court-circuit) pour ne
+   l'évaluer qu'au sol. */
+extern u8 _g_input_buffered_consumed[];
+
+static inline int _input_buffered_get(int action_index) {
+    return (_g_input_buffered_consumed[action_index >> 3] >> (action_index & 7)) & 1;
+}
+static inline void _input_buffered_set(int action_index, int v) {
+    u8 bit = (u8)(1u << (action_index & 7));
+    if (v) _g_input_buffered_consumed[action_index >> 3] |= bit;
+    else   _g_input_buffered_consumed[action_index >> 3] &= (u8)~bit;
+}
+static inline int input_buffered(int action_index, int mask, int frames) {
+    if (_input_edge_at((u16)mask, 0)) _input_buffered_set(action_index, 0);
+    for (int d = 0; d < frames; d++) {
+        if (_input_edge_at((u16)mask, d)) {
+            if (_input_buffered_get(action_index)) return 0;
+            _input_buffered_set(action_index, 1);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Position -1/0/1 d'un axe : la différence de deux masques (négatif/positif)
+   lus sur _g_keys_held — pas d'état propre. Le codegen résout le NOM de
+   l'axe ("horizontal"/"vertical", ou un `InputAxis` déclaré) en cette paire
+   de masques au build (ROADMAP « Les inputs personnalisés ») ; le runtime ne
+   connaît que des boutons. `get_axis(x, y)` compose deux appels dans
+   `input_get_vector` — x et y restent lus le même frame, jamais
+   désynchronisés. */
+static inline int input_get_axis(int mask_neg, int mask_pos) {
+    return (((_g_keys_held & (u32)mask_pos) == (u32)mask_pos) ? 1 : 0)
+         - (((_g_keys_held & (u32)mask_neg) == (u32)mask_neg) ? 1 : 0);
+}
+static inline Vec2 input_get_vector(int mask_neg_x, int mask_pos_x,
+                                    int mask_neg_y, int mask_pos_y) {
+    Vec2 v;
+    v.x = input_get_axis(mask_neg_x, mask_pos_x);
+    v.y = input_get_axis(mask_neg_y, mask_pos_y);
+    return v;
 }
 
 /* Collision AABB — teste une paire de CollisionBox dans l'espace monde */

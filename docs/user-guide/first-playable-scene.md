@@ -80,15 +80,15 @@ mouvement et les collisions.
 
 ### Variante : déplacer avec un vecteur de direction
 
-La croix directionnelle peut aussi être lue d'un seul coup avec `input.axis`. Cette propriété
-renvoie un **vecteur** `vec2` : une paire de coordonnées, `x` pour la gauche et la droite, `y`
-pour le haut et le bas. Chaque coordonnée vaut `-1`, `0` ou `1`.
+La croix directionnelle peut aussi être lue d'un seul coup avec `input:get_axis("horizontal",
+"vertical")`. Cet appel renvoie un **vecteur** `vec2` : une paire de coordonnées, `x` pour la
+gauche et la droite, `y` pour le haut et le bas. Chaque coordonnée vaut `-1`, `0` ou `1`.
 
 Vous pouvez donc remplacer tout le contenu de `on_update` par :
 
 ```lua
 function on_update()
-    local direction = input.axis
+    local direction = input:get_axis("horizontal", "vertical")
     self.position = self.position + direction
 end
 ```
@@ -100,12 +100,12 @@ pratique lorsque la vitesse devient une variable :
 local vitesse = 2
 
 function on_update()
-    self.position = self.position + input.axis * vitesse
+    self.position = self.position + input:get_axis("horizontal", "vertical") * vitesse
 end
 ```
 
 La première forme, avec une condition par touche, est préférable quand chaque direction doit
-faire une action différente. La forme avec `input.axis` convient quand les quatre directions
+faire une action différente. La forme avec `get_axis` convient quand les quatre directions
 représentent simplement un déplacement.
 
 
@@ -120,7 +120,7 @@ exports = {
 }
 
 function on_update()
-    self.position = self.position + input.axis * vitesse
+    self.position = self.position + input:get_axis("horizontal", "vertical") * vitesse
 end
 ```
 

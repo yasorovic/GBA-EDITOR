@@ -77,7 +77,7 @@ résolution des collisions. Remplacez `on_update` par cette version :
 
 ```lua
 function on_update()
-    self.velocity = input.axis * vitesse * 256
+    self.velocity = input:get_axis("horizontal", "vertical") * vitesse * 256
     self:apply_velocity()
 end
 ```
@@ -101,7 +101,7 @@ conservez le déplacement horizontal et ajoutez une accélération vers le bas :
 local gravite = 24
 
 function on_update()
-    self.velocity = vec2(input.axis.x * vitesse * 256, self.velocity.y + gravite)
+    self.velocity = vec2(input:get_axis("horizontal") * vitesse * 256, self.velocity.y + gravite)
     self:apply_velocity()
 end
 ```

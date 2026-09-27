@@ -23,10 +23,10 @@ _EDITOR_DIR = str(Path(__file__).resolve().parent)
 if _EDITOR_DIR not in sys.path:
     sys.path.insert(0, _EDITOR_DIR)
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox
-from PyQt6.QtGui import QPalette, QColor
-from ui.common.theme import GLOBAL_QSS, C
+from PyQt6.QtCore import Qt, QObject, QEvent
+from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox, QToolTip
+from PyQt6.QtGui import QPalette, QColor, QFont, QHelpEvent
+from ui.common.theme import GLOBAL_QSS, QSS, C, T
 from ui.common.numeric_drag import install_numeric_drag_behavior
 from ui.common import icons
 from ui.common import catalog
@@ -61,6 +61,34 @@ def dark_palette() -> QPalette:
     p.setColor(QPalette.ColorRole.ToolTipBase, QColor(C.BG_RAISED))
     p.setColor(QPalette.ColorRole.ToolTipText, QColor(C.TEXT_NORM))
     return p
+
+
+class _TooltipThemeFixer(QObject):
+    """Filtre d'événements posé sur `app` : sur Windows, une bulle d'aide déclenchée
+    par un widget qui porte sa PROPRE feuille de style (bouton d'icône, curseur…)
+    reste noire — ni `GLOBAL_QSS`, ni `app.setPalette()`, ni `QToolTip.setPalette()`
+    ne la corrigent, Qt la peint via le thème natif de l'OS.
+
+    On ne laisse plus Qt afficher la bulle : on GÈRE l'événement nous-mêmes
+    (`return True`, son traitement par défaut ne s'exécute jamais), et on
+    republie la feuille/palette sur le `QLabel` interne (`objectName() ==
+    "qtooltip_label"`) tout de suite après l'avoir affiché nous-mêmes — dans le
+    même appel synchrone, donc avant que Qt ait pu peindre quoi que ce soit à
+    l'écran. Un `QTimer` à 0 ms pour restyler ensuite laissait passer une
+    première peinture avec les couleurs natives → un flash noir→thème."""
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.ToolTip and isinstance(event, QHelpEvent):
+            text = obj.toolTip() if hasattr(obj, "toolTip") else ""
+            if text:
+                QToolTip.showText(event.globalPos(), text, obj)
+                for w in QApplication.topLevelWidgets():
+                    if w.objectName() == "qtooltip_label":
+                        w.setStyleSheet(QSS.tooltip)
+                        w.setPalette(dark_palette())
+                        break
+            return True
+        return False
 
 
 if __name__ == "__main__":
@@ -98,6 +126,16 @@ if __name__ == "__main__":
     # rendre maintenant (la QApplication existe) avant d'appliquer la feuille.
     icons.ensure_qss_assets()
     app.setStyleSheet(GLOBAL_QSS)
+    # Un widget qui pose sa PROPRE feuille de style (bouton d'icône, curseur…)
+    # décroche sa bulle d'aide de la feuille globale ET de app.setPalette() — Qt
+    # retombe alors sur le thème natif de l'OS (bulle noire Windows, coins
+    # arrondis) au lieu du thème de l'éditeur. `QToolTip.setPalette/setFont` est
+    # l'unique réglage que Qt applique à CHAQUE bulle sans dépendre du widget
+    # qui la déclenche : seul point qui couvre vraiment tous les cas.
+    QToolTip.setPalette(dark_palette())
+    QToolTip.setFont(QFont(T.UI, T.MD))
+    app._tooltip_theme_fixer = _TooltipThemeFixer()  # garder la référence : sinon PyQt la libère
+    app.installEventFilter(app._tooltip_theme_fixer)
 
     # L'import de la fenêtre entraîne celui de tous les écrans (même ceux qui
     # resteront invisibles au départ). Il est volontairement différé jusqu'à

@@ -14,6 +14,7 @@ import tempfile
 from pathlib import Path
 from PyQt6.QtCore import QPointF, QRectF, QSize, Qt
 from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QPolygonF
+from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import QApplication
 
 # ── Couleur neutre des icônes ─────────────────────────────────────
@@ -227,6 +228,72 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "search":                 ("mdi.magnify",                 "⌕"),
 }
 
+# ── Icônes SVG maison ("CustomIcons/") ─────────────────────────────
+# Grammaire d'icônes dessinée à la main, en cours de remplacement de qtawesome
+# clé par clé — seules les formes couvertes par un fichier ici basculent.
+# Le reste du registre continue de passer par qtawesome (mdi.*) jusqu'à ce
+# qu'un dessin équivalent existe.
+_CUSTOM_ICONS_DIR = Path(__file__).parent / "CustomIcons"
+_CUSTOM_ICONS: dict[str, str] = {
+    "actor":              "Actor_icon.svg",
+    "actor_empty":        "Actor_icon.svg",
+    "actor_script":       "Actor_icon.svg",
+    "actor_empty_script": "Actor_icon.svg",
+    "prefab":             "Prefab_icon.svg",
+    "scene":              "Scene_icon.svg",
+    "folder":             "Folder__icon.svg",
+    "script_file":        "Script_icon.svg",
+    "script_lua":         "Brackets_icon.svg",
+    "warning":            "Warning_icon.svg",
+    "asset_missing":      "QuestionMark_icon.svg",
+    "camera":             "Camera_icon.svg",
+}
+_svg_renderer_cache: dict[str, QSvgRenderer] = {}
+_custom_pixmap_cache: dict[tuple[str, str, int], QPixmap] = {}
+
+
+def _custom_pixmap(name: str, color: str, size: int) -> QPixmap | None:
+    """Pixmap teintée `color` de l'icône maison `name`, ou None si absente.
+
+    Le SVG source est dessiné en noir : on le rasterise tel quel puis on
+    recolorie les pixels opaques en `color` (CompositionMode_SourceIn), comme
+    qtawesome le fait pour ses propres glyphes — indépendant de la façon dont
+    le SVG utilise fill/stroke.
+    """
+    filename = _CUSTOM_ICONS.get(name)
+    if filename is None:
+        return None
+    key = (name, color, size)
+    px = _custom_pixmap_cache.get(key)
+    if px is not None:
+        return px
+    renderer = _svg_renderer_cache.get(filename)
+    if renderer is None:
+        path = _CUSTOM_ICONS_DIR / filename
+        if not path.exists():
+            return None
+        renderer = QSvgRenderer(str(path))
+        _svg_renderer_cache[filename] = renderer
+    if not renderer.isValid():
+        return None
+    n = max(1, int(size))
+    mask = QPixmap(n, n)
+    mask.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(mask)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    renderer.render(painter)
+    painter.end()
+    px = QPixmap(n, n)
+    px.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(px)
+    painter.drawPixmap(0, 0, mask)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.fillRect(px.rect(), QColor(color))
+    painter.end()
+    _custom_pixmap_cache[key] = px
+    return px
+
+
 # ── Backend (chargé une seule fois) ──────────────────────────────
 try:
     import qtawesome as _qta
@@ -268,6 +335,9 @@ def get(name: str,
     Retourne un QIcon pour le nom logique donné.
     color_active : couleur quand le bouton est checked (QToolButton).
     """
+    custom = _custom_pixmap(name, color, 128)
+    if custom is not None:
+        return QIcon(custom)
     if name == "camera":
         return QIcon(_classic_camera_pixmap(color, 128))
     entry = _REGISTRY.get(name)
@@ -310,8 +380,13 @@ def scaled_pixmap(name: str,
     px = _scaled_cache.get(key)
     if px is None:
         n = max(1, int(round(size * q)))
-        px = (_classic_camera_pixmap(color, n) if name == "camera"
-              else get(name, color).pixmap(QSize(n, n)))
+        custom = _custom_pixmap(name, color, n)
+        if custom is not None:
+            px = custom
+        elif name == "camera":
+            px = _classic_camera_pixmap(color, n)
+        else:
+            px = get(name, color).pixmap(QSize(n, n))
         _scaled_cache[key] = px
     return px
 
@@ -335,11 +410,21 @@ _pending: dict[Path, tuple[str, str, int, float]] = {}
 
 def _render(path: Path) -> None:
     """Écrit le PNG si possible ; silencieux tant que Qt n'est pas prêt."""
-    if _qta is None or QApplication.instance() is None or path.exists():
+    if QApplication.instance() is None or path.exists():
         return
-    qta_key, color, size, scale = _pending[path]
+    name, color, size, scale = _pending[path]
     try:
-        icon = _qta.icon(qta_key, color=color, scale_factor=scale)
+        custom = _custom_pixmap(name, color, max(1, int(round(size * scale))))
+        if custom is not None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            custom.save(str(path), "PNG")
+            return
+        if _qta is None:
+            return
+        entry = _REGISTRY.get(name)
+        if entry is None:
+            return
+        icon = _qta.icon(entry[0], color=color, scale_factor=scale)
         path.parent.mkdir(parents=True, exist_ok=True)
         icon.pixmap(size, size).save(str(path), "PNG")
     except Exception:
@@ -352,16 +437,14 @@ def qss_image(name: str, color: str = COLOR_DEFAULT,
     Chemin POSIX (QSS n'aime pas les `\\`) d'un PNG rendu depuis l'icon set.
     `scale` grossit le glyphe dans sa boîte — les icônes MDI laissent une
     marge généreuse, trop discrète pour du petit chrome de widget.
-    Retourne "" si l'icône est inconnue ou le backend absent : l'appelant
+    Retourne "" si l'icône est inconnue ou aucun backend disponible : l'appelant
     omet alors la règle `image:` au lieu de pointer un fichier fantôme.
     """
-    entry = _REGISTRY.get(name)
-    if entry is None or _qta is None:
+    if name not in _CUSTOM_ICONS and (_REGISTRY.get(name) is None or _qta is None):
         return ""
-    qta_key = entry[0]
-    slug = f"{qta_key.replace('.', '_')}_{color.lstrip('#')}_{size}_{scale:g}"
+    slug = f"{name}_{color.lstrip('#')}_{size}_{scale:g}"
     path = _CACHE_DIR / f"{slug}.png"
-    _pending[path] = (qta_key, color, size, scale)
+    _pending[path] = (name, color, size, scale)
     _render(path)
     return path.as_posix()
 

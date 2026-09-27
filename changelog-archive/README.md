@@ -33,21 +33,33 @@ Pour un résumé court, voir le [CHANGELOG](../CHANGELOG.md). Pour ce qui reste 
 | [v0.19](v0.19.md) | Le sous-pixel |
 | [v0.20](v0.20.md) | L'état du monde : les collections persistantes |
 | [v0.21](v0.21.md) | Le texte adressable : le dialogue piloté par la donnée |
+| [v0.22](v0.22.md) | Menus, listes et curseur |
 | [v0.23](v0.23.md) | Ce qu'un boss demande |
 | [v0.24](v0.24.md) | Le projet à l'échelle d'une équipe |
 | [v0.25](v0.25.md) | L'interface possède son chemin matériel |
+| [v0.26](v0.26.md) | Les polices : sources, assets et aperçu |
 | [v0.27](v0.27.md) | L'éditeur souffle le mot juste (autocomplétion du Script Editor) |
+| [v0.28](v0.28.md) | Les inputs personnalisés |
+| [v0.16 (partiel)](v0.16-api-construction.md) | L'essentiel de « L'API : règle de construction et rangement » — le jalon reste **en cours** dans [ROADMAP.md](../ROADMAP.md#v016--lapi--la-règle-de-construction-et-le-rangement) pour le peu qui reste ouvert |
 
 ### Chantiers techniques
 
 | Chantier | Sujet |
 | --- | --- |
+| [La grammaire de la struct `Actor`](actor-struct-grammar.md) | L'API C tient les trois concepts de l'éditeur (acteur/prefab/scène) |
+| [Les trois couleurs de l'interface](three-colors.md) | Une seule notion de banque de palette en portait trois |
 | [`global.nom` / `const.nom`](global-const.md) | L'accès pointé remplace les accesseurs |
 | [L'identité d'un asset et son fichier](asset-identity.md) | Le nom de fichier fait foi, et un renommage n'est pas une suppression |
 | [Les formats acceptés à l'import](import-formats.md) | `.png` pour les images, `.fnt` en plus pour les polices — rien d'autre |
+| [La police, une palette d'asset comme les autres](font-palette.md) | Une police possède ses propres couleurs, comme un fond ou un sprite |
 | [L'écran construit à sa première visite](lazy-screen-build.md) | Le lazy loading étendu au widget : seul le Scene Manager est bâti au démarrage |
 | [L'ouverture d'un projet, et l'écran blanc](open-white-screen.md) | Ouvrir avant `show()`, inspecteur paresseux, aperçu de police pré-chauffé hors écran |
+| [Les palettes, rangées avec les assets](palettes-in-assets.md) | Le catalogue quitte `project/palettes/` pour `assets/palettes/` |
 | [L'acteur appartient à sa scène](actor-scene-local.md) | Noms d'acteurs locaux à la scène, symbole C qualifié, `get_actor` nullable |
+| [Les exports de script, câblés au jeu](script-exports.md) | Paramétrer une instance (posée ou poolée) depuis l'éditeur, jusqu'au C |
+| [Un seul type de script](single-script-type.md) | Le propriétaire donne le contexte — plus de « type » de script choisi par l'auteur |
 | [Le balisage rouvert — `[font=nom]`](font-markup-reopened.md) | Changer de police en cours de texte (réouverture de v0.3.2) |
 | [Raccordement build vectoriel](build-vector-linkage.md) | Le build matérialise un `FontAsset` en tuiles via `RasterGlyph` |
 | [L'écran resynchronisé à sa revisite](screen-resync-revisit.md) | `refresh()` central à la revisite remplace les colmatages `showEvent` par écran |
+| [La struct `Actor` allégée](actor-struct-lightening.md) | `g_oam_entries[]` réserve l'OAM, `g_actors[]` ne porte que des acteurs — 1 sprite affiché = 1 slot |
+| [Correctifs trouvés en marchant](fixes-in-passing.md) | Dix bugs réels sans jalon à qui les rattacher, tous corrigés et testés |

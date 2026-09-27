@@ -36,11 +36,12 @@ from . import lua_subset
 # `core.models` qui ne peut pas remonter vers `scripting`, d'où le sens de
 # l'import (et non une seconde liste tenue ici).
 from core.models.settings import BUTTON_NAMES
-from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, KNOWN_EVENTS, KNOWN_EVENTS_BY_KIND,
+from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, REMOVED_EVENTS, KNOWN_EVENTS, KNOWN_EVENTS_BY_KIND,
                   ALL_KNOWN_EVENTS, OWNER_KINDS_WITH_SELF, DOMAIN_ANIM, DOMAIN_SPRITE_ID, DOMAIN_SFX,
                   DOMAIN_SOUND_BOX_STATE, DOMAIN_JINGLE_BOX_STATE,
                   DOMAIN_MUSIC_BOX_TRIGGER,
-                  DOMAIN_MUSIC, DOMAIN_KEY, DOMAIN_SCENE, DOMAIN_CAMERA, DOMAIN_TEXT, DOMAIN_FONT,
+                  DOMAIN_MUSIC, DOMAIN_KEY, DOMAIN_AXIS, DOMAIN_INPUT_SEQUENCE,
+                  DOMAIN_SCENE, DOMAIN_CAMERA, DOMAIN_TEXT, DOMAIN_FONT,
                   DOMAIN_LANG,
                   DOMAIN_PALETTE,
                   DOMAIN_IMAGE_STATE, DOMAIN_UI_ELEMENT,
@@ -169,10 +170,18 @@ class BuildContext:
     # sont des champs de la struct Actor — mais rien ne les AFFICHE : d'où un
     # avertissement, et non le refus de build que c'était jusqu'au 2026-08-25.
     affine_transform: bool = False
-    # Actions déclarées dans Project Settings. Elles partagent le paramètre
-    # `btn` avec les boutons matériels : un script reste donc lisible et les
-    # anciens `input:held("a")` restent valides.
+    # Actions (accords) déclarées dans Project Settings. Elles partagent le
+    # paramètre `btn` avec les boutons matériels : un script reste donc
+    # lisible et les anciens `input:held("a")` restent valides. Espace de
+    # noms SÉPARÉ de `input_sequence_names` (décision de Victor, 2026-09-27) :
+    # held/pressed/released/buffered ne lisent jamais une séquence.
     input_names: list[str] = None
+    # Séquences déclarées dans Project Settings → Input → Séquences, lues
+    # SEULEMENT par `input:get_sequence()`.
+    input_sequence_names: frozenset = frozenset()
+    # Noms d'axe valides pour `input:get_axis()` — "horizontal"/"vertical"
+    # (toujours présents) plus les `InputAxis` déclarés du projet.
+    axis_names: list[str] = None
 
     VALID_KEYS = frozenset(BUTTON_NAMES)   # dérivé du socle, jamais redéclaré
 
@@ -1051,7 +1060,13 @@ class Checker:
         is_frame_event = fn.name in (self.ctx.frame_event_names or ())
         is_helper = fn.name in self._helpers
         admitted = self._admitted_events()
-        if (check_event_names and fn.name in ALL_KNOWN_EVENTS and fn.name not in admitted
+        if check_event_names and fn.name in REMOVED_EVENTS:
+            # Les dix `on_button_*` : retirés (ROADMAP « Les inputs
+            # personnalisés », tranche finale) — un message de migration
+            # plutôt que « fonction inconnue », aucun script du dépôt ne les
+            # utilisant déjà, un guide ne coûte rien ici.
+            self.errors.append(CheckError("error", REMOVED_EVENTS[fn.name]))
+        elif (check_event_names and fn.name in ALL_KNOWN_EVENTS and fn.name not in admitted
                 and self.ctx.owner_kind):
             # Un événement qui existe, mais pas POUR CE propriétaire : le compiler comme
             # helper le rendrait muet (jamais appelé), ce qui est pire qu'un refus.
@@ -1633,6 +1648,9 @@ class Checker:
             if key.startswith("save."):
                 self._check_save(key, e.args)
                 # pas de `return` : le nombre d'arguments reste à vérifier
+            if key.startswith("input.") and key != "input.pressed":
+                self._check_input_call(key, e.args)
+                # pas de `return` : le compte de base reste vérifié par _check_args
             api = RUNTIME_API.get(key)
             if api is None:
                 self._check_unknown_call(key, e.args)
@@ -2323,6 +2341,79 @@ class Checker:
                 f"{', '.join(sorted(actions)) or 'aucune'}.",
             ))
 
+    def _check_axis(self, call_key: str, name: str):
+        """`horizontal`/`vertical` (la croix, toujours présents) plus les
+        `InputAxis` déclarés — jamais un nom d'action ou de bouton seul :
+        `get_axis` n'a pas la même grammaire que `held`/`pressed`."""
+        valid = {"horizontal", "vertical"} | set(self.ctx.axis_names or [])
+        if name not in valid:
+            self.errors.append(CheckError(
+                "error",
+                f"{call_key}('{name}') : axe inconnu. Axes : {', '.join(sorted(valid))}.",
+            ))
+
+    def _check_sequence_name(self, call_key: str, name: str):
+        """`get_sequence` a son propre espace de noms (Project Settings →
+        Input → Séquences) — jamais un bouton ni une action, décision de
+        Victor du 2026-09-27 : les rôles ne se mélangent plus."""
+        valid = set(self.ctx.input_sequence_names or [])
+        if name not in valid:
+            self.errors.append(CheckError(
+                "error",
+                f"{call_key}('{name}') : séquence inconnue. Séquences : "
+                f"{', '.join(sorted(valid)) or 'aucune'}.",
+            ))
+
+    def _check_frame_literal(self, call_key: str, arg, param_name: str):
+        """Toutes les durées d'input tiennent dans un `u8` (1 à 255 frames) —
+        seul un LITTÉRAL se vérifie ici, une variable reste du ressort de
+        l'auteur (ROADMAP « Les inputs personnalisés »)."""
+        if isinstance(arg, ExprNumber) and not (1 <= arg.value <= 255):
+            self.errors.append(CheckError(
+                "error",
+                f"{call_key}() : « {param_name} » doit tenir dans 1 à 255 frames "
+                f"(un `u8`), {arg.value} fourni.",
+            ))
+
+    def _check_input_call(self, key: str, args: list):
+        """`held`/`buffered`/`get_axis` partagent `DOMAIN_KEY`/`DOMAIN_AXIS`
+        pour leur premier argument (validé génériquement par `_check_args`
+        via `_DOMAIN_CHECKS`) ; ce qui suit est propre à chacun et n'a pas sa
+        place dans cette table à géométrie fixe. `get_sequence` et `released`
+        n'ont besoin d'aucun contrôle ici (déjà couverts génériquement)."""
+        # `_check_args` (générique, appelé après) couvre déjà le MINIMUM
+        # d'arguments (via `variadic` pour held/get_axis, ou l'égalité stricte
+        # pour buffered) : ne reste à couvrir ici que le PLAFOND et ce qui
+        # dépend de la VALEUR des arguments.
+        fname = key.rsplit(".", 1)[1]
+        if fname == "get_axis":
+            if len(args) > 2:
+                self.errors.append(CheckError(
+                    "error", f"{key}() : 1 ou 2 argument(s) attendu(s), {len(args)} fourni(s)."))
+                return
+            if len(args) == 2 and isinstance(args[1], ExprString):
+                self._check_axis(key, args[1].value)
+            return
+
+        if fname == "held":
+            if len(args) > 2:
+                self.errors.append(CheckError(
+                    "error", f"{key}() : 1 ou 2 argument(s) attendu(s), {len(args)} fourni(s)."))
+                return
+            if len(args) == 2:
+                self._check_frame_literal(key, args[1], "frames")
+        elif fname == "buffered" and len(args) == 2:
+            # `frames` fixe la profondeur de l'ANNEAU au build (comme le
+            # littéral de `wait()`) : une variable ne peut pas s'y résoudre.
+            if not isinstance(args[1], ExprNumber):
+                self.errors.append(CheckError(
+                    "error",
+                    f"{key}() : « frames » doit être un nombre écrit en clair "
+                    f"— la profondeur de l'anneau se calcule au build, elle ne "
+                    f"peut pas dépendre d'une variable."))
+            else:
+                self._check_frame_literal(key, args[1], "frames")
+
     def _check_hw_enum(self, call_key: str, name: str, domain: str):
         """Valeur d'une énumération matérielle FIXE (mode OAM, direction, mode
         et côté de mélange, décroissance). DOMAIN_WIN_REGION n'en fait PAS
@@ -2363,6 +2454,8 @@ _DOMAIN_CHECKS: dict = {
     DOMAIN_SFX:     lambda c, key, val, p, a: c._check_sfx(key, val),
     DOMAIN_MUSIC:   lambda c, key, val, p, a: c._check_music(key, val),
     DOMAIN_KEY:     lambda c, key, val, p, a: c._check_key(key, val),
+    DOMAIN_AXIS:    lambda c, key, val, p, a: c._check_axis(key, val),
+    DOMAIN_INPUT_SEQUENCE: lambda c, key, val, p, a: c._check_sequence_name(key, val),
     DOMAIN_TEXT:    lambda c, key, val, p, a: c._check_text(key, val, p.literal_ok),
     DOMAIN_FONT:    lambda c, key, val, p, a: c._check_font(key, val),
     DOMAIN_PALETTE: lambda c, key, val, p, a: c._check_palette(key, val),

@@ -30,6 +30,13 @@ Hiérarchie de titres (une seule grammaire pour toute l'app) :
 
 Stylesheet globale à appliquer une seule fois dans main.py :
     app.setStyleSheet(GLOBAL_QSS)
+
+Bulles d'aide (`QToolTip`) : la règle `QSS.tooltip` ci-dessous NE suffit PAS —
+un widget qui pose sa propre feuille de style (bouton d'icône, curseur…)
+décroche sa bulle de la feuille globale, Qt retombe sur le thème natif de
+l'OS. `main.py` doit AUSSI appeler `QToolTip.setPalette()` / `.setFont()` :
+seul réglage que Qt applique à chaque bulle sans dépendre du widget qui la
+déclenche.
 """
 
 from ui.common import icons as _icons

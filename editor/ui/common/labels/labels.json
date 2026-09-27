@@ -1572,36 +1572,6 @@
     "comped.trig_on_destroy": {
       "text": "on_destroy"
     },
-    "comped.trig_button_a": {
-      "text": "Button A"
-    },
-    "comped.trig_button_b": {
-      "text": "Button B"
-    },
-    "comped.trig_button_l": {
-      "text": "Trigger L"
-    },
-    "comped.trig_button_r": {
-      "text": "Trigger R"
-    },
-    "comped.trig_button_start": {
-      "text": "Start"
-    },
-    "comped.trig_button_select": {
-      "text": "Select"
-    },
-    "comped.trig_up": {
-      "text": "↑"
-    },
-    "comped.trig_down": {
-      "text": "↓"
-    },
-    "comped.trig_left": {
-      "text": "←"
-    },
-    "comped.trig_right": {
-      "text": "→"
-    },
     "comped.sfx": {
       "text": "Sfx"
     },
@@ -2851,11 +2821,21 @@
       "text": "Select a scene\nor an actor to\nshow its properties"
     },
     "inputs.hint": {
-      "text": "Name an action and choose the buttons that must be held together. Use it in scripts with input:held(\"name\") or input:pressed(\"name\"). The arrows are the D-pad axes."
+      "text": "Name an action and choose the buttons that must be held together. Use it in scripts with input:held(\"name\"), input:pressed(\"name\"), input:released(\"name\"), input:buffered(\"name\", frames). The arrows are the D-pad axes."
     },
     "inputs.declare_an_input": {
       "text": "Declare an input"
     },
+    "inputs.button_up": { "text": "Up" },
+    "inputs.button_down": { "text": "Down" },
+    "inputs.button_left": { "text": "Left" },
+    "inputs.button_right": { "text": "Right" },
+    "inputs.button_a": { "text": "A" },
+    "inputs.button_b": { "text": "B" },
+    "inputs.button_l": { "text": "L" },
+    "inputs.button_r": { "text": "R" },
+    "inputs.button_start": { "text": "Start" },
+    "inputs.button_select": { "text": "Select" },
     "inputs.jump": {
       "text": "Jump"
     },
@@ -3979,6 +3959,68 @@
     "inputs.count": {
       "one": "{n} input",
       "other": "{n} inputs"
+    },
+    "inputs.sequences": {
+      "text": "Sequences"
+    },
+    "inputs.sequences_hint": {
+      "text": "A named sequence recognized by input:get_sequence(\"name\") — a quarter-circle, a half-circle, a dragon punch, or a composition of your own. Write its expression: \"+\" for a chord (down + a), \"-\" for the next step (down - down+right - right), \"(a|b)\" for either."
+    },
+    "inputs.declare_a_sequence": {
+      "text": "Declare a sequence"
+    },
+    "inputs.sequences_count": {
+      "one": "{n} sequence",
+      "other": "{n} sequences"
+    },
+    "inputs.sequence_name_placeholder": {
+      "text": "quarter_circle"
+    },
+    "inputs.remove_this_sequence": {
+      "text": "Remove this sequence"
+    },
+    "inputs.expression_placeholder": {
+      "text": "down + a"
+    },
+    "inputs.window_prefix": {
+      "text": "Window "
+    },
+    "inputs.window_tip": {
+      "text": "How many frames may pass between two steps of this sequence."
+    },
+    "inputs.expression_empty": {
+      "text": "No expression yet."
+    },
+    "inputs.expression_error": {
+      "text": "Invalid expression"
+    },
+    "inputs.duplicate_expression": {
+      "text": "(same as {other})"
+    },
+    "inputs.axes": {
+      "text": "Axes"
+    },
+    "inputs.axes_hint": {
+      "text": "Declare a scalar axis — remap the D-pad, or drive one with other buttons/actions. \"horizontal\" and \"vertical\" (the D-pad) always exist, even in a project that declares none."
+    },
+    "inputs.declare_an_axis": {
+      "text": "Declare an axis"
+    },
+    "inputs.axes_count": {
+      "one": "{n} axis",
+      "other": "{n} axes"
+    },
+    "inputs.axis_name_placeholder": {
+      "text": "look"
+    },
+    "inputs.axis_negative": {
+      "text": "Negative"
+    },
+    "inputs.axis_positive": {
+      "text": "Positive"
+    },
+    "inputs.remove_this_axis": {
+      "text": "Remove this axis"
     },
     "langcard.count": {
       "one": "{n} translation",

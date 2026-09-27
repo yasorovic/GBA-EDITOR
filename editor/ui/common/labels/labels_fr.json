@@ -857,6 +857,81 @@
     },
     "bgedit.method_max_coverage": {
       "text": "Couverture max"
-    }
+    },
+    "inputs.hint": {
+      "text": "Nomme une action et choisis les boutons à tenir ensemble. Utilisable dans les scripts avec input:held(\"nom\"), input:pressed(\"nom\"), input:released(\"nom\"), input:buffered(\"nom\", frames). Les flèches sont les axes de la croix directionnelle."
+    },
+    "inputs.expression_placeholder": {
+      "text": "down + a"
+    },
+    "inputs.window_prefix": {
+      "text": "Fenêtre "
+    },
+    "inputs.window_tip": {
+      "text": "Combien de frames peuvent s'écouler entre deux pas de cette séquence."
+    },
+    "inputs.expression_empty": {
+      "text": "Aucune expression pour l'instant."
+    },
+    "inputs.expression_error": {
+      "text": "Expression invalide"
+    },
+    "inputs.duplicate_expression": {
+      "text": "(comme {other})"
+    },
+    "inputs.axes": {
+      "text": "Axes"
+    },
+    "inputs.axes_hint": {
+      "text": "Déclare un axe scalaire — remappe la croix, ou pilote un axe avec d'autres boutons/actions. « horizontal » et « vertical » (la croix) existent toujours, même dans un projet qui n'en déclare aucun."
+    },
+    "inputs.declare_an_axis": {
+      "text": "Déclarer un axe"
+    },
+    "inputs.axes_count": {
+      "one": "{n} axe",
+      "other": "{n} axes"
+    },
+    "inputs.axis_name_placeholder": {
+      "text": "regard"
+    },
+    "inputs.axis_negative": {
+      "text": "Négatif"
+    },
+    "inputs.axis_positive": {
+      "text": "Positif"
+    },
+    "inputs.remove_this_axis": {
+      "text": "Retirer cet axe"
+    },
+    "inputs.sequences": {
+      "text": "Séquences"
+    },
+    "inputs.sequences_hint": {
+      "text": "Une séquence nommée reconnue par input:get_sequence(\"nom\") — un quart de cercle, un demi-cercle, un dragon punch, ou une composition personnelle. Écris son expression : « + » pour un accord (down + a), « - » pour le pas suivant (down - down+right - right), « (a|b) » pour une alternative."
+    },
+    "inputs.declare_a_sequence": {
+      "text": "Déclarer une séquence"
+    },
+    "inputs.sequences_count": {
+      "one": "{n} séquence",
+      "other": "{n} séquences"
+    },
+    "inputs.sequence_name_placeholder": {
+      "text": "quart_de_cercle"
+    },
+    "inputs.remove_this_sequence": {
+      "text": "Retirer cette séquence"
+    },
+    "inputs.button_up": { "text": "Haut" },
+    "inputs.button_down": { "text": "Bas" },
+    "inputs.button_left": { "text": "Gauche" },
+    "inputs.button_right": { "text": "Droite" },
+    "inputs.button_a": { "text": "A" },
+    "inputs.button_b": { "text": "B" },
+    "inputs.button_l": { "text": "L" },
+    "inputs.button_r": { "text": "R" },
+    "inputs.button_start": { "text": "Start" },
+    "inputs.button_select": { "text": "Select" }
   }
 }

@@ -135,36 +135,6 @@
     "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
   },
   {
-    "file": "editor/ui/script_editor/var_table_panel.py",
-    "text": "int",
-    "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
-  },
-  {
-    "file": "editor/ui/script_editor/var_table_panel.py",
-    "text": "bool",
-    "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
-  },
-  {
-    "file": "editor/ui/script_editor/var_table_panel.py",
-    "text": "u8",
-    "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
-  },
-  {
-    "file": "editor/ui/script_editor/var_table_panel.py",
-    "text": "u16",
-    "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
-  },
-  {
-    "file": "editor/ui/script_editor/var_table_panel.py",
-    "text": "s8",
-    "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
-  },
-  {
-    "file": "editor/ui/script_editor/var_table_panel.py",
-    "text": "s16",
-    "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
-  },
-  {
     "file": "editor/ui/sprite_editor/frame_canvas.py",
     "text": "PNG",
     "reason": "Technical identifier, unit, glyph or hardware notation; not prose."

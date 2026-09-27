@@ -88,7 +88,7 @@ from core.project_renames import ProjectRenameMixin
 # (`core.models.scene` importe `OWN_PAL_BANK` pour son propre usage ; il ne
 # faut pas le lui emprunter).
 from core.models.settings import (ProjectSettings, GlobalVar, Constant,
-                                  Language, InputBinding)
+                                  Language, InputBinding, InputSequence, InputAxis, InputMovement)
 from core.models.text import Text
 from core.models.palette import PaletteBank, OWN_PAL_BANK
 from core.models.sprite import SpriteAsset
@@ -913,6 +913,12 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
             # gagne pas de clé, même politique que languages/collisions.
             **({"inputs": [i.to_dict() for i in self.settings.inputs]}
                if self.settings.inputs else {}),
+            **({"input_sequences": [s.to_dict() for s in self.settings.sequences]}
+               if self.settings.sequences else {}),
+            **({"input_axes": [a.to_dict() for a in self.settings.axes]}
+               if self.settings.axes else {}),
+            **({"input_movements": [m.to_dict() for m in self.settings.movements]}
+               if self.settings.movements else {}),
         }
         atomic_write(self.project_file, project_json.dumps(data))
         # Projet d'avant v0.10 : le .gba-project vient d'être écrit, l'ancien
@@ -1009,6 +1015,15 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         self.settings.inputs = [InputBinding.from_dict(x)
                                 for x in (d.get("inputs") or [])
                                 if (x or {}).get("name")]
+        self.settings.sequences = [InputSequence.from_dict(x)
+                                   for x in (d.get("input_sequences") or [])
+                                   if (x or {}).get("name")]
+        self.settings.axes = [InputAxis.from_dict(x)
+                              for x in (d.get("input_axes") or [])
+                              if (x or {}).get("name")]
+        self.settings.movements = [InputMovement.from_dict(x)
+                                   for x in (d.get("input_movements") or [])
+                                   if (x or {}).get("name")]
 
     def collision_tags(self) -> list:
         """Tags de collision du projet, DÉCLARÉS d'abord (dans leur ordre —

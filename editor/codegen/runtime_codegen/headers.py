@@ -437,5 +437,16 @@ def generate_runtime_api(
         a.append("/* Windows nommées du projet — utilisées par window.* */")
         a += _win_lines
 
+    # Tables de séquences d'input (ROADMAP « Les inputs personnalisés ») :
+    # DÉFINIES (non `static`) dans main.c par `main_gen` — chaque unité de
+    # scène/acteur qui appelle `input_seq_pressed` sur cette action a besoin
+    # de la voir, comme `g_sfx_on_destroy_id` ci-dessus.
+    from codegen.runtime_codegen.input_layout import compute_input_layout
+    _seq_symbols = sorted(compute_input_layout(p).seq_table_defs)
+    if _seq_symbols:
+        a.append("")
+        a.append("/* Séquences d'input du projet — définies dans main.c */")
+        a += [f"extern const u16 {sym}[];" for sym in _seq_symbols]
+
     a += ["", "#endif /* RUNTIME_API_H */", ""]
     build_output.write(p.src_dir / "runtime_api.h", "\n".join(a))

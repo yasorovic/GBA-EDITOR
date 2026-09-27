@@ -110,6 +110,32 @@ Ce raccourci convient à un projet dans une seule langue. Pour un texte à tradu
 
 Le panneau **API** du Script Editor donne la liste complète des fonctions et propriétés disponibles, avec leurs arguments.
 
+### Réagir aux boutons
+
+`input:pressed("a")` lit un bouton directement. Pour un combo tenu ensemble, déclarez une **action** dans Project Settings → Input → Inputs : des cases à cocher, comme pour un bouton (`dash = right + a`). Le script cite alors le NOM de l'action, exactement comme un bouton :
+
+```lua
+if input:pressed("dash") then self:apply_velocity() end
+```
+
+`input:held("nom", frames)` répond vrai à partir d'un appui de cette durée (tir chargé). `input:released("nom")` répond vrai au relâchement (saut à hauteur variable). `input:get_axis("horizontal", "vertical")` rend un `vec2` : la croix existe toujours, même sans axe déclaré.
+
+Pour un quart de cercle, un demi-cercle ou un combo à plusieurs pas, déclarez une **séquence** dans Project Settings → Input → Séquences : une barre d'expression accepte `+` pour un accord tenu ensemble, `-` pour le pas suivant (`down - down+right - right`), et `(a|b)` pour l'une ou l'autre touche. Une séquence se lit avec `input:get_sequence("nom")` — jamais `held`/`pressed`/`released`/`buffered`, réservés aux accords simples :
+
+```lua
+if input:get_sequence("quarter_circle") then self:play_anim("special") end
+```
+
+`input:buffered("nom", frames)` retient un appui quelques frames (tampon de saut) — répondre vrai CONSOMME l'appui, ce qui rend l'ORDRE d'évaluation sensible :
+
+```lua
+-- Piège : buffered() s'évalue avant le `and`, donc consomme l'appui même en l'air.
+if input:buffered("jump", 6) and self.grounded then saute() end
+
+-- Correct : le court-circuit du `and` n'évalue buffered() qu'au sol.
+if self.grounded and input:buffered("jump", 6) then saute() end
+```
+
 ### Changer d'apparence
 
 Un acteur affiche un seul sprite à la fois, mais il peut porter **plusieurs composants sprite**, chacun avec son `id`. Dans l'inspecteur, cocher « Active » sur l'un décoche l'autre. Depuis un script, `activate_sprite` fait la même chose :

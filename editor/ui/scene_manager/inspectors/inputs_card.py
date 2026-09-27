@@ -5,7 +5,16 @@ fenêtre Project Settings (catégorie Input).
 Nommer une action et lui associer un ou plusieurs boutons physiques du GBA
 pressés ENSEMBLE — un combo à un seul bouton est le cas courant, à plusieurs
 il en fait un vrai combo. Le nom est utilisable depuis Lua via
-`input:held("nom")` et `input:pressed("nom")`.
+`input:held("nom")`, `input:pressed("nom")`, `input:released("nom")` et
+`input:buffered("nom", frames)`.
+
+Décision de Victor (2026-09-27, après coup) : cette carte revient à des
+boutons à bascule d'avant le chantier « Les inputs personnalisés » — plus
+clair pour un accord simple. Ce ne sont plus des cases à cocher mais les
+MÊMES icônes que les events `on_button_*` du Script Editor (`ui/common/icons.py`,
+`btn_a`/`dir_n`/…) : un bouton A se reconnaît d'un coup d'œil, partout dans
+l'éditeur. Le mini-langage complet (`+`/`-`/`(a|b)`/mouvements) ne sert plus
+qu'aux SÉQUENCES, cf. `sequences_card.py`.
 
 Comme LanguagesCard, la carte ne mute rien : elle SIGNALE un geste — « ajoute »,
 « retire », « ce champ vaut ça » — et l'appelant (InputsPanel) en fait une
@@ -15,22 +24,38 @@ from __future__ import annotations
 
 from ui.common.labels import label
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QCheckBox,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
 )
 from PyQt6.QtGui import QFont
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal, QSize
 
 from core.models.settings import InputBinding, BUTTON_NAMES
 from ui.common.theme import C, T, QSS
-from ui.common.widgets import CollapsibleCard, W
+from ui.common.widgets import CollapsibleCard, HoverIconButton, W
 
 
-# Libellés courts affichés sur chaque case — dans l'ordre du boîtier GBA,
-# même ordre que BUTTON_NAMES.
-_BUTTON_LABELS: tuple[tuple[str, str], ...] = tuple(zip(
+# Icône de chaque bouton — les MÊMES clés que les events `on_button_*`
+# (scripting/api.py EVENT_REGISTRY, cf. ui/common/icons.py). Dans l'ordre du
+# boîtier GBA, même ordre que BUTTON_NAMES.
+_BUTTON_ICONS: tuple[tuple[str, str], ...] = tuple(zip(
     BUTTON_NAMES,
-    ("↑", "↓", "←", "→", "A", "B", "L", "R", "Start", "Select"),
+    ("dir_n", "dir_s", "dir_w", "dir_e", "btn_a", "btn_b", "btn_l", "btn_r",
+     "btn_start", "btn_select"),
 ))
+
+def _button_tooltips() -> dict:
+    """Appels LITTÉRAUX (pas de f-string) : `check_ui_text.py` extrait les
+    clés du catalogue par une lecture statique du code, un `label(f"...")`
+    n'y apparaîtrait jamais comme « citée ». Une fonction, pas une constante
+    de module : appelée à chaque construction de ligne, comme tout autre
+    `label(...)` de cette carte — la langue change sans redémarrer l'écran."""
+    return {
+        "up": label('inputs.button_up'), "down": label('inputs.button_down'),
+        "left": label('inputs.button_left'), "right": label('inputs.button_right'),
+        "a": label('inputs.button_a'), "b": label('inputs.button_b'),
+        "l": label('inputs.button_l'), "r": label('inputs.button_r'),
+        "start": label('inputs.button_start'), "select": label('inputs.button_select'),
+    }
 
 
 class InputsCard(CollapsibleCard):
@@ -117,14 +142,28 @@ class InputsCard(CollapsibleCard):
             lambda _i=index, _e=name: self._commit_name(_i, _e.text()))
         row.addWidget(name)
 
-        for key, btn_name in _BUTTON_LABELS:
-            box = QCheckBox(btn_name)
-            box.setFont(QFont(T.UI, T.XS))
-            box.setStyleSheet(QSS.checkbox)
-            box.setChecked(key in binding.buttons)
-            box.toggled.connect(
+        tooltips = _button_tooltips()
+        for key, icon_key in _BUTTON_ICONS:
+            btn = HoverIconButton(icon_key, C.TEXT_DIM, C.TEXT_HI, checked=C.ACCENT)
+            btn.setCheckable(True)
+            # Le `QToolButton` global (ui/common/theme.py QSS.toolbar) pose
+            # `padding: 4px 8px` : sur un bouton fixe de 26px, ça ne laisse que
+            # 10×18px de contenu — trop petit pour une icône de 18px, rognée
+            # par Qt. Un style local à padding nul règle ce que W.btn_danger
+            # (QSS.toolbutton_danger) règle déjà pour son propre bouton.
+            btn.setStyleSheet(f"""
+                QToolButton {{ border: none; padding: 0; background: transparent;
+                              border-radius: 4px; }}
+                QToolButton:hover {{ background: {C.BG_HOVER}; }}
+                QToolButton:checked {{ background: {C.BG_SEL}; }}
+            """)
+            btn.setIconSize(QSize(18, 18))
+            btn.setFixedSize(26, 26)
+            btn.setToolTip(tooltips[key])
+            btn.setChecked(key in binding.buttons)
+            btn.toggled.connect(
                 lambda on, _i=index, _k=key: self._commit_button(_i, _k, on))
-            row.addWidget(box)
+            row.addWidget(btn)
 
         row.addStretch(1)
         rm = W.btn_danger(label('inputs.remove_this_input'))

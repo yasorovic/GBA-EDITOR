@@ -43,7 +43,9 @@ from .api import (
     DOMAIN_OBJ_MODE, DOMAIN_DIRECTION, DOMAIN_WIN_REGION,
     DOMAIN_BLEND_MODE, DOMAIN_BLEND_SIDE, DOMAIN_EASE,
     hardware_enum_constant,
-    DOMAIN_ANIM, DOMAIN_SPRITE_ID, DOMAIN_SFX, DOMAIN_MUSIC, DOMAIN_KEY, DOMAIN_TAG, DOMAIN_SCENE, DOMAIN_LANG,
+    DOMAIN_ANIM, DOMAIN_SPRITE_ID, DOMAIN_SFX, DOMAIN_MUSIC, DOMAIN_KEY, DOMAIN_AXIS,
+    DOMAIN_INPUT_SEQUENCE,
+    DOMAIN_TAG, DOMAIN_SCENE, DOMAIN_LANG,
     DOMAIN_SOUND_BOX_STATE, DOMAIN_JINGLE_BOX_STATE, DOMAIN_MUSIC_BOX_TRIGGER,
     DOMAIN_CAMERA, camera_constant, DOMAIN_BOX_TAG, box_tag_constant,
     window_region_constant,
@@ -274,8 +276,8 @@ class CodegenContext:
     scene_sym: str = ""
     scene_names: list[str] = field(default_factory=list)  # noms de scènes du projet
     sfx_component_name: Optional[str] = None  # Sfx lié au SoundFxComponent de cet actor (si présent)
-    # Les triggers AUTOMATIQUES (on_spawn/on_destroy/on_button_*) ne passent
-    # plus par ici : `main_gen.py` les injecte directement au site d'appel
+    # Les triggers AUTOMATIQUES (on_spawn/on_destroy/un nom de bouton ou
+    # d'action) ne passent plus par ici : `main_gen.py` les injecte directement au site d'appel
     # connu au build, pour qu'ils marchent aussi sur un actor SANS script (cf.
     # `SFX_AUTO_TRIGGERS`, core/models/components.py). Seul `self:play_sfx()`
     # (déclenchement manuel depuis un script) reste résolu ici.
@@ -313,9 +315,21 @@ class CodegenContext:
     # un script d'acteur, ce qui serait incompréhensible.
     save_slots: Optional[int] = None
     has_persistent: Optional[bool] = None
-    # {nom d'action: expression de masque C}, dérivée des InputBinding du
-    # projet. Les boutons physiques restent résolus par `key_constant`.
-    input_masks: dict[str, str] = field(default_factory=dict)
+    # {nom d'accord : masque C}, dérivé des `InputBinding` du projet — un
+    # simple ET de boutons (cases à cocher), plus de mini-langage ici depuis
+    # la décision de Victor du 2026-09-27. Les boutons physiques restent
+    # résolus par `key_constant`.
+    input_masks: dict = field(default_factory=dict)
+    # {nom de séquence : (tables C, longueurs, fenêtre)} — le mini-langage
+    # complet reste réservé aux séquences (`InputSequence`), lu par
+    # `get_sequence` (cf. `codegen/runtime_codegen/input_layout.py`).
+    input_sequences: dict = field(default_factory=dict)
+    # Nom d'accord interrogé par `buffered()` → index de bit dans le bitset
+    # `_g_input_buffered_consumed`. Absent = jamais bufferisé, aucun coût.
+    input_buffered_bits: dict = field(default_factory=dict)
+    # Nom d'axe (built-in "horizontal"/"vertical" ou `InputAxis` déclaré) →
+    # (masque C négatif, masque C positif), pour `get_axis`.
+    input_axes: dict = field(default_factory=dict)
 
     @property
     def has_self(self) -> bool:
@@ -2126,6 +2140,59 @@ class CodeGen:
         calls.append("debug_flush()")
         return "(" + ", ".join(calls) + ")"
 
+    def _input_mask_arg(self, args: list) -> str:
+        """Le nom cité par `held`/`buffered` (1er arg) : un bouton nu ou un
+        accord déclaré (`InputBinding`) — jamais une séquence, qui n'a plus le
+        même espace de noms depuis la décision de Victor du 2026-09-27."""
+        if not args:
+            return "0"
+        if not isinstance(args[0], ExprString):
+            # Nom non littéral : comme tout autre domaine (cf. `_resolve_arg`),
+            # l'expression part telle quelle — ce système est résolu au build,
+            # un nom calculé n'a jamais été un cas supporté.
+            return self._expr(args[0])
+        name = args[0].value
+        return self.ctx.input_masks.get(name, key_constant(name))
+
+    def _emit_input_held(self, args: list) -> str:
+        """`held(nom)` / `held(nom, frames)`."""
+        mask = self._input_mask_arg(args)
+        if len(args) > 1:
+            return f"input_held_n({mask}, {self._expr(args[1])})"
+        return f"input_held({mask})"
+
+    def _emit_input_buffered(self, args: list) -> str:
+        mask = self._input_mask_arg(args)
+        name = args[0].value if args and isinstance(args[0], ExprString) else None
+        bit = self.ctx.input_buffered_bits.get(name, 0)
+        frames = self._expr(args[1]) if len(args) > 1 else "1"
+        return f"input_buffered({bit}, {mask}, {frames})"
+
+    def _emit_get_sequence(self, args: list) -> str:
+        """`get_sequence(nom)` — une alternance dans l'expression de la
+        séquence développe PLUSIEURS tables (une par alternative), réunies
+        par un OU : n'importe laquelle qui matche suffit."""
+        name = args[0].value if args and isinstance(args[0], ExprString) else None
+        entry = self.ctx.input_sequences.get(name)
+        if entry is None:
+            return "0"
+        tables, lens, window = entry
+        calls = [f"input_seq_pressed({sym}, {n}, {window})" for sym, n in zip(tables, lens)]
+        return calls[0] if len(calls) == 1 else "(" + " || ".join(calls) + ")"
+
+    def _emit_get_axis(self, args: list) -> str:
+        """`get_axis(x)` → scalaire (`input_get_axis`, ROADMAP : masque
+        négatif/positif) ; `get_axis(x, y)` → vec2 (`input_get_vector`)."""
+        def axis_masks(arg):
+            name = arg.value if isinstance(arg, ExprString) else None
+            return self.ctx.input_axes.get(name, ("0", "0"))
+
+        neg_x, pos_x = axis_masks(args[0]) if args else ("0", "0")
+        if len(args) < 2:
+            return f"input_get_axis({neg_x}, {pos_x})"
+        neg_y, pos_y = axis_masks(args[1])
+        return f"input_get_vector({neg_x}, {pos_x}, {neg_y}, {pos_y})"
+
     def _emit_get_actor(self, args: list) -> str:
         """
         Deux formes :
@@ -2460,6 +2527,10 @@ _DOMAIN_CONSTANT: dict = {
     DOMAIN_SPRITE_ID: lambda g, name: sprite_id_constant(g.ctx.actor_sym, name),
     DOMAIN_SFX:     lambda g, name: sfx_constant(name),
     DOMAIN_MUSIC:   lambda g, name: music_constant(name),
+    # `pressed`/`released` (accord simple, jamais une séquence depuis la
+    # décision de Victor du 2026-09-27) passent par ce chemin générique ;
+    # `held`/`buffered` ont leur propre émetteur (`_input_mask_arg`) pour
+    # l'argument optionnel/le bit de tampon, mais lisent le MÊME dict.
     DOMAIN_KEY:     lambda g, name: g.ctx.input_masks.get(name, key_constant(name)),
     DOMAIN_TAG:     lambda g, name: tag_constant(name),
     DOMAIN_BOX_TAG: lambda g, name: box_tag_constant(name),
@@ -2505,6 +2576,14 @@ _DOMAIN_EMITTED_ELSEWHERE: frozenset = frozenset({
     # interface:get("nom") résout directement en UIELEM_<NOM>, comme actor.get résout
     # DOMAIN_ACTOR — cf. `_emit_ui_get`.
     DOMAIN_UI_ELEMENT,
+    # `get_axis` n'a pas de constante par nom : chaque argument devient une
+    # PAIRE d'expressions (masque négatif/positif), assemblées par l'émetteur
+    # dédié (`_emit_get_axis`, ROADMAP « Les inputs personnalisés »).
+    DOMAIN_AXIS,
+    # `get_sequence` n'a pas de constante par nom : une alternance dans
+    # l'expression développe plusieurs tables C, réunies par un OU — cf.
+    # `_emit_get_sequence`.
+    DOMAIN_INPUT_SEQUENCE,
 })
 
 
@@ -2517,6 +2596,14 @@ def covered_domains() -> frozenset:
 _CALL_CUSTOM: dict = {
     "array":       CodeGen._emit_array_misuse,
     "actor.get":   CodeGen._emit_get_actor,
+    # `pressed`/`released` n'ont plus de cas particulier depuis que les
+    # séquences ont quitté leur espace de noms (2026-09-27) : un simple
+    # accord, résolu par `_DOMAIN_CONSTANT[DOMAIN_KEY]` comme n'importe quel
+    # bouton — le chemin générique (`_emit_api_call`) suffit.
+    "input.held":         CodeGen._emit_input_held,
+    "input.buffered":     CodeGen._emit_input_buffered,
+    "input.get_sequence": CodeGen._emit_get_sequence,
+    "input.get_axis":     CodeGen._emit_get_axis,
     "actor.count": CodeGen._emit_actor_count,
     "save.read":   CodeGen._emit_save_read,
     "actor.spawn": CodeGen._emit_actor_spawn,

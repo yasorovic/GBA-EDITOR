@@ -26,6 +26,7 @@ from scripting.api import LAYERS_BY_MODE, LAYER_NUMBERS
 from codegen.c_names import sym as c_sym, scene_actor_sym
 import codegen.build_output as build_output
 from codegen.oam_alloc import scene_pool_instances
+from codegen.runtime_codegen.input_layout import compute_input_layout
 
 
 def _actor_script(actor: Actor) -> Optional[str]:
@@ -169,8 +170,8 @@ def _export_c_literal(typ: str, val, values: list) -> str:
 def _sfx_component_name(owner) -> Optional[str]:
     """Le Sfx du SoundFxComponent d'un actor/prefab, si présent — ce que
     `self:play_sfx()` joue. Les triggers AUTOMATIQUES (on_spawn/on_destroy/
-    on_button_*) ne passent plus par ici : `main_gen.py` les injecte
-    directement, cf. `core.models.components.SFX_AUTO_TRIGGERS`."""
+    un nom de bouton ou d'action) ne passent plus par ici : `main_gen.py` les
+    injecte directement, cf. `core.models.components.SFX_AUTO_TRIGGERS`."""
     comp = owner.get_component("sound_fx")
     if not comp or not comp.active or not comp.sfx_name:
         return None
@@ -267,24 +268,10 @@ def _project_lists(p):
     return project_lists(p)
 
 
-def _project_inputs(p) -> tuple[list[str], dict[str, str]]:
-    """Noms et masques C des actions définies dans Project Settings.
-
-    Les noms sont délibérément résolus au build : une action ne demande aucun
-    état ni table en RAM. Un combo est simplement le masque OR de ses boutons,
-    que `input_held` teste déjà en entier.
-    """
-    bindings = list(getattr(getattr(p, "settings", None), "inputs", []) or [])
-    names: list[str] = []
-    masks: dict[str, str] = {}
-    for binding in bindings:
-        name = str(getattr(binding, "name", "") or "").strip()
-        buttons = list(getattr(binding, "buttons", []) or [])
-        if not name or not buttons or name in names:
-            continue
-        names.append(name)
-        masks[name] = " | ".join(f"BTN_{button.upper()}" for button in buttons)
-    return names, masks
+# `_project_inputs` (masque OR direct depuis `InputBinding.buttons`) est
+# remplacé par `compute_input_layout` (ROADMAP « Les inputs personnalisés »,
+# étape 3) : les noms restent résolus au build, mais l'expression passe par le
+# parseur unique — plus de seconde grammaire pour les combos.
 
 
 def transpile_all(
@@ -340,7 +327,8 @@ def transpile_all(
     # nom absent — pas un cas spécial.
     lang_codes  = ([l.code for l in p.settings.all_languages()]
                    if hasattr(p, "settings") else [])
-    input_names, input_masks = _project_inputs(p)
+    input_layout = compute_input_layout(p)
+    input_names = list(input_layout.masks)
     # Palettes : le catalogue ENTIER, dans son ordre. L'ordre devient
     # l'index dans g_palettes (main_gen), comme pour les textes et les
     # polices. Pas de dérivation depuis les scripts : la ROM est assez
@@ -465,6 +453,8 @@ def transpile_all(
             actor_name   = actor.name,
             owner_kind   = "actor",
             input_names  = input_names,
+            input_sequence_names = input_layout.sequence_names,
+            axis_names   = input_layout.axis_names,
             anim_names   = anim_names,
             sprite_ids   = _sprite_ids(p, actor),
             frame_event_names = frame_event_names,
@@ -531,6 +521,8 @@ def transpile_all(
                 actor_name   = scene.name,
                 owner_kind   = "scene",
                 input_names  = input_names,
+            input_sequence_names = input_layout.sequence_names,
+            axis_names   = input_layout.axis_names,
                 sfx_names    = sfx_names,
                 music_names  = music_names,
                 scene_names  = _scene_names,
@@ -591,7 +583,10 @@ def transpile_all(
             actor_name    = actor.name,
             actor_sym     = s,
             scene_sym     = c_sym(scene.name),
-            input_masks   = input_masks,
+            input_masks   = input_layout.masks,
+            input_sequences = input_layout.sequences,
+            input_buffered_bits = input_layout.buffered_bits,
+            input_axes    = input_layout.axes,
             anim_names    = anims,
             anim_maps     = anim_maps,
             sprite_ids    = _sprite_ids(p, actor),
@@ -658,6 +653,8 @@ def transpile_all(
             actor_name   = pf.name,
             owner_kind   = "prefab",
             input_names  = input_names,
+            input_sequence_names = input_layout.sequence_names,
+            axis_names   = input_layout.axis_names,
             anim_names   = pf_anim,
             sprite_ids   = _sprite_ids(p, pf),
             affine_transform = _pf_rt_transform,
@@ -703,7 +700,10 @@ def transpile_all(
             actor_name    = pf.name,
             actor_sym     = pf_sym,
             scene_sym     = scene_sym,
-            input_masks   = input_masks,
+            input_masks   = input_layout.masks,
+            input_sequences = input_layout.sequences,
+            input_buffered_bits = input_layout.buffered_bits,
+            input_axes    = input_layout.axes,
             anim_names    = pf_anim,
             sprite_ids    = _sprite_ids(p, pf),
             sfx_names     = sfx_names,
@@ -770,7 +770,10 @@ def transpile_all(
             actor_name    = scene.name,
             actor_sym     = scene_s,
             scene_sym     = scene_s,
-            input_masks   = input_masks,
+            input_masks   = input_layout.masks,
+            input_sequences = input_layout.sequences,
+            input_buffered_bits = input_layout.buffered_bits,
+            input_axes    = input_layout.axes,
             anim_names    = [],
             sfx_names     = sfx_names,
             music_names   = music_names,
@@ -829,6 +832,8 @@ def transpile_all(
             actor_name   = cam.name,
             owner_kind   = "camera",
             input_names  = input_names,
+            input_sequence_names = input_layout.sequence_names,
+            axis_names   = input_layout.axis_names,
             sfx_names    = sfx_names,
             music_names  = music_names,
             scene_names  = _scene_names,
@@ -873,7 +878,10 @@ def transpile_all(
         ctx_cam = CodegenContext(
             actor_name    = cam.name,
             actor_sym     = cam_sym,
-            input_masks   = input_masks,
+            input_masks   = input_layout.masks,
+            input_sequences = input_layout.sequences,
+            input_buffered_bits = input_layout.buffered_bits,
+            input_axes    = input_layout.axes,
             anim_names    = [],
             sfx_names     = sfx_names,
             music_names   = music_names,

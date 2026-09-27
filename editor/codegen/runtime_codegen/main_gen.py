@@ -91,20 +91,6 @@ from core.app_paths import RUNTIME_DIR
 import codegen.build_output as build_output
 
 
-_BTN_MAP = [
-    ("BTN_A",      "on_button_a"),
-    ("BTN_B",      "on_button_b"),
-    ("BTN_L",      "on_button_l"),
-    ("BTN_R",      "on_button_r"),
-    ("BTN_START",  "on_button_start"),
-    ("BTN_SELECT", "on_button_select"),
-    ("BTN_UP",     "on_button_up"),
-    ("BTN_DOWN",   "on_button_down"),
-    ("BTN_LEFT",   "on_button_left"),
-    ("BTN_RIGHT",  "on_button_right"),
-]
-
-
 def _actor_script(actor: Actor) -> Optional[str]:
     comp = actor.get_component("script")
     return comp.script if comp and comp.active else None
@@ -115,10 +101,10 @@ def _sfx_trigger_info(p: Project, owner) -> tuple[Optional[str], int, str]:
     d'un actor/prefab, si présent et résolu vers un Sfx du projet.
 
     Rend (None, 0, "manual") si rien n'est configuré — l'appelant n'a alors
-    rien à émettre. Les triggers AUTOMATIQUES (`SFX_AUTO_TRIGGERS`) sont
-    injectés au site d'appel connu au build par CE module, indépendamment de
-    tout script sur l'actor : c'est ce qui fait marcher `on_spawn`/
-    `on_destroy`/`on_button_*` sur un actor SANS ScriptComponent (menu, decor
+    rien à émettre. Les triggers AUTOMATIQUES ("on_spawn"/"on_destroy"/un nom
+    de bouton ou d'action) sont injectés au site d'appel connu au build par CE
+    module, indépendamment de tout script sur l'actor : c'est ce qui fait
+    marcher un déclencheur sur un actor SANS ScriptComponent (menu, decor
     déclencheur…), là où `self:play_sfx()` (trigger="manual") reste résolu
     côté scripting/codegen.py puisqu'il exige un script pour être appelé."""
     comp = owner.get_component("sound_fx")
@@ -322,7 +308,6 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
             ("on_collision_enter", f"extern void {s}_on_collision_enter(Actor* self, Actor* other, u8 my_box, u8 other_box);"),
             ("on_collision_exit",  f"extern void {s}_on_collision_exit(Actor* self, Actor* other, u8 my_box, u8 other_box);"),
             ("on_tile_collide",    f"extern void {s}_on_tile_collide(Actor* self, int normal_x, int normal_y);"),
-            *[(ev, f"extern void {s}_{ev}(Actor* self);") for _btn, ev in _BTN_MAP],
         ]:
             if _def(s, ev):
                 L.append(sig)
@@ -1733,8 +1718,12 @@ def _gen_scene_tick(
     col_pairs: list,
     actor_defined_events: dict[str, set[str]] | None = None,
     affine_info: dict | None = None,
+    input_layout=None,
 ) -> list[str]:
     """Génère void scene_tick_{sym}(void) { ... }"""
+    from codegen.runtime_codegen.input_layout import compute_input_layout as _cil
+    if input_layout is None:
+        input_layout = _cil(p)
     sym = c_sym(scene.name)
     _lay = scene_oam_layout(p, scene)
     L = [f"static void scene_tick_{sym}(void) {{"]
@@ -1886,51 +1875,40 @@ def _gen_scene_tick(
             if j_lua and _def(sj, "on_collision_exit"): L.append(f"            {sj}_on_collision_exit(&g_actors[{j}],&g_actors[{i}],_bx_j,_bx_i);")
             L += [f"        }}", f"        _col_prev[{pair_idx}]=_cur; }}"]
 
-    # Boutons
-    for btn, ev in _BTN_MAP:
-        actors_b = ([
-            (j, c_sym(scene_actors[j - actor_offset][0].name))
-            for j in sorted(lua_idx)
-            if _def(c_sym(scene_actors[j - actor_offset][0].name), ev)
-        ] if lua_idx else [])
-        # SoundFxComponent en trigger="on_button_*" — TOUS les actors de la
-        # scène, scriptés ou non (ROADMAP, 2026-08-24) : c'est ce qui permet à
-        # un item de menu de répondre à un bouton sans une seule ligne de Lua.
-        sfx_b = [
-            (j, sfx_sym, sfx_vol)
-            for j, (actor, _spr) in enumerate(scene_actors, start=actor_offset)
-            for sfx_sym, sfx_vol, sfx_trig in [_sfx_trigger_info(p, actor)]
-            if sfx_sym and sfx_trig == ev
-        ]
-        if actors_b or sfx_b:
-            L.append(f"    if(_g_keys_pressed&{btn}){{")
-            for j, s in actors_b:
-                L.append(f"        if(g_actors[{j}].active) {s}_{ev}(&g_actors[{j}]);")
-            for j, sfx_sym, sfx_vol in sfx_b:
+    # Déclencheurs SoundFx par nom d'input — ROADMAP « Les inputs
+    # personnalisés », tranche finale (2026-09-27) : les events de script
+    # on_button_* ont disparu (un script écrit `if input:pressed(nom) then`
+    # dans on_update) ; seul le SoundFxComponent garde un déclenchement
+    # AUTOMATIQUE — TOUS les actors de la scène, scriptés ou non, c'est ce qui
+    # permet à un item de menu de répondre à un bouton sans une ligne de Lua.
+    # `trigger` porte un nom de bouton OU d'accord déclaré (même liste que
+    # `input:pressed(nom)`, jamais une séquence) : un nom, pas un bouton
+    # physique — deux composants sur le même bouton partagent le même `if`.
+    from scripting.api import key_constant as _key_constant
+    sfx_by_trigger: dict = {}
+    for j, (actor, _spr) in enumerate(scene_actors, start=actor_offset):
+        sfx_sym, sfx_vol, sfx_trig = _sfx_trigger_info(p, actor)
+        if sfx_sym and sfx_trig not in ("manual", "on_spawn", "on_destroy"):
+            sfx_by_trigger.setdefault(sfx_trig, []).append(("actor", j, sfx_sym, sfx_vol))
+    for p2 in pi:
+        sfx_sym, sfx_vol, sfx_trig = _sfx_trigger_info(p, p2["prefab"])
+        if sfx_sym and sfx_trig not in ("manual", "on_spawn", "on_destroy"):
+            sfx_by_trigger.setdefault(sfx_trig, []).append(("prefab", p2, sfx_sym, sfx_vol))
+
+    for trig_name, entries in sfx_by_trigger.items():
+        mask = input_layout.masks.get(trig_name, _key_constant(trig_name))
+        L.append(f"    if(input_pressed({mask})){{")
+        for kind, ref, sfx_sym, sfx_vol in entries:
+            if kind == "actor":
+                j = ref
                 L.append(f"        if(g_actors[{j}].active) sfx_play({sfx_sym}, {sfx_vol}, 0);"
                          f"   /* SoundFxComponent : {scene_actors[j - actor_offset][0].name} */")
-            L.append("    }")
-
-        # Boutons — prefabs poolés, une instance active à la fois pouvant
-        # réagir : même mélange script/component que pour les actors de
-        # scène ci-dessus, sur le pas du GROUPE (racine seulement — même
-        # limite que on_update/on_late_update prefabs, cf. plus haut).
-        for p2 in pi:
-            pf_sym = p2["sym"]
-            has_script_ev = _def(pf_sym, ev)
-            sfx_sym, sfx_vol, sfx_trig = _sfx_trigger_info(p, p2["prefab"])
-            has_sfx_ev = bool(sfx_sym and sfx_trig == ev)
-            if not (has_script_ev or has_sfx_ev):
-                continue
-            L.append(f"    if(_g_keys_pressed&{btn})")
-            L.append(f"        for(int _pi={p2['start']}; _pi<{p2['start']+p2['size']}; _pi+={p2.get('group', 1)})")
-            L.append(f"            if(g_actors[_pi].active){{")
-            if has_script_ev:
-                L.append(f"                {pf_sym}_{ev}(&g_actors[_pi]);")
-            if has_sfx_ev:
-                L.append(f"                sfx_play({sfx_sym}, {sfx_vol}, 0);"
+            else:
+                p2 = ref
+                L.append(f"        for(int _pi={p2['start']}; _pi<{p2['start']+p2['size']}; _pi+={p2.get('group', 1)})")
+                L.append(f"            if(g_actors[_pi].active) sfx_play({sfx_sym}, {sfx_vol}, 0);"
                          f"   /* SoundFxComponent : {p2['prefab'].name} */")
-            L.append("            }")
+        L.append("    }")
 
     # on_late_update actors
     if lua_idx:
@@ -2270,9 +2248,6 @@ def generate_main(
                                 L.append(f"extern void {s}_{ev}(Actor*,Actor*,u8,u8);")
                             else:
                                 L.append(f"extern void {s}_{ev}(Actor*);")
-                    for btn, ev in _BTN_MAP:
-                        if _def(s, ev):
-                            L.append(f"extern void {s}_{ev}(Actor*);")
         if getattr(sc, "script", ""):
             L += [
                 f"extern void {sc_sym}_scene_on_start(void);",
@@ -2425,9 +2400,26 @@ def generate_main(
     # `other:destroy()` (scripting/codegen.py, `_emit_destroy`), la cible n'y
     # étant pas toujours un symbole connu au build.
     L += _sfx_on_destroy_table(p, all_scene_data, scene_pis)
+    # Anneau + compteurs d'input (ROADMAP « Les inputs personnalisés ») :
+    # profondeur et bitset `buffered` calculés depuis les actions RÉELLEMENT
+    # déclarées et interrogées par le projet — 0 action bufferisée, 0 octet
+    # payé (`compute_input_layout`, seule source, la même que `lua_compiler.py`
+    # pour le catalogue de chaque script).
+    from codegen.runtime_codegen.input_layout import compute_input_layout
+    _input_layout = compute_input_layout(p)
+    _buffered_bytes = max(1, (len(_input_layout.buffered_bits) + 7) // 8)
+    for _symbol, _steps in _input_layout.seq_table_defs.items():
+        # NON static : `runtime_api.h` en déclare l'extern pour les unités de
+        # scène/acteur qui appellent `input_seq_pressed` sur cette action.
+        L.append(f"const u16 {_symbol}[] = {{{', '.join(_steps)}}};")
     L += [
         "u32   _g_keys_held    = 0;",
         "u32   _g_keys_pressed = 0;",
+        f"u16   _g_input_ring[{_input_layout.ring_depth}];",
+        "int   _g_input_ring_pos = 0;",
+        f"const int g_input_ring_depth = {_input_layout.ring_depth};",
+        "u8    _g_key_hold_frames[10];",
+        f"u8    _g_input_buffered_consumed[{_buffered_bytes}];",
         "int   cam_x = 0, cam_y = 0;",
         "int   g_bounds_x = 0, g_bounds_y = 0, g_bounds_w = 0, g_bounds_h = 0;",
         "int   g_cam_active = 0;",
@@ -2574,6 +2566,7 @@ def generate_main(
             sprite_offsets, sprite_nframes, col_pairs_d,
             actor_defined_events=actor_defined_events,
             affine_info=affine_d,
+            input_layout=_input_layout,
         )
 
     # ── Dispatch table ────────────────────────────────────────────
@@ -2807,6 +2800,8 @@ def generate_main(
         "        scanKeys();",
         "        _g_keys_held    = keysHeld();",
         "        _g_keys_pressed = keysDown();",
+        "        _input_ring_push(_g_keys_held);",
+        "        _input_update_hold_frames(_g_keys_held);",
     ]
     if has_transitions:
         # La musique et le compteur de frames continuent pendant le fondu : une

@@ -43,7 +43,7 @@ from PyQt6.QtGui import QFont, QColor, QPainter, QFontMetrics
 from PyQt6.QtCore import Qt, QEvent, QPointF
 
 from core.project import Project
-from core.models.settings import Language, InputBinding, pair_key
+from core.models.settings import Language, InputBinding, InputSequence, pair_key
 from core.models.components import CollisionBoxComponent
 from core.history import (get_history, SetFieldCmd, AddListItemCmd,
                           RemoveListItemCmd, RenameCollisionTagCmd,
@@ -55,6 +55,8 @@ from ui.common.widgets import W
 from ui.common.notice import note, tip
 from ui.scene_manager.inspectors.languages_card import LanguagesCard
 from ui.scene_manager.inspectors.inputs_card import InputsCard
+from ui.scene_manager.inspectors.sequences_card import SequencesCard
+from ui.scene_manager.inspectors.axes_card import AxesCard
 from ui.scene_manager.inspectors.project_inspector import TRANSITION_LABELS
 
 
@@ -419,12 +421,36 @@ class InputsPanel(QWidget):
         self._card.input_removed.connect(self._remove_input)
         self._card.input_field_changed.connect(self._set_input_field)
         lay.addWidget(self._card)
+
+        self._sequences_card = SequencesCard()
+        self._sequences_card.sequence_added.connect(self._add_sequence)
+        self._sequences_card.sequence_removed.connect(self._remove_sequence)
+        self._sequences_card.sequence_field_changed.connect(self._set_sequence_field)
+        lay.addWidget(self._sequences_card)
+
+        self._axes_card = AxesCard()
+        self._axes_card.axis_added.connect(self._add_axis)
+        self._axes_card.axis_removed.connect(self._remove_axis)
+        self._axes_card.axis_field_changed.connect(self._set_axis_field)
+        lay.addWidget(self._axes_card)
+
         lay.addStretch()
 
         self._card.load(project)
+        self._sequences_card.load(project)
+        self._axes_card.load(project)
 
     def _persist(self):
         self._project.save_settings()
+
+    def _refresh_both(self):
+        # Un input renommé/retiré change la liste que la carte Axes propose
+        # comme côté d'axe (`_side_choices`) — les trois cartes se
+        # rafraîchissent ensemble, quelle que soit celle qui a bougé.
+        self._persist()
+        self._card.refresh()
+        self._sequences_card.refresh()
+        self._axes_card.refresh()
 
     def _set_input_field(self, binding, field: str, value):
         old = getattr(binding, field, None)
@@ -433,7 +459,7 @@ class InputsPanel(QWidget):
         get_history().push(SetFieldCmd(
             binding, field, old, value,
             label=f"Input.{field}",
-            persist_fn=lambda: (self._persist(), self._card.refresh()),
+            persist_fn=self._refresh_both,
         ))
 
     def _add_input(self):
@@ -441,14 +467,66 @@ class InputsPanel(QWidget):
         get_history().push(AddListItemCmd(
             self._project.settings.inputs, binding,
             label=f"Ajouter l'input {binding.name}",
-            persist_fn=lambda: (self._persist(), self._card.refresh()),
+            persist_fn=self._refresh_both,
         ))
 
     def _remove_input(self, binding):
         get_history().push(RemoveListItemCmd(
             self._project.settings.inputs, binding,
             label=f"Retirer l'input {binding.name}",
-            persist_fn=lambda: (self._persist(), self._card.refresh()),
+            persist_fn=self._refresh_both,
+        ))
+
+    def _set_axis_field(self, axis, field: str, value):
+        old = getattr(axis, field, None)
+        if old == value:
+            return
+        get_history().push(SetFieldCmd(
+            axis, field, old, value,
+            label=f"Axis.{field}",
+            persist_fn=self._refresh_both,
+        ))
+
+    def _add_axis(self):
+        from core.models.settings import InputAxis
+        axis = InputAxis(name=self._axes_card.free_name(),
+                         negative="left", positive="right")
+        get_history().push(AddListItemCmd(
+            self._project.settings.axes, axis,
+            label=f"Ajouter l'axe {axis.name}",
+            persist_fn=self._refresh_both,
+        ))
+
+    def _remove_axis(self, axis):
+        get_history().push(RemoveListItemCmd(
+            self._project.settings.axes, axis,
+            label=f"Retirer l'axe {axis.name}",
+            persist_fn=self._refresh_both,
+        ))
+
+    def _set_sequence_field(self, seq, field: str, value):
+        old = getattr(seq, field, None)
+        if old == value:
+            return
+        get_history().push(SetFieldCmd(
+            seq, field, old, value,
+            label=f"Sequence.{field}",
+            persist_fn=self._refresh_both,
+        ))
+
+    def _add_sequence(self):
+        seq = InputSequence(name=self._sequences_card.free_name())
+        get_history().push(AddListItemCmd(
+            self._project.settings.sequences, seq,
+            label=f"Ajouter la séquence {seq.name}",
+            persist_fn=self._refresh_both,
+        ))
+
+    def _remove_sequence(self, seq):
+        get_history().push(RemoveListItemCmd(
+            self._project.settings.sequences, seq,
+            label=f"Retirer la séquence {seq.name}",
+            persist_fn=self._refresh_both,
         ))
 
 
