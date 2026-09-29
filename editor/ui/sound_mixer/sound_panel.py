@@ -5,25 +5,19 @@ from typing import Optional
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QFrame, QSplitter, QTreeWidget, QTreeWidgetItem, QAbstractItemView,
-    QMenu, QFileDialog, QToolButton,
-    QSlider, QSpinBox, QCheckBox, QScrollArea, QMessageBox,
-    QComboBox, QTabWidget, QStackedWidget,
+    QFrame, QSplitter, QFileDialog, QToolButton, QSlider, QProgressBar,
+    QSpinBox, QCheckBox, QMessageBox,
+    QButtonGroup, QComboBox, QStackedWidget,
 )
-from PyQt6.QtMultimedia import (
-    QMediaPlayer, QAudioOutput, QSoundEffect,
-    QAudioSink, QAudioFormat, QMediaDevices, QAudio,
-)
-from PyQt6.QtGui import QFont, QColor, QShortcut, QKeySequence
+from PyQt6.QtGui import QFont
 from PyQt6.QtCore import (
-    Qt, QUrl, QSize, pyqtSignal, QBuffer, QByteArray, QIODevice, QTimer,
+    Qt, QSize, pyqtSignal, QTimer,
 )
 
-from ui.common.theme import C, T, QSS, tint
+from ui.common.theme import C, T, QSS, ui_font
 from ui.common.widgets import W
 from ui.common.labels import label
-from ui.common.icons import get as _ico, COLOR_DEFAULT
-from ui.common import external_editor
+from ui.common.icons import get as _ico
 
 from core.resources.asset_reconciliation import check_audio_file
 from core.models.audio import (
@@ -38,233 +32,7 @@ from ui.sound_mixer.sound_budget_bar import SoundBudgetBar
 from ui.common.asset_finder import AssetFinder
 from ui.common.asset_kinds import SFX, MUSIC
 from core.project import Project
-from core.engine_emulation.module_model import load_module
-from core.engine_emulation.module_render import render_module, GBA_MIX_RATE
 from core.history import get_history, DeleteResourceCmd
-from core.keybindings import bind
-
-
-# ──────────────────────────────────────────────────────────────────
-#  Lecteur audio partagé
-# ──────────────────────────────────────────────────────────────────
-class AudioPlayer(QWidget):
-    """
-    Barre de lecture minimale (lecture seule, pas de scrub).
-
-    Deux moteurs selon le format :
-      - QMediaPlayer (Qt Multimedia) pour tout ce qu'il sait décoder nativement
-        (wav/ogg/mp3…).
-      - Rendu maison (core.engine_emulation.mod_render) + QAudioSink pour les .mod : Qt
-        Multimedia n'a aucun décodeur tracker (FormatError à l'ouverture), et
-        le rendu maison simule en plus le mixeur logiciel Maxmod du GBA (taux
-        réduit, pas d'interpolation) pour une preview fidèle au rendu en jeu.
-    """
-
-    # Cache {chemin: pcm} pour ne pas re-render à chaque clic play/pause sur
-    # le même morceau (le rendu prend jusqu'à ~1s pour un morceau long).
-    _module_cache: dict = {}
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._player = QMediaPlayer()
-        self._audio  = QAudioOutput()
-        self._player.setAudioOutput(self._audio)
-        self._audio.setVolume(0.8)
-        self._player.errorOccurred.connect(self._on_player_error)
-        self._current: Optional[Path] = None
-
-        self._sink: Optional[QAudioSink] = None
-        self._buffer: Optional[QBuffer] = None
-        self._is_module = False
-
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 4, 8, 4)
-        layout.setSpacing(6)
-
-        self._lbl = QLabel("—")
-        self._lbl.setFont(QFont(T.UI, T.SM))
-        self._lbl.setStyleSheet(f"color:{C.TEXT_DIM};")
-        layout.addWidget(self._lbl, 1)
-
-        self._btn = QPushButton("▶")
-        self._btn.setFixedSize(28, 22)
-        self._btn.setFont(QFont(T.MONO, T.MD))
-        self._btn.setStyleSheet(
-            f"QPushButton{{background:{C.BG_SEL};color:{C.ACCENT};border:1px solid {C.BORDER_MID};"
-            "border-radius:3px;}"
-            f"QPushButton:hover{{background:{C.BG_HOVER};}}"
-        )
-        self._btn.clicked.connect(self._toggle)
-        layout.addWidget(self._btn)
-
-        self._stop_btn = QPushButton("■")
-        self._stop_btn.setFixedSize(28, 22)
-        self._stop_btn.setFont(QFont(T.MONO, T.MD))
-        self._stop_btn.setStyleSheet(
-            f"QPushButton{{background:{C.BORDER};color:{C.TEXT_DIM};border:1px solid {C.BORDER_MID};"
-            "border-radius:3px;}"
-            f"QPushButton:hover{{background:{tint(C.ACCENT_RED, 0.15)};color:{C.ACCENT_RED};}}"
-        )
-        self._stop_btn.clicked.connect(self._stop)
-        layout.addWidget(self._stop_btn)
-
-        self._vol = QSlider(Qt.Orientation.Horizontal)
-        self._vol.setRange(0, 100); self._vol.setValue(80); self._vol.setFixedWidth(70)
-        self._vol.setStyleSheet(f"QSlider::groove:horizontal{{height:4px;background:{C.BORDER_MID};border-radius:2px;}}"
-                          "QSlider::handle:horizontal{width:10px;height:10px;margin:-3px 0;"
-                          f"background:{C.ACCENT};border-radius:5px;}}")
-        self._vol.valueChanged.connect(self._on_volume)
-        layout.addWidget(self._vol)
-
-        # Éditer le fichier source dans un logiciel externe — même bouton
-        # standard que le Background Editor / Sprite Editor (cf.
-        # ui/common/external_editor.py) : cette barre écoute, elle ne retouche
-        # pas une forme d'onde.
-        self._btn_edit = QToolButton()
-        self._btn_edit.setIcon(_ico("edit_external", COLOR_DEFAULT))
-        self._btn_edit.setIconSize(QSize(15, 15))
-        self._btn_edit.setFixedSize(24, 22)
-        self._btn_edit.setStyleSheet(
-            f"QToolButton{{border:none;background:transparent;border-radius:3px;}}"
-            f"QToolButton:hover{{background:{C.BG_HOVER};}}"
-        )
-        self._btn_edit.setToolTip(label("sndpanel.edit_audio_tip"))
-        self._btn_edit.setEnabled(False)
-        self._btn_edit.clicked.connect(self._on_edit_audio)
-        self._btn_edit.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self._btn_edit.customContextMenuRequested.connect(self._on_edit_menu)
-        layout.addWidget(self._btn_edit)
-
-        self._player.playbackStateChanged.connect(self._on_state)
-
-    def _on_edit_audio(self):
-        if self._current is not None:
-            external_editor.open_audio(self._current, self)
-
-    def _on_edit_menu(self, pos):
-        menu = QMenu(self)
-        menu.setStyleSheet(QSS.menu)
-        cur = external_editor.get_configured_editor(external_editor.KIND_AUDIO)
-        act_choose = menu.addAction(label("common.choose_editor"))
-        act_default = menu.addAction(label("common.use_default"))
-        act_default.setEnabled(bool(cur))
-        chosen = menu.exec(self._btn_edit.mapToGlobal(pos))
-        if chosen == act_choose:
-            external_editor.choose_editor(self, external_editor.KIND_AUDIO)
-        elif chosen == act_default:
-            external_editor.use_system_default(external_editor.KIND_AUDIO)
-
-    def load(self, path: Path):
-        self._teardown_sink()
-        self._current = path
-        self._is_module = path.suffix.lower() in MUSIC_FILE_EXTS
-        self._lbl.setText(path.name)
-        self._btn.setText("▶")
-        self._btn_edit.setEnabled(bool(path and path.exists()))
-
-        if self._is_module:
-            self._player.stop()
-            self._player.setSource(QUrl())
-            self._prepare_module_sink(path)
-        else:
-            self._player.stop()
-            self._player.setSource(QUrl.fromLocalFile(str(path)))
-
-    def play(self, path: Path):
-        self.load(path)
-        if self._is_module:
-            if self._sink is not None:
-                self._buffer.seek(0)
-                self._sink.start(self._buffer)
-                self._btn.setText("⏸")
-        else:
-            self._player.play()
-
-    def _prepare_module_sink(self, path: Path):
-        try:
-            pcm = self._module_cache.get(path)
-            if pcm is None:
-                pcm = render_module(load_module(path))
-                self._module_cache[path] = pcm
-            if pcm.shape[0] == 0:
-                self._lbl.setText(label("sndpanel.mod_empty", name=path.name))
-                return
-            fmt = QAudioFormat()
-            fmt.setSampleRate(GBA_MIX_RATE)
-            fmt.setChannelCount(2)
-            fmt.setSampleFormat(QAudioFormat.SampleFormat.Int16)
-            device = QMediaDevices.defaultAudioOutput()
-            self._sink = QAudioSink(device, fmt)
-            self._sink.setVolume(self._vol.value() / 100.0)
-            self._sink.stateChanged.connect(self._on_sink_state)
-            self._buffer = QBuffer()
-            self._buffer.setData(QByteArray(pcm.tobytes()))
-            self._buffer.open(QIODevice.OpenModeFlag.ReadOnly)
-        except Exception as e:
-            self._lbl.setText(label("sndpanel.mod_error", name=path.name, error=e))
-            self._sink = None
-
-    def _teardown_sink(self):
-        if self._sink is not None:
-            self._sink.stop()
-            self._sink = None
-        if self._buffer is not None:
-            self._buffer.close()
-            self._buffer = None
-
-    def _toggle(self):
-        if self._is_module:
-            if self._sink is None:
-                return
-            if self._sink.state() == QAudio.State.ActiveState:
-                self._sink.suspend()
-            elif self._sink.state() == QAudio.State.SuspendedState:
-                self._sink.resume()
-            else:
-                self._buffer.seek(0)
-                self._sink.start(self._buffer)
-            return
-        if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
-            self._player.pause()
-        else:
-            self._player.play()
-
-    def _stop(self):
-        self.stop_playback()
-
-    def stop_playback(self):
-        """Couper la lecture d'asset — appelé aussi de l'extérieur : la lecture
-        ROM et l'aperçu d'un fichier se disputent la même carte son."""
-        if self._is_module:
-            if self._sink is not None:
-                self._sink.stop()
-            self._btn.setText("▶")
-            return
-        self._player.stop()
-
-    def _on_state(self, state):
-        if self._is_module:
-            return
-        playing = state == QMediaPlayer.PlaybackState.PlayingState
-        self._btn.setText("⏸" if playing else "▶")
-
-    def _on_sink_state(self, state):
-        if not self._is_module:
-            return
-        self._btn.setText("⏸" if state == QAudio.State.ActiveState else "▶")
-
-    def _on_volume(self, v: int):
-        vol = v / 100.0
-        self._audio.setVolume(vol)
-        if self._sink is not None:
-            self._sink.setVolume(vol)
-
-    def _on_player_error(self, error, error_string: str):
-        if self._is_module or error == QMediaPlayer.Error.NoError:
-            return
-        self._lbl.setText(label("sndpanel.preview_unavailable",
-                                name=self._current.name if self._current else "—",
-                                error=error_string))
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -742,10 +510,8 @@ class SoundMixerScreen(QWidget):
         # Pas de bandeau-titre d'écran : la nav du haut indique déjà où on est
         # (décision refonte thème 2026-08).
 
-        # La barre de lecture ne vit plus en haut de l'écran : elle est sous
-        # le node editor, dans le panneau central (cf. _build_machines_panel).
-        # C'est là qu'on écoute, donc là qu'on commande.
-        self._player = AudioPlayer()
+        # La simulation matérielle est sous le node editor : elle joue la
+        # MusicBox telle que la ROM la résout, pas le fichier sur l'ordinateur.
         self._box_player = BoxPlayer(self)
 
         # Splitter principal
@@ -760,13 +526,6 @@ class SoundMixerScreen(QWidget):
                                    min_width=180, max_width=360)
         self._finder.selected.connect(lambda _kind, a: self._on_asset_selected(a))
         self._finder.emptied.connect(lambda _kind: self._right_stack.setCurrentIndex(0))
-        # Double-clic ou Espace : écouter. Le finder ne sait pas ce qu'« activer »
-        # veut dire, l'écran si.
-        self._finder.activated.connect(lambda _kind, a: self._play_asset(a))
-        sc_play = QShortcut(QKeySequence(), self._finder)
-        sc_play.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        sc_play.activated.connect(self._finder.activate_current)
-        bind("sound.play_pause", sc_play)
         split.addWidget(self._finder)
 
         # ── Panneau central : les boîtes à état ───────────────────
@@ -833,9 +592,13 @@ class SoundMixerScreen(QWidget):
 
         panel = QWidget()
         panel.setStyleSheet(f"background:{C.BG_PANEL};")
+        # Même découpage que le Canvas du Scene Editor : le contexte reste
+        # visible en haut, l'éditeur occupe tout le milieu, et la lecture est
+        # ancrée en bas. Les trois boîtes ne sont donc plus des onglets qui
+        # mangent l'espace de l'éditeur.
         lay = QVBoxLayout(panel)
-        lay.setContentsMargins(10, 8, 10, 8)
-        lay.setSpacing(6)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
 
         self._music_machine = MusicMachinePanel()
         self._music_machine.state_selected.connect(self._on_state_selected)
@@ -844,8 +607,7 @@ class SoundMixerScreen(QWidget):
         self._sfx_matrix = ActionMatrix(KIND_SOUND)
         self._jingle_matrix = ActionMatrix(KIND_JINGLE)
 
-        self._tabs = QTabWidget()
-        self._tabs.setStyleSheet(QSS.tab)
+        self._tabs = QStackedWidget()
         self._music_tab = _BoxTab(
             "music_boxes", MusicBox, self._music_machine,
             lambda box: self._music_machine.load(box),
@@ -860,11 +622,9 @@ class SoundMixerScreen(QWidget):
             lambda box: self._jingle_matrix.load(
                 box, [m.name for m in self._project.music]),
             label("sndpanel.jinglebox_empty"))
-        for tab, title in ((self._music_tab, "MusicBox"),
-                           (self._sound_tab, "SoundBox"),
-                           (self._jingle_tab, "JingleBox")):
+        for tab in (self._music_tab, self._sound_tab, self._jingle_tab):
             tab.changed.connect(self._on_box_changed)
-            self._tabs.addTab(tab, title)
+            self._tabs.addWidget(tab)
         self._tabs.currentChanged.connect(self._on_tab_changed)
         self._music_machine.changed.connect(self._music_tab.save_current)
         self._sfx_matrix.changed.connect(self._sound_tab.save_current)
@@ -874,55 +634,186 @@ class SoundMixerScreen(QWidget):
         # déclencher.
         self._music_machine.changed.connect(self._refresh_budget)
         self._jingle_matrix.changed.connect(self._refresh_budget)
+        lay.addWidget(self._build_context_bar())
         lay.addWidget(self._tabs, 1)
         lay.addWidget(self._build_player_bar())
         return panel
 
-    def _build_player_bar(self) -> QWidget:
-        """Sous le node editor : écouter un asset, ou écouter la BOÎTE.
+    def _build_context_bar(self) -> QFrame:
+        """Sélecteur persistant des trois contextes du Sound Mixer.
 
-        Deux lectures dans une seule barre parce qu'elles se disputent la même
-        carte son — les mettre côte à côte, c'est rendre visible qu'on ne peut
-        pas les avoir toutes les deux.
+        Il reprend volontairement la géométrie et les états visuels du
+        sélecteur « Scene / Graph » : ce sont ici trois espaces de travail
+        exclusifs, pas trois onglets de document.
         """
-        bar = QWidget()
-        bar.setStyleSheet(f"background:{C.BG_BASE}; border-top:1px solid {C.BORDER};")
+        bar = QFrame()
+        bar.setFixedHeight(38)
+        bar.setStyleSheet(
+            f"background:{C.BG_RAISED}; border-bottom:1px solid {C.BORDER};")
         lay = QHBoxLayout(bar)
-        lay.setContentsMargins(0, 0, 8, 0)
-        lay.setSpacing(8)
+        lay.setContentsMargins(12, 4, 12, 4)
+        lay.setSpacing(5)
 
-        self._player.setFixedHeight(34)
-        lay.addWidget(self._player, 1)
+        group = QButtonGroup(bar)
+        group.setExclusive(True)
+        self._context_buttons: list[QToolButton] = []
+        contexts = (
+            (label("sndpanel.context_music"), label("sndpanel.context_music_tip")),
+            (label("sndpanel.context_sfx"), label("sndpanel.context_sfx_tip")),
+            (label("sndpanel.context_jingles"), label("sndpanel.context_jingles_tip")),
+        )
+        lay.addStretch(1)
+        for index, (text, tip) in enumerate(contexts):
+            button = QToolButton()
+            button.setText(text)
+            button.setToolTip(tip)
+            button.setCheckable(True)
+            button.setFont(ui_font(T.MD))
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setStyleSheet(
+                f"QToolButton{{border:1px solid {C.BORDER};background:{C.BG_INPUT};"
+                f"color:{C.TEXT_NORM};padding:3px 12px;margin:0px;}}"
+                f"QToolButton:hover{{background:{C.BG_HOVER};}}"
+                f"QToolButton:checked{{background:{C.BG_SEL};border-color:{C.ACCENT};"
+                f"color:{C.TEXT_HI};}}")
+            group.addButton(button)
+            button.clicked.connect(
+                lambda _checked=False, i=index: self._tabs.setCurrentIndex(i))
+            self._context_buttons.append(button)
+            lay.addWidget(button)
+        lay.addStretch(1)
 
-        self._btn_rom = QPushButton(label("sndpanel.rom_play"))
+        # Le premier contexte est visible dès la construction, avant que le
+        # projet soit chargé et avant le premier signal currentChanged.
+        self._context_buttons[0].setChecked(True)
+        return bar
+
+    def _build_player_bar(self) -> QWidget:
+        """Sous le node editor : les commandes de monitoring de la ROM."""
+        bar = QWidget()
+        bar.setFixedHeight(42)
+        bar.setStyleSheet(f"background:{C.BG_DEEP}; border-top:1px solid {C.BORDER};")
+        lay = QHBoxLayout(bar)
+        lay.setContentsMargins(10, 0, 10, 0)
+        lay.setSpacing(6)
+
+        # Le bandeau reste une zone instrumentale : ses pavés sont plus
+        # profonds que les champs d'édition, tout en gardant la palette thème.
+        block = (f"background:{C.BG_BASE}; color:{C.TEXT_DIM}; "
+                 f"border:1px solid {C.BORDER_MID}; padding:0 7px;")
+        self._rom_label = QLabel(label("sndpanel.rom_play").removeprefix("▶ ").upper())
+        self._rom_label.setFont(QFont(T.MONO, T.XS, QFont.Weight.DemiBold))
+        self._rom_label.setFixedHeight(24)
+        self._rom_label.setStyleSheet(block)
+        lay.addWidget(self._rom_label)
+
+        self._rom_source = QLabel("—")
+        self._rom_source.setFont(QFont(T.MONO, T.XS))
+        self._rom_source.setMinimumWidth(120)
+        self._rom_source.setFixedHeight(24)
+        self._rom_source.setStyleSheet(block)
+        lay.addWidget(self._rom_source)
+
+        self._btn_rom = QPushButton()
         self._btn_rom.setCheckable(True)
-        self._btn_rom.setFont(QFont(T.UI, T.SM))
+        self._btn_rom.setIcon(_ico("playback_play", C.TEXT_DIM, C.ACCENT))
+        self._btn_rom.setIconSize(QSize(14, 14))
+        self._btn_rom.setFixedWidth(30)
+        self._btn_rom.setFixedHeight(24)
         self._btn_rom.setStyleSheet(
-            f"QPushButton{{background:{C.BG_INPUT}; color:{C.TEXT_NORM};"
-            f"border:1px solid {C.BORDER_MID}; border-radius:3px; padding:3px 10px;}}"
-            f"QPushButton:hover{{background:{C.BG_HOVER};}}"
+            f"QPushButton{{background:{C.BG_BASE}; color:{C.TEXT_DIM};"
+            f"border:1px solid {C.BORDER_MID}; padding:0;}}"
+            f"QPushButton:hover{{background:{C.BG_HOVER}; border-color:{C.ACCENT};}}"
             f"QPushButton:checked{{background:{C.BG_SEL}; color:{C.ACCENT};"
             f"border-color:{C.ACCENT};}}")
         self._btn_rom.setToolTip(label("sndpanel.rom_play_tip"))
         self._btn_rom.toggled.connect(self._on_rom_toggled)
         lay.addWidget(self._btn_rom)
 
-        self._rom_state = QLabel("")
-        self._rom_state.setFont(QFont(T.MONO, T.SM))
-        self._rom_state.setStyleSheet(f"color:{C.TEXT_DIM};")
-        self._rom_state.setMinimumWidth(120)
+        self._btn_rom_stop = QPushButton()
+        self._btn_rom_stop.setFixedSize(30, 24)
+        self._btn_rom_stop.setIcon(_ico("playback_stop", C.TEXT_DIM))
+        self._btn_rom_stop.setIconSize(QSize(14, 14))
+        self._btn_rom_stop.setToolTip(label("sndpanel.rom_stop_tip"))
+        self._btn_rom_stop.setStyleSheet(
+            f"QPushButton{{background:{C.BG_BASE}; color:{C.TEXT_DIM};"
+            f"border:1px solid {C.BORDER_MID}; padding:0;}}"
+            f"QPushButton:hover{{background:{C.BG_HOVER}; border-color:{C.ACCENT_RED};"
+            f"color:{C.ACCENT_RED};}}")
+        self._btn_rom_stop.clicked.connect(self._stop_rom_playback)
+        lay.addWidget(self._btn_rom_stop)
+
+        self._btn_rom_loop = QToolButton()
+        self._btn_rom_loop.setIcon(_ico("playback_loop", C.TEXT_DIM, C.ACCENT))
+        self._btn_rom_loop.setIconSize(QSize(14, 14))
+        self._btn_rom_loop.setCheckable(True)
+        self._btn_rom_loop.setChecked(True)
+        self._btn_rom_loop.setFixedSize(30, 24)
+        self._btn_rom_loop.setToolTip(label("sndpanel.rom_loop_tip"))
+        self._btn_rom_loop.setStyleSheet(
+            f"QToolButton{{background:{C.BG_BASE}; color:{C.TEXT_DIM};"
+            f"border:1px solid {C.BORDER_MID}; padding:0;}}"
+            f"QToolButton:hover{{background:{C.BG_HOVER}; border-color:{C.ACCENT};}}"
+            f"QToolButton:checked{{background:{C.BG_SEL}; color:{C.ACCENT};"
+            f"border-color:{C.ACCENT};}}")
+        self._btn_rom_loop.toggled.connect(
+            lambda enabled: self._box_player.set_looping(enabled))
+        lay.addWidget(self._btn_rom_loop)
+
+        self._rom_volume = QSlider(Qt.Orientation.Horizontal)
+        self._rom_volume.setRange(0, 100)
+        self._rom_volume.setValue(80)
+        self._rom_volume.setFixedWidth(74)
+        self._rom_volume.setToolTip(label("sndpanel.volume_tip"))
+        self._rom_volume.setStyleSheet(
+            f"QSlider::groove:horizontal{{height:8px;background:{C.BG_BASE};"
+            f"border:1px solid {C.BORDER};}}"
+            f"QSlider::sub-page:horizontal{{background:{C.ACCENT};}}"
+            f"QSlider::handle:horizontal{{width:8px;margin:-4px 0;background:{C.TEXT_NORM};"
+            f"border:1px solid {C.BORDER_MID};}}")
+        self._rom_volume.valueChanged.connect(self._on_rom_volume)
+        lay.addWidget(self._rom_volume)
+
+        self._rom_volume_readout = QLabel("VOL 80")
+        self._rom_volume_readout.setFont(QFont(T.MONO, T.XS, QFont.Weight.DemiBold))
+        self._rom_volume_readout.setFixedHeight(24)
+        self._rom_volume_readout.setStyleSheet(block)
+        lay.addWidget(self._rom_volume_readout)
+
+        self._rom_progress = QProgressBar()
+        self._rom_progress.setRange(0, 1000)
+        self._rom_progress.setValue(0)
+        self._rom_progress.setTextVisible(False)
+        self._rom_progress.setMinimumWidth(130)
+        self._rom_progress.setFixedHeight(12)
+        self._rom_progress.setToolTip(label("sndpanel.rom_progress_tip"))
+        self._rom_progress.setStyleSheet(
+            f"QProgressBar{{background:{C.BG_BASE};border:1px solid {C.BORDER};}}"
+            f"QProgressBar::chunk{{background:{C.ACCENT};}}")
+        lay.addWidget(self._rom_progress, 1)
+
+        self._rom_state = QLabel("IDLE")
+        self._rom_state.setFont(QFont(T.MONO, T.XS, QFont.Weight.DemiBold))
+        self._rom_state.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._rom_state.setMinimumWidth(128)
+        self._rom_state.setFixedHeight(24)
+        self._rom_state.setStyleSheet(
+            block)
         lay.addWidget(self._rom_state)
 
         self._box_player.state_changed.connect(self._on_rom_state)
-        self._box_player.message.connect(
-            lambda m: self._rom_state.setText(m))
+        self._box_player.track_changed.connect(self._on_rom_track_changed)
+        self._box_player.message.connect(lambda m: self._rom_state.setText(m))
+        self._rom_progress_timer = QTimer(bar)
+        self._rom_progress_timer.setInterval(100)
+        self._rom_progress_timer.timeout.connect(self._refresh_rom_progress)
+        self._rom_progress_timer.start()
         return bar
 
     # ── Lecture ROM ───────────────────────────────────────────────
 
     def _on_rom_toggled(self, on: bool):
         if on:
-            self._player.stop_playback()   # une seule sortie audio à la fois
             box = self._music_tab.current()
             if box is None or not box.states:
                 self._rom_state.setText(label("sndpanel.no_state"))
@@ -932,10 +823,34 @@ class SoundMixerScreen(QWidget):
             self._box_player.start()
         else:
             self._box_player.stop()
-            self._rom_state.setText("")
+            self._rom_state.setText("IDLE")
+            self._rom_progress.setValue(0)
+
+    def _stop_rom_playback(self):
+        """Arrête la simulation sans modifier le contexte sélectionné."""
+        self._btn_rom.setChecked(False)
+
+    def _on_rom_volume(self, value: int):
+        self._box_player.set_volume(value / 100.0)
+        self._rom_volume_readout.setText(f"VOL {value:02d}")
+
+    def _on_rom_track_changed(self, name: str, looping: bool):
+        self._rom_source.setText(name or "—")
+        self._btn_rom_loop.blockSignals(True)
+        self._btn_rom_loop.setChecked(looping)
+        self._btn_rom_loop.blockSignals(False)
+        self._refresh_rom_progress()
+
+    def _refresh_rom_progress(self):
+        duration = self._box_player.duration_seconds
+        if duration <= 0:
+            self._rom_progress.setValue(0)
+            return
+        self._rom_progress.setValue(
+            min(1000, round(1000 * self._box_player.position_seconds / duration)))
 
     def _on_rom_state(self, name: str):
-        self._rom_state.setText(f"▶ {name}")
+        self._rom_state.setText(f"ROM → {name}")
 
     def _box_tabs(self) -> tuple:
         return (self._music_tab, self._sound_tab, self._jingle_tab)
@@ -950,6 +865,8 @@ class SoundMixerScreen(QWidget):
         qui se dépose.
         """
         self._finder.show_only({SFX.label} if index == 1 else {MUSIC.label})
+        if 0 <= index < len(self._context_buttons):
+            self._context_buttons[index].setChecked(True)
 
     def _on_box_changed(self):
         """Une boîte a été choisie ou créée : l'inspecteur d'état la suit."""
@@ -1048,30 +965,11 @@ class SoundMixerScreen(QWidget):
         self._sfx_insp.load(sfx, self._project)
         self._sfx_insp.refresh_weight(self._sound_weights().get(("sfx", sfx.name)))
         self._right_stack.setCurrentIndex(1)
-        self._load_asset(sfx)
 
     def _on_music_selected(self, music: Music):
         self._music_insp.load(music, self._project)
         self._music_insp.refresh_weight(self._sound_weights().get(("music", music.name)))
         self._right_stack.setCurrentIndex(2)
-        self._load_asset(music)
-
-    def _load_asset(self, obj):
-        """
-        Charge l'asset dans la barre de preview sans lancer la lecture — pour
-        que le bouton ▶ (ou Espace) fonctionne dès la sélection, sans devoir
-        d'abord double-cliquer l'entrée.
-        """
-        ap = self._project.asset_abs(obj.asset) if self._project and obj.asset else None
-        if ap and ap.exists():
-            self._player.load(ap)
-
-    def _play_asset(self, obj):
-        if self._btn_rom.isChecked():
-            self._btn_rom.setChecked(False)
-        ap = self._project.asset_abs(obj.asset) if self._project and obj.asset else None
-        if ap and ap.exists():
-            self._player.play(ap)
 
     def _on_changed(self):
         self._finder.refresh()

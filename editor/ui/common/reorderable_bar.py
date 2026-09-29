@@ -51,7 +51,7 @@ class ReorderableButtonBar(QWidget):
 
         self._layout = QHBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
-        self._layout.setSpacing(0)
+        self._layout.setSpacing(4)
 
         self._group = QButtonGroup(self)
         self._group.setExclusive(True)

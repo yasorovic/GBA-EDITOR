@@ -21,7 +21,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QTimer, QSize
 from ui.common.theme import T, C, S, QSS, ui_font
 from ui.common.widgets import W
 from ui.common.labels import label
-from ui.common.icons import get as _ico, COLOR_DEFAULT, COLOR_UI
+from ui.common.icons import get as _ico, folder_icon, COLOR_DEFAULT, COLOR_UI
 from ui.common.tree_selection import highlight_matching
 from ui.common.selection_grammar import RowSelectionDelegate
 
@@ -116,15 +116,6 @@ _C_SCENE  = C.TEXT_HI     # parent de l'arbre : plus clair que ses enfants
 _C_PREFAB = _TEXT
 _C_SCRIPT = _TEXT
 _C_FOLDER = _DIM
-
-_FOLDER_COLORS = (
-    ("", "scttree.folder_color_none", COLOR_DEFAULT),
-    ("#6EA8FE", "scttree.folder_color_blue", "#6EA8FE"),
-    ("#6EE7B7", "scttree.folder_color_green", "#6EE7B7"),
-    ("#FBBF24", "scttree.folder_color_yellow", "#FBBF24"),
-    ("#FB7185", "scttree.folder_color_red", "#FB7185"),
-    ("#C4B5FD", "scttree.folder_color_purple", "#C4B5FD"),
-)
 
 
 
@@ -250,11 +241,24 @@ class _ActiveSceneTree(_Tree):
         key = self._expand_key(item)
         if key is not None:
             self._expand_overrides[key] = True
+        self._refresh_folder_icon(item, True)
 
     def _on_item_collapsed(self, item: QTreeWidgetItem):
         key = self._expand_key(item)
         if key is not None:
             self._expand_overrides[key] = False
+        self._refresh_folder_icon(item, False)
+
+    def _refresh_folder_icon(self, item: QTreeWidgetItem, expanded: bool) -> None:
+        """Alterne plein/filet sur les nœuds qui portent une icône dossier
+        (T_FOLDER, et T_SCENE pour la racine de contenu).
+        `setIcon` émet `itemChanged` comme un renommage utilisateur :
+        `_on_item_changed` relirait ce non-événement comme un renommage de
+        dossier et repeuplerait l'arbre en boucle — d'où `blockSignals`."""
+        if item.data(0, _ROLE_TYPE) in (T_FOLDER, T_SCENE):
+            self.blockSignals(True)
+            item.setIcon(0, folder_icon(expanded, COLOR_DEFAULT))
+            self.blockSignals(False)
 
     @staticmethod
     def _expand_key(item: QTreeWidgetItem):
@@ -318,14 +322,15 @@ class _ActiveSceneTree(_Tree):
         self._content_root = QTreeWidgetItem(self)
         self._content_root.setData(0, _ROLE_TYPE, T_SCENE)
         self._content_root.setData(0, _ROLE_OBJ, scene)
-        self._content_root.setIcon(0, _ico("folder", COLOR_DEFAULT))
+        root_expanded = self._expand_overrides.get((T_SCENE, id(scene)), True)
+        self._content_root.setIcon(0, folder_icon(root_expanded, COLOR_DEFAULT))
         self._content_root.setText(0, scene.name)
         self._content_root.setForeground(0, QColor(_C_SCENE))
         self._content_root.setFlags((self._content_root.flags() |
                                      Qt.ItemFlag.ItemIsDropEnabled) &
                                     ~Qt.ItemFlag.ItemIsDragEnabled &
                                     ~Qt.ItemFlag.ItemIsEditable)
-        self._content_root.setExpanded(self._expand_overrides.get((T_SCENE, id(scene)), True))
+        self._content_root.setExpanded(root_expanded)
         self._folder_items = {}
         state = self._panel._content_state
         valid = {f"actor:{a.name}" for a in scene.actors}
@@ -341,11 +346,14 @@ class _ActiveSceneTree(_Tree):
                 item = QTreeWidgetItem(self._content_root)
                 item.setData(0, _ROLE_TYPE, T_FOLDER)
                 item.setData(0, _ROLE_OBJ, folder.id)
-                item.setIcon(0, _ico("folder", folder.color or COLOR_DEFAULT))
+                # Les couleurs de dossiers anciennes sont volontairement
+                # ignorées : l'arbre ne code plus les groupes par une teinte.
+                folder_expanded = self._expand_overrides.get((T_FOLDER, folder.id), True)
+                item.setIcon(0, folder_icon(folder_expanded, COLOR_DEFAULT))
                 item.setText(0, folder.name)
                 item.setFlags((item.flags() | Qt.ItemFlag.ItemIsDropEnabled |
                                Qt.ItemFlag.ItemIsEditable) & ~Qt.ItemFlag.ItemIsDragEnabled)
-                item.setExpanded(self._expand_overrides.get((T_FOLDER, folder.id), True))
+                item.setExpanded(folder_expanded)
                 self._folder_items[folder.id] = item
         self._folder_items[None] = self._content_root
 
@@ -854,12 +862,6 @@ class _ActiveSceneTree(_Tree):
             folder_id = item.data(0, _ROLE_OBJ)
             if folder_id is not None:
                 self.add_rename_action(menu, item, label("scttree.rename_folder"))
-                colors = menu.addMenu(label("scttree.folder_color"))
-                colors.setFont(QFont(T.UI, T.MD))
-                for color, label_key, icon_color in _FOLDER_COLORS:
-                    action = colors.addAction(_ico("folder", icon_color), label(label_key))
-                    action.triggered.connect(
-                        lambda _, value=color, fid=folder_id: self._set_folder_color(fid, value))
                 menu.addAction(label("scttree.delete_folder")).triggered.connect(
                     lambda _, fid=folder_id: self._delete_folder(fid))
 
@@ -869,11 +871,6 @@ class _ActiveSceneTree(_Tree):
         if self._panel._content_state and self._scene:
             self._panel._content_state.delete_folder(self._scene.name, folder_id)
             self._panel.refresh()
-
-    def _set_folder_color(self, folder_id: str, color: str) -> None:
-        if self._panel._content_state and self._scene:
-            if self._panel._content_state.set_folder_color(self._scene.name, folder_id, color):
-                self._panel.refresh()
 
     def _folder_member_for(self, node_type: str, obj) -> str | None:
         if node_type != T_ACTOR or not getattr(obj, "parent", None):
@@ -1096,7 +1093,7 @@ class _PrioritySceneTree(_Tree):
                 group.setData(0, _ROLE_PATH, (kind, slot))
                 if kind == "obj":
                     group.setText(0, f"OBJ {slot}  ·  {'front' if slot == 0 else 'back' if slot == 3 else ''}")
-                    group.setIcon(0, _ico("actor", COLOR_DEFAULT))
+                    group.setIcon(0, _ico("priority_group", COLOR_DEFAULT))
                     group.setFlags(group.flags() & ~Qt.ItemFlag.ItemIsDragEnabled)
                     for actor in (a for a in scene.actors if int(getattr(a, "priority", 0)) == slot):
                         item = QTreeWidgetItem(group)

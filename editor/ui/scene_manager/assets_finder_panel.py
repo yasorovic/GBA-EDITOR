@@ -232,7 +232,6 @@ class AssetsFinderPanel(QWidget):
             create=lambda name, parent: store.create_folder(fam, name, parent),
             rename=lambda fid, name: store.rename_folder(fam, fid, name),
             delete=lambda fid: store.delete_folder(fam, fid),
-            set_color=lambda fid, color: store.set_color(fam, fid, color),
             set_parent=lambda fid, parent: store.set_parent(fam, fid, parent),
             move=lambda scene, fid: store.move_member(fam, scene.name, fid),
             folder_of=lambda scene: store.folder_of(fam, scene.name),

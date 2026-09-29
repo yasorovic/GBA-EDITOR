@@ -35,7 +35,7 @@ _TOGGLE = 16.0
 _EDGE = 8.0
 _MIN_W = 120.0
 _MIN_H = HEADER_H + 28.0
-_GRID_STEP = 20.0
+_GRID_STEP = 40.0
 
 
 class GroupToggleItem(QGraphicsItem):

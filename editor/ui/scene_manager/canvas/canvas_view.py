@@ -83,15 +83,25 @@ class GBAView(QGraphicsView):
         """Fond de travail mat avec repère pointillé très discret."""
         painter.save()
         painter.fillRect(rect, QColor(C.CANVAS_BG))
-        # Repère régulier, volontairement plus grand que la grille de jeu : il
-        # structure l'espace de travail sans être confondu avec les tuiles.
-        pen = QPen(QColor(210, 205, 255, 28))
-        pen.setWidth(0)
+        # Repère calé sur la grille de jeu (16px) pour rester lisible comme
+        # repère de placement, pas seulement de texture de fond.
+        pen = QPen(QColor(C.BORDER_MID))
+        pen.setCosmetic(True)
+        pen.setWidthF(2.5)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(pen)
-        left = int(rect.left() // 24) * 24
-        top = int(rect.top() // 24) * 24
-        for x in range(left, int(rect.right()) + 1, 24):
-            for y in range(top, int(rect.bottom()) + 1, 24):
+        # En-deçà de 100% de zoom, le pas visuel double tous les -50% de
+        # zoom (donc le nombre de points affichés /2) : moins on voit de la
+        # scène à l'écran, moins la grille encombre.
+        step = 16
+        away = 1.0 / self._zoom
+        while away >= 1.5:
+            step *= 2
+            away /= 1.5
+        left = int(rect.left() // step) * step
+        top = int(rect.top() // step) * step
+        for x in range(left, int(rect.right()) + 1, step):
+            for y in range(top, int(rect.bottom()) + 1, step):
                 painter.drawPoint(x, y)
         painter.restore()
 

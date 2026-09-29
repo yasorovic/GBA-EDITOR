@@ -116,7 +116,7 @@ class ToolchainStatus(QWidget):
             lbl = QLabel(f"{'✓' if ok else '✗'} {name}")
             lbl.setFont(QFont(T.UI, T.XS, QFont.Weight.DemiBold))
             lbl.setStyleSheet(
-                f"color:{C.POWER if ok else C.ACCENT_RED};background:transparent;"
+                f"color:{C.TEXT_NORM if ok else C.ACCENT_RED};background:transparent;"
             )
             row_l.addWidget(lbl)
         row_l.addStretch()
@@ -264,9 +264,9 @@ class _TemplateItem(QWidget):
             self._btn.setText(f"✓ {label('home.template.downloaded')}")
             self._btn.setEnabled(False)
             self._btn.setStyleSheet(
-                f"QPushButton{{color:{C.POWER};background:transparent;"
-                f"border:1px solid {C.POWER};border-radius:3px;padding:2px 10px;}}"
-                f"QPushButton:disabled{{color:{C.POWER};border-color:{C.POWER};}}"
+                f"QPushButton{{color:{C.TEXT_DIM};background:transparent;"
+                f"border:1px solid {C.BORDER_MID};border-radius:3px;padding:2px 10px;}}"
+                f"QPushButton:disabled{{color:{C.TEXT_DIM};border-color:{C.BORDER_MID};}}"
             )
         else:
             self._btn.setText(label("home.template.download"))

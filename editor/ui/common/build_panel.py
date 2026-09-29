@@ -2,18 +2,50 @@
 
 from ui.common.labels import label
 import re
+from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QPlainTextEdit, QToolButton, QTabWidget, QListWidget, QListWidgetItem,
 )
-from PyQt6.QtGui import QFont, QColor, QTextCharFormat, QTextCursor, QPainter, QPainterPath
-from PyQt6.QtCore import pyqtSignal, pyqtProperty, Qt, QTimer, QPropertyAnimation, QEasingCurve
+from PyQt6.QtGui import QFont, QColor, QPen, QTextCharFormat, QTextCursor, QPainter, QPainterPath
+from PyQt6.QtCore import pyqtSignal, pyqtProperty, Qt, QTimer, QPropertyAnimation, QEasingCurve, QRectF
 from PyQt6.QtStateMachine import QStateMachine, QState
+from PyQt6.QtSvg import QSvgRenderer
 
 from ui.common.theme import C, T
 from core.toolchain import Toolchain
 from ui.common.rom_budget_bar import RomBudgetBar
+
+
+# ── Mascotte du bouton Build & Run ──────────────────────────────────
+# Illustrations en COULEURS PLEINES (crête et bec mauves, corps blanc…) —
+# rendues telles quelles, sans reteinte par icons.py (qui ne gère que les
+# glyphes qtawesome monochromes).
+_MASCOT_DIR = Path(__file__).parent / "CustomIcons"
+_MASCOT_FILES = {
+    "idle":    "BUILD-WAIT-SUCCESS.svg",   # au repos, prêt à lancer
+    "working": "BUILD-WORKING.svg",        # build en cours
+    "failed":  "BUILD-FAILED.svg",         # dernier build en échec
+}
+_mascot_renderers: dict[str, QSvgRenderer] = {}
+
+
+def _mascot_renderer(state: str) -> QSvgRenderer | None:
+    """Renderer SVG de la mascotte pour `state`, ou None si le fichier est
+    absent/vide (cf. BUILD-WAIT-SUCCESS.svg, pas encore dessiné) — l'appelant
+    se contente alors de ne rien peindre plutôt que de planter."""
+    filename = _MASCOT_FILES.get(state)
+    if filename is None:
+        return None
+    renderer = _mascot_renderers.get(state)
+    if renderer is None:
+        path = _MASCOT_DIR / filename
+        if not path.exists():
+            return None
+        renderer = QSvgRenderer(str(path))
+        _mascot_renderers[state] = renderer
+    return renderer if renderer.isValid() else None
 
 
 # Un emplacement `fichier.lua:ligne` dans une ligne de journal. Le codegen émet
@@ -158,23 +190,49 @@ class DiagnosticsView(QWidget):
 
 
 class AnimatedBuildButton(QToolButton):
-    """Bouton toolbar Build & Run : cartouche GBA (icône centrée, au repos) qui se
-    transforme intégralement en barre de chargement pendant le build, pilotée par
+    """Bouton toolbar Build & Run : la mascotte de l'éditeur, plaquée sur une
+    pilule colorée qui se transforme en jauge pendant le build, pilotée par
     QStateMachine.
 
-    États :
-      idle     — icône cartouche centrée, largeur fixe.
-      building — icône masquée, tout le bouton devient la jauge ; le remplissage
-                 suit la progression réelle du build via `set_progress()`.
-      done     — jauge figée sur le dernier progrès reçu (verte si succès, rouge
-                 si échec) puis retour auto à idle après un court délai.
+    États (mascotte + couleur de la pilule) :
+      idle     — mascotte au repos, pilule mauve, libellé « Run ».
+      building — mascotte affairée, pilule jaune qui se remplit ; le
+                 remplissage suit la progression réelle via `set_progress()`.
+      done     — succès : retour direct à idle après un court délai. Échec :
+                 mascotte assommée et pilule rouge « XXX », qui reste affichée
+                 jusqu'à ce qu'un nouveau build soit lancé (pas de retour
+                 automatique — un échec ne doit pas disparaître tout seul).
     """
 
     build_started = pyqtSignal()
     build_finished = pyqtSignal(bool)
     _settle = pyqtSignal()
 
-    _WIDTH, _HEIGHT = 104, 32
+    # La mascotte occupe la partie gauche et empiète sur la pilule (comme la
+    # maquette) : la pilule commence avant la fin de sa boîte.
+    _WIDTH, _HEIGHT = 96, 64
+    # ── Réglages de coupe de la mascotte ────────────────────────────
+    # Ce que peint _mascot_rect() est toujours plus grand que le bouton :
+    # SCALE agrandit le dessin, X/Y_SHIFT le déplacent — le bouton (largeur
+    # fixe _WIDTH/_HEIGHT) agit comme un cadre qui rogne le reste. Ajuster
+    # ces 4 constantes suffit à recadrer la mascotte sans toucher au code.
+    _MASCOT_SCALE = .82   # 1.0 = hauteur de la mascotte == hauteur du bouton
+    _MASCOT_BOX_W = 48     # plafond de largeur rendue pour la mascotte
+    _MASCOT_X_SHIFT = 0    # décale le dessin horizontalement (+ = vers la droite)
+    # Décale le DESSIN de la mascotte vers le haut (valeur négative) sans
+    # toucher à la pilule : la tête sort du cadre en haut, et c'est un point
+    # plus bas de l'illustration (ventre plutôt que buste) qui se retrouve
+    # au niveau de la pilule — donc la pilule paraît plus basse sur l'oiseau.
+    _MASCOT_Y_SHIFT = -10
+    _PILL_X = 15
+    _PILL_MARGIN_R = 3   # même marge que _PILL_X côté droit — sinon le contour
+                          # touche le bord du bouton et se retrouve à moitié rogné
+    _PILL_H = 27   # réduite avec l'icône (même rapport) — sinon la pilule
+                   # paraît trop grande par rapport à une mascotte plus petite
+    _PILL_RADIUS = 4   # coins arrondis d'une barre carrée, pas une pilule ovale
+
+    _PURPLE = "#aa50b4"   # mauve de la mascotte (crête/bec) — couleur de repos
+    _SETTLE_OK_MS = 700   # retour à idle après un succès
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -192,7 +250,6 @@ class AnimatedBuildButton(QToolButton):
 
         self._settle_timer = QTimer(self)
         self._settle_timer.setSingleShot(True)
-        self._settle_timer.setInterval(700)
         self._settle_timer.timeout.connect(self._settle)
 
         self.build_finished.connect(lambda ok: setattr(self, "_success", ok))
@@ -205,6 +262,10 @@ class AnimatedBuildButton(QToolButton):
         st_idle.addTransition(self.build_started, st_building)
         st_building.addTransition(self.build_finished, st_done)
         st_done.addTransition(self._settle, st_idle)
+        # Retenter pendant un échec affiché relance directement la jauge —
+        # sans ça, "done" ignore build_started (transition propre à st_idle)
+        # et le clic ne fait rien voir tant que le timer n'a pas expiré.
+        st_done.addTransition(self.build_started, st_building)
 
         st_idle.entered.connect(self._enter_idle)
         st_building.entered.connect(self._enter_building)
@@ -228,7 +289,12 @@ class AnimatedBuildButton(QToolButton):
         self.update()
 
     def _enter_done(self):
-        self._settle_timer.start()
+        # Un succès efface l'écran de fin tout seul, vite. Un échec reste
+        # affiché tant que l'utilisateur ne relance pas un build (transition
+        # st_done → st_building ci-dessus) : pas de retour "Run" tout seul,
+        # ce qui laisserait croire que l'erreur est réglée sans action.
+        if self._success:
+            self._settle_timer.start(self._SETTLE_OK_MS)
         self.update()
 
     def set_progress(self, fraction: float):
@@ -246,52 +312,92 @@ class AnimatedBuildButton(QToolButton):
         self.update()
     fill = pyqtProperty(float, _get_fill, _set_fill)
 
+    def _mascot_state(self) -> str:
+        if not self._bar_mode:
+            return "idle"
+        return "working" if self._success else "failed"
+
     # ── peinture ─────────────────────────────────────────────────
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        w, h = self.width(), self.height()
+        h = self.height()
+        pill_x, pill_w = self._PILL_X, self.width() - self._PILL_X - self._PILL_MARGIN_R
+        pill_y = (h - self._PILL_H) // 2
 
-        if not self.isEnabled():
-            bg = QColor("#1a3a24")
-        elif self.underMouse():
-            bg = QColor("#3a7a44")
-        else:
-            bg = QColor("#2a5c34")
+        # Géométrie de la mascotte calculée UNE FOIS, réutilisée par
+        # _paint_mascot() tout à la fin (par-dessus la pilule).
+        icon_rect = self._mascot_rect(h)
+        text_rect = QRectF(pill_x, pill_y, pill_w, self._PILL_H)
+        text_align = Qt.AlignmentFlag.AlignCenter
 
+        r = self._PILL_RADIUS
         if not self._bar_mode:
+            pill_color = QColor(self._PURPLE)
+            if not self.isEnabled():
+                pill_color = QColor(C.BTN_PRIMARY_DISABLED)
+            elif self.underMouse():
+                pill_color = pill_color.lighter(112)
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(bg)
-            p.drawRoundedRect(0, 0, w, h, 5, 5)
+            p.setBrush(pill_color)
+            p.drawRoundedRect(pill_x, pill_y, pill_w, self._PILL_H, r, r)
 
-            # cartouche GBA centrée
-            cw, ch = 20, 20
-            cx, cy = (w - cw) // 2, (h - ch) // 2
-            p.setPen(QColor("#c8ffc8"))
-            p.setBrush(QColor("#123018"))
-            p.drawRoundedRect(cx, cy, cw, ch, 3, 3)
+            p.setPen(QColor("#000000") if self.isEnabled() else QColor(C.TEXT_MUTED))
+            p.setFont(QFont(T.UI, T.SM, QFont.Weight.DemiBold))
+            p.drawText(text_rect, text_align, label("common.run"))
+        elif not self._success:
+            # échec figé : pilule pleine rouge, pas de jauge à faire lire.
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor("#1e4a28"))
-            p.drawRect(cx + 3, cy + 3, cw - 6, ch - 11)
-            p.setBrush(bg)
-            p.drawRect(cx + cw // 2 - 3, cy + ch - 3, 6, 4)
+            p.setBrush(QColor(C.ACCENT_RED))
+            p.drawRoundedRect(pill_x, pill_y, pill_w, self._PILL_H, r, r)
+            p.setPen(QColor("#000000"))
+            p.setFont(QFont(T.UI, T.SM, QFont.Weight.DemiBold))
+            p.drawText(text_rect, text_align, label("build.failed_mark"))
         else:
-            # tout le bouton devient la barre de chargement
+            # en cours : la pilule devient la jauge, remplissage réel du build.
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor("#123018"))
-            p.drawRoundedRect(0, 0, w, h, 5, 5)
-            fw = round(w * self._fill)
+            p.setBrush(QColor(C.BG_INPUT))
+            p.drawRoundedRect(pill_x, pill_y, pill_w, self._PILL_H, r, r)
+            fw = round(pill_w * self._fill)
             if fw > 0:
-                fill_color = QColor("#8be89b") if self._success else QColor("#e88b8b")
-                p.setBrush(fill_color)
-                p.setClipPath(self._rounded_path(w, h, 5))
-                p.drawRect(0, 0, fw, h)
+                p.save()
+                p.setBrush(QColor(C.ACCENT_YLW))
+                p.setClipPath(self._rounded_path(pill_x, pill_y, pill_w, self._PILL_H, r))
+                p.drawRect(pill_x, pill_y, fw, self._PILL_H)
+                p.restore()   # sans ça le clip reste actif et masque la mascotte
+
+        # Contour noir, cohérent avec le trait de la mascotte — par-dessus le
+        # remplissage, quel que soit l'état.
+        p.setPen(QPen(QColor("#000000"), 2))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(QRectF(pill_x, pill_y, pill_w, self._PILL_H), r, r)
+
+        self._paint_mascot(p, icon_rect)
         p.end()
 
+    def _mascot_rect(self, h: int) -> QRectF | None:
+        """Boîte de la mascotte pour l'état courant, ancrée en bas-gauche du
+        bouton — None si aucun dessin n'est disponible pour cet état."""
+        renderer = _mascot_renderer(self._mascot_state())
+        if renderer is None:
+            return None
+        vb = renderer.viewBox()
+        icon_h = float(h) * self._MASCOT_SCALE
+        icon_w = min(icon_h * (vb.width() / vb.height()), self._MASCOT_BOX_W)
+        x = self._MASCOT_X_SHIFT
+        y = h - icon_h + self._MASCOT_Y_SHIFT
+        return QRectF(x, y, icon_w, icon_h)
+
+    def _paint_mascot(self, p: QPainter, icon_rect: "QRectF | None"):
+        if icon_rect is None:
+            return
+        renderer = _mascot_renderer(self._mascot_state())
+        renderer.render(p, icon_rect)
+
     @staticmethod
-    def _rounded_path(w, h, r):
+    def _rounded_path(x, y, w, h, r):
         path = QPainterPath()
-        path.addRoundedRect(0, 0, w, h, r, r)
+        path.addRoundedRect(QRectF(x, y, w, h), r, r)
         return path
 
     def enterEvent(self, event):
@@ -429,10 +535,10 @@ class ToolchainBar(QFrame):
     def refresh(self):
         ok = self.toolchain.devkitpro_ok
         self._dkp.setText("devkitPro ✓" if ok else "devkitPro ✗")
-        self._dkp.setStyleSheet(f"color:{C.POWER};" if ok else f"color:{C.ACCENT_RED};")
+        self._dkp.setStyleSheet(f"color:{C.TEXT_NORM};" if ok else f"color:{C.ACCENT_RED};")
         ok2 = self.toolchain.mgba_ok
         self._mgba.setText("mgba ✓" if ok2 else "mgba ✗")
-        self._mgba.setStyleSheet(f"color:{C.POWER};" if ok2 else f"color:{C.ACCENT_RED};")
+        self._mgba.setStyleSheet(f"color:{C.TEXT_NORM};" if ok2 else f"color:{C.ACCENT_RED};")
 
 
 ## L'ancien ToolchainDialog (OK/Cancel, devkitPro + mgba) vit maintenant comme

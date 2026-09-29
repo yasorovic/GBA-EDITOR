@@ -5,16 +5,15 @@ Toutes les icônes de l'application passent par ce module.
 Pour migrer vers un autre icon set (font bundlée, SVGs…),
 seul ce fichier change — le reste du code appelle get() / fallback().
 
-Backend actuel : qtawesome — Material Design Icons (mdi.*)
-Fallback       : QIcon vide si qtawesome absent (pas de crash)
+Backend : qtawesome — Material Design Icons (mdi.*)
+Fallback : QIcon vide si qtawesome absent (pas de crash)
 """
 
 from __future__ import annotations
 import tempfile
 from pathlib import Path
-from PyQt6.QtCore import QPointF, QRectF, QSize, Qt
-from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QPolygonF
-from PyQt6.QtSvg import QSvgRenderer
+from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PyQt6.QtWidgets import QApplication
 
 # ── Couleur neutre des icônes ─────────────────────────────────────
@@ -27,7 +26,7 @@ from PyQt6.QtWidgets import QApplication
 from core.interface_preferences import interface_theme as _interface_theme
 _LIGHT = _interface_theme() == "light"
 COLOR_DEFAULT = "#666666" if _LIGHT else "#8c8c8c"   # gris neutre
-COLOR_ACTIVE  = "#1f9d55" if _LIGHT else "#5be08b"   # = C.POWER — état actif / live
+COLOR_ACTIVE  = "#3a3a3a" if _LIGHT else "#d0d0d0"   # état actif neutre
 COLOR_FOLDER  = "#8a8a8a" if _LIGHT else "#6e6e6e"   # dossier — gris neutre
 
 # Alias de compatibilité : les consommateurs existants continuent à demander
@@ -111,24 +110,33 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "scroll_h":              ("mdi.arrow-left-right-bold",   "↔"),
     "scroll_v":              ("mdi.arrow-up-down-bold",      "↕"),
     # Project panel — types d'objets
-    # Les instances sont Pac-Man : une silhouette immédiatement lisible et
-    # suffisamment neutre pour un PNJ, un ennemi ou un objet mobile. Le
-    # statut « script » ne change pas le pictogramme : il se lit dans le
-    # contexte qui l'affiche, pas dans une seconde taxonomie de formes.
-    "actor":                 ("mdi.pac-man",                 "◕"),
-    "actor_empty":           ("mdi.pac-man",                 "◕"),
-    "actor_script":          ("mdi.pac-man",                 "◕"),
-    "actor_empty_script":    ("mdi.pac-man",                 "◕"),
-    # Un prefab est le « fantôme » : son identité reste distincte de l'actor
-    # par la forme, sans faire appel à une couleur de famille.
-    "prefab":                ("mdi.ghost",                   "♟"),
+    # Actor/Prefab/Scene se voisinent partout (arbres, menus) : les trois
+    # viennent de la même famille Font Awesome 6 Solid plutôt que de mélanger
+    # son trait à celui de Material Design Icons (le reste du registre). Le
+    # statut « script » ne change pas le pictogramme de l'actor : il se lit
+    # dans le contexte qui l'affiche, pas dans une seconde taxonomie de formes.
+    "actor":                 ("fa6s.ghost",                  "◕"),
+    "actor_empty":           ("fa6s.ghost",                  "◕"),
+    "actor_script":          ("fa6s.ghost",                  "◕"),
+    "actor_empty_script":    ("fa6s.ghost",                  "◕"),
+    # Masques de théâtre : une forme réutilisable ailleurs pour tout ce qui
+    # tient du gabarit/de l'archétype, pas seulement les prefabs.
+    "prefab":                ("fa6s.masks-theater",          "♟"),
     # Repère d'ancrage d'un actor dans le canvas : une cible est plus explicite
     # qu'une croix dessinée à la main et réutilise le registre d'icônes.
     "actor_origin":          ("mdi.crosshairs",               "⊙"),
     "script_lua":            ("mdi.code-braces",             "λ"),
     "script_file":           ("mdi.file-outline",            "≡"),
-    "scene":                 ("mdi.layers-outline",          "◈"),
+    "scene":                 ("fa6s.clapperboard",           "◈"),
+    # Groupe technique (ex. tranche OBJ de la projection Priorité) : un
+    # marqueur neutre, pour ne pas laisser croire que le GROUPE est lui-même
+    # un actor/prefab/scene.
+    "priority_group":        ("mdi.circle-outline",          "○"),
+    # Un dossier alterne plein (replié) / filet (déplié) dans les arbres —
+    # cf. folder_icon() ci-dessous. "folder" seul reste l'état déplié/générique
+    # (menus, filtres) pour ne pas toucher les appels qui ignorent l'état.
     "folder":                ("mdi.folder-outline",          "▸"),
+    "folder_closed":         ("mdi.folder",                  "▸"),
     "sprite":                ("mdi.image-outline",           "▧"),
     "background":            ("mdi.image-multiple-outline",  "▥"),
     "palette":               ("mdi.palette-outline",         "◐"),
@@ -141,9 +149,6 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "music":                 ("mdi.music-note",              "♫"),
     "data_table":            ("mdi.table",                   "▦"),
     "asset_missing":         ("mdi.circle-outline",          "○"),
-    # Caméra de cinéma latérale à deux bobines. Le rendu est dessiné ci-dessous
-    # plutôt que pris dans MDI : les variantes « movie » sont des clapboards,
-    # pas la silhouette de caméra demandée par l'éditeur.
     "camera":                ("mdi.video",                   "▰"),
     # Sprite Editor — directions
     "dir_n":                 ("mdi.arrow-up",                "↑"),
@@ -160,6 +165,8 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     # Sprite Editor — playback
     "playback_prev":         ("mdi.skip-previous",           "⏮"),
     "playback_play":         ("mdi.play",                    "▶"),
+    "playback_stop":         ("mdi.stop",                    "■"),
+    "playback_loop":         ("mdi.repeat",                  "↻"),
     "playback_next":         ("mdi.skip-next",               "⏭"),
     "playback_grid":         ("mdi.grid",                    "⊞"),
     "playback_contrast":     ("mdi.contrast-circle",         "◑"),
@@ -228,72 +235,6 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "search":                 ("mdi.magnify",                 "⌕"),
 }
 
-# ── Icônes SVG maison ("CustomIcons/") ─────────────────────────────
-# Grammaire d'icônes dessinée à la main, en cours de remplacement de qtawesome
-# clé par clé — seules les formes couvertes par un fichier ici basculent.
-# Le reste du registre continue de passer par qtawesome (mdi.*) jusqu'à ce
-# qu'un dessin équivalent existe.
-_CUSTOM_ICONS_DIR = Path(__file__).parent / "CustomIcons"
-_CUSTOM_ICONS: dict[str, str] = {
-    "actor":              "Actor_icon.svg",
-    "actor_empty":        "Actor_icon.svg",
-    "actor_script":       "Actor_icon.svg",
-    "actor_empty_script": "Actor_icon.svg",
-    "prefab":             "Prefab_icon.svg",
-    "scene":              "Scene_icon.svg",
-    "folder":             "Folder__icon.svg",
-    "script_file":        "Script_icon.svg",
-    "script_lua":         "Brackets_icon.svg",
-    "warning":            "Warning_icon.svg",
-    "asset_missing":      "QuestionMark_icon.svg",
-    "camera":             "Camera_icon.svg",
-}
-_svg_renderer_cache: dict[str, QSvgRenderer] = {}
-_custom_pixmap_cache: dict[tuple[str, str, int], QPixmap] = {}
-
-
-def _custom_pixmap(name: str, color: str, size: int) -> QPixmap | None:
-    """Pixmap teintée `color` de l'icône maison `name`, ou None si absente.
-
-    Le SVG source est dessiné en noir : on le rasterise tel quel puis on
-    recolorie les pixels opaques en `color` (CompositionMode_SourceIn), comme
-    qtawesome le fait pour ses propres glyphes — indépendant de la façon dont
-    le SVG utilise fill/stroke.
-    """
-    filename = _CUSTOM_ICONS.get(name)
-    if filename is None:
-        return None
-    key = (name, color, size)
-    px = _custom_pixmap_cache.get(key)
-    if px is not None:
-        return px
-    renderer = _svg_renderer_cache.get(filename)
-    if renderer is None:
-        path = _CUSTOM_ICONS_DIR / filename
-        if not path.exists():
-            return None
-        renderer = QSvgRenderer(str(path))
-        _svg_renderer_cache[filename] = renderer
-    if not renderer.isValid():
-        return None
-    n = max(1, int(size))
-    mask = QPixmap(n, n)
-    mask.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(mask)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-    renderer.render(painter)
-    painter.end()
-    px = QPixmap(n, n)
-    px.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(px)
-    painter.drawPixmap(0, 0, mask)
-    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
-    painter.fillRect(px.rect(), QColor(color))
-    painter.end()
-    _custom_pixmap_cache[key] = px
-    return px
-
-
 # ── Backend (chargé une seule fois) ──────────────────────────────
 try:
     import qtawesome as _qta
@@ -303,31 +244,6 @@ except ImportError:
     _BACKEND = "none"
 
 
-def _classic_camera_pixmap(color: str, size: int) -> QPixmap:
-    """Caméra de cinéma latérale, dessinée une fois dans le registre commun.
-
-    Les deux bobines, le corps et l'objectif gardent cette forme dans l'arbre,
-    les inspecteurs et le canvas. La taille demandée est native : elle reste
-    donc nette même lorsqu'un item zoomable la redemande à haute résolution.
-    """
-    n = max(1, int(size))
-    px = QPixmap(n, n)
-    px.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(px)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-    painter.scale(n / 64.0, n / 64.0)
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(QColor(color))
-    painter.drawEllipse(QRectF(11, 5, 19, 19))
-    painter.drawEllipse(QRectF(33, 5, 19, 19))
-    painter.drawRoundedRect(QRectF(7, 27, 37, 23), 3, 3)
-    painter.drawPolygon(QPolygonF([
-        QPointF(43, 32), QPointF(58, 24), QPointF(58, 50), QPointF(43, 44),
-    ]))
-    painter.end()
-    return px
-
-
 def get(name: str,
         color: str = COLOR_DEFAULT,
         color_active: str | None = None) -> QIcon:
@@ -335,11 +251,6 @@ def get(name: str,
     Retourne un QIcon pour le nom logique donné.
     color_active : couleur quand le bouton est checked (QToolButton).
     """
-    custom = _custom_pixmap(name, color, 128)
-    if custom is not None:
-        return QIcon(custom)
-    if name == "camera":
-        return QIcon(_classic_camera_pixmap(color, 128))
     entry = _REGISTRY.get(name)
     if entry is None:
         return QIcon()
@@ -353,6 +264,13 @@ def get(name: str,
         except Exception:
             pass
     return QIcon()
+
+
+def folder_icon(expanded: bool, color: str = COLOR_FOLDER) -> QIcon:
+    """Icône dossier des arbres : plein replié, filet déplié — la même
+    alternance partout où un dossier peut se déplier (Finder d'assets, arbre
+    de scène, arbre de textes)."""
+    return get("folder" if expanded else "folder_closed", color)
 
 
 # ── Icônes dessinées dans une vue zoomable ───────────────────────
@@ -380,13 +298,7 @@ def scaled_pixmap(name: str,
     px = _scaled_cache.get(key)
     if px is None:
         n = max(1, int(round(size * q)))
-        custom = _custom_pixmap(name, color, n)
-        if custom is not None:
-            px = custom
-        elif name == "camera":
-            px = _classic_camera_pixmap(color, n)
-        else:
-            px = get(name, color).pixmap(QSize(n, n))
+        px = get(name, color).pixmap(QSize(n, n))
         _scaled_cache[key] = px
     return px
 
@@ -414,11 +326,6 @@ def _render(path: Path) -> None:
         return
     name, color, size, scale = _pending[path]
     try:
-        custom = _custom_pixmap(name, color, max(1, int(round(size * scale))))
-        if custom is not None:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            custom.save(str(path), "PNG")
-            return
         if _qta is None:
             return
         entry = _REGISTRY.get(name)
@@ -440,7 +347,7 @@ def qss_image(name: str, color: str = COLOR_DEFAULT,
     Retourne "" si l'icône est inconnue ou aucun backend disponible : l'appelant
     omet alors la règle `image:` au lieu de pointer un fichier fantôme.
     """
-    if name not in _CUSTOM_ICONS and (_REGISTRY.get(name) is None or _qta is None):
+    if _REGISTRY.get(name) is None or _qta is None:
         return ""
     slug = f"{name}_{color.lstrip('#')}_{size}_{scale:g}"
     path = _CACHE_DIR / f"{slug}.png"

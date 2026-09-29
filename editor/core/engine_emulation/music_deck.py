@@ -102,6 +102,25 @@ class MusicDeck:
     def playing(self) -> bool:
         return self._track is not None and not self._ended
 
+    @property
+    def position(self) -> int:
+        """Position de lecture actuelle, en échantillons stéréo."""
+        return self._pos
+
+    @property
+    def duration(self) -> int:
+        """Durée du module courant, en échantillons stéréo."""
+        return 0 if self._track is None else int(self._track.pcm.shape[0])
+
+    @property
+    def looping(self) -> bool:
+        return self._loop
+
+    def set_looping(self, enabled: bool):
+        """Change la boucle de la lecture en cours et de la transition pendante."""
+        self._loop = bool(enabled)
+        self._to_loop = bool(enabled)
+
     def play(self, track: Track, volume: int, loop: bool = True):
         """`music_play` : démarrage sec, sans transition."""
         self._track, self._pos, self._vol = track, 0, volume

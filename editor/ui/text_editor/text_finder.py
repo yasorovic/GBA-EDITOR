@@ -12,6 +12,7 @@ from ui.common.widgets import W
 
 
 _ROLE_PATH = Qt.ItemDataRole.UserRole
+_ROLE_IS_FOLDER = Qt.ItemDataRole.UserRole + 1
 
 
 class TextFinder(QWidget):
@@ -47,6 +48,8 @@ class TextFinder(QWidget):
         self._tree.itemSelectionChanged.connect(self._on_selection)
         self._tree.itemDoubleClicked.connect(self._begin_rename)
         self._tree.itemChanged.connect(self._commit_rename)
+        self._tree.itemExpanded.connect(lambda it: self._refresh_folder_icon(it, True))
+        self._tree.itemCollapsed.connect(lambda it: self._refresh_folder_icon(it, False))
         root.addWidget(self._tree, 1)
 
     def load_project(self, project):
@@ -60,7 +63,8 @@ class TextFinder(QWidget):
         root = QTreeWidgetItem(self._tree, [label("txttbl.text_count",
                                                   n=len(self._project.texts) if self._project else 0)])
         root.setData(0, _ROLE_PATH, ())
-        root.setIcon(0, icons.get("folder", icons.COLOR_FOLDER))
+        root.setData(0, _ROLE_IS_FOLDER, True)
+        root.setIcon(0, icons.folder_icon(root.isExpanded(), icons.COLOR_FOLDER))
         nodes: dict[tuple[str, ...], QTreeWidgetItem] = {(): root}
         counts: dict[tuple[str, ...], int] = {(): 0}
         for text in getattr(self._project, "texts", ()):
@@ -71,7 +75,6 @@ class TextFinder(QWidget):
                 if item is None:
                     item = QTreeWidgetItem(parent, [segment])
                     item.setData(0, _ROLE_PATH, path)
-                    item.setIcon(0, icons.get("folder", icons.COLOR_FOLDER))
                     nodes[path] = item
                     counts[path] = 0
                 counts[path] += 1
@@ -83,15 +86,24 @@ class TextFinder(QWidget):
                 # dossier afin que la hiérarchie se lise d'un seul regard.
                 has_child = any(other[:len(path)] == path and len(other) > len(path)
                                 for other in nodes)
+                item.setData(0, _ROLE_IS_FOLDER, has_child)
                 if not has_child:
                     item.setIcon(0, icons.get("ui_text", C.TEXT_DIM))
-                # À l'ouverture, les grands dossiers restent lisibles mais
-                # leurs descendants ne déroulent pas toute l'arborescence.
-                item.setExpanded(len(path) == 1)
+                else:
+                    # À l'ouverture, les grands dossiers restent lisibles mais
+                    # leurs descendants ne déroulent pas toute l'arborescence.
+                    expanded = len(path) == 1
+                    item.setExpanded(expanded)
+                    item.setIcon(0, icons.folder_icon(expanded, icons.COLOR_FOLDER))
         target = nodes.get(selected, root)
         target.setSelected(True)
         self._tree.setCurrentItem(target)
         self._blocking = False
+
+    @staticmethod
+    def _refresh_folder_icon(item: QTreeWidgetItem, expanded: bool) -> None:
+        if item.data(0, _ROLE_IS_FOLDER):
+            item.setIcon(0, icons.folder_icon(expanded, icons.COLOR_FOLDER))
 
     def selected_path(self) -> tuple[str, ...]:
         item = self._tree.currentItem()

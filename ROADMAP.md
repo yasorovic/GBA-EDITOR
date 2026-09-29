@@ -174,97 +174,12 @@ chantiers clos ; ce tableau ne garde que ceux **non livrés**.
 
 | Chantier | Ouvert le | État |
 | --- | --- | --- |
-| Préparer une image riche à l'import — recadrer, redimensionner | 2026-09-26 | **En cours** — tranches 4bpp/8bpp livrées ; reste la tranche bitmap (son propre panneau, pas commencée) et la validation à la souris dans l'éditeur — voir [ci-dessous](#préparer-une-image-riche-à-limport--recadrer-redimensionner-sans-toucher-au-png) |
+| Préparer une image riche à l'import — recadrer, redimensionner | 2026-09-26 | Route vers v1.0-stable — non prioritaire pour l'alpha (décidé le 2026-09-29) ; tranches 4bpp/8bpp livrées, reste la tranche bitmap et la validation à la souris. Voir [ci-dessous](#chantier-transverse--préparer-une-image-riche-à-limport-recadrer-et-redimensionner-sans-toucher-au-png) |
 | L'API dit tout ce que l'inspecteur règle | 2026-09-23 | **En cours** — tranche 1 (acteur, sprite, collision) livrée le 2026-09-23, sauf `parent` et `sprite_name` — **la collision est rouverte le 2026-09-24** (boîte = référence typée, `collision_box.get_tile`) ; tranches 2 (caméra, scène, calque) et 3 (interface) à suivre. Voir [ci-dessous](#lapi-dit-tout-ce-que-linspecteur-règle) |
 | Piste Collision — un `Contact` d'événement | 2026-09-25 | À ouvrir — non verrouillée (normale acteur↔acteur), extraite de la struct `Actor` allégée, code non commencé — voir [ci-dessous](#piste-collision--un-contact-dévénement-pas-une-dernière-collision) |
 | Le cache de scène | 2026-09-16 | À ouvrir — voir [ci-dessous](#le-cache-de-scène-rouvrir-une-scène-déjà-visitée-sans-tout-redécoder) |
 | Undo/redo des sidecars d'éditeur | — | À ouvrir — envisagé pour **V2**, voir [ci-dessous](#undoredo-des-sidecars-déditeur-annuler-la-création-dun-groupe-un-déplacement-de-nœud) |
-| L'atelier Texte réuni — écrire et voir dans un même écran | 2026-09-19 | **En cours** — conception et décision verrouillée (vue balisage en police moteur, pas une vue source Qt), aucune étape du chantier commencée. Voir [ci-dessous](#latelier-texte-réuni--écrire-et-voir-dans-un-même-écran--en-cours) |
-
----
-
-## Préparer une image riche à l'import — recadrer, redimensionner sans toucher au PNG
-
-### D'où vient la question (2026-09-26)
-
-Une photo de 474×314 importée en tuilé 8bpp donne 2194 tuiles uniques pour un budget de 256 : le
-Background Editor le **dit** (avertissement rouge « Exceeds VRAM ») mais ne laisse rien faire —
-l'auteur n'a que le mode (tuilé/bitmap, profondeur) et un logiciel externe. Et le tuilé tronque
-l'index de tuile à 10 bits (`pack_se`), donc au-delà de 1024 la carte se brouille en silence.
-
-### Le principe
-
-Deux gestes sur la **préparation de la source**, avant l'encodage, portés par le sidecar :
-
-- **Recadrer** (`import_crop`, en pixels de la source) puis **redimensionner** (`import_size`, en
-  pixels de l'image préparée), dans cet ordre ;
-- le PNG n'est **jamais** modifié : `prepare_source` produit une image PIL en mémoire, que
-  reçoit `encode_by_mode` — l'unique endroit qui choisit l'encodeur. Tous les chemins qui
-  encodent (recompression de l'inspecteur, import, resynchronisation d'un PNG retouché,
-  réconciliation au chargement) lisent la MÊME préparation, sinon la ROM et l'éditeur
-  divergeraient ;
-- revenir en arrière = effacer la préparation (bouton « Original »), le PNG étant intact.
-
-### Décisions verrouillées (2026-09-26)
-
-- **Barre du canvas** : deux bascules exclusives (Recadrer / Redimensionner) et une action
-  (Original), dans la même `CanvasTopBar` que les autres canvas.
-- **Redimensionner** : libre au pixel ; **Maj** = proportionnel ; **Ctrl** = accroche 8×8.
-- **Recadrer** : libre au pixel ; **Maj** = garde les proportions de l'image d'origine ; **Ctrl**
-  = accroche 8×8.
-- **Rééchantillonnage automatique** : plus proche voisin si le PNG source est indexé (palette
-  préservée), Lanczos sinon — aucun réglage exposé.
-- **Fonds de scène seulement** : un cadre d'UI ou une planche d'animation ont une géométrie qui
-  dépend des pixels d'origine (marges, grille de frames).
-- La taille affichée par le Scene Manager suit la taille **préparée** (`pixel_size()`), plus celle
-  du PNG.
-
-### Mesurer le 4bpp avant d'y passer (2026-09-26)
-
-Bouton « Analyser pour le 4bpp » dans l'inspecteur, sur l'image **préparée**, hors-thread :
-couleurs par tuile (min / moyenne / max et répartition), tuiles qui tiennent en 15 couleurs,
-jeux de couleurs distincts et tuiles qui en partagent un, palettes nécessaires, verdict « sans
-perte » ou non. `bg_import.analyze_tile_colors` réutilise l'extraction et le packing de la
-compression : le chiffre annoncé est celui que la compression trouvera. Les palettes comptées
-sont celles des tuiles qui tiennent, sans la réduction — un minimum, pas une promesse.
-
-### Jouer avec la compression — l'inspecteur contextuel (2026-09-26)
-
-L'auteur règle la compression avec des curseurs et voit le rendu au canvas ; un réglage relance
-l'encodage hors-thread après 250 ms. **L'inspecteur est contextuel** : chaque mode (tuilé
-4bpp / 8bpp, bitmap 8 / 16bpp) a sa boîte de réglages, absente des autres. Aucun refus d'office :
-une image hors budget s'encode quand même, et les mesures disent ce que ça coûte.
-
-**Tranche 1 — tuilé 4bpp (livrée).** Réglages portés par le sidecar (`BackgroundAsset.compression`,
-seuls les écarts au défaut sont écrits) :
-
-- **Palettes** (1–16) et **couleurs par palette** (2–15). Sans perte quand l'image le permet (pixel art :
-  packing exact) ; sinon `core/bg_palette_cluster.py` regroupe les tuiles qui se ressemblent, taille une
-  palette par groupe depuis ses pixels réels et affine — l'ancienne méthode (garder les 16 palettes les
-  plus employées, renvoyer le reste au plus proche) laissait l'océan d'une photo sans ses bleus, même
-  au réglage par défaut ;
-- **Couleurs globales** : réduire toute l'image avant le découpage en tuiles — c'est ce qui rend
-  les tuiles voisines compatibles, donc ce qui fait rentrer une photo (le 4bpp par défaut y perd
-  la moitié de l'image) ;
-- **Tuiles** : cible de tuiles uniques ; `core/bg_tile_merge.py` regroupe par **plus faible perte**
-  (agglomération de Ward, coût pondéré par les cases couvertes, distance qui pèse la luminance),
-  garde la tuile la plus centrale de chaque groupe et renvoie les autres cases vers la variante
-  gardée la plus proche. Le premier essai — garder « les plus employées » — écrasait le bas de
-  l'image : sur une photo toutes les tuiles sont employées une fois, et l'égalité tombait sur
-  l'ordre de balayage. Reste à explorer : réutiliser une tuile sous une autre banque de palette ;
-- **Méthode** de réduction dans une tuile, et le **dithering** (agit sur la réduction globale).
-
-**Tranche 2 — tuilé 8bpp (livrée).** Même boîte, contextuelle : **Couleurs** de l'unique palette
-(2–255, `palette_colors`), **Tuiles** (la même fusion par plus faible perte, budget 256 par charblock),
-**méthode** de quantification (median-cut, octree, couverture max — quantifieurs de PIL) et
-**dithering**. Le dithering des modes 8bpp et bitmap était sans effet : `Image.quantize(dither=…)`
-ignore l'option tant qu'on ne lui donne pas de palette. Corrigé pour les deux (`_quantize_rgb`),
-test à l'appui. Reste la tranche bitmap : son propre panneau.
-
-### Ce que ça ne fait pas
-
-Pas d'annulation pas-à-pas (Ctrl+Z) : la recompression est asynchrone et « Original » suffit à
-revenir. Pas de réglage de couleurs (le mode et la profondeur existent déjà dans l'inspecteur).
+| L'atelier Texte réuni — écrire et voir dans un même écran | 2026-09-19 | Route vers v1.0-stable — non prioritaire pour l'alpha (décidé le 2026-09-29) ; conception et décision verrouillée, aucune étape commencée. Voir [ci-dessous](#chantier-transverse--latelier-texte-réuni-écrire-et-voir-dans-un-même-écran) |
 
 ---
 
@@ -310,7 +225,7 @@ tag ; le tag reste la CLÉ de la boîte, donc lecture seule.
 
 ```lua
 local hb = self:collision_box("hitbox")   -- nil si l'acteur n'a pas de boîte de ce tag
-hb.active = false                         -- bool
+hb:deactivate()                           -- les cinq verbes sont la seule porte d'écriture ; `hb.active` se LIT
 hb.solid  = false                         -- bool : arrêtée par la carte de collision, ou déclencheur
 hb.offset = vec2(8, -4)                   -- décalage relatif au pivot du sprite (valeur immuable)
 hb.size   = vec2(12, 8)                   -- largeur, hauteur
@@ -324,7 +239,7 @@ local t = hb:get_collision_tile(x, y)     -- type de tile de collision au point 
 | --- | --- | --- |
 | `self:collision_box(tag)` | constructeur de référence, `nil` possible | — |
 | `hb.tag` | lecture seule | la clé des anciens appels |
-| `hb.active` | modifiable — **champ à créer au runtime** : la résolution contre la carte et le test de chevauchement doivent l'ignorer quand il est faux | (aucune porte) |
+| `hb.active` | lecture seule — **champ à créer au runtime**, écrit par `hb:activate()` / `hb:deactivate()` (cycle de vie en cinq verbes, 2026-09-25) : la résolution contre la carte et le test de chevauchement doivent l'ignorer quand il est faux | (aucune porte) |
 | `hb.solid` | modifiable | `self:box_solid` / `self:set_box_solid` |
 | `hb.offset`, `hb.size` | modifiables, bornés (offset −128..127, taille 0..255) | `self:box_rect` / `self:set_box_rect` |
 | `hb.bounds` | lecture seule, rect monde | le calcul que chaque script refaisait |
@@ -375,7 +290,7 @@ l'écriture `ref.champ`, refuser l'écriture d'un champ lecture seule, et le cod
 | CollisionBox `x, y` | `hb.offset` (`hb = self:collision_box(tag)`) | modifiable |
 | CollisionBox `w, h` | `hb.size` | modifiable |
 | CollisionBox `solid` | `hb.solid` | modifiable |
-| CollisionBox `active` | `hb.active` | modifiable (champ runtime à créer) |
+| CollisionBox `active` | `hb.active` ; `hb:activate()` / `hb:deactivate()` | lecture seule, écrite par les verbes (champ runtime créé) |
 | CollisionBox `tag` | `hb.tag` ; `self.box_count` | lecture seule |
 
 **Livré (2026-09-23)** : les sept portes du tableau, la sonde C `tests/native/actor_box_probe.c`, 
@@ -383,9 +298,47 @@ l'écriture `ref.champ`, refuser l'écriture d'un champ lecture seule, et le cod
 ajoutée à la tourelle, script utilisant les sept portes). Le renommage d'un tag de collision 
 (`RenameCollisionTagCmd`) réécrit maintenant aussi les scripts.
 
-Le re-parentage (`parent`) et le changement d'asset de sprite (`sprite_name`) sont **explicitement
-laissés lecture-seule-à-venir** : ni l'un ni l'autre n'a de trace runtime aujourd'hui (la hiérarchie
-est composée au build), leur porte demande un champ par acteur. À trancher avant d'être ouverts.
+**Tranche 1 close (2026-09-29), vérifiée contre l'API et les règles posées depuis.** Restent sans porte, et c'est
+décidé : `parent` — la parenté est authorée et jamais assignée au runtime (v0.23), donc seule une LECTURE SEULE
+aurait un sens, et elle coûte un champ par acteur (un prefab posé N fois a N parents), au rebours de la struct
+`Actor` allégée ; repoussé, à rouvrir sur besoin réel. `sprite_name` — `self.active_sprite` rend l'id du composant,
+pas l'asset ; la question « comment nomme-t-on l'accès à un sous-objet de l'instance ? » est déjà ouverte, en route
+vers v1.0-stable ([ci-dessous](#chantier-transverse--nommer-laccès-à-un-sous-objet-de-linstance)), et la trancher
+ici la trancherait deux fois. `initial_state` et `prefab_name` n'ont pas besoin de porte : `self.anim` et
+`self.tag` couvrent l'usage.
+
+### Tranche 2 — caméra, scène, calque de fond (proposition du 2026-09-29, à valider avant tout code)
+
+Classement fait en lisant le runtime C (`runtime_api_inline.h`, `gba_engine.h`) et le codegen : ce qui est un
+**littéral dans le C émis** est fixé au build (lecture seule) ; ce qui vit déjà en registre ou en RAM, ou coûte un
+octet de RAM pour le devenir, est modifiable. Les portes déjà là (`camera.position`, `camera.bound`, `layer.visible`,
+`layer.priority`, `layer.scroll`, `layer.map`, `scene.size`) ne sont pas répétées.
+
+| Champ d'inspecteur | Porte Lua proposée | Nature | Raison (ce que le C fait aujourd'hui) |
+| --- | --- | --- | --- |
+| Camera `mode` | `camera.mode` (`"fixed"` / `"follow"` / `"script"`) | lecture seule | le suivi est un `switch(g_cam_active)` dont les cas sont émis seulement pour les caméras à cible : écrire `"follow"` sur une autre ne ferait rien, sans un mot |
+| Camera `follow_target` | `camera.target` (référence d'acteur, `nil` sans cible) | lecture seule | l'index d'acteur est une constante du `switch` |
+| Camera `margin_x/y` | `camera.margin` (vec2) | **modifiable** | deux littéraux du `switch` → deux octets de RAM lus par `camera_follow` |
+| Camera `frame_w/h` | `camera.frame` (vec2) | **modifiable** | pilote WIN0 (`window_set(0, …)`), qui existe déjà ; un getter du rectangle de WIN0 est à ajouter |
+| Camera `name` | `camera.name` (comparable par son nom) | lecture seule | `DOMAIN_CAMERA` existe ; sert à savoir quelle caméra `camera:switch` a activée |
+| Scene `scroll_h/v` | `scene.scroll_h`, `scene.scroll_v` (bool) | lecture seule | choisit `(g_actors[t].x>>8)` ou `cam_x` DANS le `switch` émis |
+| Scene `blend_eva/evb/evy` | `blend.alpha` (vec2), `blend.fade` (int) | **modifiable** | l'écriture existe (`blend.set_alpha`, `blend.set_fade`) mais aucune lecture : ces deux fonctions deviennent des propriétés (état → propriété), sans alias |
+| Scene `blend_*_role` | `blend.get_layer(side, bg)` … | à trancher | l'écriture est indexée (`set_layer/obj/backdrop`) ; la lecture symétrique n'a pas de demande réelle |
+| Scene `backdrop_color` | — | à trancher | `PAL_BG_RAM[0]` s'écrit, mais Lua n'a pas de type couleur : la porte attend ce type |
+| Scene `transition_kind/frames` | `scene.transition` | à trancher | lue au `scene.switch` sortant ; modifiable en jeu = écrire le réglage de la scène courante |
+| Scene `collision_layer` | `scene.collision_layer` (int) | lecture seule | index BG fixé au build |
+| Scene `render_mode` | — **aucune** | — | échafaudage non offert à l'auteur (règle « anticiper est permis, l'exposer non ») |
+| Scene `music`, `script`, `notes` | — | sans objet | `music` ne règle que la musique de DÉPART (le module `music` couvre l'état) ; `script`/`notes` ne sont pas de l'état |
+| BackgroundLayer `scroll_speed` | `layer.scroll_speed` (pourcent, 100 = normal) | **modifiable** | littéral dans la ligne `BGOFS = (cam_x*speed)>>8 + …` → quatre entiers de RAM, un par fond |
+| BackgroundLayer `pal_bank` | `layer.pal_bank` (int) | lecture seule | banque allouée au build |
+| BackgroundLayer `background_name` | `layer.image` (comparable par son nom) | lecture seule | asset chargé au build |
+| BackgroundLayer `bg_slot` | — | sans objet | c'est la clé de la référence (`layer.get(n)`) |
+| BackgroundLayer `visible` | — | sans objet | visibilité du viewport ÉDITEUR seulement (le codegen ne la lit pas) |
+
+**Questions à trancher avant d'implémenter** : (1) `camera.target` demande un type de référence d'acteur rendu par une
+propriété — acceptable, ou renoncer à cette porte tant que le suivi reste déclaratif ? (2) les quatre lignes « à
+trancher » ; (3) `blend.set_alpha` / `blend.set_fade` deviennent-elles des propriétés maintenant, ou avec le chantier
+`mixer` qui pose la même question pour le son ?
 
 ---
 
@@ -576,166 +529,6 @@ passe de 21 à 17 lignes et perd ses deux boîtes de piétinement.
   tranche ; les boîtes `tete`/`pieds` du guide disparaissent au profit d'une seule boîte et de la normale.
 - **Ce que ça ne change pas.** `hb:overlaps(other)` reste la requête booléenne pour un test ponctuel
   hors événement ; le `Contact` n'est délivré qu'aux handlers.
-
----
-
-## L'atelier Texte réuni — écrire et voir dans un même écran — **EN COURS**
-
-L'atelier actuel coupe le geste en deux : la source balisée vit dans un `QTextEdit` à gauche,
-le rendu GBA dans `FontScreenPreview` à droite. Cette séparation a servi à poser le pipeline des
-polices, mais elle oblige désormais à lire deux fois le même texte pour savoir ce que produisent
-`[font]`, `[color]`, les icônes et les valeurs. Le chantier les réunit dans **une seule surface de
-travail** : le texte se modifie là où son rendu est visible.
-
-Il ne s'agit pas de confier le texte à la mise en forme de Qt : ses polices système, son retour à
-la ligne et sa sélection ne sont pas ceux de la ROM. `FontScreenPreview` reste donc le moteur de
-rendu fidèle (glyphes rasterisés et `layout_marked_text`) ; l'éditeur devient la couche d'entrée
-et de sélection posée sur cette même surface.
-
-### Le contrat utilisateur
-
-- **Un seul écran de contenu.** La clé, le rangement, les langues et la barre de balisage restent
-  autour ; la division « source | preview » disparaît. Le texte affiché utilise les vrais glyphes,
-  ses polices portées et sa coupe GBA.
-- **Bouton “Afficher le balisage”.** Il ne bascule pas vers une vue source : la surface reste
-  fidèle à l'écran final. Lorsqu'il est actif, les balises reconnues (`[font=…]`, `[wave]`,
-  `[/font]`, etc.) apparaissent directement entre les mots, dessinées avec la police technique du
-  moteur. Le contenu conserve toujours la police réellement utilisée par la preview. Lorsqu'il est
-  masqué, seuls ces fragments techniques disparaissent ; le texte visible ne change ni de police
-  ni de mise en page.
-- **Clic droit sur une sélection → “Retirer le balisage”.** L'action enlève les bornes des balises
-  reconnues qui enveloppent exactement la sélection, sans effacer le contenu. Les balises imbriquées
-  sont retirées ensemble dans une seule annulation ; une sélection partielle ne modifie rien plutôt
-  que de produire une portée ambiguë.
-- **La source reste la vérité.** `texts.json` et les traductions conservent le BBCode actuel. Ni la
-  ROM, ni la table Text, ni le système de traduction ne changent de format.
-
-### Le morceau difficile : correspondre source et rendu
-
-Aujourd'hui `parse()` sait retirer les balises et produire les marqueurs, mais un `Marker` ne porte
-que la position de son ouverture. Pour masquer le balisage sans casser le curseur, il faut une
-projection explicite : source → caractères affichés, et retour affichage → plage source. Elle doit
-produire des segments fidèles pour le contenu et des segments en police moteur pour les balises
-visibles ; les balises masquées ont une longueur visuelle nulle. Elle doit connaître les balises
-ouvrantes/fermantes, les échappements `[[`/`$$`, les icônes, et une valeur `$nom` qui occupe une
-place source mais plusieurs caractères à l'aperçu.
-
-Cette projection servira trois lecteurs plutôt que trois approximations : le rendu unifié, la
-sélection/caret et l'action « Retirer le balisage ». Les locales de littéraux restent hors de cet
-aperçu, comme aujourd'hui : aucune portée Lua n'existe dans l'écran Text.
-
-### Analyse technique d'implémentation
-
-Le socle est déjà en place et doit être conservé :
-
-- `core.text_markup.parse()` est la seule grammaire. Il fournit le texte réellement lu (`display`),
-  les portées (`Marker`) et les fragments de source reconnus (`Token`).
-- `FontScreenPreview` matérialise déjà les Font Assets et dessine les vrais glyphes selon
-  `layout_marked_text()`. Il sait donc afficher une suite de polices bitmap et vectorielles sans
-  déléguer le rendu à Qt.
-- `TextWorkbench` possède déjà la source active, le commit différé et l'historique en amont ;
-  `MarkupToolbar` sait déjà poser ou retirer une portée dans un bloc d'édition unique.
-
-Le manque précis est une **projection d'édition** : aujourd'hui, `ParsedText` fait correspondre la
-source au texte final, mais pas à une surface qui mélange du contenu final et des balises visibles.
-Il faut ajouter dans `core.text_markup` un objet pur, par exemple `MarkupProjection`, construit à
-partir de `source`, de `ParsedText` et de l'option `show_markup`.
-
-Chaque `ProjectionSpan` portera :
-
-- sa plage dans la source (`source_start`, `source_end`) ;
-- son texte à dessiner ;
-- son rôle (`content`, `markup`, `value`, `escape`, `literal`) ;
-- la police à demander (`preview` pour le contenu, `engine` pour une balise visible) ;
-- le comportement de sélection : une balise est atomique, tandis qu'un contenu est sélectionnable
-  caractère par caractère.
-
-La projection doit aussi exposer deux conversions sans ambiguïté : `source_to_visible(position)`
-et `visible_to_source(position, bias)`. Le `bias` départage les deux bornes d'une balise masquée :
-aller à gauche doit placer le caret avant la balise, aller à droite après elle. Cela évite les
-oscillations du curseur et rend Backspace/Suppr déterministes.
-
-Les valeurs `$nom` forment le seul cas non isométrique : une plage source peut être dessinée sous
-la forme de plusieurs chiffres de la valeur initiale. Elles doivent rester un span atomique dans la
-projection, avec une position de caret avant ou après, jamais entre les chiffres calculés. Ainsi,
-l'édition ne transforme pas accidentellement `$score` en texte statique. Les échappements `[[` et
-`$$`, eux, restent du contenu normal : ils dessinent respectivement `[` et `$` mais gardent leur
-plage source pour le remplacement.
-
-`layout_marked_text()` ne doit pas être modifié pour le rendu joueur : il doit continuer à refléter
-strictement la ROM. Le nouvel atelier utilisera un petit adaptateur de mise en page voisin, qui
-réemploie les règles d'avance, de ligature, de coupe et d'interligne existantes, mais accepte les
-`ProjectionSpan` et retourne des glyphes enrichis de leur plage source. C'est cette information qui
-permet le hit-testing, la sélection, le caret et le menu contextuel. La police moteur des balises
-sera une recette dédiée et stable de l'éditeur ; elle n'entre pas dans les assets ni dans le build.
-
-`FontScreenPreview` évolue alors en surface interactive :
-
-1. il construit la projection à chaque changement de source, valeurs, police ou option de balisage ;
-2. il dessine les glyphes à partir du placement enrichi ;
-3. il convertit clic, glisser, flèches et raccourcis en plages source ;
-4. il émet un remplacement source et une demande de commit, mais ne modifie pas directement le
-   modèle Projet.
-
-`TextWorkbench` reste propriétaire de la langue active, de la valeur de départ et du commit. Il
-remplace son `QTextEdit` par cette surface, mais **réutilise la barre de balisage existante**
-(`MarkupToolbar`) : ses boutons, ses choix d'assets, ses règles de pose/retrait et ses infobulles
-ne sont pas recréés. Son unique adaptation est de viser une petite interface d'édition abstraite
-(`source()`, `selection_source()`, `replace_source()`) plutôt qu'un `QTextEdit` concret ; un
-adaptateur temporaire gardera cette même interface pour l'éditeur actuel. `MarkupHighlighter`
-devient alors inutile. Cette interface conserve les insertions existantes, leur sélection et leur
-regroupement dans l'annulation.
-
-Le clic droit « Retirer le balisage » doit être une opération pure du modèle de projection : à partir de
-la sélection source, repérer les paires de `Marker` dont les deux bornes enveloppent exactement la
-portée, retourner les deux suppressions en ordre décroissant, puis les appliquer dans un seul bloc
-d'édition. Les portées croisées ou incomplètes restent désactivées : l'éditeur ne doit jamais
-réparer silencieusement une structure ambiguë.
-
-Les tests à ajouter se répartissent naturellement :
-
-- **unitaires** dans `tests/test_font_markup.py` : projection avec et sans balisage, imbrications,
-  échappements, `$valeur!n`, limites et retrait de portée ;
-- **mise en page** dans `tests/test_text_layout.py` : alternance contenu/police moteur, changement
-  bitmap/vectoriel et correspondance clic → plage source ;
-- **interface** : frappe, collage, sélection au clavier, Ctrl+Z/Ctrl+Y, menu contextuel, langue de
-  traduction et absence de changement dans le contenu envoyé au build.
-
-Risque principal : la police moteur ajoutée au balisage modifie nécessairement la largeur visible
-et peut provoquer un retour à la ligne qui n'existe pas dans le jeu. C'est acceptable en **vue
-balisage**, à condition que la bascule reste purement éditoriale et que la vue masquée retrouve
-exactement le placement ROM. La position du caret doit donc suivre la projection courante, pas une
-coordonnée pixel mise en cache entre les deux modes.
-
-### Ordre d'implémentation
-
-1. **Extraire le modèle de projection** dans `core.text_markup` : spans source/affichés, bornes de
-   chaque portée, conversion d'une sélection et opération pure de retrait. Tests des imbrications,
-   échappements, icônes, valeurs, traductions et annulation textuelle.
-2. **Faire de `FontScreenPreview` une surface éditable**, sans changer son algorithme de rendu :
-   exposition des positions de glyphes, hit-testing, caret et sélection. La projection compose une
-   seule surface de segments fidèles pour le contenu et de segments en police moteur pour les
-   balises visibles ; aucun `QTextEdit` source séparé n'est nécessaire.
-3. **Remplacer le splitter** de `TextWorkbench` par cette surface unique. Le bouton de balisage ne
-   fait varier que les segments techniques de la projection, en maintenant les états existants
-   (aucune sélection, multi-sélection, langue source, traduction avec référence en lecture seule).
-4. **Ajouter le menu contextuel sûr** : option visible seulement sur une portée entièrement
-   sélectionnée, édition regroupée en une commande d'historique, puis retour du curseur sur le
-   contenu conservé.
-5. **Vérifier de bout en bout** : bitmap/vectoriel, plusieurs `[font]` imbriqués, longueur et
-   coupe GBA, collage texte brut, Ctrl+Z/Ctrl+Y, changement de langue et build ROM inchangé.
-
-### Décision verrouillée (2026-09-19)
-
-La vue balisage n'est jamais une vue source typographique Qt : les balises sont affichées en police
-du moteur, dans la même composition, tandis que tout le contenu reste rendu de façon fidèle avec
-les polices de preview.
-
-### À trancher au démarrage
-
-- Le bouton doit-il mémoriser sa préférence par projet ou rester une bascule de session ?
-- Une valeur `$score` affiche-t-elle sa valeur initiale dans la vue nette (comportement actuel de
-  l'aperçu) ou le jeton `$score` pour rappeler qu'elle est dynamique ?
 
 ---
 ## v1.0 — Le pipeline 2D complet
@@ -938,6 +731,254 @@ l'activer d'abord.
 **Si ce point se rouvre**, il doit couvrir les DEUX cas ensemble (boîtes de collision multiples,
 apparences sprite inactives), pour ne pas trancher deux fois la même question — « comment
 nomme-t-on l'accès à un sous-objet précis d'une instance ? » — avec deux réponses différentes.
+
+### Chantier transverse — l'atelier Texte réuni, écrire et voir dans un même écran
+
+**Route vers v1.0-stable, non prioritaire pour la release `-alpha` (décidé le 2026-09-29).** Conception
+et décision verrouillée (2026-09-19) intactes, aucune étape n'est codée.
+
+L'atelier actuel coupe le geste en deux : la source balisée vit dans un `QTextEdit` à gauche,
+le rendu GBA dans `FontScreenPreview` à droite. Cette séparation a servi à poser le pipeline des
+polices, mais elle oblige désormais à lire deux fois le même texte pour savoir ce que produisent
+`[font]`, `[color]`, les icônes et les valeurs. Le chantier les réunit dans **une seule surface de
+travail** : le texte se modifie là où son rendu est visible.
+
+Il ne s'agit pas de confier le texte à la mise en forme de Qt : ses polices système, son retour à
+la ligne et sa sélection ne sont pas ceux de la ROM. `FontScreenPreview` reste donc le moteur de
+rendu fidèle (glyphes rasterisés et `layout_marked_text`) ; l'éditeur devient la couche d'entrée
+et de sélection posée sur cette même surface.
+
+#### Le contrat utilisateur
+
+- **Un seul écran de contenu.** La clé, le rangement, les langues et la barre de balisage restent
+  autour ; la division « source | preview » disparaît. Le texte affiché utilise les vrais glyphes,
+  ses polices portées et sa coupe GBA.
+- **Bouton “Afficher le balisage”.** Il ne bascule pas vers une vue source : la surface reste
+  fidèle à l'écran final. Lorsqu'il est actif, les balises reconnues (`[font=…]`, `[wave]`,
+  `[/font]`, etc.) apparaissent directement entre les mots, dessinées avec la police technique du
+  moteur. Le contenu conserve toujours la police réellement utilisée par la preview. Lorsqu'il est
+  masqué, seuls ces fragments techniques disparaissent ; le texte visible ne change ni de police
+  ni de mise en page.
+- **Clic droit sur une sélection → “Retirer le balisage”.** L'action enlève les bornes des balises
+  reconnues qui enveloppent exactement la sélection, sans effacer le contenu. Les balises imbriquées
+  sont retirées ensemble dans une seule annulation ; une sélection partielle ne modifie rien plutôt
+  que de produire une portée ambiguë.
+- **La source reste la vérité.** `texts.json` et les traductions conservent le BBCode actuel. Ni la
+  ROM, ni la table Text, ni le système de traduction ne changent de format.
+
+#### Le morceau difficile : correspondre source et rendu
+
+Aujourd'hui `parse()` sait retirer les balises et produire les marqueurs, mais un `Marker` ne porte
+que la position de son ouverture. Pour masquer le balisage sans casser le curseur, il faut une
+projection explicite : source → caractères affichés, et retour affichage → plage source. Elle doit
+produire des segments fidèles pour le contenu et des segments en police moteur pour les balises
+visibles ; les balises masquées ont une longueur visuelle nulle. Elle doit connaître les balises
+ouvrantes/fermantes, les échappements `[[`/`$$`, les icônes, et une valeur `$nom` qui occupe une
+place source mais plusieurs caractères à l'aperçu.
+
+Cette projection servira trois lecteurs plutôt que trois approximations : le rendu unifié, la
+sélection/caret et l'action « Retirer le balisage ». Les locales de littéraux restent hors de cet
+aperçu, comme aujourd'hui : aucune portée Lua n'existe dans l'écran Text.
+
+#### Analyse technique d'implémentation
+
+Le socle est déjà en place et doit être conservé :
+
+- `core.text_markup.parse()` est la seule grammaire. Il fournit le texte réellement lu (`display`),
+  les portées (`Marker`) et les fragments de source reconnus (`Token`).
+- `FontScreenPreview` matérialise déjà les Font Assets et dessine les vrais glyphes selon
+  `layout_marked_text()`. Il sait donc afficher une suite de polices bitmap et vectorielles sans
+  déléguer le rendu à Qt.
+- `TextWorkbench` possède déjà la source active, le commit différé et l'historique en amont ;
+  `MarkupToolbar` sait déjà poser ou retirer une portée dans un bloc d'édition unique.
+
+Le manque précis est une **projection d'édition** : aujourd'hui, `ParsedText` fait correspondre la
+source au texte final, mais pas à une surface qui mélange du contenu final et des balises visibles.
+Il faut ajouter dans `core.text_markup` un objet pur, par exemple `MarkupProjection`, construit à
+partir de `source`, de `ParsedText` et de l'option `show_markup`.
+
+Chaque `ProjectionSpan` portera :
+
+- sa plage dans la source (`source_start`, `source_end`) ;
+- son texte à dessiner ;
+- son rôle (`content`, `markup`, `value`, `escape`, `literal`) ;
+- la police à demander (`preview` pour le contenu, `engine` pour une balise visible) ;
+- le comportement de sélection : une balise est atomique, tandis qu'un contenu est sélectionnable
+  caractère par caractère.
+
+La projection doit aussi exposer deux conversions sans ambiguïté : `source_to_visible(position)`
+et `visible_to_source(position, bias)`. Le `bias` départage les deux bornes d'une balise masquée :
+aller à gauche doit placer le caret avant la balise, aller à droite après elle. Cela évite les
+oscillations du curseur et rend Backspace/Suppr déterministes.
+
+Les valeurs `$nom` forment le seul cas non isométrique : une plage source peut être dessinée sous
+la forme de plusieurs chiffres de la valeur initiale. Elles doivent rester un span atomique dans la
+projection, avec une position de caret avant ou après, jamais entre les chiffres calculés. Ainsi,
+l'édition ne transforme pas accidentellement `$score` en texte statique. Les échappements `[[` et
+`$$`, eux, restent du contenu normal : ils dessinent respectivement `[` et `$` mais gardent leur
+plage source pour le remplacement.
+
+`layout_marked_text()` ne doit pas être modifié pour le rendu joueur : il doit continuer à refléter
+strictement la ROM. Le nouvel atelier utilisera un petit adaptateur de mise en page voisin, qui
+réemploie les règles d'avance, de ligature, de coupe et d'interligne existantes, mais accepte les
+`ProjectionSpan` et retourne des glyphes enrichis de leur plage source. C'est cette information qui
+permet le hit-testing, la sélection, le caret et le menu contextuel. La police moteur des balises
+sera une recette dédiée et stable de l'éditeur ; elle n'entre pas dans les assets ni dans le build.
+
+`FontScreenPreview` évolue alors en surface interactive :
+
+1. il construit la projection à chaque changement de source, valeurs, police ou option de balisage ;
+2. il dessine les glyphes à partir du placement enrichi ;
+3. il convertit clic, glisser, flèches et raccourcis en plages source ;
+4. il émet un remplacement source et une demande de commit, mais ne modifie pas directement le
+   modèle Projet.
+
+`TextWorkbench` reste propriétaire de la langue active, de la valeur de départ et du commit. Il
+remplace son `QTextEdit` par cette surface, mais **réutilise la barre de balisage existante**
+(`MarkupToolbar`) : ses boutons, ses choix d'assets, ses règles de pose/retrait et ses infobulles
+ne sont pas recréés. Son unique adaptation est de viser une petite interface d'édition abstraite
+(`source()`, `selection_source()`, `replace_source()`) plutôt qu'un `QTextEdit` concret ; un
+adaptateur temporaire gardera cette même interface pour l'éditeur actuel. `MarkupHighlighter`
+devient alors inutile. Cette interface conserve les insertions existantes, leur sélection et leur
+regroupement dans l'annulation.
+
+Le clic droit « Retirer le balisage » doit être une opération pure du modèle de projection : à partir de
+la sélection source, repérer les paires de `Marker` dont les deux bornes enveloppent exactement la
+portée, retourner les deux suppressions en ordre décroissant, puis les appliquer dans un seul bloc
+d'édition. Les portées croisées ou incomplètes restent désactivées : l'éditeur ne doit jamais
+réparer silencieusement une structure ambiguë.
+
+Les tests à ajouter se répartissent naturellement :
+
+- **unitaires** dans `tests/test_font_markup.py` : projection avec et sans balisage, imbrications,
+  échappements, `$valeur!n`, limites et retrait de portée ;
+- **mise en page** dans `tests/test_text_layout.py` : alternance contenu/police moteur, changement
+  bitmap/vectoriel et correspondance clic → plage source ;
+- **interface** : frappe, collage, sélection au clavier, Ctrl+Z/Ctrl+Y, menu contextuel, langue de
+  traduction et absence de changement dans le contenu envoyé au build.
+
+Risque principal : la police moteur ajoutée au balisage modifie nécessairement la largeur visible
+et peut provoquer un retour à la ligne qui n'existe pas dans le jeu. C'est acceptable en **vue
+balisage**, à condition que la bascule reste purement éditoriale et que la vue masquée retrouve
+exactement le placement ROM. La position du caret doit donc suivre la projection courante, pas une
+coordonnée pixel mise en cache entre les deux modes.
+
+#### Ordre d'implémentation
+
+1. **Extraire le modèle de projection** dans `core.text_markup` : spans source/affichés, bornes de
+   chaque portée, conversion d'une sélection et opération pure de retrait. Tests des imbrications,
+   échappements, icônes, valeurs, traductions et annulation textuelle.
+2. **Faire de `FontScreenPreview` une surface éditable**, sans changer son algorithme de rendu :
+   exposition des positions de glyphes, hit-testing, caret et sélection. La projection compose une
+   seule surface de segments fidèles pour le contenu et de segments en police moteur pour les
+   balises visibles ; aucun `QTextEdit` source séparé n'est nécessaire.
+3. **Remplacer le splitter** de `TextWorkbench` par cette surface unique. Le bouton de balisage ne
+   fait varier que les segments techniques de la projection, en maintenant les états existants
+   (aucune sélection, multi-sélection, langue source, traduction avec référence en lecture seule).
+4. **Ajouter le menu contextuel sûr** : option visible seulement sur une portée entièrement
+   sélectionnée, édition regroupée en une commande d'historique, puis retour du curseur sur le
+   contenu conservé.
+5. **Vérifier de bout en bout** : bitmap/vectoriel, plusieurs `[font]` imbriqués, longueur et
+   coupe GBA, collage texte brut, Ctrl+Z/Ctrl+Y, changement de langue et build ROM inchangé.
+
+#### Décision verrouillée (2026-09-19)
+
+La vue balisage n'est jamais une vue source typographique Qt : les balises sont affichées en police
+du moteur, dans la même composition, tandis que tout le contenu reste rendu de façon fidèle avec
+les polices de preview.
+
+#### À trancher au démarrage
+
+- Le bouton doit-il mémoriser sa préférence par projet ou rester une bascule de session ?
+- Une valeur `$score` affiche-t-elle sa valeur initiale dans la vue nette (comportement actuel de
+  l'aperçu) ou le jeton `$score` pour rappeler qu'elle est dynamique ?
+
+### Chantier transverse — préparer une image riche à l'import, recadrer et redimensionner sans toucher au PNG
+
+**Route vers v1.0-stable, non prioritaire pour la release `-alpha` (décidé le 2026-09-29).** Les tranches
+4bpp et 8bpp sont livrées ; reste la tranche bitmap (son propre panneau, pas commencée) et la validation à la
+souris dans l'éditeur.
+
+#### D'où vient la question (2026-09-26)
+
+Une photo de 474×314 importée en tuilé 8bpp donne 2194 tuiles uniques pour un budget de 256 : le
+Background Editor le **dit** (avertissement rouge « Exceeds VRAM ») mais ne laisse rien faire —
+l'auteur n'a que le mode (tuilé/bitmap, profondeur) et un logiciel externe. Et le tuilé tronque
+l'index de tuile à 10 bits (`pack_se`), donc au-delà de 1024 la carte se brouille en silence.
+
+#### Le principe
+
+Deux gestes sur la **préparation de la source**, avant l'encodage, portés par le sidecar :
+
+- **Recadrer** (`import_crop`, en pixels de la source) puis **redimensionner** (`import_size`, en
+  pixels de l'image préparée), dans cet ordre ;
+- le PNG n'est **jamais** modifié : `prepare_source` produit une image PIL en mémoire, que
+  reçoit `encode_by_mode` — l'unique endroit qui choisit l'encodeur. Tous les chemins qui
+  encodent (recompression de l'inspecteur, import, resynchronisation d'un PNG retouché,
+  réconciliation au chargement) lisent la MÊME préparation, sinon la ROM et l'éditeur
+  divergeraient ;
+- revenir en arrière = effacer la préparation (bouton « Original »), le PNG étant intact.
+
+#### Décisions verrouillées (2026-09-26)
+
+- **Barre du canvas** : deux bascules exclusives (Recadrer / Redimensionner) et une action
+  (Original), dans la même `CanvasTopBar` que les autres canvas.
+- **Redimensionner** : libre au pixel ; **Maj** = proportionnel ; **Ctrl** = accroche 8×8.
+- **Recadrer** : libre au pixel ; **Maj** = garde les proportions de l'image d'origine ; **Ctrl**
+  = accroche 8×8.
+- **Rééchantillonnage automatique** : plus proche voisin si le PNG source est indexé (palette
+  préservée), Lanczos sinon — aucun réglage exposé.
+- **Fonds de scène seulement** : un cadre d'UI ou une planche d'animation ont une géométrie qui
+  dépend des pixels d'origine (marges, grille de frames).
+- La taille affichée par le Scene Manager suit la taille **préparée** (`pixel_size()`), plus celle
+  du PNG.
+
+#### Mesurer le 4bpp avant d'y passer (2026-09-26)
+
+Bouton « Analyser pour le 4bpp » dans l'inspecteur, sur l'image **préparée**, hors-thread :
+couleurs par tuile (min / moyenne / max et répartition), tuiles qui tiennent en 15 couleurs,
+jeux de couleurs distincts et tuiles qui en partagent un, palettes nécessaires, verdict « sans
+perte » ou non. `bg_import.analyze_tile_colors` réutilise l'extraction et le packing de la
+compression : le chiffre annoncé est celui que la compression trouvera. Les palettes comptées
+sont celles des tuiles qui tiennent, sans la réduction — un minimum, pas une promesse.
+
+#### Jouer avec la compression — l'inspecteur contextuel (2026-09-26)
+
+L'auteur règle la compression avec des curseurs et voit le rendu au canvas ; un réglage relance
+l'encodage hors-thread après 250 ms. **L'inspecteur est contextuel** : chaque mode (tuilé
+4bpp / 8bpp, bitmap 8 / 16bpp) a sa boîte de réglages, absente des autres. Aucun refus d'office :
+une image hors budget s'encode quand même, et les mesures disent ce que ça coûte.
+
+**Tranche 1 — tuilé 4bpp (livrée).** Réglages portés par le sidecar (`BackgroundAsset.compression`,
+seuls les écarts au défaut sont écrits) :
+
+- **Palettes** (1–16) et **couleurs par palette** (2–15). Sans perte quand l'image le permet (pixel art :
+  packing exact) ; sinon `core/bg_palette_cluster.py` regroupe les tuiles qui se ressemblent, taille une
+  palette par groupe depuis ses pixels réels et affine — l'ancienne méthode (garder les 16 palettes les
+  plus employées, renvoyer le reste au plus proche) laissait l'océan d'une photo sans ses bleus, même
+  au réglage par défaut ;
+- **Couleurs globales** : réduire toute l'image avant le découpage en tuiles — c'est ce qui rend
+  les tuiles voisines compatibles, donc ce qui fait rentrer une photo (le 4bpp par défaut y perd
+  la moitié de l'image) ;
+- **Tuiles** : cible de tuiles uniques ; `core/bg_tile_merge.py` regroupe par **plus faible perte**
+  (agglomération de Ward, coût pondéré par les cases couvertes, distance qui pèse la luminance),
+  garde la tuile la plus centrale de chaque groupe et renvoie les autres cases vers la variante
+  gardée la plus proche. Le premier essai — garder « les plus employées » — écrasait le bas de
+  l'image : sur une photo toutes les tuiles sont employées une fois, et l'égalité tombait sur
+  l'ordre de balayage. Reste à explorer : réutiliser une tuile sous une autre banque de palette ;
+- **Méthode** de réduction dans une tuile, et le **dithering** (agit sur la réduction globale).
+
+**Tranche 2 — tuilé 8bpp (livrée).** Même boîte, contextuelle : **Couleurs** de l'unique palette
+(2–255, `palette_colors`), **Tuiles** (la même fusion par plus faible perte, budget 256 par charblock),
+**méthode** de quantification (median-cut, octree, couverture max — quantifieurs de PIL) et
+**dithering**. Le dithering des modes 8bpp et bitmap était sans effet : `Image.quantize(dither=…)`
+ignore l'option tant qu'on ne lui donne pas de palette. Corrigé pour les deux (`_quantize_rgb`),
+test à l'appui. Reste la tranche bitmap : son propre panneau.
+
+#### Ce que ça ne fait pas
+
+Pas d'annulation pas-à-pas (Ctrl+Z) : la recompression est asynchrone et « Original » suffit à
+revenir. Pas de réglage de couleurs (le mode et la profondeur existent déjà dans l'inspecteur).
 
 ### Chantier transverse — l'allocateur de ressources matérielles
 

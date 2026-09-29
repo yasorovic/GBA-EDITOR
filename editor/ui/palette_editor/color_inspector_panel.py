@@ -182,7 +182,7 @@ class ColorInspectorPanel(QWidget):
         self._hsb_spins: dict[str, QSpinBox] = {}
 
         rgb_card = CollapsibleCard("RGB")
-        for ch, chan_color in (("r", C.AXIS_X), ("g", C.POWER), ("b", C.AXIS_Y)):
+        for ch, chan_color in (("r", C.AXIS_X), ("g", C.AXIS_Z), ("b", C.AXIS_Y)):
             sl, sp = self._make_channel_row(
                 rgb_card.body_layout, ch.upper(), chan_color, 0, 31,
                 lambda v, ch=ch: self._on_rgb_changed(ch, v),

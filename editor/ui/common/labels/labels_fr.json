@@ -1,5 +1,32 @@
 {
   "labels": {
+    "sndpanel.context_music": {
+      "text": "Musique"
+    },
+    "sndpanel.context_music_tip": {
+      "text": "Éditer les MusicBox et leurs états musicaux"
+    },
+    "sndpanel.context_sfx": {
+      "text": "Effets sonores"
+    },
+    "sndpanel.context_sfx_tip": {
+      "text": "Éditer les SoundBox et leurs actions d'effets sonores"
+    },
+    "sndpanel.context_jingles": {
+      "text": "Jingles"
+    },
+    "sndpanel.context_jingles_tip": {
+      "text": "Éditer les JingleBox et leurs actions de jingle"
+    },
+    "sndpanel.rom_stop_tip": {
+      "text": "Arrêter la lecture ROM"
+    },
+    "sndpanel.rom_loop_tip": {
+      "text": "Boucler l'état courant pendant la lecture ROM"
+    },
+    "sndpanel.rom_progress_tip": {
+      "text": "Position courante dans le module joué par la lecture ROM"
+    },
     "scrsb.filter_placeholder": {
       "text": "Filtrer par nom…"
     },
@@ -258,6 +285,12 @@
     "common.build_run": {
       "text": "Compiler et lancer"
     },
+    "common.run": {
+      "text": "Run"
+    },
+    "build.failed_mark": {
+      "text": "XXX"
+    },
     "settings.shortcuts.action.canvas.tool_select": {
       "text": "Outil de sélection"
     },
@@ -507,9 +540,6 @@
     "fontasset.preview_title": {
       "text": "Aperçu raster GBA"
     },
-    "fontasset.preview_live": {
-      "text": "Aperçu direct — rendu par le rasterizer du projet."
-    },
     "fontasset.preview_sample_text": {
       "text": "Texte d’essai"
     },
@@ -524,6 +554,12 @@
     },
     "fontasset.preview_size_tip": {
       "text": "Taille de rasterisation, partagée avec l’inspecteur et enregistrée dans cette police."
+    },
+    "fontasset.preview_size_fixed": {
+      "text": "{pixel_height} px (planche bitmap)"
+    },
+    "fontasset.preview_size_fixed_tip": {
+      "text": "Taille fixée par la planche bitmap importée : contrairement à une police vectorielle, elle ne se rastérise pas à une autre taille."
     },
     "fontasset.preview_canvas_tip": {
       "text": "Molette : zoom. Clic central glissé : panoramique. Double-clic : réinitialiser la vue. La grille discrète marque les tuiles GBA 8×8."
@@ -545,6 +581,9 @@
     },
     "fontasset.preview_summary": {
       "text": "{pixel_height} px · interligne {line_height} px · ajustement {pixel_fit} · hinting {hinting} · {raster_mode} · {sources}"
+    },
+    "fontasset.preview_missing_chars": {
+      "text": "Non couverts par la police : {chars}"
     },
     "settings.window_title": {
       "text": "Réglages"
@@ -614,6 +653,9 @@
     },
     "scncanvas.graph_rearrange": {
       "text": "Réorganiser"
+    },
+    "scncanvas.graph_fit_tip": {
+      "text": "Ajuster à la vue  (F)"
     },
     "scncanvas.graph_show_notes_tip": {
       "text": "Afficher ou masquer les notes libres du graphe"

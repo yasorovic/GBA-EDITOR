@@ -25,7 +25,7 @@ class CanvasTopBar(QFrame):
     zoom_step_asked = pyqtSignal(int)   # -1 = dézoomer, +1 = zoomer
     fit_asked = pyqtSignal()
 
-    def __init__(self, fit_tip: str = None, parent=None):
+    def __init__(self, fit_tip: str = None, parent=None, show_coords: bool = True):
         if fit_tip is None:
             fit_tip = label('cvtop.fit_to_view_f')
         super().__init__(parent)
@@ -68,14 +68,18 @@ class CanvasTopBar(QFrame):
         self._size_label = QLabel("")
         self._size_label.setFont(self._font)
         self._size_label.setStyleSheet(f"color:{C.TEXT_DIM};")
-        lay.addWidget(self._size_label)
-
-        lay.addSpacing(8)
-
         self._coord_label = QLabel()
         self._coord_label.setFont(self._font)
-        lay.addWidget(self._coord_label)
         self.set_cursor_px(None, None)
+        if show_coords:
+            lay.addWidget(self._size_label)
+            lay.addSpacing(8)
+            lay.addWidget(self._coord_label)
+
+    def add_trailing(self, widget) -> None:
+        """Ajoute un widget tout à droite de la barre, après la zone des
+        extras et les labels taille/curseur (ex: bouton d'action final)."""
+        self._lay.addWidget(widget)
 
     # ── Construction ──────────────────────────────────────────────
 
@@ -132,6 +136,12 @@ class CanvasTopBar(QFrame):
         self._lay.insertWidget(self._extras_at, b)
         self._extras_at += 1
         return b
+
+    def add_widget(self, widget) -> None:
+        """Insère un widget quelconque dans la zone des extras (ex: champ de
+        recherche), au même titre qu'un toggle ou une action."""
+        self._lay.insertWidget(self._extras_at, widget)
+        self._extras_at += 1
 
     def add_spacing(self, px: int):
         """Respiration entre deux groupes de toggles."""

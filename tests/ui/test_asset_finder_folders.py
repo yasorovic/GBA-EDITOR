@@ -23,7 +23,6 @@ def test_folded_nodes_range_les_assets_sous_leurs_dossiers():
             create=lambda n, p: store.create_folder("scenes", n, p),
             rename=lambda i, n: store.rename_folder("scenes", i, n),
             delete=lambda i: store.delete_folder("scenes", i),
-            set_color=lambda i, c: store.set_color("scenes", i, c),
             set_parent=lambda i, p: store.set_parent("scenes", i, p),
             move=lambda s, i: store.move_member("scenes", s.name, i),
             folder_of=lambda s: store.folder_of("scenes", s.name),

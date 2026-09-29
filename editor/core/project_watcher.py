@@ -163,9 +163,41 @@ class ProjectWatcher(QObject):
         self._clear()
         self._project_root = project_path
 
-        # Dossiers à surveiller dans assets/
+        for d in self._watched_dirs(project_path):
+            if d.exists():
+                self._watcher.addPath(str(d))
+                self._dir_snapshots[str(d)] = self._scan_dir(d)
+
+        self._index_files(project_path)
+
+    def rescan(self):
+        """Rattrape tout ce qui a changé sur le disque depuis le dernier état
+        connu, sans compter sur les événements du système.
+
+        `QFileSystemWatcher` rate des choses sous Windows : le watch d'un
+        fichier tombe après un rename ou une suppression dans l'Explorateur, un
+        dossier créé après coup n'est jamais suivi, une modif peut ne rien
+        émettre. Au retour du focus de l'application, on compare donc le disque
+        aux empreintes gardées et on émet les MÊMES signaux que le chemin
+        temps réel (apparu / disparu / renommé / modifié)."""
+        root = self._project_root
+        if root is None:
+            return
+        self._suppress = False
+        self._suppress_timer.stop()
+        for d in self._watched_dirs(root):
+            if not d.exists():
+                if str(d) in self._dir_snapshots:
+                    self._on_dir_changed(str(d))    # dossier disparu
+                continue
+            if str(d) not in self._dir_snapshots:
+                self._watcher.addPath(str(d))       # dossier apparu depuis
+            self._on_dir_changed(str(d))            # diff contre l'ancien état
+        self._index_files(root)                     # ré-arme les watches tombés
+
+    def _watched_dirs(self, project_path: Path) -> list[Path]:
         assets_root = project_path / "assets"
-        asset_dirs = [
+        return [
             assets_root,
             assets_root / "sprites",
             assets_root / "backgrounds",
@@ -174,21 +206,11 @@ class ProjectWatcher(QObject):
             assets_root / "music",
             assets_root / "fonts",
             *_script_dirs(assets_root),
-        ]
-
-        # Dossiers project/ (éditeur uniquement)
-        project_dirs = [
+            # project/ (éditeur uniquement)
             project_path / "project" / "scenes",
             project_path / "project" / "prefab",
             project_path / "project" / "backgrounds",
         ]
-
-        for d in asset_dirs + project_dirs:
-            if d.exists():
-                self._watcher.addPath(str(d))
-                self._dir_snapshots[str(d)] = self._scan_dir(d)
-
-        self._index_files(project_path)
 
     def unwatch(self):
         self._clear()
@@ -213,6 +235,10 @@ class ProjectWatcher(QObject):
                 self._watcher.addPaths(paths)
             if dirs:
                 self._watcher.addPaths(dirs)
+            # Nos propres écritures deviennent l'état de référence : sans ça,
+            # le prochain rescan les prendrait pour des modifs externes.
+            for dir_str in self._dir_snapshots:
+                self._dir_snapshots[dir_str] = self._scan_dir(Path(dir_str))
             # Ré-arme le délai : chaque sortie de suspended() repousse la levée
             # de suppression, donc la fenêtre ne se ferme que 350 ms après la
             # toute dernière sauvegarde de la rafale (cf. _suppress_timer).
@@ -331,6 +357,11 @@ class ProjectWatcher(QObject):
             self._watcher.addPath(new_path)
             self.asset_renamed.emit(old_path, new_path)
 
+        # Fichiers modifiés en place (même nom, autre empreinte)
+        for path_str, stamp in new_snap.items():
+            if path_str in old_snap and old_snap[path_str] != stamp:
+                self._dispatch_modified(path_str)
+
         # Fichiers apparus
         for path_str in appeared:
             path = Path(path_str)
@@ -339,8 +370,7 @@ class ProjectWatcher(QObject):
                 self.lua_changed.emit(path_str)
             elif path.suffix.lower() in _ASSET_SUFFIXES:
                 self.asset_appeared.emit(path_str)
-            elif (path.suffix.lower() == _JSON_SUFFIX
-                  and path.parent.name in _SIDECAR_DIRS):
+            elif self._is_sidecar_json(path):
                 self.sidecar_changed.emit(path_str)
 
         # Fichiers disparus
@@ -350,7 +380,32 @@ class ProjectWatcher(QObject):
             if path.suffix.lower() in _ASSET_SUFFIXES:
                 self.asset_removed.emit(path_str)
 
+    @staticmethod
+    def _is_sidecar_json(path: Path) -> bool:
+        """Un sidecar d'asset vit dans assets/<famille>/ — `project/backgrounds/`
+        porte le même nom de dossier mais n'en est pas un."""
+        return (path.suffix.lower() == _JSON_SUFFIX
+                and path.parent.name in _SIDECAR_DIRS
+                and path.parent.parent.name == "assets")
+
     def _emit_modified(self, path_str: str):
+        """Fin du debounce d'un fichier : n'émet que si l'empreinte diffère de
+        celle déjà rapportée (le scan de dossier a pu la voir avant), et jamais
+        pour un fichier disparu (le scan de dossier s'en charge)."""
+        path = Path(path_str)
+        try:
+            st = path.stat()
+        except OSError:
+            return
+        stamp = (st.st_size, st.st_mtime_ns)
+        snap = self._dir_snapshots.get(str(path.parent))
+        if snap is not None:
+            if snap.get(path_str) == stamp:
+                return
+            snap[path_str] = stamp
+        self._dispatch_modified(path_str)
+
+    def _dispatch_modified(self, path_str: str):
         """Émet le bon signal pour un fichier modifié."""
         path = Path(path_str)
         suffix = path.suffix.lower()
@@ -358,10 +413,9 @@ class ProjectWatcher(QObject):
         if suffix == _LUA_SUFFIX:
             self.lua_changed.emit(path_str)
         elif suffix == _JSON_SUFFIX:
-            parent = path.parent.name
-            if parent == "scenes":
+            if path.parent.name == "scenes":
                 self.scene_changed.emit(path_str)
-            elif parent in _SIDECAR_DIRS:
+            elif self._is_sidecar_json(path):
                 self.sidecar_changed.emit(path_str)
         elif suffix in _ASSET_SUFFIXES:
             self.asset_modified.emit(path_str)

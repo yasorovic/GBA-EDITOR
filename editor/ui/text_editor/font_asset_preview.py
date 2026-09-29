@@ -1,14 +1,22 @@
-"""Aperçu comparatif fondé sur les ``RasterGlyph`` du pipeline."""
+"""Aperçu comparatif fondé sur les ``RasterGlyph`` du pipeline.
+
+La sortie GBA n'est plus composée à la main : elle appelle le même pont de
+build (``codegen.font_build.build_font_asset``) et le même calcul de cellule
+(``core.font_rasterizer.raster_glyph_cell``) que l'encodeur réel. C'est ce qui
+garantit que la grille dessinée est la vraie grille de tuiles — un débordement
+visible ici est un débordement rogné en ROM, jamais une approximation.
+"""
 from __future__ import annotations
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QSizePolicy, QTextEdit, QSpinBox, QFrame)
-from PyQt6.QtGui import (QFont, QImage, QColor, QPainter, QPen, QBrush,
-                         QRadialGradient, QGradient)
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QPointF, QRect
+from PyQt6.QtGui import QFont, QImage, QColor, QPainter, QPen
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRect
 
+from codegen.font_build import build_font_asset
+from codegen.font_emit import glyph_tiles_w, glyph_advance_px, font_line_px
 from core.font_rasterizer import (FontRasterizerError, FontRasterizerUnavailable,
-                                  display_coverage, rasterize_asset_glyph)
+                                  display_coverage, raster_glyph_cell)
 from ui.common.theme import C, T, QSS
 from ui.common.labels import label
 
@@ -17,105 +25,111 @@ _SAMPLE = "AaBb 0123!?\nInterligne"
 
 
 class _RasterComparisonCanvas(QWidget):
-    """Deux rendus synchronisés : grille de tuiles, zoom et panoramique.
+    """Deux rendus synchronisés : zoom et panoramique communs.
 
     Le canevas est unique pour empêcher les deux moitiés de se décaler l'une
-    par rapport à l'autre pendant une comparaison.
+    par rapport à l'autre pendant une comparaison. Chaque côté est une boîte
+    à part entière (encart de titre, fond et contour propres) pour que la
+    couverture source et la sortie GBA ne se lisent jamais comme un seul bloc.
     """
 
     MIN_ZOOM, MAX_ZOOM = 1, 16
+    _GAP, _HEADER_H, _BORDER_W = 16, 24, 2
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._coverage = self._output = QImage()
+        self._cells: list[QRect] = []
+        self._coverage_title = self._output_title = ""
         self._zoom = 5
         self._pan = QPoint(0, 0)
         self._pan_last = None
-        self._hover = None
-        self.setMinimumHeight(136)
+        self.setMinimumHeight(100)
         self.setMouseTracking(True)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+    def set_titles(self, coverage_title: str, output_title: str):
+        self._coverage_title, self._output_title = coverage_title, output_title
+        self.update()
 
     def set_images(self, coverage: QImage, output: QImage):
         self._coverage, self._output = coverage, output
         self.update()
 
+    def set_cells(self, cells: list[QRect]):
+        """Rectangles des cellules GBA réelles (repère de l'image de sortie),
+        un par glyphe placé — c'est la grille qui remplace l'ancien quadrillage
+        décoratif, tuile par tuile réservée plutôt qu'uniforme."""
+        self._cells = cells
+        self.update()
+
     def clear(self):
         self._coverage = self._output = QImage()
+        self._cells = []
         self.update()
+
+    def _box_rect(self, side: int) -> QRect:
+        box_w = (self.width() - self._GAP) // 2
+        x0 = 0 if side == 0 else box_w + self._GAP
+        return QRect(x0, 0, box_w if side == 0 else self.width() - x0, self.height())
+
+    def _content_rect(self, side: int) -> QRect:
+        return self._box_rect(side).adjusted(self._BORDER_W, self._HEADER_H, -self._BORDER_W, -self._BORDER_W)
 
     def _image_rect(self, image: QImage, side: int, zoom=None) -> QRect:
         zoom = self._zoom if zoom is None else zoom
-        half = self.width() // 2
-        x0, width = (0, half) if side == 0 else (half + 1, self.width() - half - 1)
+        content = self._content_rect(side)
         w, h = image.width() * zoom, image.height() * zoom
-        return QRect(x0 + (width - w) // 2 + self._pan.x(),
-                     (self.height() - h) // 2 + self._pan.y(), w, h)
+        return QRect(content.x() + (content.width() - w) // 2 + self._pan.x(),
+                     content.y() + (content.height() - h) // 2 + self._pan.y(), w, h)
 
     def paintEvent(self, _event):
         painter = QPainter(self)
-        # Une vraie surface de visualisation, pas un champ éditable : le noir
-        # l'éloigne visuellement des contrôles placés au-dessus.
-        painter.fillRect(self.rect(), QColor(C.BG_DEEP))
-        if self._coverage.isNull() and self._output.isNull():
-            return
+        painter.fillRect(self.rect(), QColor(C.BG_BASE))
         for side, image in enumerate((self._coverage, self._output)):
-            if image.isNull():
-                continue
-            rect = self._image_rect(image, side)
-            viewport = self._viewport(side)
-            # Chaque moitié est un viewport réel. Rien, ni la grille ni un
-            # rendu panné, ne peut passer de l'autre côté du séparateur.
-            painter.save()
-            painter.setClipRect(viewport)
-            self._draw_grid(painter, viewport, rect)
-            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
-            painter.drawImage(rect, image)
-            self._draw_reveal(painter, viewport, rect)
-            painter.restore()
-        painter.setPen(QPen(QColor(C.BORDER_MID)))
-        painter.drawLine(self.width() // 2, 0, self.width() // 2, self.height())
+            self._draw_box(painter, side, image)
         painter.setPen(QColor(C.TEXT_MUTED))
         painter.setFont(QFont(T.MONO, T.XS))
-        painter.drawText(7, self.height() - 7, f"x{self._zoom}")
+        painter.drawText(self._box_rect(1).right() - 34, self.height() - 7, f"x{self._zoom}")
 
-    def _viewport(self, side: int) -> QRect:
-        half = self.width() // 2
-        return QRect(0, 0, half, self.height()) if side == 0 else QRect(
-            half + 1, 0, self.width() - half - 1, self.height())
+    def _draw_box(self, painter: QPainter, side: int, image: QImage):
+        """Encart de titre + surface de rendu, sous un même contour : la
+        sortie GBA est noire, avec la grille de tuiles RÉELLEMENT réservées ;
+        la couverture source reste un fond gris neutre, sans grille — ce n'est
+        pas encore une tuile, juste l'encre brute du rasterizer."""
+        is_output = side == 1
+        box = self._box_rect(side)
+        header = QRect(box.x(), box.y(), box.width(), self._HEADER_H)
+        painter.fillRect(header, QColor(C.BG_RAISED))
+        painter.setPen(QColor(C.TEXT_HI)); painter.setFont(QFont(T.UI, T.XS, QFont.Weight.DemiBold))
+        painter.drawText(header, Qt.AlignmentFlag.AlignCenter, self._output_title if is_output else self._coverage_title)
 
-    def _grid_lines(self, painter: QPainter, viewport: QRect, image_rect: QRect):
-        """Dessine une grille alignée sur l'origine du rendu, mais qui se
-        prolonge en arrière-plan du viewport pour rester lisible au pan."""
-        tile = 8 * self._zoom
-        start_x = image_rect.left() + ((viewport.left() - image_rect.left()) // tile) * tile
-        start_y = image_rect.top() + ((viewport.top() - image_rect.top()) // tile) * tile
-        for x in range(start_x, viewport.right() + tile, tile):
-            painter.drawLine(x, viewport.top(), x, viewport.bottom())
-        for y in range(start_y, viewport.bottom() + tile, tile):
-            painter.drawLine(viewport.left(), y, viewport.right(), y)
+        content = self._content_rect(side)
+        painter.save()
+        painter.setClipRect(content)
+        painter.fillRect(content, QColor(C.BG_DEEP if is_output else C.BG_HOVER))
+        if not image.isNull():
+            rect = self._image_rect(image, side)
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
+            painter.drawImage(rect, image)
+            if is_output:
+                self._draw_cells(painter, rect)
+        painter.restore()
 
-    def _draw_grid(self, painter: QPainter, viewport: QRect, image_rect: QRect):
-        """Grille grise permanente, à peine visible sur le fond noir."""
-        pen = QPen(QColor(150, 150, 165, 28))
-        pen.setCosmetic(True)
-        painter.setPen(pen)
-        self._grid_lines(painter, viewport, image_rect)
+        painter.setPen(QPen(QColor(C.BORDER_MID), self._BORDER_W))
+        half = self._BORDER_W // 2
+        painter.drawRect(box.adjusted(half, half, -half, -half))
 
-    def _draw_reveal(self, painter: QPainter, viewport: QRect, image_rect: QRect):
-        """La grille blanche n'est jamais une sélection : un dégradé radial
-        n'en révèle que la zone proche du pointeur, sans case encadrée."""
-        if self._hover is None or not viewport.contains(self._hover):
-            return
-        halo = QRadialGradient(QPointF(self._hover), float(max(48, 12 * self._zoom)))
-        halo.setCoordinateMode(QGradient.CoordinateMode.LogicalMode)
-        halo.setColorAt(0.0, QColor(255, 255, 255, 145))
-        halo.setColorAt(0.35, QColor(255, 255, 255, 72))
-        halo.setColorAt(1.0, QColor(255, 255, 255, 0))
-        pen = QPen(QBrush(halo), 1)
-        pen.setCosmetic(True)
-        painter.setPen(pen)
-        self._grid_lines(painter, viewport, image_rect)
+    def _draw_cells(self, painter: QPainter, image_rect: QRect):
+        """Un rectangle par glyphe placé, à l'échelle et à la position EXACTES
+        de sa cellule GBA (``self._cells``, en pixels image) : la vraie grille
+        de tuiles, pas un quadrillage uniforme qui mentirait sur une police
+        proportionnelle (l'avance d'un glyphe n'est alors pas multiple de 8)."""
+        painter.setPen(QPen(QColor(C.TEXT_DIM), 1))
+        z = self._zoom
+        for cell in self._cells:
+            painter.drawRect(QRect(image_rect.x() + round(cell.x() * z), image_rect.y() + round(cell.y() * z),
+                                   round(cell.width() * z), round(cell.height() * z)))
 
     def wheelEvent(self, event):
         old = self._zoom
@@ -144,21 +158,17 @@ class _RasterComparisonCanvas(QWidget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        self._hover = event.position().toPoint()
         if self._pan_last is not None and event.buttons() & Qt.MouseButton.MiddleButton:
             pos = event.position().toPoint()
             self._pan += pos - self._pan_last
             self._pan_last = pos
-        self.update()
+            self.update()
         event.accept()
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.MiddleButton and self._pan_last is not None:
             self._pan_last = None; self.unsetCursor(); event.accept(); return
         super().mouseReleaseEvent(event)
-
-    def leaveEvent(self, event):
-        self._hover = None; self.update(); super().leaveEvent(event)
 
     def mouseDoubleClickEvent(self, event):
         """Double-clic : retrouve instantanément la vue de comparaison."""
@@ -183,33 +193,45 @@ class FontAssetPreview(QWidget):
         header.setFont(QFont(T.UI, T.XS, QFont.Weight.DemiBold)); header.setStyleSheet(QSS.title_panel)
         header.setContentsMargins(8, 0, 8, 0); root.addWidget(header)
         body = QWidget(); body.setStyleSheet(f"background:{C.BG_BASE};")
-        lay = QVBoxLayout(body); lay.setContentsMargins(32, 16, 32, 18); lay.setSpacing(8)
-        # Le nom et le réglage qui lui appartient le plus sont réunis : le
-        # sommet du panneau est un en-tête compact, pas un second titre d'écran.
-        meta = QHBoxLayout(); meta.setSpacing(8)
+        lay = QVBoxLayout(body); lay.setContentsMargins(32, 16, 32, 18); lay.setSpacing(4)
         self._name = QLabel(""); self._name.setFont(QFont(T.MONO, T.LG, QFont.Weight.DemiBold)); self._name.setStyleSheet(f"color:{C.ACCENT};")
-        meta.addWidget(self._name); meta.addStretch()
-        size_label = QLabel(label("fontasset.preview_size")); size_label.setStyleSheet(QSS.label_field); meta.addWidget(size_label)
-        self._size = QSpinBox(); self._size.setRange(1, 128); self._size.setSuffix(" px"); self._size.setFont(QFont(T.MONO, T.SM)); self._size.setStyleSheet(QSS.spinbox)
-        self._size.setToolTip(label("fontasset.preview_size_tip")); meta.addWidget(self._size)
-        lay.addLayout(meta)
+        lay.addWidget(self._name)
+        lay.addSpacing(10)
 
+        # Le libellé colle à son champ : c'est un groupe, pas deux lignes isolées.
         text_label = QLabel(label("fontasset.preview_sample_text")); text_label.setStyleSheet(QSS.label_field)
         lay.addWidget(text_label)
         text_row = QHBoxLayout(); text_row.setSpacing(0)
         self._text = QTextEdit(_SAMPLE); self._text.setAcceptRichText(False)
         self._text.setPlaceholderText(label("fontasset.preview_text_placeholder")); self._text.setToolTip(label("fontasset.preview_text_tip"))
-        self._text.setFixedHeight(48); self._text.setFont(QFont(T.MONO, T.SM))
+        # Ferré à gauche : un champ d'essai n'a pas besoin de courir sur toute
+        # la largeur du panneau, seulement d'être assez large pour l'échantillon.
+        self._text.setFixedSize(420, 48); self._text.setFont(QFont(T.MONO, T.SM))
         self._text.setStyleSheet(f"QTextEdit{{background:{C.BG_INPUT}; color:{C.TEXT_HI}; border:1px solid {C.BORDER_MID}; border-radius:4px; padding:4px;}} QTextEdit:focus{{border-color:{C.ACCENT};}}")
-        text_row.addWidget(self._text, 1); lay.addLayout(text_row)
+        text_row.addWidget(self._text); text_row.addStretch(1); lay.addLayout(text_row)
+        lay.addSpacing(10)
 
-        headings = QHBoxLayout(); headings.setSpacing(0)
-        coverage_heading = QLabel(label("fontasset.preview_coverage")); coverage_heading.setAlignment(Qt.AlignmentFlag.AlignCenter); coverage_heading.setFont(QFont(T.UI, T.XS, QFont.Weight.DemiBold)); coverage_heading.setStyleSheet(f"color:{C.TEXT_NORM};")
-        output_heading = QLabel(label("fontasset.preview_output")); output_heading.setAlignment(Qt.AlignmentFlag.AlignCenter); output_heading.setFont(QFont(T.UI, T.XS, QFont.Weight.DemiBold)); output_heading.setStyleSheet(f"color:{C.TEXT_NORM};")
-        heading_divider = QFrame(); heading_divider.setFrameShape(QFrame.Shape.VLine); heading_divider.setStyleSheet(f"color:{C.BORDER_MID}; background:{C.BORDER_MID};"); heading_divider.setFixedWidth(1)
-        headings.addWidget(coverage_heading, 1); headings.addWidget(heading_divider); headings.addWidget(output_heading, 1)
-        lay.addLayout(headings)
-        self._canvas = _RasterComparisonCanvas(); self._canvas.setToolTip(label("fontasset.preview_canvas_tip")); lay.addWidget(self._canvas, 1)
+        # La taille ne concerne que la sortie GBA (c'est elle qu'on rastérise) :
+        # le réglage vit au-dessus de sa boîte, pas égaré en coin d'écran.
+        size_row = QHBoxLayout(); size_row.setSpacing(0)
+        size_row.addStretch(1)
+        size_col = QHBoxLayout(); size_col.setSpacing(8); size_col.addStretch(1)
+        size_label = QLabel(label("fontasset.preview_size")); size_label.setStyleSheet(QSS.label_field)
+        size_col.addWidget(size_label)
+        self._size = QSpinBox(); self._size.setRange(1, 128); self._size.setSuffix(" px"); self._size.setFont(QFont(T.MONO, T.SM)); self._size.setStyleSheet(QSS.spinbox)
+        self._size.setToolTip(label("fontasset.preview_size_tip")); size_col.addWidget(self._size)
+        # Une planche bitmap a une taille FIXE : le spinbox ne peut rien y changer,
+        # donc l'éditer serait mentir. Un simple libellé informatif prend sa place.
+        self._size_info = QLabel(""); self._size_info.setFont(QFont(T.MONO, T.SM)); self._size_info.setStyleSheet(f"color:{C.TEXT_NORM};")
+        size_col.addWidget(self._size_info)
+        size_row.addLayout(size_col, 1)
+        lay.addLayout(size_row)
+
+        # Canevas et pied forment un seul bloc « comparaison » : les titres
+        # vivent maintenant dans l'encart de chaque boîte, pas au-dessus.
+        self._canvas = _RasterComparisonCanvas(); self._canvas.setToolTip(label("fontasset.preview_canvas_tip"))
+        self._canvas.set_titles(label("fontasset.preview_coverage"), label("fontasset.preview_output"))
+        lay.addWidget(self._canvas, 1)
         footer = QFrame(); footer.setStyleSheet(f"background:{C.BG_DEEP}; border-top:1px solid {C.BORDER};")
         footer_lay = QVBoxLayout(footer); footer_lay.setContentsMargins(8, 6, 8, 6); footer_lay.setSpacing(2)
         self._summary = QLabel(""); self._summary.setAlignment(Qt.AlignmentFlag.AlignCenter); self._summary.setFont(QFont(T.MONO, T.SM)); self._summary.setStyleSheet(f"color:{C.TEXT_NORM}; border:none;"); footer_lay.addWidget(self._summary)
@@ -222,11 +244,35 @@ class FontAssetPreview(QWidget):
         self._asset, self._project = asset, project
         self._blocking = True; self._name.setText(asset.name if asset else ""); self._size.setValue(asset.pixel_height if asset else 8); self._blocking = False
         self._canvas.clear()
+        self._update_size_mode()
         if asset is None:
-            self._summary.setText(""); self._status.setText(""); return
+            self._summary.setText(""); self._set_status(""); return
         sources = " → ".join(asset.source_names()) or label("common.none_dash")
         self._summary.setText(label("fontasset.preview_summary", pixel_height=asset.pixel_height, line_height=asset.line_height, hinting=asset.hinting, pixel_fit=asset.pixel_fit, raster_mode=asset.raster_mode, sources=sources))
         self._render()
+
+    def _bitmap_source(self):
+        """La ``Font`` bitmap (png/fnt) de la source primaire regular, ou
+        ``None`` si l'asset n'en a pas — c'est le cas qui rend le spinbox
+        éditable inopérant : une planche n'a qu'une taille, la sienne."""
+        if self._asset is None or self._project is None:
+            return None
+        name = self._asset.primary_source_name("regular")
+        source = self._project.fonts.get(name) if name else None
+        return source if source is not None and source.source_format in ("png", "fnt") else None
+
+    def _update_size_mode(self):
+        source = self._bitmap_source()
+        self._size.setVisible(source is None)
+        self._size_info.setVisible(source is not None)
+        if source is not None:
+            self._size_info.setText(label("fontasset.preview_size_fixed", pixel_height=source.cell_h))
+            self._size_info.setToolTip(label("fontasset.preview_size_fixed_tip"))
+
+    def _set_status(self, text: str):
+        # Silence par défaut : le rendu se suffit à lui-même, seuls une perte
+        # d'encre ou une erreur méritent un message.
+        self._status.setText(text); self._status.setVisible(bool(text))
 
     def refresh(self):
         if self._asset is not None:
@@ -239,40 +285,101 @@ class FontAssetPreview(QWidget):
     def _render(self):
         if self._asset is None or self._project is None:
             return
+        text = self._text.toPlainText().replace("\r", "")
         try:
-            glyphs = [None if char == "\n" else rasterize_asset_glyph(self._project, self._asset, char) for char in self._text.toPlainText().replace("\r", "")]
-            self._canvas.set_images(self._compose(glyphs, raster_mode="coverage"), self._compose(glyphs, raster_mode=self._asset.raster_mode))
-            self._status.setText(self._quality_message(glyphs))
+            # MÊME pont que le build : un texte qui rastérise ici rastérisera
+            # pareil en ROM, tuile pour tuile, bearing pour bearing.
+            font = build_font_asset(self._project, self._asset, chars={ch for ch in text if ch != "\n"})
         except FontRasterizerUnavailable as exc:
-            self._canvas.clear(); self._status.setText(label("fontasset.preview_unavailable", detail=str(exc)))
+            self._canvas.clear(); self._set_status(label("fontasset.preview_unavailable", detail=str(exc))); return
         except FontRasterizerError as exc:
-            self._canvas.clear(); self._status.setText(label("fontasset.preview_error", detail=str(exc)))
+            self._canvas.clear(); self._set_status(label("fontasset.preview_error", detail=str(exc))); return
 
-    def _compose(self, glyphs, *, raster_mode: str) -> QImage:
-        baseline = max((g.bearing_y for g in glyphs if g is not None), default=0) + 2
-        pen_x, line_y, placements = 2, 0, []
-        min_y, max_y, max_x = 0, max(1, baseline + 2), 2
-        for glyph in glyphs:
-            if glyph is None:
-                pen_x, line_y = 2, line_y + self._asset.line_height; max_y = max(max_y, line_y + baseline + 2); continue
-            x, y = pen_x + glyph.bearing_x, line_y + baseline - glyph.bearing_y
-            placements.append((glyph, x, y)); min_y, max_y = min(min_y, y), max(max_y, y + glyph.height)
-            pen_x += max(1, glyph.advance); max_x = max(max_x, pen_x + 2)
-        width, height = max(1, max_x), max(1, max_y - min_y + 2)
-        image = QImage(width, height, QImage.Format.Format_ARGB32); image.fill(Qt.GlobalColor.transparent); ink = QColor(C.ACCENT)
-        for glyph, x, y in placements:
-            for gy in range(glyph.height):
-                for gx in range(glyph.width):
-                    alpha = display_coverage(glyph.coverage_at(gx, gy), gx, gy, raster_mode=raster_mode, threshold=self._asset.coverage_threshold, dither_pattern=self._asset.dither_pattern)
+        glyph_by_char = {g.char: g for g in font.glyphs}
+        rasters = font.raster_glyphs
+        sequence, missing = [], []
+        for ch in text:
+            if ch == "\n":
+                sequence.append(None); continue
+            g = glyph_by_char.get(ch)
+            raster = rasters.get(ch) if g is not None else None
+            (sequence.append((g, raster)) if raster is not None else missing.append(ch))
+
+        coverage_img, output_img, cells, kept = self._compose(font, sequence)
+        self._canvas.set_images(coverage_img, output_img)
+        self._canvas.set_cells(cells)
+        self._set_status(self._quality_message(missing, kept))
+
+    def _compose(self, font, sequence):
+        """Pose chaque glyphe dans sa cellule GBA réelle (même ancrage, même
+        rognage que ``codegen.font_emit``), puis rejoue le même rasterizer
+        SANS le rognage pour la couverture source — les deux images partagent
+        donc le même repère (x du pinceau, ligne de base), seul le contenu
+        diffère de ce que le matériel garde ou perd."""
+        # `cell_h` est le rognage RÉEL par glyphe (toujours arrondi à la tuile,
+        # même chemin composé) ; `line_px` est le pas d'une ligne à l'autre,
+        # déjà résolu par le build — les deux peuvent diverger pour une police
+        # proportionnelle, et alors les cellules de deux lignes se chevauchent
+        # réellement en ROM. Ne pas les confondre en une seule valeur.
+        anchor_h = max(1, int(font.line_height))
+        cell_h = max(1, (anchor_h + 7) // 8) * 8
+        line_px = font_line_px(font)
+        mode, threshold, pattern = self._asset.raster_mode, self._asset.coverage_threshold, self._asset.dither_pattern
+
+        pen_x, row, placed = 2, 0, []
+        max_ink_x, n_rows = 2, 1
+        for item in sequence:
+            if item is None:
+                row += 1; pen_x = 2; n_rows = max(n_rows, row + 1); continue
+            g, raster = item
+            gtx = glyph_tiles_w(g)
+            placed.append((raster, pen_x, row, gtx))
+            max_ink_x = max(max_ink_x, pen_x + gtx * 8)
+            pen_x += glyph_advance_px(g, font)
+            max_ink_x = max(max_ink_x, pen_x)
+
+        out_w = max_ink_x + 2
+        out_h = max(1, (n_rows - 1) * line_px + cell_h)
+        output = QImage(out_w, out_h, QImage.Format.Format_ARGB32); output.fill(Qt.GlobalColor.transparent)
+        ink = QColor(C.TEXT_HI)
+        cells, cov_placements = [], []
+        raw_ink = final_ink = 0
+
+        for raster, pen_x, row_i, gtx in placed:
+            row_top, cell_w = row_i * line_px, gtx * 8
+            cells.append(QRect(pen_x, row_top, cell_w, cell_h))
+            coverage, _ = raster_glyph_cell(raster, cell_w, cell_h, raster_mode=mode,
+                                            threshold=threshold, dither_pattern=pattern,
+                                            anchor_h=anchor_h)
+            for dy in range(cell_h):
+                for dx in range(cell_w):
+                    if coverage[dy][dx]:
+                        final_ink += 1
+                        color = QColor(ink); color.setAlpha(coverage[dy][dx])
+                        output.setPixelColor(pen_x + dx, row_top + dy, color)
+            raw_ink += sum(1 for value in raster.coverage if value)
+            base_y = row_top + max(0, anchor_h - raster.bearing_y)
+            cov_placements.append((raster, pen_x + raster.bearing_x, base_y))
+
+        cov_min_y = min([0] + [y for _, _, y in cov_placements])
+        cov_max_y = max([cell_h] + [y + raster.height for raster, _, y in cov_placements])
+        coverage_img = QImage(out_w, max(1, cov_max_y - cov_min_y + 2), QImage.Format.Format_ARGB32)
+        coverage_img.fill(Qt.GlobalColor.transparent)
+        for raster, x, y in cov_placements:
+            for gy in range(raster.height):
+                for gx in range(raster.width):
+                    alpha = display_coverage(raster.coverage_at(gx, gy), gx, gy, raster_mode="coverage",
+                                             threshold=threshold, dither_pattern=pattern)
                     if alpha:
-                        color = QColor(ink); color.setAlpha(alpha); image.setPixelColor(x + gx, y - min_y + gy, color)
-        return image
+                        color = QColor(ink); color.setAlpha(alpha)
+                        coverage_img.setPixelColor(x + gx, y - cov_min_y + gy, color)
 
-    def _quality_message(self, glyphs) -> str:
-        glyphs = [glyph for glyph in glyphs if glyph is not None]
-        raw = sum(value > 0 for glyph in glyphs for value in glyph.coverage)
-        final = sum(display_coverage(value, x, y, raster_mode=self._asset.raster_mode, threshold=self._asset.coverage_threshold, dither_pattern=self._asset.dither_pattern) > 0 for glyph in glyphs for y in range(glyph.height) for x, value in enumerate(glyph.coverage[y * glyph.width:(y + 1) * glyph.width]))
-        kept = round(100 * final / raw) if raw else 100
+        kept = round(100 * final_ink / raw_ink) if raw_ink else 100
+        return coverage_img, output, cells, kept
+
+    def _quality_message(self, missing: list[str], kept: int) -> str:
+        if missing:
+            return label("fontasset.preview_missing_chars", chars=" ".join(sorted(set(missing))))
         if self._asset.raster_mode != "coverage" and kept < 65:
             return label("fontasset.preview_ink_loss", kept=kept, threshold=self._asset.coverage_threshold)
-        return label("fontasset.preview_live")
+        return ""

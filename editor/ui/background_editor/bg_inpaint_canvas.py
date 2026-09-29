@@ -34,7 +34,7 @@ from PyQt6.QtWidgets import (
     QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsItem,
 )
 from PyQt6.QtGui import QColor, QPainter, QPixmap, QImage, QTransform, QPen, QBrush
-from PyQt6.QtCore import Qt, QPoint, QSize, QRectF, QTimer, QPropertyAnimation, pyqtSignal
+from PyQt6.QtCore import Qt, QPoint, QPointF, QSize, QRectF, QTimer, QPropertyAnimation, pyqtSignal
 
 from core.bg_import import render_bg_preview, render_bitmap_preview
 from core.models.tile_codec import unpack_se, hex_to_tile, flip_h, flip_v
@@ -49,6 +49,9 @@ from ui.common.canvas_top_bar import CanvasTopBar, BAR_HEIGHT
 from ui.background_editor.bg_prepare_overlay import PrepareOverlay, MODE_CROP, MODE_RESIZE
 from ui.common.icons import get as _ico, COLOR_DEFAULT, COLOR_ACTIVE, COLOR_UI
 from ui.common import external_editor
+from ui.common.canvas_backdrop import draw_grid, draw_grid_halo
+
+_BACKDROP_STEP = 16   # pas de la grille de fond, en pixels IMAGE (indépendant du zoom)
 
 
 def _snap8(v) -> int:
@@ -356,13 +359,23 @@ class _GridOverlay(QGraphicsItem):
         return QRectF(0, 0, self._w, self._h)
 
     def paint(self, painter: QPainter, option, widget=None):
+        # Bornée à `option.exposedRect` : sans ça, un grand fond retrace TOUTES
+        # ses lignes à chaque repaint (y compris pendant un zoom, qui invalide
+        # toute la vue), même la quasi-totalité hors champ.
+        exposed = option.exposedRect.intersected(QRectF(0, 0, self._w, self._h))
+        if exposed.isEmpty():
+            return
+        x0 = max(0, int(exposed.left()) - int(exposed.left()) % 8)
+        y0 = max(0, int(exposed.top()) - int(exposed.top()) % 8)
+        x1 = min(self._w, int(exposed.right()) + 8)
+        y1 = min(self._h, int(exposed.bottom()) + 8)
         pen = QPen(QColor(255, 255, 255, 28))
         pen.setWidth(0)
         painter.setPen(pen)
-        for x in range(0, self._w + 1, 8):
-            painter.drawLine(x, 0, x, self._h)
-        for y in range(0, self._h + 1, 8):
-            painter.drawLine(0, y, self._w, y)
+        for x in range(x0, x1 + 1, 8):
+            painter.drawLine(x, y0, x, y1)
+        for y in range(y0, y1 + 1, 8):
+            painter.drawLine(x0, y, x1, y)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -719,8 +732,26 @@ class BgInpaintView(QGraphicsView):
         self._rect_start: Optional[tuple[int, int]] = None
         self._panning = False
         self._pan_last = QPoint()
+        self._hover_scene: Optional[QPointF] = None   # halo de fond, coord. scène
 
         controller.on_rendered = self._on_rendered
+
+    def drawBackground(self, painter: QPainter, rect: QRectF):
+        """Fond du canvas : même grille + halo au survol que le Font Editor,
+        au pas de la GBA (16 px image) — sauf au dézoom, où le pas double
+        tant que son espacement à l'écran serait illisible : le nombre de
+        lignes tracées reste borné, plutôt que de croître avec la surface de
+        fond visible (c'est ce qui ramait en dézoomant beaucoup)."""
+        painter.fillRect(rect, QColor(C.BG_DEEP))
+        step = self._adaptive_step()
+        draw_grid(painter, rect, step)
+        draw_grid_halo(painter, rect, step, self._hover_scene)
+
+    def _adaptive_step(self, min_screen_px: float = 8.0) -> float:
+        step = _BACKDROP_STEP
+        while step * self._zoom < min_screen_px:
+            step *= 2
+        return step
 
     # ── API ──────────────────────────────────────────────────────
     def _on_rendered(self):
@@ -900,7 +931,28 @@ class BgInpaintView(QGraphicsView):
 
     def leaveEvent(self, e):
         self.cursor_moved.emit(-1, -1)
+        old = self._hover_scene
+        self._hover_scene = None
+        self._invalidate_halo(old, None)
         super().leaveEvent(e)
+
+    def _invalidate_halo(self, old: Optional[QPointF], new: Optional[QPointF]):
+        """Redemande le repaint SEULEMENT du carré occupé par le halo (avant
+        et après) — jamais tout le viewport : sur un grand fond, ça forçait
+        Qt à retracer l'image entière, la grille 8×8 et les calques à chaque
+        pixel de survol, pour un effet qui ne bouge qu'un halo de quelques
+        dizaines de pixels."""
+        radius = max(48.0, 1.5 * self._adaptive_step())
+        scene_rect = None
+        for pt in (old, new):
+            if pt is None:
+                continue
+            r = QRectF(pt.x() - radius, pt.y() - radius, radius * 2, radius * 2)
+            scene_rect = r if scene_rect is None else scene_rect.united(r)
+        if scene_rect is None:
+            return
+        view_rect = self.mapFromScene(scene_rect).boundingRect().adjusted(-2, -2, 2, 2)
+        self.viewport().update(view_rect)
 
     # ── Souris ───────────────────────────────────────────────────
     # PRÉCÉDENCE, du plus spécifique au plus général : un guide de coupe (il
@@ -956,6 +1008,9 @@ class BgInpaintView(QGraphicsView):
 
     def mouseMoveEvent(self, e):
         self._emit_cursor(e)
+        old_hover = self._hover_scene
+        self._hover_scene = self.mapToScene(e.position().toPoint())
+        self._invalidate_halo(old_hover, self._hover_scene)
         if self._panning:
             p = e.position().toPoint()
             d = p - self._pan_last

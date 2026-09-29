@@ -12,7 +12,7 @@ HEADER_H = 28.0
 BODY_H = 108.0
 _RADIUS = 7.0
 _TOGGLE = 16.0
-_GRID_STEP = 20.0
+_GRID_STEP = 40.0
 
 
 class NoteToggleItem(QGraphicsItem):

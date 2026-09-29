@@ -24,12 +24,12 @@ from __future__ import annotations
 import os
 from uuid import uuid4
 
-from PyQt6.QtCore import QEasingCurve, QPointF, QPropertyAnimation, QRectF, QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QEasingCurve, QPointF, QPropertyAnimation, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import (
     QBrush, QColor, QImage, QKeySequence, QPainter, QPen, QPixmap, QShortcut, QTransform,
 )
 from PyQt6.QtWidgets import (
-    QApplication, QFrame, QGraphicsOpacityEffect, QGraphicsScene, QGraphicsView, QHBoxLayout, QMenu,
+    QApplication, QGraphicsOpacityEffect, QGraphicsScene, QGraphicsView, QMenu,
     QMessageBox, QLineEdit, QToolButton, QVBoxLayout, QWidget,
 )
 
@@ -39,8 +39,8 @@ from core.selection_bus import get_bus
 from core.scene_graph_state import SceneGraphState
 from scripting.scene_graph import SceneGraph, node_diagnostics, scene_graph
 from ui.common.labels import label
-from ui.common import icons
 from ui.common.theme import C, QSS, T, ui_font
+from ui.common.canvas_top_bar import CanvasTopBar
 from ui.scene_manager.scene_graph_items import (
     CARD_H, CARD_W, MissingTargetItem, SceneCardItem, SceneGraphEdgeItem,
     ScenePreviewToggleItem,
@@ -61,7 +61,7 @@ _GROUP_PAD = 16.0  # respiration entre le cadre d'un groupe et ses cartes
 _MIN_ZOOM = 0.25
 _MAX_ZOOM = 4.0
 _PAN_MARGIN = 2000.0  # respiration autour du contenu pour paner dans le vide
-_GRID_STEP = 20.0
+_GRID_STEP = 40.0
 
 
 class _RewriteEdgeCmd(Command):
@@ -156,19 +156,30 @@ class _GraphCanvas(QGraphicsView):
         coût est borné par le rectangle visible, pas par la taille du graphe.
         """
         painter.fillRect(rect, QColor(C.BG_DEEP))
-        pen = QPen(QColor(C.BORDER_DARK))
+        pen = QPen(QColor(C.BORDER_MID))
         pen.setCosmetic(True)
+        pen.setWidthF(2.5)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(pen)
-        left = int(rect.left() // _GRID_STEP) * int(_GRID_STEP)
-        top = int(rect.top() // _GRID_STEP) * int(_GRID_STEP)
+        # En-deçà de 100% de zoom, le pas visuel double tous les -75% de zoom
+        # (donc le nombre de points affichés /2) : moins on voit de la scène à
+        # l'écran, moins la grille encombre. Le pas d'accrochage des nœuds
+        # (_GRID_STEP) n'est pas concerné.
+        step = _GRID_STEP
+        away = 1.0 / self._zoom
+        while away >= 1.75:
+            step *= 2
+            away /= 1.75
+        left = int(rect.left() // step) * int(step)
+        top = int(rect.top() // step) * int(step)
         right, bottom = rect.right(), rect.bottom()
         x = float(left)
         while x <= right:
             y = float(top)
             while y <= bottom:
                 painter.drawPoint(int(x), int(y))
-                y += _GRID_STEP
-            x += _GRID_STEP
+                y += step
+            x += step
 
     # ── Zoom ──────────────────────────────────────────────────────────
 
@@ -561,67 +572,42 @@ class SceneGraphView(QWidget):
         layout.addWidget(self._build_toolbar())
         layout.addWidget(self._view, 1)
         layout.addWidget(self._breadcrumb)
+        self._view.navigation_changed.connect(self._update_zoom_label)
+        self._update_zoom_label()
+
+    def _update_zoom_label(self, *_unused) -> None:
+        self._top_bar.set_zoom(self._view._zoom)
 
     # ── Barre d'outils propre à la vue Graphe ─────────────────────────
 
-    def _build_toolbar(self) -> QFrame:
-        bar = QFrame()
-        bar.setStyleSheet(f"background:{C.BG_RAISED}; border-bottom:1px solid {C.BORDER};")
-        lay = QHBoxLayout(bar)
-        lay.setContentsMargins(8, 4, 8, 4)
-        lay.setSpacing(6)
-        self._btn_minimap = QToolButton()
-        self._btn_minimap.setToolTip(label("scncanvas.graph_minimap_tip"))
-        self._btn_minimap.setIcon(icons.get("view_minimap", icons.COLOR_DEFAULT, C.ACCENT))
-        self._btn_minimap.setIconSize(QSize(18, 18))
-        self._btn_minimap.setCheckable(True); self._btn_minimap.setChecked(True)
-        self._btn_minimap.setFixedSize(32, 28)
-        self._btn_minimap.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-        self._btn_minimap.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_minimap.setStyleSheet(
-            f"QToolButton{{border:1px solid {C.BORDER};background:{C.BG_INPUT};"
-            f"border-radius:4px;padding:0;}}"
-            f"QToolButton:hover{{background:{C.BG_HOVER};border-color:{C.BORDER_MID};}}"
-            f"QToolButton:checked{{background:{C.BG_SEL};border-color:{C.ACCENT};}}")
-        self._btn_minimap.toggled.connect(self._set_minimap_visible)
-        lay.addWidget(self._btn_minimap)
-        self._btn_notes = QToolButton()
-        self._btn_notes.setToolTip(label("scncanvas.graph_show_notes_tip"))
-        self._btn_notes.setIcon(icons.get("view_notes", icons.COLOR_DEFAULT, C.ACCENT))
-        self._btn_notes.setIconSize(QSize(18, 18))
-        self._btn_notes.setCheckable(True); self._btn_notes.setChecked(True)
-        self._btn_notes.setFixedSize(32, 28)
-        self._btn_notes.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-        self._btn_notes.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_notes.setStyleSheet(
-            f"QToolButton{{border:1px solid {C.BORDER};background:{C.BG_INPUT};"
-            f"border-radius:4px;padding:0;}}"
-            f"QToolButton:hover{{background:{C.BG_HOVER};border-color:{C.BORDER_MID};}}"
-            f"QToolButton:checked{{background:{C.BG_SEL};border-color:{C.ACCENT};}}")
-        self._btn_notes.toggled.connect(self._set_notes_visible)
-        lay.addWidget(self._btn_notes)
-        self._btn_search = QToolButton()
-        self._btn_search.setToolTip(label("scncanvas.graph_search_tip"))
-        self._btn_search.setIcon(icons.get("search", icons.COLOR_DEFAULT, C.ACCENT))
-        self._btn_search.setIconSize(QSize(18, 18))
-        self._btn_search.setCheckable(True)
-        self._btn_search.setFixedSize(32, 28)
-        self._btn_search.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-        self._btn_search.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_search.setStyleSheet(
-            f"QToolButton{{border:1px solid {C.BORDER};background:{C.BG_INPUT};"
-            f"border-radius:4px;padding:0;}}"
-            f"QToolButton:hover{{background:{C.BG_HOVER};border-color:{C.BORDER_MID};}}"
-            f"QToolButton:checked{{background:{C.BG_SEL};border-color:{C.ACCENT};}}")
-        self._btn_search.toggled.connect(self._set_scene_search_visible)
-        lay.addWidget(self._btn_search)
+    # Paliers de zoom du graphe — mêmes bornes que _MIN_ZOOM/_MAX_ZOOM.
+    _ZOOM_LEVELS = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0]
+
+    def _build_toolbar(self) -> CanvasTopBar:
+        # Barre partagée avec le Scene Editor (cf. ui/common/canvas_top_bar) :
+        # même widget de zoom, ancré à gauche, dans les deux vues. Le graphe
+        # n'a pas de dimensions canvas/curseur pixel à afficher à droite.
+        bar = CanvasTopBar(label("scncanvas.graph_fit_tip"), show_coords=False)
+        bar.zoom_step_asked.connect(self._zoom_step)
+        bar.fit_asked.connect(self._fit_graph)
+        self._top_bar = bar
+
+        self._btn_minimap = bar.add_toggle(
+            "view_minimap", label("scncanvas.graph_minimap_tip"), self._set_minimap_visible)
+        self._btn_minimap.setChecked(True)
+        self._btn_notes = bar.add_toggle(
+            "view_notes", label("scncanvas.graph_show_notes_tip"), self._set_notes_visible)
+        self._btn_notes.setChecked(True)
+        self._btn_search = bar.add_toggle(
+            "search", label("scncanvas.graph_search_tip"), self._set_scene_search_visible)
+
         self._scene_search = QLineEdit()
         self._scene_search.setPlaceholderText(label("scncanvas.graph_search_placeholder"))
         self._scene_search.setFixedWidth(180)
         self._scene_search.setVisible(False)
         self._scene_search.returnPressed.connect(self._search_scene)
-        lay.addWidget(self._scene_search)
-        lay.addStretch()
+        bar.add_widget(self._scene_search)
+
         self._btn_rearrange = QToolButton()
         self._btn_rearrange.setText(label("scncanvas.graph_rearrange"))
         self._btn_rearrange.setToolTip(label("scncanvas.graph_rearrange_tip"))
@@ -632,8 +618,15 @@ class SceneGraphView(QWidget):
             f"color:{C.TEXT_NORM};padding:3px 12px;}}"
             f"QToolButton:hover{{background:{C.BG_HOVER};}}")
         self._btn_rearrange.clicked.connect(self._rearrange)
-        lay.addWidget(self._btn_rearrange)
+        bar.add_trailing(self._btn_rearrange)
         return bar
+
+    def _zoom_step(self, direction: int) -> None:
+        current = self._view._zoom
+        levels = self._ZOOM_LEVELS
+        idx = min(range(len(levels)), key=lambda i: abs(levels[i] - current))
+        idx = max(0, min(idx + direction, len(levels) - 1))
+        self._view.set_zoom(levels[idx])
 
     def _update_minimap(self, *_unused) -> None:
         """Repositionne et recalcule la mini-carte après navigation ou rendu."""
@@ -1519,7 +1512,8 @@ class SceneGraphView(QWidget):
         def walk(parent: str | None, depth: int) -> None:
             for f in children.get(parent, []):
                 col = collapsed(f.id)
-                shown[f.id] = {"name": f.name, "color": f.color,
+                # Les anciennes couleurs de dossiers ne teintent plus le graphe.
+                shown[f.id] = {"name": f.name, "color": "",
                                "collapsed": col, "parent": f.parent_id, "depth": depth}
                 if not col:
                     walk(f.id, depth + 1)

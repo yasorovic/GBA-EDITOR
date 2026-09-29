@@ -105,26 +105,15 @@ class UIRegionItem(QGraphicsRectItem):
     on le trouve — sinon à l'origine de l'écran, avec un liseré discontinu qui
     dit que la position affichée n'est pas celle du jeu."""
 
-    # Palette locale au canvas : pendant un drag, la couleur se lit plus vite
-    # qu'une icône de 6 px. Elle ne définit aucune famille globale ; ailleurs,
-    # l'identité du type reste portée par la FORME.
-    _KIND_COLORS = {
-        "text":   "#4f8ff7",   # texte : couleur locale de l'outil Interface
-        "container": "#b388ff",   # conteneur (lavande — structure/groupe)
-        # La liste est un conteneur : même famille que lui, teinte plus soutenue
-        # — ce qu'elle ajoute est un comportement, pas une autre nature.
-        "list":   "#8c6bff",
-        "image":  "#ffb454",   # image (ambre — un dessin, pas une structure)
-    }
     def __init__(self, layout_asset, region, project, scene, save_fn=None, parent=None):
         super().__init__(0, 0, max(8, region.w), max(8, region.h), parent)
         self._layout, self._region = layout_asset, region
         self._project, self._scene = project, scene
         self._save = save_fn
         self._press_pos = None
-        from ui.common import icons as _icons
-        self._COLOR = QColor(self._KIND_COLORS.get(getattr(region, "kind", "region"),
-                                                    _icons.COLOR_UI))
+        # Le type reste distingué par son icône et sa géométrie, jamais par une
+        # teinte locale : le canvas Interface suit la palette neutre du thème.
+        self._COLOR = QColor(C.ACCENT)
         # Poignée en cours de traction (None = déplacement/simple sélection) et
         # géométrie de départ du geste, figée au press pour que chaque mouvement
         # se calcule depuis l'origine et non depuis l'image précédente.
@@ -1020,8 +1009,7 @@ class UIRegionItem(QGraphicsRectItem):
             painter.drawLine(QPointF(r.left(), r.bottom()),
                              QPointF(r.right(), r.bottom()))
 
-        # 2. Contour — la COULEUR porte le type (cf. _KIND_COLORS). Un
-        #    CONTENEUR est un cadre : tirets au repos. Une ancre non résolue
+        # 2. Contour neutre. Un CONTENEUR est un cadre : tirets au repos. Une ancre non résolue
         #    reste en pointillés (position affichée ≠ position du jeu), et ce
         #    signal prime sur le reste.
         col = QColor("#ffffff") if (sel and active) else QColor(self._COLOR)

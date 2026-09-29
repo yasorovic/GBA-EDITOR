@@ -416,7 +416,7 @@ class TextTable(QWidget):
                 item = _Row()
                 item.setText(COL_PATH, segment)
                 item.setData(COL_PATH, _ROLE_GROUP, node_path)
-                item.setIcon(COL_PATH, icons.get("folder", icons.COLOR_FOLDER))
+                item.setIcon(COL_PATH, icons.folder_icon(True, icons.COLOR_FOLDER))
                 item.setToolTip(COL_PATH, label("txttbl.group_rename_tip"))
                 if parent is None:
                     self._tree.addTopLevelItem(item)

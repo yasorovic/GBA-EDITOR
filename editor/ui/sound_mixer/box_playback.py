@@ -63,6 +63,8 @@ class BoxPlayer(QObject):
     # L'état LOGIQUE courant — il change dès le déclenchement, comme
     # `g_music_box_state_cur` dans main.c, avant même que le fondu s'entende.
     state_changed = pyqtSignal(str)
+    # Nom de la piste effectivement résolue, et son état de boucle.
+    track_changed = pyqtSignal(str, bool)
     # Ce qu'il y a à dire à l'auteur : pas d'arête, module manquant…
     message = pyqtSignal(str)
 
@@ -133,6 +135,22 @@ class BoxPlayer(QObject):
         if self._sink is not None:
             self._sink.setVolume(self._volume)
 
+    @property
+    def position_seconds(self) -> float:
+        return self._deck.position / GBA_MIX_RATE
+
+    @property
+    def duration_seconds(self) -> float:
+        return self._deck.duration / GBA_MIX_RATE
+
+    @property
+    def looping(self) -> bool:
+        return self._deck.looping
+
+    def set_looping(self, enabled: bool):
+        """Commande de monitoring : la boucle appliquée par la ROM à l'état courant."""
+        self._deck.set_looping(enabled)
+
     # ── Le geste : cliquer un nœud ────────────────────────────────
 
     def go_to(self, state_name: str):
@@ -169,6 +187,7 @@ class BoxPlayer(QObject):
             # `if(id < 0){ music_stop(); return; }` — un état sans piste est un
             # silence, pas une erreur.
             self._deck.stop()
+            self.track_changed.emit("", False)
             return
         loop = bool(st.loop)
         if not transition:
@@ -177,6 +196,7 @@ class BoxPlayer(QObject):
             self._deck.cut_to(track, volume, loop)
         else:
             self._deck.fade_to(track, volume, frames, loop)
+        self.track_changed.emit(st.music, loop)
 
     # ── Rendu des modules ─────────────────────────────────────────
 

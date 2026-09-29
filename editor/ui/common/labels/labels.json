@@ -150,6 +150,9 @@
     "common.build_run": {
       "text": "Build & Run"
     },
+    "common.run": {
+      "text": "Run"
+    },
     "settings.shortcuts.action.canvas.tool_select": {
       "text": "Select tool"
     },
@@ -1395,6 +1398,15 @@
     "sndpanel.rom_play_tip": {
       "text": "Plays the MusicBox as the ROM will play it.\n\nClicking a node emits the trigger that leads to it: the transition sounds exactly as in-game, without a build. If no edge leads to that node, nothing happens, as on the console."
     },
+    "sndpanel.rom_stop_tip": {
+      "text": "Stop ROM playback"
+    },
+    "sndpanel.rom_loop_tip": {
+      "text": "Loop the current state during ROM playback"
+    },
+    "sndpanel.rom_progress_tip": {
+      "text": "Current position in the module played by ROM playback"
+    },
     "sndpanel.no_state": {
       "text": "No state to play."
     },
@@ -1406,6 +1418,24 @@
     },
     "sndpanel.jinglebox_empty": {
       "text": "A JingleBox says which module each jingle action points to per state. A jingle layers over the music, it doesn't replace it."
+    },
+    "sndpanel.context_music": {
+      "text": "Music"
+    },
+    "sndpanel.context_music_tip": {
+      "text": "Edit MusicBoxes and their musical states"
+    },
+    "sndpanel.context_sfx": {
+      "text": "Sound FX"
+    },
+    "sndpanel.context_sfx_tip": {
+      "text": "Edit SoundBoxes and their sound-effect actions"
+    },
+    "sndpanel.context_jingles": {
+      "text": "Jingles"
+    },
+    "sndpanel.context_jingles_tip": {
+      "text": "Edit JingleBoxes and their jingle actions"
     },
     "sprframe.trig_action": {
       "text": "SoundBox action: {name}"
@@ -2634,6 +2664,9 @@
     "build.building": {
       "text": "⏳  Building…"
     },
+    "build.failed_mark": {
+      "text": "XXX"
+    },
     "build.toolchain": {
       "text": "Toolchain:"
     },
@@ -3267,6 +3300,9 @@
     },
     "scncanvas.graph_rearrange": {
       "text": "Re-arrange"
+    },
+    "scncanvas.graph_fit_tip": {
+      "text": "Fit to view  (F)"
     },
     "scncanvas.graph_show_notes_tip": {
       "text": "Show or hide free notes on the graph"
@@ -4352,9 +4388,6 @@
     "fontasset.preview_title": {
       "text": "GBA raster preview"
     },
-    "fontasset.preview_live": {
-      "text": "Live preview. Rendered by the project rasterizer."
-    },
     "fontasset.preview_sample_text": {
       "text": "Preview text"
     },
@@ -4369,6 +4402,12 @@
     },
     "fontasset.preview_size_tip": {
       "text": "Raster size, shared with the inspector and saved in this font asset."
+    },
+    "fontasset.preview_size_fixed": {
+      "text": "{pixel_height} px (bitmap sheet)"
+    },
+    "fontasset.preview_size_fixed_tip": {
+      "text": "Size is fixed by the imported bitmap sheet: unlike a vector font, it cannot be rasterized at another size."
     },
     "fontasset.preview_canvas_tip": {
       "text": "Mouse wheel: zoom. Middle-button drag: pan. Double-click: reset view. The faint grid marks 8×8 GBA tiles."
@@ -4390,6 +4429,9 @@
     },
     "fontasset.preview_summary": {
       "text": "{pixel_height} px · line height {line_height} px · {pixel_fit} pixel fit · {hinting} hinting · {raster_mode} · {sources}"
+    },
+    "fontasset.preview_missing_chars": {
+      "text": "Not covered by the font: {chars}"
     },
     "settings.window_title": {
       "text": "Settings"

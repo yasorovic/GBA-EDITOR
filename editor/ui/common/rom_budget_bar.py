@@ -36,7 +36,7 @@ _WARN_RATIO = 0.75  # même seuil que GbaStatusBar / SoundBudgetBar
 
 # Une couleur par catégorie de `rom_report.CATEGORY_ORDER`. Propres à CETTE barre
 # (icons.py refuse toute teinte globale par famille d'asset) : en mode
-# répartition, des segments gris ne se distingueraient pas. Le vert et le rouge
+# répartition, des segments gris ne se distingueraient pas. L'accent et le rouge
 # sont laissés à l'état de remplissage (OK / dépassement), les catégories les
 # évitent. Code/Reste ne sont pas des assets : les deux gris du thème.
 _HUES_DARK = {
@@ -82,9 +82,9 @@ class _Gauge(QWidget):
         self._total = 0
         self._rom_bytes = 0
         self._mode = "fill"
-        # Couleur du remplissage : vert / jaune / rouge selon l'état, posée par
+        # Couleur du remplissage : accent / jaune / rouge selon l'état, posée par
         # la barre (elle seule connaît le seuil d'alerte).
-        self.fill_color = C.POWER
+        self.fill_color = C.ACCENT
 
     def set_data(self, categories: dict[str, int], rom_bytes: int, cartridge_bytes: int):
         """`cartridge_bytes` est le dénominateur ACTUEL, pas forcément celui
@@ -118,13 +118,13 @@ class _Gauge(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor(C.TECH_BG))
+        p.setBrush(QColor(C.BG_BASE))
         p.drawRect(0, 0, w, h)
 
         # Le quadrillage très discret donne une présence à l'espace libre :
         # il reste lisible sans concurrencer les segments de ressources.
         if self._mode == "fill":
-            p.setPen(QColor(C.TECH_GRID))
+            p.setPen(QColor(C.BORDER_DARK))
             for grid_x in range(16, w, 16):
                 p.drawLine(grid_x, 2, grid_x, h - 3)
         p.setPen(Qt.PenStyle.NoPen)
@@ -146,8 +146,8 @@ class _Gauge(QWidget):
                 p.drawRect(left, 0, max(1, right - left - 1), h)
                 x += seg_w
 
-        # Contour acier, volontairement droit comme les commandes du bandeau.
-        p.setPen(QColor(C.TECH_OUTLINE))
+        # Même contour que les champs et boutons de l'application.
+        p.setPen(QColor(C.BORDER_MID))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawRect(0, 0, max(0, w - 1), max(0, h - 1))
         p.end()
@@ -179,17 +179,17 @@ class RomBudgetBar(QWidget):
 
     cartridge_mib_changed = pyqtSignal(int)
 
-    _TECH_BG = C.TECH_BG
-    _TECH_TEXT = C.TECH_TEXT
-    _STYLE_OK   = f"color:{_TECH_TEXT};"
+    _BLOCK_BG = C.BG_BASE
+    _BLOCK_TEXT = C.TEXT_DIM
+    _STYLE_OK   = f"color:{C.ACCENT};"
     _STYLE_WARN = f"color:{C.ACCENT_YLW};"
     _STYLE_CRIT = f"color:{C.ACCENT_RED};"
 
     @classmethod
-    def _tech_block(cls, color: str | None = None) -> str:
-        """Pavé technique contrasté, sans relief ni coins arrondis."""
-        return (f"background:{cls._TECH_BG}; color:{color or cls._TECH_TEXT}; "
-                f"border:1px solid {C.TECH_BLOCK_BORDER}; padding:0 8px;")
+    def _theme_block(cls, color: str | None = None) -> str:
+        """Pavé compact qui suit les couleurs de champ du thème actif."""
+        return (f"background:{cls._BLOCK_BG}; color:{color or cls._BLOCK_TEXT}; "
+                f"border:1px solid {C.BORDER_MID}; padding:0 8px;")
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -208,7 +208,7 @@ class RomBudgetBar(QWidget):
         self._lbl_rom = QLabel()
         self._lbl_rom.setFont(QFont(T.MONO, T.XS, QFont.Weight.DemiBold))
         self._lbl_rom.setFixedHeight(24)
-        self._lbl_rom.setStyleSheet(self._tech_block())
+        self._lbl_rom.setStyleSheet(self._theme_block())
         self._lbl_rom.setCursor(Qt.CursorShape.PointingHandCursor)
         self._lbl_rom.mousePressEvent = lambda e: self._open_cartridge_menu()
         lay.addWidget(self._lbl_rom)
@@ -216,13 +216,13 @@ class RomBudgetBar(QWidget):
         self._value = QLabel("—")
         self._value.setFont(QFont(T.MONO, T.XS, QFont.Weight.Bold))
         self._value.setFixedHeight(24)
-        self._value.setStyleSheet(self._tech_block())
+        self._value.setStyleSheet(self._theme_block())
 
         self._percent = QLabel()
         self._percent.setFont(QFont(T.MONO, T.XS, QFont.Weight.DemiBold))
         self._percent.setFixedHeight(24)
         self._percent.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._percent.setStyleSheet(self._tech_block())
+        self._percent.setStyleSheet(self._theme_block())
 
         self._gauge = _Gauge()
         lay.addWidget(self._gauge, 1)
@@ -236,7 +236,7 @@ class RomBudgetBar(QWidget):
         self._mode_button = QLabel()
         self._mode_button.setFont(QFont(T.UI, T.XS, QFont.Weight.DemiBold))
         self._mode_button.setFixedHeight(24)
-        self._mode_button.setStyleSheet(self._tech_block())
+        self._mode_button.setStyleSheet(self._theme_block())
         self._mode_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._mode_button.mousePressEvent = lambda e: self._open_mode_menu()
         lay.addWidget(self._mode_button)
@@ -316,8 +316,8 @@ class RomBudgetBar(QWidget):
         if report is None:
             self._value.setText("—")
             self._percent.setText("—")
-            self._value.setStyleSheet(self._tech_block())
-            self._percent.setStyleSheet(self._tech_block())
+            self._value.setStyleSheet(self._theme_block())
+            self._percent.setStyleSheet(self._theme_block())
             self._gauge.set_data({}, 0, cartridge_bytes)
             return
 
@@ -334,7 +334,7 @@ class RomBudgetBar(QWidget):
         color = style.removeprefix("color:").removesuffix(";")
         self._gauge.fill_color = (C.ACCENT_RED if style == self._STYLE_CRIT
                                   else C.ACCENT_YLW if style == self._STYLE_WARN
-                                  else C.POWER)
-        self._value.setStyleSheet(self._tech_block(color))
-        self._percent.setStyleSheet(self._tech_block(color))
+                                  else C.ACCENT)
+        self._value.setStyleSheet(self._theme_block(color))
+        self._percent.setStyleSheet(self._theme_block(color))
         self._gauge.set_data(report.categories, report.rom_bytes, cartridge_bytes)

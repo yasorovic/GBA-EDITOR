@@ -6,7 +6,7 @@ from typing import Optional
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QToolButton, QScrollArea, QMenu,
 )
-from PyQt6.QtGui import QFont, QColor, QPainter, QPen, QPixmap
+from PyQt6.QtGui import QFont, QColor, QPainter, QPen, QPixmap, QBrush
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QRect
 
 from ui.common.theme import C, T, QSS
@@ -134,6 +134,16 @@ class _SpritesheetCanvas(QWidget):
         self.update()
         self.selection_changed.emit(self._selection)
 
+    @staticmethod
+    def _checker_pattern(cs: int = 8) -> QPixmap:
+        pm = QPixmap(cs * 2, cs * 2)
+        pm.fill(QColor(C.CHECKER_A))
+        p = QPainter(pm)
+        p.fillRect(cs, 0, cs, cs, QColor(C.CHECKER_B))
+        p.fillRect(0, cs, cs, cs, QColor(C.CHECKER_B))
+        p.end()
+        return pm
+
     def paintEvent(self, e):
         painter = QPainter(self)
         if not self._pixmap or self._pixmap.isNull():
@@ -145,6 +155,9 @@ class _SpritesheetCanvas(QWidget):
 
         pw = self._pixmap.width()  * self._zoom
         ph = self._pixmap.height() * self._zoom
+        # Damier sous la planche : sans lui, les pixels transparents se
+        # confondent avec le fond du panneau.
+        painter.fillRect(QRect(0, 0, pw, ph), QBrush(self._checker_pattern()))
         painter.drawPixmap(QRect(0, 0, pw, ph), self._pixmap)
 
         tpx = 8 * self._zoom

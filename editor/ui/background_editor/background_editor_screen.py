@@ -1025,7 +1025,7 @@ class BgPropertiesPanel(QWidget):
         lossless = m["tiles_over"] == 0 and m["palettes_needed"] <= 16
         verdict = (label("bgedit.an_lossless") if lossless
                    else label("bgedit.an_lossy", over=m["tiles_over"]))
-        color = C.POWER if lossless else C.ACCENT_RED
+        color = C.TEXT_HI if lossless else C.ACCENT_RED
         return (f'<div style="white-space:pre">{body}\n'
                 f'<span style="color:{color}">{html.escape(verdict)}</span></div>')
 
@@ -1228,7 +1228,7 @@ class BgPropertiesPanel(QWidget):
     def _validation_lines(self, ba) -> list:
         if not ba or not (ba.tileset or ba.bitmap):
             return [(label('bgedit.compression_failed'), C.ACCENT_RED)]
-        warn, err, ok = C.ACCENT_YLW, C.ACCENT_RED, C.POWER
+        warn, err, ok = C.ACCENT_YLW, C.ACCENT_RED, C.TEXT_HI
         kind_lines = self._kind_validation_lines(ba)
         if ba.mode == "bitmap":
             diag = self._diag_for(ba)

@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QAction, QFont, QKeySequence, QShortcut, QDesktopServices
 from PyQt6.QtCore import Qt, QSettings, QByteArray, QTimer, QUrl
+from PyQt6.QtGui import QGuiApplication
 
 from ui.common.theme import C, T, QSS
 from ui.common.labels import label
@@ -339,6 +340,9 @@ class MainWindow(QMainWindow):
         self.toolchain = Toolchain()
         self._external_tools = ExternalTools()
         self._watcher = ProjectWatcher(self)
+        # Retour du focus (Explorateur → éditeur) : on rattrape par comparaison
+        # avec le disque tout ce que le watcher temps réel a pu rater.
+        QGuiApplication.instance().applicationStateChanged.connect(self._on_application_state_changed)
         self._history = get_history()
 
         # Debounce : regrouper les sauvegardes rapides (SpinBox drag, etc.)
@@ -1188,6 +1192,19 @@ class MainWindow(QMainWindow):
         # rapide) — l'accueil affiche déjà son propre statut, plus explicite.
         self.toolchain_bar.setVisible(visible)
 
+    def _refresh_assets_ui(self):
+        """Les catalogues d'assets ont changé HORS de l'éditeur (fichier ajouté,
+        supprimé, renommé, sidecar retouché) : le modèle est à jour, mais les
+        écrans déjà chargés affichent encore l'ancienne liste — `refresh` à la
+        revisite ne relit que les palettes, `load_project` ne rejoue qu'à la
+        première visite. On invalide donc les écrans chargés : celui qu'on
+        regarde est repeuplé tout de suite, les autres à leur prochaine visite."""
+        if not self.project:
+            return
+        self._project_loaded_screen_indices.clear()
+        self.assets_finder_panel.refresh()
+        self._refresh_ui()      # recharge l'écran visible (index absent du set)
+
     def _refresh_ui(self):
         if not self.project: return
         name = self.project.settings.name
@@ -1456,6 +1473,10 @@ class MainWindow(QMainWindow):
 
     # ── Réactivité fichiers externes ─────────────────────────────
 
+    def _on_application_state_changed(self, state):
+        if state == Qt.ApplicationState.ApplicationActive and self.project:
+            self._watcher.rescan()
+
     def _connect_watcher(self):
         """
         Connecte tous les signaux du ProjectWatcher aux handlers.
@@ -1509,7 +1530,7 @@ class MainWindow(QMainWindow):
         with self._watcher.suspended():
             result = sync_fn(self.project, p)
         warning = result if isinstance(result, str) else None
-        self._refresh_ui()
+        self._refresh_assets_ui()
         if warning:
             self._status.showMessage(warning, _WATCHER_WARNING_MS)
         else:
@@ -1534,7 +1555,7 @@ class MainWindow(QMainWindow):
             return
         if store.load_one(p.stem) is None:
             return
-        self._refresh_ui()
+        self._refresh_assets_ui()
         self._status.showMessage(
             label("win.asset_reloaded", kind=p.parent.name[:-1].capitalize(), name=p.stem), 3000)
 
@@ -1551,7 +1572,7 @@ class MainWindow(QMainWindow):
             remove_fn(self.project, p)
             if p.parent.name == "fonts":
                 asset_reconciliation.reconcile_font_assets(self.project)
-        self._refresh_ui()
+        self._refresh_assets_ui()
         self._status.showMessage(label("win.asset_removed", kind=route_label, name=p.name), 3000)
 
     def _on_asset_renamed(self, old: str, new: str):
@@ -1581,7 +1602,7 @@ class MainWindow(QMainWindow):
             if new_p.parent.name == "fonts":
                 asset_reconciliation.reconcile_font_assets(self.project)
         warning = result if isinstance(result, str) else None
-        self._refresh_ui()
+        self._refresh_assets_ui()
         if warning:
             self._status.showMessage(warning, _WATCHER_WARNING_MS)
         else:

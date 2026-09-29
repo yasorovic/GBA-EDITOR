@@ -42,7 +42,7 @@ PREVIEW_H = PREVIEW_HEADER_H + PREVIEW_IMG_H
 _PILL = 12.0   # diamètre de la pastille d'aperçu
 _PILL_PAD = 7.0  # marge de la pastille au coin haut-droit de la carte
 _PORT_R = 4.5  # rayon des points d'entrée/sortie, centrés sur le bord de la carte
-_GRID_STEP = 20.0
+_GRID_STEP = 40.0
 
 
 class NodePortItem(QGraphicsItem):

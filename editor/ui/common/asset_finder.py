@@ -50,7 +50,7 @@ from PyQt6.QtCore import (
 from ui.common.theme import C, T, S, QSS, ui_font
 from ui.common.selection_grammar import RowSelectionDelegate
 from ui.common.widgets import W, FinderSection
-from ui.common.icons import get as _ico, COLOR_DEFAULT, COLOR_FOLDER
+from ui.common.icons import get as _ico, folder_icon, COLOR_DEFAULT, COLOR_FOLDER
 from ui.common.reveal import reveal_in_file_manager
 from core.history import get_history, MacroCmd
 
@@ -99,7 +99,6 @@ class FolderScheme:
     create: Callable[[str, Optional[str]], Any]            # (name, parent_id)
     rename: Callable[[str, str], bool]                     # (id, name)
     delete: Callable[[str], Any]                           # (id)
-    set_color: Callable[[str, str], Any]                   # (id, color)
     set_parent: Callable[[str, Optional[str]], bool]       # (id, parent_id)
     move: Callable[[Any, Optional[str]], Any]              # (asset, folder_id)
     folder_of: Callable[[Any], Optional[str]]              # (asset) -> id
@@ -108,24 +107,15 @@ class FolderScheme:
     group: Optional[Callable[[list, Optional[str]], Any]] = None  # (assets, parent) -> folder
 
 
-# Palette de repérage d'un dossier, partagée avec le Scene Tree (mêmes teintes).
-_FOLDER_COLORS = (
-    ("", "scttree.folder_color_none"),
-    ("#6EA8FE", "scttree.folder_color_blue"),
-    ("#6EE7B7", "scttree.folder_color_green"),
-    ("#FBBF24", "scttree.folder_color_yellow"),
-    ("#FB7185", "scttree.folder_color_red"),
-    ("#C4B5FD", "scttree.folder_color_purple"),
-)
-
-
 def folded_nodes(raw_assets: list[AssetNode], scheme: FolderScheme) -> list[AssetNode]:
     """Range des assets plats sous les dossiers d'auteur (arbre par `parent_id`).
 
     Les dossiers viennent en tête, dans l'ordre du store ; un asset sans dossier
     (ou de dossier inconnu) retombe à la racine — jamais perdu."""
     infos = list(scheme.folders())
-    fnodes = {f.id: AssetNode(name=f.name, folder_id=f.id, color=f.color) for f in infos}
+    # Les anciennes données peuvent contenir une couleur ; elle est ignorée afin
+    # que tous les dossiers restent neutres sans migration destructive.
+    fnodes = {f.id: AssetNode(name=f.name, folder_id=f.id) for f in infos}
     roots: list[AssetNode] = []
     for f in infos:
         node = fnodes[f.id]
@@ -350,6 +340,19 @@ class _KindTree(QTreeWidget):
         self.model().rowsRemoved.connect(self._fit)
         self.itemExpanded.connect(self._fit)
         self.itemCollapsed.connect(self._fit)
+        self.itemExpanded.connect(lambda it: self._refresh_folder_icon(it, True))
+        self.itemCollapsed.connect(lambda it: self._refresh_folder_icon(it, False))
+
+    def _refresh_folder_icon(self, item: QTreeWidgetItem, expanded: bool) -> None:
+        """Alterne plein/filet au dépli — seuls les dossiers portent `_ROLE_OBJ`
+        à None (les items d'asset le renseignent toujours, cf. `_fill`).
+        `setIcon` émet `itemChanged` comme un renommage utilisateur : sans
+        `blockSignals`, `_on_item_changed` relirait ce non-événement comme un
+        renommage de dossier et repeuplerait l'arbre en boucle."""
+        if item.data(0, _ROLE_OBJ) is None:
+            self.blockSignals(True)
+            item.setIcon(0, folder_icon(expanded, COLOR_FOLDER))
+            self.blockSignals(False)
 
     def _configure_dnd(self):
         """Glisser vers le canvas si la famille déclare un `mime` ; sinon aucun
@@ -439,7 +442,7 @@ class _KindTree(QTreeWidget):
             item = QTreeWidgetItem(parent)
             item.setFont(0, ui_font(T.LG))
             if node.is_folder:
-                item.setIcon(0, _ico("folder", node.color or COLOR_FOLDER))
+                item.setIcon(0, folder_icon(True, node.color or COLOR_FOLDER))
                 item.setText(0, node.name)
                 item.setForeground(0, QColor(C.TEXT_DIM))
                 # Un dossier d'AUTEUR (folder_id) est renommable et accueille un
@@ -599,7 +602,7 @@ class _KindTree(QTreeWidget):
 
     def _folder_menu(self, scheme, folder_id, pos):
         """Menu d'un dossier d'auteur (ou de la zone vide) : nouveau (sous-)dossier,
-        et — sur un dossier — renommer, couleur, supprimer."""
+        et — sur un dossier — renommer ou supprimer."""
         menu = QMenu(self)
         menu.setStyleSheet(QSS.menu)
         menu.setFont(QFont(T.UI, T.MD))
@@ -611,12 +614,6 @@ class _KindTree(QTreeWidget):
             menu.addSeparator()
             menu.addAction(label('assetfind.rename')).triggered.connect(
                 lambda _=False, f=folder_id: self._edit_folder(f))
-            colors = menu.addMenu(label('scttree.folder_color'))
-            colors.setFont(QFont(T.UI, T.MD))
-            for value, lbl_key in _FOLDER_COLORS:
-                colors.addAction(_ico("folder", value or COLOR_FOLDER), label(lbl_key)
-                                 ).triggered.connect(
-                    lambda _=False, v=value, f=folder_id: self._set_folder_color(scheme, f, v))
             menu.addSeparator()
             menu.addAction(label('scttree.delete_folder')).triggered.connect(
                 lambda _=False, f=folder_id: self._delete_folder(scheme, f))
@@ -631,11 +628,6 @@ class _KindTree(QTreeWidget):
 
     def _delete_folder(self, scheme, folder_id):
         scheme.delete(folder_id)
-        self._panel.refresh()
-        self._panel.folders_changed.emit()
-
-    def _set_folder_color(self, scheme, folder_id, color):
-        scheme.set_color(folder_id, color)
         self._panel.refresh()
         self._panel.folders_changed.emit()
 

@@ -11,15 +11,16 @@ from PyQt6.QtWidgets import (
     QFrame, QScrollArea, QMenu, QApplication, QWidgetAction, QLineEdit,
 )
 from PyQt6.QtGui import (
-    QFont, QColor, QPixmap, QImage, QDrag, QPainter, QPen,
+    QFont, QColor, QPixmap, QImage, QDrag, QPainter, QPen, QBrush,
     QKeySequence, QShortcut,
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QMimeData, QPoint, QRect, QSize
+from PyQt6.QtCore import Qt, pyqtSignal, QMimeData, QPoint, QPointF, QRect, QRectF, QSize
 
 from ui.common.theme import C, T, QSS, tint
 from ui.common.labels import label
 from ui.common.icons import get as _ico
 from ui.common.palette_bank_strip import PaletteBankStrip
+from ui.common.canvas_backdrop import draw_grid, draw_grid_halo
 from core.models.sprite import (
     AnimFrame,
     AnimState,
@@ -608,6 +609,8 @@ class _FrameCanvas(QWidget):
     Shift+X / Shift+Y = flip horizontal/vertical de la brosse active.
     """
 
+    DEFAULT_ZOOM = 10    # zoom à l'ouverture et à chaque nouveau sprite (Fit = 0)
+
     frame_painted      = pyqtSignal()
     selection_reset    = pyqtSignal()   # demande reset de la sélection dans le picker
     hover_changed       = pyqtSignal(object)  # (col, row) survolé, ou None
@@ -637,17 +640,25 @@ class _FrameCanvas(QWidget):
         self._hover: Optional[tuple[int, int]]       = None
         self._persist_fn = None
         # Zoom/pan manuel
-        self._zoom: int = 0          # 0 = auto-fit, >0 = manuel
+        self._zoom: int = self.DEFAULT_ZOOM   # 0 = auto-fit, >0 = manuel
         self._pan_x: int = 0
         self._pan_y: int = 0
         self._mid_drag: Optional[tuple] = None   # (start_pos, start_pan_x, start_pan_y)
         # Sélection de tuiles déjà posées (active seulement sans brosse)
         self._select_start: Optional[tuple[int, int]] = None
         self._select_end:   Optional[tuple[int, int]] = None
+        self._mouse_pos: Optional[QPointF] = None   # halo de fond, coord. widget
         # Lecture seule : direction miroir. L'édition (peindre/effacer/ramasser)
         # est bloquée ; l'image composée est retournée pour l'affichage (flip).
         self._read_only:  bool = False
         self._flip_disp:  tuple[bool, bool] = (False, False)
+        # Image composée mise en cache : compose_frame_image relit le PNG source
+        # à chaque appel (I/O disque + recadrage par tuile) — la recalculer à
+        # chaque peinture serait déjà coûteux, mais à CHAQUE mouvement de souris
+        # (halo de fond) ce serait imperceptible... jusqu'à ce que ça ne le soit
+        # plus. Invalidée uniquement quand le contenu affiché change réellement.
+        self._composed_pixmap: Optional[QPixmap] = None
+        self._checker_cache: tuple[int, QPixmap] = (0, QPixmap())
         self.setMinimumHeight(80)
         self.setMouseTracking(True)
         self.setStyleSheet(f"background:{C.BG_DEEP};")
@@ -673,7 +684,8 @@ class _FrameCanvas(QWidget):
         # lecture d'animation (load_frame appelé à chaque tick) remettraient
         # un zoom manuel à "fit" à chaque frame.
         if sprite is not prev_sprite or (self._tile_w, self._tile_h) != prev_dims:
-            self._zoom = 0; self._pan_x = self._pan_y = 0
+            self._zoom = self.DEFAULT_ZOOM; self._pan_x = self._pan_y = 0
+        self._recompose()
         self.update()
 
     def set_brush(self, tiles: list[tuple[int, int]]):
@@ -724,6 +736,7 @@ class _FrameCanvas(QWidget):
         """Miroir d'affichage de l'image composée (preview d'une direction
         miroir) — n'affecte pas les tuiles stockées."""
         self._flip_disp = (flip_h, flip_v)
+        self._recompose()
         self.update()
 
     def set_grid(self, on: bool):
@@ -735,12 +748,14 @@ class _FrameCanvas(QWidget):
         quantification (nearest, comme au build) — pas à la brosse fantôme,
         ni aux pixels sources. None = couleurs sources telles quelles."""
         self._tint_bank = bank_colors
+        self._recompose()
         self.update()
 
     def set_preview_indexed(self, indexed: bool):
         """True = mode 'indexed' (own_palette recoloré par la banque de preview,
         rendu in-game), False = mode 'png' (couleurs compressées de own_palette)."""
         self._preview_indexed = indexed
+        self._recompose()
         self.update()
 
     def set_own_palette(self, own_palette: Optional[list]):
@@ -748,7 +763,55 @@ class _FrameCanvas(QWidget):
         ça : mode 'png' l'affiche telle quelle, mode 'indexed' la recolore via la
         banque de preview. [] / None = source brut (pas encore compressé)."""
         self._own_palette = list(own_palette or [])
+        self._recompose()
         self.update()
+
+    def _recompose(self):
+        """Recalcule l'image composée (lit le PNG source, recadre tuile par
+        tuile) et la met en cache — seul point d'appel de compose_frame_image,
+        pour que le halo de fond (repeint à chaque mouvement de souris) ne le
+        redéclenche jamais."""
+        if not self._frame or not self._sprite:
+            self._composed_pixmap = None
+            return
+        img = compose_frame_image(self._abs_path, self._frame,
+                                  self._tile_w * 8, self._tile_h * 8)
+        # Rendu dérivé du source + own_palette (jamais le PNG modifié) :
+        #   mode 'png'     -> couleurs compressées (own_palette telle quelle)
+        #   mode 'indexed' -> index de own_palette recolorés par la banque preview
+        if self._own_palette:
+            from core.models.gba_color import render_indexed, recolor_indexed
+            p_img = render_indexed(img, self._own_palette)
+            if self._preview_indexed and self._tint_bank:
+                img = recolor_indexed(p_img, self._tint_bank)
+            else:
+                img = p_img.convert("RGBA")
+        # Miroir d'affichage (direction miroir en lecture seule).
+        if self._flip_disp[0] or self._flip_disp[1]:
+            from PIL import Image as _Im
+            if self._flip_disp[0]:
+                img = img.transpose(_Im.FLIP_LEFT_RIGHT)
+            if self._flip_disp[1]:
+                img = img.transpose(_Im.FLIP_TOP_BOTTOM)
+        if img.width > 0 and img.height > 0:
+            data = bytes(img.tobytes("raw", "RGBA"))
+            qi = QImage(data, img.width, img.height, QImage.Format.Format_RGBA8888)
+            self._composed_pixmap = QPixmap.fromImage(qi)
+        else:
+            self._composed_pixmap = None
+
+    def _checker_pattern(self, cs: int) -> QPixmap:
+        """Tuile 2×2 cases du damier de transparence, mise en cache par taille
+        de case — un QBrush carrelé plutôt qu'un fillRect par case."""
+        if self._checker_cache[0] != cs:
+            pm = QPixmap(cs * 2, cs * 2)
+            pm.fill(QColor(C.CHECKER_A))
+            p = QPainter(pm)
+            p.fillRect(cs, 0, cs, cs, QColor(C.CHECKER_B))
+            p.fillRect(0, cs, cs, cs, QColor(C.CHECKER_B))
+            p.end()
+            self._checker_cache = (cs, pm)
+        return self._checker_cache[1]
 
     # ── Géométrie ────────────────────────────────────────────────────
 
@@ -818,6 +881,8 @@ class _FrameCanvas(QWidget):
             self.selection_reset.emit()
 
     def mouseMoveEvent(self, e):
+        self._mouse_pos = e.position()
+        self.update()   # halo de fond : suit le pointeur même sans changer de cellule
         if self._mid_drag and e.buttons() & Qt.MouseButton.MiddleButton:
             sp, spx, spy = self._mid_drag
             self._pan_x = spx + int(e.pos().x() - sp.x())
@@ -849,6 +914,7 @@ class _FrameCanvas(QWidget):
 
     def leaveEvent(self, e):
         self._hover = None
+        self._mouse_pos = None
         self.update()
         self.hover_changed.emit(None)
 
@@ -877,6 +943,7 @@ class _FrameCanvas(QWidget):
             self._frame.tiles.append(TilePlacement(sc, sr, dc, dr, fh, fv))
             changed = True
         if changed:
+            self._recompose()
             self.update()
             self.frame_painted.emit()
             get_history().record(PaintFrameCmd(
@@ -889,6 +956,7 @@ class _FrameCanvas(QWidget):
         self._frame.tiles = [t for t in self._frame.tiles
                              if not (t.dst_col == col and t.dst_row == row)]
         if len(self._frame.tiles) != len(old):
+            self._recompose()
             self.update()
             self.frame_painted.emit()
             get_history().record(PaintFrameCmd(
@@ -918,6 +986,7 @@ class _FrameCanvas(QWidget):
         picked_pos = {(t.dst_col, t.dst_row) for t in picked}
         self._frame.tiles = [t for t in self._frame.tiles
                              if (t.dst_col, t.dst_row) not in picked_pos]
+        self._recompose()
         self.frame_painted.emit()
         get_history().record(PaintFrameCmd(
             self._frame, old, self._snapshot(), self._persist_fn))
@@ -933,6 +1002,15 @@ class _FrameCanvas(QWidget):
     def paintEvent(self, e):
         painter = QPainter(self)
 
+        zoom, ox, oy, dw, dh = self._geometry()
+        tile_px = 8 * zoom
+
+        # Fond du canvas : même grille + halo au survol que le Font Editor,
+        # au pas d'une tuile GBA (8 px, cadré sur l'origine de l'image).
+        painter.fillRect(self.rect(), QColor(C.BG_DEEP))
+        draw_grid(painter, QRectF(self.rect()), tile_px, QPointF(ox, oy), tiled=True)
+        draw_grid_halo(painter, QRectF(self.rect()), tile_px, self._mouse_pos, QPointF(ox, oy))
+
         if not self._frame or not self._sprite:
             painter.setPen(QColor(C.TEXT_MUTED))
             painter.setFont(QFont(T.UI, T.MD))
@@ -941,41 +1019,19 @@ class _FrameCanvas(QWidget):
             painter.end()
             return
 
-        zoom, ox, oy, dw, dh = self._geometry()
-        tile_px = 8 * zoom
-
-        # Damier transparence
+        # Damier transparence — motif carrelé via QBrush (une seule passe),
+        # plutôt qu'un fillRect par case : la boucle Python redevenait le coût
+        # dominant du halo de fond, repeint à chaque mouvement de souris.
         cs = max(4, zoom * 2)
-        for cy in range(0, dh, cs):
-            for cx in range(0, dw, cs):
-                c = QColor(C.CHECKER_A) if (cx // cs + cy // cs) % 2 == 0 else QColor(C.CHECKER_B)
-                painter.fillRect(ox + cx, oy + cy,
-                                 min(cs, dw - cx), min(cs, dh - cy), c)
+        painter.save()
+        painter.setBrushOrigin(ox, oy)
+        painter.fillRect(QRect(ox, oy, dw, dh), QBrush(self._checker_pattern(cs)))
+        painter.restore()
 
-        # Image composée
-        img = compose_frame_image(self._abs_path, self._frame,
-                                   self._tile_w * 8, self._tile_h * 8)
-        # Rendu dérivé du source + own_palette (jamais le PNG modifié) :
-        #   mode 'png'     -> couleurs compressées (own_palette telle quelle)
-        #   mode 'indexed' -> index de own_palette recolorés par la banque preview
-        if self._own_palette:
-            from core.models.gba_color import render_indexed, recolor_indexed
-            p_img = render_indexed(img, self._own_palette)
-            if self._preview_indexed and self._tint_bank:
-                img = recolor_indexed(p_img, self._tint_bank)
-            else:
-                img = p_img.convert("RGBA")
-        # Miroir d'affichage (direction miroir en lecture seule).
-        if self._flip_disp[0] or self._flip_disp[1]:
-            from PIL import Image as _Im
-            if self._flip_disp[0]:
-                img = img.transpose(_Im.FLIP_LEFT_RIGHT)
-            if self._flip_disp[1]:
-                img = img.transpose(_Im.FLIP_TOP_BOTTOM)
-        if img.width > 0 and img.height > 0:
-            data = bytes(img.tobytes("raw", "RGBA"))
-            qi = QImage(data, img.width, img.height, QImage.Format.Format_RGBA8888)
-            painter.drawPixmap(QRect(ox, oy, dw, dh), QPixmap.fromImage(qi))
+        # Image composée — mise en cache par _recompose(), jamais recalculée ici
+        # (sinon chaque mouvement de souris relirait le PNG source pour le halo).
+        if self._composed_pixmap is not None:
+            painter.drawPixmap(QRect(ox, oy, dw, dh), self._composed_pixmap)
 
         # Grille 8×8
         if self._show_grid:

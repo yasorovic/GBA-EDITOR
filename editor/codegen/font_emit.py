@@ -756,7 +756,7 @@ def _encode_raster_font(font, rasters: dict) -> dict:
     décision appartient ici, au dernier passage avant la GBA, et est donc aussi
     celle dont le compteur de tuiles tient compte.
     """
-    from core.font_rasterizer import display_coverage
+    from core.font_rasterizer import raster_glyph_cell
 
     mode = getattr(font, "raster_mode", "binary")
     threshold = int(getattr(font, "coverage_threshold", 128))
@@ -769,20 +769,14 @@ def _encode_raster_font(font, rasters: dict) -> dict:
             continue
         width = max(1, int(g.w)); height = max(1, int(g.h))
         gtx, gty = max(1, (width + 7) // 8), max(1, (height + 7) // 8)
-        cell = [[0] * (gtx * 8) for _ in range(gty * 8)]
-        base_y = max(0, height - raster.bearing_y)
-        for y in range(raster.height):
-            dy = base_y + y
-            if not 0 <= dy < gty * 8:
-                continue
-            for x in range(raster.width):
-                dx = raster.bearing_x + x
-                if not 0 <= dx < gtx * 8:
-                    continue
-                cov = display_coverage(raster.coverage_at(x, y), dx, dy,
-                                       raster_mode=mode, threshold=threshold,
-                                       dither_pattern=pattern)
-                source_color = raster.color_at(x, y)
+        cell_w, cell_h = gtx * 8, gty * 8
+        coverage, color = raster_glyph_cell(raster, cell_w, cell_h, raster_mode=mode,
+                                            threshold=threshold, dither_pattern=pattern,
+                                            anchor_h=height)
+        cell = [[0] * cell_w for _ in range(cell_h)]
+        for dy in range(cell_h):
+            for dx in range(cell_w):
+                cov, source_color = coverage[dy][dx], color[dy][dx]
                 if source_color is not None and color_lut:
                     # Même règle que l'ancien encodeur PNG : si une planche a
                     # plus de quinze encres, une couleur écartée rejoint la

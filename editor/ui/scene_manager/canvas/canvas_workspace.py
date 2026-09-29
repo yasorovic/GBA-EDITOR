@@ -72,10 +72,11 @@ class CanvasWorkspace(QWidget):
 
     def _build_switch_bar(self) -> QFrame:
         bar = QFrame()
+        bar.setFixedHeight(38)
         bar.setStyleSheet(f"background:{C.BG_RAISED}; border-bottom:1px solid {C.BORDER};")
         lay = QHBoxLayout(bar)
-        lay.setContentsMargins(8, 4, 8, 4)
-        lay.setSpacing(0)
+        lay.setContentsMargins(12, 4, 12, 4)
+        lay.setSpacing(5)
 
         group = QButtonGroup(bar)
         group.setExclusive(True)

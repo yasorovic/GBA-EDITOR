@@ -658,6 +658,6 @@ class TextWorkbench(QWidget):
         if len(self._texts) != 1:
             return
         QApplication.clipboard().setText(self._texts[0].key)
-        self._btn_copy.setIcon(icons.get("copied", C.POWER))
+        self._btn_copy.setIcon(icons.get("copied", C.ACCENT))
         QTimer.singleShot(
             900, lambda: self._btn_copy.setIcon(icons.get("copy", C.TEXT_DIM)))

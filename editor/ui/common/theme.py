@@ -128,7 +128,9 @@ _DARK = dict(
     ACCENT="#d0d0d0",      # accent PRIMAIRE structurel (sélection, focus, onglet actif)
     ACCENT_HOVER="#e6e6e6", ACCENT_PRESSED="#a8a8a8",
     ON_ACCENT="#000000",   # texte posé sur un fond ACCENT
-    POWER="#5be08b",       # vert power-LED — RÉSERVÉ : Build, process actif, « live »
+    # État qui demande l'attention, sans signer l'interface d'un vert « power ».
+    # Les succès ordinaires restent neutres ; le jaune porte l'alerte simple.
+    POWER="#e8c547",
     ACCENT_RED="#e05050", ACCENT_YLW="#e8c547",
     ACCENT_WARM="#c48b3c", ACCENT_COOL="#82aaff",
     TEXT_HI="#ececec", TEXT_NORM="#ababab", TEXT_DIM="#6e6e6e", TEXT_MUTED="#4a4a4a",
@@ -143,7 +145,7 @@ _DARK = dict(
     SYNTAX_STRING="#ce9178", SYNTAX_COMMENT="#6a9955",
     CONSOLE_TEXT="#c8ffc8",   # texte de la console de build
     # Instrument « technique » (barre ROM) : pavés noirs, quadrillage, filet acier.
-    TECH_BG="#040a06", TECH_TEXT="#b9f5c9", TECH_GRID="#0d1a11",
+    TECH_BG="#040a06", TECH_TEXT="#b9f5c9", TECH_GRID="#0d1a11", TECH_OK="#5be08b",
     TECH_OUTLINE="#2f6a44", TECH_BLOCK_BORDER="#1b3a27",
     HEADER_BG_VALUE=22,    # luminosité (0-255) du fond d'en-tête d'asset
 )
@@ -154,7 +156,7 @@ _LIGHT = dict(
     BORDER="#c4c4c4", BORDER_MID="#acacac", BORDER_DARK="#d4d4d4",
     ACCENT="#3a3a3a", ACCENT_HOVER="#555555", ACCENT_PRESSED="#222222",
     ON_ACCENT="#ffffff",
-    POWER="#1f9d55", ACCENT_RED="#c62828", ACCENT_YLW="#b8860b",
+    POWER="#b8860b", ACCENT_RED="#c62828", ACCENT_YLW="#b8860b",
     ACCENT_WARM="#a86a10", ACCENT_COOL="#2f5fc4",
     TEXT_HI="#0d0d0d", TEXT_NORM="#2e2e2e", TEXT_DIM="#575757", TEXT_MUTED="#828282",
     TEXT_BASE="#262626",
@@ -163,9 +165,9 @@ _LIGHT = dict(
     BTN_PRIMARY="#3a3a3a", BTN_PRIMARY_HOVER="#555555", BTN_PRIMARY_PRESSED="#222222",
     BTN_PRIMARY_DISABLED="#c4c4c4", BTN_PRIMARY_TEXT="#ffffff",
     SCROLL_HANDLE="#b0b0b0", SCROLL_HANDLE_HOVER="#909090",
-    CANVAS_BG="#dcdcdc", CHECKER_A="#d4d4d4", CHECKER_B="#c8c8c8",
+    CANVAS_BG="#dcdcdc", CHECKER_A="#b4b4b4", CHECKER_B="#9e9e9e",
     CONSOLE_TEXT="#1f6b3a",
-    TECH_BG="#f3fbf5", TECH_TEXT="#0e4023", TECH_GRID="#d3e9da",
+    TECH_BG="#f3fbf5", TECH_TEXT="#0e4023", TECH_GRID="#d3e9da", TECH_OK="#1f9d55",
     TECH_OUTLINE="#3f8a5c", TECH_BLOCK_BORDER="#93c6a5",
     SYNTAX_KEYWORD="#9c2f9a", SYNTAX_API="#0b7a6a", SYNTAX_NUMBER="#2a7a2a",
     SYNTAX_STRING="#a8482a", SYNTAX_COMMENT="#5a8a3a",

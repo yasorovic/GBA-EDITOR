@@ -2,14 +2,11 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
 from ui.common.labels import label
 from ui.common.theme import C, T, ui_font
 from ui.common.widgets import CollapsibleCard, NotesEdit, W
-
-
-_COLORS = ("", "#6EA8FE", "#6EE7B7", "#FBBF24", "#FB7185", "#C4B5FD")
 
 
 class GroupInspector(QWidget):
@@ -34,19 +31,6 @@ class GroupInspector(QWidget):
         self._note = NotesEdit(); self._note.committed.connect(self._save_note); root.addWidget(self._note)
 
         card = CollapsibleCard(label("groupinsp.presentation"))
-        colors = QWidget(); lay = QHBoxLayout(colors)
-        lay.setContentsMargins(0, 0, 0, 0); lay.setSpacing(5)
-        self._color_buttons = {}
-        for color in _COLORS:
-            button = QPushButton(); button.setCheckable(True); button.setFixedSize(24, 24)
-            fill = C.BG_INPUT if not color else color
-            button.setStyleSheet(
-                f"QPushButton{{background:{fill};border:1px solid {C.BORDER_MID};border-radius:12px;}}"
-                f"QPushButton:checked{{border:2px solid {C.TEXT_HI};}}")
-            button.clicked.connect(lambda _=False, value=color: self._set_color(value))
-            lay.addWidget(button); self._color_buttons[color] = button
-        lay.addStretch(1)
-        W.row(label("groupinsp.color"), colors, card.body_layout)
         self._collapsed = QPushButton(label("groupinsp.collapsed")); self._collapsed.setCheckable(True)
         self._collapsed.clicked.connect(self._set_collapsed)
         self._collapsed.setStyleSheet(
@@ -64,8 +48,6 @@ class GroupInspector(QWidget):
         folder = self._folder()
         self._name.setText(folder.name if folder else "")
         self._note.set_text_silent(state.group_note(group_id) if state else "")
-        color = folder.color if folder else ""
-        for value, button in self._color_buttons.items(): button.setChecked(value == color)
         self._collapsed.setChecked(state.group_collapsed(group_id) if state else True)
         self._refresh_content()
 
@@ -78,12 +60,6 @@ class GroupInspector(QWidget):
 
     def _save_note(self, text: str) -> None:
         if self._state and self._id and self._state.set_group_note(self._id, text): self.changed.emit()
-
-    def _set_color(self, color: str) -> None:
-        if self._folders and self._id:
-            changed = self._folders.set_folder_color("scenes", self._id, color)
-            for value, button in self._color_buttons.items(): button.setChecked(value == color)
-            if changed: self.changed.emit()
 
     def _set_collapsed(self, collapsed: bool) -> None:
         if self._state and self._id and self._state.set_group_collapsed(self._id, collapsed): self.changed.emit()

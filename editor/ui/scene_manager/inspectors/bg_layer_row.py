@@ -273,7 +273,7 @@ class BgLayerRow(QFrame):
         if self._highlight:
             self.setStyleSheet(
                 f"BgLayerRow{{border:2px dashed {self._color};"
-                f"background:{tint(C.POWER, 0.12)};border-radius:4px;}}"
+                f"background:{C.BG_SEL};border-radius:4px;}}"
             )
         else:
             self.setStyleSheet(

@@ -268,6 +268,46 @@ def display_coverage(value: int, x: int, y: int, *, raster_mode: str,
     return 255 if value >= max(0, min(255, threshold)) else 0
 
 
+def raster_glyph_cell(raster: RasterGlyph, cell_w: int, cell_h: int, *, raster_mode: str,
+                      threshold: int, dither_pattern: str, anchor_h: int | None = None
+                      ) -> tuple[list[list[int]], list[list]]:
+    """L'ANCRAGE et le CLIP réels d'un glyphe dans sa cellule GBA.
+
+    Le glyphe est posé par son bearing : la ligne de base virtuelle est à
+    ``anchor_h`` de son sommet (l'interligne DÉCLARÉ, en pixels bruts —
+    ``anchor_h`` par défaut à ``cell_h`` si on ne le précise pas), ``bearing_y``
+    au-dessus. Tout pixel qui tombe hors de ``cell_w`` x ``cell_h`` (la cellule
+    arrondie à la tuile) est perdu — pas reporté sur une tuile suivante.
+    ``anchor_h`` et ``cell_h`` divergent dès que l'interligne n'est pas déjà un
+    multiple de 8 : l'ancrage reste au pixel brut, seul le clip est arrondi.
+    C'est le SEUL calcul de placement/clip ; l'encodeur GBA et l'aperçu de
+    l'éditeur l'appellent tous deux, pour ne jamais promettre un rendu que
+    l'autre ne tient pas.
+
+    Renvoie deux grilles ``cell_h`` x ``cell_w`` : la couverture (déjà passée
+    par ``display_coverage``) et la couleur source (``None`` pour une police
+    vectorielle, un ``(r,g,b)`` pour une planche bitmap que l'appelant devra
+    mettre en palette).
+    """
+    anchor = cell_h if anchor_h is None else anchor_h
+    base_y = max(0, anchor - raster.bearing_y)
+    coverage = [[0] * cell_w for _ in range(cell_h)]
+    color = [[None] * cell_w for _ in range(cell_h)]
+    for y in range(raster.height):
+        dy = base_y + y
+        if not 0 <= dy < cell_h:
+            continue
+        for x in range(raster.width):
+            dx = raster.bearing_x + x
+            if not 0 <= dx < cell_w:
+                continue
+            coverage[dy][dx] = display_coverage(raster.coverage_at(x, y), dx, dy,
+                                                raster_mode=raster_mode, threshold=threshold,
+                                                dither_pattern=dither_pattern)
+            color[dy][dx] = raster.color_at(x, y)
+    return coverage, color
+
+
 def _asset_source_names(asset, variant: str, weight: int | None = None,
                         italic: bool | None = None) -> list[str]:
     """La chaîne explicite a priorité ; les faces auto servent de défaut."""

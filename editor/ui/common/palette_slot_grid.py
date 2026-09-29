@@ -179,6 +179,17 @@ class PaletteSlotGridAsset(QWidget):
         btn.setFixedSize(self._ICON_SIZE + 10, self._ICON_SIZE + 10)
         btn.setIconSize(QSize(self._ICON_SIZE, self._ICON_SIZE))
         btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        # Sans ça, le liseré de focus natif de Qt (pointillé, décalé de notre
+        # bordure dessinée en QSS) se superpose à la bordure pointillée du
+        # bouton et fait croire, sur une case aussi petite, à un contour
+        # coupé/décentré (cf. capture d'écran signalée sur le bouton « + »).
+        btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        # `flat` : sans ça, le style natif peint encore son propre bevel de
+        # bouton SOUS la bordure arrondie du QSS — visible comme un coin
+        # tronqué (le bevel natif n'est pas arrondi) sur une case aussi
+        # petite. Le flat retire ce bevel, la bordure QSS reste seule à
+        # dessiner le contour.
+        btn.setFlat(True)
 
         if kind == "scene":
             btn.setIcon(_swatch_icon(entry.colors, self._ICON_SIZE))
