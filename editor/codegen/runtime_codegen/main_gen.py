@@ -22,7 +22,7 @@ from core.models.field_value import (FieldValue as _FV,
 # réexporte ici : `palette_alloc` l'importe de ce module depuis toujours, et
 # ROADMAP le cite sous ce nom. Cf. `core.models.ui_region`.
 from core.models.ui_region import region_fill_container
-from codegen.palette_alloc import scene_bank_layout
+from codegen.palette_alloc import scene_bank_layout, effective_palette_colors
 # Les requêtes de police vivent désormais dans font_emit (leur domaine) — main_gen
 # les CONSOMME. Import de haut niveau : font_emit ne remonte plus vers main_gen,
 # le cycle d'autrefois est rompu (cf. TodoTechnique).
@@ -1153,6 +1153,23 @@ def _gen_ui_routes(p: Project, scene) -> list[str]:
     return L
 
 
+def _layer_base_bank(p, scene, bi: dict, bg_layout) -> int:
+    """Banque de palette de BASE d'un fond, telle que le build la grave dans sa map.
+
+    Une banque choisie (0-15) est elle-même. « Palette propre » : le premier slot du bloc
+    alloué au fond compressé (ses sous-palettes occupent des banques contiguës), ou le slot
+    alloué à sa palette. Un fond dont les tuiles ont des banques peintes différentes rend
+    ici sa banque de base, pas toutes celles en usage."""
+    if bi["pal_bank"] != OWN_PAL_BANK:
+        return bi["pal_bank"]
+    ba = p.get_background(bi["stem"])
+    if bi.get("compressed"):
+        return (bg_layout.bg_block_offset(ba) if ba else None) or 0
+    png = p.background_images_dir / (ba.asset if ba and ba.asset else f"{bi['stem']}.png")
+    colors = effective_palette_colors(p, OWN_PAL_BANK, png, scene.active_bg_palettes)
+    return bg_layout.bank_index(OWN_PAL_BANK, colors) or 0
+
+
 def _gen_scene_init(
     p: Project,
     scene: Scene,
@@ -1226,6 +1243,8 @@ def _gen_scene_init(
     # chaque activation, une scène peut donc faire avancer son monde.
     _sw, _sh = scene_world_size(p, scene)
     L.append(f"    g_scene_w = {_sw}; g_scene_h = {_sh};")
+    L.append(f"    g_scene_scroll_h = {int(bool(scene.scroll_h))}; g_scene_scroll_v = {int(bool(scene.scroll_v))};")
+    L.append(f"    g_scene_collision_layer = {int(scene.collision_layer)};")
     # Acteurs POSÉS de cette scène, dans l'ordre d'authoring — la borne de
     # `actor:get(i)`/`actor:count()` (ROADMAP « L'acteur appartient à sa scène »,
     # adressage dynamique). Les slots [0, placed) tiennent exactement ces
@@ -1309,6 +1328,12 @@ def _gen_scene_init(
             # write-only, la shadow permet ensuite de changer priorité /
             # screenblock au runtime sans perdre les autres bits.
             L.append(f"    bg_cnt_set({bg}, 0x{val:04X});")
+            # Vitesse de parallax de départ (Q8) : display_reset() l'a remise à 256 ;
+            # `layer.scroll_speed` la change ensuite sans regénérer le tick.
+            L.append(f"    layer_set_speed({bg}, {bi['speed']});")
+            # Banque de palette de BASE, résolue comme le build la pose dans la map : lue par
+            # `layer.pal_bank`, pour alimenter `palette:set_bg` sans coder le numéro en dur.
+            L.append(f"    layer_set_pal_bank({bg}, {_layer_base_bank(p, scene, bi, bg_layout)});")
     # APRÈS le chargement des cartes, qu'ils recouvrent : un animé n'existe pas
     # dans la carte en ROM, il est toujours posé par-dessus.
     if anims:
@@ -1962,8 +1987,8 @@ def _gen_scene_tick(
                          f"{int(bi['stream_h'])}, {int(bi['stream_v'])}, cam_x, cam_y);")
             # Scroll = caméra × vitesse de parallax + décalage propre au layer
             # (layer_set_scroll / layer_scroll_by depuis Lua).
-            L.append(f"    BGOFS({bi['bg']})=(u16)(((cam_x*{bi['speed']})>>8)+layer_get_scroll_x({bi['bg']}));")
-            L.append(f"    BGVOFS({bi['bg']})=(u16)(((cam_y*{bi['speed']})>>8)+layer_get_scroll_y({bi['bg']}));")
+            L.append(f"    BGOFS({bi['bg']})=(u16)(((cam_x*layer_get_speed({bi['bg']}))>>8)+layer_get_scroll_x({bi['bg']}));")
+            L.append(f"    BGVOFS({bi['bg']})=(u16)(((cam_y*layer_get_speed({bi['bg']}))>>8)+layer_get_scroll_y({bi['bg']}));")
 
     # Fonds animés : APRÈS le streaming, qui recharge des colonnes/lignes
     # entières de la carte en ROM — un animé recouvert par une colonne entrante
@@ -2423,6 +2448,11 @@ def generate_main(
         "int   cam_x = 0, cam_y = 0;",
         "int   g_bounds_x = 0, g_bounds_y = 0, g_bounds_w = 0, g_bounds_h = 0;",
         "int   g_cam_active = 0;",
+        # Zone morte du suivi et cadre écran de la caméra ACTIVE : recopiés de sa
+        # ligne de table par camera_switch(), réglables par `camera.margin` et
+        # `camera.frame` (cf. runtime_api_inline.h).
+        "int   g_cam_margin_x = 0, g_cam_margin_y = 0;",
+        "int   g_cam_frame_w = 240, g_cam_frame_h = 160;",
         # État de la secousse — un événement en cours, pas un réglage : il vit
         # ici et non dans la table des caméras (cf. runtime_api_inline.h).
         "int   g_shake_amp = 0, g_shake_left = 0, g_shake_total = 1;",
@@ -2438,6 +2468,9 @@ def generate_main(
         # `extern` dans runtime_api_inline.h et posée par chaque scene_init — il
         # manquait sa DÉFINITION, et le lien échouait sur tout projet.
         "int   g_scene_w = 0, g_scene_h = 0;",
+        # Défilement autorisé par la scène courante — lu par `scene.scroll_h/v`.
+        "int   g_scene_scroll_h = 1, g_scene_scroll_v = 0;",
+        "int   g_scene_collision_layer = 0;",
         "int   g_current_scene = -1;",
         "int   g_scene_placed = 0;   /* acteurs posés de la scène active (actor:get(i)) */",
         "int   g_next_scene    = -1;",

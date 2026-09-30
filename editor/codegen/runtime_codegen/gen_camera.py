@@ -82,7 +82,7 @@ def camera_follow_lines(p, scene, scene_actors: list, actor_offset: int) -> list
         tx = f"(g_actors[{t}].x>>8)" if scene.scroll_h else "cam_x"
         ty = f"(g_actors[{t}].y>>8)" if scene.scroll_v else "cam_y"
         cases.append(f"        case {i}: camera_follow((Vec2){{{tx}, {ty}}}, "
-                     f"{int(cam.margin_x)}, {int(cam.margin_y)}); break;"
+                     f"g_cam_margin_x, g_cam_margin_y); break;"
                      f"   /* {cam.name} → {cam.follow_target} */")
     if not cases:
         return []

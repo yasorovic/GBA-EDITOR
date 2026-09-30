@@ -96,6 +96,10 @@ class ReorderableButtonBar(QWidget):
 
     # ── API publique ──────────────────────────────────────────────────
 
+    def screen_order(self) -> list[int]:
+        """Index d'écrans dans l'ordre d'affichage actuel de la barre."""
+        return list(self._order)
+
     def check_screen(self, screen_idx: int):
         btn = self._buttons.get(screen_idx)
         if btn:

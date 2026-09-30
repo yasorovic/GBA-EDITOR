@@ -384,3 +384,105 @@ def test_play_anim_ignore_un_etat_absent_et_repart_de_zero_sinon(sortie_sonde):
 
 def test_un_porteur_mono_apparence_ne_lit_jamais_la_ligne_d_un_autre(sortie_sonde):
     assert sortie_sonde["appearance_mono"] == [55]           # inchangé
+
+
+# ── Tranche 2 : caméra, scène, fond ──────────────────────────────────
+
+def _lua_scene(src: str):
+    """Compile un script de scène (le récepteur `self` est absent) avec une caméra « Boss »."""
+    from scripting.parser import parse
+    from scripting.checker import check, BuildContext
+    from scripting.codegen import generate, CodegenContext
+
+    script = parse(src)
+    errors = check(script, BuildContext(actor_name="Ball", anim_names=["idle"],
+                                        camera_names=["Boss"]))
+    code, _, _ = generate(script, CodegenContext(
+        actor_name="Ball", actor_sym="Ball", anim_names=["idle"], sfx_names=[],
+        music_names=[], global_names=set(), const_names=set(), all_actor_syms=["Ball"]))
+    return [e.message for e in errors if e.level == "error"], code
+
+
+def test_camera_margin_et_frame_se_lisent_et_s_ecrivent_en_vec2():
+    errs, code = _lua_scene(
+        "function on_update(self)\n"
+        "  camera.margin = vec2(60, 30)\n"
+        "  camera.frame = vec2(240, 120)\n"
+        "  if camera.margin.x > 0 and camera.frame.y < 160 then self:show() end\n"
+        "end\n")
+    assert errs == []
+    assert "camera_set_margin((Vec2){60, 30})" in code
+    assert "camera_set_frame((Vec2){240, 120})" in code
+    assert "camera_get_margin().x" in code
+    assert "camera_get_frame().y" in code
+
+
+def test_camera_name_se_compare_par_son_nom_et_ne_s_ecrit_pas():
+    errs, code = _lua_scene(
+        "function on_update(self)\n"
+        "  if camera.name == \"Boss\" then self:show() end\n"
+        "end\n")
+    assert errs == []
+    assert "(camera_get_active() == CAM_BOSS)" in code
+    errs, _ = _lua_scene("function on_update(self)\n  camera.name = \"Boss\"\nend\n")
+    assert errs, "camera.name est en lecture seule"
+
+
+def test_une_camera_inconnue_est_refusee_a_la_comparaison():
+    errs, _ = _lua_scene("function on_update(self)\n"
+                         "  if camera.name == \"Nulle\" then self:show() end\nend\n")
+    assert errs, "une caméra qui n'existe pas doit être refusée à la compilation"
+
+
+def test_scene_scroll_h_v_sont_en_lecture_seule():
+    errs, code = _lua_scene(
+        "function on_update(self)\n"
+        "  if scene.scroll_h and not scene.scroll_v then self:show() end\n"
+        "end\n")
+    assert errs == []
+    assert "g_scene_scroll_h" in code and "g_scene_scroll_v" in code
+    errs, _ = _lua_scene("function on_update(self)\n  scene.scroll_h = false\nend\n")
+    assert errs, "scene.scroll_h est en lecture seule"
+
+
+def test_layer_scroll_speed_se_lit_et_s_ecrit_en_pourcent():
+    errs, code = _lua_scene(
+        "function on_update(self)\n"
+        "  layer:get(1).scroll_speed = 50\n"
+        "  if layer:get(1).scroll_speed > 0 then self:show() end\n"
+        "end\n")
+    assert errs == []
+    assert "layer_set_scroll_speed(1, 50)" in code
+    assert "layer_get_scroll_speed(1)" in code
+
+
+def test_c_la_camera_serre_sa_marge_et_son_cadre(sortie_sonde):
+    assert sortie_sonde["cam_active"] == [3]
+    assert sortie_sonde["cam_margin"] == [60, 0]
+    assert sortie_sonde["cam_frame_borne"] == [240, 1]
+    assert sortie_sonde["cam_frame_reduit"] == [240, 100]
+    assert sortie_sonde["cam_frame_plein"] == [240, 160]
+
+
+def test_c_la_vitesse_de_parallax_est_en_pourcent_et_avance_pas_a_pas(sortie_sonde):
+    assert sortie_sonde["speed_50"] == [50, 128]                 # 50 % = 128 en Q8
+    assert sortie_sonde["speed_incrementale"] == [1, 110]        # aucun pas perdu par l'arrondi
+    assert sortie_sonde["speed_negative"] == [-20]               # un parallax inversé se relit
+    assert sortie_sonde["speed_voisin"] == [0]                   # l'écriture ne déborde pas
+
+
+def test_scene_collision_layer_est_un_numero_de_fond_en_lecture_seule():
+    errs, code = _lua_scene(
+        "function on_update()\n  layer:get(scene.collision_layer):hide()\nend\n")
+    assert errs == []
+    assert "layer_show(g_scene_collision_layer, 0)" in code
+    errs, _ = _lua_scene("function on_update()\n  scene.collision_layer = 1\nend\n")
+    assert errs
+
+
+def test_layer_pal_bank_se_lit_pour_recolorer_et_ne_s_ecrit_pas():
+    _, code = _lua_scene(
+        "function on_update()\n  palette:set_bg(layer:get(1).pal_bank, \"Nuit\")\nend\n")
+    assert "layer_get_pal_bank(1)" in code
+    errs, _ = _lua_scene("function on_update()\n  layer:get(1).pal_bank = 2\nend\n")
+    assert errs, "layer.pal_bank est en lecture seule"

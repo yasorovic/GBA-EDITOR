@@ -429,6 +429,22 @@ class MainWindow(QMainWindow):
     def _screen_names(self) -> list[str]:
         return [s.name for s in self._screens]
 
+    def _screen_titles(self) -> list[str]:
+        """Libellés affichés (barre de navigation, menu View) : le nom du
+        catalogue reste l'identifiant, le texte passe par le catalogue de
+        labels. Un écran de plugin, sans clé, garde son nom."""
+        titles = {
+            "Scenes":      label("win.screen_scenes"),
+            "Datas":       label("win.screen_datas"),
+            "Backgrounds": label("win.screen_backgrounds"),
+            "Animations":  label("win.screen_animations"),
+            "Palettes":    label("win.screen_palettes"),
+            "Texts":       label("win.screen_texts"),
+            "Sounds":      label("win.screen_sounds"),
+            "Scripts":     label("win.screen_scripts"),
+        }
+        return [titles.get(name, name) for name in self._screen_names]
+
     def _build_screens(self):
         """Monte les écrans du catalogue — mais n'en construit qu'une partie.
 
@@ -798,7 +814,8 @@ class MainWindow(QMainWindow):
         a_project_settings = QAction(label("win.project_settings"), self)
         a_project_settings.triggered.connect(self._open_project_settings)
         m_game.addAction(a_project_settings)
-        mb.addMenu(label("win.menu_view"))
+        m_view = mb.addMenu(label("win.menu_view"))
+        m_view.aboutToShow.connect(lambda: self._fill_view_menu(m_view))
         m_help = mb.addMenu(label("win.menu_help"))
         a_docs = QAction(label("win.documentation"), self)
         a_docs.triggered.connect(lambda: QDesktopServices.openUrl(QUrl(DOCS_URL)))
@@ -808,6 +825,16 @@ class MainWindow(QMainWindow):
         a_about.triggered.connect(lambda: QMessageBox.information(
             self, label("win.app_name"), label("win.about_text")))
         m_help.addAction(a_about)
+
+    def _fill_view_menu(self, menu):
+        """Liste des écrans, dans l'ordre de la barre de navigation (que
+        l'utilisateur peut réordonner) ; reconstruite à chaque ouverture."""
+        menu.clear()
+        names = self._screen_names
+        titles = self._screen_titles()
+        for idx in self._nav_bar.screen_order():
+            action = menu.addAction(titles[idx])
+            action.triggered.connect(lambda _=False, i=idx: self._switch_screen(names[i]))
 
     # ── Toolbar ───────────────────────────────────────────────────
 
@@ -862,7 +889,7 @@ class MainWindow(QMainWindow):
         tb.addSeparator()
 
         from ui.common.reorderable_bar import ReorderableButtonBar
-        self._nav_bar = ReorderableButtonBar(self._screen_names)
+        self._nav_bar = ReorderableButtonBar(self._screen_titles())
         self._nav_bar.screen_requested.connect(self._show_screen)
         tb.addWidget(self._nav_bar)
         self._nav_bar.check_screen(0)

@@ -570,6 +570,10 @@ void layer_set_scroll  (int bg, int x, int y);
 void layer_scroll_by   (int bg, int dx, int dy);
 int  layer_get_scroll_x(int bg);
 int  layer_get_scroll_y(int bg);
+int  layer_get_speed   (int bg);
+void layer_set_speed   (int bg, int q8);
+int  layer_get_pal_bank(int bg);
+void layer_set_pal_bank(int bg, int bank);   /* posé par scene_init, jamais par un script */
 void layer_set_map     (int bg, int sbb);
 int  layer_get_map     (int bg);
 
@@ -1226,6 +1230,8 @@ void ui_fill_map       (int bg, int tx, int ty, int w, int h,
 static u16 g_dispcnt_sh;
 static u16 g_bgcnt_sh[4];
 static s16 g_bg_ofs_x[4], g_bg_ofs_y[4];
+static int g_bg_speed[4];   /* parallax de chaque fond, Q8 : 256 = suit la caméra */
+static int g_bg_pal[4];     /* banque de palette de BASE de chaque fond, posée par scene_init */
 
 /* Remet les shadows à zéro — appelé en tête de scene_init, AVANT les
    bg_cnt_set/dispcnt_set de la scène (qui les repeuplent). */
@@ -1241,6 +1247,8 @@ static void display_reset(void) {
         g_bgcnt_sh[i] = 0;
         g_bg_ofs_x[i] = 0;
         g_bg_ofs_y[i] = 0;
+        g_bg_speed[i] = 256;
+        g_bg_pal[i] = 0;
     }
     window_reset();
     blend_reset();
@@ -1311,6 +1319,12 @@ void layer_scroll_by(int bg, int dx, int dy) {
 
 int layer_get_scroll_x(int bg) { return g_bg_ofs_x[bg & 3]; }
 int layer_get_scroll_y(int bg) { return g_bg_ofs_y[bg & 3]; }
+
+int layer_get_speed(int bg) { return g_bg_speed[bg & 3]; }
+void layer_set_speed(int bg, int q8) { g_bg_speed[bg & 3] = q8; }
+
+int layer_get_pal_bank(int bg) { return g_bg_pal[bg & 3]; }
+void layer_set_pal_bank(int bg, int bank) { g_bg_pal[bg & 3] = bank; }
 
 /* Bascule de screenblock — double-buffering de tilemap : on prépare une
    carte dans un SBB libre, puis on l'affiche en une écriture (pas de

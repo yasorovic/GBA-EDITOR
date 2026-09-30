@@ -66,6 +66,10 @@ extern u32   _g_keys_pressed;
 #define SCREEN_H 160
 extern int cam_x, cam_y;
 extern int g_scene_w, g_scene_h;   /* taille du monde de la scène (px), posée par scene_init */
+/* Défilement autorisé par la scène (cases « Scroll H/V ») : posé par scene_init, lecture seule
+   côté script — le suivi émis en a fait un choix de build. */
+extern int g_scene_scroll_h, g_scene_scroll_v;
+extern int g_scene_collision_layer;   /* index BG (0-3) portant la carte de collision */
 static inline void camera_set_position(Vec2 p)  { cam_x=p.x; cam_y=p.y; }
 static inline Vec2 camera_get_position(void)     { return (Vec2){ cam_x, cam_y }; }
 
@@ -129,6 +133,36 @@ typedef struct {
 extern const Camera g_cam_table[];
 extern int g_cam_active;
 
+/* État MODIFIABLE de la caméra active — copié de sa ligne de table à chaque
+   camera_switch(), puis réglable par script. Zone morte du suivi (`camera.margin`)
+   et cadre écran (`camera.frame`) : le suivi émis et WIN0 les lisent ici, jamais
+   dans la table (const, en ROM). */
+extern int g_cam_margin_x, g_cam_margin_y;
+extern int g_cam_frame_w, g_cam_frame_h;
+
+static inline Vec2 camera_get_margin(void) { return (Vec2){ g_cam_margin_x, g_cam_margin_y }; }
+static inline void camera_set_margin(Vec2 m) {
+    g_cam_margin_x = m.x < 0 ? 0 : m.x;
+    g_cam_margin_y = m.y < 0 ? 0 : m.y;
+}
+
+/* Nom de la caméra active : l'index de la table est la constante CAM_<NOM>. */
+static inline int camera_get_active(void) { return g_cam_active; }
+
+/* Cadre écran : 240×160 = plein écran, WIN0 éteinte ; plus petit, WIN0 le découpe.
+   Borné à l'écran, et à 1 pixel au moins. */
+static inline Vec2 camera_get_frame(void) { return (Vec2){ g_cam_frame_w, g_cam_frame_h }; }
+static inline void camera_set_frame(Vec2 f) {
+    g_cam_frame_w = f.x < 1 ? 1 : (f.x > SCREEN_W ? SCREEN_W : f.x);
+    g_cam_frame_h = f.y < 1 ? 1 : (f.y > SCREEN_H ? SCREEN_H : f.y);
+    if (g_cam_frame_w < SCREEN_W || g_cam_frame_h < SCREEN_H) {
+        window_set(0, 0, 0, g_cam_frame_w, g_cam_frame_h);
+        window_show(0, 1);
+    } else {
+        window_show(0, 0);
+    }
+}
+
 /* Déclarées en avance : camera_switch() les appelle avant le bloc Windows
    plus bas (redéclaration légale en C, mêmes signatures — même raison que les
    constantes WINR_* dupliquées en tête de fichier). */
@@ -146,12 +180,8 @@ static inline void camera_switch(int idx) {
     g_cam_active = idx;
     cam_x = c->x; cam_y = c->y;
     camera_set_bounds((Rect){ c->bounds_x, c->bounds_y, c->bounds_w, c->bounds_h });
-    if (c->frame_w < SCREEN_W || c->frame_h < SCREEN_H) {
-        window_set(0, 0, 0, c->frame_w, c->frame_h);
-        window_show(0, 1);
-    } else {
-        window_show(0, 0);
-    }
+    g_cam_margin_x = c->margin_x; g_cam_margin_y = c->margin_y;
+    camera_set_frame((Vec2){ c->frame_w, c->frame_h });
     if (c->on_start) c->on_start();
 }
 
@@ -910,6 +940,14 @@ extern int  layer_get_scroll_x(int bg);
 extern int  layer_get_scroll_y(int bg);
 static inline Vec2 layer_get_scroll(int bg) { return (Vec2){ layer_get_scroll_x(bg), layer_get_scroll_y(bg) }; }
 static inline void layer_set_scroll_to(int bg, Vec2 v) { layer_set_scroll(bg, v.x, v.y); }
+/* `layer.scroll_speed` — la vitesse de parallax d'un fond, en POURCENT pour l'auteur (100 =
+   suit la caméra, 50 = deux fois plus lent). Le moteur la tient en Q8 (256 = 100 %), comme
+   la multiplication du tick : la conversion vit ici. Arrondie dans les deux sens : sans cela,
+   `scroll_speed = scroll_speed + 1` resterait bloquée (51 % → Q8 130 → relu 50 %). */
+extern int  layer_get_speed(int bg);
+extern void layer_set_speed(int bg, int q8);
+static inline int  layer_get_scroll_speed(int bg) { return (layer_get_speed(bg) * 100 + 128) >> 8; }
+static inline void layer_set_scroll_speed(int bg, int percent) { layer_set_speed(bg, (percent * 256 + 50) / 100); }
 extern void ui_image_move(int img, int dx, int dy);
 
 extern int  ui_image_dx(int img);

@@ -1948,6 +1948,23 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
         doc="Décalage PROPRE du fond, en pixels, ajouté au scroll caméra (un vec2). "
             "Ex: layer:get(0).scroll = vec2(0, 8)",
     ),
+    f"{REF_LAYER}.scroll_speed": ApiProp(
+        lua_name=f"{REF_LAYER}.scroll_speed", c_getter="layer_get_scroll_speed",
+        c_setter="layer_set_scroll_speed", ptype=PARAM_INT, self_first=True,
+        doc="Vitesse de parallax du fond, en pourcent de celle de la caméra (100 = le fond suit "
+            "la caméra, 50 = il défile deux fois plus lentement, 0 = il reste fixe). Le réglage "
+            "« Scroll speed » de l'inspecteur n'en fixe que la valeur de départ. "
+            "Ex: layer:get(1).scroll_speed = 50",
+    ),
+    f"{REF_LAYER}.pal_bank": ApiProp(
+        lua_name=f"{REF_LAYER}.pal_bank", c_getter="layer_get_pal_bank",
+        ptype=PARAM_INT, self_first=True, read_only=True,
+        doc="Banque de palette de BASE du fond (0-15) : celle que sa carte cite, y compris quand "
+            "l'inspecteur laisse « palette propre » (le build l'a alors placée). Lecture seule : "
+            "la banque est gravée dans chaque case de la carte. Sert à recolorer le fond : "
+            "palette:set_bg(layer:get(1).pal_bank, \"Nuit\"). Un fond aux tuiles peintes de "
+            "banques différentes rend sa banque de base, pas toutes celles en usage.",
+    ),
     f"{REF_LAYER}.map": ApiProp(
         lua_name=f"{REF_LAYER}.map", c_getter="layer_get_map",
         c_setter="layer_set_map", ptype=PARAM_INT, self_first=True,
@@ -2026,6 +2043,27 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
         doc="Position courante de la caméra (un vec2, .x/.y). "
             "camera.position = vec2(x, y) la place exactement.",
     ),
+    "camera.margin": ApiProp(
+        lua_name="camera.margin", c_getter="camera_get_margin",
+        c_setter="camera_set_margin", ptype=PARAM_VEC2,
+        doc="Zone morte du suivi de la caméra active, en pixels (un vec2 : .x = horizontale, "
+            ".y = verticale) : la cible peut s'éloigner de cette distance du bord de l'écran avant "
+            "que la caméra ne bouge. 0 = recentrage permanent. Le réglage « Margin » de "
+            "l'inspecteur n'en fixe que la valeur à l'activation. Ex: camera.margin = vec2(60, 30)",
+    ),
+    "camera.frame": ApiProp(
+        lua_name="camera.frame", c_getter="camera_get_frame",
+        c_setter="camera_set_frame", ptype=PARAM_VEC2,
+        doc="Taille du rendu à l'écran, en pixels (un vec2 : .x = largeur, .y = hauteur ; 240×160 "
+            "= plein écran). Plus petit, la caméra ne rend que dans ce cadre, ancré en haut à "
+            "gauche. Borné à l'écran. Ex: camera.frame = vec2(240, 120)",
+    ),
+    "camera.name": ApiProp(
+        lua_name="camera.name", c_getter="camera_get_active", ptype=PARAM_INT,
+        read_only=True, domain=DOMAIN_CAMERA,
+        doc='Nom de la caméra active (lecture seule), comparable par son nom. '
+            'Ex: if camera.name == "Boss" then ... end. Pour en changer, camera:switch(nom).',
+    ),
     "camera.bound": ApiProp(
         lua_name="camera.bound", c_getter="camera_get_bounds",
         c_setter="camera_set_bounds", ptype=PARAM_RECT,
@@ -2049,6 +2087,25 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
         ptype=PARAM_INT, read_only=True,
         doc="Compteur de frames global depuis le début de la scène. Lecture "
             "seule — utile pour des timers sans variable locale.",
+    ),
+    "scene.scroll_h": ApiProp(
+        lua_name="scene.scroll_h", c_getter="", ptype=PARAM_BOOL, read_only=True,
+        getter_expr="g_scene_scroll_h",
+        doc="La scène défile-t-elle horizontalement (case « Scroll H » de l'inspecteur de scène) ? "
+            "Lecture seule — le suivi de la caméra en a fait un choix de build.",
+    ),
+    "scene.scroll_v": ApiProp(
+        lua_name="scene.scroll_v", c_getter="", ptype=PARAM_BOOL, read_only=True,
+        getter_expr="g_scene_scroll_v",
+        doc="La scène défile-t-elle verticalement (case « Scroll V » de l'inspecteur de scène) ? "
+            "Lecture seule — le suivi de la caméra en a fait un choix de build.",
+    ),
+    "scene.collision_layer": ApiProp(
+        lua_name="scene.collision_layer", c_getter="", ptype=PARAM_INT, read_only=True,
+        getter_expr="g_scene_collision_layer",
+        doc="Numéro du fond (0-3) qui porte la carte de collision de la scène — le bouton radio "
+            "« collision layer » de l'inspecteur. Lecture seule : la carte est choisie au build. "
+            "Ex: layer:get(scene.collision_layer):hide()",
     ),
     "scene.size": ApiProp(
         lua_name="scene.size", c_getter="", ptype=PARAM_RECT, read_only=True,

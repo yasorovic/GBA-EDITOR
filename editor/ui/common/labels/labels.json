@@ -1911,6 +1911,30 @@
     "win.menu_help": {
       "text": "Help"
     },
+    "win.screen_scenes": {
+      "text": "Scenes"
+    },
+    "win.screen_datas": {
+      "text": "Datas"
+    },
+    "win.screen_backgrounds": {
+      "text": "Backgrounds"
+    },
+    "win.screen_animations": {
+      "text": "Animations"
+    },
+    "win.screen_palettes": {
+      "text": "Palettes"
+    },
+    "win.screen_texts": {
+      "text": "Texts"
+    },
+    "win.screen_sounds": {
+      "text": "Sounds"
+    },
+    "win.screen_scripts": {
+      "text": "Scripts"
+    },
     "win.documentation": {
       "text": "Documentation"
     },

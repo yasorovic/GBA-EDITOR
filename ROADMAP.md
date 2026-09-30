@@ -307,7 +307,7 @@ vers v1.0-stable ([ci-dessous](#chantier-transverse--nommer-laccès-à-un-sous-o
 ici la trancherait deux fois. `initial_state` et `prefab_name` n'ont pas besoin de porte : `self.anim` et
 `self.tag` couvrent l'usage.
 
-### Tranche 2 — caméra, scène, calque de fond (proposition du 2026-09-29, à valider avant tout code)
+### Tranche 2 — caméra, scène, calque de fond (livrée le 2026-09-30)
 
 Classement fait en lisant le runtime C (`runtime_api_inline.h`, `gba_engine.h`) et le codegen : ce qui est un
 **littéral dans le C émis** est fixé au build (lecture seule) ; ce qui vit déjà en registre ou en RAM, ou coûte un
@@ -316,29 +316,52 @@ octet de RAM pour le devenir, est modifiable. Les portes déjà là (`camera.pos
 
 | Champ d'inspecteur | Porte Lua proposée | Nature | Raison (ce que le C fait aujourd'hui) |
 | --- | --- | --- | --- |
-| Camera `mode` | `camera.mode` (`"fixed"` / `"follow"` / `"script"`) | lecture seule | le suivi est un `switch(g_cam_active)` dont les cas sont émis seulement pour les caméras à cible : écrire `"follow"` sur une autre ne ferait rien, sans un mot |
-| Camera `follow_target` | `camera.target` (référence d'acteur, `nil` sans cible) | lecture seule | l'index d'acteur est une constante du `switch` |
+| Camera `mode` | — | repoussé | changer de mode et de cible en jeu est voulu, avec une transition : chantier [« La caméra change de cible »](#chantier-transverse--la-caméra-change-de-cible-en-jeu-avec-une-transition) (route vers v1.0-stable). Aucune porte partielle d'ici là : le suivi est un `switch` dont les cas sont émis seulement pour les caméras à cible |
+| Camera `follow_target` | — | repoussé | même chantier que `mode` |
 | Camera `margin_x/y` | `camera.margin` (vec2) | **modifiable** | deux littéraux du `switch` → deux octets de RAM lus par `camera_follow` |
 | Camera `frame_w/h` | `camera.frame` (vec2) | **modifiable** | pilote WIN0 (`window_set(0, …)`), qui existe déjà ; un getter du rectangle de WIN0 est à ajouter |
 | Camera `name` | `camera.name` (comparable par son nom) | lecture seule | `DOMAIN_CAMERA` existe ; sert à savoir quelle caméra `camera:switch` a activée |
 | Scene `scroll_h/v` | `scene.scroll_h`, `scene.scroll_v` (bool) | lecture seule | choisit `(g_actors[t].x>>8)` ou `cam_x` DANS le `switch` émis |
-| Scene `blend_eva/evb/evy` | `blend.alpha` (vec2), `blend.fade` (int) | **modifiable** | l'écriture existe (`blend.set_alpha`, `blend.set_fade`) mais aucune lecture : ces deux fonctions deviennent des propriétés (état → propriété), sans alias |
-| Scene `blend_*_role` | `blend.get_layer(side, bg)` … | à trancher | l'écriture est indexée (`set_layer/obj/backdrop`) ; la lecture symétrique n'a pas de demande réelle |
-| Scene `backdrop_color` | — | à trancher | `PAL_BG_RAM[0]` s'écrit, mais Lua n'a pas de type couleur : la porte attend ce type |
-| Scene `transition_kind/frames` | `scene.transition` | à trancher | lue au `scene.switch` sortant ; modifiable en jeu = écrire le réglage de la scène courante |
+| Scene `blend_eva/evb/evy` | — | repoussé | chantier [« L'API de blending »](#chantier-transverse--lapi-de-blending-des-calques-au-petit-oignon) (route vers v1.0-stable) : `blend.set_alpha` / `blend.set_fade` → propriétés, décidé avec le `mixer` qui pose la même question pour le son |
+| Scene `blend_*_role` | — | repoussé | même chantier [« L'API de blending »](#chantier-transverse--lapi-de-blending-des-calques-au-petit-oignon) |
+| Scene `backdrop_color` | — | repoussé | même chantier [« L'API de blending »](#chantier-transverse--lapi-de-blending-des-calques-au-petit-oignon) : la porte est voulue, lecture ET écriture, sans nouveau type (un `vec3` ou un entier RGB555, à trancher là-bas) |
+| Scene `transition_kind/frames` | — | repoussé | chevauche l'API de blending (la transition possède les registres de blending) : même chantier [« L'API de blending »](#chantier-transverse--lapi-de-blending-des-calques-au-petit-oignon) |
 | Scene `collision_layer` | `scene.collision_layer` (int) | lecture seule | index BG fixé au build |
 | Scene `render_mode` | — **aucune** | — | échafaudage non offert à l'auteur (règle « anticiper est permis, l'exposer non ») |
-| Scene `music`, `script`, `notes` | — | sans objet | `music` ne règle que la musique de DÉPART (le module `music` couvre l'état) ; `script`/`notes` ne sont pas de l'état |
+| Scene `music`, `script`, `notes` | — | pas de porte | décidé le 2026-09-29 : `music` ne règle que la musique de DÉPART (le module `music` couvre l'état) ; `script`/`notes` ne sont pas de l'état |
 | BackgroundLayer `scroll_speed` | `layer.scroll_speed` (pourcent, 100 = normal) | **modifiable** | littéral dans la ligne `BGOFS = (cam_x*speed)>>8 + …` → quatre entiers de RAM, un par fond |
-| BackgroundLayer `pal_bank` | `layer.pal_bank` (int) | lecture seule | banque allouée au build |
+| BackgroundLayer `pal_bank` | `layer.pal_bank` (int) | lecture seule (livré) | banque allouée au build |
 | BackgroundLayer `background_name` | `layer.image` (comparable par son nom) | lecture seule | asset chargé au build |
 | BackgroundLayer `bg_slot` | — | sans objet | c'est la clé de la référence (`layer.get(n)`) |
 | BackgroundLayer `visible` | — | sans objet | visibilité du viewport ÉDITEUR seulement (le codegen ne la lit pas) |
 
-**Questions à trancher avant d'implémenter** : (1) `camera.target` demande un type de référence d'acteur rendu par une
-propriété — acceptable, ou renoncer à cette porte tant que le suivi reste déclaratif ? (2) les quatre lignes « à
-trancher » ; (3) `blend.set_alpha` / `blend.set_fade` deviennent-elles des propriétés maintenant, ou avec le chantier
-`mixer` qui pose la même question pour le son ?
+**Décidé le 2026-09-29** : `camera.mode` et `camera.target` sortent de la tranche (chantier caméra ci-dessous).
+**Décidé le 2026-09-29** : tout ce qui touche au blending et à la transition de scène sort de la tranche (chantier
+« L'API de blending » plus bas), comme `camera.mode` / `camera.target` (chantier caméra).
+
+**Livré (2026-09-30)** : `scene.collision_layer` ; `camera.margin`, `camera.frame` (modifiables), `camera.name` (lecture seule, comparable par son
+nom) ; `scene.scroll_h`, `scene.scroll_v` (lecture seule) ; `layer.scroll_speed` (modifiable, en pourcent) ; `layer.pal_bank` (lecture
+seule, ajouté le 2026-09-30). `layer.image` reste **sans porte** : l'image est un littéral du build et un script sait
+quel fond il a posé.
+Ce que le chantier a demandé en plus :
+
+- **Trois états passent de littéral à RAM.** La zone morte du suivi (`g_cam_margin_x/y`) et le cadre écran
+  (`g_cam_frame_w/h`) sont recopiés de la ligne de table de la caméra à chaque `camera_switch()` ; le `switch` de suivi émis
+  lit désormais `g_cam_margin_*` au lieu d'un littéral. La vitesse de parallax de chaque fond (`g_bg_speed[4]`, Q8) est
+  remise à 256 par `display_reset()` puis posée par `scene_init` ; la ligne `BGOFS` la lit. Coût : environ 32 octets.
+- **`camera.frame` réutilise `camera_switch()`** : les deux passent par `camera_set_frame()`, qui borne à l'écran et
+  allume ou éteint WIN0 — une seule porte vers la window de la caméra.
+- **`layer.pal_bank` est en lecture seule, et c'est voulu.** La banque est gravée dans CHAQUE case de la carte (champ
+  `SE_PALBANK`) : l'écrire réécrirait la carte, et un fond en streaming reviendrait de la ROM avec l'ancienne. Le
+  recolorage se fait par `palette:set_bg(banque, "Nuit")`, qui change toutes les tuiles d'un coup ; la lecture sert à ne
+  pas coder le numéro en dur. Elle rend la banque de BASE, résolue comme le build la grave (« palette propre » →
+  le slot alloué, ou le premier du bloc d'un fond compressé) ; un fond aux tuiles peintes de banques différentes ne
+  rend pas toutes celles en usage. Quatre entiers de RAM, posés par `scene_init`.
+- **Arrondi dans les deux sens pour `scroll_speed`** : le pourcent est converti en Q8 avec arrondi, et relu de même.
+  Sans cela `scroll_speed = scroll_speed + 1` restait bloquée (51 % → Q8 130 → relu 50 %). Tenu par la sonde native.
+- **Vérifié** : `test_inspector_api_parity.py` (43 tests, dont la sonde `actor_box_probe.c` étendue à la caméra et au
+  parallax) et un build ROM complet sur un projet neuf (caméra en suivi, fond parallax, script utilisant les six
+  portes) — `rom.gba` produite, `main.c` inspecté.
 
 ---
 
@@ -979,6 +1002,27 @@ test à l'appui. Reste la tranche bitmap : son propre panneau.
 
 Pas d'annulation pas-à-pas (Ctrl+Z) : la recompression est asynchrone et « Original » suffit à
 revenir. Pas de réglage de couleurs (le mode et la profondeur existent déjà dans l'inspecteur).
+
+### Chantier transverse — la caméra change de cible en jeu, avec une transition
+
+**Route vers v1.0-stable, non prioritaire pour la release `-alpha` (décidé le 2026-09-29).** Né de la tranche 2 de
+« L'API dit tout ce que l'inspecteur règle » : `Camera.mode` et `Camera.follow_target` n'ont pas de porte Lua, et une
+lecture seule ne suffirait pas — l'auteur doit pouvoir CHANGER de cible en jeu. Aujourd'hui le suivi est un
+`switch(g_cam_active)` dont la cible est une constante par caméra ; changer de cible en cours de scène, c'est de la
+RAM (mode, index de cible) lue par le suivi, et surtout un **système de transition** : passer de l'acteur A à l'acteur B
+d'un coup est une téléportation de cadre. Le chantier pose les deux ensemble (état modifiable + interpolation de la
+caméra vers la nouvelle cible), pour ne pas ouvrir une porte dont la première utilisation est un saut. Rien n'est
+tranché ni codé.
+
+### Chantier transverse — l'API de blending des calques, au petit oignon
+
+**Route vers v1.0-stable, non prioritaire pour la release `-alpha` (décidé le 2026-09-29).** Né de la tranche 2 de
+« L'API dit tout ce que l'inspecteur règle » : quatre champs d'inspecteur touchent au blending, et chacun mérite d'être pensé avec les autres plutôt que réglé à la volée. Rien n'est tranché ni codé. À rassembler :
+
+- les poids `blend_eva/evb/evy` : aujourd'hui `blend.set_alpha` / `blend.set_fade` s'écrivent, aucune lecture ; elles deviennent des propriétés (état → propriété), **décidé avec le `mixer`** qui pose la même question pour le son ;
+- les rôles (dessus / dessous) des calques, de l'OBJ et du fond de teinte : écriture indexée existante (`set_layer/obj/backdrop`), lecture absente ;
+- `backdrop_color` : une porte en lecture ET écriture, sans nouveau type — un `vec3` (r, g, b) ou un entier RGB555 ; c'est ici qu'on choisit ;
+- la transition de scène (`transition_kind`, `transition_frames`) : elle possède les registres de blending pendant sa durée (`transition_begin/fade/end`), donc elle ne se règle pas sans que l'API de blending soit posée.
 
 ### Chantier transverse — l'allocateur de ressources matérielles
 

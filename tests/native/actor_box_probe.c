@@ -47,6 +47,20 @@ OamEntry g_oam_entries[2];   /* l'affichage des acteurs : Actor.oam_entry en est
    la réponse dit quelles coordonnées lui sont arrivées. */
 int collision_map_tile(int px, int py) { return px * 10 + py; }
 
+/* État de la caméra active — main.c le définit d'ordinaire. */
+int g_cam_active = 0;
+int g_cam_margin_x = 0, g_cam_margin_y = 0;
+int g_cam_frame_w = 240, g_cam_frame_h = 160;
+
+/* Le moteur (gba_engine.h) n'est pas compilé ici : substituts minimaux. La vitesse d'un fond
+   est un vrai tableau (c'est elle que la conversion pourcent ↔ Q8 doit round-tripper) ; les
+   windows ne sont pas observées. */
+static int s_bg_speed[4];
+int  layer_get_speed(int bg) { return s_bg_speed[bg & 3]; }
+void layer_set_speed(int bg, int q8) { s_bg_speed[bg & 3] = q8; }
+void window_set(int n, int x, int y, int w, int h) { (void)n; (void)x; (void)y; (void)w; (void)h; }
+void window_show(int n, int on) { (void)n; (void)on; }
+
 #define TAG_BODY 0
 #define TAG_HIT  1
 #define TAG_NONE 7
@@ -185,5 +199,32 @@ int main(void) {
     printf("anim_absente %d %d\n", actor_get_anim(a), actor_get_frame(a));
     actor_play_anim(a, 1);
     printf("anim_reelle %d %d\n", actor_get_anim(a), actor_get_frame(a));
+
+    /* Tranche 2 — la caméra : l'index de table EST la constante CAM_<NOM>. */
+    g_cam_active = 3;
+    printf("cam_active %d\n", camera_get_active());
+    camera_set_margin((Vec2){ 60, -5 });                 /* négatif → serré à 0 */
+    vec("cam_margin", camera_get_margin());
+    camera_set_frame((Vec2){ 500, 0 });                  /* hors bornes → 240×1 */
+    vec("cam_frame_borne", camera_get_frame());
+    camera_set_frame((Vec2){ 240, 100 });
+    vec("cam_frame_reduit", camera_get_frame());
+    camera_set_frame((Vec2){ 240, 160 });                /* plein écran : WIN0 s'éteint */
+    vec("cam_frame_plein", camera_get_frame());
+
+    /* Tranche 2 — la vitesse de parallax d'un fond : pourcent pour l'auteur, Q8 dedans.
+       `+ 1` doit avancer à CHAQUE pas (l'arrondi dans les deux sens le garantit). */
+    layer_set_scroll_speed(1, 50);
+    printf("speed_50 %d %d\n", layer_get_scroll_speed(1), layer_get_speed(1));
+    int p = 50, avance = 1;
+    for (int i = 0; i < 60; i++) {
+        layer_set_scroll_speed(1, p + 1);
+        if (layer_get_scroll_speed(1) != p + 1) avance = 0;
+        p = layer_get_scroll_speed(1);
+    }
+    printf("speed_incrementale %d %d\n", avance, p);
+    layer_set_scroll_speed(2, -20);
+    printf("speed_negative %d\n", layer_get_scroll_speed(2));
+    printf("speed_voisin %d\n", layer_get_speed(3));   /* jamais écrit : la vitesse d'un autre n'a pas bougé */
     return 0;
 }

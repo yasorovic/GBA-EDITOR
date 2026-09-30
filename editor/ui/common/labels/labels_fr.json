@@ -648,6 +648,33 @@
     "scttree.folder_color_purple": {
       "text": "Violet"
     },
+    "win.menu_view": {
+      "text": "Affichage"
+    },
+    "win.screen_scenes": {
+      "text": "Scènes"
+    },
+    "win.screen_datas": {
+      "text": "Données"
+    },
+    "win.screen_backgrounds": {
+      "text": "Fonds"
+    },
+    "win.screen_animations": {
+      "text": "Animations"
+    },
+    "win.screen_palettes": {
+      "text": "Palettes"
+    },
+    "win.screen_texts": {
+      "text": "Textes"
+    },
+    "win.screen_sounds": {
+      "text": "Sons"
+    },
+    "win.screen_scripts": {
+      "text": "Scripts"
+    },
     "win.documentation": {
       "text": "Documentation"
     },
