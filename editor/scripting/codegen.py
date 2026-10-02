@@ -818,7 +818,7 @@ class CodeGen:
             stem = sym[len("beh_"):]          # "paddle_ai"
             beh_path = self.ctx.scripts_dir / "behaviors" / f"{stem}.lua"
             if not beh_path.exists():
-                msg = f"behavior '{stem}' introuvable : {beh_path}"
+                msg = f"behavior '{stem}' not found: {beh_path}"
                 self._w(f"/* {msg} */")
                 self.warnings.append(msg)
                 continue
@@ -1238,7 +1238,8 @@ class CodeGen:
         # vec2 sans init ne sait pas s'écrire en scalaire), un scalaire retombe
         # sur son défaut de source.
         if typ in _EXPORT_COMPOSITE:
-            return None, "", f"type '{typ}' non représentable en scalaire C — non déclaré"
+            return None, "", (f"type '{typ}' cannot be represented as a C scalar — not "
+                              "declared")
 
         init = self._expr(loc.value) if loc.value is not None else None
 
@@ -1250,14 +1251,14 @@ class CodeGen:
             # initialiser un int : on repart de 0. (Chemin quasi mort — le
             # résolveur remplit désormais export_inits pour tout export câblé.)
             if isinstance(loc.value, ExprString):
-                return c_type, "0", f"valeur '{loc.value.value or 'vide'}' non résolue au build"
+                return c_type, "0", f"value '{loc.value.value or 'empty'}' not resolved at build"
             # Les littéraux flottants sont déjà tronqués par le parser
             # (ExprNumber(int(...)) — le moteur n'a pas de flottants).
             return c_type, init, ""
 
         if typ:
             self.warnings.append(
-                f"exports : type '{typ}' inconnu pour '{loc.name}' — déclaré en int."
+                f"exports: unknown type '{typ}' for '{loc.name}' — declared as int."
             )
 
         # Vrai `local` (ou export de type inconnu) : déduction depuis la valeur.
@@ -1389,7 +1390,7 @@ class CodeGen:
                     # lecture seule — le checker a déjà refusé ; on trace plutôt
                     # que d'émettre du C qui ne compile pas.
                     self.warnings.append(
-                        f"{p.lua_name} est en lecture seule — l'assignation est ignorée.")
+                        f"{p.lua_name} is read-only — the assignment is ignored.")
                     return
                 setter, value = self._prop_write(p, s.value, s.target)
                 c_args = [receiver] if p.self_first else []
@@ -1618,8 +1619,8 @@ class CodeGen:
         if isinstance(e, ExprTable):
             # Un constructeur n'a de sens que comme initialiseur de déclaration
             # (`_array_init`) : ailleurs, il n'y a pas de tableau à écrire dedans.
-            self.warnings.append("un constructeur { } ne peut initialiser qu'un "
-                                 "tableau déclaré par `local`.")
+            self.warnings.append("a { } constructor can only initialise an array "
+                                 "declared with `local`.")
             return "0"
         if isinstance(e, (ExprInvoke, ExprCall)):
             return self._call_expr(e)
@@ -1645,8 +1646,8 @@ class CodeGen:
             if e.op == "#":
                 n = self._array_length(e.operand)
                 if n is None:
-                    self.warnings.append("`#` appliqué à autre chose qu'un "
-                                         "tableau déclaré dans ce script.")
+                    self.warnings.append("`#` applied to something other than an "
+                                         "array declared in this script.")
                     return "0"
                 return str(n)
             op = "!" if e.op == "not" else e.op
@@ -2114,8 +2115,8 @@ class CodeGen:
         """`array(n)` DÉCLARE un tableau : il est lu à l'endroit du `local`
         (cf. `_emit_locals`), et n'arrive ici que s'il a été écrit ailleurs —
         dans un calcul, un argument. Il n'y a rien à émettre pour ça."""
-        self.warnings.append("array() déclare un tableau et ne s'écrit que dans "
-                             "un `local` : local sac = array(8).")
+        self.warnings.append("array() declares an array and can only be written in a "
+                             "`local`: local bag = array(8).")
         return "0 /* array() hors d'une déclaration */"
 
     def _emit_debug_log(self, args: list) -> str:
@@ -2263,7 +2264,7 @@ class CodeGen:
         """L'accès à l'étape de la séquence nommée, ou None si le nom n'est pas
         un littéral (le checker l'a déjà refusé)."""
         if not args or not isinstance(args[0], ExprString):
-            self.warnings.append(f"{call} : nom de séquence non littéral.")
+            self.warnings.append(f"{call}: sequence name is not a literal.")
             return None
         return self._state_ref(f"seq_{args[0].value}_step")
 
@@ -2293,8 +2294,8 @@ class CodeGen:
             return "/* actor.spawn : nom de prefab non littéral */"
         if not self.ctx.scene_sym:
             self.warnings.append(
-                "actor.spawn hors d'une scène (script partagé) : le pool est "
-                "per-scène, aucune fonction de spawn à cibler.")
+                "actor.spawn outside a scene (shared script): the pool is per-scene, "
+                "there is no spawn function to target.")
             return "/* actor.spawn : pas de scène (script partagé) */"
         from codegen.c_names import sym as c_sym
         sym = f"{self.ctx.scene_sym}_{c_sym(args[0].value)}"

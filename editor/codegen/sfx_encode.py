@@ -124,13 +124,12 @@ def encode_sfx_for_build(project, sfx_items: list, emit=None) -> dict[str, Path]
             n = resample_wav(src, dst, target)
         except Exception as e:
             if emit:
-                emit("error_line", f"[sfx] « {sfx.name} » non ré-échantillonné : {e}")
+                emit("error_line", f"[sfx] \"{sfx.name}\" not resampled: {e}")
             continue
         if n is None:
             continue
         encoded[sfx.name] = dst
         if emit:
             emit("log_line",
-                 f"[sfx] « {sfx.name} » {src_rate} → {target} Hz  "
-                 f"({src_frames} → {n} o en ROM)")
+                 f"[sfx] \"{sfx.name}\" {src_rate} → {target} Hz  ({src_frames} → {n} bytes in ROM)")
     return encoded

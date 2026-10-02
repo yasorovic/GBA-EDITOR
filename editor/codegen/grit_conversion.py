@@ -144,7 +144,7 @@ class GritBackground:
         if not layers:
             return True
         if not self._grit:
-            self._emit("error_line", "[grit BG] introuvable"); return False
+            self._emit("error_line", "[grit BG] not found"); return False
 
         cache_hits = 0
         for asset, layer, colors, mp_slot in layers:
@@ -185,8 +185,8 @@ class GritBackground:
                     self._emit("error_line", f"[grit BG] {e}")
                     return False
                 self._emit("log_line",
-                           f"[palette] BG '{asset.name}' BG{layer.bg_slot} -> banque "
-                           f"{mp_slot} ({len(colors)} couleurs, mode {mode})")
+                           f"[palette] BG '{asset.name}' BG{layer.bg_slot} -> bank {mp_slot} ({len(colors)} colours, mode "
+                           f"{mode})")
             else:
                 shutil.copy2(ap, tmp)
             self._emit("log_line", f"[grit BG] {asset.name} BG{layer.bg_slot} <- {layer.background_name}")
@@ -219,8 +219,8 @@ class GritBackground:
             if self._cache and all(path.is_file() for path in outputs):
                 self._cache.store(f"background:{sym}", fingerprint)
         if cache_hits:
-            self._emit("log_line", f"[cache] fonds : {cache_hits} hit(s), "
-                       f"{len(layers) - cache_hits} reconverti(s)")
+            self._emit("log_line", f"[cache] backgrounds: {cache_hits} hit(s), "
+                                   f"{len(layers) - cache_hits} reconverted")
         return True
 
 
@@ -309,7 +309,7 @@ def pad_sprite_png_indexed(
         from PIL import Image
         img = Image.open(src)
         if img.mode != "P":
-            emit("error_line", f"[pad] {src.name} n'est pas un PNG indexé (mode {img.mode!r})")
+            emit("error_line", f"[pad] {src.name} is not an indexed PNG (mode {img.mode!r})")
             return None
         w, h = img.size
         target_w = ((w + frame_w - 1) // frame_w) * frame_w
@@ -319,15 +319,14 @@ def pad_sprite_png_indexed(
             img.save(out)
             return out
         emit("log_line",
-             f"[pad] {src.name} {w}×{h} -> {target_w}×{target_h} "
-             f"(frame {frame_w}×{frame_h}, indexé)")
+             f"[pad] {src.name} {w}×{h} -> {target_w}×{target_h} (frame {frame_w}×{frame_h}, indexed)")
         padded = Image.new("P", (target_w, target_h), 0)
         padded.putpalette(img.getpalette())
         _paste_indexed(padded, img, (0, 0))
         padded.save(out)
         return out
     except Exception as e:
-        emit("error_line", f"[pad] erreur padding indexé {src.name} : {e}")
+        emit("error_line", f"[pad] indexed padding error {src.name}: {e}")
         return None
 
 
@@ -366,7 +365,8 @@ def build_sprite_sheet_indexed(
         fw, fh = sprite.frame_w, sprite.frame_h
         src_img = Image.open(src)
         if src_img.mode != "P":
-            emit("error_line", f"[sheet] {src.name} n'est pas un PNG indexé (mode {src_img.mode!r})")
+            emit("error_line", f"[sheet] {src.name} is not an indexed PNG (mode "
+                               f"{src_img.mode!r})")
             return None
 
         _, ordered = sprite_unique_frames(sprite)
@@ -390,11 +390,10 @@ def build_sprite_sheet_indexed(
         out = out_dir / f"_sheetidx_{src.stem}.png"
         sheet.save(out)
         emit("log_line",
-             f"[sheet] {src.name} -> {len(all_frames)} frames "
-             f"({fw}x{fh}px, indexé) -> {out.name}")
+             f"[sheet] {src.name} -> {len(all_frames)} frames ({fw}x{fh}px, indexed) -> {out.name}")
         return out
     except Exception as e:
-        emit("error_line", f"[sheet] erreur reconstruction indexée {src.name} : {e}")
+        emit("error_line", f"[sheet] indexed reconstruction error {src.name}: {e}")
         return None
 
 
@@ -418,7 +417,7 @@ def remap_tiles_to_bank(c_path: Path, bank_colors: list[int], emit: Callable) ->
     tiles_m = re.search(_ARRAY_RE.format(suffix="Tiles"), text)
     pal_m   = re.search(_ARRAY_RE.format(suffix="Pal"), text)
     if not tiles_m or not pal_m:
-        emit("error_line", f"[palette] format grit inattendu dans {c_path.name}")
+        emit("error_line", f"[palette] unexpected grit format in {c_path.name}")
         return False
 
     tiles_vals = [int(x, 16) for x in tiles_m.group(3).split(",") if x.strip()]
@@ -498,7 +497,7 @@ class GritSprites:
         if not sprites:
             return True
         if not self._grit:
-            self._emit("error_line", "[grit Actor] introuvable"); return False
+            self._emit("error_line", "[grit Actor] not found"); return False
 
         done: set[str] = set()
         cache_hits = 0
@@ -554,7 +553,7 @@ class GritSprites:
                     self._emit("error_line", f"[grit Actor] {e}")
                     return False
                 self._emit("log_line",
-                           f"[palette] {sprite.name} -> {len(bank_colors)} couleurs (indexé)")
+                           f"[palette] {sprite.name} -> {len(bank_colors)} colours (indexed)")
 
             # grit écrit LUI-MÊME ses fichiers, donc il en date la sortie à
             # chaque passage — et il y estampille l'heure d'export, ce qui la
@@ -744,18 +743,19 @@ class MmutilAudio:
                 if got is None:
                     bad.append(f"{sym} absent de soundbank.h")
                 elif got != expected:
-                    bad.append(f"{sym} vaut {got}, attendu {expected}")
+                    bad.append(f"{sym} is {got}, expected {expected}")
         for msg in bad:
-            self._emit("error_line", f"[mmutil] numérotation inattendue : {msg}")
+            self._emit("error_line", f"[mmutil] unexpected numbering: {msg}")
         if bad:
             self._emit("error_line",
-                       "[mmutil] les constantes SFX_*/MUSIC_* du code généré seraient "
-                       "fausses — build interrompu plutôt que ROM au son décalé.")
+                       "[mmutil] the SFX_*/MUSIC_* constants of the generated code "
+                       "would be wrong — build interrupted rather than a ROM with "
+                       "shifted sound.")
         return not bad
 
     def run(self, p: Project, sound_assets: dict) -> bool:
         if not self._mmutil:
-            self._emit("error_line", "[mmutil] introuvable — skip audio"); return True
+            self._emit("error_line", "[mmutil] not found — audio skipped"); return True
 
         # Ré-échantillonnage éventuel des effets, vers le dossier de build.
         # L'ORDRE de `all_files` est intouchable : c'est lui qui fixe les
@@ -764,7 +764,7 @@ class MmutilAudio:
         try:
             encoded = encode_sfx_for_build(p, sound_assets["sfx"], self._emit)
         except Exception as e:
-            self._emit("error_line", f"[sfx] ré-échantillonnage ignoré : {e}")
+            self._emit("error_line", f"[sfx] resampling ignored: {e}")
             encoded = {}
 
         all_files = (
@@ -788,7 +788,7 @@ class MmutilAudio:
             "bin2s": tool_signature(self._bin2s),
         }) if self._cache else "")
         if self._cache and self._cache.hit("audio", fingerprint, outputs):
-            self._emit("log_line", "[cache] audio — inchangé")
+            self._emit("log_line", "[cache] audio — unchanged")
             return self._check_ids(soundbank_h, sound_assets)
         cmd = [str(self._mmutil)] + all_files + ["-osoundbank.bin", "-hsoundbank.h"]
         self._emit("log_line",
@@ -806,12 +806,12 @@ class MmutilAudio:
         # gain douze fois trop grand.
         if skipped := sound_assets.get("skipped"):
             self._emit("log_line",
-                       f"[mmutil] {len(skipped)} son(s) non référencé(s) — hors ROM, "
-                       f"fichiers conservés dans assets/")
+                       f"[mmutil] {len(skipped)} unreferenced sound(s) — left out of the ROM, "
+                       "files kept in assets/")
             for kind, name, _size in sorted(skipped, key=lambda s: -s[2])[:10]:
-                self._emit("log_line", f"           · {kind} « {name} »")
+                self._emit("log_line", f"           · {kind} \"{name}\"")
             if len(skipped) > 10:
-                self._emit("log_line", f"           · … et {len(skipped) - 10} autre(s)")
+                self._emit("log_line", f"           · … and {len(skipped) - 10} more")
         ok = self._run_cmd(cmd, "[mmutil]", cwd=p.build_dir)
         if ok and soundbank_h.exists():
             ok = self._check_ids(soundbank_h, sound_assets) and ok
@@ -837,7 +837,7 @@ class MmutilAudio:
                         errors="replace",
                     )
                 except FileNotFoundError as e:
-                    self._emit("error_line", f"[bin2s] introuvable : {e}")
+                    self._emit("error_line", f"[bin2s] not found: {e}")
                     proc = None
                 if proc is not None:
                     for line in proc.stderr.splitlines():
@@ -862,5 +862,5 @@ class MmutilAudio:
                     if self._cache and all(path.is_file() for path in outputs):
                         self._cache.store("audio", fingerprint)
             else:
-                self._emit("log_line", "[bin2s] introuvable — soundbank non linke")
+                self._emit("log_line", "[bin2s] not found — soundbank not linked")
         return ok

@@ -2138,8 +2138,8 @@ REMOVED_API: dict[str, str] = {}
 # finale, 2026-09-27) : aucun `.lua`/doc/démo du dépôt ne les utilisait déjà,
 # donc un guide ne coûte rien et évite la confusion avec `input:pressed`.
 REMOVED_EVENTS: dict[str, str] = {
-    name: (f"L'événement '{name}' n'existe plus : écrivez "
-          f"if input:pressed(\"{btn}\") then ... end dans on_update.")
+    name: (f"Event '{name}' no longer exists: write if input:pressed(\"{btn}\") then ... end "
+           "in on_update.")
     for name, btn in (
         ("on_button_a", "a"), ("on_button_b", "b"),
         ("on_button_l", "l"), ("on_button_r", "r"),

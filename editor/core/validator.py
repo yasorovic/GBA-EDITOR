@@ -164,6 +164,7 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
     # palettes par index en amont.
     _check_bg_text_cbb_conflict(ctx)
     _check_ui_node_slots(ctx)
+    _check_ui_element_names_unique(ctx)
     _check_pal_bank_reference(ctx)
     _check_palette_bank_overflow(ctx)
     _check_api_prototypes(ctx)
@@ -201,7 +202,7 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
         try:
             fn(ctx)
         except Exception as exc:
-            ctx.warn(None, f"Validateur '{fn.__name__}' a planté : {exc}")
+            ctx.warn(None, f"Validator '{fn.__name__}' crashed: {exc}")
 
     return ctx.warnings, ctx.errors
 
@@ -235,18 +236,17 @@ def _check_api_domains(ctx: ValidationContext):
         manquants = sorted(ALL_DOMAINS - couverts)
         if manquants:
             ctx.error(None,
-                      f"Domaine(s) d'argument inconnu(s) de {role} : "
-                      f"{', '.join(manquants)}. Ajouter une entrée dans la table "
-                      f"correspondante (scripting/{role}.py) — sans elle, un nom "
-                      f"cité dans ce domaine n'est ni vérifié ni résolu.")
+                      f"Unknown argument domain(s) for {role}: {', '.join(manquants)}. Add an entry in the "
+                      f"matching table (scripting/{role}.py) — without it, a name cited "
+                      "in this domain is neither checked nor resolved.")
         # Un domaine listé mais qui n'existe plus est l'autre sens de la même
         # dérive : la table garde une entrée morte que rien ne peut plus
         # atteindre. Avertissement — ça ne casse pas le build.
         fantomes = sorted(couverts - ALL_DOMAINS)
         if fantomes:
             ctx.warn(None,
-                     f"{role} : domaine(s) déclaré(s) mais inexistant(s) dans "
-                     f"api.py : {', '.join(fantomes)}.")
+                     f"{role}: domain(s) declared but missing from api.py: "
+                     f"{', '.join(fantomes)}.")
 
 
 def _check_lua_subset(ctx: ValidationContext):
@@ -273,7 +273,7 @@ def _check_lua_subset(ctx: ValidationContext):
     try:
         from luaparser import astnodes
     except ImportError:
-        ctx.warn(None, "luaparser absent — sous-ensemble Lua non vérifié.")
+        ctx.warn(None, "luaparser is missing — the Lua subset is not checked.")
         return
 
     # Les classes ABSTRAITES du module : elles ne sont jamais instanciées dans
@@ -290,17 +290,16 @@ def _check_lua_subset(ctx: ValidationContext):
     manquants = sorted(univers - couverts)
     if manquants:
         ctx.error(None,
-                  f"Nœud(s) Lua non classé(s) dans scripting/lua_subset.py : "
-                  f"{', '.join(manquants)}. Chacun doit rejoindre ACCEPTED (il se "
-                  f"traduit), REFUSED (avec la phrase qui dit quoi écrire à la "
-                  f"place) ou STRUCTURAL (jamais dispatché) — sans quoi il "
-                  f"retombe dans le silence.")
+                  "Lua node(s) not classified in scripting/lua_subset.py: "
+                  f"{', '.join(manquants)}. Each must join ACCEPTED (it is translated), REFUSED (with the"
+                  " sentence saying what to write instead) or STRUCTURAL (never "
+                  "dispatched) — otherwise it falls back into silence.")
     # L'autre sens : une entrée que luaparser ne produit plus. Avertissement,
     # comme pour les domaines fantômes — ça ne casse rien, ça encombre.
     fantomes = sorted(couverts - univers)
     if fantomes:
         ctx.warn(None,
-                 f"lua_subset.py classe des nœuds inexistants dans luaparser : "
+                 "lua_subset.py classifies nodes that do not exist in luaparser: "
                  f"{', '.join(fantomes)}.")
 
 
@@ -327,7 +326,7 @@ def _check_api_prototypes(ctx: ValidationContext):
     engine = RUNTIME_DIR / "include" / "gba_engine.h"
     facade = RUNTIME_DIR / "include" / "runtime_api_inline.h"
     if not (engine.exists() and facade.exists()):
-        ctx.warn(None, "En-têtes du runtime introuvables — API non vérifiée.")
+        ctx.warn(None, "Runtime headers not found — API not checked.")
         return
     eng = engine.read_text(encoding="utf-8", errors="ignore")
     fac = facade.read_text(encoding="utf-8", errors="ignore")
@@ -354,9 +353,9 @@ def _check_api_prototypes(ctx: ValidationContext):
             mismatched.append(f"{sym} (api.py={value}, gba_engine.h={ev})")
     if mismatched:
         ctx.error(None,
-                  "Valeurs d'énumération incohérentes entre api.py et "
-                  f"gba_engine.h : {', '.join(mismatched)}. Le symbole émis "
-                  "vaudrait deux choses selon l'unité — décalage silencieux.")
+                  "Inconsistent enumeration values between api.py and gba_engine.h: "
+                  f"{', '.join(mismatched)}. The emitted symbol would mean two different things depending "
+                  "on the unit — a silent shift.")
 
     # ── Ordre des arguments : Lua ↔ C ─────────────────────────────
     # `codegen._emit_api_call` mappe les arguments par POSITION. Si l'ordre des
@@ -388,17 +387,17 @@ def _check_api_prototypes(ctx: ValidationContext):
             permuted.append(f"{key} : Lua ({', '.join(lua)}) vs C ({', '.join(cp)})")
     if permuted:
         ctx.error(None,
-                  "Ordre des arguments incohérent entre api.py et gba_engine.h — "
-                  "les valeurs atterriront dans le mauvais paramètre sans que le "
-                  f"compilateur puisse le voir : {' ; '.join(permuted)}.")
+                  "Inconsistent argument order between api.py and gba_engine.h — "
+                  "values would land in the wrong parameter without the compiler "
+                  f"being able to see it: {' ; '.join(permuted)}.")
 
 
 def _check_scene(ctx: ValidationContext):
     if not ctx.scene:
-        ctx.error(None, "Aucune scène active — impossible de compiler.")
+        ctx.error(None, "No active scene — cannot build.")
         return
     if not ctx.actors:
-        ctx.warn(None, "La scène ne contient aucun actor.")
+        ctx.warn(None, "The scene contains no actor.")
 
 
 def _check_actors(ctx: ValidationContext):
@@ -409,7 +408,8 @@ def _check_actors(ctx: ValidationContext):
             try:
                 ctype = component_type_name(comp)
             except ValueError:
-                ctx.warn(actor, f"Composant de type non supporté ignoré : {type(comp).__name__}")
+                ctx.warn(actor, "Unsupported component type ignored: "
+                                f"{type(comp).__name__}")
                 continue
 
             if ctype == "sprite":
@@ -425,23 +425,24 @@ def _check_sprite(ctx, actor, comp):
     sprite = proj.get_sprite(comp.sprite_name) if comp.sprite_name else None
 
     if not comp.sprite_name:
-        ctx.warn(actor, "SpriteComponent sans SpriteAsset lié (pas de sprite_name).")
+        ctx.warn(actor, "SpriteComponent without a linked SpriteAsset (no "
+                        "sprite_name).")
         return
     if not sprite:
         # Le composant CITE un sprite qui n'existe plus (fichier supprimé ou
         # illisible) : sans ça l'acteur serait émis sans image, sans rien dire.
-        ctx.error(actor, f"Sprite '{comp.sprite_name}' introuvable — l'acteur le cite "
-                         f"mais aucun SpriteAsset de ce nom n'existe.")
+        ctx.error(actor, f"Sprite '{comp.sprite_name}' not found — the actor names it but no "
+                         "SpriteAsset has this name.")
         return
     if not sprite.asset:
-        ctx.warn(actor, f"Sprite '{sprite.name}' n'a pas de PNG assigné.")
+        ctx.warn(actor, f"Sprite '{sprite.name}' has no PNG assigned.")
         return
     ap = proj.asset_abs(sprite.asset)
     if not ap or not ap.exists():
-        ctx.error(actor, f"Sprite '{sprite.name}' : fichier PNG introuvable ({sprite.asset}).")
+        ctx.error(actor, f"Sprite '{sprite.name}': PNG file not found ({sprite.asset}).")
     elif reason := ctx.image_problem(ap):
-        ctx.error(actor, f"Sprite '{sprite.name}' : l'image {sprite.asset} est illisible "
-                         f"({reason}) — réexportez le PNG.")
+        ctx.error(actor, f"Sprite '{sprite.name}': image {sprite.asset} is unreadable ({reason}) — re-export the"
+                         " PNG.")
     if sprite.frame_w <= 0 or sprite.frame_h <= 0:
         ctx.error(actor, f"Sprite '{sprite.name}' : frame_w/h invalides ({sprite.frame_w}×{sprite.frame_h}).")
 
@@ -449,18 +450,18 @@ def _check_sprite(ctx, actor, comp):
 def _check_collision(ctx, actor, comp):
     if getattr(comp, "w", 0) <= 0 or getattr(comp, "h", 0) <= 0:
         ctx.error(actor,
-                  f"CollisionBox '{comp.tag}' : largeur ou hauteur nulle "
-                  f"({comp.w}×{comp.h}) — hitbox invisible.")
+                  f"CollisionBox '{comp.tag}': zero width or height ({comp.w}×{comp.h}) — invisible "
+                  "hitbox.")
 
 
 def _check_script(ctx, actor, comp):
     proj = ctx.project
     if not comp.script:
-        ctx.warn(actor, "ScriptComponent sans script assigné.")
+        ctx.warn(actor, "ScriptComponent without an assigned script.")
         return
     sp = proj.asset_abs(comp.script)
     if not sp or not sp.exists():
-        ctx.error(actor, f"Script introuvable : {comp.script}")
+        ctx.error(actor, f"Script not found: {comp.script}")
 
 
 def _check_unreadable_files(ctx: ValidationContext):
@@ -469,11 +470,11 @@ def _check_unreadable_files(ctx: ValidationContext):
     introuvable — sinon le jeu sortirait amputé sans qu'un mot ne le dise (cf.
     `ResourceStore.unreadable`). Le fichier n'est jamais modifié."""
     for name, reason in ctx.project.unreadable_files():
-        ctx.error(None, f"Fichier « {name} » illisible ({reason}) — l'asset qu'il "
-                        f"décrit est absent du build ; réparez le fichier ou supprimez-le.")
+        ctx.error(None, f"File \"{name}\" is unreadable ({reason}) — the asset it describes is "
+                        "missing from the build; repair the file or delete it.")
     for name, backup in ctx.project.preserved_files():
-        ctx.warn(None, f"Fichier « {name} » : l'original était illisible et a été "
-                       f"remplacé par une version par défaut ; il est conservé dans « {backup} ».")
+        ctx.warn(None, f"File \"{name}\": the original was unreadable and has been replaced"
+                       f" by a default version; it is kept in \"{backup}\".")
 
 
 def _check_backgrounds(ctx: ValidationContext):
@@ -486,14 +487,14 @@ def _check_backgrounds(ctx: ValidationContext):
             continue
         ba = proj.get_background(layer.background_name)
         if not ba:
-            ctx.warn(None, f"Background BG{layer.bg_slot} : image '{layer.background_name}' introuvable — layer ignoré.")
+            ctx.warn(None, f"Background BG{layer.bg_slot}: image '{layer.background_name}' not found — layer ignored.")
             continue
         png = ba.asset if ba.asset else f"{layer.background_name}.png"
         if not (proj.background_images_dir / png).exists():
-            ctx.warn(None, f"Background BG{layer.bg_slot} : PNG introuvable ({png}) — layer ignoré.")
+            ctx.warn(None, f"Background BG{layer.bg_slot}: PNG not found ({png}) — layer ignored.")
         elif reason := ctx.image_problem(proj.background_images_dir / png):
-            ctx.error(None, f"Background BG{layer.bg_slot} : l'image {png} est illisible "
-                            f"({reason}) — réexportez le PNG.")
+            ctx.error(None, f"Background BG{layer.bg_slot}: image {png} is unreadable ({reason}) — "
+                            "re-export the PNG.")
 
 
 def _check_bg_text_cbb_conflict(ctx: ValidationContext):
@@ -508,10 +509,10 @@ def _check_bg_text_cbb_conflict(ctx: ValidationContext):
         for layer in scene.background_layers:
             if layer.background_name and layer.bg_slot in ui_slots:
                 ctx.error(None,
-                    f"Scène '{scene.name}' : le layer BG{layer.bg_slot} ('{layer.background_name}') "
-                    f"partage son slot avec une interface (BG{layer.bg_slot}) — "
-                    f"son charblock est écrasé par les tuiles de police au build. "
-                    f"Change le slot BG de l'interface ou vide l'image de ce layer.")
+                    f"Scene '{scene.name}': layer BG{layer.bg_slot} ('{layer.background_name}') shares its slot with an "
+                    f"interface (BG{layer.bg_slot}) — its charblock is overwritten by the font "
+                    "tiles at build. Change the interface's BG slot or empty this "
+                    "layer's image.")
 
 
 def _check_ui_node_slots(ctx: ValidationContext):
@@ -534,15 +535,38 @@ def _check_ui_node_slots(ctx: ValidationContext):
             name = node.layout_name
             if name in seen:
                 ctx.error(None,
-                    f"Scène '{scene.name}' : l'interface '{name}' est posée deux fois — "
-                    f"ses éléments partageraient les mêmes noms (REGION_*/IMAGE_*). "
-                    f"Un layout ne se pose qu'une fois par scène.")
+                    f"Scene '{scene.name}': interface '{name}' is placed twice — its elements "
+                    "would share the same names (REGION_*/IMAGE_*). A layout can only"
+                    " be placed once per scene.")
             seen.add(name)
             if node.resolved_target(None, rm) == TARGET_BG and node.bg_slot not in valid:
                 ctx.error(None,
-                    f"Scène '{scene.name}' : l'interface '{name}' vise le slot BG{node.bg_slot}, "
-                    f"indisponible en mode vidéo {rm} (slots permis : {list(valid)}). "
-                    f"Choisis un slot valide dans l'inspecteur du nœud.")
+                    f"Scene '{scene.name}': interface '{name}' targets slot BG{node.bg_slot}, which is "
+                    f"unavailable in video mode {rm} (allowed slots: {list(valid)}). Choose a "
+                    "valid slot in the node inspector.")
+
+
+def _check_ui_element_names_unique(ctx: ValidationContext):
+    """Un nom d'élément d'interface est UNIQUE dans tout le projet.
+
+    `REGION_*`, `IMAGE_*` et `UIELEM_*` sont indexés par NOM, pour l'ensemble des
+    mises en page (cf. `Project.ui_element_names`) : deux éléments homonymes, même
+    dans deux layouts posés sur deux scènes différentes, émettent la même macro avec
+    deux valeurs. Le compilateur n'en dit qu'un avertissement, et la dernière
+    définition gagne — `interface:get("nom")` vise alors l'élément de l'AUTRE
+    interface. Le contrôle ci-dessus ne voit que le cas « un layout posé deux fois
+    dans une scène » ; celui-ci voit les homonymes entre layouts différents."""
+    owners: dict[str, list[str]] = {}
+    for layout, element in ctx.project.all_elements():
+        if element.name:
+            owners.setdefault(element.name, []).append(layout.name)
+    for name, layouts in sorted(owners.items()):
+        if len(layouts) > 1:
+            where = ", ".join(f"'{lay}'" for lay in sorted(set(layouts)))
+            ctx.error(None,
+                f"Interface element \"{name}\" duplicated ({where}): its REGION_/IMAGE_/UIELEM_"
+                " constants collide and a script would target the wrong element. "
+                "Rename one of them: the name is unique across the whole project.")
 
 
 def _text_variants(p, text, globals_names: set) -> list:
@@ -597,9 +621,9 @@ def _check_markup_fonts(ctx: ValidationContext):
                 if name not in known and key not in seen:
                     seen.add(key)
                     ctx.error(None,
-                        f"Le texte '{text.key}'"
-                        + (f" (langue « {code} »)" if code else "")
-                        + f" cite la police inconnue '{name}' dans [font={name}].")
+                        f"Text '{text.key}'"
+                        + (f" (language \"{code}\")" if code else "")
+                        + f" cites the unknown font '{name}' in [font={name}].")
 
 
 def _check_text_overflow(ctx: ValidationContext):
@@ -675,12 +699,11 @@ def _check_text_overflow(ctx: ValidationContext):
                     font, source, fonts, consts, region.w, region.h)
                 if over:
                     ctx.warn(None,
-                        f"Le texte '{text.key}'"
-                        + (f" (langue « {lbl} »)" if lbl else "")
-                        + f" déborde de la zone '{region.name}' "
-                        f"({region.w}×{region.h} px, police '{font.name}') — il sera "
-                        f"tronqué au dernier glyphe qui tient. Agrandis la zone, "
-                        f"raccourcis le texte, ou coupe-le en deux entrées.")
+                        f"Text '{text.key}'"
+                        + (f" (language \"{lbl}\")" if lbl else "")
+                        + f" overflows the zone '{region.name}' ({region.w}×{region.h} px, font '{font.name}') — it "
+                          "will be cut at the last glyph that fits. Enlarge the zone,"
+                          " shorten the text, or split it into two entries.")
 
     # Textes AUTHORÉS : le couple (élément, contenu) est connu sans lire un
     # script, et plus sûr que le cas script — c'est `scene_init` qui l'écrit,
@@ -698,12 +721,11 @@ def _check_text_overflow(ctx: ValidationContext):
                     font, source, fonts, consts, el.w, el.h)
                 if over:
                     ctx.warn(None,
-                        f"Le texte '{text.key}'"
-                        + (f" (langue « {lbl} »)" if lbl else "")
-                        + f" déborde de l'élément '{el.name}' "
-                        f"({el.w}×{el.h} px, police '{font.name}') — il sera tronqué au "
-                        f"dernier glyphe qui tient. Agrandis l'élément dans le canvas, "
-                        f"ou raccourcis le texte.")
+                        f"Text '{text.key}'"
+                        + (f" (language \"{lbl}\")" if lbl else "")
+                        + f" overflows the element '{el.name}' ({el.w}×{el.h} px, font "
+                          f"'{font.name}') — it will be cut at the last glyph that fits. "
+                          "Enlarge the element in the canvas, or shorten the text.")
 
 
 def _check_font_coverage(ctx: ValidationContext):
@@ -799,12 +821,11 @@ def _check_font_coverage(ctx: ValidationContext):
         details = "; ".join(f"{font_name} : {' '.join(chars)}"
                             for font_name, chars in by_font.items())
         ctx.warn(None,
-            f"Le texte '{key}'"
-            + (f" (langue « {lbl} »)" if lbl else "")
-            + f" cite un caractère absent de la police active "
-            f"({region_kind} '{region_name}') : {details}. "
-            f"Le glyphe manquant sera sauté à l'affichage, sans un mot "
-            f"en jeu. Ajoute-le à une police, ou change la traduction.")
+            f"Text '{key}'"
+            + (f" (language \"{lbl}\")" if lbl else "")
+            + f" cites a character missing from the active font ({region_kind} '{region_name}'): "
+              f"{details}. The missing glyph will be skipped at display, without a word in "
+              "game. Add it to a font, or change the translation.")
 
     seen: set = set()
     for site in find_call_sites_in_project(p, DOMAIN_UI_ELEMENT, DOMAIN_TEXT):
@@ -821,7 +842,7 @@ def _check_font_coverage(ctx: ValidationContext):
                 seen.add(quad)
                 missing = _missing(parsed, eff)
                 if missing:
-                    _warn(text.key, lbl, "la zone", region.name, missing)
+                    _warn(text.key, lbl, "the zone", region.name, missing)
 
     from core.models.ui_region import KIND_TEXT
     for _lay, el in p.all_regions():
@@ -839,7 +860,7 @@ def _check_font_coverage(ctx: ValidationContext):
                 seen.add(quad)
                 missing = _missing(parsed, eff)
                 if missing:
-                    _warn(text.key, lbl, "l'élément", el.name, missing)
+                    _warn(text.key, lbl, "the element", el.name, missing)
 
 
 def _check_literal_texts(ctx: ValidationContext):
@@ -869,11 +890,10 @@ def _check_literal_texts(ctx: ValidationContext):
             if ref.api_key not in LITERAL_TEXT_CALLS or ref.value in keys:
                 continue
             ctx.warn(None,
-                f"{path.name}:{ref.line} : le texte littéral « {ref.value} » "
-                f"passé à {ref.api_key}(...) n'est pas traduisible — c'est une "
-                f"entrée ANONYME (v0.3.2), invisible pour chaque langue "
-                f"déclarée. Crée-le dans l'écran Texte pour pouvoir le "
-                f"traduire.")
+                f"{path.name}:{ref.line}: the literal text \"{ref.value}\" passed to {ref.api_key}(...) is not "
+                "translatable — it is an ANONYMOUS entry (v0.3.2), invisible to every"
+                " declared language. Create it in the Text screen to be able to "
+                "translate it.")
 
 
 def _check_translation_holes(ctx: ValidationContext):
@@ -910,11 +930,10 @@ def _check_translation_holes(ctx: ValidationContext):
         # deux cents clés ne se lit pas — le compte porte l'ampleur, l'écran
         # porte la liste.
         apercu = ", ".join(t.key for t in trous[:3])
-        reste = f", et {len(trous) - 3} autre(s)" if len(trous) > 3 else ""
+        reste = f", and {len(trous) - 3} more" if len(trous) > 3 else ""
         ctx.warn(None,
-            f"Langue « {lang.name or lang.code} » : {len(trous)} entrée(s) sur "
-            f"{len(textes)} ne sont pas traduites — elles s'afficheront dans la "
-            f"langue source ({apercu}{reste}).")
+            f"Language \"{lang.name or lang.code}\": {len(trous)} of {len(textes)} entries are not translated — they will "
+            f"display in the source language ({apercu}{reste}).")
 
 
 def _check_ui_text_key(ctx: ValidationContext):
@@ -934,8 +953,8 @@ def _check_ui_text_key(ctx: ValidationContext):
         key = getattr(el, "text_key", "") or ""
         if key and p.get_text(key) is None:
             ctx.error(None,
-                f"Le texte '{el.name}' (mise en page '{lay.name}') pointe la clé "
-                f"'{key}', qui n'existe plus dans la table de textes.",
+                f"Text '{el.name}' (layout '{lay.name}') points to key '{key}', which no longer "
+                "exists in the text table.",
                 DiagnosticTarget("ui_element", el.name, lay.name))
 
 
@@ -957,23 +976,22 @@ def _check_blend(ctx: ValidationContext):
             continue
         if not scene.blend_has_target(BLEND_TOP):
             ctx.warn(None,
-                f"Scène '{scene.name}' : un mode de fusion est réglé mais aucune "
-                f"première cible n'est désignée — rien n'est mélangé, l'effet "
-                f"n'aura aucun effet. Passe un layer (ou les sprites) en « dessus ».")
+                f"Scene '{scene.name}': a blend mode is set but no first target is designated —"
+                " nothing is blended, the effect has no effect. Set a layer (or the "
+                "sprites) to \"top\".")
         elif mode in BLEND_NEEDS_BOTTOM and not scene.blend_has_target(BLEND_BOTTOM):
             ctx.warn(None,
-                f"Scène '{scene.name}' : alpha sans seconde cible — le mélange "
-                f"n'a lieu que là où un pixel du dessus a un pixel du dessous "
-                f"derrière lui. Passe le layer de derrière, ou le backdrop, en "
-                f"« dessous ».")
+                f"Scene '{scene.name}': alpha without a second target — blending only happens "
+                "where a pixel of the top has a pixel of the bottom behind it. Set "
+                "the layer behind, or the backdrop, to \"bottom\".")
         # Un rôle « dessous » sous un mode qui ne l'emploie pas ne fait rien.
         if mode not in BLEND_NEEDS_BOTTOM:
             idle = [f"BG{L.bg_slot}" for L in scene.background_layers
                     if blend_role_of(L) == BLEND_BOTTOM]
             if idle:
                 ctx.warn(None,
-                    f"Scène '{scene.name}' : {', '.join(idle)} en « dessous », "
-                    f"mais ce mode n'emploie que le dessus — ce rôle ne fait rien.")
+                    f"Scene '{scene.name}': {', '.join(idle)} set to \"bottom\", but this mode only uses the "
+                    "top — this role does nothing.")
 
 
 def _check_ui_image(ctx: ValidationContext):
@@ -995,23 +1013,22 @@ def _check_ui_image(ctx: ValidationContext):
     for lay, im in p.all_images():
         # `all_images` porte aussi les conteneurs à fond sprite : même table, même
         # panne, seul le mot change pour que le message désigne le bon objet.
-        what = ("le fond du conteneur" if can_fill(im)
+        what = ("the container background" if can_fill(im)
                 else "l'image")
         name = getattr(im, "sprite_name", "") or ""
         if not name:
             continue
         if p.get_sprite(name) is None:
             ctx.error(None,
-                f"{what.capitalize()} '{im.name}' (mise en page '{lay.name}') "
-                f"pointe le sprite '{name}', qui n'existe plus dans le projet.",
+                f"{what.capitalize()} '{im.name}' (layout '{lay.name}') points to sprite '{name}', which no longer "
+                "exists in the project.",
                 DiagnosticTarget("ui_element", im.name, lay.name))
         elif im.state_name and not any(
                 s.name == im.state_name
                 for s in getattr(p.get_sprite(name), "states", []) or []):
             ctx.warn(None,
-                f"{what.capitalize()} '{im.name}' demande l'état "
-                f"'{im.state_name}', absent du sprite '{name}' — il affichera "
-                f"le premier état.",
+                f"{what.capitalize()} '{im.name}' asks for state '{im.state_name}', missing from sprite '{name}' — it will "
+                "display the first state.",
                 DiagnosticTarget("ui_element", im.name, lay.name))
 
 
@@ -1048,13 +1065,12 @@ def _check_ui_container_fill(ctx: ValidationContext):
             # passé sur un acteur — la cible bascule en OBJ et emporte tout le
             # sous-arbre, sans que le fond ait été retouché.
             if not fill_allowed(fk, target):
-                quoi = ("un fond sprite" if target != TARGET_BG
-                        else "une couleur, un nine-slice ou un background")
+                quoi = ("a sprite background" if target != TARGET_BG
+                        else "a colour, a nine-slice or a background")
                 ctx.warn(None,
-                    f"Scène '{scene.name}' : le fond du conteneur '{el.name}' "
-                    f"est en mode « {fk} », qui n'existe pas en cible "
-                    f"{target.upper()} — rien ne sera dessiné. Sur cette cible, "
-                    f"choisir {quoi}.",
+                    f"Scene '{scene.name}': the background of container '{el.name}' is in mode "
+                    f"\"{fk}\", which does not exist on target {target.upper()} — nothing will be "
+                    f"drawn. On this target, choose {quoi}.",
                     DiagnosticTarget("ui_element", el.name, lay.name))
                 continue
             why = []
@@ -1062,23 +1078,23 @@ def _check_ui_container_fill(ctx: ValidationContext):
                 # ② Chemin OBJ. La résolution du sprite est dite par
                 # `_check_ui_image` (même table) : ici, ce qui lui est propre.
                 if not getattr(el, "fill_sprite", ""):
-                    why.append("aucun sprite n'est choisi")
+                    why.append("no sprite is chosen")
             else:
                 # ③ Chemin BG.
                 if p.scene_ui_bg_slot(scene) not in (0, 1, 2, 3):
-                    why.append("la scène n'a pas de calque UI (aucun nœud Interface en Background)")
+                    why.append("the scene has no UI layer (no Interface node on "
+                               "Background)")
                 anchor = lay.effective_anchor(el)[0]
                 if anchor != ANCHOR_SCREEN:
-                    why.append(f"son ancrage est « {anchor} » (seul l'écran est émis)")
+                    why.append(f"its anchor is \"{anchor}\" (only the screen is emitted)")
                 if fk == FILL_COLOR and getattr(el, "fill_palette", "") not in active:
-                    why.append(f"sa palette « {getattr(el, 'fill_palette', '') or '(aucune)'} » "
-                               f"n'est pas dans les palettes BG actives de la scène")
+                    why.append("its palette "
+                               f"\"{getattr(el, 'fill_palette', '') or '(none)'}\" is not among the scene's active BG palettes")
             if why:
                 ctx.warn(None,
-                    f"Scène '{scene.name}' : le fond du conteneur "
-                    f"'{el.name}' ne sera PAS dans la ROM — {' ; '.join(why)}. "
-                    f"Le canvas le montre quand même : c'est l'éditeur qui "
-                    f"promet plus que le build ne tient.",
+                    f"Scene '{scene.name}': the background of container '{el.name}' will NOT be in "
+                    f"the ROM — {' ; '.join(why)}. The canvas shows it anyway: the editor promises "
+                    "more than the build delivers.",
                     DiagnosticTarget("ui_element", el.name, lay.name))
 
 
@@ -1107,21 +1123,20 @@ def _check_data_column_types(ctx: ValidationContext):
     inconnus = sorted(set(COLUMN_REFERENCES) - citables)
     if inconnus:
         ctx.error(None,
-                  f"Type(s) de colonne sans domaine de script correspondant : "
-                  f"{', '.join(inconnus)}. Une colonne de référence porte le nom "
-                  f"de son domaine (scripting/api.py, DOMAIN_*) ou déclare `column` "
-                  f"sur le type de référence qui la porte (RefType).")
+                  "Column type(s) without a matching script domain: "
+                  f"{', '.join(inconnus)}. A reference column carries the name of its domain "
+                  "(scripting/api.py, DOMAIN_*) or declares `column` on the reference"
+                  " type that carries it (RefType).")
     sans_source = sorted(set(COLUMN_REFERENCES) - set(DATA_COLUMN_SOURCES))
     if sans_source:
         ctx.error(None,
-                  f"Type(s) de colonne sans liste de noms citables : "
-                  f"{', '.join(sans_source)}. Compléter DATA_COLUMN_SOURCES "
-                  f"(core/project.py).")
+                  "Column type(s) without a list of citable names: "
+                  f"{', '.join(sans_source)}. Complete DATA_COLUMN_SOURCES (core/project.py).")
     fantomes = sorted(set(DATA_COLUMN_SOURCES) - set(COLUMN_REFERENCES))
     if fantomes:
         ctx.warn(None,
-                 f"DATA_COLUMN_SOURCES décrit un type de colonne qui n'existe "
-                 f"plus : {', '.join(fantomes)}.")
+                 "DATA_COLUMN_SOURCES describes a column type that no longer exists: "
+                 f"{', '.join(fantomes)}.")
 
 
 def _check_data_tables(ctx: ValidationContext):
@@ -1138,41 +1153,37 @@ def _check_data_tables(ctx: ValidationContext):
     for table in getattr(p, "data_tables", []):
         if not IDENTIFIER.match(table.name):
             ctx.error(None,
-                      f"Table « {table.name} » : un script l'écrit sans "
-                      f"guillemets (data.{table.name}), donc son nom doit être "
-                      f"un identifiant — lettres, chiffres et _, sans commencer "
-                      f"par un chiffre.")
+                      f"Table \"{table.name}\": a script writes it without quotes "
+                      f"(data.{table.name}), so its name must be an identifier — letters, "
+                      "digits and _, not starting with a digit.")
         vus = set()
         for col in table.columns:
             if not IDENTIFIER.match(col.name):
                 ctx.error(None,
-                          f"Table « {table.name} », colonne « {col.name} » : même "
-                          f"règle que le nom de la table, c'est un identifiant.")
+                          f"Table \"{table.name}\", column \"{col.name}\": same rule as the table name, it"
+                          " is an identifier.")
             if col.name in vus:
                 ctx.error(None,
-                          f"Table « {table.name} » : deux colonnes nommées "
-                          f"« {col.name} ».")
+                          f"Table \"{table.name}\": two columns named \"{col.name}\".")
             vus.add(col.name)
             if col.type not in COLUMN_TYPES:
                 ctx.error(None,
-                          f"Table « {table.name} », colonne « {col.name} » : type "
-                          f"'{col.type}' inconnu ({', '.join(COLUMN_TYPES)}).")
+                          f"Table \"{table.name}\", column \"{col.name}\": unknown type '{col.type}' "
+                          f"({', '.join(COLUMN_TYPES)}).")
         for n, row in enumerate(table.rows, start=1):
             for key in row:
                 if key not in vus:
                     ctx.warn(None,
-                             f"Table « {table.name} », ligne {n} : la clé "
-                             f"« {key} » ne correspond à aucune colonne — elle "
-                             f"n'est pas émise.")
+                             f"Table \"{table.name}\", row {n}: key \"{key}\" matches no column — it "
+                             "is not emitted.")
             for col in table.columns:
                 if col.type not in COLUMN_REFERENCES:
                     continue
                 name = str(table.value(row, col) or "").strip()
                 if name and name not in p.data_column_choices(col.type):
                     ctx.error(None,
-                              f"Table « {table.name} », ligne {n}, colonne "
-                              f"« {col.name} » : aucun {col.type} nommé "
-                              f"« {name} » dans le projet.")
+                              f"Table \"{table.name}\", row {n}, column \"{col.name}\": no {col.type} named "
+                              f"\"{name}\" in the project.")
 
 
 def _check_cameras(ctx: ValidationContext):
@@ -1192,25 +1203,24 @@ def _check_cameras(ctx: ValidationContext):
         for cam in scene.cameras:
             if cam.mode == "follow" and not cam.follow_target:
                 ctx.warn(None,
-                    f"Caméra « {cam.name} » (scène '{scene.name}') : mode suivi sans "
-                    f"acteur cible — elle se comportera comme une caméra fixe.")
+                    f"Camera \"{cam.name}\" (scene '{scene.name}'): follow mode without a target actor —"
+                    " it will behave like a fixed camera.")
             elif cam.mode == "follow" and not any(
                     a.name == cam.follow_target for a in scene.actors):
                 ctx.warn(None,
-                    f"Scène '{scene.name}' : la caméra « {cam.name} » suit "
-                    f"« {cam.follow_target} », qui n'est pas un acteur de cette scène — "
-                    f"la caméra y restera immobile.")
+                    f"Scene '{scene.name}': camera \"{cam.name}\" follows \"{cam.follow_target}\", which is not an actor "
+                    "of this scene — the camera will stay still.")
             if cam.name in seen and seen[cam.name] != scene.name:
                 ctx.warn(None,
-                    f"Deux caméras nommées « {cam.name} » (scènes '{seen[cam.name]}' et "
-                    f"'{scene.name}') — camera:switch(\"{cam.name}\") viserait l'une des deux "
-                    f"au hasard du build.")
+                    f"Two cameras named \"{cam.name}\" (scenes '{seen[cam.name]}' and '{scene.name}') — "
+                    f"camera:switch(\"{cam.name}\") would target either one, depending on the "
+                    "build.")
             seen.setdefault(cam.name, scene.name)
         want = getattr(scene, "camera", "") or ""
         if want and not any(c.name == want for c in scene.cameras):
             ctx.warn(None,
-                f"Scène '{scene.name}' : la caméra « {want} » n'existe plus — la "
-                f"scène repart de la caméra par défaut (fixe à l'origine, sans bornes).")
+                f"Scene '{scene.name}': camera \"{want}\" no longer exists — the scene restarts from"
+                " the default camera (fixed at the origin, without bounds).")
 
 
 def _check_script_owner_families(ctx: ValidationContext):
@@ -1230,10 +1240,10 @@ def _check_script_owner_families(ctx: ValidationContext):
                             f"{'…' if len(owners) > 3 else ''}"
                             for fam, owners in familles.items())
         ctx.error(None,
-            f"Le script « {path} » est attaché à plusieurs familles de propriétaires "
-            f"({detail}). Un script n'a qu'un contexte : `self` et les événements "
-            f"disponibles dépendent de ce à quoi il est attaché. Faites un script par famille, "
-            f"et mettez le code commun dans un behavior.")
+            f"Script \"{path}\" is attached to several families of owners ({detail}). A script "
+            "has a single context: `self` and the available events depend on what it "
+            "is attached to. Write one script per family, and put the shared code in "
+            "a behavior.")
 
 
 def _check_behaviors_without_self(ctx: ValidationContext):
@@ -1241,7 +1251,8 @@ def _check_behaviors_without_self(ctx: ValidationContext):
     attaché à rien, il REÇOIT un acteur en paramètre. Lui laisser le mot `self` le
     rendrait ambigu (l'instance attachée ? le paramètre ?) — on le refuse, en
     bloquant le build : les erreurs du checker sur un behavior ne sont que des
-    avertissements, ce qui ne suffit pas ici."""
+    avertissements, ce qui ne suffit pas ici. Il dit aussi ce que l'inlining
+    n'osait pas bloquer : une faute de syntaxe, ou une instruction hors fonction."""
     from scripting.parser import parse as lua_parse, LuaParseError
     from scripting.checker import uses_self
 
@@ -1251,13 +1262,23 @@ def _check_behaviors_without_self(ctx: ValidationContext):
     for path in sorted(behaviors_dir.glob("*.lua")):
         try:
             script = lua_parse(path.read_text(encoding="utf-8"))
-        except (LuaParseError, OSError):
-            continue          # le parse est déjà dit ailleurs
+        except LuaParseError as exc:
+            # The inlining only turns a behavior syntax error into a warning,
+            # and the build would go on without the behavior's functions.
+            where = f"{path.name}:{exc.line}" if exc.line else path.name
+            ctx.error(None, f"Behavior \"{path.stem}\" ({where}): {exc}")
+            continue
+        except OSError:
+            continue
+        for _node, line in script.stray_statements:
+            ctx.error(None,
+                f"Behavior \"{path.stem}\" ({path.name}:{line}): this statement is "
+                "outside any function, so it would never run.")
         if uses_self(script):
             ctx.error(None,
-                f"Behavior « {path.stem} » : `self` est réservé à l'instance à laquelle un "
-                f"script est attaché. Un behavior reçoit son acteur en premier paramètre : "
-                f"nommez-le autrement, `function M.update(actor)`.")
+                f"Behavior \"{path.stem}\": `self` is reserved for the instance a script is "
+                "attached to. A behavior receives its actor as first parameter: name "
+                "it something else, `function M.update(actor)`.")
 
 
 def _check_actor_budget(ctx: ValidationContext):
@@ -1286,10 +1307,9 @@ def _check_actor_budget(ctx: ValidationContext):
         lay = scene_oam_layout(p, scene)
         if lay.over_budget:
             ctx.error(None,
-                f"Scène '{scene.name}' : {lay.used} entrées OAM demandées "
-                f"({lay.placed_entries} acteurs à sprite + {lay.ui} d'interface + {lay.pool_entries} de pool) "
-                f"pour {OAM_LIMIT} disponibles — réduire un pavage de fond, passer "
-                f"une zone en cible BG, ou diminuer le pool.")
+                f"Scene '{scene.name}': {lay.used} OAM entries requested ({lay.placed_entries} sprite actors + {lay.ui} "
+                f"interface + {lay.pool_entries} pool) for {OAM_LIMIT} available — reduce a background "
+                "tiling, move a zone to a BG target, or shrink the pool.")
 
 
 def _check_window_regions(ctx: ValidationContext):
@@ -1310,25 +1330,24 @@ def _check_window_regions(ctx: ValidationContext):
     for scene in ctx.project.scenes:
         layout = scene_window_layout(ctx.project, scene)
         if layout.overflow:
-            names = ", ".join(f"« {n} »" for n in layout.overflow)
+            names = ", ".join(f"\"{n}\"" for n in layout.overflow)
             ctx.error(None,
-                f"Scène '{scene.name}' : {names} ne tient/tiennent pas — seules deux "
-                f"windows rectangle sont possibles par scène (cadre de caméra compris). "
-                f"Réduire le nombre de WindowSlot ou agrandir le cadre d'une caméra "
-                f"réduite.")
+                f"Scene '{scene.name}': {names} do(es) not fit — only two rectangle windows are "
+                "possible per scene (camera frame included). Reduce the number of "
+                "WindowSlots or enlarge the frame of a reduced camera.")
         for ws in scene.windows:
             if ws.is_obj:
                 continue
             if not ws.name:
                 ctx.error(None,
-                    f"Scène '{scene.name}' : une window rectangle n'a pas de nom — "
-                    f"elle ne peut être ni allouée ni citée depuis un script.")
+                    f"Scene '{scene.name}': a rectangle window has no name — it can be neither "
+                    "allocated nor cited from a script.")
                 continue
             if ws.name in seen and seen[ws.name] != scene.name:
                 ctx.warn(None,
-                    f"Deux windows nommées « {ws.name} » (scènes '{seen[ws.name]}' et "
-                    f"'{scene.name}') — window.set_layer(\"{ws.name}\") viserait l'une "
-                    f"des deux au hasard du build.")
+                    f"Two windows named \"{ws.name}\" (scenes '{seen[ws.name]}' and '{scene.name}') — "
+                    f"window.set_layer(\"{ws.name}\") would target either one, depending on "
+                    "the build.")
             seen.setdefault(ws.name, scene.name)
 
 
@@ -1355,13 +1374,12 @@ def _check_actor_name_collisions(ctx: ValidationContext):
             if s in seen:
                 first = seen[s]
                 same = first == actor.name
-                quoi = (f"Deux acteurs nommés « {actor.name} »" if same else
-                        f"Les acteurs « {first} » et « {actor.name} »")
+                quoi = (f"Two actors named \"{actor.name}\"" if same else
+                        f"Actors \"{first}\" and \"{actor.name}\"")
                 ctx.warn(None,
-                    f"{quoi} dans la scène '{scene.name}' partagent le symbole C "
-                    f"`{s}` — même TAG et même fichier "
-                    f"actor_{c_sym(scene.name)}_{s}.c, donc le même comportement. "
-                    f"Renommer l'un des deux.")
+                    f"{quoi} in scene '{scene.name}' share the C symbol `{s}` — same TAG and same "
+                    f"file actor_{c_sym(scene.name)}_{s}.c, hence the same behaviour. Rename one of "
+                    "them.")
             seen.setdefault(s, actor.name)
 
 
@@ -1381,14 +1399,14 @@ def _check_audio_files(ctx: ValidationContext):
                          ("Musique", getattr(p, "music", []))):
         for a in assets or []:
             if not a.asset:
-                ctx.warn(None, f"{kind} « {a.name} » : aucun fichier associé.")
+                ctx.warn(None, f"{kind} \"{a.name}\": no associated file.")
                 continue
             path = p.asset_abs(a.asset)
             if not path or not path.exists():
-                ctx.error(None, f"{kind} « {a.name} » : fichier introuvable ({a.asset}).")
+                ctx.error(None, f"{kind} \"{a.name}\": file not found ({a.asset}).")
                 continue
             if reason := check_audio_file(path):
-                ctx.error(None, f"{kind} « {a.name} » ({path.name}) : {reason}")
+                ctx.error(None, f"{kind} \"{a.name}\" ({path.name}): {reason}")
 
     # `Scene.music` nomme une piste sans qu'aucun script ne la cite : c'est une
     # référence de plus à vérifier. En AVERTISSEMENT — le codegen sait ne pas
@@ -1400,16 +1418,16 @@ def _check_audio_files(ctx: ValidationContext):
         if want in (MUSIC_INHERIT, MUSIC_NONE) or want in known:
             continue
         ctx.warn(None,
-            f"Scène '{scene.name}' : la musique « {want} » n'existe pas — la scène "
-            f"n'en démarrera aucune (ce qui joue déjà continue).")
+            f"Scene '{scene.name}': music \"{want}\" does not exist — the scene will start none "
+            "(what already plays continues).")
 
     # `MUSIC_NONE` est le mot réservé qui déclare le silence. Une piste qui
     # porterait ce nom deviendrait inatteignable par une scène, sans que rien
     # ne le dise.
     if MUSIC_NONE in known:
         ctx.error(None,
-            f"Une musique s'appelle « {MUSIC_NONE} », qui est le mot réservé du "
-            f"silence dans Scene.music — renommez-la.")
+            f"A music is named \"{MUSIC_NONE}\", which is the reserved word for silence in "
+            "Scene.music — rename it.")
 
 
 def _check_music_cut_compat(ctx: ValidationContext):
@@ -1462,10 +1480,9 @@ def _check_music_cut_compat(ctx: ValidationContext):
                 n_o = order_len(other)
                 if n_o is not None and n_o != n_t:
                     ctx.warn(None,
-                        f"{path.name} : music:cut_to(« {target} ») reprend à la position "
-                        f"courante, mais « {other} » n'a pas la même structure "
-                        f"({n_o} motifs contre {n_t}) — la reprise tomberait ailleurs "
-                        f"dans le morceau.")
+                        f"{path.name}: music:cut_to(\"{target}\") resumes at the current position, "
+                        f"but \"{other}\" does not have the same structure ({n_o} patterns "
+                        f"against {n_t}) — the resume would land elsewhere in the song.")
 
 
 def _check_jingle_channels(ctx: ValidationContext):
@@ -1501,9 +1518,8 @@ def _check_jingle_channels(ctx: ValidationContext):
             ch = mod.num_channels
             if ch > 4:
                 ctx.warn(None,
-                    f"{path.name} : « {ref.value} » est joué en jingle mais utilise "
-                    f"{ch} canaux — maxmod n'en donne que 4 à un jingle, les autres "
-                    f"seront muets.")
+                    f"{path.name}: \"{ref.value}\" is played as a jingle but uses {ch} channels — maxmod "
+                    "only gives 4 to a jingle, the others will be silent.")
 
 
 def _check_module_channels(ctx: ValidationContext):
@@ -1533,9 +1549,9 @@ def _check_module_channels(ctx: ValidationContext):
         ch = mod.num_channels
         if ch > channels:
             ctx.warn(None,
-                f"« {m.name} » utilise {ch} voies, le projet n'a que {channels} "
-                f"canaux — les voies en trop resteront muettes. Le nombre de "
-                f"canaux se règle dans l'inspecteur de projet.")
+                f"\"{m.name}\" uses {ch} voices, the project only has {channels} channels — the extra"
+                " voices will stay silent. The number of channels is set in the "
+                "project inspector.")
 
 
 def _check_sound_boxes(ctx: ValidationContext):
@@ -1558,21 +1574,20 @@ def _check_sound_boxes(ctx: ValidationContext):
         boxes = sorted(store, key=lambda b: b.name)
         for extra in boxes[1:]:
             ctx.warn(None,
-                f"{label} « {extra.name} » : le jeu n'en charge qu'une, "
-                f"« {boxes[0].name} » (la première par ordre de nom). Celle-ci "
-                f"ne sera pas jouée.")
+                f"{label} \"{extra.name}\": the game only loads one, \"{boxes[0].name}\" (the first by name order)."
+                " This one will not be played.")
         for box in boxes:
             for dup in box.duplicate_state_names():
                 ctx.error(None,
-                    f"{label} « {box.name} » : deux états s'appellent "
-                    f"« {dup} » — l'appel serait ambigu. Renommez-en un.")
+                    f"{label} \"{box.name}\": two states are named \"{dup}\" — the call would be "
+                    "ambiguous. Rename one.")
 
     for box in getattr(p, "music_boxes", []):
         for st in box.states:
             if st.music and st.music not in music_names:
                 ctx.warn(None,
-                    f"MusicBox « {box.name} », état « {st.name} » : la musique "
-                    f"« {st.music} » n'existe pas — l'état sera muet.")
+                    f"MusicBox \"{box.name}\", state \"{st.name}\": music \"{st.music}\" does not exist — the "
+                    "state will be silent.")
 
     for store, known, label, target in (
             (getattr(p, "sound_boxes", []), sfx_names, "SoundBox", "effet"),
@@ -1582,9 +1597,8 @@ def _check_sound_boxes(ctx: ValidationContext):
                 for action, name in st.mapping.items():
                     if name and name not in known:
                         ctx.warn(None,
-                            f"{label} « {box.name} », état « {st.name} » : "
-                            f"l'action « {action} » pointe vers {target} "
-                            f"« {name} », qui n'existe pas.")
+                            f"{label} \"{box.name}\", state \"{st.name}\": action \"{action}\" points to {target} "
+                            f"\"{name}\", which does not exist.")
 
     # Une action posée sur une frame mais qu'aucune SoundBox ne déclare ne
     # résout vers rien : la frame est silencieuse, et rien ne le dirait.
@@ -1600,16 +1614,15 @@ def _check_sound_boxes(ctx: ValidationContext):
                     action = getattr(fr, "action_name", "") or ""
                     if action and action not in declared and not _warned_action:
                         ctx.warn(None,
-                            f"Sprite « {spr.name} », état « {stt.name} » : la frame "
-                            f"cite l'action « {action} », qu'aucune SoundBox "
-                            f"ne déclare — elle ne jouera rien.")
+                            f"Sprite \"{spr.name}\", state \"{stt.name}\": the frame cites action "
+                            f"\"{action}\", which no SoundBox declares — it will play "
+                            "nothing.")
                         _warned_action = True
                     sfx_name = getattr(fr, "direct_sfx_name", "") or ""
                     if sfx_name and sfx_name not in sfx_names and not _warned_sfx:
                         ctx.warn(None,
-                            f"Sprite « {spr.name} », état « {stt.name} » : la frame "
-                            f"cite le Sfx « {sfx_name} », qui n'existe pas — "
-                            f"elle ne jouera rien.")
+                            f"Sprite \"{spr.name}\", state \"{stt.name}\": the frame cites Sfx "
+                            f"\"{sfx_name}\", which does not exist — it will play nothing.")
                         _warned_sfx = True
 
 
@@ -1643,10 +1656,10 @@ def _check_frame_events(ctx: ValidationContext):
           for ev in sorted(events):
             if ev not in declared:
                 ctx.warn(actor,
-                    f"Sprite « {sprite.name} » cite l'event « {ev} » sur une frame, "
-                    f"mais le script de « {actor.name} » ne déclare aucune fonction "
-                    f"« {ev} » — l'appel ne jouera rien. Ajoute "
-                    f"`function {ev}(self) ... end` au script, ou retire l'appel.")
+                    f"Sprite \"{sprite.name}\" cites event \"{ev}\" on a frame, but the script of "
+                    f"\"{actor.name}\" declares no function \"{ev}\" — the call will play nothing. "
+                    f"Add `function {ev}(self) ... end` to the script, or remove the "
+                    "call.")
 
 
 def _check_sprite_appearances(ctx: ValidationContext):
@@ -1665,15 +1678,15 @@ def _check_sprite_appearances(ctx: ValidationContext):
             ident = c_ident(c.id)
             if ident in seen and seen[ident] != c.id:
                 ctx.error(owner,
-                    f"« {label} » : les ids « {seen[ident]} » et « {c.id} » donnent la même "
-                    f"constante C (SPRITE_…_{ident}) — renomme l'un des deux.")
+                    f"\"{label}\": ids \"{seen[ident]}\" and \"{c.id}\" give the same C constant "
+                    f"(SPRITE_…_{ident}) — rename one of them.")
             seen.setdefault(ident, c.id)
         actives = [c for c in sprite_components(owner) if c.active and c.sprite_name]
         if len(actives) > 1:
             ctx.error(owner,
-                f"« {label} » a {len(actives)} apparences (composants sprite) actives "
-                f"({', '.join(c.id for c in actives)}) : une seule peut l'être. "
-                f"Activer l'une désactive l'autre — décoche les autres.")
+                f"\"{label}\" has {len(actives)} active appearances (sprite components) "
+                f"({', '.join(c.id for c in actives)}): only one can be. Activating one deactivates the other — "
+                "untick the others.")
 
     for scene in p.scenes:
         for actor in scene.actors:
@@ -1702,14 +1715,14 @@ def _check_scene_font(ctx: ValidationContext):
     project_default = getattr(getattr(p, "settings", None), "default_font", "") or ""
     if project_default and project_default not in encodable:
         ctx.warn(None,
-            f"Projet : la Default Font « {project_default} » est introuvable ou "
-            "inexploitable ; le jeu retombera sur la première police disponible.")
+            f"Project: the Default Font \"{project_default}\" is missing or unusable; the game will "
+            "fall back to the first available font.")
     for lang in getattr(getattr(p, "settings", None), "languages", []):
         replacement = getattr(lang, "default_font", "") or ""
         if replacement and replacement not in encodable:
             ctx.warn(None,
-                f"Langue « {lang.code} » : la Default Font « {replacement} » est "
-                "introuvable ou inexploitable ; le jeu conservera celle du projet.")
+                f"Language \"{lang.code}\": the Default Font \"{replacement}\" is missing or unusable; the "
+                "game will keep the project's.")
     for scene in p.scenes:
         want = getattr(scene, "font_name", "") or ""
         if not want or want in encodable:
@@ -1717,17 +1730,16 @@ def _check_scene_font(ctx: ValidationContext):
         # Ce sur quoi la scène retombe VRAIMENT — même résolution que le build
         # (Default Font du projet, sinon première police).
         resolved = scene_default_font(p, scene)[1]
-        repli = (f" — la scène retombe sur « {resolved} »" if resolved
-                 else " — la scène retombe sur la première police du projet")
+        repli = (f" — the scene falls back to \"{resolved}\"" if resolved
+                 else " — the scene falls back to the first font of the project")
         if want in known:
             ctx.warn(None,
-                f"Scène '{scene.name}' : la police par défaut « {want} » n'a pas "
-                f"de planche exploitable (PNG manquant ou aucun glyphe), elle "
-                f"n'est donc pas compilée{repli}.")
+                f"Scene '{scene.name}': the default font \"{want}\" has no usable sheet (missing PNG"
+                f" or no glyph), so it is not compiled{repli}.")
         else:
             ctx.warn(None,
-                f"Scène '{scene.name}' : la police par défaut « {want} » "
-                f"n'existe pas dans le projet{repli}.")
+                f"Scene '{scene.name}': the default font \"{want}\" does not exist in the "
+                f"project{repli}.")
 
 
 def _check_screen_space(ctx: ValidationContext):
@@ -1752,18 +1764,18 @@ def _check_screen_space(ctx: ValidationContext):
             if any(type(c).__name__ == "CollisionBoxComponent"
                    for c in getattr(actor, "components", []) or []):
                 ctx.warn(actor,
-                    f"Scène '{scene.name}' : '{actor.name}' est ancré à l'écran "
-                    f"mais porte une CollisionBox — la carte de collision est en "
-                    f"pixels de MONDE, la hitbox testera donc une autre case que "
-                    f"celle qu'on voit. Retirer la CollisionBox, ou l'ancrage écran.")
+                    f"Scene '{scene.name}': '{actor.name}' is anchored to the screen but carries a "
+                    "CollisionBox — the collision map is in WORLD pixels, so the "
+                    "hitbox will test a different tile than the one you see. Remove "
+                    "the CollisionBox, or the screen anchor.")
             # ② Caméra — suivre une position d'écran fige la caméra sur place.
             _cam = p.scene_camera(scene) if hasattr(p, "scene_camera") else None
             if (_cam is not None and _cam.mode == "follow"
                     and _cam.follow_target == actor.name):
                 ctx.warn(actor,
-                    f"Scène '{scene.name}' : la caméra '{_cam.name}' suit '{actor.name}', "
-                    f"qui est ancré à l'écran — sa position ne bouge pas avec le monde, "
-                    f"la caméra restera donc immobile. Cibler un acteur de monde.")
+                    f"Scene '{scene.name}': camera '{_cam.name}' follows '{actor.name}', which is anchored to "
+                    "the screen — its position does not move with the world, so the "
+                    "camera will stay still. Target a world actor.")
             # ③ Nœud Interface ancré SUR cet acteur — `text_region_origin()`
             # retranche la caméra pour une ancre acteur (elle la suppose dans le
             # monde) ; sur un acteur d'écran ça décale le nœud du scroll courant.
@@ -1773,11 +1785,11 @@ def _check_screen_space(ctx: ValidationContext):
                 if (getattr(lay, "anchor", "") == ANCHOR_ACTOR
                         and getattr(lay, "anchor_actor", "") == actor.name):
                     ctx.warn(actor,
-                        f"Scène '{scene.name}' : le nœud d'interface '{lay.name}' "
-                        f"est ancré sur '{actor.name}', lui-même ancré à l'écran — "
-                        f"l'ancrage acteur suppose une position de monde et "
-                        f"retranchera le scroll une seconde fois. Ancrer le nœud "
-                        f"à l'ÉCRAN : les deux sont déjà dans le même repère.")
+                        f"Scene '{scene.name}': interface node '{lay.name}' is anchored on "
+                        f"'{actor.name}', itself anchored to the screen — actor anchoring "
+                        "assumes a world position and will subtract the scroll a "
+                        "second time. Anchor the node to the SCREEN: both are already"
+                        " in the same frame of reference.")
 
 
 def _check_pal_bank_reference(ctx: ValidationContext):
@@ -1824,9 +1836,9 @@ def _check_pal_bank_reference(ctx: ValidationContext):
                 continue  # pas de sprite construit -> pal_bank sans effet
             if _slot_missing(active, pb):
                 ctx.warn(actor,
-                    f"Actor '{actor.name}' pointe la banque OBJ {pb} de la scène "
-                    f"'{scene.name}', vide ou hors de la sélection active — le "
-                    f"sprite s'affichera avec le contenu par défaut de ce slot.")
+                    f"Actor '{actor.name}' points to OBJ bank {pb} of scene '{scene.name}', empty or "
+                    "outside the active selection — the sprite will display with the "
+                    "default content of that slot.")
 
     # ── Prefabs poolés : dans CHAQUE scène qui les spawne ────────────
     # Le spawn est per-scène (T1) : un prefab à palette référencée lit la banque
@@ -1846,10 +1858,9 @@ def _check_pal_bank_reference(ctx: ValidationContext):
                 continue
             if _slot_missing(active, pb):
                 ctx.warn(None,
-                    f"Prefab '{pf.name}' pointe la banque OBJ {pb} de la scène "
-                    f"'{scene.name}' (qui le spawne), vide ou hors de la sélection "
-                    f"active — ses instances s'y afficheront avec le contenu par "
-                    f"défaut de ce slot.")
+                    f"Prefab '{pf.name}' points to OBJ bank {pb} of scene '{scene.name}' (which spawns"
+                    " it), empty or outside the active selection — its instances will"
+                    " display there with the default content of that slot.")
 
     # ── Layers BG (portés par la scène) ──────────────────────────────
     for scene in p.scenes:
@@ -1862,10 +1873,9 @@ def _check_pal_bank_reference(ctx: ValidationContext):
                 continue
             if _slot_missing(active, pb):
                 ctx.warn(None,
-                    f"Background '{layer.background_name}' BG{layer.bg_slot} (scène "
-                    f"'{scene.name}') pointe la banque BG {pb}, vide ou hors de "
-                    f"la sélection active — le layer s'affichera avec le contenu "
-                    f"par défaut de ce slot.")
+                    f"Background '{layer.background_name}' BG{layer.bg_slot} (scene '{scene.name}') points to BG bank {pb}, "
+                    "empty or outside the active selection — the layer will display "
+                    "with the default content of that slot.")
 
 
 def _check_palette_bank_overflow(ctx: ValidationContext):
@@ -1877,13 +1887,11 @@ def _check_palette_bank_overflow(ctx: ValidationContext):
     from codegen.palette_alloc import scene_bank_layout
     p = ctx.project
     for scene in p.scenes:
-        for pool, label in (("obj", "OBJ (sprites)"), ("bg", "BG (fonds)")):
+        for pool, label in (("obj", "OBJ (sprites)"), ("bg", "BG (backgrounds)")):
             layout = scene_bank_layout(p, scene, pool)
             if layout.overflow():
                 ctx.warn(None,
-                    f"Scène '{scene.name}' : plus de 16 palettes {label} "
-                    "nécessaires (référencées + palettes propres des assets "
-                    "sans palette assignée). Certains assets retomberont sur la "
-                    "banque 0 et afficheront de mauvaises couleurs — réduire le "
-                    "nombre de palettes distinctes ou partager des palettes "
-                    "référencées.")
+                    f"Scene '{scene.name}': more than 16 {label} palettes needed (referenced + own "
+                    "palettes of assets without an assigned palette). Some assets "
+                    "will fall back to bank 0 and display wrong colours — reduce the "
+                    "number of distinct palettes or share referenced palettes.")

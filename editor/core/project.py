@@ -798,9 +798,8 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
             # formulation et de l'endroit où elle s'affiche.
             self.events._emit(
                 "status",
-                f"{len(files)} boîte(s) à état découpée(s) en MusicBox / "
-                f"JingleBox / SoundBox — ancien dossier conservé sous "
-                f"« sound_states.migre »")
+                f"{len(files)} state box(es) split into MusicBox / JingleBox / SoundBox — old "
+                "folder kept under \"sound_states.migre\"")
         target = old_dir.with_name("sound_states.migre")
         if target.exists():
             target = old_dir.with_name(f"sound_states.migre.{int(time.time())}")
@@ -1203,10 +1202,10 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
     def _unreadable_warnings(self) -> list[str]:
         """Un avertissement par fichier illisible, ou remplacé avec copie. Aucun
         fichier n'est détruit : l'utilisateur peut le réparer, ou le restaurer."""
-        return ([f"« {name} » est illisible et a été ignoré ({reason})"
+        return ([f"\"{name}\" is unreadable and was ignored ({reason})"
                  for name, reason in self.unreadable_files()]
-                + [f"« {name} » était illisible et a été remplacé ; l'original "
-                   f"est conservé dans « {backup} »"
+                + [f"\"{name}\" was unreadable and was replaced; the original is kept in "
+                   f"\"{backup}\""
                    for name, backup in self.preserved_files()])
 
     # ── Création / ouverture ──────────────────────────────────────

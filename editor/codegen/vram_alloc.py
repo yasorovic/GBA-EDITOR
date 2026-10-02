@@ -140,7 +140,7 @@ def scene_layout(slots: dict, map_blocks: dict, text_bg: int,
     # 2. Maps — servies par le HAUT, hors du chemin de croissance des fonds.
     #    C'est tout le correctif : posées à la fin de leur propre charblock,
     #    elles muraient la croissance du layer qu'elles servent.
-    lay = VramLayout(legacy=False, note="allocation par scène")
+    lay = VramLayout(legacy=False, note="per-scene allocation")
     for slot in sorted(slots, reverse=True):
         n = map_blocks[slot]
         pos = _free_run_high(occupied, 0, BLOCKS, n)
@@ -196,7 +196,7 @@ def scene_layout(slots: dict, map_blocks: dict, text_bg: int,
     # 6. Garde-fou : jamais pire que l'existant.
     for slot in slots:
         if lay.budget[slot] < legacy.budget[slot]:
-            legacy.note = (f"repli historique — le placement calculé réduisait "
-                           f"le budget de BG{slot}")
+            legacy.note = ("historical fallback — the computed placement reduced the "
+                           f"budget of BG{slot}")
             return legacy
     return lay

@@ -32,17 +32,17 @@ def script_attachments(project) -> dict[str, dict[str, list[str]]]:
             found.setdefault(path, {}).setdefault(family, []).append(owner)
 
     for scene in project.scenes:
-        attach(getattr(scene, "script", ""), "scene", f"la scène « {scene.name} »")
+        attach(getattr(scene, "script", ""), "scene", f"scene \"{scene.name}\"")
         for actor in scene.actors:
             comp = actor.get_component("script")
             if comp and comp.active:
-                attach(comp.script, "actor", f"l'acteur « {actor.name} » ({scene.name})")
+                attach(comp.script, "actor", f"actor \"{actor.name}\" ({scene.name})")
         for cam in scene.cameras:
-            attach(getattr(cam, "script", ""), "camera", f"la caméra « {cam.name} »")
+            attach(getattr(cam, "script", ""), "camera", f"camera \"{cam.name}\"")
     for prefab in project.prefabs:
         comp = prefab.get_component("script")
         if comp and comp.active:
-            attach(comp.script, "actor", f"le prefab « {prefab.name} »")
+            attach(comp.script, "actor", f"prefab \"{prefab.name}\"")
     return found
 
 

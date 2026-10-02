@@ -430,7 +430,7 @@ def transpile_all(
 
         if sp.suffix.lower() == ".c":
             build_output.copy(sp, p.src_dir / sp.name)
-            emit("log_line", f"[script] {sp.name} copié (C natif)")
+            emit("log_line", f"[script] {sp.name} copied (native C)")
             continue
 
         if sp.suffix.lower() != ".lua":
@@ -755,13 +755,12 @@ def transpile_all(
         pool_state_total += pf_state_bytes * pf_instances
         if pf_state_bytes:
             emit("log_line",
-                 f"[ewram] prefab {pf.name} : état de script {pf_state_bytes} "
-                 f"octets × {pf_instances} instance(s) = "
-                 f"{pf_state_bytes * pf_instances} octets")
+                 f"[ewram] prefab {pf.name}: script state {pf_state_bytes} bytes × {pf_instances} instance(s) = "
+                 f"{pf_state_bytes * pf_instances} bytes")
 
     if pool_state_total:
         emit("log_line",
-             f"[ewram] état de script des prefabs poolés : {pool_state_total} octets")
+             f"[ewram] script state of the pooled prefabs: {pool_state_total} bytes")
 
     # Génération C — script de scène
     if scene_script_ast and scene_script_file:

@@ -71,6 +71,6 @@ def palettes_lines(p, emit=None) -> list[str]:
     L.append(f"const int g_palette_count = {max(1, len(banks))};")
     L.append("")
     if emit and banks:
-        emit("log_line", f"[palette] {len(banks)} palette(s) du catalogue en ROM "
-                         f"({len(banks) * 32} octets)")
+        emit("log_line", f"[palette] {len(banks)} catalogue palette(s) in ROM "
+                         f"({len(banks) * 32} bytes)")
     return L

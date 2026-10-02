@@ -219,9 +219,8 @@ def _log_vram_layout(scene, emit) -> None:
         return
     budget = ", ".join(f"BG{s}:{n}" for s, n in sorted(lay.budget.items()))
     emit("log_line",
-         f"[vram] scène '{scene.name}' : texte en CBB{lay.text_cbb} "
-         f"base {lay.text_base}, map SBB{lay.text_sbb} — {lay.note}"
-         + (f" — budget tuiles {budget}" if budget else ""))
+         f"[vram] scene '{scene.name}': text in CBB{lay.text_cbb} base {lay.text_base}, map SBB{lay.text_sbb} — {lay.note}"
+         + (f" — tile budget {budget}" if budget else ""))
 
     # Sur quelle base la place a été réservée : un repli sur tout le projet est
     # un choix de l'outil, sinon on cherche pourquoi le décor a moins de tuiles.
@@ -230,20 +229,18 @@ def _log_vram_layout(scene, emit) -> None:
         return
     names = res.get("font_names")
     if names is None:
-        why = ("toutes les polices du projet — une police est choisie au "
-               "runtime (text.set_font non littéral) ou un script n'a pas pu "
-               "être analysé")
+        why = ("all the project fonts — a font is chosen at run time (non-literal "
+               "text.set_font) or a script could not be analysed")
     else:
-        why = "polices " + (", ".join(sorted(names)) if names else "(aucune)")
+        why = "fonts" + (", ".join(sorted(names)) if names else "(none)")
     # Nommer la police par défaut : c'est elle qui est chargée même dans une
     # scène sans une ligne de texte, et un `Scene.font_name` introuvable retombe
     # en silence sur la première du projet. Relue depuis la réservation, pas
     # recalculée — le log doit dire ce qui a RÉELLEMENT servi à réserver.
     _dn = res.get("default_font") or ""
     emit("log_line",
-         f"[vram] scène '{scene.name}' : {res['total']} tuile(s) réservée(s) au "
-         f"texte ({res['mono_tiles']} de glyphes — {why}"
-         + (f" — défaut {_dn}" if _dn else "") + ")")
+         f"[vram] scene '{scene.name}': {res['total']} tile(s) reserved for text ({res['mono_tiles']} of glyphs — {why}"
+         + (f" — default {_dn}" if _dn else "") + ")")
 
 
 def _scene_pi(p: Project, scene: Scene) -> list[dict]:
@@ -951,9 +948,8 @@ def _ui_images_lines(p, sprite_offsets: dict, emit=None) -> list[str]:
         from core.models.ui_region import can_fill
         n_bound = sum(1 for _l, im in images if getattr(im, "sprite_name", ""))
         n_fill = sum(1 for _l, im in images if can_fill(im))
-        emit("log_line", f"[ui] {len(images)} sprite(s) d'interface "
-                         f"(dont {n_fill} fond(s) de conteneur), "
-                         f"{n_bound} relié(s) à un sprite")
+        emit("log_line", f"[ui] {len(images)} interface sprite(s) (including {n_fill} container "
+                         f"background(s)), {n_bound} bound to a sprite")
     return emit_ui_images_c(p, sprite_offsets, obj_text_alloc(p),
                             actor_index=region_actor_index(p),
                             elem_index=ui_element_index(p), emit=emit)
@@ -998,18 +994,17 @@ def _gen_scene_blend(scene, emit=None) -> list[str]:
         # BLDY — écrire BLDALPHA ici ne ferait rien du tout.
         L.append(f"    blend_set_fade({int(scene.blend_evy)});")
     if emit:
-        names = {1: "alpha", 2: "éclaircir", 3: "assombrir"}
+        names = {1: "alpha", 2: "lighten", 3: "assombrir"}
         tops = [f"BG{l.bg_slot}" for l in scene.blend_layers(BLEND_TOP)]
         bots = [f"BG{l.bg_slot}" for l in scene.blend_layers(BLEND_BOTTOM)]
         if getattr(scene, "blend_obj_role", "") == BLEND_TOP: tops.append("OBJ")
         if getattr(scene, "blend_obj_role", "") == BLEND_BOTTOM: bots.append("OBJ")
         if getattr(scene, "blend_backdrop_role", "") == BLEND_TOP: tops.append("backdrop")
         if getattr(scene, "blend_backdrop_role", "") == BLEND_BOTTOM: bots.append("backdrop")
-        detail = f"dessus {', '.join(tops) or '(aucun)'}"
+        detail = f"top {', '.join(tops) or '(none)'}"
         if mode in BLEND_NEEDS_BOTTOM:
-            detail += f", dessous {', '.join(bots) or '(aucun)'}"
-        emit("log_line", f"[blend] scène '{scene.name}' : {names.get(mode, mode)} "
-                         f"— {detail}")
+            detail += f", bottom {', '.join(bots) or '(none)'}"
+        emit("log_line", f"[blend] scene '{scene.name}': {names.get(mode, mode)} — {detail}")
     return L
 
 
@@ -1071,9 +1066,8 @@ def _gen_ui_images(p: Project, scene, text_cbb: int, sprite_offsets: dict,
                  f"   /* '{info['el'].name}' : palette de {sprite.name} */")
         if bank is None and emit:
             emit("log_line",
-                 f"[warn] image '{info['el'].name}' : aucune banque libre pour la "
-                 f"palette de '{sprite.name}' — elle s'affichera avec les "
-                 f"couleurs de la banque 0.")
+                 f"[warn] image '{info['el'].name}': no free bank for the palette of '{sprite.name}' — it will"
+                 " display with the colours of bank 0.")
         if not info["bg"]:
             continue
         pl = layout.get(info["index"])
@@ -2155,9 +2149,8 @@ def generate_main(
                           for sc in p.scenes) else 1024
         if obj_text_tile + _tiles_need > _cap:
             _fatal.append(
-                f"[error] les zones de texte en sprites demandent "
-                f"{_tiles_need} tuiles OBJ après {obj_text_tile} de sprites, "
-                f"soit plus que les {_cap} disponibles.")
+                f"[error] the text zones as sprites need {_tiles_need} OBJ tiles after "
+                f"{obj_text_tile} of sprites, which is more than the {_cap} available.")
     # Débordement de la SRAM, ou deux variables persistantes indiscernables :
     # même règle que ci-dessus, ça bloque. Une sauvegarde qui déborde ne se
     # verrait qu'à l'exécution, chez le joueur.
@@ -2186,12 +2179,10 @@ def generate_main(
                 if not bool(getattr(_par_sc, "affine_transform", False)):
                     continue
                 emit("log_line",
-                     f"[warn] acteur '{_a.name}' : son parent '{_par.name}' peut "
-                     f"tourner ou changer d'échelle, mais '{_a.name}' n'a pas de "
-                     f"slot affine — il ne partage pas celui du parent (il a sa "
-                     f"propre rotation ou échelle) et n'en réserve pas. Cocher "
-                     f"« Affine transform » sur le sprite de '{_a.name}' pour "
-                     f"qu'il suive.")
+                     f"[warn] actor '{_a.name}': its parent '{_par.name}' can rotate or scale, but "
+                     f"'{_a.name}' has no affine slot — it does not share the parent's (it "
+                     "has its own rotation or scale) and reserves none. Tick \"Affine "
+                     f"transform\" on the sprite of '{_a.name}' to make it follow.")
     if _fatal:
         for _m in _fatal:
             if emit:
@@ -2551,9 +2542,8 @@ def generate_main(
         sc_obj_oam = _sc_lay.ui_start if _sc_lay.ui else -1
         if emit and _sc_lay.ui:
             emit("log_line",
-                 f"[text] scène '{sc.name}' : bande OBJ OAM "
-                 f"{sc_obj_oam}..{sc_obj_oam + _sc_lay.ui - 1} (sur 128), "
-                 f"tuiles depuis {obj_text_tile}")
+                 f"[text] scene '{sc.name}': OBJ OAM band "
+                 f"{sc_obj_oam}..{sc_obj_oam + _sc_lay.ui - 1} (out of 128), tiles from {obj_text_tile}")
 
         L += _gen_scene_init(
             p, sc, act_off, bgi_d, sa, lua_idx_d, scene_pis[i],

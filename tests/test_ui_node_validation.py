@@ -54,6 +54,43 @@ def test_meme_layout_pose_deux_fois_est_une_erreur(tmp_path):
     assert any("deux fois" in e for e in _errs(p, _check_ui_node_slots))
 
 
+def _deux_layouts(tmp_path, nom_b: str) -> Project:
+    p = Project(tmp_path)
+    for layout_name, element in (("main", "titre"), ("victoire", nom_b)):
+        layout = UILayout(name=layout_name, target=TARGET_BG)
+        layout.elements.append(UIText(name=element))
+        p.ui_layouts.append(layout)
+    return p
+
+
+def test_deux_layouts_avec_un_element_homonyme_est_une_erreur(tmp_path):
+    """Deux scènes, deux layouts, chacun avec « titre » : REGION_TITRE serait défini
+    deux fois, avec deux valeurs. Le cas d'une démo réelle."""
+    from core.validator import _check_ui_element_names_unique
+
+    errors = _errs(_deux_layouts(tmp_path, "titre"), _check_ui_element_names_unique)
+
+    assert len(errors) == 1
+    assert "titre" in errors[0] and "'main'" in errors[0] and "'victoire'" in errors[0]
+
+
+def test_des_noms_distincts_entre_layouts_ne_disent_rien(tmp_path):
+    from core.validator import _check_ui_element_names_unique
+
+    assert _errs(_deux_layouts(tmp_path, "titre_victoire"), _check_ui_element_names_unique) == []
+
+
+def test_deux_elements_homonymes_dans_un_meme_layout_sont_signales(tmp_path):
+    from core.validator import _check_ui_element_names_unique
+
+    p = Project(tmp_path)
+    layout = UILayout(name="hud", target=TARGET_BG)
+    layout.elements += [UIText(name="score"), UIText(name="score")]
+    p.ui_layouts.append(layout)
+
+    assert any("score" in e for e in _errs(p, _check_ui_element_names_unique))
+
+
 def test_interface_qui_partage_son_slot_avec_un_decor(tmp_path):
     p = _proj(tmp_path)
     sc = Scene(name="S", ui_layouts=["hud"],

@@ -635,15 +635,14 @@ def _font_ink_colors(font, rgb, ink) -> tuple[list, "str | None"]:
         colors, counts = np.unique(flat, axis=0, return_counts=True)
         order = np.argsort(-counts)
         kept = [tuple(int(v) for v in colors[i]) for i in order[:_MAX_INK_COLORS]]
-        warning = (f"Police « {font.name} » : {len(colors)} couleurs, "
-                   f"réduites aux {_MAX_INK_COLORS} plus fréquentes."
+        warning = (f"Font \"{font.name}\": {len(colors)} colours, reduced to the {_MAX_INK_COLORS} most frequent."
                    if len(colors) > _MAX_INK_COLORS else None)
         return kept, warning
     keys = font.key_colors() if hasattr(font, "key_colors") else []
-    warning = (f"Police « {font.name} » : les couleurs transparentes couvrent "
-               f"toute la planche — repique-les dans l'écran Police."
+    warning = (f"Font \"{font.name}\": the transparent colours cover the whole sheet — re-pick "
+               "them in the Font screen."
                if keys else
-               f"Police « {font.name} » : planche entièrement vide.")
+               f"Font \"{font.name}\": sheet entirely empty.")
     return [], warning
 
 
@@ -723,8 +722,7 @@ def _raster_palette(font, rasters: dict) -> tuple[list[int], dict[tuple[int, int
     if counts:
         ranked = sorted(counts, key=lambda color: (-counts[color], color))
         kept = ranked[:_MAX_INK_COLORS]
-        warning = (f"Police « {font.name} » : {len(ranked)} couleurs, "
-                   f"réduites aux {_MAX_INK_COLORS} plus fréquentes."
+        warning = (f"Font \"{font.name}\": {len(ranked)} colours, reduced to the {_MAX_INK_COLORS} most frequent."
                    if len(ranked) > _MAX_INK_COLORS else None)
         palette = [0] + [_bgr555(color) for color in kept]
         result = (palette + [0] * (16 - len(palette)), {
@@ -1079,19 +1077,17 @@ def emit_ui_regions_c(regions: list, font_names: list, emit=None,
             f"  /* {r.name} — {origin} */"
         )
         if target_obj and emit and pl:
-            extra = (f" (dont {pl['anim']} glyphe(s) animé(s) réservé(s))"
+            extra = (f" (including {pl['anim']} reserved animated glyph(s))"
                      if pl["anim"] else "")
             emit("log_line",
-                 f"[text] '{r.name}' en sprites : {pl['oam']} OAM, "
-                 f"{pl['tiles']} tuiles OBJ{extra}")
+                 f"[text] '{r.name}' as sprites: {pl['oam']} OAM, {pl['tiles']} OBJ tiles{extra}")
         if target_obj and emit and ai < 0 and eff_anchor == "actor":
             # Sans acteur résolu, la bande se pose à l'origine de l'écran — ce
             # qui ressemble à un bug de placement plutôt qu'à une référence
             # cassée. Le dire ici évite la chasse.
             emit("log_line",
-                 f"[warn] texte '{r.name}' : ancré sur l'actor "
-                 f"'{eff_actor or '(aucun)'}', introuvable — il se posera "
-                 f"à l'origine de l'écran.")
+                 f"[warn] text '{r.name}': anchored on actor '{eff_actor or '(none)'}', which was not found — "
+                 "it will be placed at the screen origin.")
     L.append(f"const UIRegionInfo g_ui_regions[{max(1, len(rows))}] = {{")
     L += rows or ["    { 0, 0, 240, 32, 0, 255, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1 },   /* aucun texte */"]
     L.append("};")
@@ -1143,8 +1139,8 @@ def _emit_one_text_lang(t, content: str, i_lang: int, i: int,
             # l'échappe, sinon la relecture le reprendrait pour un marqueur.
             bake[bake_key] = f"$${m.value}"
             if emit:
-                emit("log_line", f"[text] {t.key} : « ${m.value} » n'est ni "
-                                 f"un global ni une constante — écrit tel quel.")
+                emit("log_line", f"[text] {t.key}: \"${m.value}\" is neither a global nor a "
+                                 "constant — written as is.")
     if bake:
         parsed = parse(_bake_values(content, bake))
 
@@ -1159,9 +1155,8 @@ def _emit_one_text_lang(t, content: str, i_lang: int, i: int,
     if emit and fonts and parsed.of_kind("color") \
             and not any(render_composited(f) for f in fonts):
         emit("log_line",
-             f"[text] {t.key} : « [color] » demande une police composée "
-             f"(proportionnelle, ou trop grosse pour la VRAM) — aucune "
-             f"police du projet ne l'est, la couleur sera ignorée.")
+             f"[text] {t.key}: \"[color]\" needs a composed font (proportional, or too large"
+             " for VRAM) — no font in the project is, the colour will be ignored.")
 
     cps = [ord(c) for c in parsed.display if ord(c) < 0x10000]
     font_index = {getattr(font, "name", ""): index
@@ -1179,7 +1174,7 @@ def _emit_one_text_lang(t, content: str, i_lang: int, i: int,
                 # Le validateur bloque normalement ce cas. Garder le codegen
                 # total évite qu'un appel direct produise du C invalide.
                 if emit:
-                    emit("log_line", f"[text] {t.key} : police inconnue « {m.value} »")
+                    emit("log_line", f"[text] {t.key}: unknown font \"{m.value}\"")
                 continue
         if m.kind == KIND_VALUE:
             # Un littéral de `text.draw` est lié au SITE d'appel : `$hp` peut
@@ -1288,7 +1283,7 @@ def emit_texts_c(texts: list, lang_codes: list[str], content_fn,
         n_sources_total += len(sources)
         if emit and sources:
             tag = f" ({code})" if code else ""
-            emit("log_line", f"[text] {len(sources)} valeur(s) interpolée(s){tag}")
+            emit("log_line", f"[text] {len(sources)} interpolated value(s){tag}")
 
     n_lang = max(1, len(lang_codes))
     # La DIMENSION des cinq tables ci-dessous, émise pour que le moteur puisse

@@ -109,31 +109,30 @@ REFUSED: dict[str, Refusal] = {
     # ── Boucles et sauts ──────────────────────────────────────────
     "Forin": Refusal(
         "for k, v in pairs(t) do … end",
-        "`for … in` n'existe pas : un itérateur générique suppose des valeurs "
-        "de première classe et un état d'itération, c'est-à-dire les tables "
-        "Lua que ce moteur n'a pas. Un tableau se parcourt par son index : "
-        "`for i = 1, #t do`."),
+        "`for … in` does not exist: a generic iterator assumes first-class values and"
+        " an iteration state, that is, the Lua tables this engine does not have. An "
+        "array is walked by its index: `for i = 1, #t do`."),
 
     "Repeat": Refusal(
         "repeat … until c",
-        "`repeat … until` n'existe pas : la seule boucle à condition est "
-        "`while`, testée en tête. Pour un corps qui doit tourner au moins une "
-        "fois : `while true do … if c then break end end`."),
+        "`repeat … until` does not exist: the only conditional loop is `while`, "
+        "tested at the top. For a body that must run at least once: `while true do … "
+        "if c then break end end`."),
 
     "Goto": Refusal(
         "goto etiquette",
-        "`goto` n'existe pas. `break` sort d'une boucle, `return` sort du "
-        "handler — au-delà, c'est le `if` qui porte la structure."),
+        "`goto` does not exist. `break` leaves a loop, `return` leaves the handler — "
+        "beyond that, the `if` carries the structure."),
 
     "Label": Refusal(
         "::etiquette::",
-        "une étiquette n'existe pas, faute de `goto` pour y sauter."),
+        "a label does not exist, for lack of a `goto` to jump to it."),
 
     "Do": Refusal(
         "do … end",
-        "un bloc `do … end` nu n'existe pas : il ne sert qu'à ouvrir une "
-        "portée locale, et ici une variable vit dans la fonction où elle est "
-        "déclarée. Écris son contenu directement."),
+        "a bare `do … end` block does not exist: it only opens a local scope, and "
+        "here a variable lives in the function where it is declared. Write its "
+        "content directly."),
 
     # ── Fonctions ─────────────────────────────────────────────────
     # Les helpers privés s'écrivent `function f() … end` au premier niveau.
@@ -142,55 +141,53 @@ REFUSED: dict[str, Refusal] = {
 
     "LocalFunction": Refusal(
         "local function f() … end",
-        "une fonction privée s'écrit `function f() … end` au premier niveau, "
-        "pas `local function`. Elle reçoit `self` implicitement et reste "
-        "privée au script."),
+        "a private function is written `function f() … end` at the top level, not "
+        "`local function`. It receives `self` implicitly and stays private to the "
+        "script."),
 
     "Method": Refusal(
         "function objet:methode() … end",
-        "le sous-ensemble n'a ni table ni objet à qui attacher une méthode. "
-        "Les seules méthodes sont celles d'un acteur "
-        "(`self:play_anim(\"walk\")`), fournies par le moteur ; le code "
-        'partagé passe par un behavior (`require("behaviors/nom")`).'),
+        "the subset has no table or object to attach a method to. The only methods "
+        "are those of an actor (`self:play_anim(\"walk\")`), provided by the engine; "
+        "shared code goes through a behavior (`require(\"behaviors/name\")`)."),
 
     "AnonymousFunction": Refusal(
         "local f = function() … end",
-        "une fonction n'est pas une valeur ici : elle ne se range ni dans une "
-        "variable, ni dans un argument, ni dans un tableau — qui ne porte que "
-        "des entiers. Donc pas de rappel ni de fermeture ; ce qui doit se "
-        "déclencher plus tard s'écrit avec un état et le `if` qui le lit."),
+        "a function is not a value here: it is stored neither in a variable, nor in "
+        "an argument, nor in an array — which only holds integers. So no callbacks "
+        "and no closures; what must trigger later is written with a state and the "
+        "`if` that reads it."),
 
     "Dots": Refusal(
         "...",
-        "`...` n'existe pas : les fonctions privées ont des paramètres écrits "
-        "en clair. Les seules fonctions variadiques sont "
-        "celles du catalogue, et leurs arguments s'écrivent en clair."),
+        "`...` does not exist: private functions have parameters written in full. The"
+        " only variadic functions are those of the catalogue, and their arguments are"
+        " written in full."),
 
     "Varargs": Refusal(
         "...",
-        "les arguments variables n'existent pas dans ce sous-ensemble : une "
-        "fonction privée déclare tous ses paramètres."),
+        "variable arguments do not exist in this subset: a private function declares "
+        "all its parameters."),
 
     # ── Chaînes ───────────────────────────────────────────────────
     "Concat": Refusal(
         'a .. b',
-        "`..` n'existe pas : le moteur n'a pas de chaîne manipulable, et "
-        "composer du texte à l'exécution demanderait un tampon et une "
-        "allocation. Pour un HUD ponctuel, un littéral de text.draw accepte "
-        'déjà « Score : $score » ; `$score` lit une locale visible ou une '
-        "globale. Une entrée de la table de textes, elle, reste traduisible et "
-        "n'interpole que les globals."),
+        "`..` does not exist: the engine has no string it can manipulate, and "
+        "composing text at run time would need a buffer and an allocation. For a "
+        "one-off HUD, a text.draw literal already accepts \"Score: $score\"; `$score` "
+        "reads a visible local or a global. An entry of the text table stays "
+        "translatable and only interpolates globals."),
 
     # ── Arithmétique absente ──────────────────────────────────────
     "ExpoOp": Refusal(
         "a ^ b",
-        "`^` n'existe pas : le moteur est entier. Une puissance s'écrit en "
-        "multipliant (`x * x`), et la racine a `math.sqrt(x)`."),
+        "`^` does not exist: the engine is integer-only. A power is written by "
+        "multiplying (`x * x`), and the root has `math.sqrt(x)`."),
 
     "FloorDivOp": Refusal(
         "a // b",
-        "`//` n'existe pas — et n'a rien à faire ici : `/` est DÉJÀ une "
-        "division entière, tronquée vers zéro comme en C."),
+        "`//` does not exist — and has no business here: `/` is ALREADY an integer "
+        "division, truncated toward zero as in C."),
 
     # ── Opérateurs binaires ───────────────────────────────────────
     # Six nœuds, une seule raison : ils ne sont pas dans le sous-ensemble, et
@@ -201,35 +198,33 @@ REFUSED: dict[str, Refusal] = {
 
     "BAndOp": Refusal(
         "a & b",
-        "les opérateurs binaires (`&`, `|`, `~`, `<<`, `>>`) ne sont pas dans "
-        "le sous-ensemble. Un drapeau se range dans une variable globale, et "
-        "les registres du matériel se pilotent par l'API (`layer`, `window`, "
-        "`blend`)."),
+        "the bitwise operators (`&`, `|`, `~`, `<<`, `>>`) are not in the subset. A "
+        "flag is stored in a global variable, and the hardware registers are driven "
+        "through the API (`layer`, `window`, `blend`)."),
     "BOrOp": Refusal(
         "a | b",
-        "les opérateurs binaires (`&`, `|`, `~`, `<<`, `>>`) ne sont pas dans "
-        "le sous-ensemble. Un drapeau se range dans une variable globale, et "
-        "les registres du matériel se pilotent par l'API (`layer`, `window`, "
-        "`blend`)."),
+        "the bitwise operators (`&`, `|`, `~`, `<<`, `>>`) are not in the subset. A "
+        "flag is stored in a global variable, and the hardware registers are driven "
+        "through the API (`layer`, `window`, `blend`)."),
     "BXorOp": Refusal(
         "a ~ b",
-        "les opérateurs binaires (`&`, `|`, `~`, `<<`, `>>`) ne sont pas dans "
-        "le sous-ensemble. Attention au piège de lecture : ici `~=` est bien "
-        "la différence, c'est `~` SEUL qui n'existe pas."),
+        "the bitwise operators (`&`, `|`, `~`, `<<`, `>>`) are not in the subset. "
+        "Mind the reading trap: here `~=` is indeed \"not equal\", it is `~` ALONE that"
+        " does not exist."),
     "BShiftLOp": Refusal(
         "a << b",
-        "les opérateurs binaires (`&`, `|`, `~`, `<<`, `>>`) ne sont pas dans "
-        "le sous-ensemble. Un décalage vers la gauche se multiplie, un "
-        "décalage vers la droite se divise — les deux sont entiers."),
+        "the bitwise operators (`&`, `|`, `~`, `<<`, `>>`) are not in the subset. A "
+        "left shift is a multiplication, a right shift is a division — both are "
+        "integer."),
     "BShiftROp": Refusal(
         "a >> b",
-        "les opérateurs binaires (`&`, `|`, `~`, `<<`, `>>`) ne sont pas dans "
-        "le sous-ensemble. Un décalage vers la gauche se multiplie, un "
-        "décalage vers la droite se divise — les deux sont entiers."),
+        "the bitwise operators (`&`, `|`, `~`, `<<`, `>>`) are not in the subset. A "
+        "left shift is a multiplication, a right shift is a division — both are "
+        "integer."),
     "UBNotOp": Refusal(
         "~a",
-        "les opérateurs binaires (`&`, `|`, `~`, `<<`, `>>`) ne sont pas dans "
-        "le sous-ensemble. Pour inverser une condition, c'est `not`."),
+        "the bitwise operators (`&`, `|`, `~`, `<<`, `>>`) are not in the subset. To "
+        "invert a condition, use `not`."),
 }
 
 
@@ -239,9 +234,9 @@ REFUSED: dict[str, Refusal] = {
 # le nom du nœud — c'est le seul de ce cas, et il vit ici plutôt que de forcer
 # la table à porter une notion de position pour une entrée.
 NESTED_FUNCTION = Refusal(
-    "function f() … end, dans un corps",
-    "une fonction privée se déclare au premier niveau du script, jamais dans "
-    "un handler ou une autre fonction.")
+    "function f() … end, inside a body",
+    "a private function is declared at the top level of the script, never inside a "
+    "handler or another function.")
 
 
 # ─── Ce qui n'est jamais dispatché ────────────────────────────────
@@ -263,30 +258,29 @@ STRUCTURAL: dict[str, str] = {
 STDLIB_MODULES: dict[str, Refusal] = {
     "string": Refusal(
         "string.format(…)",
-        "il n'y a pas de bibliothèque `string` : le moteur n'a pas de chaîne "
-        "manipulable. Le texte affiché vit dans la table de textes, avec son "
-        "balisage et ses valeurs (« PV : $vie »), et `text.draw` l'affiche."),
+        "there is no `string` library: the engine has no string it can manipulate. "
+        "Displayed text lives in the text table, with its markup and its values (\"HP:"
+        " $life\"), and `text.draw` displays it."),
     "table": Refusal(
         "table.insert(t, v)",
-        "il n'y a pas de bibliothèque `table` : un tableau a une taille fixe, "
-        "décidée au build (`local t = array(8)`), donc rien à insérer ni à "
-        "retirer. `#t` est une constante de compilation, pas une longueur "
-        "rangée en mémoire."),
+        "there is no `table` library: an array has a fixed size, decided at build "
+        "(`local t = array(8)`), so there is nothing to insert or remove. `#t` is a "
+        "compile-time constant, not a length stored in memory."),
     "os": Refusal(
         "os.time()",
-        "il n'y a pas de module `os` : une ROM n'a ni horloge système ni "
-        "processus. Le temps se compte en frames (`scene.frame`), et ce qui "
-        "doit survivre à l'extinction passe par la sauvegarde (`save.write`)."),
+        "there is no `os` module: a ROM has neither a system clock nor processes. "
+        "Time is counted in frames (`scene.frame`), and what must survive power-off "
+        "goes through the save (`save.write`)."),
     "io": Refusal(
         "io.open(…)",
-        "il n'y a pas de module `io` : une ROM n'a pas de système de fichiers. "
-        "La seule mémoire inscriptible est la sauvegarde (`save.write` / "
-        "`save.load`), et les ressources sont cuites dans la cartouche."),
+        "there is no `io` module: a ROM has no file system. The only writable memory "
+        "is the save (`save.write` / `save.load`), and resources are baked into the "
+        "cartridge."),
     "coroutine": Refusal(
         "coroutine.create(f)",
-        "il n'y a pas de coroutine : le moteur appelle `on_update` une fois "
-        "par frame et reprend la main. Une action étalée dans le temps s'écrit "
-        "avec un état — un compteur dans une variable, et le `if` qui le lit."),
+        "there are no coroutines: the engine calls `on_update` once per frame and "
+        "takes control back. An action spread over time is written with a state — a "
+        "counter in a variable, and the `if` that reads it."),
     # `debug` n'est plus ici : ROADMAP v0.14 en fait un vrai module, avec un
     # seul membre (`debug.log`). Un autre membre Lua (`debug.traceback()`
     # notamment) retombe désormais sur `unknown_member_message` — « le
@@ -295,14 +289,13 @@ STDLIB_MODULES: dict[str, Refusal] = {
     # (api.py) une fois `debug.log` déclaré là.
     "utf8": Refusal(
         "utf8.char(…)",
-        "il n'y a pas de module `utf8` : le moteur n'a pas de chaîne "
-        "manipulable. L'encodage des textes est décidé au build, par la police "
-        "et la table de textes."),
+        "there is no `utf8` module: the engine has no string it can manipulate. The "
+        "encoding of texts is decided at build, by the font and the text table."),
     "package": Refusal(
         "package.path",
-        "il n'y a pas de module `package` : rien n'est chargé à l'exécution. "
-        '`require("behaviors/nom")` est la seule forme d\'import, et elle est '
-        "résolue au build."),
+        "there is no `package` module: nothing is loaded at run time. "
+        "`require(\"behaviors/name\")` is the only form of import, and it is resolved "
+        "at build."),
 }
 
 
@@ -311,110 +304,106 @@ STDLIB: dict[str, Refusal] = {
     # ── Le seul qu'on tape par réflexe ────────────────────────────
     "print": Refusal(
         "print(x)",
-        "`print` n'existe pas : la GBA n'a pas de console. Écrire au JOUEUR se "
-        "fait avec `text.draw` (une police, une entrée de la table de textes, "
-        "donc traduisible). Une trace pour le DÉVELOPPEUR, c'est `debug:log(...)` "
-        "— elle sort par le journal mGBA, pas par l'écran du jeu, et disparaît "
-        "des builds release."),
+        "`print` does not exist: the GBA has no console. Writing to the PLAYER is "
+        "done with `text.draw` (a font, an entry of the text table, hence "
+        "translatable). A trace for the DEVELOPER is `debug:log(...)` — it goes out "
+        "through the mGBA log, not the game screen, and disappears from release "
+        "builds."),
 
     # ── Itération ─────────────────────────────────────────────────
     "pairs": Refusal(
         "pairs(t)",
-        "`pairs` n'existe pas : il n'y a pas de table Lua à parcourir. Un "
-        "tableau se parcourt par son index — `for i = 1, #t do`."),
+        "`pairs` does not exist: there is no Lua table to walk. An array is walked by"
+        " its index — `for i = 1, #t do`."),
     "ipairs": Refusal(
         "ipairs(t)",
-        "`ipairs` n'existe pas : un tableau se parcourt par son index — "
-        "`for i = 1, #t do`, et `#t` est connu au build."),
+        "`ipairs` does not exist: an array is walked by its index — `for i = 1, #t "
+        "do`, and `#t` is known at build."),
     "next": Refusal(
         "next(t)",
-        "`next` n'existe pas : il n'y a pas de table Lua à parcourir."),
+        "`next` does not exist: there is no Lua table to walk."),
     "select": Refusal(
         "select(n, ...)",
-        "`select` n'existe pas : rien n'a d'arguments variables, un script ne "
-        "déclarant pas de fonction."),
+        "`select` does not exist: nothing has variable arguments, since a script does"
+        " not declare functions of its own."),
     "unpack": Refusal(
         "unpack(t)",
-        "`unpack` n'existe pas : un tableau ne se répand pas en arguments, "
-        "faute d'appel à arité variable."),
+        "`unpack` does not exist: an array is not spread into arguments, for lack of "
+        "a variable-arity call."),
 
     # ── Types et conversions ──────────────────────────────────────
     "type": Refusal(
         "type(x)",
-        "`type` n'existe pas : il n'y a rien à interroger. Une valeur est un "
-        "entier, un vec2/vec3, ou un tableau d'entiers — et son type est connu "
-        "au build, jamais à l'exécution."),
+        "`type` does not exist: there is nothing to query. A value is an integer, a "
+        "vec2/vec3, or an array of integers — and its type is known at build, never "
+        "at run time."),
     "tostring": Refusal(
         "tostring(x)",
-        "`tostring` n'existe pas : le moteur n'a pas de chaîne manipulable. "
-        "Pour afficher un nombre, mets un marqueur de valeur dans l'entrée de "
-        "texte (« Score : $mon_global ») et appelle `text.draw`."),
+        "`tostring` does not exist: the engine has no string it can manipulate. To "
+        "display a number, put a value marker in the text entry (\"Score: $my_global\")"
+        " and call `text.draw`."),
     "tonumber": Refusal(
         "tonumber(s)",
-        "`tonumber` n'existe pas : il n'y a pas de chaîne à convertir. Les "
-        "seules chaînes d'un script sont des NOMS cités du projet, résolus au "
-        "build."),
+        "`tonumber` does not exist: there is no string to convert. The only strings "
+        "in a script are project NAMES, resolved at build."),
 
     # ── Erreurs ───────────────────────────────────────────────────
     "pcall": Refusal(
         "pcall(f)",
-        "il n'y a pas d'exception : le C généré n'a ni pile de déroulement ni "
-        "gestionnaire. Une condition qui doit être vraie se teste avec un "
-        "`if`."),
+        "there are no exceptions: the generated C has neither an unwinding stack nor "
+        "a handler. A condition that must be true is tested with an `if`."),
     "xpcall": Refusal(
         "xpcall(f, h)",
-        "il n'y a pas d'exception : le C généré n'a ni pile de déroulement ni "
-        "gestionnaire."),
+        "there are no exceptions: the generated C has neither an unwinding stack nor "
+        "a handler."),
     "error": Refusal(
         "error(msg)",
-        "`error` n'existe pas : il n'y a pas d'exception à lever, et pas de "
-        "console où la lire. Ce qui doit être vrai se vérifie avec un `if`, et "
-        "ce qui doit être vrai AU BUILD est le métier du checker."),
+        "`error` does not exist: there is no exception to raise, and no console to "
+        "read it. What must be true is checked with an `if`, and what must be true AT"
+        " BUILD is the checker's job."),
     "assert": Refusal(
         "assert(c)",
-        "`assert` n'existe pas : pas d'exception, pas de console. Un `if` qui "
-        "corrige la valeur fautive vaut mieux qu'un arrêt qu'on ne verrait "
-        "pas."),
+        "`assert` does not exist: no exception, no console. An `if` that fixes the "
+        "faulty value is better than a halt nobody would see."),
 
     # ── Tables et métatables ──────────────────────────────────────
     "setmetatable": Refusal(
         "setmetatable(t, mt)",
-        "il n'y a pas de métatable : il n'y a pas de table Lua. Un tableau du "
-        "langage est un bloc d'entiers de taille fixe, sans comportement."),
+        "there is no metatable: there is no Lua table. An array of the language is a "
+        "block of integers of fixed size, with no behaviour."),
     "getmetatable": Refusal(
         "getmetatable(t)",
-        "il n'y a pas de métatable : il n'y a pas de table Lua."),
-    "rawget": Refusal("rawget(t, k)", "il n'y a pas de table Lua."),
-    "rawset": Refusal("rawset(t, k, v)", "il n'y a pas de table Lua."),
-    "rawequal": Refusal("rawequal(a, b)", "il n'y a pas de table Lua."),
+        "there is no metatable: there is no Lua table."),
+    "rawget": Refusal("rawget(t, k)", "there is no Lua table."),
+    "rawset": Refusal("rawset(t, k, v)", "there is no Lua table."),
+    "rawequal": Refusal("rawequal(a, b)", "there is no Lua table."),
     "rawlen": Refusal(
         "rawlen(t)",
-        "il n'y a pas de table Lua. La taille d'un tableau est `#t`, une "
-        "constante de compilation."),
+        "there is no Lua table. The size of an array is `#t`, a compile-time "
+        "constant."),
 
     # ── Exécution ─────────────────────────────────────────────────
     "collectgarbage": Refusal(
         "collectgarbage()",
-        "il n'y a pas de ramasse-miettes : rien n'est alloué à l'exécution. "
-        "Toute la mémoire est décidée au build, et c'est ce qui rend son coût "
-        "visible."),
+        "there is no garbage collector: nothing is allocated at run time. All memory "
+        "is decided at build, which is what makes its cost visible."),
     "load": Refusal(
         "load(src)",
-        "on ne charge pas de code à l'exécution : tout est transpilé en C et "
-        'cuit dans la ROM. `require("behaviors/nom")` est la seule forme '
-        "d'import, résolue au build."),
+        "code is not loaded at run time: everything is transpiled to C and baked into"
+        " the ROM. `require(\"behaviors/name\")` is the only form of import, resolved "
+        "at build."),
     "loadstring": Refusal(
         "loadstring(src)",
-        "on ne charge pas de code à l'exécution : tout est transpilé en C et "
-        "cuit dans la ROM."),
+        "code is not loaded at run time: everything is transpiled to C and baked into"
+        " the ROM."),
     "dofile": Refusal(
         "dofile(chemin)",
-        "il n'y a pas de système de fichiers dans une ROM. "
-        '`require("behaviors/nom")` importe un behavior, au build.'),
+        "there is no file system in a ROM. `require(\"behaviors/name\")` imports a "
+        "behavior, at build."),
     "loadfile": Refusal(
         "loadfile(chemin)",
-        "il n'y a pas de système de fichiers dans une ROM. "
-        '`require("behaviors/nom")` importe un behavior, au build.'),
+        "there is no file system in a ROM. `require(\"behaviors/name\")` imports a "
+        "behavior, at build."),
 
     # ── `math`, le faux ami ───────────────────────────────────────
     # Le module existe, sous le même nom, avec un AUTRE contenu — le pire cas
@@ -423,40 +412,40 @@ STDLIB: dict[str, Refusal] = {
     # `unknown_member_message`, qui liste ce que le module offre vraiment.
     "math.floor": Refusal(
         "math.floor(x)",
-        "`math.floor` n'existe pas, et n'a rien à faire : le moteur est "
-        "entièrement entier, il n'y a rien à arrondir. `/` tronque déjà vers "
-        "zéro."),
+        "`math.floor` does not exist, and has no business here: the engine is "
+        "entirely integer, there is nothing to round. `/` already truncates toward "
+        "zero."),
     "math.ceil": Refusal(
         "math.ceil(x)",
-        "`math.ceil` n'existe pas : le moteur est entièrement entier. Pour "
-        "arrondir au-dessus d'une division, `(a + b - 1) / b`."),
+        "`math.ceil` does not exist: the engine is entirely integer. To round a "
+        "division up, use `(a + b - 1) / b`."),
     "math.random": Refusal(
         "math.random(a, b)",
-        "le tirage aléatoire s'écrit `math.rand(lo, hi)` — ce `math`-ci est "
-        "celui du moteur, pas celui de Lua."),
+        "random draws are written `math.rand(lo, hi)` — this `math` is the engine's, "
+        "not Lua's."),
     "math.randomseed": Refusal(
         "math.randomseed(n)",
-        "la graine n'est pas exposée : `math.rand(lo, hi)` suffit au script, "
-        "et le moteur possède sa suite."),
+        "the seed is not exposed: `math.rand(lo, hi)` is enough for the script, and "
+        "the engine owns its sequence."),
     "math.pi": Refusal(
         "math.pi",
-        "il n'y a pas de flottant dans le moteur, donc pas de π. Les angles "
-        "s'écrivent en DEGRÉS : `math.sin(90)`, `math.cos(180)`."),
+        "there is no floating point in the engine, hence no π. Angles are written in "
+        "DEGREES: `math.sin(90)`, `math.cos(180)`."),
     "math.huge": Refusal(
         "math.huge",
-        "il n'y a pas d'infini : les valeurs sont des entiers 32 bits. Une "
-        "borne s'écrit en clair."),
+        "there is no infinity: values are 32-bit integers. A bound is written in "
+        "full."),
     "math.pow": Refusal(
         "math.pow(x, n)",
-        "`math.pow` n'existe pas : une puissance entière s'écrit en "
-        "multipliant (`x * x`)."),
+        "`math.pow` does not exist: an integer power is written by multiplying (`x * "
+        "x`)."),
     "math.fmod": Refusal(
         "math.fmod(a, b)",
-        "`math.fmod` n'existe pas : le reste entier est l'opérateur `%`."),
+        "`math.fmod` does not exist: the integer remainder is the `%` operator."),
     "math.modf": Refusal(
         "math.modf(x)",
-        "`math.modf` n'existe pas : il n'y a pas de partie fractionnaire, "
-        "toutes les valeurs sont entières."),
+        "`math.modf` does not exist: there is no fractional part, all values are "
+        "integers."),
 }
 
 
@@ -485,8 +474,8 @@ def unknown_member_message(module: str, member: str, offered: list[str]) -> str:
     trouver ici — le cas `math`, où le nom du module est le même et le contenu
     différent."""
     liste = ", ".join(sorted(offered)) or "rien"
-    return (f"le module `{module}` n'a pas de `{member}`. Il offre : {liste}. "
-            f"(Ce sont les fonctions du moteur, pas celles de Lua.)")
+    return (f"the module `{module}` has no `{member}`. It offers: {liste}. (These are the engine's "
+            "functions, not Lua's.)")
 
 
 def unknown_call_message(key: str) -> str:
@@ -497,14 +486,14 @@ def unknown_call_message(key: str) -> str:
     qu'au `make`, sur la ligne générée."""
     if "." in key:
         module = key.split(".", 1)[0]
-        return (f"`{key}()` : le module `{module}` n'existe pas. Les modules "
-                f"disponibles sont ceux du catalogue (panneau API du Script "
-                f"Editor) ; un behavior s'importe par "
-                f'`require("behaviors/nom")` et s\'appelle par son alias.')
-    return (f"`{key}()` : fonction inconnue. Un script n'a pas de fonction à "
-            f"lui — les appels possibles sont ceux du catalogue, les "
-            f"constructeurs du langage (`vec2`, `vec3`, `rect`, `array`), "
-            f"`require`, et les méthodes d'un behavior importé.")
+        return (f"`{key}()`: the module `{module}` does not exist. The available modules are "
+                "those of the catalogue (API panel of the Script Editor); a behavior "
+                "is imported with `require(\"behaviors/name\")` and called through its "
+                "alias.")
+    return (f"`{key}()`: unknown function. A script has no functions of its own — the "
+            "possible calls are those of the catalogue, the language constructors "
+            "(`vec2`, `vec3`, `rect`, `array`), `require`, and the methods of an "
+            "imported behavior.")
 
 
 # ─── Contrôle de couverture ───────────────────────────────────────

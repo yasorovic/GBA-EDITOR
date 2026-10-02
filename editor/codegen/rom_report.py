@@ -81,7 +81,7 @@ class SoundEntry:
     name: str                 # nom de la ressource, "" si non rapproché
     kind: str                 # "sfx" | "music"
     own_bytes: int            # ses données propres (échantillon, ou bloc MAS)
-    shared_bytes: int = 0     # échantillons partagés (musiques seulement)
+    shared_bytes: int = 0     # shared samples (musiques seulement)
     shared_with: int = 0      # nombre d'autres pistes qui les partagent
 
 
@@ -394,6 +394,12 @@ def sound_weights(project, sfx_names: list[str], music_names: list[str]) -> dict
     return {(e.kind, e.name): e for e in sb.entries if e.name}
 
 
+# The categories are identifiers shared with the UI (which translates them
+# itself); the build log shows them in English.
+_LOG_CATEGORY_NAMES = {"Polices": "Fonts", "Fonds": "Backgrounds", "Textes": "Texts",
+                       "Tables de données": "Data tables", "Reste": "Other"}
+
+
 def format_report(report: RomReport) -> list[str]:
     """Résumé textuel de la répartition ROM dans le journal de build.
 
@@ -401,25 +407,25 @@ def format_report(report: RomReport) -> list[str]:
     le journal ne répète donc pas une seconde jauge ASCII.
     """
     total = max(1, report.rom_bytes)
-    lines = ["", "── Poids de la ROM ─────────────────────────────────────"]
+    lines = ["", "── ROM weight ──────────────────────────────────────────"]
 
     def kio(n: int) -> str:
         return f"{n / 1024:,.1f} KiB".replace(",", " ")
 
     for cat, size in report.categories.items():
-        lines.append(f"  {cat} — {kio(size)} ({100 * size / total:.1f} %)")
+        lines.append(f"  {_LOG_CATEGORY_NAMES.get(cat, cat)} — {kio(size)} ({100 * size / total:.1f} %)")
 
     cap_mib = report.cartridge_bytes // (1024 * 1024)
     lines.append(f"  Total — {kio(report.rom_bytes)} / {cap_mib} MiB "
                  f"({100 * report.fill_ratio:.1f} %)")
     if report.over_capacity:
         over = report.rom_bytes - report.cartridge_bytes
-        lines.append(f"  DÉPASSEMENT de {kio(over)} — cette ROM ne tient pas "
-                     f"sur une cartouche de {cap_mib} MiB.")
+        lines.append(f"  OVER by {kio(over)} — this ROM does not fit "
+                     f"on a {cap_mib} MiB cartridge.")
 
     sb = report.soundbank
     if sb:
         lines.append("")
         lines.append(f"  Audio — SFX {kio(sb.sfx_bytes)}, modules {kio(sb.music_data_bytes)}, "
-                     f"échantillons partagés {kio(sb.music_sample_bytes)}")
+                     f"shared samples {kio(sb.music_sample_bytes)}")
     return lines

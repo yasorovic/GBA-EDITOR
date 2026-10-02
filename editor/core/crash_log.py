@@ -64,7 +64,7 @@ def _report(summary: str, details: str) -> None:
     try:
         _reporter(summary, details, LOG_FILE)
     except Exception:
-        _write("Le reporter d'erreur a échoué :\n" + traceback.format_exc())
+        _write("The error reporter failed:\n" + traceback.format_exc())
     finally:
         _reporting = False
 

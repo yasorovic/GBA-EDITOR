@@ -183,7 +183,7 @@ class CommandDispatcher(EventEmitter):
 
         get_history().push(AddActorCmd(scene, actor, persist_fn=persist))
         get_bus().select(actor)
-        self._emit("status_message", f"Actor créé : {name}")
+        self._emit("status_message", f"Actor created: {name}")
         return actor
 
     def status(self, msg: str):
@@ -328,7 +328,7 @@ class CommandDispatcher(EventEmitter):
         # (project viewer, graphe des scènes) doivent l'apprendre tout de suite,
         # pas au prochain aller-retour d'écran.
         self._emit("project_tree_changed")
-        self._emit("status_message",f"Scène créée : {name}")
+        self._emit("status_message",f"Scene created: {name}")
         return scene
 
     # ── Camera ────────────────────────────────────────────────────
@@ -352,7 +352,7 @@ class CommandDispatcher(EventEmitter):
         get_history().push(AddListItemCmd(scene.cameras, cam, persist_fn=persist,
                                           label=f"Add camera {cam.name}"))
         get_bus().select(CameraSelection(scene, cam))
-        self._emit("status_message", f"Camera créée : {cam.name}")
+        self._emit("status_message", f"Camera created: {cam.name}")
         return cam
 
     def delete_camera(self, camera):
@@ -385,7 +385,7 @@ class CommandDispatcher(EventEmitter):
         self._project.prefabs.append(prefab)
         with self._watcher.suspended():
             self._project.save_prefab(prefab)
-        self._emit("status_message",f"Prefab créé : {name}")
+        self._emit("status_message",f"Prefab created: {name}")
         return prefab
 
     # ── Sprite ────────────────────────────────────────────────────
@@ -448,7 +448,7 @@ class CommandDispatcher(EventEmitter):
         dst = self._project.import_asset(ap, "backgrounds")
         with self._watcher.suspended():
             warning = asset_reconciliation.sync_background_png(self._project, dst)
-        msg = f"Background importé : {dst.stem}"
+        msg = f"Background imported: {dst.stem}"
         if warning:
             msg += f" — {warning}"
         self._emit("status_message", msg)
@@ -466,7 +466,7 @@ class CommandDispatcher(EventEmitter):
         dst = self._project.import_asset(ap, "sprites")
         with self._watcher.suspended():
             warning = asset_reconciliation.sync_sprite_png(self._project, dst)
-        msg = f"Sprite importé : {dst.stem}"
+        msg = f"Sprite imported: {dst.stem}"
         if warning:
             msg += f" — {warning}"
         self._emit("status_message", msg)
@@ -503,9 +503,9 @@ class CommandDispatcher(EventEmitter):
             self._emit("actors_list_changed")
 
         n = len(scenes_updated)
-        msg = f"Prefab '{prefab.name}' sauvegardé"
+        msg = f"Prefab '{prefab.name}' saved"
         if n:
-            msg += f" — {n} scène{'s' if n > 1 else ''} mise{'s' if n > 1 else ''} à jour"
+            msg += f" — {n} scene{'s' if n > 1 else ''} updated"
         self._emit("status_message",msg)
 
     def relink_actor_to_prefab(self, actor: Actor) -> bool:
@@ -530,7 +530,7 @@ class CommandDispatcher(EventEmitter):
         # tous deux cet acteur comme instance d'un prefab (icône, badge) —
         # une action lancée depuis ce même badge doit les tenir à jour.
         self._emit("project_tree_changed")
-        self._emit("status_message", f"{actor.name} relinké sur '{prefab.name}'")
+        self._emit("status_message", f"{actor.name} relinked to '{prefab.name}'")
         return True
 
     def expose_actor_to_prefab(self, actor: Actor) -> bool:
@@ -577,7 +577,7 @@ class CommandDispatcher(EventEmitter):
         # Nouveau prefab : le project viewer doit le lister sans qu'il faille
         # rouvrir le projet.
         self._emit("project_tree_changed")
-        self._emit("status_message", f"Prefab créé depuis {actor.name} : '{name}'")
+        self._emit("status_message", f"Prefab created from {actor.name}: '{name}'")
         return prefab
 
     # ── Saves ─────────────────────────────────────────────────────

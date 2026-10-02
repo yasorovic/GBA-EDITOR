@@ -292,8 +292,8 @@ def _emit_font_subsets(p, encoded: list, emit=None) -> list[str]:
         if cps is None:
             if emit:
                 emit("log_line",
-                     f"[font] scène '{scene.name}' : polices chargées ENTIÈRES "
-                     f"— ce qu'elle affiche n'est pas déterminable au build")
+                     f"[font] scene '{scene.name}': fonts loaded WHOLE — what it displays "
+                     "cannot be determined at build")
             continue
         names = scene_font_names(p, scene, scene_default_font(p, scene)[1])
         for fname in sorted(names or [f.name for f in fonts]):
@@ -317,10 +317,10 @@ def _emit_font_subsets(p, encoded: list, emit=None) -> list[str]:
             any_line = True
             if emit:
                 extra = ("" if len(colors) == 1 else
-                         f", ×{len(colors)} couleurs {colors[1:]}")
+                         f", ×{len(colors)} colours {colors[1:]}")
                 emit("log_line",
-                     f"[font] scène '{scene.name}' : '{fname}' réduite à "
-                     f"{len(sub['load'])} tuile(s) sur {e['n_tiles']}{extra}")
+                     f"[font] scene '{scene.name}': '{fname}' reduced to {len(sub['load'])} tile(s) out of "
+                     f"{e['n_tiles']}{extra}")
     return L + [""] if any_line else []
 
 
@@ -334,8 +334,8 @@ def fonts_and_texts_lines(p, emit=None) -> list[str]:
         kept_names = {f.name for f in kept}
         skipped = [f.name for f in encodable_project_fonts(p) if f.name not in kept_names]
         if skipped:
-            emit("log_line", f"[font] {len(skipped)} police(s) non utilisée(s) "
-                             f"écartée(s) de la ROM : {', '.join(skipped)}")
+            emit("log_line", f"[font] {len(skipped)} unused font(s) left out of the ROM: "
+                             f"{', '.join(skipped)}")
 
     encoded = []
     for f in kept:
@@ -353,9 +353,8 @@ def fonts_and_texts_lines(p, emit=None) -> list[str]:
             # basculement automatique (police trop grosse) passe inaperçu.
             from codegen.font_emit import render_composited, font_vram_tiles
             mode = "composition" if render_composited(f) else "tilemap"
-            emit("log_line", f"[font] {f.name} -> {e['n_tiles']} tuiles, "
-                             f"{len(e['codepoints'])} glyphes, rendu {mode}, "
-                             f"{font_vram_tiles(f)} tuiles VRAM")
+            emit("log_line", f"[font] {f.name} -> {e['n_tiles']} tiles, {len(e['codepoints'])} glyphs, {mode} rendering, "
+                             f"{font_vram_tiles(f)} VRAM tiles")
         encoded.append((f.name, e))
 
     # Même liste que celle dont `lua_compiler` dérive les `#define` : l'ordre
@@ -363,15 +362,14 @@ def fonts_and_texts_lines(p, emit=None) -> list[str]:
     texts = list(p.build_texts() if hasattr(p, "build_texts")
                  else getattr(p, "texts", []))
     if emit and texts:
-        emit("log_line", f"[text] {len(texts)} entrée(s) de texte")
+        emit("log_line", f"[text] {len(texts)} text entry(ies)")
 
     regions = p.all_regions() if hasattr(p, "all_regions") else []
     if emit and regions:
         from core.models.ui_region import KIND_TEXT
         n_auth = sum(1 for _l, r in regions if getattr(r, "kind", "") == KIND_TEXT)
-        detail = f", dont {n_auth} texte(s) authoré(s)" if n_auth else ""
-        emit("log_line", f"[text] {len(regions)} slot(s) de texte{detail} "
-                         f"({len(p.ui_layouts)} mise(s) en page)")
+        detail = f", including {n_auth} authored text(s)" if n_auth else ""
+        emit("log_line", f"[text] {len(regions)} text slot(s){detail} ({len(p.ui_layouts)} layout(s))")
     font_names = [f.name for f in project_fonts(p)]
     subset_lines = _emit_font_subsets(p, encoded, emit)
     # Une entrée par langue déclarée, source en index 0 — `[""]` pour un
@@ -589,8 +587,8 @@ def gen_ui_texts(p: Project, scene, text_bg: int, emit=None) -> list[str]:
             continue          # le validateur le signale déjà, et mieux
         if key not in text_idx or el.name not in slot_idx:
             if emit:
-                emit("log_line", f"[warn] texte '{el.name}' : clé '{key}' "
-                                 f"introuvable dans la table — rien ne sera écrit.")
+                emit("log_line", f"[warn] text '{el.name}': key '{key}' not found in the table"
+                                 " — nothing will be written.")
             continue
         target = lay.resolved_target(el, rm)
         # Cible BG sans layer de texte : `text_set_layer(-1)` fait sortir le
@@ -598,20 +596,19 @@ def gen_ui_texts(p: Project, scene, text_bg: int, emit=None) -> list[str]:
         if target != TARGET_OBJ and text_bg not in (0, 1, 2, 3):
             if emit:
                 emit("log_line",
-                     f"[warn] texte '{el.name}' : la scène '{scene.name}' n'a "
-                     f"aucun layer de texte (Text BG), il ne s'affichera pas.")
+                     f"[warn] text '{el.name}': scene '{scene.name}' has no text layer (Text BG), it "
+                     "will not be displayed.")
             continue
         if lay.effective_anchor(el)[0] == ANCHOR_ACTOR:
             if emit:
                 emit("log_line",
-                     f"[warn] texte '{el.name}' : ancré sur un acteur mais posé "
-                     f"une seule fois à l'init — il ne suivra pas l'acteur. "
-                     f"Utilise une zone et un script pour ça.")
+                     f"[warn] text '{el.name}': anchored on an actor but placed only once at"
+                     " init — it will not follow the actor. Use a zone and a script "
+                     "for that.")
         L.append(f"    text_draw_in({slot_idx[el.name]}, {text_idx[key]});"
                  f"   /* texte authoré '{el.name}' = '{key}' */")
     if L and emit:
-        emit("log_line", f"[text] scène '{scene.name}' : {len(L)} texte(s) "
-                         f"authoré(s) écrit(s) à l'init")
+        emit("log_line", f"[text] scene '{scene.name}': {len(L)} authored text(s) written at init")
     return L
 
 

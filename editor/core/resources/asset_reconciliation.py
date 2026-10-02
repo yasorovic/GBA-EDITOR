@@ -72,13 +72,13 @@ def check_audio_file(path) -> Optional[str]:
         try:
             mod = load_module(path)
         except ValueError as e:
-            return f"{e} — l'extension dit « {ext[1:]} », le contenu non."
+            return f"{e} — the extension says \"{ext[1:]}\", the content does not."
         except Exception as e:
             return f"module illisible ({e})."
         if not mod.order:
-            return "module sans table d'ordre — aucun motif à jouer."
+            return "module without an order table — no pattern to play."
         if not any(s.data.size for s in mod.samples):
-            return "module sans aucun échantillon — il ne rendrait aucun son."
+            return "module without any sample — it would make no sound."
         return None
 
     if ext == ".wav":
@@ -87,17 +87,17 @@ def check_audio_file(path) -> Optional[str]:
             with wave.open(str(path)) as w:
                 bits = w.getsampwidth() * 8
         except wave.Error as e:
-            return (f"WAV non reconnu ({e}). Il faut du PCM non compressé, "
-                    f"8 ou 16 bits.")
+            return (f"WAV not recognised ({e}). Uncompressed 8 or 16-bit PCM is "
+                    "required.")
         except Exception as e:
-            return f"lecture impossible ({e})."
+            return f"cannot be read ({e})."
         if bits not in WAV_BITS_OK:
-            return (f"WAV {bits} bits : mmutil ne convertit que 8 et 16 bits. "
-                    f"Il construirait la ROM sans le dire, avec un effet muet.")
+            return (f"WAV {bits} bits: mmutil only converts 8 and 16 bits. It would build"
+                    " the ROM without saying so, with a silent result.")
         return None
 
     accepted = ", ".join(sorted(SFX_FILE_EXTS | MUSIC_FILE_EXTS))
-    return f"extension {ext or '(aucune)'} non prise en charge — accepté : {accepted}."
+    return f"extension {ext or '(none)'} not supported — accepted: {accepted}."
 
 
 def sync_sprite_png(project, png_path: Path) -> Optional[str]:
@@ -421,7 +421,7 @@ def sync_font_file(project, path: Path) -> Optional[str]:
                     setattr(font, key, value)
                 project.fonts.save(font)
             except Exception as exc:
-                return f"Police « {name} » : métadonnées impossibles à lire ({exc})."
+                return f"Font \"{name}\": metadata cannot be read ({exc})."
     else:
         # La planche d'un `.fnt` déjà importé ne doit pas créer une SECONDE
         # police : le descripteur fait foi (il porte le mapping des caractères)
@@ -442,8 +442,9 @@ def sync_font_file(project, path: Path) -> Optional[str]:
                 fields = font_import.import_font_fnt(path)
                 page = fields.pop("page_path", None)
                 if page is None:
-                    return (f"Police « {name} » : le descripteur ne référence aucune "
-                            f"planche PNG trouvable — dépose la planche à côté du .fnt.")
+                    return (f"Font \"{name}\": the descriptor does not reference any PNG "
+                            "sheet that can be found — drop the sheet next to the "
+                            ".fnt.")
                 font.asset = project.asset_rel(page)
                 font.descriptor = project.asset_rel(path)
             elif suffix == ".png":
@@ -469,10 +470,10 @@ def sync_font_file(project, path: Path) -> Optional[str]:
                           **vector_font_metadata(path)}
             font_import.apply_font_import(font, fields)
         except Exception as exc:
-            return f"Police « {name} » : import impossible ({exc})."
+            return f"Font \"{name}\": import failed ({exc})."
         if not font.glyphs and font.source_format in ("png", "fnt"):
-            warning = (f"Police « {name} » : aucun glyphe détecté — vérifie la "
-                       f"taille de cellule dans l'écran Police.")
+            warning = (f"Font \"{name}\": no glyph detected — check the cell size in the "
+                       "Font screen.")
         project.fonts.append(font)
     # Le sidecar de CETTE police, pas celui qui porterait le nom du fichier
     # source : les deux ne coïncident que tant que personne n'a renommé, et

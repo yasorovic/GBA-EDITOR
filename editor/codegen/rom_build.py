@@ -79,10 +79,10 @@ def path_too_long_message(p: Project) -> Optional[str]:
     estimate = len(str(p.build_dir)) + _BUILD_PATH_OVERHEAD + 2 * longest
     if estimate < WINDOWS_PATH_LIMIT:
         return None
-    return (f"[build] chemin du projet trop long : le build écrit des fichiers "
-            f"jusqu'à ~{estimate} caractères, et les outils Windows (grit, gcc) "
-            f"refusent au-delà de {WINDOWS_PATH_LIMIT}. Déplacez le projet vers un "
-            f"dossier moins profond (ex. C:\\Jeux\\{p.settings.name}).")
+    return (f"[build] project path too long: the build writes files up to ~{estimate} "
+            "characters, and the Windows tools (grit, gcc) refuse beyond "
+            f"{WINDOWS_PATH_LIMIT}. Move the project to a shallower folder (e.g. "
+            f"C:\\Games\\{p.settings.name}).")
 
 
 class _PalKey:
@@ -134,7 +134,7 @@ class BuildWorker(EventEmitter, threading.Thread):
             p = self.project
 
             if not p.scenes:
-                self._emit("error_line","[build] aucune scène dans le projet")
+                self._emit("error_line","[build] no scene in the project")
                 self._emit("finished",False)
                 return
 
@@ -145,7 +145,8 @@ class BuildWorker(EventEmitter, threading.Thread):
             for e in errors:
                 self._emit("error_line", f"[error] {e}")
             if errors:
-                self._emit("error_line", f"[build] {len(errors)} erreur(s) bloquante(s) — build annulé.")
+                self._emit("error_line", f"[build] {len(errors)} blocking error(s) — build "
+                                         "cancelled.")
                 self._emit("finished", False)
                 return
 
@@ -159,7 +160,7 @@ class BuildWorker(EventEmitter, threading.Thread):
             all_scenes = p.scenes
             scene_names = [s.name for s in all_scenes]
             self._emit("log_line", f"[build] {p.settings.name}")
-            self._emit("log_line", f"[build] {len(all_scenes)} scène(s) : {', '.join(scene_names)}")
+            self._emit("log_line", f"[build] {len(all_scenes)} scene(s): {', '.join(scene_names)}")
 
             p.prepare_build()
             build_output.begin_build()
@@ -248,8 +249,8 @@ class BuildWorker(EventEmitter, threading.Thread):
                     # ignoré (sinon traité comme un fond tuilé/grit → données invalides).
                     if ba is not None and getattr(ba, "mode", "tiled") == "bitmap":
                         self._emit("log_line",
-                                   f"[bg] '{ba.name}' bitmap (Mode 4) — non supporté au "
-                                   f"build (increment 2) → ignoré")
+                                   f"[bg] '{ba.name}' bitmap (Mode 4) — not supported by the"
+                                   " build (increment 2) → ignored")
                         continue
                     if ba and ba.tileset:
                         has_ov = bool(getattr(layer, "tile_palette_overrides", None))
@@ -270,9 +271,9 @@ class BuildWorker(EventEmitter, threading.Thread):
                             if (getattr(build_ba, "bpp", 4) == 8
                                     and sum(1 for L in d["bg_pairs"] if L.background_name) > 1):
                                 self._emit("error_line",
-                                           f"[bg] '{build_ba.name}' 8bpp occupe toute la palette "
-                                           f"BG — les autres calques de fond de la scène "
-                                           f"'{scene.name}' auront des couleurs incorrectes")
+                                           f"[bg] '{build_ba.name}' 8bpp takes the whole BG "
+                                           "palette — the other background layers of "
+                                           f"scene '{scene.name}' will have wrong colours")
                             pal_offset = bg_layout.bg_block_offset(build_ba) or 0
                             final_map = self._bg_final_tilemap(
                                 p, scene, build_ba, layer, pal_offset)
@@ -416,10 +417,9 @@ class BuildWorker(EventEmitter, threading.Thread):
             if ok:
                 stale = build_output.sweep((p.src_dir, p.grit_out_dir))
                 for f in stale:
-                    self._emit("log_line", f"[gen] périmé, retiré : {f.name}")
+                    self._emit("log_line", f"[gen] stale, removed: {f.name}")
                 self._emit("log_line",
-                           f"[gen] {build_output.written} fichier(s) écrit(s), "
-                           f"{build_output.skipped} inchangé(s)")
+                           f"[gen] {build_output.written} file(s) written, {build_output.skipped} unchanged")
                 asset_cache.save()
             if ok:
                 ok = self._step_make(p)
@@ -442,9 +442,9 @@ class BuildWorker(EventEmitter, threading.Thread):
             # Python brute devant l'utilisateur.
             crash_log.log_current_exception(
                 f"Build de {getattr(getattr(self, 'project', None), 'root', '?')}")
-            self._emit("error_line", f"[build] erreur interne : {type(e).__name__} : {e}")
-            self._emit("error_line", f"[build] le détail est dans {crash_log.LOG_FILE} "
-                                     f"(Aide → Ouvrir le dossier du journal)")
+            self._emit("error_line", f"[build] internal error: {type(e).__name__}: {e}")
+            self._emit("error_line", f"[build] details are in {crash_log.LOG_FILE} (Help → Open the log"
+                                     " folder)")
             self._emit("finished", False)
 
     # ── Utilitaires ───────────────────────────────────────────────
@@ -472,10 +472,10 @@ class BuildWorker(EventEmitter, threading.Thread):
             if proc.returncode != 0:
                 # La sortie des outils est longue ; la ligne qui dit QUELLE étape
                 # a échoué, et avec quel code, ferme le bloc.
-                self._emit("error_line", f"{prefix} a échoué (code {proc.returncode})")
+                self._emit("error_line", f"{prefix} failed (code {proc.returncode})")
             return proc.returncode == 0
         except FileNotFoundError as e:
-            self._emit("error_line",f"{prefix} introuvable : {e}")
+            self._emit("error_line",f"{prefix} not found: {e}")
             return False
         except OSError as e:
             # L'outil n'a pas pu démarrer (dossier de travail refusé, chemin trop
@@ -549,8 +549,8 @@ class BuildWorker(EventEmitter, threading.Thread):
         4bpp comme 8bpp, sont émis nativement (retournés tels quels)."""
         if getattr(ba, "mode", "tiled") == "bitmap":
             self._emit("log_line",
-                       f"[bg] '{ba.name}' fond bitmap (Mode 4) — non supporté au build "
-                       f"(increment 2) → ignoré")
+                       f"[bg] '{ba.name}' bitmap background (Mode 4) — not supported by the "
+                       "build (increment 2) → ignored")
             return None
         return ba
 
@@ -574,9 +574,8 @@ class BuildWorker(EventEmitter, threading.Thread):
         build_output.write(p.grit_out_dir / f"{sym}.h", h)
         extra = len(tileset) - len(ba.tileset)
         self._emit("log_line",
-                   f"[bg] {ba.name} compressé ({bpp}bpp) -> {sym} "
-                   f"({len(tileset)} tuiles"
-                   + (f", dont {extra} d'animés posés" if extra else "")
+                   f"[bg] {ba.name} compressed ({bpp}bpp) -> {sym} ({len(tileset)} tiles"
+                   + (f", including {extra} from placed animated backgrounds" if extra else "")
                    + f", {len(ba.palettes)} palettes)")
 
     def _emit_scene_animations(self, p, scene, bg_layout) -> bool:
@@ -595,7 +594,7 @@ class BuildWorker(EventEmitter, threading.Thread):
 
         def _skip(name, why):
             self._emit("log_line",
-                       f"[bg] animé '{name}' sur la scène '{scene.name}' — {why} → ignoré")
+                       f"[bg] animated '{name}' on scene '{scene.name}' — {why} → ignored")
 
         ok = True
 
@@ -603,11 +602,11 @@ class BuildWorker(EventEmitter, threading.Thread):
             nonlocal ok
             self._emit(
                 "error_line",
-                f"[bg] '{name}' posé en ({geom.col}, {geom.row}) tuiles sur "
-                f"'{geom.host_name}' : {why}. Un fond animé est FUSIONNÉ avec le "
-                f"décor qui se trouve dessous — sa sous-palette contient donc les "
-                f"couleurs des deux. Déplacer le placement sur un décor plus sobre, "
-                f"ou réduire le nombre de couleurs de l'animé ou du fond."
+                f"[bg] '{name}' placed at ({geom.col}, {geom.row}) tiles on '{geom.host_name}': {why}. An animated "
+                "background is MERGED with the scenery underneath — its sub-palette "
+                "therefore holds the colours of both. Move the placement onto a "
+                "plainer scenery, or reduce the number of colours of the animation or"
+                " of the background."
             )
             ok = False
 
@@ -645,9 +644,8 @@ class BuildWorker(EventEmitter, threading.Thread):
             n_sh = sum(1 for a in placements if a["shared"])
             total = sum(a["geom"].frames for a in placements)
             self._emit("log_line",
-                       f"[bg] scène '{scene.name}' : {len(placements)} fond(s) animé(s) "
-                       f"posé(s) ({len(placements) - n_sh} per instance, {n_sh} shared), "
-                       f"{total} images")
+                       f"[bg] scene '{scene.name}': {len(placements)} animated background(s) placed "
+                       f"({len(placements) - n_sh} per instance, {n_sh} shared), {total} images")
         return ok
 
     def _check_bg_tile_budget(self, p, layers) -> bool:
@@ -679,18 +677,18 @@ class BuildWorker(EventEmitter, threading.Thread):
             header = p.grit_out_dir / f"{sym}.h"
             m = re.search(rf"{sym}TilesLen\s+(\d+)", header.read_text()) if header.exists() else None
             if not m:
-                self._emit("error_line", f"[grit BG] {sym}.h introuvable/illisible — build annulé")
+                self._emit("error_line", f"[grit BG] {sym}.h not found/unreadable — "
+                                         "build cancelled")
                 ok = False
                 continue
             tiles_used = int(m.group(1)) // 32
             if tiles_used > tile_budget:
                 self._emit(
                     "error_line",
-                    f"[grit BG] '{asset.name}' BG{layer.bg_slot} : {tiles_used} tuiles "
-                    f"générées, budget disponible {tile_budget} tuiles depuis la "
-                    f"base du charblock {layer.bg_slot} — réduire le nombre de "
-                    f"tuiles uniques de ce layer (moins de couleurs/motifs), sa "
-                    f"taille de map, ou déplacer un autre layer de cette scène."
+                    f"[grit BG] '{asset.name}' BG{layer.bg_slot}: {tiles_used} tiles generated, {tile_budget} tiles available "
+                    f"from the base of charblock {layer.bg_slot} — reduce the number of unique "
+                    "tiles of this layer (fewer colours/patterns), its map size, or "
+                    "move another layer of this scene."
                 )
                 ok = False
         return ok
@@ -730,12 +728,11 @@ class BuildWorker(EventEmitter, threading.Thread):
                 extra = used - own
                 self._emit(
                     "error_line",
-                    f"[bg] '{ba.name}' BG{layer.bg_slot} : {used} tuiles à charger "
-                    f"({own} pour le fond"
-                    + (f" + {extra} pour les fonds animés posés dessus" if extra else "")
-                    + f"), budget disponible {budget} tuiles depuis la base du "
-                    f"charblock {layer.bg_slot} — retirer un animé posé, réduire le "
-                    f"nombre de tuiles uniques, ou déplacer un autre calque de la scène."
+                    f"[bg] '{ba.name}' BG{layer.bg_slot}: {used} tiles to load ({own} for the background"
+                    + (f" + {extra} for the animated backgrounds placed on it" if extra else "")
+                    + f"), {budget} tiles available from the base of charblock "
+                      f"{layer.bg_slot} — remove a placed animation, reduce the number of unique "
+                      "tiles, or move another layer of the scene."
                 )
                 ok = False
         return ok
@@ -930,7 +927,7 @@ class BuildWorker(EventEmitter, threading.Thread):
     def _step_make(self, p: Project) -> bool:
         make = self.toolchain.resolve_make()
         if not make:
-            self._emit("error_line","[make] introuvable"); return False
+            self._emit("error_line","[make] not found"); return False
         src = RUNTIME_DIR / "Makefile"
         if not src.exists():
             self._emit("error_line",f"[make] Makefile manquant : {src}"); return False
@@ -944,9 +941,9 @@ class BuildWorker(EventEmitter, threading.Thread):
                     pass
             except PermissionError:
                 self._emit("error_line",
-                           f"[make] {p.rom_path.name} est verrouillée : ouverte par un autre "
-                           f"programme (un émulateur ?) ou en lecture seule. Fermez-le, "
-                           f"puis relancez le build.")
+                           f"[make] {p.rom_path.name} is locked: opened by another program (an "
+                           "emulator?) or read-only. Close it, then run the build "
+                           "again.")
                 return False
         env = self._make_env()
         # ROADMAP v0.14 : `debug.*` n'existe dans la ROM que build DEBUG. Le
@@ -990,7 +987,8 @@ class BuildWorker(EventEmitter, threading.Thread):
             self._emit("log_line", f"[poids] rapport indisponible : {e}")
             return
         if report is None:
-            self._emit("log_line", "[poids] rapport indisponible (ELF ou binutils absents)")
+            self._emit("log_line", "[weight] report unavailable (ELF or binutils "
+                                   "missing)")
             return
         for line in format_report(report):
             self._emit("log_line", line)
@@ -999,7 +997,7 @@ class BuildWorker(EventEmitter, threading.Thread):
         self._emit("rom_report", report)
         if report.over_capacity:
             self._emit("error_line",
-                       "[poids] la ROM dépasse la capacité de cartouche déclarée.")
+                       "[weight] the ROM exceeds the declared cartridge capacity.")
 
     # ── Étape 5 : mgba ────────────────────────────────────────────
 
@@ -1009,7 +1007,7 @@ class BuildWorker(EventEmitter, threading.Thread):
             return False
         mgba = self.toolchain.resolve_mgba()
         if not mgba:
-            self._emit("error_line","[mgba] introuvable"); return False
+            self._emit("error_line","[mgba] not found"); return False
         BuildWorker._mgba_proc = subprocess.Popen([str(mgba), str(p.rom_path)])
         self._emit("log_line","[mgba] lance")
         return True

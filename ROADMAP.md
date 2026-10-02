@@ -180,6 +180,7 @@ chantiers clos ; ce tableau ne garde que ceux **non livrés**.
 | Le cache de scène | 2026-09-16 | À ouvrir — voir [ci-dessous](#le-cache-de-scène-rouvrir-une-scène-déjà-visitée-sans-tout-redécoder) |
 | Undo/redo des sidecars d'éditeur | — | À ouvrir — envisagé pour **V2**, voir [ci-dessous](#undoredo-des-sidecars-déditeur-annuler-la-création-dun-groupe-un-déplacement-de-nœud) |
 | L'atelier Texte réuni — écrire et voir dans un même écran | 2026-09-19 | Route vers v1.0-stable — non prioritaire pour l'alpha (décidé le 2026-09-29) ; conception et décision verrouillée, aucune étape commencée. Voir [ci-dessous](#chantier-transverse--latelier-texte-réuni-écrire-et-voir-dans-un-même-écran) |
+| L'élément d'interface appartient à sa scène — des noms locaux | 2026-10-03 | À ouvrir — priorité non arbitrée ; conception proposée, **aucune décision verrouillée**, code non commencé. Garde-fou en place : un nom en double entre deux layouts est une erreur de build. Voir [ci-dessous](#lélément-dinterface-appartient-à-sa-scène--des-noms-locaux) |
 
 ---
 
@@ -554,6 +555,97 @@ passe de 21 à 17 lignes et perd ses deux boîtes de piétinement.
   hors événement ; le `Contact` n'est délivré qu'aux handlers.
 
 ---
+
+## L'élément d'interface appartient à sa scène — des noms locaux
+
+### D'où vient la question (2026-10-03)
+
+En corrigeant la démo `PongAdvanced`, un défaut silencieux : deux mises en page (`SCR_Main` et
+`SCR_Victory`) portaient chacune un élément nommé `txt_press_start`. Le générateur donne à **chaque**
+unité C (scène, acteur) **tous** les `#define REGION_<NOM> <index>` du projet, par nom brut ; la valeur
+est l'index dans la table plate `g_ui_regions`. Deux éléments homonymes émettaient donc la même macro
+avec deux valeurs, le compilateur n'en disait qu'un avertissement, et **la dernière définition gagnait** :
+`interface:get("txt_press_start")` visait l'élément de l'AUTRE interface (observé : le texte de la scène
+principale s'affichait dans la région de la scène de victoire). Même mécanisme pour `IMAGE_*`,
+`UILIST_*` et `UIELEM_*`.
+
+La règle écrite jusqu'ici était « un nom d'élément est unique dans le projet » (v0.12, « collision
+d'ABI »). Le validateur ne vérifiait que « un même layout posé deux fois dans une scène » : un homonyme
+entre deux layouts de deux scènes passait sans rien dire. **Garde-fou posé le 2026-10-03** :
+`_check_ui_element_names_unique` en fait une erreur de build, avec les deux layouts nommés. Il supprime
+le défaut silencieux, **pas la contrainte** : l'auteur ne peut toujours pas écrire `titre` ou `score`
+dans deux scènes, alors que les noms d'acteurs sont locaux à leur scène depuis le 2026-09-20.
+
+### Le principe (proposé, non verrouillé)
+
+Le même que pour l'acteur : **le nom est local, le symbole C est qualifié, le qualificatif est DÉRIVÉ au
+build et jamais stocké** (source de vérité unique).
+
+- **Authoring.** L'auteur écrit `interface:get("txt_press_start")` dans chaque scène. À la compilation de
+  la scène S, le nom se résout parmi les éléments des layouts POSÉS sur S.
+- **C.** Les constantes se qualifient par le layout (`REGION_<Layout>_<NOM>`, de même `IMAGE_`, `UILIST_`,
+  `UIELEM_`). Un nom de layout est unique (c'est un asset) et un nom d'élément l'est dans son layout :
+  plus aucune collision possible, même entre scènes. Le même élément porte le même symbole partout.
+- **Les index ne changent pas.** `g_ui_regions`, `g_ui_images`, `g_ui_lists` et `g_ui_elements` restent
+  des tables plates, dans l'ordre de `Project.all_*()`. Le runtime C n'est pas touché.
+- **L'infrastructure par scène existe déjà** : `Project.scene_ui_layouts`, `scene_ui_slots`,
+  `scene_ui_images`, `scene_ui_elements`. Seule la résolution NOM → constante est globale aujourd'hui
+  (`lua_compiler.py` : `region_names`, `image_names`, `element_names`, `ui_ref_kinds`).
+- **Unicité par scène**, pas par projet : le contrôle du 2026-10-03 passe de « tous les layouts » à « les
+  layouts posés sur une même scène ». Deux layouts d'une même scène qui partagent un nom restent une
+  erreur claire.
+
+### Ce qu'il faudrait trancher avant d'ouvrir
+
+1. **Les scripts partagés** (caméras, compilés une seule fois, sans scène connue). Aujourd'hui ils visent
+   n'importe quel élément par son nom. Avec des noms locaux : soit `interface:get` y est refusé (erreur
+   claire), soit la forme qualifiée `layout.element` y est acceptée. *Penchant :* refuser d'abord ; on
+   n'ajoute la forme qualifiée que si un projet réel le demande.
+2. **Les colonnes `region` et `image` des tables de données** (`data_tables.py`). Une table est globale :
+   y citer un nom nu devient ambigu. *Penchant :* ces colonnes stockent la forme qualifiée
+   `layout.element`.
+3. **Le renommage d'un élément** (`project_renames.rename_ui_element`). Il réécrit aujourd'hui les
+   références Lua de TOUT le projet ; avec des noms locaux il ne doit réécrire que les scripts des
+   scènes qui posent ce layout. **Cas limite à régler :** un comportement partagé par plusieurs scènes
+   peut désigner, dans l'une, un élément du layout renommé et, dans l'autre, un homonyme d'un autre
+   layout.
+4. **Le moment où l'ambiguïté apparaît.** Poser un layout sur une scène peut créer un homonyme avec un
+   layout déjà là : l'avertir au placement, pas seulement au build.
+5. **La création et le renommage dans l'éditeur** (`scene_tree_panel`, `canvas_controllers`) se garantissent
+   aujourd'hui l'unicité sur le projet entier (`ui_element_names`) ; ils devront la chercher parmi les
+   scènes qui posent le layout.
+
+### Ce que ça touche
+
+- **Générateur** : `scripting/codegen.py` (bloc des `#define`, résolution de `interface:get`),
+  `codegen/runtime_codegen/lua_compiler.py` (contexte par scène), `gen_ui.py`, `data_tables.py`.
+- **Langage** : `scripting/checker.py` (le nom doit exister parmi les éléments de la scène),
+  `scripting/project_names.py` (complétion de `interface:get("` selon la scène du script).
+- **Éditeur** : `core/project.py` (`ui_element_names` et ses voisins), `core/project_renames.py`,
+  `core/validator.py`, les deux écrans de création/renommage.
+- **Docs et tests** : `docs/scripting-reference.md`, un test de collision entre deux scènes, et la démo
+  d'origine (deux `txt_press_start`) qui doit compiler SANS avertissement.
+
+**Migration.** Aucune des données d'un projet existant ne change, hormis les cellules des colonnes
+`region`/`image` si le point 2 est retenu. Un homonyme qui était une erreur devient légal.
+
+### Ordre d'implémentation (proposé)
+
+1. Qualifier les symboles et résoudre par scène, sans toucher aux scripts partagés (le cœur).
+2. Vérificateur, validateur et complétion.
+3. Tables de données et renommage.
+4. Création et renommage dans l'éditeur ; doc.
+5. Vérification par un vrai build : la démo d'origine, puis un projet de plusieurs scènes qui réutilisent
+   les mêmes noms.
+
+### Ce que ça ne fait pas
+
+- Ne change ni le runtime C, ni les index des tables `g_ui_*`.
+- Ne rend pas les noms de LAYOUT locaux : ils restent uniques, ce sont des assets.
+- Ne touche pas aux noms d'acteurs (déjà locaux, cf. [changelog-archive/actor-scene-local.md](changelog-archive/actor-scene-local.md)).
+
+---
+
 ## v1.0 — Le pipeline 2D complet
 
 ### L'objectif concret — cinq genres

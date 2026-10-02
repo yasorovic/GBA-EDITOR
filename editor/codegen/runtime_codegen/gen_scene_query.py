@@ -47,9 +47,8 @@ def parent_depths(scene_actors: list) -> tuple[dict, list]:
                 break
             if par not in by_name:
                 errors.append(
-                    f"[error] l'acteur « {a.name} » a pour parent « {par} », "
-                    f"qui n'est pas un acteur de cette scène. Un parent se "
-                    f"choisit dans la même scène.")
+                    f"[error] actor \"{a.name}\" has parent \"{par}\", which is not an actor of "
+                    "this scene. A parent is chosen within the same scene.")
                 chain = []
                 break
             # Contre la CHAÎNE et non contre un ensemble à part : le cycle est
@@ -57,8 +56,8 @@ def parent_depths(scene_actors: list) -> tuple[dict, list]:
             # cran plus loin, ce qui donnait un chemin qui repassait deux fois.
             if par in chain:
                 errors.append(
-                    f"[error] parenté circulaire : {' → '.join(chain)} → {par}. "
-                    f"Un acteur ne peut pas descendre de lui-même.")
+                    f"[error] circular parenting: {' → '.join(chain)} → {par}. An actor cannot descend "
+                    "from itself.")
                 chain = []
                 break
             cur = by_name[par]

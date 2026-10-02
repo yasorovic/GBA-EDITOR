@@ -147,10 +147,9 @@ def generate_runtime_api(
     winr_defines = build_window_region_defines(engine_src)
     if proto_unparsed:
         raise RuntimeError(
-            "Prototypes d'API illisibles dans gba_engine.h : "
-            f"{', '.join(sorted(proto_unparsed))}. Le header d'API serait "
-            "incomplet — signature à simplifier, ou extracteur à étendre "
-            "(codegen/runtime_codegen/api_prototypes.py).")
+            "API prototypes unreadable in gba_engine.h: "
+            f"{', '.join(sorted(proto_unparsed))}. The API header would be incomplete — simplify the signature, or "
+            "extend the extractor (codegen/runtime_codegen/api_prototypes.py).")
 
     a = [
         "/* runtime_api.h — l'API C que voient les scripts (généré) */",

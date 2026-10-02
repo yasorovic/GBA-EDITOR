@@ -38,6 +38,11 @@ class LuaScript:
     # récoltait « un tableau vide n'a pas de taille », et le codegen émettait un
     # `static int M = 0;` que personne ne lit.
     module_names: list[str]       = field(default_factory=list)
+    # Statements written at the top level that are neither a `local`, an
+    # `exports = {...}` table, a function nor the `return M` of a module:
+    # (luaparser node name, line). They are CARRIED, not dropped: the checker
+    # refuses them, so that `local x = 0; ADFZ = 5` cannot be swallowed.
+    stray_statements: list[tuple[str, int]] = field(default_factory=list)
 
 
 @dataclass
@@ -301,15 +306,21 @@ class _Converter:
         block = node.body
         functions = []
         locals_   = []
+        stray     = []
 
         for stmt in block.body:
             t = type(stmt).__name__
+            if t in ("SemiColon", "Return"):
+                continue             # `;` is a separator; `return M` closes a module
             if t == "Function":
                 fn = self._func(stmt)
                 functions.append(fn)
             elif t == "LocalAssign":
                 for name, val in self._local_pairs(stmt.targets, stmt.values):
                     locals_.append(LuaLocal(name=name, value=val))
+            elif t == "Assign" and not (
+                    getattr(getattr(stmt, "targets", [None])[0], "id", None) == "exports"):
+                stray.append((t, self._line(stmt)))
             elif t == "Assign":
                 # exports = { key = { default=N, ... }, ... }  → variables C statiques
                 targets = stmt.targets if hasattr(stmt, "targets") else []
@@ -346,7 +357,8 @@ class _Converter:
                         locals_.append(LuaLocal(name=key, value=default_val,
                                                 export_type=decl_type,
                                                 export_values=enum_values))
-            # On ignore les autres statements top-level.
+            else:
+                stray.append((t, self._line(stmt)))
 
         # Le nom d'un module de behavior se lit sur les DEUX bouts : `local M =
         # {}` d'un côté, `function M.update(…)` de l'autre. Exiger les deux
@@ -362,6 +374,7 @@ class _Converter:
             functions    = functions,
             locals       = [loc for loc in locals_ if loc.name not in modules],
             module_names = modules,
+            stray_statements = stray,
         )
 
     def _func(self, node) -> LuaFunction:
@@ -456,6 +469,8 @@ class _Converter:
                 return StmtReturn(values=vals)
             case "Break":
                 return StmtBreak()
+            case "SemiColon":
+                return None          # `;` separates statements and produces nothing
             case _:
                 # Tout le reste est PORTÉ jusqu'au checker, qui le refuse en
                 # nommant l'issue (cf. StmtUnsupported). Un `Function` arrive
@@ -743,28 +758,21 @@ def array_dims(expr) -> Optional[tuple[int, ...]]:
     return None
 
 
-# ─── Ce qu'une faute de syntaxe doit dire ─────────────────────────
+# ─── What a syntax error must say ─────────────────────────────────
 #
-# luaparser rend `SyntaxException("syntax errors: None")` et rien d'autre : pas
-# de ligne, pas de jeton, pas d'attendu. C'est le SEUL message du pipeline qui
-# ne dit pas où regarder — le checker nomme sa ligne, `lua_subset` nomme le
-# noeud refusé et la phrase à écrire à la place, et le parse, premier filtre de
-# la chaîne, rendait « None ».
+# luaparser raises `SyntaxException`; antlr's own exception sits in
+# `__context__`. Depending on the version it carries either the real exception
+# (offending token, expected tokens) or only a string "line L:C: message". Both
+# are read here, so the log always names a line.
 #
-# Rien n'est perdu, c'est jeté au FORMATAGE : luaparser lève sa `SyntaxException`
-# depuis un `except`, donc Python garde la `ParseCancellationException` d'antlr
-# dans `__context__`, et celle-ci porte en premier argument l'exception réelle —
-# avec le jeton fautif et l'ensemble des jetons attendus.
-#
-# Le JETON TROUVÉ n'est pas rapporté, délibérément : antlr le désigne là où il a
-# renoncé, pas là où l'auteur s'est trompé (sur `if x :`, il nomme la parenthèse
-# de l'appel, pas les deux-points). La LIGNE et l'ATTENDU, eux, sont exacts.
+# The line antlr reports is where it GAVE UP, which is often below the mistake
+# (`x = 1; ADFZ` fails on the following `end`). When the message quotes the
+# offending text, the line is moved up to the one that contains it.
 
 
 def _antlr_detail(exc) -> tuple[Optional[int], str]:
-    """(ligne, jeton attendu) tirés de la chaîne d'exceptions, `(None, "")` si
-    la faute est LEXICALE — antlr écrit celles-là sur sa sortie d'erreur sans
-    rien mettre dans l'exception, et on ne va pas lui voler son flux."""
+    """(line, expected token) from the exception chain, `(None, "")` when the
+    chain holds no token object."""
     ctx = getattr(exc, "__context__", None)
     inner = ctx.args[0] if (ctx is not None and getattr(ctx, "args", None)) else None
     tok = getattr(inner, "offendingToken", None)
@@ -780,55 +788,65 @@ def _antlr_detail(exc) -> tuple[Optional[int], str]:
     return getattr(tok, "line", None), attendu
 
 
-# Les faux amis d'un auteur qui vient d'un AUTRE langage. Ils ne sont PAS dans
-# `lua_subset.REFUSED` : celui-là range des noeuds d'AST, et aucun de ceux-ci
-# n'en produit — ils empêchent l'AST d'exister. Balayés seulement APRÈS un
-# échec, donc jamais exécutés sur un script valide, et jamais seuls : ils
-# complètent la ligne d'antlr, ils ne la remplacent pas.
+def _message_detail(exc) -> tuple[Optional[int], str]:
+    """(line, antlr message) read from "line L:C: message" in the exception text."""
+    import re
+    ctx = getattr(exc, "__context__", None)
+    for source in (ctx, exc):
+        m = re.search(r"line (\d+):\d+:? (.*)", str(source or ""), re.DOTALL)
+        if m:
+            return int(m.group(1)), m.group(2).strip()
+    return None, ""
+
+
+# False friends of an author coming from ANOTHER language. They are not in
+# `lua_subset.REFUSED`: that one lists AST nodes, and none of these produces
+# one — they prevent the AST from existing. Scanned only AFTER a failure, so
+# never run on a valid script, and never alone: they complete antlr's line.
 _FALSE_FRIENDS: tuple = (
     (r"^\s*(?:if|elseif)\b.*:\s*(?:--.*)?$",
-     "en Lua un « if » se termine par « then », jamais par deux-points"),
+     "in Lua an `if` ends with `then`, never with a colon"),
     (r"^\s*(?:for|while)\b.*:\s*(?:--.*)?$",
-     "en Lua une boucle se termine par « do », jamais par deux-points"),
+     "in Lua a loop ends with `do`, never with a colon"),
     (r"[+\-*/%.]=(?!=)",
-     "Lua n'a pas d'affectation composée : « x += 1 » s'écrit « x = x + 1 »"),
-    (r"\+\+", "Lua n'a pas de « ++ » : « x = x + 1 »"),
-    (r"!=",   "« différent de » s'écrit « ~= », pas « != »"),
-    (r"&&",   "« et » s'écrit « and », pas « && »"),
-    (r"\|\|", "« ou » s'écrit « or », pas « || »"),
+     "Lua has no compound assignment: `x += 1` is written `x = x + 1`"),
+    (r"\+\+", "Lua has no `++`: write `x = x + 1`"),
+    (r"!=",   "\"not equal\" is written `~=`, not `!=`"),
+    (r"&&",   "\"and\" is written `and`, not `&&`"),
+    (r"\|\|", "\"or\" is written `or`, not `||`"),
     (r"(?<![~=<>!])!(?!=)",
-     "« non » s'écrit « not », pas « ! »"),
+     "\"not\" is written `not`, not `!`"),
     (r"^\s*elif\b",
-     "« sinon si » s'écrit « elseif », en un seul mot"),
+     "\"else if\" is written `elseif`, as a single word"),
     (r"^\s*else\s+if\b",
-     "« else if » ouvre un SECOND bloc, qui réclame son propre « end » — "
-     "« elseif », en un seul mot, n'en réclame pas"),
+     "`else if` opens a SECOND block that needs its own `end` — "
+     "`elseif`, as a single word, does not"),
     (r"^\s*#",
-     "un commentaire commence par « -- » ; « # » est l'opérateur de longueur"),
-    (r"^\s*//", "un commentaire commence par « -- », pas par « // »"),
+     "a comment starts with `--`; `#` is the length operator"),
+    (r"^\s*//", "a comment starts with `--`, not `//`"),
 )
 
 
-def _false_friend(source: str, line: Optional[int]) -> tuple[str, Optional[int]]:
-    """(phrase, ligne où elle a été trouvée) — cherchée d'abord SUR la ligne
-    qu'antlr donne, puis dans tout le fichier.
-
-    La ligne est rendue parce que c'est CELLE-LÀ qu'on rapporte : antlr nomme
-    l'endroit où il a renoncé, qui est souvent plus bas que la faute (un
-    « if x : » ne le bloque qu'au « end » suivant). La ligne d'antlr passe
-    quand même en premier dans la recherche, pour que les deux coïncident
-    quand elles le peuvent."""
+def _code_lines(source: str) -> list[str]:
+    """The source lines with strings and comments removed: a `!=` inside a line
+    of dialogue is not a syntax error, and a `#` in a comment is a hash. The
+    patterns for a line that is ENTIRELY a comment (`^\\s*#`, `^\\s*//`) are not
+    concerned — those are not Lua comments, precisely."""
     import re
-    # Ni les chaînes ni les commentaires : un « != » dans une réplique de
-    # dialogue n'est pas une faute de syntaxe, et un « # » dans un commentaire
-    # est un dièse. Les motifs « ligne entièrement en commentaire » (`^\s*#`,
-    # `^\s*//`) ne sont pas concernés — ce ne sont pas des commentaires Lua,
-    # justement.
+
     def _code(l: str) -> str:
         l = re.sub(r"""\"[^\"]*\"|'[^']*'""", '""', l)
         return re.split(r"--", l, maxsplit=1)[0] if not l.lstrip().startswith("--") else ""
 
-    lignes = [_code(l) for l in source.splitlines()]
+    return [_code(l) for l in source.splitlines()]
+
+
+def _false_friend(source: str, line: Optional[int]) -> tuple[str, Optional[int]]:
+    """(sentence, line where it was found) — searched first ON the line antlr
+    gives, then in the whole file. The line is returned because it is THE one
+    reported: antlr names where it gave up, often below the mistake."""
+    import re
+    lignes = _code_lines(source)
     ordre = []
     if line and 1 <= line <= len(lignes):
         ordre.append((line, lignes[line - 1]))
@@ -840,35 +858,54 @@ def _false_friend(source: str, line: Optional[int]) -> tuple[str, Optional[int]]
     return "", None
 
 
+def _offending_line(source: str, reported: int, quoted: str) -> int:
+    """The line, at or above `reported`, where the quoted offending text begins."""
+    import re
+    first = quoted.split("\\n")[0].strip().strip("'")
+    if not first:
+        return reported
+    word = re.escape(first.split()[0]) if first.split() else ""
+    lignes = _code_lines(source)
+    for n in range(min(reported, len(lignes)), 0, -1):
+        if word and re.search(word, lignes[n - 1]):
+            return n
+    return reported
+
+
 def _syntax_message(source: str, exc) -> tuple[str, Optional[int]]:
-    """Le message d'une faute de syntaxe, et sa ligne."""
+    """The message of a syntax error, and its line."""
+    import re
     line, attendu = _antlr_detail(exc)
+    msg_line, antlr_msg = _message_detail(exc)
+    if line is None:
+        line = msg_line
     indice, indice_line = _false_friend(source, line)
 
-    # Un faux ami se dit SEUL, et sur SA ligne. Les chaînes et les commentaires
-    # ayant été écartés, ce qui reste est du code : un « && » ou un « != » y
-    # est une faute, pas une piste — et c'est là que l'auteur doit aller, pas
-    # à l'endroit plus bas où antlr a fini par renoncer. Deux phrases pour une
-    # faute feraient chercher deux fautes.
+    # A false friend is said ALONE, and on ITS line: strings and comments having
+    # been set aside, what remains is code, so a `&&` or a `!=` is a mistake, not
+    # a lead. Two sentences for one mistake would send the author looking for two.
     if indice:
         return indice, (indice_line or line)
 
+    quoted = re.search(r"input '(.*)'$", antlr_msg, re.DOTALL)
     if attendu == "'end'":
-        # Le cas de loin le plus fréquent, et celui dont la ligne est la moins
-        # parlante : antlr bute sur la FIN DU FICHIER, pas sur le bloc resté
-        # ouvert. Le dire, plutôt que d'envoyer l'auteur regarder la dernière
-        # ligne, qui est presque toujours correcte.
-        msg = ("il manque un « end » : un « if », une boucle ou une "
-               "« function » n'est jamais refermé")
+        # The most frequent case, and the one whose line says the least: antlr
+        # stumbles on the END OF THE FILE, not on the block left open.
+        msg = ("missing `end`: an `if`, a loop or a `function` is never closed")
     elif attendu:
-        msg = f"« {attendu.strip(chr(39))} » attendu ici"
+        msg = f"`{attendu.strip(chr(39))}` expected here"
+    elif antlr_msg.startswith("token recognition error"):
+        char = re.search(r"at: '(.*)'", antlr_msg)
+        msg = (f"unexpected character `{char.group(1)}`" if char
+               else "unexpected character")
+    elif quoted:
+        line = _offending_line(source, line or 1, quoted.group(1))
+        token = quoted.group(1).split("\\n")[0].strip()
+        msg = f"unexpected `{token}`: this is not a valid statement or expression"
     elif line:
-        msg = "cette ligne n'est pas du Lua valide"
+        msg = "this line is not valid Lua"
     else:
-        # Faute lexicale sans faux ami connu, ou luaparser qui aurait changé de
-        # forme : on ne prétend rien savoir. C'est le seul cas qui ressemble
-        # encore au message d'avant — mais il ne dit plus « None ».
-        msg = "erreur de syntaxe"
+        msg = "syntax error"
 
     return msg, line
 
@@ -881,7 +918,7 @@ def parse(source: str) -> LuaScript:
     Lève LuaParseError en cas d'erreur de syntaxe.
     """
     if not _LUAPARSER_OK:
-        raise LuaParseError("luaparser n'est pas installé (pip install luaparser)")
+        raise LuaParseError("luaparser is not installed (pip install luaparser)")
     try:
         raw = _lua_ast.parse(source)
     except Exception as e:
@@ -894,4 +931,4 @@ def parse(source: str) -> LuaScript:
     try:
         return _Converter(source).convert_chunk(raw)
     except Exception as e:
-        raise LuaParseError(f"script illisible : {e}") from e
+        raise LuaParseError(f"unreadable script: {e}") from e

@@ -203,7 +203,7 @@ class ResourceStore(Generic[T]):
                 self.items.append(item)
             except Exception as e:
                 self.unreadable[f.name] = f"{type(e).__name__}: {e}"
-                print(f"[project] erreur lecture {self.cls.__name__} {f.name}: {e}")
+                print(f"[project] read error {self.cls.__name__} {f.name}: {e}")
 
     def load_one(self, name: str) -> Optional[T]:
         """Recharge un seul item depuis le disque et met à jour la liste en place."""
@@ -229,7 +229,7 @@ class ResourceStore(Generic[T]):
             return new_item
         except Exception as e:
             self.unreadable[path.name] = f"{type(e).__name__}: {e}"
-            print(f"[project] erreur reload {self.cls.__name__} {name}: {e}")
+            print(f"[project] reload error {self.cls.__name__} {name}: {e}")
             return None
 
     def delete(self, item: T):

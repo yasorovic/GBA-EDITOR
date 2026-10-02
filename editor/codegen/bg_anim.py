@@ -129,7 +129,7 @@ def host_placements(p, host_ba, on_skip=None) -> list:
         ba = p.get_background(name)
         if not _is_emittable(ba):
             if on_skip:
-                on_skip(name, "pas une planche animée encodée en 4bpp tuilé")
+                on_skip(name, "not an animated sheet encoded as tiled 4bpp")
             continue
         out.append((pl, ba))
     return out
@@ -193,8 +193,8 @@ def compose_placement(host_ba, anim_ba, geom: PlacedAnim) -> tuple:
                 cells_rgb.append(cell)
 
     if len(order_cols) > MAX_TILE_COLORS:
-        return None, (f"{len(order_cols)} couleurs distinctes une fois fusionné "
-                      f"avec le décor (maximum {MAX_TILE_COLORS} par sous-palette)")
+        return None, (f"{len(order_cols)} distinct colours once merged with the scenery (maximum "
+                      f"{MAX_TILE_COLORS} per sub-palette)")
 
     # 2ᵈᵉ passe : réindexation sur la palette synthétisée + déduplication.
     idx = {col: i + 1 for i, col in enumerate(order_cols)}
@@ -375,7 +375,7 @@ def scene_animations(p, scene, on_skip=None, on_error=None) -> list:
             blk = for_pl.get(id(pl))
             if geom is None or blk is None:
                 if on_skip and geom is None:
-                    on_skip(ba.name, "posé hors du fond hôte")
+                    on_skip(ba.name, "placed outside the host background")
                 continue
             out.append({"layer": layer, "host": host, "anim": ba, "geom": geom,
                         "block": blk, "shared": blk.shared})

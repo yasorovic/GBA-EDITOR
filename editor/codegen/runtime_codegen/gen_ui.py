@@ -60,8 +60,8 @@ def emit_ui_images_c(p: Project, sprite_offsets: dict, obj_place: dict,
                         f"0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, {elem} }},"
                         f"  /* {im.name} — aucun sprite */")
             if emit:
-                emit("log_line", f"[ui] image '{im.name}' : aucun sprite — "
-                                 f"rien ne sera dessiné à cet endroit.")
+                emit("log_line", f"[ui] image '{im.name}': no sprite — nothing will be drawn"
+                                 " at this place.")
             continue
         ss = f"sprite_{c_sym(sprite.name)}"
         n_states = max(1, len(getattr(sprite, "states", []) or []))
@@ -94,9 +94,8 @@ def emit_ui_images_c(p: Project, sprite_offsets: dict, obj_place: dict,
             # l'image se pose à l'origine de l'écran, ce qui ressemble à un bug
             # de placement plutôt qu'à une référence introuvable.
             emit("log_line",
-                 f"[warn] image '{im.name}' : ancrée sur l'actor "
-                 f"'{eff_actor or '(aucun)'}', introuvable dans la scène — elle "
-                 f"se posera à l'origine de l'écran.")
+                 f"[warn] image '{im.name}': anchored on actor '{eff_actor or '(none)'}', which was not found in"
+                 " the scene — it will be placed at the screen origin.")
     L = ["/* ── Images d'interface (UILayout) ─────────────── */"]
     L.append(f"const UIImageInfo g_ui_images[{max(1, len(rows))}] = {{")
     L += rows or ["    { 0, 0, 8, 8, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,"
@@ -191,9 +190,8 @@ def emit_ui_lists_c(p: Project, emit=None) -> list[str]:
             if getattr(cur_el, "kind", "") == KIND_IMAGE else -1
         if emit and cur_name and cursor < 0:
             emit("log_line",
-                 f"[warn] liste '{lst.name}' : curseur '{cur_name}' introuvable "
-                 f"dans la mise en page '{lay.name}' — la liste navigue sans "
-                 f"curseur.")
+                 f"[warn] list '{lst.name}': cursor '{cur_name}' not found in layout '{lay.name}' — the "
+                 "list navigates without a cursor.")
         infos.append(
             "{" + f"{len(rows)}, "
             f"{max(1, min(255, int(getattr(lst, 'nav_columns', 1) or 1)))}, "
@@ -209,9 +207,8 @@ def emit_ui_lists_c(p: Project, emit=None) -> list[str]:
             + "}" + f"   /* {lst.name} — {len(rows)} rangée(s) */")
         if emit and not rows:
             emit("log_line",
-                 f"[warn] liste '{lst.name}' : aucune zone de texte enfant, "
-                 f"donc aucune rangée à afficher. Une liste parcourt les zones "
-                 f"de texte posées DANS son conteneur.")
+                 f"[warn] list '{lst.name}': no child text zone, hence no row to display. A "
+                 "list walks the text zones placed INSIDE its container.")
     n = len(lists)
     L.append("const UIListInfo g_ui_lists[] = {"
              + (", ".join(infos) if infos else "{0,1,0,0,0,0,0,-1,0,1,0,0,-1}") + "};")

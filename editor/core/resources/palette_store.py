@@ -73,7 +73,7 @@ class PaletteStore(ResourceStore[PaletteBank]):
                 legacy.name = sidecar.stem
                 self.save(legacy)
             except Exception as error:
-                print(f"[project] erreur migration palette {sidecar.name}: {error}")
+                print(f"[project] palette migration error {sidecar.name}: {error}")
 
         for source in sorted(self.dir.glob("*.hex")):
             try:
@@ -86,7 +86,7 @@ class PaletteStore(ResourceStore[PaletteBank]):
                 self._write_sidecar(bank)
             except Exception as error:
                 self.unreadable[source.name] = f"{type(error).__name__}: {error}"
-                print(f"[project] erreur lecture palette {source.name}: {error}")
+                print(f"[project] palette read error {source.name}: {error}")
 
     def load_one(self, name: str) -> PaletteBank | None:
         source = self.source_path(name)
@@ -104,7 +104,7 @@ class PaletteStore(ResourceStore[PaletteBank]):
             self.items.append(bank)
             return bank
         except Exception as error:
-            print(f"[project] erreur reload PaletteBank {name}: {error}")
+            print(f"[project] PaletteBank reload error {name}: {error}")
             return None
 
     def delete(self, item: PaletteBank):

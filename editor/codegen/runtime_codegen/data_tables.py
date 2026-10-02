@@ -86,17 +86,17 @@ def _cell(table, row: dict, column, index: dict) -> tuple[str, str]:
             # Aucune référence : une valeur légitime, pas une faute. Le 0 vise
             # la première entrée de la table citée — c'est à l'auteur de tester
             # avant d'employer, comme partout ailleurs dans le moteur.
-            return "0", f"{column.name} : aucune référence"
+            return "0", f"{column.name}: no reference"
         i = index.get(column.type, {}).get(name)
         if i is None:
             # Le validateur a déjà bloqué le build en nommant la ligne ; ce
             # repli n'existe que pour que le C reste compilable si on l'a forcé.
-            return "0", f"{column.name} : '{name}' INTROUVABLE"
+            return "0", f"{column.name}: '{name}' NOT FOUND"
         return str(i), f"{column.name} = {name}"
     try:
         return str(int(value)), ""
     except (TypeError, ValueError):
-        return "0", f"{column.name} : '{value}' n'est pas un entier"
+        return "0", f"{column.name}: '{value}' is not an integer"
 
 
 def generate_data_tables_h(tables) -> str:
@@ -166,8 +166,7 @@ def write_data_tables(src_dir: Path, p, emit=None) -> list[str]:
         build_output.write(c_path, generate_data_tables_c(tables, reference_index(p)))
         if emit:
             cells = sum(len(t.rows) * len(t.columns) for t in tables)
-            emit("log_line", f"[data] {len(tables)} table(s) en ROM "
-                             f"({cells} valeur(s), {cells * 4} octets)")
+            emit("log_line", f"[data] {len(tables)} table(s) in ROM ({cells} value(s), {cells * 4} bytes)")
     elif c_path.exists():
         c_path.unlink()
     return [t.name for t in tables]

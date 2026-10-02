@@ -78,10 +78,9 @@ def save_fatal(p) -> list[str]:
         k = save_id32(g.id)
         if k in seen:
             out.append(
-                f"[error] les variables persistantes « {seen[k]} » et "
-                f"« {g.name} » retombent sur le même identifiant de sauvegarde. "
-                f"Renommer n'y changera rien — recréer l'une des deux lui donne "
-                f"un nouvel identifiant.")
+                f"[error] the persistent variables \"{seen[k]}\" and \"{g.name}\" fall back on the "
+                "same save identifier. Renaming will not change anything — recreating"
+                " one of them gives it a new identifier.")
         seen[k] = g.name
     slots = max(1, int(getattr(p.settings, "save_slots", 1)))
     total = save_total_bytes(p)
@@ -92,15 +91,11 @@ def save_fatal(p) -> list[str]:
         # peut pas deviner le coût empaqueté depuis l'écran des variables.
         biggest = max(vars_, key=lambda iv: save_var_bytes(iv[1]))[1]
         n_big = max(1, int(getattr(biggest, "count", 1) or 1))
-        lever = (f" La plus grosse est « {biggest.name} » "
-                 f"({n_big} cases, {save_var_bytes(biggest)} octets par "
-                 f"emplacement)." if n_big > 1 else "")
+        lever = (f" The largest is \"{biggest.name}\" ({n_big} cells, {save_var_bytes(biggest)} bytes per slot)." if n_big > 1 else "")
         out.append(
-            f"[error] {slots} emplacement(s) de sauvegarde × {len(vars_)} "
-            f"variable(s) demandent {total} octets, soit plus que les "
-            f"{SRAM_BYTES} de la SRAM. Réduire le nombre d'emplacements, le "
-            f"nombre de cases d'un tableau, ou le nombre de variables "
-            f"persistantes.{lever}")
+            f"[error] {slots} save slot(s) × {len(vars_)} variable(s) need {total} bytes, which is more"
+            f" than the {SRAM_BYTES} of SRAM. Reduce the number of slots, the number of cells "
+            f"of an array, or the number of persistent variables.{lever}")
     return out
 
 
@@ -149,7 +144,6 @@ def save_lines(p, emit=None) -> list[str]:
     L.append("")
     if emit and vars_:
         emit("log_line",
-             f"[save] {len(vars_)} variable(s) persistante(s), {slots} "
-             f"emplacement(s) de {save_slot_size(p)} octets "
-             f"({slots * save_slot_size(p)} sur {SRAM_BYTES} de SRAM)")
+             f"[save] {len(vars_)} persistent variable(s), {slots} slot(s) of {save_slot_size(p)} bytes "
+             f"({slots * save_slot_size(p)} of {SRAM_BYTES} of SRAM)")
     return L
