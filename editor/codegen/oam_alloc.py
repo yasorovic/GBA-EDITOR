@@ -318,6 +318,64 @@ def scene_oam_layout(project, scene: Scene) -> OamLayout:
                      placed_entry=placed_entry, ui=ui, pools=pools)
 
 
+def scene_affine_requests(project, scene: Scene) -> int:
+    """Matrices affines que la scène DEMANDE — avant le plafond de 32.
+
+    Une matrice se réserve à la main (`SpriteComponent.affine_transform`), donc
+    elle se compte : un acteur actif qui la coche en réserve une ; un pool de
+    prefab dont la racine la coche en réserve une par acteur du pool (instances ×
+    parties). Un enfant sans transform propre PARTAGE celle de son parent et ne
+    coûte rien. `compute_affine_info` s'arrête en silence à 32 ; ce compte, lui,
+    continue, pour que le dépassement se voie."""
+    from core.models.components import affine_sprite_component
+    n = 0
+    for a in scene.actors:
+        if a.active:
+            sc = affine_sprite_component(a)
+            n += bool(sc and sc.affine_transform)
+    for pool in scene_oam_layout(project, scene).pools:
+        sc = affine_sprite_component(pool.prefab)
+        if sc and sc.affine_transform:
+            n += pool.size
+    return n
+
+
+def project_obj_tiles(project) -> tuple[int, int]:
+    """(tuiles OBJ occupées, plafond) — la VRAM des sprites telle que le build la pose.
+
+    Contrairement à l'OAM, la VRAM OBJ n'est PAS per-scène : les tuiles de tous
+    les sprites du projet sont résidentes et partagées (`main_gen` : union des
+    acteurs de chaque scène, des apparences supplémentaires, des prefabs poolés
+    et des images d'interface, dédupliquée par sprite, toutes frames comprises).
+    Cette fonction rejoue exactement cette union ; `obj_tiles_used` fait le
+    comptage, pour que la barre d'état et le build ne puissent pas diverger.
+
+    Le plafond est celui du matériel : 1024 tuiles 4bpp, ramené à 512 dès qu'une
+    scène est en mode bitmap (3-5), la VRAM BG empiétant sur l'espace sprite.
+    Les zones de texte en sprites ajoutent leur bande, comme au build."""
+    from codegen.runtime_codegen.gen_scene_query import obj_tiles_used, ui_image_sprites
+    pairs: list = []
+    for scene in project.scenes:
+        for actor in scene.actors:
+            if actor.active:
+                pairs += [(actor, sp) for _c, sp in owner_appearances(project, actor)]
+    for prefab in project.prefabs:
+        if not any(scene_pool_instances(s, prefab) > 0 for s in project.scenes):
+            continue
+        for owner in [prefab, *(getattr(prefab, "children", []) or [])]:
+            pairs += [(owner, sp) for _c, sp in owner_appearances(project, owner)]
+    pairs += ui_image_sprites(project)
+
+    used = obj_tiles_used(project, pairs)
+    if any(scene_obj_ui_slots(project, s) > 0 for s in project.scenes):
+        used += max((place["tile_rel"] + place["tiles"]
+                     for lay in getattr(project, "ui_layouts", [])
+                     for place in layout_obj_budget_resolved(project, lay)["place"].values()),
+                    default=0)
+    cap = 512 if any(getattr(s, "render_mode", 0) in (3, 4, 5) for s in project.scenes) else 1024
+    return used, cap
+
+
 def project_oam_entry_count(project) -> int:
     """Taille de `g_oam_entries[]` : la scène la plus gourmande (MAX, pas somme).
 

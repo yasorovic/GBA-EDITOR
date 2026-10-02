@@ -26,6 +26,7 @@ from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from ui.common.theme import C, T, QSS
 from ui.common import icons
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 
 # Type d'usage -> (icône, couleur, clé de groupe pluralisable).
 # L'ordre de ce tableau EST l'ordre d'affichage des groupes.
@@ -180,7 +181,10 @@ class PaletteUsageCard(QWidget):
             f"QFrame{{background:transparent;}}"
             f"QFrame:hover{{background:{C.BG_HOVER};}}"
         )
-        row.setToolTip(label("paluse.open_tip", detail=usage.detail))
+        row.setToolTip(tooltip(
+            title=label("paluse.open_title"),
+            body=label("paluse.open_tip", detail=usage.detail),
+        ))
         rl = QHBoxLayout(row)
         rl.setContentsMargins(26, 0, 10, 0)
         rl.setSpacing(6)

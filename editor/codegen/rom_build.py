@@ -1,5 +1,5 @@
 """
-GBA Editor — pipeline de build
+Backstage — pipeline de build
 Prend la scène active du projet et génère la ROM.
 
 Flux :
@@ -20,6 +20,7 @@ import threading
 from pathlib import Path
 from typing import Optional
 
+from core import crash_log
 from core.events import EventEmitter
 from core.toolchain import Toolchain
 from codegen.grit_conversion import (
@@ -50,6 +51,38 @@ import codegen.build_output as build_output
 # Pipeline scripting (Lua → C) : importée localement dans les méthodes, d'où
 # l'ajout du dossier au sys.path ici pour que `from scripting.…` se résolve.
 sys.path.insert(0, str(Path(__file__).parent))
+
+
+# grit, gcc et make sont des exécutables Windows sans prise en charge des chemins
+# longs : au-delà de 260 caractères ils échouent, et Python lève un `WinError 267`
+# dès qu'il leur donne un dossier de travail trop long.
+WINDOWS_PATH_LIMIT = 260
+# Partie fixe, au-delà de `build_dir`, du plus long chemin que le build écrit ;
+# le reste dépend des noms d'assets. CALIBRÉE sur une mesure (2026-10-02, projet
+# à noms ≤ 8 caractères) : le build passe avec une racine de 214 caractères et
+# casse à 218. Une marge de 2 en plus, donc un refus légèrement précoce plutôt
+# que tardif.
+_BUILD_PATH_OVERHEAD = 24
+
+
+def path_too_long_message(p: Project) -> Optional[str]:
+    """Un message si le projet est trop profond pour les outils de build Windows,
+    None sinon. Contrôlé AVANT de générer quoi que ce soit : la même panne sortait
+    sinon sous forme d'`erreur inattendue` et de trace Python, au milieu du build.
+
+    L'estimation prend le plus long nom d'asset DEUX fois : `actor_<Scène>_<Prefab>.c`
+    assemble deux noms, et un sprite se retrouve dans plusieurs fichiers."""
+    if os.name != "nt":
+        return None
+    names = [x.name for coll in (p.sprites, p.backgrounds, p.scenes, p.prefabs) for x in coll]
+    longest = max((len(n) for n in names), default=0)
+    estimate = len(str(p.build_dir)) + _BUILD_PATH_OVERHEAD + 2 * longest
+    if estimate < WINDOWS_PATH_LIMIT:
+        return None
+    return (f"[build] chemin du projet trop long : le build écrit des fichiers "
+            f"jusqu'à ~{estimate} caractères, et les outils Windows (grit, gcc) "
+            f"refusent au-delà de {WINDOWS_PATH_LIMIT}. Déplacez le projet vers un "
+            f"dossier moins profond (ex. C:\\Jeux\\{p.settings.name}).")
 
 
 class _PalKey:
@@ -113,6 +146,11 @@ class BuildWorker(EventEmitter, threading.Thread):
                 self._emit("error_line", f"[error] {e}")
             if errors:
                 self._emit("error_line", f"[build] {len(errors)} erreur(s) bloquante(s) — build annulé.")
+                self._emit("finished", False)
+                return
+
+            if too_long := path_too_long_message(p):
+                self._emit("error_line", too_long)
                 self._emit("finished", False)
                 return
 
@@ -398,10 +436,16 @@ class BuildWorker(EventEmitter, threading.Thread):
             self._emit("finished", ok)
 
         except Exception as e:
-            self._emit("error_line",f"[erreur inattendue] {e}")
-            import traceback
-            self._emit("error_line",traceback.format_exc())
-            self._emit("finished",False)
+            # Une panne que personne n'a prévue : un message lisible dans le
+            # journal de build, et la trace complète dans `crash.log` (là où le
+            # menu Aide → « Ouvrir le dossier du journal » mène). Jamais une trace
+            # Python brute devant l'utilisateur.
+            crash_log.log_current_exception(
+                f"Build de {getattr(getattr(self, 'project', None), 'root', '?')}")
+            self._emit("error_line", f"[build] erreur interne : {type(e).__name__} : {e}")
+            self._emit("error_line", f"[build] le détail est dans {crash_log.LOG_FILE} "
+                                     f"(Aide → Ouvrir le dossier du journal)")
+            self._emit("finished", False)
 
     # ── Utilitaires ───────────────────────────────────────────────
 
@@ -413,17 +457,31 @@ class BuildWorker(EventEmitter, threading.Thread):
     def _run_cmd(self, cmd, prefix, cwd=None, env=None) -> bool:
         self._emit("log_line",f"{prefix} {' '.join(str(c) for c in cmd)}")
         try:
+            # `errors="replace"` : les outils écrivent des chemins dans leur
+            # page de code (accents d'un dossier de projet) ; un octet que le
+            # décodeur refuse tuait le thread de lecture de `subprocess` et le
+            # build perdait toute la sortie de l'outil, erreurs comprises.
             proc = subprocess.run(
-                cmd, capture_output=True, text=True,
+                cmd, capture_output=True, text=True, errors="replace",
                 cwd=str(cwd) if cwd else None, env=env
             )
             for line in proc.stdout.splitlines():
                 self._emit("log_line",f"  {line}")
             for line in proc.stderr.splitlines():
                 self._emit("error_line",f"  {line}")
+            if proc.returncode != 0:
+                # La sortie des outils est longue ; la ligne qui dit QUELLE étape
+                # a échoué, et avec quel code, ferme le bloc.
+                self._emit("error_line", f"{prefix} a échoué (code {proc.returncode})")
             return proc.returncode == 0
         except FileNotFoundError as e:
             self._emit("error_line",f"{prefix} introuvable : {e}")
+            return False
+        except OSError as e:
+            # L'outil n'a pas pu démarrer (dossier de travail refusé, chemin trop
+            # long : WinError 267…). Un message, pas une trace de « erreur
+            # inattendue » (cf. `path_too_long_message` pour le cas prévisible).
+            self._emit("error_line", f"{prefix} impossible de lancer l'outil : {e}")
             return False
 
     def _make_env(self) -> dict:
@@ -877,6 +935,19 @@ class BuildWorker(EventEmitter, threading.Thread):
         if not src.exists():
             self._emit("error_line",f"[make] Makefile manquant : {src}"); return False
         build_output.copy(src, p.makefile_path)
+        # Une ROM tenue ouverte par un autre programme (un émulateur lancé hors de
+        # l'éditeur) fait échouer `objcopy` avec « Permission denied » — sans dire
+        # pourquoi. On le dit AVANT de compiler pour rien.
+        if p.rom_path.exists():
+            try:
+                with open(p.rom_path, "ab"):
+                    pass
+            except PermissionError:
+                self._emit("error_line",
+                           f"[make] {p.rom_path.name} est verrouillée : ouverte par un autre "
+                           f"programme (un émulateur ?) ou en lecture seule. Fermez-le, "
+                           f"puis relancez le build.")
+                return False
         env = self._make_env()
         # ROADMAP v0.14 : `debug.*` n'existe dans la ROM que build DEBUG. Le
         # define passe par l'environnement de make (EXTRA_CFLAGS, cf.

@@ -8,6 +8,7 @@ sont une ressource explicite du projet (project.globals).
 
 from __future__ import annotations
 from pathlib import Path
+from core.app_info import APP_NAME
 import codegen.build_output as build_output
 
 
@@ -41,7 +42,7 @@ def generate_globals_h(globals_) -> str:
     """globals_ : list[GlobalVar] (duck-typed: .name, .type)"""
     lines = [
         "/* globals.h — variables globales partagées entre les scripts acteur */",
-        "/* Généré par GBA Editor — ne pas éditer */",
+        f"/* Généré par {APP_NAME} — ne pas éditer */",
         "",
         "#ifndef GLOBALS_H",
         "#define GLOBALS_H",
@@ -99,7 +100,7 @@ def generate_globals_h(globals_) -> str:
 def generate_globals_c(globals_) -> str:
     lines = [
         "/* globals.c — définitions des variables globales partagées */",
-        "/* Généré par GBA Editor — ne pas éditer */",
+        f"/* Généré par {APP_NAME} — ne pas éditer */",
         "",
         '#include "globals.h"',
         "",

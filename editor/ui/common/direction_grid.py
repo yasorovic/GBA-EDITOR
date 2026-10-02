@@ -14,6 +14,7 @@ Les dir_id suivent la nomenclature du runtime (`runtime_api_inline.h`) :
 from __future__ import annotations
 
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from PyQt6.QtWidgets import QWidget, QGridLayout, QToolButton
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 
@@ -177,7 +178,8 @@ class DirectionPicker(QWidget):
         from PyQt6.QtWidgets import QVBoxLayout
 
         self._grid = DirectionGrid(cell=cell, gap=gap, exclusive=True)
-        self._grid.buttons[0].setToolTip(label('dirgrid.omni_no_initial_direction'))
+        self._grid.buttons[0].setToolTip(
+            tooltip(title=label('dirgrid.omni_no_initial_direction')))
         self._grid.dir_toggled.connect(self._on_dir)
 
         root = QVBoxLayout(self)

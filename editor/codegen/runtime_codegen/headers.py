@@ -8,6 +8,7 @@ from __future__ import annotations
 import shutil
 from typing import Optional
 
+from core.app_info import APP_NAME
 from core.models.sprite import AnimState, SpriteAsset
 from core.models.scene import Actor
 from core.project import Project
@@ -51,7 +52,7 @@ def generate_actor_types(p: Project) -> None:
 
     h = [
         "/* actor_types.h — struct Actor partagée entre main.c et les scripts */",
-        "/* Généré par GBA Editor */",
+        f"/* Généré par {APP_NAME} */",
         "#ifndef ACTOR_TYPES_H",
         "#define ACTOR_TYPES_H",
         "#include <gba_types.h>",
@@ -153,7 +154,7 @@ def generate_runtime_api(
 
     a = [
         "/* runtime_api.h — l'API C que voient les scripts (généré) */",
-        "/* Généré par GBA Editor */",
+        f"/* Généré par {APP_NAME} */",
         "#ifndef RUNTIME_API_H",
         "#define RUNTIME_API_H",
         '#include "actor_types.h"',

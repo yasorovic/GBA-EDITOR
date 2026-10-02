@@ -26,7 +26,9 @@ from PyQt6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QAbstractItemView, QHeaderView,
     QStyledItemDelegate, QStyle,
 )
-from PyQt6.QtGui import QFont, QFontMetrics, QColor, QBrush, QPen, QPainter
+from PyQt6.QtGui import (
+    QFont, QFontMetrics, QColor, QBrush, QPen, QPainter, QShortcut, QKeySequence,
+)
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QRectF, QPointF, QEvent
 
 from core.text_markup import parse, resolve
@@ -35,6 +37,7 @@ from ui.common.theme import C, T, S
 from ui.common.widgets import W
 from ui.common import icons
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.text_editor.colors import TEXT_COLOR
 
 
@@ -229,6 +232,12 @@ class TextTable(QWidget):
         self._tree.itemExpanded.connect(lambda it: self._on_fold(it, False))
         self._tree.itemCollapsed.connect(lambda it: self._on_fold(it, True))
         self._tree.viewport().installEventFilter(self)
+        # La clé est la seule cellule éditable du centre : le double-clic (ou
+        # F2) l'ouvre en place, jamais une modale.
+        self._tree.itemDoubleClicked.connect(self._on_double_click)
+        QShortcut(QKeySequence(Qt.Key.Key_F2), self._tree,
+                  activated=self._rename_current_key,
+                  context=Qt.ShortcutContext.WidgetShortcut)
         root.addWidget(self._tree, 1)
         root.addWidget(self._build_footer())
 
@@ -258,7 +267,7 @@ class TextTable(QWidget):
             b.setText(label(lbl_key))
             b.setCheckable(True)
             b.setFont(QFont(T.UI, T.XS))
-            b.setToolTip(label(tip_key))
+            b.setToolTip(tooltip(title=label(lbl_key), body=label(tip_key)))
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setStyleSheet(
                 f"QToolButton{{background:transparent; color:{C.TEXT_DIM};"
@@ -277,10 +286,11 @@ class TextTable(QWidget):
         self._search.textChanged.connect(lambda _q: self._apply_filter())
         hl.addWidget(self._search)
 
-        self._btn_add = W.btn_add(label("txttbl.add_tip"))
+        self._btn_add = W.btn_add(tooltip(
+            title=label("txttbl.add_title"), body=label("txttbl.add_tip")))
         self._btn_add.clicked.connect(self.add_asked.emit)
         hl.addWidget(self._btn_add)
-        self._btn_del = W.btn_danger(label("txttbl.delete_tip"))
+        self._btn_del = W.btn_danger(tooltip(title=label("txttbl.delete_title")))
         self._btn_del.clicked.connect(self.delete_asked.emit)
         self._btn_del.setEnabled(False)
         hl.addWidget(self._btn_del)
@@ -417,7 +427,9 @@ class TextTable(QWidget):
                 item.setText(COL_PATH, segment)
                 item.setData(COL_PATH, _ROLE_GROUP, node_path)
                 item.setIcon(COL_PATH, icons.folder_icon(True, icons.COLOR_FOLDER))
-                item.setToolTip(COL_PATH, label("txttbl.group_rename_tip"))
+                item.setToolTip(COL_PATH, tooltip(
+                    title=label("txttbl.h_path"), body=label("txttbl.group_rename_tip"),
+                ))
                 if parent is None:
                     self._tree.addTopLevelItem(item)
                 else:
@@ -445,10 +457,10 @@ class TextTable(QWidget):
         # posé par quelqu'un, elle mérite l'accent.
         row.setForeground(COL_KEY,
                           QColor(C.TEXT_MUTED if t.auto_key else TEXT_COLOR))
-        row.setToolTip(COL_KEY,
-                       (label("txttbl.key_auto") if t.auto_key
-                        else label("txttbl.key_hand"))
-                       + label("txttbl.key_dblclick"))
+        row.setToolTip(COL_KEY, tooltip(
+            title=label("txttbl.rename_key"), shortcut="F2",
+            body=(label("txttbl.key_auto") if t.auto_key else label("txttbl.key_hand")),
+        ))
 
         flags = set()
         # Le texte tel qu'on le LIT dans la langue ACTIVE : balises retirées,
@@ -483,17 +495,23 @@ class TextTable(QWidget):
             # se supprime.
             row.setText(COL_USED, "?")
             row.setForeground(COL_USED, QColor(C.TEXT_MUTED))
-            row.setToolTip(COL_USED, label("txttbl.used_unknown_tip"))
+            row.setToolTip(COL_USED, tooltip(
+                title=label("txttbl.h_used"), body=label("txttbl.used_unknown_tip"),
+            ))
             row.setData(COL_USED, _ROLE_SORT, -1)
         elif use is not None and use.count:
             row.setText(COL_USED, use.summary())
             row.setForeground(COL_USED, QColor(C.TEXT_DIM))
-            row.setToolTip(COL_USED, use.detail())
+            row.setToolTip(COL_USED, tooltip(
+                title=label("txttbl.h_used"), body=use.detail(),
+            ))
             row.setData(COL_USED, _ROLE_SORT, use.count)
         else:
             row.setText(COL_USED, label("txttbl.unused_cell"))
             row.setForeground(COL_USED, QColor(C.TEXT_MUTED))
-            row.setToolTip(COL_USED, label("txttbl.unused_cell_tip"))
+            row.setToolTip(COL_USED, tooltip(
+                title=label("txttbl.h_used"), body=label("txttbl.unused_cell_tip"),
+            ))
             row.setData(COL_USED, _ROLE_SORT, 0)
             flags.add(FLAG_UNUSED)
         self._flags[t.id] = flags
@@ -677,6 +695,15 @@ class TextTable(QWidget):
                 QTimer.singleShot(0, lambda i=item, c=col: self._start_edit(i, c))
                 return True
         return super().eventFilter(watched, event)
+
+    def _on_double_click(self, item: QTreeWidgetItem, col: int):
+        if col == COL_KEY and item.data(0, _ROLE_TEXT) is not None:
+            self._start_edit(item, COL_KEY)
+
+    def _rename_current_key(self):
+        item = self._tree.currentItem()
+        if item is not None and item.data(0, _ROLE_TEXT) is not None:
+            self._start_edit(item, COL_KEY)
 
     def _start_edit(self, item: QTreeWidgetItem, col: int):
         """Ouvre l'éditeur natif sans réintroduire le double-clic ambigu."""

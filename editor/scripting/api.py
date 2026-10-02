@@ -220,7 +220,7 @@ DOMAIN_KEY    = "key"     # BTN_{name} — enum fixe du hardware, jamais renomm�
 DOMAIN_AXIS   = "axis"
 # Nom d'une séquence déclarée (Project Settings → Input → Séquences), passé à
 # `input:get_sequence()`. Espace de noms SÉPARÉ de DOMAIN_KEY (décision de
-# Victor, 2026-09-27) : un accord se lit avec held/pressed/released/buffered,
+# l'auteur, 2026-09-27) : un accord se lit avec held/pressed/released/buffered,
 # une séquence avec get_sequence — jamais l'inverse, et jamais partagé avec
 # DOMAIN_SEQUENCE (qui, lui, nomme un `on_sequence_<nom>` de script).
 DOMAIN_INPUT_SEQUENCE = "input_sequence"
@@ -885,7 +885,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
     # (`checker._check_input_call`) — `variadic` n'existe que pour ça, ce
     # n'est pas une vraie fonction à arité libre. Les quatre ne lisent qu'un
     # ACCORD (bouton ou InputBinding) — jamais une séquence, qui a son propre
-    # nom d'appel (`get_sequence`, décision de Victor du 2026-09-27).
+    # nom d'appel (`get_sequence`, décision de l'auteur du 2026-09-27).
     "input.held": ApiFunc(
         lua_name="input.held", c_func="input_held",
         params=[Param("btn", PARAM_STR, DOMAIN_KEY)], variadic=True,
@@ -2133,7 +2133,7 @@ REMOVED_API: dict[str, str] = {}
 # Les dix `on_button_*` sont un cas à part : ce ne sont pas des appels d'API
 # mais des noms de fonction de PREMIER NIVEAU (des handlers), qui ne passent
 # jamais par `REMOVED_API` (celui-ci ne couvre que les appels `récepteur:méthode`
-# ou `module.fonction`). Retrait sec ailleurs, mais Victor a explicitement
+# ou `module.fonction`). Retrait sec ailleurs, mais l'auteur a explicitement
 # demandé un message ici (ROADMAP « Les inputs personnalisés », tranche
 # finale, 2026-09-27) : aucun `.lua`/doc/démo du dépôt ne les utilisait déjà,
 # donc un guide ne coûte rien et évite la confusion avec `input:pressed`.

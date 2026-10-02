@@ -88,7 +88,7 @@ class AxesCard(CollapsibleCard):
 
     def _side_choices(self) -> list:
         """Bouton ou accord (`InputBinding`) — jamais une séquence, qui n'a
-        pas de masque simple (décision de Victor, 2026-09-27)."""
+        pas de masque simple (décision de l'auteur, 2026-09-27)."""
         names = list(BUTTON_NAMES)
         if self._project:
             names += [b.name for b in self._project.settings.inputs

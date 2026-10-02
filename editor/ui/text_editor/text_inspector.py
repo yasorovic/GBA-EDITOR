@@ -12,6 +12,7 @@ from core.text_markup import parse, resolve, TAGS
 from ui.common.theme import C, T
 from ui.common.widgets import CollapsibleCard
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.text_editor.colors import TEXT_COLOR
 from ui.text_editor.inspector_shell import insp_scroll
 
@@ -81,7 +82,9 @@ class TextInspector(QWidget):
         )
         self._note_edit.setFixedHeight(64)
         self._note_edit.setPlaceholderText(label("txtinsp.note_placeholder"))
-        self._note_edit.setToolTip(label("txtinsp.note_tip"))
+        self._note_edit.setToolTip(tooltip(
+            title=label("txtinsp.note_card"), body=label("txtinsp.note_tip"),
+        ))
         # Commit au focus-out : une commande par frappe noierait l'historique.
         self._note_edit.focusOutEvent = self._note_focus_out
         self._note_baseline = ""
@@ -93,9 +96,10 @@ class TextInspector(QWidget):
         # balisage n'ont nulle part ailleurs où apparaître avant le build.
         markup_card = CollapsibleCard(label("txtinsp.markup"))
         markup_card.set_expanded(False)
-        markup_card.setToolTip("<br>".join(
-            f"<b>[{s.name}{'=…' if s.value else ''}]</b> — {s.doc}"
-            for s in TAGS.values()))
+        markup_card.setToolTip(tooltip(
+            title=label("txtinsp.markup"),
+            body=label("txtinsp.markup_tip"),
+        ))
         self._markup = QLabel("")
         self._markup.setFont(QFont(T.UI, T.XS))
         self._markup.setStyleSheet(f"color:{C.TEXT_MUTED};")

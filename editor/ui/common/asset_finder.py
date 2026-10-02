@@ -33,6 +33,7 @@ Cf. docs/asset-finder.md pour l'état des lieux et la décision.
 from __future__ import annotations
 
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -190,6 +191,7 @@ class AssetKind:
     # retain their argument order. Empty keys preserve plugin-provided text.
     label_key: str = ""
     add_tooltip_key: str = ""
+    add_tip_key: str = ""
     empty_text_key: str = ""
     # L'état initial est une propriété de la famille, non du finder qui la
     # montre : une source encombrante peut démarrer repliée partout.
@@ -996,8 +998,11 @@ class AssetFinder(QWidget):
             if kind.add is None and not (kind.add_tooltip or kind.add_tooltip_key):
                 section.set_add_visible(False)
             else:
-                section.set_add_tooltip(label(kind.add_tooltip_key) if kind.add_tooltip_key
-                                        else kind.add_tooltip or label('assetfind.add_an_item'))
+                section.set_add_tooltip(
+                    tooltip(title=label(kind.add_tooltip_key),
+                            body=label(kind.add_tip_key) if kind.add_tip_key else "")
+                    if kind.add_tooltip_key
+                    else kind.add_tooltip or label('assetfind.add_an_item'))
                 section.add_clicked.connect(lambda k=kind: self._add(k))
             if kind.dir_of is not None:
                 section.set_reveal_visible(True)

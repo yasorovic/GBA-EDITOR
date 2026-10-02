@@ -56,6 +56,15 @@ def save_slot_size(p) -> int:
     return SAVE_HEADER_BYTES + sum(save_var_bytes(g) for _i, g in save_vars(p))
 
 
+def save_total_bytes(p) -> int:
+    """Octets de SRAM que la sauvegarde occupe : emplacements × taille d'un
+    emplacement. 0 sans variable persistante — le moteur ne touche alors pas la
+    SRAM (cf. `save_fatal`, même formule)."""
+    if not save_vars(p):
+        return 0
+    return max(1, int(getattr(p.settings, "save_slots", 1))) * save_slot_size(p)
+
+
 def save_fatal(p) -> list[str]:
     """Ce qui rend la sauvegarde impossible à émettre. Bloquant, comme le budget
     de tuiles : une sauvegarde qui déborde de la SRAM n'échouerait qu'à
@@ -75,7 +84,7 @@ def save_fatal(p) -> list[str]:
                 f"un nouvel identifiant.")
         seen[k] = g.name
     slots = max(1, int(getattr(p.settings, "save_slots", 1)))
-    total = slots * save_slot_size(p)
+    total = save_total_bytes(p)
     if total > SRAM_BYTES:
         # Depuis la v0.20, une variable peut valoir des centaines de cases :
         # nommer LA plus grosse vaut mieux qu'un conseil général, parce que

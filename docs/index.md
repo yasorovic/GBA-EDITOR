@@ -1,6 +1,6 @@
-# Documentation de GBA Editor
+# Documentation de Backstage
 
-Cette documentation accompagne la création d'un jeu avec GBA Editor. Commencez par le guide
+Cette documentation accompagne la création d'un jeu avec Backstage. Commencez par le guide
 utilisateur, puis consultez le guide de scripting lorsque vous souhaitez donner un comportement
 à votre jeu.
 

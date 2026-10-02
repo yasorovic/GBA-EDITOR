@@ -31,21 +31,24 @@ Portée des catégories, volontairement inégale (2026-08-23) :
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
-    QDialog, QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
+    QApplication, QDialog, QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
     QStackedWidget, QLabel, QLineEdit, QPushButton, QFileDialog,
     QTableWidget, QTableWidgetItem, QHeaderView, QKeySequenceEdit, QScrollArea,
     QCheckBox, QComboBox,
 )
 from PyQt6.QtGui import QFont, QKeySequence
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QProcess
 
 from ui.common.theme import C, T, QSS
 from ui.common.notice import note, refresh_tips
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.common import catalog
+from core.app_info import APP_NAME
 from core.interface_preferences import (
     tips_shown, set_tips_shown, interface_language, set_interface_language,
     interface_theme, set_interface_theme,
@@ -155,16 +158,46 @@ class ThemePanel(QWidget):
         self._theme.addItem(label("settings.theme.dark"), "dark")
         self._theme.addItem(label("settings.theme.light"), "light")
         self._theme.setCurrentIndex(max(0, self._theme.findData(interface_theme())))
-        self._theme.currentIndexChanged.connect(
-            lambda index: set_interface_theme(str(self._theme.itemData(index))))
+        self._applied_theme = interface_theme()
+        self._theme.currentIndexChanged.connect(self._on_theme_changed)
         lay.addWidget(self._theme)
 
-        note = QLabel(label("settings.theme.note"))
+        note = QLabel(label("settings.theme.note", app_name=APP_NAME))
         note.setFont(QFont(T.UI, T.SM))
         note.setStyleSheet(f"color:{C.TEXT_DIM};")
         note.setWordWrap(True)
         lay.addWidget(note)
+
+        # Visible seulement tant que le choix diffère du thème de la session :
+        # revenir au thème appliqué fait disparaître l'invite.
+        self._restart_button = QPushButton(label("settings.theme.restart"))
+        self._restart_button.setStyleSheet(QSS.button_ghost)
+        self._restart_button.setFixedWidth(160)
+        self._restart_button.clicked.connect(self._restart_editor)
+        self._restart_button.setVisible(False)
+        lay.addWidget(self._restart_button, 0, Qt.AlignmentFlag.AlignLeft)
         lay.addStretch()
+
+    def _on_theme_changed(self, index: int):
+        theme = str(self._theme.itemData(index))
+        set_interface_theme(theme)
+        self._restart_button.setVisible(theme != self._applied_theme)
+
+    def _restart_editor(self):
+        """Ferme toutes les fenêtres (donc `closeEvent` de la fenêtre
+        principale : écriture du projet, confirmation si elle échoue), puis
+        relance le même programme avec les mêmes arguments. Si une fenêtre
+        refuse de se fermer, on ne relance rien."""
+        app = QApplication.instance()
+        app.closeAllWindows()
+        if any(w.isVisible() for w in app.topLevelWidgets()):
+            return
+        if getattr(sys, "frozen", False):
+            program, arguments = sys.executable, sys.argv[1:]
+        else:
+            program, arguments = sys.executable, sys.argv
+        QProcess.startDetached(program, arguments)
+        app.quit()
 
 
 # ── Interface ───────────────────────────────────────────────────────────
@@ -200,7 +233,7 @@ class InterfacePanel(QWidget):
         language_row.addWidget(self._language, 1)
         lay.addLayout(language_row)
 
-        restart_note = QLabel(label("settings.interface.language_restart"))
+        restart_note = QLabel(label("settings.interface.language_restart", app_name=APP_NAME))
         restart_note.setFont(QFont(T.UI, T.SM))
         restart_note.setStyleSheet(f"color:{C.TEXT_DIM};")
         restart_note.setWordWrap(True)
@@ -345,7 +378,9 @@ class ShortcutsPanel(QWidget):
 
                 reset_btn = QPushButton("↺")
                 reset_btn.setFixedWidth(26)
-                reset_btn.setToolTip(label("settings.shortcuts.reset_to", default=b.default))
+                reset_btn.setToolTip(tooltip(
+                    title=label("settings.shortcuts.reset_title"),
+                    body=label("settings.shortcuts.reset_to", default=b.default)))
                 reset_btn.clicked.connect(lambda _=False, bid=b.id: self._reset(bid))
                 self._table.setCellWidget(row, self._COL_RESET, reset_btn)
             else:
@@ -355,7 +390,9 @@ class ShortcutsPanel(QWidget):
                 display_key = self._DISPLAY_KEYS.get(display_id, display_id)
                 self._table.setItem(row, self._COL_ACTION, self._plain_item(label(display_key)))
                 key_item = self._plain_item(key, dim=True)
-                key_item.setToolTip(label("settings.shortcuts.system_key"))
+                key_item.setToolTip(tooltip(
+                    title=label("settings.shortcuts.system_key_title"),
+                    body=label("settings.shortcuts.system_key")))
                 self._table.setItem(row, self._COL_KEY, key_item)
 
         lay.addWidget(self._table, 1)

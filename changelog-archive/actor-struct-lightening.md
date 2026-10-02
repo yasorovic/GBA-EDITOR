@@ -146,7 +146,7 @@ touchent `sprite.*`).
 
 ### Le modèle figé : `g_oam_entries[]` réserve l'OAM, `g_actors[]` ne porte que des acteurs
 
-**Proposé par Victor le 2026-09-25.** Le tableau qui réservait les slots OAM change de propriétaire :
+**Proposé par l'auteur le 2026-09-25.** Le tableau qui réservait les slots OAM change de propriétaire :
 
 | Tableau | Un indice = | Taille (max sur les scènes) | Porte |
 | --- | --- | --- | --- |
@@ -226,7 +226,7 @@ membres n'ont pas d'entrée (table de build, pas un simple décalage).
 3. **N sprite components, 1 actif** → swap d'apparence. **OUVERTE (2026-09-25), conception figée
    ci-dessous, code non commencé.** La plus grosse marche.
 
-#### Marche 3 — le modèle (décisions de Victor, 2026-09-25)
+#### Marche 3 — le modèle (décisions de l'auteur, 2026-09-25)
 
 - **VRAM : tout résident.** Toutes les apparences déclarées restent en VRAM, comme tous les sprites le
   sont déjà : `sprite_offsets_for` donne à chaque sprite une base fixe, calculée sur le PROJET (pas par
@@ -261,7 +261,7 @@ membres n'ont pas d'entrée (table de build, pas un simple décalage).
 
 #### Marche 3 — l'API de script (à trancher avant 3c)
 
-**Tranché à l'ouverture de la 3c (2026-09-25) — à valider par Victor.** Forme proposée par Victor :
+**Tranché à l'ouverture de la 3c (2026-09-25) — à valider par l'auteur.** Forme proposée par l'auteur :
 `self.sprite = self.sprite.myID`, mais `self.sprite` y désignerait deux choses (le composant actif et le
 conteneur des composants), et un id valant un nom de propriété serait ambigu. Le code donne un précédent
 plus net : le commentaire de `self.anim` dit que changer d'état est un GESTE (il remet frame et timer à
@@ -364,7 +364,7 @@ sprite components), et la validation (un budget par sprites affichés). À préc
 
 **Chantier CLOS (2026-09-25) — le modèle est complet côté code.** Marches 0a, 0b, 2, 3a, 3b, 3c
 et le rétrécissement des types sont toutes livrées ; l'API de script (`self:activate_sprite`,
-`self.active_sprite`) est validée par Victor, avec le suivi de renommage d'id. Deux points sont
+`self.active_sprite`) est validée par l'auteur, avec le suivi de renommage d'id. Deux points sont
 sortis de ce chantier plutôt que d'y rester ouverts indéfiniment :
 
 - la **vérification émulateur** de la marche 0b (mesurée seulement par le build headless et une

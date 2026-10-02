@@ -3,29 +3,17 @@
     "sndpanel.context_music": {
       "text": "Musique"
     },
-    "sndpanel.context_music_tip": {
-      "text": "Éditer les MusicBox et leurs états musicaux"
-    },
+    "sndpanel.context_music_tip": { "text": "Modifie les MusicBox et leurs états." },
     "sndpanel.context_sfx": {
       "text": "Effets sonores"
     },
-    "sndpanel.context_sfx_tip": {
-      "text": "Éditer les SoundBox et leurs actions d'effets sonores"
-    },
+    "sndpanel.context_sfx_tip": { "text": "Modifie les SoundBox et leurs actions." },
     "sndpanel.context_jingles": {
       "text": "Jingles"
     },
-    "sndpanel.context_jingles_tip": {
-      "text": "Éditer les JingleBox et leurs actions de jingle"
-    },
-    "sndpanel.rom_stop_tip": {
-      "text": "Arrêter la lecture ROM"
-    },
-    "sndpanel.rom_loop_tip": {
-      "text": "Boucler l'état courant pendant la lecture ROM"
-    },
-    "sndpanel.rom_progress_tip": {
-      "text": "Position courante dans le module joué par la lecture ROM"
+    "sndpanel.context_jingles_tip": { "text": "Modifie les JingleBox et leurs actions." },
+    "sndpanel.preview_state": {
+      "text": "Aperçu → {name}"
     },
     "scrsb.filter_placeholder": {
       "text": "Filtrer par nom…"
@@ -193,7 +181,10 @@
       "text": "Clair"
     },
     "settings.theme.note": {
-      "text": "Le thème s’appliquera au prochain démarrage de GBA Editor."
+      "text": "Le thème s’appliquera au prochain démarrage de {app_name}."
+    },
+    "settings.theme.restart": {
+      "text": "Relancer l’éditeur"
     },
     "settings.interface.show_tips": {
       "text": "Afficher les astuces"
@@ -202,11 +193,9 @@
       "text": "Langue"
     },
     "settings.interface.language_restart": {
-      "text": "Le changement de langue s’appliquera au prochain démarrage de GBA Editor."
+      "text": "Le changement de langue s’appliquera au prochain démarrage de {app_name}."
     },
-    "settings.shortcuts.hint": {
-      "text": "Cliquez dans une touche puis saisissez la nouvelle combinaison. Deux actions sur la même touche sont signalées en rouge : elles restent actives, mais seule la première déclarée dans ce contexte répond."
-    },
+    "settings.shortcuts.hint": { "text": "Cliquer dans une touche puis saisir la nouvelle combinaison la modifie. Deux actions sur la même touche sont signalées en rouge : elles restent actives, mais seule la première déclarée dans ce contexte répond." },
     "settings.shortcuts.col_context": {
       "text": "Contexte"
     },
@@ -349,7 +338,7 @@
       "text": "Exécutable"
     },
     "home.window_title": {
-      "text": "GBA Editor — Ouvrir un projet"
+      "text": "{app_name} — Ouvrir un projet"
     },
     "home.subtitle": {
       "text": "Sélectionnez un projet"
@@ -366,14 +355,9 @@
     "home.clear": {
       "text": "Effacer la liste"
     },
-    "home.clear_tip": {
-      "text": "Retire les entrées dont le projet est introuvable"
-    },
+    "home.clear_tip": { "text": "Retire les entrées dont le projet est introuvable." },
     "home.load": {
       "text": "Ouvrir un dossier…"
-    },
-    "home.load_tip": {
-      "text": "Parcourir le disque pour ouvrir le dossier d’un projet existant"
     },
     "home.create_project": {
       "text": "Créer un projet"
@@ -390,12 +374,8 @@
     "home.status.download": {
       "text": "Télécharger →"
     },
-    "home.status.explain_devkitpro": {
-      "text": "la chaîne de compilation (ARM + grit) qui transforme votre projet en ROM .gba jouable"
-    },
-    "home.status.explain_mgba": {
-      "text": "l’émulateur utilisé pour lancer et tester votre ROM directement depuis l’éditeur"
-    },
+    "home.status.explain_devkitpro": { "text": "la chaîne de compilation (ARM + grit) qui transforme le projet en ROM .gba jouable" },
+    "home.status.explain_mgba": { "text": "l’émulateur utilisé pour lancer et tester la ROM directement depuis l’éditeur" },
     "home.project.not_found": {
       "text": "introuvable"
     },
@@ -447,9 +427,7 @@
     "akind.no_font_assets": {
       "text": "Créez un asset de police, puis configurez ses sources et sa recette de rendu."
     },
-    "akind.font_asset_tip": {
-      "text": "{name} · {pixel_height} px · interligne {line_height} px"
-    },
+    "akind.font_asset_tip": { "text": "Hauteur {pixel_height} px, interligne {line_height} px." },
     "fontasset.title": {
       "text": "Asset de police"
     },
@@ -489,12 +467,8 @@
     "fontselect.choose_asset": {
       "text": "Choisir un asset de police"
     },
-    "fontselect.bold_tip": {
-      "text": "Utiliser la face grasse native"
-    },
-    "fontselect.italic_tip": {
-      "text": "Utiliser la face italique native"
-    },
+    "fontselect.bold_tip": { "text": "Utilise la face grasse native." },
+    "fontselect.italic_tip": { "text": "Utilise la face italique native." },
     "fontasset.primary": {
       "text": "Primaire"
     },
@@ -552,18 +526,14 @@
     "fontasset.preview_size": {
       "text": "Taille"
     },
-    "fontasset.preview_size_tip": {
-      "text": "Taille de rasterisation, partagée avec l’inspecteur et enregistrée dans cette police."
-    },
+    "fontasset.preview_size_tip": { "text": "Partagée avec l’inspecteur et enregistrée dans cette police." },
     "fontasset.preview_size_fixed": {
       "text": "{pixel_height} px (planche bitmap)"
     },
     "fontasset.preview_size_fixed_tip": {
       "text": "Taille fixée par la planche bitmap importée : contrairement à une police vectorielle, elle ne se rastérise pas à une autre taille."
     },
-    "fontasset.preview_canvas_tip": {
-      "text": "Molette : zoom. Clic central glissé : panoramique. Double-clic : réinitialiser la vue. La grille discrète marque les tuiles GBA 8×8."
-    },
+    "fontasset.preview_canvas_tip": { "text": "Compare la police source et son résultat rasterisé. La grille marque les tuiles GBA de 8 × 8 pixels." },
     "fontasset.preview_coverage": {
       "text": "Couverture source"
     },
@@ -678,21 +648,24 @@
     "win.documentation": {
       "text": "Documentation"
     },
+    "win.toolchain_missing_title": { "text": "Construction impossible pour l'instant" },
+    "win.toolchain_missing": { "text": "La ROM ne peut pas être construite pour l'instant : {missing} introuvable(s).\n\n{app_name} a besoin de devkitPro (il compile la ROM) et de mGBA (il la lance). Installez-les, puis relancez Build & Run.\n\ndevkitPro : {devkitpro_url}\nmGBA : {mgba_url}" },
+    "win.toolchain_open_settings": { "text": "Ouvrir les réglages de la toolchain" },
+    "win.open_log_folder": { "text": "Ouvrir le dossier du journal" },
+    "win.copy_diagnostics": { "text": "Copier les infos de diagnostic" },
+    "win.diagnostics_copied": { "text": "Infos de diagnostic copiées — à coller dans votre rapport de bug" },
     "scncanvas.graph_rearrange": {
       "text": "Réorganiser"
     },
     "scncanvas.graph_fit_tip": {
       "text": "Ajuster à la vue  (F)"
     },
-    "scncanvas.graph_show_notes_tip": {
-      "text": "Afficher ou masquer les notes libres du graphe"
-    },
-    "scncanvas.graph_minimap_tip": {
-      "text": "Afficher ou masquer la minimap du graphe (H)"
-    },
-    "scncanvas.graph_search_tip": {
-      "text": "Rechercher une scène dans le graphe (Ctrl+F)"
-    },
+    "scncanvas.graph_fit": { "text": "Ajuster le graphe à la vue" },
+    "scncanvas.graph_notes": { "text": "Afficher les notes" },
+    "scncanvas.graph_minimap": { "text": "Afficher la minimap" },
+    "scncanvas.graph_search": { "text": "Rechercher des scènes" },
+    "scncanvas.graph_show_notes_tip": { "text": "Affiche ou masque les notes libres du graphe." },
+    "scncanvas.graph_search_tip": { "text": "Ouvre un champ pour trouver une scène dans le graphe." },
     "scncanvas.graph_search_placeholder": {
       "text": "Rechercher une scène…"
     },
@@ -705,15 +678,128 @@
     "graphnote.title": {
       "text": "Titre"
     },
-    "scncanvas.graph_rearrange_tip": {
-      "text": "Replacer automatiquement toutes les scènes — annule les positions manuelles"
+    "scncanvas.graph_rearrange_tip": { "text": "Replace automatiquement toutes les scènes." },
+    "scncanvas.graph_rearrange_tip_warning": {
+      "text": "Les positions manuelles sont remplacées et cette action ne peut pas être annulée."
     },
+    "scttree.empty_hardware_background_slot": {
+      "text": "Emplacement matériel de fond vide"
+    },
+    "scttree.obj_priority_tip": {
+      "text": "Priorité OBJ {priority}"
+    },
+    "bgedit.d16_tip": {
+      "text": "La couleur directe 16bpp n’est pas encore disponible. Les images de plus de 256 couleurs sont importées comme bitmap palettisé en Mode 4."
+    },
+    "common.scene": {
+      "text": "Scène"
+    },
+    "common.background": {
+      "text": "Fond"
+    },
+    "common.speed": {
+      "text": "Vitesse"
+    },
+    "bgedit.kind_ui": {
+      "text": "Interface"
+    },
+    "bgedit.kind_animated": {
+      "text": "Animé"
+    },
+    "bgedit.kind_scene_tip": { "text": "Place cette image comme calque dans une scène. Sa palette peut être repeinte tuile par tuile." },
+    "bgedit.kind_ui_tip": { "text": "Utilise cette image dans un panneau d’interface, comme nine-slice ou image simple." },
+    "bgedit.kind_animated_tip": { "text": "Découpe cette planche en images qui peuvent être posées et lues sur un autre fond." },
+    "bgedit.tiled": {
+      "text": "Tuilé"
+    },
+    "bgedit.tiled_tip": { "text": "Construit une tilemap. Prend en charge le défilement, la réutilisation de tuiles et la recoloration des palettes." },
+    "bgedit.bitmap": {
+      "text": "Bitmap"
+    },
+    "bgedit.bitmap_tip": { "text": "Utilise une image plein écran jusqu’à 240 × 160 pixels. Adapté aux photos et écrans-titres ; les tuiles ne sont pas modifiables." },
+    "bgedit.d4_tip": { "text": "Utilise jusqu’à 16 couleurs par tuile, réparties dans 16 palettes. Permet la recoloration des palettes et les fonds tuilés." },
+    "bgedit.d8_tip": { "text": "Utilise une palette de 256 couleurs au maximum. Adapté au pixel art détaillé et aux bitmaps en Mode 4." },
+    "bgedit.dithering": {
+      "text": "Tramage"
+    },
+    "bgedit.dithering_tip": { "text": "Mélange les pixels voisins pour préserver les dégradés lorsque les couleurs sont réduites. Peut adoucir un pixel art net." },
+    "bgedit.nine": { "text": "Nine-slice" },
+    "bgedit.nine_tip": { "text": "Conserve les coins et répète les bords et le centre lors du redimensionnement." },
+    "bgedit.plain_tip": { "text": "Place l’image en haut à gauche et la recadre aux dimensions du panneau." },
+    "bgedit.speed_tip": { "text": "Définit le nombre de ticks entre deux images. Un tick dure 1/60 de seconde, comme pour une animation de sprite." },
+    "bgedit.per_instance": {
+      "text": "Par instance"
+    },
+    "bgedit.per_instance_tip": {
+      "text": "Chaque copie posée sur un fond s’anime indépendamment."
+    },
+    "bgedit.shared": {
+      "text": "Synchronisé"
+    },
+    "bgedit.shared_tip": {
+      "text": "Toutes les copies s’animent ensemble, au même moment."
+    },
+    "bgedit.anim_source_tip": { "one": "{n} image. Faire glisser l’animation sur le canvas la place.", "other": "{n} images. Faire glisser l’animation sur le canvas la place." },
+    "bgedit.start_frame": {
+      "text": "Image de départ"
+    },
+    "bgedit.pl_start_tip": { "text": "Définit l’image sur laquelle cette copie commence. Deux copies d’une même animation peuvent ainsi être décalées dans la boucle." },
+    "bgedit.pl_speed_tip": { "text": "Définit le nombre de ticks entre deux images pour cette copie seulement. La valeur par défaut suit la vitesse de l’animation." },
+    "bgedit.import_replace": {
+      "text": "⟐ Importer ou remplacer l’image…"
+    },
+    "bgedit.import_replace_title": { "text": "Importer ou remplacer l’image" },
+    "bgedit.import_replace_tip": { "text": "Importe un PNG et l’attache à ce fond. Le fichier image source n’est pas modifié." },
+    "sndpanel.rom_play": {
+      "text": "▶ Aperçu MusicBox"
+    },
+    "sndpanel.rom_play_tip": { "text": "Simule la MusicBox avec les mêmes états et transitions que le jeu." },
+    "sndpanel.rom_play_note": { "text": "Cliquer sur un nœud émet le déclencheur qui y mène ; sans transition vers ce nœud, rien ne se produit. Cet aperçu ne lance pas une ROM compilée." },
+    "win.oam_title": { "text": "OAM (Object Attribute Memory)" },
+    "win.oam_tip": { "text": "L’OAM est une mémoire de 1 Kio qui contient 128 entrées de sprite (OBJ). Chaque entrée porte la position, la taille et l’apparence d’un sprite matériel.\nCompté ici : les entrées que le build réserve pour la scène active. Ce sont ses acteurs actifs qui ont un sprite, affiché ou caché, ses zones d’interface en cible sprite et ses pools de prefabs." },
+    "win.oam_note": { "text": "Un acteur sans sprite n’utilise aucune entrée. Les entrées au-delà de 128 ne sont pas dessinées, et le build refuse la scène." },
+    "win.cycles_title": { "text": "Cycles OBJ par scanline" },
+    "win.cycles_tip": { "text": "La GBA dispose de 1210 cycles par scanline pour dessiner les sprites. Un sprite ordinaire coûte environ sa largeur en pixels. Un sprite tourné ou mis à l’échelle coûte deux fois sa largeur plus 10.\nCompté ici : la ligne la plus chargée des 160 de la scène active, d’après les sprites affichés au démarrage de la scène et les zones de texte en cible sprite." },
+    "win.cycles_note": { "text": "Au-delà du budget, les sprites qui viennent plus loin dans l’ordre OAM ne sont pas dessinés sur cette ligne." },
+    "win.vram_title": { "text": "OBJ VRAM (tuiles de sprites)" },
+    "win.vram_tip": { "text": "La VRAM fait 96 Kio : 64 Kio pour les fonds, puis une zone de 32 Kio pour les graphismes de sprites. Cette zone contient 1024 tuiles de 8×8 pixels en 4bpp, ou 512 quand une scène utilise un mode bitmap.\nCompté ici : chaque frame de chaque sprite que la ROM charge, une seule fois par sprite, plus les tuiles des zones de texte en cible sprite. Un sprite 16×16 prend 4 tuiles par frame et un sprite 32×32 en prend 16." },
+    "win.vram_note": { "text": "Ce compte porte sur tout le projet, pas seulement sur la scène active : les sprites restent résidents pendant le jeu." },
+    "win.objpal_title": { "text": "Palettes OBJ (sprites)" },
+    "win.objpal_tip": { "text": "La Palette RAM fait 1 Kio et contient deux palettes de 256 couleurs : une pour les sprites, une pour les fonds. En 4bpp, la palette des sprites est découpée en 16 banks de 16 couleurs.\nCompté ici : les banks que la scène active occupe, d’après les palettes que ses sprites référencent et les palettes propres que l’éditeur place dans les banks libres." },
+    "win.objpal_note": { "text": "La couleur 0 de chaque bank est transparente." },
+    "win.bgpal_title": { "text": "Palettes BG (fonds)" },
+    "win.bgpal_tip": { "text": "La Palette RAM contient deux palettes de 256 couleurs : une pour les fonds, une pour les sprites. En 4bpp, la palette des fonds est découpée en 16 banks de 16 couleurs.\nCompté ici : les banks que la scène active occupe, d’après ses layers de fond et son texte d’interface." },
+    "win.bgpal_note": { "text": "La couleur 0 de chaque bank est transparente." },
+    "win.sram_title": { "text": "SRAM (mémoire de sauvegarde)" },
+    "win.sram_tip": { "text": "La cartouche garde les sauvegardes dans 32 Kio de SRAM sur pile.\nCompté ici : les emplacements de sauvegarde multipliés par la taille d’un emplacement, qui contient les variables globales persistantes. Le compte reste à 0 tant qu’aucune variable n’est persistante." },
+    "win.sram_note": { "text": "Ce compte porte sur tout le projet, pas seulement sur la scène active. Au-delà de 32 Kio, le build est refusé." },
+    "win.ewram_tip": { "text": "L’EWRAM est une RAM de travail de 256 Kio, plus lente que l’IWRAM (bus 16 bits), réservée au démarrage. Le moteur y garde ses tables d’acteurs et de sprites et l’état des scripts, et n’alloue rien pendant le jeu.\nCompté ici : les données statiques que le linker place en EWRAM." },
+    "win.ewram_note": { "text": "L’espace restant reste inutilisé." },
+    "win.iwram_tip": { "text": "L’IWRAM est une RAM de travail rapide de 32 Kio (bus 32 bits), réservée au démarrage. La pile y descend depuis le haut : plus il y a de données stockées depuis le bas, moins la pile a de place.\nCompté ici : les données statiques et le code que le linker place en IWRAM." },
+    "win.iwram_stored": { "text": "Stocké en dur :" },
+    "win.iwram_largest": { "text": "Plus gros éléments :" },
+    "win.iwram_part_iwram": { "text": "Routines du moteur placées en mémoire rapide" },
+    "win.iwram_part_bss": { "text": "Variables initialisées à zéro" },
+    "win.iwram_part_data": { "text": "Variables avec une valeur de départ" },
+    "win.iwram_part_other": { "text": "Autres" },
+    "win.count_value": { "text": "{used}/{limit}" },
+    "win.kib_value": { "text": "{used}/{limit} Kio" },
+    "win.after_build_note": { "text": "La valeur est connue après un build." },
+    "win.affine_title": { "text": "Matrices affines OBJ" },
+    "win.affine_tip": { "text": "La GBA possède 32 matrices affines. Un sprite qui tourne ou change d’échelle en utilise une.\nCompté ici : les matrices que la scène active demande avec Affine transform, une par acteur qui l’active et une par acteur de chaque pool de prefab dont la racine l’active." },
+    "win.affine_note": { "text": "Un acteur enfant sans rotation ni échelle propres partage la matrice de son parent sans rien coûter. Une demande au-delà de 32 n’obtient aucune matrice, et son sprite est dessiné sans la transformation." },
+    "win.bgvram_title": { "text": "BG VRAM (tuiles et maps de fonds)" },
+    "win.bgvram_tip": { "text": "Les 64 premiers Kio de la VRAM contiennent les graphismes des fonds, en 4 charblocks de 16 Kio. Les tuiles et les tilemaps se partagent cet espace, par blocs de 2 Kio.\nCompté ici : les blocs que la scène active utilise pour les tuiles de ses fonds, leurs tilemaps et les glyphes de son texte d’interface." },
+    "win.bgvram_note": { "text": "Une scène dont les fonds ne tiennent pas est refusée par le build." },
+    "win.ewram_title": { "text": "EWRAM (RAM de travail externe)" },
+    "win.iwram_title": { "text": "IWRAM (RAM de travail interne)" },
+    "win.iwram_note": { "text": "La pile n’est pas comptée : elle a besoin de place libre en haut de l’IWRAM." },
+    "sceneinsp.pal_obj": { "text": "OBJ (sprites)" },
+    "sceneinsp.pal_bg": { "text": "BG (fonds)" },
     "scncanvas.graph_root": {
       "text": "Toutes les scènes"
     },
-    "scncanvas.graph_preview_tip": {
-      "text": "Activer l'aperçu du fond de cette scène sur son nœud"
-    },
+    "scncanvas.graph_preview_tip": { "text": "Affiche ou masque l’aperçu du fond de cette scène sur son nœud." },
     "scncanvas.graph_edit_scene": {
       "text": "Éditer la scène"
     },
@@ -750,6 +836,112 @@
     "scncanvas.graph_delete_selection_confirm": {
       "text": "Supprimer la sélection : {scenes} scène(s) et {folders} dossier(s) ? Les dossiers gardent leur contenu ; les scènes sont supprimées (Ctrl+Z)."
     },
+    "cvtop.zoom_out": {
+      "text": "Dézoomer"
+    },
+    "cvtop.wheel_down": {
+      "text": "Molette vers le bas"
+    },
+    "cvtop.zoom_in": {
+      "text": "Zoomer"
+    },
+    "cvtop.wheel_up": {
+      "text": "Molette vers le haut"
+    },
+    "scncanvas.fit": {
+      "text": "Ajuster la scène à la vue"
+    },
+    "scncanvas.grid_8px": {
+      "text": "Grille 8 px"
+    },
+    "scncanvas.grid_8px_tip": { "text": "Affiche les limites des tuiles GBA de 8 × 8 pixels." },
+    "scncanvas.grid_16px": {
+      "text": "Grille 16 px"
+    },
+    "scncanvas.grid_16px_tip": { "text": "Affiche une grille de 16 × 16 pixels pour aligner les sprites et les éléments de la scène." },
+    "scncanvas.snap": {
+      "text": "Aligner sur la grille"
+    },
+    "scncanvas.snap_tip": { "text": "Aligne les acteurs et les éléments d’interface sur la grille active lors de leur déplacement." },
+    "scncanvas.actor_boxes": {
+      "text": "Boîtes de collision des acteurs"
+    },
+    "scncanvas.actor_boxes_tip": { "text": "Affiche les boîtes de collision de tous les acteurs de la scène active." },
+    "scncanvas.collisions": {
+      "text": "Collisions de la scène"
+    },
+    "scncanvas.collisions_tip": { "text": "Affiche la carte de collision peinte pour la scène active." },
+    "scncanvas.interface": {
+      "text": "Éléments d’interface"
+    },
+    "scncanvas.interface_tip": { "text": "Affiche les textes, conteneurs, listes et images placés dans la scène." },
+    "cvtool.select": {
+      "text": "Sélectionner"
+    },
+    "cvtool.select_tip": { "text": "Sélectionne et déplace les acteurs ou les éléments d’interface sur le canvas." },
+    "cvtool.shortcut_select": {
+      "text": "S"
+    },
+    "cvtool.add_actor": {
+      "text": "Ajouter un acteur"
+    },
+    "cvtool.add_actor_tip": { "text": "Un clic sur le canvas place un nouvel acteur." },
+    "cvtool.shortcut_add": {
+      "text": "A"
+    },
+    "cvtool.eraser": {
+      "text": "Effacer un acteur"
+    },
+    "cvtool.eraser_tip": { "text": "Un clic sur un acteur le retire de la scène active." },
+    "cvtool.shortcut_erase": {
+      "text": "E"
+    },
+    "cvtool.collision_editing": {
+      "text": "Éditer les collisions"
+    },
+    "cvtool.collision_editing_tip": { "text": "Peint les cellules de collision de la scène active avec le pinceau choisi." },
+    "cvtool.8_8_px_brush": {
+      "text": "Pinceau 8 × 8 px"
+    },
+    "cvtool.collision_brush_8_8_px": {
+      "text": "Peint les cellules de collision tuile par tuile, en 8 × 8 pixels."
+    },
+    "cvtool.16_16_px_brush": {
+      "text": "Pinceau 16 × 16 px"
+    },
+    "cvtool.collision_brush_16_16_px": {
+      "text": "Peint les cellules de collision par blocs de 16 × 16 pixels."
+    },
+    "cvtool.floor_slope": {
+      "text": "Pente de sol"
+    },
+    "cvtool.floor_slope_triangle_bresenham": {
+      "text": "Peint une pente de sol montante sous forme de triangle."
+    },
+    "cvtool.ceiling_slope": {
+      "text": "Pente de plafond"
+    },
+    "cvtool.ceiling_slope_tip": { "text": "Peint une pente de sol inversée sous forme de triangle." },
+    "cvtool.scene_inpainting": {
+      "text": "Recolorer les palettes du fond"
+    },
+    "cvtool.scene_inpainting_tip": { "text": "Recolore la palette des tuiles de fond de la scène avec l’outil choisi." },
+    "cvtool.brush": {
+      "text": "Pinceau"
+    },
+    "cvtool.inpaint_brush_tip": { "text": "Repeint la palette de chaque tuile de 8 × 8 pixels traversée. Les pixels de l’image ne changent pas." },
+    "cvtool.rectangle": {
+      "text": "Rectangle"
+    },
+    "cvtool.inpaint_rect_tip": { "text": "Repeint la palette de chaque tuile dans une zone rectangulaire. Les pixels de l’image ne changent pas." },
+    "cvtool.interface_widget": {
+      "text": "Ajouter un élément d’interface"
+    },
+    "cvtool.interface_widget_tip": { "text": "Place un élément d’interface du type choisi en traçant sa zone sur le canvas." },
+    "cvtool.text_tip": { "text": "Crée une zone de texte. Son contenu s’écrit ici ou reste vide pour qu’un script le remplisse." },
+    "cvtool.container_tip": { "text": "Crée une zone parente pour grouper des éléments. Elle peut ancrer ses enfants et afficher un fond." },
+    "cvtool.list_tip": { "text": "Crée un conteneur que le moteur peut parcourir comme des lignes avec curseur et sélection." },
+    "cvtool.image_tip": { "text": "Crée un élément image. Un script peut changer l’état de son sprite." },
     "assf.script": {
       "text": "Script"
     },
@@ -798,29 +990,156 @@
     "rombar.mode_breakdown": {
       "text": "Répartition"
     },
-    "rombar.mode_tip": {
-      "text": "Affichage de la barre : Remplissage montre l'espace libre ; Répartition compare les catégories."
-    },
+    "rombar.mode_tip": { "text": "Remplissage montre l’espace libre de la cartouche ; Répartition compare les catégories de ressources." },
     "rombar.target": {
       "text": "ROM  {_cartridge_mib} Mio ▾"
     },
     "rombar.free_space": {
       "text": "{size:,.1f} KiB libres"
     },
-    "bginp.crop_tip": {
-      "text": "Recadrer la source — tirez les poignées, Entrée applique, Échap annule. Maj garde les proportions d'origine, Ctrl accroche à 8 px. Le fichier image n'est jamais modifié."
+    "bginp.crop_tip": { "text": "Les poignées ajustent la zone. Le fichier image n’est jamais modifié." },
+    "bginp.crop": {
+      "text": "Recadrer l’image"
     },
-    "bginp.resize_tip": {
-      "text": "Redimensionner l'image — tirez le bord droit ou le bas. Maj garde les proportions, Ctrl accroche à 8 px. Le fichier image n'est jamais modifié."
+    "bginp.resize_tip": { "text": "Faire glisser le bord droit ou inférieur redimensionne l’image. Maj conserve les proportions. Ctrl aligne sur 8 px. Le fichier image n’est jamais modifié." },
+    "bginp.resize": {
+      "text": "Redimensionner l’image"
     },
-    "bginp.prep_reset_tip": {
-      "text": "Revenir à l'image d'origine (annule le recadrage et le redimensionnement)"
+    "bginp.prep_reset_tip": { "text": "Annule les ajustements de recadrage et de redimensionnement." },
+    "bginp.prep_reset": {
+      "text": "Restaurer l’image source"
     },
+    "bginp.edit_image": {
+      "text": "Modifier l’image…"
+    },
+    "bginp.edit_image_tip": { "text": "Ouvre le PNG source dans l’éditeur d’images configuré. Un clic droit propose un autre éditeur." },
+    "bginp.brush": {
+      "text": "Pinceau"
+    },
+    "bginp.brush_tip": { "text": "Recolore la palette de chaque tuile de 8 × 8 traversée. Les pixels de l’image ne sont pas modifiés." },
+    "bginp.fill": {
+      "text": "Pot de peinture"
+    },
+    "bginp.fill_tip": { "text": "Recolore la palette d’une zone de tuiles contiguë. Les pixels de l’image ne sont pas modifiés." },
+    "bginp.rectangle_repaint_an_area": {
+      "text": "Rectangle"
+    },
+    "bginp.rectangle_tip": { "text": "Recolore la palette de chaque tuile dans une zone rectangulaire. Les pixels de l’image ne sont pas modifiés." },
+    "bginp.eraser": {
+      "text": "Gomme"
+    },
+    "bginp.eraser_tip": { "text": "Restaure la palette d’origine de chaque tuile de 8 × 8 traversée." },
+    "bginp.fit_background_to_view": {
+      "text": "Ajuster le fond à la vue"
+    },
+    "bginp.8_px_grid_gba_tile": {
+      "text": "Grille 8 px"
+    },
+    "bginp.grid_tip": { "text": "Affiche la grille de 8 × 8 pixels utilisée par les tuiles GBA." },
+    "bgedit.restore": {
+      "text": "↺ Restaurer l’original…"
+    },
+    "bgedit.restore_title": { "text": "Restaurer l’original" },
+    "bgedit.restore_tip": { "text": "Restaure le fond à sa première importation et recompresse le PNG source." },
+    "bgedit.restore_tip_warning": {
+      "text": "Les palettes ajoutées et la peinture seront perdues."
+    },
+    "bgedit.extract": {
+      "text": "⤓ EXTRAIRE LES PALETTES"
+    },
+    "bgedit.extract_title": { "text": "Extraire les palettes" },
+    "bgedit.extract_tip": { "text": "Crée des palettes de catalogue partagées à partir du PNG et les assigne à ce fond. Elles restent modifiables dans l’éditeur de palettes." },
+    "bgedit.extract_warning": { "text": "Si ces palettes existent déjà, leurs couleurs sont remplacées." },
+    "bgedit.margin_left": { "text": "Marge gauche" },
+    "bgedit.margin_right": { "text": "Marge droite" },
+    "bgedit.margin_top": { "text": "Marge haute" },
+    "bgedit.margin_bottom": { "text": "Marge basse" },
+    "bgedit.margin_tip": { "text": "Définit la bordure fixe de ce côté d’un nine-slice, en pixels." },
+    "bgedit.margin_tip_note": { "text": "La valeur est arrondie à la tuile de 8 pixels inférieure lors de la compilation." },
+    "bgedit.frame_width": { "text": "Largeur d’image" },
+    "bgedit.frame_height": { "text": "Hauteur d’image" },
+    "bgedit.frame_tip": { "text": "Définit la taille d’une image de l’animation, en pixels. « Plein » utilise l’image entière sur cet axe." },
+    "bgedit.background_finder": { "text": "Recherche de fonds" },
+    "bgedit.d4": { "text": "4bpp" },
+    "bgedit.d8": { "text": "8bpp" },
+    "bgedit.d16": { "text": "16bpp" },
+    "bgedit.default": { "text": "par défaut" },
+    "bgedit.frame_full": { "text": "plein" },
+    "bgedit.margins": { "text": "Marges" },
+    "bgedit.sec_ui_role": { "text": "Rôle d’interface" },
+    "bgedit.sec_animation": { "text": "Animation" },
+    "bgedit.sec_animations": { "text": "Animations" },
+    "bgedit.sec_placement": { "text": "Placement" },
+    "bgedit.playback": { "text": "Lecture" },
+    "bgedit.src_hint": { "text": "Glisser sur le canvas le place." },
+    "bgedit.ticks_suffix": { "text": " ticks" },
+    "bgedit.import_scene": { "text": "Importer un fond de scène" },
+    "bgedit.import_ui": { "text": "Importer un fond d’interface" },
+    "bgedit.import_anim": { "text": "Importer un fond animé" },
+    "bgedit.choose_image": { "text": "Choisir une image" },
+    "bgedit.images_png": { "text": "Images PNG (*.png)" },
+    "bgedit.import_title": { "text": "Importation du fond" },
+    "bgedit.no_extract_title": { "text": "Aucune palette à extraire" },
+    "bgedit.no_extract_text": { "text": "Ce fond ne contient aucune palette à extraire." },
+    "bgedit.extracted_title": { "text": "Palettes extraites" },
+    "bgedit.extracted_text": { "text": "{n} palette(s) ajoutée(s) au catalogue et assignée(s) à « {name} » :\n  {list}\n\nElles sont maintenant visibles et modifiables dans l’éditeur de palettes." },
+    "bgedit.limit_title": { "text": "Limite atteinte" },
+    "bgedit.limit_text": { "text": "Un fond ne peut utiliser que 16 palettes." },
+    "bgedit.del_pal_title": { "text": "Retirer" },
+    "bgedit.del_pal_text": { "text": "Retirer la palette {idx} ?\nLes tuiles qui l’utilisent reviendront à la palette 0." },
+    "bgedit.name_used_title": { "text": "Nom déjà utilisé" },
+    "bgedit.name_used_text": { "text": "Un fond nommé « {name} » existe déjà." },
+    "bgedit.restore_dialog_title": { "text": "Restaurer l’original" },
+    "bgedit.restore_dialog_text": { "text": "Réinitialiser ce fond à sa toute première importation ?\nLes palettes ajoutées et la peinture seront perdues." },
+    "bgedit.restore_no_png_title": { "text": "Impossible" },
+    "bgedit.restore_no_png_text": { "text": "PNG source introuvable. Restauration impossible." },
+    "bgedit.compress_fail_title": { "text": "Compression impossible" },
+    "bgedit.compress_fail_text": { "text": "Impossible de compresser le fond :\n{msg}" },
+    "bgedit.source_origin_ncol_s_colors": { "text": "Source : {origin} · {ncol_s} couleurs" },
+    "bgedit.out_w_out_h_px_bitmap_240_160": { "text": "{out_w}×{out_h} px · bitmap ≤ 240×160" },
+    "bgedit.unique_tiles_value_budget_bpp_bpp": { "text": "Tuiles uniques : {value} / {budget} ({bpp}bpp)" },
+    "bgedit.ui_nine_slice_margins_l_r_t_b": { "text": "Interface : nine-slice (marges {l}/{r}/{t}/{b} px)" },
+    "bgedit.at_build_tl_tr_tt_tb_tiles": { "text": "À la compilation : {tl}/{tr}/{tt}/{tb} tuiles" },
+    "bgedit.frames_n_cols_rows_grid_of_fw_fh": { "text": "Images : {n} ({cols}×{rows} de {fw}×{fh} px)" },
+    "bgedit.animations_placed_n": { "text": "Animations placées : {n}" },
+    "bgedit.value_value_2_px_tiles_w_tiles_h": { "text": "{value}×{value_2} px · {tiles_w}×{tiles_h} tuiles" },
+    "bgedit.palettes_value_16": { "text": "Palettes : {value} / 16" },
+    "bgedit.cycle_speed_ticks_frame_secs_2f_s": { "text": "Cycle : {speed} ticks/image · {secs:.2f} s" },
+    "bgedit.indexed_original_palette": { "text": "indexé (palette d’origine)" },
+    "bgedit.mode_4_full_screen_no_tiles": { "text": "Mode 4 (plein écran, sans tuiles)" },
+    "bgedit.palette_256_colors_1": { "text": "Palette : 256 couleurs (1)" },
+    "bgedit.ui_plain_info": { "text": "Interface : fond simple (placé en haut à gauche, recadré au panneau)" },
+    "bgedit.compat_ok": { "text": "✓ Compatible GBA ({bpp}bpp). Compression sans perte." },
+    "bgedit.bitmap_ok": { "text": "✓ Bitmap GBA (Mode 4). Plein écran, sans perte de tuile." },
+    "bgedit.compression_failed": { "text": "⚠ Compression impossible. Image vide ou illisible." },
+    "bgedit.bitmap_needs_tiles": { "text": "⚠ Bitmap (Mode 4). Un {value} nécessite des tuiles : passez en tuilé." },
+    "bgedit.image_scaled_out_w_out_h_240_160": { "text": "⚠ Image redimensionnée → {out_w}×{out_h} (≤ 240×160)." },
+    "bgedit.n_tile_s_gt_15_colors_max_mtc": { "text": "⚠ {n} tuile(s) > 15 couleurs (max. {mtc}). Couleurs réduites, avec perte." },
+    "bgedit.palettes_merged": { "text": "⚠ {pre} palettes nécessaires > 16. Fusionnées en {value}, avec perte." },
+    "bgedit.iw_ih_not_divisible_by_fw_fh_value": { "text": "⚠ {iw}×{ih} non divisible par {fw}×{fh}. {value}×{value_2} px ignorés." },
+    "bgedit.w_h_px_not_a_multiple_of_8": { "text": "⚠ {w}×{h} px n’est pas un multiple de 8. Remplissage transparent ({value}×{value_2})." },
+    "bgedit.tiles_exceed_vram": { "text": "⚠ {value} tuiles uniques > {bud}. Dépasse la VRAM ({bpp}bpp)." },
+    "bgedit.gt_256_colors_reduced_to_256_lossy": { "text": "⚠ Plus de 256 couleurs. Réduites à 256, avec perte." },
+    "bgedit.reduced_256_8bpp": { "text": "⚠ Plus de 256 couleurs. Réduites à 256, avec perte en mode 8bpp." },
+    "bgedit.margins_overlap": { "text": "⚠ Les marges opposées se chevauchent. Les coins seront compressés sur les petits panneaux." },
+    "bgedit.frame_too_large": { "text": "⚠ Image plus grande que la planche. Aucune image à lire." },
+    "bgedit.margin_rounding": { "text": "⚠ La marge {margins} n’est pas un multiple de 8. Elle est arrondie à la tuile inférieure lors de la compilation." },
+    "bgedit.once": { "text": " · une fois" },
+    "bginp.compressing": { "text": "Compression…" },
+    "bginp.remove_this_animation": { "text": "Retirer cette animation" },
+    "common.choose_editor": { "text": "Choisir un éditeur" },
+    "common.use_default": { "text": "Utiliser l’application par défaut" },
+    "common.frame": { "text": "Image" },
+    "common.loop": { "text": "Boucle" },
+    "common.no_palette": { "text": "Aucune palette" },
+    "common.palette_i": { "text": "Palette {i}" },
+    "common.palettes": { "text": "Palettes" },
     "bgedit.analyze": {
       "text": "Analyser pour le 4bpp"
     },
-    "bgedit.analyze_tip": {
-      "text": "Mesure ce que le 4bpp demanderait à cette image — couleurs par tuile, couleurs partagées entre tuiles, palettes nécessaires — sans rien changer."
+    "bgedit.analyze_tip": { "text": "Mesure les couleurs par tuile, les couleurs partagées et les palettes nécessaires." },
+    "bgedit.analyze_tip_note": {
+      "text": "Aucune modification n’est appliquée."
     },
     "bgedit.analyzing": {
       "text": "Analyse…"
@@ -861,26 +1180,21 @@
     "bgedit.comp_palettes": {
       "text": "Palettes"
     },
-    "bgedit.comp_palettes_tip": {
-      "text": "Combien des 16 sous-palettes l'image peut employer. Moins de palettes : moins de couleurs distinctes sur l'ensemble."
-    },
+    "bgedit.comp_palettes_tip": { "text": "Définit combien des 16 sous-palettes l’image peut employer. Moins de palettes donne moins de couleurs distinctes." },
     "bgedit.comp_colors": {
       "text": "Couleurs / palette"
     },
-    "bgedit.comp_colors_tip": {
-      "text": "Couleurs de chaque sous-palette (l'index 0 reste transparent). Moins de couleurs : plus plat, plus graphique."
-    },
+    "bgedit.comp_colors_tip": { "text": "Définit les couleurs de chaque sous-palette. L’index 0 reste transparent. Moins de couleurs donne un rendu plus plat et plus graphique." },
     "bgedit.comp_global": {
       "text": "Couleurs globales"
     },
-    "bgedit.comp_global_tip": {
-      "text": "Réduit TOUTE l'image à ce nombre de couleurs avant le découpage en tuiles, pour que les tuiles voisines s'accordent sur leurs couleurs. Désactivé = chaque tuile est réduite seule."
-    },
+    "bgedit.comp_global_tip": { "text": "Réduit toute l’image à ce nombre de couleurs avant le découpage en tuiles, afin que les tuiles voisines partagent leurs couleurs. Désactivé : chaque tuile est réduite séparément." },
     "bgedit.comp_tiles": {
       "text": "Tuiles"
     },
-    "bgedit.comp_tiles_tip": {
-      "text": "Tuiles uniques à garder. En dessous du compte de l'image, les tuiles qui se ressemblent sont fusionnées — les zones lisses d'abord. Le GBA en tient 512 (4bpp) ou 256 (8bpp) par charblock."
+    "bgedit.comp_tiles_tip": { "text": "Limite le nombre de tuiles conservées. Les tuiles proches sont fusionnées lorsque la limite est dépassée, d’abord dans les zones les plus uniformes." },
+    "bgedit.comp_tiles_tip_note": {
+      "text": "Limite matérielle : 512 tuiles en 4bpp ou 256 tuiles en 8bpp par charblock."
     },
     "bgedit.comp_method": {
       "text": "Méthode"
@@ -891,9 +1205,7 @@
     "bgedit.comp_reset": {
       "text": "Réinitialiser la compression"
     },
-    "bgedit.comp_reset_tip": {
-      "text": "Retour aux réglages par défaut"
-    },
+    "bgedit.comp_reset_tip": { "text": "Rétablit les réglages de compression par défaut." },
     "bgedit.comp_off": {
       "text": "Non"
     },
@@ -918,9 +1230,7 @@
     "bgedit.comp_colors8": {
       "text": "Couleurs"
     },
-    "bgedit.comp_colors8_tip": {
-      "text": "Couleurs de l'unique palette de 256 (l'index 0 reste transparent). Moins de couleurs : plus plat, plus graphique — et les tuiles voisines se ressemblent davantage, donc plus se fondent."
-    },
+    "bgedit.comp_colors8_tip": { "text": "Définit les couleurs de l’unique palette de 256 couleurs. L’index 0 reste transparent. Moins de couleurs donne un rendu plus plat et plus graphique, et permet de fusionner davantage de tuiles voisines." },
     "bgedit.method_octree": {
       "text": "Octree"
     },
@@ -936,9 +1246,7 @@
     "inputs.window_prefix": {
       "text": "Fenêtre "
     },
-    "inputs.window_tip": {
-      "text": "Combien de frames peuvent s'écouler entre deux pas de cette séquence."
-    },
+    "inputs.window_tip": { "text": "Définit combien d’images peuvent s’écouler entre deux pas de cette séquence." },
     "inputs.expression_empty": {
       "text": "Aucune expression pour l'instant."
     },
@@ -951,9 +1259,7 @@
     "inputs.axes": {
       "text": "Axes"
     },
-    "inputs.axes_hint": {
-      "text": "Déclare un axe scalaire — remappe la croix, ou pilote un axe avec d'autres boutons/actions. « horizontal » et « vertical » (la croix) existent toujours, même dans un projet qui n'en déclare aucun."
-    },
+    "inputs.axes_hint": { "text": "Déclare un axe scalaire : il remappe la croix, ou pilote un axe avec d’autres boutons ou actions. « horizontal » et « vertical » (la croix) existent toujours, même dans un projet qui n’en déclare aucun." },
     "inputs.declare_an_axis": {
       "text": "Déclarer un axe"
     },
@@ -976,9 +1282,7 @@
     "inputs.sequences": {
       "text": "Séquences"
     },
-    "inputs.sequences_hint": {
-      "text": "Une séquence nommée reconnue par input:get_sequence(\"nom\") — un quart de cercle, un demi-cercle, un dragon punch, ou une composition personnelle. Écris son expression : « + » pour un accord (down + a), « - » pour le pas suivant (down - down+right - right), « (a|b) » pour une alternative."
-    },
+    "inputs.sequences_hint": { "text": "Une séquence nommée reconnue par input:get_sequence(\"nom\") : un quart de cercle, un demi-cercle, un dragon punch, ou une composition personnelle. Son expression emploie « + » pour un accord (down + a), « - » pour le pas suivant (down - down+right - right) et « (a|b) » pour une alternative." },
     "inputs.declare_a_sequence": {
       "text": "Déclarer une séquence"
     },
@@ -1001,6 +1305,688 @@
     "inputs.button_l": { "text": "L" },
     "inputs.button_r": { "text": "R" },
     "inputs.button_start": { "text": "Start" },
-    "inputs.button_select": { "text": "Select" }
+    "inputs.button_select": { "text": "Select" },
+    "win.about_text": { "text": "{app_name} {version}\npar {author}\n\nÉditeur homebrew pour la Game Boy Advance" },
+    "win.close_save_failed_title": { "text": "Projet non enregistré" },
+    "win.close_save_failed": { "text": "Les dernières modifications n'ont pas pu être écrites sur le disque :\n{error}\n\nFermer quand même et les perdre ?" },
+    "win.save_state_saved": { "text": "Projet enregistré" },
+    "win.save_state_unsaved": { "text": "Modifications non enregistrées" },
+    "win.save_state_saved_tip": { "text": "Toutes les modifications sont sur le disque." },
+    "win.save_state_unsaved_tip": { "text": "Une modification attend d’être écrite sur le disque." },
+    "sprframe.previous_frame": { "text": "Image précédente" },
+    "sprframe.previous_frame_tip": { "text": "Reste dans la direction active." },
+    "sprframe.play_preview": { "text": "Lire l’aperçu de l’animation" },
+    "sprframe.play_preview_tip": { "text": "Lit les images de la direction active à la vitesse de l’animation." },
+    "sprframe.next_frame": { "text": "Image suivante" },
+    "sprframe.next_frame_tip": { "text": "Reste dans la direction active." },
+    "sprframe.grid": { "text": "Grille de tuiles" },
+    "sprframe.grid_tip": { "text": "Affiche la grille des tuiles GBA de 8 × 8 pixels sur le canvas de l’image." },
+    "sprframe.preview_png": { "text": "Aperçu de la palette PNG" },
+    "sprframe.preview_png_tip": { "text": "Affiche le résultat compressé du sprite avec sa palette propre." },
+    "sprframe.preview_indexed": { "text": "Aperçu avec palette" },
+    "sprframe.preview_indexed_tip": { "text": "Recolore le sprite avec la palette active de la bande PALETTE, comme dans le jeu." },
+    "sprframe.flip_x": { "text": "Retourner la brosse horizontalement" },
+    "sprframe.flip_y": { "text": "Retourner la brosse verticalement" },
+    "sprframe.fit": { "text": "Ajuster à la vue" },
+    "sprframe.fit_title": { "text": "Ajuster à la vue" },
+    "sprframe.zoom_out": { "text": "Dézoomer" },
+    "sprframe.zoom_in": { "text": "Zoomer" },
+    "sprpanel.speed_tip": { "text": "Définit le nombre de ticks GBA entre deux images. Un tick dure 1/60 de seconde : 8 = 7,5 i/s, 4 = 15 i/s, 2 = 30 i/s." },
+    "sprpanel.import_replace_title": { "text": "Importer ou remplacer l’image" },
+    "sprpanel.import_replace_tip": { "text": "Choisit une image, la valide et l’encode pour la GBA, puis l’attache au sprite actif. Le fichier source n’est pas modifié." },
+    "sprpanel.extract_title": { "text": "Extraire la palette du PNG" },
+    "sprpanel.extract_tip": { "text": "Crée une palette dans le catalogue à partir des couleurs du PNG. L’index 0 est transparent." },
+    "sprsheet.edit": { "text": "Éditer l’image source" },
+    "sprsheet.edit_tip": { "text": "Ouvre le PNG source dans l’éditeur d’images configuré." },
+    "sprsheet.zoom_out": { "text": "Dézoomer" },
+    "sprsheet.zoom_in": { "text": "Zoomer" },
+    "dirwidget.h_mirror_title": { "text": "Miroiter les directions horizontalement" },
+    "dirwidget.mirror_h_tip": { "text": "Génère les directions O, NO et SO à partir de E, NE et SE." },
+    "dirwidget.v_mirror_title": { "text": "Miroiter les directions verticalement" },
+    "dirwidget.mirror_v_tip": { "text": "Génère les directions S, SE et SO à partir de N, NE et NO." },
+    "sprpanel.extract_warning": { "text": "Si cette palette existe déjà, ses couleurs sont remplacées." },
+    "palslot.slot": { "text": "Emplacement de palette {slot}" },
+    "palslot.slot_tip": { "text": "Utilise la palette {name} ; un clic la remplace et un clic droit la retire." },
+    "palslot.override": { "text": "Remplacement de palette" },
+    "palslot.override_tip": { "text": "{names} utilise {tgt} à la place de sa palette d’origine. Un clic la change ; un clic droit restaure la palette d’origine." },
+    "palslot.add_palette": { "text": "Ajouter une palette" },
+    "palslot.add_palette_tip": { "text": "Ajoute au sprite une palette du catalogue du projet." },
+    "palslot.compressed": { "text": "Palette fixe" },
+    "palslot.compressed_tip": { "text": "{names} utilise une palette fixe{span_txt}. Elle ne peut pas être remplacée." },
+    "palslot.own_palette": { "text": "Palette du sprite" },
+    "palslot.own_palette_tip": { "text": "{names} utilise sa propre palette. Un clic la remplace par une palette du projet." },
+    "sprframe.add_frame": { "text": "Ajouter une image" },
+    "sprframe.add_frame_tip": { "text": "Ajoute une image après l’image active. Elle duplique l’image sélectionnée ou crée une image vide." },
+    "sprframe.frame_n": { "text": "Image {n}" },
+    "sprframe.frame_tip": { "text": "Un clic modifie cette image, la faire glisser change son ordre et un clic droit ouvre les actions et déclencheurs." },
+    "sprframe.trig_action": { "text": "Action SoundBox : {name}" },
+    "sprframe.trig_sfx": { "text": "Effet sonore : {name}" },
+    "sprframe.trig_event": { "text": "Appel d’événement : {name}" },
+    "sprpanel.frame_width": { "text": "Largeur d’image" },
+    "sprpanel.frame_height": { "text": "Hauteur d’image" },
+    "sprpanel.frame_size_tip": { "text": "Définit la zone en pixels utilisée pour composer chaque image de l’animation." },
+    "dirwidget.direction_tip": { "text": "Crée ou modifie les images jouées lorsque l’acteur regarde dans cette direction." },
+    "dirwidget.direction_0": { "text": "Toutes les directions" },
+    "dirwidget.direction_1": { "text": "Nord" },
+    "dirwidget.direction_2": { "text": "Nord-est" },
+    "dirwidget.direction_3": { "text": "Est" },
+    "dirwidget.direction_4": { "text": "Sud-est" },
+    "dirwidget.direction_5": { "text": "Sud" },
+    "dirwidget.direction_6": { "text": "Sud-ouest" },
+    "dirwidget.direction_7": { "text": "Ouest" },
+    "dirwidget.direction_8": { "text": "Nord-ouest" },
+    "sprfind.add_state": { "text": "Ajouter un état d’animation" },
+    "sprfind.add_state_tip": { "text": "Crée un nouvel état d’animation avec ses propres directions, vitesse et réglage de boucle." },
+    "sprfind.animation_tree_tip": { "text": "Une direction sélectionnée ici s’édite dans le canvas des images. Un second clic sur un état d’animation le renomme ; un clic droit propose de le supprimer." },
+    "sceneinsp.notes_tip": { "text": "Contient les notes d’édition de cette scène. Elles ne sont pas affichées dans le jeu." },
+    "sceneinsp.mode_btn_title": { "text": "Mode vidéo" },
+    "sceneinsp.mode_not_impl_note": { "text": "Ce mode n’est pas encore disponible dans l’éditeur." },
+    "sceneinsp.mode_menu": { "text": "Mode {n}" },
+    "sceneinsp.mode_tip_0": { "text": "Fournit 4 fonds tuilés standards (BG0 à BG3), en 4 ou 8 bpp." },
+    "sceneinsp.mode_tip_1": { "text": "Fournit BG0 et BG1 standards, avec BG2 affine pour la rotation et l’échelle." },
+    "sceneinsp.mode_tip_2": { "text": "Fournit BG2 et BG3 affines." },
+    "sceneinsp.mode_tip_3": { "text": "Fournit un bitmap BG2 en couleur directe 16 bpp, 240 × 160, sans palette." },
+    "sceneinsp.mode_tip_4": { "text": "Fournit un bitmap BG2 avec palette 8 bpp, 256 couleurs, 240 × 160." },
+    "sceneinsp.mode_tip_5": { "text": "Fournit un bitmap BG2 en couleur directe 16 bpp, 160 × 128." },
+    "scttree.ref_tip": { "text": "Référençable dans les scripts sous le nom {handle}." },
+    "scttree.actor_prefab_tip": { "text": "Instance du prefab {name}. Référençable dans les scripts sous le nom {handle}." },
+    "scttree.elem_ref": { "text": "{type}. Référençable dans les scripts sous le nom {handle}." },
+    "scttree.elem_authoring": { "text": "{type}. Élément d’édition seulement : non référençable dans les scripts." },
+    "scttree.iface_shared_note": { "text": "La modifier les affecte toutes." },
+    "uiinsp.bank_inherited_title": { "text": "Palette bank héritée" },
+    "uiinsp.bank_inherited_tip": { "text": "Ce texte se trouve dans un conteneur rempli : il lit donc son encre dans la palette bank du conteneur." },
+    "uiinsp.bank_inherited_note": { "text": "Elle se modifie depuis le remplissage du conteneur." },
+    "uiinsp.priority.tip": { "text": "Définit la profondeur lorsque cet élément est rendu comme un sprite, ce qui arrive quand son nœud suit un acteur. Auto hérite en direct de la profondeur de l’acteur." },
+    "uiinsp.priority.title": { "text": "Priorité de sprite" },
+    "uiinsp.priority.note": { "text": "0 est au premier plan et 3 à l’arrière-plan ; une valeur remplace celle de l’acteur." },
+    "uiinsp.text.content_tip": { "text": "S’écrit dans la table de textes et non dans l’élément : la même entrée se modifie depuis l’écran Texte." },
+    "uiinsp.text.content_title": { "text": "Contenu du texte" },
+    "uiinsp.text.content_note": { "text": "Le balisage est accepté : [speed=…], $var…" },
+    "uiinsp.text.entry_tip": { "text": "Lie cet élément à une autre entrée existante, pour partager un même libellé entre plusieurs écrans." },
+    "uiinsp.text.entry_title": { "text": "Entrée de texte" },
+    "uiinsp.text.sample_tip": { "text": "Sert à l’éditeur seul, pour mesurer les débordements ; il n’est jamais compilé. C’est le script qui décide du texte affiché." },
+    "uiinsp.text.sample_title": { "text": "Texte d’exemple" },
+    "uiinsp.text.bank_tip": { "text": "Définit la palette bank partagée par tous les textes de cette scène. Un fond peut choisir sa palette bank par élément, mais pas un texte : tous les textes doivent s’accorder sur la même palette bank." },
+    "uiinsp.text.bank_title": { "text": "UI palette bank" },
+    "uiinsp.text.bank_note": { "text": "Une palette bank de plus coûterait une copie de plus des glyphes en VRAM. C’est aussi le réglage de l’inspecteur de scène : le changer ici le change pour toute la scène." },
+    "uiinsp.text.ink_tip": { "text": "Définit la couleur des glyphes, sous forme d’index dans l’UI palette bank de la scène. L’encre de la police garde les nuances de la police (contour, remplissage) ; toute autre valeur aplatit l’encre en une seule couleur." },
+    "uiinsp.text.ink_title": { "text": "Encre" },
+    "uiinsp.text.ink_note": { "text": "Chaque couleur utilisée coûte une copie de plus des glyphes en VRAM." },
+    "uiinsp.text.highlight_tip": { "text": "Pose une couleur sous le texte, sur les tuiles qu’il couvre réellement. Par défaut, un texte repose sur le fond de son conteneur ; un surlignage le remplace, façon marqueur, sur l’étendue écrite seulement." },
+    "uiinsp.text.highlight_title": { "text": "Surlignage" },
+    "uiinsp.text.highlight_note": { "text": "La composition coûte un bloc de tuiles de surface pour la scène, quelle que soit la police. Un fond ou un surlignage la paient une seule fois." },
+    "uiinsp.fill.sprite_tip": { "text": "Répète un sprite sur tout le panneau. Contrairement à une image, le panneau garde sa propre taille : le sprite se répète pour le couvrir." },
+    "uiinsp.fill.sprite_title": { "text": "Sprite du panneau" },
+    "uiinsp.fill.sprite_note": { "text": "Il coûte un sprite par cellule, car un sprite ne peut pas être étiré." },
+    "uiinsp.fill.state_tip": { "text": "Définit l’état d’animation initial. Un fond de panneau reçoit sa propre constante IMAGE_*, comme toute image." },
+    "uiinsp.fill.state_title": { "text": "État initial" },
+    "uiinsp.fill.state_note": { "text": "Un script peut le changer ensuite en écrivant l’état de l’image : interface:get(\"nom\").state = \"état\"." },
+    "uiinsp.fill.speed_tip": { "text": "Définit le nombre d’images entre deux images d’animation, en remplaçant la vitesse de l’état. 0 (du sprite) conserve la valeur modifiée dans l’éditeur de sprites." },
+    "uiinsp.fill.speed_title": { "text": "Vitesse d’animation" },
+    "uiinsp.fill.speed_note": { "text": "Cette valeur reste l’unique source de vérité : sinon, fixer une vitesse là-bas n’aurait plus silencieusement aucun effet ici." },
+    "uiinsp.list.selection_tip": { "text": "Définit si cette liste lit la croix directionnelle. Une liste inactive reste à l’écran et garde son élément courant ; elle cesse seulement de bouger." },
+    "uiinsp.list.selection_title": { "text": "Sélection" },
+    "uiinsp.list.selection_note": { "text": "C’est ce qui permet d’afficher un menu et son sous-menu en même temps ; sans cela, les deux avanceraient sur la même pression. Masquer la liste est différent : elle disparaît." },
+    "uiinsp.list.columns_tip": { "text": "Définit la largeur d’une ligne de la grille. Une colonne donne une simple liste verticale ; le nombre de lignes donne une rangée d’onglets, et toute autre largeur donne une grille." },
+    "uiinsp.list.columns_title": { "text": "Colonnes" },
+    "uiinsp.list.columns_note": { "text": "Le défilement avance d’une ligne entière : les colonnes mises en place par l’auteur restent donc où elles sont." },
+    "uiinsp.list.order_tip": { "text": "Définit le sens dans lequel les numéros d’éléments avancent. Dans l’ordre colonne d’abord, on va de haut en bas puis on passe à la colonne suivante ; dans l’ordre ligne d’abord, de gauche à droite puis à la ligne du dessous." },
+    "uiinsp.list.order_title": { "text": "Ordre" },
+    "uiinsp.list.order_note": { "text": "Avec une seule colonne, les deux décrivent le même parcours ; l’autre axe de la croix est alors laissé au jeu." },
+    "uiinsp.list.cursor_tip": { "text": "Choisit une image de cette interface que la liste déplace sur la ligne sélectionnée. Elle se place face à la première ligne : le moteur la décale de la distance entre cette ligne et la ligne courante, si bien que l’interface reste la référence." },
+    "uiinsp.list.cursor_title": { "text": "Curseur" },
+    "uiinsp.list.cursor_note": { "text": "Ne pas avoir de curseur est un choix valide : la ligne sélectionnée peut être repérée par son style." },
+    "uiinsp.list.motion_tip": { "text": "Le saut place le curseur sur la ligne d’un coup ; le glissement parcourt la distance à la vitesse indiquée en dessous." },
+    "uiinsp.list.motion_title": { "text": "Déplacement" },
+    "uiinsp.list.ink_tip": { "text": "Définit l’encre de la ligne sélectionnée, sous forme d’index dans l’UI palette bank de la scène, comme l’encre propre d’un texte. La valeur par défaut garde ce que chaque ligne utilise déjà." },
+    "uiinsp.list.ink_title": { "text": "Encre de la ligne sélectionnée" },
+    "uiinsp.list.ink_note": { "text": "Chaque couleur coûte une copie de plus des glyphes en VRAM." },
+    "uiinsp.list.highlight_tip": { "text": "Pose une couleur sous le texte de la ligne sélectionnée, sur l’étendue qu’il couvre. C’est la façon classique de marquer une sélection de menu sans curseur." },
+    "uiinsp.list.highlight_title": { "text": "Surlignage de la ligne sélectionnée" },
+    "uiinsp.img.sprite_tip": { "text": "Choisit le sprite dessiné ici. En choisir un redimensionne l’élément à la taille de son image." },
+    "uiinsp.img.sprite_title": { "text": "Sprite" },
+    "uiinsp.img.sprite_note": { "text": "Un sprite ne peut pas être étiré." },
+    "uiinsp.img.state_tip": { "text": "Définit l’état affiché au démarrage de la scène." },
+    "uiinsp.img.state_title": { "text": "État initial" },
+    "uiinsp.img.state_note": { "text": "Un script peut passer à n’importe quel autre état de ce sprite : interface:get(\"nom\").state = \"état\"." },
+    "uiinsp.img.play_tip": { "text": "Une image figée ne coûte aucun travail par image et ne réécrit jamais la tilemap. C’est le bon réglage par défaut pour une icône de HUD statique." },
+    "uiinsp.img.play_title": { "text": "Lecture des images" },
+    "cvregion.region_tip": { "text": "{name}, dans l’interface {layout}.\n{tiles}Cible : {target}.\nGlisser la déplace, les poignées la redimensionnent, Alt + glisser la duplique." },
+    "cvregion.tiles_size": { "text": "Taille : {w} × {h} tuiles.\n" },
+    "cvitems.camera_tip": { "text": "Caméra GBA {name} : {w} × {h} px.\nGlisser déplace la vue." },
+    "cvitems.window_tip": { "text": "{name} : {w} × {h} px à ({x}, {y})." },
+    "cvitems.window_inactive": { "text": "\nInactive : window_show vaut 0." },
+    "cvitems.unnamed_window": { "text": "(fenêtre sans nom)" },
+    "caminsp.recompute_from_backgrounds": { "text": "Recalculer depuis les fonds" },
+    "caminsp.starting_camera_title": { "text": "Caméra de départ" },
+    "caminsp.starting_camera_tip": { "text": "Définit laquelle des caméras de cette scène est active au démarrage. Un script peut passer à une autre avec camera.switch." },
+    "caminsp.starting_camera_note": { "text": "Ce choix ne dépend pas de la caméra affichée ci-dessus. (default) est fixe à l’origine, sans limites ni cible." },
+    "caminsp.follow_title": { "text": "Acteur suivi" },
+    "caminsp.actor_local_note": { "text": "Les noms d’acteurs sont locaux à une scène : une caméra réutilisée dans une scène sans cet acteur y reste simplement immobile." },
+    "caminsp.prefill_tip": { "text": "Préremplit la largeur et la hauteur à partir du fond de la scène sélectionnée dont la vitesse de parallaxe est la plus proche de 1,0." },
+    "caminsp.prefill_note": { "text": "Les valeurs restent modifiables ensuite." },
+    "langcard.code_title": { "text": "Code de langue" },
+    "langcard.code_tip": { "text": "Nomme le fichier de traduction, par exemple texts_de.json." },
+    "langcard.code_note": { "text": "Le code est mis en minuscules et débarrassé de tout caractère qu’un nom de fichier refuse." },
+    "langcard.name_title": { "text": "Nom de la langue" },
+    "langcard.name_tip": { "text": "Nom lisible, affiché dans l’éditeur et, s’il existe, dans le menu de langue du jeu." },
+    "langcard.font_title": { "text": "Remplacement de police" },
+    "langcard.font_replacements": { "one": "{n} remplacement de police.", "other": "{n} remplacements de police." },
+    "langcard.no_font_replacement": { "text": "Aucun remplacement de police : cette langue utilise les polices du projet." },
+    "langcard.font_note": { "text": "Seul un autre système d’écriture en demande un." },
+    "langcard.remove_title": { "text": "Retirer cette langue" },
+    "langcard.remove_tip": { "text": "Son fichier de traduction reste sur le disque." },
+    "projinsp.start_scene_title": { "text": "Scène de démarrage" },
+    "projinsp.start_scene_tip": { "text": "Première scène chargée au démarrage de la ROM." },
+    "projinsp.start_scene_note": { "text": "Elle ne dépend pas de la scène ouverte dans l’éditeur." },
+    "projset.backdrop_title": { "text": "Couleur d’arrière-plan du projet" },
+    "projset.backdrop_tip": { "text": "Définit l’index 0 de la palette de fond. Elle est affichée partout où aucun calque ni sprite ne dessine, y compris à travers une fenêtre qui masque tout." },
+    "projset.backdrop_note": { "text": "Toutes les scènes qui n’ont pas leur propre couleur d’arrière-plan en héritent. La valeur est quantifiée au format de couleur BGR555 de la GBA." },
+    "projset.cartridge_title": { "text": "Taille de la cartouche" },
+    "projset.cartridge_tip": { "text": "Définit la capacité à laquelle le rapport de compilation compare la ROM. Les tailles sont celles réellement fabriquées pour la GBA." },
+    "projset.cartridge_note": { "text": "Un dépassement est signalé comme une erreur. La ROM est tout de même produite, mais elle ne tient pas sur cette cartouche." },
+    "projset.sound_channels": { "text": "Canaux sonores" },
+    "projset.channels_tip": { "text": "Définit le nombre de canaux de mixage logiciels, partagés par la musique et les effets sonores. Un module en demande un par voix, et chaque effet en cours de lecture en prend un de plus. Les références d’effets sonores suivent une limite distincte de {handle_slots} : un effet supplémentaire est joué, mais sans référence." },
+    "projset.channels_note": { "text": "Chaque canal coûte {channel_bytes} octets de tas, plus un tampon de mixage fixe de {buffer_bytes} octets. Huit canaux, la valeur par défaut, coûtent {default_bytes} octets." },
+    "projset.debug_build": { "text": "Compilation de débogage" },
+    "projset.debug_tip": { "text": "Active debug.* dans les scripts : debug:log(...) écrit dans la console de log de mGBA, et le moteur mesure le temps d’image, l’usage de l’OAM, les canaux sonores et la charge DMA une fois par image." },
+    "projset.debug_note": { "text": "Décochée (Release), chaque appel à debug.* et la mesure qu’il coûte sont retirés à la compilation, pas seulement rendus silencieux." },
+    "projset.default_font": { "text": "Police par défaut" },
+    "projset.default_font_tip": { "text": "Comble les trous de couverture : un caractère absent de la police active, comme un mot latin non traduit sous une police japonaise, ou tout glyphe absent de la police de la scène." },
+    "projset.default_font_note": { "text": "Un caractère absent des deux polices est toujours signalé. Sans police par défaut, un glyphe manquant est simplement ignoré et ne dessine rien." },
+    "projset.frames_title": { "text": "Durée de la transition" },
+    "projset.frames_tip": { "text": "Définit la durée de chaque moitié de la transition, en images. 16 images durent un peu plus d’un quart de seconde." },
+    "projset.rate_title": { "text": "Fréquence d’échantillonnage par défaut des effets sonores" },
+    "projset.rate_tip": { "text": "Les effets sont convertis en mono 8 bits mais gardent leur fréquence d’échantillonnage : un effet à 44,1 kHz coûte environ trois fois plus qu’à 16 kHz." },
+    "projset.rate_note": { "text": "Le rééchantillonnage a lieu à la compilation. Le fichier de assets/ n’est jamais réécrit : remonter la fréquence ne fait rien perdre." },
+    "projset.save_slots": { "text": "Emplacements de sauvegarde" },
+    "projset.save_slots_tip": { "text": "Définit le nombre de sauvegardes distinctes que le jeu peut conserver en SRAM. Les scripts les désignent par leur numéro : save:write(0)." },
+    "projset.save_slots_note": { "text": "Seules les variables globales marquées persist sont enregistrées. Un projet qui n’en a aucune n’écrit aucune donnée de sauvegarde." },
+    "projset.transition_title": { "text": "Transition de scène" },
+    "projset.transition_tip": { "text": "Fondu joué quand le jeu quitte une scène et quand il en ouvre une. Chaque scène s’efface avec son propre réglage et apparaît avec celui de la scène ouverte, y compris la première." },
+    "projset.transition_note": { "text": "Pendant une transition, la scène sortante est figée et son propre mélange de couleurs est suspendu : il n’y a pas de fondu par-dessus une translucidité." },
+    "projset.drag_to_reorder": { "text": "Réordonner par glisser-déposer" },
+    "projset.remove_tag_title": { "text": "Retirer ce tag" },
+    "projset.remove_tag_used": { "one": "{n} boîte l’utilise et revient à « body ».", "other": "{n} boîtes l’utilisent et reviennent à « body »." },
+    "projset.remove_tag_unused": { "text": "Aucune boîte ne l’utilise." },
+    "comped.sfx": { "text": "Effet sonore" },
+    "comped.sfx_note": { "text": "Les sons ajoutés depuis l’écran du mixeur apparaissent ici." },
+    "comped.trigger": { "text": "Déclencheur" },
+    "comped.trigger_tip": { "text": "manual : ne joue rien ; appelez self:play_sfx() depuis un script.\non_spawn : joue au démarrage de l’acteur.\non_destroy : joue juste avant la destruction de l’acteur.\nUn bouton ou une entrée : joue tant que l’acteur est actif et que ce bouton est maintenu." },
+    "comped.trigger_note": { "text": "Tous les déclencheurs sauf manual fonctionnent sans script." },
+    "comped.palette": { "text": "Palette" },
+    "comped.palette_tip": { "text": "« Sans palette » utilise les couleurs d’origine du PNG, par défaut. Sinon, choisissez l’une des palettes actives de la scène." },
+    "comped.palette_note": { "text": "Les palettes actives se règlent dans l’inspecteur de scène." },
+    "comped.anim_speed": { "text": "Vitesse d’animation" },
+    "comped.anim_speed_title": { "text": "Vitesse d’animation" },
+    "comped.anim_speed_tip": { "text": "Définit le nombre de ticks GBA entre deux images, pour l’état initial ({state}) seulement. Un tick dure 1/60 de seconde : 8 = 7,5 i/s, 4 = 15 i/s, 2 = 30 i/s." },
+    "comped.anim_speed_note": { "text": "Les autres états gardent leur vitesse, réglée dans l’éditeur de sprites." },
+    "comped.affine": { "text": "Transformation affine" },
+    "comped.affine_tip": { "text": "Réserve l’un des 32 emplacements affines pour ce sprite, même sans transformation. Le sprite peut alors pivoter et changer d’échelle, et les trois réglages locaux s’appliquent par-dessus la transformation de l’acteur." },
+    "comped.affine_note": { "text": "Désactivé, la rotation et l’échelle de l’acteur restent lisibles et modifiables par les scripts, mais rien ne les dessine." },
+    "comped.affine_required": { "text": "Nécessite « Transformation affine »." },
+    "comped.scale_x_title": { "text": "Échelle locale X" },
+    "comped.scale_x_tip": { "text": "Définit l’échelle locale en X, multipliée par l’échelle de l’acteur." },
+    "comped.scale_y_title": { "text": "Échelle locale Y" },
+    "comped.scale_y_tip": { "text": "Définit l’échelle locale en Y, multipliée par l’échelle de l’acteur." },
+    "comped.rotation_title": { "text": "Rotation locale" },
+    "comped.rotation_tip": { "text": "Définit la rotation locale en degrés, ajoutée à la rotation de l’acteur." },
+    "comped.offset_x_title": { "text": "Décalage local X" },
+    "comped.offset_x_tip": { "text": "Définit le décalage horizontal par rapport à l’acteur, en pixels. Le sprite est dessiné à la position de l’acteur plus ce décalage, et il pivote et change d’échelle avec l’acteur." },
+    "comped.offset_y_title": { "text": "Décalage local Y" },
+    "comped.offset_y_tip": { "text": "Définit le décalage vertical par rapport à l’acteur, en pixels. Le sprite est dessiné à la position de l’acteur plus ce décalage, et il pivote et change d’échelle avec l’acteur." },
+    "bglayer.set_as_the_collision_layer": { "text": "Définir comme calque de collision" },
+    "bglayer.remove_this_background": { "text": "Retirer ce fond" },
+    "bglayer.remove_this_layer": { "text": "Retirer ce calque" },
+    "bglayer.image_title": { "text": "Image de fond" },
+    "bglayer.image_tip": { "text": "Un clic choisit un PNG ; un PNG peut aussi être déposé ici." },
+    "bglayer.reorder_title": { "text": "Ordre des calques" },
+    "bglayer.reorder_tip": { "text": "Glisser sur un autre calque échange leur priorité d’affichage." },
+    "bglayer.inpaint_title": { "text": "Recolorer les palettes de ce calque" },
+    "bglayer.visibility_title": { "text": "Afficher ou masquer ce calque sur le canvas" },
+    "bglayer.palette_title": { "text": "Palette du calque" },
+    "bglayer.palette_tip": { "text": "Utilise la palette {name}." },
+    "bglayer.no_palette_tip": { "text": "Utilise les couleurs du PNG." },
+    "bglayer.through_title": { "text": "Calque translucide" },
+    "bglayer.through_tip": { "text": "On voit à travers ce calque ; un clic le place derrière à la place." },
+    "bglayer.behind_title": { "text": "Calque derrière" },
+    "bglayer.behind_tip": { "text": "Se place derrière le calque translucide ; un clic en fait le calque translucide." },
+    "bglayer.no_blend_title": { "text": "Hors du mélange" },
+    "bglayer.no_blend_tip": { "text": "Ne participe pas au mélange ; un clic en fait le calque du dessus." },
+    "bglayer.top_title": { "text": "Calque du dessus" },
+    "bglayer.top_tip": { "text": "C’est ce calque qui est mélangé." },
+    "bglayer.bottom_title": { "text": "Calque du dessous" },
+    "bglayer.bottom_tip": { "text": "Le calque du dessus se mélange avec celui-ci, placé derrière lui." },
+    "actorinsp.sprite_preview_title": { "text": "Sprite de départ" },
+    "actorinsp.sprite_preview_tip": { "text": "Un clic assigne un sprite du projet. La première image de l’état initial est affichée." },
+    "actorinsp.index_title": { "text": "Index de l’acteur" },
+    "actorinsp.index_tip": { "text": "Position de l’acteur dans la scène. Elle détermine l’ordre de traitement et de rendu." },
+    "actorinsp.relink_title": { "text": "Relier de nouveau au prefab" },
+    "actorinsp.relink_tip": { "text": "Recharge les composants, la palette et les notes depuis la définition actuelle du prefab." },
+    "actorinsp.relink_warning": { "text": "Les modifications structurelles locales sont perdues." },
+    "actorinsp.expose_title": { "text": "Exposer au prefab" },
+    "actorinsp.expose_tip": { "text": "Reporte les composants, la palette et les notes de cette instance dans le prefab." },
+    "actorinsp.expose_warning": { "text": "Toutes les autres instances sont aussi mises à jour." },
+    "actorinsp.unlink_title": { "text": "Délier du prefab" },
+    "actorinsp.unlink_tip": { "text": "L’acteur devient indépendant." },
+    "actorinsp.expose_new_title": { "text": "Créer un prefab depuis cet acteur" },
+    "actorinsp.expose_new_tip": { "text": "Crée un prefab à partir des composants, de la palette et des notes de cet acteur. Cet acteur en devient la première instance liée." },
+    "actorinsp.parent_tip": { "text": "Exprime la position de cet acteur dans le repère de son parent. X/Y, la rotation et l’échelle deviennent locaux, et le sous-arbre du parent le suit. Masquer le parent masque tout son sous-arbre." },
+    "actorinsp.parent_note": { "text": "Ce n’est pas de l’héritage : pour réutiliser une définition, utilisez un prefab. Le parent doit être dans la même scène, et un cycle est refusé à la compilation." },
+    "actorinsp.children_tip": { "text": "Les enfants de ce prefab, comme les segments d’un boss. Chaque enfant est un acteur complet, avec son sprite, ses boîtes et sa transformation locale." },
+    "actorinsp.children_note": { "text": "Un double-clic modifie un enfant ; le faire glisser sur un autre enfant le rattache à celui-ci. Le pool réserve instances maximum × (1 + enfants) entrées." },
+    "sceneinsp.scroll_h_tip": { "text": "Défilement horizontal" },
+    "sceneinsp.scroll_v_tip": { "text": "Défilement vertical" },
+    "sceneinsp.backdrop": { "text": "Arrière-plan :" },
+    "sceneinsp.backdrop_tip": { "text": "Choisit la couleur affichée lorsqu’aucun calque de fond ni sprite ne dessine." },
+    "sceneinsp.backdrop_note": { "text": "La valeur est quantifiée au format de couleur BGR555 de la GBA." },
+    "sceneinsp.backdrop_title": { "text": "Couleur d’arrière-plan" },
+    "sceneinsp.backdrop_reset": { "text": "Réinitialiser" },
+    "sceneinsp.backdrop_reset_tip": { "text": "Réutilise la couleur d’arrière-plan définie au niveau du projet." },
+    "sceneinsp.transition": { "text": "Transition :" },
+    "sceneinsp.transition_tip": { "text": "Choisit le fondu joué à l’ouverture et à la fermeture de cette scène." },
+    "sceneinsp.transition_frames": { "text": ", {frames} images" },
+    "sceneinsp.transition_frames_tip": { "text": "Définit la durée de chaque moitié de la transition : sortie, puis entrée." },
+    "sceneinsp.transition_duration": { "text": "Durée" },
+    "sceneinsp.transition_title": { "text": "Transition" },
+    "sceneinsp.music": { "text": "Musique :" },
+    "sceneinsp.music_tip": { "text": "Choisit une piste, conserve la musique en cours ou passe explicitement au silence." },
+    "sceneinsp.music_note": { "text": "Un script lancé à l’ouverture peut remplacer ce choix." },
+    "sceneinsp.music_title": { "text": "Musique au début de la scène" },
+    "sceneinsp.bg_add": { "text": "Ajouter un calque BG (4 maximum)" },
+    "sceneinsp.bg_add_tip": { "text": "Les modes tuilés en acceptent jusqu’à quatre." },
+    "sceneinsp.bitmap_pick": { "text": "Choisir un fond bitmap…" },
+    "sceneinsp.ui_colors": { "text": "Couleurs d’interface :" },
+    "sceneinsp.ui_colors_tip": { "text": "Choisit la palette de fond de la scène utilisée par la police d’interface par défaut." },
+    "sceneinsp.ui_colors_title": { "text": "Couleurs d’interface" },
+    "sceneinsp.ui_font": { "text": "Police d’interface :" },
+    "sceneinsp.ui_font_tip": { "text": "Choisit la police utilisée par les textes d’interface sans police définie." },
+    "sceneinsp.ui_font_title": { "text": "Police d’interface" },
+    "cvtool.move_toolbar": { "text": "Déplacer les outils" },
+    "cvtop.fit_to_view": { "text": "Ajuster à la vue" },
+    "scncanvas.view_scene": { "text": "Scène" },
+    "scncanvas.view_scene_tip": { "text": "Modifie la scène active sur le canvas." },
+    "scncanvas.view_graph": { "text": "Graphe" },
+    "scncanvas.view_graph_tip": { "text": "Affiche les transitions entre toutes les scènes." },
+    "crash.window_title": { "text": "Erreur inattendue" },
+    "crash.title": { "text": "Quelque chose s'est mal passé" },
+    "crash.intro": { "text": "L'éditeur a rencontré une erreur inattendue. Vos fichiers enregistrés sont intacts. Vous pouvez continuer, mais pensez à sauvegarder bientôt." },
+    "crash.show_details": { "text": "Afficher les détails" },
+    "crash.hide_details": { "text": "Masquer les détails" },
+    "crash.copy": { "text": "Copier les détails" },
+    "crash.open_log_folder": { "text": "Ouvrir le dossier du journal" },
+    "sndmix.add_action_title": { "text": "Ajouter une action" },
+    "sndmix.add_action_tip": { "text": "Crée une action que les images d’animation peuvent déclencher." },
+    "sndmix.add_state_title": { "text": "Ajouter un état" },
+    "sndmix.add_state_tip": { "text": "Crée un état avec ses propres associations de sons." },
+    "sndmix.remove_state_title": { "text": "Retirer l’état sélectionné" },
+    "sndmix.remove_state_tip": { "text": "Retire la colonne sélectionnée et ses associations de sons." },
+    "sndmix.start_title": { "text": "État de départ" },
+    "sndmix.matrix_target_title": { "text": "Association sonore" },
+    "sndmix.matrix_target_tip": { "text": "Choisit ce que joue l’action « {action} » dans l’état « {state} »." },
+    "sndmix.delete_selection_title": { "text": "Supprimer la sélection" },
+    "sndmix.zoom_out": { "text": "Dézoomer" },
+    "sndmix.zoom_in": { "text": "Zoomer" },
+    "sndmix.fit_title": { "text": "Ajuster le graphe à la vue" },
+    "sndmix.destination_title": { "text": "État de destination" },
+    "sndmix.delete_transition_title": { "text": "Supprimer la transition" },
+    "sndmix.source_title": { "text": "État source" },
+    "sndmix.source_tip": { "text": "Choisit si cette transition part de cet état ou de n’importe quel état." },
+    "sndmix.trigger_title": { "text": "Déclencheur" },
+    "sndmix.transition_kind_title": { "text": "Type de transition" },
+    "sndmix.duration_title": { "text": "Durée" },
+    "sndmix.start_state_title": { "text": "État de départ" },
+    "sndmix.loop_title": { "text": "Boucler la piste" },
+    "sndmix.loop_tip": { "text": "Relance la piste après sa dernière séquence tant que cet état reste actif." },
+    "sndmix.level_title": { "text": "Niveau de la piste" },
+    "sndmix.intensity_title": { "text": "Cible d’intensité" },
+    "sndmix.intensity_value_title": { "text": "Valeur d’intensité" },
+    "sndmix.add_transition_title": { "text": "Ajouter une transition" },
+    "sndmix.add_transition_tip": { "text": "Crée une transition depuis l’état sélectionné." },
+    "sndpanel.import_title": { "text": "Importer un fichier audio" },
+    "sndpanel.import_tip": { "text": "Copie un fichier audio pris en charge dans le projet et l’associe à cet élément." },
+    "sndpanel.rate_title": { "text": "Fréquence d’échantillonnage" },
+    "sndpanel.box_title": { "text": "Boîte active" },
+    "sndpanel.rename_box_title": { "text": "Renommer la boîte" },
+    "sndpanel.new_box_title": { "text": "Créer une boîte" },
+    "sndpanel.new_box_tip": { "text": "Crée une nouvelle boîte dans cette famille sonore." },
+    "sndpanel.delete_box_title": { "text": "Supprimer la boîte" },
+    "sndpanel.delete_box_warning": { "text": "La boîte et ses états sont retirés du projet." },
+    "sndpanel.rom_stop_title": { "text": "Arrêter l’aperçu" },
+    "sndpanel.rom_loop_title": { "text": "Boucler l’état d’aperçu" },
+    "sndpanel.preview_volume_title": { "text": "Volume de l’aperçu" },
+    "sndpanel.preview_volume_tip": { "text": "Modifie uniquement le volume de l’aperçu dans l’éditeur, pas celui de l’élément." },
+    "sndpanel.rom_progress_title": { "text": "Progression de l’aperçu" },
+    "sndbar.channels_title": { "text": "Canaux logiciels" },
+    "sndbar.channels_tip": { "text": "Affiche le plus grand total de canaux combinant les MusicBox et JingleBox en cours d’édition." },
+    "sndbar.channels_note": { "text": "Les effets sonores ne sont pas comptés, car leur utilisation simultanée ne peut pas être prévue." },
+    "sndmix.auto_layout": { "text": "Organiser automatiquement" },
+    "sndmix.auto_layout_tip": { "text": "Organise les nœuds en colonnes à partir de l’état de départ." },
+    "sndmix.trigger_tip": { "text": "Reçoit le nom émis par un script pour déclencher cette transition." },
+    "sndmix.kind_tip": { "text": "Le fondu mélange deux pistes. La coupe conserve la position de lecture, mais exige des structures de piste identiques." },
+    "sndmix.frames_tip": { "text": "Définit la durée du fondu en images. Le jeu tourne à 60 images par seconde." },
+    "sndmix.start_state_tip": { "text": "Active cet état au démarrage du jeu. Un seul état peut être choisi." },
+    "sndmix.intensity_tip": { "text": "Choisit si l’intensité contrôle le volume, le tempo ou la hauteur de la piste." },
+    "sndmix.ivalue_tip": { "text": "100 % est la valeur neutre. Le tempo et la hauteur sont limités entre 50 et 200 %." },
+    "sndpanel.rate_tip": { "text": "Définit la fréquence utilisée à la compilation de cet effet. Le fichier source n’est pas modifié." },
+    "sndpanel.box_tip": { "text": "Choisit la boîte à modifier dans cette famille. Le jeu utilise la première boîte par ordre alphabétique." },
+    "palgrid.zoom_out": { "text": "Dézoomer" },
+    "palgrid.zoom_in": { "text": "Zoomer" },
+    "colins.copy_hex": { "text": "Copier la couleur hexadécimale" },
+    "glsheet.merge_title": { "text": "Fusionner les cellules de glyphe" },
+    "palgrid.fit_title": { "text": "Ajuster la palette à la vue" },
+    "win.build_run_title": { "text": "Compiler et lancer" },
+    "win.build_run_tip": { "text": "Compile le projet, puis le lance dans l’émulateur configuré." },
+    "txtwb.source_tab": { "text": "Source ({name})" },
+    "txtwb.translation_tab": { "text": "Traduction ({name})" },
+    "txtwb.copy_key_title": { "text": "Copier la clé de texte" },
+    "txtwb.copy_tip": { "text": "Copie la clé à coller dans un script Lua." },
+    "txtwb.filing_title": { "text": "Rangement" },
+    "txtwb.filing_tip": { "text": "Organise la table et suggère une clé, sans modifier une clé déjà définie." },
+    "txtwb.preview_font_title": { "text": "Police d’aperçu" },
+    "txtwb.preview_font_tip": { "text": "Choisit la police de l’aperçu sans modifier le texte." },
+    "txtinsp.note_tip": { "text": "Contient un contexte utile à la traduction. Cette note n’est jamais affichée dans le jeu." },
+    "txtinsp.markup_tip": { "text": "Affiche le balisage du texte sélectionné et les éventuels problèmes de validation." },
+    "txttbl.empty_tip": { "text": "Affiche uniquement les entrées dont le contenu est vide." },
+    "txttbl.unused_tip": { "text": "Affiche uniquement les entrées qu’aucun script ni interface ne référence." },
+    "txttbl.missing_tip": { "text": "Affiche uniquement les entrées sans traduction dans la langue active." },
+    "fontasset.preview_text_title": { "text": "Texte d’aperçu" },
+    "fontasset.preview_size_title": { "text": "Taille de rasterisation" },
+    "fontasset.preview_canvas_title": { "text": "Aperçu de police" },
+    "fontinsp.charset_title": { "text": "Jeu de caractères" },
+    "fontinsp.char_title": { "text": "Caractères du glyphe" },
+    "fontinsp.pick_title": { "text": "Choisir {name}" },
+    "fontinsp.clear_title": { "text": "Retirer {name}" },
+    "txtwb.key_title": { "text": "Clé de texte" },
+    "fontasset.primary_tip": { "text": "Utilise d’abord cette source pour la face normale." },
+    "fontasset.fallbacks_tip": { "text": "Utilise ces sources dans l’ordre quand la source primaire ne couvre pas un caractère." },
+    "fontasset.pixel_height_tip": { "text": "Définit la hauteur rasterisée des sources vectorielles." },
+    "fontasset.line_height_tip": { "text": "Définit la distance verticale entre deux lignes dans le jeu." },
+    "fontasset.pixel_fit_tip": { "text": "Choisit la manière dont le rasteriseur aligne la source sur la grille de pixels." },
+    "fontasset.hinting_tip": { "text": "Choisit comment les contours vectoriels sont ajustés aux petites tailles." },
+    "fontasset.raster_mode_tip": { "text": "Choisit la manière dont la couverture des pixels est encodée pour la sortie GBA." },
+    "fontasset.threshold_tip": { "text": "Définit la couverture nécessaire pour conserver un pixel en sortie binaire ou tramée." },
+    "fontasset.dither_tip": { "text": "Choisit le motif utilisé par la sortie tramée." },
+    "fontasset.offset_x_tip": { "text": "Décale les glyphes rasterisés horizontalement sans modifier la source." },
+    "fontasset.offset_y_tip": { "text": "Décale les glyphes rasterisés verticalement sans modifier la source." },
+    "fontasset.prefer_bitmap_strike_tip": { "text": "Utilise une taille bitmap intégrée lorsque la source en propose une." },
+    "glsheet.reslice_title": { "text": "Redécouper la planche de glyphes" },
+    "glsheet.reslice_tip": { "text": "Découpe à nouveau la planche selon la taille de cellule choisie." },
+    "glsheet.reslice_warning": { "text": "Les caractères assignés sont réinitialisés." },
+    "fontinsp.bg_tip": { "text": "Rend cette couleur de la planche transparente. La couleur de fond uniforme se choisit lorsque la planche a été importée sans canal alpha." },
+    "fontinsp.space_tip": { "text": "Rend ce repère d’espacement transparent afin qu’il n’apparaisse pas dans le jeu." },
+    "fontinsp.clear_tip": { "text": "Ne rend plus la couleur « {name} » transparente." },
+    "fontinsp.charset_tip": { "text": "Liste les caractères couverts par cette police. La modification les assigne aux cellules de glyphe dans l’ordre." },
+    "fontinsp.char_tip": { "text": "Assigne un ou plusieurs caractères à ce glyphe. Plusieurs caractères créent une ligature." },
+    "txtwb.key_tip_auto": { "text": "Dérivée du rangement. La nommer manuellement la détache définitivement." },
+    "txtwb.key_tip_hand": { "text": "Nommée manuellement. Le rangement ne la modifie plus et son renommage met à jour les scripts qui la référencent." },
+    "txtwb.lock_attached": { "text": "Clé liée au rangement" },
+    "txtwb.lock_reattach": { "text": "Relier à nouveau la clé au rangement" },
+    "sndpanel.musicbox_empty": { "text": "Une MusicBox organise les états musicaux et les transitions entre eux : quelle piste dans quelle ambiance, et par quel déclencheur le jeu passe de l’un à l’autre." },
+    "sndpanel.jinglebox_empty": { "text": "Une JingleBox indique vers quel module pointe chaque action de jingle, état par état. Un jingle se superpose à la musique, il ne la remplace pas." },
+    "sndpanel.soundbox_empty": { "text": "Une SoundBox indique vers quel effet pointe chaque action, état par état. Le même cycle de marche sonne sur le sable ou le gravier sans être créé deux fois." },
+    "backdrop.tip": { "text": "Fait défiler les fonds d’épreuve : l’actuel est {name}, le suivant est {next}." },
+    "win.undo_tip": { "text": "Annuler : {label}" },
+    "win.undo_none": { "text": "Rien à annuler" },
+    "win.redo_tip": { "text": "Rétablir : {label}" },
+    "win.redo_none": { "text": "Rien à rétablir" },
+    "win.build_no_scene": { "text": "Une scène est nécessaire avant la compilation." },
+    "win.build_unavailable": { "one": "Compilation impossible : {what} est manquant.", "other": "Compilation impossible : {what} sont manquants." },
+    "dirgrid.omni_no_initial_direction": { "text": "Omnidirectionnel (pas de direction initiale)" },
+    "dirgrid.omni_all_directions": { "text": "Omnidirectionnel (toutes les directions)" },
+    "pick.index_tip": { "text": "Index {_index} de la palette bank. Le code de couleur est affiché, pas saisi." },
+    "pick.stale_index_tip": { "text": "Cet index est conservé, mais la palette bank lue par ce texte n’a pas cette couleur. Rien ne sera peint avec." },
+    "akind.add_palette": { "text": "Ajouter une palette" },
+    "akind.add_palette_tip": { "text": "Ouvre un menu pour créer une palette de 16 ou 256 couleurs, ou pour en importer une." },
+    "akind.font_source_tip": { "text": "{value} glyphes de {cell_w}×{cell_h} px, {value_2} tuiles dans le charblock de la couche d’interface." },
+    "akind.font_source_note": { "text": "Source : {source_format}." },
+    "akind.add_a_track": { "text": "Ajouter une piste" },
+    "akind.add_an_sfx": { "text": "Ajouter un effet sonore" },
+    "akind.import": { "text": "Importer" },
+    "akind.import_2": { "text": "Importer…" },
+    "akind.import_a_palette": { "text": "Importer une palette" },
+    "akind.import_a_png": { "text": "Importer un PNG" },
+    "akind.import_a_sprite_sheet": { "text": "Importer une planche de sprites" },
+    "akind.import_a_ui_frame_or_panel_png": { "text": "Importer un cadre ou un panneau d’interface (PNG)" },
+    "akind.import_an_animation_sheet_png": { "text": "Importer une planche d’animation (PNG)" },
+    "akind.new_16_color_palette_4bpp": { "text": "Nouvelle palette de 16 couleurs (4 bpp)" },
+    "akind.new_256_color_palette_8bpp": { "text": "Nouvelle palette de 256 couleurs (8 bpp)" },
+    "akind.new_prefab": { "text": "Nouveau prefab" },
+    "akind.new_scene": { "text": "Nouvelle scène" },
+    "akind.new_script": { "text": "Nouveau script" },
+    "akind.new_table": { "text": "Nouvelle table" },
+    "glsheet.hint_default": { "text": "Un clic sur une cellule, puis la saisie du caractère qu’elle représente. La sélection avance d’elle-même. Les flèches permettent de naviguer." },
+    "fontinsp.charset_hint": { "text": "La modification réassigne les caractères aux cellules dans l’ordre. Les cellules en trop gardent leur caractère ; les ligatures se règlent cellule par cellule." },
+    "fontinsp.glyph_hint": { "text": "Les glyphes se dessinent dans l’éditeur d’images, comme pour un sprite. Ici, seul le caractère correspondant à chaque cellule se corrige." },
+    "glsheet.pick_hint": { "text": "Un clic sur la planche prélève la couleur « {name} » (Échap annule)." },
+    "pick.pick_hint": { "text": "Prélève une couleur dans la palette bank lue par ce texte." },
+    "projpick.add_personal_hint": { "text": "Les préréglages personnels s’ajoutent sous forme de dossiers dans :\n{USER_STARTERS_DIR}" },
+    "sndmix.graph_hint_empty": { "text": "Aucun état musical. « + État » en crée un." },
+    "sndmix.graph_hint_no_trans": { "text": "Faire glisser le point du bord droit d’un nœud vers un autre crée une transition ; cliquer sur un fil puis appuyer sur Suppr le coupe." },
+    "sndmix.matrix_hint": { "text": "Une image d’animation cite une action ; l’état actif indique vers quel {kind} elle pointe. Une cellule laissée sur « aucun » ne joue rien dans cet état : un pas ne sonne pas en plein saut." },
+    "sndmix.matrix_hint_empty": { "text": "Aucune action pour l’instant. En ajouter une, puis déposer son nom sur une image dans l’éditeur de sprites, rend le même cycle de marche utilisable sur plusieurs sols." },
+    "mktool.value_tip": { "text": "Insère la valeur d’une globale ou d’une constante du projet, lue à l’affichage." },
+    "mktool.wraps": { "text": "Entoure la sélection ; un second clic la retire." },
+    "mktool.dropped": { "text": "Est insérée devant la sélection, qui reste intacte." },
+    "txttbl.add_title": { "text": "Nouveau texte" },
+    "txttbl.add_tip": { "text": "Crée un texte et le range là où se trouve la sélection." },
+    "txttbl.delete_title": { "text": "Supprimer les textes sélectionnés" },
+    "txttbl.group_rename_tip": { "text": "Un rangement sélectionné et déplié se renomme en cliquant sur son libellé ; cela renomme le rangement de chaque texte qu’il contient." },
+    "txttbl.key_auto": { "text": "Clé automatique : elle suit le rangement." },
+    "txttbl.key_hand": { "text": "Clé nommée à la main : elle ne dépend pas du rangement." },
+    "txttbl.unused_cell_tip": { "text": "Aucun script et aucune interface ne référence cette clé." },
+    "txttbl.used_unknown_tip": { "text": "Les scripts n’ont pas pu être analysés. L’utilisation est inconnue, pas nulle." },
+    "txtwb.lock_attached_tip": { "text": "Un clic permet de la nommer à la main." },
+    "txtwb.lock_hand_tip": { "text": "Un clic la relie à nouveau au rangement." },
+    "glsheet.merge_tip": { "text": "Fusionne les cellules sélectionnées en un seul glyphe couvrant leur rectangle." },
+    "glsheet.zoom": { "text": "Zoom" },
+    "txtinsp.id_id_folder_value": { "text": "id {id}\nrangement : {value}\n" },
+    "txtinsp.key_auto_note": { "text": "clé dérivée du rangement (la nommer à la main la détache)" },
+    "txtinsp.key_manual_note": { "text": "clé nommée à la main (le rangement ne la modifie plus)" },
+    "txtwb.lock_hand": { "text": "Clé nommée à la main" },
+    "txttbl.rename_key": { "text": "Renommer la clé de texte" },
+    "txttbl.h_path": { "text": "Rangement" },
+    "txttbl.h_used": { "text": "Utilisation" },
+    "scred.back": { "text": "← Retour" },
+    "scred.new_script_btn": { "text": "+ Script" },
+    "scred.back_title": { "text": "Revenir au projet" },
+    "scred.back_tip": { "text": "Revient à l’écran précédent après avoir enregistré les modifications en attente." },
+    "scred.save_title": { "text": "Enregistrer le script" },
+    "scred.new_script_title": { "text": "Nouveau script" },
+    "scred.new_script_tip": { "text": "Crée un script Lua vide dans le projet." },
+    "scred.completion_title": { "text": "Ouvrir l’autocomplétion" },
+    "scred.completion_tip": { "text": "Affiche l’API, les noms du projet et les mots-clés Lua disponibles à la position du curseur." },
+    "scrsb.filter_title": { "text": "Filtrer les aides de script" },
+    "scrsb.filter_tip": { "text": "Filtre les événements, entrées d’API et références du projet par nom." },
+    "scrsb.event_tip_note": { "text": "La sélection insère ce gestionnaire, ou y mène s’il existe déjà." },
+    "scrsb.behavior_stub_tip": { "text": "Insère une fonction exportée pour ce module de comportement." },
+    "vartbl.insert_title": { "text": "Insérer l’accès à la variable" },
+    "scrsb.bg_ref": { "text": "Référence éditoriale. Un fond se place dans la scène, pas depuis un script." },
+    "scrsb.require_desc": { "text": "Importe le module de comportement {name}." },
+    "scrsb.interface_name": { "text": "Interface {name}" },
+    "scrsb.preview_value": { "text": " (aperçu « {value} »)" },
+    "scrsb.active_scene": { "text": "Scène active." },
+    "vartbl.array": { "text": "Tableau" },
+    "vartbl.array_tip": { "text": "Définit le nombre de cases du tableau, indexées à partir de 1 (global.nom[1]..[N])." },
+    "vartbl.array_note": { "text": "Un clic droit puis Tableau le ramène à une valeur simple." },
+    "vartbl.rename_tip": { "text": "Renomme cette variable et met à jour ses références dans les scripts et les textes." },
+    "vartbl.type_title": { "text": "Type de variable" },
+    "vartbl.value_title": { "text": "Valeur initiale" },
+    "datascr.data_finder": { "text": "Tables de données" },
+    "datagrid.table_bar": { "text": "Table" },
+    "datagrid.add_row": { "text": "Ajouter une ligne" },
+    "datagrid.add_column": { "text": "Ajouter une colonne" },
+    "datagrid.add_column_tip": { "text": "Ajoute une colonne d’entiers à cette table." },
+    "datagrid.column_title": { "text": "Colonne de table" },
+    "datagrid.column_tip": { "text": "Un double-clic sur un nom le renomme. Un clic droit modifie son type ou la retire." },
+    "datagrid.text_preview_title": { "text": "Texte référencé" },
+    "datagrid.empty": { "text": "Aucune table sélectionnée." },
+    "datagrid.text_not_found": { "text": "{key} (introuvable dans la table de textes)" },
+    "datagrid.text_preview": { "text": "{key}\n« {body} »" },
+    "datagrid.no_column_title": { "text": "Ligne" },
+    "datagrid.no_column_text": { "text": "Ajoutez d’abord une colonne. Une ligne a besoin d’au moins une colonne." },
+    "datagrid.row_above": { "text": "Insérer une ligne au-dessus" },
+    "datagrid.row_below": { "text": "Insérer une ligne au-dessous" },
+    "datagrid.row_end": { "text": "Ajouter une ligne à la fin" },
+    "datagrid.row_delete": { "text": "Supprimer la ligne" },
+    "datagrid.rename_title": { "text": "Renommer" },
+    "datagrid.rename_text": { "text": "« {name} » ne peut pas être utilisé. Le nom de colonne s’écrit comme du code dans les scripts (data.{table}[i].{col}) : il doit être un identifiant simple (lettres, chiffres et _, sans commencer par un chiffre) et unique dans la table." },
+    "datainsp.column": { "text": "Colonne" },
+    "datainsp.name": { "text": "nom" },
+    "datainsp.type": { "text": "type" },
+    "datainsp.type_title": { "text": "Type de colonne" },
+    "datainsp.type_tip": { "text": "Détermine les valeurs acceptées par cette colonne. La modifier convertit les valeurs existantes." },
+    "datainsp.cell": { "text": "Cellule" },
+    "datainsp.value": { "text": "valeur" },
+    "datainsp.no_ref": { "text": "Aucune référence." },
+    "datainsp.no_named": { "text": "Aucun {type} nommé « {name} » dans le projet." },
+    "datainsp.text_content": { "text": "« {content} »" },
+    "datainsp.pal_colors": { "text": "{n} couleurs" },
+    "datainsp.of_project": { "text": "Référence vers un {type} du projet." },
+    "palgrid.export_title": { "text": "Exporter la palette" },
+    "palgrid.export_tip": { "text": "Exporte la palette au format GIMP, JASC ou liste hexadécimale." },
+    "palgrid.reserved_title": { "text": "Couleur réservée" },
+    "palgrid.reserved_tip": { "text": "Toujours transparent." },
+    "colins.hex_title": { "text": "Couleur hexadécimale" },
+    "colins.hex_tip": { "text": "Accepte une couleur RGB à six chiffres et la convertit au format GBA 15 bits." },
+    "colins.snap_title": { "text": "Ajustement de couleur GBA" },
+    "colins.snap_tip": { "text": "Couleur ajustée à la grille GBA 15 bits, avec 5 bits par canal." },
+    "paluse.open_title": { "text": "Ouvrir l’élément utilisé" },
+    "paluse.open_tip": { "text": "{detail}. Ouvre cet élément dans son éditeur." },
+    "palgrid.export": { "text": "Exporter" },
+    "palgrid.empty": { "text": "Sélectionnez une palette dans le panneau de gauche." },
+    "palgrid.size": { "text": "{n} couleurs · {bpp}" },
+    "palgrid.ramp_title": { "text": "Créer un dégradé" },
+    "palgrid.from_index": { "text": "Depuis l’index" },
+    "palgrid.to": { "text": "jusqu’à" },
+    "palgrid.ramp_rgb": { "text": "RGB linéaire" },
+    "palgrid.ramp_hsl": { "text": "TSL par teinte" },
+    "palgrid.create_ramp": { "text": "Créer un dégradé" },
+    "palgrid.menu_clear": { "text": "Vider" },
+    "palgrid.menu_delete": { "text": "Supprimer et décaler les couleurs" },
+    "palgrid.swatch_title": { "text": "Couleur {index}" },
+    "palgrid.swatch_tip": { "text": "{hex}" },
+    "colins.color": { "text": "Couleur" },
+    "colins.wheel": { "text": "Roue chromatique" },
+    "colins.snap_badge": { "text": "≈ ajustée" },
+    "colins.color_index": { "text": "COULEUR · index {index} · 0x{hex}" },
+    "paluse.title": { "text": "Utilisation" },
+    "paluse.none_selected": { "text": "Aucune palette sélectionnée." },
+    "paluse.no_use": { "text": "Cette palette n’est utilisée nulle part dans le projet." },
+    "paluse.sprite": { "one": "Sprite", "other": "Sprites" },
+    "paluse.background": { "one": "Arrière-plan", "other": "Arrière-plans" },
+    "paluse.prefab": { "one": "Prefab", "other": "Prefabs" },
+    "paluse.scene": { "one": "Scène", "other": "Scènes" },
+    "fontselect.weight_title": { "text": "Graisse de la police" },
+    "fontselect.weight_tip": { "text": "Utilise une face native disponible dans la police sélectionnée." },
+    "fontselect.bold_title": { "text": "Face grasse" },
+    "fontselect.italic_title": { "text": "Face italique" },
+    "backdrop.title": { "text": "Fond d’épreuve" },
+    "backdrop.note": { "text": "Aide de lecture uniquement. Ne modifie ni le texte ni la ROM." },
+    "palstrip.select_title": { "text": "Sélectionner la palette : {name}" },
+    "rombar.mode_title": { "text": "Affichage de la barre ROM" },
+    "rombar.target_title": { "text": "Cartouche cible" },
+    "pick.open_palette_title": { "text": "Choisir une couleur de palette" },
+    "pick.unavailable_color_title": { "text": "Couleur de palette indisponible" },
+    "pick.color_index_title": { "text": "Couleur de palette {_index}" },
+    "valfield.reference_title": { "text": "Valeur référencée" },
+    "valfield.reference_tip": { "text": "Lit {symbol} pendant l’exécution du projet." },
+    "settings.shortcuts.reset_title": { "text": "Rétablir le raccourci par défaut" },
+    "settings.shortcuts.system_key_title": { "text": "Raccourci système" },
+    "noticeui.dismiss_title": { "text": "Masquer l’astuce" },
+    "build.refresh_title": { "text": "Actualiser les diagnostics" },
+    "build.refresh_tip": { "text": "Relance les vérifications et met cette liste à jour." },
+    "build.clear_title": { "text": "Effacer le journal de compilation" },
+    "build.configure_title": { "text": "Configurer la chaîne d’outils" },
+    "build.configure_tip": { "text": "Ouvre les chemins du compilateur et de l’émulateur." },
+    "hints.mouse.wheel": { "text": "Molette" },
+    "hints.mouse.middle_drag": { "text": "Glisser molette" },
+    "hints.mouse.left_click": { "text": "Clic" },
+    "hints.mouse.left_drag": { "text": "Glisser" },
+    "hints.mouse.right_click": { "text": "Clic droit" },
+    "hints.mouse.right_drag": { "text": "Glisser droit" },
+    "hints.mouse.double_click": { "text": "Double-clic" },
+    "hints.mouse.drop": { "text": "Déposer" },
+    "hints.header": { "text": "Raccourcis" },
+    "hints.zoom": { "text": "Zoome la vue" },
+    "hints.pan": { "text": "Déplace la vue" },
+    "hints.fit": { "text": "Cadre le contenu dans la vue" },
+    "hints.scene.select_item": { "text": "Sélectionne un acteur ou un élément" },
+    "hints.scene.extend_selection": { "text": "Ajoute ou retire un élément de la sélection" },
+    "hints.scene.move_or_rubber_band": { "text": "Déplace, ou trace un rectangle de sélection" },
+    "hints.scene.duplicate_drag": { "text": "Duplique en glissant" },
+    "hints.scene.actor_menu": { "text": "Ouvre le menu de l’acteur" },
+    "hints.scene.nudge": { "text": "Décale de 1 px (Maj : 8 px)" },
+    "hints.scene.delete": { "text": "Supprime la sélection" },
+    "hints.scene.duplicate": { "text": "Duplique la sélection" },
+    "hints.scene.copy_paste": { "text": "Copie et colle la sélection" },
+    "hints.scene.place_actor": { "text": "Place un acteur sur la grille" },
+    "hints.scene.erase_actor": { "text": "Supprime l’acteur sous le curseur" },
+    "hints.scene.paint_solid": { "text": "Peint des tuiles de collision pleines" },
+    "hints.scene.erase_tiles": { "text": "Efface des tuiles de collision" },
+    "hints.scene.draw_slope": { "text": "Trace une pente entre deux tuiles" },
+    "hints.scene.erase_slope": { "text": "Efface les tuiles le long du trait" },
+    "hints.scene.inpaint_paint": { "text": "Peint la banque active sur des tuiles" },
+    "hints.scene.inpaint_clear": { "text": "Retire la banque imposée aux tuiles" },
+    "hints.scene.inpaint_rect_paint": { "text": "Peint la banque active sur un rectangle" },
+    "hints.scene.inpaint_rect_clear": { "text": "Retire la banque imposée sur un rectangle" },
+    "hints.scene.ui_place_default": { "text": "Place un élément à sa taille par défaut" },
+    "hints.scene.ui_draw_rect": { "text": "Trace le rectangle de l’élément" },
+    "hints.scene.back_to_select": { "text": "Revient à Sélectionner" },
+    "hints.graph.title": { "text": "Graphe des scènes" },
+    "hints.graph.select": { "text": "Sélectionne une scène, un groupe ou un lien" },
+    "hints.graph.extend_selection": { "text": "Ajoute ou retire un élément de la sélection" },
+    "hints.graph.move_or_rubber_band": { "text": "Déplace une carte, ou trace un rectangle de sélection" },
+    "hints.graph.open": { "text": "Ouvre la scène ou le groupe" },
+    "hints.graph.enter_leave_group": { "text": "Entre dans le groupe / remonte d’un niveau" },
+    "hints.graph.group": { "text": "Range les scènes sélectionnées dans un groupe" },
+    "hints.graph.search": { "text": "Cherche une scène" },
+    "hints.graph.minimap": { "text": "Affiche ou masque la mini-carte" },
+    "hints.graph.deselect": { "text": "Vide la sélection" },
+    "hints.graph.fit": { "text": "Centre la sélection, ou cadre tout le graphe" },
+    "hints.graph.zoom_reset": { "text": "Remet le zoom à 100 %" },
+    "hints.bg.paint": { "text": "Peint la palette active sur des tuiles" },
+    "hints.bg.fill": { "text": "Remplit la zone connexe avec la palette active" },
+    "hints.bg.paint_rect": { "text": "Peint un rectangle avec la palette active" },
+    "hints.bg.erase": { "text": "Retire la palette des tuiles" },
+    "hints.bg.crop_adjust": { "text": "Déplace le cadre de recadrage ou ses poignées" },
+    "hints.bg.crop_apply": { "text": "Applique le recadrage" },
+    "hints.bg.crop_cancel": { "text": "Annule le recadrage" },
+    "hints.bg.resize_drag": { "text": "Redimensionne l’image par ses poignées" },
+    "hints.bg.keep_ratio": { "text": "Garde les proportions" },
+    "hints.bg.snap_grid": { "text": "Accroche à la grille 8×8" },
+    "hints.bg.key_animated_drag": { "text": "Glisser une animation" },
+    "hints.bg.move_animated": { "text": "Déplace un fond animé posé" },
+    "hints.bg.delete_animated": { "text": "Retire le fond animé sélectionné" },
+    "hints.sprite.title_brush": { "text": "Brosse" },
+    "hints.sprite.title_pick": { "text": "Sélection de tuiles" },
+    "hints.sprite.title_readonly": { "text": "Direction miroir (lecture seule)" },
+    "hints.sprite.paint": { "text": "Pose les tuiles de la brosse" },
+    "hints.sprite.erase": { "text": "Efface des tuiles" },
+    "hints.sprite.flip_h": { "text": "Retourne la brosse horizontalement" },
+    "hints.sprite.flip_v": { "text": "Retourne la brosse verticalement" },
+    "hints.sprite.pick_up": { "text": "Ramasse des tuiles posées en brosse" },
+    "hints.sprite.duplicate_frame": { "text": "Duplique la frame" },
+    "hints.sprite.delete_frame": { "text": "Supprime la frame" },
+    "hints.sound.title": { "text": "Graphe de musique" },
+    "hints.sound.select": { "text": "Sélectionne un état ou une transition" },
+    "hints.sound.move_or_rubber_band": { "text": "Déplace les états sélectionnés, ou trace un rectangle de sélection" },
+    "hints.sound.key_port_drag": { "text": "Glisser depuis un port" },
+    "hints.sound.link": { "text": "Relie deux états" },
+    "hints.sound.key_arrow_end_drag": { "text": "Glisser un bout de flèche" },
+    "hints.sound.rewire": { "text": "Recâble la transition vers un autre état" },
+    "hints.sound.drop_track": { "text": "Affecte la piste à un état, ou en crée un" },
+    "hints.sound.delete": { "text": "Supprime la sélection" },
+    "hints.sound.play_pause": { "text": "Lit ou met en pause" },
+    "hints.palette.title": { "text": "Palette" },
+    "hints.palette.select": { "text": "Sélectionne une couleur" },
+    "hints.palette.select_rect": { "text": "Sélectionne un rectangle de couleurs" },
+    "hints.palette.select_range": { "text": "Sélectionne une plage d’index" },
+    "hints.palette.menu": { "text": "Ouvre le menu des couleurs" },
+    "hints.palette.move": { "text": "Déplace la sélection" },
+    "hints.palette.extend": { "text": "Étend la sélection" },
+    "hints.palette.copy_paste": { "text": "Copie et colle la couleur en hexadécimal" },
+    "hints.palette.clear": { "text": "Vide les couleurs sélectionnées" },
+    "hints.palette.edit_hex": { "text": "Passe au champ HEX" }
   }
 }

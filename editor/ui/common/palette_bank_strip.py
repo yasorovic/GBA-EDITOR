@@ -10,6 +10,7 @@ Sprite Editor et le Background Editor (palette active de preview/peinture).
 from __future__ import annotations
 
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QToolButton
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import QSize, pyqtSignal
@@ -92,13 +93,14 @@ class PaletteBankStrip(QFrame):
             resolved = next(iter(self._colors), None)
         self._active = resolved
 
-        for id_, label, colors in entries:
+        for id_, entry_label, colors in entries:
             btn = QToolButton()
             btn.setCheckable(True)
             btn.setIcon(swatch_icon(list(colors), self._ICON))
             btn.setIconSize(QSize(self._ICON, self._ICON))
             btn.setFixedSize(30, 30)
-            btn.setToolTip(label)
+            btn.setToolTip(tooltip(
+                title=label("palstrip.select_title", name=entry_label)))
             btn.setChecked(id_ == self._active)
             btn.clicked.connect(lambda _c=False, i=id_: self._select(i))
             self._layout.addWidget(btn)

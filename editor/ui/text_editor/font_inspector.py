@@ -16,6 +16,7 @@ from ui.common.theme import C, T, QSS
 from ui.common.widgets import CollapsibleCard
 from ui.common import icons
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.text_editor.colors import FONT_COLOR
 from ui.text_editor.glyph_paint import key_out
 from ui.text_editor.glyph_sheet import GlyphSheet
@@ -105,7 +106,9 @@ class FontInspector(QWidget):
             f"border:1px solid {C.BORDER_MID}; border-radius:3px; padding:4px;}}"
         )
         self._charset.setFixedHeight(80)
-        self._charset.setToolTip(label("fontinsp.charset_tip"))
+        self._charset.setToolTip(tooltip(
+            title=label("fontinsp.charset_title"), body=label("fontinsp.charset_tip"),
+        ))
         self._charset.editing_finished.connect(self._commit_charset)
         charset_card.body_layout.addWidget(self._charset)
 
@@ -135,7 +138,9 @@ class FontInspector(QWidget):
         self._char_edit.setFont(QFont(T.CODE, T.LG))
         self._char_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._char_edit.setPlaceholderText(label("fontinsp.char_placeholder"))
-        self._char_edit.setToolTip(label("fontinsp.char_tip"))
+        self._char_edit.setToolTip(tooltip(
+            title=label("fontinsp.char_title"), body=label("fontinsp.char_tip"),
+        ))
         self._char_edit.editingFinished.connect(self._commit_char)
         glyph_card.body_layout.addWidget(self._char_edit)
 
@@ -159,7 +164,7 @@ class FontInspector(QWidget):
     def _key_row(self, role: str, lbl_key: str, tip_key: str) -> QHBoxLayout:
         """Une ligne de couleur-clé : nom, pastille, pipette, effacement."""
         disp = label(lbl_key)
-        tip = label(tip_key)
+        tip = tooltip(title=disp, body=label(tip_key))
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(6)
@@ -181,7 +186,7 @@ class FontInspector(QWidget):
         pick = QPushButton()
         pick.setIcon(icons.get("eyedropper", C.TEXT_NORM))
         pick.setFixedSize(24, 22)
-        pick.setToolTip(label("fontinsp.pick_tip", name=disp))
+        pick.setToolTip(tooltip(title=label("fontinsp.pick_title", name=disp)))
         pick.setStyleSheet(QSS.button_icon)
         pick.clicked.connect(lambda _=False, r=role, l=disp: self.pick_asked.emit(r, l))
         row.addWidget(pick)
@@ -189,7 +194,8 @@ class FontInspector(QWidget):
         clear = QPushButton()
         clear.setIcon(icons.get("clear", C.TEXT_MUTED))
         clear.setFixedSize(24, 22)
-        clear.setToolTip(label("fontinsp.clear_tip", name=disp))
+        clear.setToolTip(tooltip(title=label("fontinsp.clear_title", name=disp),
+                                 body=label("fontinsp.clear_tip", name=disp)))
         clear.setStyleSheet(QSS.button_icon)
         clear.clicked.connect(lambda _=False, r=role: self.key_color_cleared.emit(r))
         row.addWidget(clear)

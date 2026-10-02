@@ -1,4 +1,4 @@
-"""L'écran des inputs personnalisés, après la décision de Victor du
+"""L'écran des inputs personnalisés, après la décision de l'auteur du
 2026-09-27 : InputsCard redevient des boutons à bascule à icônes (accords
 simples — les MÊMES icônes que les events `on_button_*` du Script Editor),
 SequencesCard porte le mini-langage complet (get_sequence), et AxesCard ne

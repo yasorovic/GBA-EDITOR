@@ -29,6 +29,9 @@ from ui.common.theme import C, T, QSS
 from ui.common.widgets import W
 from ui.common import icons
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
+from ui.common.shortcut_hints import ShortcutHints
+from .palette_hints import palette_grid_hints
 
 from core.models.palette import PaletteBank
 from core.project import Project
@@ -104,7 +107,7 @@ class PaletteGridPanel(QWidget):
         tl.setSpacing(6)
 
         # Zoom : mêmes contrôles et mêmes libellés que CanvasTopBar (−/%/+/ajuster).
-        tl.addWidget(self._zoom_btn("zoom_out", label("palgrid.zoom_out_tip"),
+        tl.addWidget(self._zoom_btn("zoom_out", tooltip(title=label("palgrid.zoom_out"), shortcut=label("cvtop.wheel_down")),
                                     lambda: self.zoom_step(-1)))
         self._zoom_lbl = QLabel("100%")
         self._zoom_lbl.setFont(QFont(T.MONO, T.SM))
@@ -112,13 +115,16 @@ class PaletteGridPanel(QWidget):
         self._zoom_lbl.setFixedWidth(42)
         self._zoom_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         tl.addWidget(self._zoom_lbl)
-        tl.addWidget(self._zoom_btn("zoom_in", label("palgrid.zoom_in_tip"),
-                                    lambda: self.zoom_step(+1)))
-        tl.addWidget(self._zoom_btn("fit_page", label("palgrid.fit_tip"), self.fit))
+        tl.addWidget(self._zoom_btn("zoom_in", tooltip(title=label("palgrid.zoom_in"), shortcut=label("cvtop.wheel_up")),
+                                   lambda: self.zoom_step(+1)))
+        tl.addWidget(self._zoom_btn(
+            "fit_page", tooltip(title=label("palgrid.fit_title"), shortcut="F"), self.fit))
         tl.addSpacing(10)
 
         self._btn_export = W.btn_ghost(label("palgrid.export"))
-        self._btn_export.setToolTip(label("palgrid.export_tip"))
+        self._btn_export.setToolTip(tooltip(
+            title=label("palgrid.export_title"), body=label("palgrid.export_tip"),
+        ))
         self._btn_export.clicked.connect(self._export_palette)
         tl.addWidget(self._btn_export)
         chl.addWidget(self._tools)
@@ -158,6 +164,8 @@ class PaletteGridPanel(QWidget):
         il.addWidget(self._scroll, 1)
 
         root.addWidget(inner, 1)
+        # Table des raccourcis de la grille (bas-droite) — visible avec la grille.
+        self._hints = ShortcutHints(self, palette_grid_hints)
         self.show_empty()
 
     def _zoom_btn(self, icon_key: str, tip: str, slot) -> QPushButton:
@@ -202,6 +210,7 @@ class PaletteGridPanel(QWidget):
         self._empty_lbl.setVisible(False)
         self._scroll.setVisible(True)
         self._tools.setVisible(True)
+        self._hints.set_enabled(True)
         size = getattr(bank, "size", 16)
         self._title.setText(bank.name)
         self._size_lbl.setText(label("palgrid.size", n=size,
@@ -219,6 +228,7 @@ class PaletteGridPanel(QWidget):
         self._empty_lbl.setVisible(True)
         self._scroll.setVisible(False)
         self._tools.setVisible(False)
+        self._hints.set_enabled(False)
         self._title.setText("")
         self._size_lbl.setText("")
         self.editing_enabled.emit(False)
@@ -438,11 +448,18 @@ class PaletteGridPanel(QWidget):
             if i == 0:
                 btn.set_checker()              # damier transparence (hardware GBA)
                 btn.setEnabled(False)
-                btn.setToolTip(label("palgrid.reserved_tip"))
+                btn.setToolTip(tooltip(
+                    title=label("palgrid.reserved_title"), body=label("palgrid.reserved_tip"),
+                ))
             else:
                 # La case active (couleur éditée) porte le contour blanc.
                 is_active = bool(selectable and i == self._active_index)
                 self._style_swatch(btn, i, c, selected=is_active, active=is_active)
+                r, g, b = bgr555_to_rgb888(c)
+                btn.setToolTip(tooltip(
+                    title=label("palgrid.swatch_title", index=f"{i:02X}"),
+                    body=label("palgrid.swatch_tip", hex=f"#{r:02X}{g:02X}{b:02X}"),
+                ))
                 if selectable:
                     btn.installEventFilter(self)   # sélection au cliqué-glissé
                 else:

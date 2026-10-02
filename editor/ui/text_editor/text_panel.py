@@ -138,6 +138,11 @@ class TextPanel(QWidget):
         """Relais du renommage en place demandé depuis le Finder."""
         self._on_group_renamed(path, segment)
 
+    def rename_key(self, t, typed: str) -> None:
+        """Renommage de clé demandé depuis le Finder."""
+        if self._rename_key(t, typed):
+            self._table.refresh()
+
     # ── Sélection ─────────────────────────────────────────────────
 
     def _on_selection(self, texts: list):

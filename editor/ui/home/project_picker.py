@@ -1,7 +1,7 @@
 """
 ui/project_picker.py — HomeScreen : écran d'accueil affiché au lancement.
 
-• Liste les projets récemment ouverts (stockée dans ~/.gba_editor_recent.json)
+• Liste les projets récemment ouverts (stockée dans ~/.backstage_recent.json)
 • Double-clic ou Ouvrir → ouvre le projet
 • Nouveau → crée un nouveau projet dans PROJECTS_DIR
 • Clear list → supprime les entrées qui pointent vers des dossiers morts
@@ -26,19 +26,22 @@ from ui.common.theme import C, T, QSS, tint
 from ui.common.widgets import W, HoverIconButton
 from ui.common.labels import label
 from ui.common.reveal import reveal_in_file_manager
+from core.app_info import APP_NAME
 from core.toolchain import Toolchain, DEVKITPRO_URL, MGBA_URL
 from core.project_templates import (
     ProjectTemplate, TEMPLATES, target_dir as template_target_dir,
     is_downloaded as template_is_downloaded, download_template,
 )
 from core.project_starters import USER_STARTERS_DIR, available_starters
+from core.project_paths import (
+    PROJECT_EXT, ProjectManifestError, ProjectNotFoundError, find_manifest)
 
 # Emplacement proposé par défaut pour un nouveau projet — jamais créé au
 # lancement. Il ne sert qu'à préremplir les champs et les dialogues de
 # fichiers ; le dossier n'apparaît que si l'utilisateur crée réellement un
 # projet dedans (Project.create fait le mkdir parents=True).
-PROJECTS_DIR  = Path.home() / "GBAProjects"
-_RECENT_FILE  = Path.home() / ".gba_editor_recent.json"
+PROJECTS_DIR  = Path.home() / f"{APP_NAME}Projects"
+_RECENT_FILE  = Path.home() / f".{APP_NAME.lower()}_recent.json"
 _MAX_RECENT   = 12
 
 
@@ -312,11 +315,13 @@ class HomeScreen(QDialog):
       result_path   : Path vers le dossier projet choisi / créé
       result_is_new : bool — True si nouveau projet
       result_name   : str  — nom saisi (si nouveau)
+      result_starter: str — preset choisi (si nouveau)
     """
 
     result_path:   Optional[Path] = None
     result_is_new: bool           = False
     result_name:   str            = ""
+    result_starter: str           = "Basic"
     _TEMPLATE_PROGRESS_KEYS = {
         "Downloading…": "home.template.downloading",
         "Extracting…": "home.template.extracting",
@@ -328,7 +333,7 @@ class HomeScreen(QDialog):
         self._recent       = load_recent()
         self._toolchain    = Toolchain()
 
-        self.setWindowTitle(label("home.window_title"))
+        self.setWindowTitle(label("home.window_title", app_name=APP_NAME))
         self.setMinimumSize(580, 460)
         self.setMaximumSize(720, 640)
         self.setModal(True)
@@ -352,7 +357,7 @@ class HomeScreen(QDialog):
         hl = QHBoxLayout(hdr)
         hl.setContentsMargins(20, 0, 20, 0)
 
-        title_lbl = QLabel("GBA Editor")
+        title_lbl = QLabel(APP_NAME)
         title_lbl.setFont(QFont(T.UI, 16, QFont.Weight.DemiBold))
         title_lbl.setStyleSheet(f"color:{C.TEXT_HI};background:transparent;")
         sub_lbl = QLabel(label("home.subtitle"))
@@ -370,7 +375,10 @@ class HomeScreen(QDialog):
         self._tabs = QTabWidget()
         self._tabs.setStyleSheet(QSS.tab)
         self._tabs.addTab(self._build_projects_tab(), label("home.tab.projects"))
-        self._tabs.addTab(self._build_templates_tab(), label("home.tab.templates"))
+        # Sans source de modèles configurée (cf. core/app_info.APP_TEMPLATES_URL),
+        # il n'y a rien à lister : pas d'onglet vide qui promet un téléchargement.
+        if TEMPLATES:
+            self._tabs.addTab(self._build_templates_tab(), label("home.tab.templates"))
         root.addWidget(self._tabs, 1)
 
         # ── Statut toolchain (devkitPro / mGBA) ────────────────────
@@ -450,7 +458,6 @@ class HomeScreen(QDialog):
             f"border:1px solid {C.BORDER};border-radius:4px;padding:0 12px;}}"
             f"QPushButton:hover{{background:{C.BG_HOVER};border-color:#555;}}"
         )
-        btn_load.setToolTip(label("home.load_tip"))
         btn_load.clicked.connect(self._browse)
         fl.addWidget(btn_load)
 
@@ -576,6 +583,7 @@ class HomeScreen(QDialog):
     def _new_project(self):
         dlg = NewProjectDialog(self._projects_dir, self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
+            self.result_starter = dlg.result_starter
             self._accept(dlg.result_path, is_new=True, name=dlg.result_name)
 
     def _clear_dead(self):
@@ -602,6 +610,18 @@ class HomeScreen(QDialog):
         self._toolchain_status.refresh()
 
     def _accept(self, path: Path, is_new: bool = False, name: str = ""):
+        # Un dossier à ouvrir doit porter un manifeste : sinon on le dit ici et
+        # on reste sur l'accueil, au lieu de pousser dans les récents (et
+        # d'ouvrir) un projet fantôme.
+        if not is_new:
+            try:
+                if find_manifest(path) is None:
+                    raise ProjectNotFoundError(
+                        f"« {path.name} » n'est pas un projet : aucun fichier "
+                        f"{PROJECT_EXT} dans ce dossier.")
+            except ProjectManifestError as exc:
+                QMessageBox.critical(self, label("common.open_project"), str(exc))
+                return
         push_recent(path)
         self.result_path   = path
         self.result_is_new = is_new
@@ -836,7 +856,8 @@ class NewProjectDialog(QDialog):
             QMessageBox.warning(self, label("common.error"),
                                 label("home.new.exists", name=name))
             return
-        path.mkdir(parents=True, exist_ok=True)
+        # Le dossier n'est PAS créé ici : c'est `Project.create` qui le fait. Le
+        # créer avant laissait, si la création échouait ensuite, un dossier vide.
         self.result_path = path
         self.result_name = name
         self.result_starter = self._starter_combo.currentData() or "Basic"

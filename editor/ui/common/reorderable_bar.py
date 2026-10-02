@@ -11,9 +11,10 @@ from PyQt6.QtWidgets import QWidget, QHBoxLayout, QToolButton, QButtonGroup, QFr
 from PyQt6.QtCore import Qt, QSettings, QPoint, pyqtSignal, QEvent, QTimer
 from PyQt6.QtGui import QFont
 
+from core.app_info import APP_NAME
 from ui.common.theme import C, T
 
-_SETTINGS_ORG = "GBAEditor"
+_SETTINGS_ORG = APP_NAME
 _SETTINGS_APP = "Layout"
 _SETTINGS_KEY = "screen_button_order"
 

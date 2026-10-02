@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 """
-Build Nuitka de GBA Editor — Windows et Linux.
+Build Nuitka de Backstage — Windows et Linux.
 
 Une seule définition de la commande de build, utilisée par la CI comme en
 local : c'est ce qui évite que les options divergent entre les deux et
 qu'un problème n'apparaisse qu'au moment de publier.
 
-Usage :
-    python packaging/nuitka_build.py --version 0.3.2 --output-dir build-out
+Nom, auteur et version viennent de `editor/core/app_info.py` (source unique) :
+`--version`, s'il est donné, doit EGALER `APP_VERSION` — c'est la garde qui
+fait échouer une release dont le tag n'est pas celui du dépôt.
 
-Produit un dossier <output-dir>/GBAEditor/ contenant l'exécutable et ses
+Usage :
+    python packaging/nuitka_build.py --output-dir build-out
+    python packaging/nuitka_build.py --print-version     # pour le workflow
+
+Produit un dossier <output-dir>/Backstage/ contenant l'exécutable et ses
 données. C'est ce dossier qui est ensuite zippé (portable) et empaqueté
 par NSIS (installateur) — voir .github/workflows/release.yml.
 
@@ -25,17 +30,33 @@ gcc sous Linux ; à défaut Nuitka télécharge MinGW64 avec
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-COMPANY = "Yasor Rovic"
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EDITOR_DIR = REPO_ROOT / "editor"
 IS_WINDOWS = sys.platform.startswith("win")
+
+
+def _load_app_info():
+    """`core/app_info.py` chargé PAR SON CHEMIN : l'importer comme `core.app_info`
+    exigerait `editor/` dans le sys.path, donc le paquet `core` et ses effets
+    de bord — ce script tourne sur un Python nu."""
+    spec = importlib.util.spec_from_file_location(
+        "app_info", EDITOR_DIR / "core" / "app_info.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+APP = _load_app_info()
+APP_NAME = APP.APP_NAME           # « Backstage » : exe, dossier, produit
+COMPANY = APP.APP_AUTHOR          # aligné sur PUBLISHER dans installer.nsi
+APP_EXE = APP_NAME + (".exe" if IS_WINDOWS else "")
 
 
 def numeric_version(version: str) -> str:
@@ -82,7 +103,7 @@ def build_command(version: str, output_dir: Path) -> list[str]:
         "--remove-output",              # jette le .build, garde le .dist
         "--enable-plugin=pyqt6",
         f"--output-dir={output_dir}",
-        "--output-filename=" + ("GBA Editor.exe" if IS_WINDOWS else "GBA Editor"),
+        f"--output-filename={APP_EXE}",
     ]
 
     # Qt : "sensible" couvre platforms/styles/imageformats/iconengines, mais
@@ -166,8 +187,8 @@ def build_command(version: str, output_dir: Path) -> list[str]:
     # packaging/windows/installer.nsi.
     num = numeric_version(version)
     cmd += [
-        "--product-name=GBA Editor",
-        "--file-description=GBA Editor",
+        f"--product-name={APP_NAME}",
+        f"--file-description={APP_NAME}",
         f"--company-name={COMPANY}",
         f"--product-version={num}",
         f"--file-version={num}",
@@ -183,17 +204,30 @@ def build_command(version: str, output_dir: Path) -> list[str]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Build Nuitka de GBA Editor")
-    ap.add_argument("--version", default="0.0.0",
-                    help="version de la release (tag), pour les métadonnées")
+    ap = argparse.ArgumentParser(description=f"Build Nuitka de {APP_NAME}")
+    ap.add_argument("--version", default=None,
+                    help="version annoncée (tag de release) : doit égaler "
+                         f"APP_VERSION ({APP.APP_VERSION}) ; par défaut, elle")
+    ap.add_argument("--print-version", action="store_true",
+                    help="affiche APP_VERSION et sort (job `version` de la CI)")
     ap.add_argument("--output-dir", default="build-out", type=Path,
                     help="dossier de sortie du build")
     ap.add_argument("--dry-run", action="store_true",
                     help="affiche la commande sans compiler")
     args = ap.parse_args()
 
+    if args.print_version:
+        print(APP.APP_VERSION)
+        return 0
+    version = args.version or APP.APP_VERSION
+    if version.lstrip("v") != APP.APP_VERSION:
+        print(f"!! la version demandée ({version}) n'est pas celle du dépôt "
+              f"({APP.APP_VERSION}, editor/core/app_info.py) : changez l'une ou "
+              f"l'autre avant de publier.", file=sys.stderr)
+        return 2
+
     output_dir = args.output_dir.resolve()
-    cmd = build_command(args.version, output_dir)
+    cmd = build_command(version, output_dir)
 
     print("$ " + " ".join(f'"{c}"' if " " in c else c for c in cmd), flush=True)
     if args.dry_run:
@@ -209,7 +243,7 @@ def main() -> int:
     # Nuitka nomme le dossier d'après le script principal (main.dist) —
     # on le renomme pour que la CI et le .nsi aient un chemin stable.
     produced = output_dir / "main.dist"
-    final = output_dir / "GBAEditor"
+    final = output_dir / APP_NAME
     if not produced.is_dir():
         print(f"!! dossier attendu introuvable : {produced}", file=sys.stderr)
         return 1
@@ -217,7 +251,7 @@ def main() -> int:
         shutil.rmtree(final)
     produced.rename(final)
 
-    exe = final / ("GBA Editor.exe" if IS_WINDOWS else "GBA Editor")
+    exe = final / APP_EXE
     if not exe.exists():
         print(f"!! exécutable introuvable : {exe}", file=sys.stderr)
         return 1

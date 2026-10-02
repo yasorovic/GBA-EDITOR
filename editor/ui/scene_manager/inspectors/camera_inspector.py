@@ -28,6 +28,7 @@ reste à la scène (`Scene.windows`) — cf. `core/models/camera.py`.
 """
 from __future__ import annotations
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from typing import Optional
 
 from PyQt6.QtWidgets import (
@@ -98,9 +99,10 @@ class CameraInspector(QWidget):
         self._combo_camera = QComboBox()
         self._combo_camera.setFont(QFont(T.UI, T.MD))
         self._combo_camera.setStyleSheet(QSS.combobox)
-        self._combo_camera.setToolTip(
-            label('caminsp.starting_camera_tip')
-        )
+        self._combo_camera.setToolTip(tooltip(
+            title=label('caminsp.starting_camera_title'),
+            body=label('caminsp.starting_camera_tip'),
+            note=label('caminsp.starting_camera_note')))
         self._combo_camera.currentIndexChanged.connect(self._on_camera_picked)
         start_row.addWidget(self._combo_camera, 1)
         camera_card.body_layout.addLayout(start_row)
@@ -168,8 +170,9 @@ class CameraInspector(QWidget):
         self._follow_combo = QComboBox()
         self._follow_combo.setFont(QFont(T.UI, T.MD))
         self._follow_combo.setStyleSheet(QSS.combobox)
-        self._follow_combo.setToolTip(
-            label('caminsp.actor_local_note'))
+        self._follow_combo.setToolTip(tooltip(
+            title=label('caminsp.follow_title'),
+            note=label('caminsp.actor_local_note')))
         self._follow_combo.currentTextChanged.connect(self._on_follow_changed)
         fg.addWidget(self._follow_combo)
 
@@ -205,9 +208,9 @@ class CameraInspector(QWidget):
         self._btn_recalc = QPushButton(label('caminsp.recompute_from_backgrounds'))
         self._btn_recalc.setFont(QFont(T.UI, T.SM))
         self._btn_recalc.setStyleSheet(QSS.button_ghost)
-        self._btn_recalc.setToolTip(
-            label('caminsp.prefill_tip')
-        )
+        self._btn_recalc.setToolTip(tooltip(
+            title=label('caminsp.recompute_from_backgrounds'),
+            body=label('caminsp.prefill_tip'), note=label('caminsp.prefill_note')))
         self._btn_recalc.clicked.connect(self._recalc_bounds)
         bounds_card.body_layout.addWidget(self._btn_recalc)
 

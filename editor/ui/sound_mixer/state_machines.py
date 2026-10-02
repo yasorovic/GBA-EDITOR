@@ -33,6 +33,7 @@ from core.history import get_history, AddListItemCmd, RemoveListItemCmd, SetFiel
 from ui.common.theme import C, T, QSS
 from ui.common.widgets import W
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.sound_mixer.music_graph import MusicGraphView
 from ui.sound_mixer.sound_commands import (
     RenameMusicStateCmd, AddBoxStateCmd, RemoveActionStateCmd,
@@ -72,10 +73,13 @@ class ActionMatrix(QWidget):
 
         bar = QHBoxLayout(); bar.setSpacing(6)
         self._btn_action = W.btn_ghost(label("sndmix.add_action"))
+        self._btn_action.setToolTip(tooltip(title=label("sndmix.add_action_title"), body=label("sndmix.add_action_tip")))
         self._btn_action.clicked.connect(self._add_action)
         self._btn_state = W.btn_ghost(label("sndmix.add_state"))
+        self._btn_state.setToolTip(tooltip(title=label("sndmix.add_state_title"), body=label("sndmix.add_state_tip")))
         self._btn_state.clicked.connect(self._add_state)
         self._btn_del = W.btn_ghost(label("sndmix.del_column"))
+        self._btn_del.setToolTip(tooltip(title=label("sndmix.remove_state_title"), body=label("sndmix.remove_state_tip")))
         self._btn_del.clicked.connect(self._del_state)
         bar.addWidget(self._btn_action); bar.addWidget(self._btn_state)
         bar.addWidget(self._btn_del); bar.addStretch()
@@ -85,7 +89,7 @@ class ActionMatrix(QWidget):
         self._combo_start = QComboBox()
         self._combo_start.setFont(QFont(T.UI, T.SM))
         self._combo_start.setStyleSheet(QSS.combobox)
-        self._combo_start.setToolTip(label("sndmix.start_tip"))
+        self._combo_start.setToolTip(tooltip(title=label("sndmix.start_title")))
         self._combo_start.currentIndexChanged.connect(self._on_start)
         bar.addWidget(lbl_start); bar.addWidget(self._combo_start)
         root.addLayout(bar)
@@ -126,6 +130,10 @@ class ActionMatrix(QWidget):
                 combo = QComboBox()
                 combo.setFont(QFont(T.UI, T.SM))
                 combo.setStyleSheet(QSS.combobox)
+                combo.setToolTip(tooltip(
+                    title=label("sndmix.matrix_target_title"),
+                    body=label("sndmix.matrix_target_tip", action=action, state=st.name),
+                ))
                 combo.addItem(label("common.none_dash"), "")
                 for a in self._assets:
                     combo.addItem(a, a)
@@ -289,17 +297,19 @@ class MusicMachinePanel(QWidget):
 
         bar = QHBoxLayout(); bar.setSpacing(4)
         b_add = W.btn_ghost(label("sndmix.add_state"))
+        b_add.setToolTip(tooltip(title=label("sndmix.add_state_title"), body=label("sndmix.add_state_tip")))
         b_add.clicked.connect(self._add_state)
         b_del = W.btn_ghost("−")
-        b_del.setToolTip(label("sndmix.graph_del_tip"))
+        b_del.setToolTip(tooltip(title=label("sndmix.delete_selection_title"), shortcut="Del"))
         b_del.clicked.connect(lambda: self.view.delete_selected())
         b_auto = W.btn_ghost(label("sndmix.auto_layout"))
-        b_auto.setToolTip(label("sndmix.auto_layout_tip"))
+        b_auto.setToolTip(tooltip(title=label("sndmix.auto_layout"), body=label("sndmix.auto_layout_tip")))
         b_auto.clicked.connect(lambda: self.view.auto_layout())
         bar.addWidget(b_add); bar.addWidget(b_del); bar.addWidget(b_auto)
         bar.addStretch()
 
         b_out = W.btn_ghost("−")
+        b_out.setToolTip(tooltip(title=label("sndmix.zoom_out")))
         b_out.clicked.connect(lambda: self.view.zoom_by(1 / 1.15))
         self._zoom_lbl = QLabel("100 %")
         self._zoom_lbl.setFont(QFont(T.MONO, T.SM))
@@ -307,9 +317,10 @@ class MusicMachinePanel(QWidget):
         self._zoom_lbl.setFixedWidth(44)
         self._zoom_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         b_in = W.btn_ghost("+")
+        b_in.setToolTip(tooltip(title=label("sndmix.zoom_in")))
         b_in.clicked.connect(lambda: self.view.zoom_by(1.15))
         b_fit = W.btn_ghost("⤢")
-        b_fit.setToolTip(label("sndmix.fit_tip"))
+        b_fit.setToolTip(tooltip(title=label("sndmix.fit_title")))
         b_fit.clicked.connect(lambda: self.view.fit())
         bar.addWidget(b_out); bar.addWidget(self._zoom_lbl)
         bar.addWidget(b_in); bar.addWidget(b_fit)
@@ -393,9 +404,11 @@ class _TransitionRow(QFrame):
         for n in states:
             self._dst.addItem(n, n)
         self._dst.setCurrentIndex(max(0, self._dst.findData(tr.dst)))
+        self._dst.setToolTip(tooltip(title=label("sndmix.destination_title")))
         self._dst.currentIndexChanged.connect(
             lambda _i: self._set("dst", self._dst.currentData() or ""))
-        btn_del = W.btn_danger(label("sndmix.del_transition_tip"))
+        btn_del = W.btn_danger()
+        btn_del.setToolTip(tooltip(title=label("sndmix.delete_transition_title")))
         btn_del.clicked.connect(lambda: self.removed.emit(self.tr))
         head.addWidget(arrow); head.addWidget(self._dst, 1); head.addWidget(btn_del)
         lay.addLayout(head)
@@ -404,13 +417,14 @@ class _TransitionRow(QFrame):
         self._src.addItem(label("sndmix.src_this", owner=owner), owner)
         self._src.addItem(label("sndmix.src_any"), "")
         self._src.setCurrentIndex(0 if tr.src else 1)
+        self._src.setToolTip(tooltip(title=label("sndmix.source_title"), body=label("sndmix.source_tip")))
         self._src.currentIndexChanged.connect(
             lambda _i: self._set("src", self._src.currentData() or ""))
         W.row(label("sndmix.from"), self._src, lay, label_width=78)
 
         self._trigger = QLineEdit(tr.trigger)
         self._trigger.setStyleSheet(QSS.lineedit)
-        self._trigger.setToolTip(label("sndmix.trigger_tip"))
+        self._trigger.setToolTip(tooltip(title=label("sndmix.trigger_title"), body=label("sndmix.trigger_tip")))
         self._trigger.editingFinished.connect(
             lambda: self._set("trigger", self._trigger.text().strip()))
         W.row(label("sndmix.trigger"), self._trigger, lay, label_width=78)
@@ -419,7 +433,7 @@ class _TransitionRow(QFrame):
         self._kind.addItem(label("sndmix.fade"), TRANSITION_FADE)
         self._kind.addItem(label("sndmix.cut"), TRANSITION_CUT)
         self._kind.setCurrentIndex(max(0, self._kind.findData(tr.kind)))
-        self._kind.setToolTip(label("sndmix.kind_tip"))
+        self._kind.setToolTip(tooltip(title=label("sndmix.transition_kind_title"), body=label("sndmix.kind_tip")))
         self._kind.currentIndexChanged.connect(self._on_kind)
         W.row(label("sndmix.transition"), self._kind, lay, label_width=78)
 
@@ -428,7 +442,7 @@ class _TransitionRow(QFrame):
         self._frames.setStyleSheet(QSS.spinbox)
         # En frames et non en ms : c'est l'unité du runtime et celle des
         # transitions de scène (v0.6.2). Une durée ne s'écrit pas de deux façons.
-        self._frames.setToolTip(label("sndmix.frames_tip"))
+        self._frames.setToolTip(tooltip(title=label("sndmix.duration_title"), body=label("sndmix.frames_tip")))
         self._frames.valueChanged.connect(
             lambda v: self._set("frames", int(v)))
         W.row(label("sndmix.duration"), self._frames, lay, label_width=78)
@@ -488,7 +502,7 @@ class MusicStateInspector(QWidget):
 
         self._start = QCheckBox(label("sndmix.start_state"))
         self._start.setStyleSheet(QSS.checkbox)
-        self._start.setToolTip(label("sndmix.start_state_tip"))
+        self._start.setToolTip(tooltip(title=label("sndmix.start_state_title"), body=label("sndmix.start_state_tip")))
         self._start.toggled.connect(self._on_start)
         root.addWidget(self._start)
 
@@ -499,25 +513,27 @@ class MusicStateInspector(QWidget):
         W.row(label("sndmix.track"), self._music, root)
 
         self._loop = QCheckBox(label("common.loop")); self._loop.setStyleSheet(QSS.checkbox)
+        self._loop.setToolTip(tooltip(title=label("sndmix.loop_title"), body=label("sndmix.loop_tip")))
         self._loop.toggled.connect(lambda v: self._set("loop", bool(v)))
         root.addWidget(self._loop)
 
         self._level = QSpinBox(); self._level.setRange(0, 100)
         self._level.setSuffix(" %"); self._level.setStyleSheet(QSS.spinbox)
+        self._level.setToolTip(tooltip(title=label("sndmix.level_title")))
         self._level.valueChanged.connect(lambda v: self._set("level", int(v)))
         W.row(label("sndmix.level"), self._level, root)
 
         self._itarget = QComboBox(); self._itarget.setStyleSheet(QSS.combobox)
         for t in INTENSITY_TARGETS:
             self._itarget.addItem(t, t)
-        self._itarget.setToolTip(label("sndmix.intensity_tip"))
+        self._itarget.setToolTip(tooltip(title=label("sndmix.intensity_title"), body=label("sndmix.intensity_tip")))
         self._itarget.currentIndexChanged.connect(
             lambda _i: self._set("intensity_target", self._itarget.currentData()))
         W.row(label("sndmix.intensity"), self._itarget, root)
 
         self._ivalue = QSpinBox(); self._ivalue.setRange(50, 200)
         self._ivalue.setSuffix(" %"); self._ivalue.setStyleSheet(QSS.spinbox)
-        self._ivalue.setToolTip(label("sndmix.ivalue_tip"))
+        self._ivalue.setToolTip(tooltip(title=label("sndmix.intensity_value_title"), body=label("sndmix.ivalue_tip")))
         self._ivalue.valueChanged.connect(
             lambda v: self._set("intensity", int(v)))
         W.row(label("sndmix.value"), self._ivalue, root)
@@ -531,6 +547,7 @@ class MusicStateInspector(QWidget):
         root.addWidget(self._trs_box)
 
         self._btn_tr = W.btn_ghost(label("sndmix.add_transition"))
+        self._btn_tr.setToolTip(tooltip(title=label("sndmix.add_transition_title"), body=label("sndmix.add_transition_tip")))
         self._btn_tr.clicked.connect(self._add_tr)
         root.addWidget(self._btn_tr)
         root.addStretch()

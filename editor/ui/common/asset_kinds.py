@@ -20,6 +20,7 @@ pendantes, silencieusement.
 from __future__ import annotations
 
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from pathlib import Path
 
 from ui.common.icons import get as _ico, COLOR_DEFAULT
@@ -285,7 +286,11 @@ FONTS = AssetKind(
     # normalement avec les Font Assets au-dessus, donc ce dossier démarre clos.
     section_expanded=False,
     tooltip_of = lambda f: (
-        label('akind.name_value_glyphs_cell_w_cell_h_px', name=f.name, value=len(f.glyphs), cell_w=f.cell_w, cell_h=f.cell_h, value_2=f.tile_count(), source_format=f.source_format)
+        tooltip(
+            title=f.name,
+            body=label('akind.font_source_tip', value=len(f.glyphs), cell_w=f.cell_w,
+                       cell_h=f.cell_h, value_2=f.tile_count()),
+            note=label('akind.font_source_note', source_format=f.source_format))
     ),
 )
 
@@ -313,9 +318,10 @@ FONT_ASSETS = AssetKind(
     add_tooltip_key="akind.new_font_asset",
     dir_of=resource_dir("font_assets_dir"),
     empty_text_key="akind.no_font_assets",
-    tooltip_of=lambda asset: label(
-        "akind.font_asset_tip", name=asset.name,
-        pixel_height=asset.pixel_height, line_height=asset.line_height,
+    tooltip_of=lambda asset: tooltip(
+        title=asset.name,
+        body=label("akind.font_asset_tip", pixel_height=asset.pixel_height,
+                   line_height=asset.line_height),
     ),
 )
 
@@ -394,7 +400,8 @@ PALETTES = AssetKind(
     delete      = _store_deleter("palettes"),
     delete_prompt = lambda b: label('akind.delete_palette_name_ctrl_z_to_undo', name=b.name),
     add         = _add_palette,
-    add_tooltip_key = 'akind.add_a_palette_create_import',
+    add_tooltip_key = 'akind.add_palette',
+    add_tip_key = 'akind.add_palette_tip',
     actions     = (('common.duplicate', _duplicate_palette),),
     dir_of      = resource_dir("palettes_dir"),
 )

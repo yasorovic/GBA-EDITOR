@@ -1,6 +1,6 @@
 # Composants tiers
 
-L'éditeur est distribué sous GPL-3.0-only (cf. [LICENSE](LICENSE)). Il embarque
+L'éditeur Backstage est distribué sous GPL-3.0-only (cf. [LICENSE](LICENSE)). Il embarque
 et redistribue les composants ci-dessous, chacun sous ses propres conditions.
 
 > Le moteur GBA (`runtime/`) n'est pas concerné par cette page : il est sous
@@ -15,6 +15,7 @@ et redistribue les composants ci-dessous, chacun sous ses propres conditions.
 | PyQt6-sip — Riverbank Computing | 13.12.0 | BSD-2-Clause |
 | [Pillow](https://python-pillow.org/) | 12.3.0 | MIT-CMU |
 | [NumPy](https://numpy.org/) | 2.5.2 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
+| [freetype-py](https://github.com/rougier/freetype-py) | 2.5.1 | BSD (le binding) ; embarque FreeType, voir ci-dessous |
 | [QtAwesome](https://github.com/spyder-ide/qtawesome) | 1.4.2 | MIT |
 | [luaparser](https://github.com/boolangery/py-lua-parser) | 4.1.0 | MIT |
 | [QtPy](https://github.com/spyder-ide/qtpy) | 2.4.3 | MIT |
@@ -36,7 +37,20 @@ modifiée. La distribution étant en mode *standalone* (les `.dll` Qt sont des
 fichiers séparés dans le dossier, pas fusionnées dans l'exécutable), le
 remplacement reste possible.
 
+### FreeType
+
+> Portions of this software are copyright © The FreeType Project
+> ([www.freetype.org](https://www.freetype.org)). All rights reserved.
+
+`freetype-py` embarque la bibliothèque FreeType (`libfreetype`), qui sert à
+rastériser les polices vectorielles importées. FreeType est proposée sous la
+*FreeType License* (FTL, de type BSD, avec mention obligatoire — ci-dessus) **ou**
+sous la GPL v2. Cet éditeur la redistribue sous la **FTL** : la GPL v2 seule
+(sans « ou ultérieure ») est incompatible avec la GPL-3.0 de l'éditeur.
+
 ## Fontes
+
+### Livrées dans l'éditeur
 
 | Fonte | Origine | Licence |
 | --- | --- | --- |
@@ -46,6 +60,20 @@ remplacement reste possible.
 
 Les fontes de QtAwesome sont fournies par le paquet lui-même et leurs notices
 respectives se trouvent dans son arborescence.
+
+### Livrées dans le projet Starter
+
+Le projet Starter copie ces trois polices dans **chaque projet créé** ; leur
+licence est copiée avec elles, dans `project/licenses/` du projet.
+
+| Fonte | Auteur | Licence | Notice livrée |
+| --- | --- | --- | --- |
+| Font8x8 Latin | Daniel Hepper (d'après des tables de Marcel Sondaar et IBM) | domaine public | `Font8x8.txt` |
+| GNU Unifont JP 17.0.04 | Unifoundry / Paul Hardy | SIL OFL 1.1 (option retenue ; double licence avec la GPL v2+ et l'exception d'inclusion de fontes) | `GNU-Unifont-JP.txt` |
+| Misaki Gothic (美咲フォント) | Num Kadoma | licence propre de l'auteur : usage et redistribution libres, sous réserve de joindre son texte | `Misaki.txt` |
+
+Les polices vectorielles que **vous** importez dans un projet restent soumises à
+leur propre licence : à vous de vérifier qu'elle autorise l'incorporer dans un jeu.
 
 ## Chaîne de compilation (non redistribuée)
 

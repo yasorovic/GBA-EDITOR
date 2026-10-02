@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QToolButton
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 
@@ -36,6 +37,11 @@ class DirectionWidget(QWidget):
         self._grid = DirectionGrid()
         self._grid.dir_toggled.connect(self._on_dir_toggled)
         self._dir_btns = self._grid.buttons
+        for dir_id, btn in self._dir_btns.items():
+            btn.setToolTip(tooltip(
+                title=label(f"dirwidget.direction_{dir_id}"),
+                body=label("dirwidget.direction_tip"),
+            ))
         root.addWidget(self._grid, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         # Boutons H / V mirror
@@ -60,7 +66,9 @@ class DirectionWidget(QWidget):
         self._btn_h.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self._btn_h.setCheckable(True); self._btn_h.setStyleSheet(_MIRROR_BTN)
         self._btn_h.setFixedHeight(28)
-        self._btn_h.setToolTip(label('dirwidget.mirror_h_tip'))
+        self._btn_h.setToolTip(tooltip(
+            title=label('dirwidget.h_mirror_title'), body=label('dirwidget.mirror_h_tip')
+        ))
         self._btn_h.toggled.connect(self._on_h_mirror)
 
         self._btn_v = QToolButton(); self._btn_v.setText(label('dirwidget.v_mirror'))
@@ -69,7 +77,9 @@ class DirectionWidget(QWidget):
         self._btn_v.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self._btn_v.setCheckable(True); self._btn_v.setStyleSheet(_MIRROR_BTN)
         self._btn_v.setFixedHeight(28)
-        self._btn_v.setToolTip(label('dirwidget.mirror_v_tip'))
+        self._btn_v.setToolTip(tooltip(
+            title=label('dirwidget.v_mirror_title'), body=label('dirwidget.mirror_v_tip')
+        ))
         self._btn_v.toggled.connect(self._on_v_mirror)
 
         mirror_row.addWidget(self._btn_h, 1)
@@ -130,5 +140,3 @@ class DirectionWidget(QWidget):
     def _emit(self):
         active = [d for d, btn in self._dir_btns.items() if btn.isChecked()]
         self.directions_changed.emit(active, self._h_mirror, self._v_mirror)
-
-

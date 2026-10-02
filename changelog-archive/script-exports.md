@@ -121,7 +121,7 @@ Le premier jet ne couvre que l'acteur POSÉ. Un **prefab poolé** partage un `.c
 naissent au runtime par `actor.spawn` — elles n'ont pas de fiche éditeur où régler une valeur. Fait
 clarifiant : une instance de prefab **posée dans une scène est un acteur posé** (`prefab_name` est
 purement informatif, `core/models/scene.py`) — donc déjà couverte. Le cas poolé ne concerne que les
-spawns runtime. **Décidé avec Victor (D2) :**
+spawns runtime. **Décidé avec l'auteur (D2) :**
 
 - **`actor.spawn` accepte une table d'exports FACULTATIVE** : `actor:spawn("Bullet", pos, { speed = 8 })`.
   C'est l'analogue au spawn du réglage éditeur du posé — une balle rapide vs lente se règle au moment
@@ -148,7 +148,7 @@ spawns runtime. **Décidé avec Victor (D2) :**
    codegen émet, après le spawn, un **setter par clé** (`<Scène>_<Prefab>_set_<clé>`, extern, forward-
    déclaré en tête du spawner) : forme `local b = actor:spawn(...)` ou spawn nu (temporaire). L'accès
    passe par setter, jamais par `g_state` d'un autre `.c`. Enum/bool résolus en entier.
-3. **Stockage.** ✅ **Fait.** Uniformisation décidée avec Victor : sur un prefab poolé, TOUT export de
+3. **Stockage.** ✅ **Fait.** Uniformisation décidée avec l'auteur : sur un prefab poolé, TOUT export de
    type réglable est un champ de `g_state` (même lu seulement), plus de constante partagée fondue — pas
    de scan inter-script. `_emit_locals` force ces exports en état.
 4. **Checker.** ✅ **Fait.** `_check_spawn_table` : table à clés nommées, clés = exports réglables du
@@ -168,7 +168,7 @@ types déclarables (`string`, `actor_ref`, `scene_ref`, `sfx_ref`, `vec2`/`vec3`
 maintenant câblés jusqu'au C, réglables par instance (éditeur posé + template poolé) ET par la
 table de spawn.
 
-**Décisions verrouillées avec Victor (2026-09-21) :**
+**Décisions verrouillées avec l'auteur (2026-09-21) :**
 
 - **`string` → entrée de texte ANONYME → index `TEXT_*`** (décision A). Le moteur est entièrement
   entier et `text.draw` prend un index, pas un `const char *` : une string brute ne pourrait rien

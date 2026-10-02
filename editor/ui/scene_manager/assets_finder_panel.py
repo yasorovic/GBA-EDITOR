@@ -27,7 +27,7 @@ from core.project import Project
 from core.selection_bus import get_bus
 from core.command_dispatcher import get_dispatcher, unique_name
 from core.keybindings import bind
-# Source unique du dossier de projets par défaut (~/GBAProjects) — ce module et
+# Source unique du dossier de projets par défaut (~/BackstageProjects) — ce module et
 # window.py en avaient chacun une copie pointant vers le projects/ du repo :
 # inexistant chez quelqu'un qui lance l'exe, et dans le dossier temporaire une
 # fois figé.
@@ -39,7 +39,7 @@ class AssetsFinderPanel(QWidget):
     prefab_add_requested  = pyqtSignal()
     scene_add_requested   = pyqtSignal()
     script_opened         = pyqtSignal(str)
-    project_created       = pyqtSignal(str, str)   # (name, path)
+    project_created       = pyqtSignal(str, str, str)   # (name, path, starter_id)
     project_opened        = pyqtSignal(str)        # (path)
     prefab_uses_requested = pyqtSignal(object)     # Prefab
     script_uses_requested = pyqtSignal(str)        # chemin absolu du script
@@ -264,7 +264,8 @@ class AssetsFinderPanel(QWidget):
         from ui.home.project_picker import NewProjectDialog
         dlg = NewProjectDialog(PROJECTS_DIR, self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            self.project_created.emit(dlg.result_name, str(dlg.result_path))
+            self.project_created.emit(
+                dlg.result_name, str(dlg.result_path), dlg.result_starter)
 
     def _prompt_open(self):
         path = QFileDialog.getExistingDirectory(self, label("assf.open_project"), str(PROJECTS_DIR))

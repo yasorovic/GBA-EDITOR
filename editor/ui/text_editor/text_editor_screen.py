@@ -146,6 +146,8 @@ class TextEditorScreen(QWidget):
         self._text_finder = TextFinder()
         self._text_finder.path_selected.connect(self._texts_set_folder_filter)
         self._text_finder.folder_renamed.connect(self._on_folder_renamed)
+        self._text_finder.key_renamed.connect(
+            lambda t, key: self._texts.rename_key(t, key))
         self._finder_views = QStackedWidget()
         self._finder_views.addWidget(self._fonts)
         self._finder_views.addWidget(self._text_finder)

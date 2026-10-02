@@ -18,6 +18,7 @@ réglages du logiciel (`SettingsDialog`) : ce qu'on règle une fois plutôt que
 ce qu'on garde sous les yeux en travaillant (2026-08-25)."""
 from __future__ import annotations
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from typing import Optional
 
 from PyQt6.QtWidgets import (
@@ -105,9 +106,10 @@ class ProjectInspector(QWidget):
         self._combo_start = QComboBox()
         self._combo_start.setFont(QFont(T.UI, T.MD))
         self._combo_start.setStyleSheet(QSS.combobox)
-        self._combo_start.setToolTip(
-            label('projinsp.start_scene_tip')
-        )
+        self._combo_start.setToolTip(tooltip(
+            title=label('projinsp.start_scene_title'),
+            body=label('projinsp.start_scene_tip'),
+            note=label('projinsp.start_scene_note')))
         self._combo_start.currentIndexChanged.connect(self._on_start_scene_changed)
         self._row(label('projinsp.start'), self._combo_start, id_inner)
 

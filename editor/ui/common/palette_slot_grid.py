@@ -23,6 +23,7 @@ recharge.
 from __future__ import annotations
 
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from PyQt6.QtWidgets import QWidget, QPushButton, QLayout
 from PyQt6.QtCore import Qt, QSize, QRect, QPoint, pyqtSignal
 
@@ -193,7 +194,10 @@ class PaletteSlotGridAsset(QWidget):
 
         if kind == "scene":
             btn.setIcon(_swatch_icon(entry.colors, self._ICON_SIZE))
-            btn.setToolTip(label('palslot.slot_tip', slot=entry.slot, name=entry.name))
+            btn.setToolTip(tooltip(
+                title=label('palslot.slot', slot=entry.slot),
+                body=label('palslot.slot_tip', name=entry.name),
+            ))
             btn.setStyleSheet(self._style(bg=C.BG_INPUT, border=C.BORDER_MID))
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(lambda _c, e=entry, b=btn: self._pick_scene(b, e.slot))
@@ -214,7 +218,10 @@ class PaletteSlotGridAsset(QWidget):
                                          override=True, marker_color=self._accent))
                 tgt = (getattr(entry, "ref_name", None)
                        or (target.name if target else "?"))
-                btn.setToolTip(label('palslot.override_tip', names=names, tgt=tgt))
+                btn.setToolTip(tooltip(
+                    title=label('palslot.override'),
+                    body=label('palslot.override_tip', names=names, tgt=tgt),
+                ))
                 btn.setStyleSheet(self._style(bg=C.BG_INPUT, border=self._accent))
                 btn.customContextMenuRequested.connect(
                     lambda _p, e=entry: self.asset_restore.emit(e))
@@ -225,20 +232,28 @@ class PaletteSlotGridAsset(QWidget):
                 btn.setIcon(_swatch_icon(entry.own_colors, self._ICON_SIZE, greyed=True))
                 span = getattr(entry, "bank_span", 1)
                 span_txt = label('palslot.bank_span', count=span) if span > 1 else ""
-                btn.setToolTip(label('palslot.compressed_tip', names=names, span_txt=span_txt))
+                btn.setToolTip(tooltip(
+                    title=label('palslot.compressed'),
+                    body=label('palslot.compressed_tip', names=names, span_txt=span_txt),
+                ))
                 btn.setStyleSheet(
                     f"QPushButton{{background:{C.BG_BASE};"
                     f"border:1px solid {C.BORDER_DARK};border-radius:4px;}}")
             else:  # own — palette propre grisée (overridable)
                 btn.setIcon(_swatch_icon(entry.own_colors, self._ICON_SIZE, greyed=True))
-                btn.setToolTip(label('palslot.own_palette_tip', names=names))
+                btn.setToolTip(tooltip(
+                    title=label('palslot.own_palette'),
+                    body=label('palslot.own_palette_tip', names=names),
+                ))
                 btn.setStyleSheet(self._style(bg=C.BG_BASE, border=C.BORDER_MID, dashed=True))
                 btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 btn.clicked.connect(lambda _c, e=entry, b=btn: self._pick_override(b, e))
 
         elif kind == "plus":
             btn.setIcon(_plus_icon(self._ICON_SIZE, self._accent))
-            btn.setToolTip(label('palslot.add_a_scene_palette'))
+            btn.setToolTip(tooltip(
+                title=label('palslot.add_palette'), body=label('palslot.add_palette_tip')
+            ))
             btn.setStyleSheet(
                 f"QPushButton{{background:{C.BG_INPUT};"
                 f"border:1px dashed {self._accent};border-radius:4px;}}"

@@ -76,11 +76,6 @@
   },
   {
     "file": "editor/ui/home/project_picker.py",
-    "text": "GBA Editor",
-    "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
-  },
-  {
-    "file": "editor/ui/home/project_picker.py",
     "text": "f'''<span style=\"color:#666;\">{name} — {label(self._EXPLAIN_KEYS[name])}. <a href=\"{url}\" style=\"color:#4c8caf;\">{label('home.status.download')}</a></span>'''",
     "reason": "HTML presentation only; the displayed prose is resolved by the catalogue."
   },
@@ -110,11 +105,6 @@
     "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
   },
   {
-    "file": "editor/ui/scene_manager/inspectors/bg_layer_row.py",
-    "text": "UI",
-    "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
-  },
-  {
     "file": "editor/ui/scene_manager/inspectors/camera_inspector.py",
     "text": "on_start · on_update",
     "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
@@ -140,11 +130,6 @@
     "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
   },
   {
-    "file": "editor/window.py",
-    "text": "GBA  240×160  ARM7TDMI 16MHz  256KB WRAM",
-    "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
-  },
-  {
     "file": "editor/ui/scene_manager/inspectors/scene_inspector.py",
     "text": "f'0x{v:04X}'",
     "reason": "Hardware register/bank notation, independent of the interface language."
@@ -153,5 +138,25 @@
     "file": "editor/ui/scene_manager/inspectors/ui_node_inspector.py",
     "text": "f'BG{s}'",
     "reason": "Hardware register/bank notation, independent of the interface language."
+  },
+  {
+    "file": "editor/ui/text_editor/markup_toolbar.py",
+    "text": "$name",
+    "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
+  },
+  {
+    "file": "editor/ui/sound_mixer/sound_panel.py",
+    "text": "VOL 80",
+    "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
+  },
+  {
+    "file": "editor/ui/sound_mixer/sound_panel.py",
+    "text": "IDLE",
+    "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
+  },
+  {
+    "file": "editor/ui/sound_mixer/sound_panel.py",
+    "text": "f'VOL {value:02d}'",
+    "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
   }
 ]

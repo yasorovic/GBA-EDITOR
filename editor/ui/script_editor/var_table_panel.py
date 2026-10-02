@@ -7,6 +7,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 
 from ui.common.theme import C, T, S, QSS
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from core.command_dispatcher import unique_name
 from .colors import _C_GLOBAL, _C_CONST
 
@@ -57,6 +58,7 @@ class _VarRow(QWidget):
         self._name_btn.setObjectName("varName")
         self._name_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._name_btn.setStyleSheet(f"QPushButton#varName{{color:{color};}}")
+        self._name_btn.setToolTip(tooltip(title=label("vartbl.insert_title")))
         self._name_btn.clicked.connect(lambda: self.name_clicked.emit(self.entry))
         self._name_btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._name_btn.customContextMenuRequested.connect(
@@ -65,6 +67,7 @@ class _VarRow(QWidget):
         row.addWidget(self._name_btn, 1)
 
         self._name_edit = QLineEdit(entry.name)
+        self._name_edit.setToolTip(tooltip(title=label("vartbl.rename"), body=label("vartbl.rename_tip")))
         self._name_edit.hide()
         self._renaming = False
         self._name_edit.editingFinished.connect(self._commit_rename)
@@ -74,11 +77,13 @@ class _VarRow(QWidget):
         self._combo.addItems(_TYPES)
         self._combo.setCurrentText(entry.type)
         self._combo.setFixedWidth(64)
+        self._combo.setToolTip(tooltip(title=label("vartbl.type_title")))
         self._combo.currentTextChanged.connect(self._on_type)
         row.addWidget(self._combo)
 
         self._value = QLineEdit()
         self._value.setFixedWidth(48)
+        self._value.setToolTip(tooltip(title=label("vartbl.value_title")))
         self._value.editingFinished.connect(self._on_value)
         row.addWidget(self._value)
         self.refresh_value()
@@ -91,10 +96,13 @@ class _VarRow(QWidget):
 
     def refresh_value(self):
         if self._is_array():
-            shown, color, tip = self.entry.count, C.ACCENT, label("vartbl.array_tip")
+            shown, color, tip = self.entry.count, C.ACCENT, tooltip(
+                title=label("vartbl.array"), body=label("vartbl.array_tip"),
+                note=label("vartbl.array_note"),
+            )
         else:
             shown = self.entry.value if self._kind == "const" else self.entry.default
-            color, tip = C.SYNTAX_NUMBER, ""
+            color, tip = C.SYNTAX_NUMBER, tooltip(title=label("vartbl.value_title"))
         self._value.setText(str(shown))
         self._value.setToolTip(tip)
         self._value.setStyleSheet(f"color:{color};")

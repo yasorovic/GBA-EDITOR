@@ -24,12 +24,22 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
     steps:
+      - uses: actions/checkout@v4
+
+      # La version vit dans le dépôt (editor/core/app_info.py) ; le tag de la
+      # release la CONFIRME. Un tag qui diverge fait échouer la release ici, avant
+      # les ~heures de compilation. Sans tag (workflow_dispatch), on prend celle
+      # du dépôt.
       - id: v
         shell: bash
         run: |
+          FILE_VERSION="$(python3 packaging/nuitka_build.py --print-version)"
           TAG="${{ github.event.release.tag_name }}"
-          if [ -z "$TAG" ]; then TAG="0.0.0-dev"; fi
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          if [ -n "$TAG" ] && [ "${TAG#v}" != "$FILE_VERSION" ]; then
+            echo "::error::Le tag $TAG ne correspond pas à APP_VERSION ($FILE_VERSION) dans editor/core/app_info.py : alignez l'un sur l'autre."
+            exit 1
+          fi
+          echo "version=$FILE_VERSION" >> "$GITHUB_OUTPUT"
 
   build-windows:
     needs: version
@@ -70,12 +80,25 @@ jobs:
       - name: Build Nuitka (standalone)
         run: python packaging/nuitka_build.py --version "${{ needs.version.outputs.version }}" --output-dir build-out
 
+      # Le binaire LIVRE démarre-t-il, crée-t-il un projet, ouvre-t-il chaque écran,
+      # trouve-t-il ses données embarquées ? Les écrans sont importés paresseusement :
+      # un module que Nuitka n'a pas vu n'échouerait qu'au premier clic d'un
+      # utilisateur. Un échec ici arrête la release AVANT de publier.
+      - name: Smoke test du binaire
+        shell: pwsh
+        run: |
+          $report = Join-Path $PWD "smoke-report.txt"
+          $p = Start-Process -FilePath "build-out\Backstage\Backstage.exe" `
+                             -ArgumentList "--smoke-test=`"$report`"" -Wait -PassThru
+          if (Test-Path $report) { Get-Content $report }
+          if ($p.ExitCode -ne 0) { throw "smoke test du binaire en échec (code $($p.ExitCode))" }
+
       - name: ZIP portable
         shell: pwsh
         run: |
           $version = "${{ needs.version.outputs.version }}"
-          Compress-Archive -Path "build-out\GBAEditor" `
-                           -DestinationPath "GBAEditor-$version-windows-portable.zip"
+          Compress-Archive -Path "build-out\Backstage" `
+                           -DestinationPath "Backstage-$version-windows-portable.zip"
 
       - name: Construire l'installateur NSIS
         shell: pwsh
@@ -97,19 +120,28 @@ jobs:
           if (-not $makensis) { throw "makensis introuvable même après installation via choco" }
 
           $version = "${{ needs.version.outputs.version }}"
-          $src     = (Resolve-Path "build-out\GBAEditor").Path
-          $out     = Join-Path $PWD "GBAEditor-$version-windows-setup.exe"
+          $src     = (Resolve-Path "build-out\Backstage").Path
+          $out     = Join-Path $PWD "Backstage-$version-windows-setup.exe"
           # VIProductVersion exige du numérique 4 champs, VERSION non.
           $vi = python -c "import sys; sys.path.insert(0, 'packaging'); from nuitka_build import numeric_version; print(numeric_version('$version'))"
           & $makensis "/DVERSION=$version" "/DVIVERSION=$vi" "/DSRCDIR=$src" "/DOUTFILE=$out" packaging\windows\installer.nsi
           if ($LASTEXITCODE -ne 0) { throw "makensis a échoué (code $LASTEXITCODE)" }
 
+      # Le runner est une machine propre (ni Python ni devkitPro) : on y joue
+      # l'installation, la mise à jour par-dessus, et la désinstallation, qui doit
+      # épargner projets et configuration. Cf. packaging/windows/test_installer.ps1.
+      - name: Tester l'installateur
+        shell: pwsh
+        run: |
+          $version = "${{ needs.version.outputs.version }}"
+          ./packaging/windows/test_installer.ps1 -Installer (Join-Path $PWD "Backstage-$version-windows-setup.exe") -Version $version
+
       - uses: actions/upload-artifact@v4
         with:
           name: windows
           path: |
-            GBAEditor-*-windows-setup.exe
-            GBAEditor-*-windows-portable.zip
+            Backstage-*-windows-setup.exe
+            Backstage-*-windows-portable.zip
 
   build-linux-appimage:
     needs: version
@@ -156,6 +188,15 @@ jobs:
       - name: Build Nuitka (standalone)
         run: python packaging/nuitka_build.py --version "${{ needs.version.outputs.version }}" --output-dir build-out
 
+      # Même vérification que sous Windows, sur le binaire livré. Sous xvfb, avec
+      # la vraie plateforme Qt « xcb » : c'est elle qui sera dans l'AppImage.
+      - name: Smoke test du binaire
+        run: |
+          sudo apt-get install -y xvfb
+          xvfb-run -a build-out/Backstage/Backstage --smoke-test="$PWD/smoke-report.txt" || status=$?
+          cat smoke-report.txt || true
+          exit "${status:-0}"
+
       - name: Récupérer appimagetool
         run: |
           curl -L -o appimagetool \
@@ -167,7 +208,7 @@ jobs:
           mkdir -p AppDir/usr/bin
           # Nuitka produit un dossier (standalone) et non un fichier unique :
           # on copie tout son contenu, exe + données + libs, dans usr/bin/.
-          cp -r build-out/GBAEditor/. AppDir/usr/bin/
+          cp -r build-out/Backstage/. AppDir/usr/bin/
           # Le plugin de plateforme Qt "xcb" (libqxcb.so) dépend de toute une
           # famille de libs xcb/xkbcommon que Nuitka n'embarque PAS (elles sont
           # chargées par le plugin, hors de son scan) : sans elles, « Could not
@@ -192,21 +233,21 @@ jobs:
             [ -e "AppDir/usr/bin/$base" ] || cp -L "$lib" "AppDir/usr/bin/$base"
           done
           cp packaging/linux/AppRun AppDir/AppRun
-          chmod +x AppDir/AppRun AppDir/usr/bin/"GBA Editor"
-          cp packaging/linux/gba-editor.desktop AppDir/gba-editor.desktop
+          chmod +x AppDir/AppRun AppDir/usr/bin/Backstage
+          cp packaging/linux/backstage.desktop AppDir/backstage.desktop
           cp packaging/icon.png AppDir/icon.png
-          # Type MIME du manifeste <Nom>.gba-project : c'est ce qui apprend au
+          # Type MIME du manifeste <Nom>.project : c'est ce qui apprend au
           # bureau Linux que l'extension est connue, associee a l'editeur via le
           # MimeType du .desktop. Sans lui, le double-clic ne trouve aucune appli.
           mkdir -p AppDir/usr/share/mime/packages
-          cp packaging/linux/gba-project.xml AppDir/usr/share/mime/packages/gba-project.xml
+          cp packaging/linux/backstage-project.xml AppDir/usr/share/mime/packages/backstage-project.xml
 
       - name: Construire l'AppImage
         run: |
           # --appimage-extract-and-run évite la dépendance à libfuse2, absente
           # par défaut des runners GitHub-hosted récents.
           VERSION="${{ needs.version.outputs.version }}"
-          ARCH=x86_64 ./appimagetool --appimage-extract-and-run AppDir "GBAEditor-${VERSION}-x86_64.AppImage"
+          ARCH=x86_64 ./appimagetool --appimage-extract-and-run AppDir "Backstage-${VERSION}-x86_64.AppImage"
 
       - uses: actions/upload-artifact@v4
         with:

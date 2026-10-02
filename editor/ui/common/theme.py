@@ -1,5 +1,5 @@
 """
-ui/common/theme.py — Source unique du thème GBA Editor.
+ui/common/theme.py — Source unique du thème Backstage.
 
 Usage :
     from ui.common.theme import C, T, QSS, GLOBAL_QSS
@@ -31,12 +31,10 @@ Hiérarchie de titres (une seule grammaire pour toute l'app) :
 Stylesheet globale à appliquer une seule fois dans main.py :
     app.setStyleSheet(GLOBAL_QSS)
 
-Bulles d'aide (`QToolTip`) : la règle `QSS.tooltip` ci-dessous NE suffit PAS —
-un widget qui pose sa propre feuille de style (bouton d'icône, curseur…)
-décroche sa bulle de la feuille globale, Qt retombe sur le thème natif de
-l'OS. `main.py` doit AUSSI appeler `QToolTip.setPalette()` / `.setFont()` :
-seul réglage que Qt applique à chaque bulle sans dépendre du widget qui la
-déclenche.
+Bulles d'aide : les widgets définissent leur contenu avec `setToolTip()`, mais
+`main.py` intercepte leur demande et affiche `_ThemedTooltip`. La bulle est un
+widget de l'éditeur, pas le composant natif `QToolTip`, afin de ne jamais
+dessiner une première fois les couleurs de Windows.
 """
 
 from ui.common import icons as _icons
@@ -125,6 +123,9 @@ _DARK = dict(
     BG_HOVER="#303030",    # survol boutons
     BG_SEL="#2c2c2c",      # fond sélection
     BORDER="#2b2b2b", BORDER_MID="#383838", BORDER_DARK="#222222",
+    # Poignées de panneaux : distinctes des cadres ordinaires pour rester
+    # structurantes sans changer l'apparence du thème sombre actuel.
+    SPLITTER="#2b2b2b", SPLITTER_HOVER="#d0d0d0", SPLITTER_WIDTH=3,
     ACCENT="#d0d0d0",      # accent PRIMAIRE structurel (sélection, focus, onglet actif)
     ACCENT_HOVER="#e6e6e6", ACCENT_PRESSED="#a8a8a8",
     ON_ACCENT="#000000",   # texte posé sur un fond ACCENT
@@ -151,21 +152,28 @@ _DARK = dict(
 )
 
 _LIGHT = dict(
-    BG_DEEP="#d2d2d2", BG_BASE="#e4e4e4", BG_PANEL="#f1f1f1", BG_RAISED="#fafafa",
-    BG_INPUT="#ffffff", BG_HOVER="#dadada", BG_SEL="#cdcdcd",
-    BORDER="#c4c4c4", BORDER_MID="#acacac", BORDER_DARK="#d4d4d4",
+    # Le clair reste lumineux, mais les contrôles sont volontairement mats :
+    # les splitters noirs portent la structure, pas une accumulation de
+    # dégradés ou de cadres contrastés autour de chaque widget.
+    BG_DEEP="#e4e4e4", BG_BASE="#f6f6f6", BG_PANEL="#fdfdfd", BG_RAISED="#ffffff",
+    BG_INPUT="#ffffff", BG_HOVER="#ececec", BG_SEL="#e6e6e6",
+    BORDER="#dcdcdc", BORDER_MID="#c4c4c4", BORDER_DARK="#ebebeb",
+    # Les séparateurs de panneaux sont le seul noir affirmé du thème clair.
+    # Deux pixels restent visibles et faciles à saisir, sans encadrer chaque
+    # widget d'un trait noir.
+    SPLITTER="#242424", SPLITTER_HOVER="#080808", SPLITTER_WIDTH=2,
     ACCENT="#3a3a3a", ACCENT_HOVER="#555555", ACCENT_PRESSED="#222222",
     ON_ACCENT="#ffffff",
     POWER="#b8860b", ACCENT_RED="#c62828", ACCENT_YLW="#b8860b",
     ACCENT_WARM="#a86a10", ACCENT_COOL="#2f5fc4",
-    TEXT_HI="#0d0d0d", TEXT_NORM="#2e2e2e", TEXT_DIM="#575757", TEXT_MUTED="#828282",
-    TEXT_BASE="#262626",
+    TEXT_HI="#1a1a1a", TEXT_NORM="#3a3a3a", TEXT_DIM="#666666", TEXT_MUTED="#8c8c8c",
+    TEXT_BASE="#2a2a2a",
     AXIS_X="#b04040", AXIS_Y="#3f68b0", AXIS_Z="#3f8a3f",
-    SEL_BG="#cdcdcd", SEL_BORDER="#3a3a3a", SEL_TEXT="#0d0d0d",
+    SEL_BG="#e6e6e6", SEL_BORDER="#3a3a3a", SEL_TEXT="#1a1a1a",
     BTN_PRIMARY="#3a3a3a", BTN_PRIMARY_HOVER="#555555", BTN_PRIMARY_PRESSED="#222222",
     BTN_PRIMARY_DISABLED="#c4c4c4", BTN_PRIMARY_TEXT="#ffffff",
     SCROLL_HANDLE="#b0b0b0", SCROLL_HANDLE_HOVER="#909090",
-    CANVAS_BG="#dcdcdc", CHECKER_A="#b4b4b4", CHECKER_B="#9e9e9e",
+    CANVAS_BG="#e4e4e4", CHECKER_A="#b4b4b4", CHECKER_B="#9e9e9e",
     CONSOLE_TEXT="#1f6b3a",
     TECH_BG="#f3fbf5", TECH_TEXT="#0e4023", TECH_GRID="#d3e9da", TECH_OK="#1f9d55",
     TECH_OUTLINE="#3f8a5c", TECH_BLOCK_BORDER="#93c6a5",
@@ -377,6 +385,41 @@ QComboBox QAbstractItemView {{
     selection-background-color: {C.BG_SEL};
     selection-color: {C.ACCENT};
     outline: none;
+}}
+"""
+
+    # Base mate des boutons non spécialisés.
+    @property
+    def button_neutral(self) -> str:
+        """Base mate des boutons qui n'ont pas un rôle propre.
+
+        Sans cette règle globale, les QPushButton/QToolButton non spécialisés
+        retombent sur le style Windows natif et ses reflets. Les variantes
+        locales (Run, actions primaires, toolbars) conservent leurs propres
+        feuilles de style et passent donc au-dessus de cette base.
+        """
+        return f"""
+QPushButton, QToolButton {{
+    background: {C.BG_INPUT};
+    color: {C.TEXT_NORM};
+    border: 1px solid {C.BORDER_MID};
+    border-radius: 3px;
+    padding: 3px 8px;
+    font-family: {T.UI_STACK};
+    font-size: {T.MD}px;
+}}
+QPushButton:hover, QToolButton:hover {{
+    background: {C.BG_HOVER};
+    color: {C.TEXT_HI};
+}}
+QPushButton:pressed, QToolButton:pressed {{
+    background: {C.BG_SEL};
+    border-color: {C.TEXT_DIM};
+}}
+QPushButton:disabled, QToolButton:disabled {{
+    background: {C.BG_PANEL};
+    color: {C.TEXT_MUTED};
+    border-color: {C.BORDER};
 }}
 """
 
@@ -676,16 +719,16 @@ QFrame#noticeBox QLabel {{
     def splitter(self) -> str:
         return f"""
 QSplitter::handle {{
-    background: {C.BORDER};
+    background: {C.SPLITTER};
 }}
 QSplitter::handle:horizontal {{
-    width: 3px;
+    width: {C.SPLITTER_WIDTH}px;
 }}
 QSplitter::handle:vertical {{
-    height: 3px;
+    height: {C.SPLITTER_WIDTH}px;
 }}
 QSplitter::handle:hover {{
-    background: {C.ACCENT};
+    background: {C.SPLITTER_HOVER};
 }}
 """
 
@@ -883,6 +926,7 @@ GLOBAL_QSS = (
     + QSS.menu
     + QSS.menubar
     + QSS.toolbar
+    + QSS.button_neutral
     + QSS.statusbar
     + QSS.scrollbar
     + QSS.splitter

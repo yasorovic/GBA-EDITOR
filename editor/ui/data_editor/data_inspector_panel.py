@@ -23,6 +23,7 @@ from ui.common.theme import C, T, S, QSS
 from ui.common.widgets import W, CollapsibleCard
 from ui.common.notice import note
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 
 from core.models.data_table import DataColumn, COLUMN_TYPES, COLUMN_REFERENCES
 from core.project import Project
@@ -55,6 +56,9 @@ class DataInspectorPanel(QWidget):
         self._type = QComboBox()
         self._type.addItems(COLUMN_TYPES)
         self._type.setStyleSheet(QSS.combobox)
+        self._type.setToolTip(tooltip(
+            title=label("datainsp.type_title"), body=label("datainsp.type_tip"),
+        ))
         self._type.currentTextChanged.connect(self._on_type_changed)
         W.row(label("datainsp.type"), self._type, column_card.body_layout)
 

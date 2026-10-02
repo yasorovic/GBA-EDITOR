@@ -28,6 +28,7 @@ from ui.common.widgets import NotesEdit, CollapsibleCard
 from ui.common.field_binder import FieldBinder
 from ui.common.notice import notice
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.common.direction_grid import DirectionPicker
 from ui.common import icons
 
@@ -245,8 +246,9 @@ class ActorInspector(QWidget):
             f"background:{C.BG_RAISED}; border:1px solid {C.BORDER}; border-radius:5px;"
         )
         self._sprite_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._sprite_preview.setToolTip(
-            label("actorinsp.sprite_preview_tip", color=icons.COLOR_SPRITE))
+        self._sprite_preview.setToolTip(tooltip(
+            title=label("actorinsp.sprite_preview_title"),
+            body=label("actorinsp.sprite_preview_tip")))
         self._sprite_preview.setCursor(Qt.CursorShape.PointingHandCursor)
         self._sprite_preview.mousePressEvent = lambda e: self._pick_sprite()
         hl.addWidget(self._sprite_preview)
@@ -257,7 +259,8 @@ class ActorInspector(QWidget):
         self._tag_lbl = QLabel(label("actorinsp.index_none"))
         self._tag_lbl.setFont(QFont(T.UI, T.SM))
         self._tag_lbl.setStyleSheet(f"color:{icons.COLOR_ACTOR};")
-        self._tag_lbl.setToolTip(label("actorinsp.index_tip"))
+        self._tag_lbl.setToolTip(tooltip(
+            title=label("actorinsp.index_title"), body=label("actorinsp.index_tip")))
         name_col.addWidget(self._tag_lbl)
         hl.addLayout(name_col, 1)
         cl.addWidget(header_frame)
@@ -299,21 +302,26 @@ class ActorInspector(QWidget):
         self._btn_relink = QPushButton(label("actorinsp.relink"))
         self._btn_relink.setFont(QFont(T.UI, T.XS))
         self._btn_relink.setFixedHeight(18)
-        self._btn_relink.setToolTip(label("actorinsp.relink_tip"))
+        self._btn_relink.setToolTip(tooltip(
+            title=label("actorinsp.relink_title"), body=label("actorinsp.relink_tip"),
+            warning=label("actorinsp.relink_warning")))
         self._btn_relink.setStyleSheet(_pb_btn_style)
         self._btn_relink.clicked.connect(self._relink_to_prefab)
         pb_layout.addWidget(self._btn_relink)
         self._btn_expose = QPushButton(label("actorinsp.expose"))
         self._btn_expose.setFont(QFont(T.UI, T.XS))
         self._btn_expose.setFixedHeight(18)
-        self._btn_expose.setToolTip(label("actorinsp.expose_tip"))
+        self._btn_expose.setToolTip(tooltip(
+            title=label("actorinsp.expose_title"), body=label("actorinsp.expose_tip"),
+            warning=label("actorinsp.expose_warning")))
         self._btn_expose.setStyleSheet(_pb_btn_style)
         self._btn_expose.clicked.connect(self._expose_to_prefab)
         pb_layout.addWidget(self._btn_expose)
         btn_unlink = QPushButton("×")
         btn_unlink.setFont(QFont(T.UI, T.MD))
         btn_unlink.setFixedSize(18, 18)
-        btn_unlink.setToolTip(label("actorinsp.unlink_tip"))
+        btn_unlink.setToolTip(tooltip(
+            title=label("actorinsp.unlink_title"), body=label("actorinsp.unlink_tip")))
         btn_unlink.setStyleSheet(
             f"QPushButton{{color:{C.TEXT_MUTED};background:transparent;border:none;}}"
             f"QPushButton:hover{{color:{C.ACCENT_RED};}}"
@@ -339,7 +347,8 @@ class ActorInspector(QWidget):
         btn_expose_new = QPushButton(label("actorinsp.expose_new"))
         btn_expose_new.setFont(QFont(T.UI, T.XS))
         btn_expose_new.setFixedHeight(18)
-        btn_expose_new.setToolTip(label("actorinsp.expose_new_tip"))
+        btn_expose_new.setToolTip(tooltip(
+            title=label("actorinsp.expose_new_title"), body=label("actorinsp.expose_new_tip")))
         btn_expose_new.setStyleSheet(
             f"QPushButton{{color:{icons.COLOR_PREFAB};background:transparent;border:1px solid {icons.COLOR_PREFAB};"
             f"border-radius:2px;padding:0 5px;}}"
@@ -444,7 +453,9 @@ class ActorInspector(QWidget):
         # l'écran ; un parent les fait passer du monde à son repère à lui.
         self._tparent = _W.combobox([])
         self._tparent.currentIndexChanged.connect(self._on_parent_changed)
-        self._tparent.setToolTip(label("actorinsp.parent_tip"))
+        self._tparent.setToolTip(tooltip(
+            title=label("actorinsp.tr.parent"), body=label("actorinsp.parent_tip"),
+            note=label("actorinsp.parent_note")))
         _W.row(label("actorinsp.tr.parent"), self._tparent, tl, label_width=_lbl_w)
 
         # ── Ancrage écran (UI en sprite) ──────────────────────────
@@ -512,7 +523,9 @@ class ActorInspector(QWidget):
         self._children_tree.setFont(QFont(T.UI, T.MD))
         self._children_tree.itemDoubleClicked.connect(self._open_selected_child)
         self._children_tree.reparented.connect(self._on_children_reparented)
-        self._children_tree.setToolTip(label("actorinsp.children_tip"))
+        self._children_tree.setToolTip(tooltip(
+            title=label("actorinsp.card.children"), body=label("actorinsp.children_tip"),
+            note=label("actorinsp.children_note")))
         self._children_card.body_layout.setContentsMargins(0, 0, 0, 0)
         self._children_card.body_layout.addWidget(self._children_tree)
         cl.addWidget(self._children_card)

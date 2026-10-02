@@ -8,7 +8,7 @@ composition) reconnue par `input:get_sequence("nom")`. Barre d'expression
 éditable dans le mini-langage complet (`+` accord, `-` pas suivant, `(a|b)`
 alternative, mouvements), avec en dessous l'aperçu de ce que le parseur a
 compris. Rôle distinct d'InputsCard (accords simples, cases à cocher) —
-décision de Victor du 2026-09-27 : les deux ne partagent plus ni écran ni
+décision de l'auteur du 2026-09-27 : les deux ne partagent plus ni écran ni
 appel Lua.
 
 Comme LanguagesCard, la carte ne mute rien : elle SIGNALE un geste, et

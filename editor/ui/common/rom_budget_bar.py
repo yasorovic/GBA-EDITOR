@@ -22,6 +22,7 @@ bandeau le dit plutôt que d'annoncer un chiffre deviné.
 from __future__ import annotations
 
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from typing import Optional
 
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QSizePolicy, QToolTip, QMenu
@@ -274,7 +275,8 @@ class RomBudgetBar(QWidget):
     def _refresh_mode_label(self):
         key = "rombar.mode_fill" if self._mode == "fill" else "rombar.mode_breakdown"
         self._mode_button.setText(f"{label(key).upper()} ▾")
-        self._mode_button.setToolTip(label('rombar.mode_tip'))
+        self._mode_button.setToolTip(tooltip(
+            title=label('rombar.mode_title'), body=label('rombar.mode_tip')))
 
     def _pick_cartridge(self, mib: int):
         if mib == self._cartridge_mib:
@@ -308,8 +310,7 @@ class RomBudgetBar(QWidget):
         de cartouche, pour que les deux chemins ne divergent jamais."""
         self._lbl_rom.setText(label('rombar.target', _cartridge_mib=self._cartridge_mib))
         self._refresh_mode_label()
-        self._lbl_rom.setToolTip(
-            label('rombar.target_tip', _cartridge_mib=self._cartridge_mib))
+        self._lbl_rom.setToolTip(tooltip(title=label('rombar.target_title')))
 
         cartridge_bytes = self._cartridge_mib * 1024 * 1024
         report = self._report

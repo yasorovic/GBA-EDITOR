@@ -25,6 +25,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 from ui.common.theme import C, T, S, QSS
 from ui.common.widgets import W
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 
 from core.models.data_table import (DataTable, DataColumn, COLUMN_TYPES,
                                     COLUMN_REFERENCES)
@@ -171,10 +172,12 @@ class DataGridPanel(QWidget):
         self._bar = W.section_bar(label("datagrid.table_bar"), C.ACCENT)
         hl = self._bar.layout()
         self._btn_row = W.btn_add(label("datagrid.add_row"), icon="add_row")
+        self._btn_row.setToolTip(tooltip(title=label("datagrid.add_row")))
         self._btn_row.clicked.connect(lambda: self._insert_row(len(self._table.rows)
                                                                if self._table else 0))
         hl.addWidget(self._btn_row)
         self._btn_col = W.btn_add(label("datagrid.add_column"), icon="add_column")
+        self._btn_col.setToolTip(tooltip(title=label("datagrid.add_column"), body=label("datagrid.add_column_tip")))
         self._btn_col.clicked.connect(self._add_column)
         hl.addWidget(self._btn_col)
         root.addWidget(self._bar)
@@ -184,6 +187,9 @@ class DataGridPanel(QWidget):
         self._header = _ColumnHeader(self._tbl)
         self._tbl.setHorizontalHeader(self._header)
         self._header.rename_requested.connect(self._rename_column)
+        self._header.setToolTip(tooltip(
+            title=label("datagrid.column_title"), body=label("datagrid.column_tip"),
+        ))
         self._header.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._header.customContextMenuRequested.connect(self._column_menu)
         self._tbl.setItemDelegate(_CellDelegate(self))
@@ -282,7 +288,10 @@ class DataGridPanel(QWidget):
                 # `_read_item` relit — et l'auteur voit sa réplique sans
                 # ouvrir l'écran Texte.
                 if col.type == "text" and value:
-                    item.setToolTip(self._text_preview(str(value)))
+                    item.setToolTip(tooltip(
+                        title=label("datagrid.text_preview_title"),
+                        body=self._text_preview(str(value)),
+                    ))
             else:
                 item.setForeground(QColor(C.SYNTAX_NUMBER))
         return item

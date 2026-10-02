@@ -19,6 +19,8 @@ from pathlib import Path
 from scripting.api import RUNTIME_API, RUNTIME_PROPS, REMOVED_API, canonical_key
 
 from scripting import api_snippets
+from ui.common.labels import label
+from ui.common.tooltip import tooltip
 
 _JSON_PATH = Path(__file__).parent / "api_reference.json"
 _cache: list[dict] | None = None
@@ -377,49 +379,9 @@ def get_sections() -> list[dict]:
 
 
 def make_tooltip(entry: dict) -> str:
-    """Génère un tooltip HTML riche pour une entrée API."""
+    """Génère une aide brève pour une entrée API à insérer."""
     sig    = entry.get("label", "")
     desc   = entry.get("description", "")
-    params = entry.get("params", [])
     ret    = entry.get("returns", "")
     access = entry.get("access", "")  # "Read Only" / "Read and Write" — propriétés seulement
-
-    lines = [f"<b style='font-family:Consolas,monospace;color:#4ec9b0'>{sig}</b>"]
-    if access:
-        # Read Only en gris (rien à écrire), Read and Write dans l'accent —
-        # la même distinction qu'on lirait dans le mot, juste repérable sans
-        # le lire : ce que le libellé court (`position(Vec2)`) ne dit plus.
-        # `<p>` (bloc), pas `<span>` : sur sa propre ligne, sous la signature.
-        color = "#4ec9b0" if access == "Read and Write" else "#888888"
-        lines.append(
-            f"<p style='color:{color};margin:2px 0 0 0;font-size:9px;"
-            f"font-weight:bold;text-transform:uppercase;letter-spacing:0.5px'>"
-            f"{access}</p>"
-        )
-    lines.append(f"<p style='color:#aaaaaa;margin:4px 0'>{desc}</p>")
-
-    if params:
-        lines.append("<table cellspacing='2' style='margin-top:4px'>")
-        for p in params:
-            name = p.get("name", "")
-            typ  = p.get("type", "")
-            pdesc = p.get("description", "")
-            lines.append(
-                f"<tr>"
-                f"<td style='font-family:Consolas,monospace;color:#c48b3c'>{name}</td>"
-                f"<td style='color:#555;padding:0 6px'>{typ}</td>"
-                f"<td style='color:#888'>{pdesc}</td>"
-                f"</tr>"
-            )
-        lines.append("</table>")
-
-    if ret:
-        lines.append(
-            f"<p style='color:#555;margin-top:4px;font-style:italic'>→ {ret}</p>"
-        )
-
-    lines.append(
-        "<p style='color:#383838;margin-top:6px;font-size:9px'>? doc (bientôt disponible)</p>"
-    )
-
-    return "".join(lines)
+    return tooltip(title=sig, body=desc, note=access or ret)

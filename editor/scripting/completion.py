@@ -36,6 +36,7 @@ from scripting.api import (
 from scripting.expr_types import VEC_CONSTRUCTORS
 from scripting import api_snippets
 from scripting.api_reference import make_tooltip
+from ui.common.tooltip import tooltip
 
 
 # ─── Nature d'un candidat ─────────────────────────────────────────
@@ -153,8 +154,7 @@ def _event_tooltip(ev: str) -> str:
 def _plain_tooltip(sig: str, desc: str) -> str:
     """Une infobulle courte pour ce qui n'est pas dans le catalogue (module,
     mot-clé, constructeur) — même charpente visuelle que `make_tooltip`."""
-    return (f"<b style='font-family:Consolas,monospace;color:#4ec9b0'>{sig}</b>"
-            f"<p style='color:#aaaaaa;margin:4px 0'>{desc}</p>")
+    return tooltip(title=sig, body=desc)
 
 
 # ─── Fabrique de candidats ────────────────────────────────────────

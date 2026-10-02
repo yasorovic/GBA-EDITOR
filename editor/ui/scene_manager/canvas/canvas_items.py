@@ -487,7 +487,7 @@ class CameraItem(QGraphicsItem):
 
     def _tooltip(self) -> str:
         name = self.camera.name if self.camera else label('common.default_paren')
-        detail = label('cvitems.gba_camera_name_frame_w_frame_h_px', name=name, _frame_w=self._frame_w, _frame_h=self._frame_h)
+        detail = label('cvitems.camera_tip', name=name, w=self._frame_w, h=self._frame_h)
         notes = getattr(self.camera, "notes", "") if self.camera else ""
         return notes_tooltip(notes, detail)
 
@@ -543,8 +543,9 @@ class CameraItem(QGraphicsItem):
             rect.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
             rect.setAcceptHoverEvents(False)
             rect.setToolTip(
-                label('cvitems.value_value_2_value_3_px_at_x0', value=ws.name or label('cvitems.unnamed_window'), value_2=x1 - x0, value_3=y1 - y0, x0=x0, y0=y0)
-                + ("" if ws.visible else label('cvitems.inactive_window_show_at_0'))
+                label('cvitems.window_tip', name=ws.name or label('cvitems.unnamed_window'),
+                      w=x1 - x0, h=y1 - y0, x=x0, y=y0)
+                + ("" if ws.visible else label('cvitems.window_inactive'))
             )
             self._window_items.append(rect)
 

@@ -18,8 +18,11 @@ from PyQt6.QtCore import Qt, pyqtSignal, QMimeData, QPoint, QPointF, QRect, QRec
 
 from ui.common.theme import C, T, QSS, tint
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.common.icons import get as _ico
 from ui.common.palette_bank_strip import PaletteBankStrip
+from ui.common.shortcut_hints import ShortcutHints
+from ui.sprite_editor.frame_hints import frame_canvas_hints
 from ui.common.canvas_backdrop import draw_grid, draw_grid_halo
 from core.models.sprite import (
     AnimFrame,
@@ -38,6 +41,7 @@ _THUMB_IMG  = 52   # px image dans la vignette
 _THUMB_W    = 64   # largeur totale vignette
 _THUMB_H    = 74   # image + label index
 _TIMELINE_H = 106  # hauteur fixe de la zone timeline
+HINTS_CLEARANCE = 140  # marge droite des coordonnées : laisse la pastille des raccourcis
 
 
 def _pil_to_pixmap(img, size: int) -> QPixmap:
@@ -119,7 +123,11 @@ class _FrameThumb(QFrame):
         if frame.event_name:
             parts.append(("E", label("sprframe.trig_event", name=frame.event_name)))
         self._badge_lbl.setText("".join(p[0] for p in parts))
-        self.setToolTip("\n".join(p[1] for p in parts))
+        self.setToolTip(tooltip(
+            title=label("sprframe.frame_n", n=self._index + 1),
+            body=label("sprframe.frame_tip"),
+            note="\n".join(p[1] for p in parts),
+        ))
 
     def set_selected(self, sel: bool):
         if self._selected != sel:
@@ -273,7 +281,9 @@ class _FrameTimeline(QWidget):
             f"font-size:{T.LG}px;}}"
             f"QToolButton:hover{{color:{C.ACCENT};border-color:{C.ACCENT};}}"
         )
-        self._add_btn.setToolTip(label("sprframe.add_frame_tip"))
+        self._add_btn.setToolTip(tooltip(
+            title=label("sprframe.add_frame"), body=label("sprframe.add_frame_tip")
+        ))
         self._add_btn.clicked.connect(self._on_add)
 
         self._scroll.setWidget(self._content)
@@ -615,6 +625,7 @@ class _FrameCanvas(QWidget):
     selection_reset    = pyqtSignal()   # demande reset de la sélection dans le picker
     hover_changed       = pyqtSignal(object)  # (col, row) survolé, ou None
     brush_picked_up     = pyqtSignal(int)     # nb de tuiles ramassées depuis le canvas
+    mode_changed        = pyqtSignal()        # brosse posée/retirée, lecture seule basculée
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -698,6 +709,14 @@ class _FrameCanvas(QWidget):
             self._brush = [(c - min_c, r - min_r, c, r, False, False) for c, r in tiles]
             self.setCursor(Qt.CursorShape.CrossCursor)
         self.update()
+        self.mode_changed.emit()
+
+    def hint_context(self) -> str:
+        """Le geste que le canvas offre maintenant — clé de la table des
+        raccourcis : brosse active, sélection de tuiles posées, ou lecture seule."""
+        if self._read_only:
+            return "readonly"
+        return "brush" if self._brush else "pick"
 
     def flip_brush_x(self):
         """Miroir horizontal de la brosse active — réarrange les tuiles
@@ -731,6 +750,7 @@ class _FrameCanvas(QWidget):
             self._select_start = self._select_end = None
             self.setCursor(Qt.CursorShape.ArrowCursor)
         self.update()
+        self.mode_changed.emit()
 
     def set_display_flip(self, flip_h: bool, flip_v: bool):
         """Miroir d'affichage de l'image composée (preview d'une direction
@@ -1138,11 +1158,19 @@ class _CanvasFloatingToolbar(QFrame):
             layout.addWidget(b)
             return b
 
-        self.btn_prev = _icon_btn("playback_prev", label("sprframe.first_frame"))
-        self.btn_play = _icon_btn("playback_play", label("sprframe.play"), checkable=True)
-        self.btn_next = _icon_btn("playback_next", label("sprframe.last_frame"))
+        self.btn_prev = _icon_btn("playback_prev", tooltip(
+            title=label("sprframe.previous_frame"), body=label("sprframe.previous_frame_tip")
+        ))
+        self.btn_play = _icon_btn("playback_play", tooltip(
+            title=label("sprframe.play_preview"), body=label("sprframe.play_preview_tip")
+        ), checkable=True)
+        self.btn_next = _icon_btn("playback_next", tooltip(
+            title=label("sprframe.next_frame"), body=label("sprframe.next_frame_tip")
+        ))
         _sep()
-        self.btn_grid = _icon_btn("playback_grid", label("sprframe.show_grid"), checkable=True)
+        self.btn_grid = _icon_btn("playback_grid", tooltip(
+            title=label("sprframe.grid"), body=label("sprframe.grid_tip")
+        ), checkable=True)
         _sep()
         # Mode de preview : couleurs natives du PNG vs quantifiées sur la
         # banque (rendu WYSIWYG in-game) — paire mutuellement exclusive.
@@ -1154,9 +1182,13 @@ class _CanvasFloatingToolbar(QFrame):
             f"border:1px solid {C.ACCENT};border-radius:4px;}}"
         )
         self.btn_original = QToolButton(); self.btn_original.setText("PNG")
-        self.btn_original.setToolTip(label("sprframe.preview_png_tip"))
+        self.btn_original.setToolTip(tooltip(
+            title=label("sprframe.preview_png"), body=label("sprframe.preview_png_tip")
+        ))
         self.btn_indexed = QToolButton(); self.btn_indexed.setText(label("sprframe.indexed"))
-        self.btn_indexed.setToolTip(label("sprframe.preview_indexed_tip"))
+        self.btn_indexed.setToolTip(tooltip(
+            title=label("sprframe.preview_indexed"), body=label("sprframe.preview_indexed_tip")
+        ))
         for b in (self.btn_original, self.btn_indexed):
             b.setStyleSheet(_MODE_BTN)
             b.setCheckable(True)
@@ -1166,8 +1198,12 @@ class _CanvasFloatingToolbar(QFrame):
         self.btn_original.clicked.connect(lambda: self._set_preview_indexed(False))
         self.btn_indexed.clicked.connect(lambda: self._set_preview_indexed(True))
         _sep()
-        self.btn_flip_x = _icon_btn("mirror_h", label("sprframe.flip_x_tip"))
-        self.btn_flip_y = _icon_btn("mirror_v", label("sprframe.flip_y_tip"))
+        self.btn_flip_x = _icon_btn("mirror_h", tooltip(
+            title=label("sprframe.flip_x"), shortcut="Shift+X"
+        ))
+        self.btn_flip_y = _icon_btn("mirror_v", tooltip(
+            title=label("sprframe.flip_y"), shortcut="Shift+Y"
+        ))
         _sep()
 
         _TXT_BTN = (
@@ -1178,10 +1214,14 @@ class _CanvasFloatingToolbar(QFrame):
         self.btn_fit = QToolButton(); self.btn_fit.setText(label("sprframe.fit"))
         self.btn_zm  = QToolButton(); self.btn_zm.setText("−")
         self.btn_zp  = QToolButton(); self.btn_zp.setText("+")
-        for b in (self.btn_fit, self.btn_zm, self.btn_zp):
+        for b, tip in (
+            (self.btn_fit, tooltip(title=label("sprframe.fit_title"))),
+            (self.btn_zm, tooltip(title=label("sprframe.zoom_out"))),
+            (self.btn_zp, tooltip(title=label("sprframe.zoom_in"))),
+        ):
             b.setStyleSheet(_TXT_BTN)
             b.setFixedHeight(36)
-            b.setToolTip(label("sprframe.fit_tip") if b is self.btn_fit else "")
+            b.setToolTip(tip)
             layout.addWidget(b)
 
         # Grille + flip/zoom pilotent directement le canvas (pas d'état
@@ -1257,6 +1297,12 @@ class _FrameCanvasPanel(QWidget):
         self.toolbar.move(10, 10)
         self.toolbar.raise_()
 
+        # Table des raccourcis (bas-droite ; les coordonnées survolées sont décalées
+        # en conséquence dans _reposition_overlays).
+        self._hints = ShortcutHints(self, frame_canvas_hints, self.canvas.hint_context())
+        self.canvas.mode_changed.connect(self._sync_hints)
+        self.canvas.brush_picked_up.connect(lambda _n: self._sync_hints())
+
         _FLOAT_STY = f"color:{C.TEXT_MUTED};background:transparent;"
         self._tag_lbl = QLabel(label("sprframe.canvas_tag"), self)
         self._tag_lbl.setFont(QFont(T.UI, T.XS, QFont.Weight.DemiBold))
@@ -1287,6 +1333,9 @@ class _FrameCanvasPanel(QWidget):
 
         self._reposition_overlays()
 
+    def _sync_hints(self):
+        self._hints.set_context(self.canvas.hint_context())
+
     def set_read_only_banner(self, text: Optional[str]):
         """Affiche/masque le bandeau miroir. text=None → masqué."""
         if text:
@@ -1309,7 +1358,7 @@ class _FrameCanvasPanel(QWidget):
 
     def _reposition_overlays(self):
         self._tag_lbl.move(10, self.height() - self._tag_lbl.height() - 8)
-        self._coord_lbl.move(self.width() - self._coord_lbl.width() - 10,
+        self._coord_lbl.move(self.width() - self._coord_lbl.width() - HINTS_CLEARANCE,
                              self.height() - self._coord_lbl.height() - 8)
         self._info_lbl.move(self.width() - self._info_lbl.width() - 10, 8)
         self._ro_lbl.move((self.width() - self._ro_lbl.width()) // 2, 8)
@@ -1332,4 +1381,3 @@ class _FrameCanvasPanel(QWidget):
         self._reposition_overlays()
         if self.paint_strip.isVisible():
             self.paint_strip.raise_()
-

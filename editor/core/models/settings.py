@@ -71,7 +71,7 @@ class InputBinding:
     même titre que A/B : `jump = up` et `dash = right + a` ne demandent donc
     aucun cas spécial au runtime.
 
-    Décision de Victor (2026-09-27, après coup) : un ACCORD simple reste des
+    Décision de l'auteur (2026-09-27, après coup) : un ACCORD simple reste des
     cases à cocher (l'écran d'avant ce chantier, jugé plus clair) — le
     mini-langage complet (`+`/`-`/`(a|b)`/mouvements) ne sert plus qu'aux
     SÉQUENCES, cf. `InputSequence`. `input:held/pressed/released/buffered` ne
@@ -103,7 +103,7 @@ class InputSequence:
     (ROADMAP « Les inputs personnalisés » : `+` accord, `-` pas suivant,
     `(a|b)` alternative, mouvements). Rôle distinct d'`InputBinding` : un
     accord se lit avec held/pressed/released/buffered, une séquence avec
-    get_sequence — jamais l'inverse, décision de Victor (2026-09-27)."""
+    get_sequence — jamais l'inverse, décision de l'auteur (2026-09-27)."""
     name: str = ""
     expression: str = ""
     window: int = 15   # fenêtre entre deux pas
@@ -177,7 +177,9 @@ class ProjectSettings:
     # Couleur de backdrop par défaut (BGR555) — PAL_BG_RAM[0], affichée quand
     # rien d'opaque n'est dessiné nulle part. Éditée dans le ProjectInspector ;
     # Scene.backdrop_color peut la surcharger par scène.
-    backdrop_color: int = 0
+    # Gris 50 % (16, 16, 16 en 5 bits) pour un projet NEUF ; le chargement
+    # (`Project.load`) garde 0 pour un project.json qui n'a pas la clé.
+    backdrop_color: int = 0x4210
     # Nombre d'emplacements de sauvegarde en SRAM. Un réglage et non une valeur
     # libre laissée au script : c'est lui qui BORNE la place occupée, donc ce
     # qui rend la capacité vérifiable au build plutôt qu'à l'exécution.
@@ -338,6 +340,13 @@ class Constant:
 # touche B ? ». La paire répond à cette question-là directement, et c'est la
 # question qu'on se pose. Une grille triangulaire de n tags fait n(n+1)/2
 # cases : dix tags, cinquante-cinq cases — ça se lit d'un coup d'œil.
+
+# Les tags qu'un projet NEUF déclare d'office : « Player » pour ce que le joueur
+# pilote, « body » pour tout le reste (le tag par défaut d'une boîte). Posés à
+# la création (`Project.create`) et non à la lecture : un projet existant, dont
+# `collision_tags` est absent, garde exactement les siens.
+DEFAULT_COLLISION_TAGS = ("Player", "body")
+
 
 def pair_key(tag_a: str, tag_b: str) -> str:
     """La clé d'un couple de tags, indépendante de l'ordre — « A contre B » et

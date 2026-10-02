@@ -50,6 +50,7 @@ def test_project_indexes_heavy_asset_families_until_their_screen_needs_them(tmp_
     writer.backgrounds.save(BackgroundAsset(name="Sky"))
     writer.sfx.save(Sfx(name="Blip"))
     writer.music.save(Music(name="Theme"))
+    writer.save_settings()   # le manifeste : sans lui, le dossier n'est pas un projet
 
     project = Project.open(tmp_path)
 
@@ -78,6 +79,7 @@ def test_project_preloads_only_the_active_scene_assets(tmp_path: Path):
         background_layers=[BackgroundLayer(background_name="Sky")],
         actors=[Actor(components=[SpriteComponent(sprite_name="Hero")])],
     ))
+    writer.save_settings()
 
     project = Project.open(tmp_path)
 

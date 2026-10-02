@@ -21,6 +21,7 @@ from ui.common.theme import C, T, QSS
 from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import W, CollapsibleCard
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 
 from core.models.gba_color import (
     bgr555_to_rgb888, bgr555_components, components_to_bgr555, rgb888_to_bgr555,
@@ -139,12 +140,13 @@ class ColorInspectorPanel(QWidget):
         self._hex.setMaxLength(7)
         self._hex.setFont(QFont(T.MONO, T.MD))
         self._hex.setStyleSheet(QSS.lineedit)
+        self._hex.setToolTip(tooltip(title=label("colins.hex_title"), body=label("colins.hex_tip")))
         self._hex.editingFinished.connect(self._on_hex_changed)
         # Entrée valide ET rend le focus à la grille → les flèches reprennent.
         self._hex.returnPressed.connect(self.grid_focus_requested.emit)
         hex_row.addWidget(self._hex, 1)
         btn_copy = W.btn_ghost(label("common.copy"))   # libellé explicite (⧉ était incompris)
-        btn_copy.setToolTip(label("colins.copy_tip"))
+        btn_copy.setToolTip(tooltip(title=label("colins.copy_hex")))
         btn_copy.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_copy.clicked.connect(self._copy_color)
         hex_row.addWidget(btn_copy)
@@ -165,7 +167,7 @@ class ColorInspectorPanel(QWidget):
         self._snap = QLabel("")
         self._snap.setFont(QFont(T.MONO, T.SM))
         self._snap.setStyleSheet(f"color:{C.AXIS_X};")
-        self._snap.setToolTip(label("colins.snap_tip"))
+        self._snap.setToolTip(tooltip(title=label("colins.snap_title"), body=label("colins.snap_tip")))
         self._snap.setVisible(False)
         bgr_row.addWidget(self._snap)
         bgr_row.addStretch(1)

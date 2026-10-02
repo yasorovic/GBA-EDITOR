@@ -15,7 +15,7 @@ SUIVANTES, quand l'écran existe déjà mais que le projet a bougé sous lui.
 ### D'où vient la question (2026-09-18)
 
 Née en marge d'une session de debug du copier/coller de zones de texte. Symptôme rapporté par
-Victor : l'éditeur de texte affichait « 1 of 8 shown » — huit textes dans le projet, un seul dans
+l'auteur : l'éditeur de texte affichait « 1 of 8 shown » — huit textes dans le projet, un seul dans
 la table. Cause : une zone de texte créée dans le Scene Manager ajoute son entrée à `project.texts`
 ([ui_inspector.py:1071](editor/ui/scene_manager/inspectors/ui_inspector.py:1071)), mais
 `Window._load_screen_for_project` ([window.py:901](editor/window.py:901)) ne charge un écran qu'à

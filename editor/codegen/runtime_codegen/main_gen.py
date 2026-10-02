@@ -1880,8 +1880,8 @@ def _gen_scene_tick(
         L.append(f"    static u8 _col_prev[{len(col_pairs)}]={{0}};")
         for pair_idx, (i, j) in enumerate(col_pairs):
             i_lua = i in lua_idx; j_lua = j in lua_idx
-            si = c_sym(scene_actors[i - actor_offset][0].name)
-            sj = c_sym(scene_actors[j - actor_offset][0].name)
+            si = scene_actor_sym(scene.name, scene_actors[i - actor_offset][0].name)
+            sj = scene_actor_sym(scene.name, scene_actors[j - actor_offset][0].name)
             L += [
                 f"    {{ u8 _bx_i=0,_bx_j=0;",
                 f"        u8 _cur=(g_actors[{i}].active&&g_actors[{j}].active&&"

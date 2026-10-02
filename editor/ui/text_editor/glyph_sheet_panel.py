@@ -13,6 +13,7 @@ from PyQt6.QtCore import pyqtSignal
 from ui.common.theme import C, T, QSS
 from ui.common.widgets import W
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.common.backdrop_button import BackdropButton
 from ui.text_editor.glyph_sheet import GlyphSheet
 
@@ -60,7 +61,7 @@ class GlyphSheetPanel(QWidget):
 
         self._btn_merge = W.btn_ghost(label("glsheet.merge"))
         self._btn_merge.setFont(QFont(T.UI, T.XS))
-        self._btn_merge.setToolTip(label("glsheet.merge_tip"))
+        self._btn_merge.setToolTip(tooltip(title=label("glsheet.merge_title"), body=label("glsheet.merge_tip")))
         self._btn_merge.setEnabled(False)
         self._btn_merge.clicked.connect(self._ask_merge)
         bl.addWidget(self._btn_merge)
@@ -78,7 +79,10 @@ class GlyphSheetPanel(QWidget):
             bl.addWidget(s)
         self._btn_reslice = W.btn_ghost(label("glsheet.reslice"))
         self._btn_reslice.setFont(QFont(T.UI, T.XS))
-        self._btn_reslice.setToolTip(label("glsheet.reslice_tip"))
+        self._btn_reslice.setToolTip(tooltip(
+            title=label("glsheet.reslice_title"), body=label("glsheet.reslice_tip"),
+            warning=label("glsheet.reslice_warning"),
+        ))
         self._btn_reslice.clicked.connect(
             lambda: self.reslice_asked.emit(self._cw.value(), self._ch.value()))
         bl.addWidget(self._btn_reslice)
@@ -91,6 +95,7 @@ class GlyphSheetPanel(QWidget):
         self._zoom.setRange(GlyphSheet._MIN_ZOOM, GlyphSheet._MAX_ZOOM)
         self._zoom.setValue(6); self._zoom.setFixedWidth(48)
         self._zoom.setFont(QFont(T.MONO, T.SM)); self._zoom.setStyleSheet(QSS.spinbox)
+        self._zoom.setToolTip(tooltip(title=label("glsheet.zoom")))
         bl.addWidget(self._zoom)
         root.addWidget(bar)
 

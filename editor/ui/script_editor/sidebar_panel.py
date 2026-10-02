@@ -1,6 +1,4 @@
 """ui/script_editor/sidebar_panel.py — panneau gauche : sections EVENTS / API / RÉFÉRENCES."""
-from html import escape
-
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QScrollArea, QToolButton, QLineEdit
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -14,6 +12,7 @@ from core.models.text import SEP
 from core.text_markup import display_text
 from ui.common.theme import C, T
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from .colors import _BG, _BG_HDR, _BORDER, _TEXT_DIM, _TEXT_NORM, _C_API, _C_REF, _C_EVENT, _C_BEHAVIOR
 from .sidebar_widgets import (
     _Section, _EntryButton, _group_label,
@@ -45,6 +44,7 @@ class SidebarPanel(QWidget):
         self._filter = QLineEdit()
         self._filter.setClearButtonEnabled(True)
         self._filter.setPlaceholderText(label("scrsb.filter_placeholder"))
+        self._filter.setToolTip(tooltip(title=label("scrsb.filter_title"), body=label("scrsb.filter_tip")))
         self._filter.setStyleSheet(
             f"QLineEdit{{background:{_BG_HDR};color:{_TEXT_NORM};"
             f"border:none;border-bottom:1px solid {_BORDER};padding:4px 8px;}}")
@@ -167,20 +167,14 @@ class SidebarPanel(QWidget):
             btn.clicked.connect(lambda _, s=snippet: self.snippet_requested.emit(s))
             return btn
 
-        def _tip(sig: str, desc: str) -> str:
-            return (
-                f"<b style='font-family:Consolas,monospace;color:{_C_REF}'>{sig}</b>"
-                f"<p style='color:{_TEXT_NORM};margin:4px 0'>{desc}</p>"
-            )
+        def _tip(sig: str, desc: str, note: str = "") -> str:
+            return tooltip(title=sig, body=desc, note=note)
 
         def _api_tip(api_name: str, snippet: str, extra: str = "") -> str:
             """Tooltip d'un bouton d'asset : l'appel tel qu'il sera inséré, la
             description de la fonction telle qu'elle vit dans `api.py`, puis ce
             que l'éditeur seul sait de l'asset."""
-            tip = _tip(snippet, api_snippets.description(api_name))
-            if extra:
-                tip += f"<p style='color:{_TEXT_DIM};margin:2px 0'>{extra}</p>"
-            return tip
+            return _tip(snippet, api_snippets.description(api_name), extra)
 
         def _add(sub, label: str, api_name: str, extra: str = "", **domains):
             sn = api_snippets.call(api_name, **domains)
@@ -238,11 +232,9 @@ class SidebarPanel(QWidget):
                 if len(groups) > 1:
                     sub.add_widget(_group_label(folder))
                 for t in groups[folder]:
-                    where = escape(SEP.join(t.path)) if t.path else _UNFILED
-                    excerpt = escape(
-                        display_text(t.content, values).replace("\n", " ⏎ ")[:60])
-                    _add(sub, t.key, "text.draw",
-                         f"<i>{where}</i><br>« {excerpt} »", text=t.key)
+                    where = SEP.join(t.path) if t.path else _UNFILED
+                    excerpt = display_text(t.content, values).replace("\n", " ⏎ ")[:60]
+                    _add(sub, t.key, "text.draw", f"{where} · « {excerpt} »", text=t.key)
 
         # ── Zones de texte ─────────────────────────────────────────
         # Celles des nœuds `Interface` de la scène active (v0.25) — comme les
@@ -262,7 +254,7 @@ class SidebarPanel(QWidget):
                 # La zone s'écrit sur SON acquisition : interface:get("zone"):draw(...).
                 sn = api_snippets.element_call(r.name, "text_region:draw", **doms)
                 extra = (label('scrsb.interface_name', name=layout.name)
-                         + (label('scrsb.preview_value', value=escape(key)) if key else ""))
+                         + (label('scrsb.preview_value', value=key) if key else ""))
                 sub.add_widget(_ref_btn(r.name, sn, _api_tip("text_region:draw", sn, extra)))
 
         # ── Polices ────────────────────────────────────────────────
@@ -322,8 +314,7 @@ class SidebarPanel(QWidget):
 
             stub_text = "function M.name(actor, ...)"
             stub_btn = _EntryButton(f"  {stub_text}", _BTN_BEHAVIOR,
-                "<b style='font-family:Consolas,monospace'>function M.name(actor, ...)</b>"
-                f"<p style='color:{_TEXT_NORM}'>Function stub exported by this behavior module.</p>",
+                tooltip(title=stub_text, body=label("scrsb.behavior_stub_tip")),
                 icon_key="behavior_stub", icon_color=_C_BEHAVIOR)
             stub_btn.clicked.connect(
                 lambda: self.snippet_requested.emit("function M.name(actor, ...)\n    \nend\n"))

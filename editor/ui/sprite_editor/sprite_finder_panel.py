@@ -1,6 +1,7 @@
 """ui/sprite_editor/sprite_finder_panel.py — panneau gauche : liste des sprites + arbre d'animations."""
 from __future__ import annotations
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from typing import Any, Optional
 
 from PyQt6.QtWidgets import (
@@ -95,6 +96,9 @@ class SpriteFinderPanel(QWidget):
         # PAS un asset finder : l'arbre montre la structure INTERNE du sprite
         # choisi (états × directions), pas des assets du projet.
         sec_anim = FinderSection(label('sprfind.animation_states'))
+        sec_anim._btn_add.setToolTip(tooltip(
+            title=label('sprfind.add_state'), body=label('sprfind.add_state_tip')
+        ))
         sec_anim.add_clicked.connect(self._on_add_state)
         self._sprites.add_section(sec_anim)
 
@@ -109,6 +113,9 @@ class SpriteFinderPanel(QWidget):
         self._anim_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._anim_tree.customContextMenuRequested.connect(self._on_anim_context_menu)
         self._anim_tree.setEditTriggers(QAbstractItemView.EditTrigger.SelectedClicked)
+        self._anim_tree.setToolTip(tooltip(
+            title=label('sprfind.animation_states'), body=label('sprfind.animation_tree_tip')
+        ))
         self._anim_tree.itemChanged.connect(self._on_anim_item_text_changed)
         sec_anim.set_widget(self._anim_tree)
 
@@ -321,4 +328,3 @@ class SpriteFinderPanel(QWidget):
             label=f"Delete state {state.name}",
         ))
         self._refresh_anim_tree(self._current_sprite)
-

@@ -369,7 +369,7 @@ Ce que le chantier a demandé en plus :
 
 ### D'où vient la question (2026-09-16)
 
-Victor : sélectionner une scène dans le project viewer prend une demi-seconde perceptible, même
+L'auteur : sélectionner une scène dans le project viewer prend une demi-seconde perceptible, même
 pour une scène triviale (title screen, deux zones de texte). Trois causes indépendantes trouvées
 en investiguant `window._on_scene_selected` ([window.py:1128](editor/window.py:1128)) :
 
@@ -398,7 +398,7 @@ en investiguant `window._on_scene_selected` ([window.py:1128](editor/window.py:1
 
 ### Ce qu'il faudrait trancher avant d'ouvrir
 
-- **Quoi cacher, précisément.** Deux formes envisagées avec Victor, pas encore choisies :
+- **Quoi cacher, précisément.** Deux formes envisagées avec l'auteur, pas encore choisies :
   - un cache des **décodages disque** purs (PNG source des sprites/fonds), invalidé par mtime —
     la composition par frame/scène (flips, palette, overrides live) continue de tourner à chaque
     visite. Scope net, risque faible : rien ne peut devenir périmé, seul le pixel brut du fichier
@@ -425,7 +425,7 @@ en investiguant `window._on_scene_selected` ([window.py:1128](editor/window.py:1
 ### D'où vient la question (2026-09-16)
 
 En revue du chantier « groupes du Graphe de scènes » (créer/supprimer/renommer un groupe, y ranger
-des scènes, déplacer et redimensionner les boîtes, déplacer les nœuds), Victor a demandé de
+des scènes, déplacer et redimensionner les boîtes, déplacer les nœuds), l'auteur a demandé de
 vérifier que **toutes** les opérations introduites étaient reliées à undo/redo. Constat :
 
 - **Reliée.** La *suppression de scène* (clic-droit du Graphe) pousse `DeleteResourceCmd` dans
@@ -568,6 +568,20 @@ publique, pas une affirmation de stabilité totale. Les retours d'usage réel la
 ensuite vers **v1.0-beta** puis **v1.0-stable**, sans changer de numéro ni rouvrir le scope
 du jalon. Le même principe vaut pour les prochains jalons majeurs (v2.0, v3.0) : chacun peut
 sortir en `-alpha` avant sa release officielle, le temps que l'usage réel le stabilise.
+
+**La numérotation d'une release : `Backstage-X.Y.Z-<étiquette>` (décidé le 2026-10-02).**
+Trois chiffres, et une étiquette toujours écrite : `-alpha`, `-beta` ou `-stable` (jamais de
+version « nue »). Une fois l'alpha publiée officiellement :
+
+| Chiffre | Ce qu'il compte | Exemple |
+|---|---|---|
+| `X` | le numéro de version, l'affirmation de capacité d'un jalon majeur | `1` |
+| `Y` | un jalon standard de la roadmap (`vX.Y`) | `1.1.0` |
+| `Z` | tout le reste qui avance : chantier technique, correction, optimisation | `1.0.3` |
+
+La première sortie publique est donc `1.0.0-alpha`, puis `1.0.0-beta` et `1.0.0-stable` sous
+le même numéro. La version se lit dans `editor/core/app_info.py` (source unique), et le tag
+de la release (`v1.0.0-alpha`) doit lui être égal : la release échoue sinon.
 
 Une affirmation pareille n'est décidable que si on dit *quoi*. Voici le critère, sur le modèle
 de « V-Rally 3 » pour la v3.1 — une cible se compare, une capacité s'étend indéfiniment :

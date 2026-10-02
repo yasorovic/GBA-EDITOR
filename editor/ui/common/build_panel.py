@@ -1,12 +1,14 @@
 """BuildPanel, ToolchainBar."""
 
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 import re
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QPlainTextEdit, QToolButton, QTabWidget, QListWidget, QListWidgetItem,
+    QSplitter,
 )
 from PyQt6.QtGui import QFont, QColor, QPen, QTextCharFormat, QTextCursor, QPainter, QPainterPath
 from PyQt6.QtCore import pyqtSignal, pyqtProperty, Qt, QTimer, QPropertyAnimation, QEasingCurve, QRectF
@@ -31,7 +33,7 @@ _MASCOT_FILES = {
 _mascot_renderers: dict[str, QSvgRenderer] = {}
 
 
-def _mascot_renderer(state: str) -> QSvgRenderer | None:
+def mascot_renderer(state: str) -> QSvgRenderer | None:
     """Renderer SVG de la mascotte pour `state`, ou None si le fichier est
     absent/vide (cf. BUILD-WAIT-SUCCESS.svg, pas encore dessiné) — l'appelant
     se contente alors de ne rien peindre plutôt que de planter."""
@@ -134,6 +136,8 @@ class DiagnosticsView(QWidget):
         self._btn_refresh.setFont(QFont(T.UI, T.SM))
         self._btn_refresh.setFixedHeight(20)
         self._btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_refresh.setToolTip(tooltip(
+            title=label('build.refresh_title'), body=label('build.refresh_tip')))
         self._btn_refresh.clicked.connect(lambda: self.refresh_requested.emit())
         h.addWidget(self._btn_refresh)
         self._summary = QLabel("—")
@@ -378,7 +382,7 @@ class AnimatedBuildButton(QToolButton):
     def _mascot_rect(self, h: int) -> QRectF | None:
         """Boîte de la mascotte pour l'état courant, ancrée en bas-gauche du
         bouton — None si aucun dessin n'est disponible pour cet état."""
-        renderer = _mascot_renderer(self._mascot_state())
+        renderer = mascot_renderer(self._mascot_state())
         if renderer is None:
             return None
         vb = renderer.viewBox()
@@ -391,7 +395,7 @@ class AnimatedBuildButton(QToolButton):
     def _paint_mascot(self, p: QPainter, icon_rect: "QRectF | None"):
         if icon_rect is None:
             return
-        renderer = _mascot_renderer(self._mascot_state())
+        renderer = mascot_renderer(self._mascot_state())
         renderer.render(p, icon_rect)
 
     @staticmethod
@@ -433,6 +437,7 @@ class BuildPanel(QWidget):
         btn_clear = QPushButton(label('build.clear'))
         btn_clear.setFont(QFont(T.UI, T.SM))
         btn_clear.setFixedHeight(20)
+        btn_clear.setToolTip(tooltip(title=label('build.clear_title')))
         btn_clear.clicked.connect(lambda: self.console.clear())
         hl.addWidget(btn_clear)
         layout.addWidget(header)
@@ -469,6 +474,8 @@ class BuildPanel(QWidget):
         layout.addWidget(self.rom_bar, 0)
 
         self.btn_build = QPushButton(label('build.build_run'))
+        self.btn_build.setToolTip(tooltip(
+            title=label('win.build_run_title'), shortcut="F5", body=label('win.build_run_tip')))
         self.btn_build.setEnabled(False)
         self.btn_build.setVisible(False)
 
@@ -483,6 +490,23 @@ class BuildPanel(QWidget):
 
     def log_error(self, t): self.log(t, C.ACCENT_RED)
     def log_info(self, t):  self.log(t, C.ACCENT_COOL)
+
+    def reveal(self):
+        """Rouvre le panneau s'il a été replié à zéro dans son QSplitter
+        (poignée tirée jusqu'au bord). Sans effet s'il est déjà visible."""
+        splitter = self.parentWidget()
+        if not isinstance(splitter, QSplitter):
+            return
+        index = splitter.indexOf(self)
+        sizes = splitter.sizes()
+        if sizes[index] > 0:
+            return
+        wanted = max(self.minimumHeight(), 160)
+        sizes[index] = wanted
+        # Le volume est pris sur le widget le plus grand (l'éditeur/canvas).
+        donor = max(range(len(sizes)), key=lambda i: sizes[i])
+        sizes[donor] = max(sizes[donor] - wanted, 0)
+        splitter.setSizes(sizes)
 
     def set_building(self, b):
         self.btn_build.setEnabled(not b)
@@ -506,7 +530,7 @@ class ToolchainBar(QFrame):
         super().__init__(parent)
         self.toolchain = toolchain
         self.setFixedHeight(28)
-        self.setStyleSheet(f"background:{C.BG_RAISED}; border-bottom:1px solid {C.BORDER};")
+        self.setStyleSheet(f"background:{C.BG_RAISED}; border-bottom:{C.SPLITTER_WIDTH}px solid {C.SPLITTER};")
         layout = QHBoxLayout(self)
         layout.setContentsMargins(10, 0, 10, 0)
         layout.setSpacing(12)
@@ -524,6 +548,8 @@ class ToolchainBar(QFrame):
 
         btn = QPushButton(label('build.configure'))
         btn.setFixedHeight(20); btn.setFont(font)
+        btn.setToolTip(tooltip(
+            title=label('build.configure_title'), body=label('build.configure_tip')))
         btn.setStyleSheet(
             f"background:{C.BORDER}; color:{C.TEXT_NORM}; border:1px solid {C.TEXT_MUTED};"
             "border-radius:3px; padding:0 6px;"

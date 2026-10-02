@@ -14,9 +14,12 @@ def test_home_screen_is_french(qapp, tmp_path, monkeypatch):
 
     home = HomeScreen(tmp_path)
 
-    assert home.windowTitle() == "GBA Editor — Ouvrir un projet"
+    assert home.windowTitle() == "Backstage — Ouvrir un projet"
     assert home._tabs.tabText(0) == "Projets"
-    assert home._tabs.tabText(1) == "Modèles"
+    # L'onglet « Modèles » n'existe que si une source de modèles est configurée.
+    assert (home._tabs.count() == 2) == bool(project_picker.TEMPLATES)
+    if project_picker.TEMPLATES:
+        assert home._tabs.tabText(1) == "Modèles"
     assert home._empty_lbl.text().startswith("Aucun projet récent")
     assert "+ Créer un projet" in {button.text() for button in home.findChildren(QPushButton)}
     catalog.set_language("")

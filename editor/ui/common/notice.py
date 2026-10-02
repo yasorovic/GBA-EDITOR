@@ -71,6 +71,7 @@ tapée donne un message vide, et un message vide ne se plaint jamais.
 from __future__ import annotations
 
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
@@ -255,7 +256,7 @@ class NoticeBox(QFrame):
             close.setFixedSize(16, 16)
             close.setAutoRaise(True)
             close.setCursor(Qt.CursorShape.PointingHandCursor)
-            close.setToolTip(label('noticeui.dismiss_this_tip'))
+            close.setToolTip(tooltip(title=label('noticeui.dismiss_title')))
             close.setStyleSheet(
                 "QToolButton{border:none; background:transparent;}"
                 f"QToolButton:hover{{background:{C.BG_HOVER};border-radius:3px;}}")

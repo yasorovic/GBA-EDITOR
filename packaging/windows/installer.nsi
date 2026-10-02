@@ -1,8 +1,8 @@
 ; ---------------------------------------------------------------------
-; GBA Editor - installateur Windows (NSIS), installation par utilisateur.
+; Backstage - installateur Windows (NSIS), installation par utilisateur.
 ;
 ; Compile avec :
-;   makensis /DVERSION=0.3.2 /DSRCDIR=<dossier GBAEditor> /DOUTFILE=<setup.exe> installer.nsi
+;   makensis /DVERSION=0.3.2 /DSRCDIR=<dossier Backstage> /DOUTFILE=<setup.exe> installer.nsi
 ;
 ; SRCDIR est le dossier produit par packaging/nuitka_build.py.
 ;
@@ -24,13 +24,15 @@ Unicode true
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
 
-!define APP_NAME    "GBA Editor"
-!define APP_EXE     "GBA Editor.exe"
-!define APP_KEY     "GBAEditor"
-; Doit rester aligne avec --company-name dans packaging/nuitka_build.py :
-; c'est ce qui s'affiche dans "Applications et fonctionnalites" d'un cote,
-; et dans les proprietes de l'exe de l'autre.
-!define PUBLISHER   "Yasor Rovic"
+; Nom, exe et editeur doivent rester alignes avec editor/core/app_info.py
+; (APP_NAME, APP_AUTHOR), la SOURCE UNIQUE, lue par packaging/nuitka_build.py
+; (--product-name, --company-name, --output-filename) : c'est ce qui s'affiche
+; dans "Applications et fonctionnalites" d'un cote, et dans les proprietes de
+; l'exe de l'autre.
+!define APP_NAME    "Backstage"
+!define APP_EXE     "Backstage.exe"
+!define APP_KEY     "Backstage"
+!define PUBLISHER   "Yasorovic"
 !define UNINST_KEY  "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_KEY}"
 
 ; Valeurs par defaut si le script est lance a la main sans /D
@@ -38,10 +40,10 @@ Unicode true
   !define VERSION "0.0.0"
 !endif
 !ifndef SRCDIR
-  !define SRCDIR "..\..\build-out\GBAEditor"
+  !define SRCDIR "..\..\build-out\Backstage"
 !endif
 !ifndef OUTFILE
-  !define OUTFILE "GBAEditor-${VERSION}-windows-setup.exe"
+  !define OUTFILE "Backstage-${VERSION}-windows-setup.exe"
 !endif
 ; VIProductVersion n'accepte QUE du numerique 4 champs. VERSION peut etre
 ; un tag quelconque ("0.3.2-rc1"), d'ou ce define separe, calcule par
@@ -69,10 +71,18 @@ VIAddVersionKey "LegalCopyright"  "${PUBLISHER}"
 !define MUI_UNICON "..\icon.ico"
 !define MUI_ABORTWARNING
 
+; Pas de page de licence : la GPL n'en exige pas, et LICENSE comme
+; THIRD-PARTY-NOTICES.md sont installes a la racine du dossier de l'application.
+
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
+; devkitPro n'est PAS installe par cet installateur (il ne l'embarque pas) :
+; sans lui, impossible de fabriquer une ROM. On le dit ici, a la fin, avec le lien.
+!define MUI_FINISHPAGE_TEXT "$(FINISH_TEXT)"
+!define MUI_FINISHPAGE_LINK "$(FINISH_LINK)"
+!define MUI_FINISHPAGE_LINK_LOCATION "https://devkitpro.org/wiki/Getting_Started"
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${APP_EXE}"
 !insertmacro MUI_PAGE_FINISH
 
@@ -83,10 +93,70 @@ VIAddVersionKey "LegalCopyright"  "${PUBLISHER}"
 !insertmacro MUI_LANGUAGE "French"
 !insertmacro MUI_LANGUAGE "English"
 
+LangString FINISH_TEXT ${LANG_FRENCH}  "${APP_NAME} est installe.$\r$\n$\r$\nPour fabriquer des ROMs, il faut aussi devkitPro et l'emulateur mGBA (non fournis) : les liens sont dans les reglages de ${APP_NAME}."
+LangString FINISH_TEXT ${LANG_ENGLISH} "${APP_NAME} is installed.$\r$\n$\r$\nBuilding ROMs also needs devkitPro and the mGBA emulator (not included): the links are in ${APP_NAME}'s settings."
+LangString FINISH_LINK ${LANG_FRENCH}  "Installer devkitPro (necessaire pour fabriquer des ROMs)"
+LangString FINISH_LINK ${LANG_ENGLISH} "Install devkitPro (required to build ROMs)"
+LangString MSG_APP_RUNNING ${LANG_FRENCH}  "${APP_NAME} est en cours d'execution. Fermez-le, puis cliquez sur Reessayer."
+LangString MSG_APP_RUNNING ${LANG_ENGLISH} "${APP_NAME} is running. Close it, then click Retry."
 
-Section "GBA Editor" SecApp
+
+; Mise a jour par-dessus une installation existante : on retire les fichiers de la
+; version precedente AVANT de copier la nouvelle. Sans cela, un fichier renomme ou
+; supprime d'une version a l'autre (module, DLL) resterait la, et une distribution
+; standalone melangerait deux versions.
+;
+; Garde-fous :
+;  - rien n'est touche si $INSTDIR ne contient pas l'executable attendu (meme
+;    regle que la desinstallation : on ne fait pas de RMDir /r sur un dossier
+;    qu'on ne reconnait pas) ;
+;  - plugins\ est CONSERVE : c'est la que l'utilisateur depose les siens, et les
+;    plugins livres y sont de toute facon recopies par la suite ;
+;  - projets et configuration vivent hors de $INSTDIR (BackstageProjects, %APPDATA%).
+Function CleanPreviousInstall
+  Push $0
+  Push $1
+  IfFileExists "$INSTDIR\${APP_EXE}" 0 clean_done
+
+  ; L'executable est verrouille tant que l'application tourne.
+  clean_retry:
+    ClearErrors
+    FileOpen $0 "$INSTDIR\${APP_EXE}" a
+    IfErrors clean_locked 0
+    FileClose $0
+    Goto clean_purge
+  clean_locked:
+    MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(MSG_APP_RUNNING)" IDRETRY clean_retry
+    Abort
+
+  clean_purge:
+  FindFirst $0 $1 "$INSTDIR\*.*"
+  clean_loop:
+    StrCmp $1 "" clean_end
+    StrCmp $1 "." clean_next
+    StrCmp $1 ".." clean_next
+    StrCmp $1 "plugins" clean_next
+    IfFileExists "$INSTDIR\$1\*.*" clean_isdir 0
+      Delete "$INSTDIR\$1"
+      Goto clean_next
+    clean_isdir:
+      RMDir /r "$INSTDIR\$1"
+    clean_next:
+    FindNext $0 $1
+    Goto clean_loop
+  clean_end:
+  FindClose $0
+
+  clean_done:
+  Pop $1
+  Pop $0
+FunctionEnd
+
+
+Section "${APP_NAME}" SecApp
   SectionIn RO
 
+  Call CleanPreviousInstall
   SetOutPath "$INSTDIR"
   File /r "${SRCDIR}\*"
 
@@ -109,13 +179,13 @@ Section "GBA Editor" SecApp
   IntFmt $0 "0x%08X" $0
   WriteRegDWORD HKCU "${UNINST_KEY}" "EstimatedSize" "$0"
 
-  ; --- Association du fichier de projet (.gba-project) ---
+  ; --- Association du fichier de projet (.project) ---
   ; Par utilisateur : HKCU\Software\Classes est la vue HKCR propre a
   ; l'utilisateur, coherente avec une installation sans elevation. Un ProgID
   ; dedie porte l'icone et la commande d'ouverture ; l'exe ouvre le fichier
   ; passe en "%1" (main.py accepte ce chemin en argument positionnel).
-  WriteRegStr HKCU "Software\Classes\.gba-project" "" "${APP_KEY}.Project"
-  WriteRegStr HKCU "Software\Classes\${APP_KEY}.Project" "" "GBA Editor Project"
+  WriteRegStr HKCU "Software\Classes\.project" "" "${APP_KEY}.Project"
+  WriteRegStr HKCU "Software\Classes\${APP_KEY}.Project" "" "${APP_NAME} Project"
   WriteRegStr HKCU "Software\Classes\${APP_KEY}.Project\DefaultIcon" "" "$INSTDIR\${APP_EXE},0"
   WriteRegStr HKCU "Software\Classes\${APP_KEY}.Project\shell\open\command" "" '"$INSTDIR\${APP_EXE}" "%1"'
 
@@ -161,13 +231,17 @@ Section "Uninstall"
   DeleteRegKey HKCU "${UNINST_KEY}"
   DeleteRegKey HKCU "Software\${APP_KEY}"
 
-  ; Defaire l'association .gba-project posee a l'installation.
+  ; Defaire l'association .project posee a l'installation.
   DeleteRegKey HKCU "Software\Classes\${APP_KEY}.Project"
-  DeleteRegKey HKCU "Software\Classes\.gba-project"
+  ; `.project` est aussi l'extension d'autres outils (fichier de projet Eclipse) :
+  ; on ne supprime la cle que si l'association est encore la notre.
+  ReadRegStr $0 HKCU "Software\Classes\.project" ""
+  StrCmp $0 "${APP_KEY}.Project" 0 +2
+    DeleteRegKey HKCU "Software\Classes\.project"
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
 
   ; Volontairement conserves : les projets de l'utilisateur
-  ; (%USERPROFILE%\GBAProjects) et sa configuration toolchain
-  ; (%APPDATA%\GBAEditor). Une desinstallation ne doit pas detruire le
+  ; (%USERPROFILE%\BackstageProjects) et sa configuration toolchain
+  ; (%APPDATA%\Backstage). Une desinstallation ne doit pas detruire le
   ; travail de l'utilisateur ni ses chemins devkitPro/mGBA.
 SectionEnd

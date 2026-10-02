@@ -7,6 +7,7 @@ from core.models.components import SFX_AUTO_TRIGGERS
 from core.models.settings import BUTTON_NAMES
 from . import BaseComponentEditor, register
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 
 # CLÉS de libellé pour les trois triggers fixes — résolues par `label()` à
 # l'affichage.
@@ -48,7 +49,8 @@ class SfxEditor(BaseComponentEditor):
         else:
             sfx.addItem(label("comped.sfx_none"))
             sfx.setEnabled(False)
-        sfx.setToolTip(label("comped.sfx_tip"))
+        sfx.setToolTip(tooltip(
+            title=label("comped.sfx"), note=label("comped.sfx_note")))
         sfx.currentTextChanged.connect(
             lambda v: self.set_field(comp, "sfx_name", v if v in names else None)
         )
@@ -76,7 +78,9 @@ class SfxEditor(BaseComponentEditor):
         current = comp.trigger if comp.trigger in valid else "manual"
         idx = trigger.findData(current)
         trigger.setCurrentIndex(idx if idx >= 0 else 0)
-        trigger.setToolTip(label("comped.trigger_tip"))
+        trigger.setToolTip(tooltip(
+            title=label("comped.trigger"), body=label("comped.trigger_tip"),
+            note=label("comped.trigger_note")))
         trigger.currentIndexChanged.connect(
             lambda i: self.set_field(comp, "trigger", trigger.itemData(i))
         )

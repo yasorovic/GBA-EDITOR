@@ -11,8 +11,10 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from core.app_info import APP_NAME
 
-USER_STARTERS_DIR = Path.home() / ".gba_editor" / "project_starters"
+
+USER_STARTERS_DIR = Path.home() / f".{APP_NAME.lower()}" / "project_starters"
 BUILTIN_STARTERS_DIR = Path(__file__).resolve().parent.parent / "project_starters"
 
 

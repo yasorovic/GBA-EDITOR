@@ -20,6 +20,29 @@ source possède aussi `tone` (`info`, `accent`, `build`, `render`) et peut porte
 les textes et conserve leurs formes et paramètres. Une traduction manquante
 est autorisée et revient à la source.
 
+## Infobulles
+
+Le catalogue porte du texte brut ; `ui/common/tooltip.py` compose le balisage
+commun. Une infobulle courte emploie `tooltip(title=..., body=...)`. Si un
+raccourci existe, `shortcut=...` le place avant l'effet : le raccourci est en
+gras et l'effet en italique, séparés par une barre verticale (**Ctrl+F** | *Rechercher*).
+`note=...` rend une précision en italique ; `warning=...` ajoute `⚠` pour une
+perte, un remplacement ou une action difficile à annuler.
+
+Sans raccourci, le titre est l'action ou le réglage, en gras. Le corps explique l'effet avec
+des phrases courtes, à la troisième personne : le texte décrit un usage
+(« Crée une zone de texte », « Un clic assigne un sprite ») et ne s'adresse
+jamais à l'utilisateur (ni impératif, ni « vous »). Un geste se décrit par son
+effet : « Glisser déplace la vue », pas « Faites glisser ». Une barre verticale ne sépare que des éléments autonomes,
+notamment un raccourci et une action. Les tirets cadratins ne sont pas employés
+dans les infobulles : une phrase complète, deux-points ou point-virgule exprime
+la relation voulue.
+
+Les noms techniques restent en anglais dans toutes les langues : types
+d’assets et de composants du moteur (`MusicBox`, `JingleBox`, `SoundBox`,
+`prefab`…), termes matériels (`OAM`, `VRAM`, `charblock`) et noms d’API. La
+traduction ne porte que sur le vocabulaire courant autour d’eux.
+
 Les tables de menus, directions, transitions et modes conservent des clés,
 résolues à l’affichage. Les valeurs par défaut des fonctions sont résolues à
 l’appel, pas à l’import. Dans les sélecteurs, `AssetKind.label` reste

@@ -77,7 +77,9 @@ class SpriteCenterPanel(QWidget):
         root.addWidget(self._timeline)
 
         toolbar = self._canvas_panel.toolbar
+        toolbar.btn_prev.clicked.connect(lambda: self._step_frame(-1))
         toolbar.btn_play.toggled.connect(self._on_play_toggled)
+        toolbar.btn_next.clicked.connect(lambda: self._step_frame(+1))
         self._canvas_panel.paint_strip.selected.connect(self._on_paint_palette_selected)
 
         # Shift+X/Y : portés ici (pas sur _FrameCanvas seul) pour marcher
@@ -235,10 +237,28 @@ class SpriteCenterPanel(QWidget):
         if not self._sd or not self._active_frames():
             return
         n = len(self._active_frames())
-        self._sel_frame = (self._sel_frame + 1) % n
+        next_frame = self._sel_frame + 1
+        if next_frame >= n:
+            if not (self._state and self._state.loop):
+                self._anim_timer.stop()
+                self._canvas_panel.toolbar.btn_play.setChecked(False)
+                return
+            next_frame = 0
+        self._sel_frame = next_frame
         # Mettre à jour la sélection dans la timeline sans émettre frame_selected
         for i, t in enumerate(self._timeline._thumbs):
             t.set_selected(i == self._sel_frame)
+        self._timeline._selected = self._sel_frame
+        self._refresh_canvas()
+
+    def _step_frame(self, direction: int):
+        """Sélectionne la frame précédente ou suivante dans la timeline."""
+        frames = self._active_frames()
+        if not frames:
+            return
+        self._sel_frame = (self._sel_frame + direction) % len(frames)
+        for i, thumb in enumerate(self._timeline._thumbs):
+            thumb.set_selected(i == self._sel_frame)
         self._timeline._selected = self._sel_frame
         self._refresh_canvas()
 

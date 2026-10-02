@@ -13,12 +13,14 @@ BuildWorker pour que le pipeline reste découplé de l'UI.
 from __future__ import annotations
 
 import math
+import os
 import shutil
 import struct
 import subprocess
 from pathlib import Path
 from typing import Optional, Callable
 
+from core.app_info import APP_NAME
 from core.models.sprite import SpriteAsset
 from core.models.background import BackgroundLayer
 from core.project import Project
@@ -31,6 +33,21 @@ from codegen.asset_cache import AssetBuildCache, file_digest, tool_signature
 
 
 # ── Helpers image ──────────────────────────────────────────────────────────────
+
+def relative_arg(path: Path, cwd: Path) -> str:
+    """Le chemin à PASSER à un outil externe qui tourne dans `cwd`.
+
+    grit et mmutil sont des exécutables Windows « ANSI » : un dossier de projet
+    dont le nom sort de la page de code (japonais, cyrillique…) leur arrive en
+    `?`, et ils ne trouvent plus leurs fichiers. Le dossier de travail, lui, est
+    passé en Unicode au système : un chemin RELATIF à `cwd` n'a donc plus rien
+    de risqué tant que les noms de fichiers eux-mêmes le sont peu. Repli sur le
+    chemin absolu si les deux n'ont pas de chemin relatif (autre lecteur)."""
+    try:
+        return os.path.relpath(path, cwd)
+    except ValueError:
+        return str(path)
+
 
 def png_size(path: Path) -> tuple[int, int]:
     """Lit width/height depuis le header IHDR du PNG (bytes 16-23)."""
@@ -178,10 +195,10 @@ class GritBackground:
             scratch.mkdir(parents=True, exist_ok=True)
             out_base = str(scratch / sym)
             cmd = [
-                str(self._grit), str(tmp),
+                str(self._grit), relative_arg(tmp, p.grit_out_dir),
                 "-gt", "-gB4", "-mRtf", "-mLf",
                 "-p", "-pn16", "-ftc",
-                "-o", out_base, "-s", sym,
+                "-o", relative_arg(Path(out_base), p.grit_out_dir), "-s", sym,
             ]
             if quantize and mp_slot is not None:
                 cmd.append(f"-mp{mp_slot}")
@@ -552,11 +569,11 @@ class GritSprites:
                        f"[grit Actor] {sprite.name} <- {ap.name} "
                        f"({sprite.frame_w}x{sprite.frame_h}px)")
             cmd = [
-                str(self._grit), str(grit_src),
+                str(self._grit), relative_arg(grit_src, p.grit_out_dir),
                 "-gt", "-gB4",
                 f"-Mw{sprite.tile_w}", f"-Mh{sprite.tile_h}",
                 "-m!", "-p", "-pn16", "-ftc",
-                "-o", out_base,
+                "-o", relative_arg(Path(out_base), p.grit_out_dir),
             ]
             if not self._run_cmd(cmd, f"[grit:{sprite.name}]", cwd=p.grit_out_dir):
                 return False
@@ -751,8 +768,8 @@ class MmutilAudio:
             encoded = {}
 
         all_files = (
-            [str(encoded.get(s.name, ap)) for s, ap in sound_assets["sfx"]] +
-            [str(ap) for _, ap in sound_assets["music"]]
+            [relative_arg(encoded.get(s.name, ap), p.build_dir) for s, ap in sound_assets["sfx"]] +
+            [relative_arg(ap, p.build_dir) for _, ap in sound_assets["music"]]
         )
         if not all_files:
             return True
@@ -817,6 +834,7 @@ class MmutilAudio:
                     proc = subprocess.run(
                         [str(bin2s), "soundbank.bin"],
                         cwd=str(p.build_dir), capture_output=True, text=True,
+                        errors="replace",
                     )
                 except FileNotFoundError as e:
                     self._emit("error_line", f"[bin2s] introuvable : {e}")
@@ -834,7 +852,7 @@ class MmutilAudio:
                     h_dst = p.src_dir / "soundbank.bin.h"
                     build_output.write(
                         h_dst,
-                        "/* Généré par GBA Editor — déclare le symbole produit par bin2s */\n"
+                        f"/* Généré par {APP_NAME} — déclare le symbole produit par bin2s */\n"
                         "#ifndef SOUNDBANK_BIN_H\n"
                         "#define SOUNDBANK_BIN_H\n"
                         "extern const unsigned char soundbank_bin[];\n"

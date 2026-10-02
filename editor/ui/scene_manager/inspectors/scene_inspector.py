@@ -26,6 +26,7 @@ from ui.common.theme import C, T, QSS
 from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import W, ScriptPickerPopup, NotesEdit, CollapsibleCard
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.common.palette_slot_grid import PaletteSlotGridAsset
 from ui.common import icons
 
@@ -206,6 +207,9 @@ class SceneInspector(QWidget):
         notes_card = CollapsibleCard(label("common.note"))
         notes_inner = notes_card.body_layout
         self._notes_edit = NotesEdit()
+        self._notes_edit.setToolTip(tooltip(
+            title=label("common.note"), body=label("sceneinsp.notes_tip"),
+        ))
         self._notes_edit.committed.connect(lambda text: self._set_scene_field("notes", text))
         notes_inner.addWidget(self._notes_edit)
         cl.addWidget(notes_card)
@@ -229,7 +233,7 @@ class SceneInspector(QWidget):
             f"border:2px solid {C.ACCENT}; border-radius:5px;}}"
             f"QPushButton:hover{{background:{C.BG_HOVER};}}"
         )
-        self._btn_mode.setToolTip(label("sceneinsp.mode_btn_tip"))
+        self._btn_mode.setToolTip(tooltip(title=label("sceneinsp.mode_btn_title")))
         self._btn_mode.clicked.connect(self._show_mode_menu)
         mode_row.addWidget(self._btn_mode)
 
@@ -266,13 +270,20 @@ class SceneInspector(QWidget):
         self._btn_backdrop.setFixedSize(40, 22)
         self._btn_backdrop.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_backdrop.clicked.connect(self._pick_backdrop)
-        self._btn_backdrop.setToolTip(label("sceneinsp.backdrop_tip"))
+        self._btn_backdrop.setToolTip(tooltip(
+            title=label("sceneinsp.backdrop_title"),
+            body=label("sceneinsp.backdrop_tip"),
+            note=label("sceneinsp.backdrop_note"),
+        ))
         self._lbl_backdrop = QLabel()
         self._lbl_backdrop.setFont(QFont(T.MONO, T.XS))
         self._lbl_backdrop.setStyleSheet(f"color:{C.TEXT_MUTED};")
         self._btn_backdrop_reset = W.btn_ghost(label("sceneinsp.backdrop_reset"))
         self._btn_backdrop_reset.setFont(QFont(T.UI, T.XS))
-        self._btn_backdrop_reset.setToolTip(label("sceneinsp.backdrop_reset_tip"))
+        self._btn_backdrop_reset.setToolTip(tooltip(
+            title=label("sceneinsp.backdrop_reset"),
+            body=label("sceneinsp.backdrop_reset_tip"),
+        ))
         self._btn_backdrop_reset.clicked.connect(self._reset_backdrop)
         bd_row.addWidget(lbl_bd)
         bd_row.addWidget(self._btn_backdrop)
@@ -302,7 +313,10 @@ class SceneInspector(QWidget):
         self._combo_trans.setStyleSheet(QSS.combobox)
         for kind, trans_label in _TRANSITIONS:
             self._combo_trans.addItem(label(trans_label), kind)
-        self._combo_trans.setToolTip(label("sceneinsp.transition_tip"))
+        self._combo_trans.setToolTip(tooltip(
+            title=label("sceneinsp.transition_title"),
+            body=label("sceneinsp.transition_tip"),
+        ))
         self._combo_trans.currentIndexChanged.connect(self._on_transition_kind)
         self._spin_trans = QSpinBox()
         self._spin_trans.setRange(1, 255)
@@ -310,7 +324,10 @@ class SceneInspector(QWidget):
         self._spin_trans.setSuffix(label("sceneinsp.frames_suffix"))
         self._spin_trans.setFont(QFont(T.MONO, T.SM))
         self._spin_trans.setStyleSheet(QSS.spinbox)
-        self._spin_trans.setToolTip(label("sceneinsp.transition_frames_tip"))
+        self._spin_trans.setToolTip(tooltip(
+            title=label("sceneinsp.transition_duration"),
+            body=label("sceneinsp.transition_frames_tip"),
+        ))
         self._spin_trans.valueChanged.connect(
             lambda v: self._set_scene_field("transition_frames", int(v)))
         trans_row.addWidget(lbl_trans)
@@ -329,7 +346,11 @@ class SceneInspector(QWidget):
         self._combo_music = _LazyPopupCombo()
         self._combo_music.setFont(QFont(T.UI, T.SM))
         self._combo_music.setStyleSheet(QSS.combobox)
-        self._combo_music.setToolTip(label("sceneinsp.music_tip"))
+        self._combo_music.setToolTip(tooltip(
+            title=label("sceneinsp.music_title"),
+            body=label("sceneinsp.music_tip"),
+            note=label("sceneinsp.music_note"),
+        ))
         self._combo_music.set_lazy_loader(self._materialize_music_catalog)
         self._combo_music.currentIndexChanged.connect(self._on_music)
         music_row.addWidget(lbl_music)
@@ -359,6 +380,9 @@ class SceneInspector(QWidget):
         bg_inner = bg_card.body_layout
 
         self._btn_bg_add = W.btn_add(label("sceneinsp.bg_add"))
+        self._btn_bg_add.setToolTip(tooltip(
+            title=label("sceneinsp.bg_add"), body=label("sceneinsp.bg_add_tip"),
+        ))
         self._btn_bg_add.clicked.connect(self._add_bg_layer)
         bg_card.add_header_widget(self._btn_bg_add)
 
@@ -565,10 +589,17 @@ class SceneInspector(QWidget):
             item_text = label("sceneinsp.mode_menu", n=m) + ("  ✓" if m == current else "")
             act = menu.addAction(item_text)
             if m == 0:
-                act.setToolTip(label(MODE_INFO[0]["tip"]))
+                act.setToolTip(tooltip(
+                    title=label("sceneinsp.mode_menu", n=m),
+                    body=label(MODE_INFO[0]["tip"]),
+                ))
             else:
                 act.setEnabled(False)
-                act.setToolTip(label("sceneinsp.mode_not_impl", tip=label(MODE_INFO[m]["tip"])))
+                act.setToolTip(tooltip(
+                    title=label("sceneinsp.mode_menu", n=m),
+                    body=label(MODE_INFO[m]["tip"]),
+                    note=label("sceneinsp.mode_not_impl_note"),
+                ))
             act.triggered.connect(lambda _c=False, m=m: self._on_set_mode(m))
         menu.exec(self._btn_mode.mapToGlobal(QPoint(0, self._btn_mode.height())))
 
@@ -702,7 +733,7 @@ class SceneInspector(QWidget):
         for row in self._bg_layer_rows:
             # hide() avant setParent(None) : un widget visible détaché de son
             # parent redevient une fenêtre top-level à part entière (c'est le
-            # popup flottant "GBA Editor" observé au Ctrl+S) ; deleteLater()
+            # popup flottant "Backstage" observé au Ctrl+S) ; deleteLater()
             # pour le détruire proprement plutôt que le laisser orphelin.
             row.hide()
             row.setParent(None)
@@ -752,7 +783,6 @@ class SceneInspector(QWidget):
             self._bg_layer_rows.append(row)
 
         self._refresh_bound_rows()
-        self._refresh_ui_layer_marks()
         self._btn_bg_add.setEnabled(len(self._scene.background_layers) < 4)
 
     def _dim_label(self, text: str) -> QLabel:
@@ -1383,6 +1413,9 @@ class SceneInspector(QWidget):
         self._ui_pal_slot = ui_pal_bank_slot(
             active, cur, icons.COLOR_UI, on_picked=self._on_ui_pal_changed,
             project=self._project, parent=self)
+        self._ui_pal_slot.setToolTip(tooltip(
+            title=label("sceneinsp.ui_colors_title"), body=label("sceneinsp.ui_colors_tip"),
+        ))
         self._ui_pal_box.addWidget(self._ui_pal_slot)
 
     def _on_ui_pal_changed(self, new: int):
@@ -1425,6 +1458,9 @@ class SceneInspector(QWidget):
             list(getattr(p, "fonts", []) or []), usable, cur, icons.COLOR_UI,
             on_picked=self._on_scene_font_changed, parent=self,
             project_default=getattr(p.settings, "default_font", "") if p else "")
+        self._font_slot.setToolTip(tooltip(
+            title=label("sceneinsp.ui_font_title"), body=label("sceneinsp.ui_font_tip"),
+        ))
         self._font_box.addWidget(self._font_slot)
 
     def _on_scene_font_changed(self, name: str):
@@ -1432,16 +1468,6 @@ class SceneInspector(QWidget):
             return
         self._set_scene_field("font_name", name or "")
         self.changed.emit()
-
-    def _refresh_ui_layer_marks(self):
-        """Marque visuellement (icône 'UI') la rangée dont le bg_slot est le slot
-        d'UI de la scène — son charblock est réservé à la police (cf.
-        main_gen._gen_scene_init), aucune image ne devrait y être assignée. Le slot
-        est désormais dérivé des nœuds `Interface` (v0.12), plus de `Scene.text_bg`."""
-        text_bg = (self._project.scene_ui_bg_slot(self._scene)
-                   if self._project and self._scene else -1)
-        for row in self._bg_layer_rows:
-            row.set_ui_layer(row.slot_index == text_bg)
 
     def _persist(self):
         if self._project and self._scene:

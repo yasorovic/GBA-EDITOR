@@ -27,6 +27,7 @@ d'annulation — qui ramène le projet à zéro langue.
 from __future__ import annotations
 
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from typing import Optional
 
 from PyQt6.QtWidgets import (
@@ -122,8 +123,9 @@ class LanguagesCard(CollapsibleCard):
         e.setStyleSheet(QSS.lineedit)
         e.setFixedWidth(52)
         e.setPlaceholderText(placeholder)
-        e.setToolTip(
-            label('langcard.code_tip'))
+        e.setToolTip(tooltip(
+            title=label('langcard.code_title'), body=label('langcard.code_tip'),
+            note=label('langcard.code_note')))
         return e
 
     def _name_field(self, placeholder: str) -> QLineEdit:
@@ -132,7 +134,8 @@ class LanguagesCard(CollapsibleCard):
         e.setStyleSheet(QSS.lineedit)
         e.setPlaceholderText(placeholder)
         e.setMinimumWidth(60)
-        e.setToolTip(label('langcard.name_tip'))
+        e.setToolTip(tooltip(
+            title=label('langcard.name_title'), body=label('langcard.name_tip')))
         return e
 
     # ── Chargement ────────────────────────────────────────────────
@@ -202,12 +205,16 @@ class LanguagesCard(CollapsibleCard):
         btn.setFixedSize(22, 22)
         btn.setStyleSheet(BTN_ICON)
         btn.setIcon(icons.get("font", C.ACCENT if n else C.TEXT_DIM))
-        btn.setToolTip(label('langcard.font_replacements', n=n) if n
-                       else label('langcard.no_font_replacement'))
+        btn.setToolTip(tooltip(
+            title=label('langcard.font_title'),
+            body=(label('langcard.font_replacements', n=n) if n
+                  else label('langcard.no_font_replacement')),
+            note=label('langcard.font_note')))
         btn.clicked.connect(lambda _c=False, _l=lang.code: self._toggle_fonts(_l))
         row.addWidget(btn)
 
-        rm = W.btn_danger(label('langcard.remove_tip'))
+        rm = W.btn_danger(tooltip(
+            title=label('langcard.remove_title'), body=label('langcard.remove_tip')))
         rm.clicked.connect(lambda _c=False, _i=index: self._remove(_i))
         row.addWidget(rm)
         return host

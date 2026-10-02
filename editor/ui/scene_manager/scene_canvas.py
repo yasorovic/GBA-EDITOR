@@ -1,5 +1,5 @@
 """
-GBA Editor — Scene Canvas
+Backstage — Scene Canvas
 Canvas dynamique (plafond monde 32767×32767) avec caméra 240×160 déplaçable.
 
 Layers (z-order) :
@@ -11,6 +11,7 @@ Layers (z-order) :
 """
 
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 import copy
 from typing import Optional
 
@@ -25,7 +26,7 @@ from core.selection_bus import get_bus, CameraSelection
 from ui.common.theme import T, QSS, C
 from ui.common.palette_bank_strip import PaletteBankStrip
 from ui.common.canvas_top_bar import CanvasTopBar
-from PyQt6.QtCore import QPointF, Qt, pyqtSignal
+from PyQt6.QtCore import QPointF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QImage, QPixmap
 from PyQt6.QtWidgets import QVBoxLayout, QWidget
 # Rasterisation des fonds + aperçus — extrait (A3, sous-package canvas/).
@@ -47,6 +48,9 @@ from ui.scene_manager.canvas.canvas_scene import GBAScene
 from ui.scene_manager.canvas.canvas_view import GBAView
 # Palette d'outils flottante — extraite (A3, sous-package canvas/).
 from ui.scene_manager.canvas.canvas_toolbar import FloatingToolbar
+# Table des raccourcis de l'outil actif.
+from ui.common.shortcut_hints import ShortcutHints
+from ui.scene_manager.canvas.canvas_hints import scene_canvas_hints
 # Contrôleurs (logique non graphique) — extraits (A3, sous-package canvas/).
 from ui.scene_manager.canvas.canvas_controllers import (
     UIRegionController, SceneInpaintingController, CanvasClipboard,
@@ -77,6 +81,9 @@ class CanvasContainer(QWidget):
         self._toolbar.move(10, 10)
         self._toolbar.tool_changed.connect(self._on_tool_changed)
         self._toolbar.raise_()
+
+        # Table des raccourcis de l'outil actif (bas-droite, repliée au repos).
+        self._hints = ShortcutHints(self, scene_canvas_hints, self._toolbar.current_tool)
 
         # Bandeau flottant de sélection de la banque de peinture (bas-centre,
         # même widget que Sprite Editor/Background Editor — cf. palette_bank_strip).
@@ -115,6 +122,7 @@ class CanvasContainer(QWidget):
         strip.move(x, y)
 
     def _on_tool_changed(self, tool: str):
+        self._hints.set_context(tool)
         self.tool_changed.emit(tool)
 
     @property
@@ -203,29 +211,43 @@ class SceneEditor(QWidget):
         layout.setSpacing(0)
 
         # ── Barre haut — composant partagé (cf. ui/common/canvas_top_bar) ──
-        self._bar = CanvasTopBar(label('scncanvas.fit_tip'))
+        self._bar = CanvasTopBar(
+            tooltip(title=label('scncanvas.fit'), shortcut="F")
+        )
         self._bar.zoom_step_asked.connect(self._zoom_step)
         self._bar.fit_asked.connect(self._fit)
         self._bar.set_canvas_size(GBA_W, GBA_H)
 
         # ── Toggles d'affichage iconifiés (remplacent les cases texte) ──
         self._chk_grid8 = self._bar.add_toggle(
-            "view_grid", label('scncanvas.grid_8px'), self._on_grid8_toggle)
+            "view_grid", tooltip(
+                title=label('scncanvas.grid_8px'), body=label('scncanvas.grid_8px_tip')
+            ), self._on_grid8_toggle)
         self._chk_grid16 = self._bar.add_toggle(
-            "view_grid_large", label('scncanvas.grid_16px'), self._on_grid16_toggle)
+            "view_grid_large", tooltip(
+                title=label('scncanvas.grid_16px'), body=label('scncanvas.grid_16px_tip')
+            ), self._on_grid16_toggle)
         self._chk_snap = self._bar.add_toggle(
-            "view_snap", label('scncanvas.snap_tip'),
+            "view_snap", tooltip(
+                title=label('scncanvas.snap'), body=label('scncanvas.snap_tip')
+            ),
             self._on_snap_toggle)
         self._bar.add_spacing(10)
         self._chk_boxes_actors = self._bar.add_toggle(
-            "view_boxes", label('scncanvas.actor_boxes_tip'),
+            "view_boxes", tooltip(
+                title=label('scncanvas.actor_boxes'), body=label('scncanvas.actor_boxes_tip')
+            ),
             self._on_boxes_actors_toggle)
         self._chk_collision_view = self._bar.add_toggle(
-            "view_collision", label('scncanvas.collisions_tip'),
+            "view_collision", tooltip(
+                title=label('scncanvas.collisions'), body=label('scncanvas.collisions_tip')
+            ),
             self._on_collision_view_toggle)
         self._bar.add_spacing(10)
         self._chk_ui_elements = self._bar.add_toggle(
-            "ui_layout", label('scncanvas.interface_tip'),
+            "ui_layout", tooltip(
+                title=label('scncanvas.interface'), body=label('scncanvas.interface_tip')
+            ),
             self._on_ui_elements_toggle)
         # blockSignals : self._gba_scene est créé plus bas, et le `toggled`
         # SYNCHRONE de setChecked ferait planter _on_ui_elements_toggle dessus
@@ -266,8 +288,13 @@ class SceneEditor(QWidget):
 
         self._canvas_container.tool_changed.connect(self._on_tool_changed)
         self._gba_view.collision_painted.connect(self._on_collision_painted)
+        # Après une pose, retour à Sélection — différé : l'outil qui émet est
+        # encore au milieu de son on_press/on_release quand le signal part.
+        self._gba_view.placement_done.connect(
+            lambda: QTimer.singleShot(
+                0, lambda: self._canvas_container.activate_tool_shortcut("select")))
         self._gba_view.actor_context_requested.connect(self._on_actor_context_menu)
-        self._gba_view.duplicate_drag_finished.connect(self._on_duplicate_drag)
+        self._gba_view.duplicate_drag_started.connect(self._on_duplicate_drag)
 
         self._setup_shortcuts()
 
@@ -459,8 +486,9 @@ class SceneEditor(QWidget):
     # Ctrl+D, Alt+glisser et Ctrl+V passent par le même chemin, seule l'origine
     # du décalage change. Acteurs ET éléments d'interface.
 
-    def _duplicate_selection(self, dx: int, dy: int):
-        """Duplique la sélection courante, décalée de (dx, dy)."""
+    def _duplicate_selection(self, dx: int, dy: int, in_place: bool = False):
+        """Duplique la sélection courante, décalée de (dx, dy). `in_place` : la
+        copie naît pile sur l'original (Alt+glisser — la souris l'emporte ensuite)."""
         actors = [it.scene_sprite for it in self._selected_sprite_items()]
         elements = [it._region for it in self._selected_ui_items()]
         if not actors and not elements:
@@ -469,16 +497,17 @@ class SceneEditor(QWidget):
         # Une zone en cible BG s'écrit dans une tilemap : son origine ne peut
         # pas tomber entre deux tuiles, donc décalage aimanté.
         edx, edy = _tile_snap(dx), _tile_snap(dy)
-        if elements and not edx and not edy:
+        if elements and not edx and not edy and not in_place:
             # Geste plus court qu'une demi-tuile : la copie tomberait pile sur
             # l'original, donc invisible. Un cran de grille, comme au Ctrl+D.
             edx = edy = 8
         new_elements = self._ui_region_ctrl.duplicate_elements(elements, edx, edy)
         self._select_copies(new_actors, new_elements, 'scncanvas.duplicated_elements')
 
-    def _on_duplicate_drag(self, dx: int, dy: int):
-        """Alt+glisser relâché : la vue a déjà remis les originaux en place."""
-        self._duplicate_selection(dx, dy)
+    def _on_duplicate_drag(self):
+        """Alt+glisser entamé : la vue a remis les originaux en place, la copie
+        naît dessus et la vue la saisit aussitôt."""
+        self._duplicate_selection(0, 0, in_place=True)
 
     def _shortcut_copy(self):
         """Ctrl+C — met la sélection dans le presse-papier du canvas.
@@ -1227,6 +1256,10 @@ class SceneEditor(QWidget):
         self._reload_sprites()
         self.refresh_cameras()
         self._reload_ui_regions()
+
+    def has_pending_save(self) -> bool:
+        """Un déplacement au clavier attend encore son écriture (debounce)."""
+        return self._nudge_save_timer.isActive()
 
     def flush_camera_pos(self):
         """Appelé avant save_scene pour persister le cadrage de TOUTES les

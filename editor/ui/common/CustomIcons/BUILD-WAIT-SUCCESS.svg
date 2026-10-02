@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg width="100%" height="100%" viewBox="0 0 222 279" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:1.5;">
+<svg width="100%" height="100%" viewBox="0 0 230 281" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:affinity="https://www.affinity.studio/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:1.5;">
     <g transform="matrix(1,0,0,1,-1312,-1305)">
-        <g id="Plan-de-travail8" serif:id="Plan de travail8" transform="matrix(1,0,0,0.899822,-0.895037,168.848123)">
+        <g id="BUILD---WAITING---COMPLETE" affinity:id="BUILD - WAITING - COMPLETE" transform="matrix(1.038334,0,0,0.909241,-51.223246,156.944892)">
             <rect x="1312.895" y="1263.718" width="221.509" height="307.949" style="fill:none;"/>
-            <g transform="matrix(0.905351,0,0,0.770317,2305.992485,1068.100491)">
+            <g transform="matrix(0.871927,0,0,0.762337,2273.384698,1068.407262)">
                 <g transform="matrix(1.476165,0,0,1.928083,-1135.24287,-2350.559284)">
                     <path d="M164.803,1421.729C165.082,1421.171 177.921,1415.661 171.444,1432.057C165.368,1447.436 165.395,1446.663 158.721,1461.68C157.271,1464.944 156.35,1464.052 153.824,1466.577C153.021,1467.38 154.957,1469.574 147.704,1480.454C144.299,1485.561 142.819,1488.24 144.276,1534.883C144.452,1540.496 147.184,1542.784 138.89,1546.39C115.569,1556.529 62.671,1540.286 61.525,1533.414C59.373,1520.503 68.934,1520.969 71.073,1505.994C76.258,1469.706 73.305,1468.724 85.518,1444.298C86.612,1442.111 87.249,1435.152 96.535,1432.057C118.457,1424.749 101.215,1392.517 129.489,1386.862C131.944,1386.371 141.776,1404.507 147.704,1408.064C158.372,1414.465 164.543,1413.078 168.308,1413.221C171.053,1416.004 174.269,1416.502 171.444,1419.327" style="fill:white;stroke:black;stroke-width:1px;"/>
                 </g>

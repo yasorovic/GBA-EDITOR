@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Backstage
+Comment=Éditeur de jeux Game Boy Advance
+# %f : le fichier <Nom>.project double-cliqué est passé en argument.
+Exec=Backstage %f
+Icon=icon
+Categories=Development;Game;
+Terminal=false
+# Associe le manifeste de projet à l'éditeur (type déclaré dans
+# backstage-project.xml, installé dans usr/share/mime/packages/ par la CI).
+MimeType=application/x-backstage-project;

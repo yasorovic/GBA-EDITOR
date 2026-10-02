@@ -45,6 +45,7 @@ from ui.common.theme import C, T, QSS
 from ui.common.widgets import BTN_ICON
 from ui.common import icons
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.text_editor.colors import TEXT_COLOR
 from ui.text_editor.font_screen_preview import FontScreenPreview
 from ui.text_editor.markup_toolbar import MarkupToolbar
@@ -110,8 +111,10 @@ class _LangTabs(QWidget):
             b.setCheckable(True)
             b.setFont(QFont(T.UI, T.XS))
             b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.setToolTip(label("txtwb.source_tab", name=disp) if is_source
-                         else label("txtwb.translation_tab", name=disp))
+            b.setToolTip(tooltip(title=(
+                label("txtwb.source_tab", name=disp) if is_source
+                else label("txtwb.translation_tab", name=disp)
+            )))
             b.setStyleSheet(
                 f"QToolButton{{background:transparent; color:{C.TEXT_DIM};"
                 f"border:none; border-bottom:2px solid transparent;"
@@ -237,7 +240,9 @@ class TextWorkbench(QWidget):
         self._btn_copy.setFixedSize(22, 22)
         self._btn_copy.setStyleSheet(BTN_ICON)
         self._btn_copy.setIcon(icons.get("copy", C.TEXT_DIM))
-        self._btn_copy.setToolTip(label("txtwb.copy_tip"))
+        self._btn_copy.setToolTip(tooltip(
+            title=label("txtwb.copy_key_title"), body=label("txtwb.copy_tip"),
+        ))
         self._btn_copy.clicked.connect(self._copy_key)
         hl.addWidget(self._btn_copy)
 
@@ -263,13 +268,15 @@ class TextWorkbench(QWidget):
                 hl.addWidget(arrow)
                 self._path_seps.append(arrow)
             e = _PillEdit(label("txtwb.level", n=lvl + 1))
-            e.setToolTip(label("txtwb.filing_tip"))
+            e.setToolTip(tooltip(
+                title=label("txtwb.filing_title"), body=label("txtwb.filing_tip"),
+            ))
             e.editingFinished.connect(lambda _l=lvl: self._commit_path(_l))
             hl.addWidget(e)
             self._path_edits.append(e)
         self._btn_add_path = QToolButton()
         self._btn_add_path.setIcon(icons.get("add", C.TEXT_DIM))
-        self._btn_add_path.setToolTip(label("txtwb.add_level_tip"))
+        self._btn_add_path.setToolTip(tooltip(title=label("txtwb.add_level_tip")))
         self._btn_add_path.setStyleSheet(BTN_ICON)
         self._btn_add_path.clicked.connect(self._add_path_level)
         hl.addWidget(self._btn_add_path)
@@ -316,14 +323,16 @@ class TextWorkbench(QWidget):
         self._btn_markup = QToolButton()
         self._btn_markup.setCheckable(True)
         self._btn_markup.setIcon(icons.get("mk_tag", C.TEXT_DIM))
-        self._btn_markup.setToolTip(label("txtwb.show_markup_tip"))
+        self._btn_markup.setToolTip(tooltip(title=label("txtwb.show_markup_tip")))
         self._btn_markup.setStyleSheet(BTN_ICON)
         self._btn_markup.toggled.connect(self._preview.set_markup_visible)
         self._markup_bar.add_trailing_widget(self._btn_markup)
         self._preview_font = QComboBox()
         self._preview_font.setFont(QFont(T.UI, T.XS))
         self._preview_font.setStyleSheet(QSS.combobox)
-        self._preview_font.setToolTip(label("txtwb.preview_font_tip"))
+        self._preview_font.setToolTip(tooltip(
+            title=label("txtwb.preview_font_title"), body=label("txtwb.preview_font_tip"),
+        ))
         self._preview_font.currentIndexChanged.connect(self._on_preview_font)
         self._markup_bar.add_trailing_widget(self._preview_font)
         lay.addWidget(self._markup_bar)
@@ -638,20 +647,22 @@ class TextWorkbench(QWidget):
             QSS.lineedit if editable else
             QSS.lineedit + f"QLineEdit{{color:{C.TEXT_MUTED}; background:{C.BG_PANEL};}}"
         )
-        self._key_edit.setToolTip(
-            label("txtwb.key_tip_head")
-            + (label("txtwb.key_tip_auto") if auto
-               else label("txtwb.key_tip_hand"))
-        )
+        self._key_edit.setToolTip(tooltip(
+            title=label("txtwb.key_title"),
+            body=label("txtwb.key_tip_auto") if auto else label("txtwb.key_tip_hand"),
+        ))
         self._btn_lock.setIcon(icons.get(
             "key_auto" if auto else "key_manual",
             C.TEXT_DIM if auto else TEXT_COLOR))
-        self._btn_lock.setToolTip(
-            (label("txtwb.lock_attached")
-             if not self._key_unlocked else
-             label("txtwb.lock_reattach"))
-            if auto else
-            label("txtwb.lock_hand"))
+        if auto and not self._key_unlocked:
+            lock_tip = tooltip(title=label("txtwb.lock_attached"),
+                               body=label("txtwb.lock_attached_tip"))
+        elif auto:
+            lock_tip = tooltip(title=label("txtwb.lock_reattach"))
+        else:
+            lock_tip = tooltip(title=label("txtwb.lock_hand"),
+                               body=label("txtwb.lock_hand_tip"))
+        self._btn_lock.setToolTip(lock_tip)
 
     def _copy_key(self):
         """Copie la clé dans le presse-papier (à coller dans un script)."""

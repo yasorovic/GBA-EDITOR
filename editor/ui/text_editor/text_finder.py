@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QShortcut, QKeySequence
 from PyQt6.QtWidgets import QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
 
 from ui.common import icons
@@ -24,12 +24,14 @@ class TextFinder(QWidget):
 
     path_selected = pyqtSignal(object)  # tuple[str, ...]
     folder_renamed = pyqtSignal(object, str)  # (path, nouveau segment)
+    key_renamed = pyqtSignal(object, str)     # (Text à clé manuelle, nouvelle clé)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._project = None
         self._blocking = False
         self._editing_path: tuple[str, ...] | None = None
+        self._editing_text = None
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
@@ -48,6 +50,9 @@ class TextFinder(QWidget):
         self._tree.itemSelectionChanged.connect(self._on_selection)
         self._tree.itemDoubleClicked.connect(self._begin_rename)
         self._tree.itemChanged.connect(self._commit_rename)
+        QShortcut(QKeySequence(Qt.Key.Key_F2), self._tree,
+                  activated=self._rename_current,
+                  context=Qt.ShortcutContext.WidgetShortcut)
         self._tree.itemExpanded.connect(lambda it: self._refresh_folder_icon(it, True))
         self._tree.itemCollapsed.connect(lambda it: self._refresh_folder_icon(it, False))
         root.addWidget(self._tree, 1)
@@ -113,14 +118,31 @@ class TextFinder(QWidget):
         if not self._blocking:
             self.path_selected.emit(self.selected_path())
 
+    def _hand_named_leaf(self, path: tuple[str, ...]):
+        """Le texte de cette feuille si elle en désigne un seul dont la clé est
+        nommée à la main, sinon None."""
+        matches = [t for t in getattr(self._project, "texts", ())
+                   if tuple(t.path) == path]
+        if len(matches) == 1 and not matches[0].auto_key:
+            return matches[0]
+        return None
+
+    def _rename_current(self) -> None:
+        item = self._tree.currentItem()
+        if item is not None:
+            self._begin_rename(item, 0)
+
     def _begin_rename(self, item, _column) -> None:
         """Même renommage en place que les autres finders, jamais une modale."""
         path = tuple(item.data(0, _ROLE_PATH) or ())
         if not path:
             return
         self._editing_path = path
+        self._editing_text = self._hand_named_leaf(path)
         self._blocking = True
-        item.setText(0, path[-1])       # ne jamais faire éditer le compteur
+        # Une clé nommée à la main ne suit plus le rangement : renommer sa
+        # feuille doit renommer la CLÉ, sinon le geste ne ferait rien de visible.
+        item.setText(0, self._editing_text.key if self._editing_text else path[-1])
         item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
         self._blocking = False
         QTimer.singleShot(0, lambda: self._tree.editItem(item, 0))
@@ -129,9 +151,14 @@ class TextFinder(QWidget):
         if self._blocking or self._editing_path is None:
             return
         path, self._editing_path = self._editing_path, None
+        text, self._editing_text = self._editing_text, None
         typed = item.text(0).strip()
         item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        if typed and typed != path[-1]:
+        if text is not None:
+            if typed and typed != text.key:
+                self.key_renamed.emit(text, typed)
+            self.refresh()
+        elif typed and typed != path[-1]:
             self.folder_renamed.emit(path, typed)
         else:
             self.refresh()

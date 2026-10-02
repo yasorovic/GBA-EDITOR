@@ -19,6 +19,7 @@ from core.font_rasterizer import (FontRasterizerError, FontRasterizerUnavailable
                                   display_coverage, raster_glyph_cell)
 from ui.common.theme import C, T, QSS
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 
 
 _SAMPLE = "AaBb 0123!?\nInterligne"
@@ -203,7 +204,7 @@ class FontAssetPreview(QWidget):
         lay.addWidget(text_label)
         text_row = QHBoxLayout(); text_row.setSpacing(0)
         self._text = QTextEdit(_SAMPLE); self._text.setAcceptRichText(False)
-        self._text.setPlaceholderText(label("fontasset.preview_text_placeholder")); self._text.setToolTip(label("fontasset.preview_text_tip"))
+        self._text.setPlaceholderText(label("fontasset.preview_text_placeholder")); self._text.setToolTip(tooltip(title=label("fontasset.preview_text_title"), body=label("fontasset.preview_text_tip")))
         # Ferré à gauche : un champ d'essai n'a pas besoin de courir sur toute
         # la largeur du panneau, seulement d'être assez large pour l'échantillon.
         self._text.setFixedSize(420, 48); self._text.setFont(QFont(T.MONO, T.SM))
@@ -219,7 +220,7 @@ class FontAssetPreview(QWidget):
         size_label = QLabel(label("fontasset.preview_size")); size_label.setStyleSheet(QSS.label_field)
         size_col.addWidget(size_label)
         self._size = QSpinBox(); self._size.setRange(1, 128); self._size.setSuffix(" px"); self._size.setFont(QFont(T.MONO, T.SM)); self._size.setStyleSheet(QSS.spinbox)
-        self._size.setToolTip(label("fontasset.preview_size_tip")); size_col.addWidget(self._size)
+        self._size.setToolTip(tooltip(title=label("fontasset.preview_size_title"), body=label("fontasset.preview_size_tip"))); size_col.addWidget(self._size)
         # Une planche bitmap a une taille FIXE : le spinbox ne peut rien y changer,
         # donc l'éditer serait mentir. Un simple libellé informatif prend sa place.
         self._size_info = QLabel(""); self._size_info.setFont(QFont(T.MONO, T.SM)); self._size_info.setStyleSheet(f"color:{C.TEXT_NORM};")
@@ -229,7 +230,7 @@ class FontAssetPreview(QWidget):
 
         # Canevas et pied forment un seul bloc « comparaison » : les titres
         # vivent maintenant dans l'encart de chaque boîte, pas au-dessus.
-        self._canvas = _RasterComparisonCanvas(); self._canvas.setToolTip(label("fontasset.preview_canvas_tip"))
+        self._canvas = _RasterComparisonCanvas(); self._canvas.setToolTip(tooltip(title=label("fontasset.preview_canvas_title"), body=label("fontasset.preview_canvas_tip")))
         self._canvas.set_titles(label("fontasset.preview_coverage"), label("fontasset.preview_output"))
         lay.addWidget(self._canvas, 1)
         footer = QFrame(); footer.setStyleSheet(f"background:{C.BG_DEEP}; border-top:1px solid {C.BORDER};")
@@ -267,7 +268,10 @@ class FontAssetPreview(QWidget):
         self._size_info.setVisible(source is not None)
         if source is not None:
             self._size_info.setText(label("fontasset.preview_size_fixed", pixel_height=source.cell_h))
-            self._size_info.setToolTip(label("fontasset.preview_size_fixed_tip"))
+            self._size_info.setToolTip(tooltip(
+                title=label("fontasset.preview_size_title"),
+                body=label("fontasset.preview_size_fixed_tip"),
+            ))
 
     def _set_status(self, text: str):
         # Silence par défaut : le rendu se suffit à lui-même, seuls une perte

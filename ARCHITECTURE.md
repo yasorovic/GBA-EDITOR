@@ -7,7 +7,7 @@ Détails techniques du projet — terminologie, structure des fichiers, pipeline
 ## Arborescence
 
 ```
-gba-editor/
+backstage/
 ├── editor/                          ← application Python (PyQt6)
 │   ├── main.py                      ← point d'entrée
 │   ├── window.py                    ← MainWindow + onglets
@@ -178,7 +178,7 @@ gba-editor/
 ├── .github/workflows/release.yml    ← build + release GitHub automatique
 └── Project Demo/                    ← modèles de projet téléchargeables (voir README)
     └── MyGame/                      ← projet démo (OrbitTest suit la même structure)
-        ├── MyGame.gba-project       ← manifeste : config racine (scène de démarrage, auteur, version) ET point d'entrée double-clic ; le nom du projet EST le nom du fichier (v0.10, remplace project.json)
+        ├── MyGame.project       ← manifeste : config racine (scène de démarrage, auteur, version) ET point d'entrée double-clic ; le nom du projet EST le nom du fichier (v0.10, remplace project.json)
         ├── assets/                  ← dépend d'une ressource externe (image, son...)
         │   ├── sprites/             ← PNG + JSON sidecar (SpriteAsset)
         │   ├── backgrounds/         ← PNG + JSON sidecar (BackgroundAsset)
@@ -411,7 +411,7 @@ modifiable ensuite par script dans les deux cas, l'émission OAM lisant désorma
 - `assets/palettes/` → catalogue unifié (`PaletteBank`), un `.hex` visible par palette + sidecar JSON ; rangé avec les assets car une palette s'importe et s'exporte comme un fichier externe (`.hex`), partagé OBJ/BG
 - `assets/scripts/` → scripts Lua édités par le dev ; copiés dans `build/src/` au build
 - `build/grit_out/` et `build/src/` → sorties générées conservées puis balayées à la fin du build ; `build/obj/` est conservé pour la compilation incrémentale. `build/.asset-cache.json` mémorise les empreintes des conversions dont les sorties existent encore.
-- `<Nom>.gba-project` → manifeste racine (v0.10, remplace `project.json`) : c'est LUI qu'on double-clique, associé à l'éditeur sur les deux OS, et son nom de fichier EST le nom du projet (aucune clé `name` dans le JSON). Config racine uniquement (scène de démarrage, auteur, version) ; un `project.json` d'avant v0.10 se relit une fois et se réécrit dans la nouvelle forme à la première sauvegarde ; `start_scene` (point de départ du **jeu**, éditable dans le ProjectInspector) et `last_scene` (dernière scène ouverte dans l'**éditeur**, restaurée à l'ouverture) sont deux champs distincts — ouvrir une scène ne redéfinit jamais le point de départ ; toutes les autres données vivent dans `project/**/*.json`, y compris `project/variables.json` (globals + constants, unicité de nom vérifiée par type — un global et une constante peuvent partager un nom)
+- `<Nom>.project` → manifeste racine (v0.10, remplace `project.json`) : c'est LUI qu'on double-clique, associé à l'éditeur sur les deux OS, et son nom de fichier EST le nom du projet (aucune clé `name` dans le JSON). Config racine uniquement (scène de démarrage, auteur, version) ; un `project.json` d'avant v0.10 se relit une fois et se réécrit dans la nouvelle forme à la première sauvegarde ; `start_scene` (point de départ du **jeu**, éditable dans le ProjectInspector) et `last_scene` (dernière scène ouverte dans l'**éditeur**, restaurée à l'ouverture) sont deux champs distincts — ouvrir une scène ne redéfinit jamais le point de départ ; toutes les autres données vivent dans `project/**/*.json`, y compris `project/variables.json` (globals + constants, unicité de nom vérifiée par type — un global et une constante peuvent partager un nom)
 - Les assets sont référencés **par nom** (ex. `SpriteComponent.sprite_name`, `BackgroundLayer.backgroundasset_name`, palette active par nom de `PaletteBank`) — jamais par chemin absolu
 - Un argument de script qui cite un élément du projet est déclaré par le `domain` de son `Param` dans `scripting/api.py` (`DOMAIN_SCENE`, `DOMAIN_SFX`, `DOMAIN_GLOBAL`…). Cette table unique sert au checker (valider), au codegen (résoudre en index physique) et à `scripting/refactor.py` (suivre les renommages) : déclarer le domaine d'un nouvel argument suffit à alimenter les trois. Un renommage éditeur (`Project.rename_*`) réécrit les références Lua correspondantes en repérage **structurel** — jamais textuel, donc ni les commentaires ni les strings sans rapport ne bougent
 - Les scripts Lua sont **transpilés vers C** au build, pas interprétés à l'exécution
@@ -1519,7 +1519,7 @@ tip(clé, layout)               3  encadré à ampoule, coupé par Settings ▸ 
 **L'interrupteur des astuces est un réglage d'APPLICATION**
 (`core/interface_preferences.py`, à côté de `toolchain`/`external_tools`/`keybindings`), pas
 un champ de `ProjectSettings`. Deux raisons, la seconde décisive : le manifeste
-`<Nom>.gba-project` est versionné, donc couper les astuces les couperait pour toute l'équipe ; et un réglage de
+`<Nom>.project` est versionné, donc couper les astuces les couperait pour toute l'équipe ; et un réglage de
 projet passe par `SetFieldCmd`, donc annuler une édition de scène rebasculerait une
 préférence de machine.
 
@@ -2834,12 +2834,15 @@ Orchestré par `editor/codegen/rom_build.py` (`BuildWorker`), déclenché depuis
 
 À ne pas confondre avec le pipeline ROM ci-dessus : ceci construit l'**éditeur lui-même** en exécutable distribuable, pas une ROM GBA.
 
-- **`packaging/nuitka_build.py`** — définition unique de la commande de build, utilisée à l'identique par la CI et en local (`python packaging/nuitka_build.py --version 0.3.2 --output-dir build-out`). Nuitka en mode **standalone** (dossier), pas onefile : l'installateur pose de toute façon un dossier, et le onefile ne ferait que ré-extraire à chaque lancement. Sortie : `build-out/GBAEditor/`.
+- **`packaging/nuitka_build.py`** — définition unique de la commande de build, utilisée à l'identique par la CI et en local (`python packaging/nuitka_build.py --version 0.3.2 --output-dir build-out`). Nuitka en mode **standalone** (dossier), pas onefile : l'installateur pose de toute façon un dossier, et le onefile ne ferait que ré-extraire à chaque lancement. Sortie : `build-out/Backstage/`.
 - **`packaging/check_deps.py`** — relève les imports réels du code par AST et vérifie que `requirements.txt` les couvre tous. Lancé en CI **avant** le build : c'est le filet qui manquait quand `luaparser` est parti en release sans être déclaré.
-- **`packaging/windows/installer.nsi`** — installateur NSIS **par utilisateur** (`%LOCALAPPDATA%\Programs\GBAEditor`, aucune élévation UAC, désinstallation sous HKCU). La désinstallation laisse volontairement en place les projets (`~/GBAProjects`) et la config toolchain (`%APPDATA%\GBAEditor`).
+- **`packaging/windows/installer.nsi`** — installateur NSIS **par utilisateur** (`%LOCALAPPDATA%\Programs\Backstage`, aucune élévation UAC, désinstallation sous HKCU). La désinstallation laisse volontairement en place les projets (`~/BackstageProjects`) et la config toolchain (`%APPDATA%\Backstage`).
 - **`editor/core/app_paths.py`** — source unique de vérité pour « où tourne-t-on ». `IS_FROZEN` s'appuie sur `__compiled__` (le marqueur Nuitka ; **`sys._MEIPASS` n'existe pas** hors PyInstaller), et `APP_DIR` vaut le dossier de l'exe en distribution, la racine du repo depuis les sources. `RUNTIME_DIR` en dérive. Tout module ayant besoin d'un chemin de données passe par ici — c'est la duplication de ce calcul qui avait laissé `runtime_codegen/{main_gen,headers}.py` chercher `runtime/` hors du bundle, faisant échouer les copies de `.h` en silence.
-- **Disposition des données** — les données embarquées reproduisent l'arborescence des sources (`runtime/`, `plugins/`, `scripting/api_reference.json`), parce que les modules les résolvent via `Path(__file__).parent` et que Nuitka donne aux modules compilés un `__file__` cohérent dans la distribution. Les images référencées par les QSS ne sont **pas** embarquées : `ui/common/icons.py:qss_image()` les rend depuis qtawesome dans `%TEMP%/gba_editor_icons/` au démarrage (`ensure_qss_assets()`, appelé après la `QApplication` et avant `setStyleSheet`) — un cache en zone temporaire, donc toujours inscriptible même pour une installation en lecture seule.
+- **`editor/core/app_info.py`** — source unique de « qui est ce logiciel » : `APP_NAME` (Backstage), `APP_AUTHOR` (Yasorovic), `APP_VERSION` (`X.Y.Z-alpha|beta|stable`, cf. ROADMAP, « La numérotation d'une release »). Stdlib seule, sans importation, pour que les scripts de packaging la lisent sur un Python nu. Y puisent la fenêtre, l'« À propos », le rapport de diagnostic, le dossier de config (`config_dir`), les `QSettings`, le build Nuitka (`--product-name`, `--company-name`, nom de l'exe), l'installateur et le workflow. **La version vit dans le dépôt, le tag la confirme** : `nuitka_build.py --version` échoue si le tag diverge, et le job `version` de la release lit `--print-version` ; un build qui écraserait le fichier d'après le tag ferait annoncer à un lancement depuis les sources une version qu'il n'a pas. `tests/test_app_info.py` garde l'alignement (installateur, build, workflow, libellés) et l'absence des anciens identifiants.
+- **Disposition des données** — les données embarquées reproduisent l'arborescence des sources (`runtime/`, `plugins/`, `scripting/api_reference.json`), parce que les modules les résolvent via `Path(__file__).parent` et que Nuitka donne aux modules compilés un `__file__` cohérent dans la distribution. Les images référencées par les QSS ne sont **pas** embarquées : `ui/common/icons.py:qss_image()` les rend depuis qtawesome dans `%TEMP%/backstage_icons/` au démarrage (`ensure_qss_assets()`, appelé après la `QApplication` et avant `setStyleSheet`) — un cache en zone temporaire, donc toujours inscriptible même pour une installation en lecture seule.
 - **`editor/plugins/`** est copié tel quel, **non compilé** : chargé dynamiquement via `importlib.util.spec_from_file_location`, ça nécessite des `.py` réels sur disque au runtime. Corollaire assumé : le code des plugins reste lisible dans la distribution, contrairement au reste.
+- **`editor/smoke_test.py`** (`Backstage --smoke-test=<rapport>`) — ce que la CI exécute sur le binaire LIVRÉ avant de publier : crée un projet temporaire, le rouvre, **visite chaque écran** (importés paresseusement par leur nom : un module que Nuitka n'a pas vu n'échouerait qu'au premier clic), valide, enregistre, et contrôle les données embarquées (licences, runtime, starter, API, notices). Le verdict va dans un fichier : la distribution Windows est sans console. Sans devkitPro, il ne construit pas de ROM. **Sortie ordonnée** (`main._shutdown_qt`) : la fenêtre doit être détruite tant que la `QApplication` existe ; sinon le processus plantait à la sortie (violation d'accès, 4 fois sur 6 sous Windows) après avoir tout enregistré.
+- **`packaging/windows/test_installer.ps1`** — joué par la CI sur le runner (machine propre) : installation silencieuse, mise à jour par-dessus (un fichier de l'ancienne version doit disparaître, un plugin de l'utilisateur rester), désinstallation (application, raccourci, clés supprimés ; projets et configuration conservés), smoke test après chaque installation. Il écrit dans HKCU et le menu Démarrer : il refuse de tourner hors CI sans `-AllowLocal`. Côté `installer.nsi`, `CleanPreviousInstall` purge l'ancienne installation avant la copie, **sauf `plugins\`**, et seulement si l'exécutable attendu est présent.
 - **`.github/workflows/release.yml`** — se déclenche sur `release: published` (ou `workflow_dispatch` pour tester sans publier). Publie deux artefacts Windows : l'installateur `.exe` et un ZIP portable. Le job Linux/AppImage est présent mais `if: false`, en pause en attendant un test sur une vraie distro. Le cache Nuitka est indispensable : un build à froid est nettement plus long que l'ancien assemblage PyInstaller.
 - **mGBA / devkitPro ne sont jamais embarqués** — dépendances système externes, détectées à l'exécution par `editor/core/toolchain.py` (`resolve_mgba`, `resolve_grit`, `resolve_make`, `resolve_arm_gcc`). Un mécanisme d'auto-download de mGBA a été tenté (Inno Setup puis AppImage) et **abandonné délibérément** — flux 100% manuel par choix (voir historique de conversation packaging).
 
@@ -2911,7 +2914,7 @@ Un manque de **bibliothèque système Linux** (p. ex. `libpulse.so.0`, réclamé
 
 ```mermaid
 flowchart TD
-    APP["GBA Editor<br/>(Python + PyQt6)"]
+    APP["Backstage<br/>(Python + PyQt6)"]
 
     subgraph PY["Runtime Python"]
         PYQT["PyQt6<br/>interface graphique"]

@@ -1,5 +1,5 @@
 """
-GBA Editor — détection et configuration de la toolchain
+Backstage — détection et configuration de la toolchain
 Gère devkitPro (grit + make + devkitARM) et mgba.
 Les chemins sont persistés dans un fichier JSON du dossier de config
 utilisateur (voir CONFIG_FILE).
@@ -10,6 +10,8 @@ import os
 import shutil
 import sys
 from pathlib import Path
+
+from core.app_info import APP_NAME
 
 
 def config_dir() -> Path:
@@ -27,10 +29,10 @@ def config_dir() -> Path:
     if sys.platform.startswith("win"):
         base = os.environ.get("APPDATA")
         if base:
-            return Path(base) / "GBAEditor"
-        return Path.home() / "AppData" / "Roaming" / "GBAEditor"
+            return Path(base) / APP_NAME
+        return Path.home() / "AppData" / "Roaming" / APP_NAME
     xdg = os.environ.get("XDG_CONFIG_HOME")
-    return (Path(xdg) if xdg else Path.home() / ".config") / "gba-editor"
+    return (Path(xdg) if xdg else Path.home() / ".config") / APP_NAME.lower()
 
 
 # Fichier de config persistant

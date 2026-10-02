@@ -101,6 +101,18 @@ class RomReport:
     cartridge_bytes: int
     categories: dict[str, int]
     soundbank: Optional[SoundbankReport] = None
+    # Mémoires de travail, mesurées sur le même build : données statiques placées
+    # en EWRAM / IWRAM par le linker (la pile et le tas n'y sont pas).
+    ewram_bytes: int = 0
+    iwram_bytes: int = 0
+    # Ce qui remplit l'IWRAM, pour l'infobulle : {section: octets} et les plus
+    # gros symboles [(nom, octets)]. L'IWRAM est la mémoire dont la marge
+    # protège la pile, donc celle dont on veut savoir « qu'est-ce qui occupe ? ».
+    iwram_sections: dict[str, int] = field(default_factory=dict)
+    iwram_top: list[tuple[str, int]] = field(default_factory=list)
+    # Blocs de 2 Kio de VRAM BG occupés par scène (tuiles des fonds, maps,
+    # glyphes), tels que l'allocateur les a posés à CE build (`VramLayout`).
+    bg_vram_blocks: dict[str, int] = field(default_factory=dict)
 
     @property
     def over_capacity(self) -> bool:
@@ -113,9 +125,13 @@ class RomReport:
 
 # ── Lecture des artefacts ─────────────────────────────────────────────
 
-def _run(tool: Path, args: list[str]) -> Optional[str]:
+def _run(tool: Path, args: list[str], elf: Path) -> Optional[str]:
+    """Lance `tool args elf` DANS le dossier de l'ELF, avec son seul nom : les
+    binutils sont des exécutables « ANSI », un dossier de projet hors de la page
+    de code leur arrive en `?` et le rapport de poids disparaissait sans un mot."""
     try:
-        proc = subprocess.run([str(tool)] + args, capture_output=True, text=True)
+        proc = subprocess.run([str(tool)] + args + [elf.name], cwd=str(elf.parent),
+                              capture_output=True, text=True, errors="replace")
     except OSError:
         return None
     return proc.stdout if proc.returncode == 0 else None
@@ -123,7 +139,7 @@ def _run(tool: Path, args: list[str]) -> Optional[str]:
 
 def read_symbols(nm: Path, elf: Path) -> dict[str, tuple[int, int, str]]:
     """{nom: (adresse, taille, type)} — taille 0 quand l'ELF n'en porte pas."""
-    out = _run(nm, ["--print-size", "--radix=d", str(elf)])
+    out = _run(nm, ["--print-size", "--radix=d"], elf)
     if out is None:
         return {}
     syms: dict[str, tuple[int, int, str]] = {}
@@ -148,7 +164,7 @@ def read_sections(size_tool: Path, elf: Path) -> dict[str, int]:
     Elles se reconnaissent à leur adresse nulle — une section non allouée n'a
     pas de place en mémoire.
     """
-    out = _run(size_tool, ["-A", "-d", str(elf)])
+    out = _run(size_tool, ["-A", "-d"], elf)
     if out is None:
         return {}
     sections: dict[str, int] = {}
@@ -162,6 +178,47 @@ def read_sections(size_tool: Path, elf: Path) -> dict[str, int]:
             if addr:
                 sections[parts[0]] = size
     return sections
+
+
+# Fenêtres d'adresses du matériel : le linker place chaque section d'après elles.
+_EWRAM = (0x02000000, 256 * 1024)
+_IWRAM = (0x03000000, 32 * 1024)
+
+
+def read_ram_use(size_tool: Path, elf: Path) -> tuple[int, int, dict[str, int]]:
+    """(EWRAM, IWRAM, sections de l'IWRAM) occupées par l'ELF, en octets.
+
+    On classe par ADRESSE et non par nom de section : `.bss`, `.data`, `.iwram`,
+    `.ewram`, `.sbss`… dépendent du script de link, l'adresse est ce que le
+    matériel voit. Les sections de code placées en RAM (`.iwram`) comptent aussi."""
+    out = _run(size_tool, ["-A", "-d"], elf)
+    if out is None:
+        return 0, 0, {}
+    ewram = iwram = 0
+    iwram_sections: dict[str, int] = {}
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 3 and parts[0].startswith("."):
+            try:
+                size, addr = int(parts[1]), int(parts[2])
+            except ValueError:
+                continue
+            if _EWRAM[0] <= addr < _EWRAM[0] + _EWRAM[1]:
+                ewram += size
+            elif _IWRAM[0] <= addr < _IWRAM[0] + _IWRAM[1]:
+                iwram += size
+                if size:
+                    iwram_sections[parts[0]] = iwram_sections.get(parts[0], 0) + size
+    return ewram, iwram, iwram_sections
+
+
+def iwram_largest(symbols: dict[str, tuple[int, int, str]], count: int = 5) -> list[tuple[str, int]]:
+    """Les `count` plus gros symboles posés en IWRAM — ce qui remplit la mémoire
+    rapide, nommé comme dans le code généré."""
+    low, span = _IWRAM
+    inside = [(name, size) for name, (addr, size, _typ) in symbols.items()
+              if low <= addr < low + span and 0 < size < _ABSURD_SIZE]
+    return sorted(inside, key=lambda item: -item[1])[:count]
 
 
 def read_soundbank(path: Path, sfx_names: list[str], music_names: list[str]) -> Optional[SoundbankReport]:
@@ -306,12 +363,21 @@ def measure(project, toolchain, sfx_names: list[str], music_names: list[str],
         if c not in ordered and v:
             ordered[c] = v
 
+    ewram, iwram, iwram_sections = read_ram_use(size_tool, elf)
     return RomReport(
         rom_bytes=rom_bytes,
         cartridge_bytes=cartridge_mib * 1024 * 1024,
         categories=ordered,
         soundbank=read_soundbank(project.build_dir / "soundbank.bin",
                                  sfx_names, music_names),
+        ewram_bytes=ewram,
+        iwram_bytes=iwram,
+        iwram_sections=iwram_sections,
+        iwram_top=iwram_largest(symbols),
+        # `generate_main` pose `_vram_layout` sur chaque scène à chaque build :
+        # c'est le placement RÉEL de ce build, pas une relecture.
+        bg_vram_blocks={s.name: lay.used_blocks for s in project.scenes
+                        if (lay := getattr(s, "_vram_layout", None)) is not None},
     )
 
 

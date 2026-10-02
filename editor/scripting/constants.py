@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .globals import _C_TYPES
+from core.app_info import APP_NAME
 import codegen.build_output as build_output
 
 
@@ -19,7 +20,7 @@ def generate_constants_h(constants_) -> str:
     """constants_ : list[Constant] (duck-typed: .name, .type, .value)"""
     lines = [
         "/* constants.h — constantes déclarées explicitement dans le projet */",
-        "/* Généré par GBA Editor — ne pas éditer */",
+        f"/* Généré par {APP_NAME} — ne pas éditer */",
         "",
         "#ifndef CONSTANTS_H",
         "#define CONSTANTS_H",

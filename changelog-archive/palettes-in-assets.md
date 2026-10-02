@@ -6,7 +6,7 @@
 
 ## D'où vient la question (2026-09-18)
 
-Victor : une palette n'est plus un objet moteur propre à l'éditeur, mais une **donnée** que
+L'auteur : une palette n'est plus un objet moteur propre à l'éditeur, mais une **donnée** que
 l'auteur importe et exporte — un fichier `.hex` d'échange, au même titre qu'un PNG ou un son. Or
 la règle qui structure tout le projet est simple :
 
@@ -46,4 +46,4 @@ Comme le veut la règle du projet (« Aucune migration de format », cf.
 [project_paths.py](../editor/core/project_paths.py)), le chemin canonique change et les anciens
 emplacements ne sont plus lus. Un projet d'avant ce chantier a ses palettes sous
 `project/palettes/` ; l'auteur déplace le dossier à la main vers `assets/palettes/`. Décision prise
-explicitement avec Victor plutôt que de porter une migration à l'ouverture.
+explicitement avec l'auteur plutôt que de porter une migration à l'ouverture.

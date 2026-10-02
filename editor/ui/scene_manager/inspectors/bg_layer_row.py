@@ -11,6 +11,7 @@ trois autres classes qu'il portait (`AssignSlot`, `AssignPanel`,
 lui. Seule celle-ci vivait, et son unique client est l'inspecteur de scène —
 d'où sa place ici."""
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from typing import Optional
 
 from PyQt6.QtWidgets import (
@@ -56,7 +57,6 @@ class BgLayerRow(QFrame):
         self._color = LAYER_COLORS[slot_index]
         self._path: str = ""
         self._highlight = False
-        self._is_ui_layer = False
         self._pal_banks: list = []
         self._bg_names: list = []
         self._drag_start = None
@@ -77,7 +77,7 @@ class BgLayerRow(QFrame):
             f"QPushButton{{color:{C.TEXT_MUTED};background:transparent;border:none;padding:0;}}"
             f"QPushButton:hover{{color:{self._color};}}"
         )
-        self._radio.setToolTip(label('bglayer.set_as_the_collision_layer'))
+        self._radio.setToolTip(tooltip(title=label('bglayer.set_as_the_collision_layer')))
         self._radio.clicked.connect(lambda: self.bound_toggled.emit(self.slot_index))
         row.addWidget(self._radio)
 
@@ -94,7 +94,8 @@ class BgLayerRow(QFrame):
             f"color:{C.TEXT_MUTED};font-size:14px;"
         )
         self._thumb.setText("🖼")
-        self._thumb.setToolTip(label('bglayer.click_or_drop_a_png'))
+        self._thumb.setToolTip(tooltip(
+            title=label('bglayer.image_title'), body=label('bglayer.image_tip')))
         self._thumb.setCursor(Qt.CursorShape.PointingHandCursor)
         self._thumb.mousePressEvent = lambda e: self._open_dialog()
 
@@ -105,7 +106,7 @@ class BgLayerRow(QFrame):
             f"QPushButton{{background:{tint(C.ACCENT_RED, 0.18)};color:{C.ACCENT_RED};border:none;border-radius:2px;}}"
             f"QPushButton:hover{{background:{C.ACCENT_RED};color:#fff;}}"
         )
-        self._btn_clear.setToolTip(label('bglayer.remove_this_background'))
+        self._btn_clear.setToolTip(tooltip(title=label('bglayer.remove_this_background')))
         self._btn_clear.setVisible(False)
         self._btn_clear.clicked.connect(self._clear)
 
@@ -120,7 +121,8 @@ class BgLayerRow(QFrame):
         badge.setStyleSheet(f"color:{self._color};background:transparent;")
         badge.setFixedWidth(34)
         badge.setCursor(Qt.CursorShape.OpenHandCursor)
-        badge.setToolTip(label('bglayer.reorder_tip'))
+        badge.setToolTip(tooltip(
+            title=label('bglayer.reorder_title'), body=label('bglayer.reorder_tip')))
         badge.mousePressEvent = self._badge_press
         badge.mouseMoveEvent = self._badge_move
         row.addWidget(badge)
@@ -145,7 +147,7 @@ class BgLayerRow(QFrame):
         self._pal_btn = QToolButton()
         self._pal_btn.setFixedSize(30, 30)
         self._pal_btn.setIconSize(QSize(24, 24))
-        self._pal_btn.setToolTip(label('bglayer.choose_this_layer_s_palette'))
+        self._pal_btn.setToolTip(tooltip(title=label('bglayer.palette_title')))
         self._pal_btn.setStyleSheet(
             "QToolButton{background:transparent;border:1px solid #333;"
             "border-radius:3px;padding:0;}"
@@ -181,7 +183,7 @@ class BgLayerRow(QFrame):
         self._inpaint_layer_btn.setFixedSize(22, 22)
         self._inpaint_layer_btn.setIconSize(QSize(16, 16))
         self._inpaint_layer_btn.setIcon(_ico("tool_inpaint_brush", C.TEXT_DIM, self._color))
-        self._inpaint_layer_btn.setToolTip(label('bglayer.inpaint_tip'))
+        self._inpaint_layer_btn.setToolTip(tooltip(title=label('bglayer.inpaint_title')))
         self._inpaint_layer_btn.setStyleSheet(
             "QToolButton{background:transparent;border:none;padding:0;}"
             f"QToolButton:checked{{background:{C.BG_SEL};border:1px solid {self._color};"
@@ -198,7 +200,7 @@ class BgLayerRow(QFrame):
         self._eye_btn.setIconSize(QSize(16, 16))
         self._visible = True
         self._eye_btn.setIcon(_ico("eye", C.TEXT_DIM, self._color))
-        self._eye_btn.setToolTip(label('bglayer.visibility_tip'))
+        self._eye_btn.setToolTip(tooltip(title=label('bglayer.visibility_title')))
         self._eye_btn.setStyleSheet(
             "QToolButton{background:transparent;border:none;padding:0;}"
         )
@@ -207,7 +209,7 @@ class BgLayerRow(QFrame):
 
         btn_remove = W.btn_danger("×")
         btn_remove.setFixedSize(22, 22)
-        btn_remove.setToolTip(label('bglayer.remove_this_layer'))
+        btn_remove.setToolTip(tooltip(title=label('bglayer.remove_this_layer')))
         btn_remove.clicked.connect(lambda: self.layer_removed.emit(self.slot_index))
         row.addWidget(btn_remove)
 
@@ -219,13 +221,13 @@ class BgLayerRow(QFrame):
     # la main. Le mot « cible » n'a pas à remonter jusqu'à qui a juste choisi
     # « layer translucide » dans un menu.
     _BLEND_TIPS_SIMPLE = {
-        "top":    'bglayer.through_tip',
-        "bottom": 'bglayer.behind_tip',
+        "top":    ('bglayer.through_title', 'bglayer.through_tip'),
+        "bottom": ('bglayer.behind_title', 'bglayer.behind_tip'),
     }
     _BLEND_TIPS_FULL = {
-        "": 'bglayer.no_blend_tip',
-        "top": 'bglayer.top_tip',
-        "bottom": 'bglayer.bottom_tip',
+        "": ('bglayer.no_blend_title', 'bglayer.no_blend_tip'),
+        "top": ('bglayer.top_title', 'bglayer.top_tip'),
+        "bottom": ('bglayer.bottom_title', 'bglayer.bottom_tip'),
     }
 
     # Ce que le bouton propose, piloté par l'effet de la scène :
@@ -244,7 +246,11 @@ class BgLayerRow(QFrame):
                                      self._color))
         tips = (self._BLEND_TIPS_SIMPLE if self._blend_ui == "toggle"
                 else self._BLEND_TIPS_FULL)
-        self._blend_btn.setToolTip(label(tips[self._blend_role]) if self._blend_role in tips else "")
+        if self._blend_role in tips:
+            title_key, body_key = tips[self._blend_role]
+            self._blend_btn.setToolTip(tooltip(title=label(title_key), body=label(body_key)))
+        else:
+            self._blend_btn.setToolTip("")
 
     def _cycle_blend_role(self):
         order = (["top", "bottom"] if self._blend_ui == "toggle"
@@ -323,23 +329,8 @@ class BgLayerRow(QFrame):
     def clear_asset(self):
         self._path = ""
         self._thumb.setPixmap(QPixmap())
-        self._thumb.setText("UI" if self._is_ui_layer else "🖼")
+        self._thumb.setText("🖼")
         self._btn_clear.setVisible(False)
-
-    def set_ui_layer(self, is_ui: bool):
-        self._is_ui_layer = is_ui
-        if not self._path:
-            self._thumb.setText("UI" if is_ui else "🖼")
-        if is_ui:
-            self._thumb.setStyleSheet(
-                f"background:{C.BG_BASE};border:1px solid {C.BORDER_MID};border-radius:2px;"
-                f"color:{C.TEXT_DIM};font-size:11px;font-weight:bold;"
-            )
-        else:
-            self._thumb.setStyleSheet(
-                f"background:{C.BG_INPUT};border:1px solid {C.BORDER_MID};border-radius:2px;"
-                f"color:{C.TEXT_MUTED};font-size:14px;"
-            )
 
     def set_speed(self, value: float):
         self._speed.blockSignals(True)
@@ -355,13 +346,16 @@ class BgLayerRow(QFrame):
         current = next((b for b in banks if b.name == current_name), None) if current_name else None
         if current:
             self._pal_btn.setIcon(bank_icon(current))
-            self._pal_btn.setToolTip(label('bglayer.layer_palette_name', name=current.name))
+            self._pal_btn.setToolTip(tooltip(
+                title=label('bglayer.palette_title'),
+                body=label('bglayer.palette_tip', name=current.name)))
         else:
             # « Sans palette » : couleurs d'origine du PNG (défaut) — icône
             # neutre plutôt qu'un bouton vide.
             from ui.common.icons import get as _ico
             self._pal_btn.setIcon(_ico("tool_palette", C.TEXT_DIM, self._color))
-            self._pal_btn.setToolTip(label('bglayer.no_palette_tip'))
+            self._pal_btn.setToolTip(tooltip(
+                title=label('bglayer.palette_title'), body=label('bglayer.no_palette_tip')))
 
     def _open_pal_picker(self):
         from ui.common.pickers import PALETTE_NONE

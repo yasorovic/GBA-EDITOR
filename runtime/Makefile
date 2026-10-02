@@ -1,5 +1,5 @@
 #
-# GBA Editor — Makefile
+# Backstage — Makefile
 # Tourne depuis build/ — chemins relatifs à build/
 #
 # Structure attendue dans build/ :

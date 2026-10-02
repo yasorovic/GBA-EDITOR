@@ -10,4 +10,4 @@ HERE="$(dirname "$(readlink -f "${0}")")"
 # (le DT_RUNPATH de l'exe ne s'applique pas transitivement). Sans ca, l'appli
 # meurt au demarrage : "Could not load the Qt platform plugin xcb".
 export LD_LIBRARY_PATH="$HERE/usr/bin${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-exec "$HERE/usr/bin/GBA Editor" "$@"
+exec "$HERE/usr/bin/Backstage" "$@"

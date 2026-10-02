@@ -1112,12 +1112,18 @@ _EV_KIND = {
 
 def _emit_one_text_lang(t, content: str, i_lang: int, i: int,
                         const_values: dict, global_names: set,
-                        fonts, emit) -> tuple[list[str], int, str, int, list[str]]:
+                        fonts, emit,
+                        sources: list[str]) -> tuple[list[str], int, str, int]:
     """Les lignes C d'UNE entrée dans UNE langue : (lignes, longueur, nom de
-    la table d'événements ou "0", nombre d'événements, symboles de globals
-    cités). Factorisé de `emit_texts_c` (ROADMAP v0.9, phase 3) — même calcul,
-    rejoué une fois par langue déclarée plutôt qu'une fois pour la source
-    seule."""
+    la table d'événements ou "0", nombre d'événements). Factorisé de
+    `emit_texts_c` (ROADMAP v0.9, phase 3) — même calcul, rejoué une fois par
+    langue déclarée plutôt qu'une fois pour la source seule.
+
+    `sources` est la table des globals de LA LANGUE ENTIÈRE (`g_text_values_<n>`),
+    partagée par tous ses textes : l'index d'un `$nom` est son rang DANS CETTE
+    TABLE, que la fonction complète au passage. Une liste par texte donnait le
+    rang 0 au premier global de chaque texte — le second texte lisait alors le
+    global du premier."""
     from core.text_markup import parse, KIND_VALUE
 
     parsed = parse(content)
@@ -1161,7 +1167,6 @@ def _emit_one_text_lang(t, content: str, i_lang: int, i: int,
     font_index = {getattr(font, "name", ""): index
                   for index, font in enumerate(fonts or [])}
     events = []
-    sources: list[str] = []       # symboles C des globals cités, DANS CETTE LANGUE
     local_slots: list[str] = []   # `$locale` d'un littéral : rang posé par le script
     for m in parsed.markers:
         kind = _EV_KIND.get(m.kind)
@@ -1189,10 +1194,10 @@ def _emit_one_text_lang(t, content: str, i_lang: int, i: int,
                 value = local_slots.index(m.value)
                 kind = "TEXT_EV_LOCAL"
             elif m.value in global_names:
-                # Dédoublonnées PAR TEXTE ET PAR LANGUE : une traduction peut
-                # réordonner ses `$nom` (ROADMAP), donc citer un global que la
-                # source ne cite pas au même rang — chaque langue tient sa
-                # PROPRE table de sources, jamais une partagée entre langues.
+                # Dédoublonnées PAR LANGUE : une traduction peut réordonner ses
+                # `$nom` (ROADMAP), donc citer un global que la source ne cite
+                # pas au même rang — chaque langue tient sa PROPRE table de
+                # sources, jamais une partagée entre langues.
                 sym = f"GLOBAL_{m.value.upper()}"
                 if sym not in sources:
                     sources.append(sym)
@@ -1207,7 +1212,7 @@ def _emit_one_text_lang(t, content: str, i_lang: int, i: int,
         L.append(f"static const TextEvent {ev_name}[{len(events)}] = {{")
         L += events
         L.append("};")
-    return L, len(cps), ev_name, len(events), sources
+    return L, len(cps), ev_name, len(events)
 
 
 def emit_texts_c(texts: list, lang_codes: list[str], content_fn,
@@ -1250,15 +1255,13 @@ def emit_texts_c(texts: list, lang_codes: list[str], content_fn,
 
         for i, t in enumerate(texts):
             content = content_fn(t, code)
-            lines, length, ev_name, ev_count, used = _emit_one_text_lang(
-                t, content, i_lang, i, const_values, global_names, fonts, emit)
+            lines, length, ev_name, ev_count = _emit_one_text_lang(
+                t, content, i_lang, i, const_values, global_names, fonts, emit,
+                sources)
             L += lines
             lengths.append(length)
             ev_names.append(ev_name)
             ev_counts.append(ev_count)
-            for sym in used:
-                if sym not in sources:
-                    sources.append(sym)
 
         texts_name, len_name = f"g_texts_{i_lang}", f"g_text_len_{i_lang}"
         evt_name, evc_name = f"g_text_events_{i_lang}", f"g_text_ev_count_{i_lang}"

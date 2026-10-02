@@ -173,7 +173,7 @@ def main() -> None:
         shutil.rmtree(TARGET)
 
     shutil.copytree(SOURCE, TARGET, ignore=shutil.ignore_patterns("build", "__pycache__"))
-    (TARGET / "MyGame.gba-project").rename(TARGET / "BuildBenchmark.gba-project")
+    (TARGET / "MyGame.project").rename(TARGET / "BuildBenchmark.project")
 
     # MyGame apporte les palettes et polices minimales. Tout ce qui pourrait
     # biaiser la mesure (scènes, UI, textes, scripts, sprites et fonds de la
@@ -191,11 +191,11 @@ def main() -> None:
     for sprite_file in (TARGET / "assets" / "sprites").glob("*"):
         sprite_file.unlink()
 
-    manifest_path = TARGET / "BuildBenchmark.gba-project"
+    manifest_path = TARGET / "BuildBenchmark.project"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["start_scene"] = "BenchmarkScene01"
     manifest["last_scene"] = "BenchmarkScene01"
-    manifest["author"] = "GBA Editor benchmark fixture"
+    manifest["author"] = "Backstage benchmark fixture"
     manifest["languages"] = []
     manifest["fallback_font"] = "Basic"
     write_json(manifest_path, manifest)

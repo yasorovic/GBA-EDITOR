@@ -39,8 +39,11 @@ from core.selection_bus import get_bus
 from core.scene_graph_state import SceneGraphState
 from scripting.scene_graph import SceneGraph, node_diagnostics, scene_graph
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.common.theme import C, QSS, T, ui_font
 from ui.common.canvas_top_bar import CanvasTopBar
+from ui.common.shortcut_hints import ShortcutHints
+from ui.scene_manager.scene_graph_hints import scene_graph_hints
 from ui.scene_manager.scene_graph_items import (
     CARD_H, CARD_W, MissingTargetItem, SceneCardItem, SceneGraphEdgeItem,
     ScenePreviewToggleItem,
@@ -522,6 +525,8 @@ class SceneGraphView(QWidget):
         self._scene = QGraphicsScene(self)
         self._view = _GraphCanvas(self._scene, self)
         self._view.setBackgroundBrush(QColor(C.BG_DEEP))
+        # Table des raccourcis (bas-droite).
+        self._hints = ShortcutHints(self._view, scene_graph_hints)
         self._view.clicked.connect(self._on_click)
         self._view.double_clicked.connect(self._on_double_click)
         self._view.drag_finished.connect(self._persist_moves)
@@ -587,19 +592,30 @@ class SceneGraphView(QWidget):
         # Barre partagée avec le Scene Editor (cf. ui/common/canvas_top_bar) :
         # même widget de zoom, ancré à gauche, dans les deux vues. Le graphe
         # n'a pas de dimensions canvas/curseur pixel à afficher à droite.
-        bar = CanvasTopBar(label("scncanvas.graph_fit_tip"), show_coords=False)
+        bar = CanvasTopBar(
+            tooltip(title=label("scncanvas.graph_fit"), shortcut="F"),
+            show_coords=False,
+        )
         bar.zoom_step_asked.connect(self._zoom_step)
         bar.fit_asked.connect(self._fit_graph)
         self._top_bar = bar
 
         self._btn_minimap = bar.add_toggle(
-            "view_minimap", label("scncanvas.graph_minimap_tip"), self._set_minimap_visible)
+            "view_minimap", tooltip(
+                title=label("scncanvas.graph_minimap"), shortcut="H",
+            ), self._set_minimap_visible)
         self._btn_minimap.setChecked(True)
         self._btn_notes = bar.add_toggle(
-            "view_notes", label("scncanvas.graph_show_notes_tip"), self._set_notes_visible)
+            "view_notes", tooltip(
+                title=label("scncanvas.graph_notes"),
+                body=label("scncanvas.graph_show_notes_tip"),
+            ), self._set_notes_visible)
         self._btn_notes.setChecked(True)
         self._btn_search = bar.add_toggle(
-            "search", label("scncanvas.graph_search_tip"), self._set_scene_search_visible)
+            "search", tooltip(
+                title=label("scncanvas.graph_search"), shortcut="Ctrl+F",
+                body=label("scncanvas.graph_search_tip"),
+            ), self._set_scene_search_visible)
 
         self._scene_search = QLineEdit()
         self._scene_search.setPlaceholderText(label("scncanvas.graph_search_placeholder"))
@@ -610,7 +626,10 @@ class SceneGraphView(QWidget):
 
         self._btn_rearrange = QToolButton()
         self._btn_rearrange.setText(label("scncanvas.graph_rearrange"))
-        self._btn_rearrange.setToolTip(label("scncanvas.graph_rearrange_tip"))
+        self._btn_rearrange.setToolTip(tooltip(
+            title=label("scncanvas.graph_rearrange"),
+            body=label("scncanvas.graph_rearrange_tip"),
+            warning=label("scncanvas.graph_rearrange_tip_warning")))
         self._btn_rearrange.setFont(ui_font(T.MD))
         self._btn_rearrange.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_rearrange.setStyleSheet(
@@ -631,8 +650,8 @@ class SceneGraphView(QWidget):
     def _update_minimap(self, *_unused) -> None:
         """Repositionne et recalcule la mini-carte après navigation ou rendu."""
         viewport = self._view.viewport()
-        self._minimap.move(max(8, viewport.width() - self._minimap.width() - 12),
-                           max(8, viewport.height() - self._minimap.height() - 12))
+        # Haut-droite : le bas-droit est tenu par la table des raccourcis.
+        self._minimap.move(max(8, viewport.width() - self._minimap.width() - 12), 12)
         self._minimap.raise_()
         self._minimap.refresh()
 

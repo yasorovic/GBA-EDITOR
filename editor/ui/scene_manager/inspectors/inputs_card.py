@@ -8,7 +8,7 @@ il en fait un vrai combo. Le nom est utilisable depuis Lua via
 `input:held("nom")`, `input:pressed("nom")`, `input:released("nom")` et
 `input:buffered("nom", frames)`.
 
-Décision de Victor (2026-09-27, après coup) : cette carte revient à des
+Décision de l'auteur (2026-09-27, après coup) : cette carte revient à des
 boutons à bascule d'avant le chantier « Les inputs personnalisés » — plus
 clair pour un accord simple. Ce ne sont plus des cases à cocher mais les
 MÊMES icônes que les events `on_button_*` du Script Editor (`ui/common/icons.py`,

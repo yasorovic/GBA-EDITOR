@@ -9,6 +9,7 @@ from ui.common.theme import C, T, QSS
 from ui.common.widgets import ScriptSlot, ScriptPickerPopup
 from ui.common import icons
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 
 
 def weight_label(weight: int, italic: bool = False) -> str:
@@ -47,6 +48,9 @@ class FontAssetSelector(QWidget):
         self.weight_box = QComboBox()
         self.weight_box.setFont(QFont(T.UI, T.MD)); self.weight_box.setStyleSheet(QSS.combobox)
         self.weight_box.setMinimumWidth(96)
+        self.weight_box.setToolTip(tooltip(
+            title=label("fontselect.weight_title"),
+            body=label("fontselect.weight_tip")))
         self.bold_button = self._style_button("B", "fontselect.bold_tip", bold=True)
         self.italic_button = self._style_button("I", "fontselect.italic_tip", italic=True)
         lay.addWidget(self.font_slot, 1); lay.addWidget(self.weight_box)
@@ -74,7 +78,9 @@ class FontAssetSelector(QWidget):
     @staticmethod
     def _style_button(text: str, tooltip_key: str, *, bold: bool = False, italic: bool = False):
         button = QToolButton()
-        button.setText(text); button.setToolTip(label(tooltip_key))
+        title_key = "fontselect.bold_title" if bold else "fontselect.italic_title"
+        button.setText(text); button.setToolTip(tooltip(
+            title=label(title_key), body=label(tooltip_key)))
         button.setCheckable(True); button.setFixedSize(26, 26)
         font = QFont(T.UI, T.MD, QFont.Weight.Bold if bold else QFont.Weight.Normal)
         font.setItalic(italic); button.setFont(font)

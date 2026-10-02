@@ -3,7 +3,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
-# GBA Editor — artefacts de build uniquement (générés à chaque build)
+# Backstage — artefacts de build uniquement (générés à chaque build)
 Project Demo/*/build/
 
 # Sortie du build Nuitka — 180 Mo, régénérée par packaging/nuitka_build.py
@@ -25,6 +25,6 @@ build-out*/
 *.dist/
 *.build/
 *.onefile-build/
-GBAEditor-*-windows-setup.exe
-GBAEditor-*-windows-portable.zip
+Backstage-*-windows-setup.exe
+Backstage-*-windows-portable.zip
 *.AppImage

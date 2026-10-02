@@ -1,6 +1,6 @@
 # Guide utilisateur
 
-Ce guide explique comment utiliser GBA Editor pour construire un jeu, sans présumer que vous
+Ce guide explique comment utiliser Backstage pour construire un jeu, sans présumer que vous
 connaissez déjà les formats Game Boy Advance ou le code généré. Les limites de la console sont
 signalées dans l'application quand elles deviennent utiles.
 

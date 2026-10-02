@@ -12,6 +12,7 @@ d'où le `os.environ` en tête de module.
 """
 from __future__ import annotations
 
+import gc
 import os
 
 # Avant le premier import de PyQt6 : pas d'écran requis.
@@ -20,13 +21,24 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
 from PyQt6.QtWidgets import QApplication
 
+# Référence de module : le `QApplication` doit survivre au GC final de pytest
+# (`pytest_unconfigure` -> `gc_collect_harder`), sinon des widgets pris dans des
+# cycles sont finalisés APRÈS sa destruction : violation d'accès intermittente.
+_APP_KEPT_ALIVE: list[QApplication] = []
+
 
 @pytest.fixture(scope="session")
 def qapp():
     """L'unique `QApplication` de la session — un widget Qt ne peut exister sans
     lui. Réutilisé s'il existe déjà (un autre test UI a pu le créer)."""
     app = QApplication.instance() or QApplication([])
+    _APP_KEPT_ALIVE.append(app)
     yield app
+    # Finalise les widgets orphelins TANT QUE l'application existe : leurs
+    # destructeurs C++ ont besoin d'elle (cf. `_APP_KEPT_ALIVE`).
+    app.processEvents()
+    gc.collect()
+    app.processEvents()
 
 
 @pytest.fixture(autouse=True)

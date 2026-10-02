@@ -55,6 +55,7 @@ class VramLayout:
     # via leur BGxCNT — d'où plusieurs maps mais un seul jeu de tuiles.
     ui_sbb:    dict = field(default_factory=dict)   # slot d'UI -> SBB de sa map
     legacy:    bool = True  # True = placement historique (repli ou pas de gain)
+    used_blocks: int = 0    # blocs de 2 Kio occupés (tuiles des fonds + maps + texte)
     note:      str = ""     # pourquoi ce placement — pour le log de build
 
 
@@ -74,6 +75,13 @@ def _legacy_layout(slots: dict, map_blocks: dict, text_bg: int,
     Multi-slot (v0.12) : chaque slot d'UI a sa map dans son propre charblock ; les
     glyphes restent dans celui du slot primaire (`text_bg`)."""
     lay = VramLayout(legacy=True, note="placement historique")
+    # Même comptage que le placement calculé : tuiles de chaque fond, sa map, une
+    # map par slot d'UI, le texte. Le placement historique ne les chevauche pas
+    # quand il passe ; sinon le garde-fou du build bloque avant.
+    lay.used_blocks = (sum(tiles_to_blocks(n) for n in slots.values())
+                       + sum(map_blocks[s] for s in slots)
+                       + len(_ui_slot_list(text_bg, ui_slots))
+                       + tiles_to_blocks(text_tiles))
     for slot in slots:
         n = map_blocks[slot]
         lay.map_sbb[slot] = slot * BLOCKS_PER_CBB + (BLOCKS_PER_CBB - n)
@@ -171,6 +179,8 @@ def scene_layout(slots: dict, map_blocks: dict, text_bg: int,
     else:
         lay.text_cbb = text_bg
         lay.text_base = 1
+
+    lay.used_blocks = sum(1 for o in occupied if o is not None)
 
     # 5. Budget de chaque fond : de sa base jusqu'au premier bloc occupé
     #    au-dessus, borné par la portée 10 bits ET par la fin de la VRAM BG

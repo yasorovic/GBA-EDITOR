@@ -17,6 +17,7 @@ from PyQt6.QtCore import (
 from ui.common.theme import C, T, QSS, ui_font
 from ui.common.widgets import W
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.common.icons import get as _ico
 
 from core.resources.asset_reconciliation import check_audio_file
@@ -93,6 +94,9 @@ class _AssetInspectorBase(QWidget):
 
         btn_import = QPushButton(label(self._IMPORT_BTN_TEXT))
         btn_import.setFont(QFont(T.UI, T.MD))
+        btn_import.setToolTip(tooltip(
+            title=label("sndpanel.import_title"), body=label("sndpanel.import_tip"),
+        ))
         btn_import.clicked.connect(self._import)
         cl.addWidget(btn_import)
 
@@ -109,7 +113,6 @@ class _AssetInspectorBase(QWidget):
             f"QSpinBox{{background:{C.BG_INPUT};color:{C.TEXT_NORM};border:1px solid {C.BORDER_MID};"
             "border-radius:3px;padding:2px;}"
         )
-        self._vol.setToolTip(label("sndpanel.volume_tip"))
         self._vol.valueChanged.connect(self._on_vol)
         row(label("sndpanel.volume"), self._vol)
 
@@ -243,7 +246,9 @@ class SfxInspector(_AssetInspectorBase):
         self._rate.setFont(QFont(T.UI, T.MD))
         for value, rate_label in self._RATES:
             self._rate.addItem(rate_label, value)
-        self._rate.setToolTip(label("sndpanel.rate_tip"))
+        self._rate.setToolTip(tooltip(
+            title=label("sndpanel.rate_title"), body=label("sndpanel.rate_tip"),
+        ))
         self._rate.currentIndexChanged.connect(self._on_rate)
         row(label("sndpanel.rate"), self._rate)
 
@@ -328,7 +333,9 @@ class _BoxTab(QWidget):
         self._combo = QComboBox()
         self._combo.setFont(QFont(T.UI, T.SM))
         self._combo.setStyleSheet(QSS.combobox)
-        self._combo.setToolTip(label("sndpanel.box_tip"))
+        self._combo.setToolTip(tooltip(
+            title=label("sndpanel.box_title"), body=label("sndpanel.box_tip"),
+        ))
         self._combo.currentIndexChanged.connect(lambda _i: self._load())
         # Le champ de renommage prend la PLACE du sélecteur, il ne s'ajoute
         # pas à côté : on renomme la boîte qu'on a sous les yeux, et la barre
@@ -343,11 +350,13 @@ class _BoxTab(QWidget):
         self._name_edit.setVisible(False)
         self._name_edit.editingFinished.connect(self._commit_rename)
         self._btn_ren = W.btn_ghost("✎")
-        self._btn_ren.setToolTip(label("sndpanel.rename_box_tip"))
+        self._btn_ren.setToolTip(tooltip(title=label("sndpanel.rename_box_title")))
         self._btn_ren.clicked.connect(self._begin_rename)
         btn_new = W.btn_ghost(label("sndpanel.new_box"))
+        btn_new.setToolTip(tooltip(title=label("sndpanel.new_box_title"), body=label("sndpanel.new_box_tip")))
         btn_new.clicked.connect(self._new)
-        self._btn_del = W.btn_danger(label("sndpanel.del_box_tip"))
+        self._btn_del = W.btn_danger()
+        self._btn_del.setToolTip(tooltip(title=label("sndpanel.delete_box_title"), warning=label("sndpanel.delete_box_warning")))
         self._btn_del.clicked.connect(self._delete)
         bar.addWidget(lbl)
         bar.addWidget(self._combo, 1); bar.addWidget(self._name_edit, 1)
@@ -666,7 +675,7 @@ class SoundMixerScreen(QWidget):
         for index, (text, tip) in enumerate(contexts):
             button = QToolButton()
             button.setText(text)
-            button.setToolTip(tip)
+            button.setToolTip(tooltip(title=text, body=tip))
             button.setCheckable(True)
             button.setFont(ui_font(T.MD))
             button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -726,7 +735,10 @@ class SoundMixerScreen(QWidget):
             f"QPushButton:hover{{background:{C.BG_HOVER}; border-color:{C.ACCENT};}}"
             f"QPushButton:checked{{background:{C.BG_SEL}; color:{C.ACCENT};"
             f"border-color:{C.ACCENT};}}")
-        self._btn_rom.setToolTip(label("sndpanel.rom_play_tip"))
+        self._btn_rom.setToolTip(tooltip(
+            title=label("sndpanel.rom_play").removeprefix("▶ "),
+            body=label("sndpanel.rom_play_tip"),
+            note=label("sndpanel.rom_play_note")))
         self._btn_rom.toggled.connect(self._on_rom_toggled)
         lay.addWidget(self._btn_rom)
 
@@ -734,7 +746,7 @@ class SoundMixerScreen(QWidget):
         self._btn_rom_stop.setFixedSize(30, 24)
         self._btn_rom_stop.setIcon(_ico("playback_stop", C.TEXT_DIM))
         self._btn_rom_stop.setIconSize(QSize(14, 14))
-        self._btn_rom_stop.setToolTip(label("sndpanel.rom_stop_tip"))
+        self._btn_rom_stop.setToolTip(tooltip(title=label("sndpanel.rom_stop_title")))
         self._btn_rom_stop.setStyleSheet(
             f"QPushButton{{background:{C.BG_BASE}; color:{C.TEXT_DIM};"
             f"border:1px solid {C.BORDER_MID}; padding:0;}}"
@@ -749,7 +761,7 @@ class SoundMixerScreen(QWidget):
         self._btn_rom_loop.setCheckable(True)
         self._btn_rom_loop.setChecked(True)
         self._btn_rom_loop.setFixedSize(30, 24)
-        self._btn_rom_loop.setToolTip(label("sndpanel.rom_loop_tip"))
+        self._btn_rom_loop.setToolTip(tooltip(title=label("sndpanel.rom_loop_title")))
         self._btn_rom_loop.setStyleSheet(
             f"QToolButton{{background:{C.BG_BASE}; color:{C.TEXT_DIM};"
             f"border:1px solid {C.BORDER_MID}; padding:0;}}"
@@ -764,7 +776,9 @@ class SoundMixerScreen(QWidget):
         self._rom_volume.setRange(0, 100)
         self._rom_volume.setValue(80)
         self._rom_volume.setFixedWidth(74)
-        self._rom_volume.setToolTip(label("sndpanel.volume_tip"))
+        self._rom_volume.setToolTip(tooltip(
+            title=label("sndpanel.preview_volume_title"), body=label("sndpanel.preview_volume_tip"),
+        ))
         self._rom_volume.setStyleSheet(
             f"QSlider::groove:horizontal{{height:8px;background:{C.BG_BASE};"
             f"border:1px solid {C.BORDER};}}"
@@ -786,7 +800,7 @@ class SoundMixerScreen(QWidget):
         self._rom_progress.setTextVisible(False)
         self._rom_progress.setMinimumWidth(130)
         self._rom_progress.setFixedHeight(12)
-        self._rom_progress.setToolTip(label("sndpanel.rom_progress_tip"))
+        self._rom_progress.setToolTip(tooltip(title=label("sndpanel.rom_progress_title")))
         self._rom_progress.setStyleSheet(
             f"QProgressBar{{background:{C.BG_BASE};border:1px solid {C.BORDER};}}"
             f"QProgressBar::chunk{{background:{C.ACCENT};}}")
@@ -850,7 +864,7 @@ class SoundMixerScreen(QWidget):
             min(1000, round(1000 * self._box_player.position_seconds / duration)))
 
     def _on_rom_state(self, name: str):
-        self._rom_state.setText(f"ROM → {name}")
+        self._rom_state.setText(label("sndpanel.preview_state", name=name))
 
     def _box_tabs(self) -> tuple:
         return (self._music_tab, self._sound_tab, self._jingle_tab)

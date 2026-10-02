@@ -232,8 +232,9 @@ class UIRegionItem(QGraphicsRectItem):
         tiles = ""
         if hasattr(region, "tile_rect"):
             _, _, tw, th = region.tile_rect()
-            tiles = f"{tw}×{th} tiles · "
-        detail = label('cvregion.region_tip', name=region.name, name_2=self._layout.name, tiles=tiles, target=target)
+            tiles = label('cvregion.tiles_size', w=tw, h=th)
+        detail = label('cvregion.region_tip', name=region.name, layout=self._layout.name,
+                       tiles=tiles, target=target)
         # Note libre de l'auteur en tête, puis le détail technique de la zone.
         self.setToolTip(notes_tooltip(getattr(region, "notes", ""), detail))
 

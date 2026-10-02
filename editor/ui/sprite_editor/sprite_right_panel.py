@@ -11,6 +11,7 @@ from ui.common.theme import C, T
 from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import W
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from core.models.sprite import AnimFrame, AnimState, SpriteAsset, StateDirection
 from core.project import Project
 from core.models.sprite import valid_frame_heights, resolve_direction_mirrors
@@ -87,13 +88,21 @@ class SpriteRightPanel(QWidget):
             self._cb_w.addItem(str(v))
         self._cb_w.currentIndexChanged.connect(self._on_frame_w_changed)
         self._cb_h.currentIndexChanged.connect(self._on_frame_h_changed)
+        self._cb_w.setToolTip(tooltip(
+            title=label("sprpanel.frame_width"), body=label("sprpanel.frame_size_tip")
+        ))
+        self._cb_h.setToolTip(tooltip(
+            title=label("sprpanel.frame_height"), body=label("sprpanel.frame_size_tip")
+        ))
         W.pair(label("common.frame"), "W", C.AXIS_X, self._cb_w, "H", C.AXIS_Y, self._cb_h, lay)
 
         W.separator(lay)
         W.section(label("sprpanel.animation"), lay)
 
         self._sp_speed = W.spinbox(8, min_v=1, max_v=120)
-        self._sp_speed.setToolTip(label("sprpanel.speed_tip"))
+        self._sp_speed.setToolTip(tooltip(
+            title=label("common.speed"), body=label("sprpanel.speed_tip")
+        ))
         self._sp_speed.valueChanged.connect(self._on_speed_changed)
         W.row(label("common.speed"), self._sp_speed, lay)
 
@@ -129,12 +138,17 @@ class SpriteRightPanel(QWidget):
         lay.addWidget(self._pal_grid)
 
         self._btn_import = W.btn_accent(label("sprpanel.import_replace"))
-        self._btn_import.setToolTip(label("sprpanel.import_replace_tip"))
+        self._btn_import.setToolTip(tooltip(
+            title=label("sprpanel.import_replace_title"), body=label("sprpanel.import_replace_tip")
+        ))
         self._btn_import.clicked.connect(self._on_replace_image)
         lay.addWidget(self._btn_import)
 
         self._btn_extract = W.btn_accent(label("sprpanel.extract"))
-        self._btn_extract.setToolTip(label("sprpanel.extract_tip"))
+        self._btn_extract.setToolTip(tooltip(
+            title=label("sprpanel.extract_title"), body=label("sprpanel.extract_tip"),
+            warning=label("sprpanel.extract_warning"),
+        ))
         self._btn_extract.clicked.connect(self._on_extract_palette)
         lay.addWidget(self._btn_extract)
 
@@ -349,4 +363,3 @@ class SpriteRightPanel(QWidget):
             added_sd = next((d for d in self._state.directions if d.dir == added_dirs[0]), None)
             if added_sd is not None:
                 self.direction_added.emit(self._state, added_sd)
-

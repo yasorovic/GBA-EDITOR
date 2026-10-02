@@ -29,6 +29,8 @@ from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsItem
 
 from core.history import get_history, AddListItemCmd, RemoveListItemCmd, SetFieldCmd
 from ui.common.theme import C, T, ui_font
+from ui.common.shortcut_hints import ShortcutHints
+from ui.sound_mixer.music_graph_hints import music_graph_hints
 from ui.sound_mixer.sound_commands import (
     MoveMusicNodesCmd, AddBoxStateCmd, RemoveMusicStateCmd,
 )
@@ -354,6 +356,8 @@ class MusicGraphView(QGraphicsView):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setFrameShape(QGraphicsView.Shape.NoFrame)
         self.setAcceptDrops(True)
+        # Table des raccourcis (bas-droite, repliée au repos).
+        self._hints = ShortcutHints(self, music_graph_hints)
 
     # ── Fond quadrillé ────────────────────────────────────────────
 

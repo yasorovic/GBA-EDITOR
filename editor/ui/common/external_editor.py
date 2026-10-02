@@ -17,6 +17,7 @@ Le fichier réédité est repris par `project_watcher` (déjà en place pour tou
 `assets/`) : cette fonction n'a qu'à ouvrir, jamais à ré-importer.
 """
 from __future__ import annotations
+from core.app_info import APP_NAME
 from ui.common.labels import label
 import subprocess
 from pathlib import Path
@@ -25,7 +26,7 @@ from PyQt6.QtCore import QSettings, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QFileDialog, QWidget
 
-_ORG, _APP = "GBAEditor", "Preferences"
+_ORG, _APP = APP_NAME, "Preferences"
 
 KIND_IMAGE = "image"
 KIND_AUDIO = "audio"

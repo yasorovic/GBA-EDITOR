@@ -1,5 +1,5 @@
 """
-Système de plugins GBA Editor.
+Système de plugins Backstage.
 
 Un plugin est un dossier dans plugins/ contenant un fichier editor.py.
 Il est chargé automatiquement au démarrage via load_all_plugins().

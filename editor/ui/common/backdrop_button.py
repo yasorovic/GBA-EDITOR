@@ -16,6 +16,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from ui.common import icons
 from ui.common.theme import C
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 
 
 # Fonds d'ÉPREUVE, pas le backdrop de la ROM. Du plus sombre au plus clair, plus
@@ -73,5 +74,7 @@ class BackdropButton(QToolButton):
         self.setIcon(icons.get(
             "playback_contrast",
             C.TEXT_NORM if self._index == 0 else C.ACCENT))
-        self.setToolTip(label(
-            "backdrop.tip", name=label(name_key), next=label(nxt_key)))
+        self.setToolTip(tooltip(
+            title=label("backdrop.title"),
+            body=label("backdrop.tip", name=label(name_key), next=label(nxt_key)),
+            note=label("backdrop.note")))

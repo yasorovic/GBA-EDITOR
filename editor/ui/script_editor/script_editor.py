@@ -35,6 +35,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QFileSystemWatcher
 from scripting.api import EVENT_REGISTRY as _EVENT_META
 from ui.common.theme import C, T
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.common.icons import COLOR_SCRIPT
 from ui.common.build_panel import BuildPanel
 from .colors import _BG, _BG_HDR, _BORDER, _TEXT_HI, _TEXT_NORM, _C_EVENT
@@ -93,6 +94,7 @@ class ScriptEditorScreen(QWidget):
             f"QPushButton:hover{{color:{_TEXT_HI};border-color:{C.BORDER_MID};}}"
         )
         btn_back.clicked.connect(self._on_back)
+        btn_back.setToolTip(tooltip(title=label("scred.back_title"), body=label("scred.back_tip")))
         bar_l.addWidget(btn_back)
 
         # Couleur alignée sur la palette canonique par type d'objet (voir ui/icons.py,
@@ -113,6 +115,9 @@ class ScriptEditorScreen(QWidget):
             f"QPushButton:disabled{{color:{C.TEXT_MUTED};border-color:{C.BORDER_DARK};}}"
         )
         self._save_btn.setEnabled(False)
+        self._save_btn.setToolTip(tooltip(
+            shortcut="Ctrl+S", title=label("scred.save_title"),
+        ))
         self._save_btn.clicked.connect(self._save)
         bar_l.addWidget(self._save_btn)
 
@@ -131,6 +136,7 @@ class ScriptEditorScreen(QWidget):
             f"QPushButton:hover{{color:{C.TEXT_HI};border-color:{C.BORDER_MID};}}"
         )
         btn_new.clicked.connect(self._create_script)
+        btn_new.setToolTip(tooltip(title=label("scred.new_script_title"), body=label("scred.new_script_tip")))
         bar_l.addWidget(btn_new)
 
         root.addWidget(bar)
@@ -141,6 +147,10 @@ class ScriptEditorScreen(QWidget):
         self._sidebar.stub_requested.connect(self._on_event_activated)
 
         self._editor = LuaEditor()
+        self._editor.setToolTip(tooltip(
+            shortcut="Ctrl+Space", title=label("scred.completion_title"),
+            body=label("scred.completion_tip"),
+        ))
         self._editor.textChanged.connect(self._on_text_changed)
 
         # Colonne centrale : éditeur (haut) + log (bas)
@@ -360,6 +370,9 @@ class ScriptEditorScreen(QWidget):
         self.back_requested.emit()
 
     # ── Sauvegarde ───────────────────────────────────────────────────
+
+    def has_unsaved_edits(self) -> bool:
+        return self._dirty
 
     def flush_pending_edits(self):
         """Appelé par le Ctrl+S global (window.py) avant la sauvegarde projet —

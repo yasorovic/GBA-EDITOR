@@ -10,6 +10,7 @@ from core.models.font_asset import (DITHER_PATTERNS, HINTING_MODES, PIXEL_FIT_MO
 from ui.common.theme import T, QSS
 from ui.common.widgets import W, CollapsibleCard
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.text_editor.colors import FONT_COLOR
 from ui.text_editor.inspector_shell import insp_scroll
 
@@ -31,6 +32,8 @@ class FontAssetInspector(QWidget):
         self._primary = QComboBox(); self._primary.setStyleSheet(QSS.combobox)
         self._fallbacks = QLineEdit(); self._fallbacks.setStyleSheet(QSS.lineedit)
         self._fallbacks.setPlaceholderText(label("fontasset.fallback_placeholder"))
+        self._primary.setToolTip(tooltip(title=label("fontasset.primary"), body=label("fontasset.primary_tip")))
+        self._fallbacks.setToolTip(tooltip(title=label("fontasset.fallbacks"), body=label("fontasset.fallbacks_tip")))
         W.row(label("fontasset.primary"), self._primary, source_card.body_layout)
         W.row(label("fontasset.fallbacks"), self._fallbacks, source_card.body_layout)
         lay.addWidget(source_card)
@@ -55,6 +58,34 @@ class FontAssetInspector(QWidget):
         self._offset_y = self._spin(-32, 32)
         self._prefer_strike = QCheckBox(label("fontasset.prefer_bitmap_strike"))
         self._prefer_strike.setFont(QFont(T.UI, T.SM))
+        tips = {
+            self._height: "fontasset.pixel_height_tip",
+            self._line_height: "fontasset.line_height_tip",
+            self._pixel_fit: "fontasset.pixel_fit_tip",
+            self._hinting: "fontasset.hinting_tip",
+            self._raster_mode: "fontasset.raster_mode_tip",
+            self._threshold: "fontasset.threshold_tip",
+            self._dither: "fontasset.dither_tip",
+            self._offset_x: "fontasset.offset_x_tip",
+            self._offset_y: "fontasset.offset_y_tip",
+        }
+        titles = {
+            self._height: "fontasset.pixel_height",
+            self._line_height: "fontasset.line_height",
+            self._pixel_fit: "fontasset.pixel_fit",
+            self._hinting: "fontasset.hinting",
+            self._raster_mode: "fontasset.raster_mode",
+            self._threshold: "fontasset.threshold",
+            self._dither: "fontasset.dither",
+            self._offset_x: "fontasset.offset_x",
+            self._offset_y: "fontasset.offset_y",
+        }
+        for widget, tip_key in tips.items():
+            widget.setToolTip(tooltip(title=label(titles[widget]), body=label(tip_key)))
+        self._prefer_strike.setToolTip(tooltip(
+            title=label("fontasset.prefer_bitmap_strike"),
+            body=label("fontasset.prefer_bitmap_strike_tip"),
+        ))
         for text, widget in (("fontasset.pixel_height", self._height),
                              ("fontasset.line_height", self._line_height),
                              ("fontasset.pixel_fit", self._pixel_fit),

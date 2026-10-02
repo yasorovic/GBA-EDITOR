@@ -55,6 +55,7 @@ from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import W, CollapsibleCard
 from ui.common.notice import note, notice, text
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.common.pickers import ColorIndexSlot
 from ui.text_editor.colors import TEXT_COLOR as TEXT_ACCENT
 
@@ -239,7 +240,8 @@ class UIInspector(QWidget):
         self._prio.setRange(-1, 3)
         self._prio.setSpecialValueText(label("uiinsp.priority.auto"))
         self._prio.setKeyboardTracking(False)
-        self._prio.setToolTip(label("uiinsp.priority.tip"))
+        self._prio.setToolTip(tooltip(
+            title=label("uiinsp.priority.title"), body=label("uiinsp.priority.tip"), note=label("uiinsp.priority.note")))
         self._prio.valueChanged.connect(self._on_prio)
         self._prio_row = W.row(label("uiinsp.priority.label"), self._prio,
                                visible_card.body_layout).parentWidget()
@@ -263,7 +265,8 @@ class UIInspector(QWidget):
             f"border:1px solid {C.BORDER_MID}; border-radius:3px; padding:4px;}}")
         self._content.setFixedHeight(72)
         self._content.setPlaceholderText(label("uiinsp.text.content_placeholder"))
-        self._content.setToolTip(label("uiinsp.text.content_tip"))
+        self._content.setToolTip(tooltip(
+            title=label("uiinsp.text.content_title"), body=label("uiinsp.text.content_tip"), note=label("uiinsp.text.content_note")))
         # Même coloration que l'atelier Texte, sinon on tape les balises à
         # l'aveugle ici.
         from ui.text_editor.markup_highlighter import MarkupHighlighter
@@ -276,7 +279,8 @@ class UIInspector(QWidget):
         self._text_key = QComboBox()
         self._text_key.setFont(QFont(T.UI, T.SM))
         self._text_key.setStyleSheet(QSS.combobox)
-        self._text_key.setToolTip(label("uiinsp.text.entry_tip"))
+        self._text_key.setToolTip(tooltip(
+            title=label("uiinsp.text.entry_title"), body=label("uiinsp.text.entry_tip")))
         self._text_key.currentIndexChanged.connect(self._on_text_key)
         self._text_key_row = W.row(label("uiinsp.text.entry"), self._text_key,
                                    self._text_card.body_layout).parentWidget()
@@ -304,7 +308,8 @@ class UIInspector(QWidget):
         self._preview = QComboBox()
         self._preview.setFont(QFont(T.UI, T.MD))
         self._preview.setStyleSheet(QSS.combobox)
-        self._preview.setToolTip(label("uiinsp.text.sample_tip"))
+        self._preview.setToolTip(tooltip(
+            title=label("uiinsp.text.sample_title"), body=label("uiinsp.text.sample_tip")))
         self._preview.currentIndexChanged.connect(self._on_preview)
         self._preview_row = W.row(label("uiinsp.text.sample"), self._preview,
                                   self._text_card.body_layout).parentWidget()
@@ -372,11 +377,13 @@ class UIInspector(QWidget):
         self._ui_pal_slot = None
         self._ui_pal_row = W.row(label("uiinsp.text.bank"), self._ui_pal_host,
                                  self._text_card.body_layout).parentWidget()
-        self._ui_pal_host.setToolTip(label("uiinsp.text.bank_tip"))
+        self._ui_pal_host.setToolTip(tooltip(
+            title=label("uiinsp.text.bank_title"), body=label("uiinsp.text.bank_tip"), note=label("uiinsp.text.bank_note")))
 
         self._color = ColorIndexSlot(label("uiinsp.text.ink_default"), TEXT_ACCENT)
         self._color.picked.connect(self._on_color)
-        self._color.setToolTip(label("uiinsp.text.ink_tip"))
+        self._color.setToolTip(tooltip(
+            title=label("uiinsp.text.ink_title"), body=label("uiinsp.text.ink_tip"), note=label("uiinsp.text.ink_note")))
         self._color_row = W.row(label("uiinsp.text.ink"), self._color,
                                 self._text_card.body_layout).parentWidget()
 
@@ -385,7 +392,8 @@ class UIInspector(QWidget):
         # banque de palette, le matériel n'en offre pas deux.
         self._highlight = ColorIndexSlot(label("uiinsp.text.highlight_none"), TEXT_ACCENT)
         self._highlight.picked.connect(self._on_highlight)
-        self._highlight.setToolTip(label("uiinsp.text.highlight_tip"))
+        self._highlight.setToolTip(tooltip(
+            title=label("uiinsp.text.highlight_title"), body=label("uiinsp.text.highlight_tip"), note=label("uiinsp.text.highlight_note")))
         self._highlight_row = W.row(label("uiinsp.text.highlight"), self._highlight,
                                     self._text_card.body_layout).parentWidget()
         self._bank_why = note(self._text_card.body_layout)
@@ -462,7 +470,8 @@ class UIInspector(QWidget):
         self._fill_sprite = QComboBox()
         self._fill_sprite.setFont(QFont(T.UI, T.SM))
         self._fill_sprite.setStyleSheet(QSS.combobox)
-        self._fill_sprite.setToolTip(label("uiinsp.fill.sprite_tip"))
+        self._fill_sprite.setToolTip(tooltip(
+            title=label("uiinsp.fill.sprite_title"), body=label("uiinsp.fill.sprite_tip"), note=label("uiinsp.fill.sprite_note")))
         self._fill_sprite.currentIndexChanged.connect(self._on_fill_sprite)
         self._fill_sprite_row = W.row(label("common.sprite"), self._fill_sprite,
                                       self._fill_card.body_layout).parentWidget()
@@ -470,7 +479,8 @@ class UIInspector(QWidget):
         self._fill_state = QComboBox()
         self._fill_state.setFont(QFont(T.UI, T.SM))
         self._fill_state.setStyleSheet(QSS.combobox)
-        self._fill_state.setToolTip(label("uiinsp.fill.state_tip"))
+        self._fill_state.setToolTip(tooltip(
+            title=label("uiinsp.fill.state_title"), body=label("uiinsp.fill.state_tip"), note=label("uiinsp.fill.state_note")))
         self._fill_state.currentIndexChanged.connect(self._on_fill_state)
         self._fill_state_row = W.row(label("uiinsp.fill.state"), self._fill_state,
                                      self._fill_card.body_layout).parentWidget()
@@ -482,7 +492,8 @@ class UIInspector(QWidget):
         self._fill_speed.setSpecialValueText(label("uiinsp.fill.speed_from"))
         self._fill_speed.setSuffix(label("uiinsp.fill.speed_suffix"))
         self._fill_speed.setKeyboardTracking(False)
-        self._fill_speed.setToolTip(label("uiinsp.fill.speed_tip"))
+        self._fill_speed.setToolTip(tooltip(
+            title=label("uiinsp.fill.speed_title"), body=label("uiinsp.fill.speed_tip"), note=label("uiinsp.fill.speed_note")))
         self._fill_speed.valueChanged.connect(self._on_fill_speed)
         self._fill_speed_row = W.row(label("common.speed"), self._fill_speed,
                                      self._fill_card.body_layout).parentWidget()
@@ -540,7 +551,8 @@ class UIInspector(QWidget):
         self._list_active = W.checkbox_row(
             label("uiinsp.list.selection"), label("uiinsp.list.selection_sub"),
             self._list_card.body_layout)
-        self._list_active.setToolTip(label("uiinsp.list.selection_tip"))
+        self._list_active.setToolTip(tooltip(
+            title=label("uiinsp.list.selection_title"), body=label("uiinsp.list.selection_tip"), note=label("uiinsp.list.selection_note")))
         self._list_active.toggled.connect(
             lambda v: self._set("active", bool(v), "List selection"))
 
@@ -552,7 +564,8 @@ class UIInspector(QWidget):
         self._list_cols.setStyleSheet(QSS.spinbox)
         self._list_cols.setRange(1, 64)
         self._list_cols.setKeyboardTracking(False)
-        self._list_cols.setToolTip(label("uiinsp.list.columns_tip"))
+        self._list_cols.setToolTip(tooltip(
+            title=label("uiinsp.list.columns_title"), body=label("uiinsp.list.columns_tip"), note=label("uiinsp.list.columns_note")))
         self._list_cols.valueChanged.connect(
             lambda v: (self._set("nav_columns", int(v), "List columns"),
                        self._sync_list_rows()))
@@ -560,7 +573,8 @@ class UIInspector(QWidget):
 
         self._list_major = W.combobox([label("uiinsp.list.order_col"),
                                        label("uiinsp.list.order_row")])
-        self._list_major.setToolTip(label("uiinsp.list.order_tip"))
+        self._list_major.setToolTip(tooltip(
+            title=label("uiinsp.list.order_title"), body=label("uiinsp.list.order_tip"), note=label("uiinsp.list.order_note")))
         self._list_major.currentIndexChanged.connect(
             lambda i: (self._set("nav_major", NAV_ROW if i == 1 else NAV_COLUMN,
                                  "List order"),
@@ -582,13 +596,15 @@ class UIInspector(QWidget):
         # rangée, et n'a rien à écrire pour qu'il suive la sélection.
         W.section(label("uiinsp.list.cursor_section"), self._list_card.body_layout)
         self._list_cursor = W.combobox([])
-        self._list_cursor.setToolTip(label("uiinsp.list.cursor_tip"))
+        self._list_cursor.setToolTip(tooltip(
+            title=label("uiinsp.list.cursor_title"), body=label("uiinsp.list.cursor_tip"), note=label("uiinsp.list.cursor_note")))
         self._list_cursor.currentIndexChanged.connect(self._on_list_cursor)
         W.row(label("common.image"), self._list_cursor, self._list_card.body_layout)
 
         self._list_cursor_mode = W.combobox([label("uiinsp.list.motion_snap"),
                                              label("uiinsp.list.motion_slide")])
-        self._list_cursor_mode.setToolTip(label("uiinsp.list.motion_tip"))
+        self._list_cursor_mode.setToolTip(tooltip(
+            title=label("uiinsp.list.motion_title"), body=label("uiinsp.list.motion_tip")))
         self._list_cursor_mode.currentIndexChanged.connect(
             lambda i: (self._set("cursor_mode",
                                  CURSOR_SLIDE if i == 1 else CURSOR_SNAP,
@@ -619,14 +635,16 @@ class UIInspector(QWidget):
         self._list_ink = ColorIndexSlot(label("uiinsp.list.ink_default"), TEXT_ACCENT)
         self._list_ink.picked.connect(
             lambda i: self._set("selected_text_color", int(i), "Selected ink"))
-        self._list_ink.setToolTip(label("uiinsp.list.ink_tip"))
+        self._list_ink.setToolTip(tooltip(
+            title=label("uiinsp.list.ink_title"), body=label("uiinsp.list.ink_tip"), note=label("uiinsp.list.ink_note")))
         W.row(label("uiinsp.list.ink"), self._list_ink, self._list_card.body_layout)
 
         self._list_hl = ColorIndexSlot(label("uiinsp.list.highlight_none"), TEXT_ACCENT)
         self._list_hl.picked.connect(
             lambda i: self._set("selected_highlight_color", int(i),
                                 "Selected highlight"))
-        self._list_hl.setToolTip(label("uiinsp.list.highlight_tip"))
+        self._list_hl.setToolTip(tooltip(
+            title=label("uiinsp.list.highlight_title"), body=label("uiinsp.list.highlight_tip")))
         W.row(label("uiinsp.list.highlight"), self._list_hl, self._list_card.body_layout)
         L.addWidget(self._list_card)
 
@@ -640,7 +658,8 @@ class UIInspector(QWidget):
         self._img_sprite = QComboBox()
         self._img_sprite.setFont(QFont(T.UI, T.MD))
         self._img_sprite.setStyleSheet(QSS.combobox)
-        self._img_sprite.setToolTip(label("uiinsp.img.sprite_tip"))
+        self._img_sprite.setToolTip(tooltip(
+            title=label("uiinsp.img.sprite_title"), body=label("uiinsp.img.sprite_tip"), note=label("uiinsp.img.sprite_note")))
         self._img_sprite.currentIndexChanged.connect(self._on_img_sprite)
         self._img_sprite_row = W.row(label("common.sprite"), self._img_sprite,
                                      self._img_card.body_layout).parentWidget()
@@ -648,7 +667,8 @@ class UIInspector(QWidget):
         self._img_state = QComboBox()
         self._img_state.setFont(QFont(T.UI, T.MD))
         self._img_state.setStyleSheet(QSS.combobox)
-        self._img_state.setToolTip(label("uiinsp.img.state_tip"))
+        self._img_state.setToolTip(tooltip(
+            title=label("uiinsp.img.state_title"), body=label("uiinsp.img.state_tip"), note=label("uiinsp.img.state_note")))
         self._img_state.currentIndexChanged.connect(self._on_img_state)
         self._img_state_row = W.row(label("uiinsp.img.state"), self._img_state,
                                     self._img_card.body_layout).parentWidget()
@@ -658,7 +678,8 @@ class UIInspector(QWidget):
         self._img_play.setStyleSheet(QSS.combobox)
         self._img_play.addItem(label("uiinsp.img.playing"), True)
         self._img_play.addItem(label("uiinsp.img.frozen"), False)
-        self._img_play.setToolTip(label("uiinsp.img.play_tip"))
+        self._img_play.setToolTip(tooltip(
+            title=label("uiinsp.img.play_title"), body=label("uiinsp.img.play_tip")))
         self._img_play.currentIndexChanged.connect(self._on_img_play)
         self._img_play_row = W.row(label("uiinsp.img.frames"), self._img_play,
                                    self._img_card.body_layout).parentWidget()
@@ -1686,7 +1707,10 @@ class UIInspector(QWidget):
         lbl = QLabel(name)
         lbl.setFont(QFont(T.MONO, T.MD))
         lbl.setStyleSheet(f"color:{C.TEXT_DIM}; background:transparent;")
-        lbl.setToolTip(label("uiinsp.bank_inherited_tip"))
+        lbl.setToolTip(tooltip(
+            title=label("uiinsp.bank_inherited_title"),
+            body=label("uiinsp.bank_inherited_tip"),
+            note=label("uiinsp.bank_inherited_note")))
         self._ui_pal_box.addWidget(lbl)
 
     def _on_ui_pal_bank(self, new: int):
@@ -1717,6 +1741,12 @@ class UIInspector(QWidget):
             self._scene, "font_pal_banks",
             dict(getattr(self._scene, "font_pal_banks", {}) or {}), banks,
             label="Text palette bank", persist_fn=self._persist))
+        # Changer de banque sans toucher à l'encre ne se voit pas : l'index 0
+        # (« défaut ») ne peint rien de la banque. On pose donc la première
+        # couleur réelle de la nouvelle banque (index 1, le 0 étant réservé).
+        bank = self._ui_bank()
+        if bank and len(bank.colors) > 1:
+            self._set("text_color", 1, "Text ink")
         self._reload_color()   # les deux pickers lisent une autre banque désormais
 
     def _reload_color(self):

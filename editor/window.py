@@ -1,15 +1,15 @@
-"""GBA Editor — fenêtre principale (MainWindow uniquement)."""
+"""Backstage — fenêtre principale (MainWindow uniquement)."""
 
 import queue
 import sys
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
+    QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QSplitter, QLabel, QPushButton, QFrame,
     QStatusBar, QDialog,
     QMessageBox,
-    QToolButton, QStackedWidget, QToolBar,
+    QToolButton, QStackedWidget, QToolBar, QSizePolicy,
 )
 from PyQt6.QtGui import QAction, QFont, QKeySequence, QShortcut, QDesktopServices
 from PyQt6.QtCore import Qt, QSettings, QByteArray, QTimer, QUrl
@@ -17,10 +17,13 @@ from PyQt6.QtGui import QGuiApplication
 
 from ui.common.theme import C, T, QSS
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 
 from codegen import BuildWorker
-from core.models.components import displayed_sprite_component
-from codegen.oam_alloc import has_oam_entry, owner_appearances
+from core.models.components import affine_sprite_component, displayed_sprite_component
+from codegen.oam_alloc import project_obj_tiles, scene_affine_requests, scene_oam_layout
+from codegen.rom_report import RomReport
+from ui.common.stack_gauge import StackGauge
 from ui.scene_manager.scene_canvas import SceneEditor
 from ui.scene_manager.canvas.canvas_workspace import CanvasWorkspace
 from core.resources import asset_reconciliation
@@ -44,14 +47,17 @@ sys.path.insert(0, str(Path(__file__).parent))
 from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
 from ui.scene_manager.scene_tree_panel import SceneTreePanel
 from ui.common.build_panel import BuildPanel, ToolchainBar, AnimatedBuildButton
+from ui.common.save_status_indicator import SaveStatusIndicator
 from ui.common.settings_dialog import SettingsDialog
 from core.external_tools import ExternalTools
 from core.keybindings import bind
+from core import crash_log
+from core.app_info import APP_AUTHOR, APP_DOCS_URL, APP_NAME, APP_VERSION
+from core.diagnostics import diagnostic_report
+from ui.common.reveal import reveal_in_file_manager
 from ui.scene_manager.inspectors import DynamicInspector
 from ui.home.project_picker import HomeScreen, push_recent, PROJECTS_DIR
 
-# Page de documentation du dépôt (menu Help → Documentation).
-DOCS_URL = "https://victor3x0.github.io/GBA-EDITOR/"
 # Démarrage paresseux (chantier « L'écran construit à sa première visite ») :
 # les sept écrans natifs différés — Data, Background, Sprite, Palette, Text,
 # Sound, Script — ne sont PAS importés ici. Leur import (souvent lourd :
@@ -66,8 +72,21 @@ DOCS_URL = "https://victor3x0.github.io/GBA-EDITOR/"
 # ──────────────────────────────────────────────────────────────────
 class GbaStatusBar(QWidget):
     """
-    Barre fixe en bas de la fenêtre affichant les compteurs GBA en temps réel.
-    Inspiré de GB Studio : les limites hardware sont visibles, pas cachées.
+    Barre fixe en bas de la fenêtre : les mémoires de la GBA, nommées comme le
+    matériel les nomme (OAM, OBJ VRAM, palettes OBJ/BG, SRAM), et ce que la ROM
+    en occupera. Inspiré de GB Studio : les limites hardware sont visibles, pas
+    cachées.
+
+    Chaque compteur lit les MÊMES faits que le build (`oam_alloc`, `palette_alloc`,
+    `gen_save`) — la barre ne compte rien de son côté. Deux portées, dites dans
+    l'infobulle : l'OAM, les matrices affines, le coût par ligne, les palettes et
+    la VRAM BG sont ceux de la SCÈNE active (une seule scène est vivante à la
+    fois) ; la VRAM OBJ, la SRAM et la RAM sont ceux du PROJET.
+
+    Trois compteurs ne se connaissent qu'APRÈS un build (VRAM BG, EWRAM, IWRAM) :
+    leur valeur dépend de grit et du linker. Avant, ils affichent « ? » plutôt
+    qu'un chiffre deviné ; ensuite ils gardent la mesure du DERNIER build, comme
+    le bandeau ROM.
     """
     # Compteurs neutres par défaut : la couleur n'apparaît qu'en alerte (jaune
     # = proche du budget, rouge = dépassé). Le vert POWER reste réservé aux
@@ -75,6 +94,26 @@ class GbaStatusBar(QWidget):
     _STYLE_OK   = f"color:{C.TEXT_NORM};"
     _STYLE_WARN = f"color:{C.ACCENT_YLW};"
     _STYLE_CRIT = f"color:{C.ACCENT_RED};"
+    _WARN_RATIO = 0.75  # même seuil que SoundBudgetBar / RomBudgetBar
+
+    # (clé, nom du matériel, unité, plafond initial). Les noms sont ceux du
+    # matériel et ne se traduisent pas ; les clés d'infobulle sont
+    # `win.<clé>_title|tip|note`. Les mémoires en octets ("kib") se comptent en
+    # octets (seuil exact) et se lisent en Kio.
+    _SPECS = (
+        ("oam",    "OAM",        "count", 128),
+        ("affine", "AFFINE",     "count", 32),
+        ("cycles", "OBJ cycles", "count", 1210),
+        ("vram",   "OBJ VRAM",   "count", 1024),
+        ("objpal", "OBJ PAL",    "count", 16),
+        ("bgpal",  "BG PAL",     "count", 16),
+        ("bgvram", "BG VRAM",    "kib",   64 * 1024),
+        ("sram",   "SRAM",       "kib",   32 * 1024),
+        ("ewram",  "EWRAM",      "kib",   256 * 1024),
+        ("iwram",  "IWRAM",      "kib",   32 * 1024),
+    )
+    # Ceux dont la valeur vient du build : « ? » tant qu'aucun n'a eu lieu.
+    _FROM_BUILD = ("bgvram", "ewram", "iwram")
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -88,8 +127,8 @@ class GbaStatusBar(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
         top_rule = QFrame()
-        top_rule.setFixedHeight(1)
-        top_rule.setStyleSheet(f"background:{C.BORDER}; border:none;")
+        top_rule.setFixedHeight(C.SPLITTER_WIDTH)
+        top_rule.setStyleSheet(f"background:{C.SPLITTER}; border:none;")
         outer.addWidget(top_rule)
 
         row = QWidget()
@@ -98,78 +137,107 @@ class GbaStatusBar(QWidget):
         layout.setContentsMargins(12, 0, 12, 0)
         layout.setSpacing(0)
 
-        self._counters: list[QLabel] = []
-        # Le tooltip porte une CLÉ de libellé (résolue par `label()` plus bas).
-        specs = [
-            ("OAM",      "0/128 sprites",     "win.oam_tip",      128, 96),
-            ("scanline", "0/1210 cycles/line", "win.scanline_tip", 1210, 900),
-            ("VRAM",     "0/1024 tiles",      "win.vram_tip",     1024, 768),
-            ("PAL",      "0/16 palettes",     "win.pal_tip",      16, 12),
-        ]
-        for i, (name, default, tooltip, limit, warn) in enumerate(specs):
+        # Dernier rapport de build reçu (None = aucun depuis l'ouverture du projet).
+        self._report: RomReport | None = None
+        self._scene_name: str | None = None
+
+        # clé -> [label de valeur, unité, plafond courant]
+        self._counters: dict[str, list] = {}
+        self._tip_targets: dict[str, list] = {}
+        for i, (key, name, unit, limit) in enumerate(self._SPECS):
             if i > 0:
                 # Espacement posé par le layout (et non par une marge en feuille
                 # de style) : fiable, et symétrique de part et d'autre du filet.
-                layout.addSpacing(18)
+                layout.addSpacing(8)
                 sep = QFrame()
                 sep.setFrameShape(QFrame.Shape.VLine)
                 sep.setStyleSheet(f"color:{C.BORDER}; margin:4px 0;")
                 layout.addWidget(sep)
-                layout.addSpacing(18)
-            lbl_name = QLabel(f"{name}  ")
+                layout.addSpacing(8)
+            lbl_name = QLabel(f"{name} ")
             lbl_name.setFont(QFont(T.MONO, T.XS))
             lbl_name.setStyleSheet(f"color:{C.TEXT_MUTED};")
             layout.addWidget(lbl_name)
-            lbl_val = QLabel(default)
+            lbl_val = QLabel()
             lbl_val.setFont(QFont(T.MONO, T.XS, QFont.Weight.Bold))
-            lbl_val.setStyleSheet(self._STYLE_OK)
-            lbl_val.setToolTip(label(tooltip))
-            lbl_name.setToolTip(label(tooltip))
+            note = label(f"win.{key}_note")
+            if key in self._FROM_BUILD:
+                note += "\n" + label("win.after_build_note")
+            tip = tooltip(title=label(f"win.{key}_title"), body=label(f"win.{key}_tip"),
+                          note=note)
+            lbl_val.setToolTip(tip)
+            lbl_name.setToolTip(tip)
             layout.addWidget(lbl_val)
-            self._counters.append((lbl_val, limit, warn))
+            self._tip_targets[key] = [lbl_name, lbl_val]
+            if key == "iwram":
+                # La marge de l'IWRAM protège la pile : elle se lit d'un coup d'œil
+                # comme une pile qui se remplit, du vert au rouge.
+                layout.addSpacing(6)
+                self._iwram_stack = StackGauge()
+                self._iwram_stack.setToolTip(tip)
+                layout.addWidget(self._iwram_stack)
+                self._tip_targets[key].append(self._iwram_stack)
+            self._counters[key] = [lbl_val, unit, limit]
+            self._set(key, None if key in self._FROM_BUILD else 0)
 
         layout.addStretch()
 
-        gba_info = QLabel("GBA  240×160  ARM7TDMI 16MHz  256KB WRAM")
-        gba_info.setFont(QFont(T.MONO, T.XS))
-        gba_info.setStyleSheet(f"color:{C.TEXT_MUTED};")
-        gba_info.setToolTip(label("win.gba_info_tip"))
-        layout.addWidget(gba_info)
+    def set_build_report(self, report: RomReport | None):
+        """Reçoit la mesure du dernier build (None à l'ouverture d'un projet : une
+        mesure d'un autre projet ne doit pas rester affichée)."""
+        self._report = report
+        self._refresh_measured()
+
+    def _refresh_measured(self):
+        """Les trois compteurs que seul un build renseigne. EWRAM/IWRAM sont ceux du
+        projet ; la VRAM BG est celle de la scène active, « ? » si le dernier build
+        ne la connaissait pas (scène créée depuis)."""
+        r = self._report
+        self._set("ewram", r.ewram_bytes if r else None)
+        self._set("iwram", r.iwram_bytes if r else None)
+        self._iwram_stack.set_ratio(r.iwram_bytes / self._counters["iwram"][2] if r else None)
+        self._refresh_iwram_tip()
+        blocks = r.bg_vram_blocks.get(self._scene_name) if r and self._scene_name else None
+        self._set("bgvram", None if blocks is None else blocks * 2048)
 
     def update_scene(self, scene: Scene, project: Project):
-        """Recalcule les compteurs depuis la scène active."""
+        """Recalcule les compteurs depuis la scène active et le projet."""
+        from codegen.runtime_codegen.gen_save import SRAM_BYTES, save_total_bytes
+        # Portée PROJET : indépendante de la scène ouverte.
+        self._set("vram", *project_obj_tiles(project))
+        self._set("sram", save_total_bytes(project), SRAM_BYTES)
+        self._scene_name = scene.name if scene else None
+        self._refresh_measured()
         if not scene:
-            self._set(0, 0); self._set(1, 0); self._set(2, 0); self._set(3, 0)
+            for key in ("oam", "affine", "cycles", "objpal", "bgpal"):
+                self._set(key, 0)
             return
 
-        visible_actors = [a for a in scene.actors if a.visible and a.active]
-        # Un acteur ne coûte une entrée OAM que s'il a une APPARENCE réelle — le même
-        # prédicat que le build (`has_oam_entry`). Un composant sprite vide ou dont le
-        # sprite est introuvable n'affiche rien et ne réserve rien.
-        oam_count = sum(1 for a in visible_actors if has_oam_entry(project, a))
+        # OAM : l'empreinte que le build réserve (acteurs actifs à apparence,
+        # visibles ou non — `visible` n'est qu'un drapeau d'affichage —, OBJ
+        # d'interface, pools de prefabs). Le même nombre que `_check_actor_budget`.
+        oam_count = scene_oam_layout(project, scene).used
 
-        # Rectangles occupant l'écran : (y, hauteur, largeur). Servent à la fois
-        # au coût par scanline et — pour le texte — au compte d'OAM.
+        # Rectangles occupant l'écran : (y, hauteur, coût en cycles par ligne).
         spans: list[tuple[int, int, int]] = []
-
-        # Estimation tiles VRAM
-        tiles = 0
-        for a in visible_actors:
-            # Tout résident : les tuiles de CHAQUE apparence sont en VRAM.
-            for _comp, sp in owner_appearances(project, a):
-                tiles += max(1, sp.frame_w // 8) * max(1, sp.frame_h // 8)
-            # Le coût par scanline, lui, est celui du sprite AFFICHÉ : une seule
-            # apparence dessine à la fois, les autres ne pèsent que sur la VRAM.
+        for a in scene.actors:
+            if not (a.visible and a.active):
+                continue
+            # Le coût par scanline est celui du sprite AFFICHÉ : une seule
+            # apparence dessine à la fois. Un sprite affine paie le double de sa
+            # largeur plus 10, un sprite ordinaire sa largeur.
             shown = displayed_sprite_component(a)
             sp = project.get_sprite(shown.sprite_name) if shown else None
             if sp and sp.asset:
-                spans.append((a.y, sp.frame_h, sp.frame_w))
+                affine = affine_sprite_component(a)
+                cost = (2 * sp.frame_w + 10 if affine and affine.affine_transform
+                        else sp.frame_w)
+                spans.append((a.y, sp.frame_h, cost))
 
         # Zones de texte en cible sprite — leur coût est EXACT, pas estimé :
         # il ne dépend que de la géométrie authorée (cf. models/ui_region).
         from core.models.ui_region import strip_geometry, TARGET_OBJ
         rm = int(getattr(scene, "render_mode", 0) or 0)
-        text_oam = text_tiles = 0
         def _actor_pos(name):
             return next(((a.x, a.y) for a in scene.actors if a.name == name), None)
         slots = (project.scene_ui_slots(scene)
@@ -178,8 +246,6 @@ class GbaStatusBar(QWidget):
             if layout.resolved_target(r, rm) != TARGET_OBJ:
                 continue
             g = strip_geometry(r, project.region_animated_glyphs(r))
-            text_oam   += g["oam"]
-            text_tiles += g["tiles"]
             # y ÉCRAN résolu par le modèle : offsets cumulés jusqu'au root +
             # socle du frame (l'acteur pour un root actor). Sans ça une bulle
             # atterrissait hors écran et ne coûtait rien.
@@ -194,40 +260,71 @@ class GbaStatusBar(QWidget):
             # ce qui est le seul sens dans lequel une jauge ne doit pas mentir.
             if g["anim"]:
                 spans.append((ry, 16, g["anim"] * 16))
-        oam_count += text_oam
-        tiles     += text_tiles
 
-        # Palettes OBJ occupées (référencées + palettes propres auto-allouées)
-        from codegen.palette_alloc import scene_bank_layout
-        obj_banks = scene_bank_layout(project, scene, "obj").bank_count()
-
-        # Pire ligne de l'écran : un objet régulier coûte ~sa largeur en pixels,
-        # et seules comptent les lignes qu'il recouvre réellement. Sommer tout
-        # l'écran donnerait un chiffre toujours rouge ; ne rien sommer du tout
-        # laissait passer une ligne de texte en sprites.
+        # Pire ligne de l'écran : seules comptent les lignes qu'un objet recouvre
+        # réellement. Sommer tout l'écran donnerait un chiffre toujours rouge ; ne
+        # rien sommer du tout laissait passer une ligne de texte en sprites.
         line_cost = [0] * 160
         for y, h, w in spans:
             for ly in range(max(0, y), min(160, y + max(1, h))):
                 line_cost[ly] += w
         scanline_cost = max(line_cost) if line_cost else 0
 
-        values = [oam_count, scanline_cost, tiles, obj_banks]
-        labels = [
-            f"{oam_count}/128 sprites",
-            f"{scanline_cost}/1210 cycles/line",
-            f"{tiles}/1024 tiles",
-            f"{obj_banks}/16 palettes",
-        ]
-        for i, (val, lbl) in enumerate(zip(values, labels)):
-            self._set(i, val, lbl)
+        # Banques de palette occupées (référencées + propres auto-allouées) : OBJ
+        # et BG sont deux jeux de 16 distincts.
+        from codegen.palette_alloc import scene_bank_layout
+        self._set("oam", oam_count)
+        self._set("affine", scene_affine_requests(project, scene))
+        self._set("cycles", scanline_cost)
+        self._set("objpal", scene_bank_layout(project, scene, "obj").bank_count())
+        self._set("bgpal", scene_bank_layout(project, scene, "bg").bank_count())
 
-    def _set(self, idx: int, value: int, text: str = ""):
-        lbl, limit, warn = self._counters[idx]
-        if text:
-            lbl.setText(text)
-        if value >= limit:
+    def _refresh_iwram_tip(self):
+        """L'infobulle de l'IWRAM nomme ce qui l'occupe : les sections du linker
+        (dites en clair), puis les plus gros éléments, avec leur nom dans le code
+        généré. Sans build, elle garde le texte générique."""
+        note = label("win.iwram_note") + "\n" + label("win.after_build_note")
+        body = label("win.iwram_tip")
+        r = self._report
+        if r and r.iwram_sections:
+            lines = [label("win.iwram_stored")]
+            known = (".iwram", ".bss", ".data")
+            parts = {sec: r.iwram_sections.get(sec, 0) for sec in known}
+            other = sum(v for sec, v in r.iwram_sections.items() if sec not in known)
+            for sec, size in sorted(parts.items(), key=lambda kv: -kv[1]):
+                if size:
+                    lines.append(f"{label('win.iwram_part' + sec.replace('.', '_'))} : "
+                                 f"{size / 1024:.1f} KiB")
+            if other >= 52:       # sous 0,05 Kio, la ligne s'afficherait « 0.0 KiB »
+                lines.append(f"{label('win.iwram_part_other')} : {other / 1024:.1f} KiB")
+            if r.iwram_top:
+                lines.append(label("win.iwram_largest"))
+                lines += [f"{name} : {size / 1024:.1f} KiB" for name, size in r.iwram_top]
+            body += "\n" + "\n".join(lines)
+        tip = tooltip(title=label("win.iwram_title"), body=body, note=note)
+        for widget in self._tip_targets["iwram"]:
+            widget.setToolTip(tip)
+
+    def _set(self, key: str, value: int | None, limit: int | None = None):
+        """Écrit un compteur. `value` None = inconnu (« ? », couleur neutre).
+        `limit` remplace le plafond : la VRAM OBJ passe de 1024 à 512 tuiles dès
+        qu'une scène est en mode bitmap."""
+        counter = self._counters[key]
+        lbl, unit, current = counter
+        if limit is not None:
+            counter[2] = current = limit
+        if unit == "kib":
+            used = "?" if value is None else f"{value / 1024:.1f}"
+            text = label("win.kib_value", used=used, limit=current // 1024)
+        else:
+            text = label("win.count_value", used="?" if value is None else value,
+                         limit=current)
+        lbl.setText(text)
+        if value is None:
+            lbl.setStyleSheet(self._STYLE_OK)
+        elif value >= current:
             lbl.setStyleSheet(self._STYLE_CRIT)
-        elif value >= warn:
+        elif value >= current * self._WARN_RATIO:
             lbl.setStyleSheet(self._STYLE_WARN)
         else:
             lbl.setStyleSheet(self._STYLE_OK)
@@ -328,7 +425,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(label("win.app_name"))
+        self.setWindowTitle(APP_NAME)
         self.resize(1280, 760)
         self.project: Project = None
         # Un écran reçoit le projet quand il devient utile, pas au simple
@@ -710,6 +807,7 @@ class MainWindow(QMainWindow):
         _d.on("status_message",        lambda msg: self._status.showMessage(msg, 6000))
         _d.on("project_tree_changed",  self.assets_finder_panel.refresh)
         _d.on("project_tree_changed",  self.scene_tree_panel.refresh)
+        _d.on("project_tree_changed",  self._update_build_state)
         # Le graphe des scènes dérive lui aussi de l'arbre projet : une scène
         # créée/supprimée/renommée doit s'y voir en direct quand il est affiché
         # (sinon il n'apprend le changement qu'au prochain showEvent). Hors écran,
@@ -747,7 +845,7 @@ class MainWindow(QMainWindow):
     # ── Persistance layout ────────────────────────────────────────
 
     def _restore_layout(self):
-        s = QSettings("GBAEditor", "Layout")
+        s = QSettings(APP_NAME, "Layout")
         geom = s.value("geometry")
         if isinstance(geom, QByteArray):
             self.restoreGeometry(geom)
@@ -761,17 +859,34 @@ class MainWindow(QMainWindow):
                 splitter.restoreState(data)
 
     def _save_layout(self):
-        s = QSettings("GBAEditor", "Layout")
+        s = QSettings(APP_NAME, "Layout")
         s.setValue("geometry", self.saveGeometry())
         s.setValue("h_split", self._h_split.saveState())
         s.setValue("center_v_split", self._center_v_split.saveState())
         s.setValue("left_v_split", self._left_v_split.saveState())
 
     def closeEvent(self, event):
+        if not self._confirm_close():
+            event.ignore()
+            return
         self._save_layout()
         if self.project:
             self.project.commit_all_removals()
         super().closeEvent(event)
+
+    def _confirm_close(self) -> bool:
+        """Écrit ce qui est en attente ; faux si l'écriture échoue et que
+        l'utilisateur préfère rester. Ne jamais perdre du travail en silence."""
+        if not self.project:
+            return True
+        try:
+            self._persist_project()
+        except OSError as exc:
+            answer = QMessageBox.question(
+                self, label("win.close_save_failed_title"),
+                label("win.close_save_failed", error=exc))
+            return answer == QMessageBox.StandardButton.Yes
+        return True
 
     # ── Menu ──────────────────────────────────────────────────────
 
@@ -779,7 +894,7 @@ class MainWindow(QMainWindow):
         mb = self.menuBar()
         mb.setMinimumHeight(32)
         mb.setStyleSheet(
-            f"QMenuBar{{background:{C.BG_PANEL};color:{C.TEXT_NORM};font-family:{T.UI_STACK};font-size:{T.MD}px;padding:4px 4px;}}"
+            f"QMenuBar{{background:{C.BG_PANEL};color:{C.TEXT_NORM};font-family:{T.UI_STACK};font-size:{T.MD}px;padding:4px 4px;border-bottom:{C.SPLITTER_WIDTH}px solid {C.SPLITTER};}}"
             "QMenuBar::item{padding:4px 10px;border-radius:3px;}"
             f"QMenuBar::item:selected{{background:{C.BG_HOVER};}}"
             f"QMenu{{background:{C.BG_RAISED};color:{C.TEXT_NORM};border:1px solid {C.BORDER_MID};font-family:{T.UI_STACK};font-size:{T.MD}px;}}"
@@ -817,14 +932,37 @@ class MainWindow(QMainWindow):
         m_view = mb.addMenu(label("win.menu_view"))
         m_view.aboutToShow.connect(lambda: self._fill_view_menu(m_view))
         m_help = mb.addMenu(label("win.menu_help"))
-        a_docs = QAction(label("win.documentation"), self)
-        a_docs.triggered.connect(lambda: QDesktopServices.openUrl(QUrl(DOCS_URL)))
-        m_help.addAction(a_docs)
+        # Sans site de documentation (cf. core/app_info.APP_DOCS_URL), l'entrée
+        # n'existe pas : un menu qui ouvre une adresse vide serait un piège.
+        if APP_DOCS_URL:
+            a_docs = QAction(label("win.documentation"), self)
+            a_docs.triggered.connect(lambda: QDesktopServices.openUrl(QUrl(APP_DOCS_URL)))
+            m_help.addAction(a_docs)
+            m_help.addSeparator()
+        # Les deux portes d'un rapport de bug : où est le journal, et le
+        # résumé qu'on colle dans le compte rendu.
+        a_logs = QAction(label("win.open_log_folder"), self)
+        a_logs.triggered.connect(self._open_log_folder)
+        m_help.addAction(a_logs)
+        a_diag = QAction(label("win.copy_diagnostics"), self)
+        a_diag.triggered.connect(self._copy_diagnostics)
+        m_help.addAction(a_diag)
         m_help.addSeparator()
         a_about = QAction(label("win.about"), self)
         a_about.triggered.connect(lambda: QMessageBox.information(
-            self, label("win.app_name"), label("win.about_text")))
+            self, APP_NAME, label("win.about_text", app_name=APP_NAME,
+                                  version=APP_VERSION, author=APP_AUTHOR)))
         m_help.addAction(a_about)
+
+    def _open_log_folder(self):
+        """Ouvre le dossier de `crash.log`. Créé au besoin : tant que rien n'a
+        planté il n'existe pas, et un menu qui ne fait rien ressemble à une panne."""
+        crash_log.LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        reveal_in_file_manager(crash_log.LOG_FILE.parent)
+
+    def _copy_diagnostics(self):
+        QApplication.clipboard().setText(diagnostic_report(self.project, self.toolchain))
+        self._status.showMessage(label("win.diagnostics_copied"), 5000)
 
     def _fill_view_menu(self, menu):
         """Liste des écrans, dans l'ordre de la barre de navigation (que
@@ -843,12 +981,12 @@ class MainWindow(QMainWindow):
         tb.setMovable(False)
         tb.setMinimumHeight(48)
         tb.setStyleSheet(
-            f"QToolBar{{background:{C.BG_RAISED};border-bottom:1px solid {C.BORDER};spacing:4px;padding:4px 12px;}}"
+            f"QToolBar{{background:{C.BG_RAISED};border-bottom:{C.SPLITTER_WIDTH}px solid {C.SPLITTER};spacing:4px;padding:4px 12px;}}"
             f"QToolButton{{color:{C.TEXT_NORM};border:none;padding:4px 12px;font-family:{T.UI_STACK};font-size:{T.MD}px;}}"
             f"QToolButton:hover{{background:{C.BG_HOVER};border-radius:4px;}}"
         )
         self.addToolBar(tb)
-        self._tb_project_lbl = QPushButton(label("win.app_name"))
+        self._tb_project_lbl = QPushButton(APP_NAME)
         self._tb_project_lbl.setFont(QFont(T.UI, T.XL, QFont.Weight.DemiBold))
         self._tb_project_lbl.setCursor(Qt.CursorShape.PointingHandCursor)
         self._tb_project_lbl.setStyleSheet(
@@ -893,6 +1031,30 @@ class MainWindow(QMainWindow):
         self._nav_bar.screen_requested.connect(self._show_screen)
         tb.addWidget(self._nav_bar)
         self._nav_bar.check_screen(0)
+
+        # Tout à droite : l'état d'enregistrement du projet.
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        tb.addWidget(spacer)
+        self._save_indicator = SaveStatusIndicator()
+        self._tb_save_indicator = tb.addWidget(self._save_indicator)
+        # Les écritures différées (inspecteur, nudge, script) n'émettent pas de
+        # signal à leur départ : on lit leurs minuteries, peu coûteux.
+        self._save_indicator_timer = QTimer(self)
+        self._save_indicator_timer.setInterval(200)
+        self._save_indicator_timer.timeout.connect(self._refresh_save_indicator)
+        self._save_indicator_timer.start()
+
+    def _has_pending_changes(self) -> bool:
+        """Vrai tant qu'une modification n'a pas encore été écrite sur le disque."""
+        if self._save_timer.isActive() or self.scene_editor.has_pending_save():
+            return True
+        se = getattr(self, "_script_editor", None)
+        return se is not None and se.has_unsaved_edits()
+
+    def _refresh_save_indicator(self):
+        self._tb_save_indicator.setVisible(self.project is not None and self._nav_bar.isVisible())
+        self._save_indicator.set_saved(not self._has_pending_changes())
 
     def _open_project_settings(self):
         """Menu Game → Project Settings — cartouche, audio, debug build,
@@ -1168,6 +1330,7 @@ class MainWindow(QMainWindow):
         path = Path(path)
         self.project = Project.create(path, name, starter_id)
         self._project_loaded_screen_indices.clear()
+        self._gba_bar.set_build_report(None)   # la mesure d'un autre projet ne reste pas
         get_dispatcher().setup(self.project, self._watcher)
         self._watcher.watch_project(path)
         self._connect_watcher()
@@ -1177,7 +1340,7 @@ class MainWindow(QMainWindow):
         self._status.showMessage(label("win.new_project_msg", name=name))
 
     def _open_project(self, path: Path):
-        # Plusieurs .gba-project dans le dossier : on refuse d'en choisir un
+        # Plusieurs .project dans le dossier : on refuse d'en choisir un
         # (cf. ROADMAP v0.10). On le dit et on abandonne l'ouverture — l'écran
         # courant reste, aucun projet n'est à moitié chargé.
         try:
@@ -1187,6 +1350,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, label("common.open_project"), str(exc))
             return
         self._project_loaded_screen_indices.clear()
+        self._gba_bar.set_build_report(None)   # la mesure d'un autre projet ne reste pas
         get_dispatcher().setup(self.project, self._watcher)
         self._watcher.watch_project(path)
         self._connect_watcher()
@@ -1232,11 +1396,12 @@ class MainWindow(QMainWindow):
         self.assets_finder_panel.refresh()
         self._refresh_ui()      # recharge l'écran visible (index absent du set)
 
-    def _refresh_ui(self):
+    def _update_build_state(self):
+        """Active ou grise le build selon toolchain + présence d'une scène.
+
+        Séparé de `_refresh_ui` : créer ou supprimer une scène change la
+        réponse sans qu'il faille recharger l'écran visible."""
         if not self.project: return
-        name = self.project.settings.name
-        self.setWindowTitle(label("win.window_title", name=name))
-        self._tb_project_lbl.setText(name)   # QPushButton.setText
         can_build = (self.toolchain.devkitpro_ok and self.toolchain.mgba_ok
                      and bool(self.project.scenes))
         tooltip = self._build_tooltip()
@@ -1244,6 +1409,13 @@ class MainWindow(QMainWindow):
         self._tb_build_btn.setToolTip(tooltip)
         self.build_panel.btn_build.setEnabled(can_build)
         self.build_panel.btn_build.setToolTip(tooltip)
+
+    def _refresh_ui(self):
+        if not self.project: return
+        name = self.project.settings.name
+        self.setWindowTitle(label("win.window_title", app_name=APP_NAME, name=name))
+        self._tb_project_lbl.setText(name)   # QPushButton.setText
+        self._update_build_state()
         cart_mib = getattr(self.project.settings, "cartridge_mib", 4)
         self.build_panel.set_cartridge_mib(cart_mib)
         if (sbp := self._script_build_panel()) is not None:
@@ -1353,11 +1525,21 @@ class MainWindow(QMainWindow):
         ref = edge.refs[0]
         self.open_script(ref.path, ref.line)
 
-    def _add_scene(self):
-        if not self.project: return
+    def _create_scene(self) -> str:
+        """Crée une scène au nom unique. La toute première devient la scène
+        active : sans elle le panneau restait sur « No active scene » et le
+        canvas vide, alors que le modèle avait déjà une scène."""
         from core.command_dispatcher import unique_name
+        was_empty = not self.project.scenes
         name = unique_name("Scene", {s.name for s in self.project.scenes})
         get_dispatcher().add_scene(name)
+        if was_empty:
+            self._on_scene_selected(0)
+        return name
+
+    def _add_scene(self):
+        if not self.project: return
+        name = self._create_scene()
         self.assets_finder_panel.refresh()
         self.assets_finder_panel.begin_rename_scene(name)
 
@@ -1366,9 +1548,7 @@ class MainWindow(QMainWindow):
         `_add_scene`, mais la carte est posée au point cliqué (et rattachée au
         niveau ouvert du graphe) plutôt que laissée à l'auto-layout."""
         if not self.project: return
-        from core.command_dispatcher import unique_name
-        name = unique_name("Scene", {s.name for s in self.project.scenes})
-        get_dispatcher().add_scene(name)   # re-projette le graphe (project_tree_changed)
+        name = self._create_scene()   # re-projette le graphe (project_tree_changed)
         self.canvas_workspace.graph_view.place_new_scene(name, x, y)
 
     # ── Slots prefab ─────────────────────────────────────────────
@@ -1408,12 +1588,22 @@ class MainWindow(QMainWindow):
         """
         if not self.project:
             return
+        self._persist_project()
+        self._status.showMessage(label("win.saved"), 2000)
+
+    def _persist_project(self):
+        """Écrit tout ce qui est en attente, puis le projet entier.
+
+        Partagé par Ctrl+S et par la fermeture : les écritures différées
+        (debounce de 400 ms, nudge du canvas, frappe du Script Editor) ne
+        partent pas toutes seules quand la fenêtre se ferme avant leur
+        minuterie."""
+        self._save_timer.stop()
         self.scene_editor.flush_camera_pos()
         # Le Script Editor n'a du texte non enregistré que s'il a été ouvert.
         if (se := getattr(self, "_script_editor", None)) is not None:
             se.flush_pending_edits()
         self.project.save()
-        self._status.showMessage(label("win.saved"), 2000)
 
     def _refresh_actor_inspector(self):
         """Recharge l'inspecteur d'acteur s'il en montre un — un champ (ex :
@@ -1451,10 +1641,12 @@ class MainWindow(QMainWindow):
         self._btn_redo.setEnabled(self._history.can_redo)
         ul = self._history.undo_label
         rl = self._history.redo_label
-        self._btn_undo.setToolTip(label("win.undo_tip", label=ul) if ul
-                                  else label("win.undo_none"))
-        self._btn_redo.setToolTip(label("win.redo_tip", label=rl) if rl
-                                  else label("win.redo_none"))
+        self._btn_undo.setToolTip(
+            tooltip(title=label("win.undo_tip", label=ul), shortcut="Ctrl+Z") if ul
+            else tooltip(title=label("win.undo_none")))
+        self._btn_redo.setToolTip(
+            tooltip(title=label("win.redo_tip", label=rl), shortcut="Ctrl+Y") if rl
+            else tooltip(title=label("win.redo_none")))
 
     def _do_undo(self):
         lbl = self._history.undo()
@@ -1742,10 +1934,12 @@ class MainWindow(QMainWindow):
         if not self.toolchain.mgba_ok:
             missing.append("mGBA")
         if missing:
-            return label("win.build_unavailable", what=" and ".join(missing))
+            return tooltip(title=label("win.build_unavailable", n=len(missing),
+                                       what=", ".join(missing)))
         if self.project and not self.project.scenes:
-            return label("win.build_no_scene")
-        return label("win.build_run_tip")
+            return tooltip(title=label("win.build_no_scene"))
+        return tooltip(title=label("win.build_run_title"), shortcut="F5",
+                       body=label("win.build_run_tip"))
 
     # ── Build ─────────────────────────────────────────────────────
 
@@ -1786,11 +1980,33 @@ class MainWindow(QMainWindow):
         se = getattr(self, "_script_editor", None)
         return se.build_panel if se is not None else None
 
+    def _explain_missing_toolchain(self):
+        """Dit POURQUOI on ne peut pas construire maintenant, et où trouver ce qui
+        manque, avant d'ouvrir les réglages — au lieu d'une fenêtre de réglages qui
+        surgit sans un mot (cf. ALPHA_CHECKLIST, « Build & Run sans devkitPro »)."""
+        from core.toolchain import DEVKITPRO_URL, MGBA_URL
+        missing = [tool for tool, path in self.toolchain.check().items() if not path]
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(label("win.toolchain_missing_title"))
+        box.setText(label("win.toolchain_missing", app_name=APP_NAME,
+                          missing=", ".join(missing),
+                          devkitpro_url=DEVKITPRO_URL, mgba_url=MGBA_URL))
+        settings_btn = box.addButton(label("win.toolchain_open_settings"),
+                                     QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(QMessageBox.StandardButton.Close)
+        box.exec()
+        if box.clickedButton() is settings_btn:
+            self._open_settings("Toolchains")
+
     def _run_build(self):
         if not self.project or not self.project.active_scene: return
         if not self.toolchain.devkitpro_ok or not self.toolchain.mgba_ok:
-            self._open_settings("Toolchains"); return
+            self._explain_missing_toolchain(); return
 
+        self.build_panel.reveal()
+        if (sbp := self._script_build_panel()) is not None:
+            sbp.reveal()
         self.build_panel.set_building(True)
         self._tb_build_btn.build_started.emit()
         msg = label("win.build_start", project=self.project.settings.name,
@@ -1834,6 +2050,8 @@ class MainWindow(QMainWindow):
                     self._tb_build_btn.set_progress(data)
                 elif kind == "rom_report":
                     self.build_panel.update_rom_report(data)
+                    self._gba_bar.set_build_report(data)
+                    self._update_gba_bar()
                     if sbp is not None: sbp.update_rom_report(data)
                 elif kind == "finished":
                     self._build_drain.stop()

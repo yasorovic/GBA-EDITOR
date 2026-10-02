@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import QApplication
 # par une teinte qui les suivrait dans tout l'éditeur. Un écran qui a besoin
 # de couleur (état actif, type de zone, rôle dans un outil) la définit dans
 # son propre contexte, avec sa propre règle de lecture.
+from core.app_info import APP_NAME
 from core.interface_preferences import interface_theme as _interface_theme
 _LIGHT = _interface_theme() == "light"
 COLOR_DEFAULT = "#666666" if _LIGHT else "#8c8c8c"   # gris neutre
@@ -100,6 +101,10 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "view_collision":        ("mdi.wall",                    "▨"),
     "view_notes":            ("mdi.note-text-outline",       "▤"),
     "view_minimap":          ("mdi.map-outline",             "▧"),
+    # Table des raccourcis flottante (ui/common/shortcut_hints.py)
+    "hints_keyboard":        ("mdi.keyboard-outline",        "⌨"),
+    "hints_expand":          ("mdi.chevron-up",              "▴"),
+    "hints_collapse":        ("mdi.chevron-down",            "▾"),
     "warning":               ("mdi.alert",                   "⚠"),
     # Notices (ui/common/notice.py) — l'icône dit ce que le message annonce là
     # où la couleur ne suffit plus : `build` et `render` sont tous deux jaunes,
@@ -316,7 +321,7 @@ def fallback(name: str) -> str:
 # calculable à l'import de theme.py — alors que le RENDU exige une
 # QApplication vivante et n'arrive qu'ensuite (ensure_qss_assets).
 
-_CACHE_DIR = Path(tempfile.gettempdir()) / "gba_editor_icons"
+_CACHE_DIR = Path(tempfile.gettempdir()) / f"{APP_NAME.lower()}_icons"
 _pending: dict[Path, tuple[str, str, int, float]] = {}
 
 

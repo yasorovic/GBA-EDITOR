@@ -6,6 +6,7 @@ recherche+liste au clic.
 from __future__ import annotations
 
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from typing import Callable, Optional
 
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QToolButton
@@ -294,7 +295,8 @@ class ColorIndexSlot(QWidget):
         self._btn.setFixedSize(24, 24)
         self._btn.setStyleSheet(QSS.toolbutton_icon)
         self._btn.setIcon(icons.get("palette", C.TEXT_DIM))
-        self._btn.setToolTip(label('pick.pick_hint'))
+        self._btn.setToolTip(tooltip(
+            title=label('pick.open_palette_title'), body=label('pick.pick_hint')))
         self._btn.clicked.connect(self._open)
         row.addWidget(self._btn)
 
@@ -340,8 +342,9 @@ class ColorIndexSlot(QWidget):
                 f"border-radius:3px;")
             self._code.setText(label('pick.index_index_not_in_the_bank', _index=self._index))
             self._code.setStyleSheet(f"color:{C.ACCENT_YLW};")
-            self._code.setToolTip(
-                label('pick.stale_index_tip'))
+            self._code.setToolTip(tooltip(
+                title=label('pick.unavailable_color_title'),
+                body=label('pick.stale_index_tip')))
             return
         r, g, b = rgb
         self._swatch.setPixmap(QPixmap())   # efface une icône posée au tour précédent
@@ -350,8 +353,9 @@ class ColorIndexSlot(QWidget):
             f"border-radius:3px;")
         self._code.setText(f"#{r:02X}{g:02X}{b:02X}")
         self._code.setStyleSheet(f"color:{C.TEXT_NORM};")
-        self._code.setToolTip(
-            label('pick.index_tip', _index=self._index))
+        self._code.setToolTip(tooltip(
+            title=label('pick.color_index_title', _index=self._index),
+            body=label('pick.index_tip', _index=self._index)))
 
     # ── Choix ─────────────────────────────────────────────────────
 

@@ -32,6 +32,7 @@ from .parser import (
 )
 # Les volumes du modèle sont des POURCENTAGES ; chaque appel maxmod a sa
 # propre échelle, et c'est ici qu'on convertit (cf. models/audio.py).
+from core.app_info import APP_NAME
 from core.models.audio import (
     volume_to_effect, volume_to_module, pitch_to_rate, panning_to_hardware,
     volume_to_effect_expr, volume_to_module_expr, pitch_to_rate_expr,
@@ -317,7 +318,7 @@ class CodegenContext:
     has_persistent: Optional[bool] = None
     # {nom d'accord : masque C}, dérivé des `InputBinding` du projet — un
     # simple ET de boutons (cases à cocher), plus de mini-langage ici depuis
-    # la décision de Victor du 2026-09-27. Les boutons physiques restent
+    # la décision de l'auteur du 2026-09-27. Les boutons physiques restent
     # résolus par `key_constant`.
     input_masks: dict = field(default_factory=dict)
     # {nom de séquence : (tables C, longueurs, fenêtre)} — le mini-langage
@@ -889,9 +890,9 @@ class CodeGen:
         sym = self.ctx.actor_sym
         if not self.ctx.has_self:
             kind = self.ctx.owner_kind
-            self._w(f"/* {sym}.c — script de {kind}, généré par GBA Editor (ne pas éditer) */")
+            self._w(f"/* {sym}.c — script de {kind}, généré par {APP_NAME} (ne pas éditer) */")
         else:
-            self._w(f"/* actor_{sym}.c — généré par GBA Editor (ne pas éditer) */")
+            self._w(f"/* actor_{sym}.c — généré par {APP_NAME} (ne pas éditer) */")
         # `runtime_api.h` et non `runtime.h` : c'est l'en-tête généré qui porte
         # la vraie struct Actor et l'API. Le C émis l'incluait autrefois sous le
         # nom `runtime.h`, que chaque appelant remplaçait ensuite par celui-ci —
@@ -1046,7 +1047,7 @@ class CodeGen:
         # de type réglable est TOUJOURS par instance, même lu seulement — deux
         # spawns du même prefab peuvent lui donner des valeurs différentes. On
         # renonce donc à le fondre en constante (uniformisation décidée avec
-        # Victor : quelques octets par instance contre un scan inter-script).
+        # l'auteur : quelques octets par instance contre un scan inter-script).
         if self.ctx.is_pooled:
             written = assigned_names(script)
             def _instance(loc):
@@ -2143,7 +2144,7 @@ class CodeGen:
     def _input_mask_arg(self, args: list) -> str:
         """Le nom cité par `held`/`buffered` (1er arg) : un bouton nu ou un
         accord déclaré (`InputBinding`) — jamais une séquence, qui n'a plus le
-        même espace de noms depuis la décision de Victor du 2026-09-27."""
+        même espace de noms depuis la décision de l'auteur du 2026-09-27."""
         if not args:
             return "0"
         if not isinstance(args[0], ExprString):
@@ -2528,7 +2529,7 @@ _DOMAIN_CONSTANT: dict = {
     DOMAIN_SFX:     lambda g, name: sfx_constant(name),
     DOMAIN_MUSIC:   lambda g, name: music_constant(name),
     # `pressed`/`released` (accord simple, jamais une séquence depuis la
-    # décision de Victor du 2026-09-27) passent par ce chemin générique ;
+    # décision de l'auteur du 2026-09-27) passent par ce chemin générique ;
     # `held`/`buffered` ont leur propre émetteur (`_input_mask_arg`) pour
     # l'argument optionnel/le bit de tampon, mais lisent le MÊME dict.
     DOMAIN_KEY:     lambda g, name: g.ctx.input_masks.get(name, key_constant(name)),

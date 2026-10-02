@@ -8,6 +8,7 @@ interface), leurs menus déroulants et les raccourcis. N'émet que des signaux
 from __future__ import annotations
 
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from PyQt6.QtCore import Qt, QPoint, QSize, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QFrame, QToolButton, QVBoxLayout
@@ -36,11 +37,11 @@ class FloatingToolbar(QFrame):
 
     tool_changed = pyqtSignal(str)  # ex. "select", "collision_8", "collision_slope"…
 
-    # Outils principaux — (id, icon_key, tooltip)
+    # Outils principaux — (id, icon_key, titre, raccourci, description)
     _MAIN_TOOLS = [
-        ("select", "tool_select", 'cvtool.select_s'),
-        ("add", "tool_add", 'cvtool.add_actor_a'),
-        ("erase", "tool_erase", 'cvtool.eraser_e'),
+        ("select", "tool_select", 'cvtool.select', 'cvtool.shortcut_select', 'cvtool.select_tip'),
+        ("add", "tool_add", 'cvtool.add_actor', 'cvtool.shortcut_add', 'cvtool.add_actor_tip'),
+        ("erase", "tool_erase", 'cvtool.eraser', 'cvtool.shortcut_erase', 'cvtool.eraser_tip'),
     ]
 
     # Sous-outils collision — (id, icon_key, label, tooltip)
@@ -139,7 +140,9 @@ class FloatingToolbar(QFrame):
         layout.setSpacing(2)
 
         from ui.common.widgets import DragHandle
-        layout.addWidget(DragHandle(Qt.Orientation.Vertical))
+        drag_handle = DragHandle(Qt.Orientation.Vertical)
+        drag_handle.setToolTip(tooltip(title=label("cvtool.move_toolbar")))
+        layout.addWidget(drag_handle)
 
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
@@ -150,16 +153,18 @@ class FloatingToolbar(QFrame):
         self._btns: dict[str, QToolButton] = {}
 
         # ── Outils principaux ─────────────────────────────────────
-        for tool_id, icon_key, tip in self._MAIN_TOOLS:
+        for tool_id, icon_key, title_key, shortcut_key, body_key in self._MAIN_TOOLS:
             btn = QToolButton()
             btn.setIcon(_ico(icon_key, COLOR_DEFAULT, COLOR_ACTIVE))
             btn.setIconSize(QSize(24, 24))
             btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-            btn.setToolTip(label(tip))
+            btn.setToolTip(tooltip(
+                title=label(title_key), shortcut=label(shortcut_key), body=label(body_key)
+            ))
             btn.setCheckable(True)
             btn.setChecked(tool_id == "select")
             btn.setFixedSize(36, 36)
-            btn.clicked.connect(lambda _, t=tool_id: self._set_tool(t))
+            btn.clicked.connect(lambda _, t=tool_id: self._set_tool(t))  # re-coché par _sync_buttons
             layout.addWidget(btn, 0, Qt.AlignmentFlag.AlignHCenter)
             self._btns[tool_id] = btn
 
@@ -171,7 +176,10 @@ class FloatingToolbar(QFrame):
         self._btn_collision.setIcon(_ico("view_collision", COLOR_DEFAULT, COLOR_ACTIVE))
         self._btn_collision.setIconSize(QSize(24, 24))
         self._btn_collision.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-        self._btn_collision.setToolTip(label('cvtool.collision_editing_c'))
+        self._btn_collision.setToolTip(tooltip(
+            title=label('cvtool.collision_editing'), shortcut="C",
+            body=label('cvtool.collision_editing_tip'),
+        ))
         self._btn_collision.setCheckable(True)
         self._btn_collision.setFixedSize(36, 36)
         self._btn_collision.clicked.connect(self._on_collision_click)
@@ -186,7 +194,10 @@ class FloatingToolbar(QFrame):
         )
         self._btn_inpaint.setIconSize(QSize(24, 24))
         self._btn_inpaint.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-        self._btn_inpaint.setToolTip(label('cvtool.scene_inpainting_b'))
+        self._btn_inpaint.setToolTip(tooltip(
+            title=label('cvtool.scene_inpainting'), shortcut="B",
+            body=label('cvtool.scene_inpainting_tip'),
+        ))
         self._btn_inpaint.setCheckable(True)
         self._btn_inpaint.setFixedSize(36, 36)
         self._btn_inpaint.clicked.connect(self._on_inpaint_click)
@@ -208,7 +219,10 @@ class FloatingToolbar(QFrame):
             _ico(self._UI_ICON_KEYS[self._current_ui], COLOR_DEFAULT, COLOR_ACTIVE))
         self._btn_ui.setIconSize(QSize(20, 20))
         self._btn_ui.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-        self._btn_ui.setToolTip(label('cvtool.interface_widget_t'))
+        self._btn_ui.setToolTip(tooltip(
+            title=label('cvtool.interface_widget'), shortcut="T",
+            body=label('cvtool.interface_widget_tip'),
+        ))
         self._btn_ui.setCheckable(True)
         self._btn_ui.setFixedSize(34, 34)
         self._btn_ui.clicked.connect(self._on_ui_click)
@@ -248,7 +262,7 @@ class FloatingToolbar(QFrame):
         for mode_id, icon_key, lbl_key, tip in self._COLLISION_MODES:
             act = QAction(label(lbl_key), self)
             act.setIcon(_ico(icon_key, COLOR_DEFAULT))
-            act.setToolTip(label(tip))
+            act.setToolTip(tooltip(title=label(lbl_key), body=label(tip)))
             act.setCheckable(True)
             act.setChecked(self._current_collision == mode_id)
             act.triggered.connect(lambda _, m=mode_id: self._select_collision_mode(m))
@@ -258,7 +272,7 @@ class FloatingToolbar(QFrame):
         btn_pos = self._btn_collision.mapToGlobal(
             QPoint(self._btn_collision.width() + 4, 0)
         )
-        menu.exec(btn_pos)
+        self._exec_menu(menu, btn_pos, self._btn_collision)
 
     def _select_collision_mode(self, mode: str):
         # Le bouton garde l'icône « mur » (identité collision partagée) ; le
@@ -290,7 +304,7 @@ class FloatingToolbar(QFrame):
         for mode_id, icon_key, lbl_key, tip in self._INPAINT_MODES:
             act = QAction(label(lbl_key), self)
             act.setIcon(_ico(icon_key, COLOR_DEFAULT))
-            act.setToolTip(label(tip))
+            act.setToolTip(tooltip(title=label(lbl_key), body=label(tip)))
             act.setCheckable(True)
             act.setChecked(self._current_inpaint == mode_id)
             act.triggered.connect(lambda _, m=mode_id: self._select_inpaint_mode(m))
@@ -299,7 +313,7 @@ class FloatingToolbar(QFrame):
         btn_pos = self._btn_inpaint.mapToGlobal(
             QPoint(self._btn_inpaint.width() + 4, 0)
         )
-        menu.exec(btn_pos)
+        self._exec_menu(menu, btn_pos, self._btn_inpaint)
 
     def _select_inpaint_mode(self, mode: str):
         self._current_inpaint = mode
@@ -335,14 +349,14 @@ class FloatingToolbar(QFrame):
         for mode_id, icon_key, lbl_key, tip in self._UI_MODES:
             act = QAction(label(lbl_key), self)
             act.setIcon(_ico(icon_key, COLOR_UI))
-            act.setToolTip(label(tip))
+            act.setToolTip(tooltip(title=label(lbl_key), body=label(tip)))
             act.setCheckable(True)
             act.setChecked(self._current_ui == mode_id)
             act.triggered.connect(lambda _, m=mode_id: self._select_ui_mode(m))
             menu.addAction(act)
 
         btn_pos = self._btn_ui.mapToGlobal(QPoint(self._btn_ui.width() + 4, 0))
-        menu.exec(btn_pos)
+        self._exec_menu(menu, btn_pos, self._btn_ui)
 
     def _select_ui_mode(self, mode: str):
         self._current_ui = mode
@@ -358,16 +372,30 @@ class FloatingToolbar(QFrame):
 
     def _set_tool(self, tool: str):
         self._current_tool = tool
-        # Mettre à jour le visuel de tous les boutons
+        self._sync_buttons()
+        self.tool_changed.emit(tool)
+
+    def _sync_buttons(self):
+        """Coche EXACTEMENT le bouton de l'outil courant. Seule source de l'état
+        visuel : le toggle automatique de QToolButton (clic sur un bouton déjà
+        coché, ou sur un bouton à menu) ne doit jamais décider seul."""
+        tool = self._current_tool
         for tid, btn in self._btns.items():
-            is_active = (
+            btn.setChecked(
                 tid == tool
                 or (tid == "collision" and tool.startswith("collision"))
                 or (tid == "inpaint_btn" and tool.startswith("inpaint"))
                 or (tid == "ui_btn" and tool.startswith("ui_"))
             )
-            btn.setChecked(is_active)
-        self.tool_changed.emit(tool)
+
+    def _exec_menu(self, menu, pos, owner):
+        """Ouvre un dropdown d'outil. Pendant qu'il est ouvert, SEUL son bouton
+        est coché (l'utilisateur est en train de choisir un autre outil) ; s'il
+        est refermé sans choix, l'outil précédent est restauré."""
+        for btn in self._btns.values():
+            btn.setChecked(btn is owner)
+        menu.exec(pos)
+        self._sync_buttons()
 
     @property
     def current_tool(self) -> str:

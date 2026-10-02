@@ -1,5 +1,5 @@
 """
-GBA Editor — gestion de projet
+Backstage — gestion de projet
 
 Structure de projet :
 
@@ -20,7 +20,7 @@ Structure de projet :
     scenes/            ← une scène par JSON (actors ET caméras inline)
     prefab/            ← templates d'actors (jamais compilés directement)
 
-  <Nom>.gba-project    ← manifeste : settings globaux (scène de démarrage,
+  <Nom>.project    ← manifeste : settings globaux (scène de démarrage,
                          auteur…) ET point d'entrée double-clic. Le nom du
                          projet EST le nom du fichier. Remplace project.json,
                          encore relu une fois pour les projets d'avant v0.10.
@@ -72,7 +72,11 @@ from core.reconcile_manifest import ReconcileManifest
 from core.resources.resource_store import ResourceStore, atomic_write
 from core.resources.palette_store import PaletteStore
 from core.project_starters import copy_starter, get_starter
-from core.project_paths import ProjectPathsMixin, PROJECT_EXT, find_manifest
+from core import crash_log
+from core.project_paths import (
+    ProjectPathsMixin, PROJECT_EXT, PROJECT_FORMAT_VERSION,
+    ProjectFileError, ProjectManifestError,
+    ProjectNotFoundError, find_manifest)
 from core.project_variables import ProjectVariablesMixin
 from core.project_texts import ProjectTextsMixin
 from core.project_langs import ProjectLangsMixin
@@ -87,7 +91,7 @@ from core.project_renames import ProjectRenameMixin
 # DÉFINI** — y compris quand un module voisin se trouve l'avoir sous la main
 # (`core.models.scene` importe `OWN_PAL_BANK` pour son propre usage ; il ne
 # faut pas le lui emprunter).
-from core.models.settings import (ProjectSettings, GlobalVar, Constant,
+from core.models.settings import (ProjectSettings, GlobalVar, Constant, DEFAULT_COLLISION_TAGS,
                                   Language, InputBinding, InputSequence, InputAxis, InputMovement)
 from core.models.text import Text
 from core.models.palette import PaletteBank, OWN_PAL_BANK
@@ -546,6 +550,17 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         for node in self.scene_ui_layouts(scene):
             if node.resolved_target(None, rm) == TARGET_BG:
                 return int(node.bg_slot)
+        # Aucun nœud : le défaut, mais jamais sur le slot d'un décor — le texte
+        # libre n'a pas de raison d'écraser un layer que l'utilisateur a posé
+        # là. On prend le premier slot libre du mode (défaut d'abord).
+        from core.models.scene import BG_SLOTS_BY_MODE
+        allowed = BG_SLOTS_BY_MODE.get(rm, BG_SLOTS_BY_MODE[0])
+        used = {int(l.bg_slot) for l in getattr(scene, "background_layers", [])
+                if l.background_name}
+        preferred = [self.UI_BG_SLOT_DEFAULT] + [s for s in allowed if s != self.UI_BG_SLOT_DEFAULT]
+        for slot in preferred:
+            if slot in allowed and slot not in used:
+                return slot
         return self.UI_BG_SLOT_DEFAULT
 
     def scene_ui_bg_slots(self, scene) -> list:
@@ -877,10 +892,11 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
 
     def save_settings(self):
         # Pas de clé `name` : le nom du projet EST le nom du fichier
-        # (<Nom>.gba-project). L'écrire aussi dans le JSON en ferait un second
+        # (<Nom>.project). L'écrire aussi dans le JSON en ferait un second
         # porteur, à re-synchroniser — exactement ce que « source de vérité
         # unique » interdit (cf. ROADMAP v0.10).
         data = {
+            "format_version": PROJECT_FORMAT_VERSION,
             "start_scene": self.settings.start_scene,
             "last_scene":  self.settings.last_scene,
             "author":      self.settings.author,
@@ -921,7 +937,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
                if self.settings.movements else {}),
         }
         atomic_write(self.project_file, project_json.dumps(data))
-        # Projet d'avant v0.10 : le .gba-project vient d'être écrit, l'ancien
+        # Projet d'avant v0.10 : le .project vient d'être écrit, l'ancien
         # project.json n'a plus de raison d'être. Sa suppression ici est la
         # deuxième moitié du pont de find_manifest — sans elle, le dossier
         # porterait deux manifestes et l'ouverture suivante serait refusée.
@@ -933,7 +949,14 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         if manifest is None:
             return
         d = json.loads(manifest.read_text(encoding="utf-8"))
-        # Le nom vient du FICHIER : <Nom>.gba-project → le stem. Un manifeste
+        found = int(d.get("format_version", 0))
+        if found > PROJECT_FORMAT_VERSION:
+            raise ProjectFileError(
+                f"Le projet « {self.root.name} » a été créé par une version plus "
+                f"récente de l'éditeur (format {found}, celui-ci lit jusqu'au "
+                f"format {PROJECT_FORMAT_VERSION}). Mettez l'éditeur à jour pour "
+                f"l'ouvrir ; rien n'a été modifié.")
+        # Le nom vient du FICHIER : <Nom>.project → le stem. Un manifeste
         # legacy (project.json) ne le porte pas dans son intitulé — on retombe
         # alors sur sa clé `name`, puis sur le dossier.
         if manifest.suffix == PROJECT_EXT:
@@ -1155,6 +1178,36 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         self.prefabs.load()
         self.load_scenes()
         self.load_active_scene_resources()
+        self.load_warnings += self._unreadable_warnings()
+
+    def _resource_stores(self) -> tuple:
+        return (self.scenes, self.prefabs, self.sprites, self.backgrounds,
+                self.sfx, self.music, self.fonts, self.font_assets,
+                self.palettes, self.ui_layouts, self.music_boxes,
+                self.jingle_boxes, self.sound_boxes, self.data_tables)
+
+    def unreadable_files(self) -> list[tuple[str, str]]:
+        """(nom du fichier, raison) pour chaque fichier de collection que son
+        store n'a pas su lire. Lu EN DIRECT : les catalogues différés (sprites,
+        fonds, sfx, music) ne se matérialisent qu'après l'ouverture, et ce qu'ils
+        n'ont pas su lire n'existe pour le build ni pour l'écran."""
+        return [(name, reason) for store in self._resource_stores()
+                for name, reason in store.unreadable.items()]
+
+    def preserved_files(self) -> list[tuple[str, str]]:
+        """(fichier, copie) : fichiers illisibles qu'une écriture a remplacés,
+        l'original est conservé dans la copie `.corrupt`."""
+        return [(name, backup) for store in self._resource_stores()
+                for name, backup in store.preserved.items()]
+
+    def _unreadable_warnings(self) -> list[str]:
+        """Un avertissement par fichier illisible, ou remplacé avec copie. Aucun
+        fichier n'est détruit : l'utilisateur peut le réparer, ou le restaurer."""
+        return ([f"« {name} » est illisible et a été ignoré ({reason})"
+                 for name, reason in self.unreadable_files()]
+                + [f"« {name} » était illisible et a été remplacé ; l'original "
+                   f"est conservé dans « {backup} »"
+                   for name, backup in self.preserved_files()])
 
     # ── Création / ouverture ──────────────────────────────────────
 
@@ -1181,6 +1234,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
 
         proj = cls(root)
         proj.settings.name = name
+        proj.settings.collision_tags = list(DEFAULT_COLLISION_TAGS)
 
         # Les assets initiaux (dont les palettes .hex et les polices de base)
         # viennent du starter. Un projet neuf reste en mémoire juste après sa
@@ -1201,7 +1255,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         proj.settings.start_scene = "Scene_01"
         proj.settings.last_scene  = "Scene_01"
 
-        # save() écrit le manifeste <Nom>.gba-project : c'est LUI qu'on
+        # save() écrit le manifeste <Nom>.project : c'est LUI qu'on
         # double-clique, associé à l'éditeur sur les deux OS (packaging/). Il a
         # remplacé le launcher .bat, qui ne valait que sous Windows.
         proj.save()
@@ -1210,7 +1264,27 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
 
     @classmethod
     def open(cls, root: Path) -> "Project":
-        """Ouvre un projet existant."""
+        """Ouvre un projet existant.
+
+        Refuse un dossier sans manifeste AVANT de toucher au disque : `load()`
+        crée les sous-dossiers, et un dossier vide ouvert comme un projet
+        devenait un projet fantôme (aucune scène, aucun manifeste)."""
+        if not root.is_dir() or find_manifest(root) is None:
+            raise ProjectNotFoundError(
+                f"« {root.name} » n'est pas un projet : aucun fichier "
+                f"{PROJECT_EXT} dans ce dossier.")
         proj = cls(root)
-        proj.load()
+        try:
+            proj.load()
+        except ProjectManifestError:
+            raise
+        except (ValueError, KeyError, TypeError, OSError) as exc:
+            # JSON tronqué (JSONDecodeError et UnicodeDecodeError sont des
+            # ValueError), champ absent, fichier verrouillé : un message clair
+            # et la trace dans le journal, pas une exception brute.
+            crash_log.log_current_exception(f"Ouverture du projet {root}")
+            raise ProjectFileError(
+                f"Le projet « {root.name} » n'a pas pu être chargé : un de ses "
+                f"fichiers est illisible ({type(exc).__name__} : {exc}). "
+                f"Le détail est dans {crash_log.LOG_FILE}.") from exc
         return proj

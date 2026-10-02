@@ -4,6 +4,7 @@ réutilisé par Project pour chacune de ses collections (scenes, sprites,
 backgrounds, prefabs, sfx, music, fonts, palettes)."""
 
 import json
+import shutil
 import time
 from pathlib import Path
 from typing import Generic, Iterator, Optional, Type, TypeVar
@@ -79,6 +80,13 @@ class ResourceStore(Generic[T]):
         self.index = ResourceIndex(directory)
         self.items: list[T] = []
         self._pending_delete: list[T] = []
+        # {nom du fichier: raison} des JSON que `load` / `load_one` n'ont pas su
+        # lire. Le fichier reste intact sur le disque ; l'application le dit
+        # (cf. `Project.load_warnings`) au lieu de laisser l'asset disparaître.
+        self.unreadable: dict[str, str] = {}
+        # {nom du fichier: nom de la copie} des fichiers illisibles qu'une
+        # écriture a remplacés : l'original vit dans la copie `.corrupt`.
+        self.preserved: dict[str, str] = {}
 
     # -- accès liste --
     def __iter__(self) -> Iterator[T]:
@@ -144,8 +152,27 @@ class ResourceStore(Generic[T]):
     def save(self, item: T):
         self.dir.mkdir(parents=True, exist_ok=True)
         path = self._path(item.name)
+        self._keep_unreadable(path)
         atomic_write(path, project_json.dumps(item.to_dict()))
         self.index.record(item.name, path)
+
+    def _keep_unreadable(self, path: Path) -> None:
+        """Avant d'écrire PAR-DESSUS un fichier qu'on n'a pas su lire, en garde
+        une copie à côté (`<nom>.json.corrupt`, numérotée si elle existe déjà).
+
+        Le cas réel : le sidecar d'un sprite est abîmé, la planche PNG existe, la
+        réconciliation recrée un sprite par défaut — et la sauvegarde suivante
+        l'écrirait sur le fichier abîmé, dont le découpage et les animations
+        auraient pu être récupérés à la main."""
+        if self.unreadable.pop(path.name, None) is None or not path.exists():
+            return
+        backup = path.with_name(path.name + ".corrupt")
+        n = 2
+        while backup.exists():
+            backup = path.with_name(f"{path.name}.corrupt{n}")
+            n += 1
+        shutil.copy2(path, backup)
+        self.preserved[path.name] = backup.name
 
     def save_all(self):
         for item in self.items:
@@ -153,6 +180,7 @@ class ResourceStore(Generic[T]):
 
     def load(self):
         self.items = []
+        self.unreadable = {}
         self.scan_index()
         for name in self.index.names():
             f = self.index.path_for(name)
@@ -174,6 +202,7 @@ class ResourceStore(Generic[T]):
                     item.name = f.stem
                 self.items.append(item)
             except Exception as e:
+                self.unreadable[f.name] = f"{type(e).__name__}: {e}"
                 print(f"[project] erreur lecture {self.cls.__name__} {f.name}: {e}")
 
     def load_one(self, name: str) -> Optional[T]:
@@ -184,6 +213,7 @@ class ResourceStore(Generic[T]):
         try:
             d = json.loads(path.read_text(encoding="utf-8"))
             new_item = self.cls.from_dict(d)
+            self.unreadable.pop(path.name, None)
             # Même règle qu'à `load` : le fichier nomme la ressource. Sans ça,
             # un sidecar dont le champ `name` a dérivé n'est jamais reconnu
             # comme celui qu'on recharge, et vient s'AJOUTER à la liste.
@@ -198,6 +228,7 @@ class ResourceStore(Generic[T]):
             self.index.record(name, path)
             return new_item
         except Exception as e:
+            self.unreadable[path.name] = f"{type(e).__name__}: {e}"
             print(f"[project] erreur reload {self.cls.__name__} {name}: {e}")
             return None
 
@@ -230,12 +261,18 @@ class ResourceStore(Generic[T]):
         emporter AUSSI ce fichier, pas seulement le sidecar : sans quoi le
         `reconcile_*` le retrouverait au prochain lancement et recréerait la
         ressource (cf. project.commit_all_removals). Le store, lui, ne connaît
-        que ses JSONs — il n'a pas à savoir ce qu'est un fichier source."""
-        return list(self._pending_delete)
+        que ses JSONs — il n'a pas à savoir ce qu'est un fichier source.
+
+        Une suppression dont le NOM est repris depuis par un élément vivant
+        n'est plus en attente : le fichier n'appartient plus à l'élément
+        supprimé mais à son remplaçant. L'effacer à la fermeture détruisait le
+        travail du remplaçant (supprimer `Scene_01`, en recréer une, fermer)."""
+        live = {item.name for item in self.items}
+        return [x for x in self._pending_delete if x.name not in live]
 
     def commit_deletes(self):
         """Efface définitivement les JSONs en attente (appeler à la fermeture)."""
-        for item in self._pending_delete:
+        for item in self.pending_deletes():
             path = self._path(item.name)
             if path.exists():
                 path.unlink()

@@ -35,6 +35,7 @@ from core.text_markup import TAGS, KIND_VALUE, VALUE_NONE
 from ui.common import icons
 from ui.common.theme import C
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.common.widgets import ScriptPickerPopup
 
 
@@ -82,9 +83,12 @@ class MarkupToolbar(QFrame):
                       + (f"…[/{name}]" if spec.scoped else ""))
             lay.addWidget(self._button(
                 icon,
-                f"<b>{syntax}</b><br>{spec.doc}<br><br>"
-                + (label("mktool.wraps") if spec.scoped
-                   else label("mktool.dropped")),
+                tooltip(
+                    title=syntax,
+                    body=spec.doc,
+                    note=(label("mktool.wraps") if spec.scoped
+                          else label("mktool.dropped")),
+                ),
                 lambda _c=False, n=name, d=default: self._on_click(n, d),
             ))
 
@@ -99,7 +103,7 @@ class MarkupToolbar(QFrame):
         # il substitue) — d'où le séparateur, et sa place en bout de barre.
         lay.addWidget(self._button(
             "mk_value",
-            label("mktool.value_tip"),
+            tooltip(title="$name", body=label("mktool.value_tip")),
             lambda _c=False: self._on_click(KIND_VALUE, "name"),
         ))
         lay.addStretch()

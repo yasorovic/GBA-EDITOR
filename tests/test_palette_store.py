@@ -90,7 +90,7 @@ def test_personal_starter_is_discovered_and_copies_only_project_content(tmp_path
     starter = personal_root / "My setup"
     (starter / "project" / "palettes").mkdir(parents=True)
     (starter / "project" / "palettes" / "Warm.hex").write_text("#000000\n#F8A000\n")
-    (starter / "Old.gba-project").write_text("must not be copied")
+    (starter / "Old.project").write_text("must not be copied")
     monkeypatch.setattr(project_starters, "USER_STARTERS_DIR", personal_root)
 
     discovered = project_starters.get_starter("user:My setup")
@@ -98,4 +98,4 @@ def test_personal_starter_is_discovered_and_copies_only_project_content(tmp_path
     project_starters.copy_starter(discovered, destination)
 
     assert (destination / "project" / "palettes" / "Warm.hex").exists()
-    assert not (destination / "Old.gba-project").exists()
+    assert not (destination / "Old.project").exists()

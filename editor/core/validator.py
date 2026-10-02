@@ -17,6 +17,7 @@ Plugins : enregistrer un validateur avec @register_validator
 """
 from __future__ import annotations
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Optional, TYPE_CHECKING
 
 from core.models.components import sprite_components
@@ -77,6 +78,28 @@ class ValidationContext:
         # `_check_frame_events` — plusieurs actors peuvent partager le même
         # fichier de script, pas la peine de le reparser à chaque fois.
         self._scripts: dict = {}
+        # Idem pour l'intégrité des images : un sprite cité par vingt acteurs
+        # n'est vérifié qu'une fois.
+        self._images: dict = {}
+
+    def image_problem(self, path) -> Optional[str]:
+        """Pourquoi l'image à ce chemin est inutilisable, ou None si elle est saine.
+
+        `exists()` ne suffit pas : un PNG tronqué ou un fichier qui n'en est pas un
+        passait la validation, puis faisait échouer le build au beau milieu de
+        grit — sous forme de trace Python."""
+        key = str(path)
+        if key not in self._images:
+            from PIL import Image
+            try:
+                with Image.open(path) as img:
+                    img.verify()
+                self._images[key] = None
+            except Exception as exc:
+                # Sans le chemin complet que PIL recopie : le message nomme déjà le fichier.
+                self._images[key] = (f"{type(exc).__name__} : "
+                                     f"{str(exc).replace(key, Path(key).name)}")
+        return self._images[key]
 
     def module(self, path):
         """Le module lu à ce chemin, ou None s'il est illisible."""
@@ -129,6 +152,7 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
     ctx = ValidationContext(project)
 
     # ── Validateurs built-in ─────────────────────────────────────────
+    _check_unreadable_files(ctx)
     _check_scene(ctx)
     _check_actors(ctx)
     _check_backgrounds(ctx)
@@ -400,8 +424,14 @@ def _check_sprite(ctx, actor, comp):
     proj   = ctx.project
     sprite = proj.get_sprite(comp.sprite_name) if comp.sprite_name else None
 
-    if not sprite:
+    if not comp.sprite_name:
         ctx.warn(actor, "SpriteComponent sans SpriteAsset lié (pas de sprite_name).")
+        return
+    if not sprite:
+        # Le composant CITE un sprite qui n'existe plus (fichier supprimé ou
+        # illisible) : sans ça l'acteur serait émis sans image, sans rien dire.
+        ctx.error(actor, f"Sprite '{comp.sprite_name}' introuvable — l'acteur le cite "
+                         f"mais aucun SpriteAsset de ce nom n'existe.")
         return
     if not sprite.asset:
         ctx.warn(actor, f"Sprite '{sprite.name}' n'a pas de PNG assigné.")
@@ -409,6 +439,9 @@ def _check_sprite(ctx, actor, comp):
     ap = proj.asset_abs(sprite.asset)
     if not ap or not ap.exists():
         ctx.error(actor, f"Sprite '{sprite.name}' : fichier PNG introuvable ({sprite.asset}).")
+    elif reason := ctx.image_problem(ap):
+        ctx.error(actor, f"Sprite '{sprite.name}' : l'image {sprite.asset} est illisible "
+                         f"({reason}) — réexportez le PNG.")
     if sprite.frame_w <= 0 or sprite.frame_h <= 0:
         ctx.error(actor, f"Sprite '{sprite.name}' : frame_w/h invalides ({sprite.frame_w}×{sprite.frame_h}).")
 
@@ -430,6 +463,19 @@ def _check_script(ctx, actor, comp):
         ctx.error(actor, f"Script introuvable : {comp.script}")
 
 
+def _check_unreadable_files(ctx: ValidationContext):
+    """Un fichier de projet illisible est ABSENT du build : l'asset qu'il décrit
+    n'existe ni pour l'écran ni pour la ROM. En ERREUR, comme un fichier audio
+    introuvable — sinon le jeu sortirait amputé sans qu'un mot ne le dise (cf.
+    `ResourceStore.unreadable`). Le fichier n'est jamais modifié."""
+    for name, reason in ctx.project.unreadable_files():
+        ctx.error(None, f"Fichier « {name} » illisible ({reason}) — l'asset qu'il "
+                        f"décrit est absent du build ; réparez le fichier ou supprimez-le.")
+    for name, backup in ctx.project.preserved_files():
+        ctx.warn(None, f"Fichier « {name} » : l'original était illisible et a été "
+                       f"remplacé par une version par défaut ; il est conservé dans « {backup} ».")
+
+
 def _check_backgrounds(ctx: ValidationContext):
     proj = ctx.project
     if not ctx.scene:
@@ -445,6 +491,9 @@ def _check_backgrounds(ctx: ValidationContext):
         png = ba.asset if ba.asset else f"{layer.background_name}.png"
         if not (proj.background_images_dir / png).exists():
             ctx.warn(None, f"Background BG{layer.bg_slot} : PNG introuvable ({png}) — layer ignoré.")
+        elif reason := ctx.image_problem(proj.background_images_dir / png):
+            ctx.error(None, f"Background BG{layer.bg_slot} : l'image {png} est illisible "
+                            f"({reason}) — réexportez le PNG.")
 
 
 def _check_bg_text_cbb_conflict(ctx: ValidationContext):

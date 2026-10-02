@@ -83,7 +83,7 @@ cas, littéraux non traduits, caractère qu'aucune police (ni l'active ni le rep
 
 ## v0.10 — Distribution Linux
 
-Format `.gba-project` : un manifeste unique, double-cliquable, qui remplace `project.json` et le
+Format `.project` : un manifeste unique, double-cliquable, qui remplace `project.json` et le
 `.bat` Windows — association MIME native sur Linux comme sur Windows, projets existants relus
 sans convertisseur. Réactivation du build AppImage dans la CI.
 

@@ -21,6 +21,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QTimer, QSize
 from ui.common.theme import T, C, S, QSS, ui_font
 from ui.common.widgets import W
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.common.icons import get as _ico, folder_icon, COLOR_DEFAULT, COLOR_UI
 from ui.common.tree_selection import highlight_matching
 from ui.common.selection_grammar import RowSelectionDelegate
@@ -411,8 +412,10 @@ class _ActiveSceneTree(_Tree):
                 button.setIcon(_ico("eye" if visible else "eye_off",
                                     C.TEXT_DIM if visible else "#555"))
                 button.setStyleSheet("QToolButton{background:transparent;border:none;padding:0;}")
-                button.setToolTip(label("scttree.hide_in_editor") if visible
-                                  else label("scttree.show_in_editor"))
+                button.setToolTip(tooltip(title=(
+                    label("scttree.hide_in_editor") if visible
+                    else label("scttree.show_in_editor")
+                )))
                 button.clicked.connect(
                     lambda _=False, typ=node_type, value=obj, lay=layout:
                     self._toggle_editor_visibility(typ, value, lay))
@@ -457,9 +460,9 @@ class _ActiveSceneTree(_Tree):
                               if shared else base)
             root_item.setForeground(0, QColor(C.ACCENT_YLW if shared else _DIM))
             root_item.setFont(0, ui_font(T.MD, bold=True))
-            root_item.setToolTip(
-                0, label("scttree.iface_tip_shared", name=lay.name, n=len(users)) if shared
-                   else label("scttree.iface_tip", name=lay.name))
+            if shared:
+                root_item.setToolTip(0, tooltip(
+                    title=base, body=label("scttree.iface_shared_note")))
             root_item.setFlags(root_item.flags() | Qt.ItemFlag.ItemIsDragEnabled)
             self._add_content_root(T_UI_LAYOUT, lay, root_item)
             items: dict[str, QTreeWidgetItem] = {}
@@ -486,22 +489,27 @@ class _ActiveSceneTree(_Tree):
         handle = _lua_handle(T_UI_ELEM, el)
         if handle:
             item.setForeground(0, QColor(_TEXT))
-            item.setToolTip(0, label("scttree.elem_ref",
-                                     type=_UI_ELEM_LABEL.get(kind, kind), handle=handle))
+            item.setToolTip(0, tooltip(
+                title=el.name,
+                body=label("scttree.elem_ref",
+                           type=_UI_ELEM_LABEL.get(kind, kind), handle=handle)))
         else:
             item.setForeground(0, QColor(_DIM))
-            item.setToolTip(0, label("scttree.elem_authoring",
-                                     type=_UI_ELEM_LABEL.get(kind, kind)))
+            item.setToolTip(0, tooltip(
+                title=el.name,
+                body=label("scttree.elem_authoring", type=_UI_ELEM_LABEL.get(kind, kind))))
 
     def _update_actor_item(self, item: QTreeWidgetItem, actor: Actor):
         handle = _lua_handle(T_ACTOR, actor)
         if actor.prefab_name:
             item.setIcon(0, _ico("prefab", COLOR_DEFAULT))
-            item.setToolTip(0, label("scttree.actor_prefab_tip",
-                                     name=actor.prefab_name, handle=handle))
+            item.setToolTip(0, tooltip(
+                title=actor.name,
+                body=label("scttree.actor_prefab_tip", name=actor.prefab_name, handle=handle)))
         else:
             item.setIcon(0, _ico("actor", COLOR_DEFAULT))
-            item.setToolTip(0, label("scttree.ref_tip", handle=handle))
+            item.setToolTip(0, tooltip(
+                title=actor.name, body=label("scttree.ref_tip", handle=handle)))
         item.setText(0, actor.name)
         item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsDragEnabled)
         item.setForeground(0, QColor(_TEXT))
@@ -509,7 +517,8 @@ class _ActiveSceneTree(_Tree):
     def _update_camera_item(self, item: QTreeWidgetItem, camera):
         handle = _lua_handle(T_CAMERA, camera)
         item.setIcon(0, _ico("camera", COLOR_DEFAULT))
-        item.setToolTip(0, label("scttree.ref_tip", handle=handle))
+        item.setToolTip(0, tooltip(
+            title=camera.name, body=label("scttree.ref_tip", handle=handle)))
         item.setText(0, camera.name)
         item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsDragEnabled)
         item.setForeground(0, QColor(_TEXT))
@@ -794,8 +803,15 @@ class _ActiveSceneTree(_Tree):
             self._add_folder_actions(menu, T_ACTOR, actor)
             menu.addSeparator()
             self.add_rename_action(menu, item, label("scttree.rename_actor"))
-            menu.addAction(label("scttree.delete_actor")).triggered.connect(
-                lambda: get_dispatcher().delete_actor(actor))
+            # Même règle que le menu du canvas : un acteur cliqué DANS la
+            # sélection entraîne tout le lot, hors sélection il agit seul.
+            selected = [it.data(0, _ROLE_OBJ) for it in self.selectedItems()
+                        if it.data(0, _ROLE_TYPE) == T_ACTOR]
+            targets = selected if actor in selected else [actor]
+            menu.addAction(label("scttree.delete_actor") if len(targets) == 1
+                           else label("scncanvas.delete_n", n=len(targets))
+                           ).triggered.connect(
+                lambda: get_dispatcher().delete_actors(targets))
 
         elif typ == T_CAMERA:
             camera = item.data(0, _ROLE_OBJ)
@@ -1110,7 +1126,7 @@ class _PrioritySceneTree(_Tree):
                     else:
                         layer = next((l for l in scene.background_layers if l.bg_slot == slot), None)
                         if layer is None:
-                            group.setToolTip(0, "Empty hardware background slot")
+                            group.setToolTip(0, tooltip(title=label("scttree.empty_hardware_background_slot")))
                         else:
                             group.setText(0, f"Background {slot}  ·  {layer.background_name or 'empty'}")
                         # Chaque nœud Interface rendu en BG apparaît sous SON slot
@@ -1126,7 +1142,8 @@ class _PrioritySceneTree(_Tree):
     def _update_actor(self, item, actor):
         item.setIcon(0, _ico("prefab" if actor.prefab_name else "actor", COLOR_DEFAULT))
         item.setText(0, actor.name)
-        item.setToolTip(0, f"OBJ priority {actor.priority}")
+        item.setToolTip(0, tooltip(
+            title=actor.name, body=label("scttree.obj_priority_tip", priority=actor.priority)))
         item.setForeground(0, QColor(_TEXT))
         item.setFlags(item.flags() | Qt.ItemFlag.ItemIsDragEnabled | Qt.ItemFlag.ItemIsSelectable)
 
@@ -1161,7 +1178,6 @@ class _PrioritySceneTree(_Tree):
             root.setIcon(0, _ico("ui_layout", COLOR_UI))
             root.setText(0, f"Interface  ·  {layout.name}")
             root.setForeground(0, QColor(_DIM))
-            root.setToolTip(0, label("scttree.iface_tip", name=layout.name))
             # Le nœud se glisse d'un Background à l'autre (change son bg_slot) ;
             # ses éléments, eux, ne déplacent aucun slot.
             root.setFlags(root.flags() | Qt.ItemFlag.ItemIsDragEnabled)
@@ -1380,7 +1396,7 @@ class SceneTreePanel(QWidget):
             button.setAutoRaise(True)
             button.setFixedSize(24, 24)
             button.setIcon(_ico(icon, COLOR_DEFAULT))
-            button.setToolTip(label(tip))
+            button.setToolTip(tooltip(title=label(tip)))
             button.toggled.connect(lambda checked, k=key: self._toggle_content_filter(k, checked))
             filters_layout.addWidget(button)
         self._filters_bar.setVisible(False)

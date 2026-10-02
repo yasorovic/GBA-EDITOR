@@ -5,6 +5,7 @@ from __future__ import annotations
 from . import BaseComponentEditor, register
 from ui.common.widgets import W, ScriptSlot, ScriptPickerPopup
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.common.pickers import sprite_picker_slot, palette_picker_slot
 from ui.common.theme import C
 from ui.common.icons import COLOR_SPRITE
@@ -82,7 +83,9 @@ class SpriteEditor(BaseComponentEditor):
             COLOR_SPRITE, on_picked=_on_pal_picked,
             add_label=label("common.choose_palette"), parent=self.insp,
         )
-        pal_slot.setToolTip(label("comped.palette_tip"))
+        pal_slot.setToolTip(tooltip(
+            title=label("comped.palette"), body=label("comped.palette_tip"),
+            note=label("comped.palette_note")))
         W.row(label("comped.palette"), pal_slot, layout)
 
         # ── État initial : même bouton+popup filtrable que "Sprite" ──
@@ -127,7 +130,10 @@ class SpriteEditor(BaseComponentEditor):
         ) or (sprite.states[0] if sprite and sprite.states else None)
         speed = W.spinbox(_init_state.speed if _init_state else 8, min_v=1, max_v=120)
         speed.setEnabled(sprite is not None)
-        speed.setToolTip(label("comped.anim_speed_tip", state=comp.initial_state))
+        speed.setToolTip(tooltip(
+            title=label("comped.anim_speed_title"),
+            body=label("comped.anim_speed_tip", state=comp.initial_state),
+            note=label("comped.anim_speed_note")))
         speed.valueChanged.connect(lambda v: self._set_anim_speed(comp, v))
         W.row(label("comped.anim_speed"), speed, layout)
 
@@ -142,7 +148,9 @@ class SpriteEditor(BaseComponentEditor):
         # ceux-là gardent leur valeur, ils ne s'affichent simplement pas.
         aff = W.checkbox_row("", label("comped.affine"), layout)
         aff.setChecked(bool(getattr(comp, "affine_transform", False)))
-        aff.setToolTip(label("comped.affine_tip"))
+        aff.setToolTip(tooltip(
+            title=label("comped.affine"), body=label("comped.affine_tip"),
+            note=label("comped.affine_note")))
         aff.toggled.connect(lambda on, c=comp: self._set_affine(c, on))
 
         # ── Scale local ───────────────────────────────────────────
@@ -154,8 +162,12 @@ class SpriteEditor(BaseComponentEditor):
         sx = W.double_spinbox(getattr(comp, "scale_x", 1.0), min_v=0.1, max_v=4.0, step=0.1)
         sy = W.double_spinbox(getattr(comp, "scale_y", 1.0), min_v=0.1, max_v=4.0, step=0.1)
         sx.setEnabled(_aff); sy.setEnabled(_aff)
-        sx.setToolTip(label("comped.scale_x_tip"))
-        sy.setToolTip(label("comped.scale_y_tip"))
+        sx.setToolTip(tooltip(
+            title=label("comped.scale_x_title"), body=label("comped.scale_x_tip"),
+            note=label("comped.affine_required")))
+        sy.setToolTip(tooltip(
+            title=label("comped.scale_y_title"), body=label("comped.scale_y_tip"),
+            note=label("comped.affine_required")))
         sx.valueChanged.connect(lambda v: self._set_comp_field(comp, "scale_x", v))
         sy.valueChanged.connect(lambda v: self._set_comp_field(comp, "scale_y", v))
         W.pair(label("common.scale"), "X", C.AXIS_X, sx, "Y", C.AXIS_Y, sy, layout)
@@ -165,7 +177,9 @@ class SpriteEditor(BaseComponentEditor):
         rot.setSuffix("°")
         rot.setWrapping(True)
         rot.setEnabled(_aff)
-        rot.setToolTip(label("comped.rotation_tip"))
+        rot.setToolTip(tooltip(
+            title=label("comped.rotation_title"), body=label("comped.rotation_tip"),
+            note=label("comped.affine_required")))
         rot.valueChanged.connect(lambda v: self._set_comp_field(comp, "rotation", v))
         W.row(label("common.rotation"), rot, layout)
 
@@ -175,8 +189,12 @@ class SpriteEditor(BaseComponentEditor):
         offx = W.spinbox(int(getattr(comp, "offset_x", 0)), min_v=-32768, max_v=32767)
         offy = W.spinbox(int(getattr(comp, "offset_y", 0)), min_v=-32768, max_v=32767)
         offx.setEnabled(_aff); offy.setEnabled(_aff)
-        offx.setToolTip(label("comped.offset_x_tip"))
-        offy.setToolTip(label("comped.offset_y_tip"))
+        offx.setToolTip(tooltip(
+            title=label("comped.offset_x_title"), body=label("comped.offset_x_tip"),
+            note=label("comped.affine_required")))
+        offy.setToolTip(tooltip(
+            title=label("comped.offset_y_title"), body=label("comped.offset_y_tip"),
+            note=label("comped.affine_required")))
         offx.valueChanged.connect(lambda v: self._set_comp_field(comp, "offset_x", v))
         offy.valueChanged.connect(lambda v: self._set_comp_field(comp, "offset_y", v))
         W.pair(label("comped.offset"), "X", C.AXIS_X, offx, "Y", C.AXIS_Y, offy, layout)

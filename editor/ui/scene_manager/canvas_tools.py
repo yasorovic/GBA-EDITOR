@@ -115,6 +115,7 @@ class AddActorTool(BaseTool):
         else:
             name = "Actor_0"
         get_dispatcher().add_actor(name, x=sx, y=sy)
+        self._view.placement_done.emit()
         return True
 
     def on_leave(self):
@@ -518,6 +519,7 @@ class UIWidgetTool(BaseTool):
         ctrl = self._ctrl()
         if ctrl is not None:
             ctrl.create_element(self._kind, x, y, w, h)
+            self._view.placement_done.emit()
         return True
 
     def _apply_preview(self, x, y, w, h):

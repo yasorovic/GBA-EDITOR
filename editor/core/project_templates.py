@@ -1,12 +1,15 @@
 """
 core/project_templates.py — Registre des projets modèles téléchargeables.
 
-Un template pointe vers un sous-dossier du dépôt GitHub de l'éditeur.
-GitHub ne sert pas de zip pour un sous-dossier seul : on télécharge le zip
-de la branche entière et on n'en extrait que `repo_subdir`. Une fois sur
-le disque, le dossier extrait est un projet comme un autre (project.json
-et tout) — aucune notion de « template » ne survit à l'extraction, il
+Un template pointe vers un sous-dossier d'une archive zip (`APP_TEMPLATES_URL`,
+cf. `core/app_info.py`). Un hébergeur de code ne sert pas de zip pour un
+sous-dossier seul : on télécharge le zip entier et on n'en extrait que
+`repo_subdir`. Une fois sur le disque, le dossier extrait est un projet comme
+un autre — aucune notion de « template » ne survit à l'extraction, il
 s'ouvre par le chemin standard (Project.load).
+
+**Sans adresse (`APP_TEMPLATES_URL` vide), il n'y a aucun modèle** : la liste est
+vide et le sélecteur de projet n'affiche pas l'onglet.
 """
 
 from __future__ import annotations
@@ -19,8 +22,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
-REPO_ZIP_URL   = "https://github.com/victor3x0/GBA-EDITOR/archive/refs/heads/main.zip"
-_REPO_ZIP_ROOT = "GBA-EDITOR-main"
+from core.app_info import APP_TEMPLATES_URL
+
+REPO_ZIP_URL = APP_TEMPLATES_URL
 
 
 @dataclass(frozen=True)
@@ -42,7 +46,7 @@ TEMPLATES: list[ProjectTemplate] = [
         description="Complete game — scenes, sprites, scripts, music.",
         repo_subdir="Project Demo/Pong",
     ),
-]
+] if REPO_ZIP_URL else []
 
 
 def target_dir(template: ProjectTemplate, projects_dir: Path) -> Path:
@@ -59,11 +63,13 @@ def download_template(
     projects_dir: Path,
     progress_cb: Optional[Callable[[str], None]] = None,
 ) -> Path:
-    """Télécharge le zip du dépôt et n'en extrait que `repo_subdir`.
+    """Télécharge le zip des modèles et n'en extrait que `repo_subdir`.
 
     Lève une exception (réseau, sous-dossier absent, extraction) — à
     l'appelant de l'afficher ; le dossier partiel est nettoyé avant de
     relancer l'exception."""
+    if not REPO_ZIP_URL:
+        raise RuntimeError("No template source is configured.")
     dest = target_dir(template, projects_dir)
     if dest.exists():
         raise FileExistsError(f"'{dest}' already exists.")
@@ -75,10 +81,13 @@ def download_template(
 
     if progress_cb:
         progress_cb("Extracting…")
-    prefix = f"{_REPO_ZIP_ROOT}/{template.repo_subdir}/"
     dest.mkdir(parents=True, exist_ok=True)
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            # Le dossier racine d'un zip d'archive porte le nom du dépôt et de la
+            # branche : on le LIT dans l'archive plutôt que de le recopier ici.
+            root = zf.namelist()[0].split("/")[0]
+            prefix = f"{root}/{template.repo_subdir}/"
             members = [m for m in zf.namelist() if m.startswith(prefix)]
             if not members:
                 raise FileNotFoundError(

@@ -11,6 +11,7 @@ from PyQt6.QtCore import Qt, QSize, pyqtSignal, QRect
 
 from ui.common.theme import C, T, QSS
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.common import icons
 from ui.common import external_editor
 
@@ -228,7 +229,9 @@ class _SpritesheetViewer(QWidget):
         hdr_lay.addSpacing(12)
 
         btn_zm = QToolButton(); btn_zm.setText("−"); btn_zm.setStyleSheet(_BTN)
+        btn_zm.setToolTip(tooltip(title=label("sprsheet.zoom_out")))
         btn_zp = QToolButton(); btn_zp.setText("+"); btn_zp.setStyleSheet(_BTN)
+        btn_zp.setToolTip(tooltip(title=label("sprsheet.zoom_in")))
         btn_zm.clicked.connect(self._zoom_out)
         btn_zp.clicked.connect(self._zoom_in)
         hdr_lay.addWidget(btn_zm)
@@ -244,7 +247,9 @@ class _SpritesheetViewer(QWidget):
         self._btn_edit.setIcon(icons.get("edit_external", icons.COLOR_DEFAULT))
         self._btn_edit.setIconSize(QSize(15, 15))
         self._btn_edit.setStyleSheet(_BTN)
-        self._btn_edit.setToolTip(label("sprsheet.edit_tip"))
+        self._btn_edit.setToolTip(tooltip(
+            title=label("sprsheet.edit"), body=label("sprsheet.edit_tip")
+        ))
         self._btn_edit.setEnabled(False)
         self._btn_edit.clicked.connect(self._on_edit_image)
         self._btn_edit.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -315,4 +320,3 @@ class _SpritesheetViewer(QWidget):
             self._canvas._zoom -= 1
             self._canvas._update_size()
             self._canvas.update()
-

@@ -11,6 +11,7 @@ L'écran hôte reste maître de son canvas : la barre ne fait qu'émettre
 from __future__ import annotations
 
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QToolButton
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
@@ -27,7 +28,7 @@ class CanvasTopBar(QFrame):
 
     def __init__(self, fit_tip: str = None, parent=None, show_coords: bool = True):
         if fit_tip is None:
-            fit_tip = label('cvtop.fit_to_view_f')
+            fit_tip = tooltip(title=label('cvtop.fit_to_view'), shortcut="F")
         super().__init__(parent)
         self.setFixedHeight(BAR_HEIGHT)
         self.setStyleSheet(f"background:{C.BG_RAISED}; border-bottom:1px solid {C.BORDER};")
@@ -38,8 +39,10 @@ class CanvasTopBar(QFrame):
         lay.setSpacing(12)
         self._lay = lay
 
-        self._btn_zoom_out = self._icon_btn("zoom_out", 16, (24, 24),
-                                            label('cvtop.zoom_out_wheel_down'))
+        self._btn_zoom_out = self._icon_btn(
+            "zoom_out", 16, (24, 24),
+            tooltip(title=label('cvtop.zoom_out'), shortcut=label('cvtop.wheel_down')),
+        )
         self._btn_zoom_out.clicked.connect(lambda: self.zoom_step_asked.emit(-1))
         lay.addWidget(self._btn_zoom_out)
 
@@ -50,8 +53,10 @@ class CanvasTopBar(QFrame):
         self._zoom_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(self._zoom_label)
 
-        self._btn_zoom_in = self._icon_btn("zoom_in", 16, (24, 24),
-                                           label('cvtop.zoom_in_wheel_up'))
+        self._btn_zoom_in = self._icon_btn(
+            "zoom_in", 16, (24, 24),
+            tooltip(title=label('cvtop.zoom_in'), shortcut=label('cvtop.wheel_up')),
+        )
         self._btn_zoom_in.clicked.connect(lambda: self.zoom_step_asked.emit(+1))
         lay.addWidget(self._btn_zoom_in)
 

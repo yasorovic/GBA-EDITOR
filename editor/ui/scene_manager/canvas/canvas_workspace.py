@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.common.theme import C, T, ui_font
 from ui.scene_manager.scene_graph_view import SceneGraphView
 
@@ -82,10 +83,12 @@ class CanvasWorkspace(QWidget):
         group.setExclusive(True)
         self._buttons[self.SCENE_VIEW] = self._segment(
             group, self.SCENE_VIEW, label("scncanvas.view_scene"),
-            label("scncanvas.view_scene_tip"))
+            tooltip(title=label("scncanvas.view_scene"),
+                    body=label("scncanvas.view_scene_tip")))
         self._buttons[self.GRAPH_VIEW] = self._segment(
             group, self.GRAPH_VIEW, label("scncanvas.view_graph"),
-            label("scncanvas.view_graph_tip"))
+            tooltip(title=label("scncanvas.view_graph"),
+                    body=label("scncanvas.view_graph_tip")))
         # Cas volontairement distinct des barres d'outils ordinaires : ces deux
         # boutons choisissent une *vue* (comme 2D / 3D dans Godot), pas une
         # action. Deux ressorts symétriques les maintiennent donc au centre.

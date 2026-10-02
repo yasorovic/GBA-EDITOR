@@ -34,6 +34,7 @@ ProjectInspector, aucun panneau ici ne gère l'absence de projet.
 from __future__ import annotations
 
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from PyQt6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QListWidget, QListWidgetItem, QStackedWidget, QScrollArea,
@@ -108,9 +109,9 @@ class BuildPanel(QWidget):
         self._spin_slots.setFixedWidth(64)
         self._spin_slots.setFont(QFont(T.MONO, T.MD))
         self._spin_slots.setStyleSheet(QSS.spinbox)
-        self._spin_slots.setToolTip(
-            label('projset.save_slots_tip')
-        )
+        self._spin_slots.setToolTip(tooltip(
+            title=label('projset.save_slots'), body=label('projset.save_slots_tip'),
+            note=label('projset.save_slots_note')))
         self._spin_slots.valueChanged.connect(
             lambda v: self._set_setting("save_slots", int(v)))
         _row(label('projset.save_slots'), self._spin_slots, lay, stretch=False)
@@ -122,9 +123,9 @@ class BuildPanel(QWidget):
         self._combo_cart.setStyleSheet(QSS.combobox)
         for mib in CARTRIDGE_SIZES_MIB:
             self._combo_cart.addItem(f"{mib} MiB", mib)
-        self._combo_cart.setToolTip(
-            label('projset.cartridge_tip')
-        )
+        self._combo_cart.setToolTip(tooltip(
+            title=label('projset.cartridge_title'), body=label('projset.cartridge_tip'),
+            note=label('projset.cartridge_note')))
         self._combo_cart.currentIndexChanged.connect(
             lambda i: self._set_setting("cartridge_mib", int(self._combo_cart.itemData(i) or 4)))
         _row(label('projset.cartridge'), self._combo_cart, lay, stretch=False)
@@ -132,9 +133,9 @@ class BuildPanel(QWidget):
         # ── Build debug ─────────────────────────────────────────────
         self._chk_debug = QCheckBox(label('projset.debug_build'))
         self._chk_debug.setFont(QFont(T.UI, T.MD))
-        self._chk_debug.setToolTip(
-            label('projset.debug_tip')
-        )
+        self._chk_debug.setToolTip(tooltip(
+            title=label('projset.debug_build'), body=label('projset.debug_tip'),
+            note=label('projset.debug_note')))
         self._chk_debug.toggled.connect(
             lambda v: self._set_setting("debug_build", bool(v)))
         _row(label('projset.build'), self._chk_debug, lay, stretch=False)
@@ -205,9 +206,9 @@ class VisualPanel(QWidget):
         self._btn_backdrop = QPushButton()
         self._btn_backdrop.setFixedSize(40, 22)
         self._btn_backdrop.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_backdrop.setToolTip(
-            label('projset.backdrop_tip')
-        )
+        self._btn_backdrop.setToolTip(tooltip(
+            title=label('projset.backdrop_title'), body=label('projset.backdrop_tip'),
+            note=label('projset.backdrop_note')))
         self._btn_backdrop.clicked.connect(self._pick_backdrop)
         self._lbl_backdrop = QLabel()
         self._lbl_backdrop.setFont(QFont(T.MONO, T.XS))
@@ -229,9 +230,9 @@ class VisualPanel(QWidget):
         self._combo_trans.setStyleSheet(QSS.combobox)
         for kind, lbl_key in TRANSITION_LABELS:
             self._combo_trans.addItem(label(lbl_key), kind)
-        self._combo_trans.setToolTip(
-            label('projset.transition_tip')
-        )
+        self._combo_trans.setToolTip(tooltip(
+            title=label('projset.transition_title'), body=label('projset.transition_tip'),
+            note=label('projset.transition_note')))
         self._combo_trans.currentIndexChanged.connect(
             lambda i: self._set_setting("transition_kind",
                                         self._combo_trans.itemData(i) or "none"))
@@ -241,8 +242,8 @@ class VisualPanel(QWidget):
         self._spin_trans.setSuffix(" f")
         self._spin_trans.setFont(QFont(T.MONO, T.MD))
         self._spin_trans.setStyleSheet(QSS.spinbox)
-        self._spin_trans.setToolTip(
-            label('projset.frames_tip'))
+        self._spin_trans.setToolTip(tooltip(
+            title=label('projset.frames_title'), body=label('projset.frames_tip')))
         self._spin_trans.valueChanged.connect(
             lambda v: self._set_setting("transition_frames", int(v)))
         trans_row.addWidget(self._combo_trans, 1)
@@ -344,9 +345,9 @@ class SoundPanel(QWidget):
                             (11025, "11 025 Hz"), (16000, "16 000 Hz"),
                             (22050, "22 050 Hz"), (32000, "32 000 Hz")):
             self._combo_rate.addItem(disp, value)
-        self._combo_rate.setToolTip(
-            label('projset.rate_tip')
-        )
+        self._combo_rate.setToolTip(tooltip(
+            title=label('projset.rate_title'), body=label('projset.rate_tip'),
+            note=label('projset.rate_note')))
         self._combo_rate.currentIndexChanged.connect(
             lambda i: self._set_setting("sfx_sample_rate", int(self._combo_rate.itemData(i) or 0)))
         _row(label('projset.sfx_rate'), self._combo_rate, lay, stretch=False)
@@ -361,9 +362,13 @@ class SoundPanel(QWidget):
         self._spin_channels.setFixedWidth(64)
         self._spin_channels.setFont(QFont(T.MONO, T.MD))
         self._spin_channels.setStyleSheet(QSS.spinbox)
-        self._spin_channels.setToolTip(
-            label('projset.channels_tip', value=sound_channels_bytes(1) - sound_channels_bytes(0), value_2=sound_channels_bytes(0), value_3=sound_channels_bytes(8), SOUND_HANDLE_SLOTS=SOUND_HANDLE_SLOTS)
-        )
+        self._spin_channels.setToolTip(tooltip(
+            title=label('projset.sound_channels'),
+            body=label('projset.channels_tip', handle_slots=SOUND_HANDLE_SLOTS),
+            note=label('projset.channels_note',
+                       channel_bytes=sound_channels_bytes(1) - sound_channels_bytes(0),
+                       buffer_bytes=sound_channels_bytes(0),
+                       default_bytes=sound_channels_bytes(8))))
         self._spin_channels.valueChanged.connect(
             lambda v: self._set_setting("sound_channels", int(v)))
         _row(label('projset.sound_channels'), self._spin_channels, lay, stretch=False)
@@ -553,8 +558,9 @@ class LanguagesPanel(QWidget):
         self._combo_fallback = QComboBox()
         self._combo_fallback.setFont(QFont(T.UI, T.MD))
         self._combo_fallback.setStyleSheet(QSS.combobox)
-        self._combo_fallback.setToolTip(
-            label('projset.default_font_tip'))
+        self._combo_fallback.setToolTip(tooltip(
+            title=label('projset.default_font'), body=label('projset.default_font_tip'),
+            note=label('projset.default_font_note')))
         self._combo_fallback.currentIndexChanged.connect(self._on_fallback_changed)
         _row(label('projset.default_font'), self._combo_fallback, lay)
 
@@ -900,7 +906,7 @@ class CollisionsPanel(QWidget):
         handle.setFixedWidth(_TAG_HANDLE_W)
         handle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         handle.setCursor(Qt.CursorShape.OpenHandCursor)
-        handle.setToolTip(label('projset.drag_to_reorder'))
+        handle.setToolTip(tooltip(title=label('projset.drag_to_reorder')))
         handle.installEventFilter(self)
         self._drag_handles[handle] = ta
         row.addWidget(handle)
@@ -934,8 +940,9 @@ class CollisionsPanel(QWidget):
             row.addWidget(cell)
 
         n = self._tag_usage(ta)
-        rm = W.btn_danger(
-            label('projset.remove_tag_used', n=n, value='es' if n != 1 else '') if n else label('projset.remove_tag_unused'))
+        rm = W.btn_danger(tooltip(
+            title=label('projset.remove_tag_title'),
+            body=label('projset.remove_tag_used', n=n) if n else label('projset.remove_tag_unused')))
         rm.clicked.connect(lambda _c=False, _t=ta: self._remove_tag(_t))
         row.addWidget(rm)
 

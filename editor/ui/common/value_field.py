@@ -44,6 +44,7 @@ CODEGEN :
 from __future__ import annotations
 
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QSpinBox, QToolButton, QLabel, QMenu,
 )
@@ -162,7 +163,9 @@ class ValueField(QWidget):
             )
             sym = (f"CONST_{fv.var_name.upper()}" if fv.var_src == "const"
                    else f"g_{fv.var_name}")
-            self._chip.setToolTip(f"→ {sym}")
+            self._chip.setToolTip(tooltip(
+                title=label('valfield.reference_title'),
+                body=label('valfield.reference_tip', symbol=sym)))
             self._btn.setText("ƒ")
         else:
             self._chip.setVisible(False)

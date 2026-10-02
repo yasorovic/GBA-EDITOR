@@ -25,6 +25,7 @@ PAS affiché : il n'est pas mesuré, et ce projet n'affiche pas de nombre devin�
 from __future__ import annotations
 
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from typing import Optional
 
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel
@@ -135,19 +136,11 @@ class SoundBudgetBar(QWidget):
         lay.addStretch()
 
         for w in (lbl_name, self._value, self._detail):
-            w.setToolTip(self._TOOLTIP)
-
-    _TOOLTIP = (
-        "Canaux logiciels — musique + jingle\n\n"
-        "maxmod partage un même pool de canaux entre la musique, le jingle et\n"
-        "les effets. Ce compteur ne couvre que les DEUX COUCHES CONTINUES —\n"
-        "le pire état de musique, plus le pire état de jingle des boîtes\n"
-        "affichées ici — car elles peuvent se superposer à tout instant.\n\n"
-        "Les effets (SoundBox) n'y entrent pas : ce sont des déclenchements\n"
-        "ponctuels, et maxmod gère lui-même la pénurie — un canal libre\n"
-        "d'abord, sinon le canal d'arrière-plan le plus faible cède la place.\n\n"
-        "Le plafond se règle dans l'inspecteur de projet (Sound channels)."
-    )
+            w.setToolTip(tooltip(
+                title=label("sndbar.channels_title"),
+                body=label("sndbar.channels_tip"),
+                note=label("sndbar.channels_note"),
+            ))
 
     def update_boxes(self, project, music_box: Optional[MusicBox],
                      jingle_box: Optional[JingleBox], limit: int):

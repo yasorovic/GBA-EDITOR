@@ -26,13 +26,23 @@ class PaletteStore(ResourceStore[PaletteBank]):
         return self.dir / f"{safe_filename(name)}.hex"
 
     def _load_metadata(self, path: Path) -> dict:
+        """Les métadonnées du sidecar, ou {} s'il est illisible : le `.hex` est
+        la donnée canonique, un JSON voisin abîmé ne doit pas faire disparaître
+        la palette. Le fichier est signalé (`unreadable`) et sa copie de
+        sauvegarde faite avant que le sidecar ne soit réécrit."""
         if not path.exists():
             return {}
-        data = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError) as error:
+            self.unreadable[path.name] = f"{type(error).__name__}: {error}"
+            return {}
         return data if isinstance(data, dict) else {}
 
     def _write_sidecar(self, bank: PaletteBank) -> None:
-        atomic_write(self._path(bank.name), project_json.dumps(bank.to_metadata_dict()))
+        path = self._path(bank.name)
+        self._keep_unreadable(path)
+        atomic_write(path, project_json.dumps(bank.to_metadata_dict()))
 
     def save(self, item: PaletteBank):
         self.dir.mkdir(parents=True, exist_ok=True)
@@ -41,6 +51,7 @@ class PaletteStore(ResourceStore[PaletteBank]):
 
     def load(self):
         self.items = []
+        self.unreadable = {}
         if not self.dir.exists():
             return
 
@@ -74,6 +85,7 @@ class PaletteStore(ResourceStore[PaletteBank]):
                 # complet pour l'éditeur, sans que ses couleurs soient copiées.
                 self._write_sidecar(bank)
             except Exception as error:
+                self.unreadable[source.name] = f"{type(error).__name__}: {error}"
                 print(f"[project] erreur lecture palette {source.name}: {error}")
 
     def load_one(self, name: str) -> PaletteBank | None:
@@ -103,7 +115,7 @@ class PaletteStore(ResourceStore[PaletteBank]):
         self._pending_delete = [x for x in self._pending_delete if x is not item]
 
     def commit_deletes(self):
-        for item in self._pending_delete:
+        for item in self.pending_deletes():   # cf. ResourceStore.pending_deletes
             for path in (self.source_path(item.name), self._path(item.name)):
                 if path.exists():
                     path.unlink()

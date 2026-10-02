@@ -31,7 +31,7 @@ graph TD
         store["resource_index · resource_store<br/>palette_store · asset_reconciliation"]
     end
 
-    disk[("Disque projet<br/>assets/ + project/<br/>+ &lt;Nom&gt;.gba-project")]
+    disk[("Disque projet<br/>assets/ + project/<br/>+ &lt;Nom&gt;.project")]
 
     subgraph ui["Écrans — editor/ui/ (rangés par écran)"]
         screens["home · scene_manager · sprite_editor<br/>palette_editor · background_editor<br/>data_editor · sound_mixer<br/>script_editor · text_editor"]

@@ -25,6 +25,7 @@ from PyQt6.QtCore import (
 from ui.common.theme import C, T, QSS, ui_font
 from ui.common.widgets import W, FinderSection, AssetHeaderBar
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from ui.common.icons import COLOR_BACKGROUND, COLOR_UI
 from ui.common.palette_slot_grid import PaletteSlotGridAsset
 from ui.common.asset_palette_view import background_palette_view
@@ -263,7 +264,8 @@ class _AnimatedSourceList(_BgList):
             it = QListWidgetItem(ba.name)
             it.setData(Qt.ItemDataRole.UserRole, ba)
             n = ba.frame_count()
-            it.setToolTip(label("bgedit.anim_source_tip", name=ba.name, n=n))
+            it.setToolTip(tooltip(
+                title=ba.name, body=label("bgedit.anim_source_tip", n=n)))
             self.addItem(it)
         # Assez haute pour montrer jusqu'à quatre entrées, puis on défile : la
         # réserve ne doit pas repousser les palettes hors de l'écran.
@@ -345,12 +347,18 @@ class BgPropertiesPanel(QWidget):
         self._chk_dither = QCheckBox(label("bgedit.dithering"))
         self._chk_dither.setFont(QFont(T.UI, T.SM))
         self._chk_dither.setStyleSheet(f"color:{C.TEXT_NORM};")
+        self._chk_dither.setToolTip(tooltip(
+            title=label("bgedit.dithering"), body=label("bgedit.dithering_tip")))
         self._chk_dither.toggled.connect(self._on_dither_toggled)
         root.addWidget(self._chk_dither)
 
         # Mesure du 4bpp : à la demande, sur l'image PRÉPARÉE. Sert à décider s'il
         # faut recadrer/réduire avant de passer en 4bpp — elle ne change rien.
-        self._btn_analyze = self._mini_btn(label("bgedit.analyze"), label("bgedit.analyze_tip"))
+        self._btn_analyze = self._mini_btn(
+            label("bgedit.analyze"),
+            tooltip(title=label("bgedit.analyze"), body=label("bgedit.analyze_tip"),
+                    note=label("bgedit.analyze_tip_note")),
+        )
         # Enfoncé = l'analyse est affichée ; un second clic la ferme.
         self._btn_analyze.setCheckable(True)
         self._btn_analyze.toggled.connect(self._on_analyze_toggled)
@@ -386,7 +394,8 @@ class BgPropertiesPanel(QWidget):
             comp, label("bgedit.comp_colors8"), label("bgedit.comp_colors8_tip"), 2, 255)
         self._sl_tiles = self._slider_row(
             comp, label("bgedit.comp_tiles"), label("bgedit.comp_tiles_tip"), 32, 1024,
-            special=label("bgedit.comp_nolimit"), special_at_max=True)
+            special=label("bgedit.comp_nolimit"), special_at_max=True,
+            note=label("bgedit.comp_tiles_tip_note"))
         self._cmb_method = QComboBox()
         self._cmb_method.setFont(QFont(T.UI, T.SM))
         self._cmb_method.setStyleSheet(QSS.combobox)
@@ -396,13 +405,17 @@ class BgPropertiesPanel(QWidget):
                               "kmeans": label("bgedit.method_kmeans"),
                               "octree": label("bgedit.method_octree"),
                               "max_coverage": label("bgedit.method_max_coverage")}
-        self._cmb_method.setToolTip(label("bgedit.comp_method_tip"))
+        self._cmb_method.setToolTip(tooltip(
+            title=label("bgedit.comp_method"), body=label("bgedit.comp_method_tip")))
         self._cmb_method.currentIndexChanged.connect(self._on_comp_changed)
         W.row(label("bgedit.comp_method"), self._cmb_method, comp)
         # Les lignes propres à un mode : la boîte montre celles du mode courant.
         self._rows_4bpp = [self._sl_palettes._row, self._sl_colors._row, self._sl_global._row]
         self._rows_8bpp = [self._sl_pal8._row]
-        self._btn_comp_reset = self._mini_btn(label("bgedit.comp_reset"), label("bgedit.comp_reset_tip"))
+        self._btn_comp_reset = self._mini_btn(
+            label("bgedit.comp_reset"),
+            tooltip(title=label("bgedit.comp_reset"), body=label("bgedit.comp_reset_tip")),
+        )
         self._btn_comp_reset.clicked.connect(self._on_comp_reset)
         comp.addWidget(self._btn_comp_reset)
         self._comp_timer = QTimer(self)
@@ -458,6 +471,10 @@ class BgPropertiesPanel(QWidget):
             sp.setRange(0, 512)
             sp.setSingleStep(8)      # une tuile : le pas où la coupe existe vraiment
             sp.setKeyboardTracking(False)
+            sp.setToolTip(tooltip(
+                title=label(f"bgedit.margin_{field_name.removeprefix('slice_')}"),
+                body=label("bgedit.margin_tip"), note=label("bgedit.margin_tip_note"),
+            ))
             sp.valueChanged.connect(lambda v, f=field_name: self._on_slice(f, v))
             srow.addWidget(t); srow.addWidget(sp, 1)
             self._slice_spins[field_name] = sp
@@ -485,6 +502,10 @@ class BgPropertiesPanel(QWidget):
             sp.setSingleStep(8)
             sp.setSpecialValueText(label("bgedit.frame_full"))   # 0 = une seule frame
             sp.setKeyboardTracking(False)
+            sp.setToolTip(tooltip(
+                title=label(f"bgedit.frame_{'width' if field_name == 'frame_w' else 'height'}"),
+                body=label("bgedit.frame_tip"),
+            ))
             sp.valueChanged.connect(lambda v, f=field_name: self._on_frame_size(f, v))
             frow.addWidget(t); frow.addWidget(sp, 1)
             self._frame_spins[field_name] = sp
@@ -495,7 +516,8 @@ class BgPropertiesPanel(QWidget):
         self._speed.setStyleSheet(QSS.spinbox)
         self._speed.setRange(1, 255)
         self._speed.setSuffix(label("bgedit.ticks_suffix"))
-        self._speed.setToolTip(label("bgedit.speed_tip"))
+        self._speed.setToolTip(tooltip(
+            title=label("common.speed"), body=label("bgedit.speed_tip")))
         self._speed.setKeyboardTracking(False)
         self._speed.valueChanged.connect(self._on_speed)
         self._speed_row = W.row(label("common.speed"), self._speed, root).parentWidget()
@@ -552,7 +574,8 @@ class BgPropertiesPanel(QWidget):
         self._pl_start.setFont(QFont(T.MONO, T.SM))
         self._pl_start.setStyleSheet(QSS.spinbox)
         self._pl_start.setRange(0, 255)
-        self._pl_start.setToolTip(label("bgedit.pl_start_tip"))
+        self._pl_start.setToolTip(tooltip(
+            title=label("bgedit.start_frame"), body=label("bgedit.pl_start_tip")))
         self._pl_start.setKeyboardTracking(False)
         self._pl_start.valueChanged.connect(self._on_placement_start)
         self._pl_start_row = W.row(label("bgedit.start_frame"), self._pl_start, root).parentWidget()
@@ -563,7 +586,8 @@ class BgPropertiesPanel(QWidget):
         self._pl_speed.setRange(0, 255)
         self._pl_speed.setSuffix(label("bgedit.ticks_suffix"))
         self._pl_speed.setSpecialValueText(label("bgedit.default"))   # 0 = cadence de l'animé
-        self._pl_speed.setToolTip(label("bgedit.pl_speed_tip"))
+        self._pl_speed.setToolTip(tooltip(
+            title=label("common.speed"), body=label("bgedit.pl_speed_tip")))
         self._pl_speed.setKeyboardTracking(False)
         self._pl_speed.valueChanged.connect(self._on_placement_speed)
         self._pl_speed_row = W.row(label("common.speed"), self._pl_speed, root).parentWidget()
@@ -591,12 +615,17 @@ class BgPropertiesPanel(QWidget):
         # Ferrés en bas, avec « Extraire les palettes » : les gestes qui portent sur
         # l'image entière, du plus léger au plus lourd, hors du flux des réglages.
         root.addStretch()
-        self._btn = self._footer_btn(label("bgedit.import_replace"))
+        self._btn = self._footer_btn(
+            label("bgedit.import_replace"),
+            tooltip(title=label("bgedit.import_replace_title"),
+                    body=label("bgedit.import_replace_tip")))
         self._btn.clicked.connect(self._on_replace)
         root.addWidget(self._btn)
 
         self._btn_restore = self._footer_btn(
-            label("bgedit.restore"), label("bgedit.restore_tip"))
+            label("bgedit.restore"),
+            tooltip(title=label("bgedit.restore_title"), body=label("bgedit.restore_tip"),
+                    warning=label("bgedit.restore_tip_warning")))
         self._btn_restore.clicked.connect(self._on_restore)
         root.addWidget(self._btn_restore)
 
@@ -604,7 +633,9 @@ class BgPropertiesPanel(QWidget):
         #    sous-palettes déduites du PNG en PaletteBank partagées du catalogue
         #    (visibles/éditables depuis le Palette Editor) et les assigne à ce fond.
         self._btn_extract = QPushButton(label("bgedit.extract"))
-        self._btn_extract.setToolTip(label("bgedit.extract_tip"))
+        self._btn_extract.setToolTip(tooltip(
+            title=label("bgedit.extract_title"), body=label("bgedit.extract_tip"),
+            warning=label("bgedit.extract_warning")))
         self._btn_extract.setFont(QFont(T.UI, T.MD, QFont.Weight.DemiBold))
         self._btn_extract.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_extract.setFixedHeight(38)
@@ -628,14 +659,15 @@ class BgPropertiesPanel(QWidget):
         return b
 
     def _slider_row(self, layout, name: str, tip: str, lo: int, hi: int, special: str = "",
-                    special_at_max: bool = False) -> QSlider:
+                    special_at_max: bool = False, note: str = "") -> QSlider:
         """Ligne « libellé  [curseur]  [champ] ». Le champ et le curseur disent la
         même valeur : tirer l'un met l'autre à jour, taper dans le champ déplace le
         curseur. `special` nomme l'extrémité qui veut dire « désactivé » (0, ou le
         maximum pour la cible de tuiles : plus haut = moins de contrainte)."""
         sl = QSlider(Qt.Orientation.Horizontal)
         sl.setRange(lo, hi)
-        sl.setToolTip(tip)
+        rich_tip = tooltip(title=name, body=tip, note=note)
+        sl.setToolTip(rich_tip)
         # Le `QToolTip` de la feuille globale ne suit pas un widget qui porte sa
         # propre feuille : on le répète ici pour que la bulle garde le thème.
         sl.setStyleSheet(
@@ -652,7 +684,7 @@ class BgPropertiesPanel(QWidget):
         spin.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         spin.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
         spin.setKeyboardTracking(False)      # la valeur tapée compte à Entrée, pas à chaque chiffre
-        spin.setToolTip(tip)
+        spin.setToolTip(rich_tip)
         host = QWidget(); host.setStyleSheet("background:transparent;")
         h = QHBoxLayout(host); h.setContentsMargins(0, 0, 0, 0); h.setSpacing(6)
         h.addWidget(sl, 1); h.addWidget(spin)
@@ -678,7 +710,7 @@ class BgPropertiesPanel(QWidget):
         return b
 
     def _mode_btn(self, text: str, tip: str) -> QPushButton:
-        b = QPushButton(text); b.setToolTip(tip)
+        b = QPushButton(text); b.setToolTip(tooltip(title=text, body=tip))
         b.setCheckable(True)
         b.setFont(QFont(T.UI, T.MD, QFont.Weight.DemiBold))
         b.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1228,7 +1260,9 @@ class BgPropertiesPanel(QWidget):
     def _validation_lines(self, ba) -> list:
         if not ba or not (ba.tileset or ba.bitmap):
             return [(label('bgedit.compression_failed'), C.ACCENT_RED)]
-        warn, err, ok = C.ACCENT_YLW, C.ACCENT_RED, C.TEXT_HI
+        # L'overlay du canvas est sombre dans TOUS les thèmes : le « ok » ne peut
+        # pas suivre TEXT_HI (foncé en thème clair), il reste blanc.
+        warn, err, ok = C.ACCENT_YLW, C.ACCENT_RED, "#ffffff"
         kind_lines = self._kind_validation_lines(ba)
         if ba.mode == "bitmap":
             diag = self._diag_for(ba)

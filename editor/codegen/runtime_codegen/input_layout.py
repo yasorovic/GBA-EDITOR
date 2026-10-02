@@ -5,7 +5,7 @@ calculés UNE FOIS depuis les `InputBinding`/`InputSequence`/`InputAxis`/
 `InputMovement` déclarés (et, pour la profondeur liée à `buffered`, les
 littéraux trouvés dans les scripts).
 
-Décision de Victor (2026-09-27, après coup) : un ACCORD (`InputBinding`,
+Décision de l'auteur (2026-09-27, après coup) : un ACCORD (`InputBinding`,
 cases à cocher) et une SÉQUENCE (`InputSequence`, mini-langage complet) sont
 deux espaces de noms séparés — `held`/`pressed`/`released`/`buffered` ne
 lisent jamais une séquence, `get_sequence` ne lit jamais un accord.
@@ -167,7 +167,7 @@ def compute_input_layout(p) -> InputLayout:
         layout.ring_depth = max(layout.ring_depth, buffered_max + 1)
     # Le bit `buffered` n'est alloué QU'AUX accords interrogés par
     # `buffered()` — un jeu sans tampon, ou un accord jamais bufferisé, n'en
-    # paie pas l'octet (ROADMAP, décision de Victor).
+    # paie pas l'octet (ROADMAP, décision de l'auteur).
     for i, name in enumerate(n for n in layout.masks if n in buffered_names):
         layout.buffered_bits[name] = i
 

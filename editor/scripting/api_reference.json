@@ -12,7 +12,7 @@
         {
           "label": "self:move(dir, speed)",
           "snippet": "self:move(dir, speed)",
-          "description": "Avance ce frame d'au plus `speed` px dans la direction `dir` (un vec2), normalisée — une diagonale n'avance pas plus vite qu'un axe. À rappeler chaque frame depuis on_update. Ex: self:move(vec2(1, 0), 60)",
+          "description": "Avance ce frame d’au plus `speed` px dans la direction `dir` (un vec2). La direction est normalisée : une diagonale n’avance pas plus vite qu’un axe.",
           "params": [
             {
               "name": "dir",
@@ -310,7 +310,7 @@
         {
           "label": "input:held(\"nom\"[, frames])",
           "snippet": "input:held(\"jump\")",
-          "description": "Vrai si l'accord (bouton, ou action déclarée dans Project Settings → Input → Inputs) est tenu ce frame. Avec `frames`, vrai depuis AU MOINS ce nombre de frames consécutives (appui long, tir chargé) — 1 à 255. Ne lit jamais une séquence : utiliser `get_sequence` pour un quart de cercle ou un combo.",
+          "description": "Vrai si l’accord est tenu ce frame. Avec `frames`, reste vrai après ce nombre de frames consécutives, de 1 à 255. Pour une séquence, utilisez `get_sequence`.",
           "params": [
             {
               "name": "nom",
@@ -320,7 +320,7 @@
             {
               "name": "frames",
               "type": "number",
-              "description": "Optionnel — durée minimale de maintien, en frames"
+              "description": "Optionnel : durée minimale de maintien, en frames"
             }
           ],
           "returns": "bool",
@@ -357,7 +357,7 @@
         {
           "label": "input:buffered(\"nom\", frames)",
           "snippet": "input:buffered(\"jump\", 6)",
-          "description": "Vrai si l'accord vient d'être pressé dans les `frames` derniers frames (tampon de saut) ET que cet appui n'a pas déjà été consommé — répondre vrai CONSOMME l'appui. `frames` doit être un nombre écrit en clair (comme wait()) : il fixe la profondeur de l'anneau au build. Ne lit jamais une séquence. PIÈGE : évaluée avant un `and` qui la suit — `if input:buffered(\"jump\", 6) and au_sol` consomme l'appui même en l'air ; écrire `if au_sol and input:buffered(\"jump\", 6)` pour ne la consommer qu'au sol.",
+          "description": "Vrai si l’accord a été pressé dans les `frames` derniers frames et n’a pas encore été consommé. Lorsque la fonction renvoie vrai, elle consomme cet appui. Placez-la après vos autres conditions dans un `and`.",
           "params": [
             {
               "name": "nom",
@@ -367,7 +367,7 @@
             {
               "name": "frames",
               "type": "number",
-              "description": "Fenêtre de tampon, en frames — un nombre écrit en clair, 1 à 255"
+              "description": "Fenêtre de tampon, en frames. Utilisez un nombre écrit en clair, de 1 à 255."
             }
           ],
           "returns": "bool",
@@ -400,7 +400,7 @@
             {
               "name": "y",
               "type": "string",
-              "description": "Optionnel — un second axe, pour recevoir un vec2"
+              "description": "Optionnel : second axe, pour recevoir un vec2"
             }
           ],
           "returns": "int",
@@ -435,7 +435,7 @@
         {
           "label": "sfx:stop()",
           "snippet": "pas:stop()",
-          "description": "Coupe l'effet que `sfx.play` a rendu. Sans effet s'il est déjà terminé — une référence périmée ne règle jamais un autre son.",
+          "description": "Coupe l’effet renvoyé par `sfx.play`. N’a aucun effet si ce son est déjà terminé.",
           "params": [],
           "doc_anchor": "sfx-stop"
         },
@@ -593,7 +593,7 @@
         {
           "label": "sound_box:set_state(\"name\")",
           "snippet": "sound_box:set_state(\"sable\")",
-          "description": "Change l'état de la SoundBox — « le sol est du sable ». Les actions posées sur les frames d'animation se résolvent alors vers les échantillons de ce nouvel état : le même cycle de marche sonne le sable ou les cailloux sans être authoré deux fois.",
+          "description": "Change l’état de la SoundBox. Les actions d’animation utilisent alors les échantillons de ce nouvel état.",
           "params": [
             {
               "name": "name",
@@ -645,7 +645,7 @@
         {
           "label": "music_box:trigger(\"name\")",
           "snippet": "music_box:trigger(\"combat_start\")",
-          "description": "Émet un déclencheur de la MusicBox. C'est la BOÎTE qui décide vers quel état il mène et par quelle transition — le script dit seulement qu'il s'est passé quelque chose.",
+          "description": "Émet un déclencheur de la MusicBox. La boîte choisit l’état cible et sa transition.",
           "params": [
             {
               "name": "name",
@@ -707,7 +707,7 @@
         {
           "label": "actor:count()",
           "snippet": "actor:count()",
-          "description": "Nombre d'actors POSÉS de la scène active — la borne de actor:get(i). Ex: for i=1,actor:count() do local a=actor:get(i) ... end.",
+          "description": "Retourne le nombre d’actors posés dans la scène active. Utilisez-le comme borne avec `actor:get(i)`.",
           "params": [],
           "returns": "int — nombre d'actors posés",
           "doc_anchor": "actor-count"
@@ -715,7 +715,7 @@
         {
           "label": "actor:spawn(\"prefab\", position)",
           "snippet": "actor:spawn(\"Bullet\", vec2(116, 76))",
-          "description": "Instancie un prefab poolé à `position` (un vec2). La scène doit déclarer un pool pour ce prefab (carte « Actor budget »). Retourne l'instance née (un actor), ou nil si le pool est plein — `if b then b:set_velocity(0, -2) end`.",
+          "description": "Instancie un prefab du pool à `position` (un vec2). Retourne l’actor créé, ou `nil` si le pool est plein.",
           "params": [
             {
               "name": "prefab",
@@ -740,7 +740,7 @@
         {
           "label": "sequence:start(name)",
           "snippet": "sequence:start(\"intro\")",
-          "description": "Démarre (ou redémarre depuis le début) une séquence de ce script — une fonction « on_sequence_<nom> », écrite en ligne droite, où wait(frames) et wait_until(condition) marquent les pauses.",
+          "description": "Démarre ou redémarre une séquence de ce script. La séquence est une fonction `on_sequence_<nom>` dans laquelle `wait` et `wait_until` marquent les pauses.",
           "params": [
             {
               "name": "name",
@@ -816,7 +816,7 @@
         {
           "label": "save:read(slot, \"name\")",
           "snippet": "save:read(0, \"chapitre\")",
-          "description": "Rend la valeur d'UNE variable persistante dans un emplacement, SANS toucher à la partie en cours — de quoi peindre un écran de sélection de partie sans charger les autres. Rend le défaut si l'emplacement est vide/illisible ou si le fichier ne contient pas cette variable.",
+          "description": "Retourne la valeur d’une variable persistante dans un emplacement, sans charger cette partie. Retourne la valeur par défaut si l’emplacement est vide, illisible ou ne contient pas cette variable.",
           "params": [
             {
               "name": "slot",
@@ -1028,12 +1028,12 @@
         {
           "label": "array(taille)",
           "snippet": "local sac = array(8)",
-          "description": "Déclare un tableau d'entiers rempli de zéros. Deux tailles pour une grille : array(20, 12) se lit grille[1..20][1..12] — l'ordre des arguments est l'ordre des index. La taille est fixée au build, #sac la rend, et les tableaux sont indexés à partir de 1 comme partout en Lua. Un tableau écrit en clair se déclare directement : local couts = {1, 2, 4, 8}.",
+          "description": "Déclare un tableau d’entiers rempli de zéros. Avec deux tailles, crée une grille dont l’ordre des arguments suit celui des index. Les tableaux Lua sont indexés à partir de 1.",
           "params": [
             {
               "name": "taille",
               "type": "number",
-              "description": "Nombre d'éléments — une taille, ou deux pour une grille"
+              "description": "Nombre d’éléments. Donnez une taille, ou deux pour une grille."
             }
           ],
           "returns": "tableau",
@@ -1068,7 +1068,7 @@
         {
           "label": "lang:set(code)",
           "snippet": "lang:set(\"fr\")",
-          "description": "Change la langue active et recharge la scène courante pour l'appliquer (comme un scene.switch vers elle-même — acteurs et état de scène repartent à zéro).",
+          "description": "Change la langue active et recharge la scène courante pour l’appliquer. Les actors et l’état de la scène repartent alors à zéro.",
           "params": [
             {
               "name": "code",
@@ -1082,7 +1082,7 @@
         {
           "label": "lang:get()",
           "snippet": "lang:get()",
-          "description": "La langue active — un index (0 = la source), comparable à LANG_<CODE>.",
+          "description": "Index de la langue active. La valeur 0 correspond à la langue source et peut être comparée à `LANG_<CODE>`.",
           "params": [],
           "returns": "number — index de langue courant",
           "doc_anchor": "lang-get"
@@ -1101,7 +1101,7 @@
         {
           "label": "text:draw(tx, ty, id)",
           "snippet": "text:draw(2, 16, \"village_garde_01\")",
-          "description": "Affiche un texte de la table du projet. tx/ty sont en tuiles (1 tuile = 8 px). Le texte se pose sur le layer d'interface de la scène — c'est là que vivent les glyphes de la police, donc il n'y a pas de layer à choisir. La position vient avant le contenu : c'est le contenu qui grandira (valeurs interpolées), pas la géométrie.",
+          "description": "Affiche un texte de la table du projet sur le layer d’interface de la scène. `tx` et `ty` sont exprimés en tuiles de 8 pixels.",
           "params": [
             {
               "name": "tx",
@@ -1185,7 +1185,7 @@
         {
           "label": "interface:get(\"name\")",
           "snippet": "interface:get(\"alerte\")",
-          "description": "Retourne une référence à l'élément d'interface nommé (texte, panel ou image) — appeler :show()/:hide() dessus.",
+          "description": "Retourne une référence à l’élément d’interface nommé, tel qu’un texte, un panneau ou une image.",
           "params": [
             {
               "name": "name",
@@ -1199,7 +1199,7 @@
         {
           "label": "ui_element:show()",
           "snippet": "interface:get(\"alerte\"):show()",
-          "description": "Affiche l'élément — et implicitement ses enfants, sauf ceux cachés individuellement.",
+          "description": "Affiche l’élément et ses enfants, sauf ceux qui sont cachés individuellement.",
           "params": [],
           "returns": "",
           "doc_anchor": "ui_element-show"
@@ -1226,7 +1226,7 @@
         {
           "label": "blend:set_layer(side, bg, on)",
           "snippet": "blend:set_layer(0, 1, true)",
-          "description": "Désigne un layer de fond comme participant au mélange. Il y a DEUX jeux de cibles : le dessus (side 0), ce qui est mélangé, et le dessous (side 1), ce avec quoi — c'est-à-dire ce qui se trouve derrière selon les priorités. En mode alpha, rien ne se passe là où un pixel du dessus n'a aucun pixel du dessous derrière lui : c'est la cause n°1 d'un effet qui « ne marche pas ».",
+          "description": "Désigne un layer de fond comme cible du mélange. Utilisez `side 0` pour le dessus et `side 1` pour le dessous, déterminé par les priorités de rendu.",
           "params": [
             {
               "name": "side",
@@ -1249,7 +1249,7 @@
         {
           "label": "blend:set_obj(side, on)",
           "snippet": "blend:set_obj(0, true)",
-          "description": "Désigne les sprites comme cible du dessus ou du dessous. Note : un sprite passé en self.obj_mode = 1 se mélange de toute façon, indépendamment de ce réglage — pratique pour un seul fantôme translucide sans toucher aux autres.",
+          "description": "Désigne les sprites comme cible du dessus ou du dessous. Un sprite en `self.obj_mode = 1` se mélange indépendamment de ce réglage.",
           "params": [
             {
               "name": "side",
@@ -1285,7 +1285,7 @@
         {
           "label": "blend:set_alpha(eva, evb)",
           "snippet": "blend:set_alpha(8, 8)",
-          "description": "Dosage du mode 1, en seizièmes (0 à 16) : eva pour le dessus, evb pour le dessous. (8, 8) donne moitié-moitié, (16, 0) rend le dessus complètement opaque. Les deux n'ont pas à totaliser 16 — les dépasser éclaircit l'image.",
+          "description": "Règle le dosage du mode alpha en seizièmes, de 0 à 16. `eva` contrôle le dessus et `evb` le dessous. Dépasser un total de 16 éclaircit l’image.",
           "params": [
             {
               "name": "eva",
@@ -1371,7 +1371,7 @@
         {
           "label": "debug:log(...)",
           "snippet": "debug:log(...)",
-          "description": "Écrit une ligne dans le journal mGBA — jamais à l'écran du jeu. Concatène ses arguments, chacun déjà une chaîne ou un entier : debug:log(\"hp=\", hp, \" x=\", x). Sans effet, et retiré de la ROM, hors build debug (réglage du projet).",
+          "description": "Écrit une ligne dans le journal mGBA, jamais à l’écran du jeu. Cette fonction est retirée de la ROM hors build de débogage.",
           "params": [],
           "returns": "",
           "doc_anchor": "debug-log"

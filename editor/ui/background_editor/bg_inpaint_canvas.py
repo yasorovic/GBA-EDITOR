@@ -26,6 +26,7 @@ Composants :
 """
 from __future__ import annotations
 from ui.common.labels import label
+from ui.common.tooltip import tooltip
 from typing import Optional
 
 from PyQt6.QtWidgets import (
@@ -46,6 +47,8 @@ from core.models.background import (
 from ui.common.theme import C, T, QSS
 from ui.common.palette_bank_strip import PaletteBankStrip
 from ui.common.canvas_top_bar import CanvasTopBar, BAR_HEIGHT
+from ui.common.shortcut_hints import ShortcutHints
+from ui.background_editor.bg_hints import background_hints
 from ui.background_editor.bg_prepare_overlay import PrepareOverlay, MODE_CROP, MODE_RESIZE
 from ui.common.icons import get as _ico, COLOR_DEFAULT, COLOR_ACTIVE, COLOR_UI
 from ui.common import external_editor
@@ -1170,10 +1173,10 @@ class BgInpaintToolbar(QFrame):
     tool_changed = pyqtSignal(str)
 
     _TOOLS = [
-        ("brush",  "tool_inpaint_brush", label('bginp.brush_tip')),
-        ("fill",   "tool_fill",          label('bginp.fill_tip')),
-        ("rect",   "tool_inpaint_rect",  label('bginp.rectangle_repaint_an_area')),
-        ("eraser", "tool_erase",         label('bginp.eraser_tip')),
+        ("brush",  "tool_inpaint_brush", "bginp.brush", "bginp.brush_tip"),
+        ("fill",   "tool_fill",          "bginp.fill", "bginp.fill_tip"),
+        ("rect",   "tool_inpaint_rect",  "bginp.rectangle_repaint_an_area", "bginp.rectangle_tip"),
+        ("eraser", "tool_erase",         "bginp.eraser", "bginp.eraser_tip"),
     ]
 
     def __init__(self, parent=None):
@@ -1213,12 +1216,12 @@ class BgInpaintToolbar(QFrame):
         layout.addWidget(sep)
 
         self._btns: dict[str, QToolButton] = {}
-        for tool_id, icon_key, tip in self._TOOLS:
+        for tool_id, icon_key, title_key, body_key in self._TOOLS:
             btn = QToolButton()
             btn.setIcon(_ico(icon_key, COLOR_DEFAULT, COLOR_ACTIVE))
             btn.setIconSize(QSize(24, 24))
             btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-            btn.setToolTip(tip)
+            btn.setToolTip(tooltip(title=label(title_key), body=label(body_key)))
             btn.setCheckable(True)
             btn.setFixedSize(36, 36)
             btn.clicked.connect(lambda _=False, t=tool_id: self._select(t))
@@ -1285,28 +1288,35 @@ class BgInpaintCanvas(QWidget):
         self._tick = 0
 
         # Barre d'état au-dessus du canvas — même composant que le Scene Manager.
-        self._bar = CanvasTopBar(label('bginp.fit_background_to_view'))
+        self._bar = CanvasTopBar(tooltip(title=label('bginp.fit_background_to_view')))
         self._bar.zoom_step_asked.connect(self._view.zoom_step)
         self._bar.fit_asked.connect(self._view.fit)
         self._chk_grid = self._bar.add_toggle(
-            "view_grid", label('bginp.8_px_grid_gba_tile'), self._view.set_grid_visible)
+            "view_grid", tooltip(title=label('bginp.8_px_grid_gba_tile'),
+                                 body=label('bginp.grid_tip')),
+            self._view.set_grid_visible)
         self._chk_grid.setChecked(True)
         # Éditer l'image dans un logiciel externe (cf. external_editor) : ce
         # canvas peint des PALETTES, pas des pixels — pour le dessin, on
         # délègue plutôt que d'inventer un éditeur d'image dans Qt.
         self._btn_edit = self._bar.add_action(
-            "edit_external", label('bginp.edit_image'), self._on_edit_image)
+            "edit_external", tooltip(title=label('bginp.edit_image'),
+                                      body=label('bginp.edit_image_tip')),
+            self._on_edit_image)
         self._btn_edit.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._btn_edit.customContextMenuRequested.connect(self._on_edit_menu)
         # Préparer la source d'une image « riche » : recadrer, redimensionner,
         # revenir à l'original. Le PNG n'est jamais touché (cf. bg_import.prepare_source).
         self._bar.add_spacing(8)
         self._tb_crop = self._bar.add_toggle(
-            "prep_crop", label('bginp.crop_tip'), self._on_crop_toggled)
+            "prep_crop", tooltip(title=label('bginp.crop'), body=label('bginp.crop_tip')),
+            self._on_crop_toggled)
         self._tb_resize = self._bar.add_toggle(
-            "prep_resize", label('bginp.resize_tip'), self._on_resize_toggled)
+            "prep_resize", tooltip(title=label('bginp.resize'), body=label('bginp.resize_tip')),
+            self._on_resize_toggled)
         self._btn_prep_reset = self._bar.add_action(
-            "prep_reset", label('bginp.prep_reset_tip'), self._on_prep_reset)
+            "prep_reset", tooltip(title=label('bginp.prep_reset'), body=label('bginp.prep_reset_tip')),
+            self._on_prep_reset)
         self._crop_cancelled = False   # Échap / changement de fond : pas d'application
         self._src_size = (0, 0)        # taille du PNG source, lue à la sélection
         self._view.prepare_live.connect(self._bar.set_canvas_size)
@@ -1334,6 +1344,13 @@ class BgInpaintCanvas(QWidget):
         self._toolbar.move(10, BAR_HEIGHT + 10)
         self._toolbar.tool_changed.connect(self._view.set_tool)
         self._toolbar.raise_()
+
+        # Table des raccourcis (bas-droite) : suit l'outil, ou le mode de
+        # préparation (recadrer / redimensionner) quand il est ouvert.
+        self._hints = ShortcutHints(self, background_hints, self._toolbar.current_tool)
+        self._toolbar.tool_changed.connect(lambda _tool: self._sync_hints())
+        self._tb_crop.toggled.connect(lambda _on: self._sync_hints())
+        self._tb_resize.toggled.connect(lambda _on: self._sync_hints())
 
         # Overlay « Compression… » (compression hors-thread — voir screen).
         self._busy = QLabel(label('bginp.compressing'), self)
@@ -1468,6 +1485,14 @@ class BgInpaintCanvas(QWidget):
             self._view.end_resize()
         elif self._tb_resize.isChecked():
             self._view.begin_resize(self._prepared_size())
+
+    def _sync_hints(self):
+        if self._tb_crop.isChecked():
+            self._hints.set_context("crop")
+        elif self._tb_resize.isChecked():
+            self._hints.set_context("resize")
+        else:
+            self._hints.set_context(self._toolbar.current_tool)
 
     def _cancel_prepare_modes(self):
         """Quitte recadrage/redimensionnement sans rien appliquer (autre fond

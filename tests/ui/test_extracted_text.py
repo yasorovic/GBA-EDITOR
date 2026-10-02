@@ -30,7 +30,7 @@ def test_asset_title_is_translated_but_selection_id_is_stable(qapp, marked_langu
     assert SCENES.label == "Scenes"
     assert "Scenes" in finder._trees
     assert "§ Scenes" in {w.text() for w in finder.findChildren(QLabel)}
-    assert finder._sections["Scenes"]._btn_add.toolTip() == "§ New scene"
+    assert finder._sections["Scenes"]._btn_add.toolTip() == "<b>§ New scene</b>"
 
 
 def test_camera_modes_and_blend_tables_resolve_after_import(qapp, marked_language):
@@ -39,7 +39,7 @@ def test_camera_modes_and_blend_tables_resolve_after_import(qapp, marked_languag
     row = BgLayerRow(0)
     row.set_blend_role("top")
     row.set_blend_ui("toggle")
-    assert row._blend_btn.toolTip().startswith("§ This is the layer")
+    assert row._blend_btn.toolTip().startswith("<b>§ Translucent layer</b>")
 
 
 def test_default_widget_text_resolves_at_construction(qapp, marked_language):

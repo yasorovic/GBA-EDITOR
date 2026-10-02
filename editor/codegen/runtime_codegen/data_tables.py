@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from core.app_info import APP_NAME
 from core.models.data_table import COLUMN_REFERENCES
 import codegen.build_output as build_output
 
@@ -101,7 +102,7 @@ def _cell(table, row: dict, column, index: dict) -> tuple[str, str]:
 def generate_data_tables_h(tables) -> str:
     lines = [
         "/* data_tables.h — tables de données du projet */",
-        "/* Généré par GBA Editor — ne pas éditer */",
+        f"/* Généré par {APP_NAME} — ne pas éditer */",
         "",
         "#ifndef DATA_TABLES_H",
         "#define DATA_TABLES_H",
@@ -125,7 +126,7 @@ def generate_data_tables_h(tables) -> str:
 def generate_data_tables_c(tables, index: dict) -> str:
     lines = [
         "/* data_tables.c — valeurs des tables de données */",
-        "/* Généré par GBA Editor — ne pas éditer */",
+        f"/* Généré par {APP_NAME} — ne pas éditer */",
         "",
         '#include "data_tables.h"',
         "",

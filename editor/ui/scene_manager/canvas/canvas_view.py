@@ -16,8 +16,8 @@ from ui.scene_manager.canvas.canvas_const import GBA_W, GBA_H
 from ui.scene_manager.canvas.canvas_scene import GBAScene
 from ui.scene_manager.canvas.canvas_items import SpriteItem, CollisionOverlay
 from ui.scene_manager.canvas.canvas_region_item import UIRegionItem
-from PyQt6.QtCore import QPoint, QPointF, Qt, pyqtSignal
-from PyQt6.QtGui import QBrush, QColor, QPainter, QPen, QTransform, QWheelEvent
+from PyQt6.QtCore import QEvent, QPoint, QPointF, Qt, pyqtSignal
+from PyQt6.QtGui import QBrush, QColor, QMouseEvent, QPainter, QPen, QTransform, QWheelEvent
 from PyQt6.QtWidgets import (
     QApplication, QGraphicsView, QGraphicsItem, QGraphicsRectItem,
 )
@@ -78,6 +78,8 @@ class GBAView(QGraphicsView):
         # Alt+glisser = dupliquer : instantané des items glissés, pris au press
         # (cf. _arm_alt_duplicate). None = geste ordinaire.
         self._alt_drag: "Optional[list]" = None
+        self._alt_press_scene = QPointF()
+        self._alt_press_viewport = QPointF()
 
     def drawBackground(self, painter: QPainter, rect):
         """Fond de travail mat avec repère pointillé très discret."""
@@ -161,9 +163,12 @@ class GBAView(QGraphicsView):
     collision_painted = pyqtSignal()
     # Clic-droit sur un actor en mode Sélection → (SpriteItem, QPoint global).
     actor_context_requested = pyqtSignal(object, object)
-    # Alt+glisser relâché → (dx, dy) du geste, en px de scène. Les originaux
-    # ont déjà été remis en place ; il reste à créer les copies à ce décalage.
-    duplicate_drag_finished = pyqtSignal(int, int)
+    # Alt+glisser franchi le seuil : les originaux ont été remis en place ; il
+    # reste à créer les copies, SUR place, avant que la souris ne les emporte.
+    duplicate_drag_started = pyqtSignal()
+    # Un outil de pose (acteur, élément d'interface) vient de poser son objet :
+    # le canvas rend alors la main à l'outil Sélection.
+    placement_done = pyqtSignal()
 
     @property
     def collision_overlay(self) -> Optional["CollisionOverlay"]:
@@ -241,7 +246,7 @@ class GBAView(QGraphicsView):
             # va déplacer (un clic sur un item hors sélection la remplace).
             if (self._is_select_tool()
                     and (e.modifiers() & Qt.KeyboardModifier.AltModifier)):
-                self._arm_alt_duplicate(self._last_click_scene_pos)
+                self._arm_alt_duplicate(self._last_click_scene_pos, e.position())
             self.left_click_settled.emit()
         self._last_click_scene_pos = None
 
@@ -263,6 +268,9 @@ class GBAView(QGraphicsView):
         # le rattrape et restaure le curseur.
         if self._panning:
             self._end_pan()
+        if (self._alt_drag is not None and (e.buttons() & Qt.MouseButton.LeftButton)
+                and self._alt_drag_crossed(e)):
+            self._start_alt_duplicate()
         pos = self.mapToScene(e.position().toPoint())
         # Snap preview — indépendant de l'outil actif
         if self._snap_on:
@@ -282,7 +290,7 @@ class GBAView(QGraphicsView):
         _btn = e.button()
         # Repris ici quoi qu'il arrive : un geste avorté (pan, outil qui prend
         # la main) ne doit pas laisser un instantané périmé armer le prochain.
-        alt_drag, self._alt_drag = self._alt_drag, None
+        self._alt_drag = None
         if _btn == Qt.MouseButton.MiddleButton and self._panning:
             self._end_pan()
             e.accept()
@@ -302,30 +310,22 @@ class GBAView(QGraphicsView):
             self._swallow_left_release = False   # pendant du Shift+clic ci-dessus
             e.accept()
             return
-        if alt_drag is not None and _btn == Qt.MouseButton.LeftButton:
-            # Neutraliser AVANT que Qt ne distribue le relâchement aux items :
-            # c'est là qu'ils poussent leur commande de déplacement. En
-            # Alt+glisser l'original ne bouge pas — seule la copie naît.
-            for it, _origin, _model in alt_drag:
-                if isinstance(it, SpriteItem):
-                    it._drag_origin = None
-                else:
-                    it._press_pos = None
-            super().mouseReleaseEvent(e)
-            self._commit_alt_duplicate(alt_drag)
-            return
         super().mouseReleaseEvent(e)
 
     # ── Alt+glisser = dupliquer ───────────────────────────────────
+    # La copie naît AU FRANCHISSEMENT du seuil, sur place, puis c'est elle que
+    # la souris emporte : l'original ne quitte jamais sa position. Qt tient le
+    # grab de souris sur l'original ; on remet donc celui-ci en place, on
+    # relâche le geste, on crée les copies (sélectionnées), puis on REJOUE le
+    # clic d'origine pour que Qt saisisse la copie.
 
     # En deçà (px scène) c'est un clic Alt, pas un glisser : sinon un
     # frémissement de souris crée une copie invisible sous l'original.
-    # Même seuil que SpriteItem._CLICK_THRESHOLD.
     _ALT_DRAG_THRESHOLD = 2
 
-    def _arm_alt_duplicate(self, scene_pos):
-        """Mémorise les items que le glisser va emporter, pour les remettre en
-        place au relâchement et ne garder que la copie.
+    def _arm_alt_duplicate(self, scene_pos, viewport_pos):
+        """Mémorise les items que le glisser va emporter (pour les remettre en
+        place) et le point du clic (pour le rejouer sur la copie).
 
         Position Qt (le geste s'y mesure) ET position MODÈLE d'un acteur : le
         drag réécrit `actor.x/y` à chaque frame et perdrait l'expression
@@ -341,20 +341,40 @@ class GBAView(QGraphicsView):
             model = (actor.x, actor.y) if actor is not None else None
             entries.append((it, QPointF(it.pos()), model))
         self._alt_drag = entries or None
+        self._alt_press_scene = QPointF(scene_pos)
+        self._alt_press_viewport = QPointF(viewport_pos)
 
-    def _commit_alt_duplicate(self, entries: list):
-        """Remet les originaux en place et annonce le décalage du geste — la
-        duplication elle-même appartient au SceneEditor, qui traite acteurs et
-        éléments d'interface d'un même mouvement."""
-        dx = dy = 0
+    def _alt_drag_crossed(self, e) -> bool:
+        d = self.mapToScene(e.position().toPoint()) - self._alt_press_scene
+        return (abs(d.x()) >= self._ALT_DRAG_THRESHOLD
+                or abs(d.y()) >= self._ALT_DRAG_THRESHOLD)
+
+    def _start_alt_duplicate(self):
+        entries, self._alt_drag = self._alt_drag, None
+        self._restore_alt_originals(entries)
+        at = self._alt_press_viewport
+        # Fin du geste sur les originaux (neutralisés : aucune commande de
+        # déplacement n'est poussée).
+        self.mouseReleaseEvent(QMouseEvent(
+            QEvent.Type.MouseButtonRelease, at, Qt.MouseButton.LeftButton,
+            Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier))
+        self.duplicate_drag_started.emit()      # copies créées + sélectionnées
+        # Sans Alt, sinon le clic rejoué réarmerait une duplication.
+        self.mousePressEvent(QMouseEvent(
+            QEvent.Type.MouseButtonPress, at, Qt.MouseButton.LeftButton,
+            Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+
+    def _restore_alt_originals(self, entries: list):
+        """Remet les originaux en place et coupe leur geste de déplacement."""
         for it, origin, model in entries:
             try:
+                if isinstance(it, SpriteItem):
+                    it._drag_origin = None
+                else:
+                    it._press_pos = None
                 cur = it.pos()
             except RuntimeError:
                 continue                      # item C++ détruit entre-temps
-            if not dx and not dy:
-                dx = int(round(cur.x() - origin.x()))
-                dy = int(round(cur.y() - origin.y()))
             if model is not None:
                 it.scene_sprite.x, it.scene_sprite.y = model
                 it.sync_pos()
@@ -364,9 +384,6 @@ class GBAView(QGraphicsView):
                 if hasattr(it, "_move_descendants"):
                     it._move_descendants(origin.x() - cur.x(), origin.y() - cur.y())
                 it.setPos(origin)
-        if abs(dx) < self._ALT_DRAG_THRESHOLD and abs(dy) < self._ALT_DRAG_THRESHOLD:
-            return
-        self.duplicate_drag_finished.emit(dx, dy)
 
     # ── Pan clic-central ──────────────────────────────────────────
 

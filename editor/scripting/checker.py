@@ -173,7 +173,7 @@ class BuildContext:
     # Actions (accords) déclarées dans Project Settings. Elles partagent le
     # paramètre `btn` avec les boutons matériels : un script reste donc
     # lisible et les anciens `input:held("a")` restent valides. Espace de
-    # noms SÉPARÉ de `input_sequence_names` (décision de Victor, 2026-09-27) :
+    # noms SÉPARÉ de `input_sequence_names` (décision de l'auteur, 2026-09-27) :
     # held/pressed/released/buffered ne lisent jamais une séquence.
     input_names: list[str] = None
     # Séquences déclarées dans Project Settings → Input → Séquences, lues
@@ -2355,7 +2355,7 @@ class Checker:
     def _check_sequence_name(self, call_key: str, name: str):
         """`get_sequence` a son propre espace de noms (Project Settings →
         Input → Séquences) — jamais un bouton ni une action, décision de
-        Victor du 2026-09-27 : les rôles ne se mélangent plus."""
+        l'auteur du 2026-09-27 : les rôles ne se mélangent plus."""
         valid = set(self.ctx.input_sequence_names or [])
         if name not in valid:
             self.errors.append(CheckError(

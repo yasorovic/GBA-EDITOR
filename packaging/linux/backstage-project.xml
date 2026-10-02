@@ -2,14 +2,14 @@
 <!--
   Type MIME du manifeste de projet. La CI (release.yml) copie ce fichier dans
   l'AppDir sous usr/share/mime/packages/ : c'est ce qui apprend au bureau Linux
-  que *.gba-project est un type connu, associé à l'éditeur via le MimeType du
+  que *.project est un type connu, associé à l'éditeur via le MimeType du
   .desktop. Sans lui, le double-clic ne trouverait aucune application.
 -->
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
-  <mime-type type="application/x-gba-project">
-    <comment>GBA Editor project</comment>
-    <comment xml:lang="fr">Projet GBA Editor</comment>
-    <glob pattern="*.gba-project"/>
+  <mime-type type="application/x-backstage-project">
+    <comment>Backstage project</comment>
+    <comment xml:lang="fr">Projet Backstage</comment>
+    <glob pattern="*.project"/>
     <icon name="icon"/>
   </mime-type>
 </mime-info>
