@@ -19,8 +19,6 @@ from pathlib import Path
 from scripting.api import RUNTIME_API, RUNTIME_PROPS, REMOVED_API, canonical_key
 
 from scripting import api_snippets
-from ui.common.labels import label
-from ui.common.tooltip import tooltip
 
 _JSON_PATH = Path(__file__).parent / "api_reference.json"
 _cache: list[dict] | None = None
@@ -378,10 +376,14 @@ def get_sections() -> list[dict]:
     return out
 
 
-def make_tooltip(entry: dict) -> str:
-    """Génère une aide brève pour une entrée API à insérer."""
+def tooltip_parts(entry: dict) -> dict[str, str]:
+    """Les MORCEAUX de l'aide brève d'une entrée API : titre, texte, précision.
+
+    Pas de HTML ici : `scripting` est en dessous de `ui` (cf. ARCHITECTURE, « Sens
+    des dépendances »), et c'est l'interface qui compose l'infobulle —
+    `tooltip(**tooltip_parts(entry))` (`ui.common.tooltip`)."""
     sig    = entry.get("label", "")
     desc   = entry.get("description", "")
     ret    = entry.get("returns", "")
     access = entry.get("access", "")  # "Read Only" / "Read and Write" — propriétés seulement
-    return tooltip(title=sig, body=desc, note=access or ret)
+    return {"title": sig, "body": desc, "note": access or ret}

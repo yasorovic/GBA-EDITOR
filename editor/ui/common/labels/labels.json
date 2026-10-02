@@ -706,9 +706,6 @@
     "sceneinsp.mode_menu": {
       "text": "Mode {n}"
     },
-    "sceneinsp.mode_not_impl": {
-      "text": "{tip}\n(rendering not implemented yet, coming soon)"
-    },
     "sceneinsp.mode_not_impl_note": {
       "text": "This mode is not available in the editor yet."
     },
@@ -1351,24 +1348,12 @@
     "sprframe.select_frame": {
       "text": "Select a frame"
     },
-    "sprframe.first_frame": {
-      "text": "First frame"
-    },
     "sprframe.previous_frame": { "text": "Previous frame" },
     "sprframe.previous_frame_tip": { "text": "Stays within the current direction." },
-    "sprframe.play": {
-      "text": "Play"
-    },
     "sprframe.play_preview": { "text": "Play animation preview" },
     "sprframe.play_preview_tip": { "text": "Plays the frames of the current direction at the animation speed." },
-    "sprframe.last_frame": {
-      "text": "Last frame"
-    },
     "sprframe.next_frame": { "text": "Next frame" },
     "sprframe.next_frame_tip": { "text": "Stays within the current direction." },
-    "sprframe.show_grid": {
-      "text": "Show grid"
-    },
     "sprframe.grid": { "text": "Tile grid" },
     "sprframe.grid_tip": { "text": "Shows the 8×8 pixel GBA tile grid on the frame canvas." },
     "sprframe.indexed": {
@@ -1665,27 +1650,6 @@
     },
     "scttree.filter_unfiled": {
       "text": "Unfiled elements"
-    },
-    "scttree.folder_color": {
-      "text": "Folder color"
-    },
-    "scttree.folder_color_none": {
-      "text": "Neutral"
-    },
-    "scttree.folder_color_blue": {
-      "text": "Blue"
-    },
-    "scttree.folder_color_green": {
-      "text": "Green"
-    },
-    "scttree.folder_color_yellow": {
-      "text": "Yellow"
-    },
-    "scttree.folder_color_red": {
-      "text": "Red"
-    },
-    "scttree.folder_color_purple": {
-      "text": "Purple"
     },
     "scttree.iface_shared_label": {
       "text": "{base}  ·  {n} scenes"
@@ -2371,9 +2335,6 @@
       "text": "Active scene."
     },
     "scrsb.require_desc": { "text": "Imports the behavior module {name}." },
-    "scrsb.doc_soon": {
-      "text": "? doc (coming soon)"
-    },
     "scrsb.go_further": {
       "text": "Go further"
     },
@@ -2515,9 +2476,6 @@
     "palslot.slot": { "text": "Palette slot {slot}" },
     "palslot.override_tip": { "text": "{names} uses {tgt} instead of its original palette. A click changes it; a right-click restores the original palette." },
     "palslot.override": { "text": "Palette override" },
-    "palslot.add_a_scene_palette": {
-      "text": "Add a scene palette"
-    },
     "palslot.add_palette": { "text": "Add palette" },
     "palslot.add_palette_tip": { "text": "Adds a palette from the project catalog to this sprite." },
     "palslot.compressed_tip": {
@@ -2573,15 +2531,6 @@
     },
     "projpick.add_personal_hint": { "text": "Personal presets are added as folders in:\n{USER_STARTERS_DIR}" },
     "cvregion.region_tip": { "text": "{name}, in the interface {layout}.\n{tiles}Target: {target}.\nDragging moves it, the handles resize it, Alt-drag duplicates it." },
-    "cvtool.collision_editing_c": {
-      "text": "Collision editing  (C)"
-    },
-    "cvtool.scene_inpainting_b": {
-      "text": "Scene inpainting  (B)"
-    },
-    "cvtool.interface_widget_t": {
-      "text": "Interface widget  (T)"
-    },
     "cvtool.collision_editing": {
       "text": "Edit collisions"
     },
@@ -3079,17 +3028,11 @@
     "txtscr.font_finder": {
       "text": "Font finder"
     },
-    "cvtop.zoom_out_wheel_down": {
-      "text": "Zoom out  (wheel down)"
-    },
     "cvtop.zoom_out": {
       "text": "Zoom out"
     },
     "cvtop.wheel_down": {
       "text": "Wheel down"
-    },
-    "cvtop.zoom_in_wheel_up": {
-      "text": "Zoom in  (wheel up)"
     },
     "cvtop.zoom_in": {
       "text": "Zoom in"
@@ -3115,9 +3058,6 @@
     "scncanvas.no_active_bg_bank": {
       "text": "No active BG bank"
     },
-    "scncanvas.fit_tip": {
-      "text": "Fit scene to view  (F)"
-    },
     "scncanvas.fit": {
       "text": "Fit scene to view"
     },
@@ -3134,9 +3074,6 @@
     },
     "scncanvas.graph_rearrange": {
       "text": "Re-arrange"
-    },
-    "scncanvas.graph_fit_tip": {
-      "text": "Fit to view  (F)"
     },
     "scncanvas.graph_fit": { "text": "Fit graph to view" },
     "scncanvas.graph_notes": { "text": "Show notes" },
@@ -3430,9 +3367,6 @@
     "cvregion.background_bg": {
       "text": "background (BG)"
     },
-    "cvtool.select_s": {
-      "text": "Select  (S)"
-    },
     "cvtool.move_toolbar": {
       "text": "Move tools"
     },
@@ -3443,18 +3377,12 @@
     "cvtool.shortcut_select": {
       "text": "S"
     },
-    "cvtool.add_actor_a": {
-      "text": "Add actor  (A)"
-    },
     "cvtool.add_actor": {
       "text": "Add actor"
     },
     "cvtool.add_actor_tip": { "text": "A click on the canvas places a new actor." },
     "cvtool.shortcut_add": {
       "text": "A"
-    },
-    "cvtool.eraser_e": {
-      "text": "Eraser  (E)"
     },
     "cvtool.eraser": {
       "text": "Erase actor"

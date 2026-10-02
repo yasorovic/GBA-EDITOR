@@ -76,7 +76,3 @@ def open_file(path: Path, parent: QWidget | None = None, kind: str = KIND_IMAGE)
 
 def open_image(path: Path, parent: QWidget | None = None) -> None:
     open_file(path, parent, KIND_IMAGE)
-
-
-def open_audio(path: Path, parent: QWidget | None = None) -> None:
-    open_file(path, parent, KIND_AUDIO)

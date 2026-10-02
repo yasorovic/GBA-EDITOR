@@ -104,7 +104,7 @@ class SidebarPanel(QWidget):
     # montre, le moteur suit sous « Go further ».
 
     def _api_button(self, entry: dict):
-        from scripting.api_reference import make_tooltip
+        from scripting.api_reference import tooltip_parts
         # La sidebar montre le VERBE (`get("name")`) ; le clic insère la forme
         # complète (`actor:get("name")`), gardée dans le snippet.
         # Même règle pour `:` (méthode) et `.` (module, propriété).
@@ -113,7 +113,7 @@ class SidebarPanel(QWidget):
         cut = max(head.rfind(":"), head.rfind("."))
         display = raw[cut + 1:] if cut >= 0 else raw
         snippet = entry.get("snippet", entry.get("label", ""))
-        btn = _EntryButton(f"  {display}", _BTN_API, make_tooltip(entry))
+        btn = _EntryButton(f"  {display}", _BTN_API, tooltip(**tooltip_parts(entry)))
         btn.search_text = raw.lower()      # la forme complète : « spawn » ou « actor » trouvent
         btn.clicked.connect(lambda _, s=snippet: self.snippet_requested.emit(s))
         return btn

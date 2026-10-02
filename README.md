@@ -13,7 +13,7 @@ Backstage réunit scènes, sprites, collisions, son et scripts dans un même pro
 
 ## Commencer
 
-1. Téléchargez Backstage depuis la page des releases du projet.
+1. Téléchargez Backstage depuis les [releases](https://github.com/victor3x0/GBA-EDITOR/releases).
    - **`Backstage-<version>-windows-setup.exe`** installe l'application pour votre compte utilisateur, sans droits administrateur.
    - **`Backstage-<version>-windows-portable.zip`** se décompresse où vous voulez ; lancez ensuite `Backstage.exe`.
 2. Installez les deux outils utilisés pour fabriquer et tester les ROMs :
@@ -27,10 +27,11 @@ L'éditeur détecte ces installations automatiquement.
 
 ## Guides et exemples
 
-- [Documentation](docs/index.md) : toute la documentation du projet.
-- [Guide utilisateur](docs/user-guide/index.md) : créer ou ouvrir un projet, naviguer, importer des ressources et lancer une première ROM.
+- [Documentation](https://victor3x0.github.io/GBA-EDITOR/) : toute la documentation du projet en ligne.
+- [Guide utilisateur](https://victor3x0.github.io/GBA-EDITOR/user-guide/) : créer ou ouvrir un projet, naviguer, importer des ressources et lancer une première ROM.
 - [Guide de scripting](docs/scripting.md) : écrire le comportement d'un acteur.
 - [Référence de scripting](docs/scripting-reference.md) : vérifier la syntaxe disponible et les limites du langage.
+- [Projet de démo Pong](https://github.com/victor3x0/GBA-EDITOR/tree/main/Project%20Demo/Pong) : un projet complet à télécharger puis ouvrir dans l'éditeur.
 
 Le détail des travaux en cours et des prochaines versions se trouve dans la [roadmap](ROADMAP.md).
 

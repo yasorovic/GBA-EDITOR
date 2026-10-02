@@ -131,7 +131,8 @@ def test_handlers_filtres_par_contexte():
 ])
 def test_aucune_entree_ne_leve(junk):
     cands = C.candidates_at(junk, context="scene")
-    assert all(isinstance(c.insert, str) and isinstance(c.tooltip, str) for c in cands)
+    assert all(isinstance(c.insert, str) and isinstance(c.tip, dict) and "title" in c.tip
+               for c in cands)
 
 
 # ── 8. Phase 2 — les noms déclarés par le script (l'AST) ──

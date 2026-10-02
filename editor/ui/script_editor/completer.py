@@ -19,6 +19,7 @@ from scripting.completion import (
     KIND_EVENT, KIND_CONSTRUCTOR, KIND_ENUM, KIND_LOCAL, KIND_REF,
 )
 from ui.common.theme import C
+from ui.common.tooltip import tooltip
 from ui.common.icons import COLOR_SCRIPT, COLOR_SFX
 from .colors import _C_API, _C_REF
 
@@ -226,7 +227,7 @@ class ScriptCompleter(QObject):
         for c in cands:
             item = QStandardItem(c.label)                      # affiché : la signature
             item.setData(c.insert, _INSERT_ROLE)               # inséré + filtré : le membre
-            item.setData(c.tooltip, Qt.ItemDataRole.ToolTipRole)
+            item.setData(tooltip(**c.tip), Qt.ItemDataRole.ToolTipRole)
             item.setIcon(_dot(_KIND_COLOR.get(c.kind, C.TEXT_NORM)))
             item.setEditable(False)
             self._model.appendRow(item)

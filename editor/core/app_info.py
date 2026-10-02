@@ -26,13 +26,14 @@ APP_NAME = "Backstage"
 APP_AUTHOR = "Yasorovic"
 APP_VERSION = "1.0.0-alpha"
 
-# Adresses publiques du produit. VIDES tant qu'aucune n'existe : le code qui les
-# lit sait s'en passer (le menu « Documentation » et l'onglet « Modèles » ne
-# s'affichent pas). Aucune adresse ne doit figurer ailleurs que dans ce fichier.
+# Adresses publiques du produit. Le code qui les lit sait s'en passer si l'une
+# est VIDE (le menu « Documentation » ou l'onglet « Modèles » ne s'affichent
+# pas). Source unique : aucune adresse ne doit figurer en dur dans le code
+# (les liens des README et des docs, eux, sont de la rédaction).
 #
 # APP_DOCS_URL      : le site de documentation ;
 # APP_TEMPLATES_URL : un zip d'archive (type « branche entière » d'un dépôt) d'où
 #                     se téléchargent les projets modèles. Le dossier racine du zip
 #                     est lu dans l'archive elle-même.
-APP_DOCS_URL = ""
-APP_TEMPLATES_URL = ""
+APP_DOCS_URL = "https://victor3x0.github.io/GBA-EDITOR/"
+APP_TEMPLATES_URL = "https://github.com/victor3x0/GBA-EDITOR/archive/refs/heads/main.zip"

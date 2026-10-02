@@ -18,6 +18,7 @@ import builtins
 import importlib
 import json
 import os
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -183,10 +184,22 @@ def controle_catalogue(trees: dict, nom_catalogue: str, citations: dict) -> list
     )[nom_catalogue]
     citees: dict[str, str] = {}     # clé littérale EN POSITION D'APPEL
     littérales: set[str] = set()    # n'importe quelle chaîne du code
+    familles: list[re.Pattern] = []  # clés construites : f"win.{k}_note"
     for m, t in trees.items():
         for node in ast.walk(t):
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
                 littérales.add(node.value)
+            if isinstance(node, ast.JoinedStr):
+                famille = _famille_de_cles(node)
+                if famille is not None:
+                    familles.append(famille)
+            elif (isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add)
+                  and isinstance(node.left, ast.Constant)
+                  and isinstance(node.left.value, str)
+                  and re.match(r"^[a-z][a-z0-9_]*\.", node.left.value)
+                  and not isinstance(node.right, ast.Constant)):
+                # `"win.iwram_part" + sec` : la clé s'achève à l'exécution.
+                familles.append(re.compile(re.escape(node.left.value) + r"[a-z0-9_.]*"))
             if not isinstance(node, ast.Call):
                 continue
             nom = (node.func.attr if isinstance(node.func, ast.Attribute)
@@ -199,11 +212,35 @@ def controle_catalogue(trees: dict, nom_catalogue: str, citations: dict) -> list
                 citees.setdefault(arg.value, f"{m}:{node.lineno}")
     # Le sens « orpheline » se contente d'une chaîne trouvée n'importe où :
     # une clé rangée dans un tuple ou une table de correspondance est citée
-    # pour de bon, elle ne passe simplement pas par l'argument d'un appel.
+    # pour de bon, elle ne passe simplement pas par l'argument d'un appel. Une clé
+    # CONSTRUITE (`label(f"win.{key}_note")`) l'est aussi : elle n'existe jamais
+    # entière dans le code, mais sa famille — `win.<quelque chose>_note` — oui.
     return ([f"{clé} citée en {où} — absente du catalogue"
              for clé, où in sorted(citees.items()) if clé not in catalogue]
             + [f"{clé} — dans le catalogue, citée nulle part"
-               for clé in sorted(catalogue) if clé not in littérales])
+               for clé in sorted(catalogue)
+               if clé not in littérales
+               and not any(f.fullmatch(clé) for f in familles)])
+
+
+def _famille_de_cles(noeud: ast.JoinedStr):
+    """Le motif d'une clé de catalogue CONSTRUITE par f-string, ou None.
+
+    `f"win.{key}_note"` → `win\\.[a-z0-9_.]+_note`. Seule une f-string dont le
+    premier morceau LIT comme un début de clé (`écran.`) compte : un message
+    ordinaire ou un chemin, qui ne ressemble pas à `préfixe.suite`, n'excuse
+    aucune entrée du catalogue."""
+    morceaux = noeud.values
+    if not morceaux or not isinstance(morceaux[0], ast.Constant):
+        return None
+    if not re.match(r"^[a-z][a-z0-9_]*\.", str(morceaux[0].value)):
+        return None
+    if not any(isinstance(m, ast.FormattedValue) for m in morceaux):
+        return None
+    motif = "".join(
+        re.escape(str(m.value)) if isinstance(m, ast.Constant) else r"[a-z0-9_.]+"
+        for m in morceaux)
+    return re.compile(motif)
 
 
 def main() -> int:

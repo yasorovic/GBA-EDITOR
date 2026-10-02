@@ -597,27 +597,6 @@
     "scttree.filter_unfiled": {
       "text": "Éléments non classés"
     },
-    "scttree.folder_color": {
-      "text": "Couleur du dossier"
-    },
-    "scttree.folder_color_none": {
-      "text": "Neutre"
-    },
-    "scttree.folder_color_blue": {
-      "text": "Bleu"
-    },
-    "scttree.folder_color_green": {
-      "text": "Vert"
-    },
-    "scttree.folder_color_yellow": {
-      "text": "Jaune"
-    },
-    "scttree.folder_color_red": {
-      "text": "Rouge"
-    },
-    "scttree.folder_color_purple": {
-      "text": "Violet"
-    },
     "win.menu_view": {
       "text": "Affichage"
     },
@@ -656,9 +635,6 @@
     "win.diagnostics_copied": { "text": "Infos de diagnostic copiées — à coller dans votre rapport de bug" },
     "scncanvas.graph_rearrange": {
       "text": "Réorganiser"
-    },
-    "scncanvas.graph_fit_tip": {
-      "text": "Ajuster à la vue  (F)"
     },
     "scncanvas.graph_fit": { "text": "Ajuster le graphe à la vue" },
     "scncanvas.graph_notes": { "text": "Afficher les notes" },

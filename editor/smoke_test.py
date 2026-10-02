@@ -11,6 +11,10 @@ module que Nuitka n'a pas vu n'échoue qu'à la première visite de son écran �
 exactement ce qu'un utilisateur découvrirait en cliquant. Ce test est l'endroit où
 la CI le découvre à sa place, avant de publier.
 
+Ce test ne doit JAMAIS attendre un humain : `main.py` y désactive la fenêtre d'erreur
+modale (une exception s'y écrit dans le journal et le processus sort en erreur), et
+un chien de garde interrompt tout blocage.
+
 Ce que ce test ne fait PAS : construire une ROM (devkitPro n'est pas sur le runner
 de release) ni lancer d'émulateur.
 """

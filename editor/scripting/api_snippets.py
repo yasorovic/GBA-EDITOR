@@ -164,7 +164,7 @@ def _short_type(p, enum) -> str:
 
 def prop_entry_dict(name: str) -> dict:
     """Entrée au format d'`api_reference.json` pour une PROPRIÉTÉ
-    (`RUNTIME_PROPS`) — même forme que `entry_dict`, pour que `make_tooltip`
+    (`RUNTIME_PROPS`) — même forme que `entry_dict`, pour que `tooltip_parts`
     n'ait pas à savoir d'où vient l'entrée qu'il affiche.
 
     Le `label` reste COURT (`position(Vec2)`) : le préfixe (`self.`/`camera.`)
@@ -187,7 +187,7 @@ def prop_entry_dict(name: str) -> dict:
         "snippet":     snippet,
         "description": p.doc if p is not None else "",
         # Ce que le label court ne dit plus (peut-on ÉCRIRE cette propriété)
-        # devient son propre champ — `make_tooltip` l'affiche en badge.
+        # devient son propre champ — `tooltip_parts` l'affiche en badge.
         "access":      "Read Only" if read_only else "Read and Write",
         "params": [
             {"name": f, "type": "number", "description": ""} for f in fields
@@ -202,7 +202,7 @@ def prop_entry_dict(name: str) -> dict:
 
 def entry_dict(name: str) -> dict:
     """Entrée au format d'`api_reference.json`, pour une fonction que le JSON
-    ne décrit pas. Même forme exactement : c'est ce qui permet à `make_tooltip`
+    ne décrit pas. Même forme exactement : c'est ce qui permet à `tooltip_parts`
     de ne pas savoir d'où vient l'entrée qu'il affiche."""
     f = _fn(name)
     ret = "" if f is None or f.ret == "void" else f.ret

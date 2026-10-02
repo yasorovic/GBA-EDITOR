@@ -198,11 +198,17 @@ if __name__ == "__main__":
     if project_path is not None and project_path.is_file():
         project_path = project_path.parent
 
+    # `--smoke-test[=rapport]` : la CI de release l'exécute sur le binaire LIVRÉ, avant
+    # de publier. Personne n'est là pour cliquer : AUCUNE fenêtre modale.
+    smoke_mode = any(a == "--smoke-test" or a.startswith("--smoke-test=") for a in sys.argv[1:])
+
     app = QApplication(sys.argv)
     # La trace s'écrit déjà (crash_log.install) ; la fenêtre, elle, a besoin de
-    # la QApplication.
+    # la QApplication. Sans reporter (smoke test), une exception s'écrit dans le
+    # journal et sur stderr, et le processus sort en erreur au lieu d'attendre
+    # un clic qui ne viendra jamais — ce qui gèlerait un job de CI.
     from ui.common.crash_dialog import show_crash_dialog
-    crash_log.set_reporter(show_crash_dialog)
+    crash_log.set_reporter(None if smoke_mode else show_crash_dialog)
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(APP_VERSION)
     app.setStyle("Fusion")
@@ -222,9 +228,8 @@ if __name__ == "__main__":
     loaded, plugin_errors = load_all_plugins()
     from window import MainWindow
 
-    # `--smoke-test[=rapport]` : la CI de release l'exécute sur le binaire LIVRÉ,
-    # avant de publier. Aucune fenêtre d'accueil, aucune interaction.
-    if any(a == "--smoke-test" or a.startswith("--smoke-test=") for a in sys.argv[1:]):
+    # Smoke test : aucune fenêtre d'accueil, aucune interaction.
+    if smoke_mode:
         import smoke_test
         smoke_code = smoke_test.run(app, plugin_errors)
         _shutdown_qt(app)

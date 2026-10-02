@@ -12,8 +12,9 @@ jamais existé. Une fonction ajoutée à `api.py` obtient sa complétion
 gratuitement ; une fonction retirée perd la sienne, et la complétion ne peut donc
 pas proposer une fonction morte — le seul bug qui compte ici.
 
-L'infobulle est celle de la sidebar : `make_tooltip()` rend le même HTML des deux
-côtés (cf. ROADMAP v0.27).
+L'aide d'un candidat est celle de la sidebar : `tooltip_parts()` fournit les mêmes
+morceaux des deux côtés (cf. ROADMAP v0.27) ; l'INTERFACE les compose en infobulle.
+Ce module ne produit aucun HTML : il est en dessous de `ui`.
 
 Périmètre — phase 1, « le catalogue seul » :
   - membres après `X.` / `X:` (fonctions, propriétés) ;
@@ -35,8 +36,7 @@ from scripting.api import (
 
 from scripting.expr_types import VEC_CONSTRUCTORS
 from scripting import api_snippets
-from scripting.api_reference import make_tooltip
-from ui.common.tooltip import tooltip
+from scripting.api_reference import tooltip_parts
 
 
 # ─── Nature d'un candidat ─────────────────────────────────────────
@@ -58,11 +58,13 @@ class Candidate:
 
     `insert` est ce qui remplace le mot en cours de frappe (le membre seul,
     `play_anim`) — volontairement léger : l'infobulle porte déjà la signature.
-    `label` est ce que la liste affiche (`play_anim(name)`)."""
+    `label` est ce que la liste affiche (`play_anim(name)`).
+    `tip` : les morceaux de l'infobulle (`title`, `body`, `note`), à composer par
+    l'interface avec `ui.common.tooltip.tooltip(**tip)`."""
     insert:  str
     label:   str
     kind:    str
-    tooltip: str
+    tip:     dict[str, str]
 
 
 # ─── Vues dérivées du catalogue (calculées une fois) ───────────────
@@ -131,16 +133,16 @@ KEYWORDS: tuple[str, ...] = (
 
 # ─── Infobulles ───────────────────────────────────────────────────
 
-def _catalog_tooltip(name: str) -> str:
-    """L'infobulle d'un nom du catalogue — même entrée et même rendu que la
-    sidebar (`api_snippets` + `make_tooltip`)."""
+def _catalog_tip(name: str) -> dict[str, str]:
+    """Les morceaux de l'infobulle d'un nom du catalogue — même entrée et mêmes
+    morceaux que la sidebar (`api_snippets` + `tooltip_parts`)."""
     is_prop = name in RUNTIME_PROPS
     entry = (api_snippets.prop_entry_dict(name) if is_prop
              else api_snippets.entry_dict(name))
-    return make_tooltip(entry)
+    return tooltip_parts(entry)
 
 
-def _event_tooltip(ev: str) -> str:
+def _event_tip(ev: str) -> dict[str, str]:
     meta = EVENT_REGISTRY.get(ev, {})
     params = meta.get("params", [])
     entry = {
@@ -148,13 +150,13 @@ def _event_tooltip(ev: str) -> str:
         "description": meta.get("desc", ""),
         "params":      params,
     }
-    return make_tooltip(entry)
+    return tooltip_parts(entry)
 
 
-def _plain_tooltip(sig: str, desc: str) -> str:
-    """Une infobulle courte pour ce qui n'est pas dans le catalogue (module,
-    mot-clé, constructeur) — même charpente visuelle que `make_tooltip`."""
-    return tooltip(title=sig, body=desc)
+def _plain_tip(sig: str, desc: str) -> dict[str, str]:
+    """Une aide courte pour ce qui n'est pas dans le catalogue (module,
+    mot-clé, constructeur) — même charpente que `tooltip_parts`."""
+    return {"title": sig, "body": desc}
 
 
 # ─── Fabrique de candidats ────────────────────────────────────────
@@ -178,7 +180,7 @@ def _catalog_candidate(name: str) -> Candidate:
         insert=member,
         label=_member_label(name),
         kind=KIND_PROPERTY if name in RUNTIME_PROPS else KIND_FUNCTION,
-        tooltip=_catalog_tooltip(name),
+        tip=_catalog_tip(name),
     )
 
 
@@ -234,12 +236,12 @@ def _value_candidates(domain: str | None, project_names: dict | None) -> list[Ca
     if domain in HARDWARE_ENUMS:
         return [
             Candidate(insert=v, label=v, kind=KIND_ENUM,
-                      tooltip=_plain_tooltip(f'"{v}"', f"Valeur de « {domain} »."))
+                      tip=_plain_tip(f'"{v}"', f"Valeur de « {domain} »."))
             for v in HARDWARE_ENUMS[domain]
         ]
     return [
         Candidate(insert=n, label=n, kind=KIND_REF,
-                  tooltip=_plain_tooltip(f'"{n}"', f"« {domain} » du projet."))
+                  tip=_plain_tip(f'"{n}"', f"« {domain} » du projet."))
         for n in (project_names or {}).get(domain, [])
     ]
 
@@ -347,7 +349,7 @@ def _member_candidates(qual: str, sep: str, project_names: dict | None,
         kind_word = "Variable" if qual == "global" else "Constante"
         return [
             Candidate(insert=n, label=n, kind=KIND_REF,
-                      tooltip=_plain_tooltip(f"{qual}.{n}", f"{kind_word} « {n} » du projet."))
+                      tip=_plain_tip(f"{qual}.{n}", f"{kind_word} « {n} » du projet."))
             for n in (project_names or {}).get(qual, [])
         ]
     return []
@@ -359,19 +361,19 @@ def _bare_candidates(context: str) -> list[Candidate]:
     out: list[Candidate] = []
     for mod in MODULES:
         out.append(Candidate(insert=mod, label=mod, kind=KIND_MODULE,
-                             tooltip=_plain_tooltip(mod, f"Module « {mod} » de l'API.")))
+                             tip=_plain_tip(mod, f"Module « {mod} » de l'API.")))
     out += [_catalog_candidate(name) for name in _GLOBAL_FUNCS]
     for ctor in _CONSTRUCTORS:
         n = VEC_CONSTRUCTORS[ctor]
         out.append(Candidate(insert=ctor, label=f"{ctor}(…)", kind=KIND_CONSTRUCTOR,
-                             tooltip=_plain_tooltip(f"{ctor}(…)",
+                             tip=_plain_tip(f"{ctor}(…)",
                                  f"Construit une valeur à {n} composantes.")))
     for kw in KEYWORDS:
         out.append(Candidate(insert=kw, label=kw, kind=KIND_KEYWORD,
-                             tooltip=_plain_tooltip(kw, "Mot-clé du langage.")))
+                             tip=_plain_tip(kw, "Mot-clé du langage.")))
     for ev in KNOWN_EVENTS_BY_KIND.get(context, KNOWN_EVENTS):
         out.append(Candidate(insert=ev, label=ev, kind=KIND_EVENT,
-                             tooltip=_event_tooltip(ev)))
+                             tip=_event_tip(ev)))
     return out
 
 
@@ -421,7 +423,7 @@ def _local_candidates(source: str | None, line: int | None) -> list[Candidate]:
         return []
     return [
         Candidate(insert=n, label=n, kind=KIND_LOCAL,
-                  tooltip=_plain_tooltip(n, "Variable locale ou paramètre du script."))
+                  tip=_plain_tip(n, "Variable locale ou paramètre du script."))
         for n in sorted(_script_locals(source, line))
     ]
 
