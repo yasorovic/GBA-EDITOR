@@ -1,0 +1,76 @@
+{
+  "texts": [
+    {
+      "id": 999615648992,
+      "key": "scr_main_pressstart",
+      "path": [
+        "SCR_Main",
+        "PressStart"
+      ],
+      "content": "PRESS START",
+      "note": "",
+      "scene": "SCR_Main",
+      "auto_key": true
+    },
+    {
+      "id": 204079603494,
+      "key": "scr_main_Language",
+      "path": [
+        "SCR_Main",
+        "text_03"
+      ],
+      "content": "< English >",
+      "note": "",
+      "scene": "SCR_Main",
+      "auto_key": false
+    },
+    {
+      "id": 958667946125,
+      "key": "scr_victory_victory",
+      "path": [
+        "SCR_Victory",
+        "Victory"
+      ],
+      "content": "VICTORY",
+      "note": "",
+      "scene": "SCR_Victory",
+      "auto_key": false
+    },
+    {
+      "id": 595921190849,
+      "key": "scr_victory_defeat",
+      "path": [
+        "SCR_Victory",
+        "Defeat"
+      ],
+      "content": "DEFEAT",
+      "note": "",
+      "scene": "SCR_Victory",
+      "auto_key": false
+    },
+    {
+      "id": 958670757900,
+      "key": "scr_arena_score_player",
+      "path": [
+        "SCR_Arena",
+        "ScorePlayer"
+      ],
+      "content": "[font=Font8x8 Latin]$score_player[/font]",
+      "note": "",
+      "scene": "SCR_Arena",
+      "auto_key": false
+    },
+    {
+      "id": 421901810703,
+      "key": "scr_arena_score_cpu",
+      "path": [
+        "SCR_Arena",
+        "ScoreCpu"
+      ],
+      "content": "[font=Font8x8 Latin]$score_cpu[/font]",
+      "note": "",
+      "scene": "SCR_Arena",
+      "auto_key": false
+    }
+  ]
+}

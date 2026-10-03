@@ -928,6 +928,8 @@ class _ActiveSceneTree(_Tree):
             return
         from core.models.ui_region import (
             UIContainer, UIList, UIText, UIImage, unique_element_name)
+        if self._scene is not None and proj.seed_default_ui_palette(self._scene):
+            get_dispatcher().save_scene()
         taken = set(layout.element_names()) | set(proj.ui_element_names())
         if kind == KIND_CONTAINER:
             el = UIContainer(name=unique_element_name(taken, "container"),

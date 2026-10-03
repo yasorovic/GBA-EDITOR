@@ -14,9 +14,6 @@ build-out/
 # l'interpréteur du poste cf. packaging/nuitka_build.py.
 .venv*/
 
-# Projets de tests
-Project Demo/
-
 # Packaging : sorties générées par le build (voir packaging/), quel que
 # soit le dossier depuis lequel la commande est lancée (racine ou packaging/)
 build/

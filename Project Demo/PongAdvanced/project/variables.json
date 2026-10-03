@@ -1,0 +1,29 @@
+{
+  "globals": [
+    {
+      "id": 534439589175,
+      "name": "score_player",
+      "type": "int",
+      "default": 10,
+      "desc": "Points restants au joueur (décrémental : 0 = victoire)",
+      "persist": false
+    },
+    {
+      "id": 154335349840,
+      "name": "score_cpu",
+      "type": "int",
+      "default": 10,
+      "desc": "Points restants à l'adversaire (décrémental : 0 = victoire)",
+      "persist": false
+    },
+    {
+      "id": 205380810795,
+      "name": "winner",
+      "type": "int",
+      "default": 0,
+      "desc": "0 = joueur, 1 = adversaire",
+      "persist": false
+    }
+  ],
+  "constants": []
+}

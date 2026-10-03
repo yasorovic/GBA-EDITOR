@@ -43,7 +43,7 @@ def get_starter(identifier: str = "Basic") -> ProjectStarter:
     for starter in available_starters():
         if starter.id == identifier:
             return starter
-    raise ValueError(f"Starter de projet introuvable : {identifier}")
+    raise ValueError(f"Project starter not found : {identifier}")
 
 
 def copy_starter(starter: ProjectStarter, destination: Path) -> None:

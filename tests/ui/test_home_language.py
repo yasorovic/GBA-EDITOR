@@ -15,13 +15,14 @@ def test_home_screen_is_french(qapp, tmp_path, monkeypatch):
     home = HomeScreen(tmp_path)
 
     assert home.windowTitle() == "Backstage — Ouvrir un projet"
-    assert home._tabs.tabText(0) == "Projets"
+    assert home._tab_bar.tabText(0) == "Projets"
     # L'onglet « Modèles » n'existe que si une source de modèles est configurée.
-    assert (home._tabs.count() == 2) == bool(project_picker.TEMPLATES)
+    assert (home._tab_bar.count() == 2) == bool(project_picker.TEMPLATES)
     if project_picker.TEMPLATES:
-        assert home._tabs.tabText(1) == "Modèles"
+        assert home._tab_bar.tabText(1) == "Modèles"
     assert home._empty_lbl.text().startswith("Aucun projet récent")
-    assert "+ Créer un projet" in {button.text() for button in home.findChildren(QPushButton)}
+    # Le bouton porte une icône et un espace avant son texte.
+    assert "Nouveau projet" in {button.text().strip() for button in home.findChildren(QPushButton)}
     catalog.set_language("")
 
 

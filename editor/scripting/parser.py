@@ -74,18 +74,21 @@ class LuaLocal:
 class StmtCall:
     """Appel de fonction / méthode."""
     call: Any   # noeud Expr (ExprInvoke, ExprCall…)
+    line: int = field(default=0, compare=False)   # ligne du script (0 = inconnue)
 
 
 @dataclass
 class StmtAssign:
     target: Any   # ExprName ou ExprIndex
     value:  Any
+    line: int = field(default=0, compare=False)   # ligne du script (0 = inconnue)
 
 
 @dataclass
 class StmtLocalAssign:
     name:  str
     value: Any
+    line: int = field(default=0, compare=False)   # ligne du script (0 = inconnue)
 
 
 @dataclass
@@ -94,17 +97,20 @@ class StmtIf:
     then:     list[Any]
     elseifs:  list[tuple[Any, list[Any]]] = field(default_factory=list)
     else_:    list[Any]                   = field(default_factory=list)
+    line: int = field(default=0, compare=False)   # ligne du script (0 = inconnue)
 
 
 @dataclass
 class StmtWhile:
     cond: Any
     body: list[Any]
+    line: int = field(default=0, compare=False)   # ligne du script (0 = inconnue)
 
 
 @dataclass
 class StmtReturn:
     values: list[Any]
+    line: int = field(default=0, compare=False)   # ligne du script (0 = inconnue)
 
 
 @dataclass
@@ -114,11 +120,12 @@ class StmtForNum:
     stop:  Any
     step:  Any          # peut être None (défaut 1)
     body:  list[Any]
+    line: int = field(default=0, compare=False)   # ligne du script (0 = inconnue)
 
 
 @dataclass
 class StmtBreak:
-    pass
+    line: int = field(default=0, compare=False)   # ligne du script (0 = inconnue)
 
 
 @dataclass
@@ -394,6 +401,12 @@ class _Converter:
             st = self._stmt(s, local_scope)
             if st is None:
                 continue
+            # La ligne du script suit le statement jusqu'au C (`#line`, cf. codegen) : une
+            # erreur de gcc cite alors le script, pas le `.c` généré.
+            line = self._line(s)
+            for one in (st if isinstance(st, list) else [st]):
+                if not getattr(one, "line", 0):
+                    one.line = line
             # Un `local a, b, c` s'étend en PLUSIEURS statements : `_stmt` rend
             # alors une liste, aplatie ici. Tout l'aval (checker, codegen) ne voit
             # que des `local` mono-nom, comme avant ce correctif.
@@ -901,7 +914,8 @@ def _syntax_message(source: str, exc) -> tuple[str, Optional[int]]:
     elif quoted and "\\n" in quoted.group(1):
         # The quote starts at the first token of the statement that failed.
         line = _offending_line(source, line or 1, quoted.group(1))
-        token = quoted.group(1).split("\\n")[0].strip()
+        # La ligne citée par antlr peut finir par un commentaire : il n'a rien à faire ici.
+        token = re.split(r"\s*--", quoted.group(1).split("\\n")[0])[0].strip()
         msg = f"unexpected `{token}`: this is not a valid statement or expression"
     elif quoted:
         # A lone token: antlr gave up HERE, the mistake is somewhere above.

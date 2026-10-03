@@ -509,13 +509,22 @@ class BuildWorker(EventEmitter, threading.Thread):
 
             self._emit("finished", ok)
 
+        except OSError as e:
+            # Le système de fichiers refuse (un dossier qui est un fichier, un disque plein,
+            # un droit manquant) : un cas courant, pas un bogue. On le dit comme tel, avec le
+            # chemin que l'OS donne ; la trace reste dans `crash.log` pour qui la cherche.
+            crash_log.log_current_exception(
+                f"Build of {getattr(getattr(self, 'project', None), 'root', '?')}")
+            self._emit("diagnostic", build_error(f"file system error: {e}", "build"))
+            self._emit("finished", False)
+
         except Exception as e:
             # Une panne que personne n'a prévue : un message lisible dans le
             # journal de build, et la trace complète dans `crash.log` (là où le
             # menu Aide → « Ouvrir le dossier du journal » mène). Jamais une trace
             # Python brute devant l'utilisateur.
             crash_log.log_current_exception(
-                f"Build de {getattr(getattr(self, 'project', None), 'root', '?')}")
+                f"Build of {getattr(getattr(self, 'project', None), 'root', '?')}")
             self._emit("diagnostic", build_error(
                 f"internal error: {type(e).__name__}: {e}", "build"))
             self._emit("log_line", f"[build] details are in {crash_log.LOG_FILE} (Help → Open the log"
@@ -1077,7 +1086,7 @@ class BuildWorker(EventEmitter, threading.Thread):
                 cartridge_mib=getattr(p.settings, "cartridge_mib", 4),
             )
         except Exception as e:
-            self._emit("log_line", f"[poids] rapport indisponible : {e}")
+            self._emit("diagnostic", build_warning(f"report unavailable: {e}", "weight"))
             return
         if report is None:
             self._emit("log_line", "[weight] report unavailable (ELF or binutils "

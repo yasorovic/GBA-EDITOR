@@ -25,6 +25,12 @@ class PaletteUsage(NamedTuple):
     name: str
     detail: str
 
+# Palette des éléments d'interface par défaut : celle qu'une scène neuve active
+# et que son texte libre lit tant que l'auteur n'a pas choisi une autre banque
+# (cf. `Project.seed_default_ui_palette`). Un nom du catalogue, pas une copie : si
+# le projet ne l'a pas (supprimée, projet ancien), le défaut ne s'applique pas.
+DEFAULT_UI_PALETTE = "_Microsoft Windows 16"
+
 
 @dataclass
 class PaletteBank(Resource):
@@ -96,10 +102,10 @@ class PaletteBank(Resource):
                 continue
             candidate = value[1:] if value.startswith("#") else value
             if len(candidate) != 6 or any(char not in "0123456789abcdefABCDEF" for char in candidate):
-                raise ValueError(f"ligne {line_number}: couleur attendue sous la forme #RRGGBB")
+                raise ValueError(f"line {line_number}: colour expected in the form #RRGGBB")
             colors.append(hex_to_bgr555(value))
         if not colors:
-            raise ValueError("le fichier ne contient aucune couleur")
+            raise ValueError("the file contains no colour")
 
         requested_size = (metadata or {}).get("size")
         size = requested_size if requested_size in (16, 256) and len(colors) <= requested_size \

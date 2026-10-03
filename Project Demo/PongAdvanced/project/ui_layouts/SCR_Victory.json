@@ -1,0 +1,47 @@
+{
+  "name": "SCR_Victory",
+  "anchor": "screen",
+  "anchor_actor": "",
+  "target": "",
+  "elements": [
+    {
+      "kind": "text",
+      "name": "txt_result",
+      "parent": "",
+      "visible": true,
+      "text_color": 5,
+      "highlight_color": 0,
+      "priority": -1,
+      "x": 56,
+      "y": 64,
+      "w": 128,
+      "h": 8,
+      "text_key": "scr_victory_victory",
+      "font_name": "",
+      "font_weight": 400,
+      "font_italic": false,
+      "align": "center",
+      "preview_text": ""
+    },
+    {
+      "kind": "text",
+      "name": "txt_victory_press_start",
+      "parent": "",
+      "visible": false,
+      "text_color": 9,
+      "highlight_color": 0,
+      "priority": -1,
+      "x": 56,
+      "y": 120,
+      "w": 128,
+      "h": 8,
+      "text_key": "scr_main_pressstart",
+      "font_name": "",
+      "font_weight": 400,
+      "font_italic": false,
+      "align": "center",
+      "preview_text": ""
+    }
+  ],
+  "notes": ""
+}

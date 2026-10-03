@@ -268,7 +268,8 @@ def parse_bmfont(text: str) -> dict:
     if text.lstrip().startswith("<"):
         return _parse_bmfont_xml(text)
     if text.startswith("BMF"):
-        raise ValueError("BMFont binaire non géré — réexporte en format texte ou XML.")
+        raise ValueError("binary BMFont is not supported — export it again as text or"
+                         " XML.")
     return _parse_bmfont_text(text)
 
 

@@ -1267,11 +1267,21 @@ class MainWindow(QMainWindow):
             if bp is not None:
                 bp.diagnostics.set_diagnostics(warns, errors)
 
-    def _select_actor_by_name(self, name: str):
-        """Clic sur un diagnostic d'acteur : le sélectionner dans la scène
-        active (les contrôles d'acteur du validateur portent sur elle)."""
-        scene = self.project.active_scene if self.project else None
-        if scene is None:
+    def _select_actor_by_name(self, scene_name: str, name: str):
+        """Clic sur un diagnostic d'acteur ou de scène : ouvrir la scène du diagnostic si ce
+        n'est pas la scène active (le validateur contrôle toutes les scènes), puis y sélectionner
+        l'acteur. `scene_name` vide : la scène active. `name` vide : seulement la scène."""
+        if not self.project:
+            return
+        active = self.project.active_scene
+        if scene_name and (active is None or active.name != scene_name):
+            idx = next((i for i, s in enumerate(self.project.scenes) if s.name == scene_name), None)
+            if idx is None:
+                self._status.showMessage(label("win.actor_not_found", name=scene_name), 4000)
+                return
+            self._on_scene_selected(idx, refresh_diagnostics=False)
+        scene = self.project.active_scene
+        if scene is None or not name:
             return
         actor = next((a for a in scene.actors if a.name == name), None)
         if actor is not None:
@@ -1426,7 +1436,7 @@ class MainWindow(QMainWindow):
 
     # ── Slots scène ───────────────────────────────────────────────
 
-    def _on_scene_selected(self, index: int):
+    def _on_scene_selected(self, index: int, refresh_diagnostics: bool = True):
         if not self.project: return
         self.project.set_active_scene(index)
         self._history.clear()
@@ -1440,7 +1450,11 @@ class MainWindow(QMainWindow):
             self.project.active_scene.name if self.project.active_scene else None)
         self.scene_tree_panel.set_active_scene(self.project.active_scene)
         self._update_gba_bar()
-        self._refresh_diagnostics()   # la validation d'acteur porte sur la scène active
+        # La validation porte sur toutes les scènes : changer de scène ne la change pas. On
+        # ne la relance que pour la mise à jour de l'onglet ; un clic sur un diagnostic (qui
+        # bascule de scène) la garde, pour ne pas remplacer sous le doigt la liste du build.
+        if refresh_diagnostics:
+            self._refresh_diagnostics()
         self._status.showMessage(label("win.active_scene_msg", name=self.project.active_scene.name))
 
     def _open_scene_from_graph(self, name: str):

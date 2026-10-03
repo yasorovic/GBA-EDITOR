@@ -3,13 +3,18 @@ ui/common/about_dialog.py — fenêtre « À propos » : logo, version, auteur, 
 
 Les adresses viennent de `core/app_info` ; un lien dont l'adresse est vide n'est
 pas affiché. « Report an issue » ouvre le formulaire de rapport du dépôt.
+
+« Licenses » ouvre `LicensesDialog` : les textes qui accompagnent l'application
+(licence de l'éditeur, licence du moteur, notices tierces), lus dans `APP_DIR`.
+La GPL de l'éditeur et la LGPL de Qt exigent que ces textes soient atteignables
+par l'utilisateur ; un onglet dont le fichier manque n'est pas affiché.
 """
 
 from __future__ import annotations
 
 
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QTabWidget, QTextBrowser,
 )
 from PyQt6.QtGui import QFont, QDesktopServices
 from PyQt6.QtCore import Qt, QSize, QUrl, pyqtSignal
@@ -18,6 +23,7 @@ from ui.common import icons
 from ui.common.labels import label
 from ui.common.logo import BackstageLogo
 from ui.common.theme import C, T
+from core.app_paths import APP_DIR, RUNTIME_DIR
 from core.app_info import (
     APP_AUTHOR, APP_DOCS_URL, APP_ISSUES_URL, APP_RELEASES_URL, APP_VERSION,
 )
@@ -86,6 +92,37 @@ class _LinkRow(_Card):
             self.clicked.emit()
 
 
+class LicensesDialog(QDialog):
+    """Les textes de licence livrés avec l'application, un onglet chacun."""
+
+    # (clé de libellé, fichier, rendu Markdown ?)
+    _DOCUMENTS = (
+        ("about.license_editor", APP_DIR / "LICENSE", False),
+        ("about.license_engine", RUNTIME_DIR / "LICENSE", False),
+        ("about.license_notices", APP_DIR / "THIRD-PARTY-NOTICES.md", True),
+    )
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(label("about.licenses"))
+        self.resize(780, 560)
+        self.setStyleSheet(f"QDialog{{background:{C.BG_BASE};}}")
+        root = QVBoxLayout(self)
+        tabs = QTabWidget()
+        for key, path, markdown in self._DOCUMENTS:
+            if not path.is_file():
+                continue
+            view = QTextBrowser()
+            view.setOpenExternalLinks(True)
+            text = path.read_text(encoding="utf-8", errors="replace")
+            if markdown:
+                view.setMarkdown(text)
+            else:
+                view.setPlainText(text)
+            tabs.addTab(view, label(key))
+        root.addWidget(tabs)
+
+
 class AboutDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -136,9 +173,18 @@ class AboutDialog(QDialog):
             row = _LinkRow("report_issue", label("about.report_issue"))
             row.clicked.connect(lambda: _open(APP_ISSUES_URL))
             links.addWidget(row)
+        licenses = _LinkRow("licenses", label("about.licenses"))
+        licenses.clicked.connect(lambda: LicensesDialog(self).exec())
+        links.addWidget(licenses)
         root.addLayout(links)
 
         root.addSpacing(18)
+        summary = QLabel(label("about.licenses_summary"))
+        summary.setFont(QFont(T.UI, T.SM))
+        summary.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        summary.setStyleSheet(f"color:{C.TEXT_DIM};background:transparent;")
+        root.addWidget(summary)
+        root.addSpacing(6)
         author_lbl = QLabel(label("about.created_by", author=APP_AUTHOR))
         author_lbl.setFont(QFont(T.UI, T.SM))
         author_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)

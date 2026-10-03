@@ -75,8 +75,7 @@ def find_manifest(root: Path) -> Path | None:
     if len(manifests) > 1:
         names = ", ".join(m.name for m in manifests)
         raise ProjectManifestError(
-            f"« {root.name} » contient {len(manifests)} manifestes "
-            f"({names}). Gardez-en un seul.")
+            f"\"{root.name}\" contains {len(manifests)} manifests ({names}). Keep only one.")
     if manifests:
         return manifests[0]
     legacy = root / LEGACY_MANIFEST_NAME

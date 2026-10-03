@@ -94,7 +94,7 @@ from core.project_renames import ProjectRenameMixin
 from core.models.settings import (ProjectSettings, GlobalVar, Constant, DEFAULT_COLLISION_TAGS,
                                   Language, InputBinding, InputSequence, InputAxis, InputMovement)
 from core.models.text import Text
-from core.models.palette import PaletteBank, OWN_PAL_BANK
+from core.models.palette import PaletteBank, OWN_PAL_BANK, DEFAULT_UI_PALETTE
 from core.models.sprite import SpriteAsset
 from core.models.components import sprite_components
 from core.models.background import BackgroundAsset
@@ -165,6 +165,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         # {code de langue: {id du texte: contenu}} — cf. core/project_langs.
         # Vide tant qu'aucune traduction n'est déclarée.
         self.translations: dict = {}
+        self.translation_problems: dict = {}   # code de langue → pourquoi son fichier est illisible
 
         # Ce que le projet ANNONCE, et à quoi il se laisse ENTOURER.
         #
@@ -426,6 +427,21 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
 
     def get_palette(self, name: str) -> Optional[PaletteBank]:
         return self.palettes.get(name)
+
+    def seed_default_ui_palette(self, scene: Scene) -> bool:
+        """Donne à une scène SANS palette de fond la palette d'interface par défaut
+        (`DEFAULT_UI_PALETTE`) : active dans son pool BG, et lue par la police par
+        défaut (clé `""` de `font_pal_banks`, le slot 0). Appelée à la création d'une
+        scène et à celle de son premier élément d'interface.
+
+        Une scène qui a déjà une sélection n'est jamais modifiée : c'est un choix de
+        l'auteur, y compris « palette propre » (clé `""` absente). Rend True si la
+        scène a changé — à l'appelant de la persister."""
+        if scene.active_bg_palettes or self.get_palette(DEFAULT_UI_PALETTE) is None:
+            return False
+        scene.active_bg_palettes = [DEFAULT_UI_PALETTE]
+        scene.font_pal_banks = {**(scene.font_pal_banks or {}), "": 0}
+        return True
 
     def get_ui_layout(self, name: str) -> Optional[UILayout]:
         return self.ui_layouts.get(name)
@@ -951,10 +967,9 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         found = int(d.get("format_version", 0))
         if found > PROJECT_FORMAT_VERSION:
             raise ProjectFileError(
-                f"Le projet « {self.root.name} » a été créé par une version plus "
-                f"récente de l'éditeur (format {found}, celui-ci lit jusqu'au "
-                f"format {PROJECT_FORMAT_VERSION}). Mettez l'éditeur à jour pour "
-                f"l'ouvrir ; rien n'a été modifié.")
+                f"Project \"{self.root.name}\" was created by a newer version of the editor (format "
+                f"{found}, this one reads up to format {PROJECT_FORMAT_VERSION}). Update the editor to open it;"
+                " nothing was modified.")
         # Le nom vient du FICHIER : <Nom>.project → le stem. Un manifeste
         # legacy (project.json) ne le porte pas dans son intitulé — on retombe
         # alors sur sa clé `name`, puis sur le dossier.
@@ -1139,14 +1154,20 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         # Chaque registre est suivi de son rattrapage (cf. asset_reconciliation,
         # section « Rattrapage à l'ouverture ») : un fichier déposé éditeur
         # fermé n'a été vu par aucun watcher, on repasse une fois ici.
+        # `_loading_file` : le fichier en cours de lecture, pour que le refus d'ouvrir le nomme
+        # (un JSON tronqué ne dit pas de quel fichier il vient).
+        self._loading_file = find_manifest(self.root)
         self.load_settings()
+        self._loading_file = self.variables_file
         self.load_variables()
         # Une variable ajoutée à la main dans variables.json n'a pas d'id, et
         # tout ce qui référence une variable en a besoin : attribution AVANT
         # que quoi que ce soit ne tente de résoudre.
         if self.assign_variable_ids():
             self.save_variables()
+        self._loading_file = self.texts_file
         self.load_texts()
+        self._loading_file = None
         # Après les textes : un side se joint aux entrées du maître.
         self.load_translations()
         self.palettes.load()
@@ -1250,6 +1271,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         # 2026-09-19) : dérivé, rien à réserver — la première scène d'un projet
         # n'est pas un cas particulier.
         default_scene = Scene(name="Scene_01")
+        proj.seed_default_ui_palette(default_scene)
         proj.scenes.append(default_scene)
         proj.settings.start_scene = "Scene_01"
         proj.settings.last_scene  = "Scene_01"
@@ -1270,8 +1292,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         devenait un projet fantôme (aucune scène, aucun manifeste)."""
         if not root.is_dir() or find_manifest(root) is None:
             raise ProjectNotFoundError(
-                f"« {root.name} » n'est pas un projet : aucun fichier "
-                f"{PROJECT_EXT} dans ce dossier.")
+                f"\"{root.name}\" is not a project: there is no {PROJECT_EXT} file in this folder.")
         proj = cls(root)
         try:
             proj.load()
@@ -1281,9 +1302,10 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
             # JSON tronqué (JSONDecodeError et UnicodeDecodeError sont des
             # ValueError), champ absent, fichier verrouillé : un message clair
             # et la trace dans le journal, pas une exception brute.
-            crash_log.log_current_exception(f"Ouverture du projet {root}")
+            crash_log.log_current_exception(f"Opening project {root}")
+            culprit = getattr(proj, "_loading_file", None)
+            which = f"file \"{culprit.name}\"" if culprit else "one of its files"
             raise ProjectFileError(
-                f"Le projet « {root.name} » n'a pas pu être chargé : un de ses "
-                f"fichiers est illisible ({type(exc).__name__} : {exc}). "
-                f"Le détail est dans {crash_log.LOG_FILE}.") from exc
+                f"Project \"{root.name}\" could not be loaded: {which} is unreadable "
+                f"({type(exc).__name__}: {exc}). Details are in {crash_log.LOG_FILE}.") from exc
         return proj

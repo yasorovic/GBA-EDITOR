@@ -1,0 +1,11 @@
+Font8x8 Latin bitmap source
+===========================
+
+Source: https://github.com/dhepper/font8x8
+Author: Daniel Hepper; derived from public-domain VGA font material credited
+to Marcel Sondaar and International Business Machines.
+
+License: Public Domain.
+
+The Font8x8 Latin PNG in this project was generated from the upstream Basic
+Latin and Extended Latin tables by tools/generate_font8x8_template.py.

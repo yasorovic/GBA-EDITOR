@@ -28,7 +28,7 @@ def test_manifeste_tronque_donne_une_erreur_de_projet(tmp_path):
     with pytest.raises(ProjectFileError) as err:
         Project.open(root)
 
-    assert "illisible" in str(err.value)
+    assert "unreadable" in str(err.value)
     assert isinstance(err.value, ProjectManifestError)    # déjà attrapée par l'UI
     assert manifest.read_text(encoding="utf-8") == '{"start_scene": "Scene_0'
 
@@ -66,7 +66,7 @@ def test_projet_d_un_format_plus_recent_est_refuse_sans_rien_modifier(tmp_path):
     with pytest.raises(ProjectFileError) as err:
         Project.open(root)
 
-    assert "plus récente" in str(err.value)
+    assert "newer version" in str(err.value)
     assert manifest.read_text(encoding="utf-8") == text
 
 

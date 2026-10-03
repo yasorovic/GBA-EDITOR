@@ -1,0 +1,11 @@
+{
+  "name": "unifont-jp-17.0.04",
+  "asset": "assets/fonts/unifont-jp-17.0.04.otf",
+  "source_format": "otf",
+  "cell_w": 8,
+  "cell_h": 8,
+  "line_height": 8,
+  "family_name": "Unifont-JP",
+  "style_name": "Regular",
+  "glyphs": []
+}

@@ -271,7 +271,7 @@ def load_module(path) -> Module:
     data = path.read_bytes()
     kind = detect_format(data)
     if kind is None:
-        raise ValueError("format de module non reconnu (ni MOD, ni S3M, ni XM, ni IT)")
+        raise ValueError("unrecognised module format (neither MOD, S3M, XM nor IT)")
     if kind == "mod":
         from .mod_file import parse_mod
         return parse_mod(data)

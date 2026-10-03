@@ -1,0 +1,18 @@
+{
+  "name": "Font8x8 Latin",
+  "sources": {
+    "regular": [
+      "Font8x8 Latin"
+    ]
+  },
+  "pixel_height": 8,
+  "line_height": 8,
+  "pixel_fit": "auto",
+  "hinting": "normal",
+  "raster_mode": "binary",
+  "coverage_threshold": 128,
+  "dither_pattern": "none",
+  "offset_x": 0,
+  "offset_y": 0,
+  "prefer_bitmap_strike": true
+}

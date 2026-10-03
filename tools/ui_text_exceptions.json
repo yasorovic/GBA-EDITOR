@@ -158,5 +158,15 @@
     "file": "editor/ui/sound_mixer/sound_panel.py",
     "text": "f'VOL {value:02d}'",
     "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
+  },
+  {
+    "file": "editor/ui/common/about_dialog.py",
+    "text": "f'v{APP_VERSION}'",
+    "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
+  },
+  {
+    "file": "editor/ui/home/project_picker.py",
+    "text": "f'''<a href=\"{APP_DOCS_URL}\" style=\"color:{C.TEXT_NORM};\">↗ {label('home.docs')}</a>'''",
+    "reason": "HTML presentation only; the displayed prose is resolved by the catalogue."
   }
 ]

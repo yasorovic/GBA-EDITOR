@@ -244,6 +244,7 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "docs":                   ("mdi.book-open-variant",       "▤"),
     "release_notes":          ("mdi.text-box-outline",        "≣"),
     "report_issue":           ("mdi.bug-outline",             "✱"),
+    "licenses":               ("mdi.scale-balance",           "§"),
 }
 
 # ── Backend (chargé une seule fois) ──────────────────────────────

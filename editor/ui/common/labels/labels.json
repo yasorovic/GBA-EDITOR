@@ -246,7 +246,7 @@
       "text": "Extracting…"
     },
     "home.template.pong.name": {
-      "text": "Pong"
+      "text": "Pong Advanced"
     },
     "home.template.pong.description": {
       "text": "Complete game (scenes, sprites, scripts, music)."
@@ -1744,6 +1744,11 @@
     "about.docs": { "text": "Documentation" },
     "about.release_notes": { "text": "Release notes" },
     "about.report_issue": { "text": "Report an issue" },
+    "about.licenses": { "text": "Licenses and third-party notices" },
+    "about.licenses_summary": { "text": "Editor under GPL-3.0 · Game engine under zlib" },
+    "about.license_editor": { "text": "Editor — GPL-3.0" },
+    "about.license_engine": { "text": "Game engine — zlib" },
+    "about.license_notices": { "text": "Third-party notices" },
     "win.documentation": {
       "text": "Documentation"
     },

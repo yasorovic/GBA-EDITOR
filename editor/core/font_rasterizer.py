@@ -49,13 +49,13 @@ class RasterGlyph:
 
     def __post_init__(self):
         if len(self.char) != 1:
-            raise ValueError("RasterGlyph attend exactement un caractère")
+            raise ValueError("RasterGlyph expects exactly one character")
         if self.width < 0 or self.height < 0:
-            raise ValueError("les dimensions d'un RasterGlyph sont positives")
+            raise ValueError("the dimensions of a RasterGlyph must not be negative")
         if len(self.coverage) != self.width * self.height:
-            raise ValueError("la couverture ne correspond pas aux dimensions")
+            raise ValueError("the coverage does not match the dimensions")
         if self.colors and len(self.colors) != self.width * self.height * 3:
-            raise ValueError("les couleurs ne correspondent pas aux pixels")
+            raise ValueError("the colours do not match the pixels")
 
     def coverage_at(self, x: int, y: int) -> int:
         if not (0 <= x < self.width and 0 <= y < self.height):
@@ -76,8 +76,8 @@ def _freetype():
         import freetype
     except ImportError as exc:
         raise FontRasterizerUnavailable(
-            "La rasterisation vectorielle requiert freetype-py. "
-            "Installe les dépendances de l'éditeur."
+            "Vector rasterisation requires freetype-py. Install the editor's "
+            "dependencies."
         ) from exc
     return freetype
 
@@ -194,7 +194,7 @@ def glyph_exists(source_path: Path, char: str, faces=None) -> bool:
         face = _face(freetype, source_path, faces)
         return bool(face.get_char_index(ord(char)))
     except Exception as exc:  # FreeType expose plusieurs classes d'erreur.
-        raise FontRasterizerError(f"Lecture impossible de « {source_path.name} » : {exc}") from exc
+        raise FontRasterizerError(f"Cannot read \"{source_path.name}\": {exc}") from exc
 
 
 def rasterize_vector_glyph(
@@ -212,9 +212,9 @@ def rasterize_vector_glyph(
 ) -> RasterGlyph:
     """Rastérise un caractère TTF/OTF en couverture, sans effet de bord."""
     if len(char) != 1:
-        raise ValueError("rasterize_vector_glyph attend exactement un caractère")
+        raise ValueError("rasterize_vector_glyph expects exactly one character")
     if pixel_height < 1:
-        raise ValueError("pixel_height doit être positif")
+        raise ValueError("pixel_height must be positive")
     freetype = _freetype()
     try:
         face = _face(freetype, source_path, faces)
@@ -227,13 +227,13 @@ def rasterize_vector_glyph(
         if not used_strike:
             face.set_pixel_sizes(0, pixel_height)
         if not face.get_char_index(ord(char)):
-            raise FontRasterizerError(f"« {char} » n'est pas couvert par {source_path.name}")
+            raise FontRasterizerError(f"\"{char}\" is not covered by {source_path.name}")
         face.load_char(ord(char), _load_flags(freetype, hinting, grid_fit=fit == "grid_fit"))
         slot, bitmap = face.glyph, face.glyph.bitmap
     except FontRasterizerError:
         raise
     except Exception as exc:
-        raise FontRasterizerError(f"Rasterisation impossible de « {source_path.name} » : {exc}") from exc
+        raise FontRasterizerError(f"Cannot rasterise \"{source_path.name}\": {exc}") from exc
 
     return RasterGlyph(
         char=char,
@@ -342,12 +342,12 @@ def rasterize_asset_glyph(project, asset, char: str, variant: str = "regular",
     """
     names = _asset_source_names(asset, variant, weight, italic)
     if not names:
-        raise FontRasterizerError("Cet asset ne possède aucune source pour cette variante.")
+        raise FontRasterizerError("This asset has no source for this variant.")
     problems: list[str] = []
     for name in names:
         source = project.fonts.get(name)
         if source is None:
-            problems.append(f"{name} est introuvable")
+            problems.append(f"{name} was not found")
             continue
         # `asset_abs` fait un `.resolve()` (appel filesystem, lent sur Windows) :
         # inchangé pour tous les glyphes d'une même source, on le mémoïse sur la
@@ -362,12 +362,12 @@ def rasterize_asset_glyph(project, asset, char: str, variant: str = "regular",
                 path = project.asset_abs(source.asset)
                 faces[pkey] = path
         if not path or not path.exists():
-            problems.append(f"le fichier de {name} est introuvable")
+            problems.append(f"the file of {name} was not found")
             continue
         if source.source_format in ("png", "fnt"):
             glyph = source.glyph(char)
             if glyph is None:
-                problems.append(f"{name} ne couvre pas ce caractère")
+                problems.append(f"{name} does not cover this character")
                 continue
             try:
                 from PIL import Image
@@ -410,10 +410,10 @@ def rasterize_asset_glyph(project, asset, char: str, variant: str = "regular",
                                    glyph.advance, glyph.ox, glyph.h - glyph.oy,
                                    source_name=name, colors=colors.tobytes())
             except Exception as exc:
-                problems.append(f"lecture bitmap de {name} impossible ({exc})")
+                problems.append(f"cannot read the bitmap of {name} ({exc})")
                 continue
         if source.source_format not in ("ttf", "otf"):
-            problems.append(f"{name} a un format non rendu")
+            problems.append(f"{name} has a format that cannot be rendered")
             continue
         if glyph_exists(path, char, faces):
             return rasterize_vector_glyph(
@@ -423,5 +423,5 @@ def rasterize_asset_glyph(project, asset, char: str, variant: str = "regular",
                 offset_x=asset.offset_x, offset_y=asset.offset_y, source_name=name,
                 faces=faces,
             )
-    detail = " ; ".join(problems) or "aucune source ne couvre ce caractère"
-    raise FontRasterizerError(f"« {char} » ne peut pas être rendu : {detail}.")
+    detail = " ; ".join(problems) or "no source covers this character"
+    raise FontRasterizerError(f"\"{char}\" cannot be rendered: {detail}.")

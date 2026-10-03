@@ -54,13 +54,14 @@ def vector_font_metadata(path: Path) -> dict:
     """
     data = path.read_bytes()
     if len(data) < 12 or data[:4] == b"ttcf":
-        raise ValueError("collection TTC non gérée — importe une face TTF ou OTF.")
+        raise ValueError("TTC collection is not supported — import a single TTF or "
+                         "OTF face.")
     count = _u16(data, 4)
     tables: dict[bytes, tuple[int, int]] = {}
     for i in range(count):
         pos = 12 + i * 16
         if pos + 16 > len(data):
-            raise ValueError("table SFNT incomplète.")
+            raise ValueError("incomplete SFNT table.")
         tag = data[pos:pos + 4]
         offset, length = _u32(data, pos + 8), _u32(data, pos + 12)
         if offset + length <= len(data):
@@ -93,7 +94,7 @@ def vector_font_metadata(path: Path) -> dict:
 
     family, style = name_of(16, 1), name_of(17, 2)
     if not family:
-        raise ValueError("nom de famille absent.")
+        raise ValueError("family name is missing.")
     weight = _style_weight(style)
     italic = "italic" in style.lower() or "oblique" in style.lower()
     if b"OS/2" in tables:

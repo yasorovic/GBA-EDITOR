@@ -190,7 +190,8 @@ def direct_index_to_bank(path, bank_colors: list[int]) -> "Image.Image":
     from PIL import Image
     img = Image.open(path)
     if img.mode != "P":
-        raise ValueError(f"direct_index_to_bank: {path} n'est pas un PNG indexé (mode {img.mode!r})")
+        raise ValueError(f"direct_index_to_bank: {path} is not an indexed PNG (mode "
+                         f"{img.mode!r})")
 
     palette = img.getpalette() or []
     used_indices = sorted(idx for _count, idx in img.getcolors(maxcolors=256))
@@ -325,7 +326,7 @@ def reduce_colors(colors: list[tuple[int, int, int]],
     elif method == "kmeans":
         reps = _reps_kmeans(colors, counts, max_colors)
     else:
-        raise ValueError(f"reduce_colors: méthode inconnue {method!r}")
+        raise ValueError(f"reduce_colors: unknown method {method!r}")
     return {c: nearest_rgb(c, reps) for c in colors}
 
 

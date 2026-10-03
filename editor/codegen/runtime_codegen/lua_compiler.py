@@ -579,6 +579,8 @@ def transpile_all(
         } - {""})
         sfx_comp_name = _sfx_component_name(actor)
         ctx  = CodegenContext(
+            lua_file      = sp.name,
+            c_file        = f"actor_{s}.c",
             child_refs    = _child_refs_for_actor(actor, scene_actors, scene.name),
             actor_name    = actor.name,
             actor_sym     = s,
@@ -636,7 +638,12 @@ def transpile_all(
     pool_state_total = 0
     for pf in prefabs:
         pf_instances = scene_pool_instances(scene, pf)
-        if pf_instances <= 0:
+        # Un prefab qu'aucune scène ne déclare n'émet rien, mais son script est quand même
+        # VÉRIFIÉ — une fois, par la première scène : sinon ses fautes sémantiques (un nom qui
+        # ne désigne rien, un appel inconnu) ne sortiraient qu'au jour où une scène le déclare.
+        check_only = pf_instances <= 0
+        if check_only and not (scene is p.scenes[0] and
+                               all(scene_pool_instances(s, pf) <= 0 for s in p.scenes)):
             continue
         pf_sym = f"{scene_sym}_{c_sym(pf.name)}"
         sc = next((c for c in pf.components if isinstance(c, ScriptComponent)), None)
@@ -695,7 +702,11 @@ def transpile_all(
         pf_ast, ok = _compile_script(sp_path, ctx_check, emit, f"prefab {pf.name}")
         if not ok:
             return False
+        if check_only:
+            continue
         ctx_pf  = CodegenContext(
+            lua_file      = sp_path.name,
+            c_file        = f"actor_{pf_sym}.c",
             child_refs    = _child_refs_for_prefab(pf),
             actor_name    = pf.name,
             actor_sym     = pf_sym,
@@ -766,6 +777,8 @@ def transpile_all(
     if scene_script_ast and scene_script_file:
         scene_s = c_sym(scene.name)
         ctx_sc  = CodegenContext(
+            lua_file      = scene_script_file.name,
+            c_file        = f"{scene_s}_scene.c",
             actor_name    = scene.name,
             actor_sym     = scene_s,
             scene_sym     = scene_s,
@@ -875,6 +888,8 @@ def transpile_all(
         if not ok:
             return False
         ctx_cam = CodegenContext(
+            lua_file      = sp.name,
+            c_file        = f"{cam_sym}.c",
             actor_name    = cam.name,
             actor_sym     = cam_sym,
             input_masks   = input_layout.masks,

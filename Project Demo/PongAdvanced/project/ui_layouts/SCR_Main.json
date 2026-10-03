@@ -1,0 +1,47 @@
+{
+  "name": "SCR_Main",
+  "anchor": "screen",
+  "anchor_actor": "",
+  "target": "",
+  "elements": [
+    {
+      "kind": "text",
+      "name": "txt_press_start",
+      "parent": "",
+      "visible": true,
+      "text_color": 3,
+      "highlight_color": 0,
+      "priority": -1,
+      "x": 56,
+      "y": 136,
+      "w": 128,
+      "h": 8,
+      "text_key": "scr_main_pressstart",
+      "font_name": "",
+      "font_weight": 400,
+      "font_italic": false,
+      "align": "center",
+      "preview_text": ""
+    },
+    {
+      "kind": "text",
+      "name": "txt_language_selection",
+      "parent": "",
+      "visible": true,
+      "text_color": 9,
+      "highlight_color": 0,
+      "priority": -1,
+      "x": 56,
+      "y": 72,
+      "w": 128,
+      "h": 24,
+      "text_key": "scr_main_Language",
+      "font_name": "",
+      "font_weight": 400,
+      "font_italic": false,
+      "align": "center",
+      "preview_text": ""
+    }
+  ],
+  "notes": ""
+}

@@ -64,10 +64,18 @@ class ValidationMessage:
     source: str = ""    # qui le dit : "validator", "script", "checker", "codegen", un outil…
     file: str = ""      # fichier fautif (nom seul), ou ""
     line: int = 0       # ligne dans ce fichier, ou 0 si elle est inconnue
+    scene: str = ""     # scène contrôlée quand le message vient d'un contrôle PAR scène
 
     def __str__(self):
-        prefix = f"[{self.actor}] " if self.actor else ""
-        return f"{'⚠' if self.level == 'warning' else '✖'}  {self._where()}{prefix}{self.message}"
+        return f"{'⚠' if self.level == 'warning' else '✖'}  {self._where()}{self._owner()}{self.message}"
+
+    def _owner(self) -> str:
+        """`[Scène/Acteur] `, `[Scène] ` ou `[Acteur] ` : de qui l'on parle."""
+        if self.scene and self.actor:
+            return f"[{self.scene}/{self.actor}] "
+        if self.scene or self.actor:
+            return f"[{self.scene or self.actor}] "
+        return ""
 
     def _where(self) -> str:
         """`Hit.lua:3: ` ; sans fichier, le nom de l'étape ou de l'outil qui parle (jamais
@@ -81,8 +89,7 @@ class ValidationMessage:
         `fichier:ligne` est garanti par les champs, pas deviné dans un texte libre — c'est ce
         que le clic de la console relit."""
         tag = "[warn] " if self.level == "warning" else "[error]"
-        owner = f"[{self.actor}] " if self.actor else ""
-        return f"{tag} {self._where()}{owner}{self.message}"
+        return f"{tag} {self._where()}{self._owner()}{self.message}"
 
 
 def build_error(message: str, source: str, file: str = "", line: int = 0,
@@ -103,6 +110,8 @@ class ValidationContext:
         self.scene   = project.active_scene
         self.actors  = self.scene.actors if self.scene else []
         self._msgs: list[ValidationMessage] = []
+        self._focus = ""      # nom de la scène en cours de contrôle ("" hors contrôle par scène)
+        self.undecodable_scripts = False   # un script n'est pas de l'UTF-8 (cf. _check_scripts_parse)
         # Les modules déjà analysés pendant CETTE validation. Trois contrôles
         # les lisent (structure de coupe, canaux du jingle, canaux du projet)
         # et un module coûte ~9 ms à analyser : sans ce cache, la démo et ses
@@ -157,21 +166,28 @@ class ValidationContext:
             try:
                 script = lua_parse(path.read_text(encoding="utf-8"))
                 self._scripts[key] = {fn.name for fn in script.functions}
-            except (LuaParseError, OSError):  # tolerated: a syntax error is reported by the script validator
+            except (LuaParseError, OSError, UnicodeDecodeError):  # tolerated: a syntax error is reported by the script validator
                 self._scripts[key] = set()
         return self._scripts[key]
+
+    def focus(self, scene) -> None:
+        """Les contrôles par scène (`ctx.scene`, `ctx.actors`) portent sur CETTE scène, et les
+        messages émis ensuite la nomment. `focus(None)` revient à la scène active, sans nom."""
+        self.scene = scene or self.project.active_scene
+        self.actors = self.scene.actors if self.scene else []
+        self._focus = scene.name if scene else ""
 
     def warn(self, actor_or_name, message: str, target: Optional[DiagnosticTarget] = None,
              file: str = "", line: int = 0):
         name = getattr(actor_or_name, "name", str(actor_or_name)) if actor_or_name else ""
-        self._msgs.append(ValidationMessage("warning", name, message, target,
-                                            source="validator", file=file, line=line))
+        self._msgs.append(ValidationMessage("warning", name, message, target, source="validator",
+                                            file=file, line=line, scene=self._focus))
 
     def error(self, actor_or_name, message: str, target: Optional[DiagnosticTarget] = None,
               file: str = "", line: int = 0):
         name = getattr(actor_or_name, "name", str(actor_or_name)) if actor_or_name else ""
-        self._msgs.append(ValidationMessage("error", name, message, target,
-                                            source="validator", file=file, line=line))
+        self._msgs.append(ValidationMessage("error", name, message, target, source="validator",
+                                            file=file, line=line, scene=self._focus))
 
     @property
     def warnings(self) -> list[ValidationMessage]:
@@ -191,9 +207,18 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
 
     # ── Validateurs built-in ─────────────────────────────────────────
     _check_unreadable_files(ctx)
+    _check_translation_files(ctx)
+    # Les scripts d'abord : une quinzaine de contrôles les relisent, et un fichier qui n'est
+    # pas de l'UTF-8 faisait planter l'un d'eux (« internal error ») avant que ce contrôle-ci
+    # puisse le dire. Dit, il suffit : les autres liraient le même fichier.
+    _check_scripts_parse(ctx)
+    if ctx.undecodable_scripts:
+        return ctx.warnings, ctx.errors
     _check_scene(ctx)
-    _check_actors(ctx)
-    _check_backgrounds(ctx)
+    _check_each_scene(ctx)
+    _check_prefabs(ctx)
+    _check_font_sheets(ctx)
+    _check_start_scene(ctx)
     # NB : pas d'avertissement quand un même sprite/prefab/layer pointant un
     # SLOT (pal_bank 0-15) résout vers des palettes différentes selon la scène.
     # C'est un comportement PRÉVISIBLE et voulu (palette-swap par slot, comme
@@ -220,7 +245,6 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
     _check_scene_font(ctx)
     _check_cameras(ctx)
     _check_script_owner_families(ctx)
-    _check_scripts_parse(ctx)
     _check_behaviors_without_self(ctx)
     _check_window_regions(ctx)
     _check_actor_name_collisions(ctx)
@@ -233,7 +257,6 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
     _check_jingle_channels(ctx)
     _check_module_channels(ctx)
     _check_sound_boxes(ctx)
-    _check_frame_events(ctx)
     _check_sprite_appearances(ctx)
 
     # ── Validateurs plugins ──────────────────────────────────────────
@@ -434,29 +457,85 @@ def _check_api_prototypes(ctx: ValidationContext):
 def _check_scene(ctx: ValidationContext):
     if not ctx.scene:
         ctx.error(None, "No active scene — cannot build.")
-        return
-    if not ctx.actors:
-        ctx.warn(None, "The scene contains no actor.")
+
+
+def _check_each_scene(ctx: ValidationContext):
+    """Les contrôles qui lisent une scène (ses acteurs, ses fonds, les événements de frame de
+    leurs scripts) tournent pour CHAQUE scène : le build les compile toutes, et ne contrôler que
+    la scène ouverte laissait passer, en silence, un script supprimé ou un sprite illisible dans
+    une autre. Le message nomme la scène."""
+    for scene in ctx.project.scenes:
+        ctx.focus(scene)
+        # Une scène d'interface (écran titre, victoire) n'a souvent aucun acteur : valide, pas un
+        # avertissement. Elle ne fait « rien » seulement sans acteur, sans script et sans interface.
+        if not (scene.actors or getattr(scene, "script", "") or getattr(scene, "ui_layouts", None)):
+            ctx.warn(None, "The scene has no actor, script or interface: it will do nothing.")
+        _check_actors(ctx)
+        _check_backgrounds(ctx)
+        _check_frame_events(ctx)
+    ctx.focus(None)
+
+
+def _check_font_sheets(ctx: ValidationContext):
+    """La planche PNG d'une police doit exister et se lire : sans elle, la police n'a aucun glyphe
+    et chaque texte qui la cite échoue plus loin, sans nommer la planche."""
+    p = ctx.project
+    for font in getattr(p, "fonts", []):
+        sheet = getattr(font, "asset", None)
+        # Une police vectorielle (.ttf, .otf) n'a pas de planche : seul un PNG se contrôle ici.
+        if not sheet or Path(sheet).suffix.lower() != ".png":
+            continue
+        path = p.asset_abs(sheet)
+        name = Path(sheet).name
+        if not path or not path.exists():
+            ctx.error(None, f"Font \"{font.name}\": sheet {name} not found.")
+        elif font.source_format != "png":
+            continue    # .ttf / .otf / .fnt : pas une image, la rastérisation les lit à sa manière
+        elif reason := ctx.image_problem(path):
+            ctx.error(None, f"Font \"{font.name}\": sheet {name} is unreadable ({reason}) — "
+                            "re-export the PNG.")
+
+
+def _check_start_scene(ctx: ValidationContext):
+    """La scène sur laquelle démarre le jeu doit exister : sinon `main_gen` retombe, sans un mot,
+    sur la première scène."""
+    p = ctx.project
+    start = getattr(p.settings, "start_scene", "")
+    names = [scene.name for scene in p.scenes]
+    if start and names and start not in names:
+        ctx.warn(None, f"The start scene \"{start}\" does not exist — the game will start on "
+                       f"\"{names[0]}\".")
+
+
+def _check_prefabs(ctx: ValidationContext):
+    """Un prefab a les composants d'un acteur et se compile comme lui : mêmes contrôles. Sans
+    cela, le PNG d'un sprite que seul un prefab cite n'était vu par personne."""
+    for prefab in ctx.project.prefabs:
+        _check_components(ctx, prefab, prefab.components)
 
 
 def _check_actors(ctx: ValidationContext):
+    for actor in ctx.actors:
+        _check_components(ctx, actor, actor.components)
+
+
+def _check_components(ctx: ValidationContext, owner, components):
     from core.models.components import component_type_name
 
-    for actor in ctx.actors:
-        for comp in actor.components:
-            try:
-                ctype = component_type_name(comp)
-            except ValueError:
-                ctx.warn(actor, "Unsupported component type ignored: "
-                                f"{type(comp).__name__}")
-                continue
+    for comp in components:
+        try:
+            ctype = component_type_name(comp)
+        except ValueError:
+            ctx.warn(owner, "Unsupported component type ignored: "
+                            f"{type(comp).__name__}")
+            continue
 
-            if ctype == "sprite":
-                _check_sprite(ctx, actor, comp)
-            elif ctype == "collision_box":
-                _check_collision(ctx, actor, comp)
-            elif ctype == "script":
-                _check_script(ctx, actor, comp)
+        if ctype == "sprite":
+            _check_sprite(ctx, owner, comp)
+        elif ctype == "collision_box":
+            _check_collision(ctx, owner, comp)
+        elif ctype == "script":
+            _check_script(ctx, owner, comp)
 
 
 def _check_sprite(ctx, actor, comp):
@@ -483,7 +562,7 @@ def _check_sprite(ctx, actor, comp):
         ctx.error(actor, f"Sprite '{sprite.name}': image {sprite.asset} is unreadable ({reason}) — re-export the"
                          " PNG.")
     if sprite.frame_w <= 0 or sprite.frame_h <= 0:
-        ctx.error(actor, f"Sprite '{sprite.name}' : frame_w/h invalides ({sprite.frame_w}×{sprite.frame_h}).")
+        ctx.error(actor, f"Sprite '{sprite.name}' : invalid frame_w/h ({sprite.frame_w}×{sprite.frame_h}).")
 
 
 def _check_collision(ctx, actor, comp):
@@ -501,6 +580,15 @@ def _check_script(ctx, actor, comp):
     sp = proj.asset_abs(comp.script)
     if not sp or not sp.exists():
         ctx.error(actor, f"Script not found: {comp.script}")
+
+
+def _check_translation_files(ctx: ValidationContext):
+    """Un fichier de traduction illisible laisse la langue sans un mot traduit : le jeu retombe sur
+    la langue source. Le projet s'ouvre quand même (règle du repli), mais la perte se dit."""
+    p = ctx.project
+    for code, reason in getattr(p, "translation_problems", {}).items():
+        ctx.warn(None, f"Translation file \"{p.translation_file(code).name}\" is unreadable "
+                       f"({reason}) — language \"{code}\" falls back to the source language.")
 
 
 def _check_unreadable_files(ctx: ValidationContext):
@@ -923,7 +1011,7 @@ def _check_literal_texts(ctx: ValidationContext):
     for path in script_paths(p):
         try:
             src = path.read_text(encoding="utf-8")
-        except OSError:
+        except (OSError, UnicodeDecodeError):  # tolerated: _check_scripts_parse reports it
             continue
         for ref in iter_refs(src, path=path, domain=DOMAIN_TEXT):
             if ref.api_key not in LITERAL_TEXT_CALLS or ref.value in keys:
@@ -1053,7 +1141,7 @@ def _check_ui_image(ctx: ValidationContext):
         # `all_images` porte aussi les conteneurs à fond sprite : même table, même
         # panne, seul le mot change pour que le message désigne le bon objet.
         what = ("the container background" if can_fill(im)
-                else "l'image")
+                else "the image")
         name = getattr(im, "sprite_name", "") or ""
         if not name:
             continue
@@ -1317,12 +1405,21 @@ def _check_scripts_parse(ctx: ValidationContext):
         except LuaParseError as exc:
             report(None, f"{exc}{suffix}", file=path.name, line=exc.line or 0)
             continue
+        except UnicodeDecodeError as exc:
+            ctx.undecodable_scripts = True
+            report(None, f"not valid UTF-8 (byte {exc.object[exc.start]:#04x} at position "
+                         f"{exc.start}): save the script as UTF-8{suffix}", file=path.name)
+            continue
         except OSError as exc:
             report(None, f"cannot be read ({exc}){suffix}", file=path.name)
             continue
         for _node, line in script.stray_statements:
             report(None, f"this statement is outside any function, so it would never "
                          f"run{suffix}", file=path.name, line=line)
+        if blocking and not script.functions:
+            # Un script vide (ou réduit à des commentaires) est valide, mais l'acteur qui le porte
+            # perd tout son comportement : un avertissement, pas une erreur.
+            ctx.warn(None, "defines no function: the script does nothing.", file=path.name)
 
 
 def _check_behaviors_without_self(ctx: ValidationContext):
@@ -1340,7 +1437,7 @@ def _check_behaviors_without_self(ctx: ValidationContext):
     for path in sorted(behaviors_dir.glob("*.lua")):
         try:
             script = lua_parse(path.read_text(encoding="utf-8"))
-        except (LuaParseError, OSError):  # tolerated: _check_scripts_parse reports it
+        except (LuaParseError, OSError, UnicodeDecodeError):  # tolerated: _check_scripts_parse reports it
             continue
         if uses_self(script):
             ctx.error(None,
@@ -1464,7 +1561,7 @@ def _check_audio_files(ctx: ValidationContext):
     from core.resources.asset_reconciliation import check_audio_file
     p = ctx.project
     for kind, assets in (("SFX", getattr(p, "sfx", [])),
-                         ("Musique", getattr(p, "music", []))):
+                         ("Music", getattr(p, "music", []))):
         for a in assets or []:
             if not a.asset:
                 ctx.warn(None, f"{kind} \"{a.name}\": no associated file.")
@@ -1533,7 +1630,7 @@ def _check_music_cut_compat(ctx: ValidationContext):
     for path in script_paths(p):
         try:
             text = path.read_text(encoding="utf-8")
-        except OSError:
+        except (OSError, UnicodeDecodeError):  # tolerated: _check_scripts_parse reports it
             continue
         if "cut_to" not in text:            # évite de parser pour rien
             continue
@@ -1568,7 +1665,7 @@ def _check_jingle_channels(ctx: ValidationContext):
     for path in script_paths(p):
         try:
             text = path.read_text(encoding="utf-8")
-        except OSError:
+        except (OSError, UnicodeDecodeError):  # tolerated: _check_scripts_parse reports it
             continue
         if "jingle" not in text:
             continue
@@ -1658,8 +1755,8 @@ def _check_sound_boxes(ctx: ValidationContext):
                     "state will be silent.")
 
     for store, known, label, target in (
-            (getattr(p, "sound_boxes", []), sfx_names, "SoundBox", "effet"),
-            (getattr(p, "jingle_boxes", []), music_names, "JingleBox", "musique")):
+            (getattr(p, "sound_boxes", []), sfx_names, "SoundBox", "sound effect"),
+            (getattr(p, "jingle_boxes", []), music_names, "JingleBox", "music")):
         for box in store:
             for st in box.states:
                 for action, name in st.mapping.items():

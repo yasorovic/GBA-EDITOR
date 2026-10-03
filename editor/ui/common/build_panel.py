@@ -118,7 +118,7 @@ class DiagnosticsView(QWidget):
 
     refresh_requested = pyqtSignal()
     location_activated = pyqtSignal(str, int)   # fichier.lua, ligne (comme la console)
-    actor_activated = pyqtSignal(str)           # nom d'acteur (scène active)
+    actor_activated = pyqtSignal(str, str)      # (scène, acteur) ; scène "" = la scène active
     element_activated = pyqtSignal(str, str)    # mise en page, nom d'élément d'UI
 
     def __init__(self, parent=None):
@@ -194,8 +194,8 @@ class DiagnosticsView(QWidget):
         loc = parse_build_location(m.message)
         if loc:
             self.location_activated.emit(loc[0], loc[1])
-        elif m.actor:
-            self.actor_activated.emit(m.actor)
+        elif m.actor or getattr(m, "scene", ""):
+            self.actor_activated.emit(getattr(m, "scene", ""), m.actor)
 
 
 class AnimatedBuildButton(QToolButton):

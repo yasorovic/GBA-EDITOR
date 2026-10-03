@@ -43,13 +43,17 @@ def test_binutils_tournent_dans_le_dossier_de_l_elf(tmp_path):
     elf = tmp_path / "プロジェクト" / "rom.elf"
     elf.parent.mkdir()
     elf.write_bytes(b"")
-    probe = "import os, sys; print(os.getcwd()); print(sys.argv[1])"
+    # La sonde n'écrit que de l'ASCII : sa console peut être en cp1252, et un `print` du nom
+    # japonais la ferait planter pour une raison qui n'a rien à voir avec ce qu'on teste.
+    probe = ("import os, sys; "
+             "print(os.path.basename(os.getcwd()).encode('unicode_escape').decode()); "
+             "print(sys.argv[1])")
 
     out = rom_report._run(Path(sys.executable), ["-c", probe], elf)
 
     assert out is not None
     cwd_line, arg_line = out.splitlines()[:2]
-    assert Path(cwd_line).name == "プロジェクト"
+    assert cwd_line == "プロジェクト".encode("unicode_escape").decode()
     assert arg_line == "rom.elf"
 
 

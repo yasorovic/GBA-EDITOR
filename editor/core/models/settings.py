@@ -44,8 +44,11 @@ class Language:
 
     @classmethod
     def from_dict(cls, d: dict) -> "Language":
+        code = d.get("code", "")
+        if not isinstance(code, str):
+            raise ValueError(f"language code must be text, not {type(code).__name__}")
         return cls(
-            code=lang_code(d.get("code", "")),
+            code=lang_code(code),
             name=str(d.get("name", "")),
             default_font=str(d.get("default_font", "") or ""),
         )

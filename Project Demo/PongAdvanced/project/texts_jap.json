@@ -1,0 +1,41 @@
+{
+  "lang": "jap",
+  "texts": [
+    {
+      "id": 999615648992,
+      "key": "scr_main_pressstart",
+      "source": "PRESS START",
+      "content": "スタートボタンを押せ"
+    },
+    {
+      "id": 204079603494,
+      "key": "scr_main_Language",
+      "source": "< English >",
+      "content": "< 日本語 >"
+    },
+    {
+      "id": 958667946125,
+      "key": "scr_victory_victory",
+      "source": "VICTORY",
+      "content": "勝利"
+    },
+    {
+      "id": 595921190849,
+      "key": "scr_victory_defeat",
+      "source": "DEFEAT",
+      "content": "敗北"
+    },
+    {
+      "id": 958670757900,
+      "key": "scr_arena_score_player",
+      "source": "[font=Font8x8 Latin]$score_player[/font]",
+      "content": "[font=Font8x8 Latin]$score_player[/font]"
+    },
+    {
+      "id": 421901810703,
+      "key": "scr_arena_score_cpu",
+      "source": "[font=Font8x8 Latin]$score_cpu[/font]",
+      "content": "[font=Font8x8 Latin]$score_cpu[/font]"
+    }
+  ]
+}

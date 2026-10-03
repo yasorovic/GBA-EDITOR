@@ -58,6 +58,7 @@ class ProjectLangsMixin:
         Une langue déclarée dont le fichier manque n'est pas une erreur : c'est
         une langue dont rien n'est encore traduit."""
         self.translations = {}
+        self.translation_problems = {}
         for lang in self.settings.languages:
             self.translations[lang.code] = self._read_translation(lang.code)
 
@@ -67,10 +68,11 @@ class ProjectLangsMixin:
             return {}
         try:
             d = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        except (OSError, ValueError) as exc:
             # Un side illisible ne doit pas empêcher d'ouvrir le projet : le
             # jeu reste jouable dans sa langue source, ce qui est exactement ce
-            # que dit la règle du repli.
+            # que dit la règle du repli. Mais la perte se dit : le validateur la relit ici.
+            self.translation_problems[code] = f"{type(exc).__name__}: {exc}"
             return {}
         out = {}
         for e in d.get("texts", []):

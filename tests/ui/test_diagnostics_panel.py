@@ -40,14 +40,14 @@ def test_routage_script_acteur_et_global(qapp):
     )
     loc, act = [], []
     d.location_activated.connect(lambda f, l: loc.append((f, l)))
-    d.actor_activated.connect(lambda n: act.append(n))
+    d.actor_activated.connect(lambda scene, n: act.append((scene, n)))
 
     d._on_row(d._list.item(0))   # erreur script → fichier:ligne
     d._on_row(d._list.item(1))   # warning acteur → nom
     d._on_row(d._list.item(2))   # warning global → aucune cible
 
     assert loc == [("Titre.lua", 2)]
-    assert act == ["Hero"]
+    assert act == [("", "Hero")]
 
 
 def test_routage_cible_ui_element_prioritaire(qapp):
@@ -106,3 +106,75 @@ def test_un_nouveau_build_repart_d_une_liste_vide(qapp):
     bp.start_build_diagnostics()
     bp.show_build_diagnostics()
     assert bp.diagnostics._list.count() == 0
+
+
+# ── Un diagnostic d'une autre scène ouvre cette scène ─────────────
+
+
+def test_le_clic_porte_la_scene_du_diagnostic(qapp):
+    view = DiagnosticsView()
+    view.set_diagnostics([], [ValidationMessage("error", "Hero", "script missing", scene="Level2"),
+                              ValidationMessage("warning", "", "does nothing", scene="Level3")])
+    got = []
+    view.actor_activated.connect(lambda scene, actor: got.append((scene, actor)))
+    view._on_row(view._list.item(0))
+    view._on_row(view._list.item(1))
+    assert got == [("Level2", "Hero"), ("Level3", "")]       # une scène seule se clique aussi
+
+
+def _window_stub(scenes, active):
+    """Le seul morceau de MainWindow que le clic utilise, sans construire l'interface."""
+    from types import SimpleNamespace
+    state = SimpleNamespace(active=active, opened=[], selected=[], status=[])
+    project = SimpleNamespace(scenes=scenes, active_scene=active)
+
+    def on_scene_selected(index, refresh_diagnostics=True):
+        project.active_scene = scenes[index]
+        state.opened.append((index, refresh_diagnostics))
+
+    stub = SimpleNamespace(
+        project=project, _on_scene_selected=on_scene_selected,
+        _bus=SimpleNamespace(select=state.selected.append),
+        _status=SimpleNamespace(showMessage=lambda text, *_: state.status.append(text)))
+    return stub, state
+
+
+def test_cliquer_un_acteur_d_une_autre_scene_bascule_puis_le_selectionne():
+    from types import SimpleNamespace
+    from window import MainWindow
+    hero = SimpleNamespace(name="Hero")
+    scenes = [SimpleNamespace(name="Level1", actors=[]),
+              SimpleNamespace(name="Level2", actors=[hero])]
+    stub, state = _window_stub(scenes, scenes[0])
+
+    MainWindow._select_actor_by_name(stub, "Level2", "Hero")
+
+    # La scène change SANS relancer la validation : la liste du build reste affichée.
+    assert state.opened == [(1, False)]
+    assert state.selected == [hero]
+
+
+def test_cliquer_dans_la_scene_active_ne_bascule_pas():
+    from types import SimpleNamespace
+    from window import MainWindow
+    hero = SimpleNamespace(name="Hero")
+    scenes = [SimpleNamespace(name="Level1", actors=[hero])]
+    stub, state = _window_stub(scenes, scenes[0])
+
+    MainWindow._select_actor_by_name(stub, "Level1", "Hero")
+    MainWindow._select_actor_by_name(stub, "", "Hero")        # sans scène : l'active
+
+    assert state.opened == []
+    assert state.selected == [hero, hero]
+
+
+def test_cliquer_une_scene_sans_acteur_ouvre_seulement_la_scene():
+    from types import SimpleNamespace
+    from window import MainWindow
+    scenes = [SimpleNamespace(name="Level1", actors=[]), SimpleNamespace(name="Level2", actors=[])]
+    stub, state = _window_stub(scenes, scenes[0])
+
+    MainWindow._select_actor_by_name(stub, "Level2", "")
+
+    assert state.opened == [(1, False)]
+    assert state.selected == [] and state.status == []

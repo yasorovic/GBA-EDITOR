@@ -35,8 +35,8 @@ def detect_sprite_import_mode(source) -> dict:
     bpp = 4 if not lossy else 8   # informatif (8bpp/multi-palette = éditeur, à venir)
     warning = None
     if lossy:
-        warning = (f"{n} couleurs opaques (> {MAX_4BPP_COLORS}) : la palette du "
-                   f"sprite est réduite à {MAX_4BPP_COLORS} couleurs (perte).")
+        warning = (f"{n} opaque colours (> {MAX_4BPP_COLORS}): the sprite palette is reduced to "
+                   f"{MAX_4BPP_COLORS} colours (lossy).")
 
     return {
         "indexed": indexed,

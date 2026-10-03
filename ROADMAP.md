@@ -222,8 +222,11 @@ Ne touche pas au format des messages, ni à l'interface.
 Livré : `tests/test_silent_except.py` (la garde, 23 handlers annotés `# tolerated:` avec leur raison),
 `_check_scripts_parse` dans `core/validator.py` (qui absorbe la lecture des behaviors de
 `_check_behaviors_without_self`), `tests/test_build_fault_injection.py` (sept cas, dont un projet sain
-comme témoin ; désactiver le contrôle en fait échouer cinq). Seul reste, côté silence, ce que la
-tranche 2 traite par construction : la gravité encore portée par un préfixe de texte.
+comme témoin ; désactiver le contrôle en fait échouer cinq). Ajouté le même jour : un prefab qu'aucune scène ne
+déclare n'était que parsé ; `lua_compiler` le fait maintenant passer par le checker (une fois, par la
+première scène), donc une faute sémantique sort avant qu'une scène ne le déclare. Un script attaché à
+rien reste vérifié pour sa seule syntaxe : sans propriétaire, il n'a pas de contexte (`self`, événements)
+contre lequel être jugé.
 
 ### Tranche 2 — un seul diagnostic, un journal conservé (livrée le 2026-10-03)
 
@@ -258,8 +261,93 @@ verdict, `build.log` réécrit) et trois cas d'interface dans `tests/ui/test_dia
 réel de la démo `PongAdvanced` (17 s) donne `[build] 0 error(s), 1 warning(s)` et un `build.log` de 19 Ko.
 Mécanique décrite dans ARCHITECTURE.md, « Le journal de build ».
 
-Ce que ça ne fait pas : remonter une erreur de gcc d'un `.c` généré vers la ligne Lua d'origine (il
-faudrait une table de correspondance), ni un réglage « avertissements = erreurs ».
+**Suite (2026-10-03) — gcc cite le script.** Pas de table de correspondance : le générateur pose
+`#line N "Script.lua"` avant chaque statement (la ligne vient du parseur, `Stmt*.line`) et rend gcc à son
+`.c` en fin de corps de fonction, avec le numéro calculé sur le texte final. Une erreur de gcc sur le C
+émis sort donc comme un diagnostic `Script.lua:N`, cliquable. Un behavior inliné porte ses propres
+lignes. Le C d'un appelant sans nom de script (tests unitaires) reste sans directive. Vérifié par un vrai
+gcc (`tests/test_gcc_cites_the_script.py`) et par la démo, dont la ROM garde sa taille.
+
+Ce que ça ne fait pas : un réglage « avertissements = erreurs ».
+
+### Tranche 3 — la couverture, mesurée (livrée le 2026-10-03)
+
+Une matrice de pannes (31 cas injectés dans une copie de la démo, un vrai `BuildWorker` par cas) a mesuré
+ce que le journal dit. Le bilan : les fautes de script sont toutes localisées ; trois familles de trous.
+
+1. **Le validateur ne regardait que la scène active**, alors que le build compile toutes les scènes : un
+   script supprimé, un sprite tronqué ou un fond illisible dans une autre scène passait en silence ou
+   sortait en « internal error ». Les contrôles par scène (`_check_scene`, `_check_actors`,
+   `_check_backgrounds`, `_check_frame_events`) tournent maintenant pour chaque scène ; le diagnostic porte
+   le nom de sa scène. Les prefabs sont contrôlés comme des acteurs. « The scene contains no actor » ne
+   s'affiche plus pour une scène qui a un script ou une interface (un écran titre est valide).
+2. **Trois « internal error » deviennent des diagnostics clairs** : un script qui n'est pas en UTF-8, une
+   erreur de système de fichiers (`build` qui est un fichier), un PNG illisible.
+3. **Du français revenait par les exceptions** du cœur (palette, module de musique, polices, import) : en
+   anglais, comme le reste du journal.
+
+Résultat : avant, 6 pannes sur 31 sortaient en silence et 3 en « internal error » ; après, aucune panne
+réelle ne passe sous silence. Les cas restants que la matrice range encore en « silence » ou « interne » sont
+voulus : un script vide (valide), un fond dont le PNG manque (avertissement « layer ignored », le build
+continue), une table de textes illisible (le projet refuse de s'ouvrir, message clair) et un générateur qui
+lève (le filet de sécurité « internal error » + `crash.log`). Ajoutés au passage : un avertissement pour une
+scène de départ inexistante, un `UnicodeDecodeError` de script dit comme tel (et le validateur s'arrête là, les
+autres contrôles relisant le même fichier), une `OSError` du build dite « file system error ».
+
+Reste volontairement tel quel : `actor:get("Inconnu")` est un avertissement (un script peut être partagé
+entre scènes, et les noms d'acteurs sont locaux à leur scène).
+
+
+
+### Tranche 4 — la couverture, tenue (livrée le 2026-10-03)
+
+La matrice de la tranche 3 était un script jetable de 31 cas écrits à la main. Mesurée (274 sites qui
+peuvent émettre un diagnostic, comptés dans le code puis comparés à ceux qui se déclenchent
+réellement) : la matrice en atteint 28 (10 %), la suite entière 97, les deux réunis 107 (39 %). Les 167
+autres ne se déclenchent jamais : audio, tables de données, caméras, budgets, vecteurs et tableaux du
+checker, conversion grit.
+
+1. **Des invariants testés en masse.** `tests/test_build_invariants.py` corrompt un à un des fichiers de
+   la démo (tronqué, vidé, octets de bruit, clé JSON retirée, valeur du mauvais type, jeton de script
+   supprimé) et exige, pour chaque cas : aucun « internal error » ; un build en échec porte au moins une
+   erreur ; aucune erreur n'est en français ni ne recopie le chemin du projet ; un build en échec nomme le
+   fichier abîmé. Une exception à l'invariant est une entrée datée dans le test, avec sa raison.
+2. **Une couverture mesurée, avec un avertissement.** `tools/diagnostic_coverage.py` énumère les sites
+   d'émission (AST), enregistre ceux qu'une exécution déclenche, et une fin de run complet de `pytest`
+   **avertit** (sans échouer) quand un diagnostic couvert ne l'est plus ou qu'un nouveau n'est jamais
+   déclenché. La référence est `tools/diagnostic_coverage_baseline.json`, mise à jour à la main.
+
+Décidé le 2026-10-03 : le cliquet avertit, il ne bloque pas.
+
+Livré. L'invariant a trouvé, en trois relevés complets (~105 pannes), ce que 31 cas écrits à la main
+n'avaient pas vu : un projet qui refusait de s'ouvrir sans nommer son fichier (manifeste, `texts.json`,
+`variables.json`) ; un code de langue du mauvais type ; `tiles_w` du mauvais type dans un fond, qui
+plantait au build (`TypeError`) ; une planche de police illisible qui ne sortait que par ses
+conséquences ; un fichier de traduction cassé **ignoré en silence** ; un script vide sans un mot. Tous
+corrigés. Le relevé a aussi attrapé une régression de ce chantier même (un contrôle de planche appliqué
+aux polices vectorielles), d'où le cas témoin « la démo saine ne produit aucune erreur ». État : 0
+violation sur les ~105 pannes. `FUZZ_FULL=1` les joue toutes ; par défaut, une panne tournante par
+fichier (31 builds). Les cas dont l'invariant est tenu par construction sont exclus avec leur raison
+(`STILL_VALID_WHEN_CUT` : un script, une palette ou un module coupé reste un fichier valide).
+
+La référence de couverture est relevée à 103 sites exercés sur 278. Les 175 autres sont la liste de
+travail de la tranche suivante (audio, tables de données, caméras, budgets, vecteurs et tableaux du
+checker, conversion grit).
+
+### Tranche 5 — les 175 sites jamais atteints (livrée le 2026-10-03)
+
+Trois fichiers de tests, un par famille : `tests/test_checker_diagnostics.py` (cas paramétrés du checker),
+`tests/test_validator_diagnostics.py` (le plus petit projet fautif, puis l'appel du contrôle concerné) et
+`tests/test_codegen_diagnostics.py` (outils factices, `BuildWorker` aux étapes court-circuitées). Les accords
+internes (api.py ↔ en-têtes, lua_subset ↔ luaparser, domaines, colonnes) se testent en faussant leur source.
+
+La référence passe de 103 à **274 sites exercés sur 278**. Restent quatre sites : un fond animé 8 bpp
+(`rom_build`, avertissement de palette), l'erreur de placement d'un animé fusionné (`_err`), et une branche
+défensive du checker (méthode inconnue sur un enfant, `_check_call_expr`).
+
+Trouvé en chemin : deux messages restés en français (`frame_w/h invalides`, `l'image`, et deux libellés
+d'audio), corrigés ; et l'outil de couverture comptait à tort les appels à une fonction locale `_warn` comme
+des sites — un conduit, désormais ignoré.
 
 ---
 

@@ -331,6 +331,11 @@ class CodegenContext:
     # Nom d'axe (built-in "horizontal"/"vertical" ou `InputAxis` déclaré) →
     # (masque C négatif, masque C positif), pour `get_axis`.
     input_axes: dict = field(default_factory=dict)
+    # Pour que gcc cite le SCRIPT et non le `.c` généré : `lua_file` est le script source,
+    # `c_file` le fichier C qu'on écrit. Vides, aucune directive `#line` n'est émise (le C
+    # d'un test unitaire reste tel quel).
+    lua_file: str = ""
+    c_file:   str = ""
 
     @property
     def has_self(self) -> bool:
@@ -341,12 +346,36 @@ class CodegenContext:
 
 # ─── Générateur ───────────────────────────────────────────────────
 
+# Marqueur d'une ligne à remplacer, à la toute fin, par `#line <n> "<fichier .c>"`. Le numéro
+# n'est connu qu'une fois le texte final assemblé (l'état par instance est inséré après coup).
+_LINE_RESET = "/*@@line-reset@@*/"
+
+
+def _c_file_name(name: str) -> str:
+    """Un nom de fichier sûr dans une chaîne C de directive `#line`."""
+    return name.replace("\\", "/").replace('"', "")
+
+
+def _resolve_line_resets(code: str, c_file: str) -> str:
+    """Remplace chaque marqueur par une directive qui rend gcc à son vrai fichier, à sa vraie
+    ligne : la directive occupe la ligne i+1, la suivante est donc i+2."""
+    if _LINE_RESET not in code:
+        return code
+    lines = code.split("\n")
+    for i, text in enumerate(lines):
+        if text == _LINE_RESET:
+            lines[i] = f'#line {i + 2} "{_c_file_name(c_file)}"'
+    return "\n".join(lines)
+
+
 class CodeGen:
 
     def __init__(self, ctx: CodegenContext):
         self.ctx   = ctx
         self._lines: list[str] = []
         self._indent = 0
+        self._lua_file = ctx.lua_file   # le script dont on émet les statements (un behavior le change)
+        self._block_depth = 0
         self._required_behaviors: dict[str, str] = {}  # alias Lua → sym C
         self._helpers: dict[str, LuaFunction] = {}
         self._in_helper = False
@@ -442,7 +471,7 @@ class CodeGen:
         for event in known:
             if event not in defined:
                 self._emit_stub(event)
-        return "\n".join(self._lines) + "\n"
+        return _resolve_line_resets("\n".join(self._lines) + "\n", self.ctx.c_file)
 
     def _is_internal_helper(self, fn: LuaFunction) -> bool:
         known = self._known_hooks()
@@ -870,7 +899,10 @@ class CodeGen:
                 # l'instance. Cf. ARCHITECTURE.md pour la limite connue de
                 # cette substitution par nom.
                 mark = self._open_state_scope()
+                host_file, self._lua_file = self._lua_file, (
+                    beh_path.name if self._lua_file else "")
                 self._emit_block(fn.body)
+                self._lua_file = host_file
                 if fn.params:
                     self._close_state_scope(mark, receiver=fn.params[0])
                 self._state_touched = False
@@ -1353,10 +1385,24 @@ class CodeGen:
     # ── Blocs et statements ───────────────────────────────────────
 
     def _emit_block(self, stmts: list):
+        self._block_depth += 1
         for s in stmts:
             self._emit_stmt(s)
+        self._block_depth -= 1
+        if self._block_depth == 0 and self._lua_file:
+            # Le corps d'une fonction est fini : ce qui suit (accolade, tranche suivante)
+            # est du C généré, pas du script.
+            self._lines.append(_LINE_RESET)
+
+    def _mark_source(self, s):
+        """`#line N "Script.lua"` avant un statement : une erreur de gcc sur le C émis cite
+        alors la ligne du script. Une directive commence en colonne 0, d'où l'écriture directe."""
+        line = getattr(s, "line", 0)
+        if self._lua_file and line:
+            self._lines.append(f'#line {line} "{_c_file_name(self._lua_file)}"')
 
     def _emit_stmt(self, s):
+        self._mark_source(s)
         if isinstance(s, StmtCall):
             # `sfx:play(...)` posé SEUL ne tient pas sa référence : son canal
             # reste volable par l'effet suivant quand tout est plein (cf.

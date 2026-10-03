@@ -1,0 +1,225 @@
+{
+  "name": "SCR_Arena",
+  "background_layers": [
+    {
+      "background_name": "",
+      "bg_slot": 0,
+      "scroll_speed": 1.0,
+      "pal_bank": -1
+    },
+    {
+      "background_name": "Background",
+      "bg_slot": 1,
+      "scroll_speed": 1.0,
+      "pal_bank": -1
+    }
+  ],
+  "actors": [
+    {
+      "name": "Player",
+      "prefab_name": null,
+      "active": true,
+      "components": [
+        {
+          "component_type": "sprite",
+          "id": "sprite",
+          "active": true,
+          "sprite_name": "Paddle",
+          "initial_state": "Idle",
+          "auto_dir": true,
+          "affine_transform": true,
+          "scale_x": 1.0,
+          "scale_y": 1.0,
+          "rotation": 0,
+          "offset_x": 0,
+          "offset_y": 0
+        },
+        {
+          "component_type": "collision_box",
+          "id": "collision",
+          "active": true,
+          "solid": true,
+          "tag": "Player",
+          "x": 0,
+          "y": 0,
+          "w": 8,
+          "h": 32
+        },
+        {
+          "component_type": "script",
+          "id": "script",
+          "active": true,
+          "script": "assets/scripts/PaddlePlayer.lua",
+          "exports_values": {}
+        }
+      ],
+      "x": 16,
+      "y": 64,
+      "flip_h": false,
+      "flip_v": false,
+      "priority": 0,
+      "pal_bank": -1,
+      "visible": true,
+      "obj_mode": 0,
+      "rotation": 0,
+      "scale_x": 1.0,
+      "scale_y": 1.0,
+      "screen_space": false,
+      "dir_x": 0,
+      "dir_y": 0,
+      "notes": ""
+    },
+    {
+      "name": "Player_copy",
+      "prefab_name": null,
+      "active": true,
+      "components": [
+        {
+          "component_type": "sprite",
+          "id": "sprite",
+          "active": true,
+          "sprite_name": "Paddle",
+          "initial_state": "Idle",
+          "auto_dir": true,
+          "affine_transform": true,
+          "scale_x": 1.0,
+          "scale_y": 1.0,
+          "rotation": 0,
+          "offset_x": 0,
+          "offset_y": 0
+        },
+        {
+          "component_type": "collision_box",
+          "id": "collision",
+          "active": true,
+          "solid": true,
+          "tag": "Player",
+          "x": 0,
+          "y": 0,
+          "w": 8,
+          "h": 32
+        },
+        {
+          "component_type": "script",
+          "id": "script",
+          "active": true,
+          "script": "assets/scripts/PaddleAuto.lua",
+          "exports_values": {}
+        }
+      ],
+      "x": 216,
+      "y": 64,
+      "flip_h": false,
+      "flip_v": false,
+      "priority": 0,
+      "pal_bank": -1,
+      "visible": true,
+      "obj_mode": 0,
+      "rotation": 0,
+      "scale_x": 1.0,
+      "scale_y": 1.0,
+      "screen_space": false,
+      "dir_x": 0,
+      "dir_y": 0,
+      "notes": ""
+    },
+    {
+      "name": "BALL",
+      "prefab_name": null,
+      "active": true,
+      "components": [
+        {
+          "component_type": "sprite",
+          "id": "sprite",
+          "active": true,
+          "sprite_name": "Ball",
+          "initial_state": "Idle",
+          "auto_dir": true,
+          "affine_transform": true,
+          "scale_x": 1.0,
+          "scale_y": 1.0,
+          "rotation": 0,
+          "offset_x": 0,
+          "offset_y": 0
+        },
+        {
+          "component_type": "collision_box",
+          "id": "collision",
+          "active": true,
+          "solid": true,
+          "tag": "body",
+          "x": 0,
+          "y": 0,
+          "w": 8,
+          "h": 8
+        },
+        {
+          "component_type": "script",
+          "id": "script",
+          "active": true,
+          "script": "assets/scripts/Ball.lua",
+          "exports_values": {}
+        }
+      ],
+      "x": 112,
+      "y": 80,
+      "flip_h": false,
+      "flip_v": false,
+      "priority": 0,
+      "pal_bank": -1,
+      "visible": true,
+      "obj_mode": 0,
+      "rotation": 0,
+      "scale_x": 1.0,
+      "scale_y": 1.0,
+      "screen_space": false,
+      "dir_x": 0,
+      "dir_y": 0,
+      "notes": ""
+    }
+  ],
+  "cameras": [],
+  "camera": "",
+  "windows": [],
+  "render_mode": 0,
+  "scroll_h": true,
+  "scroll_v": false,
+  "script": "assets/scripts/SCR_Arena.lua",
+  "ui_layouts": [],
+  "font_name": "",
+  "font_pal_banks": {
+    "": 0
+  },
+  "collision_layer": 0,
+  "collision_map": [
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  ],
+  "active_obj_palettes": [
+    "DMG (GB Default)"
+  ],
+  "active_bg_palettes": [
+    "_Microsoft Windows 16",
+    "_Commodore 64"
+  ],
+  "backdrop_color": null,
+  "notes": ""
+}

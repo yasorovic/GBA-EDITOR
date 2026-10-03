@@ -2848,10 +2848,31 @@ cliquable. Le validateur, le checker Lua, le codegen et la sortie des outils pas
 - Le stderr d'un outil est rangé par ce qu'il dit (`BuildWorker._emit_tool_line`) : `fichier:ligne:col:
   error|warning:` de gcc devient un diagnostic, `note:` de l'information, le reste du contexte (rouge
   seulement si l'outil a échoué). Le code de retour est seul juge de l'échec.
+- **gcc cite le script, pas le `.c`.** `CodegenContext.lua_file`/`c_file` activent des directives `#line N
+  "Script.lua"` avant chaque statement émis (`CodeGen._mark_source` ; la ligne vient de `Stmt*.line`, posée par
+  `parser._block`) et un retour à `#line <n> "actor_X.c"` après chaque corps de fonction (`_emit_block`, numéro
+  résolu sur le texte final par `_resolve_line_resets`, car l'état par instance est inséré après coup). Les
+  statements d'un behavior inliné portent le nom du behavior.
+- **Le validateur contrôle toutes les scènes.** `core/validator._check_each_scene` fait tourner les contrôles
+  par scène (acteurs, fonds, événements de frame) pour CHAQUE scène via `ctx.focus(scene)`, et
+  `_check_prefabs` contrôle les composants des prefabs ; le diagnostic porte sa scène (`ValidationMessage.scene`,
+  rendu `[Scène/Acteur]`). `_check_scripts_parse` passe en premier : un script qui n'est pas de l'UTF-8 arrête la
+  validation après son message, les autres contrôles relisant le même fichier.
+  Le clic sur un tel diagnostic ouvre sa scène puis y sélectionne l'acteur (`MainWindow._select_actor_by_name`,
+  qui ne relance pas la validation : la liste du build reste affichée).
+- **La couverture des diagnostics est mesurée.** `tools/diagnostic_coverage.py` énumère les sites d'émission (AST,
+  clé stable `fichier::fonction::empreinte du message`) et enregistre ceux qu'un run déclenche (`Recorder`, installé
+  par `tests/conftest.py`). À la fin d'un run COMPLET, `pytest` AVERTIT (sans échouer) d'un diagnostic couvert qui
+  ne l'est plus ou d'un nouveau jamais déclenché ; la référence est `tools/diagnostic_coverage_baseline.json`
+  (274 sites sur 278 exercés ; `DIAGNOSTIC_COVERAGE_UPDATE=1` pour la relever, `python tools/diagnostic_coverage.py` pour lister les sites
+  jamais atteints). `tests/test_build_invariants.py` corrompt les fichiers de la démo un à un et exige cinq
+  invariants du journal (pas d'« internal error », échec = erreur, anglais sans chemin du projet, le fichier
+  abîmé est nommé, un fichier cassé n'est jamais ignoré sans un mot).
 - **Aucune erreur n'est avalée.** Un `except` large (`Exception`, nu, `LuaParseError`) de `codegen/`,
   `scripting/` ou `core/validator.py` lève, émet, ou porte `# tolerated: <raison>` ; `tests/
   test_silent_except.py` le garde. `core/validator._check_scripts_parse` lit tout `.lua` de `scripts/`,
-  attaché ou non, et `tests/test_build_fault_injection.py` rejoue des fautes connues dans un vrai build.
+  attaché ou non ; un prefab qu'aucune scène ne déclare passe en plus par le checker (`lua_compiler`, une
+  fois par build) ; `tests/test_build_fault_injection.py` rejoue des fautes connues dans un vrai build.
 
 ---
 

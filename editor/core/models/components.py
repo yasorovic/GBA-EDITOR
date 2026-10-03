@@ -145,7 +145,7 @@ def component_type_name(comp) -> str:
     for type_name, klass in COMPONENT_REGISTRY.items():
         if isinstance(comp, klass):
             return type_name
-    raise ValueError(f"Composant de type inconnu : {comp!r}")
+    raise ValueError(f"Unknown component type: {comp!r}")
 
 
 def components_to_list(components: list) -> list[dict]:

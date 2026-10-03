@@ -120,6 +120,8 @@ class UIRegionController(QObject):
         if not self.ready:
             return None
         lay = self._ensure_layout()
+        if self._project.seed_default_ui_palette(self._scene):
+            get_dispatcher().save_scene()
         x, y, w, h = int(x), int(y), int(w), int(h)
         taken = set(lay.element_names()) | set(self._project.ui_element_names())
         if kind == KIND_CONTAINER:

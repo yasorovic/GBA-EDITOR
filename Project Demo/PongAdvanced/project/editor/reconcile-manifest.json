@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "dirs": {
+    "assets/backgrounds": {
+      "Background.png": "747:1790798510545956500"
+    },
+    "assets/sfx": {
+      "GAMEOVER.wav": "283580:1790808071186384900",
+      "GOAL.wav": "276404:1790808071532975300",
+      "GoalTaken.wav": "205844:1790808072088326100",
+      "PADDLEBOUNCE.wav": "91980:1790808072730098200",
+      "WALLBOUNCE.wav": "54276:1790808073073369900"
+    },
+    "assets/music": {
+      "Admin Rights - Full DX DRUMLESS FAST.mod": "58378:1790670875371497200",
+      "Admin Rights - Full DX DRUMLESS SLOW.mod": "58378:1790670875372498600",
+      "Admin Rights - Full DX DRUMLESS.mod": "58378:1790670875373500300",
+      "Admin Rights - Full DX FAST.mod": "58378:1790670875374498600",
+      "Admin Rights - Full DX SLOW.mod": "58378:1790670875375498700",
+      "Admin Rights - Full DX.mod": "58378:1790670875376499000",
+      "Claimed DX DRUMLESS FAST.mod": "51210:1790670875377499100",
+      "Claimed DX DRUMLESS SLOW.mod": "51210:1790670875380500500",
+      "Claimed DX DRUMLESS.mod": "51210:1790670875381503300",
+      "Claimed DX FAST.mod": "51210:1790670875382498800",
+      "Claimed DX SLOW.mod": "51210:1790670875383499400",
+      "Claimed DX.mod": "51210:1790670875384499400",
+      "Crystal Clear DX FAST.mod": "54282:1790670875385508300",
+      "Crystal Clear DX SLOW.mod": "54282:1790670875386507800",
+      "Crystal Clear DX.mod": "54282:1790670875387513200",
+      "Crystal Clear Loop DX FAST.mod": "54282:1790670875388506600",
+      "Crystal Clear Loop DX SLOW.mod": "54282:1790670875389508200"
+    },
+    "assets/sprites": {
+      "Ball.png": "252:1790795624430914300",
+      "Paddle.png": "259:1790795619596037900"
+    }
+  }
+}

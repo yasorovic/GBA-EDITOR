@@ -35,9 +35,9 @@ APP_VERSION = "1.0.0-alpha"
 # APP_TEMPLATES_URL : un zip d'archive (type « branche entière » d'un dépôt) d'où
 #                     se téléchargent les projets modèles. Le dossier racine du zip
 #                     est lu dans l'archive elle-même.
-APP_DOCS_URL = "https://victor3x0.github.io/GBA-EDITOR/"
-APP_TEMPLATES_URL = "https://github.com/victor3x0/GBA-EDITOR/archive/refs/heads/main.zip"
+APP_DOCS_URL = "https://yasorovic.github.io/GBA-EDITOR/"
+APP_TEMPLATES_URL = "https://github.com/yasorovic/GBA-EDITOR/archive/refs/heads/main.zip"
 # APP_RELEASES_URL  : les notes de version ;
 # APP_ISSUES_URL    : le formulaire de rapport de problème.
-APP_RELEASES_URL = "https://github.com/victor3x0/GBA-EDITOR/releases"
-APP_ISSUES_URL = "https://github.com/victor3x0/GBA-EDITOR/issues/new"
+APP_RELEASES_URL = "https://github.com/yasorovic/GBA-EDITOR/releases"
+APP_ISSUES_URL = "https://github.com/yasorovic/GBA-EDITOR/issues/new"

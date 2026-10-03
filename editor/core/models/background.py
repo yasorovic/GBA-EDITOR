@@ -562,7 +562,7 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
             palettes=read_palettes(d.get("palettes", [])),
             tileset=list(d.get("tileset", [])),
             tilemap=read_grid(d.get("tilemap", [])),
-            tiles_w=d.get("tiles_w", 0), tiles_h=d.get("tiles_h", 0),
+            tiles_w=int(d.get("tiles_w", 0) or 0), tiles_h=int(d.get("tiles_h", 0) or 0),
             quantize_method=d.get("quantize_method", d.get("compress_method", "median_cut")),
             tile_palette_overrides=decode_tile_palette_overrides(
                 d.get("tile_palette_overrides")),

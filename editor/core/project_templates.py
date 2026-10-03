@@ -32,7 +32,7 @@ class ProjectTemplate:
     id:           str
     display_name: str
     description:  str
-    repo_subdir:  str   # chemin dans le dépôt, ex. "Project Demo/Pong"
+    repo_subdir:  str   # chemin dans le dépôt, ex. "Project Demo/PongAdvanced"
 
     @property
     def folder_name(self) -> str:
@@ -42,9 +42,9 @@ class ProjectTemplate:
 TEMPLATES: list[ProjectTemplate] = [
     ProjectTemplate(
         id="pong",
-        display_name="Pong",
+        display_name="Pong Advanced",
         description="Complete game — scenes, sprites, scripts, music.",
-        repo_subdir="Project Demo/Pong",
+        repo_subdir="Project Demo/PongAdvanced",
     ),
 ] if REPO_ZIP_URL else []
 

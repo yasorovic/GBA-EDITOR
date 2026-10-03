@@ -1,0 +1,23 @@
+{
+  "version": 3,
+  "scene_positions": {
+    "SCR_Main": [
+      20.0,
+      20.0
+    ],
+    "SCR_Arena": [
+      230.0,
+      20.0
+    ],
+    "SCR_Victory": [
+      440.0,
+      20.0
+    ]
+  },
+  "missing_positions": {},
+  "scene_previews": {},
+  "edge_styles": {},
+  "edge_notes": {},
+  "groups": {},
+  "notes": {}
+}

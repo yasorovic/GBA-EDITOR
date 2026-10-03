@@ -163,8 +163,8 @@ def detect_import_mode(source, tile_budget: int = TILE_BUDGET) -> dict:
 
     warning = None
     if not indexed and (bpp == 16 or capped):
-        warning = ("PNG non indexé et riche en couleurs : palette déduite "
-                   "automatiquement (perte possible).")
+        warning = ("Non-indexed PNG with many colours: palette derived automatically "
+                   "(some loss possible).")
 
     return {
         "indexed": indexed,

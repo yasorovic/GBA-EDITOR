@@ -131,3 +131,29 @@ def test_la_fenetre_a_propos_donne_nom_version_et_auteur():
 
     assert APP_VERSION in text and APP_AUTHOR in text
     del app
+
+
+def test_la_fenetre_a_propos_ouvre_licences_et_notices_tierces():
+    from PyQt6.QtWidgets import QApplication, QTabWidget, QTextBrowser
+    from ui.common.about_dialog import LicensesDialog
+
+    app = QApplication.instance() or QApplication([])
+    dialog = LicensesDialog()
+    tabs = dialog.findChild(QTabWidget)
+
+    assert tabs.count() == 3          # éditeur, moteur, notices tierces
+    notices = tabs.widget(2)
+    assert isinstance(notices, QTextBrowser)
+    assert "PyQt6" in notices.toPlainText()
+    del app
+
+
+def test_les_modeles_pointent_vers_un_dossier_de_la_demo_qui_existe():
+    """Un modèle renommé dans `Project Demo/` sans le registre = téléchargement qui échoue."""
+    import pytest
+    from core import project_templates
+
+    if not (REPO_DIR / "Project Demo").is_dir():
+        pytest.skip("`Project Demo/` n'est pas versionné : absent d'un clone neuf (CI)")
+    for template in project_templates.TEMPLATES:
+        assert (REPO_DIR / template.repo_subdir).is_dir(), template.repo_subdir

@@ -40,7 +40,7 @@ from typing import Any, Callable, Optional
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QTreeWidget, QTreeWidgetItem, QMenu,
-    QAbstractItemView, QMessageBox, QSizePolicy, QScrollArea,
+    QAbstractItemView, QMessageBox, QSizePolicy, QScrollArea, QHeaderView,
 )
 from PyQt6 import sip
 from PyQt6.QtGui import QFont, QColor, QDrag
@@ -157,7 +157,7 @@ class AssetKind:
     # un asset quand ce n'est pas d'un « + » — une police naît d'un PNG déposé
     # dans assets/fonts/, pas d'un bouton.
     empty_text: str = ""
-    # Suffixe affiché après le nom, jamais édité — « (12 × 3) », « (16) ».
+    # Suffixe affiché à droite du nom, en italique, jamais édité — « 12 × 3 », « 16 ».
     # Le nom NU reste l'identité : c'est lui qu'on édite et qu'on cherche.
     suffix_of: Optional[Callable[[Any], str]] = None
     tooltip_of: Optional[Callable[[Any], str]] = None
@@ -309,6 +309,13 @@ class _KindTree(QTreeWidget):
         self._active_obj = None
         self.setItemDelegate(RowSelectionDelegate(self))
         self.setHeaderHidden(True)
+        # Deux colonnes : le nom (qui s'étire et s'édite) et, ferré à droite,
+        # le suffixe informatif — « 16 » pour une palette, « 12 × 3 » pour une table.
+        self.setColumnCount(2)
+        header = self.header()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.setIndentation(14)
         self.setUniformRowHeights(True)
         self.setIconSize(QSize(14, 14))
@@ -480,7 +487,14 @@ class _KindTree(QTreeWidget):
         nu vit dans l'objet, et c'est lui que l'édition en place reprend."""
         name = self._name_of(obj)
         suffix = self._kind.suffix_of(obj) if self._kind.suffix_of else ""
-        item.setText(0, f"{name}  {suffix}" if suffix else name)
+        item.setText(0, name)
+        item.setText(1, suffix)
+        if suffix:
+            font = ui_font(T.SM)
+            font.setItalic(True)
+            item.setFont(1, font)
+            item.setForeground(1, QColor(C.TEXT_DIM))
+            item.setTextAlignment(1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
     @staticmethod
     def _name_of(obj) -> str:
@@ -710,7 +724,9 @@ class _KindTree(QTreeWidget):
 
     # ── Renommage en place ────────────────────────────────────────
 
-    def _on_item_changed(self, item: QTreeWidgetItem, _col: int):
+    def _on_item_changed(self, item: QTreeWidgetItem, col: int):
+        if col != 0:            # le suffixe n'est qu'affichage, jamais une édition
+            return
         obj = item.data(0, _ROLE_OBJ)
         folder_id = item.data(0, _ROLE_FOLDER)
         scheme = self._panel.folder_scheme(self._kind.label)

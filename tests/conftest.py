@@ -15,3 +15,55 @@ EDITOR_DIR = REPO_DIR / "editor"
 
 if str(EDITOR_DIR) not in sys.path:
     sys.path.insert(0, str(EDITOR_DIR))
+
+
+# ── Couverture des diagnostics (cf. tools/diagnostic_coverage.py) ─────────────
+#
+# Chaque run note les lignes qui construisent un diagnostic. À la fin d'un run COMPLET, un
+# avertissement dit quel diagnostic couvert ne l'est plus, ou quel nouveau n'est jamais déclenché.
+# Il n'échoue jamais.
+
+TOOLS_DIR = REPO_DIR / "tools"
+
+
+def pytest_configure(config):
+    if str(TOOLS_DIR) not in sys.path:
+        sys.path.insert(0, str(TOOLS_DIR))
+    from diagnostic_coverage import Recorder
+    config._diagnostic_recorder = Recorder()
+    config._diagnostic_recorder.install()
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    import json
+    import os
+    import diagnostic_coverage as dc
+
+    recorder = getattr(config, "_diagnostic_recorder", None)
+    if recorder is None:
+        return
+    out = os.environ.get("DIAGNOSTIC_COVERAGE_OUT")
+    if out:                                   # le relevé que demande `tools/diagnostic_coverage.py`
+        with open(out, "w", encoding="utf-8") as handle:
+            json.dump(sorted(recorder.hits), handle)
+        return
+
+    baseline = dc.load_baseline()
+    collected = getattr(terminalreporter, "_numcollected", 0)
+    update = bool(os.environ.get("DIAGNOSTIC_COVERAGE_UPDATE"))
+    # « Complet » : ni -k ni -m, et presque autant de tests que lors du relevé de référence.
+    full = (bool(baseline) and not config.option.keyword and not config.option.markexpr
+            and collected >= 0.9 * baseline.get("collected", 10 ** 9))
+    if not (full or update):
+        return
+    sites = dc.enumerate_sites()
+    covered = recorder.covered(sites)
+    if update:
+        dc.write_baseline(sites, covered, collected)
+        terminalreporter.write_line(
+            f"Diagnostic coverage reference updated: {len(covered & {s.key for s in sites})}"
+            f"/{len(sites)} sites.", yellow=True)
+        return
+    report = dc.compare(sites, covered, baseline)
+    for line in dc.summary_lines(report, baseline):
+        terminalreporter.write_line(line, yellow=line.startswith("WARNING"))

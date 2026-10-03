@@ -108,3 +108,21 @@ def test_un_script_attache_a_rien_avertit_sans_bloquer(tmp_path):
     assert ok is True
     assert errors == []
     assert any("Draft.lua:2" in line and "attached to nothing" in line for line in log), log
+
+
+# ── Un prefab que personne ne déclare est vérifié, pas seulement parsé ─
+
+
+def test_un_prefab_sans_instance_est_verifie_par_le_checker(tmp_path):
+    """Le script parse, mais le checker le refuse (une fonction anonyme). Avant, la faute
+    sortait le jour où une scène déclarait le prefab, jamais avant."""
+    ok, _log, errors = _build(_projet(
+        tmp_path, prefab_script="function on_update()\n  local f = function() return 1 end\nend\n"))
+    assert ok is False
+    assert any("Bullet.lua:2:" in e and "[prefab Bullet]" in e for e in errors), errors
+
+
+def test_un_prefab_sans_instance_et_sain_ne_bloque_pas(tmp_path):
+    ok, _log, errors = _build(_projet(tmp_path, prefab_script=HANDLER_OK))
+    assert ok is True
+    assert errors == []
