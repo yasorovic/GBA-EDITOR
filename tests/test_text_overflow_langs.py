@@ -61,9 +61,9 @@ def test_une_traduction_plus_longue_deborde_et_le_dit(projet):
     p.translations["de"][t.id] = "TOO LONG FOR THIS BOX"
     warns = _warnings_for(p)
     assert len(warns) == 1
-    assert "hud_msg" in warns[0] and "« de »" in warns[0]
+    assert "hud_msg" in warns[0] and '"de"' in warns[0]
     # La source, elle, reste dans les clous — un seul message, pas deux.
-    assert "déborde" in warns[0]
+    assert "overflows" in warns[0]
 
 
 def test_une_langue_non_traduite_ne_double_pas_le_message(projet):

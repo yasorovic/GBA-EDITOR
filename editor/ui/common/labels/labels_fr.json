@@ -340,9 +340,9 @@
     "home.window_title": {
       "text": "{app_name} — Ouvrir un projet"
     },
-    "home.subtitle": {
-      "text": "Sélectionnez un projet"
-    },
+    "home.version": { "text": "Version {version}" },
+    "home.created_by": { "text": "Créé par {author}" },
+    "home.docs": { "text": "Documentation en ligne" },
     "home.tab.projects": {
       "text": "Projets"
     },
@@ -357,10 +357,10 @@
     },
     "home.clear_tip": { "text": "Retire les entrées dont le projet est introuvable." },
     "home.load": {
-      "text": "Ouvrir un dossier…"
+      "text": "Parcourir…"
     },
     "home.create_project": {
-      "text": "Créer un projet"
+      "text": "Nouveau projet"
     },
     "home.browse_title": {
       "text": "Ouvrir un projet existant"
@@ -624,6 +624,11 @@
     "win.screen_scripts": {
       "text": "Scripts"
     },
+    "about.tagline": { "text": "Éditeur homebrew pour la Game Boy Advance" },
+    "about.created_by": { "text": "Créé par {author}" },
+    "about.docs": { "text": "Documentation" },
+    "about.release_notes": { "text": "Notes de version" },
+    "about.report_issue": { "text": "Signaler un problème" },
     "win.documentation": {
       "text": "Documentation"
     },
@@ -1282,7 +1287,6 @@
     "inputs.button_r": { "text": "R" },
     "inputs.button_start": { "text": "Start" },
     "inputs.button_select": { "text": "Select" },
-    "win.about_text": { "text": "{app_name} {version}\npar {author}\n\nÉditeur homebrew pour la Game Boy Advance" },
     "win.close_save_failed_title": { "text": "Projet non enregistré" },
     "win.close_save_failed": { "text": "Les dernières modifications n'ont pas pu être écrites sur le disque :\n{error}\n\nFermer quand même et les perdre ?" },
     "win.save_state_saved": { "text": "Projet enregistré" },

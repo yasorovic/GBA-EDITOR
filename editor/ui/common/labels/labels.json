@@ -214,9 +214,9 @@
     "home.window_title": {
       "text": "{app_name} — Open a project"
     },
-    "home.subtitle": {
-      "text": "Select a project"
-    },
+    "home.version": { "text": "Version {version}" },
+    "home.created_by": { "text": "Created by {author}" },
+    "home.docs": { "text": "Online documentation" },
     "home.tab.projects": {
       "text": "Projects"
     },
@@ -231,10 +231,10 @@
     },
     "home.clear_tip": { "text": "Removes the entries pointing to projects that cannot be found." },
     "home.load": {
-      "text": "Load a folder…"
+      "text": "Browse…"
     },
     "home.create_project": {
-      "text": "Create project"
+      "text": "New project"
     },
     "home.browse_title": {
       "text": "Open an existing project"
@@ -1739,6 +1739,11 @@
     "win.screen_scripts": {
       "text": "Scripts"
     },
+    "about.tagline": { "text": "Homebrew editor for the Game Boy Advance" },
+    "about.created_by": { "text": "Created by {author}" },
+    "about.docs": { "text": "Documentation" },
+    "about.release_notes": { "text": "Release notes" },
+    "about.report_issue": { "text": "Report an issue" },
     "win.documentation": {
       "text": "Documentation"
     },
@@ -1762,9 +1767,6 @@
     },
     "win.about": {
       "text": "About"
-    },
-    "win.about_text": {
-      "text": "{app_name} {version}\nby {author}\n\nHomebrew editor for the Game Boy Advance"
     },
     "win.window_title": {
       "text": "{app_name} ({name})"

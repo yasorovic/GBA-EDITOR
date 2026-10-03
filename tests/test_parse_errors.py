@@ -49,18 +49,18 @@ def test_un_end_manquant_se_nomme():
     ouvert. Le message le dit plutôt que d'envoyer l'auteur regarder la
     dernière ligne, qui est presque toujours correcte."""
     e = _faute('function on_update()\n\tif x then\n\t\tfoo()\nend\n')
-    assert "end" in str(e) and "manque" in str(e)
+    assert "end" in str(e) and "missing" in str(e)
     assert e.line == 5
 
 
 def test_ce_quon_ne_sait_pas_ne_sinvente_pas():
     """Il reste des fautes dont antlr ne rend NI jeton NI attendu et qu'aucun
-    faux ami n'explique (`local x =` sans valeur). Le message y est générique
-    et la ligne absente — mais il ne dit plus « None », et surtout il ne
-    fabrique pas une ligne pour faire joli."""
+    faux ami n'explique (`local x =` sans valeur). antlr y renonce sur le jeton
+    suivant : le message le dit (« avant `end` », la faute est plus haut) au
+    lieu de désigner ce jeton comme coupable."""
     e = _faute('function on_update()\n\tlocal x = \nend\n')
-    assert str(e) == "erreur de syntaxe"
-    assert e.line is None
+    assert "before `end`" in str(e) and "previous line" in str(e)
+    assert e.line == 3
 
 
 def test_le_jeton_TROUVE_nest_pas_rapporte():
@@ -114,7 +114,7 @@ def test_un_faux_ami_dans_une_chaine_nest_pas_une_faute():
     faux collé à sa vraie erreur."""
     e = _faute('function on_update()\n\tlocal s = "a != b"\n\tif x then\nend\n')
     assert "~=" not in str(e)
-    assert "manque" in str(e)          # la vraie faute, seule
+    assert "missing" in str(e)          # la vraie faute, seule
 
 
 def test_un_faux_ami_en_commentaire_nest_pas_une_faute():
@@ -173,7 +173,7 @@ def test_une_erreur_de_conversion_ne_se_deguise_pas_en_syntaxe():
     vrai, P._Converter = P._Converter, _Boum
     try:
         e = _faute("function on_update()\nend\n")
-        assert "illisible" in str(e) and "noeud inattendu" in str(e)
+        assert "unreadable" in str(e) and "noeud inattendu" in str(e)
         assert e.line is None
     finally:
         P._Converter = vrai

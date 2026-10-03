@@ -104,8 +104,7 @@ def _action_box_lines(kind: str, box, actions: list[str], p) -> list[str]:
 
     n_states = max(1, len(states))
     L = [
-        f"/* ── {kind} — {n_actions} action(s), "
-        f"{len(states)} état(s) (ROADMAP v0.8.7) ── */",
+        f"/* ── {kind} — {n_actions} action(s), {len(states)} state(s) (ROADMAP v0.8.7) ── */",
         f"#define {kind.upper()}_ACTIONS {n_actions}",
         f"#define {kind.upper()}_STATES {n_states}",
     ]
@@ -162,14 +161,14 @@ def _music_box_lines(box, p, triggers: list[str]) -> list[str]:
 
     start = idx.get(getattr(box, "start", ""), 0)
     L = [
-        f"/* ── music_box — {len(states)} état(s), {len(edges)} arête(s) ── */",
+        f"/* ── music_box — {len(states)} state(s), {len(edges)} edge(s) ── */",
         f"static const s16 g_music_box_state[{len(states)}][3] = {{",
         *rows, "};",
         f"int g_music_box_state_cur = {start};",
     ]
     if edges:
         L += [
-            "/* {src, dst, déclencheur, coupe ?, frames} — src -1 = depuis n'importe où */",
+            "/* {src, dst, trigger, cut?, frames} — src -1 = from anywhere */",
             f"static const s16 g_music_box_tr[{len(edges)}][5] = {{",
             *edges, "};",
         ]
@@ -206,7 +205,7 @@ def emit(p) -> list[str]:
     if (info["music_box"] is None and not info["sound_actions"]
             and not info["jingle_actions"]):
         return []
-    L = ["", "/* ═══ Boîtes sonores (ROADMAP v0.8.7) ═══════════════════════ */"]
+    L = ["", "/* ═══ Sound boxes (ROADMAP v0.8.7) ═══════════════════════ */"]
     L += _action_box_lines(KIND_SOUND, info["sound_box"], info["sound_actions"], p)
     L += _action_box_lines(KIND_JINGLE, info["jingle_box"], info["jingle_actions"], p)
     L += _music_box_lines(info["music_box"], p, p.sound_trigger_names())
@@ -224,7 +223,7 @@ def music_start_lines(p) -> list[str]:
     if not states:
         return []
     return [
-        "    /* État de départ de la MusicBox. */",
+        "    /* Starting state of the MusicBox. */",
         "    if(g_music_box_state[g_music_box_state_cur][0] >= 0)",
         "        music_play(g_music_box_state[g_music_box_state_cur][0],",
         "                   g_music_box_state[g_music_box_state_cur][1],",

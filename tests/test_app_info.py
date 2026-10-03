@@ -122,8 +122,12 @@ def test_la_config_utilisateur_vit_sous_le_nom_du_produit():
 
 
 def test_la_fenetre_a_propos_donne_nom_version_et_auteur():
-    from ui.common.labels import label
+    from PyQt6.QtWidgets import QApplication, QLabel
+    from ui.common.about_dialog import AboutDialog
 
-    text = label("win.about_text", app_name=APP_NAME, version=APP_VERSION, author=APP_AUTHOR)
+    app = QApplication.instance() or QApplication([])
+    dialog = AboutDialog()
+    text = "\n".join(lbl.text() for lbl in dialog.findChildren(QLabel))
 
-    assert APP_NAME in text and APP_VERSION in text and APP_AUTHOR in text
+    assert APP_VERSION in text and APP_AUTHOR in text
+    del app

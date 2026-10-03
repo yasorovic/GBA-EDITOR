@@ -15,6 +15,7 @@ from core.models.components import affine_sprite_component
 from codegen.oam_alloc import owner_appearances
 from core.models.scene import Actor, Scene
 from core.project import Project
+from core.validator import build_error, build_warning
 from scripting.parser  import parse as lua_parse, LuaParseError
 from scripting.checker import check as lua_check, BuildContext
 from scripting.codegen import generate as lua_generate, CodegenContext
@@ -138,7 +139,7 @@ def _spawn_exports_meta(p, prefabs) -> dict:
             continue
         try:
             ast = lua_parse(sp.read_text(encoding="utf-8"))
-        except Exception:
+        except Exception:  # tolerated: a syntax error is reported by the script validator
             continue
         meta = {loc.name: {"type": loc.export_type, "values": loc.export_values}
                 for loc in ast.locals
@@ -215,7 +216,7 @@ def _affine_reserved(owner) -> bool:
     return bool(comp and comp.affine_transform)
 
 
-def _compile_script(sp: Path, ctx_check: "BuildContext", emit, label: str):
+def _compile_script(sp: Path, ctx_check: "BuildContext", emit, owner: str = ""):
     """
     Parse + valide un script Lua (actor, scène ou prefab — même traitement
     pour les trois, contrairement à avant où seuls les actors étaient
@@ -223,21 +224,20 @@ def _compile_script(sp: Path, ctx_check: "BuildContext", emit, label: str):
     False sur erreur bloquante (parse ou check), quel que soit le type de
     script — un prefab avec une faute de syntaxe bloque désormais le build
     au lieu d'être silencieusement sauté.
+
+    `owner` nomme le propriétaire quand il n'est pas évident par le fichier (« prefab Ball »,
+    « camera Cam ») ; la ligne manque quand la faute est LEXICALE et qu'aucun faux ami connu
+    ne l'explique (cf. `parser._syntax_message`) : le fichier reste alors le seul repère.
     """
     try:
         script = lua_parse(sp.read_text(encoding="utf-8"))
     except LuaParseError as e:
-        # `fichier:ligne`, comme les messages qui citent une ligne ailleurs
-        # (`_check_literal_texts`) — la ligne manque quand la faute est
-        # LEXICALE et qu'aucun faux ami connu ne l'explique (cf. `parser.
-        # _syntax_message`) ; le nom du fichier reste alors le seul repère.
-        ou = f"{label}:{e.line}" if e.line else label
-        emit("error_line", f"[error] {ou} : {e}")
+        emit("diagnostic", build_error(str(e), "script", sp.name, e.line or 0, owner))
         return None, False
     errors = lua_check(script, ctx_check)
     for err in errors:
-        prefix = "[error]" if err.level == "error" else "[warn] "
-        emit("log_line", f"{prefix} {label}: {err.message}")
+        make = build_error if err.level == "error" else build_warning
+        emit("diagnostic", make(err.message, "checker", sp.name, err.line, owner))
     if any(e.level == "error" for e in errors):
         return script, False
     return script, True
@@ -504,7 +504,7 @@ def transpile_all(
             data_tables  = _data_tables,
             spawn_exports = _spawn_meta,
         )
-        script, ok = _compile_script(sp, ctx_check, emit, sp.name)
+        script, ok = _compile_script(sp, ctx_check, emit)
         if not ok:
             return False
 
@@ -562,7 +562,7 @@ def transpile_all(
                 data_tables  = _data_tables,
                 spawn_exports = _spawn_meta,
             )
-            scene_script_ast, ok = _compile_script(sp, ctx_check, emit, sp.name)
+            scene_script_ast, ok = _compile_script(sp, ctx_check, emit)
             if not ok:
                 return False
             scene_script_file = sp
@@ -622,7 +622,7 @@ def transpile_all(
         )
         c_code, gen_warnings, _ = lua_generate(script, ctx)
         for w in gen_warnings:
-            emit("log_line", f"[warn] {sp.name}: {w}")
+            emit("diagnostic", build_warning(w, "codegen", sp.name))
         out = p.src_dir / f"actor_{s}.c"
         build_output.write(out, c_code)
         emit("log_line", f"[lua->c] {sp.name} -> {out.name}")
@@ -692,7 +692,7 @@ def transpile_all(
             data_tables  = _data_tables,
             spawn_exports = _spawn_meta,
         )
-        pf_ast, ok = _compile_script(sp_path, ctx_check, emit, f"prefab {pf.name} ({sp_path.name})")
+        pf_ast, ok = _compile_script(sp_path, ctx_check, emit, f"prefab {pf.name}")
         if not ok:
             return False
         ctx_pf  = CodegenContext(
@@ -745,7 +745,7 @@ def transpile_all(
         )
         pf_c, pf_warnings, pf_state_bytes = lua_generate(pf_ast, ctx_pf)
         for w in pf_warnings:
-            emit("log_line", f"[warn] prefab {pf.name}: {w}")
+            emit("diagnostic", build_warning(w, "codegen", sp_path.name, actor=f"prefab {pf.name}"))
         out_pf = p.src_dir / f"actor_{pf_sym}.c"
         build_output.write(out_pf, pf_c)
         emit("log_line", f"[lua->c] prefab {pf.name} -> {out_pf.name}")
@@ -803,7 +803,7 @@ def transpile_all(
         )
         c_code, sc_warnings, _ = lua_generate(scene_script_ast, ctx_sc)
         for w in sc_warnings:
-            emit("log_line", f"[warn] {scene_script_file.name}: {w}")
+            emit("diagnostic", build_warning(w, "codegen", scene_script_file.name))
         out_name = f"{scene_s}_scene.c"
         out = p.src_dir / out_name
         build_output.write(out, c_code)
@@ -871,7 +871,7 @@ def transpile_all(
             data_tables  = _data_tables,
             spawn_exports = _spawn_meta,
         )
-        cam_ast, ok = _compile_script(sp, ctx_check, emit, f"camera {cam.name} ({sp.name})")
+        cam_ast, ok = _compile_script(sp, ctx_check, emit, f"camera {cam.name}")
         if not ok:
             return False
         ctx_cam = CodegenContext(
@@ -911,7 +911,7 @@ def transpile_all(
         )
         cam_c, cam_warnings, _ = lua_generate(cam_ast, ctx_cam)
         for w in cam_warnings:
-            emit("log_line", f"[warn] camera {cam.name}: {w}")
+            emit("diagnostic", build_warning(w, "codegen", sp.name, actor=f"camera {cam.name}"))
         out_cam = p.src_dir / f"{cam_sym}.c"
         build_output.write(out_cam, cam_c)
         emit("log_line", f"[lua->c] {sp.name} -> {out_cam.name}")

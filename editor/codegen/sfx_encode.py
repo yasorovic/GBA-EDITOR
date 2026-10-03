@@ -18,6 +18,7 @@ ils tombent à ~83 Kio.
 from __future__ import annotations
 
 import wave
+from core.validator import build_warning
 from pathlib import Path
 from typing import Optional
 
@@ -115,7 +116,7 @@ def encode_sfx_for_build(project, sfx_items: list, emit=None) -> dict[str, Path]
         try:
             with wave.open(str(src)) as w:
                 src_rate, src_frames = w.getframerate(), w.getnframes()
-        except Exception:
+        except Exception:  # tolerated: unreadable WAV: check_audio_file reports it
             continue
         if src_rate == target:
             continue
@@ -124,7 +125,7 @@ def encode_sfx_for_build(project, sfx_items: list, emit=None) -> dict[str, Path]
             n = resample_wav(src, dst, target)
         except Exception as e:
             if emit:
-                emit("error_line", f"[sfx] \"{sfx.name}\" not resampled: {e}")
+                emit("diagnostic", build_warning(f"\"{sfx.name}\" not resampled: {e}", "sfx"))
             continue
         if n is None:
             continue

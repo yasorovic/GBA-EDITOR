@@ -205,7 +205,7 @@ def test_la_cellule_garde_sa_nature_de_donnee_constante():
     """Le handle se lit ; la CELLULE ne s'écrit toujours pas (la table est en ROM). Seule une
     propriété de l'élément désigné s'écrit."""
     (msg,) = _data_errors("data.Dialogue[1].boite = 2")
-    assert "constante" in msg
+    assert "constant" in msg
     assert _data_errors("data.Dialogue[1].icone.offset = vec2(0, 1)") == []
 
 
@@ -225,7 +225,7 @@ def test_l_etat_d_image_par_nom_exige_une_image_connue_au_build():
                        image_states={"Heart": ["full"]})
     src = 'function on_update()\ndata.Dialogue[1].icone.state = "full"\nend\n'
     (msg,) = [e.message for e in check(parse(src), ctx) if e.level == "error"]
-    assert "ne sait pas laquelle" in msg
+    assert "does not know which image" in msg
 
 
 def test_le_build_type_les_colonnes_de_reference_du_projet():

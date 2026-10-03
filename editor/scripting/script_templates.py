@@ -45,7 +45,7 @@ def generate_script_template(ctx: ScriptTemplateContext) -> str:
 
 def _generate_scene_template(ctx: ScriptTemplateContext) -> str:
     return (
-        f"-- Script de scène : {ctx.scene_name}\n\n"
+        f"-- Scene script: {ctx.scene_name}\n\n"
         "function on_start()\nend\n\n"
         "function on_update()\nend\n\n"
         "function on_late_update()\nend\n"
@@ -57,9 +57,9 @@ def _generate_camera_template(ctx: ScriptTemplateContext) -> str:
     suivi déclaratif a déjà écrit la position quand `on_update` s'exécute, donc
     ce qu'on écrit ici l'ajuste au lieu de se battre avec lui."""
     return (
-        f"-- Script de caméra : {ctx.camera_name}\n"
-        "-- Les réglages déclaratifs (suivi, zone morte) sont calculés AVANT\n"
-        "-- ce script ; les bornes du monde sont appliquées APRÈS.\n\n"
+        f"-- Camera script: {ctx.camera_name}\n"
+        "-- The declarative settings (follow, dead zone) are computed BEFORE\n"
+        "-- this script; the world bounds are applied AFTER.\n\n"
         "function on_start()\nend\n\n"
         "function on_update()\nend\n"
     )
@@ -67,8 +67,8 @@ def _generate_camera_template(ctx: ScriptTemplateContext) -> str:
 
 def _generate_behavior_template(ctx: ScriptTemplateContext) -> str:
     return (
-        f"-- Behavior : {ctx.name}\n"
-        f"-- Module réutilisable. Usage : local M = require('behaviors/{ctx.name}')\n\n"
+        f"-- Behavior: {ctx.name}\n"
+        f"-- Reusable module. Usage: local M = require('behaviors/{ctx.name}')\n\n"
         "local M = {}\n\n"
         "function M.update(actor)\nend\n\n"
         "return M\n"
@@ -81,7 +81,7 @@ def _generate_actor_template(ctx: ScriptTemplateContext) -> str:
         f"-- Actor       : {ctx.actor_name or '?'}",
         f"-- Components  : {', '.join(ctx.component_labels) or 'aucun'}",
         "",
-        "-- Déclare ici les variables configurables depuis l'éditeur :",
+        "-- Declare here the variables configurable from the editor:",
         "-- exports = {",
         "--     speed  = { type = \"int\",  default = 5,       label = \"Speed\", min = 0, max = 20 },",
         "--     name   = { type = \"string\", default = \"Hero\", label = \"Name\" },",
@@ -103,5 +103,5 @@ def _generate_actor_template(ctx: ScriptTemplateContext) -> str:
                   "function on_collision_exit(other, my_box, other_box)", "end", ""]
 
     if not (ctx.has_sprite or ctx.collision_tags or ctx.has_sfx):
-        lines += ["-- Ajoute des components dans l'inspector pour débloquer l'API.", ""]
+        lines += ["-- Add components in the inspector to unlock the API.", ""]
     return "\n".join(lines)

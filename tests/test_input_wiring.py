@@ -70,13 +70,13 @@ def test_held_refuse_une_sequence_comme_action_inconnue():
     # inconnu, exactement comme un bouton mal orthographié.
     layout = _layout(sequences=_QCF)
     errs = _errors(_body('if input:held("qcf") then end'), layout)
-    assert errs and "inconnu" in errs[0]
+    assert errs and "unknown" in errs[0]
 
 
 def test_pressed_refuse_une_sequence_comme_action_inconnue():
     layout = _layout(sequences=_QCF)
     errs = _errors(_body('if input:pressed("qcf") then end'), layout)
-    assert errs and "inconnu" in errs[0]
+    assert errs and "unknown" in errs[0]
 
 
 def test_get_sequence_accepte_une_sequence():
@@ -88,7 +88,7 @@ def test_get_sequence_accepte_une_sequence():
 def test_get_sequence_refuse_un_accord():
     layout = _layout(masks=_DASH)
     errs = _errors(_body('if input:get_sequence("dash") then end'), layout)
-    assert errs and "inconnue" in errs[0]
+    assert errs and "unknown" in errs[0]
 
 
 # ── held(n) / buffered(frames) : bornes et littéral obligatoire ─────────
@@ -108,7 +108,7 @@ def test_held_avec_trop_darguments():
 def test_buffered_frames_non_litteral_refuse():
     layout = _layout(masks=_DASH)
     errs = _errors(_body('local n = 4\nif input:buffered("dash", n) then end'), layout)
-    assert any("littéral" in e.lower() or "clair" in e.lower() for e in errs), errs
+    assert any("literal" in e.lower() or "plain" in e.lower() for e in errs), errs
 
 
 def test_buffered_frames_litteral_ok():

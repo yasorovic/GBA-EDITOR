@@ -127,7 +127,7 @@ def test_une_comparaison_de_domaine_sur_recepteur_chaine():
 # ── Ce que le checker refuse, au lieu de le laisser traverser ─────────────
 
 def test_ecrire_une_propriete_chainee_en_lecture_seule_est_refuse():
-    assert any("lecture seule" in m for m in _errors('self:collision_box("hb").tag = "x"'))
+    assert any("read-only" in m for m in _errors('self:collision_box("hb").tag = "x"'))
 
 
 def test_une_propriete_chainee_recoit_le_type_de_sa_valeur():
@@ -142,15 +142,15 @@ def test_un_champ_inconnu_sur_une_reference_chainee_est_refuse():
 
 def test_un_recepteur_chaine_de_type_inconnu_est_refuse():
     """`math.abs(1):foo()` : le codegen n'a rien à émettre. Refusé, pas ignoré."""
-    assert any("ne peut pas s'appeler" in m for m in _errors("math.abs(1):foo()"))
+    assert any("cannot be called" in m for m in _errors("math.abs(1):foo()"))
 
 
 def test_une_methode_inconnue_sur_un_acteur_chaine_est_refusee():
-    assert any("Méthode inconnue" in m for m in _errors('actor:get("Foe"):bogus()'))
+    assert any("Unknown method" in m for m in _errors('actor:get("Foe"):bogus()'))
 
 
 def test_une_methode_inconnue_sur_une_reference_chainee_est_refusee():
-    assert any("Méthode inconnue" in m for m in _errors('sfx:play("Bip"):bogus()'))
+    assert any("Unknown method" in m for m in _errors('sfx:play("Bip"):bogus()'))
 
 
 def test_l_enfant_d_un_prefab_reste_un_recepteur_valide():

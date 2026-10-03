@@ -51,7 +51,7 @@ def test_slot_valide_ne_dit_rien(tmp_path):
 def test_meme_layout_pose_deux_fois_est_une_erreur(tmp_path):
     p = _proj(tmp_path)
     p.scenes.append(Scene(name="S", ui_layouts=["hud", "hud"]))
-    assert any("deux fois" in e for e in _errs(p, _check_ui_node_slots))
+    assert any("placed twice" in e for e in _errs(p, _check_ui_node_slots))
 
 
 def _deux_layouts(tmp_path, nom_b: str) -> Project:
@@ -97,7 +97,7 @@ def test_interface_qui_partage_son_slot_avec_un_decor(tmp_path):
                background_layers=[BackgroundLayer(background_name="decor", bg_slot=2)])
     sc.ui_layouts[0].bg_slot = 2
     p.scenes.append(sc)
-    assert any("partage son slot" in e for e in _errs(p, _check_bg_text_cbb_conflict))
+    assert any("shares its slot" in e for e in _errs(p, _check_bg_text_cbb_conflict))
 
 
 def test_interface_et_decor_sur_slots_distincts_ok(tmp_path):

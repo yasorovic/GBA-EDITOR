@@ -20,7 +20,7 @@ def test_font_partage_les_regles_generiques_d_imbrication():
 
     assert parsed.display == "A"
     assert parsed.of_kind("font")[0].value == "Titre"
-    assert any("imbrication croisée" in issue.message for issue in parsed.issues)
+    assert any("crossed nesting" in issue.message for issue in parsed.issues)
 
 
 def test_une_police_de_balisage_inconnue_bloque_le_build(tmp_path):

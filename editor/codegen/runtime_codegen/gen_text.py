@@ -17,6 +17,7 @@ d'ici). `region_ink_bank`/`region_is_composited` sont relus par l'éditeur
 from __future__ import annotations
 
 from core.project import Project
+from core.validator import build_error, build_warning
 from core.models.ui_region import region_fill_container
 from codegen.c_names import sym as c_sym
 from codegen.oam_alloc import layout_obj_budget_resolved
@@ -284,7 +285,7 @@ def _emit_font_subsets(p, encoded: list, emit=None) -> list[str]:
     by_name = {name: (i, e) for i, (name, e) in enumerate(encoded)}
     lang_codes = _declared_lang_codes(p)
 
-    L: list[str] = ["/* ── Sous-ensembles de glyphes (par scène) ───────── */"]
+    L: list[str] = ["/* ── Glyph subsets (per scene) ───────── */"]
     any_line = False
     for scene in p.scenes:
         scene._ui_font_subsets = {}
@@ -343,7 +344,7 @@ def fonts_and_texts_lines(p, emit=None) -> list[str]:
             e = encode_font(f, p.asset_abs(f.asset) if f.asset else None)
         except Exception as exc:
             if emit:
-                emit("error_line", f"[font] {f.name} : encodage impossible ({exc})")
+                emit("diagnostic", build_error(f"{f.name}: encoding failed ({exc})", "font"))
             continue
         if e.get("warning") and emit:
             emit("log_line", f"[font] {e['warning']}")
@@ -587,26 +588,26 @@ def gen_ui_texts(p: Project, scene, text_bg: int, emit=None) -> list[str]:
             continue          # le validateur le signale déjà, et mieux
         if key not in text_idx or el.name not in slot_idx:
             if emit:
-                emit("log_line", f"[warn] text '{el.name}': key '{key}' not found in the table"
-                                 " — nothing will be written.")
+                emit("diagnostic", build_warning(
+                    f"text '{el.name}': key '{key}' not found in the table"
+                    " — nothing will be written.", "text"))
             continue
         target = lay.resolved_target(el, rm)
         # Cible BG sans layer de texte : `text_set_layer(-1)` fait sortir le
         # rendu sans un mot, et l'élément disparaît entre le canvas et la ROM.
         if target != TARGET_OBJ and text_bg not in (0, 1, 2, 3):
             if emit:
-                emit("log_line",
-                     f"[warn] text '{el.name}': scene '{scene.name}' has no text layer (Text BG), it "
-                     "will not be displayed.")
+                emit("diagnostic", build_warning(
+                    f"text '{el.name}': scene '{scene.name}' has no text layer (Text BG), it "
+                    "will not be displayed.", "text"))
             continue
         if lay.effective_anchor(el)[0] == ANCHOR_ACTOR:
             if emit:
-                emit("log_line",
-                     f"[warn] text '{el.name}': anchored on an actor but placed only once at"
-                     " init — it will not follow the actor. Use a zone and a script "
-                     "for that.")
-        L.append(f"    text_draw_in({slot_idx[el.name]}, {text_idx[key]});"
-                 f"   /* texte authoré '{el.name}' = '{key}' */")
+                emit("diagnostic", build_warning(
+                    f"text '{el.name}': anchored on an actor but placed only once at"
+                    " init — it will not follow the actor. Use a zone and a script "
+                    "for that.", "text"))
+        L.append(f"    text_draw_in({slot_idx[el.name]}, {text_idx[key]});   /* authored text '{el.name}' = '{key}' */")
     if L and emit:
         emit("log_line", f"[text] scene '{scene.name}': {len(L)} authored text(s) written at init")
     return L

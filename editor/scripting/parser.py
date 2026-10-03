@@ -783,7 +783,7 @@ def _antlr_detail(exc) -> tuple[Optional[int], str]:
         reco = inner.recognizer
         attendu = inner.getExpectedTokens().toString(
             reco.literalNames, reco.symbolicNames).strip("{} ")
-    except Exception:
+    except Exception:  # tolerated: optional detail: the message stays valid without it
         pass
     return getattr(tok, "line", None), attendu
 
@@ -898,10 +898,15 @@ def _syntax_message(source: str, exc) -> tuple[str, Optional[int]]:
         char = re.search(r"at: '(.*)'", antlr_msg)
         msg = (f"unexpected character `{char.group(1)}`" if char
                else "unexpected character")
-    elif quoted:
+    elif quoted and "\\n" in quoted.group(1):
+        # The quote starts at the first token of the statement that failed.
         line = _offending_line(source, line or 1, quoted.group(1))
         token = quoted.group(1).split("\\n")[0].strip()
         msg = f"unexpected `{token}`: this is not a valid statement or expression"
+    elif quoted:
+        # A lone token: antlr gave up HERE, the mistake is somewhere above.
+        msg = (f"syntax error before `{quoted.group(1).strip()}` — "
+               f"the mistake is on a previous line")
     elif line:
         msg = "this line is not valid Lua"
     else:

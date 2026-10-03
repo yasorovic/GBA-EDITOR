@@ -128,22 +128,22 @@ def test_is_grounded_est_une_propriete_de_boite_en_lecture_seule():
     assert "collision_box_get_grounded(hb)" in code
     errs, _ = _lua("function on_update(self)\n"
                    "  local hb = self:collision_box(\"body\")\n  hb.is_grounded = true\nend\n")
-    assert errs and "lecture seule" in errs[0]
+    assert errs and "read-only" in errs[0]
 
 
 def test_le_tag_et_les_bounds_d_une_boite_sont_en_lecture_seule():
     errs, _ = _lua("function on_update(self)\n"
                    "  local hb = self:collision_box(\"body\")\n  hb.tag = \"hitbox\"\nend\n")
-    assert errs and "lecture seule" in errs[0]
+    assert errs and "read-only" in errs[0]
     errs, _ = _lua("function on_update(self)\n"
                    "  local hb = self:collision_box(\"body\")\n  hb.bounds = rect(0, 0, 1, 1)\nend\n")
-    assert errs and "lecture seule" in errs[0]
+    assert errs and "read-only" in errs[0]
 
 
 def test_une_valeur_composee_de_la_boite_est_immuable():
     errs, _ = _lua("function on_update(self)\n"
                    "  local hb = self:collision_box(\"body\")\n  hb.size.x = 3\nend\n")
-    assert errs and "immuable" in errs[0]
+    assert errs and "immutable" in errs[0]
 
 
 def test_un_champ_inconnu_sur_une_boite_est_refuse():
@@ -190,7 +190,7 @@ def test_box_count_est_en_lecture_seule():
     assert errs == []
     assert "actor_get_box_count(self)" in code
     errs, _ = _lua("function on_update(self)\n self.box_count = 3\nend\n")
-    assert errs and "lecture seule" in errs[0]
+    assert errs and "read-only" in errs[0]
 
 
 # ── Réglages fixés au build : lecture seule ──────────────────────────
@@ -204,7 +204,7 @@ def test_les_reglages_du_build_se_lisent_sans_s_ecrire(champ, getter):
     assert errs == []
     assert f"{getter}(self)" in code
     errs, _ = _lua(f"function on_update(self)\n self.{champ} = true\nend\n")
-    assert errs and "lecture seule" in errs[0]
+    assert errs and "read-only" in errs[0]
 
 
 def test_un_autre_acteur_se_lit_aussi():

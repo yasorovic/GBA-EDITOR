@@ -66,27 +66,27 @@ class TagSpec:
 TAGS: dict[str, TagSpec] = {t.name: t for t in (
     # ── Tempo — ponctuelles, elles marquent un INSTANT de la lecture ──
     TagSpec("speed", False, VALUE_INT,
-            "Vitesse de lecture à partir d'ici, en frames par caractère. "
-            "0 = instantané."),
+            "Sets the reading speed from this point, in frames per character. "
+            "0 shows the text instantly."),
     TagSpec("pause", False, VALUE_INT,
-            "Attend n frames avant de continuer — la virgule du tempo."),
+            "Waits n frames before going on, like a comma in the rhythm."),
     # ── Insertion ─────────────────────────────────────────────────
     TagSpec("icon", False, VALUE_NAME,
-            "Insère le glyphe nommé de la police (une case fusionnée). "
-            "Équivaut à taper sa suite de caractères, mais l'éditeur peut "
-            "vérifier que la police le porte."),
+            "Inserts the named glyph of the font. "
+            "It is the same as typing its sequence of characters, but the "
+            "editor can check that the font has it."),
     # ── Effets — de PORTÉE, ils s'appliquent à un intervalle ───────
-    TagSpec("wave",  True, VALUE_NONE, "Ondulation par caractère."),
-    TagSpec("shake", True, VALUE_NONE, "Tremblement par caractère."),
+    TagSpec("wave",  True, VALUE_NONE, "Makes each character wave."),
+    TagSpec("shake", True, VALUE_NONE, "Makes each character shake."),
     # 1..15 n'est pas un choix : une police est en 4bpp, l'index 0 y est la
     # transparence et il ne reste que quinze encres. Hors de cette plage, le
     # remappage du runtime déborderait son mot de 32 bits.
     TagSpec("color", True, VALUE_INT,
-            "Couleur d'encre n dans la sous-palette de la police (1..15). "
-            "Suppose une planche qui porte déjà plusieurs teintes.",
+            "Uses ink colour n of the font's sub-palette (1..15). "
+            "Needs a sheet that already carries several shades.",
             vmin=1, vmax=15),
     TagSpec("font", True, VALUE_NAME,
-            "Emploie la police nommée pour ce fragment de texte."),
+            "Uses the named font for this piece of text."),
 )}
 
 # Marqueur de valeur — pas une balise : il désigne un global ou une const, dont
@@ -448,8 +448,8 @@ def parse(source: str) -> ParsedText:
     # seule sa fin manque), on l'étend jusqu'au bout plutôt que de la dessiner —
     # mais on le dit, sinon un `[/wave]` oublié passerait en ROM sans un mot.
     for name, value, at, s0, s1 in open_scopes:
-        out.issues.append(Issue(s0, s1, f"« [{name}] » n'est jamais refermée — "
-                                        f"l'effet court jusqu'à la fin du texte."))
+        out.issues.append(Issue(s0, s1, f"\"[{name}]\" is never closed — the effect runs to"
+                                        " the end of the text."))
         out.markers.append(Marker(name, at, len(out.display), value, (s0, s1)))
 
     out.markers.sort(key=lambda mk: (mk.at, mk.end))
@@ -467,12 +467,12 @@ def _unknown_issue(name: str, raw: Optional[str], closing: bool,
     que si la forme trahit une TENTATIVE de balise."""
     lower = name.lower()
     if lower in TAGS and lower != name:
-        return f"« [{name}] » : les balises s'écrivent en minuscules — « [{lower}] »."
+        return f"\"[{name}]\": tags are written in lowercase — \"[{lower}]\"."
     near = difflib.get_close_matches(lower, list(TAGS), n=1, cutoff=0.7)
     if near:
-        return f"Balise inconnue « {name} » — vouliez-vous « {near[0]} » ?"
+        return f"Unknown tag \"{name}\" — did you mean \"{near[0]}\"?"
     if closing or raw is not None or f"[/{name}]" in source:
-        return f"Balise inconnue « {name} » — elle s'affichera telle quelle."
+        return f"Unknown tag \"{name}\" — it will be displayed as is."
     return ""
 
 
@@ -481,19 +481,19 @@ def _read_value(spec: TagSpec, raw: Optional[str]) -> tuple[object, str]:
     vide."""
     if spec.value == VALUE_NONE:
         if raw is not None:
-            return None, f"« [{spec.name}] » ne prend pas de valeur."
+            return None, f"\"[{spec.name}]\" takes no value."
         return None, ""
     if raw is None or not raw.strip():
-        kind = "un entier" if spec.value == VALUE_INT else "un nom"
-        return None, f"« [{spec.name}] » attend {kind} : [{spec.name}=…]."
+        kind = "an integer" if spec.value == VALUE_INT else "a name"
+        return None, f"\"[{spec.name}]\" expects {kind}: [{spec.name}=…]."
     raw = raw.strip()
     if spec.value == VALUE_INT:
         if not raw.isdigit():
-            return None, (f"« [{spec.name}={raw}] » attend un entier positif.")
+            return None, (f"\"[{spec.name}={raw}]\" expects a positive integer.")
         n = int(raw)
         if n < spec.vmin or (spec.vmax is not None and n > spec.vmax):
-            return None, (f"« [{spec.name}={n}] » est hors plage — "
-                          f"attendu entre {spec.vmin} et {spec.vmax}.")
+            return None, (f"\"[{spec.name}={n}]\" is out of range — expected between {spec.vmin} and "
+                          f"{spec.vmax}.")
         return n, ""
     return raw, ""
 
@@ -503,13 +503,12 @@ def _close_scope(out: ParsedText, disp: list[str], open_scopes: list,
                  span: tuple[int, int]):
     """Referme une portée ouverte, ou signale ce qui l'en empêche."""
     if raw is not None:
-        out.issues.append(Issue(*span, f"Une balise fermante ne porte pas de "
-                                       f"valeur : écrire « [/{spec.name}] »."))
+        out.issues.append(Issue(*span, "A closing tag carries no value: write "
+                                       f"\"[/{spec.name}]\"."))
         disp.append(tok)
         return
     if not spec.scoped:
-        out.issues.append(Issue(*span, f"« [{spec.name}] » est ponctuelle, elle "
-                                       f"ne se referme pas."))
+        out.issues.append(Issue(*span, f"\"[{spec.name}]\" is a one-shot tag, it is not closed."))
         disp.append(tok)
         return
     for i in range(len(open_scopes) - 1, -1, -1):
@@ -518,13 +517,12 @@ def _close_scope(out: ParsedText, disp: list[str], open_scopes: list,
             if i != len(open_scopes):
                 # Mal imbriquée : on ferme quand même celle qui est nommée. La
                 # refuser obligerait à choisir laquelle sacrifier.
-                out.issues.append(Issue(*span, f"« [/{name}] » ferme une portée "
-                                               f"ouverte avant d'autres encore "
-                                               f"ouvertes — imbrication croisée."))
+                out.issues.append(Issue(*span, f"\"[/{name}]\" closes a scope opened before"
+                                               " others that are still open — crossed"
+                                               " nesting."))
             out.markers.append(Marker(name, at, len("".join(disp)), value, (s0, s1)))
             return
-    out.issues.append(Issue(*span, f"« [/{spec.name}] » ne ferme aucune portée "
-                                   f"ouverte."))
+    out.issues.append(Issue(*span, f"\"[/{spec.name}]\" closes no open scope."))
     disp.append(tok)
 
 

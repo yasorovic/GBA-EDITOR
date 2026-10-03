@@ -78,7 +78,7 @@ def save_fatal(p) -> list[str]:
         k = save_id32(g.id)
         if k in seen:
             out.append(
-                f"[error] the persistent variables \"{seen[k]}\" and \"{g.name}\" fall back on the "
+                f"the persistent variables \"{seen[k]}\" and \"{g.name}\" fall back on the "
                 "same save identifier. Renaming will not change anything — recreating"
                 " one of them gives it a new identifier.")
         seen[k] = g.name
@@ -93,7 +93,7 @@ def save_fatal(p) -> list[str]:
         n_big = max(1, int(getattr(biggest, "count", 1) or 1))
         lever = (f" The largest is \"{biggest.name}\" ({n_big} cells, {save_var_bytes(biggest)} bytes per slot)." if n_big > 1 else "")
         out.append(
-            f"[error] {slots} save slot(s) × {len(vars_)} variable(s) need {total} bytes, which is more"
+            f"{slots} save slot(s) × {len(vars_)} variable(s) need {total} bytes, which is more"
             f" than the {SRAM_BYTES} of SRAM. Reduce the number of slots, the number of cells "
             f"of an array, or the number of persistent variables.{lever}")
     return out
@@ -108,7 +108,7 @@ def save_lines(p, emit=None) -> list[str]:
     qui dit au moteur de ne pas toucher la SRAM."""
     vars_ = save_vars(p)
     slots = max(1, int(getattr(p.settings, "save_slots", 1)))
-    L = ["", "/* Sauvegarde — variables globales marquées persistantes */"]
+    L = ["", "/* Save — global variables marked persistent */"]
     if vars_:
         # La chaîne que cherchent émulateurs et linkers pour savoir de quel type
         # de sauvegarde la cartouche dispose. Émise SEULEMENT si le projet sauve

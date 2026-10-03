@@ -234,7 +234,7 @@ REFUSED: dict[str, Refusal] = {
 # le nom du nœud — c'est le seul de ce cas, et il vit ici plutôt que de forcer
 # la table à porter une notion de position pour une entrée.
 NESTED_FUNCTION = Refusal(
-    "function f() … end, inside a body",
+    "function f() … end, dans un corps",
     "a private function is declared at the top level of the script, never inside a "
     "handler or another function.")
 

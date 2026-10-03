@@ -34,7 +34,7 @@ def test_langue_declaree_compile():
 
 def test_langue_non_declaree_refuse():
     errs = _errors(_CALL_LANG, lang_codes=["en", "de"])
-    assert errs and "fr" in errs[0] and "introuvable" in errs[0]
+    assert errs and "fr" in errs[0] and "not found" in errs[0]
 
 
 def test_projet_monolingue_refuse_tout_code():

@@ -236,12 +236,12 @@ def _value_candidates(domain: str | None, project_names: dict | None) -> list[Ca
     if domain in HARDWARE_ENUMS:
         return [
             Candidate(insert=v, label=v, kind=KIND_ENUM,
-                      tip=_plain_tip(f'"{v}"', f"Valeur de « {domain} »."))
+                      tip=_plain_tip(f'"{v}"', f"Value of \"{domain}\"."))
             for v in HARDWARE_ENUMS[domain]
         ]
     return [
         Candidate(insert=n, label=n, kind=KIND_REF,
-                  tip=_plain_tip(f'"{n}"', f"« {domain} » du projet."))
+                  tip=_plain_tip(f'"{n}"', f"\"{domain}\" of the project."))
         for n in (project_names or {}).get(domain, [])
     ]
 
@@ -346,10 +346,10 @@ def _member_candidates(qual: str, sep: str, project_names: dict | None,
     # `global.nom` / `const.nom` — variables et constantes du projet, lues dans
     # `names_by_domain` sous la clé qui EST le qualificateur écrit.
     if sep == "." and qual in ("global", "const"):
-        kind_word = "Variable" if qual == "global" else "Constante"
+        kind_word = "Variable" if qual == "global" else "Constant"
         return [
             Candidate(insert=n, label=n, kind=KIND_REF,
-                      tip=_plain_tip(f"{qual}.{n}", f"{kind_word} « {n} » du projet."))
+                      tip=_plain_tip(f"{qual}.{n}", f"{kind_word} \"{n}\" of the project."))
             for n in (project_names or {}).get(qual, [])
         ]
     return []
@@ -361,16 +361,16 @@ def _bare_candidates(context: str) -> list[Candidate]:
     out: list[Candidate] = []
     for mod in MODULES:
         out.append(Candidate(insert=mod, label=mod, kind=KIND_MODULE,
-                             tip=_plain_tip(mod, f"Module « {mod} » de l'API.")))
+                             tip=_plain_tip(mod, f"Module \"{mod}\" of the API.")))
     out += [_catalog_candidate(name) for name in _GLOBAL_FUNCS]
     for ctor in _CONSTRUCTORS:
         n = VEC_CONSTRUCTORS[ctor]
         out.append(Candidate(insert=ctor, label=f"{ctor}(…)", kind=KIND_CONSTRUCTOR,
                              tip=_plain_tip(f"{ctor}(…)",
-                                 f"Construit une valeur à {n} composantes.")))
+                                 f"Builds a value with {n} components.")))
     for kw in KEYWORDS:
         out.append(Candidate(insert=kw, label=kw, kind=KIND_KEYWORD,
-                             tip=_plain_tip(kw, "Mot-clé du langage.")))
+                             tip=_plain_tip(kw, "Language keyword.")))
     for ev in KNOWN_EVENTS_BY_KIND.get(context, KNOWN_EVENTS):
         out.append(Candidate(insert=ev, label=ev, kind=KIND_EVENT,
                              tip=_event_tip(ev)))
@@ -423,7 +423,7 @@ def _local_candidates(source: str | None, line: int | None) -> list[Candidate]:
         return []
     return [
         Candidate(insert=n, label=n, kind=KIND_LOCAL,
-                  tip=_plain_tip(n, "Variable locale ou paramètre du script."))
+                  tip=_plain_tip(n, "Local variable or parameter of the script."))
         for n in sorted(_script_locals(source, line))
     ]
 

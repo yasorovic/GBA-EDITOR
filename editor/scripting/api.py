@@ -120,9 +120,9 @@ REF_TYPE_TABLE: dict[str, RefType] = {
     # Le conteneur n'a aucune capacité propre : il EST le type de base.
     REF_UI_ELEMENT: RefType(
         c_type="int", variable="element", ui_kind="container", constant="UIELEM_",
-        hint="La géométrie d'un élément est authorée : elle ne s'ouvre pas au "
-             "runtime. Une liste, une image et une zone de texte ont leurs propres "
-             "membres — le type de `interface:get(nom)` est celui de l'élément."),
+        hint="The geometry of an element is authored: it does not open up at runtime."
+             " A list, an image and a text zone have their own members — the type of "
+             "`interface:get(name)` is that of the element."),
     REF_LIST: RefType(
         c_type="int", variable="menu", base=REF_UI_ELEMENT, to_base="ui_list_element",
         ui_kind="list", constant="UILIST_"),
@@ -134,15 +134,15 @@ REF_TYPE_TABLE: dict[str, RefType] = {
         ui_kind="text", constant="REGION_", column="region"),
     REF_LAYER: RefType(
         c_type="int", variable="fond",
-        hint="Un fond est numéroté par le matériel, de 0 à 3 : `layer:get(n)`."),
+        hint="A background is numbered by the hardware, from 0 to 3: `layer:get(n)`."),
     REF_ACTOR: RefType(
         c_type="Actor*", variable="self",
-        hint="Un acteur s'appelle `self:méthode()` sur l'acteur qui exécute le script, ou sur un "
-             "acteur tenu par une variable (`local boss = actor:get(\"Boss\")`)."),
+        hint="An actor is called as `self:method()` on the actor running the script, "
+             "or on an actor held by a variable (`local boss = actor:get(\"Boss\")`)."),
     REF_WINDOW_REGION: RefType(
 
         c_type="int", variable="fenetre",
-        hint="Une région se nomme : `window:get(\"Panneau\")`, \"object\" ou \"outside\"."),
+        hint="A region is named: `window:get(\"Panel\")`, \"object\" or \"outside\"."),
 }
 
 # Les fonds RÉGULIERS (tuilés, à défilement) que chaque mode vidéo GBA offre — un fait du
@@ -530,13 +530,15 @@ RUNTIME_API: dict[str, ApiFunc] = {
         lua_name="actor:move", c_func="actor_move",
         params=[Param("dir", PARAM_VEC2), Param("speed", PARAM_INT)],
         self_first=True,
-        doc="Avance ce frame d'au plus `speed` px dans la direction `dir` (un vec2) — normalisée, donc une diagonale n'avance pas plus vite qu'un axe.",
+        doc=("Moves this frame by at most `speed` px in the direction `dir` (a vec2) —"
+             " normalised, so a diagonal does not move faster than an axis."),
     ),
     "actor:move_to": ApiFunc(
         lua_name="actor:move_to", c_func="actor_move_to",
         params=[Param("target", PARAM_VEC2), Param("speed", PARAM_INT)],
         self_first=True,
-        doc="Avance ce frame d'au plus `speed` px vers la position `target` (un vec2) ; s'arrête pile dessus sans dépasser.",
+        doc=("Moves this frame by at most `speed` px toward the position `target` (a "
+             "vec2); stops exactly on it without overshooting."),
     ),
 
     # ── Physics — vélocité stockée sur l'actor ────────────────────────
@@ -547,8 +549,8 @@ RUNTIME_API: dict[str, ApiFunc] = {
         lua_name="actor:add_velocity", c_func="actor_add_velocity",
         params=[Param("dv", PARAM_VEC2)],
         self_first=True,
-        doc="Ajoute `dv` (un vec2, en Q8 — 256 = 1 px/frame) à la vélocité courante. "
-            "Utile pour l'accélération ou la gravité, frame après frame.",
+        doc="Adds `dv` (a vec2, in Q8 — 256 = 1 px/frame) to the current velocity. "
+            "Useful for acceleration or gravity, frame after frame.",
     ),
     # Le pendant manquant de self.velocity depuis que sa réponse à « comment
     # l'auteur exprime une vélocité fractionnaire » (ROADMAP v0.19,
@@ -561,10 +563,10 @@ RUNTIME_API: dict[str, ApiFunc] = {
     "actor:apply_velocity": ApiFunc(
         lua_name="actor:apply_velocity", c_func="actor_apply_velocity",
         params=[], self_first=True,
-        doc="Ajoute la vélocité courante (self.velocity) à la position, en gardant le "
-            "sous-pixel d'une frame à l'autre — remplace `self.position = self.position "
-            "+ self.velocity`, qui mélangeait deux échelles depuis que self.velocity est "
-            "en Q8. self.position continue de ne rendre que des pixels entiers.",
+        doc="Adds the current velocity (self.velocity) to the position, keeping the "
+            "sub-pixel from one frame to the next — replaces `self.position = "
+            "self.position + self.velocity`, which mixed two scales since "
+            "self.velocity became Q8. self.position still only returns whole pixels.",
     ),
 
     # self.grounded (lecture seule) : cf. RUNTIME_PROPS — « y a-t-il un sol
@@ -575,7 +577,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
         lua_name="actor:play_anim", c_func="actor_play_anim",
         params=[Param("name", PARAM_STR, DOMAIN_ANIM)],
         self_first=True,
-        doc="Démarre l'animation nommée (définie dans le SpriteAsset).",
+        doc="Starts the named animation (defined in the SpriteAsset).",
     ),
     # Apparences (marche 3 de « La struct Actor allégée ») : un acteur affiche UN
     # sprite parmi plusieurs composants sprite ; activer l'un désactive l'autre.
@@ -585,11 +587,11 @@ RUNTIME_API: dict[str, ApiFunc] = {
         lua_name="actor:activate_sprite", c_func="actor_set_appearance",
         params=[Param("id", PARAM_STR, DOMAIN_SPRITE_ID)],
         self_first=True,
-        doc="Active le composant sprite dont l'id est donné (case « Active » de "
-            "l'inspecteur) et désactive celui qui l'était : c'est son sprite qui "
-            "s'affiche désormais. L'animation repart de son premier état. "
-            "Ex: self:activate_sprite(\"blesse\"). Sans effet sur un acteur qui "
-            "n'a qu'une apparence.",
+        doc="Activates the sprite component whose id is given (\"Active\" box of the "
+            "inspector) and deactivates the one that was: its sprite is now the one "
+            "displayed. The animation restarts from its first state. Ex: "
+            "self:activate_sprite(\"hurt\"). No effect on an actor that has a single "
+            "appearance.",
     ),
     # self.frame / self.flip_h / self.flip_v / self.pal / self.obj_mode : cf.
     # RUNTIME_PROPS — l'état de l'acteur se lit/s'écrit en propriétés, pas en
@@ -614,64 +616,68 @@ RUNTIME_API: dict[str, ApiFunc] = {
         lua_name="actor:squash", c_func="actor_squash",
         params=[Param("t", PARAM_INT), Param("duration", PARAM_INT), Param("amount", PARAM_INT)],
         self_first=True,
-        doc="Aplatit le sprite (large et bas) puis revient à 100% en `duration` frames. "
-            "`amount` = intensité en points de %. Ex: impact au sol → self:squash(t, 8, 30).",
+        doc="Flattens the sprite (wide and low) then returns to 100% in `duration` "
+            "frames. `amount` = intensity in percentage points. Ex: ground impact → "
+            "self:squash(t, 8, 30).",
     ),
     "actor:stretch": ApiFunc(
         lua_name="actor:stretch", c_func="actor_stretch",
         params=[Param("t", PARAM_INT), Param("duration", PARAM_INT), Param("amount", PARAM_INT)],
         self_first=True,
-        doc="Étire le sprite (fin et haut) puis revient à 100% en `duration` frames. "
-            "`amount` = intensité en points de %. Ex: départ d'un saut → self:stretch(t, 6, 25).",
+        doc="Stretches the sprite (thin and tall) then returns to 100% in `duration` "
+            "frames. `amount` = intensity in percentage points. Ex: start of a jump →"
+            " self:stretch(t, 6, 25).",
     ),
     "actor:bounce": ApiFunc(
         lua_name="actor:bounce", c_func="actor_bounce",
         params=[Param("t", PARAM_INT), Param("duration", PARAM_INT), Param("amount", PARAM_INT)],
         self_first=True,
-        doc="Décale le sprite vers le haut puis le laisse retomber (self.sprite_offset.y), "
-            "`amount` px d'amplitude sur `duration` frames.",
+        doc="Shifts the sprite upward then lets it fall back (self.sprite_offset.y), "
+            "`amount` px of amplitude over `duration` frames.",
     ),
     "actor:shake": ApiFunc(
         lua_name="actor:shake", c_func="actor_shake",
         params=[Param("t", PARAM_INT), Param("duration", PARAM_INT), Param("amount", PARAM_INT)],
         self_first=True,
-        doc="Fait trembler le sprite (self.sprite_offset aléatoire), `amount` px max, "
-            "retombant à zéro sur `duration` frames. Écrase tout self.sprite_offset déjà posé.",
+        doc="Makes the sprite shake (random self.sprite_offset), `amount` px max, "
+            "fading to zero over `duration` frames. Overwrites any self.sprite_offset"
+            " already set.",
     ),
     "actor:flash": ApiFunc(
         lua_name="actor:flash", c_func="actor_flash",
         params=[Param("t", PARAM_INT), Param("duration", PARAM_INT), Param("pal", PARAM_INT)],
         self_first=True,
-        doc="Bascule sur la banque palette `pal` (self.pal) tant que t < duration, "
-            "puis revient à la banque 0. Ex: dégât → self:flash(t, 4, WHITE_FLASH_BANK).",
+        doc="Switches to palette bank `pal` (self.pal) while t < duration, then "
+            "returns to bank 0. Ex: damage → self:flash(t, 4, WHITE_FLASH_BANK).",
     ),
     "actor:blink": ApiFunc(
         lua_name="actor:blink", c_func="actor_blink",
         params=[Param("t", PARAM_INT), Param("duration", PARAM_INT), Param("interval", PARAM_INT)],
         self_first=True,
-        doc="Bascule self.visible on/off toutes les `interval` frames tant que t < duration, "
-            "puis reste visible. Ex: invincibilité → self:blink(t, 90, 4).",
+        doc="Toggles self.visible on/off every `interval` frames while t < duration, "
+            "then stays visible. Ex: invincibility → self:blink(t, 90, 4).",
     ),
     "actor:pulse": ApiFunc(
         lua_name="actor:pulse", c_func="actor_pulse",
         params=[Param("t", PARAM_INT), Param("duration", PARAM_INT), Param("amount", PARAM_INT)],
         self_first=True,
-        doc="Grossit puis revient à 100% (self.sprite_scale), `amount` points de % "
-            "d'amplitude sur `duration` frames. Ex: objet ramassable → self:pulse(t, 30, 15).",
+        doc="Grows then returns to 100% (self.sprite_scale), `amount` percentage "
+            "points of amplitude over `duration` frames. Ex: collectible object → "
+            "self:pulse(t, 30, 15).",
     ),
     "actor:pop": ApiFunc(
         lua_name="actor:pop", c_func="actor_pop",
         params=[Param("t", PARAM_INT), Param("duration", PARAM_INT), Param("amount", PARAM_INT)],
         self_first=True,
-        doc="Apparition : grossit de 0% jusqu'à 100+`amount`% puis se stabilise à 100%. "
-            "Ex: spawn d'un power-up → self:pop(t, 15, 20).",
+        doc="Appearance: grows from 0% up to 100+`amount`% then settles at 100%. Ex: "
+            "power-up spawn → self:pop(t, 15, 20).",
     ),
     "actor:wobble": ApiFunc(
         lua_name="actor:wobble", c_func="actor_wobble",
         params=[Param("t", PARAM_INT), Param("duration", PARAM_INT), Param("amount", PARAM_INT)],
         self_first=True,
-        doc="Oscille en rotation autour de 0° (self.sprite_rotation), `amount` degrés max, "
-            "amplitude retombant à zéro sur `duration` frames.",
+        doc="Oscillates in rotation around 0° (self.sprite_rotation), `amount` "
+            "degrees max, amplitude fading to zero over `duration` frames.",
     ),
 
     # La direction s'écrivait de trois façons pour un seul état (`dir_x`/`dir_y`)
@@ -682,7 +688,8 @@ RUNTIME_API: dict[str, ApiFunc] = {
     "actor:destroy": ApiFunc(
         lua_name="actor:destroy", c_func="_destroy",  # résolu par codegen
         params=[], self_first=True,
-        doc="Détruit l'actor : appelle on_destroy() puis le désactive (plus d'update, plus de rendu).",
+        doc=("Destroys the actor: calls on_destroy() then deactivates it (no more "
+             "update, no more rendering)."),
     ),
     # self.tag (lecture seule) et self.pal : cf. RUNTIME_PROPS.
 
@@ -692,25 +699,26 @@ RUNTIME_API: dict[str, ApiFunc] = {
     "actor:show": ApiFunc(
         lua_name="actor:show", c_func="actor_set_visible",
         params=[], self_first=True, fixed_args=(1,),
-        doc="Affiche le sprite de l'actor. Ex: self:show()",
+        doc="Shows the actor's sprite. Ex: self:show()",
     ),
     "actor:hide": ApiFunc(
         lua_name="actor:hide", c_func="actor_set_visible",
         params=[], self_first=True, fixed_args=(0,),
-        doc="Cache le sprite de l'actor ; il continue d'exister, d'être mis à "
-            "jour et de heurter. Ex: self:hide()",
+        doc="Hides the actor's sprite; it still exists, is still updated and still "
+            "collides. Ex: self:hide()",
     ),
     "actor:activate": ApiFunc(
         lua_name="actor:activate", c_func="actor_set_active",
         params=[], self_first=True, fixed_args=(1,),
-        doc="Réactive l'actor : update, collisions et rendu reprennent. Ex: other:activate()",
+        doc=("Reactivates the actor: update, collisions and rendering resume. Ex: "
+             "other:activate()"),
     ),
     "actor:deactivate": ApiFunc(
         lua_name="actor:deactivate", c_func="actor_set_active",
         params=[], self_first=True, fixed_args=(0,),
-        doc="Désactive l'actor : plus d'update, de collisions ni de rendu, mais il "
-            "existe toujours (contrairement à destroy) et peut être réactivé. "
-            "Ex: self:deactivate()",
+        doc="Deactivates the actor: no more update, collisions or rendering, but it "
+            "still exists (unlike destroy) and can be reactivated. Ex: "
+            "self:deactivate()",
     ),
 
     # ── Boîtes de collision — une référence typée ───────────────────
@@ -725,34 +733,33 @@ RUNTIME_API: dict[str, ApiFunc] = {
         lua_name="actor:collision_box", c_func="actor_get_box",
         params=[Param("tag", PARAM_STR, DOMAIN_BOX_TAG)],
         ret=REF_COLLISION_BOX, self_first=True,
-        doc='La boîte de collision de cet actor portant ce tag. Rend nil si '
-            'l\'actor n\'en a pas — `if hb then` le teste. Ex: '
-            'local hb = self:collision_box("hitbox")',
+        doc="The collision box of this actor carrying this tag. Returns nil if the "
+            "actor has none — `if hb then` tests it. Ex: local hb = "
+            "self:collision_box(\"hitbox\")",
     ),
     f"{REF_COLLISION_BOX}:overlaps": ApiFunc(
         lua_name="collision_box:overlaps", c_func="collision_box_overlaps_actor",
         params=[Param("other", PARAM_ACTOR)], ret="bool", self_first=True,
-        doc="Cette boîte chevauche-t-elle `other` ? `other` est un actor (n'importe "
-            "laquelle de ses boîtes actives) ou une autre boîte (celle-là "
-            "seulement). Une boîte inactive ne chevauche personne. "
+        doc="Does this box overlap `other`? `other` is an actor (any of its active "
+            "boxes) or another box (only that one). An inactive box overlaps nobody. "
             "Ex: if hb:overlaps(other) then ... end",
     ),
     f"{REF_COLLISION_BOX}:activate": ApiFunc(
         lua_name="collision_box:activate", c_func="collision_box_set_active",
         params=[], self_first=True, fixed_args=(1,),
-        doc="Remet la boîte en jeu : elle heurte de nouveau la carte et les autres "
-            "boîtes. Ex: hb:activate()",
+        doc="Puts the box back in play: it collides with the map and the other boxes "
+            "again. Ex: hb:activate()",
     ),
     f"{REF_COLLISION_BOX}:deactivate": ApiFunc(
         lua_name="collision_box:deactivate", c_func="collision_box_set_active",
         params=[], self_first=True, fixed_args=(0,),
-        doc="Retire la boîte du jeu : elle ne heurte plus rien, sans être "
-            "détruite. Ex: hb:deactivate()",
+        doc="Takes the box out of play: it no longer collides with anything, without "
+            "being destroyed. Ex: hb:deactivate()",
     ),
     "actor:play_sfx": ApiFunc(
         lua_name="actor:play_sfx", c_func="_play_sfx",  # résolu par codegen (SoundFxComponent de l'actor)
         params=[], self_first=True,
-        doc="Joue le Sfx configuré dans le SoundFX component de cet actor.",
+        doc="Plays the Sfx configured in this actor's SoundFX component.",
     ),
 
     # ── Actors ─────────────────────────────────────────────────────
@@ -764,18 +771,27 @@ RUNTIME_API: dict[str, ApiFunc] = {
         # que le checker l'accepte ; sa validation dédiée vit dans _check_spawn_table.
         variadic=True,
         ret="actor",   # rend l'instance née, ou nil si le pool est plein (ROADMAP v0.17 T6)
-        doc='Instancie un prefab poolé à `position` (un vec2) et rend l\'instance née, ou nil si le pool est plein. Une table facultative règle ses exports : actor:spawn("Bullet", pos, { speed = 8, team = "RED" }) ; les clés absentes gardent la valeur du prefab. Ex: local b = actor:spawn("Bullet", vec2(116, 76)); if b then b:set_velocity(0, -2) end.',
+        doc=("Instantiates a pooled prefab at `position` (a vec2) and returns the new "
+             "instance, or nil if the pool is full. An optional table sets its "
+             "exports: actor:spawn(\"Bullet\", pos, { speed = 8, team = \"RED\" }); absent"
+             " keys keep the prefab's value. Ex: local b = actor:spawn(\"Bullet\", "
+             "vec2(116, 76)); if b then b:set_velocity(0, -2) end."),
     ),
     "actor.get": ApiFunc(
         lua_name="actor.get", c_func="_get_actor",   # résolu par codegen
         params=[Param("name", PARAM_STR, DOMAIN_ACTOR)],
         ret="actor",
-        doc='Un acteur de la scène, par NOM (littéral, résolu à la compilation : actor:get("PADDLE_AUTO"):move_to(vec2(120,80),2)) ou par INDEX dynamique 1-based (actor:get(i), de 1 à actor:count(), dans l\'ordre de la scène). Rend nil si absent ou détruit — à tester. Pour lire une position, passe par un local : local p = actor:get(i) ; puis p.position.x.',
+        doc=("An actor of the scene, by NAME (literal, resolved at compile time: "
+             "actor:get(\"PADDLE_AUTO\"):move_to(vec2(120,80),2)) or by dynamic 1-based "
+             "INDEX (actor:get(i), from 1 to actor:count(), in scene order). Returns "
+             "nil if absent or destroyed — to be tested. To read a position, go "
+             "through a local: local p = actor:get(i); then p.position.x."),
     ),
     "actor.count": ApiFunc(
         lua_name="actor.count", c_func="_actor_count",   # résolu par codegen
         params=[], ret="int",
-        doc="Nombre d'acteurs POSÉS de la scène active — la borne de actor:get(i). Ex: for i=1,actor:count() do local a=actor:get(i) ... end.",
+        doc=("Number of actors PLACED in the active scene — the bound of actor:get(i)."
+             " Ex: for i=1,actor:count() do local a=actor:get(i) ... end."),
     ),
 
     # ── Éléments d'interface, typés (ROADMAP v0.16, étape c) ─────────
@@ -795,22 +811,23 @@ RUNTIME_API: dict[str, ApiFunc] = {
         lua_name="interface.get", c_func="_ui_get",   # résolu par codegen
         params=[Param("name", PARAM_STR, DOMAIN_UI_ELEMENT)],
         ret=REF_UI_ELEMENT, ret_by_name=True,
-        doc='Un élément d\'interface par son nom, du type de sa nature dans la mise '
-            'en page (liste, image, zone de texte…). Résolu à la compilation, zéro '
-            'overhead runtime. Ex: interface:get("alerte"):show().',
+        doc="An interface element by its name, of the type of its nature in the "
+            "layout (list, image, text zone…). Resolved at compile time, zero runtime"
+            " overhead. Ex: interface:get(\"alert\"):show().",
     ),
     # Cycle de vie : `show`/`hide` sont deux valeurs du MÊME appel C (`fixed_args`).
     # `visible` (lecture seule, cf. RUNTIME_PROPS) est le seul moyen de lire l'état.
     f"{REF_UI_ELEMENT}:show": ApiFunc(
         lua_name=f"{REF_UI_ELEMENT}:show", c_func="ui_element_show",
         params=[], self_first=True, fixed_args=(1,),
-        doc='Affiche l\'élément (et implicitement ses enfants, sauf s\'ils sont '
-            'cachés individuellement). Ex: interface:get("alerte"):show()',
+        doc="Shows the element (and implicitly its children, unless they are "
+            "individually hidden). Ex: interface:get(\"alert\"):show()",
     ),
     f"{REF_UI_ELEMENT}:hide": ApiFunc(
         lua_name=f"{REF_UI_ELEMENT}:hide", c_func="ui_element_show",
         params=[], self_first=True, fixed_args=(0,),
-        doc='Cache l\'élément et tout son sous-arbre. Ex: interface:get("alerte"):hide()',
+        doc=("Hides the element and its whole subtree. Ex: "
+             "interface:get(\"alert\"):hide()"),
     ),
     # Une LISTE : la navigation d'un menu (ROADMAP v0.22). Le moteur suit un index ; il
     # ne dessine rien. Les rangées sont les zones de texte du panneau, et c'est le script
@@ -821,23 +838,23 @@ RUNTIME_API: dict[str, ApiFunc] = {
     f"{REF_LIST}:row": ApiFunc(
         lua_name=f"{REF_LIST}:row", c_func="ui_list_row",
         params=[Param("r", PARAM_INT)], ret=REF_TEXT_REGION, self_first=True,
-        doc="La zone de texte qui porte la rangée r (1 = la première visible), où "
-            "écrire l'item : menu:row(1):draw(\"Potion\"). Hors bornes, la référence "
-            "vaut -1 et n'écrit rien.",
+        doc="The text zone carrying row r (1 = the first visible), where to write the"
+            " item: menu:row(1):draw(\"Potion\"). Out of bounds, the reference is -1 "
+            "and writes nothing.",
     ),
     f"{REF_LIST}:activate": ApiFunc(
         lua_name=f"{REF_LIST}:activate", c_func="ui_list_set_active",
         params=[], self_first=True, fixed_args=(1,),
-        doc="Donne la croix directionnelle à cette liste. C'est ce qui permet un menu "
-            "et son sous-menu à l'écran en même temps : sans ça, les deux bougent au "
-            "même appui. Ex: menu:activate()",
+        doc="Gives the directional pad to this list. This is what allows a menu and "
+            "its submenu on screen at the same time: without it, both move on the "
+            "same press. Ex: menu:activate()",
     ),
     f"{REF_LIST}:deactivate": ApiFunc(
         lua_name=f"{REF_LIST}:deactivate", c_func="ui_list_set_active",
         params=[], self_first=True, fixed_args=(0,),
-        doc="Retire la main à cette liste : elle reste à l'écran et garde son item "
-            "courant, seule la SÉLECTION est coupée. La cacher (:hide()) est autre "
-            "chose — elle disparaît. Ex: menu:deactivate()",
+        doc="Takes the control away from this list: it stays on screen and keeps its "
+            "current item, only the SELECTION is cut. Hiding it (:hide()) is "
+            "something else — it disappears. Ex: menu:deactivate()",
     ),
     # Une IMAGE : un sprite à état posé sur la mise en page. L'élément est AUTHORÉ dans le
     # canvas (position, sprite, état de départ) et le script ne fait que changer d'état
@@ -847,12 +864,12 @@ RUNTIME_API: dict[str, ApiFunc] = {
     f"{REF_IMAGE}:play": ApiFunc(
         lua_name=f"{REF_IMAGE}:play", c_func="ui_image_play",
         params=[], self_first=True, fixed_args=(1,),
-        doc="Lance le défilement des frames de l'état affiché. Ex: heart:play()",
+        doc="Starts scrolling the frames of the displayed state. Ex: heart:play()",
     ),
     f"{REF_IMAGE}:pause": ApiFunc(
         lua_name=f"{REF_IMAGE}:pause", c_func="ui_image_play",
         params=[], self_first=True, fixed_args=(0,),
-        doc="Fige l'image sur la première frame de son état. Ex: cursor:pause()",
+        doc="Freezes the image on the first frame of its state. Ex: cursor:pause()",
     ),
     # Une ZONE DE TEXTE : c'est ELLE qui écrit, pas un module. La cible (BG ou sprites) ne
     # remonte pas jusqu'ici : c'est une conséquence de l'ancrage du nœud Interface, pas un
@@ -860,14 +877,14 @@ RUNTIME_API: dict[str, ApiFunc] = {
     f"{REF_TEXT_REGION}:draw": ApiFunc(
         lua_name=f"{REF_TEXT_REGION}:draw", c_func="text_draw_in",
         params=[Param("id", PARAM_STR, DOMAIN_TEXT, literal_ok=True)], self_first=True,
-        doc='Affiche un texte dans cette zone. Une clé est traduisible ; un littéral '
-            'peut lire une locale avec `$nom` et tronquer avec `!1` à `!9`. '
-            'Ex: interface:get("boite_bas"):draw("PV : $hp!3")',
+        doc="Displays a text in this zone. A key is translatable; a literal can read "
+            "a local with `$name` and truncate with `!1` to `!9`. Ex: "
+            "interface:get(\"bottom_box\"):draw(\"HP: $hp!3\")",
     ),
     f"{REF_TEXT_REGION}:clear": ApiFunc(
         lua_name=f"{REF_TEXT_REGION}:clear", c_func="text_clear_in",
         params=[], self_first=True,
-        doc='Vide cette zone de texte. Ex: interface:get("boite_bas"):clear()',
+        doc="Clears this text zone. Ex: interface:get(\"bottom_box\"):clear()",
     ),
     # Un texte à tempo (`[speed=4]`, `[pause=30]`) introduit un ÉTAT par zone : il ne
     # s'affiche plus, il se lit (`reading`, cf. RUNTIME_PROPS). `skip` révèle tout d'un
@@ -876,7 +893,8 @@ RUNTIME_API: dict[str, ApiFunc] = {
     f"{REF_TEXT_REGION}:skip": ApiFunc(
         lua_name=f"{REF_TEXT_REGION}:skip", c_func="text_skip",
         params=[], self_first=True,
-        doc='Révèle tout le texte d\'un coup. Ex: if input:pressed("A") then box:skip() end',
+        doc=("Reveals the whole text at once. Ex: if input:pressed(\"A\") then "
+             "box:skip() end"),
     ),
 
     # ── Input ──────────────────────────────────────────────────────
@@ -890,62 +908,60 @@ RUNTIME_API: dict[str, ApiFunc] = {
         lua_name="input.held", c_func="input_held",
         params=[Param("btn", PARAM_STR, DOMAIN_KEY)], variadic=True,
         ret="bool",
-        doc="Vrai si l'accord est tenu ce frame. Avec un 2e argument (frames), "
-            "vrai depuis AU MOINS ce nombre de frames consécutives (appui long).",
+        doc="True if the chord is held this frame. With a 2nd argument (frames), true"
+            " since AT LEAST that number of consecutive frames (long press).",
     ),
     "input.pressed": ApiFunc(
         lua_name="input.pressed", c_func="input_pressed",
         params=[Param("btn", PARAM_STR, DOMAIN_KEY)],
         ret="bool",
-        doc="Vrai si l'accord vient de se compléter (front montant).",
+        doc="True if the chord has just been completed (rising edge).",
     ),
     "input.released": ApiFunc(
         lua_name="input.released", c_func="input_released",
         params=[Param("btn", PARAM_STR, DOMAIN_KEY)],
         ret="bool",
-        doc="Vrai si l'accord était complet au frame précédent et ne l'est "
-            "plus (saut à hauteur variable).",
+        doc="True if the chord was complete on the previous frame and no longer is "
+            "(variable-height jump).",
     ),
     "input.buffered": ApiFunc(
         lua_name="input.buffered", c_func="input_buffered",
         params=[Param("btn", PARAM_STR, DOMAIN_KEY), Param("frames", PARAM_INT)],
         ret="bool",
-        doc="Vrai si l'accord vient d'être pressé dans les `frames` derniers "
-            "frames (tampon de saut) ET que cet appui n'a pas déjà été "
-            "consommé. Répondre vrai CONSOMME l'appui. `frames` doit être un "
-            "nombre écrit en clair (comme wait()) : il fixe la profondeur de "
-            "l'anneau au build. Piège : évaluée avant un `and` qui la suit — "
-            "écrire `if au_sol and input:buffered(...)`, jamais l'inverse, "
-            "pour ne la consommer qu'au bon moment.",
+        doc="True if the chord has just been pressed within the last `frames` frames "
+            "(jump buffer) AND that press has not already been consumed. Answering "
+            "true CONSUMES the press. `frames` must be a plain number (like wait()): "
+            "it sets the depth of the ring at build. Trap: evaluated before an `and` "
+            "that follows it — write `if on_ground and input:buffered(...)`, never "
+            "the reverse, so that it is only consumed at the right moment.",
     ),
     "input.get_sequence": ApiFunc(
         lua_name="input.get_sequence", c_func="input_seq_pressed",
         params=[Param("nom", PARAM_STR, DOMAIN_INPUT_SEQUENCE)],
         ret="bool",
-        doc="Vrai le frame où la séquence déclarée (Project Settings → Input "
-            "→ Séquences) vient de se compléter : son DERNIER pas vient de "
-            "se compléter, les précédents s'étant trouvés en amont, dans "
-            "l'ordre, dans la fenêtre de la séquence.",
+        doc="True on the frame the declared sequence (Project Settings → Input → "
+            "Sequences) has just been completed: its LAST step has just been "
+            "completed, the previous ones having been found earlier, in order, within"
+            " the sequence's window.",
     ),
     "input.get_axis": ApiFunc(
         lua_name="input.get_axis", c_func="input_get_axis",
         params=[Param("x", PARAM_STR, DOMAIN_AXIS)], variadic=True,
         ret="int",
-        doc='Position de l\'axe `x` : -1, 0 ou 1. Avec un 2e argument (y), rend '
-            'un vec2 des deux axes — la forme 2D. "horizontal"/"vertical" sont '
-            "toujours définis (la croix) ; un axe déclaré s'y ajoute.",
+        doc="Position of axis `x`: -1, 0 or 1. With a 2nd argument (y), returns a "
+            "vec2 of both axes — the 2D form. \"horizontal\"/\"vertical\" are always "
+            "defined (the d-pad); a declared axis is added to them.",
     ),
     # ── Audio ──────────────────────────────────────────────────────
     "sfx.play": ApiFunc(
         lua_name="sfx.play", c_func="sfx_play",
         params=[Param("name", PARAM_STR, DOMAIN_SFX)],
         ret=REF_SFX,
-        doc="Joue un effet sonore one-shot. L'appel REND l'effet qui vient de "
-            "démarrer : `sfx:play(\"Bip\")` seul reste le cas courant, "
-            "`local pas = sfx:play(\"Pas\")` le suit ensuite. La référence "
-            "vaut 0 quand maxmod n'en a pas donné — plus aucun canal libre "
-            "(l'effet ne sonne pas), ou les 16 références déjà prises (il "
-            "sonne quand même).",
+        doc="Plays a one-shot sound effect. The call RETURNS the effect that has just"
+            " started: `sfx:play(\"Beep\")` alone remains the common case, `local step "
+            "= sfx:play(\"Step\")` follows it afterwards. The reference is 0 when "
+            "maxmod did not give one — no free channel left (the effect does not "
+            "sound), or the 16 references already taken (it sounds anyway).",
     ),
     # Les cinq méthodes de la référence. Elles ne valent que sur ce qu'un
     # `sfx.play` a rendu : la clé porte le TYPE, pas le nom d'une variable.
@@ -954,69 +970,67 @@ RUNTIME_API: dict[str, ApiFunc] = {
     f"{REF_SFX}:stop": ApiFunc(
         lua_name="sfx:stop", c_func="sfx_stop",
         params=[], self_first=True,
-        doc="Coupe cet effet. Sans effet s'il est déjà terminé.",
+        doc="Cuts this effect. No effect if it has already finished.",
     ),
     f"{REF_SFX}:playing": ApiFunc(
         lua_name="sfx:playing", c_func="sfx_is_playing",
         params=[], ret="int", self_first=True,
-        doc="Vrai tant que cet effet sonne.",
+        doc="True while this effect is sounding.",
     ),
     f"{REF_SFX}:set_volume": ApiFunc(
         lua_name="sfx:set_volume", c_func="sfx_set_volume",
         params=[Param("percent", PARAM_INT)], self_first=True,
-        doc="Règle le volume de CET effet, en pourcentage (100 = le niveau de "
-            "la ressource). Sans rapport avec `sound_box.set_volume`, qui règle "
-            "la catégorie entière.",
+        doc="Sets the volume of THIS effect, as a percentage (100 = the level of the "
+            "resource). Unrelated to `sound_box.set_volume`, which sets the whole "
+            "category.",
     ),
     f"{REF_SFX}:set_pitch": ApiFunc(
         lua_name="sfx:set_pitch", c_func="sfx_set_pitch",
         params=[Param("percent", PARAM_INT)], self_first=True,
-        doc="Règle la hauteur de CET effet, en pourcentage de sa hauteur "
-            "d'origine — 200 = une octave au-dessus, 50 = une octave en "
-            "dessous. La valeur est absolue : la même donne la même hauteur, "
-            "quel que soit le nombre d'appels.",
+        doc="Sets the pitch of THIS effect, as a percentage of its original pitch — "
+            "200 = one octave above, 50 = one octave below. The value is absolute: "
+            "the same one gives the same pitch, whatever the number of calls.",
     ),
     f"{REF_SFX}:set_panning": ApiFunc(
         lua_name="sfx:set_panning", c_func="sfx_set_panning",
         params=[Param("panning", PARAM_INT)], self_first=True,
-        doc="Place cet effet dans le champ stéréo : −100 à gauche, 0 au "
-            "centre, +100 à droite.",
+        doc="Places this effect in the stereo field: −100 left, 0 centre, +100 right.",
     ),
     "music.play": ApiFunc(
         lua_name="music.play", c_func="music_play",
         params=[Param("name", PARAM_STR, DOMAIN_MUSIC)],
-        doc="Démarre une piste musicale (en boucle).",
+        doc="Starts a music track (looping).",
     ),
     "music.stop": ApiFunc(
         lua_name="music.stop", c_func="music_stop",
         params=[],
-        doc="Arrête la musique.",
+        doc="Stops the music.",
     ),
     # Pas de référence côté musique : il n'y a qu'un module à la fois sur cette
     # console, donc rien à tenir — l'appel désigne le seul qui puisse jouer.
     "music.pause": ApiFunc(
         lua_name="music.pause", c_func="music_pause",
         params=[],
-        doc="Suspend la musique là où elle en est. `music:resume()` la reprend "
-            "au même endroit.",
+        doc="Pauses the music where it is. `music:resume()` resumes it at the same "
+            "place.",
     ),
     "music.resume": ApiFunc(
         lua_name="music.resume", c_func="music_resume",
         params=[],
-        doc="Reprend la musique suspendue.",
+        doc="Resumes the paused music.",
     ),
     "music.is_playing": ApiFunc(
         lua_name="music.is_playing", c_func="music_is_playing",
         params=[], ret="int",
-        doc="Vrai tant qu'un module joue. Faux après `music:stop()`, vrai "
-            "pendant une pause.",
+        doc="True while a module is playing. False after `music:stop()`, true during "
+            "a pause.",
     ),
     "music.set_volume": ApiFunc(
         lua_name="music.set_volume", c_func="music_set_volume",
         params=[Param("percent", PARAM_INT)],
-        doc="Règle le volume de la musique, en pourcentage. C'est le SEUL "
-            "niveau de la couche module : le matériel n'a qu'un scaler, et "
-            "aucune boîte n'en ajoute un deuxième.",
+        doc="Sets the music volume, as a percentage. It is the ONLY level of the "
+            "module layer: the hardware has a single scaler, and no box adds a second"
+            " one.",
     ),
     # Le jingle : la seule superposition que la console autorise. Il ne boucle
     # pas, prend jusqu'à 4 des 8 canaux, et il n'y en a qu'un à la fois — trois
@@ -1024,52 +1038,49 @@ RUNTIME_API: dict[str, ApiFunc] = {
     "sound_box.set_state": ApiFunc(
         lua_name="sound_box.set_state", c_func="sound_box_set_state",
         params=[Param("state", PARAM_STR, DOMAIN_SOUND_BOX_STATE)],
-        doc="Change l'état de la SoundBox — « le sol est du sable », « on est "
-            "en vol ». Les actions posées sur les frames d'animation se "
-            "résolvent alors vers les échantillons de ce nouvel état : le même "
-            "cycle de marche sonne le sable ou les cailloux sans être authoré "
-            "deux fois.",
+        doc="Changes the state of the SoundBox — \"the floor is sand\", \"we are "
+            "flying\". The actions placed on the animation frames then resolve to the "
+            "samples of this new state: the same walk cycle sounds like sand or like "
+            "pebbles without being authored twice.",
     ),
     "jingle_box.set_state": ApiFunc(
         lua_name="jingle_box.set_state", c_func="jingle_box_set_state",
         params=[Param("state", PARAM_STR, DOMAIN_JINGLE_BOX_STATE)],
-        doc="Change l'état de la JingleBox : vers quel module chaque "
-            "action de jingle pointe désormais.",
+        doc="Changes the state of the JingleBox: which module each jingle action now "
+            "points to.",
     ),
     "sound_box.set_volume": ApiFunc(
         lua_name="sound_box.set_volume", c_func="sfx_set_effects_volume",
         params=[Param("percent", PARAM_INT)],
-        doc="Règle le volume de TOUS les effets, en pourcentage. C'est un "
-            "réglage de mixage : il multiplie le volume propre de chaque "
-            "effet, il ne le remplace pas.",
+        doc="Sets the volume of ALL effects, as a percentage. It is a mixing setting:"
+            " it multiplies the own volume of each effect, it does not replace it.",
     ),
     "jingle_box.set_volume": ApiFunc(
         lua_name="jingle_box.set_volume", c_func="music_jingle_volume",
         params=[Param("percent", PARAM_INT)],
-        doc="Règle le volume de la couche jingle, en pourcentage. Avec "
-            "`music.set_volume`, c'est la moitié du duck : la musique "
-            "s'efface pendant la fanfare, puis remonte.",
+        doc="Sets the volume of the jingle layer, as a percentage. Together with "
+            "`music.set_volume`, it is half of the duck: the music fades out during "
+            "the fanfare, then comes back up.",
     ),
     "music_box.trigger": ApiFunc(
         lua_name="music_box.trigger", c_func="music_box_trigger",
         params=[Param("trigger", PARAM_STR, DOMAIN_MUSIC_BOX_TRIGGER)],
-        doc="Émet un déclencheur de la MusicBox. C'est la BOÎTE qui décide "
-            "vers quel état il mène et par quelle transition — le script dit "
-            "seulement qu'il s'est passé quelque chose.",
+        doc="Emits a trigger of the MusicBox. The BOX decides which state it leads to"
+            " and through which transition — the script only says that something "
+            "happened.",
     ),
     "music.jingle": ApiFunc(
         lua_name="music.jingle", c_func="music_jingle",
         params=[Param("name", PARAM_STR, DOMAIN_MUSIC)],
-        doc="Joue un module PAR-DESSUS la musique en cours, sans l'arrêter — "
-            "une fanfare de victoire, un carillon. Il ne boucle jamais et se "
-            "termine seul. Un seul à la fois, et il prend jusqu'à 4 des 8 "
-            "canaux du projet. C'est la seule façon de faire sonner deux "
-            "musiques ensemble sur cette console.",
+        doc="Plays a module OVER the current music, without stopping it — a victory "
+            "fanfare, a chime. It never loops and ends by itself. Only one at a time,"
+            " and it takes up to 4 of the project's 8 channels. It is the only way to"
+            " make two musics sound together on this console.",
     ),
     "music.jingle_playing": ApiFunc(
         lua_name="music.jingle_playing", c_func="music_jingle_playing",
         params=[], ret="int",
-        doc="Vrai tant qu'un jingle sonne.",
+        doc="True while a jingle is sounding.",
     ),
 
     # Les DEUX transitions du matériel. Il n'y en a pas de troisième : maxmod
@@ -1079,26 +1090,25 @@ RUNTIME_API: dict[str, ApiFunc] = {
         lua_name="music.fade_to", c_func="music_fade_to",
         params=[Param("name", PARAM_STR, DOMAIN_MUSIC),
                 Param("frames", PARAM_INT)],
-        doc="Passe à une autre piste par un fondu traversant : le volume tombe "
-            "à zéro, la piste change, le volume remonte. Marche entre deux "
-            "morceaux quelconques, au prix d'un creux audible. `frames` est la "
-            "durée totale des deux moitiés.",
+        doc="Switches to another track with a cross fade: the volume drops to zero, "
+            "the track changes, the volume comes back up. Works between any two "
+            "songs, at the cost of an audible dip. `frames` is the total duration of "
+            "both halves.",
     ),
     "music.cut_to": ApiFunc(
         lua_name="music.cut_to", c_func="music_cut_to",
         params=[Param("name", PARAM_STR, DOMAIN_MUSIC)],
-        doc="Passe à une autre piste SANS creux, à la fin du motif en cours, "
-            "en reprenant à la même position. C'est ce qui enchaîne deux "
-            "variantes d'un même morceau — la batterie qui entre, le thème qui "
-            "s'intensifie. Les deux pistes doivent avoir la même structure ; le "
-            "validateur le vérifie.",
+        doc="Switches to another track WITHOUT a dip, at the end of the current "
+            "pattern, resuming at the same position. This is what chains two variants"
+            " of the same song — the drums coming in, the theme intensifying. Both "
+            "tracks must have the same structure; the validator checks it.",
     ),
 
     # ── Scènes ─────────────────────────────────────────────────────
     "scene.switch": ApiFunc(
         lua_name="scene.switch", c_func="scene_switch",
         params=[Param("name", PARAM_STR, DOMAIN_SCENE)],
-        doc="Passe à une autre scène au début de la prochaine frame.",
+        doc="Switches to another scene at the start of the next frame.",
     ),
 
     # ── Langue (ROADMAP v0.9, phase 4) ───────────────────────────────
@@ -1112,14 +1122,14 @@ RUNTIME_API: dict[str, ApiFunc] = {
     "lang.set": ApiFunc(
         lua_name="lang.set", c_func="lang_set",
         params=[Param("code", PARAM_STR, DOMAIN_LANG)],
-        doc="Change la langue active et recharge la scène courante pour "
-            "l'appliquer (comme un scene.switch vers elle-même — acteurs et "
-            "état de scène repartent à zéro). Ex: lang:set(\"fr\").",
+        doc="Changes the active language and reloads the current scene to apply it "
+            "(like a scene.switch to itself — actors and scene state restart from "
+            "zero). Ex: lang:set(\"fr\").",
     ),
     "lang.get": ApiFunc(
         lua_name="lang.get", c_func="lang_get",
         params=[], ret="int",
-        doc="La langue active — un index (0 = la source), comparable à "
+        doc="The active language — an index (0 = the source), comparable to "
             "LANG_<CODE>. Ex: if lang:get() == LANG_FR then ... end.",
     ),
 
@@ -1155,10 +1165,10 @@ RUNTIME_API: dict[str, ApiFunc] = {
         params=[Param("taille", PARAM_INT)],
         variadic=True,
         ret="int",
-        doc="Déclare un tableau d'entiers rempli de zéros : local sac = array(8). "
-            "Deux tailles pour une grille — array(20, 12) se lit grille[1..20][1..12]. "
-            "La taille est fixée au build ; les tableaux sont indexés à partir de 1, "
-            "et #sac vaut leur taille.",
+        doc="Declares an array of integers filled with zeros: local bag = array(8). "
+            "Two sizes for a grid — array(20, 12) is read grid[1..20][1..12]. The "
+            "size is fixed at build; arrays are indexed from 1, and #bag is their "
+            "size.",
     ),
 
     # ── Diagnostic (ROADMAP v0.14) ───────────────────────────────────
@@ -1173,10 +1183,10 @@ RUNTIME_API: dict[str, ApiFunc] = {
     "debug.log": ApiFunc(
         lua_name="debug.log", c_func="_debug_log",   # résolu par codegen
         params=[], variadic=True,
-        doc='Écrit une ligne dans le journal mGBA — jamais à l\'écran du jeu. '
-            'Concatène ses arguments, chacun déjà une chaîne ou un entier : '
-            'debug:log("hp=", hp, " x=", x). Sans effet, et retiré de la ROM, '
-            'hors build debug (réglage du projet).',
+        doc="Writes a line in the mGBA log — never on the game screen. Concatenates "
+            "its arguments, each already a string or an integer: debug:log(\"hp=\", hp,"
+            " \" x=\", x). No effect, and removed from the ROM, outside a debug build "
+            "(project setting).",
     ),
 
     # ── Affichage texte : voir `text.*` (cf. REMOVED_API) ─────────
@@ -1200,13 +1210,14 @@ RUNTIME_API: dict[str, ApiFunc] = {
             Param("margin_x", PARAM_INT),
             Param("margin_y", PARAM_INT),
         ],
-        doc="Suit `target` (un vec2) avec une zone morte. Ex: camera:follow(camera.position, 40, 20)",
+        doc=("Follows `target` (a vec2) with a dead zone. Ex: "
+             "camera:follow(camera.position, 40, 20)"),
     ),
     "camera.switch": ApiFunc(
         lua_name="camera.switch", c_func="camera_switch",
         params=[Param("name", PARAM_STR, DOMAIN_CAMERA)],
-        doc="Active une autre caméra du projet — son cadrage et ses bornes sont posés "
-            "immédiatement. Une seule caméra est active à la fois.",
+        doc="Activates another camera of the project — its framing and bounds are set"
+            " immediately. Only one camera is active at a time.",
     ),
     # ── Séquences ────────────────────────────────────────────────
     # Un seul entier porte l'état d'une séquence : 0 = arrêtée, 1..N = l'étape
@@ -1217,51 +1228,52 @@ RUNTIME_API: dict[str, ApiFunc] = {
     "sequence.start": ApiFunc(
         lua_name="sequence.start", c_func="",
         params=[Param("name", PARAM_STR, DOMAIN_SEQUENCE)],
-        doc="Démarre (ou redémarre depuis le début) la séquence `on_sequence_<name>` "
-            "de ce script. Ex: sequence:start(\"intro\")",
+        doc="Starts (or restarts from the beginning) the sequence "
+            "`on_sequence_<name>` of this script. Ex: sequence:start(\"intro\")",
     ),
     "sequence.stop": ApiFunc(
         lua_name="sequence.stop", c_func="",
         params=[Param("name", PARAM_STR, DOMAIN_SEQUENCE)],
-        doc="Arrête la séquence en cours de route. Elle ne reprend pas où elle en "
-            "était : un `sequence.start` la relance depuis le début.",
+        doc="Stops the sequence midway. It does not resume where it was: a "
+            "`sequence.start` restarts it from the beginning.",
     ),
     "sequence.running": ApiFunc(
         lua_name="sequence.running", c_func="",
         params=[Param("name", PARAM_STR, DOMAIN_SEQUENCE)], ret="bool",
-        doc="Vrai tant que la séquence n'a pas atteint sa dernière ligne. "
-            "Ex: if not sequence:running(\"intro\") then … end",
+        doc="True as long as the sequence has not reached its last line. Ex: if not "
+            "sequence:running(\"intro\") then … end",
     ),
 
     "camera.shake": ApiFunc(
         lua_name="camera.shake", c_func="camera_shake",
         params=[Param("amplitude", PARAM_INT), Param("frames", PARAM_INT)],
-        doc="Secoue la caméra : amplitude en pixels, retombant à zéro sur la durée. "
-            "Ex: camera:shake(4, 20)",
+        doc="Shakes the camera: amplitude in pixels, fading to zero over the "
+            "duration. Ex: camera:shake(4, 20)",
     ),
 
     # ── Maths ────────────────────────────────────────────────────
     "math.abs": ApiFunc(
         lua_name="math.abs", c_func="math_abs",
         params=[Param("x", PARAM_INT)], ret="int",
-        doc="Valeur absolue entière.",
+        doc="Integer absolute value.",
     ),
     "math.clamp": ApiFunc(
         lua_name="math.clamp", c_func="math_clamp",
         params=[Param("x", PARAM_INT), Param("lo", PARAM_INT), Param("hi", PARAM_INT)],
         ret="int",
-        doc="Bloque x entre lo et hi.",
+        doc="Clamps x between lo and hi.",
     ),
     "math.rand": ApiFunc(
         lua_name="math.rand", c_func="math_rand",
         params=[Param("lo", PARAM_INT), Param("hi", PARAM_INT)],
         ret="int",
-        doc="Entier aléatoire entre lo et hi inclus. Ex: math.rand(1, 3) → 1, 2 ou 3.",
+        doc=("Random integer between lo and hi inclusive. Ex: math.rand(1, 3) → 1, 2 "
+             "or 3."),
     ),
     "math.sign": ApiFunc(
         lua_name="math.sign", c_func="math_sign",
         params=[Param("x", PARAM_INT)], ret="int",
-        doc="Signe de x : retourne -1, 0 ou 1.",
+        doc="Sign of x: returns -1, 0 or 1.",
     ),
     "math.min": ApiFunc(
         lua_name="math.min", c_func="math_min",
@@ -1277,41 +1289,42 @@ RUNTIME_API: dict[str, ApiFunc] = {
         lua_name="math.lerp", c_func="math_lerp",
         params=[Param("a", PARAM_INT), Param("b", PARAM_INT), Param("num", PARAM_INT), Param("den", PARAM_INT)],
         ret="int",
-        doc="Interpole linéairement entre a et b à la fraction num/den. "
-            "Ex: math.lerp(0, 100, frame, 30) glisse de 0 à 100 sur 30 frames.",
+        doc="Linearly interpolates between a and b at the fraction num/den. Ex: "
+            "math.lerp(0, 100, frame, 30) slides from 0 to 100 over 30 frames.",
     ),
     "math.ease": ApiFunc(
         lua_name="math.ease", c_func="math_ease",
         params=[Param("a", PARAM_INT), Param("b", PARAM_INT), Param("num", PARAM_INT), Param("den", PARAM_INT),
                 Param("kind", PARAM_STR, DOMAIN_EASE)],
         ret="int",
-        doc='Comme math.lerp, mais en courbant la fraction avant de l\'appliquer. '
-            '"in" démarre lentement et accélère, "out" démarre vite et ralentit, '
-            '"in_out" combine les deux. Ex: math.ease(0, 100, frame, 30, "out").',
+        doc="Like math.lerp, but bending the fraction before applying it. \"in\" starts"
+            " slowly and accelerates, \"out\" starts fast and slows down, \"in_out\" "
+            "combines both. Ex: math.ease(0, 100, frame, 30, \"out\").",
     ),
     "math.sin": ApiFunc(
         lua_name="math.sin", c_func="math_sin",
         params=[Param("deg", PARAM_INT)], ret="int",
-        doc="Sinus de deg (degrés), en fixe Q8 (×256 : -256 à 256, pas de virgule "
-            "flottante sur GBA) — la même échelle que la matrice affine du sprite. "
-            "Ex: dx = amount * math.sin(deg) / 256.",
+        doc="Sine of deg (degrees), in Q8 fixed point (×256: -256 to 256, no floating"
+            " point on the GBA) — the same scale as the sprite's affine matrix. Ex: "
+            "dx = amount * math.sin(deg) / 256.",
     ),
     "math.cos": ApiFunc(
         lua_name="math.cos", c_func="math_cos",
         params=[Param("deg", PARAM_INT)], ret="int",
-        doc="Cosinus de deg (degrés), en fixe Q8 (×256), même échelle que math.sin.",
+        doc=("Cosine of deg (degrees), in Q8 fixed point (×256), same scale as "
+             "math.sin."),
     ),
     "math.sqrt": ApiFunc(
         lua_name="math.sqrt", c_func="math_sqrt",
         params=[Param("x", PARAM_INT)], ret="int",
-        doc="Racine carrée entière (tronquée). x négatif ou nul → 0.",
+        doc="Integer square root (truncated). Negative or zero x → 0.",
     ),
     "math.atan2": ApiFunc(
         lua_name="math.atan2", c_func="math_atan2",
         params=[Param("y", PARAM_INT), Param("x", PARAM_INT)], ret="int",
-        doc="Angle en degrés (0-359) du vecteur (x, y) — même convention d'axes que "
-            "self.rotation, donc self.rotation = math.atan2(vel.y, vel.x) oriente "
-            "l'actor dans le sens de sa vélocité.",
+        doc="Angle in degrees (0-359) of the vector (x, y) — same axis convention as "
+            "self.rotation, so self.rotation = math.atan2(vel.y, vel.x) orients the "
+            "actor along its velocity.",
     ),
 
     # ── Scène ──────────────────────────────────────────────────────
@@ -1322,13 +1335,12 @@ RUNTIME_API: dict[str, ApiFunc] = {
     f"{REF_COLLISION_BOX}:get_collision_tile": ApiFunc(
         lua_name="collision_box:get_collision_tile", c_func="collision_box_get_collision_tile",
         params=[Param("x", PARAM_INT), Param("y", PARAM_INT)], ret="int", self_first=True,
-        doc="Type de tile de la carte de collision à la position monde (x, y) en "
-            "pixels. 0 = vide (ou hors carte). Le point est absolu : il ne dépend "
-            "pas de cette boîte, qui sert seulement de porte d'entrée (le verbe "
-            "`get` est juste : le tile n'est pas un champ de la boîte, c'est une "
-            "question posée à la carte). Utile pour des déclencheurs non solides "
-            "(pièces, zones de spawn, poison). "
-            "Ex: local t = hb:get_collision_tile(hb.bounds.x, hb.bounds.y + hb.bounds.h)",
+        doc="Type of the collision map tile at the world position (x, y) in pixels. 0"
+            " = empty (or off the map). The point is absolute: it does not depend on "
+            "this box, which only serves as an entry point (the verb `get` is right: "
+            "the tile is not a field of the box, it is a question asked to the map). "
+            "Useful for non-solid triggers (coins, spawn zones, poison). Ex: local t "
+            "= hb:get_collision_tile(hb.bounds.x, hb.bounds.y + hb.bounds.h)",
     ),
 
     # ── Fonds (layers) — une référence NUMÉROTÉE par le matériel ───────
@@ -1343,25 +1355,26 @@ RUNTIME_API: dict[str, ApiFunc] = {
     "layer.get": ApiFunc(
         lua_name="layer.get", c_func="_layer_get",   # résolu par codegen
         params=[Param("n", PARAM_INT)], ret=REF_LAYER,
-        doc="Le fond `n` de la scène, de 0 à 3 (le numéro de l'inspecteur de scène). Résolu à "
-            "la compilation ; un numéro écrit en clair hors de 0-3 est refusé. "
-            "Ex: layer:get(2):hide()",
+        doc="Background `n` of the scene, from 0 to 3 (the number in the scene "
+            "inspector). Resolved at compile time; a number written plainly outside "
+            "0-3 is refused. Ex: layer:get(2):hide()",
 
     ),
     f"{REF_LAYER}:show": ApiFunc(
         lua_name=f"{REF_LAYER}:show", c_func="layer_show",
         params=[], self_first=True, fixed_args=(1,),
-        doc="Affiche le fond. Ex: layer:get(2):show()",
+        doc="Shows the background. Ex: layer:get(2):show()",
     ),
     f"{REF_LAYER}:hide": ApiFunc(
         lua_name=f"{REF_LAYER}:hide", c_func="layer_show",
         params=[], self_first=True, fixed_args=(0,),
-        doc="Cache le fond. Ex: layer:get(2):hide()",
+        doc="Hides the background. Ex: layer:get(2):hide()",
     ),
     f"{REF_LAYER}:scroll_by": ApiFunc(
         lua_name=f"{REF_LAYER}:scroll_by", c_func="layer_scroll_by",
         params=[Param("dx", PARAM_INT), Param("dy", PARAM_INT)], self_first=True,
-        doc="Ajoute (dx, dy) au décalage propre du fond. Ex: nuages qui dérivent seuls.",
+        doc=("Adds (dx, dy) to the background's own offset. Ex: clouds drifting on "
+             "their own."),
     ),
     # tx/ty en TUILES dans la map du fond (pas en pixels monde) ; les coordonnées
     # wrappent comme le hardware.
@@ -1369,31 +1382,34 @@ RUNTIME_API: dict[str, ApiFunc] = {
         lua_name=f"{REF_LAYER}:set_tile", c_func="tilemap_set",
         params=[Param("tx", PARAM_INT), Param("ty", PARAM_INT), Param("tile", PARAM_INT)],
         self_first=True,
-        doc="Pose la tuile d'index `tile` en (tx, ty) sur le fond. Conserve le flip et la palette de la case.",
+        doc=("Sets the tile of index `tile` at (tx, ty) on the background. Keeps the "
+             "flip and the palette of the cell."),
     ),
     f"{REF_LAYER}:get_tile": ApiFunc(
         lua_name=f"{REF_LAYER}:get_tile", c_func="tilemap_get",
         params=[Param("tx", PARAM_INT), Param("ty", PARAM_INT)], ret="int", self_first=True,
-        doc="Index de tuile actuellement en (tx, ty) sur le fond.",
+        doc="Tile index currently at (tx, ty) on the background.",
     ),
     f"{REF_LAYER}:set_tile_palette": ApiFunc(
         lua_name=f"{REF_LAYER}:set_tile_palette", c_func="tilemap_set_palette",
         params=[Param("tx", PARAM_INT), Param("ty", PARAM_INT), Param("bank", PARAM_INT)],
         self_first=True,
-        doc="Repeint la case (tx, ty) avec la banque de palette `bank` (0-15) — l'inpainting, au runtime.",
+        doc=("Repaints the cell (tx, ty) with the palette bank `bank` (0-15) — "
+             "inpainting, at runtime."),
     ),
     f"{REF_LAYER}:set_tile_flip": ApiFunc(
         lua_name=f"{REF_LAYER}:set_tile_flip", c_func="tilemap_set_flip",
         params=[Param("tx", PARAM_INT), Param("ty", PARAM_INT),
                 Param("h", PARAM_BOOL), Param("v", PARAM_BOOL)], self_first=True,
-        doc="Retourne la case (tx, ty) horizontalement et/ou verticalement.",
+        doc="Flips the cell (tx, ty) horizontally and/or vertically.",
     ),
     f"{REF_LAYER}:fill": ApiFunc(
         lua_name=f"{REF_LAYER}:fill", c_func="tilemap_fill",
         params=[Param("tx", PARAM_INT), Param("ty", PARAM_INT),
                 Param("w", PARAM_INT), Param("h", PARAM_INT), Param("tile", PARAM_INT)],
         self_first=True,
-        doc="Remplit un rectangle de w×h tuiles à partir de (tx, ty) avec la tuile `tile`.",
+        doc=("Fills a rectangle of w×h tiles starting at (tx, ty) with the tile "
+             "`tile`."),
     ),
 
     # ── Texte ──────────────────────────────────────────────────────
@@ -1415,27 +1431,28 @@ RUNTIME_API: dict[str, ApiFunc] = {
         lua_name="text.draw", c_func="text_draw",
         params=[Param("tx", PARAM_INT), Param("ty", PARAM_INT),
                 Param("id", PARAM_STR, DOMAIN_TEXT, literal_ok=True)],
-        doc='Affiche un texte du projet à (tx, ty), en tuiles — une clé de la '
-            'table, ou un littéral écrit sur place (qui ne se traduira pas). '
-            'Dans un littéral, `$nom` lit une locale visible, ou une globale '
-            'si aucune locale ne la masque ; `$nom!3` tronque l’affichage à '
-            'trois caractères (maximum `!9`). Ex: text:draw(2, 16, "PV : $hp!3")',
+        doc="Displays a project text at (tx, ty), in tiles — a key of the table, or a"
+            " literal written in place (which will not be translated). In a literal, "
+            "`$name` reads a visible local, or a global if no local hides it; "
+            "`$name!3` truncates the display to three characters (maximum `!9`). Ex: "
+            "text:draw(2, 16, \"HP: $hp!3\")",
     ),
     "text.clear": ApiFunc(
         lua_name="text.clear", c_func="text_clear",
         params=[Param("tx", PARAM_INT), Param("ty", PARAM_INT),
                 Param("w", PARAM_INT), Param("h", PARAM_INT)],
-        doc="Efface un rectangle de w×h tuiles sur le layer d'UI.",
+        doc="Clears a rectangle of w×h tiles on the UI layer.",
     ),
     "text.length": ApiFunc(
         lua_name="text.length", c_func="text_length",
         params=[Param("id", PARAM_STR, DOMAIN_TEXT)], ret="int",
-        doc="Nombre de caractères d'un texte — la borne de la machine à écrire.",
+        doc="Number of characters of a text — the bound of the typewriter.",
     ),
     "text.set_font": ApiFunc(
         lua_name="text.set_font", c_func="text_set_font",
         params=[Param("f", PARAM_STR, DOMAIN_FONT)],
-        doc='Charge une police en mémoire vidéo. Une seule à la fois. Ex: text:set_font("Pixelia")',
+        doc=("Loads a font into video memory. Only one at a time. Ex: "
+             "text:set_font(\"Pixelia\")"),
     ),
 
 
@@ -1452,44 +1469,48 @@ RUNTIME_API: dict[str, ApiFunc] = {
     "window.get": ApiFunc(
         lua_name="window.get", c_func="_window_get",   # résolu par codegen
         params=[Param("name", PARAM_STR, DOMAIN_WIN_REGION)], ret=REF_WINDOW_REGION,
-        doc='Une région du pochoir : un nom de WindowSlot, "object" (la fenêtre-objet) ou '
-            '"outside". Résolu à la compilation. Ex: window:get("Panneau"):show()',
+        doc="A region of the stencil: the name of a WindowSlot, \"object\" (the object "
+            "window) or \"outside\". Resolved at compile time. Ex: "
+            "window:get(\"Panel\"):show()",
     ),
     f"{REF_WINDOW_REGION}:show": ApiFunc(
         lua_name=f"{REF_WINDOW_REGION}:show", c_func="window_show",
         params=[], self_first=True, fixed_args=(1,),
-        doc="Active la window : un WindowSlot, ou la fenêtre-objet. Ex: window:get(\"Panneau\"):show()",
+        doc=("Activates the window: a WindowSlot, or the object window. Ex: "
+             "window:get(\"Panel\"):show()"),
     ),
     f"{REF_WINDOW_REGION}:hide": ApiFunc(
         lua_name=f"{REF_WINDOW_REGION}:hide", c_func="window_show",
         params=[], self_first=True, fixed_args=(0,),
-        doc="Désactive la window. Ex: window:get(\"Panneau\"):hide()",
+        doc="Deactivates the window. Ex: window:get(\"Panel\"):hide()",
     ),
     f"{REF_WINDOW_REGION}:set": ApiFunc(
         lua_name=f"{REF_WINDOW_REGION}:set", c_func="window_set",
         params=[Param("x", PARAM_INT), Param("y", PARAM_INT),
                 Param("w", PARAM_INT), Param("h", PARAM_INT)], self_first=True,
-        doc="Rectangle en pixels écran d'un WindowSlot. Clampé à 240×160.",
+        doc="Rectangle in screen pixels of a WindowSlot. Clamped to 240×160.",
     ),
     f"{REF_WINDOW_REGION}:set_layer": ApiFunc(
         lua_name=f"{REF_WINDOW_REGION}:set_layer", c_func="window_set_layer",
         params=[Param("bg", PARAM_INT), Param("on", PARAM_BOOL)], self_first=True,
-        doc="Autorise ou non le fond `bg` dans la région (un WindowSlot, la fenêtre-objet ou l'extérieur).",
+        doc=("Allows or not the background `bg` in the region (a WindowSlot, the "
+             "object window or the outside)."),
     ),
     f"{REF_WINDOW_REGION}:get_layer": ApiFunc(
         lua_name=f"{REF_WINDOW_REGION}:get_layer", c_func="window_get_layer",
         params=[Param("bg", PARAM_INT)], ret="int", self_first=True,
-        doc="1 si le fond `bg` est autorisé dans la région, 0 sinon.",
+        doc="1 if the background `bg` is allowed in the region, 0 otherwise.",
     ),
     f"{REF_WINDOW_REGION}:set_obj": ApiFunc(
         lua_name=f"{REF_WINDOW_REGION}:set_obj", c_func="window_set_obj",
         params=[Param("on", PARAM_BOOL)], self_first=True,
-        doc="Autorise ou non les sprites dans la région.",
+        doc="Allows or not the sprites in the region.",
     ),
     f"{REF_WINDOW_REGION}:set_blend": ApiFunc(
         lua_name=f"{REF_WINDOW_REGION}:set_blend", c_func="window_set_blend",
         params=[Param("on", PARAM_BOOL)], self_first=True,
-        doc="Autorise ou non le blending dans la région. Assombrir le monde SAUF un panneau = blending activé dans la région 3, coupé dans la 0.",
+        doc=("Allows or not blending in the region. Darkening the world EXCEPT a panel"
+             " = blending enabled in region 3, off in region 0."),
     ),
 
     # ── Blend ──────────────────────────────────────────────────────
@@ -1509,14 +1530,14 @@ RUNTIME_API: dict[str, ApiFunc] = {
     "palette.set_bg": ApiFunc(
         lua_name="palette.set_bg", c_func="palette_set_bg",
         params=[Param("bank", PARAM_INT), Param("p", PARAM_STR, DOMAIN_PALETTE)],
-        doc='Remplace les couleurs de la banque de FOND `bank` (0-15). '
-            'Ex: palette:set_bg(0, "Nuit")',
+        doc="Replaces the colours of the BACKGROUND bank `bank` (0-15). Ex: "
+            "palette:set_bg(0, \"Night\")",
     ),
     "palette.set_obj": ApiFunc(
         lua_name="palette.set_obj", c_func="palette_set_obj",
         params=[Param("bank", PARAM_INT), Param("p", PARAM_STR, DOMAIN_PALETTE)],
-        doc='Remplace les couleurs de la banque de SPRITES `bank` (0-15). '
-            'Ex: palette:set_obj(1, "Nuit")',
+        doc="Replaces the colours of the SPRITE bank `bank` (0-15). Ex: "
+            "palette:set_obj(1, \"Night\")",
     ),
 
     # ── Sauvegarde (SRAM) ──────────────────────────────────────────
@@ -1533,16 +1554,16 @@ RUNTIME_API: dict[str, ApiFunc] = {
     "save.write": ApiFunc(
         lua_name="save.write", c_func="save_write",
         params=[Param("slot", PARAM_INT)], ret="int",
-        doc="Écrit les variables persistantes dans l'emplacement `slot` "
-            "(0 = le premier). Rend 0 si l'emplacement n'existe pas.",
+        doc="Writes the persistent variables into slot `slot` (0 = the first). "
+            "Returns 0 if the slot does not exist.",
     ),
     "save.load": ApiFunc(
         lua_name="save.load", c_func="save_read",
         params=[Param("slot", PARAM_INT)], ret="int",
-        doc="Relit l'emplacement `slot` et REMPLACE TOUTES les variables "
-            "persistantes de la partie en cours. Rend 0 si l'emplacement est "
-            "vide ou illisible — les variables ne sont alors PAS touchées. "
-            "Pour lire une seule valeur sans charger la partie, cf. save.read.",
+        doc="Reads slot `slot` again and REPLACES ALL the persistent variables of the"
+            " current game. Returns 0 if the slot is empty or unreadable — the "
+            "variables are then NOT touched. To read a single value without loading "
+            "the game, see save.read.",
     ),
     # Une lecture SANS effet de bord : contrairement à save.load, elle ne
     # touche à aucune globale de la partie en cours. C'est ce qui manquait
@@ -1554,23 +1575,22 @@ RUNTIME_API: dict[str, ApiFunc] = {
         lua_name="save.read", c_func="_save_read",   # résolu par codegen
         params=[Param("slot", PARAM_INT), Param("name", PARAM_STR, DOMAIN_GLOBAL)],
         ret="int",
-        doc="Rend la valeur de la variable persistante `name` dans "
-            "l'emplacement `slot`, SANS toucher à la partie en cours. Rend son "
-            "défaut si l'emplacement est vide, illisible, ou si le fichier ne "
-            "contient pas cette variable (jeu plus récent que la sauvegarde). "
-            "`name` doit être une variable cochée « persist ». "
-            "Ex: save:read(0, \"chapitre\")",
+        doc="Returns the value of the persistent variable `name` in slot `slot`, "
+            "WITHOUT touching the current game. Returns its default if the slot is "
+            "empty, unreadable, or if the file does not contain this variable (game "
+            "newer than the save). `name` must be a variable ticked \"persist\". Ex: "
+            "save:read(0, \"chapter\")",
     ),
     "save.exists": ApiFunc(
         lua_name="save.exists", c_func="save_exists",
         params=[Param("slot", PARAM_INT)], ret="int",
-        doc="Vrai si l'emplacement `slot` contient une sauvegarde relisible. "
-            "De quoi griser une entrée « Continuer ».",
+        doc="True if slot `slot` holds a readable save. Enough to grey out a "
+            "\"Continue\" entry.",
     ),
     "save.erase": ApiFunc(
         lua_name="save.erase", c_func="save_erase",
         params=[Param("slot", PARAM_INT)], ret="int",
-        doc="Vide l'emplacement `slot` : save.exists y répond faux ensuite.",
+        doc="Empties slot `slot`: save.exists then answers false for it.",
     ),
 
     # blend.mode (int 0-3) : cf. RUNTIME_PROPS — l'état du mélange est une
@@ -1578,27 +1598,32 @@ RUNTIME_API: dict[str, ApiFunc] = {
     "blend.set_layer": ApiFunc(
         lua_name="blend.set_layer", c_func="blend_set_layer",
         params=[Param("side", PARAM_STR, DOMAIN_BLEND_SIDE), Param("bg", PARAM_INT), Param("on", PARAM_BOOL)],
-        doc="Prend (ou non) le layer de fond `bg` comme cible du mélange, côté \"top\" (la source) ou \"bottom\" (ce sur quoi elle se mélange).",
+        doc=("Takes (or not) the background layer `bg` as a blending target, on the "
+             "\"top\" side (the source) or the \"bottom\" side (what it blends onto)."),
     ),
     "blend.set_obj": ApiFunc(
         lua_name="blend.set_obj", c_func="blend_set_obj",
         params=[Param("side", PARAM_STR, DOMAIN_BLEND_SIDE), Param("on", PARAM_BOOL)],
-        doc="Prend (ou non) les sprites comme cible du mélange, côté \"top\" ou \"bottom\".",
+        doc=("Takes (or not) the sprites as a blending target, on the \"top\" or "
+             "\"bottom\" side."),
     ),
     "blend.set_backdrop": ApiFunc(
         lua_name="blend.set_backdrop", c_func="blend_set_backdrop",
         params=[Param("side", PARAM_STR, DOMAIN_BLEND_SIDE), Param("on", PARAM_BOOL)],
-        doc="Prend (ou non) la couleur de fond de la scène comme cible. Souvent le dessous manquant quand rien n'est dessiné derrière.",
+        doc=("Takes (or not) the scene's background colour as a target. Often the "
+             "missing bottom when nothing is drawn behind."),
     ),
     "blend.set_alpha": ApiFunc(
         lua_name="blend.set_alpha", c_func="blend_set_alpha",
         params=[Param("eva", PARAM_INT), Param("evb", PARAM_INT)],
-        doc="Dosage du mode 1, en seizièmes (0-16) : eva pour le dessus, evb pour le dessous. Ex: blend:set_alpha(8, 8) = moitié-moitié.",
+        doc=("Mix of mode 1, in sixteenths (0-16): eva for the top, evb for the "
+             "bottom. Ex: blend:set_alpha(8, 8) = half and half."),
     ),
     "blend.set_fade": ApiFunc(
         lua_name="blend.set_fade", c_func="blend_set_fade",
         params=[Param("evy", PARAM_INT)],
-        doc="Intensité des modes 2 et 3, en seizièmes (0 = rien, 16 = blanc ou noir complet). Un fondu = incrémenter evy frame après frame.",
+        doc=("Intensity of modes 2 and 3, in sixteenths (0 = nothing, 16 = full white "
+             "or black). A fade = incrementing evy frame after frame."),
     ),
 
 }
@@ -1623,27 +1648,28 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
     "actor.position": ApiProp(
         lua_name="actor.position", c_getter="actor_get_position",
         c_setter="actor_set_position", ptype=PARAM_VEC2, self_first=True,
-        doc="Position monde de l'actor (un vec2, .x/.y), en PIXELS entiers — "
-            "toujours, même sur un actor qui accumule du sous-pixel via "
-            "self:apply_velocity(). self.position = vec2(x, y) la téléporte "
-            "instantanément et efface le sous-pixel accumulé.",
+        doc="World position of the actor (a vec2, .x/.y), in whole PIXELS — always, "
+            "even on an actor that accumulates sub-pixel via self:apply_velocity(). "
+            "self.position = vec2(x, y) teleports it instantly and clears the "
+            "accumulated sub-pixel.",
     ),
     "actor.rotation": ApiProp(
         lua_name="actor.rotation", c_getter="actor_get_rotation",
         c_setter="actor_set_rotation", ptype=PARAM_INT, self_first=True,
-        doc='Rotation MONDE de cet actor en degrés (0-359), héritée par son sprite. '
-            "Se lit et s'écrit toujours ; ne s'AFFICHE que si le SpriteComponent a "
-            '"Affine transform" coché (il réserve un des 32 slots affines du GBA). '
-            "Le sprite a sa propre rotation locale : self.sprite_rotation (somme des "
-            "deux à l'écran).",
+        doc="WORLD rotation of this actor in degrees (0-359), inherited by its "
+            "sprite. Always readable and writable; only DISPLAYED if the "
+            "SpriteComponent has \"Affine transform\" ticked (it reserves one of the "
+            "GBA's 32 affine slots). The sprite has its own local rotation: "
+            "self.sprite_rotation (sum of both on screen).",
     ),
     "actor.scale": ApiProp(
         lua_name="actor.scale", c_getter="actor_get_scale",
         c_setter="actor_set_scale", ptype=PARAM_VEC2, self_first=True,
-        doc="Échelle MONDE de cet actor en pourcent (100 = normal, 50 = moitié) — un vec2 "
-            "(.x, .y), héritée par son sprite. Se lit et s'écrit toujours ; ne s'AFFICHE "
-            "que si le SpriteComponent a \"Affine transform\" coché. Le sprite a son "
-            "propre scale local : self.sprite_scale (produit des deux à l'écran).",
+        doc="WORLD scale of this actor in percent (100 = normal, 50 = half) — a vec2 "
+            "(.x, .y), inherited by its sprite. Always readable and writable; only "
+            "DISPLAYED if the SpriteComponent has \"Affine transform\" ticked. The "
+            "sprite has its own local scale: self.sprite_scale (product of both on "
+            "screen).",
     ),
 
     # ── Actor — transform LOCAL du sprite ─────────────────────────
@@ -1654,24 +1680,24 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
     "actor.sprite_rotation": ApiProp(
         lua_name="actor.sprite_rotation", c_getter="actor_get_sprite_rotation",
         c_setter="actor_set_sprite_rotation", ptype=PARAM_INT, self_first=True,
-        doc="Rotation LOCAL du sprite en degrés (0-359), composée PAR-DESSUS la rotation "
-            "monde de l'actor (la somme des deux s'affiche). Ne s'affiche que si ce "
-            "sprite a \"Affine transform\" coché.",
+        doc="LOCAL rotation of the sprite in degrees (0-359), composed ON TOP OF the "
+            "actor's world rotation (the sum of both is displayed). Only displayed if"
+            " this sprite has \"Affine transform\" ticked.",
     ),
     "actor.sprite_scale": ApiProp(
         lua_name="actor.sprite_scale", c_getter="actor_get_sprite_scale",
         c_setter="actor_set_sprite_scale", ptype=PARAM_VEC2, self_first=True,
-        doc="Échelle LOCALE du sprite en pourcent (100 = normal) — un vec2 (.x, .y), "
-            "MULTIPLIÉE par le scale monde de l'actor. Ne s'affiche que si ce sprite a "
-            "\"Affine transform\" coché.",
+        doc="LOCAL scale of the sprite in percent (100 = normal) — a vec2 (.x, .y), "
+            "MULTIPLIED by the actor's world scale. Only displayed if this sprite has"
+            " \"Affine transform\" ticked.",
     ),
     "actor.sprite_offset": ApiProp(
         lua_name="actor.sprite_offset", c_getter="actor_get_sprite_offset",
         c_setter="actor_set_sprite_offset", ptype=PARAM_VEC2, self_first=True,
-        doc="Offset du sprite par rapport à son actor, en pixels, dans le repère LOCAL de "
-            "l'actor : il tourne et scale avec lui (hérarchie parent→enfant). Le sprite "
-            "n'a pas de position monde — la position monde, c'est self.position. "
-            "Ne s'applique que si ce sprite a \"Affine transform\" coché.",
+        doc="Offset of the sprite relative to its actor, in pixels, in the actor's "
+            "LOCAL frame: it rotates and scales with it (parent→child hierarchy). The"
+            " sprite has no world position — the world position is self.position. "
+            "Only applies if this sprite has \"Affine transform\" ticked.",
     ),
 
     # ── Actor — physique ───────────────────────────────────────────
@@ -1683,10 +1709,10 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
     "actor.velocity": ApiProp(
         lua_name="actor.velocity", c_getter="actor_get_velocity",
         c_setter="actor_set_velocity", ptype=PARAM_VEC2, self_first=True,
-        doc="Vélocité de l'actor (un vec2, .x/.y), en Q8 : 256 = 1 pixel/frame, "
-            "128 = un demi-pixel/frame. Ne déplace pas seule — self:apply_velocity() "
-            "l'ajoute à la position, en conservant le sous-pixel d'une frame à l'autre "
-            "(self.position, elle, ne rend que des pixels entiers).",
+        doc="Velocity of the actor (a vec2, .x/.y), in Q8: 256 = 1 pixel/frame, 128 ="
+            " half a pixel/frame. Does not move by itself — self:apply_velocity() "
+            "adds it to the position, keeping the sub-pixel from one frame to the "
+            "next (self.position only returns whole pixels).",
     ),
 
     # ── Actor — état général ───────────────────────────────────────
@@ -1696,14 +1722,13 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
     "actor.visible": ApiProp(
         lua_name="actor.visible", c_getter="actor_get_visible",
         ptype=PARAM_BOOL, self_first=True, read_only=True,
-        doc="Le sprite est-il affiché ? Lecture seule : self:show() / self:hide() "
-            "l'écrivent.",
+        doc="Is the sprite displayed? Read-only: self:show() / self:hide() write it.",
     ),
     "actor.active": ApiProp(
         lua_name="actor.active", c_getter="actor_get_active",
         ptype=PARAM_BOOL, self_first=True, read_only=True,
-        doc="L'actor est-il actif (update, collisions et rendu en marche) ? "
-            "Lecture seule : self:activate() / self:deactivate() l'écrivent.",
+        doc="Is the actor active (update, collisions and rendering running)? "
+            "Read-only: self:activate() / self:deactivate() write it.",
     ),
     # Se compare par le NOM de l'acteur ou du prefab — sans quoi la propriété
     # rendait un entier opaque qu'aucune écriture Lua ne permettait de nommer :
@@ -1711,9 +1736,9 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
     "actor.tag": ApiProp(
         lua_name="actor.tag", c_getter="actor_get_tag", ptype=PARAM_INT,
         self_first=True, read_only=True, domain=DOMAIN_TAG,
-        doc='Identité de cet actor (lecture seule) : le nom de son acteur de '
-            'scène ou de son prefab. C\'est ce qui permet de reconnaître qui '
-            'l\'on touche. Ex: if other.tag == "Ball" then self:destroy() end',
+        doc="Identity of this actor (read-only): the name of its scene actor or of "
+            "its prefab. It is what lets you recognise who you touch. Ex: if "
+            "other.tag == \"Ball\" then self:destroy() end",
     ),
 
     # ── Actor — animation ──────────────────────────────────────────
@@ -1723,93 +1748,91 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
     "actor.anim": ApiProp(
         lua_name="actor.anim", c_getter="actor_get_anim", ptype=PARAM_INT,
         self_first=True, read_only=True, domain=DOMAIN_ANIM,
-        doc='État d\'animation courant (lecture seule), comparable par son nom. '
-            'Ex: if self.anim == "Walk" then ... end. Pour le changer, '
-            'self:play_anim(name).',
+        doc="Current animation state (read-only), comparable by its name. Ex: if "
+            "self.anim == \"Walk\" then ... end. To change it, self:play_anim(name).",
     ),
     "actor.active_sprite": ApiProp(
         lua_name="actor.active_sprite", c_getter="actor_get_appearance", ptype=PARAM_INT,
         self_first=True, read_only=True, domain=DOMAIN_SPRITE_ID,
-        doc="Id du composant sprite actif (lecture seule), comparable par son nom. "
-            "Ex: if self.active_sprite == \"blesse\" then ... end. Pour le changer, "
+        doc="Id of the active sprite component (read-only), comparable by its name. "
+            "Ex: if self.active_sprite == \"hurt\" then ... end. To change it, "
             "self:activate_sprite(id).",
     ),
     "actor.anim_speed": ApiProp(
         lua_name="actor.anim_speed", c_getter="actor_get_anim_speed",
         c_setter="actor_set_anim_speed", ptype=PARAM_INT, self_first=True,
-        doc="Surcharge la vitesse (ticks GBA entre deux frames) de "
-            "l'animation en cours. 0 = la vitesse réglée pour cet état dans "
-            "le Sprite Editor, qui reste la source de vérité. Ne se remet "
-            "pas à 0 tout seul : un effet temporaire (temps ralenti) se "
-            "referme explicitement par le script qui l'a ouvert.",
+        doc="Overrides the speed (GBA ticks between two frames) of the current "
+            "animation. 0 = the speed set for this state in the Sprite Editor, which "
+            "remains the source of truth. Does not reset to 0 by itself: a temporary "
+            "effect (slow motion) is closed explicitly by the script that opened it.",
     ),
     "actor.anim_length": ApiProp(
         lua_name="actor.anim_length", c_getter="actor_get_anim_length",
         ptype=PARAM_INT, self_first=True, read_only=True,
-        doc="Nombre de frames de la direction actuellement jouée de l'état "
-            "d'animation courant. Lecture seule.",
+        doc="Number of frames of the currently played direction of the current "
+            "animation state. Read-only.",
     ),
     "actor.anim_loop": ApiProp(
         lua_name="actor.anim_loop", c_getter="actor_get_anim_loop",
         ptype=PARAM_BOOL, self_first=True, read_only=True,
-        doc="Vrai si l'état d'animation courant boucle (réglage « Loop » du "
-            "Sprite Editor pour cet état). Lecture seule.",
+        doc="True if the current animation state loops (\"Loop\" setting of the Sprite "
+            "Editor for this state). Read-only.",
     ),
     "actor.anim_finished": ApiProp(
         lua_name="actor.anim_finished", c_getter="actor_get_anim_finished",
         ptype=PARAM_BOOL, self_first=True, read_only=True,
-        doc="Vrai si l'état d'animation courant NE boucle PAS et a atteint "
-            "sa dernière frame (self.anim_length). Reste vrai tant qu'on ne "
-            "change pas d'état (self:play_anim) — comme self.grounded reste "
-            "vrai tant qu'on ne quitte pas le sol. Toujours faux pour un "
-            "état qui boucle. Lecture seule.",
+        doc="True if the current animation state does NOT loop and has reached its "
+            "last frame (self.anim_length). Stays true until the state changes "
+            "(self:play_anim) — just as self.grounded stays true until the actor "
+            "leaves the ground. Always false for a looping state. Read-only.",
     ),
     "actor.frame_w": ApiProp(
         lua_name="actor.frame_w", c_getter="actor_get_frame_w",
         ptype=PARAM_INT, self_first=True, read_only=True,
-        doc="Largeur d'une frame du sprite, en pixels (réglage du Sprite "
-            "Editor). Lecture seule — la taille de frame est fixée au build.",
+        doc="Width of a sprite frame, in pixels (Sprite Editor setting). Read-only — "
+            "the frame size is fixed at build.",
     ),
     "actor.frame_h": ApiProp(
         lua_name="actor.frame_h", c_getter="actor_get_frame_h",
         ptype=PARAM_INT, self_first=True, read_only=True,
-        doc="Hauteur d'une frame du sprite, en pixels (réglage du Sprite "
-            "Editor). Lecture seule — la taille de frame est fixée au build.",
+        doc="Height of a sprite frame, in pixels (Sprite Editor setting). Read-only —"
+            " the frame size is fixed at build.",
     ),
     "actor.frame": ApiProp(
         lua_name="actor.frame", c_getter="actor_get_frame",
         c_setter="actor_set_frame", ptype=PARAM_INT, self_first=True,
-        doc="Frame courante de l'animation. self.frame = 0 la remet au début.",
+        doc=("Current frame of the animation. self.frame = 0 puts it back at the "
+             "start."),
     ),
     "actor.flip_h": ApiProp(
         lua_name="actor.flip_h", c_getter="actor_get_flip_h",
         c_setter="actor_set_flip_h", ptype=PARAM_BOOL, self_first=True,
-        doc="Sprite retourné horizontalement (true) ou normal (false). "
-            "self.flip_h = self.direction.x < 0 suit le regard.",
+        doc="Sprite flipped horizontally (true) or normal (false). self.flip_h = "
+            "self.direction.x < 0 follows the gaze.",
     ),
     "actor.flip_v": ApiProp(
         lua_name="actor.flip_v", c_getter="actor_get_flip_v",
         c_setter="actor_set_flip_v", ptype=PARAM_BOOL, self_first=True,
-        doc="Sprite retourné verticalement (true) ou normal (false).",
+        doc="Sprite flipped vertically (true) or normal (false).",
     ),
     "actor.pal": ApiProp(
         lua_name="actor.pal", c_getter="actor_get_pal",
         c_setter="actor_set_pal", ptype=PARAM_INT, self_first=True,
-        doc="Palette bank OAM courante (0-15). Flash de dégâts, invincibilité…",
+        doc="Current OAM palette bank (0-15). Damage flash, invincibility…",
     ),
     "actor.obj_mode": ApiProp(
         lua_name="actor.obj_mode", c_getter="actor_get_obj_mode",
         c_setter="actor_set_obj_mode", ptype=PARAM_INT, self_first=True,
         domain=DOMAIN_OBJ_MODE,
-        doc='Mode OAM, par son nom : "normal", "blend" (semi-transparent, '
-            'réservé au mélange) ou "window" (masque : découpe la '
-            'fenêtre-objet). Ex: self.obj_mode = "window"',
+        doc="OAM mode, by its name: \"normal\", \"blend\" (semi-transparent, reserved for"
+            " blending) or \"window\" (mask: cuts the object window). Ex: self.obj_mode"
+            " = \"window\"",
     ),
     "actor.priority": ApiProp(
         lua_name="actor.priority", c_getter="actor_get_priority",
         c_setter="actor_set_priority", ptype=PARAM_INT, self_first=True,
-        doc="Ordre d'affichage face aux BG layers (0-3) : 0 = devant tous "
-            "les backgrounds, 3 = derrière tous. Même registre OAM que "
+        doc="Display order against the BG layers (0-3): 0 = in front of all "
+            "backgrounds, 3 = behind all. Same OAM register as "
             "self.pal/self.obj_mode.",
     ),
 
@@ -1823,34 +1846,33 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
         c_setter="actor_set_direction", ptype=PARAM_VEC2, self_first=True,
         domain=DOMAIN_DIRECTION,
         c_getter_named="actor_get_dir", c_setter_named="actor_set_dir",
-        doc='Direction d\'animation discrète. Se lit en vec2 dont chaque '
-            'composante vaut -1, 0 ou 1 (.x = gauche/droite, .y = haut/bas), et '
-            's\'écrit des deux façons : self.direction = vec2(1, -1) ou '
-            'self.direction = "north_east". Se compare aussi par son nom : '
-            'if self.direction == "west". Écrire le vecteur ENTIER — jamais '
-            'self.direction.x seul.',
+        doc="Discrete animation direction. Read as a vec2 whose components are each "
+            "-1, 0 or 1 (.x = left/right, .y = up/down), and written both ways: "
+            "self.direction = vec2(1, -1) or self.direction = \"north_east\". Also "
+            "compared by its name: if self.direction == \"west\". Write the WHOLE "
+            "vector — never self.direction.x alone.",
     ),
     "actor.auto_dir": ApiProp(
         lua_name="actor.auto_dir", c_getter="actor_get_auto_dir",
         c_setter="actor_set_auto_dir", ptype=PARAM_BOOL, self_first=True,
-        doc="Calcule (true) ou non (false) la direction automatiquement depuis "
-            "la vélocité. À false, self.direction est ce que le script en fait.",
+        doc="Computes (true) or not (false) the direction automatically from the "
+            "velocity. When false, self.direction is whatever the script makes of it.",
     ),
 
     # ── Actor — collision ──────────────────────────────────────────
     "actor.grounded": ApiProp(
         lua_name="actor.grounded", c_getter="actor_on_ground", ptype=PARAM_BOOL,
         self_first=True, read_only=True,
-        doc="Vrai si une box solide reposait sur le sol à la fin de la frame "
-            "précédente — pentes comprises. Demande une carte de collision dans "
-            "la scène. Lecture seule.",
+        doc="True if a solid box was resting on the ground at the end of the previous"
+            " frame — slopes included. Requires a collision map in the scene. "
+            "Read-only.",
     ),
     "actor.box_count": ApiProp(
         lua_name="actor.box_count", c_getter="actor_get_box_count", ptype=PARAM_INT,
         self_first=True, read_only=True,
-        doc="Nombre de boîtes de collision de cet actor, actives ou non (fixé au "
-            "build, lecture seule). Les boîtes elles-mêmes se demandent par leur "
-            "tag : self:collision_box(\"hitbox\").",
+        doc="Number of collision boxes of this actor, active or not (fixed at build, "
+            "read-only). The boxes themselves are requested by their tag: "
+            "self:collision_box(\"hitbox\").",
     ),
 
     # ── La boîte de collision (référence `collision_box`) ──────────
@@ -1860,45 +1882,45 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
     "collision_box.tag": ApiProp(
         lua_name="collision_box.tag", c_getter="collision_box_get_tag",
         ptype=PARAM_INT, self_first=True, read_only=True, domain=DOMAIN_BOX_TAG,
-        doc='Le tag de cette boîte — la clé qui l\'a désignée. Lecture seule ; '
-            'sert à comparer : hb.tag == "hitbox".',
+        doc="The tag of this box — the key that designated it. Read-only; used to "
+            "compare: hb.tag == \"hitbox\".",
     ),
     "collision_box.active": ApiProp(
         lua_name="collision_box.active", c_getter="collision_box_get_active",
         ptype=PARAM_BOOL, self_first=True, read_only=True,
-        doc="La boîte est-elle en jeu ? Inactive, elle ne heurte ni la carte ni les "
-            "autres boîtes. Lecture seule : hb:activate() / hb:deactivate() "
-            "l'écrivent. C'est la case « Active » de l'inspecteur, qui n'en "
-            "fixe que l'état de départ.",
+        doc="Is the box in play? When inactive, it collides with neither the map nor "
+            "the other boxes. Read-only: hb:activate() / hb:deactivate() write it. It"
+            " is the \"Active\" box of the inspector, which only sets the starting "
+            "state.",
     ),
     # ── Une LISTE ────────────────────────────────────────────────
     f"{REF_LIST}.count": ApiProp(
         lua_name=f"{REF_LIST}.count", c_getter="ui_list_count",
         c_setter="ui_list_set_count", ptype=PARAM_INT, self_first=True,
-        doc="Combien d'items cette liste parcourt. Vaut le nombre de rangées authorées "
-            "par défaut — un menu statique navigue donc sans rien poser. À écrire quand "
-            "les items dépassent les rangées visibles (un inventaire qui défile) : "
-            "#mon_tableau, le nombre de lignes d'une table de données, ou un compte "
-            "tenu à la main. Ex: menu.count = #sac",
+        doc="How many items this list walks through. Equals the number of authored "
+            "rows by default — a static menu therefore navigates without anything "
+            "set. To be written when the items exceed the visible rows (a scrolling "
+            "inventory): #my_array, the number of rows of a data table, or a "
+            "hand-kept count. Ex: menu.count = #bag",
     ),
     f"{REF_LIST}.index": ApiProp(
         lua_name=f"{REF_LIST}.index", c_getter="ui_list_index",
         c_setter="ui_list_set_index", ptype=PARAM_INT, self_first=True,
-        doc="L'item sélectionné, à partir de 1 (0 si la liste est vide). Écrire place "
-            "le curseur sur cet item ; la fenêtre se recale pour qu'il soit visible. "
-            "Ex: menu.index = 2",
+        doc="The selected item, from 1 (0 if the list is empty). Writing places the "
+            "cursor on that item; the window re-centres so that it is visible. Ex: "
+            "menu.index = 2",
     ),
     f"{REF_LIST}.first": ApiProp(
         lua_name=f"{REF_LIST}.first", c_getter="ui_list_first",
         ptype=PARAM_INT, self_first=True, read_only=True,
-        doc="Le premier item AFFICHÉ, à partir de 1 — la position de la fenêtre. "
-            "L'item de la rangée r est first + r - 1. Lecture seule.",
+        doc="The first DISPLAYED item, from 1 — the position of the window. The item "
+            "of row r is first + r - 1. Read-only.",
     ),
     f"{REF_LIST}.active": ApiProp(
         lua_name=f"{REF_LIST}.active", c_getter="ui_list_active",
         ptype=PARAM_BOOL, self_first=True, read_only=True,
-        doc="Cette liste prend-elle la croix directionnelle ? C'est la SÉLECTION, pas "
-            "l'affichage. Lecture seule : menu:activate() / menu:deactivate() l'écrivent.",
+        doc="Does this list take the directional pad? It is the SELECTION, not the "
+            "display. Read-only: menu:activate() / menu:deactivate() write it.",
     ),
     # ── Une IMAGE ────────────────────────────────────────────────
     # L'état se pose par son NOM dans le sprite de CETTE image (`IMGST_{image}_{état}`) :
@@ -1909,112 +1931,112 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
         lua_name=f"{REF_IMAGE}.state", c_getter="ui_image_state",
         c_setter="ui_image_set_state", ptype=PARAM_INT, self_first=True,
         domain=DOMAIN_IMAGE_STATE,
-        doc='L\'état affiché, par son nom dans le sprite de l\'image : heart.state = "vide", '
-            'if heart.state == "vide". L\'image doit être connue au build.',
+        doc="The displayed state, by its name in the image's sprite: heart.state = "
+            "\"empty\", if heart.state == \"empty\". The image must be known at build.",
     ),
     f"{REF_IMAGE}.offset": ApiProp(
         lua_name=f"{REF_IMAGE}.offset", c_getter="ui_image_offset",
         c_setter="ui_image_set_offset", ptype=PARAM_VEC2, self_first=True,
-        doc="Le décalage de l'image, en pixels, RELATIVEMENT à la position posée dans le "
-            "canvas — (0, 0) l'y ramène. En cible BG l'origine se cale sur la grille de "
-            "8 px ; pour un déplacement au pixel, l'ancrage du conteneur racine doit "
-            "donner la cible OBJ. Ex: cursor.offset = vec2(0, 16 * menu.index)",
+        doc="The offset of the image, in pixels, RELATIVE to the position set in the "
+            "canvas — (0, 0) brings it back. On a BG target the origin snaps to the 8"
+            " px grid; for a pixel-level move, the anchoring of the root container "
+            "must give the OBJ target. Ex: cursor.offset = vec2(0, 16 * menu.index)",
     ),
     # ── Une ZONE DE TEXTE ────────────────────────────────────────
     f"{REF_TEXT_REGION}.reading": ApiProp(
         lua_name=f"{REF_TEXT_REGION}.reading", c_getter="text_reading",
         ptype=PARAM_BOOL, self_first=True, read_only=True,
-        doc="Vrai tant que le texte s'écrit dans cette zone (machine à écrire). "
-            "Lecture seule. Ex: if not box.reading then scene.goto(\"SUITE\") end",
+        doc="True while the text is being written in this zone (typewriter). "
+            "Read-only. Ex: if not box.reading then scene.goto(\"NEXT\") end",
     ),
     # ── Un FOND (layer) ──────────────────────────────────────────
     # `visible` se lit ici ; `:show()` / `:hide()` l'écrivent.
     f"{REF_LAYER}.visible": ApiProp(
         lua_name=f"{REF_LAYER}.visible", c_getter="layer_is_visible",
         ptype=PARAM_BOOL, self_first=True, read_only=True,
-        doc="Le fond est-il affiché ? Lecture seule : :show() / :hide() l'écrivent.",
+        doc="Is the background displayed? Read-only: :show() / :hide() write it.",
     ),
     f"{REF_LAYER}.priority": ApiProp(
         lua_name=f"{REF_LAYER}.priority", c_getter="layer_get_priority",
         c_setter="layer_set_priority", ptype=PARAM_INT, self_first=True,
-        doc="Ordre d'affichage du fond (0 = devant, 3 = derrière), sprites compris. "
-            "Ex: layer:get(1).priority = 0",
+        doc="Display order of the background (0 = in front, 3 = behind), sprites "
+            "included. Ex: layer:get(1).priority = 0",
     ),
     # Le moteur tient le décalage en deux entiers ; `Vec2` n'existe que côté scripts : la
     # conversion vit dans la façade `runtime_api_inline.h`.
     f"{REF_LAYER}.scroll": ApiProp(
         lua_name=f"{REF_LAYER}.scroll", c_getter="layer_get_scroll",
         c_setter="layer_set_scroll_to", ptype=PARAM_VEC2, self_first=True,
-        doc="Décalage PROPRE du fond, en pixels, ajouté au scroll caméra (un vec2). "
-            "Ex: layer:get(0).scroll = vec2(0, 8)",
+        doc="The background's OWN offset, in pixels, added to the camera scroll (a "
+            "vec2). Ex: layer:get(0).scroll = vec2(0, 8)",
     ),
     f"{REF_LAYER}.scroll_speed": ApiProp(
         lua_name=f"{REF_LAYER}.scroll_speed", c_getter="layer_get_scroll_speed",
         c_setter="layer_set_scroll_speed", ptype=PARAM_INT, self_first=True,
-        doc="Vitesse de parallax du fond, en pourcent de celle de la caméra (100 = le fond suit "
-            "la caméra, 50 = il défile deux fois plus lentement, 0 = il reste fixe). Le réglage "
-            "« Scroll speed » de l'inspecteur n'en fixe que la valeur de départ. "
-            "Ex: layer:get(1).scroll_speed = 50",
+        doc="Parallax speed of the background, as a percentage of the camera's (100 ="
+            " the background follows the camera, 50 = it scrolls twice as slowly, 0 ="
+            " it stays fixed). The \"Scroll speed\" setting of the inspector only sets "
+            "the starting value. Ex: layer:get(1).scroll_speed = 50",
     ),
     f"{REF_LAYER}.pal_bank": ApiProp(
         lua_name=f"{REF_LAYER}.pal_bank", c_getter="layer_get_pal_bank",
         ptype=PARAM_INT, self_first=True, read_only=True,
-        doc="Banque de palette de BASE du fond (0-15) : celle que sa carte cite, y compris quand "
-            "l'inspecteur laisse « palette propre » (le build l'a alors placée). Lecture seule : "
-            "la banque est gravée dans chaque case de la carte. Sert à recolorer le fond : "
-            "palette:set_bg(layer:get(1).pal_bank, \"Nuit\"). Un fond aux tuiles peintes de "
-            "banques différentes rend sa banque de base, pas toutes celles en usage.",
+        doc="BASE palette bank of the background (0-15): the one its map cites, "
+            "including when the inspector leaves \"own palette\" (the build then placed"
+            " it). Read-only: the bank is engraved in each cell of the map. Used to "
+            "recolour the background: palette:set_bg(layer:get(1).pal_bank, \"Night\")."
+            " A background whose tiles are painted with different banks returns its "
+            "base bank, not all those in use.",
     ),
     f"{REF_LAYER}.map": ApiProp(
         lua_name=f"{REF_LAYER}.map", c_getter="layer_get_map",
         c_setter="layer_set_map", ptype=PARAM_INT, self_first=True,
-        doc="Avancé — le screenblock (0-31) affiché par le fond. Écrire bascule d'un coup "
-            "sur une carte préparée, sans tearing.",
+        doc="Advanced — the screenblock (0-31) displayed by the background. Writing "
+            "switches at once to a prepared map, without tearing.",
     ),
     # ── Une REGION de window ─────────────────────────────────────
     f"{REF_WINDOW_REGION}.visible": ApiProp(
         lua_name=f"{REF_WINDOW_REGION}.visible", c_getter="window_is_visible",
         ptype=PARAM_BOOL, self_first=True, read_only=True,
-        doc="La window est-elle active ? Lecture seule : :show() / :hide() l'écrivent.",
+        doc="Is the window active? Read-only: :show() / :hide() write it.",
     ),
     f"{REF_UI_ELEMENT}.visible": ApiProp(
         lua_name=f"{REF_UI_ELEMENT}.visible", c_getter="ui_element_is_visible",
         ptype=PARAM_BOOL, self_first=True, read_only=True,
-        doc="L'élément est-il affiché ? Tient compte de ses parents : un enfant "
-            "d'un conteneur caché ne l'est pas. Lecture seule : :show() / :hide() "
-            "l'écrivent.",
+        doc="Is the element displayed? Takes its parents into account: a child of a "
+            "hidden container is not. Read-only: :show() / :hide() write it.",
     ),
     "collision_box.is_grounded": ApiProp(
         lua_name="collision_box.is_grounded", c_getter="collision_box_get_grounded",
         ptype=PARAM_BOOL, self_first=True, read_only=True,
-        doc="Cette boîte reposait-elle sur le sol à la fin de la frame précédente "
-            "(pentes comprises) ? Vaut toujours faux pour une boîte non solide : "
-            "la carte de collision l'ignore. `self.grounded` en est le OU sur "
-            "toutes les boîtes de l'acteur. Lecture seule."),
+        doc="Was this box resting on the ground at the end of the previous frame "
+            "(slopes included)? Always false for a non-solid box: the collision map "
+            "ignores it. `self.grounded` is the OR over all the boxes of the actor. "
+            "Read-only."),
     "collision_box.solid": ApiProp(
         lua_name="collision_box.solid", c_getter="collision_box_get_solid",
         c_setter="collision_box_set_solid", ptype=PARAM_BOOL, self_first=True,
-        doc="Arrêtée par la carte de collision (true) ou simple déclencheur "
-            "(false). Ex: hb.solid = false pour traverser les murs.",
+        doc="Stopped by the collision map (true) or a simple trigger (false). Ex: "
+            "hb.solid = false to pass through walls.",
     ),
     "collision_box.offset": ApiProp(
         lua_name="collision_box.offset", c_getter="collision_box_get_offset",
         c_setter="collision_box_set_offset", ptype=PARAM_VEC2, self_first=True,
-        doc="Décalage de la boîte par rapport au pivot du sprite, en pixels "
-            "(−128 à 127, borné). Valeur immuable : hb.offset = vec2(8, -4).",
+        doc="Offset of the box relative to the sprite's pivot, in pixels (−128 to "
+            "127, clamped). Immutable value: hb.offset = vec2(8, -4).",
     ),
     "collision_box.size": ApiProp(
         lua_name="collision_box.size", c_getter="collision_box_get_size",
         c_setter="collision_box_set_size", ptype=PARAM_VEC2, self_first=True,
-        doc="Largeur et hauteur de la boîte, en pixels (0 à 255, borné). Une "
-            "hitbox qui grandit : hb.size = vec2(12 + t, 8).",
+        doc="Width and height of the box, in pixels (0 to 255, clamped). A hitbox "
+            "that grows: hb.size = vec2(12 + t, 8).",
     ),
     "collision_box.bounds": ApiProp(
         lua_name="collision_box.bounds", c_getter="collision_box_get_bounds",
         ptype=PARAM_RECT, self_first=True, read_only=True,
-        doc="Le rectangle de la boîte en coordonnées MONDE (position de l'actor + "
-            "décalage + taille), en pixels. Lecture seule : c'est ce que la "
-            "détection compare, et ce qu'on passe à collision_box.get_tile.",
+        doc="The rectangle of the box in WORLD coordinates (actor position + offset +"
+            " size), in pixels. Read-only: it is what detection compares, and what is"
+            " passed to collision_box.get_tile.",
     ),
 
     # ── Actor — réglages d'inspecteur fixés au build (lecture seule) ─
@@ -2024,51 +2046,54 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
     "actor.screen_space": ApiProp(
         lua_name="actor.screen_space", c_getter="actor_get_screen_space",
         ptype=PARAM_BOOL, self_first=True, read_only=True,
-        doc="Vrai si la position de cet actor est en pixels d'ÉCRAN (interface en "
-            "sprite : la caméra ne la déplace pas) plutôt qu'en pixels du monde. "
-            "Lecture seule — fixé à l'éditeur (case « Screen space »).",
+        doc="True if the position of this actor is in SCREEN pixels (interface as a "
+            "sprite: the camera does not move it) rather than world pixels. Read-only"
+            " — set in the editor (\"Screen space\" box).",
     ),
     "actor.affine": ApiProp(
         lua_name="actor.affine", c_getter="actor_get_affine",
         ptype=PARAM_BOOL, self_first=True, read_only=True,
-        doc="Vrai si le sprite de cet actor a un slot de matrice affine (case "
-            "« Affine transform » du SpriteComponent) — donc si sa rotation et "
-            "son échelle se VOIENT. Lecture seule : le slot est réservé au build.",
+        doc="True if this actor's sprite has an affine matrix slot (\"Affine "
+            "transform\" box of the SpriteComponent) — hence if its rotation and scale"
+            " are SEEN. Read-only: the slot is reserved at build.",
     ),
 
     # ── Caméra ─────────────────────────────────────────────────────
     "camera.position": ApiProp(
         lua_name="camera.position", c_getter="camera_get_position",
         c_setter="camera_set_position", ptype=PARAM_VEC2,
-        doc="Position courante de la caméra (un vec2, .x/.y). "
-            "camera.position = vec2(x, y) la place exactement.",
+        doc="Current position of the camera (a vec2, .x/.y). camera.position = "
+            "vec2(x, y) places it exactly.",
     ),
     "camera.margin": ApiProp(
         lua_name="camera.margin", c_getter="camera_get_margin",
         c_setter="camera_set_margin", ptype=PARAM_VEC2,
-        doc="Zone morte du suivi de la caméra active, en pixels (un vec2 : .x = horizontale, "
-            ".y = verticale) : la cible peut s'éloigner de cette distance du bord de l'écran avant "
-            "que la caméra ne bouge. 0 = recentrage permanent. Le réglage « Margin » de "
-            "l'inspecteur n'en fixe que la valeur à l'activation. Ex: camera.margin = vec2(60, 30)",
+        doc="Dead zone of the active camera's follow, in pixels (a vec2: .x = "
+            "horizontal, .y = vertical): the target can move this far from the screen"
+            " edge before the camera moves. 0 = permanent re-centring. The \"Margin\" "
+            "setting of the inspector only sets the value at activation. Ex: "
+            "camera.margin = vec2(60, 30)",
     ),
     "camera.frame": ApiProp(
         lua_name="camera.frame", c_getter="camera_get_frame",
         c_setter="camera_set_frame", ptype=PARAM_VEC2,
-        doc="Taille du rendu à l'écran, en pixels (un vec2 : .x = largeur, .y = hauteur ; 240×160 "
-            "= plein écran). Plus petit, la caméra ne rend que dans ce cadre, ancré en haut à "
-            "gauche. Borné à l'écran. Ex: camera.frame = vec2(240, 120)",
+        doc="Size of the on-screen rendering, in pixels (a vec2: .x = width, .y = "
+            "height; 240×160 = full screen). When smaller, the camera only renders "
+            "within this frame, anchored at the top left. Clamped to the screen. Ex: "
+            "camera.frame = vec2(240, 120)",
     ),
     "camera.name": ApiProp(
         lua_name="camera.name", c_getter="camera_get_active", ptype=PARAM_INT,
         read_only=True, domain=DOMAIN_CAMERA,
-        doc='Nom de la caméra active (lecture seule), comparable par son nom. '
-            'Ex: if camera.name == "Boss" then ... end. Pour en changer, camera:switch(nom).',
+        doc="Name of the active camera (read-only), comparable by its name. Ex: if "
+            "camera.name == \"Boss\" then ... end. To change it, camera:switch(name).",
     ),
     "camera.bound": ApiProp(
         lua_name="camera.bound", c_getter="camera_get_bounds",
         c_setter="camera_set_bounds", ptype=PARAM_RECT,
-        doc="Zone scrollable du monde, un rect (.x/.y = origine, .w/.h = taille en px ; "
-            "0 = axe illimité). camera.bound = rect(x, y, w, h) débloque une zone au runtime.",
+        doc="Scrollable area of the world, a rect (.x/.y = origin, .w/.h = size in "
+            "px; 0 = unlimited axis). camera.bound = rect(x, y, w, h) unlocks an area"
+            " at runtime.",
     ),
 
     # ── Blend ──────────────────────────────────────────────────────
@@ -2076,42 +2101,42 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
         lua_name="blend.mode", c_getter="blend_get_mode",
         c_setter="blend_set_mode", ptype=PARAM_INT,
         domain=DOMAIN_BLEND_MODE,
-        doc='Mode de mélange courant, par son nom : "none", "alpha" '
-            '(dessus×EVA + dessous×EVB), "brighten" (vers le blanc) ou '
-            '"darken" (vers le noir). Ex: blend.mode = "alpha"',
+        doc="Current blending mode, by its name: \"none\", \"alpha\" (top×EVA + "
+            "bottom×EVB), \"brighten\" (toward white) or \"darken\" (toward black). Ex: "
+            "blend.mode = \"alpha\"",
     ),
 
     # ── Scène ──────────────────────────────────────────────────────
     "scene.frame": ApiProp(
         lua_name="scene.frame", c_getter="scene_frame",
         ptype=PARAM_INT, read_only=True,
-        doc="Compteur de frames global depuis le début de la scène. Lecture "
-            "seule — utile pour des timers sans variable locale.",
+        doc="Global frame counter since the start of the scene. Read-only — useful "
+            "for timers without a local variable.",
     ),
     "scene.scroll_h": ApiProp(
         lua_name="scene.scroll_h", c_getter="", ptype=PARAM_BOOL, read_only=True,
         getter_expr="g_scene_scroll_h",
-        doc="La scène défile-t-elle horizontalement (case « Scroll H » de l'inspecteur de scène) ? "
-            "Lecture seule — le suivi de la caméra en a fait un choix de build.",
+        doc="Does the scene scroll horizontally (\"Scroll H\" box of the scene "
+            "inspector)? Read-only — camera follow made it a build choice.",
     ),
     "scene.scroll_v": ApiProp(
         lua_name="scene.scroll_v", c_getter="", ptype=PARAM_BOOL, read_only=True,
         getter_expr="g_scene_scroll_v",
-        doc="La scène défile-t-elle verticalement (case « Scroll V » de l'inspecteur de scène) ? "
-            "Lecture seule — le suivi de la caméra en a fait un choix de build.",
+        doc="Does the scene scroll vertically (\"Scroll V\" box of the scene "
+            "inspector)? Read-only — camera follow made it a build choice.",
     ),
     "scene.collision_layer": ApiProp(
         lua_name="scene.collision_layer", c_getter="", ptype=PARAM_INT, read_only=True,
         getter_expr="g_scene_collision_layer",
-        doc="Numéro du fond (0-3) qui porte la carte de collision de la scène — le bouton radio "
-            "« collision layer » de l'inspecteur. Lecture seule : la carte est choisie au build. "
-            "Ex: layer:get(scene.collision_layer):hide()",
+        doc="Number of the background (0-3) that carries the scene's collision map — "
+            "the \"collision layer\" radio button of the inspector. Read-only: the map "
+            "is chosen at build. Ex: layer:get(scene.collision_layer):hide()",
     ),
     "scene.size": ApiProp(
         lua_name="scene.size", c_getter="", ptype=PARAM_RECT, read_only=True,
         getter_expr="(Rect){0, 0, g_scene_w, g_scene_h}",
-        doc="Taille du monde de la scène (un rect : .x/.y = 0, .w/.h = canvas en px). "
-            "Lecture seule.",
+        doc="Size of the scene's world (a rect: .x/.y = 0, .w/.h = canvas in px). "
+            "Read-only.",
     ),
 }
 
@@ -2166,7 +2191,7 @@ EVENT_REGISTRY: dict[str, dict] = {
         "icon": "▶",
         "icon_key": "ev_start",
         "stub": "function on_start()\n    \nend\n",
-        "desc": "Appelé une fois au démarrage de la scène.",
+        "desc": "Called once at the start of the scene.",
         "params": [],
         "c_sig": "void {prefix}_on_start(Actor* self)",
     },
@@ -2174,7 +2199,7 @@ EVENT_REGISTRY: dict[str, dict] = {
         "icon": "↺",
         "icon_key": "ev_update",
         "stub": "function on_update()\n    \nend\n",
-        "desc": "Appelé chaque frame (60 fps). Logique principale.",
+        "desc": "Called every frame (60 fps). Main logic.",
         "params": [],
         "c_sig": "void {prefix}_on_update(Actor* self)",
     },
@@ -2182,7 +2207,8 @@ EVENT_REGISTRY: dict[str, dict] = {
         "icon": "↻",
         "icon_key": "ev_late_update",
         "stub": "function on_late_update()\n    \nend\n",
-        "desc": "Appelé après physique et collisions. Idéal pour la caméra et le HUD.",
+        "desc": "Called after physics and collisions. Ideal for the camera and the "
+                "HUD.",
         "params": [],
         "c_sig": "void {prefix}_on_late_update(Actor* self)",
     },
@@ -2190,11 +2216,14 @@ EVENT_REGISTRY: dict[str, dict] = {
         "icon": "⬡",
         "icon_key": "ev_collide",
         "stub": "function on_collide(other, my_box, other_box)\n    \nend\n",
-        "desc": "Appelé chaque frame où cet actor touche un autre.",
+        "desc": "Called every frame in which this actor touches another.",
         "params": [
-            {"name": "other",     "type": "actor", "description": "Référence à l'actor en contact"},
-            {"name": "my_box",    "type": "int",   "description": "BOXTAG_* de ma box impliquée"},
-            {"name": "other_box", "type": "int",   "description": "BOXTAG_* de la box adverse"},
+            {"name": "other",     "type": "actor", "description": "Reference to the "
+                                                                  "actor in contact"},
+            {"name": "my_box",    "type": "int",   "description": "BOXTAG_* of my box"
+                                                                  " involved"},
+            {"name": "other_box", "type": "int",   "description": "BOXTAG_* of the "
+                                                                  "other box"},
         ],
         "c_sig": "void {prefix}_on_collide(Actor* self, Actor* other, u8 my_box, u8 other_box)",
     },
@@ -2202,11 +2231,15 @@ EVENT_REGISTRY: dict[str, dict] = {
         "icon": "→",
         "icon_key": "ev_collision_enter",
         "stub": "function on_collision_enter(other, my_box, other_box)\n    \nend\n",
-        "desc": "Premier frame de contact avec un autre actor.",
+        "desc": "First frame of contact with another actor.",
         "params": [
-            {"name": "other",     "type": "actor", "description": "Référence à l'actor entrant en contact"},
-            {"name": "my_box",    "type": "int",   "description": "BOXTAG_* de ma box impliquée"},
-            {"name": "other_box", "type": "int",   "description": "BOXTAG_* de la box adverse"},
+            {"name": "other",     "type": "actor", "description": "Reference to the "
+                                                                  "actor entering "
+                                                                  "into contact"},
+            {"name": "my_box",    "type": "int",   "description": "BOXTAG_* of my box"
+                                                                  " involved"},
+            {"name": "other_box", "type": "int",   "description": "BOXTAG_* of the "
+                                                                  "other box"},
         ],
         "c_sig": "void {prefix}_on_collision_enter(Actor* self, Actor* other, u8 my_box, u8 other_box)",
     },
@@ -2214,10 +2247,12 @@ EVENT_REGISTRY: dict[str, dict] = {
         "icon": "▦",
         "icon_key": "ev_tile_collide",
         "stub": "function on_tile_collide(normal_x, normal_y)\n    \nend\n",
-        "desc": "Appelé quand cet actor heurte une tile solide de la collision map.",
+        "desc": "Called when this actor hits a solid tile of the collision map.",
         "params": [
-            {"name": "normal_x", "type": "int", "description": "-1/0/1 : direction horizontale du choc"},
-            {"name": "normal_y", "type": "int", "description": "-1/0/1 : direction verticale du choc"},
+            {"name": "normal_x", "type": "int", "description": "-1/0/1: horizontal "
+                                                               "direction of the hit"},
+            {"name": "normal_y", "type": "int", "description": "-1/0/1: vertical "
+                                                               "direction of the hit"},
         ],
         "c_sig": "void {prefix}_on_tile_collide(Actor* self, int normal_x, int normal_y)",
     },
@@ -2225,11 +2260,15 @@ EVENT_REGISTRY: dict[str, dict] = {
         "icon": "←",
         "icon_key": "ev_collision_exit",
         "stub": "function on_collision_exit(other, my_box, other_box)\n    \nend\n",
-        "desc": "Premier frame sans contact après une collision.",
+        "desc": "First frame without contact after a collision.",
         "params": [
-            {"name": "other",     "type": "actor", "description": "Référence à l'actor qui s'est éloigné"},
-            {"name": "my_box",    "type": "int",   "description": "BOXTAG_* de ma box impliquée"},
-            {"name": "other_box", "type": "int",   "description": "BOXTAG_* de la box adverse"},
+            {"name": "other",     "type": "actor", "description": "Reference to the "
+                                                                  "actor that moved "
+                                                                  "away"},
+            {"name": "my_box",    "type": "int",   "description": "BOXTAG_* of my box"
+                                                                  " involved"},
+            {"name": "other_box", "type": "int",   "description": "BOXTAG_* of the "
+                                                                  "other box"},
         ],
         "c_sig": "void {prefix}_on_collision_exit(Actor* self, Actor* other, u8 my_box, u8 other_box)",
     },
@@ -2237,7 +2276,7 @@ EVENT_REGISTRY: dict[str, dict] = {
         "icon": "✕",
         "icon_key": "ev_destroy",
         "stub": "function on_destroy()\n    \nend\n",
-        "desc": "Appelé juste avant que l'actor soit désactivé par destroy().",
+        "desc": "Called just before the actor is deactivated by destroy().",
         "params": [],
         "c_sig": "void {prefix}_on_destroy(Actor* self)",
     },

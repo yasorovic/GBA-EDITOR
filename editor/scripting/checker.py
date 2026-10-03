@@ -82,6 +82,7 @@ _OWNER_LABELS = {"actor": "actor", "prefab": "prefab",
 class CheckError:
     level:   str   # "error" | "warning"
     message: str
+    line:    int = 0   # ligne du script, ou 0 si la faute n'en a pas (le build la rend en `fichier:ligne`)
 
 
 @dataclass
@@ -303,13 +304,13 @@ class Checker:
         definitions at the top of a script. Dropping it silently let
         `local speed = 2; ADFZ = 5` build without a word."""
         for node, line in script.stray_statements:
-            where = f"line {line}: " if line else ""
             self.errors.append(CheckError(
                 "error",
-                f"{where}this statement is outside any function, so it would never "
-                f"run. At the top of a script only `local` declarations, "
-                f"`exports = {{...}}` and function definitions are allowed — move "
-                f"it inside a function."))
+                "this statement is outside any function, so it would never "
+                "run. At the top of a script only `local` declarations, "
+                "`exports = {...}` and function definitions are allowed — move "
+                "it inside a function.",
+                line))
 
     def _check_self_owner(self, script: LuaScript) -> None:
         """`self` désigne l'instance à laquelle le script est attaché : il n'existe
@@ -750,7 +751,7 @@ class Checker:
         if self._known_bare_name(name) or name in self._bare_said:
             return
         self._bare_said.add(name)
-        geste = ("is declared as" if ecrit else "se lit")
+        geste = ("is declared as" if ecrit else "is declared as")
         self.errors.append(CheckError(
             "warning",
             f"\"{name}\" refers to nothing: this name is neither a `local` of this script "
@@ -824,7 +825,7 @@ class Checker:
 
     def _unknown_ref_field(self, shown: str, ref: str, field: str) -> None:
         champs = ", ".join(k.split(".", 1)[1] for owner in ref_lineage(ref)
-                           for k in RUNTIME_PROPS if k.startswith(f"{owner}.")) or "aucun"
+                           for k in RUNTIME_PROPS if k.startswith(f"{owner}.")) or "none"
         self.errors.append(CheckError(
             "error",
             f"{shown}.{field}: a {ref} reference has no field \"{field}\" — its fields are: "
@@ -1009,7 +1010,7 @@ class Checker:
             return
         if isinstance(value, ExprNumber):
             valides = HARDWARE_ENUMS.get(p.domain)
-            fin = (f" Valeurs valides : {', '.join(sorted(valides))}."
+            fin = (f" Valid values: {', '.join(sorted(valides))}."
                    if valides else "")
             self.errors.append(CheckError(
                 "error",
@@ -1312,8 +1313,7 @@ class Checker:
                         " in lua_subset.py)."))
         else:
             message = refusal.message
-        where = f"line {line}:" if line else ""
-        self.errors.append(CheckError("error", f"{where}{message}"))
+        self.errors.append(CheckError("error", message, line))
 
     def _check_expr(self, e):
         """Descend dans TOUTE l'expression. Le parcours s'arrêtait aux appels
@@ -1435,7 +1435,7 @@ class Checker:
                     # Ni une propriété, ni un enfant : le dire ici plutôt que de
                     # laisser gcc parler d'un champ de struct que l'auteur n'a
                     # jamais écrit (ROADMAP v0.23).
-                    offre = ", ".join(self.ctx.child_names) or "aucun"
+                    offre = ", ".join(self.ctx.child_names) or "none"
                     self.errors.append(CheckError(
                         "error",
                         f"self.{e.field}: neither an actor property nor a child of it. "
@@ -1534,7 +1534,7 @@ class Checker:
                 shown = f"{receiver}:{e.method}"
                 if api is None and ref:
                     if not self._unknown_element(e.obj):
-                        self._unknown_ref_method(shown, ref, f"`{receiver}` tient")
+                        self._unknown_ref_method(shown, ref, f"`{receiver}` holds")
                 elif api is None:
                     # Une méthode RETIRÉE est une erreur guidée. Un nom
                     # simplement inconnu l'est AUSSI, contrairement à un
@@ -1638,8 +1638,8 @@ class Checker:
                 if len(e.args) != dims:
                     self.errors.append(CheckError(
                         "error",
-                        f"{key}() attend {dims} nombres ({', '.join(VEC_FIELDS[key])}), "
-                        f"{len(e.args)} fourni(s)."))
+                        f"{key}() expects {dims} numbers ({', '.join(VEC_FIELDS[key])}), "
+                        f"{len(e.args)} given."))
                 return
             # Les NOMS cités (scène, prefab, actor, global, constante) sont
             # vérifiés par leur domaine dans `_check_args`, comme tout autre
@@ -1678,7 +1678,7 @@ class Checker:
         valid = LAYER_NUMBERS if self.ctx.layer_numbers is None else self.ctx.layer_numbers
         n = args[0].value
         if n not in valid:
-            offre = ", ".join(str(v) for v in valid) or "aucun"
+            offre = ", ".join(str(v) for v in valid) or "none"
             self.errors.append(CheckError(
                 "error",
                 f"layer:get({n}): this scene has no background {n}. Available "
@@ -1706,7 +1706,7 @@ class Checker:
             got = len(args or [])
             if got != expected:
                 self.errors.append(CheckError(
-                    "error", f"{key}() : {expected} argument(s) attendu(s), {got} fourni(s)."))
+                    "error", f"{key}(): {expected} argument(s) expected, {got} given."))
             return
 
         removed = REMOVED_API.get(key)
@@ -1782,7 +1782,7 @@ class Checker:
         elif got != expected:
             self.errors.append(CheckError(
                 "error",
-                f"{key}() : {expected} argument(s) attendu(s), {got} fourni(s).",
+                f"{key}(): {expected} argument(s) expected, {got} given.",
             ))
             return
 
@@ -2235,7 +2235,7 @@ class Checker:
             if meta is None:
                 continue                # contexte relâché : on ne juge pas les clés
             if key not in meta:
-                near = ", ".join(sorted(meta)) or "aucun"
+                near = ", ".join(sorted(meta)) or "none"
                 self.errors.append(CheckError(
                     "error",
                     f"actor:spawn(\"{prefab}\", …): \"{key}\" is not a settable export of "
@@ -2284,7 +2284,7 @@ class Checker:
                  "sfx_ref":   self.ctx.sfx_names,
                  "scene_ref": self.ctx.scene_names}.get(typ)
         if table is not None and name not in table:
-            near = ", ".join(table) or "aucun"
+            near = ", ".join(table) or "none"
             self.errors.append(CheckError(
                 "warning",
                 f"actor.spawn: \"{name}\" is not a known {typ} ({near})."))
@@ -2333,8 +2333,8 @@ class Checker:
         if name.lower() not in BuildContext.VALID_KEYS and name not in actions:
             self.errors.append(CheckError(
                 "error",
-                f"{call_key}('{name}') : input inconnu. Boutons : "
-                f"{', '.join(sorted(BuildContext.VALID_KEYS))}. Actions : "
+                f"{call_key}('{name}'): unknown input. Buttons: "
+                f"{', '.join(sorted(BuildContext.VALID_KEYS))}. Actions: "
                 f"{', '.join(sorted(actions)) or 'none'}.",
             ))
 
@@ -2346,7 +2346,7 @@ class Checker:
         if name not in valid:
             self.errors.append(CheckError(
                 "error",
-                f"{call_key}('{name}') : axe inconnu. Axes : {', '.join(sorted(valid))}.",
+                f"{call_key}('{name}'): unknown axis. Axes: {', '.join(sorted(valid))}.",
             ))
 
     def _check_sequence_name(self, call_key: str, name: str):
@@ -2423,8 +2423,8 @@ class Checker:
         if name.lower() not in valid:
             self.errors.append(CheckError(
                 "error",
-                f"{call_key}('{name}') : valeur '{name}' inconnue. "
-                f"Valeurs valides : {', '.join(sorted(valid))}.",
+                f"{call_key}('{name}'): unknown value '{name}'. "
+                f"Valid values: {', '.join(sorted(valid))}.",
             ))
 
 

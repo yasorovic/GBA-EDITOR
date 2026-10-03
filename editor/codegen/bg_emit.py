@@ -86,7 +86,7 @@ def emit_bg_anim_c(sym: str, tables: list) -> tuple[str, str]:
             "{" + ",".join(f"0x{w:04X}" for w in se) + "};\n"
         )
         decls.append(f"extern const unsigned short {name}[{len(se)}];")
-    c = "\n".join(parts) if parts else "/* aucun fond animé dans cette scène */\n"
+    c = "\n".join(parts) if parts else "/* no animated background in this scene */\n"
     h = (
         f"#ifndef {sym.upper()}_H\n#define {sym.upper()}_H\n\n"
         + "\n".join(decls) + ("\n\n" if decls else "\n")
@@ -114,7 +114,7 @@ def emit_bg_tileanim_c(sym: str, tables: list, bpp: int = 4) -> tuple[str, str]:
             "{" + ",".join(f"0x{w:08X}" for w in words) + "};\n"
         )
         decls.append(f"extern const unsigned int {name}[{len(words)}];")
-    c = "\n".join(parts) if parts else "/* aucun fond animé « shared » dans cette scène */\n"
+    c = "\n".join(parts) if parts else "/* no shared animated background in this scene */\n"
     h = (
         f"#ifndef {sym.upper()}_H\n#define {sym.upper()}_H\n\n"
         + "\n".join(decls) + ("\n\n" if decls else "\n")

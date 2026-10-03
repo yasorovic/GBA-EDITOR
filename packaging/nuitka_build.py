@@ -159,6 +159,12 @@ def build_command(version: str, output_dir: Path) -> list[str]:
         f"=scripting/api_reference.json"
     )
 
+    # Illustrations SVG (icône de fenêtre, mascotte du bouton Build) : lues par chemin.
+    cmd.append(
+        f"--include-data-dir={EDITOR_DIR / 'ui' / 'common' / 'CustomIcons'}"
+        f"=ui/common/CustomIcons"
+    )
+
     # Catalogue des notices (ui/common/notice.py le lit par Path(__file__)).
     # `--include-package=ui` n'embarque que du code : sans ce dossier, CHAQUE
     # message informatif de l'éditeur retombe sur sa clé (« ui.text.footprint_bg »

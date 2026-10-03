@@ -200,7 +200,7 @@ def iter_refs(text: str, path: Path | None = None,
         return
     try:
         tree = _lua_ast.parse(text)
-    except Exception:
+    except Exception:  # tolerated: unparsable script: the validator reports it, nothing is rewritten
         return   # script non parsable : aucune réécriture (cf. rename_in_text)
 
     yield from _iter_prop_refs(tree, text, path, domain, value)
@@ -306,7 +306,7 @@ def iter_call_sites(text: str, path: Path | None = None,
         return
     try:
         tree = _lua_ast.parse(text)
-    except Exception:
+    except Exception:  # tolerated: unparsable script: the validator reports it, nothing is rewritten
         return
 
     elems = _element_locals(tree)
@@ -358,7 +358,7 @@ def domain_args_in_text(text: str, domain: str) -> tuple[set[str], bool]:
         return set(), True
     try:
         tree = _lua_ast.parse(text)
-    except Exception:
+    except Exception:  # tolerated: unparsable script: the validator reports it, nothing is rewritten
         return set(), True
 
     names: set[str] = set()
@@ -473,7 +473,7 @@ def iter_data_refs(text: str, path: Path | None = None,
         return
     try:
         tree = _lua_ast.parse(text)
-    except Exception:
+    except Exception:  # tolerated: unparsable script: the validator reports it, nothing is rewritten
         return
 
     def _line(off: int) -> int:
@@ -594,7 +594,7 @@ def iter_var_refs(text: str, path: Path | None = None,
         return
     try:
         tree = _lua_ast.parse(text)
-    except Exception:
+    except Exception:  # tolerated: unparsable script: the validator reports it, nothing is rewritten
         return
 
     def _line(off: int) -> int:

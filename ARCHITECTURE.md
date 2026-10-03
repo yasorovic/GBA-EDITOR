@@ -2828,6 +2828,31 @@ La gomme restaure la palette d'origine (supprime l'override).
 Orchestré par `editor/codegen/rom_build.py` (`BuildWorker`), déclenché depuis
 `ui/common/build_panel.py`.
 
+### Le journal de build — un diagnostic, un fichier
+
+Tout ce que le build reproche au projet est un `ValidationMessage` (`core/validator.py`) :
+`level` (`error`/`warning`), `source` (`validator`, `script`, `checker`, `codegen`, ou l'outil :
+`make`, `grit`, `mmutil`…), `file`, `line`, `actor` (le propriétaire d'un script), et une `target`
+cliquable. Le validateur, le checker Lua, le codegen et la sortie des outils passent par la même forme ;
+`build_error()` / `build_warning()` la fabriquent hors du validateur.
+
+`BuildWorker` n'émet que quatre sortes d'événements : `log_line` (information), `diagnostic`
+(avertissement ou erreur, l'objet ci-dessus), `error_line` (le contexte d'un outil qui a échoué),
+`progress`/`finished`. Son `_emit` est le seul point de passage : il compte les diagnostics, ajoute
+`[build] N error(s), M warning(s)` devant `finished`, et copie chaque ligne dans
+**`<projet>/build/build.log`** (réécrit à chaque build ; en-tête : version, outils, projet).
+
+- La console se rend d'un diagnostic avec `console_line()` (`[error] Hit.lua:3: message`) ; la couleur
+  suit `level`, pas le canal. L'onglet Diagnostics reçoit la même liste à la fin du build, et son clic lit
+  `file`/`line`.
+- Le stderr d'un outil est rangé par ce qu'il dit (`BuildWorker._emit_tool_line`) : `fichier:ligne:col:
+  error|warning:` de gcc devient un diagnostic, `note:` de l'information, le reste du contexte (rouge
+  seulement si l'outil a échoué). Le code de retour est seul juge de l'échec.
+- **Aucune erreur n'est avalée.** Un `except` large (`Exception`, nu, `LuaParseError`) de `codegen/`,
+  `scripting/` ou `core/validator.py` lève, émet, ou porte `# tolerated: <raison>` ; `tests/
+  test_silent_except.py` le garde. `core/validator._check_scripts_parse` lit tout `.lua` de `scripts/`,
+  attaché ou non, et `tests/test_build_fault_injection.py` rejoue des fautes connues dans un vrai build.
+
 ---
 
 ## Packaging & distribution (Nuitka + NSIS + GitHub Releases)

@@ -158,11 +158,11 @@ def _parse_value(raw: str, typ: str) -> Any:
 
     if typ == "int":
         try:    return int(float(raw))
-        except: return 0
+        except (ValueError, OverflowError): return 0
 
     if typ == "float":
         try:    return float(raw)
-        except: return 0.0
+        except ValueError: return 0.0
 
     if typ == "vec2":
         nums = re.findall(r'-?[\d.]+', raw)
@@ -228,7 +228,7 @@ def add_export(lua_path: Path, name: str, typ: str, label: str | None = None) ->
     """Ajoute une nouvelle variable à la table `exports` (la crée si absente,
     juste après un éventuel bloc @note — cf. scripting/script_notes.py)."""
     if typ not in KNOWN_TYPES:
-        raise ValueError(f"Type de variable inconnu : {typ}")
+        raise ValueError(f"Unknown variable type: {typ}")
     text = lua_path.read_text(encoding="utf-8", errors="ignore") if lua_path.exists() else ""
     label = label or name
     default_repr = _lua_literal(_DEFAULTS.get(typ, ""), typ)

@@ -234,16 +234,16 @@ end
     # message autour d'elle — d'où ce marqueur, et non l'ancien « PREMIER
     # NIVEAU » qui n'y figure plus.
     ("function on_sequence_a()\n if self.visible then\n wait(10)\n end\nend\n",
-     "au premier niveau ou dans une boucle BORNÉE"),
+     "at the top level or in a BOUNDED loop"),
     ("function on_update()\n wait(10)\nend\n",
-     "au premier niveau ou dans une boucle BORNÉE"),
-    ("function on_sequence_a()\n local n = wait(3)\nend\n", "ne rend aucune valeur"),
-    ("function on_sequence_a()\n wait_until(false)\nend\n", "ne peut pas changer"),
+     "at the top level or in a BOUNDED loop"),
+    ("function on_sequence_a()\n local n = wait(3)\nend\n", "returns no value"),
+    ("function on_sequence_a()\n wait_until(false)\nend\n", "cannot change"),
     ("local S = 10\nfunction on_sequence_a()\n wait_until(S > 20)\nend\n",
-     "ne peut pas changer"),
-    ("function on_sequence_a()\n wait(-1)\nend\n", "écrite en clair et positive"),
+     "cannot change"),
+    ("function on_sequence_a()\n wait(-1)\nend\n", "plain positive number"),
     ("function on_sequence_a()\n wait(1)\nend\nfunction on_start()\n"
-     " sequence:start(\"autre\")\nend\n", "ne déclare pas de séquence"),
+     " sequence:start(\"autre\")\nend\n", "does not declare a sequence"),
 ])
 def test_les_refus(src, attendu):
     errs, _code, _n = _gen(src)

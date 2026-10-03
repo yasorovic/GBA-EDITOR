@@ -96,7 +96,7 @@ def test_deposer_une_source_vectorielle_invalide_est_refusee_sans_rasteriser(tmp
     warning = asset_reconciliation.sync_font_file(project, source)
     font = project.fonts.get("ComicNeue")
 
-    assert "import impossible" in warning
+    assert "import failed" in warning
     assert font is None
 
 

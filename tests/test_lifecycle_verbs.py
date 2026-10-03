@@ -140,7 +140,7 @@ def test_ecrire_l_etat_est_refuse_sur_chaque_type():
                         "hb.active"),
                        ('interface:get("Menu").visible = false', "visible")):
         (msg,) = _errors(body)
-        assert "lecture seule" in msg, (body, msg)
+        assert "read-only" in msg, (body, msg)
 
 
 def test_un_type_refuse_un_verbe_qu_il_ne_declare_pas():

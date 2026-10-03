@@ -49,7 +49,7 @@ def test_un_id_connu_passe():
 
 def test_un_id_inconnu_est_une_erreur_qui_liste_les_ids():
     (msg,) = _erreurs('self:activate_sprite("nope")', ["normal", "blesse"])
-    assert "aucun composant sprite de cet id" in msg and "normal, blesse" in msg
+    assert "no sprite component with this id" in msg and "normal, blesse" in msg
 
 
 def test_la_comparaison_de_l_apparence_active_est_verifiee_aussi():
@@ -59,7 +59,7 @@ def test_la_comparaison_de_l_apparence_active_est_verifiee_aussi():
 def test_activer_le_sprite_d_un_autre_acteur_est_refuse():
     """L'id appartient à l'acteur qui exécute le script, pas au récepteur."""
     errs = _erreurs('local o = actor:get(1)\nif o then o:activate_sprite("normal") end', ["normal"])
-    assert any("nomme un" in e for e in errs)
+    assert any("names an element" in e for e in errs)
 
 
 # ── Le C émis ─────────────────────────────────────────────────────────
@@ -195,4 +195,4 @@ def test_deux_ids_qui_donnent_la_meme_constante_sont_une_erreur(tmp_path):
     ctx = ValidationContext(p)
     _check_sprite_appearances(ctx)
     errs = [m.message for m in ctx._msgs if m.level == "error"]
-    assert len(errs) == 1 and "même constante C" in errs[0]
+    assert len(errs) == 1 and "same C constant" in errs[0]

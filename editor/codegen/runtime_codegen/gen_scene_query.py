@@ -47,7 +47,7 @@ def parent_depths(scene_actors: list) -> tuple[dict, list]:
                 break
             if par not in by_name:
                 errors.append(
-                    f"[error] actor \"{a.name}\" has parent \"{par}\", which is not an actor of "
+                    f"actor \"{a.name}\" has parent \"{par}\", which is not an actor of "
                     "this scene. A parent is chosen within the same scene.")
                 chain = []
                 break
@@ -56,7 +56,7 @@ def parent_depths(scene_actors: list) -> tuple[dict, list]:
             # cran plus loin, ce qui donnait un chemin qui repassait deux fois.
             if par in chain:
                 errors.append(
-                    f"[error] circular parenting: {' → '.join(chain)} → {par}. An actor cannot descend "
+                    f"circular parenting: {' → '.join(chain)} → {par}. An actor cannot descend "
                     "from itself.")
                 chain = []
                 break
@@ -166,7 +166,7 @@ def bg_info(p, scene) -> list[dict]:
                 from PIL import Image
                 with Image.open(ap) as img:
                     w, h = img.size
-            except Exception:
+            except Exception:  # tolerated: unreadable PNG: the validator reports it, default size kept
                 w, h = 240, 160
             tw, th, ms = bg_map_geometry(w, h)
             map_sbb_count = bg_map_sbb_count(ms)

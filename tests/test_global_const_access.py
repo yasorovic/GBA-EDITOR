@@ -95,14 +95,14 @@ def test_case_de_tableau_compile_indexee():
 def test_global_inconnu_refuse_et_nomme_les_declarees():
     errs = _check(_body("local v = global.inexistant"))
     assert len(errs) == 1
-    assert "global.inexistant" in errs[0] and "introuvable" in errs[0]
+    assert "global.inexistant" in errs[0] and "not found" in errs[0]
     assert "score" in errs[0]
 
 
 def test_constante_inconnue_refusee():
     errs = _check(_body("local v = const.inexistante"))
     assert len(errs) == 1
-    assert "const.inexistante" in errs[0] and "introuvable" in errs[0]
+    assert "const.inexistante" in errs[0] and "not found" in errs[0]
 
 
 def test_constante_citee_dans_un_projet_sans_aucune_constante():
@@ -113,7 +113,7 @@ def test_constante_citee_dans_un_projet_sans_aucune_constante():
     errs = _check(_body("local v = const.max_vies"), const_names=[])
     assert len(errs) == 1
     assert "const.max_vies" in errs[0]
-    assert "aucune constante" in errs[0]
+    assert "no constant" in errs[0]
 
 
 def test_contexte_absent_relache_la_verification():
@@ -128,7 +128,7 @@ def test_contexte_absent_relache_la_verification():
 def test_un_tableau_ne_se_lit_pas_nu():
     errs = _check(_body("local v = global.coffres"))
     assert len(errs) == 1
-    assert "TABLEAU" in errs[0] and "global.coffres[i]" in errs[0]
+    assert "ARRAY" in errs[0] and "global.coffres[i]" in errs[0]
 
 
 def test_un_scalaire_ne_sindexe_pas():
@@ -148,7 +148,7 @@ def test_un_rang_hors_bornes_ecrit_en_clair_est_refuse():
 
 
 def test_ecrire_une_constante_est_refuse():
-    assert any("ne s'écrit jamais" in e for e in _check(_body("const.max_vies = 4")))
+    assert any("is never written" in e for e in _check(_body("const.max_vies = 4")))
 
 
 def test_ecrire_une_constante_inconnue_dit_les_deux_fautes():
@@ -185,7 +185,7 @@ def test_les_accesseurs_retires_sont_bloques(src):
     inexistant. Le blocage tient au checker (module hors catalogue), pas à
     REMOVED_API."""
     errs = _check(_body(src))
-    assert errs and "n'existe pas" in errs[0]
+    assert errs and "does not exist" in errs[0]
 
 
 def test_les_accesseurs_ont_quitte_le_catalogue():

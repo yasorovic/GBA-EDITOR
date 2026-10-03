@@ -125,7 +125,7 @@ def scene_ui_obj_slots(scene: Scene, project) -> int:
     que de lever."""
     try:
         return int(scene_obj_ui_slots(project, scene) or 0)
-    except Exception:
+    except Exception:  # tolerated: half-loaded project: the validator reports the missing asset
         return 0
 
 

@@ -32,6 +32,14 @@ def _errors(src: str, **ctx_kw) -> list[str]:
     return [e.message for e in errs if e.level == "error"]
 
 
+def _error_lines(src: str, **ctx_kw) -> list[int]:
+    """Les lignes des erreurs d'un script (0 = la faute n'en a pas)."""
+    from scripting.parser import parse
+    from scripting.checker import check, BuildContext
+    return [e.line for e in check(parse(src), BuildContext(actor_name="Ball", **ctx_kw))
+            if e.level == "error"]
+
+
 def _in_handler(body: str) -> str:
     return f"function on_update()\n{body}\nend\n"
 
@@ -45,14 +53,14 @@ def _in_handler(body: str) -> str:
     ("repeat n = n - 1 until n == 0",         "repeat … until"),
     ("goto fin\n::fin::",                     "goto"),
     ("do n = 1 end",                          "do … end"),
-    ("local function f() return 1 end",       "fonction"),
-    ("function f() return 1 end",             "fonction"),
+    ("local function f() return 1 end",       "function"),
+    ("function f() return 1 end",             "function"),
 ])
 def test_statement_refuse_avec_sa_ligne(body, attendu):
     errs = _errors(_in_handler(body))
     assert errs, f"« {body} » ne produit aucune erreur — il disparaît en silence"
     assert any(attendu in e for e in errs), errs
-    assert any("ligne" in e for e in errs), \
+    assert any(_error_lines(_in_handler(body))), \
         f"le refus de « {body} » ne situe pas la faute : {errs}"
 
 
@@ -60,12 +68,12 @@ def test_statement_refuse_avec_sa_ligne(body, attendu):
 
 @pytest.mark.parametrize("expr, attendu", [
     ('local s = "a" .. "b"',            ".."),
-    ("local f = function() return 1 end", "fonction"),
+    ("local f = function() return 1 end", "function"),
     ("local p = 2 ^ 8",                 "^"),
     ("local q = 5 // 2",                "//"),
-    ("local r = 1 << 3",                "binaires"),
-    ("local r = 1 & 3",                 "binaires"),
-    ("local r = ~1",                    "binaires"),
+    ("local r = 1 << 3",                "bitwise"),
+    ("local r = 1 & 3",                 "bitwise"),
+    ("local r = ~1",                    "bitwise"),
 ])
 def test_expression_refusee(expr, attendu):
     errs = _errors(_in_handler(expr))
@@ -118,7 +126,7 @@ def test_invoke_sur_expression_sans_type_reste_refuse():
         actor_name="Ball", actor_sym="Ball", anim_names=[], sfx_names=[],
         music_names=[], global_names=set(), const_names=set(),
         all_actor_syms=["Ball"]))
-    assert "invoke sur expression complexe ignoré" in code
+    assert "invoke on complex expression ignored" in code
 
 
 def test_aucun_identifiant_unsupported_dans_le_c():
@@ -133,7 +141,7 @@ def test_aucun_identifiant_unsupported_dans_le_c():
         music_names=[], global_names=set(), const_names=set(),
         all_actor_syms=["Ball"]))
     assert "__unsupported" not in code
-    assert "non traduit" in code       # le trou est écrit, pas caché
+    assert "not translated" in code       # le trou est écrit, pas caché
 
 
 def test_zero_est_faux_pas_comme_le_vrai_lua():
@@ -206,14 +214,14 @@ def test_text_draw_litteral_interpole_une_locale():
 def test_text_draw_litteral_refuse_une_valeur_inconnue():
     errs = _errors(_in_handler('    text:draw(2, 2, "PV : $hp")'),
                    global_names=[], const_names=[], text_keys=[])
-    assert any("n’est ni une locale" in err for err in errs), errs
+    assert any("neither a locale" in err for err in errs), errs
 
 
 def test_text_draw_litteral_limite_les_locales_a_quatre():
     src = _in_handler("\n".join(f"    local v{i} = {i}" for i in range(5))
                       + '\n    text:draw(2, 2, "$v0 $v1 $v2 $v3 $v4")')
     errs = _errors(src, global_names=[], const_names=[], text_keys=[])
-    assert any("au plus 4 valeurs" in err for err in errs), errs
+    assert any("at most 4 interpolated" in err for err in errs), errs
 
 
 def test_text_draw_in_litteral_interpole_une_locale():
@@ -247,16 +255,16 @@ def test_marqueur_de_valeur_accepte_une_limite_de_neuf_caracteres():
 
 @pytest.mark.parametrize("appel, attendu", [
     ("print(1)",              "console"),
-    ("table.insert(t, 1)",    "taille fixe"),
-    ("string.format(\"%d\")", "chaîne manipulable"),
-    ("os.time()",             "horloge"),
-    ("io.open(\"a\")",        "système de fichiers"),
+    ("table.insert(t, 1)",    "fixed size"),
+    ("string.format(\"%d\")", "string it can manipulate"),
+    ("os.time()",             "system clock"),
+    ("io.open(\"a\")",        "file system"),
     ("coroutine.create(f)",   "coroutine"),
     ("pairs(t)",              "index"),
-    ("tostring(1)",           "marqueur de valeur"),
-    ("pcall(f)",              "exception"),
-    ("setmetatable(t, t)",    "métatable"),
-    ("collectgarbage()",      "alloué"),
+    ("tostring(1)",           "value marker"),
+    ("pcall(f)",              "exceptions"),
+    ("setmetatable(t, t)",    "metatable"),
+    ("collectgarbage()",      "allocated"),
 ])
 def test_bibliotheque_standard_refusee(appel, attendu):
     errs = _errors(_in_handler(f"    {appel}"))
@@ -264,9 +272,9 @@ def test_bibliotheque_standard_refusee(appel, attendu):
 
 
 @pytest.mark.parametrize("appel, attendu", [
-    ("math.floor(1)",   "entièrement entier"),
+    ("math.floor(1)",   "entirely integer"),
     ("math.random(1, 2)", "math.rand"),
-    ("math.pow(2, 3)",  "multipliant"),
+    ("math.pow(2, 3)",  "multiplying"),
     ("math.fmod(5, 2)", "%"),
     # Sans entrée dédiée : le message LISTE ce que le module offre vraiment.
     ("math.tan(1)",     "abs, atan2, clamp"),
@@ -280,7 +288,7 @@ def test_math_est_un_faux_ami(appel, attendu):
 
 def test_fonction_inconnue_refusee():
     errs = _errors(_in_handler("    aide(3)"))
-    assert any("fonction inconnue" in e.lower() for e in errs), errs
+    assert any("unknown function" in e.lower() for e in errs), errs
 
 
 def test_module_inconnu_refuse():
@@ -292,12 +300,12 @@ def test_propriete_appelee_comme_une_fonction():
     """`self.position()` : la v0.7.4 a fait des états des propriétés, et le
     point suivi de parenthèses est l'erreur que cette migration provoque."""
     errs = _errors(_in_handler("    local p = self.position()"))
-    assert any("PROPRIÉTÉ" in e for e in errs), errs
+    assert any("PROPERTY" in e for e in errs), errs
 
 
 def test_methode_appelee_avec_un_point():
     errs = _errors(_in_handler('    self.play_anim("idle")'))
-    assert any("DEUX POINTS" in e for e in errs), errs
+    assert any("COLON" in e for e in errs), errs
 
 
 def test_helper_prive_accepte_et_recoit_self_implicite():
@@ -325,7 +333,7 @@ def test_helper_prive_verifie_arite_et_recursion():
     arity = _errors("function aide(n) end\nfunction on_update() aide() end\n")
     assert any("1 argument" in e for e in arity), arity
     recursive = _errors("function aide() aide() end\nfunction on_update() aide() end\n")
-    assert any("Récursion interdite" in e for e in recursive), recursive
+    assert any("Recursion is not allowed" in e for e in recursive), recursive
 
 
 # ── 5. Ce qui doit continuer de passer ─────────────────────────────

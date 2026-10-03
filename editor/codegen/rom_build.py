@@ -45,7 +45,7 @@ from core.models.components import SpriteComponent
 from core.models.sprite import SpriteAsset
 from core.models.scene import Actor
 from core.project import Project
-from core.validator import validate_project
+from core.validator import validate_project, build_error, build_warning
 import codegen.build_output as build_output
 
 # Pipeline scripting (Lua → C) : importée localement dans les méthodes, d'où
@@ -65,6 +65,12 @@ WINDOWS_PATH_LIMIT = 260
 _BUILD_PATH_OVERHEAD = 24
 
 
+# `chemin:ligne:col: error: message` — la forme de gcc (et de make qui la relaie).
+_TOOL_DIAGNOSTIC = re.compile(
+    r"^(?P<file>.+?):(?P<line>\d+)(?::\d+)?:\s*(?P<kind>fatal error|error|warning|note):\s*"
+    r"(?P<message>.*)$")
+
+
 def path_too_long_message(p: Project) -> Optional[str]:
     """Un message si le projet est trop profond pour les outils de build Windows,
     None sinon. Contrôlé AVANT de générer quoi que ce soit : la même panne sortait
@@ -79,7 +85,7 @@ def path_too_long_message(p: Project) -> Optional[str]:
     estimate = len(str(p.build_dir)) + _BUILD_PATH_OVERHEAD + 2 * longest
     if estimate < WINDOWS_PATH_LIMIT:
         return None
-    return (f"[build] project path too long: the build writes files up to ~{estimate} "
+    return (f"project path too long: the build writes files up to ~{estimate} "
             "characters, and the Windows tools (grit, gcc) refuse beyond "
             f"{WINDOWS_PATH_LIMIT}. Move the project to a shallower folder (e.g. "
             f"C:\\Games\\{p.settings.name}).")
@@ -104,8 +110,13 @@ class BuildWorker(EventEmitter, threading.Thread):
 
     Événements émis (depuis le thread de build) :
         "log_line"   (str)   — ligne de log normale
-        "error_line" (str)   — ligne d'erreur
-        "finished"   (bool)  — succès/échec en fin de build
+        "error_line" (str)   — ligne de contexte d'un échec (sortie d'un outil qui a échoué)
+        "diagnostic" (ValidationMessage) — un avertissement ou une erreur, avec son fichier
+                              et sa ligne ; c'est la SEULE forme d'un problème de build
+        "finished"   (bool)  — succès/échec en fin de build, précédé du décompte
+
+    Tout ce qui est émis est aussi copié dans `<projet>/build/build.log`, réécrit à chaque
+    build : c'est le journal qu'on joint à un rapport de bug, et il survit à la fenêtre.
 
     La GUI est responsable de marshaller ces callbacks vers son propre
     thread principal (ex. queue + QTimer pour PyQt6).
@@ -119,6 +130,69 @@ class BuildWorker(EventEmitter, threading.Thread):
         threading.Thread.__init__(self, daemon=True)
         self.project   = project
         self.toolchain = toolchain
+        self._build_log = None
+        self._counts = {"error": 0, "warning": 0}
+
+    # ── Émission, décompte et build.log ───────────────────────────────
+
+    def _emit(self, event: str, *args) -> None:
+        """Seul point par où passe le journal : compte les diagnostics, ajoute le décompte
+        devant `finished`, et copie chaque ligne dans `build.log`."""
+        if event == "diagnostic":
+            self._counts[args[0].level] += 1
+        elif event == "finished":
+            errors, warnings = self._counts["error"], self._counts["warning"]
+            self._emit("error_line" if errors else "log_line",
+                       f"[build] {errors} error(s), {warnings} warning(s)")
+        self._write_build_log(event, args)
+        super()._emit(event, *args)
+        if event == "finished":
+            self._close_build_log()
+
+    def _open_build_log(self, p: Project) -> None:
+        import datetime
+        from core.app_info import APP_NAME, APP_VERSION
+        self._counts = {"error": 0, "warning": 0}
+        tc = self.toolchain
+        tools = ({"make": tc.resolve_make(), "grit": tc.resolve_grit(),
+                  "mmutil": tc.resolve_mmutil(), "arm-gcc": tc.resolve_arm_gcc(),
+                  "mgba": tc.resolve_mgba()} if tc else {})
+        try:
+            p.build_dir.mkdir(parents=True, exist_ok=True)
+            self._build_log = open(p.build_dir / "build.log", "w", encoding="utf-8")
+        except OSError as exc:
+            self._build_log = None
+            self._emit("log_line", f"[build] build.log could not be written: {exc}")
+            return
+        header = [f"{APP_NAME} {APP_VERSION} — build log",
+                  f"project: {p.settings.name} ({p.root})",
+                  f"started: {datetime.datetime.now().isoformat(timespec='seconds')}",
+                  "tools: " + ", ".join(f"{k}={v or 'NOT FOUND'}" for k, v in tools.items()),
+                  "legend: `! ` = output of a tool that failed; [error]/[warn] = diagnostics",
+                  ""]
+        self._build_log.write("\n".join(header) + "\n")
+
+    def _write_build_log(self, event: str, args: tuple) -> None:
+        if self._build_log is None:
+            return
+        if event == "log_line":
+            text = args[0]
+        elif event == "error_line":
+            text = "! " + args[0]
+        elif event == "diagnostic":
+            text = args[0].console_line()
+        else:
+            return
+        try:
+            self._build_log.write(text + "\n")
+            self._build_log.flush()
+        except OSError:  # tolerated: build.log is a copy of what the panel shows, the build goes on
+            self._build_log = None
+
+    def _close_build_log(self) -> None:
+        if self._build_log is not None:
+            self._build_log.close()
+            self._build_log = None
 
     def run(self):
         try:
@@ -127,31 +201,31 @@ class BuildWorker(EventEmitter, threading.Thread):
                 BuildWorker._mgba_proc.terminate()
                 try:
                     BuildWorker._mgba_proc.wait(timeout=3)
-                except Exception:
+                except Exception:  # tolerated: wait() timed out: the process is killed instead
                     BuildWorker._mgba_proc.kill()
             BuildWorker._mgba_proc = None
 
             p = self.project
+            self._open_build_log(p)
 
             if not p.scenes:
-                self._emit("error_line","[build] no scene in the project")
+                self._emit("diagnostic", build_error("no scene in the project", "build"))
                 self._emit("finished",False)
                 return
 
             # ── Validation ────────────────────────────────────────
             warns, errors = validate_project(p)
             for w in warns:
-                self._emit("log_line", f"[warn]  {w}")
+                self._emit("diagnostic", w)
             for e in errors:
-                self._emit("error_line", f"[error] {e}")
+                self._emit("diagnostic", e)
             if errors:
-                self._emit("error_line", f"[build] {len(errors)} blocking error(s) — build "
-                                         "cancelled.")
+                self._emit("log_line", "[build] build cancelled: the project has blocking errors.")
                 self._emit("finished", False)
                 return
 
             if too_long := path_too_long_message(p):
-                self._emit("error_line", too_long)
+                self._emit("diagnostic", build_error(too_long, "build"))
                 self._emit("finished", False)
                 return
 
@@ -270,10 +344,10 @@ class BuildWorker(EventEmitter, threading.Thread):
                             # avec un 2e calque de fond dans la même scène.
                             if (getattr(build_ba, "bpp", 4) == 8
                                     and sum(1 for L in d["bg_pairs"] if L.background_name) > 1):
-                                self._emit("error_line",
-                                           f"[bg] '{build_ba.name}' 8bpp takes the whole BG "
-                                           "palette — the other background layers of "
-                                           f"scene '{scene.name}' will have wrong colours")
+                                self._emit("diagnostic", build_warning(
+                                    f"'{build_ba.name}' 8bpp takes the whole BG "
+                                    "palette — the other background layers of "
+                                    f"scene '{scene.name}' will have wrong colours", "bg"))
                             pal_offset = bg_layout.bg_block_offset(build_ba) or 0
                             final_map = self._bg_final_tilemap(
                                 p, scene, build_ba, layer, pal_offset)
@@ -442,9 +516,10 @@ class BuildWorker(EventEmitter, threading.Thread):
             # Python brute devant l'utilisateur.
             crash_log.log_current_exception(
                 f"Build de {getattr(getattr(self, 'project', None), 'root', '?')}")
-            self._emit("error_line", f"[build] internal error: {type(e).__name__}: {e}")
-            self._emit("error_line", f"[build] details are in {crash_log.LOG_FILE} (Help → Open the log"
-                                     " folder)")
+            self._emit("diagnostic", build_error(
+                f"internal error: {type(e).__name__}: {e}", "build"))
+            self._emit("log_line", f"[build] details are in {crash_log.LOG_FILE} (Help → Open the log"
+                                   " folder)")
             self._emit("finished", False)
 
     # ── Utilitaires ───────────────────────────────────────────────
@@ -453,6 +528,27 @@ class BuildWorker(EventEmitter, threading.Thread):
     def _actor_script(actor: Actor) -> Optional[str]:
         comp = actor.get_component("script")
         return comp.script if comp and comp.active else None
+
+    def _emit_tool_line(self, line: str, source: str, failed: bool) -> None:
+        """Une ligne du stderr d'un outil, rangée par ce qu'elle DIT et non par le flux
+        qui la porte : gcc écrit ses avertissements sur stderr, et une compilation réussie
+        se remplissait de lignes rouges. Seul le code de retour juge de l'échec.
+
+        - `fichier:ligne:col: error|warning:` (gcc) : un diagnostic, avec son fichier ;
+        - `undefined reference` (l'éditeur de liens) : une erreur ;
+        - `note:` : de l'information ;
+        - le reste : du contexte, rouge si l'outil a échoué, ordinaire sinon."""
+        m = _TOOL_DIAGNOSTIC.match(line)
+        if m and m["kind"] in ("error", "fatal error", "warning"):
+            make = build_warning if m["kind"] == "warning" else build_error
+            self._emit("diagnostic", make(m["message"], source,
+                                          Path(m["file"]).name, int(m["line"])))
+        elif "undefined reference" in line:
+            self._emit("diagnostic", build_error(line.strip(), source))
+        elif failed and not (m and m["kind"] == "note"):
+            self._emit("error_line", f"  {line}")
+        else:
+            self._emit("log_line", f"  {line}")
 
     def _run_cmd(self, cmd, prefix, cwd=None, env=None) -> bool:
         self._emit("log_line",f"{prefix} {' '.join(str(c) for c in cmd)}")
@@ -465,23 +561,26 @@ class BuildWorker(EventEmitter, threading.Thread):
                 cmd, capture_output=True, text=True, errors="replace",
                 cwd=str(cwd) if cwd else None, env=env
             )
+            failed = proc.returncode != 0
             for line in proc.stdout.splitlines():
-                self._emit("log_line",f"  {line}")
+                self._emit("log_line", f"  {line}")
             for line in proc.stderr.splitlines():
-                self._emit("error_line",f"  {line}")
-            if proc.returncode != 0:
+                self._emit_tool_line(line, prefix.strip("[]"), failed)
+            if failed:
                 # La sortie des outils est longue ; la ligne qui dit QUELLE étape
                 # a échoué, et avec quel code, ferme le bloc.
-                self._emit("error_line", f"{prefix} failed (code {proc.returncode})")
-            return proc.returncode == 0
+                self._emit("diagnostic", build_error(
+                    f"failed (code {proc.returncode})", prefix.strip("[]")))
+            return not failed
         except FileNotFoundError as e:
-            self._emit("error_line",f"{prefix} not found: {e}")
+            self._emit("diagnostic", build_error(f"not found: {e}", prefix.strip("[]")))
             return False
         except OSError as e:
             # L'outil n'a pas pu démarrer (dossier de travail refusé, chemin trop
             # long : WinError 267…). Un message, pas une trace de « erreur
             # inattendue » (cf. `path_too_long_message` pour le cas prévisible).
-            self._emit("error_line", f"{prefix} impossible de lancer l'outil : {e}")
+            self._emit("diagnostic", build_error(f"could not start the tool: {e}",
+                                                  prefix.strip("[]")))
             return False
 
     def _make_env(self) -> dict:
@@ -600,14 +699,12 @@ class BuildWorker(EventEmitter, threading.Thread):
 
         def _err(name, geom, why):
             nonlocal ok
-            self._emit(
-                "error_line",
-                f"[bg] '{name}' placed at ({geom.col}, {geom.row}) tiles on '{geom.host_name}': {why}. An animated "
+            self._emit("diagnostic", build_error(
+                f"'{name}' placed at ({geom.col}, {geom.row}) tiles on '{geom.host_name}': {why}. An animated "
                 "background is MERGED with the scenery underneath — its sub-palette "
                 "therefore holds the colours of both. Move the placement onto a "
                 "plainer scenery, or reduce the number of colours of the animation or"
-                " of the background."
-            )
+                " of the background.", "bg"))
             ok = False
 
         placements = scene_animations(p, scene, _skip, _err)
@@ -677,19 +774,17 @@ class BuildWorker(EventEmitter, threading.Thread):
             header = p.grit_out_dir / f"{sym}.h"
             m = re.search(rf"{sym}TilesLen\s+(\d+)", header.read_text()) if header.exists() else None
             if not m:
-                self._emit("error_line", f"[grit BG] {sym}.h not found/unreadable — "
-                                         "build cancelled")
+                self._emit("diagnostic", build_error(
+                    f"{sym}.h not found/unreadable — build cancelled", "grit"))
                 ok = False
                 continue
             tiles_used = int(m.group(1)) // 32
             if tiles_used > tile_budget:
-                self._emit(
-                    "error_line",
-                    f"[grit BG] '{asset.name}' BG{layer.bg_slot}: {tiles_used} tiles generated, {tile_budget} tiles available "
+                self._emit("diagnostic", build_error(
+                    f"'{asset.name}' BG{layer.bg_slot}: {tiles_used} tiles generated, {tile_budget} tiles available "
                     f"from the base of charblock {layer.bg_slot} — reduce the number of unique "
                     "tiles of this layer (fewer colours/patterns), its map size, or "
-                    "move another layer of this scene."
-                )
+                    "move another layer of this scene.", "grit"))
                 ok = False
         return ok
 
@@ -726,14 +821,12 @@ class BuildWorker(EventEmitter, threading.Thread):
                     continue
                 own = len(ba.tileset)
                 extra = used - own
-                self._emit(
-                    "error_line",
-                    f"[bg] '{ba.name}' BG{layer.bg_slot}: {used} tiles to load ({own} for the background"
+                self._emit("diagnostic", build_error(
+                    f"'{ba.name}' BG{layer.bg_slot}: {used} tiles to load ({own} for the background"
                     + (f" + {extra} for the animated backgrounds placed on it" if extra else "")
                     + f"), {budget} tiles available from the base of charblock "
                       f"{layer.bg_slot} — remove a placed animation, reduce the number of unique "
-                      "tiles, or move another layer of the scene."
-                )
+                      "tiles, or move another layer of the scene.", "bg"))
                 ok = False
         return ok
 
@@ -848,7 +941,7 @@ class BuildWorker(EventEmitter, threading.Thread):
                     if any(_sequence_name(n) is not None for n in events):
                         events.add("on_update")
                     actor_defined_events[sym] = events
-                except LuaParseError:
+                except LuaParseError:  # tolerated: a syntax error is reported by the script validator
                     pass
 
         for d in all_scene_data:
@@ -927,10 +1020,10 @@ class BuildWorker(EventEmitter, threading.Thread):
     def _step_make(self, p: Project) -> bool:
         make = self.toolchain.resolve_make()
         if not make:
-            self._emit("error_line","[make] not found"); return False
+            self._emit("diagnostic", build_error("not found", "make")); return False
         src = RUNTIME_DIR / "Makefile"
         if not src.exists():
-            self._emit("error_line",f"[make] Makefile manquant : {src}"); return False
+            self._emit("diagnostic", build_error(f"Makefile missing: {src}", "make")); return False
         build_output.copy(src, p.makefile_path)
         # Une ROM tenue ouverte par un autre programme (un émulateur lancé hors de
         # l'éditeur) fait échouer `objcopy` avec « Permission denied » — sans dire
@@ -940,10 +1033,10 @@ class BuildWorker(EventEmitter, threading.Thread):
                 with open(p.rom_path, "ab"):
                     pass
             except PermissionError:
-                self._emit("error_line",
-                           f"[make] {p.rom_path.name} is locked: opened by another program (an "
-                           "emulator?) or read-only. Close it, then run the build "
-                           "again.")
+                self._emit("diagnostic", build_error(
+                    f"{p.rom_path.name} is locked: opened by another program (an "
+                    "emulator?) or read-only. Close it, then run the build "
+                    "again.", "make"))
                 return False
         env = self._make_env()
         # ROADMAP v0.14 : `debug.*` n'existe dans la ROM que build DEBUG. Le
@@ -996,18 +1089,18 @@ class BuildWorker(EventEmitter, threading.Thread):
         # quel, pas les lignes de texte — le rendu graphique ne réanalyse rien.
         self._emit("rom_report", report)
         if report.over_capacity:
-            self._emit("error_line",
-                       "[weight] the ROM exceeds the declared cartridge capacity.")
+            self._emit("diagnostic", build_warning(
+                "the ROM exceeds the declared cartridge capacity.", "weight"))
 
     # ── Étape 5 : mgba ────────────────────────────────────────────
 
     def _step_launch_mgba(self, p: Project) -> bool:
         if not p.rom_path.exists():
-            self._emit("error_line",f"[mgba] ROM manquante : {p.rom_path}")
+            self._emit("diagnostic", build_error(f"ROM missing: {p.rom_path}", "mgba"))
             return False
         mgba = self.toolchain.resolve_mgba()
         if not mgba:
-            self._emit("error_line","[mgba] not found"); return False
+            self._emit("diagnostic", build_error("not found", "mgba")); return False
         BuildWorker._mgba_proc = subprocess.Popen([str(mgba), str(p.rom_path)])
-        self._emit("log_line","[mgba] lance")
+        self._emit("log_line","[mgba] launched")
         return True

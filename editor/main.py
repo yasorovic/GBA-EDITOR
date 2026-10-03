@@ -211,6 +211,7 @@ if __name__ == "__main__":
     crash_log.set_reporter(None if smoke_mode else show_crash_dialog)
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(APP_VERSION)
+    app.setWindowIcon(icons.app_icon())
     app.setStyle("Fusion")
     app.setPalette(dark_palette())
     install_numeric_drag_behavior(app)

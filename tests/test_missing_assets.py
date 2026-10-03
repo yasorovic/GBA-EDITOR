@@ -49,7 +49,7 @@ def test_acteur_qui_cite_un_sprite_disparu_est_une_erreur(tmp_path):
 
     _, _, errors = _rouvrir_et_valider(p.root)
 
-    assert any("Sprite 'hero' introuvable" in e for e in errors)
+    assert any("Sprite 'hero' not found" in e for e in errors)
 
 
 def test_sprite_sans_nom_reste_un_simple_avertissement(tmp_path):
@@ -59,7 +59,7 @@ def test_sprite_sans_nom_reste_un_simple_avertissement(tmp_path):
 
     _, warnings, errors = _rouvrir_et_valider(p.root)
 
-    assert any("pas de sprite_name" in w for w in warnings)
+    assert any("no sprite_name" in w for w in warnings)
     assert not any("Sprite" in e for e in errors)
 
 
@@ -70,7 +70,7 @@ def test_sidecar_de_sprite_illisible_bloque_le_build_et_reste_intact(tmp_path):
 
     _, _, errors = _rouvrir_et_valider(p.root)
 
-    assert any("hero.json" in e and "illisible" in e for e in errors)
+    assert any("hero.json" in e and "unreadable" in e for e in errors)
     assert sidecar.read_text(encoding="utf-8") == BROKEN
 
 
@@ -82,7 +82,7 @@ def test_sidecar_audio_illisible_est_vu_malgre_le_chargement_differe(tmp_path):
     assert reopened.unreadable_files() == []         # différé : pas encore lu
     _, errors = validate_project(reopened)
 
-    assert any("boom.json" in str(e) and "illisible" in str(e) for e in errors)
+    assert any("boom.json" in str(e) and "unreadable" in str(e) for e in errors)
 
 
 def test_sidecar_de_palette_abime_garde_la_palette_et_une_copie(tmp_path):
@@ -106,5 +106,5 @@ def test_hex_de_palette_illisible_est_signale_sans_etre_modifie(tmp_path):
 
     _, _, errors = _rouvrir_et_valider(p.root)
 
-    assert any(f"{name}.hex" in e and "illisible" in e for e in errors)
+    assert any(f"{name}.hex" in e and "unreadable" in e for e in errors)
     assert source.read_text(encoding="utf-8") == "pas une palette"

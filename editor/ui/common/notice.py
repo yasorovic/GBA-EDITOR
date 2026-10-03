@@ -78,6 +78,7 @@ from PyQt6.QtWidgets import (
     QApplication, QFrame, QHBoxLayout, QLabel, QToolButton, QVBoxLayout, QWidget,
 )
 from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtGui import QIcon
 
 from ui.common import icons
 from ui.common.theme import C, S, T, QSS, ui_font
@@ -89,6 +90,16 @@ NOTICES_DIR = Path(__file__).parent / "notices"
 
 # Ton → (couleur, nom d'icône). Le nom vide = pas d'icône : une ligne de
 # niveau 1 porte son ton par sa seule couleur, comme aujourd'hui.
+# Illustrations en COULEURS PLEINES de l'encadré (NoticeBox), par nom d'icône du
+# ton : rendues telles quelles, sans reteinte, et seulement ici — les autres
+# usages de « info » et « warning » gardent les glyphes monochromes d'icons.py.
+_BOX_ICON_DIR = Path(__file__).parent / "CustomIcons"
+_BOX_ICON_FILES = {
+    "info":    "QuestionMark_icon.svg",
+    "warning": "Warning_icon.svg",
+}
+_BOX_ICON_SIZE = 26     # px de hauteur : en dessous, le trait des SVG devient illisible
+
 TONES: dict[str, tuple[str, str]] = {
     "info":   (C.TEXT_MUTED, ""),
     "accent": (C.ACCENT,     "info"),
@@ -227,9 +238,15 @@ class NoticeBox(QFrame):
 
         if icon_name:
             ico = QLabel()
-            ico.setPixmap(icons.get(icon_name, color).pixmap(QSize(14, 14)))
+            svg = _BOX_ICON_FILES.get(icon_name)
+            if svg is not None:
+                size = _BOX_ICON_SIZE
+                ico.setPixmap(QIcon(str(_BOX_ICON_DIR / svg)).pixmap(QSize(size, size)))
+            else:
+                size = 14
+                ico.setPixmap(icons.get(icon_name, color).pixmap(QSize(size, size)))
             ico.setAlignment(Qt.AlignmentFlag.AlignTop)
-            ico.setFixedWidth(14)
+            ico.setFixedWidth(size)
             row.addWidget(ico)
 
         # SANS cadre, la couleur est portée par le texte ; AVEC cadre, par le

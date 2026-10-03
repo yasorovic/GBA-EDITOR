@@ -11,6 +11,7 @@ import shutil
 from typing import Optional
 
 from core.models.palette import OWN_PAL_BANK
+from core.validator import build_error, build_warning
 from core.models.components import (CollisionBoxComponent, SpriteComponent,
                                     affine_sprite_component)
 from core.models.sprite import SpriteAsset
@@ -278,7 +279,7 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
             return True
         return ev in actor_defined_events.get(sym, set())
 
-    L = ["/* ── Spawn helpers (prefabs poolés) ────────────────────── */"]
+    L = ["/* ── Spawn helpers (pooled prefabs) ────────────────────── */"]
     _alay = appearance_layout(p, [], pool_info, obj_layout)   # mêmes numéros que scene_init
     for pi in pool_info:
         s, start, size, pf = pi["sym"], pi["start"], pi["size"], pi["prefab"]
@@ -469,12 +470,14 @@ def _gen_tile_helpers() -> list[str]:
         "static int g_cmap_w = 0, g_cmap_h = 0;",
         "#define TILE_SIZE 8",
         "",
-        "/* Profil des types de tuiles — ÉMIS depuis core/models/collision_tiles.py,",
-        "   jamais écrit à la main ici : c'est la même géométrie que celle que",
-        "   l'éditeur dessine. `surface` porte l'ordonnée de la surface dans",
-        "   chacune des 8 colonnes de pixels ; pour un SOL la matière va de là au",
-        "   bas de la tuile (8 = colonne vide), pour un PLAFOND du haut jusque-là",
-        "   (0 = colonne vide). */",
+        "/* Tile type profile — EMITTED from core/models/collision_tiles.py,",
+        "   never written by hand here: it is the same geometry as the one",
+        "   the editor draws. `surface` carries the ordinate of the surface in",
+        "   each of the 8 pixel columns; for a FLOOR the material goes from there to "
+        "the",
+        "   bottom of the tile (8 = empty column), for a CEILING from the top down to"
+        " there",
+        "   (0 = empty column). */",
         "#define TK_EMPTY 0",
         "#define TK_SOLID 1",
         "#define TK_FLOOR 2",
@@ -502,32 +505,37 @@ def _gen_tile_helpers() -> list[str]:
         "    if(tx<0||ty<0||tx>=g_cmap_w||ty>=g_cmap_h) return 0;",
         "    return (int)g_active_cmap[ty*g_cmap_w+tx];",
         "}",
-        "/* Le seul type qui REPOUSSE horizontalement. Une pente n'est pas un mur,",
-        "   sinon personne ne la gravirait : on y monte par la surface. */",
+        "/* The only type that PUSHES horizontally. A slope is not a wall,",
+        "   otherwise nobody could climb it: one goes up through the surface. */",
         "static int tile_wall_at(int px,int py){",
         "    if(!g_active_cmap) return 0;",
         "    int tx=px/TILE_SIZE, ty=py/TILE_SIZE;",
         "    if(tx<0||ty<0||tx>=g_cmap_w||ty>=g_cmap_h) return 1;",
         "    return g_active_cmap[ty*g_cmap_w+tx]==TK_SOLID;",
         "}",
-        "/* Ordonnée monde du DESSUS de la matière portant la colonne px.",
+        "/* World ordinate of the TOP of the material carrying column px.",
         "",
-        "   Trois tuiles balayées de haut en bas, la PREMIÈRE trouvée gagnant : celle",
-        "   au-dessus des pieds, celle des pieds, celle du dessous. La tuile du DESSUS",
-        "   est indispensable — sur une pente, la matière de la colonne suivante vit",
-        "   dans la tuile d'au-dessus, et s'arrêter aux pieds fait décrocher l'acteur",
-        "   en pleine montée. Une surface plus haute que la box est écartée (`>=top`) :",
-        "   elle ne touche pas l'acteur, et l'y hisser le téléporterait sur une",
-        "   plateforme qu'il passait dessous.",
+        "   Three tiles swept from top to bottom, the FIRST one found winning: the "
+        "one",
+        "   above the feet, the one at the feet, the one below. The tile ABOVE",
+        "   is essential — on a slope, the material of the next column lives",
+        "   in the tile above, and stopping at the feet makes the actor drop off",
+        "   in the middle of the climb. A surface higher than the box is discarded "
+        "(`>=top`):",
+        "   it does not touch the actor, and lifting it there would teleport it onto "
+        "a",
+        "   platform it was passing under.",
         "",
-        "   Hors carte par le bas = plein : le monde est une boîte close, comme avant",
-        "   que la résolution ne connaisse les pentes. Sans ça un acteur qui rate une",
-        "   plateforme tombe indéfiniment — et son sprite reboucle en haut de l'écran,",
-        "   l'OAM ne codant Y que sur 8 bits. -1 = rien à portée. */",
-        "/* Type de la tuile qui a fourni la dernière surface rendue par",
-        "   tile_floor_at — c'est elle qui porte l'acteur, donc elle qui dit à",
-        "   quelle pente il marche. Rendu à côté plutôt qu'en valeur de retour :",
-        "   un seul appelant s'en sert, et le balayage n'est pas fait deux fois. */",
+        "   Off the map at the bottom = solid: the world is a closed box, as before",
+        "   the resolution knew about slopes. Without it an actor that misses a",
+        "   platform falls forever — and its sprite wraps around to the top of the "
+        "screen,",
+        "   since the OAM only encodes Y on 8 bits. -1 = nothing in range. */",
+        "/* Type of the tile that provided the last surface returned by",
+        "   tile_floor_at — it is the one carrying the actor, hence the one that says",
+        "   which slope it is walking on. Returned on the side rather than as a "
+        "return value:",
+        "   a single caller uses it, and the sweep is not done twice. */",
         "static u8 g_floor_tile = 0;",
         "static int tile_floor_at(int px,int top,int bot){",
         "    g_floor_tile=0;",
@@ -547,10 +555,11 @@ def _gen_tile_helpers() -> list[str]:
         "    }",
         "    return -1;",
         "}",
-        "/* Symétrique : ordonnée du DESSOUS de la matière au-dessus de la tête.",
-        "   Le balayage part de la tête et MONTE — jamais vers le bas, sinon le sol",
-        "   sur lequel l'acteur repose serait pris pour un plafond et le pousserait",
-        "   dedans. Hors carte par le haut = plein, même boîte close. */",
+        "/* Symmetric: ordinate of the BOTTOM of the material above the head.",
+        "   The sweep starts at the head and goes UP — never downward, otherwise the "
+        "floor",
+        "   the actor rests on would be taken for a ceiling and would push it",
+        "   into it. Off the map at the top = solid, same closed box. */",
         "static int tile_ceil_at(int px,int py){",
         "    if(!g_active_cmap) return -1;",
         "    int tx=px/TILE_SIZE;",
@@ -569,44 +578,49 @@ def _gen_tile_helpers() -> list[str]:
         "    return -1;",
         "}",
         "typedef void (*TileCollideCb)(Actor*,int,int);",
-        "/* Résolution d'un acteur contre la carte (cf. ROADMAP v0.6.3).",
-        "   L'ordre est la règle : X d'abord — les pentes n'y font pas obstacle —",
-        "   puis Y, où la surface est cherchée en TROIS points (les deux coins bas",
-        "   et le centre), la plus haute l'emportant : un acteur large ne s'enfonce",
-        "   pas dans la pente et franchit une arête proprement.",
-        "   `cb` ne fait que PRÉVENIR : la vitesse est annulée dans tous les cas,",
-        "   écrire le hook ne désactive donc pas la physique. */",
+        "/* Resolution of an actor against the map (see ROADMAP v0.6.3).",
+        "   The order is the rule: X first — slopes do not obstruct it —",
+        "   then Y, where the surface is searched at THREE points (the two bottom "
+        "corners",
+        "   and the centre), the highest one winning: a wide actor does not sink",
+        "   into the slope and clears an edge cleanly.",
+        "   `cb` only WARNS: the velocity is cancelled in every case,",
+        "   so writing the hook does not disable the physics. */",
         "static void __attribute__((unused)) resolve_actor_tiles(Actor*a, TileCollideCb cb){",
         "    if(!g_active_cmap) return;",
-        "    /* ROADMAP v0.19 : x/y de l'Actor sont en Q8 (256 = 1 px), mais TOUTE la",
-        "       géométrie ci-dessous (tuiles, boxes, pentes) est en pixels, inchangée",
-        "       depuis la v0.6.3 — l'arrondi se fait UNE fois à l'entrée (_px/_py) et",
-        "       UNE fois à la sortie. _fx/_fy portent le sous-pixel à travers la",
-        "       fonction : une frame sans collision sur un axe lui rend EXACTEMENT",
-        "       sa position Q8 d'entrée (x == (x>>8)<<8 | x&255, arithmétique deux's",
-        "       complément) ; une frame qui clampe (mur, sol, plafond) réémet la",
-        "       fraction d'AVANT le clamp — approximation délibérée plutôt qu'une",
-        "       remise à zéro par branche, dont le gain serait imperceptible ici. */",
+        "    /* ROADMAP v0.19: the Actor's x/y are in Q8 (256 = 1 px), but ALL the",
+        "       geometry below (tiles, boxes, slopes) is in pixels, unchanged",
+        "       since v0.6.3 — rounding is done ONCE on entry (_px/_py) and",
+        "       ONCE on exit. _fx/_fy carry the sub-pixel through the",
+        "       function: a frame without collision on an axis gives it back EXACTLY",
+        "       its input Q8 position (x == (x>>8)<<8 | x&255, two's",
+        "       complement arithmetic); a frame that clamps (wall, floor, ceiling) "
+        "re-emits the",
+        "       fraction from BEFORE the clamp — a deliberate approximation rather "
+        "than a",
+        "       reset per branch, whose gain would be imperceptible here. */",
         "    int _px=a->x>>8, _py=a->y>>8, _fx=a->x&255, _fy=a->y&255;",
         "    int was_grounded=a->collision.grounded, dx=_px-a->collision.last_x;",
         "    int moved=dx<0?-dx:dx;",
-        "    /* ── Vitesse constante LE LONG du sol ─────────────────────",
-        "       Un pas horizontal sur une pente parcourt √(1+p²) fois plus de",
-        "       distance qu'à plat : 114 % à 26°, 141 % à 45°, 224 % à 63°. Sans",
-        "       correction, plus la pente est raide plus le personnage paraît",
-        "       rapide. On ramène donc le pas au cosinus de la pente qu'il",
-        "       gravit, lu dans g_tile_scale.",
+        "    /* ── Constant speed ALONG the ground ─────────────────────",
+        "       A horizontal step on a slope covers √(1+p²) times more",
+        "       distance than on the flat: 114 % at 26°, 141 % at 45°, 224 % at 63°. "
+        "Without",
+        "       correction, the steeper the slope the faster the character",
+        "       seems. So the step is brought back to the cosine of the slope it",
+        "       climbs, read in g_tile_scale.",
         "",
-        "       Deux garde-fous, parce que le moteur DÉFAIT ici un enfant de ce",
-        "       que le script a demandé :",
-        "         - il faut être au sol à la frame précédente — un saut, une",
-        "           chute ou un vol ne sont pas une marche ;",
-        "         - le pas doit tenir dans une tuile. Au-delà, la résolution ne",
-        "           prétend déjà plus rien (la sonde ne porte qu'à une tuile), et",
-        "           c'est là qu'un script téléporte plutôt qu'il ne marche.",
-        "       Le reste (1/256 de pixel) est REPORTÉ : sans lui, un pas de 2 px",
-        "       à 45° tomberait toujours sur 1 px, et le personnage ramperait au",
-        "       lieu d'aller 1,41 fois moins vite. */",
+        "       Two safeguards, because the engine UNDOES here a child of what",
+        "       the script asked for:",
+        "         - it must be on the ground on the previous frame — a jump, a",
+        "           fall or a flight is not a walk;",
+        "         - the step must fit in a tile. Beyond that, the resolution",
+        "           already claims nothing (the probe only reaches one tile), and",
+        "           that is where a script teleports rather than walks.",
+        "       The remainder (1/256 of a pixel) is CARRIED OVER: without it, a 2 px "
+        "step",
+        "       at 45° would always land on 1 px, and the character would crawl",
+        "       instead of going 1.41 times slower. */",
         "    if(was_grounded && dx && moved<=TILE_SIZE){",
         "        for(int i=0;i<a->collision.box_count;i++){",
         "            CollisionBox*b=&a->collision.boxes[i];",
@@ -630,7 +644,7 @@ def _gen_tile_helpers() -> list[str]:
         "        CollisionBox*b=&a->collision.boxes[i];",
         "        if(!b->solid||!b->active) continue;",
         "        int left,right,top,bot;",
-        "        /* ── X : seuls les blocs pleins repoussent ───────────── */",
+        "        /* ── X: only solid blocks push ───────────── */",
         "        if(a->vx!=0){",
         "            left=_px+(int)b->x; right=left+(int)b->w-1;",
         "            top =_py+(int)b->y; bot  =top +(int)b->h-1;",
@@ -647,7 +661,7 @@ def _gen_tile_helpers() -> list[str]:
         "                    a->vx=0; if(cb)cb(a,-1,0);}",
         "            }",
         "        }",
-        "        /* ── Plafond : la surface la plus BASSE arrête la tête ─ */",
+        "        /* ── Ceiling: the LOWEST surface stops the head ─ */",
         "        left=_px+(int)b->x; right=left+(int)b->w-1;",
         "        top =_py+(int)b->y; bot  =top +(int)b->h-1;",
         "        if(a->vy<0){",
@@ -659,7 +673,7 @@ def _gen_tile_helpers() -> list[str]:
         "            }",
         "            if(c>=0&&top<c){_py=c-(int)b->y; a->vy=0; if(cb)cb(a,0,-1);}",
         "        }",
-        "        /* ── Sol : la surface la plus HAUTE porte l'acteur ───── */",
+        "        /* ── Floor: the HIGHEST surface carries the actor ───── */",
         "        top=_py+(int)b->y; bot=top+(int)b->h-1;",
         "        int g=-1;",
         "        for(int k=0;k<3;k++){",
@@ -670,22 +684,23 @@ def _gen_tile_helpers() -> list[str]:
         "        if(g>=0){",
         "            int feet=bot+1;",
         "            if(feet>g){",
-        "                /* Pénétration : on remonte sur la surface. Aucun plafond",
-        "                   de marche — l'auteur a peint une pente, on la gravit. */",
+        "                /* Penetration: we climb back onto the surface. No walking",
+        "                   ceiling — the author painted a slope, we climb it. */",
         "                _py=g-(int)b->y-(int)b->h;",
         "                if(a->vy>0) a->vy=0;",
         "                a->collision.grounded=b->grounded=1; if(cb)cb(a,0,1);",
         "            }else if(feet==g){",
-        "                /* Pile sur la surface : au sol, et une vitesse vers le",
-        "                   bas n'a plus de sens — sans ça elle survit une frame",
-        "                   de plus et l'acteur retraverse le sol avant d'être",
-        "                   repoussé. */",
+        "                /* Right on the surface: on the ground, and a downward",
+        "                   velocity makes no sense any more — without this it "
+        "survives one more",
+        "                   frame and the actor crosses the floor again before being",
+        "                   pushed back. */",
         "                if(a->vy>0) a->vy=0;",
         "                a->collision.grounded=b->grounded=1;",
         "            }else if(was_grounded&&a->vy>=0&&g-feet<=moved*2+1){",
-        "                /* Collage en descente : l'écart maximal qu'une pente à",
-        "                   63° peut creuser pour ce déplacement. Sans lui, toute",
-        "                   descente décolle et retombe, donc tressaute. */",
+        "                /* Sticking on the way down: the maximum gap that a 63°",
+        "                   slope can open for this movement. Without it, every",
+        "                   descent takes off and falls back, hence jitters. */",
         "                _py=g-(int)b->y-(int)b->h;",
         "                a->collision.grounded=b->grounded=1;",
         "            }",
@@ -797,9 +812,9 @@ def _parent_compose_lines(scene_actors: list, actor_offset: int,
     if not kids:
         return []
     kids.sort(key=lambda t: depths[t[0].name])   # parents avant enfants
-    L = ["    /* Hiérarchie d'acteurs — parents avant enfants, profondeur",
-         "       calculée au build (ROADMAP v0.23). Même composition que celle",
-         "       d'un acteur et de son sprite, d'un cran plus haut. */"]
+    L = ["    /* Actor hierarchy — parents before children, depth",
+         "       computed at build (ROADMAP v0.23). Same composition as that of",
+         "       an actor and its sprite, one level up. */"]
     import math
     by_name = {a.name: a for a, _ in scene_actors}
     for a, _j in kids:
@@ -825,7 +840,7 @@ def _parent_compose_lines(scene_actors: list, actor_offset: int,
         sx = int(round(float(getattr(a, "scale_x", 1.0) or 1.0) / p_sx * 256))
         sy = int(round(float(getattr(a, "scale_y", 1.0) or 1.0) / p_sy * 256))
         L += [
-            f"    {{   /* {a.name} dans le repère de {a.parent} */",
+            f"    {{   /* {a.name} in the frame of {a.parent} */",
             f"        int _pr = g_actors[{p}].rotation;",
             f"        int _px = g_actors[{p}].scale_x, _py = g_actors[{p}].scale_y;",
             f"        int _co = gba_cos(_pr), _si = gba_sin(_pr);",
@@ -878,7 +893,7 @@ def _pool_compose_lines(pi: list[dict]) -> list[str]:
         ranks = p2["member_entries"]      # rang d'entrée de chaque membre, -1 si aucun
         by_name = {pt.name: pt for pt in parts}
         rank = {pt.name: k for k, pt in enumerate(parts, start=1)}
-        L += [f"    /* {pf.name} — sous-arbre de chaque instance (ROADMAP v0.23) */",
+        L += [f"    /* {pf.name} — subtree of each instance (ROADMAP v0.23) */",
               f"    for(int _b={start}, _eb={p2['entry_start']}; _b<{start+size}; "
               f"_b+={group}, _eb+={p2['entries_per_instance']}) {{",
               # Racine éteinte = groupe RENDU AU POOL. C'est ici, en un seul
@@ -918,8 +933,7 @@ def _pool_compose_lines(pi: list[dict]) -> list[str]:
             sy = int(round(float(getattr(pt, "scale_y", 1.0) or 1.0) / p_sy * 256))
             src = f"_b+{p_off}" if p_off else "_b"
             L += [
-                f"        if(g_actors[_b+{k}].active) {{"
-                f"   /* {pt.name} dans le repère de "
+                f"        if(g_actors[_b+{k}].active) {{   /* {pt.name} in the frame of "
                 f"{par.name if par is not None else pf.name} */",
                 f"            int _pr = g_actors[{src}].rotation;",
                 f"            int _px = g_actors[{src}].scale_x, _py = g_actors[{src}].scale_y;",
@@ -1062,12 +1076,12 @@ def _gen_ui_images(p: Project, scene, text_cbb: int, sprite_offsets: dict,
         bank = bank_layout.bank_index(
             int(getattr(sprite, "pal_bank", OWN_PAL_BANK)),
             list(getattr(sprite, "own_palette", None) or []))
-        L.append(f"    ui_image_set_bank({info['index']}, {bank if bank is not None else 0});"
-                 f"   /* '{info['el'].name}' : palette de {sprite.name} */")
+        L.append(f"    ui_image_set_bank({info['index']}, {bank if bank is not None else 0});   /* '{info['el'].name}': palette of "
+                 f"{sprite.name} */")
         if bank is None and emit:
-            emit("log_line",
-                 f"[warn] image '{info['el'].name}': no free bank for the palette of '{sprite.name}' — it will"
-                 " display with the colours of bank 0.")
+            emit("diagnostic", build_warning(
+                f"image '{info['el'].name}': no free bank for the palette of '{sprite.name}' — it will"
+                " display with the colours of bank 0.", "ui"))
         if not info["bg"]:
             continue
         pl = layout.get(info["index"])
@@ -1106,14 +1120,14 @@ def _scene_music_lines(p: Project, scene: Scene, sound_assets: dict | None) -> l
     if want == MUSIC_INHERIT:
         return []
     if want == MUSIC_NONE:
-        return ["    music_stop();   /* silence déclaré par la scène */"]
+        return ["    music_stop();   /* silence declared by the scene */"]
     in_rom = {m.name: m for m, _ in (sound_assets or {}).get("music", [])}
     music = in_rom.get(want)
     if music is None:
         # Le validateur a déjà nommé le problème ; ici on ne PEUT pas émettre
         # MOD_X, la constante n'existe pas dans soundbank.h et la compilation C
         # échouerait sur un message bien moins clair.
-        return [f"    /* musique « {want} » absente de la ROM — scène muette */"]
+        return [f"    /* music \"{want}\" absent from the ROM — silent scene */"]
     from core.models.audio import volume_to_module
     loop = 1 if getattr(music, "loop", True) else 0
     # `volume` est un POURCENTAGE ; mmSetModuleVolume attend 0–1024.
@@ -1199,8 +1213,8 @@ def _gen_scene_init(
     # runtime. `scene_init` ne fait plus qu'une copie et une écriture de map.
     for _a in (getattr(scene, "_ui_img_assets", []) or []):
         _w = _a["words"]
-        L.append(f"static const unsigned int {sym}_{_a['sym']}[] = {{"
-                 f"   /* fond '{_a['name']}' : {_a['tiles']} tuiles */")
+        L.append(f"static const unsigned int {sym}_{_a['sym']}[] = {{   /* background "
+                 f"'{_a['name']}': {_a['tiles']} tiles */")
         for i in range(0, len(_w), 8):
             L.append("    " + " ".join(f"0x{v:08X}," for v in _w[i:i + 8]))
         L.append("};")
@@ -1406,8 +1420,8 @@ def _gen_scene_init(
     # bloc UI (le texte se décale de `len(indices)`), puis on les repose sur le
     # rectangle de chaque container. Statique : posé une fois, avant le texte.
     for i, idx in enumerate(fill_indices):
-        L.append(f"    ui_fill_load_solid({text_cbb}, {text_base + i}, {idx});"
-                 f"   /* tuile pleine, index {idx} */")
+        L.append(f"    ui_fill_load_solid({text_cbb}, {text_base + i}, {idx});   /* solid tile, index {idx} "
+                 "*/")
     # Fonds IMAGE (nine-slice, background) : les tuiles de chaque asset source
     # sont copiées dans le charblock d'UI, JUSTE APRÈS les tuiles pleines et
     # AVANT les glyphes — chaque bloc a son adresse propre, aucun ne recouvre
@@ -1419,9 +1433,8 @@ def _gen_scene_init(
     _cur = img_base
     for a in img_assets:
         asset_base.append(_cur)
-        L.append(f"    copy16(TILE_RAM({text_cbb}) + {_cur} * 16, "
-                 f"{sym}_{a['sym']}, {a['tiles'] * 32});"
-                 f"   /* tuiles du fond '{a['name']}' */")
+        L.append(f"    copy16(TILE_RAM({text_cbb}) + {_cur} * 16, {sym}_{a['sym']}, {a['tiles'] * 32});   /* tiles of "
+                 f"background '{a['name']}' */")
         _cur += a["tiles"]
     glyph_base = _cur
     if project_fonts(p):
@@ -1433,8 +1446,7 @@ def _gen_scene_init(
         # Chaque police à SA base : charger la seconde n'écrase plus la
         # première. Rien d'émis = tout à la base 0, une seule résidente.
         for _fl in getattr(scene, "_ui_reservation", {}).get("font_layout", []):
-            L.append(f"    text_set_font_base({_fl['index']}, {_fl['base']});"
-                     f"   /* {_fl['name']} : {_fl['tiles']} tuile(s) */")
+            L.append(f"    text_set_font_base({_fl['index']}, {_fl['base']});   /* {_fl['name']}: {_fl['tiles']} tile(s) */")
         # Sous-ensembles AVANT text_set_font : c'est lui qui copie les glyphes,
         # il doit déjà savoir lesquels. Une police sans sous-ensemble déclaré se
         # charge entière.
@@ -1467,13 +1479,11 @@ def _gen_scene_init(
     for f in fills:
         L.append(
             f"    ui_fill_rect({f.get('slot', text_bg)}, {f['tx']}, {f['ty']}, {f['w']}, {f['h']}, "
-            f"{text_base + fill_indices.index(f['index'])}, {f['bank']});"
-            f"   /* fond couleur '{f['name']}' → BG{f.get('slot', text_bg)} */")
+            f"{text_base + fill_indices.index(f['index'])}, {f['bank']});   /* colour background '{f['name']}' → BG{f.get('slot', text_bg)} */")
     for f in img_fills:
         L.append(
-            f"    ui_fill_map({f.get('slot', text_bg)}, {f['tx']}, {f['ty']}, {f['w']}, {f['h']}, "
-            f"{sym}_uimap_{c_sym(f['name'])}, {asset_base[f['asset']]});"
-            f"   /* fond image '{f['name']}' → BG{f.get('slot', text_bg)} */")
+            f"    ui_fill_map({f.get('slot', text_bg)}, {f['tx']}, {f['ty']}, {f['w']}, {f['h']}, {sym}_uimap_{c_sym(f['name'])}, "
+            f"{asset_base[f['asset']]});   /* image background '{f['name']}' → BG{f.get('slot', text_bg)} */")
     # ── Le FOND des zones de texte ────────────────────────────────
     # Un texte prend le fond de son conteneur : sans ça, écrire remplace la
     # cellule par une tuile de glyphe (index 0 transparent) et perce le fond.
@@ -1485,10 +1495,8 @@ def _gen_scene_init(
     for rb in region_backdrops:
         f = img_fills[rb["fill"]]
         L.append(
-            f"    text_set_region_backdrop({rb['region']}, "
-            f"{sym}_uimap_{c_sym(f['name'])}, {f['w']}, {rb['dx']}, {rb['dy']}, "
-            f"{asset_base[f['asset']]}, {f['bank']});"
-            f"   /* '{rb['name']}' recompose le fond '{f['name']}' */")
+            f"    text_set_region_backdrop({rb['region']}, {sym}_uimap_{c_sym(f['name'])}, {f['w']}, {rb['dx']}, {rb['dy']}, "
+            f"{asset_base[f['asset']]}, {f['bank']});   /* '{rb['name']}' recomposes the background '{f['name']}' */")
     # COULEUR ensuite. `scene_region_colors` DÉRIVE de `fills`, la liste que le
     # build émet réellement : un conteneur écarté (palette non active, ancrage,
     # cible) ne peut donc plus teinter le texte qu'il contient.
@@ -1499,8 +1507,8 @@ def _gen_scene_init(
     # « la police, une palette d'asset ».
     region_colors = scene_region_colors(p, scene, fills)
     for rc in region_colors:
-        L.append(f"    text_set_region_color({rc['region']}, {rc['index']}, {rc['bank']});"
-                 f"   /* '{rc['name']}' sur le fond de '{rc['container']}' */")
+        L.append(f"    text_set_region_color({rc['region']}, {rc['index']}, {rc['bank']});   /* '{rc['name']}' on the "
+                 f"background of '{rc['container']}' */")
     # La SURFACE composée : réclamée par un fond comme par un surlignement,
     # puisque les deux font composer le texte même en police mono — et par une
     # police composée, qui n'a nulle part ailleurs où ranger ses pixels. Bloc
@@ -1514,17 +1522,16 @@ def _gen_scene_init(
     if compose and text_bg in {0, 1, 2, 3}:
         mono_tiles = getattr(scene, "_ui_mono_tiles", 0)
         surf_base = glyph_base + mono_tiles
-        L.append(f"    text_set_surf_base({surf_base});"
-                 f"   /* surface partagée (écriture libre), après les glyphes mono */")
+        L.append(f"    text_set_surf_base({surf_base});   /* shared surface (free writing), "
+                 "after the mono glyphs */")
         # Puis un bloc PROPRE par zone composée, à la suite. C'est ce qui
         # permet à deux boîtes de coexister où qu'elles soient à l'écran : la
         # surface partagée, elle, est adressée modulo TEXT_SURF_H rangées.
         _shared = int(_res.get("shared_surf_tiles", 0) or 0)
         for _sl in _res.get("surf_layout", []):
             L.append(
-                f"    text_set_region_surf({_sl['region']}, "
-                f"{surf_base + _shared + _sl['base']}, {_sl['w']}, {_sl['h']});"
-                f"   /* '{_sl['name']}' : {_sl['w']}×{_sl['h']} tuiles */")
+                f"    text_set_region_surf({_sl['region']}, {surf_base + _shared + _sl['base']}, {_sl['w']}, {_sl['h']});   /* '{_sl['name']}': "
+                f"{_sl['w']}×{_sl['h']} tiles */")
     # Bande de sprites du texte : après les sprites d'acteurs (tuiles) et après
     # tous les slots d'acteurs et de pools (OAM). -1 = aucune zone en cible OBJ.
     if obj_text_oam >= 0:
@@ -2149,7 +2156,7 @@ def generate_main(
                           for sc in p.scenes) else 1024
         if obj_text_tile + _tiles_need > _cap:
             _fatal.append(
-                f"[error] the text zones as sprites need {_tiles_need} OBJ tiles after "
+                f"the text zones as sprites need {_tiles_need} OBJ tiles after "
                 f"{obj_text_tile} of sprites, which is more than the {_cap} available.")
     # Débordement de la SRAM, ou deux variables persistantes indiscernables :
     # même règle que ci-dessus, ça bloque. Une sauvegarde qui déborde ne se
@@ -2178,15 +2185,16 @@ def generate_main(
                 _par_sc = affine_sprite_component(_par)
                 if not bool(getattr(_par_sc, "affine_transform", False)):
                     continue
-                emit("log_line",
-                     f"[warn] actor '{_a.name}': its parent '{_par.name}' can rotate or scale, but "
-                     f"'{_a.name}' has no affine slot — it does not share the parent's (it "
-                     "has its own rotation or scale) and reserves none. Tick \"Affine "
-                     f"transform\" on the sprite of '{_a.name}' to make it follow.")
+                emit("diagnostic", build_warning(
+                    f"its parent '{_par.name}' can rotate or scale, but "
+                    f"'{_a.name}' has no affine slot — it does not share the parent's (it "
+                    "has its own rotation or scale) and reserves none. Tick \"Affine "
+                    f"transform\" on the sprite of '{_a.name}' to make it follow.",
+                    "scene", actor=_a.name))
     if _fatal:
         for _m in _fatal:
             if emit:
-                emit("error_line", _m)
+                emit("diagnostic", build_error(_m, "build"))
         return False
 
     # ── Génération des includes (union de toutes les scènes) ──────
@@ -2406,7 +2414,8 @@ def generate_main(
     L += [
         f"Actor g_actors[{n_actors}] EWRAM_DATA;",
         f"OamEntry g_oam_entries[{n_oam_entries}] EWRAM_DATA;",
-        "const AppearanceInit* g_appearance_init;   /* constantes d'activation de la scène active */",
+        "const AppearanceInit* g_appearance_init;   /* activation constants of the "
+        "active scene */",
     ]
     # SoundFxComponent en trigger="on_destroy" — tables PAR SCÈNE indexées par
     # TAG, plus un pointeur que chaque scene_init fait pointer sur la sienne
@@ -2463,7 +2472,8 @@ def generate_main(
         "int   g_scene_scroll_h = 1, g_scene_scroll_v = 0;",
         "int   g_scene_collision_layer = 0;",
         "int   g_current_scene = -1;",
-        "int   g_scene_placed = 0;   /* acteurs posés de la scène active (actor:get(i)) */",
+        "int   g_scene_placed = 0;   /* actors placed in the active scene "
+        "(actor:get(i)) */",
         "int   g_next_scene    = -1;",
         "",
     ]
@@ -2484,7 +2494,7 @@ def generate_main(
     # scène a de l'UI OBJ (le pointeur est projet-global, posé par scene_init).
     if _any_obj_ui:
         L += [
-            "/* ── Position et profondeur d'acteur pour l'UI ancrée ─── */",
+            "/* ── Actor position and depth for the anchored UI ─── */",
             "static int _txt_actor_x(int i) { return g_actors[i].x>>8; }",
             "static int _txt_actor_y(int i) { return g_actors[i].y>>8; }",
             "static int _txt_actor_prio(int i) { return actor_oam_entry(&g_actors[i])->priority; }",
@@ -2662,15 +2672,15 @@ def generate_main(
 
     if has_transitions:
         L += [
-            "/* ── Transition de scène (cf. ROADMAP v0.6.2) ──────────────────── */",
-            "/* Phase 0 = aucune, 1 = fermeture (la scène sortante est gelée),",
-            "   2 = ouverture. L'intensité va de 0 (net) à 16 (éteint). */",
+            "/* ── Scene transition (see ROADMAP v0.6.2) ──────────────────── */",
+            "/* Phase 0 = none, 1 = closing (the outgoing scene is frozen),",
+            "   2 = opening. The intensity goes from 0 (sharp) to 16 (off). */",
             "static int g_trans_phase = 0, g_trans_i = 0, g_trans_n = 1;",
             "",
-            "/* Bascule effective. L'écran est déjà éteint quand scene_init tourne :",
-            "   son display_reset() n'écrit que dans les shadows tant que la",
-            "   transition possède les registres, donc la scène entrante ne",
-            "   surgit pas en pleine lumière au milieu de son chargement. */",
+            "/* Actual switch. The screen is already off when scene_init runs:",
+            "   its display_reset() only writes to the shadows while the",
+            "   transition owns the registers, so the incoming scene does not",
+            "   burst out in full light in the middle of its loading. */",
             "static void scene_enter(void){",
             "    int m = 0, n = 1;",
             f"    if(g_next_scene>=0 && g_next_scene<{n_scenes}){{",
@@ -2697,9 +2707,9 @@ def generate_main(
             "static void music_transition_tick(void){",
             "    if(!g_mtr_mode) return;",
             "    if(g_mtr_mode == 1){",
-            "        /* Fondu traversant. La bascule tombe à la moitié, quand le",
-            "           volume est à zéro : c'est là qu'un changement s'entend le",
-            "           moins. */",
+            "        /* Cross fade. The switch falls at the half, when the",
+            "           volume is at zero: that is where a change is heard the",
+            "           least. */",
             "        int half = g_mtr_n / 2;",
             "        g_mtr_i++;",
             "        if(g_mtr_i < half){",
@@ -2716,11 +2726,12 @@ def generate_main(
             "        }",
             "        return;",
             "    }",
-            "    /* Coupe à la position. On guette le retour en arrière de la LIGNE :",
-            "       c'est la frontière de motif, et ça marche aussi pour un module",
-            "       d'un seul motif, dont l'index d'ordre ne changerait jamais.",
-            "       mmPosition() ne sait viser qu'un motif — couper en cours de motif",
-            "       rejouerait donc les lignes déjà passées, ce qui s'entend. */",
+            "    /* Cut at position. We watch for the ROW going backward:",
+            "       it is the pattern boundary, and it also works for a module",
+            "       of a single pattern, whose order index would never change.",
+            "       mmPosition() can only target a pattern — cutting mid-pattern",
+            "       would therefore replay the rows already passed, which is audible."
+            " */",
             "    {",
             "        int row = (int)mmGetPositionRow();",
             "        if(row < g_mtr_row){",
@@ -2756,8 +2767,8 @@ def generate_main(
         # chiffré par `audio.sound_channels_bytes`.
         from core.models.audio import sound_channels_bytes
         _ch = int(getattr(p.settings, "sound_channels", 8))
-        L.append(f"    mmInitDefault((mm_addr)soundbank_bin, {_ch});"
-                 f"   /* {_ch} canaux — {sound_channels_bytes(_ch)} o de tas */")
+        L.append(f"    mmInitDefault((mm_addr)soundbank_bin, {_ch});   /* {_ch} channels —"
+                 f" {sound_channels_bytes(_ch)} B of heap */")
         from codegen.runtime_codegen.sound_emit import music_start_lines
         L += music_start_lines(p)
         # Plus de mmStart au boot. Il démarrait la PREMIÈRE musique du projet,
@@ -2770,7 +2781,7 @@ def generate_main(
     # déjà la sienne (g_pal_obj_{sym}) au bon moment, y compris pour la
     # scène de départ (appelée juste après, cf. boucle principale ci-dessous).
     if sprite_offsets:
-        L.append("    /* Tiles sprites → OBJ VRAM (toutes scènes) */")
+        L.append("    /* Sprite tiles → OBJ VRAM (all scenes) */")
         for name, base in sprite_offsets.items():
             ss = f"sprite_{c_sym(name)}"
             L.append(f"    copy16(OBJ_VRAM+{base}*16, {ss}Tiles, {ss}TilesLen);")
@@ -2779,15 +2790,18 @@ def generate_main(
     L.append("    while(1){")
     if has_transitions:
         L += [
-            "        /* Rechargement de langue (phase 4) : force le garde-fou ci-dessous",
-            "           à réinitialiser la MÊME scène, comme un vrai changement. Le fondu",
-            "           de FERMETURE ne joue pas cette fois (g_current_scene forcé à -1,",
-            "           donc « pas de scène sortante » côté transition) — un lang:set()",
-            "           et un scene:switch() la même frame perdraient ce fondu-là, cas",
-            "           assez rare pour ne pas le traiter à part. */",
+            "        /* Language reload (phase 4): forces the safeguard below",
+            "           to reinitialise the SAME scene, like a real change. The "
+            "CLOSING",
+            "           fade does not play this time (g_current_scene forced to -1,",
+            "           hence \"no outgoing scene\" on the transition side) — a "
+            "lang:set()",
+            "           and a scene:switch() on the same frame would lose that fade, "
+            "a case",
+            "           rare enough not to be handled separately. */",
             "        if(g_lang_reload){ g_lang_reload=0; g_current_scene=-1; }",
-            "        /* Fermeture : la scène qu'on QUITTE décide du fondu, et gèle",
-            "           pendant celui-ci. Rien à jouer → bascule immédiate. */",
+            "        /* Closing: the scene being LEFT decides the fade, and freezes",
+            "           during it. Nothing to play → immediate switch. */",
             "        if(g_trans_phase==0 && g_next_scene!=g_current_scene){",
             "            int m = (g_current_scene>=0 && g_current_scene<"
             f"{n_scenes}) ? g_scene_vtable[g_current_scene].trans_mode : 0;",
@@ -2800,8 +2814,8 @@ def generate_main(
         ]
     else:
         L += [
-            "        /* Rechargement de langue (phase 4) : force le garde-fou juste",
-            "           en-dessous à réinitialiser la MÊME scène. */",
+            "        /* Language reload (phase 4): forces the safeguard just",
+            "           below to reinitialise the SAME scene. */",
             "        if(g_lang_reload){ g_lang_reload=0; g_current_scene=-1; }",
             "        if(g_next_scene != g_current_scene){",
             "            g_current_scene = g_next_scene;",
@@ -2816,7 +2830,8 @@ def generate_main(
     # aucun coût, pas un drapeau testé à chaque frame.
     L.append("        debug_budget_start();")
     if has_sound and soundbank_h.exists():
-        L.append("        mmFrame();   /* doc maxmod.h : _doit_ être appelée chaque frame */")
+        L.append("        mmFrame();   /* maxmod.h doc: _must_ be called every frame "
+                 "*/")
         L.append("        music_transition_tick();")
     L += [
         "        _g_frame++;",
@@ -2835,7 +2850,7 @@ def generate_main(
             "            g_trans_i++;",
             "            transition_fade((16*g_trans_i)/g_trans_n);",
             "            if(g_trans_i>=g_trans_n) scene_enter();",
-            "            continue;   /* la scène sortante est gelée */",
+            "            continue;   /* the outgoing scene is frozen */",
             "        }",
             "        if(g_trans_phase==2){",
             "            g_trans_i--;",

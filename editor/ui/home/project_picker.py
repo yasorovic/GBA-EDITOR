@@ -5,7 +5,9 @@ ui/project_picker.py — HomeScreen : écran d'accueil affiché au lancement.
 • Double-clic ou Ouvrir → ouvre le projet
 • Nouveau → crée un nouveau projet dans PROJECTS_DIR
 • Clear list → supprime les entrées qui pointent vers des dossiers morts
-• Statut devkitPro / mGBA avec lien de téléchargement discret si manquant
+• Logo + onglets centrés, projets en cartes, bandeau version / auteur / documentation
+• Statut devkitPro / mGBA avec lien de téléchargement discret, affiché seulement
+  s'il manque quelque chose
 """
 
 from __future__ import annotations
@@ -17,16 +19,18 @@ from typing import Optional
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QFrame, QFileDialog, QSizePolicy,
-    QLineEdit, QWidget, QMessageBox, QTabWidget, QComboBox,
+    QLineEdit, QWidget, QMessageBox, QTabWidget, QComboBox, QMenu, QTabBar, QStackedWidget,
 )
-from PyQt6.QtGui import QFont, QColor, QIcon
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QThread
+from PyQt6.QtGui import QFont, QColor, QIcon, QDesktopServices
+from PyQt6.QtCore import Qt, QSize, QUrl, pyqtSignal, QThread
 
 from ui.common.theme import C, T, QSS, tint
 from ui.common.widgets import W, HoverIconButton
+from ui.common import icons
 from ui.common.labels import label
+from ui.common.logo import BackstageLogo
 from ui.common.reveal import reveal_in_file_manager
-from core.app_info import APP_NAME
+from core.app_info import APP_AUTHOR, APP_DOCS_URL, APP_NAME, APP_VERSION
 from core.toolchain import Toolchain, DEVKITPRO_URL, MGBA_URL
 from core.project_templates import (
     ProjectTemplate, TEMPLATES, target_dir as template_target_dir,
@@ -43,6 +47,8 @@ from core.project_paths import (
 PROJECTS_DIR  = Path.home() / f"{APP_NAME}Projects"
 _RECENT_FILE  = Path.home() / f".{APP_NAME.lower()}_recent.json"
 _MAX_RECENT   = 12
+
+_LOGO_WIDTH = 340
 
 
 # ── Persistance des récents ───────────────────────────────────────────
@@ -193,10 +199,6 @@ class _ProjectItem(QWidget):
                 "border-radius:3px;padding:1px 5px;"
             )
             hl.addWidget(dead_badge)
-        else:
-            btn_reveal = W.btn_reveal(label("home.project.reveal"))
-            btn_reveal.clicked.connect(lambda: reveal_in_file_manager(self.path))
-            hl.addWidget(btn_reveal)
 
         # Retire ce projet de la liste des récents. Le dossier et son contenu
         # restent intacts sur le disque.
@@ -334,8 +336,9 @@ class HomeScreen(QDialog):
         self._toolchain    = Toolchain()
 
         self.setWindowTitle(label("home.window_title", app_name=APP_NAME))
-        self.setMinimumSize(580, 460)
-        self.setMaximumSize(720, 640)
+        self.setMinimumSize(640, 600)
+        self.setMaximumSize(900, 820)
+        self.resize(680, 640)
         self.setModal(True)
         self.setStyleSheet(
             f"QDialog{{background:{C.BG_BASE};}}"
@@ -347,70 +350,132 @@ class HomeScreen(QDialog):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── Header ───────────────────────────────────────────────
-        hdr = QWidget()
-        hdr.setFixedHeight(56)
-        hdr.setStyleSheet(
-            f"background:{C.BG_PANEL};"
-            f"border-bottom:1px solid {C.BORDER_DARK};"
-        )
-        hl = QHBoxLayout(hdr)
-        hl.setContentsMargins(20, 0, 20, 0)
+        # ── Logo + titre ─────────────────────────────────────────
+        root.addSpacing(20)
+        root.addWidget(BackstageLogo(_LOGO_WIDTH), 0, Qt.AlignmentFlag.AlignHCenter)
 
-        title_lbl = QLabel(APP_NAME)
-        title_lbl.setFont(QFont(T.UI, 16, QFont.Weight.DemiBold))
-        title_lbl.setStyleSheet(f"color:{C.TEXT_HI};background:transparent;")
-        sub_lbl = QLabel(label("home.subtitle"))
-        sub_lbl.setFont(QFont(T.UI, T.SM))
-        sub_lbl.setStyleSheet(f"color:{C.TEXT_DIM};background:transparent;")
-
-        hc = QVBoxLayout()
-        hc.setSpacing(2)
-        hc.addWidget(title_lbl)
-        hc.addWidget(sub_lbl)
-        hl.addLayout(hc, 1)
-        root.addWidget(hdr)
+        root.addSpacing(18)
 
         # ── Onglets : Projects (récents) / Templates (démos) ───────
-        self._tabs = QTabWidget()
-        self._tabs.setStyleSheet(QSS.tab)
-        self._tabs.addTab(self._build_projects_tab(), label("home.tab.projects"))
+        # Barre maison plutôt que QTabWidget : centrer la barre dépend du style
+        # Qt de la plateforme, alors qu'ici elle est centrée par la mise en page.
+        self._tab_bar = QTabBar()
+        self._tab_bar.setExpanding(False)
+        self._tab_bar.setDrawBase(False)
+        self._tab_bar.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._tab_bar.setStyleSheet(self._tabs_qss())
+        self._stack = QStackedWidget()
+        self._tab_bar.addTab(label("home.tab.projects"))
+        self._stack.addWidget(self._build_projects_tab())
         # Sans source de modèles configurée (cf. core/app_info.APP_TEMPLATES_URL),
         # il n'y a rien à lister : pas d'onglet vide qui promet un téléchargement.
         if TEMPLATES:
-            self._tabs.addTab(self._build_templates_tab(), label("home.tab.templates"))
-        root.addWidget(self._tabs, 1)
+            self._tab_bar.addTab(label("home.tab.templates"))
+            self._stack.addWidget(self._build_templates_tab())
+        self._tab_bar.currentChanged.connect(self._stack.setCurrentIndex)
 
-        # ── Statut toolchain (devkitPro / mGBA) ────────────────────
-        status_wrap = QWidget()
-        status_wrap.setStyleSheet(
-            f"background:{C.BG_PANEL};border-top:1px solid {C.BORDER_DARK};"
-        )
-        sw_l = QVBoxLayout(status_wrap)
-        sw_l.setContentsMargins(16, 8, 16, 8)
+        tab_row = QHBoxLayout()
+        tab_row.setContentsMargins(0, 0, 0, 0)
+        tab_row.addStretch()
+        tab_row.addWidget(self._tab_bar)
+        tab_row.addStretch()
+        root.addLayout(tab_row)
+
+        # Filet épais posé sous les onglets
+        rule = QFrame()
+        rule.setFixedHeight(2)
+        rule.setStyleSheet(f"background:{C.ACCENT};border:none;")
+        root.addWidget(rule)
+        root.addWidget(self._stack, 1)
+
+        # ── Statut toolchain : visible seulement s'il manque quelque chose ──
+        self._status_wrap = QWidget()
+        sw_l = QVBoxLayout(self._status_wrap)
+        sw_l.setContentsMargins(24, 8, 24, 8)
         self._toolchain_status = ToolchainStatus(self._toolchain)
         self._toolchain_status.configure_requested.connect(self._open_toolchain_dialog)
         sw_l.addWidget(self._toolchain_status)
-        root.addWidget(status_wrap)
+        self._status_wrap.setVisible(self._toolchain_missing())
+        root.addWidget(self._status_wrap)
+
+        root.addWidget(self._build_info_bar())
+
+    def _toolchain_missing(self) -> bool:
+        return not (self._toolchain.devkitpro_ok and self._toolchain.mgba_ok)
+
+    def _tabs_qss(self) -> str:
+        """Onglets arrondis en haut, carrés en bas, posés sur le filet."""
+        return (
+            "QTabBar{background:transparent;}"
+            f"QTabBar::tab{{min-width:110px;padding:8px 22px;margin:0 2px;"
+            f"color:{C.TEXT_DIM};background:{C.BG_PANEL};"
+            f"border:1px solid {C.BORDER};border-bottom:none;"
+            "border-top-left-radius:8px;border-top-right-radius:8px;"
+            "border-bottom-left-radius:0;border-bottom-right-radius:0;}"
+            f"QTabBar::tab:hover{{color:{C.TEXT_HI};}}"
+            f"QTabBar::tab:selected{{color:{C.TEXT_HI};background:{C.BG_RAISED};}}"
+        )
+
+    def _build_info_bar(self) -> QWidget:
+        """Bandeau bas : version · auteur à gauche, lien de documentation à droite."""
+        bar = QWidget()
+        bar.setStyleSheet(f"border-top:1px solid {C.BORDER_DARK};")
+        bl = QHBoxLayout(bar)
+        bl.setContentsMargins(24, 12, 24, 12)
+        bl.setSpacing(14)
+
+        def _dim(text: str) -> QLabel:
+            lbl = QLabel(text)
+            lbl.setFont(QFont(T.UI, T.SM))
+            lbl.setStyleSheet(f"color:{C.TEXT_DIM};background:transparent;border:none;")
+            return lbl
+
+        bl.addWidget(_dim(label("home.version", version=APP_VERSION)))
+        sep = QFrame()
+        sep.setFixedSize(1, 16)
+        sep.setStyleSheet(f"background:{C.BORDER_MID};border:none;")
+        bl.addWidget(sep)
+        bl.addWidget(_dim(label("home.created_by", author=APP_AUTHOR)))
+        bl.addStretch()
+
+        # Sans site de documentation (core/app_info.APP_DOCS_URL), pas de lien.
+        if APP_DOCS_URL:
+            docs = QLabel(f'<a href="{APP_DOCS_URL}" style="color:{C.TEXT_NORM};">'
+                          f'↗ {label("home.docs")}</a>')
+            docs.setFont(QFont(T.UI, T.SM))
+            docs.setStyleSheet("background:transparent;border:none;")
+            docs.setCursor(Qt.CursorShape.PointingHandCursor)
+            docs.linkActivated.connect(lambda url: QDesktopServices.openUrl(QUrl(url)))
+            bl.addWidget(docs)
+        return bar
 
     # ── Onglet Projects ────────────────────────────────────────────
+
+    @staticmethod
+    def _cards_qss() -> str:
+        """Chaque entrée est une carte arrondie ; la sélectionnée prend l'accent."""
+        return (
+            "QListWidget{background:transparent;border:none;outline:none;}"
+            f"QListWidget::item{{background:{C.BG_PANEL};border:1px solid {C.BORDER};"
+            "border-radius:8px;padding:0;}"
+            f"QListWidget::item:hover{{background:{C.BG_HOVER};}}"
+            f"QListWidget::item:selected{{background:{C.BG_SEL};border:1px solid {C.ACCENT};}}"
+        )
 
     def _build_projects_tab(self) -> QWidget:
         tab = QWidget()
         tl = QVBoxLayout(tab)
-        tl.setContentsMargins(0, 0, 0, 0)
+        tl.setContentsMargins(24, 14, 24, 0)
         tl.setSpacing(0)
 
         self._list = QListWidget()
-        self._list.setStyleSheet(
-            f"QListWidget{{background:{C.BG_BASE};border:none;outline:none;}}"
-            f"QListWidget::item{{padding:0;border-bottom:1px solid {C.BORDER_DARK};}}"
-            f"QListWidget::item:selected{{background:{C.BG_SEL};}}"
-            f"QListWidget::item:hover:!selected{{background:{C.BG_HOVER};}}"
-        )
+        self._list.setStyleSheet(self._cards_qss())
         self._list.setIconSize(QSize(0, 0))
-        self._list.setSpacing(0)
+        self._list.setSpacing(4)
+        self._list.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
         self._list.itemDoubleClicked.connect(self._open_selected)
+        self._list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._list.customContextMenuRequested.connect(self._project_menu)
         tl.addWidget(self._list, 1)
 
         self._populate()
@@ -419,7 +484,7 @@ class HomeScreen(QDialog):
         self._empty_lbl = QLabel(label("home.empty"))
         self._empty_lbl.setFont(QFont(T.UI, T.MD))
         self._empty_lbl.setStyleSheet(
-            f"color:{C.TEXT_MUTED};background:{C.BG_BASE};"
+            f"color:{C.TEXT_MUTED};background:transparent;"
         )
         self._empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_lbl.setVisible(not self._recent)
@@ -427,17 +492,14 @@ class HomeScreen(QDialog):
 
         # ── Barre du bas : Clear · Load · Open · Create ────────────
         footer = QWidget()
-        footer.setStyleSheet(
-            f"background:{C.BG_PANEL};"
-            f"border-top:1px solid {C.BORDER_DARK};"
-        )
+        footer.setStyleSheet("background:transparent;")
         fl = QHBoxLayout(footer)
-        fl.setContentsMargins(16, 10, 16, 10)
-        fl.setSpacing(8)
+        fl.setContentsMargins(0, 14, 0, 16)
+        fl.setSpacing(10)
 
         btn_clear = QPushButton(f"🗑  {label('home.clear')}")
         btn_clear.setFont(QFont(T.UI, T.SM))
-        btn_clear.setFixedHeight(30)
+        btn_clear.setFixedHeight(36)
         btn_clear.setStyleSheet(
             f"QPushButton{{color:{C.ACCENT_RED};background:{C.BG_INPUT};"
             f"border:1px solid {tint(C.ACCENT_RED, 0.35)};border-radius:4px;padding:0 12px;}}"
@@ -452,7 +514,7 @@ class HomeScreen(QDialog):
 
         btn_load = QPushButton(label("home.load"))
         btn_load.setFont(QFont(T.UI, T.SM))
-        btn_load.setFixedHeight(30)
+        btn_load.setFixedHeight(36)
         btn_load.setStyleSheet(
             f"QPushButton{{color:{C.TEXT_NORM};background:{C.BG_INPUT};"
             f"border:1px solid {C.BORDER};border-radius:4px;padding:0 12px;}}"
@@ -463,7 +525,7 @@ class HomeScreen(QDialog):
 
         self._btn_open = QPushButton(label("common.open"))
         self._btn_open.setFont(QFont(T.UI, T.SM))
-        self._btn_open.setFixedHeight(30)
+        self._btn_open.setFixedHeight(36)
         self._btn_open.setStyleSheet(
             f"QPushButton{{color:{C.TEXT_NORM};background:{C.BG_INPUT};"
             f"border:1px solid {C.BORDER};border-radius:4px;padding:0 12px;}}"
@@ -473,12 +535,14 @@ class HomeScreen(QDialog):
         self._btn_open.clicked.connect(self._open_selected)
         fl.addWidget(self._btn_open)
 
-        btn_new = QPushButton(f"+ {label('home.create_project')}")
-        btn_new.setFont(QFont(T.UI, T.SM, QFont.Weight.DemiBold))
-        btn_new.setFixedHeight(30)
+        btn_new = QPushButton(f" {label('home.create_project')}")
+        btn_new.setIcon(icons.get("add", C.ON_ACCENT))
+        btn_new.setIconSize(QSize(22, 22))
+        btn_new.setFont(QFont(T.UI, T.MD, QFont.Weight.DemiBold))
+        btn_new.setFixedHeight(36)
         btn_new.setStyleSheet(
             f"QPushButton{{color:{C.ON_ACCENT};background:{C.ACCENT};"
-            f"border:none;border-radius:4px;padding:0 14px;}}"
+            f"border:none;border-radius:4px;padding:0 20px;}}"
             f"QPushButton:hover{{background:{C.ACCENT_HOVER};}}"
             f"QPushButton:pressed{{background:{C.ACCENT_PRESSED};}}"
         )
@@ -505,18 +569,13 @@ class HomeScreen(QDialog):
     def _build_templates_tab(self) -> QWidget:
         tab = QWidget()
         tl = QVBoxLayout(tab)
-        tl.setContentsMargins(0, 0, 0, 0)
+        tl.setContentsMargins(24, 14, 24, 0)
         tl.setSpacing(0)
 
         self._tpl_list = QListWidget()
-        self._tpl_list.setStyleSheet(
-            f"QListWidget{{background:{C.BG_BASE};border:none;outline:none;}}"
-            f"QListWidget::item{{padding:0;border-bottom:1px solid {C.BORDER_DARK};}}"
-            f"QListWidget::item:selected{{background:{C.BG_SEL};}}"
-            f"QListWidget::item:hover:!selected{{background:{C.BG_HOVER};}}"
-        )
+        self._tpl_list.setStyleSheet(self._cards_qss())
         self._tpl_list.setIconSize(QSize(0, 0))
-        self._tpl_list.setSpacing(0)
+        self._tpl_list.setSpacing(4)
         self._tpl_list.itemDoubleClicked.connect(self._open_template_selected)
         tl.addWidget(self._tpl_list, 1)
 
@@ -533,7 +592,7 @@ class HomeScreen(QDialog):
             item = QListWidgetItem(self._list)
             w = _ProjectItem(path, dead)
             w.remove_requested.connect(self._remove_recent)
-            item.setSizeHint(QSize(0, 64))
+            item.setSizeHint(QSize(0, 68))
             self._list.addItem(item)
             self._list.setItemWidget(item, w)
 
@@ -555,6 +614,17 @@ class HomeScreen(QDialog):
         w = self._list.itemWidget(self._list.item(row)) if row >= 0 else None
         self._btn_open.setEnabled(bool(w and not w.dead))
 
+    def _project_menu(self, pos):
+        """Clic droit sur un projet : l'ouvrir dans le gestionnaire de fichiers."""
+        item = self._list.itemAt(pos)
+        w = self._list.itemWidget(item) if item else None
+        if not w or w.dead:
+            return
+        menu = QMenu(self)
+        menu.addAction(label("home.project.reveal"),
+                       lambda: reveal_in_file_manager(w.path))
+        menu.exec(self._list.viewport().mapToGlobal(pos))
+
     def _open_selected(self, *_):
         row = self._list.currentRow()
         if row < 0:
@@ -566,7 +636,7 @@ class HomeScreen(QDialog):
 
     def keyPressEvent(self, ev):
         if ev.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            if self._tabs.currentIndex() == 0:
+            if self._tab_bar.currentIndex() == 0:
                 self._open_selected()
             else:
                 self._open_template_selected()
@@ -608,6 +678,7 @@ class HomeScreen(QDialog):
         dlg = SettingsDialog(self._toolchain, ExternalTools(), "Toolchains", self)
         dlg.exec()
         self._toolchain_status.refresh()
+        self._status_wrap.setVisible(self._toolchain_missing())
 
     def _accept(self, path: Path, is_new: bool = False, name: str = ""):
         # Un dossier à ouvrir doit porter un manifeste : sinon on le dit ici et

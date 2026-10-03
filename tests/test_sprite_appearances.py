@@ -114,7 +114,7 @@ def _erreurs(p):
 def test_deux_apparences_actives_sont_une_erreur(tmp_path):
     scene = Scene(name="S", actors=[_acteur(("A", True), ("B", True))])
     (err,) = _erreurs(_projet(tmp_path, scenes=[scene]))
-    assert "2 apparences" in err.message and "s0, s1" in err.message
+    assert "2 active appearances" in err.message and "s0, s1" in err.message
 
 
 def test_une_seule_active_ou_aucune_ne_dit_rien(tmp_path):

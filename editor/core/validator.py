@@ -53,14 +53,48 @@ class DiagnosticTarget:
 
 @dataclass
 class ValidationMessage:
+    """Un diagnostic : ce que le validateur, le checker Lua, le codegen ou un outil
+    reproche au projet. C'est l'UNIQUE forme d'un avertissement ou d'une erreur de build
+    (chantier « La fiabilité du journal de build ») : la console, l'onglet Diagnostics et
+    `build.log` en sont tous rendus, et l'événement `diagnostic` du `BuildWorker` le porte."""
     level: str      # "warning" | "error"
-    actor: str      # nom de l'actor ou "" si global
+    actor: str      # nom de l'actor (ou du propriétaire du script) ; "" si global
     message: str
     target: Optional[DiagnosticTarget] = None   # cible cliquable, ou None
+    source: str = ""    # qui le dit : "validator", "script", "checker", "codegen", un outil…
+    file: str = ""      # fichier fautif (nom seul), ou ""
+    line: int = 0       # ligne dans ce fichier, ou 0 si elle est inconnue
 
     def __str__(self):
         prefix = f"[{self.actor}] " if self.actor else ""
-        return f"{'⚠' if self.level == 'warning' else '✖'}  {prefix}{self.message}"
+        return f"{'⚠' if self.level == 'warning' else '✖'}  {self._where()}{prefix}{self.message}"
+
+    def _where(self) -> str:
+        """`Hit.lua:3: ` ; sans fichier, le nom de l'étape ou de l'outil qui parle (jamais
+        « validator », qui est le cas ordinaire)."""
+        if self.file:
+            return f"{self.file}:{self.line}: " if self.line else f"{self.file}: "
+        return f"{self.source}: " if self.source not in ("", "validator") else ""
+
+    def console_line(self) -> str:
+        """La ligne du journal : `[error] Hit.lua:3: [Ball] message`. Le format
+        `fichier:ligne` est garanti par les champs, pas deviné dans un texte libre — c'est ce
+        que le clic de la console relit."""
+        tag = "[warn] " if self.level == "warning" else "[error]"
+        owner = f"[{self.actor}] " if self.actor else ""
+        return f"{tag} {self._where()}{owner}{self.message}"
+
+
+def build_error(message: str, source: str, file: str = "", line: int = 0,
+                actor: str = "") -> ValidationMessage:
+    """Une erreur de build émise hors du validateur (étape, outil, générateur)."""
+    return ValidationMessage("error", actor, message, None, source, file, line)
+
+
+def build_warning(message: str, source: str, file: str = "", line: int = 0,
+                  actor: str = "") -> ValidationMessage:
+    """Un avertissement de build émis hors du validateur."""
+    return ValidationMessage("warning", actor, message, None, source, file, line)
 
 
 class ValidationContext:
@@ -95,7 +129,7 @@ class ValidationContext:
                 with Image.open(path) as img:
                     img.verify()
                 self._images[key] = None
-            except Exception as exc:
+            except Exception as exc:  # tolerated: stored in self._images, reported by the check that asks for it
                 # Sans le chemin complet que PIL recopie : le message nomme déjà le fichier.
                 self._images[key] = (f"{type(exc).__name__} : "
                                      f"{str(exc).replace(key, Path(key).name)}")
@@ -108,7 +142,7 @@ class ValidationContext:
             from core.engine_emulation.module_model import load_module
             try:
                 self._modules[key] = load_module(path)
-            except Exception:
+            except Exception:  # tolerated: unreadable module: check_audio_file reports it
                 self._modules[key] = None
         return self._modules[key]
 
@@ -123,17 +157,21 @@ class ValidationContext:
             try:
                 script = lua_parse(path.read_text(encoding="utf-8"))
                 self._scripts[key] = {fn.name for fn in script.functions}
-            except (LuaParseError, OSError):
+            except (LuaParseError, OSError):  # tolerated: a syntax error is reported by the script validator
                 self._scripts[key] = set()
         return self._scripts[key]
 
-    def warn(self, actor_or_name, message: str, target: Optional[DiagnosticTarget] = None):
+    def warn(self, actor_or_name, message: str, target: Optional[DiagnosticTarget] = None,
+             file: str = "", line: int = 0):
         name = getattr(actor_or_name, "name", str(actor_or_name)) if actor_or_name else ""
-        self._msgs.append(ValidationMessage("warning", name, message, target))
+        self._msgs.append(ValidationMessage("warning", name, message, target,
+                                            source="validator", file=file, line=line))
 
-    def error(self, actor_or_name, message: str, target: Optional[DiagnosticTarget] = None):
+    def error(self, actor_or_name, message: str, target: Optional[DiagnosticTarget] = None,
+              file: str = "", line: int = 0):
         name = getattr(actor_or_name, "name", str(actor_or_name)) if actor_or_name else ""
-        self._msgs.append(ValidationMessage("error", name, message, target))
+        self._msgs.append(ValidationMessage("error", name, message, target,
+                                            source="validator", file=file, line=line))
 
     @property
     def warnings(self) -> list[ValidationMessage]:
@@ -182,6 +220,7 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
     _check_scene_font(ctx)
     _check_cameras(ctx)
     _check_script_owner_families(ctx)
+    _check_scripts_parse(ctx)
     _check_behaviors_without_self(ctx)
     _check_window_regions(ctx)
     _check_actor_name_collisions(ctx)
@@ -1246,13 +1285,52 @@ def _check_script_owner_families(ctx: ValidationContext):
             "a behavior.")
 
 
+def _check_scripts_parse(ctx: ValidationContext):
+    """Chaque `.lua` de `scripts/` est lu, utilisé ou non (chantier « La fiabilité du
+    journal de build »). Le build ne parse que ce qu'il compile : un behavior inliné
+    n'était qu'un avertissement, un prefab sans instance dans la scène était sauté, un
+    fichier attaché à rien n'était jamais ouvert.
+
+    Une faute de syntaxe, ou une instruction hors fonction qui ne s'exécuterait jamais, est
+    une ERREUR pour un script attaché (acteur, scène, caméra, prefab) et pour un behavior ;
+    pour un fichier attaché à rien, un avertissement : un brouillon ne bloque pas le build."""
+    from scripting.parser import parse as lua_parse, LuaParseError
+    from core.script_owners import script_attachments
+
+    p = ctx.project
+    attached = set()
+    for rel in script_attachments(p):
+        ap = p.asset_abs(rel)
+        if ap is not None and Path(ap).suffix.lower() == ".lua":
+            attached.add(Path(ap).resolve())
+    behaviors = (sorted(p.scripts_behaviors_dir.glob("*.lua"))
+                 if p.scripts_behaviors_dir.is_dir() else [])
+    files = {f.resolve(): f for f in (*p.script_files(), *behaviors)}
+    files.update({a: a for a in attached if a.exists()})
+
+    for resolved, path in sorted(files.items(), key=lambda kv: str(kv[0])):
+        blocking = resolved in attached or p.scripts_behaviors_dir in path.parents
+        report = ctx.error if blocking else ctx.warn
+        suffix = "" if blocking else " (attached to nothing)"
+        try:
+            script = lua_parse(path.read_text(encoding="utf-8"))
+        except LuaParseError as exc:
+            report(None, f"{exc}{suffix}", file=path.name, line=exc.line or 0)
+            continue
+        except OSError as exc:
+            report(None, f"cannot be read ({exc}){suffix}", file=path.name)
+            continue
+        for _node, line in script.stray_statements:
+            report(None, f"this statement is outside any function, so it would never "
+                         f"run{suffix}", file=path.name, line=line)
+
+
 def _check_behaviors_without_self(ctx: ValidationContext):
     """`self` désigne l'instance à laquelle le script est attaché ; un behavior n'est
     attaché à rien, il REÇOIT un acteur en paramètre. Lui laisser le mot `self` le
     rendrait ambigu (l'instance attachée ? le paramètre ?) — on le refuse, en
     bloquant le build : les erreurs du checker sur un behavior ne sont que des
-    avertissements, ce qui ne suffit pas ici. Il dit aussi ce que l'inlining
-    n'osait pas bloquer : une faute de syntaxe, ou une instruction hors fonction."""
+    avertissements, ce qui ne suffit pas ici."""
     from scripting.parser import parse as lua_parse, LuaParseError
     from scripting.checker import uses_self
 
@@ -1262,18 +1340,8 @@ def _check_behaviors_without_self(ctx: ValidationContext):
     for path in sorted(behaviors_dir.glob("*.lua")):
         try:
             script = lua_parse(path.read_text(encoding="utf-8"))
-        except LuaParseError as exc:
-            # The inlining only turns a behavior syntax error into a warning,
-            # and the build would go on without the behavior's functions.
-            where = f"{path.name}:{exc.line}" if exc.line else path.name
-            ctx.error(None, f"Behavior \"{path.stem}\" ({where}): {exc}")
+        except (LuaParseError, OSError):  # tolerated: _check_scripts_parse reports it
             continue
-        except OSError:
-            continue
-        for _node, line in script.stray_statements:
-            ctx.error(None,
-                f"Behavior \"{path.stem}\" ({path.name}:{line}): this statement is "
-                "outside any function, so it would never run.")
         if uses_self(script):
             ctx.error(None,
                 f"Behavior \"{path.stem}\": `self` is reserved for the instance a script is "

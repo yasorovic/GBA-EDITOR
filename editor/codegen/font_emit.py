@@ -24,6 +24,7 @@ import re
 from pathlib import Path
 
 from codegen.c_names import c_ident
+from core.validator import build_warning
 
 # Banque de palette BG réservée aux glyphes. Convention héritée du chemin TTE
 # (`SE_PALBANK(15)`), conservée pour ne pas déplacer la contrainte existante.
@@ -683,7 +684,7 @@ def font_palette(font, png_path) -> list[int]:
             kept, _w = _font_ink_colors(font, rgb, ink)
             pal = [0] + [_bgr555(c) for c in kept]
             cached = (pal + [0] * (16 - len(pal))) if kept else []
-        except Exception:
+        except Exception:  # tolerated: unreadable PNG: the validator reports it
             cached = []
         _FONT_PAL_CACHE[cache_key] = cached
     return cached
@@ -956,7 +957,7 @@ def emit_fonts_c(encoded: list[tuple[str, dict]]) -> list[str]:
     Émet un `FontInfo` par police et la table `g_fonts` que `text_set_font()`
     indexe. Une police vide donne quand même une entrée : mieux vaut un texte
     invisible qu'un projet qui ne linke pas."""
-    L: list[str] = ["/* ── Polices ─────────────────────────────────────── */"]
+    L: list[str] = ["/* ── Fonts ─────────────────────────────────────── */"]
     for name, e in encoded:
         sym = c_ident(name)
         L.append(f"static const unsigned int g_font_{sym}_tiles[{max(1, len(e['tiles']))}] "
@@ -1032,7 +1033,7 @@ def emit_ui_regions_c(regions: list, font_names: list, emit=None,
     comme une erreur (cf. sa garde de boucle)."""
     from core.models.ui_region import TARGET_OBJ, ALIGNS, ANCHORS
 
-    L: list[str] = ["/* ── Slots de texte (UILayout) ─────────────────── */"]
+    L: list[str] = ["/* ── Text slots (UILayout) ─────────────────── */"]
     rows: list[str] = []
     for _lay, r in regions:
         # Cible et ancrage EFFECTIFS (hérités du root) : une zone imbriquée sous
@@ -1068,7 +1069,7 @@ def emit_ui_regions_c(regions: list, font_names: list, emit=None,
         elem = (elem_index or {}).get(r.name, -1)
         # En commentaire : d'où vient le contenu. La table seule ne le dit pas,
         # et c'est la première question en relisant le C.
-        origin = "authoré" if getattr(r, "text_key", "") else "écrit par script"
+        origin = "authored" if getattr(r, "text_key", "") else "written by script"
         rows.append(
             f"    {{ {x}, {y}, {w}, {h}, {ALIGNS.index(r.align)}, "
             f"{font_idx}, {1 if target_obj else 0}, {ANCHORS.index(eff_anchor)}, "
@@ -1085,11 +1086,12 @@ def emit_ui_regions_c(regions: list, font_names: list, emit=None,
             # Sans acteur résolu, la bande se pose à l'origine de l'écran — ce
             # qui ressemble à un bug de placement plutôt qu'à une référence
             # cassée. Le dire ici évite la chasse.
-            emit("log_line",
-                 f"[warn] text '{r.name}': anchored on actor '{eff_actor or '(none)'}', which was not found — "
-                 "it will be placed at the screen origin.")
+            emit("diagnostic", build_warning(
+                f"text '{r.name}': anchored on actor '{eff_actor or '(none)'}', which was not found — "
+                "it will be placed at the screen origin.", "text"))
     L.append(f"const UIRegionInfo g_ui_regions[{max(1, len(rows))}] = {{")
-    L += rows or ["    { 0, 0, 240, 32, 0, 255, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1 },   /* aucun texte */"]
+    L += rows or ["    { 0, 0, 240, 32, 0, 255, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, "
+                  "0, -1 },   /* no text */"]
     L.append("};")
     L.append(f"const int g_ui_region_count = {len(rows)};")
     L.append("")
@@ -1325,7 +1327,7 @@ def emit_lang_fonts_c(font_names: list[str], languages: list,
     name_to_idx = {name: i for i, name in enumerate(font_names)}
     langs = list(languages) or [None]   # None = pas de langue déclarée : identité
 
-    L: list[str] = ["/* ── Remap de police par langue ─────────────────── */"]
+    L: list[str] = ["/* ── Per-language font remap ─────────────────── */"]
     table_names = []
     for i_lang, lang in enumerate(langs):
         replacement = getattr(lang, "default_font", "") or ""

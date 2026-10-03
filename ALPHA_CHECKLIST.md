@@ -36,10 +36,13 @@ du même niveau d'urgence.
 - [ ] **(+)** Vérifier l'affichage en mise à l'échelle Windows (125 %, 150 %) et en petite fenêtre
 
 ## B. Premier contact
-- [ ] Refaire le splash / sélecteur de projet : logo, numéro de version, lien notice d'utilisation, lien notice IA
-- [ ] **(+)** Mention « Alpha » visible (splash, titre de fenêtre) + lien de retour d'expérience
+- [x] Refaire le splash / sélecteur de projet : logo, numéro de version, lien de documentation
+  - Accueil refait d'après maquette (`ui/home/project_picker.py`) : logo centré (`ui/common/logo.py`, texte du SVG converti en courbes, marge au cadre), onglets Projects / Templates centrés sur un filet de 2 px, projets en cartes, boutons Browse / Open / New project (icône `+`), bandeau Version · Created by · Online documentation. « Open project folder » est passé en clic droit sur un projet. *Reste* : lien notice IA (aucune adresse), captures d'écran de la doc.
+- [x] **(+)** Mention « Alpha » visible (splash, titre de fenêtre) + lien de retour d'expérience
+  - *Fait* : la version `1.0.0-alpha` (étiquette comprise) figure dans le bandeau de l'accueil et dans « À propos », qui porte « Report an issue » (`APP_ISSUES_URL`). *Reste* : rien dans le titre de fenêtre de l'éditeur ; à décider si nécessaire.
 - [ ] Refaire l'écran « À propos » : version, licences (GPL éditeur / zlib runtime), liens
-- [x] État de la toolchain (devkitPro / mGBA) affiché en permanence dans la barre de l'éditeur et sur le splash
+  - *Fait* (`ui/common/about_dialog.py`, remplace la boîte de message) : logo, pastille de version au thème, auteur, description, liens Documentation / Release notes / Report an issue (adresses dans `app_info.py`, un lien sans adresse n'est pas affiché). *Reste* : les licences (GPL éditeur / zlib runtime) et les notices tierces n'y figurent pas encore ; confirmer les adresses `APP_RELEASES_URL` et `APP_ISSUES_URL` (déduites du dépôt actuel).
+- [x] État de la toolchain (devkitPro / mGBA) affiché dans la barre de l'éditeur ; sur l'accueil, seulement quand il manque quelque chose (le lien « Configure manually » disparaît alors quand tout est installé)
 - [x] Build & Run sans devkitPro : message dédié qui explique pourquoi on ne peut pas builder maintenant et comment l'installer (au lieu d'une erreur de build)
   - `MainWindow._explain_missing_toolchain` : nomme ce qui manque, donne les deux liens, propose d'ouvrir les réglages (`tests/ui/test_missing_toolchain.py`). Avant, le bouton ouvrait les réglages sans un mot.
 - [x] Installateur : rendre devkitPro visible à l'installation (à ce jour `installer.nsi` n'en parle pas), au minimum un lien ou une page d'information de fin d'installation

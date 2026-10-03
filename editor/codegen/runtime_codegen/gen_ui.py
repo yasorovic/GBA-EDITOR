@@ -16,6 +16,7 @@ appelle `emit_ui_images_c` d'ici.
 from __future__ import annotations
 
 from core.project import Project
+from core.validator import build_warning
 from codegen.c_names import sym as c_sym
 from codegen.runtime_codegen.gen_scene_query import ui_item_geometry
 
@@ -56,9 +57,8 @@ def emit_ui_images_c(p: Project, sprite_offsets: dict, obj_place: dict,
             y -= y % 8
         elem = (elem_index or {}).get(im.name, -1)
         if sprite is None or not sprite.asset:
-            rows.append(f"    {{ {x}, {y}, {im.w}, {im.h}, 0, 0, -1, "
-                        f"0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, {elem} }},"
-                        f"  /* {im.name} — aucun sprite */")
+            rows.append(f"    {{ {x}, {y}, {im.w}, {im.h}, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, "
+                        f"0, 0, 0, 1, 1, 0, {elem} }},  /* {im.name} — no sprite */")
             if emit:
                 emit("log_line", f"[ui] image '{im.name}': no sprite — nothing will be drawn"
                                  " at this place.")
@@ -93,13 +93,13 @@ def emit_ui_images_c(p: Project, sprite_offsets: dict, obj_place: dict,
             # Même angle mort que pour une zone de texte : sans acteur résolu,
             # l'image se pose à l'origine de l'écran, ce qui ressemble à un bug
             # de placement plutôt qu'à une référence introuvable.
-            emit("log_line",
-                 f"[warn] image '{im.name}': anchored on actor '{eff_actor or '(none)'}', which was not found in"
-                 " the scene — it will be placed at the screen origin.")
+            emit("diagnostic", build_warning(
+                f"image '{im.name}': anchored on actor '{eff_actor or '(none)'}', which was not found in"
+                " the scene — it will be placed at the screen origin.", "ui"))
     L = ["/* ── Images d'interface (UILayout) ─────────────── */"]
     L.append(f"const UIImageInfo g_ui_images[{max(1, len(rows))}] = {{")
-    L += rows or ["    { 0, 0, 8, 8, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,"
-                  " 1, 1, 0, -1 },   /* aucune image */"]
+    L += rows or ["    { 0, 0, 8, 8, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1,"
+                  " 0, -1 },   /* no image */"]
     L.append("};")
     L.append(f"const int g_ui_image_count = {len(rows)};")
     L.append("")
@@ -152,7 +152,7 @@ def emit_ui_lists_c(p: Project, emit=None) -> list[str]:
     qui défile) : il écrase ce défaut, il ne comble plus un zéro."""
     from core.models.ui_region import KIND_IMAGE, NAV_ROW, CURSOR_SLIDE
     lists = project_lists(p)
-    L = ["", "/* Listes d'interface — la navigation, pas la mise en page */"]
+    L = ["", "/* Interface lists — navigation, not layout */"]
     regions = {name: i for i, name in enumerate(p.region_names())}
     # Index d'IMAGE, celui de `g_ui_images` et donc de `IMAGE_*` : c'est par là
     # que la liste désigne son curseur. Le même ordre que `emit_ui_images_c`,
@@ -189,9 +189,9 @@ def emit_ui_lists_c(p: Project, emit=None) -> list[str]:
         cursor = images.get(cur_name, -1) \
             if getattr(cur_el, "kind", "") == KIND_IMAGE else -1
         if emit and cur_name and cursor < 0:
-            emit("log_line",
-                 f"[warn] list '{lst.name}': cursor '{cur_name}' not found in layout '{lay.name}' — the "
-                 "list navigates without a cursor.")
+            emit("diagnostic", build_warning(
+                f"list '{lst.name}': cursor '{cur_name}' not found in layout '{lay.name}' — the "
+                "list navigates without a cursor.", "ui"))
         infos.append(
             "{" + f"{len(rows)}, "
             f"{max(1, min(255, int(getattr(lst, 'nav_columns', 1) or 1)))}, "
@@ -204,11 +204,11 @@ def emit_ui_lists_c(p: Project, emit=None) -> list[str]:
             f"{int(getattr(lst, 'selected_text_color', 0) or 0)}, "
             f"{int(getattr(lst, 'selected_highlight_color', 0) or 0)}, "
             f"{elements.get(lst.name, -1)}"
-            + "}" + f"   /* {lst.name} — {len(rows)} rangée(s) */")
+            + "}" + f"   /* {lst.name} — {len(rows)} row(s) */")
         if emit and not rows:
-            emit("log_line",
-                 f"[warn] list '{lst.name}': no child text zone, hence no row to display. A "
-                 "list walks the text zones placed INSIDE its container.")
+            emit("diagnostic", build_warning(
+                f"list '{lst.name}': no child text zone, hence no row to display. A "
+                "list walks the text zones placed INSIDE its container.", "ui"))
     n = len(lists)
     L.append("const UIListInfo g_ui_lists[] = {"
              + (", ".join(infos) if infos else "{0,1,0,0,0,0,0,-1,0,1,0,0,-1}") + "};")
@@ -267,9 +267,9 @@ def emit_ui_elements_c(p: Project) -> list[str]:
         parent_idx = index.get(parent, -1) if lay.get(parent) is not None else -1
         rows.append(f"    {{ {parent_idx}, {1 if getattr(e, 'visible', True) else 0} }},"
                     f"  /* {e.name} */")
-    L = ["/* ── Visibilité des éléments d'interface (UILayout) ───────── */"]
+    L = ["/* ── Interface element visibility (UILayout) ───────── */"]
     L.append(f"const UIElementInfo g_ui_elements[{max(1, len(rows))}] = {{")
-    L += rows or ["    { -1, 1 },   /* aucun élément */"]
+    L += rows or ["    { -1, 1 },   /* no element */"]
     L.append("};")
     L.append(f"const int g_ui_element_count = {len(rows)};")
     L.append("")

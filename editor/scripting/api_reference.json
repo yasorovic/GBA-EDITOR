@@ -12,17 +12,17 @@
         {
           "label": "self:move(dir, speed)",
           "snippet": "self:move(dir, speed)",
-          "description": "Avance ce frame d’au plus `speed` px dans la direction `dir` (un vec2). La direction est normalisée : une diagonale n’avance pas plus vite qu’un axe.",
+          "description": "Moves this frame by at most `speed` px in the direction `dir` (a vec2). The direction is normalised: a diagonal does not move faster than an axis.",
           "params": [
             {
               "name": "dir",
               "type": "vec2",
-              "description": "Direction de déplacement (pas une distance)"
+              "description": "Movement direction (not a distance)"
             },
             {
               "name": "speed",
               "type": "number",
-              "description": "Vitesse maximale ce frame, en pixels"
+              "description": "Maximum speed this frame, in pixels"
             }
           ],
           "doc_anchor": "self-move"
@@ -30,17 +30,17 @@
         {
           "label": "self:move_to(target, speed)",
           "snippet": "self:move_to(target, speed)",
-          "description": "Avance ce frame d'au plus `speed` px vers la position `target` (un vec2) ; s'arrête pile dessus sans dépasser. À rappeler chaque frame jusqu'à l'arrivée. Ex: self:move_to(vec2(100, 20), 30)",
+          "description": "Moves this frame by at most `speed` px toward the position `target` (a vec2); stops exactly on it without overshooting. Call it again every frame until arrival. Ex: self:move_to(vec2(100, 20), 30)",
           "params": [
             {
               "name": "target",
               "type": "vec2",
-              "description": "Position monde visée"
+              "description": "Target world position"
             },
             {
               "name": "speed",
               "type": "number",
-              "description": "Vitesse maximale ce frame, en pixels"
+              "description": "Maximum speed this frame, in pixels"
             }
           ],
           "doc_anchor": "self-move_to"
@@ -54,12 +54,12 @@
         {
           "label": "self:add_velocity(dv)",
           "snippet": "self:add_velocity(dv)",
-          "description": "Ajoute `dv` (un vec2) à la vélocité courante. Pour accumuler une accélération ou une gravité frame après frame. Ex: self:add_velocity(vec2(0, 1))",
+          "description": "Adds `dv` (a vec2) to the current velocity. To accumulate an acceleration or gravity frame after frame. Ex: self:add_velocity(vec2(0, 1))",
           "params": [
             {
               "name": "dv",
               "type": "vec2",
-              "description": "Ajout à la vélocité (.x, .y)"
+              "description": "Added to the velocity (.x, .y)"
             }
           ],
           "doc_anchor": "self-add_velocity"
@@ -78,12 +78,12 @@
         {
           "label": "self:play_anim(\"name\")",
           "snippet": "self:play_anim(\"Idle\")",
-          "description": "Démarre l'animation nommée définie dans le SpriteAsset. Sans effet si déjà active.",
+          "description": "Starts the named animation defined in the SpriteAsset. No effect if already active.",
           "params": [
             {
               "name": "name",
               "type": "string",
-              "description": "Nom de l'état d'animation (ex: \"Idle\", \"Run\", \"Jump\")"
+              "description": "Name of the animation state (e.g. \"Idle\", \"Run\", \"Jump\")"
             }
           ],
           "doc_anchor": "self-play_anim"
@@ -97,22 +97,22 @@
         {
           "label": "self:squash(t, duration, amount)",
           "snippet": "self:squash(t, 8, 30)",
-          "description": "Aplatit le sprite (large et bas) puis revient à 100% en `duration` frames. `amount` = intensité en points de %. Ex: impact au sol → self:squash(t, 8, 30).",
+          "description": "Flattens the sprite (wide and low) then returns to 100% in `duration` frames. `amount` = intensity in percentage points. Ex: ground impact → self:squash(t, 8, 30).",
           "params": [
             {
               "name": "t",
               "type": "number",
-              "description": "Frame courante de l'effet, avancée par le script appelant"
+              "description": "Current frame of the effect, advanced by the calling script"
             },
             {
               "name": "duration",
               "type": "number",
-              "description": "Durée totale de l'effet, en frames"
+              "description": "Total duration of the effect, in frames"
             },
             {
               "name": "amount",
               "type": "number",
-              "description": "Intensité, en points de %"
+              "description": "Intensity, in percentage points"
             }
           ],
           "doc_anchor": "self-squash"
@@ -120,22 +120,22 @@
         {
           "label": "self:stretch(t, duration, amount)",
           "snippet": "self:stretch(t, 6, 25)",
-          "description": "Étire le sprite (fin et haut) puis revient à 100% en `duration` frames. `amount` = intensité en points de %. Ex: départ d'un saut → self:stretch(t, 6, 25).",
+          "description": "Stretches the sprite (thin and tall) then returns to 100% in `duration` frames. `amount` = intensity in percentage points. Ex: start of a jump → self:stretch(t, 6, 25).",
           "params": [
             {
               "name": "t",
               "type": "number",
-              "description": "Frame courante de l'effet, avancée par le script appelant"
+              "description": "Current frame of the effect, advanced by the calling script"
             },
             {
               "name": "duration",
               "type": "number",
-              "description": "Durée totale de l'effet, en frames"
+              "description": "Total duration of the effect, in frames"
             },
             {
               "name": "amount",
               "type": "number",
-              "description": "Intensité, en points de %"
+              "description": "Intensity, in percentage points"
             }
           ],
           "doc_anchor": "self-stretch"
@@ -143,17 +143,17 @@
         {
           "label": "self:bounce(t, duration, amount)",
           "snippet": "self:bounce(t, duration, amount)",
-          "description": "Décale le sprite vers le haut puis le laisse retomber (self.sprite_offset.y), `amount` px d'amplitude sur `duration` frames.",
+          "description": "Shifts the sprite upward then lets it fall back (self.sprite_offset.y), `amount` px of amplitude over `duration` frames.",
           "params": [
             {
               "name": "t",
               "type": "number",
-              "description": "Frame courante de l'effet, avancée par le script appelant"
+              "description": "Current frame of the effect, advanced by the calling script"
             },
             {
               "name": "duration",
               "type": "number",
-              "description": "Durée totale de l'effet, en frames"
+              "description": "Total duration of the effect, in frames"
             },
             {
               "name": "amount",
@@ -166,17 +166,17 @@
         {
           "label": "self:shake(t, duration, amount)",
           "snippet": "self:shake(t, duration, amount)",
-          "description": "Fait trembler le sprite (self.sprite_offset aléatoire), `amount` px max, retombant à zéro sur `duration` frames. Écrase tout self.sprite_offset déjà posé.",
+          "description": "Makes the sprite shake (random self.sprite_offset), `amount` px max, fading to zero over `duration` frames. Overwrites any self.sprite_offset already set.",
           "params": [
             {
               "name": "t",
               "type": "number",
-              "description": "Frame courante de l'effet, avancée par le script appelant"
+              "description": "Current frame of the effect, advanced by the calling script"
             },
             {
               "name": "duration",
               "type": "number",
-              "description": "Durée totale de l'effet, en frames"
+              "description": "Total duration of the effect, in frames"
             },
             {
               "name": "amount",
@@ -189,22 +189,22 @@
         {
           "label": "self:flash(t, duration, pal)",
           "snippet": "self:flash(t, 4, WHITE_FLASH_BANK)",
-          "description": "Bascule sur la banque palette `pal` (self.pal) tant que t < duration, puis revient à la banque 0. Ex: dégât → self:flash(t, 4, WHITE_FLASH_BANK).",
+          "description": "Switches to palette bank `pal` (self.pal) while t < duration, then returns to bank 0. Ex: damage → self:flash(t, 4, WHITE_FLASH_BANK).",
           "params": [
             {
               "name": "t",
               "type": "number",
-              "description": "Frame courante de l'effet, avancée par le script appelant"
+              "description": "Current frame of the effect, advanced by the calling script"
             },
             {
               "name": "duration",
               "type": "number",
-              "description": "Durée totale de l'effet, en frames"
+              "description": "Total duration of the effect, in frames"
             },
             {
               "name": "pal",
               "type": "number",
-              "description": "Banque palette à afficher pendant l'effet"
+              "description": "Palette bank to display during the effect"
             }
           ],
           "doc_anchor": "self-flash"
@@ -212,22 +212,22 @@
         {
           "label": "self:blink(t, duration, interval)",
           "snippet": "self:blink(t, 90, 4)",
-          "description": "Bascule self.visible on/off toutes les `interval` frames tant que t < duration, puis reste visible. Ex: invincibilité → self:blink(t, 90, 4).",
+          "description": "Toggles self.visible on/off every `interval` frames while t < duration, then stays visible. Ex: invincibility → self:blink(t, 90, 4).",
           "params": [
             {
               "name": "t",
               "type": "number",
-              "description": "Frame courante de l'effet, avancée par le script appelant"
+              "description": "Current frame of the effect, advanced by the calling script"
             },
             {
               "name": "duration",
               "type": "number",
-              "description": "Durée totale de l'effet, en frames"
+              "description": "Total duration of the effect, in frames"
             },
             {
               "name": "interval",
               "type": "number",
-              "description": "Frames entre chaque bascule visible/invisible"
+              "description": "Frames between each visible/invisible toggle"
             }
           ],
           "doc_anchor": "self-blink"
@@ -235,17 +235,17 @@
         {
           "label": "self:pulse(t, duration, amount)",
           "snippet": "self:pulse(t, 30, 15)",
-          "description": "Grossit puis revient à 100% (self.sprite_scale), `amount` points de % d'amplitude sur `duration` frames. Ex: objet ramassable → self:pulse(t, 30, 15).",
+          "description": "Grows then returns to 100% (self.sprite_scale), `amount` percentage points of amplitude over `duration` frames. Ex: collectible object → self:pulse(t, 30, 15).",
           "params": [
             {
               "name": "t",
               "type": "number",
-              "description": "Frame courante de l'effet, avancée par le script appelant"
+              "description": "Current frame of the effect, advanced by the calling script"
             },
             {
               "name": "duration",
               "type": "number",
-              "description": "Durée totale de l'effet, en frames"
+              "description": "Total duration of the effect, in frames"
             },
             {
               "name": "amount",
@@ -258,22 +258,22 @@
         {
           "label": "self:pop(t, duration, amount)",
           "snippet": "self:pop(t, 15, 20)",
-          "description": "Apparition : grossit de 0% jusqu'à 100+`amount`% puis se stabilise à 100%. Ex: spawn d'un power-up → self:pop(t, 15, 20).",
+          "description": "Appearance: grows from 0% up to 100+`amount`% then settles at 100%. Ex: power-up spawn → self:pop(t, 15, 20).",
           "params": [
             {
               "name": "t",
               "type": "number",
-              "description": "Frame courante de l'effet, avancée par le script appelant"
+              "description": "Current frame of the effect, advanced by the calling script"
             },
             {
               "name": "duration",
               "type": "number",
-              "description": "Durée totale de l'effet, en frames"
+              "description": "Total duration of the effect, in frames"
             },
             {
               "name": "amount",
               "type": "number",
-              "description": "Dépassement au pic, en points de %"
+              "description": "Overshoot at the peak, in percentage points"
             }
           ],
           "doc_anchor": "self-pop"
@@ -281,22 +281,22 @@
         {
           "label": "self:wobble(t, duration, amount)",
           "snippet": "self:wobble(t, duration, amount)",
-          "description": "Oscille en rotation autour de 0° (self.sprite_rotation), `amount` degrés max, amplitude retombant à zéro sur `duration` frames.",
+          "description": "Oscillates in rotation around 0° (self.sprite_rotation), `amount` degrees max, amplitude fading to zero over `duration` frames.",
           "params": [
             {
               "name": "t",
               "type": "number",
-              "description": "Frame courante de l'effet, avancée par le script appelant"
+              "description": "Current frame of the effect, advanced by the calling script"
             },
             {
               "name": "duration",
               "type": "number",
-              "description": "Durée totale de l'effet, en frames"
+              "description": "Total duration of the effect, in frames"
             },
             {
               "name": "amount",
               "type": "number",
-              "description": "Amplitude max, en degrés"
+              "description": "Maximum amplitude, in degrees"
             }
           ],
           "doc_anchor": "self-wobble"
@@ -310,17 +310,17 @@
         {
           "label": "input:held(\"nom\"[, frames])",
           "snippet": "input:held(\"jump\")",
-          "description": "Vrai si l’accord est tenu ce frame. Avec `frames`, reste vrai après ce nombre de frames consécutives, de 1 à 255. Pour une séquence, utilisez `get_sequence`.",
+          "description": "True if the chord is held this frame. With `frames`, stays true after that number of consecutive frames, from 1 to 255. For a sequence, use `get_sequence`.",
           "params": [
             {
               "name": "nom",
               "type": "string",
-              "description": "Bouton (\"a\", \"b\", \"l\", \"r\", \"start\", \"select\", \"up\", \"down\", \"left\", \"right\") ou action déclarée"
+              "description": "Button (\"a\", \"b\", \"l\", \"r\", \"start\", \"select\", \"up\", \"down\", \"left\", \"right\") or declared action"
             },
             {
               "name": "frames",
               "type": "number",
-              "description": "Optionnel : durée minimale de maintien, en frames"
+              "description": "Optional: minimum hold duration, in frames"
             }
           ],
           "returns": "bool",
@@ -329,12 +329,12 @@
         {
           "label": "input:pressed(\"nom\")",
           "snippet": "input:pressed(\"jump\")",
-          "description": "Vrai uniquement le frame où l'accord vient de se compléter (front montant). Ne lit jamais une séquence.",
+          "description": "True only on the frame the chord has just been completed (rising edge). Never reads a sequence.",
           "params": [
             {
               "name": "nom",
               "type": "string",
-              "description": "Bouton ou action déclarée"
+              "description": "Button or declared action"
             }
           ],
           "returns": "bool",
@@ -343,12 +343,12 @@
         {
           "label": "input:released(\"nom\")",
           "snippet": "input:released(\"jump\")",
-          "description": "Vrai le frame où l'accord était complet au frame précédent et ne l'est plus (saut à hauteur variable : relâcher tôt coupe l'élan). Ne lit jamais une séquence.",
+          "description": "True on the frame the chord was complete on the previous frame and no longer is (variable-height jump: releasing early cuts the momentum). Never reads a sequence.",
           "params": [
             {
               "name": "nom",
               "type": "string",
-              "description": "Bouton ou action déclarée"
+              "description": "Button or declared action"
             }
           ],
           "returns": "bool",
@@ -357,17 +357,17 @@
         {
           "label": "input:buffered(\"nom\", frames)",
           "snippet": "input:buffered(\"jump\", 6)",
-          "description": "Vrai si l’accord a été pressé dans les `frames` derniers frames et n’a pas encore été consommé. Lorsque la fonction renvoie vrai, elle consomme cet appui. Placez-la après vos autres conditions dans un `and`.",
+          "description": "True if the chord was pressed within the last `frames` frames and has not been consumed yet. When the function returns true, it consumes that press. Place it after your other conditions in an `and`.",
           "params": [
             {
               "name": "nom",
               "type": "string",
-              "description": "Bouton ou action déclarée"
+              "description": "Button or declared action"
             },
             {
               "name": "frames",
               "type": "number",
-              "description": "Fenêtre de tampon, en frames. Utilisez un nombre écrit en clair, de 1 à 255."
+              "description": "Buffer window, in frames. Use a plain number, from 1 to 255."
             }
           ],
           "returns": "bool",
@@ -376,12 +376,12 @@
         {
           "label": "input:get_sequence(\"nom\")",
           "snippet": "input:get_sequence(\"quarter_circle\")",
-          "description": "Vrai le frame où la séquence déclarée (Project Settings → Input → Séquences) vient de se compléter : son DERNIER pas vient de se compléter, les précédents s'étant trouvés en amont, dans l'ordre, dans la fenêtre de la séquence. Espace de noms séparé des accords : jamais un bouton, jamais held/pressed/released/buffered.",
+          "description": "True on the frame the declared sequence (Project Settings → Input → Sequences) has just been completed: its LAST step has just been completed, the previous ones having been found earlier, in order, within the sequence's window. Namespace separate from chords: never a button, never held/pressed/released/buffered.",
           "params": [
             {
               "name": "nom",
               "type": "string",
-              "description": "Séquence déclarée"
+              "description": "Declared sequence"
             }
           ],
           "returns": "bool",
@@ -390,17 +390,17 @@
         {
           "label": "input:get_axis(\"x\"[, \"y\"])",
           "snippet": "input:get_axis(\"horizontal\")",
-          "description": "Position de l'axe `x` : -1, 0 ou 1. Avec un 2e argument, rend un vec2 des deux axes. \"horizontal\" et \"vertical\" (la croix) existent toujours, même sans axe déclaré ; un `InputAxis` du projet (Project Settings → Input → Axes) s'utilise pareil.",
+          "description": "Position of axis `x`: -1, 0 or 1. With a 2nd argument, returns a vec2 of both axes. \"horizontal\" and \"vertical\" (the d-pad) always exist, even without a declared axis; a project `InputAxis` (Project Settings → Input → Axes) is used the same way.",
           "params": [
             {
               "name": "x",
               "type": "string",
-              "description": "\"horizontal\", \"vertical\", ou un axe déclaré"
+              "description": "\"horizontal\", \"vertical\", or a declared axis"
             },
             {
               "name": "y",
               "type": "string",
-              "description": "Optionnel : second axe, pour recevoir un vec2"
+              "description": "Optional: second axis, to receive a vec2"
             }
           ],
           "returns": "int",
@@ -415,19 +415,19 @@
         {
           "label": "self:play_sfx()",
           "snippet": "self:play_sfx()",
-          "description": "Joue le Sfx configuré dans le component SoundFX de cet actor (voir l'inspector).",
+          "description": "Plays the Sfx configured in this actor's SoundFX component (see the inspector).",
           "params": [],
           "doc_anchor": "self-play_sfx"
         },
         {
           "label": "sfx:play(\"name\")",
           "snippet": "sfx:play(\"name\")",
-          "description": "Joue un effet sonore one-shot (défini dans project/sfx/).",
+          "description": "Plays a one-shot sound effect (defined in project/sfx/).",
           "params": [
             {
               "name": "name",
               "type": "string",
-              "description": "Nom du Sfx (sans extension)"
+              "description": "Name of the Sfx (without extension)"
             }
           ],
           "doc_anchor": "sfx-play"
@@ -435,26 +435,26 @@
         {
           "label": "sfx:stop()",
           "snippet": "pas:stop()",
-          "description": "Coupe l’effet renvoyé par `sfx.play`. N’a aucun effet si ce son est déjà terminé.",
+          "description": "Cuts the effect returned by `sfx.play`. No effect if that sound has already finished.",
           "params": [],
           "doc_anchor": "sfx-stop"
         },
         {
           "label": "sfx:playing()",
           "snippet": "pas:playing()",
-          "description": "Vrai tant que cet effet sonne.",
+          "description": "True while this effect is sounding.",
           "params": [],
           "doc_anchor": "sfx-playing"
         },
         {
           "label": "sfx:set_volume(percent)",
           "snippet": "pas:set_volume(80)",
-          "description": "Règle le volume de CET effet, en pourcentage (100 = le niveau réglé sur la ressource).",
+          "description": "Sets the volume of THIS effect, as a percentage (100 = the level set on the resource).",
           "params": [
             {
               "name": "percent",
               "type": "int",
-              "description": "0 à 100"
+              "description": "0 to 100"
             }
           ],
           "doc_anchor": "sfx-set_volume"
@@ -462,7 +462,7 @@
         {
           "label": "sfx:set_pitch(percent)",
           "snippet": "pas:set_pitch(120)",
-          "description": "Règle la hauteur de CET effet, en pourcentage de sa hauteur d'origine : 200 = une octave au-dessus, 50 = une octave en dessous. La valeur est absolue.",
+          "description": "Sets the pitch of THIS effect, as a percentage of its original pitch: 200 = one octave above, 50 = one octave below. The value is absolute.",
           "params": [
             {
               "name": "percent",
@@ -475,12 +475,12 @@
         {
           "label": "sfx:set_panning(panning)",
           "snippet": "pas:set_panning(-50)",
-          "description": "Place cet effet dans le champ stéréo : −100 à gauche, 0 au centre, +100 à droite.",
+          "description": "Places this effect in the stereo field: −100 left, 0 centre, +100 right.",
           "params": [
             {
               "name": "panning",
               "type": "int",
-              "description": "−100 (gauche) à +100 (droite)"
+              "description": "−100 (left) to +100 (right)"
             }
           ],
           "doc_anchor": "sfx-set_panning"
@@ -488,12 +488,12 @@
         {
           "label": "music:play(\"name\")",
           "snippet": "music:play(\"name\")",
-          "description": "Démarre une piste musicale en boucle.",
+          "description": "Starts a music track in a loop.",
           "params": [
             {
               "name": "name",
               "type": "string",
-              "description": "Nom de la Music (sans extension)"
+              "description": "Name of the Music (without extension)"
             }
           ],
           "doc_anchor": "music-play"
@@ -501,40 +501,40 @@
         {
           "label": "music:stop()",
           "snippet": "music:stop()",
-          "description": "Arrête la musique en cours.",
+          "description": "Stops the current music.",
           "params": [],
           "doc_anchor": "music-stop"
         },
         {
           "label": "music:pause()",
           "snippet": "music:pause()",
-          "description": "Suspend la musique là où elle en est.",
+          "description": "Pauses the music where it is.",
           "params": [],
           "doc_anchor": "music-pause"
         },
         {
           "label": "music:resume()",
           "snippet": "music:resume()",
-          "description": "Reprend la musique suspendue, au même endroit.",
+          "description": "Resumes the paused music, at the same place.",
           "params": [],
           "doc_anchor": "music-resume"
         },
         {
           "label": "music:is_playing()",
           "snippet": "music:is_playing()",
-          "description": "Vrai tant qu'un module joue. Faux après `music:stop()`, vrai pendant une pause.",
+          "description": "True while a module is playing. False after `music:stop()`, true during a pause.",
           "params": [],
           "doc_anchor": "music-is_playing"
         },
         {
           "label": "music:set_volume(percent)",
           "snippet": "music:set_volume(60)",
-          "description": "Règle le volume de la musique, en pourcentage. C'est le seul niveau de la couche module : le matériel n'a qu'un scaler.",
+          "description": "Sets the music volume, as a percentage. It is the only level of the module layer: the hardware has a single scaler.",
           "params": [
             {
               "name": "percent",
               "type": "int",
-              "description": "0 à 100"
+              "description": "0 to 100"
             }
           ],
           "doc_anchor": "music-set_volume"
@@ -542,17 +542,17 @@
         {
           "label": "music:fade_to(\"name\", frames)",
           "snippet": "music:fade_to(\"name\", 60)",
-          "description": "Passe à une autre piste par un fondu traversant : le volume tombe à zéro, la piste change, il remonte. Marche entre deux morceaux quelconques, au prix d'un creux audible.",
+          "description": "Switches to another track with a cross fade: the volume drops to zero, the track changes, it comes back up. Works between any two songs, at the cost of an audible dip.",
           "params": [
             {
               "name": "name",
               "type": "string",
-              "description": "Nom de la Music"
+              "description": "Name of the Music"
             },
             {
               "name": "frames",
               "type": "int",
-              "description": "Durée totale des deux moitiés"
+              "description": "Total duration of both halves"
             }
           ],
           "doc_anchor": "music-fade_to"
@@ -560,12 +560,12 @@
         {
           "label": "music:cut_to(\"name\")",
           "snippet": "music:cut_to(\"name\")",
-          "description": "Passe à une autre piste SANS creux, à la fin du motif en cours, en reprenant à la même position. C'est ce qui enchaîne deux variantes d'un même morceau. Les deux pistes doivent avoir la même structure.",
+          "description": "Switches to another track WITHOUT a dip, at the end of the current pattern, resuming at the same position. This is what chains two variants of the same song. Both tracks must have the same structure.",
           "params": [
             {
               "name": "name",
               "type": "string",
-              "description": "Nom de la Music"
+              "description": "Name of the Music"
             }
           ],
           "doc_anchor": "music-cut_to"
@@ -573,12 +573,12 @@
         {
           "label": "music:jingle(\"name\")",
           "snippet": "music:jingle(\"name\")",
-          "description": "Joue un module PAR-DESSUS la musique en cours, sans l'arrêter. Il ne boucle jamais, un seul à la fois, et il prend jusqu'à 4 des 8 canaux. C'est la seule façon de faire sonner deux musiques ensemble sur cette console.",
+          "description": "Plays a module OVER the current music, without stopping it. It never loops, only one at a time, and it takes up to 4 of the 8 channels. It is the only way to make two musics sound together on this console.",
           "params": [
             {
               "name": "name",
               "type": "string",
-              "description": "Nom de la Music jouée en jingle"
+              "description": "Name of the Music played as a jingle"
             }
           ],
           "doc_anchor": "music-jingle"
@@ -586,19 +586,19 @@
         {
           "label": "music:jingle_playing()",
           "snippet": "music:jingle_playing()",
-          "description": "Vrai tant qu'un jingle sonne.",
+          "description": "True while a jingle is sounding.",
           "params": [],
           "doc_anchor": "music-jingle_playing"
         },
         {
           "label": "sound_box:set_state(\"name\")",
           "snippet": "sound_box:set_state(\"sable\")",
-          "description": "Change l’état de la SoundBox. Les actions d’animation utilisent alors les échantillons de ce nouvel état.",
+          "description": "Changes the state of the SoundBox. Animation actions then use the samples of this new state.",
           "params": [
             {
               "name": "name",
               "type": "string",
-              "description": "Nom d'un état de la SoundBox"
+              "description": "Name of a SoundBox state"
             }
           ],
           "doc_anchor": "sound_box-set_state"
@@ -606,12 +606,12 @@
         {
           "label": "sound_box:set_volume(percent)",
           "snippet": "sound_box:set_volume(50)",
-          "description": "Règle le volume de TOUS les effets, en pourcentage. Un réglage de mixage : il multiplie le volume propre de chaque effet, il ne le remplace pas.",
+          "description": "Sets the volume of ALL effects, as a percentage. A mixing setting: it multiplies the own volume of each effect, it does not replace it.",
           "params": [
             {
               "name": "percent",
               "type": "int",
-              "description": "0 à 100"
+              "description": "0 to 100"
             }
           ],
           "doc_anchor": "sound_box-set_volume"
@@ -619,12 +619,12 @@
         {
           "label": "jingle_box:set_state(\"name\")",
           "snippet": "jingle_box:set_state(\"victoire\")",
-          "description": "Change l'état de la JingleBox : vers quel module chaque action de jingle pointe désormais.",
+          "description": "Changes the state of the JingleBox: which module each jingle action now points to.",
           "params": [
             {
               "name": "name",
               "type": "string",
-              "description": "Nom d'un état de la JingleBox"
+              "description": "Name of a JingleBox state"
             }
           ],
           "doc_anchor": "jingle_box-set_state"
@@ -632,12 +632,12 @@
         {
           "label": "jingle_box:set_volume(percent)",
           "snippet": "jingle_box:set_volume(25)",
-          "description": "Règle le volume de la couche jingle, en pourcentage. Avec `music.set_volume`, c'est la moitié du duck : la musique s'efface pendant la fanfare, puis remonte.",
+          "description": "Sets the volume of the jingle layer, as a percentage. Together with `music.set_volume`, it is half of the duck: the music fades out during the fanfare, then comes back up.",
           "params": [
             {
               "name": "percent",
               "type": "int",
-              "description": "0 à 100"
+              "description": "0 to 100"
             }
           ],
           "doc_anchor": "jingle_box-set_volume"
@@ -645,12 +645,12 @@
         {
           "label": "music_box:trigger(\"name\")",
           "snippet": "music_box:trigger(\"combat_start\")",
-          "description": "Émet un déclencheur de la MusicBox. La boîte choisit l’état cible et sa transition.",
+          "description": "Emits a trigger of the MusicBox. The box chooses the target state and its transition.",
           "params": [
             {
               "name": "name",
               "type": "string",
-              "description": "Nom d'un déclencheur d'arête de la MusicBox"
+              "description": "Name of a MusicBox edge trigger"
             }
           ],
           "doc_anchor": "music_box-trigger"
@@ -664,22 +664,22 @@
         {
           "label": "camera:follow(target, mx, my)",
           "snippet": "camera:follow(self.position, 40, 20)",
-          "description": "Suit `target` (un vec2) avec une zone morte. Typiquement appelé dans on_late_update.",
+          "description": "Follows `target` (a vec2) with a dead zone. Typically called in on_late_update.",
           "params": [
             {
               "name": "target",
               "type": "vec2",
-              "description": "Point cible"
+              "description": "Target point"
             },
             {
               "name": "margin_x",
               "type": "number",
-              "description": "Marge horizontale avant de bouger (pixels)"
+              "description": "Horizontal margin before moving (pixels)"
             },
             {
               "name": "margin_y",
               "type": "number",
-              "description": "Marge verticale avant de bouger (pixels)"
+              "description": "Vertical margin before moving (pixels)"
             }
           ],
           "doc_anchor": "camera-follow"
@@ -693,34 +693,34 @@
         {
           "label": "actor:get(\"name\")",
           "snippet": "actor:get(\"Player\")",
-          "description": "Un actor de la scène active, par NOM (littéral) ou par INDEX dynamique 1-based (actor:get(i), de 1 à actor:count(), dans l'ordre de la scène). Rend nil si absent ou détruit.",
+          "description": "An actor of the active scene, by NAME (literal) or by dynamic 1-based INDEX (actor:get(i), from 1 to actor:count(), in scene order). Returns nil if absent or destroyed.",
           "params": [
             {
               "name": "name",
               "type": "string | int",
-              "description": "Nom exact de l'actor, ou son index 1-based dans la scène"
+              "description": "Exact name of the actor, or its 1-based index in the scene"
             }
           ],
-          "returns": "actor — référence actor, ou nil si absent/détruit",
+          "returns": "actor — actor reference, or nil if absent/destroyed",
           "doc_anchor": "actor-get"
         },
         {
           "label": "actor:count()",
           "snippet": "actor:count()",
-          "description": "Retourne le nombre d’actors posés dans la scène active. Utilisez-le comme borne avec `actor:get(i)`.",
+          "description": "Returns the number of actors placed in the active scene. Use it as a bound with `actor:get(i)`.",
           "params": [],
-          "returns": "int — nombre d'actors posés",
+          "returns": "int — number of placed actors",
           "doc_anchor": "actor-count"
         },
         {
           "label": "actor:spawn(\"prefab\", position)",
           "snippet": "actor:spawn(\"Bullet\", vec2(116, 76))",
-          "description": "Instancie un prefab du pool à `position` (un vec2). Retourne l’actor créé, ou `nil` si le pool est plein.",
+          "description": "Instantiates a pool prefab at `position` (a vec2). Returns the created actor, or `nil` if the pool is full.",
           "params": [
             {
               "name": "prefab",
               "type": "string",
-              "description": "Nom exact du Prefab (tel que créé dans l'éditeur)"
+              "description": "Exact name of the Prefab (as created in the editor)"
             },
             {
               "name": "position",
@@ -728,7 +728,7 @@
               "description": "Position monde en pixels (.x, .y)"
             }
           ],
-          "returns": "number — index slot dans g_actors[], ou -1 si pool plein",
+          "returns": "number — slot index in g_actors[], or -1 if the pool is full",
           "doc_anchor": "actor-spawn"
         }
       ]
@@ -740,12 +740,12 @@
         {
           "label": "sequence:start(name)",
           "snippet": "sequence:start(\"intro\")",
-          "description": "Démarre ou redémarre une séquence de ce script. La séquence est une fonction `on_sequence_<nom>` dans laquelle `wait` et `wait_until` marquent les pauses.",
+          "description": "Starts or restarts a sequence of this script. The sequence is an `on_sequence_<name>` function in which `wait` and `wait_until` mark the pauses.",
           "params": [
             {
               "name": "name",
               "type": "string",
-              "description": "Le nom qui suit on_sequence_ dans le nom du handler"
+              "description": "The name that follows on_sequence_ in the handler name"
             }
           ],
           "returns": "",
@@ -754,12 +754,12 @@
         {
           "label": "sequence:stop(name)",
           "snippet": "sequence:stop(\"intro\")",
-          "description": "Arrête la séquence en cours de route. Elle ne reprend pas où elle en était : un sequence.start la relance depuis sa première ligne.",
+          "description": "Stops the sequence midway. It does not resume where it was: a sequence.start restarts it from its first line.",
           "params": [
             {
               "name": "name",
               "type": "string",
-              "description": "Le nom qui suit on_sequence_ dans le nom du handler"
+              "description": "The name that follows on_sequence_ in the handler name"
             }
           ],
           "returns": "",
@@ -768,15 +768,15 @@
         {
           "label": "sequence:running(name)",
           "snippet": "if not sequence:running(\"intro\") then\n    \nend",
-          "description": "Vrai tant que la séquence n'a pas atteint sa dernière ligne. De quoi enchaîner deux séquences, ou geler une commande pendant une cinématique.",
+          "description": "True as long as the sequence has not reached its last line. Enough to chain two sequences, or to freeze a control during a cutscene.",
           "params": [
             {
               "name": "name",
               "type": "string",
-              "description": "Le nom qui suit on_sequence_ dans le nom du handler"
+              "description": "The name that follows on_sequence_ in the handler name"
             }
           ],
-          "returns": "bool — vrai si la séquence tourne",
+          "returns": "bool — true if the sequence is running",
           "doc_anchor": "sequence-running"
         }
       ]
@@ -788,76 +788,76 @@
         {
           "label": "save:write(slot)",
           "snippet": "save:write(0)",
-          "description": "Écrit les variables globales marquées « persist » dans un emplacement de sauvegarde.",
+          "description": "Writes the global variables marked \"persist\" into a save slot.",
           "params": [
             {
               "name": "slot",
               "type": "number",
-              "description": "Numéro d'emplacement, à partir de 0 (leur nombre se règle dans le projet)"
+              "description": "Slot number, from 0 (their number is set in the project)"
             }
           ],
-          "returns": "number — 1 si la sauvegarde a eu lieu, 0 si l'emplacement n'existe pas",
+          "returns": "number — 1 if the save took place, 0 if the slot does not exist",
           "doc_anchor": "save-write"
         },
         {
           "label": "save:load(slot)",
           "snippet": "save:load(0)",
-          "description": "Relit un emplacement et REMPLACE TOUTES les variables persistantes de la partie en cours. Une variable absente du fichier reprend sa valeur par défaut ; si l'emplacement est vide ou illisible, rien n'est touché.",
+          "description": "Reads a slot again and REPLACES ALL the persistent variables of the current game. A variable absent from the file takes its default value; if the slot is empty or unreadable, nothing is touched.",
           "params": [
             {
               "name": "slot",
               "type": "number",
-              "description": "Numéro d'emplacement, à partir de 0"
+              "description": "Slot number, from 0"
             }
           ],
-          "returns": "number — 1 si la lecture a eu lieu, 0 sinon",
+          "returns": "number — 1 if the read took place, 0 otherwise",
           "doc_anchor": "save-load"
         },
         {
           "label": "save:read(slot, \"name\")",
           "snippet": "save:read(0, \"chapitre\")",
-          "description": "Retourne la valeur d’une variable persistante dans un emplacement, sans charger cette partie. Retourne la valeur par défaut si l’emplacement est vide, illisible ou ne contient pas cette variable.",
+          "description": "Returns the value of a persistent variable in a slot, without loading that game. Returns the default value if the slot is empty, unreadable or does not contain this variable.",
           "params": [
             {
               "name": "slot",
               "type": "number",
-              "description": "Numéro d'emplacement, à partir de 0"
+              "description": "Slot number, from 0"
             },
             {
               "name": "name",
               "type": "string",
-              "description": "Nom d'une variable globale cochée « persist »"
+              "description": "Name of a global variable ticked \"persist\""
             }
           ],
-          "returns": "number — la valeur de la variable dans cet emplacement",
+          "returns": "number — the value of the variable in this slot",
           "doc_anchor": "save-read"
         },
         {
           "label": "save:exists(slot)",
           "snippet": "if save:exists(0) then\n    \nend",
-          "description": "Vrai si l'emplacement contient une sauvegarde relisible. De quoi n'afficher « Continuer » que s'il y a une partie.",
+          "description": "True if the slot holds a readable save. Enough to show \"Continue\" only when there is a game.",
           "params": [
             {
               "name": "slot",
               "type": "number",
-              "description": "Numéro d'emplacement, à partir de 0"
+              "description": "Slot number, from 0"
             }
           ],
-          "returns": "number — 1 si l'emplacement porte une sauvegarde, 0 sinon",
+          "returns": "number — 1 if the slot holds a save, 0 otherwise",
           "doc_anchor": "save-exists"
         },
         {
           "label": "save:erase(slot)",
           "snippet": "save:erase(0)",
-          "description": "Vide un emplacement : save.exists y répond faux ensuite.",
+          "description": "Empties a slot: save.exists then answers false for it.",
           "params": [
             {
               "name": "slot",
               "type": "number",
-              "description": "Numéro d'emplacement, à partir de 0"
+              "description": "Slot number, from 0"
             }
           ],
-          "returns": "number — 1 si l'emplacement existe, 0 sinon",
+          "returns": "number — 1 if the slot exists, 0 otherwise",
           "doc_anchor": "save-erase"
         }
       ]
@@ -869,12 +869,12 @@
         {
           "label": "math.abs(x)",
           "snippet": "math.abs(x)",
-          "description": "Valeur absolue entière.",
+          "description": "Integer absolute value.",
           "params": [
             {
               "name": "x",
               "type": "number",
-              "description": "Valeur entière"
+              "description": "Integer value"
             }
           ],
           "returns": "number — |x|",
@@ -883,45 +883,45 @@
         {
           "label": "math.clamp(x, lo, hi)",
           "snippet": "math.clamp(x, 0, 255)",
-          "description": "Bloque x entre lo et hi inclus.",
+          "description": "Clamps x between lo and hi inclusive.",
           "params": [
             {
               "name": "x",
               "type": "number",
-              "description": "Valeur à borner"
+              "description": "Value to clamp"
             },
             {
               "name": "lo",
               "type": "number",
-              "description": "Borne inférieure"
+              "description": "Lower bound"
             },
             {
               "name": "hi",
               "type": "number",
-              "description": "Borne supérieure"
+              "description": "Upper bound"
             }
           ],
-          "returns": "number — valeur bornée",
+          "returns": "number — clamped value",
           "doc_anchor": "math-clamp"
         },
         {
           "label": "math.sign(x)",
           "snippet": "math.sign(x)",
-          "description": "Signe de x. Retourne -1, 0, ou 1. Pratique pour normaliser une direction.",
+          "description": "Sign of x. Returns -1, 0, or 1. Handy for normalising a direction.",
           "params": [
             {
               "name": "x",
               "type": "number",
-              "description": "Valeur entière"
+              "description": "Integer value"
             }
           ],
-          "returns": "number — -1, 0 ou 1",
+          "returns": "number — -1, 0 or 1",
           "doc_anchor": "math-sign"
         },
         {
           "label": "math.min(a, b)",
           "snippet": "math.min(a, b)",
-          "description": "Retourne le plus petit des deux entiers.",
+          "description": "Returns the smaller of the two integers.",
           "params": [
             {
               "name": "a",
@@ -940,7 +940,7 @@
         {
           "label": "math.max(a, b)",
           "snippet": "math.max(a, b)",
-          "description": "Retourne le plus grand des deux entiers.",
+          "description": "Returns the larger of the two integers.",
           "params": [
             {
               "name": "a",
@@ -959,64 +959,64 @@
         {
           "label": "math.lerp(a, b, num, den)",
           "snippet": "math.lerp(a, b, num, den)",
-          "description": "Interpole linéairement entre a et b à la fraction num/den. Ex: math.lerp(0, 100, frame, 30) glisse de 0 à 100 sur 30 frames.",
+          "description": "Linearly interpolates between a and b at the fraction num/den. Ex: math.lerp(0, 100, frame, 30) slides from 0 to 100 over 30 frames.",
           "params": [
             {
               "name": "a",
               "type": "number",
-              "description": "Valeur de départ (fraction 0)"
+              "description": "Start value (fraction 0)"
             },
             {
               "name": "b",
               "type": "number",
-              "description": "Valeur d'arrivée (fraction 1)"
+              "description": "End value (fraction 1)"
             },
             {
               "name": "num",
               "type": "number",
-              "description": "Numérateur de la fraction parcourue"
+              "description": "Numerator of the fraction covered"
             },
             {
               "name": "den",
               "type": "number",
-              "description": "Dénominateur de la fraction parcourue"
+              "description": "Denominator of the fraction covered"
             }
           ],
-          "returns": "number — valeur interpolée",
+          "returns": "number — interpolated value",
           "doc_anchor": "math-lerp"
         },
         {
           "label": "math.ease(a, b, num, den, \"kind\")",
           "snippet": "math.ease(a, b, num, den, \"out\")",
-          "description": "Comme math.lerp, mais en courbant la fraction avant de l'appliquer. \"in\" démarre lentement et accélère, \"out\" démarre vite et ralentit, \"in_out\" combine les deux.",
+          "description": "Like math.lerp, but bending the fraction before applying it. \"in\" starts slowly and accelerates, \"out\" starts fast and slows down, \"in_out\" combines both.",
           "params": [
             {
               "name": "a",
               "type": "number",
-              "description": "Valeur de départ (fraction 0)"
+              "description": "Start value (fraction 0)"
             },
             {
               "name": "b",
               "type": "number",
-              "description": "Valeur d'arrivée (fraction 1)"
+              "description": "End value (fraction 1)"
             },
             {
               "name": "num",
               "type": "number",
-              "description": "Numérateur de la fraction parcourue"
+              "description": "Numerator of the fraction covered"
             },
             {
               "name": "den",
               "type": "number",
-              "description": "Dénominateur de la fraction parcourue"
+              "description": "Denominator of the fraction covered"
             },
             {
               "name": "kind",
               "type": "string",
-              "description": "Courbe : \"in\", \"out\" ou \"in_out\""
+              "description": "Curve: \"in\", \"out\" or \"in_out\""
             }
           ],
-          "returns": "number — valeur interpolée et courbée",
+          "returns": "number — interpolated and curved value",
           "doc_anchor": "math-ease"
         }
       ]
@@ -1028,12 +1028,12 @@
         {
           "label": "array(taille)",
           "snippet": "local sac = array(8)",
-          "description": "Déclare un tableau d’entiers rempli de zéros. Avec deux tailles, crée une grille dont l’ordre des arguments suit celui des index. Les tableaux Lua sont indexés à partir de 1.",
+          "description": "Declares an array of integers filled with zeros. With two sizes, creates a grid whose argument order follows that of the indices. Lua arrays are indexed from 1.",
           "params": [
             {
               "name": "taille",
               "type": "number",
-              "description": "Nombre d’éléments. Donnez une taille, ou deux pour une grille."
+              "description": "Number of elements. Give one size, or two for a grid."
             }
           ],
           "returns": "tableau",
@@ -1048,7 +1048,7 @@
         {
           "label": "scene:switch(name)",
           "snippet": "scene:switch(\"name\")",
-          "description": "Passe à une autre scène au début de la prochaine frame.",
+          "description": "Switches to another scene at the start of the next frame.",
           "params": [
             {
               "name": "name",
@@ -1068,12 +1068,12 @@
         {
           "label": "lang:set(code)",
           "snippet": "lang:set(\"fr\")",
-          "description": "Change la langue active et recharge la scène courante pour l’appliquer. Les actors et l’état de la scène repartent alors à zéro.",
+          "description": "Changes the active language and reloads the current scene to apply it. Actors and scene state then restart from zero.",
           "params": [
             {
               "name": "code",
               "type": "string",
-              "description": "Code d'une langue déclarée dans le projet"
+              "description": "Code of a language declared in the project"
             }
           ],
           "returns": "",
@@ -1082,7 +1082,7 @@
         {
           "label": "lang:get()",
           "snippet": "lang:get()",
-          "description": "Index de la langue active. La valeur 0 correspond à la langue source et peut être comparée à `LANG_<CODE>`.",
+          "description": "Index of the active language. The value 0 is the source language and can be compared to `LANG_<CODE>`.",
           "params": [],
           "returns": "number — index de langue courant",
           "doc_anchor": "lang-get"
@@ -1101,22 +1101,22 @@
         {
           "label": "text:draw(tx, ty, id)",
           "snippet": "text:draw(2, 16, \"village_garde_01\")",
-          "description": "Affiche un texte de la table du projet sur le layer d’interface de la scène. `tx` et `ty` sont exprimés en tuiles de 8 pixels.",
+          "description": "Displays a text from the project table on the scene's interface layer. `tx` and `ty` are expressed in 8-pixel tiles.",
           "params": [
             {
               "name": "tx",
               "type": "number",
-              "description": "Colonne, en tuiles"
+              "description": "Column, in tiles"
             },
             {
               "name": "ty",
               "type": "number",
-              "description": "Ligne, en tuiles"
+              "description": "Row, in tiles"
             },
             {
               "name": "id",
               "type": "string",
-              "description": "Clé du texte dans la table du projet"
+              "description": "Key of the text in the project table"
             }
           ],
           "doc_anchor": "text-draw"
@@ -1124,41 +1124,41 @@
         {
           "label": "text:length(id)",
           "snippet": "text:length(\"village_garde_01\")",
-          "description": "Nombre de caractères d'un texte. C'est la borne de la machine à écrire : quand n l'atteint, le texte est entièrement révélé.",
+          "description": "Number of characters of a text. It is the bound of the typewriter: when n reaches it, the text is fully revealed.",
           "params": [
             {
               "name": "id",
               "type": "string",
-              "description": "Clé du texte"
+              "description": "Key of the text"
             }
           ],
-          "returns": "number — nombre de caractères",
+          "returns": "number — number of characters",
           "doc_anchor": "text-length"
         },
         {
           "label": "text:clear(tx, ty, w, h)",
           "snippet": "text:clear(0, 0, 30, 4)",
-          "description": "Efface un rectangle de w×h tuiles sur le layer d'interface.",
+          "description": "Clears a rectangle of w×h tiles on the interface layer.",
           "params": [
             {
               "name": "tx",
               "type": "number",
-              "description": "Colonne du coin haut-gauche, en tuiles"
+              "description": "Column of the top-left corner, in tiles"
             },
             {
               "name": "ty",
               "type": "number",
-              "description": "Ligne du coin haut-gauche, en tuiles"
+              "description": "Row of the top-left corner, in tiles"
             },
             {
               "name": "w",
               "type": "number",
-              "description": "Largeur en tuiles"
+              "description": "Width in tiles"
             },
             {
               "name": "h",
               "type": "number",
-              "description": "Hauteur en tuiles"
+              "description": "Height in tiles"
             }
           ],
           "doc_anchor": "text-clear"
@@ -1166,12 +1166,12 @@
         {
           "label": "text:set_font(f)",
           "snippet": "text:set_font(\"Pixelia\")",
-          "description": "Charge une police en mémoire vidéo. Une seule police est résidente à la fois : rappeler cette fonction remplace la précédente. La première police du projet est chargée automatiquement au début de chaque scène.",
+          "description": "Loads a font into video memory. Only one font is resident at a time: calling this function again replaces the previous one. The first font of the project is loaded automatically at the start of each scene.",
           "params": [
             {
               "name": "f",
               "type": "string",
-              "description": "Nom de la police du projet"
+              "description": "Name of the project font"
             }
           ],
           "doc_anchor": "text-set_font"
@@ -1185,21 +1185,21 @@
         {
           "label": "interface:get(\"name\")",
           "snippet": "interface:get(\"alerte\")",
-          "description": "Retourne une référence à l’élément d’interface nommé, tel qu’un texte, un panneau ou une image.",
+          "description": "Returns a reference to the named interface element, such as a text, a panel or an image.",
           "params": [
             {
               "name": "name",
               "type": "string",
-              "description": "Nom exact de l'élément dans la mise en page"
+              "description": "Exact name of the element in the layout"
             }
           ],
-          "returns": "ui_element — référence, ou nil si absent",
+          "returns": "ui_element — reference, or nil if absent",
           "doc_anchor": "interface-get"
         },
         {
           "label": "ui_element:show()",
           "snippet": "interface:get(\"alerte\"):show()",
-          "description": "Affiche l’élément et ses enfants, sauf ceux qui sont cachés individuellement.",
+          "description": "Shows the element and its children, except those that are individually hidden.",
           "params": [],
           "returns": "",
           "doc_anchor": "ui_element-show"
@@ -1207,7 +1207,7 @@
         {
           "label": "ui_element:hide()",
           "snippet": "interface:get(\"alerte\"):hide()",
-          "description": "Cache l'élément et tout son sous-arbre.",
+          "description": "Hides the element and its whole subtree.",
           "params": [],
           "returns": "",
           "doc_anchor": "ui_element-hide"
@@ -1226,22 +1226,22 @@
         {
           "label": "blend:set_layer(side, bg, on)",
           "snippet": "blend:set_layer(0, 1, true)",
-          "description": "Désigne un layer de fond comme cible du mélange. Utilisez `side 0` pour le dessus et `side 1` pour le dessous, déterminé par les priorités de rendu.",
+          "description": "Designates a background layer as a blending target. Use `side 0` for the top and `side 1` for the bottom, determined by the rendering priorities.",
           "params": [
             {
               "name": "side",
               "type": "number",
-              "description": "0 = le dessus, 1 = le dessous"
+              "description": "0 = the top, 1 = the bottom"
             },
             {
               "name": "bg",
               "type": "number",
-              "description": "Slot de fond 0-3"
+              "description": "Background slot 0-3"
             },
             {
               "name": "on",
               "type": "boolean",
-              "description": "true = ce layer participe"
+              "description": "true = this layer takes part"
             }
           ],
           "doc_anchor": "blend-set_layer"
@@ -1249,17 +1249,17 @@
         {
           "label": "blend:set_obj(side, on)",
           "snippet": "blend:set_obj(0, true)",
-          "description": "Désigne les sprites comme cible du dessus ou du dessous. Un sprite en `self.obj_mode = 1` se mélange indépendamment de ce réglage.",
+          "description": "Designates the sprites as the top or bottom target. A sprite with `self.obj_mode = 1` blends independently of this setting.",
           "params": [
             {
               "name": "side",
               "type": "number",
-              "description": "0 = le dessus, 1 = le dessous"
+              "description": "0 = the top, 1 = the bottom"
             },
             {
               "name": "on",
               "type": "boolean",
-              "description": "true = les sprites participent"
+              "description": "true = the sprites take part"
             }
           ],
           "doc_anchor": "blend-set_obj"
@@ -1267,17 +1267,17 @@
         {
           "label": "blend:set_backdrop(side, on)",
           "snippet": "blend:set_backdrop(1, true)",
-          "description": "Désigne la couleur de fond de la scène comme cible. C'est très souvent le dessous qui manque : là où aucun layer ne dessine, seul le fond est derrière.",
+          "description": "Designates the scene's background colour as a target. It is very often the missing bottom: where no layer draws, only the background is behind.",
           "params": [
             {
               "name": "side",
               "type": "number",
-              "description": "0 = le dessus, 1 = le dessous"
+              "description": "0 = the top, 1 = the bottom"
             },
             {
               "name": "on",
               "type": "boolean",
-              "description": "true = le fond participe"
+              "description": "true = the background takes part"
             }
           ],
           "doc_anchor": "blend-set_backdrop"
@@ -1285,17 +1285,17 @@
         {
           "label": "blend:set_alpha(eva, evb)",
           "snippet": "blend:set_alpha(8, 8)",
-          "description": "Règle le dosage du mode alpha en seizièmes, de 0 à 16. `eva` contrôle le dessus et `evb` le dessous. Dépasser un total de 16 éclaircit l’image.",
+          "description": "Sets the mix of alpha mode in sixteenths, from 0 to 16. `eva` controls the top and `evb` the bottom. Going over a total of 16 brightens the image.",
           "params": [
             {
               "name": "eva",
               "type": "number",
-              "description": "Part du dessus, 0-16"
+              "description": "Share of the top, 0-16"
             },
             {
               "name": "evb",
               "type": "number",
-              "description": "Part du dessous, 0-16"
+              "description": "Share of the bottom, 0-16"
             }
           ],
           "doc_anchor": "blend-set_alpha"
@@ -1303,12 +1303,12 @@
         {
           "label": "blend:set_fade(evy)",
           "snippet": "blend:set_fade(8)",
-          "description": "Intensité des modes 2 et 3, en seizièmes : 0 = rien, 16 = blanc ou noir complet. Un fondu d'entrée ou de sortie, c'est cette valeur incrémentée frame après frame. Combiné à window.set_blend(), l'estompe ne s'applique que dans les régions choisies.",
+          "description": "Intensity of modes 2 and 3, in sixteenths: 0 = nothing, 16 = full white or black. A fade in or out is this value incremented frame after frame. Combined with window.set_blend(), the fade only applies in the chosen regions.",
           "params": [
             {
               "name": "evy",
               "type": "number",
-              "description": "Intensité 0-16"
+              "description": "Intensity 0-16"
             }
           ],
           "doc_anchor": "blend-set_fade"
@@ -1322,7 +1322,7 @@
         {
           "label": "palette:set_bg(bank, p)",
           "snippet": "palette:set_bg(0, \"Nuit\")",
-          "description": "Remplace les couleurs de la banque de FOND `bank` (0-15).",
+          "description": "Replaces the colours of the BACKGROUND bank `bank` (0-15).",
           "params": [
             {
               "name": "bank",
@@ -1341,7 +1341,7 @@
         {
           "label": "palette:set_obj(bank, p)",
           "snippet": "palette:set_obj(1, \"Nuit\")",
-          "description": "Remplace les couleurs de la banque de SPRITES `bank` (0-15).",
+          "description": "Replaces the colours of the SPRITE bank `bank` (0-15).",
           "params": [
             {
               "name": "bank",
@@ -1371,7 +1371,7 @@
         {
           "label": "debug:log(...)",
           "snippet": "debug:log(...)",
-          "description": "Écrit une ligne dans le journal mGBA, jamais à l’écran du jeu. Cette fonction est retirée de la ROM hors build de débogage.",
+          "description": "Writes a line in the mGBA log, never on the game screen. This function is removed from the ROM outside a debug build.",
           "params": [],
           "returns": "",
           "doc_anchor": "debug-log"

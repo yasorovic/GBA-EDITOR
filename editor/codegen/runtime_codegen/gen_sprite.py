@@ -99,7 +99,7 @@ def _actor_script_functions(p: Project, actor: Actor) -> set[str]:
         try:
             script = lua_parse(sp.read_text(encoding="utf-8"))
             _actor_fn_cache[key] = {fn.name for fn in script.functions}
-        except (LuaParseError, OSError):
+        except (LuaParseError, OSError):  # tolerated: a syntax error is reported by the script validator
             _actor_fn_cache[key] = set()
     return _actor_fn_cache[key]
 
@@ -196,7 +196,7 @@ def anim_tables_for(p: Project, sprite: SpriteAsset) -> list[str]:
     # marche de sonner « sable » ou « cailloux » sans être authoré deux fois.
     if any(a >= 0 for a in frame_actions):
         L += [
-            "/* Emplacement joué en arrivant sur la frame — -1 = aucun. */",
+            "/* Slot played on arriving at the frame — -1 = none. */",
             f"static const s16 {sym}_frame_action[] = {{{','.join(str(a) for a in frame_actions)}}};",
         ]
     # Sfx DIRECT par frame (ROADMAP v0.8.9) — même garde qu'au-dessus : une
@@ -204,7 +204,7 @@ def anim_tables_for(p: Project, sprite: SpriteAsset) -> list[str]:
     frame_sfx = frame_sfx_syms(p, sprite)
     if any(s != "-1" for s, _v in frame_sfx):
         L += [
-            "/* Sfx joué directement en arrivant sur la frame — -1 = aucun. */",
+            "/* Sfx played directly on arriving at the frame — -1 = none. */",
             f"static const s16 {sym}_frame_sfx[] = {{{','.join(s for s, _v in frame_sfx)}}};",
             f"static const u8  {sym}_frame_sfxv[] = {{{','.join(str(v) for _s, v in frame_sfx)}}};",
         ]

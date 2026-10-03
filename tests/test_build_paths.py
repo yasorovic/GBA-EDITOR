@@ -60,6 +60,7 @@ def test_sortie_d_outil_non_decodable_ne_tue_pas_le_build():
     lines = []
     worker.on("log_line", lines.append)
     worker.on("error_line", lines.append)
+    worker.on("diagnostic", lambda d: lines.append(d.console_line()))
     emit = r"import sys; sys.stdout.buffer.write(b'avant \x81\x8d apres\n')"
 
     assert worker._run_cmd([sys.executable, "-c", emit], "[t]") is True
@@ -87,7 +88,7 @@ def test_chemin_trop_long_est_refuse_avec_un_message_clair():
 
     assert message is not None
     assert str(WINDOWS_PATH_LIMIT) in message
-    assert "Déplacez le projet" in message
+    assert "Move the project" in message
 
 
 @windows_only

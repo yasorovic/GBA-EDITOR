@@ -107,7 +107,7 @@ def test_les_fautes_d_un_type_declare_sont_refusees_avec_son_indice(gizmo):
 
 
 def test_une_propriete_en_lecture_seule_d_un_type_declare_est_refusee(gizmo):
-    assert any("lecture seule" in m for m in _errors(
+    assert any("read-only" in m for m in _errors(
         "local g = scene:make_gizmo()\ng.id = 3"))
 
 

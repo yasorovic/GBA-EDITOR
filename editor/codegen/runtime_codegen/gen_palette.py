@@ -59,7 +59,7 @@ def palettes_lines(p, emit=None) -> list[str]:
     cher que le risque de réserver trop peu, qui ferait basculer vers une palette
     absente sans erreur avant l'exécution."""
     banks = list(getattr(p, "palettes", []))
-    L = ["", "/* Palettes du catalogue — palette.set_bg / palette.set_obj */"]
+    L = ["", "/* Catalogue palettes — palette.set_bg / palette.set_obj */"]
     L.append(f"const unsigned short g_palettes[{max(1, len(banks))}][16] = {{")
     for b in banks:
         cols = list(b.colors or [])[:16]

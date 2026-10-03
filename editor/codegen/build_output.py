@@ -43,7 +43,7 @@ from pathlib import Path
 # VISIBLE plutôt que supprimée : un lecteur du fichier généré doit comprendre
 # pourquoi l'heure d'export n'y est pas, sans avoir à retrouver ce module.
 _GRIT_STAMP = re.compile(r"^(//\s*)Time-stamp:.*$", re.MULTILINE)
-_GRIT_STAMP_REPLACEMENT = r"\1Time-stamp: (neutralisé — cf. codegen/build_output.py)"
+_GRIT_STAMP_REPLACEMENT = r"\1Time-stamp: (neutralised — see codegen/build_output.py)"
 
 # Ce que le build en cours a produit, et ce qu'il a laissé tel quel. Remis à
 # zéro par `begin_build()`.

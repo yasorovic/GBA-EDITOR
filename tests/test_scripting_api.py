@@ -91,7 +91,7 @@ def test_orthographe_retiree_bloque_sur_self():
     lui-même ne dépend pas de REMOVED_API — un « : » ne peut désigner qu'une
     méthode du catalogue."""
     errs = _errors("function on_update(self)\n self:set_frame(0)\nend\n")
-    assert errs and "inconnue" in errs[0].lower()
+    assert errs and "unknown" in errs[0].lower()
 
 
 def test_orthographe_retiree_bloque_aussi_sur_un_autre_recepteur():
@@ -100,7 +100,7 @@ def test_orthographe_retiree_bloque_aussi_sur_un_autre_recepteur():
     même règle : le « : » n'a pas de méthode à traduire hors du catalogue."""
     errs = _errors("function on_collide(self, other)\n"
                    " other:set_position(vec2(1, 2))\nend\n")
-    assert errs and "inconnue" in errs[0].lower()
+    assert errs and "unknown" in errs[0].lower()
 
 
 def test_methode_inconnue_signalee_sur_tout_recepteur():
@@ -201,7 +201,7 @@ def test_propriete_denumeration_comparee_par_son_nom():
 
 def test_entier_nu_refuse_sur_une_propriete_denumeration():
     errs = _errors("function on_update(self)\n self.obj_mode = 2\nend\n")
-    assert errs and "nom" in errs[0]
+    assert errs and "name" in errs[0]
 
 
 def test_valeur_inconnue_refusee():
@@ -305,7 +305,7 @@ def test_les_anciennes_orthographes_sont_bloquees(old):
     reste refusée — comme « méthode inconnue » — mais ne guide plus vers la
     propriété. Le blocage tient au « : », pas à REMOVED_API."""
     errs = _errors(f"function on_update(self)\n local x = {old}\nend\n")
-    assert errs and "inconnue" in errs[0].lower()
+    assert errs and "unknown" in errs[0].lower()
 
 
 def test_auto_dir_se_lit_maintenant():
@@ -319,7 +319,7 @@ def test_auto_dir_se_lit_maintenant():
 
 def test_grounded_est_en_lecture_seule():
     errs = _errors("function on_update(self)\n self.grounded = true\nend\n")
-    assert errs and "lecture seule" in errs[0]
+    assert errs and "read-only" in errs[0]
 
 
 def test_le_getter_dauto_dir_existe_en_c():
@@ -370,7 +370,7 @@ def test_un_etat_d_image_ecrit_sur_une_image_inconnue_du_build_est_refuse():
                       ' local c = interface:get("coeur_1")\n'
                       ' local c = interface:get("curseur")\n'
                       ' c.state = "on"\nend\n')
-    assert len(errs) == 1 and "ne sait pas laquelle" in errs[0]
+    assert len(errs) == 1 and "does not know which image" in errs[0]
 
 
 def test_etat_dimage_inconnu_refuse_avec_les_etats_du_bon_sprite():
@@ -384,7 +384,7 @@ def test_etat_dimage_inconnu_refuse_avec_les_etats_du_bon_sprite():
 def test_image_inconnue_ne_produit_quune_seule_erreur():
     errs = _ui_errors('function on_update(self)\n'
                       ' interface:get("nawak").state = "vide"\nend\n')
-    assert len(errs) == 1 and "introuvable" in errs[0]
+    assert len(errs) == 1 and "not found" in errs[0]
 
 
 # ── 6. L'écran de référence décrit l'API qui existe ────────────────
@@ -517,13 +517,13 @@ def test_identite_inconnue_refusee():
     sévérité que pour une scène ou un prefab inconnus."""
     errs, _ = _tag_lua('function on_collide(self, other)\n'
                        ' if other.tag == "Nawak" then end\nend\n')
-    assert errs and "aucun acteur ni prefab" in errs[0]
+    assert errs and "no actor or prefab" in errs[0]
 
 
 def test_le_tag_ne_se_compare_pas_a_un_nombre():
     errs, _ = _tag_lua('function on_collide(self, other)\n'
                        ' if other.tag == 0 then end\nend\n')
-    assert errs and "par son nom" in errs[0]
+    assert errs and "by its name" in errs[0]
 
 
 def test_les_messages_nomment_le_recepteur_ecrit():
@@ -682,7 +682,7 @@ def test_une_methode_inconnue_sur_une_reference_est_refusee():
                        '  pas:set_speed(2)\n'
                        'end\n')
     assert len(errs) == 1
-    assert "référence sfx" in errs[0]
+    assert "sfx reference" in errs[0]
     assert ":set_pitch()" in errs[0]
 
 

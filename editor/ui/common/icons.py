@@ -12,8 +12,9 @@ Fallback : QIcon vide si qtawesome absent (pas de crash)
 from __future__ import annotations
 import tempfile
 from pathlib import Path
-from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtCore import QRectF, QSize, Qt
 from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import QApplication
 
 # ── Couleur neutre des icônes ─────────────────────────────────────
@@ -238,6 +239,11 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     # peut recolorer que du texte, pas un pixmap déjà teinté.
     "add":                    ("mdi.plus",                    "+"),
     "search":                 ("mdi.magnify",                 "⌕"),
+    # Fenêtre « À propos » (ui/common/about_dialog.py)
+    "open_external":          ("mdi.open-in-new",             "↗"),
+    "docs":                   ("mdi.book-open-variant",       "▤"),
+    "release_notes":          ("mdi.text-box-outline",        "≣"),
+    "report_issue":           ("mdi.bug-outline",             "✱"),
 }
 
 # ── Backend (chargé une seule fois) ──────────────────────────────
@@ -269,6 +275,35 @@ def get(name: str,
         except Exception:
             pass
     return QIcon()
+
+
+_APP_ICON_SVG = Path(__file__).parent / "CustomIcons" / "Backstage_icon.svg"
+_APP_ICON_SIZES = (16, 20, 24, 32, 48, 64, 128, 256)
+
+
+def app_icon() -> QIcon:
+    """Icône de l'application : le SVG centré dans un carré transparent.
+
+    L'illustration n'est pas carrée ; confiée telle quelle à QIcon, Windows
+    l'étire dans le carré qu'il demande (barre de titre, barre des tâches).
+    Chaque taille est donc rendue ici, proportions conservées — même rendu que
+    packaging/icon.png (tools/generate_app_icon.py)."""
+    renderer = QSvgRenderer(str(_APP_ICON_SVG))
+    icon = QIcon()
+    if not renderer.isValid():
+        return icon
+    view = renderer.viewBoxF()
+    for size in _APP_ICON_SIZES:
+        pixmap = QPixmap(size, size)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        scale = size / max(view.width(), view.height())
+        width, height = view.width() * scale, view.height() * scale
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        renderer.render(painter, QRectF((size - width) / 2, (size - height) / 2, width, height))
+        painter.end()
+        icon.addPixmap(pixmap)
+    return icon
 
 
 def folder_icon(expanded: bool, color: str = COLOR_FOLDER) -> QIcon:

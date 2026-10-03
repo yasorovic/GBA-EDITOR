@@ -186,6 +186,11 @@ class DiagnosticsView(QWidget):
         if target is not None and target.kind == "ui_element":
             self.element_activated.emit(target.layout, target.name)
             return
+        # Le fichier et la ligne du diagnostic d'abord (ils sont des champs) ; le texte
+        # n'est lu que pour un message du validateur qui cite encore `fichier.lua:ligne`.
+        if getattr(m, "file", "").endswith(".lua") and getattr(m, "line", 0):
+            self.location_activated.emit(m.file, m.line)
+            return
         loc = parse_build_location(m.message)
         if loc:
             self.location_activated.emit(loc[0], loc[1])
@@ -454,6 +459,7 @@ class BuildPanel(QWidget):
         # Console (le journal) et Diagnostics (la liste du validateur) partagent
         # l'emplacement : deux onglets, le budget ROM reste dessous.
         self.diagnostics = DiagnosticsView()
+        self._build_diagnostics: list = []   # ceux du build en cours (cf. log_diagnostic)
         tabs = QTabWidget()
         tabs.setDocumentMode(True)
         tabs.setStyleSheet(
@@ -490,6 +496,24 @@ class BuildPanel(QWidget):
 
     def log_error(self, t): self.log(t, C.ACCENT_RED)
     def log_info(self, t):  self.log(t, C.ACCENT_COOL)
+
+    def start_build_diagnostics(self):
+        """Un nouveau build : la liste des diagnostics repart de zéro."""
+        self._build_diagnostics = []
+
+    def log_diagnostic(self, diagnostic):
+        """Une ligne de console colorée selon la gravité DU DIAGNOSTIC (et non du canal qui
+        l'a porté), gardée pour l'onglet Diagnostics à la fin du build."""
+        self.log(diagnostic.console_line(),
+                 C.ACCENT_RED if diagnostic.level == "error" else C.ACCENT_YLW)
+        self._build_diagnostics.append(diagnostic)
+
+    def show_build_diagnostics(self):
+        """Fin de build : l'onglet Diagnostics montre ce que le build a dit, y compris ce que
+        le checker, le codegen et les outils ont reproché — pas seulement le validateur."""
+        warnings = [d for d in self._build_diagnostics if d.level == "warning"]
+        errors = [d for d in self._build_diagnostics if d.level == "error"]
+        self.diagnostics.set_diagnostics(warnings, errors)
 
     def reveal(self):
         """Rouvre le panneau s'il a été replié à zéro dans son QSplitter

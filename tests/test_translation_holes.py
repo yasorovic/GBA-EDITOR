@@ -43,7 +43,7 @@ def test_aucune_traduction_compte_toutes_les_entrees(projet):
     warns = _warnings(projet)
     assert len(warns) == 1
     assert "Deutsch" in warns[0]
-    assert "4 entrée(s) sur 4" in warns[0]
+    assert "4 of 4" in warns[0]
 
 
 def test_une_langue_complete_ne_dit_rien(projet):
@@ -57,7 +57,7 @@ def test_le_compte_suit_les_entrees_remplies(projet):
     p = projet
     p.translations["de"][p.texts[0].id] = "Hallo"
     warns = _warnings(p)
-    assert len(warns) == 1 and "3 entrée(s) sur 4" in warns[0]
+    assert len(warns) == 1 and "3 of 4" in warns[0]
 
 
 def test_une_traduction_vide_est_un_trou(projet):
@@ -66,7 +66,7 @@ def test_une_traduction_vide_est_un_trou(projet):
     p = projet
     for t in p.texts:
         p.translations["de"][t.id] = "   "
-    assert "4 entrée(s) sur 4" in _warnings(p)[0]
+    assert "4 of 4" in _warnings(p)[0]
 
 
 def test_le_message_nomme_les_premieres_cles_pas_toutes(projet):
@@ -77,7 +77,7 @@ def test_le_message_nomme_les_premieres_cles_pas_toutes(projet):
         p.new_text(content=f"Encore {i}", path=["Dialogue"])
     msg = _warnings(p)[0]
     assert msg.count(",") >= 3          # trois clés citées
-    assert "et 11 autre(s)" in msg
+    assert "and 11 more" in msg
 
 
 def test_chaque_langue_a_son_message(projet):
@@ -104,4 +104,4 @@ def test_une_entree_source_vide_nest_pas_comptee(projet):
     problème que l'écran Texte montre déjà en colonne Content."""
     p = projet
     p.texts[0].content = ""
-    assert "3 entrée(s) sur 3" in _warnings(p)[0]
+    assert "3 of 3" in _warnings(p)[0]

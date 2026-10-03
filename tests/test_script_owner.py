@@ -29,7 +29,7 @@ def _errors(src: str, owner_kind: str, **kw) -> list[str]:
 ])
 def test_self_refuse_hors_acteur(kind, src):
     errs = _errors(src, kind)
-    assert any("`self` n'existe pas" in m for m in errs), errs
+    assert any("`self` does not exist" in m for m in errs), errs
 
 
 @pytest.mark.parametrize("kind", ["actor", "prefab", ""])
@@ -54,7 +54,7 @@ _BEHAVIOR_SELF_PARAMETRE = (
 def test_behavior_refuse_self_en_corps_et_en_parametre(src):
     errs = [e.message for e in check(parse(src), BuildContext(owner_kind="behavior"),
                                      check_event_names=False) if e.level == "error"]
-    assert any("`self` n'existe pas" in m and "de behavior" in m for m in errs), errs
+    assert any("`self` does not exist" in m and "behavior script" in m for m in errs), errs
 
 
 def test_behavior_avec_parametre_actor_est_valide():
@@ -77,7 +77,7 @@ def test_validateur_bloque_un_behavior_qui_ecrit_self(tmp_path):
 
 def test_evenement_d_acteur_refuse_dans_une_camera():
     errs = _errors("function on_collision_enter(other, a, b)\nend\n", "camera")
-    assert len(errs) == 1 and "on_collision_enter" in errs[0] and "de caméra" in errs[0]
+    assert len(errs) == 1 and "on_collision_enter" in errs[0] and "camera script" in errs[0]
 
 
 def test_on_late_update_refuse_dans_une_camera_admis_dans_une_scene():
@@ -136,7 +136,7 @@ def _refus(project) -> list[str]:
 
 def test_meme_fichier_sur_acteur_et_scene_refuse():
     (msg,) = _refus(_project(scene_script="s/x.lua", actor_scripts=["s/x.lua"]))
-    assert "s/x.lua" in msg and "plusieurs familles" in msg
+    assert "s/x.lua" in msg and "several families" in msg
 
 
 def test_meme_fichier_sur_acteur_et_camera_refuse():

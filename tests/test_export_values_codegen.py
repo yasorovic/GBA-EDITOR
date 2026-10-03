@@ -241,14 +241,14 @@ def test_checker_refuse_une_cle_inconnue():
     src = ('function on_update()\n'
            '    local b = actor:spawn("Bullet", vec2(0,0), { vitesse = 8 })\n'
            'end\n')
-    assert any("vitesse" in m and "réglable" in m for m in _spawn_errors(src))
+    assert any("vitesse" in m and "settable" in m for m in _spawn_errors(src))
 
 
 def test_checker_refuse_la_table_hors_statement():
     src = ('function on_update()\n'
            '    local n = foo(actor:spawn("Bullet", vec2(0,0), { speed = 8 }))\n'
            'end\n')
-    assert any("début de ligne" in m for m in _spawn_errors(src))
+    assert any("start of a line" in m for m in _spawn_errors(src))
 
 
 def test_checker_accepte_une_table_valide():
@@ -388,7 +388,7 @@ def test_export_ne_peut_masquer_un_champ_actor():
 def test_export_ne_peut_masquer_un_global():
     msgs = _errors('exports = { score = { type = "int", default = 0 } }\n',
                    global_names=["score"])
-    assert any("score" in m and "globale" in m for m in msgs)
+    assert any("score" in m and "global" in m for m in msgs)
 
 
 def test_export_ne_peut_masquer_un_mot_dapi():

@@ -181,6 +181,85 @@ chantiers clos ; ce tableau ne garde que ceux **non livrés**.
 | Undo/redo des sidecars d'éditeur | — | À ouvrir — envisagé pour **V2**, voir [ci-dessous](#undoredo-des-sidecars-déditeur-annuler-la-création-dun-groupe-un-déplacement-de-nœud) |
 | L'atelier Texte réuni — écrire et voir dans un même écran | 2026-09-19 | Route vers v1.0-stable — non prioritaire pour l'alpha (décidé le 2026-09-29) ; conception et décision verrouillée, aucune étape commencée. Voir [ci-dessous](#chantier-transverse--latelier-texte-réuni-écrire-et-voir-dans-un-même-écran) |
 | L'élément d'interface appartient à sa scène — des noms locaux | 2026-10-03 | À ouvrir — priorité non arbitrée ; conception proposée, **aucune décision verrouillée**, code non commencé. Garde-fou en place : un nom en double entre deux layouts est une erreur de build. Voir [ci-dessous](#lélément-dinterface-appartient-à-sa-scène--des-noms-locaux) |
+| La fiabilité du journal de build | 2026-10-03 | **Tranche 1 livrée le 2026-10-03** (aucune erreur avalée, tout script vérifié, fautes injectées) ; **tranche 2 livrée le 2026-10-03** (diagnostic unique, `build.log`, sortie des outils classée) ; reste ouvert : les codes stables, si le besoin apparaît. Voir [ci-dessous](#la-fiabilité-du-journal-de-build) |
+
+---
+
+## La fiabilité du journal de build
+
+### D'où vient la question (2026-10-03)
+
+Un `; ADFZ` écrit en fin de ligne compilait « proprement ». Cause : `convert_chunk` « ignorait les
+autres statements top-level », donc `local x = 1; ADFZ = 5` en tête de fichier était lu puis jeté, sans
+une ligne de journal. Corrigé le même jour (le parseur porte désormais ces instructions, le checker les
+refuse), mais le défaut n'était pas isolé : en cherchant autour, trois autres silences du même genre.
+
+- Un behavior dont la syntaxe est fausse n'était qu'un **avertissement** : le build continuait sans ses
+  fonctions.
+- Un prefab sans instance dans la scène était sauté **avant** que son script soit parsé.
+- Vingt-trois `except` larges (`Exception`, nu, `LuaParseError`) de la chaîne de build ne disaient rien,
+  et rien n'écrivait pourquoi c'était acceptable.
+
+Le journal est le seul témoin de ce que fait le build. Un silence y vaut une garantie fausse.
+
+### Tranche 1 — aucun silence (livrée le 2026-10-03)
+
+1. **Un `except` large dit pourquoi ou parle.** Dans `codegen/`, `scripting/` et `core/validator.py`, un
+   handler de `Exception`, nu ou de `LuaParseError` doit lever, émettre un diagnostic, ou porter sur sa
+   ligne `# tolerated: <raison>`. Un test parcourt le code et refuse le reste. Les `except:` nus de
+   `exports_parser` deviennent `ValueError`.
+2. **Tout script est vérifié, utilisé ou non.** Le validateur parse chaque `.lua` de `scripts/` :
+   - attaché (acteur, scène, caméra, prefab, y compris un prefab à zéro instance) ou behavior : une
+     faute de syntaxe ou une instruction hors fonction est une **erreur** ;
+   - attaché à rien : un **avertissement** (un brouillon ne bloque pas le build, mais ne passe pas non plus
+     sous silence).
+3. **Des fautes connues injectées au build.** Un test construit un projet jetable contenant chacune des
+   fautes trouvées (instruction hors fonction, `; ADFZ`, behavior cassé, prefab inutilisé cassé, script
+   orphelin cassé) et exige qu'elle ressorte dans le journal avec son fichier et sa ligne.
+
+Ne touche pas au format des messages, ni à l'interface.
+
+Livré : `tests/test_silent_except.py` (la garde, 23 handlers annotés `# tolerated:` avec leur raison),
+`_check_scripts_parse` dans `core/validator.py` (qui absorbe la lecture des behaviors de
+`_check_behaviors_without_self`), `tests/test_build_fault_injection.py` (sept cas, dont un projet sain
+comme témoin ; désactiver le contrôle en fait échouer cinq). Seul reste, côté silence, ce que la
+tranche 2 traite par construction : la gravité encore portée par un préfixe de texte.
+
+### Tranche 2 — un seul diagnostic, un journal conservé (livrée le 2026-10-03)
+
+Le problème, relevé dans le code : le validateur produit des `ValidationMessage` structurés (niveau,
+cible cliquable) que l'onglet Diagnostics affiche, mais le build les aplatit en lignes
+`[warn]  ⚠  [acteur] message` ; les erreurs du checker Lua, les avertissements du codegen et les
+générateurs n'existent que comme texte, donc l'onglet Diagnostics ne les voit jamais. La gravité est
+portée par un préfixe écrit à la main et par le canal d'émission (`log_line` gris, `error_line` rouge) ;
+tout le stderr des outils est rouge, avertissements de gcc compris ; le clic « fichier:ligne » est une
+regex sur du texte libre ; le verdict est un booléen ; le journal disparaît avec la fenêtre.
+
+Décisions (2026-10-03) :
+
+1. **Un seul objet.** `ValidationMessage` est étendu (`source`, `file`, `line`), pas doublé. Le
+   `BuildWorker` l'émet par un événement `diagnostic` ; la console s'en rend, l'onglet Diagnostics se
+   remplit de la même liste à la fin du build, le clic lit `file`/`line` au lieu d'une regex. Les lignes
+   purement informatives (`[gen] 12 fichier(s) écrit(s)`) restent du texte. `CheckError` gagne un champ
+   `line` (la ligne sort du texte du message).
+2. **Le verdict se chiffre** : « N erreur(s), M avertissement(s) » à la fin de chaque build.
+3. **`build.log`** dans `<projet>/build/`, **écrasé à chaque build**, écrit par le `BuildWorker` lui-même
+   (donc indépendant de l'interface, et lisible d'un test) ; en-tête : version de l'éditeur, outils,
+   projet, scène.
+4. **La sortie des outils est classée par contenu** : `error`/`warning` de gcc deviennent des
+   diagnostics ; le code de retour reste le seul juge de l'échec ; les lignes non classées d'un outil
+   qui a échoué restent affichées en rouge, celles d'un outil qui a réussi passent en information.
+5. **Pas de codes stables** (`E0412`) pour l'instant : à rouvrir seulement si le besoin apparaît (recherche
+   dans la doc, suppression d'une classe d'avertissement). Les champs de 1 découplent déjà les tests du
+   texte.
+
+Livré : `tests/test_build_diagnostics.py` (douze cas : l'objet, le classement de la sortie des outils, le
+verdict, `build.log` réécrit) et trois cas d'interface dans `tests/ui/test_diagnostics_panel.py`. Un build
+réel de la démo `PongAdvanced` (17 s) donne `[build] 0 error(s), 1 warning(s)` et un `build.log` de 19 Ko.
+Mécanique décrite dans ARCHITECTURE.md, « Le journal de build ».
+
+Ce que ça ne fait pas : remonter une erreur de gcc d'un `.c` généré vers la ligne Lua d'origine (il
+faudrait une table de correspondance), ni un réglage « avertissements = erreurs ».
 
 ---
 

@@ -68,3 +68,41 @@ def test_routage_cible_ui_element_prioritaire(qapp):
 def test_build_panel_a_les_deux_onglets(qapp):
     bp = BuildPanel()
     assert hasattr(bp, "console") and hasattr(bp, "diagnostics")
+
+
+# ── Les diagnostics d'un build (tranche 2 de « La fiabilité du journal de build ») ──
+
+
+def test_un_diagnostic_de_build_va_dans_la_console_et_l_onglet(qapp):
+    from core.validator import build_error, build_warning
+    bp = BuildPanel()
+    bp.start_build_diagnostics()
+    bp.log_diagnostic(build_warning("unused", "codegen", "Hit.lua"))
+    bp.log_diagnostic(build_error("unexpected `x`", "script", "Hit.lua", 3))
+    assert "[error] Hit.lua:3: unexpected `x`" in bp.console.toPlainText()
+
+    bp.show_build_diagnostics()
+    assert bp.diagnostics._list.count() == 2
+    assert bp.diagnostics._msgs[0].level == "error"       # erreurs d'abord
+
+
+def test_le_clic_lit_le_fichier_et_la_ligne_du_diagnostic(qapp):
+    """Les champs, pas une regex sur le texte : un message sans « Hit.lua:3 » dedans route
+    quand même vers la bonne ligne."""
+    from core.validator import build_error
+    view = DiagnosticsView()
+    view.set_diagnostics([], [build_error("unexpected token", "script", "Hit.lua", 3)])
+    got = []
+    view.location_activated.connect(lambda f, l: got.append((f, l)))
+    view._on_row(view._list.item(0))
+    assert got == [("Hit.lua", 3)]
+
+
+def test_un_nouveau_build_repart_d_une_liste_vide(qapp):
+    from core.validator import build_error
+    bp = BuildPanel()
+    bp.start_build_diagnostics()
+    bp.log_diagnostic(build_error("old", "make"))
+    bp.start_build_diagnostics()
+    bp.show_build_diagnostics()
+    assert bp.diagnostics._list.count() == 0

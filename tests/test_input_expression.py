@@ -80,7 +80,7 @@ def test_mouvement_plus_bouton_rejoint_le_dernier_pas():
 def test_mouvement_doit_etre_en_tete():
     with pytest.raises(InputExpressionError) as exc:
         parse_input_expression("a + quarter_circle_right")
-    assert "premier atome" in exc.value.message
+    assert "first atom" in exc.value.message
 
 
 def test_mouvement_au_milieu_dune_sequence_refuse():

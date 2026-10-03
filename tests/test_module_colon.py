@@ -105,7 +105,7 @@ def test_l_ancien_point_est_refuse_pour_toute_fonction_de_module(cle):
     """Toute fonction de module, sans en nommer aucune ici : le catalogue dit lesquelles."""
     module, _, fonction = cle.partition(".")
     (msg, *_reste) = _errors(f"{module}.{fonction}()")
-    assert f"{module}:{fonction}(" in msg and "« : »" in msg, msg
+    assert f"{module}:{fonction}(" in msg and '":"' in msg, msg
 
 
 def test_le_point_sur_interface_layer_window_est_refuse_aussi():
@@ -117,7 +117,7 @@ def test_le_point_sur_interface_layer_window_est_refuse_aussi():
 
 def test_la_bibliotheque_math_refuse_les_deux_points():
     (msg,) = _errors("local x = math:abs(-1)")
-    assert "bibliothèque" in msg and "math.abs" in msg
+    assert "library" in msg and "math.abs" in msg
     assert _errors("local x = math.abs(-1)") == []
 
 

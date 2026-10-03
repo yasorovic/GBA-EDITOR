@@ -212,7 +212,8 @@ def test_un_curseur_introuvable_ne_fait_pas_echouer_le_build(projet):
     p, _lay, lst = projet
     lst.cursor_image = "Absent"
     logs: list[str] = []
-    src = "\n".join(emit_ui_lists_c(p, emit=lambda _k, m: logs.append(m)))
+    src = "\n".join(emit_ui_lists_c(
+        p, emit=lambda k, m: logs.append(m.console_line() if k == "diagnostic" else m)))
     assert _row(src)[7] == "-1"
     assert any("Absent" in m for m in logs)
 

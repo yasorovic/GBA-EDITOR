@@ -57,7 +57,7 @@ def test_png_de_sprite_corrompu_est_refuse_en_validation(tmp_path):
 
     errors = _erreurs(p)
 
-    assert any("hero.png" in e and "illisible" in e for e in errors)
+    assert any("hero.png" in e and "unreadable" in e for e in errors)
     assert not any(str(tmp_path) in e for e in errors)        # pas de chemin complet recopié
 
 
@@ -65,7 +65,7 @@ def test_png_de_fond_corrompu_est_refuse_en_validation(tmp_path):
     p = _projet(tmp_path)
     (p.backgrounds_dir / "sky.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"tronque")
 
-    assert any("sky.png" in e and "illisible" in e for e in _erreurs(p))
+    assert any("sky.png" in e and "unreadable" in e for e in _erreurs(p))
 
 
 # ── Panne imprévue : message lisible, trace dans le journal ───────────
@@ -81,9 +81,13 @@ class _ProjetQuiPlante:
 def test_une_panne_imprevue_ne_montre_pas_de_trace_python(tmp_path, monkeypatch):
     journal = tmp_path / "crash.log"
     monkeypatch.setattr(crash_log, "LOG_FILE", journal)
-    worker = BuildWorker(_ProjetQuiPlante(), None)
+    projet = _ProjetQuiPlante()
+    projet.build_dir = tmp_path / "build"
+    projet.settings = SimpleNamespace(name="projet-qui-plante")
+    worker = BuildWorker(projet, None)
     lines, finished = [], []
     worker.on("error_line", lines.append)
+    worker.on("diagnostic", lambda d: lines.append(d.console_line()))
     worker.on("log_line", lines.append)
     worker.on("finished", finished.append)
 
@@ -92,7 +96,7 @@ def test_une_panne_imprevue_ne_montre_pas_de_trace_python(tmp_path, monkeypatch)
     assert finished == [False]
     texte = "\n".join(lines)
     assert "Traceback" not in texte
-    assert "erreur interne" in texte and "boom interne" in texte
+    assert "internal error" in texte and "boom interne" in texte
     assert str(journal) in texte                                # dit où est le détail
     assert "RuntimeError" in journal.read_text(encoding="utf-8")   # …et il y est
 
@@ -103,18 +107,20 @@ def test_un_outil_en_echec_dit_quelle_etape_et_quel_code():
     worker = BuildWorker(None, None)
     lines = []
     worker.on("error_line", lines.append)
+    worker.on("diagnostic", lambda d: lines.append(d.console_line()))
     worker.on("log_line", lines.append)
 
     ok = worker._run_cmd([sys.executable, "-c", "import sys; sys.exit(3)"], "[outil]")
 
     assert ok is False
-    assert "[outil] a échoué (code 3)" in lines
+    assert "[error] outil: failed (code 3)" in lines
 
 
 def test_un_outil_qui_reussit_n_ajoute_pas_de_ligne_d_echec():
     worker = BuildWorker(None, None)
     lines = []
     worker.on("error_line", lines.append)
+    worker.on("diagnostic", lambda d: lines.append(d.console_line()))
 
     assert worker._run_cmd([sys.executable, "-c", "pass"], "[outil]") is True
     assert not any("a échoué" in line for line in lines)
@@ -130,6 +136,7 @@ def test_rom_verrouillee_par_un_autre_programme_est_dite_clairement(tmp_path):
     worker = BuildWorker(None, SimpleNamespace(resolve_make=lambda: Path("make")))
     errors = []
     worker.on("error_line", errors.append)
+    worker.on("diagnostic", lambda d: errors.append(d.console_line()))
 
     kernel32 = ctypes.windll.kernel32
     kernel32.CreateFileW.restype = ctypes.c_void_p
@@ -140,4 +147,4 @@ def test_rom_verrouillee_par_un_autre_programme_est_dite_clairement(tmp_path):
     finally:
         kernel32.CloseHandle(ctypes.c_void_p(handle))
 
-    assert any("rom.gba" in e and "verrouillée" in e for e in errors)
+    assert any("rom.gba" in e and "locked" in e for e in errors)

@@ -81,7 +81,7 @@ def test_les_tuiles_d_un_fond_sont_ses_methodes():
 
 def test_l_etat_d_un_fond_s_ecrit_par_ses_verbes_seulement():
     (msg,) = _errors("layer:get(0).visible = false")
-    assert "lecture seule" in msg
+    assert "read-only" in msg
 
 
 def test_un_fond_refuse_ce_qui_n_est_pas_a_lui():
@@ -95,15 +95,15 @@ def test_le_numero_est_borne_par_les_fonds_de_la_scene():
     (comme un index de tableau)."""
     from scripting.api import LAYERS_BY_MODE
     (msg,) = _errors("layer:get(4):hide()")
-    assert "fond 4" in msg and "0, 1, 2, 3" in msg
+    assert "background 4" in msg and "0, 1, 2, 3" in msg
     assert _errors("layer:get(0):hide()\nlayer:get(3):hide()") == []
     assert _errors("local i = 9\nlayer:get(i):hide()") == []
     # Un mode qui n'a que deux fonds réguliers (le troisième est affine) : le refus dit lesquels.
     (msg,) = _errors("layer:get(3):hide()", layer_numbers=LAYERS_BY_MODE[1])
-    assert "fond 3" in msg and "0, 1" in msg
+    assert "background 3" in msg and "0, 1" in msg
     assert _errors("layer:get(1):hide()", layer_numbers=LAYERS_BY_MODE[1]) == []
     (msg,) = _errors("layer:get(0):hide()", layer_numbers=LAYERS_BY_MODE[3])
-    assert "aucun" in msg
+    assert "none" in msg
 
 
 def test_les_fonds_par_mode_couvrent_les_six_modes_du_modele():
@@ -165,7 +165,7 @@ def test_une_region_inconnue_est_refusee_sur_son_nom():
 
 def test_l_etat_d_une_region_s_ecrit_par_ses_verbes_seulement():
     (msg,) = _errors('window:get("Panneau").visible = true')
-    assert "lecture seule" in msg
+    assert "read-only" in msg
 
 
 # ── Le C ───────────────────────────────────────────────────────────────────

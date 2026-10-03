@@ -110,7 +110,7 @@ def _scan_buffered(p):
             continue
         try:
             ast = _parse(sp.read_text(encoding="utf-8"))
-        except LuaParseError:
+        except LuaParseError:  # tolerated: a syntax error is reported by the script validator
             continue
         _walk(ast, best, names)
     return best[0], names

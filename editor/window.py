@@ -52,7 +52,8 @@ from ui.common.settings_dialog import SettingsDialog
 from core.external_tools import ExternalTools
 from core.keybindings import bind
 from core import crash_log
-from core.app_info import APP_AUTHOR, APP_DOCS_URL, APP_NAME, APP_VERSION
+from core.app_info import APP_DOCS_URL, APP_NAME
+from ui.common.about_dialog import AboutDialog
 from core.diagnostics import diagnostic_report
 from ui.common.reveal import reveal_in_file_manager
 from ui.scene_manager.inspectors import DynamicInspector
@@ -949,9 +950,7 @@ class MainWindow(QMainWindow):
         m_help.addAction(a_diag)
         m_help.addSeparator()
         a_about = QAction(label("win.about"), self)
-        a_about.triggered.connect(lambda: QMessageBox.information(
-            self, APP_NAME, label("win.about_text", app_name=APP_NAME,
-                                  version=APP_VERSION, author=APP_AUTHOR)))
+        a_about.triggered.connect(lambda: AboutDialog(self).exec())
         m_help.addAction(a_about)
 
     def _open_log_folder(self):
@@ -2012,8 +2011,10 @@ class MainWindow(QMainWindow):
         msg = label("win.build_start", project=self.project.settings.name,
                     scene=self.project.active_scene.name)
         self.build_panel.log_info(msg)
+        self.build_panel.start_build_diagnostics()
         if (sbp := self._script_build_panel()) is not None:
             sbp.log_info(msg)
+            sbp.start_build_diagnostics()
 
         # Bridge thread-safe : BuildWorker (thread Python) → Qt main thread
         # Les callbacks de l'engine sont appelés depuis le thread de build ;
@@ -2028,6 +2029,7 @@ class MainWindow(QMainWindow):
         self._worker = BuildWorker(project=self.project, toolchain=self.toolchain)
         self._worker.on("log_line",   lambda m:  self._build_queue.put(("log",      m)))
         self._worker.on("error_line", lambda m:  self._build_queue.put(("error",    m)))
+        self._worker.on("diagnostic", lambda d:  self._build_queue.put(("diagnostic", d)))
         self._worker.on("progress",   lambda f:  self._build_queue.put(("progress", f)))
         self._worker.on("finished",   lambda ok: self._build_queue.put(("finished", ok)))
         self._worker.on("rom_report", lambda r:  self._build_queue.put(("rom_report", r)))
@@ -2046,6 +2048,9 @@ class MainWindow(QMainWindow):
                 elif kind == "error":
                     self.build_panel.log_error(data)
                     if sbp is not None: sbp.log_error(data)
+                elif kind == "diagnostic":
+                    self.build_panel.log_diagnostic(data)
+                    if sbp is not None: sbp.log_diagnostic(data)
                 elif kind == "progress":
                     self._tb_build_btn.set_progress(data)
                 elif kind == "rom_report":
@@ -2061,6 +2066,9 @@ class MainWindow(QMainWindow):
 
     def _on_build_finished(self, success: bool):
         self.build_panel.set_building(False)
+        self.build_panel.show_build_diagnostics()
+        if (panel := self._script_build_panel()) is not None:
+            panel.show_build_diagnostics()
         self._tb_build_btn.build_finished.emit(success)
         sbp = self._script_build_panel()
         if success:

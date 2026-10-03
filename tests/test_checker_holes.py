@@ -97,7 +97,7 @@ def test_un_champ_sur_une_reference_delement_est_une_erreur(src):
     pas, donc laisser le build continuer ne fait que déplacer la faute vers gcc."""
     errs = _errors(_body(src))
     assert len(errs) == 1
-    assert "propres membres" in errs[0]           # le message dit où chercher
+    assert "own members" in errs[0]           # le message dit où chercher
     assert _warnings(_body(src)) == []
 
 

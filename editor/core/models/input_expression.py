@@ -95,7 +95,7 @@ def _tokenize(text: str) -> list:
             continue
         m = _TOKEN_RE.match(text, i)
         if not m:
-            raise InputExpressionError(f"caractère inattendu « {c} »", i + 1)
+            raise InputExpressionError(f"unexpected character \"{c}\"", i + 1)
         tokens.append((m.group(0), i + 1))
         i = m.end()
     return tokens
@@ -126,18 +126,18 @@ class _Parser:
     def _expect(self, text: str):
         tok = self._peek()
         if tok is None or tok[0] != text:
-            raise self._error_here(f"« {text} » attendu")
+            raise self._error_here(f"\"{text}\" expected")
         self._advance()
 
     def _parse_word_atome(self) -> list:
         """bouton | direction, pour une branche d'alternance (jamais mouvement)."""
         tok = self._peek()
         if tok is None or not _WORD_RE.fullmatch(tok[0]):
-            raise self._error_here("un nom de bouton ou de direction est attendu")
+            raise self._error_here("a button or direction name is expected")
         word, col = self._advance()
         if word not in _BUTTONS:
             raise InputExpressionError(
-                f"« {word} » n'est ni un bouton ni une direction valide", col)
+                f"\"{word}\" is neither a button nor a valid direction", col)
         return [frozenset({word})]
 
     def _parse_alternance(self) -> list:
@@ -149,8 +149,7 @@ class _Parser:
         self._expect(")")
         if len(branches) > MAX_ALTERNATION_BRANCHES:
             raise InputExpressionError(
-                f"trop de branches dans « (...) » ({len(branches)} > "
-                f"{MAX_ALTERNATION_BRANCHES})", 1)
+                f"too many branches in \"(...)\" ({len(branches)} > {MAX_ALTERNATION_BRANCHES})", 1)
         return branches
 
     def _parse_atome(self) -> list:
@@ -158,21 +157,20 @@ class _Parser:
         il n'est valide qu'en tête de l'expression entière."""
         tok = self._peek()
         if tok is None:
-            raise self._error_here("un atome est attendu")
+            raise self._error_here("an atom is expected")
         text, col = tok
         if text == "(":
             return self._parse_alternance()
         if not _WORD_RE.fullmatch(text):
-            raise self._error_here(f"jeton inattendu « {text} »")
+            raise self._error_here(f"unexpected token \"{text}\"")
         if text in self._movements:
             raise InputExpressionError(
-                f"« {text} » est un mouvement : il doit être le premier atome "
-                "de l'expression", col)
+                f"\"{text}\" is a motion: it must be the first atom of the expression", col)
         self._advance()
         if text in _BUTTONS:
             return [frozenset({text})]
         raise InputExpressionError(
-            f"« {text} » n'est ni un bouton, une direction ni un mouvement déclaré", col)
+            f"\"{text}\" is neither a button, a direction nor a declared motion", col)
 
     def _parse_pas(self) -> list:
         branches = self._parse_atome()
@@ -205,15 +203,15 @@ class _Parser:
             sequences = [seq + [b] for seq in sequences for b in pas_branches]
             if len(sequences) > MAX_ALTERNATIVES:
                 raise InputExpressionError(
-                    f"trop d'alternatives au total ({len(sequences)} > "
-                    f"{MAX_ALTERNATIVES}) — utiliser deux actions séparées", 1)
+                    f"too many alternatives in total ({len(sequences)} > {MAX_ALTERNATIVES}) — use two separate "
+                    "actions", 1)
         if self._peek() is not None:
             tok, col = self._peek()
-            raise InputExpressionError(f"jeton inattendu « {tok} »", col)
+            raise InputExpressionError(f"unexpected token \"{tok}\"", col)
         if len(sequences) > MAX_ALTERNATIVES:
             raise InputExpressionError(
-                f"trop d'alternatives au total ({len(sequences)} > "
-                f"{MAX_ALTERNATIVES}) — utiliser deux actions séparées", 1)
+                f"too many alternatives in total ({len(sequences)} > {MAX_ALTERNATIVES}) — use two separate "
+                "actions", 1)
         return [InputExpression(steps=tuple(InputStep(s) for s in seq)) for seq in sequences]
 
 
@@ -227,7 +225,7 @@ def compile_movement(name: str, steps_text: str) -> tuple:
     alternatives = parser.parse()
     if len(alternatives) != 1:
         raise InputExpressionError(
-            f"le mouvement « {name} » ne peut pas utiliser l'alternance « (a|b) »", 1)
+            f"the motion \"{name}\" cannot use the alternation \"(a|b)\"", 1)
     return tuple(step.buttons for step in alternatives[0].steps)
 
 
@@ -238,7 +236,7 @@ def parse_input_expression(text: str, custom_movements: dict | None = None) -> l
     for movement_name, steps_text in (custom_movements or {}).items():
         if movement_name in movements:
             raise InputExpressionError(
-                f"« {movement_name} » est déjà un mouvement intégré", 1)
+                f"\"{movement_name}\" is already a built-in motion", 1)
         movements[movement_name] = compile_movement(movement_name, steps_text)
     tokens = _tokenize(text)
     return _Parser(tokens, movements).parse()

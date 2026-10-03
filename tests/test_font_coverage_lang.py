@@ -62,7 +62,7 @@ def test_un_caractere_absent_est_signale_avec_la_langue_et_la_police(projet):
 
     warns = _warnings_for(p)
     assert len(warns) == 1
-    assert "hud_msg" in warns[0] and "« ja »" in warns[0]
+    assert "hud_msg" in warns[0] and '"ja"' in warns[0]
     assert "test_font" in warns[0]
     assert "こ" in warns[0]   # au moins un des caractères manquants est nommé
 

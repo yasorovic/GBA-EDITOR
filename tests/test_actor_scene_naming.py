@@ -46,7 +46,7 @@ def test_doublon_dans_une_meme_scene_avertit():
     ctx = _Ctx([s])
     _check_actor_name_collisions(ctx)
     assert len(ctx.msgs) == 1
-    assert "même scène" in ctx.msgs[0] or "scène 'S'" in ctx.msgs[0]
+    assert "same scene" in ctx.msgs[0] or "scene 'S'" in ctx.msgs[0]
 
 
 def _gen(body: str, **ctx_kw):

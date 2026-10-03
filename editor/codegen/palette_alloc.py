@@ -69,7 +69,7 @@ def own_palette(png_path) -> list[int]:
     if cached is None:
         try:
             cached = extract_palette_from_image(p)
-        except Exception:
+        except Exception:  # tolerated: unreadable PNG: the validator reports it
             cached = []
         _own_cache[key] = cached
     return cached
@@ -862,7 +862,7 @@ def scene_palette_view(p: Project, scene: Scene, pool: str) -> ScenePaletteView:
     # seulement — une bande de texte OBJ se décide plus tard (cf. ROADMAP). MÊME
     # pool de dédup : une police et un fond aux mêmes couleurs partagent la banque.
     if pool == "bg":
-        pairs = pairs + [(tuple(cols), InstanceRef("font", name, f"{name} (police)", pb))
+        pairs = pairs + [(tuple(cols), InstanceRef("font", name, f"{name} (font)", pb))
                          for name, pb, cols in _scene_font_palettes(p, scene)]
 
     groups: dict[tuple, list[InstanceRef]] = {}

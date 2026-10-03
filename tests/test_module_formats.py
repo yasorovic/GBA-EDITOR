@@ -174,4 +174,4 @@ def test_un_module_sans_echantillon_est_refuse_a_limport():
     vide[i + 0x12] = 0x00
     path = Path(tempfile.mkdtemp()) / "muet.it"
     path.write_bytes(bytes(vide))
-    assert "échantillon" in (check_audio_file(path) or "")
+    assert "sample" in (check_audio_file(path) or "")
