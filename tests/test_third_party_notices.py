@@ -37,7 +37,21 @@ def test_chaque_dependance_directe_a_sa_notice(package):
 def test_freetype_est_credite_comme_l_exige_sa_licence():
     # La FTL exige une mention dans la documentation livrée avec le logiciel.
     assert "The FreeType Project" in NOTICES
-    assert "freetype.org" in NOTICES
+    assert re.search(r"\[www\.freetype\.org\]\(https://www\.freetype\.org\)", NOTICES)
+
+
+LICENSE_TEXTS = ["LGPL-3.0.txt", "LGPL-2.1.txt", "Apache-2.0.txt", "PSF-Python.txt"]
+
+
+@pytest.mark.parametrize("name", LICENSE_TEXTS)
+def test_les_textes_de_licence_exiges_sont_livres(name):
+    # La LGPL (Qt, FFmpeg) et l'Apache-2.0 exigent que leur texte accompagne le binaire.
+    assert (REPO_DIR / "licenses" / name).stat().st_size > 1000
+
+
+def test_le_build_emporte_le_dossier_licenses():
+    build = (REPO_DIR / "packaging" / "nuitka_build.py").read_text(encoding="utf-8")
+    assert "'licenses'" in build
 
 
 def _starter_license_files() -> list[Path]:

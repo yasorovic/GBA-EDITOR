@@ -76,7 +76,12 @@
   },
   {
     "file": "editor/ui/home/project_picker.py",
-    "text": "f'''<span style=\"color:#666;\">{name} — {label(self._EXPLAIN_KEYS[name])}. <a href=\"{url}\" style=\"color:#4c8caf;\">{label('home.status.download')}</a></span>'''",
+    "text": "f'''<span style=\"color:#666;\">{label(self._EXPLAIN_KEYS[name])} <a href=\"{url}\" style=\"color:#4c8caf;\">{label('home.status.download')}</a></span>'''",
+    "reason": "HTML presentation only; the displayed prose is resolved by the catalogue."
+  },
+  {
+    "file": "editor/ui/common/settings_dialog.py",
+    "text": "f'''<span style=\"color:{colour};\">{('✓' if ok else '✗')} {text}</span>&nbsp;&nbsp;·&nbsp;&nbsp;<a href=\"{url}\" style=\"color:{C.ACCENT_COOL};\">{link}</a>{hint}'''",
     "reason": "HTML presentation only; the displayed prose is resolved by the catalogue."
   },
   {

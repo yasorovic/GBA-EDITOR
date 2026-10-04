@@ -31,7 +31,7 @@ from ui.common.labels import label
 from ui.common.logo import BackstageLogo
 from ui.common.reveal import reveal_in_file_manager
 from core.app_info import APP_AUTHOR, APP_DOCS_URL, APP_NAME, APP_VERSION
-from core.toolchain import Toolchain, DEVKITPRO_URL, MGBA_URL
+from core.toolchain import Toolchain, DEVKITPRO_URL, MGBA_URL, DEVKITPRO_OK, DEVKITPRO_INCOMPLETE
 from core.project_templates import (
     ProjectTemplate, TEMPLATES, target_dir as template_target_dir,
     is_downloaded as template_is_downloaded, download_template,
@@ -124,9 +124,10 @@ class ToolchainStatus(QWidget):
         for name, ok, _ in checks:
             lbl = QLabel(f"{'✓' if ok else '✗'} {name}")
             lbl.setFont(QFont(T.UI, T.XS, QFont.Weight.DemiBold))
-            lbl.setStyleSheet(
-                f"color:{C.TEXT_NORM if ok else C.ACCENT_RED};background:transparent;"
-            )
+            # ✗ jaune : devkitPro trouvé mais incomplet (cf. `Toolchain.devkitpro_state`).
+            incomplete = name == "devkitPro" and self._toolchain.devkitpro_state == DEVKITPRO_INCOMPLETE
+            colour = C.TEXT_NORM if ok else C.ACCENT_YLW if incomplete else C.ACCENT_RED
+            lbl.setStyleSheet(f"color:{colour};background:transparent;")
             row_l.addWidget(lbl)
         row_l.addStretch()
 
@@ -140,7 +141,7 @@ class ToolchainStatus(QWidget):
 
         for name, ok, url in missing:
             expl = QLabel(
-                f'<span style="color:#666;">{name} — {label(self._EXPLAIN_KEYS[name])}. '
+                f'<span style="color:#666;">{label(self._EXPLAIN_KEYS[name])} '
                 f'<a href="{url}" style="color:#4c8caf;">{label("home.status.download")}</a></span>'
             )
             expl.setFont(QFont(T.UI, T.XS))

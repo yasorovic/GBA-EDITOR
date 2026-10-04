@@ -74,6 +74,12 @@ VIAddVersionKey "LegalCopyright"  "${PUBLISHER}"
 ; Pas de page de licence : la GPL n'en exige pas, et LICENSE comme
 ; THIRD-PARTY-NOTICES.md sont installes a la racine du dossier de l'application.
 
+; Titres courts : le titre par defaut reprend $(^NameDA) ("Backstage 1.0.0-alpha"), et la
+; version complete deborde du titre de la page d'accueil. Le titre ne garde que le nom ;
+; la version passe dans le texte.
+!define MUI_WELCOMEPAGE_TITLE "$(WELCOME_TITLE)"
+!define MUI_WELCOMEPAGE_TEXT "$(WELCOME_TEXT)"
+!define MUI_FINISHPAGE_TITLE "$(FINISH_TITLE)"
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_DIRECTORY
@@ -93,6 +99,12 @@ VIAddVersionKey "LegalCopyright"  "${PUBLISHER}"
 !insertmacro MUI_LANGUAGE "French"
 !insertmacro MUI_LANGUAGE "English"
 
+LangString WELCOME_TITLE ${LANG_FRENCH}  "Installation de ${APP_NAME}"
+LangString WELCOME_TITLE ${LANG_ENGLISH} "Installing ${APP_NAME}"
+LangString WELCOME_TEXT ${LANG_FRENCH}  "Cet assistant va installer ${APP_NAME} ${VERSION} sur votre ordinateur.$\r$\n$\r$\nFermez ${APP_NAME} s'il est ouvert, puis cliquez sur Suivant."
+LangString WELCOME_TEXT ${LANG_ENGLISH} "This wizard will install ${APP_NAME} ${VERSION} on your computer.$\r$\n$\r$\nClose ${APP_NAME} if it is open, then click Next."
+LangString FINISH_TITLE ${LANG_FRENCH}  "${APP_NAME} est installe"
+LangString FINISH_TITLE ${LANG_ENGLISH} "${APP_NAME} is installed"
 LangString FINISH_TEXT ${LANG_FRENCH}  "${APP_NAME} est installe.$\r$\n$\r$\nPour fabriquer des ROMs, il faut aussi devkitPro et l'emulateur mGBA (non fournis) : les liens sont dans les reglages de ${APP_NAME}."
 LangString FINISH_TEXT ${LANG_ENGLISH} "${APP_NAME} is installed.$\r$\n$\r$\nBuilding ROMs also needs devkitPro and the mGBA emulator (not included): the links are in ${APP_NAME}'s settings."
 LangString FINISH_LINK ${LANG_FRENCH}  "Installer devkitPro (necessaire pour fabriquer des ROMs)"

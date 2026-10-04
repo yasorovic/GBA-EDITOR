@@ -1438,10 +1438,14 @@ class MainWindow(QMainWindow):
         Séparé de `_refresh_ui` : créer ou supprimer une scène change la
         réponse sans qu'il faille recharger l'écran visible."""
         if not self.project: return
-        can_build = (self.toolchain.devkitpro_ok and self.toolchain.mgba_ok
-                     and bool(self.project.scenes))
+        toolchain_ok = self.toolchain.devkitpro_ok and self.toolchain.mgba_ok
+        can_build = toolchain_ok and bool(self.project.scenes)
         tooltip = self._build_tooltip()
-        self._tb_build_btn.setEnabled(can_build)
+        # Outils manquants : le bouton est grisé mais reste cliquable, le clic
+        # ouvre l'explication puis les réglages (`_run_build`). Sans scène, il
+        # n'y a rien à expliquer : grisé pour de bon.
+        self._tb_build_btn.setEnabled(bool(self.project.scenes))
+        self._tb_build_btn.set_unavailable(not toolchain_ok)
         self._tb_build_btn.setToolTip(tooltip)
         self.build_panel.btn_build.setEnabled(can_build)
         self.build_panel.btn_build.setToolTip(tooltip)
@@ -1975,7 +1979,8 @@ class MainWindow(QMainWindow):
             missing.append("mGBA")
         if missing:
             return tooltip(title=label("win.build_unavailable", n=len(missing),
-                                       what=", ".join(missing)))
+                                       what=", ".join(missing)),
+                           body=label("win.build_unavailable_tip"))
         if self.project and not self.project.scenes:
             return tooltip(title=label("win.build_no_scene"))
         return tooltip(title=label("win.build_run_title"), shortcut=get_keybindings().resolve("game.build"),
@@ -2024,26 +2029,21 @@ class MainWindow(QMainWindow):
         """Dit POURQUOI on ne peut pas construire maintenant, et où trouver ce qui
         manque, avant d'ouvrir les réglages — au lieu d'une fenêtre de réglages qui
         surgit sans un mot (cf. ALPHA_CHECKLIST, « Build & Run sans devkitPro »)."""
-        from core.toolchain import DEVKITPRO_URL, MGBA_URL
+        from ui.common.toolchain_dialog import ToolchainMissingDialog
         missing = [tool for tool, path in self.toolchain.check().items() if not path]
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Icon.Warning)
-        box.setWindowTitle(label("win.toolchain_missing_title"))
-        box.setText(label("win.toolchain_missing", app_name=APP_NAME,
-                          missing=", ".join(missing),
-                          devkitpro_url=DEVKITPRO_URL, mgba_url=MGBA_URL))
-        settings_btn = box.addButton(label("win.toolchain_open_settings"),
-                                     QMessageBox.ButtonRole.AcceptRole)
-        box.addButton(QMessageBox.StandardButton.Close)
-        box.exec()
-        if box.clickedButton() is settings_btn:
+        dialog = ToolchainMissingDialog(missing, self)
+        dialog.exec()
+        if dialog.open_settings_requested:
             self._open_settings("Toolchains")
 
     def _run_build(self):
         if not self.project or not self.project.active_scene: return
         if self._worker is not None: return     # un build tourne déjà : le clic est ignoré
-        if not self.toolchain.devkitpro_ok or not self.toolchain.mgba_ok:
-            self._explain_missing_toolchain(); return
+        if not (self.toolchain.devkitpro_ok and self.toolchain.mgba_ok):
+            self.toolchain.recheck()    # outils installés depuis le dernier inventaire ?
+            if not (self.toolchain.devkitpro_ok and self.toolchain.mgba_ok):
+                self._explain_missing_toolchain(); return
+            self._update_build_state()
 
         self.build_panel.reveal()
         if (sbp := self._script_build_panel()) is not None:

@@ -278,10 +278,20 @@ jobs:
           VERSION="${{ needs.version.outputs.version }}"
           ARCH=x86_64 ./appimagetool --appimage-extract-and-run AppDir "Backstage-${VERSION}-x86_64.AppImage"
 
+      # On livre l'AppImage DANS un .tar.gz : un .zip (ou un téléchargement direct)
+      # perd le bit exécutable, et l'utilisateur Linux doit alors faire un chmod +x
+      # avant que le double-clic fonctionne. tar le conserve ; extraire l'archive
+      # suffit.
+      - name: Archiver l'AppImage (conserve le droit d'exécution)
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          tar -czf "Backstage-${VERSION}-x86_64.AppImage.tar.gz" "Backstage-${VERSION}-x86_64.AppImage"
+          tar -tvzf "Backstage-${VERSION}-x86_64.AppImage.tar.gz"
+
       - uses: actions/upload-artifact@v4
         with:
           name: linux-appimage
-          path: "*.AppImage"
+          path: "*.AppImage.tar.gz"
 
   publish:
     if: github.event_name == 'release'

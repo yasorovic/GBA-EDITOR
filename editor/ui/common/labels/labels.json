@@ -46,7 +46,24 @@
       "text": "External Tools"
     },
     "settings.toolchains.hint": {
-      "text": "Paths to devkitPro and mgba : required for Build & Run."
+      "text": "Build & Run compiles the project with devkitPro, then opens the ROM in mGBA. Both are found automatically when installed in their usual place. Set a path only if the editor does not find them."
+    },
+    "settings.toolchains.found": {
+      "text": "Detected"
+    },
+    "settings.toolchains.missing": {
+      "text": "Not detected"
+    },
+    "settings.toolchains.incomplete": { "text": "Incomplete: {tools} not found" },
+    "settings.toolchains.incomplete_hint": { "text": "The devkitPro folder is there, but some packages are not. Run the devkitPro Updater and tick GBA Development, or type pacman -S gba-dev in the devkitPro MSYS2 terminal, then check again." },
+    "settings.toolchains.check": { "text": "Check installation" },
+    "settings.toolchains.check_tip": { "text": "Detects the tools again, for instance once the installation has finished." },
+    "build.devkitpro_incomplete_tip": { "text": "devkitPro is found but incomplete: {tools} not found. The toolchain settings can check the installation." },
+    "settings.toolchains.devkitpro_link": {
+      "text": "Installation guide →"
+    },
+    "settings.toolchains.mgba_link": {
+      "text": "Download page →"
     },
     "settings.toolchains.pick_mgba": {
       "text": "mgba executable"
@@ -251,8 +268,8 @@
     "home.status.download": {
       "text": "Download →"
     },
-    "home.status.explain_devkitpro": { "text": "the compilation toolchain (ARM + grit) that turns the project into a playable .gba ROM" },
-    "home.status.explain_mgba": { "text": "the emulator used to launch and test the ROM directly from the editor" },
+    "home.status.explain_devkitpro": { "text": "devkitPro is the toolchain that compiles the project into a playable .gba ROM." },
+    "home.status.explain_mgba": { "text": "mGBA is the emulator that opens the ROM straight from the editor to test it." },
     "home.project.not_found": {
       "text": "not found"
     },
@@ -1757,7 +1774,16 @@
       "text": "Can't build yet"
     },
     "win.toolchain_missing": {
-      "text": "The ROM can't be built yet: {missing} not found.\n\n{app_name} needs devkitPro (it compiles the ROM) and mGBA (it runs it). Install them, then press Build & Run again.\n\ndevkitPro: {devkitpro_url}\nmGBA: {mgba_url}"
+      "text": "{app_name} needs devkitPro (it compiles the ROM) and mGBA (it runs it). Install them, then press Build & Run again."
+    },
+    "win.toolchain_missing_heading": {
+      "text": "The ROM can't be built yet"
+    },
+    "win.toolchain_missing_list": {
+      "text": "Not found: {missing}"
+    },
+    "win.toolchain_get": {
+      "text": "Get {tool}: {link}"
     },
     "win.toolchain_open_settings": {
       "text": "Open toolchain settings"
@@ -1883,6 +1909,7 @@
     "win.scene_reloaded": {
       "text": "Scene reloaded: {name}"
     },
+    "win.build_unavailable_tip": { "text": "Opens the toolchain settings." },
     "win.build_unavailable": { "one": "Build unavailable: {what} is missing.", "other": "Build unavailable: {what} are missing." },
     "win.build_no_scene": { "text": "A scene is required before building." },
     "win.build_run_tip": { "text": "Builds the project, then starts it in the configured emulator." },

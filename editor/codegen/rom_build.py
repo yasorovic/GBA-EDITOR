@@ -23,6 +23,7 @@ from typing import Optional
 from core import crash_log
 from core.events import EventEmitter
 from core.toolchain import Toolchain
+from core.tool_process import run_tool
 from codegen.grit_conversion import (
     GritBackground, GritSprites, MmutilAudio,
     resolve_sound_assets, png_size,
@@ -567,10 +568,7 @@ class BuildWorker(EventEmitter, threading.Thread):
             # page de code (accents d'un dossier de projet) ; un octet que le
             # décodeur refuse tuait le thread de lecture de `subprocess` et le
             # build perdait toute la sortie de l'outil, erreurs comprises.
-            proc = subprocess.run(
-                cmd, capture_output=True, text=True, errors="replace",
-                cwd=str(cwd) if cwd else None, env=env
-            )
+            proc = run_tool(cmd, cwd=str(cwd) if cwd else None, env=env)
             failed = proc.returncode != 0
             for line in proc.stdout.splitlines():
                 self._emit("log_line", f"  {line}")

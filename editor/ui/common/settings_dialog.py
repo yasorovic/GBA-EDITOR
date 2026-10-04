@@ -44,17 +44,18 @@ from PyQt6.QtGui import QFont, QKeySequence
 from PyQt6.QtCore import Qt, QProcess
 
 from ui.common.theme import C, T, QSS
-from ui.common.notice import refresh_tips
+from ui.common.notice import refresh_tips, tip
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 from ui.common import catalog
 from core.app_info import APP_NAME
+from core.app_paths import IS_FROZEN
 from core.interface_preferences import (
     tips_shown, set_tips_shown, interface_language, set_interface_language,
     interface_theme, set_interface_theme,
     interface_scale_percent, set_interface_scale_percent, SCALE_CHOICES,
 )
-from core.toolchain import Toolchain
+from core.toolchain import Toolchain, DEVKITPRO_URL, MGBA_URL, DEVKITPRO_OK, DEVKITPRO_INCOMPLETE
 from core.external_tools import ExternalTools, TOOL_KINDS
 from ui.common.widgets import CollapsibleCard
 from core.keybindings import (
@@ -88,6 +89,35 @@ def _path_row(parent_layout, label_text: str, initial: str,
     return edit
 
 
+def _tool_help(parent_layout, note_key: str, action: QPushButton | None = None) -> QLabel:
+    """Sous le champ de la ligne qui vient d'être ajoutée (`_path_row`) : une ligne
+    de statut (détecté ou non, et le lien), le bouton `action` s'il y en a un, puis
+    l'astuce qui présente l'outil (niveau 3 des notices). Retourne la ligne de
+    statut, que le panneau réécrit. Tout est décalé comme le champ, pas comme son
+    étiquette."""
+    row = parent_layout.itemAt(parent_layout.count() - 1).layout()
+    indent = 140 + row.spacing()
+    status = QLabel()
+    status.setFont(QFont(T.UI, T.SM))
+    status.setOpenExternalLinks(True)
+    status.setWordWrap(True)
+    status.setContentsMargins(indent, 0, 0, 0)
+    parent_layout.addWidget(status)
+    if action is not None:
+        action_row = QHBoxLayout()
+        action_row.addSpacing(indent)
+        action_row.addWidget(action)
+        action_row.addStretch()
+        parent_layout.addLayout(action_row)
+    shifted = QHBoxLayout()
+    shifted.addSpacing(indent)
+    column = QVBoxLayout()
+    shifted.addLayout(column, 1)
+    parent_layout.addLayout(shifted)
+    tip(note_key, column)
+    return status
+
+
 def _category_title(text: str) -> QLabel:
     lbl = QLabel(text)
     lbl.setFont(QFont(T.UI, T.LG, QFont.Weight.DemiBold))
@@ -113,10 +143,49 @@ class ToolchainsPanel(QWidget):
         self._dkp_edit = _path_row(lay, "devkitPro", str(toolchain.devkitpro_path or ""),
                                    self._browse_dkp)
         self._dkp_edit.editingFinished.connect(self._commit_dkp)
+        # Installation commencée mais pas finie : ce bouton relance la détection une
+        # fois les paquets installés, sans rouvrir les réglages. Visible seulement alors.
+        self._dkp_check = QPushButton(label("settings.toolchains.check"))
+        self._dkp_check.setStyleSheet(QSS.button_ghost)
+        self._dkp_check.setToolTip(tooltip(title=label("settings.toolchains.check"),
+                                           body=label("settings.toolchains.check_tip")))
+        self._dkp_check.clicked.connect(self._recheck)
+        self._dkp_status = _tool_help(lay, "toolchain.devkitpro", self._dkp_check)
         self._mgba_edit = _path_row(lay, "mgba", str(toolchain.mgba_path or ""),
                                     self._browse_mgba)
         self._mgba_edit.editingFinished.connect(self._commit_mgba)
+        self._mgba_status = _tool_help(lay, "toolchain.mgba")
         lay.addStretch()
+        self._refresh_status()
+
+    def _recheck(self):
+        self._toolchain.recheck()
+        self._refresh_status()
+
+    def _refresh_status(self):
+        """Détecté, incomplet ou introuvable, et le lien pour l'obtenir, sous chaque champ."""
+        dkp_state = self._toolchain.devkitpro_state
+        incomplete = dkp_state == DEVKITPRO_INCOMPLETE
+        self._dkp_check.setVisible(incomplete)
+        for status, state, link, url in (
+            (self._dkp_status, dkp_state,
+             label("settings.toolchains.devkitpro_link"), DEVKITPRO_URL),
+            (self._mgba_status, DEVKITPRO_OK if self._toolchain.mgba_ok else "missing",
+             label("settings.toolchains.mgba_link"), MGBA_URL),
+        ):
+            ok = state == DEVKITPRO_OK
+            if state == DEVKITPRO_INCOMPLETE:
+                colour = C.ACCENT_YLW
+                text = label("settings.toolchains.incomplete",
+                             tools=", ".join(self._toolchain.devkitpro_missing_tools()))
+            else:
+                colour = C.TEXT_NORM if ok else C.ACCENT_RED
+                text = label("settings.toolchains.found" if ok else "settings.toolchains.missing")
+            hint = (f'<br><span style="color:{C.TEXT_DIM};">{label("settings.toolchains.incomplete_hint")}</span>'
+                    if state == DEVKITPRO_INCOMPLETE else "")
+            status.setText(
+                f'<span style="color:{colour};">{"✓" if ok else "✗"} {text}</span>'
+                f'&nbsp;&nbsp;·&nbsp;&nbsp;<a href="{url}" style="color:{C.ACCENT_COOL};">{link}</a>{hint}')
 
     def _browse_dkp(self, edit: QLineEdit):
         p = QFileDialog.getExistingDirectory(self, "devkitPro")
@@ -134,11 +203,13 @@ class ToolchainsPanel(QWidget):
         t = self._dkp_edit.text().strip()
         if t:
             self._toolchain.devkitpro_path = Path(t)
+            self._refresh_status()
 
     def _commit_mgba(self):
         t = self._mgba_edit.text().strip()
         if t:
             self._toolchain.mgba_path = Path(t)
+            self._refresh_status()
 
 
 def restart_editor():
@@ -156,11 +227,14 @@ def restart_editor():
     app.closeAllWindows()
     if any(w.isVisible() for w in app.topLevelWidgets()):
         return
-    if getattr(sys, "frozen", False):
-        program, arguments = sys.executable, sys.argv[1:]
+    # Nuitka ne pose pas `sys.frozen` : IS_FROZEN teste aussi `__compiled__`.
+    # Le chemin de l'exécutable vient de Qt, fiable dans les deux modes.
+    if IS_FROZEN:
+        program, arguments = QApplication.applicationFilePath(), sys.argv[1:]
     else:
         program, arguments = sys.executable, sys.argv
-    QProcess.startDetached(program, arguments)
+    if not QProcess.startDetached(program, arguments):
+        return
     app.quit()
 
 

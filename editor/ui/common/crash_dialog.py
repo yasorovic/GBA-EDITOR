@@ -23,7 +23,7 @@ from ui.common.theme import C, QSS, T
 _MASCOT_W, _MASCOT_H = 78, 120   # le SVG fait 217×330 : on garde ses proportions
 
 
-class _Mascot(QWidget):
+class Mascot(QWidget):
     """La mascotte « build raté », peinte à sa taille propre."""
 
     def __init__(self, parent=None):
@@ -55,7 +55,7 @@ class CrashDialog(QDialog):
 
         top = QHBoxLayout()
         top.setSpacing(18)
-        top.addWidget(_Mascot(), 0, Qt.AlignmentFlag.AlignTop)
+        top.addWidget(Mascot(), 0, Qt.AlignmentFlag.AlignTop)
 
         text = QVBoxLayout()
         text.setSpacing(6)

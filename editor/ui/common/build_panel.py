@@ -17,7 +17,7 @@ from PyQt6.QtStateMachine import QStateMachine, QState
 from PyQt6.QtSvg import QSvgRenderer
 
 from ui.common.theme import C, T
-from core.toolchain import Toolchain
+from core.toolchain import Toolchain, DEVKITPRO_OK, DEVKITPRO_INCOMPLETE
 from ui.common.rom_budget_bar import RomBudgetBar
 
 
@@ -253,6 +253,7 @@ class AnimatedBuildButton(QToolButton):
         self._fill = 0.0
         self._success = True
         self._bar_mode = False
+        self._unavailable = False
 
         self._progress_anim = QPropertyAnimation(self, b"fill", self)
         self._progress_anim.setDuration(220)
@@ -315,6 +316,13 @@ class AnimatedBuildButton(QToolButton):
         self._progress_anim.setEndValue(fraction)
         self._progress_anim.start()
 
+    def set_unavailable(self, unavailable: bool):
+        """Aspect grisé SANS désactiver : un bouton désactivé ne reçoit plus
+        le clic, or celui-ci doit mener aux réglages de la toolchain."""
+        if self._unavailable != unavailable:
+            self._unavailable = unavailable
+            self.update()
+
     # ── propriété animable ──────────────────────────────────────
     def _get_fill(self): return self._fill
     def _set_fill(self, v):
@@ -343,8 +351,9 @@ class AnimatedBuildButton(QToolButton):
 
         r = self._PILL_RADIUS
         if not self._bar_mode:
+            greyed = not self.isEnabled() or self._unavailable
             pill_color = QColor(self._PURPLE)
-            if not self.isEnabled():
+            if greyed:
                 pill_color = QColor(C.BTN_PRIMARY_DISABLED)
             elif self.underMouse():
                 pill_color = pill_color.lighter(112)
@@ -352,7 +361,7 @@ class AnimatedBuildButton(QToolButton):
             p.setBrush(pill_color)
             p.drawRoundedRect(pill_x, pill_y, pill_w, self._PILL_H, r, r)
 
-            p.setPen(QColor("#000000") if self.isEnabled() else QColor(C.TEXT_MUTED))
+            p.setPen(QColor(C.TEXT_MUTED) if greyed else QColor("#000000"))
             p.setFont(QFont(T.UI, T.SM, QFont.Weight.DemiBold))
             p.drawText(text_rect, text_align, label("common.run"))
         elif not self._success:
@@ -584,9 +593,15 @@ class ToolchainBar(QFrame):
         self.refresh()
 
     def refresh(self):
-        ok = self.toolchain.devkitpro_ok
-        self._dkp.setText("devkitPro ✓" if ok else "devkitPro ✗")
-        self._dkp.setStyleSheet(f"color:{C.TEXT_NORM};" if ok else f"color:{C.ACCENT_RED};")
+        state = self.toolchain.devkitpro_state
+        self._dkp.setText("devkitPro ✓" if state == DEVKITPRO_OK else "devkitPro ✗")
+        # ✗ jaune : trouvé mais incomplet — il faut vérifier l'installation, pas le chemin.
+        colour = {DEVKITPRO_OK: C.TEXT_NORM, DEVKITPRO_INCOMPLETE: C.ACCENT_YLW}.get(state, C.ACCENT_RED)
+        self._dkp.setStyleSheet(f"color:{colour};")
+        self._dkp.setToolTip(
+            tooltip(title=label("build.devkitpro_incomplete_tip",
+                                tools=", ".join(self.toolchain.devkitpro_missing_tools())))
+            if state == DEVKITPRO_INCOMPLETE else "")
         ok2 = self.toolchain.mgba_ok
         self._mgba.setText("mgba ✓" if ok2 else "mgba ✗")
         self._mgba.setStyleSheet(f"color:{C.TEXT_NORM};" if ok2 else f"color:{C.ACCENT_RED};")

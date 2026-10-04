@@ -239,6 +239,14 @@
     "ui.visible.hidden_parent": {
       "tone": "render",
       "text": "Hidden anyway: parent “{parent}” is not visible."
+    },
+    "toolchain.devkitpro": {
+      "tone": "accent",
+      "text": "The toolchain (ARM compiler, grit, maxmod) that turns the project into a playable ROM. Select the folder where it is installed, usually C:\\devkitPro on Windows or /opt/devkitpro on Linux."
+    },
+    "toolchain.mgba": {
+      "tone": "accent",
+      "text": "The Game Boy Advance emulator in which Build & Run opens the ROM. Select the mGBA executable (mGBA.exe on Windows, mgba-qt on Linux)."
     }
   }
 }

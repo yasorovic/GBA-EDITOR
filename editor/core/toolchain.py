@@ -69,6 +69,14 @@ _UNIX_DEFAULTS = [
 ]
 
 
+# Les trois outils sans lesquels aucune ROM ne se construit, et les états qu'en tire
+# `Toolchain.devkitpro_state`.
+DEVKITPRO_TOOLS = ("grit", "make", "arm-none-eabi-gcc")
+DEVKITPRO_OK = "ok"
+DEVKITPRO_INCOMPLETE = "incomplete"
+DEVKITPRO_MISSING = "missing"
+
+
 class Toolchain:
     """
     Détecte et stocke les chemins vers devkitPro et mgba.
@@ -78,6 +86,7 @@ class Toolchain:
 
     def __init__(self):
         self._config: dict = self._load_config()
+        self._status: dict[str, Path | None] | None = None
 
     # ── Chargement / sauvegarde config ────────────────────────────
 
@@ -109,6 +118,7 @@ class Toolchain:
     def devkitpro_path(self, path: Path):
         self._config["devkitpro"] = str(path)
         self.save()
+        self.recheck()
 
     @property
     def mgba_path(self) -> Path | None:
@@ -120,6 +130,7 @@ class Toolchain:
     def mgba_path(self, path: Path):
         self._config["mgba"] = str(path)
         self.save()
+        self.recheck()
 
     # ── Résolution des exécutables ────────────────────────────────
 
@@ -252,19 +263,55 @@ class Toolchain:
     # ── Status global ─────────────────────────────────────────────
 
     def check(self) -> dict[str, Path | None]:
-        """Retourne un dict {outil: path|None} pour tous les outils."""
-        return {
-            "grit":         self.resolve_grit(),
-            "make":         self.resolve_make(),
-            "arm-none-eabi-gcc": self.resolve_arm_gcc(),
-            "mgba":         self.resolve_mgba(),
-        }
+        """Retourne un dict {outil: path|None} pour tous les outils.
+
+        Une détection balaie le PATH et tous les emplacements connus (~200 ms) ;
+        l'interface la demande à chaque rafraîchissement, d'où le cache. Il ne
+        s'invalide que par `recheck()` (réglages modifiés, bouton « Vérifier »,
+        clic sur Build) : le build, lui, résout ses outils par `resolve_*`."""
+        if self._status is None:
+            self._status = {
+                "grit":         self.resolve_grit(),
+                "make":         self.resolve_make(),
+                "arm-none-eabi-gcc": self.resolve_arm_gcc(),
+                "mgba":         self.resolve_mgba(),
+            }
+        return dict(self._status)
+
+    def recheck(self):
+        """Oublie la détection : la prochaine lecture refait l'inventaire."""
+        self._status = None
+
+    def devkitpro_missing_tools(self) -> list[str]:
+        """Les outils devkitPro (grit, make, arm-none-eabi-gcc) introuvables."""
+        s = self.check()
+        return [tool for tool in DEVKITPRO_TOOLS if not s[tool]]
 
     @property
     def devkitpro_ok(self) -> bool:
-        s = self.check()
-        return all(s[k] for k in ("grit", "make", "arm-none-eabi-gcc"))
+        return not self.devkitpro_missing_tools()
+
+    @property
+    def devkitpro_state(self) -> str:
+        """`DEVKITPRO_OK`, `DEVKITPRO_INCOMPLETE` ou `DEVKITPRO_MISSING`.
+
+        « Incomplet » : on trouve un dossier devkitPro (celui des réglages ou un
+        emplacement connu) ou au moins un de ses outils, mais pas tous — typiquement
+        une installation dont les paquets GBA n'ont pas été téléchargés jusqu'au bout.
+        Ce n'est pas la même consigne que « introuvable » : réinstaller ou vérifier,
+        et non chercher le dossier."""
+        missing = self.devkitpro_missing_tools()
+        if not missing:
+            return DEVKITPRO_OK
+        if len(missing) < len(DEVKITPRO_TOOLS) or self._devkitpro_folder_found():
+            return DEVKITPRO_INCOMPLETE
+        return DEVKITPRO_MISSING
+
+    def _devkitpro_folder_found(self) -> bool:
+        bases = [self.devkitpro_path] if self.devkitpro_path else []
+        bases += _WIN_DEFAULTS + _UNIX_DEFAULTS
+        return any(Path(base).is_dir() for base in bases)
 
     @property
     def mgba_ok(self) -> bool:
-        return self.resolve_mgba() is not None
+        return self.check()["mgba"] is not None

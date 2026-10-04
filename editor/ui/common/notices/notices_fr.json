@@ -1,4 +1,10 @@
 {
   "notices": {
+    "toolchain.devkitpro": {
+      "text": "La chaîne de compilation (compilateur ARM, grit, maxmod) qui transforme le projet en ROM jouable. Sélectionner le dossier d’installation, en général C:\\devkitPro sous Windows ou /opt/devkitpro sous Linux."
+    },
+    "toolchain.mgba": {
+      "text": "L’émulateur Game Boy Advance dans lequel Compiler et lancer ouvre la ROM. Sélectionner l’exécutable mGBA (mGBA.exe sous Windows, mgba-qt sous Linux)."
+    }
   }
 }

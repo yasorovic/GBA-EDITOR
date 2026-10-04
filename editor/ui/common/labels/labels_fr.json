@@ -175,7 +175,24 @@
       "text": "Outils externes"
     },
     "settings.toolchains.hint": {
-      "text": "Chemins vers devkitPro et mgba : nécessaires pour Compiler et lancer."
+      "text": "Compiler et lancer compile le projet avec devkitPro, puis ouvre la ROM dans mGBA. Les deux sont trouvés automatiquement quand ils sont installés à leur emplacement habituel. Un chemin n’est à renseigner que si l’éditeur ne les trouve pas."
+    },
+    "settings.toolchains.found": {
+      "text": "Détecté"
+    },
+    "settings.toolchains.missing": {
+      "text": "Non détecté"
+    },
+    "settings.toolchains.incomplete": { "text": "Incomplet : {tools} introuvable(s)" },
+    "settings.toolchains.incomplete_hint": { "text": "Le dossier devkitPro est là, mais certains paquets manquent. Relancez le devkitPro Updater en cochant GBA Development, ou tapez pacman -S gba-dev dans le terminal MSYS2 de devkitPro, puis vérifiez à nouveau." },
+    "settings.toolchains.check": { "text": "Vérifier l'installation" },
+    "settings.toolchains.check_tip": { "text": "Relance la détection des outils, par exemple une fois l'installation terminée." },
+    "build.devkitpro_incomplete_tip": { "text": "devkitPro est trouvé mais incomplet : {tools} introuvable(s). Les réglages de la toolchain permettent de vérifier l'installation." },
+    "settings.toolchains.devkitpro_link": {
+      "text": "Guide d’installation →"
+    },
+    "settings.toolchains.mgba_link": {
+      "text": "Page de téléchargement →"
     },
     "settings.toolchains.pick_mgba": {
       "text": "Exécutable mgba"
@@ -374,8 +391,8 @@
     "home.status.download": {
       "text": "Télécharger →"
     },
-    "home.status.explain_devkitpro": { "text": "la chaîne de compilation (ARM + grit) qui transforme le projet en ROM .gba jouable" },
-    "home.status.explain_mgba": { "text": "l’émulateur utilisé pour lancer et tester la ROM directement depuis l’éditeur" },
+    "home.status.explain_devkitpro": { "text": "devkitPro est la chaîne de compilation qui transforme le projet en ROM .gba jouable." },
+    "home.status.explain_mgba": { "text": "mGBA est l’émulateur qui ouvre la ROM directement depuis l’éditeur pour la tester." },
     "home.project.not_found": {
       "text": "introuvable"
     },
@@ -641,7 +658,10 @@
       "text": "Documentation"
     },
     "win.toolchain_missing_title": { "text": "Construction impossible pour l'instant" },
-    "win.toolchain_missing": { "text": "La ROM ne peut pas être construite pour l'instant : {missing} introuvable(s).\n\n{app_name} a besoin de devkitPro (il compile la ROM) et de mGBA (il la lance). Installez-les, puis relancez Build & Run.\n\ndevkitPro : {devkitpro_url}\nmGBA : {mgba_url}" },
+    "win.toolchain_missing": { "text": "{app_name} a besoin de devkitPro (il compile la ROM) et de mGBA (il la lance). Installez-les, puis relancez Build & Run." },
+    "win.toolchain_missing_heading": { "text": "La ROM ne peut pas être construite pour l'instant" },
+    "win.toolchain_missing_list": { "text": "Introuvable : {missing}" },
+    "win.toolchain_get": { "text": "Obtenir {tool} : {link}" },
     "win.toolchain_open_settings": { "text": "Ouvrir les réglages de la toolchain" },
     "win.open_log_folder": { "text": "Ouvrir le dossier du journal" },
     "win.copy_diagnostics": { "text": "Copier les infos de diagnostic" },
@@ -1717,6 +1737,7 @@
     "win.redo_tip": { "text": "Rétablir : {label}" },
     "win.redo_none": { "text": "Rien à rétablir" },
     "win.build_no_scene": { "text": "Une scène est nécessaire avant la compilation." },
+    "win.build_unavailable_tip": { "text": "Ouvre les réglages de la toolchain." },
     "win.build_unavailable": { "one": "Compilation impossible : {what} est manquant.", "other": "Compilation impossible : {what} sont manquants." },
     "dirgrid.omni_no_initial_direction": { "text": "Omnidirectionnel (pas de direction initiale)" },
     "dirgrid.omni_all_directions": { "text": "Omnidirectionnel (toutes les directions)" },

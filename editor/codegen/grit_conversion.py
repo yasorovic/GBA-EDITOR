@@ -16,11 +16,11 @@ import math
 import os
 import shutil
 import struct
-import subprocess
 from pathlib import Path
 from typing import Optional, Callable
 
 from core.app_info import APP_NAME
+from core.tool_process import run_tool
 from core.models.sprite import SpriteAsset
 from core.models.background import BackgroundLayer
 from core.project import Project
@@ -857,11 +857,7 @@ class MmutilAudio:
                 # "soundbank_bin" jamais linké → undefined reference au link).
                 self._emit("log_line", f"[bin2s] {bin2s} soundbank.bin")
                 try:
-                    proc = subprocess.run(
-                        [str(bin2s), "soundbank.bin"],
-                        cwd=str(p.build_dir), capture_output=True, text=True,
-                        errors="replace",
-                    )
+                    proc = run_tool([str(bin2s), "soundbank.bin"], cwd=str(p.build_dir))
                 except FileNotFoundError as e:
                     self._emit("diagnostic", build_warning(f"not found: {e}", "bin2s"))
                     proc = None

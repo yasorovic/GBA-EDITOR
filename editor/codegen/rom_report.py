@@ -20,10 +20,11 @@ from __future__ import annotations
 
 import re
 import struct
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+
+from core.tool_process import run_tool
 
 # ── Capacités de cartouche ────────────────────────────────────────────
 # Les tailles réellement produites en cartouche masquée sur GBA. L'espace
@@ -130,8 +131,7 @@ def _run(tool: Path, args: list[str], elf: Path) -> Optional[str]:
     binutils sont des exécutables « ANSI », un dossier de projet hors de la page
     de code leur arrive en `?` et le rapport de poids disparaissait sans un mot."""
     try:
-        proc = subprocess.run([str(tool)] + args + [elf.name], cwd=str(elf.parent),
-                              capture_output=True, text=True, errors="replace")
+        proc = run_tool([str(tool)] + args + [elf.name], cwd=str(elf.parent))
     except OSError:
         return None
     return proc.stdout if proc.returncode == 0 else None

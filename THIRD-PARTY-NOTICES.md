@@ -2,6 +2,7 @@
 
 L'éditeur Backstage est distribué sous GPL-3.0-only (cf. [LICENSE](LICENSE)). Il embarque
 et redistribue les composants ci-dessous, chacun sous ses propres conditions.
+Le texte de ces licences est dans le dossier [licenses/](licenses/README.md), livré avec l'application.
 
 > Le moteur GBA (`runtime/`) n'est pas concerné par cette page : il est sous
 > licence zlib et n'embarque rien de tiers. Voir [runtime/LICENSE](runtime/LICENSE).
@@ -11,7 +12,7 @@ et redistribue les composants ci-dessous, chacun sous ses propres conditions.
 | Composant | Version | Licence |
 | --- | --- | --- |
 | [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) — Riverbank Computing | 6.11.0 | **GPL-3.0-only** |
-| [PyQt6-Qt6](https://www.qt.io/) — The Qt Company | 6.11.1 | **LGPL-3.0** |
+| [PyQt6-Qt6](https://www.qt.io/) — The Qt Company | 6.11.2 | **LGPL-3.0** |
 | PyQt6-sip — Riverbank Computing | 13.12.0 | BSD-2-Clause |
 | [Pillow](https://python-pillow.org/) | 12.3.0 | MIT-CMU |
 | [NumPy](https://numpy.org/) | 2.5.2 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
@@ -22,13 +23,13 @@ et redistribue les composants ci-dessous, chacun sous ses propres conditions.
 | [antlr4-python3-runtime](https://www.antlr.org/) | 4.13.2 | BSD |
 | [multimethod](https://github.com/coady/multimethod) | 2.1 | Apache-2.0 |
 
-Les quatre derniers sont des dépendances transitives (antlr4 et multimethod via
-luaparser, QtPy via QtAwesome)
+PyQt6-Qt6 et PyQt6-sip viennent avec PyQt6 ; les trois derniers sont des dépendances
+transitives (antlr4 et multimethod via luaparser, QtPy via QtAwesome).
 
 ### Deux points qui ne sont pas de simples notices
 
 **PyQt6 est en GPL-3.0-only.** C'est la raison pour laquelle cet éditeur est
-lui-même en GPL-3.0 : Pour distribuer un binaire lié à PyQt6 sous une licence
+lui-même en GPL-3.0 : distribuer un binaire lié à PyQt6 sous une autre licence
 n'est pas possible sans une licence commerciale Riverbank.
 
 **Qt est en LGPL-3.0.** Elle impose de fournir cette notice et de ne pas
@@ -48,6 +49,49 @@ rastériser les polices vectorielles importées. FreeType est proposée sous la
 sous la GPL v2. Cet éditeur la redistribue sous la **FTL** : la GPL v2 seule
 (sans « ou ultérieure ») est incompatible avec la GPL-3.0 de l'éditeur.
 
+## Composants natifs embarqués
+
+Ces bibliothèques ne sont pas des paquets Python : elles sont copiées telles quelles
+dans le dossier de l'application (fichiers `.dll`, séparés de l'exécutable).
+
+| Composant | Version | Licence | Où |
+| --- | --- | --- | --- |
+| [Python](https://www.python.org/) (interpréteur et bibliothèque standard) | 3.12.10 | PSF License 2.0 | `python312.dll` |
+| [FFmpeg](https://ffmpeg.org/) — via Qt Multimédia | 7.1.5 | **LGPL-2.1-or-later** (compilé sans `--enable-gpl`) | `avcodec`, `avformat`, `avutil`, `swresample`, `swscale` |
+| [OpenSSL](https://www.openssl.org/) | 3.0.16 | Apache-2.0 | `libssl-3.dll`, `libcrypto-3.dll` |
+| [libffi](https://sourceware.org/libffi/) | 3.x | MIT | `libffi-8.dll` |
+| [OpenBLAS](https://github.com/OpenMathLib/OpenBLAS/) — via NumPy | | BSD-3-Clause | `numpy.libs/` |
+| [LAPACK](https://www.netlib.org/lapack/) (dans OpenBLAS) | | BSD-3-Clause-Open-MPI | `numpy.libs/` |
+| GCC runtime library (dans OpenBLAS) | | GPL-3.0-or-later avec *GCC Runtime Library Exception 3.1* | `numpy.libs/` |
+| Microsoft Visual C++ runtime | 14.x | redistribuable Microsoft (*Visual C++ Redistributable*) | `vcruntime140*.dll`, `msvcp140*.dll` |
+
+**FFmpeg est en LGPL-2.1-or-later.** Comme pour Qt, ses `.dll` sont des fichiers
+séparés : l'utilisateur peut les remplacer par une version modifiée. FFmpeg est le
+moteur de Qt Multimédia, que l'éditeur n'utilise que pour la sortie audio de l'aperçu
+des musiques : il est livré parce que ce module en dépend.
+
+**Bibliothèques liées dans les modules compilés** (pas de `.dll` à part, donc
+invisibles dans le dossier) :
+
+- **Pillow** (`PIL/*.pyd`) embarque brotli, FreeType, HarfBuzz, Little CMS 2,
+  libavif, libjpeg-turbo, libpng, libtiff, libwebp, OpenJPEG, xz et zlib-ng,
+  sous des licences permissives ; leurs textes sont dans `licenses/python-packages/Pillow.txt` ;
+- **Python** : `pyexpat` (expat, MIT), `_decimal` (libmpdec, BSD-2-Clause),
+  `_bz2` (bzip2, style BSD) et `_lzma` (liblzma, domaine public / 0BSD) ;
+- **Qt** (`qt6gui.dll` et plugins `imageformats/`) : libpng, libjpeg, zlib,
+  FreeType, HarfBuzz et d'autres, recensés par la documentation de Qt.
+
+Le plugin `multimedia/windowsmediaplugin.dll` s'appuie sur Windows Media Foundation,
+fournie par le système : rien de tiers n'est livré pour lui.
+
+Qt embarque lui-même des composants tiers (modules Qt PDF et Qt Multimédia
+notamment) sous leurs propres licences ; elles sont recensées par la documentation
+de Qt (« Third-party Licenses »).
+
+L'AppImage Linux embarque en plus les bibliothèques système dont l'éditeur dépend
+(xcb, xkbcommon, glib, dbus, fontconfig, FreeType, libgcrypt, la bibliothèque C…),
+sous des licences permissives ou LGPL.
+
 ## Fontes
 
 ### Livrées dans l'éditeur
@@ -57,6 +101,9 @@ sous la GPL v2. Cet éditeur la redistribue sous la **FTL** : la GPL v2 seule
 | Font Awesome 5 / 6 | via QtAwesome | SIL OFL 1.1 (fontes) + CC BY 4.0 (icônes) |
 | Elusive Icons | via QtAwesome | SIL OFL 1.1 |
 | Codicon | via QtAwesome | CC BY 4.0 |
+| Material Design Icons 5.9.55 / 6.9.96 | via QtAwesome | Apache-2.0 |
+| Phosphor 1.3.0 | via QtAwesome | MIT |
+| Remix Icon 2.5.0 | via QtAwesome | Apache-2.0 |
 
 Les fontes de QtAwesome sont fournies par le paquet lui-même et leurs notices
 respectives se trouvent dans son arborescence.
