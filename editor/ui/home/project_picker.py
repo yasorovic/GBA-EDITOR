@@ -187,6 +187,7 @@ class _ProjectItem(QWidget):
             f"color:{C.ACCENT_RED if dead else C.TEXT_DIM};background:transparent;"
         )
         path_lbl.setWordWrap(False)
+        path_lbl.setMinimumWidth(1)  # un long chemin ne doit pas élargir la fenêtre
         col.addWidget(path_lbl)
 
         hl.addLayout(col, 1)
@@ -435,7 +436,11 @@ class HomeScreen(QDialog):
         sep.setFixedSize(1, 16)
         sep.setStyleSheet(f"background:{C.BORDER_MID};border:none;")
         bl.addWidget(sep)
-        bl.addWidget(_dim(label("home.created_by", author=APP_AUTHOR)))
+        # Un QLabel impose la largeur de son texte : sans ce plancher, le pied de page
+        # empêchait la fenêtre de descendre sous ~677 px. Le texte se rogne au besoin.
+        author = _dim(label("home.created_by", author=APP_AUTHOR))
+        author.setMinimumWidth(1)
+        bl.addWidget(author)
         bl.addStretch()
 
         # Sans site de documentation (core/app_info.APP_DOCS_URL), pas de lien.

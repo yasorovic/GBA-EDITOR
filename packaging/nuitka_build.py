@@ -174,6 +174,15 @@ def build_command(version: str, output_dir: Path) -> list[str]:
         f"=ui/common/notices"
     )
 
+    # Catalogue des libellés (ui/common/labels.py le lit par Path(__file__)), frère
+    # des notices. Sans ce dossier, l'interface entière s'affiche en clés brutes
+    # (« home.create_project » au lieu du bouton) : `--include-package=ui`
+    # n'embarque que du code.
+    cmd.append(
+        f"--include-data-dir={EDITOR_DIR / 'ui' / 'common' / 'labels'}"
+        f"=ui/common/labels"
+    )
+
     # Starter local : les palettes initiales doivent exister dans une version
     # distribuée aussi, pas seulement depuis un checkout de développement.
     cmd.append(
