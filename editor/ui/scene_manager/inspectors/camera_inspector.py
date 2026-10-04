@@ -3,17 +3,15 @@
 Reçoit une scène et une caméra (choisie dans le scene tree, ou l'icône cliquée
 dans le canvas — cf. `CameraSelection`) et édite CETTE caméra. Deux états :
 
-- **`camera` est `None`** — la scène n'a encore aucune caméra, elle est fixe à
-  l'origine, sans bornes ni suivi, sans entrée dans `scene.cameras`. Les
-  réglages sont visibles mais éteints ;
 - **`camera` est un objet réel** — tout est éditable. Elle n'appartient qu'à
   CETTE scène (révisé le 2026-08-24 — ce n'est plus un asset de projet
-  réutilisable, cf. `changelog-archive/v0.6.md`).
+  réutilisable, cf. `changelog-archive/v0.6.md`) ;
+- **`camera` est `None`** — seulement avant le premier `load` : une scène sans
+  caméra n'a rien à montrer ici (elle est fixe à l'origine), et l'inspecteur
+  n'est jamais ouvert dessus.
 
-Le passage du premier au second n'est pas un bouton « créer » dans CET
-inspecteur : il se produit au premier réglage, y compris le déplacement du
-cadre dans le canvas (`Project.ensure_scene_camera`) — la création explicite
-se fait depuis le scene tree (bouton **+**).
+Une caméra se crée depuis le scene tree (bouton **+**) ; une scène neuve en
+reçoit une d'office (`Project.seed_default_camera`).
 
 Le combo « Starting camera » est un contrôle SÉPARÉ : il choisit laquelle des
 caméras de la scène est celle de démarrage (`scene.camera`), indépendamment de
@@ -38,6 +36,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont, QFontMetrics
 from PyQt6.QtCore import pyqtSignal
 
+from core.command_dispatcher import get_dispatcher
+from core.models.field_value import FieldValue, make_resolver, variables_from_project
 from core.models.camera import Camera, CAM_FIXED, CAM_FOLLOW, CAM_SCRIPT
 from core.models.scene import Scene
 from core.project import Project
@@ -54,7 +54,7 @@ _MODES = [
 ]
 
 _NO_TARGET = 'common.none_paren'
-_DEFAULT_CAMERA = 'common.default_paren'
+_DEFAULT_CAMERA = 'common.none_paren'
 
 
 class CameraInspector(QWidget):
@@ -107,11 +107,6 @@ class CameraInspector(QWidget):
         start_row.addWidget(self._combo_camera, 1)
         camera_card.body_layout.addLayout(start_row)
 
-        self._lbl_users = QLabel("")
-        self._lbl_users.setFont(QFont(T.UI, T.XS))
-        self._lbl_users.setStyleSheet(f"color:{C.TEXT_MUTED};")
-        self._lbl_users.setWordWrap(True)
-        camera_card.body_layout.addWidget(self._lbl_users)
         layout.addWidget(camera_card)
 
         # ── Note libre — même carte partagée qu'Actor/Scène ───────
@@ -120,6 +115,14 @@ class CameraInspector(QWidget):
         self._notes_edit.committed.connect(self._on_notes_changed)
         notes_card.body_layout.addWidget(self._notes_edit)
         layout.addWidget(notes_card)
+
+        # Largeur de colonne des libellés, mesurée sur le plus long du panneau —
+        # même approche que l'ActorInspector (une valeur fixe tronquerait selon
+        # la fonte de la machine).
+        _lbl_w = max(
+            QFontMetrics(QFont(T.UI, T.SM)).horizontalAdvance(t)
+            for t in (label('common.position'), label('caminsp.origin'), label('caminsp.margin'), label('common.frame'), label('common.size'))
+        ) + 4
 
         # ── Mode ──────────────────────────────────────────────────
         mode_card = CollapsibleCard(label('common.mode'))
@@ -131,27 +134,46 @@ class CameraInspector(QWidget):
         self._mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         mode_card.body_layout.addWidget(self._mode_combo)
         notice("camera.mode", self._mode_combo, mode_card.body_layout)
-        layout.addWidget(mode_card)
+        # ── Réglages du mode « suivre un acteur » ─────────────────
+        # Widgets DANS la carte Mode (pas une carte à part) : choisir le mode
+        # les fait apparaître/disparaître sur place.
+        self._follow_group = QWidget()
+        fg = QVBoxLayout(self._follow_group)
+        fg.setContentsMargins(0, 0, 0, 0)
+        fg.setSpacing(6)
 
-        # Largeur de colonne des libellés, mesurée sur le plus long du panneau —
-        # même approche que l'ActorInspector (une valeur fixe tronquerait selon
-        # la fonte de la machine).
-        _lbl_w = max(
-            QFontMetrics(QFont(T.UI, T.SM)).horizontalAdvance(t)
-            for t in (label('common.position'), label('caminsp.origin'), label('caminsp.margin'), label('common.frame'), label('common.size'))
-        ) + 4
+        self._follow_combo = QComboBox()
+        self._follow_combo.setFont(QFont(T.UI, T.MD))
+        self._follow_combo.setStyleSheet(QSS.combobox)
+        self._follow_combo.setToolTip(tooltip(
+            title=label('caminsp.follow_title'),
+            note=label('caminsp.actor_local_note')))
+        self._follow_combo.currentTextChanged.connect(self._on_follow_changed)
+        fg.addWidget(self._follow_combo)
+
+        self._margin_x = self._field(0, 0, 120)
+        self._margin_y = self._field(0, 0, 120)
+        W.pair(label('caminsp.margin'), "X", C.AXIS_X, self._margin_x, "Y", C.AXIS_Y, self._margin_y,
+               fg, label_width=_lbl_w)
+        self._margin_x.changed.connect(lambda _raw: self._on_margins_changed())
+        self._margin_y.changed.connect(lambda _raw: self._on_margins_changed())
+        notice("camera.margin", self._margin_x, fg)
+
+        mode_card.body_layout.addWidget(self._follow_group)
+
+        layout.addWidget(mode_card)
 
         # ── Transform : position (canvas ↔ inspecteur) + frame écran ──
         transform_card = CollapsibleCard(label('caminsp.transform'))
         # Position — plage 0..32767 (s16, comme les bornes du monde), pas de 8 px.
-        self._pos_x = W.spinbox(0, min_v=0, max_v=32767, step=8)
-        self._pos_y = W.spinbox(0, min_v=0, max_v=32767, step=8)
+        self._pos_x = self._field(0, 0, 32767)
+        self._pos_y = self._field(0, 0, 32767)
         W.pair(label('common.position'), "X", C.AXIS_X, self._pos_x, "Y", C.AXIS_Y, self._pos_y,
                transform_card.body_layout, label_width=_lbl_w)
         notice("camera.position", self._pos_x, transform_card.body_layout)
 
-        self._frame_w = W.spinbox(240, min_v=1, max_v=240)
-        self._frame_h = W.spinbox(160, min_v=1, max_v=160)
+        self._frame_w = self._field(240, 1, 240)
+        self._frame_h = self._field(160, 1, 160)
         W.pair(label('common.frame'), "W", C.AXIS_X, self._frame_w, "H", C.AXIS_Y, self._frame_h,
                transform_card.body_layout, label_width=_lbl_w)
 
@@ -163,47 +185,24 @@ class CameraInspector(QWidget):
         notice("camera.frame", self._frame_w, transform_card.body_layout)
         layout.addWidget(transform_card)
 
-        # ── Suivi (visible en mode follow) ────────────────────────
-        self._follow_group = CollapsibleCard(label('caminsp.follow_an_actor'))
-        fg = self._follow_group.body_layout
-
-        self._follow_combo = QComboBox()
-        self._follow_combo.setFont(QFont(T.UI, T.MD))
-        self._follow_combo.setStyleSheet(QSS.combobox)
-        self._follow_combo.setToolTip(tooltip(
-            title=label('caminsp.follow_title'),
-            note=label('caminsp.actor_local_note')))
-        self._follow_combo.currentTextChanged.connect(self._on_follow_changed)
-        fg.addWidget(self._follow_combo)
-
-        self._margin_x = W.spinbox(0, min_v=0, max_v=120)
-        self._margin_y = W.spinbox(0, min_v=0, max_v=120)
-        W.pair(label('caminsp.margin'), "X", C.AXIS_X, self._margin_x, "Y", C.AXIS_Y, self._margin_y,
-               fg, label_width=_lbl_w)
-        self._margin_x.valueChanged.connect(self._on_margins_changed)
-        self._margin_y.valueChanged.connect(self._on_margins_changed)
-        notice("camera.margin", self._margin_x, fg)
-
-        layout.addWidget(self._follow_group)
-
         # ── Bornes du monde (rect : origine + taille) ──────────────
         bounds_card = CollapsibleCard(label('caminsp.world_bounds_0_unlimited'))
         # Taille — bornes monde jusqu'à 32767 (s16) → scroll caméra max = 32767 -
         # screen.width (32527 en X, 32607 en Y).
-        self._bounds_w = W.spinbox(0, min_v=0, max_v=32767, step=8)
-        self._bounds_h = W.spinbox(0, min_v=0, max_v=32767, step=8)
+        self._bounds_w = self._field(0, 0, 32767)
+        self._bounds_h = self._field(0, 0, 32767)
         W.pair(label('common.size'), "W", C.AXIS_X, self._bounds_w, "H", C.AXIS_Y, self._bounds_h,
                bounds_card.body_layout, label_width=_lbl_w)
         # Origine de la zone scrollable — 0 = le monde commence au bord de l'écran.
         # Presque toujours 0, exposé pour rester cohérent avec le rect camera.bound.
-        self._bounds_x = W.spinbox(0, min_v=0, max_v=32767, step=8)
-        self._bounds_y = W.spinbox(0, min_v=0, max_v=32767, step=8)
+        self._bounds_x = self._field(0, 0, 32767)
+        self._bounds_y = self._field(0, 0, 32767)
         W.pair(label('caminsp.origin'), "X", C.AXIS_X, self._bounds_x, "Y", C.AXIS_Y, self._bounds_y,
                bounds_card.body_layout, label_width=_lbl_w)
-        self._bounds_w.valueChanged.connect(self._on_bounds_changed)
-        self._bounds_h.valueChanged.connect(self._on_bounds_changed)
-        self._bounds_x.valueChanged.connect(self._on_bounds_changed)
-        self._bounds_y.valueChanged.connect(self._on_bounds_changed)
+        self._bounds_w.changed.connect(lambda _raw: self._on_bounds_changed())
+        self._bounds_h.changed.connect(lambda _raw: self._on_bounds_changed())
+        self._bounds_x.changed.connect(lambda _raw: self._on_bounds_changed())
+        self._bounds_y.changed.connect(lambda _raw: self._on_bounds_changed())
 
         self._btn_recalc = QPushButton(label('caminsp.recompute_from_backgrounds'))
         self._btn_recalc.setFont(QFont(T.UI, T.SM))
@@ -235,18 +234,34 @@ class CameraInspector(QWidget):
 
         layout.addStretch()
 
-        # Tout ce qui n'a de sens qu'avec une caméra RÉELLE.
-        self._editors = (
-            self._mode_combo, self._follow_group, self._margin_x, self._margin_y,
-            self._bounds_w, self._bounds_h, self._bounds_x, self._bounds_y,
-            self._btn_recalc, self._script_slot,
-            self._pos_x, self._pos_y, self._frame_w, self._frame_h,
-            self._notes_edit,
-        )
-        self._pos_x.valueChanged.connect(self._on_transform_changed)
-        self._pos_y.valueChanged.connect(self._on_transform_changed)
-        self._frame_w.valueChanged.connect(self._on_transform_changed)
-        self._frame_h.valueChanged.connect(self._on_transform_changed)
+        self._pos_x.changed.connect(lambda _raw: self._on_transform_changed())
+        self._pos_y.changed.connect(lambda _raw: self._on_transform_changed())
+        self._frame_w.changed.connect(lambda _raw: self._on_transform_changed())
+        self._frame_h.changed.connect(lambda _raw: self._on_transform_changed())
+
+    @staticmethod
+    def _field(default, min_px: int, max_px: int):
+        """Champ px / tile / CONSTANTE — jamais de variable globale : ces
+        valeurs sont cuites dans `const Camera g_cam_table[]` à la compilation,
+        une globale n'y serait jamais relue. L'éditeur ne propose que ce qu'il
+        tient ; la liste des constantes est fournie par `_sync_constants`."""
+        return W.value_field(default, variables=[], min_px=min_px, max_px=max_px)
+
+    def _fields(self):
+        return (self._pos_x, self._pos_y, self._frame_w, self._frame_h,
+                self._margin_x, self._margin_y,
+                self._bounds_x, self._bounds_y, self._bounds_w, self._bounds_h)
+
+    def _sync_constants(self):
+        """Donne aux champs les constantes du projet (et elles seules)."""
+        consts = [v for v in variables_from_project(self._project) if v[0] == "const"]
+        for f in self._fields():
+            f.set_variables(consts)
+
+    def _bound(self, field):
+        """Raw d'une borne ; 0 → None (axe illimité)."""
+        raw = field.raw()
+        return None if FieldValue.parse(raw).px(make_resolver(self._project)) == 0 else raw
 
     def set_script_open_fn(self, fn):
         self._script_open_fn = fn
@@ -257,6 +272,7 @@ class CameraInspector(QWidget):
         self._scene = scene
         self._camera = camera
         self._project = project
+        self._sync_constants()
         self._refresh()
 
     def _refresh(self):
@@ -271,13 +287,6 @@ class CameraInspector(QWidget):
                 self._combo_camera.addItem(c.name, c.name)
             idx = self._combo_camera.findData(getattr(scene, "camera", "") or "")
             self._combo_camera.setCurrentIndex(max(0, idx))
-
-            for w in self._editors:
-                w.setEnabled(cam is not None)
-
-            self._lbl_users.setText(
-                "" if cam is not None else
-                label('caminsp.no_camera_yet'))
 
             mode = cam.mode if cam else CAM_FIXED
             self._mode_combo.setCurrentIndex(
@@ -299,17 +308,17 @@ class CameraInspector(QWidget):
                 self._follow_combo.setCurrentIndex(
                     max(0, self._follow_combo.findData(target)))
 
-            self._margin_x.setValue(cam.margin_x if cam else 40)
-            self._margin_y.setValue(cam.margin_y if cam else 20)
-            self._bounds_w.setValue((cam.bounds_w if cam else 0) or 0)
-            self._bounds_h.setValue((cam.bounds_h if cam else 0) or 0)
-            self._bounds_x.setValue((cam.bounds_x if cam else 0) or 0)
-            self._bounds_y.setValue((cam.bounds_y if cam else 0) or 0)
+            self._margin_x.set_raw(cam.margin_x if cam else 40)
+            self._margin_y.set_raw(cam.margin_y if cam else 20)
+            self._bounds_w.set_raw((cam.bounds_w if cam else 0) or 0)
+            self._bounds_h.set_raw((cam.bounds_h if cam else 0) or 0)
+            self._bounds_x.set_raw((cam.bounds_x if cam else 0) or 0)
+            self._bounds_y.set_raw((cam.bounds_y if cam else 0) or 0)
             self._notes_edit.set_text_silent(cam.notes if cam else "")
-            self._pos_x.setValue(cam.x if cam else 0)
-            self._pos_y.setValue(cam.y if cam else 0)
-            self._frame_w.setValue(cam.frame_w if cam else 240)
-            self._frame_h.setValue(cam.frame_h if cam else 160)
+            self._pos_x.set_raw(cam.x if cam else 0)
+            self._pos_y.set_raw(cam.y if cam else 0)
+            self._frame_w.set_raw(cam.frame_w if cam else 240)
+            self._frame_h.set_raw(cam.frame_h if cam else 160)
             self._refresh_window_budget()
 
             script = (cam.script if cam else "") or ""
@@ -328,7 +337,7 @@ class CameraInspector(QWidget):
             self._lbl_win_budget.setText("")
             return
         from codegen.window_alloc import scene_window_budget
-        used, total = scene_window_budget(self._scene)
+        used, total = scene_window_budget(self._scene, self._project)
         over = used > total
         self._lbl_win_budget.setStyleSheet(
             f"color:{C.ACCENT_RED if over else C.TEXT_MUTED};")
@@ -345,34 +354,23 @@ class CameraInspector(QWidget):
         if self._blocking or camera is not self._camera:
             return
         self._blocking = True
-        self._pos_x.setValue(x)
-        self._pos_y.setValue(y)
+        self._pos_x.set_raw(x)
+        self._pos_y.set_raw(y)
         self._blocking = False
 
     # ── Mutations ─────────────────────────────────────────────────
 
-    def _mutable(self) -> Optional[Camera]:
-        """La caméra à éditer, matérialisée si la scène n'en avait encore
-        aucune (état implicite, `self._camera is None`). Une fois réelle, la
-        référence tenue par l'inspecteur devient cette caméra-là.
-
-        Seule la MATÉRIALISATION exige un projet (elle passe par
-        `ensure_scene_camera`) : une caméra déjà réelle s'édite sans, ce qui
-        garde l'édition symétrique des autres inspecteurs (la persistance, elle,
-        est déjà gardée dans `_save`)."""
-        if self._camera is not None:
-            return self._camera
-        if not self._scene or not self._project:
-            return None
-        self._camera = self._project.ensure_scene_camera(self._scene)
-        return self._camera
-
     def _save(self):
         """Persiste la scène — la caméra vit dans SON JSON (plus de fichier
         séparé). Donné en `persist_fn` aux commandes : c'est leur `execute`/`undo`
-        qui sauve, pour que l'écriture disque suive fidèlement l'état."""
+        qui sauve, pour que l'écriture disque suive fidèlement l'état.
+
+        Le watcher est suspendu : sans cela, la scène qu'on vient d'écrire est
+        re-détectée comme « modifiée en externe », rechargée, et la sélection du
+        canvas est perdue à chaque champ modifié (cf. scene_inspector)."""
         if self._project and self._scene:
-            self._project.save_scene(self._scene)
+            with get_dispatcher().suspended():
+                self._project.save_scene(self._scene)
 
     def _edit(self, fields, label: str, refresh: bool = True) -> bool:
         """Applique un GROUPE de champs comme UNE entrée d'historique annulable.
@@ -408,21 +406,21 @@ class CameraInspector(QWidget):
     def _on_notes_changed(self, text: str):
         if self._blocking:
             return
-        cam = self._mutable()
+        cam = self._camera
         if cam is not None:
             self._edit([(cam, "notes", text)], "Camera note", refresh=False)
 
     def _on_mode_changed(self, idx: int):
         if self._blocking:
             return
-        cam = self._mutable()
+        cam = self._camera
         if cam is not None:
             self._edit([(cam, "mode", _MODES[idx][0])], "Camera mode")
 
     def _on_follow_changed(self, text: str):
         if self._blocking:
             return
-        cam = self._mutable()
+        cam = self._camera
         if cam is not None:
             self._edit([(cam, "follow_target",
                          self._follow_combo.currentData() or "")],
@@ -431,21 +429,21 @@ class CameraInspector(QWidget):
     def _on_margins_changed(self):
         if self._blocking:
             return
-        cam = self._mutable()
+        cam = self._camera
         if cam is not None:
-            self._edit([(cam, "margin_x", self._margin_x.value()),
-                        (cam, "margin_y", self._margin_y.value())],
+            self._edit([(cam, "margin_x", self._margin_x.raw()),
+                        (cam, "margin_y", self._margin_y.raw())],
                        "Camera margins", refresh=False)
 
     def _on_bounds_changed(self):
         if self._blocking:
             return
-        cam = self._mutable()
+        cam = self._camera
         if cam is not None:
-            self._edit([(cam, "bounds_w", self._bounds_w.value() or None),
-                        (cam, "bounds_h", self._bounds_h.value() or None),
-                        (cam, "bounds_x", self._bounds_x.value() or None),
-                        (cam, "bounds_y", self._bounds_y.value() or None)],
+            self._edit([(cam, "bounds_w", self._bound(self._bounds_w)),
+                        (cam, "bounds_h", self._bound(self._bounds_h)),
+                        (cam, "bounds_x", self._bound(self._bounds_x)),
+                        (cam, "bounds_y", self._bound(self._bounds_y))],
                        "Camera bounds", refresh=False)
 
     def _on_transform_changed(self):
@@ -454,13 +452,13 @@ class CameraInspector(QWidget):
         du canvas (cf. SceneEditor.move_camera_item)."""
         if self._blocking:
             return
-        cam = self._mutable()
+        cam = self._camera
         if cam is None:
             return
-        if self._edit([(cam, "x", self._pos_x.value()),
-                       (cam, "y", self._pos_y.value()),
-                       (cam, "frame_w", self._frame_w.value()),
-                       (cam, "frame_h", self._frame_h.value())],
+        if self._edit([(cam, "x", self._pos_x.raw()),
+                       (cam, "y", self._pos_y.raw()),
+                       (cam, "frame_w", self._frame_w.raw()),
+                       (cam, "frame_h", self._frame_h.raw())],
                       "Camera transform", refresh=False):
             self.camera_moved.emit(cam)
 
@@ -484,9 +482,7 @@ class CameraInspector(QWidget):
         # UNE entrée via `_on_bounds_changed` → `_edit` (MacroCmd).
         for sp, v in ((self._bounds_x, 0), (self._bounds_y, 0),
                       (self._bounds_w, w), (self._bounds_h, h)):
-            sp.blockSignals(True)
-            sp.setValue(v)
-            sp.blockSignals(False)
+            sp.set_raw(v)               # silencieux
         self._on_bounds_changed()
 
     def _bg_pixel_size(self, layer) -> Optional[tuple[int, int]]:
@@ -518,12 +514,12 @@ class CameraInspector(QWidget):
         popup.show_below(self._script_slot)
 
     def _script_assign(self, rel: str):
-        cam = self._mutable()
+        cam = self._camera
         if cam is not None:
             self._edit([(cam, "script", rel)], "Camera script")
 
     def _script_create_new(self):
-        cam = self._mutable()
+        cam = self._camera
         if cam is None:
             return
         name, ok = QInputDialog.getText(self, label('caminsp.new_camera_script'), label('common.name_without_lua'))

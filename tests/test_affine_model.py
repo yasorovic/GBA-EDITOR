@@ -120,8 +120,48 @@ def test_oam_dynamic_compose_monde_local_et_offset():
     # Composition : la rotation effective est la SOMME monde+local
     assert "int _ang=_arot+_srot;" in lines
     # Offset transformé par la matrice de l'ACTOR (hérarchie)
-    assert "int _ofx=(_acos*_asxs" in lines
-    assert "int _ofy=(_asin*_asxs" in lines
+    assert "int _ofx=(_acos*_asx*" in lines
+    assert "int _ofy=(_asin*_asx*" in lines
+    # L'offset ne s'inverse pas avec le flip du sprite (le flip retourne la
+    # texture, il ne déplace pas le cadre).
+    assert "_asxs" not in lines
+    # Point de pivot depuis le centre du cadre : P reste fixe, le centre se place
+    # à P - M·pivot. Pivot (0,0) = le centre ne bouge pas (GBA native).
+    assert "int _px=g_oam_entries[7].pivot_x; int _py=g_oam_entries[7].pivot_y;" in lines
+    assert "int _u=(_cosA*_sxs*_px)/65536-(_sinA*_sys*_py)/65536;" in lines
+    assert "int sx=_ocx-4+_px-_u; int sy=_ocy-4+_py-_v;" in lines
+
+
+def test_le_pivot_est_seme_depuis_le_composant_sprite():
+    sc = _sc(affine_transform=True, pivot_x=3, pivot_y={"unit": "t", "n": 1})
+    e = affine_entry(_actor(), sc, 0)
+    assert (e["pivot_x"], e["pivot_y"]) == (3, 8)
+    assert (affine_entry(_actor(), _sc(affine_transform=True), 0)["pivot_x"]) == 0
+
+
+def test_centrer_sur_le_cadre_a_la_case_affine():
+    from core.models.components import (CollisionBoxComponent, SpriteComponent,
+                                        center_on_frame)
+
+    class Frame:
+        frame_w, frame_h = 32, 24
+
+    sprite_comp = SpriteComponent()
+    deplacee = CollisionBoxComponent(id="a", x=0, y=0, w=16, h=8)
+    reglee = CollisionBoxComponent(id="b", x=3, y=0, w=16, h=8)
+    owner = _actor()
+    owner.components = [sprite_comp, deplacee, reglee]
+
+    changed = center_on_frame(owner, sprite_comp, Frame())
+
+    assert (sprite_comp.offset_x, sprite_comp.offset_y) == (-16, -12)
+    assert (deplacee.x, deplacee.y) == (-8, -4)
+    assert (reglee.x, reglee.y) == (3, 0)          # réglage de l'auteur préservé
+    assert sprite_comp in changed and reglee not in changed
+
+    sprite_comp.offset_x = 5                       # offset déjà réglé : intact
+    center_on_frame(owner, sprite_comp, Frame())
+    assert sprite_comp.offset_x == 5
 
 
 def test_script_lua_compile_avec_les_props_affine():
@@ -244,3 +284,38 @@ def test_prefab_delegue_la_case_a_son_sprite():
     assert pf.affine_transform is True
     pf.actor.get_component("sprite").affine_transform = False
     assert pf.affine_transform is False
+
+
+def test_offset_du_sprite_peut_etre_une_variable():
+    """Offset px/tile → entier ; variable → expression C (assignation à l'init)."""
+    from core.models.field_value import FieldValue
+    names = {("global", 3): "shake"}
+    sc = _sc(affine_transform=True, offset_x={"unit": "t", "n": 2},
+             offset_y={"var": 3, "src": "global"})
+    e = affine_entry(_actor(), sc, 0, names=names)
+    assert e["offset_x"] == 16
+    assert e["offset_y"] == "g_shake"
+
+
+def test_rotation_echelle_variables_dans_le_c():
+    """Rotation/échelle en variable : expression C ; l'échelle d'une variable
+    est en POURCENT (100 = normal), ramenée au Q8 du moteur."""
+    names = {("global", 5): "spin", ("global", 6): "zoom"}
+    a = _actor()
+    a.rotation = {"var": 5, "src": "global"}
+    a.scale_x = {"var": 6, "src": "global"}
+    sc = _sc(affine_transform=True, rotation=90, scale_y=2.0)
+    e = affine_entry(a, sc, 0, names=names)
+    assert e["rotation"] == "g_spin"
+    assert e["scale_x"] == "((g_zoom)*256/100)"
+    assert e["sprite_rotation"] == 90
+    assert e["sprite_scale_y"] == 512
+
+
+def test_number_value_resout_la_variable_a_son_defaut():
+    from core.models.field_value import number_value, number_c
+    res = lambda src, key: 150 if key == 6 else None
+    assert number_value({"var": 6, "src": "global"}, res, 1.0, ref_divisor=100) == 1.5
+    assert number_value({"var": 9, "src": "global"}, res, 1.0, ref_divisor=100) == 1.0
+    assert number_c({"var": 5, "src": "global"}, {("global", 5): "p"}, mask=3) == "((g_p)&3)"
+    assert number_c(7, None, mask=3) == 3

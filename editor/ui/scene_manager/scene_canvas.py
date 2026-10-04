@@ -13,9 +13,11 @@ Layers (z-order) :
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 import copy
+import math
 from typing import Optional
 
 from core.command_dispatcher import get_dispatcher
+from core.keybindings import get_keybindings
 from core.models.components import displayed_sprite_component
 from core.models.scene import Actor
 from core.project import Project
@@ -28,7 +30,7 @@ from ui.common.palette_bank_strip import PaletteBankStrip
 from ui.common.canvas_top_bar import CanvasTopBar
 from PyQt6.QtCore import QPointF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QImage, QPixmap
-from PyQt6.QtWidgets import QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QApplication, QVBoxLayout, QWidget
 # Rasterisation des fonds + aperçus — extrait (A3, sous-package canvas/).
 from ui.scene_manager.canvas.canvas_raster import (
     BgLayerRaster, build_bg_raster, bg_pixmap, preview_frame_for_actor,
@@ -212,7 +214,7 @@ class SceneEditor(QWidget):
 
         # ── Barre haut — composant partagé (cf. ui/common/canvas_top_bar) ──
         self._bar = CanvasTopBar(
-            tooltip(title=label('scncanvas.fit'), shortcut="F")
+            tooltip(title=label('scncanvas.fit'), shortcut=get_keybindings().resolve("common.fit"))
         )
         self._bar.zoom_step_asked.connect(self._zoom_step)
         self._bar.fit_asked.connect(self._fit)
@@ -272,6 +274,7 @@ class SceneEditor(QWidget):
         # CHAQUE clic gauche (cf. GBAView.mousePressEvent).
         self._gba_view.left_click_settled.connect(self._on_selection_changed)
         self._gba_scene.changed.connect(self._on_scene_item_changed)
+        self._gba_view.left_released.connect(self._commit_camera_drag)
         self._gba_view.prefab_template_dropped.connect(self._on_prefab_template_dropped)
         get_bus().changed.connect(self.on_selection)
 
@@ -375,14 +378,14 @@ class SceneEditor(QWidget):
         mkb("canvas.tool_inpaint",   lambda: self._shortcut_tool("inpaint"))
         mkb("canvas.tool_ui",        lambda: self._shortcut_tool("ui"))
         # Vue
-        mkb("canvas.fit", self._fit)
+        mkb("common.fit", self._fit)
         # Sélection / édition
-        mkb("canvas.cancel", self._shortcut_escape)
-        mkb("canvas.delete", self._shortcut_delete)
+        mkb("common.cancel", self._shortcut_escape)
+        mkb("common.delete", self._shortcut_delete)
         mk("Backspace", self._shortcut_delete)   # alias fixe, cf. mk() ci-dessus
-        mkb("canvas.duplicate", self._shortcut_duplicate)
-        mkb("canvas.copy", self._shortcut_copy)
-        mkb("canvas.paste", self._shortcut_paste)
+        mkb("common.duplicate", self._shortcut_duplicate)
+        mkb("common.copy", self._shortcut_copy)
+        mkb("common.paste", self._shortcut_paste)
         # Nudge de la sélection : 1 px, Shift = 8 px (cran de grille) — touches
         # positionnelles, hors du registre remappable (cf. core/keybindings.py)
         for seq, (dx, dy) in {
@@ -987,7 +990,10 @@ class SceneEditor(QWidget):
             if sprite and ap and ap.exists():
                 preview_frame, dir_fh, dir_fv = preview_frame_for_actor(
                     sprite, sprite_comp, actor)
-                if preview_frame is not None:
+                # Une frame sans tuile n'a aucun pixel : l'image composée serait
+                # transparente, donc invisible ET impossible à cliquer (la forme Qt
+                # d'un pixmap suit son masque). Le repère prend alors le relais.
+                if preview_frame is not None and preview_frame.tiles:
                     img = compose_frame_image(ap, preview_frame, sprite.frame_w, sprite.frame_h)
                     bank = resolve_obj_palette_bank(p, actor, scene)
                     img = quantize_preview(img, sprite, bank)
@@ -1018,23 +1024,45 @@ class SceneEditor(QWidget):
             # celui du sprite — le canvas montre donc l'identité (0°/100%), comme
             # la ROM.
             _aff = bool(getattr(sprite_comp, "affine_transform", False)) if sprite_comp else False
-            asx = getattr(actor, "scale_x", 1.0)  if _aff else 1.0
-            asy = getattr(actor, "scale_y", 1.0)  if _aff else 1.0
-            arot = getattr(actor, "rotation", 0)  if _aff else 0
-            sx  = (getattr(sprite_comp, "scale_x",  1.0) if _aff else 1.0) * asx
-            sy  = (getattr(sprite_comp, "scale_y",  1.0) if _aff else 1.0) * asy
-            rot = (getattr(sprite_comp, "rotation", 0.0) if _aff else 0.0) + arot
-            off_x = getattr(sprite_comp, "offset_x", 0) if (sprite_comp and _aff) else 0
-            off_y = getattr(sprite_comp, "offset_y", 0) if (sprite_comp and _aff) else 0
+            from core.models.field_value import number_value, make_resolver
+            _nres = make_resolver(self._project)
+            def _n(o, name, default, pct=False):
+                return number_value(getattr(o, name, default), _nres, default,
+                                    ref_divisor=100 if pct else 1)
+            asx = _n(actor, "scale_x", 1.0, True)  if _aff else 1.0
+            asy = _n(actor, "scale_y", 1.0, True)  if _aff else 1.0
+            arot = _n(actor, "rotation", 0)  if _aff else 0
+            sx  = (_n(sprite_comp, "scale_x", 1.0, True) if _aff else 1.0) * asx
+            sy  = (_n(sprite_comp, "scale_y", 1.0, True) if _aff else 1.0) * asy
+            rot = (_n(sprite_comp, "rotation", 0.0) if _aff else 0.0) + arot
+            # Offset px / tile / variable : une variable se dessine à la valeur
+            # par défaut de sa variable, comme la position de l'actor.
+            from core.models.field_value import FieldValue, make_resolver
+            _res = make_resolver(self._project)
+            off_x = (FieldValue.parse(getattr(sprite_comp, "offset_x", 0)).px(_res)
+                     if (sprite_comp and _aff) else 0)
+            off_y = (FieldValue.parse(getattr(sprite_comp, "offset_y", 0)).px(_res)
+                     if (sprite_comp and _aff) else 0)
+            piv_x = (FieldValue.parse(getattr(sprite_comp, "pivot_x", 0)).px(_res)
+                     if (sprite_comp and _aff) else 0)
+            piv_y = (FieldValue.parse(getattr(sprite_comp, "pivot_y", 0)).px(_res)
+                     if (sprite_comp and _aff) else 0)
+            # L'offset décale le cadre dans le repère de l'ACTOR (il tourne et
+            # change d'échelle avec lui, pas avec le sprite ni son flip) — comme
+            # `affine_oam_lines_dynamic`. `origin_*` du SpriteItem = l'opposé.
+            _ra = math.radians(arot)
+            disp_x = math.cos(_ra) * asx * off_x - math.sin(_ra) * asy * off_y
+            disp_y = math.sin(_ra) * asx * off_x + math.cos(_ra) * asy * off_y
             # Flip effectif = flip du component XOR flip de la direction miroir
             # (ex. Ouest = miroir horizontal de l'Est).
             fh  = bool(getattr(sprite_comp, "flip_h", False) if sprite_comp else False) ^ dir_fh
             fv  = bool(getattr(sprite_comp, "flip_v", False) if sprite_comp else False) ^ dir_fv
             item = self._gba_scene.add_sprite(
                 frame_px, actor, save_fn=save_fn,
-                origin_x=ox + off_x, origin_y=oy + off_y, scale_x=sx, scale_y=sy,
+                origin_x=ox - disp_x, origin_y=oy - disp_y, scale_x=sx, scale_y=sy,
                 rotation=rot, flip_h=fh, flip_v=fv,
                 resolver=_pos_resolver, placeholder=is_placeholder,
+                pivot_x=piv_x, pivot_y=piv_y, show_pivot=bool(sprite_comp and _aff),
             )
             item.scene_sprite = actor
 
@@ -1056,12 +1084,34 @@ class SceneEditor(QWidget):
             return
         # Si une caméra est sélectionnée, mettre à jour l'inspecteur avec sa
         # nouvelle position — n'importe laquelle des caméras de la scène.
+        # Pendant le glisser (bouton gauche tenu), seul l'inspecteur suit : écrire
+        # le cadrage à chaque frame poussait une entrée d'historique ET une
+        # sauvegarde disque par mouvement de souris (~20 ms chacune). L'écriture
+        # a lieu au relâchement (`_commit_camera_drag`).
+        dragging = bool(QApplication.mouseButtons() & Qt.MouseButton.LeftButton)
         for item in self._gba_scene.camera_items():
             if item.isSelected():
                 x, y = int(item.pos().x()), int(item.pos().y())
-                self._write_camera_pos(x, y, item)
+                if not dragging:
+                    self._write_camera_pos(x, y, item)
                 self.camera_position_changed.emit(item.camera, x, y)
-                self.scene_changed.emit()
+                if not dragging:
+                    self.scene_changed.emit()
+
+    def _commit_camera_drag(self):
+        """Fin d'un glisser : le cadrage final entre dans l'historique, une fois."""
+        if not self._project or not self._project.active_scene:
+            return
+        moved = False
+        for item in self._gba_scene.camera_items():
+            if item.isSelected() and item.camera is not None:
+                x, y = int(item.pos().x()), int(item.pos().y())
+                if (item.camera.px('x', self._project),
+                        item.camera.px('y', self._project)) != (x, y):
+                    self._write_camera_pos(x, y, item)
+                    moved = True
+        if moved:
+            self.scene_changed.emit()
 
     # ── Sélection ─────────────────────────────────────────────────
 
@@ -1104,8 +1154,6 @@ class SceneEditor(QWidget):
         target = self._gba_scene.active_item or selected[0]
         if isinstance(target, CameraItem):
             if self._project and self._project.active_scene:
-                # Sélectionner n'est pas régler : on ne matérialise pas la
-                # caméra par défaut ici, seulement au premier vrai déplacement.
                 get_bus().select(CameraSelection(self._project.active_scene, target.camera))
         elif isinstance(target, SpriteItem):
             actors = [item.scene_sprite for item in selected if isinstance(item, SpriteItem)]
@@ -1218,8 +1266,9 @@ class SceneEditor(QWidget):
         `move_actor_item`."""
         for item in self._gba_scene.camera_items():
             if item.camera is camera:
-                item.setPos(camera.x, camera.y)
-                item.set_frame_size(camera.frame_w, camera.frame_h)
+                item.setPos(camera.px('x', self._project), camera.px('y', self._project))
+                item.set_frame_size(camera.px('frame_w', self._project),
+                                    camera.px('frame_h', self._project))
                 return
 
     # ── Caméras : (re)construction et sauvegarde de position ───────
@@ -1232,9 +1281,11 @@ class SceneEditor(QWidget):
         après ajout/suppression/renommage depuis le scene tree
         (`refresh_cameras`)."""
         _cam = self._project.scene_camera(scene) if (self._project and scene) else None
-        self._gba_scene.setup_camera(_cam.x if _cam else 0, _cam.y if _cam else 0, camera=_cam)
+        self._gba_scene.setup_camera(_cam.px('x', self._project) if _cam else 0,
+                                       _cam.px('y', self._project) if _cam else 0,
+                                       camera=_cam, project=self._project)
         _others = [c for c in (scene.cameras if scene else []) if c is not _cam]
-        self._gba_scene.setup_extra_cameras(_others)
+        self._gba_scene.setup_extra_cameras(_others, self._project)
 
     def refresh_cameras(self):
         """Reconstruit uniquement les items caméra — appelé après
@@ -1273,31 +1324,26 @@ class SceneEditor(QWidget):
     def _write_camera_pos(self, x: int, y: int, item):
         """Écrit le cadrage dans la caméra possédée par la scène active.
 
-        `item.camera is None` désigne l'item de démarrage à l'état implicite :
-        déplacer le cadre est un réglage, c'est ici qu'une vraie caméra naît
-        (`ensure_scene_camera`) — l'item est alors rebranché sur l'objet réel,
-        sinon un second déplacement dans le même geste la matérialiserait à
-        chaque fois sans jamais reconnaître qu'elle existe déjà. Ne rien faire
-        quand la position est déjà celle du défaut évite d'en créer une au
-        premier clic sur le rectangle. Une caméra déjà réelle (démarrage ou
-        non) s'écrit directement, sans matérialisation."""
+        `item.camera is None` désigne le support invisible d'une scène sans
+        caméra (cf. CameraItem) : il n'est pas déplaçable, rien à écrire."""
         scene = self._project.active_scene if self._project else None
-        if scene is None:
-            return
         cam = item.camera
-        if cam is None:
-            if x == 0 and y == 0:
-                return
-            cam = self._project.ensure_scene_camera(scene)
-            item.camera = cam
-        if (cam.x, cam.y) == (x, y):
+        if scene is None or cam is None:
+            return
+        if (cam.px('x', self._project), cam.px('y', self._project)) == (x, y):
             return
         # Annulable comme un drag d'actor (cf. MoveActorCmd) : la MATÉRIALISATION
         # ci-dessus reste hors historique, seul le cadrage se défait.
         from core.history import get_history, MoveCameraCmd
         get_history().push(MoveCameraCmd(
-            cam, cam.x, cam.y, x, y,
-            persist_fn=lambda s=scene: self._project.save_scene(s)))
+            cam, cam.px('x', self._project), cam.px('y', self._project), x, y,
+            persist_fn=lambda s=scene: self._save_scene_quietly(s)))
+
+    def _save_scene_quietly(self, scene):
+        """Écrit la scène SANS que le watcher la reprenne pour une modification
+        externe (ce qui la rechargerait et désélectionnerait l'objet)."""
+        with get_dispatcher().suspended():
+            self._project.save_scene(scene)
 
     def _on_prefab_template_dropped(self, prefab_name: str, pos: QPointF):
         if not self._project or not self._project.active_scene:

@@ -45,7 +45,8 @@ from core.models.components import SpriteComponent
 from core.models.sprite import SpriteAsset
 from core.models.scene import Actor
 from core.project import Project
-from core.validator import validate_project, build_error, build_warning
+from core.diagnostic import build_error, build_warning
+from core.validator import validate_project
 import codegen.build_output as build_output
 
 # Pipeline scripting (Lua → C) : importée localement dans les méthodes, d'où
@@ -270,7 +271,7 @@ class BuildWorker(EventEmitter, threading.Thread):
                         # Le sprite AFFICHÉ au départ ; à défaut d'apparence active,
                         # la première (l'entrée existe, cachée).
                         shown = displayed_sprite_component(actor)
-                        sprite = p.get_sprite(shown.sprite_name) if shown else None
+                        sprite = p.get_buildable_sprite(shown.sprite_name) if shown else None
                         apps = owner_appearances(p, actor)
                         if sprite is None and apps:
                             sprite = apps[0][1]
@@ -928,7 +929,7 @@ class BuildWorker(EventEmitter, threading.Thread):
         from codegen.c_names import sym as c_sym, scene_actor_sym
 
         # Écriture globals.h/c depuis la liste déclarée dans le projet
-        names = _write_globals(p.src_dir, p.globals)
+        names = _write_globals(p.src_dir, p.globals, [t.key for t in p.build_texts()])
         if names:
             self._emit("log_line", f"[lua] globals: {', '.join('g_' + n for n in names)}")
 
@@ -986,7 +987,7 @@ class BuildWorker(EventEmitter, threading.Thread):
         """Génère constants.h depuis project.constants (source de vérité explicite)."""
         from scripting.constants import write_constants as _write_constants
 
-        names = _write_constants(p.src_dir, p.constants)
+        names = _write_constants(p.src_dir, p.constants, [t.key for t in p.build_texts()])
         if names:
             self._emit("log_line", f"[lua] constants: {', '.join('CONST_' + n.upper() for n in names)}")
         return names

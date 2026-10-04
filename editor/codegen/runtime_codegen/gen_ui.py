@@ -16,7 +16,7 @@ appelle `emit_ui_images_c` d'ici.
 from __future__ import annotations
 
 from core.project import Project
-from core.validator import build_warning
+from core.diagnostic import build_warning
 from codegen.c_names import sym as c_sym
 from codegen.runtime_codegen.gen_scene_query import ui_item_geometry
 
@@ -44,7 +44,7 @@ def emit_ui_images_c(p: Project, sprite_offsets: dict, obj_place: dict,
     rows: list[str] = []
     images = p.all_images() if hasattr(p, "all_images") else []
     for lay, im in images:
-        sprite = p.get_sprite(getattr(im, "sprite_name", "") or "")
+        sprite = p.get_buildable_sprite(getattr(im, "sprite_name", "") or "")
         eff_anchor, eff_actor = lay.effective_anchor(im)
         from core.models.ui_region import ANCHORS, TARGET_OBJ
         target_obj = lay.resolved_target(im) == TARGET_OBJ

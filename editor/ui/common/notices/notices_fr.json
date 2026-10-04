@@ -1,7 +1,4 @@
 {
   "notices": {
-    "settings.tips": {
-      "text": "Les astuces expliquent un concept ou indiquent où une optimisation est utile. Les avertissements sur le build ou le rendu ne sont jamais masqués par ce réglage."
-    }
   }
 }

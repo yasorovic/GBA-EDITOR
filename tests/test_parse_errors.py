@@ -56,11 +56,11 @@ def test_un_end_manquant_se_nomme():
 def test_ce_quon_ne_sait_pas_ne_sinvente_pas():
     """Il reste des fautes dont antlr ne rend NI jeton NI attendu et qu'aucun
     faux ami n'explique (`local x =` sans valeur). antlr y renonce sur le jeton
-    suivant : le message le dit (« avant `end` », la faute est plus haut) au
-    lieu de désigner ce jeton comme coupable."""
+    suivant : la ligne rapportée est celle de l'instruction INCOMPLÈTE, avec son
+    texte, au lieu de désigner ce jeton comme coupable."""
     e = _faute('function on_update()\n\tlocal x = \nend\n')
-    assert "before `end`" in str(e) and "previous line" in str(e)
-    assert e.line == 3
+    assert "`local x =`" in str(e) and "next `end`" in str(e)
+    assert e.line == 2
 
 
 def test_le_jeton_TROUVE_nest_pas_rapporte():
@@ -177,3 +177,70 @@ def test_une_erreur_de_conversion_ne_se_deguise_pas_en_syntaxe():
         assert e.line is None
     finally:
         P._Converter = vrai
+
+
+def test_local_dans_exports_et_if_sans_then_sont_nommes():
+    e = _faute('exports = {\n    local v = { type = "int" },\n}\n')
+    assert "exports" in str(e) and e.line == 2
+    e = _faute('function f()\n    if x == 0 foo()\n    end\nend\n')
+    assert "`then`" in str(e) and e.line == 2
+
+
+def test_un_entier_se_mele_a_un_vecteur_par_plus_moins_fois():
+    """`v + 2` vaut `v + vec2(2, 2)` : le checker l'accepte et le C émet `vec2_splat`."""
+    from scripting.parser import parse
+    from scripting.checker import check, BuildContext
+    from scripting.codegen import generate, CodegenContext
+    src = ("function on_update()\n    local a = vec2(1, 2)\n    local b = a + 2\n"
+           "    local c = 10 - a\n    local d = 3 * a\n"
+           "    local f = a / 2\nend\n")
+    assert not check(parse(src), BuildContext(actor_name="P"))
+    ctx = CodegenContext(actor_name="P", actor_sym="P", anim_names=[], sfx_names=[],
+                         music_names=[], global_names=set(), const_names=set(),
+                         all_actor_syms=[])
+    code, _, _ = generate(parse(src), ctx)
+    assert "vec2_add(a, vec2_splat(2))" in code
+    assert "vec2_sub(vec2_splat(10), a)" in code
+    assert "vec2_scale(a, 3)" in code
+    assert "vec2_div(a, vec2_splat(2))" in code
+
+
+def _vec_script(*lines: str) -> str:
+    return "function on_update()\n" + "".join(f"    {l}\n" for l in lines) + "end\n"
+
+
+def _vec_errors(*lines: str) -> list[str]:
+    from scripting.parser import parse
+    from scripting.checker import check, BuildContext
+    return [e.message for e in check(parse(_vec_script(*lines)), BuildContext(actor_name="P"))]
+
+
+def test_deux_vecteurs_se_combinent_composante_par_composante():
+    """`a * b`, `a / b` : composante par composante ; `dot(a, b)` : un entier."""
+    from scripting.parser import parse
+    from scripting.codegen import generate, CodegenContext
+    lines = ("local a = vec2(1, 2)", "local b = vec2(3, 4)", "local c = a * b",
+             "local d = a / b", "local n = dot(a, b)")
+    assert not _vec_errors(*lines)
+    ctx = CodegenContext(actor_name="P", actor_sym="P", anim_names=[], sfx_names=[],
+                         music_names=[], global_names=set(), const_names=set(),
+                         all_actor_syms=[])
+    code, _, _ = generate(parse(_vec_script(*lines)), ctx)
+    assert "vec2_mul(a, b)" in code and "vec2_div(a, b)" in code and "vec2_dot(a, b)" in code
+
+
+def test_dot_et_les_types_melanges_sont_refuses():
+    errs = _vec_errors("local a = vec2(1, 2)", "local b = vec3(1, 2, 3)",
+                       "local c = a * b", "local d = dot(a, b)", "local e = dot(a)")
+    assert any("both sides must be of the same type" in m for m in errs)
+    assert any("both vectors must be of the same type" in m for m in errs)
+    assert any("expects 2 vectors" in m for m in errs)
+
+
+def test_un_etat_d_animation_se_nomme_sans_egard_a_la_casse():
+    """Le C nomme l'état en MAJUSCULES : `"idle"` désigne l'état `Idle`, sans avertissement."""
+    from scripting.parser import parse
+    from scripting.checker import check, BuildContext
+    src = 'function on_update()\n    self:play_anim("idle")\n    self:play_anim("run")\nend\n'
+    msgs = [e.message for e in check(parse(src), BuildContext(actor_name="P", anim_names=["Idle"]))]
+    assert len(msgs) == 1 and "'run'" in msgs[0]

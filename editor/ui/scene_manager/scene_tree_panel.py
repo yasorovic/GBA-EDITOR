@@ -28,6 +28,7 @@ from ui.common.selection_grammar import RowSelectionDelegate
 
 from core.models.scene import Actor, Scene
 from core.project import Project
+from core.models.field_value import number_value
 from core.selection_bus import (
     get_bus, UIElementSelection, CameraSelection, BackgroundLayerSelection, UILayoutSelection,
     ActorSelection)
@@ -526,12 +527,13 @@ class _ActiveSceneTree(_Tree):
     def highlight_actor(self, actor: Actor):
         self._highlight(T_ACTOR, actor)
 
-    def highlight_actors(self, actors) -> None:
+    def highlight_actors(self, actors, active=None) -> None:
         # `Actor` est mutable (dataclass non hachable) : l'identité est le
         # contrat de sélection dans l'éditeur, pas son égalité structurelle.
         wanted = {id(actor) for actor in actors}
         highlight_matching(self, lambda node: node.data(0, _ROLE_TYPE) == T_ACTOR
-                           and id(node.data(0, _ROLE_OBJ)) in wanted)
+                           and id(node.data(0, _ROLE_OBJ)) in wanted,
+                           current=lambda node: node.data(0, _ROLE_OBJ) is active)
 
     def highlight_ui_layout(self, layout):
         self._highlight(T_UI_LAYOUT, layout)
@@ -1113,7 +1115,7 @@ class _PrioritySceneTree(_Tree):
                     group.setText(0, f"OBJ {slot}  ·  {'front' if slot == 0 else 'back' if slot == 3 else ''}")
                     group.setIcon(0, _ico("priority_group", COLOR_DEFAULT))
                     group.setFlags(group.flags() & ~Qt.ItemFlag.ItemIsDragEnabled)
-                    for actor in (a for a in scene.actors if int(getattr(a, "priority", 0)) == slot):
+                    for actor in (a for a in scene.actors if int(number_value(getattr(a, "priority", 0))) == slot):
                         item = QTreeWidgetItem(group)
                         item.setData(0, _ROLE_TYPE, T_ACTOR)
                         item.setData(0, _ROLE_OBJ, actor)
@@ -1145,23 +1147,16 @@ class _PrioritySceneTree(_Tree):
         item.setIcon(0, _ico("prefab" if actor.prefab_name else "actor", COLOR_DEFAULT))
         item.setText(0, actor.name)
         item.setToolTip(0, tooltip(
-            title=actor.name, body=label("scttree.obj_priority_tip", priority=actor.priority)))
+            title=actor.name, body=label("scttree.obj_priority_tip", priority=number_value(actor.priority))))
         item.setForeground(0, QColor(_TEXT))
         item.setFlags(item.flags() | Qt.ItemFlag.ItemIsDragEnabled | Qt.ItemFlag.ItemIsSelectable)
 
-    def highlight_actors(self, actors) -> None:
+    def highlight_actors(self, actors, active=None) -> None:
         """Reflète une multi-sélection du Canvas dans la projection Priority."""
         wanted = {id(actor) for actor in actors}
-        self.blockSignals(True)
-        self.clearSelection()
-        if QTreeWidgetItemIterator is not None:
-            it = QTreeWidgetItemIterator(self)
-            while it.value():
-                node = it.value()
-                if node.data(0, _ROLE_TYPE) == T_ACTOR and id(node.data(0, _ROLE_OBJ)) in wanted:
-                    node.setSelected(True)
-                it += 1
-        self.blockSignals(False)
+        highlight_matching(self, lambda node: node.data(0, _ROLE_TYPE) == T_ACTOR
+                           and id(node.data(0, _ROLE_OBJ)) in wanted,
+                           current=lambda node: node.data(0, _ROLE_OBJ) is active)
 
     def _populate_bg_ui(self, host, project, scene, slot):
         """Ajoute sous `host` les nœuds Interface rendus en BG dont le `bg_slot`
@@ -1266,7 +1261,7 @@ class _PrioritySceneTree(_Tree):
         if before is not None and before in new_order:
             new_order.insert(new_order.index(before), actor)
         else:
-            same = [a for a in new_order if int(getattr(a, "priority", 0)) == priority]
+            same = [a for a in new_order if int(number_value(getattr(a, "priority", 0))) == priority]
             if same:
                 new_order.insert(new_order.index(same[-1]) + 1, actor)
             else:
@@ -1300,22 +1295,12 @@ class _PrioritySceneTree(_Tree):
         self._highlight(T_UI_LAYOUT, layout, deref=True)
 
     def _highlight(self, node_type, obj, deref=False):
-        if QTreeWidgetItemIterator is None:
-            return
-        self.blockSignals(True)
-        self.clearSelection()
-        it = QTreeWidgetItemIterator(self)
-        while it.value():
-            node = it.value()
-            stored = node.data(0, _ROLE_OBJ)
-            if deref:
-                stored = getattr(stored, "layout", stored)
-            if node.data(0, _ROLE_TYPE) == node_type and stored is obj:
-                node.setSelected(True)
-                self.scrollToItem(node)
-                break
-            it += 1
-        self.blockSignals(False)
+        def stored(node):
+            value = node.data(0, _ROLE_OBJ)
+            return getattr(value, "layout", value) if deref else value
+        highlight_matching(
+            self, lambda node: node.data(0, _ROLE_TYPE) == node_type
+            and stored(node) is obj, scroll_to_first=True)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -1467,6 +1452,10 @@ class SceneTreePanel(QWidget):
         self._tree.populate(self._project, self._scene)
         self._priority_tree.populate(self._project, self._scene)
         self._update_context_tabs()
+        # `populate` repart d'arbres vides : sans cela, tout rafraîchissement
+        # (un déplacement au canvas sauve la scène, donc rafraîchit) perdrait la
+        # sélection du bus. Le bus reste la seule source de vérité.
+        self.on_selection(get_bus().current)
         has_scene = self._scene is not None
         self._tree.setVisible(has_scene and self._context == "content")
         self._priority_tree.setVisible(has_scene and self._context == "priority")
@@ -1565,8 +1554,8 @@ class SceneTreePanel(QWidget):
         elif isinstance(obj, UILayoutSelection):
             self._priority_tree.highlight_ui_layout(obj.layout)
         elif isinstance(obj, ActorSelection):
-            self._tree.highlight_actors(obj.actors)
-            self._priority_tree.highlight_actors(obj.actors)
+            self._tree.highlight_actors(obj.actors, obj.active)
+            self._priority_tree.highlight_actors(obj.actors, obj.active)
 
     def _after_ui_change(self):
         """Après une mutation d'UI depuis l'arbre (créer/déplacer/renommer/

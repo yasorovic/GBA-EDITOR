@@ -1,5 +1,11 @@
 {
   "labels": {
+    "common.none_paren": {
+      "text": "(aucun)"
+    },
+    "wdg.remove": {
+      "text": "Retirer"
+    },
     "sndpanel.context_music": {
       "text": "Musique"
     },
@@ -192,19 +198,16 @@
     "settings.interface.language": {
       "text": "Langue"
     },
+    "settings.interface.scale": {
+      "text": "Échelle"
+    },
+    "settings.interface.scale_restart": {
+      "text": "Le changement d’échelle s’appliquera au prochain démarrage de {app_name}."
+    },
     "settings.interface.language_restart": {
       "text": "Le changement de langue s’appliquera au prochain démarrage de {app_name}."
     },
-    "settings.shortcuts.hint": { "text": "Cliquer dans une touche puis saisir la nouvelle combinaison la modifie. Deux actions sur la même touche sont signalées en rouge : elles restent actives, mais seule la première déclarée dans ce contexte répond." },
-    "settings.shortcuts.col_context": {
-      "text": "Contexte"
-    },
-    "settings.shortcuts.col_action": {
-      "text": "Action"
-    },
-    "settings.shortcuts.col_shortcut": {
-      "text": "Raccourci"
-    },
+    "settings.shortcuts.hint": { "text": "Cliquer sur un champ puis saisir la nouvelle combinaison. Les conflits sont signalés en rouge." },
     "settings.shortcuts.reset_to": {
       "text": "Réinitialiser sur {default}"
     },
@@ -215,7 +218,7 @@
       "text": "Tout réinitialiser"
     },
     "settings.shortcuts.context.global": {
-      "text": "Global"
+      "text": "Raccourcis communs"
     },
     "settings.shortcuts.context.scene_canvas": {
       "text": "Canvas de scène"
@@ -232,26 +235,44 @@
     "settings.shortcuts.action.scene.group": {
       "text": "Grouper les scènes sélectionnées"
     },
-    "settings.shortcuts.action.scene.graph_fit": {
-      "text": "Cadrer le graphe de scènes"
-    },
-    "settings.shortcuts.action.scene.graph_zoom_reset": {
-      "text": "Réinitialiser le zoom du graphe"
-    },
-    "settings.shortcuts.action.scene.graph_zoom_in": {
-      "text": "Zoomer sur le graphe de scènes"
-    },
-    "settings.shortcuts.action.scene.graph_zoom_out": {
-      "text": "Dézoomer sur le graphe de scènes"
-    },
     "settings.shortcuts.action.scene.graph_toggle_minimap": {
       "text": "Afficher / masquer la minimap du graphe"
     },
-    "settings.shortcuts.action.scene.graph_deselect": {
-      "text": "Désélectionner dans le graphe"
-    },
     "settings.shortcuts.action.scene.graph_search": {
       "text": "Rechercher une scène dans le graphe"
+    },
+    "settings.shortcuts.action.common.copy": {
+      "text": "Copier"
+    },
+    "settings.shortcuts.action.common.paste": {
+      "text": "Coller"
+    },
+    "settings.shortcuts.action.common.duplicate": {
+      "text": "Dupliquer"
+    },
+    "settings.shortcuts.action.common.delete": {
+      "text": "Supprimer la sélection"
+    },
+    "settings.shortcuts.action.common.cancel": {
+      "text": "Annuler / désélectionner"
+    },
+    "settings.shortcuts.action.common.fit": {
+      "text": "Ajuster à la vue"
+    },
+    "settings.shortcuts.action.common.zoom_in": {
+      "text": "Zoom avant"
+    },
+    "settings.shortcuts.action.common.zoom_out": {
+      "text": "Zoom arrière"
+    },
+    "settings.shortcuts.action.common.zoom_reset": {
+      "text": "Rétablir le zoom (100 %)"
+    },
+    "settings.shortcuts.display.wheel_zoom": {
+      "text": "Zoomer la vue"
+    },
+    "settings.shortcuts.display.middle_pan": {
+      "text": "Déplacer la vue"
     },
     "settings.shortcuts.display.undo": {
       "text": "Annuler"
@@ -298,35 +319,14 @@
     "settings.shortcuts.action.canvas.tool_ui": {
       "text": "Outil d’interface"
     },
-    "settings.shortcuts.action.canvas.fit": {
-      "text": "Ajuster la vue"
-    },
-    "settings.shortcuts.action.canvas.cancel": {
-      "text": "Annuler / désélectionner"
-    },
-    "settings.shortcuts.action.canvas.delete": {
-      "text": "Supprimer la sélection"
-    },
-    "settings.shortcuts.action.canvas.duplicate": {
-      "text": "Dupliquer la sélection"
-    },
     "common.copy": {
       "text": "Copier"
-    },
-    "settings.shortcuts.action.canvas.paste": {
-      "text": "Coller"
     },
     "settings.shortcuts.action.sprite.flip_h": {
       "text": "Retourner le pinceau horizontalement"
     },
     "settings.shortcuts.action.sprite.flip_v": {
       "text": "Retourner le pinceau verticalement"
-    },
-    "settings.shortcuts.action.sprite.duplicate_frame": {
-      "text": "Dupliquer l’image"
-    },
-    "settings.shortcuts.action.sprite.delete_frame": {
-      "text": "Supprimer l’image"
     },
     "settings.shortcuts.action.sound.play_pause": {
       "text": "Lire / mettre en pause l’aperçu"
@@ -865,23 +865,14 @@
       "text": "Sélectionner"
     },
     "cvtool.select_tip": { "text": "Sélectionne et déplace les acteurs ou les éléments d’interface sur le canvas." },
-    "cvtool.shortcut_select": {
-      "text": "S"
-    },
     "cvtool.add_actor": {
       "text": "Ajouter un acteur"
     },
     "cvtool.add_actor_tip": { "text": "Un clic sur le canvas place un nouvel acteur." },
-    "cvtool.shortcut_add": {
-      "text": "A"
-    },
     "cvtool.eraser": {
       "text": "Effacer un acteur"
     },
     "cvtool.eraser_tip": { "text": "Un clic sur un acteur le retire de la scène active." },
-    "cvtool.shortcut_erase": {
-      "text": "E"
-    },
     "cvtool.collision_editing": {
       "text": "Éditer les collisions"
     },
@@ -1292,6 +1283,9 @@
     "inputs.button_r": { "text": "R" },
     "inputs.button_start": { "text": "Start" },
     "inputs.button_select": { "text": "Select" },
+    "win.close_unsaved_title": { "text": "Modifications non enregistrées" },
+    "win.close_unsaved": { "text": "Le projet contient des modifications non enregistrées.\n\nLes enregistrer avant de quitter ?" },
+    "win.close_discard": { "text": "Ne pas enregistrer" },
     "win.close_save_failed_title": { "text": "Projet non enregistré" },
     "win.close_save_failed": { "text": "Les dernières modifications n'ont pas pu être écrites sur le disque :\n{error}\n\nFermer quand même et les perdre ?" },
     "win.save_state_saved": { "text": "Projet enregistré" },
@@ -1445,7 +1439,7 @@
     "caminsp.recompute_from_backgrounds": { "text": "Recalculer depuis les fonds" },
     "caminsp.starting_camera_title": { "text": "Caméra de départ" },
     "caminsp.starting_camera_tip": { "text": "Définit laquelle des caméras de cette scène est active au démarrage. Un script peut passer à une autre avec camera.switch." },
-    "caminsp.starting_camera_note": { "text": "Ce choix ne dépend pas de la caméra affichée ci-dessus. (default) est fixe à l’origine, sans limites ni cible." },
+    "caminsp.starting_camera_note": { "text": "Ce choix ne dépend pas de la caméra affichée ci-dessus. (aucun) garde la vue fixe à l’origine, sans limites ni cible." },
     "caminsp.follow_title": { "text": "Acteur suivi" },
     "caminsp.actor_local_note": { "text": "Les noms d’acteurs sont locaux à une scène : une caméra réutilisée dans une scène sans cet acteur y reste simplement immobile." },
     "caminsp.prefill_tip": { "text": "Préremplit la largeur et la hauteur à partir du fond de la scène sélectionnée dont la vitesse de parallaxe est la plus proche de 1,0." },
@@ -1507,15 +1501,19 @@
     "comped.anim_speed_tip": { "text": "Définit le nombre de ticks GBA entre deux images, pour l’état initial ({state}) seulement. Un tick dure 1/60 de seconde : 8 = 7,5 i/s, 4 = 15 i/s, 2 = 30 i/s." },
     "comped.anim_speed_note": { "text": "Les autres états gardent leur vitesse, réglée dans l’éditeur de sprites." },
     "comped.affine": { "text": "Transformation affine" },
-    "comped.affine_tip": { "text": "Réserve l’un des 32 emplacements affines pour ce sprite, même sans transformation. Le sprite peut alors pivoter et changer d’échelle, et les trois réglages locaux s’appliquent par-dessus la transformation de l’acteur." },
+    "comped.affine_tip": { "text": "Réserve l’un des 32 emplacements affines pour ce sprite, même sans transformation. Le sprite peut alors pivoter et changer d’échelle autour du centre de son cadre, et les trois réglages locaux s’appliquent par-dessus la transformation de l’acteur. Cocher la case centre l’acteur sur le cadre : le décalage devient moins la moitié de la taille du cadre, et les boîtes de collision encore à 0, 0 suivent." },
     "comped.affine_note": { "text": "Désactivé, la rotation et l’échelle de l’acteur restent lisibles et modifiables par les scripts, mais rien ne les dessine." },
-    "comped.affine_required": { "text": "Nécessite « Transformation affine »." },
     "comped.scale_x_title": { "text": "Échelle locale X" },
-    "comped.scale_x_tip": { "text": "Définit l’échelle locale en X, multipliée par l’échelle de l’acteur." },
+    "comped.scale_x_tip": { "text": "Définit l’échelle locale en X, multipliée par l’échelle de l’acteur. Le sprite change d’échelle autour du point de pivot. Une valeur négative le retourne autour de ce point." },
     "comped.scale_y_title": { "text": "Échelle locale Y" },
-    "comped.scale_y_tip": { "text": "Définit l’échelle locale en Y, multipliée par l’échelle de l’acteur." },
+    "comped.scale_y_tip": { "text": "Définit l’échelle locale en Y, multipliée par l’échelle de l’acteur. Le sprite change d’échelle autour du point de pivot. Une valeur négative le retourne autour de ce point." },
     "comped.rotation_title": { "text": "Rotation locale" },
     "comped.rotation_tip": { "text": "Définit la rotation locale en degrés, ajoutée à la rotation de l’acteur." },
+    "comped.pivot": { "text": "Point de pivot" },
+    "comped.pivot_x_title": { "text": "Point de pivot X" },
+    "comped.pivot_y_title": { "text": "Point de pivot Y" },
+    "comped.pivot_x_tip": { "text": "Définit la position horizontale du pivot, en pixels depuis le centre du cadre du sprite. 0, 0 est le centre. La rotation, l’échelle et le flip s’exercent autour de ce point, qui reste fixe à l’écran. Il ne déplace pas le sprite : c’est le rôle du décalage." },
+    "comped.pivot_y_tip": { "text": "Définit la position verticale du pivot, en pixels depuis le centre du cadre du sprite. 0, 0 est le centre. La rotation, l’échelle et le flip s’exercent autour de ce point, qui reste fixe à l’écran. Il ne déplace pas le sprite : c’est le rôle du décalage." },
     "comped.offset_x_title": { "text": "Décalage local X" },
     "comped.offset_x_tip": { "text": "Définit le décalage horizontal par rapport à l’acteur, en pixels. Le sprite est dessiné à la position de l’acteur plus ce décalage, et il pivote et change d’échelle avec l’acteur." },
     "comped.offset_y_title": { "text": "Décalage local Y" },
@@ -1797,6 +1795,15 @@
     "vartbl.rename_tip": { "text": "Renomme cette variable et met à jour ses références dans les scripts et les textes." },
     "vartbl.type_title": { "text": "Type de variable" },
     "vartbl.value_title": { "text": "Valeur initiale" },
+    "vartbl.type_int_tip": { "text": "Nombre entier de -2 147 483 648 à 2 147 483 647 (32 bits). Le type à tout faire." },
+    "vartbl.type_bool_tip": { "text": "Vrai ou faux (0 ou 1). Occupe un octet en mémoire et un seul bit dans une sauvegarde." },
+    "vartbl.type_u8_tip": { "text": "Nombre entier de 0 à 255 (8 bits, sans signe). Repart de l’autre bout au-delà des limites." },
+    "vartbl.type_u16_tip": { "text": "Nombre entier de 0 à 65 535 (16 bits, sans signe). Repart de l’autre bout au-delà des limites." },
+    "vartbl.type_s8_tip": { "text": "Nombre entier de -128 à 127 (8 bits, avec signe). Repart de l’autre bout au-delà des limites." },
+    "vartbl.type_s16_tip": { "text": "Nombre entier de -32 768 à 32 767 (16 bits, avec signe). Repart de l’autre bout au-delà des limites." },
+    "vartbl.type_string_tip": { "text": "Texte affiché par text.draw. Tenu dans le jeu comme une entrée de la table de textes : il se dessine et se compare, mais ne se modifie pas caractère par caractère." },
+    "vartbl.type_string_note": { "text": "Une globale de ce type ne peut pas être sauvegardée." },
+    "vartbl.string_value_tip": { "text": "Le texte, ou la clé d’un texte existant du projet." },
     "datascr.data_finder": { "text": "Tables de données" },
     "datagrid.table_bar": { "text": "Table" },
     "datagrid.add_row": { "text": "Ajouter une ligne" },
@@ -1874,6 +1881,8 @@
     "pick.open_palette_title": { "text": "Choisir une couleur de palette" },
     "pick.unavailable_color_title": { "text": "Couleur de palette indisponible" },
     "pick.color_index_title": { "text": "Couleur de palette {_index}" },
+    "valfield.number_int": { "text": "Valeur entière" },
+    "valfield.number_float": { "text": "Valeur décimale" },
     "valfield.reference_title": { "text": "Valeur référencée" },
     "valfield.reference_tip": { "text": "Lit {symbol} pendant l’exécution du projet." },
     "settings.shortcuts.reset_title": { "text": "Rétablir le raccourci par défaut" },
@@ -1893,18 +1902,13 @@
     "hints.mouse.double_click": { "text": "Double-clic" },
     "hints.mouse.drop": { "text": "Déposer" },
     "hints.header": { "text": "Raccourcis" },
-    "hints.zoom": { "text": "Zoome la vue" },
     "hints.pan": { "text": "Déplace la vue" },
-    "hints.fit": { "text": "Cadre le contenu dans la vue" },
     "hints.scene.select_item": { "text": "Sélectionne un acteur ou un élément" },
     "hints.scene.extend_selection": { "text": "Ajoute ou retire un élément de la sélection" },
     "hints.scene.move_or_rubber_band": { "text": "Déplace, ou trace un rectangle de sélection" },
     "hints.scene.duplicate_drag": { "text": "Duplique en glissant" },
     "hints.scene.actor_menu": { "text": "Ouvre le menu de l’acteur" },
     "hints.scene.nudge": { "text": "Décale de 1 px (Maj : 8 px)" },
-    "hints.scene.delete": { "text": "Supprime la sélection" },
-    "hints.scene.duplicate": { "text": "Duplique la sélection" },
-    "hints.scene.copy_paste": { "text": "Copie et colle la sélection" },
     "hints.scene.place_actor": { "text": "Place un acteur sur la grille" },
     "hints.scene.erase_actor": { "text": "Supprime l’acteur sous le curseur" },
     "hints.scene.paint_solid": { "text": "Peint des tuiles de collision pleines" },
@@ -1927,9 +1931,6 @@
     "hints.graph.group": { "text": "Range les scènes sélectionnées dans un groupe" },
     "hints.graph.search": { "text": "Cherche une scène" },
     "hints.graph.minimap": { "text": "Affiche ou masque la mini-carte" },
-    "hints.graph.deselect": { "text": "Vide la sélection" },
-    "hints.graph.fit": { "text": "Centre la sélection, ou cadre tout le graphe" },
-    "hints.graph.zoom_reset": { "text": "Remet le zoom à 100 %" },
     "hints.bg.paint": { "text": "Peint la palette active sur des tuiles" },
     "hints.bg.fill": { "text": "Remplit la zone connexe avec la palette active" },
     "hints.bg.paint_rect": { "text": "Peint un rectangle avec la palette active" },
@@ -1942,7 +1943,6 @@
     "hints.bg.snap_grid": { "text": "Accroche à la grille 8×8" },
     "hints.bg.key_animated_drag": { "text": "Glisser une animation" },
     "hints.bg.move_animated": { "text": "Déplace un fond animé posé" },
-    "hints.bg.delete_animated": { "text": "Retire le fond animé sélectionné" },
     "hints.sprite.title_brush": { "text": "Brosse" },
     "hints.sprite.title_pick": { "text": "Sélection de tuiles" },
     "hints.sprite.title_readonly": { "text": "Direction miroir (lecture seule)" },
@@ -1951,8 +1951,6 @@
     "hints.sprite.flip_h": { "text": "Retourne la brosse horizontalement" },
     "hints.sprite.flip_v": { "text": "Retourne la brosse verticalement" },
     "hints.sprite.pick_up": { "text": "Ramasse des tuiles posées en brosse" },
-    "hints.sprite.duplicate_frame": { "text": "Duplique la frame" },
-    "hints.sprite.delete_frame": { "text": "Supprime la frame" },
     "hints.sound.title": { "text": "Graphe de musique" },
     "hints.sound.select": { "text": "Sélectionne un état ou une transition" },
     "hints.sound.move_or_rubber_band": { "text": "Déplace les états sélectionnés, ou trace un rectangle de sélection" },
@@ -1961,7 +1959,6 @@
     "hints.sound.key_arrow_end_drag": { "text": "Glisser un bout de flèche" },
     "hints.sound.rewire": { "text": "Recâble la transition vers un autre état" },
     "hints.sound.drop_track": { "text": "Affecte la piste à un état, ou en crée un" },
-    "hints.sound.delete": { "text": "Supprime la sélection" },
     "hints.sound.play_pause": { "text": "Lit ou met en pause" },
     "hints.palette.title": { "text": "Palette" },
     "hints.palette.select": { "text": "Sélectionne une couleur" },
@@ -1970,8 +1967,6 @@
     "hints.palette.menu": { "text": "Ouvre le menu des couleurs" },
     "hints.palette.move": { "text": "Déplace la sélection" },
     "hints.palette.extend": { "text": "Étend la sélection" },
-    "hints.palette.copy_paste": { "text": "Copie et colle la couleur en hexadécimal" },
-    "hints.palette.clear": { "text": "Vide les couleurs sélectionnées" },
     "hints.palette.edit_hex": { "text": "Passe au champ HEX" }
   }
 }

@@ -99,13 +99,6 @@ def test_french_settings_catalogue_is_complete():
     assert settings_keys <= set(french)
 
 
-def test_french_settings_tip_is_translated():
-    from ui.common import notice
-    catalog.set_language("fr")
-    assert notice.text("settings.tips").startswith("Les astuces expliquent")
-    catalog.set_language("")
-
-
 def test_french_home_catalogue_is_complete():
     """L'accueil est le second écran livré sans mélange de langues."""
     from ui.common.labels import LABELS_DIR

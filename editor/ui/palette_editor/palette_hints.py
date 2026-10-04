@@ -1,10 +1,10 @@
 """ui/palette_editor/palette_hints.py — contenu de la table des raccourcis de la
 grille de palette. Pas d'outil : une seule table (la grille de couleurs).
-Les touches de la grille sont posées en dur dans `PaletteGridPanel`, hors du
-registre remappable — elles s'affichent donc telles quelles."""
+Seuls les gestes propres à la grille s'affichent ; les raccourcis communs
+(copier, vider, ajuster, zoom) vivent dans Réglages → Shortcuts."""
 from __future__ import annotations
 
-from ui.common.shortcut_hints import Hints, SEPARATOR, combo, key_icon, mouse
+from ui.common.shortcut_hints import Hints, combo, key_icon, mouse
 
 
 def palette_grid_hints(_context: str) -> Hints:
@@ -15,11 +15,5 @@ def palette_grid_hints(_context: str) -> Hints:
         (mouse("right_click"), "hints.palette.menu"),
         (key_icon("dir_omni"), "hints.palette.move"),
         (combo("Shift", key_icon("dir_omni")), "hints.palette.extend"),
-        ("Ctrl+C / Ctrl+V", "hints.palette.copy_paste"),
-        ("Del", "hints.palette.clear"),
         ("Enter", "hints.palette.edit_hex"),
-        SEPARATOR,
-        (mouse("wheel"), "hints.zoom"),
-        (mouse("middle_drag"), "hints.pan"),
-        ("F", "hints.fit"),
     ]

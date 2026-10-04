@@ -41,8 +41,37 @@ jobs:
           fi
           echo "version=$FILE_VERSION" >> "$GITHUB_OUTPUT"
 
+  # Les tests qui compilent un projet entier (`-m slow`, exclus de `tests.yml` et du
+  # travail quotidien) tournent ici : avant les ~heures de compilation de l'éditeur.
+  slow-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installer les bibliothèques Qt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 libpulse0
+
+      - name: Installer les dépendances Python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Tests lents
+        run: python -m pytest tests -m slow -q -rs
+
   build-windows:
-    needs: version
+    needs: [version, slow-tests]
     runs-on: windows-latest
     # Nuitka compile en C : nettement plus long que l'ancien build
     # PyInstaller (qui ne faisait qu'assembler des .pyc).
@@ -144,7 +173,7 @@ jobs:
             Backstage-*-windows-portable.zip
 
   build-linux-appimage:
-    needs: version
+    needs: [version, slow-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:

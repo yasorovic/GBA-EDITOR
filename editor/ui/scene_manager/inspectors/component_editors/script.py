@@ -2,8 +2,9 @@
 from __future__ import annotations
 from pathlib import Path
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QFileDialog, QInputDialog, QLineEdit,
+    QFileDialog, QHBoxLayout, QInputDialog, QLineEdit, QSlider, QWidget,
 )
 from PyQt6.QtGui import QFont
 
@@ -56,6 +57,45 @@ class ScriptEditor(BaseComponentEditor):
         for var in variables:
             self._build_var_row(comp, var, layout)
 
+    _FLOAT_SLIDER_STEPS = 1000
+
+    @staticmethod
+    def _row_with_slider(text, spin, value, lo, hi, kind, layout):
+        """Ligne « libellé | slider | spinbox » pour une variable bornée. Le
+        spinbox reste la source de la valeur (c'est lui qui émet le save) ; le
+        slider ne fait que le piloter. Flottant : le slider parcourt
+        _FLOAT_SLIDER_STEPS pas entre min et max."""
+        steps = 0 if kind is int else ScriptEditor._FLOAT_SLIDER_STEPS
+        if kind is int:
+            to_slider, from_slider = int, int
+            s_lo, s_hi = int(lo), int(hi)
+        else:
+            span = (hi - lo) or 1.0
+            to_slider = lambda v: round((v - lo) / span * steps)
+            from_slider = lambda s: lo + s / steps * span
+            s_lo, s_hi = 0, steps
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setRange(s_lo, s_hi)
+        slider.setValue(to_slider(value))
+
+        def on_slider(s):
+            spin.setValue(from_slider(s))      # émet valueChanged → save
+
+        def on_spin(v):
+            slider.blockSignals(True)
+            slider.setValue(to_slider(v))
+            slider.blockSignals(False)
+
+        slider.valueChanged.connect(on_slider)
+        spin.valueChanged.connect(on_spin)
+        box = QWidget()
+        hb = QHBoxLayout(box)
+        hb.setContentsMargins(0, 0, 0, 0)
+        hb.setSpacing(6)
+        hb.addWidget(slider, 1)
+        hb.addWidget(spin)
+        W.row(text, box, layout)
+
     def _build_var_row(self, comp, var: dict, layout):
         name    = var["name"]
         typ     = var["type"]
@@ -78,7 +118,10 @@ class ScriptEditor(BaseComponentEditor):
             mn = int(var["min"]) if var["min"] is not None else -9999
             mx = int(var["max"]) if var["max"] is not None else  9999
             sp = W.spinbox(int(current) if current != "" else 0, mn, mx)
-            W.row(label, sp, layout)
+            if var["min"] is not None and var["max"] is not None:
+                self._row_with_slider(label, sp, sp.value(), mn, mx, int, layout)
+            else:
+                W.row(label, sp, layout)
             sp.valueChanged.connect(save)
 
         # ── float ─────────────────────────────────────────────────
@@ -88,7 +131,10 @@ class ScriptEditor(BaseComponentEditor):
             try:   val = float(current)
             except: val = 0.0
             sp = W.double_spinbox(val, mn, mx)
-            W.row(label, sp, layout)
+            if var["min"] is not None and var["max"] is not None:
+                self._row_with_slider(label, sp, sp.value(), mn, mx, float, layout)
+            else:
+                W.row(label, sp, layout)
             sp.valueChanged.connect(save)
 
         # ── string ────────────────────────────────────────────────

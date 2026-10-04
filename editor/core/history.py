@@ -244,10 +244,9 @@ class MoveCameraCmd(Command):
     """Déplacement du cadre d'une caméra dans le canvas (drag souris).
 
     Symétrique de `MoveActorCmd` (cf. `SceneEditor.move_camera_item`) : x/y
-    d'un seul geste, les frames d'un même drag fusionnent. La MATÉRIALISATION
-    d'une caméra implicite (`ensure_scene_camera`) reste faite par l'appelant,
-    en amont — un undo rend la position, pas l'existence de la caméra, comme
-    déplacer un actor n'annule pas sa création."""
+    d'un seul geste, les frames d'un même drag fusionnent. Un undo rend la
+    position, pas l'existence de la caméra, comme déplacer un actor n'annule
+    pas sa création."""
 
     def __init__(self, camera: Any, old_x: int, old_y: int,
                  new_x: int, new_y: int, persist_fn=None):

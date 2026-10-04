@@ -4,7 +4,7 @@ de composition du Sprite Editor. Contexte = ce que le canvas offre : « brush »
 « readonly » (direction miroir)."""
 from __future__ import annotations
 
-from ui.common.shortcut_hints import Hints, bound, mouse, view_rows
+from ui.common.shortcut_hints import Hints, bound, mouse
 
 _TITLES = {
     "brush": "hints.sprite.title_brush",
@@ -27,9 +27,4 @@ def frame_canvas_hints(context: str) -> Hints:
             (mouse("left_drag"), "hints.sprite.pick_up"),
             (mouse("right_click"), "hints.sprite.erase"),
         ]
-    if context in ("brush", "pick"):
-        rows += [
-            (bound("sprite.duplicate_frame"), "hints.sprite.duplicate_frame"),
-            (bound("sprite.delete_frame"), "hints.sprite.delete_frame"),
-        ]
-    return _TITLES.get(context, "hints.sprite.title_pick"), rows + view_rows(None)
+    return _TITLES.get(context, "hints.sprite.title_pick"), rows

@@ -195,6 +195,7 @@ class CollisionTool(BaseTool):
         ov = self._view.collision_overlay
         if ov:
             ov.set_preview(None)
+            ov.set_hover(None)
             sc = self._view.scene()
             keep_visible = getattr(sc, "_collision_view", False)
             if not keep_visible:
@@ -208,6 +209,7 @@ class CollisionTool(BaseTool):
         ov = self._view.collision_overlay
         if not ov:
             return True
+        self._update_hover(pos)
         if self._mode in SLOPE_MODES:
             col, row = ov.scene_to_tile(pos.x(), pos.y())
             self._slope_start = (col, row)
@@ -225,6 +227,7 @@ class CollisionTool(BaseTool):
         ov = self._view.collision_overlay
         if not ov:
             return True
+        self._update_hover(pos)
         # Brush : seulement si le bouton correspondant est enfoncé
         buttons = e.buttons()
         active = (self._paint_mode and buttons & Qt.MouseButton.LeftButton) or (
@@ -274,7 +277,25 @@ class CollisionTool(BaseTool):
             self._dirty = False
         return True
 
+    def on_leave(self):
+        ov = self._view.collision_overlay
+        if ov:
+            ov.set_hover(None)
+
     # ── Logique interne ───────────────────────────────────────────
+
+    def _update_hover(self, scene_pos: QPointF):
+        """Surligne la tuile (ou le bloc 2×2) que le pinceau va couvrir. Une pente
+        en cours de tracé a déjà son aperçu : la surbrillance s'efface alors."""
+        ov = self._view.collision_overlay
+        if not ov:
+            return
+        if self._mode in SLOPE_MODES and self._slope_start:
+            ov.set_hover(None)
+            return
+        size = 2 if self._mode == "collision_16" else 1
+        col, row = ov.scene_to_tile(scene_pos.x(), scene_pos.y())
+        ov.set_hover((col, row, size, size))
 
     def _paint_brush(self, scene_pos: QPointF, brush_tiles: int):
         ov = self._view.collision_overlay

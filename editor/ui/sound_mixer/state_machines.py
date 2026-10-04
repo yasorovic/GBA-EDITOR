@@ -30,6 +30,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.history import get_history, AddListItemCmd, RemoveListItemCmd, SetFieldCmd
+from core.keybindings import get_keybindings
 from ui.common.theme import C, T, QSS
 from ui.common.widgets import W
 from ui.common.labels import label
@@ -300,7 +301,7 @@ class MusicMachinePanel(QWidget):
         b_add.setToolTip(tooltip(title=label("sndmix.add_state_title"), body=label("sndmix.add_state_tip")))
         b_add.clicked.connect(self._add_state)
         b_del = W.btn_ghost("−")
-        b_del.setToolTip(tooltip(title=label("sndmix.delete_selection_title"), shortcut="Del"))
+        b_del.setToolTip(tooltip(title=label("sndmix.delete_selection_title"), shortcut=get_keybindings().resolve("common.delete")))
         b_del.clicked.connect(lambda: self.view.delete_selected())
         b_auto = W.btn_ghost(label("sndmix.auto_layout"))
         b_auto.setToolTip(tooltip(title=label("sndmix.auto_layout"), body=label("sndmix.auto_layout_tip")))
@@ -320,7 +321,7 @@ class MusicMachinePanel(QWidget):
         b_in.setToolTip(tooltip(title=label("sndmix.zoom_in")))
         b_in.clicked.connect(lambda: self.view.zoom_by(1.15))
         b_fit = W.btn_ghost("⤢")
-        b_fit.setToolTip(tooltip(title=label("sndmix.fit_title")))
+        b_fit.setToolTip(tooltip(title=label("sndmix.fit_title"), shortcut=get_keybindings().resolve("common.fit")))
         b_fit.clicked.connect(lambda: self.view.fit())
         bar.addWidget(b_out); bar.addWidget(self._zoom_lbl)
         bar.addWidget(b_in); bar.addWidget(b_fit)

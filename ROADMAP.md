@@ -334,16 +334,27 @@ La référence de couverture est relevée à 103 sites exercés sur 278. Les 175
 travail de la tranche suivante (audio, tables de données, caméras, budgets, vecteurs et tableaux du
 checker, conversion grit).
 
-### Tranche 5 — les 175 sites jamais atteints (livrée le 2026-10-03)
+**Isolés le 2026-10-04.** `test_build_fault_injection.py`, `test_build_diagnostics.py`, `test_build_invariants.py`, `test_gcc_cites_the_script.py`, `test_smoke_test.py` et un cas de `test_codegen_diagnostics.py` compilent un projet entier par cas : lancés à chaque modification, la suite durait ~20 min. Ils portent le marqueur `slow`, exclu par défaut (`addopts` de `pyproject.toml`) ; `pytest -m slow` les lance, et le job `slow-tests` de `release.yml` les exige avant toute publication.
 
-Trois fichiers de tests, un par famille : `tests/test_checker_diagnostics.py` (cas paramétrés du checker),
-`tests/test_validator_diagnostics.py` (le plus petit projet fautif, puis l'appel du contrôle concerné) et
-`tests/test_codegen_diagnostics.py` (outils factices, `BuildWorker` aux étapes court-circuitées). Les accords
-internes (api.py ↔ en-têtes, lua_subset ↔ luaparser, domaines, colonnes) se testent en faussant leur source.
+### Tranche 5 — les 175 sites jamais atteints (livrée le 2026-10-03, réduite le 2026-10-04)
 
-La référence passe de 103 à **274 sites exercés sur 278**. Restent quatre sites : un fond animé 8 bpp
-(`rom_build`, avertissement de palette), l'erreur de placement d'un animé fusionné (`_err`), et une branche
-défensive du checker (méthode inconnue sur un enfant, `_check_call_expr`).
+Les 175 sites ont d'abord tous été exercés : 274 sur 278. C'était un compteur satisfait, pas une
+garantie : ces ~170 tests vérifiaient qu'un fragment de message sort, pas qu'il est juste, et ne m'ont
+trouvé que trois vrais défauts (deux libellés restés en français, un faux « site » dans l'outil de
+couverture). Ils ont été **réduits à un échantillon de 52 tests** qui portent une vraie logique :
+l'accord de listes internes (api.py ↔ en-têtes du runtime, lua_subset ↔ luaparser, domaines, colonnes),
+les budgets (palettes, fenêtres, structure de musique), les promesses que l'éditeur fait sans que le
+build les tienne, les pannes de lecture, et un cas par famille de faute du checker. Trois fichiers :
+`tests/test_checker_diagnostics.py`, `tests/test_validator_diagnostics.py`,
+`tests/test_codegen_diagnostics.py`.
+
+La référence est relevée à **172 sites exercés sur 278** (103 avant la tranche). Ce n'est pas un objectif
+à remonter : le cliquet avertit d'un site couvert qui ne l'est plus, il ne demande pas de tout couvrir.
+
+Corrigé en chemin : trois messages restés en français ; l'outil de couverture comptait à tort les appels à
+une fonction locale `_warn` ; et le déplacement de `ValidationMessage`, `build_error` et `build_warning`
+vers `core/diagnostic.py`, module de base, pour fermer la boucle d'import que l'unification des
+diagnostics avait ouverte entre `core.validator` et les générateurs (que `check_architecture` signalait).
 
 Trouvé en chemin : deux messages restés en français (`frame_w/h invalides`, `l'image`, et deux libellés
 d'audio), corrigés ; et l'outil de couverture comptait à tort les appels à une fonction locale `_warn` comme

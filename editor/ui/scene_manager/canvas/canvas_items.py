@@ -20,6 +20,7 @@ from typing import Optional
 
 from core.history import MoveActorCmd, MoveActorGroupCmd, get_history
 from core.models.scene import Actor
+from core.models.field_value import number_value
 from core.models import collision_tiles as CT
 from core.models.collision_tiles import (
     COLLISION_TILE_SIZE,
@@ -37,7 +38,7 @@ from core.models.tile_codec import flip_h, flip_v
 from core.project import Project
 from ui.common.theme import C
 from ui.scene_manager.canvas.canvas_const import GBA_W, GBA_H
-from PyQt6.QtCore import QPointF, QRectF, Qt
+from PyQt6.QtCore import QLineF, QPointF, QRectF, Qt
 from PyQt6.QtGui import (
     QBrush, QColor, QPainter, QPainterPath, QPen, QPixmap, QTransform,
 )
@@ -142,10 +143,16 @@ class SpriteItem(QGraphicsPixmapItem):
         flip_v: bool = False,
         resolver=None,
         placeholder: bool = False,
+        pivot_x: float = 0.0,
+        pivot_y: float = 0.0,
+        show_pivot: bool = False,
         parent=None,
     ):
         super().__init__(pixmap, parent)
         self.scene_sprite = actor
+        # Posés avant tout appel pouvant interroger boundingRect() (setOffset…).
+        self._pivot_point = QPointF()
+        self._show_pivot = False
         # Actor sans sprite : le pixmap ne sert que de géométrie, le repère est
         # redessiné à chaque paint() au zoom courant (cf. _paint_content).
         self._placeholder = placeholder
@@ -175,12 +182,23 @@ class SpriteItem(QGraphicsPixmapItem):
         )
         # OBJ, priorité de CET acteur — pas un zValue fixe : deux acteurs de
         # priorités différentes doivent s'empiler comme le hardware le ferait.
-        self.setZValue(hw_layer_z(getattr(actor, "priority", 0), is_obj=True))
+        self.setZValue(hw_layer_z(number_value(getattr(actor, "priority", 0), resolver), is_obj=True))
 
         # Décaler le pixmap dans le repère local pour que (0,0) = ancrage (origine)
         self.setOffset(-origin_x, -origin_y)
+        # Point de pivot = centre du cadre + `pivot` (comme `sprite.pivot_x/y` au
+        # runtime). (0, 0) = le centre, le comportement GBA natif. Il reste FIXE :
+        # rotation, échelle et flip (échelle -1) s'exercent autour de lui.
+        self._pivot_point = QPointF(-origin_x + pixmap.width() / 2 + pivot_x,
+                                    -origin_y + pixmap.height() / 2 + pivot_y)
+        self._show_pivot = show_pivot
 
-        # Transform : scale+flip EN PREMIER (espace objet), puis rotation — pivot = (0,0) = ancrage
+        # Transform autour du pivot. Qt applique les opérations de droite à gauche
+        # sur un point : la rotation vient donc AVANT l'échelle dans la chaîne,
+        # pour que l'échelle (flip compris) agisse d'abord dans l'espace de la
+        # texture, puis que la rotation tourne le tout — la matrice du matériel.
+        # (`setTransformOriginPoint` ne sert qu'à setRotation/setScale : un
+        # `setTransform` l'ignore.)
         sx_eff = scale_x * (-1.0 if flip_h else 1.0)
         sy_eff = scale_y * (-1.0 if flip_v else 1.0)
         has_transform = (
@@ -189,9 +207,11 @@ class SpriteItem(QGraphicsPixmapItem):
         )
         if has_transform:
             t = QTransform()
-            t.scale(sx_eff, sy_eff)
+            t.translate(self._pivot_point.x(), self._pivot_point.y())
             if abs(rotation) > 1e-4:
                 t.rotate(rotation)
+            t.scale(sx_eff, sy_eff)
+            t.translate(-self._pivot_point.x(), -self._pivot_point.y())
             self.setTransform(t)
 
         # Item (0,0) = position logique de l'acteur — la caméra suit directement
@@ -300,6 +320,67 @@ class SpriteItem(QGraphicsPixmapItem):
             return QPointF(x, y)
         return super().itemChange(change, value)
 
+    def _marker_rect(self, center: QPointF) -> QRectF:
+        """Zone d'un repère (origine ou pivot) dans l'espace du PARENT sans la
+        position : il est dessiné là, transform défait, pas dans le repère de
+        l'image."""
+        reach = _ORIGIN_ICO_SIZE / 2 + 2
+        return QRectF(center.x() - reach, center.y() - reach, 2 * reach, 2 * reach)
+
+    def boundingRect(self) -> QRectF:
+        """Pixmap + repères d'origine et de pivot. Les repères et leurs bords
+        antialiasés débordent du pixmap dès que le point est sur un bord (ou
+        dehors) : hors du boundingRect, Qt ne les efface pas au déplacement et
+        laisse une traînée blanche (surtout hors du canvas, sans fond qui
+        recouvre). Les repères vivent dans l'espace d'où le transform est défait
+        (cf. paint) : leur zone en repère local est donc leur image par
+        l'inverse du transform."""
+        rect = super().boundingRect()
+        inverse, ok = self.transform().inverted()
+        if not ok:
+            inverse = QTransform()
+        zones = [self._marker_rect(QPointF(0, 0))]
+        if self._show_pivot:
+            zones.append(self._marker_rect(self._pivot_point))
+        for zone in zones:
+            rect = rect.united(inverse.mapRect(zone))
+        return rect
+
+    def _paint_markers(self, painter, widget):
+        """Origine (rouge) et point de pivot (bleu), à la sélection.
+
+        Dessinés dans l'espace où le transform du sprite est DÉFAIT : l'origine
+        est la position de l'acteur et le pivot reste fixe, ni l'un ni l'autre ne
+        tournent ni ne changent d'échelle avec l'image. Le painter reçoit
+        l'inverse du transform avant le dessin."""
+        from ui.common.icons import scaled_pixmap
+
+        inverse, ok = self.transform().inverted()
+        painter.save()
+        if ok:
+            painter.setWorldTransform(inverse * painter.worldTransform())
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        half = _ORIGIN_ICO_SIZE / 2
+        px = scaled_pixmap("actor_origin", C.AXIS_X, _ORIGIN_ICO_SIZE,
+                           _screen_scale(painter, widget))
+        painter.drawPixmap(QRectF(-half, -half, _ORIGIN_ICO_SIZE, _ORIGIN_ICO_SIZE),
+                           px, QRectF(px.rect()))
+
+        if self._show_pivot:
+            # Anneau + croix : se distingue de la cible de l'origine même sans la
+            # couleur (daltonisme), et reste lisible sur un fond clair.
+            c = self._pivot_point
+            pen = QPen(QColor(C.AXIS_Y), 1.5)
+            pen.setCosmetic(True)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(c, half * 0.6, half * 0.6)
+            painter.drawLine(QPointF(c.x() - half, c.y()), QPointF(c.x() + half, c.y()))
+            painter.drawLine(QPointF(c.x(), c.y() - half), QPointF(c.x(), c.y() + half))
+        painter.restore()
+
     def set_mask_rects(self, rects: list):
         """Régions (coordonnées de SCÈNE) où ce sprite ne s'affiche pas —
         windows actives dont le bit OBJ est coupé. Cf. GBAScene.update_window_masks."""
@@ -332,7 +413,7 @@ class SpriteItem(QGraphicsPixmapItem):
             # les rects arrivent en coordonnées de scène.
             painter.save()
             path = QPainterPath()
-            path.addRect(self.boundingRect())
+            path.addRect(super().boundingRect())
             for r in self._mask_rects:
                 cut = QPainterPath()
                 cut.addPolygon(self.mapFromScene(r))
@@ -352,7 +433,7 @@ class SpriteItem(QGraphicsPixmapItem):
             painter.save()
             painter.setPen(QPen(ring, 1, Qt.PenStyle.SolidLine))
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            r = self.boundingRect().adjusted(0, 0, -1, -1)
+            r = super().boundingRect().adjusted(0, 0, -1, -1)
             painter.drawRect(r)
             # Petits coins pour renforcer la visibilité
             painter.setPen(QPen(ring, 2))
@@ -365,24 +446,11 @@ class SpriteItem(QGraphicsPixmapItem):
                 painter.drawPoint(int(cx), int(cy))
             painter.restore()
 
-        # Repère d'origine (point d'ancrage) : une cible du registre, affichée
-        # seulement à la sélection ; au repos, elle encombrait la scène sans
-        # apporter d'information actionnable.
+        # Repères d'origine (rouge) et de pivot (bleu) : affichés seulement à la
+        # sélection ; au repos, ils encombraient la scène sans apporter
+        # d'information actionnable.
         if self.isSelected():
-            from ui.common.icons import scaled_pixmap
-
-            sc = self.scene()
-            is_active = getattr(sc, "active_item", None) is self
-            color = "#ffffff" if is_active else C.ACCENT
-            px = scaled_pixmap("actor_origin", color, _ORIGIN_ICO_SIZE,
-                               _screen_scale(painter, widget))
-            half = _ORIGIN_ICO_SIZE / 2
-            painter.save()
-            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-            painter.drawPixmap(QRectF(-half, -half, _ORIGIN_ICO_SIZE,
-                                      _ORIGIN_ICO_SIZE), px, QRectF(px.rect()))
-            painter.restore()
+            self._paint_markers(painter, widget)
 
     def set_snap(self, snap: bool):
         self.snap = snap
@@ -442,20 +510,23 @@ class CameraItem(QGraphicsItem):
         super().__init__(parent)
         self._canvas_w = canvas_w
         self._canvas_h = canvas_h
-        # La caméra (modèle) que cet item représente — `None` = état implicite
-        # (scène sans caméra encore créée, cf. Project.ensure_scene_camera).
-        # Une scène peut en posséder plusieurs (révisé 2026-08-24) : chaque
-        # CameraItem porte donc SA référence, distincte du singleton d'avant.
+        # La caméra (modèle) que cet item représente. Une scène peut en
+        # posséder plusieurs (révisé 2026-08-24) : chaque CameraItem porte SA
+        # référence. `None` = la scène n'a pas de caméra : l'item n'est alors
+        # qu'un SUPPORT INVISIBLE à (0,0) — il porte les sprites en espace écran
+        # et l'aperçu des windows, comme le runtime les pose sans caméra — et
+        # n'offre ni icône, ni sélection, ni déplacement (rien à éditer).
         self.camera = camera
 
-        self.setFlags(
-            QGraphicsItem.GraphicsItemFlag.ItemIsMovable
-            | QGraphicsItem.GraphicsItemFlag.ItemIsSelectable
-            | QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges
-        )
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
+        if camera is not None:
+            self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
+            self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
+            self.setAcceptHoverEvents(True)
+        else:
+            self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self.setZValue(150)
         self.setPos(cam_x, cam_y)
-        self.setAcceptHoverEvents(True)
         self._hovered = False
 
         # Zone de vision — enfant non-interactif. Sa taille EST le frame de la
@@ -486,10 +557,20 @@ class CameraItem(QGraphicsItem):
         self.setToolTip(self._tooltip())
 
     def _tooltip(self) -> str:
-        name = self.camera.name if self.camera else label('common.default_paren')
+        if self.camera is None:
+            return ""
+        name = self.camera.name
         detail = label('cvitems.camera_tip', name=name, w=self._frame_w, h=self._frame_h)
-        notes = getattr(self.camera, "notes", "") if self.camera else ""
+        notes = getattr(self.camera, "notes", "")
         return notes_tooltip(notes, detail)
+
+    @property
+    def frame_w(self) -> int:
+        return self._frame_w
+
+    @property
+    def frame_h(self) -> int:
+        return self._frame_h
 
     def set_frame_size(self, w: int, h: int):
         """Redimensionne le rectangle de vue — c'est le frame écran de la
@@ -560,7 +641,8 @@ class CameraItem(QGraphicsItem):
     def shape(self) -> "QPainterPath":
         # Hit-test limité à l'icône seule — les actors en-dessous restent cliquables.
         path = QPainterPath()
-        path.addRect(QRectF(0, 0, _CAM_ICO_SIZE, _CAM_ICO_SIZE))
+        if self.camera is not None:
+            path.addRect(QRectF(0, 0, _CAM_ICO_SIZE, _CAM_ICO_SIZE))
         return path
 
     def paint(self, painter: QPainter, option, widget=None):
@@ -569,6 +651,9 @@ class CameraItem(QGraphicsItem):
         # est floue dès le zoom ×2 (le canvas s'ouvre déjà à ×2). Lissage local,
         # sans affecter le nearest-neighbor des sprites/BG ailleurs sur le canvas.
         from ui.common.icons import scaled_pixmap
+
+        if self.camera is None:
+            return   # support invisible : pas de caméra, rien à montrer
 
         # Palette locale de l'outil Caméra : une présence gris clair lisible
         # au repos, un contraste clair au survol, puis l'ambre de sélection.
@@ -711,12 +796,24 @@ class GridItem(QGraphicsItem):
         # Grille large 16px (toujours visible au-dessus de la fine)
         pen16 = QPen(QColor(255, 255, 255, 55))
         pen16.setWidth(0)
-        for x in range(0, self._w + 1, self._cell):
-            painter.setPen(pen8 if self._cell == 8 and x % 16 != 0 else pen16)
-            painter.drawLine(x, 0, x, self._h)
-        for y in range(0, self._h + 1, self._cell):
-            painter.setPen(pen8 if self._cell == 8 and y % 16 != 0 else pen16)
-            painter.drawLine(0, y, self._w, y)
+        # Seules les lignes de la zone EXPOSÉE sont tracées (au glisser d'un
+        # item, Qt ne repeint qu'une petite région), et par lots : un appel Qt
+        # par pen au lieu d'un par ligne.
+        cell = self._cell
+        exposed = option.exposedRect
+        x0 = max(0, int(exposed.left() // cell) * cell)
+        x1 = min(self._w, int(exposed.right() // cell + 1) * cell)
+        y0 = max(0, int(exposed.top() // cell) * cell)
+        y1 = min(self._h, int(exposed.bottom() // cell + 1) * cell)
+        fine, large = [], []
+        for x in range(x0, x1 + 1, cell):
+            (fine if cell == 8 and x % 16 != 0 else large).append(QLineF(x, y0, x, y1))
+        for y in range(y0, y1 + 1, cell):
+            (fine if cell == 8 and y % 16 != 0 else large).append(QLineF(x0, y, x1, y))
+        painter.setPen(pen8)
+        painter.drawLines(fine)
+        painter.setPen(pen16)
+        painter.drawLines(large)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -808,6 +905,9 @@ class GuideLine(QGraphicsLineItem):
 _T = COLLISION_TILE_SIZE  # 8
 
 _C_SOLID = QColor(255, 126, 88, 42)
+# Surbrillance de survol : neutre, pour ne pas se confondre avec un type de tuile.
+_C_HOVER = QColor(255, 255, 255, 46)
+_B_HOVER = QColor(255, 255, 255, 200)
 _C_STEEP = QColor(255, 183, 77, 48)
 _C_GENTLE = QColor(255, 211, 102, 48)
 _B_SOLID = QColor(255, 126, 88, 175)
@@ -874,6 +974,9 @@ class CollisionOverlay(QGraphicsItem):
         self._rows = 0
         self._cols = 0
         self._preview: Optional[list[tuple[int, int, int]]] = None
+        # Surbrillance sous la souris : (col, row, largeur, hauteur) en tuiles —
+        # l'empreinte que le prochain geste de peinture va couvrir.
+        self._hover: Optional[tuple[int, int, int, int]] = None
         self._cache: Optional[QPixmap] = None  # cache rendu hors-écran (map seule)
         self.setZValue(300)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
@@ -910,6 +1013,18 @@ class CollisionOverlay(QGraphicsItem):
         self._preview = tiles
         self.update()
 
+    def set_hover(self, footprint: Optional[tuple[int, int, int, int]]):
+        """Surbrillance de l'empreinte du pinceau, rognée aux bornes de la carte."""
+        if footprint is not None:
+            col, row, w, h = footprint
+            c0, r0 = max(col, 0), max(row, 0)
+            c1, r1 = min(col + w, self._cols), min(row + h, self._rows)
+            footprint = (c0, r0, c1 - c0, r1 - r0) if c1 > c0 and r1 > r0 else None
+        if footprint == self._hover:
+            return
+        self._hover = footprint
+        self.update()
+
     def scene_to_tile(self, scene_x: float, scene_y: float) -> tuple[int, int]:
         return int(scene_x // _T), int(scene_y // _T)
 
@@ -943,6 +1058,15 @@ class CollisionOverlay(QGraphicsItem):
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
             for col, row, t in self._preview:
                 self._draw_tile(painter, col, row, t, alpha_mul=1.55)
+            painter.restore()
+
+        if self._hover:
+            col, row, w, h = self._hover
+            painter.save()
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+            painter.fillRect(col * _T, row * _T, w * _T, h * _T, _C_HOVER)
+            painter.setPen(QPen(_B_HOVER, 0))
+            painter.drawRect(col * _T, row * _T, w * _T - 1, h * _T - 1)
             painter.restore()
 
     def _draw_tile(

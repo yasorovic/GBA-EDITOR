@@ -16,8 +16,8 @@ from ui.scene_manager.canvas.canvas_const import GBA_W, GBA_H
 from ui.scene_manager.canvas.canvas_scene import GBAScene
 from ui.scene_manager.canvas.canvas_items import SpriteItem, CollisionOverlay
 from ui.scene_manager.canvas.canvas_region_item import UIRegionItem
-from PyQt6.QtCore import QEvent, QPoint, QPointF, Qt, pyqtSignal
-from PyQt6.QtGui import QBrush, QColor, QMouseEvent, QPainter, QPen, QTransform, QWheelEvent
+from PyQt6.QtCore import QEvent, QPoint, QPointF, QRectF, QSizeF, Qt, pyqtSignal
+from PyQt6.QtGui import QBrush, QColor, QCursor, QMouseEvent, QPainter, QPainterPath, QPen, QPolygonF, QTransform, QWheelEvent
 from PyQt6.QtWidgets import (
     QApplication, QGraphicsView, QGraphicsItem, QGraphicsRectItem,
 )
@@ -37,6 +37,9 @@ class GBAView(QGraphicsView):
     # fire, et l'inspecteur resterait figé sur son panneau précédent. Ce signal
     # force une réévaluation à chaque clic, indépendamment de tout changement.
     left_click_settled = pyqtSignal()
+    # Émis après CHAQUE relâchement du bouton gauche traité par Qt : fin d'un
+    # glisser d'item (la caméra y écrit son cadrage final).
+    left_released = pyqtSignal()
 
     def __init__(self, scene: GBAScene, parent=None):
         super().__init__(scene, parent)
@@ -46,11 +49,19 @@ class GBAView(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
         self.setBackgroundBrush(QColor(C.BG_DEEP))
+        # Le fond (grille de points) est mis en cache : au pan, Qt décale le
+        # cache et ne redessine que la bande découverte.
+        self.setCacheMode(QGraphicsView.CacheModeFlag.CacheBackground)
+        self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.MinimalViewportUpdate)
         # Focus clavier : nécessaire pour que les raccourcis du canvas (contexte
         # WidgetWithChildren de SceneEditor) se déclenchent quand la vue est active.
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._zoom = 2.0
         self._apply_zoom()
+        # Le canvas change de taille (scène, fond) : la zone défilable suit.
+        scene.sceneRectChanged.connect(lambda _rect: self._update_pan_area())
+        # Le voile hors-caméra dépend de la sélection : repeindre toute la vue.
+        scene.selectionChanged.connect(lambda: self.viewport().update())
         self.setAcceptDrops(True)
         # Outil actif — initialisé après import (évite la circularité)
         self._active_tool: "BaseTool | None" = None
@@ -102,10 +113,35 @@ class GBAView(QGraphicsView):
             away /= 1.5
         left = int(rect.left() // step) * step
         top = int(rect.top() // step) * step
-        for x in range(left, int(rect.right()) + 1, step):
-            for y in range(top, int(rect.bottom()) + 1, step):
-                painter.drawPoint(x, y)
+        # Un seul appel Qt pour tous les points : une boucle drawPoint en Python
+        # ralentissait le rafraîchissement pendant le pan.
+        points = QPolygonF([
+            QPointF(x, y)
+            for x in range(left, int(rect.right()) + 1, step)
+            for y in range(top, int(rect.bottom()) + 1, step)
+        ])
+        painter.drawPoints(points)
         painter.restore()
+
+    def drawForeground(self, painter: QPainter, rect):
+        """Assombrit (noir 50 %) le canvas HORS du cadre de la caméra sélectionnée.
+
+        Peint ici, au premier plan de la VUE, plutôt que par un item : un item
+        couvrant tout le canvas devrait être invalidé à chaque pas de la caméra,
+        alors que ce voile ne change que dans la bande que la caméra découvre."""
+        sc = self.scene()
+        if not isinstance(sc, GBAScene):
+            return
+        cameras = [c for c in sc.camera_items() if c.isSelected() and c.camera is not None]
+        if not cameras:
+            return
+        shade = QPainterPath()
+        shade.addRect(sc.sceneRect().intersected(rect))
+        for cam in cameras:
+            hole = QPainterPath()
+            hole.addRect(QRectF(cam.pos(), QSizeF(cam.frame_w, cam.frame_h)))
+            shade = shade.subtracted(hole)
+        painter.fillPath(shade, QColor(0, 0, 0, 128))
 
     def leaveEvent(self, e):
         if self._snap_preview:
@@ -138,10 +174,39 @@ class GBAView(QGraphicsView):
         else:
             super().dropEvent(e)
 
+    def _update_pan_area(self):
+        """Zone défilable de la VUE : le canvas plus une marge d'une demi-fenêtre.
+
+        Sans marge, la zone défilable est celle de la scène (le canvas) : dès
+        qu'il tient dans la fenêtre — zoom faible ou petite scène — les barres
+        n'ont aucune plage et le pan au clic-central n'a rien à déplacer. Posée
+        sur la VUE, la marge laisse `GBAScene.sceneRect()` intact : c'est lui
+        qui borne la zone active du canvas (clics, grille, fond)."""
+        scene = self.scene()
+        if scene is None:
+            return
+        zoom = max(self._zoom, 0.5)
+        mx = self.viewport().width() / zoom * 0.5
+        my = self.viewport().height() / zoom * 0.5
+        self.setSceneRect(scene.sceneRect().adjusted(-mx, -my, mx, my))
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._update_pan_area()
+
     def _apply_zoom(self):
+        # Le point de la scène sous le curseur (ou au centre de la vue) reste à
+        # sa place : changer la zone défilable déplace sinon le contenu.
+        cursor = self.viewport().mapFromGlobal(QCursor.pos())
+        anchor = cursor if self.viewport().rect().contains(cursor)             else self.viewport().rect().center()
+        pinned = self.mapToScene(anchor)
+        self._update_pan_area()
         t = QTransform()
         t.scale(self._zoom, self._zoom)
         self.setTransform(t)
+        shift = self.mapFromScene(pinned) - anchor
+        self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() + shift.x())
+        self.verticalScrollBar().setValue(self.verticalScrollBar().value() + shift.y())
         self.zoom_changed.emit(self._zoom)
 
     def wheelEvent(self, event: QWheelEvent):
@@ -150,6 +215,7 @@ class GBAView(QGraphicsView):
         self._apply_zoom()
 
     def fit(self, w: int = GBA_W, h: int = GBA_H):
+        self._update_pan_area()
         self.fitInView(0, 0, w, h, Qt.AspectRatioMode.KeepAspectRatio)
         self._zoom = self.transform().m11()
         self.zoom_changed.emit(self._zoom)
@@ -311,6 +377,8 @@ class GBAView(QGraphicsView):
             e.accept()
             return
         super().mouseReleaseEvent(e)
+        if _btn == Qt.MouseButton.LeftButton:
+            self.left_released.emit()
 
     # ── Alt+glisser = dupliquer ───────────────────────────────────
     # La copie naît AU FRANCHISSEMENT du seuil, sur place, puis c'est elle que

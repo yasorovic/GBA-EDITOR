@@ -285,7 +285,7 @@ def ui_image_sprites(p) -> list:
         name = getattr(im, "sprite_name", "") or ""
         if not name or name in seen:
             continue
-        sprite = p.get_sprite(name)
+        sprite = p.get_buildable_sprite(name)
         if sprite is None or not sprite.asset:
             continue
         seen.add(name)
@@ -309,7 +309,7 @@ def scene_ui_images(p, scene) -> list[dict]:
     index = {im.name: i for i, (_l, im) in enumerate(p.all_images())}
     out: list[dict] = []
     for lay, im in p.scene_ui_images(scene):
-        sprite = p.get_sprite(getattr(im, "sprite_name", "") or "")
+        sprite = p.get_buildable_sprite(getattr(im, "sprite_name", "") or "")
         if sprite is None or not sprite.asset or im.name not in index:
             continue
         frames = count_frames(p, sprite)

@@ -136,6 +136,9 @@ typedef struct OamEntry {
        plafonne un objet à 64 px. */
     u8 frame_w, frame_h;
     u8 auto_dir;           /* 1 = recalcule dir_x/dir_y depuis vx/vy chaque frame */
+    s8 face_x;             /* dernier dir_x NON nul vu par le tick d'animation : le côté vers lequel
+                              l'acteur REGARDE. `dir_x` retombe à 0 à l'arrêt ou en montée droite ;
+                              c'est ce côté-là que le repli de direction retient (cf. gen_sprite) */
     /* Registres OAM. `visible` = 0 cache l'objet ; `pal_bank`, `obj_mode` et
        `priority` sont les trois registres d'attr0/attr2, tous modifiables par
        script. `priority` : ordre d'affichage face aux BG layers (attr2 bits
@@ -163,6 +166,11 @@ typedef struct OamEntry {
        le transform monde de l'acteur et le transform local ci-dessus gardent
        leur valeur, mais aucune matrice n'est écrite et rien ne les affiche. */
     s8 affine_slot;
+    /* Point de pivot du sprite, pixels, depuis le CENTRE du cadre ((0,0) = le
+       centre). Rotation, échelle et flip s'exercent autour de lui
+       (self.sprite_pivot). Sur 8 bits : un objet plafonne à 64 px, ±127 suffit
+       largement et l'entrée n'y gagne que 2 octets (36 → 38). */
+    s8 pivot_x, pivot_y;
 } OamEntry;
 
 typedef struct Actor {

@@ -23,7 +23,8 @@ def test_interface_panel_defers_language_until_restart(qapp, tmp_path, monkeypat
     assert label("settings.window_title") == "Settings"
     # Even a panel constructed after changing the preference stays in English.
     shortcuts = ShortcutsPanel()
-    assert shortcuts._table.item(0, shortcuts._COL_ACTION).text() == "New project"
+    assert "file.new" in shortcuts._edits
+    assert shortcuts._binding_label("file.new") == "New project"
     # The startup entry point applies the persisted preference.
     catalog.set_language(prefs.interface_language())
     assert label("settings.window_title") == "Réglages"
@@ -34,9 +35,8 @@ def test_shortcuts_table_is_french(qapp):
     catalog.set_language("fr")
     panel = ShortcutsPanel()
 
-    assert panel._table.item(0, panel._COL_CONTEXT).text() == "Global"
-    assert panel._table.item(0, panel._COL_ACTION).text() == "Nouveau projet"
-    # Deux raccourcis système (Undo/Redo) sont intercalés après Save.
-    assert panel._table.item(7, panel._COL_CONTEXT).text() == "Canvas de scène"
-    assert panel._table.item(7, panel._COL_ACTION).text() == "Outil de sélection"
+    assert panel._context_label("global") == "Raccourcis communs"
+    assert panel._binding_label("file.new") == "Nouveau projet"
+    assert panel._context_label("scene_canvas") == "Canvas de scène"
+    assert panel._binding_label("canvas.tool_select") == "Outil de sélection"
     catalog.set_language("")

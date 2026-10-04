@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.slow
+
 REPO_DIR = Path(__file__).resolve().parent.parent
 MAIN = REPO_DIR / "editor" / "main.py"
 

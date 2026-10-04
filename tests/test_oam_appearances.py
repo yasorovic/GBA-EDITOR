@@ -74,6 +74,8 @@ def test_deux_apparences_partagent_la_direction_et_ont_chacune_leurs_tables():
     assert code.count("if(g_oam_entries[1].auto_dir") == 1          # commun, une seule fois
     assert "switch(g_oam_entries[1].appearance)" in code
     assert "sprite_Hero_state_start" in code and "sprite_Hurt_state_start" in code
-    # un `goto` par apparence : les étiquettes doivent différer
-    assert "goto _af4_0;" in code and "goto _af4_1;" in code
-    assert "_af4_0:;" in code and "_af4_1:;" in code
+    # Chaque apparence choisit sa direction dans SES tables (plus d'étiquette `goto` : le
+    # repli est un `if` imbriqué) ; le côté regardé, lui, est mis à jour une seule fois.
+    assert "goto" not in code
+    assert code.count("int _hd=") == 2
+    assert code.count(".face_x=g_actors[4].dir_x;") == 1

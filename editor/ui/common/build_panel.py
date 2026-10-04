@@ -2,6 +2,7 @@
 
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
+from core.keybindings import get_keybindings
 import re
 from pathlib import Path
 
@@ -481,7 +482,7 @@ class BuildPanel(QWidget):
 
         self.btn_build = QPushButton(label('build.build_run'))
         self.btn_build.setToolTip(tooltip(
-            title=label('win.build_run_title'), shortcut="F5", body=label('win.build_run_tip')))
+            title=label('win.build_run_title'), shortcut=get_keybindings().resolve("game.build"), body=label('win.build_run_tip')))
         self.btn_build.setEnabled(False)
         self.btn_build.setVisible(False)
 

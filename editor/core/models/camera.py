@@ -44,6 +44,9 @@ ARCHITECTURE.md « Windows — le pochoir » et ROADMAP.md (Caméra2D).
 from dataclasses import dataclass
 from typing import Optional
 
+from core.models.field_value import (
+    FieldValue, Raw, make_resolver, var_names_from_project,
+)
 from core.models.resource import Resource
 
 # Modes — QUI écrit la position de la caméra pendant la frame.
@@ -62,15 +65,15 @@ class Camera(Resource):
     # Cadrage appliqué À L'ACTIVATION (démarrage de scène ou camera.switch).
     # Une caméra fixe ne bouge plus ensuite ; une caméra en suivi se recale
     # dans la frame même.
-    x: int = 0
-    y: int = 0
+    x: Raw = 0
+    y: Raw = 0
     # Taille du rendu à l'ÉCRAN (WIN0), en pixels — 240×160 = plein écran, la
     # window matérielle reste éteinte (comportement identique à avant que ce
     # champ existe). Plus petit que l'écran → `camera_switch()` pose WIN0 à
     # (0,0,frame_w,frame_h) et l'active. Ancré à l'origine écran : pas de
     # frame_x/frame_y, non demandé.
-    frame_w: int = 240
-    frame_h: int = 160
+    frame_w: Raw = 240
+    frame_h: Raw = 160
     mode: str = CAM_FIXED
     # Acteur suivi, par NOM — résolu dans les acteurs de SA scène (une caméra
     # n'en possède qu'une). Un nom qui n'y correspond à aucun acteur laisse la
@@ -78,16 +81,16 @@ class Camera(Resource):
     follow_target: str = ""
     # Zone morte : la caméra ne bouge que lorsque la cible s'éloigne de plus de
     # ça du bord de l'écran. 0 = recentrage permanent.
-    margin_x: int = 40
-    margin_y: int = 20
+    margin_x: Raw = 40
+    margin_y: Raw = 20
     # Bornes du monde en pixels, appliquées à l'activation ; None = axe
     # illimité. La zone scrollable est un RECTANGLE : l'origine (bounds_x/y,
     # presque toujours 0) et la taille (bounds_w/h). Un script peut les
     # redéfinir ensuite (camera.bound), et une réactivation les repose.
-    bounds_x: Optional[int] = None
-    bounds_y: Optional[int] = None
-    bounds_w: Optional[int] = None
-    bounds_h: Optional[int] = None
+    bounds_x: Optional[Raw] = None
+    bounds_y: Optional[Raw] = None
+    bounds_w: Optional[Raw] = None
+    bounds_h: Optional[Raw] = None
     # Script Lua de la caméra, mêmes points d'entrée qu'une scène. Les réglages
     # déclaratifs ci-dessus sont TOUJOURS calculés avant qu'il ne s'exécute :
     # l'usage peut donc être purement déclaratif, purement scripté, ou les
@@ -96,6 +99,22 @@ class Camera(Resource):
     # Note libre de l'auteur — éditeur uniquement, JAMAIS compilée. Même champ
     # que l'Actor et la Scène, et ce que le survol de l'icône caméra affiche.
     notes: str = ""
+
+    def px(self, name: str, project=None) -> int:
+        """Valeur EN PIXELS du champ `name` (`x`, `frame_w`, `bounds_x`…).
+
+        Ces champs sont stockés sous la forme sérialisable d'un `FieldValue`
+        (px = `int` nu, tiles = `{"unit": "t", "n": N}`, constante du projet =
+        `{"var": <id>, "src": "const"}`) : tout lecteur qui veut des pixels
+        passe par ici. Jamais de variable globale — la table des caméras est
+        figée à la compilation (`const Camera g_cam_table[]`), l'éditeur ne
+        propose donc que px / tile / constante. La constante se résout ICI en
+        sa valeur (`project` requis pour la lire) : `static const int CONST_X`
+        n'est pas une expression constante C, elle ne peut pas entrer dans
+        l'initialiseur de la table. `None` (bornes illimitées) → 0."""
+        raw = getattr(self, name) or 0
+        return FieldValue.parse(raw, var_names_from_project(project)).px(
+            make_resolver(project))
 
     def mode_id(self) -> int:
         return CAM_MODE_IDS.get(self.mode, 0)

@@ -34,7 +34,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.history import Command, get_history, SetFieldCmd
-from core.keybindings import bind
+from core.keybindings import bind, get_keybindings
 from core.selection_bus import get_bus
 from core.scene_graph_state import SceneGraphState
 from scripting.scene_graph import SceneGraph, node_diagnostics, scene_graph
@@ -547,12 +547,12 @@ class SceneGraphView(QWidget):
         bind("scene.group", self._sc_group)
         self._graph_shortcuts: list[QShortcut] = []
         for binding_id, callback in (
-            ("scene.graph_fit", self._focus_graph),
-            ("scene.graph_zoom_reset", lambda: self._view.set_zoom(1.0)),
-            ("scene.graph_zoom_in", lambda: self._view.set_zoom(self._view._zoom * 1.15)),
-            ("scene.graph_zoom_out", lambda: self._view.set_zoom(self._view._zoom / 1.15)),
+            ("common.fit", self._focus_graph),
+            ("common.zoom_reset", lambda: self._view.set_zoom(1.0)),
+            ("common.zoom_in", lambda: self._view.set_zoom(self._view._zoom * 1.15)),
+            ("common.zoom_out", lambda: self._view.set_zoom(self._view._zoom / 1.15)),
             ("scene.graph_toggle_minimap", self._toggle_minimap),
-            ("scene.graph_deselect", self._scene.clearSelection),
+            ("common.cancel", self._scene.clearSelection),
             ("scene.graph_search", self._open_scene_search),
         ):
             shortcut = QShortcut(QKeySequence(), self)
@@ -593,7 +593,7 @@ class SceneGraphView(QWidget):
         # même widget de zoom, ancré à gauche, dans les deux vues. Le graphe
         # n'a pas de dimensions canvas/curseur pixel à afficher à droite.
         bar = CanvasTopBar(
-            tooltip(title=label("scncanvas.graph_fit"), shortcut="F"),
+            tooltip(title=label("scncanvas.graph_fit"), shortcut=get_keybindings().resolve("common.fit")),
             show_coords=False,
         )
         bar.zoom_step_asked.connect(self._zoom_step)
@@ -602,7 +602,7 @@ class SceneGraphView(QWidget):
 
         self._btn_minimap = bar.add_toggle(
             "view_minimap", tooltip(
-                title=label("scncanvas.graph_minimap"), shortcut="H",
+                title=label("scncanvas.graph_minimap"), shortcut=get_keybindings().resolve("scene.graph_toggle_minimap"),
             ), self._set_minimap_visible)
         self._btn_minimap.setChecked(True)
         self._btn_notes = bar.add_toggle(
@@ -613,7 +613,7 @@ class SceneGraphView(QWidget):
         self._btn_notes.setChecked(True)
         self._btn_search = bar.add_toggle(
             "search", tooltip(
-                title=label("scncanvas.graph_search"), shortcut="Ctrl+F",
+                title=label("scncanvas.graph_search"), shortcut=get_keybindings().resolve("scene.graph_search"),
                 body=label("scncanvas.graph_search_tip"),
             ), self._set_scene_search_visible)
 

@@ -17,7 +17,7 @@ d'ici). `region_ink_bank`/`region_is_composited` sont relus par l'éditeur
 from __future__ import annotations
 
 from core.project import Project
-from core.validator import build_error, build_warning
+from core.diagnostic import build_error, build_warning
 from core.models.ui_region import region_fill_container
 from codegen.c_names import sym as c_sym
 from codegen.oam_alloc import layout_obj_budget_resolved

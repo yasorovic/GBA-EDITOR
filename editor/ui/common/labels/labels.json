@@ -69,19 +69,16 @@
     "settings.interface.language": {
       "text": "Language"
     },
+    "settings.interface.scale": {
+      "text": "Scale"
+    },
+    "settings.interface.scale_restart": {
+      "text": "Scale changes apply after restarting {app_name}."
+    },
     "settings.interface.language_restart": {
       "text": "Language changes apply after restarting {app_name}."
     },
-    "settings.shortcuts.hint": { "text": "A click in a key field, then typing, sets the new combination. Two actions on the same key are flagged in red. Both stay active, only the first declared in the context responds." },
-    "settings.shortcuts.col_context": {
-      "text": "Context"
-    },
-    "settings.shortcuts.col_action": {
-      "text": "Action"
-    },
-    "settings.shortcuts.col_shortcut": {
-      "text": "Shortcut"
-    },
+    "settings.shortcuts.hint": { "text": "Click a field, then press the new combination. Conflicts are shown in red." },
     "settings.shortcuts.reset_to": {
       "text": "Reset to {default}"
     },
@@ -92,7 +89,7 @@
       "text": "Reset all to defaults"
     },
     "settings.shortcuts.context.global": {
-      "text": "Global"
+      "text": "Common shortcuts"
     },
     "settings.shortcuts.context.scene_canvas": {
       "text": "Scene canvas"
@@ -109,26 +106,44 @@
     "settings.shortcuts.action.scene.group": {
       "text": "Group selected scenes"
     },
-    "settings.shortcuts.action.scene.graph_fit": {
-      "text": "Fit scene graph"
-    },
-    "settings.shortcuts.action.scene.graph_zoom_reset": {
-      "text": "Reset graph zoom"
-    },
-    "settings.shortcuts.action.scene.graph_zoom_in": {
-      "text": "Zoom in scene graph"
-    },
-    "settings.shortcuts.action.scene.graph_zoom_out": {
-      "text": "Zoom out scene graph"
-    },
     "settings.shortcuts.action.scene.graph_toggle_minimap": {
       "text": "Show / hide graph minimap"
     },
-    "settings.shortcuts.action.scene.graph_deselect": {
-      "text": "Deselect graph"
-    },
     "settings.shortcuts.action.scene.graph_search": {
       "text": "Search scene in graph"
+    },
+    "settings.shortcuts.action.common.copy": {
+      "text": "Copy"
+    },
+    "settings.shortcuts.action.common.paste": {
+      "text": "Paste"
+    },
+    "settings.shortcuts.action.common.duplicate": {
+      "text": "Duplicate"
+    },
+    "settings.shortcuts.action.common.delete": {
+      "text": "Delete selection"
+    },
+    "settings.shortcuts.action.common.cancel": {
+      "text": "Cancel / deselect"
+    },
+    "settings.shortcuts.action.common.fit": {
+      "text": "Fit to view"
+    },
+    "settings.shortcuts.action.common.zoom_in": {
+      "text": "Zoom in"
+    },
+    "settings.shortcuts.action.common.zoom_out": {
+      "text": "Zoom out"
+    },
+    "settings.shortcuts.action.common.zoom_reset": {
+      "text": "Reset zoom (100 %)"
+    },
+    "settings.shortcuts.display.wheel_zoom": {
+      "text": "Zoom the view"
+    },
+    "settings.shortcuts.display.middle_pan": {
+      "text": "Pan the view"
     },
     "settings.shortcuts.display.undo": {
       "text": "Undo"
@@ -172,35 +187,14 @@
     "settings.shortcuts.action.canvas.tool_ui": {
       "text": "UI tool"
     },
-    "settings.shortcuts.action.canvas.fit": {
-      "text": "Fit view"
-    },
-    "settings.shortcuts.action.canvas.cancel": {
-      "text": "Cancel / deselect"
-    },
-    "settings.shortcuts.action.canvas.delete": {
-      "text": "Delete selection"
-    },
-    "settings.shortcuts.action.canvas.duplicate": {
-      "text": "Duplicate selection"
-    },
     "common.copy": {
       "text": "Copy"
-    },
-    "settings.shortcuts.action.canvas.paste": {
-      "text": "Paste"
     },
     "settings.shortcuts.action.sprite.flip_h": {
       "text": "Flip brush horizontally"
     },
     "settings.shortcuts.action.sprite.flip_v": {
       "text": "Flip brush vertically"
-    },
-    "settings.shortcuts.action.sprite.duplicate_frame": {
-      "text": "Duplicate frame"
-    },
-    "settings.shortcuts.action.sprite.delete_frame": {
-      "text": "Delete frame"
     },
     "settings.shortcuts.action.sound.play_pause": {
       "text": "Play / pause preview"
@@ -1438,6 +1432,11 @@
     "comped.offset": {
       "text": "Offset"
     },
+    "comped.pivot": { "text": "Pivot point" },
+    "comped.pivot_x_title": { "text": "Pivot point X" },
+    "comped.pivot_y_title": { "text": "Pivot point Y" },
+    "comped.pivot_x_tip": { "text": "Sets the horizontal position of the pivot, in pixels from the centre of the sprite frame. 0, 0 is the centre. Rotation, scale and flip happen around this point, and it stays fixed on screen. It does not move the sprite: the offset does." },
+    "comped.pivot_y_tip": { "text": "Sets the vertical position of the pivot, in pixels from the centre of the sprite frame. 0, 0 is the centre. Rotation, scale and flip happen around this point, and it stays fixed on screen. It does not move the sprite: the offset does." },
     "comped.collision_solid": {
       "text": "Solid  (unchecked = Trigger)"
     },
@@ -1495,9 +1494,9 @@
     "comped.affine": {
       "text": "Affine transform"
     },
-    "comped.affine_tip": { "text": "Reserves one of the 32 affine slots for this sprite, even at identity. The sprite can then rotate and scale, and the three local settings below apply on top of the transform of the actor." },
-    "comped.scale_x_tip": { "text": "Sets the local X scale, multiplied by the scale of the actor." },
-    "comped.scale_y_tip": { "text": "Sets the local Y scale, multiplied by the scale of the actor." },
+    "comped.affine_tip": { "text": "Reserves one of the 32 affine slots for this sprite, even at identity. The sprite can then rotate and scale around the centre of its frame, and the three local settings below apply on top of the transform of the actor. Ticking the box centres the actor on the frame: the offset becomes minus half the frame size, and collision boxes still at 0, 0 follow." },
+    "comped.scale_x_tip": { "text": "Sets the local X scale, multiplied by the scale of the actor. The sprite scales around the pivot point. A negative value mirrors it around that point." },
+    "comped.scale_y_tip": { "text": "Sets the local Y scale, multiplied by the scale of the actor. The sprite scales around the pivot point. A negative value mirrors it around that point." },
     "comped.rotation_tip": { "text": "Sets the local rotation in degrees, added to the rotation of the actor." },
     "comped.offset_x_tip": { "text": "Sets the horizontal offset from the actor, in pixels. The sprite is drawn at the position of the actor plus this offset, and it turns and scales with the actor." },
     "comped.offset_y_tip": { "text": "Sets the vertical offset from the actor, in pixels. The sprite is drawn at the position of the actor plus this offset, and it turns and scales with the actor." },
@@ -1507,7 +1506,6 @@
     "comped.anim_speed_title": { "text": "Animation speed" },
     "comped.anim_speed_note": { "text": "Other states keep their own speed, set in the Sprite Editor." },
     "comped.affine_note": { "text": "When off, the rotation and scale of the actor can still be read and written from scripts, but nothing draws them." },
-    "comped.affine_required": { "text": "Requires “Affine transform”." },
     "comped.scale_x_title": { "text": "Local scale X" },
     "comped.scale_y_title": { "text": "Local scale Y" },
     "comped.rotation_title": { "text": "Local rotation" },
@@ -1811,6 +1809,15 @@
     },
     "win.saved": {
       "text": "Project saved"
+    },
+    "win.close_unsaved_title": {
+      "text": "Unsaved changes"
+    },
+    "win.close_unsaved": {
+      "text": "The project has changes that are not saved yet.\n\nSave them before quitting?"
+    },
+    "win.close_discard": {
+      "text": "Don't save"
     },
     "win.close_save_failed_title": {
       "text": "Project not saved"
@@ -2521,6 +2528,8 @@
     "valfield.tiles": {
       "text": "Tiles"
     },
+    "valfield.number_int": { "text": "Integer value" },
+    "valfield.number_float": { "text": "Decimal value" },
     "wdg.active": {
       "text": "Active"
     },
@@ -2612,9 +2621,6 @@
     },
     "caminsp.new_camera_script": {
       "text": "New camera script"
-    },
-    "caminsp.no_camera_yet": {
-      "text": "No camera yet. Any change below creates one."
     },
     "caminsp.world_bounds": {
       "text": "World bounds"
@@ -2988,7 +2994,7 @@
     },
     "langcard.remove_tip": { "text": "Its translation file is kept on disk." },
     "caminsp.starting_camera_title": { "text": "Starting camera" },
-    "caminsp.starting_camera_note": { "text": "This choice does not depend on the camera shown above. (default) is fixed at the origin, with no bounds and no target." },
+    "caminsp.starting_camera_note": { "text": "This choice does not depend on the camera shown above. (none) keeps the view fixed at the origin, with no bounds and no target." },
     "caminsp.follow_title": { "text": "Followed actor" },
     "caminsp.prefill_note": { "text": "The values stay editable afterwards." },
     "langcard.code_title": { "text": "Language code" },
@@ -3282,9 +3288,6 @@
     "dyninsp.ui_element": {
       "text": "UI element"
     },
-    "common.default_paren": {
-      "text": "(default)"
-    },
     "txtinsp.usage_unknown": {
       "text": "scripts could not be parsed (usage unknown)"
     },
@@ -3381,23 +3384,14 @@
       "text": "Select"
     },
     "cvtool.select_tip": { "text": "Selects and moves actors or interface elements on the canvas." },
-    "cvtool.shortcut_select": {
-      "text": "S"
-    },
     "cvtool.add_actor": {
       "text": "Add actor"
     },
     "cvtool.add_actor_tip": { "text": "A click on the canvas places a new actor." },
-    "cvtool.shortcut_add": {
-      "text": "A"
-    },
     "cvtool.eraser": {
       "text": "Erase actor"
     },
     "cvtool.eraser_tip": { "text": "A click on an actor removes it from the active scene." },
-    "cvtool.shortcut_erase": {
-      "text": "E"
-    },
     "cvtool.8_8_px_brush": {
       "text": "8×8 px brush"
     },
@@ -3443,6 +3437,9 @@
     },
     "wdg.add": {
       "text": "Add"
+    },
+    "wdg.remove": {
+      "text": "Remove"
     },
     "wdg.search": {
       "text": "Search"
@@ -4328,6 +4325,15 @@
     "vartbl.rename_tip": { "text": "Renames this variable and updates its references in scripts and text." },
     "vartbl.type_title": { "text": "Variable type" },
     "vartbl.value_title": { "text": "Initial value" },
+    "vartbl.type_int_tip": { "text": "Whole number from -2,147,483,648 to 2,147,483,647 (32 bits). The general-purpose type." },
+    "vartbl.type_bool_tip": { "text": "True or false (0 or 1). Takes one byte in memory and a single bit in a save." },
+    "vartbl.type_u8_tip": { "text": "Whole number from 0 to 255 (8 bits, no sign). Wraps around past the limits." },
+    "vartbl.type_u16_tip": { "text": "Whole number from 0 to 65,535 (16 bits, no sign). Wraps around past the limits." },
+    "vartbl.type_s8_tip": { "text": "Whole number from -128 to 127 (8 bits, signed). Wraps around past the limits." },
+    "vartbl.type_s16_tip": { "text": "Whole number from -32,768 to 32,767 (16 bits, signed). Wraps around past the limits." },
+    "vartbl.type_string_tip": { "text": "Text shown by text.draw. Held in the game as an entry of the text table, so it can be drawn and compared but not edited character by character." },
+    "vartbl.type_string_note": { "text": "A global of this type cannot be saved." },
+    "vartbl.string_value_tip": { "text": "The text, or the key of an existing text of the project." },
     "datagrid.add_column_tip": { "text": "Adds an integer column to this table." },
     "datagrid.column_title": { "text": "Table column" },
     "datagrid.column_tip": { "text": "A double-click on a name renames it. A right-click changes its type or removes it." },
@@ -4373,18 +4379,13 @@
     "hints.mouse.double_click": { "text": "Double click" },
     "hints.mouse.drop": { "text": "Drop" },
     "hints.header": { "text": "Shortcuts" },
-    "hints.zoom": { "text": "Zooms the view" },
     "hints.pan": { "text": "Pans the view" },
-    "hints.fit": { "text": "Fits the content to the view" },
     "hints.scene.select_item": { "text": "Selects an actor or an element" },
     "hints.scene.extend_selection": { "text": "Toggles an item in the selection" },
     "hints.scene.move_or_rubber_band": { "text": "Moves, or draws a selection rectangle" },
     "hints.scene.duplicate_drag": { "text": "Duplicates while dragging" },
     "hints.scene.actor_menu": { "text": "Opens the actor menu" },
     "hints.scene.nudge": { "text": "Nudges by 1 px (Shift: 8 px)" },
-    "hints.scene.delete": { "text": "Deletes the selection" },
-    "hints.scene.duplicate": { "text": "Duplicates the selection" },
-    "hints.scene.copy_paste": { "text": "Copies and pastes the selection" },
     "hints.scene.place_actor": { "text": "Places an actor on the grid" },
     "hints.scene.erase_actor": { "text": "Deletes the actor under the cursor" },
     "hints.scene.paint_solid": { "text": "Paints solid collision tiles" },
@@ -4407,9 +4408,6 @@
     "hints.graph.group": { "text": "Groups the selected scenes" },
     "hints.graph.search": { "text": "Searches for a scene" },
     "hints.graph.minimap": { "text": "Shows or hides the minimap" },
-    "hints.graph.deselect": { "text": "Clears the selection" },
-    "hints.graph.fit": { "text": "Centers the selection, or fits the whole graph" },
-    "hints.graph.zoom_reset": { "text": "Resets the zoom to 100%" },
     "hints.bg.paint": { "text": "Paints the active palette on tiles" },
     "hints.bg.fill": { "text": "Fills the connected area with the active palette" },
     "hints.bg.paint_rect": { "text": "Paints a rectangle with the active palette" },
@@ -4422,7 +4420,6 @@
     "hints.bg.snap_grid": { "text": "Snaps to the 8×8 grid" },
     "hints.bg.key_animated_drag": { "text": "Drag an animation" },
     "hints.bg.move_animated": { "text": "Moves a placed animated background" },
-    "hints.bg.delete_animated": { "text": "Removes the selected animated background" },
     "hints.sprite.title_brush": { "text": "Brush" },
     "hints.sprite.title_pick": { "text": "Tile selection" },
     "hints.sprite.title_readonly": { "text": "Mirrored direction (read only)" },
@@ -4431,8 +4428,6 @@
     "hints.sprite.flip_h": { "text": "Flips the brush horizontally" },
     "hints.sprite.flip_v": { "text": "Flips the brush vertically" },
     "hints.sprite.pick_up": { "text": "Picks up placed tiles as a brush" },
-    "hints.sprite.duplicate_frame": { "text": "Duplicates the frame" },
-    "hints.sprite.delete_frame": { "text": "Deletes the frame" },
     "hints.sound.title": { "text": "Music graph" },
     "hints.sound.select": { "text": "Selects a state or a transition" },
     "hints.sound.move_or_rubber_band": { "text": "Moves the selected states, or draws a selection rectangle" },
@@ -4441,7 +4436,6 @@
     "hints.sound.key_arrow_end_drag": { "text": "Drag an arrow end" },
     "hints.sound.rewire": { "text": "Rewires the transition to another state" },
     "hints.sound.drop_track": { "text": "Assigns the track to a state, or creates one" },
-    "hints.sound.delete": { "text": "Deletes the selection" },
     "hints.sound.play_pause": { "text": "Plays or pauses" },
     "hints.palette.title": { "text": "Palette" },
     "hints.palette.select": { "text": "Selects a color" },
@@ -4450,8 +4444,6 @@
     "hints.palette.menu": { "text": "Opens the color menu" },
     "hints.palette.move": { "text": "Moves the selection" },
     "hints.palette.extend": { "text": "Extends the selection" },
-    "hints.palette.copy_paste": { "text": "Copies and pastes the color as hex" },
-    "hints.palette.clear": { "text": "Clears the selected colors" },
     "hints.palette.edit_hex": { "text": "Jumps to the HEX field" }
   }
 }

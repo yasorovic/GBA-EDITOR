@@ -246,7 +246,7 @@ class GBAScene(QGraphicsScene):
 
     # ── Caméra ────────────────────────────────────────────────────
 
-    def setup_camera(self, cam_x: int = 0, cam_y: int = 0, camera=None):
+    def setup_camera(self, cam_x: int = 0, cam_y: int = 0, camera=None, project=None):
         """(Re)crée l'item de la caméra DE DÉMARRAGE — celle qui porte les
         sprites en espace écran et l'aperçu des windows. `camera` est l'objet
         modèle qu'elle représente (`None` = état implicite)."""
@@ -259,15 +259,15 @@ class GBAScene(QGraphicsScene):
                     if it.scene() is None:
                         self.addItem(it)
             self.removeItem(self._camera)
-        fw = camera.frame_w if camera else GBA_W
-        fh = camera.frame_h if camera else GBA_H
+        fw = camera.px('frame_w', project) if camera else GBA_W
+        fh = camera.px('frame_h', project) if camera else GBA_H
         self._camera = CameraItem(self._canvas_w, self._canvas_h, cam_x, cam_y,
                                   frame_w=fw, frame_h=fh, camera=camera)
         self.addItem(self._camera)
         for it in self._sprite_items:
             self.sync_sprite_space(it)
 
-    def setup_extra_cameras(self, cameras: list):
+    def setup_extra_cameras(self, cameras: list, project=None):
         """(Re)crée les items des AUTRES caméras de la scène — rectangles
         déplaçables/sélectionnables comme la caméra de démarrage, mais sans
         rôle dans le rendu écran (pas de sprites, pas de windows) : la scène
@@ -276,8 +276,9 @@ class GBAScene(QGraphicsScene):
             self.removeItem(it)
         self._extra_cameras = []
         for cam in cameras:
-            it = CameraItem(self._canvas_w, self._canvas_h, cam.x, cam.y,
-                            frame_w=cam.frame_w, frame_h=cam.frame_h, camera=cam)
+            it = CameraItem(self._canvas_w, self._canvas_h, cam.px('x', project), cam.px('y', project),
+                            frame_w=cam.px('frame_w', project),
+                            frame_h=cam.px('frame_h', project), camera=cam)
             self.addItem(it)
             self._extra_cameras.append(it)
 
@@ -388,6 +389,7 @@ class GBAScene(QGraphicsScene):
         rotation: float = 0.0,
         flip_h: bool = False, flip_v: bool = False,
         resolver=None, placeholder: bool = False,
+        pivot_x: float = 0.0, pivot_y: float = 0.0, show_pivot: bool = False,
     ) -> SpriteItem:
         item = SpriteItem(
             pixmap, actor,
@@ -397,6 +399,7 @@ class GBAScene(QGraphicsScene):
             scale_x=scale_x, scale_y=scale_y,
             rotation=rotation, flip_h=flip_h, flip_v=flip_v,
             resolver=resolver, placeholder=placeholder,
+            pivot_x=pivot_x, pivot_y=pivot_y, show_pivot=show_pivot,
         )
         self.addItem(item)
         self._sprite_items.append(item)

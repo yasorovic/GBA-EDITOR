@@ -438,7 +438,7 @@ texte Lua → parser.py → AST Python → checker.py (validation) → codegen.p
 - **Important pour toute nouvelle fonction Lua** : si elle se traduit par un simple appel C avec conversion d'arguments, une entrée dans `RUNTIME_API` suffit *côté traduction*. Ce n'est que si elle a besoin de logique de traduction (nom C dynamique, arguments non présents côté Lua, émission multi-instructions) qu'elle doit aussi rejoindre `_INVOKE_CUSTOM`/`_CALL_CUSTOM`.
 - **Mais une fonction du moteur doit être déclarée DEUX fois** — voir « Deux listes de prototypes » ci-dessous. C'est le piège le plus coûteux de cette chaîne, parce qu'il ne se manifeste qu'au `make`.
 - **`lua_subset.py`** — la LISTE de ce que le langage accepte, et de ce qu'il refuse en le disant (`changelog-archive/v0.7.md`, v0.7.5). Chaque nœud de luaparser y est rangé dans une des trois cases — `ACCEPTED` (il se traduit), `REFUSED` (avec la phrase qui dit quoi écrire à la place) ou `STRUCTURAL` (jamais dispatché) — et la bibliothèque standard de Lua (`print`, `math.floor`, `table.*`…) reçoit le même traitement, par nom. Trois consommateurs : `checker.py` (refuser en nommant l'issue), `docs/scripting-reference.md` (expliquer — un test échoue si un refus n'y est pas documenté) et `validator._check_lua_subset` (**erreur bloquante** si un nœud de luaparser n'est classé nulle part, exactement comme `_check_api_domains` pour les domaines d'arguments). Avant elle, `parser.py` rendait `None` pour tout statement non géré — un `repeat` ou un `for … in` disparaissait du jeu sans un mot — et `ExprName("__unsupported_<Type>")` pour toute expression non gérée, qui n'échouait qu'au `make`. Les nœuds non traduits sont désormais PORTÉS (`StmtUnsupported`, `ExprUnsupported`, avec leur ligne) : le parser décrit, le checker juge. Ce qui n'atteint même pas l'AST — une faute de SYNTAXE — est le seul refus que le parser prononce lui-même, et il le prononce dans la même langue : `LuaParseError` porte sa `line` et une phrase, reconstruites depuis la chaîne d'exceptions d'antlr que luaparser jette en formatant son `syntax errors: None` (cf. `_syntax_message`, et la table de faux amis qui ne se balaie qu'après un échec).
-- **`expr_types.py`** — les deux exceptions au sous-ensemble Lua entièrement scalaire (ROADMAP v0.7.3 et v0.8.6) : `vec2(x, y)`/`vec3(x, y, z)` sont des constructeurs de langage, pas des entrées `RUNTIME_API`. `checker.py` et `codegen.py` partagent ce module pour savoir si une expression EST un vec2/vec3 (locals `self._vec_types`, remplie au fil d'un même parcours à plat dans les deux fichiers — même approximation que `self._arrays`) plutôt que de laisser chacun réinventer sa propre inférence. `+`/`-`/`*` (par un entier) s'y traduisent en appels `vec2_add`/`vec2_sub`/`vec2_scale` (`actor_api_static.h`) : le C n'a pas d'opérateur sur les structs. La seconde exception sont les **références** — ce qu'un appel REND (`local pas = sfx:play("Pas")`) : une valeur composée se copie, une référence DÉSIGNE un slot pris dans un pool du matériel, mais les deux répondent à la même question (« quel type porte ce nom ? ») et deux modules y auraient fini par répondre différemment. Le module s'appelait `vec_types.py` tant qu'il n'y avait qu'une exception.
+- **`expr_types.py`** — les deux exceptions au sous-ensemble Lua entièrement scalaire (ROADMAP v0.7.3 et v0.8.6) : `vec2(x, y)`/`vec3(x, y, z)` sont des constructeurs de langage, pas des entrées `RUNTIME_API`. `checker.py` et `codegen.py` partagent ce module pour savoir si une expression EST un vec2/vec3 (locals `self._vec_types`, remplie au fil d'un même parcours à plat dans les deux fichiers — même approximation que `self._arrays`) plutôt que de laisser chacun réinventer sa propre inférence. `+`/`-`/`*`/`/` s'y traduisent en appels `vec2_add`/`vec2_sub`/`vec2_scale`/`vec2_div` (`runtime_api_inline.h`) : le C n'a pas d'opérateur sur les structs. Un entier mêlé à un vecteur par `+`/`-` vaut le vecteur dont toutes les composantes sont cet entier (`vec2_splat`) : `v + 2` = `v + vec2(2, 2)`, `10 - v` = `vec2(10, 10) - v` ; Deux vecteurs du MÊME type se combinent composante par composante avec `+ - * /` (`vec2_mul`, `vec2_div`…) ; `dot(a, b)` (`vec2_dot`/`vec3_dot`, fonction de langage listée dans `VEC_FUNCTIONS`) rend un entier. La division est entière. La seconde exception sont les **références** — ce qu'un appel REND (`local pas = sfx:play("Pas")`) : une valeur composée se copie, une référence DÉSIGNE un slot pris dans un pool du matériel, mais les deux répondent à la même question (« quel type porte ce nom ? ») et deux modules y auraient fini par répondre différemment. Le module s'appelait `vec_types.py` tant qu'il n'y avait qu'une exception.
 
 ### La grammaire cible de l'API — trois formes, une par nature
 
@@ -2378,7 +2378,7 @@ Deux niveaux de transform, séparés par qui les possède :
 | | Qui possède | Éditeur | API Lua | Runtime |
 | --- | --- | --- | --- | --- |
 | **Monde** | l'`Actor` | carte Transform : rotation (0-359°), scale X/Y | `self.rotation`, `self.scale` | `g_actors[i].rotation`, `.scale_x/y` (Q8, 256 = 100%) |
-| **Local** | le `SpriteComponent` | carte Sprite : rotation, scale X/Y, offset X/Y | `self.sprite_rotation`, `self.sprite_scale`, `self.sprite_offset` | `g_oam_entries[i].rotation`, `.scale_x/y`, `.offset_x/y` |
+| **Local** | le `SpriteComponent` | carte Sprite : offset X/Y, rotation, scale X/Y, pivot X/Y | `self.sprite_offset`, `self.sprite_pivot`, `self.sprite_scale`, `self.sprite_rotation` | `g_oam_entries[i].offset_x/y`, `.pivot_x/y`, `.scale_x/y`, `.rotation` |
 
 Le transform monde reste sur l'**Actor** alors que la case est passée au sprite, et ce n'est
 pas une incohérence : la rotation d'un actor est un fait de son état de jeu — un script la lit,
@@ -2394,7 +2394,21 @@ frame) :
 - **scale effectif** = `scale_x` · `sprite.scale_x` / 256 (produit, Q8) ;
 - **offset** = R(rotation) · S(scale) · (`sprite.offset_x`, `sprite.offset_y`) — transformé par la
   matrice de l'ACTOR, pas par la matrice composée ;
-- **position** = actor.position + offset composé ;
+- **position** = actor.position + offset composé : c'est le coin haut-gauche du CADRE du sprite ;
+- **point de pivot** (`sprite.pivot_x/y`, `self.sprite_pivot`) : le point autour duquel rotation,
+  échelle et flip s'exercent, en pixels **depuis le centre du cadre** — (0, 0) = le centre. Deux
+  notions distinctes : l'**offset** dit OÙ est le sprite, le **pivot** dit AUTOUR DE QUOI il se
+  transforme. Le matériel pivote toujours sur le centre de la texture (Tonc, `obj_aff_*`) : le
+  pivot de l'auteur s'obtient par calcul — le point P reste fixe à l'écran et le centre de la
+  boîte OAM se place à `P − M·pivot` (M = rotation·échelle·flip). Le flip n'est que l'échelle −1
+  (signe de `pa/pb` ou `pc/pd`), jamais un déplacement du cadre ; l'offset ne s'inverse pas avec
+  lui. Les helpers de l'API qui jouent sur l'échelle ou la rotation (`squash`, `stretch`,
+  `pulse`, `wobble`…) s'exercent donc autour du pivot ; `bounce` et `shake` déplacent, ils
+  écrivent l'offset ;
+- **au cochage** de « Affine transform », l'éditeur place l'actor au centre du cadre
+  (`center_on_frame`) : offset du sprite = `(−largeur/2, −hauteur/2)`, et les boîtes de
+  collision restées à `(0, 0)` passent à `(−w/2, −h/2)`. Un réglage déjà fait par l'auteur n'est
+  jamais écrasé ;
 - les quatre paramètres `pa/pb/pc/pd` sont écrits à partir du cosinus/sinus de la
   rotation effective (table `SIN_LUT[360]`, Q8 — `gba_sin`/`gba_cos`) et des scales,
   et le sprite est étiqueté `ATTR_AFFINE` avec son `affine_slot`.
@@ -2830,7 +2844,7 @@ Orchestré par `editor/codegen/rom_build.py` (`BuildWorker`), déclenché depuis
 
 ### Le journal de build — un diagnostic, un fichier
 
-Tout ce que le build reproche au projet est un `ValidationMessage` (`core/validator.py`) :
+Tout ce que le build reproche au projet est un `ValidationMessage` (`core/diagnostic.py`, module de base que `core.validator` ré-exporte — les générateurs l'importent de là pour ne pas fermer une boucle d'import) :
 `level` (`error`/`warning`), `source` (`validator`, `script`, `checker`, `codegen`, ou l'outil :
 `make`, `grit`, `mmutil`…), `file`, `line`, `actor` (le propriétaire d'un script), et une `target`
 cliquable. Le validateur, le checker Lua, le codegen et la sortie des outils passent par la même forme ;
@@ -2864,15 +2878,16 @@ cliquable. Le validateur, le checker Lua, le codegen et la sortie des outils pas
   clé stable `fichier::fonction::empreinte du message`) et enregistre ceux qu'un run déclenche (`Recorder`, installé
   par `tests/conftest.py`). À la fin d'un run COMPLET, `pytest` AVERTIT (sans échouer) d'un diagnostic couvert qui
   ne l'est plus ou d'un nouveau jamais déclenché ; la référence est `tools/diagnostic_coverage_baseline.json`
-  (274 sites sur 278 exercés ; `DIAGNOSTIC_COVERAGE_UPDATE=1` pour la relever, `python tools/diagnostic_coverage.py` pour lister les sites
-  jamais atteints). `tests/test_build_invariants.py` corrompt les fichiers de la démo un à un et exige cinq
+  (172 sites sur 278 exercés, par choix : un échantillon, pas un objectif de 100 % ; `DIAGNOSTIC_COVERAGE_UPDATE=1` pour la relever, `python tools/diagnostic_coverage.py` pour lister les sites
+  jamais atteints). `tests/test_build_invariants.py` (marqué `slow`, isolé le 2026-10-04 : `pytest -m slow`, et `release.yml` avant publication) corrompt les fichiers de la démo un à un (une compilation réelle par cas, ~3 min à lui seul) et exige cinq
   invariants du journal (pas d'« internal error », échec = erreur, anglais sans chemin du projet, le fichier
   abîmé est nommé, un fichier cassé n'est jamais ignoré sans un mot).
 - **Aucune erreur n'est avalée.** Un `except` large (`Exception`, nu, `LuaParseError`) de `codegen/`,
   `scripting/` ou `core/validator.py` lève, émet, ou porte `# tolerated: <raison>` ; `tests/
   test_silent_except.py` le garde. `core/validator._check_scripts_parse` lit tout `.lua` de `scripts/`,
   attaché ou non ; un prefab qu'aucune scène ne déclare passe en plus par le checker (`lua_compiler`, une
-  fois par build) ; `tests/test_build_fault_injection.py` rejoue des fautes connues dans un vrai build.
+  fois par build) ; `tests/test_build_fault_injection.py` rejoue des fautes connues dans un vrai build (marqué `slow`
+  avec les autres tests qui compilent un projet entier : exclus par défaut, lancés par `release.yml`).
 
 ---
 

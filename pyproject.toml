@@ -4,7 +4,7 @@
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q -rs"
+addopts = "-q -rs -m 'not slow'"
 markers = [
-    "slow: construit un vrai projet de bout en bout (quelques minutes) ; `-m \"not slow\"` pour les sauter",
+    "slow: construit un vrai projet de bout en bout (quelques minutes) ; exclus par défaut, `pytest -m slow` les lance",
 ]

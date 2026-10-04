@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from codegen.runtime_codegen.gen_scene_query import parent_depths
 from core.models.components import affine_sprite_component
+from core.models.field_value import FieldValue, number_c, number_value
 
 
-def affine_entry(actor, sc, slot: int, force: bool = False) -> dict | None:
+def affine_entry(actor, sc, slot: int, force: bool = False, names=None) -> dict | None:
     """
     Calcule l'entrée affine d'un Actor + son SpriteComponent.
 
@@ -40,18 +41,38 @@ def affine_entry(actor, sc, slot: int, force: bool = False) -> dict | None:
         # Valeurs de départ des champs Actor, écrites au scene_init. Monde sur
         # l'actor, local sur le sprite ; le rendu compose rotation (somme) et
         # scale (produit), l'offset étant transformé par la matrice de l'actor.
-        "rotation":   int(round(getattr(actor, "rotation", 0))),
-        "scale_x":    int(round(getattr(actor, "scale_x", 1.0) * 256)),
-        "scale_y":    int(round(getattr(actor, "scale_y", 1.0) * 256)),
-        "sprite_rotation":   int(round(getattr(sc, "rotation", 0))),
-        "sprite_scale_x":    int(round(getattr(sc, "scale_x", 1.0) * 256)),
-        "sprite_scale_y":    int(round(getattr(sc, "scale_y", 1.0) * 256)),
-        "offset_x":    int(getattr(sc, "offset_x", 0)),
-        "offset_y":    int(getattr(sc, "offset_y", 0)),
+        # Littéral → int, variable → expression C (assignation à l'init).
+        "rotation":   number_c(getattr(actor, "rotation", 0), names),
+        "scale_x":    number_c(getattr(actor, "scale_x", 1.0), names, q8=True),
+        "scale_y":    number_c(getattr(actor, "scale_y", 1.0), names, q8=True),
+        "sprite_rotation":   number_c(getattr(sc, "rotation", 0), names),
+        "sprite_scale_x":    number_c(getattr(sc, "scale_x", 1.0), names, q8=True),
+        "sprite_scale_y":    number_c(getattr(sc, "scale_y", 1.0), names, q8=True),
+        "offset_x":    _offset_value(getattr(sc, "offset_x", 0), names),
+        "offset_y":    _offset_value(getattr(sc, "offset_y", 0), names),
+        "pivot_x":     _offset_value(getattr(sc, "pivot_x", 0), names),
+        "pivot_y":     _offset_value(getattr(sc, "pivot_y", 0), names),
     }
 
 
-def compute_affine_info(actor_offset: int, scene_actors: list, pi: list) -> dict:
+def _is_set(obj, name: str, neutral) -> bool:
+    """Le champ s'écarte-t-il de sa valeur neutre ? Une VARIABLE compte comme
+    écart : sa valeur n'est pas connue au build, et le rendu affine doit
+    pouvoir la recevoir."""
+    raw = getattr(obj, name, neutral)
+    return isinstance(raw, dict) or number_value(raw, default=neutral) != neutral
+
+
+def _offset_value(raw, names):
+    """Décalage de sprite tel qu'il s'écrit dans le C : un `int` pour un
+    littéral (px/tile), l'expression `g_<nom>` pour une variable. Une
+    assignation à l'init, donc une variable y est légitime. `names` =
+    `var_names_from_project`."""
+    fv = FieldValue.parse(raw, names)
+    return fv.c_expr() if fv.is_ref else fv.px()
+
+
+def compute_affine_info(actor_offset: int, scene_actors: list, pi: list, names=None) -> dict:
     """
     Retourne {oam_idx: entry} pour tout actor dont le SpriteComponent a
     `affine_transform` coché.
@@ -67,7 +88,7 @@ def compute_affine_info(actor_offset: int, scene_actors: list, pi: list) -> dict
         sc = affine_sprite_component(actor)
         if not sc:
             continue
-        entry = affine_entry(actor, sc, slot)
+        entry = affine_entry(actor, sc, slot, names=names)
         if entry:
             result[actor_offset + j] = entry
             slot += 1
@@ -99,22 +120,22 @@ def compute_affine_info(actor_offset: int, scene_actors: list, pi: list) -> dict
                 continue
             if getattr(sc, "affine_transform", False):
                 continue          # il a demandé le sien, il l'a eu (ou pas : 32)
-            if (int(getattr(actor, "rotation", 0) or 0) != 0
-                    or float(getattr(actor, "scale_x", 1.0) or 1.0) != 1.0
-                    or float(getattr(actor, "scale_y", 1.0) or 1.0) != 1.0):
+            if (_is_set(actor, "rotation", 0)
+                    or _is_set(actor, "scale_x", 1.0)
+                    or _is_set(actor, "scale_y", 1.0)):
                 continue          # transform propre → matrice différente
             # Le transform LOCAL du sprite entre AUSSI dans la matrice
             # (`angle_eff = rotation + sprite_rot`, `scale_eff = scale ×
             # sprite_scale`) : un enfant dont le sprite a sa propre rotation
             # n'a pas la même matrice que son parent, malgré un transform
             # d'acteur neutre. Il paie alors son slot comme les autres.
-            if (int(round(getattr(sc, "rotation", 0) or 0)) != 0
-                    or float(getattr(sc, "scale_x", 1.0) or 1.0) != 1.0
-                    or float(getattr(sc, "scale_y", 1.0) or 1.0) != 1.0):
+            if (_is_set(sc, "rotation", 0)
+                    or _is_set(sc, "scale_x", 1.0)
+                    or _is_set(sc, "scale_y", 1.0)):
                 continue
             # Ses PROPRES décalages de sprite, sur le slot du parent : la
             # matrice est partagée, pas la pose.
-            entry = affine_entry(actor, sc, base["slot"], force=True)
+            entry = affine_entry(actor, sc, base["slot"], force=True, names=names)
             if entry:
                 result[oam] = entry
 
@@ -126,7 +147,7 @@ def compute_affine_info(actor_offset: int, scene_actors: list, pi: list) -> dict
         for oam_idx in range(p2["start"], p2["start"] + p2["size"]):
             if slot >= 32:
                 break
-            entry = affine_entry(pf, sc, slot)
+            entry = affine_entry(pf, sc, slot, names=names)
             if entry:
                 result[oam_idx] = entry
                 slot += 1
@@ -148,17 +169,21 @@ def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr
     affine » :
         angle_eff     = rotation + sprite_rot            (somme)
         scale_eff     = scale_x * sprite_scale_x / 256   (produit, Q8)
-        position_eff  = actor.position + R(rotation)·S(scale)·offset
-    L'offset vit dans le repère local de l'actor : il tourne ET scale avec lui.
-    C'est lui qui décale le sprite par rapport à la position monde (l'actor n'a
-    pas l'offset ; le sprite n'a pas de position monde).
+        position_eff  = actor.position + R(rotation)·S(scale)·offset  (coin haut-gauche du cadre)
+    L'offset vit dans le repère local de l'actor : il tourne ET scale avec lui
+    (mais ne s'inverse pas avec le flip du sprite). C'est lui qui décale le
+    cadre du sprite par rapport à la position monde (l'actor n'a pas l'offset ;
+    le sprite n'a pas de position monde).
+
+    Rotation, échelle et flip (échelle -1, ici le signe de pa/pb/pc/pd)
+    s'exercent autour du POINT DE PIVOT (`sprite.pivot_x/y`, depuis le centre
+    du cadre ; (0,0) = le centre, comme sur GBA native).
 
     `screen_space` retire la soustraction de caméra (cf. Actor.screen_space)."""
     aslot = aff["slot"]
     W, H   = sprite.frame_w, sprite.frame_h
     sh, sz = sprite.oam_shape, sprite.oam_size
     tpf    = sprite.tiles_per_frame
-    dx, dy = -(W // 2), -(H // 2)
 
     # ROADMAP v0.19 : x/y sont en Q8 en interne (256 = 1 px) ; l'émission OAM
     # est UN des deux seuls points d'arrondi du chantier (l'autre est l'entrée
@@ -185,16 +210,23 @@ def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr
         f"        if(!_pa&&!_pb){{_pa=1;}}",
         f"        if(!_pc&&!_pd){{_pd=1;}}",
         # Offset local transformé par la matrice de l'ACTOR (hérarchie) :
-        #   ox = R(rotation)·S(scale)·offset, avec le flip déjà dans le signe.
+        #   ox = R(rotation)·S(scale)·offset. Le flip du SPRITE n'y entre pas :
+        #   il retourne la texture sur place (cf. ci-dessous), il ne déplace rien.
         f"        int _acos=gba_cos(_arot); int _asin=gba_sin(_arot);",
-        f"        int _asxs=_fh?-_asx:_asx; int _asys=_fv?-_asy:_asy;",
-        f"        int _ofx=(_acos*_asxs*g_oam_entries[{e}].offset_x - _asin*_asys*g_oam_entries[{e}].offset_y)/65536;",
-        f"        int _ofy=(_asin*_asxs*g_oam_entries[{e}].offset_x + _acos*_asys*g_oam_entries[{e}].offset_y)/65536;",
-        # Position : pivot de rotation au centre texture ; l'offset s'ajoute au monde.
+        f"        int _ofx=(_acos*_asx*g_oam_entries[{e}].offset_x - _asin*_asy*g_oam_entries[{e}].offset_y)/65536;",
+        f"        int _ofy=(_asin*_asx*g_oam_entries[{e}].offset_x + _acos*_asy*g_oam_entries[{e}].offset_y)/65536;",
+        # Position. Le matériel pivote toujours sur le CENTRE de la texture
+        # (Tonc, obj_aff_*) : la boîte OAM (double taille) est centrée dessus. Le
+        # POINT DE PIVOT de l'auteur (`pivot`, depuis le centre du cadre) est
+        # donc obtenu par calcul : le point P reste FIXE à l'écran, en
+        # `ancre + offset + (W/2 + pivot_x, H/2 + pivot_y)`, et le centre se
+        # place à P - M·pivot (M = rotation·échelle·flip). Pivot (0,0) : le
+        # centre ne bouge pas, le comportement natif.
         f"        int _ocx=({base_x})+_ofx; int _ocy=({base_y})+_ofy;",
-        f"        int _u=(_cosA*_sxs*({dx}))/65536-(_sinA*_sys*({dy}))/65536;",
-        f"        int _v=(_sinA*_sxs*({dx}))/65536+(_cosA*_sys*({dy}))/65536;",
-        f"        int sx=_ocx+(-{W}-_u); int sy=_ocy+(-{H}-_v);",
+        f"        int _px=g_oam_entries[{e}].pivot_x; int _py=g_oam_entries[{e}].pivot_y;",
+        f"        int _u=(_cosA*_sxs*_px)/65536-(_sinA*_sys*_py)/65536;",
+        f"        int _v=(_sinA*_sxs*_px)/65536+(_cosA*_sys*_py)/65536;",
+        f"        int sx=_ocx-{W // 2}+_px-_u; int sy=_ocy-{H // 2}+_py-_v;",
         f"        u16 ti=(u16)({bt}+g_oam_entries[{e}].frame*{tpf});",
         f"        shadow_oam[{aslot*4+0}].dummy=(u16)(s16)(_fh?-_pa:_pa);",
         f"        shadow_oam[{aslot*4+1}].dummy=(u16)(s16)(_fh?-_pb:_pb);",

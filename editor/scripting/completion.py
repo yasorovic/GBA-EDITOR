@@ -34,7 +34,7 @@ from scripting.api import (
     STATELESS_MODULES, canonical_key,
 )
 
-from scripting.expr_types import VEC_CONSTRUCTORS
+from scripting.expr_types import VEC_CONSTRUCTORS, VEC_FUNCTIONS
 from scripting import api_snippets
 from scripting.api_reference import tooltip_parts
 
@@ -368,6 +368,10 @@ def _bare_candidates(context: str) -> list[Candidate]:
         out.append(Candidate(insert=ctor, label=f"{ctor}(…)", kind=KIND_CONSTRUCTOR,
                              tip=_plain_tip(f"{ctor}(…)",
                                  f"Builds a value with {n} components.")))
+    for fn in sorted(VEC_FUNCTIONS):
+        out.append(Candidate(insert=fn, label=f"{fn}(…)", kind=KIND_CONSTRUCTOR,
+                             tip=_plain_tip(f"{fn}(a, b)",
+                                 "Dot product of two vectors: a number.")))
     for kw in KEYWORDS:
         out.append(Candidate(insert=kw, label=kw, kind=KIND_KEYWORD,
                              tip=_plain_tip(kw, "Language keyword.")))

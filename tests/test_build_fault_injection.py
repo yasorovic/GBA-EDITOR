@@ -19,6 +19,8 @@ from core.models.scene import Actor, Prefab
 from core.project import Project
 from core.toolchain import Toolchain
 
+pytestmark = pytest.mark.slow
+
 HANDLER_OK = "function on_update()\nend\n"
 
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
+from core.keybindings import get_keybindings
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QToolButton
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
@@ -28,7 +29,7 @@ class CanvasTopBar(QFrame):
 
     def __init__(self, fit_tip: str = None, parent=None, show_coords: bool = True):
         if fit_tip is None:
-            fit_tip = tooltip(title=label('cvtop.fit_to_view'), shortcut="F")
+            fit_tip = tooltip(title=label('cvtop.fit_to_view'), shortcut=get_keybindings().resolve("common.fit"))
         super().__init__(parent)
         self.setFixedHeight(BAR_HEIGHT)
         self.setStyleSheet(f"background:{C.BG_RAISED}; border-bottom:1px solid {C.BORDER};")

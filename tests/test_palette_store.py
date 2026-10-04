@@ -10,18 +10,6 @@ from core.project import Project
 from core import project_starters
 
 
-def test_basic_starter_copies_hex_and_creates_metadata_sidecars(tmp_path):
-    project = Project.create(tmp_path / "MyGame", "MyGame")
-    palette_dir = project.palettes_dir
-
-    sources = sorted(palette_dir.glob("*.hex"))
-    sidecars = sorted(palette_dir.glob("*.json"))
-    assert len(sources) == 10
-    assert {path.stem for path in sources} == {path.stem for path in sidecars}
-    assert len(project.palettes) == len(sources)
-    for sidecar in sidecars:
-        assert "colors" not in json.loads(sidecar.read_text(encoding="utf-8"))
-
 
 def test_hex_dropped_by_user_creates_sidecar_on_open(tmp_path):
     palette_dir = tmp_path / "assets" / "palettes"

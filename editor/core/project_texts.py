@@ -130,6 +130,27 @@ class ProjectTextsMixin:
                 if e.get("type") == "string":
                     _add(e.get("default"))
 
+        # Variables et constantes de type `string` : même chemin, une entrée
+        # anonyme par valeur non vide (une clé réelle du projet garde la sienne).
+        for var in list(self.globals) + list(self.constants):
+            if var.type == "string":
+                _add(var.default if hasattr(var, "default") else var.value)
+
+        # `global.titre = "Bonjour"` sur une globale string : le littéral écrit
+        # dans un script est une entrée anonyme lui aussi.
+        string_globals = {g.name for g in self.globals if g.type == "string"}
+        if string_globals:
+            import re
+            assign = re.compile(r'\bglobal\.(\w+)\s*=\s*"([^"\n]*)"')
+            for path in script_paths(self):
+                try:
+                    src = path.read_text(encoding="utf-8")
+                except OSError:
+                    continue
+                for name, literal in assign.findall(src):
+                    if name in string_globals:
+                        _add(literal)
+
         owners = [a for sc in self.scenes for a in sc.actors] + list(self.prefabs)
         for owner in owners:
             comp = next((c for c in getattr(owner, "components", [])

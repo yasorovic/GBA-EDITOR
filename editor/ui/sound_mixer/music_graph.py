@@ -23,12 +23,13 @@ from typing import Optional
 from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal
 from PyQt6.QtGui import (
     QPainter, QPainterPath, QPainterPathStroker, QPen, QBrush, QColor,
-    QPolygonF, QTransform,
+    QKeySequence, QPolygonF, QShortcut, QTransform,
 )
 from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsItem
 
 from core.history import get_history, AddListItemCmd, RemoveListItemCmd, SetFieldCmd
 from ui.common.theme import C, T, ui_font
+from core.keybindings import bind, matches
 from ui.common.shortcut_hints import ShortcutHints
 from ui.sound_mixer.music_graph_hints import music_graph_hints
 from ui.sound_mixer.sound_commands import (
@@ -358,6 +359,10 @@ class MusicGraphView(QGraphicsView):
         self.setAcceptDrops(True)
         # Table des raccourcis (bas-droite, repliée au repos).
         self._hints = ShortcutHints(self, music_graph_hints)
+        fit_shortcut = QShortcut(QKeySequence(), self)
+        fit_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        fit_shortcut.activated.connect(self.fit)
+        bind("common.fit", fit_shortcut)
 
     # ── Fond quadrillé ────────────────────────────────────────────
 
@@ -790,7 +795,7 @@ class MusicGraphView(QGraphicsView):
                 get_history().push(MoveMusicNodesCmd(moves, self._after_edit))
 
     def keyPressEvent(self, e):
-        if e.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+        if matches("common.delete", e) or e.key() == Qt.Key.Key_Backspace:
             self.delete_selected()
             e.accept()
             return

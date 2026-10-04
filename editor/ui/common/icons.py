@@ -238,6 +238,7 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     # jamais un glyphe de police posé par `setText` : la feuille de style ne
     # peut recolorer que du texte, pas un pixmap déjà teinté.
     "add":                    ("mdi.plus",                    "+"),
+    "remove":                 ("mdi.minus",                   "−"),
     "search":                 ("mdi.magnify",                 "⌕"),
     # Fenêtre « À propos » (ui/common/about_dialog.py)
     "open_external":          ("mdi.open-in-new",             "↗"),

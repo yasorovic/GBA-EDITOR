@@ -10,6 +10,7 @@ from ui.common.pickers import sprite_picker_slot, palette_picker_slot
 from ui.common.theme import C
 from ui.common.icons import COLOR_SPRITE
 from core.command_dispatcher import get_dispatcher
+from core.models.components import center_on_frame
 
 
 @register("sprite")
@@ -143,7 +144,7 @@ class SpriteEditor(BaseComponentEditor):
         # « Le modèle affine »). C'est aussi ce qui la rend décidable sur une
         # racine de prefab, dont cette carte est la seule affichée.
         #
-        # Elle commande les trois réglages qui suivent — et, à l'écran
+        # Elle commande les trois réglages qui suivent (affichés seulement si cochée) — et, à l'écran
         # seulement, le rotation/scale MONDE de l'actor (carte Transform) :
         # ceux-là gardent leur valeur, ils ne s'affichent simplement pas.
         aff = W.checkbox_row("", label("comped.affine"), layout)
@@ -153,51 +154,67 @@ class SpriteEditor(BaseComponentEditor):
             note=label("comped.affine_note")))
         aff.toggled.connect(lambda on, c=comp: self._set_affine(c, on))
 
-        # ── Scale local ───────────────────────────────────────────
+        # ── Réglages locaux ───────────────────────────────────────
         # Transform LOCAL : ne vaut QUE si la case ci-dessus est cochée
         # (rotation/scale/offset sont relatifs à l'actor et se composent par-
         # dessus son transform monde). Sinon aucun slot de matrice affine, et
-        # ces réglages sont ignorés — on les grise pour le dire.
-        _aff = bool(getattr(comp, "affine_transform", False))
-        sx = W.double_spinbox(getattr(comp, "scale_x", 1.0), min_v=0.1, max_v=4.0, step=0.1)
-        sy = W.double_spinbox(getattr(comp, "scale_y", 1.0), min_v=0.1, max_v=4.0, step=0.1)
-        sx.setEnabled(_aff); sy.setEnabled(_aff)
-        sx.setToolTip(tooltip(
-            title=label("comped.scale_x_title"), body=label("comped.scale_x_tip"),
-            note=label("comped.affine_required")))
-        sy.setToolTip(tooltip(
-            title=label("comped.scale_y_title"), body=label("comped.scale_y_tip"),
-            note=label("comped.affine_required")))
-        sx.valueChanged.connect(lambda v: self._set_comp_field(comp, "scale_x", v))
-        sy.valueChanged.connect(lambda v: self._set_comp_field(comp, "scale_y", v))
-        W.pair(label("common.scale"), "X", C.AXIS_X, sx, "Y", C.AXIS_Y, sy, layout)
+        # ces réglages seraient ignorés : on ne les montre pas. Leurs valeurs
+        # restent dans le component ; `_set_affine` reconstruit l'éditeur.
+        if not getattr(comp, "affine_transform", False):
+            return
 
-        # ── Rotation locale ───────────────────────────────────────
-        rot = W.spinbox(int(getattr(comp, "rotation", 0)), min_v=0, max_v=359)
-        rot.setSuffix("°")
-        rot.setWrapping(True)
-        rot.setEnabled(_aff)
+        # Offset relatif à l'actor, dans SON repère local (il tourne/scale avec
+        # lui) : le sprite n'a PAS de position monde.
+        # px / tile / variable : un script change l'offset (self.sprite_offset),
+        # la variable est donc légitime ici (assignation à l'init).
+        offx = W.value_field(getattr(comp, "offset_x", 0), project=proj,
+                             min_px=-32768, max_px=32767)
+        offy = W.value_field(getattr(comp, "offset_y", 0), project=proj,
+                             min_px=-32768, max_px=32767)
+        offx.setToolTip(tooltip(
+            title=label("comped.offset_x_title"), body=label("comped.offset_x_tip")))
+        offy.setToolTip(tooltip(
+            title=label("comped.offset_y_title"), body=label("comped.offset_y_tip")))
+        offx.changed.connect(lambda raw: self._set_comp_field(comp, "offset_x", raw))
+        offy.changed.connect(lambda raw: self._set_comp_field(comp, "offset_y", raw))
+        W.pair(label("comped.offset"), "X", C.AXIS_X, offx, "Y", C.AXIS_Y, offy, layout)
+
+        rot = W.number_field(getattr(comp, "rotation", 0), project=proj, kind="int",
+                             min_v=0, max_v=359, suffix="°", wrapping=True)
         rot.setToolTip(tooltip(
-            title=label("comped.rotation_title"), body=label("comped.rotation_tip"),
-            note=label("comped.affine_required")))
-        rot.valueChanged.connect(lambda v: self._set_comp_field(comp, "rotation", v))
+            title=label("comped.rotation_title"), body=label("comped.rotation_tip")))
+        rot.changed.connect(lambda raw: self._set_comp_field(comp, "rotation", raw))
         W.row(label("common.rotation"), rot, layout)
 
-        # ── Offset (position relative à l'actor) ─────────────────
-        # Le sprite n'a PAS de position monde : son offset est relatif à
-        # l'actor, dans SON repère local (il tourne/scale avec lui).
-        offx = W.spinbox(int(getattr(comp, "offset_x", 0)), min_v=-32768, max_v=32767)
-        offy = W.spinbox(int(getattr(comp, "offset_y", 0)), min_v=-32768, max_v=32767)
-        offx.setEnabled(_aff); offy.setEnabled(_aff)
-        offx.setToolTip(tooltip(
-            title=label("comped.offset_x_title"), body=label("comped.offset_x_tip"),
-            note=label("comped.affine_required")))
-        offy.setToolTip(tooltip(
-            title=label("comped.offset_y_title"), body=label("comped.offset_y_tip"),
-            note=label("comped.affine_required")))
-        offx.valueChanged.connect(lambda v: self._set_comp_field(comp, "offset_x", v))
-        offy.valueChanged.connect(lambda v: self._set_comp_field(comp, "offset_y", v))
-        W.pair(label("comped.offset"), "X", C.AXIS_X, offx, "Y", C.AXIS_Y, offy, layout)
+        # float ou variable (en POURCENT, comme `self.sprite_scale`).
+        sx = W.number_field(getattr(comp, "scale_x", 1.0), project=proj, kind="float",
+                            min_v=-4.0, max_v=4.0, step=0.1)
+        sy = W.number_field(getattr(comp, "scale_y", 1.0), project=proj, kind="float",
+                            min_v=-4.0, max_v=4.0, step=0.1)
+        sx.setToolTip(tooltip(
+            title=label("comped.scale_x_title"), body=label("comped.scale_x_tip")))
+        sy.setToolTip(tooltip(
+            title=label("comped.scale_y_title"), body=label("comped.scale_y_tip")))
+        sx.changed.connect(lambda raw: self._set_comp_field(comp, "scale_x", raw))
+        sy.changed.connect(lambda raw: self._set_comp_field(comp, "scale_y", raw))
+        W.pair(label("common.scale"), "X", C.AXIS_X, sx, "Y", C.AXIS_Y, sy, layout)
+
+        W.separator(layout)
+
+        # Point de pivot, depuis le CENTRE du cadre ((0, 0) = le centre) : le
+        # point autour duquel rotation, échelle et flip s'exercent. Même forme
+        # que l'offset, donc un script le change aussi (self.sprite_pivot).
+        pivx = W.value_field(getattr(comp, "pivot_x", 0), project=proj,
+                             min_px=-32768, max_px=32767)
+        pivy = W.value_field(getattr(comp, "pivot_y", 0), project=proj,
+                             min_px=-32768, max_px=32767)
+        pivx.setToolTip(tooltip(
+            title=label("comped.pivot_x_title"), body=label("comped.pivot_x_tip")))
+        pivy.setToolTip(tooltip(
+            title=label("comped.pivot_y_title"), body=label("comped.pivot_y_tip")))
+        pivx.changed.connect(lambda raw: self._set_comp_field(comp, "pivot_x", raw))
+        pivy.changed.connect(lambda raw: self._set_comp_field(comp, "pivot_y", raw))
+        W.pair(label("comped.pivot"), "X", C.AXIS_X, pivx, "Y", C.AXIS_Y, pivy, layout)
 
     # ── Helpers ──────────────────────────────────────────────────────
 
@@ -208,6 +225,12 @@ class SpriteEditor(BaseComponentEditor):
         D'où la reconstruction de l'éditeur après la sauvegarde."""
         if self.insp._blocking or not self.insp._actor: return
         comp.affine_transform = bool(on)
+        if on:
+            # Cas courant d'entrée de jeu : l'acteur au centre du cadre (cf.
+            # `center_on_frame`). Les boîtes de collision suivent le sprite.
+            sprite = (self.insp._project.get_sprite(comp.sprite_name)
+                      if comp.sprite_name else None)
+            center_on_frame(self.insp._actor, comp, sprite)
         self.insp._save_component_change(comp)
         self.insp._build_editor(comp)
 

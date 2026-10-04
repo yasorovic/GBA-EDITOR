@@ -132,6 +132,7 @@ _PROP_HOME: dict[str, str] = {
     "actor.sprite_rotation": "Animation",
     "actor.sprite_scale":    "Animation",
     "actor.sprite_offset":   "Animation",
+    "actor.sprite_pivot":    "Animation",
     "actor.direction": "Movement",
     "actor.auto_dir":  "Movement",
     "actor.grounded":  "Collision",

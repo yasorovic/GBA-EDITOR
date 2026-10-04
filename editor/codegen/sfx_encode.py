@@ -18,7 +18,7 @@ ils tombent à ~83 Kio.
 from __future__ import annotations
 
 import wave
-from core.validator import build_warning
+from core.diagnostic import build_warning
 from pathlib import Path
 from typing import Optional
 

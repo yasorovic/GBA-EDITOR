@@ -82,6 +82,58 @@ class LuaEditor(QPlainTextEdit):
         Posé par l'écran quand le projet est chargé."""
         self._completer.set_project_names(names)
 
+    _TAB_WIDTH = 4   # largeur d'un niveau d'indentation écrit en espaces
+
+    def _selected_lines(self) -> tuple[int, int]:
+        """(première, dernière) ligne touchées par la sélection, ou la ligne du curseur.
+        Une sélection qui se termine au tout début d'une ligne ne touche pas cette ligne."""
+        cur = self.textCursor()
+        doc = self.document()
+        first = doc.findBlock(cur.selectionStart()).blockNumber()
+        last_block = doc.findBlock(cur.selectionEnd())
+        if cur.hasSelection() and cur.selectionEnd() == last_block.position()                 and last_block.blockNumber() > first:
+            last_block = last_block.previous()
+        return first, last_block.blockNumber()
+
+    def indent_selection(self) -> bool:
+        """`Tab` sur une sélection de PLUSIEURS lignes : ajoute une tabulation en tête de
+        chacune, la sélection est conservée. Rend False (rien fait) quand la sélection
+        tient sur une ligne ou n'existe pas : `Tab` y insère une tabulation, comme d'habitude."""
+        first, last = self._selected_lines()
+        if not self.textCursor().hasSelection() or first == last:
+            return False
+        cur = self.textCursor()
+        doc = self.document()
+        cur.beginEditBlock()
+        for n in range(first, last + 1):
+            if doc.findBlockByNumber(n).text():       # une ligne vide reste vide
+                QTextCursor(doc.findBlockByNumber(n)).insertText("	")
+        cur.endEditBlock()
+        return True
+
+    def unindent_selection(self):
+        """`Maj+Tab` : retire UN niveau d'indentation de la ligne du curseur, ou de
+        chaque ligne touchée par la sélection. Un niveau est une tabulation, ou à
+        défaut jusqu'à `_TAB_WIDTH` espaces de tête ; une ligne sans indentation
+        reste telle quelle. Un seul geste d'annulation pour l'ensemble."""
+        cur = self.textCursor()
+        doc = self.document()
+        first, last = self._selected_lines()
+        cur.beginEditBlock()
+        for n in range(first, last + 1):
+            block = doc.findBlockByNumber(n)
+            text = block.text()
+            if text.startswith("	"):
+                removed = 1
+            else:
+                removed = min(len(text) - len(text.lstrip(" ")), self._TAB_WIDTH)
+            if removed:
+                edit = QTextCursor(block)
+                edit.movePosition(QTextCursor.MoveOperation.Right,
+                                  QTextCursor.MoveMode.KeepAnchor, removed)
+                edit.removeSelectedText()
+        cur.endEditBlock()
+
     def insert_newline_keeping_indent(self):
         """Retour à la ligne qui CONSERVE l'indentation de la ligne courante —
         sans ça, `Entrée` ramène le curseur tout à gauche. Reproduit le blanc de
@@ -108,6 +160,19 @@ class LuaEditor(QPlainTextEdit):
         if (event.modifiers() & Qt.KeyboardModifier.ControlModifier) \
                 and event.key() == Qt.Key.Key_Space:
             comp.maybe_complete(force=True)      # Ctrl+Espace
+            return
+
+        # `Tab` sur plusieurs lignes sélectionnées : indente chacune (popup fermé).
+        if event.key() == Qt.Key.Key_Tab and not (event.modifiers() & (
+                Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier))                 and self.indent_selection():
+            comp.hide()
+            return
+
+        # `Maj+Tab` (popup fermé — ouvert, c'est le filtre du completer qui l'a) :
+        # désindente. Qt le livre comme `Key_Backtab`.
+        if event.key() == Qt.Key.Key_Backtab:
+            self.unindent_selection()
+            comp.hide()
             return
 
         # `Entrée` (popup fermé — ouvert, c'est le filtre du completer qui l'a) :

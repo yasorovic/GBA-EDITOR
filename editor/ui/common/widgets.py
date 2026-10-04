@@ -190,6 +190,17 @@ class _W:
         b.setToolTip(tooltip)
         return b
 
+    def btn_remove(self, tooltip: str = None) -> QToolButton:
+        """Bouton − jumeau de `btn_add` (même taille, même survol)."""
+        if tooltip is None:
+            tooltip = label('wdg.remove')
+        b = HoverIconButton("remove", C.TEXT_DIM, C.ACCENT)
+        b.setStyleSheet(BTN_ICON)
+        b.setFixedSize(24, 24)
+        b.setIconSize(QSize(16, 16))
+        b.setToolTip(tooltip)
+        return b
+
     def btn_search(self, tooltip: str = None) -> QToolButton:
         """Bouton loupe sans bordure, survol accent — style project panel."""
         if tooltip is None:
@@ -504,6 +515,18 @@ class _W:
         from core.models.field_value import variables_from_project
         vars_ = variables if variables is not None else variables_from_project(project)
         return ValueField(raw, vars_, min_px=min_px, max_px=max_px, allow_tile=allow_tile)
+
+
+    def number_field(self, raw=0, project=None, variables=None, kind: str = "int",
+                     min_v=0, max_v=100, step=1, suffix: str = "", wrapping: bool = False):
+        """Champ numérique sans unité (rotation, échelle, priorité) : littéral
+        « int »/« float » OU variable — voir `NumberField`. Pendant de
+        `value_field` pour ce qui n'est ni pixels ni tiles."""
+        from ui.common.value_field import NumberField
+        from core.models.field_value import variables_from_project
+        vars_ = variables if variables is not None else variables_from_project(project)
+        return NumberField(raw, vars_, kind=kind, min_v=min_v, max_v=max_v,
+                           step=step, suffix=suffix, wrapping=wrapping)
 
 
 W = _W()

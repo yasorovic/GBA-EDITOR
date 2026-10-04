@@ -11,7 +11,20 @@ Chaque site d'origine résout sa touche via `resolve(id)` au lieu d'une chaîne
 en dur ; ce module ne branche rien lui-même, il ne fait que dire quelle touche
 va avec quel id.
 
-Trois familles VOLONTAIREMENT absentes de ce registre, remappables nulle part :
+Règle de partage : une touche est remappable quand elle déclenche une ACTION
+NOMMÉE d'un canvas ou d'un écran (outil, copier, supprimer, ajuster, zoom). Elle
+ne l'est pas quand elle NAVIGUE dans un widget, ferme ou annule, édite du texte,
+ou suit une convention du système. Les familles ci-dessous sont donc
+VOLONTAIREMENT absentes de ce registre, remappables nulle part :
+
+  - **Navigation dans un widget** — flèches, Entrée, Tab, Espace, Home/End dans
+    les grilles (palettes, glyphes), le graphe des scènes, la complétion Lua,
+    l'éditeur Lua et l'aperçu de police ; Suppr/Entrée du graphe des scènes
+    et validation/annulation du recadrage de fond.
+  - **Fermer / annuler** — Échap pour quitter un renommage, une sélection de
+    glyphe ou le recadrage de fond.
+  - **Édition de texte et complétion Lua** — Ctrl+Espace compris : c'est la
+    convention des éditeurs de code.
 
   - **Undo/Redo** (window.py) — `QKeySequence.StandardKey`, la convention du
     système d'exploitation, pas un choix de ce projet ; Redo est en plus
@@ -44,7 +57,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QKeyCombination, QObject, Qt, pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut, QAction
 
 from core.toolchain import config_dir
@@ -61,12 +74,23 @@ class Binding:
 
 # ── Le registre — un binding par ligne, dans l'ordre d'affichage ──────────
 BINDINGS: list[Binding] = [
-    # Global (window.py — menus File / Game)
+    # Commun — actif dans tout le logiciel. Le contexte « global » est la
+    # première section de l'écran Réglages ; une touche d'écran qui entrerait
+    # en collision avec l'une d'elles est signalée comme un conflit.
     Binding("file.new",   "global", "Ctrl+N"),
     Binding("file.open",  "global", "Ctrl+O"),
     Binding("file.save",  "global", "Ctrl+S"),
     Binding("file.quit",  "global", "Ctrl+Q"),
     Binding("game.build", "global", "F5"),
+    Binding("common.copy",       "global", "Ctrl+C"),
+    Binding("common.paste",      "global", "Ctrl+V"),
+    Binding("common.duplicate",  "global", "Ctrl+D"),
+    Binding("common.delete",     "global", "Del"),
+    Binding("common.cancel",     "global", "Escape"),
+    Binding("common.fit",        "global", "F"),
+    Binding("common.zoom_in",    "global", "+"),
+    Binding("common.zoom_out",   "global", "-"),
+    Binding("common.zoom_reset", "global", "1"),
 
     # Scene canvas (ui/scene_manager/scene_canvas.py)
     Binding("canvas.tool_select",    "scene_canvas", "S"),
@@ -75,30 +99,17 @@ BINDINGS: list[Binding] = [
     Binding("canvas.tool_collision", "scene_canvas", "C"),
     Binding("canvas.tool_inpaint",   "scene_canvas", "B"),
     Binding("canvas.tool_ui",        "scene_canvas", "T"),
-    Binding("canvas.fit",            "scene_canvas", "F"),
-    Binding("canvas.cancel",         "scene_canvas", "Escape"),
-    Binding("canvas.delete",         "scene_canvas", "Del"),
-    Binding("canvas.duplicate",      "scene_canvas", "Ctrl+D"),
-    Binding("canvas.copy",           "scene_canvas", "Ctrl+C"),
-    Binding("canvas.paste",          "scene_canvas", "Ctrl+V"),
 
     # Sprite editor (ui/sprite_editor/*)
-    Binding("sprite.flip_h",         "sprite_editor", "Shift+X"),
-    Binding("sprite.flip_v",         "sprite_editor", "Shift+Y"),
-    Binding("sprite.duplicate_frame","sprite_editor", "Ctrl+D"),
-    Binding("sprite.delete_frame",   "sprite_editor", "Del"),
+    Binding("sprite.flip_h", "sprite_editor", "Shift+X"),
+    Binding("sprite.flip_v", "sprite_editor", "Shift+Y"),
 
     # Sound mixer (ui/sound_mixer/sound_panel.py)
     Binding("sound.play_pause", "sound_mixer", "Space"),
 
     # Scene Manager — project viewer & Graphe des scènes
     Binding("scene.group", "scene_manager", "Ctrl+G"),
-    Binding("scene.graph_fit", "scene_manager", "F"),
-    Binding("scene.graph_zoom_reset", "scene_manager", "1"),
-    Binding("scene.graph_zoom_in", "scene_manager", "+"),
-    Binding("scene.graph_zoom_out", "scene_manager", "-"),
     Binding("scene.graph_toggle_minimap", "scene_manager", "H"),
-    Binding("scene.graph_deselect", "scene_manager", "Escape"),
     Binding("scene.graph_search", "scene_manager", "Ctrl+F"),
 ]
 
@@ -106,15 +117,16 @@ _BY_ID: dict[str, Binding] = {b.id: b for b in BINDINGS}
 
 
 # ── Affichage seul — pas dans BINDINGS, jamais remappable ──────────────────
-# Insérées, dans l'ordre, juste après le binding_id `insert_after` de leur
-# contexte — ShortcutsPanel s'en sert pour les placer au bon endroit de la
-# table sans dupliquer l'ordre d'affichage ici.
+# Rangées de la section « global » de l'écran Réglages, après ses raccourcis
+# remappables. La molette et le clic-milieu sont des gestes de souris : la
+# troisième colonne est vide, l'écran y met le nom du geste traduit.
 DISPLAY_ONLY: list[tuple[str, str, str]] = [
     # (context_id, display_id, touche affichée)
     ("global", "undo", "Ctrl+Z"),
     ("global", "redo", "Ctrl+Y"),
+    ("global", "wheel_zoom", ""),
+    ("global", "middle_pan", ""),
 ]
-DISPLAY_ONLY_INSERT_AFTER = "file.save"   # binding_id après lequel les insérer
 
 
 class Keybindings(QObject):
@@ -193,6 +205,29 @@ def get_keybindings() -> Keybindings:
     if _instance is None:
         _instance = Keybindings()
     return _instance
+
+
+def matches(binding_id: str, event) -> bool:
+    """Vrai si `event` (un QKeyEvent) est la touche EFFECTIVE de `binding_id`.
+
+    Pour les widgets qui lisent déjà le clavier eux-mêmes (`keyPressEvent`,
+    filtre d'événements) : là, un `QShortcut` volerait la touche aux champs
+    de saisie voisins (Suppr, Ctrl+C dans un champ HEX). Un id inconnu ou une
+    touche vidée ne correspond à rien.
+
+    Maj est ignoré pour « + » : sur un clavier AZERTY il s'obtient avec Maj,
+    et Qt le rapporte avec ce modificateur."""
+    wanted = QKeySequence(get_keybindings().resolve(binding_id))
+    if wanted.isEmpty():
+        return False
+    mods = event.modifiers() & ~Qt.KeyboardModifier.KeypadModifier
+    key = Qt.Key(event.key())
+    if QKeySequence(QKeyCombination(mods, key)) == wanted:
+        return True
+    if key == Qt.Key.Key_Plus and mods & Qt.KeyboardModifier.ShiftModifier:
+        return QKeySequence(QKeyCombination(
+            mods & ~Qt.KeyboardModifier.ShiftModifier, key)) == wanted
+    return False
 
 
 def bind(binding_id: str, target: QShortcut | QAction) -> None:

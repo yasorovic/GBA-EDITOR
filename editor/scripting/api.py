@@ -1700,6 +1700,16 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
             "Only applies if this sprite has \"Affine transform\" ticked.",
     ),
 
+    "actor.sprite_pivot": ApiProp(
+        lua_name="actor.sprite_pivot", c_getter="actor_get_sprite_pivot",
+        c_setter="actor_set_sprite_pivot", ptype=PARAM_VEC2, self_first=True,
+        doc="Pivot point of the sprite, in pixels from the CENTER of its frame "
+            "((0, 0) = the center). Rotation, scale and flip happen around it, and "
+            "it stays fixed on screen while the rest of the sprite turns. Unlike "
+            "sprite_offset, it does not move the sprite. Only applies if this sprite "
+            "has \"Affine transform\" ticked.",
+    ),
+
     # ── Actor — physique ───────────────────────────────────────────
     # ROADMAP v0.19 (2026-08-20) : unité Q8 (256 = 1 px), pas des pixels — la
     # rupture assumée qui rend le sous-pixel utilisable sans un second nom

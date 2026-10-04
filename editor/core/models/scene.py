@@ -11,6 +11,7 @@ from core.models.components import (
 )
 from core.models.background import BackgroundLayer, decode_tile_palette_overrides
 from core.models.camera import Camera
+from core.models.field_value import Raw, number_raw
 from core.models.ui_region import InterfaceNode
 
 # Les types de tuiles de collision et leur géométrie vivent dans leur propre
@@ -350,7 +351,7 @@ class Actor(ComponentOwnerMixin):
     y: int = 72
     flip_h: bool = False
     flip_v: bool = False
-    priority: int = 0
+    priority: Raw = 0            # 0-3 ; int ou référence de variable
     pal_bank: int = OWN_PAL_BANK   # -1 = palette propre du sprite (défaut)
     visible: bool = True
     # Mode OAM (bits 10-11 d'attr0) : 0 = sprite normal, 2 = fenêtre-objet —
@@ -365,9 +366,11 @@ class Actor(ComponentOwnerMixin):
     # matrice affine OAM. Sans elle, l'actor tourne pour la logique, pas pour
     # l'écran ; le SpriteComponent compose alors son propre scale/rotation/offset
     # locaux par-dessus ceux-ci, mais rien ne les affiche.
-    rotation: int = 0            # degrés 0-359 — rotation monde de l'actor
-    scale_x: float = 1.0         # scale monde de l'actor (1.0 = normal)
-    scale_y: float = 1.0
+    # int/float, ou référence de variable (cf. field_value.number_value) :
+    # une variable de rotation est en degrés, une d'échelle en POURCENT.
+    rotation: Raw = 0            # degrés 0-359 — rotation monde de l'actor
+    scale_x: Raw = 1.0           # scale monde de l'actor (1.0 = normal)
+    scale_y: Raw = 1.0
     # Ancrage ÉCRAN : x/y ne sont plus des coordonnées de monde mais des pixels
     # d'écran, et l'émission OAM ne retranche pas la caméra — l'acteur ne
     # défile pas. C'est l'UI en sprite (score, cœurs, curseur) avec tout le
@@ -437,13 +440,13 @@ class Actor(ComponentOwnerMixin):
             y           = d.get("y", 72),
             flip_h      = d.get("flip_h", False),
             flip_v      = d.get("flip_v", False),
-            priority    = d.get("priority", 0),
+            priority    = number_raw(d.get("priority", 0), int),
             pal_bank    = d.get("pal_bank", OWN_PAL_BANK),
             visible     = d.get("visible", True),
             obj_mode    = d.get("obj_mode", 0),
-            rotation    = int(d.get("rotation", 0)),
-            scale_x     = float(d.get("scale_x", 1.0)),
-            scale_y     = float(d.get("scale_y", 1.0)),
+            rotation    = number_raw(d.get("rotation", 0), int),
+            scale_x     = number_raw(d.get("scale_x", 1.0), float),
+            scale_y     = number_raw(d.get("scale_y", 1.0), float),
             screen_space = d.get("screen_space", False),
             parent       = (d.get("parent") or None),
             dir_x       = d.get("dir_x", 0),
@@ -575,7 +578,7 @@ class Scene(Resource):
     # aujourd'hui (aucune window active, tout s'affiche normalement).
     windows: list = field(default_factory=list)  # list[WindowSlot]
     scroll_h: bool = True  # défilement horizontal activé (mode "follow")
-    scroll_v: bool = False # défilement vertical activé (mode "follow")
+    scroll_v: bool = True  # défilement vertical activé (mode "follow") — par défaut pour une NOUVELLE scène ; un fichier sans la clé reste à False (cf. from_dict)
     # Mode vidéo GBA de la scène (0-5). 0 = 4 fonds tuilés réguliers (défaut) ;
     # 1/2 = tuilé + affine ; 3/4/5 = un fond bitmap plein écran (BG2). Pilote
     # l'inspecteur (zones background/palettes). cf. ui MODE_INFO.
@@ -677,9 +680,19 @@ class Scene(Resource):
         return role in (self.blend_obj_role, self.blend_backdrop_role)
 
     def ensure_collision_map(self, width_px: int = 240, height_px: int = 160):
-        """Initialise ou redimensionne la collision_map si vide."""
+        """Initialise la collision_map, ou l'AGRANDIT à la taille de la scène
+        (déduite de son plus grand fond). Jamais de rognage : réduire un fond
+        ne doit pas détruire la collision déjà peinte."""
         if not self.collision_map:
             self.collision_map = make_collision_map(width_px, height_px)
+            return
+        want = make_collision_map(width_px, height_px)
+        cols = max(len(want[0]), max(len(row) for row in self.collision_map))
+        rows = max(len(want), len(self.collision_map))
+        for row in self.collision_map:
+            row.extend([TILE_EMPTY] * (cols - len(row)))
+        while len(self.collision_map) < rows:
+            self.collision_map.append([TILE_EMPTY] * cols)
 
     def to_dict(self) -> dict:
         return {

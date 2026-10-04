@@ -34,7 +34,10 @@ from PyQt6.QtWidgets import (
     QGraphicsOpacityEffect,
     QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsItem,
 )
-from PyQt6.QtGui import QColor, QPainter, QPixmap, QImage, QTransform, QPen, QBrush
+from PyQt6.QtGui import (
+    QColor, QPainter, QPixmap, QImage, QTransform, QPen, QBrush, QKeySequence, QShortcut,
+)
+from core.keybindings import bind, get_keybindings
 from PyQt6.QtCore import Qt, QPoint, QPointF, QSize, QRectF, QTimer, QPropertyAnimation, pyqtSignal
 
 from core.bg_import import render_bg_preview, render_bitmap_preview
@@ -1288,9 +1291,14 @@ class BgInpaintCanvas(QWidget):
         self._tick = 0
 
         # Barre d'état au-dessus du canvas — même composant que le Scene Manager.
-        self._bar = CanvasTopBar(tooltip(title=label('bginp.fit_background_to_view')))
+        self._bar = CanvasTopBar(tooltip(
+            title=label('bginp.fit_background_to_view'), shortcut=get_keybindings().resolve("common.fit")))
         self._bar.zoom_step_asked.connect(self._view.zoom_step)
         self._bar.fit_asked.connect(self._view.fit)
+        fit_shortcut = QShortcut(QKeySequence(), self)
+        fit_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        fit_shortcut.activated.connect(self._view.fit)
+        bind("common.fit", fit_shortcut)
         self._chk_grid = self._bar.add_toggle(
             "view_grid", tooltip(title=label('bginp.8_px_grid_gba_tile'),
                                  body=label('bginp.grid_tip')),

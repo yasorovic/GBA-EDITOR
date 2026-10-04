@@ -5,6 +5,7 @@ Usage : python main.py
 
 from ui.common.labels import label
 import gc
+import os
 import sys
 from pathlib import Path
 
@@ -36,7 +37,7 @@ from core.project_paths import (
     PROJECT_EXT, find_manifest, ProjectManifestError, ProjectNotFoundError)
 from core import crash_log
 from core.app_info import APP_NAME, APP_VERSION
-from core.interface_preferences import interface_language
+from core.interface_preferences import interface_language, interface_scale_percent
 
 
 def dark_palette() -> QPalette:
@@ -202,6 +203,9 @@ if __name__ == "__main__":
     # de publier. Personne n'est là pour cliquer : AUCUNE fenêtre modale.
     smoke_mode = any(a == "--smoke-test" or a.startswith("--smoke-test=") for a in sys.argv[1:])
 
+    # Qt lit ce facteur à la création de la QApplication, pas après : d'où le
+    # redémarrage demandé par le panneau Interface.
+    os.environ["QT_SCALE_FACTOR"] = str(interface_scale_percent() / 100)
     app = QApplication(sys.argv)
     # La trace s'écrit déjà (crash_log.install) ; la fenêtre, elle, a besoin de
     # la QApplication. Sans reporter (smoke test), une exception s'écrit dans le

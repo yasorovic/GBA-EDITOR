@@ -19,9 +19,10 @@ from scripting.api import (
     DOMAIN_FONT, DOMAIN_PALETTE, DOMAIN_TEXT, DOMAIN_LANG, DOMAIN_ACTOR,
     DOMAIN_UI_ELEMENT, DOMAIN_GLOBAL, REF_TYPE_TABLE,
     DOMAIN_SOUND_BOX_STATE, DOMAIN_JINGLE_BOX_STATE, DOMAIN_MUSIC_BOX_TRIGGER,
-    DOMAIN_KEY, DOMAIN_WIN_REGION, WIN_REGIONS, DOMAIN_BOX_TAG,
+    DOMAIN_KEY, DOMAIN_WIN_REGION, WIN_REGIONS, DOMAIN_BOX_TAG, DOMAIN_ANIM,
 )
 from core.models.settings import BUTTON_NAMES
+from core.script_owners import actors_and_prefabs_of_script
 
 
 def _names(items) -> list[str]:
@@ -55,6 +56,18 @@ def data_column_kinds(project) -> dict[str, str]:
     return {data_column_key(table.name, col.name): by_column[col.type]
             for table in (getattr(project, "data_tables", None) or [])
             for col in table.columns if col.type in by_column}
+
+
+def anim_names_of_script(project, path) -> list[str]:
+    """Les états d'animation que ce script peut nommer : ceux des sprites de tous les
+    acteurs et prefabs auxquels il est attaché, dans l'ordre de première apparition.
+    Même source que le `BuildContext` du checker (`owner_appearances`)."""
+    from codegen.oam_alloc import owner_appearances
+    names: list[str] = []
+    for owner in actors_and_prefabs_of_script(project, path):
+        for _comp, sprite in owner_appearances(project, owner):
+            names += [st.name for st in sprite.states if st.name not in names]
+    return names
 
 
 def names_by_domain(project, scene=None) -> dict[str, list[str]]:

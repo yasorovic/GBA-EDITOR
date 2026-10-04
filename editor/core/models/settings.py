@@ -299,8 +299,8 @@ class ProjectSettings:
 class GlobalVar:
     """Variable globale déclarée explicitement dans le projet."""
     name:    str  = "var"
-    type:    str  = "int"   # int|bool|u8|u16|s8|s16 — un type par variable en C
-    default: int  = 0
+    type:    str  = "int"   # int|bool|u8|u16|s8|s16|string — un type par variable en C
+    default: int | str = 0   # un texte pour le type string
     desc:    str  = ""      # description optionnelle
     id:      int  = 0       # opaque, stable à vie — voir en-tête de section
     # Cette variable survit-elle à l'extinction de la console ? Un drapeau par
@@ -330,8 +330,8 @@ class GlobalVar:
 class Constant:
     """Constante déclarée explicitement dans le projet (lecture seule)."""
     name:  str = "const"
-    type:  str = "int"   # même jeu de types que GlobalVar : int|bool|u8|u16|s8|s16
-    value: int = 0
+    type:  str = "int"   # même jeu de types que GlobalVar : int|bool|u8|u16|s8|s16|string
+    value: int | str = 0   # un texte pour le type string
     desc:  str = ""      # description optionnelle
     id:    int = 0       # opaque, stable à vie
 

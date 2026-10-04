@@ -4,7 +4,7 @@ quand un mode de préparation de la source est ouvert (il prend alors la main)."
 from __future__ import annotations
 
 from ui.common.labels import label
-from ui.common.shortcut_hints import Hints, combo, mouse, view_rows
+from ui.common.shortcut_hints import Hints, combo, mouse
 
 _TITLES = {
     "brush": "bginp.brush",
@@ -39,6 +39,5 @@ def background_hints(context: str) -> Hints:
     rows = list(_ROWS.get(context, []))
     # Les fonds animés posés se déplacent et se retirent quel que soit l'outil.
     if context in ("brush", "fill", "rect", "eraser"):
-        rows += [(label("hints.bg.key_animated_drag"), "hints.bg.move_animated"),
-                 ("Del", "hints.bg.delete_animated")]
-    return _TITLES.get(context, "bginp.brush"), rows + view_rows(None)
+        rows += [(label("hints.bg.key_animated_drag"), "hints.bg.move_animated")]
+    return _TITLES.get(context, "bginp.brush"), rows

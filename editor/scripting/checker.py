@@ -36,6 +36,7 @@ from . import lua_subset
 # `core.models` qui ne peut pas remonter vers `scripting`, d'où le sens de
 # l'import (et non une seconde liste tenue ici).
 from core.models.settings import BUTTON_NAMES
+from codegen.c_names import c_ident
 from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, REMOVED_EVENTS, KNOWN_EVENTS, KNOWN_EVENTS_BY_KIND,
                   ALL_KNOWN_EVENTS, OWNER_KINDS_WITH_SELF, DOMAIN_ANIM, DOMAIN_SPRITE_ID, DOMAIN_SFX,
                   DOMAIN_SOUND_BOX_STATE, DOMAIN_JINGLE_BOX_STATE,
@@ -53,7 +54,7 @@ from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, REMOVED_EVENTS, KNOWN
                   ref_member, ref_lineage, REF_ACTOR, STATELESS_MODULES, module_call_form, LAYER_NUMBERS,
                   modernize_message)
 
-from .expr_types import (VEC_FIELDS, VEC_CONSTRUCTORS, ARITH_TYPES,
+from .expr_types import (VEC_FIELDS, VEC_CONSTRUCTORS, VEC_FUNCTIONS, ARITH_TYPES,
                          infer_vec_type, infer_ref_type, resolve_prop,
                          is_actor_call, chain_label, element_of)
 
@@ -83,6 +84,20 @@ class CheckError:
     level:   str   # "error" | "warning"
     message: str
     line:    int = 0   # ligne du script, ou 0 si la faute n'en a pas (le build la rend en `fichier:ligne`)
+
+
+class _LineStampedErrors(list):
+    """The errors of a check. An error built without a line takes the line of the
+    statement being checked (`Checker._stmt_line`): the author is always told WHERE."""
+
+    def __init__(self, checker):
+        super().__init__()
+        self._checker = checker
+
+    def append(self, err):
+        if not err.line:
+            err.line = self._checker._stmt_line
+        super().append(err)
 
 
 @dataclass
@@ -204,7 +219,8 @@ class Checker:
 
     def __init__(self, ctx: BuildContext):
         self.ctx    = ctx
-        self.errors: list[CheckError] = []
+        self._stmt_line = 0
+        self.errors: list[CheckError] = _LineStampedErrors(self)
         # Tableaux du script : nom → dimensions, ou None quand le même nom est
         # déclaré deux fois avec des tailles différentes. Une table PLATE, sans
         # portée lexicale : approximer large ne peut que taire un contrôle,
@@ -355,7 +371,7 @@ class Checker:
         """
         from .expr_types import _ACTOR_PROP_FIELDS
         globals_ = set(self.ctx.global_names or [])
-        reserved = self._NAMESPACES | frozenset(RUNTIME_API) | frozenset(VEC_CONSTRUCTORS)
+        reserved = self._NAMESPACES | frozenset(RUNTIME_API) | frozenset(VEC_CONSTRUCTORS) | VEC_FUNCTIONS
         for loc in script.locals:
             if not loc.export_type:
                 continue
@@ -388,7 +404,7 @@ class Checker:
         counts: dict[str, int] = {}
         for fn in helpers:
             counts[fn.name] = counts.get(fn.name, 0) + 1
-            if fn.name in RUNTIME_API or fn.name in VEC_CONSTRUCTORS:
+            if fn.name in RUNTIME_API or fn.name in VEC_CONSTRUCTORS or fn.name in VEC_FUNCTIONS:
                 self.errors.append(CheckError(
                     "error", f"Private function '{fn.name}': this name already belongs to "
                              "the API."))
@@ -1056,7 +1072,8 @@ class Checker:
         _, p = prop
         if (p.lua_name.startswith(f"{REF_ACTOR}.")
                 and p.lua_name.split(".")[1] in
-                ("rotation", "scale", "sprite_rotation", "sprite_scale", "sprite_offset")
+                ("rotation", "scale", "sprite_rotation", "sprite_scale", "sprite_offset",
+                 "sprite_pivot")
                 and not self.ctx.affine_transform):
             self.errors.append(CheckError(
                 "warning",
@@ -1216,6 +1233,14 @@ class Checker:
             self._check_stmt(s, seq_top)
 
     def _check_stmt(self, s, seq_top: bool = False):
+        enclosing = self._stmt_line
+        self._stmt_line = getattr(s, "line", 0) or enclosing
+        try:
+            self._check_stmt_line_known(s, seq_top)
+        finally:
+            self._stmt_line = enclosing
+
+    def _check_stmt_line_known(self, s, seq_top: bool = False):
         if isinstance(s, StmtCall):
             # Une attente n'est pas un appel : elle coupe la séquence en deux,
             # et le découpage n'a de sens qu'en LIGNE DROITE. `seq_top` est vrai
@@ -1451,11 +1476,12 @@ class Checker:
             self._check_expr(e.obj)
 
     def _check_vec_binop(self, e: ExprBinop):
-        """+ et - veulent le MÊME type vec2/vec3 des deux côtés ; * veut un
-        vecteur d'un côté et un entier de l'autre. Tout le reste (comparer,
-        diviser, mélanger vec2 et vec3…) n'a pas de sens ici — vec2/vec3 ne
-        portent aucun opérateur en dehors de ces trois-là. Un rect, lui, n'est
-        jamais un opérande de calcul."""
+        """Deux vecteurs se combinent composante par composante, s'ils sont du MÊME
+        type vec2/vec3 ; un vecteur et un entier aussi, l'entier valant alors le
+        vecteur dont toutes les composantes sont cet entier. `dot(a, b)` est la
+        fonction qui rend un entier. Tout le reste (comparer, mélanger vec2 et vec3…)
+        n'a pas de sens ici : vec2/vec3 ne portent que + - * /. Un rect, lui,
+        n'est jamais un opérande de calcul."""
         lt = infer_vec_type(e.left, self._vec_types, self._ref_types, self._kinds)
         rt = infer_vec_type(e.right, self._vec_types, self._ref_types, self._kinds)
         if lt is None and rt is None:
@@ -1472,27 +1498,30 @@ class Checker:
                 f"a {bad} is not a number: '{e.op}' is not defined on it (only vec2/vec3 "
                 "and integers can be used in arithmetic)."))
             return
-        if e.op not in ("+", "-", "*"):
+        if e.op not in ("+", "-", "*", "/"):
             self.errors.append(CheckError(
                 "error",
-                f"'{e.op}' is not defined on a vec2/vec3 — only +, - and * (by an "
-                "integer) are."))
+                f"'{e.op}' is not defined on a vec2/vec3 — only +, -, * and / (with "
+                "an integer; + and - also with another vector) are."))
             return
         if lt and rt:
-            if e.op == "*":
-                self.errors.append(CheckError(
-                    "error",
-                    "vec2/vec3 * vec2/vec3 does not exist — multiplying two vectors "
-                    "component by component makes no sense here. An integer on one "
-                    "side does."))
-            elif lt != rt:
+            if lt != rt:
                 self.errors.append(CheckError(
                     "error", f"{lt} {e.op} {rt}: both sides must be of the same type."))
-        elif e.op != "*":
+
+    def _check_vec_function(self, key: str, args: list):
+        """`dot(a, b)` : deux vecteurs du MÊME type, vec2 ou vec3."""
+        if len(args) != 2:
             self.errors.append(CheckError(
-                "error",
-                f"{e.op} between a {lt or rt} and a scalar does not exist — only multiplication "
-                "by an integer mixes the two."))
+                "error", f"{key}() expects 2 vectors, {len(args)} given."))
+            return
+        types = [infer_vec_type(a, self._vec_types, self._ref_types, self._kinds) for a in args]
+        if any(t not in ARITH_TYPES for t in types):
+            self.errors.append(CheckError(
+                "error", f"{key}() takes two vec2 or two vec3: an argument is not a vector."))
+        elif types[0] != types[1]:
+            self.errors.append(CheckError(
+                "error", f"{key}({types[0]}, {types[1]}): both vectors must be of the same type."))
 
     def _check_length(self, operand):
         """`#x` est une constante de compilation : elle n'a de valeur que sur un
@@ -1629,6 +1658,9 @@ class Checker:
                     f"{key}() returns no value: it is a wait, and is written alone on "
                     "its line, at the top level of a sequence "
                     f"({SEQUENCE_PREFIX}<name>)."))
+                return
+            if key in VEC_FUNCTIONS:
+                self._check_vec_function(key, e.args)
                 return
             if key in VEC_CONSTRUCTORS:
                 # vec2(x, y) / vec3(x, y, z) : constructeur de langage, pas une
@@ -1861,11 +1893,16 @@ class Checker:
                 "error", "literal text: at most 4 interpolated values in a literal."))
 
     def _check_anim(self, call_key: str, name: str):
-        if self.ctx.anim_names is not None and name not in self.ctx.anim_names:
+        # Le C nomme l'état `ANIM_<acteur>_<NOM EN MAJUSCULES>` (`c_ident`) : `"idle"`
+        # et `"Idle"` désignent le MÊME état, et c'est ce que le build comprend.
+        if (self.ctx.anim_names is not None
+                and c_ident(name) not in {c_ident(n) for n in self.ctx.anim_names}):
+            linked = ", ".join(self.ctx.anim_names) or "none"
             self.errors.append(CheckError(
                 "warning",
                 f"{call_key}('{name}'): animation '{name}' not found in the linked sprite "
-                f"({', '.join(self.ctx.anim_names) or 'none'}).",
+                f"({linked})." + ("" if self.ctx.anim_names else
+                                  " This actor or prefab has no sprite with an image."),
             ))
 
     def _check_sprite_id(self, call_key: str, name: str):

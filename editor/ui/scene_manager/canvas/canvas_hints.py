@@ -2,7 +2,7 @@
 du canvas de scène, par outil actif (ids de `FloatingToolbar.tool_changed`)."""
 from __future__ import annotations
 
-from ui.common.shortcut_hints import Hints, bound, combo, key_icon, mouse, view_rows
+from ui.common.shortcut_hints import Hints, bound, combo, key_icon, mouse
 
 _TITLES = {
     "select": "cvtool.select",
@@ -39,9 +39,6 @@ def _tool_rows(tool: str) -> list:
             (combo("Alt", mouse("left_drag")), "hints.scene.duplicate_drag"),
             (mouse("right_click"), "hints.scene.actor_menu"),
             (key_icon("dir_omni"), "hints.scene.nudge"),
-            (bound("canvas.delete"), "hints.scene.delete"),
-            (bound("canvas.duplicate"), "hints.scene.duplicate"),
-            (f"{bound('canvas.copy')} / {bound('canvas.paste')}", "hints.scene.copy_paste"),
         ]
     if tool == "add":
         return [(mouse("left_click"), "hints.scene.place_actor")]
@@ -64,5 +61,5 @@ def _tool_rows(tool: str) -> list:
 def scene_canvas_hints(tool: str) -> Hints:
     rows = _tool_rows(tool or "select")
     if tool and tool != "select":
-        rows = rows + [(bound("canvas.cancel"), "hints.scene.back_to_select")]
-    return _TITLES.get(tool or "select", "cvtool.select"), rows + view_rows()
+        rows = rows + [(bound("common.cancel"), "hints.scene.back_to_select")]
+    return _TITLES.get(tool or "select", "cvtool.select"), rows

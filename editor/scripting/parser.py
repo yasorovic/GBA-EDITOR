@@ -834,6 +834,12 @@ _FALSE_FRIENDS: tuple = (
     (r"^\s*else\s+if\b",
      "`else if` opens a SECOND block that needs its own `end` — "
      "`elseif`, as a single word, does not"),
+    # A condition that neither ends on an operator nor a comma (it would continue
+    # on the next line) and holds no `then`: `if x == 0 self:play_anim("idle")`.
+    (r"^\s*(?:if|elseif)\b(?!.*\bthen\b)(?!.*(?:\band|\bor|\bnot|[(,+\-*/%=<>~.{])\s*$)",
+     "this `if` / `elseif` has no `then`: the condition must be followed by `then`"),
+    (r"^\s*(?:for|while)\b(?!.*\bdo\b)(?!.*(?:\band|\bor|\bnot|[(,+\-*/%=<>~.{])\s*$)",
+     "this `for` / `while` has no `do`: the header must be followed by `do`"),
     (r"^\s*#",
      "a comment starts with `--`; `#` is the length operator"),
     (r"^\s*//", "a comment starts with `--`, not `//`"),
@@ -854,17 +860,43 @@ def _code_lines(source: str) -> list[str]:
     return [_code(l) for l in source.splitlines()]
 
 
+def _locals_in_exports(lignes: list[str]) -> set[int]:
+    """Lines of a `local` declaration written INSIDE `exports = { ... }`: the
+    block is a table, so each entry is `name = { type = ... }`, never `local`."""
+    import re
+    found, depth = set(), 0
+    for n, texte in enumerate(lignes, start=1):
+        if depth == 0:
+            if not re.match(r"^\s*exports\s*=\s*\{", texte):
+                continue
+            texte_apres = texte[texte.index("{"):]
+        else:
+            texte_apres = texte
+            if re.match(r"^\s*local\b", texte):
+                found.add(n)
+        depth += texte_apres.count("{") - texte_apres.count("}")
+        depth = max(depth, 0)
+    return found
+
+
+_LOCAL_IN_EXPORTS = ("`local` has no place inside `exports = { ... }`: "
+                     "write the entry as `name = { type = ... }`")
+
+
 def _false_friend(source: str, line: Optional[int]) -> tuple[str, Optional[int]]:
     """(sentence, line where it was found) — searched first ON the line antlr
     gives, then in the whole file. The line is returned because it is THE one
     reported: antlr names where it gave up, often below the mistake."""
     import re
     lignes = _code_lines(source)
+    locaux = _locals_in_exports(lignes)
     ordre = []
     if line and 1 <= line <= len(lignes):
         ordre.append((line, lignes[line - 1]))
     ordre += [(i, l) for i, l in enumerate(lignes, start=1) if i != line]
     for n, texte in ordre:
+        if n in locaux:
+            return _LOCAL_IN_EXPORTS, n
         for motif, phrase in _FALSE_FRIENDS:
             if re.search(motif, texte):
                 return phrase, n
@@ -918,9 +950,19 @@ def _syntax_message(source: str, exc) -> tuple[str, Optional[int]]:
         token = re.split(r"\s*--", quoted.group(1).split("\\n")[0])[0].strip()
         msg = f"unexpected `{token}`: this is not a valid statement or expression"
     elif quoted:
-        # A lone token: antlr gave up HERE, the mistake is somewhere above.
-        msg = (f"syntax error before `{quoted.group(1).strip()}` — "
-               f"the mistake is on a previous line")
+        # A lone token: antlr gave up HERE, so the statement BEFORE it is the one
+        # left incomplete. That line is reported, with its text.
+        token = quoted.group(1).strip()
+        lignes = source.splitlines()
+        code = _code_lines(source)
+        precedente = next((n for n in range(min((line or 1) - 1, len(lignes)), 0, -1)
+                           if code[n - 1].strip()), None)
+        if precedente:
+            line = precedente
+            msg = (f"this statement is incomplete or malformed (`{lignes[precedente - 1].strip()}`): "
+                   f"the parser stopped at the next `{token}`")
+        else:
+            msg = f"unexpected `{token}` at the start of the script"
     elif line:
         msg = "this line is not valid Lua"
     else:

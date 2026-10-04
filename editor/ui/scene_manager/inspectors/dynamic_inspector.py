@@ -65,7 +65,11 @@ class DynamicInspector(QWidget):
         self._project = None   # mis à jour via set_project()
         self._graph_state = None
         self.setStyleSheet(f"background:{C.BG_PANEL};")
-        self.setMinimumWidth(200)
+        # Plancher mesuré : le contenu des inspecteurs de scène (≈ 274 px) et
+        # d'interface (≈ 291 px) ne rétrécit pas plus, et la barre horizontale
+        # est coupée — sous ce seuil le séparateur rognait les champs sans
+        # recours. 200 les laissait coupés dès l'ouverture.
+        self.setMinimumWidth(300)
 
         main = QVBoxLayout(self)
         main.setContentsMargins(0, 0, 0, 0)
@@ -491,11 +495,7 @@ class DynamicInspector(QWidget):
     def show_camera(self, scene, camera, project):
         self._ensure(self._MODE_CAMERA)
         self._camera_insp.load(scene, camera, project)
-        # Éditable seulement si la caméra existe RÉELLEMENT : l'état implicite
-        # ("(default)", cf. camera_inspector.py) n'a pas de nom à changer —
-        # renommer matérialiserait une caméra par un geste qui n'en a pas l'air.
-        self._set_header("camera", label('common.camera'), camera.name if camera else label('common.default_paren'),
-                         editable=camera is not None)
+        self._set_header("camera", label('common.camera'), camera.name, editable=True)
         self._stack.setCurrentIndex(self._MODE_CAMERA)
 
     def show_script(self, path, project=None):

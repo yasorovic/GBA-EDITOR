@@ -228,7 +228,6 @@ class ActorInspector(QWidget):
         self._notes_edit = NotesEdit()
         self._notes_edit.committed.connect(lambda text: self._set("notes", text))
         notes_card.body_layout.addWidget(self._notes_edit)
-        cl.addWidget(notes_card)
 
         # ── Header : preview sprite + nom ────────────────────────
         header_frame = QFrame()
@@ -264,6 +263,7 @@ class ActorInspector(QWidget):
         name_col.addWidget(self._tag_lbl)
         hl.addLayout(name_col, 1)
         cl.addWidget(header_frame)
+        cl.addWidget(notes_card)
 
         # ── Badge prefab (visible seulement si actor.prefab_name) ──
         self._prefab_badge = QFrame()
@@ -401,15 +401,18 @@ class ActorInspector(QWidget):
         # SpriteComponent (cf. ARCHITECTURE.md « Le modèle affine ») : elle
         # réserve le slot de matrice OAM. Ces champs ne sont donc pas grisés
         # quand elle est décochée — ils marchent, ils ne s'affichent pas.
-        self._trotation = self._fields.bind("rotation", _W.spinbox(0, min_v=0, max_v=359))
-        self._trotation.setSuffix("°")
-        self._trotation.setWrapping(True)
+        # int ou variable (degrés) — cf. NumberField.
+        self._trotation = self._fields.bind("rotation", _W.number_field(
+            0, project=self._project, kind="int", min_v=0, max_v=359,
+            suffix="°", wrapping=True))
         _W.row(label("common.rotation"), self._trotation, tl, label_width=_lbl_w)
 
         self._tscale_x = self._fields.bind(
-            "scale_x", _W.double_spinbox(1.0, min_v=0.1, max_v=4.0, step=0.1))
+            "scale_x", _W.number_field(1.0, project=self._project, kind="float",
+                                       min_v=0.1, max_v=4.0, step=0.1))
         self._tscale_y = self._fields.bind(
-            "scale_y", _W.double_spinbox(1.0, min_v=0.1, max_v=4.0, step=0.1))
+            "scale_y", _W.number_field(1.0, project=self._project, kind="float",
+                                       min_v=0.1, max_v=4.0, step=0.1))
         _W.pair(label("common.scale"), "X", C.AXIS_X, self._tscale_x,
                 "Y", C.AXIS_Y, self._tscale_y, tl, label_width=_lbl_w)
 
@@ -429,7 +432,8 @@ class ActorInspector(QWidget):
         # ── Priority ─────────────────────────────────────────────
         # (la palette OBJ se règle désormais dans l'éditeur du SpriteComponent,
         # cf. component_editors/sprite.py — palette_picker_slot)
-        self._tpriority = self._fields.bind("priority", _W.spinbox(0, min_v=0, max_v=3))
+        self._tpriority = self._fields.bind("priority", _W.number_field(
+            0, project=self._project, kind="int", min_v=0, max_v=3))
         notice("actor.priority", self._tpriority, tl)
         _W.row(label("actorinsp.tr.priority"), self._tpriority, tl, label_width=_lbl_w)
 
@@ -472,19 +476,10 @@ class ActorInspector(QWidget):
         tl.addWidget(self._tvisible)
         cl.addWidget(self._transform_group)
 
-        _ico_btn = (
-            f"QPushButton{{color:{C.TEXT_DIM};background:{C.BG_INPUT};"
-            f"border:1px solid {C.BORDER_MID};border-radius:3px;"
-            f"font-family:{T.UI_STACK};font-size:{T.XL}px;}}"
-            f"QPushButton:hover{{color:{C.TEXT_HI};background:{C.BG_HOVER};border-color:{C.BORDER_MID};}}"
-        )
-
         # ── COMPONENTS card ──────────────────────────────────────────
         self._comp_card = CollapsibleCard(label("actorinsp.card.components"), color=icons.COLOR_ACTOR)
-        btn_add = QPushButton("+"); btn_add.setFixedSize(20, 20)
-        btn_add.setStyleSheet(_ico_btn); btn_add.clicked.connect(self._show_add_menu)
-        btn_del = QPushButton("−"); btn_del.setFixedSize(20, 20)
-        btn_del.setStyleSheet(_ico_btn); btn_del.clicked.connect(self._remove_selected_component)
+        btn_add = _W.btn_add(); btn_add.clicked.connect(self._show_add_menu)
+        btn_del = _W.btn_remove(); btn_del.clicked.connect(self._remove_selected_component)
         self._comp_card.add_header_widget(btn_add)
         self._comp_card.add_header_widget(btn_del)
 
@@ -511,10 +506,8 @@ class ActorInspector(QWidget):
         # dialogue — on renomme ensuite dans l'inspecteur, comme partout
         # ailleurs dans ce logiciel.
         self._children_card = CollapsibleCard(label("actorinsp.card.children"), color=icons.COLOR_PREFAB)
-        _pb_add = QPushButton("+"); _pb_add.setFixedSize(20, 20)
-        _pb_add.setStyleSheet(_ico_btn); _pb_add.clicked.connect(self._add_child)
-        _pb_del = QPushButton("−"); _pb_del.setFixedSize(20, 20)
-        _pb_del.setStyleSheet(_ico_btn); _pb_del.clicked.connect(self._remove_selected_child)
+        _pb_add = _W.btn_add(); _pb_add.clicked.connect(self._add_child)
+        _pb_del = _W.btn_remove(); _pb_del.clicked.connect(self._remove_selected_child)
         self._children_card.add_header_widget(_pb_add)
         self._children_card.add_header_widget(_pb_del)
 
@@ -683,6 +676,8 @@ class ActorInspector(QWidget):
             from core.models.field_value import variables_from_project
             _vars = variables_from_project(self._project)
             self._tx.set_variables(_vars); self._ty.set_variables(_vars)
+            for _nf in (self._trotation, self._tscale_x, self._tscale_y, self._tpriority):
+                _nf.set_variables(_vars)
             self._dir_picker.set_direction(getattr(actor, "dir_x", 0), getattr(actor, "dir_y", 0))
             # x, y, rotation, scale_x, scale_y, priority, obj_mode, screen_space,
             # visible : repeuplés d'un coup par le binder (x/y après le
@@ -872,32 +867,34 @@ class ActorInspector(QWidget):
         comp = self._previewed_sprite_component()
         if not comp or not comp.sprite_name:
             return
+        # Catalogue des sprites différé (v0.24) : sans ceci, `get_sprite` ne
+        # trouve rien tant qu'un éditeur de component ne l'a pas matérialisé.
+        self._project.load_sprites()
         sprite = self._project.get_sprite(comp.sprite_name)
         if not sprite or not sprite.asset:
             return
         asset_path = self._project.asset_abs(sprite.asset)
         if not asset_path or not asset_path.exists():
             return
-        # Trouver l'AnimState correspondant à initial_state
-        state_name = getattr(comp, "initial_state", "Idle")
-        state = next((s for s in sprite.states if s.name == state_name), None)
-        if not state and sprite.states:
-            state = sprite.states[0]
-        sd = state.directions[0] if state and state.directions else None
-        if not sd or not sd.frames:
+        # Même chaîne que le canvas (frame, direction, palette OBJ de la scène) :
+        # l'en-tête montre ce que la scène dessine, pas le PNG brut.
+        from core.sprite_compose import compose_frame_image
+        from core.models.gba_color import quantize_preview
+        from codegen.grit_conversion import resolve_obj_palette_bank
+        from ui.scene_manager.canvas.canvas_raster import preview_frame_for_actor
+        from PyQt6.QtGui import QImage
+        frame, flip_h, flip_v = preview_frame_for_actor(sprite, comp, self._actor)
+        if frame is None or not frame.tiles:
             return
-        frame = sd.frames[0]
-        px = QPixmap(str(asset_path))
-        if px.isNull():
+        img = compose_frame_image(asset_path, frame, sprite.frame_w, sprite.frame_h)
+        img = quantize_preview(img, sprite, resolve_obj_palette_bank(
+            self._project, self._actor, self._scene))
+        if img.width <= 0 or img.height <= 0:
             return
-        cropped = QPixmap(sprite.frame_w, sprite.frame_h)
-        cropped.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(cropped)
-        for t in frame.tiles:
-            tile_px = px.copy(t.src_col * 8, t.src_row * 8, 8, 8)
-            painter.drawPixmap(t.dst_col * 8, t.dst_row * 8, tile_px)
-        painter.end()
-        scaled = cropped.scaled(
+        data = bytes(img.tobytes("raw", "RGBA"))
+        qi = QImage(data, img.width, img.height, QImage.Format.Format_RGBA8888)
+        qi = qi.mirrored(bool(flip_h), bool(flip_v))
+        scaled = QPixmap.fromImage(qi).scaled(
             44, 44,
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.FastTransformation,

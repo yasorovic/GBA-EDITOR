@@ -6,6 +6,10 @@ semi-transparent, ferré en bas à droite, qui liste les raccourcis et gestes de
 l'outil actif. Replié, c'est une pastille ; la souris dessus le déploie vers
 le haut, la souris partie il se referme.
 
+Le cartouche ne liste que les outils et les gestes PROPRES à l'écran : les
+raccourcis communs (copier, supprimer, ajuster, zoom, molette, clic-milieu)
+vivent dans Réglages → Shortcuts, pas ici.
+
 L'écran hôte reste maître du contenu : il donne un `provider(contexte)` qui
 rend le titre et les rangées de l'outil, et dit quand le contexte change
 (`set_context`). Le widget ne connaît ni outil ni canvas.
@@ -75,18 +79,6 @@ def combo(*parts: Shortcut) -> Shortcut:
     if icon is not None:
         return KeyIcon(icon.name, tuple(str(part) for part in parts if isinstance(part, str)))
     return " + ".join(parts)
-
-
-def view_rows(fit_key: Optional[str] = "canvas.fit",
-              fit_label: str = "hints.fit") -> list[Row]:
-    """Les gestes de vue, identiques partout : zoom, déplacement, cadrage.
-    `fit_key=None` quand l'écran n'a pas de touche de cadrage (bouton seul)."""
-    rows = [SEPARATOR,
-            (mouse("wheel"), "hints.zoom"),
-            (mouse("middle_drag"), "hints.pan")]
-    if fit_key:
-        rows.append((bound(fit_key), fit_label))
-    return rows
 
 
 # ── Le cartouche ──────────────────────────────────────────────────────────

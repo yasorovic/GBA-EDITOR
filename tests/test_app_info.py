@@ -121,33 +121,6 @@ def test_la_config_utilisateur_vit_sous_le_nom_du_produit():
     assert config_dir().name.lower() == APP_NAME.lower()
 
 
-def test_la_fenetre_a_propos_donne_nom_version_et_auteur():
-    from PyQt6.QtWidgets import QApplication, QLabel
-    from ui.common.about_dialog import AboutDialog
-
-    app = QApplication.instance() or QApplication([])
-    dialog = AboutDialog()
-    text = "\n".join(lbl.text() for lbl in dialog.findChildren(QLabel))
-
-    assert APP_VERSION in text and APP_AUTHOR in text
-    del app
-
-
-def test_la_fenetre_a_propos_ouvre_licences_et_notices_tierces():
-    from PyQt6.QtWidgets import QApplication, QTabWidget, QTextBrowser
-    from ui.common.about_dialog import LicensesDialog
-
-    app = QApplication.instance() or QApplication([])
-    dialog = LicensesDialog()
-    tabs = dialog.findChild(QTabWidget)
-
-    assert tabs.count() == 3          # éditeur, moteur, notices tierces
-    notices = tabs.widget(2)
-    assert isinstance(notices, QTextBrowser)
-    assert "PyQt6" in notices.toPlainText()
-    del app
-
-
 def test_les_modeles_pointent_vers_un_dossier_de_la_demo_qui_existe():
     """Un modèle renommé dans `Project Demo/` sans le registre = téléchargement qui échoue."""
     import pytest

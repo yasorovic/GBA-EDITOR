@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import sys
 
+import pytest
+
 from codegen import BuildWorker
 from core.models.components import ScriptComponent
 from core.models.scene import Actor
@@ -119,6 +121,7 @@ def _build(project):
     return verdict[-1], lines
 
 
+@pytest.mark.slow
 def test_le_verdict_chiffre_les_erreurs(tmp_path):
     # Un refus du checker, avec sa ligne : le checker est une source comme une autre.
     ok, lines = _build(_projet(tmp_path, "function on_update()\n  local f = function() return 1 end\nend\n"))
@@ -127,12 +130,14 @@ def test_le_verdict_chiffre_les_erreurs(tmp_path):
     assert "[build] 1 error(s), 0 warning(s)" in lines
 
 
+@pytest.mark.slow
 def test_un_projet_sain_chiffre_zero_erreur(tmp_path):
     ok, lines = _build(_projet(tmp_path, "function on_update()\nend\n"))
     assert ok is True
     assert "[build] 0 error(s), 0 warning(s)" in lines
 
 
+@pytest.mark.slow
 def test_build_log_copie_le_journal_et_se_reecrit(tmp_path):
     project = _projet(tmp_path, "function on_update()\n  local f = function() return 1 end\nend\n")
     _build(project)

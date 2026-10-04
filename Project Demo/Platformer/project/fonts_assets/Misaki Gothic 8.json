@@ -1,0 +1,25 @@
+{
+  "name": "Misaki Gothic 8",
+  "sources": {
+    "regular": [
+      "misaki-gothic"
+    ]
+  },
+  "faces": [
+    {
+      "source_name": "misaki-gothic",
+      "weight": 400
+    }
+  ],
+  "auto_family": "MisakiGothic",
+  "pixel_height": 8,
+  "line_height": 8,
+  "pixel_fit": "bitmap_strike",
+  "hinting": "normal",
+  "raster_mode": "binary",
+  "coverage_threshold": 128,
+  "dither_pattern": "none",
+  "offset_x": 0,
+  "offset_y": 0,
+  "prefer_bitmap_strike": true
+}

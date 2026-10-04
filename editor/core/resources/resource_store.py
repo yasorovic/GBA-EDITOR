@@ -178,7 +178,23 @@ class ResourceStore(Generic[T]):
         for item in self.items:
             self.save(item)
 
+    @staticmethod
+    def _adopt(existing: T, fresh: T) -> T:
+        """Fait de `existing` le reflet de `fresh`, SANS changer d'objet.
+
+        Une ressource n'a qu'une identité en mémoire : l'écran qui l'édite, le
+        canvas qui l'affiche et la sauvegarde globale tiennent tous LA MÊME
+        instance. Remplacer l'objet au rechargement en créait une seconde, périmée
+        pour ceux qui gardaient l'ancienne — l'éditeur modifiait l'une, la
+        sauvegarde du projet écrivait l'autre par-dessus."""
+        if not hasattr(existing, "__dict__") or not hasattr(fresh, "__dict__"):
+            return fresh
+        existing.__dict__.clear()
+        existing.__dict__.update(fresh.__dict__)
+        return existing
+
     def load(self):
+        known = {item.name: item for item in self.items}
         self.items = []
         self.unreadable = {}
         self.scan_index()
@@ -200,6 +216,8 @@ class ResourceStore(Generic[T]):
                 # asset_reconciliation.sync_font_file).
                 if safe_filename(item.name) != f.stem:
                     item.name = f.stem
+                if item.name in known:
+                    item = self._adopt(known[item.name], item)
                 self.items.append(item)
             except Exception as e:
                 self.unreadable[f.name] = f"{type(e).__name__}: {e}"
@@ -221,7 +239,7 @@ class ResourceStore(Generic[T]):
                 new_item.name = name
             for i, item in enumerate(self.items):
                 if item.name == name:
-                    self.items[i] = new_item
+                    self.items[i] = new_item = self._adopt(item, new_item)
                     self.index.record(name, path)
                     return new_item
             self.items.append(new_item)

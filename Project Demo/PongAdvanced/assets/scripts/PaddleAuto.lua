@@ -20,7 +20,7 @@ function on_update()
             incoming = true
         end
     end
-
+ 
     -- La balle vient de se tourner vers nous : on calcule une fois où elle ira.
     if incoming and not was_incoming then
         react = 10

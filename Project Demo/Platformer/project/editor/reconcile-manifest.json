@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "dirs": {
+    "assets/backgrounds": {
+      "LevelDesign.png": "768:1791068913115969500"
+    },
+    "assets/sprites": {
+      "Player.png": "1049:1791068463656443600"
+    },
+    "assets/sfx": {},
+    "assets/music": {}
+  }
+}

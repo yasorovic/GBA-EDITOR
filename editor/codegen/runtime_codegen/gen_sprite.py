@@ -211,13 +211,27 @@ def anim_tables_for(p: Project, sprite: SpriteAsset) -> list[str]:
     return L
 
 
+def direction_lines(idx: int, e: int) -> list[str]:
+    """Le recalcul de la direction d'un acteur (`idx`) pour son entrée OAM `e` : commun à
+    toutes ses apparences, émis UNE fois."""
+    return [
+        f"    if(g_oam_entries[{e}].auto_dir&&(g_actors[{idx}].vx||g_actors[{idx}].vy)){{",
+        f"        g_actors[{idx}].dir_x=(g_actors[{idx}].vx>0)-(g_actors[{idx}].vx<0);",
+        f"        g_actors[{idx}].dir_y=(g_actors[{idx}].vy>0)-(g_actors[{idx}].vy<0);",
+        f"    }}",
+        # Le côté regardé survit à un `dir_x` retombé à 0 (arrêt, saut droit) : c'est lui
+        # que retient le repli de direction du tick. Hors du `if` d'auto_dir — une
+        # direction écrite par le script compte aussi.
+        f"    if(g_actors[{idx}].dir_x) g_oam_entries[{e}].face_x=g_actors[{idx}].dir_x;",
+    ]
+
+
 def anim_tick_lines(idx: int, sym: str, has_frame_sfx: bool = False,
                     has_frame_direct_sfx: bool = False,
                     event_lines: Optional[list[str]] = None,
                     has_frame_events: bool = False,
                     actor_sym: str = "",
                     entry: int | None = None,
-                    label_suffix: str = "",
                     with_auto_dir: bool = True) -> list[str]:
     """Génère le bloc C de tick d'animation pour un acteur (dans scene_tick).
 
@@ -235,18 +249,10 @@ def anim_tick_lines(idx: int, sym: str, has_frame_sfx: bool = False,
     portée LOCALE à ce bloc (un `static` de fonction est légal en C, même
     patron que `_dlut` juste en dessous), plutôt qu'au niveau fichier.
 
-    `label_suffix` : le `goto` interne s'appelle `_af<idx>` ; deux apparences du
-    même acteur dans un `switch` (cf. `anim_tick_variants`) ont donc besoin de
-    deux noms. `with_auto_dir` : le recalcul de la direction est PARTAGÉ entre les
-    apparences, il n'a pas à être émis dans chacune.
+    `with_auto_dir` : le recalcul de la direction est PARTAGÉ entre les apparences,
+    il n'a pas à être émis dans chacune.
     """
     e = idx if entry is None else entry   # entrée OAM ; `idx` reste l'acteur (vx, vy, dir, événements)
-    auto_dir = [
-        f"    if(g_oam_entries[{e}].auto_dir&&(g_actors[{idx}].vx||g_actors[{idx}].vy)){{",
-        f"        g_actors[{idx}].dir_x=(g_actors[{idx}].vx>0)-(g_actors[{idx}].vx<0);",
-        f"        g_actors[{idx}].dir_y=(g_actors[{idx}].vy>0)-(g_actors[{idx}].vy<0);",
-        f"    }}",
-    ]
     advance = [
         # dir_x/dir_y → indice 1-8 (NW=8,N=1,NE=2,W=7,0=0,E=3,SW=6,S=5,SE=4)
         f"    {{",
@@ -255,13 +261,24 @@ def anim_tick_lines(idx: int, sym: str, has_frame_sfx: bool = False,
         f"        int _ad=_dlut[g_actors[{idx}].dir_y+1][g_actors[{idx}].dir_x+1];",
         f"        int _st=g_oam_entries[{e}].anim_state;",
         f"        int _b={sym}_state_start[_st];",
-        f"        int _fs=0,_fc=1,_fb=-1,_fbc=1;",
+        # La direction demandée, sinon — dans CET état, jamais ailleurs dans le sheet —
+        # l'omni (0), puis le côté regardé (E/W), puis la première direction de l'état.
+        # Une direction que l'état ne dessine pas (un saut droit sur un sprite E/W) ne
+        # tombe donc plus sur la frame 0 du sheet, celle d'un AUTRE état.
+        f"        int _hd=g_oam_entries[{e}].face_x?_dlut[1][g_oam_entries[{e}].face_x+1]:-1;",
+        f"        int _fs=-1,_fc=1,_hs=-1,_hc=1,_fb=-1,_fbc=1;",
         f"        for(int _e=_b;{sym}_anim_dirs[_e][0]!=255;_e++){{",
-        f"            if({sym}_anim_dirs[_e][0]==_ad){{_fs={sym}_anim_dirs[_e][1];_fc={sym}_anim_dirs[_e][2];goto _af{idx}{label_suffix};}}",
-        f"            if({sym}_anim_dirs[_e][0]==0){{_fb={sym}_anim_dirs[_e][1];_fbc={sym}_anim_dirs[_e][2];}}",
+        f"            int _d={sym}_anim_dirs[_e][0];",
+        f"            if(_d==_ad){{_fs={sym}_anim_dirs[_e][1];_fc={sym}_anim_dirs[_e][2];break;}}",
+        f"            if(_d==0){{_fb={sym}_anim_dirs[_e][1];_fbc={sym}_anim_dirs[_e][2];}}",
+        f"            if(_d==_hd){{_hs={sym}_anim_dirs[_e][1];_hc={sym}_anim_dirs[_e][2];}}",
         f"        }}",
-        f"        if(_fb>=0){{_fs=_fb;_fc=_fbc;}}",
-        f"        _af{idx}{label_suffix}:;",
+        f"        if(_fs<0){{",
+        f"            if(_fb>=0){{_fs=_fb;_fc=_fbc;}}",
+        f"            else if(_hs>=0){{_fs=_hs;_fc=_hc;}}",
+        f"            else if({sym}_anim_dirs[_b][0]!=255){{_fs={sym}_anim_dirs[_b][1];_fc={sym}_anim_dirs[_b][2];}}",
+        f"            else{{_fs=0;_fc=1;}}",
+        f"        }}",
         # RESYNC : `frame` peut être hors de [_fs, _fs+_fc) — self:play_anim
         # le remet à 0 (frame ABSOLUE dans le sheet dédupliqué du sprite en
         # entier), qui ne tombe dans le bloc du nouvel état que si celui-ci
@@ -319,7 +336,7 @@ def anim_tick_lines(idx: int, sym: str, has_frame_sfx: bool = False,
         f"&& (g_oam_entries[{e}].frame - _fs) >= _fc - 1;",
         f"    }}",
     ]
-    return auto_dir + advance if with_auto_dir else advance
+    return direction_lines(idx, e) + advance if with_auto_dir else advance
 
 
 # ── Apparences ────────────────────────────────────────────────────────
@@ -393,14 +410,14 @@ def anim_tick_variants(idx: int, e: int, variants: list) -> list[str]:
     if len(variants) == 1:
         return anim_tick_lines(idx, entry=e, **variants[0])
     first = next(v for v in variants if v is not None)
-    L = anim_tick_lines(idx, entry=e, **first)[:4]   # recalcul de la direction, commun
+    L = direction_lines(idx, e)                       # recalcul de la direction, commun
     L.append(f"    switch(g_oam_entries[{e}].appearance){{")
     for n, kw in enumerate(variants):
         if kw is None:
             L += [f"    case {n}: break;"]
             continue
         L += [f"    case {n}:",
-              *anim_tick_lines(idx, entry=e, label_suffix=f"_{n}", with_auto_dir=False, **kw),
+              *anim_tick_lines(idx, entry=e, with_auto_dir=False, **kw),
               "    break;"]
     L.append("    }")
     return L

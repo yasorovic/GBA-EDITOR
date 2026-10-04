@@ -63,6 +63,7 @@ pytestmark_toolchain = pytest.mark.skipif(
 
 
 @pytestmark_toolchain
+@pytest.mark.slow
 def test_une_faute_de_c_sort_sur_la_ligne_du_script(tmp_path, monkeypatch):
     # Le checker laisse passer ce script ; on rend le C émis fautif pour imiter un trou du checker.
     monkeypatch.setattr(CodeGen, "_call_expr", lambda self, call: "bogus_undeclared_var")

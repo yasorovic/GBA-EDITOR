@@ -24,7 +24,7 @@ from core.app_info import APP_NAME
 from core.models.sprite import SpriteAsset
 from core.models.background import BackgroundLayer
 from core.project import Project
-from core.validator import build_error, build_warning
+from core.diagnostic import build_error, build_warning
 # `sym` importée sous le nom `c_sym` : « sym » est un nom de variable locale
 # très courant dans la génération (`sym = bg_layer_sym(...)`), et une locale
 # masquerait la fonction dans toute la portée où elle apparaît.
@@ -703,6 +703,31 @@ def resolve_sound_assets(p: Project) -> dict:
             else:
                 skipped.append((kind, item.name, ap.stat().st_size))
     return {"sfx": sfx_list, "music": music_list, "skipped": skipped}
+
+
+def silent_sound_symbols(p: Project) -> list[str]:
+    """Les constantes C des sons dont le FICHIER manque : `resolve_sound_assets` ne les
+    embarque pas, donc `soundbank.h` ne les définit pas.
+
+    Un son sans fichier — l'utilisateur l'a sans doute retiré lui-même — ne doit pas faire
+    échouer la compilation de ce qui le cite (script, composant, boîte, scène) : le jeu se
+    joue sans lui. Chaque constante vaut alors -1, « aucun son », que les fonctions de lecture
+    ignorent (cf. `headers.generate_runtime_api`). Le validateur, lui, le dit par un avertissement.
+    """
+    from scripting.api import sfx_constant, music_constant
+
+    def missing(item) -> bool:
+        path = p.asset_abs(item.asset) if item.asset else None
+        return not (path and path.exists())
+
+    symbols: list[str] = []
+    for sfx in getattr(p, "sfx", []):
+        if missing(sfx):
+            symbols.append(sfx_constant(sfx.name))
+    for music in getattr(p, "music", []):
+        if missing(music):
+            symbols += [music_constant(music.name), f"MOD_{c_sym(music.name).upper()}"]
+    return symbols
 
 
 class MmutilAudio:

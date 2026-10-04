@@ -12,7 +12,17 @@ from core.command_dispatcher import unique_name
 from .colors import _C_GLOBAL, _C_CONST
 
 
-_TYPES = ["int", "bool", "u8", "u16", "s8", "s16"]
+_TYPES = ["int", "bool", "u8", "u16", "s8", "s16", "string"]
+_STRING = "string"
+_COMBO_WIDTH, _VALUE_WIDTH = 76, 64   # fixes : changer de type ne décale plus la ligne
+
+
+def _type_tooltip(type_: str) -> str:
+    """L'infobulle d'un type : son nom, sa portée, et ce que la string ne permet pas."""
+    return tooltip(
+        title=type_, body=label(f"vartbl.type_{type_}_tip"),
+        note=label("vartbl.type_string_note") if type_ == _STRING else "",
+    )
 
 # Une ligne = un nom cliquable + son type + sa valeur, sans grille ni en-tête :
 # le nom se lit comme les boutons des autres sections de la sidebar.
@@ -75,14 +85,16 @@ class _VarRow(QWidget):
 
         self._combo = QComboBox()
         self._combo.addItems(_TYPES)
+        for i, type_ in enumerate(_TYPES):
+            self._combo.setItemData(i, _type_tooltip(type_), Qt.ItemDataRole.ToolTipRole)
         self._combo.setCurrentText(entry.type)
-        self._combo.setFixedWidth(64)
-        self._combo.setToolTip(tooltip(title=label("vartbl.type_title")))
+        self._combo.setFixedWidth(_COMBO_WIDTH)
         self._combo.currentTextChanged.connect(self._on_type)
+        self._refresh_type_tip()
         row.addWidget(self._combo)
 
         self._value = QLineEdit()
-        self._value.setFixedWidth(48)
+        self._value.setFixedWidth(_VALUE_WIDTH)
         self._value.setToolTip(tooltip(title=label("vartbl.value_title")))
         self._value.editingFinished.connect(self._on_value)
         row.addWidget(self._value)
@@ -94,7 +106,17 @@ class _VarRow(QWidget):
     def _is_array(self) -> bool:
         return self._kind == "global" and self.entry.count > 1
 
+    def _is_string(self) -> bool:
+        return self.entry.type == _STRING
+
+    def _refresh_type_tip(self):
+        """Le tooltip fermé du combo décrit le type COURANT ; ceux de la liste,
+        chacun le sien."""
+        self._combo.setToolTip(_type_tooltip(self.entry.type))
+
     def refresh_value(self):
+        # Une string est un texte ; un tableau de strings garde sa taille dans la cellule.
+        text_mode = self._is_string() and not self._is_array()
         if self._is_array():
             shown, color, tip = self.entry.count, C.ACCENT, tooltip(
                 title=label("vartbl.array"), body=label("vartbl.array_tip"),
@@ -102,7 +124,10 @@ class _VarRow(QWidget):
             )
         else:
             shown = self.entry.value if self._kind == "const" else self.entry.default
-            color, tip = C.SYNTAX_NUMBER, tooltip(title=label("vartbl.value_title"))
+            color = C.SYNTAX_STRING if text_mode else C.SYNTAX_NUMBER
+            tip = (tooltip(title=label("vartbl.value_title"),
+                           body=label("vartbl.string_value_tip"))
+                   if text_mode else tooltip(title=label("vartbl.value_title")))
         self._value.setText(str(shown))
         self._value.setToolTip(tip)
         self._value.setStyleSheet(f"color:{color};")
@@ -127,15 +152,31 @@ class _VarRow(QWidget):
         self._name_btn.setText(self.entry.name)  # le nom réel : un refus le laisse intact
 
     def _on_type(self, text: str):
+        was_string = self._is_string()
         self.entry.type = text
+        if was_string != self._is_string():
+            # Un nombre n'est pas un texte : la valeur repart de zéro / du vide
+            # plutôt que de garder une chaîne là où le C attend un entier.
+            reset = "" if self._is_string() else 0
+            if self._kind == "const":
+                self.entry.value = reset
+            else:
+                self.entry.default = reset
+            if self._is_string() and self._kind == "global":
+                self.entry.persist = False   # un index de texte ne se sauvegarde pas
+            self.refresh_value()
+        self._refresh_type_tip()
         self.edited.emit()
 
     def _on_value(self):
-        try:
-            value = int(self._value.text() or "0")
-        except ValueError:
-            self.refresh_value()
-            return
+        if self._is_string() and not self._is_array():
+            value = self._value.text()
+        else:
+            try:
+                value = int(self._value.text() or "0")
+            except ValueError:
+                self.refresh_value()
+                return
         if self._kind == "const":
             self.entry.value = value
         elif self.entry.count > 1:
@@ -273,6 +314,7 @@ class VarTablePanel(QWidget):
             a_persist = menu.addAction(label("vartbl.persist"))
             a_persist.setCheckable(True)
             a_persist.setChecked(entry.persist)
+            a_persist.setEnabled(entry.type != _STRING)
         menu.addSeparator()
         a_del = menu.addAction(label("common.delete"))
         action = menu.exec(global_pos)
@@ -299,7 +341,7 @@ class VarTablePanel(QWidget):
         valeur change de sens en même temps (défaut ↔ taille)."""
         if entry.count > 1:
             entry.count = 1
-            entry.default = 0   # la case redevient un défaut, pas une taille périmée
+            entry.default = "" if entry.type == _STRING else 0   # un défaut, pas une taille périmée
         else:
             entry.count = 8     # taille de départ ; l'auteur l'ajuste dans la cellule
         self._save()

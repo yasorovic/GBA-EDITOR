@@ -50,7 +50,7 @@ from ui.common.build_panel import BuildPanel, ToolchainBar, AnimatedBuildButton
 from ui.common.save_status_indicator import SaveStatusIndicator
 from ui.common.settings_dialog import SettingsDialog
 from core.external_tools import ExternalTools
-from core.keybindings import bind
+from core.keybindings import bind, get_keybindings
 from core import crash_log
 from core.app_info import APP_DOCS_URL, APP_NAME
 from ui.common.about_dialog import AboutDialog
@@ -427,7 +427,11 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(APP_NAME)
-        self.resize(1280, 760)
+        # La taille par défaut ne dépasse pas l'écran : à 150 % sur un écran 1080p,
+        # la zone utile ne fait que 1280×680 (barre de titre en sus) et le bas de
+        # la fenêtre — barre d'état comprise — sortait de l'écran.
+        usable = QApplication.primaryScreen().availableGeometry()
+        self.resize(min(1280, usable.width()), min(760, usable.height() - 40))
         self.project: Project = None
         # Un écran reçoit le projet quand il devient utile, pas au simple
         # démarrage de la fenêtre. C'est la frontière UI du chargement différé
@@ -830,7 +834,7 @@ class MainWindow(QMainWindow):
         # resynchronisé à sa revisite ») le remet à jour au retour, sans
         # rafraîchir un écran invisible.
 
-        self._h_split.setSizes([220, 820, 240])
+        self._h_split.setSizes([220, 760, 300])
         self._h_split.setStretchFactor(0, 0)
         self._h_split.setStretchFactor(1, 1)
         self._h_split.setStretchFactor(2, 0)
@@ -876,10 +880,30 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
     def _confirm_close(self) -> bool:
-        """Écrit ce qui est en attente ; faux si l'écriture échoue et que
-        l'utilisateur préfère rester. Ne jamais perdre du travail en silence."""
+        """Propose d'écrire ce qui est en attente ; faux si l'utilisateur
+        annule, ou si l'écriture échoue et qu'il préfère rester. Ne jamais
+        perdre du travail en silence : l'abandon est un choix explicite."""
         if not self.project:
             return True
+        if self._has_pending_changes():
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Icon.Warning)
+            # Application-modale : la fermeture peut venir du dialogue de
+            # réglages (redémarrage), lui-même modal.
+            box.setWindowModality(Qt.WindowModality.ApplicationModal)
+            box.setWindowTitle(label("win.close_unsaved_title"))
+            box.setText(label("win.close_unsaved"))
+            save = box.addButton(label("common.save"), QMessageBox.ButtonRole.AcceptRole)
+            discard = box.addButton(label("win.close_discard"), QMessageBox.ButtonRole.DestructiveRole)
+            cancel = box.addButton(label("common.cancel"), QMessageBox.ButtonRole.RejectRole)
+            box.setDefaultButton(save)
+            box.setEscapeButton(cancel)
+            box.exec()
+            clicked = box.clickedButton()
+            if clicked is discard:
+                return True
+            if clicked is not save:
+                return False
         try:
             self._persist_project()
         except OSError as exc:
@@ -1037,6 +1061,9 @@ class MainWindow(QMainWindow):
         tb.addWidget(spacer)
         self._save_indicator = SaveStatusIndicator()
         self._tb_save_indicator = tb.addWidget(self._save_indicator)
+        # Sans plancher, une fenêtre étroite renvoyait l'état d'enregistrement dans le
+        # menu de débordement de la barre (le « >> ») au lieu de le montrer.
+        tb.setMinimumWidth(tb.sizeHint().width())
         # Les écritures différées (inspecteur, nudge, script) n'émettent pas de
         # signal à leur départ : on lit leurs minuteries, peu coûteux.
         self._save_indicator_timer = QTimer(self)
@@ -1951,7 +1978,7 @@ class MainWindow(QMainWindow):
                                        what=", ".join(missing)))
         if self.project and not self.project.scenes:
             return tooltip(title=label("win.build_no_scene"))
-        return tooltip(title=label("win.build_run_title"), shortcut="F5",
+        return tooltip(title=label("win.build_run_title"), shortcut=get_keybindings().resolve("game.build"),
                        body=label("win.build_run_tip"))
 
     # ── Build ─────────────────────────────────────────────────────

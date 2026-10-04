@@ -30,6 +30,7 @@ from ui.common.widgets import W
 from ui.common import icons
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
+from core.keybindings import get_keybindings, matches
 from ui.common.shortcut_hints import ShortcutHints
 from .palette_hints import palette_grid_hints
 
@@ -118,7 +119,7 @@ class PaletteGridPanel(QWidget):
         tl.addWidget(self._zoom_btn("zoom_in", tooltip(title=label("palgrid.zoom_in"), shortcut=label("cvtop.wheel_up")),
                                    lambda: self.zoom_step(+1)))
         tl.addWidget(self._zoom_btn(
-            "fit_page", tooltip(title=label("palgrid.fit_title"), shortcut="F"), self.fit))
+            "fit_page", tooltip(title=label("palgrid.fit_title"), shortcut=get_keybindings().resolve("common.fit")), self.fit))
         tl.addSpacing(10)
 
         self._btn_export = W.btn_ghost(label("palgrid.export"))
@@ -545,31 +546,31 @@ class PaletteGridPanel(QWidget):
         self._scroll.viewport().unsetCursor()
 
     def _handle_grid_key(self, event) -> bool:
-        """Navigation clavier dans la grille : flèches (+ shift pour étendre la
-        plage), Ctrl+C / Ctrl+V pour copier/coller la couleur active."""
+        """Clavier de la grille. Les actions nommées (copier/coller, zoom,
+        ajuster, vider) sont les raccourcis COMMUNS (`common.*`, cf. core/keybindings) ;
+        la navigation — flèches (+ Maj pour étendre la plage) et Entrée — ne
+        l'est pas."""
         key, mod = event.key(), event.modifiers()
-        if mod & Qt.KeyboardModifier.ControlModifier:
-            if key == Qt.Key.Key_C:
-                self._copy_color(); return True
-            if key == Qt.Key.Key_V:
-                self._paste_color(); return True
-            # Ctrl + +/-/0 : zoom au clavier (0 = 100 %).
-            if key in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
-                self.zoom_step(+1); return True
-            if key == Qt.Key.Key_Minus:
-                self.zoom_step(-1); return True
-            if key == Qt.Key.Key_0:
-                self.set_zoom(1.0); return True
-            return False
+        if matches("common.copy", event):
+            self._copy_color(); return True
+        if matches("common.paste", event):
+            self._paste_color(); return True
+        if matches("common.zoom_in", event):
+            self.zoom_step(+1); return True
+        if matches("common.zoom_out", event):
+            self.zoom_step(-1); return True
+        if matches("common.zoom_reset", event):
+            self.set_zoom(1.0); return True
         bank = self._current_bank()
         if not bank or self._active_index is None:
             return False
-        # F : ajuster à la vue (même raccourci que les canvas).
-        if key == Qt.Key.Key_F:
+        if matches("common.fit", event):
             self.fit(); return True
-        # Suppr / Backspace : vider le(s) slot(s) sélectionné(s) (0x0000).
-        if key in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+        # Retour arrière reste un second alias de « vider » (0x0000).
+        if matches("common.delete", event) or key == Qt.Key.Key_Backspace:
             self._clear_selected(); return True
+        if mod & Qt.KeyboardModifier.ControlModifier:
+            return False
         # Entrée : passer au champ HEX pour une saisie numérique rapide.
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             self.hex_focus_requested.emit(); return True

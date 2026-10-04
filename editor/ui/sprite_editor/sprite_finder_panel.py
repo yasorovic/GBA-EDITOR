@@ -15,7 +15,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QSize
 from ui.common.widgets import W, FinderSection
 from ui.common.asset_finder import AssetFinder
 from ui.common.asset_kinds import SPRITES
-from ui.common.theme import C, T, QSS
+from ui.common.theme import C, T, S, QSS
 from ui.common.icons import get as _ico, COLOR_DEFAULT
 from core.models.sprite import AnimState, SpriteAsset, StateDirection
 from core.project import Project
@@ -107,8 +107,13 @@ class SpriteFinderPanel(QWidget):
         self._anim_tree.setStyleSheet(QSS.tree_widget)
         self._anim_tree.setIndentation(14)
         self._anim_tree.setIconSize(QSize(14, 14))
+        # Hauteur réglée sur le contenu (cf. `_fit_anim_tree`), comme les listes
+        # d'assets : la colonne du panneau défile, l'arbre ne défile pas lui-même.
         self._anim_tree.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self._anim_tree.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._anim_tree.itemExpanded.connect(self._fit_anim_tree)
+        self._anim_tree.itemCollapsed.connect(self._fit_anim_tree)
         self._anim_tree.currentItemChanged.connect(self._on_anim_item_changed)
         self._anim_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._anim_tree.customContextMenuRequested.connect(self._on_anim_context_menu)
@@ -146,6 +151,18 @@ class SpriteFinderPanel(QWidget):
 
     # ── Peuplement anim tree ──────────────────────────────────────
 
+    def _fit_anim_tree(self, *_):
+        rows, stack = 0, [self._anim_tree.topLevelItem(i)
+                          for i in range(self._anim_tree.topLevelItemCount())]
+        while stack:
+            item = stack.pop()
+            rows += 1
+            if item.isExpanded():
+                stack.extend(item.child(n) for n in range(item.childCount()))
+        # S.ROW = hauteur d'une ligne dans QSS.tree_widget (même règle que
+        # asset_finder._KindTree._fit).
+        self._anim_tree.setFixedHeight(max(rows * S.ROW, 4))
+
     def _refresh_anim_tree(self, sprite: Optional[SpriteAsset], select: Any = _KEEP_SELECTION):
         if select is _KEEP_SELECTION:
             current = self._anim_tree.currentItem()
@@ -161,6 +178,7 @@ class SpriteFinderPanel(QWidget):
         if not sprite:
             self._blocking = False
             self._anim_tree.blockSignals(False)
+            self._fit_anim_tree()
             return
 
         for state in sprite.states:
@@ -187,6 +205,7 @@ class SpriteFinderPanel(QWidget):
 
         self._blocking = False
         self._anim_tree.blockSignals(False)
+        self._fit_anim_tree()
 
         # Sélectionner la cible demandée si elle existe encore, sinon la
         # première direction du premier état.

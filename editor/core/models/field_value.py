@@ -187,8 +187,9 @@ def variables_from_project(project) -> list[tuple[str, str, int]]:
     la donnée — le widget a besoin des deux au même moment."""
     if not project:
         return []
-    return ([("global", g.name, g.id) for g in project.globals]
-            + [("const", c.name, c.id) for c in project.constants])
+    # Une string n'est pas un nombre : ni pixels, ni tuiles, ni durée.
+    return ([("global", g.name, g.id) for g in project.globals if g.type != "string"]
+            + [("const", c.name, c.id) for c in project.constants if c.type != "string"])
 
 
 def var_defaults_from_project(project) -> dict:
@@ -202,9 +203,13 @@ def var_defaults_from_project(project) -> dict:
         return {}
     d: dict = {}
     for g in project.globals:
+        if g.type == "string":
+            continue
         d[("global", g.name)] = g.default
         d[("global", g.id)] = g.default
     for c in project.constants:
+        if c.type == "string":
+            continue
         d[("const", c.name)] = c.value
         d[("const", c.id)] = c.value
     return d
@@ -214,3 +219,54 @@ def make_resolver(project) -> Resolver:
     """Résolveur `(src, name) -> valeur|None` prêt pour `FieldValue.px(resolver)`."""
     defaults = var_defaults_from_project(project)
     return lambda src, name: defaults.get((src, name))
+
+
+# ── Nombres sans unité (rotation, échelle, priorité) ──────────────────
+# Ces champs ne sont ni des pixels ni des tiles : un littéral (`int` ou
+# `float` nu dans le fichier) OU une référence de variable (même dict
+# `{"var": <id>, "src": …}` que ci-dessus). Pas de forme tile.
+#
+# Unité d'une variable : le NOMBRE du champ tel que le script le lit
+# (`self.rotation` en degrés, `self.priority` 0-3, `self.scale` en POURCENT —
+# 100 = normal, comme l'API Lua), jamais l'unité interne Q8 du moteur.
+
+def is_ref_raw(raw) -> bool:
+    return isinstance(raw, dict) and "var" in raw
+
+
+def number_raw(raw, cast):
+    """Forme à STOCKER pour un champ numérique : la référence telle quelle,
+    sinon le littéral converti par `cast` (`int` ou `float`)."""
+    return raw if is_ref_raw(raw) else cast(raw)
+
+
+def number_value(raw, resolver: Optional[Resolver] = None, default=0,
+                 ref_divisor: int = 1):
+    """Valeur numérique d'un champ pour l'aperçu/les calculs de l'éditeur.
+    Une référence vaut le défaut de sa variable (`resolver`), divisé par
+    `ref_divisor` (100 pour une échelle en pourcent) ; non résolue → `default`.
+    """
+    if is_ref_raw(raw):
+        fv = FieldValue.parse(raw)
+        v = fv.px(resolver, fallback=None) if resolver else None
+        return default if v is None else v / ref_divisor
+    if isinstance(raw, bool):
+        return int(raw)
+    if isinstance(raw, (int, float)):
+        return raw
+    return default
+
+
+def number_c(raw, names: Optional[dict] = None, *, q8: bool = False,
+             mask: Optional[int] = None):
+    """Rvalue C d'un champ numérique : `int` pour un littéral, expression pour
+    une variable. `q8` : l'échelle est stockée ×256 côté moteur (littéral
+    `round(f*256)`, variable en pourcent `(v)*256/100`). `mask` : `& mask`."""
+    if is_ref_raw(raw):
+        e = FieldValue.parse(raw, names).c_expr()
+        if q8:
+            e = f"(({e})*256/100)"
+        return f"(({e})&{mask})" if mask is not None else e
+    v = number_value(raw)
+    n = int(round(v * 256)) if q8 else int(round(v))
+    return n & mask if mask is not None else n

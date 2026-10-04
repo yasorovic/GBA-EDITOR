@@ -8,6 +8,8 @@ import dataclasses
 from dataclasses import dataclass, field, fields
 from typing import Optional
 
+from core.models.field_value import FieldValue, Raw, number_raw
+
 
 @dataclass
 class CollisionBoxComponent:
@@ -74,21 +76,31 @@ class SpriteComponent:
     # multiplié par le scale de l'actor. Sans `affine_transform`, aucun slot
     # n'est alloué et le sprite est émis en OAM normale : ces valeurs ne se
     # voient pas.
-    scale_x: float = 1.0               # affine OAM (1.0 = normal), local
-    scale_y: float = 1.0
-    rotation: int = 0                  # degrés 0–359 (OAM affine), local
+    scale_x: Raw = 1.0                 # affine OAM (1.0 = normal), local
+    scale_y: Raw = 1.0
+    rotation: Raw = 0                  # degrés 0–359 (OAM affine), local
     # Position du sprite RELATIVE à son actor, en pixels, dans le repère local de
     # l'actor : l'offset tourne/scale AVEC l'actor (hérarchie parent→enfant). Le
     # sprite n'a pas de position monde — la position monde reste Actor.x/y.
-    offset_x: int = 0
-    offset_y: int = 0
+    # Raw : px (`int`), tiles ou variable — cf. core/models/field_value.py.
+    offset_x: Raw = 0
+    offset_y: Raw = 0
+    # POINT DE PIVOT du sprite, en pixels, à partir du CENTRE du cadre : (0, 0) =
+    # le centre. Rotation, échelle et flip s'exercent autour de lui, et il reste
+    # fixe à l'écran pendant que le reste du sprite tourne. Distinct de l'offset
+    # (qui déplace le cadre entier) : l'offset dit OÙ est le sprite, le pivot dit
+    # AUTOUR DE QUOI il se transforme. Raw : px, tiles ou variable.
+    pivot_x: Raw = 0
+    pivot_y: Raw = 0
 
     def __post_init__(self):
-        self.scale_x  = float(self.scale_x)
-        self.scale_y  = float(self.scale_y)
-        self.rotation = int(self.rotation)
-        self.offset_x = int(self.offset_x)
-        self.offset_y = int(self.offset_y)
+        self.scale_x  = number_raw(self.scale_x, float)
+        self.scale_y  = number_raw(self.scale_y, float)
+        self.rotation = number_raw(self.rotation, int)
+        self.offset_x = FieldValue.parse(self.offset_x).to_raw()
+        self.offset_y = FieldValue.parse(self.offset_y).to_raw()
+        self.pivot_x = FieldValue.parse(self.pivot_x).to_raw()
+        self.pivot_y = FieldValue.parse(self.pivot_y).to_raw()
 
 
 # Triggers de SoundFxComponent AUTRES que "manual" — tous DÉCLENCHÉS PAR LE
@@ -196,6 +208,37 @@ def components_from_list(data: list) -> list:
 def sprite_components(owner) -> list:
     """Toutes les apparences d'un porteur, dans l'ordre de ses composants."""
     return [c for c in getattr(owner, "components", []) if isinstance(c, SpriteComponent)]
+
+
+def center_on_frame(owner, sprite_comp, sprite) -> list:
+    """Quand « Affine transform » est coché : pose l'acteur au CENTRE du cadre.
+
+    Sur GBA native, un sprite affine pivote sur le centre de sa texture ; le cas
+    courant est donc un acteur dont la position EST ce centre. Le sprite reçoit
+    pour offset `(-largeur/2, -hauteur/2)` et les boîtes de collision restées à
+    leur position d'origine `(0, 0)` reçoivent `(-w/2, -h/2)` : elles continuent
+    d'entourer le sprite.
+
+    N'écrase jamais un réglage de l'auteur (offset ou boîte déjà déplacés) ni une
+    valeur liée à une variable. Retourne les composants modifiés."""
+    changed = []
+    if sprite is None or not sprite_comp:
+        return changed
+    if (FieldValue.parse(sprite_comp.offset_x).to_raw() == 0
+            and FieldValue.parse(sprite_comp.offset_y).to_raw() == 0):
+        sprite_comp.offset_x = -(sprite.frame_w // 2)
+        sprite_comp.offset_y = -(sprite.frame_h // 2)
+        changed.append(sprite_comp)
+    for comp in getattr(owner, "components", []):
+        if not isinstance(comp, CollisionBoxComponent):
+            continue
+        fx, fy = FieldValue.parse(comp.x), FieldValue.parse(comp.y)
+        fw, fh = FieldValue.parse(comp.w), FieldValue.parse(comp.h)
+        if (fx.to_raw(), fy.to_raw()) != (0, 0) or fw.is_ref or fh.is_ref:
+            continue
+        comp.x, comp.y = -(fw.px() // 2), -(fh.px() // 2)
+        changed.append(comp)
+    return changed
 
 
 def displayed_sprite_component(owner):

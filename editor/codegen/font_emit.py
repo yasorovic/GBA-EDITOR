@@ -24,7 +24,7 @@ import re
 from pathlib import Path
 
 from codegen.c_names import c_ident
-from core.validator import build_warning
+from core.diagnostic import build_warning
 
 # Banque de palette BG réservée aux glyphes. Convention héritée du chemin TTE
 # (`SE_PALBANK(15)`), conservée pour ne pas déplacer la contrainte existante.

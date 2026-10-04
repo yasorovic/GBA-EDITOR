@@ -38,7 +38,12 @@ _DEFAULTS = {
     # démarrage (les couleurs sont figées dans les feuilles de style à la
     # construction des écrans), donc le changement prend effet au redémarrage.
     "theme": "dark",
+    # Facteur d'échelle de toute l'interface, en pourcents. Lu avant la
+    # création de la QApplication : le changement prend effet au redémarrage.
+    "scale_percent": 100,
 }
+
+SCALE_CHOICES = (75, 100, 125, 150)
 
 _cache: dict | None = None
 
@@ -85,6 +90,17 @@ def interface_theme() -> str:
 
 def set_interface_theme(mode: str):
     _load()["theme"] = "light" if mode == "light" else "dark"
+    _save()
+
+
+def interface_scale_percent() -> int:
+    """Échelle de l'interface en pourcents (75, 100, 125 ou 150)."""
+    value = _load().get("scale_percent", _DEFAULTS["scale_percent"])
+    return value if value in SCALE_CHOICES else _DEFAULTS["scale_percent"]
+
+
+def set_interface_scale_percent(percent: int):
+    _load()["scale_percent"] = percent if percent in SCALE_CHOICES else _DEFAULTS["scale_percent"]
     _save()
 
 

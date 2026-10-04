@@ -32,10 +32,11 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QFileSystemWatcher
 
-from scripting.api import EVENT_REGISTRY as _EVENT_META
+from scripting.api import EVENT_REGISTRY as _EVENT_META, DOMAIN_ANIM
 from ui.common.theme import C, T
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
+from core.keybindings import get_keybindings
 from ui.common.icons import COLOR_SCRIPT
 from ui.common.build_panel import BuildPanel
 from .colors import _BG, _BG_HDR, _BORDER, _TEXT_HI, _TEXT_NORM, _C_EVENT
@@ -116,7 +117,7 @@ class ScriptEditorScreen(QWidget):
         )
         self._save_btn.setEnabled(False)
         self._save_btn.setToolTip(tooltip(
-            shortcut="Ctrl+S", title=label("scred.save_title"),
+            shortcut=get_keybindings().resolve("file.save"), title=label("scred.save_title"),
         ))
         self._save_btn.clicked.connect(self._save)
         bar_l.addWidget(self._save_btn)
@@ -211,6 +212,7 @@ class ScriptEditorScreen(QWidget):
         self._save_btn.setEnabled(False)
         self._refresh_events()
 
+        self._editor.set_completion_project_names(self._completion_names())
         ctx = self._detect_context(path)
         self._sidebar.set_context(ctx)
         self._editor.set_completion_context(ctx)
@@ -244,8 +246,19 @@ class ScriptEditorScreen(QWidget):
         (fichier ouvert, contexte, arbre) est intact."""
         from scripting.project_names import names_by_domain
         self._sidebar.set_project(self._project)
-        self._editor.set_completion_project_names(
-            names_by_domain(self._project) if self._project else None)
+        self._editor.set_completion_project_names(self._completion_names())
+
+    def _completion_names(self):
+        """Les noms du projet, plus les animations du sprite du script OUVERT : elles
+        dépendent de l'acteur auquel il est attaché, pas du seul projet."""
+        from scripting.project_names import names_by_domain, anim_names_of_script
+        if not self._project:
+            return None
+        names = names_by_domain(self._project)
+        anims = anim_names_of_script(self._project, self._path) if self._path else []
+        if anims:
+            names[DOMAIN_ANIM] = anims
+        return names
 
     def refresh(self):
         """Re-dérive à la revisite de l'écran — appelé au centre par

@@ -33,7 +33,7 @@ from core.models.sprite import (
 )
 from core.history import get_history, PaintFrameCmd
 from core.sprite_compose import compose_frame_image
-from core.keybindings import bind
+from core.keybindings import bind, get_keybindings
 
 # ── Frame timeline ─────────────────────────────────────────────────────────────
 
@@ -293,11 +293,11 @@ class _FrameTimeline(QWidget):
         dup = QShortcut(QKeySequence(), self)
         dup.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         dup.activated.connect(lambda: self._copy_frame(self._selected))
-        bind("sprite.duplicate_frame", dup)
+        bind("common.duplicate", dup)
         delete = QShortcut(QKeySequence(), self)
         delete.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         delete.activated.connect(lambda: self._delete_frame(self._selected))
-        bind("sprite.delete_frame", delete)
+        bind("common.delete", delete)
 
     # ── API publique ───────────────────────────────────────────────────
 
@@ -1199,10 +1199,10 @@ class _CanvasFloatingToolbar(QFrame):
         self.btn_indexed.clicked.connect(lambda: self._set_preview_indexed(True))
         _sep()
         self.btn_flip_x = _icon_btn("mirror_h", tooltip(
-            title=label("sprframe.flip_x"), shortcut="Shift+X"
+            title=label("sprframe.flip_x"), shortcut=get_keybindings().resolve("sprite.flip_h")
         ))
         self.btn_flip_y = _icon_btn("mirror_v", tooltip(
-            title=label("sprframe.flip_y"), shortcut="Shift+Y"
+            title=label("sprframe.flip_y"), shortcut=get_keybindings().resolve("sprite.flip_v")
         ))
         _sep()
 

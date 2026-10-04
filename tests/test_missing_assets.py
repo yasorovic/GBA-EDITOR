@@ -43,13 +43,14 @@ def _rouvrir_et_valider(root):
     return p, [str(m) for m in warnings], [str(m) for m in errors]
 
 
-def test_acteur_qui_cite_un_sprite_disparu_est_une_erreur(tmp_path):
+def test_acteur_qui_cite_un_sprite_disparu_est_un_avertissement(tmp_path):
     p = _projet(tmp_path)
     p.sprites.path_of(p.sprites.get("hero")).unlink()
 
-    _, _, errors = _rouvrir_et_valider(p.root)
+    _, warnings, errors = _rouvrir_et_valider(p.root)
 
-    assert any("Sprite 'hero' not found" in e for e in errors)
+    assert any("Sprite 'hero' not found" in w for w in warnings)
+    assert not any("hero" in e for e in errors)
 
 
 def test_sprite_sans_nom_reste_un_simple_avertissement(tmp_path):

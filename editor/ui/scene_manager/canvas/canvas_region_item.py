@@ -208,7 +208,8 @@ class UIRegionItem(QGraphicsRectItem):
                     a = next((x for x in getattr(self._scene, "actors", [])
                               if getattr(x, "name", "") == actor_name), None)
                     if a is not None:
-                        prio = int(getattr(a, "priority", 0) or 0)
+                        from core.models.field_value import number_value
+                        prio = int(number_value(getattr(a, "priority", 0)) or 0)
             base_z = hw_layer_z(prio, is_obj=True)
         else:
             # Slot BG du NŒUD de cette zone (v0.12) : `self._layout` est une

@@ -51,8 +51,10 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
     baseline = dc.load_baseline()
     collected = getattr(terminalreporter, "_numcollected", 0)
     update = bool(os.environ.get("DIAGNOSTIC_COVERAGE_UPDATE"))
-    # « Complet » : ni -k ni -m, et presque autant de tests que lors du relevé de référence.
-    full = (bool(baseline) and not config.option.keyword and not config.option.markexpr
+    # « Complet » : ni -k ni -m (hors le « not slow » par défaut de pyproject), et presque autant de
+    # tests que lors du relevé de référence.
+    full = (bool(baseline) and not config.option.keyword
+            and config.option.markexpr in ("", "not slow")
             and collected >= 0.9 * baseline.get("collected", 10 ** 9))
     if not (full or update):
         return

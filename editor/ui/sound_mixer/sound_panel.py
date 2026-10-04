@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QSpinBox, QCheckBox, QMessageBox,
     QButtonGroup, QComboBox, QStackedWidget,
 )
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QKeySequence, QShortcut
 from PyQt6.QtCore import (
     Qt, QSize, pyqtSignal, QTimer,
 )
@@ -32,6 +32,7 @@ from ui.sound_mixer.box_playback import BoxPlayer
 from ui.sound_mixer.sound_budget_bar import SoundBudgetBar
 from ui.common.asset_finder import AssetFinder
 from ui.common.asset_kinds import SFX, MUSIC
+from core.keybindings import bind
 from core.project import Project
 from core.history import get_history, DeleteResourceCmd
 
@@ -646,6 +647,11 @@ class SoundMixerScreen(QWidget):
         lay.addWidget(self._build_context_bar())
         lay.addWidget(self._tabs, 1)
         lay.addWidget(self._build_player_bar())
+        # Espace lance / arrête l'aperçu, comme le bouton du bandeau.
+        play_pause = QShortcut(QKeySequence(), panel)
+        play_pause.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        play_pause.activated.connect(self._btn_rom.toggle)
+        bind("sound.play_pause", play_pause)
         return panel
 
     def _build_context_bar(self) -> QFrame:
@@ -830,8 +836,12 @@ class SoundMixerScreen(QWidget):
         if on:
             box = self._music_tab.current()
             if box is None or not box.states:
-                self._rom_state.setText(label("sndpanel.no_state"))
+                # Décoché sans signal : le rappel de décochage remettrait « IDLE »
+                # par-dessus le message.
+                self._btn_rom.blockSignals(True)
                 self._btn_rom.setChecked(False)
+                self._btn_rom.blockSignals(False)
+                self._rom_state.setText(label("sndpanel.no_state"))
                 return
             self._box_player.load(self._project, box)
             self._box_player.start()

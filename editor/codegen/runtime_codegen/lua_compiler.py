@@ -15,7 +15,7 @@ from core.models.components import affine_sprite_component
 from codegen.oam_alloc import owner_appearances
 from core.models.scene import Actor, Scene
 from core.project import Project
-from core.validator import build_error, build_warning
+from core.diagnostic import build_error, build_warning
 from scripting.parser  import parse as lua_parse, LuaParseError
 from scripting.checker import check as lua_check, BuildContext
 from scripting.codegen import generate as lua_generate, CodegenContext
@@ -352,7 +352,7 @@ def transpile_all(
     # seul endroit du build qui tienne les deux bouts (l'élément et l'asset).
     image_states = {}
     for _lay, _im in (p.all_images() if hasattr(p, "all_images") else []):
-        _spr = p.get_sprite(getattr(_im, "sprite_name", "") or "")
+        _spr = p.get_buildable_sprite(getattr(_im, "sprite_name", "") or "")
         image_states[_im.name] = [st.name for st in (getattr(_spr, "states", []) or [])]
     all_syms    = [c_sym(a.name) for a, _ in scene_actors]
     _actor_names = [a.name for a, _ in scene_actors]
@@ -395,11 +395,14 @@ def transpile_all(
     _data_tables = {t.name: ([c.name for c in t.columns], len(t.rows))
                     for t in getattr(p, "data_tables", [])}
 
+    # Les globales de type string : `global.x = "texte"` s'y résout en index de texte.
+    _string_globals = frozenset(g.name for g in p.globals if g.type == "string")
+
     # Globals résolus en avance (nécessaire pour le BuildContext du checker)
     if precomputed_global_names is not None:
         global_names = precomputed_global_names
     else:
-        global_names = write_globals(p.src_dir, p.globals)
+        global_names = write_globals(p.src_dir, p.globals, text_keys)
         if global_names:
             emit("log_line", f"[lua] globals: {', '.join('g_'+n for n in global_names)}")
 
@@ -407,7 +410,7 @@ def transpile_all(
     if precomputed_const_names is not None:
         const_names = precomputed_const_names
     else:
-        const_names = write_constants(p.src_dir, p.constants)
+        const_names = write_constants(p.src_dir, p.constants, text_keys)
         if const_names:
             emit("log_line", f"[lua] constants: {', '.join('CONST_'+n.upper() for n in const_names)}")
 
@@ -595,6 +598,7 @@ def transpile_all(
             sfx_names     = sfx_names,
             music_names   = music_names,
             global_names  = set(global_names),
+            string_globals = _string_globals,
             const_names   = set(const_names),
             all_actor_syms= all_syms,
             frame_event_names = frame_events,
@@ -652,8 +656,10 @@ def transpile_all(
         sp_path = p.asset_abs(sc.script)
         if not sp_path or not sp_path.exists() or sp_path.suffix.lower() != ".lua":
             continue
-        pf_spr  = next((c for c in pf.components if hasattr(c, "states")), None)
-        pf_anim = [st.name for st in pf_spr.states] if pf_spr and hasattr(pf_spr, "states") else []
+        # Les états viennent des SpriteAsset que les composants citent, comme pour un acteur :
+        # un SpriteComponent ne porte pas `states`, il référence un asset.
+        pf_apps = owner_appearances(p, pf)
+        pf_anim, pf_anim_maps = _anim_union(p, pf, pf_apps[0][1] if pf_apps else None)
         pf_sfx_comp_name = _sfx_component_name(pf)
         _pf_rt_transform = _affine_reserved(pf)
         ctx_check = BuildContext(
@@ -716,10 +722,12 @@ def transpile_all(
             input_buffered_bits = input_layout.buffered_bits,
             input_axes    = input_layout.axes,
             anim_names    = pf_anim,
+            anim_maps     = pf_anim_maps,
             sprite_ids    = _sprite_ids(p, pf),
             sfx_names     = sfx_names,
             music_names   = music_names,
             global_names  = set(global_names),
+            string_globals = _string_globals,
             const_names   = set(const_names),
             all_actor_syms= all_syms,
             scripts_dir   = p.scripts_dir,
@@ -790,6 +798,7 @@ def transpile_all(
             sfx_names     = sfx_names,
             music_names   = music_names,
             global_names  = set(global_names),
+            string_globals = _string_globals,
             const_names   = set(const_names),
             all_actor_syms= all_syms,
             owner_kind    = "scene",
@@ -900,6 +909,7 @@ def transpile_all(
             sfx_names     = sfx_names,
             music_names   = music_names,
             global_names  = set(global_names),
+            string_globals = _string_globals,
             const_names   = set(const_names),
             all_actor_syms= all_syms,
             owner_kind    = "camera",

@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, TYPE_CHECKING
 
+from core.diagnostic import (DiagnosticTarget, ValidationMessage,  # noqa: F401  (ré-exportés : API historique)
+                             build_error, build_warning)
 from core.models.components import sprite_components
 
 if TYPE_CHECKING:
@@ -32,76 +34,6 @@ def register_validator(fn: Callable) -> Callable:
     """Décorateur — enregistre une fonction de validation."""
     _VALIDATORS.append(fn)
     return fn
-
-
-@dataclass
-class DiagnosticTarget:
-    """Où mène un diagnostic quand on le clique (cf. panneau Diagnostics).
-
-    Volontairement en CHAÎNES, pas en références de modèle : le message reste de
-    la donnée pure, et c'est l'interface qui résout le nom au moment du clic (par
-    `Project.all_elements`), comme le journal résout un `fichier.lua:ligne`.
-
-    Un seul `kind` pour l'instant — `ui_element` : la zone/le panneau/l'image
-    d'une mise en page, que rien ne rendait cliquable jusqu'ici (un acteur passe
-    déjà par son nom, un script par le `fichier.lua:ligne` de son message). Le
-    vocabulaire s'étendra si un autre écran gagne une cible (cf. TodoTechnique)."""
-    kind: str            # "ui_element"
-    name: str = ""       # nom de l'élément
-    layout: str = ""     # mise en page qui le contient (désambiguïse `all_elements`)
-
-
-@dataclass
-class ValidationMessage:
-    """Un diagnostic : ce que le validateur, le checker Lua, le codegen ou un outil
-    reproche au projet. C'est l'UNIQUE forme d'un avertissement ou d'une erreur de build
-    (chantier « La fiabilité du journal de build ») : la console, l'onglet Diagnostics et
-    `build.log` en sont tous rendus, et l'événement `diagnostic` du `BuildWorker` le porte."""
-    level: str      # "warning" | "error"
-    actor: str      # nom de l'actor (ou du propriétaire du script) ; "" si global
-    message: str
-    target: Optional[DiagnosticTarget] = None   # cible cliquable, ou None
-    source: str = ""    # qui le dit : "validator", "script", "checker", "codegen", un outil…
-    file: str = ""      # fichier fautif (nom seul), ou ""
-    line: int = 0       # ligne dans ce fichier, ou 0 si elle est inconnue
-    scene: str = ""     # scène contrôlée quand le message vient d'un contrôle PAR scène
-
-    def __str__(self):
-        return f"{'⚠' if self.level == 'warning' else '✖'}  {self._where()}{self._owner()}{self.message}"
-
-    def _owner(self) -> str:
-        """`[Scène/Acteur] `, `[Scène] ` ou `[Acteur] ` : de qui l'on parle."""
-        if self.scene and self.actor:
-            return f"[{self.scene}/{self.actor}] "
-        if self.scene or self.actor:
-            return f"[{self.scene or self.actor}] "
-        return ""
-
-    def _where(self) -> str:
-        """`Hit.lua:3: ` ; sans fichier, le nom de l'étape ou de l'outil qui parle (jamais
-        « validator », qui est le cas ordinaire)."""
-        if self.file:
-            return f"{self.file}:{self.line}: " if self.line else f"{self.file}: "
-        return f"{self.source}: " if self.source not in ("", "validator") else ""
-
-    def console_line(self) -> str:
-        """La ligne du journal : `[error] Hit.lua:3: [Ball] message`. Le format
-        `fichier:ligne` est garanti par les champs, pas deviné dans un texte libre — c'est ce
-        que le clic de la console relit."""
-        tag = "[warn] " if self.level == "warning" else "[error]"
-        return f"{tag} {self._where()}{self._owner()}{self.message}"
-
-
-def build_error(message: str, source: str, file: str = "", line: int = 0,
-                actor: str = "") -> ValidationMessage:
-    """Une erreur de build émise hors du validateur (étape, outil, générateur)."""
-    return ValidationMessage("error", actor, message, None, source, file, line)
-
-
-def build_warning(message: str, source: str, file: str = "", line: int = 0,
-                  actor: str = "") -> ValidationMessage:
-    """Un avertissement de build émis hors du validateur."""
-    return ValidationMessage("warning", actor, message, None, source, file, line)
 
 
 class ValidationContext:
@@ -477,19 +409,23 @@ def _check_each_scene(ctx: ValidationContext):
 
 
 def _check_font_sheets(ctx: ValidationContext):
-    """La planche PNG d'une police doit exister et se lire : sans elle, la police n'a aucun glyphe
-    et chaque texte qui la cite échoue plus loin, sans nommer la planche."""
+    """Le fichier source d'une police doit exister, et une planche PNG doit se lire.
+
+    Un fichier DISPARU est un avertissement : l'utilisateur a pu le retirer lui-même, et le
+    build sait s'en passer — la police n'est pas compilée et les scènes retombent sur une autre
+    (cf. `_check_scene_font`). Une planche ILLISIBLE reste une erreur : le fichier est là, mais
+    la police serait émise sans glyphe."""
     p = ctx.project
     for font in getattr(p, "fonts", []):
         sheet = getattr(font, "asset", None)
-        # Une police vectorielle (.ttf, .otf) n'a pas de planche : seul un PNG se contrôle ici.
-        if not sheet or Path(sheet).suffix.lower() != ".png":
+        if not sheet:
             continue
         path = p.asset_abs(sheet)
         name = Path(sheet).name
         if not path or not path.exists():
-            ctx.error(None, f"Font \"{font.name}\": sheet {name} not found.")
-        elif font.source_format != "png":
+            ctx.warn(None, f"Font \"{font.name}\": file {name} not found — the font is left out "
+                           "of the build.")
+        elif Path(sheet).suffix.lower() != ".png" or font.source_format != "png":
             continue    # .ttf / .otf / .fnt : pas une image, la rastérisation les lit à sa manière
         elif reason := ctx.image_problem(path):
             ctx.error(None, f"Font \"{font.name}\": sheet {name} is unreadable ({reason}) — "
@@ -547,17 +483,18 @@ def _check_sprite(ctx, actor, comp):
                         "sprite_name).")
         return
     if not sprite:
-        # Le composant CITE un sprite qui n'existe plus (fichier supprimé ou
-        # illisible) : sans ça l'acteur serait émis sans image, sans rien dire.
-        ctx.error(actor, f"Sprite '{comp.sprite_name}' not found — the actor names it but no "
-                         "SpriteAsset has this name.")
+        # Le composant CITE un sprite qui n'existe plus (fichier retiré, sans doute
+        # par l'utilisateur) : l'acteur se joue sans image — mais il le faut dire.
+        ctx.warn(actor, f"Sprite '{comp.sprite_name}' not found — the actor names it but no "
+                        "SpriteAsset has this name; it is played without a sprite.")
         return
     if not sprite.asset:
         ctx.warn(actor, f"Sprite '{sprite.name}' has no PNG assigned.")
         return
     ap = proj.asset_abs(sprite.asset)
     if not ap or not ap.exists():
-        ctx.error(actor, f"Sprite '{sprite.name}': PNG file not found ({sprite.asset}).")
+        ctx.warn(actor, f"Sprite '{sprite.name}': PNG file not found ({sprite.asset}); the actor "
+                        "is played without a sprite.")
     elif reason := ctx.image_problem(ap):
         ctx.error(actor, f"Sprite '{sprite.name}': image {sprite.asset} is unreadable ({reason}) — re-export the"
                          " PNG.")
@@ -1343,6 +1280,19 @@ def _check_cameras(ctx: ValidationContext):
                     f"camera:switch(\"{cam.name}\") would target either one, depending on the "
                     "build.")
             seen.setdefault(cam.name, scene.name)
+        if not scene.cameras:
+            # Sans caméra, la vue reste fixe à (0,0) : sans conséquence pour un
+            # écran d'un seul tenant (menu, titre), mais tout ce qui dépasse
+            # 240×160 est alors inatteignable.
+            for layer in scene.background_layers:
+                ba = p.get_background(layer.background_name) if layer.background_name else None
+                bw, bh = ba.pixel_size() if ba else (0, 0)
+                if bw > 240 or bh > 160:
+                    ctx.warn(None,
+                        f"Scene '{scene.name}' has no camera but its background \"{layer.background_name}\""
+                        f" ({bw}×{bh}) is larger than the screen — the view stays fixed at the origin,"
+                        " the rest of the scene is never shown. Add a camera to scroll.")
+                    break
         want = getattr(scene, "camera", "") or ""
         if want and not any(c.name == want for c in scene.cameras):
             ctx.warn(None,
@@ -1568,7 +1518,7 @@ def _check_audio_files(ctx: ValidationContext):
                 continue
             path = p.asset_abs(a.asset)
             if not path or not path.exists():
-                ctx.error(None, f"{kind} \"{a.name}\": file not found ({a.asset}).")
+                ctx.warn(None, f"{kind} \"{a.name}\": file not found ({a.asset}); it is not played.")
                 continue
             if reason := check_audio_file(path):
                 ctx.error(None, f"{kind} \"{a.name}\" ({path.name}): {reason}")

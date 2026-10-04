@@ -11,13 +11,15 @@ import shutil
 from typing import Optional
 
 from core.models.palette import OWN_PAL_BANK
-from core.validator import build_error, build_warning
+from core.diagnostic import build_error, build_warning
 from core.models.components import (CollisionBoxComponent, SpriteComponent,
                                     affine_sprite_component)
 from core.models.sprite import SpriteAsset
 from core.models.scene import Actor, Scene
 from core.project import Project
 from core.models.field_value import (FieldValue as _FV,
+                                     number_c as _number_c,
+                                     number_value as _number_value,
                                      var_names_from_project as _var_names)
 # `region_fill_container` vit dans le modèle (règle de mise en page pure) et se
 # réexporte ici : `palette_alloc` l'importe de ce module depuis toujours, et
@@ -334,7 +336,7 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
         # Le slot appartient à la SCÈNE (il change d'une scène à l'autre) : on le
         # préserve. L'échelle et la rotation appartiennent au PREFAB : on les
         # repose comme au scene_init, c'est-à-dire à l'état neutre du template.
-        _sp_aff = affine_entry(pf, sp, 0) if sp else None
+        _sp_aff = affine_entry(pf, sp, 0, names=_var_names(p)) if sp else None
         _sp_aff = _sp_aff if _e0 else None    # sans entrée, aucun transform d'affichage
         if _sp_aff:
             L.append(f"            int _aff = g_oam_entries[{_e0}].affine_slot;")
@@ -359,6 +361,8 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
                 f"            g_oam_entries[{_e0}].scale_y = {_sp_aff['sprite_scale_y']};",
                 f"            g_oam_entries[{_e0}].offset_x     = {_sp_aff['offset_x']};",
                 f"            g_oam_entries[{_e0}].offset_y     = {_sp_aff['offset_y']};",
+                f"            g_oam_entries[{_e0}].pivot_x      = {_sp_aff['pivot_x']};",
+                f"            g_oam_entries[{_e0}].pivot_y      = {_sp_aff['pivot_y']};",
             ]
         L += [
             # ROADMAP v0.19 : x/y en Q8 en interne. `x`/`y` ici sont les entiers
@@ -826,9 +830,9 @@ def _parent_compose_lines(scene_actors: list, actor_offset: int,
         # à la POSE AUTHORÉE du parent : on défait sa rotation puis son
         # échelle. Le résultat, recomposé au runtime avec cette même pose,
         # redonne la position que l'auteur a vue au canvas.
-        p_rot = float(getattr(par, "rotation", 0) or 0)
-        p_sx = float(getattr(par, "scale_x", 1.0) or 1.0) or 1.0
-        p_sy = float(getattr(par, "scale_y", 1.0) or 1.0) or 1.0
+        p_rot = float(_number_value(getattr(par, "rotation", 0)) or 0)
+        p_sx = float(_number_value(getattr(par, "scale_x", 1.0), ref_divisor=100) or 1.0) or 1.0
+        p_sy = float(_number_value(getattr(par, "scale_y", 1.0), ref_divisor=100) or 1.0) or 1.0
         dx = float(int(a.x) - int(par.x))
         dy = float(int(a.y) - int(par.y))
         th = math.radians(-p_rot)
@@ -836,9 +840,9 @@ def _parent_compose_lines(scene_actors: list, actor_offset: int,
         uy = dx * math.sin(th) + dy * math.cos(th)
         ox = int(round((ux / p_sx) * 256))
         oy = int(round((uy / p_sy) * 256))
-        rot = int(getattr(a, "rotation", 0) or 0) - int(round(p_rot))
-        sx = int(round(float(getattr(a, "scale_x", 1.0) or 1.0) / p_sx * 256))
-        sy = int(round(float(getattr(a, "scale_y", 1.0) or 1.0) / p_sy * 256))
+        rot = int(_number_value(getattr(a, "rotation", 0)) or 0) - int(round(p_rot))
+        sx = int(round(float(_number_value(getattr(a, "scale_x", 1.0), ref_divisor=100) or 1.0) / p_sx * 256))
+        sy = int(round(float(_number_value(getattr(a, "scale_y", 1.0), ref_divisor=100) or 1.0) / p_sy * 256))
         L += [
             f"    {{   /* {a.name} in the frame of {a.parent} */",
             f"        int _pr = g_actors[{p}].rotation;",
@@ -915,9 +919,9 @@ def _pool_compose_lines(pi: list[dict]) -> list[str]:
             # Parent = une autre partie, sinon la racine du groupe (décalage 0).
             p_off = rank.get(par.name, 0) if par is not None else 0
             ref = par if par is not None else pf
-            p_rot = float(getattr(ref, "rotation", 0) or 0)
-            p_sx = float(getattr(ref, "scale_x", 1.0) or 1.0) or 1.0
-            p_sy = float(getattr(ref, "scale_y", 1.0) or 1.0) or 1.0
+            p_rot = float(_number_value(getattr(ref, "rotation", 0)) or 0)
+            p_sx = float(_number_value(getattr(ref, "scale_x", 1.0), ref_divisor=100) or 1.0) or 1.0
+            p_sy = float(_number_value(getattr(ref, "scale_y", 1.0), ref_divisor=100) or 1.0) or 1.0
             # La racine d'un prefab n'a pas de pose authorée — le template est
             # posé à l'origine, et c'est `spawn(x, y)` qui décide où. Le monde
             # d'un enfant se lit donc directement comme un offset au template.
@@ -928,9 +932,9 @@ def _pool_compose_lines(pi: list[dict]) -> list[str]:
             ux = dx * math.cos(th) - dy * math.sin(th)
             uy = dx * math.sin(th) + dy * math.cos(th)
             ox, oy = int(round(ux / p_sx * 256)), int(round(uy / p_sy * 256))
-            rot = int(getattr(pt, "rotation", 0) or 0) - int(round(p_rot))
-            sx = int(round(float(getattr(pt, "scale_x", 1.0) or 1.0) / p_sx * 256))
-            sy = int(round(float(getattr(pt, "scale_y", 1.0) or 1.0) / p_sy * 256))
+            rot = int(_number_value(getattr(pt, "rotation", 0)) or 0) - int(round(p_rot))
+            sx = int(round(float(_number_value(getattr(pt, "scale_x", 1.0), ref_divisor=100) or 1.0) / p_sx * 256))
+            sy = int(round(float(_number_value(getattr(pt, "scale_y", 1.0), ref_divisor=100) or 1.0) / p_sy * 256))
             src = f"_b+{p_off}" if p_off else "_b"
             L += [
                 f"        if(g_actors[_b+{k}].active) {{   /* {pt.name} in the frame of "
@@ -1574,8 +1578,8 @@ def _gen_scene_init(
     _layout = scene_window_layout(p, scene)
     if _layout.camera_slot is not None:
         _start_cam = project_cameras(p)[_cam_idx]
-        _fw = _start_cam.frame_w if _start_cam else 240
-        _fh = _start_cam.frame_h if _start_cam else 160
+        _fw = _start_cam.px('frame_w', p) if _start_cam else 240
+        _fh = _start_cam.px('frame_h', p) if _start_cam else 160
         L.append(f"    window_set({_layout.camera_slot}, 0, 0, {_fw}, {_fh});")
         L.append(f"    window_show({_layout.camera_slot}, 1);")
     for ws in getattr(scene, "windows", []):
@@ -1616,7 +1620,7 @@ def _gen_scene_init(
             f"    g_actors[{idx}].dir_y   = {getattr(actor,'dir_y',0)};",
             f"    g_oam_entries[{_e}].pal_bank= {pal if pal is not None else 0};",
             f"    g_oam_entries[{_e}].obj_mode= {int(getattr(actor, 'obj_mode', 0)) & 3};",
-            f"    g_oam_entries[{_e}].priority= {int(getattr(actor, 'priority', 0)) & 3};",
+            f"    g_oam_entries[{_e}].priority= {_number_c(getattr(actor, 'priority', 0), _var_names(p), mask=3)};",
             f"    g_oam_entries[{_e}].auto_dir= {1 if getattr(_shown(p, actor)[0], 'auto_dir', True) else 0};",
             f"    g_oam_entries[{_e}].anim_state=0;",
             # self.frame_w/frame_h : posées une fois ici depuis le sprite,
@@ -1633,9 +1637,9 @@ def _gen_scene_init(
             # position ET l'échelle affine de ses enfants (matrice dégénérée).
             # Défaut 256 = ×1 ; la branche affine ci-dessous ne rajoute que le
             # slot et la transform LOCALE du sprite.
-            f"    g_actors[{idx}].rotation     = {int(round(getattr(actor, 'rotation', 0) or 0))};",
-            f"    g_actors[{idx}].scale_x      = {int(round(float(getattr(actor, 'scale_x', 1.0) or 1.0) * 256))};",
-            f"    g_actors[{idx}].scale_y      = {int(round(float(getattr(actor, 'scale_y', 1.0) or 1.0) * 256))};",
+            f"    g_actors[{idx}].rotation     = {_number_c(getattr(actor, 'rotation', 0), _var_names(p))};",
+            f"    g_actors[{idx}].scale_x      = {_number_c(getattr(actor, 'scale_x', 1.0), _var_names(p), q8=True)};",
+            f"    g_actors[{idx}].scale_y      = {_number_c(getattr(actor, 'scale_y', 1.0), _var_names(p), q8=True)};",
             f"    g_oam_entries[{_e}].screen_space = {1 if getattr(actor, 'screen_space', False) else 0};",
             f"    g_actors[{idx}].collision.box_count = {len(boxes)};",
         ]
@@ -1655,6 +1659,8 @@ def _gen_scene_init(
                 f"    g_oam_entries[{_e}].scale_y = {_aff_i['sprite_scale_y']};",
                 f"    g_oam_entries[{_e}].offset_x     = {_aff_i['offset_x']};",
                 f"    g_oam_entries[{_e}].offset_y     = {_aff_i['offset_y']};",
+                f"    g_oam_entries[{_e}].pivot_x      = {_aff_i['pivot_x']};",
+                f"    g_oam_entries[{_e}].pivot_y      = {_aff_i['pivot_y']};",
             ]
         elif _e >= 0:
             L.append(f"    g_oam_entries[{_e}].affine_slot = -1;")
@@ -1702,6 +1708,8 @@ def _gen_scene_init(
                     f"    g_oam_entries[{_e}].scale_y = {_aff_p['sprite_scale_y']};",
                     f"    g_oam_entries[{_e}].offset_x     = {_aff_p['offset_x']};",
                     f"    g_oam_entries[{_e}].offset_y     = {_aff_p['offset_y']};",
+                    f"    g_oam_entries[{_e}].pivot_x      = {_aff_p['pivot_x']};",
+                    f"    g_oam_entries[{_e}].pivot_y      = {_aff_p['pivot_y']};",
                 ]
             elif _e >= 0:
                 L.append(f"    g_oam_entries[{_e}].affine_slot = -1;")
@@ -2303,11 +2311,11 @@ def generate_main(
         cs = camera_sym(cam.name)
         hooks = (f"{cs}_camera_on_start, {cs}_camera_on_update"
                  if getattr(cam, "script", "") else "NULL, NULL")
-        L.append(f"    {{ {cam.mode_id()}, {int(cam.margin_x)}, {int(cam.margin_y)}, "
-                 f"{int(cam.x)}, {int(cam.y)}, "
-                 f"{int(cam.bounds_x or 0)}, {int(cam.bounds_y or 0)}, "
-                 f"{int(cam.bounds_w or 0)}, {int(cam.bounds_h or 0)}, "
-                 f"{int(cam.frame_w)}, {int(cam.frame_h)}, {hooks} }},"
+        L.append(f"    {{ {cam.mode_id()}, {cam.px('margin_x', p)}, {cam.px('margin_y', p)}, "
+                 f"{cam.px('x', p)}, {cam.px('y', p)}, "
+                 f"{cam.px('bounds_x', p)}, {cam.px('bounds_y', p)}, "
+                 f"{cam.px('bounds_w', p)}, {cam.px('bounds_h', p)}, "
+                 f"{cam.px('frame_w', p)}, {cam.px('frame_h', p)}, {hooks} }},"
                  f"   /* {cam.name} — {cam.mode} */")
     L += ["};", ""]
 
@@ -2561,7 +2569,7 @@ def generate_main(
             actor_defined_events=actor_defined_events,
             obj_text_oam=sc_obj_oam, obj_text_tile=obj_text_tile,
             emit=emit,
-            affine_info=compute_affine_info(act_off, sa, scene_pis[i]),
+            affine_info=compute_affine_info(act_off, sa, scene_pis[i], _var_names(p)),
         )
 
     # ── scene_tick_X() par scène ──────────────────────────────────
@@ -2593,7 +2601,7 @@ def generate_main(
             and actors_can_collide(p, sa[ii][0], sa[jj][0])
         ]
 
-        affine_d = compute_affine_info(act_off, sa, scene_pis[i])
+        affine_d = compute_affine_info(act_off, sa, scene_pis[i], _var_names(p))
         L += _gen_scene_tick(
             p, sc, act_off, bgi_d, sa, lua_idx_d, scene_pis[i],
             sprite_offsets, sprite_nframes, col_pairs_d,
@@ -2751,6 +2759,9 @@ def generate_main(
     # ── main() ────────────────────────────────────────────────────
     L.append("int main(void){")
     L.append("    irqInit(); irqEnable(IRQ_VBLANK);")
+    # Ouvre le canal de log mGBA : sans ce `0xC0DE`, mGBA traite les écritures de `debug:log`
+    # comme des accès E/S inconnus (« Stub I/O register write: FFF700 »). Stub vide hors build debug.
+    L.append("    debug_init();")
     # Waitstates SRAM, posés avant toute lecture. Inconditionnel : c'est une
     # écriture de registre, et la rendre conditionnelle ferait dépendre le
     # démarrage d'un état du projet pour économiser un cycle.

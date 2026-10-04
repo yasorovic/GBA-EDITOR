@@ -213,6 +213,7 @@ def generate_runtime_api(
             "   lost silently. */",
             "static inline mm_sfxhand sfx_play(int id, int volume, int hold){",
             "    mm_sound_effect ex;",
+            "    if(id < 0) return 0;   /* a sound whose file is gone: nothing to play */",
             "    ex.id = (mm_word)id; ex.rate = (mm_hword)1024;",
             "    ex.handle = (mm_hword)(hold ? 0 : 255);",
             "    ex.volume = (mm_byte)volume; ex.panning = (mm_byte)128;",
@@ -233,6 +234,7 @@ def generate_runtime_api(
             "}",
             "static inline void sfx_set_effects_volume(int volume){mmSetEffectsVolume((mm_word)volume);}",
             "static inline void music_play(int id, int loop, int volume){",
+            "    if(id < 0) return;     /* a music whose file is gone: nothing to play */",
             "    mmStart((mm_word)id, loop ? MM_PLAY_LOOP : MM_PLAY_ONCE);",
             "    mmSetModuleVolume((mm_word)volume);",
             "}",
@@ -251,6 +253,7 @@ def generate_runtime_api(
             "     - it is capped at 4 channels (maxmod doc), taken from the 8;",
             "     - there is only ONE at a time. */",
             "static inline void music_jingle(int id, int volume){",
+            "    if(id < 0) return;",
             "    mmJingle((mm_word)id);",
             "    mmSetJingleVolume((mm_word)volume);",
             "}",
@@ -284,11 +287,13 @@ def generate_runtime_api(
             "    /* Under two frames there is no fade to play: we switch straight "
             "away",
             "       rather than pretend. */",
+            "    if(id < 0) return;",
             "    if(frames < 2){ music_play(id, loop, volume); return; }",
             "    g_mtr_mode = 1; g_mtr_id = id; g_mtr_loop = loop; g_mtr_vol = volume;",
             "    g_mtr_i = 0; g_mtr_n = frames;",
             "}",
             "static inline void music_cut_to(int id, int loop, int volume){",
+            "    if(id < 0) return;",
             "    /* Nothing is playing: there is no position to respect. */",
             "    if(!mmActive()){ music_play(id, loop, volume); return; }",
             "    g_mtr_mode = 2; g_mtr_id = id; g_mtr_loop = loop; g_mtr_vol = volume;",
@@ -460,6 +465,13 @@ def generate_runtime_api(
         a.append("")
         a.append("/* Input sequences of the project — defined in main.c */")
         a += [f"extern const u16 {sym}[];" for sym in _seq_symbols]
+
+    from codegen.grit_conversion import silent_sound_symbols
+    _silent = silent_sound_symbols(p)
+    if _silent:
+        a.append("")
+        a.append("/* Sounds whose file is gone: -1 = nothing to play (see sfx_play / music_play) */")
+        a += [f"#define {sym} (-1)" for sym in _silent]
 
     a += ["", "#endif /* RUNTIME_API_H */", ""]
     build_output.write(p.src_dir / "runtime_api.h", "\n".join(a))

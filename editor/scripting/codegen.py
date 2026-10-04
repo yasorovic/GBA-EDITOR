@@ -61,7 +61,7 @@ from .api import (
     SCREEN_CONSTANTS,
 )
 from .checker import check as _lua_check, BuildContext as _BuildContext
-from .expr_types import (VEC_CONSTRUCTORS, C_TYPES,
+from .expr_types import (VEC_CONSTRUCTORS, VEC_FUNCTIONS, C_TYPES,
                          infer_vec_type, infer_ref_type, resolve_prop, element_of)
 
 
@@ -289,6 +289,7 @@ class CodegenContext:
     jingle_box_states: dict = field(default_factory=dict)
     music_box_triggers: dict = field(default_factory=dict)
     text_keys:  list[str] = field(default_factory=list)  # clés de la table de textes (ordre = index C)
+    string_globals: frozenset = frozenset()  # globales de type string (valeur = index de texte)
     lang_codes: list[str] = field(default_factory=list)  # langues déclarées (ordre = index g_lang), [] en monolingue
     font_names: list[str] = field(default_factory=list)  # polices encodables (ordre = index dans g_fonts)
     palette_names: list[str] = field(default_factory=list)  # catalogue de couleurs (ordre = index dans g_palettes)
@@ -1443,7 +1444,14 @@ class CodeGen:
                 self._w(f"{setter}({', '.join(c_args)});")
                 return
             tgt = self._expr(s.target)
-            val = self._expr(s.value)
+            # `global.titre = "Bonjour"` : une globale string tient un index de
+            # texte, le littéral se résout comme celui d'un export string.
+            if (isinstance(s.value, ExprString) and isinstance(s.target, ExprIndex)
+                    and isinstance(s.target.obj, ExprName) and s.target.obj.name == "global"
+                    and s.target.field in self.ctx.string_globals):
+                val = self._ref_or_text_literal("string", s.value.value)
+            else:
+                val = self._expr(s.value)
             self._w(f"{tgt} = {val};")
 
         elif isinstance(s, StmtLocalAssign):
@@ -1676,15 +1684,21 @@ class CodeGen:
             lt = infer_vec_type(e.left, self._vec_types, self._ref_types, self._kinds)
             rt = infer_vec_type(e.right, self._vec_types, self._ref_types, self._kinds)
             vt = lt or rt
-            if vt and e.op in ("+", "-", "*"):
+            if vt and e.op in ("+", "-", "*", "/"):
                 # Pas d'opérateur `+`/`-`/`*` sur les structs en C : ce sont
                 # les fonctions vec2_*/vec3_* de runtime_api_inline.h qui portent
                 # l'opération (checker.py a déjà refusé vec2+vec3, vec*vec…).
                 left, right = self._expr(e.left), self._expr(e.right)
-                if e.op == "*":
+                if e.op == "*" and not (lt and rt):
                     vecexpr, scalar = (left, right) if lt else (right, left)
                     return f"{vt}_scale({vecexpr}, {scalar})"
-                fn = "add" if e.op == "+" else "sub"
+                fn = {"+": "add", "-": "sub", "*": "mul", "/": "div"}[e.op]
+                # Un entier d'un côté : il vaut un vecteur dont toutes les composantes
+                # sont cet entier (`v + 2`, `10 - v`).
+                if not lt:
+                    left = f"{vt}_splat({left})"
+                elif not rt:
+                    right = f"{vt}_splat({right})"
                 return f"{vt}_{fn}({left}, {right})"
             return f"({self._expr(e.left)} {e.op} {self._expr(e.right)})"
         if isinstance(e, ExprUnop):
@@ -1860,6 +1874,13 @@ class CodeGen:
             # C, pas un appel : aucune fonction `vec2`/`rect` n'existe côté runtime.
             args = ", ".join(self._expr(a) for a in e.args)
             return f"({C_TYPES[key]}){{{args}}}"
+
+        if key in VEC_FUNCTIONS:
+            # dot(a, b) → vec2_dot(a, b) : le type des arguments choisit la fonction C.
+            vt = infer_vec_type(e.args[0], self._vec_types, self._ref_types, self._kinds)                 if e.args else None
+            if vt not in ("vec2", "vec3") or len(e.args) != 2:
+                return "0"   # le checker a déjà refusé : rien de valide à émettre
+            return f"{vt}_{key}({self._expr(e.args[0])}, {self._expr(e.args[1])})"
 
         if key in self._helpers:
             args = [self._expr(a) for a in e.args]

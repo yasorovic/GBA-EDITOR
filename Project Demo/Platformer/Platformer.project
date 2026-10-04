@@ -1,0 +1,21 @@
+{
+  "format_version": 1,
+  "start_scene": "Scene_01",
+  "last_scene": "Scene_01",
+  "author": "",
+  "version": "0.1",
+  "backdrop_color": 16912,
+  "save_slots": 1,
+  "transition_kind": "none",
+  "transition_frames": 16,
+  "cartridge_mib": 4,
+  "sfx_sample_rate": 0,
+  "sound_channels": 8,
+  "debug_build": true,
+  "list_repeat_delay": 10,
+  "list_repeat_rate": 4,
+  "collision_tags": [
+    "Player",
+    "body"
+  ]
+}

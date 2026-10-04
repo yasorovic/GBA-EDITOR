@@ -323,6 +323,20 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
     def get_sprite(self, name: str) -> Optional[SpriteAsset]:
         return self.sprites.get(name)
 
+    def get_buildable_sprite(self, name: str) -> Optional[SpriteAsset]:
+        """Le sprite nommé tel que le BUILD le voit : `None` si son PNG a disparu du disque.
+
+        Un acteur dont le sprite manque se joue sans sprite — le validateur le dit par un
+        avertissement ; le build, lui, ne doit pas tomber sur un fichier absent. Tout le
+        codegen passe donc par ici plutôt que par `get_sprite`, qui reste celui de l'éditeur
+        (le sprite et son découpage y existent encore tant que l'asset est là)."""
+        sprite = self.sprites.get(name)
+        if sprite is not None and sprite.asset:
+            path = self.asset_abs(sprite.asset)
+            if not path or not path.exists():
+                return None
+        return sprite
+
     # ── Ressources différées ─────────────────────────────────────
 
     def load_sprites(self) -> None:
@@ -489,24 +503,14 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
             return None
         return next((c for c in scene.cameras if c.name == name), None)
 
-    def ensure_scene_camera(self, scene) -> Camera:
-        """La caméra de cette scène, MATÉRIALISÉE si elle emploie encore le
-        défaut implicite.
-
-        C'est le geste « je veux autre chose que l'origine » : personne ne crée
-        de caméra d'avance, elle apparaît au premier réglage (cadrage déplacé
-        dans le canvas, mode changé dans l'inspecteur). Sans ça, il faudrait
-        soit créer une caméra par scène à la création — une liste remplie
-        d'entrées jamais touchées — soit demander à l'auteur d'en créer une
-        avant de pouvoir bouger le cadre."""
-        cam = self.scene_camera(scene)
-        if cam is not None:
-            return cam
+    def seed_default_camera(self, scene) -> Camera:
+        """Donne à une scène NEUVE sa caméra de départ : un vrai objet de
+        `scene.cameras`, visible et éditable dans l'arbre et le canvas dès la
+        création. Le nom est unique à l'échelle du projet (cf. `camera_names`)."""
         taken = self.camera_names()
-        base = (getattr(scene, "name", "") or "Camera").strip()
-        name, n = base, 2
+        name, n = "Camera", 2
         while name in taken:
-            name, n = f"{base} {n}", n + 1
+            name, n = f"Camera {n}", n + 1
         cam = Camera(name=name)
         scene.cameras.append(cam)
         scene.camera = name
@@ -1272,6 +1276,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         # n'est pas un cas particulier.
         default_scene = Scene(name="Scene_01")
         proj.seed_default_ui_palette(default_scene)
+        proj.seed_default_camera(default_scene)
         proj.scenes.append(default_scene)
         proj.settings.start_scene = "Scene_01"
         proj.settings.last_scene  = "Scene_01"

@@ -37,3 +37,20 @@ def test_content_tree_eye_masque_un_acteur_dans_le_sidecar(qapp, tmp_path):
 
     assert not state.member_visible(scene.name, "actor:Hero")
     assert actor.visible is True
+
+
+def test_selection_venue_du_canvas_pose_l_item_courant(qapp, tmp_path):
+    """Sélectionnée depuis le canvas, la ligne est PRIMAIRE (courante : fond
+    plein de la grammaire de sélection), pas un simple contour secondaire."""
+    from ui.scene_manager.scene_tree_panel import _ActiveSceneTree, _ROLE_OBJ
+
+    actors = [Actor(name="First"), Actor(name="Second")]
+    from types import SimpleNamespace
+    panel = SimpleNamespace(_content_state=SceneTreeState(tmp_path), refresh=lambda: None)
+    tree = _ActiveSceneTree(panel)
+    tree.populate(None, Scene(name="Test", actors=actors))
+
+    tree.highlight_actors(actors, actors[1])
+
+    assert tree.currentItem().data(0, _ROLE_OBJ) is actors[1]
+    assert len(tree.selectedItems()) == 2

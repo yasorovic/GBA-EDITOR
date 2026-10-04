@@ -1,0 +1,21 @@
+{
+  "globals": [
+    {
+      "id": 176276980874,
+      "name": "global",
+      "type": "string",
+      "default": "",
+      "desc": "",
+      "persist": false
+    }
+  ],
+  "constants": [
+    {
+      "id": 241913466890,
+      "name": "const",
+      "type": "string",
+      "value": "",
+      "desc": ""
+    }
+  ]
+}

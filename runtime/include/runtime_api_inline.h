@@ -231,7 +231,20 @@ static inline Vec2 vec2_sub  (Vec2 a, Vec2 b) { return (Vec2){ a.x-b.x, a.y-b.y 
 static inline Vec2 vec2_scale(Vec2 v, int k)  { return (Vec2){ v.x*k,   v.y*k   }; }
 static inline Vec3 vec3_add  (Vec3 a, Vec3 b) { return (Vec3){ a.x+b.x, a.y+b.y, a.z+b.z }; }
 static inline Vec3 vec3_sub  (Vec3 a, Vec3 b) { return (Vec3){ a.x-b.x, a.y-b.y, a.z-b.z }; }
+/* `*` et `/` entre deux vecteurs : composante par composante (division entière).
+   Avec un entier, le codegen passe par `*_splat` pour `/`, par `*_scale` pour `*`.
+   `dot(a, b)` : la somme des produits composante par composante, un ENTIER. */
+static inline Vec2 vec2_mul  (Vec2 a, Vec2 b) { return (Vec2){ a.x*b.x, a.y*b.y }; }
+static inline Vec3 vec3_mul  (Vec3 a, Vec3 b) { return (Vec3){ a.x*b.x, a.y*b.y, a.z*b.z }; }
+static inline int  vec2_dot  (Vec2 a, Vec2 b) { return a.x*b.x + a.y*b.y; }
+static inline int  vec3_dot  (Vec3 a, Vec3 b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
+static inline Vec2 vec2_div  (Vec2 a, Vec2 b) { return (Vec2){ a.x/b.x, a.y/b.y }; }
+static inline Vec3 vec3_div  (Vec3 a, Vec3 b) { return (Vec3){ a.x/b.x, a.y/b.y, a.z/b.z }; }
 static inline Vec3 vec3_scale(Vec3 v, int k)  { return (Vec3){ v.x*k,   v.y*k,   v.z*k   }; }
+/* Un entier mêlé à un vecteur par `+`/`-` vaut ce vecteur dont TOUTES les
+   composantes sont cet entier : `v + 2` = `v + vec2(2, 2)`. */
+static inline Vec2 vec2_splat(int k) { return (Vec2){ k, k }; }
+static inline Vec3 vec3_splat(int k) { return (Vec3){ k, k, k }; }
 
 /* Transform — position instantanée, sans notion de temps ni de vitesse.
    ROADMAP v0.19 : s->x/s->y sont en Q8 en interne (256 = 1 px), mais
@@ -464,6 +477,10 @@ static inline void actor_set_sprite_offset(Actor* s, Vec2 o) {
     actor_oam_entry(s)->offset_x = o.x;
     actor_oam_entry(s)->offset_y = o.y;
 }
+static inline void actor_set_sprite_pivot(Actor* s, Vec2 o) {
+    actor_oam_entry(s)->pivot_x = o.x;
+    actor_oam_entry(s)->pivot_y = o.y;
+}
 static inline int  actor_get_sprite_rotation(const Actor* s) {
     return actor_oam_entry(s)->rotation;
 }
@@ -472,6 +489,9 @@ static inline Vec2 actor_get_sprite_scale(const Actor* s) {
 }
 static inline Vec2 actor_get_sprite_offset(const Actor* s) {
     return (Vec2){ actor_oam_entry(s)->offset_x, actor_oam_entry(s)->offset_y };
+}
+static inline Vec2 actor_get_sprite_pivot(const Actor* s) {
+    return (Vec2){ actor_oam_entry(s)->pivot_x, actor_oam_entry(s)->pivot_y };
 }
 
 /* Direction 8-axes pour l'animation (0=override, 1=N..8=NW) */

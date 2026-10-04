@@ -56,6 +56,12 @@ ARITH_TYPES: frozenset[str] = frozenset({"vec2", "vec3"})
 # endroit à tenir à jour pour ajouter un jour un autre type composé.
 VEC_CONSTRUCTORS: dict[str, int] = {name: len(fields) for name, fields in VEC_FIELDS.items()}
 
+# Fonctions de langage sur deux vecteurs : `dot(a, b)` rend un ENTIER (la somme des
+# produits composante par composante). Comme les constructeurs, ce ne sont pas des
+# entrées RUNTIME_API : leur type de retour est scalaire, le type des arguments
+# décide de la fonction C (`vec2_dot` / `vec3_dot`).
+VEC_FUNCTIONS: frozenset[str] = frozenset({"dot"})
+
 # Constructeur → type C émis (littéral composé, pas un appel de fonction).
 C_TYPES: dict[str, str] = {
     "vec2": "Vec2",
@@ -208,11 +214,11 @@ def infer_vec_type(expr, local_types: dict[str, Optional[str]],
         api = RUNTIME_API.get(f"{REF_ACTOR}:{expr.method}")
         return api.ret if (api and api.ret in VEC_CONSTRUCTORS) else None
 
-    if isinstance(expr, ExprBinop) and expr.op in ("+", "-", "*"):
+    if isinstance(expr, ExprBinop) and expr.op in ("+", "-", "*", "/"):
         lt = infer_vec_type(expr.left, local_types, ref_types, ref_kinds)
         rt = infer_vec_type(expr.right, local_types, ref_types, ref_kinds)
         if lt and rt:
-            return lt if (lt == rt and expr.op != "*") else None
+            return lt if lt == rt else None
         return lt or rt   # un seul côté composite (l'autre un scalaire, cf. * ) : ce type-là
 
     if isinstance(expr, ExprIndex):

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
+from core.keybindings import get_keybindings
 from PyQt6.QtCore import Qt, QPoint, QSize, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QFrame, QToolButton, QVBoxLayout
@@ -37,11 +38,11 @@ class FloatingToolbar(QFrame):
 
     tool_changed = pyqtSignal(str)  # ex. "select", "collision_8", "collision_slope"…
 
-    # Outils principaux — (id, icon_key, titre, raccourci, description)
+    # Outils principaux — (id, icon_key, titre, description) — le raccourci est `canvas.<icon_key>`
     _MAIN_TOOLS = [
-        ("select", "tool_select", 'cvtool.select', 'cvtool.shortcut_select', 'cvtool.select_tip'),
-        ("add", "tool_add", 'cvtool.add_actor', 'cvtool.shortcut_add', 'cvtool.add_actor_tip'),
-        ("erase", "tool_erase", 'cvtool.eraser', 'cvtool.shortcut_erase', 'cvtool.eraser_tip'),
+        ("select", "tool_select", 'cvtool.select', 'cvtool.select_tip'),
+        ("add", "tool_add", 'cvtool.add_actor', 'cvtool.add_actor_tip'),
+        ("erase", "tool_erase", 'cvtool.eraser', 'cvtool.eraser_tip'),
     ]
 
     # Sous-outils collision — (id, icon_key, label, tooltip)
@@ -153,13 +154,13 @@ class FloatingToolbar(QFrame):
         self._btns: dict[str, QToolButton] = {}
 
         # ── Outils principaux ─────────────────────────────────────
-        for tool_id, icon_key, title_key, shortcut_key, body_key in self._MAIN_TOOLS:
+        for tool_id, icon_key, title_key, body_key in self._MAIN_TOOLS:
             btn = QToolButton()
             btn.setIcon(_ico(icon_key, COLOR_DEFAULT, COLOR_ACTIVE))
             btn.setIconSize(QSize(24, 24))
             btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
             btn.setToolTip(tooltip(
-                title=label(title_key), shortcut=label(shortcut_key), body=label(body_key)
+                title=label(title_key), shortcut=get_keybindings().resolve(f"canvas.{icon_key}"), body=label(body_key)
             ))
             btn.setCheckable(True)
             btn.setChecked(tool_id == "select")
@@ -177,7 +178,7 @@ class FloatingToolbar(QFrame):
         self._btn_collision.setIconSize(QSize(24, 24))
         self._btn_collision.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self._btn_collision.setToolTip(tooltip(
-            title=label('cvtool.collision_editing'), shortcut="C",
+            title=label('cvtool.collision_editing'), shortcut=get_keybindings().resolve("canvas.tool_collision"),
             body=label('cvtool.collision_editing_tip'),
         ))
         self._btn_collision.setCheckable(True)
@@ -195,7 +196,7 @@ class FloatingToolbar(QFrame):
         self._btn_inpaint.setIconSize(QSize(24, 24))
         self._btn_inpaint.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self._btn_inpaint.setToolTip(tooltip(
-            title=label('cvtool.scene_inpainting'), shortcut="B",
+            title=label('cvtool.scene_inpainting'), shortcut=get_keybindings().resolve("canvas.tool_inpaint"),
             body=label('cvtool.scene_inpainting_tip'),
         ))
         self._btn_inpaint.setCheckable(True)
@@ -220,7 +221,7 @@ class FloatingToolbar(QFrame):
         self._btn_ui.setIconSize(QSize(20, 20))
         self._btn_ui.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self._btn_ui.setToolTip(tooltip(
-            title=label('cvtool.interface_widget'), shortcut="T",
+            title=label('cvtool.interface_widget'), shortcut=get_keybindings().resolve("canvas.tool_ui"),
             body=label('cvtool.interface_widget_tip'),
         ))
         self._btn_ui.setCheckable(True)

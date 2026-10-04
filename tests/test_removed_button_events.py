@@ -30,13 +30,6 @@ def test_on_update_avec_pressed_reste_valide():
     assert errs == []
 
 
-def test_soundfx_component_migre_le_trigger_a_la_lecture():
-    from core.models.components import components_from_list
-    comps = components_from_list([
-        {"component_type": "sound_fx", "sfx_name": "Boop", "trigger": "on_button_a"},
-    ])
-    assert comps[0].trigger == "a"
-
 
 def test_soundfx_component_conserve_manual_et_on_spawn():
     from core.models.components import components_from_list

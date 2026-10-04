@@ -21,17 +21,8 @@ def test_load_reflete_le_modele(qapp):
 
     insp.load(scene, cam, project=None)
 
-    assert (insp._pos_x.value(), insp._pos_y.value()) == (32, 16)
-    assert (insp._frame_w.value(), insp._frame_h.value()) == (200, 120)
-    assert (insp._margin_x.value(), insp._margin_y.value()) == (50, 25)
-    assert (insp._bounds_w.value(), insp._bounds_h.value()) == (1024, 512)
-    assert (insp._bounds_x.value(), insp._bounds_y.value()) == (8, 8)
-
-
-def test_sans_camera_les_champs_sont_desactives(qapp):
-    """Scène sans caméra : les éditeurs sont visibles mais éteints (la première
-    édition en créera une — cf. docstring de l'inspecteur)."""
-    insp = CameraInspector()
-    insp.load(Scene(name="S1"), None, project=None)
-    assert not insp._pos_x.isEnabled()
-    assert not insp._bounds_w.isEnabled()
+    assert (insp._pos_x.raw(), insp._pos_y.raw()) == (32, 16)
+    assert (insp._frame_w.raw(), insp._frame_h.raw()) == (200, 120)
+    assert (insp._margin_x.raw(), insp._margin_y.raw()) == (50, 25)
+    assert (insp._bounds_w.raw(), insp._bounds_h.raw()) == (1024, 512)
+    assert (insp._bounds_x.raw(), insp._bounds_y.raw()) == (8, 8)

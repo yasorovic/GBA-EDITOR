@@ -37,7 +37,7 @@ class _Recorder:
             raise self.fail
 
 
-def _make_window(log, *, project=True, save_error=None):
+def _make_window(log, *, project=True, save_error=None, pending=False):
     from window import MainWindow
 
     win = SimpleNamespace(
@@ -45,6 +45,7 @@ def _make_window(log, *, project=True, save_error=None):
         _save_timer=_Recorder(log, "timer"),
         scene_editor=_Recorder(log, "scene"),
         _script_editor=_Recorder(log, "script"),
+        _has_pending_changes=lambda: pending,
     )
     win._persist_project = MainWindow._persist_project.__get__(win)
     win._confirm_close = MainWindow._confirm_close.__get__(win)
@@ -87,3 +88,59 @@ def test_echec_d_ecriture_puis_accord_ferme_quand_meme(monkeypatch):
     win = _make_window([], save_error=PermissionError("disque verrouillé"))
 
     assert win._confirm_close() is True
+
+
+class _FakeBox(QMessageBox):
+    """Remplace la boîte Enregistrer / Ne pas enregistrer / Annuler : le test
+    choisit le bouton « cliqué » par son rôle."""
+    choice = QMessageBox.ButtonRole.AcceptRole
+
+    def __init__(self, *args):
+        self._buttons = {}
+
+    def setIcon(self, *a): pass
+    def setWindowModality(self, *a): pass
+    def setWindowTitle(self, *a): pass
+    def setText(self, *a): pass
+    def setDefaultButton(self, *a): pass
+    def setEscapeButton(self, *a): pass
+    def exec(self): return 0
+
+    def addButton(self, text, role):
+        self._buttons[role] = object()
+        return self._buttons[role]
+
+    def clickedButton(self):
+        return self._buttons[self.choice]
+
+
+def _ask(monkeypatch, choice):
+    _FakeBox.choice = choice
+    monkeypatch.setattr("window.QMessageBox", _FakeBox)
+
+
+def test_modifications_en_attente_enregistrer_sauvegarde(monkeypatch):
+    _ask(monkeypatch, QMessageBox.ButtonRole.AcceptRole)
+    log = []
+    win = _make_window(log, pending=True)
+
+    assert win._confirm_close() is True
+    assert "project.save" in log
+
+
+def test_modifications_en_attente_ne_pas_enregistrer_ferme_sans_ecrire(monkeypatch):
+    _ask(monkeypatch, QMessageBox.ButtonRole.DestructiveRole)
+    log = []
+    win = _make_window(log, pending=True)
+
+    assert win._confirm_close() is True
+    assert log == []
+
+
+def test_modifications_en_attente_annuler_garde_la_fenetre_ouverte(monkeypatch):
+    _ask(monkeypatch, QMessageBox.ButtonRole.RejectRole)
+    log = []
+    win = _make_window(log, pending=True)
+
+    assert win._confirm_close() is False
+    assert log == []

@@ -43,7 +43,7 @@ from typing import Any, Callable
 
 from PyQt6.QtWidgets import QCheckBox, QComboBox, QDoubleSpinBox, QSpinBox
 
-from ui.common.value_field import ValueField
+from ui.common.value_field import NumberField, ValueField
 
 
 def _resolve(widget, values):
@@ -66,7 +66,7 @@ def _resolve(widget, values):
         )
     if isinstance(widget, (QSpinBox, QDoubleSpinBox)):
         return widget.valueChanged, (lambda w: w.value()), (lambda w, v: w.setValue(v))
-    if isinstance(widget, ValueField):
+    if isinstance(widget, (ValueField, NumberField)):
         # `.changed` émet déjà la forme sérialisable ; `set_raw` ne réémet pas.
         return widget.changed, (lambda w: w.raw()), (lambda w, v: w.set_raw(v))
     raise TypeError(f"FieldBinder ne sait pas lier un {type(widget).__name__}")

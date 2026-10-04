@@ -41,11 +41,11 @@ class WindowLayout:
         return self.slots.get(window_name)
 
 
-def scene_needs_camera_slot(scene: Scene) -> bool:
+def scene_needs_camera_slot(scene: Scene, project=None) -> bool:
     """Une des caméras de la scène a-t-elle un cadre plus petit que l'écran ?
     Une seule réservation même si plusieurs le font — une seule caméra est
     active à la fois (cf. camera.py)."""
-    return any(c.frame_w < 240 or c.frame_h < 160 for c in scene.cameras)
+    return any(c.px('frame_w', project) < 240 or c.px('frame_h', project) < 160 for c in scene.cameras)
 
 
 def scene_window_names(scene: Scene) -> list:
@@ -63,7 +63,7 @@ def scene_window_layout(project: Project, scene: Scene) -> WindowLayout:
     layout = WindowLayout()
     next_slot = 0
 
-    if scene_needs_camera_slot(scene):
+    if scene_needs_camera_slot(scene, project):
         layout.camera_slot = next_slot
         next_slot += 1
 
@@ -77,10 +77,10 @@ def scene_window_layout(project: Project, scene: Scene) -> WindowLayout:
     return layout
 
 
-def scene_window_budget(scene: Scene) -> tuple:
+def scene_window_budget(scene: Scene, project=None) -> tuple:
     """(intentions utilisées, 2) — même collecte que `scene_window_layout`
     sans construire l'assignation, pour l'affichage budget des inspecteurs
     (Scene « Windows », Camera « Transform »). `utilisées` peut dépasser 2 :
     montrer le dépassement plutôt que le masquer est le but de ce chiffre."""
-    used = (1 if scene_needs_camera_slot(scene) else 0) + len(scene_window_names(scene))
+    used = (1 if scene_needs_camera_slot(scene, project) else 0) + len(scene_window_names(scene))
     return (used, _MAX_SLOTS)

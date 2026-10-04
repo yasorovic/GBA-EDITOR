@@ -1,0 +1,25 @@
+{
+  "name": "GNU Unifont JP 16",
+  "sources": {
+    "regular": [
+      "unifont-jp-17.0.04"
+    ]
+  },
+  "faces": [
+    {
+      "source_name": "unifont-jp-17.0.04",
+      "weight": 400
+    }
+  ],
+  "auto_family": "Unifont-JP",
+  "pixel_height": 16,
+  "line_height": 16,
+  "pixel_fit": "grid_fit",
+  "hinting": "normal",
+  "raster_mode": "binary",
+  "coverage_threshold": 128,
+  "dither_pattern": "none",
+  "offset_x": 0,
+  "offset_y": 0,
+  "prefer_bitmap_strike": false
+}

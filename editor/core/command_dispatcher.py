@@ -322,6 +322,7 @@ class CommandDispatcher(EventEmitter):
         # plus tard) ; l'ancien seeding 96/32 a disparu avec `DEFAULT_ACTOR_SLOTS`.
         scene = Scene(name=name)
         self._project.seed_default_ui_palette(scene)
+        self._project.seed_default_camera(scene)
         self._project.scenes.append(scene)
         with self._watcher.suspended():
             self._project.save_scene(scene)

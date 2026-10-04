@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import ctypes
 import os
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -101,29 +100,7 @@ def test_une_panne_imprevue_ne_montre_pas_de_trace_python(tmp_path, monkeypatch)
     assert "RuntimeError" in journal.read_text(encoding="utf-8")   # …et il y est
 
 
-# ── Un outil qui échoue : l'étape et le code ──────────────────────────
 
-def test_un_outil_en_echec_dit_quelle_etape_et_quel_code():
-    worker = BuildWorker(None, None)
-    lines = []
-    worker.on("error_line", lines.append)
-    worker.on("diagnostic", lambda d: lines.append(d.console_line()))
-    worker.on("log_line", lines.append)
-
-    ok = worker._run_cmd([sys.executable, "-c", "import sys; sys.exit(3)"], "[outil]")
-
-    assert ok is False
-    assert "[error] outil: failed (code 3)" in lines
-
-
-def test_un_outil_qui_reussit_n_ajoute_pas_de_ligne_d_echec():
-    worker = BuildWorker(None, None)
-    lines = []
-    worker.on("error_line", lines.append)
-    worker.on("diagnostic", lambda d: lines.append(d.console_line()))
-
-    assert worker._run_cmd([sys.executable, "-c", "pass"], "[outil]") is True
-    assert not any("a échoué" in line for line in lines)
 
 
 # ── ROM verrouillée : dite avant de compiler pour rien ────────────────

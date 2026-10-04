@@ -46,6 +46,19 @@ def script_attachments(project) -> dict[str, dict[str, list[str]]]:
     return found
 
 
+def actors_and_prefabs_of_script(project, path: Path) -> list:
+    """Les acteurs et prefabs (objets) dont le composant script actif désigne ce fichier."""
+    target = Path(path).resolve()
+
+    def uses(owner) -> bool:
+        comp = owner.get_component("script")
+        abs_path = project.asset_abs(comp.script) if comp and comp.active and comp.script else None
+        return abs_path is not None and Path(abs_path).resolve() == target
+
+    return ([a for scene in project.scenes for a in scene.actors if uses(a)]
+            + [pf for pf in project.prefabs if uses(pf)])
+
+
 def family_of_script(project, path: Path) -> str | None:
     """La famille du propriétaire de ce fichier, ou None s'il n'est attaché à rien
     (ou, cas refusé au build, à plusieurs familles à la fois : aucune ne l'emporte)."""

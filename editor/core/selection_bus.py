@@ -28,8 +28,8 @@ class CameraSelection:
     distinguer les deux intentions une fois passées par le bus.
 
     `camera` désigne PRÉCISÉMENT la caméra visée (la scène peut en posséder
-    plusieurs) ; `None` = état implicite (scène sans caméra encore créée, cf.
-    `Project.ensure_scene_camera`)."""
+    plusieurs) : toujours une caméra réelle, une scène sans caméra n'en offre
+    aucune à sélectionner."""
     __slots__ = ("scene", "camera")
 
     def __init__(self, scene, camera=None):
