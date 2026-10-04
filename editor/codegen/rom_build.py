@@ -17,7 +17,7 @@ import shutil
 import subprocess
 import sys
 import threading
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Optional
 
 from core import crash_log
@@ -552,7 +552,7 @@ class BuildWorker(EventEmitter, threading.Thread):
         if m and m["kind"] in ("error", "fatal error", "warning"):
             make = build_warning if m["kind"] == "warning" else build_error
             self._emit("diagnostic", make(m["message"], source,
-                                          Path(m["file"]).name, int(m["line"])))
+                                          PureWindowsPath(m["file"]).name, int(m["line"])))
         elif "undefined reference" in line:
             self._emit("diagnostic", build_error(line.strip(), source))
         elif failed and not (m and m["kind"] == "note"):
