@@ -130,6 +130,7 @@ class GBAScene(QGraphicsScene):
         coordonnées scène — lus tels qu'ils sont dessinés (offset d'actor
         compris). Retourne (xs, ys) où chaque élément est un (start, size)."""
         xs, ys = [], []
+        ox, oy = exclude_item.screen_offset() if hasattr(exclude_item, "screen_offset") else (0, 0)
         for it in self._ui_region_items:
             if it is exclude_item:
                 continue
@@ -137,8 +138,10 @@ class GBAScene(QGraphicsScene):
                 r, p = it.rect(), it.pos()
             except RuntimeError:
                 continue
-            xs.append((p.x() + r.left(), r.width()))
-            ys.append((p.y() + r.top(),  r.height()))
+            # Dans le repère ÉCRAN de l'item qu'on déplace : ses bords sont
+            # comparés au cadre 240×160, pas à la position de la caméra.
+            xs.append((p.x() - ox + r.left(), r.width()))
+            ys.append((p.y() - oy + r.top(),  r.height()))
         return xs, ys
 
     def _guide_pen(self) -> "QPen":
@@ -266,6 +269,29 @@ class GBAScene(QGraphicsScene):
         self.addItem(self._camera)
         for it in self._sprite_items:
             self.sync_sprite_space(it)
+        self.sync_ui_to_camera()
+
+    def sync_ui_to_camera(self):
+        """Replace les zones d'interface ancrées à l'écran sur la caméra de
+        démarrage — appelé quand elle bouge ou est recréée."""
+        for it in self._ui_region_items:
+            try:
+                it.reposition()
+            except RuntimeError:
+                continue          # item C++ détruit entre-temps
+        self.refresh_screen_frame()
+
+    def refresh_screen_frame(self):
+        """Montre le cadre de la caméra de démarrage (et le voile hors cadre)
+        tant qu'une zone ancrée à l'écran est sélectionnée : sans lui on ne
+        voit pas où l'élément tombera sur l'écran de la console."""
+        cam = self._camera
+        if cam is None or cam.camera is None:
+            return          # pas de caméra authorée : l'écran est à (0, 0)
+        on = any(it.isSelected() and it.is_screen_anchored()
+                 for it in self._ui_region_items)
+        cam.set_view_forced(on)
+        self.update()
 
     def setup_extra_cameras(self, cameras: list, project=None):
         """(Re)crée les items des AUTRES caméras de la scène — rectangles
@@ -494,10 +520,12 @@ class GBAScene(QGraphicsScene):
                     item.setVisible(self._ui_elements_visible)
                     self.addItem(item)
                     self._ui_region_items.append(item)
+                    item.reposition()
                     if any(r is k for k in kept):
                         item.setSelected(True)
         finally:
             self.blockSignals(was_blocked)
+        self.refresh_screen_frame()
 
         # Pré-chauffage : résoudre MAINTENANT (hors écran, à la construction des
         # items) les couleurs de banque de chaque région. Chaque item les met en

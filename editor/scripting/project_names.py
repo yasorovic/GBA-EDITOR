@@ -20,6 +20,7 @@ from scripting.api import (
     DOMAIN_UI_ELEMENT, DOMAIN_GLOBAL, REF_TYPE_TABLE,
     DOMAIN_SOUND_BOX_STATE, DOMAIN_JINGLE_BOX_STATE, DOMAIN_MUSIC_BOX_TRIGGER,
     DOMAIN_KEY, DOMAIN_WIN_REGION, WIN_REGIONS, DOMAIN_BOX_TAG, DOMAIN_ANIM,
+    DOMAIN_ACTOR_NAME,
 )
 from core.models.settings import BUTTON_NAMES
 from core.script_owners import actors_and_prefabs_of_script
@@ -138,5 +139,9 @@ def names_by_domain(project, scene=None) -> dict[str, list[str]]:
     sc = scene if scene is not None else has("active_scene")
     if sc is not None:
         out[DOMAIN_ACTOR] = _names(getattr(sc, "actors", []))
+
+    # `other.name == "…"` : l'identité d'un acteur — les acteurs de la scène active ET les
+    # prefabs, comme `Checker._check_actor_name`.
+    out[DOMAIN_ACTOR_NAME] = out.get(DOMAIN_ACTOR, []) + out[DOMAIN_PREFAB]
 
     return {dom: names for dom, names in out.items() if names}

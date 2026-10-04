@@ -1,3 +1,16 @@
 {
-  "texts": []
+  "texts": [
+    {
+      "id": 432030139170,
+      "key": "hud_score",
+      "path": [
+        "Hud",
+        "score"
+      ],
+      "content": "score = $score",
+      "note": "",
+      "scene": "Scene_01",
+      "auto_key": true
+    }
+  ]
 }

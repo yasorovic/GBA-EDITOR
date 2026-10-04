@@ -8,7 +8,7 @@ prefab poolé l'est déjà. Deux conséquences vérifiées ici :
     un nom d'une scène à l'autre ne produit plus d'avertissement, un doublon dans
     la MÊME scène en produit un ;
   ② le symbole émis (`scene_actor_sym`) est bien qualifié, donc deux « Cursor »
-    ne partagent plus `TAG_CURSOR` ni `actor_Cursor.c`.
+    ne partagent plus `ACTOR_CURSOR` ni `actor_Cursor.c`.
 """
 from __future__ import annotations
 
@@ -65,7 +65,7 @@ def test_get_actor_dans_un_script_de_scene_resout_a_la_compilation():
     """Une scène connue → TAG qualifié + filtre `actor_live` (nil si détruit,
     décision C')."""
     code = _gen('    local u = actor:get("Foe")', scene_sym="Arena")
-    assert "actor_live(&g_actors[TAG_ARENA_FOE])" in code
+    assert "actor_live(&g_actors[ACTOR_ARENA_FOE])" in code
     assert "runtime_get_actor" not in code
 
 
@@ -74,7 +74,7 @@ def test_get_actor_dans_un_script_partage_resout_au_runtime():
     ACTORNAME (décision C)."""
     code = _gen('    local u = actor:get("Foe")', scene_sym="")
     assert "runtime_get_actor(ACTORNAME_FOE)" in code
-    assert "TAG_" not in code
+    assert "ACTOR_" not in code
 
 
 def test_get_actor_par_index_dynamique():

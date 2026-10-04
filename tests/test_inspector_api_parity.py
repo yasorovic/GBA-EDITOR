@@ -70,13 +70,13 @@ def test_une_boite_se_tient_dans_une_variable_et_ses_champs_sont_des_proprietes(
 
 
 def test_hb_tag_n_est_pas_le_tag_de_l_acteur():
-    """`self.tag` existe (identité de l'acteur) : `hb.tag` ne doit jamais s'y
+    """`self.name` existe (identité de l'acteur) : `hb.tag` ne doit jamais s'y
     résoudre, sans quoi la boîte répondrait par l'acteur."""
     _, code = _lua("function on_update(self)\n"
                    "  local hb = self:collision_box(\"body\")\n"
                    "  if hb.tag == \"body\" then self:show() end\nend\n")
     assert "collision_box_get_tag(hb)" in code
-    assert "actor_get_tag(hb)" not in code
+    assert "actor_get_name(hb)" not in code
 
 
 def test_une_boite_d_un_autre_acteur_se_demande_aussi():

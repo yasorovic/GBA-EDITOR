@@ -46,13 +46,13 @@ from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, REMOVED_EVENTS, KNOWN
                   DOMAIN_LANG,
                   DOMAIN_PALETTE,
                   DOMAIN_IMAGE_STATE, DOMAIN_UI_ELEMENT,
-                  DOMAIN_TAG, DOMAIN_BOX_TAG, DOMAIN_PREFAB, DOMAIN_ACTOR, DOMAIN_GLOBAL,
+                  DOMAIN_ACTOR_NAME, DOMAIN_BOX_TAG, DOMAIN_PREFAB, DOMAIN_ACTOR, DOMAIN_GLOBAL,
                   DOMAIN_SEQUENCE,
                   DOMAIN_OBJ_MODE, DOMAIN_DIRECTION, DOMAIN_WIN_REGION,
                   DOMAIN_BLEND_MODE, DOMAIN_BLEND_SIDE, DOMAIN_EASE, HARDWARE_ENUMS,
                   API_MODULES, module_members, REF_TYPES, REF_TYPE_TABLE,
                   ref_member, ref_lineage, REF_ACTOR, STATELESS_MODULES, module_call_form, LAYER_NUMBERS,
-                  modernize_message)
+                  modernize_message, REF_COLLISION_BOX, COLLISION_EVENTS, BOX_PARAMS)
 
 from .expr_types import (VEC_FIELDS, VEC_CONSTRUCTORS, VEC_FUNCTIONS, ARITH_TYPES,
                          infer_vec_type, infer_ref_type, resolve_prop,
@@ -997,13 +997,13 @@ class Checker:
 
     def _check_prop_domain_value(self, receiver: str, p, value, op: str, access=None):
         """La valeur d'une propriété À DOMAINE s'écrit par son NOM
-        (`self.obj_mode = "window"`, `other.tag == "Ball"`), jamais par le
+        (`self.obj_mode = "window"`, `other.name == "Ball"`), jamais par le
         nombre correspondant.
 
         Le NOM est jugé par la table de domaine, exactement comme un ARGUMENT du
         même domaine (`_check_args`) : le domaine décide, pas la position ni la
         nature de ce qui le porte. C'est ce qui fait qu'une énumération
-        matérielle et un espace de noms du projet — `TAG_*`, les acteurs et les
+        matérielle et un espace de noms du projet — `ACTOR_*`, les acteurs et les
         prefabs — se valident du même geste.
 
         Une expression qui n'est ni un nombre ni une chaîne littérale (une
@@ -1042,7 +1042,7 @@ class Checker:
             check(self, nom, value.value, p, [access.obj] if access is not None else [])
 
     def _check_prop_enum_compare(self, e: ExprBinop) -> bool:
-        """`blend.mode == "alpha"`, `other.tag == "Ball"` — une propriété qui
+        """`blend.mode == "alpha"`, `other.name == "Ball"` — une propriété qui
         s'ÉCRIT par un nom se COMPARE par un nom, et une propriété en lecture
         seule qui en porte un ne se lit utilement que comme ça.
 
@@ -1130,7 +1130,14 @@ class Checker:
         # `seq_top` : les attentes ne sont légales qu'ici, au premier niveau
         # d'une séquence. Partout ailleurs `_check_stmt` les refuse.
         previous, self._current_function = self._current_function, fn.name
+        # `my_box` / `other_box` d'un événement de contact sont des références de boîte.
+        box_params = ([n for n, _ in BOX_PARAMS if n in fn.params]
+                      if fn.name in COLLISION_EVENTS else [])
+        for name in box_params:
+            self._ref_types[name] = REF_COLLISION_BOX
         self._check_block(fn.body, seq_top=seq is not None)
+        for name in box_params:
+            self._ref_types.pop(name, None)
         self._current_function = previous
 
     def _check_helper_returns(self, fn: LuaFunction):
@@ -1428,6 +1435,20 @@ class Checker:
                     # `self.position`, `camera.bound`… — un accès de propriété.
                     # Le champ qui suit est validé à l'étage d'au-dessus.
                     self._check_prop_read(prop)
+                elif (isinstance(e.obj, ExprIndex) and e.obj.field == "collision_box"
+                      and isinstance(e.obj.obj, ExprName)):
+                    # `other.collision_box.tag` : un acteur porte jusqu'à 4 boîtes, aucune n'est « la » boîte.
+                    self.errors.append(CheckError(
+                        "error",
+                        f"{e.obj.obj.name}.collision_box is not a field. Use the box the contact "
+                        "handler gives you (`other_box.tag`), or `self:collision_box(\"tag\")`."))
+                elif (e.field == "tag" and isinstance(e.obj, ExprName)
+                      and e.obj.name not in self._ref_types and e.obj.name not in API_MODULES):
+                    # Migration : `tag` appartenait à l'acteur avant de devenir celui des boîtes.
+                    self.errors.append(CheckError(
+                        "error",
+                        f"{e.obj.name}.tag: the identity of an actor is now `{e.obj.name}.name`. "
+                        "`tag` is reserved for collision boxes (`other_box.tag`)."))
                 elif ((isinstance(e.obj, ExprName)
                        and e.obj.name in self._ref_types)
                       or (isinstance(e.obj, (ExprCall, ExprInvoke, ExprIndex))
@@ -2314,7 +2335,7 @@ class Checker:
     def _check_spawn_ref_name(self, typ: str, name: str) -> None:
         """Un nom de réf vide est neutre (→ 0). Sinon il doit exister dans la
         liste du domaine, quand le contexte la porte — un nom inconnu émettrait
-        une macro C indéfinie (TAG_*/SFX_*/SCENE_IDX_*) au lien."""
+        une macro C indéfinie (ACTOR_*/SFX_*/SCENE_IDX_*) au lien."""
         if not name or typ == "string":
             return                          # string : tout texte est admis
         table = {"actor_ref": self.ctx.actor_names,
@@ -2334,9 +2355,9 @@ class Checker:
                 f"({', '.join(self.ctx.actor_names) or 'none'}).",
             ))
 
-    def _check_tag(self, call_key: str, name: str):
+    def _check_actor_name(self, call_key: str, name: str):
         """L'IDENTITÉ d'un acteur : le nom d'un acteur de la scène ou d'un
-        prefab poolé, les deux seuls à recevoir un `#define TAG_*`
+        prefab poolé, les deux seuls à recevoir un `#define ACTOR_*`
         (cf. codegen/runtime_codegen/headers.py).
 
         Erreur bloquante, comme la scène ou le prefab : sans ce `#define`, le C
@@ -2503,7 +2524,7 @@ _DOMAIN_CHECKS: dict = {
     DOMAIN_MUSIC_BOX_TRIGGER: lambda c, key, val, p, a: c._check_sound_trigger(key, val),
     DOMAIN_PREFAB:  lambda c, key, val, p, a: c._check_prefab(key, val),
     DOMAIN_ACTOR:   lambda c, key, val, p, a: c._check_actor(key, val),
-    DOMAIN_TAG:     lambda c, key, val, p, a: c._check_tag(key, val),
+    DOMAIN_ACTOR_NAME:     lambda c, key, val, p, a: c._check_actor_name(key, val),
     DOMAIN_BOX_TAG: lambda c, key, val, p, a: c._check_box_tag(key, val),
     DOMAIN_GLOBAL:  lambda c, key, val, p, a: c._check_global(key, val),
     DOMAIN_SEQUENCE: lambda c, key, val, p, a: c._check_sequence(key, val),
@@ -2530,7 +2551,7 @@ _DOMAIN_CHECKS: dict = {
 # Domaines connus mais délibérément NON validés — la troisième case du contrôle
 # de couverture (`validator._check_api_domains`), qui distingue « traité
 # ailleurs » de « oublié ». Vide aujourd'hui : `tag` l'occupait au motif que
-# `TAG_*` serait un espace ouvert, ce qui était faux — l'espace est celui des
+# `ACTOR_*` serait un espace ouvert, ce qui était faux — l'espace est celui des
 # acteurs de scène et des prefabs, parfaitement énumérable, et c'est `BOXTAG_*`
 # (champ libre d'une box de collision) qui ne l'est pas. La case reste, elle
 # n'est pas un oubli : le prochain domaine sans liste de référence s'y range.
@@ -2538,7 +2559,7 @@ _DOMAINS_UNCHECKED: frozenset = frozenset()
 
 
 def _prop_label(receiver: str, p) -> str:
-    """`self.tag` lu sur `other` s'annonce « other.tag ».
+    """`self.name` lu sur `other` s'annonce « other.name ».
 
     Le catalogue range les propriétés d'actor sous la clé `self.<champ>` — une
     clé, pas une restriction (cf. expr_types.resolve_prop) — et un message qui

@@ -376,7 +376,7 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
                *_appearance_init_lines(p, pf, _e0, "            ",
                                        _alay.member_base.get((pi["sym"], 0)))]
               if _e0 else []),
-            f"            g_actors[_i].tag      = TAG_{s.upper()};",
+            f"            g_actors[_i].name      = ACTOR_{s.upper()};",
             f"            g_actors[_i].collision.box_count = {len(boxes)};",
         ]
         for bi, cb in enumerate(boxes):
@@ -425,7 +425,7 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
                 # La partie porte le tag de sa RACINE : un bras de boss touché,
                 # c'est le boss qui est touché. Elle n'est pas un autre type
                 # d'acteur, elle est un enfant de celui-là.
-                f"            g_actors[_i+{k}].tag      = TAG_{s.upper()};",
+                f"            g_actors[_i+{k}].name      = ACTOR_{s.upper()};",
                 f"            g_actors[_i+{k}].collision.box_count = {len(p_boxes)};",
             ]
             for bi, cb in enumerate(p_boxes):
@@ -1628,7 +1628,7 @@ def _gen_scene_init(
             # potentiellement None plus haut) rend 0 des deux côtés.
             f"    g_oam_entries[{_e}].frame_w = {sprite.frame_w if sprite else 0};",
             f"    g_oam_entries[{_e}].frame_h = {sprite.frame_h if sprite else 0};",
-            f"    g_actors[{idx}].tag     = TAG_{s.upper()};",
+            f"    g_actors[{idx}].name     = ACTOR_{s.upper()};",
             # Transform MONDE : émise pour TOUT acteur, affine ou non. Un acteur
             # non-affine ne l'AFFICHE pas (aucun slot de matrice), mais un enfant
             # en HÉRITE par la composition parent→enfant — un enfant hérite des
@@ -1693,7 +1693,7 @@ def _gen_scene_init(
             _e = (p2["entry_start"] + _inst * p2["entries_per_instance"] + _rank
                   if _rank >= 0 else -1)
             L.append(f"    g_actors[{slot}].oam_entry = {_e};")
-            L.append(f"    g_actors[{slot}].tag = TAG_{p2['sym'].upper()};")
+            L.append(f"    g_actors[{slot}].name = ACTOR_{p2['sym'].upper()};")
             L.append(f"    g_actors[{slot}].active = 0;")
             _aff_p = (affine_info or {}).get(slot)
             if _aff_p and _e >= 0:
@@ -2665,7 +2665,7 @@ def generate_main(
                 tag = scene_actor_sym(d["scene"].name, actor.name).upper()
                 cases.append(
                     f"        case ACTORNAME_{nsym.upper()}: "
-                    f"return actor_live(&g_actors[TAG_{tag}]);")
+                    f"return actor_live(&g_actors[ACTOR_{tag}]);")
             if not cases:
                 continue
             L.append(f"    case {si}:   /* {d['scene'].name} */")

@@ -275,6 +275,10 @@ class SceneEditor(QWidget):
         self._gba_view.left_click_settled.connect(self._on_selection_changed)
         self._gba_scene.changed.connect(self._on_scene_item_changed)
         self._gba_view.left_released.connect(self._commit_camera_drag)
+        # Pendant un rectangle de sélection, la publication au bus est reportée
+        # au relâchement (cf. _on_selection_changed).
+        self._selection_pending = False
+        self._gba_view.left_released.connect(self._flush_pending_selection)
         self._gba_view.prefab_template_dropped.connect(self._on_prefab_template_dropped)
         get_bus().changed.connect(self.on_selection)
 
@@ -297,7 +301,7 @@ class SceneEditor(QWidget):
             lambda: QTimer.singleShot(
                 0, lambda: self._canvas_container.activate_tool_shortcut("select")))
         self._gba_view.actor_context_requested.connect(self._on_actor_context_menu)
-        self._gba_view.duplicate_drag_started.connect(self._on_duplicate_drag)
+        self._gba_view.duplicate_drag_finished.connect(self._duplicate_selection)
 
         self._setup_shortcuts()
 
@@ -489,28 +493,28 @@ class SceneEditor(QWidget):
     # Ctrl+D, Alt+glisser et Ctrl+V passent par le même chemin, seule l'origine
     # du décalage change. Acteurs ET éléments d'interface.
 
-    def _duplicate_selection(self, dx: int, dy: int, in_place: bool = False):
-        """Duplique la sélection courante, décalée de (dx, dy). `in_place` : la
-        copie naît pile sur l'original (Alt+glisser — la souris l'emporte ensuite)."""
+    def _duplicate_selection(self, dx: int, dy: int):
+        """Duplique la sélection courante, décalée de (dx, dy)."""
         actors = [it.scene_sprite for it in self._selected_sprite_items()]
         elements = [it._region for it in self._selected_ui_items()]
         if not actors and not elements:
             return
+        # Créer puis sélectionner les copies ne doit pas déplacer la vue.
+        hbar = self._gba_view.horizontalScrollBar()
+        vbar = self._gba_view.verticalScrollBar()
+        scroll = (hbar.value(), vbar.value())
         new_actors = get_dispatcher().duplicate_actors(actors, dx, dy)
         # Une zone en cible BG s'écrit dans une tilemap : son origine ne peut
         # pas tomber entre deux tuiles, donc décalage aimanté.
         edx, edy = _tile_snap(dx), _tile_snap(dy)
-        if elements and not edx and not edy and not in_place:
+        if elements and not edx and not edy:
             # Geste plus court qu'une demi-tuile : la copie tomberait pile sur
             # l'original, donc invisible. Un cran de grille, comme au Ctrl+D.
             edx = edy = 8
         new_elements = self._ui_region_ctrl.duplicate_elements(elements, edx, edy)
         self._select_copies(new_actors, new_elements, 'scncanvas.duplicated_elements')
-
-    def _on_duplicate_drag(self):
-        """Alt+glisser entamé : la vue a remis les originaux en place, la copie
-        naît dessus et la vue la saisit aussitôt."""
-        self._duplicate_selection(0, 0, in_place=True)
+        hbar.setValue(scroll[0])
+        vbar.setValue(scroll[1])
 
     def _shortcut_copy(self):
         """Ctrl+C — met la sélection dans le presse-papier du canvas.
@@ -1115,6 +1119,11 @@ class SceneEditor(QWidget):
 
     # ── Sélection ─────────────────────────────────────────────────
 
+    def _flush_pending_selection(self):
+        if self._selection_pending:
+            self._selection_pending = False
+            self._on_selection_changed()
+
     def _on_selection_changed(self):
         """Qt selectionChanged → émettre vers le bus (jamais vers les autres panels)."""
         try:
@@ -1128,6 +1137,11 @@ class SceneEditor(QWidget):
         # une suppression peut l'avoir laissé de côté (règle : à défaut, le
         # premier membre devient actif).
         self._gba_scene.reconcile_active()
+        # Rectangle de sélection en cours : chaque item qui entre changerait
+        # l'inspecteur (rechargé en ~50 ms). On ne publie qu'au relâchement.
+        if not self._gba_view.rubberBandRect().isNull():
+            self._selection_pending = True
+            return
         if not selected:
             # Clic dans la zone active du canvas (sceneRect, cf. GBAScene) sans
             # rien toucher → sélection de la SCÈNE elle-même (SceneInspector,
@@ -1180,6 +1194,11 @@ class SceneEditor(QWidget):
                     return it
         return None
 
+    def _reveal(self, item):
+        """Rend l'item visible SANS recentrer : la vue ne bouge que s'il est hors
+        champ (sélection venue de l'arbre), et du minimum nécessaire."""
+        self._gba_view.ensureVisible(item, 40, 40)
+
     def on_selection(self, obj):
         """Reçu du bus — aligner le canvas sans reboucler.
 
@@ -1192,6 +1211,18 @@ class SceneEditor(QWidget):
         if target is not None and target.isSelected():
             self._gba_scene.set_active_item(target)
             return
+        # Multi-sélection déjà reflétée par le canvas (écho du bus pendant un
+        # rectangle de sélection) : ne rien refaire. Sinon chaque pas du
+        # rectangle désélectionnait/resélectionnait tout et recentrait la vue.
+        from core.selection_bus import ActorSelection
+        if isinstance(obj, ActorSelection):
+            wanted = [self._find_item(a) for a in obj.actors]
+            current = {id(it) for it in self._gba_scene.selectedItems()}
+            if (None not in wanted and current == {id(it) for it in wanted}):
+                active = self._find_item(obj.active)
+                if active is not None:
+                    self._gba_scene.set_active_item(active)
+                return
 
         self._gba_scene.blockSignals(True)
         # Désélectionner tout d'abord
@@ -1207,12 +1238,12 @@ class SceneEditor(QWidget):
                     if actor is obj.active:
                         active_item = item
             if active_item:
-                self._gba_view.centerOn(active_item)
+                self._reveal(active_item)
         elif isinstance(obj, Actor):
             item = self._find_item(obj)
             if item:
                 item.setSelected(True)
-                self._gba_view.centerOn(item)
+                self._reveal(item)
         elif isinstance(obj, CameraSelection):
             # Re-sélectionner l'item caméra pour cet aller-retour bus : sans ce
             # cas, le clic sur l'icône (qui sélectionne nativement la caméra

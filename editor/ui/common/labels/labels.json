@@ -1628,6 +1628,9 @@
     "scttree.remove_from_folder": {
       "text": "Remove from folder"
     },
+    "scttree.new_folder_from_selection": {
+      "text": "New folder from selection"
+    },
     "scttree.hide_in_editor": {
       "text": "Hide in the editor"
     },
@@ -4323,7 +4326,6 @@
     "scrsb.behavior_stub_tip": { "text": "Inserts an exported function for this behavior module." },
     "vartbl.insert_title": { "text": "Insert variable access" },
     "vartbl.rename_tip": { "text": "Renames this variable and updates its references in scripts and text." },
-    "vartbl.type_title": { "text": "Variable type" },
     "vartbl.value_title": { "text": "Initial value" },
     "vartbl.type_int_tip": { "text": "Whole number from -2,147,483,648 to 2,147,483,647 (32 bits). The general-purpose type." },
     "vartbl.type_bool_tip": { "text": "True or false (0 or 1). Takes one byte in memory and a single bit in a save." },
@@ -4362,6 +4364,7 @@
     "pick.color_index_title": { "text": "Palette color {_index}" },
     "valfield.reference_title": { "text": "Referenced value" },
     "valfield.reference_tip": { "text": "Reads {symbol} when the project runs." },
+    "valfield.var_button": { "text": "var" },
     "settings.shortcuts.reset_title": { "text": "Restore default shortcut" },
     "settings.shortcuts.system_key_title": { "text": "System shortcut" },
     "noticeui.dismiss_title": { "text": "Dismiss tip" },

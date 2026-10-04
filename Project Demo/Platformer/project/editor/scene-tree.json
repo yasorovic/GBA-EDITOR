@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "scenes": {
+    "Scene_01": {
+      "folders": [
+        {
+          "id": "64a0d785468c46f78434885dcb2b5283",
+          "name": "Collectibles",
+          "members": [
+            "actor:Collectible_copy_copy_copy"
+          ],
+          "color": ""
+        }
+      ],
+      "hidden_members": [],
+      "hidden_folders": []
+    }
+  }
+}

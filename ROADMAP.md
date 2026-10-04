@@ -80,7 +80,7 @@ relevés en construisant la boucle ; le 2 a été confirmé par le **test d'éch
 
 2. **Les acteurs posés ne sont pas namespacés par scène.** Deux scènes qui posent chacune un
    acteur nommé « Cursor » (ou « Enemy », « Boss »…) collisionnent sur un seul symbole C :
-   `actor_Cursor.c` de la seconde écrase celui de la première, et `TAG_CURSOR` est défini deux
+   `actor_Cursor.c` de la seconde écrase celui de la première, et `ACTOR_CURSOR` est défini deux
    fois avec des valeurs différentes. Les prefabs et les scripts de scène, eux, SONT qualifiés
    (`<Scène>_<Prefab>`, `<Scène>_scene`) ; les acteurs posés font exception. Le validateur
    l'attrape et nomme le doublon (bien) — mais dans un jeu à 40 scènes, réutiliser un nom
@@ -455,7 +455,7 @@ l'écriture `ref.champ`, refuser l'écriture d'un champ lecture seule, et le cod
 - **La référence est un entier** (rang de l'acteur × `MAX_BOXES` + rang de la boîte + 1, 0 = absente),
   comme le handle d'un `sfx` : `if not hb` compile en `!hb`. Les propriétés d'une référence passent par
   `resolve_prop(expr, ref_types)`, sans jamais retomber sur les champs d'actor (`hb.tag` n'est pas
-  `self.tag`). Le renommage d'un tag suit aussi `hb.tag == "hitbox"` (`refactor._iter_prop_refs`).
+  `self.name`). Le renommage d'un tag suit aussi `hb.tag == "hitbox"` (`refactor._iter_prop_refs`).
 - **Vérifié** : sonde native (`actor_box_probe.c`), `test_inspector_api_parity.py`, et un build ROM complet
   sur une copie d'OrbitTest (deux boîtes sur la tourelle dont une inactive au départ, une sur Moon, script
   utilisant toute l'API) — `rom.gba` produite.
@@ -484,7 +484,7 @@ aurait un sens, et elle coûte un champ par acteur (un prefab posé N fois a N p
 pas l'asset ; la question « comment nomme-t-on l'accès à un sous-objet de l'instance ? » est déjà ouverte, en route
 vers v1.0-stable ([ci-dessous](#chantier-transverse--nommer-laccès-à-un-sous-objet-de-linstance)), et la trancher
 ici la trancherait deux fois. `initial_state` et `prefab_name` n'ont pas besoin de porte : `self.anim` et
-`self.tag` couvrent l'usage.
+`self.name` couvrent l'usage.
 
 ### Tranche 2 — caméra, scène, calque de fond (livrée le 2026-09-30)
 
@@ -692,12 +692,12 @@ requête de géométrie et événement de collision.
 **Non verrouillée.** Aujourd'hui la normale n'existe que pour les tuiles (`on_tile_collide(normal_x,
 normal_y)`, deux entiers) ; un contact acteur↔acteur n'en porte aucune (`on_collision_enter(other,
 my_box, other_box)`). Distinguer « on me marche dessus » de « on me touche » impose donc deux boîtes
-Trigger dédiées (`tete`, `pieds`) et la comparaison de deux constantes `BOXTAG_*` (cf.
+Trigger dédiées (`tete`, `pieds`) et la comparaison de deux tags (`my_box.tag == "tete"`, cf.
 `docs/user-guide/enemies.md`). Le `Contact` ci-dessus ne le règle que si la normale s'y trouve aussi :
 
 ```lua
 function on_collision_enter(contact)
-  if contact.other.tag ~= "Joueur" then return end
+  if contact.other.name ~= "Joueur" then return end
   if contact.normal.y < 0 then          -- poussé vers le haut : on me marche dessus
     self:destroy()
   else
@@ -723,7 +723,7 @@ passe de 21 à 17 lignes et perd ses deux boîtes de piétinement.
   connue.
 - **Point ouvert — la valeur.** Comme pour le `Contact` de tuile, l'introduction attend la vérification
   que le sous-ensemble Lua (`lua_subset.py`) sait porter une valeur structurée (`contact.normal.y`,
-  `contact.other.tag`) et qu'un paramètre de handler peut en être une.
+  `contact.other.name`) et qu'un paramètre de handler peut en être une.
 - **Migration.** Les trois signatures (`on_collision_enter(other, my_box, other_box)`,
   `on_collision_exit`, `on_tile_collide(nx, ny)`) migrent ENSEMBLE vers un `Contact`, avec le renommage
   `on_tile_collide` → `on_tile_collision`. Retrait sec, comme le reste. Le guide utilisateur

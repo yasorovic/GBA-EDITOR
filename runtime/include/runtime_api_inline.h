@@ -693,7 +693,7 @@ static inline int actors_overlap(const Actor*a, const Actor*b) {
 }
 
 /* Tag */
-static inline int actor_get_tag(const Actor* s) { return s->tag; }
+static inline int actor_get_name(const Actor* s) { return s->name; }
 
 /* Palette (flash de dégâts, invincibilité…) */
 static inline int  actor_get_pal(const Actor* s)    { return actor_oam_entry(s)->pal_bank; }

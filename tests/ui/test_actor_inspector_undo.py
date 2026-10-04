@@ -39,7 +39,7 @@ def test_une_edition_cree_une_entree_annulable(qapp, history):
     a = Actor(name="Hero", priority=0)
     insp = _loaded(a)
 
-    insp._tpriority.setValue(3)
+    insp._tpriority._spin.setValue(3)
 
     assert a.priority == 3
     assert history.can_undo
@@ -52,8 +52,8 @@ def test_undo_restaure_le_modele_et_linspecteur_le_reflete(qapp, history):
     a = Actor(name="Hero", priority=0, rotation=0)
     insp = _loaded(a)
 
-    insp._tpriority.setValue(3)
-    insp._trotation.setValue(45)      # champ DIFFÉRENT → 2e entrée, pas de fusion
+    insp._tpriority._spin.setValue(3)
+    insp._trotation._spin.setValue(45)      # champ DIFFÉRENT → 2e entrée, pas de fusion
     assert (a.priority, a.rotation) == (3, 45)
 
     history.undo()                    # défait la rotation
@@ -62,15 +62,15 @@ def test_undo_restaure_le_modele_et_linspecteur_le_reflete(qapp, history):
     assert (a.priority, a.rotation) == (0, 0)
 
     insp.load(a, project=None, scene=None)
-    assert insp._tpriority.value() == 0
-    assert insp._trotation.value() == 0
+    assert insp._tpriority.raw() == 0
+    assert insp._trotation.raw() == 0
 
 
 def test_redo_rejoue(qapp, history):
     a = Actor(name="Hero", priority=0)
     insp = _loaded(a)
 
-    insp._tpriority.setValue(2)
+    insp._tpriority._spin.setValue(2)
     history.undo()
     assert a.priority == 0
     assert history.can_redo
@@ -98,9 +98,9 @@ def test_frappes_fusionnees_une_seule_entree(qapp, history):
     a = Actor(name="Hero", priority=0)
     insp = _loaded(a)
 
-    insp._tpriority.setValue(1)
-    insp._tpriority.setValue(2)
-    insp._tpriority.setValue(3)
+    insp._tpriority._spin.setValue(1)
+    insp._tpriority._spin.setValue(2)
+    insp._tpriority._spin.setValue(3)
     assert a.priority == 3
 
     history.undo()

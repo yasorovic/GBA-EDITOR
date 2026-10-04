@@ -31,7 +31,8 @@ from dataclasses import dataclass
 from scripting.api import (
     RUNTIME_API, RUNTIME_PROPS, HARDWARE_ENUMS,
     KNOWN_EVENTS, KNOWN_EVENTS_BY_KIND, EVENT_REGISTRY,
-    STATELESS_MODULES, canonical_key,
+    STATELESS_MODULES, canonical_key, REF_TYPES, REF_ACTOR,
+    DOMAIN_ANIM, DOMAIN_SPRITE_ID, REF_COLLISION_BOX, BOX_PARAMS,
 )
 
 from scripting.expr_types import VEC_CONSTRUCTORS, VEC_FUNCTIONS
@@ -246,7 +247,40 @@ def _value_candidates(domain: str | None, project_names: dict | None) -> list[Ca
     ]
 
 
-def _string_arg(line_prefix: str, project_names: dict | None) -> list[Candidate]:
+# `local hb = self:collision_box("x")` : le type de référence que porte un local.
+# Lecture textuelle, pour la même raison que `_script_locals` (pas d'AST à chaque frappe).
+_RE_REF_LOCAL = re.compile(r"\b([A-Za-z_]\w*)\s*=\s*([A-Za-z_][\w.:]*)\s*\(")
+
+# Les domaines qui nomment un élément du sprite du RÉCEPTEUR : sur un autre acteur que
+# `self`, le checker les refuse (`other.anim == …`) — on ne les propose donc pas.
+_SELF_ONLY_DOMAINS = frozenset({DOMAIN_ANIM, DOMAIN_SPRITE_ID})
+
+
+def _receiver_prop(receiver_prop: str, source: str | None):
+    """La propriété du catalogue que désigne `recepteur.champ` : `self.name` et
+    `other.name` sont des champs d'acteur, `hb.tag` celui du TYPE que `hb` tient
+    (`hb = self:collision_box(…)` → `collision_box.tag`). Un récepteur dont on ne sait
+    pas le type ne rend rien."""
+    receiver, _, field = receiver_prop.partition(".")
+    if not field:
+        return None
+    if receiver == "self":
+        return RUNTIME_PROPS.get(f"{REF_ACTOR}.{field}")
+    # Les deux boîtes d'un événement de contact : `other_box.tag == "`.
+    ref_type = REF_COLLISION_BOX if receiver in dict(BOX_PARAMS) else None
+    for m in _RE_REF_LOCAL.finditer(source or ""):
+        if m.group(1) == receiver:
+            api = RUNTIME_API.get(canonical_key(m.group(2)))
+            ref_type = api.ret if api and api.ret in REF_TYPES else None
+    if ref_type:
+        return RUNTIME_PROPS.get(f"{ref_type}.{field}")
+    # Un récepteur nu est un acteur (`other`, un paramètre de handler, un acteur nommé).
+    p = RUNTIME_PROPS.get(canonical_key(f"self.{field}"))
+    return p if p is not None and p.domain not in _SELF_ONLY_DOMAINS else None
+
+
+def _string_arg(line_prefix: str, project_names: dict | None,
+                source: str | None = None) -> list[Candidate]:
     """Candidats pour une CHAÎNE en cours de frappe, dans les deux endroits où une
     valeur nommée s'écrit : un argument d'appel (`sfx:play("…`, `layer.set_blend
     ("…`) et l'affectation ou la comparaison d'une propriété (`self.obj_mode ==
@@ -267,7 +301,7 @@ def _string_arg(line_prefix: str, project_names: dict | None) -> list[Candidate]
     # Hors parenthèses : une propriété dont la valeur est un NOM d'énumération
     # (`self.obj_mode = "window"`, ou la comparaison `== "window"`).
     m = re.search(r"([A-Za-z_][\w.:]*)\s*==?\s*[\"'][^\"']*$", line_prefix)
-    p = RUNTIME_PROPS.get(canonical_key(m.group(1))) if m else None
+    p = _receiver_prop(m.group(1), source) if m else None
 
     return _value_candidates(p.domain, project_names) if p is not None else []
 
@@ -449,7 +483,7 @@ def candidates_at(line_prefix: str, *, context: str = "unknown",
     if _in_comment(line_prefix):
         return []
     if _in_string(line_prefix):
-        return _string_arg(line_prefix, project_names)
+        return _string_arg(line_prefix, project_names, source)
     qual = _QUAL.search(line_prefix)
     if qual:
         return _member_candidates(qual.group(1), qual.group(2), project_names, context)

@@ -358,7 +358,7 @@ sur `OamEntry`, où « local » se lit par opposition au monde de l'acteur.
 **La surface Lua ne bouge pas** : `self.frame`, `self.sprite_scale`, `self.anim_length`
 passent par les accesseurs de `runtime_api_inline.h`, seul endroit du dépôt (avec le C émis
 par le codegen) qui touche les champs. `scripting/api.py`, `codegen.py`, `checker.py` et `expr_types.py` n'en connaissent
-aucun — ils n'émettent que des `&g_actors[TAG_*]` et des appels `actor_get/set_*`. C'est cette
+aucun — ils n'émettent que des `&g_actors[ACTOR_*]` et des appels `actor_get/set_*`. C'est cette
 couche d'accesseurs qui a rendu le découpage possible sans rupture pour les projets existants.
 
 **`self.anim_length`/`self.anim_loop`/`self.anim_finished` sont écrites sur `OamEntry`,
@@ -522,7 +522,7 @@ Deux conséquences qui se paient cher si on les oublie :
   `_check_prop_domain_value` — les deux portes par lesquelles un nom de domaine entre).
 - **Une propriété peut porter un domaine** (`ApiProp.domain`), donc s'écrire et se
   comparer par un NOM : `self.obj_mode = "window"`, `blend.mode == "alpha"`,
-  `other.tag == "Ball"`. C'est le même `DOMAIN_*` que sur un paramètre, jugé par les
+  `other.name == "Ball"`. C'est le même `DOMAIN_*` que sur un paramètre, jugé par les
   mêmes tables (`checker._DOMAIN_CHECKS`, `codegen._DOMAIN_CONSTANT`) — une énumération
   du matériel et un espace de noms du projet s'y traitent donc pareil. Sans ce champ,
   faire d'un réglage une propriété le faisait
@@ -936,7 +936,7 @@ GBA : chaque `scene_init` efface `g_actors[]` et repose sa fenêtre OAM **depuis
 `scene_oam_layout(project, scene) -> OamLayout` est la source de vérité unique de cette
 géométrie — les acteurs actifs posés `[0..placed)`, puis la bande d'interface en sprites, puis
 les pools de prefabs que la scène déclare (`Scene.prefab_pools`), dans cet ordre (**acteurs → UI
-→ pools**, l'index OAM bas passant devant). `headers.py` (les `TAG_`/`POOL_<Scene>_<Prefab>_*`),
+→ pools**, l'index OAM bas passant devant). `headers.py` (les `ACTOR_`/`POOL_<Scene>_<Prefab>_*`),
 `main_gen.py` (`spawn_<Scene>_<Prefab>`, dimensionnement de `g_actors[]`) et la façade
 `actor_budget.py` en sont des **lecteurs**, comme le pipeline grit et `main_gen` lisent
 `palette_alloc`. Trois conséquences que le per-scène achète :
@@ -944,7 +944,7 @@ les pools de prefabs que la scène déclare (`Scene.prefab_pools`), dans cet ord
 - **`g_actors[]` est dimensionné sur la scène la plus gourmande** (le MAX, pas la somme des
   scènes) : une scène de menu ne paie plus les slots des projectiles du niveau d'action.
 - **Les symboles portent la scène** : `spawn_<Scene>_<Prefab>` rend un `Actor*` (ou `NULL`
-  pool plein), `TAG_*`/`POOL_*` repartent de 0 par scène, chaque scène recompile ses unités de
+  pool plein), `ACTOR_*`/`POOL_*` repartent de 0 par scène, chaque scène recompile ses unités de
   prefab contre SA géométrie. Un état project-wide indexé par `Actor.tag` doit donc devenir
   per-scène : `g_sfx_on_destroy_id/_vol` sont désormais des tables par scène, un pointeur posé
   au `scene_init` (patron `g_active_cmap`).

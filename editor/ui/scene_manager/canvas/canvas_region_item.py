@@ -24,6 +24,7 @@ from ui.scene_manager.align_snap import (
     candidate_lines, collect_targets, snap as _align_snap, SNAP_PX as _ALIGN_SNAP_PX,
 )
 from ui.scene_manager.canvas.canvas_const import GBA_W, GBA_H
+from core.models.ui_region import ANCHOR_SCREEN
 from ui.scene_manager.canvas.canvas_items import hw_layer_z
 from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import (
@@ -253,6 +254,29 @@ class UIRegionItem(QGraphicsRectItem):
         root (offsets cumulés + socle du frame), plus seulement de son ancrage
         propre — un enfant est pixel-relatif à son parent."""
         return self._layout.absolute_origin(self._region, self._actor_pos)
+
+    def screen_offset(self) -> tuple[int, int]:
+        """Décalage scène d'une zone ancrée à l'ÉCRAN : la position de la caméra
+        de démarrage. Une zone « écran » vit en coordonnées d'écran (x/y du
+        modèle) mais le canvas est en coordonnées de scène — sans ce décalage,
+        elle resterait collée au coin du monde quand la caméra en est ailleurs.
+        (0, 0) pour tout autre ancrage, ou hors scène."""
+        sc = self.scene()
+        if sc is None or not hasattr(sc, "camera_pos"):
+            return 0, 0
+        if self._layout.effective_anchor(self._region)[0] != ANCHOR_SCREEN:
+            return 0, 0
+        return sc.camera_pos()
+
+    def is_screen_anchored(self) -> bool:
+        return self._layout.effective_anchor(self._region)[0] == ANCHOR_SCREEN
+
+    def reposition(self):
+        """Replace l'item d'après le modèle ET la caméra courante. Appelé quand
+        la caméra de démarrage bouge : une zone ancrée à l'écran la suit."""
+        ox, oy, _ = self._origin()
+        dx, dy = self.screen_offset()
+        self.setPos(ox + dx, oy + dy)
 
     def _fill_brush(self):
         """Pinceau d'aperçu du fond d'un conteneur, ou None (autre type / sans
@@ -1115,7 +1139,10 @@ class UIRegionItem(QGraphicsRectItem):
                   and len(sc.selectable_items()) == 1)
         if (change == QGraphicsItem.GraphicsItemChange.ItemPositionChange
                 and self._moving and single):
-            nx, ny = value.x(), value.y()
+            # Aimantation dans le repère ÉCRAN : une zone ancrée à l'écran se
+            # cale sur la grille de l'écran, pas sur celle du monde.
+            offx, offy = self.screen_offset()
+            nx, ny = value.x() - offx, value.y() - offy
             w, h = self.rect().width(), self.rect().height()
             dx, gx = self._axis_snap(candidate_lines(nx, w), True)
             dy, gy = self._axis_snap(candidate_lines(ny, h), False)
@@ -1128,7 +1155,7 @@ class UIRegionItem(QGraphicsRectItem):
             if step > 1:
                 nx = (int(nx) // step) * step
                 ny = (int(ny) // step) * step
-            return QPointF(nx, ny)
+            return QPointF(nx + offx, ny + offy)
         # Position APPLIQUÉE pendant le geste : les enfants suivent du même
         # delta. Leur modèle est relatif au parent, il n'y a donc rien à
         # committer chez eux — c'est un suivi d'écran, pas une écriture.
@@ -1144,6 +1171,11 @@ class UIRegionItem(QGraphicsRectItem):
         if change in (QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged,
                       QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged):
             self.update()
+        # Le cadre de la caméra se montre tant qu'une zone « écran » est
+        # sélectionnée : c'est lui qui dit où elle tombera sur la console.
+        if (change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged
+                and sc is not None and hasattr(sc, "refresh_screen_frame")):
+            sc.refresh_screen_frame()
         return super().itemChange(change, value)
 
     # ── Interaction ──────────────────────────────────────────────
@@ -1223,17 +1255,18 @@ class UIRegionItem(QGraphicsRectItem):
         # sauf pour un setPos programmatique qui aurait contourné `_moving`.
         step = self._snap_step()
         pre = self.pos()
-        nx = int(pre.x()) // step * step
-        ny = int(pre.y()) // step * step
-        self.setPos(nx, ny)
+        offx, offy = self.screen_offset()
+        nx = (int(pre.x()) - offx) // step * step
+        ny = (int(pre.y()) - offy) // step * step
+        self.setPos(nx + offx, ny + offy)
         # Le snap final doit aussi emporter les descendants — `_moving` est déjà
         # retombé, le suivi d'`itemChange` ne le fait plus. Sélection simple
         # seulement, comme le suivi lui-même (en groupe, chaque item gère le sien).
         if (sc is not None and hasattr(sc, "selectable_items")
                 and len(sc.selectable_items()) == 1):
-            self._move_descendants(nx - pre.x(), ny - pre.y())
+            self._move_descendants(nx + offx - pre.x(), ny + offy - pre.y())
         self._last_pos = None
-        if (nx, ny) == (int(start.x()), int(start.y())):
+        if (nx + offx, ny + offy) == (int(start.x()), int(start.y())):
             return
         # Un ancrage actor stocke un OFFSET : c'est lui qu'il faut réécrire,
         # pas la position absolue lue dans le canvas.
@@ -1256,15 +1289,16 @@ class UIRegionItem(QGraphicsRectItem):
         reste sur sa case tant que la souris n'a pas franchi la suivante,
         `_commit_resize` ne fait plus alors qu'appliquer les bornes finales."""
         start_pos, start_rect = self._resize_start
-        l = start_pos.x() + start_rect.left()
-        t = start_pos.y() + start_rect.top()
-        rt = start_pos.x() + start_rect.right()
-        b = start_pos.y() + start_rect.bottom()
+        offx, offy = self.screen_offset()      # tout le calcul en repère écran
+        l = start_pos.x() - offx + start_rect.left()
+        t = start_pos.y() - offy + start_rect.top()
+        rt = start_pos.x() - offx + start_rect.right()
+        b = start_pos.y() - offy + start_rect.bottom()
         ml, mt, mr, mb = _HANDLE_EDGES[self._resize_handle]
-        if ml: l = scene_pos.x()
-        if mt: t = scene_pos.y()
-        if mr: rt = scene_pos.x()
-        if mb: b = scene_pos.y()
+        if ml: l = scene_pos.x() - offx
+        if mt: t = scene_pos.y() - offy
+        if mr: rt = scene_pos.x() - offx
+        if mb: b = scene_pos.y() - offy
         # Aimantation d'alignement sur le(s) SEUL(S) bord(s) que la poignée
         # déplace — un coin bouge un bord par axe, un milieu un seul.
         gx = gy = None
@@ -1297,7 +1331,7 @@ class UIRegionItem(QGraphicsRectItem):
         if b - t < 8:
             if mt: t = b - 8
             else:  b = t + 8
-        self.setPos(l, t)
+        self.setPos(l + offx, t + offy)
         self.setRect(0, 0, rt - l, b - t)
 
     def _commit_resize(self):
@@ -1306,8 +1340,9 @@ class UIRegionItem(QGraphicsRectItem):
         est un filet de sécurité (no-op en pratique), comme dans
         `mouseReleaseEvent` pour le déplacement."""
         step = self._snap_step()
-        l = int(self.pos().x())
-        t = int(self.pos().y())
+        offx, offy = self.screen_offset()
+        l = int(self.pos().x()) - offx
+        t = int(self.pos().y()) - offy
         rt = l + int(self.rect().width())
         b = t + int(self.rect().height())
         l = (l // step) * step
@@ -1316,7 +1351,7 @@ class UIRegionItem(QGraphicsRectItem):
         b = ((b + step - 1) // step) * step
         w = max(8, min(512, rt - l))
         h = max(8, min(512, b - t))
-        self.setPos(l, t)
+        self.setPos(l + offx, t + offy)
         self.setRect(0, 0, w, h)
         ax, ay = self._parent_origin()
         old = (self._region.x, self._region.y, self._region.w, self._region.h)

@@ -114,7 +114,7 @@ _PROP_HOME: dict[str, str] = {
     "actor.velocity":  "Physics",
     "actor.visible":   "Actor",
     "actor.active":    "Actor",
-    "actor.tag":       "Actor",
+    "actor.name":      "Actor",
     "actor.frame":     "Animation",
     "actor.anim":      "Animation",
     "actor.active_sprite": "Animation",

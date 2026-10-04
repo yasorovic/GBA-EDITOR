@@ -528,6 +528,10 @@ class CameraItem(QGraphicsItem):
         self.setZValue(150)
         self.setPos(cam_x, cam_y)
         self._hovered = False
+        # Cadre montré sans que la caméra soit sélectionnée : une zone
+        # d'interface ancrée à l'écran est en cours d'édition (cf.
+        # GBAScene.refresh_screen_frame).
+        self._view_forced = False
 
         # Zone de vision — enfant non-interactif. Sa taille EST le frame de la
         # caméra (Camera.frame_w/h, réglé le 2026-08-24) — plus petite que
@@ -691,6 +695,11 @@ class CameraItem(QGraphicsItem):
             sc = self.scene()
             if sc is not None and hasattr(sc, "update_window_masks"):
                 sc.update_window_masks()
+            # Les zones d'interface ancrées à l'écran suivent la caméra de
+            # démarrage (les autres caméras n'ont pas d'écran propre).
+            if (sc is not None and hasattr(sc, "sync_ui_to_camera")
+                    and getattr(sc, "_camera", None) is self):
+                sc.sync_ui_to_camera()
         if change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
             # prepareGeometryChange() notifie Qt que la zone de dessin
             # effective change (icon seul → icon + viewport 240×160).
@@ -700,7 +709,16 @@ class CameraItem(QGraphicsItem):
 
     def _sync_view_visibility(self):
         """Aperçu 240×160 visible seulement sélectionnée ou survolée."""
-        self._view.setVisible(self.isSelected() or self._hovered)
+        self._view.setVisible(self.isSelected() or self._hovered or self._view_forced)
+
+    @property
+    def view_forced(self) -> bool:
+        return self._view_forced
+
+    def set_view_forced(self, on: bool):
+        if on != self._view_forced:
+            self._view_forced = on
+            self._sync_view_visibility()
 
     def hoverEnterEvent(self, e):
         self._hovered = True
@@ -863,14 +881,27 @@ class ActorBoxOverlay(QGraphicsItem):
         # par défaut de la variable pour dessiner une box représentative.
         resolve = lambda src, name: self._var_defaults.get((src, name))
 
+        # Position VIVANTE de l'item : en glisser multiple Qt déplace les items
+        # non saisis sans réécrire leur modèle (cf. SpriteItem.itemChange), donc
+        # actor.x/y y est périmé jusqu'au relâchement.
+        scene = self.scene()
+        live = ({id(it.scene_sprite): it.pos() for it in scene._sprite_items}
+                if scene is not None and hasattr(scene, "_sprite_items") else {})
+
         pen_s = QPen(self._B_SOLID, 0)
         pen_t = QPen(self._B_TRIGGER, 0)
         for actor in self._actors:
+            at = live.get(id(actor))
             for comp in actor.components:
                 if not isinstance(comp, CollisionBoxComponent) or not comp.active:
                     continue
-                x = FieldValue.parse(actor.x).px(resolve) + FieldValue.parse(comp.x).px(resolve)
-                y = FieldValue.parse(actor.y).px(resolve) + FieldValue.parse(comp.y).px(resolve)
+                if at is not None:
+                    ax, ay = round(at.x()), round(at.y())
+                else:
+                    ax = FieldValue.parse(actor.x).px(resolve)
+                    ay = FieldValue.parse(actor.y).px(resolve)
+                x = ax + FieldValue.parse(comp.x).px(resolve)
+                y = ay + FieldValue.parse(comp.y).px(resolve)
                 w = FieldValue.parse(comp.w).px(resolve)
                 h = FieldValue.parse(comp.h).px(resolve)
                 if comp.solid:

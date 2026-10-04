@@ -2041,6 +2041,7 @@ class MainWindow(QMainWindow):
 
     def _run_build(self):
         if not self.project or not self.project.active_scene: return
+        if self._worker is not None: return     # un build tourne déjà : le clic est ignoré
         if not self.toolchain.devkitpro_ok or not self.toolchain.mgba_ok:
             self._explain_missing_toolchain(); return
 
@@ -2106,6 +2107,7 @@ class MainWindow(QMainWindow):
             pass
 
     def _on_build_finished(self, success: bool):
+        self._worker = None
         self.build_panel.set_building(False)
         self.build_panel.show_build_diagnostics()
         if (panel := self._script_build_panel()) is not None:

@@ -500,9 +500,19 @@ class UIWidgetTool(BaseTool):
     def _ctrl(self):
         return getattr(self._view, "ui_region_controller", None)
 
-    @staticmethod
-    def _snap(pos: QPointF) -> tuple[int, int]:
-        return (int(pos.x()) // _BG_TILE) * _BG_TILE, (int(pos.y()) // _BG_TILE) * _BG_TILE
+    def _offset(self) -> tuple[int, int]:
+        """Position de la caméra de démarrage si le widget sera ancré à l'écran :
+        le clic est en coordonnées de scène, le modèle en coordonnées d'écran."""
+        from core.models.ui_region import ANCHOR_SCREEN
+        ctrl, sc = self._ctrl(), self._view.scene()
+        if ctrl is None or not hasattr(sc, "camera_pos"):
+            return 0, 0
+        return sc.camera_pos() if ctrl.receiving_anchor() == ANCHOR_SCREEN else (0, 0)
+
+    def _snap(self, pos: QPointF) -> tuple[int, int]:
+        """Case de tuile sous `pos`, en repère écran quand le widget y sera ancré."""
+        ox, oy = self._offset()
+        return ((int(pos.x()) - ox) // _BG_TILE) * _BG_TILE, ((int(pos.y()) - oy) // _BG_TILE) * _BG_TILE
 
     def _rect(self, pos: QPointF) -> tuple[int, int, int, int]:
         """(x, y, w, h) en pixels, bornes snappées, largeur/hauteur >= 1 tuile.
@@ -545,7 +555,8 @@ class UIWidgetTool(BaseTool):
 
     def _apply_preview(self, x, y, w, h):
         if self._preview:
-            self._preview.setRect(x, y, w, h)
+            ox, oy = self._offset()
+            self._preview.setRect(x + ox, y + oy, w, h)
             self._preview.setVisible(True)
 
     def on_leave(self):

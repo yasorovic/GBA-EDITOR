@@ -265,3 +265,19 @@ def test_global_pointe_vide_sans_projet():
     # Sans project_names, `global.` ne propose rien (pas de plantage, pas de
     # fausse suggestion).
     assert C.candidates_at("    global.", context="actor") == []
+
+
+def test_tag_compare_propose_les_noms_du_projet():
+    # `other.name == "` → identités d'acteurs ; `hb.tag == "` → tags de boîtes de
+    # collision, d'après le type de référence que le local tient.
+    names = {"actor_name": ["player"], "box_tag": ["hitbox", "body"], "anim": ["walk"]}
+    src = 'local hb = self:collision_box("body")\n'
+
+    def at(prefix):
+        return {c.insert for c in C.candidates_at(prefix, context="actor",
+                                                  source=src + prefix, project_names=names)}
+
+    assert at('if other.name == "') == {"player"}
+    assert at('if hb.tag == "') == {"hitbox", "body"}
+    assert at('if other.anim == "') == set()      # l'anim d'un autre acteur : refusée par le checker
+    assert at('if self.anim == "') == {"walk"}

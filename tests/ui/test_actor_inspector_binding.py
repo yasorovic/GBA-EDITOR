@@ -24,9 +24,9 @@ _B = dict(x=8, y=8, rotation=0, scale_x=1.0, scale_y=1.0,
 def _widget_state(insp: ActorInspector) -> dict:
     return dict(
         x=insp._tx.raw(), y=insp._ty.raw(),
-        rotation=insp._trotation.value(),
-        scale_x=insp._tscale_x.value(), scale_y=insp._tscale_y.value(),
-        priority=insp._tpriority.value(),
+        rotation=insp._trotation.raw(),
+        scale_x=insp._tscale_x.raw(), scale_y=insp._tscale_y.raw(),
+        priority=insp._tpriority.raw(),
         obj_mode=[0, 2][insp._tobj_mode.currentIndex()],
         screen_space=insp._tscreen.isChecked(),
         visible=insp._tvisible.isChecked(),
@@ -58,8 +58,8 @@ def test_edition_ecrit_dans_le_modele(qapp):
     insp.load(a, project=None, scene=None)
 
     insp._tvisible.setChecked(False)
-    insp._tpriority.setValue(3)
-    insp._trotation.setValue(45)
+    insp._tpriority._spin.setValue(3)
+    insp._trotation._spin.setValue(45)
 
     assert a.visible is False
     assert a.priority == 3

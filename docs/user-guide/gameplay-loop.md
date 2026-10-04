@@ -34,7 +34,7 @@ Créez dans `Niveau1` une zone de sortie : un acteur avec une boîte **Collision
 
 ```lua
 function on_collision_enter(other, my_box, other_box)
-    if other.tag == "Joueur" then
+    if other.name == "Joueur" then
         scene:switch("Victoire")
     end
 end

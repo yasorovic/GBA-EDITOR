@@ -431,7 +431,7 @@ class BuildWorker(EventEmitter, threading.Thread):
             # Headers : tous les actors de toutes les scènes
             if ok:
                 # `generate_runtime_api` a encore besoin de l'union (ANIM_* par
-                # SpriteAsset) ; la taille de `g_actors` et les TAG_/POOL_, eux,
+                # SpriteAsset) ; la taille de `g_actors` et les ACTOR_/POOL_, eux,
                 # sont dérivés par scène de `scene_oam_layout` (ROADMAP v0.17).
                 all_sa = [(a, s) for d in all_scene_data for a, s in d["scene_actors"]]
                 ok = self._step_generate_actor_headers(

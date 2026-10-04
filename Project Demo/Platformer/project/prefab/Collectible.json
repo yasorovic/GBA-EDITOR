@@ -1,0 +1,41 @@
+{
+  "name": "Collectible",
+  "components": [
+    {
+      "component_type": "sprite",
+      "id": "Coin",
+      "active": true,
+      "sprite_name": "Collectible",
+      "initial_state": "Idle",
+      "auto_dir": true,
+      "affine_transform": false,
+      "scale_x": 1.0,
+      "scale_y": 1.0,
+      "rotation": 0,
+      "offset_x": 0,
+      "offset_y": 0,
+      "pivot_x": 0,
+      "pivot_y": 0
+    },
+    {
+      "component_type": "collision_box",
+      "id": "collision",
+      "active": true,
+      "solid": false,
+      "tag": "body",
+      "x": 4,
+      "y": 4,
+      "w": 8,
+      "h": 8
+    },
+    {
+      "component_type": "script",
+      "id": "script",
+      "active": true,
+      "script": "assets/scripts/Collectible.lua",
+      "exports_values": {}
+    }
+  ],
+  "pal_bank": -1,
+  "notes": ""
+}

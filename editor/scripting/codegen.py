@@ -12,7 +12,7 @@ Règles de génération :
   - self:method(args)  → actor_method(self, args) via RUNTIME_API
   - module.func(args)  → func_c(args) via RUNTIME_API
   - Opérateurs Lua     → opérateurs C (and→&&, or→||, ~=→!=, not→!)
-  - Strings d'args API → constantes entières (ANIM_*, SFX_*, BTN_*, TAG_*)
+  - Strings d'args API → constantes entières (ANIM_*, SFX_*, BTN_*, ACTOR_*)
 """
 
 from __future__ import annotations
@@ -46,15 +46,16 @@ from .api import (
     hardware_enum_constant,
     DOMAIN_ANIM, DOMAIN_SPRITE_ID, DOMAIN_SFX, DOMAIN_MUSIC, DOMAIN_KEY, DOMAIN_AXIS,
     DOMAIN_INPUT_SEQUENCE,
-    DOMAIN_TAG, DOMAIN_SCENE, DOMAIN_LANG,
+    DOMAIN_ACTOR_NAME, DOMAIN_SCENE, DOMAIN_LANG,
     DOMAIN_SOUND_BOX_STATE, DOMAIN_JINGLE_BOX_STATE, DOMAIN_MUSIC_BOX_TRIGGER,
     DOMAIN_CAMERA, camera_constant, DOMAIN_BOX_TAG, box_tag_constant,
     window_region_constant,
     DOMAIN_TEXT, DOMAIN_FONT, DOMAIN_IMAGE_STATE,
     DOMAIN_PALETTE, DOMAIN_UI_ELEMENT, ui_list_constant,
     ref_member, ref_upcast, ref_constant, REF_ACTOR, REF_UI_ELEMENT, REF_TEXT_REGION,
+    REF_COLLISION_BOX, COLLISION_EVENTS, BOX_PARAMS,
     DOMAIN_PREFAB, DOMAIN_ACTOR, DOMAIN_GLOBAL, DOMAIN_SEQUENCE,
-    anim_constant, sprite_id_constant, sfx_constant, music_constant, key_constant, tag_constant, scene_constant,
+    anim_constant, sprite_id_constant, sfx_constant, music_constant, key_constant, actor_name_constant, scene_constant,
     text_constant, font_constant, region_constant, anon_text_key, palette_constant,
     lang_constant,
     image_constant, image_state_constant, ui_element_constant,
@@ -70,7 +71,7 @@ from .expr_types import (VEC_CONSTRUCTORS, VEC_FUNCTIONS, C_TYPES,
 # entièrement entier — aucun float dans runtime/ — donc `float` devient un int
 # (le parser tronque déjà les littéraux, cf. ExprNumber). TOUS les types
 # scalaires tombent sur un `int` : un `*_ref` est un index/handle (SFX_*,
-# SCENE_IDX_*, TAG_*) et une `string` est un index de la table de textes
+# SCENE_IDX_*, ACTOR_*) et une `string` est un index de la table de textes
 # (TEXT_*, entrée anonyme) — la résolution éditeur/spawn → valeur d'instance
 # est câblée par le résolveur de lua_compiler (chantier « Les exports de
 # script »). Rien n'est plus déclaré `const char *` : une string qui reste
@@ -229,7 +230,7 @@ class CodegenContext:
     all_actor_syms: list[str]    # tous les acteurs de la scène
     # Les ENFANTS de ce propriétaire, nom Lua → expression C qui les désigne
     # (ROADMAP v0.23). `self.bras` s'y lit : pour un acteur de scène c'est
-    # une constante `&g_actors[TAG_*]`, pour la racine d'un prefab poolé un
+    # une constante `&g_actors[ACTOR_*]`, pour la racine d'un prefab poolé un
     # décalage constant dans son groupe (`self + 2`). Résolu au BUILD dans
     # les deux cas — un enfant se NOMME, il ne se construit pas.
     child_refs: dict = field(default_factory=dict)
@@ -1372,8 +1373,17 @@ class CodeGen:
                 sig = f"void {self.ctx.actor_sym}_{fn.name}(Actor* self)"
             else:
                 sig = sig_tpl.format(prefix=self.ctx.actor_sym)
+        box_params = self.ctx.has_self and fn.name in COLLISION_EVENTS
+        if box_params:
+            # Les appelants passent des tags (`u8`) ; le script reçoit des RÉFÉRENCES de boîte.
+            sig = sig.replace("u8 my_box", "u8 my_box_tag").replace("u8 other_box", "u8 other_box_tag")
         self._w(sig + " {")
         self._indent += 1
+        if box_params:
+            for name, owner in BOX_PARAMS:
+                if name in fn.params:
+                    self._w(f"int {name} __attribute__((unused)) = actor_get_box({owner}, {name}_tag);")
+                    self._ref_types[name] = REF_COLLISION_BOX
         mark = self._open_state_scope()
         self._emit_block(fn.body)
         if fn.name == "on_update":
@@ -1714,9 +1724,9 @@ class CodeGen:
         return "0"
 
     # ── Propriétés à domaine ──────────────────────────────────────
-    # `self.obj_mode = "window"`, `blend.mode == "alpha"`, `other.tag == "Ball"`.
+    # `self.obj_mode = "window"`, `blend.mode == "alpha"`, `other.name == "Ball"`.
     # Le C reste un entier ; ce qui change est ce que l'auteur écrit, et la
-    # constante émise (`OBJ_MODE_WINDOW` plutôt que `2`, `TAG_BALL` plutôt
+    # constante émise (`OBJ_MODE_WINDOW` plutôt que `2`, `ACTOR_BALL` plutôt
     # qu'un index de scène). La résolution passe par `_DOMAIN_CONSTANT`, la même
     # table que pour un ARGUMENT du même domaine : le domaine décide, pas ce
     # qui le porte.
@@ -2266,9 +2276,9 @@ class CodeGen:
         """
         Deux formes :
 
-        actor:get("PADDLE_AUTO")  →  &g_actors[TAG_<Scène>_PADDLE_AUTO]
+        actor:get("PADDLE_AUTO")  →  &g_actors[ACTOR_<Scène>_PADDLE_AUTO]
             Nom LITTÉRAL, résolu à la compilation. Le nom est sanitisé avec la
-            même fonction que celle qui définit les macros TAG_*
+            même fonction que celle qui définit les macros ACTOR_*
             (headers.py::generate_actor_types, via codegen.c_names.sym).
 
         actor:get(i)  →  actor_at((i) - 1)
@@ -2291,10 +2301,10 @@ class CodeGen:
         if scene:
             # `actor_live` rend nil si l'acteur a été détruit au runtime
             # (décision C') — le TAG reste résolu à la compilation.
-            return f"actor_live(&g_actors[TAG_{scene.upper()}_{sym.upper()}])"
+            return f"actor_live(&g_actors[ACTOR_{scene.upper()}_{sym.upper()}])"
         # Script PARTAGÉ (caméra, sans scène connue au build) : résolution à
         # l'exécution, dans la scène active, nullable (décisions C/C'). Le NOM
-        # est une clé de lookup GLOBALE (ACTORNAME_*), distincte des TAG_ qualifiés.
+        # est une clé de lookup GLOBALE (ACTORNAME_*), distincte des ACTOR_ qualifiés.
         return f"runtime_get_actor(ACTORNAME_{sym.upper()})"
 
     def _emit_actor_count(self, args: list) -> str:
@@ -2466,7 +2476,7 @@ class CodeGen:
         """La valeur d'une clé de table de spawn, en littéral C. Résolue DANS la
         scène du spawner (c'est là que le nom d'un acteur a un sens) :
           - enum → index de l'étiquette ; bool → 0/1 ; int/float → l'entier ;
-          - sfx_ref/scene_ref → SFX_*/SCENE_IDX_* ; actor_ref → TAG_* qualifié
+          - sfx_ref/scene_ref → SFX_*/SCENE_IDX_* ; actor_ref → ACTOR_* qualifié
             par la scène du spawner ; string → index de texte (TEXT_*, anonyme) ;
           - vec2/vec3/rect → le littéral composé `(Vec2){x, y}` (via _expr).
         None si la clé n'est pas un export réglable du prefab (checker l'aura
@@ -2490,7 +2500,7 @@ class CodeGen:
     def _ref_or_text_literal(self, typ: str, name: str) -> str:
         """Un nom d'export `*_ref`/`string` → sa constante C, dans le contexte de
         CE fichier (le posé, le template poolé, ou le spawner). Vide → « 0 ». Les
-        macros émises (SFX_*, SCENE_IDX_*, TAG_*, TEXT_*) sont toutes en portée
+        macros émises (SFX_*, SCENE_IDX_*, ACTOR_*, TEXT_*) sont toutes en portée
         ici — l'en-tête du fichier les #define (cf. _emit_header)."""
         if not name:
             return "0"
@@ -2500,7 +2510,7 @@ class CodeGen:
             return scene_constant(name)
         if typ == "actor_ref":
             from codegen.c_names import sym as c_sym
-            return f"TAG_{(self.ctx.scene_sym + '_' + c_sym(name)).upper()}"
+            return f"ACTOR_{(self.ctx.scene_sym + '_' + c_sym(name)).upper()}"
         # string → entrée de texte : une clé réelle du projet garde son rang,
         # sinon c'est un littéral, entré comme texte ANONYME au build (même
         # chemin que text:draw("…"), cf. project_texts.collect_literal_texts).
@@ -2601,7 +2611,7 @@ _DOMAIN_CONSTANT: dict = {
     # `held`/`buffered` ont leur propre émetteur (`_input_mask_arg`) pour
     # l'argument optionnel/le bit de tampon, mais lisent le MÊME dict.
     DOMAIN_KEY:     lambda g, name: g.ctx.input_masks.get(name, key_constant(name)),
-    DOMAIN_TAG:     lambda g, name: tag_constant(name),
+    DOMAIN_ACTOR_NAME:     lambda g, name: actor_name_constant(name),
     DOMAIN_BOX_TAG: lambda g, name: box_tag_constant(name),
     DOMAIN_SCENE:   lambda g, name: scene_constant(name),
     DOMAIN_LANG:    lambda g, name: lang_constant(name),

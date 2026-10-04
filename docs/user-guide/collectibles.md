@@ -16,7 +16,7 @@ Ajoutez un composant **Script** au prefab et créez `Piece.lua` :
 
 ```lua
 function on_collision_enter(other, my_box, other_box)
-    if other.tag == "Joueur" then
+    if other.name == "Joueur" then
         global.score = global.score + 1
         self:destroy()
     end

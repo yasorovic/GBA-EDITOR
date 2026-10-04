@@ -13,6 +13,7 @@ from typing import Optional
 from core.models.resource import MIME_PREFAB_TEMPLATE
 from ui.common.theme import C
 from ui.scene_manager.canvas.canvas_const import GBA_W, GBA_H
+from ui.scene_manager.canvas.canvas_alt_duplicate import AltDuplicateGesture
 from ui.scene_manager.canvas.canvas_scene import GBAScene
 from ui.scene_manager.canvas.canvas_items import SpriteItem, CollisionOverlay
 from ui.scene_manager.canvas.canvas_region_item import UIRegionItem
@@ -86,11 +87,8 @@ class GBAView(QGraphicsView):
         # évite qu'une valeur périmée soit relue par un _on_selection_changed
         # déclenché plus tard pour une tout autre raison (Échap, clic droit…).
         self._last_click_scene_pos: "Optional[QPointF]" = None
-        # Alt+glisser = dupliquer : instantané des items glissés, pris au press
-        # (cf. _arm_alt_duplicate). None = geste ordinaire.
-        self._alt_drag: "Optional[list]" = None
-        self._alt_press_scene = QPointF()
-        self._alt_press_viewport = QPointF()
+        # Alt+glisser = dupliquer : geste autonome (cf. canvas_alt_duplicate).
+        self._alt_duplicate = AltDuplicateGesture(self)
 
     def drawBackground(self, painter: QPainter, rect):
         """Fond de travail mat avec repère pointillé très discret."""
@@ -132,7 +130,7 @@ class GBAView(QGraphicsView):
         sc = self.scene()
         if not isinstance(sc, GBAScene):
             return
-        cameras = [c for c in sc.camera_items() if c.isSelected() and c.camera is not None]
+        cameras = [c for c in sc.camera_items() if (c.isSelected() or c.view_forced) and c.camera is not None]
         if not cameras:
             return
         shade = QPainterPath()
@@ -229,9 +227,9 @@ class GBAView(QGraphicsView):
     collision_painted = pyqtSignal()
     # Clic-droit sur un actor en mode Sélection → (SpriteItem, QPoint global).
     actor_context_requested = pyqtSignal(object, object)
-    # Alt+glisser franchi le seuil : les originaux ont été remis en place ; il
-    # reste à créer les copies, SUR place, avant que la souris ne les emporte.
-    duplicate_drag_started = pyqtSignal()
+    # Alt+glisser relâché au-delà du seuil : (dx, dy) en px scène. La création
+    # des copies est l'affaire de l'appelant.
+    duplicate_drag_finished = pyqtSignal(int, int)
     # Un outil de pose (acteur, élément d'interface) vient de poser son objet :
     # le canvas rend alors la main à l'outil Sélection.
     placement_done = pyqtSignal()
@@ -287,6 +285,13 @@ class GBAView(QGraphicsView):
         if _btn == Qt.MouseButton.RightButton and self._is_select_tool():
             e.accept()
             return
+        # Alt+clic sur un item : le geste de duplication prend la main seul.
+        if (_btn == Qt.MouseButton.LeftButton and self._is_select_tool()
+                and (e.modifiers() & Qt.KeyboardModifier.AltModifier)
+                and self._alt_duplicate.begin(
+                    self.mapToScene(e.position().toPoint()))):
+            e.accept()
+            return
         # Grammaire de sélection commune avec le Scene Tree : Ctrl bascule un
         # élément, Shift l'ajoute. Elle est traitée ici (et non par Qt) afin de
         # conserver la notion d'item actif utilisée par l'inspecteur.
@@ -308,11 +313,6 @@ class GBAView(QGraphicsView):
             self._last_click_scene_pos = self.mapToScene(e.position().toPoint())
         super().mousePressEvent(e)
         if _btn == Qt.MouseButton.LeftButton:
-            # APRÈS Qt : c'est lui qui vient d'arrêter la sélection que le geste
-            # va déplacer (un clic sur un item hors sélection la remplace).
-            if (self._is_select_tool()
-                    and (e.modifiers() & Qt.KeyboardModifier.AltModifier)):
-                self._arm_alt_duplicate(self._last_click_scene_pos, e.position())
             self.left_click_settled.emit()
         self._last_click_scene_pos = None
 
@@ -334,10 +334,14 @@ class GBAView(QGraphicsView):
         # le rattrape et restaure le curseur.
         if self._panning:
             self._end_pan()
-        if (self._alt_drag is not None and (e.buttons() & Qt.MouseButton.LeftButton)
-                and self._alt_drag_crossed(e)):
-            self._start_alt_duplicate()
         pos = self.mapToScene(e.position().toPoint())
+        if self._alt_duplicate.active:
+            if e.buttons() & Qt.MouseButton.LeftButton:
+                self._alt_duplicate.move(pos)
+            else:
+                self._alt_duplicate.cancel()    # relâchement manqué
+            e.accept()
+            return
         # Snap preview — indépendant de l'outil actif
         if self._snap_on:
             self._ensure_snap_preview()
@@ -354,9 +358,13 @@ class GBAView(QGraphicsView):
 
     def mouseReleaseEvent(self, e):
         _btn = e.button()
-        # Repris ici quoi qu'il arrive : un geste avorté (pan, outil qui prend
-        # la main) ne doit pas laisser un instantané périmé armer le prochain.
-        self._alt_drag = None
+        if _btn == Qt.MouseButton.LeftButton and self._alt_duplicate.active:
+            shift = self._alt_duplicate.finish(
+                self.mapToScene(e.position().toPoint()))
+            if shift is not None:
+                self.duplicate_drag_finished.emit(*shift)
+            e.accept()
+            return
         if _btn == Qt.MouseButton.MiddleButton and self._panning:
             self._end_pan()
             e.accept()
@@ -379,79 +387,6 @@ class GBAView(QGraphicsView):
         super().mouseReleaseEvent(e)
         if _btn == Qt.MouseButton.LeftButton:
             self.left_released.emit()
-
-    # ── Alt+glisser = dupliquer ───────────────────────────────────
-    # La copie naît AU FRANCHISSEMENT du seuil, sur place, puis c'est elle que
-    # la souris emporte : l'original ne quitte jamais sa position. Qt tient le
-    # grab de souris sur l'original ; on remet donc celui-ci en place, on
-    # relâche le geste, on crée les copies (sélectionnées), puis on REJOUE le
-    # clic d'origine pour que Qt saisisse la copie.
-
-    # En deçà (px scène) c'est un clic Alt, pas un glisser : sinon un
-    # frémissement de souris crée une copie invisible sous l'original.
-    _ALT_DRAG_THRESHOLD = 2
-
-    def _arm_alt_duplicate(self, scene_pos, viewport_pos):
-        """Mémorise les items que le glisser va emporter (pour les remettre en
-        place) et le point du clic (pour le rejouer sur la copie).
-
-        Position Qt (le geste s'y mesure) ET position MODÈLE d'un acteur : le
-        drag réécrit `actor.x/y` à chaque frame et perdrait l'expression
-        d'origine (« 4t », une réf de variable)."""
-        sc = self.scene()
-        if scene_pos is None or not hasattr(sc, "selectable_items"):
-            return
-        if self._selectable_item_at(scene_pos) is None:
-            return          # Alt dans le vide : rubber band, rien à dupliquer
-        entries = []
-        for it in sc.selectable_items():
-            actor = getattr(it, "scene_sprite", None)
-            model = (actor.x, actor.y) if actor is not None else None
-            entries.append((it, QPointF(it.pos()), model))
-        self._alt_drag = entries or None
-        self._alt_press_scene = QPointF(scene_pos)
-        self._alt_press_viewport = QPointF(viewport_pos)
-
-    def _alt_drag_crossed(self, e) -> bool:
-        d = self.mapToScene(e.position().toPoint()) - self._alt_press_scene
-        return (abs(d.x()) >= self._ALT_DRAG_THRESHOLD
-                or abs(d.y()) >= self._ALT_DRAG_THRESHOLD)
-
-    def _start_alt_duplicate(self):
-        entries, self._alt_drag = self._alt_drag, None
-        self._restore_alt_originals(entries)
-        at = self._alt_press_viewport
-        # Fin du geste sur les originaux (neutralisés : aucune commande de
-        # déplacement n'est poussée).
-        self.mouseReleaseEvent(QMouseEvent(
-            QEvent.Type.MouseButtonRelease, at, Qt.MouseButton.LeftButton,
-            Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier))
-        self.duplicate_drag_started.emit()      # copies créées + sélectionnées
-        # Sans Alt, sinon le clic rejoué réarmerait une duplication.
-        self.mousePressEvent(QMouseEvent(
-            QEvent.Type.MouseButtonPress, at, Qt.MouseButton.LeftButton,
-            Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
-
-    def _restore_alt_originals(self, entries: list):
-        """Remet les originaux en place et coupe leur geste de déplacement."""
-        for it, origin, model in entries:
-            try:
-                if isinstance(it, SpriteItem):
-                    it._drag_origin = None
-                else:
-                    it._press_pos = None
-                cur = it.pos()
-            except RuntimeError:
-                continue                      # item C++ détruit entre-temps
-            if model is not None:
-                it.scene_sprite.x, it.scene_sprite.y = model
-                it.sync_pos()
-            else:
-                # Un conteneur a emmené ses descendants à l'écran (leur modèle
-                # est relatif au parent, il n'a pas bougé) : même delta retour.
-                if hasattr(it, "_move_descendants"):
-                    it._move_descendants(origin.x() - cur.x(), origin.y() - cur.y())
-                it.setPos(origin)
 
     # ── Pan clic-central ──────────────────────────────────────────
 

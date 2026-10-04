@@ -199,9 +199,9 @@ class _FrameThumb(QFrame):
 class _FrameTimeline(QWidget):
     """
     Bande horizontale de frames avec :
-    - clic → sélection
+    - clic → sélection ; Ctrl+clic → ajoute/retire ; Maj+clic → plage
     - drag-drop → réordonnancement
-    - clic droit → copy / clone / delete
+    - clic droit → copy / clone / clear / delete (sur toute la sélection)
     - bouton + → ajouter une frame
     """
 
@@ -224,7 +224,8 @@ class _FrameTimeline(QWidget):
         self._state:     Optional[AnimState]       = None
         self._sd:        Optional[StateDirection]  = None
         self._abs_path:  Optional[Path]            = None
-        self._selected:  int                       = 0
+        self._selected:  int                       = 0   # frame affichée au canvas
+        self._sel:       set[int]                  = {0}  # multi-sélection (contient _selected)
         self._thumbs:    list[_FrameThumb]         = []
         self._drop_before: Optional[int]           = None   # indicateur pendant drag
         # Mode lecture seule : direction miroir (mirror_of défini). Les frames
@@ -292,11 +293,11 @@ class _FrameTimeline(QWidget):
         # Raccourcis : n'agissent que quand la timeline (ou un enfant) a le focus.
         dup = QShortcut(QKeySequence(), self)
         dup.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        dup.activated.connect(lambda: self._copy_frame(self._selected))
+        dup.activated.connect(lambda: self._copy_frames(self._selected_indices()))
         bind("common.duplicate", dup)
         delete = QShortcut(QKeySequence(), self)
         delete.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        delete.activated.connect(lambda: self._delete_frame(self._selected))
+        delete.activated.connect(lambda: self._delete_frames(self._selected_indices()))
         bind("common.delete", delete)
 
     # ── API publique ───────────────────────────────────────────────────
@@ -311,6 +312,7 @@ class _FrameTimeline(QWidget):
         self._sd         = sd
         self._abs_path   = abs_path
         self._selected   = 0
+        self._sel        = {0}
         self._read_only  = read_only
         self._disp_frames = disp_frames
         self._flip       = flip
@@ -357,7 +359,7 @@ class _FrameTimeline(QWidget):
             for i, frame in enumerate(frames):
                 pm  = _make_frame_pixmap(self._abs_path, frame, fw, fh, flip=self._flip)
                 t   = _FrameThumb(i, frame, pm)
-                t.set_selected(i == self._selected)
+                t.set_selected(i in self._sel)
                 t.clicked.connect(self._on_thumb_clicked)
                 if self._read_only:
                     t._draggable = False
@@ -379,11 +381,25 @@ class _FrameTimeline(QWidget):
         self._content.setFixedSize(max(content_w, self._scroll.width()), vp_h)
 
     def _select(self, index: int):
-        if self._sd and 0 <= index < len(self._frames()):
-            for i, t in enumerate(self._thumbs):
-                t.set_selected(i == index)
-            self._selected = index
-            self.frame_selected.emit(index)
+        self._select_many({index}, index)
+
+    def _select_many(self, indices, primary: int):
+        """Sélection multiple ; `primary` est la frame montrée au canvas."""
+        if not self._sd:
+            return
+        count = len(self._frames())
+        chosen = {i for i in indices if 0 <= i < count}
+        if not chosen:
+            return
+        self._sel = chosen
+        self._selected = primary if primary in chosen else min(chosen)
+        for i, t in enumerate(self._thumbs):
+            t.set_selected(i in chosen)
+        self.frame_selected.emit(self._selected)
+
+    def _selected_indices(self) -> list[int]:
+        count = len(self._sd.frames) if self._sd else 0
+        return sorted(i for i in self._sel if 0 <= i < count)
 
     def refresh_thumb(self, index: int, pixmap: QPixmap):
         """Met à jour l'image d'une vignette sans changer la sélection (après peinture)."""
@@ -394,7 +410,19 @@ class _FrameTimeline(QWidget):
 
     def _on_thumb_clicked(self, index: int):
         self.setFocus(Qt.FocusReason.MouseFocusReason)
-        self._select(index)
+        mods = QApplication.keyboardModifiers()
+        if mods & Qt.KeyboardModifier.ShiftModifier:
+            lo, hi = sorted((self._selected, index))
+            self._select_many(range(lo, hi + 1), index)
+        elif mods & Qt.KeyboardModifier.ControlModifier:
+            if index in self._sel:
+                if len(self._sel) > 1:
+                    rest = self._sel - {index}
+                    self._select_many(rest, max(rest))
+            else:
+                self._select_many(self._sel | {index}, index)
+        else:
+            self._select(index)
 
     def _on_add(self):
         if not self._sd or self._read_only:
@@ -412,6 +440,11 @@ class _FrameTimeline(QWidget):
     def _on_context_menu(self, index: int, pos: QPoint):
         if not self._sd or self._read_only:
             return
+        # Clic droit hors sélection : la vignette visée devient la sélection.
+        if index not in self._sel:
+            self._select(index)
+        targets = self._selected_indices()
+        multi = len(targets) > 1
         menu = QMenu(self)
         menu.setStyleSheet(QSS.menu)
         copy_a  = menu.addAction(label("sprframe.menu_copy"))
@@ -419,25 +452,30 @@ class _FrameTimeline(QWidget):
         clear_a = menu.addAction(label("sprframe.menu_clear"))
         menu.addSeparator()
         del_a   = menu.addAction(label("sprframe.menu_delete"))
-        del_a.setEnabled(len(self._sd.frames) > 1)
+        del_a.setEnabled(len(self._sd.frames) > len(targets))
 
-        menu.addSeparator()
+        # Déclencheurs : propres à une frame, absents en multi-sélection.
+        if not multi:
+            menu.addSeparator()
+            self._build_frame_trigger_menus(menu, index)
+
+        act = menu.exec(pos)
+        if act == copy_a:
+            self._copy_frames(targets)
+        elif act == clone_a:
+            self._clone_frames_to_end(targets)
+        elif act == clear_a:
+            self._clear_frames(targets)
+        elif act == del_a:
+            self._delete_frames(targets)
+
+    def _build_frame_trigger_menus(self, menu: QMenu, index: int):
         frame = self._sd.frames[index]
         self._build_trigger_menu(menu, label("sprframe.play_action"), frame.action_name,
                                  self._sound_action_names(), index, "action_name")
         self._build_trigger_menu(menu, label("sprframe.play_sfx"), frame.direct_sfx_name,
                                  self._sfx_names(), index, "direct_sfx_name")
         self._build_event_call_menu(menu, frame.event_name, index)
-
-        act = menu.exec(pos)
-        if act == copy_a:
-            self._copy_frame(index)
-        elif act == clone_a:
-            self._clone_frame_to_end(index)
-        elif act == clear_a:
-            self._clear_frame(index)
-        elif act == del_a:
-            self._delete_frame(index)
 
     # ── Déclencheurs de frame (SoundBox action / Sfx / EventCall) ──────
 
@@ -509,39 +547,46 @@ class _FrameTimeline(QWidget):
 
     # ── Actions frame (partagées menu contextuel + raccourcis clavier) ──
 
-    def _copy_frame(self, index: int):
-        if not self._sd or self._read_only or not self._sd.frames:
-            return
-        src = self._sd.frames[index]
-        self._sd.frames.insert(index + 1, src.clone())
-        self.frames_changed.emit()
-        self._rebuild()
-        self._select(index + 1)
+    def _editable(self, indices: list[int]) -> bool:
+        return bool(self._sd and not self._read_only and indices)
 
-    def _clone_frame_to_end(self, index: int):
-        if not self._sd or self._read_only or not self._sd.frames:
+    def _copy_frames(self, indices: list[int]):
+        """Insère les copies en bloc juste après la dernière frame copiée."""
+        if not self._editable(indices):
             return
-        src = self._sd.frames[index]
-        self._sd.frames.append(src.clone())
+        at = indices[-1] + 1
+        self._sd.frames[at:at] = [self._sd.frames[i].clone() for i in indices]
         self.frames_changed.emit()
         self._rebuild()
-        self._select(len(self._sd.frames) - 1)
+        self._select_many(range(at, at + len(indices)), at)
 
-    def _clear_frame(self, index: int):
-        if not self._sd or self._read_only or not self._sd.frames:
+    def _clone_frames_to_end(self, indices: list[int]):
+        if not self._editable(indices):
             return
-        self._sd.frames[index].tiles.clear()
+        start = len(self._sd.frames)
+        self._sd.frames.extend(self._sd.frames[i].clone() for i in indices)
         self.frames_changed.emit()
         self._rebuild()
-        self._select(index)
+        self._select_many(range(start, start + len(indices)), start)
 
-    def _delete_frame(self, index: int):
-        if not self._sd or self._read_only or len(self._sd.frames) <= 1:
+    def _clear_frames(self, indices: list[int]):
+        if not self._editable(indices):
             return
-        self._sd.frames.pop(index)
+        for i in indices:
+            self._sd.frames[i].tiles.clear()
         self.frames_changed.emit()
         self._rebuild()
-        self._select(min(index, len(self._sd.frames) - 1))
+        self._select_many(indices, indices[0])
+
+    def _delete_frames(self, indices: list[int]):
+        """Supprime les frames ; une direction garde toujours au moins une frame."""
+        if not self._editable(indices) or len(indices) >= len(self._sd.frames):
+            return
+        for i in reversed(indices):
+            self._sd.frames.pop(i)
+        self.frames_changed.emit()
+        self._rebuild()
+        self._select(min(indices[0], len(self._sd.frames) - 1))
 
     # ── Drag-drop reorder ─────────────────────────────────────────────
 
@@ -613,8 +658,9 @@ class _FrameTimeline(QWidget):
 class _FrameCanvas(QWidget):
     """
     Zone de composition — grille de tuiles 8×8.
-    Clic gauche = peindre (brosse active) ou sélectionner/ramasser des
-    tuiles déjà posées (aucune brosse active) ; clic droit = effacer +
+    Clic gauche = peindre (brosse active) ou, sans brosse, tracer un
+    rectangle pour ramasser les tuiles posées (un simple clic en ramasse
+    une seule) ; clic gauche hors de l'image = vider la brosse ; clic droit = effacer +
     reset sélection picker. Molette = zoom, molette centrale glissée = pan.
     Shift+X / Shift+Y = flip horizontal/vertical de la brosse active.
     """
@@ -887,13 +933,18 @@ class _FrameCanvas(QWidget):
             return
         cell = self._cell_at(e.position())
         if cell is None:
+            # Clic gauche hors de l'image : on lâche la brosse.
+            if e.button() == Qt.MouseButton.LeftButton and self._brush:
+                self.set_brush([])
+                self.selection_reset.emit()
             return
         if e.button() == Qt.MouseButton.LeftButton:
             if self._brush:
                 self._do_paint(*cell)
             else:
-                # Pas de brosse active : démarrer une sélection rectangulaire
-                # des tuiles déjà posées, pour les ramasser (cf mouseReleaseEvent).
+                # Pas de brosse active : rectangle de sélection des tuiles déjà
+                # posées, pour les ramasser (cf mouseReleaseEvent) ; sans
+                # glisser, c'est la seule case cliquée.
                 self._select_start = self._select_end = cell
                 self.update()
         elif e.button() == Qt.MouseButton.RightButton:

@@ -95,7 +95,7 @@ def test_get_actor_chaine_directe_une_methode():
         actor_name="Ball", actor_sym="Sc_Ball", scene_sym="Sc", anim_names=[],
         sfx_names=[], music_names=[], global_names=set(), const_names=set(),
         all_actor_syms=["Ball", "Foe"]))
-    assert "actor_move_to(actor_live(&g_actors[TAG_SC_FOE])" in code
+    assert "actor_move_to(actor_live(&g_actors[ACTOR_SC_FOE])" in code
     assert "ignoré" not in code
 
 

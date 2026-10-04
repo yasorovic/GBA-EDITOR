@@ -28,7 +28,7 @@ def actorname_ids(p: Project) -> dict:
     distincte des symboles C qualifiés par scène. « Cursor » de la scène A et
     « Cursor » de la scène B partagent cet id — c'est justement ce qui permet à
     une caméra partagée de demander « le Cursor de la scène active » — sans
-    partager pour autant leur `TAG_<Scène>_Cursor`."""
+    partager pour autant leur `ACTOR_<Scène>_Cursor`."""
     ids: dict[str, int] = {}
     for sc in p.scenes:
         for a in sc.actors:
@@ -40,7 +40,7 @@ def actorname_ids(p: Project) -> dict:
 def generate_actor_types(p: Project) -> None:
     """Écrit actor_types_static.h (copie) et actor_types.h (généré).
 
-    TAG_* et POOL_* sont émis PAR SCÈNE (ROADMAP v0.17, T1) : chaque scène
+    ACTOR_* et POOL_* sont émis PAR SCÈNE (ROADMAP v0.17, T1) : chaque scène
     repart de la base OAM 0, ses acteurs actifs numérotés 0..N-1, puis les pools
     qu'elle déclare. Les symboles de pool sont préfixés par la scène
     (`<Scène>_<Prefab>`), car chaque scène compile ses propres unités de prefab
@@ -71,9 +71,9 @@ def generate_actor_types(p: Project) -> None:
     h.append('#include "actor_types_static.h"')
     h.append("")
 
-    # Un bloc par scène. TAG_<Actor> pour ses acteurs ACTIFS (même ordre et même
+    # Un bloc par scène. ACTOR_<Actor> pour ses acteurs ACTIFS (même ordre et même
     # base 0 que ce que `main_gen` pose dans `g_actors` au scene_init), puis
-    # TAG_<Scène>_<Prefab> et la géométrie de la plage — POOL_<Scène>_<Prefab>_
+    # ACTOR_<Scène>_<Prefab> et la géométrie de la plage — POOL_<Scène>_<Prefab>_
     # START/_SIZE/_GROUP/_INSTANCES. Le script transpilé en a besoin pour
     # dimensionner son état par instance et retrouver le slot d'un `self`
     # (`self - &g_actors[START]`) ; compilé PAR scène, il lit ces bornes-ci.
@@ -84,11 +84,11 @@ def generate_actor_types(p: Project) -> None:
         for actor in sc.actors:
             if not getattr(actor, "active", True):
                 continue
-            h.append(f"#define TAG_{scene_actor_sym(sc.name, actor.name).upper()} {i}")
+            h.append(f"#define ACTOR_{scene_actor_sym(sc.name, actor.name).upper()} {i}")
             i += 1
         for pl in lay.pools:
             u = pl.sym.upper()
-            h.append(f"#define TAG_{u} {pl.start}  /* prefab pool start */")
+            h.append(f"#define ACTOR_{u} {pl.start}  /* prefab pool start */")
             h.append(f"#define POOL_{u}_START {pl.start}")
             # ROADMAP v0.23 : le pool se dit en INSTANCES, le build multiplie par
             # les parties. _SIZE = entrées de `g_actors` réellement payées ; les
@@ -357,8 +357,8 @@ def generate_runtime_api(
         # deux tableaux, définis dans main.c, sont tout -1 quand il n'y a
         # aucun SoundFxComponent en on_destroy dans le projet.
         "static inline void actor_destroy_with_sfx(Actor* s){",
-        "    int id = g_sfx_on_destroy_id[s->tag];",
-        "    if(id >= 0) sfx_play(id, g_sfx_on_destroy_vol[s->tag], 0);",
+        "    int id = g_sfx_on_destroy_id[s->name];",
+        "    if(id >= 0) sfx_play(id, g_sfx_on_destroy_vol[s->name], 0);",
         "    actor_destroy_internal(s);",
         "}",
     ]

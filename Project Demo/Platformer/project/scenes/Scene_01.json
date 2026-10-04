@@ -3,6 +3,12 @@
   "background_layers": [
     {
       "background_name": "LevelDesign",
+      "bg_slot": 1,
+      "scroll_speed": 1.0,
+      "pal_bank": -1
+    },
+    {
+      "background_name": "",
       "bg_slot": 0,
       "scroll_speed": 1.0,
       "pal_bank": -1
@@ -63,8 +69,8 @@
           "h": 4
         }
       ],
-      "x": 99,
-      "y": 143,
+      "x": 98,
+      "y": 146,
       "flip_h": false,
       "flip_v": false,
       "priority": 0,
@@ -78,19 +84,243 @@
       "dir_x": 1,
       "dir_y": 0,
       "notes": "Player"
+    },
+    {
+      "name": "Collectible_copy_copy_copy",
+      "prefab_name": "Collectible",
+      "active": true,
+      "components": [
+        {
+          "component_type": "sprite",
+          "id": "Coin",
+          "active": true,
+          "sprite_name": "Collectible",
+          "initial_state": "Idle",
+          "auto_dir": true,
+          "affine_transform": false,
+          "scale_x": 1.0,
+          "scale_y": 1.0,
+          "rotation": 0,
+          "offset_x": 0,
+          "offset_y": 0,
+          "pivot_x": 0,
+          "pivot_y": 0
+        },
+        {
+          "component_type": "collision_box",
+          "id": "collision",
+          "active": true,
+          "solid": false,
+          "tag": "body",
+          "x": 4,
+          "y": 4,
+          "w": 8,
+          "h": 8
+        },
+        {
+          "component_type": "script",
+          "id": "script",
+          "active": true,
+          "script": "assets/scripts/Collectible.lua",
+          "exports_values": {}
+        }
+      ],
+      "x": 245,
+      "y": 102,
+      "flip_h": false,
+      "flip_v": false,
+      "priority": 0,
+      "pal_bank": -1,
+      "visible": true,
+      "obj_mode": 0,
+      "rotation": 0,
+      "scale_x": 1.0,
+      "scale_y": 1.0,
+      "screen_space": false,
+      "dir_x": 0,
+      "dir_y": 0,
+      "notes": ""
+    },
+    {
+      "name": "Collectible_copy_copy_copy_copy_copy",
+      "prefab_name": "Collectible",
+      "active": true,
+      "components": [
+        {
+          "component_type": "sprite",
+          "id": "Coin",
+          "active": true,
+          "sprite_name": "Collectible",
+          "initial_state": "Idle",
+          "auto_dir": true,
+          "affine_transform": false,
+          "scale_x": 1.0,
+          "scale_y": 1.0,
+          "rotation": 0,
+          "offset_x": 0,
+          "offset_y": 0,
+          "pivot_x": 0,
+          "pivot_y": 0
+        },
+        {
+          "component_type": "collision_box",
+          "id": "collision",
+          "active": true,
+          "solid": false,
+          "tag": "body",
+          "x": 4,
+          "y": 4,
+          "w": 8,
+          "h": 8
+        },
+        {
+          "component_type": "script",
+          "id": "script",
+          "active": true,
+          "script": "assets/scripts/Collectible.lua",
+          "exports_values": {}
+        }
+      ],
+      "x": 178,
+      "y": 115,
+      "flip_h": false,
+      "flip_v": false,
+      "priority": 0,
+      "pal_bank": -1,
+      "visible": true,
+      "obj_mode": 0,
+      "rotation": 0,
+      "scale_x": 1.0,
+      "scale_y": 1.0,
+      "screen_space": false,
+      "dir_x": 0,
+      "dir_y": 0,
+      "notes": ""
+    },
+    {
+      "name": "Collectible_copy_copy_copy_copy2",
+      "prefab_name": "Collectible",
+      "active": true,
+      "components": [
+        {
+          "component_type": "sprite",
+          "id": "Coin",
+          "active": true,
+          "sprite_name": "Collectible",
+          "initial_state": "Idle",
+          "auto_dir": true,
+          "affine_transform": false,
+          "scale_x": 1.0,
+          "scale_y": 1.0,
+          "rotation": 0,
+          "offset_x": 0,
+          "offset_y": 0,
+          "pivot_x": 0,
+          "pivot_y": 0
+        },
+        {
+          "component_type": "collision_box",
+          "id": "collision",
+          "active": true,
+          "solid": false,
+          "tag": "body",
+          "x": 4,
+          "y": 4,
+          "w": 8,
+          "h": 8
+        },
+        {
+          "component_type": "script",
+          "id": "script",
+          "active": true,
+          "script": "assets/scripts/Collectible.lua",
+          "exports_values": {}
+        }
+      ],
+      "x": 194,
+      "y": 98,
+      "flip_h": false,
+      "flip_v": false,
+      "priority": 0,
+      "pal_bank": -1,
+      "visible": true,
+      "obj_mode": 0,
+      "rotation": 0,
+      "scale_x": 1.0,
+      "scale_y": 1.0,
+      "screen_space": false,
+      "dir_x": 0,
+      "dir_y": 0,
+      "notes": ""
+    },
+    {
+      "name": "Collectible_copy_copy_copy_copy_copy2",
+      "prefab_name": "Collectible",
+      "active": true,
+      "components": [
+        {
+          "component_type": "sprite",
+          "id": "Coin",
+          "active": true,
+          "sprite_name": "Collectible",
+          "initial_state": "Idle",
+          "auto_dir": true,
+          "affine_transform": false,
+          "scale_x": 1.0,
+          "scale_y": 1.0,
+          "rotation": 0,
+          "offset_x": 0,
+          "offset_y": 0,
+          "pivot_x": 0,
+          "pivot_y": 0
+        },
+        {
+          "component_type": "collision_box",
+          "id": "collision",
+          "active": true,
+          "solid": false,
+          "tag": "body",
+          "x": 4,
+          "y": 4,
+          "w": 8,
+          "h": 8
+        },
+        {
+          "component_type": "script",
+          "id": "script",
+          "active": true,
+          "script": "assets/scripts/Collectible.lua",
+          "exports_values": {}
+        }
+      ],
+      "x": 222,
+      "y": 116,
+      "flip_h": false,
+      "flip_v": false,
+      "priority": 0,
+      "pal_bank": -1,
+      "visible": true,
+      "obj_mode": 0,
+      "rotation": 0,
+      "scale_x": 1.0,
+      "scale_y": 1.0,
+      "screen_space": false,
+      "dir_x": 0,
+      "dir_y": 0,
+      "notes": ""
     }
   ],
   "cameras": [
     {
       "name": "Camera",
-      "x": 10,
-      "y": 44,
+      "x": 31,
+      "y": 36,
       "frame_w": 240,
       "frame_h": 160,
       "mode": "follow",
       "follow_target": "Player",
-      "margin_x": 64,
-      "margin_y": 64,
+      "margin_x": 96,
+      "margin_y": 0,
       "bounds_x": null,
       "bounds_y": null,
       "bounds_w": 480,
@@ -105,7 +335,15 @@
   "scroll_h": true,
   "scroll_v": true,
   "script": "",
-  "ui_layouts": [],
+  "ui_layouts": [
+    {
+      "layout_name": "Scene_01",
+      "anchor": "screen",
+      "anchor_actor": "",
+      "target": "",
+      "bg_slot": 0
+    }
+  ],
   "font_name": "",
   "font_pal_banks": {
     "": 0

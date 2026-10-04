@@ -25,7 +25,7 @@ Un **état** est une variable qui décrit où en est un acteur. Ici, `rencontre`
 local rencontre = 0
 
 function on_collision_enter(other, my_box, other_box)
-    if other.tag ~= "Joueur" then
+    if other.name ~= "Joueur" then
         return
     end
 
@@ -121,7 +121,7 @@ function on_update()
 end
 
 function on_collision_enter(other, my_box, other_box)
-    if other.tag == "Ennemi" and invincible == 0 then
+    if other.name == "Ennemi" and invincible == 0 then
         invincible = 30
     end
 end
@@ -131,13 +131,13 @@ Le clignotement et la secousse sont une première dose de *juiciness* : même sa
 
 ## 8. Éliminer un ennemi en lui sautant dessus
 
-Donnez au joueur une petite boîte Trigger sous ses pieds, avec le tag `pieds`. Donnez à l'ennemi une petite boîte Trigger sur sa tête, avec le tag `tete`. Les noms de tags deviennent les constantes `BOXTAG_PIEDS` et `BOXTAG_TETE` dans les scripts.
+Donnez au joueur une petite boîte Trigger sous ses pieds, avec le tag `pieds`. Donnez à l'ennemi une petite boîte Trigger sur sa tête, avec le tag `tete`. Dans un script, `my_box` et `other_box` sont les deux boîtes en contact, et leur `.tag` se compare par le nom du tag.
 
 Dans le script de l'ennemi, distinguez ce contact du contact avec son corps :
 
 ```lua
 function on_collision_enter(other, my_box, other_box)
-    if other.tag == "Joueur" and my_box == BOXTAG_TETE and other_box == BOXTAG_PIEDS then
+    if other.name == "Joueur" and my_box.tag == "tete" and other_box.tag == "pieds" then
         sequence:start("mort")
     end
 end

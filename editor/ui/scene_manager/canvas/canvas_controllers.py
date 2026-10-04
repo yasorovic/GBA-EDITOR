@@ -74,6 +74,19 @@ class UIRegionController(QObject):
     def ready(self) -> bool:
         return self._project is not None and self._scene is not None
 
+    def receiving_anchor(self) -> str:
+        """Ancrage du nœud `Interface` qui recevrait un widget dessiné MAINTENANT
+        (sans en créer un) ; « screen » si la scène n'en a pas encore — c'est
+        l'ancrage d'un nœud neuf."""
+        from core.models.ui_region import ANCHOR_SCREEN
+        if not self.ready:
+            return ANCHOR_SCREEN
+        bounds = self._project.scene_ui_layouts(self._scene)
+        for b in bounds:
+            if b.layout is self._active_layout:
+                return b.anchor
+        return bounds[0].anchor if bounds else ANCHOR_SCREEN
+
     def _ensure_layout(self):
         from core.models.ui_region import UILayout
         # La scène référence une LISTE de nœuds `Interface` (v0.25). Le

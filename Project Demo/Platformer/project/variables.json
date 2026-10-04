@@ -2,20 +2,12 @@
   "globals": [
     {
       "id": 176276980874,
-      "name": "global",
-      "type": "string",
-      "default": "",
+      "name": "score",
+      "type": "int",
+      "default": 0,
       "desc": "",
       "persist": false
     }
   ],
-  "constants": [
-    {
-      "id": 241913466890,
-      "name": "const",
-      "type": "string",
-      "value": "",
-      "desc": ""
-    }
-  ]
+  "constants": []
 }

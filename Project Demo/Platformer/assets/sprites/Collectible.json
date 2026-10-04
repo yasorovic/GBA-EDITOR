@@ -1,0 +1,146 @@
+{
+  "name": "Collectible",
+  "asset": "assets/sprites/Collectible.png",
+  "frame_w": 16,
+  "frame_h": 16,
+  "source_stamp": "322:1791121272695618900:cc258dba0efae084",
+  "own_palette": [
+    "#181020",
+    "#F8A830",
+    "#F8E060",
+    "#F07020"
+  ],
+  "quantize_method": "median_cut",
+  "palettes": [
+    ["#000000", "#181020", "#F8A830", "#F8E060", "#F07020", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"]
+  ],
+  "source_palettes": [
+    ["#000000", "#181020", "#F8A830", "#F8E060", "#F07020", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"]
+  ],
+  "states": [
+    {
+      "name": "Idle",
+      "speed": 8,
+      "loop": true,
+      "directions": [
+        {
+          "dir": 0,
+          "frames": [
+            {
+              "tiles": [
+                {
+                  "src_col": 1,
+                  "src_row": 0,
+                  "dst_col": 1,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 0,
+                  "src_row": 1,
+                  "dst_col": 0,
+                  "dst_row": 1
+                },
+                {
+                  "src_col": 0,
+                  "src_row": 0,
+                  "dst_col": 0,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 1,
+                  "src_row": 1,
+                  "dst_col": 1,
+                  "dst_row": 1
+                }
+              ]
+            },
+            {
+              "tiles": [
+                {
+                  "src_col": 2,
+                  "src_row": 0,
+                  "dst_col": 0,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 3,
+                  "src_row": 0,
+                  "dst_col": 1,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 2,
+                  "src_row": 1,
+                  "dst_col": 0,
+                  "dst_row": 1
+                },
+                {
+                  "src_col": 3,
+                  "src_row": 1,
+                  "dst_col": 1,
+                  "dst_row": 1
+                }
+              ]
+            },
+            {
+              "tiles": [
+                {
+                  "src_col": 4,
+                  "src_row": 0,
+                  "dst_col": 0,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 5,
+                  "src_row": 0,
+                  "dst_col": 1,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 4,
+                  "src_row": 1,
+                  "dst_col": 0,
+                  "dst_row": 1
+                },
+                {
+                  "src_col": 5,
+                  "src_row": 1,
+                  "dst_col": 1,
+                  "dst_row": 1
+                }
+              ]
+            },
+            {
+              "tiles": [
+                {
+                  "src_col": 6,
+                  "src_row": 0,
+                  "dst_col": 0,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 7,
+                  "src_row": 0,
+                  "dst_col": 1,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 6,
+                  "src_row": 1,
+                  "dst_col": 0,
+                  "dst_row": 1
+                },
+                {
+                  "src_col": 7,
+                  "src_row": 1,
+                  "dst_col": 1,
+                  "dst_row": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

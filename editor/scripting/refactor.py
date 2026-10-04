@@ -160,7 +160,7 @@ def _iter_prop_refs(tree, text: str, path, domain, value) -> Iterator[LuaRef]:
     "hitbox"`. Ils citent le nom du projet exactement comme l'argument d'une
     fonction, et un renommage qui les oubliait laisserait une comparaison que le
     checker refuse. Seul le type de la variable dit de quelle propriété il
-    s'agit (`self.tag` est l'acteur, `hb.tag` la boîte), d'où `_ref_locals`."""
+    s'agit (`self.name` est l'acteur, `hb.tag` la boîte), d'où `_ref_locals`."""
     refs = _ref_locals(tree)
     # `self` est aussi un récepteur : `self.anim == "walk"`, `self.active_sprite ==
     # "blesse"` citent un nom du projet comme `hb.tag == "hitbox"`. Le type est

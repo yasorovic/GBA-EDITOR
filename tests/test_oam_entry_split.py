@@ -48,7 +48,7 @@ def test_l_acteur_ne_porte_plus_aucun_champ_d_affichage():
 
 def test_l_acteur_garde_son_socle_et_le_lien():
     actor = _champs("Actor")
-    assert {"x", "y", "vx", "vy", "tag", "active", "dir_x", "dir_y",
+    assert {"x", "y", "vx", "vy", "name", "active", "dir_x", "dir_y",
             "oam_entry"} <= actor
     # Le transform MONDE reste à l'acteur (état de jeu, lisible sans affichage) ;
     # le LOCAL (`rotation`, `scale_*` de l'entrée) est un autre champ, d'un autre struct.

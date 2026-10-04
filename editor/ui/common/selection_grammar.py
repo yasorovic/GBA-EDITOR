@@ -73,8 +73,10 @@ class RowSelectionDelegate(QStyledItemDelegate):
             painter.save()
             painter.setPen(QPen(QColor(C.ACCENT), _PASSIVE_PEN))
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            x0, x1 = r.left(), r.right() - 1
-            y0, y1 = r.top(), r.bottom() - 1
+            # Pixels INCLUSIFS, comme le remplissage : sinon un cran vide reste
+            # entre deux cellules et le cadre s'arrête un pixel avant le fond.
+            x0, x1 = r.left(), r.right()
+            y0, y1 = r.top(), r.bottom()
             painter.drawLine(x0, y0, x1, y0)
             painter.drawLine(x0, y1, x1, y1)
             if col == 0:

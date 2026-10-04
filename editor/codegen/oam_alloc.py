@@ -272,7 +272,7 @@ class OamLayout:
 
 def scene_oam_layout(project, scene: Scene) -> OamLayout:
     """Géométrie OAM déterministe d'une scène (base 0). Mêmes (project, scene)
-    -> même layout : `headers` (TAG_/POOL_) et `main_gen` (spawn/pi/g_actors)
+    -> même layout : `headers` (ACTOR_/POOL_) et `main_gen` (spawn/pi/g_actors)
     restent cohérents sans se coordonner.
 
     Ordre des pools = ordre du catalogue `project.prefabs` (stable), pour que

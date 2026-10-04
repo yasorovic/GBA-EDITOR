@@ -499,30 +499,30 @@ def _tag_lua(src: str):
 
 def test_le_tag_se_compare_par_le_nom_de_lacteur():
     errs, code = _tag_lua('function on_collide(self, other)\n'
-                          ' if other.tag == "PADDLE_PL" then self:destroy() end\nend\n')
+                          ' if other.name == "PADDLE_PL" then self:destroy() end\nend\n')
     assert errs == []
-    assert "actor_get_tag(other) == TAG_PADDLE_PL" in code
+    assert "actor_get_name(other) == ACTOR_PADDLE_PL" in code
 
 
 def test_le_tag_accepte_aussi_un_prefab():
-    """`headers.py` émet un TAG_* par acteur de scène ET par prefab poolé."""
+    """`headers.py` émet un ACTOR_* par acteur de scène ET par prefab poolé."""
     errs, code = _tag_lua('function on_collide(self, other)\n'
-                          ' if other.tag == "Bullet" then self:destroy() end\nend\n')
+                          ' if other.name == "Bullet" then self:destroy() end\nend\n')
     assert errs == []
-    assert "TAG_BULLET" in code
+    assert "ACTOR_BULLET" in code
 
 
 def test_identite_inconnue_refusee():
     """Sans `#define`, le C généré cite un identifiant qui n'existe pas — même
     sévérité que pour une scène ou un prefab inconnus."""
     errs, _ = _tag_lua('function on_collide(self, other)\n'
-                       ' if other.tag == "Nawak" then end\nend\n')
+                       ' if other.name == "Nawak" then end\nend\n')
     assert errs and "no actor or prefab" in errs[0]
 
 
 def test_le_tag_ne_se_compare_pas_a_un_nombre():
     errs, _ = _tag_lua('function on_collide(self, other)\n'
-                       ' if other.tag == 0 then end\nend\n')
+                       ' if other.name == 0 then end\nend\n')
     assert errs and "by its name" in errs[0]
 
 
@@ -531,15 +531,15 @@ def test_les_messages_nomment_le_recepteur_ecrit():
     pas une restriction. Un message qui reprendrait la clé citerait à l'auteur
     une ligne qu'il n'a pas écrite."""
     errs, _ = _tag_lua('function on_collide(self, other)\n'
-                       ' other.tag = "Bullet"\nend\n')
-    assert errs and errs[0].startswith("other.tag")
+                       ' other.name = "Bullet"\nend\n')
+    assert errs and errs[0].startswith("other.name")
 
 
 def test_aucun_domaine_declare_nest_orphelin():
     """Un `DOMAIN_*` que ni un paramètre ni une propriété ne cite est du
     vocabulaire mort — et il oblige quand même checker et codegen à garder une
     entrée pour satisfaire `validator._check_api_domains`. C'était le cas de
-    `tag`, gardé au motif faux que `TAG_*` serait un espace ouvert (c'est
+    `tag`, gardé au motif faux que `ACTOR_*` serait un espace ouvert (c'est
     `BOXTAG_*` qui l'est)."""
     from scripting.api import ALL_DOMAINS, RUNTIME_API, RUNTIME_PROPS
 
@@ -765,3 +765,16 @@ def test_multi_local_valeurs_manquantes_valent_zero():
     _errs, code = _lua("function on_start()\n    local a, b, c = 1\nend\n")
     assert "int a = 1;" in code
     assert "int b = 0;" in code and "int c = 0;" in code
+
+
+def test_tag_d_un_acteur_guide_vers_name():
+    """`other.tag` était l'identité de l'acteur ; `tag` est désormais réservé aux boîtes."""
+    errs, _ = _tag_lua('function on_collide(self, other)\n'
+                       ' if other.tag == "Ball" then end\nend\n')
+    assert any("other.name" in e for e in errs)
+
+
+def test_collision_box_n_est_pas_un_champ_d_acteur():
+    errs, _ = _tag_lua('function on_collide(self, other)\n'
+                       ' if other.collision_box.tag == "Player" then end\nend\n')
+    assert any("other_box.tag" in e for e in errs)

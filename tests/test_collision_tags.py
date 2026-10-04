@@ -93,3 +93,20 @@ def test_chaque_tag_a_un_numero_distinct(tmp_path):
     # Un tag DÉCLARÉ mais posé sur aucune box a quand même sa constante : un
     # script peut le citer avant que la box existe.
     assert "#define BOXTAG_HURTBOX " in h
+
+
+def test_my_box_et_other_box_sont_des_references_de_boite():
+    """`other_box.tag == "Player"` dans un événement de contact : le checker juge le
+    nom contre les tags du projet, et le C reçoit une référence, pas un `u8` nu."""
+    from scripting.parser import parse
+    from scripting.checker import check, BuildContext
+
+    def erreurs(nom: str):
+        src = ('function on_collision_enter(other, my_box, other_box)\n'
+               f'    if other_box.tag == "{nom}" then self:destroy() end\n'
+               'end\n')
+        ctx = BuildContext(actor_name="T", box_tag_names=["Player", "body"])
+        return [m for m in check(parse(src), ctx) if m.level == "error"]
+
+    assert erreurs("Player") == []
+    assert any("no collision box with tag" in m.message for m in erreurs("Plyer"))

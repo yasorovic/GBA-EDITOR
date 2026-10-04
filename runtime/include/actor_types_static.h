@@ -199,7 +199,7 @@ typedef struct Actor {
     s16 scale_y;           /* monde, Q8 */
 
     /* 16 bits, puis 8 bits (aucun remplissage) — cf. OamEntry pour la règle. */
-    s16 tag;               /* TAG_* — type de l'acteur (≥ 255 dès qu'un pool est grand) */
+    s16 name;              /* ACTOR_* — type de l'acteur (≥ 255 dès qu'un pool est grand) */
     /* Indice de son entrée dans g_oam_entries[] (cf. l'en-tête ci-dessus), -1 = sans. */
     s16 oam_entry;
     u8 active;             /* 0 = ignoré (update + rendu désactivés) */

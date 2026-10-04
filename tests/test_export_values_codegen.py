@@ -151,11 +151,11 @@ def test_pose_emet_string_refs_et_composites():
         music_names=[], global_names=set(), const_names=set(),
         all_actor_syms=["Scene_Guard"], is_pooled=False,
         export_inits={"label": "TEXT_HELLO", "boom": "SFX_BOOM",
-                      "next": "SCENE_IDX_WIN", "target": "TAG_SCENE_BOSS",
+                      "next": "SCENE_IDX_WIN", "target": "ACTOR_SCENE_BOSS",
                       "home": "{ 3, 4 }", "box": "{ 0, 0, 16, 16 }"}))
     assert "label = TEXT_HELLO;" in code      # string → index de texte (int)
     assert "boom = SFX_BOOM;" in code         # sfx_ref → SFX_*
-    assert "target = TAG_SCENE_BOSS;" in code # actor_ref → TAG_*
+    assert "target = ACTOR_SCENE_BOSS;" in code # actor_ref → ACTOR_*
     assert "Vec2 " in code and "home = { 3, 4 };" in code
     assert "Rect " in code and "box = { 0, 0, 16, 16 };" in code
 
@@ -181,7 +181,7 @@ def test_spawn_table_refs_et_vec():
     # Valeurs résolues au site du spawn, dans la scène du spawner.
     assert "Arena_Bullet_set_vel(b, (Vec2){1, 2});" in code
     assert "Arena_Bullet_set_boom(b, SFX_POP);" in code
-    assert "Arena_Bullet_set_tgt(b, TAG_ARENA_ENEMY);" in code
+    assert "Arena_Bullet_set_tgt(b, ACTOR_ARENA_ENEMY);" in code
 
 
 def test_poole_setter_composite_typé():
@@ -346,7 +346,7 @@ def test_resolveur_refs_et_composites():
     inits = _export_inits(actor, script, res)
     assert inits["boom"] == "SFX_EXPLOSION"
     assert inits["next"] == "SCENE_IDX_VICTORY"
-    assert inits["target"] == "TAG_ARENA_BOSS"     # qualifié par la scène
+    assert inits["target"] == "ACTOR_ARENA_BOSS"     # qualifié par la scène
     assert inits["home"] == "{ 10, 20 }"           # override vec2
     assert inits["box"] == "{ 0, 0, 16, 16 }"      # défaut rect
     assert inits["boom"] and inits["target"]       # non vides

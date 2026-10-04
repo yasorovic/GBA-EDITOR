@@ -65,7 +65,7 @@ def _make_export_resolver(p, scene_name: str, text_keys: list):
     (venue de l'éditeur ou du défaut de source) → son initialiseur C, résolu
     DANS `scene_name` (c'est là qu'un nom d'acteur a un sens). Les scalaires
     tombent sur un entier ou une constante symbolique en portée dans le `.c`
-    généré (SFX_*, SCENE_IDX_*, TAG_*, TEXT_*) ; les composites sur un littéral
+    généré (SFX_*, SCENE_IDX_*, ACTOR_*, TEXT_*) ; les composites sur un littéral
     `{ x, y }`. Chantier « Les exports de script », types non-entiers."""
     from scripting.api import (sfx_constant, scene_constant, text_constant,
                                anon_text_key)
@@ -80,7 +80,7 @@ def _make_export_resolver(p, scene_name: str, text_keys: list):
         if typ == "scene_ref":
             return scene_constant(name)
         if typ == "actor_ref":
-            return f"TAG_{scene_actor_sym(scene_name, name).upper()}"
+            return f"ACTOR_{scene_actor_sym(scene_name, name).upper()}"
         # string → index de texte : clé réelle du projet, sinon entrée anonyme
         # (le littéral aura été collecté par project_texts.collect_literal_texts).
         key = name if name in text_keys else anon_text_key(name)
@@ -247,9 +247,9 @@ def _child_refs_for_actor(actor, scene_actors, scene_name) -> dict:
     """Les enfants d'un acteur de SCÈNE, nom Lua → expression C (ROADMAP v0.23).
 
     Un enfant est un acteur de la même scène dont `parent` nomme celui-ci ; il
-    a donc son propre TAG_*, qualifié par la scène comme tout acteur posé
+    a donc son propre ACTOR_*, qualifié par la scène comme tout acteur posé
     (« L'acteur appartient à sa scène »), et le désigner ne coûte qu'un `#define`."""
-    return {a.name: f"&g_actors[TAG_{scene_actor_sym(scene_name, a.name).upper()}]"
+    return {a.name: f"&g_actors[ACTOR_{scene_actor_sym(scene_name, a.name).upper()}]"
             for a, _ in scene_actors
             if getattr(a, "parent", None) == actor.name}
 
@@ -385,7 +385,7 @@ def transpile_all(
     # (ctx codegen ET ctx_check du checker), n'importe lequel peut spawner.
     _spawn_meta = _spawn_exports_meta(p, prefabs)
     # Résolveur des valeurs d'export → initialiseur C, scopé à CETTE scène : un
-    # `actor_ref` se résout en TAG_* de la scène de compilation (cf. « L'acteur
+    # `actor_ref` se résout en ACTOR_* de la scène de compilation (cf. « L'acteur
     # appartient à sa scène »), une `string` en TEXT_* de la table du build.
     _export_resolver = _make_export_resolver(p, scene.name, text_keys)
     # Tables de données : {nom: (colonnes, nombre de lignes)}. Le checker en

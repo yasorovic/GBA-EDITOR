@@ -26,7 +26,7 @@ from codegen.c_names import c_ident, sym as c_sym
 # Utilisés par le codegen pour savoir comment convertir l'arg Lua → C.
 #
 #   "int"   → entier littéral, passé directement
-#   "str"   → string Lua → constante C (ANIM_*, SFX_*, KEY_*, TAG_*)
+#   "str"   → string Lua → constante C (ANIM_*, SFX_*, KEY_*, ACTOR_*)
 #             Le codegen fait la résolution via le contexte de build.
 #   "bool"  → 0/1 entier
 #   "actor" → référence à un acteur (nom Lua → pointeur C)
@@ -35,7 +35,7 @@ PARAM_INT          = "int"
 PARAM_STR          = "str"
 PARAM_STR_LITERAL  = "str_literal"   # string passée telle quelle entre guillemets C (pas de résolution de constante)
 PARAM_BOOL         = "bool"
-PARAM_ACTOR        = "actor"         # nom Lua → &g_actors[TAG_NAME]
+PARAM_ACTOR        = "actor"         # nom Lua → &g_actors[ACTOR_NAME]
 # vec2/vec3 — valeur composée (cf. scripting/expr_types.py), pas une chaîne à
 # résoudre : l'argument Lua est un vec2(x,y)/vec3(x,y,z) littéral, une variable
 # du même type, ou une expression qui s'y réduit (a + b, get_position()…). Ces
@@ -224,14 +224,14 @@ DOMAIN_AXIS   = "axis"
 # une séquence avec get_sequence — jamais l'inverse, et jamais partagé avec
 # DOMAIN_SEQUENCE (qui, lui, nomme un `on_sequence_<nom>` de script).
 DOMAIN_INPUT_SEQUENCE = "input_sequence"
-# TAG_{name} — l'IDENTITÉ d'un acteur. L'espace de noms est celui des acteurs de
+# ACTOR_{name} — l'IDENTITÉ d'un acteur. L'espace de noms est celui des acteurs de
 # la scène et des prefabs poolés, un `#define` par nom (cf. headers.py) : il est
 # donc parfaitement énumérable, contrairement à ce que ce fichier a longtemps
 # prétendu. La confusion venait de `BOXTAG_*`, lui bel et bien libre — il vient
 # de `CollisionBoxComponent.tag`, que l'auteur écrit à la main.
-DOMAIN_TAG    = "tag"
+DOMAIN_ACTOR_NAME = "actor_name"
 # BOXTAG_{name} — le champ « Tag » d'une boîte de collision. À l'opposé de
-# DOMAIN_TAG, l'espace est LIBRE : l'auteur l'écrit à la main dans le
+# DOMAIN_ACTOR_NAME, l'espace est LIBRE : l'auteur l'écrit à la main dans le
 # CollisionBoxComponent, la liste du projet est `Project.collision_tags()`.
 DOMAIN_BOX_TAG = "box_tag"
 DOMAIN_SCENE  = "scene"   # SCENE_IDX_{name}
@@ -691,7 +691,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
         doc=("Destroys the actor: calls on_destroy() then deactivates it (no more "
              "update, no more rendering)."),
     ),
-    # self.tag (lecture seule) et self.pal : cf. RUNTIME_PROPS.
+    # self.name (lecture seule) et self.pal : cf. RUNTIME_PROPS.
 
     # ── Cycle de vie : les cinq verbes (ROADMAP v0.16, critère 3) ────
     # La SEULE porte d'écriture de « visible » et « actif » ; l'état se lit par
@@ -1743,12 +1743,13 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
     # Se compare par le NOM de l'acteur ou du prefab — sans quoi la propriété
     # rendait un entier opaque qu'aucune écriture Lua ne permettait de nommer :
     # « utile pour identifier other », disait sa doc, sans dire comment.
-    "actor.tag": ApiProp(
-        lua_name="actor.tag", c_getter="actor_get_tag", ptype=PARAM_INT,
-        self_first=True, read_only=True, domain=DOMAIN_TAG,
-        doc="Identity of this actor (read-only): the name of its scene actor or of "
+    "actor.name": ApiProp(
+        lua_name="actor.name", c_getter="actor_get_name", ptype=PARAM_INT,
+        self_first=True, read_only=True, domain=DOMAIN_ACTOR_NAME,
+        doc="Name of this actor (read-only): the name of its scene actor or of "
             "its prefab. It is what lets you recognise who you touch. Ex: if "
-            "other.tag == \"Ball\" then self:destroy() end",
+            "other.name == \"Ball\" then self:destroy() end. Not to be confused "
+            "with `tag`, which belongs to collision boxes.",
     ),
 
     # ── Actor — animation ──────────────────────────────────────────
@@ -2230,10 +2231,10 @@ EVENT_REGISTRY: dict[str, dict] = {
         "params": [
             {"name": "other",     "type": "actor", "description": "Reference to the "
                                                                   "actor in contact"},
-            {"name": "my_box",    "type": "int",   "description": "BOXTAG_* of my box"
+            {"name": "my_box",    "type": "int",   "description": "My collision box"
                                                                   " involved"},
-            {"name": "other_box", "type": "int",   "description": "BOXTAG_* of the "
-                                                                  "other box"},
+            {"name": "other_box", "type": "int",   "description": "The collision box of "
+                                                                  "the other actor"},
         ],
         "c_sig": "void {prefix}_on_collide(Actor* self, Actor* other, u8 my_box, u8 other_box)",
     },
@@ -2246,10 +2247,10 @@ EVENT_REGISTRY: dict[str, dict] = {
             {"name": "other",     "type": "actor", "description": "Reference to the "
                                                                   "actor entering "
                                                                   "into contact"},
-            {"name": "my_box",    "type": "int",   "description": "BOXTAG_* of my box"
+            {"name": "my_box",    "type": "int",   "description": "My collision box"
                                                                   " involved"},
-            {"name": "other_box", "type": "int",   "description": "BOXTAG_* of the "
-                                                                  "other box"},
+            {"name": "other_box", "type": "int",   "description": "The collision box of "
+                                                                  "the other actor"},
         ],
         "c_sig": "void {prefix}_on_collision_enter(Actor* self, Actor* other, u8 my_box, u8 other_box)",
     },
@@ -2275,10 +2276,10 @@ EVENT_REGISTRY: dict[str, dict] = {
             {"name": "other",     "type": "actor", "description": "Reference to the "
                                                                   "actor that moved "
                                                                   "away"},
-            {"name": "my_box",    "type": "int",   "description": "BOXTAG_* of my box"
+            {"name": "my_box",    "type": "int",   "description": "My collision box"
                                                                   " involved"},
-            {"name": "other_box", "type": "int",   "description": "BOXTAG_* of the "
-                                                                  "other box"},
+            {"name": "other_box", "type": "int",   "description": "The collision box of "
+                                                                  "the other actor"},
         ],
         "c_sig": "void {prefix}_on_collision_exit(Actor* self, Actor* other, u8 my_box, u8 other_box)",
     },
@@ -2295,6 +2296,13 @@ EVENT_REGISTRY: dict[str, dict] = {
 # Aliases dérivés — ne plus éditer, générés depuis EVENT_REGISTRY
 KNOWN_EVENTS: list[str] = list(EVENT_REGISTRY.keys())
 EVENT_C_SIGNATURES: dict[str, str] = {k: v["c_sig"] for k, v in EVENT_REGISTRY.items()}
+
+# Les événements de contact reçoivent DEUX boîtes : `my_box` (sur `self`) et `other_box` (sur
+# `other`). Le C les passe en tag (`u8`) ; le script les tient comme des références
+# `collision_box` — `other_box.tag == "Player"`, `my_box:overlaps(other_box)` —, le codegen
+# posant la référence en tête de fonction (`actor_get_box(<propriétaire>, tag)`).
+COLLISION_EVENTS = ("on_collide", "on_collision_enter", "on_collision_exit")
+BOX_PARAMS = (("my_box", "self"), ("other_box", "other"))   # (nom du paramètre, acteur qui la porte)
 
 
 # ─── Les modules, dérivés du catalogue ────────────────────────────
@@ -2414,9 +2422,9 @@ def key_constant(key_name: str) -> str:
     return f"BTN_{c_ident(key_name)}"
 
 
-def tag_constant(actor_name: str) -> str:
-    """'enemy' → 'TAG_ENEMY'"""
-    return f"TAG_{c_ident(actor_name)}"
+def actor_name_constant(actor_name: str) -> str:
+    """'enemy' → 'ACTOR_ENEMY'"""
+    return f"ACTOR_{c_ident(actor_name)}"
 
 
 def box_tag_constant(tag: str) -> str:

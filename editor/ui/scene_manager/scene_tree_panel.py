@@ -408,6 +408,10 @@ class _ActiveSceneTree(_Tree):
                 visible = self._editor_visible(node_type, obj, layout)
                 button = QToolButton(self)
                 button.setAutoRaise(True)
+                # Sans focus : un widget de cellule qui prend le focus fait
+                # sélectionner SA LIGNE par la vue (sélection sans clic, au
+                # simple survol de l'œil).
+                button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
                 button.setFixedSize(24, 24)
                 button.setIconSize(QSize(16, 16))
                 button.setIcon(_ico("eye" if visible else "eye_off",
@@ -906,22 +910,47 @@ class _ActiveSceneTree(_Tree):
         member = self._folder_member_for(node_type, obj)
         if not member:
             return
+        # Même règle que la suppression : un élément cliqué DANS la sélection
+        # entraîne tout le lot, hors sélection il agit seul.
+        selected = [m for it in self.selectedItems()
+                    if (m := self._folder_member_for(it.data(0, _ROLE_TYPE),
+                                                     it.data(0, _ROLE_OBJ)))]
+        members = list(dict.fromkeys(selected)) if member in selected else [member]
         current = state.folder_of(scene.name, member)
         sub = menu.addMenu(label("scttree.move_to_folder"))
         sub.setFont(QFont(T.UI, T.MD))
-        for folder in state.folders(scene.name):
+        folders = state.folders(scene.name)
+        for folder in folders:
             action = sub.addAction(folder.name)
-            action.setEnabled(folder.id != current)
+            action.setEnabled(len(members) > 1 or folder.id != current)
             action.triggered.connect(
-                lambda _, fid=folder.id, key=member: self._move_member_to_folder(key, fid))
+                lambda _, fid=folder.id, keys=members: self._move_members_to_folder(keys, fid))
+        if folders:
+            sub.addSeparator()
+        sub.addAction(label("scttree.new_folder_from_selection")).triggered.connect(
+            lambda _, keys=members: self._move_members_to_new_folder(keys))
         if current is not None:
             menu.addAction(label("scttree.remove_from_folder")).triggered.connect(
-                lambda _, key=member: self._move_member_to_folder(key, None))
+                lambda _, keys=members: self._move_members_to_folder(keys, None))
 
-    def _move_member_to_folder(self, member: str, folder_id: str | None) -> None:
+    def _move_members_to_folder(self, members: list[str], folder_id: str | None) -> None:
         if self._panel._content_state and self._scene:
-            self._panel._content_state.move_member(self._scene.name, member, folder_id)
+            for member in members:
+                self._panel._content_state.move_member(self._scene.name, member, folder_id)
             self._panel.refresh()
+
+    def _move_members_to_new_folder(self, members: list[str]) -> None:
+        """Crée un dossier, y range le lot, et ouvre son nom en édition en place."""
+        panel = self._panel
+        if not panel._content_state or not self._scene:
+            return
+        names = {f.name for f in panel._content_state.folders(self._scene.name)}
+        folder = panel._content_state.create_folder(
+            self._scene.name, unique_name(label("scttree.new_folder"), names))
+        self._move_members_to_folder(members, folder.id)
+        item = self._folder_items.get(folder.id)
+        if item:
+            self.editItem(item, 0)
 
     # ── Éléments d'UI : création / réordonnancement / suppression ─
     def _create_ui_elem(self, layout, kind: str, parent_name: str):

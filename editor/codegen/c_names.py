@@ -40,7 +40,7 @@ def scene_actor_sym(scene_name: str, actor_name: str) -> str:
     son NOM est local à la scène — deux scènes peuvent chacune poser un
     « Cursor » — tandis que son SYMBOLE C, lui, est qualifié, exactement comme un
     prefab poolé l'est déjà (``<Scène>_<Prefab>``). C'est ce qui empêche deux
-    « Cursor » de collisionner sur un seul ``TAG_CURSOR`` / ``actor_Cursor.c``.
+    « Cursor » de collisionner sur un seul ``ACTOR_CURSOR`` / ``actor_Cursor.c``.
 
     À employer partout où l'on forme le TAG, le nom de fichier ou le préfixe de
     fonction d'un acteur de scène — jamais `sym(actor.name)` nu."""

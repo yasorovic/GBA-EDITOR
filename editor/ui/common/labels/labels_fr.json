@@ -576,6 +576,9 @@
     "scttree.remove_from_folder": {
       "text": "Retirer du dossier"
     },
+    "scttree.new_folder_from_selection": {
+      "text": "Nouveau dossier depuis la sélection"
+    },
     "scttree.hide_in_editor": {
       "text": "Masquer dans l’éditeur"
     },
@@ -1793,7 +1796,6 @@
     "vartbl.array_tip": { "text": "Définit le nombre de cases du tableau, indexées à partir de 1 (global.nom[1]..[N])." },
     "vartbl.array_note": { "text": "Un clic droit puis Tableau le ramène à une valeur simple." },
     "vartbl.rename_tip": { "text": "Renomme cette variable et met à jour ses références dans les scripts et les textes." },
-    "vartbl.type_title": { "text": "Type de variable" },
     "vartbl.value_title": { "text": "Valeur initiale" },
     "vartbl.type_int_tip": { "text": "Nombre entier de -2 147 483 648 à 2 147 483 647 (32 bits). Le type à tout faire." },
     "vartbl.type_bool_tip": { "text": "Vrai ou faux (0 ou 1). Occupe un octet en mémoire et un seul bit dans une sauvegarde." },
@@ -1885,6 +1887,7 @@
     "valfield.number_float": { "text": "Valeur décimale" },
     "valfield.reference_title": { "text": "Valeur référencée" },
     "valfield.reference_tip": { "text": "Lit {symbol} pendant l’exécution du projet." },
+    "valfield.var_button": { "text": "var" },
     "settings.shortcuts.reset_title": { "text": "Rétablir le raccourci par défaut" },
     "settings.shortcuts.system_key_title": { "text": "Raccourci système" },
     "noticeui.dismiss_title": { "text": "Masquer l’astuce" },

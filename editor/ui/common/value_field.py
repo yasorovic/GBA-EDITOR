@@ -363,7 +363,7 @@ class NumberField(QWidget):
             self._chip.setToolTip(tooltip(
                 title=label('valfield.reference_title'),
                 body=label('valfield.reference_tip', symbol=sym)))
-            self._btn.setText("var")
+            self._btn.setText(label('valfield.var_button'))
         else:
             self._chip.setVisible(False)
             self._spin.setVisible(True)
