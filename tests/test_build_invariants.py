@@ -35,7 +35,8 @@ from core.toolchain import Toolchain
 
 DEMO = Path(__file__).resolve().parent.parent / "Project Demo" / "PongAdvanced"
 pytestmark = [pytest.mark.slow,
-              pytest.mark.skipif(not DEMO.exists(), reason="projet de démo absent")]
+              pytest.mark.skipif(not DEMO.exists(), reason="projet de démo absent"),
+              pytest.mark.skipif(not Toolchain().devkitpro_ok, reason="devkitPro absent : le build ne peut pas tourner")]
 
 # Les fichiers que l'on abîme (relatifs à la racine de la démo). Les gros lots homogènes
 # (105 musiques, 20 palettes) sont représentés par un seul fichier.

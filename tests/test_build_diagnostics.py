@@ -96,6 +96,10 @@ def test_un_outil_en_echec_compte_comme_une_erreur():
 
 # ── Le verdict et build.log ───────────────────────────────────────
 
+# Ces trois tests lancent le vrai build : sans grit (devkitPro), il échoue pour une autre raison.
+needs_devkitpro = pytest.mark.skipif(
+    not Toolchain().devkitpro_ok, reason="devkitPro absent : le build ne peut pas tourner")
+
 
 def _projet(tmp_path, script):
     project = Project.create(tmp_path / "Game", "Game")
@@ -121,6 +125,7 @@ def _build(project):
     return verdict[-1], lines
 
 
+@needs_devkitpro
 @pytest.mark.slow
 def test_le_verdict_chiffre_les_erreurs(tmp_path):
     # Un refus du checker, avec sa ligne : le checker est une source comme une autre.
@@ -130,6 +135,7 @@ def test_le_verdict_chiffre_les_erreurs(tmp_path):
     assert "[build] 1 error(s), 0 warning(s)" in lines
 
 
+@needs_devkitpro
 @pytest.mark.slow
 def test_un_projet_sain_chiffre_zero_erreur(tmp_path):
     ok, lines = _build(_projet(tmp_path, "function on_update()\nend\n"))
@@ -137,6 +143,7 @@ def test_un_projet_sain_chiffre_zero_erreur(tmp_path):
     assert "[build] 0 error(s), 0 warning(s)" in lines
 
 
+@needs_devkitpro
 @pytest.mark.slow
 def test_build_log_copie_le_journal_et_se_reecrit(tmp_path):
     project = _projet(tmp_path, "function on_update()\n  local f = function() return 1 end\nend\n")
