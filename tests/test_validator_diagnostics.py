@@ -144,6 +144,16 @@ def test_un_acteur_d_ecran_avec_collision_camera_ou_interface_avertit(project):
     assert says(found, "warning", "subtract the scroll a second time")
 
 
+def test_un_fond_plus_grand_que_l_ecran_sans_camera_avertit(project):
+    from core.models.background import BackgroundAsset
+    project.backgrounds.append(BackgroundAsset(name="level", tiles_w=40, tiles_h=20))   # 320×160
+    scene = project.active_scene
+    scene.cameras = []
+    scene.background_layers = [BackgroundLayer(background_name="level", bg_slot=0)]
+    found = run(project, validator._check_cameras)
+    assert says(found, "warning", "has no camera but its background")
+
+
 def test_une_banque_de_palette_inexistante_avertit_pour_acteur_prefab_et_fond(project):
     from core.models.scene import Prefab
     project.sprites.append(SpriteAsset(name="Hero", asset="assets/sprites/hero.png"))
