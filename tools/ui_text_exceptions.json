@@ -76,7 +76,7 @@
   },
   {
     "file": "editor/ui/home/project_picker.py",
-    "text": "f'''<span style=\"color:#666;\">{label(self._EXPLAIN_KEYS[name])} <a href=\"{url}\" style=\"color:#4c8caf;\">{label('home.status.download')}</a></span>'''",
+    "text": "f'<span style=\"color:#666;\">{label(self._EXPLAIN_KEYS[name])} <a href=\"{url}\" style=\"color:#4c8caf;\">{label(self._LINK_KEYS[name])}</a></span>'",
     "reason": "HTML presentation only; the displayed prose is resolved by the catalogue."
   },
   {

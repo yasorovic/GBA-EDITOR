@@ -22,7 +22,7 @@
       "id": "collision",
       "active": true,
       "solid": true,
-      "tag": "Player",
+      "tag": "player",
       "x": 0,
       "y": 0,
       "w": 32,

@@ -653,10 +653,12 @@ class SceneEditor(QWidget):
         if self._show_all_boxes:
             self._gba_scene.update_actor_boxes(self._project.active_scene.actors, var_defaults)
         else:
+            # Un acteur sans sprite n'a que sa boîte pour exister à l'écran
+            # (un trigger, typiquement) : elle reste visible sans sélection.
             actors = [
                 item.scene_sprite
                 for item in self._gba_scene._sprite_items
-                if item.isSelected()
+                if item.isSelected() or item._placeholder
             ]
             self._gba_scene.update_actor_boxes(actors, var_defaults)
 
@@ -1077,8 +1079,7 @@ class SceneEditor(QWidget):
         self._gba_scene.blockSignals(False)
         self._apply_editor_visibility()
 
-        if prev_selected_ids:
-            self._update_actor_box_overlay()
+        self._update_actor_box_overlay()
 
     # ── Changements items ─────────────────────────────────────────
 

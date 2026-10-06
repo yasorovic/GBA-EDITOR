@@ -393,8 +393,11 @@
     "home.status.configure": {
       "text": "Configurer manuellement"
     },
-    "home.status.download": {
-      "text": "Télécharger →"
+    "home.status.more_info": {
+      "text": "Plus d’infos →"
+    },
+    "home.status.official_site": {
+      "text": "Site officiel →"
     },
     "home.status.explain_devkitpro": { "text": "devkitPro est la chaîne de compilation qui transforme le projet en ROM .gba jouable." },
     "home.status.explain_mgba": { "text": "mGBA est l’émulateur qui ouvre la ROM directement depuis l’éditeur pour la tester." },
@@ -621,6 +624,9 @@
     },
     "scttree.filter_unfiled": {
       "text": "Éléments non classés"
+    },
+    "win.asset_misplaced": {
+      "text": "{name} ignoré : {folder}/ n'accepte pas les fichiers {ext}"
     },
     "win.menu_view": {
       "text": "Affichage"
@@ -1548,7 +1554,6 @@
     "comped.offset_y_tip": { "text": "Définit le décalage vertical par rapport à l’acteur, en pixels. Le sprite est dessiné à la position de l’acteur plus ce décalage, et il pivote et change d’échelle avec l’acteur." },
     "bglayer.set_as_the_collision_layer": { "text": "Définir comme calque de collision" },
     "bglayer.remove_this_background": { "text": "Retirer ce fond" },
-    "bglayer.remove_this_layer": { "text": "Retirer ce calque" },
     "bglayer.image_title": { "text": "Image de fond" },
     "bglayer.image_tip": { "text": "Un clic choisit un PNG ; un PNG peut aussi être déposé ici." },
     "bglayer.reorder_title": { "text": "Ordre des calques" },
@@ -1604,8 +1609,6 @@
     "sceneinsp.music_tip": { "text": "Choisit une piste, conserve la musique en cours ou passe explicitement au silence." },
     "sceneinsp.music_note": { "text": "Un script lancé à l’ouverture peut remplacer ce choix." },
     "sceneinsp.music_title": { "text": "Musique au début de la scène" },
-    "sceneinsp.bg_add": { "text": "Ajouter un calque BG (4 maximum)" },
-    "sceneinsp.bg_add_tip": { "text": "Les modes tuilés en acceptent jusqu’à quatre." },
     "sceneinsp.bitmap_pick": { "text": "Choisir un fond bitmap…" },
     "sceneinsp.ui_colors": { "text": "Couleurs d’interface :" },
     "sceneinsp.ui_colors_tip": { "text": "Choisit la palette de fond de la scène utilisée par la police d’interface par défaut." },

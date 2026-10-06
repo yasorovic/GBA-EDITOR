@@ -141,6 +141,12 @@ class ProjectWatcher(QObject):
         self._timers: dict[str, QTimer] = {}
         self._project_root: Optional[Path] = None
         self._suppress = False
+        # Fichiers que l'éditeur déplace LUI-MÊME pendant une suspension
+        # (suppression vers `.temp/`, Ctrl+Z qui les rend) : à la sortie, ils
+        # font partie de la référence au lieu d'être pris pour des dépôts
+        # externes. Vidés quand la dernière suspension imbriquée se termine.
+        self._claimed: set[str] = set()
+        self._suspend_depth = 0
         # Timer unique et ré-armable qui lève la suppression. Réutilisé (plutôt
         # que QTimer.singleShot) pour qu'une rafale de sauvegardes internes
         # (maintien d'une flèche = nudge répété, molette continue sur un spinbox)
@@ -155,6 +161,19 @@ class ProjectWatcher(QObject):
         # snapshot des fichiers connus dans chaque dossier surveillé
         # dir_str -> {file_str: (taille, date_ns)} — cf. _scan_dir
         self._dir_snapshots: dict[str, dict[str, tuple[int, int]]] = {}
+
+        # Fichiers sources APPARUS mais dont la copie n'est peut-être pas finie :
+        # chemin -> dernière empreinte vue. Ils restent hors de la référence du
+        # dossier tant que leur empreinte bouge (cf. `_settle_check`) — un PNG
+        # lu à moitié copié serait un import corrompu.
+        self._settling: dict[str, tuple[int, int]] = {}
+        # Ceux dont l'empreinte vient de se stabiliser : `_on_dir_changed` les
+        # accepte le temps d'un passage, puis la liste est vidée.
+        self._settled: set[str] = set()
+        self._settle_timer = QTimer(self)
+        self._settle_timer.setSingleShot(True)
+        self._settle_timer.setInterval(self._DEBOUNCE_MS)
+        self._settle_timer.timeout.connect(self._settle_check)
 
     # ── API publique ────────────────────────────────────────────────
 
@@ -214,6 +233,14 @@ class ProjectWatcher(QObject):
 
     def unwatch(self):
         self._clear()
+        # Sans racine, `rescan()` ne ressuscite pas le projet fermé au retour du
+        # focus (il verrait tous ses fichiers comme apparus).
+        self._project_root = None
+
+    def claim(self, path: Path):
+        """Déclare qu'un fichier source vient d'être déplacé par l'éditeur
+        lui-même pendant la suspension en cours (cf. `_claimed`)."""
+        self._claimed.add(str(path))
 
     @contextmanager
     def suspended(self):
@@ -225,6 +252,8 @@ class ProjectWatcher(QObject):
         if dirs:
             self._watcher.removePaths(dirs)
         self._suppress = True
+        self._suspend_depth += 1
+        before = {d: dict(snap) for d, snap in self._dir_snapshots.items()}
         try:
             yield
         finally:
@@ -237,14 +266,71 @@ class ProjectWatcher(QObject):
                 self._watcher.addPaths(dirs)
             # Nos propres écritures deviennent l'état de référence : sans ça,
             # le prochain rescan les prendrait pour des modifs externes.
+            #
+            # Sauf les fichiers SOURCES que nous n'avons pas écrits nous-mêmes :
+            # dépôts externes arrivés pendant l'import en cours (trois PNG
+            # glissés d'un coup : le watcher ne voit le dossier qu'après le
+            # premier, et la photo prise ici absorbait les deux autres comme
+            # « déjà connus »), ou source retouchée dehors pendant la fenêtre.
+            # Ils restent à leur ancien état dans la référence et on re-diffe
+            # le dossier juste après. Les sidecars, eux, sont NOS écritures.
+            leftover = False
             for dir_str in self._dir_snapshots:
-                self._dir_snapshots[dir_str] = self._scan_dir(Path(dir_str))
+                snap = self._scan_dir(Path(dir_str))
+                known = before.get(dir_str, {})
+                for p in list(snap):
+                    if (Path(p).suffix.lower() not in _ASSET_SUFFIXES
+                            or p in self._claimed):
+                        continue
+                    if p not in known:
+                        del snap[p]
+                        leftover = True
+                    elif known[p] != snap[p]:
+                        snap[p] = known[p]
+                        leftover = True
+                self._dir_snapshots[dir_str] = snap
+            self._suspend_depth -= 1
+            if self._suspend_depth == 0:
+                self._claimed.clear()
+            if leftover:
+                QTimer.singleShot(0, self._rediff_dirs)
             # Ré-arme le délai : chaque sortie de suspended() repousse la levée
             # de suppression, donc la fenêtre ne se ferme que 350 ms après la
             # toute dernière sauvegarde de la rafale (cf. _suppress_timer).
             self._suppress_timer.start(self._DEBOUNCE_MS + 150)
 
     # ── Interne ─────────────────────────────────────────────────────
+
+    def _settle_check(self):
+        """Fin du délai : un fichier source apparu dont l'empreinte n'a pas
+        bougé depuis le dernier passage est une copie terminée — on le laisse
+        entrer ; un autre est encore en train d'être écrit, on attend."""
+        ready: set[Path] = set()
+        waiting = False
+        for path_str, stamp in list(self._settling.items()):
+            try:
+                st = Path(path_str).stat()
+            except OSError:
+                del self._settling[path_str]    # disparu avant d'être fini
+                continue
+            now = (st.st_size, st.st_mtime_ns)
+            if now == stamp:
+                del self._settling[path_str]
+                self._settled.add(path_str)
+                ready.add(Path(path_str).parent)
+            else:
+                self._settling[path_str] = now
+                waiting = True
+        for d in ready:
+            self._on_dir_changed(str(d))
+        self._settled.clear()
+        if waiting:
+            self._settle_timer.start()
+
+    def _rediff_dirs(self):
+        """Rejoue le diff de chaque dossier suivi contre son état de référence."""
+        for dir_str in list(self._dir_snapshots):
+            self._on_dir_changed(dir_str)
 
     def _scan_dir(self, d: Path) -> dict[str, tuple[int, int]]:
         """Les fichiers pertinents présents dans `d` (non-récursif), chacun avec
@@ -282,6 +368,9 @@ class ProjectWatcher(QObject):
             t.stop()
         self._timers.clear()
         self._suppress_timer.stop()
+        self._settle_timer.stop()
+        self._settling.clear()
+        self._settled.clear()
         self._suppress = False
         self._dir_snapshots.clear()
 
@@ -341,6 +430,19 @@ class ProjectWatcher(QObject):
             return
 
         new_snap = self._scan_dir(d)
+        renames = pair_renames(old_snap, new_snap)
+        renamed_to = {new for _, new in renames}
+
+        # Source apparue : on ne la rapporte qu'une fois sa copie finie. Un
+        # renommage n'est pas concerné (même empreinte qu'un fichier déjà
+        # complet), ni un fichier que `_settle_check` vient de valider.
+        for path_str in [p for p in new_snap
+                         if p not in old_snap
+                         and p not in renamed_to
+                         and p not in self._settled
+                         and Path(p).suffix.lower() in _ASSET_SUFFIXES]:
+            self._settling[path_str] = new_snap.pop(path_str)
+            self._settle_timer.start()
         self._dir_snapshots[dir_str] = new_snap
 
         appeared = [p for p in new_snap if p not in old_snap]
@@ -350,7 +452,7 @@ class ProjectWatcher(QObject):
         # parcourues : un renommage n'est ni une création ni une suppression,
         # et le traiter comme les deux revenait à détruire l'asset pour en
         # créer un neuf sous le nouveau nom.
-        for old_path, new_path in pair_renames(old_snap, new_snap):
+        for old_path, new_path in renames:
             appeared.remove(new_path)
             vanished.remove(old_path)
             self._watcher.removePath(old_path)
@@ -400,6 +502,8 @@ class ProjectWatcher(QObject):
         stamp = (st.st_size, st.st_mtime_ns)
         snap = self._dir_snapshots.get(str(path.parent))
         if snap is not None:
+            if path_str not in snap:
+                return      # inconnu : son apparition (ou sa copie en cours) est l'affaire du scan
             if snap.get(path_str) == stamp:
                 return
             snap[path_str] = stamp

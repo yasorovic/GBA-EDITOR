@@ -107,6 +107,9 @@ class PaletteStore(ResourceStore[PaletteBank]):
             print(f"[project] PaletteBank reload error {name}: {error}")
             return None
 
+    def _files_of(self, item: PaletteBank) -> list[Path]:
+        return [self.source_path(item.name), self._path(item.name)]
+
     def delete(self, item: PaletteBank):
         for path in (self.source_path(item.name), self._path(item.name)):
             if path.exists():

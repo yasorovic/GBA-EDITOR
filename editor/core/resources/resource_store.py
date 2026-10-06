@@ -80,6 +80,12 @@ class ResourceStore(Generic[T]):
         self.index = ResourceIndex(directory)
         self.items: list[T] = []
         self._pending_delete: list[T] = []
+        # `.temp/` du projet : où partent les fichiers d'une ressource supprimée
+        # (cf. core/resources/deleted_files). Absent, la suppression reste
+        # différée jusqu'à la fermeture. `_extra_files` ajoute au sidecar les
+        # fichiers SOURCES que seul le projet sait nommer.
+        self._bin = None
+        self._extra_files = None
         # {nom du fichier: raison} des JSON que `load` / `load_one` n'ont pas su
         # lire. Le fichier reste intact sur le disque ; l'application le dit
         # (cf. `Project.load_warnings`) au lieu de laisser l'asset disparaître.
@@ -109,11 +115,32 @@ class ResourceStore(Generic[T]):
     def __contains__(self, item) -> bool:
         return item in self.items
 
+    def attach_bin(self, bin_, extra_files=None) -> None:
+        self._bin = bin_
+        self._extra_files = extra_files
+
+    def _files_of(self, item: T) -> list[Path]:
+        """Tout ce qui, sur le disque, fait exister `item`."""
+        files = [self._path(item.name)]
+        if self._extra_files is not None:
+            files.extend(self._extra_files(item))
+        return files
+
     # -- lookup --
+    def _is_pending_delete(self, name: str) -> bool:
+        return any(x.name == name for x in self._pending_delete)
+
     def get(self, name: str) -> Optional[T]:
         cached = next((i for i in self.items if i.name == name), None)
         if cached is not None:
             return cached
+        # Un item en attente de suppression a son JSON ENCORE sur disque (effacé à
+        # la fermeture) et son entrée dans l'index : sans cette garde, le premier
+        # `get` l'y relisait — il revenait dans les listes, puis était réécrit à
+        # la fermeture, d'où des « fausses suppressions » qui revenaient au
+        # lancement suivant.
+        if self._is_pending_delete(name):
+            return None
         # L'index ne contient que les sidecars vus à l'ouverture ou lors d'une
         # écriture. Résoudre cette entrée seule est le chemin normal d'un canvas
         # qui cite un sprite ou un fond sans ouvrir son éditeur complet.
@@ -134,6 +161,8 @@ class ResourceStore(Generic[T]):
         provoquer une lecture en masse cachée. ``Project`` l'emploie pour les
         références ponctuelles des collections différées.
         """
+        if self._is_pending_delete(name):
+            return None
         return self.get(name) or self.load_one(name)
 
     # -- I/O --
@@ -264,10 +293,14 @@ class ResourceStore(Generic[T]):
         self.remove(item)
         if item not in self._pending_delete:
             self._pending_delete.append(item)
+        if self._bin is not None:
+            self._bin.stash(self._files_of(item))
 
     def restore(self, item: T):
         """Annule un soft_delete : remet l'item dans la liste et le resauvegarde."""
         self._pending_delete = [x for x in self._pending_delete if x is not item]
+        if self._bin is not None:
+            self._bin.restore(self._files_of(item))
         if item not in self.items:
             self.items.append(item)
         self.save(item)

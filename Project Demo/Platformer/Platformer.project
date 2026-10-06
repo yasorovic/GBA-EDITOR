@@ -15,7 +15,7 @@
   "list_repeat_delay": 10,
   "list_repeat_rate": 4,
   "collision_tags": [
-    "Player",
-    "body"
+    "body",
+    "player"
   ]
 }

@@ -566,7 +566,7 @@ class Scene(Resource):
     prefab_pools: dict = field(default_factory=dict)  # dict[str, int]
     # Caméras POSSÉDÉES par cette scène (inline dans le JSON, comme `actors`) —
     # révisé le 2026-08-24 : une caméra n'est plus un asset de projet partagé
-    # entre scènes (cf. models/camera.py, changelog-archive/v0.6.md).
+    # entre scènes (cf. models/camera.py, changelog/archives/v0.6.md).
     cameras: list = field(default_factory=list)  # list[Camera]
     # Caméra de DÉMARRAGE, par nom — résolue dans `cameras` ci-dessus. "" = la
     # caméra par défaut : fixe à (0,0), sans bornes ni suivi, sans entrée dans

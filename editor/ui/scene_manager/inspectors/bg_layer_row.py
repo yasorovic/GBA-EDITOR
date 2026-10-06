@@ -34,15 +34,13 @@ MIME_BG_LAYER = "application/x-gba-bg-layer-slot"
 
 class BgLayerRow(QFrame):
     """
-    Ligne compacte : [○] [thumb/×] [BG0] [vitesse] [stretch] [× layer]
+    Ligne compacte : [○] [thumb/×] [BG0] [vitesse] [stretch]
     - × sur la vignette → retire le background assigné
-    - × à droite       → retire le layer entier
     - Vignette vide    → fond gris + icône selon l'état (vide / UI layer)
     """
     asset_changed    = pyqtSignal(int, str)
     speed_changed    = pyqtSignal(int, float)
     bound_toggled    = pyqtSignal(int)
-    layer_removed    = pyqtSignal(int)
     pal_bank_changed   = pyqtSignal(int, str)  # slot_index, nom de la PaletteBank
     layer_swap_requested = pyqtSignal(int, int)  # (bg_slot source, bg_slot cible)
     visibility_toggled   = pyqtSignal(int, bool)  # (bg_slot, visible)
@@ -207,11 +205,6 @@ class BgLayerRow(QFrame):
         self._eye_btn.clicked.connect(self._toggle_visibility)
         row.addWidget(self._eye_btn)
 
-        btn_remove = W.btn_danger("×")
-        btn_remove.setFixedSize(22, 22)
-        btn_remove.setToolTip(tooltip(title=label('bglayer.remove_this_layer')))
-        btn_remove.clicked.connect(lambda: self.layer_removed.emit(self.slot_index))
-        row.addWidget(btn_remove)
 
     # ── Apparence ─────────────────────────────────────────────────
 

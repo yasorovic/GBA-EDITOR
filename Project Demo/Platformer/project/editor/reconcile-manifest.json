@@ -2,7 +2,9 @@
   "version": 1,
   "dirs": {
     "assets/backgrounds": {
-      "LevelDesign.png": "768:1791068913115969500"
+      "LevelDesign-BCK-CLOUDS.png": "674:1791320730859445400",
+      "LevelDesign-BCK.png": "1472:1791320494592405400",
+      "LevelDesign-ROAD.png": "1608:1791322620871991800"
     },
     "assets/sprites": {
       "Collectible.png": "322:1791121272695618900",

@@ -92,6 +92,7 @@ class CommandDispatcher(EventEmitter):
         """Appelé par MainWindow à chaque chargement/création de projet."""
         self._project = project
         self._watcher = watcher
+        project.deleted_files.attach_watcher(watcher)
         # Le projet énonce des faits, l'application les met en mots et
         # rafraîchit les vues. C'est ce branchement-ci qui remplace l'import du
         # dispatcher que `Project` faisait autrefois : la dépendance ne va plus

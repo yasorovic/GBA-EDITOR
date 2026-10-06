@@ -10,5 +10,5 @@
 # core/engine_emulation/text_layout) ne tirent aucune dépendance externe, ce qui
 # rend le job de CI quasi instantané. Le seul outil supplémentaire est un
 # compilateur C hôte, pour l'équivalence Python/C — cf.
-# tests/test_text_layout_native.py.
+# tests/text/test_text_layout_native.py.
 pytest

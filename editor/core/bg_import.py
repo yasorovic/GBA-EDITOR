@@ -120,6 +120,13 @@ def source_palette_info(source) -> tuple[bool, int, bool]:
     return indexed, (-1 if capped else n), capped
 
 
+def _fits_4bpp_tiled(source) -> bool:
+    """Vrai si le 4bpp tuilé représente l'image SANS perte : aucune tuile au-delà
+    de 15 couleurs (l'index 0 est le transparent) et au plus 16 sous-palettes."""
+    stats = analyze_tile_colors(source)
+    return stats["tiles_over"] == 0 and stats["palettes_needed"] <= 16
+
+
 def detect_import_mode(source, tile_budget: int = TILE_BUDGET) -> dict:
     """Décision d'import UNIFIÉE (le pivot = le PNG est-il indexé ?). Renvoie un
     dict de faits + un `token` pour l'UI. Ne modifie jamais le source.
@@ -142,7 +149,11 @@ def detect_import_mode(source, tile_budget: int = TILE_BUDGET) -> dict:
     if n <= 16:
         bpp = 4
     elif n <= 256:
-        bpp = 8
+        # Le 4bpp ne limite pas les couleurs de l'IMAGE mais celles de chaque
+        # TUILE (15 + transparent) sur au plus 16 sous-palettes. Une image à 18
+        # couleurs dont chaque tuile en utilise peu tient donc en 4bpp, sans
+        # perte — et ne prend pas toute la PAL_BG_RAM comme le ferait le 8bpp.
+        bpp = 4 if _fits_4bpp_tiled(source) else 8
     else:
         bpp = 16   # >256 couleurs : indexation impossible → couleur directe
 

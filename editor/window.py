@@ -1793,6 +1793,12 @@ class MainWindow(QMainWindow):
         p = Path(path)
         route = self._match_asset_route(p)
         if not route:
+            # Extension d'asset reconnue, mais pas par CE dossier (un .wav dans
+            # backgrounds/) : le fichier reste là sans asset — le dire, plutôt
+            # que de le laisser muet.
+            self._status.showMessage(
+                label("win.asset_misplaced", name=p.name, folder=p.parent.name,
+                      ext=p.suffix.lower()), _WATCHER_WARNING_MS)
             return
         sync_fn, _, _, route_label = route
         # Certains sync_* renvoient un avertissement d'import (police sans

@@ -53,7 +53,7 @@ from ui.common.selection_grammar import RowSelectionDelegate
 from ui.common.widgets import W, FinderSection
 from ui.common.icons import get as _ico, folder_icon, COLOR_DEFAULT, COLOR_FOLDER
 from ui.common.reveal import reveal_in_file_manager
-from core.history import get_history, MacroCmd
+from core.history import get_history, MacroCmd, RefreshAfterCmd
 
 _ROLE_OBJ = Qt.ItemDataRole.UserRole
 _ROLE_FOLDER = Qt.ItemDataRole.UserRole + 1   # id d'un dossier d'auteur (obj None)
@@ -919,7 +919,7 @@ class _KindTree(QTreeWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         ) != QMessageBox.StandardButton.Yes:
             return
-        get_history().push(kind.delete(project, obj))
+        get_history().push(RefreshAfterCmd(kind.delete(project, obj), self._panel.refresh))
         self._panel.refresh()
         self._panel.emptied.emit(kind.label)
 
@@ -938,7 +938,8 @@ class _KindTree(QTreeWidget):
         ) != QMessageBox.StandardButton.Yes:
             return
         cmds = [kind.delete(project, o) for o in objs]
-        get_history().push(MacroCmd(cmds, f"Delete {n} {kind.label.lower()}"))
+        get_history().push(RefreshAfterCmd(
+            MacroCmd(cmds, f"Delete {n} {kind.label.lower()}"), self._panel.refresh))
         self._panel.refresh()
         self._panel.emptied.emit(kind.label)
 

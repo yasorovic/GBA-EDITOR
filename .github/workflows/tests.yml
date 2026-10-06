@@ -21,7 +21,7 @@ jobs:
       # machine sans écran.
       QT_QPA_PLATFORM: offscreen
       # Ici, un test natif sauté est un ÉCHEC : c'est ce job qui porte la
-      # garantie d'équivalence Python/C (cf. tests/test_text_layout_native.py).
+      # garantie d'équivalence Python/C (cf. tests/text/test_text_layout_native.py).
       GBA_TESTS_REQUIRE_NATIVE: "1"
 
     steps:

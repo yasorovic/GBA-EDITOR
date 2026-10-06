@@ -1,6 +1,6 @@
 """Poignées de recadrage / redimensionnement du Background Editor (item Qt).
 
-La géométrie pure est testée dans tests/test_bg_prepare.py ; ici, ce que l'item en
+La géométrie pure est testée dans tests/graphics/test_bg_prepare.py ; ici, ce que l'item en
 fait : quelles poignées il offre, et quel bord reste en place quand on tire.
 """
 from __future__ import annotations

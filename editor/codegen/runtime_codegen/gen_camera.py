@@ -25,7 +25,7 @@ def project_cameras(p) -> list:
     particulier évite un `if` à chaque endroit qui active une caméra.
 
     Une caméra appartient à sa scène (révisé 2026-08-24, cf.
-    `changelog-archive/v0.6.md`) : cette table APLATIT toutes les scènes, dans
+    `changelog/archives/v0.6.md`) : cette table APLATIT toutes les scènes, dans
     leur ordre puis celui de `Scene.cameras` — ordre déterministe, condition
     pour que `headers.py` (les `#define CAM_*`) et `lua_compiler.py` en
     dérivent la MÊME liste que celle-ci (sinon `camera.switch` viserait la

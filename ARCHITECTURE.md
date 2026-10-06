@@ -30,6 +30,7 @@ backstage/
 │   │   ├── resources/               ← persistance disque ↔ modèles, sans dépendre de Project
 │   │   │   ├── resource_index.py    ← inventaire léger nom → chemin, sans lire les JSON
 │   │   │   ├── resource_store.py    ← ResourceStore générique (I/O JSON par collection)
+│   │   │   ├── deleted_files.py     ← `.temp/` du projet : ce qu'on supprime y est déplacé, Ctrl+Z le rend, la fermeture le vide
 │   │   │   ├── palette_store.py     ← palettes .hex + sidecar JSON
 │   │   │   └── asset_reconciliation.py ← synchronisation des fichiers assets et de leurs sidecars
 │   │   ├── collision_slopes.py      ← génération des tiles de pente (Bresenham) pour CollisionTool
@@ -159,19 +160,24 @@ backstage/
 ├── tools/
 │   └── check_architecture.py        ← les règles de ce document, rendues exécutables
 │                                      (voir « Les règles ci-dessus se vérifient toutes seules »)
-├── tests/                           ← `pytest tests` — les trois modules où une
-│   │                                  erreur est SILENCIEUSE (pas d'exception,
-│   │                                  pas de message : une ROM fausse)
-│   ├── test_vram_alloc.py           ← géométrie VRAM BG + le garde-fou de l'allocateur
-│   ├── test_palette_alloc.py        ← les 16 banques, blocs contigus, débordement
-│   ├── test_oam_alloc.py            ← les 128 entrées OAM par scène (base 0, ordre
-│   │                                  acteurs → UI → pools, max des scènes)
-│   ├── test_actor_budget.py         ← le budget OAM dérivé, façade de l'inspecteur
-│   ├── text_layout_cases.py         ← polices et textes d'essai, partagés
-│   ├── test_text_layout.py          ← mise en page, côté aperçu Python
-│   ├── test_text_layout_native.py   ← ÉQUIVALENCE Python ↔ C : compile le vrai
-│   │                                  gba_engine.h et compare les placements.
-│   │                                  Saute sans compilateur C hôte (cf. `CC`)
+├── tests/                           ← `pytest tests` — un dossier par tâche ; les tests
+│   │                                  d'erreurs SILENCIEUSES (pas d'exception, une ROM
+│   │                                  fausse) sont dans graphics/ et text/
+│   ├── rom_build/                   ← build, diagnostics des outils, injection de fautes
+│   │                                  (pas `build/` : pytest l'ignore par défaut, git aussi)
+│   ├── scripting/                   ← sous-ensemble Lua, vérificateur, API, complétion
+│   ├── input/  scene/  project/     ← entrées ; scène et acteurs ; ouverture, sauvegarde,
+│   │                                  écriture interrompue, assets manquants
+│   ├── graphics/                    ← VRAM, palettes, OAM (`test_vram_alloc`,
+│   │                                  `test_palette_alloc`, `test_oam_alloc`), sprites, fonds
+│   ├── audio/  interface/           ← modules musicaux, budget son ; éléments d'interface
+│   ├── text/                        ← polices, textes, langues ; `test_text_layout_native`
+│   │                                  = ÉQUIVALENCE Python ↔ C (compile le vrai gba_engine.h,
+│   │                                  saute sans compilateur C hôte, cf. `CC`)
+│   ├── i18n/  packaging/            ← catalogues et infobulles ; installateur, notices, smoke test
+│   ├── ui/                          ← widgets Qt sous `QApplication` hors écran
+│   ├── native_toolchain.py          ← le compilateur C hôte, partagé par les sondes
+│   ├── oam_fixtures.py              ← sprites d'essai partagés (graphics/ et scene/)
 │   └── native/                      ← la sonde C et six en-têtes libgba bidon,
 │                                      de quoi compiler le moteur sur PC
 ├── .github/workflows/tests.yml      ← contrôle d'architecture + tests, à chaque poussée
@@ -437,7 +443,7 @@ texte Lua → parser.py → AST Python → checker.py (validation) → codegen.p
 - **`codegen.py`** — pour la majorité des appels, `_emit_api_call` génère l'appel C directement depuis l'entrée `RUNTIME_API` correspondante. Une poignée de fonctions ne se traduisent pas par un simple appel de fonction (`self:destroy` → deux instructions enchaînées, `sfx.play` → arguments synthétisés depuis la ressource Sfx du projet...) : elles sont réunies dans deux tables de dispatch en fin de fichier, `_INVOKE_CUSTOM` et `_CALL_CUSTOM`, plutôt que dispersées en `if`/`elif` dans le code de traduction. Chacune de ces fonctions a quand même une entrée dans `RUNTIME_API` pour la validation/documentation. `global.nom`/`const.nom` ne sont ni l'un ni l'autre (chantier global/const) : ce sont des accès POINTÉS, pas des appels — comme `self.position` (RUNTIME_PROPS) ou `data.Objets`, résolus directement dans la branche `ExprIndex` de `_expr` (accès direct à la variable C `g_nom` / au symbole `CONST_NOM`), et validés côté checker par `_check_global_scalar`/`_check_global_indexed`/`_check_const_scalar` plutôt que par le catalogue.
 - **Important pour toute nouvelle fonction Lua** : si elle se traduit par un simple appel C avec conversion d'arguments, une entrée dans `RUNTIME_API` suffit *côté traduction*. Ce n'est que si elle a besoin de logique de traduction (nom C dynamique, arguments non présents côté Lua, émission multi-instructions) qu'elle doit aussi rejoindre `_INVOKE_CUSTOM`/`_CALL_CUSTOM`.
 - **Mais une fonction du moteur doit être déclarée DEUX fois** — voir « Deux listes de prototypes » ci-dessous. C'est le piège le plus coûteux de cette chaîne, parce qu'il ne se manifeste qu'au `make`.
-- **`lua_subset.py`** — la LISTE de ce que le langage accepte, et de ce qu'il refuse en le disant (`changelog-archive/v0.7.md`, v0.7.5). Chaque nœud de luaparser y est rangé dans une des trois cases — `ACCEPTED` (il se traduit), `REFUSED` (avec la phrase qui dit quoi écrire à la place) ou `STRUCTURAL` (jamais dispatché) — et la bibliothèque standard de Lua (`print`, `math.floor`, `table.*`…) reçoit le même traitement, par nom. Trois consommateurs : `checker.py` (refuser en nommant l'issue), `docs/scripting-reference.md` (expliquer — un test échoue si un refus n'y est pas documenté) et `validator._check_lua_subset` (**erreur bloquante** si un nœud de luaparser n'est classé nulle part, exactement comme `_check_api_domains` pour les domaines d'arguments). Avant elle, `parser.py` rendait `None` pour tout statement non géré — un `repeat` ou un `for … in` disparaissait du jeu sans un mot — et `ExprName("__unsupported_<Type>")` pour toute expression non gérée, qui n'échouait qu'au `make`. Les nœuds non traduits sont désormais PORTÉS (`StmtUnsupported`, `ExprUnsupported`, avec leur ligne) : le parser décrit, le checker juge. Ce qui n'atteint même pas l'AST — une faute de SYNTAXE — est le seul refus que le parser prononce lui-même, et il le prononce dans la même langue : `LuaParseError` porte sa `line` et une phrase, reconstruites depuis la chaîne d'exceptions d'antlr que luaparser jette en formatant son `syntax errors: None` (cf. `_syntax_message`, et la table de faux amis qui ne se balaie qu'après un échec).
+- **`lua_subset.py`** — la LISTE de ce que le langage accepte, et de ce qu'il refuse en le disant (`changelog/archives/v0.7.md`, v0.7.5). Chaque nœud de luaparser y est rangé dans une des trois cases — `ACCEPTED` (il se traduit), `REFUSED` (avec la phrase qui dit quoi écrire à la place) ou `STRUCTURAL` (jamais dispatché) — et la bibliothèque standard de Lua (`print`, `math.floor`, `table.*`…) reçoit le même traitement, par nom. Trois consommateurs : `checker.py` (refuser en nommant l'issue), `docs/scripting-reference.md` (expliquer — un test échoue si un refus n'y est pas documenté) et `validator._check_lua_subset` (**erreur bloquante** si un nœud de luaparser n'est classé nulle part, exactement comme `_check_api_domains` pour les domaines d'arguments). Avant elle, `parser.py` rendait `None` pour tout statement non géré — un `repeat` ou un `for … in` disparaissait du jeu sans un mot — et `ExprName("__unsupported_<Type>")` pour toute expression non gérée, qui n'échouait qu'au `make`. Les nœuds non traduits sont désormais PORTÉS (`StmtUnsupported`, `ExprUnsupported`, avec leur ligne) : le parser décrit, le checker juge. Ce qui n'atteint même pas l'AST — une faute de SYNTAXE — est le seul refus que le parser prononce lui-même, et il le prononce dans la même langue : `LuaParseError` porte sa `line` et une phrase, reconstruites depuis la chaîne d'exceptions d'antlr que luaparser jette en formatant son `syntax errors: None` (cf. `_syntax_message`, et la table de faux amis qui ne se balaie qu'après un échec).
 - **`expr_types.py`** — les deux exceptions au sous-ensemble Lua entièrement scalaire (ROADMAP v0.7.3 et v0.8.6) : `vec2(x, y)`/`vec3(x, y, z)` sont des constructeurs de langage, pas des entrées `RUNTIME_API`. `checker.py` et `codegen.py` partagent ce module pour savoir si une expression EST un vec2/vec3 (locals `self._vec_types`, remplie au fil d'un même parcours à plat dans les deux fichiers — même approximation que `self._arrays`) plutôt que de laisser chacun réinventer sa propre inférence. `+`/`-`/`*`/`/` s'y traduisent en appels `vec2_add`/`vec2_sub`/`vec2_scale`/`vec2_div` (`runtime_api_inline.h`) : le C n'a pas d'opérateur sur les structs. Un entier mêlé à un vecteur par `+`/`-` vaut le vecteur dont toutes les composantes sont cet entier (`vec2_splat`) : `v + 2` = `v + vec2(2, 2)`, `10 - v` = `vec2(10, 10) - v` ; Deux vecteurs du MÊME type se combinent composante par composante avec `+ - * /` (`vec2_mul`, `vec2_div`…) ; `dot(a, b)` (`vec2_dot`/`vec3_dot`, fonction de langage listée dans `VEC_FUNCTIONS`) rend un entier. La division est entière. La seconde exception sont les **références** — ce qu'un appel REND (`local pas = sfx:play("Pas")`) : une valeur composée se copie, une référence DÉSIGNE un slot pris dans un pool du matériel, mais les deux répondent à la même question (« quel type porte ce nom ? ») et deux modules y auraient fini par répondre différemment. Le module s'appelait `vec_types.py` tant qu'il n'y avait qu'une exception.
 
 ### La grammaire cible de l'API — trois formes, une par nature
@@ -577,7 +583,7 @@ de mode — un test le garde. Les fonds affines et bitmap auront leur propre typ
 | ~~Le type acteur s'appelle `self:`~~ — **fait (v0.16, étape e)** | `RUNTIME_API["actor:…"]` et `RUNTIME_PROPS["actor.…"]` : `actor` est un type de `REF_TYPE_TABLE` (`Actor*`). `self` n'est pas le type : c'est le récepteur implicite, comme `other` ou un acteur de la scène — tout nom qui ne tient pas une référence typée est un acteur | la clé est le NOM DU TYPE : `actor:` |
 | ~~Une fonction de module reçoit le nom d'une instance~~ — **fait pour `interface` (v0.16, étape c)** | `list.*`, `interface.image_*`, `interface.draw_text`/`clear_text`/`reading`/`skip` ont disparu : `interface:get(nom)` rend une `list`, une `image`, une `text_region` ou un `ui_element` selon la nature de l'élément, lue dans la mise en page. Reste `window.*` (7), et `layer.*` (numéroté par le matériel) | méthodes/propriétés du type visé, obtenu par `interface.get` / `window.get` |
 | ~~Trois mécanismes de « valeur qui désigne »~~ — **fait (v0.16, étape b)** | `sfx`, `collision_box` et `ui_element` sont trois lignes de `api.REF_TYPE_TABLE` ; plus de cas spécial d'`interface.get` dans le checker. Reste `actor`, dont la clé `self:` est l'étape (e) | UN mécanisme : un type déclaré, avec sa représentation C |
-| ~~Trois façons de dire « absent »~~ | dans le C émis, c'est déjà UNE : `nil` vaut 0 et une référence absente vaut 0 (`if p ~= nil` → `(p != 0)` pour un acteur, un effet, une boîte — `tests/test_ref_type_table.py`). Une référence d'élément d'interface est un index connu au build : jamais absente | écrire la règle par type ; refuser le test de `nil` inutile sur un statique (critère 4) |
+| ~~Trois façons de dire « absent »~~ | dans le C émis, c'est déjà UNE : `nil` vaut 0 et une référence absente vaut 0 (`if p ~= nil` → `(p != 0)` pour un acteur, un effet, une boîte — `tests/scripting/test_ref_type_table.py`). Une référence d'élément d'interface est un index connu au build : jamais absente | écrire la règle par type ; refuser le test de `nil` inutile sur un statique (critère 4) |
 
 **Ce que ça ne coûte pas.** Une référence à une chose STATIQUE du projet (`interface:get("Menu")`,
 `window:get("Panel")`) se résout au build en constante, comme `TEXT_<clé>` : aucun slot, aucun
@@ -595,7 +601,7 @@ une valeur qui peut être périmée ou absente.
 
 Tout le reste s'en dérive : le `local` typé (`codegen`), le refus d'un membre inconnu
 (`checker._unknown_ref_method` / `_unknown_ref_field`), les snippets (`api_snippets`), le
-renommage (`refactor`). `tests/test_ref_type_table.py` déclare un type factice `gizmo` par ces trois
+renommage (`refactor`). `tests/scripting/test_ref_type_table.py` déclare un type factice `gizmo` par ces trois
 gestes seulement et vérifie qu'il se vérifie et se traduit — chaîné ou non — sans toucher
 `checker.py` ni `codegen.py`. Seule une traduction C réellement atypique reste un cas de
 `_INVOKE_CUSTOM` (`ui_element:show` → `ui_element_show(h, 1)`).
@@ -884,7 +890,7 @@ décrit en « Deux listes de prototypes ».
 Une window GBA **ne dessine rien**. C'est un pochoir : par région de l'écran, elle dit
 quels layers et sprites ont le droit de s'afficher, et si le blending s'y applique.
 D'où sa valeur pour l'UI — elle exprime le *où* sans jamais imposer un *à quoi ça
-ressemble* (cf. `changelog-archive/v0.3.md`, v0.3.2, « neutralité de style »).
+ressemble* (cf. `changelog/archives/v0.3.md`, v0.3.2, « neutralité de style »).
 
 Quatre régions, par priorité décroissante : `WINR_0` (rectangle 0), `WINR_1`
 (rectangle 1), `WINR_OBJ` (fenêtre-objet), `WINR_OUT` (tout le reste). Un pixel obéit à
@@ -1084,7 +1090,7 @@ scène peut en posséder plusieurs ; une seule est active à la fois — la GBA 
 ### Transitions de scène — le fondu possède les registres
 
 Un changement de scène joue un fondu à la fermeture puis à l'ouverture
-(`changelog-archive/v0.6.md`, v0.6.2). Trois faits structurent l'implémentation :
+(`changelog/archives/v0.6.md`, v0.6.2). Trois faits structurent l'implémentation :
 
 1. **Le séquencement vit dans la boucle principale générée**, seul endroit qui connaisse
    les deux scènes — `scene_switch()` ne fait que poser `g_next_scene`. La machine à états
@@ -2307,8 +2313,8 @@ déjà `list.*`, et `to_dict` écrivait cinq clés selon un booléen. Un `{"kind
   troisième menu d'un jeu. Une ANIMATION sur la rangée choisie n'est pas offerte : sur cible
   BG elle réécrirait des tuiles à chaque frame.
 
-Vérification : `tests/test_ui_list_type.py` (le type, la relecture, ce que le build émet) et
-`tests/test_ui_list_native.py`, qui fait tourner le VRAI `ui_list_tick` compilé — le pas en
+Vérification : `tests/interface/test_ui_list_type.py` (le type, la relecture, ce que le build émet) et
+`tests/interface/test_ui_list_native.py`, qui fait tourner le VRAI `ui_list_tick` compilé — le pas en
 grille et le défilement sont de l'arithmétique entière sans sortie visible avant qu'une ROM
 tourne.
 
@@ -2879,14 +2885,14 @@ cliquable. Le validateur, le checker Lua, le codegen et la sortie des outils pas
   par `tests/conftest.py`). À la fin d'un run COMPLET, `pytest` AVERTIT (sans échouer) d'un diagnostic couvert qui
   ne l'est plus ou d'un nouveau jamais déclenché ; la référence est `tools/diagnostic_coverage_baseline.json`
   (172 sites sur 278 exercés, par choix : un échantillon, pas un objectif de 100 % ; `DIAGNOSTIC_COVERAGE_UPDATE=1` pour la relever, `python tools/diagnostic_coverage.py` pour lister les sites
-  jamais atteints). `tests/test_build_invariants.py` (marqué `slow`, isolé le 2026-10-04 : `pytest -m slow`, et `release.yml` avant publication) corrompt les fichiers de la démo un à un (une compilation réelle par cas, ~3 min à lui seul) et exige cinq
+  jamais atteints). `tests/rom_build/test_build_invariants.py` (marqué `slow`, isolé le 2026-10-04 : `pytest -m slow`, et `release.yml` avant publication) corrompt les fichiers de la démo un à un (une compilation réelle par cas, ~3 min à lui seul) et exige cinq
   invariants du journal (pas d'« internal error », échec = erreur, anglais sans chemin du projet, le fichier
   abîmé est nommé, un fichier cassé n'est jamais ignoré sans un mot).
 - **Aucune erreur n'est avalée.** Un `except` large (`Exception`, nu, `LuaParseError`) de `codegen/`,
   `scripting/` ou `core/validator.py` lève, émet, ou porte `# tolerated: <raison>` ; `tests/
   test_silent_except.py` le garde. `core/validator._check_scripts_parse` lit tout `.lua` de `scripts/`,
   attaché ou non ; un prefab qu'aucune scène ne déclare passe en plus par le checker (`lua_compiler`, une
-  fois par build) ; `tests/test_build_fault_injection.py` rejoue des fautes connues dans un vrai build (marqué `slow`
+  fois par build) ; `tests/rom_build/test_build_fault_injection.py` rejoue des fautes connues dans un vrai build (marqué `slow`
   avec les autres tests qui compilent un projet entier : exclus par défaut, lancés par `release.yml`).
 
 ---
@@ -2899,7 +2905,7 @@ cliquable. Le validateur, le checker Lua, le codegen et la sortie des outils pas
 - **`packaging/check_deps.py`** — relève les imports réels du code par AST et vérifie que `requirements.txt` les couvre tous. Lancé en CI **avant** le build : c'est le filet qui manquait quand `luaparser` est parti en release sans être déclaré.
 - **`packaging/windows/installer.nsi`** — installateur NSIS **par utilisateur** (`%LOCALAPPDATA%\Programs\Backstage`, aucune élévation UAC, désinstallation sous HKCU). La désinstallation laisse volontairement en place les projets (`~/BackstageProjects`) et la config toolchain (`%APPDATA%\Backstage`).
 - **`editor/core/app_paths.py`** — source unique de vérité pour « où tourne-t-on ». `IS_FROZEN` s'appuie sur `__compiled__` (le marqueur Nuitka ; **`sys._MEIPASS` n'existe pas** hors PyInstaller), et `APP_DIR` vaut le dossier de l'exe en distribution, la racine du repo depuis les sources. `RUNTIME_DIR` en dérive. Tout module ayant besoin d'un chemin de données passe par ici — c'est la duplication de ce calcul qui avait laissé `runtime_codegen/{main_gen,headers}.py` chercher `runtime/` hors du bundle, faisant échouer les copies de `.h` en silence.
-- **`editor/core/app_info.py`** — source unique de « qui est ce logiciel » : `APP_NAME` (Backstage), `APP_AUTHOR` (Yasorovic), `APP_VERSION` (`X.Y.Z-alpha|beta|stable`, cf. ROADMAP, « La numérotation d'une release »). Stdlib seule, sans importation, pour que les scripts de packaging la lisent sur un Python nu. Y puisent la fenêtre, l'« À propos », le rapport de diagnostic, le dossier de config (`config_dir`), les `QSettings`, le build Nuitka (`--product-name`, `--company-name`, nom de l'exe), l'installateur et le workflow. **La version vit dans le dépôt, le tag la confirme** : `nuitka_build.py --version` échoue si le tag diverge, et le job `version` de la release lit `--print-version` ; un build qui écraserait le fichier d'après le tag ferait annoncer à un lancement depuis les sources une version qu'il n'a pas. `tests/test_app_info.py` garde l'alignement (installateur, build, workflow, libellés) et l'absence des anciens identifiants.
+- **`editor/core/app_info.py`** — source unique de « qui est ce logiciel » : `APP_NAME` (Backstage), `APP_AUTHOR` (Yasorovic), `APP_VERSION` (`X.Y.Z-alpha|beta|stable`, cf. ROADMAP, « La numérotation d'une release »). Stdlib seule, sans importation, pour que les scripts de packaging la lisent sur un Python nu. Y puisent la fenêtre, l'« À propos », le rapport de diagnostic, le dossier de config (`config_dir`), les `QSettings`, le build Nuitka (`--product-name`, `--company-name`, nom de l'exe), l'installateur et le workflow. **La version vit dans le dépôt, le tag la confirme** : `nuitka_build.py --version` échoue si le tag diverge, et le job `version` de la release lit `--print-version` ; un build qui écraserait le fichier d'après le tag ferait annoncer à un lancement depuis les sources une version qu'il n'a pas. `tests/packaging/test_app_info.py` garde l'alignement (installateur, build, workflow, libellés) et l'absence des anciens identifiants.
 - **Disposition des données** — les données embarquées reproduisent l'arborescence des sources (`runtime/`, `plugins/`, `scripting/api_reference.json`), parce que les modules les résolvent via `Path(__file__).parent` et que Nuitka donne aux modules compilés un `__file__` cohérent dans la distribution. Les images référencées par les QSS ne sont **pas** embarquées : `ui/common/icons.py:qss_image()` les rend depuis qtawesome dans `%TEMP%/backstage_icons/` au démarrage (`ensure_qss_assets()`, appelé après la `QApplication` et avant `setStyleSheet`) — un cache en zone temporaire, donc toujours inscriptible même pour une installation en lecture seule.
 - **`editor/plugins/`** est copié tel quel, **non compilé** : chargé dynamiquement via `importlib.util.spec_from_file_location`, ça nécessite des `.py` réels sur disque au runtime. Corollaire assumé : le code des plugins reste lisible dans la distribution, contrairement au reste.
 - **`editor/smoke_test.py`** (`Backstage --smoke-test=<rapport>`) — ce que la CI exécute sur le binaire LIVRÉ avant de publier : crée un projet temporaire, le rouvre, **visite chaque écran** (importés paresseusement par leur nom : un module que Nuitka n'a pas vu n'échouerait qu'au premier clic), valide, enregistre, et contrôle les données embarquées (licences, runtime, starter, API, notices). Le verdict va dans un fichier : la distribution Windows est sans console. Sans devkitPro, il ne construit pas de ROM. **Sortie ordonnée** (`main._shutdown_qt`) : la fenêtre doit être détruite tant que la `QApplication` existe ; sinon le processus plantait à la sortie (violation d'accès, 4 fois sur 6 sous Windows) après avoir tout enregistré.

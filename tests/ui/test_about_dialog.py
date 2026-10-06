@@ -1,6 +1,6 @@
 """La fenêtre « À propos » : nom, version, auteur et licences.
 
-Ces tests vivent ici et non dans `tests/test_app_info.py` : ils instancient des widgets, donc
+Ces tests vivent ici et non dans `tests/packaging/test_app_info.py` : ils instancient des widgets, donc
 utilisent la fixture `qapp` de la session. En créant leur propre `QApplication` puis en le
 lâchant, ils le détruisaient, et les tests UI suivants trouvaient un `CommandHistory` supprimé.
 """

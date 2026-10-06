@@ -68,6 +68,28 @@ class MacroCmd(Command):
             cmd.undo()
 
 
+class RefreshAfterCmd(Command):
+    """Une commande dont l'exécution ET l'annulation repeuplent une vue.
+
+    Le finder rafraîchit sa liste après SA suppression, mais Ctrl+Z (et Ctrl+Y)
+    passent par l'historique, qui ne connaît pas le finder : la ressource
+    revenait dans le modèle, jamais dans l'arbre. `refresh_fn` est rappelée
+    après chacun des deux sens ; la commande enveloppée ne change pas."""
+
+    def __init__(self, cmd: Command, refresh_fn):
+        self._cmd = cmd
+        self._refresh = refresh_fn
+        self.label = cmd.label
+
+    def execute(self):
+        self._cmd.execute()
+        self._refresh()
+
+    def undo(self):
+        self._cmd.undo()
+        self._refresh()
+
+
 # ── Commandes concrètes ────────────────────────────────────────────
 
 class SetFieldCmd(Command):

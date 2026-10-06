@@ -1,0 +1,23 @@
+{
+  "version": 3,
+  "scene_positions": {
+    "Scene_01": [
+      20.0,
+      20.0
+    ],
+    "Scene": [
+      280.0,
+      0.0
+    ],
+    "Scene_2": [
+      280.0,
+      80.0
+    ]
+  },
+  "missing_positions": {},
+  "scene_previews": {},
+  "edge_styles": {},
+  "edge_notes": {},
+  "groups": {},
+  "notes": {}
+}

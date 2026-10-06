@@ -1,10 +1,10 @@
-Licence du MOTEUR — zlib
+Licence du moteur — zlib
 ========================
 
 Ce dossier (`runtime/`) n'est pas couvert par la GPL de l'éditeur.
 
-    Le fichier LICENSE à la racine du dépôt (GPL-3.0-only) couvre l'ÉDITEUR.
-    Il ne s'applique PAS à ce dossier, ni à ce que l'éditeur génère.
+    Le fichier LICENSE à la racine du dépôt (GPL-3.0-only) couvre l'éditeur.
+    Il ne s'applique pas à ce dossier, ni à ce que l'éditeur génère.
 
 
 Pourquoi une licence distincte
@@ -19,10 +19,10 @@ l'intention, et personne ne devrait avoir à le déduire.
 D'où cette licence séparée, permissive, et la déclaration explicite ci-dessous.
 
 
-Ce que ça veut dire pour qui fait un jeu   (note explicative, non contractuelle)
--------------------------------------------------------------------------------
+Ce que cela signifie pour les créateurs de jeux (note explicative, non contractuelle)
+--------------------------------------------------------------------------------------
 
-**Votre projet et votre ROM vous appartiennent, entièrement.** Les images, sons,
+**Votre projet et votre ROM vous appartiennent entièrement.** Les images, sons,
 scripts, données et scènes que vous créez sont votre travail ; le fait de les
 avoir produits avec cet éditeur ne donne à personne d'autre le moindre droit
 dessus.
@@ -32,7 +32,7 @@ demander quoi que ce soit, sans reverser quoi que ce soit, et sans publier vos
 sources.
 
 **Vous n'avez rien à joindre à votre ROM.** La clause 3 ci-dessous ne porte que
-sur la distribution des SOURCES de ce moteur. Distribuer une ROM compilée
+sur la distribution des sources de ce moteur. Distribuer une ROM compilée
 n'entraîne donc aucune obligation de notice — c'est précisément pourquoi la
 licence zlib a été retenue ici plutôt que MIT.
 

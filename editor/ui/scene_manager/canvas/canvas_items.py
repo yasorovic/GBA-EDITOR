@@ -871,7 +871,10 @@ class ActorBoxOverlay(QGraphicsItem):
         self.update()
 
     def boundingRect(self) -> QRectF:
-        return QRectF(0, 0, self._canvas_w, self._canvas_h)
+        # Bien plus grand que le canvas : une boîte (un trigger de niveau) peut
+        # déborder de l'écran GBA, et Qt rogne la peinture à ce rect — la partie
+        # hors rect clignote au zoom et laisse des traînées en se déplaçant.
+        return QRectF(-32768, -32768, 65536, 65536)
 
     def paint(self, painter: QPainter, option, widget=None):
         from core.models.components import CollisionBoxComponent
@@ -923,6 +926,15 @@ class GuideLine(QGraphicsLineItem):
     Trait cosmétique (largeur 0) : Qt efface une zone de largeur nulle, donc le
     guide laisse une traînée en se déplaçant. Même piège que
     `UIRegionItem.boundingRect`."""
+
+    def boundingRect(self) -> QRectF:
+        return super().boundingRect().adjusted(-6.0, -6.0, 6.0, 6.0)
+
+
+class SnapPreviewItem(QGraphicsRectItem):
+    """Contour du pas de snap sous la souris, trait cosmétique élargi comme
+    `GuideLine` : sans cette marge, le trait déborde du rect que Qt repeint et
+    laisse des traînées (et clignote quand le zoom change)."""
 
     def boundingRect(self) -> QRectF:
         return super().boundingRect().adjusted(-6.0, -6.0, 6.0, 6.0)

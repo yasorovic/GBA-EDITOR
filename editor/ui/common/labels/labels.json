@@ -270,8 +270,11 @@
     "home.status.configure": {
       "text": "Configure manually"
     },
-    "home.status.download": {
-      "text": "Download →"
+    "home.status.more_info": {
+      "text": "More info →"
+    },
+    "home.status.official_site": {
+      "text": "Official website →"
     },
     "home.status.explain_devkitpro": { "text": "devkitPro is the toolchain that compiles the project into a playable .gba ROM." },
     "home.status.explain_mgba": { "text": "mGBA is the emulator that opens the ROM straight from the editor to test it." },
@@ -799,10 +802,6 @@
     "sceneinsp.script_hint": {
       "text": "on_start · on_update · on_late_update"
     },
-    "sceneinsp.bg_add": {
-      "text": "Add a BG layer (max 4)"
-    },
-    "sceneinsp.bg_add_tip": { "text": "Up to four layers are available in tiled modes." },
     "sceneinsp.bitmap_pick": {
       "text": "Choose a bitmap background…"
     },
@@ -1890,6 +1889,9 @@
     "win.asset_imported": {
       "text": "{kind} imported: {name}"
     },
+    "win.asset_misplaced": {
+      "text": "{name} ignored: {folder}/ does not accept {ext} files"
+    },
     "win.asset_removed": {
       "text": "{kind} removed: {name}"
     },
@@ -2601,9 +2603,6 @@
       "text": "Remove this background"
     },
     "bglayer.reorder_tip": { "text": "Dragging onto another layer swaps their display priority." },
-    "bglayer.remove_this_layer": {
-      "text": "Remove this layer"
-    },
     "bglayer.image_title": { "text": "Background image" },
     "bglayer.image_tip": { "text": "A click chooses a PNG; a PNG can also be dropped here." },
     "bglayer.reorder_title": { "text": "Layer order" },

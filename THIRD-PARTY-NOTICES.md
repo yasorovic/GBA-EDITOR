@@ -1,27 +1,34 @@
 # Composants tiers
 
-L'éditeur Backstage est distribué sous GPL-3.0-only (cf. [LICENSE](LICENSE)). Il embarque
-et redistribue les composants ci-dessous, chacun sous ses propres conditions.
-Le texte de ces licences est dans le dossier [licenses/](licenses/README.md), livré avec l'application.
+L'éditeur Backstage est distribué sous GPL-3.0-only (voir [LICENSE](LICENSE)). Il
+embarque et redistribue les composants ci-dessous, chacun sous ses propres
+conditions. Les textes de licence disponibles sont livrés dans le dossier
+[licenses/](licenses/README.md) avec l'application ; lorsque le texte n'est pas
+fourni par une dépendance, cette page indique son origine et sa licence.
+
+Les dépendances Python ne sont pas verrouillées dans le dépôt : les versions
+exactes d'une distribution sont celles résolues par `pip` au moment de son build.
+Les bornes ci-dessous sont donc celles déclarées dans `requirements.txt`, et non
+une promesse qu'un même numéro de version sera présent dans chaque release.
 
 > Le moteur GBA (`runtime/`) n'est pas concerné par cette page : il est sous
 > licence zlib et n'embarque rien de tiers. Voir [runtime/LICENSE](runtime/LICENSE).
 
 ## Bibliothèques Python
 
-| Composant | Version | Licence |
+| Composant | Version déclarée | Licence |
 | --- | --- | --- |
-| [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) — Riverbank Computing | 6.11.0 | **GPL-3.0-only** |
-| [PyQt6-Qt6](https://www.qt.io/) — The Qt Company | 6.11.2 | **LGPL-3.0** |
-| PyQt6-sip — Riverbank Computing | 13.12.0 | BSD-2-Clause |
-| [Pillow](https://python-pillow.org/) | 12.3.0 | MIT-CMU |
-| [NumPy](https://numpy.org/) | 2.5.2 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
-| [freetype-py](https://github.com/rougier/freetype-py) | 2.5.1 | BSD (le binding) ; embarque FreeType, voir ci-dessous |
-| [QtAwesome](https://github.com/spyder-ide/qtawesome) | 1.4.2 | MIT |
-| [luaparser](https://github.com/boolangery/py-lua-parser) | 4.1.0 | MIT |
-| [QtPy](https://github.com/spyder-ide/qtpy) | 2.4.3 | MIT |
-| [antlr4-python3-runtime](https://www.antlr.org/) | 4.13.2 | BSD |
-| [multimethod](https://github.com/coady/multimethod) | 2.1 | Apache-2.0 |
+| [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) — Riverbank Computing | >= 6.11, < 7 | **GPL-3.0-only** |
+| [PyQt6-Qt6](https://www.qt.io/) — The Qt Company | dépendance transitive de PyQt6 | **LGPL-3.0** |
+| PyQt6-sip — Riverbank Computing | dépendance transitive de PyQt6 | BSD-2-Clause |
+| [Pillow](https://python-pillow.org/) | >= 12.3, < 13 | MIT-CMU |
+| [NumPy](https://numpy.org/) | >= 2.5, < 3 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
+| [freetype-py](https://github.com/rougier/freetype-py) | >= 2.5, < 3 | BSD-3-Clause (binding) ; FreeType est fourni par les wheels standards, voir ci-dessous |
+| [QtAwesome](https://github.com/spyder-ide/qtawesome) | >= 1.4, < 2 | MIT |
+| [luaparser](https://github.com/boolangery/py-lua-parser) | >= 4.1, < 5 | MIT |
+| [QtPy](https://github.com/spyder-ide/qtpy) | dépendance transitive de QtAwesome | MIT |
+| [antlr4-python3-runtime](https://www.antlr.org/) | dépendance transitive de luaparser | BSD |
+| [multimethod](https://github.com/coady/multimethod) | dépendance transitive de luaparser | Apache-2.0 |
 
 PyQt6-Qt6 et PyQt6-sip viennent avec PyQt6 ; les trois derniers sont des dépendances
 transitives (antlr4 et multimethod via luaparser, QtPy via QtAwesome).
@@ -43,8 +50,10 @@ remplacement reste possible.
 > Portions of this software are copyright © The FreeType Project
 > ([www.freetype.org](https://www.freetype.org)). All rights reserved.
 
-`freetype-py` embarque la bibliothèque FreeType (`libfreetype`), qui sert à
-rastériser les polices vectorielles importées. FreeType est proposée sous la
+Les wheels standards de `freetype-py` fournissent une bibliothèque FreeType
+(`libfreetype`), qui sert à rastériser les polices vectorielles importées. Une
+installation depuis les sources peut, elle, utiliser une bibliothèque FreeType
+déjà présente sur le système. FreeType est proposée sous la
 *FreeType License* (FTL, de type BSD, avec mention obligatoire — ci-dessus) **ou**
 sous la GPL v2. Cet éditeur la redistribue sous la **FTL** : la GPL v2 seule
 (sans « ou ultérieure ») est incompatible avec la GPL-3.0 de l'éditeur.
@@ -56,9 +65,9 @@ dans le dossier de l'application (fichiers `.dll`, séparés de l'exécutable).
 
 | Composant | Version | Licence | Où |
 | --- | --- | --- | --- |
-| [Python](https://www.python.org/) (interpréteur et bibliothèque standard) | 3.12.10 | PSF License 2.0 | `python312.dll` |
-| [FFmpeg](https://ffmpeg.org/) — via Qt Multimédia | 7.1.5 | **LGPL-2.1-or-later** (compilé sans `--enable-gpl`) | `avcodec`, `avformat`, `avutil`, `swresample`, `swscale` |
-| [OpenSSL](https://www.openssl.org/) | 3.0.16 | Apache-2.0 | `libssl-3.dll`, `libcrypto-3.dll` |
+| [Python](https://www.python.org/) (interpréteur et bibliothèque standard) | 3.12.x | PSF License 2.0 | `python312.dll` |
+| [FFmpeg](https://ffmpeg.org/) — via Qt Multimédia | selon la distribution Qt résolue par `pip` | **LGPL-2.1-or-later** | `avcodec`, `avformat`, `avutil`, `swresample`, `swscale` |
+| [OpenSSL](https://www.openssl.org/) | selon la distribution Python 3.12 utilisée pour le build | Apache-2.0 | `libssl-3.dll`, `libcrypto-3.dll` |
 | [libffi](https://sourceware.org/libffi/) | 3.x | MIT | `libffi-8.dll` |
 | [OpenBLAS](https://github.com/OpenMathLib/OpenBLAS/) — via NumPy | | BSD-3-Clause | `numpy.libs/` |
 | [LAPACK](https://www.netlib.org/lapack/) (dans OpenBLAS) | | BSD-3-Clause-Open-MPI | `numpy.libs/` |
@@ -67,8 +76,8 @@ dans le dossier de l'application (fichiers `.dll`, séparés de l'exécutable).
 
 **FFmpeg est en LGPL-2.1-or-later.** Comme pour Qt, ses `.dll` sont des fichiers
 séparés : l'utilisateur peut les remplacer par une version modifiée. FFmpeg est le
-moteur de Qt Multimédia, que l'éditeur n'utilise que pour la sortie audio de l'aperçu
-des musiques : il est livré parce que ce module en dépend.
+moteur de Qt Multimédia, que l'éditeur utilise pour la sortie audio de l'aperçu des
+musiques ; il est livré parce que ce module en dépend.
 
 **Bibliothèques liées dans les modules compilés** (pas de `.dll` à part, donc
 invisibles dans le dossier) :
@@ -88,9 +97,10 @@ Qt embarque lui-même des composants tiers (modules Qt PDF et Qt Multimédia
 notamment) sous leurs propres licences ; elles sont recensées par la documentation
 de Qt (« Third-party Licenses »).
 
-L'AppImage Linux embarque en plus les bibliothèques système dont l'éditeur dépend
-(xcb, xkbcommon, glib, dbus, fontconfig, FreeType, libgcrypt, la bibliothèque C…),
-sous des licences permissives ou LGPL.
+L'AppImage Linux embarque en plus des bibliothèques système nécessaires au plugin
+Qt « xcb » (notamment xcb, xkbcommon, fontconfig et leurs dépendances). Elles
+restent sous leurs licences respectives ; la liste exacte dépend du runner de build
+et doit être contrôlée dans l'AppImage produite.
 
 ## Fontes
 
@@ -120,12 +130,13 @@ licence est copiée avec elles, dans `project/licenses/` du projet.
 | Misaki Gothic (美咲フォント) | Num Kadoma | licence propre de l'auteur : usage et redistribution libres, sous réserve de joindre son texte | `Misaki.txt` |
 
 Les polices vectorielles que **vous** importez dans un projet restent soumises à
-leur propre licence : à vous de vérifier qu'elle autorise l'incorporer dans un jeu.
+leur propre licence : à vous de vérifier qu'elle autorise leur incorporation dans
+un jeu.
 
 ## Chaîne de compilation (non redistribuée)
 
 L'éditeur ne redistribue **pas** ces outils : il détecte une installation
-existante sur la machine et l'appelle. Ils ne sont donc dans aucun artefact
+existante sur la machine et les appelle. Ils ne sont donc inclus dans aucun artefact
 publié ici. Ils sont mentionnés parce qu'ils comptent pour l'utilisateur.
 
 | Outil | Rôle |
@@ -137,4 +148,4 @@ publié ici. Ils sont mentionnés parce qu'ils comptent pour l'utilisateur.
 `libgba` et `maxmod` finissent dans la ROM produite : leurs conditions
 s'appliquent donc à celui qui publie le jeu, pas à cet éditeur. Elles sont
 permissives et compatibles avec une distribution commerciale ; les termes
-exacts sont à lire chez devkitPro.
+exacts sont à consulter auprès de devkitPro.

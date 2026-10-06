@@ -5,7 +5,7 @@ dans le canvas — cf. `CameraSelection`) et édite CETTE caméra. Deux états :
 
 - **`camera` est un objet réel** — tout est éditable. Elle n'appartient qu'à
   CETTE scène (révisé le 2026-08-24 — ce n'est plus un asset de projet
-  réutilisable, cf. `changelog-archive/v0.6.md`) ;
+  réutilisable, cf. `changelog/archives/v0.6.md`) ;
 - **`camera` est `None`** — seulement avant le premier `load` : une scène sans
   caméra n'a rien à montrer ici (elle est fixe à l'origine), et l'inspecteur
   n'est jamais ouvert dessus.

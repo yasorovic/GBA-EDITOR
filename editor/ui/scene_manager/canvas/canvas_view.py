@@ -15,7 +15,7 @@ from ui.common.theme import C
 from ui.scene_manager.canvas.canvas_const import GBA_W, GBA_H
 from ui.scene_manager.canvas.canvas_alt_duplicate import AltDuplicateGesture
 from ui.scene_manager.canvas.canvas_scene import GBAScene
-from ui.scene_manager.canvas.canvas_items import SpriteItem, CollisionOverlay
+from ui.scene_manager.canvas.canvas_items import SpriteItem, CollisionOverlay, SnapPreviewItem
 from ui.scene_manager.canvas.canvas_region_item import UIRegionItem
 from PyQt6.QtCore import QEvent, QPoint, QPointF, QRectF, QSizeF, Qt, pyqtSignal
 from PyQt6.QtGui import QBrush, QColor, QCursor, QMouseEvent, QPainter, QPainterPath, QPen, QPolygonF, QTransform, QWheelEvent
@@ -66,7 +66,7 @@ class GBAView(QGraphicsView):
         self.setAcceptDrops(True)
         # Outil actif — initialisé après import (évite la circularité)
         self._active_tool: "BaseTool | None" = None
-        # Snap preview — 16×16, visible uniquement si snap actif
+        # Snap preview — contour 8×8, visible uniquement si snap actif
         self._snap_on = False
         self._snap_preview: "QGraphicsRectItem | None" = None
         # Contrôleur de peinture par palette BG (injecté par SceneEditor).
@@ -252,9 +252,9 @@ class GBAView(QGraphicsView):
 
     def _ensure_snap_preview(self):
         if self._snap_preview is None:
-            item = QGraphicsRectItem(0, 0, 16, 16)
-            item.setBrush(QBrush(QColor(100, 255, 120, 55)))
-            item.setPen(QPen(QColor(100, 255, 120, 210), 0))
+            item = SnapPreviewItem(0, 0, 8, 8)
+            item.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+            item.setPen(QPen(QColor(255, 255, 255, 230), 0))
             item.setZValue(49)  # sous le preview AddActorTool (z=50)
             item.setVisible(False)
             item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
@@ -345,10 +345,14 @@ class GBAView(QGraphicsView):
         # Snap preview — indépendant de l'outil actif
         if self._snap_on:
             self._ensure_snap_preview()
-            sx = int(pos.x() // 16) * 16
-            sy = int(pos.y() // 16) * 16
+            sx = int(pos.x() // 8) * 8
+            sy = int(pos.y() // 8) * 8
             self._snap_preview.setPos(sx, sy)
-            self._snap_preview.setVisible(True)
+            # Masqué tant qu'une sélection est active : le curseur de pose n'a
+            # plus de sens quand on manipule déjà quelque chose.
+            self._snap_preview.setVisible(not self.scene().selectedItems())
+        elif self._snap_preview:
+            self._snap_preview.setVisible(False)
         # Délégation à l'outil (hover + drag)
         if self._active_tool:
             if self._active_tool.on_move(pos, e):

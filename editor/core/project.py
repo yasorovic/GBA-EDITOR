@@ -71,6 +71,7 @@ from core.resources import asset_reconciliation
 from core.reconcile_manifest import ReconcileManifest
 from core.resources.resource_store import ResourceStore, atomic_write
 from core.resources.palette_store import PaletteStore
+from core.resources.deleted_files import DeletedFilesBin
 from core.project_starters import copy_starter, get_starter
 from core import crash_log
 from core.project_paths import (
@@ -214,6 +215,22 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         # partie d'entre elles. ``load`` les indexe ; leur écran ou une
         # opération globale les matérialise explicitement (v0.24).
         self._deferred_resource_collections: set[str] = set()
+        # Ce que l'auteur supprime part dans `<projet>/.temp/` et revient avec
+        # Ctrl+Z ; la fermeture le vide (cf. core/resources/deleted_files).
+        self.deleted_files = DeletedFilesBin(self.root)
+        for store, source_paths in (
+            (self.sprites,     asset_reconciliation.sprite_source_paths),
+            (self.backgrounds, asset_reconciliation.background_source_paths),
+            (self.sfx,         asset_reconciliation.sound_source_paths),
+            (self.music,       asset_reconciliation.sound_source_paths),
+            (self.fonts,       asset_reconciliation.font_source_paths),
+        ):
+            store.attach_bin(self.deleted_files,
+                             lambda item, fn=source_paths: fn(self, item))
+        for store in (self.prefabs, self.scenes, self.font_assets, self.palettes,
+                      self.ui_layouts, self.music_boxes, self.jingle_boxes,
+                      self.sound_boxes, self.data_tables):
+            store.attach_bin(self.deleted_files)
         # La porte de la réconciliation incrémentale : l'empreinte des dossiers
         # source au dernier rattrapage. Sidecar d'éditeur, jamais livré en ROM
         # (cf. core/reconcile_manifest.py).
@@ -314,6 +331,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
                     self.palettes, self.music_boxes,
                     self.jingle_boxes, self.sound_boxes):
             mgr.commit_deletes()
+        self.deleted_files.purge()
 
     # ── Helpers de lookup ────────────────────────────────────────
 
@@ -1299,6 +1317,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
             raise ProjectNotFoundError(
                 f"\"{root.name}\" is not a project: there is no {PROJECT_EXT} file in this folder.")
         proj = cls(root)
+        proj.deleted_files.purge()      # reste d'une session qui n'a pas fermé proprement
         try:
             proj.load()
         except ProjectManifestError:

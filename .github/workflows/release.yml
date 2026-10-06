@@ -42,13 +42,49 @@ jobs:
           fi
           echo "version=$FILE_VERSION" >> "$GITHUB_OUTPUT"
 
+  # Les mêmes contrôles que `tests.yml`, rejoués sur le commit EXACT du tag publié : une CI
+  # verte sur une poussée antérieure ne dit rien du commit qui part en release. Un échec ici
+  # arrête tout, avant les ~heures de compilation de l'éditeur.
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      QT_QPA_PLATFORM: offscreen
+      GBA_TESTS_REQUIRE_NATIVE: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installer les bibliothèques Qt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends             libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 libpulse0
+
+      - name: Installer les dépendances Python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Contrôle d'architecture
+        run: python tools/check_architecture.py --fresh
+
+      - name: Tests
+        run: python -m pytest tests -q -rs
+
   # Les tests qui compilent un projet entier (`-m slow`, exclus de `tests.yml` et du
   # travail quotidien) tournent ici : avant les ~heures de compilation de l'éditeur.
+  # Ils ont besoin de devkitPro (grit, make, arm-none-eabi-gcc) : on l'installe, et
+  # `GBA_TESTS_REQUIRE_DEVKITPRO` fait de son absence un échec plutôt qu'un test sauté.
   slow-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
       QT_QPA_PLATFORM: offscreen
+      GBA_TESTS_REQUIRE_DEVKITPRO: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -68,11 +104,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
+      # Mêmes commandes que celles proposées à l'utilisateur Linux (`core.toolchain`).
+      - name: Installer devkitPro
+        run: |
+          wget https://apt.devkitpro.org/install-devkitpro-pacman
+          chmod +x ./install-devkitpro-pacman
+          sudo ./install-devkitpro-pacman
+          sudo dkp-pacman -S --noconfirm gba-dev
+
       - name: Tests lents
         run: python -m pytest tests -m slow -q -rs
 
   build-windows:
-    needs: [version, slow-tests]
+    needs: [version, tests, slow-tests]
     runs-on: windows-latest
     # Nuitka compile en C : nettement plus long que l'ancien build
     # PyInstaller (qui ne faisait qu'assembler des .pyc).
@@ -174,7 +218,7 @@ jobs:
             Backstage-*-windows-portable.zip
 
   build-linux-appimage:
-    needs: [version, slow-tests]
+    needs: [version, tests, slow-tests]
     # Version figée, pas `ubuntu-latest` : l'AppImage exige au moins la glibc du
     # runner qui la construit. 22.04 (glibc 2.35) couvre aussi Debian 12 et
     # RHEL 9 ; `latest` (24.04, glibc 2.39) les exclurait.
@@ -261,10 +305,28 @@ jobs:
             ldd "$plugin" | grep "not found"
             exit 1
           fi
+          # JAMAIS la glibc : elle appartient au système de l'utilisateur. AppRun place
+          # usr/bin en tête de LD_LIBRARY_PATH, donc une libc.so.6 embarquée (ici
+          # celle du runner, 2.35) passe avant celle du système (2.39 sur Ubuntu
+          # 24.04) et mélange deux versions avec son ld-linux : segfault immédiat,
+          # sans un message. La CI ne le voit pas, le runner ayant la même glibc.
+          # La liste est celle de la « excludelist » d'AppImage pour le noyau glibc.
           ldd "$plugin" | awk '/=> \// {print $3}' | while read -r lib; do
             base="$(basename "$lib")"
+            case "$base" in
+              ld-linux*|libc.so*|libm.so*|libdl.so*|libpthread.so*|librt.so*|libresolv.so*|libutil.so*|libnsl.so*|libanl.so*) continue ;;
+            esac
             [ -e "AppDir/usr/bin/$base" ] || cp -L "$lib" "AppDir/usr/bin/$base"
           done
+          # Nuitka ou une copie antérieure peut en avoir posé : on retire, puis on
+          # vérifie qu'il n'en reste aucune.
+          rm -f AppDir/usr/bin/ld-linux*.so* AppDir/usr/bin/libc.so* AppDir/usr/bin/libm.so* \
+                AppDir/usr/bin/libdl.so* AppDir/usr/bin/libpthread.so* AppDir/usr/bin/librt.so* \
+                AppDir/usr/bin/libresolv.so* AppDir/usr/bin/libutil.so*
+          if ls AppDir/usr/bin/ | grep -E '^(ld-linux.*|libc\.so.*|libm\.so.*|libdl\.so.*|libpthread\.so.*|librt\.so.*|libresolv\.so.*|libutil\.so.*)$'; then
+            echo "::error::La glibc est dans l'AppImage (voir ci-dessus) : elle casserait le démarrage sur une distribution plus récente que le runner."
+            exit 1
+          fi
           cp packaging/linux/AppRun AppDir/AppRun
           chmod +x AppDir/AppRun AppDir/usr/bin/Backstage
           cp packaging/linux/backstage.desktop AppDir/backstage.desktop

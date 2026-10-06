@@ -2,7 +2,7 @@
 
 Une caméra APPARTIENT à sa scène (`Scene.cameras`, inline dans le JSON de la
 scène — comme `Actor`/`BackgroundLayer`) : ce n'est plus un asset de projet
-partagé entre scènes (révisé le 2026-08-24, cf. `changelog-archive/v0.6.md`).
+partagé entre scènes (révisé le 2026-08-24, cf. `changelog/archives/v0.6.md`).
 
 **Une seule caméra est active à la fois.** La GBA n'a qu'un écran et le
 multijoueur est hors périmètre : une scène peut posséder plusieurs caméras,

@@ -379,13 +379,6 @@ class SceneInspector(QWidget):
         self._bg_card = bg_card
         bg_inner = bg_card.body_layout
 
-        self._btn_bg_add = W.btn_add(label("sceneinsp.bg_add"))
-        self._btn_bg_add.setToolTip(tooltip(
-            title=label("sceneinsp.bg_add"), body=label("sceneinsp.bg_add_tip"),
-        ))
-        self._btn_bg_add.clicked.connect(self._add_bg_layer)
-        bg_card.add_header_widget(self._btn_bg_add)
-
         # Rows dynamiques des BackgroundLayers (portés par la scène)
         self._bg_layer_rows: list[BgLayerRow] = []
         self._inpaint_layer_slot: Optional[int] = None  # layer BG peint actif
@@ -712,7 +705,6 @@ class SceneInspector(QWidget):
         self._refresh_mode_buttons()
         self._mode_hint.setText(label(info["tip"]))
         # BACKGROUND : rangées tuilées vs slot bitmap.
-        self._btn_bg_add.setVisible(is_tiled)
         self._bitmap_box.setVisible(not is_tiled)
         self._clear_layer_rows()
         if is_tiled:
@@ -741,8 +733,20 @@ class SceneInspector(QWidget):
         self._bg_layer_rows.clear()
 
         if not (self._project and self._scene):
-            self._btn_bg_add.setEnabled(False)
             return
+
+        # Une ligne par slot BG du mode vidéo, toujours : le mode décide du
+        # nombre de lignes, l'auteur ne les crée ni ne les supprime. Une ligne
+        # absente de la scène (projet ancien, retour d'un mode plus étroit)
+        # est matérialisée vide ; elle n'est écrite qu'à la prochaine édition.
+        from core.models.background import BackgroundLayer
+        valid_slots = MODE_INFO.get(getattr(self._scene, "render_mode", 0),
+                                    MODE_INFO[0])["bg_slots"]
+        present = {L.bg_slot for L in self._scene.background_layers}
+        for slot in valid_slots:
+            if slot not in present:
+                self._scene.background_layers.append(
+                    BackgroundLayer(background_name="", bg_slot=slot, scroll_speed=1.0))
 
         active_names = self._scene.active_bg_palettes
         active_banks = [b for n in active_names if (b := self._project.get_palette(n))]
@@ -754,7 +758,7 @@ class SceneInspector(QWidget):
             self._project.load_backgrounds()
             return [b.name for b in self._project.backgrounds]
 
-        for layer in self._scene.background_layers:
+        for layer in sorted(self._scene.background_layers, key=lambda L: L.bg_slot):
             row = BgLayerRow(layer.bg_slot)
             row.set_backgrounds(_bg_names_provider, layer.background_name)
             if layer.background_name:
@@ -772,7 +776,6 @@ class SceneInspector(QWidget):
             row.asset_changed.connect(lambda _, name, l=layer: self._on_layer_image(l, name))
             row.speed_changed.connect(lambda _, v, l=layer: self._on_layer_speed(l, v))
             row.pal_bank_changed.connect(lambda _, n, l=layer: self._on_layer_pal_bank(l, n))
-            row.layer_removed.connect(lambda _, l=layer: self._on_layer_remove(l))
             row.bound_toggled.connect(lambda idx: self._on_bound_toggled(idx))
             row.layer_swap_requested.connect(self._on_layer_swap)
             row.visibility_toggled.connect(self._on_layer_visibility)
@@ -783,7 +786,6 @@ class SceneInspector(QWidget):
             self._bg_layer_rows.append(row)
 
         self._refresh_bound_rows()
-        self._btn_bg_add.setEnabled(len(self._scene.background_layers) < 4)
 
     def _dim_label(self, text: str) -> QLabel:
         """Libellé de champ en ton atténué, réutilisé par les cartes qui n'ont
@@ -890,44 +892,6 @@ class SceneInspector(QWidget):
         ))
         get_dispatcher()._emit("bg_slot_changed", src_slot)
         get_dispatcher()._emit("bg_slot_changed", dst_slot)
-        self.changed.emit()
-
-    def _on_layer_remove(self, layer):
-        if not self._scene or layer not in self._scene.background_layers:
-            return
-
-        def _refresh():
-            self._persist_scene()
-            self._rebuild_layer_rows()
-
-        get_history().push(RemoveListItemCmd(
-            self._scene.background_layers, layer, persist_fn=_refresh,
-            label=f"Remove layer BG{layer.bg_slot}",
-        ))
-        self.changed.emit()
-
-    def _add_bg_layer(self):
-        """Ajoute un nouveau layer vide à la scène, sur un slot BG valide pour le
-        mode courant (Mode 0 : BG0-3 ; Mode 1 : BG0-2 ; Mode 2 : BG2-3)."""
-        if not self._scene:
-            return
-        valid_slots = MODE_INFO.get(getattr(self._scene, "render_mode", 0),
-                                    MODE_INFO[0])["bg_slots"]
-        used_slots = {L.bg_slot for L in self._scene.background_layers}
-        next_slot = next((i for i in valid_slots if i not in used_slots), None)
-        if next_slot is None:
-            return   # tous les slots BG du mode sont occupés
-        from core.models.background import BackgroundLayer
-        new_layer = BackgroundLayer(background_name="", bg_slot=next_slot, scroll_speed=1.0)
-
-        def _refresh():
-            self._persist_scene()
-            self._rebuild_layer_rows()
-
-        get_history().push(AddListItemCmd(
-            self._scene.background_layers, new_layer, persist_fn=_refresh,
-            label=f"Ajouter layer BG{next_slot}",
-        ))
         self.changed.emit()
 
     # ── Prefabs connus de la scène ─────────────────────────────────

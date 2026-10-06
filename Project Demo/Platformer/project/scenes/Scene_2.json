@@ -1,0 +1,68 @@
+{
+  "name": "Scene_2",
+  "background_layers": [
+    {
+      "background_name": "",
+      "bg_slot": 0,
+      "scroll_speed": 1.0,
+      "pal_bank": -1
+    },
+    {
+      "background_name": "",
+      "bg_slot": 1,
+      "scroll_speed": 1.0,
+      "pal_bank": -1
+    },
+    {
+      "background_name": "",
+      "bg_slot": 2,
+      "scroll_speed": 1.0,
+      "pal_bank": -1
+    },
+    {
+      "background_name": "",
+      "bg_slot": 3,
+      "scroll_speed": 1.0,
+      "pal_bank": -1
+    }
+  ],
+  "actors": [],
+  "cameras": [
+    {
+      "name": "Camera 3",
+      "x": 0,
+      "y": 0,
+      "frame_w": 240,
+      "frame_h": 160,
+      "mode": "fixed",
+      "follow_target": "",
+      "margin_x": 40,
+      "margin_y": 20,
+      "bounds_x": null,
+      "bounds_y": null,
+      "bounds_w": null,
+      "bounds_h": null,
+      "script": "",
+      "notes": ""
+    }
+  ],
+  "camera": "Camera 3",
+  "windows": [],
+  "render_mode": 0,
+  "scroll_h": true,
+  "scroll_v": true,
+  "script": "",
+  "ui_layouts": [],
+  "font_name": "",
+  "font_pal_banks": {
+    "": 0
+  },
+  "collision_layer": 0,
+  "collision_map": [],
+  "active_obj_palettes": [],
+  "active_bg_palettes": [
+    "_Microsoft Windows 16"
+  ],
+  "backdrop_color": null,
+  "notes": ""
+}

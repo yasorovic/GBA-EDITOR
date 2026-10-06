@@ -6,9 +6,9 @@ les décisions déjà verrouillées avant même de commencer, et les questions v
 laissées ouvertes.
 
 Une fois un jalon **livré**, son détail quitte ce fichier : la discussion complète (décisions
-verrouillées, pièges rencontrés, mesures) part dans [changelog-archive/](changelog-archive/), un
+verrouillées, pièges rencontrés, mesures) part dans [changelog/archives/](changelog/archives/), un
 fichier par version — ou par chantier, pour un [chantier technique](#chantiers-techniques). Un
-jalon **produit** gagne en plus une ligne au [CHANGELOG](CHANGELOG.md) ; un chantier technique
+jalon **produit** gagne en plus une ligne au [CHANGELOG](changelog/CHANGELOG.md) ; un chantier technique
 n'y va jamais, il ne concerne que le code. Rien n'est perdu, ça change juste d'endroit — pour
 rouvrir une décision passée, c'est là qu'elle est.
 
@@ -17,8 +17,8 @@ Six documents, six rôles :
 | Fichier | Pour qui | Contenu |
 | --- | --- | --- |
 | [README](README.md) | un visiteur | une ligne par version |
-| [CHANGELOG](CHANGELOG.md) | qui veut savoir ce qui a changé | une entrée courte par version livrée |
-| [changelog-archive/](changelog-archive/) | qui rouvre une décision passée | le détail complet d'une version livrée |
+| [CHANGELOG](changelog/CHANGELOG.md) | qui veut savoir ce qui a changé | une entrée courte par version livrée |
+| [changelog/archives/](changelog/archives/) | qui rouvre une décision passée | le détail complet d'une version livrée |
 | **ce fichier** | qui décide de la suite | scope, décisions, ouvert — jalons **non livrés** seulement |
 | [ARCHITECTURE](ARCHITECTURE.md) | qui modifie le code | comment c'est construit |
 | [Référence de scripting](docs/scripting-reference.md) | qui écrit un script | le Lua accepté, et ce qui ne l'est pas |
@@ -42,7 +42,7 @@ numéroté, jamais mélangé aux jalons produit.
 
 Ce fichier ne garde que les jalons **non livrés** — c'est son rôle propre, cf. le tableau des six
 documents en tête. Toute version livrée (v0.2 à v0.28 à ce jour) a son entrée dans le
-[CHANGELOG](CHANGELOG.md) et son détail complet dans [changelog-archive/](changelog-archive/) ;
+[CHANGELOG](changelog/CHANGELOG.md) et son détail complet dans [changelog/archives/](changelog/archives/) ;
 elle ne reste pas ici en doublon.
 
 **Un seul jalon produit est ouvert : [v0.29](#v029--diffuser-une-rom-dans-le-navigateur-itchio)**
@@ -50,7 +50,7 @@ elle ne reste pas ici en doublon.
 v0.16 (« L'API : règle de construction et
 rangement ») s'est fermé le 2026-09-27 — huit sections, cinq renommages, `REF_TYPE_TABLE`, cycle
 de vie en cinq verbes, éléments d'interface typés, `module:fonction()` généralisé, garde-fou du
-catalogue — voir le [CHANGELOG](CHANGELOG.md) et son [détail](changelog-archive/v0.16-api-construction.md).
+catalogue — voir le [CHANGELOG](changelog/CHANGELOG.md) et son [détail](changelog/archives/v0.16-api-construction.md).
 Le singleton `mixer`, seule chose restée non tranchée, est sorti en chantier transverse (route
 vers v1.0-stable, voir [ci-dessous](#au-delà-de-la-v10)) plutôt que de garder v0.16 ouvert pour
 une proposition qui ne le concerne plus vraiment.
@@ -76,9 +76,9 @@ relevés en construisant la boucle ; le 2 a été confirmé par le **test d'éch
 200 sprites, cf. la note en fin de section).
 
 1. ~~**Aucun moyen d'adresser un acteur dynamique.**~~ **Corrigé (2026-09-20)** — `actor.get`
-   accepte un index dynamique 1-based (`actor:get(i)`), voir [test_actor_scene_naming.py](tests/test_actor_scene_naming.py).
+   accepte un index dynamique 1-based (`actor:get(i)`), voir [test_actor_scene_naming.py](tests/scripting/test_actor_scene_naming.py).
    La piste restée ouverte à l'époque (les `exports_values` par instance non câblées au codegen)
-   est depuis livrée — voir [le chantier des exports de script](changelog-archive/script-exports.md).
+   est depuis livrée — voir [le chantier des exports de script](changelog/archives/script-exports.md).
 
 2. **Les acteurs posés ne sont pas namespacés par scène.** Deux scènes qui posent chacune un
    acteur nommé « Cursor » (ou « Enemy », « Boss »…) collisionnent sur un seul symbole C :
@@ -114,7 +114,7 @@ relevés en construisant la boucle ; le 2 a été confirmé par le **test d'éch
 
 6. **Deux idiomes non évidents du transpileur, et une doc qui mentait.**
    ~~`actor:get(...):méthode()` en chaîne directe ne transpile pas~~ **Corrigé (2026-09-20)** —
-   voir [test_lua_subset.py](tests/test_lua_subset.py) (`test_get_actor_chaine_directe_une_methode`).
+   voir [test_lua_subset.py](tests/scripting/test_lua_subset.py) (`test_get_actor_chaine_directe_une_methode`).
    **Reste** : un `vec2` ne se stocke toujours pas dans un local (`local c = …:get_position()`
    devient `int c = /* ignoré */`) — lire `self.position.x` **inline** ; et `get_position()`
    n'existe pas comme méthode (seulement la propriété `self.position`) (`editor/scripting/codegen.py`
@@ -159,7 +159,7 @@ test est le point 2 ci-dessus (collision de noms d'acteurs entre scènes).
 Séance du 2026-08-19 : relecture du logiciel du point de vue d'un projet cible (metroidvania à
 composante RPG, équipe de trois, cartouche réelle au bout), qui a fixé un ordre de traitement
 recommandé pour sept jalons alors ouverts (v0.14 → v0.19 → v0.24 → v0.20 → v0.23 → v0.21 →
-v0.22). **Les sept sont désormais livrés**, dans cet ordre — voir le [CHANGELOG](CHANGELOG.md)
+v0.22). **Les sept sont désormais livrés**, dans cet ordre — voir le [CHANGELOG](changelog/CHANGELOG.md)
 pour chacun. Le détail du raisonnement (pourquoi ce rang plutôt qu'un autre) reste consultable
 dans l'historique git de ce fichier.
 
@@ -249,7 +249,7 @@ reconfirmer) : un fichier extrait de 200 Mo au plus, 500 Mo au total, 1000 fichi
    trop grosse) ; l'équivalence du gabarit se vérifie à l'étape 2, pas en test automatique.
 7. **Documentation** : une page du guide utilisateur (de la ROM à la page itch, y compris la case
    à cocher), `THIRD-PARTY-NOTICES.md`, ARCHITECTURE.md. Le détail part ensuite dans
-   `changelog-archive/v0.29.md`, une ligne au CHANGELOG et au README.
+   `changelog/archives/v0.29.md`, une ligne au CHANGELOG et au README.
 8. **Nettoyage** : le prototype de l'étape 1 est supprimé avant de dire terminé.
 
 ### Fichiers annoncés
@@ -283,8 +283,8 @@ packaging de l'éditeur (`packaging/`, PyInstaller, installateur) — c'est pré
 
 Un chantier technique ne livre rien de visible pour qui joue au jeu produit avec l'éditeur —
 seulement une réécriture, une clarification ou une garantie côté code. Il n'apparaît ni dans le
-[README](README.md) ni dans le [CHANGELOG](CHANGELOG.md), et ne porte pas de numéro `vX.Y` : une
-fois refermé, son détail rejoint [changelog-archive/](changelog-archive/) comme n'importe quel
+[README](README.md) ni dans le [CHANGELOG](changelog/CHANGELOG.md), et ne porte pas de numéro `vX.Y` : une
+fois refermé, son détail rejoint [changelog/archives/](changelog/archives/) comme n'importe quel
 jalon, mais référencé par son nom plutôt que par un numéro — c'est là qu'est l'index complet des
 chantiers clos ; ce tableau ne garde que ceux **non livrés**.
 
@@ -336,9 +336,9 @@ Le journal est le seul témoin de ce que fait le build. Un silence y vaut une ga
 
 Ne touche pas au format des messages, ni à l'interface.
 
-Livré : `tests/test_silent_except.py` (la garde, 23 handlers annotés `# tolerated:` avec leur raison),
+Livré : `tests/scripting/test_silent_except.py` (la garde, 23 handlers annotés `# tolerated:` avec leur raison),
 `_check_scripts_parse` dans `core/validator.py` (qui absorbe la lecture des behaviors de
-`_check_behaviors_without_self`), `tests/test_build_fault_injection.py` (sept cas, dont un projet sain
+`_check_behaviors_without_self`), `tests/rom_build/test_build_fault_injection.py` (sept cas, dont un projet sain
 comme témoin ; désactiver le contrôle en fait échouer cinq). Ajouté le même jour : un prefab qu'aucune scène ne
 déclare n'était que parsé ; `lua_compiler` le fait maintenant passer par le checker (une fois, par la
 première scène), donc une faute sémantique sort avant qu'une scène ne le déclare. Un script attaché à
@@ -373,7 +373,7 @@ Décisions (2026-10-03) :
    dans la doc, suppression d'une classe d'avertissement). Les champs de 1 découplent déjà les tests du
    texte.
 
-Livré : `tests/test_build_diagnostics.py` (douze cas : l'objet, le classement de la sortie des outils, le
+Livré : `tests/rom_build/test_build_diagnostics.py` (douze cas : l'objet, le classement de la sortie des outils, le
 verdict, `build.log` réécrit) et trois cas d'interface dans `tests/ui/test_diagnostics_panel.py`. Un build
 réel de la démo `PongAdvanced` (17 s) donne `[build] 0 error(s), 1 warning(s)` et un `build.log` de 19 Ko.
 Mécanique décrite dans ARCHITECTURE.md, « Le journal de build ».
@@ -383,7 +383,7 @@ Mécanique décrite dans ARCHITECTURE.md, « Le journal de build ».
 `.c` en fin de corps de fonction, avec le numéro calculé sur le texte final. Une erreur de gcc sur le C
 émis sort donc comme un diagnostic `Script.lua:N`, cliquable. Un behavior inliné porte ses propres
 lignes. Le C d'un appelant sans nom de script (tests unitaires) reste sans directive. Vérifié par un vrai
-gcc (`tests/test_gcc_cites_the_script.py`) et par la démo, dont la ROM garde sa taille.
+gcc (`tests/rom_build/test_gcc_cites_the_script.py`) et par la démo, dont la ROM garde sa taille.
 
 Ce que ça ne fait pas : un réglage « avertissements = erreurs ».
 
@@ -424,7 +424,7 @@ réellement) : la matrice en atteint 28 (10 %), la suite entière 97, les deux r
 autres ne se déclenchent jamais : audio, tables de données, caméras, budgets, vecteurs et tableaux du
 checker, conversion grit.
 
-1. **Des invariants testés en masse.** `tests/test_build_invariants.py` corrompt un à un des fichiers de
+1. **Des invariants testés en masse.** `tests/rom_build/test_build_invariants.py` corrompt un à un des fichiers de
    la démo (tronqué, vidé, octets de bruit, clé JSON retirée, valeur du mauvais type, jeton de script
    supprimé) et exige, pour chaque cas : aucun « internal error » ; un build en échec porte au moins une
    erreur ; aucune erreur n'est en français ni ne recopie le chemin du projet ; un build en échec nomme le
@@ -462,8 +462,8 @@ couverture). Ils ont été **réduits à un échantillon de 52 tests** qui porte
 l'accord de listes internes (api.py ↔ en-têtes du runtime, lua_subset ↔ luaparser, domaines, colonnes),
 les budgets (palettes, fenêtres, structure de musique), les promesses que l'éditeur fait sans que le
 build les tienne, les pannes de lecture, et un cas par famille de faute du checker. Trois fichiers :
-`tests/test_checker_diagnostics.py`, `tests/test_validator_diagnostics.py`,
-`tests/test_codegen_diagnostics.py`.
+`tests/scripting/test_checker_diagnostics.py`, `tests/scripting/test_validator_diagnostics.py`,
+`tests/rom_build/test_codegen_diagnostics.py`.
 
 La référence est relevée à **172 sites exercés sur 278** (103 avant la tranche). Ce n'est pas un objectif
 à remonter : le cliquet avertit d'un site couvert qui ne l'est plus, il ne demande pas de tout couvrir.
@@ -590,7 +590,7 @@ l'écriture `ref.champ`, refuser l'écriture d'un champ lecture seule, et le cod
 | CollisionBox `tag` | `hb.tag` ; `self.box_count` | lecture seule |
 
 **Livré (2026-09-23)** : les sept portes du tableau, la sonde C `tests/native/actor_box_probe.c`, 
-`tests/test_inspector_api_parity.py`, un build ROM complet sur une copie d'OrbitTest (boîte « hitbox » 
+`tests/scripting/test_inspector_api_parity.py`, un build ROM complet sur une copie d'OrbitTest (boîte « hitbox » 
 ajoutée à la tourelle, script utilisant les sept portes). Le renommage d'un tag de collision 
 (`RenameCollisionTagCmd`) réécrit maintenant aussi les scripts.
 
@@ -770,7 +770,7 @@ Deux obstacles durs empêchent de brancher naïvement ces gestes sur l'historiqu
 
 ## Piste Collision — un `Contact` d'événement, pas une « dernière collision »
 
-Née dans le chantier « La struct `Actor` allégée » ([archive](changelog-archive/actor-struct-lightening.md)), livré à côté de cette piste : elle reste **non verrouillée**, code non commencé.
+Née dans le chantier « La struct `Actor` allégée » ([archive](changelog/archives/actor-struct-lightening.md)), livré à côté de cette piste : elle reste **non verrouillée**, code non commencé.
 
 Une boîte peut toucher plusieurs tuiles ou plusieurs acteurs dans une même frame. Lui demander
 `my_box:get_collision()` ou `get_collision_vector()` imposerait de choisir arbitrairement une
@@ -937,7 +937,7 @@ build et jamais stocké** (source de vérité unique).
 
 - Ne change ni le runtime C, ni les index des tables `g_ui_*`.
 - Ne rend pas les noms de LAYOUT locaux : ils restent uniques, ce sont des assets.
-- Ne touche pas aux noms d'acteurs (déjà locaux, cf. [changelog-archive/actor-scene-local.md](changelog-archive/actor-scene-local.md)).
+- Ne touche pas aux noms d'acteurs (déjà locaux, cf. [changelog/archives/actor-scene-local.md](changelog/archives/actor-scene-local.md)).
 
 ---
 
@@ -1301,9 +1301,9 @@ réparer silencieusement une structure ambiguë.
 
 Les tests à ajouter se répartissent naturellement :
 
-- **unitaires** dans `tests/test_font_markup.py` : projection avec et sans balisage, imbrications,
+- **unitaires** dans `tests/text/test_font_markup.py` : projection avec et sans balisage, imbrications,
   échappements, `$valeur!n`, limites et retrait de portée ;
-- **mise en page** dans `tests/test_text_layout.py` : alternance contenu/police moteur, changement
+- **mise en page** dans `tests/text/test_text_layout.py` : alternance contenu/police moteur, changement
   bitmap/vectoriel et correspondance clic → plage source ;
 - **interface** : frappe, collage, sélection au clavier, Ctrl+Z/Ctrl+Y, menu contextuel, langue de
   traduction et absence de changement dans le contenu envoyé au build.
@@ -1884,7 +1884,7 @@ exclusives (une seule active par scène à la fois), la question ne se pose pas.
 *Mise à jour 2026-08-24* : « unifier les mécanismes de caméra concurrents » (l'autre point que
 cette piste listait) est réglé — c'est fait depuis la v0.6.1, et l'objet nommé porteur d'un
 état existe déjà. Ce qui a bougé depuis n'est pas cet axe-là mais la PROPRIÉTÉ de la caméra :
-elle appartient désormais à sa scène plutôt qu'au projet (cf. `changelog-archive/v0.6.md`,
+elle appartient désormais à sa scène plutôt qu'au projet (cf. `changelog/archives/v0.6.md`,
 « Révisé le 2026-08-24 »). Ça ne contredit pas Caméra2D — une caméra reste exclusive, une
 seule active à la fois — et ça ne change rien à ce qui reste ouvert ici.
 

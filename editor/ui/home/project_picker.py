@@ -94,6 +94,11 @@ class ToolchainStatus(QWidget):
         "devkitPro": "home.status.explain_devkitpro",
         "mGBA":      "home.status.explain_mgba",
     }
+    # Le lien dit où il mène : devkitPro a un guide d'installation, mGBA un site.
+    _LINK_KEYS = {
+        "devkitPro": "home.status.more_info",
+        "mGBA":      "home.status.official_site",
+    }
 
     def __init__(self, toolchain: Toolchain, parent=None):
         super().__init__(parent)
@@ -143,7 +148,7 @@ class ToolchainStatus(QWidget):
         for name, ok, url in missing:
             expl = QLabel(
                 f'<span style="color:#666;">{label(self._EXPLAIN_KEYS[name])} '
-                f'<a href="{url}" style="color:#4c8caf;">{label("home.status.download")}</a></span>'
+                f'<a href="{url}" style="color:#4c8caf;">{label(self._LINK_KEYS[name])}</a></span>'
             )
             expl.setFont(QFont(T.UI, T.XS))
             expl.setStyleSheet("background:transparent;")
