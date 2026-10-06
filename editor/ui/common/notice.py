@@ -268,9 +268,9 @@ class NoticeBox(QFrame):
         # changé alors que seul l'affichage s'est tu.
         if is_tip:
             close = QToolButton()
-            close.setIcon(icons.get("clear", C.TEXT_MUTED))
-            close.setIconSize(QSize(11, 11))
-            close.setFixedSize(16, 16)
+            close.setIcon(icons.get("clear", C.TEXT_NORM, C.TEXT_HI))
+            close.setIconSize(QSize(16, 16))
+            close.setFixedSize(24, 24)
             close.setAutoRaise(True)
             close.setCursor(Qt.CursorShape.PointingHandCursor)
             close.setToolTip(tooltip(title=label('noticeui.dismiss_title')))

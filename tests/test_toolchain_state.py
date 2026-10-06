@@ -38,6 +38,17 @@ def test_dossier_present_sans_aucun_outil_est_incomplet(monkeypatch, tmp_path):
     assert t.devkitpro_state == tc.DEVKITPRO_INCOMPLETE
 
 
+def test_make_systeme_seul_ne_fait_pas_un_devkitpro_incomplet(monkeypatch, tmp_path):
+    """Un Linux a `make` sans devkitPro : sans dossier ni outil propre, c'est « introuvable »."""
+    t = _toolchain(monkeypatch, tmp_path, {"make"}, folder=False)
+    assert t.devkitpro_state == tc.DEVKITPRO_MISSING
+
+
+def test_un_outil_propre_a_devkitpro_sans_dossier_est_incomplet(monkeypatch, tmp_path):
+    t = _toolchain(monkeypatch, tmp_path, {"grit"}, folder=False)
+    assert t.devkitpro_state == tc.DEVKITPRO_INCOMPLETE
+
+
 def test_ni_dossier_ni_outil_est_introuvable(monkeypatch, tmp_path):
     t = _toolchain(monkeypatch, tmp_path, set(), folder=False)
     assert t.devkitpro_state == tc.DEVKITPRO_MISSING

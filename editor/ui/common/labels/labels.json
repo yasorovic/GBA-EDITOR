@@ -55,7 +55,12 @@
       "text": "Not detected"
     },
     "settings.toolchains.incomplete": { "text": "Incomplete: {tools} not found" },
-    "settings.toolchains.incomplete_hint": { "text": "The devkitPro folder is there, but some packages are not. Run the devkitPro Updater and tick GBA Development, or type pacman -S gba-dev in the devkitPro MSYS2 terminal, then check again." },
+    "settings.toolchains.incomplete_hint": { "text": "The devkitPro folder is there, but some packages are not. Run the devkitPro Updater and tick GBA Development, then check again." },
+    "settings.toolchains.incomplete_hint_linux": { "text": "The devkitPro folder is there, but some packages are not. Install them with the commands below, then check again." },
+    "install.heading": { "text": "Install {tool} on Debian / Ubuntu" },
+    "install.copy": { "text": "Copy" },
+    "install.copied": { "text": "Copied" },
+    "install.copy_tip": { "text": "Copies the commands to the clipboard, one per line." },
     "settings.toolchains.check": { "text": "Check installation" },
     "settings.toolchains.check_tip": { "text": "Detects the tools again, for instance once the installation has finished." },
     "build.devkitpro_incomplete_tip": { "text": "devkitPro is found but incomplete: {tools} not found. The toolchain settings can check the installation." },

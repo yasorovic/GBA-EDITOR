@@ -45,7 +45,9 @@ documents en tête. Toute version livrée (v0.2 à v0.28 à ce jour) a son entr�
 [CHANGELOG](CHANGELOG.md) et son détail complet dans [changelog-archive/](changelog-archive/) ;
 elle ne reste pas ici en doublon.
 
-**Aucun jalon produit n'est actuellement ouvert.** v0.16 (« L'API : règle de construction et
+**Un seul jalon produit est ouvert : [v0.29](#v029--diffuser-une-rom-dans-le-navigateur-itchio)**
+(empaqueter une ROM pour le navigateur, ouvert le 2026-10-05, aucune ligne de code). Pour mémoire,
+v0.16 (« L'API : règle de construction et
 rangement ») s'est fermé le 2026-09-27 — huit sections, cinq renommages, `REF_TYPE_TABLE`, cycle
 de vie en cinq verbes, éléments d'interface typés, `module:fonction()` généralisé, garde-fou du
 catalogue — voir le [CHANGELOG](CHANGELOG.md) et son [détail](changelog-archive/v0.16-api-construction.md).
@@ -163,6 +165,120 @@ dans l'historique git de ce fichier.
 
 ---
 
+## v0.29 — Diffuser une ROM dans le navigateur (itch.io)
+
+**Ouvert le 2026-10-05. Faisabilité vérifiée, aucune ligne de code.**
+
+### D'où vient la question
+
+Un jeu fini doit pouvoir être **joué sans installer d'émulateur**. itch.io n'héberge pas de ROM
+jouable : une page « HTML5 » est un zip dont l'`index.html` tourne dans une iframe. Il faut donc
+livrer, avec la ROM, un émulateur compilé pour le navigateur et la page qui le pilote. La ROM
+reste intacte ; c'est l'émulateur qui la fait tourner. Ce jalon livre le **générateur** de ce zip.
+
+### Ce que ça livre
+
+Une **fenêtre Qt indépendante** : on choisit à la main la ROM `.gba` à empaqueter, on règle
+quelques options de page, on obtient un **zip prêt à envoyer sur itch.io**. Elle vit dans le dépôt
+mais **hors du build du logiciel** : ni installateur, ni exécutable de l'éditeur, aucun lien avec
+le projet ouvert dans l'éditeur. Le générateur prend une ROM et rend un dossier web ; il ne sait
+rien d'où elle vient.
+
+### Faisabilité (vérifiée le 2026-10-05)
+
+- **L'émulateur existe en WebAssembly.** mGBA compilé avec Emscripten, publié sous
+  [`@thenick775/mgba-wasm`](https://www.npmjs.com/package/@thenick775/mgba-wasm) (2.5.1 à la date
+  de la vérification) : six fichiers, environ 2,8 Mo, aucune dépendance, `mgba.js` + `mgba.wasm`.
+  C'est le moteur de gbajs3. Dépôt : [`thenick775/mgba`](https://github.com/thenick775/mgba).
+- **Licence MPL-2.0**, redistribuable : il faut joindre le texte de la licence et un lien vers les
+  sources dans le zip, et ajouter l'entrée à `THIRD-PARTY-NOTICES.md`. Le BIOS est émulé par mGBA :
+  **aucun BIOS Nintendo n'est livré**.
+- **API suffisante** : `new mGBA({ canvas })`, `FSInit()`, `uploadRom()`, `loadGame()` ;
+  sauvegardes (`getSave`, `uploadSaveOrSaveState`) ; audio (`pauseAudio`, `resumeAudio`,
+  `setVolume`) ; touches (`bindKey`, `buttonPress`). Le système de fichiers virtuel d'Emscripten
+  est accessible via `Module.FS`.
+- **Précédent** : au moins un jeu GBA est jouable dans le navigateur sur itch.io par ce moteur.
+- **Pas d'Emscripten ni de Node chez l'auteur du jeu** : le binaire est vendorisé, pas recompilé.
+
+### Décisions verrouillées (2026-10-05)
+
+- **Hors de l'éditeur dans un premier temps** : fenêtre Qt autonome, ROM choisie à la main. Une
+  intégration à l'éditeur (étape finale du build) se reconsidère une fois le générateur éprouvé,
+  pas avant.
+- **On vendorise le binaire npm, on ne le recompile pas.** Version épinglée, empreinte contrôlée ;
+  jamais « latest ».
+- **Le générateur ne publie pas.** Il produit le zip ; l'envoi sur itch.io reste un geste de
+  l'auteur du jeu (pas de `butler` dans ce jalon).
+- **Pas de fonctions d'émulateur qui n'ont rien à faire là** : rembobinage, états de sauvegarde
+  rapides, filtres d'écran. Une page de diffusion, pas un émulateur de confort.
+
+### Le point dur — les threads
+
+Le cœur mGBA est multi-thread : la page doit être **isolée** (en-têtes COOP/COEP) pour que
+`SharedArrayBuffer` existe, et `mgba.js`/`mgba.wasm` sont servis **depuis la même origine** (les
+workers sont chargés depuis l'URL du script). Côté itch.io :
+
+- il existe une case « SharedArrayBuffer support » dans les réglages du projet, marquée
+  expérimentale, qui fait servir les en-têtes d'isolation (`COEP: credentialless`) ;
+- **le générateur ne peut pas la cocher** : elle se coche sur la page itch, à la main. Le README
+  du zip et la fenêtre doivent le dire ;
+- `credentialless` est mal supporté hors Chromium ; une erreur `SharedArrayBuffer` sur Firefox est
+  signalée dans les échanges d'itch. **Risque principal, non levé.**
+
+Limites itch (relevées dans des extraits de forum, pas dans la documentation officielle — à
+reconfirmer) : un fichier extrait de 200 Mo au plus, 500 Mo au total, 1000 fichiers, `index.html`
+à la racine du zip. Une ROM GBA fait 32 Mo au plus : aucune n'est atteinte.
+
+### Déroulé
+
+1. **Prototype jetable** : une page HTML + le binaire 2.5.1 + une ROM de démo, servis en local avec
+   les en-têtes COOP/COEP. Vérifie : la ROM démarre, le son marche après un clic, la sauvegarde
+   survit à un rechargement. Rien n'est gardé de ce code que le gabarit qui a fait ses preuves.
+2. **Essai sur itch.io** avec un projet **privé** : case SharedArrayBuffer cochée, test sur
+   Chrome, Firefox et Safari. **Si Firefox ou Safari échouent**, on tranche ici (voir « Ouvert »)
+   avant d'écrire la moindre fenêtre.
+3. **Le gabarit de page** : canvas, écran « Cliquer pour jouer » (l'audio ne démarre qu'après un
+   geste), mise à l'échelle entière sans flou, plein écran, mapping clavier affiché, persistance
+   de la `.sav` dans IndexedDB (copie du FS virtuel, relue au chargement).
+4. **Le générateur** (module sans Qt) : ROM + options → dossier web → zip. Copie le binaire
+   vendorisé, la licence MPL-2.0 et le lien vers les sources. Contrôle le zip produit
+   (`index.html` à la racine, chemins relatifs, taille, empreinte du binaire).
+5. **La fenêtre Qt** : choix de la ROM, titre, facteur d'échelle, couleur de fond, dossier de
+   sortie. Elle appelle le module de l'étape 4 et ne contient aucune logique de génération.
+6. **Tests** : le générateur (structure du zip, options injectées, refus d'une ROM absente ou
+   trop grosse) ; l'équivalence du gabarit se vérifie à l'étape 2, pas en test automatique.
+7. **Documentation** : une page du guide utilisateur (de la ROM à la page itch, y compris la case
+   à cocher), `THIRD-PARTY-NOTICES.md`, ARCHITECTURE.md. Le détail part ensuite dans
+   `changelog-archive/v0.29.md`, une ligne au CHANGELOG et au README.
+8. **Nettoyage** : le prototype de l'étape 1 est supprimé avant de dire terminé.
+
+### Fichiers annoncés
+
+Création : le module du générateur, la fenêtre Qt, le gabarit de page, le binaire vendorisé et
+son empreinte, les tests, la page de guide. Modification : `THIRD-PARTY-NOTICES.md`,
+`ARCHITECTURE.md`, `ROADMAP.md`. **Non touchés** : le build ROM, le codegen, le runtime, le
+packaging de l'éditeur (`packaging/`, PyInstaller, installateur) — c'est précisément ce que
+« hors de l'éditeur » garantit.
+
+### Ouvert
+
+- **Où vit le code dans le dépôt**, et comment il reste hors du build du logiciel (dossier à
+  part, exclusion explicite de l'installateur) : à décider à l'étape 4, pas avant.
+- **Si Firefox ou Safari ne passent pas avec `credentialless`** : documenter « Chromium seulement »,
+  ou chercher un cœur sans threads (build mono-thread de mGBA, ou autre émulateur) ? Dépend du
+  résultat de l'étape 2.
+- **Vendoriser dans le dépôt ou télécharger à la demande** (comme la toolchain devkitPro) : les
+  quelque 3 Mo plaident pour le dépôt, mais l'empreinte épinglée doit rester la source de vérité.
+- **Intégration à l'éditeur** (une étape « Exporter pour le web » après le build) : reportée
+  volontairement, à rouvrir quand le générateur autonome a servi.
+- **Contrôles tactiles pour mobile** : utiles sur itch, mais hors du minimum ; à trancher après
+  l'étape 3.
+- **Le nom et la marque** : la page produite doit éviter d'afficher « GBA » comme marque (même
+  risque Nintendo que celui noté au point « Une licence » de la v1.0) ; à relire à l'étape 5 sur
+  les textes de la fenêtre.
+
+---
+
 ## Chantiers techniques
 
 Un chantier technique ne livre rien de visible pour qui joue au jeu produit avec l'éditeur —
@@ -180,6 +296,7 @@ chantiers clos ; ce tableau ne garde que ceux **non livrés**.
 | Le cache de scène | 2026-09-16 | À ouvrir — voir [ci-dessous](#le-cache-de-scène-rouvrir-une-scène-déjà-visitée-sans-tout-redécoder) |
 | Undo/redo des sidecars d'éditeur | — | À ouvrir — envisagé pour **V2**, voir [ci-dessous](#undoredo-des-sidecars-déditeur-annuler-la-création-dun-groupe-un-déplacement-de-nœud) |
 | L'atelier Texte réuni — écrire et voir dans un même écran | 2026-09-19 | Route vers v1.0-stable — non prioritaire pour l'alpha (décidé le 2026-09-29) ; conception et décision verrouillée, aucune étape commencée. Voir [ci-dessous](#chantier-transverse--latelier-texte-réuni-écrire-et-voir-dans-un-même-écran) |
+| La chaîne `if/elseif` sur une constante devient un `switch` C | 2026-10-06 | Route vers v1.0-stable — non prioritaire pour l'alpha ; piste de réflexion, **rien de verrouillé**, code non commencé, gain de perf non mesuré. Voir [ci-dessous](#chantier-transverse--la-chaîne-ifelseif-sur-une-constante-devient-un-switch-c) |
 | L'élément d'interface appartient à sa scène — des noms locaux | 2026-10-03 | À ouvrir — priorité non arbitrée ; conception proposée, **aucune décision verrouillée**, code non commencé. Garde-fou en place : un nom en double entre deux layouts est une erreur de build. Voir [ci-dessous](#lélément-dinterface-appartient-à-sa-scène--des-noms-locaux) |
 | La fiabilité du journal de build | 2026-10-03 | **Tranche 1 livrée le 2026-10-03** (aucune erreur avalée, tout script vérifié, fautes injectées) ; **tranche 2 livrée le 2026-10-03** (diagnostic unique, `build.log`, sortie des outils classée) ; reste ouvert : les codes stables, si le besoin apparaît. Voir [ci-dessous](#la-fiabilité-du-journal-de-build) |
 
@@ -1038,6 +1155,33 @@ l'activer d'abord.
 **Si ce point se rouvre**, il doit couvrir les DEUX cas ensemble (boîtes de collision multiples,
 apparences sprite inactives), pour ne pas trancher deux fois la même question — « comment
 nomme-t-on l'accès à un sous-objet précis d'une instance ? » — avec deux réponses différentes.
+
+### Chantier transverse — la chaîne `if/elseif` sur une constante devient un `switch` C
+
+**Route vers v1.0-stable, non prioritaire pour la release `-alpha` (piste notée le 2026-10-06).**
+Piste de réflexion, **rien de verrouillé, code non commencé.** Le parseur Lua reste la porte
+d'entrée de tous les scripts ; une syntaxe `switch` maison obligerait à préparser le texte avant
+l'AST (numéros de ligne décalés, `case A : …` ambigu avec un appel de méthode Lua, `switch`
+disparu avant que le codegen puisse l'émettre) — **écartée**. Le C brut l'est aussi : le script
+sortirait de l'AST sans analyse (identité des variables, types, graphe de dépendances, garde-fous du
+sous-ensemble Lua).
+
+**Piste retenue : zéro syntaxe nouvelle.** Le codegen reconnaît une chaîne
+`if s == A … elseif s == B … else … end` dont la variable `s` est la même d'un bout à l'autre et dont
+les valeurs sont des constantes ou des membres d'énumération, et émet un `switch` C. Le Lua reste du
+Lua pur ; l'optimisation est invisible pour qui écrit le script.
+
+**Ce que ça apporte — et ce que ça n'apporte pas.** Ce n'est **pas** présenté comme une optimisation :
+sur l'ARM7TDMI, la table de sauts coûte un saut indirect (pipeline vidé, ~3 cycles) et une lecture en
+ROM avec wait states ; pour 3-4 cas une chaîne de comparaisons peut être plus rapide, et GCC choisit
+lui-même selon la densité des valeurs. Les raisons de le faire : la lisibilité du C généré, et
+`-Wswitch` qui signale un enum non couvert. **Gain de perf non mesuré** : à vérifier par `objdump`
+sur une machine à états réelle (~8 états) avant d'en parler comme d'un gain.
+
+**À trancher avant d'ouvrir** : la forme exacte reconnue (`==` seulement ? chaînes imbriquées ?
+cas sans `else` ?) ; ce qui se passe quand deux branches testent la même valeur (erreur de build ou
+première gagnante, comme en Lua) ; si le warning d'énumération non couverte est émis côté éditeur
+ou laissé à GCC.
 
 ### Chantier transverse — l'atelier Texte réuni, écrire et voir dans un même écran
 

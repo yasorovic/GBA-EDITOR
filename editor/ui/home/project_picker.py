@@ -28,6 +28,7 @@ from ui.common.theme import C, T, QSS, tint
 from ui.common.widgets import W, HoverIconButton
 from ui.common import icons
 from ui.common.labels import label
+from ui.common.install_commands import InstallCommands
 from ui.common.logo import BackstageLogo
 from ui.common.reveal import reveal_in_file_manager
 from core.app_info import APP_AUTHOR, APP_DOCS_URL, APP_NAME, APP_VERSION
@@ -149,6 +150,7 @@ class ToolchainStatus(QWidget):
             expl.setOpenExternalLinks(True)
             expl.setWordWrap(True)
             self._layout.addWidget(expl)
+            self._layout.addWidget(InstallCommands(name))   # invisible sans commandes (Windows)
 
 
 # ── Widget d'une entrée ───────────────────────────────────────────────

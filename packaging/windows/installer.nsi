@@ -23,6 +23,7 @@ Unicode true
 
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
+!include "Sections.nsh"
 
 ; Nom, exe et editeur doivent rester alignes avec editor/core/app_info.py
 ; (APP_NAME, APP_AUTHOR), la SOURCE UNIQUE, lue par packaging/nuitka_build.py
@@ -71,6 +72,14 @@ VIAddVersionKey "LegalCopyright"  "${PUBLISHER}"
 !define MUI_UNICON "..\icon.ico"
 !define MUI_ABORTWARNING
 
+; Images de l'habillage (chemins relatifs a ce script) : 164x314 pour l'accueil et la fin,
+; 150x57 pour la banniere d'en-tete. BMP 24 bits, convertis depuis les maquettes.
+!define MUI_WELCOMEFINISHPAGE_BITMAP   "installer_welcome.bmp"
+!define MUI_UNWELCOMEFINISHPAGE_BITMAP "installer_welcome.bmp"
+!define MUI_HEADERIMAGE
+!define MUI_HEADERIMAGE_BITMAP   "installer_header.bmp"
+!define MUI_HEADERIMAGE_UNBITMAP "installer_header.bmp"
+
 ; Pas de page de licence : la GPL n'en exige pas, et LICENSE comme
 ; THIRD-PARTY-NOTICES.md sont installes a la racine du dossier de l'application.
 
@@ -84,8 +93,9 @@ VIAddVersionKey "LegalCopyright"  "${PUBLISHER}"
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
-; devkitPro n'est PAS installe par cet installateur (il ne l'embarque pas) :
-; sans lui, impossible de fabriquer une ROM. On le dit ici, a la fin, avec le lien.
+; devkitPro et mGBA ne sont pas embarques : ce sont des cases a cocher qui les
+; telechargent (cf. SecDevkitpro, SecMgba). Si elles sont decochees, ou si le
+; telechargement echoue, la page de fin le rappelle avec le lien.
 !define MUI_FINISHPAGE_TEXT "$(FINISH_TEXT)"
 !define MUI_FINISHPAGE_LINK "$(FINISH_LINK)"
 !define MUI_FINISHPAGE_LINK_LOCATION "https://devkitpro.org/wiki/Getting_Started"
@@ -105,8 +115,8 @@ LangString WELCOME_TEXT ${LANG_FRENCH}  "Cet assistant va installer ${APP_NAME} 
 LangString WELCOME_TEXT ${LANG_ENGLISH} "This wizard will install ${APP_NAME} ${VERSION} on your computer.$\r$\n$\r$\nClose ${APP_NAME} if it is open, then click Next."
 LangString FINISH_TITLE ${LANG_FRENCH}  "${APP_NAME} est installe"
 LangString FINISH_TITLE ${LANG_ENGLISH} "${APP_NAME} is installed"
-LangString FINISH_TEXT ${LANG_FRENCH}  "${APP_NAME} est installe.$\r$\n$\r$\nPour fabriquer des ROMs, il faut aussi devkitPro et l'emulateur mGBA (non fournis) : les liens sont dans les reglages de ${APP_NAME}."
-LangString FINISH_TEXT ${LANG_ENGLISH} "${APP_NAME} is installed.$\r$\n$\r$\nBuilding ROMs also needs devkitPro and the mGBA emulator (not included): the links are in ${APP_NAME}'s settings."
+LangString FINISH_TEXT ${LANG_FRENCH}  "${APP_NAME} est installe.$\r$\n$\r$\nSi vous avez choisi devkitPro, son assistant continue dans sa propre fenetre : terminez-le (GBA Development coche) avant de fabriquer une ROM. Les outils manquants sont aussi signales dans les reglages de ${APP_NAME}."
+LangString FINISH_TEXT ${LANG_ENGLISH} "${APP_NAME} is installed.$\r$\n$\r$\nIf you chose devkitPro, its wizard continues in its own window: finish it (GBA Development ticked) before building a ROM. Missing tools are also reported in ${APP_NAME}'s settings."
 LangString FINISH_LINK ${LANG_FRENCH}  "Installer devkitPro (necessaire pour fabriquer des ROMs)"
 LangString FINISH_LINK ${LANG_ENGLISH} "Install devkitPro (required to build ROMs)"
 LangString MSG_APP_RUNNING ${LANG_FRENCH}  "${APP_NAME} est en cours d'execution. Fermez-le, puis cliquez sur Reessayer."
@@ -216,14 +226,107 @@ Section /o "Raccourci sur le Bureau" SecDesktop
 SectionEnd
 
 
+; --- Outils externes : telecharges au moment de l'installation ---
+;
+; Ni devkitPro ni mGBA ne sont embarques : le premier est un telechargeur de
+; paquets (il a besoin d'Internet de toute facon), le second pese 16 Mo et n'est
+; pas le notre. On recupere l'installateur OFFICIEL, on verifie son empreinte
+; SHA-256 (epinglee ci-dessus : mGBA n'est pas signe, l'empreinte est alors la
+; seule garantie), puis on le lance SANS attendre sa fin : attendre figerait la
+; fenetre de l'installateur le temps de l'assistant devkitPro. L'application
+; redetecte ses outils au demarrage, avant un build et au retour de focus.
+;
+; Jamais en mode silencieux (/S, la CI) : pas de reseau, pas d'assistant.
+; Un echec ne fait pas echouer l'installation de Backstage : on le dit, et les
+; liens restent dans les reglages.
+!define TOOLS_DIR "$TEMP\BackstageSetup"
+
+!define DEVKITPRO_URL  "https://github.com/devkitPro/installer/releases/download/v3.0.3/devkitProUpdater-3.0.3.exe"
+!define DEVKITPRO_FILE "devkitProUpdater-3.0.3.exe"
+!define DEVKITPRO_SHA  "038a99dc84f1ca0b52e9e0e074a94a3b0672e6d7bf0988563f0ab0812dcbb38d"
+
+!define MGBA_URL       "https://github.com/mgba-emu/mgba/releases/download/0.10.5/mGBA-0.10.5-win64-installer.exe"
+!define MGBA_FILE      "mGBA-0.10.5-win64-installer.exe"
+!define MGBA_SHA       "edd0454b8fe69f20dc2f0b47f2cfc32a14e3848550762ffbb3d782e649669c6b"
+
+; Telecharge URL vers $TEMP\BackstageSetup\FILE et compare le SHA-256. Laisse
+; "0" dans $0 si le fichier est la et conforme. Le chemin est resolu par
+; PowerShell ($env:TEMP) et non injecte : un nom d'utilisateur peut contenir une
+; apostrophe.
+!macro FetchVerified URL FILE SHA
+  CreateDirectory "${TOOLS_DIR}"
+  nsExec::Exec `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$$ErrorActionPreference='Stop'; $$ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; $$f=Join-Path $$env:TEMP 'BackstageSetup\${FILE}'; Invoke-WebRequest -UseBasicParsing -Uri '${URL}' -OutFile $$f; if ((Get-FileHash -Algorithm SHA256 $$f).Hash -ne '${SHA}') { Remove-Item $$f; exit 2 }"`
+  Pop $0
+!macroend
+
+Section "devkitPro (GBA)" SecDevkitpro
+  IfSilent devkitpro_done
+  DetailPrint "$(MSG_DOWNLOADING) devkitPro"
+  !insertmacro FetchVerified "${DEVKITPRO_URL}" "${DEVKITPRO_FILE}" "${DEVKITPRO_SHA}"
+  StrCmp $0 "0" 0 devkitpro_failed
+  ; Eleve (UAC) : il s'installe dans C:\devkitPro. Son assistant propose GBA
+  ; Development, a cocher puis a suivre dans sa propre fenetre.
+  DetailPrint "$(MSG_LAUNCHING) devkitPro"
+  ExecShell "runas" "${TOOLS_DIR}\${DEVKITPRO_FILE}"
+  Goto devkitpro_done
+  devkitpro_failed:
+    MessageBox MB_OK|MB_ICONEXCLAMATION "devkitPro : $(MSG_DOWNLOAD_FAILED)"
+  devkitpro_done:
+SectionEnd
+
+Section "mGBA" SecMgba
+  IfSilent mgba_done
+  DetailPrint "$(MSG_DOWNLOADING) mGBA"
+  !insertmacro FetchVerified "${MGBA_URL}" "${MGBA_FILE}" "${MGBA_SHA}"
+  StrCmp $0 "0" 0 mgba_failed
+  ; Silencieux, dans %LOCALAPPDATA%\mGBA : un des emplacements que l'application
+  ; connait deja (Toolchain, _MGBA_WIN_DEFAULTS).
+  DetailPrint "$(MSG_LAUNCHING) mGBA"
+  ExecShell "open" "${TOOLS_DIR}\${MGBA_FILE}" '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /DIR="$LOCALAPPDATA\mGBA"' SW_HIDE
+  Goto mgba_done
+  mgba_failed:
+    MessageBox MB_OK|MB_ICONEXCLAMATION "mGBA : $(MSG_DOWNLOAD_FAILED)"
+  mgba_done:
+SectionEnd
+
+
+; Un outil deja present n'est pas propose par defaut : la case est decochee, pas
+; masquee, au cas ou l'utilisateur voudrait quand meme le (re)installer.
+Function .onInit
+  ReadEnvStr $0 DEVKITPRO
+  StrCmp $0 "" 0 devkitpro_present
+  IfFileExists "C:\devkitPro\devkitARM\bin\arm-none-eabi-gcc.exe" devkitpro_present devkitpro_check_done
+  devkitpro_present:
+    !insertmacro UnselectSection ${SecDevkitpro}
+  devkitpro_check_done:
+  IfFileExists "$LOCALAPPDATA\mGBA\mGBA.exe" mgba_present 0
+  IfFileExists "$PROGRAMFILES64\mGBA\mGBA.exe" mgba_present mgba_check_done
+  mgba_present:
+    !insertmacro UnselectSection ${SecMgba}
+  mgba_check_done:
+FunctionEnd
+
+
 LangString DESC_SecApp     ${LANG_FRENCH}  "L'editeur et ses fichiers."
 LangString DESC_SecApp     ${LANG_ENGLISH} "The editor and its files."
 LangString DESC_SecDesktop ${LANG_FRENCH}  "Ajouter une icone sur le Bureau."
 LangString DESC_SecDesktop ${LANG_ENGLISH} "Add a shortcut on the Desktop."
+LangString DESC_SecDevkitpro ${LANG_FRENCH}  "Telecharge et lance l'installateur officiel de devkitPro (necessaire pour fabriquer des ROMs). Dans son assistant, cochez GBA Development. Internet requis."
+LangString DESC_SecDevkitpro ${LANG_ENGLISH} "Downloads and runs the official devkitPro installer (required to build ROMs). In its wizard, tick GBA Development. Internet required."
+LangString DESC_SecMgba    ${LANG_FRENCH}  "Telecharge et installe l'emulateur mGBA, qui ouvre la ROM depuis l'editeur. Internet requis."
+LangString DESC_SecMgba    ${LANG_ENGLISH} "Downloads and installs the mGBA emulator, which opens the ROM from the editor. Internet required."
+LangString MSG_DOWNLOADING ${LANG_FRENCH}  "Telechargement de"
+LangString MSG_DOWNLOADING ${LANG_ENGLISH} "Downloading"
+LangString MSG_LAUNCHING   ${LANG_FRENCH}  "Lancement de l'installateur de"
+LangString MSG_LAUNCHING   ${LANG_ENGLISH} "Starting the installer of"
+LangString MSG_DOWNLOAD_FAILED ${LANG_FRENCH}  "le telechargement a echoue (connexion absente ou fichier inattendu). ${APP_NAME} est installe quand meme ; les liens pour installer cet outil sont dans les reglages de ${APP_NAME}."
+LangString MSG_DOWNLOAD_FAILED ${LANG_ENGLISH} "the download failed (no connection or unexpected file). ${APP_NAME} is installed anyway; the links to install this tool are in ${APP_NAME}'s settings."
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecApp}     $(DESC_SecApp)
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} $(DESC_SecDesktop)
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecApp}       $(DESC_SecApp)
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop}   $(DESC_SecDesktop)
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecDevkitpro} $(DESC_SecDevkitpro)
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecMgba}      $(DESC_SecMgba)
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 

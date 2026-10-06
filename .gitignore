@@ -25,3 +25,7 @@ build-out*/
 Backstage-*-windows-setup.exe
 Backstage-*-windows-portable.zip
 *.AppImage
+
+.zed/
+
+run.bat

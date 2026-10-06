@@ -483,6 +483,7 @@ class MainWindow(QMainWindow):
         self.toolchain_bar = ToolchainBar(self.toolchain)
         self.toolchain_bar.configure_requested.connect(lambda: self._open_settings("Toolchains"))
         root_layout.addWidget(self.toolchain_bar)
+        QApplication.instance().applicationStateChanged.connect(self._recheck_toolchain_on_focus)
 
         self._screen_stack = QStackedWidget()
         root_layout.addWidget(self._screen_stack, 1)
@@ -1431,6 +1432,18 @@ class MainWindow(QMainWindow):
         self._project_loaded_screen_indices.clear()
         self.assets_finder_panel.refresh()
         self._refresh_ui()      # recharge l'écran visible (index absent du set)
+
+    def _recheck_toolchain_on_focus(self, state):
+        """Retour sur l'éditeur après l'installateur de devkitPro ou de mGBA : tant
+        qu'il manque un outil, on relit la détection pour que la barre et le bouton
+        Build passent au vert sans rien cliquer. Plus rien à vérifier une fois complet."""
+        if state != Qt.ApplicationState.ApplicationActive:
+            return
+        if self.toolchain.devkitpro_ok and self.toolchain.mgba_ok:
+            return
+        self.toolchain.recheck()
+        self.toolchain_bar.refresh()
+        self._update_build_state()
 
     def _update_build_state(self):
         """Active ou grise le build selon toolchain + présence d'une scène.

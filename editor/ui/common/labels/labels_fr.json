@@ -184,7 +184,12 @@
       "text": "Non détecté"
     },
     "settings.toolchains.incomplete": { "text": "Incomplet : {tools} introuvable(s)" },
-    "settings.toolchains.incomplete_hint": { "text": "Le dossier devkitPro est là, mais certains paquets manquent. Relancez le devkitPro Updater en cochant GBA Development, ou tapez pacman -S gba-dev dans le terminal MSYS2 de devkitPro, puis vérifiez à nouveau." },
+    "settings.toolchains.incomplete_hint": { "text": "Le dossier devkitPro est là, mais certains paquets manquent. Relancez le devkitPro Updater en cochant GBA Development, puis vérifiez à nouveau." },
+    "settings.toolchains.incomplete_hint_linux": { "text": "Le dossier devkitPro est là, mais certains paquets manquent. Installez-les avec les commandes ci-dessous, puis vérifiez à nouveau." },
+    "install.heading": { "text": "Installer {tool} sous Debian / Ubuntu" },
+    "install.copy": { "text": "Copier" },
+    "install.copied": { "text": "Copié" },
+    "install.copy_tip": { "text": "Copie les commandes dans le presse-papiers, une par ligne." },
     "settings.toolchains.check": { "text": "Vérifier l'installation" },
     "settings.toolchains.check_tip": { "text": "Relance la détection des outils, par exemple une fois l'installation terminée." },
     "build.devkitpro_incomplete_tip": { "text": "devkitPro est trouvé mais incomplet : {tools} introuvable(s). Les réglages de la toolchain permettent de vérifier l'installation." },

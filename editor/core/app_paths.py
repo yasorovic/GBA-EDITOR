@@ -21,6 +21,12 @@ from pathlib import Path
 # correct si la distribution change encore de forme.
 IS_FROZEN = "__compiled__" in globals() or getattr(sys, "frozen", False)
 
+# Le système d'exploitation, lu ici et nulle part ailleurs : un écran qui
+# s'affiche autrement sous Linux, un chemin de config, un drapeau de processus
+# importent ces deux constantes plutôt que de tester `sys.platform` dans leur coin.
+IS_WINDOWS = sys.platform.startswith("win")
+IS_LINUX = sys.platform.startswith("linux")
+
 
 def _app_dir() -> Path:
     """

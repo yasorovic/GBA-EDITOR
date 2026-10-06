@@ -10,12 +10,13 @@ d'autres. `stdin` est fermé : sans console, celui du parent est invalide.
 from __future__ import annotations
 
 import subprocess
-import sys
+
+from core.app_paths import IS_WINDOWS
 
 
 def run_tool(cmd, **kwargs) -> subprocess.CompletedProcess:
     """`subprocess.run` pour un outil dont on capture la sortie, sans fenêtre."""
     kwargs.setdefault("stdin", subprocess.DEVNULL)
-    if sys.platform == "win32":
+    if IS_WINDOWS:
         kwargs["creationflags"] = kwargs.get("creationflags", 0) | subprocess.CREATE_NO_WINDOW
     return subprocess.run(cmd, capture_output=True, text=True, errors="replace", **kwargs)

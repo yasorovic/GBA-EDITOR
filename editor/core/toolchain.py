@@ -5,13 +5,14 @@ Les chemins sont persistés dans un fichier JSON du dossier de config
 utilisateur (voir CONFIG_FILE).
 """
 
+import glob
 import json
 import os
 import shutil
-import sys
 from pathlib import Path
 
 from core.app_info import APP_NAME
+from core.app_paths import IS_LINUX, IS_WINDOWS
 
 
 def config_dir() -> Path:
@@ -26,7 +27,7 @@ def config_dir() -> Path:
     devkitPro saisis par l'utilisateur étaient donc reperdus à chaque
     lancement de l'exe.
     """
-    if sys.platform.startswith("win"):
+    if IS_WINDOWS:
         base = os.environ.get("APPDATA")
         if base:
             return Path(base) / APP_NAME
@@ -49,6 +50,31 @@ _LEGACY_CONFIG_FILE = Path(__file__).parent / "toolchain.json"
 DEVKITPRO_URL = "https://devkitpro.org/wiki/Getting_Started"
 MGBA_URL      = "https://mgba.io/downloads.html"
 
+# Sous Linux, aucun installateur ne s'en charge : l'écran montre les commandes à
+# copier, pour Debian/Ubuntu (les autres distributions : à venir, la clé est le
+# nom de l'outil tel que l'interface l'affiche). Une commande par ligne ; sous
+# Windows (ou macOS), la liste est vide et l'écran garde son lien de téléchargement.
+# devkitPro : le script officiel de https://devkitpro.org/wiki/devkitPro_pacman
+# ajoute le dépôt apt de devkitPro et installe `dkp-pacman`, qui fournit ensuite
+# le groupe `gba-dev` (installé dans /opt/devkitpro, un emplacement connu).
+# mGBA n'y figure pas : il s'obtient en exécutable sur le site officiel (MGBA_URL),
+# que l'écran montre déjà ; des commandes de plus n'apporteraient rien.
+_LINUX_INSTALL_COMMANDS = {
+    "devkitPro": [
+        "wget https://apt.devkitpro.org/install-devkitpro-pacman",
+        "chmod +x ./install-devkitpro-pacman",
+        "sudo ./install-devkitpro-pacman",
+        "sudo dkp-pacman -S gba-dev",
+    ],
+}
+
+
+def install_commands(tool: str) -> list[str]:
+    """Les commandes qui installent `tool` ("devkitPro") sur ce système, dans
+    l'ordre ; vide quand ce système a un installateur (Windows), que l'outil
+    s'obtient autrement (mGBA) ou que le système n'est pas encore pris en charge."""
+    return list(_LINUX_INSTALL_COMMANDS.get(tool, [])) if IS_LINUX else []
+
 # Emplacements Windows typiques
 _WIN_DEFAULTS = [
     Path("C:/devkitPro"),
@@ -59,6 +85,21 @@ _MGBA_WIN_DEFAULTS = [
     Path("C:/Program Files/mGBA"),
     Path("C:/Program Files (x86)/mGBA"),
     Path(os.environ.get("LOCALAPPDATA", "")) / "mGBA",
+]
+
+# mGBA sous Linux : l'AppImage officielle n'est pas dans le PATH (elle se
+# télécharge dans un dossier, nom versionné), et Flatpak/Snap exposent un
+# lanceur dans un dossier d'exports. Chaque motif est un glob.
+_MGBA_UNIX_GLOBS = [
+    str(Path.home() / ".local/share/flatpak/exports/bin/io.mgba.mGBA"),
+    "/var/lib/flatpak/exports/bin/io.mgba.mGBA",
+    "/snap/bin/mgba*",
+    "/usr/games/mgba*",
+    "/Applications/mGBA.app/Contents/MacOS/mGBA",
+    *(str(Path.home() / d / pattern)
+      for d in ("Applications", "Downloads", "Desktop", "bin", ".local/bin")
+      for pattern in ("mGBA*.appimage", "mGBA*.AppImage", "mgba*.appimage", "mgba*.AppImage")),
+    *(f"/opt/{pattern}" for pattern in ("mGBA*.AppImage", "mgba*.AppImage", "mgba/mgba*")),
 ]
 
 # Emplacements Linux/macOS typiques
@@ -230,6 +271,11 @@ class Toolchain:
                 c = base / exe
                 if c.exists():
                     return c
+        # Emplacements connus Linux/macOS
+        for pattern in _MGBA_UNIX_GLOBS:
+            for c in sorted(glob.glob(pattern), reverse=True):
+                if os.path.isfile(c) and os.access(c, os.X_OK):
+                    return Path(c)
         return None
 
     def resolve_mmutil(self) -> Path | None:
@@ -296,14 +342,17 @@ class Toolchain:
         """`DEVKITPRO_OK`, `DEVKITPRO_INCOMPLETE` ou `DEVKITPRO_MISSING`.
 
         « Incomplet » : on trouve un dossier devkitPro (celui des réglages ou un
-        emplacement connu) ou au moins un de ses outils, mais pas tous — typiquement
+        emplacement connu) ou l'un de ses outils propres (grit, arm-none-eabi-gcc),
+        mais pas tous — typiquement
         une installation dont les paquets GBA n'ont pas été téléchargés jusqu'au bout.
         Ce n'est pas la même consigne que « introuvable » : réinstaller ou vérifier,
         et non chercher le dossier."""
         missing = self.devkitpro_missing_tools()
         if not missing:
             return DEVKITPRO_OK
-        if len(missing) < len(DEVKITPRO_TOOLS) or self._devkitpro_folder_found():
+        # `make` ne prouve rien : un Linux ou un Windows avec MSYS l'a sans devkitPro.
+        found_own_tool = any(tool not in missing for tool in DEVKITPRO_TOOLS if tool != "make")
+        if found_own_tool or self._devkitpro_folder_found():
             return DEVKITPRO_INCOMPLETE
         return DEVKITPRO_MISSING
 

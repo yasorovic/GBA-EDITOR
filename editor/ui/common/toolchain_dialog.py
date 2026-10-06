@@ -11,8 +11,9 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
 from core.app_info import APP_NAME
-from core.toolchain import DEVKITPRO_URL, MGBA_URL
+from core.toolchain import DEVKITPRO_TOOLS, DEVKITPRO_URL, MGBA_URL
 from ui.common.crash_dialog import Mascot
+from ui.common.install_commands import InstallCommands
 from ui.common.labels import label
 from ui.common.theme import C, QSS, T
 
@@ -60,6 +61,10 @@ class ToolchainMissingDialog(QDialog):
         links.setStyleSheet(f"color:{C.TEXT_NORM};background:transparent;")
         for widget in (title, intro, not_found, links):
             text.addWidget(widget)
+        # Sous Linux : les commandes qui installent ce qui manque (rien sous Windows).
+        for tool, parts in (("devkitPro", DEVKITPRO_TOOLS), ("mGBA", ("mgba",))):
+            if any(part in missing for part in parts):
+                text.addWidget(InstallCommands(tool))
         text.addStretch()
         top.addLayout(text, 1)
         root.addLayout(top)

@@ -7,9 +7,10 @@ name: Release builds
 # de release (les artefacts restent alors dans l'onglet Actions).
 #
 # Trois plateformes : l'installateur NSIS + le ZIP portable Windows, et
-# l'AppImage Linux. Faute de Linux local, la vraie distribution de test EST le
-# runner ubuntu-latest : un `workflow_dispatch` produit l'AppImage en artefact
-# (onglet Actions) sans publier de release, pour la valider avant un vrai tag.
+# l'AppImage Linux. La vraie distribution de test est le runner ubuntu-22.04
+# (figé : il fixe la glibc minimale de l'AppImage) : un `workflow_dispatch`
+# produit l'AppImage en artefact (onglet Actions) sans publier de release, pour
+# la valider avant un vrai tag.
 on:
   release:
     types: [published]
@@ -174,7 +175,10 @@ jobs:
 
   build-linux-appimage:
     needs: [version, slow-tests]
-    runs-on: ubuntu-latest
+    # Version figée, pas `ubuntu-latest` : l'AppImage exige au moins la glibc du
+    # runner qui la construit. 22.04 (glibc 2.35) couvre aussi Debian 12 et
+    # RHEL 9 ; `latest` (24.04, glibc 2.39) les exclurait.
+    runs-on: ubuntu-22.04
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -265,6 +269,8 @@ jobs:
           chmod +x AppDir/AppRun AppDir/usr/bin/Backstage
           cp packaging/linux/backstage.desktop AppDir/backstage.desktop
           cp packaging/icon.png AppDir/icon.png
+          # Icône du fichier AppImage dans les gestionnaires de fichiers.
+          cp packaging/icon.png AppDir/.DirIcon
           # Type MIME du manifeste <Nom>.project : c'est ce qui apprend au
           # bureau Linux que l'extension est connue, associee a l'editeur via le
           # MimeType du .desktop. Sans lui, le double-clic ne trouve aucune appli.

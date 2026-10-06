@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from PyQt6.QtCore import QEvent, QObject, QPoint, Qt
 from PyQt6.QtGui import QMouseEvent, QWheelEvent
-from PyQt6.QtWidgets import QApplication, QAbstractScrollArea, QAbstractSpinBox
+from PyQt6.QtWidgets import QApplication, QAbstractScrollArea, QAbstractSpinBox, QWidget
 
 
 _DRAG_THRESHOLD = 3
@@ -36,10 +36,13 @@ class NumericDragBehavior(QObject):
 
     @staticmethod
     def _spinbox_for(obj) -> QAbstractSpinBox | None:
-        while obj is not None:
+        # Le filtre est global : il reçoit aussi les événements d'objets non
+        # graphiques (modèles de vue, dont `parent()` exige un index). Seuls les
+        # widgets remontent, par `parentWidget()`.
+        while isinstance(obj, QWidget):
             if isinstance(obj, QAbstractSpinBox):
                 return obj
-            obj = obj.parent()
+            obj = obj.parentWidget()
         return None
 
     @staticmethod

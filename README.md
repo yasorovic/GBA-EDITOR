@@ -16,6 +16,7 @@ Backstage réunit scènes, sprites, collisions, son et scripts dans un même pro
 1. Téléchargez Backstage depuis les [releases](https://github.com/yasorovic/GBA-EDITOR/releases).
    - **`Backstage-<version>-windows-setup.exe`** installe l'application pour votre compte utilisateur, sans droits administrateur.
    - **`Backstage-<version>-windows-portable.zip`** se décompresse où vous voulez ; lancez ensuite `Backstage.exe`.
+   - **`Backstage-<version>-x86_64.AppImage.tar.gz`** (Linux) contient l'AppImage : extrayez l'archive, puis lancez le fichier `.AppImage`. Prérequis : Ubuntu 22.04 ou équivalent récent (glibc 2.35 ou plus) et une session **X11 ou XWayland** (par défaut sur GNOME et KDE). Si le lancement échoue sur Ubuntu 24.04, installez `libfuse2` (`sudo apt install libfuse2`) ou lancez l'AppImage avec `--appimage-extract-and-run`.
 2. Installez les deux outils utilisés pour fabriquer et tester les ROMs :
 
    | Outil | Rôle | Lien |
