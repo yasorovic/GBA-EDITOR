@@ -117,7 +117,9 @@ jobs:
           else
             echo "apt.devkitpro.org inaccessible : repli sur l'image Docker devkitpro/devkitarm"
             docker run --name dkp devkitpro/devkitarm dkp-pacman -Sy --noconfirm gba-dev
-            sudo docker cp dkp:/opt/devkitpro /opt/devkitpro
+            # `docker cp` refuse un lien symbolique pointant hors de l'arbre copié ;
+            # tar, lui, l'extrait tel quel.
+            docker export dkp | sudo tar -x -C / opt/devkitpro
             docker rm dkp
           fi
           echo "DEVKITPRO=/opt/devkitpro" >> "$GITHUB_ENV"
