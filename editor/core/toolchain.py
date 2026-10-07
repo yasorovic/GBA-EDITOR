@@ -155,6 +155,18 @@ class Toolchain:
             return Path(p)
         return None
 
+    @property
+    def devkitpro_root(self) -> Path | None:
+        """Le dossier devkitPro réellement utilisable : celui de la config, sinon
+        `$DEVKITPRO`, sinon le premier emplacement connu qui existe. `devkitpro_path`
+        ne dit que ce que l'utilisateur a choisi ; un devkitPro installé à
+        `/opt/devkitpro` sans rien configurer n'y figure pas."""
+        if self.devkitpro_path:
+            return self.devkitpro_path
+        candidates = [Path(e) for e in (os.environ.get("DEVKITPRO"),) if e]
+        candidates += _WIN_DEFAULTS + _UNIX_DEFAULTS
+        return next((c for c in candidates if c.is_dir()), None)
+
     @devkitpro_path.setter
     def devkitpro_path(self, path: Path):
         self._config["devkitpro"] = str(path)

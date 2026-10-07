@@ -593,7 +593,7 @@ class BuildWorker(EventEmitter, threading.Thread):
 
     def _make_env(self) -> dict:
         env = os.environ.copy()
-        dkp = self.toolchain.devkitpro_path or Path("C:/devkitPro")
+        dkp = self.toolchain.devkitpro_root or Path("C:/devkitPro")
         arm = self.toolchain.resolve_arm_gcc()
         env["DEVKITPRO"] = str(dkp).replace("\\", "/")
         env["DEVKITARM"] = str(dkp / "devkitARM").replace("\\", "/")
