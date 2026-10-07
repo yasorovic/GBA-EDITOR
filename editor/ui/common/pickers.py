@@ -207,6 +207,47 @@ def font_picker_slot(
     return slot
 
 
+def collision_tag_slot(
+    tags: list[str],
+    current_tag: str,
+    accent: str,
+    on_picked: Callable[[str], None],
+    on_created: Callable[[str], None],
+    parent=None,
+) -> ScriptSlot:
+    """Slot pour choisir le tag de collision d'une boîte — même modèle que
+    `sprite_picker_slot`, avec la CRÉATION en plus : le texte tapé dans la
+    recherche devient un nouveau tag (`on_created`). Le slot ne déclare rien
+    lui-même ; l'appelant possède la déclaration au niveau projet."""
+    slot = ScriptSlot(add_label=label('pick.choose_a_tag'), accent_color=accent,
+                      show_clear=False)
+    icon = icons.get("view_collision", C.TEXT_DIM)
+    slot.set_script(current_tag, icon=icon)
+
+    def _open_picker():
+        entries = [(t, t, icon) for t in tags]
+        if current_tag and current_tag not in tags:
+            entries.append((current_tag, current_tag, icon))
+        popup = ScriptPickerPopup(entries, accent, parent=parent,
+                                  new_label=label('pick.create_tag_named', name='{name}'),
+                                  create_named=True)
+
+        def _picked(name: str):
+            slot.set_script(name, icon=icon)
+            on_picked(name)
+
+        def _created(name: str):
+            slot.set_script(name, icon=icon)
+            on_created(name)
+
+        popup.picked.connect(_picked)
+        popup.created.connect(_created)
+        popup.show_below(slot)
+
+    slot.set_callbacks(on_add=_open_picker, on_open=_open_picker)
+    return slot
+
+
 def sprite_picker_slot(
     sprite_names: list[str],
     current_name: Optional[str],

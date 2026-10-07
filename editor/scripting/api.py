@@ -17,57 +17,33 @@ Convention de nommage des clés :
 from dataclasses import dataclass, field
 from typing import Optional
 
-# Les deux fabricants d'identifiants C vivent ensemble, dans un module qui
-# n'importe rien — ce catalogue les emploie, il ne les possède pas.
+# Générateurs d'identifiants C utilisés par ce catalogue.
 from codegen.c_names import c_ident, sym as c_sym
 
 
-# ─── Types de paramètre ────────────────────────────────────────────
-# Utilisés par le codegen pour savoir comment convertir l'arg Lua → C.
-#
-#   "int"   → entier littéral, passé directement
-#   "str"   → string Lua → constante C (ANIM_*, SFX_*, KEY_*, ACTOR_*)
-#             Le codegen fait la résolution via le contexte de build.
-#   "bool"  → 0/1 entier
-#   "actor" → référence à un acteur (nom Lua → pointeur C)
+# Types de paramètres, utilisés pour convertir les arguments Lua en C.
 
 PARAM_INT          = "int"
 PARAM_STR          = "str"
 PARAM_STR_LITERAL  = "str_literal"   # string passée telle quelle entre guillemets C (pas de résolution de constante)
 PARAM_BOOL         = "bool"
 PARAM_ACTOR        = "actor"         # nom Lua → &g_actors[ACTOR_NAME]
-# vec2/vec3 — valeur composée (cf. scripting/expr_types.py), pas une chaîne à
-# résoudre : l'argument Lua est un vec2(x,y)/vec3(x,y,z) littéral, une variable
-# du même type, ou une expression qui s'y réduit (a + b, get_position()…). Ces
-# deux chaînes SONT le type de retour ("ret") d'une ApiFunc qui rend un vecteur
-# — même vocabulaire des deux côtés, un seul à retenir.
+# Vecteurs : valeurs composées, également utilisées comme types de retour.
 PARAM_VEC2         = "vec2"
 PARAM_VEC3         = "vec3"
 PARAM_RECT         = "rect"
 
-# ─── Types de RÉFÉRENCE — ce qu'un appel REND, et sur quoi on écrit « : » ──
-# Une référence n'est ni une valeur composée (vec2) ni un nom résolu au build :
-# c'est un SLOT pris dans un pool dimensionné par le matériel, rendu par l'appel
-# qui l'a pris — la forme de `actor.spawn`, et celle de `sfx.play` depuis la
-# v0.8.6. Le `ret` d'une ApiFunc porte ce type ; les méthodes qui s'écrivent
-# dessus sont indexées `"<type>:<méthode>"` dans le catalogue, exactement comme
-# les méthodes d'acteur le sont sous `"actor:"`.
+# Types de référence renvoyés par les appels et utilisés avec `:`.
 REF_SFX = "sfx"                   # un effet EN TRAIN de jouer — un mm_sfxhand
 REF_COLLISION_BOX = "collision_box"  # une boîte de collision d'un acteur — un rang, 0 = absente
 REF_UI_ELEMENT = "ui_element"     # un élément d'interface — son index, connu au build
-# Les natures d'élément (ROADMAP v0.16, étape c) : `interface:get("X")` rend le type RÉEL de
-# l'élément, lu dans la mise en page au build. Ils HÉRITENT de `ui_element` — le cycle de vie
-# (`show`/`hide`/`visible`) y vit une fois, pas quatre.
+# Les éléments d'interface héritent de `ui_element`.
 REF_LIST = "list"                 # un conteneur qui se PARCOURT — son index dans `g_ui_lists`
 REF_IMAGE = "image"               # un sprite à état — son index dans `g_ui_images`
 REF_TEXT_REGION = "text_region"   # une zone de texte — son index dans `g_ui_regions`
-# Un ACTEUR : un `Actor*`. Ses méthodes sont indexées `actor:<méthode>`, ses propriétés
-# `actor.<champ>` ; à l'écriture c'est `self:` (l'instance qui exécute le script), `other:`, une
-# variable qui tient `actor:get(…)` — `self` n'est pas le type, c'est un récepteur implicite.
+# Un acteur est un `Actor*` ; `self` est un récepteur implicite, pas un type.
 REF_ACTOR = "actor"
-# Deux références NUMÉROTÉES OU NOMMÉES par le matériel, pas par un asset. Elles ne portent
-# pas le nom du module qui les rend (`layer`, `window`) : un type `layer` donnerait à
-# `layer.priority` deux lectures — la propriété du type, ou une fonction du module.
+# Références matérielles distinctes des modules qui les créent.
 REF_LAYER = "background_layer"    # un fond tuilé — son numéro matériel (bg_slot)
 REF_WINDOW_REGION = "window_region"  # une région du pochoir — son rang (WINR_*)
 
@@ -95,29 +71,22 @@ class RefType:
     s'émet, pas ce que le type EST."""
     c_type:   str           # type C du `local` qui tient la référence
     variable: str           # nom de variable montré dans les snippets (`hb:overlaps(...)`)
-    # Une phrase ajoutée à l'erreur « méthode/champ inconnu » : l'auteur qui
-    # cherche une porte qui n'existe pas apprend laquelle existe.
+    # Indication ajoutée aux erreurs de méthode ou champ inconnu.
     hint:     str = ""
-    # HÉRITAGE : le type dont celui-ci reprend les membres (`list` → `ui_element`, d'où
-    # `menu:hide()`). `to_base` est la fonction C qui convertit la référence en celle de
-    # son parent — un `list` est un index de `g_ui_lists`, ses verbes de base veulent
-    # l'index d'ÉLÉMENT : `ui_element_show(ui_list_element(menu), 0)`.
+    # Type de base et fonction C de conversion pour les membres hérités.
     base:     str = ""
     to_base:  str = ""
-    # Ce que `interface:get(nom)` rend pour un élément de cette nature : le `kind` de la
-    # mise en page (`core.models.ui_region.KIND_*`) et le préfixe de la constante C qui
-    # l'indexe. Vide pour un type qui n'est pas un élément d'interface.
+    # Type d'élément et préfixe de constante renvoyés par `interface:get`.
     ui_kind:  str = ""
     constant: str = ""
-    # Le type de COLONNE d'une table de données qui stocke le handle de ce type (`region`,
-    # `image` : le build y range l'index de la zone ou de l'image). Vide sinon.
+    # Type de colonne de table de données stockant cette référence.
     column:   str = ""
 
 
 REF_TYPE_TABLE: dict[str, RefType] = {
     REF_SFX: RefType(c_type="mm_sfxhand", variable="pas"),
     REF_COLLISION_BOX: RefType(c_type="int", variable="hb"),
-    # Le conteneur n'a aucune capacité propre : il EST le type de base.
+    # Le conteneur utilise les capacités de son type de base.
     REF_UI_ELEMENT: RefType(
         c_type="int", variable="element", ui_kind="container", constant="UIELEM_",
         hint="The geometry of an element is authored: it does not open up at runtime."
@@ -145,13 +114,7 @@ REF_TYPE_TABLE: dict[str, RefType] = {
         hint="A region is named: `window:get(\"Panel\")`, \"object\" or \"outside\"."),
 }
 
-# Les fonds RÉGULIERS (tuilés, à défilement) que chaque mode vidéo GBA offre — un fait du
-# matériel, tenu ICI pour que le jour où `Scene.render_mode` sera offert à l'auteur, `layer:get`
-# refuse déjà un numéro que la scène n'a pas. Les fonds affines (modes 1-2) et bitmap (3-5) ont
-# d'autres registres et d'autres membres : ils auront leur propre type avec leur rendu.
-#
-# INTERNE : rien de ce que l'auteur lit — doc, indices, messages — ne parle de mode. Aujourd'hui
-# seul le mode 0 est offert, donc toute scène a les quatre fonds.
+# Fonds tuilés disponibles par mode vidéo GBA.
 LAYERS_BY_MODE: dict[int, tuple[int, ...]] = {
     0: (0, 1, 2, 3),
     1: (0, 1),
@@ -159,7 +122,7 @@ LAYERS_BY_MODE: dict[int, tuple[int, ...]] = {
     3: (), 4: (), 5: (),
 }
 
-# Les numéros de fonds quand la scène n'est pas connue (hors build), et par défaut : le mode 0.
+# Fonds par défaut hors build : ceux du mode 0.
 LAYER_NUMBERS: tuple[int, ...] = LAYERS_BY_MODE[0]
 
 
@@ -196,93 +159,46 @@ def ref_upcast(ref: str, owner: str, receiver: str) -> str:
         receiver = f"{REF_TYPE_TABLE[step].to_base}({receiver})"
     return receiver
 
-# Une VUE vivante sur la table : `"sfx" in REF_TYPES` reste vrai pour un type
-# ajouté plus tard, sans seconde liste à tenir d'accord avec la première.
+# Vue des types de référence, dérivée de la table principale.
 REF_TYPES = REF_TYPE_TABLE.keys()
 
-# ─── Domaines de résolution pour les arguments "str" ──────────────
-# Quand le codegen voit PARAM_STR il a besoin de savoir dans quel
-# espace de noms chercher la constante C.
-#
-# Le `domain` d'un paramètre est aussi la déclaration « cet argument RÉFÉRENCE
-# un élément nommé du projet » : c'est ce qui permet à scripting/refactor.py de
-# suivre les renommages, sans liste de fonctions codée en dur. Tout nouvel
-# argument qui cite un nom d'asset doit donc porter son domaine.
+# Domaines de résolution des paramètres texte, aussi utilisés lors des renommages.
 DOMAIN_ANIM   = "anim"    # ANIM_{actor}_{name}
 DOMAIN_SPRITE_ID = "sprite_id"  # SPRITE_{actor}_{id} — l'id d'un composant sprite de l'acteur
 DOMAIN_SFX    = "sfx"     # SFX_{name}
 DOMAIN_MUSIC  = "music"   # MUSIC_{name}
 DOMAIN_KEY    = "key"     # BTN_{name} — enum fixe du hardware, jamais renommé
-# Nom d'axe passé à `input:get_axis()` — "horizontal"/"vertical" (toujours
-# présents, jamais déclarés) ou un `InputAxis` du projet. Domaine distinct de
-# DOMAIN_KEY : un axe n'est pas un bouton ni une action, il ne s'utilise
-# jamais avec `held`/`pressed`/`released`/`buffered`.
+# Axe utilisé par `input:get_axis()`, distinct d'un bouton ou d'une action.
 DOMAIN_AXIS   = "axis"
-# Nom d'une séquence déclarée (Project Settings → Input → Séquences), passé à
-# `input:get_sequence()`. Espace de noms SÉPARÉ de DOMAIN_KEY (décision de
-# l'auteur, 2026-09-27) : un accord se lit avec held/pressed/released/buffered,
-# une séquence avec get_sequence — jamais l'inverse, et jamais partagé avec
-# DOMAIN_SEQUENCE (qui, lui, nomme un `on_sequence_<nom>` de script).
+# Séquence déclarée, utilisée uniquement par `input:get_sequence()`.
 DOMAIN_INPUT_SEQUENCE = "input_sequence"
-# ACTOR_{name} — l'IDENTITÉ d'un acteur. L'espace de noms est celui des acteurs de
-# la scène et des prefabs poolés, un `#define` par nom (cf. headers.py) : il est
-# donc parfaitement énumérable, contrairement à ce que ce fichier a longtemps
-# prétendu. La confusion venait de `BOXTAG_*`, lui bel et bien libre — il vient
-# de `CollisionBoxComponent.tag`, que l'auteur écrit à la main.
+# Identifiant d'acteur : acteurs de scène et prefabs poolés.
 DOMAIN_ACTOR_NAME = "actor_name"
-# BOXTAG_{name} — le champ « Tag » d'une boîte de collision. À l'opposé de
-# DOMAIN_ACTOR_NAME, l'espace est LIBRE : l'auteur l'écrit à la main dans le
-# CollisionBoxComponent, la liste du projet est `Project.collision_tags()`.
+# Étiquette libre d'une boîte de collision.
 DOMAIN_BOX_TAG = "box_tag"
 DOMAIN_SCENE  = "scene"   # SCENE_IDX_{name}
 DOMAIN_CAMERA = "camera"  # CAM_{name}   — caméra du projet
-# Les trois boîtes sonores (ROADMAP v0.8.7). Un domaine PAR BOÎTE, parce que
-# chaque boîte a son propre espace de noms depuis qu'elles sont trois assets :
-# « sable » dans une SoundBox et « sable » dans une JingleBox sont deux états
-# différents, et l'appel dit lequel il vise. Un ÉTAT reste un fait qu'on pose
-# (« le sol est du sable »), un DÉCLENCHEUR un événement qu'on émet.
+# Chaque boîte sonore possède son propre espace de noms d'états.
 DOMAIN_SOUND_BOX_STATE   = "sound_box_state"
 DOMAIN_JINGLE_BOX_STATE  = "jingle_box_state"
 DOMAIN_MUSIC_BOX_TRIGGER = "music_box_trigger"
 DOMAIN_TEXT   = "text"    # TEXT_{key}  — clé de la table de textes du projet
-# LANG_{code} — une langue DÉCLARÉE du projet (ROADMAP v0.9, phase 4).
-# Espace de noms VIDE dans un projet monolingue : `lang.set`/`lang.get` n'ont
-# alors aucun code valide, donc aucun appel ne compile — même mécanique que
-# DOMAIN_SCENE sur un projet sans scène, jamais un cas spécial à écrire.
+# Langue déclarée du projet. Un projet monolingue n'admet aucun code de langue.
 DOMAIN_LANG   = "lang"
 DOMAIN_FONT   = "font"    # FONT_{name}
 DOMAIN_PALETTE = "palette"  # PAL_{name} — palette du catalogue de couleurs
-# État affiché par une image d'interface (`heart.state = "vide"`). Le SEUL domaine
-# dont la validité dépend du RÉCEPTEUR : un état n'existe que dans un sprite, et
-# c'est l'image qui dit lequel (`IMGST_{image}_{état}`). D'où un contrôle qui lit
-# l'image sur le récepteur de la propriété plutôt que sur son seul littéral.
+# État d'image d'interface, validé dans le sprite de l'image concernée.
 DOMAIN_IMAGE_STATE = "image_state"
 DOMAIN_PREFAB = "prefab"  # nom de Prefab — actor:spawn()
 # Domaines résolus par un _emit_* dédié du codegen (pas de constante C
 # générique) : ils n'en restent pas moins des références nommées.
-DOMAIN_ACTOR  = "actor"   # nom d'Actor de la scène — actor:get()
-# N'IMPORTE QUEL élément d'une mise en page (texte, conteneur, liste, image) — le
-# seul nom que cite `interface:get()`. Sa constante dépend de la NATURE de l'élément
-# (`UIELEM_`, `UILIST_`, `IMAGE_`, `REGION_` : cf. `RefType.constant`), que le build
-# lit dans la mise en page — le script n'a pas à la connaître.
+DOMAIN_ACTOR  = "actor"   # Acteur de la scène, utilisé par `actor:get()`.
+# Élément d'interface dont le type et la constante sont résolus au build.
 DOMAIN_UI_ELEMENT = "ui_element"
-DOMAIN_GLOBAL = "global"  # GlobalVar du projet — cité en LITTÉRAL par save.read
-                           # (global.nom lui-même est un accès pointé, résolu
-                           # hors domaine — cf. _check_global_scalar, chantier global/const)
-# Pas de DOMAIN_CONST : const.get (seul site littéral qui le citait) a quitté
-# RUNTIME_API au profit de l'accès pointé (`const.nom`, résolu par
-# `_check_const_scalar`/`ExprIndex`, hors domaine — chantier global/const). Un domaine
-# sans site serait un orphelin — `test_aucun_domaine_declare_nest_orphelin`.
-# Nom de séquence — `sequence:start("intro")` désigne `function on_sequence_intro`.
-# Le SEUL domaine dont l'espace de noms est le SCRIPT et non le projet : checker
-# et codegen reçoivent l'AST, ils collectent les noms eux-mêmes. Conséquence à
-# connaître : `refactor` le dérive du catalogue comme les autres, mais aucun
-# renommage d'asset ne le déclenche — une séquence n'est pas un asset.
+DOMAIN_GLOBAL = "global"  # Globale citée littéralement par `save.read`.
+# Nom de séquence de ce script, utilisé par `sequence:start()`.
 DOMAIN_SEQUENCE = "sequence"
-# Énumérations MATÉRIELLES : ensemble fixe, connu au build, jamais renommé —
-# même nature que DOMAIN_KEY, dont elles reprennent exactement le mécanisme.
-# Elles ne citent pas un élément du projet : `refactor` n'a donc rien à y
-# suivre, mais le checker et le codegen si (cf. HARDWARE_ENUMS plus bas).
+# Énumérations matérielles fixes, validées par le checker et le générateur.
 DOMAIN_OBJ_MODE   = "obj_mode"    # mode OAM d'un sprite
 DOMAIN_DIRECTION  = "direction"   # direction d'animation d'un acteur
 DOMAIN_WIN_REGION = "win_region"  # région de window (WINR_*)
@@ -290,18 +206,7 @@ DOMAIN_BLEND_MODE = "blend_mode"  # mode de mélange (BLDCNT)
 DOMAIN_BLEND_SIDE = "blend_side"  # dessus / dessous du mélange
 DOMAIN_EASE       = "ease"        # courbe d'accélération de math.ease()
 
-# Tous les domaines, DÉRIVÉS des constantes ci-dessus : déclarer un
-# `DOMAIN_*` suffit à entrer dans le contrôle, il n'y a pas de seconde liste à
-# penser à compléter.
-#
-# Deux consommateurs doivent savoir quoi faire de chaque domaine — le checker
-# (le nom existe-t-il ?) et le codegen (quelle constante C émettre ?) — et
-# aucun des deux ne le signalait quand la réponse manquait : le checker ne
-# validait simplement rien, et le codegen retombait sur « émettre la chaîne
-# telle quelle », donc du texte C là où le C attend un entier. Panne au `make`,
-# sur la ligne générée, jamais sur la cause. C'est le même défaut que les deux
-# listes de prototypes du moteur, et il se règle pareil : les deux tables sont
-# comparées à celle-ci au build (`validator._check_api_domains`).
+# Tous les domaines déclarés. Le validateur vérifie leur prise en charge.
 ALL_DOMAINS: frozenset[str] = frozenset(
     value for name, value in list(globals().items())
     if name.startswith("DOMAIN_") and isinstance(value, str)
@@ -313,11 +218,7 @@ class Param:
     name: str
     ptype: str                        # PARAM_*
     domain: Optional[str] = None      # DOMAIN_* (seulement si ptype == PARAM_STR)
-    # Une chaîne qui ne résout PAS dans le domaine est-elle acceptable ?
-    # Faux partout sauf `text.draw` : un nom de scène ou de sfx inconnu est une
-    # faute, un texte peut s'écrire au vol dans le script (ROADMAP v0.3.2,
-    # 2026-07-27). Déclaré ici plutôt que testé sur le nom de la fonction — la
-    # même table pilote checker, codegen et refactor.
+    # Autorise une chaîne non résolue dans le domaine, notamment pour `text.draw`.
     literal_ok: bool = False
 
 
@@ -330,13 +231,9 @@ class ApiFunc:
     ret:       str = "void"                 # type de retour C ("void", "int", "bool")
     self_first: bool = False                # True → émettre (self, ...) en C
     variadic:   bool = False                # True → args restants après params passés tels quels
-    # Arguments C constants, ajoutés APRÈS ceux du script : c'est ce qui fait
-    # d'un verbe du cycle de vie (`:hide()`) le même appel C que son inverse
-    # (`ui_element_show(h, 0)` / `(h, 1)`) sans un émetteur dédié par verbe.
+    # Arguments C constants ajoutés après ceux du script.
     fixed_args: tuple = ()
-    # Vrai quand le TYPE rendu dépend du NOM littéral en premier argument : `interface.get`
-    # rend `list`, `image`… selon la nature de l'élément dans la mise en page. Le nom →
-    # type se lit dans le contexte de build (`ref_kinds`) ; sans lui, `ret` fait foi.
+    # Le type de retour dépend du premier nom littéral, par exemple avec `interface.get`.
     ret_by_name: bool = False
     doc:       str = ""
 
@@ -365,22 +262,9 @@ class ApiProp:
     self_first: bool = False                 # True → émettre (récepteur, ...) en C
     read_only:  bool = False
     getter_expr: Optional[str] = None        # lecture synthétique C (scène) au lieu d'un appel
-    # DOMAIN_* d'énumération matérielle, quand la valeur de cette propriété est
-    # un NOM et pas un nombre (`self.obj_mode = "window"`). Sans ce champ, une
-    # propriété ne pouvait porter qu'un entier nu : convertir `blend.set_mode
-    # ("alpha")` en propriété faisait donc RETOMBER ce réglage sur le `1` que la
-    # section « Énumérations matérielles » ci-dessus existe pour supprimer.
-    # Côté C rien ne change — la constante vaut toujours un entier. Ce qui
-    # change, c'est ce que l'auteur écrit et ce que le checker sait vérifier :
-    # l'écriture (`= "alpha"`) comme la comparaison (`== "alpha"`).
+    # Domaine matériel quand la propriété accepte un nom plutôt qu'un nombre.
     domain:     Optional[str] = None
-    # Fonctions C de la forme NOMMÉE, quand elle ne passe pas par les mêmes que
-    # la forme ordinaire. Un seul cas : `self.direction` est un vec2 (pour le
-    # calcul : `self.direction.x < 0`) dont les neuf valeurs ont AUSSI des noms
-    # de boussole. Le C ne range qu'une donnée — `dir_x`/`dir_y` — mais les deux
-    # vues n'y accèdent pas par la même porte : l'une prend/rend le vecteur,
-    # l'autre l'index de boussole. Une énumération SCALAIRE (`blend.mode`) n'en
-    # a pas besoin : sa constante EST l'entier que le getter ordinaire rend.
+    # Getter C utilisé quand la forme nommée diffère de la forme ordinaire.
     c_getter_named: Optional[str] = None
     c_setter_named: Optional[str] = None
     doc:        str = ""

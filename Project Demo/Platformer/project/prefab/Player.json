@@ -12,28 +12,42 @@
       "scale_x": 1.0,
       "scale_y": 1.0,
       "rotation": 0,
-      "offset_x": 0,
-      "offset_y": 0,
+      "offset_x": -16,
+      "offset_y": -16,
       "pivot_x": 0,
       "pivot_y": 0
     },
     {
       "component_type": "collision_box",
-      "id": "collision",
+      "id": "Body",
       "active": true,
-      "solid": true,
+      "solid": false,
       "tag": "player",
-      "x": 0,
-      "y": 0,
-      "w": 32,
-      "h": 32
+      "x": -13,
+      "y": -13,
+      "w": 26,
+      "h": 23
     },
     {
       "component_type": "script",
       "id": "script",
       "active": true,
       "script": "assets/scripts/Player.lua",
-      "exports_values": {}
+      "exports_values": {
+        "gravity": 60,
+        "jump_force": 1024
+      }
+    },
+    {
+      "component_type": "collision_box",
+      "id": "Feet",
+      "active": true,
+      "solid": true,
+      "tag": "Feet",
+      "x": -7,
+      "y": 11,
+      "w": 17,
+      "h": 4
     }
   ],
   "pal_bank": -1,

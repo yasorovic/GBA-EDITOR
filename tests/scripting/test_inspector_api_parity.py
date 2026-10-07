@@ -345,6 +345,18 @@ def test_c_le_chevauchement_compare_des_pixels_pas_du_q8(sortie_sonde):
     assert sortie_sonde["actors_overlap"] == [1]
 
 
+def test_c_un_contact_par_couple_de_tags_le_premier_ne_masque_pas_le_suivant(sortie_sonde):
+    """Régression : `on_collision_enter` ne rapportait que la PREMIÈRE paire de
+    boîtes d'un couple d'acteurs. Un joueur qui retombe sur une pièce la touche
+    d'abord des pieds : le contact « corps » arrivait ensuite sans événement.
+    Bit (i*MAX_BOXES + j) ; ici MAX_BOXES = 4, corps = tag 0, pieds = tag 1."""
+    assert sortie_sonde["mask_pieds"] == [1 << (1 * 4 + 0)]
+    assert sortie_sonde["mask_les_deux"] == [(1 << (0 * 4 + 0)) | (1 << (1 * 4 + 0))]
+    assert sortie_sonde["mask_loin"] == [0]
+    assert sortie_sonde["mask_meme_tag"] == [1]         # un seul contact, pas deux
+    assert sortie_sonde["mask_inactive"] == [1]         # seul le corps touche encore
+
+
 def test_c_is_grounded_se_lit_par_boite_et_une_boite_absente_est_fausse(sortie_sonde):
     assert sortie_sonde["grounded"] == [1, 0, 0]
 

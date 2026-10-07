@@ -1,14 +1,17 @@
 """Éditeur du CollisionBoxComponent."""
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QCheckBox, QComboBox, QHBoxLayout, QLabel, QWidget
+from PyQt6.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QWidget
 from PyQt6.QtGui import QFont
 
 from . import BaseComponentEditor, register
 from ui.common.widgets import W
 from ui.common.notice import notice
 from ui.common.labels import label
-from ui.common.theme import C, T, QSS
+from ui.common.theme import C, T
+from ui.common.pickers import collision_tag_slot
+from ui.common.icons import COLOR_SPRITE
+from core.history import get_history, AddListItemCmd
 
 
 @register("collision_box")
@@ -27,25 +30,27 @@ class CollisionEditor(BaseComponentEditor):
         # étaient confondus avant le tag registry (2026-08-25) — plus
         # aujourd'hui, chacun peut varier indépendamment.
         proj = self.insp._project
-        tag_combo = QComboBox()
-        tag_combo.setEditable(True)
-        tag_combo.setStyleSheet(QSS.combobox)
         current = getattr(comp, "tag", "body") or "body"
-        for t in proj.collision_tags():
-            tag_combo.addItem(t)
-        if tag_combo.findText(current) < 0:
-            tag_combo.addItem(current)
-        tag_combo.setCurrentText(current)
-        notice("collision.tag", tag_combo, layout)
 
-        def _commit_tag():
-            self.set_field(comp, "tag", tag_combo.currentText().strip() or "body")
+        def _commit_tag(name: str):
+            self.set_field(comp, "tag", name.strip() or "body")
 
-        tag_combo.lineEdit().editingFinished.connect(_commit_tag)
-        tag_combo.activated.connect(lambda _i: _commit_tag())
-        self.register_syncer("tag", lambda v, w=tag_combo: (
-            w.blockSignals(True), w.setCurrentText(str(v) or "body"), w.blockSignals(False)))
-        W.row(label("comped.tag"), tag_combo, layout)
+        def _create_tag(name: str):
+            # Création = déclaration au niveau projet (Project Settings >
+            # Collisions) PUIS affectation : le tag existe pour toutes les boîtes.
+            name = name.strip()
+            if name and name not in proj.collision_tags():
+                get_history().push(AddListItemCmd(
+                    proj.settings.collision_tags, name,
+                    label=f"Déclarer le tag {name}",
+                    persist_fn=proj.save_settings))
+            _commit_tag(name)
+
+        tag_slot = collision_tag_slot(
+            proj.collision_tags(), current, COLOR_SPRITE, _commit_tag, _create_tag, parent=self.insp)
+        notice("collision.tag", tag_slot, layout)
+        self.register_syncer("tag", lambda v, w=tag_slot: w.set_script(str(v) or "body"))
+        W.row(label("comped.tag"), tag_slot, layout)
 
         # ── Mode Solid / Trigger ──────────────────────────────────
         chk_solid = QCheckBox()

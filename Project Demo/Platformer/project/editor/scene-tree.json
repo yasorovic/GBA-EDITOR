@@ -8,7 +8,9 @@
           "name": "Collectibles",
           "members": [
             "actor:Collectible_copy_copy_copy",
-            "actor:Collectible_copy_copy_copy_copy_copy"
+            "actor:Collectible_copy_copy_copy_copy_copy",
+            "actor:Collectible_copy_copy_copy_copy2",
+            "actor:Collectible_copy_copy_copy_copy_copy2"
           ],
           "color": ""
         }

@@ -72,18 +72,15 @@ from core.models.resource import Resource
 
 TILE = 8
 
-# ── Ancrages ──────────────────────────────────────────────────────
-ANCHOR_SCREEN = "screen"   # fixe sur l'écran (HUD, boîte de dialogue basse)
+# Ancrages
+ANCHOR_SCREEN = "screen"   # Fixe sur l'écran.
 ANCHOR_WORLD  = "world"    # défile avec la caméra (conteneur posé dans le décor)
 ANCHOR_ACTOR  = "actor"    # suit un acteur (bulle) — impose la cible OBJ
 
 ANCHORS = (ANCHOR_SCREEN, ANCHOR_WORLD, ANCHOR_ACTOR)
 
-# ── Cibles de rendu ───────────────────────────────────────────────
-# Deux budgets DISJOINTS en modes tuilés : la VRAM BG (64 Ko, arbitrée par
-# codegen/vram_alloc) et la VRAM OBJ (32 Ko). Basculer une région d'une cible à
-# l'autre transfère la charge, ce qui en fait l'échappatoire quand un charblock
-# est plein.
+# Cibles de rendu
+# Les cibles BG et OBJ utilisent des budgets VRAM distincts.
 TARGET_BG  = "bg"
 TARGET_OBJ = "obj"
 
@@ -91,56 +88,25 @@ TARGETS = (TARGET_BG, TARGET_OBJ)
 
 ALIGNS = ("left", "center", "right")
 
-# ── Types d'élément ───────────────────────────────────────────────
-# Une mise en page contient PLUSIEURS types dans une seule liste ordonnée
-# (`UILayout.elements`) — l'ordre fixe l'empilement (z-order) et l'ordre des
-# frères dans l'arbre. Chaque type porte un `kind` (sérialisé) et une capacité
-# `can_contain` : CE QUE le type accueille, en tuple de kinds — vide pour une
-# feuille (texte, image), tous les kinds pour un conteneur, le seul `KIND_TEXT`
-# pour une liste dont les enfants SONT les rangées. Un booléen y a suffi tant
-# qu'un seul type accueillait n'importe quoi ; il laissait déposer une image dans
-# une liste, que le build ignorait ensuite en silence. Le « root » n'est pas un
-# type : c'est le RÔLE d'un élément de premier niveau, qui porte alors l'ancrage
-# de son sous-arbre.
-KIND_CONTAINER  = "container"  # groupe ; racine = ancrage
+# Types d'élément
+# Une mise en page est une liste ordonnée : son ordre fixe l'empilement et l'arbre.
+KIND_CONTAINER  = "container"  # Groupe ; une racine porte l'ancrage.
 KIND_LIST   = "list"     # conteneur qui se PARCOURT — ses enfants sont ses rangées
 KIND_TEXT   = "text"     # texte (authoré ET/OU écrit par un script) — feuille
 KIND_IMAGE  = "image"    # sprite à état posé sur l'interface — feuille
 
-# Tous les kinds ÉCRITS, dans l'ordre où l'auteur les rencontre. `KIND_REGION`
-# n'en est pas : il ne se lit que dans les anciens fichiers (cf. juste en dessous).
+# Types écrits dans les nouveaux fichiers.
 KINDS = (KIND_CONTAINER, KIND_LIST, KIND_TEXT, KIND_IMAGE)
 
-# `kind`s HÉRITÉS, gardés pour la seule relecture des fichiers anciens : ils se
-# désérialisent en type courant (cf. `_ELEMENT_FROM_DICT`) et ne sont jamais
-# réécrits. Aucun code neuf ne doit les tester.
-#   region → `UIText` : la « zone de texte » d'avant la fusion, qui ne différait
-#            d'un texte que par un `text_key` vide.
-#   panel  → `UIContainer` : le conteneur s'est appelé « panel » jusqu'au
-#            2026-09-02. Un seul mot par concept — et celui-là entrait en
-#            collision avec les conteneurs de l'ÉDITEUR (`AssetsFinderPanel`,
-#            `sound_panel`), qui sont une autre chose et gardent le mot.
+# Types hérités, lus seulement pour migrer les anciens fichiers.
 KIND_REGION = "region"
 KIND_PANEL_LEGACY = "panel"
 
-# Types qui occupent une entrée de `g_ui_regions`, c'est-à-dire qui ont une
-# géométrie où du TEXTE se pose. Un seul depuis la fusion — le tuple reste
-# parce que les appelants disent « est-ce un slot de texte ? » et non « est-ce
-# un UIText ? », et qu'une image, elle, occupe sa propre table.
+# Types qui occupent une entrée de `g_ui_regions`.
 KIND_SLOTS = (KIND_TEXT,)
 
-# ── Fonds de conteneur ────────────────────────────────────────────
-# Le fond d'un CONTENEUR (`UIContainer`, `UIList` — cf. `FillMixin`) est un champ
-# polymorphe (« à quoi ressemble la zone »), séparé de la géométrie (« où »). Un
-# conteneur sans fond est un groupe invisible.
-#   couleur     : une ENTRÉE DE PALETTE (nom + index), pas du RGB libre — c'est
-#                 le hardware qui l'impose (cf. project_palette_system_design).
-#   nine-slice  : un cadre tuilé (coins fixes, bords/centre répétés) — quasi
-#                 gratuit sur GBA. L'asset dédié reste à créer.
-#   background  : un fond tuilé référencé, rogné en bas/à droite si la zone est
-#                 plus petite que l'asset.
-#   sprite      : un SpriteAsset PAVÉ sur le rectangle — le seul fond possible
-#                 en cible OBJ, où il n'y a pas de tilemap où poser des tuiles.
+# Fonds de conteneur
+# Un fond décrit l'apparence du conteneur, indépendamment de sa géométrie.
 FILL_NONE   = "none"
 FILL_COLOR  = "color"
 FILL_NINE   = "nine_slice"
@@ -148,17 +114,7 @@ FILL_BG     = "background"
 FILL_SPRITE = "sprite"
 FILL_KINDS = (FILL_NONE, FILL_COLOR, FILL_NINE, FILL_BG, FILL_SPRITE)
 
-# Fonds permis selon la CIBLE de rendu (dérivée du root).
-#
-# La table dit ce que le BUILD ÉMET, pas ce qui serait concevable. Couleur,
-# nine-slice et background posent des TUILES et écrivent une carte : ça n'existe
-# que sur BG. Sur OBJ il n'y a pas de tilemap, donc un seul fond possible — un
-# sprite, pavé sur le rectangle. Inversement un sprite sur BG n'apporterait rien
-# que `background` ne fasse déjà mieux (vraies tuiles, zéro slot OAM).
-#
-# Elle a longtemps promis couleur et nine-slice sur OBJ, que rien n'émettait :
-# le canvas dessinait un fond absent de la ROM. Un mode permis mais jamais émis
-# est pire qu'un mode absent — on ne cherche pas ce qui n'est pas proposé.
+# Fonds réellement pris en charge par cible de rendu.
 _FILL_TARGETS = {
     FILL_NONE:   (TARGET_BG, TARGET_OBJ),
     FILL_COLOR:  (TARGET_BG,),
@@ -206,9 +162,7 @@ def region_fill_container(lay, el):
         return anc
     return None
 
-# Modes vidéo bitmap : la VRAM BG est un framebuffer, il n'y a plus de tilemap
-# où écrire des glyphes. Le texte BG y est impossible — le texte sprite n'est
-# pas une option, c'est le seul chemin (et l'espace OBJ y tombe à 512 tuiles).
+# Les modes bitmap n'ont pas de tilemap : le texte doit être rendu en sprites.
 BITMAP_MODES = (3, 4, 5)
 
 
@@ -261,11 +215,7 @@ class RectGeometryMixin:
         return tw * th
 
 
-# Priorité OBJ HÉRITÉE. Une valeur 0-3 est explicite (0 devant, 3 derrière) ;
-# -1 dit « hérite de l'acteur ancré », résolu EN DIRECT par le runtime
-# (`ui_obj_prio`) au moment de poser le sprite — un libellé flottant vit donc à
-# la profondeur de sa cible, et la suit si un script change `self.priority`. Le
-# codegen émet -1 en 255 (sentinelle sur un `unsigned char`), 0-3 tels quels.
+# Priorité OBJ. `-1` hérite de l'acteur ancré ; `0` est devant et `3` derrière.
 PRIORITY_INHERIT = -1
 
 
@@ -278,23 +228,10 @@ def _clamp_priority(v) -> int:
     return n if -1 <= n <= 3 else PRIORITY_INHERIT
 
 
-# Couleur d'un slot de texte : un INDEX dans la banque d'encre de la zone, pas
-# un RGB — le matériel n'offre que des index. La banque est celle de la police
-# (usage libre) ou celle du CONTENEUR quand le texte y est imbriqué : l'index
-# désigne une couleur de cette banque-là.
-#
-# 0 = encre d'ORIGINE : le glyphe garde les teintes de sa police, seul moyen de
-# ne pas perdre une police à plusieurs encres. 1..15 aplatit toute l'encre sur
-# cette couleur, comme la balise `[color=n]`.
-#
-# Le coût est en VRAM, pas en palette : chaque couleur employée charge sa propre
-# copie des glyphes de la scène, recolorée au chargement (cf.
-# main_gen.scene_text_reservation). Abordable grâce au sous-ensemble par scène.
-TEXT_COLOR_INK = 0     # encre d'origine de la police
-TEXT_COLOR_MAX = 15    # 4bpp : l'index 0 est la transparence
-# Surlignement — la couleur posée SOUS le texte, dans la même banque d'UI et sur
-# la même plage que l'encre. 0 = aucun, et c'est bien le même zéro que celui du
-# matériel : l'index 0 d'une palette 4bpp EST la transparence.
+# Couleur d'un texte : index dans sa banque de palette. Chaque couleur utilise des tuiles VRAM dédiées.
+TEXT_COLOR_INK = 0     # Conserve les couleurs d'origine de la police.
+TEXT_COLOR_MAX = 15    # L'index 0 est transparent en 4bpp.
+# Surlignement : couleur derrière le texte, dans la même banque de palette.
 HIGHLIGHT_NONE = 0
 
 
@@ -340,71 +277,31 @@ class UIText(RectGeometryMixin):
     kind = KIND_TEXT         # attribut de classe (pas un champ dataclass)
     can_contain = ()         # feuille : n'accueille jamais d'enfants
     name:   str = "text"
-    # Nom de l'élément PARENT dans la même mise en page ("" = racine). L'arbre
-    # d'UI se DÉRIVE de ces refs, il ne se stocke pas : la liste `elements` reste
-    # plate, exactement comme la table de textes reste plate et l'arbre se
-    # reconstruit des chemins (cf. `ui/text_editor/text_table.py`). Une ref pendante (parent
-    # supprimé) est traitée comme racine, jamais comme une erreur. Le parent est
-    # cité par NOM et non par index : renommer un élément doit donc retargetter
-    # les enfants (`UILayout.retarget_parent`), comme un renommage de clé.
+    # Nom du parent. Une chaîne vide ou une référence absente désigne la racine.
     parent: str = ""
-    # État AUTHORÉ de départ, indépendant de celui des ancêtres — la visibilité
-    # EFFECTIVE (celle qui compte pour le rendu) se calcule à la lecture, elle
-    # ne se stocke jamais ici : cf. `UILayout.is_visible`. Un script bascule
-    # cette valeur au runtime via `ui.show(nom, on)`, même mécanisme pour les
-    # trois types (cf. `UIContainer.visible`, `UIImage.visible`).
+    # Visibilité locale. La visibilité effective tient compte des ancêtres.
     visible: bool = True
-    # Géométrie en PIXELS, dans le repère du parent (l'écran, ou l'offset de
-    # l'acteur, pour un élément racine — cf. `UILayout.absolute_origin`). Ancrage
-    # et cible ne vivent PLUS sur l'élément : ils appartiennent au nœud
-    # `Interface` (`UILayout`), qui les porte pour tout son sous-arbre (v0.25).
+    # Géométrie en pixels, relative au parent.
     x: int = 0
     y: int = 0
     w: int = 96
     h: int = 16
-    # Entrée de la table affichée ici. Renseignée = contenu AUTHORÉ, posé à
-    # l'init ; vide = emplacement que le script remplit. Cf. la docstring.
+    # Clé du texte initial. Vide : le script fournit le contenu.
     text_key: str = ""
-    # "" = police par défaut de la scène. Nommer une police ici est ce qui rend
-    # l'empreinte VRAM de la scène calculable (cf. font_emit.scene_text_tiles).
+    # Police utilisée ; vide pour la police par défaut de la scène.
     font_name: str = ""
-    # Poids natif demandé dans la FontAsset. Il reste une valeur OS/2 (400 =
-    # Regular, 700 = Bold), pas un booléen : Light et Medium sont de vraies
-    # faces, et l'éditeur ne synthétise jamais un faux gras.
+    # Poids natif de la police au format OS/2, par exemple 400 ou 700.
     font_weight: int = 400
-    # Le poids ne suffit pas à distinguer Light et Light Italic. Cette face est
-    # elle aussi native ; False conserve les TextBox créés avant ce champ.
+    # Sélectionne la face italique native.
     font_italic: bool = False
     align: str = "left"
-    # Texte de MESURE, éditeur seulement, jamais compilé : ce que le canvas pose
-    # dans le rectangle quand `text_key` est vide, pour voir le débordement à la
-    # conception. Le mesureur existe déjà (FontScreenPreview rejoue text_layout
-    # avec les vrais glyphes), il ne lui manquait qu'un rectangle contre lequel
-    # se mesurer. Sans objet dès qu'un contenu authoré est là — c'est lui qu'on
-    # mesure alors, et il est vrai.
+    # Texte de mesure affiché dans l'éditeur quand aucune clé n'est définie.
     preview_text: str = ""
-    # Couleur du texte posé ici — cf. TEXT_COLOR_INK.
+    # Couleur du texte, dans sa banque de palette.
     text_color: int = TEXT_COLOR_INK
-    # Couleur posée SOUS le texte, sur l'étendue qu'il occupe — cf.
-    # HIGHLIGHT_NONE. Index dans la banque d'UI de la scène, comme l'encre :
-    # la tuile de surface où le texte se compose ne porte qu'UNE banque de
-    # palette, le matériel n'en offre pas deux.
-    #
-    # Déclaré ici et nulle part ailleurs : le fond d'un conteneur ancêtre ne
-    # teinte PAS ses textes enfants. Les deux se ressemblaient à l'écran et
-    # n'avaient ni le même propriétaire ni les mêmes conditions d'émission —
-    # d'où un conteneur qui ne colorait qu'une partie de sa zone, la boîte de son
-    # texte, quand sa palette n'était pas active dans la scène.
-    #
-    # Corollaire assumé : un texte SANS surlignement perce le fond de son
-    # conteneur, le chemin tilemap remplaçant la cellule par une tuile de glyphe
-    # dont l'index 0 est transparent. C'est le matériel, montré tel quel.
+    # Couleur de surlignement derrière le texte. Elle n'est pas héritée du conteneur.
     highlight_color: int = HIGHLIGHT_NONE
-    # Priorité OBJ quand la zone est rendue en sprites (nœud ancré acteur, ou
-    # scène bitmap) — -1 = PRIORITY_INHERIT (hérite de l'acteur, le défaut),
-    # 0-3 = surcharge. Sans effet en cible BG, où la profondeur est celle du
-    # layer d'UI. Même champ que `UIImage.priority` / `FillMixin.priority` :
-    # chaque élément d'UI porte SA priorité, éditée dans la carte Geometry.
+    # Priorité OBJ. Sans effet pour le rendu BG.
     priority: int = PRIORITY_INHERIT
     # Les glyphes ANIMÉS — les caractères qui sortent de la bande pour recevoir
     # un effet (`[wave]`, `[shake]`) — ne sont PAS un champ.

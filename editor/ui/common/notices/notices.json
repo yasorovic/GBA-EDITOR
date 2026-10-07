@@ -65,7 +65,7 @@
     "collision.tag": {
       "tone": "accent",
       "code": "self.collision.tag",
-      "text": "Collision group, shared between actors. The matrix in Project Settings ▸ Collisions decides which groups ignore each other; codegen emits it as BOXTAG_<TAG>. Pick an existing tag from the list, or type a new one."
+      "text": "Collision group, shared between actors. The matrix in Project Settings ▸ Collisions decides which groups ignore each other; codegen emits it as BOXTAG_<TAG>. Pick an existing tag from the list, or type a name in the search and create it."
     },
     "collision.w": {
       "tone": "accent",

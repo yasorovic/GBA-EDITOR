@@ -156,6 +156,33 @@ int main(void) {
     collision_box_set_active(body, 1);
     printf("overlap_absente %d\n", collision_box_overlaps_box(none, bbox));
 
+    /* Contacts par couple de TAGS : un bit par couple, pour que le premier contact
+       ne masque pas les suivants. `joueur` = un corps (haut) + des pieds (bas) ;
+       `piece` = un seul corps. Tombée sur la pièce, c'est d'abord les pieds. */
+    Actor *joueur = &g_actors[2];
+    Actor *piece  = &g_actors[3];
+    joueur->collision.box_count = 2;
+    joueur->collision.boxes[0] = (CollisionBox){ 0,  0, 16, 16, 0, 1, TAG_BODY };
+    joueur->collision.boxes[1] = (CollisionBox){ 0, 16, 16,  4, 1, 1, TAG_HIT  };
+    piece->collision.box_count = 1;
+    piece->collision.boxes[0] = (CollisionBox){ 0, 0, 8, 8, 0, 1, TAG_BODY };
+    joueur->x = 0;  joueur->y = 0;
+    piece->x = 4 << 8;
+    piece->y = 18 << 8;                       /* ne touche que les pieds */
+    printf("mask_pieds %d\n", actors_overlap_mask(joueur, piece));
+    piece->y = 10 << 8;                       /* touche le corps ET les pieds */
+    printf("mask_les_deux %d\n", actors_overlap_mask(joueur, piece));
+    piece->y = 40 << 8;
+    printf("mask_loin %d\n", actors_overlap_mask(joueur, piece));
+    /* Deux boîtes de même tag chez le même acteur : UN seul contact. */
+    joueur->collision.boxes[1].tag = TAG_BODY;
+    piece->y = 10 << 8;
+    printf("mask_meme_tag %d\n", actors_overlap_mask(joueur, piece));
+    /* Une boîte inactive ne fait pas de contact. */
+    joueur->collision.boxes[1].tag = TAG_HIT;
+    joueur->collision.boxes[1].active = 0;
+    printf("mask_inactive %d\n", actors_overlap_mask(joueur, piece));
+
     /* Au sol : par boîte, et une boîte absente est fausse. */
     a->collision.boxes[0].grounded = 1;
     a->collision.boxes[1].grounded = 0;

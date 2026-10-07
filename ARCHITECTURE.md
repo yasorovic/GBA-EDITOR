@@ -1013,7 +1013,11 @@ les « deux listes de prototypes ». Une tuile s'y décrit par sa **droite de
 surface** (ordonnées en `x=0` et `x=8`, autorisées à sortir de la tuile) et le
 côté plein ; les 22 types y tiennent, pentes raides comprises.
 
-La résolution (`resolve_actor_tiles`, émise par `main_gen`) suit un ordre qui est
+La résolution (`resolve_actor_tiles`, émise par `main_gen`) ne résout qu'une
+**vélocité** : un acteur dont `vx` et `vy` sont nuls n'a pas été conduit cette frame, elle
+le laisse tel quel (`grounded` garde sa valeur). `self.position` est donc une
+téléportation qui ignore la carte — ni arrêt contre un mur, ni remontée sur une pente — et
+`self.velocity` le déplacement physique. Quand elle tourne, elle suit un ordre qui est
 la règle :
 
 1. **X d'abord**, et seul `TILE_SOLID` repousse — une pente qui bloquerait

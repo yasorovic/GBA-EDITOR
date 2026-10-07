@@ -1,5 +1,8 @@
 {
   "labels": {
+    "pick.choose_a_tag": { "text": "Choisir un tag" },
+    "pick.create_tag_named": { "text": "＋  Créer « {name} »" },
+    "wdg.create_named_hint": { "text": "Créer" },
     "common.none_paren": {
       "text": "(aucun)"
     },

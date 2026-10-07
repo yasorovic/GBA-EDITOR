@@ -74,7 +74,7 @@
           "id": "Feet",
           "active": true,
           "solid": true,
-          "tag": "player",
+          "tag": "Feet",
           "x": -7,
           "y": 11,
           "w": 17,
@@ -82,7 +82,7 @@
         }
       ],
       "x": 56,
-      "y": 152,
+      "y": 160,
       "flip_h": false,
       "flip_v": false,
       "priority": 0,
@@ -137,7 +137,7 @@
           "exports_values": {}
         }
       ],
-      "x": 264,
+      "x": 240,
       "y": 136,
       "flip_h": false,
       "flip_v": false,
@@ -193,8 +193,8 @@
           "exports_values": {}
         }
       ],
-      "x": 184,
-      "y": 128,
+      "x": 136,
+      "y": 136,
       "flip_h": false,
       "flip_v": false,
       "priority": 0,
@@ -249,8 +249,8 @@
           "exports_values": {}
         }
       ],
-      "x": 208,
-      "y": 112,
+      "x": 152,
+      "y": 120,
       "flip_h": false,
       "flip_v": false,
       "priority": 0,
@@ -305,8 +305,8 @@
           "exports_values": {}
         }
       ],
-      "x": 232,
-      "y": 128,
+      "x": 168,
+      "y": 136,
       "flip_h": false,
       "flip_v": false,
       "priority": 0,
@@ -347,6 +347,64 @@
       ],
       "x": 520,
       "y": 112,
+      "flip_h": false,
+      "flip_v": false,
+      "priority": 0,
+      "pal_bank": -1,
+      "visible": true,
+      "obj_mode": 0,
+      "rotation": 0,
+      "scale_x": 1.0,
+      "scale_y": 1.0,
+      "screen_space": false,
+      "dir_x": 0,
+      "dir_y": 0,
+      "notes": ""
+    },
+    {
+      "name": "Guard",
+      "prefab_name": null,
+      "active": true,
+      "components": [
+        {
+          "component_type": "sprite",
+          "id": "sprite",
+          "active": true,
+          "sprite_name": "Demon",
+          "initial_state": "Moving",
+          "auto_dir": true,
+          "affine_transform": false,
+          "scale_x": 1.0,
+          "scale_y": 1.0,
+          "rotation": 0,
+          "offset_x": 0,
+          "offset_y": 0,
+          "pivot_x": 0,
+          "pivot_y": 0
+        },
+        {
+          "component_type": "collision_box",
+          "id": "collision",
+          "active": true,
+          "solid": true,
+          "tag": "body",
+          "x": 0,
+          "y": 0,
+          "w": 32,
+          "h": 32
+        },
+        {
+          "component_type": "script",
+          "id": "script",
+          "active": true,
+          "script": "assets/scripts/Guard_Patrol.lua",
+          "exports_values": {
+            "vitesse": 1
+          }
+        }
+      ],
+      "x": 104,
+      "y": 176,
       "flip_h": false,
       "flip_v": false,
       "priority": 0,

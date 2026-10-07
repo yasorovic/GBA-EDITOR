@@ -59,16 +59,18 @@ exports = {
 }
 
 function on_update()
-    self.position = self.position + vec2(sens * vitesse, 0)
+    self.velocity = vec2(sens * vitesse * 256, 0)
+    self:apply_velocity()
 end
 
 function on_tile_collide(normal_x, normal_y)
     if normal_x ~= 0 then
         sens = -sens
-        self.flip_h = sens < 0
     end
 end
 ```
+
+Le déplacement passe par `self.velocity` (en 256ᵉ de pixel, d'où le `* 256`) puis `apply_velocity()`, comme le joueur. C'est la vitesse que la carte de collision lit pour détecter un mur : écrire `self.position` téléporte l'acteur et la carte ne voit aucun mouvement, l'ennemi traverse donc les murs. Cette même vitesse pilote l'**auto-direction** : l'ennemi se tourne seul vers son sens de marche, à condition que le sprite dessine les deux sens (par exemple une direction est et une direction ouest en miroir). Ne retournez donc pas le sprite à la main avec `self.flip_h` : le retournement s'ajouterait à celui de la direction ouest et l'ennemi regarderait du mauvais côté. Un sprite qui ne dessine qu'un sens reste la seule exception, et peut être retourné avec `self.flip_h = sens < 0` dans `on_tile_collide`.
 
 Ajoutez plusieurs instances du prefab dans des couloirs fermés. Elles patrouillent indépendamment, tandis que le sprite et la logique restent partagés par le prefab.
 
@@ -89,7 +91,8 @@ Dans l'inspecteur de `Niveau1`, réservez des instances de `Projectile` dans le 
 
 ```lua
 function on_update()
-    self.position = self.position + vec2(sens * vitesse, 0)
+    self.velocity = vec2(sens * vitesse * 256, 0)
+    self:apply_velocity()
 
     if scene.frame % 90 == 0 then
         actor:spawn("Projectile", self.position)
@@ -132,6 +135,8 @@ Le clignotement et la secousse sont une première dose de *juiciness* : même sa
 ## 8. Éliminer un ennemi en lui sautant dessus
 
 Donnez au joueur une petite boîte Trigger sous ses pieds, avec le tag `pieds`. Donnez à l'ennemi une petite boîte Trigger sur sa tête, avec le tag `tete`. Dans un script, `my_box` et `other_box` sont les deux boîtes en contact, et leur `.tag` se compare par le nom du tag.
+
+Chaque couple de tags en contact est un événement à part : si les pieds du joueur touchent l'ennemi avant son corps, `on_collision_enter` est appelé une première fois pour `pieds`/`tete`, puis une seconde fois quand le corps entre à son tour. Deux boîtes de même tag chez un acteur ne comptent que pour un seul contact.
 
 Dans le script de l'ennemi, distinguez ce contact du contact avec son corps :
 

@@ -687,6 +687,33 @@ static inline int actors_overlap_boxes(const Actor*a, const Actor*b,
     return 0;
 }
 
+/* Les contacts entre deux acteurs, UN BIT PAR COUPLE DE TAGS en contact.
+   Un contact est identifié par ses tags, pas par ses boxes : deux boxes de même
+   tag sur un acteur comptent pour une seule (c'est la première qui la
+   représente, comme `actor_get_box`) — sinon un acteur à deux boxes `player`
+   déclencherait deux fois le même `on_collision_enter`.
+   Bit (i*MAX_BOXES+j) = boxes i de `a` et j de `b`, canoniques. Pieds contre
+   tête ET corps contre corps sont donc deux contacts distincts, suivis chacun
+   d'une frame à l'autre — le premier ne masque plus le second. */
+_Static_assert(MAX_BOXES * MAX_BOXES <= 16, "actors_overlap_mask tient sur 16 bits");
+static inline int _box_canonical(const Actor*a, int i) {
+    for (int k=0; k<i; k++)
+        if (a->collision.boxes[k].tag == a->collision.boxes[i].tag) return k;
+    return i;
+}
+static inline u16 actors_overlap_mask(const Actor*a, const Actor*b) {
+    u16 m = 0;
+    for (int i=0; i<a->collision.box_count; i++) {
+        if (!a->collision.boxes[i].active) continue;
+        for (int j=0; j<b->collision.box_count; j++)
+            if (b->collision.boxes[j].active &&
+                box_overlap(a->x>>8,a->y>>8,&a->collision.boxes[i],
+                            b->x>>8,b->y>>8,&b->collision.boxes[j]))
+                m |= (u16)(1u << (_box_canonical(a,i)*MAX_BOXES + _box_canonical(b,j)));
+    }
+    return m;
+}
+
 /* Rétrocompatibilité — teste sans récupérer les tags */
 static inline int actors_overlap(const Actor*a, const Actor*b) {
     u8 _a=0,_b=0; return actors_overlap_boxes(a,b,&_a,&_b);

@@ -894,6 +894,13 @@ class CollisionsPanel(QWidget):
             self._row_widgets[ta] = row
             self._grid_col.addWidget(row)
 
+        # Pas de défilement vertical : la zone doit donc être aussi haute que
+        # la matrice, sinon les dernières lignes sont coupées (la barre
+        # horizontale en dessous y gagne sa propre place).
+        self._grid_scroll.setMinimumHeight(
+            self._grid_col.sizeHint().height()
+            + self._grid_scroll.horizontalScrollBar().sizeHint().height() + 4)
+
     def _build_row(self, r: int, ta: str, tags: list, disabled: set) -> QWidget:
         host = QWidget()
         row = QHBoxLayout(host)

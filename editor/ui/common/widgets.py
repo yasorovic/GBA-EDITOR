@@ -708,9 +708,11 @@ class ScriptPickerPopup(QFrame):
 
     picked        = pyqtSignal(str)   # chemin relatif au projet
     new_requested = pyqtSignal()
+    created       = pyqtSignal(str)   # nom tapé dans la recherche (mode `create_named`)
 
     def __init__(self, scripts: list[tuple], accent: str, parent=None,
-                 new_label: str | None | object = _DEFAULT_NEW_LABEL):
+                 new_label: str | None | object = _DEFAULT_NEW_LABEL,
+                 create_named: bool = False):
         """
         scripts   : liste de (nom_affichage, valeur) ou (nom_affichage, valeur, QIcon)
                     — le 3e élément (icône par ligne) est optionnel, pour les
@@ -719,6 +721,9 @@ class ScriptPickerPopup(QFrame):
         new_label : texte du bouton de création en bas du popup ; None pour
                     l'omettre (ex: picker qui ne propose que des éléments déjà
                     existants, sans création à la volée).
+        create_named : la création prend son nom dans la barre de recherche
+                    (`new_label` est alors un gabarit avec `{name}`) : le bouton
+                    n'est actif que pour un nom libre, et `created(name)` le porte.
         """
         super().__init__(parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         # Normalise en (display, valeur, icone|None) — accepte les anciens
@@ -727,6 +732,9 @@ class ScriptPickerPopup(QFrame):
             new_label = label('wdg.new_script')
         self._scripts = [(e[0], e[1], e[2] if len(e) > 2 else None) for e in scripts]
         self._accent  = accent
+        self._create_named = create_named
+        self._new_template = new_label
+        self._btn_new = None
 
         self.setFixedWidth(260)
         self.setStyleSheet(
@@ -782,8 +790,11 @@ class ScriptPickerPopup(QFrame):
             )
             btn_new.clicked.connect(self._on_new)
             root.addWidget(btn_new)
+            self._btn_new = btn_new
 
         self._search.textChanged.connect(self._filter)
+        if create_named and self._btn_new is not None:
+            self._search.returnPressed.connect(self._on_enter)
         self._filter("")
         self._search.setFocus()
 
@@ -798,6 +809,7 @@ class ScriptPickerPopup(QFrame):
                 item.widget().deleteLater()
 
         matches = [(d, r, i) for d, r, i in self._scripts if query in d.lower()]
+        self._sync_create_button()
 
         if not matches:
             lbl = QLabel(label('wdg.no_results'))
@@ -828,8 +840,32 @@ class ScriptPickerPopup(QFrame):
         self.picked.emit(rel)
         self.close()
 
+    def _creatable_name(self) -> str:
+        """Le nom tapé s'il est libre (insensible à la casse), sinon ''."""
+        name = self._search.text().strip()
+        taken = {d.lower() for d, _r, _i in self._scripts}
+        return "" if (not name or name.lower() in taken) else name
+
+    def _sync_create_button(self):
+        if not (self._create_named and self._btn_new is not None):
+            return
+        name = self._creatable_name()
+        self._btn_new.setEnabled(bool(name))
+        self._btn_new.setText(self._new_template.format(name=name) if name
+                              else label('wdg.create_named_hint'))
+
+    def _on_enter(self):
+        if self._creatable_name():
+            self._on_new()
+
     def _on_new(self):
-        self.new_requested.emit()
+        if self._create_named:
+            name = self._creatable_name()
+            if not name:
+                return
+            self.created.emit(name)
+        else:
+            self.new_requested.emit()
         self.close()
 
     # ── Positionnement ────────────────────────────────────────────

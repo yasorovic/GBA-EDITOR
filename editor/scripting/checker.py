@@ -31,10 +31,7 @@ from .parser import (
     SEQUENCE_PREFIX,
 )
 from . import lua_subset
-# Les 10 boutons GBA — source unique dans le SOCLE (core.models). `scripting`
-# a le droit d'importer `core.models` (cf. check_architecture, INTERDITS) ; c'est
-# `core.models` qui ne peut pas remonter vers `scripting`, d'où le sens de
-# l'import (et non une seconde liste tenue ici).
+# Boutons GBA : liste unique définie dans `core.models`.
 from core.models.settings import BUTTON_NAMES
 from codegen.c_names import c_ident
 from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, REMOVED_EVENTS, KNOWN_EVENTS, KNOWN_EVENTS_BY_KIND,
@@ -59,22 +56,18 @@ from .expr_types import (VEC_FIELDS, VEC_CONSTRUCTORS, VEC_FUNCTIONS, ARITH_TYPE
                          is_actor_call, chain_label, element_of)
 
 
-# Ce à quoi ressemble une CLÉ et pas un libellé : minuscules, chiffres, au
-# moins un tiret bas, ni espace ni accent. « village_garde_01 » oui, « Appuyez
-# sur A » non — de quoi voir la faute de frappe sans suspecter chaque littéral
-# (cf. Checker._check_text).
+# Forme d'une clé de texte : minuscules, chiffres et au moins un souligné.
 _KEY_SHAPED = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)+$")
 
 
-# Les champs d'un acteur (`position`, `velocity`…) : ce qu'un module `actor` n'a PAS et qu'on lui
-# demande par erreur.
+# Champs d'acteur absents du module `actor`.
 _ACTOR_FIELD_NAMES = frozenset(k.split(".", 1)[1] for k in RUNTIME_PROPS if k.startswith("actor."))
 
 
-# ─── Résultat ─────────────────────────────────────────────────────
+# Résultat
 
 
-# « a <label> script » — the owner's family du propriétaire, dite à l'auteur.
+# Libellé du type de propriétaire du script.
 _OWNER_LABELS = {"actor": "actor", "prefab": "prefab",
                  "scene": "scene", "camera": "camera", "behavior": "behavior"}
 
@@ -107,27 +100,17 @@ class BuildContext:
     Tous les champs sont optionnels ; si absent, la vérification est relâchée.
     """
     actor_name:   str        = ""
-    # Famille du PROPRIÉTAIRE du script — "actor" | "prefab" | "scene" | "camera".
-    # Le script n'a pas de type propre : elle décide des événements qu'il peut
-    # définir et de la présence de `self`. "" = vérification relâchée (événements
-    # d'acteur, `self` toléré), pour les appelants qui ne savent pas où le script sera attaché.
+    # Type du propriétaire. Une chaîne vide relâche les vérifications liées au contexte.
     owner_kind:   str        = ""
     anim_names:   list[str]  = None    # noms d'anim définis dans le SpriteAsset lié
-    # `id` des composants sprite de l'acteur (ses apparences), dans l'ordre : le rang
-    # est celui que `OamEntry.appearance` désigne. None = vérification relâchée.
+    # Identifiants des composants sprite, dans l'ordre des apparences. `None` relâche le contrôle.
     sprite_ids:   list[str]  = None
-    # `AnimFrame.event_name` cités par le sprite lié (ROADMAP v0.8.9) — une
-    # fonction de premier niveau portant l'un de ces noms est un EventCall,
-    # pas une fonction inconnue : cf. `_check_function`.
+    # Événements d'animation autorisés comme fonctions de premier niveau.
     frame_event_names: list[str] = None
     sfx_names:    list[str]  = None    # noms de Sfx dans le projet
     music_names:  list[str]  = None    # noms de Music dans le projet
     scene_names:  list[str]  = None    # noms de scènes du projet
-    # Codes des langues DÉCLARÉES (ROADMAP v0.9, phase 4). `lua_compiler` pose
-    # toujours une LISTE, `[]` dans un projet monolingue — lang.set/lang.get
-    # n'ont alors aucun code valide, donc tout appel est refusé, sans cas
-    # spécial à écrire ici. `None` (l'absence) relâche la vérification, comme
-    # tout le reste de ce contexte.
+    # Codes des langues déclarées. Une liste vide interdit `lang.set` et `lang.get`.
     lang_codes:   list[str]  = None
     camera_names: list[str]  = None    # noms de caméras du projet (pour camera.switch)
     box_tag_names: list[str] = None    # tags de boîtes de collision du projet (self:collision_box…)
@@ -137,73 +120,48 @@ class BuildContext:
     music_box_trigger_names: list[str] = None  # déclencheurs des MusicBox
     actor_names:  list[str]  = None    # noms des actors de la scène (pour actor.get)
     prefab_names: list[str]  = None    # noms de Prefab du projet (pour actor.spawn)
-    # Exports réglables par prefab (tranche poolé D2) : nom de prefab → { export →
-    # {"type", "values"} }. Sert à valider la table d'`actor:spawn("X", pos, {k=v})`.
+    # Exports par prefab, utilisés pour valider `actor:spawn`.
     spawn_exports: dict      = None
     global_names: list[str]  = None    # noms de GlobalVar déclarées dans le projet
     global_types: dict[str, str] = None  # nom -> type ("int"/"bool"/"u8"/"u16"/"s8"/"s16")
-    # nom -> nombre de cases (ROADMAP v0.20). 1 = scalaire, ce qu'était toute
-    # variable avant cette version ; au-delà, `global.nom[i]` l'indexe.
+    # Nombre de cases par variable globale. Une seule case désigne un scalaire.
     global_counts: dict[str, int] = None
-    # nom -> `persist` (ROADMAP v0.22). Sert UNIQUEMENT `save.read` : un nom
-    # qui existe mais n'est pas coché persist ne figure dans aucun fichier de
-    # sauvegarde — l'appel rendrait toujours le défaut, en silence.
+    # Indique les variables globales enregistrées par `save.read`.
     global_persist: dict[str, bool] = None
-    # Les enfants du propriétaire de ce script (ROADMAP v0.23) : `self.bras`
-    # n'est valide que si « bras » en est un. None = information absente
-    # (appel hors build), et la vérification ne s'applique pas.
+    # Enfants du propriétaire, pour valider les accès `self.<enfant>`.
     child_names: list = None
     const_names:  list[str]  = None    # noms de Constant déclarées dans le projet
     sfx_component_name: Optional[str] = None  # Sfx lié au SoundFxComponent de cet actor (si présent)
     text_keys:    list[str]  = None    # clés de la table de textes du projet
     font_names:   list[str]  = None    # noms des polices encodables
     palette_names: list[str] = None    # palettes du catalogue de couleurs
-    # TOUS les éléments d'UI, tous types confondus (pour interface.get) — texte,
-    # conteneur, liste et image.
+    # Tous les éléments d'interface, pour `interface.get`.
     element_names: list[str] = None
-    # nom d'élément → type de référence que `interface:get(nom)` rend (`list`, `image`,
-    # `text_region`, `ui_element`), lu dans la mise en page. None hors build : le type
-    # de base, donc le seul cycle de vie.
+    # Type de référence renvoyé par `interface:get`. Absent hors build.
     ref_kinds: dict = None
-    # Les numéros de fonds de la scène (`api.LAYERS_BY_MODE` × son mode). None : les quatre du mode 0.
+    # Numéros de fonds de la scène. Par défaut : ceux du mode 0.
     layer_numbers: tuple = None
 
-    # {nom d'image: [états de SON sprite]} — un état n'existe que dans un
-    # sprite, et c'est l'image qui dit lequel (cf. `_check_image_state`).
+    # États disponibles par image d'interface.
     image_states: dict = None
     save_slots:   Optional[int] = None # emplacements de sauvegarde déclarés au projet
-    # Tables de données : {nom: (noms de colonnes, nombre de lignes)}. Ce que le
-    # checker en fait : refuser une table ou une colonne qui n'existe pas, borner
-    # un index écrit en clair, et refuser l'écriture (elles sont `const` en ROM).
+    # Tables de données : colonnes et nombre de lignes, pour valider leurs accès.
     data_tables:  dict = None
-    # Y a-t-il seulement quelque chose à sauver ? Sauver sans variable
-    # persistante n'échoue pas, ça ne fait simplement RIEN — le genre de silence
-    # qu'on ne diagnostique pas en regardant son script.
+    # Indique si le projet contient au moins une variable persistante.
     has_persistent: Optional[bool] = None
-    # « Affine transform » est-il coché sur le SpriteComponent de cet
-    # actor/prefab ? C'est ce qui lui réserve un slot de matrice affine au
-    # build. self.rotation/self.scale s'écrivent et se relisent sans lui — ce
-    # sont des champs de la struct Actor — mais rien ne les AFFICHE : d'où un
-    # avertissement, et non le refus de build que c'était jusqu'au 2026-08-25.
+    # Une transformation affine est nécessaire pour afficher rotation et échelle.
     affine_transform: bool = False
-    # Actions (accords) déclarées dans Project Settings. Elles partagent le
-    # paramètre `btn` avec les boutons matériels : un script reste donc
-    # lisible et les anciens `input:held("a")` restent valides. Espace de
-    # noms SÉPARÉ de `input_sequence_names` (décision de l'auteur, 2026-09-27) :
-    # held/pressed/released/buffered ne lisent jamais une séquence.
+    # Actions déclarées dans le projet. Elles n'incluent pas les séquences.
     input_names: list[str] = None
-    # Séquences déclarées dans Project Settings → Input → Séquences, lues
-    # SEULEMENT par `input:get_sequence()`.
+    # Séquences lues uniquement par `input:get_sequence()`.
     input_sequence_names: frozenset = frozenset()
-    # Noms d'axe valides pour `input:get_axis()` — "horizontal"/"vertical"
-    # (toujours présents) plus les `InputAxis` déclarés du projet.
+    # Axes valides pour `input:get_axis()`.
     axis_names: list[str] = None
 
     VALID_KEYS = frozenset(BUTTON_NAMES)   # dérivé du socle, jamais redéclaré
 
 
-# Plage valide par type C généré (cf. scripting/globals.py) — "int" n'a pas
-# de plage restreinte (entier natif ARM 32 bits), donc absent de la table.
+# Plages valides des types C générés. `int` reste un entier ARM 32 bits.
 _TYPE_RANGES = {
     "bool": (0, 1),
     "u8":   (0, 255),
@@ -213,7 +171,7 @@ _TYPE_RANGES = {
 }
 
 
-# ─── Checker ──────────────────────────────────────────────────────
+# Vérificateur
 
 class Checker:
 
@@ -221,56 +179,28 @@ class Checker:
         self.ctx    = ctx
         self._stmt_line = 0
         self.errors: list[CheckError] = _LineStampedErrors(self)
-        # Tableaux du script : nom → dimensions, ou None quand le même nom est
-        # déclaré deux fois avec des tailles différentes. Une table PLATE, sans
-        # portée lexicale : approximer large ne peut que taire un contrôle,
-        # jamais en inventer un — et une erreur de bornes est bloquante, donc
-        # elle ne doit jamais porter sur le mauvais tableau.
+        # Dimensions des tableaux du script. `None` indique des déclarations incompatibles.
         self._arrays: dict[str, Optional[tuple[int, ...]]] = {}
-        # Locals vec2/vec3 du script : nom → type, ou None si le même nom a
-        # servi avec deux types différents. Même approximation, à plat, que
-        # `_arrays` ci-dessus — cf. scripting/expr_types.py.
+        # Types des variables vectorielles. `None` indique des types incompatibles.
         self._vec_types: dict[str, Optional[str]] = {}
-        # Locals qui tiennent une RÉFÉRENCE : nom → type de référence
-        # (`local pas = sfx:play("Pas")` → "sfx"). C'est ce qui dit à quel
-        # catalogue de méthodes un `pas:...` doit être confronté — sans quoi il
-        # serait jugé comme une méthode d'actor, et refusé.
+        # Types de référence des variables locales, pour valider leurs méthodes.
         self._ref_types: dict[str, str] = {}
-        # Le NOM de l'élément d'interface qu'un local tient (`local heart =
-        # interface:get("Heart")` → "Heart"), ou None s'il en tient plusieurs : ce que
-        # l'état d'une image exige pour se nommer dans SON sprite.
+        # Éléments d'interface référencés par les variables locales.
         self._ref_elements: dict[str, Optional[str]] = {}
-        # Les deux espaces de noms qu'un script peut appeler en plus du
-        # catalogue : l'alias d'un behavior importé (`local AI =
-        # require("behaviors/ai")` → `AI.update(self)`) et, dans un behavior, sa
-        # propre table de module (`M.aide(x)`). Sans eux, refuser les appels
-        # inconnus refuserait aussi les seuls appels légitimes hors catalogue.
+        # Alias de behaviors importés et fonctions de module autorisés.
         self._require_aliases: set[str] = set()
         self._module_functions: dict[str, list[str]] = {}
-        # Fonctions privées du script : des helpers nommés au premier niveau,
-        # différents des handlers, séquences et EventCall de frame. Elles ne
-        # quittent jamais ce fichier Lua ; le codegen leur passe `self` en
-        # premier argument C.
+        # Fonctions privées du script, appelées avec `self` en premier argument C.
         self._helpers: dict[str, LuaFunction] = {}
         self._current_function: str = ""
-        # Tout ce qu'un nom NU a le droit d'être : un `local` (où qu'il soit
-        # déclaré), un paramètre de fonction, une variable de boucle. Ce
-        # langage n'a pas de variable de script implicite — une globale
-        # s'écrit `global.nom` —, donc un nom hors de cet ensemble ne désigne
-        # rien et le C émis citerait un identifiant qui n'existe pas.
+        # Noms locaux autorisés : variables, paramètres et compteurs de boucle.
         self._local_names: set[str] = set()
-        # Un nom inconnu se dit UNE fois par script, pas une fois par
-        # occurrence : `curpos = curpos + 1` le rencontre trois fois (la cible,
-        # la cible relue comme expression, l'opérande) et trois lignes
-        # identiques donneraient à chercher trois fautes.
+        # Noms inconnus déjà signalés, pour éviter les diagnostics répétés.
         self._bare_said: set[str] = set()
-        # Remplis par `check()` — cf. les commentaires là-bas.
+        # Données calculées par `check()`.
         self._sequences: list[str] = []
         self._assigned:  set[str]  = set()
-        # `id()` des appels `actor:spawn(...)` en position STATEMENT (début de
-        # ligne ou `local x = …`), les seules où le codegen sait écrire la table
-        # d'exports (tranche poolé D2). Rempli par `_check_stmt`, lu par
-        # `_check_spawn_table`.
+        # Appels `actor:spawn` dont la table d'exports peut être générée.
         self._spawn_stmt_ok: set = set()
 
     def check(self, script: LuaScript, check_event_names: bool = True) -> list[CheckError]:
@@ -288,19 +218,13 @@ class Checker:
         self._collect_local_types(script)
         self._collect_namespaces(script)
         self._collect_local_names(script)
-        # Les séquences déclarées par CE script : l'espace de noms de
-        # `sequence.start` est le script, pas le projet (cf. DOMAIN_SEQUENCE).
-        # Et les noms qu'aucune ligne n'assigne, pour le refus du `wait_until`
-        # dont la condition ne peut jamais devenir vraie.
+        # Séquences de ce script et noms jamais assignés, pour `wait_until`.
         self._sequences = [s for s in (sequence_name(fn.name) for fn in script.functions)
                            if s is not None]
         self._assigned = assigned_names(script)
         for loc in script.locals:
             self._check_array_decl(loc.name, loc.value)
-            # Un export composite porte un type vec2/vec3/rect dès sa déclaration
-            # (sa valeur vient de l'éditeur, pas d'un `local x = vec2(...)`) : on
-            # le sème ici pour que `home + vec2(1,0)` ou `box.x` se valident comme
-            # sur un vrai vec. Symétrique du codegen (cf. _emit_shared_local).
+            # Les exports composites sont typés dès leur déclaration.
             if loc.export_type in ("vec2", "vec3", "rect"):
                 self._vec_types[loc.name] = loc.export_type
         self._check_export_names(script)
@@ -349,9 +273,7 @@ class Checker:
             f"`self` does not exist in a {_OWNER_LABELS.get(kind, kind)} script: it designates the instance the "
             f"script is attached to, and only an actor or a prefab has one. {conseil}"))
 
-    # Tous les types d'export sont désormais câblés jusqu'au C (chantier « Les
-    # exports de script » : scalaires, string→TEXT_*, *_ref→index, vec/rect).
-    # Miroir de codegen._EXPORT_SETTABLE et lua_compiler._SETTABLE_EXPORTS.
+    # Types d'exports gérés par le générateur C.
     _EXPORT_WIRED_TYPES = frozenset({
         "int", "float", "bool", "enum",
         "string", "actor_ref", "scene_ref", "sfx_ref",
@@ -417,9 +339,7 @@ class Checker:
                 self.errors.append(CheckError("error", f"Private function '{name}' "
                                                        f"declared {n} times."))
 
-        # Un appel de helper est direct ; un cycle ne peut donc ni se dérouler
-        # ni être transformé en machine d'états. Le refuser ici évite un stack
-        # overflow C sur une GBA.
+        # Les cycles de helpers provoqueraient un débordement de pile sur GBA.
         graph = {name: self._helper_calls(fn.body) for name, fn in self._helpers.items()}
         visiting, done = set(), set()
         def visit(name):
@@ -469,7 +389,7 @@ class Checker:
                 for value in s.values: expr(value)
         return found
 
-    # ── Tableaux ──────────────────────────────────────────────────
+    # Tableaux
 
     def _collect_arrays(self, script: LuaScript):
         """Relève toutes les déclarations de tableau du script, où qu'elles
@@ -556,7 +476,7 @@ class Checker:
         les deux."""
         self._local_names |= local_names(script)
 
-    # ── Espaces de noms appelables ────────────────────────────────
+    # Espaces de noms appelables
 
     def _collect_namespaces(self, script: LuaScript):
         """Les alias de behavior et la table de module de ce script.
@@ -637,8 +557,7 @@ class Checker:
             indices.append(cur.index)
             cur = cur.obj
         indices.reverse()
-        # `data.Objets[i]` : la base n'est pas un nom mais une table du projet,
-        # et sa « dimension » est son nombre de lignes.
+        # Une table de données est dimensionnée par son nombre de lignes.
         table = self._data_table_ref(cur)
         if table is not None:
             self._check_data_rows(table, indices)
@@ -669,7 +588,7 @@ class Checker:
                     f"'{name}[{k}]': out of bounds — this array runs from 1 to "
                     f"{dims[level]} (arrays are indexed from 1, as everywhere in Lua)."))
 
-    # ── Tables de données ─────────────────────────────────────────
+    # Tables de données
 
     @staticmethod
     def _data_table_ref(e) -> Optional[str]:
@@ -729,14 +648,7 @@ class Checker:
                 + (f" (declared in the project: {near})." if near
                    else " — no constant is declared in this project.")))
 
-    # Ce qu'un nom NU peut être SANS être une variable : un espace de noms.
-    # `_check_expr` visite `e.obj` en fin de branche `ExprIndex`, donc le
-    # `global` de `global.score` et le `camera` de `camera.bound` passent par
-    # là. `API_MODULES` porte les modules du catalogue ; les quatre autres sont
-    # des espaces résolus hors catalogue (accès pointé du chantier global/const,
-    # tables de données, constantes d'écran) et `self`/`other` sont des
-    # récepteurs. Un nom d'ACTEUR est légitime aussi (`paddle.position`) : il
-    # vient du projet, donc du contexte de build.
+    # Noms valides hors variable : modules, récepteurs, données et acteurs du projet.
     _NAMESPACES: frozenset = frozenset(API_MODULES) | frozenset({
         "global", "const", "data", "screen", "self", "other",
     })
@@ -775,13 +687,7 @@ class Checker:
             " at the top of the file; a value shared between scripts is written "
             f"`global.{name}` (declare it in the Variables screen)."))
 
-    # ── Références typées : méthode ou champ inconnu ──────────────
-    # Un type de référence se DÉCLARE (`api.REF_TYPE_TABLE`) et ses membres vivent
-    # dans le catalogue : ces deux messages en sont dérivés, pour TOUT type — une
-    # boîte de collision, un effet, un élément d'interface, le prochain. Ils
-    # remplacent le cas spécial qui ne savait parler que d'`interface:get(...)`.
-    # Une faute est une ERREUR et non un avertissement : le C qu'elle émettrait
-    # (`UIELEM_CURSOR.y`, `actor_bouge(UIELEM_CURSOR)`) ne compile pas.
+    # Références typées : une méthode ou un champ inconnu empêche la compilation C.
 
     @property
     def _kinds(self):
@@ -963,8 +869,7 @@ class Checker:
                 return
             named = p.domain is not None
             if named and isinstance(value, ExprString):
-                # Forme NOMMÉE — la seule écriture possible d'une propriété à
-                # domaine scalaire, et l'une des deux de `self.direction`.
+                # Les propriétés à domaine scalaire s'écrivent avec une valeur nommée.
                 self._check_prop_domain_value(receiver, p, value, "=", target)
             elif p.ptype in VEC_CONSTRUCTORS:
                 vt = infer_vec_type(value, self._vec_types, self._ref_types, self._kinds)
@@ -981,7 +886,7 @@ class Checker:
             elif named:
                 self._check_prop_domain_value(receiver, p, value, "=", target)
             return
-        # Un accès pointé EN DESSOUS d'un champ écrit : `self.position.x = 5`
+        # Accès imbriqué sous un champ écrit, par exemple `self.position.x = 5`.
         node = target
         while isinstance(node, ExprIndex):
             base = resolve_prop(node.obj, self._ref_types, self._kinds)
@@ -1011,13 +916,7 @@ class Checker:
         que ce qui est écrit en clair."""
         nom = _prop_label(receiver, p)
         if p.domain in _RECEIVER_DOMAINS and receiver != "self":
-            # Même piège que pour un ARGUMENT du même domaine (_check_args,
-            # plus haut) : le nom cité appartient au sprite du RÉCEPTEUR, que
-            # ce script ne connaît pas — et le codegen le résout quand même
-            # contre l'acteur courant (`anim_constant(ctx.actor_sym, ...)`),
-            # produisant une constante crédible et fausse. Erreur ici, plutôt
-            # qu'une comparaison à l'animation d'un autre acteur qui mentirait
-            # en silence.
+            # Le générateur résout ces noms dans le sprite de l'acteur courant.
             self.errors.append(CheckError(
                 "error",
                 f"{nom} {op} ...: \"{p.lua_name.split('.', 1)[1]}\" names an element of the sprite of \"{receiver}\", and it "
@@ -1037,8 +936,7 @@ class Checker:
             return
         check = _DOMAIN_CHECKS.get(p.domain)
         if check:
-            # Pour une PROPRIÉTÉ, `args` porte l'expression du récepteur : l'état d'une
-            # image se nomme dans le sprite de l'image qu'il désigne.
+            # La validation d'une propriété utilise son expression réceptrice.
             check(self, nom, value.value, p, [access.obj] if access is not None else [])
 
     def _check_prop_enum_compare(self, e: ExprBinop) -> bool:
@@ -1081,41 +979,26 @@ class Checker:
                 "no affine matrix slot is reserved at build. The value can be written"
                 " and read back, but nothing shows it on screen."))
 
-    # ── Fonctions ─────────────────────────────────────────────────
+    # Fonctions
 
     def _check_function(self, fn: LuaFunction, check_event_names: bool = True):
-        # check_event_names=False pour les modules de behavior : leurs
-        # fonctions top-level sont des noms de méthode arbitraires (M.update),
-        # pas des handlers d'événement actor/scène — seul le corps est validé.
+        # Les fonctions de behavior ne sont pas des gestionnaires d'événements.
         seq = sequence_name(fn.name)
         is_frame_event = fn.name in (self.ctx.frame_event_names or ())
         is_helper = fn.name in self._helpers
         admitted = self._admitted_events()
         if check_event_names and fn.name in REMOVED_EVENTS:
-            # Les dix `on_button_*` : retirés (ROADMAP « Les inputs
-            # personnalisés », tranche finale) — un message de migration
-            # plutôt que « fonction inconnue », aucun script du dépôt ne les
-            # utilisant déjà, un guide ne coûte rien ici.
+            # Les anciens événements de bouton reçoivent un diagnostic de migration.
             self.errors.append(CheckError("error", REMOVED_EVENTS[fn.name]))
         elif (check_event_names and fn.name in ALL_KNOWN_EVENTS and fn.name not in admitted
                 and self.ctx.owner_kind):
-            # Un événement qui existe, mais pas POUR CE propriétaire : le compiler comme
-            # helper le rendrait muet (jamais appelé), ce qui est pire qu'un refus.
+            # Un événement non pris en charge par ce propriétaire ne serait jamais appelé.
             self.errors.append(CheckError(
                 "error",
                 f"Event '{fn.name}' is not available for a "
                 f"{_OWNER_LABELS.get(self.ctx.owner_kind, self.ctx.owner_kind)} script: the events allowed here are {', '.join(admitted)}."))
         elif check_event_names and not is_helper and seq is None and fn.name not in admitted and not is_frame_event:
-            # ERREUR et non avertissement : le C émis pour un nom inconnu est
-            # `static void <Acteur>_<nom>(Actor* self)`, qu'aucun appel Lua ne
-            # peut atteindre (`nom()` s'émet `nom()`, sans le préfixe). Donc du
-            # code mort au mieux, un « implicit declaration » au `make` au pire
-            # — jamais ce que l'auteur croyait écrire.
-            #
-            # Exception : un nom cité par `AnimFrame.event_name` sur LE sprite
-            # de cet actor (`frame_event_names`) EST atteint — pas par un appel
-            # Lua, par le stepper d'anim de `main.c` (ROADMAP v0.8.9, EventCall,
-            # cf. `codegen._emit_function` / `gen_sprite.actor_frame_event_lines`).
+            # Un nom inconnu produit du code mort ou une erreur C. Les événements d'animation sont admis.
             self.errors.append(CheckError(
                 "error",
                 f"Unknown function '{fn.name}': a top-level function is an event handler "
@@ -1127,10 +1010,9 @@ class Checker:
             self._check_sequence_waits(fn, seq)
         if is_helper:
             self._check_helper_returns(fn)
-        # `seq_top` : les attentes ne sont légales qu'ici, au premier niveau
-        # d'une séquence. Partout ailleurs `_check_stmt` les refuse.
+        # Les attentes sont autorisées uniquement au premier niveau d'une séquence.
         previous, self._current_function = self._current_function, fn.name
-        # `my_box` / `other_box` d'un événement de contact sont des références de boîte.
+        # Les paramètres d'événement de contact sont des références de boîte.
         box_params = ([n for n, _ in BOX_PARAMS if n in fn.params]
                       if fn.name in COLLISION_EVENTS else [])
         for name in box_params:
@@ -1170,7 +1052,7 @@ class Checker:
                     walk(stmt.body)
         walk(fn.body)
 
-    # ── Séquences ─────────────────────────────────────────────────
+    # Séquences
 
     def _check_sequence_waits(self, fn: LuaFunction, seq: str):
         """Ce qui rend une attente invalide, dit sur sa ligne.
@@ -1178,9 +1060,7 @@ class Checker:
         Deux contrôles, et ils ne portent pas sur la même chose : la FORME de
         l'appel (un argument, du bon genre), et la question de fond — cette
         condition peut-elle seulement devenir vraie un jour ?"""
-        # Les attentes d'une boucle bornée comptent autant que celles du premier
-        # niveau (ROADMAP v0.23) : leur forme se vérifie de la même façon, sans
-        # quoi `wait(x)` dans une boucle passerait sans être relu.
+        # Les attentes des boucles bornées sont validées comme celles du premier niveau.
         def _waits(stmts):
             for st in stmts:
                 if wait_call(st) is not None:
@@ -1233,7 +1113,7 @@ class Checker:
                     and self._condition_is_frozen(e.right))
         return False
 
-    # ── Statements ────────────────────────────────────────────────
+    # Instructions
 
     def _check_block(self, stmts: list, seq_top: bool = False):
         for s in stmts:
@@ -1249,18 +1129,12 @@ class Checker:
 
     def _check_stmt_line_known(self, s, seq_top: bool = False):
         if isinstance(s, StmtCall):
-            # Une attente n'est pas un appel : elle coupe la séquence en deux,
-            # et le découpage n'a de sens qu'en LIGNE DROITE. `seq_top` est vrai
-            # au seul endroit où elle est légale ; sa forme y a déjà été validée
-            # par `_check_sequence_waits`, il n'y a plus rien à faire ici.
+            # Une attente interrompt la séquence et n'est valide qu'au premier niveau.
             if wait_call(s) is not None:
                 if not seq_top:
                     self._refuse_misplaced_wait(s)
                 return
-            # `_check_expr` et non `_check_call_expr` : posé seul, un appel doit
-            # descendre exactement comme en expression — ses arguments, et le
-            # RÉCEPTEUR d'un `:méthode()` quand c'en est un autre
-            # (`interface:get("Cusor"):show()` ne validait rien du tout).
+            # Un appel isolé valide aussi ses arguments et son récepteur.
             self._mark_spawn_stmt(s.call)
             self._check_expr(s.call)
         elif isinstance(s, StmtLocalAssign):
@@ -1289,17 +1163,10 @@ class Checker:
             self._check_for_step(s)
             self._check_expr(s.start)
             self._check_expr(s.stop)
-            # ROADMAP v0.23 : une boucle BORNÉE laisse passer l'attente, parce
-            # qu'elle se découpe sans continuation — un compteur de plus dans
-            # l'état, et une tranche qui revient en arrière. `if` et `while`
-            # gardent leur refus : eux demanderaient la transformation que la
-            # v0.7.7 a chiffrée puis écartée, et son prix n'a pas changé.
+            # Les attentes sont permises dans une boucle bornée, mais pas dans `if` ou `while`.
             self._check_block(s.body, seq_top)
         elif isinstance(s, StmtUnsupported):
-            # Un `Function` n'arrive ici que s'il est IMBRIQUÉ : au premier
-            # niveau, c'est un handler, et `convert_chunk` le prend. Le nœud est
-            # le même, seule sa place change — d'où le seul refus qui ne
-            # s'indexe pas par le nom du nœud (cf. lua_subset.NESTED_FUNCTION).
+            # Une fonction atteint cette branche uniquement si elle est imbriquée.
             refusal = (lua_subset.NESTED_FUNCTION if s.node == "Function"
                        else lua_subset.refusal_for_node(s.node))
             self._refuse(refusal, s.node, s.line)
@@ -1363,20 +1230,13 @@ class Checker:
             while isinstance(cur, ExprIndexAt):
                 self._check_expr(cur.index)
                 cur = cur.obj
-            # `global.coffres[i]` — nom, tableau-ness et rang, tout d'un coup
-            # (ROADMAP v0.20 pour les tableaux, chantier global/const pour
-            # l'accès pointé). `_check_global_indexed` remplace ici ce
-            # que la branche ExprIndex ci-dessous ferait pour un accès NU —
-            # d'où le `is_global_index` qui l'empêche de repasser dessus.
+            # Les accès indexés aux globales sont validés en une seule fois.
             is_global_index = (isinstance(e.obj, ExprIndex)
                                and isinstance(e.obj.obj, ExprName)
                                and e.obj.obj.name == "global")
             if is_global_index:
                 self._check_global_indexed(e.obj.field, e.index)
-            # La BASE est déjà traitée : par `_array_chain` pour un tableau de
-            # script ou une table de données, par `_check_global_indexed`
-            # ci-dessus pour `global.nom[i]`. La revisiter dirait deux fois la
-            # même erreur sur la même ligne.
+            # La base est déjà validée pour éviter les diagnostics dupliqués.
             if (not is_global_index and not isinstance(cur, ExprName)
                     and self._data_table_ref(cur) is None):
                 self._check_expr(cur)
@@ -1384,11 +1244,7 @@ class Checker:
             self._check_call_expr(e)
             for a in e.args:
                 self._check_expr(a)
-            # Le RÉCEPTEUR d'un `:méthode()`, quand ce n'est pas un simple nom.
-            # `interface:get("Cusor"):show()` ne validait rien du tout : ni le nom de
-            # l'élément (que la même expression posée seule refuse pourtant),
-            # ni la méthode. `_check_call_expr` s'arrête à un récepteur
-            # `ExprName`, et personne ne descendait dans le reste.
+            # Un récepteur composé doit aussi être validé.
             if isinstance(e, ExprInvoke) and not isinstance(e.obj, ExprName):
                 self._check_expr(e.obj)
         elif isinstance(e, ExprBinop):
@@ -1404,15 +1260,10 @@ class Checker:
             for v in e.items:
                 self._check_expr(v)
         elif isinstance(e, ExprName):
-            # La branche qui manquait : un nom nu ne rencontrait AUCUN cas et
-            # traversait le checker sans un mot. Elle est atteinte aussi par le
-            # `_check_expr(e.obj)` qui clôt la branche `ExprIndex` ci-dessous —
-            # d'où les espaces de noms dans `_known_bare_name`.
+            # Un nom nu doit être une variable connue ou un espace de noms.
             self._check_bare_name(e.name, ecrit=False)
         elif isinstance(e, ExprIndex):
-            # `data.Objets` seul, ou la COLONNE de `data.Objets[i].prix` : les
-            # deux formes sont un accès pointé, et c'est ce qu'il y a DESSOUS
-            # qui les distingue.
+            # Les accès aux tables et à leurs colonnes sont résolus ici.
             table = self._data_table_ref(e)
             if table is not None:
                 self._check_data_table(table)
@@ -1432,19 +1283,18 @@ class Checker:
             else:
                 prop = resolve_prop(e, self._ref_types, self._kinds)
                 if prop is not None:
-                    # `self.position`, `camera.bound`… — un accès de propriété.
-                    # Le champ qui suit est validé à l'étage d'au-dessus.
+                    # Un accès de propriété ; le champ suivant est validé plus haut.
                     self._check_prop_read(prop)
                 elif (isinstance(e.obj, ExprIndex) and e.obj.field == "collision_box"
                       and isinstance(e.obj.obj, ExprName)):
-                    # `other.collision_box.tag` : un acteur porte jusqu'à 4 boîtes, aucune n'est « la » boîte.
+                    # Un acteur peut avoir plusieurs boîtes de collision.
                     self.errors.append(CheckError(
                         "error",
                         f"{e.obj.obj.name}.collision_box is not a field. Use the box the contact "
                         "handler gives you (`other_box.tag`), or `self:collision_box(\"tag\")`."))
                 elif (e.field == "tag" and isinstance(e.obj, ExprName)
                       and e.obj.name not in self._ref_types and e.obj.name not in API_MODULES):
-                    # Migration : `tag` appartenait à l'acteur avant de devenir celui des boîtes.
+                    # `tag` est désormais une propriété des boîtes de collision.
                     self.errors.append(CheckError(
                         "error",
                         f"{e.obj.name}.tag: the identity of an actor is now `{e.obj.name}.name`. "
@@ -1454,8 +1304,7 @@ class Checker:
                       or (isinstance(e.obj, (ExprCall, ExprInvoke, ExprIndex))
                           and infer_ref_type(e.obj, self._kinds, self._ref_types) is not None)):
 
-                    # Un NOM qui tient une référence, ou un récepteur CHAÎNÉ
-                    # (`self:collision_box("hb").bogus`) : même champ inconnu.
+                    # Une référence nommée ou composée peut avoir un champ inconnu.
                     if isinstance(e.obj, ExprName):
                         ref, shown = self._ref_types[e.obj.name], e.obj.name
                     else:
@@ -1465,8 +1314,7 @@ class Checker:
                 elif (isinstance(e.obj, ExprName) and e.obj.name not in self._local_names
                       and e.obj.name in API_MODULES and e.field not in module_members(e.obj.name)
                       and module_members(e.obj.name)):
-                    # `camera.nawak`, `actor.position` : un champ que le MODULE n'a pas. Le C émis
-                    # serait un accès de champ sur un nom qui n'existe pas côté C.
+                    # Un champ de module inconnu produirait un accès C invalide.
                     mod = e.obj.name
                     hint = ((" An actor's position is read on the actor: "
                              f"`self.{e.field}`, or on a variable that holds it (`local a = "
@@ -1478,9 +1326,7 @@ class Checker:
                         f"{self._module_offer(mod)}).{hint}"))
                 elif (isinstance(e.obj, ExprName) and e.obj.name == "self"
                       and self.ctx.child_names is not None):
-                    # Ni une propriété, ni un enfant : le dire ici plutôt que de
-                    # laisser gcc parler d'un champ de struct que l'auteur n'a
-                    # jamais écrit (ROADMAP v0.23).
+                    # Signale un enfant inconnu avant la génération C.
                     offre = ", ".join(self.ctx.child_names) or "none"
                     self.errors.append(CheckError(
                         "error",
@@ -1507,11 +1353,7 @@ class Checker:
         rt = infer_vec_type(e.right, self._vec_types, self._ref_types, self._kinds)
         if lt is None and rt is None:
             return
-        # `None` = un SCALAIRE, pas un type fautif : le mélange vecteur/entier
-        # est jugé plus bas (seul `*` l'accepte). Ce qu'on écarte ici, c'est un
-        # composite qui ne calcule pas — un rect. Tester `not in ARITH_TYPES`
-        # attrapait aussi None, donc annonçait « un None n'est pas un nombre »
-        # sur `pos + 3` et rendait le dernier message de cette fonction mort.
+        # `None` désigne un scalaire. Seuls les composites non arithmétiques sont refusés ici.
         bad = next((t for t in (lt, rt) if t is not None and t not in ARITH_TYPES), None)
         if bad is not None:
             self.errors.append(CheckError(
@@ -1559,26 +1401,14 @@ class Checker:
             "'#' only applies to an array declared in this script or to a data table "
             "— its value is computed at build, not stored in memory."))
 
-    # ── Appels ────────────────────────────────────────────────────
+    # Appels
 
     def _check_call_expr(self, e):
         if isinstance(e, ExprInvoke):
-            # `récepteur:method(args)`. Les méthodes d'actor sont indexées sous
-            # `self:` dans le catalogue, mais s'appellent sur n'importe quel
-            # Actor* nommé (`other`, une variable de actor.get) — exactement
-            # comme les PROPRIÉTÉS (cf. expr_types.resolve_prop). Ne valider que
-            # `self` laissait tout le reste traverser sans un mot, alors que
-            # `codegen._invoke` émettait quand même du C : `other:set_position(p)`
-            # devenait `actor_set_position(other, p)`, qui compile et marche,
-            # donc une API retirée qui survit tant qu'on ne l'écrit pas sur
-            # `self`.
+            # Les méthodes d'acteur sont valides sur tout acteur nommé.
             if isinstance(e.obj, ExprName):
                 receiver = e.obj.name
-                # Un récepteur qui tient une RÉFÉRENCE (`local pas =
-                # sfx:play(...)`) a son propre jeu de méthodes : la clé porte
-                # alors le type de la référence et non `self`. Sans ça un
-                # `pas:set_volume(80)` serait jugé — et refusé — comme une
-                # méthode d'actor.
+                # Une variable de référence utilise le catalogue de son propre type.
                 ref = self._ref_types.get(receiver)
                 key, api = self._method_of(ref, e.method)
                 shown = f"{receiver}:{e.method}"
@@ -1586,23 +1416,10 @@ class Checker:
                     if not self._unknown_element(e.obj):
                         self._unknown_ref_method(shown, ref, f"`{receiver}` holds")
                 elif api is None:
-                    # Une méthode RETIRÉE est une erreur guidée. Un nom
-                    # simplement inconnu l'est AUSSI, contrairement à un
-                    # `module.func()` : celui-là peut être un helper écrit par
-                    # l'utilisateur, alors qu'un `:` ne peut désigner qu'une
-                    # méthode d'actor, et il n'y en a pas d'autres que celles du
-                    # catalogue. En avertissement, `codegen._invoke` inventait
-                    # quand même `actor_<méthode>(récepteur, ...)` — qui tombait
-                    # pile sur une fonction C existante pour toute ancienne
-                    # orthographe (`self:set_sprite_rotation`), donc du code non
-                    # documenté qui marche, ou sinon un `implicit declaration`
-                    # au `make`. Les deux issues valent moins qu'un message ici.
+                    # Une méthode retirée ou inconnue est une erreur, pas un avertissement.
                     removed = REMOVED_API.get(key)
                     if removed:
-                        # Le message du catalogue parle de `self` (c'est là que
-                        # la clé vit) ; sur un autre récepteur on le préfixe
-                        # plutôt que de le réécrire — une propriété d'actor
-                        # s'écrit sur n'importe quel acteur nommé.
+                        # Adapte le message du catalogue au récepteur courant.
                         if receiver != "self":
                             removed = ((f"{shown}(): {removed} The same property is accessed on "
                                         f"any named actor ({receiver}.<field>)."))
@@ -1630,13 +1447,9 @@ class Checker:
                             " its Sfx field is empty) — the call will play nothing.",
                         ))
             else:
-                # Récepteur CHAÎNÉ : `actor:get("X"):m()`, `sfx:play("Bip"):m()`,
-                # `interface:get("X"):m()`, `self:collision_box("hb"):m()`. Le codegen
-                # n'émet que ceux-là ; tout autre récepteur disparaissait en
-                # commentaire C.
+                # Le générateur ne gère que les récepteurs composés reconnus.
                 ref = infer_ref_type(e.obj, self._kinds, self._ref_types)
-                # `self.bras:m()` — l'enfant d'un prefab, un acteur que le codegen accepte
-                # (`_is_actor_expr`) et que `_check_expr(e.obj)` juge déjà (v0.23).
+                # Un enfant de prefab est un récepteur d'acteur valide.
                 is_child = (isinstance(e.obj, ExprIndex)
                             and isinstance(e.obj.obj, ExprName)
                             and e.obj.obj.name == "self")
@@ -1671,9 +1484,7 @@ class Checker:
                     f"{module_call_form(key)}(…). The dot remains for a STATE (`camera.bound`, "
                     "`scene.frame`) and for the `math` library."))
             if key in WAIT_FNS:
-                # Atteint seulement quand l'attente est écrite comme une
-                # EXPRESSION (`local n = wait(3)`) : posée seule, `_check_stmt`
-                # l'a déjà traitée. Une attente ne rend rien, elle coupe.
+                # Une attente utilisée comme expression est invalide : elle ne renvoie rien.
                 self.errors.append(CheckError(
                     "error",
                     f"{key}() returns no value: it is a wait, and is written alone on "
@@ -1684,9 +1495,7 @@ class Checker:
                 self._check_vec_function(key, e.args)
                 return
             if key in VEC_CONSTRUCTORS:
-                # vec2(x, y) / vec3(x, y, z) : constructeur de langage, pas une
-                # entrée RUNTIME_API — la seule chose à vérifier est le nombre
-                # d'arguments, les arguments eux-mêmes le sont par `_check_expr`.
+                # Les constructeurs vectoriels ne vérifient ici que leur nombre d'arguments.
                 dims = VEC_CONSTRUCTORS[key]
                 if len(e.args) != dims:
                     self.errors.append(CheckError(
@@ -1694,20 +1503,13 @@ class Checker:
                         f"{key}() expects {dims} numbers ({', '.join(VEC_FIELDS[key])}), "
                         f"{len(e.args)} given."))
                 return
-            # Les NOMS cités (scène, prefab, actor, global, constante) sont
-            # vérifiés par leur domaine dans `_check_args`, comme tout autre
-            # argument nommé — ces appels n'ont donc plus de chemin à part.
-            # Ne restent ici que les contrôles qui portent sur autre chose que
-            # le nom : le numéro d'emplacement d'un `save.*` (la valeur d'un
-            # `global.nom = v` est vérifiée à l'ASSIGNATION, pas ici — cf.
-            # `_check_global_write_value`, chantier global/const). Aucun `return` : le
-            # reste des vérifications (nombre d'arguments compris) doit suivre.
+            # Les noms d'arguments sont validés dans `_check_args`.
             if key.startswith("save."):
                 self._check_save(key, e.args)
-                # pas de `return` : le nombre d'arguments reste à vérifier
+                # Le nombre d'arguments est vérifié ci-dessous.
             if key.startswith("input.") and key != "input.pressed":
                 self._check_input_call(key, e.args)
-                # pas de `return` : le compte de base reste vérifié par _check_args
+                # Le nombre d'arguments est vérifié par `_check_args`.
             api = RUNTIME_API.get(key)
             if api is None:
                 self._check_unknown_call(key, e.args)
@@ -1749,8 +1551,7 @@ class Checker:
         helper = self._helpers.get(key)
         if helper is not None:
             expected = len(helper.params)
-            # Le helper reçoit `self` automatiquement côté C : l'auteur ne
-            # compte donc que les paramètres qu'il a écrits lui-même.
+            # Le générateur C passe `self` automatiquement aux helpers.
             if self._current_function == key:
                 # Le graphe complet est aussi vérifié dans `_check_helpers` ;
                 # ce diagnostic local rend le cas le plus courant immédiat.
@@ -1768,7 +1569,7 @@ class Checker:
             return
         if key == REQUIRE_FN:
             return                       # l'import d'un behavior, résolu au build
-        # `self.position()` : `self` s'écrit pour l'acteur, dont le catalogue dit `actor.position`.
+        # Les propriétés d'acteur s'écrivent avec `self` dans les scripts.
         if (f"{REF_ACTOR}.{key.split('.', 1)[1]}" in RUNTIME_PROPS
                 if key.startswith("self.") else key in RUNTIME_PROPS):
             self.errors.append(CheckError(
@@ -1840,12 +1641,7 @@ class Checker:
             return
 
         for i, (param, arg) in enumerate(zip(api.params, args)):
-            # Un NOMBRE là où une énumération matérielle est attendue : c'est
-            # l'ancienne forme de l'API (`blend:set_layer("top", ...)` devenu
-            # un entier nu), qui restait silencieuse — le codegen émettait
-            # l'entier tel quel, donc du C valide au comportement arbitraire.
-            # La rupture doit se voir ici, sur l'appel, et pas se découvrir en
-            # jouant.
+            # Une énumération matérielle doit être écrite avec son nom, pas son ancien numéro.
             if param.ptype in VEC_CONSTRUCTORS:
                 vt = infer_vec_type(arg, self._vec_types, self._ref_types, self._kinds)
                 if vt != param.ptype:
@@ -1866,11 +1662,7 @@ class Checker:
                 continue
 
             if param.domain in _RECEIVER_DOMAINS and receiver != "self":
-                # Le nom cité appartient au sprite du RÉCEPTEUR, que ce script
-                # ne connaît pas — et le codegen, lui, le résout quand même
-                # contre l'acteur courant (`anim_constant(ctx.actor_sym, ...)`),
-                # produisant une constante crédible et fausse. Erreur ici,
-                # plutôt qu'une animation d'un autre acteur jouée en silence.
+                # Ces noms sont résolus dans le sprite de l'acteur courant.
                 self.errors.append(CheckError(
                     "error",
                     f"{receiver}:{key.split(':')[1]}(): \"{param.name}\" names an element of the sprite of \"{receiver}\", and it"
@@ -1914,8 +1706,7 @@ class Checker:
                 "error", "literal text: at most 4 interpolated values in a literal."))
 
     def _check_anim(self, call_key: str, name: str):
-        # Le C nomme l'état `ANIM_<acteur>_<NOM EN MAJUSCULES>` (`c_ident`) : `"idle"`
-        # et `"Idle"` désignent le MÊME état, et c'est ce que le build comprend.
+        # Les noms d'animation sont comparés sans tenir compte de la casse.
         if (self.ctx.anim_names is not None
                 and c_ident(name) not in {c_ident(n) for n in self.ctx.anim_names}):
             linked = ", ".join(self.ctx.anim_names) or "none"
@@ -2151,11 +1942,7 @@ class Checker:
                     "error",
                     f"{call_key}({val}): the project declares {slots} save slot(s), numbered from 0"
                     f" to {slots - 1}."))
-        # save:read('nom') cite une variable qui n'est pas cochée persist : le
-        # nom existe (sinon `_check_global` l'aurait déjà signalé), mais aucun
-        # fichier de sauvegarde ne la contiendra jamais — l'appel rendrait
-        # toujours son défaut, un silence du même genre que `save.write` sans
-        # variable persistante du tout.
+        # `save.read` ne peut lire qu'une variable globale persistante.
         if call_key == "save.read" and len(args) >= 2 and isinstance(args[1], ExprString):
             name = args[1].value
             persist = self.ctx.global_persist
@@ -2301,8 +2088,7 @@ class Checker:
                 continue
             self._check_spawn_value(prefab, key, meta[key].get("type"), val)
 
-    # Types d'export dont la valeur de spawn est un NOM (résolu en index au
-    # build) : une chaîne littérale, jamais un nombre.
+    # Exports dont la valeur de spawn est un nom résolu en index au build.
     _NAMED_EXPORT_TYPES = frozenset({"string", "actor_ref", "scene_ref", "sfx_ref"})
     _COMPOSITE_EXPORT_TYPES = frozenset({"vec2", "vec3", "rect"})
 
@@ -2435,10 +2221,7 @@ class Checker:
         via `_DOMAIN_CHECKS`) ; ce qui suit est propre à chacun et n'a pas sa
         place dans cette table à géométrie fixe. `get_sequence` et `released`
         n'ont besoin d'aucun contrôle ici (déjà couverts génériquement)."""
-        # `_check_args` (générique, appelé après) couvre déjà le MINIMUM
-        # d'arguments (via `variadic` pour held/get_axis, ou l'égalité stricte
-        # pour buffered) : ne reste à couvrir ici que le PLAFOND et ce qui
-        # dépend de la VALEUR des arguments.
+        # `_check_args` vérifie le minimum d'arguments ; cette méthode traite le reste.
         fname = key.rsplit(".", 1)[1]
         if fname == "get_axis":
             if len(args) > 2:
@@ -2457,8 +2240,7 @@ class Checker:
             if len(args) == 2:
                 self._check_frame_literal(key, args[1], "frames")
         elif fname == "buffered" and len(args) == 2:
-            # `frames` fixe la profondeur de l'ANNEAU au build (comme le
-            # littéral de `wait()`) : une variable ne peut pas s'y résoudre.
+            # `frames` fixe une taille de buffer au build et doit être un littéral.
             if not isinstance(args[1], ExprNumber):
                 self.errors.append(CheckError(
                     "error",

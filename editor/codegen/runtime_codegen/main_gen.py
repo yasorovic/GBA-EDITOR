@@ -373,6 +373,7 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
                f"            g_oam_entries[{_e0}].pal_bank = {pal};",
                f"            g_oam_entries[{_e0}].frame_w  = {sprite.frame_w if sprite else 0};",
                f"            g_oam_entries[{_e0}].frame_h  = {sprite.frame_h if sprite else 0};",
+               f"            g_oam_entries[{_e0}].anim_state = {_initial_state_rank(*_shown(p, pf))};",
                *_appearance_init_lines(p, pf, _e0, "            ",
                                        _alay.member_base.get((pi["sym"], 0)))]
               if _e0 else []),
@@ -419,6 +420,7 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
                    f"            g_oam_entries[{_ek}].pal_bank = {p_pal};",
                    f"            g_oam_entries[{_ek}].frame_w  = {p_spr.frame_w if p_spr else 0};",
                    f"            g_oam_entries[{_ek}].frame_h  = {p_spr.frame_h if p_spr else 0};",
+                   f"            g_oam_entries[{_ek}].anim_state = {_initial_state_rank(p_sc, p_spr)};",
                    *_appearance_init_lines(p, part, _ek, "            ",
                                            _alay.member_base.get((pi["sym"], k)))]
                   if _ek else []),
@@ -457,6 +459,50 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
             f"}}",
             "",
         ]
+    return L
+
+
+def _box_contact_lines(a_expr: str, b_expr: str, active: str, prev: str,
+                       events_a: list, events_b: list, indent: str) -> list[str]:
+    """Les contacts d'UNE paire d'acteurs, un par couple de TAGS de boxes.
+
+    `actors_overlap_mask` rend un bit par couple de tags en contact ; `prev` en
+    garde le souvenir d'une frame à l'autre. Un contact qui naît appelle
+    `on_collision_enter`, un contact qui dure `on_collide`, un contact qui se
+    défait `on_collision_exit` — chacun avec les tags de CE couple. Une paire
+    d'acteurs porte donc plusieurs contacts à la fois (pieds contre tête ET corps
+    contre corps) sans que le premier masque les suivants.
+
+    `events_a` / `events_b` : (événement, fonction C) que reçoit chaque côté ;
+    `my_box` d'un côté est la `other_box` de l'autre."""
+    def calls(event: str) -> list[str]:
+        out = []
+        for ev, fn in events_a:
+            if ev == event:
+                out.append(f"{fn}({a_expr},{b_expr},_ta,_tb);")
+        for ev, fn in events_b:
+            if ev == event:
+                out.append(f"{fn}({b_expr},{a_expr},_tb,_ta);")
+        return out
+
+    i = indent
+    L = [
+        f"{i}{{ u16 _cur=({active})?actors_overlap_mask({a_expr},{b_expr}):0; u16 _prv={prev};",
+        f"{i}  if(_cur|_prv)",
+        f"{i}  for(u8 _bi=0;_bi<MAX_BOXES;_bi++) for(u8 _bj=0;_bj<MAX_BOXES;_bj++){{",
+        f"{i}      u16 _m=(u16)(1u<<(_bi*MAX_BOXES+_bj));",
+        f"{i}      u8 _c=(_cur&_m)!=0, _p=(_prv&_m)!=0;",
+        f"{i}      if(!_c&&!_p) continue;",
+        f"{i}      u8 _ta=({a_expr})->collision.boxes[_bi].tag, _tb=({b_expr})->collision.boxes[_bj].tag;",
+        f"{i}      (void)_ta; (void)_tb;",
+    ]
+    for cond, event in (("_c&&!_p", "on_collision_enter"),
+                        ("_c&&_p", "on_collide"),
+                        ("!_c&&_p", "on_collision_exit")):
+        cs = calls(event)
+        if cs:
+            L.append(f"{i}      if({cond}){{ " + " ".join(cs) + " }")
+    L += [f"{i}  }}", f"{i}  {prev}=_cur; }}"]
     return L
 
 
@@ -589,9 +635,18 @@ def _gen_tile_helpers() -> list[str]:
         "   and the centre), the highest one winning: a wide actor does not sink",
         "   into the slope and clears an edge cleanly.",
         "   `cb` only WARNS: the velocity is cancelled in every case,",
-        "   so writing the hook does not disable the physics. */",
+        "   so writing the hook does not disable the physics.",
+        "   The map only resolves a VELOCITY: an actor with vx == vy == 0 has not",
+        "   been driven this frame, so it is left alone. That is what makes",
+        "   `self.position` a teleport that ignores the map (no wall stop, no",
+        "   climbing back onto a slope) and `self.velocity` the physical move. `grounded`",
+        "   keeps its value: a resting actor is still resting. */",
         "static void __attribute__((unused)) resolve_actor_tiles(Actor*a, TileCollideCb cb){",
         "    if(!g_active_cmap) return;",
+        "    if(a->vx==0&&a->vy==0){",
+        "        a->collision.last_x=a->x>>8; a->collision.slope_acc=0;",
+        "        return;",
+        "    }",
         "    /* ROADMAP v0.19: the Actor's x/y are in Q8 (256 = 1 px), but ALL the",
         "       geometry below (tiles, boxes, slopes) is in pixels, unchanged",
         "       since v0.6.3 — rounding is done ONCE on entry (_px/_py) and",
@@ -737,6 +792,15 @@ def _shown(p, owner):
         return None, None
     n = initial_appearance(p, owner)
     return apps[max(n, 0)]
+
+
+def _initial_state_rank(comp, sprite) -> int:
+    """Rang de `comp.initial_state` dans les états de `sprite` (0 par défaut)."""
+    name = getattr(comp, "initial_state", None)
+    for i, st in enumerate(getattr(sprite, "states", None) or []):
+        if st.name == name:
+            return i
+    return 0
 
 
 def _appearance_init_lines(p, owner, entry_expr: str, indent: str, base=None) -> list[str]:
@@ -1622,7 +1686,9 @@ def _gen_scene_init(
             f"    g_oam_entries[{_e}].obj_mode= {int(getattr(actor, 'obj_mode', 0)) & 3};",
             f"    g_oam_entries[{_e}].priority= {_number_c(getattr(actor, 'priority', 0), _var_names(p), mask=3)};",
             f"    g_oam_entries[{_e}].auto_dir= {1 if getattr(_shown(p, actor)[0], 'auto_dir', True) else 0};",
-            f"    g_oam_entries[{_e}].anim_state=0;",
+            # L'état de départ choisi dans l'inspecteur (`initial_state`) : rang dans
+            # les états du sprite AFFICHÉ, 0 si le nom n'existe plus.
+            f"    g_oam_entries[{_e}].anim_state={_initial_state_rank(*_shown(p, actor))};",
             # self.frame_w/frame_h : posées une fois ici depuis le sprite,
             # jamais recalculées — un acteur sans sprite (rare, cf. `sprite`
             # potentiellement None plus haut) rend 0 des deux côtés.
@@ -1845,7 +1911,7 @@ def _gen_scene_tick(
             np = len(col_scene_pf)
             L += [
                 f"    {{",
-                f"        static u8 _pcol_{s}[{size}][{np}]={{{{0}}}};",
+                f"        static u16 _pcol_{s}[{size}][{np}]={{{{0}}}};",
                 f"        for(int _pi={start}; _pi<{start+size}; _pi++){{",
                 f"            if(!g_actors[_pi].active) continue;",
                 f"            int _sl=_pi-{start};",
@@ -1864,50 +1930,32 @@ def _gen_scene_tick(
                 s_lua = (sidx in lua_idx) and has_col_event(_def, ss)
                 if not pool_reacts and not s_lua:
                     continue
-                L += [
-                    f"            {{ u8 _bx=0,_bo=0;",
-                    f"              u8 _c=(g_actors[{sidx}].active&&actors_overlap_boxes(&g_actors[_pi],&g_actors[{sidx}],&_bx,&_bo))?1:0;",
-                    f"              u8 _p=_pcol_{s}[_sl][{ci}];",
-                ]
-                if _def(s, "on_collision_enter"):
-                    L.append(f"              if(_c&&!_p) {s}_on_collision_enter(&g_actors[_pi],&g_actors[{sidx}],_bx,_bo);")
-                if s_lua and _def(ss, "on_collision_enter"):
-                    L.append(f"              if(_c&&!_p) {ss}_on_collision_enter(&g_actors[{sidx}],&g_actors[_pi],_bo,_bx);")
-                if _def(s, "on_collide"):
-                    L.append(f"              if(_c&&_p)  {s}_on_collide(&g_actors[_pi],&g_actors[{sidx}],_bx,_bo);")
-                if s_lua and _def(ss, "on_collide"):
-                    L.append(f"              if(_c&&_p)  {ss}_on_collide(&g_actors[{sidx}],&g_actors[_pi],_bo,_bx);")
-                if _def(s, "on_collision_exit"):
-                    L.append(f"              if(!_c&&_p) {s}_on_collision_exit(&g_actors[_pi],&g_actors[{sidx}],_bx,_bo);")
-                if s_lua and _def(ss, "on_collision_exit"):
-                    L.append(f"              if(!_c&&_p) {ss}_on_collision_exit(&g_actors[{sidx}],&g_actors[_pi],_bo,_bx);")
-                L.append(f"              _pcol_{s}[_sl][{ci}]=_c; }}")
+                ev_pool = [(ev, s) for ev in ("on_collision_enter", "on_collide", "on_collision_exit")
+                           if _def(s, ev)]
+                ev_scene = [(ev, ss) for ev in ("on_collision_enter", "on_collide", "on_collision_exit")
+                            if s_lua and _def(ss, ev)]
+                L += _box_contact_lines(
+                    "&g_actors[_pi]", f"&g_actors[{sidx}]", f"g_actors[{sidx}].active",
+                    f"_pcol_{s}[_sl][{ci}]",
+                    [(ev, f"{fn}_{ev}") for ev, fn in ev_pool],
+                    [(ev, f"{fn}_{ev}") for ev, fn in ev_scene],
+                    "            ")
             L += [f"        }}", f"    }}"]
 
     # AABB collisions scène
     if col_pairs:
-        L.append(f"    static u8 _col_prev[{len(col_pairs)}]={{0}};")
+        L.append(f"    static u16 _col_prev[{len(col_pairs)}]={{0}};")
         for pair_idx, (i, j) in enumerate(col_pairs):
             i_lua = i in lua_idx; j_lua = j in lua_idx
             si = scene_actor_sym(scene.name, scene_actors[i - actor_offset][0].name)
             sj = scene_actor_sym(scene.name, scene_actors[j - actor_offset][0].name)
-            L += [
-                f"    {{ u8 _bx_i=0,_bx_j=0;",
-                f"        u8 _cur=(g_actors[{i}].active&&g_actors[{j}].active&&"
-                f"actors_overlap_boxes(&g_actors[{i}],&g_actors[{j}],&_bx_i,&_bx_j))?1:0;",
-                f"        if(_cur&&!_col_prev[{pair_idx}]){{",
-            ]
-            if i_lua and _def(si, "on_collision_enter"): L.append(f"            {si}_on_collision_enter(&g_actors[{i}],&g_actors[{j}],_bx_i,_bx_j);")
-            if j_lua and _def(sj, "on_collision_enter"): L.append(f"            {sj}_on_collision_enter(&g_actors[{j}],&g_actors[{i}],_bx_j,_bx_i);")
-            L.append(f"        }}")
-            L.append(f"        if(_cur&&_col_prev[{pair_idx}]){{")
-            if i_lua and _def(si, "on_collide"): L.append(f"            {si}_on_collide(&g_actors[{i}],&g_actors[{j}],_bx_i,_bx_j);")
-            if j_lua and _def(sj, "on_collide"): L.append(f"            {sj}_on_collide(&g_actors[{j}],&g_actors[{i}],_bx_j,_bx_i);")
-            L.append(f"        }}")
-            L.append(f"        if(!_cur&&_col_prev[{pair_idx}]){{")
-            if i_lua and _def(si, "on_collision_exit"): L.append(f"            {si}_on_collision_exit(&g_actors[{i}],&g_actors[{j}],_bx_i,_bx_j);")
-            if j_lua and _def(sj, "on_collision_exit"): L.append(f"            {sj}_on_collision_exit(&g_actors[{j}],&g_actors[{i}],_bx_j,_bx_i);")
-            L += [f"        }}", f"        _col_prev[{pair_idx}]=_cur; }}"]
+            evs = ("on_collision_enter", "on_collide", "on_collision_exit")
+            L += _box_contact_lines(
+                f"&g_actors[{i}]", f"&g_actors[{j}]",
+                f"g_actors[{i}].active&&g_actors[{j}].active", f"_col_prev[{pair_idx}]",
+                [(ev, f"{si}_{ev}") for ev in evs if i_lua and _def(si, ev)],
+                [(ev, f"{sj}_{ev}") for ev in evs if j_lua and _def(sj, ev)],
+                "    ")
 
     # Déclencheurs SoundFx par nom d'input — ROADMAP « Les inputs
     # personnalisés », tranche finale (2026-09-27) : les events de script

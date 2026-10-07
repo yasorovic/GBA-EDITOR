@@ -14,7 +14,11 @@
   "debug_build": true,
   "list_repeat_delay": 10,
   "list_repeat_rate": 4,
+  "collision_disabled_pairs": [
+    "player|player"
+  ],
   "collision_tags": [
+    "Feet",
     "body",
     "player"
   ]

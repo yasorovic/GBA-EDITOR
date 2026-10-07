@@ -17,6 +17,8 @@ self:apply_velocity()
 
 `self.position` est exprimée en pixels, tandis que `self.velocity` utilise cette échelle plus précise. Pour vos propres calculs, choisissez aussi une échelle, par exemple 100 pour des pourcentages, et conservez-la jusqu'au dernier calcul.
 
+`self.position` **téléporte** l'acteur : la carte de collision n'est pas consultée, il traverse les murs et n'est pas remonté sur une pente. Pour un déplacement physique (murs, pentes, sol, `on_tile_collide`), donnez une vitesse avec `self.velocity` puis appelez `self:apply_velocity()` : la carte ne résout qu'un acteur dont la vitesse est non nulle.
+
 ## Votre premier script
 
 ### 1. Créez et attachez le script
