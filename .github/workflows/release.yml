@@ -116,7 +116,9 @@ jobs:
             sudo dkp-pacman -S --noconfirm gba-dev
           else
             echo "apt.devkitpro.org inaccessible : repli sur l'image Docker devkitpro/devkitarm"
-            docker run --name dkp devkitpro/devkitarm dkp-pacman -Sy --noconfirm gba-dev
+            # L'image embarque déjà gba-dev (grit, libgba, libtonc…) ; pkg.devkitpro.org
+            # est bloqué aussi, donc pas de `dkp-pacman -Sy`.
+            docker create --name dkp devkitpro/devkitarm
             # `docker cp` refuse un lien symbolique pointant hors de l'arbre copié ;
             # tar, lui, l'extrait tel quel.
             docker export dkp | sudo tar -x -C / opt/devkitpro
