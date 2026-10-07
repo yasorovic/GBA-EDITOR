@@ -57,20 +57,21 @@ def _starters():
 
 
 def _build(root: Path):
-    """(réussi ?, diagnostics, ROM) d'un build réel, mGBA exclu."""
+    """(réussi ?, diagnostics, ROM, sortie des outils) d'un build réel, mGBA exclu."""
     project = Project.open(root)
     worker = BuildWorker(project, Toolchain())
     worker._step_launch_mgba = lambda _p: True
-    diagnostics, verdict = [], []
+    diagnostics, verdict, tool_output = [], [], []
     worker.on("diagnostic", diagnostics.append)
+    worker.on("error_line", tool_output.append)
     worker.on("finished", verdict.append)
     worker.run()
-    return verdict[-1], diagnostics, project.rom_path
+    return verdict[-1], diagnostics, project.rom_path, tool_output
 
 
 def _assert_rom(root: Path, name: str):
-    ok, diagnostics, rom = _build(root)
-    errors = [d.console_line() for d in diagnostics if d.level == "error"]
+    ok, diagnostics, rom, tool_output = _build(root)
+    errors = [d.console_line() for d in diagnostics if d.level == "error"] + tool_output[-40:]
     assert ok is True and not errors, f"{name} ne builde pas :\n  " + "\n  ".join(errors or ["(aucune erreur nommée)"])
     assert rom.is_file(), f"{name} : le build réussit mais {rom.name} n'existe pas"
     assert rom.stat().st_size >= MIN_ROM_BYTES, f"{name} : {rom.name} fait {rom.stat().st_size} octets"
