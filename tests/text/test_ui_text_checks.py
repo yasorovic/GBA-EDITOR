@@ -13,8 +13,8 @@ spec.loader.exec_module(checks)
 
 
 @pytest.mark.parametrize("entry", [
-    {"text": "Hi", "one": "Hi", "other": "Hi"},
-    {"one": "One"}, {"text": ""}, {"text": 2},
+    {"text": "Hi", "singular": "Hi", "plural": "Hi"},
+    {"singular": "One"}, {"text": ""}, {"text": 2},
     {"text": "{missing"}, {"text": "{}"}, {"text": "{user.name}"},
     {"text": "Hi", "typo": True},
 ])

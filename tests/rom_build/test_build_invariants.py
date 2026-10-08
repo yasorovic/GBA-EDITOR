@@ -31,12 +31,13 @@ import pytest
 
 from codegen import BuildWorker
 from core.project import Project
-from core.toolchain import Toolchain
+from core.toolchain import DEVKITPRO_OK, Toolchain
 
 DEMO = Path(__file__).resolve().parents[2] / "Project Demo" / "PongAdvanced"
 pytestmark = [pytest.mark.slow,
               pytest.mark.skipif(not DEMO.exists(), reason="projet de démo absent"),
-              pytest.mark.skipif(not Toolchain().devkitpro_ok, reason="devkitPro absent : le build ne peut pas tourner")]
+              pytest.mark.skipif(Toolchain().devkitpro_state != DEVKITPRO_OK,
+                                 reason=f"devkitPro non prêt ({Toolchain().devkitpro_state}) : le build ne peut pas tourner")]
 
 # Les fichiers que l'on abîme (relatifs à la racine de la démo). Les gros lots homogènes
 # (105 musiques, 20 palettes) sont représentés par un seul fichier.

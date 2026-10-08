@@ -200,9 +200,9 @@ def validate_entries(data, name, *, translated=False):
                 raise ValueError("invalid dotted key")
             if not isinstance(entry, dict):
                 raise ValueError("expected an entry object")
-            forms = set(entry) & {"text", "one", "other"}
-            if forms not in ({"text"}, {"one", "other"}):
-                raise ValueError("expected text OR both one/other")
+            forms = set(entry) & {"text", "singular", "plural"}
+            if forms not in ({"text"}, {"singular", "plural"}):
+                raise ValueError("expected text OR both singular/plural")
             allowed = forms | ({"tone", "code"} if name == "notices" and not translated else set())
             if set(entry) - allowed:
                 raise ValueError(f"unknown fields: {sorted(set(entry) - allowed)}")
@@ -273,7 +273,7 @@ def check(root=ROOT):
             if forms is None:
                 errors.append(f"{rel}:{call.lineno}: unknown {catalogue} key {key!r}")
             elif not any(k.arg is None for k in call.keywords):
-                required = set().union(*forms.values()) | ({"n"} if "one" in forms else set())
+                required = set().union(*forms.values()) | ({"n"} if "singular" in forms else set())
                 provided = {k.arg for k in call.keywords}
                 if function == "tip":
                     provided -= {"layout"}

@@ -25,7 +25,7 @@ import pytest
 from codegen import BuildWorker
 from core.project import Project
 from core.project_starters import available_starters
-from core.toolchain import Toolchain
+from core.toolchain import DEVKITPRO_INCOMPLETE, DEVKITPRO_OK, Toolchain
 
 DEMOS_DIR = Path(__file__).resolve().parents[2] / "Project Demo"
 
@@ -37,11 +37,17 @@ pytestmark = pytest.mark.slow
 
 @pytest.fixture(autouse=True)
 def _devkitpro():
-    if Toolchain().devkitpro_ok:
+    toolchain = Toolchain()
+    state = toolchain.devkitpro_state
+    if state == DEVKITPRO_OK:
         return
+    # Incomplet (outils manquants) et absent ne sont pas la même consigne : réinstaller
+    # ou vérifier, plutôt que chercher le dossier.
+    reason = (f"devkitPro est incomplet (manque : {', '.join(toolchain.devkitpro_missing_tools())})"
+              if state == DEVKITPRO_INCOMPLETE else "devkitPro est introuvable")
     if os.environ.get("GBA_TESTS_REQUIRE_DEVKITPRO"):
-        pytest.fail("devkitPro est introuvable alors que la CI l'exige : les projets livrés n'ont pas été buildés")
-    pytest.skip("devkitPro absent : le build ne peut pas tourner")
+        pytest.fail(f"{reason} alors que la CI l'exige : les projets livrés n'ont pas été buildés")
+    pytest.skip(f"{reason} : le build ne peut pas tourner")
 
 
 def _demos() -> list[Path]:

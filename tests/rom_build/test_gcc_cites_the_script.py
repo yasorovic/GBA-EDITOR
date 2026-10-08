@@ -14,7 +14,7 @@ from codegen import BuildWorker
 from core.models.components import ScriptComponent
 from core.models.scene import Actor
 from core.project import Project
-from core.toolchain import Toolchain
+from core.toolchain import DEVKITPRO_OK, Toolchain
 from scripting.codegen import CodeGen, CodegenContext, generate
 from scripting.parser import parse
 
@@ -59,7 +59,8 @@ def test_sans_nom_de_script_aucune_directive():
 # ── Le vrai gcc ───────────────────────────────────────────────────
 
 pytestmark_toolchain = pytest.mark.skipif(
-    not Toolchain().devkitpro_ok, reason="devkitPro absent : gcc ne peut pas tourner")
+    Toolchain().devkitpro_state != DEVKITPRO_OK,
+    reason=f"devkitPro non prêt ({Toolchain().devkitpro_state}) : gcc ne peut pas tourner")
 
 
 @pytestmark_toolchain

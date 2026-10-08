@@ -189,10 +189,7 @@ class Toolchain:
 
     def resolve_grit(self) -> Path | None:
         """Retourne le chemin absolu de grit, ou None."""
-        # 1. PATH système
-        if p := shutil.which("grit"):
-            return Path(p)
-        # 2. Config utilisateur
+        # 1. Chemin donné par l'utilisateur (réglages)
         if dkp := self.devkitpro_path:
             for candidate in [
                 dkp / "tools" / "bin" / "grit.exe",
@@ -201,6 +198,9 @@ class Toolchain:
             ]:
                 if candidate.exists():
                     return candidate
+        # 2. PATH système
+        if p := shutil.which("grit"):
+            return Path(p)
         # 3. Emplacements connus
         for base in _WIN_DEFAULTS + _UNIX_DEFAULTS:
             for sub in ["tools/bin/grit.exe", "tools/bin/grit"]:
@@ -229,23 +229,24 @@ class Toolchain:
 
     def resolve_arm_gcc(self) -> Path | None:
         """Retourne le chemin de arm-none-eabi-gcc, ou None."""
-        # 1. PATH système
+        # 1. Chemin donné par l'utilisateur (réglages), puis 2. PATH système,
+        # puis 3. emplacements connus.
+        explicit = [Path(self.devkitpro_path)] if self.devkitpro_path else []   # Path() normalise \ et /
+        known = [Path(b) for b in _WIN_DEFAULTS + _UNIX_DEFAULTS]
+
+        def scan(bases):
+            for base in bases:
+                for exe in ("arm-none-eabi-gcc.exe", "arm-none-eabi-gcc"):
+                    candidate = base / "devkitARM" / "bin" / exe
+                    if candidate.exists():
+                        return candidate
+            return None
+
+        if found := scan(explicit):
+            return found
         if p := shutil.which("arm-none-eabi-gcc"):
             return Path(p)
-
-        # 2. Bases à scanner : config utilisateur + emplacements connus
-        bases = []
-        if dkp := self.devkitpro_path:
-            bases.append(Path(dkp))          # Path() normalise \ et /
-        bases += [Path(b) for b in _WIN_DEFAULTS + _UNIX_DEFAULTS]
-
-        for base in bases:
-            for exe in ("arm-none-eabi-gcc.exe", "arm-none-eabi-gcc"):
-                candidate = base / "devkitARM" / "bin" / exe
-                if candidate.exists():
-                    return candidate
-
-        return None
+        return scan(known)
 
     def resolve_binutil(self, tool: str) -> Path | None:
         """Un binutil devkitARM (`nm`, `size`, `objdump`…) par son nom court.

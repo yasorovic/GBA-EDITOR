@@ -61,7 +61,7 @@ dans le même commit.
 
 Le Python passe des VALEURS, jamais des morceaux de phrase : c'est la
 concaténation qui rend un message intraduisible, l'ordre des mots n'étant pas
-le même d'une langue à l'autre. Le pluriel se déclare (`one`/`other`, choisi
+le même d'une langue à l'autre. Le pluriel se déclare (`singular`/`plural`, choisi
 par l'argument `n`) au lieu de s'écrire `"s" if n > 1`.
 
 `tools/check_architecture.py` vérifie les deux sens : toute clé citée existe,

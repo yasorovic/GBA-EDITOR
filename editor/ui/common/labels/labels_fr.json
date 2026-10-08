@@ -762,7 +762,7 @@
     "bgedit.shared_tip": {
       "text": "Toutes les copies s’animent ensemble, au même moment."
     },
-    "bgedit.anim_source_tip": { "one": "{n} image. Faire glisser l’animation sur le canvas la place.", "other": "{n} images. Faire glisser l’animation sur le canvas la place." },
+    "bgedit.anim_source_tip": { "singular": "{n} image. Faire glisser l’animation sur le canvas la place.", "plural": "{n} images. Faire glisser l’animation sur le canvas la place." },
     "bgedit.start_frame": {
       "text": "Image de départ"
     },
@@ -1278,8 +1278,8 @@
       "text": "Déclarer un axe"
     },
     "inputs.axes_count": {
-      "one": "{n} axe",
-      "other": "{n} axes"
+      "singular": "{n} axe",
+      "plural": "{n} axes"
     },
     "inputs.axis_name_placeholder": {
       "text": "regard"
@@ -1301,8 +1301,8 @@
       "text": "Déclarer une séquence"
     },
     "inputs.sequences_count": {
-      "one": "{n} séquence",
-      "other": "{n} séquences"
+      "singular": "{n} séquence",
+      "plural": "{n} séquences"
     },
     "inputs.sequence_name_placeholder": {
       "text": "quart_de_cercle"
@@ -1487,7 +1487,7 @@
     "langcard.name_title": { "text": "Nom de la langue" },
     "langcard.name_tip": { "text": "Nom lisible, affiché dans l’éditeur et, s’il existe, dans le menu de langue du jeu." },
     "langcard.font_title": { "text": "Remplacement de police" },
-    "langcard.font_replacements": { "one": "{n} remplacement de police.", "other": "{n} remplacements de police." },
+    "langcard.font_replacements": { "singular": "{n} remplacement de police.", "plural": "{n} remplacements de police." },
     "langcard.no_font_replacement": { "text": "Aucun remplacement de police : cette langue utilise les polices du projet." },
     "langcard.font_note": { "text": "Seul un autre système d’écriture en demande un." },
     "langcard.remove_title": { "text": "Retirer cette langue" },
@@ -1523,7 +1523,7 @@
     "projset.transition_note": { "text": "Pendant une transition, la scène sortante est figée et son propre mélange de couleurs est suspendu : il n’y a pas de fondu par-dessus une translucidité." },
     "projset.drag_to_reorder": { "text": "Réordonner par glisser-déposer" },
     "projset.remove_tag_title": { "text": "Retirer ce tag" },
-    "projset.remove_tag_used": { "one": "{n} boîte l’utilise et revient à « body ».", "other": "{n} boîtes l’utilisent et reviennent à « body »." },
+    "projset.remove_tag_used": { "singular": "{n} boîte l’utilise et revient à « body ».", "plural": "{n} boîtes l’utilisent et reviennent à « body »." },
     "projset.remove_tag_unused": { "text": "Aucune boîte ne l’utilise." },
     "comped.sfx": { "text": "Effet sonore" },
     "comped.sfx_note": { "text": "Les sons ajoutés depuis l’écran du mixeur apparaissent ici." },
@@ -1749,7 +1749,7 @@
     "win.redo_none": { "text": "Rien à rétablir" },
     "win.build_no_scene": { "text": "Une scène est nécessaire avant la compilation." },
     "win.build_unavailable_tip": { "text": "Ouvre les réglages de la toolchain." },
-    "win.build_unavailable": { "one": "Compilation impossible : {what} est manquant.", "other": "Compilation impossible : {what} sont manquants." },
+    "win.build_unavailable": { "singular": "Compilation impossible : {what} est manquant.", "plural": "Compilation impossible : {what} sont manquants." },
     "dirgrid.omni_no_initial_direction": { "text": "Omnidirectionnel (pas de direction initiale)" },
     "dirgrid.omni_all_directions": { "text": "Omnidirectionnel (toutes les directions)" },
     "pick.index_tip": { "text": "Index {_index} de la palette bank. Le code de couleur est affiché, pas saisi." },
@@ -1899,10 +1899,10 @@
     "paluse.title": { "text": "Utilisation" },
     "paluse.none_selected": { "text": "Aucune palette sélectionnée." },
     "paluse.no_use": { "text": "Cette palette n’est utilisée nulle part dans le projet." },
-    "paluse.sprite": { "one": "Sprite", "other": "Sprites" },
-    "paluse.background": { "one": "Arrière-plan", "other": "Arrière-plans" },
-    "paluse.prefab": { "one": "Prefab", "other": "Prefabs" },
-    "paluse.scene": { "one": "Scène", "other": "Scènes" },
+    "paluse.sprite": { "singular": "Sprite", "plural": "Sprites" },
+    "paluse.background": { "singular": "Arrière-plan", "plural": "Arrière-plans" },
+    "paluse.prefab": { "singular": "Prefab", "plural": "Prefabs" },
+    "paluse.scene": { "singular": "Scène", "plural": "Scènes" },
     "fontselect.weight_title": { "text": "Graisse de la police" },
     "fontselect.weight_tip": { "text": "Utilise une face native disponible dans la police sélectionnée." },
     "fontselect.bold_title": { "text": "Face grasse" },

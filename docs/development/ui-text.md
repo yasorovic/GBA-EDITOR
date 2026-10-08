@@ -11,10 +11,10 @@ est `catalog.py`. Les textes des jeux restent dans les données du projet.
    du widget. Si une variable s'appelle déjà `label`, importer
    `from ui.common import labels as ui_labels` et appeler `ui_labels.label()`.
 3. Écrire une phrase entière avec des paramètres nommés. Pour un compte,
-   employer `one` et `other`, et fournir `n`, sans suffixe grammatical calculé.
+   employer `singular` et `plural`, et fournir `n`, sans suffixe grammatical calculé.
 4. Exécuter `python tools/check_ui_text.py`, puis les tests concernés.
 
-Une entrée contient `text`, ou les deux formes `one` / `other`. Une notice
+Une entrée contient `text`, ou les deux formes `singular` / `plural`. Une notice
 source possède aussi `tone` (`info`, `accent`, `build`, `render`) et peut porter
 `code`, une expression technique non traduite. Une traduction ne remplace que
 les textes et conserve leurs formes et paramètres. Une traduction manquante

@@ -27,7 +27,7 @@ def demo(tmp_path):
     """Un catalogue jetable : maître + side `fr` incomplet (n_items non traduit)."""
     _write(tmp_path, "demo", "", {
         "hi": {"text": "Hello"},
-        "n_items": {"one": "{n} item", "other": "{n} items"},
+        "n_items": {"singular": "{n} item", "plural": "{n} items"},
         "greet": {"text": "Hi {who}"},
     })
     _write(tmp_path, "demo", "fr", {

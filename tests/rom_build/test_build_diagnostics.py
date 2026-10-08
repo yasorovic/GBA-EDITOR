@@ -15,7 +15,7 @@ from codegen import BuildWorker
 from core.models.components import ScriptComponent
 from core.models.scene import Actor
 from core.project import Project
-from core.toolchain import Toolchain
+from core.toolchain import DEVKITPRO_OK, Toolchain
 from core.validator import ValidationMessage, build_error, build_warning
 
 
@@ -98,7 +98,8 @@ def test_un_outil_en_echec_compte_comme_une_erreur():
 
 # Ces trois tests lancent le vrai build : sans grit (devkitPro), il échoue pour une autre raison.
 needs_devkitpro = pytest.mark.skipif(
-    not Toolchain().devkitpro_ok, reason="devkitPro absent : le build ne peut pas tourner")
+    Toolchain().devkitpro_state != DEVKITPRO_OK,
+    reason=f"devkitPro non prêt ({Toolchain().devkitpro_state}) : le build ne peut pas tourner")
 
 
 def _projet(tmp_path, script):

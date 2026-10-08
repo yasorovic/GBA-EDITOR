@@ -1119,7 +1119,7 @@
       "text": "Animations"
     },
     "bgedit.src_hint": { "text": "Dragging onto the canvas places it." },
-    "bgedit.anim_source_tip": { "one": "{n} frame. Dragging the animation onto the canvas places it.", "other": "{n} frames. Dragging the animation onto the canvas places it." },
+    "bgedit.anim_source_tip": { "singular": "{n} frame. Dragging the animation onto the canvas places it.", "plural": "{n} frames. Dragging the animation onto the canvas places it." },
     "bgedit.sec_placement": {
       "text": "Placement"
     },
@@ -1920,7 +1920,7 @@
       "text": "Scene reloaded: {name}"
     },
     "win.build_unavailable_tip": { "text": "Opens the toolchain settings." },
-    "win.build_unavailable": { "one": "Build unavailable: {what} is missing.", "other": "Build unavailable: {what} are missing." },
+    "win.build_unavailable": { "singular": "Build unavailable: {what} is missing.", "plural": "Build unavailable: {what} are missing." },
     "win.build_no_scene": { "text": "A scene is required before building." },
     "win.build_run_tip": { "text": "Builds the project, then starts it in the configured emulator." },
     "win.build_start": {
@@ -2049,20 +2049,20 @@
     },
     "paluse.open_tip": { "text": "{detail}. Opens this item in its editor." },
     "paluse.sprite": {
-      "one": "Sprite",
-      "other": "Sprites"
+      "singular": "Sprite",
+      "plural": "Sprites"
     },
     "paluse.background": {
-      "one": "Background",
-      "other": "Backgrounds"
+      "singular": "Background",
+      "plural": "Backgrounds"
     },
     "paluse.prefab": {
-      "one": "Prefab",
-      "other": "Prefabs"
+      "singular": "Prefab",
+      "plural": "Prefabs"
     },
     "paluse.scene": {
-      "one": "Scene",
-      "other": "Scenes"
+      "singular": "Scene",
+      "plural": "Scenes"
     },
     "fontinsp.title": {
       "text": "Font"
@@ -2101,8 +2101,8 @@
       "text": "No transparent color. The sheet is used as-is."
     },
     "fontinsp.key_count": {
-      "one": "{n} color made transparent. The PNG is not modified.",
-      "other": "{n} colors made transparent. The PNG is not modified."
+      "singular": "{n} color made transparent. The PNG is not modified.",
+      "plural": "{n} colors made transparent. The PNG is not modified."
     },
     "fontinsp.adv_spacing": {
       "text": "\nAdvance declared by spacing (proportional)."
@@ -2206,8 +2206,8 @@
       "text": "Used"
     },
     "txttbl.text_count": {
-      "one": "{n} text",
-      "other": "{n} texts"
+      "singular": "{n} text",
+      "plural": "{n} texts"
     },
     "txttbl.n_selected": {
       "text": "{n} selected"
@@ -3040,7 +3040,7 @@
     "langcard.font_title": { "text": "Font replacement" },
     "langcard.font_note": { "text": "Only a different writing system needs one." },
     "langcard.remove_title": { "text": "Remove this language" },
-    "projset.remove_tag_used": { "one": "{n} box uses it and falls back to “body”.", "other": "{n} boxes use it and fall back to “body”." },
+    "projset.remove_tag_used": { "singular": "{n} box uses it and falls back to “body”.", "plural": "{n} boxes use it and fall back to “body”." },
     "projset.remove_tag_unused": { "text": "No box uses it." },
     "scrinsp.remove_name": {
       "text": "Remove '{name}'"
@@ -3754,8 +3754,8 @@
       "text": "Remove from folder"
     },
     "assetfind.delete_selection": {
-      "one": "Delete {n} item",
-      "other": "Delete {n} items"
+      "singular": "Delete {n} item",
+      "plural": "Delete {n} items"
     },
     "bgedit.indexed_original_palette": {
       "text": "indexed (original palette)"
@@ -3826,8 +3826,8 @@
       "text": "＋  New script"
     },
     "inputs.count": {
-      "one": "{n} input",
-      "other": "{n} inputs"
+      "singular": "{n} input",
+      "plural": "{n} inputs"
     },
     "inputs.sequences": {
       "text": "Sequences"
@@ -3837,8 +3837,8 @@
       "text": "Declare a sequence"
     },
     "inputs.sequences_count": {
-      "one": "{n} sequence",
-      "other": "{n} sequences"
+      "singular": "{n} sequence",
+      "plural": "{n} sequences"
     },
     "inputs.sequence_name_placeholder": {
       "text": "quarter_circle"
@@ -3870,8 +3870,8 @@
       "text": "Declare an axis"
     },
     "inputs.axes_count": {
-      "one": "{n} axis",
-      "other": "{n} axes"
+      "singular": "{n} axis",
+      "plural": "{n} axes"
     },
     "inputs.axis_name_placeholder": {
       "text": "look"
@@ -3886,10 +3886,10 @@
       "text": "Remove this axis"
     },
     "langcard.count": {
-      "one": "{n} translation",
-      "other": "{n} translations"
+      "singular": "{n} translation",
+      "plural": "{n} translations"
     },
-    "langcard.font_replacements": { "one": "{n} font replacement.", "other": "{n} font replacements." },
+    "langcard.font_replacements": { "singular": "{n} font replacement.", "plural": "{n} font replacements." },
     "langcard.no_font_replacement": { "text": "No font replacement: this language uses the fonts of the project." },
     "projset.build": {
       "text": "Build"
@@ -3910,28 +3910,28 @@
       "text": "Collisions"
     },
     "projinsp.count_scenes": {
-      "one": "{n} scene",
-      "other": "{n} scenes"
+      "singular": "{n} scene",
+      "plural": "{n} scenes"
     },
     "projinsp.count_prefabs": {
-      "one": "{n} prefab",
-      "other": "{n} prefabs"
+      "singular": "{n} prefab",
+      "plural": "{n} prefabs"
     },
     "projinsp.count_sprites": {
-      "one": "{n} sprite",
-      "other": "{n} sprites"
+      "singular": "{n} sprite",
+      "plural": "{n} sprites"
     },
     "projinsp.count_backgrounds": {
-      "one": "{n} background",
-      "other": "{n} backgrounds"
+      "singular": "{n} background",
+      "plural": "{n} backgrounds"
     },
     "projinsp.count_palettes": {
-      "one": "{n} palette",
-      "other": "{n} palettes"
+      "singular": "{n} palette",
+      "plural": "{n} palettes"
     },
     "projinsp.count_fonts": {
-      "one": "{n} font",
-      "other": "{n} fonts"
+      "singular": "{n} font",
+      "plural": "{n} fonts"
     },
     "sprfind.animation_states": {
       "text": "Animation states"
@@ -4018,20 +4018,20 @@
       "text": ", {frames} frames"
     },
     "scncanvas.deleted_elements": {
-      "one": "Deleted {n} element",
-      "other": "Deleted {n} elements"
+      "singular": "Deleted {n} element",
+      "plural": "Deleted {n} elements"
     },
     "scncanvas.copied_elements": {
-      "one": "Copied {n} element",
-      "other": "Copied {n} elements"
+      "singular": "Copied {n} element",
+      "plural": "Copied {n} elements"
     },
     "scncanvas.duplicated_elements": {
-      "one": "Duplicated {n} element",
-      "other": "Duplicated {n} elements"
+      "singular": "Duplicated {n} element",
+      "plural": "Duplicated {n} elements"
     },
     "scncanvas.pasted_elements": {
-      "one": "Pasted {n} element",
-      "other": "Pasted {n} elements"
+      "singular": "Pasted {n} element",
+      "plural": "Pasted {n} elements"
     },
     "scncanvas.shared_layout": {
       "text": " (shared by {count} scenes)"

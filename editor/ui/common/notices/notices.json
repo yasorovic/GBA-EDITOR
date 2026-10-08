@@ -132,8 +132,8 @@
     },
     "ui.fill.sprite_cost": {
       "tone": "info",
-      "one": "{w}×{h} tiled {cols}×{rows} = {n} OAM slot of the 128 the hardware has, actors included. Tiles cost nothing extra: every cell points at the same frame.",
-      "other": "{w}×{h} tiled {cols}×{rows} = {n} OAM slots of the 128 the hardware has, actors included. Tiles cost nothing extra: every cell points at the same frame."
+      "singular": "{w}×{h} tiled {cols}×{rows} = {n} OAM slot of the 128 the hardware has, actors included. Tiles cost nothing extra: every cell points at the same frame.",
+      "plural": "{w}×{h} tiled {cols}×{rows} = {n} OAM slots of the 128 the hardware has, actors included. Tiles cost nothing extra: every cell points at the same frame."
     },
     "ui.fill.sprite_overflow": {
       "tone": "render",
@@ -141,8 +141,8 @@
     },
     "ui.image.cost": {
       "tone": "info",
-      "one": "{w}×{h} px  ·  {n} frame across all states  ·  {where}. Every state stays resident: a script may switch at any frame.",
-      "other": "{w}×{h} px  ·  {n} frames across all states  ·  {where}. Every state stays resident: a script may switch at any frame."
+      "singular": "{w}×{h} px  ·  {n} frame across all states  ·  {where}. Every state stays resident: a script may switch at any frame.",
+      "plural": "{w}×{h} px  ·  {n} frames across all states  ·  {where}. Every state stays resident: a script may switch at any frame."
     },
     "ui.image.missing": {
       "tone": "render",
@@ -154,13 +154,13 @@
     },
     "ui.image.where_bg": {
       "tone": "info",
-      "one": "{n} tile in the UI charblock",
-      "other": "{n} tiles in the UI charblock"
+      "singular": "{n} tile in the UI charblock",
+      "plural": "{n} tiles in the UI charblock"
     },
     "ui.image.where_obj": {
       "tone": "info",
-      "one": "1 OAM slot, sharing the sprite's {n} tile already in OBJ VRAM",
-      "other": "1 OAM slot, sharing the sprite's {n} tiles already in OBJ VRAM"
+      "singular": "1 OAM slot, sharing the sprite's {n} tile already in OBJ VRAM",
+      "plural": "1 OAM slot, sharing the sprite's {n} tiles already in OBJ VRAM"
     },
     "ui.layout.name": {
       "tone": "info",
@@ -168,8 +168,8 @@
     },
     "ui.layout.shared": {
       "tone": "accent",
-      "one": "Shared by {n} scene. Editing it changes that scene too.",
-      "other": "Shared by {n} scenes. Editing it changes them all."
+      "singular": "Shared by {n} scene. Editing it changes that scene too.",
+      "plural": "Shared by {n} scenes. Editing it changes them all."
     },
     "ui.list.cursor_missing": {
       "tone": "build",
@@ -185,23 +185,23 @@
     },
     "ui.list.rows": {
       "tone": "info",
-      "one": "{n} row: {names}. The script writes their content, and menu:row(n) gives the zone.",
-      "other": "{n} rows: {names}. The script writes their content, and menu:row(n) gives the zone."
+      "singular": "{n} row: {names}. The script writes their content, and menu:row(n) gives the zone.",
+      "plural": "{n} rows: {names}. The script writes their content, and menu:row(n) gives the zone."
     },
     "ui.text.anim_bg": {
       "tone": "render",
-      "one": "{n} animated glyph in this text, but a background zone cannot animate it, so it will render static. Anchor the zone on an actor to get sprites.",
-      "other": "{n} animated glyphs in this text, but a background zone cannot animate them, so they will render static. Anchor the zone on an actor to get sprites."
+      "singular": "{n} animated glyph in this text, but a background zone cannot animate it, so it will render static. Anchor the zone on an actor to get sprites.",
+      "plural": "{n} animated glyphs in this text, but a background zone cannot animate them, so they will render static. Anchor the zone on an actor to get sprites."
     },
     "ui.text.anim_capped": {
       "tone": "build",
-      "one": "{n} animated glyph reserved, capped at {max}; the rest renders static.",
-      "other": "{n} animated glyphs reserved, capped at {max}; the rest renders static."
+      "singular": "{n} animated glyph reserved, capped at {max}; the rest renders static.",
+      "plural": "{n} animated glyphs reserved, capped at {max}; the rest renders static."
     },
     "ui.text.anim_reserved": {
       "tone": "info",
-      "one": "{n} animated glyph reserved (from the text itself).",
-      "other": "{n} animated glyphs reserved (from the text itself)."
+      "singular": "{n} animated glyph reserved (from the text itself).",
+      "plural": "{n} animated glyphs reserved (from the text itself)."
     },
     "ui.text.bank_none": {
       "tone": "info",
@@ -229,8 +229,8 @@
     },
     "ui.text.key_shared": {
       "tone": "accent",
-      "one": "Shown by {n} other element. Fixing the entry fixes both; breaking it breaks both.",
-      "other": "Shown by {n} other elements. Fixing the entry fixes them all; breaking it breaks them all."
+      "singular": "Shown by {n} other element. Fixing the entry fixes both; breaking it breaks both.",
+      "plural": "Shown by {n} other elements. Fixing the entry fixes them all; breaking it breaks them all."
     },
     "ui.text.sample_only": {
       "tone": "info",

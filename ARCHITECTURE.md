@@ -1491,7 +1491,7 @@ jalons (v0.11 et v0.9) — mais **la même grammaire**, et c'est délibéré.
 
 **Deux catalogues frères, un seul cœur.** `ui/common/catalog.py` porte toute la mécanique —
 maître `<nom>.json` + side `<nom>_<code>.json` joints par clé, repli sur la source quand une
-entrée manque, pluriel `one`/`other` choisi par l'argument `n`, `format(**args)`, et un
+entrée manque, pluriel `singular`/`plural` choisi par l'argument `n`, `format(**args)`, et un
 `set_language(code)` global à tous les catalogues. Deux catalogues l'utilisent :
 
 - **`ui/common/notice.py`** + `notices/notices.json` — le contenu INFORMATIF (constats,
@@ -1558,7 +1558,7 @@ Deux règles qui viennent de ce que la traduction exige, et qu'aucun test n'aura
 - **Le Python passe des VALEURS, jamais des morceaux de phrase.** L'ordre des mots n'est pas
   le même d'une langue à l'autre ; une phrase assemblée par concaténation n'est traduisible
   dans aucune. Un message composé injecte un autre message ENTIER, par `text()`.
-- **Le pluriel est déclaré** (`one`/`other`, choisi par l'argument `n`), pas écrit
+- **Le pluriel est déclaré** (`singular`/`plural`, choisi par l'argument `n`), pas écrit
   `"s" if n > 1`. Un champ `code` porte l'expression Lua qu'un champ miroite ; il vit dans le
   maître seul, parce qu'une expression d'API ne se traduit pas.
 

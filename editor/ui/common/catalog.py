@@ -5,7 +5,7 @@ et un side par langue, joints par CLÉ. C'est le cœur partagé par les notices
 repli, même pluriel, même `format`, et UN SEUL `set_language` qui les bascule
 tous d'un coup.
 
-    <name>.json          le MAÎTRE — clé → { "text": … } ou { "one"/"other": … }
+    <name>.json          le MAÎTRE — clé → { "text": … } ou { "singular"/"plural": … }
     <name>_fr.json       un SIDE   — la traduction seule, jointe par clé
 
 **Une entrée absente vaut la SOURCE, jamais une chaîne vide** ; une clé absente
@@ -49,8 +49,8 @@ def _template(entry, args: dict) -> str:
         return str(entry)
     if "text" in entry:
         return str(entry["text"])
-    plural = "one" if int(args.get("n", 0) or 0) == 1 else "other"
-    return str(entry.get(plural, entry.get("other", "")))
+    form = "singular" if int(args.get("n", 0) or 0) == 1 else "plural"
+    return str(entry.get(form, entry.get("plural", "")))
 
 
 class Catalog:
