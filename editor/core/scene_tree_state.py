@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from uuid import uuid4
 import json
 
+from core.models.ids import new_id
 from core.resources.resource_store import atomic_write
 from core.models import project_json
 
@@ -50,6 +50,13 @@ class SceneTreeState:
         if isinstance(scenes, dict):
             self._data = {"version": self._VERSION, "scenes": scenes}
 
+    def _folder_ids(self) -> set[str]:
+        """Tous les ids de dossier du fichier, toutes scènes confondues : un id
+        tiré n'en recouvre aucun."""
+        return {str(f.get("id")) for entry in self._data["scenes"].values()
+                if isinstance(entry, dict) and isinstance(entry.get("folders"), list)
+                for f in entry["folders"] if isinstance(f, dict)}
+
     def _scene_data(self, scene_name: str) -> dict:
         scenes = self._data["scenes"]
         entry = scenes.setdefault(scene_name, {})
@@ -76,7 +83,7 @@ class SceneTreeState:
 
     def create_folder(self, scene_name: str, name: str) -> ContentFolder:
         clean = name.strip() or "Folder"
-        raw = {"id": uuid4().hex, "name": clean, "members": [], "color": ""}
+        raw = {"id": new_id(self._folder_ids()), "name": clean, "members": [], "color": ""}
         self._scene_data(scene_name)["folders"].append(raw)
         self.save()
         return ContentFolder(raw["id"], clean, (), "")

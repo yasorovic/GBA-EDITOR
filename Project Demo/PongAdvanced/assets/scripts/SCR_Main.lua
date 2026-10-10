@@ -3,7 +3,7 @@
 local lit = -1   -- état affiché de « PRESS START » : 1 visible, 0 caché, -1 pas encore
 
 function on_start()
-    music_box:trigger("to_title")
+	music_box:trigger("to_title")
 end
 
 function on_update()

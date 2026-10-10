@@ -45,12 +45,12 @@ from __future__ import annotations
 import unicodedata
 from dataclasses import dataclass, field, asdict
 
-from core.models.ids import new_id as _new_id
+from core.models.unique_name import unique_name
 
 
 # L'id opaque et son tirage vivent dans `models/ids.py` : les variables du
-# projet suivent la même règle, et deux tirages séparés auraient fini par
-# diverger sur la largeur ou sur la garde d'unicité.
+# projet et les dossiers suivent la même règle, et deux tirages séparés auraient
+# fini par diverger sur la largeur ou sur la garde d'unicité.
 
 # Longueur max d'un segment de clé — au-delà on tronque (une clé sert à situer,
 # pas à raconter).
@@ -70,7 +70,7 @@ SEP = " › "
 @dataclass
 class Text:
     """Une entrée de la table de textes du projet."""
-    id:      int = 0     # opaque, stable à vie — voir en-tête du module
+    id:      str = ""   # opaque, stable à vie — voir en-tête du module
     key:     str = ""    # poignée unique et lisible, référencée depuis Lua
     path:    list[str] = field(default_factory=list)  # rangement libre, 1..6 niveaux
     content: str = ""    # le texte lui-même, tel qu'affiché au joueur
@@ -95,7 +95,7 @@ class Text:
             # premier — et pour l'instant seul — niveau du chemin.
             raw = [d["label"]] if d.get("label") else []
         return cls(
-            id       = int(d.get("id", 0)),
+            id       = str(d.get("id") or ""),
             key      = d.get("key", ""),
             path     = norm_path(raw),
             content  = d.get("content", ""),
@@ -157,32 +157,14 @@ def repath_segment(texts, path, new_seg: str) -> list[tuple]:
     ]
 
 
-def new_id(taken: set[int]) -> int:
-    """Id opaque non encore utilisé — ré-exporté depuis `models/ids.py` pour ne
-    pas casser les `from core.models.text import new_id` existants."""
-    return _new_id(taken)
-
-
 def key_from_path(path, *, taken: set[str] | None = None) -> str:
     """Clé positionnelle unique dérivée du chemin : `village_garde`.
 
-    Le rang `_NN` n'apparaît qu'en cas de collision — plusieurs répliques
-    rangées au même endroit. La clé reste ainsi lisible dans le cas courant
-    (un texte par nœud), qui est aussi celui qu'on copie dans un script.
+    Le rang `_2`, `_3`… n'apparaît qu'en cas de collision — plusieurs répliques
+    rangées au même endroit (cf. `unique_name`). La clé reste ainsi lisible dans
+    le cas courant (un texte par nœud), qui est aussi celui qu'on copie dans un
+    script.
 
-    Chemin vide : compteur nu `texte_NNN`, numéroté d'emblée puisqu'il ne situe
-    rien et que le suivant tomberait de toute façon sur la même base."""
-    taken = taken or set()
+    Chemin vide : la base est `texte`."""
     segs = [s for s in (slug(p) for p in norm_path(path)) if s]
-    base = "_".join(segs)
-    if not base:
-        n = 1
-        while f"texte_{n:03d}" in taken:
-            n += 1
-        return f"texte_{n:03d}"
-    if base not in taken:
-        return base
-    n = 2
-    while f"{base}_{n:02d}" in taken:
-        n += 1
-    return f"{base}_{n:02d}"
+    return unique_name("_".join(segs) or "texte", taken or set())

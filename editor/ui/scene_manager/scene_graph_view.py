@@ -22,7 +22,6 @@ attachées au nœud déplacé.
 from __future__ import annotations
 
 import os
-from uuid import uuid4
 
 from PyQt6.QtCore import QEasingCurve, QPointF, QPropertyAnimation, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import (
@@ -34,6 +33,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.history import Command, get_history, SetFieldCmd
+from core.models.ids import new_id
 from core.keybindings import bind, get_keybindings
 from core.selection_bus import get_bus
 from core.scene_graph_state import SceneGraphState
@@ -158,8 +158,8 @@ class _GraphCanvas(QGraphicsView):
         Les points suivent donc le pan et restent stables sous les nœuds ; leur
         coût est borné par le rectangle visible, pas par la taille du graphe.
         """
-        painter.fillRect(rect, QColor(C.BG_DEEP))
-        pen = QPen(QColor(C.BORDER_MID))
+        painter.fillRect(rect, QColor(C.GRAPH_BG))
+        pen = QPen(QColor(C.GRAPH_GRID))
         pen.setCosmetic(True)
         pen.setWidthF(2.5)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
@@ -524,7 +524,7 @@ class SceneGraphView(QWidget):
 
         self._scene = QGraphicsScene(self)
         self._view = _GraphCanvas(self._scene, self)
-        self._view.setBackgroundBrush(QColor(C.BG_DEEP))
+        self._view.setBackgroundBrush(QColor(C.GRAPH_BG))
         # Table des raccourcis (bas-droite).
         self._hints = ShortcutHints(self._view, scene_graph_hints)
         self._view.clicked.connect(self._on_click)
@@ -713,7 +713,7 @@ class SceneGraphView(QWidget):
         self._scene_search.setStyleSheet("")
         # Une recherche est globale : ouvrir le niveau parent direct garantit que
         # la carte existe réellement, plutôt que de centrer une boîte repliée.
-        target_level = self._folders.folder_of("scenes", found.name) if self._folders else None
+        target_level = self._folder_of_scene(found.name)
         if target_level != self._level:
             self._level = target_level
             if self._graph is not None:
@@ -732,6 +732,19 @@ class SceneGraphView(QWidget):
             if scene.name == name:
                 return scene
         return None
+
+    # Le Graphe pense en NOMS de scène (cartes, positions) ; les dossiers rangent
+    # des IDS. Ces deux méthodes sont la seule frontière entre les deux.
+
+    def _scene_id(self, name: str) -> str:
+        scene = self._scene_by_name(name)
+        return scene.id if scene is not None else ""
+
+    def _folder_of_scene(self, name: str) -> str | None:
+        """Dossier de la scène `name`, None à la racine (ou si elle est inconnue)."""
+        if self._folders is None:
+            return None
+        return self._folders.folder_of("scenes", self._scene_id(name))
 
     def _on_click(self, item) -> None:
         if isinstance(item, ScenePreviewToggleItem):
@@ -872,7 +885,7 @@ class SceneGraphView(QWidget):
         if self._state is None:
             return
         pt = self._view.mapToScene(self._view.mapFromGlobal(global_pos))
-        note_id = uuid4().hex
+        note_id = new_id(self._notes)
         if self._state.create_note(note_id, pt.x(), pt.y()) and self._graph is not None:
             self._render(self._graph)
             note = self._notes.get(note_id)
@@ -905,7 +918,7 @@ class SceneGraphView(QWidget):
         if self._state is not None:
             self._state.set_scene_position(name, x, y)
         if self._folders is not None and self._level is not None:
-            self._folders.move_member("scenes", name, self._level)
+            self._folders.move_member("scenes", self._scene_id(name), self._level)
         if self._graph is not None:
             self._render(self._graph)
         scene = self._scene_by_name(name)
@@ -993,8 +1006,7 @@ class SceneGraphView(QWidget):
         """Les scènes rangées dans `group_id` ou l'un de ses sous-dossiers."""
         subtree = {group_id} | self._group_descendants(group_id)
         return [s for s in getattr(self._project, "scenes", ()) or ()
-                if (self._folders.folder_of("scenes", s.name) if self._folders else None)
-                in subtree]
+                if self._folder_of_scene(s.name) in subtree]
 
     def _delete_group_deep(self, group_id: str) -> None:
         """Supprime un dossier ET son contenu : les scènes de tout son sous-arbre
@@ -1064,10 +1076,10 @@ class SceneGraphView(QWidget):
         le project viewer."""
         if self._folders is None:
             return
-        names = [i.name for i in self._scene.selectedItems()
-                 if isinstance(i, SceneCardItem)]
+        ids = [self._scene_id(i.name) for i in self._scene.selectedItems()
+               if isinstance(i, SceneCardItem)]
         self._folders.create_group(
-            "scenes", label("assetfind.group_default_name"), names, self._level)
+            "scenes", label("assetfind.group_default_name"), [i for i in ids if i], self._level)
         if self._graph is not None:
             self._render(self._graph)
         self.groups_changed.emit()
@@ -1370,8 +1382,9 @@ class SceneGraphView(QWidget):
             if card is None:
                 continue
             target = self._group_at(card.anchor_rect().center())
-            if self._folders.folder_of("scenes", name) != target:
-                self._folders.move_member("scenes", name, target)
+            scene_id = self._scene_id(name)
+            if scene_id and self._folders.folder_of("scenes", scene_id) != target:
+                self._folders.move_member("scenes", scene_id, target)
                 changed = True
         return changed
 
@@ -1506,7 +1519,7 @@ class SceneGraphView(QWidget):
     def _folder_chain(self, name: str, fmap: dict) -> list[str]:
         """Dossiers de la scène `name`, du plus proche (son dossier direct) à la
         racine — la chaîne d'appartenance."""
-        fid = self._folders.folder_of("scenes", name) if self._folders else None
+        fid = self._folder_of_scene(name)
         chain: list[str] = []
         cur, seen = fid, set()
         while cur and cur in fmap and cur not in seen:
@@ -1736,8 +1749,7 @@ class SceneGraphView(QWidget):
         (positions prêtes), puis cadres du PLUS PROFOND au plus haut (un cadre
         parent doit lire la géométrie de ses cadres enfants pour s'amorcer)."""
         fmap = {f.id: f for f in self._folders.folders("scenes")} if self._folders else {}
-        direct_count = {gid: sum(1 for n in node_names
-                                 if (self._folders.folder_of("scenes", n) if self._folders else None) == gid)
+        direct_count = {gid: sum(1 for n in node_names if self._folder_of_scene(n) == gid)
                         for gid in shown}
         # Scènes cachées par chaque boîte repliée (pour ancrer leurs arêtes).
         boxed: dict[str, list[str]] = {}
@@ -1804,7 +1816,7 @@ class SceneGraphView(QWidget):
         # (fait après coup : tous les items existent, cartes et groupes.)
         for gid, frame in self._frames.items():
             sub = [it for n, it in card_of.items()
-                   if (fid := (self._folders.folder_of("scenes", n) if self._folders else None))
+                   if (fid := self._folder_of_scene(n))
                    and (fid == gid or gid in self._ancestor_ids(fid, fmap))]
             sub += [it for cg, it in {**self._boxes, **self._frames}.items()
                     if cg != gid and gid in self._ancestor_ids(cg, fmap)]

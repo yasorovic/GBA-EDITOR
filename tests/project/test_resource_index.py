@@ -11,26 +11,26 @@ from core.project import Project
 
 
 def test_index_lists_json_sidecars_without_reading_them(tmp_path: Path):
-    (tmp_path / "Hero.json").write_text("not json", encoding="utf-8")
-    (tmp_path / "Arena.json").write_text("{", encoding="utf-8")
+    (tmp_path / "Hero.sfx").write_text("not json", encoding="utf-8")
+    (tmp_path / "Arena.sfx").write_text("{", encoding="utf-8")
     (tmp_path / "ignored.txt").write_text("x", encoding="utf-8")
 
-    index = ResourceIndex(tmp_path)
+    index = ResourceIndex(tmp_path, ".sfx")
     index.scan()
 
     assert index.names() == ("Arena", "Hero")
-    assert index.path_for("Hero") == tmp_path / "Hero.json"
+    assert index.path_for("Hero") == tmp_path / "Hero.sfx"
     assert "Arena" in index
 
 
 def test_index_uses_the_same_safe_filename_as_the_store(tmp_path: Path):
-    (tmp_path / "Boss_1.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "Boss_1.sfx").write_text("{}", encoding="utf-8")
 
-    index = ResourceIndex(tmp_path)
+    index = ResourceIndex(tmp_path, ".sfx")
     index.scan()
 
     assert safe_filename("Boss:1") == "Boss_1"
-    assert index.path_for("Boss:1") == tmp_path / "Boss_1.json"
+    assert index.path_for("Boss:1") == tmp_path / "Boss_1.sfx"
 
 
 def test_store_can_load_one_indexed_resource_without_loading_the_collection(tmp_path: Path):

@@ -7,12 +7,12 @@ from core.models.text import Text
 
 
 def test_second_text_reads_its_own_global():
-    texts = [Text(id=1, key="a", content="$score_player"),
-             Text(id=2, key="b", content="$score_cpu"),
-             Text(id=3, key="c", content="$score_player")]
+    texts = [Text(id="000000000001", key="a", content="$score_player"),
+             Text(id="000000000002", key="b", content="$score_cpu"),
+             Text(id="000000000003", key="c", content="$score_player")]
     c = "\n".join(emit_texts_c(
         texts, [""], lambda t, code: t.content,
-        globals_=[GlobalVar(name="score_player", id=1), GlobalVar(name="score_cpu", id=2)]))
+        globals_=[GlobalVar(name="score_player", id="000000000001"), GlobalVar(name="score_cpu", id="000000000002")]))
 
     assert "g_text_values_0[2] = {GLOBAL_SCORE_PLAYER,GLOBAL_SCORE_CPU}" in c
     # L'argument du TextEvent VALUE est le rang dans cette table : 0, 1, puis 0 (dédoublonné).

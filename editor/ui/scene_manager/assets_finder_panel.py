@@ -25,7 +25,8 @@ from ui.common.script_creation import show_add_script_menu
 
 from core.project import Project
 from core.selection_bus import get_bus
-from core.command_dispatcher import get_dispatcher, unique_name
+from core.command_dispatcher import get_dispatcher
+from core.models.unique_name import unique_name
 from core.keybindings import bind
 # Source unique du dossier de projets par défaut (~/BackstageProjects) — ce module et
 # window.py en avaient chacun une copie pointant vers le projects/ du repo :
@@ -95,6 +96,10 @@ class AssetsFinderPanel(QWidget):
         self._sc_group.activated.connect(self._group_selected_scenes)
         bind("scene.group", self._sc_group)
 
+    def hide_title(self) -> None:
+        """Le panneau vit sous un onglet « Project viewer » : son bandeau ferait doublon."""
+        self._finder.set_title_visible(False)
+
     # ── Sélection ─────────────────────────────────────────────────
 
     def _on_selected(self, kind_label: str, obj):
@@ -145,14 +150,14 @@ class AssetsFinderPanel(QWidget):
         menu.addAction(label("assetfind.create_group"), self._create_scene_group)
         menu.exec(QCursor.pos())
 
-    def _create_scene_group(self, member_names=()):
+    def _create_scene_group(self, member_ids=()):
         """Crée un groupe de scènes (dossier de la famille), éventuellement
-        peuplé, et l'ouvre en renommage en place. `groups_changed` prévient le
-        Graphe, qui partage le même store."""
+        peuplé (par ids de scène), et l'ouvre en renommage en place.
+        `groups_changed` prévient le Graphe, qui partage le même store."""
         if self._folder_store is None:
             return
         folder = self._folder_store.create_group(
-            "scenes", label("assetfind.group_default_name"), list(member_names))
+            "scenes", label("assetfind.group_default_name"), list(member_ids))
         self._finder.refresh()
         self.groups_changed.emit()
         if folder is not None:
@@ -161,9 +166,9 @@ class AssetsFinderPanel(QWidget):
     def _group_selected_scenes(self):
         """Ctrl+G : range les scènes SÉLECTIONNÉES dans un nouveau groupe. Sans
         sélection de scènes, ne fait rien — le geste opère sur ce qui est choisi."""
-        names = [s.name for s in self._finder.selected_objs(SCENES.label)]
-        if names:
-            self._create_scene_group(names)
+        ids = [s.id for s in self._finder.selected_objs(SCENES.label)]
+        if ids:
+            self._create_scene_group(ids)
 
     def _add_prefab(self):
         if not self._project:
@@ -222,24 +227,10 @@ class AssetsFinderPanel(QWidget):
     def set_folder_store(self, store) -> None:
         """Active les dossiers d'auteur de la famille Scenes, adossés au store
         partagé (mêmes dossiers que les groupes du Graphe). Les scènes sont
-        rangées par NOM — leur identité durable ; le renommage migre
-        l'appartenance via le choke point `Project.rename_scene`."""
-        from ui.common.asset_finder import FolderScheme
+        rangées par ID — leur identité durable : renommer ou déplacer le fichier
+        d'une scène ne la fait pas sortir de son dossier."""
         self._folder_store = store
-        fam = "scenes"
-        scheme = FolderScheme(
-            folders=lambda: store.folders(fam),
-            create=lambda name, parent: store.create_folder(fam, name, parent),
-            rename=lambda fid, name: store.rename_folder(fam, fid, name),
-            delete=lambda fid: store.delete_folder(fam, fid),
-            set_parent=lambda fid, parent: store.set_parent(fam, fid, parent),
-            move=lambda scene, fid: store.move_member(fam, scene.name, fid),
-            folder_of=lambda scene: store.folder_of(fam, scene.name),
-            group=lambda scenes, parent: store.create_group(
-                fam, label("assetfind.group_default_name"),
-                [s.name for s in scenes], parent),
-        )
-        self._finder.set_folder_scheme(SCENES.label, scheme)
+        self._finder.set_folder_store(store)
 
     def refresh(self):
         self._finder.refresh()

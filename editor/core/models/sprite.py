@@ -7,6 +7,7 @@ from typing import Optional
 from core.models.resource import Resource
 from core.models.sub_palette import SubPaletteAssetMixin, decode_palette_overrides
 from core.models.gba_color import write_colors, read_colors, write_palettes, read_palettes
+from core.models import asset_extensions
 
 
 @dataclass
@@ -184,6 +185,7 @@ class SpriteAsset(SubPaletteAssetMixin, Resource):
     sur l'Actor, pas par le sprite (un même sprite peut être utilisé par
     des actors avec des hitbox différentes).
     """
+    sidecar_extension = asset_extensions.SPRITE
     name: str = "sprite"
     asset: Optional[str] = None
     frame_w: int = 16

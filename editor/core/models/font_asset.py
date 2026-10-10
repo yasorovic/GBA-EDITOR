@@ -17,6 +17,7 @@ from typing import Optional
 
 from core.models.font import color_from_hex, color_to_hex
 from core.models.resource import Resource
+from core.models import asset_extensions
 
 
 FONT_VARIANTS = ("regular", "bold", "italic", "bold_italic")
@@ -84,6 +85,7 @@ class FontAsset(Resource):
     des ``Font`` dans ``assets/fonts/`` ; ils ne sont pas des chemins afin que
     les renommages de ressources restent possibles.
     """
+    sidecar_extension = asset_extensions.FONT_ASSET
 
     name: str = "font_asset"
     sources: dict[str, list[str]] = field(default_factory=dict)

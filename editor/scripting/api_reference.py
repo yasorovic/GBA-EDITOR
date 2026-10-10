@@ -37,7 +37,7 @@ _MISC_FALLBACK  = "Other"
 # ─── `group` interne des catégories ─────────────────────────────────
 # Étiquette héritée que chaque catégorie porte encore (dans le JSON, ou posée
 # par les fallbacks ci-dessous). Elle ne pilote plus AUCUNE navigation depuis
-# le rangement en 8 sections (ROADMAP v0.16) : les trois « grosses parties »
+# le rangement par sections (ROADMAP v0.16) : les trois « grosses parties »
 # Gameplay/Scripting/Hardware ont disparu de la sidebar, remplacées par une
 # navigation unique par NOM (cf. `SECTIONS`). On garde le champ tel quel pour
 # ne pas toucher au JSON — il n'a simplement plus de lecteur.
@@ -49,7 +49,7 @@ _FALLBACK_GROUP: dict[str, str] = {
     _MISC_FALLBACK:  GROUP_GAMEPLAY,
 }
 
-# ─── Les 8 sections — une par CHOSE qu'on tient (ROADMAP v0.16) ──────
+# ─── Les sections — une par CHOSE qu'on tient (ROADMAP v0.16) ───────
 # La navigation de la sidebar. Chaque section absorbe plusieurs des 24
 # catégories du catalogue, qui deviennent de simples SOUS-TITRES en son sein
 # (`blend` reste `blend` pour qui le connaît, mais cesse d'être une porte
@@ -60,14 +60,13 @@ _FALLBACK_GROUP: dict[str, str] = {
 # labels.json, français dans labels_fr.json) — la sidebar traduit, cette couche
 # ne code pas de texte visible en dur.
 SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("scrsb.sec.actor",   ("Transform", "Movement", "Physics", "Collision", "Animation", "Juiciness", "Actor")),
-    ("scrsb.sec.scenery", ("Layer", "Tilemap", "Palette", "Window", "Blend")),
+    ("scrsb.sec.actor",   ("Transform", "Movement", "Physics", "CollisionBox", "Collision", "Sprite", "Animation", "Juiciness", "Actor", "Input")),
+    ("scrsb.sec.scene",   ("Scene", "Layer", "Tilemap", "Palette", "Window", "Blend")),
+    ("scrsb.sec.camera",  ("Camera",)),
     ("scrsb.sec.sound",   ("Audio",)),
-    ("scrsb.sec.text_ui", ("Text", "Interface")),
+    ("scrsb.sec.text_ui", ("Text", "Interface", "Language")),
     ("scrsb.sec.data",    ("Save", "Arrays")),
     ("scrsb.sec.script",  ("Math", "Sequences", "Debug")),
-    ("scrsb.sec.scene",   ("Scene", "Camera", "Language")),
-    ("scrsb.sec.player",  ("Input",)),
 )
 
 # ─── La couche MOTEUR — repliée sous « Aller plus loin » ────────────
@@ -88,11 +87,10 @@ _ENGINE_KEYS: frozenset[str] = frozenset({
     "window_region:set_obj", "window_region:set_blend",
     "blend.set_layer", "blend.set_obj", "blend.set_backdrop",
     "blend.set_alpha", "blend.set_fade", "blend.mode",
-    # Le son : les trois boîtes (états, déclencheurs). `sfx`/`music` restent
-    # l'itération.
-    "sound_box.set_state", "sound_box.set_volume",
-    "jingle_box.set_state", "jingle_box.set_volume",
-    "music_box.trigger",
+    # Le son ne replie pas ses trois boîtes ici. Elles sont peu fréquentes,
+    # mais les cacher sous un vague « Aller plus loin » les rendait
+    # indécouvrables. Elles vivent plus bas dans des sous-groupes nommés de
+    # la section Sound, avec leur préfixe complet.
     # L'interface : le module moteur nommé par la ROADMAP. `text.*` (afficher un
     # texte ponctuel) reste l'itération ; les zones nommées, images et listes
     # sont le moteur.
@@ -117,26 +115,26 @@ _PROP_HOME: dict[str, str] = {
     "actor.name":      "Actor",
     "actor.frame":     "Animation",
     "actor.anim":      "Animation",
-    "actor.active_sprite": "Animation",
+    "actor.active_sprite": "Sprite",
     "actor.anim_speed":    "Animation",
     "actor.anim_length":   "Animation",
     "actor.anim_loop":     "Animation",
     "actor.anim_finished": "Animation",
-    "actor.frame_w":   "Animation",
-    "actor.frame_h":   "Animation",
-    "actor.flip_h":    "Animation",
-    "actor.flip_v":    "Animation",
-    "actor.pal":       "Animation",
-    "actor.obj_mode":  "Animation",
-    "actor.priority":  "Animation",
-    "actor.sprite_rotation": "Animation",
-    "actor.sprite_scale":    "Animation",
-    "actor.sprite_offset":   "Animation",
-    "actor.sprite_pivot":    "Animation",
+    "actor.frame_w":   "Sprite",
+    "actor.frame_h":   "Sprite",
+    "actor.flip_h":    "Sprite",
+    "actor.flip_v":    "Sprite",
+    "actor.pal":       "Sprite",
+    "actor.obj_mode":  "Sprite",
+    "actor.priority":  "Sprite",
+    "actor.sprite_rotation": "Sprite",
+    "actor.sprite_scale":    "Sprite",
+    "actor.sprite_offset":   "Sprite",
+    "actor.sprite_pivot":    "Sprite",
     "actor.direction": "Movement",
     "actor.auto_dir":  "Movement",
-    "actor.grounded":  "Collision",
-    "actor.box_count": "Collision",
+    "actor.grounded":  "CollisionBox",
+    "actor.box_count": "CollisionBox",
     "ui_element.visible": "Interface",
     "background_layer.visible": "Layer", "background_layer.priority": "Layer",
     "background_layer.scroll": "Layer", "background_layer.map": "Layer",
@@ -146,15 +144,15 @@ _PROP_HOME: dict[str, str] = {
     "list.first": "Interface", "list.active": "Interface",
     "image.state": "Interface", "image.offset": "Interface",
     "text_region.reading": "Interface",
-    "collision_box.tag":    "Collision",
-    "collision_box.active": "Collision",
-    "collision_box.solid":  "Collision",
-    "collision_box.is_grounded": "Collision",
-    "collision_box.offset": "Collision",
-    "collision_box.size":   "Collision",
-    "collision_box.bounds": "Collision",
+    "collision_box.tag":    "CollisionBox",
+    "collision_box.active": "CollisionBox",
+    "collision_box.solid":  "CollisionBox",
+    "collision_box.is_grounded": "CollisionBox",
+    "collision_box.offset": "CollisionBox",
+    "collision_box.size":   "CollisionBox",
+    "collision_box.bounds": "CollisionBox",
     "actor.screen_space": "Actor",
-    "actor.affine":    "Animation",
+    "actor.affine":    "Sprite",
     "camera.position": "Camera",
     "camera.bound":    "Camera",
     "camera.margin":   "Camera",
@@ -175,8 +173,12 @@ _PROP_HOME: dict[str, str] = {
 # dans « Actor » ou « Other ». Ne figurent ici que celles à ranger ailleurs ; le
 # reste est décrit par le JSON.
 _FUNC_HOME: dict[str, str] = {
-    "actor:collision_box":     "Collision",
-    "collision_box:overlaps": "Collision",
+    # La vélocité est un état de Physics ; l'appliquer est le geste qui le
+    # transforme en déplacement, pas une opération générique d'Actor.
+    "actor:apply_velocity": "Physics",
+    "actor:collision_box":     "CollisionBox",
+    "collision_box:overlaps": "CollisionBox",
+    "actor:activate_sprite": "Sprite",
     "layer.get": "Layer", "window.get": "Window",
     "background_layer:show": "Layer", "background_layer:hide": "Layer",
 
@@ -187,15 +189,93 @@ _FUNC_HOME: dict[str, str] = {
     "window_region:show": "Window", "window_region:hide": "Window", "window_region:set": "Window",
     "window_region:set_layer": "Window", "window_region:get_layer": "Window",
     "window_region:set_obj": "Window", "window_region:set_blend": "Window",
-    "collision_box:activate": "Collision",
+    "collision_box:activate": "CollisionBox",
 
-    "collision_box:deactivate": "Collision",
+    "collision_box:deactivate": "CollisionBox",
     "list:row": "Interface", "list:activate": "Interface", "list:deactivate": "Interface",
     "image:play": "Interface", "image:pause": "Interface",
     "text_region:draw": "Interface", "text_region:clear": "Interface",
     "text_region:skip": "Interface",
+    # Lecture de la carte : l'ancienne méthode de boîte reste compatible mais
+    # vit avec son équivalent direct `collision:tile_at`.
     "collision_box:get_collision_tile": "Collision",
+    "collision.tile_at": "Collision",
 }
+
+# Dans « Actor », l'ordre du dictionnaire technique ne raconte pas une prise en
+# main : les propriétés sont ajoutées après les méthodes, donc `self.name` se
+# retrouvait tout au fond. Cette petite carte ne déplace aucune entrée ; elle
+# pose seulement les repères fondamentaux avant les gestes plus spécialisés.
+# Les futures entrées non listées restent ensuite dans l'ordre du catalogue.
+_ACTOR_ENTRY_ORDER: tuple[str, ...] = (
+    "actor-name",           # qui suis-je ?
+    "actor-get",            # comment pointer un acteur nommé ?
+    "actor-count",
+    "actor-spawn",
+    "actor-active",         # état et cycle de vie
+    "actor-visible",
+    "actor-activate",
+    "actor-deactivate",
+    "actor-show",
+    "actor-hide",
+    "actor-destroy",
+    "actor-screen_space",   # réglages et actions moins usuels
+    "actor-activate_sprite",
+)
+_ACTOR_ENTRY_RANK = {anchor: rank for rank, anchor in enumerate(_ACTOR_ENTRY_ORDER)}
+
+
+# Le catalogue garde une seule catégorie « Audio » : c'est son rangement de
+# données, pas celui qu'un auteur doit apprendre. Dans la sidebar, le son se
+# lit d'abord comme des gestes : jouer un effet, tenir une référence, piloter
+# la musique, puis employer les trois boîtes d'états. Les clés restent celles
+# du catalogue ; une future entrée non rangée demeure visible sous « Other
+# audio » au lieu de disparaître.
+_SOUND_SHELVES: tuple[tuple[str, frozenset[str]], ...] = (
+    ("Actor sound", frozenset({"actor:play_sfx"})),
+    ("Sound effects", frozenset({
+        "sfx.play", "sfx:stop", "sfx:playing", "sfx:set_volume", "sfx:set_pitch",
+        "sfx:set_panning",
+    })),
+    ("Music", frozenset({
+        "music.play", "music.stop", "music.pause", "music.resume", "music.is_playing",
+        "music.set_volume", "music.fade_to", "music.cut_to",
+    })),
+    ("Jingles", frozenset({"music.jingle", "music.jingle_playing"})),
+    ("SoundBox · contextual effects", frozenset({"sound_box.set_state", "sound_box.set_volume"})),
+    ("JingleBox · contextual jingles", frozenset({"jingle_box.set_state", "jingle_box.set_volume"})),
+    ("MusicBox · adaptive music", frozenset({"music_box.trigger"})),
+)
+
+# Les boîtes contextuelles existent encore dans le runtime et dans les projets
+# qui les emploient. Elles ne sont simplement pas proposées dans la sidebar
+# Scripts tant que leur modèle d'auteur n'est pas assez clair. Ce filtre ne
+# supprime donc ni l'API, ni les données, ni la compatibilité de build.
+_EXTENDED_AUDIO_KEYS: frozenset[str] = frozenset({
+    # Raccourci lié à un composant d'acteur, pas une troisième façon de
+    # découvrir/structurer les SFX.
+    "actor:play_sfx",
+    "sound_box.set_state", "sound_box.set_volume",
+    "jingle_box.set_state", "jingle_box.set_volume",
+    "music_box.trigger",
+})
+
+
+def _sound_shelves(entries: list[dict]) -> list[dict]:
+    """Rend l'unique catégorie Audio lisible sans dupliquer le catalogue."""
+    pending = {canonical_key(e["label"].split("(")[0].strip()): e for e in entries}
+    shelves: list[dict] = []
+    for name, keys in _SOUND_SHELVES:
+        # L'ordre d'affichage reste celui du catalogue/JSON ; un frozenset est
+        # pratique pour l'appartenance, pas pour décider de la leçon lue.
+        picked = [entry for key, entry in pending.items() if key in keys]
+        for key in [key for key in pending if key in keys]:
+            del pending[key]
+        if picked:
+            shelves.append({"name": name, "entries": picked})
+    if pending:
+        shelves.append({"name": "Other audio", "entries": list(pending.values())})
+    return shelves
 
 
 def _module_of(name: str) -> str:
@@ -312,6 +392,16 @@ def _reconcile(cats: list[dict]) -> list[dict]:
             out.append(cat)
         cat["entries"].append(_mark_layer(api_snippets.prop_entry_dict(name), name))
 
+    actor = by_name.get("Actor")
+    if actor is not None:
+        # Le second terme stabilise l'ordre catalogue des entrées non classées.
+        actor["entries"] = sorted(
+            enumerate(actor["entries"]),
+            key=lambda indexed: (_ACTOR_ENTRY_RANK.get(
+                indexed[1].get("doc_anchor", ""), len(_ACTOR_ENTRY_RANK)), indexed[0]),
+        )
+        actor["entries"] = [entry for _, entry in actor["entries"]]
+
     # Un en-tête sans rien dessous n'apprend rien : les catégories que ni le
     # catalogue ni les propriétés n'ont remplies disparaissent — après, pour
     # n'avoir pas coûté leur place à celles qui se remplissent.
@@ -327,8 +417,8 @@ def get_categories() -> list[dict]:
     return _cache
 
 
-def get_sections() -> list[dict]:
-    """`get_categories()`, regroupée en 8 sections (ROADMAP v0.16) — la
+def get_sections(show_extended_audio: bool = True) -> list[dict]:
+    """`get_categories()`, regroupée en sections (ROADMAP v0.16) — la
     navigation de la sidebar.
 
     Rend, dans l'ordre de `SECTIONS`, une liste de
@@ -340,7 +430,12 @@ def get_sections() -> list[dict]:
 
     Une catégorie hors de `SECTIONS` n'est jamais perdue : elle rend sa propre
     section en queue — même garantie que `_reconcile`, rien ne disparaît en
-    silence."""
+    silence.
+
+    `show_extended_audio=False` ne concerne que la surface de découverte : le
+    raccourci d'acteur et les trois boîtes restent dans le catalogue, le
+    checker et le générateur, afin que les projets existants continuent à
+    compiler."""
     cats = {c["name"]: c for c in get_categories()}
 
     def split(cat: dict) -> tuple[list[dict], list[dict]]:
@@ -358,6 +453,17 @@ def get_sections() -> list[dict]:
                 continue
             used.add(cname)
             it, en = split(cat)
+            if label_ == "scrsb.sec.sound" and cname == "Audio":
+                # Les boîtes ne sont pas une couche « cachée » : leur nom et
+                # leur rôle sont la seule façon de comprendre l'API audio.
+                if not show_extended_audio:
+                    it = [e for e in it if canonical_key(e["label"].split("(")[0].strip())
+                          not in _EXTENDED_AUDIO_KEYS]
+                    en = [e for e in en if canonical_key(e["label"].split("(")[0].strip())
+                          not in _EXTENDED_AUDIO_KEYS]
+                iteration.extend(_sound_shelves(it))
+                engine.extend(_sound_shelves(en))
+                continue
             if it:
                 iteration.append({"name": cname, "entries": it})
             if en:

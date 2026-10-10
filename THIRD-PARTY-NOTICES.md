@@ -114,6 +114,7 @@ et doit être contrôlée dans l'AppImage produite.
 | Material Design Icons 5.9.55 / 6.9.96 | via QtAwesome | Apache-2.0 |
 | Phosphor 1.3.0 | via QtAwesome | MIT |
 | Remix Icon 2.5.0 | via QtAwesome | Apache-2.0 |
+| Sniglet (Regular, ExtraBold) | Haley Fiege, Brenda Gallo, Pablo Impallari | SIL OFL 1.1 (texte : `licenses/Sniglet-OFL.txt`) |
 
 Les fontes de QtAwesome sont fournies par le paquet lui-même et leurs notices
 respectives se trouvent dans son arborescence.

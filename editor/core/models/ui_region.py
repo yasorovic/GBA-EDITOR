@@ -69,6 +69,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from core.models.resource import Resource
+from core.models import asset_extensions
 
 TILE = 8
 
@@ -295,8 +296,14 @@ class UIText(RectGeometryMixin):
     # Sélectionne la face italique native.
     font_italic: bool = False
     align: str = "left"
-    # Texte de mesure affiché dans l'éditeur quand aucune clé n'est définie.
+    # Littéral affiché dans l'éditeur quand aucune clé n'est définie : la
+    # représentation visuelle du `text:draw(tx, ty, string)` que le script
+    # écrira. Il n'est jamais compilé ni ajouté à la table de textes.
     preview_text: str = ""
+    # Les fichiers antérieurs portaient une CLÉ dans `preview_text`. Ce marqueur
+    # de migration empêche qu'un littéral neuf égal à une clé existante soit
+    # interprété par erreur comme une ancienne référence.
+    preview_is_literal: bool = True
     # Couleur du texte, dans sa banque de palette.
     text_color: int = TEXT_COLOR_INK
     # Couleur de surlignement derrière le texte. Elle n'est pas héritée du conteneur.
@@ -339,6 +346,7 @@ class UIText(RectGeometryMixin):
             "font_italic": self.font_italic,
             "align": self.align,
             "preview_text": self.preview_text,
+            "preview_is_literal": self.preview_is_literal,
         }
 
     @classmethod
@@ -377,6 +385,9 @@ class UIText(RectGeometryMixin):
             # dérive du texte désormais. La clé disparaît du JSON au prochain
             # enregistrement — « une seule forme ÉCRITE », cf. core/project.py.
             preview_text = str(d.get("preview_text", "")),
+            # Absence = ancien échantillon qui désignait une clé. Tous les
+            # nouveaux fichiers portent explicitement le littéral.
+            preview_is_literal = bool(d.get("preview_is_literal", False)),
         )
 
 
@@ -1012,7 +1023,7 @@ def element_from_dict(d: dict):
 class UILayout(Resource):
     """Le nœud `Interface` : un jeu d'éléments d'UI, avec SON chemin matériel.
 
-    **Un asset, pas une donnée de scène.** Rangé dans `project/ui_layouts/` et
+    **Un asset, pas une donnée de scène.** Rangé dans `assets/ui_layouts/` et
     référencé par NOM : une boîte de dialogue dessinée une fois sert les
     quarante scènes du jeu et se corrige en un endroit. Stockée dans la scène,
     elle serait à redessiner — et à recorriger — quarante fois. Une scène en
@@ -1033,6 +1044,7 @@ class UILayout(Resource):
     `name` est la clé de référence, comme partout ailleurs dans le projet
     (`<asset>_name`), donc ce qui entre dans le graphe de dépendances.
     """
+    sidecar_extension = asset_extensions.LAYOUT
     name:    str = "ui_layout"
     # Liste ordonnée de TOUS les éléments (textes, conteneurs, images) — l'ordre
     # fixe l'empilement et l'ordre des frères. `slots` et `images` en exposent
@@ -1719,32 +1731,3 @@ def preset_rect(w: int, h: int, frame_w: int, frame_h: int,
         if stretch_v:
             h = _ceil_tile(h) * TILE
     return int(x), int(y), int(w), int(h)
-
-
-def unique_element_name(taken, base: str = "element") -> str:
-    """Nom d'élément libre mais unique dans `taken` — générique, tous types
-    (alias de `unique_region_name`, dont la logique ne dépend pas du type)."""
-    return unique_region_name(taken, base)
-
-
-def unique_region_name(taken, base: str = "region") -> str:
-    """Nom libre mais unique **dans tout le projet** — `taken` est l'ensemble
-    des noms déjà pris (cf. `Project.region_names()`).
-
-    Pourquoi projet et pas mise en page : le nom se résout en `REGION_<NOM>`,
-    un index dans une table C plate, exactement comme une clé de texte ou un
-    nom de police. Deux régions homonymes dans deux mises en page rendraient
-    la constante indécidable.
-
-    Conséquence assumée : deux mises en page ne peuvent pas avoir chacune leur
-    « boite_bas » ; la seconde devient `boite_bas_02`. Le jour où l'on voudra
-    qu'un même script vise « la boîte basse de la mise en page COURANTE », il
-    faudra une indirection par scène — la constante ne bougerait pas, seule sa
-    résolution changerait, donc ce n'est pas une impasse."""
-    taken = set(taken)
-    if base not in taken:
-        return base
-    n = 2
-    while f"{base}_{n:02d}" in taken:
-        n += 1
-    return f"{base}_{n:02d}"

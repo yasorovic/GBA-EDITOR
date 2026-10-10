@@ -45,7 +45,7 @@ class ValidationContext:
         self._focus = ""      # nom de la scène en cours de contrôle ("" hors contrôle par scène)
         self.undecodable_scripts = False   # un script n'est pas de l'UTF-8 (cf. _check_scripts_parse)
         # Les modules déjà analysés pendant CETTE validation. Trois contrôles
-        # les lisent (structure de coupe, canaux du jingle, canaux du projet)
+        # les lisent (structure de coupe, canaux du projet)
         # et un module coûte ~9 ms à analyser : sans ce cache, la démo et ses
         # 105 morceaux paient trois secondes pour trois questions.
         self._modules: dict = {}
@@ -139,6 +139,7 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
 
     # ── Validateurs built-in ─────────────────────────────────────────
     _check_unreadable_files(ctx)
+    _check_missing_sources(ctx)
     _check_translation_files(ctx)
     # Les scripts d'abord : une quinzaine de contrôles les relisent, et un fichier qui n'est
     # pas de l'UTF-8 faisait planter l'un d'eux (« internal error ») avant que ce contrôle-ci
@@ -178,6 +179,7 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
     _check_cameras(ctx)
     _check_script_owner_families(ctx)
     _check_behaviors_without_self(ctx)
+    _check_duplicate_behaviors(ctx)
     _check_window_regions(ctx)
     _check_actor_name_collisions(ctx)
     _check_actor_budget(ctx)
@@ -186,7 +188,7 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
     _check_screen_space(ctx)
     _check_audio_files(ctx)
     _check_music_cut_compat(ctx)
-    _check_jingle_channels(ctx)
+    _check_sound_names_unique(ctx)
     _check_module_channels(ctx)
     _check_sound_boxes(ctx)
     _check_sprite_appearances(ctx)
@@ -423,8 +425,7 @@ def _check_font_sheets(ctx: ValidationContext):
         path = p.asset_abs(sheet)
         name = Path(sheet).name
         if not path or not path.exists():
-            ctx.warn(None, f"Font \"{font.name}\": file {name} not found — the font is left out "
-                           "of the build.")
+            continue    # signalé une fois, en erreur, par `_check_missing_sources`
         elif Path(sheet).suffix.lower() != ".png" or font.source_format != "png":
             continue    # .ttf / .otf / .fnt : pas une image, la rastérisation les lit à sa manière
         elif reason := ctx.image_problem(path):
@@ -492,10 +493,8 @@ def _check_sprite(ctx, actor, comp):
         ctx.warn(actor, f"Sprite '{sprite.name}' has no PNG assigned.")
         return
     ap = proj.asset_abs(sprite.asset)
-    if not ap or not ap.exists():
-        ctx.warn(actor, f"Sprite '{sprite.name}': PNG file not found ({sprite.asset}); the actor "
-                        "is played without a sprite.")
-    elif reason := ctx.image_problem(ap):
+    # Un PNG introuvable est signalé une fois, en erreur, par `_check_missing_sources`.
+    if ap and ap.exists() and (reason := ctx.image_problem(ap)):
         ctx.error(actor, f"Sprite '{sprite.name}': image {sprite.asset} is unreadable ({reason}) — re-export the"
                          " PNG.")
     if sprite.frame_w <= 0 or sprite.frame_h <= 0:
@@ -528,6 +527,19 @@ def _check_translation_files(ctx: ValidationContext):
                        f"({reason}) — language \"{code}\" falls back to the source language.")
 
 
+def _check_missing_sources(ctx: ValidationContext):
+    """Un asset dont le fichier source a disparu (déplacé, renommé, supprimé hors de l'éditeur) reste dans
+    le projet SANS source : une ERREUR, une seule par fichier, qui dit comment la réparer. Elle remplace
+    les avertissements que chaque famille émettait de son côté — le build ne livre pas un jeu amputé, et
+    ne le dit pas quatre fois."""
+    from core.asset_relink import FAMILY_LABELS, missing_sources
+    p = ctx.project
+    for missing in missing_sources(p):
+        ctx.error(None, f"{FAMILY_LABELS[missing.family]} \"{missing.item.name}\": source file not found "
+                        f"({p.asset_rel(missing.path)}) — relink the asset to another file (right-click it "
+                        "in the finder) or delete it.")
+
+
 def _check_unreadable_files(ctx: ValidationContext):
     """Un fichier de projet illisible est ABSENT du build : l'asset qu'il décrit
     n'existe ni pour l'écran ni pour la ROM. En ERREUR, comme un fichier audio
@@ -539,6 +551,10 @@ def _check_unreadable_files(ctx: ValidationContext):
     for name, backup in ctx.project.preserved_files():
         ctx.warn(None, f"File \"{name}\": the original was unreadable and has been replaced"
                        f" by a default version; it is kept in \"{backup}\".")
+    # Deux sidecars de même nom dans deux dossiers : un seul peut être l'asset. L'autre n'est ni lu ni
+    # modifié ; l'auteur le renomme ou le déplace.
+    for name, reason in ctx.project.ignored_duplicate_files():
+        ctx.warn(None, f"File \"{name}\" is ignored: {reason}. Rename it to keep both.")
 
 
 def _check_backgrounds(ctx: ValidationContext):
@@ -553,11 +569,10 @@ def _check_backgrounds(ctx: ValidationContext):
         if not ba:
             ctx.warn(None, f"Background BG{layer.bg_slot}: image '{layer.background_name}' not found — layer ignored.")
             continue
-        png = ba.asset if ba.asset else f"{layer.background_name}.png"
-        if not (proj.background_images_dir / png).exists():
-            ctx.warn(None, f"Background BG{layer.bg_slot}: PNG not found ({png}) — layer ignored.")
-        elif reason := ctx.image_problem(proj.background_images_dir / png):
-            ctx.error(None, f"Background BG{layer.bg_slot}: image {png} is unreadable ({reason}) — "
+        png = proj.background_image_path(ba, layer.background_name)
+        # Un PNG introuvable est signalé une fois, en erreur, par `_check_missing_sources`.
+        if png.exists() and (reason := ctx.image_problem(png)):
+            ctx.error(None, f"Background BG{layer.bg_slot}: image {png.name} is unreadable ({reason}) — "
                             "re-export the PNG.")
 
 
@@ -1341,13 +1356,13 @@ def _check_scripts_parse(ctx: ValidationContext):
         ap = p.asset_abs(rel)
         if ap is not None and Path(ap).suffix.lower() == ".lua":
             attached.add(Path(ap).resolve())
-    behaviors = (sorted(p.scripts_behaviors_dir.glob("*.lua"))
-                 if p.scripts_behaviors_dir.is_dir() else [])
+    behaviors = p.behavior_files()
+    behavior_set = {f.resolve() for f in behaviors}
     files = {f.resolve(): f for f in (*p.script_files(), *behaviors)}
     files.update({a: a for a in attached if a.exists()})
 
     for resolved, path in sorted(files.items(), key=lambda kv: str(kv[0])):
-        blocking = resolved in attached or p.scripts_behaviors_dir in path.parents
+        blocking = resolved in attached or resolved in behavior_set
         report = ctx.error if blocking else ctx.warn
         suffix = "" if blocking else " (attached to nothing)"
         try:
@@ -1372,6 +1387,17 @@ def _check_scripts_parse(ctx: ValidationContext):
             ctx.warn(None, "defines no function: the script does nothing.", file=path.name)
 
 
+def _check_duplicate_behaviors(ctx: ValidationContext):
+    """`require("behaviors/<nom>")` résout par NOM parmi les fichiers marqués `-- @behavior`, où qu'ils soient :
+    deux behaviors de même nom ne se départagent pas, et le build ne choisira pas pour l'auteur."""
+    from core import lua_scripts
+    root = ctx.project.root
+    for name, paths in sorted(lua_scripts.behaviors_by_name(ctx.project).items()):
+        if len(paths) > 1:
+            where = ", ".join(p.relative_to(root).as_posix() for p in paths)
+            ctx.error(None, f"Behavior \"{name}\" is defined by {len(paths)} files ({where}): `require(\"behaviors/{name}\")` cannot tell them apart. Rename one.")
+
+
 def _check_behaviors_without_self(ctx: ValidationContext):
     """`self` désigne l'instance à laquelle le script est attaché ; un behavior n'est
     attaché à rien, il REÇOIT un acteur en paramètre. Lui laisser le mot `self` le
@@ -1381,10 +1407,7 @@ def _check_behaviors_without_self(ctx: ValidationContext):
     from scripting.parser import parse as lua_parse, LuaParseError
     from scripting.checker import uses_self
 
-    behaviors_dir = ctx.project.scripts_behaviors_dir
-    if not behaviors_dir.is_dir():
-        return
-    for path in sorted(behaviors_dir.glob("*.lua")):
+    for path in ctx.project.behavior_files():
         try:
             script = lua_parse(path.read_text(encoding="utf-8"))
         except (LuaParseError, OSError, UnicodeDecodeError):  # tolerated: _check_scripts_parse reports it
@@ -1508,20 +1531,22 @@ def _check_audio_files(ctx: ValidationContext):
     complète, avec sa constante `SFX_*` bien définie et un effet muet. Laisser
     passer, c'est livrer un jeu dont un son manque sans que rien ne l'ait dit —
     et ça ne s'entend qu'en jouant."""
-    from core.resources.asset_reconciliation import check_audio_file
+    from core.resources.asset_reconciliation import check_audio_file, wav_too_long
     p = ctx.project
     for kind, assets in (("SFX", getattr(p, "sfx", [])),
-                         ("Music", getattr(p, "music", []))):
+                         ("Music", getattr(p, "music", [])),
+                         ("Jingle", getattr(p, "jingles", []))):
         for a in assets or []:
             if not a.asset:
                 ctx.warn(None, f"{kind} \"{a.name}\": no associated file.")
                 continue
             path = p.asset_abs(a.asset)
             if not path or not path.exists():
-                ctx.warn(None, f"{kind} \"{a.name}\": file not found ({a.asset}); it is not played.")
-                continue
-            if reason := check_audio_file(path):
+                continue    # signalé une fois, en erreur, par `_check_missing_sources`
+            if reason := check_audio_file(path, at_import=False):
                 ctx.error(None, f"{kind} \"{a.name}\" ({path.name}): {reason}")
+            elif kind != "SFX" and (reason := wav_too_long(path)):
+                ctx.warn(None, f"{kind} \"{a.name}\" ({path.name}): {reason} Playing it fails the build.")
 
     # `Scene.music` nomme une piste sans qu'aucun script ne la cite : c'est une
     # référence de plus à vérifier. En AVERTISSEMENT — le codegen sait ne pas
@@ -1600,41 +1625,19 @@ def _check_music_cut_compat(ctx: ValidationContext):
                         f"against {n_t}) — the resume would land elsewhere in the song.")
 
 
-def _check_jingle_channels(ctx: ValidationContext):
-    """Un jingle est plafonné à 4 canaux par maxmod (doc `mmJingle`).
+def _check_sound_names_unique(ctx: ValidationContext):
+    """Un nom de musique et un nom de jingle ne peuvent pas coïncider.
 
-    Un module qui en demande plus sera joué tronqué — et un morceau tronqué ne
-    s'entend pas comme une erreur, il s'entend comme un morceau raté. Le nombre
-    de canaux est écrit dans l'en-tête du MOD et `mod_file.py` le lit déjà : ça
-    se vérifie sans rien construire."""
-    from scripting.api import DOMAIN_MUSIC
-    from scripting.refactor import iter_refs, script_paths
+    Les deux dossiers sont deux familles, mais une seule numérotation de ROM :
+    `MUSIC_<nom>` et `MOD_<NOM>` s'écrivent pareil pour les deux. Le doublon se
+    verrait au `#define` redéfini, loin de sa cause."""
     p = ctx.project
-    by_name = {m.name: m for m in getattr(p, "music", [])}
-    seen: set[str] = set()
-    for path in script_paths(p):
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):  # tolerated: _check_scripts_parse reports it
-            continue
-        if "jingle" not in text:
-            continue
-        for ref in iter_refs(text, path=path, domain=DOMAIN_MUSIC):
-            if ref.api_key != "music.jingle" or ref.value in seen:
-                continue
-            seen.add(ref.value)
-            m = by_name.get(ref.value)
-            ap = p.asset_abs(m.asset) if m and m.asset else None
-            if not (ap and ap.exists()):
-                continue
-            mod = ctx.module(ap)
-            if mod is None:
-                continue
-            ch = mod.num_channels
-            if ch > 4:
-                ctx.warn(None,
-                    f"{path.name}: \"{ref.value}\" is played as a jingle but uses {ch} channels — maxmod "
-                    "only gives 4 to a jingle, the others will be silent.")
+    music = {m.name for m in getattr(p, "music", [])}
+    for j in getattr(p, "jingles", []):
+        if j.name in music:
+            ctx.error(None,
+                f"\"{j.name}\" exists both in assets/music/ and in assets/jingles/ — both "
+                "would become the same constant in the ROM. Rename one of the files.")
 
 
 def _check_module_channels(ctx: ValidationContext):
@@ -1654,7 +1657,7 @@ def _check_module_channels(ctx: ValidationContext):
     """
     p = ctx.project
     channels = int(getattr(p.settings, "sound_channels", 8))
-    for m in getattr(p, "music", []):
+    for m in (p.audio_modules() if hasattr(p, "audio_modules") else getattr(p, "music", [])):
         ap = p.asset_abs(m.asset) if getattr(m, "asset", None) else None
         if not (ap and ap.exists()):
             continue
@@ -1680,6 +1683,7 @@ def _check_sound_boxes(ctx: ValidationContext):
     p = ctx.project
     sfx_names = {s.name for s in getattr(p, "sfx", [])}
     music_names = {m.name for m in getattr(p, "music", [])}
+    jingle_names = {j.name for j in getattr(p, "jingles", [])}
 
     # Une boîte active par famille — la première par ordre de nom (v0.8.7).
     # Les autres existent dans le projet mais ne sonneront jamais.
@@ -1704,9 +1708,24 @@ def _check_sound_boxes(ctx: ValidationContext):
                     f"MusicBox \"{box.name}\", state \"{st.name}\": music \"{st.music}\" does not exist — the "
                     "state will be silent.")
 
+    # Une coupe REPREND à la position courante (`music_cut_to`). Une piste WAV n'a
+    # sa note qu'à l'ordre 0 de son module : reprise plus loin, elle ne sonne pas.
+    from core.models.sound_box import TRANSITION_CUT
+    by_music = {m.name: m for m in getattr(p, "music", [])}
+    for box in getattr(p, "music_boxes", []):
+        states = {s.name: s for s in box.states}
+        for tr in box.transitions:
+            dst = states.get(tr.dst)
+            m = by_music.get(dst.music) if dst and dst.music else None
+            if tr.kind == TRANSITION_CUT and m and (m.asset or "").lower().endswith(".wav"):
+                ctx.warn(None,
+                    f"MusicBox \"{box.name}\": the cut to \"{tr.dst}\" targets a WAV track "
+                    f"(\"{m.name}\") — it resumes mid-module, where a WAV track has no note, so it "
+                    "stays silent. Use a fade.")
+
     for store, known, label, target in (
             (getattr(p, "sound_boxes", []), sfx_names, "SoundBox", "sound effect"),
-            (getattr(p, "jingle_boxes", []), music_names, "JingleBox", "music")):
+            (getattr(p, "jingle_boxes", []), jingle_names, "JingleBox", "jingle")):
         for box in store:
             for st in box.states:
                 for action, name in st.mapping.items():

@@ -222,5 +222,4 @@ def preview_frame_for_actor(sprite, sprite_comp, actor):
 def layer_png_path(project: Project, layer):
     """Chemin du PNG source d'un layer (via son BackgroundAsset sidecar)."""
     ba = project.get_background(layer.background_name)
-    png = ba.asset if ba and ba.asset else f"{layer.background_name}.png"
-    return project.background_images_dir / png
+    return project.background_image_path(ba, layer.background_name)

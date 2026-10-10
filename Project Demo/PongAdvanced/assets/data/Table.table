@@ -1,0 +1,27 @@
+{
+  "name": "Table",
+  "id": "280e97641396",
+  "columns": [
+    {
+      "name": "valeur",
+      "type": "int"
+    },
+    {
+      "name": "column",
+      "type": "int"
+    },
+    {
+      "name": "column_2",
+      "type": "int"
+    },
+    {
+      "name": "column_3",
+      "type": "int"
+    }
+  ],
+  "rows": [
+    {},
+    {},
+    {}
+  ]
+}

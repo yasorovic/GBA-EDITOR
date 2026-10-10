@@ -65,17 +65,6 @@ def test_couleur_de_dossier_persistante(tmp_path):
     assert AssetFolderStore(tmp_path).folders("scenes")[0].color == "#6EA8FE"
 
 
-def test_renommage_de_membre_migre_l_appartenance(tmp_path):
-    store = AssetFolderStore(tmp_path)
-    folder = store.create_folder("scenes", "Village")
-    store.move_member("scenes", "Shop", folder.id)
-
-    store.rename_member("scenes", "Shop", "GeneralStore")
-
-    assert store.folder_of("scenes", "GeneralStore") == folder.id
-    assert store.folder_of("scenes", "Shop") is None
-
-
 def test_purge_oublie_les_membres_disparus(tmp_path):
     store = AssetFolderStore(tmp_path)
     folder = store.create_folder("scenes", "Village")
@@ -136,3 +125,14 @@ def test_create_group_sous_un_parent(tmp_path):
     parent = store.create_folder("scenes", "World")
     child = store.create_group("scenes", "Group", ["Shop"], parent_id=parent.id)
     assert child.parent_id == parent.id
+
+
+def test_une_cle_vide_ne_se_range_pas(tmp_path):
+    store = AssetFolderStore(tmp_path)
+    folder = store.create_folder("scenes", "Village")
+
+    assert store.move_member("scenes", "", folder.id) is False
+    group = store.create_group("scenes", "Group", ["", "0123456789ab"])
+
+    assert store.folders("scenes")[0].members == ()
+    assert group.members == ("0123456789ab",)

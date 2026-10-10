@@ -170,6 +170,12 @@ def build_command(version: str, output_dir: Path) -> list[str]:
         f"=ui/common/CustomIcons"
     )
 
+    # Police de marque Sniglet (ui/common/theme.py: brand_font la charge par chemin).
+    cmd.append(
+        f"--include-data-dir={EDITOR_DIR / 'ui' / 'common' / 'fonts'}"
+        f"=ui/common/fonts"
+    )
+
     # Catalogue des notices (ui/common/notice.py le lit par Path(__file__)).
     # `--include-package=ui` n'embarque que du code : sans ce dossier, CHAQUE
     # message informatif de l'éditeur retombe sur sa clé (« ui.text.footprint_bg »

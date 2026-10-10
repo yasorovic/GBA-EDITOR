@@ -57,6 +57,13 @@ _CATEGORY_COLORS: dict[str, str] = {
 }
 
 
+# Thème clair : jauge et pavés partagent le même contour foncé ; la jauge a un
+# fond gris et un quadrillage assorti. Le sombre garde ses teintes du thème.
+_FRAME_BORDER = "#8c8c8c" if C.IS_LIGHT else C.BORDER_MID
+_GAUGE_BG = "#d4d4d4" if C.IS_LIGHT else C.BG_BASE
+_GAUGE_GRID = "#b4b4b4" if C.IS_LIGHT else C.BORDER_DARK
+
+
 _CATEGORY_KEYS = {'Audio': 'rombar.audio', 'Polices': 'common.fonts', 'Fonds': 'common.backgrounds', 'Sprites': 'common.sprites', 'Palettes': 'common.palettes', 'Textes': 'common.texts', 'Interface': 'common.interface', 'Tables de données': 'rombar.data_tables', 'Collision': 'rombar.collision', 'Code': 'rombar.code', 'Reste': 'rombar.other'}
 
 
@@ -119,13 +126,13 @@ class _Gauge(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor(C.BG_BASE))
+        p.setBrush(QColor(_GAUGE_BG))
         p.drawRect(0, 0, w, h)
 
         # Le quadrillage très discret donne une présence à l'espace libre :
         # il reste lisible sans concurrencer les segments de ressources.
         if self._mode == "fill":
-            p.setPen(QColor(C.BORDER_DARK))
+            p.setPen(QColor(_GAUGE_GRID))
             for grid_x in range(16, w, 16):
                 p.drawLine(grid_x, 2, grid_x, h - 3)
         p.setPen(Qt.PenStyle.NoPen)
@@ -148,7 +155,7 @@ class _Gauge(QWidget):
                 x += seg_w
 
         # Même contour que les champs et boutons de l'application.
-        p.setPen(QColor(C.BORDER_MID))
+        p.setPen(QColor(_FRAME_BORDER))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawRect(0, 0, max(0, w - 1), max(0, h - 1))
         p.end()
@@ -180,8 +187,11 @@ class RomBudgetBar(QWidget):
 
     cartridge_mib_changed = pyqtSignal(int)
 
-    _BLOCK_BG = C.BG_BASE
-    _BLOCK_TEXT = C.TEXT_DIM
+    # Thème clair : pavés d'un gris marqué, texte noir, contour foncé (aspect
+    # « instrument »). Le thème sombre garde ses pavés discrets.
+    _BLOCK_BG = "#cfcfcf" if C.IS_LIGHT else C.BG_BASE
+    _BLOCK_TEXT = C.TEXT_HI if C.IS_LIGHT else C.TEXT_DIM
+    _BLOCK_BORDER = _FRAME_BORDER
     _STYLE_OK   = f"color:{C.ACCENT};"
     _STYLE_WARN = f"color:{C.ACCENT_YLW};"
     _STYLE_CRIT = f"color:{C.ACCENT_RED};"
@@ -190,7 +200,7 @@ class RomBudgetBar(QWidget):
     def _theme_block(cls, color: str | None = None) -> str:
         """Pavé compact qui suit les couleurs de champ du thème actif."""
         return (f"background:{cls._BLOCK_BG}; color:{color or cls._BLOCK_TEXT}; "
-                f"border:1px solid {C.BORDER_MID}; padding:0 8px;")
+                f"border:1px solid {cls._BLOCK_BORDER}; padding:0 8px;")
 
     def __init__(self, parent=None):
         super().__init__(parent)

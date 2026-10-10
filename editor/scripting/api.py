@@ -64,13 +64,13 @@ class RefType:
 
     Tout le reste s'en DÉRIVE : le type C d'un `local` qui tient la référence
     (`codegen`), le refus d'une méthode ou d'un champ inconnu (`checker`), la
-    variable des snippets (`api_snippets`), la portée du renommage (`refactor`).
+    préfixe des snippets (`api_snippets`), la portée du renommage (`refactor`).
 
     Seule une traduction C réellement atypique reste un cas de `_INVOKE_CUSTOM`
     (`ui_element:show` → `ui_element_show(h, 1)`), parce qu'elle change ce qui
     s'émet, pas ce que le type EST."""
     c_type:   str           # type C du `local` qui tient la référence
-    variable: str           # nom de variable montré dans les snippets (`hb:overlaps(...)`)
+    prefix:   str           # ce qui précède « : » dans les snippets — le MODULE de la section (`layer:show()`), jamais une variable inventée
     # Indication ajoutée aux erreurs de méthode ou champ inconnu.
     hint:     str = ""
     # Type de base et fonction C de conversion pour les membres hérités.
@@ -84,33 +84,33 @@ class RefType:
 
 
 REF_TYPE_TABLE: dict[str, RefType] = {
-    REF_SFX: RefType(c_type="mm_sfxhand", variable="pas"),
-    REF_COLLISION_BOX: RefType(c_type="int", variable="hb"),
+    REF_SFX: RefType(c_type="mm_sfxhand", prefix="sfx"),
+    REF_COLLISION_BOX: RefType(c_type="int", prefix="collision_box"),
     # Le conteneur utilise les capacités de son type de base.
     REF_UI_ELEMENT: RefType(
-        c_type="int", variable="element", ui_kind="container", constant="UIELEM_",
+        c_type="int", prefix="ui_element", ui_kind="container", constant="UIELEM_",
         hint="The geometry of an element is authored: it does not open up at runtime."
              " A list, an image and a text zone have their own members — the type of "
              "`interface:get(name)` is that of the element."),
     REF_LIST: RefType(
-        c_type="int", variable="menu", base=REF_UI_ELEMENT, to_base="ui_list_element",
+        c_type="int", prefix="list", base=REF_UI_ELEMENT, to_base="ui_list_element",
         ui_kind="list", constant="UILIST_"),
     REF_IMAGE: RefType(
-        c_type="int", variable="icone", base=REF_UI_ELEMENT, to_base="ui_image_element",
+        c_type="int", prefix="image", base=REF_UI_ELEMENT, to_base="ui_image_element",
         ui_kind="image", constant="IMAGE_", column="image"),
     REF_TEXT_REGION: RefType(
-        c_type="int", variable="zone", base=REF_UI_ELEMENT, to_base="ui_region_element",
+        c_type="int", prefix="text_region", base=REF_UI_ELEMENT, to_base="ui_region_element",
         ui_kind="text", constant="REGION_", column="region"),
     REF_LAYER: RefType(
-        c_type="int", variable="fond",
+        c_type="int", prefix="layer",
         hint="A background is numbered by the hardware, from 0 to 3: `layer:get(n)`."),
     REF_ACTOR: RefType(
-        c_type="Actor*", variable="self",
+        c_type="Actor*", prefix="self",
         hint="An actor is called as `self:method()` on the actor running the script, "
              "or on an actor held by a variable (`local boss = actor:get(\"Boss\")`)."),
     REF_WINDOW_REGION: RefType(
 
-        c_type="int", variable="fenetre",
+        c_type="int", prefix="window",
         hint="A region is named: `window:get(\"Panel\")`, \"object\" or \"outside\"."),
 }
 
@@ -167,6 +167,9 @@ DOMAIN_ANIM   = "anim"    # ANIM_{actor}_{name}
 DOMAIN_SPRITE_ID = "sprite_id"  # SPRITE_{actor}_{id} — l'id d'un composant sprite de l'acteur
 DOMAIN_SFX    = "sfx"     # SFX_{name}
 DOMAIN_MUSIC  = "music"   # MUSIC_{name}
+# Un jingle est un module comme une musique (même constante MUSIC_{name}), mais d'un
+# AUTRE dossier : `music.jingle` n'accepte que lui, `music.play` que l'autre.
+DOMAIN_JINGLE = "jingle"  # MUSIC_{name}
 DOMAIN_KEY    = "key"     # BTN_{name} — enum fixe du hardware, jamais renommé
 # Axe utilisé par `input:get_axis()`, distinct d'un bouton ou d'une action.
 DOMAIN_AXIS   = "axis"
@@ -955,9 +958,9 @@ RUNTIME_API: dict[str, ApiFunc] = {
     ),
     "music.jingle": ApiFunc(
         lua_name="music.jingle", c_func="music_jingle",
-        params=[Param("name", PARAM_STR, DOMAIN_MUSIC)],
-        doc="Plays a module OVER the current music, without stopping it — a victory "
-            "fanfare, a chime. It never loops and ends by itself. Only one at a time,"
+        params=[Param("name", PARAM_STR, DOMAIN_JINGLE)],
+        doc="Plays a jingle (a module of assets/jingles/) OVER the current music, without"
+            " stopping it — a victory fanfare, a chime. It never loops and ends by itself. Only one at a time,"
             " and it takes up to 4 of the project's 8 channels. It is the only way to"
             " make two musics sound together on this console.",
     ),
@@ -1215,16 +1218,25 @@ RUNTIME_API: dict[str, ApiFunc] = {
     # scene.frame (int, lecture seule) et scene.size (rect) : cf. RUNTIME_PROPS
     # — la scène expose son état en propriétés.
 
-    # ── Tile ───────────────────────────────────────────────────────
+    # ── Collision du monde ──────────────────────────────────────────
+    # La carte appartient à la scène, pas à une CollisionBox. La forme module
+    # est donc la porte normale ; l'ancienne méthode de boîte ci-dessous reste
+    # uniquement pour les scripts déjà écrits.
+    "collision.tile_at": ApiFunc(
+        lua_name="collision.tile_at", c_func="collision_map_tile",
+        params=[Param("x", PARAM_INT), Param("y", PARAM_INT)], ret="int",
+        doc="Type of the collision-map tile at world position (x, y), in pixels. "
+            "0 = empty (or off the map). Useful for triggers, spawn zones and "
+            "custom movement.",
+    ),
+
+    # ── Compatibilité CollisionBox ─────────────────────────────────
     f"{REF_COLLISION_BOX}:get_collision_tile": ApiFunc(
         lua_name="collision_box:get_collision_tile", c_func="collision_box_get_collision_tile",
         params=[Param("x", PARAM_INT), Param("y", PARAM_INT)], ret="int", self_first=True,
-        doc="Type of the collision map tile at the world position (x, y) in pixels. 0"
-            " = empty (or off the map). The point is absolute: it does not depend on "
-            "this box, which only serves as an entry point (the verb `get` is right: "
-            "the tile is not a field of the box, it is a question asked to the map). "
-            "Useful for non-solid triggers (coins, spawn zones, poison). Ex: local t "
-            "= hb:get_collision_tile(hb.bounds.x, hb.bounds.y + hb.bounds.h)",
+        doc="Legacy form of collision:tile_at(x, y). The point is absolute and does "
+            "not depend on this box; migrate new scripts to collision:tile_at. "
+            "A missing box still returns 0 for compatibility.",
     ),
 
     # ── Fonds (layers) — une référence NUMÉROTÉE par le matériel ───────
@@ -2085,7 +2097,7 @@ EVENT_REGISTRY: dict[str, dict] = {
     "on_start": {
         "icon": "▶",
         "icon_key": "ev_start",
-        "stub": "function on_start()\n    \nend\n",
+        "stub": "function on_start()\n\nend\n",
         "desc": "Called once at the start of the scene.",
         "params": [],
         "c_sig": "void {prefix}_on_start(Actor* self)",
@@ -2093,7 +2105,7 @@ EVENT_REGISTRY: dict[str, dict] = {
     "on_update": {
         "icon": "↺",
         "icon_key": "ev_update",
-        "stub": "function on_update()\n    \nend\n",
+        "stub": "function on_update()\n\nend\n",
         "desc": "Called every frame (60 fps). Main logic.",
         "params": [],
         "c_sig": "void {prefix}_on_update(Actor* self)",
@@ -2101,7 +2113,7 @@ EVENT_REGISTRY: dict[str, dict] = {
     "on_late_update": {
         "icon": "↻",
         "icon_key": "ev_late_update",
-        "stub": "function on_late_update()\n    \nend\n",
+        "stub": "function on_late_update()\n\nend\n",
         "desc": "Called after physics and collisions. Ideal for the camera and the "
                 "HUD.",
         "params": [],
@@ -2110,7 +2122,7 @@ EVENT_REGISTRY: dict[str, dict] = {
     "on_collide": {
         "icon": "⬡",
         "icon_key": "ev_collide",
-        "stub": "function on_collide(other, my_box, other_box)\n    \nend\n",
+        "stub": "function on_collide(other, my_box, other_box)\n\nend\n",
         "desc": "Called every frame in which this actor touches another.",
         "params": [
             {"name": "other",     "type": "actor", "description": "Reference to the "
@@ -2125,7 +2137,7 @@ EVENT_REGISTRY: dict[str, dict] = {
     "on_collision_enter": {
         "icon": "→",
         "icon_key": "ev_collision_enter",
-        "stub": "function on_collision_enter(other, my_box, other_box)\n    \nend\n",
+        "stub": "function on_collision_enter(other, my_box, other_box)\n\nend\n",
         "desc": "First frame of contact with another actor.",
         "params": [
             {"name": "other",     "type": "actor", "description": "Reference to the "
@@ -2141,7 +2153,7 @@ EVENT_REGISTRY: dict[str, dict] = {
     "on_tile_collide": {
         "icon": "▦",
         "icon_key": "ev_tile_collide",
-        "stub": "function on_tile_collide(normal_x, normal_y)\n    \nend\n",
+        "stub": "function on_tile_collide(normal_x, normal_y)\n\nend\n",
         "desc": "Called when this actor hits a solid tile of the collision map.",
         "params": [
             {"name": "normal_x", "type": "int", "description": "-1/0/1: horizontal "
@@ -2154,7 +2166,7 @@ EVENT_REGISTRY: dict[str, dict] = {
     "on_collision_exit": {
         "icon": "←",
         "icon_key": "ev_collision_exit",
-        "stub": "function on_collision_exit(other, my_box, other_box)\n    \nend\n",
+        "stub": "function on_collision_exit(other, my_box, other_box)\n\nend\n",
         "desc": "First frame without contact after a collision.",
         "params": [
             {"name": "other",     "type": "actor", "description": "Reference to the "
@@ -2170,7 +2182,7 @@ EVENT_REGISTRY: dict[str, dict] = {
     "on_destroy": {
         "icon": "✕",
         "icon_key": "ev_destroy",
-        "stub": "function on_destroy()\n    \nend\n",
+        "stub": "function on_destroy()\n\nend\n",
         "desc": "Called just before the actor is deactivated by destroy().",
         "params": [],
         "c_sig": "void {prefix}_on_destroy(Actor* self)",
@@ -2236,7 +2248,7 @@ def module_call_form(key: str) -> str:
 def canonical_key(shown: str) -> str:
     """L'inverse de `module_call_form` : `input:pressed` → `input.pressed`. Un nom qui est
     déjà une clé du catalogue (`sfx:stop`, méthode d'un type) se rend inchangé — `sfx` est à
-    la fois un module (`sfx:play`) et un type (`pas:stop`), et le catalogue dit lequel."""
+    la fois un module (`sfx:play`) et un type (`sfx:stop`), et le catalogue dit lequel."""
     if shown in RUNTIME_API or shown in RUNTIME_PROPS:
         return shown
     # `self:move_to` / `self.position` : l'acteur qui exécute le script, dont le catalogue dit `actor`.

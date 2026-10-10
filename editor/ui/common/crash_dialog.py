@@ -18,9 +18,10 @@ from PyQt6.QtWidgets import (
 from ui.common.build_panel import mascot_renderer
 from ui.common.labels import label
 from ui.common.reveal import reveal_in_file_manager
-from ui.common.theme import C, QSS, T
+from ui.common.theme import C, QSS, T, brand_font
 
-_MASCOT_W, _MASCOT_H = 78, 120   # le SVG fait 217×330 : on garde ses proportions
+_MASCOT_HEIGHT = 120   # la largeur découle du viewBox du SVG : proportions conservées
+_MASCOT_FALLBACK_WIDTH = 98
 
 
 class Mascot(QWidget):
@@ -28,7 +29,12 @@ class Mascot(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(_MASCOT_W, _MASCOT_H)
+        renderer = mascot_renderer("failed")
+        width = _MASCOT_FALLBACK_WIDTH
+        if renderer is not None:
+            view = renderer.viewBoxF()
+            width = round(_MASCOT_HEIGHT * view.width() / view.height())
+        self.setFixedSize(width, _MASCOT_HEIGHT)
 
     def paintEvent(self, _event):
         renderer = mascot_renderer("failed")
@@ -36,7 +42,7 @@ class Mascot(QWidget):
             return   # SVG absent : un dialogue d'erreur ne doit pas en lever une autre
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        renderer.render(painter, QRectF(0, 0, _MASCOT_W, _MASCOT_H))
+        renderer.render(painter, QRectF(0, 0, self.width(), self.height()))
 
 
 class CrashDialog(QDialog):
@@ -60,7 +66,7 @@ class CrashDialog(QDialog):
         text = QVBoxLayout()
         text.setSpacing(6)
         title = QLabel(label("crash.title"))
-        title.setFont(QFont(T.UI, T.LG, QFont.Weight.DemiBold))
+        title.setFont(brand_font(T.LG))
         title.setStyleSheet(f"color:{C.TEXT_HI};background:transparent;")
         intro = QLabel(label("crash.intro"))
         intro.setWordWrap(True)

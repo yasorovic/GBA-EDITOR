@@ -16,9 +16,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from uuid import uuid4
 import json
 
+from core.models.ids import new_id
+from core.models.unique_name import unique_name
 from core.resources.resource_store import atomic_write
 from core.models import project_json
 
@@ -35,9 +36,11 @@ class AssetFolder:
 class AssetFolderStore:
     """Lit et écrit les dossiers d'auteur, par famille et par clé durable.
 
-    Une clé de membre est l'identité de l'asset dans sa famille — le nom d'une
-    scène, d'un sprite… Un asset est membre d'au plus un dossier ; un dossier est
-    enfant d'au plus un autre dossier de la même famille.
+    Une clé de membre est l'ID de l'asset (`Resource.id`), jamais son nom : le
+    nom se renomme, le fichier se déplace, l'id reste. Le store ne connaît que
+    ces clés opaques — c'est à l'appelant de traduire nom ↔ id. Un asset est
+    membre d'au plus un dossier ; un dossier est enfant d'au plus un autre
+    dossier de la même famille.
     """
 
     _VERSION = 1
@@ -61,6 +64,12 @@ class AssetFolderStore:
         if not isinstance(fam.get("folders"), list):
             fam["folders"] = []
         return fam
+
+    def _folder_ids(self) -> set[str]:
+        """Tous les ids de dossier du fichier, toutes familles confondues."""
+        return {str(f.get("id")) for fam in self._data["families"].values()
+                if isinstance(fam, dict) and isinstance(fam.get("folders"), list)
+                for f in fam["folders"] if isinstance(f, dict)}
 
     def _raw_folder(self, family: str, folder_id: str | None) -> dict | None:
         if not folder_id:
@@ -119,7 +128,7 @@ class AssetFolderStore:
     def create_folder(self, family: str, name: str, parent_id: str | None = None) -> AssetFolder:
         clean = name.strip() or "Folder"
         parent = parent_id if self._raw_folder(family, parent_id) is not None else None
-        raw = {"id": uuid4().hex, "name": clean, "parent_id": parent,
+        raw = {"id": new_id(self._folder_ids()), "name": clean, "parent_id": parent,
                "members": [], "color": ""}
         self._family(family)["folders"].append(raw)
         self.save()
@@ -137,17 +146,12 @@ class AssetFolderStore:
         est d'abord retiré de son dossier actuel : un asset n'est membre que d'un
         dossier."""
         existing = {f.name for f in self.folders(family)}
-        unique = name.strip() or "Group"
-        if unique in existing:
-            i = 2
-            while f"{unique}_{i}" in existing:
-                i += 1
-            unique = f"{unique}_{i}"
+        unique = unique_name(name.strip() or "Group", existing)
         parent = parent_id if self._raw_folder(family, parent_id) is not None else None
-        raw = {"id": uuid4().hex, "name": unique, "parent_id": parent,
+        raw = {"id": new_id(self._folder_ids()), "name": unique, "parent_id": parent,
                "members": [], "color": ""}
         self._family(family)["folders"].append(raw)
-        for key in member_keys:
+        for key in filter(None, member_keys):
             for f in self._family(family)["folders"]:
                 if isinstance(f, dict) and f is not raw and key in (f.get("members") or []):
                     f["members"] = [m for m in f["members"] if m != key]
@@ -267,7 +271,10 @@ class AssetFolderStore:
     # ── Écriture — appartenance ────────────────────────────────────
 
     def move_member(self, family: str, key: str, folder_id: str | None) -> bool:
-        """Range un asset dans un dossier, ou en racine avec None."""
+        """Range un asset dans un dossier, ou en racine avec None. Une clé vide
+        (asset jamais enregistré, donc sans id) ne se range pas."""
+        if not key:
+            return False
         target = self._raw_folder(family, folder_id) if folder_id else None
         if folder_id and target is None:
             return False
@@ -285,21 +292,6 @@ class AssetFolderStore:
         if changed:
             self.save()
         return changed
-
-    def rename_member(self, family: str, before: str, after: str) -> None:
-        if before == after:
-            return
-        changed = False
-        for f in self._family(family)["folders"]:
-            if not isinstance(f, dict):
-                continue
-            members = f.get("members") or []
-            rewritten = [after if m == before else m for m in members]
-            if rewritten != members:
-                f["members"] = list(dict.fromkeys(rewritten))
-                changed = True
-        if changed:
-            self.save()
 
     def prune(self, family: str, valid_keys: set[str]) -> None:
         """Oublie les assets disparus et répare un `parent_id` orphelin. Ne

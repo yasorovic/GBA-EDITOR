@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 from typing import Generic, Iterator, Optional, Type, TypeVar
 
+from core.models.ids import is_id, new_id
 from core.models.resource import Resource
 from core.models import project_json
 from core.resources.resource_index import ResourceIndex, safe_filename
@@ -64,28 +65,36 @@ _REPLACE_RETRY_DELAY = 0.02   # 12 × 20 ms ≈ 240 ms de fenêtre de retry
 
 class ResourceStore(Generic[T]):
     """
-    Gère une collection de Resource d'un type donné, persistée dans
-    `directory/<name>.json`. Se comporte comme une liste (itération,
-    len, indexation, append) pour rester un drop-in replacement des
-    anciennes `list[Actor]` / `list[Background]` etc.
+    Gère une collection de Resource d'un type donné, persistée dans des
+    `<name><extension du type>` n'importe où sous `root` (tout `assets/` pour un projet : l'extension dit
+    le type, l'auteur range ses assets comme il veut, `assets/sfx/platformer/coin.sfx` comme
+    `assets/Persos/coin.sfx`), le contenu étant du JSON. Un NOUVEL asset naît dans `directory`. Se comporte
+    comme une liste (itération, len, indexation, append) pour rester un drop-in
+    replacement des anciennes `list[Actor]` / `list[Background]` etc.
+
+    Le nom d'une ressource est le stem de son fichier et reste UNIQUE dans la
+    collection, quel que soit le dossier : cf. `ResourceIndex` pour les homonymes.
     """
 
-    def __init__(self, directory: Path, cls: Type[T]):
+    def __init__(self, directory: Path, cls: Type[T], root: Optional[Path] = None):
+        # `directory` : le dossier où naît un NOUVEL asset de ce type. `root` : sous quoi on cherche les assets
+        # existants — tout `assets/` pour un projet, car l'extension dit le type et l'auteur range où il veut ;
+        # le dossier seul si rien d'autre n'est dit.
         self.dir = directory
+        self.root = root or directory
         self.cls = cls
         # Inventaire disque, indépendant des objets déjà matérialisés dans
         # ``items``. Aujourd'hui ``load`` continue de tout lire ; la phase
         # suivante pourra ne charger que l'entrée demandée sans changer le
         # contrat de nommage ni les chemins.
-        self.index = ResourceIndex(directory)
+        self.suffix = cls.sidecar_extension
+        self.index = ResourceIndex(self.root, self.suffix)
         self.items: list[T] = []
         self._pending_delete: list[T] = []
         # `.temp/` du projet : où partent les fichiers d'une ressource supprimée
         # (cf. core/resources/deleted_files). Absent, la suppression reste
-        # différée jusqu'à la fermeture. `_extra_files` ajoute au sidecar les
-        # fichiers SOURCES que seul le projet sait nommer.
+        # différée jusqu'à la fermeture.
         self._bin = None
-        self._extra_files = None
         # {nom du fichier: raison} des JSON que `load` / `load_one` n'ont pas su
         # lire. Le fichier reste intact sur le disque ; l'application le dit
         # (cf. `Project.load_warnings`) au lieu de laisser l'asset disparaître.
@@ -115,16 +124,13 @@ class ResourceStore(Generic[T]):
     def __contains__(self, item) -> bool:
         return item in self.items
 
-    def attach_bin(self, bin_, extra_files=None) -> None:
+    def attach_bin(self, bin_) -> None:
         self._bin = bin_
-        self._extra_files = extra_files
 
     def _files_of(self, item: T) -> list[Path]:
-        """Tout ce qui, sur le disque, fait exister `item`."""
-        files = [self._path(item.name)]
-        if self._extra_files is not None:
-            files.extend(self._extra_files(item))
-        return files
+        """Ce qui, sur le disque, fait exister `item` : son fichier d'asset. Sa SOURCE n'en fait pas partie :
+        l'asset la pointe, supprimer l'asset ne la supprime pas."""
+        return [self._path(item.name)]
 
     # -- lookup --
     def _is_pending_delete(self, name: str) -> bool:
@@ -146,9 +152,20 @@ class ResourceStore(Generic[T]):
         # qui cite un sprite ou un fond sans ouvrir son éditeur complet.
         return self.load_one(name) if self.index.path_for(name) else None
 
-    def scan_index(self) -> None:
+    def id_of(self, name: str) -> str:
+        """L'id de l'asset chargé nommé `name`, "" s'il n'est pas chargé. C'est la clé sous laquelle les
+        dossiers d'éditeur rangent un asset : le nom change au renommage, l'id jamais."""
+        item = next((i for i in self.items if i.name == name), None)
+        return item.id if item is not None else ""
+
+    def name_of(self, asset_id: str) -> str:
+        """Le nom de l'asset chargé qui porte `asset_id`, "" s'il n'est pas chargé."""
+        item = next((i for i in self.items if i.id == asset_id), None) if asset_id else None
+        return item.name if item is not None else ""
+
+    def scan_index(self, listing: list[Path] | None = None) -> None:
         """Actualise l'inventaire disque sans matérialiser les ressources."""
-        self.index.scan()
+        self.index.scan(listing)
 
     def known_names(self) -> tuple[str, ...]:
         """Noms vus au dernier scan ou à la dernière écriture du store."""
@@ -166,8 +183,81 @@ class ResourceStore(Generic[T]):
         return self.get(name) or self.load_one(name)
 
     # -- I/O --
-    def _path(self, name: str) -> Path:
-        return self.dir / f"{safe_filename(name)}.json"
+    def _path(self, name: str, folder: Optional[Path] = None) -> Path:
+        """Le fichier de `name` : là où l'index le connaît, sinon un NOUVEAU fichier à la racine
+        du dossier de la collection — ou dans `folder`, pour un asset qu'on y pose."""
+        known = self.index.path_for(name)
+        if known is not None:
+            return known
+        return (folder or self.dir) / f"{safe_filename(name)}{self.suffix}"
+
+    # -- identité --
+    def _ensure_id(self, item: T) -> None:
+        """Donne un id à `item` s'il n'en a pas, ou s'il porte celui d'un AUTRE item de la collection
+        (un duplicata qui a gardé l'id de son original)."""
+        taken = {i.id for i in self.items if i is not item and is_id(i.id)}
+        if not is_id(item.id) or item.id in taken:
+            item.id = new_id(taken)
+
+    @staticmethod
+    def _with_id(data: dict, identity: str) -> dict:
+        """`data` avec l'id juste après le nom (ou en tête) : le début d'un sidecar se lit « nom, id »."""
+        out: dict = {}
+        for key, value in data.items():
+            if key == "id":
+                continue
+            out[key] = value
+            if key == "name":
+                out["id"] = identity
+        return out if "id" in out else {"id": identity, **out}
+
+    def _repair_ids(self) -> None:
+        """Fin d'un chargement complet : un id manquant, invalide ou répété est remplacé, et le sidecar
+        réécrit. C'est ce qui donne un id aux assets d'avant, et un nouveau à la copie d'un fichier faite
+        dans l'Explorateur (le premier dans l'ordre des noms garde le sien)."""
+        taken = {i.id for i in self.items if is_id(i.id)}
+        seen: set[str] = set()
+        changed: list[T] = []
+        for item in self.items:
+            if not is_id(item.id) or item.id in seen:
+                item.id = new_id(taken)
+                taken.add(item.id)
+                changed.append(item)
+            seen.add(item.id)
+        for item in changed:
+            try:
+                self.save(item)
+            except OSError:
+                pass            # fichier verrouillé : l'id vit en mémoire, le prochain chargement réessaie
+
+    def _give_id_if_missing(self, item: T) -> None:
+        """Un asset lu seul (chargement paresseux) et sans id en reçoit un tout de suite : `_repair_ids`
+        ne passe que sur un chargement complet, et l'asset ne doit pas rester sans identité en attendant."""
+        if is_id(item.id):
+            return
+        try:
+            self.save(item)
+        except OSError:
+            pass
+
+    def _key(self, path: Path) -> str:
+        """Comment on désigne un fichier dans `unreadable` et `preserved` : son chemin sous le dossier de
+        la collection (`platformer/coin.sfx`), jamais son seul nom — deux dossiers peuvent avoir un `coin.sfx`."""
+        try:
+            return path.relative_to(self.root).as_posix()
+        except ValueError:
+            return path.name
+
+    def ignored_duplicates(self) -> dict[str, str]:
+        """`{fichier: raison}` des sidecars que l'inventaire a ignorés parce qu'un homonyme moins profond
+        l'emporte. Rien n'est renommé ni écrit : l'application les signale, l'auteur tranche."""
+        out: dict[str, str] = {}
+        for name, extras in self.index.duplicates.items():
+            kept = self.index.path_for(name)
+            for extra in extras:
+                out[self._key(extra)] = (f"another sidecar named \"{name}\" is at \"{self._key(kept)}\" "
+                                         f"and is the one in use")
+        return out
 
     def path_of(self, item: T) -> Path:
         """Le JSON dans lequel CET item se sauvegarde.
@@ -178,11 +268,19 @@ class ResourceStore(Generic[T]):
         ressemblent tant que personne n'a renommé, puis divergent en silence."""
         return self._path(item.name)
 
-    def save(self, item: T):
-        self.dir.mkdir(parents=True, exist_ok=True)
-        path = self._path(item.name)
+    def save(self, item: T, folder: Optional[Path] = None):
+        """Écrit `item`. Un item déjà connu reste là où il est ; `folder` ne sert qu'à poser un NOUVEL
+        asset ailleurs qu'à la racine du dossier de la collection (par exemple à côté de sa source)."""
+        if folder is not None and self.index.path_for(item.name) is None:
+            try:
+                Path(folder).resolve().relative_to(self.root.resolve())
+            except ValueError:
+                raise ValueError(f"{folder} is outside {self.root}") from None
+        path = self._path(item.name, folder)
+        path.parent.mkdir(parents=True, exist_ok=True)
         self._keep_unreadable(path)
-        atomic_write(path, project_json.dumps(item.to_dict()))
+        self._ensure_id(item)
+        atomic_write(path, project_json.dumps(self._with_id(item.to_dict(), item.id)))
         self.index.record(item.name, path)
 
     def _keep_unreadable(self, path: Path) -> None:
@@ -193,7 +291,7 @@ class ResourceStore(Generic[T]):
         réconciliation recrée un sprite par défaut — et la sauvegarde suivante
         l'écrirait sur le fichier abîmé, dont le découpage et les animations
         auraient pu être récupérés à la main."""
-        if self.unreadable.pop(path.name, None) is None or not path.exists():
+        if self.unreadable.pop(self._key(path), None) is None or not path.exists():
             return
         backup = path.with_name(path.name + ".corrupt")
         n = 2
@@ -201,11 +299,30 @@ class ResourceStore(Generic[T]):
             backup = path.with_name(f"{path.name}.corrupt{n}")
             n += 1
         shutil.copy2(path, backup)
-        self.preserved[path.name] = backup.name
+        self.preserved[self._key(path)] = backup.name
 
     def save_all(self):
-        for item in self.items:
+        # Un sidecar effacé HORS de l'éditeur (Explorateur, git) pendant que sa
+        # ressource vivait en mémoire n'est pas à réécrire : chaque édition
+        # écrit déjà son item (`save`), donc ce balayage ne ferait que
+        # ressusciter, à la fermeture, ce que l'auteur vient de supprimer.
+        for item in list(self.items):
+            if self.drop_if_deleted_on_disk(item.name):
+                continue
             self.save(item)
+
+    def drop_if_deleted_on_disk(self, name: str) -> bool:
+        """Oublie l'item `name` si son sidecar, connu de l'index, a disparu du
+        disque. Rend True s'il a été retiré de la mémoire (rien n'est écrit)."""
+        path = self.index.path_for(name)
+        if path is None or path.exists():
+            return False
+        item = next((i for i in self.items if i.name == name), None)
+        if item is None:
+            return False
+        self.remove(item)
+        self.index.forget(name)
+        return True
 
     @staticmethod
     def _adopt(existing: T, fresh: T) -> T:
@@ -234,6 +351,7 @@ class ResourceStore(Generic[T]):
             try:
                 d = json.loads(f.read_text(encoding="utf-8"))
                 item = self.cls.from_dict(d)
+                item.id = str(d.get("id") or "")
                 # LE NOM DE FICHIER EST L'IDENTITÉ. `save` écrit toujours dans
                 # `<name>.json` : un fichier qui ne porte pas le nom qu'il
                 # contient a été renommé sur le disque, et c'est le champ qui
@@ -249,8 +367,9 @@ class ResourceStore(Generic[T]):
                     item = self._adopt(known[item.name], item)
                 self.items.append(item)
             except Exception as e:
-                self.unreadable[f.name] = f"{type(e).__name__}: {e}"
+                self.unreadable[self._key(f)] = f"{type(e).__name__}: {e}"
                 print(f"[project] read error {self.cls.__name__} {f.name}: {e}")
+        self._repair_ids()
 
     def load_one(self, name: str) -> Optional[T]:
         """Recharge un seul item depuis le disque et met à jour la liste en place."""
@@ -260,7 +379,8 @@ class ResourceStore(Generic[T]):
         try:
             d = json.loads(path.read_text(encoding="utf-8"))
             new_item = self.cls.from_dict(d)
-            self.unreadable.pop(path.name, None)
+            new_item.id = str(d.get("id") or "")
+            self.unreadable.pop(self._key(path), None)
             # Même règle qu'à `load` : le fichier nomme la ressource. Sans ça,
             # un sidecar dont le champ `name` a dérivé n'est jamais reconnu
             # comme celui qu'on recharge, et vient s'AJOUTER à la liste.
@@ -270,12 +390,14 @@ class ResourceStore(Generic[T]):
                 if item.name == name:
                     self.items[i] = new_item = self._adopt(item, new_item)
                     self.index.record(name, path)
+                    self._give_id_if_missing(new_item)
                     return new_item
             self.items.append(new_item)
             self.index.record(name, path)
+            self._give_id_if_missing(new_item)
             return new_item
         except Exception as e:
-            self.unreadable[path.name] = f"{type(e).__name__}: {e}"
+            self.unreadable[self._key(path)] = f"{type(e).__name__}: {e}"
             print(f"[project] reload error {self.cls.__name__} {name}: {e}")
             return None
 
@@ -331,9 +453,10 @@ class ResourceStore(Generic[T]):
         self._pending_delete.clear()
 
     def rename(self, item: T, new_name: str):
+        """Renomme `item` ET son fichier, qui reste dans son dossier."""
         old_path = self._path(item.name)
         if old_path.exists():
             old_path.unlink()
         self.index.forget(item.name)
         item.name = new_name
-        self.save(item)
+        self.save(item, old_path.parent)

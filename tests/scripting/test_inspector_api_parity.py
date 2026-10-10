@@ -113,11 +113,23 @@ def test_get_collision_tile_est_une_methode_de_la_boite():
     assert "collision_box_get_collision_tile(hb, " in code
 
 
-def test_l_ancienne_fonction_de_module_n_existe_plus():
-    """`collision_box.get_tile` et `tile.get` sont remplacées par la méthode."""
+def test_collision_tile_at_interroge_directement_le_monde():
+    """La nouvelle porte ne demande aucune CollisionBox : la carte appartient
+    à la scène, pas à l'acteur qui pose la question."""
+    errs, code = _lua("function on_update(self)\n"
+                      "  local t = collision:tile_at(self.position.x, self.position.y)\n"
+                      "end\n")
+    assert errs == []
+    assert "collision_map_tile(actor_get_position(self).x, actor_get_position(self).y)" in code
+
+
+def test_les_formes_obsoletes_de_lecture_de_tuile_nexistent_pas():
+    """La forme historique par CollisionBox reste compatible, mais les anciens
+    faux modules ne réapparaissent pas."""
     from scripting.api import RUNTIME_API
     assert "collision_box.get_tile" not in RUNTIME_API
     assert "tile.get" not in RUNTIME_API
+    assert "collision.tile_at" in RUNTIME_API
 
 
 def test_is_grounded_est_une_propriete_de_boite_en_lecture_seule():

@@ -28,7 +28,7 @@ def test_une_scene_avec_une_selection_n_est_jamais_modifiee(tmp_path):
 
 def test_sans_la_palette_dans_le_catalogue_rien_n_est_pose(tmp_path):
     project = Project.create(tmp_path / "Game", "Game")
-    project.palettes.remove(project.get_palette(DEFAULT_UI_PALETTE))
+    project.palettes.soft_delete(project.get_palette(DEFAULT_UI_PALETTE))
     scene = Scene(name="Level")
 
     assert project.seed_default_ui_palette(scene) is False

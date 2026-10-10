@@ -367,34 +367,19 @@
       "text": "CONTENT"
     },
     "uiinsp.text.content_placeholder": {
-      "text": "Type the text shown in-game…"
+      "text": "Text drawn by your script…"
     },
-    "uiinsp.text.content_tip": { "text": "Written into the text table, not into the element: the same entry is editable from the Text screen." },
-    "uiinsp.text.entry": {
-      "text": "Entry"
-    },
+    "uiinsp.text.content_tip": { "text": "Without an entry, this previews text:draw(tx, ty, string) and never creates a text-table entry. Choose an entry to edit shared, translatable text." },
     "uiinsp.text.entry_tip": { "text": "Binds this element to another existing entry, to share one label between several screens." },
-    "uiinsp.text.entry_new": {
-      "text": "(new entry)"
-    },
-    "uiinsp.text.sample": {
-      "text": "Sample"
-    },
-    "uiinsp.text.sample_tip": { "text": "Used by the editor only, to measure overflow; it is never compiled. The script decides the displayed text." },
+    "uiinsp.text.create_entry": { "text": "Create new entry" },
+    "uiinsp.text.create_entry_title": { "text": "Create a text entry" },
+    "uiinsp.text.create_entry_tip": { "text": "Open the Text editor to create a named, shared and translatable entry." },
+    "uiinsp.text.entry_search": { "text": "Search an entry…" },
     "common.none_paren": {
       "text": "(none)"
     },
-    "uiinsp.text.typography": {
-      "text": "TYPOGRAPHY"
-    },
-    "uiinsp.text.font": {
-      "text": "Font"
-    },
     "uiinsp.text.font_scene": {
       "text": "(scene font)"
-    },
-    "uiinsp.text.alignment": {
-      "text": "Alignment"
     },
     "uiinsp.text.colors": {
       "text": "COLORS"
@@ -572,9 +557,6 @@
     },
     "uiinsp.img.play_tip": { "text": "A frozen image costs no per-frame work and never rewrites the tilemap. It is the right default for a static HUD icon." },
     "uiinsp.bank_inherited_tip": { "text": "This text sits in a filled container, so it reads its ink from the bank of the container." },
-    "uiinsp.delete": {
-      "text": "Delete element"
-    },
     "actorinsp.comp.collision": {
       "text": "Collision"
     },
@@ -1234,6 +1216,9 @@
     "sndpanel.header_music": {
       "text": "Music"
     },
+    "sndpanel.header_jingle": {
+      "text": "Jingle"
+    },
     "sndpanel.sfx_empty": {
       "text": "Select an SFX"
     },
@@ -1253,11 +1238,17 @@
     "sndpanel.music_empty": {
       "text": "Select a track"
     },
+    "sndpanel.jingle_empty": {
+      "text": "Select a jingle"
+    },
     "sndpanel.music_import_btn": {
       "text": "Import MOD…"
     },
     "sndpanel.music_import_title": {
       "text": "Import Music"
+    },
+    "sndpanel.jingle_import_title": {
+      "text": "Import Jingle"
     },
     "sndpanel.music_weight": {
       "text": "In ROM: {kb} KiB own  (last build)"
@@ -1288,6 +1279,9 @@
     "sndpanel.rom_play_note": { "text": "Clicking a node emits the trigger that leads to it; if no edge leads to that node, nothing happens. This preview does not run a compiled ROM." },
     "sndpanel.preview_state": {
       "text": "Preview → {name}"
+    },
+    "sndpanel.asset_preview": {
+      "text": "Preview (file)"
     },
     "sndpanel.no_state": {
       "text": "No state to play."
@@ -1320,8 +1314,8 @@
     "sprframe.trig_event": {
       "text": "Event call: {name}"
     },
-    "sprframe.frames_header": {
-      "text": "  FRAMES"
+    "sprframe.timeline_title": {
+      "text": "  Timeline"
     },
     "sprframe.add_frame_tip": { "text": "Adds a new frame after the current one. It duplicates the selected frame, or creates an empty frame." },
     "sprframe.add_frame": { "text": "Add frame" },
@@ -1392,8 +1386,8 @@
     "common.no_palette": {
       "text": "No palette"
     },
-    "sprframe.canvas_tag": {
-      "text": "Canvas"
+    "sprframe.canvas_title": {
+      "text": "Sprite canvas"
     },
     "sprframe.info": {
       "text": "Tiles={tiles}  Unique={unique}"
@@ -1437,14 +1431,14 @@
     "sprsheet.no_png": {
       "text": "No source PNG"
     },
-    "sprsheet.tiles": {
-      "text": "Tiles"
+    "sprsheet.title": {
+      "text": "Spritesheet"
     },
     "sprsheet.no_brush": {
       "text": "No brush"
     },
     "sprsheet.edit_tip": { "text": "Opens the source PNG in the configured image editor." },
-    "sprsheet.edit": { "text": "Edit source image" },
+    "sprsheet.edit": { "text": "Edit file" },
     "sprsheet.zoom_out": { "text": "Zoom out" },
     "sprsheet.zoom_in": { "text": "Zoom in" },
     "sprsheet.brush": {
@@ -1699,13 +1693,13 @@
       "text": "Rename actor"
     },
     "scttree.delete_actor": {
-      "text": "Delete actor"
+      "text": "Delete"
     },
     "scttree.rename_camera": {
       "text": "Rename camera"
     },
     "scttree.delete_camera": {
-      "text": "Delete camera"
+      "text": "Delete"
     },
     "scttree.add_widget": {
       "text": "Add a widget"
@@ -1714,7 +1708,7 @@
       "text": "Remove from this scene"
     },
     "scttree.delete_interface": {
-      "text": "Delete interface"
+      "text": "Delete"
     },
     "scttree.add_child": {
       "text": "Add a child"
@@ -1763,6 +1757,9 @@
     },
     "win.screen_scripts": {
       "text": "Scripts"
+    },
+    "win.view_build_panel": {
+      "text": "Build panel"
     },
     "about.tagline": { "text": "Homebrew editor for the Game Boy Advance" },
     "about.created_by": { "text": "Created by {author}" },
@@ -2395,14 +2392,11 @@
     "scrsb.sec.actor": {
       "text": "Gameplay"
     },
-    "scrsb.sec.scenery": {
-      "text": "Scenery"
-    },
     "scrsb.sec.sound": {
       "text": "Sound"
     },
     "scrsb.sec.text_ui": {
-      "text": "Text & interface"
+      "text": "Text && interface"
     },
     "scrsb.sec.data": {
       "text": "Data"
@@ -2413,8 +2407,8 @@
     "scrsb.sec.scene": {
       "text": "Scene"
     },
-    "scrsb.sec.player": {
-      "text": "Player"
+    "scrsb.sec.camera": {
+      "text": "Camera"
     },
     "vartbl.globals": {
       "text": "Globals"
@@ -2489,9 +2483,6 @@
     },
     "build.refresh": {
       "text": "⟳ Refresh"
-    },
-    "build.build_debug": {
-      "text": "Build / debug"
     },
     "build.clear": {
       "text": "Clear"
@@ -2694,7 +2685,7 @@
       "text": "Jump"
     },
     "langcard.source_note": {
-      "text": "The source language lives in texts.json. Each translation gets its own project/texts_&lt;code&gt;.json."
+      "text": "The source language lives in texts.json. Each translation gets its own assets/texts_&lt;code&gt;.json."
     },
     "langcard.source": {
       "text": "Source"
@@ -3374,7 +3365,6 @@
     "uiinsp.text.content_title": { "text": "Text content" },
     "uiinsp.text.content_note": { "text": "Markup is accepted: [speed=…], $var…" },
     "uiinsp.text.entry_title": { "text": "Text entry" },
-    "uiinsp.text.sample_title": { "text": "Sample text" },
     "uiinsp.text.bank_title": { "text": "UI palette bank" },
     "uiinsp.text.bank_note": { "text": "One more bank would cost one more copy of the glyphs in VRAM. This is also the Scene inspector setting: changing it here changes it for the whole scene." },
     "uiinsp.text.ink_title": { "text": "Ink" },
@@ -3571,6 +3561,9 @@
     "akind.delete_track_name_ctrl_z_to_undo": {
       "text": "Delete track “{name}”?\n(Ctrl+Z to undo)"
     },
+    "akind.delete_jingle_name_ctrl_z_to_undo": {
+      "text": "Delete jingle “{name}”?\n(Ctrl+Z to undo)"
+    },
     "akind.delete_table_name_ctrl_z_to_undo": {
       "text": "Delete table “{name}”?\n(Ctrl+Z to undo)"
     },
@@ -3623,7 +3616,7 @@
       "text": "Duplicate ({n})"
     },
     "scncanvas.delete_n": {
-      "text": "Delete ({n})"
+      "text": "Delete {n} items"
     },
     "scrsb.interface_name": { "text": "Interface {name}" },
     "scrsb.preview_value": {
@@ -3672,6 +3665,9 @@
     "akind.music": {
       "text": "Music"
     },
+    "akind.jingles": {
+      "text": "Jingles"
+    },
     "akind.tables": {
       "text": "Tables"
     },
@@ -3693,6 +3689,9 @@
     "akind.add_a_track": {
       "text": "Add a track"
     },
+    "akind.add_a_jingle": {
+      "text": "Add a jingle"
+    },
     "akind.new_table": {
       "text": "New table"
     },
@@ -3712,7 +3711,7 @@
       "text": "Import an animation sheet PNG"
     },
     "akind.no_font_drop_a_png_or_a_fnt": {
-      "text": "No font.\n\nDrop a PNG or a .fnt\ninto assets/fonts/"
+      "text": "No font.\n\nSelect a PNG, .fnt, .ttf or .otf\nin the Disk tab and click Create"
     },
     "akind.new_16_color_palette_4bpp": {
       "text": "New 16-color palette (4bpp)"
@@ -3754,7 +3753,7 @@
       "text": "Remove from folder"
     },
     "assetfind.delete_selection": {
-      "singular": "Delete {n} item",
+      "singular": "Delete",
       "plural": "Delete {n} items"
     },
     "bgedit.indexed_original_palette": {
@@ -4404,6 +4403,79 @@
     "noticeui.dismiss_title": { "text": "Dismiss tip" },
     "build.refresh_title": { "text": "Refresh diagnostics" },
     "build.refresh_tip": { "text": "Runs the checks again and updates this list." },
+    "build.disk": { "text": "Disk" },
+    "disk.root": { "text": "Assets" },
+    "disk.asset": { "text": "Asset" },
+    "disk.source_of": { "text": "Source of {name}" },
+    "disk.free_source": { "text": "Source, no asset" },
+    "disk.unsupported": { "text": "Not managed" },
+    "disk.counts": { "text": "{assets} assets · {sources} sources without asset" },
+    "disk.refresh_title": { "text": "Refresh the disk view" },
+    "disk.refresh_tip": { "text": "Reads the assets folder again and updates this tree." },
+    "disk.up_tip": { "text": "Goes back to the parent folder." },
+    "akind.relink_source": { "text": "Relink source…" },
+    "akind.relink_source_title": { "text": "Relink source — {name}" },
+    "akind.relink_filter": { "text": "Source files" },
+    "disk.open_assets_tip": { "text": "Opens the assets folder in the file explorer." },
+    "disk.reveal": { "text": "Reveal in file manager" },
+    "disk.edit_externally": { "text": "Edit externally" },
+    "disk.new_folder": { "text": "New folder" },
+    "disk.add_folder_tip": { "text": "Adds to the selected folder: import a file, create an asset, or make a folder." },
+    "disk.rename_refused": { "text": "The folder was not renamed: the name is empty, uses a forbidden character, or is already taken." },
+    "assetfind.deleted": { "singular": "Deleted {n} item. Ctrl+Z undoes.", "plural": "Deleted {n} items. Ctrl+Z undoes." },
+    "disk.deleted": { "singular": "Deleted {n} asset. Ctrl+Z undoes; its source file stays.", "plural": "Deleted {n} assets. Ctrl+Z undoes; their source files stay." },
+    "disk.delete_used": { "text": "Still used by:" },
+    "disk.plus_tip": { "text": "Adds to the folder shown: import a file, create an asset, or make a folder." },
+    "disk.list_view_tip": { "text": "Shows the files as a list, grouped by extension when sorted by extension." },
+    "disk.group_folders": { "text": "Folders" },
+    "disk.group_no_extension": { "text": "No extension" },
+    "wdg.list_view": { "text": "List view" },
+    "disk.sort_tip": { "text": "Sorts the files shown." },
+    "disk.sort_name": { "text": "Sort by name" },
+    "disk.sort_extension": { "text": "Sort by extension" },
+    "wdg.sort": { "text": "Sort" },
+    "disk.import": { "text": "Import…" },
+    "disk.create_menu": { "text": "Create" },
+    "disk.create_named_tip": { "text": "Makes an asset of this type from the selected source file, next to it." },
+    "disk.create_other_tip": { "text": "Other asset types this file can become." },
+    "disk.create_single_only": { "text": "Create from source works on one file at a time: select a single source file." },
+    "disk.create_as": { "text": "Create as" },
+    "disk.family_sprites": { "text": "Sprite" },
+    "disk.family_backgrounds": { "text": "Background" },
+    "disk.family_sfx": { "text": "Sound effect" },
+    "disk.family_music": { "text": "Music" },
+    "disk.family_jingles": { "text": "Jingle" },
+    "disk.family_fonts": { "text": "Font" },
+    "disk.family_palettes": { "text": "Palette" },
+    "disk.blank_scene": { "text": "Scene" },
+    "disk.blank_prefab": { "text": "Prefab" },
+    "disk.blank_ui_layout": { "text": "Interface layout" },
+    "disk.blank_music_box": { "text": "Music box" },
+    "disk.blank_jingle_box": { "text": "Jingle box" },
+    "disk.blank_sound_box": { "text": "Sound box" },
+    "disk.blank_data_table": { "text": "Data table" },
+    "disk.blank_palette": { "text": "Palette" },
+    "disk.blank_script": { "text": "Script" },
+    "disk.blank_behavior": { "text": "Behavior" },
+    "disk.delete_items": { "singular": "Delete", "plural": "Delete {n} items" },
+    "disk.delete_items_confirm": { "singular": "Delete this item from the disk? Ctrl+Z undoes.", "plural": "Delete these {n} items from the disk? Ctrl+Z undoes." },
+    "disk.delete_cited": { "text": "Cited by an asset (it will lose its source):" },
+    "disk.deleted_items": { "singular": "{n} item deleted. Ctrl+Z undoes.", "plural": "{n} items deleted. Ctrl+Z undoes." },
+    "disk.delete_assets": { "singular": "Delete {n} asset", "plural": "Delete {n} assets" },
+    "disk.delete_confirm": { "singular": "Delete this asset? Its source file stays on disk. Ctrl+Z undoes.", "plural": "Delete these {n} assets? Their source files stay on disk. Ctrl+Z undoes." },
+    "disk.import_title": { "text": "Import files" },
+    "disk.import_filter": { "text": "Source files" },
+    "disk.imported": { "singular": "Imported {n} file.", "plural": "Imported {n} files." },
+    "disk.created": { "text": "Created {name}." },
+    "disk.create_refused": { "text": "Nothing was created: {error}" },
+    "disk.move_done": { "singular": "Moved {n} item.", "plural": "Moved {n} items." },
+    "disk.move_refused_outside": { "text": "{name} was not moved: it or its destination is outside the assets folder." },
+    "disk.move_refused_into_itself": { "text": "{name} was not moved: a folder cannot go inside itself." },
+    "disk.move_refused_exists": { "text": "{name} was not moved: the destination already has a file with that name." },
+    "disk.move_refused_protected": { "text": "{name} was not moved: palettes, texts, variables, scripts and background images stay where the editor looks for them." },
+    "disk.move_refused_failed": { "text": "{name} was not moved: the system refused (file open elsewhere, or no permission)." },
+    "disk.no_editor": { "text": "{name} has no dedicated editor." },
+    "disk.prefab_created": { "text": "Prefab {name} created in this folder." },
     "build.clear_title": { "text": "Clear build log" },
     "build.configure_title": { "text": "Configure toolchain" },
     "build.configure_tip": { "text": "Opens the paths for the compiler and emulator." },

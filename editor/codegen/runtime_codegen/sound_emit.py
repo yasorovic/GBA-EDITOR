@@ -82,7 +82,7 @@ def _action_box_lines(kind: str, box, actions: list[str], p) -> list[str]:
             if res is None:
                 return "-1", 0
             return _sfx_const(name), volume_to_effect(getattr(res, "volume", 100))
-        res = next((m for m in getattr(p, "music", []) if m.name == name), None)
+        res = next((j for j in getattr(p, "jingles", []) if j.name == name), None)
         if res is None:
             return "-1", 0
         return _music_const(name), volume_to_module(getattr(res, "volume", 100))

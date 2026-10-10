@@ -105,10 +105,8 @@ class UIRegionController(QObject):
                 if b.layout is self._active_layout:
                     return b.layout
             return bounds[0].layout
-        base = getattr(self._scene, "name", "") or "ui"
-        name, n = base, 2
-        while self._project.get_ui_layout(name) is not None:
-            name = f"{base}_{n:02d}"; n += 1
+        name = unique_name(getattr(self._scene, "name", "") or "ui",
+                           {l.name for l in self._project.ui_layouts})
         lay = UILayout(name=name)
         self._project.ui_layouts.append(lay)
         if not any(nd.layout_name == name for nd in self._scene.ui_layouts):
@@ -127,8 +125,9 @@ class UIRegionController(QObject):
         projet ») poserait un dessin que personne n'a demandé."""
         from core.models.ui_region import (
             UIContainer, UIList, UIText, UIImage,
-            KIND_CONTAINER, KIND_LIST, KIND_IMAGE, unique_element_name,
+            KIND_CONTAINER, KIND_LIST, KIND_IMAGE,
         )
+        from core.models.unique_name import unique_name
         from core.history import get_history, AddListItemCmd
         if not self.ready:
             return None
@@ -138,19 +137,19 @@ class UIRegionController(QObject):
         x, y, w, h = int(x), int(y), int(w), int(h)
         taken = set(lay.element_names()) | set(self._project.ui_element_names())
         if kind == KIND_CONTAINER:
-            el = UIContainer(name=unique_element_name(taken, "container"),
+            el = UIContainer(name=unique_name("container", taken),
                          x=x, y=y, w=w, h=h)
             label = "container"
         elif kind == KIND_LIST:
-            el = UIList(name=unique_element_name(taken, "list"),
+            el = UIList(name=unique_name("list", taken),
                         x=x, y=y, w=w, h=h)
             label = "list"
         elif kind == KIND_IMAGE:
-            el = UIImage(name=unique_element_name(taken, "image"),
+            el = UIImage(name=unique_name("image", taken),
                          x=x, y=y, w=w, h=h)
             label = "image"
         else:
-            el = UIText(name=unique_element_name(taken, "text"),
+            el = UIText(name=unique_name("text", taken),
                         x=x, y=y, w=w, h=h)
             label = "text"
         # Par l'historique : dessiner un élément est une modification comme une
@@ -283,7 +282,7 @@ class UIRegionController(QObject):
         refs `parent` réécrites vers les copies, décalage sur la seule RACINE
         (les enfants sont positionnés relativement à leur parent, les décaler
         aussi les ferait glisser deux fois)."""
-        from core.models.ui_region import unique_element_name
+        from core.models.unique_name import unique_name
         from core.history import get_history, AddListItemsCmd
         taken = set(lay.element_names()) | set(self._project.ui_element_names())
         copies: list = []
@@ -298,7 +297,7 @@ class UIRegionController(QObject):
                 # Espace de noms : le projet entier, tous types confondus (cf.
                 # Project.ui_element_names) — les refs `parent` restent ainsi
                 # sans ambiguïté et les constantes C ne collisionnent pas.
-                new.name = unique_element_name(taken, src.name)
+                new.name = unique_name(src.name, taken)
                 taken.add(new.name)
                 rename[src.name] = new.name
                 pairs.append((src, new))

@@ -33,6 +33,7 @@ from .parser import (
 # Les volumes du modèle sont des POURCENTAGES ; chaque appel maxmod a sa
 # propre échelle, et c'est ici qu'on convertit (cf. models/audio.py).
 from core.app_info import APP_NAME
+from core.lua_scripts import require_name
 from core.models.audio import (
     volume_to_effect, volume_to_module, pitch_to_rate, panning_to_hardware,
     volume_to_effect_expr, volume_to_module_expr, pitch_to_rate_expr,
@@ -44,7 +45,7 @@ from .api import (
     DOMAIN_OBJ_MODE, DOMAIN_DIRECTION, DOMAIN_WIN_REGION,
     DOMAIN_BLEND_MODE, DOMAIN_BLEND_SIDE, DOMAIN_EASE,
     hardware_enum_constant,
-    DOMAIN_ANIM, DOMAIN_SPRITE_ID, DOMAIN_SFX, DOMAIN_MUSIC, DOMAIN_KEY, DOMAIN_AXIS,
+    DOMAIN_ANIM, DOMAIN_SPRITE_ID, DOMAIN_SFX, DOMAIN_MUSIC, DOMAIN_JINGLE, DOMAIN_KEY, DOMAIN_AXIS,
     DOMAIN_INPUT_SEQUENCE,
     DOMAIN_ACTOR_NAME, DOMAIN_SCENE, DOMAIN_LANG,
     DOMAIN_SOUND_BOX_STATE, DOMAIN_JINGLE_BOX_STATE, DOMAIN_MUSIC_BOX_TRIGGER,
@@ -224,7 +225,7 @@ class CodegenContext:
     actor_sym:    str            # "Hero" nettoyé pour C (ex: "Mon_Hero")
     anim_names:   list[str]      # ["idle", "walk", "attack"] — depuis SpriteAsset
     sfx_names:    list[str]      # noms des Sfx du projet
-    music_names:  list[str]      # noms des Music du projet
+    music_names:  list[str]      # noms des modules du projet (musiques ET jingles)
     global_names: set[str]       # noms des variables globales (depuis globals.h)
     const_names:  set[str]       # noms des constantes (depuis constants.h)
     all_actor_syms: list[str]    # tous les acteurs de la scène
@@ -234,6 +235,8 @@ class CodegenContext:
     # décalage constant dans son groupe (`self + 2`). Résolu au BUILD dans
     # les deux cas — un enfant se NOMME, il ne se construit pas.
     child_refs: dict = field(default_factory=dict)
+    # Parmi `music_names`, les modules de assets/jingles/ : `music.jingle` n'accepte qu'eux.
+    jingle_names: list[str] = field(default_factory=list)
     # Fonctions citées par une frame de sprite : elles sont appelées depuis
     # main.c et doivent donc rester publiques, pas devenir des helpers static.
     frame_event_names: list[str] = field(default_factory=list)
@@ -251,7 +254,7 @@ class CodegenContext:
     # du symbole C émis (`<sym>_scene_on_update` / `<sym>_camera_on_update`). Une caméra a
     # les mêmes points d'entrée qu'une scène et emprunte donc le même chemin.
     owner_kind: str = "actor"
-    scripts_dir: Path | None = None  # racine project/scripts/ pour résoudre les require()
+    behavior_paths: dict | None = None  # {nom: fichier} des behaviors du projet, pour résoudre les require()
     # Prefab poolé : les variables de tête que le script ÉCRIT deviennent un
     # champ de `g_state_<sym>[]`, une entrée par instance (cf. _emit_pool_state).
     # `pool_size` ne sert qu'à CHIFFRER ce que cet état coûte — le C émis, lui,
@@ -841,14 +844,14 @@ class CodeGen:
     def _emit_inlined_behaviors(self, script: LuaScript):
         """Parse et transpile les behaviors requis en fonctions C statiques inline."""
         from .parser import parse as lua_parse, LuaParseError
-        if not self._required_behaviors or not self.ctx.scripts_dir:
+        if not self._required_behaviors or self.ctx.behavior_paths is None:
             return
         self._w("/* ── Inlined behaviors ── */")
         for alias, sym in self._required_behaviors.items():
             stem = sym[len("beh_"):]          # "paddle_ai"
-            beh_path = self.ctx.scripts_dir / "behaviors" / f"{stem}.lua"
-            if not beh_path.exists():
-                msg = f"behavior '{stem}' not found: {beh_path}"
+            beh_path = self.ctx.behavior_paths.get(stem)
+            if beh_path is None or not beh_path.exists():
+                msg = f"behavior '{stem}' not found (no script starting with `-- @behavior` has this name)"
                 self._w(f"/* {msg} */")
                 self.warnings.append(msg)
                 continue
@@ -871,6 +874,7 @@ class CodeGen:
                 sprite_ids   = self.ctx.sprite_ids,
                 sfx_names    = self.ctx.sfx_names,
                 music_names  = self.ctx.music_names,
+                jingle_names = self.ctx.jingle_names,
                 scene_names  = self.ctx.scene_names,
                 global_names = list(self.ctx.global_names) if self.ctx.global_names else None,
                 const_names  = list(self.ctx.const_names) if self.ctx.const_names else None,
@@ -1068,7 +1072,7 @@ class CodeGen:
             if target is None:
                 non_require.append(loc)
             else:
-                self._required_behaviors[loc.name] = f"beh_{Path(target).stem}"
+                self._required_behaviors[loc.name] = f"beh_{require_name(target)}"
         # Ce qui change appartient à l'INSTANCE, ce qui ne change pas appartient
         # au PREFAB. Un `local FX_POP = 1` qu'aucune ligne n'assigne est une
         # constante : la recopier dans chaque slot du pool ferait payer seize
@@ -1469,7 +1473,7 @@ class CodeGen:
             # déclaration C : le behavior est inliné dans l'en-tête.
             target = require_target(s.value)
             if target is not None:
-                self._required_behaviors[s.name] = f"beh_{Path(target).stem}"
+                self._required_behaviors[s.name] = f"beh_{require_name(target)}"
                 return
             # Une variable de séquence qui traverse une attente est DÉJÀ
             # déclarée, dans l'état : son `local` n'est plus qu'une affectation.
@@ -2606,6 +2610,7 @@ _DOMAIN_CONSTANT: dict = {
     DOMAIN_SPRITE_ID: lambda g, name: sprite_id_constant(g.ctx.actor_sym, name),
     DOMAIN_SFX:     lambda g, name: sfx_constant(name),
     DOMAIN_MUSIC:   lambda g, name: music_constant(name),
+    DOMAIN_JINGLE:  lambda g, name: music_constant(name),
     # `pressed`/`released` (accord simple, jamais une séquence depuis la
     # décision de l'auteur du 2026-09-27) passent par ce chemin générique ;
     # `held`/`buffered` ont leur propre émetteur (`_input_mask_arg`) pour

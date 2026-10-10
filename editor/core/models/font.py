@@ -40,6 +40,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from core.models.resource import Resource
+from core.models import asset_extensions
 
 
 # Tuiles 4bpp que contient un charblock GBA (16 Ko / 32 o). Plafond matériel :
@@ -129,6 +130,7 @@ def _source_format(value) -> str:
 
 @dataclass
 class Font(Resource):
+    sidecar_extension = asset_extensions.FONT
     name:  str = "font"
     asset: Optional[str] = None          # planche PNG (relative au projet)
     descriptor: Optional[str] = None     # .fnt BMFont d'origine, si import .fnt

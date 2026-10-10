@@ -43,6 +43,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont, QColor, QPainter, QFontMetrics
 from PyQt6.QtCore import Qt, QEvent, QPointF
 
+from core.models.unique_name import unique_name
 from core.project import Project
 from core.models.settings import Language, InputBinding, InputSequence, pair_key
 from core.models.components import CollisionBoxComponent
@@ -841,10 +842,7 @@ class CollisionsPanel(QWidget):
 
     def _free_tag_name(self) -> str:
         taken = set(self._all_tags())
-        n = 1
-        while f"tag{n}" in taken:
-            n += 1
-        return f"tag{n}"
+        return unique_name("tag", taken)
 
     # ── Construction de la matrice ────────────────────────────────
 

@@ -12,8 +12,8 @@ besoin depuis que la liste projet est rendue par le composant partagé
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QTreeWidget,
-    QTreeWidgetItem, QMenu, QAbstractItemView, QScrollArea, QSizePolicy, QPushButton,
-    QToolButton, QHeaderView,
+    QTreeWidgetItem, QMenu, QAbstractItemView, QScrollArea, QSizePolicy,
+    QToolButton, QHeaderView, QTabBar,
 )
 from PyQt6.QtGui import QFont, QColor
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QTimer, QSize
@@ -32,7 +32,8 @@ from core.models.field_value import number_value
 from core.selection_bus import (
     get_bus, UIElementSelection, CameraSelection, BackgroundLayerSelection, UILayoutSelection,
     ActorSelection)
-from core.command_dispatcher import get_dispatcher, unique_name
+from core.command_dispatcher import get_dispatcher
+from core.models.unique_name import unique_name
 from core.history import (
     get_history, AddListItemCmd, RemoveListItemCmd, UILayoutOrderCmd,
     DeleteInterfaceCmd, SceneActorOrderCmd, SetFieldCmd,
@@ -836,6 +837,8 @@ class _ActiveSceneTree(_Tree):
                 act.triggered.connect(
                     lambda _, k=kind, lay=layout: self._create_ui_elem(lay, k, ""))
             menu.addSeparator()
+            self._add_folder_actions(menu, T_UI_LAYOUT, layout)
+            menu.addSeparator()
             # Un nœud partagé ne perd que sa référence dans CETTE scène ; le seul
             # à le référencer emporte l'asset avec lui. Le libellé le dit, pour ne
             # pas laisser croire qu'on détruit une interface utilisée ailleurs.
@@ -845,8 +848,6 @@ class _ActiveSceneTree(_Tree):
             menu.addAction(label("scttree.remove_from_scene") if shared
                            else label("scttree.delete_interface")).triggered.connect(
                 lambda _, lay=layout, sh=shared: self._delete_interface(lay, sh))
-            menu.addSeparator()
-            self._add_folder_actions(menu, T_UI_LAYOUT, layout)
 
         elif typ == T_UI_ELEM:
             el = item.data(0, _ROLE_OBJ)
@@ -958,21 +959,21 @@ class _ActiveSceneTree(_Tree):
         if proj is None:
             return
         from core.models.ui_region import (
-            UIContainer, UIList, UIText, UIImage, unique_element_name)
+            UIContainer, UIList, UIText, UIImage)
         if self._scene is not None and proj.seed_default_ui_palette(self._scene):
             get_dispatcher().save_scene()
         taken = set(layout.element_names()) | set(proj.ui_element_names())
         if kind == KIND_CONTAINER:
-            el = UIContainer(name=unique_element_name(taken, "container"),
+            el = UIContainer(name=unique_name("container", taken),
                          parent=parent_name, x=8, y=8, w=96, h=48)
         elif kind == KIND_LIST:
-            el = UIList(name=unique_element_name(taken, "list"),
+            el = UIList(name=unique_name("list", taken),
                         parent=parent_name, x=8, y=8, w=96, h=48)
         elif kind == KIND_IMAGE:
-            el = UIImage(name=unique_element_name(taken, "image"),
+            el = UIImage(name=unique_name("image", taken),
                          parent=parent_name, x=8, y=8, w=16, h=16)
         else:
-            el = UIText(name=unique_element_name(taken, "text"),
+            el = UIText(name=unique_name("text", taken),
                         parent=parent_name, x=8, y=8, w=80, h=16)
         get_history().push(AddListItemCmd(
             layout.elements, el, persist_fn=self._panel._after_ui_change,
@@ -1344,6 +1345,10 @@ class SceneTreePanel(QWidget):
     # Ensemble de clés (actor:/camera:/ui:) que le Canvas masque localement.
     editor_visibility_changed = pyqtSignal(object)
 
+    # Les deux projections de la scène, dans l'ordre des onglets : (contexte, clé de libellé).
+    _CONTEXTS = (("content", "scttree.context_content"),
+                 ("priority", "scttree.context_priority"))
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._project: Project | None = None
@@ -1375,7 +1380,7 @@ class SceneTreePanel(QWidget):
         # Menu plutôt qu'un clic direct : deux natures d'objet se créent
         # depuis ce bouton, toutes deux possédées par la scène — un acteur et
         # une caméra (cf. command_dispatcher.add_camera).
-        self._btn_add = W.btn_add(label("scttree.add"))
+        self._btn_add = W.btn_add_menu(label("scttree.add"))
         add_menu = QMenu(self._btn_add)
         add_menu.setFont(QFont(T.UI, T.MD))
         add_menu.addAction(_ico("actor", COLOR_DEFAULT), label("common.actor")).triggered.connect(self._add_actor)
@@ -1393,7 +1398,14 @@ class SceneTreePanel(QWidget):
         layout.addWidget(hdr)
 
         self._filters_bar = QFrame()
-        self._filters_bar.setStyleSheet(f"background:{_BG}; border-bottom:1px solid {C.BORDER};")
+        # Sélecteur d'identité : une feuille sans sélecteur se propage aux
+        # QToolButton enfants (fond et bordure basse sur chaque icône).
+        self._filters_bar.setObjectName("scene_tree_filters_bar")
+        self._filters_bar.setStyleSheet(
+            f"QFrame#scene_tree_filters_bar{{background:{_BG}; border-bottom:1px solid {C.BORDER};}}"
+            f"QToolButton{{background:transparent; border:none; padding:0;}}"
+            f"QToolButton:hover{{background:{C.BG_HOVER};}}"
+            f"QToolButton:checked{{background:{C.BG_INPUT};}}")
         filters_layout = QHBoxLayout(self._filters_bar)
         filters_layout.setContentsMargins(S.GUTTER, S.XS, S.GUTTER, S.XS)
         filters_layout.setSpacing(S.XS)
@@ -1412,6 +1424,7 @@ class SceneTreePanel(QWidget):
             button.setAutoRaise(True)
             button.setFixedSize(24, 24)
             button.setIcon(_ico(icon, COLOR_DEFAULT))
+            button.setIconSize(QSize(16, 16))
             button.setToolTip(tooltip(title=label(tip)))
             button.toggled.connect(lambda checked, k=key: self._toggle_content_filter(k, checked))
             filters_layout.addWidget(button)
@@ -1422,20 +1435,18 @@ class SceneTreePanel(QWidget):
         # Le nom « Scene tree » ne dit rien que le contenu ne montre déjà.
         # Ces deux entrées nomment en revanche le choix réel de l'auteur.
         tabs = QFrame()
-        tabs.setFixedHeight(34)
-        tabs.setStyleSheet(f"background:{_BG}; border-bottom:1px solid {C.BORDER};")
+        tabs.setStyleSheet(f"background:{C.BG_RAISED}; border-bottom:1px solid {C.BORDER};")
         tl = QHBoxLayout(tabs)
         tl.setContentsMargins(S.GUTTER, 0, S.GUTTER, 0)
-        tl.setSpacing(S.LG)
-        self._content_tab = QPushButton(label("scttree.context_content"))
-        self._priority_tab = QPushButton(label("scttree.context_priority"))
-        for button, context in ((self._content_tab, "content"),
-                                (self._priority_tab, "priority")):
-            button.setFlat(True)
-            button.setCursor(Qt.CursorShape.PointingHandCursor)
-            button.setFont(QFont(T.UI, T.SM, QFont.Weight.DemiBold))
-            button.clicked.connect(lambda _=False, c=context: self._set_context(c))
-            tl.addWidget(button)
+        self._context_tabs = QTabBar()
+        self._context_tabs.setExpanding(False)
+        self._context_tabs.setDrawBase(False)
+        self._context_tabs.setCursor(Qt.CursorShape.PointingHandCursor)
+        for context, key in self._CONTEXTS:
+            self._context_tabs.addTab(label(key))
+        self._context_tabs.currentChanged.connect(
+            lambda index: self._set_context(self._CONTEXTS[index][0]))
+        tl.addWidget(self._context_tabs)
         tl.addStretch()
         layout.addWidget(tabs)
 
@@ -1559,14 +1570,11 @@ class SceneTreePanel(QWidget):
         self.refresh()
 
     def _update_context_tabs(self):
-        for button, context in ((self._content_tab, "content"),
-                                (self._priority_tab, "priority")):
-            active = context == self._context
-            button.setStyleSheet(
-                f"QPushButton{{color:{C.ACCENT if active else C.TEXT_DIM};"
-                f"background:transparent; border:none; padding:0 2px;}}"
-                f"QPushButton:hover{{color:{C.TEXT_HI};}}"
-                + (f"QPushButton{{border-bottom:2px solid {C.ACCENT};}}" if active else ""))
+        """Montre l'onglet du contexte courant, sans le faire passer pour un clic."""
+        index = [context for context, _key in self._CONTEXTS].index(self._context)
+        self._context_tabs.blockSignals(True)
+        self._context_tabs.setCurrentIndex(index)
+        self._context_tabs.blockSignals(False)
 
     # ── Sélection bus ─────────────────────────────────────────────
 
@@ -1629,14 +1637,11 @@ class SceneTreePanel(QWidget):
         """Crée un nouveau nœud `Interface` (asset `UILayout`) et le pose dans la
         scène. Comme un acteur : un nouvel asset, pas une copie d'un existant. Le
         nom se change ensuite dans l'en-tête (l'inspecteur du nœud), pas en place
-        dans l'arbre — la ligne y affiche « Interface », jamais le nom du .json."""
+        dans l'arbre — la ligne y affiche « Interface », jamais le nom du .layout."""
         if not self._project or not self._scene:
             return
         from core.models.ui_region import UILayout, InterfaceNode
-        base, name, n = (self._scene.name or "ui"), (self._scene.name or "ui"), 2
-        while self._project.get_ui_layout(name) is not None:
-            name = f"{base}_{n:02d}"
-            n += 1
+        name = unique_name(self._scene.name or "ui", {l.name for l in self._project.ui_layouts})
         lay = UILayout(name=name)
         self._project.ui_layouts.append(lay)
         self._scene.ui_layouts.append(InterfaceNode(layout_name=name))

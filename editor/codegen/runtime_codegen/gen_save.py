@@ -32,14 +32,15 @@ def save_vars(p) -> list[tuple[int, object]]:
             if getattr(g, "persist", False)]
 
 
-def save_id32(vid: int) -> int:
-    """L'id opaque replié sur 32 bits. Il en fait 12 chiffres (jusqu'à ~2^40) et
-    la SRAM se lit par mots de 32 bits : c'est un repli DÉTERMINISTE, pas un
+def save_id32(vid: str) -> int:
+    """L'id opaque replié sur 32 bits. Il en fait 12 chiffres hexadécimaux (48
+    bits) et la SRAM se lit par mots de 32 bits : on garde les 8 derniers
+    chiffres, c'est un repli DÉTERMINISTE, pas un
     hachage — deux builds du même projet donnent le même. Une collision entre
     deux variables persistantes bloque le build (cf. `save_fatal`), sinon elle
     ne se verrait qu'en jeu, sous la forme d'une variable qui prend la valeur
     d'une autre."""
-    return int(vid) & 0xFFFFFFFF
+    return int(vid, 16) & 0xFFFFFFFF
 
 
 def save_var_bytes(g) -> int:

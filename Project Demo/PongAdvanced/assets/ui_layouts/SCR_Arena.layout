@@ -1,0 +1,30 @@
+{
+  "name": "SCR_Arena",
+  "id": "87fd8d5a7342",
+  "anchor": "screen",
+  "anchor_actor": "",
+  "target": "",
+  "elements": [
+    {
+      "kind": "text",
+      "name": "text",
+      "parent": "",
+      "visible": true,
+      "text_color": 0,
+      "highlight_color": 0,
+      "priority": -1,
+      "x": 40,
+      "y": 120,
+      "w": 96,
+      "h": 16,
+      "text_key": "",
+      "font_name": "",
+      "font_weight": 400,
+      "font_italic": false,
+      "align": "left",
+      "preview_text": "",
+      "preview_is_literal": false
+    }
+  ],
+  "notes": ""
+}

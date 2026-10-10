@@ -257,7 +257,7 @@ La bibliothèque standard de Lua n'est pas embarquée dans la ROM. Les cas usuel
 | Ouvrir un fichier | `save.write` et `save.read` pour la SRAM. |
 | Afficher une trace | `debug:log(...)`, visible dans mGBA et retiré des builds release. |
 | Gérer une erreur ou une exception | Un `if` qui contrôle et corrige la valeur. |
-| Charger un behavior | `require("behaviors/nom")`, résolu au build. |
+| Charger un behavior | `require("behaviors/nom")`, résolu au build par NOM parmi les scripts dont la première ligne est `-- @behavior`, où qu'ils soient rangés. Deux behaviors de même nom : erreur de build. |
 
 Il n'y a pas de `string`, `table`, `os`, `io`, `coroutine`, `utf8`, métatable, fonction de réflexion ni chargement de code à l'exécution.
 

@@ -1,6 +1,7 @@
 """Interaction commune des champs numériques de l'éditeur.
 
-La molette appartient au panneau qui contient le champ ; un déplacement
+La molette appartient au panneau qui contient le champ (spinbox comme liste
+déroulante, qui ne changent jamais de valeur par la molette) ; un déplacement
 horizontal avec le bouton gauche maintenu ajuste la valeur, comme dans les
 inspecteurs de moteurs de jeu.
 """
@@ -10,7 +11,9 @@ from dataclasses import dataclass
 
 from PyQt6.QtCore import QEvent, QObject, QPoint, Qt
 from PyQt6.QtGui import QMouseEvent, QWheelEvent
-from PyQt6.QtWidgets import QApplication, QAbstractScrollArea, QAbstractSpinBox, QWidget
+from PyQt6.QtWidgets import (
+    QAbstractScrollArea, QAbstractSpinBox, QApplication, QComboBox, QLineEdit, QWidget,
+)
 
 
 _DRAG_THRESHOLD = 3
@@ -46,6 +49,17 @@ class NumericDragBehavior(QObject):
         return None
 
     @staticmethod
+    def _combo_for(obj) -> QComboBox | None:
+        # Seul le combo lui-même (ou son champ de saisie s'il est éditable) est
+        # visé : la liste déroulante ouverte garde sa molette pour défiler.
+        if isinstance(obj, QComboBox):
+            return obj
+        parent = obj.parentWidget() if isinstance(obj, QWidget) else None
+        if isinstance(obj, QLineEdit) and isinstance(parent, QComboBox):
+            return parent
+        return None
+
+    @staticmethod
     def _spin_position(spin: QAbstractSpinBox, obj, position: QPoint) -> QPoint:
         return spin.mapFromGlobal(obj.mapToGlobal(position))
 
@@ -70,7 +84,7 @@ class NumericDragBehavior(QObject):
             parent = parent.parentWidget()
         return None
 
-    def _forward_wheel_to_scroll(self, spin: QAbstractSpinBox, event: QWheelEvent) -> None:
+    def _forward_wheel_to_scroll(self, spin: QWidget, event: QWheelEvent) -> None:
         scroll = self._scroll_container(spin)
         if scroll is None:
             return
@@ -81,6 +95,13 @@ class NumericDragBehavior(QObject):
         bar.setValue(bar.value() - delta)
 
     def eventFilter(self, obj, event):  # noqa: N802 - API Qt
+        if event.type() == QEvent.Type.Wheel:
+            combo = self._combo_for(obj)
+            if combo is not None:
+                self._forward_wheel_to_scroll(combo, event)
+                event.accept()
+                return True
+
         spin = self._spinbox_for(obj)
         if spin is None or not spin.isEnabled() or spin.isReadOnly():
             return False

@@ -141,15 +141,15 @@ def test_camera_accepte_une_constante_resolue_en_pixels():
     """Une constante est un nombre connu à la compilation : `Camera.px` la
     résout (la table `const` ne peut pas porter le symbole `CONST_*`)."""
     from types import SimpleNamespace as NS
-    proj = NS(globals=[], constants=[NS(id=7, name="ARENA_W", value=480, type="int")])
-    cam = Camera(name="Cam", bounds_w={"var": 7, "src": "const"})
+    proj = NS(globals=[], constants=[NS(id="000000000007", name="ARENA_W", value=480, type="int")])
+    cam = Camera(name="Cam", bounds_w={"var": "000000000007", "src": "const"})
     assert cam.px("bounds_w", proj) == 480
 
 
 def test_l_inspecteur_ne_propose_que_les_constantes(qapp):
     from types import SimpleNamespace as NS
-    proj = NS(globals=[NS(id=1, name="score", default=0, type="int")],
-              constants=[NS(id=7, name="ARENA_W", value=480, type="int")])
+    proj = NS(globals=[NS(id="000000000001", name="score", default=0, type="int")],
+              constants=[NS(id="000000000007", name="ARENA_W", value=480, type="int")])
     scene = Scene(name="S1")
     cam = Camera(name="Cam")
     scene.cameras.append(cam)
@@ -161,11 +161,11 @@ def test_l_inspecteur_ne_propose_que_les_constantes(qapp):
 
 def test_number_field_litteral_ou_variable(qapp):
     from ui.common.value_field import NumberField
-    f = NumberField(1.5, [("global", "zoom", 6)], kind="float", min_v=0.1, max_v=4.0)
+    f = NumberField(1.5, [("global", "zoom", "000000000006")], kind="float", min_v=0.1, max_v=4.0)
     assert f.raw() == 1.5
     seen = []
     f.changed.connect(seen.append)
-    f._set_ref("global", "zoom", 6)
-    assert f.raw() == {"var": 6, "src": "global"} and seen == [f.raw()]
+    f._set_ref("global", "zoom", "000000000006")
+    assert f.raw() == {"var": "000000000006", "src": "global"} and seen == [f.raw()]
     f.set_raw(2.0)                       # silencieux, retour au littéral
     assert f.raw() == 2.0 and len(seen) == 1

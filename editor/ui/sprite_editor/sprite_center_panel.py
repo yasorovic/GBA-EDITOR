@@ -1,4 +1,4 @@
-"""ui/sprite_editor/sprite_center_panel.py — zone centre : playback, canvas, tile picker, timeline."""
+"""ui/sprite_editor/sprite_center_panel.py — zone centre : sprite canvas | spritesheet, et dessous la timeline."""
 from __future__ import annotations
 from pathlib import Path
 from typing import Optional
@@ -13,17 +13,19 @@ from core.models.sprite import AnimState, SpriteAsset, StateDirection
 from core.project import Project
 from core.command_dispatcher import get_dispatcher
 from core.keybindings import bind
-from .frame_canvas import _FrameCanvasPanel, _FrameTimeline, _make_frame_pixmap
-from .spritesheet_viewer import _SpritesheetViewer
+from .sprite_canvas import SpriteCanvasPanel
+from .sprite_timeline import SpriteTimeline, make_frame_pixmap
+from .spritesheet_selector import SpritesheetSelector
 
 # ── Zone centre — Preview ──────────────────────────────────────────────────────
 # La barre playback (|◀ ▶ ▶| grille/palette) et le header (flip/fit/zoom,
 # tag CANVAS, stats) sont flottants, superposés au canvas — voir
-# _CanvasFloatingToolbar / _FrameCanvasPanel dans frame_canvas.py.
+# SpriteCanvasToolbar / SpriteCanvasPanel dans sprite_canvas.py.
 
 
 class SpriteCenterPanel(QWidget):
-    """Zone centre : playback · canvas · tile picker · timeline."""
+    """Zone centre : le sprite canvas (à gauche) et le spritesheet (à droite) côte à côte,
+    la timeline dessous — la place laissée en bas sert au panneau de build."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -47,51 +49,53 @@ class SpriteCenterPanel(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        splitter = QSplitter(Qt.Orientation.Vertical)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
         splitter.setStyleSheet(
             f"QSplitter::handle{{background:{C.BORDER};}}"
-            f"QSplitter::handle:vertical{{height:3px;}}"
-            f"QSplitter::handle:vertical:hover{{background:{C.ACCENT};}}"
+            f"QSplitter::handle:horizontal{{width:3px;}}"
+            f"QSplitter::handle:horizontal:hover{{background:{C.ACCENT};}}"
         )
 
-        self._canvas_panel = _FrameCanvasPanel()
-        self._canvas = self._canvas_panel.canvas
-        self._canvas.frame_painted.connect(self._on_frame_painted)
-        self._canvas.set_persist_fn(self._on_frame_painted)
-        self._canvas.selection_reset.connect(self._on_selection_reset)
-        self._canvas.brush_picked_up.connect(self._on_brush_picked_up)
+        self._sprite_canvas_panel = SpriteCanvasPanel()
+        self._sprite_canvas = self._sprite_canvas_panel.canvas
+        self._sprite_canvas.frame_painted.connect(self._on_frame_painted)
+        self._sprite_canvas.set_persist_fn(self._on_frame_painted)
+        self._sprite_canvas.selection_reset.connect(self._on_selection_reset)
+        self._sprite_canvas.brush_picked_up.connect(self._on_brush_picked_up)
 
-        self._tiles = _SpritesheetViewer()
-        self._tiles.selection_changed.connect(self._on_tile_selection_changed)
+        self._spritesheet = SpritesheetSelector()
+        self._spritesheet.selection_changed.connect(self._on_tile_selection_changed)
 
-        splitter.addWidget(self._canvas_panel)
-        splitter.addWidget(self._tiles)
-        splitter.setSizes([320, 200])
+        splitter.addWidget(self._sprite_canvas_panel)
+        splitter.addWidget(self._spritesheet)
+        splitter.setSizes([560, 360])
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 0)
 
         root.addWidget(splitter, 1)
 
-        self._timeline = _FrameTimeline()
+        self._timeline = SpriteTimeline()
         self._timeline.frame_selected.connect(self._on_frame_selected)
         self._timeline.frames_changed.connect(self._on_frames_changed)
         root.addWidget(self._timeline)
 
-        toolbar = self._canvas_panel.toolbar
+        toolbar = self._sprite_canvas_panel.toolbar
         toolbar.btn_prev.clicked.connect(lambda: self._step_frame(-1))
         toolbar.btn_play.toggled.connect(self._on_play_toggled)
         toolbar.btn_next.clicked.connect(lambda: self._step_frame(+1))
-        self._canvas_panel.paint_strip.selected.connect(self._on_paint_palette_selected)
+        self._sprite_canvas_panel.paint_strip.selected.connect(self._on_paint_palette_selected)
 
-        # Shift+X/Y : portés ici (pas sur _FrameCanvas seul) pour marcher
+        # Shift+X/Y : portés ici (pas sur SpriteCanvas seul) pour marcher
         # aussi bien après un clic dans le canvas que dans le tile picker —
         # WidgetWithChildrenShortcut s'active dès qu'un descendant a le focus.
         flip_x = QShortcut(QKeySequence(), self)
         flip_x.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        flip_x.activated.connect(self._canvas.flip_brush_x)
+        flip_x.activated.connect(self._sprite_canvas.flip_brush_x)
         bind("sprite.flip_h", flip_x)
         flip_y = QShortcut(QKeySequence(), self)
         flip_y.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        flip_y.activated.connect(self._canvas.flip_brush_y)
+        flip_y.activated.connect(self._sprite_canvas.flip_brush_y)
         bind("sprite.flip_v", flip_y)
 
     # ── API publique ──────────────────────────────────────────────────
@@ -104,10 +108,10 @@ class SpriteCenterPanel(QWidget):
     def load_sprite(self, sprite: SpriteAsset, project: Project):
         self._sprite  = sprite
         self._project = project
-        self._canvas.set_own_palette(getattr(sprite, "own_palette", []))
+        self._sprite_canvas.set_own_palette(getattr(sprite, "own_palette", []))
         self._anim_timer.stop()
-        self._canvas_panel.toolbar.btn_play.setChecked(False)
-        self._canvas_panel.set_info(
+        self._sprite_canvas_panel.toolbar.btn_play.setChecked(False)
+        self._sprite_canvas_panel.set_info(
             tiles=sprite.tiles_per_frame * sum(
                 len(sd.frames)
                 for s in sprite.states
@@ -116,7 +120,7 @@ class SpriteCenterPanel(QWidget):
             ),
             unique=sprite.tiles_per_frame,
         )
-        self._tiles.load(self._abs_path())
+        self._spritesheet.load(self._abs_path())
         self._load_paint_strip()
 
     # ── Bande de preview (PAL_BANK du sprite, tête du canvas) ──────────
@@ -128,24 +132,24 @@ class SpriteCenterPanel(QWidget):
         seulement au premier chargement ou si elle a disparu. Teinte le canvas
         avec la palette RÉELLEMENT sélectionnée après coup (pas toujours [0]).
         Masquée si le sprite n'a pas encore de PAL_BANK (pas d'asset)."""
-        strip = self._canvas_panel.paint_strip
+        strip = self._sprite_canvas_panel.paint_strip
         palettes = list(getattr(self._sprite, "palettes", []) or []) if self._sprite else []
         if palettes:
             entries = [(i, label("common.palette_i", i=i), cols) for i, cols in enumerate(palettes)]
             strip.load(entries, active=0)
             strip.setVisible(True)
-            self._canvas_panel._position_paint_strip()
-            self._canvas.set_tint(palettes[strip.active()])
+            self._sprite_canvas_panel._position_paint_strip()
+            self._sprite_canvas.set_tint(palettes[strip.active()])
         else:
             strip.setVisible(False)
-            self._canvas.set_tint(None)
+            self._sprite_canvas.set_tint(None)
 
     def _on_paint_palette_selected(self, idx: int):
         if not self._sprite:
             return
         palettes = getattr(self._sprite, "palettes", []) or []
         if 0 <= idx < len(palettes):
-            self._canvas.set_tint(palettes[idx])
+            self._sprite_canvas.set_tint(palettes[idx])
 
     def load_direction(self, state: AnimState, sd: StateDirection):
         if not self._sprite or not self._project:
@@ -154,7 +158,7 @@ class SpriteCenterPanel(QWidget):
         self._sd = sd
         self._sel_frame = 0
         self._anim_timer.stop()
-        self._canvas_panel.toolbar.btn_play.setChecked(False)
+        self._sprite_canvas_panel.toolbar.btn_play.setChecked(False)
 
         # Miroir : les frames n'appartiennent pas à cette direction, elles sont
         # dérivées de la source (mirror_of) + flip. Affichage seul, pas d'édition
@@ -171,11 +175,11 @@ class SpriteCenterPanel(QWidget):
         self._timeline.load(self._sprite, state, sd, self._abs_path(),
                             self._read_only, self._disp_frames, self._flip,
                             project=self._project)
-        self._canvas.set_read_only(self._read_only)
-        self._canvas.set_display_flip(*self._flip)
-        self._tiles.setEnabled(not self._read_only)
+        self._sprite_canvas.set_read_only(self._read_only)
+        self._sprite_canvas.set_display_flip(*self._flip)
+        self._spritesheet.setEnabled(not self._read_only)
         from ui.sprite_editor.sprite_finder_panel import dir_label
-        self._canvas_panel.set_read_only_banner(
+        self._sprite_canvas_panel.set_read_only_banner(
             label("sprctr.mirror_banner", dir=dir_label(sd)) if self._read_only else None)
         self._refresh_canvas()
 
@@ -198,25 +202,25 @@ class SpriteCenterPanel(QWidget):
         self._refresh_canvas()
 
     def _on_tile_selection_changed(self, tiles: list):
-        self._canvas.set_brush(tiles)
-        self._tiles.set_brush_label(len(tiles))
+        self._sprite_canvas.set_brush(tiles)
+        self._spritesheet.set_brush_label(len(tiles))
 
     def _on_selection_reset(self):
-        self._tiles.clear_selection()
-        self._canvas.set_brush([])
+        self._spritesheet.clear_selection()
+        self._sprite_canvas.set_brush([])
 
     def _on_brush_picked_up(self, n: int):
-        """Tuiles ramassées directement dans le canvas (cf _FrameCanvas) —
+        """Tuiles ramassées directement dans le canvas (cf SpriteCanvas) —
         seul le libellé du picker doit refléter la nouvelle brosse ; ne pas
-        appeler _tiles.clear_selection() ici, ça réémettrait une sélection
+        appeler _spritesheet.clear_selection() ici, ça réémettrait une sélection
         vide et effacerait la brosse qu'on vient de charger."""
-        self._tiles.set_brush_label(n)
+        self._spritesheet.set_brush_label(n)
 
     def _on_frame_painted(self):
         if self._sprite and self._project:
             get_dispatcher().save_sprite(self._sprite)
         if self._sd and 0 <= self._sel_frame < len(self._sd.frames):
-            pm = _make_frame_pixmap(self._abs_path(), self._sd.frames[self._sel_frame],
+            pm = make_frame_pixmap(self._abs_path(), self._sd.frames[self._sel_frame],
                                     self._sprite.frame_w, self._sprite.frame_h)
             self._timeline.refresh_thumb(self._sel_frame, pm)
 
@@ -241,7 +245,7 @@ class SpriteCenterPanel(QWidget):
         if next_frame >= n:
             if not (self._state and self._state.loop):
                 self._anim_timer.stop()
-                self._canvas_panel.toolbar.btn_play.setChecked(False)
+                self._sprite_canvas_panel.toolbar.btn_play.setChecked(False)
                 return
             next_frame = 0
         self._sel_frame = next_frame
@@ -266,10 +270,10 @@ class SpriteCenterPanel(QWidget):
 
     def _refresh_canvas(self):
         if not self._sd or not self._sprite:
-            self._canvas.load_frame(None, None, None)
+            self._sprite_canvas.load_frame(None, None, None)
             return
         frames = self._active_frames()
         if not frames or not (0 <= self._sel_frame < len(frames)):
-            self._canvas.load_frame(None, None, None)
+            self._sprite_canvas.load_frame(None, None, None)
             return
-        self._canvas.load_frame(self._sprite, self._abs_path(), frames[self._sel_frame])
+        self._sprite_canvas.load_frame(self._sprite, self._abs_path(), frames[self._sel_frame])

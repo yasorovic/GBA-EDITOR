@@ -61,6 +61,7 @@ def _project_lines(project) -> list[str]:
     out += [f"    - {name} ({reason})" for name, reason in unreadable]
     out += [f"    + copie conservée : {name} → {backup}"
             for name, backup in project.preserved_files()]
+    out += [f"    ~ ignoré : {name} ({reason})" for name, reason in project.ignored_duplicate_files()]
     return out
 
 

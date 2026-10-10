@@ -62,12 +62,17 @@ def use_system_default(kind: str = KIND_IMAGE) -> None:
 def open_file(path: Path, parent: QWidget | None = None, kind: str = KIND_IMAGE) -> None:
     """Ouvre `path` dans le logiciel configuré pour `kind`, sinon l'appli par
     défaut du système, sinon rien."""
+    open_with(get_configured_editor(kind), path)
+
+
+def open_with(editor, path: Path) -> None:
+    """Ouvre `path` dans l'exécutable `editor` (chemin, ou vide), sinon dans l'application par défaut du système.
+    C'est le repli des réglages « External Tools » de l'écran Réglages (`core.external_tools`)."""
     if not path or not Path(path).exists():
         return
-    configured = get_configured_editor(kind)
-    if configured and Path(configured).exists():
+    if editor and Path(editor).exists():
         try:
-            subprocess.Popen([configured, str(path)])
+            subprocess.Popen([str(editor), str(path)])
             return
         except OSError:
             pass  # exécutable configuré cassé : on retombe sur le défaut système

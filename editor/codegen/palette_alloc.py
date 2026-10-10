@@ -272,8 +272,7 @@ def _bg_own_sources(p: Project, scene: Scene) -> list[Path]:
         ba = p.get_background(layer.background_name)
         if ba and getattr(ba, "tileset", None):
             continue
-        png = ba.asset if ba and ba.asset else f"{layer.background_name}.png"
-        srcs.append(p.background_images_dir / png)
+        srcs.append(p.background_image_path(ba, layer.background_name))
     return srcs
 
 
@@ -748,8 +747,7 @@ def _bg_instance_pairs(p: Project, scene: Scene) -> list[tuple[tuple, InstanceRe
         ba = p.get_background(layer.background_name)
         if ba and getattr(ba, "tileset", None):
             continue   # compressé : géré comme entrée de bloc
-        png = ba.asset if ba and ba.asset else f"{layer.background_name}.png"
-        cols = own_palette(p.background_images_dir / png)
+        cols = own_palette(p.background_image_path(ba, layer.background_name))
         if not cols:
             continue
         key = tuple(_own_bank_content(cols, "bg"))

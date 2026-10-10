@@ -37,7 +37,7 @@ def gizmo(monkeypatch):
     fabrique vit dans un module EXISTANT (`scene`) : ce test juge les types, pas
     la déclaration d'un nouveau module."""
     monkeypatch.setitem(REF_TYPE_TABLE, "gizmo", RefType(
-        c_type="gizmo_t", variable="g", hint="Un gizmo se règle par `speed`."))
+        c_type="gizmo_t", prefix="g", hint="Un gizmo se règle par `speed`."))
     monkeypatch.setitem(RUNTIME_API, "scene.make_gizmo", ApiFunc(
         lua_name="scene.make_gizmo", c_func="gizmo_make", ret="gizmo"))
     monkeypatch.setitem(RUNTIME_API, "gizmo:spin", ApiFunc(
@@ -111,7 +111,7 @@ def test_une_propriete_en_lecture_seule_d_un_type_declare_est_refusee(gizmo):
         "local g = scene:make_gizmo()\ng.id = 3"))
 
 
-def test_la_variable_des_snippets_vient_de_la_table(gizmo):
+def test_le_prefixe_des_snippets_vient_de_la_table(gizmo):
     from scripting import api_snippets
     assert api_snippets._on_variable("gizmo:spin") == "g:spin"
     assert api_snippets._on_variable("gizmo.speed") == "g.speed"
@@ -263,7 +263,7 @@ def test_le_catalogue_ne_garde_aucune_cle_self():
     assert not [k for k in RUNTIME_API if k.startswith(("self:", "self."))]
     assert not [k for k in RUNTIME_PROPS if k.startswith(("self:", "self."))]
     assert REF_TYPE_TABLE["actor"].c_type == "Actor*"
-    assert REF_TYPE_TABLE["actor"].variable == "self"
+    assert REF_TYPE_TABLE["actor"].prefix == "self"
 
 
 def _actor_errors(body: str) -> list[str]:
@@ -293,7 +293,7 @@ def test_le_module_actor_n_a_pas_les_champs_du_type_actor():
     assert _actor_errors("local p = self.position\nother.velocity = vec2(0, 0)") == []
 
 
-def test_la_variable_des_snippets_d_un_acteur_est_self():
+def test_le_prefixe_des_snippets_d_un_acteur_est_self():
     from scripting import api_snippets
     assert api_snippets.bare("actor:move_to") == "self:move_to()"
     assert api_snippets.bare("actor.position") == "self.position"

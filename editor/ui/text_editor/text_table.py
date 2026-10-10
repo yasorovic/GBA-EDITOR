@@ -94,12 +94,23 @@ class _KeyDelegate(QStyledItemDelegate):
     une ligne sélectionnée ou très longue.
     """
 
+    # Zone cliquable de l'icône, depuis le bord droit de la cellule : la même
+    # que celle du clic, pour que survol et clic désignent le même endroit.
+    HIT_WIDTH = 28
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # Cellule dont l'icône est survolée — posée par la table, qui reçoit
+        # les mouvements de souris ; le délégué ne fait que la lire.
+        self.hot_index = None
+
     def paint(self, painter: QPainter, option, index):
         super().paint(painter, option, index)
         painter.save()
         # L'icône fait partie du rendu de la cellule, plutôt qu'un widget
         # ajouté par-dessus : une seule clé, aucune découpe ni doublon.
-        icon = icons.get("copy", C.TEXT_DIM)
+        hot = self.hot_index is not None and self.hot_index == index
+        icon = icons.get("copy", C.ACCENT if hot else C.TEXT_DIM)
         size = 15
         x = option.rect.right() - size - 8
         y = option.rect.center().y() - size // 2
@@ -196,7 +207,8 @@ class TextTable(QWidget):
         # rendu (balises résolues) et non la source.
         self._tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self._tree.setItemDelegateForColumn(COL_PATH, _PathDelegate(self))
-        self._tree.setItemDelegateForColumn(COL_KEY, _KeyDelegate(self))
+        self._key_delegate = _KeyDelegate(self)
+        self._tree.setItemDelegateForColumn(COL_KEY, self._key_delegate)
         self._tree.setStyleSheet(
             f"QTreeWidget{{background:{C.BG_BASE}; color:{C.TEXT_NORM}; border:none;"
             f"font-family:{T.UI_STACK}; font-size:{T.MD}px; outline:none;}}"
@@ -668,6 +680,28 @@ class TextTable(QWidget):
         badge = QRectF(rect.left() + 6, rect.center().y() - 7.0, badge_w, 15.0)
         return (item, COL_PATH) if badge.contains(QPointF(pos)) else None
 
+    def _copy_icon_at(self, pos):
+        """Index de la cellule clé dont l'icône de copie est sous `pos`."""
+        item = self._tree.itemAt(pos)
+        index = self._tree.indexAt(pos)
+        if (item is None or item.data(0, _ROLE_TEXT) is None
+                or index.column() != COL_KEY):
+            return None
+        rect = self._tree.visualRect(index)
+        return index if pos.x() >= rect.right() - _KeyDelegate.HIT_WIDTH else None
+
+    def _set_copy_hot(self, index):
+        """Repeint l'ancienne et la nouvelle icône : Qt ne repeint une cellule
+        qu'à l'entrée dans sa ligne, pas quand la souris la traverse."""
+        old = self._key_delegate.hot_index
+        if old == index:
+            return
+        self._key_delegate.hot_index = index
+        viewport = self._tree.viewport()
+        for changed in (old, index):
+            if changed is not None:
+                viewport.update(self._tree.visualRect(changed))
+
     def eventFilter(self, watched, event):
         if watched is self._tree.viewport():
             if (event.type() == QEvent.Type.MouseButtonPress
@@ -678,14 +712,20 @@ class TextTable(QWidget):
                 text = item.data(0, _ROLE_TEXT) if item else None
                 if text is not None and index.column() == COL_KEY:
                     rect = self._tree.visualRect(index)
-                    if pos.x() >= rect.right() - 28:
+                    if pos.x() >= rect.right() - _KeyDelegate.HIT_WIDTH:
                         QApplication.clipboard().setText(text.key)
                         return True
             hit = self._badge_at(event.position().toPoint()) if hasattr(event, "position") else None
             editable = bool(hit and hit[0].isSelected() and hit[0].isExpanded())
             if event.type() == QEvent.Type.MouseMove:
+                copy_hot = self._copy_icon_at(event.position().toPoint())
+                self._set_copy_hot(copy_hot)
                 self._tree.viewport().setCursor(
-                    Qt.CursorShape.IBeamCursor if editable else Qt.CursorShape.ArrowCursor)
+                    Qt.CursorShape.PointingHandCursor if copy_hot is not None
+                    else Qt.CursorShape.IBeamCursor if editable
+                    else Qt.CursorShape.ArrowCursor)
+            elif event.type() == QEvent.Type.Leave:
+                self._set_copy_hot(None)
             elif (event.type() == QEvent.Type.MouseButtonPress
                   and event.button() == Qt.MouseButton.LeftButton and editable):
                 item, col = hit

@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from scripting.api import (
     RUNTIME_API, RUNTIME_PROPS, HARDWARE_ENUMS,
     KNOWN_EVENTS, KNOWN_EVENTS_BY_KIND, EVENT_REGISTRY,
-    STATELESS_MODULES, canonical_key, REF_TYPES, REF_ACTOR,
+    STATELESS_MODULES, canonical_key, module_call_form, REF_TYPES, REF_ACTOR,
     DOMAIN_ANIM, DOMAIN_SPRITE_ID, REF_COLLISION_BOX, BOX_PARAMS,
 )
 
@@ -59,7 +59,7 @@ class Candidate:
 
     `insert` est ce qui remplace le mot en cours de frappe (le membre seul,
     `play_anim`) — volontairement léger : l'infobulle porte déjà la signature.
-    `label` est ce que la liste affiche (`play_anim(name)`).
+    `label` est ce que la liste affiche avec son appelant (`self:play_anim(name)`).
     `tip` : les morceaux de l'infobulle (`title`, `body`, `note`), à composer par
     l'interface avec `ui.common.tooltip.tooltip(**tip)`."""
     insert:  str
@@ -163,16 +163,23 @@ def _plain_tip(sig: str, desc: str) -> dict[str, str]:
 # ─── Fabrique de candidats ────────────────────────────────────────
 
 def _member_label(name: str) -> str:
-    """Le libellé montré dans la liste : la signature, sans son préfixe de
-    module — `self:play_anim(name)` → `play_anim(name)`, `text:draw(...)` →
-    `draw(...)`."""
+    """Signature complète montrée dans la liste, sans changer le membre inséré.
+
+    Après `self.` l'insertion reste simplement `position`, mais l'affichage
+    conserve `self.position(Vec2)` : le propriétaire est indispensable pour
+    lire et auditer la couverture de l'API.
+    """
     is_prop = name in RUNTIME_PROPS
     entry = (api_snippets.prop_entry_dict(name) if is_prop
              else api_snippets.entry_dict(name))
-    label = entry["label"]              # "self:play_anim(name)" / "draw(x, y, id)"
-    # `entry_dict` porte le nom entier ; `prop_entry_dict` déjà juste le membre.
-    head, sep, tail = label.partition("(")
-    return f"{_split(head)[2]}{sep}{tail}" if sep else _split(head)[2]
+    label = entry["label"]
+    _, paren, tail = label.partition("(")
+    # Le catalogue utilise `actor.*`, mais un script l'écrit avec le récepteur
+    # courant `self.*`. `module_call_form` rend correctement les autres
+    # modules (`sfx.play` → `sfx:play`) et les méthodes de références.
+    shown = ("self." + name[len("actor."):] if name.startswith("actor.")
+             else module_call_form(name))
+    return f"{shown}{paren}{tail}" if paren else shown
 
 
 def _catalog_candidate(name: str) -> Candidate:

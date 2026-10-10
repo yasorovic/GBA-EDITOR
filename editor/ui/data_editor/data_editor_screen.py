@@ -20,10 +20,10 @@ from __future__ import annotations
 from ui.common.labels import label
 from typing import Optional
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSplitter
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QWidget, QVBoxLayout
 
-from ui.common.theme import C, QSS
+from ui.common.theme import C
+from ui.common.three_column_body import ThreeColumnBody
 from ui.common.asset_finder import AssetFinder
 from ui.common.asset_kinds import DATA_TABLES
 from core.project import Project
@@ -46,23 +46,15 @@ class DataEditorScreen(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        split = QSplitter(Qt.Orientation.Horizontal)
-        split.setStyleSheet(QSS.splitter)
-        root.addWidget(split, 1)
-
         self._finder    = AssetFinder(label('datascr.data_finder'), [DATA_TABLES],
                                       min_width=200, max_width=360)
         self._grid      = DataGridPanel()
         self._inspector = DataInspectorPanel()
 
-        split.addWidget(self._finder)
-        split.addWidget(self._grid)
-        split.addWidget(self._inspector)
-        split.setSizes([240, 700, 300])
-        split.setStretchFactor(0, 0)
-        split.setStretchFactor(1, 1)     # la grille absorbe le redimensionnement
-        split.setStretchFactor(2, 0)
-        split.setCollapsible(1, False)
+        self.body = ThreeColumnBody(self._finder, self._grid, self._inspector,
+                                    sizes=(240, 700, 300))
+        self.body.setCollapsible(1, False)
+        root.addWidget(self.body, 1)
 
         # Le finder rend l'ASSET, la grille travaille par nom : c'est ici, et
         # nulle part dans le finder, que se fait la conversion — le composant
@@ -82,6 +74,12 @@ class DataEditorScreen(QWidget):
         self._finder.load_project(project)
         self._grid.load_project(project)
         self._inspector.load_project(project)
+
+    def select_table(self, name: str):
+        """Ouvre la table `name` — navigation entrante depuis un autre écran (onglet Disk)."""
+        table = self._project.data_tables.get(name) if self._project else None
+        if table is not None:
+            self._finder.select(DATA_TABLES.label, table)
 
     def refresh(self):
         """Le projet a changé sous l'écran (undo, renommage ailleurs)."""

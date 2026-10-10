@@ -240,30 +240,13 @@ class ScriptEditor(BaseComponentEditor):
         self.insp._save_component_change(None)
 
     def _build_template(self, script_name: str) -> str:
-        """Résout le contexte de l'actor (composants présents) puis délègue
-        la génération du texte à scripting.script_templates (partagée avec
-        les autres points de création de script)."""
-        from core.models.components import CollisionBoxComponent, SoundFxComponent, SpriteComponent, component_type_name
+        """Crée le point d'entrée minimal, commun à tous les scripts d'acteur.
+
+        L'API Lua et le transpileur résolvent déjà les composants de l'acteur
+        au build ; aucun détail de cette plomberie ne doit être préécrit dans
+        le fichier de l'utilisateur.
+        """
         from scripting.script_templates import ScriptTemplateContext, generate_script_template
-        actor = self.insp._actor
-        comps = actor.components if actor else []
-
-        has_sprite = any(isinstance(c, SpriteComponent)  for c in comps)
-        has_sfx    = any(isinstance(c, SoundFxComponent) for c in comps)
-        boxes      = [c for c in comps if isinstance(c, CollisionBoxComponent)]
-
-        comp_labels = []
-        for c in comps:
-            base = component_type_name(c); tag = getattr(c, "tag", None)
-            comp_labels.append(f"{base}({tag})" if tag and tag != "body" else base)
-
-        ctx = ScriptTemplateContext(
-            kind="actor",
-            name=script_name,
-            actor_name=actor.name if actor else "?",
-            component_labels=comp_labels,
-            has_sprite=has_sprite,
-            has_sfx=has_sfx,
-            collision_tags=list(dict.fromkeys(c.tag or "body" for c in boxes)),
-        )
-        return generate_script_template(ctx)
+        return generate_script_template(ScriptTemplateContext(
+            kind="actor", name=script_name,
+        ))

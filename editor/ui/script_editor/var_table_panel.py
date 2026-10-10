@@ -8,7 +8,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 from ui.common.theme import C, T, S, QSS
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
-from core.command_dispatcher import unique_name
+from core.models.unique_name import unique_name
 from .colors import _C_GLOBAL, _C_CONST
 
 

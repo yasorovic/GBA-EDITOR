@@ -2,6 +2,20 @@
 dont la famille Scenes est le premier client (store partagé avec le Graphe)."""
 from __future__ import annotations
 
+import hashlib
+
+
+def _sid(name):
+    """L'id (12 chiffres hex) qu'un test donne à la scène `name` — déterministe, pour écrire les rangements sans projet."""
+    return hashlib.sha1(name.encode()).hexdigest()[:12]
+
+
+def _scene(name, **fields):
+    from core.models.scene import Scene
+    scene = Scene(name=name, **fields)
+    scene.id = _sid(name)
+    return scene
+
 
 def test_folded_nodes_range_les_assets_sous_leurs_dossiers():
     from core.asset_folder_store import AssetFolderStore
@@ -14,9 +28,9 @@ def test_folded_nodes_range_les_assets_sous_leurs_dossiers():
         village = store.create_folder("scenes", "Village")
 
         class _Scene:
-            def __init__(self, name): self.name = name
+            def __init__(self, name): self.name, self.id = name, _sid(name)
         shop, title = _Scene("Shop"), _Scene("Title")
-        store.move_member("scenes", "Shop", village.id)
+        store.move_member("scenes", _sid("Shop"), village.id)
 
         scheme = FolderScheme(
             folders=lambda: store.folders("scenes"),
@@ -24,8 +38,8 @@ def test_folded_nodes_range_les_assets_sous_leurs_dossiers():
             rename=lambda i, n: store.rename_folder("scenes", i, n),
             delete=lambda i: store.delete_folder("scenes", i),
             set_parent=lambda i, p: store.set_parent("scenes", i, p),
-            move=lambda s, i: store.move_member("scenes", s.name, i),
-            folder_of=lambda s: store.folder_of("scenes", s.name),
+            move=lambda s, i: store.move_member("scenes", s.id, i),
+            folder_of=lambda s: store.folder_of("scenes", s.id),
         )
         raw = [AssetNode(name="Shop", obj=shop), AssetNode(name="Title", obj=title)]
         roots = folded_nodes(raw, scheme)
@@ -42,7 +56,7 @@ def _scenes_project(tmp_path):
     from core.models.scene import Scene
     project = Project(tmp_path / "jeu")
     for name in ("Title", "Shop", "Arena"):
-        project.scenes.append(Scene(name=name))
+        project.scenes.append(_scene(name))
     return project
 
 
@@ -66,7 +80,7 @@ def test_le_project_viewer_montre_les_dossiers_de_scenes(qapp, tmp_path):
     project = _scenes_project(tmp_path)
     store = AssetFolderStore(project.root)
     folder = store.create_folder("scenes", "Town")
-    store.move_member("scenes", "Shop", folder.id)
+    store.move_member("scenes", _sid("Shop"), folder.id)
 
     panel = AssetsFinderPanel()
     panel.load_project(project)
@@ -176,7 +190,7 @@ def test_maj_clic_conserve_la_selection_active(qapp, tmp_path):
 
     project = _scenes_project(tmp_path)
     for name in ("Boss", "Credits"):
-        project.scenes.append(Scene(name=name))
+        project.scenes.append(_scene(name))
     panel = AssetsFinderPanel()
     panel.load_project(project)
 
@@ -324,7 +338,7 @@ def test_highlight_scene_dans_un_groupe_replie_surligne_le_groupe(qapp, tmp_path
     project = _scenes_project(tmp_path)
     store = AssetFolderStore(project.root)
     folder = store.create_folder("scenes", "Town")
-    store.move_member("scenes", "Shop", folder.id)
+    store.move_member("scenes", _sid("Shop"), folder.id)
 
     panel = AssetsFinderPanel()
     panel.load_project(project)
@@ -365,7 +379,7 @@ def test_deplacer_une_scene_vers_un_dossier_via_le_store(qapp, tmp_path):
     tree._move_to_folder(scheme, arena, folder.id)
 
     # Rangement reflété dans le store partagé (donc visible aussi côté Graphe).
-    assert store.folder_of("scenes", "Arena") == folder.id
+    assert store.folder_of("scenes", _sid("Arena")) == folder.id
 
 
 def test_creer_un_groupe_vide_depuis_le_menu_ajout(qapp, tmp_path):
@@ -404,7 +418,7 @@ def test_ctrl_g_groupe_les_scenes_selectionnees(qapp, tmp_path):
     panel._group_selected_scenes()
 
     groups = store.folders("scenes")
-    assert len(groups) == 1 and set(groups[0].members) == {"Title", "Arena"}
+    assert len(groups) == 1 and set(groups[0].members) == {_sid("Title"), _sid("Arena")}
 
 
 def test_ctrl_g_sans_selection_ne_cree_rien(qapp, tmp_path):
@@ -441,7 +455,7 @@ def test_clic_droit_grouper_range_un_lot(qapp, tmp_path):
     tree._group([title, arena])
 
     groups = store.folders("scenes")
-    assert len(groups) == 1 and set(groups[0].members) == {"Title", "Arena"}
+    assert len(groups) == 1 and set(groups[0].members) == {_sid("Title"), _sid("Arena")}
     assert changed          # le Graphe est prévenu (folders_changed → groups_changed)
 
 
@@ -460,7 +474,7 @@ def test_clic_droit_grouper_un_seul_item(qapp, tmp_path):
     shop = next(s for s in project.scenes if s.name == "Shop")
     tree._group([shop])
 
-    assert store.folders("scenes")[0].members == ("Shop",)
+    assert store.folders("scenes")[0].members == (_sid("Shop"),)
 
 
 def test_multi_deplacer_vers_le_dossier(qapp, tmp_path):
@@ -481,5 +495,37 @@ def test_multi_deplacer_vers_le_dossier(qapp, tmp_path):
     arena = next(s for s in project.scenes if s.name == "Arena")
     tree._move_many_to_folder(scheme, [title, arena], folder.id)
 
-    assert store.folder_of("scenes", "Title") == folder.id
-    assert store.folder_of("scenes", "Arena") == folder.id
+    assert store.folder_of("scenes", _sid("Title")) == folder.id
+    assert store.folder_of("scenes", _sid("Arena")) == folder.id
+
+
+def test_un_finder_range_seulement_les_familles_qui_le_declarent(qapp, tmp_path):
+    from core.asset_folder_store import AssetFolderStore
+    from ui.common.asset_finder import AssetFinder
+    from ui.common.asset_kinds import PREFABS, SCENES
+
+    project = _scenes_project(tmp_path)
+    finder = AssetFinder("Finder", [SCENES, PREFABS])
+    finder.load_project(project)
+
+    finder.set_folder_store(AssetFolderStore(project.root))
+
+    assert finder.folder_scheme(SCENES.label) is not None      # SCENES déclare folder_family
+    assert finder.folder_scheme(PREFABS.label) is None         # PREFABS ne le déclare pas : à plat
+
+
+def test_le_scheme_d_une_famille_range_par_id_dans_sa_propre_famille(tmp_path):
+    from core.asset_folder_store import AssetFolderStore
+    from ui.common.asset_finder import FolderScheme
+
+    store = AssetFolderStore(tmp_path)
+    sprites = FolderScheme.for_family(store, "sprites")
+    folder = sprites.create("Enemies", None)
+
+    class _Asset:
+        id = "0123456789ab"
+    sprites.move(_Asset, folder.id)
+
+    assert sprites.folder_of(_Asset) == folder.id
+    assert store.folder_of("sprites", "0123456789ab") == folder.id
+    assert store.folders("scenes") == []                       # une autre famille ne voit rien

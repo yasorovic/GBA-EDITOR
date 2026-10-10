@@ -15,7 +15,7 @@ pour un enum matériel vide.
 from __future__ import annotations
 
 from scripting.api import (
-    DOMAIN_SCENE, DOMAIN_CAMERA, DOMAIN_SFX, DOMAIN_MUSIC, DOMAIN_PREFAB,
+    DOMAIN_SCENE, DOMAIN_CAMERA, DOMAIN_SFX, DOMAIN_MUSIC, DOMAIN_JINGLE, DOMAIN_PREFAB,
     DOMAIN_FONT, DOMAIN_PALETTE, DOMAIN_TEXT, DOMAIN_LANG, DOMAIN_ACTOR,
     DOMAIN_UI_ELEMENT, DOMAIN_GLOBAL, REF_TYPE_TABLE,
     DOMAIN_SOUND_BOX_STATE, DOMAIN_JINGLE_BOX_STATE, DOMAIN_MUSIC_BOX_TRIGGER,
@@ -90,6 +90,7 @@ def names_by_domain(project, scene=None) -> dict[str, list[str]]:
         DOMAIN_SCENE:   _names(has("scenes")),
         DOMAIN_SFX:     _names(has("sfx")),
         DOMAIN_MUSIC:   _names(has("music")),
+        DOMAIN_JINGLE:  _names(has("jingles")),
         DOMAIN_PREFAB:  _names(has("prefabs")),
         DOMAIN_FONT:    _names(has("fonts")),
         DOMAIN_PALETTE: _names(has("palettes")),

@@ -22,14 +22,14 @@ import json
 
 from core.resources.resource_store import atomic_write
 from core.models import project_json
-from core.models.ids import new_id
+from core.models.ids import is_id, new_id
 from core.models.settings import GlobalVar, Constant
 from scripting.api import DOMAIN_GLOBAL
 
 
 class ProjectVariablesMixin:
     # ── I/O variables (globals + constants) ─────────────────────────
-    # Assets côté éditeur sans dépendance externe -> project/variables.json,
+    # Assets côté éditeur sans dépendance externe -> assets/variables.json,
     # pas project.json (config racine uniquement, cf. ARCHITECTURE.md).
 
     def save_variables(self):
@@ -49,7 +49,7 @@ class ProjectVariablesMixin:
                 for c in self.constants
             ],
         }
-        self.project_dir.mkdir(parents=True, exist_ok=True)
+        self.variables_file.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(self.variables_file, project_json.dumps(data))
 
     def load_variables(self):
@@ -64,7 +64,7 @@ class ProjectVariablesMixin:
                 type    = g.get("type", "int"),
                 default = g.get("default", 0),
                 desc    = g.get("desc", ""),
-                id      = int(g.get("id", 0)),
+                id      = str(g.get("id") or ""),
                 persist = bool(g.get("persist", False)),
                 # Absent = scalaire : c'est ce qu'était toute variable avant la
                 # v0.20, donc un projet existant se relit à l'identique.
@@ -78,7 +78,7 @@ class ProjectVariablesMixin:
                 type  = c.get("type", "int"),
                 value = c.get("value", 0),
                 desc  = c.get("desc", ""),
-                id    = int(c.get("id", 0)),
+                id    = str(c.get("id") or ""),
             )
             for c in d.get("constants", [])
         ]
@@ -92,8 +92,8 @@ class ProjectVariablesMixin:
     def assign_variable_ids(self) -> int:
         """Donne un id aux variables qui n'en ont pas.
 
-        C'est ce qui rend `variables.json` éditable à la main : un id est un
-        entier opaque, personne ne peut en inventer un, donc une variable
+        C'est ce qui rend `variables.json` éditable à la main : un id est une
+        chaîne hexadécimale opaque, personne ne peut en inventer une, donc une variable
         ajoutée au clavier n'en a pas et le reçoit ici. Idempotent — une
         variable qui en a déjà un n'est jamais renumérotée, sans quoi tout ce
         qui la référence casserait à l'ouverture suivante."""
@@ -116,10 +116,16 @@ class ProjectVariablesMixin:
     def variable_name_taken(self, kind: str, name: str, *, exclude=None) -> bool:
         return any(e is not exclude and e.name == name for e in self._variable_list(kind))
 
+    @staticmethod
+    def variable_name_reserved(name: str) -> bool:
+        """Un nom qui a la forme d'un id (12 chiffres hexadécimaux) est refusé :
+        `{"var": ...}` distingue le nom de l'id à cette seule forme."""
+        return is_id(name)
+
     def add_variable(self, kind: str, name: str):
         """Ajoute un global ou une constante. Retourne None si le nom est vide ou déjà pris (par type)."""
         name = name.strip()
-        if not name or self.variable_name_taken(kind, name):
+        if not name or self.variable_name_reserved(name) or self.variable_name_taken(kind, name):
             return None
         entry = Constant(name=name) if kind == "const" else GlobalVar(name=name)
         # Id tout de suite, et pas au prochain chargement du projet : c'est lui
@@ -134,7 +140,7 @@ class ProjectVariablesMixin:
     def rename_variable(self, kind: str, entry, new_name: str) -> bool:
         """Renomme en place. Retourne False (no-op) si le nom est vide/inchangé/déjà pris."""
         new_name = new_name.strip()
-        if not new_name or new_name == entry.name:
+        if not new_name or new_name == entry.name or self.variable_name_reserved(new_name):
             return False
         if self.variable_name_taken(kind, new_name, exclude=entry):
             return False

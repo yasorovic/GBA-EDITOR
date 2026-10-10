@@ -38,20 +38,25 @@ def _fn(name: str) -> ApiFunc | None:
     return RUNTIME_API.get(name)
 
 
-# Une référence s'écrit sur une VARIABLE, pas sur le nom de son type : le libellé
-# du bouton dit le type (`collision_box:overlaps`), le snippet inséré montre
-# l'usage (`hb:overlaps(other)`). Même convention que le JSON pour `sfx`
-# (`sfx:stop()` → `pas:stop()`). La variable se DÉCLARE avec le type
-# (`api.REF_TYPE_TABLE`) : pas de seconde liste ici.
+# Le snippet d'une méthode de référence porte le nom de sa SECTION, jamais une variable
+# inventée : `layer:show()`, `tilemap:set_tile()`, `sfx:set_panning()`. L'auteur lit ainsi
+# d'où vient la fonction et comment la préfixer. Ce n'est pas du Lua validé tel quel — la
+# référence s'obtient d'abord (`layer:get(0)`, `sfx:play(...)`) et se tient dans une variable
+# —, c'est le préfixe à reconnaître. Il se DÉCLARE avec le type (`api.REF_TYPE_TABLE`) ;
+# seule la section Tilemap, qui partage le type du calque, se distingue ci-dessous.
+_TILEMAP_C_PREFIX = "tilemap_"   # les fonctions C de la section Tilemap, toutes préfixées ainsi
 
 
 def _on_variable(name: str) -> str:
-    """`collision_box:overlaps` / `collision_box.solid` → `hb:overlaps` / `hb.solid`.
+    """`background_layer:show` → `layer:show` ; `background_layer:set_tile` → `tilemap:set_tile`.
     Une FONCTION de module (`collision_box.get_tile`) garde son nom : le point ne
     dit une propriété que si le catalogue la connaît comme telle."""
     for ref, decl in REF_TYPE_TABLE.items():
         if name.startswith(f"{ref}:") or (name.startswith(f"{ref}.") and name in RUNTIME_PROPS):
-            return decl.variable + name[len(ref):]
+            func = RUNTIME_API.get(name)
+            prefix = ("tilemap" if func is not None and func.c_func.startswith(_TILEMAP_C_PREFIX)
+                      else decl.prefix)
+            return prefix + name[len(ref):]
     # La fonction d'un MODULE s'écrit avec « : » (`input:pressed`) : la clé du catalogue reste
     # `input.pressed`, seule sa forme écrite change (`api.module_call_form`).
     return module_call_form(name)
@@ -129,7 +134,7 @@ def description(name: str) -> str:
 def bare(name: str) -> str:
     """Ce que le bouton INSÈRE dans le script : le nom, sans exemple.
 
-    `actor:spawn()`, `self:move()`, `hb:overlaps()`, et pour une propriété son nom
+    `actor:spawn()`, `self:move()`, `collision_box:overlaps()`, et pour une propriété son nom
     seul (`self.active`). Ni argument d'illustration ni valeur d'écriture : le
     clic pose de quoi écrire, l'auteur complète. Un exemple inséré est un exemple
     à effacer (`actor:spawn("Bullet", vec2(116, 76))` — un acteur qui n'existe

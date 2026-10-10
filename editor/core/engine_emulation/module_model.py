@@ -251,7 +251,12 @@ _MOD_TAGS = frozenset({
 
 
 def detect_format(data: bytes) -> str | None:
-    """« mod » / « s3m » / « xm » / « it », ou None si ce n'en est aucun."""
+    """« mod » / « s3m » / « xm » / « it » / « wav », ou None si ce n'en est aucun.
+
+    « wav » n'est pas un module : c'est une piste que `core/wav_module.py`
+    encapsule en XM (cf. ce fichier), et qui se lit donc comme un module."""
+    if data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+        return "wav"
     for offset, magic, kind in _SIGNATURES:
         if data[offset:offset + len(magic)] == magic:
             return kind
@@ -272,6 +277,10 @@ def load_module(path) -> Module:
     kind = detect_format(data)
     if kind is None:
         raise ValueError("unrecognised module format (neither MOD, S3M, XM nor IT)")
+    if kind == "wav":
+        from core.wav_module import wav_to_xm
+        from .xm_file import parse_xm
+        return parse_xm(wav_to_xm(path))
     if kind == "mod":
         from .mod_file import parse_mod
         return parse_mod(data)

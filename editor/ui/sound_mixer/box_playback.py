@@ -29,6 +29,7 @@ from PyQt6.QtMultimedia import QAudioFormat, QAudioSink, QMediaDevices
 from core.engine_emulation.module_model import load_module
 from core.engine_emulation.module_render import render_module_marked, GBA_MIX_RATE
 from core.engine_emulation.music_deck import MusicDeck, Track, MODULE_FULL
+from core.engine_emulation.wav_render import render_wav
 from core.models.audio import volume_to_module
 from core.models.sound_box import TRANSITION_CUT
 
@@ -97,6 +98,11 @@ class BoxPlayer(QObject):
         return self._sink is not None
 
     @property
+    def sounding(self) -> bool:
+        """Le deck produit encore du son (faux quand un son non bouclé a fini)."""
+        return self._deck.playing
+
+    @property
     def current_state(self) -> str:
         return self._current
 
@@ -106,6 +112,14 @@ class BoxPlayer(QObject):
         """Démarre sur l'état de départ — ce que fait `main()` au boot."""
         if self.running or self._box is None:
             return
+        self._open_sink()
+
+        start =self._box.start or (self._box.states[0].name
+                                    if self._box.states else "")
+        self._current = ""
+        self._enter(start, transition=False)
+
+    def _open_sink(self):
         fmt = QAudioFormat()
         fmt.setSampleRate(GBA_MIX_RATE)
         fmt.setChannelCount(2)
@@ -116,10 +130,23 @@ class BoxPlayer(QObject):
         self._device.open(QIODevice.OpenModeFlag.ReadOnly)
         self._sink.start(self._device)
 
-        start = self._box.start or (self._box.states[0].name
-                                    if self._box.states else "")
+    def preview(self, project, asset) -> bool:
+        """Joue UN asset du Sound finder, hors de toute boîte.
+
+        Même deck et même sortie que la boîte : ce qu'on entend est rendu
+        comme la boîte le rendrait. Un effet joue une fois ; une musique suit
+        sa propre boucle. Rend False (et dit pourquoi) si rien ne peut sonner.
+        """
+        track = self._track_of_asset(project, asset)
+        if track is None:
+            return False
+        if not self.running:
+            self._open_sink()
+        loop = bool(getattr(asset, "loop", False))
         self._current = ""
-        self._enter(start, transition=False)
+        self._deck.play(track, volume_to_module(asset.volume), loop)
+        self.track_changed.emit(asset.name, loop)
+        return True
 
     def stop(self):
         if self._sink is not None:
@@ -207,15 +234,29 @@ class BoxPlayer(QObject):
         if music is None or not music.asset:
             self.message.emit(label('boxplay.tat_name_piste_introuvable', name=state.name))
             return None
-        path = self._project.asset_abs(music.asset)
+        return self._render_file(self._project, music, state.name)
+
+    def _track_of_asset(self, project, asset) -> Optional[Track]:
+        if not asset.asset:
+            self.message.emit(label('boxplay.tat_name_piste_introuvable', name=asset.name))
+            return None
+        return self._render_file(project, asset, asset.name)
+
+    def _render_file(self, project, asset, owner: str) -> Optional[Track]:
+        """Le fichier de l'asset rendu et mis en cache ; `owner` nomme le
+        demandeur (état de boîte ou asset) dans les messages."""
+        path = project.asset_abs(asset.asset)
         if path is None or not path.exists():
-            self.message.emit(label('boxplay.tat_name_fichier_manquant', name=state.name))
+            self.message.emit(label('boxplay.tat_name_fichier_manquant', name=owner))
             return None
         if path not in self._tracks:
             try:
-                pcm, marks = render_module_marked(load_module(path))
+                if path.suffix.lower() == ".wav":
+                    self._tracks[path] = render_wav(path)
+                else:
+                    pcm, marks = render_module_marked(load_module(path))
+                    self._tracks[path] = Track(pcm=pcm, marks=marks)
             except Exception as exc:
-                self.message.emit(label('boxplay.name_illisible_exc', name=music.name, exc=exc))
+                self.message.emit(label('boxplay.name_illisible_exc', name=asset.name, exc=exc))
                 return None
-            self._tracks[path] = Track(pcm=pcm, marks=marks)
         return self._tracks[path]

@@ -27,6 +27,7 @@ from ui.common.widgets import W
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 
+from core.models.unique_name import unique_name
 from core.models.data_table import (DataTable, DataColumn, COLUMN_TYPES,
                                     COLUMN_REFERENCES)
 from core.history import get_history, RemoveListItemCmd
@@ -405,12 +406,7 @@ class DataGridPanel(QWidget):
     # ── Colonnes ──────────────────────────────────────────────────
 
     def _unique_column(self, base: str) -> str:
-        if self._table and not self._table.column(base):
-            return base
-        i = 2
-        while self._table.column(f"{base}_{i}"):
-            i += 1
-        return f"{base}_{i}"
+        return unique_name(base, [c.name for c in self._table.columns] if self._table else [])
 
     def _add_column(self):
         if not self._table:

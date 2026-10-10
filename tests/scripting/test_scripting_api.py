@@ -420,6 +420,29 @@ def test_toute_entree_du_catalogue_est_rangee_et_aucune_ne_finit_en_vrac():
     assert all(c["entries"] for c in cats), "catégorie sans entrée"
 
 
+def test_actor_commence_par_identite_puis_acces_et_cycle_de_vie():
+    """La section Actor se lit comme un parcours d'auteur, pas comme l'ordre
+    interne des tables du runtime."""
+    from scripting import api_reference
+
+    actor = next(category for category in api_reference.get_categories()
+                 if category["name"] == "Actor")
+    anchors = [entry["doc_anchor"] for entry in actor["entries"]]
+    assert anchors[:4] == ["actor-name", "actor-get", "actor-count", "actor-spawn"]
+    assert anchors.index("actor-active") < anchors.index("actor-activate")
+    assert anchors.index("actor-activate") < anchors.index("actor-destroy")
+
+
+def test_apply_velocity_est_rangee_dans_physics():
+    from scripting import api_reference
+
+    categories = {category["name"]: category for category in api_reference.get_categories()}
+    physics = {entry["doc_anchor"] for entry in categories["Physics"]["entries"]}
+    actor = {entry["doc_anchor"] for entry in categories["Actor"]["entries"]}
+    assert "actor-apply_velocity" in physics
+    assert "actor-apply_velocity" not in actor
+
+
 def test_lordre_du_json_gouverne_lecran():
     """Une catégorie vidée par le filtre gardait son en-tête mais perdait sa
     place : « Transform », première du fichier, se recréait en dernier une fois
@@ -436,8 +459,8 @@ def test_lordre_du_json_gouverne_lecran():
     assert rendu[0] == "Transform"
 
 
-def test_les_huit_sections_ne_perdent_aucune_entree():
-    """Le rangement (ROADMAP v0.16) regroupe les 24 catégories en 8 sections
+def test_les_sections_ne_perdent_aucune_entree():
+    """Le rangement (ROADMAP v0.16) regroupe les 24 catégories en sections
     sans rien perdre : chaque entrée du catalogue atterrit dans une section, et
     aucune section « orpheline » (un nom de catégorie brut) n'apparaît — signe
     qu'une catégorie a échappé à `SECTIONS`."""
@@ -445,7 +468,7 @@ def test_les_huit_sections_ne_perdent_aucune_entree():
 
     secs = api_reference.get_sections()
     assert [s["label"] for s in secs] == [k for k, _ in api_reference.SECTIONS], (
-        "8 sections attendues, dans l'ordre de SECTIONS — une section orpheline "
+        "Les sections attendues, dans l'ordre de SECTIONS — une section orpheline "
         "signale une catégorie hors de SECTIONS")
 
     n_sec = sum(len(g["entries"])
@@ -455,9 +478,9 @@ def test_les_huit_sections_ne_perdent_aucune_entree():
 
 
 def test_la_couche_moteur_se_replie_la_bonne():
-    """Le drapeau moteur (« Aller plus loin ») est per-entrée, plus fin que la
-    catégorie : `sfx.play` reste itération quand `sound_box.set_state` est
-    moteur, tous deux dans « Le son »."""
+    """Le son garde ses boîtes visibles et nommées : elles ne sont pas assez
+    découvrables pour vivre sous « Aller plus loin ». Les autres sections
+    conservent leur séparation itération / moteur."""
     from scripting import api_reference
 
     secs = {s["label"]: s for s in api_reference.get_sections()}
@@ -466,13 +489,34 @@ def test_la_couche_moteur_se_replie_la_bonne():
 
     son = secs["scrsb.sec.sound"]
     assert "sfx:play" in keys(son["iteration"])
-    assert "sound_box:set_state" in keys(son["engine"])
+    assert "sound_box:set_state" in keys(son["iteration"])
+    assert not son["engine"]
+    assert [g["name"] for g in son["iteration"]] == [
+        "Actor sound", "Sound effects", "Music", "Jingles",
+        "SoundBox · contextual effects", "JingleBox · contextual jingles",
+        "MusicBox · adaptive music",
+    ]
 
 
     # Le décor a une face itération ET une face moteur pour le MÊME calque.
-    decor = secs["scrsb.sec.scenery"]
-    assert "background_layer:show" in keys(decor["iteration"])
-    assert "map" in keys(decor["engine"])      # propriété `background_layer.map`, libellé court
+    scene = secs["scrsb.sec.scene"]
+    assert "background_layer:show" in keys(scene["iteration"])
+    assert "map" in keys(scene["engine"])      # propriété `background_layer.map`, libellé court
+
+
+def test_la_sidebar_peut_masquer_temporairement_l_audio_non_essentiel():
+    """Le recentrage vers `sfx` et `music` ne retire pas les raccourcis
+    d'acteur ou les boîtes du moteur : il les retire seulement de la sidebar."""
+    from scripting import api_reference
+
+    son = next(s for s in api_reference.get_sections(show_extended_audio=False)
+               if s["label"] == "scrsb.sec.sound")
+    shown = {e["label"].split("(")[0].strip()
+             for g in son["iteration"] for e in g["entries"]}
+    assert not {"self:play_sfx", "sound_box:set_state", "sound_box:set_volume",
+                "jingle_box:set_state", "jingle_box:set_volume",
+                "music_box:trigger"} & shown
+    assert {"sfx:play", "music:play", "music:jingle"} <= shown
 
 
 

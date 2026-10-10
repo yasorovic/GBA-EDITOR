@@ -87,7 +87,7 @@ def make_sprite(index: int, sprite_dir: Path) -> str:
             }],
         }],
     }
-    write_json(sprite_dir / f"{name}.json", sidecar)
+    write_json(sprite_dir / f"{name}.sprite", sidecar)
     return name
 
 
@@ -106,7 +106,7 @@ def make_sfx(index: int, sfx_dir: Path) -> str:
         out.setsampwidth(2)
         out.setframerate(rate)
         out.writeframes(frames)
-    write_json(sfx_dir / f"{name}.json", {
+    write_json(sfx_dir / f"{name}.sfx", {
         "name": name,
         "asset": f"assets/sfx/{name}.wav",
         "volume": 100,
@@ -211,7 +211,7 @@ def main() -> None:
         batch = [actor(name, first + offset + 1,
                        sfx_names[first + offset] if first + offset < SFX_COUNT else None)
                  for offset, name in enumerate(names[first:first + SPRITES_PER_SCENE])]
-        write_json(scenes_dir / f"BenchmarkScene{scene_index + 1:02d}.json",
+        write_json(scenes_dir / f"BenchmarkScene{scene_index + 1:02d}.scene",
                    scene(f"BenchmarkScene{scene_index + 1:02d}", batch))
 
     (TARGET / "README.md").write_text(

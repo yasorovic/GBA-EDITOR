@@ -42,7 +42,7 @@ contexte actif :
 from __future__ import annotations
 
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QVBoxLayout, QSplitter, QStackedWidget, QMessageBox,
+    QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget, QMessageBox,
     QFrame, QToolButton, QLabel, QButtonGroup,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -51,8 +51,8 @@ from PyQt6.QtGui import QFont
 from core.history import get_history, SetFieldCmd
 from ui.common.theme import C
 from ui.common.labels import label
-from ui.text_editor.colors import TEXT_COLOR
 from ui.common.asset_finder import AssetFinder
+from ui.common.three_column_body import ThreeColumnBody
 from ui.common.asset_kinds import FONTS, FONT_ASSETS
 from ui.text_editor.text_panel import TextPanel
 from ui.text_editor.text_finder import TextFinder
@@ -125,13 +125,6 @@ class TextEditorScreen(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        split = QSplitter(Qt.Orientation.Horizontal)
-        split.setStyleSheet(
-            f"QSplitter::handle{{background:{C.BORDER};}}"
-            f"QSplitter::handle:horizontal{{width:2px;}}"
-            f"QSplitter::handle:hover{{background:{TEXT_COLOR};}}"
-        )
-
         # Le Finder est lui aussi contextuel : il ne mélange pas la source
         # bitmap, la recette FontAsset et les textes avec lesquels elles
         # travaillent. Les trois boutons sont placés ICI, pas dans une barre
@@ -184,15 +177,10 @@ class TextEditorScreen(QWidget):
         self._inspectors.addWidget(self._font_insp)   # _CTX_FONT
         self._inspectors.addWidget(self._font_asset_insp)  # _CTX_FONT_ASSET
 
-        split.addWidget(self._finder_host)
-        split.addWidget(self._center_host)
-        split.addWidget(self._inspectors)
-        split.setSizes([240, 800, 300])
-        split.setStretchFactor(0, 0)
-        split.setStretchFactor(1, 1)
-        split.setStretchFactor(2, 0)
-        split.setCollapsible(1, False)
-        root.addWidget(split)
+        self.body = ThreeColumnBody(self._finder_host, self._center_host, self._inspectors,
+                                    sizes=(240, 800, 300))
+        self.body.setCollapsible(1, False)
+        root.addWidget(self.body)
 
         # Bascule de contexte par sélection — jamais par un onglet.
         self._fonts.selected.connect(lambda _kind, f: self._on_font_selected(f))
@@ -304,6 +292,14 @@ class TextEditorScreen(QWidget):
                 # le sélecteur et le résumé doivent alors se relire ensemble.
                 self._font_asset_insp.load(font_asset, self._project)
                 self._font_asset_preview.load(font_asset, self._project)
+
+    def select_font(self, family: str, name: str):
+        """Ouvre la police `name` (« fonts ») ou la recette `name` (« font_assets ») — navigation entrante depuis l'onglet Disk."""
+        kind, store = (FONTS, self._project.fonts) if family == "fonts" else (FONT_ASSETS, self._project.font_assets)
+        font = store.get(name)
+        if font is not None:
+            self._set_context(self._CTX_FONT if family == "fonts" else self._CTX_FONT_ASSET)    # le finder ne montre que la famille du contexte
+            self._fonts.select(kind.label, font)
 
     # ── Contexte ──────────────────────────────────────────────────
 

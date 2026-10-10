@@ -295,9 +295,13 @@ chantiers clos ; ce tableau ne garde que ceux **non livrés**.
 | Piste Collision — un `Contact` d'événement | 2026-09-25 | À ouvrir — non verrouillée (normale acteur↔acteur), extraite de la struct `Actor` allégée, code non commencé — voir [ci-dessous](#piste-collision--un-contact-dévénement-pas-une-dernière-collision) |
 | Le cache de scène | 2026-09-16 | À ouvrir — voir [ci-dessous](#le-cache-de-scène-rouvrir-une-scène-déjà-visitée-sans-tout-redécoder) |
 | Undo/redo des sidecars d'éditeur | — | À ouvrir — envisagé pour **V2**, voir [ci-dessous](#undoredo-des-sidecars-déditeur-annuler-la-création-dun-groupe-un-déplacement-de-nœud) |
-| L'atelier Texte réuni — écrire et voir dans un même écran | 2026-09-19 | Route vers v1.0-stable — non prioritaire pour l'alpha (décidé le 2026-09-29) ; conception et décision verrouillée, aucune étape commencée. Voir [ci-dessous](#chantier-transverse--latelier-texte-réuni-écrire-et-voir-dans-un-même-écran) |
+| L'écran Texte n'édite et ne range que du contenu | 2026-10-10 | **À ouvrir** — conception proposée, **rien de verrouillé**, code non commencé ; retire l'aperçu écran et édite le contenu dans la table. Remplace « L'atelier Texte réuni » (abandonné). Voir [ci-dessous](#lécran-texte-nédite-et-ne-range-que-du-contenu) |
+| Un pont entre l'écran Texte et les tables de données — créer un dialogue sans tout renseigner à la main | 2026-10-10 | **À ouvrir** — besoin posé, pistes A (Texte → table) et B (« Nouveau texte » dans la cellule) **retenues**, le reste non verrouillé, code non commencé ; le dialogue reste une table de données (pas d'éditeur de dialogue). Voir [ci-dessous](#un-pont-entre-lécran-texte-et-les-tables-de-données--créer-un-dialogue) |
 | La chaîne `if/elseif` sur une constante devient un `switch` C | 2026-10-06 | Route vers v1.0-stable — non prioritaire pour l'alpha ; piste de réflexion, **rien de verrouillé**, code non commencé, gain de perf non mesuré. Voir [ci-dessous](#chantier-transverse--la-chaîne-ifelseif-sur-une-constante-devient-un-switch-c) |
 | L'élément d'interface appartient à sa scène — des noms locaux | 2026-10-03 | À ouvrir — priorité non arbitrée ; conception proposée, **aucune décision verrouillée**, code non commencé. Garde-fou en place : un nom en double entre deux layouts est une erreur de build. Voir [ci-dessous](#lélément-dinterface-appartient-à-sa-scène--des-noms-locaux) |
+| Tout ce que l'auteur manipule vit dans `assets/` | 2026-10-10 | **En cours** — scènes, prefabs, mises en page, boîtes sonores, tables de données, polices logiques, textes, variables : de `project/` vers `assets/`. Voir [ci-dessous](#tout-ce-que-lauteur-manipule-vit-dans-assets) |
+| Une seule règle de nom libre | 2026-10-09 | **En cours** — huit règles de suffixe coexistent (`_2`, `_02`, `_copy`, `_1`, `Camera 2`, `axis1`, `Actor_0`, `Palette 2`) ; toutes passent à `coin`, `coin_2`, `coin_3`. Voir [ci-dessous](#une-seule-règle-de-nom-libre) |
+| Source ≠ asset — l'arborescence du disque et l'id stable | 2026-10-09 | **Livré pour l'essentiel (2026-10-11)** — ids dans tous les sidecars, extension par type d'asset, assets et sources rangés où l'on veut sous `assets/` (fonds, palettes, scripts compris), onglet Disk (glisser-déposer, *Create asset*, suppression annulable, détachement complet source ≠ asset) ; **reste** : dossiers virtuels des autres finders, références par id, associations de fichiers (installateur, zip portable, AppImage). Voir [ci-dessous](#source--asset--larborescence-du-disque-et-lid-stable) |
 | La fiabilité du journal de build | 2026-10-03 | **Tranche 1 livrée le 2026-10-03** (aucune erreur avalée, tout script vérifié, fautes injectées) ; **tranche 2 livrée le 2026-10-03** (diagnostic unique, `build.log`, sortie des outils classée) ; reste ouvert : les codes stables, si le besoin apparaît. Voir [ci-dessous](#la-fiabilité-du-journal-de-build) |
 
 ---
@@ -941,6 +945,479 @@ build et jamais stocké** (source de vérité unique).
 
 ---
 
+## Tout ce que l'auteur manipule vit dans `assets/`
+
+### D'où vient la question (2026-10-10)
+
+Le chantier « Source ≠ asset » a posé que `assets/` est le dossier de l'auteur, qu'il organise lui-même (modèle Unity /
+Godot / Unreal). Or une partie de ce qu'il manipule vivait encore sous `project/` : l'onglet Disk n'en montrait rien. La
+décision avait été de garder `project/` pour « ce qui n'a pas de source à relier » ; elle est **révisée** : `project/`
+n'est plus pour l'auteur, `assets/` l'est pour tout.
+
+### Décisions verrouillées (2026-10-10)
+
+- **Tout ce que l'auteur a le droit de manipuler passe de `project/` à `assets/`**, sous le MÊME nom de dossier (un seul
+  geste, déplacer sans renommer ; normaliser — `prefab` → `prefabs`… — viendra avec les dossiers librement déplaçables) :
+
+  | Avant | Après |
+  | --- | --- |
+  | `project/scenes/` | `assets/scenes/` |
+  | `project/prefab/` | `assets/prefab/` |
+  | `project/ui_layouts/` | `assets/ui_layouts/` |
+  | `project/music_boxes/`, `jingle_boxes/`, `sound_boxes/` | `assets/music_boxes/`, `jingle_boxes/`, `sound_boxes/` |
+  | `project/data/` (tables de données) | `assets/data/` |
+  | `project/fonts_assets/` (polices logiques) | `assets/fonts_assets/` |
+  | `project/texts.json`, `texts_<langue>.json` | `assets/texts.json`, `assets/texts_<langue>.json` |
+  | `project/variables.json` | `assets/variables.json` |
+
+- **`project/` ne garde que ce qui n'est pas à l'auteur** : `editor/` (positions du Graphe, dossiers virtuels, manifeste de
+  rattrapage — l'état interne de l'éditeur), `licenses/` et `README.md`.
+- Les textes et les variables sont des tables du projet entier, pas des assets nommés : ils se posent à la RACINE de
+  `assets/`, pas dans un sous-dossier — `assets/data/` est lu comme « une table par fichier » et les avalerait.
+- Les projets existants se migrent par `tools/migrate_project_to_assets.py` (comme pour les ids : aucune lecture de
+  l'ancien emplacement dans l'éditeur, le projet n'étant pas diffusé), appliqué aux deux démos et au starter.
+
+### Ce que ça touche
+
+- **Chemins** : les propriétés de `core/project_paths.py` (une dizaine), plus les emplacements écrits en dur — la création
+  des dossiers à l'ouverture (`Project.load`, `Project.create`), la surveillance (`ProjectWatcher`), les traductions
+  (`texts_<langue>.json`), la copie d'un starter.
+- **L'onglet Disk** : ces fichiers y apparaissent ; ils doivent être marqués ASSET (famille, icône) et non « Non géré ».
+- **Tests** : ceux qui construisent un projet à la main ou citent `project/<famille>` (une quinzaine).
+- **Docs** : ARCHITECTURE (la disposition d'un projet), les en-têtes de module qui citent `project/`.
+
+### Ordre d'implémentation
+
+1. Les chemins et leurs utilisateurs (code, surveillance, starters).
+2. L'onglet Disk reconnaît ces familles.
+3. Le script de migration, appliqué aux démos et au starter.
+4. Les tests, les docs, la chasse au code mort.
+
+---
+
+## Une seule règle de nom libre
+
+### D'où vient la question (2026-10-09)
+
+En préparant le chantier « Source ≠ asset » (un nom d'asset est unique dans le projet, un nom déjà pris est
+suffixé), un balayage du code a trouvé **huit** façons de suffixer un nom déjà pris :
+
+| Règle | Suite | Où |
+| --- | --- | --- |
+| `unique_name` | `coin`, `coin_2`, `coin_3` | scènes, prefabs, scripts, caméras (dispatcher), pistes, variables, dossiers |
+| copies à la main de la même règle | `_2`, `_3` | groupe de dossier, id de composant, table et colonne de données, variable d'export |
+| numéro sur 2 chiffres | `boite_bas`, `boite_bas_02` | éléments d'interface, clés de texte, mise en page renommée ou créée pour une scène |
+| duplicata d'acteur | `Hero_copy`, `Hero_copy2` | `_copy_name` |
+| instance de prefab | `Ball`, `Ball_1`, `Ball_2` | dispatcher |
+| caméra de départ | `Camera`, `Camera 2` | `Project.seed_default_camera` |
+| toujours numéroté, sans séparateur | `axis1`, `input1`, `lang1`, `tag1`, `sequence1`, `Part1` | cartes de l'inspecteur |
+| acteur posé au canvas | `Actor_0`, `Actor_1` | `canvas_tools` |
+| assets, polices, palettes | `Palette`, `Palette 2` | `asset_kinds._unique` |
+
+Deux gestes donnaient deux suites différentes pour le même objet (un acteur depuis l'arbre ou depuis le canvas ;
+une caméra de départ ou ajoutée ensuite).
+
+### Décision (2026-10-09)
+
+**Une seule règle : `base`, puis `base_2`, `base_3`…**, celle de `unique_name`. Elle vit dans
+`core/models/unique_name.py` (couche modèle, sans dépendance), et tout le monde l'appelle. Sont **supprimés**,
+pas conservés à côté : `_copy_name` (un duplicata d'acteur devient `Hero_2`, la distinction « copie » /
+« création » est abandonnée), `unique_region_name` et `unique_element_name`, `asset_kinds._unique`, et chaque
+boucle écrite à la main. Les noms déjà enregistrés dans un projet ne changent pas : seule la suite des
+NOUVEAUX noms change.
+
+---
+
+## Source ≠ asset — l'arborescence du disque et l'id stable
+
+### D'où vient la question (2026-10-09)
+
+L'auteur a rangé ses sons dans une arborescence (`assets/sfx/platformer/wav/…`, 556 fichiers dont 175 `.wav`
+réels). L'éditeur ne la voit pas : la synchronisation fait `glob("*")` à plat
+(`asset_reconciliation.reconcile_sfx_and_music`), et l'identité d'un asset est **le nom du fichier sans
+extension** (`path.stem`) — le sidecar `GOAL.json` porte `"name"` et `"asset"`, aucun id. 10 noms de `.wav`
+apparaissent dans plusieurs dossiers (`coin`, `die`, `fireball`…).
+
+Le but à terme : un dossier `assets/` **vierge** que l'auteur organise comme il veut (modèle Unity / Godot /
+Unreal), puis un clic droit sur une **source** → *Create asset* (l'auteur choisit le type d'asset à en tirer).
+Un script ne référence jamais une source, toujours un asset.
+
+### Ce que font les trois moteurs
+
+Tous séparent l'identité de l'emplacement : Unity un GUID dans un `.meta` voisin du fichier ; Godot le chemin
+`res://` plus, depuis la 4.4, un `uid://` ; Unreal le chemin de package complet. Deux `coin` dans deux dossiers
+ne se heurtent dans aucun des trois, et l'auteur choisit une référence en la sélectionnant plutôt qu'en tapant
+un nom.
+
+### Ce qui existe déjà
+
+| Objet | Identité | Où |
+| --- | --- | --- |
+| Variables | id opaque, nom renommable | `core/models/ids.py`, `project_variables.py` |
+| Textes | id opaque, la clé est proposée | `assets/texts.json`, `project_texts.py` |
+| Dossiers d'assets et de scène, notes du Graphe | id opaque, imbricables (`parent_id`) | `core/asset_folder_store.py`, `core/scene_tree_state.py` |
+| **Assets** (sfx, sprites, fonds, musiques…) | **le nom** | sidecars `*.json` |
+
+`asset_folder_store` range des assets par dossiers d'éditeur. **Ses `members` sont des ids depuis le 2026-10-10**
+(famille Scenes, la seule qui en ait) ; ils étaient des noms, et renommer ou déplacer le fichier d'une scène la
+faisait sortir de son dossier. Le store ne connaît que des clés opaques ; `ResourceStore.id_of(nom)` /
+`name_of(id)` traduisent, et le Graphe (qui pense en noms de carte) ne traduit qu'en deux méthodes
+(`_scene_id`, `_folder_of_scene`). Aucun outil de migration : un `asset-folders.json` d'avant garde des noms que
+`prune` efface à l'ouverture (aucun projet connu n'en portait).
+**Pour étendre à une autre famille :** lui bâtir un `FolderScheme` qui passe `asset.id`, et ne lancer son `prune`
+qu'une fois la famille entièrement chargée — une famille à chargement différé (sprites, fonds, sons) n'a pas
+tous ses ids tant qu'elle n'est pas lue, et un `prune` anticipé viderait ses dossiers.
+
+### Décisions verrouillées (2026-10-09)
+
+- **Un seul format d'id, partout : 12 chiffres hexadécimaux (48 bits), en chaîne**, tirés par `ids.new_id`
+  avec garde d'unicité. **Livré le 2026-10-09** pour les variables, les textes (et leurs sides), les dossiers
+  (assets et scènes) et les notes du Graphe ; avant, les deux premiers étaient des entiers de 12 chiffres
+  décimaux et les autres un `uuid4().hex` de 32 caractères. Le projet n'étant pas diffusé, aucune lecture de
+  l'ancien format n'est conservée : `tools/migrate_ids_to_hex.py` convertit un projet (réécriture textuelle,
+  idempotente), appliqué aux démos `PongAdvanced` et `Platformer`. Un nom de variable ne peut pas avoir la
+  forme d'un id (`{"var": <id|nom>}` les distingue à cette seule forme). La sauvegarde SRAM garde les 8
+  derniers chiffres de l'id (`save_id32`).
+- **Le sidecar d'un asset porte un `id` opaque** (`ids.new_id`), c'est lui qui est stocké par les références
+  de données. *Pas encore fait* — seule la forme de l'id est livrée. Le nom reste renommable ; le chemin du fichier
+  source est un simple emplacement. Même règle que les variables et les textes : un id dans les données, un nom lisible dans le Lua.
+
+- **Le nom d'asset est unique dans le projet** (2026-10-09). Il se tranche à la création (*Create asset*
+  propose la stem de la source et refuse ou suffixe un nom déjà pris) ; les SOURCES peuvent être homonymes
+  librement. Le Lua écrit toujours `sfx.play("coin")` et les symboles C n'embarquent aucun nom de dossier.
+- **Deux vues, deux questions, pas de conflit de dossiers** (2026-10-09). L'*asset finder* et les panneaux de
+  famille (Sound…) montrent ce qui EXISTE dans le projet, les assets, rangés par type dans des dossiers
+  virtuels (`asset-folders.json`) ; le panneau Sound reste une liste plate. Un futur onglet **Disk** de la
+  zone Build / debug, façon Unity / Unreal, montrera une représentation fidèle du disque : les vraies
+  arborescences et les SOURCES. C'est là que vit *Create asset* (clic droit sur une source). Un asset n'est pas
+  une source : le même son ne s'affiche donc jamais à deux endroits.
+
+- **L'asset et sa source vivent indépendamment** (2026-10-09), comme dans Unreal et non comme dans Unity (où le
+  `.meta` voyage avec le fichier). L'asset a son propre fichier, avec son `id` ; il ne fait que POINTER sa
+  source (`asset`, un chemin). Déplacer, renommer ou supprimer la source sur le disque ne détruit, ne renomme et
+  ne déplace jamais l'asset : ses références (par id) tiennent.
+
+- **Le fichier de l'asset vit dans le dossier `assets/` de l'auteur** (2026-10-09), comme avant, et non sous
+  `project/`. Il est créé à côté de sa source par défaut, puis l'auteur le déplace où il veut, comme dans Unity.
+  `project/` reste réservé à ce qui n'a pas de fichier source à relier (les scènes : un dossier virtuel
+  suffit à les ranger). Les scènes pourraient, plus tard, vivre elles aussi dans `assets/`.
+
+- **Source déplacée ou absente : *Relink source* et erreur de build** (2026-10-09). L'asset est « sans
+  source » : il reste dans le projet, signalé, et l'auteur le relie à un autre fichier. Le build l'indique comme
+  une erreur claire tant que la source manque (le mécanisme des assets manquants existe déjà). Aucune copie des
+  données importées n'est conservée dans l'asset : la légèreté du projet passe avant l'autonomie de l'asset.
+
+- **Un nom déjà pris est suffixé, comme partout dans l'éditeur** (2026-10-09). Le but est d'éviter la
+  collision de NOM, pas de départager des fichiers : l'éditeur réutilise `unique_name`
+  (`core/command_dispatcher.py`) — `coin`, `coin_2`, `coin_3`… — à *Create asset* comme au scan de `assets/`.
+  Le scan retrouve chaque asset par son `id`, où qu'il soit ; si un fichier copié dans l'Explorateur apporte un
+  nom ou un id déjà pris, il reçoit un nouvel id et un nom suffixé, et le journal le dit. Aucune notion
+  d'« original » ni de date de fichier.
+
+### Ce qu'il faudrait trancher avant d'ouvrir
+
+1. **Source sans asset.** Visible dans l'onglet Disk (grisée si le format n'est pas pris en charge, avec
+   infobulle) ; absente de l'asset finder et du projet tant qu'aucun *Create asset* n'a été fait.
+2. **Migration.** Les sidecars existants restent où ils sont et reçoivent leur id ; `asset-folders.json` passe
+   de membres-par-nom à membres-par-id.
+
+### Ordre d'implémentation (proposé)
+
+1. **Livrée le 2026-10-09.** L'id dans le sidecar + migration, sur les SFX (famille pilote). Rien de visible : le
+   panneau Sound ne change pas. `Sfx.id` (pas encore sur la base `Resource`, pour ne pas écrire un `"id": ""` dans
+   les sidecars des autres familles) ; `asset_reconciliation.assign_sfx_ids` donne un id à ceux qui n'en ont pas et un
+   NOUVEL id au second d'un doublon, au chargement de l'audio ; `sync_sfx_file` et la création depuis le finder en
+   attribuent un d'emblée. Les 5 sidecars de `PongAdvanced` portent leur id. Le reste du chantier (arbre du disque,
+   déplacement libre) reste à faire : `ResourceStore` repère encore un sidecar par son nom, à plat.
+2. **Livrée le 2026-10-09 — L'onglet Disk, en lecture seule** (zone Build / debug). Un arbre fidèle du dossier `assets/`, où chaque
+   fichier est marqué : source reconnue sans asset, source déjà reliée à un asset, format non pris en charge. Le
+   comportement ne change pas : la création automatique d'un asset à partir d'un fichier reste active. C'est la
+   tranche qui rend les sources VISIBLES, avant de leur retirer quoi que ce soit.
+   Livré : l'onglet **Disk**, racine **Assets**, dans le panneau Build / debug (les deux, scènes et scripts) ;
+   **vue à plat** — le contenu d'un dossier, une icône et un nom par entrée, un fil d'ariane pour remonter, double-clic
+   pour entrer (le bandeau « Build / Debug » a disparu, Clear a rejoint la barre de la console) ;
+   `core/disk_tree.py` classe chaque fichier, `ui/common/disk_view.py` l'affiche, `Project.source_families()` est la
+   table unique famille → fichiers sources (déjà dupliquée deux fois dans `project.py`). L'arbre se relit à l'ouverture
+   de l'onglet et au bouton Refresh, après `load_all_resources()`. **Constat :** le scan actuel étant plat, un `.wav` posé
+   dans un SOUS-dossier de `sfx/` ressort comme source libre, tandis qu'un `.wav` posé à la racine de `sfx/` devient un
+   asset d'office — la création automatique que la tranche 3 retire.
+3. **La lecture récursive** (ordre choisi le 2026-10-10 : elle passe AVANT *Create asset*). Un sidecar peut vivre dans un
+   sous-dossier de son dossier de famille (`assets/sfx/platformer/wav/coin.json`) : l'index d'un magasin le trouve, et
+   lecture, sauvegarde, suppression et renommage le traitent là où il est, sans le ramener à la racine. Un nouvel asset
+   peut être posé dans un dossier donné — c'est ce qui permettra de créer l'asset à côté de sa source. Deux sidecars de
+   même nom dans deux dossiers : le premier (le moins profond) est lu, l'autre est ignoré et signalé. **Pas encore** :
+   déplacer un asset hors du dossier de sa famille (un sidecar reste dans le dossier de SA famille, `assets/sfx/…`), la
+   création automatique d'un nom suffixé pour le doublon, le suivi en direct des sous-dossiers par le surveillant.
+4. **Livrée le 2026-10-11 — *Create asset* au clic droit sur une source, et fin de la création automatique.** `core/asset_creation.py` (un format de source → les types qu'il peut devenir : `.png` sprite / fond / police, `.wav` effet / musique / jingle, `.mod .xm .s3m .it` musique / jingle, `.ttf .otf .fnt` police, `.hex` palette ; l'asset naît À CÔTÉ de sa source, nommé d'après le fichier et unique dans son type), `core/blank_assets.py` (les assets vierges : scène, prefab, mise en page, trois boîtes, table de données, palette ; scripts et behaviors sont des fichiers), `core/disk_commands.py` (importer, déplacer, créer et renommer un dossier, créer un fichier : tous annulables) et `CreateAssetCmd`. Dans l'onglet Disk : un « + » (Import…, Create ▸, New folder) ; un bouton « Create *nom* » quand UNE source libre est sélectionnée (la flèche propose les autres types) ; au clic droit, *Create* sur une source (grisé en multi-sélection, avec la raison) et *Delete* sur des assets. **Supprimer un asset ne supprime plus sa source** ; plus aucun asset ne naît de l'apparition d'un fichier (réconciliation d'ouverture et surveillant), ni ne suit un fichier renommé ; `reconcile_manifest` retiré ; la corbeille ne contient que les fichiers d'asset. **Détachement achevé (2026-10-11) :** `sync_*`, `_relink_source`, `_sourced_by` supprimés ; l'import d'un sprite depuis son finder copie puis crée l'asset en UNE entrée d'historique ; l'inspecteur d'acteur choisit un SPRITE (asset), plus un PNG ; l'appariement des renommages et le signal `asset_renamed` du surveillant sont retirés (un renommage = disparu + apparu) ; supprimer un asset prévient de ce qui le cite encore (`core/asset_usages.py` : composants de sprite, calques de fond, prefabs posés, palettes, scène de départ, scripts — un avertissement, pas un refus). Ancien énoncé :  Les deux vont ensemble :
+   « une source n'est un asset qu'après *Create asset* » n'a de sens que si le geste existe. L'asset est créé à côté de sa
+   source (grâce à la tranche 3). L'import par dialogue (copie d'un fichier venu de l'extérieur, asset créé d'office) reste
+   un second chemin vers le même résultat. Le nom d'asset est tranché ici (règle commune, unique dans le projet).
+5. **L'asset devient indépendant de sa source et librement déplaçable** (découpée le 2026-10-10, une tranche à la fois) :
+   - **5a. Un id dans tous les sidecars.** Le magasin (`ResourceStore`) l'écrit juste après le nom et le relit lui-même :
+     aucun modèle n'a à le porter (une douzaine ont leur propre sérialisation). Attribué à l'enregistrement et au
+     chargement ; deux items qui portent le même id (une copie dans l'Explorateur) : le second en reçoit un nouveau.
+     Remplace `Sfx.id` de la tranche 1. Les palettes (`.hex` + sidecar) viendront à part.
+   - **5b. La source qui manque. Livrée le 2026-10-10.** Une erreur de build, UNE par fichier manquant, pour toutes les
+     familles adossées à un fichier (`core/asset_relink.py`, `validator._check_missing_sources`) : elle remplace les
+     quatre avertissements que sprites, fonds, polices et sons émettaient chacun de leur côté. L'action *Relink source…*
+     du menu du finder relie l'asset à un autre fichier, sans le recréer (nom, id, réglages gardés ; sprites et fonds
+     ré-encodés depuis le nouveau fichier, par asset et non par nom de fichier) ; un fichier qui ne convient pas est
+     refusé, l'asset inchangé. **Limite :** un fond ne se relie qu'à un fichier directement dans `assets/backgrounds/`
+     (son encodage ne retient que le nom du fichier).
+   - **5c. Le déplacement libre sous `assets/` — décidé le 2026-10-10 : une extension par type d'asset.** Le sidecar
+     cesse de s'appeler `<nom>.json` : son extension dit sa famille (`Player.sprite`, `boom.sfx`), le contenu reste du
+     JSON (lisible, diffable, fusionnable). Le balayage global lit donc le TYPE dans le nom du fichier, sans ouvrir son
+     contenu : plus de cache d'empreintes, plus d'étiquette de famille dans le sidecar, et un asset peut vivre n'importe où
+     sous `assets/`. Noms nus (sans préfixe), une table unique `type → extension` (module de nommage), toutes les familles.
+     | Famille | Extension | | Famille | Extension |
+     |---|---|---|---|---|
+     | sprites | `.sprite` | | scènes | `.scene` |
+     | fonds | `.background` | | prefabs | `.prefab` |
+     | effets sonores | `.sfx` | | mises en page d'interface | `.layout` |
+     | musiques | `.music` | | boîtes musique / jingle / sonore | `.musicbox` `.jinglebox` `.soundbox` |
+     | jingles | `.jingle` | | tables de données | `.table` |
+     | polices | `.font` | | assets de police | `.fontasset` |
+     | palettes | `.palette` (le `.hex` reste le format d'échange) | | | |
+     **Restent en `.json`** : `texts.json`, `texts_<langue>.json`, `variables.json` (un fichier pour tout le projet, pas un
+     par asset). Aucune extension de sidecar ne reprend celle d'un format de source (`.png .wav .mod .xm .s3m .it .ttf .otf
+     .fnt .hex .lua`). Trois temps : (1) **livré le 2026-10-10** — module de nommage (`core/models/asset_extensions.py`, une constante `sidecar_extension` par modèle) + `tools/migrate_sidecar_extensions.py`, appliqués aux deux démos et au starter Basic (76 fichiers) ; le surveillant et l'arbre Disk suivent la nouvelle extension ;
+     (2) **livré le 2026-10-10** — chaque magasin cherche ses sidecars sous TOUT `assets/` (`ResourceStore(dossier, classe, racine)` : le dossier de la famille ne sert plus qu'à y faire naître un nouvel asset) ; un asset se lit, s'écrit, se renomme et se supprime là où il est, deux types peuvent partager un dossier et un nom ; un homonyme du même type plus profond est ignoré et signalé, son chemin est donné depuis `assets/` ; les palettes restent dans `assets/palettes/` (leur `.hex` y vit avec elles) ; (3) **livré le 2026-10-10** — déplacer fichiers et dossiers par glisser-déposer dans l'onglet Disk (arbre et vue à plat), `core/disk_move.py` étant la seule écriture. Règles : un sidecar se déplace seul (l'asset pointe sa source par chemin) ; une source citée par un asset se déplace avec mise à jour du chemin de l'asset ; une source libre ou un fichier non géré se déplace librement ; un dossier se déplace avec tout son contenu, chemins des assets réécrits ; rien n'est jamais écrasé (un fichier du même nom à destination = refus, sans rien déplacer) ; pas de déplacement d'un dossier dans lui-même. **Refusés** : textes et variables (un seul fichier pour tout le projet) ; les palettes, les images de fonds et les scripts `.lua` se déplacent désormais (temps 4), un script déplacé voyant réécrites ses attaches dans les scènes, caméras, acteurs et prefabs. Le surveillant est suspendu pendant l'opération : un fichier déplacé n'est jamais pris pour un nouvel import. Au survol, le dossier qui peut recevoir est surligné et les entrées glissées passent à demi transparentes ; un dossier qui ne peut pas recevoir (palettes, textes…) montre le curseur « interdit » et dit pourquoi dans la barre d'état dès le survol, pas seulement au dépôt (`disk_move.drop_verdict`, la même règle que le déplacement). **Temps 4 — libres partout (décidé le 2026-10-10, non commencé).** **Modèle (précisé le 2026-10-10) : un asset n'est plus le sidecar d'un fichier source.** C'est un objet à part entière, qui ne fait que POINTER une source par un chemin explicite ; plus aucun lien implicite entre les deux — ni nom commun, ni dossier commun : l'asset ne suit pas sa source (renommée, déplacée), la source ne suit pas son asset. Les conventions qui supposaient ce couplage disparaissent avec *Create asset* : un asset nommé d'après le stem de son fichier, la création automatique à l'apparition d'un fichier, le suivi d'un fichier renommé par le surveillant. Les trois pas ci-dessous se conçoivent dans ce modèle. Lever les derniers refus de `core/disk_move.py`, un par un, chacun avec sa migration, ses tests et le retrait du refus correspondant : (a) **images de fonds — livré le 2026-10-10** (`tools/migrate_background_paths.py` ; `Project.background_image_path` ; renommer un fond ne renomme plus son image ; `disk_move` et `asset_relink` n'ont plus de cas à part ; restent, pour *Create asset*, la création d'un fond à l'apparition d'un PNG dans `assets/backgrounds/` et le raccrochage par le nom) : `BackgroundAsset.asset` passe du seul NOM de fichier à un chemin relatif au projet, comme sprites et sons ; une seule fonction rend le chemin réel de l'image d'un fond et remplace la vingtaine de `background_images_dir / nom` (build, codegen, éditeur de fonds, canvas, inspecteurs, réconciliation) ; la relier à un fichier hors de `assets/backgrounds/` devient possible (`asset_relink`) ; (b) **palettes — livré le 2026-10-10** : le `.palette` cite son `.hex` par un champ `asset` (chemin relatif au projet), les couleurs restent dans le `.hex` et ne sont jamais dupliquées ; l'un et l'autre se rangent où l'on veut sous `assets/` ; les palettes rejoignent `source_families()` (déplacement, relink, source manquante, corbeille : le cas général) ; renommer une palette ne renomme pas son `.hex` ; un `.palette` d'avant le champ le reçoit à la première ouverture (le `.hex` voisin) ; une palette dont le `.hex` a disparu n'est pas chargée et son `.palette` reste intact ; (c) **scripts, option B — livré le 2026-10-10** (`core/lua_scripts.py`, `tools/migrate_behavior_markers.py`, tests `tests/scripting/test_behavior_marker.py`) : le rôle d'un script ne vient plus de son dossier mais de son contenu : une première ligne `-- @behavior` marque un behavior ; `require("behaviors/<nom>")` reste l'appel écrit (le mot `behaviors/` devient un espace de noms, plus un dossier), résolu par NOM parmi les fichiers marqués, où qu'ils soient ; les scripts attachables sont tous les `.lua` non marqués de `assets/` ; deux behaviors de même nom = erreur de build ; « New behavior » écrit le marqueur ; un outil migre les projets d'avant (marqueur ajouté aux fichiers de `scripts/behaviors/`) ; le finder de scripts montre tous les `.lua` de `assets/` (les dossiers sans script sont masqués) ; le surveillant suit les `.lua` de tous les dossiers de `assets/`, les autres sources n'y étant suivies que dans les dossiers de famille. **Ne bougent jamais** : `texts.json`, `texts_<langue>.json`, `variables.json` (un fichier pour tout le projet). **Ensuite, hors de cette
+     tranche :** associations de fichiers (installateur Windows en `HKCU\Software\Classes`, proposition à l'utilisateur
+     pour le zip portable, fichier MIME + `.desktop` pour l'AppImage) et un éditeur qui ouvre un sidecar passé en argument.
+   - **Plus tard : les références par id** (une scène qui cite un sprite par son id et non par son nom) : un chantier à
+     part, qui touche toutes les scènes.
+6. Extension aux musiques, jingles, sprites, fonds.
+
+**Livré aussi (2026-10-10) :** l'arbre vertical de tout `assets/` vit dans la colonne de gauche, sous un onglet **Disk**
+à côté de **Project viewer** (qui devient lui-même un onglet : on ne touche pas au mécanisme d'`AssetFinder`). Choisir un
+dossier de l'arbre l'affiche, à plat, dans l'onglet Disk du panneau du bas — comme le fait Unity ; la vue du bas se
+navigue aussi seule (double-clic, fil d'ariane). Le sens inverse (un double-clic en bas qui sélectionne le dossier
+dans l'arbre) n'est pas fait.
+**Un « + » et une loupe sur l'arbre (2026-10-10).** L'onglet n'est plus strictement en lecture seule : le « + » crée un
+vrai dossier sur le disque, dans le dossier choisi (ou la racine), nommé d'office `New folder`, `New folder_2`… puis
+renommé EN PLACE dans l'arbre (pas de fenêtre) ; un nom vide, interdit (`/ \ : * ? " < > |`, point ou espace final) ou
+déjà pris est refusé avec un message et le dossier garde son nom. `core/disk_folders.py` est la seule écriture et refuse
+tout ce qui sort de `assets/`. La loupe filtre l'arbre par nom (`W.filter_tree`, déjà partagé). Un dossier vide n'est pas
+suivi par git tant qu'il ne contient aucun fichier.
+**Noms trop longs (2026-10-10).** Un nom passe d'abord à la ligne (deux lignes dans la vue à plat, une dans l'arbre) ; s'il est
+ENCORE trop long, son extension est gardée et le début coupé : `monnomquiestbeaucouptroplong.extension` devient
+`monnomq... .extension` (sur deux lignes, l'extension reste seule sur la seconde). Le retour à la ligne est fait par
+`ui/common/elide_name.py`, pas par Qt : en mode icônes Qt ne coupe qu'aux espaces, donc un nom sans espace n'était jamais
+replié mais abrégé par un « … » qui mangeait l'extension. Même règle dans la vue à plat et dans l'arbre vertical.
+Le retour à la ligne choisit sa coupe dans cet ordre : **juste avant l'extension** (`Falling Asleep` puis `.json`), sinon à une
+**espace** (jamais au milieu d'un mot : `Out of Energy` puis `Game Over.json`), sinon en pleine lettre mais sans laisser une ou
+deux lettres seules sur la seconde ligne (`.jso` / `n`). La largeur dont le texte dispose est demandée au STYLE de Qt (`SE_ItemViewItemText`), pas devinée : une marge devinée un peu
+trop grande, et Qt abrégeait de nouveau le nom déjà coupé (`Vi... .m…`) — vu dans l'arbre, avec sa feuille de style.
+**Iconographie et dossiers (2026-10-10).** La vue à plat reprend les icônes de l'éditeur : un fichier relié à un asset
+prend l'icône de sa famille (sprite, fond, effet, musique, jingle, police, palette, script), une source sans asset celle de
+son format (`.wav` effet, `.png` image — les deux formats partagés entre deux familles donnent le cas courant). Un dossier
+**plein** est un dossier où l'on peut descendre ; l'entrée **« ... »**, en filet, est toujours la première hors de la
+racine et remonte d'un niveau ; **à la racine**, où il n'y a rien à remonter, cette place est tenue par une icône de **disque dur**
+nommée `assets`, dont le double-clic ouvre le vrai dossier dans l'explorateur de fichiers du système. `DiskNode.family` porte la famille ; `Project.source_families()` rend `(famille, store,
+fichiers)`. L'onglet Disk est **tout à gauche**, avec une icône de disque (le seul onglet à en avoir une), dans la colonne
+de gauche (avant Project viewer) comme dans le panneau du bas (avant Console).
+
+### Ce que ça ne fait pas
+
+- Ne change ni le runtime C ni le format de la ROM.
+- Ne fait pas de l'éditeur un outil de dessin (cf. périmètre).
+
+---
+
+## L'écran Texte n'édite et ne range que du contenu
+
+### D'où vient la question (2026-10-10)
+
+L'écran Texte fait aujourd'hui deux métiers : **ranger et écrire** du contenu (la table, la clé, le
+rangement, les langues, la barre de balisage), et **montrer le rendu GBA** de ce contenu (`FontScreenPreview`,
+un écran 240×160 aux vrais glyphes, avec son sélecteur de police et son bouton « Afficher le balisage »).
+Le second brouille le message du premier : l'œil va vers le rectangle noir, pas vers la liste qu'on est venu
+mettre en ordre. Le rendu fidèle a servi à poser le pipeline des polices ; il a un autre lieu naturel (la
+scène, l'écran Police). L'écran Texte ne doit plus chercher qu'**une chose : éditer et ranger le contenu**.
+
+### Le parcours visé (précisé le 2026-10-10)
+
+Deux lieux, deux métiers, et ils ne se recouvrent pas :
+
+- **Le scene canvas règle l'aspect.** C'est là que l'auteur configure une boîte de dialogue, sa police, sa
+  taille, sa couleur, et voit le texte tel qu'il sera. Tout ce qui est apparence vit ici.
+- **L'écran Texte règle ce qui entre dedans.** Le contenu, sa clé, son rangement, ses langues, son balisage.
+  Il ne sait pas dans quelle boîte le texte va tomber ; il n'a donc pas à en montrer le rendu.
+
+Conséquence assumée : **l'écran Texte ne dit pas si un texte est tronqué**, ni s'il déborde de sa boîte. Pas
+dans un premier temps ; si le besoin se fait sentir, ce sera un retour de la scène vers la table (un texte
+signalé depuis son lieu d'usage), pas un rendu recréé dans l'écran Texte.
+
+Ce que le canvas fait déjà (vérifié dans le code, 2026-10-10) : rendu aux vrais glyphes avec le placement du
+moteur, et liseré ambre quand la boîte tronque. Ce qu'il ne fait pas encore : montrer une **traduction** — il
+n'affiche que la langue source. Décidé qu'il prévisualisera la langue choisie, dans une mesure non définie (voir
+point 4 de « À trancher »).
+
+### Ce que ça change pour l'auteur
+
+- **L'aperçu écran disparaît** de l'atelier : plus de rectangle 240×160, plus de sélecteur de police d'aperçu,
+  plus de bouton « Afficher le balisage » (la source balisée est la seule vue du contenu).
+- **Le contenu s'édite dans la colonne centrale**, dans la table elle-même — éditer là où l'on lit, même geste
+  que la clé et le rangement (inline, jamais de dialogue ; cf. cellule de clé et `_PathDelegate`).
+- **L'atelier du bas rétrécit** à ce qui n'est pas le contenu : clé (cadenas, copie), fil d'Ariane du rangement,
+  onglets de langue, barre de balisage. Plus de séparateur ni de zone repliable.
+
+### Le conflit avec l'ancien chantier
+
+Ce chantier **remplace** « L'atelier Texte réuni — écrire et voir dans un même écran » (2026-09-19), qui
+allait à l'opposé : faire du rendu GBA la surface d'édition (projection source ↔ affichage, caret et
+sélection dessinés par `FontScreenPreview`, vue balisage en police moteur). Cette direction est abandonnée :
+elle aurait fait de l'aperçu la pièce centrale de l'écran, là où l'on veut le retirer. Sa décision verrouillée
+du 2026-09-19 tombe avec elle ; la section qui la portait n'est plus qu'un renvoi ici.
+
+**Constat de code, à dire avant d'ouvrir :** l'ancien chantier était annoncé « aucune étape codée »,
+mais `TextWorkbench` monte déjà `FontScreenPreview` en surface **éditable** (`set_editable(True)`, signaux
+`edited` / `committed`) et y branche `MarkupToolbar`. Le code est donc à mi-chemin d'une direction qu'on
+abandonne : l'état d'arrivée de ce chantier n'est pas « l'ancien QTextEdit », c'est la table qui édite.
+
+### Ce que ça touche
+
+| Fichier | Sort |
+| --- | --- |
+| `font_screen_preview.py` | **supprimé** — seul `TextWorkbench` le monte |
+| `text_workbench.py` | perd `_build_preview`, le `QSplitter`, `_preview`, le sélecteur de police d'aperçu, `_btn_markup` ; garde l'identité (clé, rangement, langues) et la barre de balisage |
+| `text_table.py` | la colonne Content devient éditable : délégué de cellule multi-ligne portant la source, coloration par `MarkupHighlighter`, au repos la source (plus le texte résolu avec `⏎`) |
+| `text_panel.py` | reste l'unique arbitre : la saisie de cellule devient la commande annulable que produit aujourd'hui `content_committed` |
+| `markup_toolbar.py` | vise l'éditeur de la cellule en cours plutôt que `FontScreenPreview` — son contrat (`source()`, `selection_source()`, `replace_source()`) est déjà abstrait ; désactivée hors édition |
+| `text_editor_screen.py`, `text_inspector.py` | `preview_font_changed` / `set_font` : voir « À trancher » |
+| `markup_highlighter.py` | **conservé** — `ui_inspector.py` l'utilise aussi |
+| `tests/ui/test_text_preview_font_assets.py` | retiré avec l'aperçu |
+| `labels.json`, `labels_fr.json` | clés `txtwb.show_markup_*`, `txtwb.preview_font_*` retirées |
+
+`core.text_markup`, `texts.json`, les sides de traduction et la ROM ne bougent pas : c'est un chantier d'**interface**.
+`ScreenTextPreview` (la jauge de longueur de l'inspecteur de script) est un autre composant, il reste.
+
+### À trancher avant d'ouvrir
+
+1. **Ce que la cellule montre au repos.** La source balisée (ce qu'on édite = ce qu'on lit, balises teintées),
+   ou le texte résolu comme aujourd'hui (plus propre pour parcourir, mais deux représentations du même
+   contenu). Penchant : la source, une seule représentation.
+2. **Hauteur des lignes.** Un texte multi-ligne s'étale-t-il (ligne qui grandit, plafonnée) ou reste-t-il sur une
+   ligne avec `⏎` jusqu'à l'édition ? Une ligne qui grandit casse le rythme d'une table de centaines d'entrées.
+3. **Ce que devient la police d'aperçu.** Elle alimente encore l'inspecteur (caractères manquants via
+   `missing_chars()`) et la liste des icônes de la barre de balisage. Sans sélecteur : la « Default Font » du
+   projet (v0.9) comme police de référence, ou le sélecteur déménage dans l'inspecteur de droite. Si l'apparence
+   appartient à la scène, la police n'a plus de raison d'être choisie ici : la couverture des glyphes
+   (`missing_chars()`) est-elle encore une question de contenu, ou passe-t-elle aussi à la scène ?
+4. ~~La troncature~~ — **tranché le 2026-10-10** : hors de l'écran Texte, pas dans un premier temps (voir « Le
+   parcours visé »). Prémisse **vérifiée dans le code le 2026-10-10** : le scene canvas rend déjà le texte d'une
+   boîte avec les vrais glyphes (`canvas_region_item.py` : `_paint_text` → `layout_text` / `layout_marked_text`,
+   mêmes fonctions que la ROM ; police par `font_emit.scene_default_font`, encre par `font_palette`) et signale
+   déjà la troncature (liseré ambre en bas de la boîte). **Un trou : la langue.** `_text_content` et
+   `_text_source` lisent `t.content`, donc toujours la langue source ; le canvas n'a ni sélecteur de langue ni
+   appel à `Project.text_content(t, lang)`. Une traduction plus longue que l'original peut déborder sans que rien
+   ne le montre — et l'aperçu de l'atelier, qui suivait l'onglet de langue, était le seul endroit où on la voyait
+   dans sa boîte. **Décidé le 2026-10-10 : le canvas prévisualisera la langue choisie.** La **mesure** reste à
+   définir : où se choisit la langue (canvas seul, ou partagée avec l'écran Texte), si elle est mémorisée par
+   scène ou par session, si le liseré ambre de troncature suit la langue affichée, si l'on peut voir plusieurs
+   langues à la fois. Rien de tout cela n'est arrêté. Ce n'est pas un prérequis du retrait de l'aperçu, mais
+   tant que ce n'est pas livré l'auteur qui traduit perd un repère : le dire dans la clôture.
+5. **Édition de la traduction.** La référence source en lecture seule (visible seulement en traduisant) tient-elle
+   dans la bande du bas, ou devient-elle une colonne de la table ?
+
+### Ordre d'implémentation (proposé)
+
+1. **Délégué de contenu** dans `text_table.py` : édition en place, source au repos, commit via `text_panel`
+   (annulable). L'aperçu existe encore : on vérifie que les deux chemins d'édition ne se disputent pas.
+2. **Rebrancher `MarkupToolbar`** sur l'éditeur de cellule.
+3. **Retirer l'aperçu** : `FontScreenPreview`, splitter, sélecteur, bouton, signaux de police, clés de
+   traduction, test dédié. Trancher le point 3 avant cette étape.
+4. **Chercher le mort** : signaux sans abonné, `set_font` orphelin, helpers de rendu qu'aucun autre écran
+   n'appelle ; mettre à jour `ARCHITECTURE.md` (arbre des fichiers, section de l'écran Texte).
+
+### Ce que ça ne fait pas
+
+- Ne retire pas le rendu fidèle de l'éditeur : il reste dans l'écran Police et en scène.
+- Ne change ni `texts.json`, ni le format des traductions, ni la ROM.
+- Ne crée pas de second éditeur : le contenu n'a qu'un seul lieu de saisie, la table.
+
+---
+
+## Un pont entre l'écran Texte et les tables de données — créer un dialogue
+
+### D'où vient la question (2026-10-10)
+
+Depuis la v0.21, un dialogue est une **table de données** dont une colonne est de type `text`
+(`data.Dialogues[i].replique`) : le script la parcourt, et la réplique reste traduisible. Le modèle est
+bon ; **la saisie est fastidieuse**. Pour écrire dix répliques, l'auteur doit :
+
+1. créer la table dans l'écran Données et lui ajouter une colonne `text` ;
+2. pour chaque réplique, aller dans l'écran Texte, créer l'entrée, la ranger, lui donner un contenu ;
+3. revenir dans la grille, ouvrir la cellule de la ligne et y choisir la clé au milieu de toutes les autres.
+
+Deux écrans, un aller-retour par réplique, et la clé — qui n'a d'intérêt que pour la machine — au centre du geste.
+L'infobulle de la cellule montre bien le contenu (`_text_preview`), mais seulement une fois la clé posée.
+
+### Le principe
+
+**Le pont ne crée pas de modèle.** Un dialogue n'est ni un nouvel asset ni un nouvel écran : c'est toujours une
+`DataTable` et des `Text`, écrits par les commandes annulables qui existent déjà (`InsertRowCmd`, `SetCellCmd`,
+`CreateTextForElementCmd`…). Le pont est un **geste** qui enchaîne ces écritures, pas une structure de plus. Il
+tient la ligne posée dès la v0.3 : pas d'arbre de conversation, pas de choix branchés, pas d'éditeur de dialogue
+(cf. [Table de textes](ARCHITECTURE.md#textes-du-joueur--table-de-chaînes) et « Ce qui reste au script »).
+
+### Pistes (proposées, non verrouillées)
+
+- **A — Depuis l'écran Texte : « Envoyer vers une table ».** L'auteur sélectionne des textes dans la table
+  (l'ordre de la sélection est l'ordre des lignes), choisit une table de données existante ou en crée une, et
+  chaque texte devient une ligne dont la colonne `text` porte sa clé. C'est le geste de qui écrit d'abord ses
+  répliques puis les assemble.
+- **B — Depuis la grille de données : « Nouveau texte » dans la cellule.** Une cellule de type `text` offre, en
+  tête de sa liste, *Nouveau texte…* : l'entrée est créée à l'instant (clé proposée par le rangement, jamais
+  tapée), rangée sous le nom de la table, et la cellule la référence. C'est le geste de qui construit la
+  conversation ligne à ligne. Le contenu s'écrit ensuite dans l'écran Texte, ou sur place si la cellule le permet.
+- **C — Les deux sens se rejoignent sur le rangement.** Le chemin d'un texte propose sa clé (`auto_key`) ; si le
+  rangement d'un dialogue porte le nom de sa table, la clé de la réplique `n` se dérive d'elle-même
+  (`<table>_<n>`) et plus personne ne la nomme à la main. Le lien table ↔ rangement reste une convention de
+  création, jamais une contrainte (les deux peuvent diverger ensuite).
+
+**Décidé le 2026-10-10 : A et B, les deux.** A sert à l'écriture, B à l'assemblage. Ordre de livraison proposé :
+**B d'abord** (une entrée de plus dans une liste déroulante qui existe), puis A, qui demande une action de
+sélection multiple vers un écran voisin. C reste une convention de création, à trancher avec les deux.
+
+### Ce que ça touche (provisoire)
+
+| Fichier | Sort |
+| --- | --- |
+| `ui/data_editor/data_grid_panel.py` | `_DataCellDelegate` : l'éditeur de cellule `text` gagne l'entrée « Nouveau texte… » (piste B) |
+| `ui/data_editor/data_commands.py` | une commande qui crée le texte et pose la cellule **dans une seule annulation** |
+| `ui/text_editor/text_panel.py`, `text_table.py` | menu de la sélection : « Envoyer vers une table… » (piste A) |
+| `ui/text_editor/text_commands.py` | `CreateTextForElementCmd` est le modèle à suivre : création d'un texte rangé, clé dérivée |
+| `ui/screens.py` | aucune navigation entre écrans n'existe aujourd'hui : voir « À trancher » |
+
+`core/models/text.py`, `core/models/data_table.py`, le checker, le build et la ROM ne bougent pas.
+
+### À trancher avant d'ouvrir
+
+1. ~~A, B, ou les deux ?~~ — **tranché le 2026-10-10 : les deux** (B puis A, voir « Pistes »).
+2. **Le contenu s'écrit où ?** Avec la piste B, l'auteur crée la réplique depuis la grille : l'écrit-il dans la
+   cellule (qui doit alors devenir un petit éditeur de texte) ou est-il renvoyé à l'écran Texte ? C'est la même
+   question que « le contenu s'édite dans la table » du chantier [L'écran Texte n'édite et ne range que du contenu](#lécran-texte-nédite-et-ne-range-que-du-contenu) :
+   les deux chantiers partagent le délégué de contenu et doivent se décider ensemble.
+3. **Aller d'un écran à l'autre.** L'infobulle de la cellule est aujourd'hui la seule jonction. Faut-il un « Ouvrir
+   dans l'écran Texte » (sélection du texte, bascule d'écran) ? Aucun mécanisme de navigation entre écrans n'est
+   encore posé : c'est le coût caché de la piste A comme du point précédent.
+4. **Que contient une ligne de dialogue ?** Une colonne `text` suffit à une réplique ; un dialogue réel veut aussi
+   un locuteur, un portrait, un son. Le pont crée-t-il les colonnes d'un **gabarit** (réplique seule, ou
+   locuteur + réplique), ou laisse-t-il l'auteur les ajouter ? Un gabarit ne doit pas devenir un type « Dialogue ».
+5. **Le rangement du dialogue.** Le nom d'une table est un identifiant (`Dialogues`), un rangement est une liste
+   de libellés libres : la dérivation de la piste C marche-t-elle sans les confondre ?
+6. **Ordre.** Une table a un ordre, la table de textes est triée à l'écran : l'ordre de l'envoi doit être celui de
+   la sélection, pas celui de l'affichage. À vérifier à l'usage.
+
+### Ce que ça ne fait pas
+
+- Ne crée ni asset « Dialogue », ni écran de dialogue, ni arbre de conversation, ni choix branchés.
+- Ne dit rien de l'enchaînement : *quand* une réplique s'affiche reste au script.
+- Ne change ni `texts.json`, ni le format des tables de données, ni la ROM.
+
+---
+
 ## v1.0 — Le pipeline 2D complet
 
 ### L'objectif concret — cinq genres
@@ -1047,6 +1524,59 @@ réglé** ; il reste trois.
 ---
 
 ## Au-delà de la v1.0
+
+### Diffuser un jeu desktop — le Backstage Player
+
+**Route vers v1.0-stable, non prioritaire pour la release `-alpha` (décidé le
+2026-10-10).** Une ROM `.gba` reste le coeur et le format universel du jeu, mais elle ne
+constitue pas à elle seule une expérience de diffusion grand public : le joueur doit installer
+et configurer un émulateur. Après l'export navigateur/itch.io de la v0.29, Backstage doit pouvoir
+produire un **package desktop jouable directement**.
+
+Le package ne transforme pas la ROM en binaire PC. Il rassemble la ROM et un lecteur générique,
+nommé provisoirement **Backstage Player**, qui l'exécute au moyen du coeur mGBA. Le joueur lance
+le jeu, pas un émulateur : aucune interface mGBA ne doit apparaître.
+
+**Première cible : Windows.** Avant un installateur, un ZIP portable est suffisant pour valider
+la chaîne et l'expérience. Le Player doit démarrer directement sur le jeu, gérer le plein écran
+(`F11` et `Alt+Entrée`), la mise à l'échelle entière sans flou, la pause à la perte de focus, le
+clavier, la manette, le volume et des sauvegardes rangées par jeu. Le titre, l'icône, l'image de
+fond éventuelle, la taille de fenêtre et le démarrage en plein écran sont les métadonnées de
+l'export. macOS et Linux restent hors de ce premier périmètre.
+
+**Une API de plateforme, pas une API Steam dans la ROM.** Le runtime exposera à terme des actions
+neutres telles que `platform:unlock_achievement("first_boss")`, `platform:set_stat(...)` et
+`platform:increment_stat(...)`. Elles émettent un événement vers le Player par un pont ROM →
+lecteur ; elles ne dépendent ni d'un App ID ni du SDK Steam. Le lecteur décide ensuite : aucun
+service, succès locaux, ou Steamworks. Une ROM lancée dans un émulateur ordinaire reste jouable ;
+ces actions n'en deviennent jamais une dépendance.
+
+**Steam est une cible d'export facultative.** Pour un jeu publié sur Steam, le Player initialise
+Steamworks, transmet succès et statistiques, puis pourra prendre en charge le Cloud et la présence.
+Chaque jeu a son propre App ID et ses succès, définis par son auteur dans Steamworks : Backstage ne
+les crée pas et n'embarque aucun identifiant de développement. Le package Steam reste tolérant à
+l'absence du client pour les builds non-Steam ; le comportement Steam-only éventuel relève de
+l'auteur du jeu. Le premier périmètre exclut le Workshop, le multijoueur, l'inventaire et le DRM.
+
+### Décisions verrouillées
+
+- La ROM est inchangée et reste exportable seule ; le desktop est une cible supplémentaire.
+- Le lecteur est générique et habillé avec les métadonnées du jeu, pas un fork par projet.
+- L'expérience de base (plein écran, pixels nets, contrôles, sauvegardes) précède Steam.
+- L'API de script est indépendante de tout distributeur ; Steamworks vit uniquement dans le
+  Player et seulement dans l'export Steam.
+- L'intégration Steam commence par succès, statistiques, Cloud et présence ; le reste est hors
+  périmètre.
+
+### Ouvert
+
+- Le choix d'intégration du coeur mGBA dans le Player : lancement encapsulé d'un binaire existant
+  pour le premier prototype, ou intégration native du coeur pour contrôler totalement la fenêtre.
+- Le format du pont ROM → Player et la persistance éventuelle de succès locaux.
+- Le moment où l'export quitte le ZIP portable pour un installateur signé, et les critères pour
+  ouvrir macOS puis Linux.
+- La place dans l'interface : générateur autonome éprouvé d'abord, puis éventuellement étape
+  finale du build de l'éditeur.
 
 ### Chantier transverse — le singleton `mixer`
 
@@ -1183,166 +1713,9 @@ cas sans `else` ?) ; ce qui se passe quand deux branches testent la même valeur
 première gagnante, comme en Lua) ; si le warning d'énumération non couverte est émis côté éditeur
 ou laissé à GCC.
 
-### Chantier transverse — l'atelier Texte réuni, écrire et voir dans un même écran
+### Chantier transverse — l'atelier Texte réuni, écrire et voir dans un même écran — **ABANDONNÉ**
 
-**Route vers v1.0-stable, non prioritaire pour la release `-alpha` (décidé le 2026-09-29).** Conception
-et décision verrouillée (2026-09-19) intactes, aucune étape n'est codée.
-
-L'atelier actuel coupe le geste en deux : la source balisée vit dans un `QTextEdit` à gauche,
-le rendu GBA dans `FontScreenPreview` à droite. Cette séparation a servi à poser le pipeline des
-polices, mais elle oblige désormais à lire deux fois le même texte pour savoir ce que produisent
-`[font]`, `[color]`, les icônes et les valeurs. Le chantier les réunit dans **une seule surface de
-travail** : le texte se modifie là où son rendu est visible.
-
-Il ne s'agit pas de confier le texte à la mise en forme de Qt : ses polices système, son retour à
-la ligne et sa sélection ne sont pas ceux de la ROM. `FontScreenPreview` reste donc le moteur de
-rendu fidèle (glyphes rasterisés et `layout_marked_text`) ; l'éditeur devient la couche d'entrée
-et de sélection posée sur cette même surface.
-
-#### Le contrat utilisateur
-
-- **Un seul écran de contenu.** La clé, le rangement, les langues et la barre de balisage restent
-  autour ; la division « source | preview » disparaît. Le texte affiché utilise les vrais glyphes,
-  ses polices portées et sa coupe GBA.
-- **Bouton “Afficher le balisage”.** Il ne bascule pas vers une vue source : la surface reste
-  fidèle à l'écran final. Lorsqu'il est actif, les balises reconnues (`[font=…]`, `[wave]`,
-  `[/font]`, etc.) apparaissent directement entre les mots, dessinées avec la police technique du
-  moteur. Le contenu conserve toujours la police réellement utilisée par la preview. Lorsqu'il est
-  masqué, seuls ces fragments techniques disparaissent ; le texte visible ne change ni de police
-  ni de mise en page.
-- **Clic droit sur une sélection → “Retirer le balisage”.** L'action enlève les bornes des balises
-  reconnues qui enveloppent exactement la sélection, sans effacer le contenu. Les balises imbriquées
-  sont retirées ensemble dans une seule annulation ; une sélection partielle ne modifie rien plutôt
-  que de produire une portée ambiguë.
-- **La source reste la vérité.** `texts.json` et les traductions conservent le BBCode actuel. Ni la
-  ROM, ni la table Text, ni le système de traduction ne changent de format.
-
-#### Le morceau difficile : correspondre source et rendu
-
-Aujourd'hui `parse()` sait retirer les balises et produire les marqueurs, mais un `Marker` ne porte
-que la position de son ouverture. Pour masquer le balisage sans casser le curseur, il faut une
-projection explicite : source → caractères affichés, et retour affichage → plage source. Elle doit
-produire des segments fidèles pour le contenu et des segments en police moteur pour les balises
-visibles ; les balises masquées ont une longueur visuelle nulle. Elle doit connaître les balises
-ouvrantes/fermantes, les échappements `[[`/`$$`, les icônes, et une valeur `$nom` qui occupe une
-place source mais plusieurs caractères à l'aperçu.
-
-Cette projection servira trois lecteurs plutôt que trois approximations : le rendu unifié, la
-sélection/caret et l'action « Retirer le balisage ». Les locales de littéraux restent hors de cet
-aperçu, comme aujourd'hui : aucune portée Lua n'existe dans l'écran Text.
-
-#### Analyse technique d'implémentation
-
-Le socle est déjà en place et doit être conservé :
-
-- `core.text_markup.parse()` est la seule grammaire. Il fournit le texte réellement lu (`display`),
-  les portées (`Marker`) et les fragments de source reconnus (`Token`).
-- `FontScreenPreview` matérialise déjà les Font Assets et dessine les vrais glyphes selon
-  `layout_marked_text()`. Il sait donc afficher une suite de polices bitmap et vectorielles sans
-  déléguer le rendu à Qt.
-- `TextWorkbench` possède déjà la source active, le commit différé et l'historique en amont ;
-  `MarkupToolbar` sait déjà poser ou retirer une portée dans un bloc d'édition unique.
-
-Le manque précis est une **projection d'édition** : aujourd'hui, `ParsedText` fait correspondre la
-source au texte final, mais pas à une surface qui mélange du contenu final et des balises visibles.
-Il faut ajouter dans `core.text_markup` un objet pur, par exemple `MarkupProjection`, construit à
-partir de `source`, de `ParsedText` et de l'option `show_markup`.
-
-Chaque `ProjectionSpan` portera :
-
-- sa plage dans la source (`source_start`, `source_end`) ;
-- son texte à dessiner ;
-- son rôle (`content`, `markup`, `value`, `escape`, `literal`) ;
-- la police à demander (`preview` pour le contenu, `engine` pour une balise visible) ;
-- le comportement de sélection : une balise est atomique, tandis qu'un contenu est sélectionnable
-  caractère par caractère.
-
-La projection doit aussi exposer deux conversions sans ambiguïté : `source_to_visible(position)`
-et `visible_to_source(position, bias)`. Le `bias` départage les deux bornes d'une balise masquée :
-aller à gauche doit placer le caret avant la balise, aller à droite après elle. Cela évite les
-oscillations du curseur et rend Backspace/Suppr déterministes.
-
-Les valeurs `$nom` forment le seul cas non isométrique : une plage source peut être dessinée sous
-la forme de plusieurs chiffres de la valeur initiale. Elles doivent rester un span atomique dans la
-projection, avec une position de caret avant ou après, jamais entre les chiffres calculés. Ainsi,
-l'édition ne transforme pas accidentellement `$score` en texte statique. Les échappements `[[` et
-`$$`, eux, restent du contenu normal : ils dessinent respectivement `[` et `$` mais gardent leur
-plage source pour le remplacement.
-
-`layout_marked_text()` ne doit pas être modifié pour le rendu joueur : il doit continuer à refléter
-strictement la ROM. Le nouvel atelier utilisera un petit adaptateur de mise en page voisin, qui
-réemploie les règles d'avance, de ligature, de coupe et d'interligne existantes, mais accepte les
-`ProjectionSpan` et retourne des glyphes enrichis de leur plage source. C'est cette information qui
-permet le hit-testing, la sélection, le caret et le menu contextuel. La police moteur des balises
-sera une recette dédiée et stable de l'éditeur ; elle n'entre pas dans les assets ni dans le build.
-
-`FontScreenPreview` évolue alors en surface interactive :
-
-1. il construit la projection à chaque changement de source, valeurs, police ou option de balisage ;
-2. il dessine les glyphes à partir du placement enrichi ;
-3. il convertit clic, glisser, flèches et raccourcis en plages source ;
-4. il émet un remplacement source et une demande de commit, mais ne modifie pas directement le
-   modèle Projet.
-
-`TextWorkbench` reste propriétaire de la langue active, de la valeur de départ et du commit. Il
-remplace son `QTextEdit` par cette surface, mais **réutilise la barre de balisage existante**
-(`MarkupToolbar`) : ses boutons, ses choix d'assets, ses règles de pose/retrait et ses infobulles
-ne sont pas recréés. Son unique adaptation est de viser une petite interface d'édition abstraite
-(`source()`, `selection_source()`, `replace_source()`) plutôt qu'un `QTextEdit` concret ; un
-adaptateur temporaire gardera cette même interface pour l'éditeur actuel. `MarkupHighlighter`
-devient alors inutile. Cette interface conserve les insertions existantes, leur sélection et leur
-regroupement dans l'annulation.
-
-Le clic droit « Retirer le balisage » doit être une opération pure du modèle de projection : à partir de
-la sélection source, repérer les paires de `Marker` dont les deux bornes enveloppent exactement la
-portée, retourner les deux suppressions en ordre décroissant, puis les appliquer dans un seul bloc
-d'édition. Les portées croisées ou incomplètes restent désactivées : l'éditeur ne doit jamais
-réparer silencieusement une structure ambiguë.
-
-Les tests à ajouter se répartissent naturellement :
-
-- **unitaires** dans `tests/text/test_font_markup.py` : projection avec et sans balisage, imbrications,
-  échappements, `$valeur!n`, limites et retrait de portée ;
-- **mise en page** dans `tests/text/test_text_layout.py` : alternance contenu/police moteur, changement
-  bitmap/vectoriel et correspondance clic → plage source ;
-- **interface** : frappe, collage, sélection au clavier, Ctrl+Z/Ctrl+Y, menu contextuel, langue de
-  traduction et absence de changement dans le contenu envoyé au build.
-
-Risque principal : la police moteur ajoutée au balisage modifie nécessairement la largeur visible
-et peut provoquer un retour à la ligne qui n'existe pas dans le jeu. C'est acceptable en **vue
-balisage**, à condition que la bascule reste purement éditoriale et que la vue masquée retrouve
-exactement le placement ROM. La position du caret doit donc suivre la projection courante, pas une
-coordonnée pixel mise en cache entre les deux modes.
-
-#### Ordre d'implémentation
-
-1. **Extraire le modèle de projection** dans `core.text_markup` : spans source/affichés, bornes de
-   chaque portée, conversion d'une sélection et opération pure de retrait. Tests des imbrications,
-   échappements, icônes, valeurs, traductions et annulation textuelle.
-2. **Faire de `FontScreenPreview` une surface éditable**, sans changer son algorithme de rendu :
-   exposition des positions de glyphes, hit-testing, caret et sélection. La projection compose une
-   seule surface de segments fidèles pour le contenu et de segments en police moteur pour les
-   balises visibles ; aucun `QTextEdit` source séparé n'est nécessaire.
-3. **Remplacer le splitter** de `TextWorkbench` par cette surface unique. Le bouton de balisage ne
-   fait varier que les segments techniques de la projection, en maintenant les états existants
-   (aucune sélection, multi-sélection, langue source, traduction avec référence en lecture seule).
-4. **Ajouter le menu contextuel sûr** : option visible seulement sur une portée entièrement
-   sélectionnée, édition regroupée en une commande d'historique, puis retour du curseur sur le
-   contenu conservé.
-5. **Vérifier de bout en bout** : bitmap/vectoriel, plusieurs `[font]` imbriqués, longueur et
-   coupe GBA, collage texte brut, Ctrl+Z/Ctrl+Y, changement de langue et build ROM inchangé.
-
-#### Décision verrouillée (2026-09-19)
-
-La vue balisage n'est jamais une vue source typographique Qt : les balises sont affichées en police
-du moteur, dans la même composition, tandis que tout le contenu reste rendu de façon fidèle avec
-les polices de preview.
-
-#### À trancher au démarrage
-
-- Le bouton doit-il mémoriser sa préférence par projet ou rester une bascule de session ?
-- Une valeur `$score` affiche-t-elle sa valeur initiale dans la vue nette (comportement actuel de
-  l'aperçu) ou le jeton `$score` pour rappeler qu'elle est dynamique ?
+**Remplacé le 2026-10-10** par [L'écran Texte n'édite et ne range que du contenu](#lécran-texte-nédite-et-ne-range-que-du-contenu). Ce chantier voulait faire du rendu GBA la surface d'édition (projection source ↔ affichage, vue balisage en police moteur) ; on retire au contraire l'aperçu de l'écran et le contenu s'édite dans la table. Sa décision verrouillée du 2026-09-19 est caduque.
 
 ### Chantier transverse — préparer une image riche à l'import, recadrer et redimensionner sans toucher au PNG
 

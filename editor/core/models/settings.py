@@ -302,7 +302,7 @@ class GlobalVar:
     type:    str  = "int"   # int|bool|u8|u16|s8|s16|string — un type par variable en C
     default: int | str = 0   # un texte pour le type string
     desc:    str  = ""      # description optionnelle
-    id:      int  = 0       # opaque, stable à vie — voir en-tête de section
+    id:      str  = ""     # opaque, stable à vie — voir en-tête de section
     # Cette variable survit-elle à l'extinction de la console ? Un drapeau par
     # variable, et non « tout persister » : un compteur de travail n'a rien à
     # faire en SRAM, et surtout ce qui entre dans la sauvegarde décide de sa
@@ -333,7 +333,7 @@ class Constant:
     type:  str = "int"   # même jeu de types que GlobalVar : int|bool|u8|u16|s8|s16|string
     value: int | str = 0   # un texte pour le type string
     desc:  str = ""      # description optionnelle
-    id:    int = 0       # opaque, stable à vie
+    id:    str = ""     # opaque, stable à vie
 
 
 # ── La matrice de collision (ROADMAP v0.23) ──────────────────────────

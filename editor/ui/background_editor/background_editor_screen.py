@@ -4,7 +4,7 @@
 repeindre la palette par tuile 8×8, partagé entre scènes, cf. bg_inpaint_canvas) ·
 inspecteur (dimensions, budget tuiles, liste des palettes éditables, algo de
 compression). La compression est non-destructive (cf. core/bg_import) — le PNG
-n'est jamais modifié, tout vit en métadonnées dans le .json du BackgroundAsset.
+n'est jamais modifié, tout vit en métadonnées dans le .background du BackgroundAsset.
 """
 from __future__ import annotations
 import html
@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QVBoxLayout, QSplitter, QListWidget,
+    QWidget, QHBoxLayout, QVBoxLayout, QListWidget,
     QListWidgetItem, QFileDialog, QLabel, QSpinBox,
     QMenu, QMessageBox, QAbstractItemView, QPushButton, QGridLayout, QCheckBox,
     QSlider, QComboBox,
@@ -38,6 +38,7 @@ from core.models.background import (
 from core.models.gba_color import COMPRESSION_METHODS
 from core.command_dispatcher import get_dispatcher
 from ui.common.asset_finder import AssetFinder
+from ui.common.three_column_body import ThreeColumnBody
 from ui.common.asset_kinds import (
     BACKGROUNDS_SCENE, BACKGROUNDS_UI, BACKGROUNDS_ANIM,
 )
@@ -992,7 +993,7 @@ class BgPropertiesPanel(QWidget):
             self._header.set_header("empty", "", "")
         self._blocking = False
         self._clear_analysis()   # mesurait l'image d'avant (autre fond, autre taille)
-        self._btn_analyze.setEnabled(bool(ba and ba.image_name()))
+        self._btn_analyze.setEnabled(bool(ba and ba.asset))
         self._refresh_kind_buttons()
         self._refresh_kind_sections()
         self._refresh_mode_buttons()
@@ -1437,8 +1438,9 @@ class BgPropertiesPanel(QWidget):
         self.renamed.emit()
 
     def _png_path(self):
-        img = self._ba.image_name() if self._ba else ""
-        return (self._project.background_images_dir / img) if (self._project and img) else None
+        if not (self._project and self._ba and self._ba.asset):
+            return None
+        return self._project.background_image_path(self._ba)
 
     def _on_extract_palette(self):
         """Promeut les sous-palettes déduites (`ba.palettes`) en PaletteBank
@@ -1491,7 +1493,7 @@ class BgPropertiesPanel(QWidget):
         dst = self._project.background_images_dir / f"{self._ba.name}.png"
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, dst)
-        self._ba.asset = dst.name
+        self._ba.asset = self._project.asset_rel(dst)
         # Un recadrage se dit en pixels de l'ANCIENNE image : sur la nouvelle il
         # désignerait autre chose.
         self._ba.import_crop = self._ba.import_size = None
@@ -1515,12 +1517,6 @@ class BackgroundEditorScreen(QWidget):
         self.setStyleSheet(f"background:{C.BG_DEEP};")
         self._project = None
         root = QHBoxLayout(self); root.setContentsMargins(0, 0, 0, 0); root.setSpacing(0)
-        split = QSplitter(Qt.Orientation.Horizontal)
-        split.setStyleSheet(
-            f"QSplitter::handle{{background:{C.BORDER};}}"
-            f"QSplitter::handle:horizontal{{width:2px;}}"
-            f"QSplitter::handle:hover{{background:{_BG_COLOR};}}"
-        )
         # Trois sections, une par `kind` : chacune a son propre import (un PNG,
         # un cadre d'UI, une planche d'animation). Cf. ui/common/asset_kinds.py.
         self._finder = AssetFinder(
@@ -1529,10 +1525,9 @@ class BackgroundEditorScreen(QWidget):
             min_width=180, max_width=420)
         self._canvas = BgInpaintCanvas()
         self._props = BgPropertiesPanel()
-        split.addWidget(self._finder); split.addWidget(self._canvas); split.addWidget(self._props)
-        split.setSizes([240, 800, 300])
-        split.setStretchFactor(0, 0); split.setStretchFactor(1, 1); split.setStretchFactor(2, 0)
-        root.addWidget(split)
+        self.body = ThreeColumnBody(self._finder, self._canvas, self._props,
+                                    sizes=(240, 800, 300))
+        root.addWidget(self.body)
 
         self._finder.selected.connect(lambda _kind, ba: self._on_selected(ba))
         self._finder.add_requested.connect(
@@ -1643,7 +1638,7 @@ class BackgroundEditorScreen(QWidget):
             from core.resources import asset_reconciliation
             ba.import_crop, ba.import_size = used_prep["crop"], used_prep["size"]
             ba.compression = used_comp
-            asset_reconciliation.apply_bg_encoding(ba, name, c)
+            asset_reconciliation.apply_bg_encoding(ba, c)
             with get_dispatcher().suspended():
                 self._project.backgrounds.save(ba)
             get_dispatcher().notify_background_changed(ba)
@@ -1673,22 +1668,22 @@ class BackgroundEditorScreen(QWidget):
         """Recadrage / redimensionnement posé au canvas (ou « Original » : deux
         None). Même mode et même dithering, seule la source préparée change."""
         ba = self._props._ba
-        if not ba or not self._project or not ba.image_name():
+        if not ba or not self._project or not ba.asset:
             return
         token = ("bitmap" if ba.mode == "bitmap"
                  else "tiled8" if ba.bpp == 8 else "tiled4")
         self._compress_async(
-            ba, self._project.background_images_dir / ba.image_name(), token,
+            ba, self._project.background_image_path(ba), token,
             ba.quantize_method, ba.dither,
             then=lambda: (self._props.load(ba, self._project), self._canvas.reload()),
             prep={"crop": crop, "size": size})
 
     def _on_compression(self, compression, method):
         ba = self._props._ba
-        if not ba or not self._project or not ba.image_name():
+        if not ba or not self._project or not ba.asset:
             return
         self._compress_async(
-            ba, self._project.background_images_dir / ba.image_name(),
+            ba, self._project.background_image_path(ba),
             "tiled8" if ba.bpp == 8 else "tiled4", method, ba.dither,
             then=lambda: (self._props.load(ba, self._project), self._canvas.reload()),
             compression=compression)
@@ -1730,7 +1725,7 @@ class BackgroundEditorScreen(QWidget):
         ba = self._project.get_background(name)
         if ba is None:
             from core.models.background import BackgroundAsset
-            ba = BackgroundAsset(name=name, asset=dst.name)
+            ba = BackgroundAsset(name=name, asset=self._project.asset_rel(dst))
             self._project.backgrounds.append(ba)
         # Le type vient du « + » sur lequel on a cliqué : la section où l'auteur
         # range l'image dit son emploi mieux que n'importe quelle heuristique

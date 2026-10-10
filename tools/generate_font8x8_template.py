@@ -84,7 +84,7 @@ def main() -> None:
         "bg_color": "#FF00FF",
         "glyphs": glyphs,
     }
-    (fonts_dir / "Font8x8 Latin.json").write_text(
+    (fonts_dir / "Font8x8 Latin.font").write_text(
         json.dumps(sidecar, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 

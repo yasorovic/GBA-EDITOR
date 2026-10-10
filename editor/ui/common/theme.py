@@ -37,6 +37,8 @@ widget de l'éditeur, pas le composant natif `QToolTip`, afin de ne jamais
 dessiner une première fois les couleurs de Windows.
 """
 
+from pathlib import Path
+
 from ui.common import icons as _icons
 
 # ──────────────────────────────────────────────────────────────────
@@ -62,6 +64,30 @@ class _Typography:
 
 
 T = _Typography()
+
+
+_BRAND_FONT_DIR = Path(__file__).parent / "fonts"
+_brand_family: str | None = None
+
+
+def brand_font(size: int = T.XL, *, regular: bool = False) -> "QFont":
+    """Sniglet ExtraBold (taille en points, comme `QFont(T.UI, …)`) : la police
+    de marque — nom du projet, bouton Run, titre de l'écran de crash.
+
+    Chargée au premier appel (la QApplication doit exister) : l'écran de crash
+    peut s'ouvrir avant que le reste de l'éditeur ait rien construit. Si le
+    fichier manque, on retombe sur la police d'interface plutôt que d'échouer."""
+    from PyQt6.QtGui import QFont, QFontDatabase
+    global _brand_family
+    if _brand_family is None:
+        _brand_family = T.UI
+        for name in ("Sniglet-Regular.ttf", "Sniglet-ExtraBold.ttf"):
+            font_id = QFontDatabase.addApplicationFont(str(_BRAND_FONT_DIR / name))
+            families = QFontDatabase.applicationFontFamilies(font_id)
+            if families:
+                _brand_family = families[0]   # les deux graisses partagent « Sniglet »
+    return QFont(_brand_family, size,
+                 QFont.Weight.Normal if regular else QFont.Weight.ExtraBold)
 
 
 def ui_font(size: int = T.MD, *, bold: bool = False, family: str | None = None):
@@ -142,6 +168,7 @@ _DARK = dict(
     BTN_PRIMARY_DISABLED="#232323", BTN_PRIMARY_TEXT="#f2f2f2",
     SCROLL_HANDLE="#3a3a3a", SCROLL_HANDLE_HOVER="#4c4c4c",
     CANVAS_BG="#1a1a1a", CHECKER_A="#222222", CHECKER_B="#2a2a2a",
+    GRAPH_BG="#0b0b0b", GRAPH_GRID="#383838",
     SYNTAX_KEYWORD="#c586c0", SYNTAX_API="#4ec9b0", SYNTAX_NUMBER="#b5cea8",
     SYNTAX_STRING="#ce9178", SYNTAX_COMMENT="#6a9955",
     CONSOLE_TEXT="#c8ffc8",   # texte de la console de build
@@ -174,6 +201,7 @@ _LIGHT = dict(
     BTN_PRIMARY_DISABLED="#c4c4c4", BTN_PRIMARY_TEXT="#ffffff",
     SCROLL_HANDLE="#b0b0b0", SCROLL_HANDLE_HOVER="#909090",
     CANVAS_BG="#e4e4e4", CHECKER_A="#b4b4b4", CHECKER_B="#9e9e9e",
+    GRAPH_BG="#cfcfcf", GRAPH_GRID="#c4c4c4",
     CONSOLE_TEXT="#1f6b3a",
     TECH_BG="#f3fbf5", TECH_TEXT="#0e4023", TECH_GRID="#d3e9da", TECH_OK="#1f9d55",
     TECH_OUTLINE="#3f8a5c", TECH_BLOCK_BORDER="#93c6a5",
@@ -832,31 +860,39 @@ QStatusBar {{
 }}
 """
 
-    # Onglets (bascule entre vues) — onglet actif = liseré ACCENT en haut
+    # Onglets — LE look de tous les onglets de l'éditeur (arbre de scène, panneaux,
+    # atelier Texte, boîtes de dialogue) : texte gras, l'onglet actif s'éclaire et
+    # se pose sur un trait d'accent de 2 px qui occupe toute sa largeur, appuyé sur
+    # le filet de la barre. Toutes les barres d'onglets ont le même fond (BG_RAISED) ;
+    # le conteneur d'une barre isolée (arbre de scène, langues) le reprend. Aucun écran n'écrit le sien ; l'accueil des projets est
+    # la seule exception, voulue (cf. `project_picker._tabs_qss`).
     @property
     def tab(self) -> str:
         return f"""
 QTabWidget::pane {{
-    border: 1px solid {C.BORDER};
-    background: {C.BG_PANEL};
+    border: none;
+    border-top: 1px solid {C.BORDER};
+}}
+QTabBar {{
+    background: {C.BG_RAISED};
 }}
 QTabBar::tab {{
-    background: {C.BG_RAISED};
+    background: transparent;
     color: {C.TEXT_DIM};
-    border: 1px solid {C.BORDER};
-    border-bottom: none;
-    padding: 4px 12px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 6px 12px;
+    margin: 0;
     font-family: {T.UI_STACK};
-    font-size: {T.MD}px;
-}}
-QTabBar::tab:selected {{
-    background: {C.BG_PANEL};
-    color: {C.ACCENT};
-    border-top: 2px solid {C.ACCENT};
+    font-size: {T.SM}px;
+    font-weight: 600;
 }}
 QTabBar::tab:hover:!selected {{
-    background: {C.BG_HOVER};
     color: {C.TEXT_NORM};
+}}
+QTabBar::tab:selected {{
+    color: {C.TEXT_HI};
+    border-bottom: 2px solid {C.ACCENT};
 }}
 """
 
@@ -935,4 +971,5 @@ GLOBAL_QSS = (
     + QSS.checkbox
     + QSS.combobox
     + QSS.list_widget
+    + QSS.tab
 )

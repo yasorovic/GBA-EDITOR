@@ -18,6 +18,7 @@ from PyQt6.QtGui import QFont
 
 from PyQt6.QtCore import pyqtSignal
 
+from core.models.unique_name import unique_name
 from core.models.settings import InputAxis, BUTTON_NAMES
 from ui.common.theme import C, T, QSS
 from ui.common.widgets import CollapsibleCard, W
@@ -179,7 +180,4 @@ class AxesCard(CollapsibleCard):
 
     def free_name(self) -> str:
         taken = {a.name for a in self._project.settings.axes} | RESERVED_AXIS_NAMES
-        n = 1
-        while f"axis{n}" in taken:
-            n += 1
-        return f"axis{n}"
+        return unique_name("axis", taken)

@@ -763,8 +763,7 @@ class SceneInspector(QWidget):
             row.set_backgrounds(_bg_names_provider, layer.background_name)
             if layer.background_name:
                 ba = self._project.get_background(layer.background_name)
-                png = ba.asset if ba and ba.asset else f"{layer.background_name}.png"
-                ap = self._project.background_images_dir / png
+                ap = self._project.background_image_path(ba, layer.background_name)
                 if ap.exists():
                     row.set_asset(str(ap))
             row.set_speed(layer.scroll_speed)

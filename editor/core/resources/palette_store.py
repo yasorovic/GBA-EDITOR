@@ -1,9 +1,13 @@
-"""Persistance des palettes : le ``.hex`` est la donnée canonique.
+"""Persistance des palettes : le ``.hex`` est la donnée canonique, la palette le POINTE.
 
-Une palette est visible et modifiable sans l'éditeur dans
-``assets/palettes/<nom>.hex``. Le JSON voisin est seulement un sidecar pour
-les métadonnées de l'éditeur ; il ne duplique volontairement jamais les
-couleurs.
+Une palette est un asset ``<nom>.palette`` (du JSON : nom, taille, et ``asset`` — le chemin du ``.hex``
+relatif au projet), rangé où l'auteur veut sous ``assets/``. Ses couleurs vivent dans le ``.hex``, lisible
+et modifiable sans l'éditeur, et ne sont jamais dupliquées dans le ``.palette``. Comme pour les autres
+familles, l'asset ne suit pas son fichier source, et le fichier ne suit pas son asset : seul le chemin
+``asset`` les relie.
+
+Un ``.hex`` déposé à la main dans ``assets/palettes/`` devient aussitôt une palette (son ``.palette`` est
+créé à côté). Ailleurs sous ``assets/``, c'est une source libre, comme un PNG qu'aucun asset ne cite.
 """
 
 from __future__ import annotations
@@ -17,13 +21,37 @@ from core.resources.resource_store import ResourceStore, atomic_write, safe_file
 
 
 class PaletteStore(ResourceStore[PaletteBank]):
-    """Catalogue de :class:`PaletteBank` adossé à des fichiers ``.hex``."""
+    """Catalogue de :class:`PaletteBank`, chacune pointant son fichier ``.hex``."""
 
-    def __init__(self, directory: Path):
-        super().__init__(directory, PaletteBank)
+    def __init__(self, directory: Path, root: Path | None = None, project_root: Path | None = None):
+        super().__init__(directory, PaletteBank, root)
+        # Les chemins `asset` sont relatifs à la racine du PROJET (comme ceux des autres familles).
+        self._project_root = Path(project_root) if project_root is not None else self.root
+
+    # ── Où vit le .hex ────────────────────────────────────────────
+
+    def _rel(self, path: Path) -> str:
+        try:
+            return Path(path).resolve().relative_to(self._project_root.resolve()).as_posix()
+        except ValueError:
+            return Path(path).as_posix()
+
+    def _abs(self, rel: str) -> Path:
+        path = Path(rel)
+        return path if path.is_absolute() else (self._project_root / path).resolve()
+
+    def hex_path(self, bank: PaletteBank) -> Path:
+        """Le fichier des couleurs de `bank` : celui que son asset cite ; une palette neuve, qui n'en cite pas
+        encore, aura le sien dans le dossier des palettes."""
+        if bank.asset:
+            return self._abs(bank.asset)
+        return self.dir / f"{safe_filename(bank.name)}.hex"
 
     def source_path(self, name: str) -> Path:
-        return self.dir / f"{safe_filename(name)}.hex"
+        bank = next((b for b in self.items if b.name == name), None)
+        return self.hex_path(bank) if bank is not None else self.dir / f"{safe_filename(name)}.hex"
+
+    # ── Lecture ───────────────────────────────────────────────────
 
     def _load_metadata(self, path: Path) -> dict:
         """Les métadonnées du sidecar, ou {} s'il est illisible : le `.hex` est
@@ -35,98 +63,117 @@ class PaletteStore(ResourceStore[PaletteBank]):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (ValueError, OSError) as error:
-            self.unreadable[path.name] = f"{type(error).__name__}: {error}"
+            self.unreadable[self._key(path)] = f"{type(error).__name__}: {error}"
             return {}
         return data if isinstance(data, dict) else {}
 
-    def _write_sidecar(self, bank: PaletteBank) -> None:
-        path = self._path(bank.name)
+    def _write_sidecar(self, bank: PaletteBank, folder: Path | None = None) -> None:
+        path = self._path(bank.name, folder)
         self._keep_unreadable(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(path, project_json.dumps(bank.to_metadata_dict()))
+        self.index.record(bank.name, path)
 
-    def save(self, item: PaletteBank):
-        self.dir.mkdir(parents=True, exist_ok=True)
-        atomic_write(self.source_path(item.name), item.to_hex())
-        self._write_sidecar(item)
+    def _read(self, name: str, sidecar: Path) -> PaletteBank | None:
+        """Lit la palette `name` : son sidecar, puis le `.hex` qu'il cite (à défaut, celui qui porte son nom à
+        côté de lui). Une palette dont le `.hex` a disparu n'est pas chargée, et son sidecar n'est pas touché :
+        supprimer le fichier source est une intention, pas une panne à réparer."""
+        metadata = self._load_metadata(sidecar)
+        cited = metadata.get("asset")
+        hex_file = self._abs(cited) if isinstance(cited, str) and cited else sidecar.with_suffix(".hex")
+        if not hex_file.exists():
+            hex_file = self._migrate_colors_in_sidecar(name, sidecar, metadata, hex_file)
+            if hex_file is None:
+                return None
+        try:
+            bank = PaletteBank.from_hex(name, hex_file.read_text(encoding="utf-8"), metadata)
+        except Exception as error:
+            self.unreadable[self._key(hex_file)] = f"{type(error).__name__}: {error}"
+            print(f"[project] palette read error {hex_file.name}: {error}")
+            return None
+        bank.asset = self._rel(hex_file)
+        if metadata != bank.to_metadata_dict():
+            self._write_sidecar(bank)              # un sidecar d'avant le champ `asset` le reçoit une fois
+        else:
+            self.index.record(name, sidecar)
+        for index, existing in enumerate(self.items):
+            if existing.name == name:
+                self.items[index] = bank
+                return bank
+        self.items.append(bank)
+        return bank
+
+    def _migrate_colors_in_sidecar(self, name: str, sidecar: Path, metadata: dict, hex_file: Path) -> Path | None:
+        """Les projets antérieurs n'ont que leur JSON, couleurs comprises : on en tire le `.hex`, une fois.
+        Un sidecar moderne (sans couleurs) dont le `.hex` manque reste tel quel."""
+        if "colors" not in metadata:
+            return None
+        try:
+            legacy = PaletteBank.from_dict(metadata)
+            legacy.name = name
+            legacy.asset = self._rel(hex_file)
+            atomic_write(hex_file, legacy.to_hex())
+            return hex_file
+        except Exception as error:
+            print(f"[project] palette migration error {sidecar.name}: {error}")
+            return None
 
     def load(self):
         self.items = []
         self.unreadable = {}
-        if not self.dir.exists():
+        self.index.scan()
+        if not self.root.exists():
             return
-
-        # Les projets antérieurs n'ont que leur JSON. Une seule migration les
-        # transforme en source .hex, puis les ouvertures suivantes lisent le
-        # format canonique comme tous les autres projets.
-        for sidecar in sorted(self.dir.glob("*.json")):
-            source = sidecar.with_suffix(".hex")
-            if source.exists():
+        for name in self.index.names():
+            sidecar = self.index.path_for(name)
+            if sidecar is not None:
+                self._read(name, sidecar)
+        # Un `.hex` déposé à la main dans le dossier des palettes devient immédiatement une palette
+        # complète pour l'éditeur, sans que ses couleurs soient copiées.
+        cited = {self.hex_path(bank).resolve() for bank in self.items}
+        taken = {bank.name for bank in self.items}
+        for source in sorted(self.dir.glob("*.hex")) if self.dir.exists() else []:
+            if source.resolve() in cited or source.stem in taken:
                 continue
             try:
-                data = json.loads(sidecar.read_text(encoding="utf-8"))
-                # Un sidecar moderne orphelin signifie que l'utilisateur a
-                # supprimé le .hex. Ne jamais le recréer : la suppression du
-                # fichier source est une intention, pas une panne à réparer.
-                if not isinstance(data, dict) or "colors" not in data:
-                    continue
-                legacy = PaletteBank.from_dict(data)
-                legacy.name = sidecar.stem
-                self.save(legacy)
+                bank = PaletteBank.from_hex(source.stem, source.read_text(encoding="utf-8"), {})
             except Exception as error:
-                print(f"[project] palette migration error {sidecar.name}: {error}")
-
-        for source in sorted(self.dir.glob("*.hex")):
-            try:
-                metadata = self._load_metadata(source.with_suffix(".json"))
-                bank = PaletteBank.from_hex(
-                    source.stem, source.read_text(encoding="utf-8"), metadata)
-                self.items.append(bank)
-                # Un .hex déposé à la main devient immédiatement un asset
-                # complet pour l'éditeur, sans que ses couleurs soient copiées.
-                self._write_sidecar(bank)
-            except Exception as error:
-                self.unreadable[source.name] = f"{type(error).__name__}: {error}"
+                self.unreadable[self._key(source)] = f"{type(error).__name__}: {error}"
                 print(f"[project] palette read error {source.name}: {error}")
+                continue
+            bank.asset = self._rel(source)
+            self.items.append(bank)
+            self._write_sidecar(bank)
 
     def load_one(self, name: str) -> PaletteBank | None:
-        source = self.source_path(name)
-        if not source.exists():
-            return None
-        try:
-            metadata = self._load_metadata(self._path(name))
-            bank = PaletteBank.from_hex(
-                name, source.read_text(encoding="utf-8"), metadata)
-            self._write_sidecar(bank)
-            for index, existing in enumerate(self.items):
-                if existing.name == name:
-                    self.items[index] = bank
-                    return bank
-            self.items.append(bank)
-            return bank
-        except Exception as error:
-            print(f"[project] PaletteBank reload error {name}: {error}")
-            return None
+        sidecar = self.index.path_for(name)
+        return self._read(name, sidecar) if sidecar is not None else None
+
+    # ── Écriture ──────────────────────────────────────────────────
+
+    def save(self, item: PaletteBank, folder: Path | None = None):
+        if not item.asset:
+            item.asset = self._rel(self.dir / f"{safe_filename(item.name)}.hex")
+        hex_file = self.hex_path(item)
+        hex_file.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write(hex_file, item.to_hex())
+        self._write_sidecar(item, folder)
 
     def _files_of(self, item: PaletteBank) -> list[Path]:
-        return [self.source_path(item.name), self._path(item.name)]
+        return [self.path_of(item)]               # le `.hex` est la source, il reste : on ne supprime que l'asset
 
     def delete(self, item: PaletteBank):
-        for path in (self.source_path(item.name), self._path(item.name)):
+        for path in self._files_of(item):
             if path.exists():
                 path.unlink()
+        self.index.forget(item.name)
         self.remove(item)
         self._pending_delete = [x for x in self._pending_delete if x is not item]
 
     def commit_deletes(self):
         for item in self.pending_deletes():   # cf. ResourceStore.pending_deletes
-            for path in (self.source_path(item.name), self._path(item.name)):
+            for path in self._files_of(item):
                 if path.exists():
                     path.unlink()
+            self.index.forget(item.name)
         self._pending_delete.clear()
-
-    def rename(self, item: PaletteBank, new_name: str):
-        for path in (self.source_path(item.name), self._path(item.name)):
-            if path.exists():
-                path.unlink()
-        item.name = new_name
-        self.save(item)

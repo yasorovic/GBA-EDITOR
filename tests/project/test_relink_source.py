@@ -1,0 +1,137 @@
+"""La source qui manque : une erreur de build par fichier, et le geste qui relie l'asset à un autre fichier."""
+import wave
+from pathlib import Path
+
+import pytest
+from PIL import Image
+
+from asset_fixtures import create_all
+from core import asset_relink
+from core.project import Project
+from core.validator import validate_project
+
+
+def _wav(path: Path) -> None:
+    with wave.open(str(path), "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(1)
+        out.setframerate(8000)
+        out.writeframes(bytes(800))
+
+
+def _project(tmp_path: Path) -> Project:
+    p = Project.create(tmp_path / "Jeu", "Jeu")
+    Image.new("RGB", (16, 16), (200, 30, 30)).save(p.sprites_dir / "hero.png")
+    _wav(p.sfx_dir / "boom.wav")
+    Image.new("RGB", (32, 32), (10, 20, 30)).save(p.backgrounds_dir / "sky.png")
+    p = Project.open(p.root)
+    p.load_all_resources()
+    create_all(p, ("sprites", p.sprites_dir / "hero.png"), ("sfx", p.sfx_dir / "boom.wav"),
+               ("backgrounds", p.backgrounds_dir / "sky.png"))
+    return p
+
+
+def _errors(root: Path) -> list[str]:
+    project = Project.open(root)
+    project.load_all_resources()
+    return [str(m) for m in validate_project(project)[1]]
+
+
+def test_a_source_that_is_there_is_not_an_error(tmp_path: Path):
+    p = _project(tmp_path)
+    assert asset_relink.missing_sources(p) == []
+    assert not any("source file not found" in e for e in _errors(p.root))
+
+
+def test_each_missing_source_is_ONE_error_whatever_the_family(tmp_path: Path):
+    p = _project(tmp_path)
+    (p.sprites_dir / "hero.png").unlink()
+    (p.sfx_dir / "boom.wav").unlink()
+    (p.backgrounds_dir / "sky.png").unlink()
+
+    errors = [e for e in _errors(p.root) if "source file not found" in e]
+
+    assert len(errors) == 3                                                    # une par fichier, pas quatre messages par famille
+    for family, name in (("Sprite", "hero"), ("SFX", "boom"), ("Background", "sky")):
+        assert any(f'{family} "{name}"' in e and "relink" in e for e in errors), (family, name)
+
+
+def test_relinking_a_sound_keeps_its_name_and_id_and_clears_the_error(tmp_path: Path):
+    p = _project(tmp_path)
+    boom = p.sfx.get("boom")
+    identity, volume = boom.id, boom.volume
+    (p.sfx_dir / "boom.wav").unlink()
+    elsewhere = p.sfx_dir / "kept" / "explosion.wav"
+    elsewhere.parent.mkdir()
+    _wav(elsewhere)
+
+    assert asset_relink.relink_source(p, "sfx", boom, elsewhere) == "asset"
+
+    assert boom.asset == "assets/sfx/kept/explosion.wav"
+    assert (boom.name, boom.id, boom.volume) == ("boom", identity, volume)
+    reopened = Project.open(p.root)
+    reopened.load_all_resources()
+    assert reopened.sfx.get("boom").asset == "assets/sfx/kept/explosion.wav"
+    assert not any("source file not found" in e for e in _errors(p.root))
+
+
+def test_relinking_a_sprite_to_a_file_with_another_name_re_encodes_it_and_creates_nothing(tmp_path: Path):
+    p = _project(tmp_path)
+    hero = p.sprites.get("hero")
+    (p.sprites_dir / "hero.png").unlink()
+    Image.new("RGB", (16, 16), (30, 200, 40)).save(p.sprites_dir / "hero_green.png")
+    count = len(p.sprites)
+
+    asset_relink.relink_source(p, "sprites", hero, p.sprites_dir / "hero_green.png")
+
+    assert hero.asset == "assets/sprites/hero_green.png" and hero.name == "hero"
+    assert len(p.sprites) == count and p.sprites.get("hero_green") is None      # pas de doublon né du nom du fichier
+    assert hero.palettes                                                         # l'encodage vient du NOUVEAU fichier
+    assert not any("source file not found" in e for e in _errors(p.root))
+
+
+def test_relinking_a_background_to_an_image_anywhere_under_assets_re_encodes_it(tmp_path: Path):
+    p = _project(tmp_path)
+    sky = p.backgrounds.get("sky")
+    (p.backgrounds_dir / "sky.png").unlink()
+    elsewhere = p.assets_dir / "Levels" / "Act1" / "sunset.png"
+    elsewhere.parent.mkdir(parents=True)
+    Image.new("RGB", (32, 32), (200, 100, 50)).save(elsewhere)
+
+    asset_relink.relink_source(p, "backgrounds", sky, elsewhere)
+
+    assert sky.asset == "assets/Levels/Act1/sunset.png" and sky.name == "sky"
+    assert p.background_image_path(sky) == elsewhere.resolve()
+    assert not any("source file not found" in e for e in _errors(p.root))
+
+
+def test_a_file_outside_the_project_cannot_be_the_source_of_a_background(tmp_path: Path):
+    p = _project(tmp_path)
+    sky = p.backgrounds.get("sky")
+    outside = tmp_path / "elsewhere.png"
+    Image.new("RGB", (32, 32), (1, 2, 3)).save(outside)
+    before = sky.asset
+
+    with pytest.raises(ValueError, match="inside the project"):
+        asset_relink.relink_source(p, "backgrounds", sky, outside)
+    assert sky.asset == before
+
+
+def test_a_file_that_does_not_fit_is_refused_and_the_asset_is_left_alone(tmp_path: Path):
+    p = _project(tmp_path)
+    boom = p.sfx.get("boom")
+    note = p.sfx_dir / "notes.txt"
+    note.write_text("x", encoding="utf-8")
+    broken = p.sprites_dir / "broken.png"
+    broken.write_bytes(b"not an image")
+    hero = p.sprites.get("hero")
+    before = (boom.asset, hero.asset, list(hero.palettes))
+
+    with pytest.raises(ValueError, match="not a source format"):
+        asset_relink.relink_source(p, "sfx", boom, note)
+    with pytest.raises(ValueError, match="could not be read"):
+        asset_relink.relink_source(p, "sprites", hero, broken)
+    with pytest.raises(ValueError, match="not a file"):
+        asset_relink.relink_source(p, "sfx", boom, p.sfx_dir / "missing.wav")
+
+    assert (boom.asset, hero.asset, list(hero.palettes)) == before

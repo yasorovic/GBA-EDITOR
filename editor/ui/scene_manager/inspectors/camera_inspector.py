@@ -491,9 +491,7 @@ class CameraInspector(QWidget):
             return None
         if getattr(ba, "tileset", None):
             return ba.tiles_w * 8, ba.tiles_h * 8
-        png = self._project.background_images_dir / (
-            ba.asset if getattr(ba, "asset", None) else f"{layer.background_name}.png"
-        )
+        png = self._project.background_image_path(ba, layer.background_name)
         try:
             from PIL import Image
             with Image.open(png) as img:

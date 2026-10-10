@@ -19,7 +19,8 @@ backstage/
 │   │   ├── project_langs.py         ← tranche de Project : traductions, un fichier par langue
 │   │   ├── project_renames.py       ← tranche de Project : renommer et réparer ce qui cite
 │   │   ├── models/                  ← modèle de domaine (dataclasses + sérialisation), un fichier par sous-domaine
-│   │   │   ├── ids.py                   ← id opaque partagé (données) vs nom lisible (code écrit à la main)
+│   │   │   ├── ids.py                   ← id opaque (12 chiffres hexadécimaux) partagé (données) vs nom lisible (code écrit à la main)
+│   │   │   ├── unique_name.py           ← la règle unique du nom libre : `coin`, `coin_2`, `coin_3`
 │   │   │   ├── resource.py, settings.py, palette.py, sub_palette.py
 │   │   │   ├── components.py            ← Components ECS (CollisionBox/Sprite/SoundFx/Script) + registre
 │   │   │   ├── sprite.py, background.py, audio.py
@@ -28,11 +29,19 @@ backstage/
 │   │   │   ├── scene.py                 ← Actor, Prefab, Scene, collision map
 │   │   │   └── tile_codec.py            ← format binaire tuile/entrée de carte — module FEUILLE, n'importe rien
 │   │   ├── resources/               ← persistance disque ↔ modèles, sans dépendre de Project
-│   │   │   ├── resource_index.py    ← inventaire léger nom → chemin, sans lire les JSON
-│   │   │   ├── resource_store.py    ← ResourceStore générique (I/O JSON par collection)
+│   │   │   ├── resource_index.py    ← inventaire léger nom → chemin, sans lire les JSON ; RÉCURSIF (un sidecar peut vivre dans un sous-dossier de sa famille), le moins profond l'emporte sur un homonyme
+│   │   │   ├── resource_store.py    ← ResourceStore générique (I/O JSON par collection) ; un item est lu, écrit, renommé et supprimé là où il vit, `save(item, folder)` pose un nouvel asset où l'on veut
 │   │   │   ├── deleted_files.py     ← `.temp/` du projet : ce qu'on supprime y est déplacé, Ctrl+Z le rend, la fermeture le vide
 │   │   │   ├── palette_store.py     ← palettes .hex + sidecar JSON
 │   │   │   └── asset_reconciliation.py ← synchronisation des fichiers assets et de leurs sidecars
+│   │   ├── disk_tree.py             ← `assets/` tel qu'il est sur le disque, chaque fichier marqué (asset, source reliée, source libre, non géré) — sans Qt, lecture seule
+│   │   ├── disk_folders.py          ← créer et renommer un dossier de `assets/` (refuse tout ce qui sort de `assets/`)
+│   │   ├── asset_creation.py        ← *Create asset* : un format de source → les types qu'il peut devenir ; construit l'asset (nom unique, à côté de sa source, qui le POINTE), l'historique le range (`CreateAssetCmd`)
+│   │   ├── asset_usages.py          ← ce qui cite encore un asset (composants, calques, prefabs, palettes, scripts) : l'avertissement avant de le supprimer
+│   │   ├── blank_assets.py          ← les assets vierges sans source (scène, prefab, mise en page, boîtes, table, palette) et le contenu d'un script / behavior neuf
+│   │   ├── disk_commands.py         ← importer, déplacer, créer / renommer un dossier, créer un fichier : des `Command` annulables autour de `disk_folders`, `disk_move`, `asset_creation`
+│   │   ├── disk_move.py             ← déplacer fichiers et dossiers de `assets/` (glisser-déposer de l'onglet Disk) : réécrit le chemin de source des assets, n'écrase jamais, `drop_verdict` répond au survol sans rien toucher, une image de fond se déplace comme n'importe quelle source (`BackgroundAsset.asset` est un chemin relatif au projet, lu par `Project.background_image_path`), refuse palettes / textes / variables / scripts / images de fonds
+│   │   ├── asset_relink.py          ← l'asset dont la source manque (`missing_sources`, erreur de build du validateur) et `relink_source` : le relier à un autre fichier sans le recréer
 │   │   ├── collision_slopes.py      ← génération des tiles de pente (Bresenham) pour CollisionTool
 │   │   ├── project_watcher.py       ← détection live des assets (déplacement vers projects/ à venir)
 │   │   ├── sprite_compose.py        ← composition d'une frame de sprite depuis son PNG source (PIL)
@@ -69,6 +78,11 @@ backstage/
 │       ├── common/                  ← transverse à tous les écrans
 │       │   ├── theme.py             ← C (couleurs) / T (typographie) — jamais de valeurs en dur
 │       │   ├── icons.py, widgets.py, reorderable_bar.py, build_panel.py
+│       │   ├── panel_bar.py         ← la barre d'outils fine d'un onglet (Clear, Refresh) — panneau Build / debug et onglet Disk de la colonne de gauche — et `tab_widget()`, le jeu d'onglets de l'éditeur (mode document : la barre occupe toute la largeur). Le look des ONGLETS eux-mêmes n'est pas ici : `QSS.tab` (theme.py), global, la seule règle ; l'accueil des projets en est l'unique exception, voulue
+│       │   ├── three_column_body.py ← le squelette d'un écran : finder | centre | inspecteur, et sous le centre l'emplacement du panneau de build (`attach_dock`, `set_dock_open`) — chaque écran l'utilise au lieu de refaire son `QSplitter`
+│       │   ├── elide_name.py        ← couper un nom de fichier trop long en gardant son extension (`monnomq... .extension`) : retour à la ligne d'abord, puis coupe — la règle commune de la vue à plat et de l'arbre de l'onglet Disk
+│       │   ├── disk_tree_view.py    ← l'onglet Disk de la colonne de gauche (à côté de Project viewer) : l'arbre vertical de `assets/`, racine « Assets » ; choisir un dossier l'affiche dans `disk_view` ; « + » crée un dossier (renommé en place), la loupe filtre par nom
+│       │   ├── disk_view.py         ← l'onglet Disk du panneau Build / debug : le contenu d'UN dossier de `assets/` à plat (icône + nom), fil d'ariane « Assets › … », lecture seule
 │       │   ├── catalog.py           ← cœur partagé maître+side (join par clé, pluriel, set_language)
 │       │   ├── notice.py            ← les 3 niveaux de contenu informatif (bâti sur catalog.py)
 │       │   ├── notices/             ← notices.json (source EN) + notices_<code>.json (traductions)
@@ -86,10 +100,12 @@ backstage/
 │       │       └── component_editors/     ← un fichier par type de Component
 │       ├── sprite_editor/             ← un fichier par sous-zone de l'écran
 │       │   ├── sprite_finder_panel.py     ← panneau gauche (sprites + anims)
-│       │   ├── frame_canvas.py            ← timeline + canvas de composition tuile par tuile
-│       │   ├── spritesheet_viewer.py      ← tile picker sur le PNG source
+│       │   ├── sprite_canvas.py           ← le sprite canvas : composition tuile par tuile + barre flottante
+│       │   ├── spritesheet_selector.py    ← le spritesheet : sélecteur de tuiles sur le PNG source
+│       │   ├── sprite_timeline.py         ← la timeline : les frames de la direction, en vignettes
+│       │   ├── sprite_canvas_hints.py     ← table des raccourcis du sprite canvas
 │       │   ├── direction_widget.py        ← sélecteur 3×3 de directions
-│       │   ├── sprite_center_panel.py     ← assemble playback+canvas+tiles+timeline
+│       │   ├── sprite_center_panel.py     ← assemble sprite canvas | spritesheet, timeline dessous
 │       │   ├── sprite_right_panel.py      ← propriétés/collision/anim settings/palette
 │       │   └── sprite_editor_screen.py    ← écran complet (assemble les 3 colonnes)
 │       ├── palette_editor/            ← un fichier par sous-zone de l'écran
@@ -185,20 +201,21 @@ backstage/
 └── Project Demo/                    ← modèles de projet téléchargeables (voir README)
     └── MyGame/                      ← projet démo (OrbitTest suit la même structure)
         ├── MyGame.project       ← manifeste : config racine (scène de démarrage, auteur, version) ET point d'entrée double-clic ; le nom du projet EST le nom du fichier (v0.10, remplace project.json)
-        ├── assets/                  ← dépend d'une ressource externe (image, son...)
+        ├── assets/                  ← TOUT ce que l'auteur manipule ; il l'organise lui-même
         │   ├── sprites/             ← PNG + JSON sidecar (SpriteAsset)
         │   ├── backgrounds/         ← PNG + JSON sidecar (BackgroundAsset)
-        │   └── scripts/             ← scripts Lua source (acteurs, scènes, caméras)
-        ├── project/                 ← données éditeur pures, aucune dépendance externe
-        │   ├── scenes/              ← définition des scènes (.json)
-        │   ├── palettes/            ← PaletteBank (.json) — catalogue de palettes nommées, 1 fichier/palette
-        │   ├── prefab/              ← préfabs d'acteurs (.json)
-        │   ├── data/                ← tables de données (.json) — colonnes typées, lignes
-        │   ├── ui_layouts/          ← mises en page d'interface (.json), partagées entre scènes
-        │   ├── texts.json           ← corpus source : id, clé, rangement et contenu
+        │   ├── scripts/             ← scripts Lua source (acteurs, scènes, caméras)
+        │   ├── palettes/            ← PaletteBank (.hex + .json) — catalogue de palettes nommées, 1 fichier/palette
+        │   ├── scenes/              ← définition des scènes (.scene, du JSON)
+        │   ├── prefab/              ← préfabs d'acteurs (.prefab)
+        │   ├── data/                ← tables de données (.table) — colonnes typées, lignes
+        │   ├── ui_layouts/          ← mises en page d'interface (.layout), partagées entre scènes
+        │   ├── music_boxes/ jingle_boxes/ sound_boxes/ fonts_assets/   ← boîtes sonores (.musicbox .jinglebox .soundbox), polices logiques (.fontasset)
+        │   ├── texts.json           ← corpus source : id, clé, rangement et contenu (à la racine d'assets/)
         │   ├── texts_<code>.json    ← side de traduction partiel, joint au maître par id
         │   └── variables.json       ← globals + constants du projet
-        └── build/                   ← 100% généré, gitignored — compile assets/ ET project/
+        ├── project/                 ← ce qui n'est PAS à l'auteur : editor/ (état interne), licenses/, README.md
+        └── build/                   ← 100% généré, gitignored — compile assets/
 ```
 
 ---
@@ -261,7 +278,7 @@ Ces concepts ont un équivalent direct dans le hardware ou la toolchain.
 | `AnimFrame` | plage de tile indices | Un état visuel = N tiles dans VRAM |
 | `Actor` | `struct Actor` + `OBJATTR` (OAM) | Une entrée de `g_actors[]` en EWRAM ; son affichage est une entrée de `g_oam_entries[]` (`OamEntry`), que `Actor.oam_entry` désigne. `CollisionBoxComponent` → `Actor.collision` (cf. « Deux tables runtime : acteurs et entrées OAM ») |
 | `BackgroundLayer` | charblock (CBB=`bg_slot`) + screenblock | `{image, bg_slot, scroll_speed, pal_bank, tile_palette_overrides}` — un plan BG physique **de la scène** |
-| `BackgroundAsset` | tileset + sous-palettes | Sidecar (`assets/backgrounds/{image}.json`), keyé par nom comme `SpriteAsset` — PNG source jamais modifié
+| `BackgroundAsset` | tileset + sous-palettes | Sidecar (`assets/backgrounds/{image}.background`), keyé par nom comme `SpriteAsset` — PNG source jamais modifié
 | `Scene.background_layers` | jusqu'à 4 `REG_BGxCNT` | Liste de `BackgroundLayer` inline dans le JSON de la scène (chacun référence un `BackgroundAsset` par nom d'asset) |
 | `PaletteBank` | 16 couleurs BGR555 | Palette nommée du catalogue (`assets/palettes/*.json`), partagée OBJ/BG |
 | `Scene.active_obj_palettes` / `Scene.active_bg_palettes` | 16 banques `PAL_OBJ`/`PAL_BG` | Sélection ordonnée (index = banque hardware) des palettes actives de la scène ; `pal_bank` indexe dans cette liste |
@@ -411,13 +428,14 @@ modifiable ensuite par script dans les deux cas, l'émission OAM lisant désorma
 
 ### Règles clés
 
-- **`assets/` vs `project/`** — la distinction qui structure tout le projet : `assets/` contient ce qui dépend d'une ressource externe à l'éditeur (une image PNG, un son) ; `project/` contient les données propres à l'éditeur, sans dépendance externe (scènes, prefabs, variables...). Les deux sont traités par l'éditeur et compilés dans `build/` — la différence est l'origine de la donnée, pas son traitement.
+- **Une extension par type d'asset** — un asset stocké s'appelle `<nom>.<type>` (`Player.sprite`, `boom.sfx`, `Scene_01.scene`, `Night.palette`…), le contenu reste du JSON. La table unique est `core/models/asset_extensions.py` ; chaque modèle porte la sienne (`sidecar_extension`, déclarée sur `Resource`), `ResourceStore` la lit et cherche ses sidecars sous tout `assets/` (la racine que lui donne `Project`), `tools/migrate_sidecar_extensions.py` migre un projet d'avant. Restent en `.json` : `texts.json`, `texts_<langue>.json`, `variables.json`. Le `.hex` d'une palette est sa donnée canonique, que le `.palette` POINTE par son champ `asset` (les deux se rangent où l'on veut sous `assets/`) ; `.pal` et `.gpl` ne servent qu'à l'import et l'export.
+- **`assets/` vs `project/`** — `assets/` est le dossier de l'auteur : TOUT ce qu'il manipule y vit, sources brutes (une image PNG, un son) comme ce qu'il crée dans l'éditeur (scènes, prefabs, mises en page, boîtes sonores, tables de données, polices logiques, textes, variables), et il l'organise lui-même. `project/` n'est plus à lui : il ne garde que l'état interne de l'éditeur (`editor/`), les licences et le README. Avant le 2026-10-10 les données propres à l'éditeur vivaient sous `project/` ; `tools/migrate_project_to_assets.py` migre un projet d'avant.
 - `assets/` → la source de vérité des assets bruts ; le JSON sidecar est auto-géré par l'éditeur
 - `assets/backgrounds/` → PNG bruts (`BackgroundAsset`) ; → sidecar d'importation par image (`BackgroundAsset` : tileset + sous-palettes, PNG jamais modifié). 
 - `assets/palettes/` → catalogue unifié (`PaletteBank`), un `.hex` visible par palette + sidecar JSON ; rangé avec les assets car une palette s'importe et s'exporte comme un fichier externe (`.hex`), partagé OBJ/BG
 - `assets/scripts/` → scripts Lua édités par le dev ; copiés dans `build/src/` au build
 - `build/grit_out/` et `build/src/` → sorties générées conservées puis balayées à la fin du build ; `build/obj/` est conservé pour la compilation incrémentale. `build/.asset-cache.json` mémorise les empreintes des conversions dont les sorties existent encore.
-- `<Nom>.project` → manifeste racine (v0.10, remplace `project.json`) : c'est LUI qu'on double-clique, associé à l'éditeur sur les deux OS, et son nom de fichier EST le nom du projet (aucune clé `name` dans le JSON). Config racine uniquement (scène de démarrage, auteur, version) ; un `project.json` d'avant v0.10 se relit une fois et se réécrit dans la nouvelle forme à la première sauvegarde ; `start_scene` (point de départ du **jeu**, éditable dans le ProjectInspector) et `last_scene` (dernière scène ouverte dans l'**éditeur**, restaurée à l'ouverture) sont deux champs distincts — ouvrir une scène ne redéfinit jamais le point de départ ; toutes les autres données vivent dans `project/**/*.json`, y compris `project/variables.json` (globals + constants, unicité de nom vérifiée par type — un global et une constante peuvent partager un nom)
+- `<Nom>.project` → manifeste racine (v0.10, remplace `project.json`) : c'est LUI qu'on double-clique, associé à l'éditeur sur les deux OS, et son nom de fichier EST le nom du projet (aucune clé `name` dans le JSON). Config racine uniquement (scène de démarrage, auteur, version) ; un `project.json` d'avant v0.10 se relit une fois et se réécrit dans la nouvelle forme à la première sauvegarde ; `start_scene` (point de départ du **jeu**, éditable dans le ProjectInspector) et `last_scene` (dernière scène ouverte dans l'**éditeur**, restaurée à l'ouverture) sont deux champs distincts — ouvrir une scène ne redéfinit jamais le point de départ ; toutes les autres données vivent dans `assets/**/*.json`, y compris `assets/variables.json` (globals + constants, unicité de nom vérifiée par type — un global et une constante peuvent partager un nom)
 - Les assets sont référencés **par nom** (ex. `SpriteComponent.sprite_name`, `BackgroundLayer.backgroundasset_name`, palette active par nom de `PaletteBank`) — jamais par chemin absolu
 - Un argument de script qui cite un élément du projet est déclaré par le `domain` de son `Param` dans `scripting/api.py` (`DOMAIN_SCENE`, `DOMAIN_SFX`, `DOMAIN_GLOBAL`…). Cette table unique sert au checker (valider), au codegen (résoudre en index physique) et à `scripting/refactor.py` (suivre les renommages) : déclarer le domaine d'un nouvel argument suffit à alimenter les trois. Un renommage éditeur (`Project.rename_*`) réécrit les références Lua correspondantes en repérage **structurel** — jamais textuel, donc ni les commentaires ni les strings sans rapport ne bougent
 - Les scripts Lua sont **transpilés vers C** au build, pas interprétés à l'exécution
@@ -439,7 +457,7 @@ texte Lua → parser.py → AST Python → checker.py (validation) → codegen.p
 
 - **`parser.py`** — modélise la grammaire Lua en dataclasses Python (`StmtIf`, `ExprInvoke` pour `self:method()`, etc.). Spécifique à Lua : remplacer le langage de script demanderait de réécrire ce fichier (et une partie du pattern-matching de `checker.py`/`codegen.py` sur ces formes syntaxiques), mais pas le reste de la chaîne.
 - **`api.py`** (`RUNTIME_API`) — source de vérité unique pour toute fonction Lua exposée au runtime : nom Lua, fonction C cible, types de paramètres, domaine de résolution des chaînes (`DOMAIN_ANIM`, `DOMAIN_SFX`, `DOMAIN_SCENE`...). Utilisé à la fois par `checker.py` (valider un appel connu) et `codegen.py` (générer l'appel C générique via `_emit_api_call`).
-- **`checker.py`** — parcourt l'AST et valide les appels contre `RUNTIME_API` (fonction connue, bon nombre d'arguments — y compris les fonctions variadiques comme `display.print`, nom de ressource existant). Ne bloque le build que sur les erreurs (`CheckError.level == "error"`) ; les avertissements (ex. valeur littérale hors plage écrite dans une globale typée, `global.score = 70000` sur un `u16`) sont journalisés sans empêcher la compilation. Appliqué uniformément aux scripts actor, scène et prefab via `lua_compiler.py::_compile_script` — un prefab avec une erreur bloque désormais le build comme un actor, plutôt que d'être silencieusement sauté. Les behaviors (`require("behaviors/x")`, inlinés par `codegen.py::_emit_inlined_behaviors`) passent par le même checker avec `check_event_names=False` (leurs fonctions top-level sont des noms de méthode arbitraires, pas des handlers d'événement) ; fichier manquant ou erreur de parse y remontent comme avertissement plutôt que de casser silencieusement ou de lever une exception Python brute.
+- **`checker.py`** — parcourt l'AST et valide les appels contre `RUNTIME_API` (fonction connue, bon nombre d'arguments — y compris les fonctions variadiques comme `display.print`, nom de ressource existant). Ne bloque le build que sur les erreurs (`CheckError.level == "error"`) ; les avertissements (ex. valeur littérale hors plage écrite dans une globale typée, `global.score = 70000` sur un `u16`) sont journalisés sans empêcher la compilation. Appliqué uniformément aux scripts actor, scène et prefab via `lua_compiler.py::_compile_script` — un prefab avec une erreur bloque désormais le build comme un actor, plutôt que d'être silencieusement sauté. Les behaviors (`require("behaviors/x")`, résolus PAR NOM parmi les `.lua` marqués `-- @behavior` où qu'ils soient — `core/lua_scripts.py`, `CodegenContext.behavior_paths` —, inlinés par `codegen.py::_emit_inlined_behaviors`) passent par le même checker avec `check_event_names=False` (leurs fonctions top-level sont des noms de méthode arbitraires, pas des handlers d'événement) ; fichier manquant ou erreur de parse y remontent comme avertissement plutôt que de casser silencieusement ou de lever une exception Python brute.
 - **`codegen.py`** — pour la majorité des appels, `_emit_api_call` génère l'appel C directement depuis l'entrée `RUNTIME_API` correspondante. Une poignée de fonctions ne se traduisent pas par un simple appel de fonction (`self:destroy` → deux instructions enchaînées, `sfx.play` → arguments synthétisés depuis la ressource Sfx du projet...) : elles sont réunies dans deux tables de dispatch en fin de fichier, `_INVOKE_CUSTOM` et `_CALL_CUSTOM`, plutôt que dispersées en `if`/`elif` dans le code de traduction. Chacune de ces fonctions a quand même une entrée dans `RUNTIME_API` pour la validation/documentation. `global.nom`/`const.nom` ne sont ni l'un ni l'autre (chantier global/const) : ce sont des accès POINTÉS, pas des appels — comme `self.position` (RUNTIME_PROPS) ou `data.Objets`, résolus directement dans la branche `ExprIndex` de `_expr` (accès direct à la variable C `g_nom` / au symbole `CONST_NOM`), et validés côté checker par `_check_global_scalar`/`_check_global_indexed`/`_check_const_scalar` plutôt que par le catalogue.
 - **Important pour toute nouvelle fonction Lua** : si elle se traduit par un simple appel C avec conversion d'arguments, une entrée dans `RUNTIME_API` suffit *côté traduction*. Ce n'est que si elle a besoin de logique de traduction (nom C dynamique, arguments non présents côté Lua, émission multi-instructions) qu'elle doit aussi rejoindre `_INVOKE_CUSTOM`/`_CALL_CUSTOM`.
 - **Mais une fonction du moteur doit être déclarée DEUX fois** — voir « Deux listes de prototypes » ci-dessous. C'est le piège le plus coûteux de cette chaîne, parce qu'il ne se manifeste qu'au `make`.
@@ -592,7 +610,7 @@ une valeur qui peut être périmée ou absente.
 
 **Déclarer un type de référence — trois gestes, aucun cas spécial** (livré, v0.16 étape b).
 
-1. UNE ligne dans `api.REF_TYPE_TABLE` : `RefType(c_type=…, variable=…, hint=…)`. Le type C du
+1. UNE ligne dans `api.REF_TYPE_TABLE` : `RefType(c_type=…, prefix=…, hint=…)`. Le type C du
    `local` qui tient la référence, la variable des snippets, la phrase ajoutée à l'erreur
    « méthode/champ inconnu ».
 2. Ses entrées de catalogue : la fabrique (`ApiFunc(ret="<type>")`), les méthodes sous
@@ -1344,6 +1362,31 @@ EditorScreen("Sound Editor", self._make_sound_editor)
   enregistré par l'utilisateur survit. Leurs appels sont entourés d'un
   `try` — du code tiers dans un slot Qt fait abandonner le process.
 
+### Le panneau de build — un seul, accroché à l'écran affiché
+
+Console, diagnostics et onglet Disk vivent dans **un seul** `BuildPanel`
+(`MainWindow._make_build_panel`), qui n'appartient à aucun écran. Il y en avait
+deux (Scene Manager et Script Editor), la seconde recevant une copie de chaque
+ligne de log ; elle a disparu avec ses points d'appel.
+
+- **Chaque écran est bâti sur `ThreeColumnBody`** (`ui/common/three_column_body.py`)
+  et l'expose en `body`. La colonne centrale y est un splitter vertical
+  `[centre | emplacement du panneau]` : le panneau se loge sous le centre de
+  l'écran, jamais en pleine largeur. Un écran sans `body` (plugin) n'a pas de panneau.
+- **`_show_screen` l'accroche** (`_move_build_panel_to`) : Qt reparente le widget,
+  console et onglets restent intacts. **Fermé = replié à zéro dans le splitter**, pas
+  masqué : la poignée reste au bord bas du centre, c'est elle qu'on tire pour ouvrir.
+  Le Sound Mixer, dont le contenu central est caché le temps de son recentrage, garde
+  sa colonne (vide) pour la même raison : on ne masque pas la colonne, seulement son contenu.
+- **Ouvert ou fermé est une donnée du catalogue** : `EditorScreen.build_panel_open`
+  (ouvert : Scenes, Datas, Scripts ; fermé : les autres et les plugins). C'est la
+  valeur de départ ; `_build_panel_open` retient le dernier état de chaque écran pour
+  la session, pas entre deux lancements. Build & Run l'ouvre sur l'écran affiché,
+  menu View › « Panneau de build » le bascule.
+- **L'onglet courant** (Disk au premier lancement, puis le dernier vu) est commun à
+  tous les écrans, puisqu'il n'y a qu'un panneau ; il est écrit dans `QSettings`
+  (`Layout/build_tab`).
+
 ### Les trois surfaces d'extension d'un plugin
 
 | Portée | Point d'entrée | Exemple |
@@ -1446,8 +1489,8 @@ Format d'un emplacement, écrit par `save_write` :
 
 **Rangé par id, pas par rang.** Ajouter, retirer ou réordonner une variable persistante
 laisse les sauvegardes existantes lisibles, là où un tableau positionnel aurait fait lire
-à `score` la valeur de `vies`. L'id opaque fait 12 chiffres et la SRAM se lit par mots de
-32 bits : c'est un repli déterministe (`id & 0xFFFFFFFF`) qui est écrit, et une collision
+à `score` la valeur de `vies`. L'id opaque fait 12 chiffres hexadécimaux (48 bits) et la SRAM se lit par mots de
+32 bits : c'est un repli déterministe (les 8 derniers chiffres, `int(id, 16) & 0xFFFFFFFF`) qui est écrit, et une collision
 entre deux variables persistantes **bloque le build** — improbable, et invisible en jeu.
 
 **Trois tests avant de croire un emplacement** (marque, version, somme) : la mémoire d'une
@@ -1577,7 +1620,7 @@ la même méthode.
 
 ## Textes du joueur — table de chaînes
 
-`project/texts.json`, modèle dans `core/models/text.py`. Un seul fichier maître plutôt
+`assets/texts.json`, modèle dans `core/models/text.py`. Un seul fichier maître plutôt
 qu'un par entrée (contrairement aux palettes) : des centaines d'entrées courtes, qu'un
 traducteur veut voir d'un coup. Chaque langue déclarée possède à côté un side
 `texts_<code>.json`, partiel et joint au maître par `id` (cf. `core/project_langs.py`).
@@ -1586,7 +1629,7 @@ traducteur veut voir d'un coup. Chaque langue déclarée possède à côté un s
 
 | Champ | Rôle | Résolvable ? |
 | --- | --- | --- |
-| `id` | opaque (12 chiffres), tiré une fois, jamais affiché | dans les **fichiers de données** — insensible au renommage |
+| `id` | opaque (12 chiffres hexadécimaux), tiré une fois, jamais affiché | dans les **fichiers de données** — insensible au renommage |
 | `key` | poignée lisible, ce qu'écrit un script Lua | oui, **au build** uniquement → index de table C, comme `SFX_*` |
 | `path` | rangement libre, 1 à 3 niveaux, peut se répéter | **jamais** |
 
@@ -1606,7 +1649,7 @@ clé automatique est jetable. Dès que l'utilisateur la nomme à la main, `auto_
 la clé se détache définitivement. Sans ce détachement, ranger reviendrait à **refactorer** :
 renommer un nœud produirait un diff de N fichiers `.lua` versionnés pour un geste
 cosmétique. Et une clé strictement dérivée forcerait un dernier niveau unique — le libellé
-ne serait plus libre, juste une clé déguisée ; d'où le rang `_NN` en cas de collision.
+ne serait plus libre, juste une clé déguisée ; d'où le rang `_2`, `_3`… en cas de collision (la règle unique `unique_name`).
 
 Le chemin est stocké comme **liste**, jamais comme chaîne à séparateur : un libellé libre
 a le droit de contenir `/`. L'arbre de l'écran Textes est une **vue** — `texts.json` reste
@@ -1741,7 +1784,7 @@ l'affichage.
 ```
 assets/fonts/ (Font, source) ─┐
                                ├─ FontAsset ─→ RasterGlyph ─→ tuiles + palette 4bpp ─→ ROM
-project/fonts_assets/ ─────────┘       ↑              ↑                  ↑
+assets/fonts_assets/ ─────────┘       ↑              ↑                  ↑
                                   recette auteur   preview/build     rendu + budget VRAM
 ```
 
@@ -1861,7 +1904,7 @@ et sa page ne doit pas créer une seconde police en doublon.
 
 ## Éléments d'interface — `UIText` / `UIContainer` / `UIList` / `UIImage` dans un `UILayout`
 
-`core/models/ui_region.py`, stockage dans `project/ui_layouts/<nom>.json`. Un élément de
+`core/models/ui_region.py`, stockage dans `assets/ui_layouts/<nom>.layout`. Un élément de
 texte répond à **où** le texte se pose ; il remplace les arguments de géométrie que
 `text_draw_box` prenait dans le script, donc invisibles depuis l'éditeur et incalculables
 avant le build.
@@ -1987,7 +2030,7 @@ divergent.
 
 ### Un nœud est un asset, pas une donnée de scène — et une scène en référence PLUSIEURS
 
-`UILayout` est rangé dans `project/ui_layouts/` et référencé par nom. Une scène en référence
+`UILayout` est rangé dans `assets/ui_layouts/` et référencé par nom. Une scène en référence
 une **liste de nœuds** (`Scene.ui_layouts`, désormais `list[InterfaceNode]`, v0.12) : chaque
 nœud est l'INSTANCE d'un layout dans cette scène, et porte sa `bg_slot` (cf. la sous-section
 suivante). Une même scène peut poser un HUD-BG et une bulle actor-OBJ côte à côte. Une boîte
@@ -2826,14 +2869,14 @@ La gomme restaure la palette d'origine (supprime l'override).
        → cache : empreinte des sources retenues, de leurs réglages et des deux outils
 
 ⑤ Génération des headers C
-   project/ + sprites
+   assets/ + sprites
        → codegen            → build/src/actor_types.h
                             → build/src/actor_api.h
 
 ⑥ Transpilation Lua → C — toutes les scènes en une passe
    script attaché à une scène   → build/src/{scene}_scene.c
    script attaché à un acteur   → build/src/actor_{name}.c
-   (les scripts vivent à plat dans assets/scripts/ ; seul behaviors/ est un dossier à part)
+   (un script se range où l'on veut sous assets/ ; un behavior se reconnaît à sa première ligne `-- @behavior`, cf. core/lua_scripts.py)
    (globals partagés)            → build/src/globals.c / globals.h
 
 ⑦ Génération de main.c

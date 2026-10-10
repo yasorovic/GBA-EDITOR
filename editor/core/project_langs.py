@@ -2,8 +2,8 @@
 maître.
 
 ```
-project/texts.json      le MAÎTRE — id, key, path, note, contenu SOURCE
-project/texts_de.json   un SIDE   — la traduction seule, jointe par id
+assets/texts.json       le MAÎTRE — id, key, path, note, contenu SOURCE
+assets/texts_de.json    un SIDE   — la traduction seule, jointe par id
 ```
 
 **Le maître possède la structure, le side ne porte que la traduction.** `id`,
@@ -41,9 +41,9 @@ class ProjectLangsMixin:
     # ── Où vivent les traductions ─────────────────────────────────
 
     def translation_file(self, code: str) -> Path:
-        """`project/texts_<code>.json`. Le code EST le nom du fichier — d'où
-        `lang_code()`, qui le rend utilisable comme tel."""
-        return self.project_dir / f"texts_{code}.json"
+        """`assets/texts_<code>.json`, à côté de `texts.json`. Le code EST le nom du fichier —
+        d'où `lang_code()`, qui le rend utilisable comme tel."""
+        return self.texts_file.with_name(f"texts_{code}.json")
 
     def is_multilingual(self) -> bool:
         """Vrai dès qu'une traduction est déclarée. Faux = le projet se
@@ -76,7 +76,7 @@ class ProjectLangsMixin:
             return {}
         out = {}
         for e in d.get("texts", []):
-            tid = int(e.get("id", 0) or 0)
+            tid = str(e.get("id") or "")
             # `key` et `source` sont là pour l'humain : on ne les relit pas.
             if tid:
                 out[tid] = str(e.get("content", ""))
@@ -107,7 +107,7 @@ class ProjectLangsMixin:
         for tid, content in sorted(by_id.items()):
             if tid not in by_id_master and content:
                 entries.append({"id": tid, "content": content})
-        self.project_dir.mkdir(parents=True, exist_ok=True)
+        self.texts_file.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(self.translation_file(code),
                      project_json.dumps({"lang": code, "texts": entries}))
 
@@ -138,7 +138,7 @@ class ProjectLangsMixin:
         La réciproque est la règle qui compte : **dès qu'un side contient une
         traduction, il n'est plus jamais supprimé automatiquement**, même si sa
         langue disparaît de la déclaration."""
-        for path in self.project_dir.glob("texts_*.json"):
+        for path in self.texts_file.parent.glob("texts_*.json"):
             code = path.stem[len("texts_"):]
             if code in declared:
                 continue

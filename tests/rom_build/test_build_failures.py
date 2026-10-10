@@ -17,6 +17,7 @@ from PIL import Image
 
 from codegen.rom_build import BuildWorker
 from core import crash_log
+from asset_fixtures import create_all
 from core.models.components import SpriteComponent
 from core.models.scene import Actor, BackgroundLayer
 from core.project import Project
@@ -32,6 +33,7 @@ def _projet(tmp_path) -> Project:
     Image.new("RGB", (32, 32), (30, 30, 200)).save(p.backgrounds_dir / "sky.png")
     p = Project.open(root)
     p.load_all_resources()
+    create_all(p, ("sprites", p.sprites_dir / "hero.png"), ("backgrounds", p.backgrounds_dir / "sky.png"))
     hero = Actor(name="Hero")
     hero.components.append(SpriteComponent(sprite_name="hero"))
     p.scenes[0].actors.append(hero)

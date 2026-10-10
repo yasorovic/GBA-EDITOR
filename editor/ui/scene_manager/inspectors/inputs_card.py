@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import pyqtSignal, QSize
 
+from core.models.unique_name import unique_name
 from core.models.settings import InputBinding, BUTTON_NAMES
 from ui.common.theme import C, T, QSS
 from ui.common.widgets import CollapsibleCard, HoverIconButton, W
@@ -210,7 +211,4 @@ class InputsCard(CollapsibleCard):
         """Un nom encore libre, pour un input qu'on vient d'ajouter — il doit
         pouvoir être distingué des autres avant même d'être renommé."""
         taken = {b.name for b in self._project.settings.inputs}
-        n = 1
-        while f"input{n}" in taken:
-            n += 1
-        return f"input{n}"
+        return unique_name("input", taken)

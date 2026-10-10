@@ -43,8 +43,8 @@ class GroupInspector(QWidget):
         root.addWidget(self._content)
         root.addStretch(1)
 
-    def load(self, group_id, folders, state) -> None:
-        self._id, self._folders, self._state = group_id, folders, state
+    def load(self, group_id, folders, state, project=None) -> None:
+        self._id, self._folders, self._state, self._project = group_id, folders, state, project
         folder = self._folder()
         self._name.setText(folder.name if folder else "")
         self._note.set_text_silent(state.group_note(group_id) if state else "")
@@ -71,7 +71,9 @@ class GroupInspector(QWidget):
             if item.widget(): item.widget().deleteLater()
         folders = self._folders.folders("scenes") if self._folders else []
         folder = self._folder()
-        scenes = list(folder.members) if folder else []
+        # Les membres sont des ids de scène ; on affiche leur nom (une scène disparue n'a pas de nom).
+        scenes = [name for member in (folder.members if folder else ())
+                  if (name := self._project.scenes.name_of(member))] if self._project else []
         children = [f.name for f in folders if f.parent_id == self._id]
         for title, names in ((label("groupinsp.scenes", count=len(scenes)), scenes),
                              (label("groupinsp.groups", count=len(children)), children)):

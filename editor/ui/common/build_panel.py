@@ -9,20 +9,21 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QPlainTextEdit, QToolButton, QTabWidget, QListWidget, QListWidgetItem,
-    QSplitter,
 )
 from PyQt6.QtGui import QFont, QColor, QPen, QTextCharFormat, QTextCursor, QPainter, QPainterPath
 from PyQt6.QtCore import pyqtSignal, pyqtProperty, Qt, QTimer, QPropertyAnimation, QEasingCurve, QRectF
 from PyQt6.QtStateMachine import QStateMachine, QState
 from PyQt6.QtSvg import QSvgRenderer
 
-from ui.common.theme import C, T
+from ui.common.theme import C, T, brand_font
 from core.toolchain import Toolchain, DEVKITPRO_OK, DEVKITPRO_INCOMPLETE
+from ui.common.disk_view import DiskView, add_disk_tab
+from ui.common.panel_bar import bar_button, panel_bar, tab_widget
 from ui.common.rom_budget_bar import RomBudgetBar
 
 
 # ── Mascotte du bouton Build & Run ──────────────────────────────────
-# Illustrations en COULEURS PLEINES (crête et bec mauves, corps blanc…) —
+# Illustrations en COULEURS PLEINES (crête et museau mauves, corps blanc…) —
 # rendues telles quelles, sans reteinte par icons.py (qui ne gère que les
 # glyphes qtawesome monochromes).
 _MASCOT_DIR = Path(__file__).parent / "CustomIcons"
@@ -128,15 +129,8 @@ class DiagnosticsView(QWidget):
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(0)
 
-        bar = QFrame()
-        bar.setFixedHeight(26)
-        bar.setStyleSheet(f"background:{C.BG_RAISED}; border-bottom:1px solid {C.BORDER};")
-        h = QHBoxLayout(bar)
-        h.setContentsMargins(8, 0, 8, 0)
-        self._btn_refresh = QPushButton(label('build.refresh'))
-        self._btn_refresh.setFont(QFont(T.UI, T.SM))
-        self._btn_refresh.setFixedHeight(20)
-        self._btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
+        bar, h = panel_bar()
+        self._btn_refresh = bar_button(label('build.refresh'))
         self._btn_refresh.setToolTip(tooltip(
             title=label('build.refresh_title'), body=label('build.refresh_tip')))
         self._btn_refresh.clicked.connect(lambda: self.refresh_requested.emit())
@@ -232,16 +226,17 @@ class AnimatedBuildButton(QToolButton):
     # Décale le DESSIN de la mascotte vers le haut (valeur négative) sans
     # toucher à la pilule : la tête sort du cadre en haut, et c'est un point
     # plus bas de l'illustration (ventre plutôt que buste) qui se retrouve
-    # au niveau de la pilule — donc la pilule paraît plus basse sur l'oiseau.
+    # au niveau de la pilule — donc la pilule paraît plus basse sur la chaussette.
     _MASCOT_Y_SHIFT = -10
     _PILL_X = 15
     _PILL_MARGIN_R = 3   # même marge que _PILL_X côté droit — sinon le contour
                           # touche le bord du bouton et se retrouve à moitié rogné
     _PILL_H = 27   # réduite avec l'icône (même rapport) — sinon la pilule
                    # paraît trop grande par rapport à une mascotte plus petite
-    _PILL_RADIUS = 4   # coins arrondis d'une barre carrée, pas une pilule ovale
+    _TEXT_X_SHIFT = 14   # px de pilule cachés sous la mascotte, retirés au centrage du texte
+    _PILL_RADIUS = 4  # coins arrondis d'une barre carrée, pas une pilule ovale
 
-    _PURPLE = "#aa50b4"   # mauve de la mascotte (crête/bec) — couleur de repos
+    _PURPLE = "#aa50b4"   # mauve de la mascotte (crête/museau) — couleur de repos
     _SETTLE_OK_MS = 700   # retour à idle après un succès
 
     def __init__(self, parent=None):
@@ -346,7 +341,10 @@ class AnimatedBuildButton(QToolButton):
         # Géométrie de la mascotte calculée UNE FOIS, réutilisée par
         # _paint_mascot() tout à la fin (par-dessus la pilule).
         icon_rect = self._mascot_rect(h)
-        text_rect = QRectF(pill_x, pill_y, pill_w, self._PILL_H)
+        # La mascotte masque la gauche de la pilule : le texte se centre sur la
+        # partie VISIBLE, d'où ce décalage (même effet qu'un espacement invisible).
+        text_rect = QRectF(pill_x + self._TEXT_X_SHIFT, pill_y,
+                           pill_w - self._TEXT_X_SHIFT, self._PILL_H)
         text_align = Qt.AlignmentFlag.AlignCenter
 
         r = self._PILL_RADIUS
@@ -362,7 +360,7 @@ class AnimatedBuildButton(QToolButton):
             p.drawRoundedRect(pill_x, pill_y, pill_w, self._PILL_H, r, r)
 
             p.setPen(QColor(C.TEXT_MUTED) if greyed else QColor("#000000"))
-            p.setFont(QFont(T.UI, T.SM, QFont.Weight.DemiBold))
+            p.setFont(brand_font(T.SM, regular=True))
             p.drawText(text_rect, text_align, label("common.run"))
         elif not self._success:
             # échec figé : pilule pleine rouge, pas de jauge à faire lire.
@@ -370,7 +368,7 @@ class AnimatedBuildButton(QToolButton):
             p.setBrush(QColor(C.ACCENT_RED))
             p.drawRoundedRect(pill_x, pill_y, pill_w, self._PILL_H, r, r)
             p.setPen(QColor("#000000"))
-            p.setFont(QFont(T.UI, T.SM, QFont.Weight.DemiBold))
+            p.setFont(brand_font(T.SM, regular=True))
             p.drawText(text_rect, text_align, label("build.failed_mark"))
         else:
             # en cours : la pilule devient la jauge, remplissage réel du build.
@@ -439,24 +437,6 @@ class BuildPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        header = QFrame()
-        header.setFixedHeight(28)
-        header.setStyleSheet(f"background:{C.BG_RAISED}; border-bottom:1px solid {C.BORDER};")
-        hl = QHBoxLayout(header)
-        hl.setContentsMargins(8, 0, 8, 0)
-        lbl = QLabel(label('build.build_debug'))
-        lbl.setFont(QFont(T.UI, T.MD, QFont.Weight.DemiBold))
-        lbl.setStyleSheet(f"color:{C.TEXT_NORM};")
-        hl.addWidget(lbl)
-        hl.addStretch()
-        btn_clear = QPushButton(label('build.clear'))
-        btn_clear.setFont(QFont(T.UI, T.SM))
-        btn_clear.setFixedHeight(20)
-        btn_clear.setToolTip(tooltip(title=label('build.clear_title')))
-        btn_clear.clicked.connect(lambda: self.console.clear())
-        hl.addWidget(btn_clear)
-        layout.addWidget(header)
-
         self.console = BuildConsole()
         self.console.setFont(QFont(T.MONO, T.SM))
         self.console.setStyleSheet(
@@ -469,17 +449,13 @@ class BuildPanel(QWidget):
         # Console (le journal) et Diagnostics (la liste du validateur) partagent
         # l'emplacement : deux onglets, le budget ROM reste dessous.
         self.diagnostics = DiagnosticsView()
+        self.disk = DiskView()
         self._build_diagnostics: list = []   # ceux du build en cours (cf. log_diagnostic)
-        tabs = QTabWidget()
-        tabs.setDocumentMode(True)
-        tabs.setStyleSheet(
-            f"QTabBar::tab{{background:{C.BG_RAISED};color:{C.TEXT_MUTED};"
-            f"padding:3px 10px;border:none;font-family:{T.UI_STACK};font-size:{T.SM}px;}}"
-            f"QTabBar::tab:selected{{color:{C.TEXT_NORM};border-bottom:2px solid {C.ACCENT};}}"
-            f"QTabWidget::pane{{border:none;}}"
-        )
-        tabs.addTab(self.console, label('build.console'))
+        tabs = self._tabs = tab_widget()
+        tabs.addTab(self._console_page(), label('build.console'))
         tabs.addTab(self.diagnostics, label('build.diagnostics'))
+        add_disk_tab(tabs, self.disk)
+        tabs.currentChanged.connect(self._on_tab_changed)
         layout.addWidget(tabs, 1)
 
         # Séparé verticalement du journal, et FERRÉ en bas : contrairement au
@@ -488,12 +464,51 @@ class BuildPanel(QWidget):
         self.rom_bar = RomBudgetBar()
         self.rom_bar.cartridge_mib_changed.connect(self.cartridge_mib_changed)
         layout.addWidget(self.rom_bar, 0)
+        self._on_tab_changed(tabs.currentIndex())
 
         self.btn_build = QPushButton(label('build.build_run'))
         self.btn_build.setToolTip(tooltip(
             title=label('win.build_run_title'), shortcut=get_keybindings().resolve("game.build"), body=label('win.build_run_tip')))
         self.btn_build.setEnabled(False)
         self.btn_build.setVisible(False)
+
+    def _on_tab_changed(self, index: int) -> None:
+        on_disk = self._tabs.widget(index) is self.disk
+        # Le budget ROM parle de la compilation (console, diagnostics) ; il n'a rien
+        # à dire d'un dossier de `assets/`.
+        self.rom_bar.setVisible(not on_disk)
+        # L'arbre se relit à l'ouverture de l'onglet, jamais en arrière-plan : le
+        # parcours du disque et le chargement des familles différées ont un coût.
+        if on_disk:
+            self.disk.refresh_requested.emit()
+
+    def show_console_tab(self) -> None:
+        """Met la Console au premier plan (un build démarre : c'est elle qui le raconte)."""
+        self._tabs.setCurrentIndex(0)
+
+    def tab_is_disk(self) -> bool:
+        return self._tabs.currentWidget() is self.disk
+
+    def show_disk_tab(self) -> None:
+        """Met l'onglet Disk au premier plan (un dossier vient d'y être choisi ailleurs)."""
+        self._tabs.setCurrentWidget(self.disk)
+
+    def _console_page(self) -> QWidget:
+        """La console sous sa barre d'outils : le bouton Clear y vit, comme Refresh
+        vit sur celle des diagnostics et du disque."""
+        page = QWidget()
+        column = QVBoxLayout(page)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(0)
+        bar, row = panel_bar()
+        clear = bar_button(label('build.clear'))
+        clear.setToolTip(tooltip(title=label('build.clear_title')))
+        clear.clicked.connect(self.console.clear)
+        row.addWidget(clear)
+        row.addStretch()
+        column.addWidget(bar)
+        column.addWidget(self.console, 1)
+        return page
 
     def log(self, text, color=C.CONSOLE_TEXT):
         fmt = QTextCharFormat()
@@ -524,23 +539,6 @@ class BuildPanel(QWidget):
         warnings = [d for d in self._build_diagnostics if d.level == "warning"]
         errors = [d for d in self._build_diagnostics if d.level == "error"]
         self.diagnostics.set_diagnostics(warnings, errors)
-
-    def reveal(self):
-        """Rouvre le panneau s'il a été replié à zéro dans son QSplitter
-        (poignée tirée jusqu'au bord). Sans effet s'il est déjà visible."""
-        splitter = self.parentWidget()
-        if not isinstance(splitter, QSplitter):
-            return
-        index = splitter.indexOf(self)
-        sizes = splitter.sizes()
-        if sizes[index] > 0:
-            return
-        wanted = max(self.minimumHeight(), 160)
-        sizes[index] = wanted
-        # Le volume est pris sur le widget le plus grand (l'éditeur/canvas).
-        donor = max(range(len(sizes)), key=lambda i: sizes[i])
-        sizes[donor] = max(sizes[donor] - wanted, 0)
-        splitter.setSizes(sizes)
 
     def set_building(self, b):
         self.btn_build.setEnabled(not b)

@@ -289,9 +289,9 @@ def test_prefab_delegue_la_case_a_son_sprite():
 def test_offset_du_sprite_peut_etre_une_variable():
     """Offset px/tile → entier ; variable → expression C (assignation à l'init)."""
     from core.models.field_value import FieldValue
-    names = {("global", 3): "shake"}
+    names = {("global", "000000000003"): "shake"}
     sc = _sc(affine_transform=True, offset_x={"unit": "t", "n": 2},
-             offset_y={"var": 3, "src": "global"})
+             offset_y={"var": "000000000003", "src": "global"})
     e = affine_entry(_actor(), sc, 0, names=names)
     assert e["offset_x"] == 16
     assert e["offset_y"] == "g_shake"
@@ -300,10 +300,10 @@ def test_offset_du_sprite_peut_etre_une_variable():
 def test_rotation_echelle_variables_dans_le_c():
     """Rotation/échelle en variable : expression C ; l'échelle d'une variable
     est en POURCENT (100 = normal), ramenée au Q8 du moteur."""
-    names = {("global", 5): "spin", ("global", 6): "zoom"}
+    names = {("global", "000000000005"): "spin", ("global", "000000000006"): "zoom"}
     a = _actor()
-    a.rotation = {"var": 5, "src": "global"}
-    a.scale_x = {"var": 6, "src": "global"}
+    a.rotation = {"var": "000000000005", "src": "global"}
+    a.scale_x = {"var": "000000000006", "src": "global"}
     sc = _sc(affine_transform=True, rotation=90, scale_y=2.0)
     e = affine_entry(a, sc, 0, names=names)
     assert e["rotation"] == "g_spin"
@@ -314,8 +314,8 @@ def test_rotation_echelle_variables_dans_le_c():
 
 def test_number_value_resout_la_variable_a_son_defaut():
     from core.models.field_value import number_value, number_c
-    res = lambda src, key: 150 if key == 6 else None
-    assert number_value({"var": 6, "src": "global"}, res, 1.0, ref_divisor=100) == 1.5
-    assert number_value({"var": 9, "src": "global"}, res, 1.0, ref_divisor=100) == 1.0
-    assert number_c({"var": 5, "src": "global"}, {("global", 5): "p"}, mask=3) == "((g_p)&3)"
+    res = lambda src, key: 150 if key == "000000000006" else None
+    assert number_value({"var": "000000000006", "src": "global"}, res, 1.0, ref_divisor=100) == 1.5
+    assert number_value({"var": "000000000009", "src": "global"}, res, 1.0, ref_divisor=100) == 1.0
+    assert number_c({"var": "000000000005", "src": "global"}, {("global", "000000000005"): "p"}, mask=3) == "((g_p)&3)"
     assert number_c(7, None, mask=3) == 3

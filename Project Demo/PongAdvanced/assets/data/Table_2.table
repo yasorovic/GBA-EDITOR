@@ -1,0 +1,11 @@
+{
+  "name": "Table_2",
+  "id": "9c3c73c59e5d",
+  "columns": [
+    {
+      "name": "valeur",
+      "type": "int"
+    }
+  ],
+  "rows": []
+}

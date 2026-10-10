@@ -8,6 +8,7 @@ première moitié d'un chargement paresseux ; le cache d'objets reste dans
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
@@ -19,6 +20,11 @@ def safe_filename(name: str) -> str:
     return name.translate(_WIN_FORBIDDEN).strip() or "_"
 
 
+def list_files(directory: Path) -> list[Path]:
+    """Tous les fichiers sous `directory`, en un seul parcours."""
+    return [Path(folder) / name for folder, _, names in os.walk(directory) for name in names]
+
+
 class ResourceIndex:
     """Inventaire ``nom de ressource → fichier`` d'une collection.
 
@@ -26,23 +32,43 @@ class ResourceIndex:
     fichier est l'identité faisant foi lorsqu'un champ ``name`` du JSON a
     dérivé. Les entrées sont rangées par nom pour rendre les écrans et les tests
     déterministes.
+
+    **L'inventaire est RÉCURSIF** : il parcourt tout `directory` (pour un projet,
+    `assets/`) et retient les fichiers qui portent l'extension de la famille. Un
+    sidecar peut donc vivre n'importe où (`assets/sfx/platformer/coin.sfx`,
+    `assets/Persos/coin.sfx`), là où l'auteur l'a rangé : l'extension dit le type. Deux fichiers de même nom dans deux dossiers ne peuvent pas porter la
+    même identité : celui qui est le moins profond l'emporte (à profondeur égale,
+    l'ordre alphabétique du chemin), les autres sont gardés dans `duplicates` pour
+    que l'application les signale — rien n'est renommé ni écrit ici.
     """
 
-    def __init__(self, directory: Path, suffix: str = ".json"):
+    def __init__(self, directory: Path, suffix: str):
         self.directory = directory
         self.suffix = suffix
         self._paths: dict[str, Path] = {}
+        # {nom: [chemins ignorés]} — les homonymes que l'inventaire n'a pas retenus.
+        self.duplicates: dict[str, list[Path]] = {}
 
-    def scan(self) -> None:
-        """Reconstruit l'inventaire sans ouvrir le contenu des fichiers."""
+    def scan(self, listing: list[Path] | None = None) -> None:
+        """Reconstruit l'inventaire sans ouvrir le contenu des fichiers. `listing` : les fichiers déjà
+        énumérés (`list_files`), pour que plusieurs index partagent UN parcours du disque."""
+        self._paths = {}
+        self.duplicates = {}
         if not self.directory.exists():
-            self._paths = {}
             return
-        self._paths = {
-            path.stem: path
-            for path in sorted(self.directory.glob(f"*{self.suffix}"))
-            if path.is_file()
-        }
+        if listing is None:
+            found = [p for p in self.directory.rglob(f"*{self.suffix}") if p.is_file()]
+        else:
+            found = [p for p in listing if p.name.endswith(self.suffix) and self.directory in p.parents]
+        # Le moins profond d'abord : un sidecar posé à la racine du dossier l'emporte sur un homonyme rangé plus bas.
+        found.sort(key=lambda p: (len(p.relative_to(self.directory).parts), p.relative_to(self.directory).as_posix()))
+        kept: dict[str, Path] = {}
+        for path in found:
+            if path.stem in kept:
+                self.duplicates.setdefault(path.stem, []).append(path)
+            else:
+                kept[path.stem] = path
+        self._paths = dict(sorted(kept.items()))
 
     def names(self) -> tuple[str, ...]:
         """Noms connus, dans l'ordre stable du système de fichiers projet."""

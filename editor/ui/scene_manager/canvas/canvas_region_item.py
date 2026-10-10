@@ -313,7 +313,7 @@ class UIRegionItem(QGraphicsRectItem):
         bg = get_bg(getattr(self._region, "fill_asset", ""))
         if bg is None or not getattr(bg, "asset", ""):
             return None, bg
-        path = self._project.background_images_dir / bg.asset
+        path = self._project.background_image_path(bg)
         return QPixmap(str(path)), bg
 
     def _load_image_frame(self):
@@ -368,7 +368,7 @@ class UIRegionItem(QGraphicsRectItem):
         bg = get_bg(getattr(self._region, "fill_asset", ""))
         if bg is None or not getattr(bg, "asset", ""):
             return None
-        return QPixmap(str(self._project.background_images_dir / bg.asset))
+        return QPixmap(str(self._project.background_image_path(bg)))
 
     def _paint_background(self, painter):
         """Peint le background à taille NATURELLE, calé en haut-gauche, ROGNÉ en
@@ -446,21 +446,27 @@ class UIRegionItem(QGraphicsRectItem):
     def _text_content(self) -> str:
         """Ce que cet élément AFFICHE, balisage résolu.
 
-        Un texte authoré montre SON contenu (celui que la ROM écrira) ; une zone
-        montre son `preview_text`, simple étalon d'éditeur — le script décidera.
+        Un texte authoré montre SON contenu (celui que la ROM écrira) ; sans
+        entrée liée, `preview_text` est le littéral représenté par un futur
+        `text:draw` — le script décidera du moment où il l'écrit.
         Les deux passent par `display_text`, sinon l'aperçu montrerait les
         crochets d'un `[speed=6]` que le joueur ne verra jamais."""
         el, p = self._region, self._project
         if p is None:
             return ""
-        kind = getattr(el, "kind", "region")
-        key = (getattr(el, "text_key", "") if kind == "text"
-               else getattr(el, "preview_text", "")) or ""
+        from core.text_markup import display_text
+        key = getattr(el, "text_key", "") or ""
         get_text = getattr(p, "get_text", None)
         t = get_text(key) if (key and get_text) else None
+        raw = getattr(el, "preview_text", "") or ""
+        if t is None and not key:
+            # Compatibilité : les anciens projets stockaient ici une clé.
+            t = (get_text(raw) if (raw and get_text
+                 and not getattr(el, "preview_is_literal", True)) else None)
+            if t is None:
+                return display_text(raw, p.text_values() if hasattr(p, "text_values") else {})
         if t is None:
             return ""
-        from core.text_markup import display_text
         values = p.text_values() if hasattr(p, "text_values") else {}
         return display_text(t.content or "", values)
 
@@ -469,10 +475,14 @@ class UIRegionItem(QGraphicsRectItem):
         el, p = self._region, self._project
         if p is None:
             return ""
-        key = (getattr(el, "text_key", "") if getattr(el, "kind", "region") == "text"
-               else getattr(el, "preview_text", "")) or ""
+        key = getattr(el, "text_key", "") or ""
         text = p.get_text(key) if key and hasattr(p, "get_text") else None
-        return (getattr(text, "content", "") or "") if text is not None else ""
+        if text is not None:
+            return getattr(text, "content", "") or ""
+        raw = getattr(el, "preview_text", "") or ""
+        legacy = (p.get_text(raw) if raw and hasattr(p, "get_text")
+                  and not getattr(el, "preview_is_literal", True) else None)
+        return (getattr(legacy, "content", "") if legacy is not None else raw) or ""
 
     def _text_font(self):
         """Police de l'élément — mise en cache pour la VIE de l'item.

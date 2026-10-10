@@ -15,7 +15,7 @@ import time
 import pytest
 from PyQt6.QtCore import QCoreApplication
 
-from core.project_watcher import ProjectWatcher, pair_renames
+from core.project_watcher import ProjectWatcher
 
 SETTLE_S = 0.6      # > délai de stabilité (200 ms) × 2 passages
 
@@ -38,7 +38,7 @@ def write(path, data: bytes = b"x", mtime_ns: int | None = None):
 class Spy:
     """Enregistre tout ce que le watcher émet, signal par signal."""
 
-    NAMES = ("asset_appeared", "asset_removed", "asset_renamed", "asset_modified",
+    NAMES = ("asset_appeared", "asset_removed", "asset_modified",
              "lua_changed", "scene_changed", "sidecar_changed")
 
     def __init__(self, watcher: ProjectWatcher):
@@ -61,7 +61,7 @@ _KEPT: list[ProjectWatcher] = []
 def root(tmp_path):
     for sub in ("backgrounds", "sprites", "sfx", "music", "fonts", "scripts"):
         (tmp_path / "assets" / sub).mkdir(parents=True)
-    (tmp_path / "project" / "scenes").mkdir(parents=True)
+    (tmp_path / "assets" / "scenes").mkdir(parents=True)
     return tmp_path
 
 
@@ -110,7 +110,7 @@ def test_fichier_pendant_une_importation_n_est_pas_absorbe(watcher, root):
     write(root / "assets/backgrounds/a.png")
     settle(watcher)
     with watcher.suspended():
-        write(root / "assets/backgrounds/a.json", b"{}")      # notre écriture
+        write(root / "assets/backgrounds/a.background", b"{}")      # notre écriture
         write(root / "assets/backgrounds/b.png", b"bb")       # dépôts externes
         write(root / "assets/backgrounds/c.png", b"ccc")
     pump()
@@ -180,15 +180,17 @@ def test_sous_dossier_de_scripts_est_surveille(watcher, root):
 
 def test_sidecar_json_cree_a_la_main(watcher, root):
     spy = start(watcher, root)
-    write(root / "assets/fonts/ui.json", b"{}")
+    write(root / "assets/fonts/ui.font", b"{}")
     watcher.rescan()
-    assert [os.path.basename(a[0]) for a in spy.sidecar_changed] == ["ui.json"]
+    assert [os.path.basename(a[0]) for a in spy.sidecar_changed] == ["ui.font"]
 
 
-def test_json_de_project_backgrounds_n_est_pas_un_sidecar(watcher, root):
-    (root / "project/backgrounds").mkdir()
+def test_json_d_un_asset_sans_source_n_est_pas_un_sidecar(watcher, root):
+    """`assets/prefab/` est surveillé comme `assets/scenes/`, mais ses JSON sont des assets entiers —
+    pas le sidecar d'un fichier source."""
+    (root / "assets/prefab").mkdir()
     spy = start(watcher, root)
-    write(root / "project/backgrounds/x.json", b"{}")
+    write(root / "assets/prefab/x.prefab", b"{}")
     watcher.rescan()
     assert spy.sidecar_changed == []
 
@@ -204,45 +206,14 @@ def test_suppression(watcher, root):
     assert spy.names("asset_removed") == ["hero.png"]
 
 
-def test_renommage_n_emet_que_asset_renamed(watcher, root):
+def test_un_renommage_est_une_disparition_et_une_apparition(watcher, root):
+    """Un asset POINTE sa source : le surveillant ne suit plus un fichier renommé."""
     write(root / "assets/sprites/old.png", b"abc", mtime_ns=5_000_000_000)
     spy = start(watcher, root)
     (root / "assets/sprites/old.png").rename(root / "assets/sprites/new.png")
-    watcher.rescan()
-    pump()
-    assert [(os.path.basename(a), os.path.basename(b))
-            for a, b in spy.asset_renamed] == [("old.png", "new.png")]
-    assert spy.asset_appeared == [] and spy.asset_removed == []
-
-
-def test_renommage_avec_contenu_modifie_est_une_suppression_et_une_creation(watcher, root):
-    write(root / "assets/sprites/old.png", b"abc", mtime_ns=5_000_000_000)
-    spy = start(watcher, root)
-    (root / "assets/sprites/old.png").unlink()
-    write(root / "assets/sprites/new.png", b"different")
     settle(watcher)
-    assert spy.asset_renamed == []
     assert spy.names("asset_removed") == ["old.png"]
     assert spy.names("asset_appeared") == ["new.png"]
-
-
-def test_deux_fichiers_identiques_un_seul_renomme(watcher, root):
-    """Même empreinte des deux côtés : chaque disparu n'est apparié qu'une fois."""
-    before = {"a": (3, 7), "b": (3, 7)}
-    after = {"c": (3, 7), "d": (3, 7)}
-    pairs = pair_renames({f"{k}.png": v for k, v in before.items()},
-                         {f"{k}.png": v for k, v in after.items()})
-    assert sorted(pairs) == [("a.png", "c.png"), ("b.png", "d.png")]
-
-
-def test_renommage_vers_une_extension_inconnue_est_une_disparition(watcher, root):
-    write(root / "assets/sprites/old.png", b"abc", mtime_ns=5_000_000_000)
-    spy = start(watcher, root)
-    (root / "assets/sprites/old.png").rename(root / "assets/sprites/old.psd")
-    watcher.rescan()
-    pump()
-    assert spy.names("asset_removed") == ["old.png"]
-    assert spy.asset_renamed == []
 
 
 def test_dossier_supprime_signale_chaque_fichier(watcher, root):
@@ -306,19 +277,19 @@ def test_modification_sans_changement_d_empreinte_est_invisible(watcher, root):
 
 
 def test_sidecar_modifie_a_la_main(watcher, root):
-    write(root / "assets/fonts/ui.json", b"{}", mtime_ns=1_000_000_000)
+    write(root / "assets/fonts/ui.font", b"{}", mtime_ns=1_000_000_000)
     spy = start(watcher, root)
-    write(root / "assets/fonts/ui.json", b'{"a":1}', mtime_ns=2_000_000_000)
+    write(root / "assets/fonts/ui.font", b'{"a":1}', mtime_ns=2_000_000_000)
     watcher.rescan()
-    assert [os.path.basename(a[0]) for a in spy.sidecar_changed] == ["ui.json"]
+    assert [os.path.basename(a[0]) for a in spy.sidecar_changed] == ["ui.font"]
 
 
 def test_scene_modifiee(watcher, root):
-    write(root / "project/scenes/Scene_01.json", b"{}", mtime_ns=1_000_000_000)
+    write(root / "assets/scenes/Scene_01.scene", b"{}", mtime_ns=1_000_000_000)
     spy = start(watcher, root)
-    write(root / "project/scenes/Scene_01.json", b'{"a":1}', mtime_ns=2_000_000_000)
+    write(root / "assets/scenes/Scene_01.scene", b'{"a":1}', mtime_ns=2_000_000_000)
     watcher.rescan()
-    assert [os.path.basename(a[0]) for a in spy.scene_changed] == ["Scene_01.json"]
+    assert [os.path.basename(a[0]) for a in spy.scene_changed] == ["Scene_01.scene"]
 
 
 def test_rescan_sans_changement_ne_dit_rien(watcher, root):
@@ -336,7 +307,7 @@ def test_rescan_sans_changement_ne_dit_rien(watcher, root):
 def test_sidecar_ecrit_par_l_editeur_reste_muet(watcher, root):
     spy = start(watcher, root)
     with watcher.suspended():
-        write(root / "assets/backgrounds/a.json", b"{}")
+        write(root / "assets/backgrounds/a.background", b"{}")
     pump()
     watcher.rescan()
     pump()
@@ -356,8 +327,8 @@ def test_suspensions_imbriquees(watcher, root):
     spy = start(watcher, root)
     with watcher.suspended():
         with watcher.suspended():
-            write(root / "assets/backgrounds/a.json", b"{}")
-        write(root / "assets/backgrounds/b.json", b"{}")
+            write(root / "assets/backgrounds/a.background", b"{}")
+        write(root / "assets/backgrounds/b.background", b"{}")
     pump()
     watcher.rescan()
     pump()
@@ -461,24 +432,3 @@ def test_projet_sans_dossier_assets(watcher, tmp_path):
     spy = start(watcher, tmp_path)
     watcher.rescan()
     assert spy.silent()
-
-
-# ── L'avertissement de dossier erroné (côté fenêtre) ────────────────
-
-
-def test_fichier_dans_la_mauvaise_famille_avertit_dans_la_barre_de_statut(qapp, tmp_path):
-    from types import SimpleNamespace
-    from pathlib import Path
-    from window import MainWindow
-
-    shown: list[str] = []
-    fake = SimpleNamespace(
-        project=object(),
-        _status=SimpleNamespace(showMessage=lambda text, ms=0: shown.append(text)))
-    fake._match_asset_route = lambda p: MainWindow._match_asset_route(fake, p)
-    fake._ASSET_ROUTES = MainWindow._ASSET_ROUTES
-
-    MainWindow._on_asset_appeared(fake, str(tmp_path / "backgrounds" / "boom.wav"))
-
-    assert len(shown) == 1
-    assert "boom.wav" in shown[0] and "backgrounds" in shown[0] and ".wav" in shown[0]

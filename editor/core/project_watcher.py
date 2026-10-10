@@ -8,27 +8,25 @@ Principe :
                fichier déposé ou supprimé dans les dossiers listés est notifié
                via asset_appeared / asset_removed, à condition que son
                extension soit dans _ASSET_SUFFIXES. Les .lua émettent
-               lua_changed directement. Une disparition et une apparition de
-               MÊME empreinte dans le même événement sont un RENOMMAGE, et
-               n'émettent ni l'un ni l'autre mais asset_renamed (cf.
-               pair_renames) — un asset renommé doit suivre son fichier, pas
-               mourir et renaître vierge.
-  - les sidecars `.json` d'assets (sprites, backgrounds, fonts, sfx, music)
+               lua_changed directement. Un fichier renommé est, pour le
+               surveillant, un fichier disparu ET un fichier apparu : un asset
+               POINTE sa source, il ne la suit pas.
+  - les sidecars d'assets (sprites, backgrounds, fonts, sfx, music)
                vivent DANS assets/, à côté de leur fichier source, et sont
                surveillés eux aussi — sidecar_changed. Ils ne l'étaient pas :
                éditer une police à la main hors de l'éditeur ne se voyait pas.
-  - project/ → seuls les JSONs de scènes et prefabs sont surveillés (éditeur
-               interne).
+  - assets/scenes/ et assets/prefab/ → leurs JSONs sont surveillés (relus s'ils
+               changent hors de l'éditeur).
 
 Signaux principaux
 ------------------
 asset_appeared(path)  — nouveau fichier brut dans assets/ (PNG, WAV, MOD…)
 asset_removed(path)   — fichier supprimé de assets/
-asset_renamed(a, b)   — fichier brut renommé dans assets/ : `a` est devenu `b`
 asset_modified(path)  — fichier existant modifié dans assets/ (ex. PNG mis à jour)
 lua_changed(path)     — .lua modifié ou créé dans assets/scripts/
-scene_changed(path)   — .json de scène modifié dans project/scenes/
-sidecar_changed(path) — .json d'asset créé ou modifié dans assets/<famille>/
+scene_changed(path)   — .scene modifié dans assets/scenes/
+sidecar_changed(path) — sidecar d'asset créé ou modifié dans assets/<famille>/
+sidecar_removed(path) — sidecar d'asset supprimé de assets/<famille>/
 
 Notes QFileSystemWatcher :
 - fileChanged peut supprimer le fichier de la liste après un save atomique
@@ -57,62 +55,47 @@ from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QFileSystemWatcher
 # C'est exactement la panne que la table de routage de `window.py` a déjà connue
 # (cf. son commentaire `_ASSET_ROUTES`) : une seconde liste que rien ne
 # confronte à la première. Une union dérivée ne peut plus diverger.
+from core.models import asset_extensions
 from core.models.audio import SFX_FILE_EXTS, MUSIC_FILE_EXTS
 from core.models.font import FONT_FILE_EXTS
 from core.models.sprite import IMAGE_FILE_EXTS
 
 _ASSET_SUFFIXES = IMAGE_FILE_EXTS | SFX_FILE_EXTS | MUSIC_FILE_EXTS | FONT_FILE_EXTS
 
-# Les familles dont le sidecar `.json` vit DANS assets/, à côté du fichier
+# Les familles dont le sidecar vit DANS assets/, à côté du fichier
 # source — le nom du dossier est aussi celui du `ResourceStore` correspondant
 # (`project.fonts`, `project.sprites`…), ce qui évite une table de
 # correspondance de plus.
-_SIDECAR_DIRS = frozenset({"sprites", "backgrounds", "fonts", "sfx", "music"})
+_SIDECAR_DIRS = frozenset({"sprites", "backgrounds", "fonts", "sfx", "music", "jingles"})
 _LUA_SUFFIX     = ".lua"
-_JSON_SUFFIX    = ".json"
+_SCENE_SUFFIX   = asset_extensions.SCENE
+# L'extension de chaque sidecar qui vit à côté de sa source (`.sprite`, `.sfx`…) : la table des extensions,
+# restreinte aux familles à source.
+_SIDECAR_SUFFIXES = frozenset({asset_extensions.SPRITE, asset_extensions.BACKGROUND, asset_extensions.FONT,
+                               asset_extensions.SFX, asset_extensions.MUSIC, asset_extensions.JINGLE})
+# Tout ce qu'un dossier d'assets surveillé peut contenir de pertinent.
+_WATCHED_SUFFIXES = _ASSET_SUFFIXES | {_LUA_SUFFIX, _SCENE_SUFFIX} | _SIDECAR_SUFFIXES
 
 
-def pair_renames(before: dict[str, tuple[int, int]],
-                 after: dict[str, tuple[int, int]]) -> list[tuple[str, str]]:
-    """Les renommages entre deux instantanés de dossier, en [(avant, après)].
+# Les dossiers de `assets/` où l'on surveille TOUT ce qu'un asset peut être (sources, sidecars, scripts) ;
+# partout ailleurs, l'auteur range comme il veut et seuls les `.lua` sont suivis : un fichier source déposé
+# dans un dossier libre est une source sans asset, pas un import à signaler.
+_FULL_WATCH_DIRS = frozenset({"sprites", "backgrounds", "sounds", "sfx", "music", "jingles", "fonts",
+                              "scripts", "scenes", "prefab"})
 
-    Un renommage arrive comme une disparition ET une apparition dans le MÊME
-    événement, et il ne touche ni au contenu ni à la date : deux fichiers dont
-    l'un s'en va et l'autre arrive avec la même taille et la même date à la
-    nanoseconde sont le même fichier sous un autre nom. Deux fichiers
-    DIFFÉRENTS qui partageraient les deux, ça ne se produit pas.
 
-    Seuls les fichiers SOURCES sont appariés : un `.lua` est déjà suivi par son
-    chemin, et un sidecar `.json` renommé à la main se rattrape au chargement
-    (cf. `ResourceStore.load`) — ni l'un ni l'autre ne mérite un second signal.
-
-    Écrite à part et non dans `_on_dir_changed` : c'est la seule règle du
-    module qui se juge sur deux dictionnaires, sans dossier réel ni Qt autour.
-    """
-    def sources(snap):
-        return {p: st for p, st in snap.items()
-                if Path(p).suffix.lower() in _ASSET_SUFFIXES}
-
-    gone = {p: st for p, st in sources(before).items() if p not in after}
-    born = {p: st for p, st in sources(after).items() if p not in before}
-
-    pairs: list[tuple[str, str]] = []
-    for new_path, stamp in born.items():
-        old_path = next((p for p, s in gone.items() if s == stamp), None)
-        if old_path is None:
-            continue
-        del gone[old_path]      # un fichier disparu n'est renommé qu'une fois
-        pairs.append((old_path, new_path))
-    return pairs
+def _suffixes_for(directory: Path) -> frozenset:
+    """Ce que le surveillant suit dans `directory`."""
+    if directory.name == "assets" or directory.parent.name == "assets" and directory.name in _FULL_WATCH_DIRS:
+        return _WATCHED_SUFFIXES
+    return frozenset({_LUA_SUFFIX})
 
 
 def _script_dirs(assets_root: Path) -> list[Path]:
-    """`scripts/` et tous ses sous-dossiers, quels qu'ils soient : un script vit à plat, mais
-    `behaviors/` et les rangements hérités d'anciens projets doivent rester surveillés."""
-    scripts = assets_root / "scripts"
-    if not scripts.is_dir():
-        return [scripts]
-    return [scripts, *sorted(d for d in scripts.rglob("*") if d.is_dir())]
+    """Tous les dossiers de `assets/`, à toute profondeur : un script se range où l'auteur veut."""
+    if not assets_root.is_dir():
+        return []
+    return sorted(d for d in assets_root.rglob("*") if d.is_dir())
 
 
 class ProjectWatcher(QObject):
@@ -120,16 +103,16 @@ class ProjectWatcher(QObject):
     Surveille le répertoire d'un projet et notifie les changements de fichiers.
 
     assets/   → asset_appeared / asset_removed / asset_modified / lua_changed
-    project/  → scene_changed
+    assets/scenes/  → scene_changed
     """
 
     asset_appeared = pyqtSignal(str)   # nouveau fichier brut dans assets/
     asset_removed  = pyqtSignal(str)   # fichier supprimé de assets/
-    asset_renamed  = pyqtSignal(str, str)  # fichier brut renommé : (avant, après)
     asset_modified = pyqtSignal(str)   # fichier existant modifié dans assets/
     lua_changed    = pyqtSignal(str)   # .lua créé ou modifié dans assets/scripts/
-    scene_changed  = pyqtSignal(str)   # .json de scène modifié dans project/scenes/
-    sidecar_changed = pyqtSignal(str)  # .json d'asset créé/modifié dans assets/<famille>/
+    scene_changed  = pyqtSignal(str)   # .scene modifié dans assets/scenes/
+    sidecar_changed = pyqtSignal(str)  # sidecar d'asset créé/modifié dans assets/<famille>/
+    sidecar_removed = pyqtSignal(str)  # sidecar d'asset supprimé de assets/<famille>/
 
     _DEBOUNCE_MS = 200
 
@@ -223,12 +206,12 @@ class ProjectWatcher(QObject):
             assets_root / "sounds",
             assets_root / "sfx",
             assets_root / "music",
+            assets_root / "jingles",
             assets_root / "fonts",
             *_script_dirs(assets_root),
-            # project/ (éditeur uniquement)
-            project_path / "project" / "scenes",
-            project_path / "project" / "prefab",
-            project_path / "project" / "backgrounds",
+            # Les JSONs d'édition de l'auteur (scènes, prefabs) : relus s'ils changent hors de l'éditeur
+            assets_root / "scenes",
+            assets_root / "prefab",
         ]
 
     def unwatch(self):
@@ -349,9 +332,9 @@ class ProjectWatcher(QObject):
         out: dict[str, tuple[int, int]] = {}
         if not d.exists():
             return out
+        suffixes = _suffixes_for(d)
         for f in d.iterdir():
-            if not (f.is_file()
-                    and f.suffix.lower() in (_ASSET_SUFFIXES | {_LUA_SUFFIX, _JSON_SUFFIX})):
+            if not (f.is_file() and f.suffix.lower() in suffixes):
                 continue
             try:
                 st = f.stat()
@@ -378,21 +361,21 @@ class ProjectWatcher(QObject):
         """Ajoute tous les fichiers pertinents à la surveillance."""
         assets_root = project_path / "assets"
         asset_dirs = [assets_root / sub for sub in
-                      ("sprites", "backgrounds", "sounds", "sfx", "music", "fonts")]
+                      ("sprites", "backgrounds", "sounds", "sfx", "music", "jingles", "fonts")]
         for d in asset_dirs + _script_dirs(assets_root):
             if d.exists():
+                suffixes = _suffixes_for(d)
                 for f in d.iterdir():
-                    # Le `.json` d'un sidecar est suivi comme le fichier source :
+                    # Le sidecar est suivi comme le fichier source :
                     # sans lui, éditer une police ou un fond à la main hors de
                     # l'éditeur ne se voyait jamais.
-                    if f.is_file() and f.suffix.lower() in (
-                            _ASSET_SUFFIXES | {_LUA_SUFFIX, _JSON_SUFFIX}):
+                    if f.is_file() and f.suffix.lower() in suffixes:
                         self._watcher.addPath(str(f))
 
         # JSONs de scènes (éditeur)
-        scenes_dir = project_path / "project" / "scenes"
+        scenes_dir = assets_root / "scenes"
         if scenes_dir.exists():
-            for f in scenes_dir.glob("*.json"):
+            for f in scenes_dir.glob(f"*{_SCENE_SUFFIX}"):
                 self._watcher.addPath(str(f))
 
     def _clear_suppress(self):
@@ -430,15 +413,10 @@ class ProjectWatcher(QObject):
             return
 
         new_snap = self._scan_dir(d)
-        renames = pair_renames(old_snap, new_snap)
-        renamed_to = {new for _, new in renames}
-
-        # Source apparue : on ne la rapporte qu'une fois sa copie finie. Un
-        # renommage n'est pas concerné (même empreinte qu'un fichier déjà
-        # complet), ni un fichier que `_settle_check` vient de valider.
+        # Source apparue : on ne la rapporte qu'une fois sa copie finie (sauf un fichier que
+        # `_settle_check` vient de valider).
         for path_str in [p for p in new_snap
                          if p not in old_snap
-                         and p not in renamed_to
                          and p not in self._settled
                          and Path(p).suffix.lower() in _ASSET_SUFFIXES]:
             self._settling[path_str] = new_snap.pop(path_str)
@@ -447,17 +425,6 @@ class ProjectWatcher(QObject):
 
         appeared = [p for p in new_snap if p not in old_snap]
         vanished = [p for p in old_snap if p not in new_snap]
-
-        # Renommages — retirés des deux listes AVANT qu'elles ne soient
-        # parcourues : un renommage n'est ni une création ni une suppression,
-        # et le traiter comme les deux revenait à détruire l'asset pour en
-        # créer un neuf sous le nouveau nom.
-        for old_path, new_path in renames:
-            appeared.remove(new_path)
-            vanished.remove(old_path)
-            self._watcher.removePath(old_path)
-            self._watcher.addPath(new_path)
-            self.asset_renamed.emit(old_path, new_path)
 
         # Fichiers modifiés en place (même nom, autre empreinte)
         for path_str, stamp in new_snap.items():
@@ -481,12 +448,14 @@ class ProjectWatcher(QObject):
             self._watcher.removePath(path_str)
             if path.suffix.lower() in _ASSET_SUFFIXES:
                 self.asset_removed.emit(path_str)
+            elif self._is_sidecar_json(path):
+                self.sidecar_removed.emit(path_str)
 
     @staticmethod
     def _is_sidecar_json(path: Path) -> bool:
-        """Un sidecar d'asset vit dans assets/<famille>/ — `project/backgrounds/`
-        porte le même nom de dossier mais n'en est pas un."""
-        return (path.suffix.lower() == _JSON_SUFFIX
+        """Un sidecar d'asset vit dans assets/<famille de source>/, à côté de sa source. Les JSON
+        d'`assets/scenes/`, `assets/prefab/`… sont des assets entiers, sans source : pas des sidecars."""
+        return (path.suffix.lower() in _SIDECAR_SUFFIXES
                 and path.parent.name in _SIDECAR_DIRS
                 and path.parent.parent.name == "assets")
 
@@ -516,10 +485,10 @@ class ProjectWatcher(QObject):
 
         if suffix == _LUA_SUFFIX:
             self.lua_changed.emit(path_str)
-        elif suffix == _JSON_SUFFIX:
+        elif suffix == _SCENE_SUFFIX:
             if path.parent.name == "scenes":
                 self.scene_changed.emit(path_str)
-            elif self._is_sidecar_json(path):
-                self.sidecar_changed.emit(path_str)
+        elif self._is_sidecar_json(path):
+            self.sidecar_changed.emit(path_str)
         elif suffix in _ASSET_SUFFIXES:
             self.asset_modified.emit(path_str)

@@ -7,7 +7,7 @@ choisissent que les familles qui les concernent :
 
     AssetFinder("Data finder",    [DATA_TABLES])
     AssetFinder("Project viewer", [SCENES, PREFABS, SCRIPTS])
-    AssetFinder("Sound finder",   [SFX, MUSIC])
+    AssetFinder("Sound finder",   [SFX, MUSIC, JINGLES])
 
 Avant ce fichier, chaque écran réécrivait ces quatre réponses pour sa propre
 famille — d'où huit panneaux qui divergeaient. Cf. docs/asset-finder.md.
@@ -27,6 +27,7 @@ from ui.common.icons import get as _ico, COLOR_DEFAULT
 from ui.common.theme import QSS
 from ui.common.asset_finder import AssetKind, store_nodes, dir_nodes, resource_dir
 
+from core.models.unique_name import unique_name
 from core.models.resource import (
     MIME_ANIMATED_BG, MIME_MUSIC, MIME_PREFAB_TEMPLATE, MIME_SCRIPT,
 )
@@ -67,19 +68,8 @@ def _font_source_deleter(project, obj):
     return DeleteFontSourceCmd(project, obj)
 
 
-def _unique(store, base: str) -> str:
-    """Premier nom libre de la forme `base`, `base 2`, `base 3`…"""
-    base = (base or "").strip() or "Asset"
-    if store.get(base) is None:
-        return base
-    i = 2
-    while store.get(f"{base} {i}") is not None:
-        i += 1
-    return f"{base} {i}"
-
-
 def _menu_choice(entries):
-    """Petit menu au curseur — `entries` = [(libellé, action) | (None, None)].
+    """Petit menu au curseur — `entries` = [(libellé, action[, icône]) | (None, None)].
 
     Un menu plutôt qu'une enfilade de modales : le « + » d'une famille qui a
     plusieurs façons de naître (créer en 16 ou 256 couleurs, importer) pose la
@@ -89,11 +79,12 @@ def _menu_choice(entries):
     menu = QMenu()
     menu.setStyleSheet(QSS.menu)
     chosen = {}
-    for label, fn in entries:
+    for entry in entries:
+        label, fn = entry[0], entry[1]
         if label is None:
             menu.addSeparator()
             continue
-        act = menu.addAction(label)
+        act = menu.addAction(_ico(entry[2], COLOR_DEFAULT), label) if len(entry) > 2 else menu.addAction(label)
         chosen[act] = fn
     act = menu.exec(QCursor.pos())
     fn = chosen.get(act)
@@ -114,6 +105,8 @@ SCENES = AssetKind(
     delete_prompt = lambda s: label('akind.delete_scene_name_ctrl_z_to_undo', name=s.name),
     add_tooltip_key = 'akind.new_scene',     # l'écran crée (scène active à reporter)
     dir_of        = resource_dir("scenes_dir"),
+    folder_family = "scenes",
+    add_menu      = True,                    # scène ou groupe : le « + » déroule un menu
 )
 
 PREFABS = AssetKind(
@@ -159,11 +152,12 @@ SCRIPTS = AssetKind(
     label_key = 'akind.scripts',
     icon          = "script_lua",
     icon_of       = _script_icon,
-    nodes         = dir_nodes("scripts_dir", (".lua", ".c")),
+    nodes         = dir_nodes("assets_dir", (".lua", ".c"), prune_empty=True),
     rename        = _rename_script,
     delete        = lambda project, path: DeleteFileCmd(path),
     delete_prompt = lambda p: label('akind.delete_name_ctrl_z_to_undo', name=p.name),
     add_tooltip_key = 'akind.new_script',
+    add_menu      = True,                    # script ou behavior : le « + » déroule un menu
     # Glisser un script sur un actor lui attache un ScriptComponent. La charge
     # utile est le chemin RELATIF au projet : un chemin absolu ne survivrait pas
     # au déplacement du dossier de projet.
@@ -196,6 +190,29 @@ def _rename_sprite(project, sprite, new_name: str) -> str:
     return sprite.name
 
 
+def _relink_action(family: str):
+    """« Relink source… » : relier l'asset à un autre fichier, quand le sien a disparu — ou pour en changer.
+    Le dialogue s'ouvre sur le dossier de l'ancien fichier ; un refus (format, dossier) se dit, et
+    l'asset reste inchangé."""
+    def run(project, asset):
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        from core import asset_relink
+        from core.command_dispatcher import get_dispatcher
+        title = label('akind.relink_source_title', name=asset.name)
+        known = project.asset_abs(getattr(asset, "asset", None))
+        start = known.parent if known and known.parent.is_dir() else project.assets_dir
+        extensions = " ".join(f"*{ext}" for ext in sorted(asset_relink.FAMILY_EXTENSIONS[family]))
+        chosen, _ = QFileDialog.getOpenFileName(
+            None, title, str(start), f"{label('akind.relink_filter')} ({extensions})")
+        if not chosen:
+            return
+        try:
+            get_dispatcher().relink_asset_source(family, asset, chosen)
+        except ValueError as error:
+            QMessageBox.warning(None, title, str(error))
+    return ('akind.relink_source', run)
+
+
 SPRITES = AssetKind(
     label         = "Sprites",
     label_key = 'common.sprites',
@@ -208,6 +225,7 @@ SPRITES = AssetKind(
     # Un sprite se crée uniquement par import d'une image : l'écran ouvre le
     # dialogue (il lui faut un parent), le finder ne fait que le demander.
     add_tooltip_key = 'akind.import_a_sprite_sheet',
+    actions       = (_relink_action("sprites"),),
     dir_of        = resource_dir("sprites_dir"),
 )
 
@@ -226,6 +244,7 @@ BACKGROUNDS = AssetKind(
     nodes  = store_nodes("backgrounds", group_by=lambda bg: getattr(bg, "kind", "")),
     rename = _renamer("rename_background"),
     delete = _store_deleter("backgrounds"),
+    actions = (_relink_action("backgrounds"),),
     dir_of = resource_dir("backgrounds_dir"),
 )
 
@@ -252,6 +271,7 @@ def _background_of_kind(bg_kind: str, label: str, add_tooltip: str,
         delete      = _store_deleter("backgrounds"),
         add_tooltip_key = add_tooltip,      # sans `add` : l'écran ouvre l'import
         mime        = mime,
+        actions     = (_relink_action("backgrounds"),),
         dir_of      = resource_dir("backgrounds_dir"),
     )
 
@@ -278,9 +298,10 @@ FONTS = AssetKind(
     nodes      = store_nodes("fonts"),
     rename     = _renamer("rename_font"),
     delete     = _font_source_deleter,
+    actions    = (_relink_action("fonts"),),
     dir_of     = resource_dir("fonts_dir"),
-    # Pas de « + » : une police s'obtient en déposant un PNG ou un .fnt dans
-    # assets/fonts/ (asset_reconciliation.sync_font_file), comme sprites et fonds.
+    # Pas de « + » : une police se crée depuis un PNG, un .fnt, un .ttf ou un .otf, par *Create* dans l'onglet Disk
+    # (core.asset_creation), comme sprites et fonds.
     empty_text_key = 'akind.no_font_drop_a_png_or_a_fnt',
     # Les fichiers source servent surtout au diagnostic : l'auteur travaille
     # normalement avec les Font Assets au-dessus, donc ce dossier démarre clos.
@@ -300,7 +321,7 @@ def _new_font_asset(project):
     from core.history import AddResourceCmd
     from core.models.font_asset import FontAsset
 
-    asset = FontAsset(name=_unique(project.font_assets, "Font"))
+    asset = FontAsset(name=unique_name("Font", {item.name for item in project.font_assets}))
     if project.fonts:
         asset.sources = {"regular": [project.fonts[0].name]}
     get_history().push(AddResourceCmd(project.font_assets, asset))
@@ -339,7 +360,7 @@ def _new_palette(project, size: int):
     from core.models.palette import PaletteBank
     from core.palette_presets import hsb_ramp_bgr555
     from core.history import AddResourceCmd
-    bank = PaletteBank(name=_unique(project.palettes, "Palette"),
+    bank = PaletteBank(name=unique_name("Palette", {item.name for item in project.palettes}),
                        colors=hsb_ramp_bgr555(0, 0, steps=size), size=size)
     get_history().push(AddResourceCmd(project.palettes, bank))
     return bank
@@ -358,7 +379,7 @@ def _import_palette(project):
     if not path:
         return None
     try:
-        bank = import_palette(_P(path), _unique(project.palettes, _P(path).stem))
+        bank = import_palette(_P(path), unique_name(_P(path).stem, {item.name for item in project.palettes}))
     except (OSError, ValueError) as e:
         QMessageBox.warning(None, label('akind.import'), label('akind.unreadable_file_e', e=e))
         return None
@@ -372,10 +393,10 @@ def _add_palette(project):
     plutôt que dialogues ») : la banque naît nommée, et le finder ouvre aussitôt
     son renommage en place."""
     return _menu_choice([
-        (label('akind.new_16_color_palette_4bpp'),  lambda: _new_palette(project, 16)),
-        (label('akind.new_256_color_palette_8bpp'), lambda: _new_palette(project, 256)),
+        (label('akind.new_16_color_palette_4bpp'),  lambda: _new_palette(project, 16), "palette"),
+        (label('akind.new_256_color_palette_8bpp'), lambda: _new_palette(project, 256), "palette"),
         (None, None),
-        (label('akind.import_2'),                      lambda: _import_palette(project)),
+        (label('akind.import_2'),                      lambda: _import_palette(project), "import"),
     ])
 
 
@@ -384,7 +405,7 @@ def _duplicate_palette(project, bank):
     à l'originale ni aux scènes qui la citent par nom. Annulable (Ctrl+Z)."""
     from core.models.palette import PaletteBank
     from core.history import AddResourceCmd
-    copy = PaletteBank(name=_unique(project.palettes, f"{bank.name} copy"),
+    copy = PaletteBank(name=unique_name(f"{bank.name} copy", {item.name for item in project.palettes}),
                        colors=list(bank.colors), size=bank.size)
     get_history().push(AddResourceCmd(project.palettes, copy))
 
@@ -418,7 +439,7 @@ def _add_sound(attr: str, cls_name: str, base: str):
         import core.models.audio as audio_models
         from core.history import AddResourceCmd
         store = getattr(project, attr)
-        asset = getattr(audio_models, cls_name)(name=_unique(store, base))
+        asset = getattr(audio_models, cls_name)(name=unique_name(base, {item.name for item in store}))
         get_history().push(AddResourceCmd(store, asset))
         return asset
     return add
@@ -434,6 +455,7 @@ SFX = AssetKind(
     delete_prompt = lambda a: label('akind.delete_sfx_name_ctrl_z_to_undo', name=a.name),
     add           = _add_sound("sfx", "Sfx", "SFX"),
     add_tooltip_key = 'akind.add_an_sfx',
+    actions       = (_relink_action("sfx"),),
     dir_of        = resource_dir("sfx_dir"),
 )
 
@@ -450,7 +472,25 @@ MUSIC = AssetKind(
     delete_prompt = lambda a: label('akind.delete_track_name_ctrl_z_to_undo', name=a.name),
     add           = _add_sound("music", "Music", "Track"),
     add_tooltip_key = 'akind.add_a_track',
+    actions       = (_relink_action("music"),),
     dir_of        = resource_dir("music_dir"),
+)
+
+# Un jingle est un module comme une musique, mais d'un autre DOSSIER — et c'est
+# ce dossier qui dit le rôle. Pas de `mime` : il ne se dépose pas dans le graphe
+# d'une MusicBox, qui ne lit que des musiques.
+JINGLES = AssetKind(
+    label         = "Jingles",
+    label_key = 'akind.jingles',
+    icon          = "jingle",
+    nodes         = store_nodes("jingles"),
+    rename        = _renamer("rename_sound"),
+    delete        = _store_deleter("jingles"),
+    delete_prompt = lambda a: label('akind.delete_jingle_name_ctrl_z_to_undo', name=a.name),
+    add           = _add_sound("jingles", "Jingle", "Jingle"),
+    add_tooltip_key = 'akind.add_a_jingle',
+    actions       = (_relink_action("jingles"),),
+    dir_of        = resource_dir("jingles_dir"),
 )
 
 
@@ -465,10 +505,7 @@ def _add_data_table(project):
     from core.models.data_table import DataTable, DataColumn
     from core.history import AddResourceCmd
 
-    base, name, i = "Table", "Table", 2
-    while project.data_tables.get(name):
-        name = f"{base}_{i}"
-        i += 1
+    name = unique_name("Table", {t.name for t in project.data_tables})
     table = DataTable(name=name, columns=[DataColumn(name="valeur", type="int")], rows=[])
     get_history().push(AddResourceCmd(project.data_tables, table))
     return table
@@ -499,5 +536,5 @@ DATA_TABLES = AssetKind(
 
 ALL_KINDS = (
     SCENES, PREFABS, SCRIPTS, SPRITES, BACKGROUNDS,
-    FONTS, PALETTES, SFX, MUSIC, DATA_TABLES,
+    FONTS, PALETTES, SFX, MUSIC, JINGLES, DATA_TABLES,
 )

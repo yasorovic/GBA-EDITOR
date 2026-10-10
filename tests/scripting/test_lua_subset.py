@@ -371,7 +371,7 @@ def test_les_scripts_de_la_demo_restent_valides():
     fouillant les JSON de la démo en ferait une seconde source qui dériverait au
     premier champ ajouté. Les garde-fous qui dépendent d'une case cochée dans
     l'éditeur sont donc ouverts — `Ball` a bien « Affine transform » coché
-    (`project/prefab/Ball.json`), et c'est le build qui le vérifie. Le refus,
+    (`assets/prefab/Ball.json`), et c'est le build qui le vérifie. Le refus,
     lui, est scellé juste en dessous."""
     from scripting.parser import parse
     from scripting.checker import check, BuildContext

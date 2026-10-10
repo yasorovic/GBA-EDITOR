@@ -1,18 +1,12 @@
-"""
-scripting/script_templates.py — Génère le contenu initial d'un nouveau
-script Lua selon son contexte (scène / actor / behavior / générique).
+"""Contenu initial, volontairement minimal, des nouveaux scripts Lua.
 
-Point d'entrée unique utilisé par les endroits de l'UI qui créent un script
-(SceneInspector, ScriptEditor du component, Script finder, Assets finder) —
-avant, chacun réimplémentait son propre template de façon indépendante,
-avec des résultats incohérents entre eux (ex: noms d'event en camelCase au
-lieu de snake_case, jamais reconnus par KNOWN_EVENTS). L'écriture disque
-reste du ressort de l'UI ; ce module ne produit que du texte.
+Les scripts créés par l'interface passent tous ici. Le runtime connaît déjà
+le propriétaire, ses composants et ses boîtes de collision au build : ces
+détails ne doivent pas devenir du texte à supprimer avant d'écrire du code.
+L'écriture disque reste du ressort de l'UI ; ce module ne produit que du texte.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
-
-from codegen.c_names import c_ident
 
 
 @dataclass
@@ -44,31 +38,17 @@ def generate_script_template(ctx: ScriptTemplateContext) -> str:
 
 
 def _generate_scene_template(ctx: ScriptTemplateContext) -> str:
-    return (
-        f"-- Scene script: {ctx.scene_name}\n\n"
-        "function on_start()\nend\n\n"
-        "function on_update()\nend\n\n"
-        "function on_late_update()\nend\n"
-    )
+    return "function on_update()\nend\n"
 
 
 def _generate_camera_template(ctx: ScriptTemplateContext) -> str:
-    """Deux points d'entrée seulement, et l'ordre dit dans le commentaire : le
-    suivi déclaratif a déjà écrit la position quand `on_update` s'exécute, donc
-    ce qu'on écrit ici l'ajuste au lieu de se battre avec lui."""
-    return (
-        f"-- Camera script: {ctx.camera_name}\n"
-        "-- The declarative settings (follow, dead zone) are computed BEFORE\n"
-        "-- this script; the world bounds are applied AFTER.\n\n"
-        "function on_start()\nend\n\n"
-        "function on_update()\nend\n"
-    )
+    return "function on_update()\nend\n"
 
 
 def _generate_behavior_template(ctx: ScriptTemplateContext) -> str:
+    from core.lua_scripts import BEHAVIOR_MARKER
     return (
-        f"-- Behavior: {ctx.name}\n"
-        f"-- Reusable module. Usage: local M = require('behaviors/{ctx.name}')\n\n"
+        f"{BEHAVIOR_MARKER}\n"
         "local M = {}\n\n"
         "function M.update(actor)\nend\n\n"
         "return M\n"
@@ -76,32 +56,4 @@ def _generate_behavior_template(ctx: ScriptTemplateContext) -> str:
 
 
 def _generate_actor_template(ctx: ScriptTemplateContext) -> str:
-    lines = [
-        f"-- Actor script : {ctx.name}",
-        f"-- Actor       : {ctx.actor_name or '?'}",
-        f"-- Components  : {', '.join(ctx.component_labels) or 'aucun'}",
-        "",
-        "-- Declare here the variables configurable from the editor:",
-        "-- exports = {",
-        "--     speed  = { type = \"int\",  default = 5,       label = \"Speed\", min = 0, max = 20 },",
-        "--     name   = { type = \"string\", default = \"Hero\", label = \"Name\" },",
-        "--     active = { type = \"bool\",   default = true,    label = \"Active\" },",
-        "-- }",
-        "",
-        "function on_start()",
-    ]
-    if ctx.has_sprite: lines += ["    -- self:play_anim('Idle')"]
-    lines += ["end", "", "function on_update()"]
-    if ctx.has_sprite: lines += ["    -- self:play_anim('Run')"]
-    if ctx.has_sfx:    lines += ["    -- self:play_sfx()"]
-    lines += ["end", ""]
-
-    if ctx.collision_tags:
-        boxtags = ", ".join("BOXTAG_" + c_ident(t or "body") for t in ctx.collision_tags)
-        lines += [f"-- my_box / other_box : {boxtags}",
-                  "function on_collision_enter(other, my_box, other_box)", "end", "",
-                  "function on_collision_exit(other, my_box, other_box)", "end", ""]
-
-    if not (ctx.has_sprite or ctx.collision_tags or ctx.has_sfx):
-        lines += ["-- Add components in the inspector to unlock the API.", ""]
-    return "\n".join(lines)
+    return "function on_update()\nend\n"

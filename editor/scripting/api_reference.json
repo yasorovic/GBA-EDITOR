@@ -67,7 +67,17 @@
       ]
     },
     {
+      "name": "CollisionBox",
+      "group": "gameplay",
+      "entries": []
+    },
+    {
       "name": "Collision",
+      "group": "gameplay",
+      "entries": []
+    },
+    {
+      "name": "Sprite",
       "group": "gameplay",
       "entries": []
     },
@@ -308,7 +318,7 @@
       "group": "gameplay",
       "entries": [
         {
-          "label": "input:held(\"nom\"[, frames])",
+          "label": "input:held(\"nom\", frames?)",
           "snippet": "input:held(\"jump\")",
           "description": "True if the chord is held this frame. With `frames`, stays true after that number of consecutive frames, from 1 to 255. For a sequence, use `get_sequence`.",
           "params": [
@@ -388,7 +398,7 @@
           "doc_anchor": "input-get_sequence"
         },
         {
-          "label": "input:get_axis(\"x\"[, \"y\"])",
+          "label": "input:get_axis(\"x\", \"y\"?)",
           "snippet": "input:get_axis(\"horizontal\")",
           "description": "Position of axis `x`: -1, 0 or 1. With a 2nd argument, returns a vec2 of both axes. \"horizontal\" and \"vertical\" (the d-pad) always exist, even without a declared axis; a project `InputAxis` (Project Settings → Input → Axes) is used the same way.",
           "params": [
@@ -434,21 +444,21 @@
         },
         {
           "label": "sfx:stop()",
-          "snippet": "pas:stop()",
+          "snippet": "sfx:stop()",
           "description": "Cuts the effect returned by `sfx.play`. No effect if that sound has already finished.",
           "params": [],
           "doc_anchor": "sfx-stop"
         },
         {
           "label": "sfx:playing()",
-          "snippet": "pas:playing()",
+          "snippet": "sfx:playing()",
           "description": "True while this effect is sounding.",
           "params": [],
           "doc_anchor": "sfx-playing"
         },
         {
           "label": "sfx:set_volume(percent)",
-          "snippet": "pas:set_volume(80)",
+          "snippet": "sfx:set_volume(80)",
           "description": "Sets the volume of THIS effect, as a percentage (100 = the level set on the resource).",
           "params": [
             {
@@ -461,7 +471,7 @@
         },
         {
           "label": "sfx:set_pitch(percent)",
-          "snippet": "pas:set_pitch(120)",
+          "snippet": "sfx:set_pitch(120)",
           "description": "Sets the pitch of THIS effect, as a percentage of its original pitch: 200 = one octave above, 50 = one octave below. The value is absolute.",
           "params": [
             {
@@ -474,7 +484,7 @@
         },
         {
           "label": "sfx:set_panning(panning)",
-          "snippet": "pas:set_panning(-50)",
+          "snippet": "sfx:set_panning(-50)",
           "description": "Places this effect in the stereo field: −100 left, 0 centre, +100 right.",
           "params": [
             {

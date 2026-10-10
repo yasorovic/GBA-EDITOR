@@ -25,12 +25,12 @@ from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
+    QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFrame,
     QInputDialog, QMessageBox,
 )
 from PyQt6.QtGui import QFont
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QFileSystemWatcher
+from PyQt6.QtCore import pyqtSignal, QTimer, QFileSystemWatcher
 
 from scripting.api import EVENT_REGISTRY as _EVENT_META, DOMAIN_ANIM
 from ui.common.theme import C, T
@@ -38,7 +38,7 @@ from ui.common.labels import label
 from ui.common.tooltip import tooltip
 from core.keybindings import get_keybindings
 from ui.common.icons import COLOR_SCRIPT
-from ui.common.build_panel import BuildPanel
+from ui.common.three_column_body import ThreeColumnBody
 from .colors import _BG, _BG_HDR, _BORDER, _TEXT_HI, _TEXT_NORM, _C_EVENT
 from .lua_editor import LuaEditor
 from .sidebar_panel import SidebarPanel
@@ -154,46 +154,18 @@ class ScriptEditorScreen(QWidget):
         ))
         self._editor.textChanged.connect(self._on_text_changed)
 
-        # Colonne centrale : éditeur (haut) + log (bas)
-        self.build_panel = BuildPanel()
-        self.build_panel.setMinimumHeight(60)
-
-        center_split = QSplitter(Qt.Orientation.Vertical)
-        center_split.setStyleSheet(
-            f"QSplitter::handle{{background:{_BORDER};}}"
-            "QSplitter::handle:vertical{{height:2px;}}"
-        )
-        center_split.addWidget(self._editor)
-        center_split.addWidget(self.build_panel)
-        center_split.setSizes([600, 150])
-        center_split.setStretchFactor(0, 1)
-        center_split.setStretchFactor(1, 0)
-
         # ScriptFinderPanel — colonne droite
         self._file_tree = ScriptFinderPanel()
         self._file_tree.file_requested.connect(lambda p: self.open_script(Path(p)))
         self._file_tree.snippet_requested.connect(self._editor_insert_snippet)
 
-        # Corps dans un QSplitter horizontal : colonnes redimensionnables à la
-        # souris, comme le Sprite Editor / Scene Manager (panneaux « étirables »
-        # bornés par min/max, pas de largeur fixe). Le centre s'étire, les côtés
-        # gardent leur taille. childrenCollapsible=False : la poignée ne réduit
-        # pas une colonne à 0 par accident.
-        body = QSplitter(Qt.Orientation.Horizontal)
-        body.setStyleSheet(
-            f"QSplitter::handle{{background:{_BORDER};}}"
-            f"QSplitter::handle:horizontal{{width:2px;}}"
-            f"QSplitter::handle:hover{{background:{C.ACCENT};}}"
-        )
-        body.setChildrenCollapsible(False)
-        body.addWidget(self._sidebar)
-        body.addWidget(center_split)
-        body.addWidget(self._file_tree)
-        body.setStretchFactor(0, 0)
-        body.setStretchFactor(1, 1)
-        body.setStretchFactor(2, 0)
-        body.setSizes([220, 900, 224])
-        root.addWidget(body, 1)
+        # Corps : trois colonnes redimensionnables à la souris, comme les autres
+        # écrans. Le panneau de build s'accroche sous l'éditeur (cf. ThreeColumnBody).
+        # childrenCollapsible=False : la poignée ne réduit pas une colonne à 0 par accident.
+        self.body = ThreeColumnBody(self._sidebar, self._editor, self._file_tree,
+                                    sizes=(220, 900, 224))
+        self.body.setChildrenCollapsible(False)
+        root.addWidget(self.body, 1)
 
     # ── API publique ──────────────────────────────────────────────────
 
@@ -235,10 +207,8 @@ class ScriptEditorScreen(QWidget):
         self._file_tree.set_project(project)
         self._refresh_catalogs()
         if project:
-            scripts_dir = getattr(project, "scripts_dir", None) or \
-                          project.root / "project" / "scripts"
-            self._root_scripts_dir = scripts_dir
-            self._file_tree.set_root(scripts_dir)
+            self._root_scripts_dir = project.scripts_dir
+            self._file_tree.set_root(project.scripts_dir)
 
     def _refresh_catalogs(self):
         """Re-dérive ce qui dépend des CATALOGUES du projet : la section
@@ -274,9 +244,10 @@ class ScriptEditorScreen(QWidget):
 
     def _detect_context(self, path: Path) -> str:
         """Ce que l'éditeur propose (événements, `self`) dépend de ce à quoi le script est
-        ATTACHÉ, jamais de son dossier. Seul un behavior se reconnaît à son dossier : c'est
-        un module, attaché à rien, référencé par son chemin."""
-        if path.parent == getattr(self._project, "scripts_behaviors_dir", None):
+        ATTACHÉ, jamais de son dossier. Seul un behavior se reconnaît, à son marqueur
+        (`-- @behavior`) : c'est un module, attaché à rien."""
+        from core.lua_scripts import is_behavior
+        if is_behavior(path):
             return "behavior"
         if self._project is not None:
             from core.script_owners import family_of_script
@@ -302,7 +273,7 @@ class ScriptEditorScreen(QWidget):
             self._editor.jump_to_function(event_name)
         else:
             meta = _EVENT_META.get(event_name, {})
-            stub = meta.get("stub", f"function {event_name}()\n    \nend\n")
+            stub = meta.get("stub", f"function {event_name}()\n\nend\n")
             self._editor.insert_stub(stub)
             self._editor.jump_to_function(event_name)
 

@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont, QCursor, QPixmap, QPainter
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 
+from core.models.unique_name import unique_name
 from core.models.resource import MIME_SCRIPT
 from core.models.components import (
     SpriteComponent, component_type_name, competing_sprite_components,
@@ -478,7 +479,7 @@ class ActorInspector(QWidget):
 
         # ── COMPONENTS card ──────────────────────────────────────────
         self._comp_card = CollapsibleCard(label("actorinsp.card.components"), color=icons.COLOR_ACTOR)
-        btn_add = _W.btn_add(); btn_add.clicked.connect(self._show_add_menu)
+        btn_add = _W.btn_add_menu(); btn_add.clicked.connect(self._show_add_menu)
         btn_del = _W.btn_remove(); btn_del.clicked.connect(self._remove_selected_component)
         self._comp_card.add_header_widget(btn_add)
         self._comp_card.add_header_widget(btn_del)
@@ -784,13 +785,11 @@ class ActorInspector(QWidget):
             return
         from core.models.scene import Actor as _A
         taken = {pt.name for pt in (self._prefab.children or [])} | {self._prefab.name}
-        base, n = "Part", 1
-        while f"{base}{n}" in taken:
-            n += 1
+        name = unique_name("Part", taken)
         # Posée SUR la racine (0, 0) : un bras se déplace ensuite là où il va,
         # et une partie qui apparaît au centre se voit — une partie posée hors
         # écran donnerait l'impression que le « + » n'a rien fait.
-        part = _A(name=f"{base}{n}", x=0, y=0)
+        part = _A(name=name, x=0, y=0)
         self._prefab.children.append(part)
         self._persist()
         self._refresh_children_list()
@@ -908,9 +907,8 @@ class ActorInspector(QWidget):
     def _pick_sprite(self):
         if not self._actor or not self._project:
             return
-        sprites_dir = self._project.root / "assets" / "sprites"
-        pngs = sorted(sprites_dir.glob("*.png")) if sprites_dir.exists() else []
-        if not pngs:
+        names = sorted(sprite.name for sprite in self._project.sprites)
+        if not names:
             from PyQt6.QtWidgets import QMessageBox
             QMessageBox.information(self, label("actorinsp.no_sprite_title"),
                 label("actorinsp.no_sprite_text"))
@@ -918,9 +916,8 @@ class ActorInspector(QWidget):
 
         menu = QMenu(self)
         menu.setStyleSheet(QSS.menu)
-        for png in pngs:
-            action = menu.addAction(png.stem)
-            action.setData(str(png))
+        for name in names:
+            menu.addAction(name).setData(name)
 
         pos = self._sprite_preview.mapToGlobal(
             self._sprite_preview.rect().bottomLeft()
@@ -929,21 +926,7 @@ class ActorInspector(QWidget):
         if not chosen:
             return
 
-        png_path = Path(chosen.data())
-        sprite_name = png_path.stem
-
-        # Récupérer ou créer le SpriteAsset correspondant
-        from core.models.sprite import SpriteAsset
-        sprite = self._project.get_sprite(sprite_name)
-        if not sprite:
-            dst = self._project.import_asset(png_path, "sprites")
-            sprite = SpriteAsset(
-                name=sprite_name,
-                asset=self._project.asset_rel(dst),
-            )
-            self._project.sprites.append(sprite)
-            with __import__("contextlib").suppress(Exception):
-                get_dispatcher().save_sprite(sprite)
+        sprite_name = chosen.data()
 
         comp = self._previewed_sprite_component()
         if comp:

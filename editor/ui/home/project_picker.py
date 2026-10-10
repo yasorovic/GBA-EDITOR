@@ -413,12 +413,19 @@ class HomeScreen(QDialog):
         return not (self._toolchain.devkitpro_ok and self._toolchain.mgba_ok)
 
     def _tabs_qss(self) -> str:
-        """Onglets arrondis en haut, carrés en bas, posés sur le filet."""
+        """Onglets arrondis en haut, carrés en bas, posés sur le filet.
+
+        L'EXCEPTION voulue au look commun des onglets (`QSS.tab`) : l'écran d'accueil
+        n'a pas la contrainte d'espace d'un panneau de travail, ses onglets sont de
+        grands boutons. Chaque propriété du look commun est donc reprise ici
+        explicitement (police, graisse, liseré du bas) — une règle de widget l'emporte
+        sur la feuille globale, mais seulement pour les propriétés qu'elle nomme."""
         return (
             "QTabBar{background:transparent;}"
             f"QTabBar::tab{{min-width:110px;padding:8px 22px;margin:0 2px;"
+            f"font-size:{T.MD}px;font-weight:400;"
             f"color:{C.TEXT_DIM};background:{C.BG_PANEL};"
-            f"border:1px solid {C.BORDER};border-bottom:none;"
+            f"border:1px solid {C.BORDER_MID if C.IS_LIGHT else C.BORDER};border-bottom:none;"
             "border-top-left-radius:8px;border-top-right-radius:8px;"
             "border-bottom-left-radius:0;border-bottom-right-radius:0;}"
             f"QTabBar::tab:hover{{color:{C.TEXT_HI};}}"
@@ -469,7 +476,7 @@ class HomeScreen(QDialog):
         """Chaque entrée est une carte arrondie ; la sélectionnée prend l'accent."""
         return (
             "QListWidget{background:transparent;border:none;outline:none;}"
-            f"QListWidget::item{{background:{C.BG_PANEL};border:1px solid {C.BORDER};"
+            f"QListWidget::item{{background:{C.BG_PANEL};border:1px solid {C.BORDER_MID if C.IS_LIGHT else C.BORDER};"
             "border-radius:8px;padding:0;}"
             f"QListWidget::item:hover{{background:{C.BG_HOVER};}}"
             f"QListWidget::item:selected{{background:{C.BG_SEL};border:1px solid {C.ACCENT};}}"
@@ -530,7 +537,7 @@ class HomeScreen(QDialog):
         btn_load.setFixedHeight(36)
         btn_load.setStyleSheet(
             f"QPushButton{{color:{C.TEXT_NORM};background:{C.BG_INPUT};"
-            f"border:1px solid {C.BORDER};border-radius:4px;padding:0 12px;}}"
+            f"border:1px solid {C.BORDER_MID if C.IS_LIGHT else C.BORDER};border-radius:4px;padding:0 12px;}}"
             f"QPushButton:hover{{background:{C.BG_HOVER};border-color:#555;}}"
         )
         btn_load.clicked.connect(self._browse)
@@ -541,7 +548,7 @@ class HomeScreen(QDialog):
         self._btn_open.setFixedHeight(36)
         self._btn_open.setStyleSheet(
             f"QPushButton{{color:{C.TEXT_NORM};background:{C.BG_INPUT};"
-            f"border:1px solid {C.BORDER};border-radius:4px;padding:0 12px;}}"
+            f"border:1px solid {C.BORDER_MID if C.IS_LIGHT else C.BORDER};border-radius:4px;padding:0 12px;}}"
             f"QPushButton:hover{{background:{C.BG_HOVER};border-color:#555;}}"
             f"QPushButton:disabled{{color:{C.TEXT_MUTED};border-color:{C.BORDER_DARK};}}"
         )

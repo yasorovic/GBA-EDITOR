@@ -1,0 +1,12 @@
+{
+  "name": "misaki-gothic",
+  "id": "bde94acc5d25",
+  "asset": "assets/fonts/misaki-gothic.ttf",
+  "source_format": "ttf",
+  "cell_w": 8,
+  "cell_h": 8,
+  "line_height": 8,
+  "family_name": "MisakiGothic",
+  "style_name": "Regular",
+  "glyphs": []
+}

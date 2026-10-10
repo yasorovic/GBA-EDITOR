@@ -12,8 +12,8 @@ Fallback : QIcon vide si qtawesome absent (pas de crash)
 from __future__ import annotations
 import tempfile
 from pathlib import Path
-from PyQt6.QtCore import QRectF, QSize, Qt
-from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PyQt6.QtCore import QPointF, QRectF, QSize, Qt
+from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QPolygonF
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import QApplication
 
@@ -143,6 +143,10 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     # (menus, filtres) pour ne pas toucher les appels qui ignorent l'état.
     "folder":                ("mdi.folder-outline",          "▸"),
     "folder_closed":         ("mdi.folder",                  "▸"),
+    "import":                ("mdi.file-import-outline",     "⇲"),
+    # Le dossier `assets/` lui-même, en tête de la vue Disk : le disque de l'auteur, qu'un
+    # double-clic ouvre dans l'explorateur — pas un dossier où l'on descend.
+    "disk":                  ("mdi.harddisk",                "▭"),
     "sprite":                ("mdi.image-outline",           "▧"),
     "background":            ("mdi.image-multiple-outline",  "▥"),
     "palette":               ("mdi.palette-outline",         "◐"),
@@ -153,6 +157,7 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "anim_state":            ("mdi.play-box-outline",        "▶"),
     "sfx":                   ("mdi.volume-high",             "♪"),
     "music":                 ("mdi.music-note",              "♫"),
+    "jingle":                ("mdi.bell-ring-outline",       "♫"),
     "data_table":            ("mdi.table",                   "▦"),
     "asset_missing":         ("mdi.circle-outline",          "○"),
     "camera":                ("mdi.video",                   "▰"),
@@ -238,8 +243,13 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     # jamais un glyphe de police posé par `setText` : la feuille de style ne
     # peut recolorer que du texte, pas un pixmap déjà teinté.
     "add":                    ("mdi.plus",                    "+"),
+    # Le « + » qui ouvre un menu au lieu d'ajouter : un « + » suivi d'une flèche vers le bas,
+    # partout dans l'éditeur (cf. `_add_menu_icon`, `W.btn_add_menu`).
+    "add_menu":               ("mdi.plus",                    "+▾"),
     "remove":                 ("mdi.minus",                   "−"),
     "search":                 ("mdi.magnify",                 "⌕"),
+    "layout_list":            ("mdi.view-list",               "☰"),
+    "sort":                   ("mdi.sort-alphabetical-ascending", "⇅"),
     # Fenêtre « À propos » (ui/common/about_dialog.py)
     "open_external":          ("mdi.open-in-new",             "↗"),
     "docs":                   ("mdi.book-open-variant",       "▤"),
@@ -268,6 +278,8 @@ def get(name: str,
     if entry is None:
         return QIcon()
     qta_key, _ = entry
+    if name == "add_menu":
+        return _add_menu_icon(color)
     if _qta is not None:
         try:
             kw: dict = {"color": color}
@@ -277,6 +289,30 @@ def get(name: str,
         except Exception:
             pass
     return QIcon()
+
+
+def _add_menu_icon(color: str) -> QIcon:
+    """« + » dont le coin bas-droit porte une petite flèche vers le bas : le bouton d'ajout qui déroule un
+    menu. La flèche chevauche le « + » (même carré que `add`), comme l'indicateur de menu natif d'un
+    `QToolButton` — celui-ci est masqué (cf. `make_add_menu_button`) pour que le rendu ne dépende pas
+    de la présence d'un `setMenu`."""
+    if _qta is None:
+        return QIcon()
+    size = 32
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    try:
+        _qta.icon("mdi.plus", color=color).paint(painter, 0, 0, size, size)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(color))
+        painter.drawPolygon(QPolygonF([QPointF(19, 22), QPointF(31, 22), QPointF(25, 29)]))
+    except Exception:
+        painter.end()
+        return QIcon()
+    painter.end()
+    return QIcon(pixmap)
 
 
 _APP_ICON_SVG = Path(__file__).parent / "CustomIcons" / "Backstage_icon.svg"

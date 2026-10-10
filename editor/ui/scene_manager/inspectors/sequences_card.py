@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import pyqtSignal, Qt
 
+from core.models.unique_name import unique_name
 from core.models.settings import InputSequence, BUTTON_NAMES
 from core.models.input_expression import (
     InputExpressionError, BUILTIN_MOVEMENTS, parse_input_expression,
@@ -252,7 +253,4 @@ class SequencesCard(CollapsibleCard):
 
     def free_name(self) -> str:
         taken = {s.name for s in self._project.settings.sequences}
-        n = 1
-        while f"sequence{n}" in taken:
-            n += 1
-        return f"sequence{n}"
+        return unique_name("sequence", taken)

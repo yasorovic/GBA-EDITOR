@@ -25,6 +25,7 @@ from core.models.sprite import SpriteAsset
 from core.models.background import BackgroundLayer
 from core.project import Project
 from core.diagnostic import build_error, build_warning
+from core.wav_module import encode_music_for_build
 # `sym` importée sous le nom `c_sym` : « sym » est un nom de variable locale
 # très courant dans la génération (`sym = bg_layer_sym(...)`), et une locale
 # masquerait la fonction dans toute la portée où elle apparaît.
@@ -151,8 +152,7 @@ class GritBackground:
         for asset, layer, colors, mp_slot in layers:
             if not layer.background_name:
                 continue
-            png_name = asset.asset if asset and asset.asset else f"{layer.background_name}.png"
-            ap = p.background_images_dir / png_name
+            ap = p.background_image_path(asset, layer.background_name)
             if not ap.exists():
                 self._emit("diagnostic", build_error(f"image missing: {layer.background_name}", "grit"))
                 return False
@@ -623,12 +623,15 @@ def referenced_sound_names(p: Project) -> tuple[set[str], set[str]]:
     ③. `direct_sfx_name` est la différence : un nom de Sfx DIRECT, comme ②,
     donc une source au même titre.
     """
-    from scripting.api import DOMAIN_SFX, DOMAIN_MUSIC
+    from scripting.api import DOMAIN_SFX, DOMAIN_MUSIC, DOMAIN_JINGLE
     from scripting.refactor import index_refs_in_project
     from core.models.components import component_type_name
 
     sfx_names   = set(index_refs_in_project(p, DOMAIN_SFX))
-    music_names = set(index_refs_in_project(p, DOMAIN_MUSIC))
+    # Un jingle est cité par `music.jingle`, d'un autre domaine mais du même
+    # soundbank : les deux listes n'en font qu'une côté ROM.
+    music_names = (set(index_refs_in_project(p, DOMAIN_MUSIC))
+                   | set(index_refs_in_project(p, DOMAIN_JINGLE)))
 
     # ② Le composant ne passe pas par un littéral de script : `self:play_sfx()`
     # ne nomme rien, c'est le codegen qui va chercher le nom dans le composant.
@@ -693,7 +696,7 @@ def resolve_sound_assets(p: Project) -> dict:
     ref_sfx, ref_music = referenced_sound_names(p)
     sfx_list, music_list, skipped = [], [], []
     for kind, store, keep, out in (("sfx", p.sfx, ref_sfx, sfx_list),
-                                   ("music", p.music, ref_music, music_list)):
+                                   ("music", p.audio_modules(), ref_music, music_list)):
         for item in store:
             ap = p.asset_abs(item.asset) if item.asset else None
             if not (ap and ap.exists()):
@@ -724,7 +727,7 @@ def silent_sound_symbols(p: Project) -> list[str]:
     for sfx in getattr(p, "sfx", []):
         if missing(sfx):
             symbols.append(sfx_constant(sfx.name))
-    for music in getattr(p, "music", []):
+    for music in (p.audio_modules() if hasattr(p, "audio_modules") else getattr(p, "music", [])):
         if missing(music):
             symbols += [music_constant(music.name), f"MOD_{c_sym(music.name).upper()}"]
     return symbols
@@ -793,9 +796,25 @@ class MmutilAudio:
             self._emit("diagnostic", build_warning(f"resampling ignored: {e}", "sfx"))
             encoded = {}
 
+        # Une piste `.wav` n'est pas un module : on lui substitue celui qui
+        # l'encapsule (core/wav_module.py). Même règle que ci-dessus — des
+        # chemins, jamais des rangs.
+        music_files = []
+        for m, ap in sound_assets["music"]:
+            if ap.suffix.lower() == ".wav":
+                dst = p.build_dir / "music" / f"{ap.stem}.xm"
+                try:
+                    size = encode_music_for_build(ap, dst)
+                except ValueError as e:
+                    self._emit("diagnostic", build_error(f"\"{m.name}\": {e}", "music"))
+                    return False
+                self._emit("log_line",
+                           f"[music] \"{m.name}\" wav -> module  ({size} bytes in ROM)")
+                ap = dst
+            music_files.append(relative_arg(ap, p.build_dir))
         all_files = (
             [relative_arg(encoded.get(s.name, ap), p.build_dir) for s, ap in sound_assets["sfx"]] +
-            [relative_arg(ap, p.build_dir) for _, ap in sound_assets["music"]]
+            music_files
         )
         if not all_files:
             return True

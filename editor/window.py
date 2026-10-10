@@ -8,14 +8,14 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QSplitter, QLabel, QPushButton, QFrame,
     QStatusBar, QDialog,
-    QMessageBox,
-    QToolButton, QStackedWidget, QToolBar, QSizePolicy,
+    QMessageBox, QFileDialog,
+    QToolButton, QStackedWidget, QToolBar, QSizePolicy, QTabWidget,
 )
 from PyQt6.QtGui import QAction, QFont, QKeySequence, QShortcut, QDesktopServices
-from PyQt6.QtCore import Qt, QSettings, QByteArray, QTimer, QUrl
-from PyQt6.QtGui import QGuiApplication
+from PyQt6.QtCore import Qt, QSettings, QByteArray, QRectF, QTimer, QUrl
+from PyQt6.QtGui import QGuiApplication, QPixmap, QPainter
 
-from ui.common.theme import C, T, QSS
+from ui.common.theme import C, T, QSS, brand_font
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 
@@ -29,7 +29,7 @@ from ui.scene_manager.canvas.canvas_workspace import CanvasWorkspace
 from core.resources import asset_reconciliation
 from core.toolchain import Toolchain
 from core.project_watcher import ProjectWatcher
-from core.history import get_history, SetFieldCmd
+from core.history import get_history, SetFieldCmd, CreateAssetCmd, DeleteResourceCmd, MacroCmd, RefreshAfterCmd
 from core.selection_bus import get_bus
 from core.command_dispatcher import get_dispatcher
 from core.models.audio import MUSIC_FILE_EXTS, SFX_FILE_EXTS
@@ -46,12 +46,16 @@ from ui.screens import EditorScreen, ProjectScreen, plugin_screens, refresh_scre
 sys.path.insert(0, str(Path(__file__).parent))
 from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
 from ui.scene_manager.scene_tree_panel import SceneTreePanel
-from ui.common.build_panel import BuildPanel, ToolchainBar, AnimatedBuildButton
+from ui.common.three_column_body import ThreeColumnBody
+from ui.common.build_panel import BuildPanel, ToolchainBar, AnimatedBuildButton, mascot_renderer
+from ui.common.disk_tree_view import DiskTreeView
+from ui.common.disk_view import add_disk_tab
+from ui.common.panel_bar import tab_widget
 from ui.common.save_status_indicator import SaveStatusIndicator
 from ui.common.settings_dialog import SettingsDialog
 from core.external_tools import ExternalTools
 from core.keybindings import bind, get_keybindings
-from core import crash_log
+from core import crash_log, disk_tree
 from core.app_info import APP_DOCS_URL, APP_NAME
 from ui.common.about_dialog import AboutDialog
 from core.diagnostics import diagnostic_report
@@ -369,7 +373,7 @@ class SceneManagerScreen(QWidget):
         # fichier se désynchroniseraient.
         self._graph_state = SceneGraphState(project.root)
         self._folder_store = AssetFolderStore(project.root)
-        self._folder_store.prune("scenes", {s.name for s in project.scenes})
+        self._folder_store.prune("scenes", {s.id for s in project.scenes})
         self._finder.load_project(project)
         self._finder.set_folder_store(self._folder_store)
         self._scene_tree.load_project(project)
@@ -394,36 +398,6 @@ _WATCHER_WARNING_MS = 60000
 #  Fenêtre principale
 # ──────────────────────────────────────────────────────────────────
 class MainWindow(QMainWindow):
-    # Routage assets/<dossier>/*.ext → (sync, remove, rename, label) — une seule
-    # table pour _on_asset_appeared/_removed/_renamed, qui n'était avant
-    # dupliquée qu'avec "sync_"/"remove_" échangés.
-    #
-    # Les FONCTIONS d'`asset_encoding`, pas leurs noms. La table portait des
-    # chaînes appelées par `getattr(self.project, nom)` : les treize passe-plats
-    # correspondants ont été retirés de `Project` (cf. core/project.py, « ce
-    # module ne fait plus passe-plat vers asset_encoding ») et le routage a
-    # continué de les épeler. Rien ne pouvait le voir — ni l'import, ni
-    # `check_architecture.py`, qui contrôle pourtant les noms résolus — et
-    # déposer un PNG dans assets/sprites/ levait un AttributeError dans un slot
-    # Qt, donc tuait l'éditeur. Une référence directe échoue à l'import.
-    _ASSET_ROUTES = [
-        ("sprites",     IMAGE_FILE_EXTS, asset_reconciliation.sync_sprite_png,
-                                          asset_reconciliation.remove_sprite_png,
-                                          asset_reconciliation.rename_sprite_png,     "Sprite"),
-        ("backgrounds", IMAGE_FILE_EXTS, asset_reconciliation.sync_background_png,
-                                          asset_reconciliation.remove_background_png,
-                                          asset_reconciliation.rename_background_png, "Background"),
-        ("sfx",         SFX_FILE_EXTS,    asset_reconciliation.sync_sfx_file,
-                                          asset_reconciliation.remove_sfx_file,
-                                          asset_reconciliation.rename_sfx_file,       "SFX"),
-        ("music",       MUSIC_FILE_EXTS,  asset_reconciliation.sync_music_file,
-                                          asset_reconciliation.remove_music_file,
-                                          asset_reconciliation.rename_music_file,     "Music"),
-        ("fonts",       FONT_FILE_EXTS,   asset_reconciliation.sync_font_file,
-                                          asset_reconciliation.remove_font_file,
-                                          asset_reconciliation.rename_font_file,      "Font"),
-    ]
-
     def __init__(self):
         super().__init__()
         self.setWindowTitle(APP_NAME)
@@ -472,6 +446,9 @@ class MainWindow(QMainWindow):
         # Construire le catalogue ne construit aucun widget — ce sont des
         # fabriques.
         self._screens: list[EditorScreen] = self._screen_catalogue()
+        # Index d'écran → panneau de build ouvert ? Rempli à la première visite
+        # depuis le catalogue, mis à jour quand on quitte l'écran.
+        self._build_panel_open: dict[int, bool] = {}
         self._setup_toolbar()
 
         root = QWidget()
@@ -491,10 +468,12 @@ class MainWindow(QMainWindow):
         # Écrans éditeur — l'accueil (HomeScreen) est un QDialog séparé
         # (ui/project_picker.py), affiché par main.py avant la fenêtre
         # principale, et rouvrable via _go_home() pour changer de projet.
+        self.build_panel = self._make_build_panel()
         self._build_screens()
 
         # Nav cachée tant qu'aucun projet n'est chargé
         self._screen_stack.setCurrentIndex(0)   # Scene Manager
+        self._move_build_panel_to(0)
         self._set_editor_nav_visible(False)
 
         self._gba_bar = GbaStatusBar()
@@ -502,6 +481,34 @@ class MainWindow(QMainWindow):
 
         self._status = QStatusBar()
         self.setStatusBar(self._status)
+
+    def _make_build_panel(self) -> BuildPanel:
+        """L'UNIQUE panneau de build (console, diagnostics, disque). Il n'appartient
+        à aucun écran : `_show_screen` l'accroche à celui qui s'affiche."""
+        panel = BuildPanel()
+        panel.btn_build.clicked.connect(self._run_build)
+        panel.cartridge_mib_changed.connect(self._set_cartridge_mib)
+        panel.console.location_activated.connect(self._open_build_location)
+        d = panel.diagnostics
+        d.refresh_requested.connect(self._refresh_diagnostics)
+        d.location_activated.connect(self._open_build_location)
+        d.actor_activated.connect(self._select_actor_by_name)
+        d.element_activated.connect(self._select_ui_element)
+        panel.disk.refresh_requested.connect(self._refresh_disk)
+        panel.disk.move_requested.connect(self._move_disk_items)
+        panel.disk.asset_open_requested.connect(self._open_disk_asset)
+        panel.disk.actor_dropped.connect(self._export_actor_to_disk)
+        panel.disk.set_callbacks(self._disk_callbacks())
+        panel.disk.set_drop_check(self._disk_drop_verdict)
+        panel.disk.drop_blocked.connect(self._say_move_refused)
+        panel.disk.set_layout_mode(QSettings(APP_NAME, "Layout").value("disk_layout", "grid"))
+        # Première ouverture : Disk. Ensuite, le dernier onglet vu (cf. _save_layout).
+        if QSettings(APP_NAME, "Layout").value("build_tab") == "console":
+            panel.show_console_tab()
+        else:
+            panel.show_disk_tab()
+        panel.setMinimumHeight(80)
+        return panel
 
     # ── Catalogue d'écrans ────────────────────────────────────────
     #
@@ -518,14 +525,14 @@ class MainWindow(QMainWindow):
 
     def _screen_catalogue(self) -> list[EditorScreen]:
         return [
-            EditorScreen("Scenes",      self._build_scene_manager_screen),
-            EditorScreen("Datas",       self._make_data_editor),
+            EditorScreen("Scenes",      self._build_scene_manager_screen, build_panel_open=True),
+            EditorScreen("Datas",       self._make_data_editor,           build_panel_open=True),
             EditorScreen("Backgrounds", self._make_background_editor),
             EditorScreen("Animations",  self._make_sprite_editor),
             EditorScreen("Palettes",    self._make_palette_editor),
             EditorScreen("Texts",       self._make_text_editor),
             EditorScreen("Sounds",      self._make_sound_mixer),
-            EditorScreen("Scripts",     self._make_script_editor),
+            EditorScreen("Scripts",     self._make_script_editor,         build_panel_open=True),
         ] + plugin_screens()
 
     @property
@@ -645,18 +652,14 @@ class MainWindow(QMainWindow):
         self._script_editor.back_requested.connect(
             lambda: self._switch_screen("Scenes")
         )
-        self._script_editor.build_panel.cartridge_mib_changed.connect(self._set_cartridge_mib)
-        self._script_editor.build_panel.console.location_activated.connect(self._open_build_location)
-        self._wire_diagnostics(self._script_editor.build_panel)
         return self._script_editor
 
     def _build_scene_manager_screen(self) -> QWidget:
         # L'écran est construit EN DERNIER (cf. fin de méthode) : il reçoit ses
         # trois colonnes, qui n'existent qu'une fois le splitter peuplé.
 
-        # Splitter horizontal principal : 3 colonnes
-        self._h_split = QSplitter(Qt.Orientation.Horizontal)
-        self._h_split.setStyleSheet(QSS.splitter)
+        # Les trois colonnes sont assemblées en bas (ThreeColumnBody), une fois
+        # l'inspecteur construit.
 
         # ── Colonne 1 : Project Panel (haut) + Scene Tree (bas) ───
         # Deux questions distinctes, deux panneaux : « quelles scènes/prefabs/
@@ -681,23 +684,18 @@ class MainWindow(QMainWindow):
         self._left_v_split = QSplitter(Qt.Orientation.Vertical)
         self._left_v_split.setStyleSheet(QSS.splitter)
         self._left_v_split.addWidget(self.scene_tree_panel)
-        self._left_v_split.addWidget(self.assets_finder_panel)
+        self._left_v_split.addWidget(self._left_tabs())
         self._left_v_split.setSizes([260, 420])
         self._left_v_split.setStretchFactor(0, 1)
         self._left_v_split.setStretchFactor(1, 1)
-        self._h_split.addWidget(self._left_v_split)
 
-        # ── Colonne 2 : Canvas (haut) + Console (bas) ────────────
-        self._center_v_split = QSplitter(Qt.Orientation.Vertical)
-        self._center_v_split.setStyleSheet(QSS.splitter)
-
+        # ── Colonne 2 : Canvas (le panneau de build s'accroche dessous) ──
         self.scene_editor = SceneEditor()
         self.scene_editor.scene_changed.connect(self._on_scene_changed)
         # Le workspace possède les CONTEXTES du Canvas. `scene_editor` reste
         # l'éditeur/rendu de scène, afin que le futur graphe ne le transforme
         # pas en monolithe et que les connexions existantes restent stables.
         self.canvas_workspace = CanvasWorkspace(self.scene_editor)
-        self._center_v_split.addWidget(self.canvas_workspace)
         # Navigation depuis le Graphe de scènes : la vue émet des INTENTIONS, la
         # fenêtre les exécute avec ses façades existantes (ouvrir une scène,
         # ouvrir un script). La sélection au clic, elle, passe déjà par le bus.
@@ -724,21 +722,10 @@ class MainWindow(QMainWindow):
         _graph.groups_changed.connect(self.assets_finder_panel.refresh)
         self.assets_finder_panel.groups_changed.connect(_graph.reload_groups)
 
-        self.build_panel = BuildPanel()
-        self.build_panel.btn_build.clicked.connect(self._run_build)
-        self.build_panel.cartridge_mib_changed.connect(self._set_cartridge_mib)
-        self.build_panel.console.location_activated.connect(self._open_build_location)
-        self._wire_diagnostics(self.build_panel)
-        self.build_panel.setMinimumHeight(80)
-        self._center_v_split.addWidget(self.build_panel)
-        self._center_v_split.setSizes([600, 160])
-        self._center_v_split.setStretchFactor(0, 1)
-        self._center_v_split.setStretchFactor(1, 0)
-
-        self._h_split.addWidget(self._center_v_split)
-
         # ── Colonne 3 : Inspector (pleine hauteur) ────────────────
         self._inspector = DynamicInspector()
+        self._inspector.text_editor_requested.connect(
+            lambda: self._switch_screen("Texts"))
         self._inspector.actor_changed.connect(self._on_inspector_actor_changed)
         self._inspector.groups_changed.connect(_graph.reload_groups)
         self._inspector.groups_changed.connect(self.assets_finder_panel.refresh)
@@ -770,7 +757,6 @@ class MainWindow(QMainWindow):
         # leurs fabriques au démarrage paresseux) — plus d'accès direct à
         # `_scene_insp`, qui n'existe pas encore à ce stade.
         self._inspector.set_script_open_fn(self.open_script)
-        self._h_split.addWidget(self._inspector)
 
         # Mise en page UI éditée depuis l'arbre de scène (ajout/suppression/
         # reparentage/réordonnancement/renommage) → sauver ET redessiner le
@@ -814,6 +800,7 @@ class MainWindow(QMainWindow):
         _d.on("project_tree_changed",  self.assets_finder_panel.refresh)
         _d.on("project_tree_changed",  self.scene_tree_panel.refresh)
         _d.on("project_tree_changed",  self._update_build_state)
+        _d.on("disk_changed",          self._refresh_disk)
         # Le graphe des scènes dérive lui aussi de l'arbre projet : une scène
         # créée/supprimée/renommée doit s'y voir en direct quand il est affiché
         # (sinon il n'apprend le changement qu'au prochain showEvent). Hors écran,
@@ -835,10 +822,9 @@ class MainWindow(QMainWindow):
         # resynchronisé à sa revisite ») le remet à jour au retour, sans
         # rafraîchir un écran invisible.
 
-        self._h_split.setSizes([220, 760, 300])
-        self._h_split.setStretchFactor(0, 0)
-        self._h_split.setStretchFactor(1, 1)
-        self._h_split.setStretchFactor(2, 0)
+        self._h_split = ThreeColumnBody(self._left_v_split, self.canvas_workspace,
+                                        self._inspector, sizes=(220, 760, 300))
+        self._center_v_split = self._h_split.center_split
 
         screen = SceneManagerScreen(self.assets_finder_panel, self.scene_tree_panel,
                                     self.canvas_workspace, self._inspector)
@@ -846,6 +832,7 @@ class MainWindow(QMainWindow):
         screen_layout.setContentsMargins(0, 0, 0, 0)
         screen_layout.setSpacing(0)
         screen_layout.addWidget(self._h_split)
+        screen.body = self._h_split
         return screen
 
     # ── Persistance layout ────────────────────────────────────────
@@ -870,6 +857,10 @@ class MainWindow(QMainWindow):
         s.setValue("h_split", self._h_split.saveState())
         s.setValue("center_v_split", self._center_v_split.saveState())
         s.setValue("left_v_split", self._left_v_split.saveState())
+        on_project = self._left_tab_widget.currentWidget() is self.assets_finder_panel
+        s.setValue("left_tab", "project" if on_project else "disk")
+        s.setValue("disk_layout", self.build_panel.disk.layout_mode())
+        s.setValue("build_tab", "disk" if self.build_panel.tab_is_disk() else "console")
 
     def closeEvent(self, event):
         if not self._confirm_close():
@@ -888,7 +879,25 @@ class MainWindow(QMainWindow):
             return True
         if self._has_pending_changes():
             box = QMessageBox(self)
-            box.setIcon(QMessageBox.Icon.Warning)
+            # La mascotte « working » plutôt que le triangle système : le
+            # projet est en cours de travail, pas en erreur.
+            mascot = mascot_renderer("working")
+            if mascot is not None:
+                pixmap = QPixmap(64, 64)
+                pixmap.fill(Qt.GlobalColor.transparent)
+                # L'illustration n'est pas carrée : proportions conservées,
+                # centrée dans le carré plutôt qu'étirée.
+                view = mascot.viewBoxF()
+                scale = pixmap.width() / max(view.width(), view.height())
+                width, height = view.width() * scale, view.height() * scale
+                painter = QPainter(pixmap)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                mascot.render(painter, QRectF(
+                    (pixmap.width() - width) / 2, (pixmap.height() - height) / 2, width, height))
+                painter.end()
+                box.setIconPixmap(pixmap)
+            else:
+                box.setIcon(QMessageBox.Icon.Warning)
             # Application-modale : la fermeture peut venir du dialogue de
             # réglages (redémarrage), lui-même modal.
             box.setWindowModality(Qt.WindowModality.ApplicationModal)
@@ -997,6 +1006,15 @@ class MainWindow(QMainWindow):
         for idx in self._nav_bar.screen_order():
             action = menu.addAction(titles[idx])
             action.triggered.connect(lambda _=False, i=idx: self._switch_screen(names[i]))
+        # Le panneau de build suit l'écran affiché ; sans `body` (écran de plugin),
+        # il n'y en a pas à ouvrir.
+        body = self._body_of(self._screen_stack.currentIndex())
+        if body is not None:
+            menu.addSeparator()
+            toggle = menu.addAction(label("win.view_build_panel"))
+            toggle.setCheckable(True)
+            toggle.setChecked(body.dock_is_open())
+            toggle.triggered.connect(self._toggle_build_panel)
 
     # ── Toolbar ───────────────────────────────────────────────────
 
@@ -1010,16 +1028,6 @@ class MainWindow(QMainWindow):
             f"QToolButton:hover{{background:{C.BG_HOVER};border-radius:4px;}}"
         )
         self.addToolBar(tb)
-        self._tb_project_lbl = QPushButton(APP_NAME)
-        self._tb_project_lbl.setFont(QFont(T.UI, T.XL, QFont.Weight.DemiBold))
-        self._tb_project_lbl.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._tb_project_lbl.setStyleSheet(
-            f"QPushButton{{color:{C.TEXT_MUTED};background:none;border:none;padding:0 12px;}}"
-            f"QPushButton:hover{{color:{C.TEXT_DIM};}}"
-        )
-        self._tb_project_lbl.clicked.connect(self._go_home)
-        tb.addWidget(self._tb_project_lbl)
-        tb.addSeparator()
         self._tb_build_btn = AnimatedBuildButton()
         self._tb_build_btn.setEnabled(False)
         self._tb_build_btn.clicked.connect(self._run_build)
@@ -1060,6 +1068,19 @@ class MainWindow(QMainWindow):
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         tb.addWidget(spacer)
+        # Ordre de la barre : Run | undo redo | écrans | projet | état.
+        self._tb_project_lbl = QPushButton(APP_NAME)
+        self._tb_project_lbl.setCursor(Qt.CursorShape.PointingHandCursor)
+        # Le QSS global fixe la police des QPushButton : `setFont` seul serait
+        # écrasé, la famille et la graisse passent donc par la feuille du widget.
+        self._tb_project_lbl.setStyleSheet(
+            f"QPushButton{{color:{C.TEXT_MUTED};background:none;border:none;padding:0 12px;"
+            f"font-family:'{brand_font().family()}';font-size:{T.XL}px;font-weight:400;}}"
+            f"QPushButton:hover{{color:{C.TEXT_DIM};}}"
+        )
+        self._tb_project_lbl.clicked.connect(self._go_home)
+        tb.addWidget(self._tb_project_lbl)
+        tb.addSeparator()
         self._save_indicator = SaveStatusIndicator()
         self._tb_save_indicator = tb.addWidget(self._save_indicator)
         # Sans plancher, une fenêtre étroite renvoyait l'état d'enregistrement dans le
@@ -1128,8 +1149,9 @@ class MainWindow(QMainWindow):
             te.refresh()
         cart_mib = getattr(self.project.settings, "cartridge_mib", 4)
         self.build_panel.set_cartridge_mib(cart_mib)
-        if (sbp := self._script_build_panel()) is not None:
-            sbp.set_cartridge_mib(cart_mib)
+        self._show_disk(None)       # l'arbre d'un autre projet ne doit pas survivre
+        if self._left_tab_widget.currentWidget() is self.disk_tree_view:
+            self._refresh_disk()    # Disk déjà à l'écran : pas de changement d'onglet pour le relire
 
     def _show_screen(self, index: int):
         # Un seul catalogue : l'index de nav EST l'index du stack, par
@@ -1137,6 +1159,7 @@ class MainWindow(QMainWindow):
         # Démarrage paresseux : l'écran est construit maintenant s'il ne l'était
         # pas — c'est sa première visite.
         self._ensure_screen(index)
+        self._move_build_panel_to(index)
         # Revisite ? On le capture AVANT `_load_screen_for_project`, qui ajoute
         # l'index au set à la première visite : sinon, la première visite serait
         # prise pour une revisite et rafraîchirait juste après avoir chargé.
@@ -1150,6 +1173,45 @@ class MainWindow(QMainWindow):
             self._refresh_screen_for_project(index)
         self._history.clear()
         self._bus.clear()
+
+    # ── Panneau de build : un seul, accroché à l'écran affiché ───────
+
+    def _body_of(self, index: int):
+        """Le `ThreeColumnBody` de l'écran d'index `index`, ou None (écran de plugin
+        sans `body`, ou pas encore construit)."""
+        return getattr(self._screen_widgets[index], "body", None)
+
+    def _move_build_panel_to(self, index: int):
+        """Garde l'état ouvert/fermé de l'écran qu'on quitte, puis accroche le panneau
+        à celui d'arrivée, ouvert ou fermé selon son dernier état (le défaut du
+        catalogue à la première visite)."""
+        leaving = self._body_of(self._screen_stack.currentIndex())
+        if leaving is not None and leaving.holds_dock(self.build_panel):
+            self._build_panel_open[self._screen_stack.currentIndex()] = leaving.dock_is_open()
+        body = self._body_of(index)
+        if body is None:
+            return
+        body.attach_dock(self.build_panel)
+        body.set_dock_open(self._build_panel_open.setdefault(
+            index, self._screens[index].build_panel_open))
+
+    def _toggle_build_panel(self):
+        index = self._screen_stack.currentIndex()
+        body = self._body_of(index)
+        if body is None:
+            return
+        opened = not body.dock_is_open()
+        body.set_dock_open(opened)
+        self._build_panel_open[index] = opened
+
+    def _open_build_panel(self):
+        """Ouvre le panneau sur l'écran affiché (un build démarre) et s'en souvient."""
+        index = self._screen_stack.currentIndex()
+        body = self._body_of(index)
+        if body is None:
+            return
+        body.set_dock_open(True)
+        self._build_panel_open[index] = True
 
     def _load_screen_for_project(self, index: int):
         """Prépare un écran lors de sa première visite pour ce projet.
@@ -1263,24 +1325,345 @@ class MainWindow(QMainWindow):
         des scripts du projet."""
         if not self.project:
             return
-        from pathlib import Path
-        root = getattr(self.project, "scripts_dir", None) or \
-            (self.project.root / "project" / "scripts")
-        match = next((p for p in Path(root).rglob(filename)), None)
+        match = next((p for p in self.project.scripts_dir.rglob(filename)), None)
         if match is None:
             self._status.showMessage(label("win.script_not_found", name=filename), 4000)
             return
         self.open_script(match, line)
 
-    # ── Diagnostics (panneau du validateur) ───────────────────────
-    def _wire_diagnostics(self, build_panel):
-        """Branche l'onglet Diagnostics d'un BuildPanel : relance la validation,
-        et route les clics (script → ligne, acteur → sélection)."""
-        d = build_panel.diagnostics
-        d.refresh_requested.connect(self._refresh_diagnostics)
-        d.location_activated.connect(self._open_build_location)
-        d.actor_activated.connect(self._select_actor_by_name)
-        d.element_activated.connect(self._select_ui_element)
+    # ── Disk (arbre de assets/, lecture seule) ────────────────────
+    def _left_tabs(self):
+        """Project viewer et Disk, côte à côte : le premier est ce que le projet
+        contient (scènes, prefabs, scripts), le second ce que le disque contient."""
+        self.assets_finder_panel.hide_title()
+        self.disk_tree_view = DiskTreeView()
+        self.disk_tree_view.refresh_requested.connect(self._refresh_disk)
+        self.disk_tree_view.folder_selected.connect(self._show_disk_folder)
+        self.disk_tree_view.folder_rename_requested.connect(self._rename_disk_folder)
+        self.disk_tree_view.move_requested.connect(self._move_disk_items)
+        self.disk_tree_view.asset_open_requested.connect(self._open_disk_asset)
+        self.disk_tree_view.actor_dropped.connect(self._export_actor_to_disk)
+        self.disk_tree_view.set_callbacks(self._disk_callbacks())
+        self.disk_tree_view.set_drop_check(self._disk_drop_verdict)
+        self.disk_tree_view.drop_blocked.connect(self._say_move_refused)
+        tabs = tab_widget()
+        tabs.addTab(self.assets_finder_panel, label('assf.project_viewer'))
+        add_disk_tab(tabs, self.disk_tree_view)
+        tabs.currentChanged.connect(
+            lambda i: self.disk_tree_view.refresh_requested.emit()
+            if tabs.widget(i) is self.disk_tree_view else None)
+        tabs.setMinimumWidth(180)
+        tabs.setMaximumWidth(420)
+        self._left_tab_widget = tabs
+        # Première ouverture : Disk. Ensuite, le dernier onglet vu (cf. _save_layout).
+        saved = QSettings(APP_NAME, "Layout").value("left_tab")
+        tabs.setCurrentWidget(self.assets_finder_panel if saved == "project"
+                              else self.disk_tree_view)
+        return tabs
+
+    def _show_disk_folder(self, path: str):
+        """Un dossier choisi dans l'arbre : son contenu s'affiche dans le panneau du bas."""
+        self.build_panel.disk.show_folder(path)
+        self.build_panel.show_disk_tab()
+
+    def _disk_push(self, command, after=None):
+        """Une commande de l'onglet Disk : le surveillant suspendu, l'arbre et les finders remis d'accord après
+        chaque sens (exécution, annulation, refaire). `after` : le rafraîchissement, `_after_disk_change` par défaut."""
+        from core.disk_commands import SuspendedCmd
+        get_history().push(SuspendedCmd(RefreshAfterCmd(command, after or self._after_disk_change), self._watcher.suspended))
+
+    def _after_disk_change(self):
+        # Une police vectorielle créée (ou retirée) change les familles logiques qu'on en compose : idempotent.
+        asset_reconciliation.reconcile_font_assets(self.project)
+        self._refresh_assets_ui()
+        self._refresh_disk()
+
+    def _after_disk_move(self):
+        """Un déplacement change des chemins, pas ce qu'un écran montre : les assets sont les mêmes objets, réécrits en
+        place. L'écran visible n'est donc pas rechargé (canvas, inspecteur : plus d'une seconde) ; les autres le sont à
+        leur prochaine visite, comme après tout changement du disque."""
+        visible = self._screen_stack.currentIndex()
+        was_loaded = visible in self._project_loaded_screen_indices
+        self._project_loaded_screen_indices.clear()
+        if was_loaded:
+            self._project_loaded_screen_indices.add(visible)
+        self.assets_finder_panel.refresh()
+        self._refresh_disk()
+
+    def _create_disk_folder(self, parent: str):
+        """Le « + » de l'arbre : crée le dossier sur le disque (annulable), puis laisse l'auteur le nommer."""
+        if not self.project:
+            return
+        from core.disk_commands import CreateFolderCmd
+        command = CreateFolderCmd(Path(parent), label('disk.new_folder'), self.project.assets_dir,
+                                  around=self._watcher.suspended)
+        self._disk_push(command)
+        if command.created is not None:
+            self.disk_tree_view.begin_rename(str(command.created))
+
+    def _rename_disk_folder(self, path: str, new_name: str):
+        if not self.project:
+            return
+        from core.disk_commands import RenameFolderCmd
+        command = RenameFolderCmd(Path(path), new_name, self.project.assets_dir, around=self._watcher.suspended)
+        self._disk_push(command)
+        if command.renamed is None:
+            self._status.showMessage(label('disk.rename_refused'), 6000)
+            get_history().undo()                  # un refus ne laisse pas d'entrée d'historique vide
+            self._refresh_disk()
+
+    def _disk_drop_verdict(self, paths, target):
+        """La question du survol : ce glisser pourrait-il être déposé sur `target` ? (cf. `disk_move.drop_verdict`)"""
+        if not self.project:
+            return False, None
+        from core import disk_move
+        return disk_move.drop_verdict(self.project, [Path(p) for p in paths], Path(target))
+
+    def _export_actor_to_disk(self, actor_name: str, folder: str):
+        """Un acteur du canvas lâché sur un dossier de l'onglet Disk : il y devient un prefab (« Expose to prefab »),
+        ou, si c'est déjà l'instance d'un prefab, ce prefab y est copié."""
+        scene = self.project.active_scene if self.project else None
+        actor = next((a for a in scene.actors if a.name == actor_name), None) if scene else None
+        if actor is None:
+            return
+        prefab = get_dispatcher().export_actor_to_folder(actor, Path(folder))
+        if prefab is not None:                       # l'onglet Disk s'est relu seul (« disk_changed »)
+            self._status.showMessage(label("disk.prefab_created", name=prefab.name), 6000)
+
+    def _open_disk_asset(self, family: str, name: str, path: str):
+        """Double-clic sur un asset de l'onglet Disk : l'écran qui l'édite, l'asset choisi. Une famille sans écran dédié
+        (variables, boîtes sonores, layouts d'interface) le dit. La sélection vient APRÈS le changement d'écran, comme
+        pour `_open_palette_usage` : `_show_screen` vide le bus."""
+        if not self.project:
+            return
+        if family == "scripts":
+            self.open_script(Path(path))
+            return
+        by_usage = {"sprites": "sprite", "backgrounds": "background", "scenes": "scene", "prefabs": "prefab"}
+        if family in by_usage:
+            self._open_palette_usage(by_usage[family], name)
+            return
+        # famille → (écran, sélection dans cet écran) ; la sélection est facultative (les textes n'ont pas d'asset à choisir).
+        targets = {
+            "palettes":    ("Palettes", lambda: self._palette_editor.select_palette(name)),
+            "sfx":         ("Sounds",   lambda: self._sound_mixer.select_sound(family, name)),
+            "music":       ("Sounds",   lambda: self._sound_mixer.select_sound(family, name)),
+            "jingles":     ("Sounds",   lambda: self._sound_mixer.select_sound(family, name)),
+            "fonts":       ("Texts",    lambda: self._text_editor.select_font(family, name)),
+            "font_assets": ("Texts",    lambda: self._text_editor.select_font(family, name)),
+            "texts":       ("Texts",    None),
+            "data_tables": ("Datas",    lambda: self._data_editor.select_table(name)),
+        }
+        if family not in targets:
+            self._status.showMessage(label("disk.no_editor", name=name), 6000)
+            return
+        screen, select = targets[family]
+        self._switch_screen(screen)
+        if select is not None:
+            select()
+
+    def _say_move_refused(self, refusal):
+        """Un dossier survolé qui ne peut pas recevoir : le dire dès le survol, pas seulement au dépôt."""
+        path, reason = refusal
+        self._status.showMessage(label(f"disk.move_refused_{reason}", name=path.name), 8000)
+
+    def _move_disk_items(self, paths: list, target: str):
+        """Des fichiers ou dossiers glissés vers un dossier de l'onglet Disk (arbre ou vue à plat), annulable.
+        Le surveillant est suspendu : un fichier déplacé n'est ni un import ni une suppression."""
+        if not self.project:
+            return
+        from core.disk_commands import MoveFilesCmd
+        command = MoveFilesCmd(self.project, [Path(p) for p in paths], Path(target), around=self._watcher.suspended)
+        self._disk_push(command, after=self._after_disk_move)
+        result = command.result
+        messages = []
+        if result.moved:
+            messages.append(label("disk.move_done", n=len(result.moved)))
+        messages += [label(f"disk.move_refused_{reason}", name=path.name) for path, reason in result.refused[:2]]
+        if messages:
+            self._status.showMessage(" ".join(messages), 8000)
+        if not result.moved:
+            get_history().undo()                  # rien n'a bougé : pas d'entrée d'historique à défaire
+
+    # ── Create asset, import, suppression (onglet Disk) ───────────
+
+    def _disk_callbacks(self):
+        from core import blank_assets
+        from ui.common.disk_view import DiskCallbacks
+        kinds = [(kind, label(f"disk.blank_{kind}")) for kind, _f, _b in blank_assets.BLANK_KINDS]
+        kinds += [(kind, label(f"disk.blank_{kind}")) for kind in blank_assets.SCRIPT_KINDS]
+        return DiskCallbacks(
+            create_options=self._disk_create_options, create_from_source=self._disk_create_from_source,
+            delete_items=self._disk_delete_items, deletable=self._disk_deletable,
+            import_files=self._disk_import_files, create_blank=self._disk_create_blank,
+            new_folder=self._create_disk_folder, blank_kinds=kinds, edit_externally=self._edit_externally)
+
+    def _edit_externally(self, path: Path) -> None:
+        """Ouvre `path` dans l'éditeur de texte des réglages « External Tools », sinon dans l'application du système."""
+        from ui.common.external_editor import open_with
+        open_with(self._external_tools.path("text"), path)
+
+    def _disk_create_options(self, path: str) -> list:
+        """`[(famille, mot, nom)]` : ce que cette source libre peut devenir, le plus courant d'abord ; vide si ce
+        n'est pas une source libre (déjà citée, ou format inconnu)."""
+        if not self.project:
+            return []
+        from core import asset_creation
+        source = Path(path)
+        if not asset_creation.can_create_from(self.project, source):
+            return []
+        return [(family, label(f"disk.family_{family}"), asset_creation.asset_name(self.project, family, source))
+                for family in asset_creation.families_for(self.project, source)]
+
+    def _disk_create_from_source(self, path: str, family: str):
+        """*Create asset* : l'asset naît à côté de sa source, qu'il pointe ; annulable."""
+        if not self.project:
+            return
+        from core import asset_creation
+        creation = asset_creation.build_from_source(self.project, family, Path(path))
+        if creation.error is not None:
+            self._status.showMessage(label("disk.create_refused", error=creation.error), 8000)
+            return
+        self._disk_push(CreateAssetCmd(creation.store, creation.item, creation.folder))
+        message = label("disk.created", name=creation.item.name)
+        self._status.showMessage(f"{message} {creation.warning}" if creation.warning else message, 6000)
+
+    def _disk_deletable(self, node) -> bool:
+        """Tout se supprime depuis l'onglet Disk, sauf les tables de tout le projet (textes, variables) — et un
+        dossier qui en contient une."""
+        return not any(n.family in ("texts", "variables") for n in node.walk())
+
+    def _disk_delete_items(self, nodes: list):
+        """Supprime des assets, des sources, des fichiers et des dossiers, en UNE entrée d'historique annulable.
+        Un asset supprimé garde sa source (elle redevient libre) ; une source ou un fichier supprimé, lui, part à la
+        corbeille du projet (`.temp/`) ; un dossier emporte tout ce qu'il contient."""
+        if not self.project or not nodes:
+            return
+        from core.disk_commands import DeleteFilesCmd
+        # Un nœud déjà couvert par un dossier sélectionné n'est pas compté deux fois.
+        folders_chosen = [n.path for n in nodes if n.kind == disk_tree.FOLDER]
+        tops = [n for n in nodes if not any(f in n.path.parents for f in folders_chosen)]
+        assets, files, folders, cited = [], [], [], []
+        for top in tops:
+            for node in top.walk():
+                if node.kind == disk_tree.FOLDER:
+                    folders.append(node.path)
+                elif node.kind == disk_tree.ASSET:
+                    assets.append(node)
+                else:
+                    files.append(node.path)
+                    if node.kind == disk_tree.LINKED_SOURCE:
+                        cited.append(f"{node.name} → {node.owner}")
+        if folders or cited:
+            text = label("disk.delete_items_confirm", n=len(tops))
+            if cited:
+                text += "\n\n" + label("disk.delete_cited") + "\n" + "\n".join(cited[:6])
+            if QMessageBox.question(self, label("common.delete"), text,
+                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                                    ) != QMessageBox.StandardButton.Yes:
+                return
+        extra = [DeleteFilesCmd(self.project, files, folders)] if files or folders else []
+        self._disk_delete_assets(assets, extra=extra)
+        if extra:
+            self._status.showMessage(label("disk.deleted_items", n=len(tops)), 6000)
+
+    def _disk_delete_assets(self, nodes: list, extra=()):
+        """Supprime des assets — jamais leurs sources, qui redeviennent des sources libres — en UNE entrée d'historique.
+        `extra` : d'autres commandes (fichiers, dossiers) rangées dans la même entrée, après celles des assets."""
+        if not self.project or not (nodes or extra):
+            return
+        from core.asset_usages import usages
+        from core.history import DeleteFileCmd, DeleteFontSourceCmd
+        used = []
+        for node in nodes:
+            store = getattr(self.project, node.family, None)
+            item = store.get(node.owner) if store is not None else None
+            if item is not None:
+                used += [f"{node.owner}: {line}" for line in usages(self.project, node.family, item)]
+        # Pas de fenêtre à chaque suppression : elle est annulable (Ctrl+Z) et ne touche jamais à la source. On ne
+        # demande que pour un asset qui est ENCORE cité, parce que le supprimer casse ce qui le cite.
+        if used:
+            more = f"\n… +{len(used) - 6}" if len(used) > 6 else ""
+            text = (label("disk.delete_confirm", n=len(nodes)) + "\n\n" + label("disk.delete_used") + "\n"
+                    + "\n".join(used[:6]) + more)
+            if QMessageBox.question(self, label("common.delete"), text,
+                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                                    ) != QMessageBox.StandardButton.Yes:
+                return
+        commands = []
+        for node in nodes:
+            if node.family == "scripts":
+                commands.append(DeleteFileCmd(node.path))
+                continue
+            store = getattr(self.project, node.family, None)
+            item = store.get(node.owner) if store is not None else None
+            if item is None:
+                continue
+            commands.append(DeleteFontSourceCmd(self.project, item) if node.family == "fonts"
+                            else DeleteResourceCmd(store, item))
+        commands += extra
+        if commands:
+            self._disk_push(MacroCmd(commands, f"Supprimer {len(commands)} élément(s)"))
+            if not extra:
+                self._status.showMessage(label("disk.deleted", n=len(commands)), 6000)
+
+    def _disk_import_files(self, folder: str):
+        """Importer des fichiers source dans le dossier affiché (copie, annulable). L'asset se crée ensuite par *Create*."""
+        if not self.project:
+            return
+        from core import asset_creation
+        from core.disk_commands import ImportFilesCmd
+        from core.models.unique_name import unique_name
+        patterns = " ".join(f"*{ext}" for ext in sorted(asset_creation.SOURCE_FAMILIES))
+        files, _ = QFileDialog.getOpenFileNames(
+            self, label("disk.import_title"), "", f"{label('disk.import_filter')} ({patterns})")
+        if not files:
+            return
+        target = Path(folder)
+        taken = {entry.name for entry in target.iterdir()} if target.is_dir() else set()
+        copies = []
+        for raw in files:
+            source = Path(raw)
+            name = unique_name(source.stem, {Path(n).stem for n in taken})
+            copy = target / f"{name}{source.suffix}"
+            taken.add(copy.name)
+            copies.append((source, copy))
+        self._disk_push(ImportFilesCmd(copies, around=self._watcher.suspended))
+        self._status.showMessage(label("disk.imported", n=len(copies)), 6000)
+
+    def _disk_create_blank(self, kind: str, folder: str):
+        """Un asset vierge (scène, prefab, boîte, table, palette) ou un script, dans le dossier affiché ; annulable."""
+        if not self.project:
+            return
+        from core import blank_assets
+        from core.disk_commands import CreateFileCmd
+        from core.lua_scripts import lua_files
+        from core.models.unique_name import unique_name
+        target = Path(folder)
+        if kind in blank_assets.SCRIPT_KINDS:
+            base = "Behavior" if kind == "behavior" else "Script"
+            name = unique_name(base, {p.stem for p in lua_files(self.project)})      # un behavior se retrouve par son nom
+            content = blank_assets.script_source(kind, name).encode("utf-8")
+            self._disk_push(CreateFileCmd(target / f"{name}.lua", content, around=self._watcher.suspended))
+            return
+        store, item = blank_assets.build_blank(self.project, kind)
+        self._disk_push(CreateAssetCmd(store, item, target))
+        self._status.showMessage(label("disk.created", name=item.name), 4000)
+
+    def _refresh_disk(self):
+        """Relit `assets/` et alimente l'onglet Disk des deux panneaux. À l'ouverture
+        de l'onglet et au bouton Refresh. Les familles différées sont chargées d'abord :
+        sans elles, leurs assets passeraient pour des sources sans asset."""
+        if not self.project:
+            return
+        from core.disk_tree import build_disk_tree
+        self.project.load_all_resources()
+        self._show_disk(build_disk_tree(self.project))
+
+    def _show_disk(self, tree):
+        if (view := getattr(self, "disk_tree_view", None)) is not None:
+            view.set_tree(tree)
+        self.build_panel.disk.set_tree(tree)
 
     def _refresh_diagnostics(self):
         """Relance `validate_project` sur la scène active et alimente les deux
@@ -1290,10 +1673,7 @@ class MainWindow(QMainWindow):
             return
         from core.validator import validate_project
         warns, errors = validate_project(self.project)
-        for bp in (getattr(self, "build_panel", None),
-                   getattr(getattr(self, "_script_editor", None), "build_panel", None)):
-            if bp is not None:
-                bp.diagnostics.set_diagnostics(warns, errors)
+        self.build_panel.diagnostics.set_diagnostics(warns, errors)
 
     def _select_actor_by_name(self, scene_name: str, name: str):
         """Clic sur un diagnostic d'acteur ou de scène : ouvrir la scène du diagnostic si ce
@@ -1374,6 +1754,7 @@ class MainWindow(QMainWindow):
         push_recent(path)
         self._enter_editor()
         self._refresh_ui()
+        self._refresh_disk()                    # l'onglet Disk montre le disque dès l'ouverture, sans attendre un clic
         self._status.showMessage(label("win.new_project_msg", name=name))
 
     def _open_project(self, path: Path):
@@ -1394,6 +1775,7 @@ class MainWindow(QMainWindow):
         push_recent(path)
         self._enter_editor()
         self._refresh_ui()
+        self._refresh_disk()                    # l'onglet Disk montre le disque dès l'ouverture, sans attendre un clic
         # Un asset que la réconciliation n'a pas su importer laissait un panneau
         # vide et rien d'autre. Le dire ici, au seul moment où l'utilisateur
         # peut faire le lien avec le fichier qu'il vient de déposer.
@@ -1471,8 +1853,6 @@ class MainWindow(QMainWindow):
         self._update_build_state()
         cart_mib = getattr(self.project.settings, "cartridge_mib", 4)
         self.build_panel.set_cartridge_mib(cart_mib)
-        if (sbp := self._script_build_panel()) is not None:
-            sbp.set_cartridge_mib(cart_mib)
         # Seul l'écran visible reçoit le projet maintenant. Les autres le
         # recevront dans ``_show_screen`` lors de leur première visite.
         self._load_screen_for_project(self._screen_stack.currentIndex())
@@ -1586,7 +1966,7 @@ class MainWindow(QMainWindow):
         """Crée une scène au nom unique. La toute première devient la scène
         active : sans elle le panneau restait sur « No active scene » et le
         canvas vide, alors que le modèle avait déjà une scène."""
-        from core.command_dispatcher import unique_name
+        from core.models.unique_name import unique_name
         was_empty = not self.project.scenes
         name = unique_name("Scene", {s.name for s in self.project.scenes})
         get_dispatcher().add_scene(name)
@@ -1612,7 +1992,7 @@ class MainWindow(QMainWindow):
 
     def _add_prefab(self):
         if not self.project: return
-        from core.command_dispatcher import unique_name
+        from core.models.unique_name import unique_name
         name = unique_name("Prefab", {p.name for p in self.project.prefabs})
         get_dispatcher().add_prefab(name)
         self.assets_finder_panel.refresh()
@@ -1762,61 +2142,31 @@ class MainWindow(QMainWindow):
         par déclencher le handler N fois après N ouvertures de projet.
         """
         w = self._watcher
-        for sig in (w.asset_appeared, w.asset_removed, w.asset_renamed,
+        for sig in (w.asset_appeared, w.asset_removed,
                     w.asset_modified,
-                    w.lua_changed, w.scene_changed, w.sidecar_changed):
+                    w.lua_changed, w.scene_changed, w.sidecar_changed,
+                    w.sidecar_removed):
             try:
                 sig.disconnect()
             except TypeError:
                 pass   # aucune connexion existante — rien à faire
-        w.asset_appeared.connect(self._on_asset_appeared)
-        w.asset_removed.connect(self._on_asset_removed)
-        w.asset_renamed.connect(self._on_asset_renamed)
+        w.asset_appeared.connect(self._on_source_files_changed)
+        w.asset_removed.connect(self._on_source_files_changed)
         w.asset_modified.connect(self._on_asset_modified)
         w.lua_changed.connect(self._on_lua_changed)
         w.scene_changed.connect(self._on_scene_file_changed)
         w.sidecar_changed.connect(self._on_sidecar_changed)
+        w.sidecar_removed.connect(self._on_sidecar_removed)
 
-    def _match_asset_route(self, p: Path):
-        """Trouve la route (sync/remove/rename/label) pour un fichier
-        assets/<dossier>/*.ext."""
-        suffix, parent = p.suffix.lower(), p.parent.name
-        for folder, exts, sync_fn, remove_fn, rename_fn, label in self._ASSET_ROUTES:
-            if parent == folder and suffix in exts:
-                return sync_fn, remove_fn, rename_fn, label
-        return None
+    def _on_source_files_changed(self, *_paths):
+        """Un fichier brut est apparu, a disparu ou a été renommé sous assets/.
 
-    def _on_asset_appeared(self, path: str):
-        """Nouveau fichier brut détecté dans assets/ — créer le sidecar si nécessaire."""
-        if not self.project:
-            return
-        p = Path(path)
-        route = self._match_asset_route(p)
-        if not route:
-            # Extension d'asset reconnue, mais pas par CE dossier (un .wav dans
-            # backgrounds/) : le fichier reste là sans asset — le dire, plutôt
-            # que de le laisser muet.
-            self._status.showMessage(
-                label("win.asset_misplaced", name=p.name, folder=p.parent.name,
-                      ext=p.suffix.lower()), _WATCHER_WARNING_MS)
-            return
-        sync_fn, _, _, route_label = route
-        # Certains sync_* renvoient un avertissement d'import (police sans
-        # glyphe, format illisible…) — le taire laisserait un asset muet à
-        # l'écran sans que l'utilisateur sache pourquoi. D'autres renvoient la
-        # Resource créée (Sfx/Music) : seule une chaîne est un avertissement.
-        #
-        # `suspended` : sync_* ÉCRIT le sidecar .json, et depuis que ceux-ci
-        # sont surveillés cette écriture nous reviendrait comme une modification
-        # externe — on rechargerait l'asset qu'on vient de créer.
-        with self._watcher.suspended():
-            result = sync_fn(self.project, p)
-        warning = result if isinstance(result, str) else None
-        self._refresh_assets_ui()
-        if warning:
-            self._status.showMessage(warning, _WATCHER_WARNING_MS)
-        else:
-            self._status.showMessage(label("win.asset_imported", kind=route_label, name=p.name), 3000)
+        Aucun asset n'en naît ni n'en disparaît : un asset POINTE sa source, il n'en est pas le sidecar. Un
+        fichier nouveau est une source libre, que l'auteur transforme en asset par *Create asset* ; un fichier
+        disparu ou renommé laisse l'asset qui le citait sans source (erreur de build, *Relink source…*). Ici on
+        ne fait que remettre l'onglet Disk d'accord avec le disque."""
+        if self.project:
+            self._refresh_disk()
 
     def _on_sidecar_changed(self, path: str):
         """Un sidecar `.json` d'asset a été créé ou modifié hors de l'éditeur.
@@ -1841,56 +2191,19 @@ class MainWindow(QMainWindow):
         self._status.showMessage(
             label("win.asset_reloaded", kind=p.parent.name[:-1].capitalize(), name=p.stem), 3000)
 
-    def _on_asset_removed(self, path: str):
-        """Fichier brut supprimé de assets/ — suppression différée du JSON, UI mise à jour."""
+    def _on_sidecar_removed(self, path: str):
+        """Un sidecar `.json` d'asset a été supprimé hors de l'éditeur : la
+        ressource disparaît de la mémoire, sans quoi la sauvegarde suivante
+        l'écrirait de nouveau (cf. `ResourceStore.save_all`). Le fichier source,
+        s'il reste, la recréera au prochain rattrapage — c'est lui qui fait foi."""
         if not self.project:
             return
         p = Path(path)
-        route = self._match_asset_route(p)
-        if not route:
+        store = getattr(self.project, p.parent.name, None)
+        if store is None or not hasattr(store, "drop_if_deleted_on_disk"):
             return
-        _, remove_fn, _, route_label = route
-        with self._watcher.suspended():
-            remove_fn(self.project, p)
-            if p.parent.name == "fonts":
-                asset_reconciliation.reconcile_font_assets(self.project)
-        self._refresh_assets_ui()
-        self._status.showMessage(label("win.asset_removed", kind=route_label, name=p.name), 3000)
-
-    def _on_asset_renamed(self, old: str, new: str):
-        """Fichier brut renommé dans assets/ — l'asset SUIT son fichier.
-
-        Le watcher apparie la disparition et l'apparition ; sans lui, ce geste
-        arrivait ici en deux temps, et l'asset était détruit avec tout ce qui
-        avait été authoré dessus pendant qu'un asset vierge naissait du nouveau
-        nom.
-
-        `suspended` pour la même raison que dans `_on_asset_appeared` : les
-        `rename_*` écrivent le sidecar, et depuis que ceux-ci sont surveillés
-        l'écriture nous reviendrait comme une modification externe."""
-        if not self.project:
-            return
-        old_p, new_p = Path(old), Path(new)
-        route = self._match_asset_route(new_p)
-        if not route:
-            # L'extension a changé pour une que cette famille ne connaît pas :
-            # ce n'est plus un renommage de son point de vue, c'est une
-            # disparition.
-            self._on_asset_removed(old)
-            return
-        _, _, rename_fn, route_label = route
-        with self._watcher.suspended():
-            result = rename_fn(self.project, old_p, new_p)
-            if new_p.parent.name == "fonts":
-                asset_reconciliation.reconcile_font_assets(self.project)
-        warning = result if isinstance(result, str) else None
-        self._refresh_assets_ui()
-        if warning:
-            self._status.showMessage(warning, _WATCHER_WARNING_MS)
-        else:
-            self._status.showMessage(
-                label("win.asset_renamed", kind=route_label,
-                      old=old_p.name, new=new_p.name), 3000)
+        if store.drop_if_deleted_on_disk(p.stem):
+            self._refresh_assets_ui()
 
     def _on_asset_modified(self, path: str):
         """Fichier existant modifié dans assets/ (ex. PNG retouché) — rafraîchir la preview."""
@@ -1932,25 +2245,14 @@ class MainWindow(QMainWindow):
                                      _WATCHER_WARNING_MS if warning else 3000)
             return
         if p.parent.name == "fonts":
-            # Planche retouchée : les métriques affichées (glyphes, coût en
-            # tuiles) sont dérivées de l'asset, pas du fichier — un refresh
-            # suffit, l'asset lui-même n'est jamais ré-analysé automatiquement
-            # (sinon on écraserait les corrections de l'utilisateur). MAIS
-            # `sync_font_file` est un no-op pour une police déjà connue — il
-            # ne fait un import réel que si `project.fonts.get(name)` est
-            # None, exactement le cas d'un fichier jamais importé avec succès
-            # (import refusé la première fois, puis retouché/redéposé) : sans
-            # cet appel, ce cas retombait dans le message générique tout en
-            # bas, silencieux sur la vraie raison (cf. bug rapporté 2026-09-01).
+            # Planche retouchée : les métriques affichées (glyphes, coût en tuiles) sont dérivées de l'asset,
+            # pas du fichier — un refresh suffit, l'asset n'est jamais ré-analysé automatiquement (on
+            # écraserait les corrections de l'utilisateur).
             if self.project:
                 with self._watcher.suspended():
-                    warning = asset_reconciliation.sync_font_file(self.project, p)
                     asset_reconciliation.reconcile_font_assets(self.project)
                 if (te := getattr(self, "_text_editor", None)) is not None:
                     te.refresh()
-                if warning:
-                    self._status.showMessage(warning, _WATCHER_WARNING_MS)
-                    return
         if (actor_insp := self._inspector.actor_inspector) is not None:
             actor_insp._refresh_sprite_preview()
         self._status.showMessage(label("win.asset_modified", name=Path(path).name), 2000)
@@ -1965,7 +2267,7 @@ class MainWindow(QMainWindow):
         self._status.showMessage(label("win.script_modified", name=Path(path).name), 2000)
 
     def _on_scene_file_changed(self, path: str):
-        """Un .json de scène a changé depuis un éditeur externe — recharger la scène active."""
+        """Un .scene a changé depuis un éditeur externe — recharger la scène active."""
         if not self.project:
             return
         active = self.project.active_scene
@@ -2022,27 +2324,16 @@ class MainWindow(QMainWindow):
         project = self.project
 
         def _persist():
-            # Resynchronise les DEUX bandeaux sur `execute` ET `undo` — même
+            # Resynchronise le bandeau sur `execute` ET `undo` — même
             # règle que `ProjectInspector._persist` pour son combo.
             project.save()
             cur = getattr(settings, "cartridge_mib", 4)
             self.build_panel.set_cartridge_mib(cur)
-            if (sbp := self._script_build_panel()) is not None:
-                sbp.set_cartridge_mib(cur)
 
         get_history().push(SetFieldCmd(
             settings, "cartridge_mib", old, mib,
             label="Projet.cartridge_mib", persist_fn=_persist,
         ))
-
-    def _script_build_panel(self):
-        """La seconde console de build (celle du Script Editor) SI cet écran a
-        été construit, sinon None. Démarrage paresseux : le build est
-        déclenchable depuis la barre d'outils sans jamais avoir ouvert Scripts —
-        on n'alimente sa console mirroir que si elle existe déjà. Ouvrir Scripts
-        plus tard montre une console vierge, cohérent avec un écran neuf."""
-        se = getattr(self, "_script_editor", None)
-        return se.build_panel if se is not None else None
 
     def _explain_missing_toolchain(self):
         """Dit POURQUOI on ne peut pas construire maintenant, et où trouver ce qui
@@ -2064,18 +2355,14 @@ class MainWindow(QMainWindow):
                 self._explain_missing_toolchain(); return
             self._update_build_state()
 
-        self.build_panel.reveal()
-        if (sbp := self._script_build_panel()) is not None:
-            sbp.reveal()
+        self._open_build_panel()
+        self.build_panel.show_console_tab()
         self.build_panel.set_building(True)
         self._tb_build_btn.build_started.emit()
         msg = label("win.build_start", project=self.project.settings.name,
                     scene=self.project.active_scene.name)
         self.build_panel.log_info(msg)
         self.build_panel.start_build_diagnostics()
-        if (sbp := self._script_build_panel()) is not None:
-            sbp.log_info(msg)
-            sbp.start_build_diagnostics()
 
         # Bridge thread-safe : BuildWorker (thread Python) → Qt main thread
         # Les callbacks de l'engine sont appelés depuis le thread de build ;
@@ -2085,8 +2372,6 @@ class MainWindow(QMainWindow):
         self._build_drain.setInterval(30)
         self._build_drain.timeout.connect(self._drain_build_queue)
 
-        if (sbp := self._script_build_panel()) is not None:
-            sbp.console.clear()
         self._worker = BuildWorker(project=self.project, toolchain=self.toolchain)
         self._worker.on("log_line",   lambda m:  self._build_queue.put(("log",      m)))
         self._worker.on("error_line", lambda m:  self._build_queue.put(("error",    m)))
@@ -2102,23 +2387,18 @@ class MainWindow(QMainWindow):
         try:
             while True:
                 kind, data = self._build_queue.get_nowait()
-                sbp = self._script_build_panel()
                 if kind == "log":
                     self.build_panel.log(data)
-                    if sbp is not None: sbp.log(data)
                 elif kind == "error":
                     self.build_panel.log_error(data)
-                    if sbp is not None: sbp.log_error(data)
                 elif kind == "diagnostic":
                     self.build_panel.log_diagnostic(data)
-                    if sbp is not None: sbp.log_diagnostic(data)
                 elif kind == "progress":
                     self._tb_build_btn.set_progress(data)
                 elif kind == "rom_report":
                     self.build_panel.update_rom_report(data)
                     self._gba_bar.set_build_report(data)
                     self._update_gba_bar()
-                    if sbp is not None: sbp.update_rom_report(data)
                 elif kind == "finished":
                     self._build_drain.stop()
                     self._on_build_finished(data)
@@ -2129,15 +2409,10 @@ class MainWindow(QMainWindow):
         self._worker = None
         self.build_panel.set_building(False)
         self.build_panel.show_build_diagnostics()
-        if (panel := self._script_build_panel()) is not None:
-            panel.show_build_diagnostics()
         self._tb_build_btn.build_finished.emit(success)
-        sbp = self._script_build_panel()
         if success:
             self.build_panel.log_info(label("win.build_rom_ok"))
-            if sbp is not None: sbp.log_info(label("win.build_rom_ok"))
             self._status.showMessage(label("win.build_ok"))
         else:
             self.build_panel.log_error(label("win.build_failed_log"))
-            if sbp is not None: sbp.log_error(label("win.build_failed_log"))
             self._status.showMessage(label("win.build_error"))

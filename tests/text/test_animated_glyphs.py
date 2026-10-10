@@ -66,7 +66,36 @@ def test_une_zone_sans_entree_se_mesure_sur_son_echantillon(projet):
     lay.elements.append(libre)
     assert p.region_animated_glyphs(libre) == 0     # rien à quoi se raccrocher
     libre.preview_text = t.key
+    libre.preview_is_literal = False  # ancien format : l'échantillon était une clé
     assert p.region_animated_glyphs(libre) == len("there")
+
+
+def test_un_litteral_de_script_ne_cree_pas_d_entree_pour_etre_mesure(projet):
+    """Le parcours par défaut est le visuel de `text:draw`, pas la table.
+
+    Le littéral reste assez riche pour que le budget des glyphes animés voie
+    son balisage, sans pour autant devenir une entrée persistée et traduisible.
+    """
+    from core.models.ui_region import UIText
+    p, lay, _zone, _t = projet
+    libre = UIText(name="script_literal", w=64, h=16,
+                   preview_text="[wave]Bonjour[/wave]")
+    lay.elements.append(libre)
+
+    assert len(p.texts) == 1
+    assert p.region_text(libre).content == "[wave]Bonjour[/wave]"
+    assert p.region_animated_glyphs(libre) == len("Bonjour")
+    assert len(p.texts) == 1
+
+
+def test_un_litteral_identique_a_une_clef_reste_un_litteral(projet):
+    """Un texte libre ne doit pas redevenir ambigu par coïncidence de nom."""
+    from core.models.ui_region import UIText
+    p, lay, _zone, _t = projet
+    libre = UIText(name="literal", preview_text="line")
+    lay.elements.append(libre)
+
+    assert p.region_text(libre).content == "line"
 
 
 def test_le_plafond_materiel_est_respecte(projet):

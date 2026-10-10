@@ -14,6 +14,7 @@ Cycle de vie :
 
 from __future__ import annotations
 
+from core.models.unique_name import unique_name
 from abc import ABC
 from typing import TYPE_CHECKING, Optional
 
@@ -107,13 +108,9 @@ class AddActorTool(BaseTool):
         proj = get_dispatcher().project
         scene = proj.active_scene if proj else None
         if scene:
-            existing = {a.name for a in scene.actors}
-            n = 0
-            while f"Actor_{n}" in existing:
-                n += 1
-            name = f"Actor_{n}"
+            name = unique_name("Actor", {a.name for a in scene.actors})
         else:
-            name = "Actor_0"
+            name = "Actor"
         get_dispatcher().add_actor(name, x=sx, y=sy)
         self._view.placement_done.emit()
         return True

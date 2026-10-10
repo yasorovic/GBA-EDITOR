@@ -5,7 +5,7 @@ d'être un stub (glyphes, grille, charset dérivé).
 
 Les formats acceptés (ROADMAP v0.8.1, élargie en v0.8.8) : les quatre modules
 que maxmod sait jouer — `.mod`, `.s3m`, `.xm`, `.it` — et `.wav` PCM 8/16 bits
-pour les effets. Tout le reste est refusé à l'import par `check_audio_file`.
+pour les effets, ainsi que pour une musique (encapsulé en module au build). Tout le reste est refusé à l'import par `check_audio_file`.
 
 La hauteur, le volume et le panning se surchargent À L'APPEL depuis la v0.8.6 :
 `sfx.play` rend une référence, et les conversions vers les trois graduations du
@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from core.models.resource import Resource
+from core.models import asset_extensions
 
 
 # ── Les niveaux sont des POURCENTAGES ─────────────────────────────────
@@ -144,6 +145,7 @@ class _MigrateVolumeMixin:
 
 @dataclass
 class Sfx(_MigrateVolumeMixin, Resource):
+    sidecar_extension = asset_extensions.SFX
     name: str = "sfx"
     asset: Optional[str] = None
     volume: int = 100          # POURCENTAGE — cf. _MigrateVolumeMixin
@@ -176,7 +178,11 @@ class Sfx(_MigrateVolumeMixin, Resource):
 # Elles sont la SEULE source : les filtres des dialogues d'import en dérivent
 # (file_dialog_filter) au lieu d'être réécrits à la main.
 SFX_FILE_EXTS   = {".wav"}
-MUSIC_FILE_EXTS = {".mod", ".xm", ".s3m", ".it"}
+MUSIC_FILE_EXTS = {".mod", ".xm", ".s3m", ".it", ".wav"}
+# `.wav` y est un cas à part : maxmod ne joue pas de WAV en musique, c'est le
+# build qui l'encapsule en module (`core/wav_module.py`). Il se reconnaît donc
+# à son extension ET à son dossier — dans assets/sfx/, c'est un effet.
+WAV_MUSIC_EXT = ".wav"
 
 # `check_audio_file` vit dans `core/resources/asset_reconciliation.py` : elle doit LIRE
 # un module pour le valider, donc importer `core.engine_emulation` — et une
@@ -222,7 +228,27 @@ def sfx_rom_bytes(path) -> Optional[int]:
 
 @dataclass
 class Music(_MigrateVolumeMixin, Resource):
+    sidecar_extension = asset_extensions.MUSIC
     name: str = "music"
     asset: Optional[str] = None
     loop: bool = True
     volume: int = 100          # POURCENTAGE — cf. _MigrateVolumeMixin
+
+
+# maxmod ne donne que 4 canaux à la couche jingle (doc `mmJingle`) : un module
+# qui en demande plus serait joué tronqué, et un morceau tronqué ne s'entend pas
+# comme une erreur, il s'entend comme un morceau raté.
+JINGLE_MAX_CHANNELS = 4
+
+
+@dataclass
+class Jingle(Music):
+    """Un module joué PAR-DESSUS la musique (`music.jingle`, JingleBox).
+
+    Même fichier, mêmes champs qu'une `Music` : ce qui les distingue n'est écrit
+    nulle part dans le module, c'est le DOSSIER où il vit — `assets/jingles/`
+    contre `assets/music/`. Une classe à part plutôt qu'un drapeau : le rôle ne
+    peut pas diverger de l'emplacement du fichier, et chaque écran, chaque
+    contrôle demande l'une ou l'autre famille par son nom."""
+    sidecar_extension = asset_extensions.JINGLE
+    name: str = "jingle"

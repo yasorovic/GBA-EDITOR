@@ -37,6 +37,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, pyqtSignal
 
+from core.models.unique_name import unique_name
 from core.models.settings import Language, lang_code
 from ui.common.theme import C, T, QSS
 from ui.common.widgets import CollapsibleCard, W, BTN_ICON
@@ -329,7 +330,4 @@ class LanguagesCard(CollapsibleCard):
         doit pouvoir nommer son fichier avant d'être renommée."""
         taken = {l.code for l in self._project.settings.languages}
         taken.add(self._project.settings.source_lang.code)
-        n = 1
-        while f"lang{n}" in taken:
-            n += 1
-        return f"lang{n}"
+        return unique_name("lang", taken)

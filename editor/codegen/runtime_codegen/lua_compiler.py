@@ -15,6 +15,7 @@ from core.models.components import affine_sprite_component
 from codegen.oam_alloc import owner_appearances
 from core.models.scene import Actor, Scene
 from core.project import Project
+from core import lua_scripts
 from core.diagnostic import build_error, build_warning
 from scripting.parser  import parse as lua_parse, LuaParseError
 from scripting.checker import check as lua_check, BuildContext
@@ -306,12 +307,16 @@ def transpile_all(
         music_items = [m for m, _ in sound_assets.get("music", [])]
     else:
         sfx_items   = list(getattr(p, "sfx", []))
-        music_items = list(getattr(p, "music", []))
+        music_items = list(p.audio_modules()) if hasattr(p, "audio_modules") else list(getattr(p, "music", []))
     sfx_names   = [s.name for s in sfx_items]
     sfx_volumes = {s.name: getattr(s, "volume", 100) for s in sfx_items}
     music_names = [m.name for m in music_items]
-    music_info  = ({m.name: (getattr(m, "loop", True), getattr(m, "volume", 100)) for m in p.music}
-                   if hasattr(p, "music") else {})
+    # Les jingles aussi : `music.jingle` lit leur volume ici.
+    music_info  = ({m.name: (getattr(m, "loop", True), getattr(m, "volume", 100))
+                    for m in p.audio_modules()}
+                   if hasattr(p, "audio_modules") else {})
+    # Parmi les modules ci-dessus, ceux qui vivent dans assets/jingles/.
+    jingle_names = [j.name for j in getattr(p, "jingles", [])]
     # Textes et polices : l'ORDRE fait foi (il devient l'index dans les tables C
     # émises par main_gen). project_fonts() est la source unique côté polices.
     from codegen.font_emit import project_fonts
@@ -464,6 +469,7 @@ def transpile_all(
             affine_transform = _rt_transform,
             sfx_names    = sfx_names,
             music_names  = music_names,
+            jingle_names = jingle_names,
             scene_names  = _scene_names,
             camera_names = _camera_names,
             box_tag_names = _box_tag_names,
@@ -528,6 +534,7 @@ def transpile_all(
             axis_names   = input_layout.axis_names,
                 sfx_names    = sfx_names,
                 music_names  = music_names,
+                jingle_names = jingle_names,
                 scene_names  = _scene_names,
                 camera_names = _camera_names,
                 box_tag_names = _box_tag_names,
@@ -597,12 +604,13 @@ def transpile_all(
             sprite_ids    = _sprite_ids(p, actor),
             sfx_names     = sfx_names,
             music_names   = music_names,
+            jingle_names = jingle_names,
             global_names  = set(global_names),
             string_globals = _string_globals,
             const_names   = set(const_names),
             all_actor_syms= all_syms,
             frame_event_names = frame_events,
-            scripts_dir   = p.scripts_dir,
+            behavior_paths = lua_scripts.behavior_paths(p),
             scene_names   = _scene_names,
             sfx_component_name = sfx_comp_name,
             sfx_volumes   = sfx_volumes,
@@ -673,6 +681,7 @@ def transpile_all(
             affine_transform = _pf_rt_transform,
             sfx_names    = sfx_names,
             music_names  = music_names,
+            jingle_names = jingle_names,
             scene_names  = _scene_names,
             camera_names = _camera_names,
             box_tag_names = _box_tag_names,
@@ -726,11 +735,12 @@ def transpile_all(
             sprite_ids    = _sprite_ids(p, pf),
             sfx_names     = sfx_names,
             music_names   = music_names,
+            jingle_names = jingle_names,
             global_names  = set(global_names),
             string_globals = _string_globals,
             const_names   = set(const_names),
             all_actor_syms= all_syms,
-            scripts_dir   = p.scripts_dir,
+            behavior_paths = lua_scripts.behavior_paths(p),
             owner_kind    = "prefab",
             is_pooled     = True,
             pool_size     = pf_instances,
@@ -797,6 +807,7 @@ def transpile_all(
             anim_names    = [],
             sfx_names     = sfx_names,
             music_names   = music_names,
+            jingle_names = jingle_names,
             global_names  = set(global_names),
             string_globals = _string_globals,
             const_names   = set(const_names),
@@ -857,6 +868,7 @@ def transpile_all(
             axis_names   = input_layout.axis_names,
             sfx_names    = sfx_names,
             music_names  = music_names,
+            jingle_names = jingle_names,
             scene_names  = _scene_names,
             camera_names = _camera_names,
             box_tag_names = _box_tag_names,
@@ -908,6 +920,7 @@ def transpile_all(
             anim_names    = [],
             sfx_names     = sfx_names,
             music_names   = music_names,
+            jingle_names = jingle_names,
             global_names  = set(global_names),
             string_globals = _string_globals,
             const_names   = set(const_names),

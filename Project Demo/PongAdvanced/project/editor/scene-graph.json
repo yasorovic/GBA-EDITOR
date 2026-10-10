@@ -2,16 +2,16 @@
   "version": 3,
   "scene_positions": {
     "SCR_Main": [
-      20.0,
-      20.0
+      -40.0,
+      120.0
     ],
     "SCR_Arena": [
-      230.0,
-      20.0
+      200.0,
+      120.0
     ],
     "SCR_Victory": [
       440.0,
-      20.0
+      120.0
     ]
   },
   "missing_positions": {},

@@ -54,7 +54,8 @@ def _module_channels(project, cache: dict, asset_name: str) -> int:
     from core.engine_emulation.module_model import load_module
 
     n = 0
-    music = next((m for m in getattr(project, "music", []) if m.name == asset_name), None)
+    modules = project.audio_modules() if hasattr(project, "audio_modules") else getattr(project, "music", [])
+    music = next((m for m in modules if m.name == asset_name), None)
     ap = project.asset_abs(music.asset) if music and music.asset else None
     if ap and ap.exists():
         try:

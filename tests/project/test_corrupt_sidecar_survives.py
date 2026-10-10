@@ -15,6 +15,7 @@ import os
 
 from PIL import Image
 
+from asset_fixtures import create
 from core.project import Project
 
 CORRUPT = '{ "name": "hero", "frame_w": 16, "frame_h'      # tronqué
@@ -30,8 +31,9 @@ def test_sprite_au_sidecar_illisible_n_est_pas_ecrase(tmp_path):
     project = Project.create(root, "Jeu")
     png = project.sprites_dir / "hero.png"
     Image.new("RGB", (16, 16), (200, 30, 30)).save(png)
-    project = Project.open(root)                      # un projet créé ne diffère rien
-    project.load_all_resources()                      # crée le sidecar de hero
+    project = Project.open(root)
+    project.load_all_resources()
+    create(project, "sprites", png)                    # le sidecar de hero
     sidecar = project.sprites.path_of(project.sprites.get("hero"))
     assert sidecar.exists()
 

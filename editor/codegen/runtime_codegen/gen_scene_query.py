@@ -161,7 +161,7 @@ def bg_info(p, scene) -> list[dict]:
             })
         else:
             # Image non compressée -> taille depuis le PNG (chemin legacy).
-            ap = p.background_images_dir / (ba.asset if ba and ba.asset else f"{layer.background_name}.png")
+            ap = p.background_image_path(ba, layer.background_name)
             try:
                 from PIL import Image
                 with Image.open(ap) as img:

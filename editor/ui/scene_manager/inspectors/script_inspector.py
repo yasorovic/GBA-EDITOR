@@ -3,6 +3,7 @@ d'actor) : note libre + liste des variables exposées (ajout/retrait). Le nom
 de l'asset (fichier .lua) est renommé via l'en-tête partagé (AssetHeaderBar),
 géré par DynamicInspector — cf. dynamic_inspector._on_header_rename."""
 from __future__ import annotations
+from core.models.unique_name import unique_name
 from ui.common.labels import label
 import re
 from pathlib import Path
@@ -401,11 +402,7 @@ class ScriptInspector(QWidget):
         if not self._path:
             return
         existing = {v["name"] for v in parse_exports(self._path)}
-        base = "nouvelle_var"
-        name, i = base, 1
-        while name in existing:
-            i += 1
-            name = f"{base}_{i}"
+        name = unique_name("nouvelle_var", existing)
         add_export(self._path, name, "int", name)
         self._focus_var = name
         self._refresh_vars()

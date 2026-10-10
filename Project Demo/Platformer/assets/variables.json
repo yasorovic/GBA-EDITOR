@@ -1,0 +1,13 @@
+{
+  "globals": [
+    {
+      "id": "b3532b4c3717",
+      "name": "score",
+      "type": "int",
+      "default": 0,
+      "desc": "",
+      "persist": false
+    }
+  ],
+  "constants": []
+}

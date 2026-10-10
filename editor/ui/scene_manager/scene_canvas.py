@@ -280,6 +280,7 @@ class SceneEditor(QWidget):
         self._selection_pending = False
         self._gba_view.left_released.connect(self._flush_pending_selection)
         self._gba_view.prefab_template_dropped.connect(self._on_prefab_template_dropped)
+        self._gba_view.ui_layout_dropped.connect(self._on_ui_layout_dropped)
         get_bus().changed.connect(self.on_selection)
 
         self._canvas_container = CanvasContainer(self._gba_view)
@@ -770,8 +771,7 @@ class SceneEditor(QWidget):
             if bw and bh:
                 max_w, max_h = max(max_w, bw), max(max_h, bh)
                 continue
-            png = ba.asset if ba and ba.asset else f"{layer.background_name}.png"
-            ap = project.background_images_dir / png
+            ap = project.background_image_path(ba, layer.background_name)
             if ap.exists():
                 px = QPixmap(str(ap))
                 if not px.isNull():
@@ -802,8 +802,7 @@ class SceneEditor(QWidget):
             if not layer.background_name:
                 continue
             ba = project.get_background(layer.background_name)
-            png = ba.asset if ba and ba.asset else f"{layer.background_name}.png"
-            ap = project.background_images_dir / png
+            ap = project.background_image_path(ba, layer.background_name)
             raw_layers[layer.bg_slot] = bg_pixmap(project, scene, layer, ap)
             shown.add(layer.bg_slot)
         # Pixmaps BRUTS, avant tout mélange : c'est eux que `refresh_blend()`
@@ -1384,6 +1383,22 @@ class SceneEditor(QWidget):
         y = max(0, min(int(pos.y()), self._canvas_h))
         get_dispatcher().instantiate_prefab(prefab_name, x, y)
 
+    def _on_ui_layout_dropped(self, layout_name: str):
+        """Ajoute le layout à la scène active (un nœud `Interface` qui le cite) et le sélectionne.
+        Déjà présent dans la scène : il est seulement sélectionné, un layout n'y figure qu'une fois."""
+        scene = self._project.active_scene if self._project else None
+        layout = next((l for l in self._project.ui_layouts if l.name == layout_name), None) if scene else None
+        if layout is None:
+            return
+        if not any(node.layout_name == layout_name for node in scene.ui_layouts):
+            from core.models.ui_region import InterfaceNode
+            scene.ui_layouts.append(InterfaceNode(layout_name=layout_name))
+            get_dispatcher().save_all()
+            self._reload_ui_regions()
+            self.scene_changed.emit()               # l'arbre de scène se reconstruit
+        from core.selection_bus import UILayoutSelection
+        get_bus().select(UILayoutSelection(layout, scene))
+
     def refresh_bg(self, bg_index: int = 0):
         """Recharge tous les BG depuis le BackgroundAsset actif de la scène."""
         if not self._project or not self._project.active_scene:
@@ -1394,8 +1409,7 @@ class SceneEditor(QWidget):
             if not layer.background_name:
                 continue
             ba = self._project.get_background(layer.background_name)
-            png = ba.asset if ba and ba.asset else f"{layer.background_name}.png"
-            ap = self._project.background_images_dir / png
+            ap = self._project.background_image_path(ba, layer.background_name)
             self._gba_scene.set_bg(layer.bg_slot, bg_pixmap(self._project, scene, layer, ap))
             self._gba_scene.set_bg_visible(layer.bg_slot, getattr(layer, "visible", True))
             shown.add(layer.bg_slot)

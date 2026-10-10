@@ -35,6 +35,7 @@ class DynamicInspector(QWidget):
     # Une zone éditée ou supprimée doit être redessinée dans le canvas : `changed`
     # est trop général (il est aussi émis par la scène et les actors).
     ui_regions_changed = pyqtSignal()
+    text_editor_requested = pyqtSignal()
     # Relayé depuis SceneInspector : un réglage de mélange demande au canvas de
     # recomposer ses pixmaps (cf. SceneEditor.refresh_blend).
     blend_changed = pyqtSignal()
@@ -232,6 +233,7 @@ class DynamicInspector(QWidget):
         insp = UIInspector()
         insp.changed.connect(self.changed)
         insp.changed.connect(self.ui_regions_changed)
+        insp.text_editor_requested.connect(self.text_editor_requested)
         # Un renommage venu d'AILLEURS que l'en-tête (arbre, canvas) doit s'y
         # refléter : l'en-tête est désormais le seul endroit qui montre le nom.
         insp.renamed.connect(self._header.set_name)
@@ -529,7 +531,7 @@ class DynamicInspector(QWidget):
         if folder is None:
             return
         self._ensure(self._MODE_GROUP)
-        self._group_insp.load(group_id, folders, state)
+        self._group_insp.load(group_id, folders, state, self._project)
         self._set_header("group", label("assetfind.group"), folder.name, editable=False)
         self._stack.setCurrentIndex(self._MODE_GROUP)
 

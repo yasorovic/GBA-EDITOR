@@ -279,7 +279,7 @@ class _TransitionEdge(QGraphicsItem):
         lit = picked or self.dst.isSelected() or (
             self.src is not None and self.src.isSelected())
         color = QColor(C.SEL_BORDER if picked else
-                       (C.ACCENT if lit else C.BORDER_MID))
+                       (C.ACCENT if lit else C.TEXT_DIM))
         # Trait plein = fondu traversant, tireté = coupe à la position. Les deux
         # seules transitions que le matériel tient (v0.8.3).
         pen = QPen(color, 2.6 if picked else (2.0 if lit else 1.4))
@@ -353,7 +353,7 @@ class MusicGraphView(QGraphicsView):
         self.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
-        self.setBackgroundBrush(QColor(C.BG_BASE))
+        self.setBackgroundBrush(QColor(C.GRAPH_BG))
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setFrameShape(QGraphicsView.Shape.NoFrame)
         self.setAcceptDrops(True)
@@ -369,7 +369,7 @@ class MusicGraphView(QGraphicsView):
     def drawBackground(self, painter: QPainter, rect: QRectF):
         super().drawBackground(painter, rect)
         step = 32
-        painter.setPen(QPen(QColor(C.BORDER_DARK), 0))
+        painter.setPen(QPen(QColor(C.GRAPH_GRID), 0))
         x = int(rect.left()) - int(rect.left()) % step
         while x < rect.right():
             painter.drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()))
@@ -549,7 +549,7 @@ class MusicGraphView(QGraphicsView):
         g = self._graph
         if g is None:
             return None
-        from core.command_dispatcher import unique_name
+        from core.models.unique_name import unique_name
         # L'espace de noms est celui de CETTE boîte : une SoundBox peut
         # porter le même nom d'état sans que rien ne devienne ambigu.
         taken = [s.name for s in g.states]
@@ -619,7 +619,7 @@ class MusicGraphView(QGraphicsView):
         g = self._graph
         if g is None:
             return
-        from core.command_dispatcher import unique_name
+        from core.models.unique_name import unique_name
         taken = [t.trigger for t in g.transitions if t.trigger]
         tr = MusicTransition(src=src.state.name, dst=dst.state.name,
                              trigger=unique_name("trigger", taken))
@@ -666,7 +666,7 @@ class MusicGraphView(QGraphicsView):
                     f"Piste de {node.state.name}", self._after_edit))
             self.select_state(node.state.name)
         else:
-            from core.command_dispatcher import unique_name
+            from core.models.unique_name import unique_name
             scene_pos = self.mapToScene(pos)
             st = MusicState(
                 name=unique_name(name, [s.name for s in g.states]),

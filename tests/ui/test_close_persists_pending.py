@@ -99,6 +99,7 @@ class _FakeBox(QMessageBox):
         self._buttons = {}
 
     def setIcon(self, *a): pass
+    def setIconPixmap(self, *a): pass
     def setWindowModality(self, *a): pass
     def setWindowTitle(self, *a): pass
     def setText(self, *a): pass

@@ -1,6 +1,6 @@
 """DataTable — une table de données du projet : des colonnes typées, des lignes.
 
-Rangée avec les données PROPRES au projet (`project/data/`) et non dans
+Rangée avec les données PROPRES au projet (`assets/data/`) et non dans
 `assets/` : elle ne dérive d'aucun fichier importé, comme une caméra ou une
 palette.
 
@@ -42,6 +42,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Any
 
 from core.models.resource import Resource
+from core.models import asset_extensions
 
 # Le nom d'une table et celui de ses colonnes sont des IDENTIFIANTS, pas des
 # libellés : un script les écrit comme du CODE (`data.Objets[i].prix`), sans
@@ -83,6 +84,7 @@ class DataColumn:
 
 @dataclass
 class DataTable(Resource):
+    sidecar_extension = asset_extensions.TABLE
     name:    str = "Table"
     columns: list[DataColumn] = field(default_factory=list)
     rows:    list[dict]       = field(default_factory=list)

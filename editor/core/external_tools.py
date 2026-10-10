@@ -2,14 +2,12 @@
 core/external_tools.py — chemins des logiciels tiers, réglage du LOGICIEL
 (un chemin par machine, comme `core/toolchain.py`), pas du projet.
 
-Portée actuelle : trois chemins configurables depuis l'écran Réglages
-(catégorie « External Tools »), pour l'image, le son et la police. Rien ne
-les LIT encore ailleurs dans l'éditeur — aucun bouton « Edit externally »
-n'existe sur les finders de sprites/fonds/sons/polices. C'est un choix
-délibéré (portée resserrée à la demande) : cette classe ne fait qu'exister
-et se souvenir, le câblage viendra dans un chantier séparé, quand chaque
-finder saura quoi faire d'un chemin vide (proposer l'app par défaut du
-système ? refuser silencieusement ? — une question par écran, pas ici).
+Portée actuelle : quatre chemins configurables depuis l'écran Réglages
+(catégorie « External Tools »), pour l'image, le son, la police et le texte
+(éditeur de fichiers `.json` & co). Seul le chemin « text » est lu : le clic droit
+« Edit externally » de l'onglet Disk sur textes, traductions et variables
+(`window._edit_externally`). Un chemin vide s'ouvre dans l'application par défaut
+du système. Les trois autres attendent leur câblage, finder par finder.
 """
 from __future__ import annotations
 
@@ -25,6 +23,7 @@ TOOL_KINDS: list[tuple[str, str]] = [
     ("image", "Image editor"),
     ("audio", "Audio editor"),
     ("font",  "Font editor"),
+    ("text",  "Text editor"),
 ]
 
 

@@ -10,10 +10,10 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QSplitter
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QWidget, QHBoxLayout
 
 from ui.common.theme import C
+from ui.common.three_column_body import ThreeColumnBody
 from core.models.sprite import AnimState, SpriteAsset, StateDirection
 from core.project import Project
 from .sprite_finder_panel import SpriteFinderPanel
@@ -34,26 +34,13 @@ class SpriteEditorScreen(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.setStyleSheet(
-            f"QSplitter::handle{{background:{C.BORDER};}}"
-            f"QSplitter::handle:horizontal{{width:2px;}}"
-            f"QSplitter::handle:hover{{background:{C.ACCENT};}}"
-        )
-
         self._left   = SpriteFinderPanel()
         self._center = SpriteCenterPanel()
         self._right  = SpriteRightPanel()
 
-        splitter.addWidget(self._left)
-        splitter.addWidget(self._center)
-        splitter.addWidget(self._right)
-        splitter.setSizes([240, 860, 270])
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        splitter.setStretchFactor(2, 0)
-
-        root.addWidget(splitter)
+        self.body = ThreeColumnBody(self._left, self._center, self._right,
+                                    sizes=(240, 860, 270))
+        root.addWidget(self.body)
 
         self._left.sprite_selected.connect(self._on_sprite_selected)
         self._left.direction_selected.connect(self._on_direction_selected)

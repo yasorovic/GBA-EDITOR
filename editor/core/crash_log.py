@@ -26,6 +26,8 @@ NATIVE_LOG_FILE = config_dir() / "crash_native.log"
 _native_log = None       # garder le fichier ouvert : faulthandler écrit dessus au crash
 _reporter = None
 _reporting = False
+_shown_summaries: set[str] = set()
+_MAX_DIALOGS = 3
 
 
 def _write(text: str) -> None:
@@ -60,6 +62,13 @@ def _report(summary: str, details: str) -> None:
     global _reporting
     if _reporter is None or _reporting:
         return
+    # Une erreur qui se répète (paintEvent, timer…) rouvrirait la fenêtre à
+    # chaque fermeture et empêcherait de quitter : la trace va au log à chaque
+    # fois, mais la fenêtre ne s'ouvre qu'une fois par erreur distincte, et au
+    # plus _MAX_DIALOGS fois par session.
+    if summary in _shown_summaries or len(_shown_summaries) >= _MAX_DIALOGS:
+        return
+    _shown_summaries.add(summary)
     _reporting = True
     try:
         _reporter(summary, details, LOG_FILE)

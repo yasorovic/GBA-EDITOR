@@ -38,10 +38,13 @@ def says(found, level: str, fragment: str) -> bool:
 # ── Sprites, scripts, collisions ──────────────────────────────────────────
 
 
-def test_un_sprite_dont_le_png_manque_est_un_avertissement(project):
+def test_un_sprite_dont_le_png_manque_est_une_erreur_une_seule_fois(project):
+    """Le fichier introuvable est signalé UNE fois, en erreur, au niveau du projet — plus par l'acteur qui
+    cite le sprite, qui répétait le même constat en avertissement."""
     project.sprites.append(SpriteAsset(name="Hero", asset="assets/sprites/gone.png"))
-    found = run(project, validator._check_sprite, Actor(name="A"), SpriteComponent(sprite_name="Hero"))
-    assert says(found, "warning", "PNG file not found")
+    assert says(run(project, validator._check_missing_sources), "error", 'Sprite "Hero": source file not found')
+    per_actor = run(project, validator._check_sprite, Actor(name="A"), SpriteComponent(sprite_name="Hero"))
+    assert not says(per_actor, "warning", "not found") and not says(per_actor, "error", "not found")
 
 
 # ── Mélange de couleurs ───────────────────────────────────────────────────
@@ -214,12 +217,6 @@ def test_deux_morceaux_de_structure_differente_ne_se_relaient_pas(project, monke
     _music_files(project, monkeypatch, A=(4, 4), B=(8, 4))
     _script(project, 'function on_start()\n music.play("B")\n music.cut_to("A")\nend\n')
     assert says(run(project, validator._check_music_cut_compat), "warning", "does not have the same structure")
-
-
-def test_un_jingle_de_plus_de_quatre_canaux_avertit(project, monkeypatch):
-    _music_files(project, monkeypatch, Fanfare=(1, 6))
-    _script(project, 'function on_start()\n music.jingle("Fanfare")\nend\n')
-    assert says(run(project, validator._check_jingle_channels), "warning", "only gives 4 to a jingle")
 
 
 def test_une_frame_qui_cite_une_action_ou_un_sfx_inconnus_avertit(project):

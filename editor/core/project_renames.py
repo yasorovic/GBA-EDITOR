@@ -23,14 +23,15 @@ puisque `project.py` l'importe pour composer la classe.
 from contextlib import contextmanager
 from typing import Optional
 
-from core.models.audio import Music
+from core.models.audio import Jingle, Music
 from core.models.background import BackgroundAsset
 from core.models.components import SpriteComponent, ScriptComponent
 from core.models.palette import PaletteBank, PaletteUsage, OWN_PAL_BANK
 from core.models.scene import Scene
 from core.models.sprite import SpriteAsset
+from core.models.unique_name import unique_name
 from scripting.api import (
-    DOMAIN_SCENE, DOMAIN_CAMERA, DOMAIN_PREFAB, DOMAIN_SFX, DOMAIN_MUSIC, DOMAIN_FONT,
+    DOMAIN_SCENE, DOMAIN_CAMERA, DOMAIN_PREFAB, DOMAIN_SFX, DOMAIN_MUSIC, DOMAIN_JINGLE, DOMAIN_FONT,
     DOMAIN_ACTOR, DOMAIN_UI_ELEMENT, DOMAIN_WIN_REGION,
 )
 
@@ -45,15 +46,7 @@ class ProjectRenameMixin:
         if not new_name or new_name == bg.name:
             return
         old_name = bg.name
-        # Renommer aussi le PNG source : un BackgroundAsset est keyé par le stem
-        # de son PNG (name == stem(source)). Sans ça, la réconciliation des fonds
-        # recréerait un asset orphelin depuis l'ancien PNG au prochain chargement.
-        old_png = (self.background_images_dir / bg.asset) if bg.asset else None
-        if old_png and old_png.exists():
-            new_png = old_png.with_name(f"{new_name}{old_png.suffix}")
-            if not new_png.exists():
-                old_png.rename(new_png)
-                bg.asset = new_png.name
+        # Le fichier image ne bouge pas : l'asset le POINTE, il n'en est plus le sidecar.
         self.backgrounds.rename(bg, new_name)
         # Met à jour les layers des scènes qui référencent ce fond par nom.
         for scene in self.scenes:
@@ -71,16 +64,7 @@ class ProjectRenameMixin:
         if not new_name or new_name == sprite.name:
             return
         old_name = sprite.name
-        # Renommer aussi le PNG source : un SpriteAsset est keyé par le stem
-        # de son PNG (comme BackgroundAsset). Sans ça, la réconciliation des
-        # sprites recréerait un asset orphelin depuis l'ancien PNG au prochain
-        # chargement.
-        old_png = self.asset_abs(sprite.asset) if sprite.asset else None
-        if old_png and old_png.exists():
-            new_png = old_png.with_name(f"{new_name}{old_png.suffix}")
-            if not new_png.exists():
-                old_png.rename(new_png)
-                sprite.asset = self.asset_rel(new_png)
+        # Le fichier image ne bouge pas : l'asset le POINTE, il n'en est plus le sidecar.
         self.sprites.rename(sprite, new_name)
         # Met à jour les SpriteComponent (Actors inline dans les scènes, et
         # Prefabs) qui référencent ce sprite par nom.
@@ -252,13 +236,13 @@ class ProjectRenameMixin:
         domaine, y compris pour un conteneur. Retourne le nom RÉELLEMENT appliqué
         (peut différer si collision)."""
         from core.models.ui_region import (
-            KIND_TEXT, KIND_IMAGE, KIND_LIST, unique_element_name)
+            KIND_TEXT, KIND_IMAGE, KIND_LIST)
         new_name = new_name.strip()
         if not new_name or new_name == element.name:
             return element.name
         taken = set(self.ui_element_names()) - {element.name}
         if new_name in taken:
-            new_name = unique_element_name(taken, new_name)
+            new_name = unique_name(new_name, taken)
         kind = getattr(element, "kind", KIND_TEXT)
         # Un élément ne se cite que par `interface:get("Nom")`, quelle que soit sa nature :
         # UN domaine, donc un conteneur — qu'aucun domaine ne couvrait — est réécrit aussi.
@@ -283,8 +267,8 @@ class ProjectRenameMixin:
         return new_name
 
     def rename_ui_layout(self, layout, new_name: str) -> str:
-        """Renomme un nœud `Interface` (l'asset `UILayout`, `project/ui_layouts/
-        <nom>.json`) et répare les scènes qui le citent.
+        """Renomme un nœud `Interface` (l'asset `UILayout`, `assets/ui_layouts/
+        <nom>.layout`) et répare les scènes qui le citent.
 
         Une scène référence ses nœuds par NOM (`Scene.ui_layouts`, v0.25) : le
         renommage remplace le nom EN PLACE dans chaque liste, pour ne pas changer
@@ -295,11 +279,7 @@ class ProjectRenameMixin:
         if not new_name or new_name == layout.name:
             return layout.name
         taken = {l.name for l in self.ui_layouts} - {layout.name}
-        if new_name in taken:
-            base, n = new_name, 2
-            while new_name in taken:
-                new_name = f"{base}_{n:02d}"
-                n += 1
+        new_name = unique_name(new_name, taken)
         old_name = layout.name
         with self._renaming():
             self.ui_layouts.rename(layout, new_name)
@@ -316,18 +296,22 @@ class ProjectRenameMixin:
         return new_name
 
     def rename_sound(self, asset, new_name: str):
-        """Sfx ou Music — même chemin, seul le domaine Lua diffère."""
+        """Sfx, Music ou Jingle — même chemin, seuls le registre et le domaine Lua
+        diffèrent."""
         new_name = new_name.strip()
         if not new_name or new_name == asset.name:
             return
         old_name = asset.name
-        is_music = isinstance(asset, Music)
+        if isinstance(asset, Jingle):
+            store, domain, kind = self.jingles, DOMAIN_JINGLE, "Jingle"
+        elif isinstance(asset, Music):
+            store, domain, kind = self.music, DOMAIN_MUSIC, "Music"
+        else:
+            store, domain, kind = self.sfx, DOMAIN_SFX, "SFX"
         with self._renaming():
-            (self.music if is_music else self.sfx).rename(asset, new_name)
-            refs = self.rename_lua_refs(DOMAIN_MUSIC if is_music else DOMAIN_SFX,
-                                        old_name, new_name)
-        self._notify_renamed("Music" if is_music else "SFX",
-                             old_name, new_name, refs)
+            store.rename(asset, new_name)
+            refs = self.rename_lua_refs(domain, old_name, new_name)
+        self._notify_renamed(kind, old_name, new_name, refs)
 
     def palette_usages(self, name: str) -> list[PaletteUsage]:
         """Tout ce qui utilise la banque `name` — alimente la carte « USAGE »

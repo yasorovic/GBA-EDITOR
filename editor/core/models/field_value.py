@@ -14,7 +14,8 @@ l'affichage et pour l'expression C.
 Deux formes lues, une seule écrite : un champ nu (`x: 0`) est un littéral pixel,
 et `{"var": <id>}` est la référence telle que l'éditeur la sauvegarde. La forme
 par NOM (`{"var": "score_joueur"}`) reste acceptée en lecture — c'est celle qui
-s'écrit à la main dans un sidecar, l'id étant illisible — et se résout par nom.
+s'écrit à la main dans un sidecar, l'id étant illisible — et se résout par nom
+(un id a toujours la forme de 12 chiffres hexadécimaux, cf. `ids.is_id`).
 Elle repasse en id dès que l'éditeur réécrit le fichier.
 
 Ce module ne dépend pas de Qt : il est partagé par l'UI (aperçu pixel),
@@ -25,6 +26,8 @@ scripting/constants.py (`CONST_<NOM en MAJUSCULES>`).
 
 from __future__ import annotations
 from typing import Callable, Optional, Union
+
+from core.models.ids import is_id
 
 TILE_SIZE = 8   # px par tile (GBA)
 
@@ -43,7 +46,7 @@ class FieldValue:
     __slots__ = ("mode", "n", "var_name", "var_src", "var_id")
 
     def __init__(self, mode: str, n: int = 0, var_name: str = "",
-                 var_src: str = "global", var_id: int = 0):
+                 var_src: str = "global", var_id: str = ""):
         self.mode = mode            # "px" | "tile" | "ref"
         self.n = n                  # nombre (px ou tiles) pour px/tile
         self.var_name = var_name    # nom résolu — affichage et expression C
@@ -66,13 +69,14 @@ class FieldValue:
                 src = raw.get("src", "global")
                 src = src if src in ("global", "const") else "global"
                 var = raw.get("var", "")
-                if isinstance(var, str):
-                    # Forme ancienne : le nom EST la référence. Gardée lisible
-                    # tant que la migration n'est pas passée.
+                var = str(var or "")
+                if not is_id(var):
+                    # Forme écrite à la main : le nom EST la référence. Un nom
+                    # n'a jamais la forme d'un id — l'éditeur refuse de la
+                    # donner à une variable.
                     return cls("ref", var_name=var, var_src=src)
-                vid = int(var or 0)
-                return cls("ref", var_src=src, var_id=vid,
-                           var_name=(names or {}).get((src, vid), ""))
+                return cls("ref", var_src=src, var_id=var,
+                           var_name=(names or {}).get((src, var), ""))
             if raw.get("unit") == "t":
                 try:
                     return cls("tile", int(raw.get("n", 0)))
@@ -89,7 +93,7 @@ class FieldValue:
         return cls("tile", int(n))
 
     @classmethod
-    def ref(cls, name: str, src: str, var_id: int = 0) -> "FieldValue":
+    def ref(cls, name: str, src: str, var_id: str = "") -> "FieldValue":
         return cls("ref", var_name=name, var_id=var_id,
                    var_src=src if src in ("global", "const") else "global")
 
@@ -180,7 +184,7 @@ def var_names_from_project(project) -> dict:
     return d
 
 
-def variables_from_project(project) -> list[tuple[str, str, int]]:
+def variables_from_project(project) -> list[tuple[str, str, str]]:
     """Liste ordonnée `(src, nom, id)` prête pour `ValueField(variables=…)`.
 
     Le NOM est ce que l'utilisateur choisit dans le menu, l'ID ce qui part dans

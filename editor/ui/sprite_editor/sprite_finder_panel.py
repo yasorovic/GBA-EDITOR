@@ -274,13 +274,11 @@ class SpriteFinderPanel(QWidget):
         """Le « + » du finder délègue ici : le dialogue d'import a besoin d'un
         widget parent, que le composant partagé n'a pas à connaître."""
         from .import_png_dialog import import_new_sprite
-        dst = import_new_sprite(self._project, self)
-        if not dst:
+        sprite = import_new_sprite(self._project, self)
+        if sprite is None:
             return
         self._sprites.refresh()
-        sprite = self._project.sprites.get(dst.stem)
-        if sprite is not None:
-            self._sprites.select(SPRITES.label, sprite)
+        self._sprites.select(SPRITES.label, sprite)
 
 
     # ── Animations : renommage / suppression d'un état ──────────────

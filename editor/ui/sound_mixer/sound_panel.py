@@ -5,7 +5,7 @@ from typing import Optional
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QFrame, QSplitter, QFileDialog, QToolButton, QSlider, QProgressBar,
+    QFrame, QFileDialog, QToolButton, QSlider, QProgressBar,
     QSpinBox, QCheckBox, QMessageBox,
     QButtonGroup, QComboBox, QStackedWidget,
 )
@@ -15,6 +15,7 @@ from PyQt6.QtCore import (
 )
 
 from ui.common.theme import C, T, QSS, ui_font
+from ui.common.three_column_body import ThreeColumnBody
 from ui.common.widgets import W
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
@@ -22,7 +23,7 @@ from ui.common.icons import get as _ico
 
 from core.resources.asset_reconciliation import check_audio_file
 from core.models.audio import (
-    Music, Sfx, SFX_FILE_EXTS, MUSIC_FILE_EXTS,
+    Jingle, Music, Sfx, SFX_FILE_EXTS, MUSIC_FILE_EXTS,
     file_dialog_filter, sfx_rom_bytes,
 )
 from ui.sound_mixer.state_machines import (
@@ -31,10 +32,11 @@ from ui.sound_mixer.state_machines import (
 from ui.sound_mixer.box_playback import BoxPlayer
 from ui.sound_mixer.sound_budget_bar import SoundBudgetBar
 from ui.common.asset_finder import AssetFinder
-from ui.common.asset_kinds import SFX, MUSIC
+from ui.common.asset_kinds import SFX, MUSIC, JINGLES
 from core.keybindings import bind
 from core.project import Project
 from core.history import get_history, DeleteResourceCmd
+from core.command_dispatcher import get_dispatcher
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -148,6 +150,17 @@ class _AssetInspectorBase(QWidget):
     def _save(self):
         raise NotImplementedError
 
+    def _persist(self):
+        """Écrit le sidecar SANS réveiller le watcher.
+
+        Les sidecars de assets/sfx|music|jingles sont surveillés : une écriture
+        non suspendue revient comme une modification externe, `load_one`
+        remplace l'asset par une copie et l'écran se recharge — l'inspecteur se
+        vide à chaque réglage. Même règle que tout écran qui écrit sous assets/.
+        """
+        with get_dispatcher().suspended():
+            self._save()
+
     def load(self, asset, project: Project):
         self._asset = asset; self._project = project
         if not asset:
@@ -171,19 +184,20 @@ class _AssetInspectorBase(QWidget):
         if new_name and new_name != self._asset.name:
             # Passe par le projet (pas le ResourceStore brut) : il met aussi
             # à jour les sfx:play()/music:play() des scripts.
-            self._project.rename_sound(self._asset, new_name)
+            with get_dispatcher().suspended():
+                self._project.rename_sound(self._asset, new_name)
             self.changed.emit()
 
     def _on_loop(self, v):
         if self._blocking or not self._asset: return
         self._asset.loop = v
-        self._save()
+        self._persist()
         self.changed.emit()
 
     def _on_vol(self, v):
         if self._blocking or not self._asset: return
         self._asset.volume = v
-        self._save()
+        self._persist()
         self.changed.emit()
 
     def _file_hint(self, path: Path) -> str:
@@ -205,14 +219,15 @@ class _AssetInspectorBase(QWidget):
         # Refuser AVANT la copie : un fichier écarté ne doit pas atterrir dans
         # assets/. Et c'est le seul refus possible — mmutil construit la ROM
         # sans broncher sur un wav 24 bits, en la laissant muette.
-        if reason := check_audio_file(Path(path)):
+        if reason := check_audio_file(Path(path), into=self._IMPORT_FOLDER):
             QMessageBox.warning(self, label("sndpanel.import_rejected_title"),
                                 label("sndpanel.import_rejected_text",
                                       name=Path(path).name, reason=reason))
             return
-        dst = self._project.import_asset(Path(path), self._IMPORT_FOLDER)
+        with get_dispatcher().suspended():
+            dst = self._project.import_asset(Path(path), self._IMPORT_FOLDER)
         self._asset.asset = self._project.asset_rel(dst)
-        self._save()
+        self._persist()
         self._set_file_label(dst)
         self.changed.emit()
 
@@ -259,7 +274,7 @@ class SfxInspector(_AssetInspectorBase):
     def _on_rate(self, idx: int):
         if self._blocking or not self._asset: return
         self._asset.sample_rate = int(self._rate.itemData(idx) or 0)
-        self._save()
+        self._persist()
         self.changed.emit()
 
     def _save(self):
@@ -300,6 +315,21 @@ class MusicInspector(_AssetInspectorBase):
 
     def _save(self):
         self._project.save_music(self._asset)
+
+
+class JingleInspector(MusicInspector):
+    """Même réglages qu'une musique, d'un autre dossier : le jingle ne boucle pas
+    dans le jeu (maxmod le joue une fois), mais le réglage reste celui du module."""
+    _EMPTY_TEXT = "sndpanel.jingle_empty"
+    _HEADER_LABEL = "sndpanel.header_jingle"
+    _IMPORT_DIALOG_TITLE = "sndpanel.jingle_import_title"
+    _IMPORT_FOLDER = "jingles"
+
+    def _manager(self):
+        return self._project.jingles
+
+    def _save(self):
+        self._project.save_jingle(self._asset)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -414,7 +444,7 @@ class _BoxTab(QWidget):
         """Crée une boîte au nom automatique — pas de pop-up de saisie."""
         if not self._project:
             return
-        from core.command_dispatcher import unique_name
+        from core.models.unique_name import unique_name
         store = getattr(self._project, self._store_attr)
         box = self._cls(name=unique_name(self._cls().name,
                                          [b.name for b in store]))
@@ -511,6 +541,9 @@ class SoundMixerScreen(QWidget):
         self._project: Optional[Project] = None
         self._weights: Optional[dict] = None   # poids du dernier build, à la demande
         self._last_selected = None             # cf. _on_state_selected
+        # L'asset du Sound finder que le lecteur jouera à la place de la boîte,
+        # tant qu'on n'a pas touché à la boîte (cf. _disarm_asset).
+        self._armed_asset = None
         self.setStyleSheet(f"background:{C.BG_PANEL};")
 
         root = QVBoxLayout(self)
@@ -524,25 +557,27 @@ class SoundMixerScreen(QWidget):
         # MusicBox telle que la ROM la résout, pas le fichier sur l'ordinateur.
         self._box_player = BoxPlayer(self)
 
-        # Splitter principal
-        split = QSplitter(Qt.Orientation.Horizontal)
-        split.setStyleSheet(QSS.splitter)
-        root.addWidget(split, 1)
-
         # ── Panneau gauche : Sound finder ──────────────────────────
         # Deux familles dans un seul finder partagé ; c'est le TYPE de l'asset
         # reçu qui dit quel inspecteur montrer, pas un signal par famille.
-        self._finder = AssetFinder(label('sndpanel.sound_finder'), [SFX, MUSIC],
+        self._finder = AssetFinder(label('sndpanel.sound_finder'), [SFX, MUSIC, JINGLES],
                                    min_width=180, max_width=360)
         self._finder.selected.connect(lambda _kind, a: self._on_asset_selected(a))
         self._finder.emptied.connect(lambda _kind: self._right_stack.setCurrentIndex(0))
-        split.addWidget(self._finder)
 
-        # ── Panneau central : les boîtes à état ───────────────────
-        # C'est le cœur de l'écran (ROADMAP v0.8.7) : le finder n'est qu'un
-        # magasin, l'inspecteur de droite ne règle qu'un asset à la fois, et
-        # c'est ici que les sons se rangent en états et se relient.
-        split.addWidget(self._build_machines_panel())
+        # ── Panneau central : contextes audio (masqué temporairement) ──
+        # Les MusicBox/SoundBox/JingleBox restent chargées afin que les projets
+        # existants gardent leurs données et leur build. Leur éditeur visuel,
+        # en revanche, disparaît de l'écran pendant le recentrage sur les deux
+        # modules fondamentaux : Music et Sound FX.
+        # La COLONNE reste (le panneau de build s'y loge, sa poignée aussi) ; seul son
+        # contenu est masqué.
+        self._machines_panel = self._build_machines_panel()
+        self._machines_panel.hide()
+        center = QWidget()
+        center_layout = QVBoxLayout(center)
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.addWidget(self._machines_panel)
 
         # ── Panneau droit : inspector ─────────────────────────────
         self._right_stack = QStackedWidget()
@@ -575,8 +610,13 @@ class SoundMixerScreen(QWidget):
         self._state_insp.restructured.connect(self._music_machine.refresh)
         self._right_stack.addWidget(self._state_insp)  # 3
 
-        split.addWidget(self._right_stack)
-        split.setSizes([200, 560, 300])
+        self._jingle_insp = JingleInspector()
+        self._jingle_insp.changed.connect(self._on_changed)
+        self._right_stack.addWidget(self._jingle_insp)  # 4
+
+        self.body = ThreeColumnBody(self._finder, center, self._right_stack,
+                                    sizes=(200, 560, 300))
+        root.addWidget(self.body, 1)
 
         # Bandeau de canaux : jumeau LOCAL de GbaStatusBar (window.py), pour
         # la ressource rare de CET écran — cf. sound_budget_bar.py. Sous le
@@ -630,7 +670,7 @@ class SoundMixerScreen(QWidget):
         self._jingle_tab = _BoxTab(
             "jingle_boxes", JingleBox, self._jingle_matrix,
             lambda box: self._jingle_matrix.load(
-                box, [m.name for m in self._project.music]),
+                box, [j.name for j in self._project.jingles]),
             label("sndpanel.jinglebox_empty"))
         for tab in (self._music_tab, self._sound_tab, self._jingle_tab):
             tab.changed.connect(self._on_box_changed)
@@ -833,8 +873,16 @@ class SoundMixerScreen(QWidget):
     # ── Lecture ROM ───────────────────────────────────────────────
 
     def _on_rom_toggled(self, on: bool):
+        if on and self._armed_asset is not None:
+            self._rom_state.setText(label("sndpanel.asset_preview"))
+            if not self._box_player.preview(self._project, self._armed_asset):
+                self._btn_rom.blockSignals(True)
+                self._btn_rom.setChecked(False)
+                self._btn_rom.blockSignals(False)
+                self._rom_state.setText("IDLE")
+            return
         if on:
-            box = self._music_tab.current()
+            box =self._music_tab.current()
             if box is None or not box.states:
                 # Décoché sans signal : le rappel de décochage remettrait « IDLE »
                 # par-dessus le message.
@@ -866,6 +914,11 @@ class SoundMixerScreen(QWidget):
         self._refresh_rom_progress()
 
     def _refresh_rom_progress(self):
+        # Un aperçu d'asset non bouclé se termine tout seul : le bouton le suit.
+        if (self._armed_asset is not None and self._btn_rom.isChecked()
+                and not self._box_player.sounding):
+            self._btn_rom.setChecked(False)
+            return
         duration = self._box_player.duration_seconds
         if duration <= 0:
             self._rom_progress.setValue(0)
@@ -882,13 +935,15 @@ class SoundMixerScreen(QWidget):
     def _on_tab_changed(self, index: int):
         """Le finder ne montre que ce que l'onglet courant peut résoudre.
 
-        Une action de SoundBox pointe vers un Sfx, une action de JingleBox et
-        un état de MusicBox vers une Music : la banque d'effets n'a rien à
-        faire à côté d'un graphe musical, et l'inverse non plus. C'est aussi ce
+        Une action de SoundBox pointe vers un Sfx, une action de JingleBox vers
+        un Jingle, un état de MusicBox vers une Music : la banque d'effets n'a
+        rien à faire à côté d'un graphe musical, et l'inverse non plus. C'est aussi ce
         qui rend le glisser-déposer sans ambiguïté — ce qui est visible est ce
         qui se dépose.
         """
-        self._finder.show_only({SFX.label} if index == 1 else {MUSIC.label})
+        self._disarm_asset()
+        visible = {0: MUSIC.label, 1: SFX.label, 2: JINGLES.label}
+        self._finder.show_only({visible.get(index, MUSIC.label)})
         if 0 <= index < len(self._context_buttons):
             self._context_buttons[index].setChecked(True)
 
@@ -896,6 +951,7 @@ class SoundMixerScreen(QWidget):
         """Une boîte a été choisie ou créée : l'inspecteur d'état la suit."""
         # Une autre boîte, ce sont d'autres états : ce qui jouait n'a plus de
         # sens. On coupe plutôt que de laisser sonner un état disparu.
+        self._disarm_asset()
         if self._btn_rom.isChecked():
             self._btn_rom.setChecked(False)
         self._last_selected = None
@@ -922,6 +978,7 @@ class SoundMixerScreen(QWidget):
             self._project, self._music_tab.current(), self._jingle_tab.current(), limit)
 
     def load_project(self, project: Project):
+        self._disarm_asset()
         if self._btn_rom.isChecked():
             self._btn_rom.setChecked(False)
         self._last_selected = None
@@ -965,6 +1022,8 @@ class SoundMixerScreen(QWidget):
         # Et, en lecture ROM, c'est le déclencheur qui y mène. Le graphe se
         # reconstruit à chaque édition et ré-émet la même sélection : sans ce
         # garde-fou, régler un volume rejouerait une transition.
+        if state is not None:
+            self._disarm_asset()
         if (state is not None and state is not self._last_selected
                 and self._btn_rom.isChecked()):
             self._box_player.go_to(state.name)
@@ -977,13 +1036,50 @@ class SoundMixerScreen(QWidget):
 
     # ── Sélection / lecture (relayées depuis le Sound finder) ──────
 
+    def select_sound(self, family: str, name: str):
+        """Ouvre le son `name` de `family` (« sfx », « music », « jingles ») — navigation entrante depuis l'onglet Disk."""
+        kind, store = {"sfx": (SFX, self._project.sfx), "music": (MUSIC, self._project.music),
+                       "jingles": (JINGLES, self._project.jingles)}[family]
+        asset = store.get(name)
+        if asset is not None:
+            self._finder.select(kind.label, asset)
+
     def _on_asset_selected(self, asset):
         """Un seul point d'entrée pour les deux familles — le type de l'asset
         choisit l'inspecteur."""
         if isinstance(asset, Sfx):
             self._on_sfx_selected(asset)
+        elif isinstance(asset, Jingle):      # avant Music : un Jingle EST une Music
+            self._on_jingle_selected(asset)
         elif isinstance(asset, Music):
             self._on_music_selected(asset)
+        self._arm_asset(asset)
+
+    def _arm_asset(self, asset):
+        """Le lecteur vise cet asset : un clic dans l'arbre suffit à l'écouter.
+
+        Déjà en lecture, la sélection suivante enchaîne tout de suite, pour
+        parcourir une liste à l'oreille avec les flèches.
+        """
+        same = asset is self._armed_asset
+        was_on = self._btn_rom.isChecked()
+        if was_on and self._armed_asset is None:
+            # Ce qui sonne est la boîte : on la coupe avant de changer de cible.
+            self._btn_rom.setChecked(False)
+            was_on = False
+        self._armed_asset = asset
+        self._rom_source.setText(asset.name)
+        if was_on and not same:
+            self._on_rom_toggled(True)
+
+    def _disarm_asset(self):
+        """Retour à la boîte : le lecteur ne vise plus l'asset du finder."""
+        if self._armed_asset is None:
+            return
+        self._armed_asset = None
+        self._rom_source.setText("—")
+        if self._btn_rom.isChecked():
+            self._btn_rom.setChecked(False)
 
     def _on_sfx_selected(self, sfx: Sfx):
         self._sfx_insp.load(sfx, self._project)
@@ -994,6 +1090,12 @@ class SoundMixerScreen(QWidget):
         self._music_insp.load(music, self._project)
         self._music_insp.refresh_weight(self._sound_weights().get(("music", music.name)))
         self._right_stack.setCurrentIndex(2)
+
+    def _on_jingle_selected(self, jingle: Jingle):
+        self._jingle_insp.load(jingle, self._project)
+        # Même soundbank que les musiques : le poids se relève sous la même clé.
+        self._jingle_insp.refresh_weight(self._sound_weights().get(("music", jingle.name)))
+        self._right_stack.setCurrentWidget(self._jingle_insp)
 
     def _on_changed(self):
         self._finder.refresh()

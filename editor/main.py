@@ -30,6 +30,7 @@ from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox, QFrame, QLabel, 
 from PyQt6.QtGui import QPalette, QColor, QHelpEvent, QPainter, QPen
 from ui.common.theme import GLOBAL_QSS, C, T, ui_font
 from ui.common.numeric_drag import install_numeric_drag_behavior
+from ui.common.eliding_style import ElidingStyle
 from ui.common import icons
 from ui.common import catalog
 from ui.home.project_picker import HomeScreen, PROJECTS_DIR
@@ -218,7 +219,7 @@ if __name__ == "__main__":
     # Sous Wayland, l'icône vient du .desktop (packaging/linux/backstage.desktop).
     app.setDesktopFileName("backstage")
     app.setWindowIcon(icons.app_icon())
-    app.setStyle("Fusion")
+    app.setStyle(ElidingStyle())
     app.setPalette(dark_palette())
     install_numeric_drag_behavior(app)
     # Les QSS référencent quelques icônes par chemin de fichier : il faut les

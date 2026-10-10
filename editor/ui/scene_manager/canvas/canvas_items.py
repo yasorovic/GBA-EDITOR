@@ -65,16 +65,17 @@ def _screen_scale(painter: QPainter, widget=None) -> float:
     return lod * (widget.devicePixelRatioF() if widget is not None else 1.0)
 
 
-def _draw_placeholder(painter: QPainter, scale: float = 1.0) -> None:
+def _draw_placeholder(painter: QPainter, scale: float = 1.0, icon: str = "actor_empty") -> None:
     """Repère 16×16 des actors/prefabs sans sprite, dessiné dans le repère
     courant du painter. `scale` = facteur d'échelle écran effectif : le glyphe
-    est demandé à cette résolution pour rester net quand la vue est zoomée."""
+    est demandé à cette résolution pour rester net quand la vue est zoomée. `icon` : le pictogramme du registre
+    (« prefab » pour une instance de prefab, « actor_empty » sinon)."""
     from ui.common.icons import scaled_pixmap
 
     # Actor sans sprite : un simple repère Pac-Man neutre. Un badge bleu
     # n'avait aucune sémantique dans ce contexte et masquait la scène.
     painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-    px = scaled_pixmap("actor_empty", "#f5f0d8", _PLACEHOLDER_ICO, scale)
+    px = scaled_pixmap(icon, "#f5f0d8", _PLACEHOLDER_ICO, scale)
     painter.drawPixmap(
         QRectF(2, 2, _PLACEHOLDER_ICO, _PLACEHOLDER_ICO), px, QRectF(px.rect())
     )
@@ -278,6 +279,25 @@ class SpriteItem(QGraphicsPixmapItem):
             self._drag_descendants = []
             self._drag_desc_origin = []
 
+    def cancel_drag(self) -> None:
+        """Abandonne le déplacement en cours : l'acteur (et son sous-arbre) retrouve sa pose du press, et le
+        relâchement qui suivra n'écrira aucune entrée d'historique. Pour un glisser qui QUITTE le canvas."""
+        if self._drag_origin is None:
+            return
+        ox, oy = self._drag_origin
+        descendants = self._drag_desc_origin
+        self._drag_origin = None                  # d'abord : itemChange ne doit plus réécrire le modèle
+        self._drag_confirmed = False
+        self.scene_sprite.x, self.scene_sprite.y = ox, oy
+        self.setPos(ox, oy)
+        for it, dx, dy in descendants:
+            it.scene_sprite.x, it.scene_sprite.y = dx, dy
+            it.setPos(dx, dy)
+        self._drag_descendants = []
+        self._drag_desc_origin = []
+        if self.scene() is not None:
+            self.scene().sprite_moved.emit()
+
     def item_pos(self) -> tuple[float, float]:
         """Position Qt de l'item = position logique de l'acteur (item origin = ancrage)."""
         px, py = self.pos_px()
@@ -398,7 +418,8 @@ class SpriteItem(QGraphicsPixmapItem):
             return
         painter.save()
         painter.translate(self.offset())
-        _draw_placeholder(painter, _screen_scale(painter, widget))
+        icon = "prefab" if getattr(self.scene_sprite, "prefab_name", None) else "actor_empty"
+        _draw_placeholder(painter, _screen_scale(painter, widget), icon)
         painter.restore()
 
     def paint(self, painter, option, widget=None):

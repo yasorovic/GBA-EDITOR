@@ -31,6 +31,7 @@ une boîte ne dépend d'aucun fichier extérieur. Même statut que la caméra (v
 from dataclasses import dataclass, field, asdict
 
 from core.models.resource import Resource
+from core.models import asset_extensions
 
 # Les deux transitions que le matériel tient (cf. v0.8.3). Il n'y en a pas de
 # troisième : maxmod n'a qu'une couche de module qui boucle.
@@ -93,6 +94,7 @@ class MusicTransition:
 @dataclass
 class MusicBox(Resource):
     """Les états musicaux d'un projet et les transitions entre eux."""
+    sidecar_extension = asset_extensions.MUSIC_BOX
     KIND = KIND_MUSIC
 
     name: str = "musics"
@@ -229,6 +231,7 @@ class ActionBox(Resource):
 @dataclass
 class SoundBox(ActionBox):
     """Les actions d'EFFETS. Une action résout vers un `Sfx`."""
+    sidecar_extension = asset_extensions.SOUND_BOX
     KIND = KIND_SOUND
     name: str = "sounds"
 
@@ -237,5 +240,6 @@ class SoundBox(ActionBox):
 class JingleBox(ActionBox):
     """Les actions de JINGLES. Une action résout vers une `Music`, jouée
     par-dessus la piste en cours sans l'arrêter."""
+    sidecar_extension = asset_extensions.JINGLE_BOX
     KIND = KIND_JINGLE
     name: str = "jingles"

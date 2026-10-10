@@ -1,7 +1,21 @@
 """La vue Graphe projette à l'affichage et ne re-parse qu'au changement."""
 from __future__ import annotations
 
+import hashlib
+
 import pytest
+
+
+def _sid(name):
+    """L'id (12 chiffres hex) qu'un test donne à la scène `name` — déterministe, pour écrire les rangements sans projet."""
+    return hashlib.sha1(name.encode()).hexdigest()[:12]
+
+
+def _scene(name, **fields):
+    from core.models.scene import Scene
+    scene = Scene(name=name, **fields)
+    scene.id = _sid(name)
+    return scene
 
 
 @pytest.fixture(autouse=True)
@@ -30,7 +44,7 @@ def _project(tmp_path):
     scripts = project.root / "assets" / "scripts" / "scenes"
     scripts.mkdir(parents=True)
     for name in ("Title", "Arena"):
-        project.scenes.append(Scene(name=name))
+        project.scenes.append(_scene(name))
     project.settings.start_scene = "Title"
     source = scripts / "title.lua"
     source.write_text('scene:switch("Arena")\n', encoding="utf-8")
@@ -113,7 +127,7 @@ def test_une_scene_ajoutee_apparait_au_refresh(qapp, tmp_path):
     view.refresh()
     assert "Newbie" not in {n.name for n in view.graph.nodes}
 
-    project.scenes.append(Scene(name="Newbie"))
+    project.scenes.append(_scene("Newbie"))
     view.refresh()
 
     assert "Newbie" in {n.name for n in view.graph.nodes}
@@ -431,7 +445,7 @@ def _grouped_view(tmp_path, collapsed: bool):
     state = SceneGraphState(project.root)
     folders = AssetFolderStore(project.root)
     group = folders.create_folder("scenes", "World")
-    folders.move_member("scenes", "Arena", group.id)
+    folders.move_member("scenes", _sid("Arena"), group.id)
     state.set_group_collapsed(group.id, collapsed)
 
     view = SceneGraphView()
@@ -503,8 +517,8 @@ def _two_groups_view(tmp_path):
     folders = AssetFolderStore(project.root)
     world = folders.create_folder("scenes", "World")
     inner = folders.create_folder("scenes", "Inner")
-    folders.move_member("scenes", "Arena", world.id)
-    folders.move_member("scenes", "Title", inner.id)
+    folders.move_member("scenes", _sid("Arena"), world.id)
+    folders.move_member("scenes", _sid("Title"), inner.id)
     state.set_group_collapsed(world.id, True)
     state.set_group_collapsed(inner.id, True)
     view = SceneGraphView()
@@ -545,12 +559,12 @@ def _nested_view(tmp_path):
     project = Project(tmp_path / "jeu")
     (project.root / "assets" / "scripts" / "scenes").mkdir(parents=True)
     for name in ("Title", "Arena"):
-        project.scenes.append(Scene(name=name))
+        project.scenes.append(_scene(name))
     project.settings.start_scene = "Title"
     folders = AssetFolderStore(project.root)
     world = folders.create_folder("scenes", "World")
     inner = folders.create_folder("scenes", "Inner", world.id)
-    folders.move_member("scenes", "Arena", inner.id)
+    folders.move_member("scenes", _sid("Arena"), inner.id)
     state = SceneGraphState(project.root)
     state.set_group_collapsed(world.id, False)   # World déplié
     state.set_group_collapsed(inner.id, True)    # Inner replié
@@ -612,7 +626,7 @@ def _leveled_view(tmp_path):
     scripts = project.root / "assets" / "scripts" / "scenes"
     scripts.mkdir(parents=True)
     for name in ("A", "B", "C"):
-        project.scenes.append(Scene(name=name))
+        project.scenes.append(_scene(name))
     project.settings.start_scene = "A"
     (scripts / "a.lua").write_text('scene:switch("B")\n', encoding="utf-8")
     (scripts / "b.lua").write_text('scene:switch("C")\n', encoding="utf-8")
@@ -622,8 +636,8 @@ def _leveled_view(tmp_path):
     state = SceneGraphState(project.root)
     folders = AssetFolderStore(project.root)
     world = folders.create_folder("scenes", "World")
-    folders.move_member("scenes", "B", world.id)
-    folders.move_member("scenes", "C", world.id)
+    folders.move_member("scenes", _sid("B"), world.id)
+    folders.move_member("scenes", _sid("C"), world.id)
 
     view = SceneGraphView()
     view.set_project(project, state, folders)
@@ -665,14 +679,14 @@ def test_le_lien_de_sortie_relie_le_noeud_a_la_porte(qapp, tmp_path):
     scripts = project.root / "assets" / "scripts" / "scenes"
     scripts.mkdir(parents=True)
     for name in ("Inside", "Outside"):
-        project.scenes.append(Scene(name=name))
+        project.scenes.append(_scene(name))
     project.settings.start_scene = "Inside"
     (scripts / "inside.lua").write_text('scene:switch("Outside")\n', encoding="utf-8")
     project.scenes[0].script = "assets/scripts/scenes/inside.lua"
 
     folders = AssetFolderStore(project.root)
     world = folders.create_folder("scenes", "World")
-    folders.move_member("scenes", "Inside", world.id)   # Inside dans le groupe, Outside dehors
+    folders.move_member("scenes", _sid("Inside"), world.id)   # Inside dans le groupe, Outside dehors
 
     view = SceneGraphView()
     view.set_project(project, SceneGraphState(project.root), folders)
@@ -891,7 +905,7 @@ def test_grouper_la_selection_range_les_scenes(qapp, tmp_path):
     view._group_selected_scenes()
 
     groups = folders.folders("scenes")
-    assert len(groups) == 1 and groups[0].members == ("Arena",)
+    assert len(groups) == 1 and groups[0].members == (_sid("Arena"),)
     assert groups[0].name == "Group"
     assert changed == [True]
     # La boîte du groupe (replié par défaut) apparaît, la carte membre disparaît.
@@ -934,24 +948,24 @@ def test_glisser_une_scene_dans_le_cadre_la_rend_membre(qapp, tmp_path):
     déplié devient membre de ce groupe (recalcul au relâchement)."""
     view, group = _grouped_view(tmp_path, collapsed=False)
     folders = view._folders
-    assert folders.folder_of("scenes", "Title") is None  # hors groupe au départ
+    assert folders.folder_of("scenes", _sid("Title")) is None  # hors groupe au départ
 
     # Pose Title au même endroit qu'Arena (déjà dans le cadre) → centre contenu.
     _card(view, "Title").setPos(_card(view, "Arena").pos())
     view._view.drag_finished.emit()
 
-    assert folders.folder_of("scenes", "Title") == group.id
+    assert folders.folder_of("scenes", _sid("Title")) == group.id
 
 
 def test_glisser_une_scene_hors_du_cadre_la_sort_du_groupe(qapp, tmp_path):
     view, group = _grouped_view(tmp_path, collapsed=False)
     folders = view._folders
-    assert folders.folder_of("scenes", "Arena") == group.id
+    assert folders.folder_of("scenes", _sid("Arena")) == group.id
 
     _card(view, "Arena").setPos(6000, 6000)   # loin, hors de tout cadre
     view._view.drag_finished.emit()
 
-    assert folders.folder_of("scenes", "Arena") is None
+    assert folders.folder_of("scenes", _sid("Arena")) is None
 
 
 def test_redimensionner_un_cadre_ne_fait_pas_fuir_ses_membres(qapp, tmp_path):
@@ -964,7 +978,7 @@ def test_redimensionner_un_cadre_ne_fait_pas_fuir_ses_membres(qapp, tmp_path):
     frame._w, frame._h = 10.0, _MIN_H_VALUE()   # cadre minuscule, Arena dehors
     view._view.drag_finished.emit()
 
-    assert folders.folder_of("scenes", "Arena") == group.id  # toujours membre
+    assert folders.folder_of("scenes", _sid("Arena")) == group.id  # toujours membre
 
 
 def _MIN_H_VALUE():
@@ -987,7 +1001,7 @@ def test_deplacer_le_cadre_par_lentete_emporte_les_membres(qapp, tmp_path):
     arena.setPos(start.x() + 50, start.y() + 30)
     view._view.drag_finished.emit()
 
-    assert folders.folder_of("scenes", "Arena") == group.id     # reste dedans
+    assert folders.folder_of("scenes", _sid("Arena")) == group.id     # reste dedans
     assert SceneGraphState(view._project.root).group_frame(group.id) is not None
 
 
@@ -1031,12 +1045,12 @@ def test_clic_droit_supprimer_un_groupe_remonte_ses_membres(qapp, tmp_path):
     folders = view._folders
     changed = []
     view.groups_changed.connect(lambda: changed.append(True))
-    assert folders.folder_of("scenes", "Arena") == group.id
+    assert folders.folder_of("scenes", _sid("Arena")) == group.id
 
     view._delete_group(group.id)
 
     assert folders.folders("scenes") == []          # le dossier a disparu
-    assert folders.folder_of("scenes", "Arena") is None   # Arena remonte à la racine
+    assert folders.folder_of("scenes", _sid("Arena")) is None   # Arena remonte à la racine
     assert changed == [True]
     # Arena redevient une carte visible (plus cachée dans une boîte).
     assert "Arena" in view._cards
@@ -1117,7 +1131,7 @@ def test_supprimer_dossier_et_contenu(qapp, tmp_path, monkeypatch):
         lambda *a, **k: QMessageBox.StandardButton.Yes)
     view, folders = _grapher(tmp_path)
     group = folders.create_folder("scenes", "World")
-    folders.move_member("scenes", "Arena", group.id)
+    folders.move_member("scenes", _sid("Arena"), group.id)
     view.refresh()
 
     view._delete_group_deep(group.id)

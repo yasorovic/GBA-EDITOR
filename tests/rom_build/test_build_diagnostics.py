@@ -161,3 +161,49 @@ def test_build_log_copie_le_journal_et_se_reecrit(tmp_path):
     log = (project.root / "build" / "build.log").read_text(encoding="utf-8")
     assert "[error] Hit.lua" not in log
     assert "[build] 0 error(s), 0 warning(s)" in log
+
+
+# ── Le démarrage de make qui échoue sans raison ─────────────────────
+
+def _counting_tool(counter, fail_times, message):
+    """Un « outil » qui échoue `fail_times` fois en écrivant `message`, puis réussit ; `counter` compte les lancements."""
+    return [sys.executable, "-c",
+            "import sys, pathlib\n"
+            f"c = pathlib.Path({str(counter)!r})\n"
+            "n = int(c.read_text()) + 1 if c.exists() else 1\n"
+            "c.write_text(str(n))\n"
+            f"if n <= {fail_times}:\n"
+            f"    sys.stderr.write({message!r} + chr(10)); sys.exit(1)\n"]
+
+
+def test_un_demarrage_de_msys2_qui_echoue_est_relance_puis_passe(tmp_path, monkeypatch):
+    monkeypatch.setattr("codegen.rom_build.time.sleep", lambda _s: None)
+    worker, seen = _worker()
+    counter = tmp_path / "runs"
+
+    assert worker._run_cmd(_counting_tool(counter, 2, "fatal error - add_item failed"), "[make]") is True
+
+    assert counter.read_text() == "3"                                              # deux échecs, puis le bon
+    assert seen["diagnostic"] == []                                                 # l'auteur n'a rien à lire
+    assert sum("retrying" in line for line in seen["log_line"]) == 2                # mais le journal le dit
+
+
+def test_un_demarrage_qui_echoue_toujours_est_une_erreur_apres_trois_essais(tmp_path, monkeypatch):
+    monkeypatch.setattr("codegen.rom_build.time.sleep", lambda _s: None)
+    worker, seen = _worker()
+    counter = tmp_path / "runs"
+
+    assert worker._run_cmd(_counting_tool(counter, 99, "fatal error - add_item failed"), "[make]") is False
+
+    assert counter.read_text() == "3"                                              # un essai + deux relances, pas une boucle
+    assert [d.console_line() for d in seen["diagnostic"]] == ["[error] make: failed (code 1)"]
+
+
+def test_une_vraie_erreur_n_est_jamais_relancee(tmp_path, monkeypatch):
+    monkeypatch.setattr("codegen.rom_build.time.sleep", lambda _s: None)
+    worker, seen = _worker()
+    counter = tmp_path / "runs"
+
+    assert worker._run_cmd(_counting_tool(counter, 99, "a.c:3:1: error: expected ';'"), "[make]") is False
+
+    assert counter.read_text() == "1"

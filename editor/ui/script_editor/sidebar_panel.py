@@ -74,7 +74,7 @@ class SidebarPanel(QWidget):
             self._event_btns[ev] = btn
         self._cl.addWidget(self._sec_events)
 
-        # ── Sections API — 8 sections, une par chose qu'on tient ──────
+        # ── Sections API — une par chose qu'on tient ──────────────────
         # ROADMAP v0.16 : le rangement remplace les 3 grosses parties
         # (Gameplay/Scripting/Hardware) par une navigation unique par NOM. Les
         # anciennes catégories deviennent des sous-titres ; le moteur se replie
@@ -98,29 +98,41 @@ class SidebarPanel(QWidget):
             sec.apply_filter(query)
 
     # ── Sections API (statiques, depuis api_reference.json) ───────────
-    # Huit sections — une par CHOSE qu'on tient (ROADMAP v0.16). Les anciennes
+    # Sections — une par CHOSE qu'on tient (ROADMAP v0.16). Les anciennes
     # catégories deviennent des SOUS-SECTIONS repliables, plus des
     # portes : la seule navigation est la section. Dans chacune, l'itération se
     # montre, le moteur suit sous « Go further ».
 
     def _api_button(self, entry: dict):
         from scripting.api_reference import tooltip_parts
-        # La sidebar montre le VERBE (`get("name")`) ; le clic insère la forme
-        # complète (`actor:get("name")`), gardée dans le snippet.
-        # Même règle pour `:` (méthode) et `.` (module, propriété).
+        # La sidebar montre l'appel COMPLET : le module appelant fait partie du
+        # modèle mental (`scene:switch`, `camera:set_position`,
+        # `interface.draw_text`). Il rend aussi les doublons et les zones mal
+        # couvertes immédiatement visibles lors de l'inventaire de l'API.
         raw = entry['label']
-        head = raw.split("(")[0]
-        cut = max(head.rfind(":"), head.rfind("."))
-        display = raw[cut + 1:] if cut >= 0 else raw
+        head, paren, tail = raw.partition("(")
+        # Les propriétés étaient historiquement rangées sous une signature
+        # courte (`position(Vec2)`) alors que leur snippet connaît le propriétaire
+        # écrit (`self.position`). On le réinjecte pour que la règle « toujours
+        # montrer l'appelant » s'applique aussi à elles.
+        snippet_head = entry.get("snippet", "").partition("(")[0]
+        if not any(sep in head for sep in (".", ":")) \
+                and any(sep in snippet_head for sep in (".", ":")):
+            raw = f"{snippet_head}{paren}{tail}" if paren else snippet_head
         snippet = entry.get("snippet", entry.get("label", ""))
-        btn = _EntryButton(f"  {display}", _BTN_API, tooltip(**tooltip_parts(entry)))
+        btn = _EntryButton(f"  {raw}", _BTN_API, tooltip(**tooltip_parts(entry)))
         btn.search_text = raw.lower()      # la forme complète : « spawn » ou « actor » trouvent
         btn.clicked.connect(lambda _, s=snippet: self.snippet_requested.emit(s))
         return btn
 
     def _build_api_sections(self):
         from scripting.api_reference import get_sections
-        for section in get_sections():
+        # La sidebar est une porte d'entrée, pas un inventaire exhaustif du
+        # runtime. Le raccourci d'acteur et les SoundBox/JingleBox/MusicBox
+        # restent compatibles mais sont retirés temporairement de cette
+        # découverte, le temps de poser deux modules simples : `sfx` et
+        # `music`.
+        for section in get_sections(show_extended_audio=False):
             sec = _Section(label(section["label"]), _C_API, expanded=False)
             # Une sous-section repliable par ancienne catégorie ; le moteur se
             # range dans la sienne, sous l'annotation « Go further » — pas un
@@ -246,10 +258,11 @@ class SidebarPanel(QWidget):
         if slots:
             sub = self._sec_refs.sub_section(label("scrsb.text_zones"))
             for layout, r in slots:
-                # Une zone propose son texte d'aperçu ; un texte AUTHORÉ porte
-                # directement sa clé, et reste adressable (cf. KIND_SLOTS) pour
-                # être remplacé en cours de jeu.
-                key = getattr(r, "preview_text", "") or getattr(r, "text_key", "") or ""
+                # Une zone sans entrée propose son littéral d'aperçu ; un texte
+                # AUTHORÉ porte directement sa clé. La clé prime : un ancien
+                # aperçu peut être conservé en revenant plus tard à
+                # « script draw », mais ne doit pas polluer le snippet lié.
+                key = getattr(r, "text_key", "") or getattr(r, "preview_text", "") or ""
                 doms = {"text": key} if key else {}
                 # La zone s'écrit sur SON acquisition : interface:get("zone"):draw(...).
                 sn = api_snippets.element_call(r.name, "text_region:draw", **doms)
@@ -270,8 +283,7 @@ class SidebarPanel(QWidget):
                 _add(sub, name, "sfx.play", sfx=name)
 
         # Scripts behaviors
-        behaviors_dir = project.scripts_behaviors_dir
-        scripts = sorted(behaviors_dir.glob("*.lua")) if behaviors_dir.exists() else []
+        scripts = project.behavior_files()
         if scripts:
             sub = self._sec_refs.sub_section(label("scrsb.scripts"))
             for sp in scripts:
@@ -312,12 +324,12 @@ class SidebarPanel(QWidget):
             hint.setWordWrap(True)
             self._sec_events.add_widget(hint)
 
-            stub_text = "function M.name(actor, ...)"
+            stub_text = "function M.name(actor)"
             stub_btn = _EntryButton(f"  {stub_text}", _BTN_BEHAVIOR,
                 tooltip(title=stub_text, body=label("scrsb.behavior_stub_tip")),
                 icon_key="behavior_stub", icon_color=_C_BEHAVIOR)
             stub_btn.clicked.connect(
-                lambda: self.snippet_requested.emit("function M.name(actor, ...)\n    \nend\n"))
+                lambda: self.snippet_requested.emit("function M.name(actor)\n\nend\n"))
             self._sec_events.add_widget(stub_btn)
 
             self._sec_refs.setVisible(False)

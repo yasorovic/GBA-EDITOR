@@ -18,6 +18,7 @@ from core.models.ui_region import InterfaceNode
 # module (feuille, il n'importe rien) : ils sont réclamés par l'outil de
 # peinture, par le canvas qui les dessine et par le codegen qui les émet en C.
 from core.models.collision_tiles import TILE_EMPTY, COLLISION_TILE_SIZE
+from core.models import asset_extensions
 
 # ── Slots BG valides par mode vidéo ───────────────────────────────
 # SOURCE DE VÉRITÉ (cœur) du matériel : quels slots BG existent dans chaque mode
@@ -224,7 +225,7 @@ def _components_with_affine_migrated(d: dict) -> list:
 
 
 # ──────────────────────────────────────────────────────────────────
-#  Prefab — template réutilisable. Stocké dans project/prefab/{name}.json.
+#  Prefab — template réutilisable. Stocké dans assets/prefab/{name}.json.
 #  Jamais compilé ni placé directement dans une scène.
 #  Instancier un Prefab = copie ponctuelle de ses Components dans un
 #  nouvel Actor inline (aucun lien vivant après la création).
@@ -232,6 +233,7 @@ def _components_with_affine_migrated(d: dict) -> list:
 
 @dataclass
 class Prefab(Resource, ComponentOwnerMixin):
+    sidecar_extension = asset_extensions.PREFAB
     name: str = "Prefab"
     # Un prefab EST son actor racine : components, palette, réservation
     # affine, notes — le MÊME `Actor` qu'un acteur de scène, celui que
@@ -537,6 +539,7 @@ class WindowSlot:
 
 @dataclass
 class Scene(Resource):
+    sidecar_extension = asset_extensions.SCENE
     name: str = "Scene"
     # Layers de fond de CETTE scène (inline dans le JSON) — chaque layer référence
     # un BackgroundAsset (sidecar de compression) par son nom d'image.

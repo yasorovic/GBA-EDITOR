@@ -1,53 +1,46 @@
-"""Orchestration d'encodage GBA déclenchée par l'apparition/suppression d'un
-fichier asset sur disque (ProjectWatcher, dialogues d'import UI). Calcule
-l'encodage (délégué à core.bg_import / core.sprite_import) et l'applique au
-sidecar JSON (BackgroundAsset / SpriteAsset) — jamais le PNG source.
-
-Deux déclencheurs, un seul geste : `sync_*` pour UN fichier qui apparaît
-maintenant, `reconcile_*` (en fin de module) pour le dossier entier à
-l'ouverture d'un projet, quand des fichiers ont été déposés éditeur fermé."""
+"""Encodage GBA d'un asset existant : le calcule (délégué à core.bg_import / core.sprite_import) et l'applique à
+l'asset (BackgroundAsset / SpriteAsset) — jamais au fichier source. Un fichier qui apparaît n'est PAS un asset : on
+le crée par *Create asset* (cf. `core.asset_creation`). `reconcile_*` (en fin de module) répare, à l'ouverture d'un
+projet, les assets dont l'encodage manque ou dont la source a été retouchée éditeur fermé."""
 
 from pathlib import Path
 from typing import Optional
 
 from core.models.background import BackgroundAsset
 from core.models.sprite import SpriteAsset, IMAGE_FILE_EXTS
-from core.models.audio import MUSIC_FILE_EXTS, SFX_FILE_EXTS, WAV_BITS_OK
+from core.models.audio import MUSIC_FILE_EXTS, SFX_FILE_EXTS, WAV_BITS_OK, JINGLE_MAX_CHANNELS
 
 
-def _relink_source(store, asset, rel: str, cited: Optional[Path]) -> None:
-    """Raccroche un asset au fichier qui PORTE SON NOM, quand celui que son
-    sidecar cite a disparu.
-
-    Les trois familles à sidecar (fonds, sprites, polices) sont keyées par le
-    stem de leur fichier source. Une planche renommée dans l'explorateur laisse
-    donc le sidecar citer un chemin mort : l'asset s'affiche vide, et le fichier
-    renommé en crée un SECOND à côté — c'est le doublon observé dans l'écran
-    Police. Le fichier trouvé sous le nom de l'asset est la seule source
-    plausible : on le raccroche, plutôt que de laisser une entrée sans image.
-
-    Ne fait rien tant que le fichier cité existe — c'est ce qui empêche de
-    voler sa source à un asset bien portant. `rel` s'écrit dans la convention
-    de la famille (chemin relatif au projet, ou simple nom de fichier pour un
-    fond) : c'est l'appelant qui la connaît, comme il connaît `cited`."""
-    if cited is not None and cited.exists():
-        return
-    asset.asset = rel
-    store.save(asset)
+def _citing(store, path: Path, resolve) -> list:
+    """Les assets de `store` qui POINTENT ce fichier — plusieurs, quand l'auteur en a tiré plusieurs assets. Un asset ne se
+    retrouve pas par le nom de son fichier : il n'en est plus le sidecar."""
+    target = Path(path).resolve()
+    found = []
+    for asset in store:
+        cited = resolve(asset) if getattr(asset, "asset", "") else None
+        if cited is not None and Path(cited).resolve() == target:
+            found.append(asset)
+    return found
 
 
-def _sourced_by(store, path: Path, resolve) -> bool:
-    """Ce fichier est-il DÉJÀ la source d'un asset de la famille ?
+def wav_too_long(path) -> Optional[str]:
+    """La raison pour laquelle ce WAV ne tiendra pas dans un module de musique,
+    ou None. Une piste devient UN module d'UN échantillon : sa durée est bornée
+    par ce que le mixeur sait lire d'un échantillon (cf. `wav_module`)."""
+    import wave
+    from core.wav_module import MAX_SECONDS
+    try:
+        with wave.open(str(path)) as w:
+            seconds = w.getnframes() / max(1, w.getframerate())
+    except Exception:
+        return None          # `check_audio_file` dit déjà pourquoi il est illisible
+    if seconds > MAX_SECONDS:
+        return (f"WAV of {seconds:.0f} s: a music track is limited to "
+                f"{MAX_SECONDS:.0f} s once turned into a module.")
+    return None
 
-    Le pendant du raccrochage : quand un asset cite un fichier sous un autre
-    nom que le sien (un renommage qui n'a pas pu emporter le PNG, un `.fnt` qui
-    nomme sa page), ce fichier ne doit pas fonder un second asset sur la même
-    image. `resolve` rend le chemin absolu que cite un asset — la convention de
-    la famille, encore une fois."""
-    return any(resolve(a) == path for a in store)
 
-
-def check_audio_file(path) -> Optional[str]:
+def check_audio_file(path, into: Optional[str] = None, at_import: bool = True) -> Optional[str]:
     """None si le fichier est utilisable, sinon la raison du refus, rédigée
     pour être affichée telle quelle à l'auteur.
 
@@ -58,12 +51,20 @@ def check_audio_file(path) -> Optional[str]:
 
     Appelé à l'import ET par le validateur, parce que le ProjectWatcher
     ramasse aussi les fichiers déposés à la main dans assets/.
+
+    `at_import=False` : le validateur, pour lequel une piste trop longue n'est
+    pas un refus (cf. `wav_too_long`).
+
+    `into` nomme le dossier de `assets/` où le fichier ira, à l'import : le rôle
+    d'un module (musique, jingle) est celui de son DOSSIER, et à l'import le
+    fichier n'y est pas encore. Sans lui, c'est le dossier du fichier lui-même.
     """
     from pathlib import Path
     path = Path(path)
     ext = path.suffix.lower()
+    folder = into or path.parent.name
 
-    if ext in MUSIC_FILE_EXTS:
+    if ext in MUSIC_FILE_EXTS and ext != ".wav":
         # Le contenu décide, pas l'extension : c'est la règle de la v0.8.1, et
         # elle vaut d'autant plus avec quatre formats — un `.xm` renommé `.mod`
         # se joue très bien, et un `.mod` qui n'en est pas un doit se refuser
@@ -79,6 +80,12 @@ def check_audio_file(path) -> Optional[str]:
             return "module without an order table — no pattern to play."
         if not any(s.data.size for s in mod.samples):
             return "module without any sample — it would make no sound."
+        if folder == "jingles" and mod.num_channels > JINGLE_MAX_CHANNELS:
+            # maxmod ne donne que 4 canaux à la couche jingle : le reste serait
+            # joué tronqué, et un morceau tronqué s'entend comme un morceau raté.
+            return (f"{mod.num_channels} channels — maxmod only gives {JINGLE_MAX_CHANNELS} to a "
+                    "jingle, the others would be silent. Reduce the module, or keep it "
+                    "as a music.")
         return None
 
     if ext == ".wav":
@@ -94,47 +101,15 @@ def check_audio_file(path) -> Optional[str]:
         if bits not in WAV_BITS_OK:
             return (f"WAV {bits} bits: mmutil only converts 8 and 16 bits. It would build"
                     " the ROM without saying so, with a silent result.")
+        if at_import and folder in ("music", "jingles"):
+            # Refusé à l'import. Dans le validateur, le même constat n'est qu'un
+            # avertissement : un fichier trop long qu'aucun état ne joue ne
+            # coûte rien, et celui qui est joué échoue au build (`wav_to_xm`).
+            return wav_too_long(path)
         return None
 
     accepted = ", ".join(sorted(SFX_FILE_EXTS | MUSIC_FILE_EXTS))
     return f"extension {ext or '(none)'} not supported — accepted: {accepted}."
-
-
-def sync_sprite_png(project, png_path: Path) -> Optional[str]:
-    """Appelé quand un PNG apparaît dans assets/sprites/ (watcher/import). Crée
-    le SpriteAsset + son sidecar si absent, via le pipeline aligné sur les
-    backgrounds : Validator (détection) → Encodage non-destructif → asset
-    éditable. Un sprite déjà connu n'est jamais ré-encodé automatiquement ; il
-    est en revanche RACCROCHÉ à cette planche si celle qu'il cite a disparu
-    (cf. `_relink_source`).
-    Renvoie un éventuel avertissement d'import (palette réduite), None sinon."""
-    name = png_path.stem
-    sprite = project.sprites.get(name)
-    warning = None
-    if sprite is not None:
-        _relink_source(project.sprites, sprite, project.asset_rel(png_path),
-                       project.asset_abs(sprite.asset))
-    else:
-        # Cette planche appartient peut-être déjà à un sprite qui porte un autre
-        # nom — un renommage qui n'a pas pu emporter le PNG (nom déjà pris).
-        # En fonder un second, c'est deux sprites sur une image, dont un vide
-        # de tout ce qui a été découpé.
-        if _sourced_by(project.sprites, png_path,
-                       lambda s: project.asset_abs(s.asset)):
-            return None
-        sprite = SpriteAsset(name=name, asset=project.asset_rel(png_path),
-                             frame_w=8, frame_h=8)
-        # Validator + encodage : métadonnées uniquement, PNG jamais modifié.
-        try:
-            warning = encode_sprite_asset(sprite, png_path)
-        except Exception:
-            pass
-        project.sprites.append(sprite)
-    # Le sidecar de CE sprite, pas celui qui porterait le nom du PNG : les deux
-    # ne coïncident que tant que personne n'a renommé (cf. ResourceStore.path_of).
-    if not project.sprites.path_of(sprite).exists():
-        project.sprites.save(sprite)
-    return warning
 
 
 def apply_sprite_encoding(sprite: "SpriteAsset", c: dict):
@@ -153,7 +128,7 @@ def encode_sprite_asset(sprite: "SpriteAsset", png_path: Path, method: str = Non
     Calcul/application séparés comme `apply_sprite_encoding` : ici les deux
     sont enchaînés pour le cas simple (import/remplacement UI). Renvoie un
     éventuel avertissement d'import (palette réduite), None sinon. Propage les
-    erreurs d'encodage (contrairement à `sync_sprite_png`, qui les avale en
+    erreurs d'encodage (contrairement à la création depuis une source, qui les avale en
     tâche de fond watcher)."""
     from core.sprite_import import detect_sprite_import_mode, encode_sprite
     warning = detect_sprite_import_mode(png_path).get("warning")
@@ -162,8 +137,16 @@ def encode_sprite_asset(sprite: "SpriteAsset", png_path: Path, method: str = Non
 
 
 def resync_sprite_png(project, png_path: Path) -> Optional[str]:
+    """La planche a changé sur le disque : recalcule les palettes de CHAQUE sprite qui la pointe (cf. `_resync_sprite`).
+    Renvoie les avertissements réunis, None s'il n'y en a pas."""
+    warnings = [w for w in (_resync_sprite(project, sprite, png_path)
+                            for sprite in _citing(project.sprites, png_path, lambda s: project.asset_abs(s.asset))) if w]
+    return " ".join(warnings) or None
+
+
+def _resync_sprite(project, sprite, png_path: Path) -> Optional[str]:
     """La planche d'un sprite EXISTANT a changé sur le disque : recalculer ses
-    palettes depuis les nouveaux pixels. Pendant de `resync_background_png`.
+    palettes depuis les nouveaux pixels. Pendant de `_resync_background`.
 
     Moins grave qu'un fond — le build fait relire le PNG par grit, donc la ROM
     est juste — mais l'éditeur affichait, lui, les anciennes couleurs : aperçu
@@ -171,9 +154,6 @@ def resync_sprite_png(project, png_path: Path) -> Optional[str]:
     dessiné (découpe en frames, états, directions, miroirs) ne dépend pas des
     couleurs et reste intact ; `apply_sprite_encoding` ne touche qu'aux
     palettes."""
-    sprite = project.sprites.get(png_path.stem)
-    if sprite is None:
-        return None
     before = len(sprite.palettes)
     pal_overrides = dict(sprite.palette_overrides)
     try:
@@ -192,143 +172,9 @@ def resync_sprite_png(project, png_path: Path) -> Optional[str]:
     return warning
 
 
-def remove_sprite_png(project, png_path: Path):
-    """PNG supprimé de assets/sprites/ : suppression différée du JSON."""
-    sprite = project.sprites.get(png_path.stem)
-    if sprite:
-        project.sprites.soft_delete(sprite)
-
-
-# ── Renommages ────────────────────────────────────────────────────
-# Un fichier source renommé dans l'explorateur pendant que l'éditeur tourne.
-# Le watcher apparie la disparition et l'apparition (cf. project_watcher,
-# `_on_dir_changed`) ; ici, l'asset SUIT son fichier plutôt que d'être détruit
-# et recréé — sinon un simple renommage de planche coûtait la découpe en
-# frames d'un sprite, ou les caractères assignés d'une police.
-#
-# Deux gestes, dans cet ordre, et aucun n'est nouveau : le `rename_*` du
-# projet (qui renomme la ressource, déplace son sidecar et réécrit ce qui la
-# cite — scènes, prefabs, scripts), puis le `sync_*` du fichier neuf, dont le
-# raccrochage (`_relink_source`) repointe la source. Un fichier dont aucun
-# asset ne portait le nom n'est pas un renommage : c'est une apparition.
-
-
-def rename_sprite_png(project, old_path: Path, new_path: Path) -> Optional[str]:
-    """La planche d'un sprite renommée sur le disque."""
-    sprite = project.sprites.get(old_path.stem)
-    if sprite is None:
-        return sync_sprite_png(project, new_path)
-    project.rename_sprite(sprite, new_path.stem)
-    return sync_sprite_png(project, new_path)
-
-
-def rename_background_png(project, old_path: Path, new_path: Path) -> Optional[str]:
-    """L'image d'un fond renommée sur le disque. La compression déjà calculée
-    (tuiles, palettes, repeints par tuile) survit : ce sont les mêmes pixels."""
-    bg = project.backgrounds.get(old_path.stem)
-    if bg is None:
-        return sync_background_png(project, new_path)
-    project.rename_background(bg, new_path.stem)
-    return sync_background_png(project, new_path)
-
-
-def rename_sfx_file(project, old_path: Path, new_path: Path) -> Optional[str]:
-    """Un fichier d'effet sonore renommé sur le disque."""
-    sfx = project.sfx.get(old_path.stem)
-    if sfx is None:
-        sync_sfx_file(project, new_path)
-        return None
-    sfx.asset = project.asset_rel(new_path)
-    project.rename_sound(sfx, new_path.stem)     # sauvegarde le sidecar
-    return None
-
-
-def rename_music_file(project, old_path: Path, new_path: Path) -> Optional[str]:
-    """Un module de musique renommé sur le disque."""
-    music = project.music.get(old_path.stem)
-    if music is None:
-        sync_music_file(project, new_path)
-        return None
-    music.asset = project.asset_rel(new_path)
-    project.rename_sound(music, new_path.stem)   # sauvegarde le sidecar
-    return None
-
-
-def rename_font_file(project, old_path: Path, new_path: Path) -> Optional[str]:
-    """Un fichier de police renommé sur le disque.
-
-    Une police vit sur DEUX fichiers possibles (planche + descripteur `.fnt`),
-    dont les noms peuvent différer : on met à jour celui qui a bougé, et on ne
-    renomme la police que si c'est le fichier qui LUI DONNE SON NOM — renommer
-    la page d'un `.fnt` ne renomme pas la police."""
-    font = project.fonts.get(old_path.stem)
-    if font is None:
-        for f in project.fonts:
-            if any(rel and project.asset_abs(rel) == old_path
-                   for rel in (f.asset, f.descriptor)):
-                font = f
-                break
-    if font is None:
-        return sync_font_file(project, new_path)
-    rel_new = project.asset_rel(new_path)
-    if font.asset and project.asset_abs(font.asset) == old_path:
-        font.asset = rel_new
-    if font.descriptor and project.asset_abs(font.descriptor) == old_path:
-        font.descriptor = rel_new
-    if font.name == old_path.stem:
-        project.rename_font(font, new_path.stem)   # sauvegarde le sidecar
-    else:
-        project.fonts.save(font)
-    return None
-
-
-def remove_background_png(project, png_path: Path):
-    """PNG supprimé de assets/backgrounds/ : suppression différée du JSON."""
-    bg = project.backgrounds.get(png_path.stem)
-    if bg:
-        project.backgrounds.soft_delete(bg)
-
-
-def remove_sfx_file(project, path: Path):
-    """Fichier audio supprimé de assets/sfx/ : suppression différée du JSON."""
-    sfx = project.sfx.get(path.stem)
-    if sfx:
-        project.sfx.soft_delete(sfx)
-
-
-def remove_music_file(project, path: Path):
-    """Fichier audio supprimé de assets/music/ : suppression différée du JSON."""
-    music = project.music.get(path.stem)
-    if music:
-        project.music.soft_delete(music)
-
-
-def remove_font_file(project, path: Path):
-    """Fichier supprimé de assets/fonts/ : suppression différée du JSON.
-
-    Une police vit sur DEUX fichiers possibles (planche + descripteur `.fnt`),
-    dont les noms peuvent différer. On retire donc la police que ce fichier
-    porte réellement — par son stem, ou parce qu'elle le référence comme
-    planche/descripteur — plutôt que de supposer stem == nom de police."""
-    font = project.fonts.get(path.stem)
-    if font is None:
-        for f in project.fonts:
-            for rel in (f.asset, f.descriptor):
-                if rel and project.asset_abs(rel) == path:
-                    font = f
-                    break
-            if font:
-                break
-    if font:
-        project.fonts.soft_delete(font)
-
-
 # ── Fichiers source d'une ressource ───────────────────────────────
-# L'inverse des `remove_*_file` : d'une ressource vers le(s) fichier(s) du
-# disque qui la font naître. Lu à la fermeture pour que la suppression
-# DÉFINITIVE emporte aussi la source — sinon `reconcile_*` la ressusciterait au
-# prochain lancement depuis le PNG / `.fnt` / module resté en place, et la
-# suppression depuis le finder ne tiendrait pas (cf. project.commit_all_removals).
+# D'une ressource vers le(s) fichier(s) du disque qu'elle POINTE : ce que lisent l'arbre Disk, la détection
+# des sources manquantes, le déplacement et *Relink source…*. Supprimer l'asset n'efface pas ces fichiers.
 
 
 def sprite_source_paths(project, sprite) -> list[Path]:
@@ -336,9 +182,12 @@ def sprite_source_paths(project, sprite) -> list[Path]:
     return [p] if p else []
 
 
+def palette_source_paths(project, bank) -> list[Path]:
+    return [project.palettes.hex_path(bank)]
+
+
 def background_source_paths(project, bg) -> list[Path]:
-    img = bg.image_name()
-    return [project.background_images_dir / img] if img else []
+    return [project.background_image_path(bg)] if bg.asset else []
 
 
 def sound_source_paths(project, snd) -> list[Path]:
@@ -351,141 +200,6 @@ def font_source_paths(project, font) -> list[Path]:
     """Une police vit sur DEUX fichiers possibles : planche + descripteur `.fnt`."""
     return [p for p in (project.asset_abs(font.asset),
                         project.asset_abs(font.descriptor)) if p]
-
-
-def sync_sfx_file(project, path: Path):
-    """
-    Appelé quand un fichier audio apparaît dans assets/sfx/.
-    Crée le sidecar JSON à côté si absent, l'ajoute à project.sfx si nécessaire.
-    """
-    from core.models.audio import Sfx
-    name = path.stem
-    sfx = project.sfx.get(name)
-    if sfx is None:
-        sfx = Sfx(name=name, asset=project.asset_rel(path))
-        project.sfx.append(sfx)
-    sidecar = path.with_suffix(".json")
-    if not sidecar.exists():
-        project.sfx.save(sfx)
-    return sfx
-
-
-def sync_music_file(project, path: Path):
-    """
-    Appelé quand un fichier audio apparaît dans assets/music/.
-    Crée le sidecar JSON à côté si absent, l'ajoute à project.music si nécessaire.
-    """
-    from core.models.audio import Music
-    name = path.stem
-    music = project.music.get(name)
-    if music is None:
-        music = Music(name=name, asset=project.asset_rel(path))
-        project.music.append(music)
-    sidecar = path.with_suffix(".json")
-    if not sidecar.exists():
-        project.music.save(music)
-    return music
-
-
-def sync_font_file(project, path: Path) -> Optional[str]:
-    """Appelé quand une source de police apparaît dans assets/fonts/.
-
-    Deux points d'entrée, un seul asset : le `.fnt` apporte le mapping des
-    caractères, le PNG nu le fait déduire (grille + charset proposé,
-    corrigeables dans l'écran Police). Une police
-    déjà connue n'est jamais ré-analysée automatiquement — sinon on écraserait
-    les corrections de l'utilisateur. Elle est en revanche RACCROCHÉE à ce
-    fichier si la planche qu'elle cite a disparu : une planche renommée sur le
-    disque laissait la police à l'écran sans image, pendant que le fichier
-    renommé en créait une deuxième à côté.
-
-    Renvoie un avertissement d'import, None si tout va bien."""
-    from core.models.font import Font
-    from core import font_import
-
-    name = path.stem
-    font = project.fonts.get(name)
-    warning = None
-    if font is not None:
-        # Une planche renommée sur le disque laissait la police sans image.
-        # Seule une PLANCHE raccroche : un `.fnt` n'est pas l'image, il la nomme.
-        if path.suffix.lower() != ".fnt":
-            _relink_source(project.fonts, font, project.asset_rel(path),
-                           project.asset_abs(font.asset))
-        if path.suffix.lower() in (".ttf", ".otf") and not font.family_name:
-            # Sources reconnues avant l'arrivée des métadonnées : les relire
-            # une fois afin que leur famille soit créée sans réimport manuel.
-            try:
-                from core.font_metadata import vector_font_metadata
-                for key, value in vector_font_metadata(path).items():
-                    setattr(font, key, value)
-                project.fonts.save(font)
-            except Exception as exc:
-                return f"Font \"{name}\": metadata cannot be read ({exc})."
-    else:
-        # La planche d'un `.fnt` déjà importé ne doit pas créer une SECONDE
-        # police : le descripteur fait foi (il porte le mapping des caractères)
-        # et référence déjà cette image. reconcile_fonts applique cette règle en
-        # ordonnant ses passes, mais un dépôt à chaud (watcher) arrive fichier
-        # par fichier — d'où le garde ici, au seul endroit qui crée un Font.
-        if path.suffix.lower() != ".fnt" and _sourced_by(
-                project.fonts, path, lambda f: project.asset_abs(f.asset)):
-            return None
-        font = Font(name=name)
-        # Échec dur (format illisible, planche introuvable) : aucun asset créé —
-        # mieux vaut rien qu'une police vide qui traîne et se sauvegarde. Un
-        # échec mou (planche lisible mais aucun glyphe trouvé) crée l'asset :
-        # l'utilisateur corrigera la taille de cellule dans l'écran Police.
-        try:
-            suffix = path.suffix.lower()
-            if suffix == ".fnt":
-                fields = font_import.import_font_fnt(path)
-                page = fields.pop("page_path", None)
-                if page is None:
-                    return (f"Font \"{name}\": the descriptor does not reference any PNG "
-                            "sheet that can be found — drop the sheet next to the "
-                            ".fnt.")
-                font.asset = project.asset_rel(page)
-                font.descriptor = project.asset_rel(path)
-            elif suffix == ".png":
-                # Planche opaque : le fond dominant est PROPOSÉ comme couleur
-                # transparente. Une proposition, pas un verdict — l'écran
-                # Police laisse la repiquer, ou l'effacer si elle est fausse.
-                font.bg_color = font_import.detect_bg_color(path)
-                # `space_color` est None à ce stade (rien à deviner : un
-                # marqueur d'espacement ne se distingue pas d'une couleur de
-                # dessin), donc la police entre en MONO. Elle passera en
-                # proportionnel le jour où l'utilisateur repiquera la couleur.
-                fields = font_import.import_font_png(
-                    path, keys=font.key_colors(), space_color=font.space_color)
-                font.asset = project.asset_rel(path)
-            else:
-                # Une source vectorielle ne se transforme pas à l'import : le
-                # futur FontRasterizer la lira à la demande, pour le sous-
-                # ensemble réellement requis. Créer le sidecar suffit pour que
-                # le watcher, le finder et FontAsset puissent la référencer.
-                font.asset = project.asset_rel(path)
-                from core.font_metadata import vector_font_metadata
-                fields = {"source_format": suffix.lstrip("."),
-                          **vector_font_metadata(path)}
-            font_import.apply_font_import(font, fields)
-        except Exception as exc:
-            return f"Font \"{name}\": import failed ({exc})."
-        if not font.glyphs and font.source_format in ("png", "fnt"):
-            warning = (f"Font \"{name}\": no glyph detected — check the cell size in the "
-                       "Font screen.")
-        project.fonts.append(font)
-    # Le sidecar de CETTE police, pas celui qui porterait le nom du fichier
-    # source : les deux ne coïncident que tant que personne n'a renommé, et
-    # c'est justement ce cas-là qu'on rattrape ici (cf. ResourceStore.path_of).
-    if not project.fonts.path_of(font).exists():
-        project.fonts.save(font)
-    # La source vient d'être reconnue : elle doit être immédiatement utilisable
-    # dans les TextBox, même lorsqu'il s'agit d'une planche bitmap sans famille
-    # typographique vectorielle. Idempotent et sans écraser les recettes déjà
-    # écrites par l'auteur.
-    reconcile_font_assets(project)
-    return warning
 
 
 def _family_key(name: str) -> str:
@@ -577,56 +291,19 @@ def reconcile_font_assets(project):
         project.font_assets.save(asset)
 
 
-def sync_background_png(project, png_path: Path) -> Optional[str]:
-    """Crée un BackgroundAsset (sidecar de compression par image, keyé par le
-    stem du PNG) quand un PNG apparaît dans assets/backgrounds/. Ne modifie
-    pas un asset existant — sauf pour le RACCROCHER à ce PNG si celui qu'il
-    cite a disparu (cf. `_relink_source`). C'est la scène qui possède ses
-    layers. Renvoie un éventuel avertissement d'import (palette déduite), None
-    sinon."""
-    name = png_path.stem
-    ba = project.backgrounds.get(name)
-    if ba is not None:
-        # Un fond cite son image par son seul NOM DE FICHIER, relatif à
-        # background_images_dir — la convention de la famille.
-        img = ba.image_name()
-        _relink_source(project.backgrounds, ba, png_path.name,
-                       (project.background_images_dir / img) if img else None)
-    else:
-        # Cette image appartient peut-être déjà à un fond qui porte un autre nom
-        # (renommage qui n'a pas pu emporter le PNG) : en fonder un second
-        # dupliquerait la compression, et les scènes ne sauraient plus lequel
-        # elles citent.
-        if _sourced_by(project.backgrounds, png_path,
-                       lambda b: (project.background_images_dir / b.image_name())
-                                 if b.image_name() else None):
-            return None
-        ba = BackgroundAsset(name=name, asset=png_path.name)
-        # Nouveau dépôt : AUTO-DÉTECTION du mode (pivot indexé/non-indexé),
-        # puis compression (métadonnées) sans toucher le PNG.
-        warning = None
-        try:
-            from core.bg_import import detect_import_mode
-            d = detect_import_mode(png_path)
-            ba.mode = "bitmap" if d["token"] in ("bitmap", "bitmap16") else "tiled"
-            ba.bpp = 8 if d["token"] == "tiled8" else 4
-            warning = d["warning"]
-        except Exception:
-            pass
-        encode_background_asset(ba, png_path)
-        project.backgrounds.append(ba)
-        project.backgrounds.save(ba)
-        return warning
-    return None
-
-
 def resync_background_png(project, png_path: Path) -> Optional[str]:
+    """L'image a changé sur le disque : recompresse CHAQUE fond qui la pointe (cf. `_resync_background`).
+    Renvoie les avertissements réunis, None s'il n'y en a pas."""
+    warnings = [w for w in (_resync_background(project, ba, png_path)
+                            for ba in _citing(project.backgrounds, png_path, project.background_image_path)) if w]
+    return " ".join(warnings) or None
+
+
+def _resync_background(project, ba, png_path: Path) -> Optional[str]:
     """Le PNG d'un fond EXISTANT a changé sur le disque : recalculer sa
     compression depuis les nouveaux pixels.
 
-    `sync_background_png` ne touche pas à un asset déjà connu (c'est sa règle :
-    ne jamais écraser un import), et `reconcile_backgrounds` ne rattrape que les
-    sidecars SANS tileset. Un fond retouché gardait donc ses anciennes tuiles
+    `reconcile_backgrounds` ne rattrape que les sidecars SANS tileset. Un fond retouché gardait donc ses anciennes tuiles
     pour toujours — à l'écran ET dans la ROM, puisque le build lit `ba.tileset`
     et non le PNG.
 
@@ -638,9 +315,6 @@ def resync_background_png(project, png_path: Path) -> Optional[str]:
 
     Renvoie un avertissement si des repeints ont dû être abandonnés, None sinon.
     """
-    ba = project.backgrounds.get(png_path.stem)
-    if ba is None:
-        return None
     before = (ba.tiles_w, ba.tiles_h, len(ba.palettes))
     tile_overrides = dict(ba.tile_palette_overrides)
     pal_overrides = dict(ba.palette_overrides)
@@ -713,11 +387,12 @@ def source_changed(path: Path, stored: str) -> tuple[bool, str]:
     return changed, fresh
 
 
-def apply_bg_encoding(ba: "BackgroundAsset", source_name: str, c: dict):
+def apply_bg_encoding(ba: "BackgroundAsset", c: dict):
     """Applique un résultat de compression (dict de bg_import.encode_background)
     à un BackgroundAsset. Séparé du calcul pour permettre une compression
-    hors-thread : le worker calcule `c`, le thread UI applique via ce helper."""
-    ba.asset = source_name
+    hors-thread : le worker calcule `c`, le thread UI applique via ce helper.
+
+    Ne touche pas à `ba.asset` : l'asset POINTE sa source, que l'encodage ne change pas."""
     ba.palettes = c["palettes"]
     # Nouvelle baseline dérivée du PNG : snapshot restaurable + reset des
     # overrides (l'origine des palettes repart de la compression fraîche).
@@ -760,7 +435,7 @@ def encode_background_asset(ba: "BackgroundAsset", png_path: Path, method: str =
             else ("tiled8" if getattr(ba, "bpp", 4) == 8 else "tiled4")
         c = encode_by_mode(png_path, mode_token, method or ba.quantize_method,
                            getattr(ba, "dither", False), ba.import_prep(), ba.compression)
-        apply_bg_encoding(ba, png_path.name, c)
+        apply_bg_encoding(ba, c)
     except Exception:
         pass
 
@@ -770,9 +445,7 @@ def encode_background_asset(ba: "BackgroundAsset", png_path: Path, method: str =
 # tourne. Ceux déposés à l'explorateur, éditeur fermé, ne sont vus par personne :
 # les `reconcile_*` ci-dessous repassent une fois par ouverture de projet.
 #
-# C'est le même geste que les `sync_*` de ce module, appliqué au DOSSIER au lieu
-# d'un fichier — d'où leur place ici : aucune n'a besoin d'importer quoi que ce
-# soit, elles bouclent sur ce qui précède. Elles rattrapent aussi le sidecar dont
+# Elles bouclent sur les assets connus et rattrapent le sidecar dont
 # l'encodage manque (import interrompu, échec avalé en tâche de fond) : le
 # fichier source est là, l'encodage se recalcule.
 #
@@ -788,8 +461,7 @@ def reconcile_background(project, ba) -> None:
     préchargement de la scène active (`Project.load_active_scene_resources`)
     puisse remettre d'aplomb les fonds qu'elle cite sans lancer la passe globale
     — un catalogue différé ne repasse pas le dossier entier à l'ouverture."""
-    img = ba.image_name()
-    ap = project.background_images_dir / img if img else None
+    ap = project.background_image_path(ba) if ba.asset else None
     if not (ap and ap.exists()):
         return
     if not ba.tileset and ba.mode != "bitmap":
@@ -808,7 +480,7 @@ def reconcile_background(project, ba) -> None:
     # cette version arrive.
     changed, fresh = source_changed(ap, ba.source_stamp)
     if changed:
-        resync_background_png(project, ap)
+        _resync_background(project, ba, ap)
     elif fresh != ba.source_stamp:
         # Contenu identique mais empreinte à migrer (ancien format sans date, ou
         # date reposée) : la réécrire une fois pour que la prochaine ouverture
@@ -828,7 +500,7 @@ def reconcile_sprite(project, sp) -> None:
     if not ap or not ap.exists():
         return
     if not sp.palettes:
-        # Sprite créé par `sync_sprite_png` alors que son encodage avait échoué
+        # Sprite créé alors que son encodage avait échoué
         # (exception avalée en tâche de fond watcher) : la réparation est ici.
         try:
             from core.sprite_import import encode_sprite
@@ -843,7 +515,7 @@ def reconcile_sprite(project, sp) -> None:
     # déterministe).
     changed, fresh = source_changed(ap, sp.source_stamp)
     if changed:
-        resync_sprite_png(project, ap)
+        _resync_sprite(project, sp, ap)
     elif fresh != sp.source_stamp:
         # Contenu identique, empreinte à migrer (cf. reconcile_background).
         sp.source_stamp = fresh
@@ -851,103 +523,17 @@ def reconcile_sprite(project, sp) -> None:
 
 
 def reconcile_backgrounds(project):
-    """(1) PNG déposés hors éditeur dans assets/backgrounds/ → crée le
-    BackgroundAsset + sa compression. (2) Fonds dont le sidecar existe sans
-    tileset → compression recalculée depuis le PNG. (3) Fonds dont le PNG a été
-    RETOUCHÉ éditeur fermé → compression refaite depuis les nouveaux pixels.
-
-    (2) et (3) délèguent à `reconcile_background`, par asset.
-
-    Sautée quand l'empreinte du dossier n'a pas bougé (cf. `reconcile_sprites`)."""
-    d = project.background_images_dir
-    if project.reconcile_manifest.matches(d, IMAGE_FILE_EXTS):
-        return
-    for f in (sorted(d.glob("*")) if d.exists() else []):
-        if f.is_file() and f.suffix.lower() in IMAGE_FILE_EXTS:
-            sync_background_png(project, f)
+    """Répare chaque fond déjà connu : compression manquante, ou image retouchée éditeur fermé (cf.
+    `reconcile_background`, par asset). Rien n'est CRÉÉ : un fichier qui apparaît n'est pas un asset tant que
+    l'auteur n'a pas fait *Create asset* (cf. `core.asset_creation`)."""
     for ba in list(project.backgrounds):
         reconcile_background(project, ba)
-    project.reconcile_manifest.record(d, IMAGE_FILE_EXTS)
 
 
 def reconcile_sprites(project):
-    """(1) PNG déposés hors éditeur dans assets/sprites/ → crée le SpriteAsset,
-    et raccroche un sprite dont la planche a été renommée. (2) Sprites dont le
-    sidecar existe sans PAL_BANK → encodage recalculé depuis le PNG source.
-    (3) Sprites dont la planche a été RETOUCHÉE éditeur fermé → palettes
-    refaites depuis les nouveaux pixels. (2) et (3) délèguent à
-    `reconcile_sprite`, par asset.
-
-    Pendant de `reconcile_backgrounds`. La passe (1) y manquait : le watcher
-    crée bien un sprite quand un PNG apparaît pendant que l'éditeur tourne, mais
-    le même fichier déposé — ou renommé — éditeur fermé n'était vu par
-    personne.
-
-    Sautée quand l'empreinte du dossier n'a pas bougé depuis le dernier
-    rattrapage (cf. `ReconcileManifest`) : la passe est idempotente, la refaire
-    à vide ne trouverait rien."""
-    d = project.sprites_dir
-    if project.reconcile_manifest.matches(d, IMAGE_FILE_EXTS):
-        return
-    for f in (sorted(d.glob("*")) if d.exists() else []):
-        if f.is_file() and f.suffix.lower() in IMAGE_FILE_EXTS:
-            sync_sprite_png(project, f)
+    """Répare chaque sprite déjà connu : encodage manquant, ou planche retouchée éditeur fermé (cf.
+    `reconcile_sprite`, par asset). Pendant de `reconcile_backgrounds` : rien n'est CRÉÉ."""
     for sp in list(project.sprites):
         reconcile_sprite(project, sp)
-    project.reconcile_manifest.record(d, IMAGE_FILE_EXTS)
 
 
-def reconcile_sfx_and_music(project):
-    """Crée les sidecars manquants pour les fichiers audio bruts déjà présents
-    dans assets/sfx/ et assets/music/.
-
-    Sautée quand les deux dossiers ont l'empreinte de leur dernier rattrapage
-    (cf. `reconcile_sprites`) ; sinon les deux tournent et se réenregistrent."""
-    from core.models.audio import SFX_FILE_EXTS, MUSIC_FILE_EXTS
-    manifest = project.reconcile_manifest
-    if (manifest.matches(project.sfx_dir, SFX_FILE_EXTS)
-            and manifest.matches(project.music_dir, MUSIC_FILE_EXTS)):
-        return
-    for f in sorted(project.sfx_dir.glob("*")) if project.sfx_dir.exists() else []:
-        if f.is_file() and f.suffix.lower() in SFX_FILE_EXTS:
-            sync_sfx_file(project, f)
-    for f in sorted(project.music_dir.glob("*")) if project.music_dir.exists() else []:
-        if f.is_file() and f.suffix.lower() in MUSIC_FILE_EXTS:
-            sync_music_file(project, f)
-    manifest.record(project.sfx_dir, SFX_FILE_EXTS)
-    manifest.record(project.music_dir, MUSIC_FILE_EXTS)
-
-
-def reconcile_fonts(project):
-    """Même rôle pour assets/fonts/ : planches PNG et descripteurs `.fnt`
-    déposés hors ligne.
-
-    Le `.fnt` passe en premier : quand les deux fichiers sont là, c'est lui qui
-    fait foi (il porte le mapping des caractères), et il référence sa planche —
-    laquelle ne doit donc pas créer une seconde police en doublon.
-
-    Rend la liste des avertissements d'import. Elle était jetée : un `.fnt`
-    déposé sans sa planche, un conteneur illisible, une planche dont aucun
-    glyphe ne ressort — `sync_font_file` le disait, et personne ne l'écoutait.
-    L'utilisateur voyait « No font. » sans un mot, dans un panneau qui l'invite
-    justement à déposer un `.fnt`, c'est-à-dire le cas qui échoue seul."""
-    from core.models.font import FONT_FILE_EXTS
-    if not project.fonts_dir.exists():
-        return []
-    files = [f for f in sorted(project.fonts_dir.glob("*"))
-             if f.is_file() and f.suffix.lower() in FONT_FILE_EXTS]
-    warnings: list[str] = []
-    pages = set()
-    for f in [x for x in files if x.suffix.lower() == ".fnt"]:
-        w = sync_font_file(project, f)
-        if w:
-            warnings.append(w)
-        font = project.fonts.get(f.stem)
-        if font and font.asset:
-            pages.add(project.asset_abs(font.asset))
-    for f in [x for x in files if x.suffix.lower() != ".fnt"]:
-        if f not in pages:
-            w = sync_font_file(project, f)
-            if w:
-                warnings.append(w)
-    return warnings

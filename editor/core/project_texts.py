@@ -26,9 +26,9 @@ from typing import Optional
 
 from core.resources.resource_store import atomic_write
 from core.models import project_json
+from core.models.ids import new_id
 from core.models.text import (
     Text, key_from_path as text_key_from_path, norm_path as norm_text_path,
-    new_id as new_text_id,
 )
 
 
@@ -188,7 +188,7 @@ class ProjectTextsMixin:
 
     def save_texts(self):
         data = {"texts": [t.to_dict() for t in self.texts]}
-        self.project_dir.mkdir(parents=True, exist_ok=True)
+        self.texts_file.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(self.texts_file, project_json.dumps(data))
 
     def load_texts(self):
@@ -203,12 +203,12 @@ class ProjectTextsMixin:
         """Rattrape un fichier édité à la main : id manquant ou dupliqué, clé
         manquante ou dupliquée. L'id prime — c'est lui l'identité ; une clé en
         double est celle qu'on renumérote."""
-        seen_ids: set[int] = set()
+        seen_ids: set[str] = set()
         seen_keys: set[str] = set()
         for t in self.texts:
             t.path = norm_text_path(t.path)
             if not t.id or t.id in seen_ids:
-                t.id = new_text_id(seen_ids)
+                t.id = new_id(seen_ids)
             seen_ids.add(t.id)
             if not t.key or t.key in seen_keys:
                 t.key = text_key_from_path(t.path, taken=seen_keys)
@@ -223,7 +223,7 @@ class ProjectTextsMixin:
         """Résolution par clé — l'unique chemin de résolution côté script."""
         return next((t for t in self.texts if t.key == key), None)
 
-    def get_text_by_id(self, tid: int) -> Optional[Text]:
+    def get_text_by_id(self, tid: str) -> Optional[Text]:
         """Résolution par id — pour les références stockées dans les fichiers
         de données (inspecteurs, scènes), insensibles au renommage."""
         return next((t for t in self.texts if t.id == tid), None)
@@ -236,7 +236,7 @@ class ProjectTextsMixin:
         l'arbre se remplit tout seul, et le chemin par défaut situe déjà."""
         p = norm_text_path(path if path is not None else ([scene] if scene else []))
         t = Text(
-            id      = new_text_id({x.id for x in self.texts}),
+            id      = new_id({x.id for x in self.texts}),
             key     = text_key_from_path(p, taken=self.text_keys()),
             path    = p,
             content = content,
@@ -328,12 +328,25 @@ class ProjectTextsMixin:
         """L'entrée de la table qu'une zone d'interface montre, ou None.
 
         Deux sources dans cet ordre : le contenu AUTHORÉ (`text_key`, posé à
-        l'init), sinon l'ÉCHANTILLON (`preview_text`) — qui n'est jamais
-        compilé mais qui est, pour une zone remplie par un script, la seule
-        idée que l'éditeur ait de ce qui y atterrira."""
-        key = (getattr(region, "text_key", "")
-               or getattr(region, "preview_text", "") or "")
-        return self.get_text(key) if key else None
+        l'init), sinon le littéral d'aperçu (`preview_text`) que le script
+        écrira avec `text:draw`. Ce dernier ne devient jamais une entrée du
+        projet ; on le présente seulement sous la forme minimale attendue par
+        les outils de mesure et de validation.
+
+        Une ancienne valeur de `preview_text` qui est une clé reste comprise :
+        les projets enregistrés avant le littéral conservent leur aperçu."""
+        key = getattr(region, "text_key", "") or ""
+        if key:
+            return self.get_text(key)
+        preview = getattr(region, "preview_text", "") or ""
+        if not preview:
+            return None
+        if not getattr(region, "preview_is_literal", True):
+            legacy = self.get_text(preview)
+            if legacy is not None:
+                return legacy
+        from core.models.text import Text
+        return Text(content=preview)
 
     def region_animated_glyphs(self, region) -> int:
         """Glyphes animés à RÉSERVER pour cette zone — dérivé, jamais déclaré.

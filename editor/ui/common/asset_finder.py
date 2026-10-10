@@ -53,6 +53,8 @@ from ui.common.selection_grammar import RowSelectionDelegate
 from ui.common.widgets import W, FinderSection
 from ui.common.icons import get as _ico, folder_icon, COLOR_DEFAULT, COLOR_FOLDER
 from ui.common.reveal import reveal_in_file_manager
+from core.asset_usages import usages_of
+from core.command_dispatcher import get_dispatcher
 from core.history import get_history, MacroCmd, RefreshAfterCmd
 
 _ROLE_OBJ = Qt.ItemDataRole.UserRole
@@ -106,6 +108,31 @@ class FolderScheme:
     # Range un lot d'assets dans un NOUVEAU dossier auto-nommé, en un geste
     # (menu « Grouper »). None = la famille ne sait pas grouper d'un clic.
     group: Optional[Callable[[list, Optional[str]], Any]] = None  # (assets, parent) -> folder
+
+    @classmethod
+    def for_family(cls, store, family: str) -> "FolderScheme":
+        """LE rangement en dossiers de toute famille, adossé au store partagé.
+
+        Un asset est rangé sous son `id` (`Resource.id`), jamais sous son nom : renommer
+        ou déplacer son fichier ne le fait pas sortir de son dossier. Les familles ne
+        diffèrent que par leur nom de `family` — il n'y a pas de variante par famille."""
+        return cls(
+            folders=lambda: store.folders(family),
+            create=lambda name, parent: store.create_folder(family, name, parent),
+            rename=lambda fid, name: store.rename_folder(family, fid, name),
+            delete=lambda fid: store.delete_folder(family, fid),
+            set_parent=lambda fid, parent: store.set_parent(family, fid, parent),
+            move=lambda asset, fid: store.move_member(family, asset.id, fid),
+            folder_of=lambda asset: store.folder_of(family, asset.id),
+            group=lambda assets, parent: store.create_group(
+                family, label("assetfind.group_default_name"), [a.id for a in assets], parent),
+        )
+
+
+def _with_usages(prompt: str, used: list[str]) -> str:
+    """La question de suppression, suivie de ce qui cite encore l'asset (six lignes au plus)."""
+    more = f"\n… +{len(used) - 6}" if len(used) > 6 else ""
+    return prompt + "\n\n" + label('disk.delete_used') + "\n" + "\n".join(used[:6]) + more
 
 
 def folded_nodes(raw_assets: list[AssetNode], scheme: FolderScheme) -> list[AssetNode]:
@@ -196,6 +223,14 @@ class AssetKind:
     # L'état initial est une propriété de la famille, non du finder qui la
     # montre : une source encombrante peut démarrer repliée partout.
     section_expanded: bool = True
+    # La famille d'`AssetFolderStore` où ses assets se rangent en dossiers d'auteur
+    # ("" = pas de dossiers : la famille s'affiche à plat ou en arbre deviné). Une
+    # famille rangeable a des assets qui portent un `id` (tout `Resource`) — pas les
+    # scripts, dont le disque est la vérité. Le finder installe seul le rangement
+    # (cf. `AssetFinder.set_folder_store`).
+    folder_family: str = ""
+    # Le « + » ouvre un menu de types à créer : il porte l'icône « + ▾ » plutôt que le « + » nu.
+    add_menu: bool = False
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -251,13 +286,14 @@ def store_nodes(attr: str,
     return build
 
 
-def dir_nodes(attr: str, suffixes: tuple[str, ...]
+def dir_nodes(attr: str, suffixes: tuple[str, ...], prune_empty: bool = False
               ) -> Callable[[Any], list[AssetNode]]:
     """Arbre d'une famille dont la vérité est le DISQUE — les scripts.
 
     Parcourt `project.<attr>` récursivement : les dossiers deviennent des nœuds
     dossier, les fichiers dont l'extension figure dans `suffixes` des feuilles
-    portant leur `Path`."""
+    portant leur `Path`. `prune_empty` : un dossier sans aucune feuille n'est pas montré (on parcourt tout
+    `assets/` pour n'y montrer que les scripts)."""
     def walk(directory: Path) -> list[AssetNode]:
         try:
             entries = sorted(directory.iterdir(),
@@ -267,7 +303,9 @@ def dir_nodes(attr: str, suffixes: tuple[str, ...]
         out: list[AssetNode] = []
         for entry in entries:
             if entry.is_dir():
-                out.append(AssetNode(name=entry.name, children=walk(entry)))
+                children = walk(entry)
+                if children or not prune_empty:
+                    out.append(AssetNode(name=entry.name, children=children))
             elif entry.suffix in suffixes:
                 out.append(AssetNode(name=entry.name, obj=entry))
         return out
@@ -912,16 +950,21 @@ class _KindTree(QTreeWidget):
         if project is None:
             return
         name = self._name_of(obj)
-        prompt = (kind.delete_prompt(obj) if kind.delete_prompt
-                  else label('assetfind.delete_name_ctrl_z_to_undo', name=name))
-        if QMessageBox.question(
-            self, label('common.delete'), prompt,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        ) != QMessageBox.StandardButton.Yes:
-            return
+        # Pas de fenêtre à chaque suppression : elle est annulable (Ctrl+Z). On ne demande que pour un asset ENCORE
+        # cité — le supprimer casse ce qui le cite — et la question dit par quoi.
+        used = usages_of(project, obj)
+        if used:
+            prompt = (kind.delete_prompt(obj) if kind.delete_prompt
+                      else label('assetfind.delete_name_ctrl_z_to_undo', name=name))
+            if QMessageBox.question(
+                self, label('common.delete'), _with_usages(prompt, used),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            ) != QMessageBox.StandardButton.Yes:
+                return
         get_history().push(RefreshAfterCmd(kind.delete(project, obj), self._panel.refresh))
         self._panel.refresh()
         self._panel.emptied.emit(kind.label)
+        get_dispatcher().status(label('assetfind.deleted', n=1))
 
     def _delete_many(self, objs):
         """Supprime un lot en UNE entrée d'historique (`MacroCmd`) : un seul
@@ -931,9 +974,10 @@ class _KindTree(QTreeWidget):
         if project is None or not objs:
             return
         n = len(objs)
-        if QMessageBox.question(
+        used = [f"{self._name_of(o)}: {line}" for o in objs for line in usages_of(project, o)]
+        if used and QMessageBox.question(
             self, label('common.delete'),
-            label('assetfind.delete_confirm', n=n),
+            _with_usages(label('assetfind.delete_confirm', n=n), used),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         ) != QMessageBox.StandardButton.Yes:
             return
@@ -942,6 +986,7 @@ class _KindTree(QTreeWidget):
             MacroCmd(cmds, f"Delete {n} {kind.label.lower()}"), self._panel.refresh))
         self._panel.refresh()
         self._panel.emptied.emit(kind.label)
+        get_dispatcher().status(label('assetfind.deleted', n=n))
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -1020,6 +1065,7 @@ class AssetFinder(QWidget):
                             body=label(kind.add_tip_key) if kind.add_tip_key else "")
                     if kind.add_tooltip_key
                     else kind.add_tooltip or label('assetfind.add_an_item'))
+                section.set_add_menu(kind.add_menu)
                 section.add_clicked.connect(lambda k=kind: self._add(k))
             if kind.dir_of is not None:
                 section.set_reveal_visible(True)
@@ -1040,6 +1086,10 @@ class AssetFinder(QWidget):
         """
         for label, section in self._sections.items():
             section.setVisible(labels is None or label in labels)
+
+    def set_title_visible(self, visible: bool) -> None:
+        """Masque le bandeau-titre quand un onglet porte déjà ce nom."""
+        self._title.setVisible(visible)
 
     def set_title(self, title: str) -> None:
         """Nomme le contexte actuellement parcouru par ce finder."""
@@ -1171,6 +1221,14 @@ class AssetFinder(QWidget):
         return tree._selected_objs() if tree is not None else []
 
     # ── Actions ajoutées par l'écran ──────────────────────────────
+
+    def set_folder_store(self, store) -> None:
+        """Range en dossiers d'auteur chaque famille de ce finder qui le déclare
+        (`AssetKind.folder_family`), dans le store partagé de la fenêtre. Les autres
+        restent inchangées. Un seul geste pour tous les finders."""
+        for kind in self._kinds:
+            if kind.folder_family:
+                self.set_folder_scheme(kind.label, FolderScheme.for_family(store, kind.folder_family))
 
     def folder_scheme(self, kind_label: str) -> Optional["FolderScheme"]:
         return self._folder_schemes.get(kind_label)

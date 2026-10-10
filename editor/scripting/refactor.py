@@ -254,16 +254,14 @@ def rename_in_text(text: str, domain: str, old: str, new: str) -> tuple[str, int
 # ── Portée projet ─────────────────────────────────────────────────
 
 def script_paths(project) -> list[Path]:
-    """Tous les .lua du projet, où qu'ils soient rangés sous `scripts_dir`.
+    """Tous les .lua du projet, où qu'ils soient rangés sous `assets/`.
 
     Un dossier par famille de propriétaire faisait oublier des scripts : ceux de CAMÉRA
     manquaient à la liste, donc un `scene:switch("Arène")` écrit dans l'un d'eux n'était
     pas réécrit par un renommage de scène, et la faute ne remontait qu'au build suivant.
-    Parcourir `scripts_dir` d'un bloc ne peut plus rien oublier."""
-    scripts_dir = getattr(project, "scripts_dir", None)
-    if not scripts_dir or not Path(scripts_dir).exists():
-        return []
-    return sorted(Path(scripts_dir).rglob("*.lua"))
+    Parcourir `assets/` d'un bloc ne peut plus rien oublier."""
+    from core import lua_scripts
+    return lua_scripts.lua_files(project)
 
 
 def find_refs_in_project(project, domain: str, name: str) -> dict[Path, list[LuaRef]]:

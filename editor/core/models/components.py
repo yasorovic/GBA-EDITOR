@@ -9,6 +9,7 @@ from dataclasses import dataclass, field, fields
 from typing import Optional
 
 from core.models.field_value import FieldValue, Raw, number_raw
+from core.models.unique_name import unique_name
 
 
 @dataclass
@@ -280,11 +281,6 @@ class ComponentOwnerMixin:
         comp = klass(**kwargs)
         # Garantir un id unique au sein de l'actor (ex: "collision", "collision_2", ...)
         existing_ids = {c.id for c in self.components}
-        if comp.id in existing_ids:
-            n = 2
-            base = comp.id
-            while f"{base}_{n}" in existing_ids:
-                n += 1
-            comp.id = f"{base}_{n}"
+        comp.id = unique_name(comp.id, existing_ids)
         self.components.append(comp)
         return comp

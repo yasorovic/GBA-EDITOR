@@ -50,7 +50,7 @@ def test_projet_decrit_ses_fichiers_illisibles_sans_leur_contenu(tmp_path):
 
     assert "nom : Jeu" in report
     assert "fichiers illisibles : 1" in report
-    assert "Scene_01.json" in report
+    assert "Scene_01.scene" in report
     assert "secret_du_joueur" not in report
 
 

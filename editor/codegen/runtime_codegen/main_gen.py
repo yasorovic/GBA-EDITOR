@@ -1241,7 +1241,7 @@ def _layer_base_bank(p, scene, bi: dict, bg_layout) -> int:
     ba = p.get_background(bi["stem"])
     if bi.get("compressed"):
         return (bg_layout.bg_block_offset(ba) if ba else None) or 0
-    png = p.background_images_dir / (ba.asset if ba and ba.asset else f"{bi['stem']}.png")
+    png = p.background_image_path(ba, bi['stem'])
     colors = effective_palette_colors(p, OWN_PAL_BANK, png, scene.active_bg_palettes)
     return bg_layout.bank_index(OWN_PAL_BANK, colors) or 0
 

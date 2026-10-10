@@ -6,10 +6,10 @@ function on_start()
     -- La musique de jeu se tait ; le jingle sonne par-dessus le silence.
     music_box:trigger("to_result")
     if global.winner == 0 then
-        music:jingle("Claimed DX")
+        music:jingle("Victory Fanfare")
     else
         interface:get("txt_result"):draw("scr_victory_defeat")
-        music:jingle("Crystal Clear DX SLOW")
+        music:jingle("Out of Energy Game Over")
     end
 end
 

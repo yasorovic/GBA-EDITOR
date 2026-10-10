@@ -13,7 +13,7 @@ le zoom, le pan, la grille et le rendu :
     marges que règlent les champs de l'inspecteur) ;
   · fond ANIMÉ → grille de frames et lecture à la vitesse déclarée ;
   · n'importe quel fond → fonds animés POSÉS dessus, déposés depuis le finder,
-    déplaçables et supprimables, stockés dans le .json de l'hôte.
+    déplaçables et supprimables, stockés dans le .background de l'hôte.
 
 Composants :
 - BgInpaintController : état + peinture (brosse/fill/rect/gomme) + rendu
@@ -633,7 +633,7 @@ class _PlacementOverlay(QGraphicsItem):
             if pix is None:
                 # Référence pendante (animé supprimé/renommé hors éditeur) :
                 # une croix à la place, jamais un trou — un placement invisible
-                # se retrouverait dans le .json sans qu'on sache pourquoi.
+                # se retrouverait dans le .background sans qu'on sache pourquoi.
                 pen = QPen(QColor(C.ACCENT_RED)); pen.setWidth(0)
                 painter.setPen(pen)
                 painter.drawRect(rect)
@@ -1450,7 +1450,7 @@ class BgInpaintCanvas(QWidget):
 
     def _prep_available(self) -> bool:
         ba = self._ba
-        return bool(ba and not ba.is_ui and not ba.is_animated and ba.image_name()
+        return bool(ba and not ba.is_ui and not ba.is_animated and ba.asset
                     and (ba.tileset or ba.bitmap) and self._src_size[0])
 
     def _read_source_size(self) -> tuple:
@@ -1571,8 +1571,7 @@ class BgInpaintCanvas(QWidget):
         """PNG source du fond courant (sur disque), ou None."""
         if not (self._project and self._ba):
             return None
-        img = self._ba.image_name()
-        return (self._project.background_images_dir / img) if img else None
+        return self._project.background_image_path(self._ba) if self._ba.asset else None
 
     def _on_edit_image(self):
         path = self._source_png_path()
@@ -1757,7 +1756,7 @@ class BgInpaintCanvas(QWidget):
         self.reload_geometry()
         self._bar.set_canvas_size(*self._ctrl.image_size())
         self._bar.set_cursor_px(None, None)
-        self._btn_edit.setEnabled(bool(ba and ba.image_name()))
+        self._btn_edit.setEnabled(bool(ba and ba.asset))
         self._src_size = self._read_source_size()
         self._refresh_prepare_ui()
 

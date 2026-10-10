@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path, PureWindowsPath
 from typing import Optional
 
@@ -91,6 +92,11 @@ def path_too_long_message(p: Project) -> Optional[str]:
             "characters, and the Windows tools (grit, gcc) refuse beyond "
             f"{WINDOWS_PATH_LIMIT}. Move the project to a shallower folder (e.g. "
             f"C:\\Games\\{p.settings.name}).")
+
+
+# Le démarrage de `make` peut échouer sans raison (cf. `BuildWorker._run_cmd`) : on le relance, deux fois au plus.
+_MSYS_START_FAILURE = "fatal error - add_item"
+_TOOL_START_RETRIES = 2
 
 
 class _PalKey:
@@ -360,7 +366,7 @@ class BuildWorker(EventEmitter, threading.Thread):
                         continue
                     seen_bg_layers.add(key)
 
-                    png = p.background_images_dir / (ba.asset if ba and ba.asset else f"{layer.background_name}.png")
+                    png = p.background_image_path(ba, layer.background_name)
                     colors = effective_palette_colors(
                         p, layer.pal_bank, png, scene.active_bg_palettes)
                     mp_slot = bg_layout.bank_index(layer.pal_bank, colors)
@@ -569,6 +575,17 @@ class BuildWorker(EventEmitter, threading.Thread):
             # décodeur refuse tuait le thread de lecture de `subprocess` et le
             # build perdait toute la sortie de l'outil, erreurs comprises.
             proc = run_tool(cmd, cwd=str(cwd) if cwd else None, env=env)
+            # Le runtime msys2 de devkitPro (`make`, `sh`) échoue parfois AU DÉMARRAGE, avant d'avoir rien fait :
+            # `fatal error - add_item ("\??\C:\devkitPro\msys2", "/", ...) failed`. Il ne manque ni fichier ni
+            # réglage, l'appel suivant passe (mesuré le 2026-10-11 : trois échecs de suite, puis des builds propres sans
+            # rien changer). On relance donc l'outil, au lieu de rendre l'auteur responsable d'une panne qui n'est pas la sienne.
+            for attempt in range(1, _TOOL_START_RETRIES + 1):
+                if proc.returncode == 0 or _MSYS_START_FAILURE not in (proc.stdout + proc.stderr):
+                    break
+                self._emit("log_line", f"{prefix} msys2 failed to start (transient); retrying "
+                                       f"({attempt}/{_TOOL_START_RETRIES})")
+                time.sleep(0.5 * attempt)
+                proc = run_tool(cmd, cwd=str(cwd) if cwd else None, env=env)
             failed = proc.returncode != 0
             for line in proc.stdout.splitlines():
                 self._emit("log_line", f"  {line}")
@@ -770,8 +787,7 @@ class BuildWorker(EventEmitter, threading.Thread):
         for asset, layer, *_rest in layers:
             if not layer.background_name:
                 continue
-            png_name = asset.asset if asset and asset.asset else f"{layer.background_name}.png"
-            w, h = png_size(p.background_images_dir / png_name)
+            w, h = png_size(p.background_image_path(asset, layer.background_name))
             _, _, ms = bg_map_geometry(w, h)
             map_sbb_count = bg_map_sbb_count(ms)
             # Le budget le plus SERRÉ parmi les scènes qui utilisent ce layer :
@@ -859,8 +875,7 @@ class BuildWorker(EventEmitter, threading.Thread):
                 ba = p.get_background(layer.background_name)
                 if ba is not None and getattr(ba, "mode", "tiled") == "bitmap":
                     continue
-                png = p.background_images_dir / (
-                    ba.asset if ba and ba.asset else f"{layer.background_name}.png")
+                png = p.background_image_path(ba, layer.background_name)
                 w, h = png_size(png)
                 _, _, ms = bg_map_geometry(w, h)
                 # Nombre de tuiles inconnu ici pour un fond legacy (grit n'a pas

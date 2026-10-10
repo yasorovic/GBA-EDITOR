@@ -38,7 +38,7 @@ from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, REMOVED_EVENTS, KNOWN
                   ALL_KNOWN_EVENTS, OWNER_KINDS_WITH_SELF, DOMAIN_ANIM, DOMAIN_SPRITE_ID, DOMAIN_SFX,
                   DOMAIN_SOUND_BOX_STATE, DOMAIN_JINGLE_BOX_STATE,
                   DOMAIN_MUSIC_BOX_TRIGGER,
-                  DOMAIN_MUSIC, DOMAIN_KEY, DOMAIN_AXIS, DOMAIN_INPUT_SEQUENCE,
+                  DOMAIN_MUSIC, DOMAIN_JINGLE, DOMAIN_KEY, DOMAIN_AXIS, DOMAIN_INPUT_SEQUENCE,
                   DOMAIN_SCENE, DOMAIN_CAMERA, DOMAIN_TEXT, DOMAIN_FONT,
                   DOMAIN_LANG,
                   DOMAIN_PALETTE,
@@ -108,7 +108,8 @@ class BuildContext:
     # Événements d'animation autorisés comme fonctions de premier niveau.
     frame_event_names: list[str] = None
     sfx_names:    list[str]  = None    # noms de Sfx dans le projet
-    music_names:  list[str]  = None    # noms de Music dans le projet
+    music_names:  list[str]  = None    # noms des modules du projet (musiques ET jingles)
+    jingle_names: list[str]  = None    # parmi eux, ceux qui vivent dans assets/jingles/
     scene_names:  list[str]  = None    # noms de scènes du projet
     # Codes des langues déclarées. Une liste vide interdit `lang.set` et `lang.get`.
     lang_codes:   list[str]  = None
@@ -1003,8 +1004,8 @@ class Checker:
                 "error",
                 f"Unknown function '{fn.name}': a top-level function is an event handler "
                 f"({', '.join(admitted[:5])}…), a sequence ({SEQUENCE_PREFIX}<name>), or an EventCall named by a frame of "
-                "this actor's sprite. For shared code, use a behavior — a file in "
-                "scripts/behaviors/, imported with require(\"behaviors/name\").",
+                "this actor's sprite. For shared code, use a behavior — a script whose first line is "
+                "`-- @behavior`, imported with require(\"behaviors/name\").",
             ))
         if seq is not None:
             self._check_sequence_waits(fn, seq)
@@ -1260,8 +1261,16 @@ class Checker:
             for v in e.items:
                 self._check_expr(v)
         elif isinstance(e, ExprName):
-            # Un nom nu doit être une variable connue ou un espace de noms.
-            self._check_bare_name(e.name, ecrit=False)
+            if self._is_bare_constructor(e):
+                self.errors.append(CheckError(
+                    "error",
+                    f"`{e.name}` is a constructor, not a value — write "
+                    f"{e.name}({', '.join(VEC_FIELDS[e.name])})."
+                    if e.name in VEC_CONSTRUCTORS else
+                    f"`{e.name}` is a function, not a value — write {e.name}(a, b)."))
+            else:
+                # Un nom nu doit être une variable connue ou un espace de noms.
+                self._check_bare_name(e.name, ecrit=False)
         elif isinstance(e, ExprIndex):
             # Les accès aux tables et à leurs colonnes sont résolus ici.
             table = self._data_table_ref(e)
@@ -1617,6 +1626,60 @@ class Checker:
                 return f"{func_expr.obj.name}.{func_expr.field}"   # ex: "sfx.play"
         return None
 
+    def _is_bare_constructor(self, e) -> bool:
+        """`vec2`, `rect`, `dot` écrits SANS parenthèses : ce sont des constructeurs et des
+        fonctions de langage, jamais des valeurs. Un `local` qui porterait ce nom les masque."""
+        return (isinstance(e, ExprName) and e.name not in self._local_names
+                and (e.name in VEC_CONSTRUCTORS or e.name in VEC_FUNCTIONS))
+
+    def _arg_kind(self, arg):
+        """Ce que `arg` EST, quand on peut l'affirmer : `(clé, libellé)`, ou None pour une
+        expression dont la valeur ne se lit pas dans le source (variable, appel, calcul).
+        Même règle que partout : on n'accuse que ce qui est écrit en clair."""
+        if isinstance(arg, ExprNumber):
+            return "number", "a number"
+        if isinstance(arg, ExprBool):
+            return "bool", "a boolean"
+        if isinstance(arg, ExprNil):
+            return "nil", "nil"
+        if isinstance(arg, ExprString):
+            return "string", "a string"
+        if isinstance(arg, ExprTable):
+            return "table", "a table"
+        if (isinstance(arg, ExprUnop) and arg.op == "not") or (
+                isinstance(arg, ExprBinop) and arg.op in _COMPARISON_OPS):
+            return "bool", "a boolean"
+        vec = infer_vec_type(arg, self._vec_types, self._ref_types, self._kinds)
+        if vec:
+            return vec, f"a {vec}"
+        if is_actor_call(arg):
+            return "actor", "an actor"
+        ref = infer_ref_type(arg, self._kinds, self._ref_types)
+        if ref:
+            return ref, f"a {ref} reference"
+        return None
+
+    def _check_arg_type(self, key: str, param, arg) -> bool:
+        """Le type de `arg` est celui que `param` attend. Rend True quand une erreur est posée.
+
+        Les valeurs composées (`vec2`…) sont jugées plus haut. Ici les autres types du
+        catalogue : l'argument est un nombre, un booléen, une chaîne ou un acteur, et le
+        message dit lequel, pour que la faute se lise sans ouvrir la doc."""
+        spec = _PARAM_TYPE_RULES.get(param.ptype)
+        kind = self._arg_kind(arg)
+        if spec is None or kind is None:
+            return False
+        expected, accepted = spec
+        if kind[0] in accepted:
+            return False
+        if param.ptype == "str" and param.domain is not None:
+            exemple = _domain_example(param.domain)
+            expected = f'a name written as a string ("{exemple}")' if exemple else expected
+        self.errors.append(CheckError(
+            "error",
+            f"{key}(): argument \"{param.name}\" expects {expected}, received {kind[1]}."))
+        return True
+
     def _check_args(self, key: str, api, args: list, receiver: str = "self"):
         """Vérifie le nombre d'arguments et les valeurs string si possible.
 
@@ -1641,15 +1704,19 @@ class Checker:
             return
 
         for i, (param, arg) in enumerate(zip(api.params, args)):
+            if self._is_bare_constructor(arg):
+                continue   # déjà refusé par `_check_expr` (« vec2 is a constructor… »)
             # Une énumération matérielle doit être écrite avec son nom, pas son ancien numéro.
             if param.ptype in VEC_CONSTRUCTORS:
                 vt = infer_vec_type(arg, self._vec_types, self._ref_types, self._kinds)
                 if vt != param.ptype:
+                    kind = self._arg_kind(arg)
                     self.errors.append(CheckError(
                         "error",
                         f"{key}(): argument \"{param.name}\" expects a {param.ptype}"
-                        + (f", received a {vt}." if vt else (" (a number or a variable of"
-                                                          " this type)."))))
+                        + (f", received {kind[1]}." if kind else (" (a literal"
+                                                               f" {param.ptype}(…) or a variable"
+                                                               " of this type)."))))
                 continue
 
             if isinstance(arg, ExprNumber) and param.domain in HARDWARE_ENUMS:
@@ -1669,6 +1736,9 @@ class Checker:
                     " is resolved against the sprite of the actor running this script"
                     " — the emitted C would cite the wrong resource. This call can "
                     "only be made on self."))
+                continue
+
+            if self._check_arg_type(key, param, arg):
                 continue
 
             if not isinstance(arg, ExprString):
@@ -1763,10 +1833,40 @@ class Checker:
             ))
 
     def _check_music(self, call_key: str, name: str):
-        if self.ctx.music_names is not None and name not in self.ctx.music_names:
+        """Une musique, pas un jingle : les deux sont des modules, mais maxmod les
+        joue sur deux couches, et un jingle lancé comme musique coupe la musique
+        en cours au lieu de passer par-dessus."""
+        if self.ctx.music_names is None:
+            return
+        if name in (self.ctx.jingle_names or ()):
+            self.errors.append(CheckError(
+                "warning",
+                f"{call_key}('{name}'): '{name}' is a jingle (assets/jingles/) — play it "
+                "with music.jingle, or move the file to assets/music/.",
+            ))
+        elif name not in self.ctx.music_names:
             self.errors.append(CheckError(
                 "warning",
                 f"{call_key}('{name}'): music '{name}' not found in the project.",
+            ))
+
+    def _check_jingle(self, call_key: str, name: str):
+        """Un jingle, pas une musique : seul le dossier assets/jingles/ lui donne
+        le rôle, et c'est lui qui garantit les 4 canaux que maxmod lui accorde."""
+        if self.ctx.music_names is None:
+            return
+        if name in (self.ctx.jingle_names or ()):
+            return
+        if name in self.ctx.music_names:
+            self.errors.append(CheckError(
+                "warning",
+                f"{call_key}('{name}'): '{name}' is a music (assets/music/), not a jingle — "
+                "move the file to assets/jingles/, or play it with music.play.",
+            ))
+        else:
+            self.errors.append(CheckError(
+                "warning",
+                f"{call_key}('{name}'): jingle '{name}' not found in the project.",
             ))
 
     def _check_text(self, call_key: str, key: str, literal_ok: bool = False):
@@ -2288,6 +2388,7 @@ _DOMAIN_CHECKS: dict = {
     DOMAIN_SPRITE_ID: lambda c, key, val, p, a: c._check_sprite_id(key, val),
     DOMAIN_SFX:     lambda c, key, val, p, a: c._check_sfx(key, val),
     DOMAIN_MUSIC:   lambda c, key, val, p, a: c._check_music(key, val),
+    DOMAIN_JINGLE:  lambda c, key, val, p, a: c._check_jingle(key, val),
     DOMAIN_KEY:     lambda c, key, val, p, a: c._check_key(key, val),
     DOMAIN_AXIS:    lambda c, key, val, p, a: c._check_axis(key, val),
     DOMAIN_INPUT_SEQUENCE: lambda c, key, val, p, a: c._check_sequence_name(key, val),
@@ -2348,6 +2449,20 @@ def _prop_label(receiver: str, p) -> str:
     reprendrait la clé telle quelle citerait à l'auteur une ligne qu'il n'a pas
     écrite."""
     return f"{receiver}.{p.lua_name.split('.', 1)[1]}"
+
+
+_COMPARISON_OPS = frozenset({"==", "~=", "<", "<=", ">", ">="})
+
+# Type de paramètre du catalogue → (ce qui s'écrit dans le message, clés de `_arg_kind`
+# acceptées). Les vecteurs n'y figurent pas : `_check_args` les juge avec `infer_vec_type`.
+# Une référence de boîte ou un appel `actor:get` valent un acteur (`hb:overlaps(other)`).
+_PARAM_TYPE_RULES: dict = {
+    "int":         ("a number", {"number"}),
+    "bool":        ("a boolean (true or false)", {"bool"}),
+    "str":         ("a string", {"string"}),
+    "str_literal": ("a string", {"string"}),
+    "actor":       ("an actor (or a collision box)", {"actor", REF_COLLISION_BOX}),
+}
 
 
 def _domain_example(domain: Optional[str]) -> Optional[str]:

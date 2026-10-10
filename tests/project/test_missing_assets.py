@@ -10,6 +10,7 @@ import wave
 
 from PIL import Image
 
+from asset_fixtures import create_all
 from core.models.components import SpriteComponent
 from core.models.scene import Actor
 from core.project import Project
@@ -30,6 +31,7 @@ def _projet(tmp_path) -> Project:
         w.writeframes(bytes(800))
     p = Project.open(root)
     p.load_all_resources()
+    create_all(p, ("sprites", p.sprites_dir / "hero.png"), ("sfx", p.sfx_dir / "boom.wav"))
     hero = Actor(name="Hero")
     hero.components.append(SpriteComponent(sprite_name="hero"))
     p.scenes[0].actors.append(hero)
@@ -71,7 +73,7 @@ def test_sidecar_de_sprite_illisible_bloque_le_build_et_reste_intact(tmp_path):
 
     _, _, errors = _rouvrir_et_valider(p.root)
 
-    assert any("hero.json" in e and "unreadable" in e for e in errors)
+    assert any("hero.sprite" in e and "unreadable" in e for e in errors)
     assert sidecar.read_text(encoding="utf-8") == BROKEN
 
 
@@ -83,7 +85,7 @@ def test_sidecar_audio_illisible_est_vu_malgre_le_chargement_differe(tmp_path):
     assert reopened.unreadable_files() == []         # différé : pas encore lu
     _, errors = validate_project(reopened)
 
-    assert any("boom.json" in str(e) and "unreadable" in str(e) for e in errors)
+    assert any("boom.sfx" in str(e) and "unreadable" in str(e) for e in errors)
 
 
 def test_sidecar_de_palette_abime_garde_la_palette_et_une_copie(tmp_path):
@@ -96,7 +98,7 @@ def test_sidecar_de_palette_abime_garde_la_palette_et_une_copie(tmp_path):
 
     assert reopened.palettes.get(name) is not None            # le .hex fait foi
     assert sidecar.with_name(sidecar.name + ".corrupt").read_text(encoding="utf-8") == BROKEN
-    assert any(f"{name}.json" in w and ".corrupt" in w for w in warnings)
+    assert any(f"{name}.palette" in w and ".corrupt" in w for w in warnings)
 
 
 def test_hex_de_palette_illisible_est_signale_sans_etre_modifie(tmp_path):

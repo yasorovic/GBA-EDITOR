@@ -3,7 +3,7 @@ Backstage — gestion de projet
 
 Structure de projet :
 
-  assets/              ← géré par l'utilisateur
+  assets/              ← TOUT ce que l'auteur manipule, qu'il organise lui-même
     sprites/           ← PNG + JSON sidecar (auto-créé au dépôt)
     backgrounds/       ← PNG + JSON sidecar
     sounds/            ← WAV, MOD
@@ -15,10 +15,12 @@ Structure de projet :
       scenes/
       cameras/
       behaviors/
-
-  project/             ← géré exclusivement par l'éditeur
     scenes/            ← une scène par JSON (actors ET caméras inline)
     prefab/            ← templates d'actors (jamais compilés directement)
+    ui_layouts/, music_boxes/, jingle_boxes/, sound_boxes/, data/, fonts_assets/
+    texts.json, texts_<langue>.json, variables.json   ← à la racine
+
+  project/             ← ce qui n'est PAS à l'auteur : editor/ (état interne), licences, README
 
   <Nom>.project    ← manifeste : settings globaux (scène de démarrage,
                          auteur…) ET point d'entrée double-clic. Le nom du
@@ -67,8 +69,8 @@ from typing import Optional
 
 from core.events import EventEmitter
 from core.models import project_json
+from core.models.unique_name import unique_name
 from core.resources import asset_reconciliation
-from core.reconcile_manifest import ReconcileManifest
 from core.resources.resource_store import ResourceStore, atomic_write
 from core.resources.palette_store import PaletteStore
 from core.resources.deleted_files import DeletedFilesBin
@@ -99,7 +101,7 @@ from core.models.palette import PaletteBank, OWN_PAL_BANK, DEFAULT_UI_PALETTE
 from core.models.sprite import SpriteAsset
 from core.models.components import sprite_components
 from core.models.background import BackgroundAsset
-from core.models.audio import Sfx, Music
+from core.models.audio import Sfx, Music, Jingle
 from core.models.font import Font
 from core.models.font_asset import FontAsset
 from core.models.ui_region import UILayout
@@ -185,32 +187,32 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         self.events = EventEmitter()
         self.rename_scope = nullcontext
 
-        self.backgrounds: ResourceStore[BackgroundAsset] = ResourceStore(self.backgrounds_dir, BackgroundAsset)
-        self.sprites:     ResourceStore[SpriteAsset]     = ResourceStore(self.sprites_dir, SpriteAsset)
-        self.prefabs:     ResourceStore[Prefab]      = ResourceStore(self.prefab_dir, Prefab)
+        self.backgrounds: ResourceStore[BackgroundAsset] = ResourceStore(self.backgrounds_dir, BackgroundAsset, self.assets_dir)
+        self.sprites:     ResourceStore[SpriteAsset]     = ResourceStore(self.sprites_dir, SpriteAsset, self.assets_dir)
+        self.prefabs:     ResourceStore[Prefab]      = ResourceStore(self.prefab_dir, Prefab, self.assets_dir)
         # Avertissements du dernier load() — rempli par la réconciliation
         # des assets. Toujours présent : un projet fraîchement créé n'a pas
         # encore chargé, et l'appelant ne doit pas avoir à le vérifier.
         self.load_warnings: list[str] = []
-        self.scenes:      ResourceStore[Scene]       = ResourceStore(self.scenes_dir, Scene)
-        self.sfx:         ResourceStore[Sfx]         = ResourceStore(self.sfx_dir, Sfx)
-        self.music:       ResourceStore[Music]       = ResourceStore(self.music_dir, Music)
-        self.fonts:       ResourceStore[Font]        = ResourceStore(self.fonts_dir, Font)
-        self.font_assets: ResourceStore[FontAsset]   = ResourceStore(self.font_assets_dir, FontAsset)
-        self.palettes: PaletteStore = PaletteStore(self.palettes_dir)
-        self.ui_layouts: ResourceStore[UILayout] = ResourceStore(self.ui_layouts_dir, UILayout)
+        self.scenes:      ResourceStore[Scene]       = ResourceStore(self.scenes_dir, Scene, self.assets_dir)
+        self.sfx:         ResourceStore[Sfx]         = ResourceStore(self.sfx_dir, Sfx, self.assets_dir)
+        self.music:       ResourceStore[Music]       = ResourceStore(self.music_dir, Music, self.assets_dir)
+        # Les jingles sont des modules comme les musiques ; c'est leur DOSSIER qui
+        # dit le rôle (cf. core.models.audio.Jingle).
+        self.jingles:     ResourceStore[Jingle]      = ResourceStore(self.jingles_dir, Jingle, self.assets_dir)
+        self.fonts:       ResourceStore[Font]        = ResourceStore(self.fonts_dir, Font, self.assets_dir)
+        self.font_assets: ResourceStore[FontAsset]   = ResourceStore(self.font_assets_dir, FontAsset, self.assets_dir)
+        self.palettes: PaletteStore = PaletteStore(self.palettes_dir, self.assets_dir, self.root)
+        self.ui_layouts: ResourceStore[UILayout] = ResourceStore(self.ui_layouts_dir, UILayout, self.assets_dir)
         # Pas de ResourceStore pour Camera : une caméra appartient à sa scène
         # (Scene.cameras), elle se charge/sauve avec elle (cf. camera_names()
         # ci-dessous pour la vue à plat sur tout le projet).
         # Trois registres et non un : les trois couches du matériel ne se
         # coordonnent pas, et un appel Lua nomme la boîte à qui il parle.
-        self.music_boxes: ResourceStore[MusicBox] = ResourceStore(
-            self.music_boxes_dir, MusicBox)
-        self.jingle_boxes: ResourceStore[JingleBox] = ResourceStore(
-            self.jingle_boxes_dir, JingleBox)
-        self.sound_boxes: ResourceStore[SoundBox] = ResourceStore(
-            self.sound_boxes_dir, SoundBox)
-        self.data_tables: ResourceStore[DataTable] = ResourceStore(self.data_tables_dir, DataTable)
+        self.music_boxes: ResourceStore[MusicBox] = ResourceStore(self.music_boxes_dir, MusicBox, self.assets_dir)
+        self.jingle_boxes: ResourceStore[JingleBox] = ResourceStore(self.jingle_boxes_dir, JingleBox, self.assets_dir)
+        self.sound_boxes: ResourceStore[SoundBox] = ResourceStore(self.sound_boxes_dir, SoundBox, self.assets_dir)
+        self.data_tables: ResourceStore[DataTable] = ResourceStore(self.data_tables_dir, DataTable, self.assets_dir)
         # Ces familles sont nombreuses et une scène ne cite qu'une petite
         # partie d'entre elles. ``load`` les indexe ; leur écran ou une
         # opération globale les matérialise explicitement (v0.24).
@@ -218,23 +220,11 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         # Ce que l'auteur supprime part dans `<projet>/.temp/` et revient avec
         # Ctrl+Z ; la fermeture le vide (cf. core/resources/deleted_files).
         self.deleted_files = DeletedFilesBin(self.root)
-        for store, source_paths in (
-            (self.sprites,     asset_reconciliation.sprite_source_paths),
-            (self.backgrounds, asset_reconciliation.background_source_paths),
-            (self.sfx,         asset_reconciliation.sound_source_paths),
-            (self.music,       asset_reconciliation.sound_source_paths),
-            (self.fonts,       asset_reconciliation.font_source_paths),
-        ):
-            store.attach_bin(self.deleted_files,
-                             lambda item, fn=source_paths: fn(self, item))
-        for store in (self.prefabs, self.scenes, self.font_assets, self.palettes,
+        for store in (self.sprites, self.backgrounds, self.sfx, self.music, self.jingles, self.fonts,
+                      self.palettes, self.prefabs, self.scenes, self.font_assets,
                       self.ui_layouts, self.music_boxes, self.jingle_boxes,
                       self.sound_boxes, self.data_tables):
             store.attach_bin(self.deleted_files)
-        # La porte de la réconciliation incrémentale : l'empreinte des dossiers
-        # source au dernier rattrapage. Sidecar d'éditeur, jamais livré en ROM
-        # (cf. core/reconcile_manifest.py).
-        self.reconcile_manifest = ReconcileManifest(self.root)
 
         # Variables globales déclarées explicitement dans le projet
         self.globals:     list[GlobalVar] = []
@@ -269,6 +259,36 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
 
     # ── Résolution des assets ─────────────────────────────────────
 
+    def source_families(self) -> tuple:
+        """`(famille, store, fichiers_sources)` de chaque famille adossée à des fichiers
+        de `assets/` : `fichiers_sources(projet, item)` donne les fichiers qu'un item
+        cite. La corbeille, la suppression à la fermeture et l'arbre Disk lisent
+        la MÊME table — une famille ajoutée ici l'est partout."""
+        return (
+            ("sprites",     self.sprites,     asset_reconciliation.sprite_source_paths),
+            ("backgrounds", self.backgrounds, asset_reconciliation.background_source_paths),
+            ("sfx",         self.sfx,         asset_reconciliation.sound_source_paths),
+            ("music",       self.music,       asset_reconciliation.sound_source_paths),
+            ("jingles",     self.jingles,     asset_reconciliation.sound_source_paths),
+            ("fonts",       self.fonts,       asset_reconciliation.font_source_paths),
+            ("palettes",    self.palettes,    asset_reconciliation.palette_source_paths),
+        )
+
+    def authored_families(self) -> tuple:
+        """`(famille, store)` de chaque famille d'assets SANS fichier source : l'auteur les crée dans
+        l'éditeur (une scène, un prefab, une boîte sonore…) et chacune vit dans son dossier de
+        `assets/`. Pendant de `source_families`, pour ce qui n'a rien à relier."""
+        return (
+            ("scenes",       self.scenes),
+            ("prefabs",      self.prefabs),
+            ("ui_layouts",   self.ui_layouts),
+            ("music_boxes",  self.music_boxes),
+            ("jingle_boxes", self.jingle_boxes),
+            ("sound_boxes",  self.sound_boxes),
+            ("data_tables",  self.data_tables),
+            ("font_assets",  self.font_assets),
+        )
+
     def asset_abs(self, rel: Optional[str]) -> Optional[Path]:
         if not rel:
             return None
@@ -280,6 +300,13 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
             return str(abs_path.relative_to(self.root)).replace("\\", "/")
         except ValueError:
             return f"assets/{abs_path.name}"
+
+    def background_image_path(self, background, name: str = "") -> Path:
+        """Le fichier image d'un fond : celui que son asset cite (un chemin relatif au projet), sinon
+        `<name>.png` dans assets/backgrounds pour un fond inconnu ou sans image."""
+        if background is not None and background.asset:
+            return self.asset_abs(background.asset)
+        return self.background_images_dir / f"{name}.png"
 
     def import_asset(self, src: Path, subdir: str = "") -> Path:
         """
@@ -305,28 +332,9 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
     def commit_all_removals(self):
         """Rend définitives les suppressions différées (appeler à la fermeture).
 
-        Pour les familles adossées à un fichier source, on efface AUSSI ce
-        fichier, pas seulement le sidecar JSON : sinon `reconcile_*` retrouverait
-        le PNG / `.fnt` / module au prochain lancement et recréerait la ressource
-        (cf. asset_reconciliation). C'est ce qui manquait pour qu'une suppression depuis
-        le finder tienne au rechargement, et non un défaut du soft_delete lui-même.
-
-        La source n'est touchée qu'ICI, à la fermeture — pendant la session elle
-        reste en place, et le Ctrl+Z (restore) suffit à ramener la ressource."""
-        for store, source_paths in (
-            (self.sprites,     asset_reconciliation.sprite_source_paths),
-            (self.backgrounds, asset_reconciliation.background_source_paths),
-            (self.sfx,         asset_reconciliation.sound_source_paths),
-            (self.music,       asset_reconciliation.sound_source_paths),
-            (self.fonts,       asset_reconciliation.font_source_paths),
-        ):
-            for item in store.pending_deletes():
-                for path in source_paths(self, item):
-                    try:
-                        Path(path).unlink(missing_ok=True)
-                    except OSError:
-                        pass   # fichier verrouillé (indexeur, AV) : le reste passe
-        for mgr in (self.sprites, self.backgrounds, self.sfx, self.music,
+        Seul le fichier de l'asset part. Sa SOURCE (un PNG, un son, une police…) reste sur le disque :
+        l'asset la pointait, il ne la possédait pas, et elle redevient une source libre."""
+        for mgr in (self.sprites, self.backgrounds, self.sfx, self.music, self.jingles,
                     self.fonts, self.font_assets, self.scenes, self.prefabs, self.ui_layouts,
                     self.palettes, self.music_boxes,
                     self.jingle_boxes, self.sound_boxes):
@@ -374,13 +382,13 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         self._deferred_resource_collections.discard("backgrounds")
 
     def load_audio(self) -> None:
-        """Matérialise effets et musiques, avec le rattrapage des sources."""
-        pending = {"sfx", "music"} & self._deferred_resource_collections
+        """Matérialise effets, musiques et jingles."""
+        pending = {"sfx", "music", "jingles"} & self._deferred_resource_collections
         if not pending:
             return
         self.sfx.load()
         self.music.load()
-        asset_reconciliation.reconcile_sfx_and_music(self)
+        self.jingles.load()
         self._deferred_resource_collections.difference_update(pending)
 
     def load_all_resources(self) -> None:
@@ -526,12 +534,9 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         `scene.cameras`, visible et éditable dans l'arbre et le canvas dès la
         création. Le nom est unique à l'échelle du projet (cf. `camera_names`)."""
         taken = self.camera_names()
-        name, n = "Camera", 2
-        while name in taken:
-            name, n = f"Camera {n}", n + 1
-        cam = Camera(name=name)
+        cam = Camera(name=unique_name("Camera", taken))
         scene.cameras.append(cam)
-        scene.camera = name
+        scene.camera = cam.name
         return cam
 
     def ui_backgrounds(self, role: str = "") -> list[BackgroundAsset]:
@@ -680,6 +685,13 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         savoir que deux éléments homonymes de types différents sont légaux —
         il les verrait côte à côte dans l'arbre sans pouvoir les distinguer."""
         return [e.name for _lay, e in self.all_elements()]
+
+    def audio_modules(self) -> list:
+        """Tous les modules que la ROM peut embarquer : musiques PUIS jingles.
+
+        Pour qui ne s'intéresse qu'au fichier (poids, canaux, présence sur le
+        disque, nom pris). Qui a besoin du RÔLE demande `music` ou `jingles`."""
+        return [*self.music, *self.jingles]
 
     def _action_boxes(self, kind: str):
         """Le registre d'actions d'une famille, trié par nom."""
@@ -1118,6 +1130,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
     def save_background(self, bg: BackgroundAsset):       self.backgrounds.save(bg)
     def save_sfx(self, sfx: Sfx):                         self.sfx.save(sfx)
     def save_music(self, music: Music):                   self.music.save(music)
+    def save_jingle(self, jingle: Jingle):                self.jingles.save(jingle)
     def save_font_asset(self, font_asset: FontAsset):     self.font_assets.save(font_asset)
 
     # ── Sauvegarde / chargement global ────────────────────────────
@@ -1129,6 +1142,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         self.sprites.save_all()
         self.sfx.save_all()
         self.music.save_all()
+        self.jingles.save_all()
         self.fonts.save_all()
         self.font_assets.save_all()
         self.ui_layouts.save_all()
@@ -1162,15 +1176,15 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
 
     def load(self):
         # S'assurer que tous les sous-dossiers existent
-        for sub in ("project/scenes", "project/prefab",
-                    "project/fonts_assets", "project/ui_layouts",
-                    "project/music_boxes",
-                    "project/jingle_boxes",
-                    "project/sound_boxes",
+        for sub in ("assets/scenes", "assets/prefab",
+                    "assets/fonts_assets", "assets/ui_layouts",
+                    "assets/music_boxes",
+                    "assets/jingle_boxes",
+                    "assets/sound_boxes",
                     "assets/palettes",
                     "assets/sprites", "assets/backgrounds",
                     "assets/scripts", "assets/scripts/behaviors",
-                    "assets/sfx", "assets/music", "assets/fonts"):
+                    "assets/sfx", "assets/music", "assets/jingles", "assets/fonts"):
             (self.root / sub).mkdir(parents=True, exist_ok=True)
 
         # Chaque registre est suivi de son rattrapage (cf. asset_reconciliation,
@@ -1196,17 +1210,15 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         # Les trois catalogues lourds ne lisent ici que leurs noms et chemins.
         # Leur contenu et le rattrapage des sources sont demandés par l'écran
         # concerné, ou par ``load_all_resources`` avant une opération globale.
-        self._deferred_resource_collections = {"sprites", "backgrounds", "sfx", "music"}
+        self._deferred_resource_collections = {"sprites", "backgrounds", "sfx", "music", "jingles"}
         self.sprites.scan_index()
         self.backgrounds.scan_index()
         self.sfx.scan_index()
         self.music.scan_index()
+        self.jingles.scan_index()
         self.fonts.load()
         self.font_assets.load()
-        # Ce que la réconciliation n'a PAS pu importer. Gardé sur le projet
-        # plutôt que jeté : sans ça, une police refusée à l'import laisse un
-        # panneau vide et aucune explication (cf. reconcile_fonts).
-        self.load_warnings = list(asset_reconciliation.reconcile_fonts(self) or [])
+        self.load_warnings = []
         asset_reconciliation.reconcile_font_assets(self)
         # Avant les scènes : une scène référence sa mise en page et ses prefabs
         # par nom, et doit les trouver déjà chargés.
@@ -1224,7 +1236,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
 
     def _resource_stores(self) -> tuple:
         return (self.scenes, self.prefabs, self.sprites, self.backgrounds,
-                self.sfx, self.music, self.fonts, self.font_assets,
+                self.sfx, self.music, self.jingles, self.fonts, self.font_assets,
                 self.palettes, self.ui_layouts, self.music_boxes,
                 self.jingle_boxes, self.sound_boxes, self.data_tables)
 
@@ -1235,6 +1247,12 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         n'ont pas su lire n'existe pour le build ni pour l'écran."""
         return [(name, reason) for store in self._resource_stores()
                 for name, reason in store.unreadable.items()]
+
+    def ignored_duplicate_files(self) -> list[tuple[str, str]]:
+        """(fichier, raison) pour chaque sidecar ignoré parce qu'un homonyme, moins profond, l'emporte.
+        Lu en direct, comme `unreadable_files` : l'inventaire des familles différées est déjà fait."""
+        return [(name, reason) for store in self._resource_stores()
+                for name, reason in store.ignored_duplicates().items()]
 
     def preserved_files(self) -> list[tuple[str, str]]:
         """(fichier, copie) : fichiers illisibles qu'une écriture a remplacés,
@@ -1249,7 +1267,9 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
                  for name, reason in self.unreadable_files()]
                 + [f"\"{name}\" was unreadable and was replaced; the original is kept in "
                    f"\"{backup}\""
-                   for name, backup in self.preserved_files()])
+                   for name, backup in self.preserved_files()]
+                + [f"\"{name}\" was ignored: {reason}"
+                   for name, reason in self.ignored_duplicate_files()])
 
     # ── Création / ouverture ──────────────────────────────────────
 
@@ -1264,11 +1284,11 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
             "assets/sfx",
             "assets/music",
             "assets/fonts",
-            "project/fonts_assets",
+            "assets/fonts_assets",
             "assets/scripts",
             "assets/scripts/behaviors",
-            "project/scenes",
-            "project/prefab",
+            "assets/scenes",
+            "assets/prefab",
         ):
             (root / sub).mkdir(parents=True, exist_ok=True)
 
@@ -1285,7 +1305,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         proj.palettes.load()
         proj.fonts.load()
         proj.font_assets.load()
-        proj.load_warnings = list(asset_reconciliation.reconcile_fonts(proj) or [])
+        proj.load_warnings = []
         asset_reconciliation.reconcile_font_assets(proj)
 
         # Créer une scène de démarrage par défaut

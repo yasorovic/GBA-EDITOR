@@ -21,6 +21,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from ui.common.theme import C, T, QSS
+from ui.common.three_column_body import ThreeColumnBody
 from core.project import Project
 
 from ui.common.asset_finder import AssetFinder
@@ -50,10 +51,6 @@ class PaletteEditorScreen(QWidget):
 
         # Pas de bandeau-titre d'écran : la nav du haut indique déjà où on est
         # (décision refonte thème 2026-08).
-        split = QSplitter(Qt.Orientation.Horizontal)
-        split.setStyleSheet(QSS.splitter)
-        root.addWidget(split, 1)
-
         self._finder    = AssetFinder(label('palscr.palette_finder'), [PALETTES],
                                       min_width=200, max_width=360)
         self._grid      = PaletteGridPanel()
@@ -77,15 +74,11 @@ class PaletteEditorScreen(QWidget):
         right.setStretchFactor(1, 0)
         right.setSizes([520, 180])
 
-        split.addWidget(self._finder)
-        split.addWidget(self._grid)
-        split.addWidget(right)
-        split.setSizes([240, 620, 320])
-        split.setStretchFactor(0, 0)
-        split.setStretchFactor(1, 1)    # la grille absorbe le redimensionnement
-        split.setStretchFactor(2, 0)
-        split.setCollapsible(1, False)
-        split.setCollapsible(2, False)
+        self.body = ThreeColumnBody(self._finder, self._grid, right,
+                                    sizes=(240, 620, 320))
+        self.body.setCollapsible(1, False)
+        self.body.setCollapsible(2, False)
+        root.addWidget(self.body, 1)
 
         # Finder → grille + carte : la banque sélectionnée devient la banque
         # affichée (et celle dont on liste les usages).
@@ -115,6 +108,10 @@ class PaletteEditorScreen(QWidget):
         bank = self._project.palettes.get(name or "") if self._project else None
         if bank is not None:
             self._finder.select(PALETTES.label, bank)
+
+    def select_palette(self, name: str):
+        """Ouvre la palette `name` — navigation entrante depuis un autre écran (onglet Disk)."""
+        self._select_bank(name)
 
     def _on_bank_selected(self, name: str):
         self._grid.show_bank(name)

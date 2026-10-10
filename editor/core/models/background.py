@@ -11,6 +11,7 @@ from core.models.palette import OWN_PAL_BANK
 from core.models.sub_palette import SubPaletteAssetMixin, decode_palette_overrides
 from core.models.gba_color import write_palettes, read_palettes
 from core.models.project_json import write_grid, read_grid
+from core.models import asset_extensions
 
 
 # ── Types de fond ─────────────────────────────────────────────────
@@ -283,12 +284,13 @@ class BackgroundAnimation:
 
 @dataclass
 class BackgroundAsset(SubPaletteAssetMixin, Resource):
-    """Sidecar d'import d'UNE image de fond — assets/backgrounds/{stem}.json, à côté
-    du PNG et keyé par son nom (comme SpriteAsset). Le PNG source n'est jamais modifié.
+    """Asset d'UNE image de fond — `<nom>.background`, rangé où l'auteur veut sous assets/ ; il POINTE
+    son PNG par un chemin relatif au projet (comme SpriteAsset). Le PNG source n'est jamais modifié.
     C'est la SCÈNE qui possède ses layers (Scene.background_layers) et référence
     ce fond par nom — plus de composition multi-layer réutilisable ici."""
-    name:   str  = "background"                     # = stem du PNG source
-    asset:   str  = ""                              # PNG dans assets/backgrounds/ (convention .asset, cf. SpriteAsset)
+    sidecar_extension = asset_extensions.BACKGROUND
+    name:   str  = "background"
+    asset:   str  = ""                              # chemin du PNG relatif au projet (cf. SpriteAsset)
     palettes: list = field(default_factory=list)    # list[list[int]] BGR555 (≤16×≤16)
     tileset:  list = field(default_factory=list)    # list[str] (64 nibbles hex/tuile)
     tilemap:  list = field(default_factory=list)    # list[int] (screen entries GBA)
@@ -379,9 +381,6 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
     # N'a de sens que sur un hôte ; un animé peut en porter (une planche reste
     # une image), mais rien dans l'éditeur ne le propose.
     animations: list = field(default_factory=list)   # list[BackgroundAnimation]
-
-    def image_name(self) -> str:
-        return self.asset
 
     def import_prep(self) -> dict:
         """La préparation de la source, sous la forme que prend `bg_import` —

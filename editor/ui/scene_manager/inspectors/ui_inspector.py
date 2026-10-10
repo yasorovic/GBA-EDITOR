@@ -38,7 +38,6 @@ from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPen, QColor
 from PyQt6.QtCore import pyqtSignal, QTimer, Qt
 
 from core.project import Project
-from core.text_markup import display_text
 from core.models.gba_color import bgr555_to_rgb888
 from core.models.ui_region import (
     ANCHOR_ACTOR, ALIGNS, TARGET_BG, TARGET_OBJ, PRIORITY_INHERIT,
@@ -52,7 +51,7 @@ from core.models.ui_region import (
 from ui.common import icons
 from ui.common.theme import C, T, QSS
 from ui.common.responsive import InspectorScrollArea
-from ui.common.widgets import W, CollapsibleCard
+from ui.common.widgets import W, CollapsibleCard, ScriptSlot, ScriptPickerPopup
 from ui.common.notice import note, notice, text
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
@@ -133,6 +132,7 @@ def _preset_icon(hpos: str, vpos: str, sh: bool, sv: bool) -> QIcon:
 
 class UIInspector(QWidget):
     changed = pyqtSignal()
+    text_editor_requested = pyqtSignal()
     # Le nom a changé sous nos pieds (collision d'unicité résolue par le
     # modèle) : l'en-tête, qui l'affiche, doit se remettre d'accord. Émis par
     # `rename` — la seule porte d'entrée du renommage, cf. la docstring.
@@ -251,77 +251,11 @@ class UIInspector(QWidget):
         # ── Section TEXTE (zone runtime ET texte authoré) ─────────
         self._text_card = CollapsibleCard(label("common.text"))
 
-        # Contenu ÉDITABLE SUR PLACE d'un texte authoré, pour ne pas avoir à
-        # créer l'entrée dans l'écran Texte puis revenir la choisir ici.
-        #
-        # Le contenu n'est PAS stocké dans l'élément : ce widget édite l'entrée
-        # de la table pointée par `text_key` (créée à la volée à la première
-        # frappe). Le dupliquer ici le sortirait de l'édition centralisée, donc
-        # de la traduction et de l'interpolation `$nom`.
-        self._content = QTextEdit()
-        self._content.setFont(QFont(T.MONO, T.MD))
-        self._content.setStyleSheet(
-            f"QTextEdit{{background:{C.BG_INPUT}; color:{C.TEXT_NORM};"
-            f"border:1px solid {C.BORDER_MID}; border-radius:3px; padding:4px;}}")
-        self._content.setFixedHeight(72)
-        self._content.setPlaceholderText(label("uiinsp.text.content_placeholder"))
-        self._content.setToolTip(tooltip(
-            title=label("uiinsp.text.content_title"), body=label("uiinsp.text.content_tip"), note=label("uiinsp.text.content_note")))
-        # Même coloration que l'atelier Texte, sinon on tape les balises à
-        # l'aveugle ici.
-        from ui.text_editor.markup_highlighter import MarkupHighlighter
-        self._hl = MarkupHighlighter(self._content.document())
-        W.section(label("uiinsp.text.content_section"), self._text_card.body_layout)
-
-        # L'entrée AVANT le champ de saisie : c'est elle qui nomme ce que ce
-        # champ édite. Sous le champ, comme avant, on lisait le nom de la chose
-        # après l'avoir modifiée.
-        self._text_key = QComboBox()
-        self._text_key.setFont(QFont(T.UI, T.SM))
-        self._text_key.setStyleSheet(QSS.combobox)
-        self._text_key.setToolTip(tooltip(
-            title=label("uiinsp.text.entry_title"), body=label("uiinsp.text.entry_tip")))
-        self._text_key.currentIndexChanged.connect(self._on_text_key)
-        self._text_key_row = W.row(label("uiinsp.text.entry"), self._text_key,
-                                   self._text_card.body_layout).parentWidget()
-
-        self._content.textChanged.connect(self._on_content_typed)
-        self._content.focusOutEvent = self._content_focus_out
-        # Commit DIFFÉRÉ : `_persist` sauve le projet et redessine le canvas, ce
-        # qui à chaque frappe ferait onze sauvegardes pour « PRESS START ».
-        self._commit_timer = QTimer(self)
-        self._commit_timer.setSingleShot(True)
-        self._commit_timer.setInterval(600)
-        self._commit_timer.timeout.connect(self._commit_content)
-        self._content_baseline = None   # None = rien en cours d'édition
-        self._text_card.body_layout.addWidget(self._content)
-
-        self._key_lbl = note(self._text_card.body_layout)
-        self._key_shared = note(self._text_card.body_layout, "ui.text.key_shared")
-
-        # L'ÉCHANTILLON ne sert qu'à une zone SANS entrée — c'est écrit dans son
-        # propre tooltip depuis toujours : « editor only, never compiled ». Il
-        # ne s'affiche donc que dans ce cas (cf. `_sync_text_rows`). Les deux
-        # combos étaient jusqu'ici côte à côte, avec la même allure et la même
-        # liste, alors qu'un seul des deux compte à la fois : c'était la
-        # première chose incompréhensible de cette carte.
-        self._preview = QComboBox()
-        self._preview.setFont(QFont(T.UI, T.MD))
-        self._preview.setStyleSheet(QSS.combobox)
-        self._preview.setToolTip(tooltip(
-            title=label("uiinsp.text.sample_title"), body=label("uiinsp.text.sample_tip")))
-        self._preview.currentIndexChanged.connect(self._on_preview)
-        self._preview_row = W.row(label("uiinsp.text.sample"), self._preview,
-                                  self._text_card.body_layout).parentWidget()
-        self._preview_why = note(self._text_card.body_layout, "ui.text.sample_only")
-
-        W.section(label("uiinsp.text.typography"), self._text_card.body_layout)
-
         from ui.common.font_asset_selector import FontAssetSelector
         self._font = FontAssetSelector()
         self._font.changed.connect(self._on_font)
-        self._font_row = W.row(label("uiinsp.text.font"), self._font,
-                               self._text_card.body_layout).parentWidget()
+        self._font_row = self._font
+        self._text_card.body_layout.addWidget(self._font)
 
         # Trois boutons plutôt qu'un menu déroulant : le choix est court, fermé,
         # et se DESSINE — l'icône dit le résultat mieux que le mot « Centered ».
@@ -341,8 +275,46 @@ class UIInspector(QWidget):
             ab.addWidget(b, 1)
             self._align_group.addButton(b, i)
         self._align_group.idToggled.connect(self._on_align_toggled)
-        self._align_row = W.row(label("uiinsp.text.alignment"), align_box,
-                                self._text_card.body_layout).parentWidget()
+        self._align_row = align_box
+        self._text_card.body_layout.addWidget(align_box)
+
+        # Le texte libre est la représentation de `text:draw`. Créer une
+        # entrée est un choix EXPLICITE : le bouton mène à l'écran Texte ; le
+        # menu voisin sert uniquement à retrouver une clé existante.
+        self._text_key = ScriptSlot(
+            add_label=label("uiinsp.text.create_entry"), accent_color=TEXT_ACCENT,
+            show_clear=True)
+        self._text_key.setToolTip(tooltip(
+            title=label("uiinsp.text.create_entry_title"),
+            body=label("uiinsp.text.create_entry_tip")))
+        self._text_key.set_callbacks(
+            on_add=self._open_text_picker,
+            on_open=self._open_text_picker,
+            on_clear=self._clear_text_link,
+        )
+        self._text_key_row = self._text_key
+
+        self._content = QTextEdit()
+        self._content.setFont(QFont(T.MONO, T.MD))
+        self._content.setStyleSheet(
+            f"QTextEdit{{background:{C.BG_INPUT}; color:{C.TEXT_NORM};"
+            f"border:1px solid {C.BORDER_MID}; border-radius:3px; padding:4px;}}")
+        self._content.setFixedHeight(72)
+        self._content.setPlaceholderText(label("uiinsp.text.content_placeholder"))
+        self._content.setToolTip(tooltip(
+            title=label("uiinsp.text.content_title"), body=label("uiinsp.text.content_tip"), note=label("uiinsp.text.content_note")))
+        from ui.text_editor.markup_highlighter import MarkupHighlighter
+        self._hl = MarkupHighlighter(self._content.document())
+        self._content.textChanged.connect(self._on_content_typed)
+        self._content.focusOutEvent = self._content_focus_out
+        self._commit_timer = QTimer(self)
+        self._commit_timer.setSingleShot(True)
+        self._commit_timer.setInterval(600)
+        self._commit_timer.timeout.connect(self._commit_content)
+        self._content_baseline = None
+        self._text_card.body_layout.addWidget(self._content)
+        self._key_lbl = note(self._text_card.body_layout)
+        self._key_shared = note(self._text_card.body_layout, "ui.text.key_shared")
 
         # Couleur du texte : un INDEX dans la banque d'UI de la scène, pas un
         # RGB — le matériel n'offre que des index. 0 = encre d'origine (seul
@@ -408,6 +380,9 @@ class UIInspector(QWidget):
         W.section(label("uiinsp.text.costs"), self._text_card.body_layout)
         self._size_lbl = note(self._text_card.body_layout)
         self._anim_lbl = note(self._text_card.body_layout)
+        # L'action qui sort de ce contexte vit au pied de la carte. Aucun
+        # libellé répété : le bouton et la recherche disent déjà leur rôle.
+        self._text_card.body_layout.addWidget(self._text_key_row)
         L.addWidget(self._text_card)
 
         # ── Section FOND (conteneur) ──────────────────────────────
@@ -694,15 +669,6 @@ class UIInspector(QWidget):
                                 self._img_card.body_layout)
         L.addWidget(self._img_card)
 
-        # ── Suppression ───────────────────────────────────────────
-        # Il n'y a plus de label d'avertissement ICI : chaque message est posé
-        # sous le réglage qui le cause (empreinte sous le texte, fond sous le
-        # fond) plutôt que dans un bac commun au pied de l'inspecteur.
-        W.separator(L)
-        self._del = W.btn_ghost(label("uiinsp.delete"))
-        self._del.setFont(QFont(T.UI, T.SM))
-        self._del.clicked.connect(self._on_delete)
-        L.addWidget(self._del)
         L.addStretch()
 
     # ── Presets de placement ──────────────────────────────────────
@@ -792,8 +758,6 @@ class UIInspector(QWidget):
             # redimensionnent pas sans `stretch_*`).
             for k in ("w", "h"):
                 self._sp[k].setEnabled(not is_image)
-            self._del.setText(label("uiinsp.delete"))
-
             if is_text:
                 self._reload_fonts()
                 btn = self._align_group.button(
@@ -801,7 +765,6 @@ class UIInspector(QWidget):
                 if btn is not None:
                     btn.setChecked(True)
                 self._reload_color()
-                self._reload_previews()
                 self._reload_text_key()
                 self._reload_content()
                 self._sync_text_rows()
@@ -836,23 +799,9 @@ class UIInspector(QWidget):
                              bool(italic if italic is not None else
                                   getattr(legacy_font, "italic", False)))
 
-    def _reload_previews(self):
-        self._preview.clear()
-        self._preview.addItem(label("common.none_paren"), "")
-        values = self._project.text_values() if self._project else {}
-        for t in (self._project.texts if self._project else []):
-            self._preview.addItem(
-                f"{t.key} — {display_text(t.content, values)[:24]}", t.key)
-        i = self._preview.findData(getattr(self._element, "preview_text", "") or "")
-        self._preview.setCurrentIndex(i if i >= 0 else 0)
-
     def _reload_text_key(self):
-        self._text_key.clear()
-        self._text_key.addItem(label("uiinsp.text.entry_new"), "")
-        for t in (self._project.texts if self._project else []):
-            self._text_key.addItem(t.key, t.key)
-        i = self._text_key.findData(getattr(self._element, "text_key", "") or "")
-        self._text_key.setCurrentIndex(i if i >= 0 else 0)
+        key = getattr(self._element, "text_key", "") or ""
+        self._text_key.set_script(key) if key else self._text_key.clear_script()
 
     # ── Image (désigne un sprite et l'un de ses états) ────────────
     def _current_sprite(self):
@@ -988,7 +937,8 @@ class UIInspector(QWidget):
     # ── Contenu (édite l'entrée de table, pas l'élément) ──────────
     def _current_text(self):
         """L'entrée de table que cet élément affiche, ou None s'il n'en a pas
-        encore (elle naîtra à la première frappe)."""
+        encore. Dans ce cas, le contenu est un aperçu du `text:draw` que le
+        script écrira."""
         key = getattr(self._element, "text_key", "") or ""
         return self._project.get_text(key) if (self._project and key) else None
 
@@ -996,25 +946,24 @@ class UIInspector(QWidget):
         """Repose le contenu et le badge de clé. Sous `_blocking` : setPlainText
         déclenche `textChanged`, qui prendrait un rechargement pour une frappe."""
         t = self._current_text()
-        self._content.setPlainText(t.content if t else "")
+        preview = getattr(self._element, "preview_text", "")
+        if (t is None and preview and not getattr(self._element, "preview_is_literal", True)
+                and self._project):
+            # Projet enregistré avant le littéral : son échantillon était une
+            # clé. On l'affiche encore comme l'ancien écran, jusqu'à la
+            # première modification qui le transforme explicitement en texte.
+            legacy = self._project.get_text(preview)
+            preview = legacy.content if legacy is not None else preview
+        self._content.setPlainText(t.content if t else preview)
         self._content_baseline = None
         self._sync_key_badge()
 
     def _sync_text_rows(self):
-        """L'échantillon n'apparaît QUE pour une zone sans entrée.
+        """Le champ de contenu garde la même place dans les deux modes.
 
-        Une zone qui a son entrée a déjà un contenu réel à mesurer et à
-        montrer dans le canvas ; lui proposer en plus un « échantillon » tiré
-        de la même liste posait deux fois la même question, dont une seule
-        comptait. Vide, l'échantillon est la seule idée que l'éditeur ait de
-        ce que le script y écrira — et la mesure de débordement s'appuie
-        dessus."""
-        has_entry = bool(getattr(self._element, "text_key", "") or "")
-        self._preview_row.setVisible(not has_entry)
-        if has_entry:
-            self._preview_why.clear()
-        else:
-            self._preview_why.show_text()
+        Le choix « script draw » affiche et édite le littéral de prévisualisation;
+        choisir une entrée fait éditer son contenu. Rien d'autre à basculer.
+        """
 
     def _sync_key_badge(self):
         """Le badge sous l'éditeur : quelle entrée, dérivée ou nommée, partagée
@@ -1056,9 +1005,10 @@ class UIInspector(QWidget):
         new = self._content.toPlainText()
         t = self._current_text()
         if t is None:
-            if not new.strip():
-                return          # frappe vide : pas de quoi créer une entrée
-            self._create_text_entry(new)
+            if self._content_baseline is None:
+                self._content_baseline = getattr(self._element, "preview_text", "")
+            self._element.preview_text = new
+            self._element.preview_is_literal = True
             self.changed.emit()
             self._commit_timer.start()
             return
@@ -1083,32 +1033,16 @@ class UIInspector(QWidget):
             return
         old, self._content_baseline = self._content_baseline, None
         t = self._current_text()
-        if t is None or t.content == old:
+        target = t if t is not None else self._element
+        field = "content" if t is not None else "preview_text"
+        value = getattr(target, field)
+        if value == old:
             return
         from core.history import get_history, SetFieldCmd
         get_history().push(SetFieldCmd(
-            t, "content", old, t.content,
-            label=f"Edit text {t.key}", persist_fn=self._persist))
-
-    def _create_text_entry(self, content: str):
-        """Crée l'entrée de table qui manquait et l'accroche à l'élément.
-
-        Le chemin PROPOSE la clé : mise en page puis nom de l'élément, ce qui
-        situe sans jamais posséder (`auto_key` reste vrai, ranger l'entrée
-        ailleurs la recalera). Cf. models/text.py."""
-        from ui.text_editor.text_commands import CreateTextForElementCmd
-        from core.history import get_history
-        get_history().push(CreateTextForElementCmd(
-            self._project, self._element, content,
-            path=[self._layout_asset.name, self._element.name],
-            scene=getattr(self._scene, "name", "") or "",
+            target, field, old, value,
+            label=(f"Edit text {t.key}" if t is not None else "Edit script text preview"),
             persist_fn=self._persist))
-        self._blocking = True
-        try:
-            self._reload_text_key()     # l'entrée neuve entre dans la liste
-            self._sync_key_badge()
-        finally:
-            self._blocking = False
 
     # ── Géométrie : pas de grille selon la cible HÉRITÉE du nœud ───
     def _sync_geom(self):
@@ -1793,18 +1727,44 @@ class UIInspector(QWidget):
         target = self._layout_asset.resolved_target(self._element, self._render_mode())
         self._highlight_row.setVisible(target == TARGET_BG)
 
-    def _on_preview(self, i):
-        if self._blocking or not self._element or i < 0:
-            return
-        self._set("preview_text", self._preview.currentData() or "", "Zone preview")
-
-    def _on_text_key(self, i):
+    def _on_text_key(self, key: str):
         """Ré-accroche l'élément à une AUTRE entrée existante. La salve en cours
         appartient à l'ancienne : la commiter avant de basculer."""
-        if self._blocking or not self._element or i < 0:
+        if self._blocking or not self._element:
+            return
+        key = (key or "").strip()
+        if not key or not self._project or self._project.get_text(key) is None:
             return
         self._commit_content()
-        self._set("text_key", self._text_key.currentData() or "", "Element text")
+        self._set("text_key", key, "Element text")
+        from core.command_dispatcher import get_dispatcher
+        get_dispatcher().notify_ui_text_links_changed()
+        self._blocking = True
+        try:
+            self._reload_content()
+            self._sync_text_rows()
+        finally:
+            self._blocking = False
+        self._refresh_diagnostics()
+
+    def _open_text_picker(self):
+        """Même popup de recherche que les sélecteurs d'assets (Bank, Font…)."""
+        if self._blocking or not self._project:
+            return
+        entries = [(t.key, t.key) for t in self._project.texts]
+        popup = ScriptPickerPopup(
+            entries, TEXT_ACCENT, parent=self._text_key,
+            new_label=label("uiinsp.text.create_entry"))
+        popup.picked.connect(self._on_text_key)
+        popup.new_requested.connect(self.text_editor_requested.emit)
+        popup.show_below(self._text_key)
+
+    def _clear_text_link(self):
+        """Le × du slot revient au mode `text:draw`."""
+        if self._blocking or not self._element or not getattr(self._element, "text_key", ""):
+            return
+        self._commit_content()
+        self._set("text_key", "", "Element text")
         from core.command_dispatcher import get_dispatcher
         get_dispatcher().notify_ui_text_links_changed()
         self._blocking = True
@@ -1899,21 +1859,3 @@ class UIInspector(QWidget):
         ns = self._current_ns()
         if ns is not None:
             self._set_ns(ns, key, int(v), "Frame margin")
-
-    # ── Suppression ───────────────────────────────────────────────
-    def _on_delete(self):
-        """Supprime l'élément ET son sous-arbre — même règle qu'au canvas
-        (Suppr) : la position d'un enfant étant relative à son conteneur, les
-        orphelins ne resteraient pas en place, ils sauteraient ailleurs."""
-        if not self._element or not self._layout_asset:
-            return
-        from core.history import get_history, RemoveListItemsCmd
-        from core.selection_bus import get_bus
-        lay = self._layout_asset
-        victims = [self._element] + lay.descendants(self._element.name)
-        n = len(victims)
-        get_bus().clear()     # avant la persistance, qui réémet la sélection
-        get_history().push(RemoveListItemsCmd(
-            lay.elements, victims, persist_fn=self._persist,
-            label=f"Delete {self._element.name}"
-                  + (f" (+{n - 1} children)" if n > 1 else "")))

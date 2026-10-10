@@ -69,6 +69,20 @@ def test_self_methode_et_champ_sont_disjoints():
     assert all(c.kind == C.KIND_PROPERTY for c in C.candidates_at("self."))
 
 
+def test_les_suggestions_affichent_toujours_leur_appelant():
+    """Le popup reste auditable même lorsqu'il complète après un `.` ou `:`.
+    Le texte inséré, lui, demeure le membre seul afin de ne pas dupliquer le
+    préfixe déjà écrit par l'auteur."""
+    self_props = {c.insert: c for c in C.candidates_at("self.")}
+    camera_props = {c.insert: c for c in C.candidates_at("camera.")}
+    sfx_calls = {c.insert: c for c in C.candidates_at("sfx:")}
+
+    assert self_props["position"].label == "self.position(Vec2)"
+    assert self_props["position"].insert == "position"
+    assert camera_props["position"].label == "camera.position(Vec2)"
+    assert sfx_calls["play"].label.startswith("sfx:play(")
+
+
 # ── 4. Les valeurs d'énumération, aux deux endroits où elles s'écrivent ──
 
 def test_enum_dans_un_argument_dappel():

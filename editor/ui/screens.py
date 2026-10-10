@@ -85,6 +85,10 @@ class EditorScreen:
     classe parce qu'un écran ne se construit pas forcément par simple appel de
     constructeur — le Scene Manager est assemblé par la fenêtre à partir de
     trois colonnes qu'elle possède déjà.
+
+    Un écran qui accueille le panneau de build expose `body`, son
+    `ThreeColumnBody` (cf. `ui/common/three_column_body.py`) ; sans `body`
+    — un écran de plugin le plus souvent —, il n'a pas de panneau de build.
     """
 
     name: str
@@ -93,6 +97,10 @@ class EditorScreen:
     # plutôt que de laisser une exception traverser un slot Qt (cf.
     # `MainWindow._refresh_ui`). Les écrans natifs, eux, doivent échouer fort.
     plugin: bool = False
+    # Le panneau de build (console, diagnostics, disque) s'ouvre-t-il avec cet
+    # écran ? Une valeur de DÉPART : l'auteur l'ouvre ou le ferme ensuite, et
+    # l'écran se souvient de son dernier état pour la session.
+    build_panel_open: bool = False
 
 
 # ── Registre des plugins ──────────────────────────────────────────────

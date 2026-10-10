@@ -87,62 +87,66 @@ class ProjectPathsMixin:
 
     @property
     def assets_dir(self) -> Path:
-        """Espace libre utilisateur — PNGs bruts, sons..."""
+        """Tout ce que l'auteur manipule : sources brutes (PNG, sons…), assets (scènes, prefabs,
+        mises en page, boîtes sonores, tables de données, polices logiques…), textes et variables.
+        Il l'organise lui-même ; l'éditeur n'y écrit que ce qu'il lui demande."""
         return self.root / "assets"
 
     @property
     def project_dir(self) -> Path:
-        """Objets moteur (scenes, actors, sprites, tilesets, backgrounds, scripts)."""
+        """Ce qui n'est PAS à l'auteur : l'état interne de l'éditeur (`editor/`), les licences,
+        le README. Rien de ce qu'il édite n'y vit plus."""
         return self.root / "project"
 
     @property
     def scenes_dir(self) -> Path:
-        return self.project_dir / "scenes"
+        return self.assets_dir / "scenes"
 
     @property
     def prefab_dir(self) -> Path:
-        return self.project_dir / "prefab"
+        return self.assets_dir / "prefab"
 
     @property
     def variables_file(self) -> Path:
-        """Globals + constants du projet — project/variables.json (pas de dépendance externe)."""
-        return self.project_dir / "variables.json"
+        """Globals + constants du projet — assets/variables.json, à la racine de `assets/`."""
+        return self.assets_dir / "variables.json"
 
     @property
     def texts_file(self) -> Path:
-        """Table des textes du joueur — project/texts.json.
+        """Table des textes du joueur — assets/texts.json, à la racine de `assets/`.
 
         Un seul fichier plutôt qu'un par entrée (contrairement aux palettes) :
         on parle de centaines d'entrées courtes, et un traducteur veut tout voir
-        d'un coup. La v0.8 ajoutera `texts.<langue>.json` à côté."""
-        return self.project_dir / "texts.json"
+        d'un coup. Les traductions sont à côté, `texts_<langue>.json`. Ni dans un
+        sous-dossier : `assets/data/` est lu comme « une table par fichier »."""
+        return self.assets_dir / "texts.json"
 
     @property
     def ui_layouts_dir(self) -> Path:
-        """Mises en page d'UI — project/ui_layouts/*.json.
+        """Mises en page d'UI — assets/ui_layouts/*.layout.
 
         Un fichier par mise en page (contrairement aux textes, monolithiques) :
         une mise en page est un objet qu'on renomme, duplique et partage entre
         scènes, donc qui mérite une identité de fichier — comme une palette."""
-        return self.project_dir / "ui_layouts"
+        return self.assets_dir / "ui_layouts"
 
     @property
     def music_boxes_dir(self) -> Path:
-        """MusicBox — project/music_boxes/*.json.
+        """MusicBox — assets/music_boxes/*.musicbox.
 
         Avec les données propres au projet, comme les caméras : une boîte
         sonore ne dérive d'aucun fichier importé (ROADMAP v0.8.7)."""
-        return self.project_dir / "music_boxes"
+        return self.assets_dir / "music_boxes"
 
     @property
     def jingle_boxes_dir(self) -> Path:
-        """JingleBox — project/jingle_boxes/*.json."""
-        return self.project_dir / "jingle_boxes"
+        """JingleBox — assets/jingle_boxes/*.jinglebox."""
+        return self.assets_dir / "jingle_boxes"
 
     @property
     def sound_boxes_dir(self) -> Path:
-        """SoundBox — project/sound_boxes/*.json."""
-        return self.project_dir / "sound_boxes"
+        """SoundBox — assets/sound_boxes/*.soundbox."""
+        return self.assets_dir / "sound_boxes"
 
     @property
     def legacy_sound_states_dir(self) -> Path:
@@ -155,16 +159,16 @@ class ProjectPathsMixin:
 
     @property
     def data_tables_dir(self) -> Path:
-        """Tables de données — project/data/*.json.
+        """Tables de données — assets/data/*.table.
 
         Un fichier par table, avec les données propres au projet : une table ne
         dérive d'aucun fichier importé. Le dossier porte le mot que le script
         écrit (`data.Objets`) — une seule grammaire du disque au Lua."""
-        return self.project_dir / "data"
+        return self.assets_dir / "data"
 
     @property
     def palettes_dir(self) -> Path:
-        """Catalogue de palettes unifié — sources ``.hex`` et sidecars JSON.
+        """Catalogue de palettes unifié — sources ``.hex`` et sidecars ``.palette``.
 
         Rangé dans ``assets/`` et non ``project/`` : une palette n'est plus un
         objet moteur mais une donnée d'éditeur que l'auteur importe et exporte,
@@ -173,13 +177,13 @@ class ProjectPathsMixin:
 
     @property
     def font_assets_dir(self) -> Path:
-        """Polices logiques — ``project/fonts_assets/*.json``.
+        """Polices logiques — ``assets/fonts_assets/*.fontasset``.
 
         Une FontAsset configure l'usage d'une ou plusieurs sources dans
-        ``assets/fonts/`` ; elle vit donc avec les données du projet, jamais à
-        côté d'un fichier importé.
+        ``assets/fonts/`` ; elle vit dans son propre dossier, jamais à côté
+        d'un fichier importé.
         """
-        return self.project_dir / "fonts_assets"
+        return self.assets_dir / "fonts_assets"
 
     @property
     def sprites_dir(self) -> Path:
@@ -206,6 +210,10 @@ class ProjectPathsMixin:
         return self.assets_dir / "music"
 
     @property
+    def jingles_dir(self) -> Path:
+        return self.assets_dir / "jingles"
+
+    @property
     def fonts_dir(self) -> Path:
         return self.assets_dir / "fonts"
 
@@ -215,18 +223,19 @@ class ProjectPathsMixin:
 
     @property
     def scripts_behaviors_dir(self) -> Path:
-        """Le seul sous-dossier de scripts qui ait un sens : un behavior est un module
-        importé par son chemin (`require("behaviors/nom")`). Tout autre script vit à plat
-        dans `scripts_dir` — c'est son attache, pas son dossier, qui lui donne son contexte."""
+        """Où « New behavior » crée un behavior. Rien de plus : le RÔLE d'un script vient de son contenu
+        (`-- @behavior`, cf. `core.lua_scripts`), pas de son dossier, et il se range où l'on veut."""
         return self.scripts_dir / "behaviors"
 
     def script_files(self) -> list[Path]:
-        """Les scripts qu'on peut ATTACHER à un acteur, une scène ou une caméra : tout .lua
-        de `scripts_dir`, sauf les behaviors (des modules, attachés à rien)."""
-        if not self.scripts_dir.is_dir():
-            return []
-        behaviors = self.scripts_behaviors_dir
-        return sorted(f for f in self.scripts_dir.rglob("*.lua") if behaviors not in f.parents)
+        """Les scripts qu'on peut ATTACHER à un acteur, une scène ou une caméra : tout `.lua` de
+        `assets/` qui n'est pas un behavior (des modules, attachés à rien)."""
+        from core import lua_scripts
+        return lua_scripts.script_files(self)
+
+    def behavior_files(self) -> list[Path]:
+        from core import lua_scripts
+        return lua_scripts.behavior_files(self)
 
     @property
     def build_dir(self) -> Path:

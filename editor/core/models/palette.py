@@ -10,6 +10,7 @@ from core.models.resource import Resource
 from core.models.gba_color import (
     RESERVED_SLOT_COLOR, bgr555_to_hex, hex_to_bgr555, read_colors, write_colors,
 )
+from core.models import asset_extensions
 
 
 class PaletteUsage(NamedTuple):
@@ -40,10 +41,12 @@ class PaletteBank(Resource):
     aux deux. Une Scene en active jusqu'à 16 par pool (Scene.active_obj_palettes
     / active_bg_palettes) ; c'est cette sélection, pas le catalogue, qui
     occupe les banques hardware (physiquement séparées OBJ/BG) au build."""
+    sidecar_extension = asset_extensions.PALETTE
     name: str = ""
     colors: list[int] = field(default_factory=list)  # valeurs BGR555 GBA
     size: int = 16   # capacité de la palette : 16 (4bpp / une banque) ou 256 (8bpp).
-                     # Persisté dans le .json ; absent d'un ancien fichier -> 16.
+                     # Persisté dans le .palette ; absent d'un ancien fichier -> 16.
+    asset: str = ""  # le `.hex` qui porte les couleurs : un chemin relatif au projet (comme les autres familles).
 
     def __post_init__(self):
         """Normalise `size` (16 ou 256) et force l'index 0 vers
@@ -86,7 +89,7 @@ class PaletteBank(Resource):
     # de l'éditeur dans le sidecar JSON. Ces trois méthodes définissent ce
     # FORMAT de palette, sans savoir où il se trouve sur le disque.
     def to_metadata_dict(self) -> dict:
-        return {"name": self.name, "size": self.size}
+        return {"name": self.name, "size": self.size, "asset": self.asset}
 
     def to_hex(self) -> str:
         """Forme canonique : une couleur #RRGGBB par ligne."""
@@ -110,7 +113,7 @@ class PaletteBank(Resource):
         requested_size = (metadata or {}).get("size")
         size = requested_size if requested_size in (16, 256) and len(colors) <= requested_size \
             else (256 if len(colors) > 16 else 16)
-        return cls(name=name, colors=colors, size=size)
+        return cls(name=name, colors=colors, size=size, asset=str((metadata or {}).get("asset") or ""))
 
 
 # Sentinel Actor/Prefab.pal_bank et BackgroundLayer.pal_bank : "Sans palette"

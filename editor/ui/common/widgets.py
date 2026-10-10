@@ -77,6 +77,10 @@ class HoverIconButton(QToolButton):
             self.toggled.connect(lambda _c: self._sync_icon())
         self._sync_icon()
 
+    def set_icon_name(self, icon_name: str):
+        self._icon_name = icon_name
+        self._sync_icon()
+
     def _sync_icon(self):
         if self._checked_color is not None and self.isChecked():
             color = self._checked_color
@@ -151,6 +155,13 @@ class DragHandle(QWidget):
         p.end()
 
 
+def make_add_menu_button(button: HoverIconButton) -> None:
+    """Transforme un `btn_add` en « + ▾ » : même taille, l'icône porte la flèche. L'indicateur natif d'un
+    bouton à menu est masqué, sinon il doublerait la flèche de l'icône."""
+    button.set_icon_name("add_menu")
+    button.setStyleSheet(BTN_ICON + "QToolButton::menu-indicator{image:none;width:0;}")
+
+
 # ── Factory class (namespace) ─────────────────────────────────────────
 
 class _W:
@@ -190,6 +201,13 @@ class _W:
         b.setToolTip(tooltip)
         return b
 
+    def btn_add_menu(self, tooltip: str = None) -> HoverIconButton:
+        """Bouton « + ▾ » : le jumeau de `btn_add` pour un ajout qui déroule un menu. Tout « + » de
+        l'éditeur qui ouvre un menu prend celui-ci, pour que la flèche dise qu'un choix suit."""
+        b = self.btn_add(tooltip)
+        make_add_menu_button(b)
+        return b
+
     def btn_remove(self, tooltip: str = None) -> QToolButton:
         """Bouton − jumeau de `btn_add` (même taille, même survol)."""
         if tooltip is None:
@@ -206,6 +224,29 @@ class _W:
         if tooltip is None:
             tooltip = label('wdg.search')
         b = HoverIconButton("search", C.TEXT_DIM, C.ACCENT)
+        b.setStyleSheet(BTN_ICON)
+        b.setFixedSize(24, 24)
+        b.setIconSize(QSize(16, 16))
+        b.setToolTip(tooltip)
+        return b
+
+    def btn_sort(self, tooltip: str = None) -> QToolButton:
+        """Bouton de tri sans bordure, survol accent — jumeau de `btn_search` ; ouvre un menu de critères."""
+        if tooltip is None:
+            tooltip = label('wdg.sort')
+        b = HoverIconButton("sort", C.TEXT_DIM, C.ACCENT)
+        b.setStyleSheet(BTN_ICON)
+        b.setFixedSize(24, 24)
+        b.setIconSize(QSize(16, 16))
+        b.setToolTip(tooltip)
+        return b
+
+    def btn_list_view(self, tooltip: str = None) -> QToolButton:
+        """Bouton cochable « vue en liste » : coché, la liste remplace la mosaïque. Jumeau de `btn_search`."""
+        if tooltip is None:
+            tooltip = label('wdg.list_view')
+        b = HoverIconButton("layout_list", C.TEXT_DIM, C.ACCENT, checked=C.ACCENT)
+        b.setCheckable(True)
         b.setStyleSheet(BTN_ICON)
         b.setFixedSize(24, 24)
         b.setIconSize(QSize(16, 16))
@@ -871,15 +912,31 @@ class ScriptPickerPopup(QFrame):
     # ── Positionnement ────────────────────────────────────────────
 
     def show_below(self, anchor: QWidget):
-        """Affiche le popup sous le widget anchor."""
+        """Place le popup sous son ancre, ou au-dessus si le bas manque.
+
+        Les inspecteurs défilants peuvent laisser un slot tout au bas de la
+        fenêtre : un popup toujours ouvert vers le bas serait alors coupé par
+        l'écran. Le même choix sert à tous les sélecteurs fondés sur ce popup
+        (banques, polices, scripts, entrées de texte…).
+        """
         self.adjustSize()
-        pos = anchor.mapToGlobal(QPoint(0, anchor.height() + 2))
+        gap = 2
+        below = anchor.mapToGlobal(QPoint(0, anchor.height() + gap))
         # Éviter de sortir à droite de l'écran — celui de l'ancre (pas
         # forcément l'écran primaire : la fenêtre peut être sur un 2e moniteur).
         screen = anchor.screen() or QApplication.primaryScreen()
         geo = screen.availableGeometry()
-        if pos.x() + self.width() > geo.right():
-            pos.setX(geo.right() - self.width() - 4)
+        above = anchor.mapToGlobal(QPoint(0, -self.height() - gap))
+        if below.y() + self.height() <= geo.bottom() + 1:
+            pos = below
+        elif above.y() >= geo.top():
+            pos = above
+        else:
+            # Cas rare (petit écran ou popup très long) : garder l'intégralité
+            # de la fenêtre visible, même si elle doit chevaucher son ancre.
+            pos = below
+            pos.setY(max(geo.top(), min(pos.y(), geo.bottom() - self.height() + 1)))
+        pos.setX(max(geo.left(), min(pos.x(), geo.right() - self.width() + 1)))
         self.move(pos)
         self.show()
 
@@ -1035,6 +1092,11 @@ class FinderSection(QFrame):
 
     def set_add_tooltip(self, tooltip: str):
         self._btn_add.setToolTip(tooltip)
+
+    def set_add_menu(self, opens_menu: bool = True):
+        """Le « + » de cette section ouvre un menu : il prend l'icône « + ▾ »."""
+        if opens_menu:
+            make_add_menu_button(self._btn_add)
 
     def set_add_visible(self, visible: bool):
         self._btn_add.setVisible(visible)

@@ -34,7 +34,8 @@ from __future__ import annotations
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
-    QTextEdit, QLineEdit, QComboBox, QToolButton, QButtonGroup, QApplication,
+    QTextEdit, QLineEdit, QComboBox, QToolButton, QApplication,
+    QSplitter, QTabBar,
 )
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
@@ -70,35 +71,39 @@ class _LangTabs(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("langTabs")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(
-            f"background:{C.BG_PANEL}; border-bottom:1px solid {C.BORDER_DARK};")
+            f"#langTabs{{background:{C.BG_RAISED}; border-bottom:1px solid {C.BORDER_DARK};}}")
         self._active = ""
-        self._buttons: dict[str, QToolButton] = {}
-        self._lay = QHBoxLayout(self)
-        self._lay.setContentsMargins(8, 0, 8, 0)
-        self._lay.setSpacing(2)
-        self._group = QButtonGroup(self)
-        self._group.setExclusive(True)
+        self._bar = QTabBar()
+        self._bar.setExpanding(False)
+        self._bar.setDrawBase(False)
+        self._bar.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._bar.currentChanged.connect(self._on_changed)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(8, 0, 8, 0)
+        lay.addWidget(self._bar)
+        lay.addStretch(1)
         self.setVisible(False)
 
     def populate(self, project, active: str) -> str:
         """Reconstruit les onglets depuis le projet. Rend le code
         EFFECTIVEMENT actif — celui demandé s'il existe encore, sinon la
         source (jamais une langue au hasard)."""
-        for b in list(self._buttons.values()):
-            self._group.removeButton(b)
-            b.deleteLater()
-        self._buttons.clear()
-        while self._lay.count():
-            self._lay.takeAt(0)
+        self._bar.blockSignals(True)       # reconstruire n'est pas un clic de l'auteur
+        while self._bar.count():
+            self._bar.removeTab(0)
 
         langs = project.settings.all_languages() if project else []
         self.setVisible(len(langs) > 1)
         if len(langs) <= 1:
             self._active = ""
+            self._bar.blockSignals(False)
             return ""
 
         source_code = project.settings.source_lang.code
+        codes: list[str] = []
         for lang in langs:
             is_source = lang.code == source_code
             disp = lang.name or lang.code or "?"
@@ -106,36 +111,23 @@ class _LangTabs(QWidget):
                 n = len(project.translation_gaps(lang.code))
                 if n:
                     disp = f"{disp} ({n})"
-            b = QToolButton()
-            b.setText(disp)
-            b.setCheckable(True)
-            b.setFont(QFont(T.UI, T.XS))
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.setToolTip(tooltip(title=(
+            index = self._bar.addTab(disp)
+            self._bar.setTabData(index, lang.code)
+            self._bar.setTabToolTip(index, tooltip(title=(
                 label("txtwb.source_tab", name=disp) if is_source
                 else label("txtwb.translation_tab", name=disp)
             )))
-            b.setStyleSheet(
-                f"QToolButton{{background:transparent; color:{C.TEXT_DIM};"
-                f"border:none; border-bottom:2px solid transparent;"
-                f"padding:4px 8px;}}"
-                f"QToolButton:hover{{color:{C.TEXT_NORM};}}"
-                f"QToolButton:checked{{color:{TEXT_COLOR};"
-                f"border-bottom-color:{TEXT_COLOR};}}"
-            )
-            b.clicked.connect(lambda _c=False, _code=lang.code: self._on_click(_code))
-            self._group.addButton(b)
-            self._lay.addWidget(b)
-            self._buttons[lang.code] = b
-        self._lay.addStretch(1)
+            codes.append(lang.code)
 
-        resolved = active if active in self._buttons else source_code
+        resolved = active if active in codes else source_code
         self._active = resolved
-        self._buttons[resolved].setChecked(True)
+        self._bar.setCurrentIndex(codes.index(resolved))
+        self._bar.blockSignals(False)
         return resolved
 
-    def _on_click(self, code: str):
-        if code != self._active:
+    def _on_changed(self, index: int):
+        code = self._bar.tabData(index)
+        if code is not None and code != self._active:
             self._active = code
             self.picked.emit(code)
 
@@ -205,9 +197,9 @@ class TextWorkbench(QWidget):
     # ── Construction ──────────────────────────────────────────────
 
     def _build_editor(self) -> QWidget:
-        pane = QWidget()
-        pane.setStyleSheet(f"background:{C.BG_BASE};")
-        lay = QVBoxLayout(pane)
+        top = QWidget()
+        top.setStyleSheet(f"background:{C.BG_BASE};")
+        lay = QVBoxLayout(top)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
 
@@ -336,8 +328,19 @@ class TextWorkbench(QWidget):
         self._preview_font.currentIndexChanged.connect(self._on_preview_font)
         self._markup_bar.add_trailing_widget(self._preview_font)
         lay.addWidget(self._markup_bar)
-        lay.addWidget(self._build_preview(), 1)
-        return pane
+
+        # L'aperçu se replie vers le bas en tirant la poignée jusqu'au bord,
+        # comme le journal de build : même geste, aucun bouton de plus. Seul
+        # lui est repliable — la clé, les onglets et la barre restent.
+        split = QSplitter(Qt.Orientation.Vertical)
+        split.setStyleSheet(QSS.splitter)
+        split.addWidget(top)
+        split.addWidget(self._build_preview())
+        split.setCollapsible(0, False)
+        split.setCollapsible(1, True)
+        split.setStretchFactor(0, 0)
+        split.setStretchFactor(1, 1)
+        return split
 
     def _build_preview(self) -> QWidget:
         pane = QWidget()

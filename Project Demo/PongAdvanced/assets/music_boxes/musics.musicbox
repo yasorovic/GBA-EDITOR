@@ -1,0 +1,108 @@
+{
+  "name": "musics",
+  "id": "6e6745e7f013",
+  "start": "Title",
+  "states": [
+    {
+      "name": "Title",
+      "music": "bs-p2-mountainzone",
+      "loop": true,
+      "level": 100,
+      "intensity_target": "volume",
+      "intensity": 100,
+      "x": 219,
+      "y": 97
+    },
+    {
+      "name": "Rally 1",
+      "music": "bs-p2-1u",
+      "loop": true,
+      "level": 100,
+      "intensity_target": "volume",
+      "intensity": 100,
+      "x": 535,
+      "y": 179
+    },
+    {
+      "name": "Rally 2",
+      "music": "bs-p2-gh-dungeon",
+      "loop": true,
+      "level": 100,
+      "intensity_target": "volume",
+      "intensity": 100,
+      "x": 801,
+      "y": 282
+    },
+    {
+      "name": "Rally 3",
+      "music": "bs-p2-race",
+      "loop": true,
+      "level": 100,
+      "intensity_target": "volume",
+      "intensity": 100,
+      "x": 1140,
+      "y": 152
+    },
+    {
+      "name": "Silence",
+      "music": "",
+      "loop": true,
+      "level": 100,
+      "intensity_target": "volume",
+      "intensity": 100,
+      "x": -26,
+      "y": 263
+    }
+  ],
+  "transitions": [
+    {
+      "src": "Title",
+      "dst": "Rally 1",
+      "trigger": "to_arena",
+      "kind": "fade",
+      "frames": 30
+    },
+    {
+      "src": "Rally 1",
+      "dst": "Rally 2",
+      "trigger": "speed_up",
+      "kind": "fade",
+      "frames": 30
+    },
+    {
+      "src": "Rally 2",
+      "dst": "Rally 3",
+      "trigger": "speed_up",
+      "kind": "fade",
+      "frames": 30
+    },
+    {
+      "src": "Rally 2",
+      "dst": "Rally 1",
+      "trigger": "slow_down",
+      "kind": "fade",
+      "frames": 30
+    },
+    {
+      "src": "Rally 3",
+      "dst": "Rally 1",
+      "trigger": "slow_down",
+      "kind": "fade",
+      "frames": 30
+    },
+    {
+      "src": "Silence",
+      "dst": "Title",
+      "trigger": "to_title",
+      "kind": "fade",
+      "frames": 30
+    },
+    {
+      "src": "",
+      "dst": "Silence",
+      "trigger": "to_result",
+      "kind": "fade",
+      "frames": 30
+    }
+  ]
+}

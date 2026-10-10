@@ -30,6 +30,9 @@ Usage :
                                      prefab d'un actor a changé (Relink/Expose/
                                      Unlink) : repeupler les arbres du panneau
                                      projet (cf. Project._notify_renamed)
+    "disk_changed"                 — un fichier est né sous `assets/` par un
+                                     geste de l'éditeur (un prefab exposé ou
+                                     copié) : repeupler l'onglet Disk
 """
 from __future__ import annotations
 from pathlib import Path
@@ -41,37 +44,13 @@ import copy
 from core.resources import asset_reconciliation
 from core.events import EventEmitter
 from core.models.scene import Actor, Prefab, Scene
+from core.models.unique_name import unique_name
 from core.history import get_history, AddActorCmd
 from core.selection_bus import get_bus
 
 if TYPE_CHECKING:
     from core.project import Project
     from core.project_watcher import ProjectWatcher
-
-
-def unique_name(base: str, existing) -> str:
-    """Nom unique dérivé de `base` : `base`, puis `base_2`, `base_3`… en évitant
-    les noms déjà présents dans `existing`. Sert au nommage automatique lors de
-    la création d'assets (pas de pop-up — cf. feedback inline over dialogs)."""
-    existing = set(existing)
-    if base not in existing:
-        return base
-    i = 2
-    while f"{base}_{i}" in existing:
-        i += 1
-    return f"{base}_{i}"
-
-
-def _copy_name(base: str, taken) -> str:
-    """`base_copy`, puis `base_copy2`, `base_copy3`… — nommage des duplicatas
-    d'actor. Distinct de `unique_name` (suffixe `_2`), qui sert à la CRÉATION :
-    le suffixe dit lequel des deux gestes a produit l'objet."""
-    name = f"{base}_copy"
-    i = 1
-    while name in taken:
-        i += 1
-        name = f"{base}_copy{i}"
-    return name
 
 
 class CommandDispatcher(EventEmitter):
@@ -167,6 +146,21 @@ class CommandDispatcher(EventEmitter):
             return
         with self.suspended():
             self._project.save()
+
+    # ── Asset ─────────────────────────────────────────────────────
+
+    def relink_asset_source(self, family: str, asset, path) -> str:
+        """Relie `asset` à un autre fichier source (cf. `core.asset_relink`) et rafraîchit ce qui l'affiche.
+        `ValueError` — l'asset inchangé — si le fichier ne convient pas."""
+        from core.asset_relink import relink_source
+        if not self._project:
+            raise ValueError("no project is open")
+        with self.suspended():
+            relink_source(self._project, family, asset, path)
+        self._emit("scene_sprites_changed")
+        self._emit("project_tree_changed")
+        self._emit("status_message", f"Relinked “{asset.name}” to {Path(path).name}")
+        return asset.name
 
     # ── Actor ─────────────────────────────────────────────────────
 
@@ -269,7 +263,7 @@ class CommandDispatcher(EventEmitter):
         copies: list[Actor] = []
         for src in sources:
             new = copy.deepcopy(src)
-            new.name = _copy_name(src.name, taken)
+            new.name = unique_name(src.name, taken)
             taken.add(new.name)
             new.x = FieldValue.parse(src.x, _vn).px(r) + dx
             new.y = FieldValue.parse(src.y, _vn).px(r) + dy
@@ -298,11 +292,7 @@ class CommandDispatcher(EventEmitter):
         if not prefab:
             return None
         existing = {a.name for a in self._project.active_scene.actors}
-        name = prefab.name
-        counter = 1
-        while name in existing:
-            name = f"{prefab.name}_{counter}"
-            counter += 1
+        name = unique_name(prefab.name, existing)
         actor = self._project.instantiate_actor_from_prefab(prefab, name, x=x, y=y)
         self._project.active_scene.actors.append(actor)
         self._save_scene()
@@ -443,37 +433,7 @@ class CommandDispatcher(EventEmitter):
             if layer.background_name == ba.name:
                 self._emit("bg_slot_changed", layer.bg_slot)
 
-    def import_background_png(self, path_str: str):
-        """Importe un PNG dans assets/backgrounds/ et crée le BackgroundAsset associé."""
-        if not self._project or not path_str:
-            return
-        ap = Path(path_str)
-        dst = self._project.import_asset(ap, "backgrounds")
-        with self._watcher.suspended():
-            warning = asset_reconciliation.sync_background_png(self._project, dst)
-        msg = f"Background imported: {dst.stem}"
-        if warning:
-            msg += f" — {warning}"
-        self._emit("status_message", msg)
-        self._emit("bg_slot_changed", 0)
-
     # ── Sprite ────────────────────────────────────────────────────
-
-    def import_sprite_png(self, path_str: str):
-        """Importe un PNG dans assets/sprites/ et crée le SpriteAsset associé, via
-        le pipeline aligné sur les backgrounds : Validator → Encodage → asset.
-        Miroir de import_background_png."""
-        if not self._project or not path_str:
-            return
-        ap = Path(path_str)
-        dst = self._project.import_asset(ap, "sprites")
-        with self._watcher.suspended():
-            warning = asset_reconciliation.sync_sprite_png(self._project, dst)
-        msg = f"Sprite imported: {dst.stem}"
-        if warning:
-            msg += f" — {warning}"
-        self._emit("status_message", msg)
-        self._emit("scene_sprites_changed")
 
     # ── Prefab avec propagation ───────────────────────────────────
 
@@ -558,7 +518,27 @@ class CommandDispatcher(EventEmitter):
         self._emit("project_tree_changed")
         return True
 
-    def create_prefab_from_actor(self, actor: Actor) -> Optional[Prefab]:
+    def export_actor_to_folder(self, actor: Actor, folder: Path) -> Optional[Prefab]:
+        """Canvas → onglet Disk : l'acteur devient un prefab rangé dans `folder`. Un acteur ordinaire est exposé
+        (`create_prefab_from_actor`) ; l'instance d'un prefab existant en fait une COPIE de ce prefab, sous un
+        nom libre — le prefab d'origine et ses instances ne bougent pas."""
+        if not self._project:
+            return None
+        source = self._project.get_prefab(actor.prefab_name) if actor.prefab_name else None
+        if source is None:
+            return self.create_prefab_from_actor(actor, folder)
+        duplicate = copy.deepcopy(source)           # son id, copié, est remplacé à l'enregistrement
+        duplicate.name = unique_name(source.name, {pf.name for pf in self._project.prefabs})
+        duplicate.actor.name = duplicate.name
+        self._project.prefabs.append(duplicate)
+        with self._watcher.suspended():
+            self._project.prefabs.save(duplicate, folder)
+        self._emit("project_tree_changed")
+        self._emit("disk_changed")
+        self._emit("status_message", f"Prefab '{source.name}' copied: '{duplicate.name}'")
+        return duplicate
+
+    def create_prefab_from_actor(self, actor: Actor, folder: Optional[Path] = None) -> Optional[Prefab]:
         """« Expose to prefab » depuis un acteur QUI N'EST PAS déjà une
         instance : crée un nouveau Prefab à partir de son état actuel
         (composants/palette/réservation affine/notes — la POSE ne fait
@@ -573,13 +553,14 @@ class CommandDispatcher(EventEmitter):
         prefab = Prefab(name=name, actor=new_actor)
         self._project.prefabs.append(prefab)
         with self._watcher.suspended():
-            self._project.save_prefab(prefab)
+            self._project.prefabs.save(prefab, folder)
         actor.prefab_name = name
         self._save_scene()
         self._emit("actors_list_changed")
         # Nouveau prefab : le project viewer doit le lister sans qu'il faille
         # rouvrir le projet.
         self._emit("project_tree_changed")
+        self._emit("disk_changed")
         self._emit("status_message", f"Prefab created from {actor.name}: '{name}'")
         return prefab
 

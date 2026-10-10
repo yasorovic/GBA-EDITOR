@@ -11,7 +11,7 @@ from typing import Callable
 from PyQt6.QtWidgets import QMenu, QWidget
 from PyQt6.QtGui import QCursor
 
-from core.command_dispatcher import unique_name
+from core.models.unique_name import unique_name
 from ui.common.labels import label
 from ui.common.theme import QSS
 
@@ -23,9 +23,11 @@ def show_add_script_menu(parent: QWidget, project, on_created: Callable[[Path], 
         return
     menu = QMenu(parent)
     menu.setStyleSheet(QSS.menu)
-    menu.addAction(label("assf.script"),
+    from ui.common import icons
+    icon = icons.get("script_lua", icons.COLOR_DEFAULT)
+    menu.addAction(icon, label("assf.script"),
                    lambda: _create(project, "empty", project.scripts_dir, "Script", on_created))
-    menu.addAction(label("assf.behavior_script"),
+    menu.addAction(icon, label("assf.behavior_script"),
                    lambda: _create(project, "behavior", project.scripts_behaviors_dir,
                                    "Behavior", on_created))
     menu.exec(QCursor.pos())
@@ -37,7 +39,8 @@ def _create(project, kind: str, directory: Path, base: str, on_created):
     component_editors/script.py."""
     from scripting.script_templates import ScriptTemplateContext, generate_script_template
     directory.mkdir(parents=True, exist_ok=True)
-    name = unique_name(base, {f.stem for f in directory.glob("*.lua")})
+    from core.lua_scripts import lua_files
+    name = unique_name(base, {f.stem for f in lua_files(project)})      # un behavior se retrouve par son nom : unique partout
     path = directory / f"{name}.lua"
     path.write_text(generate_script_template(ScriptTemplateContext(kind=kind, name=name)),
                     encoding="utf-8")

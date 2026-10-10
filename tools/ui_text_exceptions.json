@@ -130,7 +130,7 @@
     "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
   },
   {
-    "file": "editor/ui/sprite_editor/frame_canvas.py",
+    "file": "editor/ui/sprite_editor/sprite_canvas.py",
     "text": "PNG",
     "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
   },

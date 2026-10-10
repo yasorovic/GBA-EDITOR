@@ -10,15 +10,15 @@ from __future__ import annotations
 
 from typing import Optional
 
-from core.models.resource import MIME_PREFAB_TEMPLATE
+from core.models.resource import MIME_CANVAS_ACTOR, MIME_PREFAB_TEMPLATE, MIME_UI_LAYOUT
 from ui.common.theme import C
 from ui.scene_manager.canvas.canvas_const import GBA_W, GBA_H
 from ui.scene_manager.canvas.canvas_alt_duplicate import AltDuplicateGesture
 from ui.scene_manager.canvas.canvas_scene import GBAScene
 from ui.scene_manager.canvas.canvas_items import SpriteItem, CollisionOverlay, SnapPreviewItem
 from ui.scene_manager.canvas.canvas_region_item import UIRegionItem
-from PyQt6.QtCore import QEvent, QPoint, QPointF, QRectF, QSizeF, Qt, pyqtSignal
-from PyQt6.QtGui import QBrush, QColor, QCursor, QMouseEvent, QPainter, QPainterPath, QPen, QPolygonF, QTransform, QWheelEvent
+from PyQt6.QtCore import QEvent, QMimeData, QPoint, QPointF, QRectF, QSizeF, Qt, pyqtSignal
+from PyQt6.QtGui import QBrush, QColor, QCursor, QDrag, QMouseEvent, QPainter, QPainterPath, QPen, QPolygonF, QTransform, QWheelEvent
 from PyQt6.QtWidgets import (
     QApplication, QGraphicsView, QGraphicsItem, QGraphicsRectItem,
 )
@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import (
 # ──────────────────────────────────────────────────────────────────
 class GBAView(QGraphicsView):
     prefab_template_dropped = pyqtSignal(str, QPointF)
+    ui_layout_dropped = pyqtSignal(str)             # nom du layout : son ancrage décide où il se pose, pas le dépôt
     zoom_changed = pyqtSignal(float)
     # Émis après CHAQUE clic gauche traité par Qt (RubberBandDrag), qu'il ait
     # ou non changé la sélection — Qt.selectionChanged ne se déclenche QUE si
@@ -151,23 +152,30 @@ class GBAView(QGraphicsView):
     def dragLeaveEvent(self, e):
         e.accept()  # supprime le warning Qt "drag leave before drag enter"
 
+    @staticmethod
+    def _accepts_drop(mime) -> bool:
+        return mime.hasFormat(MIME_PREFAB_TEMPLATE) or mime.hasFormat(MIME_UI_LAYOUT)
+
     def dragEnterEvent(self, e):
-        if e.mimeData().hasFormat(MIME_PREFAB_TEMPLATE):
+        if self._accepts_drop(e.mimeData()):
             e.acceptProposedAction()
         else:
             super().dragEnterEvent(e)
 
     def dragMoveEvent(self, e):
-        if e.mimeData().hasFormat(MIME_PREFAB_TEMPLATE):
+        if self._accepts_drop(e.mimeData()):
             e.acceptProposedAction()
         else:
             super().dragMoveEvent(e)
 
     def dropEvent(self, e):
-        if e.mimeData().hasFormat(MIME_PREFAB_TEMPLATE):
-            name = bytes(e.mimeData().data(MIME_PREFAB_TEMPLATE)).decode("utf-8")
-            pos = self.mapToScene(e.position().toPoint())
-            self.prefab_template_dropped.emit(name, pos)
+        mime = e.mimeData()
+        if mime.hasFormat(MIME_PREFAB_TEMPLATE):
+            name = bytes(mime.data(MIME_PREFAB_TEMPLATE)).decode("utf-8")
+            self.prefab_template_dropped.emit(name, self.mapToScene(e.position().toPoint()))
+            e.acceptProposedAction()
+        elif mime.hasFormat(MIME_UI_LAYOUT):
+            self.ui_layout_dropped.emit(bytes(mime.data(MIME_UI_LAYOUT)).decode("utf-8"))
             e.acceptProposedAction()
         else:
             super().dropEvent(e)
@@ -353,12 +361,45 @@ class GBAView(QGraphicsView):
             self._snap_preview.setVisible(not self.scene().selectedItems())
         elif self._snap_preview:
             self._snap_preview.setVisible(False)
+        if self._leaves_with_actor(e):
+            self._export_actor_drag(e)
+            e.accept()
+            return
         # Délégation à l'outil (hover + drag)
         if self._active_tool:
             if self._active_tool.on_move(pos, e):
                 e.accept()
                 return
         super().mouseMoveEvent(e)
+
+    def _leaves_with_actor(self, e) -> SpriteItem | None:
+        """L'acteur qu'on est en train de déplacer, si le curseur vient de QUITTER la vue bouton enfoncé : ce n'est
+        plus un déplacement dans la scène mais un glisser vers un autre panneau (l'onglet Disk)."""
+        if not (e.buttons() & Qt.MouseButton.LeftButton) or self.viewport().rect().contains(e.position().toPoint()):
+            return None
+        item = self.scene().mouseGrabberItem() if self.scene() is not None else None
+        if isinstance(item, SpriteItem) and item._drag_confirmed:
+            return item
+        return None
+
+    def _export_actor_drag(self, e) -> None:
+        """Glisse l'acteur hors du canvas : il reprend sa place, le geste de déplacement est clos, et un vrai glisser
+        (`MIME_CANVAS_ACTOR`, le nom de l'acteur) part vers le panneau qui le reçoit."""
+        item = self._leaves_with_actor(e)
+        if item is None:
+            return
+        name = item.scene_sprite.name
+        item.cancel_drag()
+        # Le relâchement que Qt ne verra jamais (le glisser garde la souris) : sans lui sa machinerie de grab
+        # reste armée et les clics suivants repartent vers le dernier item saisi.
+        release = QMouseEvent(QEvent.Type.MouseButtonRelease, e.position(), e.globalPosition(),
+                              Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton, e.modifiers())
+        QGraphicsView.mouseReleaseEvent(self, release)
+        mime = QMimeData()
+        mime.setData(MIME_CANVAS_ACTOR, name.encode("utf-8"))
+        drag = QDrag(self)
+        drag.setMimeData(mime)
+        drag.exec(Qt.DropAction.CopyAction)
 
     def mouseReleaseEvent(self, e):
         _btn = e.button()

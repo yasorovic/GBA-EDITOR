@@ -552,6 +552,38 @@ class AddResourceCmd(Command):
             self._refresh()
 
 
+class CreateAssetCmd(Command):
+    """
+    Création d'un asset (depuis une source, ou vierge) : *Create asset*.
+    execute : la première fois, range l'asset dans son dossier et l'écrit ; ensuite (refaire), `restore`
+    undo    : `soft_delete` — l'asset quitte la liste, son fichier est effacé à la fermeture. Sa SOURCE n'est
+              jamais touchée : l'asset la pointe, il ne la possède pas.
+    """
+
+    def __init__(self, manager: Any, item: Any, folder: Any = None, refresh_fn=None):
+        self._mgr     = manager
+        self._item    = item
+        self._folder  = folder
+        self._done    = False
+        self.label    = f"Créer {getattr(item, 'name', str(item))}"
+        self._refresh = refresh_fn
+
+    def execute(self):
+        if self._done:
+            self._mgr.restore(self._item)
+        else:
+            from core.asset_creation import store_asset
+            store_asset(self._mgr, self._item, self._folder)
+            self._done = True
+        if self._refresh:
+            self._refresh()
+
+    def undo(self):
+        self._mgr.soft_delete(self._item)
+        if self._refresh:
+            self._refresh()
+
+
 class DeleteInterfaceCmd(Command):
     """Retire un nœud `Interface` d'une scène (v0.25).
 

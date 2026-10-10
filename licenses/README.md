@@ -17,6 +17,7 @@ et les distributions concernés.
 | `LGPL-2.1.txt` | FFmpeg (`avcodec`, `avformat`, `avutil`, `swresample`, `swscale`) |
 | `Apache-2.0.txt` | OpenSSL, multimethod, polices Material Design Icons et Remix Icon |
 | `PSF-Python.txt` | Python (interpréteur et bibliothèque standard) |
+| `Sniglet-OFL.txt` | Police Sniglet (nom du projet, bouton Run, écran de crash) |
 
 ## Paquets Python (`python-packages/`)
 

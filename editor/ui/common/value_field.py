@@ -198,7 +198,7 @@ class ValueField(QWidget):
         self._fv = FieldValue.tiles(round(self._fv.px() / TILE_SIZE))
         self._refresh_widgets(emit=True)
 
-    def _set_mode_ref(self, src: str, name: str, var_id: int = 0):
+    def _set_mode_ref(self, src: str, name: str, var_id: str = ""):
         # Le nom sert à l'affichage, l'id part dans la donnée : c'est lui qui
         # tiendra si la variable est renommée demain.
         self._fv = FieldValue.ref(name, src, var_id)
@@ -381,7 +381,7 @@ class NumberField(QWidget):
         self._refresh_widgets()
         self.changed.emit(self.raw())
 
-    def _set_ref(self, src: str, name: str, var_id: int = 0):
+    def _set_ref(self, src: str, name: str, var_id: str = ""):
         self._ref = FieldValue.ref(name, src, var_id)
         self._refresh_widgets()
         self.changed.emit(self.raw())

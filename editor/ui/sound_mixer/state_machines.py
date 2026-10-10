@@ -292,11 +292,14 @@ class MusicMachinePanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # Toolbar, canvas et aide partagent le fond du canvas : pas d'effet
+        # « boîte » autour du graphe, comme dans le graphe de scènes.
+        self.setStyleSheet(f"background:{C.GRAPH_BG};")
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(6)
 
-        bar = QHBoxLayout(); bar.setSpacing(4)
+        bar = QHBoxLayout(); bar.setContentsMargins(8, 6, 8, 0); bar.setSpacing(4)
         b_add = W.btn_ghost(label("sndmix.add_state"))
         b_add.setToolTip(tooltip(title=label("sndmix.add_state_title"), body=label("sndmix.add_state_tip")))
         b_add.clicked.connect(self._add_state)
@@ -338,6 +341,7 @@ class MusicMachinePanel(QWidget):
         self._hint.setFont(QFont(T.UI, T.SM))
         self._hint.setStyleSheet(f"color:{C.TEXT_MUTED};")
         self._hint.setWordWrap(True)
+        self._hint.setContentsMargins(8, 0, 8, 6)
         root.addWidget(self._hint)
 
     def load(self, box: MusicBox):
@@ -670,7 +674,7 @@ class MusicStateInspector(QWidget):
         g, st = self._graph, self._state
         if g is None or st is None:
             return
-        from core.command_dispatcher import unique_name
+        from core.models.unique_name import unique_name
         taken = [t.trigger for t in g.transitions if t.trigger]
         # Vers un AUTRE état par défaut : une transition d'un état vers
         # lui-même ne changerait rien à ce qui joue.
