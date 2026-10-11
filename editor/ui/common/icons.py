@@ -235,9 +235,9 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "prep_crop":              ("mdi.crop",                    "▣"),
     "prep_resize":            ("mdi.resize",                  "⇲"),
     "prep_reset":             ("mdi.backup-restore",          "↺"),
-    # Finders — révéler le dossier RÉEL d'une famille dans l'explorateur du
-    # système (cf. ui/common/reveal.py). Bouton standardisé, pas un par écran.
-    "reveal_in_files":        ("mdi.folder-open-outline",     "⤢"),
+    # LOCATE : montrer un élément dans l'onglet Disk (cf. ui/common/locate_bus.py).
+    # À droite de chaque ligne d'un finder ; le même geste partout.
+    "locate":                 ("mdi.crosshairs-gps",          "⌖"),
     # Boutons génériques de barre d'outils (ui/common/widgets.py W.btn_add /
     # W.btn_search) — un `QIcon` recolorable au survol (cf. `_HoverIconButton`),
     # jamais un glyphe de police posé par `setText` : la feuille de style ne

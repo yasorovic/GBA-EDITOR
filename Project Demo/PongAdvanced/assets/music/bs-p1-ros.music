@@ -1,0 +1,15 @@
+{
+  "name": "bs-p1-ros",
+  "id": "5c29d0918825",
+  "asset": "assets/music/bs-p1-ros.wav",
+  "loop": true,
+  "volume": 100,
+  "unit": "ms",
+  "sections": [],
+  "loop_section": "",
+  "tempo": 100,
+  "pitch": 100,
+  "fade_in": 0,
+  "fade_out": 0,
+  "sample_rate": 0
+}

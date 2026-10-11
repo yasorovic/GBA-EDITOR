@@ -23,20 +23,22 @@ def _citing(store, path: Path, resolve) -> list:
     return found
 
 
-def wav_too_long(path) -> Optional[str]:
+def wav_too_long(path, sample_rate: int = 0) -> Optional[str]:
     """La raison pour laquelle ce WAV ne tiendra pas dans un module de musique,
     ou None. Une piste devient UN module d'UN échantillon : sa durée est bornée
-    par ce que le mixeur sait lire d'un échantillon (cf. `wav_module`)."""
+    par ce que le mixeur sait lire d'un échantillon (cf. `wav_module`) — et cette
+    borne dépend du taux de build (`Music.sample_rate`, 0 = le défaut)."""
     import wave
-    from core.wav_module import MAX_SECONDS
+    from core.wav_module import effective_rate, max_seconds
+    limit = max_seconds(effective_rate(sample_rate))
     try:
         with wave.open(str(path)) as w:
             seconds = w.getnframes() / max(1, w.getframerate())
     except Exception:
         return None          # `check_audio_file` dit déjà pourquoi il est illisible
-    if seconds > MAX_SECONDS:
+    if seconds > limit:
         return (f"WAV of {seconds:.0f} s: a music track is limited to "
-                f"{MAX_SECONDS:.0f} s once turned into a module.")
+                f"{limit:.0f} s once turned into a module at this sample rate.")
     return None
 
 
@@ -69,14 +71,15 @@ def check_audio_file(path, into: Optional[str] = None, at_import: bool = True) -
         # elle vaut d'autant plus avec quatre formats — un `.xm` renommé `.mod`
         # se joue très bien, et un `.mod` qui n'en est pas un doit se refuser
         # ici, puisque mmutil ne dira jamais non.
-        from core.engine_emulation.module_model import load_module
+        from core.engine_emulation.module_model import is_pattern_order, load_module
         try:
             mod = load_module(path)
         except ValueError as e:
             return f"{e} — the extension says \"{ext[1:]}\", the content does not."
         except Exception as e:
             return f"module illisible ({e})."
-        if not mod.order:
+        # La table est brute : `[255]` ou `[254, 255]` n'est pas vide, mais ne joue rien.
+        if not any(is_pattern_order(o) for o in mod.order):
             return "module without an order table — no pattern to play."
         if not any(s.data.size for s in mod.samples):
             return "module without any sample — it would make no sound."

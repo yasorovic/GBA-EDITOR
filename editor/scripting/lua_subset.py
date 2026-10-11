@@ -95,6 +95,13 @@ ACCEPTED: dict[str, str] = {
     "UMinusOp":           "-a",
     "ULNotOp":            "not a",
     "ULengthOP":          "#t  — constante de compilation, pas une lecture",
+    # Opérateurs binaires (entiers 32 bits, comme le C émis — pas les 64 bits de Lua 5.3)
+    "BAndOp":             "a & b",
+    "BOrOp":              "a | b",
+    "BXorOp":             "a ~ b  (xor ; `~=` reste « différent de »)",
+    "BShiftLOp":          "a << b",
+    "BShiftROp":          "a >> b",
+    "UBNotOp":            "~a",
 }
 
 
@@ -188,43 +195,6 @@ REFUSED: dict[str, Refusal] = {
         "a // b",
         "`//` does not exist — and has no business here: `/` is ALREADY an integer "
         "division, truncated toward zero as in C."),
-
-    # ── Opérateurs binaires ───────────────────────────────────────
-    # Six nœuds, une seule raison : ils ne sont pas dans le sous-ensemble, et
-    # rien ne les a réclamés. Le matériel ne s'y oppose pas — ils se
-    # traduiraient terme à terme —, c'est donc un refus daté et pas définitif
-    # (cf. ROADMAP v0.7.5, « Ouvert »). Un message par opérateur : celui qui
-    # écrit `<<` cherche `<<`, pas « opérateur binaire ».
-
-    "BAndOp": Refusal(
-        "a & b",
-        "the bitwise operators (`&`, `|`, `~`, `<<`, `>>`) are not in the subset. A "
-        "flag is stored in a global variable, and the hardware registers are driven "
-        "through the API (`layer`, `window`, `blend`)."),
-    "BOrOp": Refusal(
-        "a | b",
-        "the bitwise operators (`&`, `|`, `~`, `<<`, `>>`) are not in the subset. A "
-        "flag is stored in a global variable, and the hardware registers are driven "
-        "through the API (`layer`, `window`, `blend`)."),
-    "BXorOp": Refusal(
-        "a ~ b",
-        "the bitwise operators (`&`, `|`, `~`, `<<`, `>>`) are not in the subset. "
-        "Mind the reading trap: here `~=` is indeed \"not equal\", it is `~` ALONE that"
-        " does not exist."),
-    "BShiftLOp": Refusal(
-        "a << b",
-        "the bitwise operators (`&`, `|`, `~`, `<<`, `>>`) are not in the subset. A "
-        "left shift is a multiplication, a right shift is a division — both are "
-        "integer."),
-    "BShiftROp": Refusal(
-        "a >> b",
-        "the bitwise operators (`&`, `|`, `~`, `<<`, `>>`) are not in the subset. A "
-        "left shift is a multiplication, a right shift is a division — both are "
-        "integer."),
-    "UBNotOp": Refusal(
-        "~a",
-        "the bitwise operators (`&`, `|`, `~`, `<<`, `>>`) are not in the subset. To "
-        "invert a condition, use `not`."),
 }
 
 
@@ -237,6 +207,17 @@ NESTED_FUNCTION = Refusal(
     "function f() … end, dans un corps",
     "a private function is declared at the top level of the script, never inside a "
     "handler or another function.")
+
+
+# `a, b = b, a` : luaparser produit un `Assign` à plusieurs cibles, le MÊME nœud
+# qu'une affectation simple — son refus ne peut donc pas être indexé par le nom
+# du nœud (même cas que NESTED_FUNCTION). Le parser ne lisait que la première
+# cible : la seconde affectation disparaissait, et un échange (`a, b = b, a`)
+# devenait `a = b`, sans un mot.
+MULTI_ASSIGN = Refusal(
+    "a, b = b, a",
+    "a multiple assignment does not exist: write one assignment per line. To swap "
+    "two values, go through a local: `local t = a`, `a = b`, `b = t`.")
 
 
 # ─── Ce qui n'est jamais dispatché ────────────────────────────────
@@ -309,6 +290,18 @@ STDLIB: dict[str, Refusal] = {
         "translatable). A trace for the DEVELOPER is `debug:log(...)` — it goes out "
         "through the mGBA log, not the game screen, and disappears from release "
         "builds."),
+
+    # ── Le switch maison ──────────────────────────────────────────
+    # Lua n'a pas de `switch`; l'idiome répandu est une fonction `switch(x, {
+    # [1] = function() … end })`. Elle suppose une table de fonctions-valeurs,
+    # ce que ce sous-ensemble refuse deux fois (AnonymousFunction, Table
+    # d'entiers). La forme qui se traduit en C est la chaîne `if / elseif`.
+    "switch": Refusal(
+        "switch(x, { [1] = function() … end })",
+        "`switch` does not exist, and its usual Lua form cannot: it passes a table "
+        "of functions, and a function is not a value here. A multi-way choice is "
+        "written with `if x == 1 then … elseif x == 2 then … else … end` — the "
+        "`else` branch plays the part of `default`."),
 
     # ── Itération ─────────────────────────────────────────────────
     "pairs": Refusal(

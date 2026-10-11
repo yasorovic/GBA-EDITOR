@@ -147,6 +147,9 @@ class StmtUnsupported:
 @dataclass
 class ExprNumber:
     value: int
+    # Valeur écrite quand elle avait une partie fractionnaire (`1.5`) : `value`
+    # est alors tronquée, et le checker le dit. None pour tout entier écrit.
+    written: Optional[float] = field(default=None, compare=False)
 
 
 @dataclass
@@ -283,10 +286,15 @@ _BINOP_MAP: dict[str, str] = {
     "ModOp": "%", "EqToOp": "==", "NotEqToOp": "!=", "LessThanOp": "<",
     "GreaterThanOp": ">", "LessOrEqThanOp": "<=", "GreaterOrEqThanOp": ">=",
     "AndLoOp": "&&", "OrLoOp": "||",
+    # Opérateurs binaires (Lua 5.3+) : mêmes symboles en C, sauf le xor (`~` → `^`).
+    # La précédence diffère (`a & 1 == 0` en Lua, `(a & 1) == 0` en C) : le
+    # codegen parenthèse chaque opération, donc le sens de la source est gardé.
+    "BAndOp": "&", "BOrOp": "|", "BXorOp": "^",
+    "BShiftLOp": "<<", "BShiftROp": ">>",
 }
 
 _UNOP_MAP: dict[str, str] = {
-    "UMinusOp": "-", "ULNotOp": "not", "ULengthOP": "#",
+    "UMinusOp": "-", "ULNotOp": "not", "ULengthOP": "#", "UBNotOp": "~",
 }
 
 
@@ -429,6 +437,10 @@ class _Converter:
         t = type(node).__name__
         match t:
             case "Assign":
+                if len(node.targets) > 1:
+                    # `a, b = b, a` : ne garder que la première cible faisait
+                    # disparaître le reste. Le checker refuse (lua_subset.MULTI_ASSIGN).
+                    return StmtUnsupported(node="MultiAssign", line=self._line(node))
                 tgt = self._expr(node.targets[0])
                 val = self._expr(node.values[0])
                 return StmtAssign(target=tgt, value=val)
@@ -519,7 +531,9 @@ class _Converter:
         t = type(node).__name__
         match t:
             case "Number":
-                return ExprNumber(int(node.n))
+                n = node.n
+                fractional = isinstance(n, float) and n != int(n)
+                return ExprNumber(int(n), written=n if fractional else None)
             case "TrueExpr":
                 return ExprBool(True)
             case "FalseExpr":
@@ -801,6 +815,14 @@ def _antlr_detail(exc) -> tuple[Optional[int], str]:
     return getattr(tok, "line", None), attendu
 
 
+def _offending_text(exc) -> str:
+    """Le texte du jeton sur lequel antlr a buté (`<EOF>` en fin de fichier)."""
+    ctx = getattr(exc, "__context__", None)
+    inner = ctx.args[0] if (ctx is not None and getattr(ctx, "args", None)) else None
+    tok = getattr(inner, "offendingToken", None)
+    return getattr(tok, "text", "") or ""
+
+
 def _message_detail(exc) -> tuple[Optional[int], str]:
     """(line, antlr message) read from "line L:C: message" in the exception text."""
     import re
@@ -824,6 +846,9 @@ _FALSE_FRIENDS: tuple = (
     (r"[+\-*/%.]=(?!=)",
      "Lua has no compound assignment: `x += 1` is written `x = x + 1`"),
     (r"\+\+", "Lua has no `++`: write `x = x + 1`"),
+    (r"^\s*local\s+\w+\s*:\s*[A-Za-z_]",
+     "Lua has no type annotations: write `local x = 3` — a variable takes the type of "
+     "its value"),
     (r"!=",   "\"not equal\" is written `~=`, not `!=`"),
     (r"&&",   "\"and\" is written `and`, not `&&`"),
     (r"\|\|", "\"or\" is written `or`, not `||`"),
@@ -934,9 +959,23 @@ def _syntax_message(source: str, exc) -> tuple[str, Optional[int]]:
 
     quoted = re.search(r"input '(.*)'$", antlr_msg, re.DOTALL)
     if attendu == "'end'":
-        # The most frequent case, and the one whose line says the least: antlr
-        # stumbles on the END OF THE FILE, not on the block left open.
-        msg = ("missing `end`: an `if`, a loop or a `function` is never closed")
+        # antlr attend `end` à chaque endroit où seul `end` pouvait suivre. Ce
+        # n'est un `end` OUBLIÉ que si le jeton fautif est la fin du fichier :
+        # le bloc n'a alors jamais été fermé. Tout autre jeton est une instruction
+        # qui n'a pas sa place là — typiquement le code après un `return`.
+        offending = _offending_text(exc)
+        code = _code_lines(source)
+        precedente = next((n for n in range(min((line or 1) - 1, len(code)), 0, -1)
+                           if code[n - 1].strip()), None)
+        if offending in ("", "<EOF>"):
+            msg = ("missing `end`: an `if`, a loop or a `function` is never closed")
+        elif precedente and re.match(r"\s*return\b", code[precedente - 1]):
+            line = precedente
+            msg = ("`return` must be the last statement of its block: what follows it can "
+                   "never run. Remove it, or put the `return` inside an `if`.")
+        else:
+            msg = (f"unexpected `{offending}`: it does not start a valid statement here "
+                   "(the block expected a statement or its `end`)")
     elif attendu:
         msg = f"`{attendu.strip(chr(39))}` expected here"
     elif antlr_msg.startswith("token recognition error"):

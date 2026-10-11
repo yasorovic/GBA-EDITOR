@@ -39,6 +39,8 @@ from core.history import (
     DeleteInterfaceCmd, SceneActorOrderCmd, SetFieldCmd,
 )
 from core.models.ui_region import KIND_CONTAINER, KIND_LIST, KIND_TEXT, KIND_IMAGE
+from core import disk_locate
+from ui.common.locate_bus import get_locate_bus
 from core.scene_tree_state import SceneTreeState
 
 # ── Rôles QTreeWidgetItem ─────────────────────────────────────────
@@ -208,6 +210,20 @@ class _Tree(QTreeWidget):
 
     def sizeHint(self):
         return QSize(self.width(), self.minimumHeight())
+
+    def clear_highlight(self) -> None:
+        """Oublie la projection locale de la sélection du ``SelectionBus``.
+
+        L'arbre ne possède pas sa propre sélection : il n'en montre qu'une
+        projection.  Il faut donc effacer celle-ci aussi quand le bus reçoit
+        ``None`` ou un objet qui ne correspond à aucune de ses lignes.  Les
+        signaux restent bloqués, sinon retirer le dernier acteur depuis le
+        canvas rappellerait ``bus.clear()`` pendant le traitement du bus.
+        """
+        was_blocked = self.blockSignals(True)
+        self.clearSelection()
+        self.setCurrentItem(None)
+        self.blockSignals(was_blocked)
 
 
 try:
@@ -809,6 +825,11 @@ class _ActiveSceneTree(_Tree):
             menu.addSeparator()
             self._add_folder_actions(menu, T_ACTOR, actor)
             menu.addSeparator()
+            located = disk_locate.target_of(actor)
+            locate = menu.addAction(label("common.locate"))
+            locate.setEnabled(located is not None)
+            if located is not None:
+                locate.triggered.connect(lambda _, t=located: self._locate(*t))
             self.add_rename_action(menu, item, label("scttree.rename_actor"))
             # Même règle que le menu du canvas : un acteur cliqué DANS la
             # sélection entraîne tout le lot, hors sélection il agit seul.
@@ -839,6 +860,8 @@ class _ActiveSceneTree(_Tree):
             menu.addSeparator()
             self._add_folder_actions(menu, T_UI_LAYOUT, layout)
             menu.addSeparator()
+            menu.addAction(label("common.locate")).triggered.connect(
+                lambda _, lay=layout: self._locate("ui_layouts", lay.name))
             # Un nœud partagé ne perd que sa référence dans CETTE scène ; le seul
             # à le référencer emporte l'asset avec lui. Le libellé le dit, pour ne
             # pas laisser croire qu'on détruit une interface utilisée ailleurs.
@@ -889,6 +912,10 @@ class _ActiveSceneTree(_Tree):
                     lambda _, fid=folder_id: self._delete_folder(fid))
 
         menu.exec(self.viewport().mapToGlobal(pos))
+
+    def _locate(self, family: str, name: str):
+        """LOCATE : l'onglet Disk montre le fichier de cet asset."""
+        get_locate_bus().locate(disk_locate.file_of(self._panel._project, family, name), name)
 
     def _delete_folder(self, folder_id: str):
         if self._panel._content_state and self._scene:
@@ -1579,6 +1606,15 @@ class SceneTreePanel(QWidget):
     # ── Sélection bus ─────────────────────────────────────────────
 
     def on_selection(self, obj):
+        # Le bus est la source de vérité, y compris pour une désélection.  Les
+        # deux projections doivent d'abord perdre leur ancien état : sans cela,
+        # un clic vide dans le canvas (``obj is None``) laissait les acteurs
+        # visuellement sélectionnés dans le Scene Viewer. Cela évite aussi
+        # qu'une sélection de caméra/UI conserve une ancienne multi-sélection
+        # dans la projection Priority.
+        self._tree.clear_highlight()
+        self._priority_tree.clear_highlight()
+
         if isinstance(obj, Actor):
             self._tree.highlight_actor(obj)
             self._priority_tree.highlight_actor(obj)

@@ -45,14 +45,16 @@ from PyQt6.QtWidgets import (
 from PyQt6 import sip
 from PyQt6.QtGui import QFont, QColor, QDrag
 from PyQt6.QtCore import (
-    Qt, pyqtSignal, QSize, QTimer, QMimeData, QByteArray, QItemSelectionModel,
+    Qt, pyqtSignal, QRect, QSize, QTimer, QMimeData, QByteArray, QItemSelectionModel,
 )
 
 from ui.common.theme import C, T, S, QSS, ui_font
 from ui.common.selection_grammar import RowSelectionDelegate
 from ui.common.widgets import W, FinderSection
 from ui.common.icons import get as _ico, folder_icon, COLOR_DEFAULT, COLOR_FOLDER
+from ui.common.locate_bus import get_locate_bus
 from ui.common.reveal import reveal_in_file_manager
+from core import disk_locate
 from core.asset_usages import usages_of
 from core.command_dispatcher import get_dispatcher
 from core.history import get_history, MacroCmd, RefreshAfterCmd
@@ -209,10 +211,10 @@ class AssetKind:
     # Une famille sans `mime` n'est pas glissable.
     mime: Optional[tuple] = None
 
-    # projet -> dossier RÉEL de la famille sur le disque, pour le bouton
-    # « Open in file manager » (standardisé, cf. widgets.FinderSection). Une
-    # famille sans `dir_of` n'affiche pas le bouton — cf. `dir_of()` ci-dessous.
-    dir_of: Optional[Callable[[Any], Any]] = None
+    # (projet, asset) -> le FICHIER de l'asset sur le disque (None s'il n'en a pas encore), pour
+    # Locate (l'icône de chaque ligne, onglet Disk) et Reveal (explorateur du système). Une
+    # famille sans `file_of` n'offre ni l'un ni l'autre — cf. `store_file` / `own_path`.
+    file_of: Optional[Callable[[Any, Any], Any]] = None
 
     # Keep these after the original fields: positional plugin constructors
     # retain their argument order. Empty keys preserve plugin-provided text.
@@ -318,20 +320,51 @@ def dir_nodes(attr: str, suffixes: tuple[str, ...], prune_empty: bool = False
     return build
 
 
-def resource_dir(attr: str) -> Callable[[Any], Optional[Path]]:
-    """Dossier physique d'une famille, pour `AssetKind.dir_of` — même contrat
-    que `store_nodes`/`dir_nodes` (un nom de propriété de `Project`), vers UN
-    chemin plutôt qu'un arbre. `attr` est déjà la source nommée dans le
-    `store_nodes`/`dir_nodes` de la même famille — jamais une copie."""
-    def get(project) -> Optional[Path]:
-        directory = getattr(project, attr, None)
-        return Path(directory) if directory else None
+def store_file(family: str) -> Callable[[Any, Any], Optional[Path]]:
+    """Le fichier d'un asset d'une famille adossée à un `ResourceStore`, pour `AssetKind.file_of`.
+    `family` est son nom dans `Project.source_families()` / `authored_families()` — la même
+    table que l'arbre Disk, donc le chemin rendu est toujours celui que Disk y affiche."""
+    def get(project, asset) -> Optional[Path]:
+        return disk_locate.file_of(project, family, asset.name)
     return get
+
+
+def own_path(_project, asset) -> Optional[Path]:
+    """Pour `AssetKind.file_of` d'une famille dont l'asset EST son fichier (les scripts : `obj` est un `Path`)."""
+    return Path(asset)
 
 
 # ──────────────────────────────────────────────────────────────────
 #  L'arbre Qt d'une famille
 # ──────────────────────────────────────────────────────────────────
+
+_LOCATE_COL = 2                 # la colonne de l'icône Locate, ferrée à droite de chaque asset
+_LOCATE_COL_WIDTH = 22
+_LOCATE_ICON = 14
+
+
+class _LocateDelegate(RowSelectionDelegate):
+    """La grammaire de sélection des finders, plus l'icône Locate dans sa colonne.
+
+    L'icône n'est peinte que sur la ligne survolée ou sélectionnée : une liste de cinquante assets
+    n'est pas une colonne de cinquante cibles. Elle s'allume (accent) quand c'est elle qu'on survole."""
+
+    def paint(self, painter, option, index):
+        super().paint(painter, option, index)
+        if index.column() != _LOCATE_COL:
+            return
+        tree = self.parent()
+        item = tree.itemFromIndex(index)
+        if item is None or item.data(0, _ROLE_OBJ) is None:
+            return
+        if not (item is tree.hover_item() or item.isSelected()):
+            return
+        color = C.ACCENT if (item is tree.hover_item() and tree.hover_column() == _LOCATE_COL) else C.TEXT_DIM
+        rect = option.rect
+        target = QRect(rect.center().x() - _LOCATE_ICON // 2, rect.center().y() - _LOCATE_ICON // 2,
+                       _LOCATE_ICON, _LOCATE_ICON)
+        _ico("locate", color).paint(painter, target)
+
 
 class _KindTree(QTreeWidget):
     """L'arbre d'UNE famille. Ne connaît que son `AssetKind` et son panneau."""
@@ -340,20 +373,26 @@ class _KindTree(QTreeWidget):
         super().__init__()
         self._panel = panel
         self._kind = kind
+        self._hover: tuple = (None, -1)         # (ligne survolée, colonne survolée), pour l'icône Locate
+        self.setMouseTracking(True)
         # Asset ACTIF (chargé dans le canvas) — distinct de la sélection, peint
         # en barre gauche par la grammaire de sélection partagée
         # (`RowSelectionDelegate`, via `active_item()`). Retenu par IDENTITÉ
         # (comme la sélection restaurée) ; None si la famille n'a pas d'actif.
         self._active_obj = None
-        self.setItemDelegate(RowSelectionDelegate(self))
+        self.setItemDelegate(_LocateDelegate(self))
         self.setHeaderHidden(True)
-        # Deux colonnes : le nom (qui s'étire et s'édite) et, ferré à droite,
-        # le suffixe informatif — « 16 » pour une palette, « 12 × 3 » pour une table.
-        self.setColumnCount(2)
+        # Le nom (qui s'étire et s'édite), puis, ferré à droite, le suffixe informatif —
+        # « 16 » pour une palette, « 12 × 3 » pour une table — et, pour une famille qui a un
+        # fichier, l'icône Locate (`_LOCATE_COL`).
+        self.setColumnCount(_LOCATE_COL + 1 if kind.file_of is not None else _LOCATE_COL)
         header = self.header()
         header.setStretchLastSection(False)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        if kind.file_of is not None:
+            header.setSectionResizeMode(_LOCATE_COL, QHeaderView.ResizeMode.Fixed)
+            header.resizeSection(_LOCATE_COL, _LOCATE_COL_WIDTH)
         self.setIndentation(14)
         self.setUniformRowHeights(True)
         self.setIconSize(QSize(14, 14))
@@ -389,6 +428,64 @@ class _KindTree(QTreeWidget):
         self.itemCollapsed.connect(self._fit)
         self.itemExpanded.connect(lambda it: self._refresh_folder_icon(it, True))
         self.itemCollapsed.connect(lambda it: self._refresh_folder_icon(it, False))
+
+    # ── Locate : l'icône ferrée à droite de chaque asset ──────────
+
+    def hover_item(self) -> Optional[QTreeWidgetItem]:
+        item = self._hover[0]
+        return item if item is not None and not sip.isdeleted(item) else None
+
+    def hover_column(self) -> int:
+        return self._hover[1]
+
+    def mouseMoveEvent(self, event):
+        pos = event.position().toPoint()
+        hover = (self.itemAt(pos), self.columnAt(pos.x()))
+        if hover != self._hover:
+            self._hover = hover
+            self.viewport().update()
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event):
+        self._hover = (None, -1)
+        self.viewport().update()
+        super().leaveEvent(event)
+
+    def _locate_hit(self, event) -> Optional[Any]:
+        """L'asset dont l'icône Locate est sous le clic, ou None : ni sélection ni activation ne partent d'un clic sur elle."""
+        if self._kind.file_of is None or event.button() != Qt.MouseButton.LeftButton:
+            return None
+        pos = event.position().toPoint()
+        item = self.itemAt(pos)
+        if item is None or self.columnAt(pos.x()) != _LOCATE_COL:
+            return None
+        return item.data(0, _ROLE_OBJ)
+
+    def mousePressEvent(self, event):
+        obj = self._locate_hit(event)
+        if obj is not None:
+            self._locate_asset(obj)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if self._locate_hit(event) is not None:
+            event.accept()                      # le 2e clic d'un double-clic sur l'icône n'ouvre pas l'asset
+            return
+        super().mouseDoubleClickEvent(event)
+
+    def _asset_file(self, obj) -> Optional[Path]:
+        project = self._panel.project
+        return self._kind.file_of(project, obj) if project is not None else None
+
+    def _locate_asset(self, obj) -> None:
+        """LOCATE : l'onglet Disk montre le fichier de cet asset (cf. `ui/common/locate_bus.py`)."""
+        get_locate_bus().locate(self._asset_file(obj), self._name_of(obj))
+
+    def _reveal_asset(self, obj) -> None:
+        """REVEAL : l'explorateur du système montre le fichier de cet asset (cf. `ui/common/reveal.py`)."""
+        reveal_in_file_manager(self._asset_file(obj))
 
     def _refresh_folder_icon(self, item: QTreeWidgetItem, expanded: bool) -> None:
         """Alterne plein/filet au dépli — seuls les dossiers portent `_ROLE_OBJ`
@@ -517,6 +614,8 @@ class _KindTree(QTreeWidget):
                                   & ~Qt.ItemFlag.ItemIsDropEnabled)
                 if self._kind.tooltip_of is not None:
                     item.setToolTip(0, self._kind.tooltip_of(node.obj))
+                if self._kind.file_of is not None:
+                    item.setToolTip(_LOCATE_COL, tooltip(title=label('common.locate'), body=label('assetfind.locate_tip')))
                 if node.children:
                     self._fill(item, node.children)
 
@@ -850,6 +949,14 @@ class _KindTree(QTreeWidget):
             menu.addAction(lbl).triggered.connect(
                 lambda _=False, f=fn, o=obj: f(o))
 
+        if kind.file_of is not None:
+            if not menu.isEmpty():
+                menu.addSeparator()
+            menu.addAction(label('common.locate')).triggered.connect(
+                lambda _=False, o=obj: self._locate_asset(o))
+            menu.addAction(label('common.reveal')).triggered.connect(
+                lambda _=False, o=obj: self._reveal_asset(o))
+
         if kind.rename is not None:
             if not menu.isEmpty():
                 menu.addSeparator()
@@ -1067,9 +1174,6 @@ class AssetFinder(QWidget):
                     else kind.add_tooltip or label('assetfind.add_an_item'))
                 section.set_add_menu(kind.add_menu)
                 section.add_clicked.connect(lambda k=kind: self._add(k))
-            if kind.dir_of is not None:
-                section.set_reveal_visible(True)
-                section.reveal_clicked.connect(lambda k=kind: self._reveal(k))
             self._column.addWidget(section)
 
         self._column.addStretch()
@@ -1257,13 +1361,6 @@ class AssetFinder(QWidget):
 
     def extra_actions(self, kind_label: str) -> list:
         return self._extra_actions.get(kind_label, [])
-
-    # ── Ouvrir dans l'explorateur du système ─────────────────────────
-
-    def _reveal(self, kind: AssetKind):
-        if self._project is None:
-            return
-        reveal_in_file_manager(kind.dir_of(self._project))
 
     # ── Ajout ─────────────────────────────────────────────────────
 

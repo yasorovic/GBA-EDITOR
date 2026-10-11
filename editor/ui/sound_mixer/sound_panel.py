@@ -30,6 +30,9 @@ from ui.sound_mixer.state_machines import (
     ActionMatrix, MusicMachinePanel, MusicStateInspector,
 )
 from ui.sound_mixer.box_playback import BoxPlayer
+from ui.sound_mixer.music_editor import MusicEditor
+from core.music_structure import is_wav_asset
+from core.models.audio import FADE_MAX_FRAMES, PITCH_MAX, PITCH_MIN, TEMPO_MAX, TEMPO_MIN
 from ui.sound_mixer.sound_budget_bar import SoundBudgetBar
 from ui.common.asset_finder import AssetFinder
 from ui.common.asset_kinds import SFX, MUSIC, JINGLES
@@ -82,7 +85,7 @@ class _AssetInspectorBase(QWidget):
         def row(label, widget):
             r = QHBoxLayout()
             l = QLabel(label); l.setFont(QFont(T.UI, T.SM))
-            l.setStyleSheet(f"color:{C.TEXT_DIM};"); l.setFixedWidth(70)
+            l.setStyleSheet(f"color:{C.TEXT_DIM};"); l.setFixedWidth(92)
             r.addWidget(l); r.addWidget(widget, 1); cl.addLayout(r); return widget
 
         from ui.common.widgets import AssetHeaderBar
@@ -293,6 +296,79 @@ class MusicInspector(_AssetInspectorBase):
     _IMPORT_FILTER = file_dialog_filter("Module", MUSIC_FILE_EXTS)
     _IMPORT_FOLDER = "music"
     _HAS_LOOP = True
+    # Les réglages que la ROM applique à une musique. Un jingle n'en applique aucun (il joue sur
+    # l'autre couche, avec son propre volume) : son inspecteur ne les propose pas.
+    _SETTINGS = True
+
+    # Taux de build d'une piste WAV : 0 = le défaut. Plus bas, la piste pèse moins et peut être plus longue.
+    _RATES = ((0, "sndpanel.rate_default"), (8000, "8 000 Hz"), (11025, "11 025 Hz"),
+              (13379, "13 379 Hz"), (16000, "16 000 Hz"))
+
+    def _build_extra_rows(self, row, layout):
+        if not self._SETTINGS:
+            return
+        self._tempo = self._setting_spin(TEMPO_MIN, TEMPO_MAX, " %", self._on_tempo,
+                                         "sndpanel.tempo_tip")
+        self._pitch = self._setting_spin(PITCH_MIN, PITCH_MAX, " %", self._on_pitch,
+                                         "sndpanel.pitch_tip")
+        self._fade_in = self._setting_spin(0, FADE_MAX_FRAMES, " fr", self._on_fade_in,
+                                           "sndpanel.fade_in_tip")
+        self._fade_out = self._setting_spin(0, FADE_MAX_FRAMES, " fr", self._on_fade_out,
+                                            "sndpanel.fade_out_tip")
+        row(label("sndpanel.tempo"), self._tempo)
+        row(label("sndpanel.pitch"), self._pitch)
+        row(label("sndpanel.fade_in"), self._fade_in)
+        row(label("sndpanel.fade_out"), self._fade_out)
+        self._rate = QComboBox()
+        self._rate.setFont(QFont(T.UI, T.MD))
+        for value, text in self._RATES:
+            self._rate.addItem(label(text) if text.startswith("sndpanel.") else text, value)
+        self._rate.setToolTip(tooltip(title=label("sndpanel.music_rate"),
+                                      body=label("sndpanel.music_rate_tip")))
+        self._rate.currentIndexChanged.connect(self._on_rate)
+        row(label("sndpanel.rate"), self._rate)
+
+    def _setting_spin(self, low: int, high: int, suffix: str, slot, tip_key: str) -> QSpinBox:
+        spin = QSpinBox()
+        spin.setRange(low, high)
+        spin.setSuffix(suffix)
+        spin.setFont(QFont(T.MONO, T.MD))
+        spin.setStyleSheet(QSS.spinbox)
+        spin.setToolTip(tooltip(title=label(tip_key.removesuffix("_tip")), body=label(tip_key)))
+        spin.valueChanged.connect(slot)
+        return spin
+
+    def load(self, asset, project):
+        super().load(asset, project)
+        if not asset or not self._SETTINGS:
+            return
+        self._blocking = True
+        self._tempo.setValue(asset.tempo)
+        self._pitch.setValue(asset.pitch)
+        self._fade_in.setValue(asset.fade_in)
+        self._fade_out.setValue(asset.fade_out)
+        index = self._rate.findData(int(asset.sample_rate or 0))
+        self._rate.setCurrentIndex(index if index >= 0 else 0)
+        # Un WAV n'a ni tempo ni hauteur (son module n'a qu'une note, calée sur la piste) et ne
+        # change de taux que lui ; un module garde ses échantillons, donc pas de taux.
+        wav = is_wav_asset(asset.asset)
+        for widget in (self._tempo, self._pitch):
+            widget.setEnabled(not wav)
+        self._rate.setEnabled(wav)
+        self._blocking = False
+
+    def _set_setting(self, field: str, value) -> None:
+        if self._blocking or not self._asset:
+            return
+        setattr(self._asset, field, value)
+        self._persist()
+        self.changed.emit()
+
+    def _on_tempo(self, v): self._set_setting("tempo", v)
+    def _on_pitch(self, v): self._set_setting("pitch", v)
+    def _on_fade_in(self, v): self._set_setting("fade_in", v)
+    def _on_fade_out(self, v): self._set_setting("fade_out", v)
+    def _on_rate(self, index): self._set_setting("sample_rate", int(self._rate.itemData(index) or 0))
 
     def _weight_text(self, entry) -> str:
         """DEUX nombres, jamais un seul.
@@ -321,6 +397,7 @@ class JingleInspector(MusicInspector):
     """Même réglages qu'une musique, d'un autre dossier : le jingle ne boucle pas
     dans le jeu (maxmod le joue une fois), mais le réglage reste celui du module."""
     _EMPTY_TEXT = "sndpanel.jingle_empty"
+    _SETTINGS = False
     _HEADER_LABEL = "sndpanel.header_jingle"
     _IMPORT_DIALOG_TITLE = "sndpanel.jingle_import_title"
     _IMPORT_FOLDER = "jingles"
@@ -544,6 +621,7 @@ class SoundMixerScreen(QWidget):
         # L'asset du Sound finder que le lecteur jouera à la place de la boîte,
         # tant qu'on n'a pas touché à la boîte (cf. _disarm_asset).
         self._armed_asset = None
+        self._edited_music = None              # l'asset que l'éditeur central montre
         self.setStyleSheet(f"background:{C.BG_PANEL};")
 
         root = QVBoxLayout(self)
@@ -563,7 +641,7 @@ class SoundMixerScreen(QWidget):
         self._finder = AssetFinder(label('sndpanel.sound_finder'), [SFX, MUSIC, JINGLES],
                                    min_width=180, max_width=360)
         self._finder.selected.connect(lambda _kind, a: self._on_asset_selected(a))
-        self._finder.emptied.connect(lambda _kind: self._right_stack.setCurrentIndex(0))
+        self._finder.emptied.connect(self._on_finder_emptied)
 
         # ── Panneau central : contextes audio (masqué temporairement) ──
         # Les MusicBox/SoundBox/JingleBox restent chargées afin que les projets
@@ -577,7 +655,27 @@ class SoundMixerScreen(QWidget):
         center = QWidget()
         center_layout = QVBoxLayout(center)
         center_layout.setContentsMargins(0, 0, 0, 0)
-        center_layout.addWidget(self._machines_panel)
+        center_layout.setSpacing(0)
+        center_layout.addWidget(self._machines_panel, 1)
+        # L'éditeur d'une musique ou d'un jingle : la forme d'onde et les sections de boucle. Il prend la
+        # place du graphe masqué quand un module est choisi dans le finder (cf. `_show_music_editor`).
+        self._music_editor = MusicEditor(self._box_player.track_for)
+        self._music_editor.changed.connect(self._on_editor_changed)
+        self._music_editor.preview_section.connect(self._preview_section)
+        self._music_editor.hide()
+        center_layout.addWidget(self._music_editor, 1)
+        # Le lecteur ne dépend pas de l'éditeur de boîtes : il reste ancré en bas de la colonne (hauteur
+        # fixe) même quand le panneau des boîtes est masqué. Le remplissage pousse la barre vers le bas
+        # tant que l'éditeur n'est pas là, et lui cède la place sinon.
+        self._center_filler = QWidget()
+        center_layout.addWidget(self._center_filler, 1)
+        center_layout.addWidget(self._build_player_bar())
+        # Espace lance / arrête l'aperçu, comme le bouton du bandeau. Sur tout l'écran et non sur la
+        # seule colonne centrale : on choisit un asset dans le finder puis on l'écoute sans changer de focus.
+        play_pause = QShortcut(QKeySequence(), self)
+        play_pause.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        play_pause.activated.connect(self._btn_rom.toggle)
+        bind("sound.play_pause", play_pause)
 
         # ── Panneau droit : inspector ─────────────────────────────
         self._right_stack = QStackedWidget()
@@ -598,6 +696,7 @@ class SoundMixerScreen(QWidget):
 
         self._music_insp = MusicInspector()
         self._music_insp.changed.connect(self._on_changed)
+        self._music_insp.changed.connect(self._music_editor.reload)
         self._right_stack.addWidget(self._music_insp)  # 2
 
         # L'inspecteur du nœud sélectionné dans le graphe. Il partage la
@@ -612,6 +711,7 @@ class SoundMixerScreen(QWidget):
 
         self._jingle_insp = JingleInspector()
         self._jingle_insp.changed.connect(self._on_changed)
+        self._jingle_insp.changed.connect(self._music_editor.reload)
         self._right_stack.addWidget(self._jingle_insp)  # 4
 
         self.body = ThreeColumnBody(self._finder, center, self._right_stack,
@@ -642,10 +742,8 @@ class SoundMixerScreen(QWidget):
 
         panel = QWidget()
         panel.setStyleSheet(f"background:{C.BG_PANEL};")
-        # Même découpage que le Canvas du Scene Editor : le contexte reste
-        # visible en haut, l'éditeur occupe tout le milieu, et la lecture est
-        # ancrée en bas. Les trois boîtes ne sont donc plus des onglets qui
-        # mangent l'espace de l'éditeur.
+        # Le contexte reste visible en haut et l'éditeur occupe tout le milieu ;
+        # la lecture, elle, vit sous ce panneau (cf. `__init__`).
         lay = QVBoxLayout(panel)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
@@ -686,12 +784,6 @@ class SoundMixerScreen(QWidget):
         self._jingle_matrix.changed.connect(self._refresh_budget)
         lay.addWidget(self._build_context_bar())
         lay.addWidget(self._tabs, 1)
-        lay.addWidget(self._build_player_bar())
-        # Espace lance / arrête l'aperçu, comme le bouton du bandeau.
-        play_pause = QShortcut(QKeySequence(), panel)
-        play_pause.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        play_pause.activated.connect(self._btn_rom.toggle)
-        bind("sound.play_pause", play_pause)
         return panel
 
     def _build_context_bar(self) -> QFrame:
@@ -744,7 +836,7 @@ class SoundMixerScreen(QWidget):
         return bar
 
     def _build_player_bar(self) -> QWidget:
-        """Sous le node editor : les commandes de monitoring de la ROM."""
+        """Le lecteur, en bas de la colonne centrale : les commandes de monitoring de la ROM."""
         bar = QWidget()
         bar.setFixedHeight(42)
         bar.setStyleSheet(f"background:{C.BG_DEEP}; border-top:1px solid {C.BORDER};")
@@ -920,6 +1012,9 @@ class SoundMixerScreen(QWidget):
             self._btn_rom.setChecked(False)
             return
         duration = self._box_player.duration_seconds
+        if self._music_editor.isVisible():
+            self._music_editor.set_playhead_seconds(
+                self._box_player.position_seconds if self._box_player.sounding else -1.0)
         if duration <= 0:
             self._rom_progress.setValue(0)
             return
@@ -942,8 +1037,12 @@ class SoundMixerScreen(QWidget):
         qui se dépose.
         """
         self._disarm_asset()
-        visible = {0: MUSIC.label, 1: SFX.label, 2: JINGLES.label}
-        self._finder.show_only({visible.get(index, MUSIC.label)})
+        if self._machines_panel.isHidden():
+            # Sans éditeur de boîtes, rien ne se dépose : le finder garde ses trois familles.
+            self._finder.show_only(None)
+        else:
+            visible = {0: MUSIC.label, 1: SFX.label, 2: JINGLES.label}
+            self._finder.show_only({visible.get(index, MUSIC.label)})
         if 0 <= index < len(self._context_buttons):
             self._context_buttons[index].setChecked(True)
 
@@ -983,6 +1082,7 @@ class SoundMixerScreen(QWidget):
             self._btn_rom.setChecked(False)
         self._last_selected = None
         self._project = project
+        self._show_music_editor(None)
         self._finder.load_project(project)
         self._right_stack.setCurrentIndex(0)
         self._weights = None
@@ -1081,17 +1181,61 @@ class SoundMixerScreen(QWidget):
         if self._btn_rom.isChecked():
             self._btn_rom.setChecked(False)
 
+    def _show_music_editor(self, asset, sections: bool = True) -> None:
+        """Montre l'éditeur sur cet asset, ou le cache (`asset` None). Il remplace le remplissage."""
+        self._music_editor.load(self._project, asset, sections) if asset is not None \
+            else self._music_editor.load(None, None)
+        self._music_editor.setVisible(asset is not None)
+        self._center_filler.setVisible(asset is None)
+        self._edited_music = asset
+
+    def _on_finder_emptied(self, _kind) -> None:
+        self._right_stack.setCurrentIndex(0)
+        self._show_music_editor(None)
+
+    def _on_editor_changed(self) -> None:
+        """Une section a bougé dans l'éditeur : on enregistre l'asset, sans réveiller le watcher
+        (même règle que l'inspecteur, cf. `_AssetInspectorBase._persist`)."""
+        asset = self._edited_music
+        if asset is None or self._project is None:
+            return
+        with get_dispatcher().suspended():
+            if isinstance(asset, Jingle):
+                self._project.save_jingle(asset)
+            else:
+                self._project.save_music(asset)
+        self._finder.refresh()
+
+    def _preview_section(self, section) -> None:
+        """Le ▶ d'une ligne du tableau : la musique, depuis le début de cette section."""
+        asset = self._edited_music
+        if asset is None or self._project is None:
+            return
+        self._arm_asset(asset)
+        self._btn_rom.blockSignals(True)
+        self._btn_rom.setChecked(True)
+        self._btn_rom.blockSignals(False)
+        self._rom_state.setText(label("sndpanel.asset_preview"))
+        if not self._box_player.preview(self._project, asset, section):
+            self._btn_rom.blockSignals(True)
+            self._btn_rom.setChecked(False)
+            self._btn_rom.blockSignals(False)
+            self._rom_state.setText("IDLE")
+
     def _on_sfx_selected(self, sfx: Sfx):
+        self._show_music_editor(None)
         self._sfx_insp.load(sfx, self._project)
         self._sfx_insp.refresh_weight(self._sound_weights().get(("sfx", sfx.name)))
         self._right_stack.setCurrentIndex(1)
 
     def _on_music_selected(self, music: Music):
+        self._show_music_editor(music)
         self._music_insp.load(music, self._project)
         self._music_insp.refresh_weight(self._sound_weights().get(("music", music.name)))
         self._right_stack.setCurrentIndex(2)
 
     def _on_jingle_selected(self, jingle: Jingle):
+        self._show_music_editor(jingle, sections=False)
         self._jingle_insp.load(jingle, self._project)
         # Même soundbank que les musiques : le poids se relève sous la même clé.
         self._jingle_insp.refresh_weight(self._sound_weights().get(("music", jingle.name)))

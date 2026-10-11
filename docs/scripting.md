@@ -170,7 +170,81 @@ for i = 1, #degats do
 end
 ```
 
+### Gérer plusieurs états à la fois
+
+Un personnage de plateforme peut courir, attaquer et être invincible en même temps. Un seul `enum` ne peut pas le représenter : il ne vaut qu'une étiquette à la fois. Séparez donc l'état en deux familles.
+
+- **Ce qui s'exclut** (au sol, en saut, en chute) s'écrit avec un `enum` exposé, qu'on compare et qu'on affecte par son étiquette.
+- **Ce qui se cumule** (attaque, dégâts, invincibilité) s'écrit avec un bit par état dans un seul entier. `|` active un bit, `& ~` l'éteint, `&` le teste.
+
+```lua
+exports = {
+    locomotion = { type = "enum", default = "IDLE", values = {"IDLE", "RUN", "JUMP", "FALL"} },
+}
+
+local FLAG_ATTACKING  = 1    -- bit 0
+local FLAG_HURT       = 2    -- bit 1
+local FLAG_INVINCIBLE = 4    -- bit 2
+local flags = 0
+
+local attack_timer = 0
+
+function has_flag(flag)
+    return flags & flag ~= 0
+end
+
+function on_update()
+    local move_dir = input:get_axis("horizontal")
+
+    -- Exclusif : déduit de la physique à chaque frame.
+    if not self.grounded then
+        if self.velocity.y < 0 then locomotion = "JUMP" else locomotion = "FALL" end
+    elseif move_dir ~= 0 then
+        locomotion = "RUN"
+    else
+        locomotion = "IDLE"
+    end
+
+    -- Cumulable : on attaque en courant comme en sautant.
+    if not has_flag(FLAG_ATTACKING) and input:pressed("b") then
+        flags = flags | FLAG_ATTACKING
+        attack_timer = 20
+    end
+    if attack_timer > 0 then
+        attack_timer = attack_timer - 1
+        if attack_timer == 0 then flags = flags & ~FLAG_ATTACKING end
+    end
+
+    -- L'action prime sur la locomotion pour choisir l'animation.
+    if has_flag(FLAG_ATTACKING) then self:play_anim("attack")
+    elseif locomotion == "RUN" then self:play_anim("moving")
+    elseif locomotion == "IDLE" then self:play_anim("idle")
+    else self:play_anim("jumping") end
+end
+
+function on_collision_enter(other, my_box, other_box)
+    if not has_flag(FLAG_INVINCIBLE) then
+        flags = flags | FLAG_HURT | FLAG_INVINCIBLE   -- deux drapeaux d'un coup
+    end
+end
+```
+
+Quelques points à retenir :
+
+- **Un compteur par drapeau temporaire.** Le drapeau tombe quand son compteur atteint `0`. Ici seul `attack_timer` est écrit en entier ; `FLAG_HURT` et `FLAG_INVINCIBLE` suivraient le même schéma avec leurs propres compteurs.
+- **Les drapeaux sont des entiers de 32 bits** : un seul entier en porte jusqu'à 32. Une globale `u8` n'en garde que 8, une `u16` que 16.
+- **L'`enum` se compare par son étiquette** (`locomotion == "RUN"`) ; le build refuse une étiquette absente de `values`.
+- **Il n'y a pas de `switch`.** Pour choisir entre plusieurs valeurs, écrivez `if … elseif … else`. Le `else` joue le rôle d'un cas par défaut.
+
+Les opérateurs bit à bit sont détaillés dans la [référence](scripting-reference.md#le-langage).
+
 ## Construire une action dans le temps
+
+### Le temps se compte en frames
+
+Le moteur appelle vos handlers **une fois par frame**, environ 60 fois par seconde, et il n'y a pas de `dt` : une vitesse s'exprime par frame (`256` sous-pixels valent 1 pixel par frame) et une durée en nombre de frames (`wait(30)` attend une demi-seconde). `scene.frame` compte ces frames depuis le début de la scène.
+
+Si le travail d'une frame dure plus de 16,7 ms, le jeu **ralentit par paliers** au lieu de sauter ou de rattraper : un tour qui dure entre 1 et 2 images fait avancer le jeu à 30 frames par seconde, entre 2 et 3 images à 20 par seconde. `scene.frame`, `wait(n)` et tous vos compteurs ralentissent avec lui ; l'affichage continue de se rafraîchir. Cela a été mesuré dans mGBA, dont le BIOS est émulé (`tools/frame_overrun_probe`). Pour vérifier le budget de votre jeu, cochez le build debug : chaque frame écrit `frame us=N` dans le journal de mGBA, et `N` doit rester sous **16 743**.
 
 Un handler rend la main à chaque frame. Une **séquence** permet d'écrire une action qui attend, en restant lisible :
 

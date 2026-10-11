@@ -222,6 +222,18 @@ static inline void camera_shake_apply(void) {
     cam_x += g_shake_dx; cam_y += g_shake_dy;
 }
 
+/* Décalages `a << n` / `a >> n` du Lua. Un `int` est un registre ARM de 32 bits ;
+   le C seul laisse deux écarts avec le Lua que ces fonctions ferment :
+     - un décalage d'au moins 32 bits est INDÉFINI en C. Ici il vaut 0 (comme en
+       Lua, où un décalage de la largeur entière ou plus vide la valeur) ; un
+       compte négatif vaut 0 aussi — le checker refuse déjà un littéral hors 0..31 ;
+     - `>>` d'un `int` signé propage le signe en C (ASR). Le `>>` du Lua est
+       LOGIQUE (LSR) : les bits qui entrent à gauche sont des 0.
+   Passer par `unsigned` rend aussi `<<` défini quand le bit 31 déborde. Avec un
+   compte constant, -O2 replie l'appel en un seul LSL/LSR. */
+static inline int bits_shl(int a, int n) { return (unsigned)n < 32u ? (int)((unsigned)a << n) : 0; }
+static inline int bits_shr(int a, int n) { return (unsigned)n < 32u ? (int)((unsigned)a >> n) : 0; }
+
 /* Vec2/Vec3 — opérateurs composante à composante. Pas d'opérateur `+`/`-`/`*`
    sur les structs en C : ce sont ces fonctions que le codegen appelle pour
    `a + b` / `a - b` / `v * k` sur deux valeurs vec2 ou vec3 (jamais mélangées

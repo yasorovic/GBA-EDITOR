@@ -105,6 +105,30 @@ LOOP_NONE     = 0
 LOOP_FORWARD  = 1
 LOOP_PINGPONG = 2
 
+# ── La table d'ordres, telle que la ROM la numérote ───────────────────
+# `mmutil` ne renumérote RIEN (mesuré le 2026-10-11, ROADMAP « L'asset .music ») :
+# la séquence du soundbank est celle du fichier, marqueurs compris, et
+# `mmGetPosition()` rend l'index BRUT. Avec [0, 254, 1, 255], il passe de 0 à 2
+# (le séparateur est sauté mais occupe l'index 1), puis s'arrête sur le 255.
+# `Module.order` porte donc cette table brute, et c'est elle qu'une section
+# d'un `.music` indexe — filtrer les marqueurs décalerait l'éditeur de la ROM.
+ORDER_SKIP = 254       # « +++ » : séparateur, sauté
+ORDER_END  = 255       # « --- » : fin du morceau, ce qui suit n'est jamais joué
+
+
+def effective_restart(restart: int, length: int) -> int:
+    """La position de restart que `mmutil` écrit : hors de la table, elle devient 0.
+
+    Mesuré sur 127, la valeur de ProTracker pour « aucun » (→ 0). Un restart
+    hors table mais différent de 127 n'a pas été essayé ; on suppose la même règle."""
+    return restart if 0 <= restart < length else 0
+
+
+def is_pattern_order(entry: int) -> bool:
+    """Vrai si cette entrée de la table désigne un pattern, pas un marqueur."""
+    return entry < ORDER_SKIP
+
+
 # Notes. La numérotation est celle d'IT — **60 = C-5**, la note qui sonne au
 # `c5_speed` de l'échantillon. Les autres formats s'y ramènent à la lecture,
 # pour que le lecteur audio n'ait qu'une convention à connaître.
@@ -218,7 +242,10 @@ class Module:
     #     En ProTracker, « A00 » ne fait rien du tout.
     slide_scale: float = 1.0
     effect_memory: bool = False
-    order: list = field(default_factory=list)          # list[int]
+    order: list = field(default_factory=list)          # list[int], table BRUTE — cf. ORDER_SKIP / ORDER_END
+    # Où `MM_PLAY_LOOP` reboucle : un index de `order`. MOD et XM l'écrivent
+    # dans leur en-tête, `mmutil` le transmet ; IT et S3M n'en ont pas, donc 0.
+    restart: int = 0
     patterns: list = field(default_factory=list)       # list[list[list[Cell]]]
     samples: list = field(default_factory=list)        # list[Sample]
     instruments: list = field(default_factory=list)    # list[Instrument], vide si aucun

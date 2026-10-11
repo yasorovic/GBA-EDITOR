@@ -1,0 +1,30 @@
+{
+  "name": "bs-p2-mountianzone",
+  "id": "5f79e32bef92",
+  "asset": "assets/music/.MOD/bs-p2-mountianzone.mod",
+  "loop": true,
+  "volume": 100,
+  "unit": "order",
+  "sections": [
+    {
+      "name": "Loop",
+      "color": "#82aaff",
+      "start": 0,
+      "end": 5,
+      "loop": true
+    },
+    {
+      "name": "Loop 2",
+      "color": "#7aab7a",
+      "start": 5,
+      "end": 9,
+      "loop": true
+    }
+  ],
+  "loop_section": "Loop",
+  "tempo": 100,
+  "pitch": 100,
+  "fade_in": 0,
+  "fade_out": 0,
+  "sample_rate": 0
+}

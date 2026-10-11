@@ -317,6 +317,10 @@ def transpile_all(
                    if hasattr(p, "audio_modules") else {})
     # Parmi les modules ci-dessus, ceux qui vivent dans assets/jingles/.
     jingle_names = [j.name for j in getattr(p, "jingles", [])]
+    # Les noms de section des musiques : l'index est la constante `MSEC_*`, et la même liste clé
+    # la table de main.c (cf. core/music_structure.music_section_names).
+    from core.music_structure import music_section_names
+    music_section_list = music_section_names(getattr(p, "music", []))
     # Textes et polices : l'ORDRE fait foi (il devient l'index dans les tables C
     # émises par main_gen). project_fonts() est la source unique côté polices.
     from codegen.font_emit import project_fonts
@@ -470,6 +474,7 @@ def transpile_all(
             sfx_names    = sfx_names,
             music_names  = music_names,
             jingle_names = jingle_names,
+            music_section_names = music_section_list,
             scene_names  = _scene_names,
             camera_names = _camera_names,
             box_tag_names = _box_tag_names,
@@ -535,6 +540,7 @@ def transpile_all(
                 sfx_names    = sfx_names,
                 music_names  = music_names,
                 jingle_names = jingle_names,
+                music_section_names = music_section_list,
                 scene_names  = _scene_names,
                 camera_names = _camera_names,
                 box_tag_names = _box_tag_names,
@@ -605,6 +611,7 @@ def transpile_all(
             sfx_names     = sfx_names,
             music_names   = music_names,
             jingle_names = jingle_names,
+            music_section_names = music_section_list,
             global_names  = set(global_names),
             string_globals = _string_globals,
             const_names   = set(const_names),
@@ -682,6 +689,7 @@ def transpile_all(
             sfx_names    = sfx_names,
             music_names  = music_names,
             jingle_names = jingle_names,
+            music_section_names = music_section_list,
             scene_names  = _scene_names,
             camera_names = _camera_names,
             box_tag_names = _box_tag_names,
@@ -736,6 +744,7 @@ def transpile_all(
             sfx_names     = sfx_names,
             music_names   = music_names,
             jingle_names = jingle_names,
+            music_section_names = music_section_list,
             global_names  = set(global_names),
             string_globals = _string_globals,
             const_names   = set(const_names),
@@ -808,6 +817,7 @@ def transpile_all(
             sfx_names     = sfx_names,
             music_names   = music_names,
             jingle_names = jingle_names,
+            music_section_names = music_section_list,
             global_names  = set(global_names),
             string_globals = _string_globals,
             const_names   = set(const_names),
@@ -869,6 +879,7 @@ def transpile_all(
             sfx_names    = sfx_names,
             music_names  = music_names,
             jingle_names = jingle_names,
+            music_section_names = music_section_list,
             scene_names  = _scene_names,
             camera_names = _camera_names,
             box_tag_names = _box_tag_names,
@@ -921,6 +932,7 @@ def transpile_all(
             sfx_names     = sfx_names,
             music_names   = music_names,
             jingle_names = jingle_names,
+            music_section_names = music_section_list,
             global_names  = set(global_names),
             string_globals = _string_globals,
             const_names   = set(const_names),

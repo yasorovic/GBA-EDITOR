@@ -3,9 +3,9 @@
 L'arbre vertical de tout le dossier ; choisir un dossier le montre dans l'onglet Disk
 du panneau du bas (`folder_selected`), qui en affiche le contenu à plat. Le « + » déroule le
 menu de la vue à plat (importer, asset vierge, dossier) dans le dossier choisi ; un dossier neuf est
-nommé d'office puis renommé EN PLACE (pas de fenêtre) ; la loupe filtre l'arbre par nom. La vue ne connaît ni le projet ni le
+nommé d'office puis renommé EN PLACE (pas de fenêtre), comme tout dossier, source ou script (F2, ou « Rename » au clic droit) ; la loupe filtre l'arbre par nom. La vue ne connaît ni le projet ni le
 disque : `window.py` lui donne l'arbre calculé par `core.disk_tree` et fait l'écriture
-(`core.disk_folders`). La marque d'un fichier (asset, source reliée, source
+(`core.disk_folders`, `core.disk_move`). La marque d'un fichier (asset, source reliée, source
 sans asset, non géré) se lit à sa couleur et à son infobulle ; la racine s'appelle
 « Assets »."""
 
@@ -20,14 +20,15 @@ from PyQt6.QtWidgets import QHBoxLayout, QLabel, QMenu, QTreeWidget, QTreeWidget
 from core import disk_tree
 from ui.common import icons
 from ui.common.disk_view import (
-    DRAGGING_ROLE, MIME_DISK_PATHS, DiskCallbacks, DragDimDelegate, DropCheckMixin, add_asset_actions, bind_delete_key, disk_mime,
-    dropped_paths, file_icon, mark_color, mark_text, openable, paint_drop_target, show_plus_menu, show_sort_menu, sort_nodes, SORT_MODES,
+    DRAGGING_ROLE, MIME_DISK_PATHS, DiskCallbacks, DragDimDelegate, DropCheckMixin, add_asset_actions, add_folder_color_actions, bind_delete_key, disk_mime,
+    dropped_paths, file_icon, mark_color, mark_text, openable, paint_drop_target, renamable, show_plus_menu, show_sort_menu, sort_nodes, SORT_MODES,
 )
 from ui.common.labels import label
 from ui.common.panel_bar import bar_button, panel_bar
 from ui.common.theme import C, QSS, S, T
 from ui.common.tooltip import tooltip
 from ui.common.widgets import W
+from ui.common.disk_folder_colors import color_for as folder_color_for
 
 _PATH_ROLE = Qt.ItemDataRole.UserRole
 _IS_FOLDER_ROLE = Qt.ItemDataRole.UserRole + 1
@@ -40,6 +41,7 @@ class _DiskTree(DropCheckMixin, QTreeWidget):
     move_requested = pyqtSignal(list, str)           # (chemins, dossier de destination)
     drop_blocked = pyqtSignal(object)                # (chemin, motif) du premier élément qu'un survol refuse
     actor_dropped = pyqtSignal(str, str)             # (acteur du canvas, dossier de destination)
+    files_dropped = pyqtSignal(list, str)            # (fichiers de l'explorateur, dossier de destination)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -67,6 +69,14 @@ class _DiskTree(DropCheckMixin, QTreeWidget):
             return None
         return item.data(0, _PATH_ROLE)
 
+    def _import_item(self, event) -> QTreeWidgetItem | None:
+        """Le dossier qui recevrait des fichiers de l'explorateur : celui sous la souris, le dossier d'un fichier
+        survolé, sinon la racine."""
+        item = self.itemAt(event.position().toPoint())
+        if item is not None and not item.data(0, _IS_FOLDER_ROLE):
+            item = item.parent()
+        return item if item is not None else self.topLevelItem(0)
+
     def startDrag(self, actions):
         """Les lignes glissées passent à demi transparentes jusqu'au dépôt (ou à l'abandon)."""
         items = self.selectedItems()
@@ -84,14 +94,19 @@ class _DiskTree(DropCheckMixin, QTreeWidget):
 
     def dragEnterEvent(self, event):
         self._forget_verdicts()
-        if dropped_paths(event.mimeData()) or self._canvas_actor(event.mimeData()):
+        mime = event.mimeData()
+        if dropped_paths(mime) or self._canvas_actor(mime) or self._external_files(mime):
             event.acceptProposedAction()
         else:
             event.ignore()
 
     def dragMoveEvent(self, event):
         paths, target = dropped_paths(event.mimeData()), self._target(event)
-        if self._canvas_actor(event.mimeData()):          # un acteur du canvas : tout dossier le reçoit
+        if self._external_files(event.mimeData()):
+            event.setDropAction(Qt.DropAction.CopyAction)
+            event.accept()
+            self._set_drop_hover(self._import_item(event))
+        elif self._canvas_actor(event.mimeData()):          # un acteur du canvas : tout dossier le reçoit
             event.setDropAction(Qt.DropAction.CopyAction)
             if target:
                 event.accept()
@@ -115,8 +130,15 @@ class _DiskTree(DropCheckMixin, QTreeWidget):
         target = self._target(event)
         paths = dropped_paths(event.mimeData())
         actor = self._canvas_actor(event.mimeData())
+        files = self._external_files(event.mimeData())
+        folder = self._import_item(event) if files else None
         self._set_drop_hover(None)
         self._forget_verdicts()
+        if files and folder is not None:
+            event.setDropAction(Qt.DropAction.CopyAction)
+            event.accept()
+            self.files_dropped.emit(files, folder.data(0, _PATH_ROLE))
+            return
         if target and actor:
             event.setDropAction(Qt.DropAction.CopyAction)
             event.accept()
@@ -150,7 +172,8 @@ class DiskTreeView(QWidget):
     asset_open_requested = pyqtSignal(str, str, str)  # (famille, nom, chemin) : double-clic sur un asset
     actor_dropped = pyqtSignal(str, str)            # (acteur du canvas, dossier) : un acteur glissé du canvas
     folder_selected = pyqtSignal(str)               # chemin du dossier choisi
-    folder_rename_requested = pyqtSignal(str, str)  # (chemin du dossier, nouveau nom)
+    rename_requested = pyqtSignal(str, str)         # (chemin de l'entrée, nouveau nom)
+    folder_color_changed = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -197,16 +220,20 @@ class DiskTreeView(QWidget):
         self._tree.move_requested.connect(self.move_requested)
         self._tree.drop_blocked.connect(self.drop_blocked)
         self._tree.actor_dropped.connect(self.actor_dropped)
+        self._tree.files_dropped.connect(self._on_files_dropped)
         self._tree.setHeaderHidden(True)
         self._tree.setFont(QFont(T.UI, T.SM))
         self._tree.setUniformRowHeights(True)
-        self._tree.setItemDelegate(DragDimDelegate(lines=1, parent=self._tree))
-        self._tree.setEditTriggers(QTreeWidget.EditTrigger.NoEditTriggers)
+        self._tree.setItemDelegate(DragDimDelegate(lines=1, parent=self._tree, node_role=_NODE_ROLE))
+        # Un clic sur une ligne déjà choisie (ou F2) en édite le nom, comme dans les autres arbres ; seules les lignes
+        # `renamable` portent le drapeau d'édition (cf. `_add`).
+        self._tree.setEditTriggers(QTreeWidget.EditTrigger.SelectedClicked | QTreeWidget.EditTrigger.EditKeyPressed)
         self._tree.setStyleSheet(
-            f"QTreeWidget{{background:{C.BG_DEEP};border:none;padding:2px;}}"
-            f"QTreeWidget::item{{padding:2px 4px;}}"
+            f"QTreeWidget{{background:{C.BG_DEEP};border:none;padding:4px;outline:none;}}"
+            f"QTreeWidget::item{{padding:2px 4px;border:1px solid transparent;border-radius:3px;}}"
             f"QTreeWidget::item:hover{{background:{C.BG_HOVER};}}"
-            f"QTreeWidget::item:selected{{background:{C.BG_HOVER};}}")
+            f"QTreeWidget::item:selected{{background:{C.BG_SEL};border-color:{C.BORDER_MID};}}"
+            f"QTreeWidget::item:selected:active{{border-color:{C.ACCENT};}}")
         self._tree.itemExpanded.connect(lambda item: self._set_folder_icon(item, True))
         self._tree.itemCollapsed.connect(lambda item: self._set_folder_icon(item, False))
         self._tree.itemClicked.connect(self._on_clicked)
@@ -216,10 +243,6 @@ class DiskTreeView(QWidget):
         self._tree.customContextMenuRequested.connect(self._on_context_menu)
         self._callbacks: DiskCallbacks | None = None
         self._tree.itemChanged.connect(self._on_item_changed)
-        self._renaming: str | None = None           # le dossier dont le nom s'édite en ce moment
-        # L'éditeur se referme à la validation comme à Échap, qu'il y ait eu changement ou non :
-        # c'est là qu'on rend la ligne non éditable.
-        self._tree.itemDelegate().closeEditor.connect(self._end_rename)
         v.addWidget(self._tree, 1)
 
         self._empty = QLabel("—")
@@ -233,6 +256,10 @@ class DiskTreeView(QWidget):
 
     def set_callbacks(self, callbacks: DiskCallbacks) -> None:
         self._callbacks = callbacks
+
+    def _on_files_dropped(self, files: list, folder: str) -> None:
+        if self._callbacks is not None:
+            self._callbacks.import_paths(files, folder)
 
     def _selected_nodes(self) -> list:
         return [n for n in (i.data(0, _NODE_ROLE) for i in self._tree.selectedItems()) if n is not None]
@@ -248,7 +275,11 @@ class DiskTreeView(QWidget):
         nodes = self._selected_nodes()
         menu = QMenu(self)
         menu.setStyleSheet(QSS.menu)
-        add_asset_actions(menu, nodes, self._callbacks)
+        # « Assets », la racine, n'est pas un dossier qu'on renomme.
+        rename = None if nodes and nodes[0] is self._root else self._begin_rename_node
+        add_asset_actions(menu, nodes, self._callbacks, rename)
+        if len(nodes) == 1:
+            add_folder_color_actions(menu, nodes[0], self.folder_color_changed.emit)
         if not menu.isEmpty():
             menu.exec(self._tree.viewport().mapToGlobal(position))
 
@@ -274,8 +305,10 @@ class DiskTreeView(QWidget):
         item.setData(0, _PATH_ROLE, str(node.path))
         item.setData(0, _IS_FOLDER_ROLE, node.kind == disk_tree.FOLDER)
         item.setData(0, _NODE_ROLE, node)
+        if renamable(node) and parent is not self._tree.invisibleRootItem():     # la racine « Assets » ne se renomme pas
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
         if node.kind == disk_tree.FOLDER:
-            item.setIcon(0, icons.folder_icon(False))
+            item.setIcon(0, icons.folder_icon(False, folder_color_for(node.path) or icons.COLOR_FOLDER))
             item.setForeground(0, QColor(C.TEXT_HI))
             for child in sort_nodes(node.children, self._sort):
                 self._add(item, child)
@@ -318,49 +351,30 @@ class DiskTreeView(QWidget):
         self._btn_search.setChecked(False)
         show_plus_menu(self, self._btn_add, self._target_folder(), self._callbacks)
 
+    def _begin_rename_node(self, node: disk_tree.DiskNode) -> None:
+        if node is not self._root:
+            self.begin_rename(str(node.path))
+
     def begin_rename(self, path: str) -> None:
-        """Le dossier `path` (qui vient d'être créé) devient une ligne éditable."""
+        """L'entrée `path` (un dossier qui vient d'être créé, ou celle qu'on renomme) devient une ligne éditable."""
         item = self._find(path)
-        if item is None:
+        if item is None or not item.flags() & Qt.ItemFlag.ItemIsEditable:
             return
         parent = item.parent()
-        while parent is not None:                   # le dossier neuf doit se voir
+        while parent is not None:                   # l'entrée doit se voir
             parent.setExpanded(True)
             parent = parent.parent()
-        self._set_editable(item, True)
-        self._renaming = path
         self._tree.setCurrentItem(item)
         # L'éditeur s'ouvre APRÈS la fin du clic sur « + » : à la fin d'un clic, le focus revient
         # au bouton, et un éditeur ouvert pendant ce temps se refermait aussitôt.
-        QTimer.singleShot(0, lambda: self._start_edit(path))
+        QTimer.singleShot(0, lambda: self._tree.editItem(item, 0))
 
     def _on_item_changed(self, item: QTreeWidgetItem, column: int) -> None:
+        """Le nom validé dans l'éditeur ; un nom inchangé (ou Échap) ne demande rien."""
         path = item.data(0, _PATH_ROLE)
-        if column != 0 or path != self._renaming:
-            return
-        self._end_rename()
-        if item.text(0) != Path(path).name:
-            self.folder_rename_requested.emit(path, item.text(0))
-
-    def _start_edit(self, path: str) -> None:
-        item = self._find(path) if self._renaming == path else None
-        if item is not None:
-            self._tree.editItem(item, 0)
-
-    def _end_rename(self, *_ignored) -> None:
-        item = self._find(self._renaming) if self._renaming else None
-        self._renaming = None
-        if item is not None:
-            self._set_editable(item, False)
-
-    def _set_editable(self, item: QTreeWidgetItem, editable: bool) -> None:
-        """Changer les drapeaux d'un élément émet `itemChanged` : sans le bloquer, le
-        gestionnaire verrait ce changement comme une validation du nom."""
-        self._tree.blockSignals(True)
-        flags = item.flags()
-        item.setFlags(flags | Qt.ItemFlag.ItemIsEditable if editable
-                      else flags & ~Qt.ItemFlag.ItemIsEditable)
-        self._tree.blockSignals(False)
+        if (column == 0 and path and item.flags() & Qt.ItemFlag.ItemIsEditable      # pas la racine « Assets »
+                and item.text(0) != Path(path).name):
+            self.rename_requested.emit(path, item.text(0))
 
     def _find(self, path: str) -> QTreeWidgetItem | None:
         stack = [self._tree.topLevelItem(i) for i in range(self._tree.topLevelItemCount())]
@@ -370,6 +384,21 @@ class DiskTreeView(QWidget):
                 return item
             stack.extend(item.child(i) for i in range(item.childCount()))
         return None
+
+    def select_file(self, path: str) -> None:
+        """Déplie les dossiers jusqu'à `path`, le sélectionne et l'amène en vue. Sans effet si l'arbre ne le contient pas.
+        Le filtre est levé : il pourrait cacher la ligne."""
+        self._btn_search.setChecked(False)
+        item = self._find(str(path))
+        if item is None:
+            return
+        parent = item.parent()
+        while parent is not None:
+            parent.setExpanded(True)
+            parent = parent.parent()
+        self._tree.clearSelection()
+        self._tree.setCurrentItem(item)
+        self._tree.scrollToItem(item)
 
     # ── Choix d'un dossier ────────────────────────────────────────
 
@@ -412,4 +441,4 @@ class DiskTreeView(QWidget):
 
     @staticmethod
     def _set_folder_icon(item: QTreeWidgetItem, expanded: bool) -> None:
-        item.setIcon(0, icons.folder_icon(expanded))
+        item.setIcon(0, icons.folder_icon(expanded, folder_color_for(item.data(0, _PATH_ROLE)) or icons.COLOR_FOLDER))

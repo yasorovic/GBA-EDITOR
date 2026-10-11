@@ -570,7 +570,7 @@
         {
           "label": "music:cut_to(\"name\")",
           "snippet": "music:cut_to(\"name\")",
-          "description": "Switches to another track WITHOUT a dip, at the end of the current pattern, resuming at the same position. This is what chains two variants of the same song. Both tracks must have the same structure.",
+          "description": "Switches to another track WITHOUT a dip, at the end of the current pattern, resuming at the same position. This is what chains two variants of the same song. Wherever the current track can be, the target must have a pattern at the same position; the validator checks it.",
           "params": [
             {
               "name": "name",
@@ -579,6 +579,83 @@
             }
           ],
           "doc_anchor": "music-cut_to"
+        },
+        {
+          "label": "music:set_tempo(percent)",
+          "snippet": "music:set_tempo(150)",
+          "description": "Sets the tempo of the playing music, as a percentage of the file's own. The next track starts again at the tempo set on its asset. Not for a WAV track: its length is its tempo.",
+          "params": [
+            {
+              "name": "percent",
+              "type": "int",
+              "description": "50 to 200"
+            }
+          ],
+          "doc_anchor": "music-set_tempo"
+        },
+        {
+          "label": "music:set_pitch(percent)",
+          "snippet": "music:set_pitch(120)",
+          "description": "Sets the pitch of the playing music, as a percentage: a module plays higher and shorter, lower and longer. The next track starts again at the pitch set on its asset. Not for a WAV track.",
+          "params": [
+            {
+              "name": "percent",
+              "type": "int",
+              "description": "50 to 200"
+            }
+          ],
+          "doc_anchor": "music-set_pitch"
+        },
+        {
+          "label": "music:fade_in(\"name\", frames)",
+          "snippet": "music:fade_in(\"name\", 90)",
+          "description": "Starts a music track with a fade in of `frames`, instead of the fade in set on its asset. The volume rises from zero.",
+          "params": [
+            {
+              "name": "name",
+              "type": "string",
+              "description": "Name of the Music"
+            },
+            {
+              "name": "frames",
+              "type": "int",
+              "description": "Duration, in frames (60 per second)"
+            }
+          ],
+          "doc_anchor": "music-fade_in"
+        },
+        {
+          "label": "music:fade_out(frames)",
+          "snippet": "music:fade_out(90)",
+          "description": "Stops the music with a fade out of `frames`, instead of the fade out set on its asset. `music:is_playing()` stays true until it is over.",
+          "params": [
+            {
+              "name": "frames",
+              "type": "int",
+              "description": "Duration, in frames (60 per second)"
+            }
+          ],
+          "doc_anchor": "music-fade_out"
+        },
+        {
+          "label": "music:set_section(\"section\")",
+          "snippet": "music:set_section(\"Phase 2\")",
+          "description": "Makes the playing track loop on another section of its own — a boss changing phase: the same song, another part of it. Nothing happens if the playing track has no section by this name. Modules only: a WAV track has a single loop, fixed at build.",
+          "params": [
+            {
+              "name": "section",
+              "type": "string",
+              "description": "Name of a section of the playing Music"
+            }
+          ],
+          "doc_anchor": "music-set_section"
+        },
+        {
+          "label": "music:leave_loop()",
+          "snippet": "music:leave_loop()",
+          "description": "Lets the playing track leave its loop section: it plays on through the rest of the song — the outro — and then stops. Modules only: a WAV track never leaves its loop, so its outro is never played.",
+          "params": [],
+          "doc_anchor": "music-leave_loop"
         },
         {
           "label": "music:jingle(\"name\")",

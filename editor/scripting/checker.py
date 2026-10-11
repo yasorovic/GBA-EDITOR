@@ -23,7 +23,7 @@ from typing import Optional
 from .parser import (
     LuaScript, LuaFunction,
     StmtCall, StmtAssign, StmtLocalAssign, StmtIf, StmtWhile, StmtForNum, StmtReturn,
-    StmtUnsupported, ExprUnsupported,
+    StmtBreak, StmtUnsupported, ExprUnsupported,
     ExprInvoke, ExprCall, ExprIndex, ExprIndexAt, ExprTable, ExprName, ExprString,
     ExprNumber, ExprUnop, ExprBool, ExprBinop, ExprNil,
     ARRAY_CTOR, array_dims, DATA_NS, REQUIRE_FN, require_target, local_names,
@@ -31,13 +31,14 @@ from .parser import (
     SEQUENCE_PREFIX,
 )
 from . import lua_subset
+from .exports_parser import KNOWN_TYPES as KNOWN_EXPORT_TYPES
 # Boutons GBA : liste unique définie dans `core.models`.
 from core.models.settings import BUTTON_NAMES
 from codegen.c_names import c_ident
 from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, REMOVED_EVENTS, KNOWN_EVENTS, KNOWN_EVENTS_BY_KIND,
                   ALL_KNOWN_EVENTS, OWNER_KINDS_WITH_SELF, DOMAIN_ANIM, DOMAIN_SPRITE_ID, DOMAIN_SFX,
                   DOMAIN_SOUND_BOX_STATE, DOMAIN_JINGLE_BOX_STATE,
-                  DOMAIN_MUSIC_BOX_TRIGGER,
+                  DOMAIN_MUSIC_BOX_TRIGGER, DOMAIN_MUSIC_SECTION,
                   DOMAIN_MUSIC, DOMAIN_JINGLE, DOMAIN_KEY, DOMAIN_AXIS, DOMAIN_INPUT_SEQUENCE,
                   DOMAIN_SCENE, DOMAIN_CAMERA, DOMAIN_TEXT, DOMAIN_FONT,
                   DOMAIN_LANG,
@@ -49,7 +50,7 @@ from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, REMOVED_EVENTS, KNOWN
                   DOMAIN_BLEND_MODE, DOMAIN_BLEND_SIDE, DOMAIN_EASE, HARDWARE_ENUMS,
                   API_MODULES, module_members, REF_TYPES, REF_TYPE_TABLE,
                   ref_member, ref_lineage, REF_ACTOR, STATELESS_MODULES, module_call_form, LAYER_NUMBERS,
-                  modernize_message, REF_COLLISION_BOX, COLLISION_EVENTS, BOX_PARAMS)
+                  modernize_message, REF_COLLISION_BOX, COLLISION_EVENTS, BOX_PARAMS, EVENT_REGISTRY)
 
 from .expr_types import (VEC_FIELDS, VEC_CONSTRUCTORS, VEC_FUNCTIONS, ARITH_TYPES,
                          infer_vec_type, infer_ref_type, resolve_prop,
@@ -119,6 +120,7 @@ class BuildContext:
     sound_box_state_names: list[str]  = None  # états des SoundBox du projet
     jingle_box_state_names: list[str] = None  # états des JingleBox du projet
     music_box_trigger_names: list[str] = None  # déclencheurs des MusicBox
+    music_section_names: list[str] = None  # noms de section des musiques (music.set_section)
     actor_names:  list[str]  = None    # noms des actors de la scène (pour actor.get)
     prefab_names: list[str]  = None    # noms de Prefab du projet (pour actor.spawn)
     # Exports par prefab, utilisés pour valider `actor:spawn`.
@@ -184,6 +186,8 @@ class Checker:
         self._arrays: dict[str, Optional[tuple[int, ...]]] = {}
         # Types des variables vectorielles. `None` indique des types incompatibles.
         self._vec_types: dict[str, Optional[str]] = {}
+        # Étiquettes des exports `enum`, dans l'ordre déclaré : l'index est la valeur.
+        self._enum_exports: dict[str, list[str]] = {}
         # Types de référence des variables locales, pour valider leurs méthodes.
         self._ref_types: dict[str, str] = {}
         # Éléments d'interface référencés par les variables locales.
@@ -225,12 +229,20 @@ class Checker:
         self._assigned = assigned_names(script)
         for loc in script.locals:
             self._check_array_decl(loc.name, loc.value)
+            self._check_literals_in(loc.value)
             # Les exports composites sont typés dès leur déclaration.
             if loc.export_type in ("vec2", "vec3", "rect"):
                 self._vec_types[loc.name] = loc.export_type
+            if loc.export_type == "enum" and loc.export_values:
+                self._enum_exports[loc.name] = list(loc.export_values)
         self._check_export_names(script)
+        self._check_export_values(script)
+        self._check_duplicate_functions(script)
+        if check_event_names:
+            self._check_event_names(script)
         self._check_stray_statements(script)
         self._check_self_owner(script)
+        self._collect_top_level_kinds(script)
         for fn in script.functions:
             self._check_function(fn, check_event_names)
         return self.errors
@@ -311,11 +323,91 @@ class Checker:
                 self.errors.append(CheckError(
                     "error",
                     f"export \"{name}\": this name is already {why} — pick another one."))
-            if loc.export_type not in self._EXPORT_WIRED_TYPES:
+            if loc.export_type not in KNOWN_EXPORT_TYPES:
+                import difflib
+                close = difflib.get_close_matches(loc.export_type, sorted(KNOWN_EXPORT_TYPES), n=1)
+                hint = f" Did you mean '{close[0]}'?" if close else ""
+                self.errors.append(CheckError(
+                    "error",
+                    f"export \"{name}\": unknown type '{loc.export_type}'.{hint} The types are: "
+                    f"{', '.join(sorted(KNOWN_EXPORT_TYPES))}."))
+            elif loc.export_type not in self._EXPORT_WIRED_TYPES:
                 self.errors.append(CheckError(
                     "warning",
                     f"export \"{name}\" of type '{loc.export_type}': the value set per instance is not "
                     "applied at build yet; the script default applies."))
+
+    def _check_export_values(self, script: LuaScript) -> None:
+        """Ce qu'un export déclare doit tenir debout : un `enum` a des étiquettes
+        distinctes et son défaut en fait partie ; un `int` n'a pas un texte pour
+        défaut. Avant, tout passait, et le C comparait un index arbitraire — ou
+        une chaîne, pour un `enum` sans `values`."""
+        for loc in script.locals:
+            if loc.export_type == "enum":
+                labels = list(loc.export_values or [])
+                if not labels:
+                    self.errors.append(CheckError(
+                        "error",
+                        f"export \"{loc.name}\": an enum needs its labels — "
+                        f"values = {{\"A\", \"B\"}}."))
+                    continue
+                dups = sorted({x for x in labels if labels.count(x) > 1})
+                if dups:
+                    self.errors.append(CheckError(
+                        "error",
+                        f"export \"{loc.name}\": the label {', '.join(dups)} appears twice in "
+                        f"values — the second one could never be reached."))
+                default = loc.value
+                if isinstance(default, ExprString) and default.value not in labels:
+                    self.errors.append(CheckError(
+                        "error",
+                        f"export \"{loc.name}\": the default \"{default.value}\" is not one of "
+                        f"its labels ({', '.join(labels)})."))
+            elif loc.export_type in ("int", "float", "bool") and isinstance(loc.value, ExprString):
+                self.errors.append(CheckError(
+                    "error",
+                    f"export \"{loc.name}\": a '{loc.export_type}' takes a number as default, "
+                    f"not the text \"{loc.value.value}\"."))
+
+    def _check_duplicate_functions(self, script: LuaScript) -> None:
+        """Deux `function on_update()` : le C n'en émettait qu'un, et le second
+        corps disparaissait sans un mot. Même chose pour deux fonctions privées."""
+        seen: set[str] = set()
+        for fn in script.functions:
+            if fn.name in seen:
+                self.errors.append(CheckError(
+                    "error",
+                    f"`{fn.name}` is defined twice: only one definition can exist. "
+                    f"Merge the two bodies into one function."))
+            seen.add(fn.name)
+
+    def _check_event_names(self, script: LuaScript) -> None:
+        """Un nom qui RESSEMBLE à un événement sans en être un. Il devenait une
+        fonction privée que personne n'appelle : `on_updat` ne se déclenchait
+        jamais et rien ne le disait. Les noms en `on_…` sont donc réservés aux
+        événements, et `onUpdate` / `OnUpdate` se corrigent en `on_update`."""
+        import difflib
+        known = sorted(ALL_KNOWN_EVENTS)
+        flat = {k.replace("_", ""): k for k in known}
+        frame_events = set(self.ctx.frame_event_names or ())
+        for fn in script.functions:
+            name = fn.name
+            if ("." in name or name in ALL_KNOWN_EVENTS or name in frame_events
+                    or sequence_name(name) is not None):
+                continue
+            camel = len(name) > 2 and name[:2].lower() == "on" and name[2].isupper()
+            if not (name.startswith("on_") or camel):
+                continue
+            guess = flat.get(name.lower().replace("_", ""))
+            if guess is None:
+                close = difflib.get_close_matches(name, known, n=1, cutoff=0.7)
+                guess = close[0] if close else None
+            hint = (f" Did you mean `{guess}`?" if guess
+                    else f" The events are: {', '.join(known)}.")
+            self.errors.append(CheckError(
+                "error",
+                f"`{name}` is not an event, and a function starting with `on_` would never "
+                f"be called.{hint}"))
 
     def _check_helpers(self, helpers: list[LuaFunction]):
         """Contrat volontairement petit des fonctions privées.
@@ -342,23 +434,25 @@ class Checker:
 
         # Les cycles de helpers provoqueraient un débordement de pile sur GBA.
         graph = {name: self._helper_calls(fn.body) for name, fn in self._helpers.items()}
-        visiting, done = set(), set()
-        def visit(name):
-            if name in visiting:
-                self.errors.append(CheckError("error", "Recursion is not allowed: "
-                                                       f"'{name}' calls itself, directly "
-                                                       "or through another private "
-                                                       "function."))
+        done: set[str] = set()
+        def visit(name, path):
+            if name in path:
+                cycle = path[path.index(name):] + [name]
+                # Un helper qui s'appelle lui-même est dit sur SA ligne, à l'appel
+                # (cf. `_check_call`) : le redire ici ferait deux messages pour une faute.
+                if len(cycle) > 2:
+                    self.errors.append(CheckError(
+                        "error",
+                        "Recursion is not allowed: " + " → ".join(cycle)
+                        + " — a private function cannot call itself, even through another."))
                 return
             if name in done:
                 return
-            visiting.add(name)
             for called in graph[name]:
-                visit(called)
-            visiting.remove(name)
+                visit(called, path + [name])
             done.add(name)
         for name in graph:
-            visit(name)
+            visit(name, [])
 
     def _helper_calls(self, stmts) -> set[str]:
         found: set[str] = set()
@@ -680,6 +774,14 @@ class Checker:
         if self._known_bare_name(name) or name in self._bare_said:
             return
         self._bare_said.add(name)
+        owner = next((n for n, labels in self._enum_exports.items() if name in labels), None)
+        if owner is not None:
+            # Ce n'est pas une variable oubliée : c'est une étiquette d'enum sans guillemets.
+            self.errors.append(CheckError(
+                "error",
+                f"\"{name}\" is a label of the enum export \"{owner}\": a label is written "
+                f"as text — {owner} == \"{name}\"."))
+            return
         geste = ("is declared as" if ecrit else "is declared as")
         self.errors.append(CheckError(
             "warning",
@@ -887,19 +989,41 @@ class Checker:
             elif named:
                 self._check_prop_domain_value(receiver, p, value, "=", target)
             return
-        # Accès imbriqué sous un champ écrit, par exemple `self.position.x = 5`.
-        node = target
-        while isinstance(node, ExprIndex):
-            base = resolve_prop(node.obj, self._ref_types, self._kinds)
-            if base is not None:
-                receiver, p = base
-                nom = _prop_label(receiver, p)
-                self.errors.append(CheckError(
-                    "error",
-                    f"cannot write to {nom}.{node.field}: {nom} is an immutable composite value — "
-                    f"reassign the whole object: {nom} = ..."))
-                return
-            node = node.obj
+        # Un CHAMP d'une propriété composée : `self.position.x = 5`. Le codegen
+        # lit la valeur, change la composante et la réécrit — la propriété doit
+        # donc être écrivable. Le champ inconnu est déjà refusé par la lecture
+        # de l'expression (`_check_expr`).
+        if not isinstance(target, ExprIndex):
+            return
+        base = resolve_prop(target.obj, self._ref_types, self._kinds)
+        if base is None:
+            # `self.position.x.y = 3` : un champ de composante n'a pas de champ.
+            inner = target.obj
+            if isinstance(inner, ExprIndex):
+                owner = resolve_prop(inner.obj, self._ref_types, self._kinds)
+                if owner is not None and owner[1].ptype in VEC_CONSTRUCTORS:
+                    nom = f"{_prop_label(owner[0], owner[1])}.{inner.field}"
+                    self.errors.append(CheckError(
+                        "error",
+                        f"{nom} is a number: it has no field '{target.field}'."))
+            return
+        receiver, p = base
+        nom = _prop_label(receiver, p)
+        if p.read_only or p.c_setter is None:
+            self.errors.append(CheckError(
+                "error",
+                f"{nom} is read-only — {nom}.{target.field} cannot be assigned."))
+        elif p.ptype not in VEC_CONSTRUCTORS:
+            self.errors.append(CheckError(
+                "error",
+                f"{nom} is not a composite value — it has no field '{target.field}' "
+                f"to assign."))
+        elif (isinstance(value, ExprString)
+              or infer_vec_type(value, self._vec_types, self._ref_types, self._kinds) is not None):
+            self.errors.append(CheckError(
+                "error",
+                f"{nom}.{target.field} is a number: assign it an integer, not a "
+                f"{'string' if isinstance(value, ExprString) else 'vector'}."))
 
     def _check_prop_domain_value(self, receiver: str, p, value, op: str, access=None):
         """La valeur d'une propriété À DOMAINE s'écrit par son NOM
@@ -965,6 +1089,114 @@ class Checker:
             return False
         return False
 
+    # Les opérateurs tels que l'auteur les ÉCRIT (l'AST porte déjà le C).
+    _LUA_OPS = {"&&": "and", "||": "or", "!=": "~=", "^": "~"}
+
+    def _check_string_operand(self, e: ExprBinop) -> None:
+        """Une chaîne n'est pas une valeur calculable : c'est un NOM résolu au
+        build. Seuls les comparaisons jugées plus haut (propriété à nom, étiquette
+        d'`enum`) en acceptent une. Partout ailleurs le C comparait ou additionnait
+        un POINTEUR : toujours faux, ou une adresse décalée, sans erreur."""
+        if isinstance(e.left, ExprString) or isinstance(e.right, ExprString):
+            op = self._LUA_OPS.get(e.op, e.op)
+            self.errors.append(CheckError(
+                "error",
+                f"a string cannot be an operand of '{op}': the engine has no string it can "
+                f"manipulate. A name is only accepted where a name is expected — an argument "
+                f"of the API, a property compared by name (`self.direction == \"west\"`), or "
+                f"the label of an enum export."))
+
+    _INT_MIN, _INT_MAX = -2**31, 2**31 - 1
+
+    def _check_literals_in(self, value) -> None:
+        """Les littéraux d'une valeur de TÊTE de script (`local t = {1.5, 2}`,
+        `local big = 99999999999`) : elle ne passe pas par `_check_expr`, qui juge
+        les corps de fonction. Seuls les nombres sont regardés ici."""
+        if isinstance(value, ExprNumber):
+            self._check_number_literal(value)
+        elif isinstance(value, ExprUnop) and value.op == "-" and isinstance(value.operand, ExprNumber):
+            self._check_number_literal(value.operand, negated=True)
+        elif isinstance(value, ExprTable):
+            for item in value.items:
+                self._check_literals_in(item)
+        elif isinstance(value, ExprBinop):
+            self._check_literals_in(value.left)
+            self._check_literals_in(value.right)
+
+    def _check_number_literal(self, e: ExprNumber, negated: bool = False) -> None:
+        """Un entier est un registre de 32 bits : un littéral hors de
+        -2147483648..2147483647 ne tient pas, et gcc le tronquait sans erreur.
+        Un littéral à virgule est tronqué vers zéro — documenté, mais un `1.5`
+        qui devient `1` sans un mot surprend, d'où l'avertissement."""
+        value = -e.value if negated else e.value
+        if not self._INT_MIN <= value <= self._INT_MAX:
+            self.errors.append(CheckError(
+                "error",
+                f"the number {value} does not fit in an integer: the engine's integers have "
+                f"32 bits, from -2147483648 to 2147483647."))
+        if e.written is not None:
+            shown = -e.written if negated else e.written
+            self.errors.append(CheckError(
+                "warning",
+                f"{shown:g} is truncated to {int(shown)}: the engine is integer-only, there is "
+                f"no decimal part. For a fraction, scale up (a speed in sub-pixels: 256 = 1 "
+                f"pixel per frame) or divide at the end."))
+
+    def _check_zero_divisor(self, e: ExprBinop) -> None:
+        """`x / 0` et `x % 0` écrits en clair. Sur GBA la division n'a pas
+        d'instruction : c'est une fonction de la bibliothèque du compilateur, qui
+        ne s'arrête pas sur un diviseur nul mais rend une valeur sans sens — le
+        plus grand entier pour un dividende positif, le plus petit pour un
+        négatif. Le jeu continue donc avec un nombre faux, sans le dire. Un
+        diviseur CALCULÉ ne peut pas être jugé ici."""
+        if e.op not in ("/", "%"):
+            return
+        divisor = e.right
+        if isinstance(divisor, ExprNumber) and divisor.value == 0:
+            op = "division" if e.op == "/" else "modulo"
+            self.errors.append(CheckError(
+                "error",
+                f"{op} by zero: the result has no meaning (the console does not stop, it "
+                f"returns the largest or smallest integer). Check the divisor before dividing."))
+
+    def _check_shift_count(self, e: ExprBinop) -> None:
+        """Un entier est un registre de 32 bits : un compte de décalage littéral
+        hors de 0..31 ne décale rien d'utile (le runtime rend 0)."""
+        if e.op not in ("<<", ">>"):
+            return
+        count = e.right
+        if isinstance(count, ExprUnop) and count.op == "-" and isinstance(count.operand, ExprNumber):
+            value = -count.operand.value
+        elif isinstance(count, ExprNumber):
+            value = count.value
+        else:
+            return
+        if not 0 <= value <= 31:
+            self.errors.append(CheckError(
+                "error",
+                f"a shift by {int(value)} bits: an integer has 32 bits, so the count must "
+                f"be between 0 and 31 (anything else gives 0)."))
+
+    def _check_enum_label(self, name: str, label: str) -> None:
+        """L'étiquette d'un export `enum` doit être l'une de ses `values`."""
+        valides = self._enum_exports[name]
+        if label not in valides:
+            self.errors.append(CheckError(
+                "error",
+                f"`{name}` has no label \"{label}\". Its labels are: {', '.join(valides)}."))
+
+    def _check_export_enum_compare(self, e: ExprBinop) -> bool:
+        """`team == "RED"` — un export `enum` se compare par son ÉTIQUETTE, que
+        le codegen remplace par son index. Rend True quand le nœud est jugé ici."""
+        if e.op not in ("==", "!="):
+            return False
+        for side, other in ((e.left, e.right), (e.right, e.left)):
+            if (isinstance(side, ExprName) and side.name in self._enum_exports
+                    and isinstance(other, ExprString)):
+                self._check_enum_label(side.name, other.value)
+                return True
+        return False
+
     def _check_prop_read(self, prop):
         """Contrôles portant sur la LECTURE d'une propriété. Le CHAMP qui suit
         (`self.position.x`) est validé par l'accès vec de `_check_expr`."""
@@ -1011,6 +1243,10 @@ class Checker:
             self._check_sequence_waits(fn, seq)
         if is_helper:
             self._check_helper_returns(fn)
+        is_event = fn.name in ALL_KNOWN_EVENTS or seq is not None or is_frame_event
+        self._check_control_flow(fn.body, in_loop=False, returns_nothing=is_event and not is_helper)
+        if check_event_names and fn.name in EVENT_REGISTRY:
+            self._check_event_params(fn)
         # Les attentes sont autorisées uniquement au premier niveau d'une séquence.
         previous, self._current_function = self._current_function, fn.name
         # Les paramètres d'événement de contact sont des références de boîte.
@@ -1022,6 +1258,123 @@ class Checker:
         for name in box_params:
             self._ref_types.pop(name, None)
         self._current_function = previous
+
+    def _check_control_flow(self, stmts: list, in_loop: bool, returns_nothing: bool) -> None:
+        """`break` et `return v` ne valent que là où le C les accepte. Hors d'une
+        boucle, `break` n'est pas du C ; et un handler est une fonction `void` :
+        `return 5` y échoue au `make`, sur la ligne générée."""
+        for st in stmts:
+            if isinstance(st, StmtBreak) and not in_loop:
+                self.errors.append(CheckError(
+                    "error",
+                    "`break` is only valid inside a loop (`while` or `for`). To leave the "
+                    "handler, write `return`.", st.line))
+            elif isinstance(st, StmtReturn) and st.values and returns_nothing:
+                self.errors.append(CheckError(
+                    "error",
+                    "an event handler returns nothing to the engine: `return` alone leaves it. "
+                    "A value is returned by a private function (`function f() … end`).", st.line))
+            elif isinstance(st, StmtIf):
+                self._check_control_flow(st.then, in_loop, returns_nothing)
+                for _, body in st.elseifs:
+                    self._check_control_flow(body, in_loop, returns_nothing)
+                self._check_control_flow(st.else_, in_loop, returns_nothing)
+            elif isinstance(st, (StmtWhile, StmtForNum)):
+                self._check_control_flow(st.body, True, returns_nothing)
+
+    def _check_event_params(self, fn: LuaFunction) -> None:
+        """Les paramètres d'un handler sont ceux que le moteur lui passe, sous
+        leur nom : `on_update(dt)` ne recevrait rien, et `dt` n'existerait pas
+        dans le C. On peut en déclarer MOINS que le moteur n'en offre."""
+        offered = [p["name"] for p in EVENT_REGISTRY[fn.name]["params"]]
+        extra = [p for p in fn.params if p not in offered and p != "self"]
+        if extra:
+            have = ", ".join(offered) if offered else "none"
+            self.errors.append(CheckError(
+                "error",
+                f"{fn.name}({', '.join(fn.params)}): the engine does not pass "
+                f"{', '.join('`' + e + '`' for e in extra)}. This event provides: {have}."))
+
+    def _check_condition(self, cond) -> None:
+        """Un vecteur ou un rectangle n'est pas une condition : en C c'est une
+        struct, que `if` refuse. On teste une composante (`v.x ~= 0`)."""
+        kind = infer_vec_type(cond, self._vec_types, self._ref_types, self._kinds)
+        if kind is not None:
+            self.errors.append(CheckError(
+                "error",
+                f"a {kind} is not a condition. Test one of its fields "
+                f"({', '.join(VEC_FIELDS[kind])}), for example `v.x ~= 0`."))
+
+    def _check_unary_operand(self, e: ExprUnop) -> None:
+        kind = infer_vec_type(e.operand, self._vec_types, self._ref_types, self._kinds)
+        if kind is None:
+            return
+        if e.op == "not":
+            self._check_condition(e.operand)
+        elif e.op == "-":
+            self.errors.append(CheckError(
+                "error",
+                f"a {kind} cannot be negated with `-`. Multiply it by -1: `v * -1`."))
+        else:
+            self.errors.append(CheckError(
+                "error", f"'~' is not defined on a {kind} — it only works on integers."))
+
+    def _collect_top_level_kinds(self, script: LuaScript) -> None:
+        """Le type (entier / composite) des variables du script déclarées au
+        premier niveau. Seules celles-ci sont jugées à l'affectation : un nom de
+        `local` de handler peut être réutilisé d'un handler à l'autre avec un autre
+        type, et on ne conclurait rien de sûr."""
+        self._top_scalars: set[str] = set()
+        self._top_composites: dict[str, str] = {}
+        for loc in script.locals:
+            if array_dims(loc.value):
+                continue
+            if loc.export_type in VEC_CONSTRUCTORS:
+                kind = loc.export_type
+            elif loc.value is not None:
+                kind = infer_vec_type(loc.value, {}, self._ref_types, self._kinds)
+            else:
+                kind = None
+            if kind is not None:
+                self._top_composites[loc.name] = kind
+            elif infer_ref_type(loc.value, self._kinds, self._ref_types) is None:
+                self._top_scalars.add(loc.name)
+
+    def _check_assign_kinds(self, target, value) -> None:
+        """Un composite dans un entier (`count = v`), un entier dans un composite
+        (`v = 5`), un tableau comme valeur (`n = t`) ou comme cible (`t = 5`) :
+        le C refuse chacun, mais sur la ligne générée. Seules les variables de
+        premier niveau et les tableaux sont jugés (cf. `_collect_top_level_kinds`)."""
+        if (isinstance(value, ExprName) and value.name in self._arrays
+                and self._arrays.get(value.name) is not None):
+            self.errors.append(CheckError(
+                "error",
+                f"`{value.name}` is an array: an array is not a value. Read or write an "
+                f"element — {value.name}[i]."))
+            return
+        if not isinstance(target, ExprName):
+            return
+        name = target.name
+        if self._arrays.get(name) is not None:
+            self.errors.append(CheckError(
+                "error",
+                f"`{name}` is an array: assign its elements — {name}[i] = value."))
+            return
+        got = infer_vec_type(value, self._vec_types, self._ref_types, self._kinds)
+        if name in self._top_composites:
+            # Un membre droit que l'inférence ne sait pas typer n'est pas jugé :
+            # seul un littéral est sûrement un entier.
+            sure_scalar = isinstance(value, (ExprNumber, ExprBool, ExprNil))
+            if (got is not None and got != self._top_composites[name]) or (got is None and sure_scalar):
+                what = "an integer" if got is None else f"a {got}"
+                self.errors.append(CheckError(
+                    "error",
+                    f"`{name}` holds a {self._top_composites[name]}: it cannot receive {what}."))
+        elif name in self._top_scalars and got is not None:
+            self.errors.append(CheckError(
+                "error",
+                f"`{name}` holds an integer: it cannot receive a {got}. Assign one of its "
+                f"fields ({', '.join(VEC_FIELDS[got])}), or declare a variable for the {got}."))
 
     def _check_helper_returns(self, fn: LuaFunction):
         """Les helpers ont un ABI C volontairement réduit : retour scalaire.
@@ -1145,20 +1498,26 @@ class Checker:
         elif isinstance(s, StmtAssign):
             self._check_data_write(s.target)
             self._check_prop_write(s.target, s.value)
+            self._check_assign_kinds(s.target, s.value)
             self._check_const_write(s.target)
             self._check_global_write_value(s.target, s.value)
             if isinstance(s.target, ExprName):
                 self._check_bare_name(s.target.name, ecrit=True)
+                if s.target.name in self._enum_exports and isinstance(s.value, ExprString):
+                    self._check_enum_label(s.target.name, s.value.value)
             self._check_expr(s.target)     # `t[i] = v` : la CIBLE aussi s'indexe
             self._check_expr(s.value)
         elif isinstance(s, StmtIf):
             self._check_expr(s.cond)
+            self._check_condition(s.cond)
             self._check_block(s.then)
-            for _, b in s.elseifs:
+            for cond, b in s.elseifs:
+                self._check_condition(cond)
                 self._check_block(b)
             self._check_block(s.else_)
         elif isinstance(s, StmtWhile):
             self._check_expr(s.cond)
+            self._check_condition(s.cond)
             self._check_block(s.body)
         elif isinstance(s, StmtForNum):
             self._check_for_step(s)
@@ -1169,6 +1528,7 @@ class Checker:
         elif isinstance(s, StmtUnsupported):
             # Une fonction atteint cette branche uniquement si elle est imbriquée.
             refusal = (lua_subset.NESTED_FUNCTION if s.node == "Function"
+                       else lua_subset.MULTI_ASSIGN if s.node == "MultiAssign"
                        else lua_subset.refusal_for_node(s.node))
             self._refuse(refusal, s.node, s.line)
 
@@ -1200,6 +1560,11 @@ class Checker:
                 "error",
                 "for … do: the step must be a plain number — it says whether the loop"
                 " goes up or down, and that is decided at compile time."))
+        elif s.step is not None and self._literal_int(s.step) == 0:
+            self.errors.append(CheckError(
+                "error",
+                "for … do: a step of 0 never moves the counter — the loop would never end "
+                "and the game would freeze."))
 
     def _refuse(self, refusal, node: str, line: int):
         """Dit un refus du sous-ensemble, situé sur sa ligne.
@@ -1225,6 +1590,8 @@ class Checker:
             return
         if isinstance(e, ExprUnsupported):
             self._refuse(lua_subset.refusal_for_node(e.node), e.node, e.line)
+        elif isinstance(e, ExprNumber):
+            self._check_number_literal(e)
         elif isinstance(e, ExprIndexAt):
             self._array_chain(e)
             cur = e
@@ -1251,12 +1618,20 @@ class Checker:
         elif isinstance(e, ExprBinop):
             self._check_expr(e.left)
             self._check_expr(e.right)
-            if not self._check_prop_enum_compare(e):
+            if not (self._check_prop_enum_compare(e) or self._check_export_enum_compare(e)):
                 self._check_vec_binop(e)
+                self._check_string_operand(e)
+            self._check_shift_count(e)
+            self._check_zero_divisor(e)
         elif isinstance(e, ExprUnop):
             if e.op == "#":
                 self._check_length(e.operand)
-            self._check_expr(e.operand)
+            elif e.op in ("not", "-", "~"):
+                self._check_unary_operand(e)
+            if e.op == "-" and isinstance(e.operand, ExprNumber):
+                self._check_number_literal(e.operand, negated=True)
+            else:
+                self._check_expr(e.operand)
         elif isinstance(e, ExprTable):
             for v in e.items:
                 self._check_expr(v)
@@ -1832,6 +2207,22 @@ class Checker:
                 "will do nothing.",
             ))
 
+    def _check_music_section(self, call_key: str, name: str):
+        """Une section se nomme dans UNE musique — mais `music.set_section` n'en nomme pas :
+        elle agit sur ce qui joue, que le script ne sait pas. On ne peut donc refuser que ce
+        qu'AUCUNE musique du projet ne porte : c'est la faute de frappe, ou la section
+        supprimée. Une section qui existe ailleurs mais pas dans la piste en cours ne fait
+        rien à l'exécution — c'est dit dans la doc de l'appel, pas deviné ici.
+
+        Erreur, comme pour un état de boîte : la constante `MSEC_*` n'existerait pas."""
+        known = self.ctx.music_section_names
+        if known is not None and name not in known:
+            self.errors.append(CheckError(
+                "error",
+                f"{call_key}('{name}'): no music of the project has a section with this "
+                f"name. Sections: {', '.join(known) or 'none'}.",
+            ))
+
     def _check_music(self, call_key: str, name: str):
         """Une musique, pas un jingle : les deux sont des modules, mais maxmod les
         joue sur deux couches, et un jingle lancé comme musique coupe la musique
@@ -2405,6 +2796,7 @@ _DOMAIN_CHECKS: dict = {
     DOMAIN_JINGLE_BOX_STATE: lambda c, key, val, p, a: c._check_box_state(
         key, val, c.ctx.jingle_box_state_names),
     DOMAIN_MUSIC_BOX_TRIGGER: lambda c, key, val, p, a: c._check_sound_trigger(key, val),
+    DOMAIN_MUSIC_SECTION: lambda c, key, val, p, a: c._check_music_section(key, val),
     DOMAIN_PREFAB:  lambda c, key, val, p, a: c._check_prefab(key, val),
     DOMAIN_ACTOR:   lambda c, key, val, p, a: c._check_actor(key, val),
     DOMAIN_ACTOR_NAME:     lambda c, key, val, p, a: c._check_actor_name(key, val),

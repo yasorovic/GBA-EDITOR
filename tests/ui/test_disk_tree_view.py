@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import QPushButton
 
 from core import disk_tree
 from ui.common.disk_tree_view import DiskTreeView
-from ui.common.disk_view import DiskView
+from ui.common.disk_view import DiskView, renamable
 
 
 def _tree() -> disk_tree.DiskNode:
@@ -71,13 +71,13 @@ def test_the_flat_view_shows_the_folder_chosen_in_the_tree(qapp):
     flat.set_tree(_tree())
     flat.show_folder(Path("assets") / "sfx" / "platformer")
     names = [flat._list.item(i).text() for i in range(flat._list.count())]
-    crumbs = [b.text() for b in flat.findChildren(QPushButton) if b.isFlat()]
+    crumbs = [b.text() for b in flat.findChildren(QPushButton) if b.isFlat() and not b.isHidden()]
     assert names == ["...", "jump.wav"] and crumbs == ["Assets", "sfx", "platformer"]
 
     flat.show_folder(Path("elsewhere") / "x")           # hors de la racine : ignoré
-    assert crumbs == [b.text() for b in flat.findChildren(QPushButton) if b.isFlat()]
+    assert crumbs == [b.text() for b in flat.findChildren(QPushButton) if b.isFlat() and not b.isHidden()]
     flat.show_folder(Path("assets") / "gone")           # dossier disparu : on reste à la racine
-    assert [b.text() for b in flat.findChildren(QPushButton) if b.isFlat()] == ["Assets"]
+    assert [b.text() for b in flat.findChildren(QPushButton) if b.isFlat() and not b.isHidden()] == ["Assets"]
 
 
 def _emitted(signal) -> list:
@@ -98,27 +98,63 @@ def test_the_plus_targets_the_chosen_folder_or_beside_a_chosen_file_or_the_root(
     assert view._target_folder() == str(Path("assets"))                # rien : la racine
 
 
-def test_a_new_folder_is_renamed_in_place_and_only_a_real_change_is_reported(qapp):
+def test_a_folder_or_a_file_is_renamed_in_place_and_only_a_real_change_is_reported(qapp):
     view = DiskTreeView()
     view.set_tree(_tree())
-    asked = _emitted(view.folder_rename_requested)
-    path = str(Path("assets") / "sfx" / "platformer")
+    asked = _emitted(view.rename_requested)
+    folder = Path("assets") / "sfx" / "platformer"
+    jump = folder / "jump.wav"
 
-    view.begin_rename(path)
-    item = _find(view, Path(path))
+    view.begin_rename(str(folder))
+    item = _find(view, folder)
     assert item.parent().isExpanded()                   # le dossier neuf se voit
-    assert item.flags() & Qt.ItemFlag.ItemIsEditable and view._renaming == path
+    assert item.flags() & Qt.ItemFlag.ItemIsEditable
 
-    view._end_rename()                                  # l'éditeur se ferme sans changement (ou Échap)
-    assert asked == [] and view._renaming is None
-    assert not item.flags() & Qt.ItemFlag.ItemIsEditable
-
-    view.begin_rename(path)
+    item.setText(0, "platformer")                       # l'éditeur se ferme sans changement (ou Échap)
+    assert asked == []
     item.setText(0, "jumps")
-    assert asked == [(path, "jumps")] and view._renaming is None
+    assert asked == [(str(folder), "jumps")]
+    _find(view, jump).setText(0, "hop.wav")             # un fichier source aussi
+    assert asked[-1] == (str(jump), "hop.wav")
 
-    item.setText(0, "again")                            # hors renommage en cours : ignoré
-    assert asked == [(path, "jumps")]
+
+def test_the_root_and_an_asset_are_not_editable_and_never_ask_for_a_rename(qapp):
+    view = DiskTreeView()
+    view.set_tree(_tree())
+    asked = _emitted(view.rename_requested)
+    root = view._tree.topLevelItem(0)
+    goal = _find(view, Path("assets") / "sfx" / "GOAL.json")
+
+    assert not root.flags() & Qt.ItemFlag.ItemIsEditable and not goal.flags() & Qt.ItemFlag.ItemIsEditable
+    root.setExpanded(False)                             # le changement d'icône émet `itemChanged` : pas une demande
+    root.setText(0, "x")
+    assert asked == []
+    view.begin_rename(str(Path("assets") / "sfx" / "GOAL.json"))      # sans effet sur un asset
+    assert view._tree.state() != view._tree.State.EditingState
+
+
+def test_the_flat_view_renames_in_place_and_reports_only_a_real_change(qapp):
+    flat = DiskView()
+    flat.set_tree(_tree())
+    asked = _emitted(flat.rename_requested)
+    sfx = flat._root.children[0]
+    flat.show_folder(sfx.path)
+    row = {flat._list.item(i).text(): flat._list.item(i) for i in range(flat._list.count())}
+
+    assert row["platformer"].flags() & Qt.ItemFlag.ItemIsEditable
+    assert not row["GOAL.json"].flags() & Qt.ItemFlag.ItemIsEditable      # un asset se renomme dans son écran
+    row["platformer"].setText("platformer")             # même nom : rien à demander
+    assert asked == []
+    row["platformer"].setText("jumps")
+    assert asked == [(str(sfx.children[0].path), "jumps")]
+
+
+def test_only_folders_sources_and_scripts_are_renamable():
+    folder = disk_tree.DiskNode("a", Path("a"), disk_tree.FOLDER)
+    source = disk_tree.DiskNode("a.wav", Path("a.wav"), disk_tree.FREE_SOURCE)
+    script = disk_tree.DiskNode("a.lua", Path("a.lua"), disk_tree.ASSET, "a", "scripts")
+    asset = disk_tree.DiskNode("a.sfx", Path("a.sfx"), disk_tree.ASSET, "a", "sfx")
+    assert [renamable(n) for n in (folder, source, script, asset)] == [True, True, True, False]
 
 
 def test_the_magnifier_filters_the_tree_and_closing_it_shows_everything(qapp):

@@ -253,14 +253,10 @@ class _W:
         b.setToolTip(tooltip)
         return b
 
-    def btn_reveal(self, tooltip: str = None) -> QToolButton:
-        """Bouton dossier sans bordure — révèle le dossier RÉEL d'une famille
-        de finder dans l'explorateur du système (cf. ui/common/reveal.py).
-        Standardisé : le même bouton dans tous les finders, visible seulement
-        pour les familles qui ont un dossier physique (`AssetKind.dir_of`)."""
-        if tooltip is None:
-            tooltip = label('wdg.open_in_file_manager')
-        b = HoverIconButton("reveal_in_files", C.TEXT_DIM, C.ACCENT)
+    def btn_grid_size(self, tooltip: str) -> QToolButton:
+        """Bouton cochable qui révèle le réglage de taille d'une mosaïque."""
+        b = HoverIconButton("prep_resize", C.TEXT_DIM, C.ACCENT, checked=C.ACCENT)
+        b.setCheckable(True)
         b.setStyleSheet(BTN_ICON)
         b.setFixedSize(24, 24)
         b.setIconSize(QSize(16, 16))
@@ -962,7 +958,6 @@ class FinderSection(QFrame):
     """
 
     add_clicked = pyqtSignal()
-    reveal_clicked = pyqtSignal()
 
     # Air au-dessus du titre et sous le corps. Le bas ne compte que déplié :
     # replié, doubler la marge ferait flotter des sections vides.
@@ -1037,14 +1032,7 @@ class FinderSection(QFrame):
         self._btn_search.setCheckable(True)
         self._btn_search.toggled.connect(self._on_search_toggled)
 
-        # Masqué par défaut : seules les familles avec un dossier physique
-        # (`AssetKind.dir_of`) l'affichent — cf. AssetFinder._reveal.
-        self._btn_reveal = W.btn_reveal(label('wdg.open_in_file_manager'))
-        self._btn_reveal.setVisible(False)
-        self._btn_reveal.clicked.connect(self.reveal_clicked)
-
         hl.addWidget(toggle_area, 1)
-        hl.addWidget(self._btn_reveal)
         hl.addWidget(self._btn_add)
         hl.addWidget(self._btn_search)
         root.addWidget(hdr)
@@ -1103,9 +1091,6 @@ class FinderSection(QFrame):
 
     def set_search_visible(self, visible: bool):
         self._btn_search.setVisible(visible)
-
-    def set_reveal_visible(self, visible: bool):
-        self._btn_reveal.setVisible(visible)
 
     def _set_arrow(self, direction: str):
         """direction: "down" (dépliée) ou "right" (repliée)."""

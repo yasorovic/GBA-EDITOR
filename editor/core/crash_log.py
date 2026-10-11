@@ -27,6 +27,7 @@ _native_log = None       # garder le fichier ouvert : faulthandler écrit dessus
 _reporter = None
 _reporting = False
 _shown_summaries: set[str] = set()
+_repeats: dict[str, int] = {}     # trace complète -> combien de fois vue (cf. `_excepthook`)
 _MAX_DIALOGS = 3
 
 
@@ -78,11 +79,26 @@ def _report(summary: str, details: str) -> None:
         _reporting = False
 
 
+def _is_milestone(count: int) -> bool:
+    """10, 100, 1000… : les seuls moments où une trace déjà vue est rappelée."""
+    while count % 10 == 0:
+        count //= 10
+    return count == 1
+
+
 def _excepthook(exc_type, exc, tb) -> None:
     if issubclass(exc_type, KeyboardInterrupt):
         sys.__excepthook__(exc_type, exc, tb)
         return
     text = "".join(traceback.format_exception(exc_type, exc, tb))
+    # Une erreur de peinture ou de timer se répète à CHAQUE repaint : la même trace écrite des
+    # centaines de fois noie le journal (et la vraie cause avec). Elle s'écrit en entier la
+    # première fois ; ensuite seul un rappel chiffré aux 10ᵉ, 100ᵉ, 1000ᵉ occurrences.
+    count = _repeats[text] = _repeats.get(text, 0) + 1
+    if count > 1:
+        if _is_milestone(count):
+            _write(f"The previous error has now happened {count} times: {exc_type.__name__}: {exc}")
+        return
     _write(text)
     sys.stderr.write(text)
     _report(f"{exc_type.__name__}: {exc}", text)

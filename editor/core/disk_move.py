@@ -1,7 +1,8 @@
 """
 core/disk_move.py — déplacer fichiers et dossiers de `assets/` d'un dossier à un autre.
 
-La seconde écriture de l'onglet Disk (la première, `core/disk_folders.py`, crée et renomme un dossier).
+Une des écritures de l'onglet Disk (l'autre, `core/disk_folders.py`, crée un dossier). Renommer est un déplacement
+sur place : même suivi des références.
 Un asset se retrouve par l'extension de son sidecar, où qu'il soit sous `assets/` : déplacer un sidecar ne
 demande donc rien d'autre. Ce qui demande un travail, c'est une SOURCE citée par un asset (un `.wav`, un
 `.png`…) : l'asset la désigne par son chemin, qui doit suivre le fichier. Après le déplacement, chaque asset
@@ -19,7 +20,7 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from core.disk_folders import inside
+from core.disk_folders import inside, valid_entry_name
 from core.resources.resource_index import list_files
 
 # Les motifs d'un refus, que l'interface traduit.
@@ -136,6 +137,32 @@ def move_to_folder(project, paths, target) -> MoveResult:
     if result.moved:
         _follow(project, result.moved, assets)
     return result
+
+
+def rename_in_place(project, path, new_name: str) -> Path | None:
+    """Renomme `path` (fichier ou dossier) sans le changer de dossier ; les chemins que l'asset cite sont réécrits,
+    comme à un déplacement. `None` si le nom est invalide ou pris, ou si `path` est `assets/` lui-même, n'en fait pas
+    partie, ou est un fichier que le code cherche à un endroit précis. Un nom inchangé rend `path` sans rien toucher."""
+    project.load_all_resources()
+    assets = project.assets_dir.resolve()
+    path = Path(path)
+    new_name = new_name.strip()
+    if (not valid_entry_name(new_name) or not path.exists()
+            or not inside(assets, path) or path.resolve() == assets):
+        return None
+    if new_name == path.name:
+        return path
+    source = path.resolve()
+    target = source.with_name(new_name)
+    # Sous Windows `a` → `A` désigne le même fichier : ce n'est pas un nom pris.
+    if (target.exists() and not os.path.samefile(target, source)) or _is_protected(source, _protected_files(project)):
+        return None
+    try:
+        source.rename(target)
+    except OSError:
+        return None
+    _follow(project, [(source, target)], assets)
+    return path.with_name(new_name)
 
 
 def _rewritten(project, value, moved: list[tuple[Path, Path]], root: Path) -> str | None:

@@ -206,7 +206,9 @@ def parse_it(data: bytes) -> Module:
     chan_vol = list(data[0x80:0xC0])
 
     off = 0xC0
-    order = [o for o in data[off:off + ord_num] if o < 254]
+    # La table BRUTE, marqueurs compris : c'est l'index que la ROM rendra
+    # (cf. module_model.ORDER_SKIP). L'IT n'a pas de position de restart.
+    order = list(data[off:off + ord_num])
     off += ord_num
     ins_off = list(struct.unpack_from(f"<{ins_num}I", data, off)); off += ins_num * 4
     smp_off = list(struct.unpack_from(f"<{smp_num}I", data, off)); off += smp_num * 4

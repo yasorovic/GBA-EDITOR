@@ -161,8 +161,7 @@ _clipboard = CanvasClipboard()
 
 
 class SceneEditor(QWidget):
-    scene_changed = pyqtSignal()  # fin de drag / déplacement caméra → sauvegarder
-    # Position d'une caméra changée PAR DRAG dans le canvas — l'inspecteur
+    scene_changed = pyqtSignal()  # fin de drag / déplacement caméra → sauvegarder    # Position d'une caméra changée PAR DRAG dans le canvas — l'inspecteur
     # doit suivre (cf. window.py, symétrique de CameraInspector.camera_moved
     # qui fait le chemin inverse).
     camera_position_changed = pyqtSignal(object, int, int)   # Camera|None, x, y
@@ -428,10 +427,17 @@ class SceneEditor(QWidget):
         act_rename = menu.addAction(label('scncanvas.rename'))
         act_rename.setEnabled(n == 1)
         act_dup = menu.addAction(label('common.duplicate') if n == 1 else label('scncanvas.duplicate_n', n=n))
+        from core import disk_locate
+        from ui.common.locate_bus import get_locate_bus
+        located = disk_locate.target_of(actors[0]) if n == 1 else None
+        act_locate = menu.addAction(label('common.locate'))
+        act_locate.setEnabled(located is not None)
         menu.addSeparator()
         act_del = menu.addAction(label('common.delete') if n == 1 else label('scncanvas.delete_n', n=n))
         chosen = menu.exec(global_pos)
-        if chosen is act_rename:
+        if chosen is act_locate:
+            get_locate_bus().locate(disk_locate.file_of(self._project, *located), located[1])
+        elif chosen is act_rename:
             self._rename_actor(actors[0])
         elif chosen is act_dup:
             # Par la sélection : le menu vise déjà tout le lot, et les copies

@@ -18,7 +18,7 @@ from PyQt6.QtSvg import QSvgRenderer
 from ui.common.theme import C, T, brand_font
 from core.toolchain import Toolchain, DEVKITPRO_OK, DEVKITPRO_INCOMPLETE
 from ui.common.disk_view import DiskView, add_disk_tab
-from ui.common.panel_bar import bar_button, panel_bar, tab_widget
+from ui.common.panel_bar import bar_button, panel_bar, restore_tab_order, tab_order, tab_widget
 from ui.common.rom_budget_bar import RomBudgetBar
 
 
@@ -452,7 +452,8 @@ class BuildPanel(QWidget):
         self.disk = DiskView()
         self._build_diagnostics: list = []   # ceux du build en cours (cf. log_diagnostic)
         tabs = self._tabs = tab_widget()
-        tabs.addTab(self._console_page(), label('build.console'))
+        self._console_tab = self._console_page()
+        tabs.addTab(self._console_tab, label('build.console'))
         tabs.addTab(self.diagnostics, label('build.diagnostics'))
         add_disk_tab(tabs, self.disk)
         tabs.currentChanged.connect(self._on_tab_changed)
@@ -482,9 +483,18 @@ class BuildPanel(QWidget):
         if on_disk:
             self.disk.refresh_requested.emit()
 
+    def _tab_keys(self) -> tuple:
+        return (("console", self._console_tab), ("diagnostics", self.diagnostics), ("disk", self.disk))
+
+    def tab_order(self) -> list[str]:
+        return tab_order(self._tabs, self._tab_keys())
+
+    def restore_tab_order(self, order) -> None:
+        restore_tab_order(self._tabs, self._tab_keys(), order)
+
     def show_console_tab(self) -> None:
         """Met la Console au premier plan (un build démarre : c'est elle qui le raconte)."""
-        self._tabs.setCurrentIndex(0)
+        self._tabs.setCurrentWidget(self._console_tab)
 
     def tab_is_disk(self) -> bool:
         return self._tabs.currentWidget() is self.disk

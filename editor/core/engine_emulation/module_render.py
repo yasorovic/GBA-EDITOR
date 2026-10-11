@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .module_model import (
-    Envelope, Instrument, Module, Sample,
+    Envelope, Instrument, Module, Sample, ORDER_END,
     LOOP_NONE, LOOP_PINGPONG, NOTE_NONE, NOTE_OFF, NOTE_C5,
     PERIOD_C5, AMIGA_C5_RATE,
     FX_NONE, FX_ARPEGGIO, FX_PORTA_UP, FX_PORTA_DOWN, FX_TONE_PORTA,
@@ -169,13 +169,14 @@ def _slide_toward(period: float, target: float, step: float) -> float:
     return period
 
 
-def render_module(mod: Module, mix_rate: int = GBA_MIX_RATE) -> np.ndarray:
+def render_module(mod: Module, mix_rate: int = GBA_MIX_RATE,
+                  tempo: float = 1.0, pitch: float = 1.0) -> np.ndarray:
     """Retourne un tableau int16 stéréo entrelacé (frames, 2)."""
-    return render_module_marked(mod, mix_rate)[0]
+    return render_module_marked(mod, mix_rate, tempo, pitch)[0]
 
 
-def render_module_marked(mod: Module,
-                         mix_rate: int = GBA_MIX_RATE) -> tuple[np.ndarray, dict]:
+def render_module_marked(mod: Module, mix_rate: int = GBA_MIX_RATE,
+                         tempo: float = 1.0, pitch: float = 1.0) -> tuple[np.ndarray, dict]:
     """Le rendu, PLUS l'offset où commence chaque position d'ordre.
 
     `marks[i]` = l'échantillon où débute la position d'ordre `i`, la première
@@ -184,6 +185,15 @@ def render_module_marked(mod: Module,
     ces repères, l'aperçu ne saurait ni quand couper, ni où reprendre l'autre
     module. Un seul parcours produit les deux — un rendu et une table de
     positions calculés séparément finiraient par diverger.
+
+    `tempo` et `pitch` sont les facteurs de `mmSetModuleTempo` / `mmSetModulePitch`
+    (1,0 = le fichier tel qu'il est ; la ROM les borne à 0,5–2,0). Le tempo raccourcit
+    ou allonge le TICK — les lignes passent plus vite, les échantillons gardent leur
+    hauteur — ; la hauteur multiplie la vitesse de lecture de chaque échantillon, donc sa
+    durée change avec elle. Mesuré sur ROM le 2026-10-11 : les deux prennent effet
+    appliqués juste après `mmStart`, et le facteur de tempo SE MULTIPLIE avec un
+    changement de tempo du morceau lui-même (`Fxx` à 250 bpm : ×2 ; facteur 200 % : ×2 ;
+    les deux : ×4) — d'où le facteur appliqué à chaque tick, quel que soit le tempo courant.
     """
     n_ch = max(1, mod.num_channels)
     channels = [_Channel() for _ in range(n_ch)]
@@ -278,7 +288,7 @@ def render_module_marked(mod: Module,
     def render_tick():
         """Mixe un tick — la plus petite tranche de temps d'un tracker."""
         nonlocal written
-        n = round(mix_rate * 2.5 / bpm)
+        n = round(mix_rate * 2.5 / (bpm * tempo))
         if n <= 0:
             return
         left = np.zeros(n, dtype=np.float32)
@@ -287,7 +297,7 @@ def render_module_marked(mod: Module,
             samp = ch.sample
             if not ch.playing or samp is None or samp.data.size == 0:
                 continue
-            step = _step(mod, ch.period + _vib_delta(ch), samp, mix_rate)
+            step = _step(mod, ch.period + _vib_delta(ch), samp, mix_rate) * pitch
             if step <= 0:
                 continue
             vol = ch.volume + _trem_delta(ch)
@@ -392,7 +402,9 @@ def render_module_marked(mod: Module,
 
     while 0 <= order_pos < len(mod.order):
         pattern_idx = mod.order[order_pos]
-        if pattern_idx >= len(mod.patterns):
+        if pattern_idx == ORDER_END:
+            break            # fin du morceau : ce qui suit n'est jamais joué (ROM comprise)
+        if pattern_idx >= len(mod.patterns):    # ORDER_SKIP compris : sauté
             order_pos += 1
             row = 0
             continue

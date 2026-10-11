@@ -47,6 +47,24 @@ def test_every_file_gets_one_mark(tmp_path: Path):
     assert nodes["sfx/Blip.sfx"].family == nodes["sfx/Blip.wav"].family == "sfx"
     assert nodes["scripts/Ball.lua"].family == "scripts"
     assert nodes["sfx/deep/Loose.wav"].family == "" and nodes["sfx/notes.txt"].family == ""
+    assert nodes["sfx/Blip.sfx"].status == nodes["sfx/Blip.wav"].status == disk_tree.STATUS_OK
+    assert nodes["sfx/deep/Loose.wav"].status == disk_tree.STATUS_ORPHAN_SOURCE
+    assert nodes["sfx/notes.txt"].status == disk_tree.STATUS_NEUTRAL
+
+
+def test_an_asset_with_a_missing_source_is_marked_for_repair(tmp_path: Path):
+    _project(tmp_path)
+    sfx = tmp_path / "assets" / "sfx"
+    sfx.mkdir(parents=True)
+    (sfx / "Lost.sfx").write_text(json.dumps(
+        {"name": "Lost", "asset": "assets/sfx/gone.wav", "volume": 100, "sample_rate": 0}), encoding="utf-8")
+
+    project = Project.open(tmp_path)
+    project.load_all_resources()
+    node = _by_name(disk_tree.build_disk_tree(project))["sfx/Lost.sfx"]
+
+    assert node.kind == disk_tree.ASSET
+    assert node.status == disk_tree.STATUS_MISSING_SOURCE
 
 
 def test_the_tree_shows_the_disk_and_adds_nothing(tmp_path: Path):

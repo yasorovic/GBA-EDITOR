@@ -17,6 +17,25 @@ if str(EDITOR_DIR) not in sys.path:
     sys.path.insert(0, str(EDITOR_DIR))
 
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _tests_never_write_the_real_crash_log(tmp_path, monkeypatch):
+    """Les journaux de crash de CHAQUE test vont dans son dossier temporaire, jamais dans celui de l'auteur.
+
+    Beaucoup de tests provoquent des erreurs exprès (manifeste tronqué, dossier `build` déjà fichier…) ;
+    `Project.open` en écrit la trace dans `crash.log`. Sans cette redirection, ces traces s'accumulaient
+    par centaines dans le vrai `%APPDATA%/<app>/crash.log` et noyaient les vrais crashs de l'éditeur.
+    Un test qui veut lire ce journal le redirige lui-même (`monkeypatch.setattr(crash_log, "LOG_FILE", …)`)
+    : sa redirection passe après celle-ci."""
+    from core import crash_log
+    monkeypatch.setattr(crash_log, "LOG_FILE", tmp_path / "crash.log")
+    monkeypatch.setattr(crash_log, "NATIVE_LOG_FILE", tmp_path / "crash_native.log")
+    monkeypatch.setattr(crash_log, "_repeats", {})
+    monkeypatch.setattr(crash_log, "_shown_summaries", set())
+
+
 # ── Couverture des diagnostics (cf. tools/diagnostic_coverage.py) ─────────────
 #
 # Chaque run note les lignes qui construisent un diagnostic. À la fin d'un run COMPLET, un

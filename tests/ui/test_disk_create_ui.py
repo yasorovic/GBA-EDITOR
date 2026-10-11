@@ -35,10 +35,11 @@ class _Spy:
     def callbacks(self) -> DiskCallbacks:
         return DiskCallbacks(
             create_options=lambda path: list(FAMILIES.get(Path(path).suffix, [])),
-            create_from_source=lambda path, family: self.created.append((Path(path).name, family)),
+            create_from_sources=lambda paths, family: self.created.extend((Path(p).name, family) for p in paths),
             delete_items=lambda nodes: self.deleted.append([n.name for n in nodes]),
             deletable=lambda node: node.family not in ("texts", "variables"),
             import_files=lambda folder: self.imported.append(folder),
+            import_paths=lambda files, folder: self.imported.append(folder),
             create_blank=lambda kind, folder: self.blank.append((kind, folder)),
             new_folder=lambda parent: self.folders.append(parent),
             blank_kinds=[("scene", "Scene"), ("prefab", "Prefab")])
@@ -88,9 +89,9 @@ def test_the_arrow_only_shows_when_the_file_can_become_several_types(qapp):
 def test_the_button_is_hidden_for_everything_that_is_not_one_free_source(qapp):
     view, _spy = _view(qapp)
 
-    for names in ((), ("hero.sprite",), ("notes.txt",), ("hero.png", "boom.wav")):
+    for names in ((), ("hero.sprite",), ("notes.txt",), ("hero.png", "boom.wav"), ("boom.wav", "hero.sprite")):
         _select(view, *names)
-        assert not view._btn_create.isVisibleTo(view), names                       # ni asset, ni format inconnu, ni multi-sélection
+        assert not view._btn_create.isVisibleTo(view), names                       # ni asset, ni format inconnu, ni sources sans type commun
 
 
 def test_the_other_types_are_offered_with_the_same_name(qapp):
@@ -98,7 +99,7 @@ def test_the_other_types_are_offered_with_the_same_name(qapp):
     _select(view, "boom.wav")
 
     assert [family for family, _word, _name in view._create_options] == ["sfx", "music", "jingles"]
-    view._callbacks.create_from_source(view._create_path, "music")
+    view._callbacks.create_from_sources(view._create_paths, "music")
     assert spy.created == [("boom.wav", "music")]
 
 
@@ -112,13 +113,13 @@ def test_the_context_menu_of_one_source_creates_and_of_assets_deletes(qapp):
 
     single = QMenu()
     add_asset_actions(single, [nodes["theme.hex"]], spy.callbacks())
-    assert _texts(single) == ["Create", "Reveal in file manager", "Delete"]
+    assert _texts(single) == ["Create", "Reveal", "Delete"]
     single.actions()[0].trigger()
     assert spy.created == [("theme.hex", "palettes")]
 
     ambiguous = QMenu()
     add_asset_actions(ambiguous, [nodes["hero.png"]], spy.callbacks())
-    assert _texts(ambiguous) == ["Create as", "Reveal in file manager", "Delete"]
+    assert _texts(ambiguous) == ["Create as", "Reveal", "Delete"]
     assert [a.text() for a in ambiguous.actions()[0].menu().actions()] == ["Sprite", "Background", "Font"]
 
     assets = QMenu()
@@ -128,17 +129,46 @@ def test_the_context_menu_of_one_source_creates_and_of_assets_deletes(qapp):
     assert spy.deleted == [["hero.sprite", "Level.scene"]]
 
 
-def test_create_from_source_is_greyed_out_in_a_multi_selection_and_says_why(qapp):
+def test_create_is_greyed_out_when_the_selection_has_no_type_in_common_and_says_why(qapp):
     spy = _Spy()
     nodes = {n.name: n for n in _tree().walk()}
-    menu = QMenu()
 
-    add_asset_actions(menu, [nodes["hero.png"], nodes["boom.wav"]], spy.callbacks())
-
-    entry = menu.actions()[0]
+    mixed_formats = QMenu()
+    add_asset_actions(mixed_formats, [nodes["hero.png"], nodes["boom.wav"]], spy.callbacks())
+    entry = mixed_formats.actions()[0]
     assert entry.text() == "Create" and not entry.isEnabled()
-    assert "one file at a time" in entry.toolTip()
+    assert "same type" in entry.toolTip()
+
+    with_an_asset = QMenu()
+    add_asset_actions(with_an_asset, [nodes["boom.wav"], nodes["hero.sprite"]], spy.callbacks())
+    entry = with_an_asset.actions()[0]
+    assert not entry.isEnabled() and "source files only" in entry.toolTip()
     assert spy.created == []
+
+
+def test_several_sources_of_one_format_are_created_in_one_gesture(qapp):
+    spy = _Spy()
+    first = disk_tree.DiskNode("boom.wav", BASE / "boom.wav", disk_tree.FREE_SOURCE)
+    second = disk_tree.DiskNode("zap.wav", BASE / "zap.wav", disk_tree.LINKED_SOURCE, "zap", "sfx")
+
+    menu = QMenu()
+    add_asset_actions(menu, [first, second], spy.callbacks())
+    assert menu.actions()[0].text() == "Create as"
+    assert [a.text() for a in menu.actions()[0].menu().actions()] == ["Sound effect", "Music", "Jingle"]
+    menu.actions()[0].menu().actions()[1].trigger()
+
+    assert spy.created == [("boom.wav", "music"), ("zap.wav", "music")]
+
+
+def test_the_button_creates_every_selected_source_and_offers_only_shared_types(qapp):
+    view, spy = _view(qapp)
+
+    _select(view, "boom.wav", "hero.png")
+    assert not view._btn_create.isVisibleTo(view)                                   # un PNG et un WAV : aucun type commun
+
+    _select(view, "boom.wav")
+    view._btn_create.click()
+    assert spy.created == [("boom.wav", "sfx")]
 
 
 def test_files_and_folders_can_be_deleted_but_not_the_project_tables(qapp):
@@ -149,7 +179,7 @@ def test_files_and_folders_can_be_deleted_but_not_the_project_tables(qapp):
     assert _texts(menu) == ["Delete 2 items"]
     tables = QMenu()
     add_asset_actions(tables, [nodes["texts.json"]], spy.callbacks())
-    assert _texts(tables) == ["Reveal in file manager"]                              # pas de Delete : seul l'emplacement s'offre
+    assert _texts(tables) == ["Reveal"]                              # pas de Delete : seul l'emplacement s'offre
 
 
 def test_the_plus_menu_offers_import_create_and_new_folder_for_the_folder_shown(qapp, monkeypatch):
@@ -193,7 +223,7 @@ def test_the_tree_has_the_same_context_menu(qapp):
 
     add_asset_actions(menu, nodes, view._callbacks)
 
-    assert _texts(menu) == ["Create", "Reveal in file manager", "Delete"]
+    assert _texts(menu) == ["Create", "Reveal", "Delete"]
 
 
 def _items(tree):
@@ -298,6 +328,6 @@ def test_the_menu_ends_with_reveal_then_delete_and_delete_names_no_count_for_one
         add_asset_actions(menu, nodes, callbacks)
         texts = [a.text() for a in menu.actions() if not a.isSeparator()]
         assert texts[-1] == delete_text
-        assert ("Reveal in file manager" in texts) == (len(nodes) == 1)
+        assert ("Reveal" in texts) == (len(nodes) == 1)
         if len(nodes) == 1:
-            assert texts[-2] == "Reveal in file manager"
+            assert texts[-2] == "Reveal"

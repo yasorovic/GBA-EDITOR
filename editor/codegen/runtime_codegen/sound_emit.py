@@ -25,6 +25,7 @@ graphe. Il lit des tables et compare des entiers.
 from __future__ import annotations
 
 from core.models.audio import volume_to_effect, volume_to_module
+from core.music_structure import music_info_row   # une seule définition, que l'aperçu lit aussi
 from core.models.sound_box import KIND_SOUND, KIND_JINGLE, TRANSITION_CUT
 from codegen.c_names import sym as c_sym
 
@@ -210,6 +211,197 @@ def emit(p) -> list[str]:
     L += _action_box_lines(KIND_JINGLE, info["jingle_box"], info["jingle_actions"], p)
     L += _music_box_lines(info["music_box"], p, p.sound_trigger_names())
     return L
+
+
+# ── Les réglages d'une musique, au runtime (ROADMAP « L'asset .music ») ──────
+#
+# Une ligne par module : la section de boucle (en positions d'ordre), le tempo et la
+# hauteur (facteurs Q10 de maxmod), les deux fondus (en frames). ZÉRO PARTOUT = le
+# fichier tel qu'il est : un module sans réglage n'a pas de ligne, et la table ne
+# pèse que ce que l'auteur a réglé.
+
+def music_runtime_lines(p, sound_assets) -> list[str]:
+    """Le C de la couche musique : la table des réglages et les fonctions qui les lisent.
+
+    `music_play`, `music_stop` et `music_set_volume` vivent ICI et non plus en `static
+    inline` dans l'en-tête : ils doivent lire la table, et l'état (module en cours,
+    section de boucle) tient dans `main.c`. Les scripts, qui sont d'autres unités de
+    compilation, les appellent par leur prototype.
+
+    Un seul point d'écriture du volume de module, comme pour les transitions : les
+    deux fondus d'un module (entrée, sortie) sont des MODES de `music_transition_tick`
+    (3 et 4), pas un second mécanisme qui écrirait le même registre.
+
+    Les appels de script (`music.set_tempo`, `fade_in`, `set_section`…) SURCHARGENT ces
+    réglages pour la lecture en cours : `music_begin` et `music_end` sont l'unique chemin
+    de `music_play` / `music_stop` ET de leurs variantes à fondu explicite, et
+    `music_apply` réapplique les réglages de l'asset à chaque nouveau module — une
+    surcharge ne survit pas à la piste suivante."""
+    from core.models.audio import Jingle
+    from core.music_structure import music_section_names, music_section_rows
+    musics = [m for m, _path in (sound_assets or {}).get("music", []) if not isinstance(m, Jingle)]
+    rows = []
+    for m, _path in (sound_assets or {}).get("music", []):
+        if isinstance(m, Jingle):
+            continue        # un jingle joue par `mmJingle`, sur sa propre couche : aucun de ces réglages
+        row = music_info_row(m)
+        if any(row):
+            rows.append(f"    [{_music_const(m.name)}] = {{ {', '.join(str(v) for v in row)} }},"
+                        f"   /* {m.name} */")
+
+    # Les sections qu'un script peut choisir : (module, rang du NOM, début, fin). Le rang est
+    # celui de `music_section_names` — la même liste que les `MSEC_*` du script.
+    names = music_section_names(getattr(p, "music", musics) if p is not None else musics)
+    section_rows = []
+    for m in musics:
+        for name, start, end in music_section_rows(m):
+            section_rows.append(f"    {{ {_music_const(m.name)}, {names.index(name)}, {start}, {end} }},"
+                                f"   /* {m.name} / {name} */")
+    return [
+        "/* ── Music settings per module (ROADMAP « L'asset .music ») ──────────── */",
+        "/* {loop start, loop end, tempo, pitch, fade in, fade out}. Zero = the file as it",
+        "   is: only a module with a setting has a row. The loop is in ORDER POSITIONS,",
+        "   end excluded; 0 = no loop section. Tempo and pitch are maxmod's Q10 factors. */",
+        "typedef struct { s16 loop_start, loop_end; u16 tempo, pitch, fade_in, fade_out; } MusicInfo;",
+        "static const MusicInfo g_music_info[MSL_NSONGS + 1] = {",
+        *(rows or ["    { 0, 0, 0, 0, 0, 0 },"]),
+        "};",
+        "/* The sections a script can pick (music.set_section): {module, section, start, end}.",
+        "   `section` is the rank of the NAME among the project's section names — the same",
+        "   rank as the MSEC_* constants of the scripts. */",
+        "typedef struct { s16 music, section, start, end; } MusicSection;",
+        f"#define MUSIC_SECTION_COUNT {len(section_rows)}",
+        "static const MusicSection g_music_sec[MUSIC_SECTION_COUNT + 1] = {",
+        *(section_rows or ["    { 0, 0, 0, 0 },"]),
+        "};",
+        "int g_music_cur = -1;                 /* the module playing, -1 = none */",
+        "int g_music_vol = 0;                  /* its volume, on maxmod's 0-1024 scale */",
+        "static int g_mloop_start = 0, g_mloop_end = 0, g_mloop_in = 0;",
+        "static int g_mloop_rel = 0, g_mloop_last = 0;   /* a released loop: plays on to the end, then stops */",
+        "",
+        "/* A module with a loop section must LOOP, whatever its `loop` flag: the section",
+        "   is what makes it loop, and a module played once would simply end. */",
+        "static int music_mode(int id, int loop){",
+        "    return (loop || (id >= 0 && id < MSL_NSONGS && g_music_info[id].loop_end > 0))",
+        "           ? MM_PLAY_LOOP : MM_PLAY_ONCE;",
+        "}",
+        "/* Applies the settings of the module that has JUST started — after mmStart, which",
+        "   would otherwise reset them. Measured on ROM: tempo and pitch take effect there. */",
+        "static void music_apply(int id){",
+        "    const MusicInfo *m;",
+        "    g_mloop_in = 0; g_mloop_rel = 0;",
+        "    if(id < 0 || id >= MSL_NSONGS){ g_music_cur = -1; g_mloop_end = 0; return; }",
+        "    m = &g_music_info[id];",
+        "    g_music_cur = id;",
+        "    mmSetModuleTempo((mm_word)(m->tempo ? m->tempo : 1024));",
+        "    mmSetModulePitch((mm_word)(m->pitch ? m->pitch : 1024));",
+        "    g_mloop_start = m->loop_start; g_mloop_end = m->loop_end;",
+        "}",
+        "/* `fade_in` < 0 = the fade in of the asset; otherwise the call's own. */",
+        "static void music_begin(int id, int loop, int volume, int fade_in){",
+        "    if(id < 0) return;     /* a music whose file is gone: nothing to play */",
+        "    mmStart((mm_word)id, (mm_pmode)music_mode(id, loop));",
+        "    music_apply(id);",
+        "    if(g_mtr_mode >= 3) g_mtr_mode = 0;   /* a new play supersedes a fade in or out */",
+        "    g_music_vol = volume;",
+        "    if(fade_in < 0) fade_in = (id < MSL_NSONGS) ? g_music_info[id].fade_in : 0;",
+        "    if(fade_in > 1){",
+        "        mmSetModuleVolume(0);",
+        "        g_mtr_mode = 3; g_mtr_vol = volume; g_mtr_i = 0; g_mtr_n = fade_in;",
+        "    } else {",
+        "        mmSetModuleVolume((mm_word)volume);",
+        "    }",
+        "}",
+        "/* `fade_out` < 0 = the fade out of the asset; otherwise the call's own. */",
+        "static void music_end(int fade_out){",
+        "    if(fade_out < 0)",
+        "        fade_out = (g_music_cur >= 0 && g_music_cur < MSL_NSONGS)",
+        "                   ? g_music_info[g_music_cur].fade_out : 0;",
+        "    if(g_mtr_mode == 4) return;           /* already fading out */",
+        "    if(fade_out > 1 && mmActive()){",
+        "        g_mtr_mode = 4; g_mtr_vol = g_music_vol; g_mtr_i = 0; g_mtr_n = fade_out;",
+        "        return;",
+        "    }",
+        "    if(g_mtr_mode == 3) g_mtr_mode = 0;",
+        "    mmStop(); g_music_cur = -1; g_mloop_end = 0; g_mloop_rel = 0;",
+        "}",
+        "void music_play(int id, int loop, int volume){ music_begin(id, loop, volume, -1); }",
+        "void music_fade_in(int id, int loop, int volume, int frames){",
+        "    music_begin(id, loop, volume, frames < 0 ? 0 : frames);",
+        "}",
+        "void music_stop(void){ music_end(-1); }",
+        "void music_fade_out(int frames){ music_end(frames < 0 ? 0 : frames); }",
+        "void music_set_volume(int volume){",
+        "    g_music_vol = volume;",
+        "    if(g_mtr_mode >= 3) g_mtr_vol = volume;   /* the fade now aims at this level */",
+        "    mmSetModuleVolume((mm_word)volume);",
+        "}",
+        "/* Tempo and pitch of the PLAYING module, on maxmod's Q10 scale (0x200-0x800 = 0.5x-2x).",
+        "   They last until the next module starts, which re-applies its asset's own. */",
+        "void music_set_tempo(int tempo){",
+        "    mmSetModuleTempo((mm_word)(tempo < 0x200 ? 0x200 : tempo > 0x800 ? 0x800 : tempo));",
+        "}",
+        "void music_set_pitch(int pitch){",
+        "    mmSetModulePitch((mm_word)(pitch < 0x200 ? 0x200 : pitch > 0x800 ? 0x800 : pitch));",
+        "}",
+        "/* Loop on another section OF THE PLAYING MODULE; nothing if it has none by this name. */",
+        "void music_set_section(int section){",
+        "    int i;",
+        "    if(g_music_cur < 0) return;",
+        "    for(i = 0; i < MUSIC_SECTION_COUNT; i++){",
+        "        if(g_music_sec[i].music == g_music_cur && g_music_sec[i].section == section){",
+        "            g_mloop_start = g_music_sec[i].start; g_mloop_end = g_music_sec[i].end;",
+        "            g_mloop_in = 0; g_mloop_rel = 0;",
+        "            return;",
+        "        }",
+        "    }",
+        "}",
+        "/* Leave the loop section: the module plays on through the outro, then stops. */",
+        "void music_leave_loop(void){",
+        "    if(g_mloop_end <= 0) return;",
+        "    g_mloop_end = 0;",
+        "    g_mloop_rel = 1; g_mloop_last = (int)mmGetPosition();",
+        "}",
+        "/* The loop section, once per frame. The position only moves at a row boundary, so",
+        "   this lands within a frame of the end. A loop that reaches the END of the song is",
+        "   caught by its backward wrap: the module restarts at its own restart position,",
+        "   below the section start, and we send it back. */",
+        "static void music_loop_tick(void){",
+        "    int pos;",
+        "    if(!mmActive()) return;",
+        "    pos = (int)mmGetPosition();",
+        "    if(g_mloop_rel){",
+        "        /* Released: the module was started in MM_PLAY_LOOP, so it wraps at the end of",
+        "           the song. A position that goes BACK is that end — we stop there. */",
+        "        if(pos < g_mloop_last){ mmStop(); g_music_cur = -1; g_mloop_rel = 0; return; }",
+        "        g_mloop_last = pos;",
+        "        return;",
+        "    }",
+        "    if(g_mloop_end <= 0) return;",
+        "    if(pos >= g_mloop_end){ mmPosition((mm_word)g_mloop_start); g_mloop_in = 1; }",
+        "    else if(pos >= g_mloop_start){ g_mloop_in = 1; }",
+        "    else if(g_mloop_in){ mmPosition((mm_word)g_mloop_start); }",
+        "}",
+        "",
+    ]
+
+
+def music_runtime_stub_lines() -> list[str]:
+    """Le même contrat, sans soundbank : un projet dont l'audio n'a pas pu être construit
+    doit encore LIER — les scripts appellent ces fonctions."""
+    return [
+        "void music_play(int id, int loop, int volume){(void)id;(void)loop;(void)volume;}",
+        "void music_fade_in(int id, int loop, int volume, int frames)"
+        "{(void)id;(void)loop;(void)volume;(void)frames;}",
+        "void music_stop(void){}",
+        "void music_fade_out(int frames){(void)frames;}",
+        "void music_set_volume(int volume){(void)volume;}",
+        "void music_set_tempo(int tempo){(void)tempo;}",
+        "void music_set_pitch(int pitch){(void)pitch;}",
+        "void music_set_section(int section){(void)section;}",
+        "void music_leave_loop(void){}",
+        "",
+    ]
 
 
 def music_start_lines(p) -> list[str]:

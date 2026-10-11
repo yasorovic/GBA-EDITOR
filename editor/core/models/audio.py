@@ -11,7 +11,7 @@ La hauteur, le volume et le panning se surchargent À L'APPEL depuis la v0.8.6 :
 `sfx.play` rend une référence, et les conversions vers les trois graduations du
 matériel vivent plus bas dans ce fichier."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from core.models.resource import Resource
@@ -87,6 +87,51 @@ _MIX_BUFFER_BYTES = 1056         # MM_MIXLEN_16KHZ — le mode que mmInitDefault
 def sound_channels_bytes(channels: int) -> int:
     """Ce que `mmInitDefault` alloue sur le tas pour ce nombre de canaux."""
     return _CHANNEL_BYTES * int(channels) + _MIX_BUFFER_BYTES
+
+
+# ── Tempo et hauteur d'un MODULE ──────────────────────────────────────
+#
+# `mmSetModuleTempo` et `mmSetModulePitch` prennent un facteur Q10 de 0x200 à
+# 0x800 : 0,5× à 2,0× (maxmod.h). Ce n'est pas un BPM — le BPM du fichier reste
+# de l'information, jamais un réglage. En pourcentage, comme tout le reste du
+# fichier : 100 = le fichier tel qu'il est.
+
+TEMPO_MIN = 50          # % — 0x200
+TEMPO_MAX = 200         # % — 0x800
+PITCH_MIN = 50
+PITCH_MAX = 200
+
+# Les fondus sont en FRAMES, comme les transitions de la MusicBox : une durée ne
+# s'écrit pas de deux façons selon l'écran. Dix secondes bornent un réglage
+# raisonnable ; au-delà, c'est une transition, pas un fondu.
+FADE_MAX_FRAMES = 600
+
+_MODULE_FACTOR_NORMAL = 1024    # Q10 : 1,0×
+_MODULE_FACTOR_MIN = 0x200
+_MODULE_FACTOR_MAX = 0x800
+
+
+def tempo_to_module(percent: int) -> int:
+    """% → l'argument de `mmSetModuleTempo` (Q10, 0x200–0x800)."""
+    return max(_MODULE_FACTOR_MIN,
+               min(_MODULE_FACTOR_MAX, round(percent * _MODULE_FACTOR_NORMAL / VOLUME_MAX)))
+
+
+def pitch_to_module(percent: int) -> int:
+    """% → l'argument de `mmSetModulePitch` (Q10, 0x200–0x800)."""
+    return max(_MODULE_FACTOR_MIN,
+               min(_MODULE_FACTOR_MAX, round(percent * _MODULE_FACTOR_NORMAL / VOLUME_MAX)))
+
+
+def tempo_to_module_expr(c_expr: str) -> str:
+    """La même conversion, pour un tempo qui n'existe qu'À L'EXÉCUTION (cf. `volume_to_module_expr`).
+    Le C ne borne pas ici : `music_set_tempo` le fait, dans la plage de maxmod."""
+    return f"(({c_expr}) * {_MODULE_FACTOR_NORMAL} / {VOLUME_MAX})"
+
+
+def pitch_to_module_expr(c_expr: str) -> str:
+    """Idem pour la hauteur de module."""
+    return f"(({c_expr}) * {_MODULE_FACTOR_NORMAL} / {VOLUME_MAX})"
 
 
 def pitch_to_rate(percent: int) -> int:
@@ -226,6 +271,41 @@ def sfx_rom_bytes(path) -> Optional[int]:
         return None
 
 
+# ── Les sections d'une musique ────────────────────────────────────────
+#
+# Une section est une plage NOMMÉE du morceau, que l'auteur pose par-dessus le
+# fichier sans jamais le toucher (ROADMAP « L'asset .music »). L'unité dépend de
+# la source, et le sidecar l'écrit lui-même (`Music.unit`) :
+#
+#   "order"  un module tracker — un INDEX BRUT de la table d'ordres, celui que
+#            `mmGetPosition()` rend (cf. engine_emulation/module_model.ORDER_SKIP) ;
+#   "ms"     un WAV — des millisecondes depuis le début de la piste.
+#
+# Les deux sont DEMI-OUVERTES : [start, end). La boucle saute dès que la
+# position atteint `end`, et deux sections voisines (4–12 puis 12–16) se
+# touchent sans se recouvrir. L'écran écrit « ordres 04–11 » pour [4, 12) : c'est
+# à lui de traduire, le modèle n'a qu'une convention.
+
+UNIT_ORDER = "order"
+UNIT_MS    = "ms"
+MUSIC_UNITS = (UNIT_ORDER, UNIT_MS)
+
+
+@dataclass
+class MusicSection:
+    name: str = "section"
+    color: str = ""            # "#RRGGBB" ; vide = l'écran en choisit une selon le rang
+    start: int = 0
+    end: int = 0               # exclu
+    loop: bool = False         # cette section PEUT être jouée en boucle
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "MusicSection":
+        return cls(name=str(d.get("name", "section")), color=str(d.get("color", "")),
+                   start=int(d.get("start", 0)), end=int(d.get("end", 0)),
+                   loop=bool(d.get("loop", False)))
+
+
 @dataclass
 class Music(_MigrateVolumeMixin, Resource):
     sidecar_extension = asset_extensions.MUSIC
@@ -233,6 +313,82 @@ class Music(_MigrateVolumeMixin, Resource):
     asset: Optional[str] = None
     loop: bool = True
     volume: int = 100          # POURCENTAGE — cf. _MigrateVolumeMixin
+    # Le sidecar surcharge, le fichier propose : ce qui suit ne modifie JAMAIS
+    # le fichier source, le build l'applique. Un sidecar d'avant ces champs relit
+    # les défauts ci-dessous, qui sont exactement l'ancien comportement.
+    unit: str = UNIT_ORDER
+    sections: list = field(default_factory=list)       # list[MusicSection]
+    loop_section: str = ""     # nom de la section bouclée ; vide = tout le morceau
+    # Valeurs PAR DÉFAUT, que l'API surcharge à l'appel — la règle du volume
+    # depuis la v0.8.6. Pourcentages : 100 = le fichier tel qu'il est.
+    tempo: int = 100
+    pitch: int = 100
+    fade_in: int = 0           # frames
+    fade_out: int = 0          # frames
+    # WAV seulement : le taux auquel la piste devient un module. 0 = le défaut
+    # (`wav_module.WAV_MUSIC_RATE`). Un taux plus bas allonge ce qui tient dans
+    # un échantillon, au prix des aigus (cf. `wav_module.max_seconds`).
+    sample_rate: int = 0
+
+    @classmethod
+    def from_dict(cls, d: dict):
+        obj = super().from_dict(d)
+        obj.sections = [MusicSection.from_dict(sec) for sec in obj.sections
+                        if isinstance(sec, dict)]
+        return obj
+
+    def section(self, name: str):
+        return next((s for s in self.sections if s.name == name), None)
+
+    def unique_section_name(self, base: str = "Loop") -> str:
+        """`base`, puis `base 2`, `base 3`… : la première forme libre dans CETTE musique."""
+        taken = {s.name for s in self.sections}
+        if base not in taken:
+            return base
+        n = 2
+        while f"{base} {n}" in taken:
+            n += 1
+        return f"{base} {n}"
+
+    def add_section(self, start: int, end: int, name: str = "", color: str = "",
+                    loop: bool = True) -> "MusicSection":
+        """Ajoute une section et la rend. Son nom est unique ; la première section qui boucle
+        devient la boucle par défaut — une musique qui n'a qu'une boucle n'a pas à la désigner."""
+        section = MusicSection(self.unique_section_name(name or "Loop"), color, start, end, loop)
+        self.sections.append(section)
+        if loop and not self.loop_section:
+            self.loop_section = section.name
+        return section
+
+    def remove_section(self, name: str) -> None:
+        """Retire une section ET ce qui la cite : la boucle par défaut ne doit pas pendre dans le
+        vide. Si d'autres sections bouclent, la première reprend ce rôle."""
+        self.sections = [s for s in self.sections if s.name != name]
+        if self.loop_section == name:
+            self.loop_section = next((s.name for s in self.sections if s.loop), "")
+
+    def set_single_loop(self, start: int, end: int, name: str = "Loop") -> "MusicSection":
+        """LA boucle d'un WAV (il n'en a qu'une, native) : la crée ou la déplace.
+
+        Les autres sections, s'il y en a, ne sont pas touchées — mais elles ne bouclent plus :
+        deux sections qui bouclent sur un WAV est une erreur du validateur."""
+        section = self.section(name) or self.add_section(start, end, name)
+        section.start, section.end, section.loop = start, end, True
+        for other in self.sections:
+            if other is not section:
+                other.loop = False
+        self.loop_section = section.name
+        return section
+
+    def rename_section(self, old: str, new: str) -> None:
+        """Renomme une section ET ce qui la cite : `loop_section` ne doit pas
+        pendre dans le vide quand l'auteur la renomme."""
+        sec = self.section(old)
+        if sec is None:
+            return
+        sec.name = new
+        if self.loop_section == old:
+            self.loop_section = new
 
 
 # maxmod ne donne que 4 canaux à la couche jingle (doc `mmJingle`) : un module

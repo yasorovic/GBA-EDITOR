@@ -34,12 +34,14 @@ backstage/
 │   │   │   ├── deleted_files.py     ← `.temp/` du projet : ce qu'on supprime y est déplacé, Ctrl+Z le rend, la fermeture le vide
 │   │   │   ├── palette_store.py     ← palettes .hex + sidecar JSON
 │   │   │   └── asset_reconciliation.py ← synchronisation des fichiers assets et de leurs sidecars
+│   │   ├── music_structure.py       ← les réglages d'une `.music` face à son fichier : sections, boucle, coupe (`cut_problems`), ce que la ROM lit (`music_info_row`)
+│   │   ├── wav_module.py            ← une piste WAV encapsulée en module XM : taux choisi, boucle d'échantillon calée sur un passage par zéro
 │   │   ├── disk_tree.py             ← `assets/` tel qu'il est sur le disque, chaque fichier marqué (asset, source reliée, source libre, non géré) — sans Qt, lecture seule
-│   │   ├── disk_folders.py          ← créer et renommer un dossier de `assets/` (refuse tout ce qui sort de `assets/`)
+│   │   ├── disk_folders.py          ← créer un dossier de `assets/` (refuse tout ce qui sort de `assets/`)
 │   │   ├── asset_creation.py        ← *Create asset* : un format de source → les types qu'il peut devenir ; construit l'asset (nom unique, à côté de sa source, qui le POINTE), l'historique le range (`CreateAssetCmd`)
 │   │   ├── asset_usages.py          ← ce qui cite encore un asset (composants, calques, prefabs, palettes, scripts) : l'avertissement avant de le supprimer
 │   │   ├── blank_assets.py          ← les assets vierges sans source (scène, prefab, mise en page, boîtes, table, palette) et le contenu d'un script / behavior neuf
-│   │   ├── disk_commands.py         ← importer, déplacer, créer / renommer un dossier, créer un fichier : des `Command` annulables autour de `disk_folders`, `disk_move`, `asset_creation`
+│   │   ├── disk_commands.py         ← importer, déplacer, créer un dossier, renommer un dossier / une source / un script (arbre et vue à plat, clic sur le nom ou F2), créer un fichier : des `Command` annulables autour de `disk_folders`, `disk_move`, `asset_creation`
 │   │   ├── disk_move.py             ← déplacer fichiers et dossiers de `assets/` (glisser-déposer de l'onglet Disk) : réécrit le chemin de source des assets, n'écrase jamais, `drop_verdict` répond au survol sans rien toucher, une image de fond se déplace comme n'importe quelle source (`BackgroundAsset.asset` est un chemin relatif au projet, lu par `Project.background_image_path`), refuse palettes / textes / variables / scripts / images de fonds
 │   │   ├── asset_relink.py          ← l'asset dont la source manque (`missing_sources`, erreur de build du validateur) et `relink_source` : le relier à un autre fichier sans le recréer
 │   │   ├── collision_slopes.py      ← génération des tiles de pente (Bresenham) pour CollisionTool
@@ -52,7 +54,8 @@ backstage/
 │   │   │   ├── text_layout.py       ← où atterrit chaque glyphe (jumeau : text_layout() du moteur)
 │   │   │   ├── blend_preview.py     ← les formules BLDCNT/BLDALPHA/BLDY appliquées aux images
 │   │   │   ├── module_render.py     ← rejoue un module façon mixeur maxmod (taux réduit, sans interpolation)
-│   │   │   ├── music_deck.py        ← la couche module et ses 2 transitions (jumeau : music_transition_tick())
+│   │   │   ├── music_deck.py        ← la couche module : transitions, fondus, section de boucle (jumeau : music_transition_tick() / music_loop_tick())
+│   │   │   ├── wav_render.py        ← une piste WAV rendue comme le build la portera (taux choisi, 8 bits, boucle d'échantillon)
 │   │   │   ├── module_model.py      ← le modèle commun aux 4 formats + reconnaissance par signature
 │   │   │   └── mod/s3m/xm/it_file.py ← les 4 lecteurs de format que maxmod accepte
 │   │   ├── text_markup.py           ← langage de balisage des textes (BBCode) : analyse → affiché + effets
@@ -83,6 +86,7 @@ backstage/
 │       │   ├── elide_name.py        ← couper un nom de fichier trop long en gardant son extension (`monnomq... .extension`) : retour à la ligne d'abord, puis coupe — la règle commune de la vue à plat et de l'arbre de l'onglet Disk
 │       │   ├── disk_tree_view.py    ← l'onglet Disk de la colonne de gauche (à côté de Project viewer) : l'arbre vertical de `assets/`, racine « Assets » ; choisir un dossier l'affiche dans `disk_view` ; « + » crée un dossier (renommé en place), la loupe filtre par nom
 │       │   ├── disk_view.py         ← l'onglet Disk du panneau Build / debug : le contenu d'UN dossier de `assets/` à plat (icône + nom), fil d'ariane « Assets › … », lecture seule
+│       │   ├── locate_bus.py        ← LOCATE : le canal par lequel un finder, le canvas ou l'arbre de scène demandent à la fenêtre d'ouvrir l'onglet Disk sur un fichier ; `reveal.py` est son jumeau, REVEAL, vers l'explorateur du système (cf. « Locate et Reveal » ci-dessous)
 │       │   ├── catalog.py           ← cœur partagé maître+side (join par clé, pluriel, set_language)
 │       │   ├── notice.py            ← les 3 niveaux de contenu informatif (bâti sur catalog.py)
 │       │   ├── notices/             ← notices.json (source EN) + notices_<code>.json (traductions)
@@ -124,12 +128,17 @@ backstage/
 │       │   ├── data_inspector_panel.py     ← panneau droit : la colonne, et ce que la cellule désigne
 │       │   └── data_editor_screen.py       ← écran complet (assemble les 3 colonnes)
 │       ├── sound_mixer/
-│       │   ├── box_playback.py             ← lecture ROM d'une MusicBox (sortie audio + cache des modules)
+│       │   ├── box_playback.py             ← lecture ROM d'une MusicBox ou d'un asset (sortie audio, cache des rendus, aperçu d'une section)
+│       │   ├── music_editor.py             ← centre, pour une musique : en-tête, forme d'onde, et la zone de structure du FORMAT (module ou WAV)
+│       │   ├── waveform_view.py            ← la forme d'onde du `Track` ; bandes de sections (module) ou poignées de boucle (WAV)
+│       │   ├── order_strip.py              ← la table d'ordres BRUTE d'un module, ses sections, la sélection d'une plage
+│       │   ├── section_table.py            ← les sections d'un module en tableau, éditées en place
+│       │   ├── section_colors.py           ← la couleur d'une section (lue par les quatre composants ci-dessus)
 │       │   ├── music_graph.py              ← centre : le graphe de la MusicBox (nœuds déplaçables)
 │       │   ├── sound_commands.py           ← écritures annulables (déplacer, supprimer, renommer un état)
 │       │   ├── state_machines.py           ← hôte du graphe, inspecteur d'état, tables actions × états
 │       │   ├── sound_budget_bar.py         ← bandeau canaux, LOCAL à l'écran (jumeau de GbaStatusBar)
-│       │   └── sound_panel.py              ← écran complet (finder + 3 onglets de boîtes + inspecteurs)
+│       │   └── sound_panel.py              ← écran complet (finder + éditeur de musique + 3 onglets de boîtes + inspecteurs) ; le lecteur (`_build_player_bar`) est séparé des boîtes
 │       ├── script_editor/             ← un fichier par sous-zone de l'écran
 │       │   ├── colors.py                  ← proxys couleur partagés par tout l'écran
 │       │   ├── lua_editor.py               ← coloration syntaxique + widget d'édition
@@ -174,8 +183,10 @@ backstage/
 │   ├── windows/installer.nsi        ← installateur NSIS (par utilisateur)
 │   └── linux/                       ← AppImage (job CI en pause)
 ├── tools/
-│   └── check_architecture.py        ← les règles de ce document, rendues exécutables
-│                                      (voir « Les règles ci-dessus se vérifient toutes seules »)
+│   ├── check_architecture.py        ← les règles de ce document, rendues exécutables
+│   │                                  (voir « Les règles ci-dessus se vérifient toutes seules »)
+│   └── convert_uge_to_mod.py        ← hUGETracker (.uge) → module ProTracker (.mod) 4 canaux : des modules
+│                                      réalistes pour essayer l'écran Son et le build audio
 ├── tests/                           ← `pytest tests` — un dossier par tâche ; les tests
 │   │                                  d'erreurs SILENCIEUSES (pas d'exception, une ROM
 │   │                                  fausse) sont dans graphics/ et text/
@@ -262,6 +273,17 @@ C'est la règle qui prime sur tout le reste : **un concept a un seul nom, écrit
 - **Renommer, c'est renommer partout.** Un changement de nom touche la classe, le fichier, les labels et les références — pas seulement le libellé UI. Un renommage éditeur (`Project.rename_*`) réécrit d'ailleurs les références Lua par repérage **structurel**, jamais textuel : ni les commentaires ni les chaînes sans rapport ne bougent.
 
 Avant de nommer un nouveau type (struct C, classe Python, label UI), vérifier que le **même mot** est employé aux trois endroits. En cas de doute entre « juste le libellé » et « renommage complet », c'est toujours le renommage complet.
+
+### Locate et Reveal — deux gestes, deux noms
+
+Montrer où vit un fichier a deux sens, et ils ne se mélangent pas :
+
+| Geste | Où il mène | Libellé | Code |
+|---|---|---|---|
+| **Locate** | l'onglet **Disk** de l'éditeur, le fichier sélectionné | `common.locate` (« Locate ») | `ui/common/locate_bus.py` → `window._locate_file` |
+| **Reveal** | l'**explorateur du système**, le fichier sélectionné (son dossier s'il n'y a pas moyen) | `common.reveal` (« Reveal ») | `ui/common/reveal.py` |
+
+Locate part de partout (l'icône ferrée à droite de chaque ligne d'un finder, le clic-droit d'un acteur du canvas ou de l'arbre de scène) et aboutit en un seul endroit, la fenêtre, qui possède l'onglet Disk : l'émetteur dit seulement QUEL fichier, jamais comment l'afficher. Reveal, lui, n'a pas besoin de la fenêtre. Un finder tient les deux derrière `AssetKind.file_of` (le fichier d'un asset, la même table que l'arbre Disk) : une famille qui le déclare gagne l'icône et les deux entrées de menu, sans autre câblage. Le bouton « dossier » qui ouvrait seul le dossier d'une famille n'existe plus.
 
 ---
 
@@ -1376,8 +1398,15 @@ ligne de log ; elle a disparu avec ses points d'appel.
 - **`_show_screen` l'accroche** (`_move_build_panel_to`) : Qt reparente le widget,
   console et onglets restent intacts. **Fermé = replié à zéro dans le splitter**, pas
   masqué : la poignée reste au bord bas du centre, c'est elle qu'on tire pour ouvrir.
-  Le Sound Mixer, dont le contenu central est caché le temps de son recentrage, garde
-  sa colonne (vide) pour la même raison : on ne masque pas la colonne, seulement son contenu.
+  Le Sound Mixer, dont l'éditeur de boîtes (`_machines_panel`) est caché le temps de son
+  recentrage, garde sa colonne pour la même raison : on ne masque pas la colonne, seulement son
+  contenu. Le **lecteur** (`BoxPlayer` + sa barre, hauteur fixe de 42 px) n'est PAS dans ce
+  panneau masqué : il est ancré en bas de la colonne centrale, sous un stretch, et sert
+  l'aperçu d'un asset du Sound finder comme celui d'une boîte ; Espace le lance / l'arrête.
+- **Création depuis des sources (onglet Disk).** `disk_view.shared_create_options(nodes, callbacks)`
+  est la seule règle de « quels types pour cette sélection » (intersection des types de chaque source),
+  partagée par le bouton *Create*, le clic droit de la vue à plat et celui de l'arbre.
+  `DiskCallbacks.create_from_sources(chemins, famille)` crée le lot en UNE entrée d'historique.
 - **Ouvert ou fermé est une donnée du catalogue** : `EditorScreen.build_panel_open`
   (ouvert : Scenes, Datas, Scripts ; fermé : les autres et les plugins). C'est la
   valeur de départ ; `_build_panel_open` retient le dernier état de chaque écran pour

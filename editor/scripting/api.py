@@ -185,6 +185,7 @@ DOMAIN_CAMERA = "camera"  # CAM_{name}   — caméra du projet
 DOMAIN_SOUND_BOX_STATE   = "sound_box_state"
 DOMAIN_JINGLE_BOX_STATE  = "jingle_box_state"
 DOMAIN_MUSIC_BOX_TRIGGER = "music_box_trigger"
+DOMAIN_MUSIC_SECTION = "music_section"   # MSEC_{name} — section de boucle d'une musique (music.set_section)
 DOMAIN_TEXT   = "text"    # TEXT_{key}  — clé de la table de textes du projet
 # Langue déclarée du projet. Un projet monolingue n'admet aucun code de langue.
 DOMAIN_LANG   = "lang"
@@ -919,6 +920,51 @@ RUNTIME_API: dict[str, ApiFunc] = {
             "module layer: the hardware has a single scaler, and no box adds a second"
             " one.",
     ),
+    # Les réglages d'une musique (tempo, hauteur, fondus, section de boucle) se posent sur
+    # son ASSET ; ces six appels les SURCHARGENT pour la lecture en cours. Une musique qui
+    # démarre reprend ceux de son asset : une surcharge ne survit pas à la piste suivante.
+    "music.set_tempo": ApiFunc(
+        lua_name="music.set_tempo", c_func="music_set_tempo",
+        params=[Param("percent", PARAM_INT)],
+        doc="Sets the tempo of the playing music, as a percentage of the file's own "
+            "(50 to 200). The next track starts again at the tempo set on its asset. "
+            "Not for a WAV track: its length is its tempo.",
+    ),
+    "music.set_pitch": ApiFunc(
+        lua_name="music.set_pitch", c_func="music_set_pitch",
+        params=[Param("percent", PARAM_INT)],
+        doc="Sets the pitch of the playing music, as a percentage (50 to 200): a "
+            "module plays higher and shorter, lower and longer. The next track starts "
+            "again at the pitch set on its asset. Not for a WAV track.",
+    ),
+    "music.fade_in": ApiFunc(
+        lua_name="music.fade_in", c_func="music_fade_in",
+        params=[Param("name", PARAM_STR, DOMAIN_MUSIC), Param("frames", PARAM_INT)],
+        doc="Starts a music track with a fade in of `frames` (60 per second), instead "
+            "of the fade in set on its asset. The volume rises from zero.",
+    ),
+    "music.fade_out": ApiFunc(
+        lua_name="music.fade_out", c_func="music_fade_out",
+        params=[Param("frames", PARAM_INT)],
+        doc="Stops the music with a fade out of `frames` (60 per second), instead of "
+            "the fade out set on its asset. `music:is_playing()` stays true until it "
+            "is over.",
+    ),
+    "music.set_section": ApiFunc(
+        lua_name="music.set_section", c_func="music_set_section",
+        params=[Param("section", PARAM_STR, DOMAIN_MUSIC_SECTION)],
+        doc="Makes the playing track loop on another section of ITS OWN (a boss "
+            "changing phase: the same song, another part of it). Nothing happens if the "
+            "playing track has no section by this name. Modules only: a WAV track has a "
+            "single loop, fixed at build.",
+    ),
+    "music.leave_loop": ApiFunc(
+        lua_name="music.leave_loop", c_func="music_leave_loop",
+        params=[],
+        doc="Lets the playing track leave its loop section: it plays on through the "
+            "rest of the song — the outro — and then stops. Modules only: a WAV track "
+            "never leaves its loop, so its outro is never played.",
+    ),
     # Le jingle : la seule superposition que la console autorise. Il ne boucle
     # pas, prend jusqu'à 4 des 8 canaux, et il n'y en a qu'un à la fois — trois
     # faits matériels, énoncés dans la doc plutôt que corrigés en douce.
@@ -987,8 +1033,9 @@ RUNTIME_API: dict[str, ApiFunc] = {
         params=[Param("name", PARAM_STR, DOMAIN_MUSIC)],
         doc="Switches to another track WITHOUT a dip, at the end of the current "
             "pattern, resuming at the same position. This is what chains two variants"
-            " of the same song — the drums coming in, the theme intensifying. Both "
-            "tracks must have the same structure; the validator checks it.",
+            " of the same song — the drums coming in, the theme intensifying. Wherever "
+            "the current track can be, the target must have a pattern at the same "
+            "position; the validator checks it.",
     ),
 
     # ── Scènes ─────────────────────────────────────────────────────
@@ -2311,6 +2358,13 @@ def sfx_constant(sfx_name: str) -> str:
 
 def music_constant(music_name: str) -> str:
     return f"MUSIC_{c_ident(music_name)}"
+
+
+def music_section_constant(section_name: str) -> str:
+    """'Main' → 'MSEC_MAIN'. Le nom d'une section est propre à SA musique (deux musiques
+    peuvent toutes deux avoir « Main ») : la constante ne désigne donc que le NOM, et c'est
+    la table de `main.c` qui dit où il tombe dans le module qui joue."""
+    return f"MSEC_{c_ident(section_name)}"
 
 
 def key_constant(key_name: str) -> str:

@@ -150,7 +150,9 @@ def parse_s3m(data: bytes) -> Module:
     chan_settings = list(data[0x40:0x60])
 
     off = 0x60
-    order = [o for o in data[off:off + ord_num] if o < 254]
+    # La table BRUTE, marqueurs compris (cf. module_model.ORDER_SKIP) : même
+    # convention qu'IT dans le format, non vérifiée sous `mmutil` pour le S3M.
+    order = list(data[off:off + ord_num])
     off += ord_num
     ins_ptr = list(struct.unpack_from(f"<{ins_num}H", data, off)); off += ins_num * 2
     pat_ptr = list(struct.unpack_from(f"<{pat_num}H", data, off)); off += pat_num * 2

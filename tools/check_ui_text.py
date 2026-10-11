@@ -93,7 +93,7 @@ FIRST = {
     "btn_danger", "pair", "row", "field", "checkbox", "AssetFinder",
     "set_add_tooltip", "set_empty_text",
     "title_panel", "title_group", "finder_bar", "section_bar", "title_section",
-    "empty_state", "btn_search", "btn_reveal", "search_box", "combobox",
+    "empty_state", "btn_search", "search_box", "combobox",
     "_category_title", "_row", "FinderSection", "QListWidgetItem", "CanvasTopBar",
     "_add_empty_row", "_add_section_header",
 }

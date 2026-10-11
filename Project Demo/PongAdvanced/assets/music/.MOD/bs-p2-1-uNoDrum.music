@@ -1,0 +1,15 @@
+{
+  "name": "bs-p2-1-uNoDrum",
+  "id": "5df2c3c63530",
+  "asset": "assets/music/.MOD/bs-p2-1-uNoDrum.mod",
+  "loop": true,
+  "volume": 100,
+  "unit": "order",
+  "sections": [],
+  "loop_section": "",
+  "tempo": 100,
+  "pitch": 100,
+  "fade_in": 0,
+  "fade_out": 0,
+  "sample_rate": 0
+}

@@ -10,7 +10,7 @@ Un script contient des variables, des événements proposés dans le panneau **E
 
 | Valeur | Écriture | Notes |
 | --- | --- | --- |
-| Entier | `12`, `-3` | Seul type numérique. `7 / 2` vaut `3`. |
+| Entier | `12`, `-3` | Seul type numérique, sur 32 bits (de -2147483648 à 2147483647). `7 / 2` vaut `3`. |
 | Booléen | `true`, `false` | Utilisable comme 1 ou 0. |
 | `nil` | `nil` | Vaut 0. |
 | Vecteur | `vec2(x, y)`, `vec3(x, y, z)` | `+`, `-`, multiplication par un entier. |
@@ -24,9 +24,33 @@ Un script contient des variables, des événements proposés dans le panneau **E
 +  -  *  /  %              -- arithmétique entière
 == ~= < <= > >=           -- comparaison
 and or not                -- logique
+&  |  ~  <<  >>  ~a         -- bit à bit : et, ou, xor, décalages, non (entiers 32 bits)
 #t                         -- taille d'un tableau, connue au build
 #data.Objets               -- nombre de lignes d'une table de données, connu au build aussi
 ```
+
+Quelques règles sur les nombres, qui découlent du fait que le moteur n'a que des entiers :
+
+- **Un littéral à virgule est tronqué vers zéro** (`1.5` vaut `1`, `-1.5` vaut `-1`), et le build avertit. Pour une fraction, mettez à l'échelle : une vitesse s'exprime en sous-pixels, `256` valant 1 pixel par frame.
+- **Un littéral hors de 32 bits est une erreur** (`99999999999`).
+- **`%` suit le C, pas Lua.** Le reste a le signe du dividende : `-5 % 3` vaut `-2`, là où Lua donne `1`.
+- **Diviser par zéro ne plante pas la console, mais le résultat n'a aucun sens.** La division est une fonction de la bibliothèque du compilateur : avec un diviseur nul elle rend le plus grand entier pour un dividende positif, le plus petit pour un négatif, et `0` pour `0 / 0`. Le build refuse un `/ 0` ou un `% 0` écrit en clair. Un diviseur calculé n'est pas vérifié : testez-le avant de diviser.
+
+Les opérateurs bit à bit servent à cumuler plusieurs drapeaux dans un seul entier :
+
+```lua
+flags = flags | 2                 -- activer le drapeau 2
+flags = flags & ~4                -- désactiver le drapeau 4
+if flags & 1 ~= 0 then … end      -- tester le drapeau 1
+```
+
+Ils portent sur des entiers de **32 bits**, la largeur d'un registre de la GBA — pas les 64 bits de Lua 5.3. Les règles qui en découlent :
+
+- **Un décalage s'écrit entre 0 et 31.** Un compte littéral hors de cet intervalle est refusé au build. Un compte calculé qui sort de l'intervalle donne `0`.
+- **`>>` est logique**, comme en Lua : les bits qui entrent à gauche sont des `0`, même pour un nombre négatif. `-1 >> 28` vaut `15`.
+- **`<<` peut atteindre le bit 31**, qui est le bit de signe : `1 << 31` vaut `-2147483648`.
+- **La largeur d'un drapeau est celle de la variable qui le porte.** Une globale `u8` ne garde que 8 drapeaux, une `u16` en garde 16.
+- `~` seul est le « non » binaire, et `~=` reste « différent de ». Ces opérateurs ne s'appliquent ni à un `vec2`, ni à un `vec3`, ni à un `rect`.
 
 Les boucles disponibles sont `while` et `for`. Un `for` accepte un début, une fin et un pas écrit en clair. `break` et `return` sont disponibles.
 
@@ -45,6 +69,16 @@ self.position = vec2(8, 8)
 self:destroy()
 sfx:play("Bip")
 ```
+
+Une propriété composée s'écrit en entier ou composante par composante. Les champs sont `x, y` pour un `vec2`, `x, y, z` pour un `vec3` et `x, y, w, h` pour un `rect` :
+
+```lua
+self.position = vec2(8, 8)            -- la valeur entière
+self.position.x = self.position.x + 1 -- une seule composante
+camera.bound.w = 240                  -- un champ de rect
+```
+
+Une propriété en lecture seule (`scene.size`) refuse les deux formes.
 
 Certains appels renvoient une référence à un élément matériel. Une référence vaut `0` si aucun slot n'est libre ; une référence devenue périmée ne fait rien.
 
@@ -155,6 +189,7 @@ end
 ```
 
 - **On l'utilise par son nom nu**, comme n'importe quelle variable : la lire, la réassigner. Sa seule particularité est que sa valeur de départ vient de l'inspecteur, pas du script.
+- **Un `enum` se compare et s'affecte par son étiquette** : `if team == "RED" then … end`, `team = "BLUE"`. Le build la remplace par son index et refuse une étiquette absente de `values`. Le nombre (`team == 1`) reste accepté, mais l'étiquette se relit mieux.
 - **La valeur réglée sur l'instance** l'emporte sur le `default` ; sans réglage, c'est le `default`.
 - **Tous les types sont réglables par instance**, avec la valeur portée jusqu'au jeu :
   - `int`, `float`, `bool`, `enum` — entiers au runtime (`float` est tronqué, un `enum` vaut l'index de son étiquette).
@@ -257,6 +292,7 @@ La bibliothèque standard de Lua n'est pas embarquée dans la ROM. Les cas usuel
 | Ouvrir un fichier | `save.write` et `save.read` pour la SRAM. |
 | Afficher une trace | `debug:log(...)`, visible dans mGBA et retiré des builds release. |
 | Gérer une erreur ou une exception | Un `if` qui contrôle et corrige la valeur. |
+| Choisir entre plusieurs valeurs (`switch`) | `if x == 1 then … elseif x == 2 then … else … end`. Le `else` joue le rôle de `default`. |
 | Charger un behavior | `require("behaviors/nom")`, résolu au build par NOM parmi les scripts dont la première ligne est `-- @behavior`, où qu'ils soient rangés. Deux behaviors de même nom : erreur de build. |
 
 Il n'y a pas de `string`, `table`, `os`, `io`, `coroutine`, `utf8`, métatable, fonction de réflexion ni chargement de code à l'exécution.
@@ -271,8 +307,23 @@ Pour rechercher une forme Lua précise dans une erreur, voici les appels refusé
 | Métatables | `setmetatable(t, mt)`, `getmetatable(t)`, `rawget(t, k)`, `rawset(t, k, v)`, `rawequal(a, b)`, `rawlen(t)` |
 | Fichiers et code | `os.time()`, `io.open(…)`, `package.path`, `dofile(chemin)`, `load(src)`, `loadfile(chemin)`, `loadstring(src)`, `collectgarbage()` |
 | Coroutines | `coroutine.create(f)` |
+| Aiguillage | `switch(x, { [1] = function() … end })` |
 
 Une fonction écrite `function f() … end, dans un corps` ou `function objet:methode() … end` est également refusée. Déclarez une fonction privée au premier niveau. `local function f() … end` n'est pas une forme disponible.
+
+Une affectation multiple `a, b = b, a` est refusée : écrivez une affectation par ligne. Pour échanger deux valeurs, passez par un `local` (`local t = a`, `a = b`, `b = t`). La forme `local x, y = 1, 2` reste valide.
+
+Le build refuse aussi, avec un message qui nomme la faute :
+
+- **Deux fonctions de même nom**, par exemple deux `function on_update()`. Fusionnez-les.
+- **Un nom qui ressemble à un événement sans en être un** (`on_updat`, `onUpdate`). Une fonction en `on_…` serait ignorée ; le message propose le bon nom.
+- **Une chaîne comme opérande** (`n + "a"`, `other_box == "x"`). Une chaîne est un nom résolu au build, pas une valeur calculable. Seuls les noms attendus l'acceptent : un argument de l'API, une propriété comparée par nom (`self.direction == "west"`) et l'étiquette d'un `enum`.
+- **Un pas de boucle nul** (`for i = 1, 10, 0`), qui ne finirait jamais.
+- **Un `vec2`, `vec3` ou `rect` utilisé comme un nombre.** Il n'est pas une condition (`if v then` : testez `v.x ~= 0`), ne se nie pas avec `-v` (écrivez `v * -1`) et ne se mêle pas à un entier à l'affectation (`count = v`).
+- **Un tableau utilisé comme valeur** (`n = t`, `t = 5`). On lit et on écrit ses éléments : `t[i]`.
+- **`break` hors d'une boucle**, et **`return` avec une valeur dans un handler**. `return` seul quitte le handler ; seule une fonction privée rend une valeur.
+- **Un paramètre de handler que le moteur ne passe pas** (`on_update(dt)`). Un handler reçoit ses paramètres sous leur nom : `other`, `my_box`, `other_box` pour un contact, `normal_x`, `normal_y` pour `on_tile_collide`. On peut en déclarer moins.
+- **Un export `enum` incohérent** : sans `values`, avec une étiquette en double ou dont le `default` n'en fait pas partie. Un `int` dont le `default` est un texte est refusé de la même façon.
 
 ## Comprendre les erreurs
 

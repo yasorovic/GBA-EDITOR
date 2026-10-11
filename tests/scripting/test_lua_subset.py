@@ -71,9 +71,6 @@ def test_statement_refuse_avec_sa_ligne(body, attendu):
     ("local f = function() return 1 end", "function"),
     ("local p = 2 ^ 8",                 "^"),
     ("local q = 5 // 2",                "//"),
-    ("local r = 1 << 3",                "bitwise"),
-    ("local r = 1 & 3",                 "bitwise"),
-    ("local r = ~1",                    "bitwise"),
 ])
 def test_expression_refusee(expr, attendu):
     errs = _errors(_in_handler(expr))
@@ -261,7 +258,8 @@ def test_marqueur_de_valeur_accepte_une_limite_de_neuf_caracteres():
     ("io.open(\"a\")",        "file system"),
     ("coroutine.create(f)",   "coroutine"),
     ("pairs(t)",              "index"),
-    ("tostring(1)",           "value marker"),
+    ("switch(n, {})",         "elseif"),
+    ("tostring(1)",          "value marker"),
     ("pcall(f)",              "exceptions"),
     ("setmetatable(t, t)",    "metatable"),
     ("collectgarbage()",      "allocated"),
@@ -435,6 +433,7 @@ def test_chaque_refus_est_documente():
 
     doc = (REPO_DIR / "docs" / "scripting-reference.md").read_text(encoding="utf-8")
     refus = [*lua_subset.REFUSED.values(), lua_subset.NESTED_FUNCTION,
+             lua_subset.MULTI_ASSIGN,
              *lua_subset.STDLIB_MODULES.values(), *lua_subset.STDLIB.values()]
     absents = sorted({r.lua for r in refus if r.lua not in doc})
     assert absents == [], (

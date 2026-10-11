@@ -175,3 +175,90 @@ def test_un_module_sans_echantillon_est_refuse_a_limport():
     path = Path(tempfile.mkdtemp()) / "muet.it"
     path.write_bytes(bytes(vide))
     assert "sample" in (check_audio_file(path) or "")
+
+
+# ── 3. La table d'ordres est celle de la ROM ──────────────────────
+#
+# Mesuré le 2026-10-11 (ROADMAP « L'asset .music ») : `mmutil` ne renumérote
+# rien, et `mmGetPosition()` rend l'index BRUT de la table — séparateurs (254)
+# et fin (255) compris. L'éditeur qui les filtrait comptait autrement que la
+# console, et une section de `.music` aurait visé le mauvais motif.
+
+
+def _render(kind: str, **kw):
+    from core.engine_emulation.module_render import render_module_marked
+
+    makers = {"mod": F.make_mod, "s3m": F.make_s3m, "xm": F.make_xm, "it": F.make_it}
+    return render_module_marked(_parse(kind, makers[kind](**kw)))
+
+
+@pytest.mark.parametrize("kind", ("s3m", "it"))
+def test_les_marqueurs_restent_dans_la_table_d_ordres(kind):
+    """Le séparateur occupe un index : retirer le 254 ramènerait le deuxième
+    pattern à l'index 1, alors que la ROM le rend à l'index 2."""
+    orders = [0, 254, 0, 255]
+    makers = {"s3m": F.make_s3m, "it": F.make_it}
+    assert _parse(kind, makers[kind](orders=orders)).order == orders
+
+
+@pytest.mark.parametrize("kind", ("s3m", "xm", "it"))
+def test_les_reperes_du_rendu_suivent_l_index_brut(kind):
+    """`marks` est ce que la coupe à la position et les sections lisent : la
+    clé doit être l'index de la ROM (2), pas le rang parmi les patterns (1)."""
+    _pcm, marks = _render(kind, orders=[0, 254, 0])
+    assert sorted(marks) == [0, 2]
+
+
+@pytest.mark.parametrize("kind", ("s3m", "xm", "it"))
+def test_un_255_termine_le_morceau(kind):
+    """Ce qui suit un 255 n'est jamais joué sur la console : l'aperçu ne doit
+    pas le jouer non plus."""
+    court, _ = _render(kind, orders=[0])
+    coupe, marks = _render(kind, orders=[0, 255, 0])
+    assert len(coupe) == len(court)
+    assert sorted(marks) == [0]
+
+
+def test_un_module_dont_la_table_n_a_que_des_marqueurs_est_refuse(tmp_path):
+    """`[255]` n'est pas une table vide, mais elle ne joue rien : à refuser à
+    l'import, comme un module sans échantillon."""
+    from core.resources.asset_reconciliation import check_audio_file
+
+    path = tmp_path / "rien.xm"
+    path.write_bytes(F.make_xm(orders=[255]))
+    assert "order table" in (check_audio_file(path, into="music") or "")
+
+
+# ── 4. La position de restart ─────────────────────────────────────
+
+
+@pytest.mark.parametrize("kind", ("mod", "xm"))
+def test_le_restart_du_fichier_est_lu(kind):
+    makers = {"mod": F.make_mod, "xm": F.make_xm}
+    assert _parse(kind, makers[kind](orders=[0, 0, 0], restart=1)).restart == 1
+
+
+def test_un_restart_de_proTracker_pour_aucun_devient_zero():
+    """127 est la valeur de ProTracker pour « pas de restart » ; `mmutil` la
+    ramène à 0 (mesuré), et le modèle fait de même."""
+    assert _parse("mod", F.make_mod(orders=[0, 0, 0], restart=127)).restart == 0
+
+
+@pytest.mark.parametrize("kind", ("s3m", "it"))
+def test_s3m_et_it_n_ont_pas_de_restart(kind):
+    makers = {"s3m": F.make_s3m, "it": F.make_it}
+    assert _parse(kind, makers[kind]()).restart == 0
+
+
+def test_la_piste_reboucle_a_son_restart_et_non_au_debut():
+    """Ce que fait `MM_PLAY_LOOP` sur la console : revenir à l'ordre de restart.
+    Le deck de l'aperçu rebouclait à 0 — une intro rejouée que la ROM ne joue pas."""
+    from core.engine_emulation.music_deck import MusicDeck, Track
+
+    pcm = np.zeros((1000, 2), dtype=np.int16)
+    pcm[:, 0] = np.arange(1000)
+    track = Track(pcm=pcm, marks={0: 0, 1: 400}, restart=1)
+    deck = MusicDeck(mix_rate=3600)
+    deck.play(track, volume=1024, loop=True)
+    out = deck.pull(1010)
+    assert list(out[1000:1010, 0]) == list(range(400, 410))

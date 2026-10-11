@@ -20,6 +20,7 @@ Deux fidélités valent d'être dites, parce qu'elles se voient à l'usage :
 from __future__ import annotations
 
 from ui.common.labels import label
+from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 
@@ -30,7 +31,8 @@ from core.engine_emulation.module_model import load_module
 from core.engine_emulation.module_render import render_module_marked, GBA_MIX_RATE
 from core.engine_emulation.music_deck import MusicDeck, Track, MODULE_FULL
 from core.engine_emulation.wav_render import render_wav
-from core.models.audio import volume_to_module
+from core.models.audio import Jingle, Music, volume_to_module
+from core.music_structure import music_info_row, wav_loop_region
 from core.models.sound_box import TRANSITION_CUT
 
 
@@ -78,10 +80,13 @@ class BoxPlayer(QObject):
         self._sink: Optional[QAudioSink] = None
         self._current = ""
         self._volume = 0.8
-        # Modules rendus, par chemin de fichier. Le rendu d'un morceau long
-        # prend jusqu'à une seconde : le refaire à chaque transition rendrait
-        # l'aperçu inutilisable.
-        self._tracks: dict[Path, Track] = {}
+        # Modules rendus. Le rendu d'un morceau long prend jusqu'à une seconde : le
+        # refaire à chaque transition rendrait l'aperçu inutilisable. La clé porte
+        # tout ce qui change CE QUE LE FICHIER RENDRA — le chemin, le tempo, la
+        # hauteur, le taux, la boucle d'un WAV — pour qu'un réglage modifié ne rejoue
+        # pas l'ancien rendu. Les fondus et la section d'un module, eux, ne changent
+        # pas le rendu : ils se posent sur le `Track` à chaque appel.
+        self._tracks: dict[tuple, Track] = {}
 
     # ── Chargement ────────────────────────────────────────────────
 
@@ -130,21 +135,37 @@ class BoxPlayer(QObject):
         self._device.open(QIODevice.OpenModeFlag.ReadOnly)
         self._sink.start(self._device)
 
-    def preview(self, project, asset) -> bool:
+    def track_for(self, project, asset) -> Optional[Track]:
+        """Le `Track` que le deck jouerait pour cet asset, rendu et mis en cache — ce que l'écran
+        Son dessine (waveform, repères d'ordre) est donc EXACTEMENT ce qu'on entend."""
+        return self._track_of_asset(project, asset)
+
+    def preview(self, project, asset, section=None) -> bool:
         """Joue UN asset du Sound finder, hors de toute boîte.
 
         Même deck et même sortie que la boîte : ce qu'on entend est rendu
         comme la boîte le rendrait. Un effet joue une fois ; une musique suit
         sa propre boucle. Rend False (et dit pourquoi) si rien ne peut sonner.
+
+        Avec `section` (une `MusicSection` de cet asset), la lecture COMMENCE à son début et
+        boucle dessus : c'est le ▶ d'une ligne du tableau des sections. On rend l'asset avec CETTE
+        section pour boucle par défaut — le même chemin que `music:set_section` à l'exécution.
         """
-        track = self._track_of_asset(project, asset)
+        played = replace(asset, loop_section=section.name) if section is not None else asset
+        track = self._track_of_asset(project, played)
         if track is None:
             return False
         if not self.running:
             self._open_sink()
         loop = bool(getattr(asset, "loop", False))
+        start_at = 0
+        if section is not None:
+            if track.sample_loop is not None:          # un WAV : la boucle commence à son échantillon
+                start_at = track.sample_loop[0]
+            else:
+                start_at = track.start_of(section.start) or 0
         self._current = ""
-        self._deck.play(track, volume_to_module(asset.volume), loop)
+        self._deck.play(track, volume_to_module(asset.volume), loop, start_at)
         self.track_changed.emit(asset.name, loop)
         return True
 
@@ -212,8 +233,9 @@ class BoxPlayer(QObject):
         volume = volume_to_module(st.level)
         if track is None:
             # `if(id < 0){ music_stop(); return; }` — un état sans piste est un
-            # silence, pas une erreur.
-            self._deck.stop()
+            # silence, pas une erreur. `music_stop`, et non l'arrêt sec : le fondu de
+            # sortie de la musique qui jouait s'applique, comme dans le jeu.
+            self._deck.music_stop()
             self.track_changed.emit("", False)
             return
         loop = bool(st.loop)
@@ -249,14 +271,32 @@ class BoxPlayer(QObject):
         if path is None or not path.exists():
             self.message.emit(label('boxplay.tat_name_fichier_manquant', name=owner))
             return None
-        if path not in self._tracks:
+
+        # Les réglages de la musique, lus par la MÊME fonction que le build : un jingle
+        # n'en applique aucun (il joue sur l'autre couche), un effet n'en a pas.
+        is_music = isinstance(asset, Music) and not isinstance(asset, Jingle)
+        start, end, tempo_q, pitch_q, fade_in, fade_out = (
+            music_info_row(asset) if is_music else (0, 0, 0, 0, 0, 0))
+        wav = path.suffix.lower() == ".wav"
+        rate = int(getattr(asset, "sample_rate", 0) or 0) if isinstance(asset, Music) else 0
+        loop_ms = wav_loop_region(asset) if is_music and wav else None
+
+        key = (path, path.stat().st_mtime_ns, tempo_q, pitch_q, rate, loop_ms)
+        if key not in self._tracks:
             try:
-                if path.suffix.lower() == ".wav":
-                    self._tracks[path] = render_wav(path)
+                if wav:
+                    self._tracks[key] = render_wav(path, GBA_MIX_RATE, rate, loop_ms)
                 else:
-                    pcm, marks = render_module_marked(load_module(path))
-                    self._tracks[path] = Track(pcm=pcm, marks=marks)
+                    mod = load_module(path)
+                    pcm, marks = render_module_marked(
+                        mod, GBA_MIX_RATE, (tempo_q or MODULE_FULL) / MODULE_FULL,
+                        (pitch_q or MODULE_FULL) / MODULE_FULL)
+                    self._tracks[key] = Track(pcm=pcm, marks=marks, restart=mod.restart,
+                                              order_count=len(mod.order))
             except Exception as exc:
                 self.message.emit(label('boxplay.name_illisible_exc', name=asset.name, exc=exc))
                 return None
-        return self._tracks[path]
+        # Ce qui ne change pas le rendu se pose sur une COPIE : deux états qui partagent un
+        # fichier ne se marchent pas dessus.
+        return replace(self._tracks[key], loop_orders=(start, end) if end > 0 else None,
+                       fade_in=fade_in, fade_out=fade_out)

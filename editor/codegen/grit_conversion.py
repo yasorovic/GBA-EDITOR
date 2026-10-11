@@ -25,6 +25,7 @@ from core.models.sprite import SpriteAsset
 from core.models.background import BackgroundLayer
 from core.project import Project
 from core.diagnostic import build_error, build_warning
+from core.music_structure import wav_loop_region
 from core.wav_module import encode_music_for_build
 # `sym` importée sous le nom `c_sym` : « sym » est un nom de variable locale
 # très courant dans la génération (`sym = bg_layer_sym(...)`), et une locale
@@ -803,13 +804,16 @@ class MmutilAudio:
         for m, ap in sound_assets["music"]:
             if ap.suffix.lower() == ".wav":
                 dst = p.build_dir / "music" / f"{ap.stem}.xm"
+                loop_ms = wav_loop_region(m)
                 try:
-                    size = encode_music_for_build(ap, dst)
+                    size = encode_music_for_build(ap, dst, m.sample_rate, loop_ms)
                 except ValueError as e:
                     self._emit("diagnostic", build_error(f"\"{m.name}\": {e}", "music"))
                     return False
+                detail = (f", loops {loop_ms[0]}-{loop_ms[1]} ms" if loop_ms else "") + (
+                    f", {m.sample_rate} Hz" if m.sample_rate else "")
                 self._emit("log_line",
-                           f"[music] \"{m.name}\" wav -> module  ({size} bytes in ROM)")
+                           f"[music] \"{m.name}\" wav -> module  ({size} bytes in ROM{detail})")
                 ap = dst
             music_files.append(relative_arg(ap, p.build_dir))
         all_files = (

@@ -152,10 +152,11 @@ def test_le_tag_et_les_bounds_d_une_boite_sont_en_lecture_seule():
     assert errs and "read-only" in errs[0]
 
 
-def test_une_valeur_composee_de_la_boite_est_immuable():
-    errs, _ = _lua("function on_update(self)\n"
-                   "  local hb = self:collision_box(\"body\")\n  hb.size.x = 3\nend\n")
-    assert errs and "immutable" in errs[0]
+def test_un_champ_d_une_valeur_composee_de_la_boite_s_ecrit():
+    errs, code = _lua("function on_update(self)\n"
+                      "  local hb = self:collision_box(\"body\")\n  hb.size.x = 3\nend\n")
+    assert errs == []
+    assert "_field.x = 3;" in code
 
 
 def test_un_champ_inconnu_sur_une_boite_est_refuse():

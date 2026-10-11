@@ -240,6 +240,8 @@ _SOUND_SHELVES: tuple[tuple[str, frozenset[str]], ...] = (
     ("Music", frozenset({
         "music.play", "music.stop", "music.pause", "music.resume", "music.is_playing",
         "music.set_volume", "music.fade_to", "music.cut_to",
+        "music.set_tempo", "music.set_pitch", "music.fade_in", "music.fade_out",
+        "music.set_section", "music.leave_loop",
     })),
     ("Jingles", frozenset({"music.jingle", "music.jingle_playing"})),
     ("SoundBox · contextual effects", frozenset({"sound_box.set_state", "sound_box.set_volume"})),

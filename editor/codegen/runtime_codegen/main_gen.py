@@ -2759,9 +2759,33 @@ def generate_main(
     # d'écriture de sa position (v0.6.1) : deux mécanismes qui écrivent le même
     # registre sans se coordonner, c'est le défaut qu'on a déjà corrigé une fois.
     if has_sound and soundbank_h.exists():
+        from codegen.runtime_codegen.sound_emit import music_runtime_lines
+        L += music_runtime_lines(p, sound_assets)
         L += [
             "static void music_transition_tick(void){",
             "    if(!g_mtr_mode) return;",
+            "    /* Modes 3 and 4 are the module's own fades (Music.fade_in / fade_out): the",
+            "       volume ramps up from zero, or down to zero and then the module stops. */",
+            "    if(g_mtr_mode == 3){",
+            "        g_mtr_i++;",
+            "        if(g_mtr_i >= g_mtr_n){",
+            "            mmSetModuleVolume((mm_word)g_mtr_vol);",
+            "            g_mtr_mode = 0;",
+            "        } else {",
+            "            mmSetModuleVolume((mm_word)(g_mtr_vol * g_mtr_i / g_mtr_n));",
+            "        }",
+            "        return;",
+            "    }",
+            "    if(g_mtr_mode == 4){",
+            "        g_mtr_i++;",
+            "        if(g_mtr_i >= g_mtr_n){",
+            "            mmStop(); g_music_cur = -1; g_mloop_end = 0;",
+            "            g_mtr_mode = 0;",
+            "        } else {",
+            "            mmSetModuleVolume((mm_word)(g_mtr_vol * (g_mtr_n - g_mtr_i) / g_mtr_n));",
+            "        }",
+            "        return;",
+            "    }",
             "    if(g_mtr_mode == 1){",
             "        /* Cross fade. The switch falls at the half, when the",
             "           volume is at zero: that is where a change is heard the",
@@ -2771,10 +2795,12 @@ def generate_main(
             "        if(g_mtr_i < half){",
             "            mmSetModuleVolume((mm_word)(g_mtr_vol * (half - g_mtr_i) / half));",
             "        } else if(g_mtr_i == half){",
-            "            mmStart((mm_word)g_mtr_id, g_mtr_loop ? MM_PLAY_LOOP : MM_PLAY_ONCE);",
+            "            mmStart((mm_word)g_mtr_id, (mm_pmode)music_mode(g_mtr_id, g_mtr_loop));",
+            "            music_apply(g_mtr_id);",
             "            mmSetModuleVolume(0);",
             "        } else if(g_mtr_i >= g_mtr_n){",
             "            mmSetModuleVolume((mm_word)g_mtr_vol);",
+            "            g_music_vol = g_mtr_vol;",
             "            g_mtr_mode = 0;",
             "        } else {",
             "            int k = g_mtr_i - half, n = g_mtr_n - half;",
@@ -2792,9 +2818,11 @@ def generate_main(
             "        int row = (int)mmGetPositionRow();",
             "        if(row < g_mtr_row){",
             "            mm_word pat = mmGetPosition();",
-            "            mmStart((mm_word)g_mtr_id, g_mtr_loop ? MM_PLAY_LOOP : MM_PLAY_ONCE);",
+            "            mmStart((mm_word)g_mtr_id, (mm_pmode)music_mode(g_mtr_id, g_mtr_loop));",
             "            mmPosition(pat);",
+            "            music_apply(g_mtr_id);",
             "            mmSetModuleVolume((mm_word)g_mtr_vol);",
+            "            g_music_vol = g_mtr_vol;",
             "            g_mtr_mode = 0;",
             "        } else {",
             "            g_mtr_row = row;",
@@ -2803,6 +2831,10 @@ def generate_main(
             "}",
             "",
         ]
+
+    elif has_sound:
+        from codegen.runtime_codegen.sound_emit import music_runtime_stub_lines
+        L += music_runtime_stub_lines()
 
     # ── main() ────────────────────────────────────────────────────
     L.append("int main(void){")
@@ -2892,6 +2924,7 @@ def generate_main(
         L.append("        mmFrame();   /* maxmod.h doc: _must_ be called every frame "
                  "*/")
         L.append("        music_transition_tick();")
+        L.append("        music_loop_tick();")
     L += [
         "        _g_frame++;",
         "        scanKeys();",

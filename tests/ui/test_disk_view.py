@@ -29,7 +29,7 @@ def _open(view: DiskView, name: str) -> None:
 
 
 def _crumbs(view: DiskView) -> list[str]:
-    return [b.text() for b in view.findChildren(QPushButton) if b.isFlat()]
+    return [b.text() for b in view.findChildren(QPushButton) if b.isFlat() and not b.isHidden()]
 
 
 def test_shows_one_folder_flat_with_the_root_in_the_breadcrumb(qapp):
@@ -139,6 +139,21 @@ def test_every_cell_has_the_same_size_whatever_its_name(qapp):
     assert len(sizes) == 1, sizes                        # « ... », un dossier, un fichier long : même boîte
 
 
+def test_grid_cell_size_is_adjustable_only_in_grid_mode(qapp):
+    view = DiskView()
+    view.set_tree(_tree())
+    default = view.grid_cell_width()
+    view.set_grid_cell_width(default + 24)
+
+    assert view.grid_cell_width() == default + 24
+    assert view._list.gridSize().width() == default + 24
+    assert not view._btn_grid_size.isHidden()
+
+    view.set_layout_mode("list")
+    assert view._btn_grid_size.isHidden()
+    assert view._grid_size_slider.isHidden()
+
+
 def test_the_root_entry_opens_the_assets_folder_and_the_dots_entry_never_does(qapp, monkeypatch):
     opened: list = []
     monkeypatch.setattr("ui.common.disk_view.reveal_in_file_manager", opened.append)
@@ -189,3 +204,97 @@ def test_the_disk_icon_lights_up_with_its_tab(qapp):
     assert dim != lit
     tabs.setCurrentWidget(other)
     assert tabs.tabIcon(0).pixmap(16, 16).toImage() == dim
+
+
+def test_select_file_opens_its_folder_and_selects_the_row(qapp):
+    view = DiskView()
+    view.set_tree(_tree())
+    view.select_file(Path("assets") / "sfx" / "GOAL.json")
+    assert _crumbs(view) == ["Assets", "sfx"]
+    assert view._list.currentItem().text() == "GOAL.json"
+
+
+def test_build_start_brings_the_console_tab_forward_not_disk(qapp):
+    from ui.common.build_panel import BuildPanel
+    panel = BuildPanel()
+    panel.show_disk_tab()
+    panel.show_console_tab()
+    assert panel._tabs.currentWidget() is panel._console_tab and not panel.tab_is_disk()
+
+
+def test_tab_sets_are_reorderable_and_the_console_stays_found(qapp):
+    from ui.common.build_panel import BuildPanel
+    panel = BuildPanel()
+    assert panel._tabs.isMovable()
+    panel._tabs.tabBar().moveTab(panel._tabs.indexOf(panel._console_tab), 0)     # la Console passe devant Disk
+    panel.show_disk_tab()
+    panel.show_console_tab()
+    assert panel._tabs.currentWidget() is panel._console_tab
+
+
+def test_tab_order_round_trips_and_tolerates_stale_settings(qapp):
+    from ui.common.build_panel import BuildPanel
+    panel = BuildPanel()
+    default = panel.tab_order()
+    assert default == ["disk", "console", "diagnostics"]
+    panel.restore_tab_order(["diagnostics", "disk", "console"])
+    assert panel.tab_order() == ["diagnostics", "disk", "console"]
+    panel.restore_tab_order(["console", "ghost"])            # clé inconnue ignorée, les absents suivent dans l'ordre déclaré
+    assert panel.tab_order() == ["console", "diagnostics", "disk"]
+    panel.restore_tab_order(None)                            # rien d'enregistré : ordre déclaré
+    assert panel.tab_order() == ["console", "diagnostics", "disk"]
+    panel.restore_tab_order("disk")                          # QSettings : liste d'un élément = chaîne
+    assert panel.tab_order()[0] == "disk"
+
+
+def test_the_vertical_tree_paints_its_rows_without_raising(qapp, monkeypatch):
+    """Le délégué partagé lit le DiskNode sous le rôle de SA vue : l'arbre vertical ne range pas le nœud
+    là où la vue à plat le range, et lire l'autre rôle y rendait une chaîne — un `paint` qui lève."""
+    import sys
+    from ui.common.disk_tree_view import DiskTreeView
+
+    raised = []
+    monkeypatch.setattr(sys, "excepthook", lambda kind, error, tb: raised.append(error))
+    view = DiskTreeView()
+    view.resize(400, 300)
+    view.set_tree(_tree())
+    view.show()
+    for _ in range(3):
+        qapp.processEvents()
+
+    assert raised == []
+
+
+def test_rebuilding_the_breadcrumb_never_flashes_a_top_level_window(qapp):
+    """Un maillon retiré du fil d'ariane devenait, un instant, une fenêtre de premier niveau (setParent(None)) :
+    la petite fenêtre qui clignotait à chaque rafraîchissement de l'onglet Disk, donc à chaque Locate."""
+    from PyQt6.QtCore import QEvent, QObject
+    from PyQt6.QtWidgets import QWidget
+
+    class Spy(QObject):
+        def __init__(self):
+            super().__init__()
+            self.windows = []
+
+        def eventFilter(self, watched, event):
+            if event.type() == QEvent.Type.Show and isinstance(watched, QWidget) and watched.isWindow():
+                self.windows.append(type(watched).__name__)
+            return False
+
+    view = DiskView()
+    view.resize(700, 300)
+    view.show()
+    qapp.processEvents()
+    spy = Spy()
+    qapp.installEventFilter(spy)
+    try:
+        for _ in range(3):
+            view.set_tree(_tree())
+            view.show_folder(Path("assets") / "sfx")            # chaque passage reconstruit le fil d'ariane
+            qapp.processEvents()
+            view.show_folder(Path("assets"))
+            qapp.processEvents()
+    finally:
+        qapp.removeEventFilter(spy)
+
+    assert spy.windows == []

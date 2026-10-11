@@ -25,7 +25,7 @@ from pathlib import Path
 
 from ui.common.icons import get as _ico, COLOR_DEFAULT
 from ui.common.theme import QSS
-from ui.common.asset_finder import AssetKind, store_nodes, dir_nodes, resource_dir
+from ui.common.asset_finder import AssetKind, store_nodes, dir_nodes, store_file, own_path
 
 from core.models.unique_name import unique_name
 from core.models.resource import (
@@ -104,7 +104,7 @@ SCENES = AssetKind(
     delete        = _store_deleter("scenes"),
     delete_prompt = lambda s: label('akind.delete_scene_name_ctrl_z_to_undo', name=s.name),
     add_tooltip_key = 'akind.new_scene',     # l'écran crée (scène active à reporter)
-    dir_of        = resource_dir("scenes_dir"),
+    file_of       = store_file("scenes"),
     folder_family = "scenes",
     add_menu      = True,                    # scène ou groupe : le « + » déroule un menu
 )
@@ -120,7 +120,7 @@ PREFABS = AssetKind(
     add_tooltip_key = 'akind.new_prefab',
     # Glisser un prefab sur le canvas l'y instancie.
     mime          = (MIME_PREFAB_TEMPLATE, lambda project, pf: pf.name),
-    dir_of        = resource_dir("prefab_dir"),
+    file_of       = store_file("prefabs"),
 )
 
 
@@ -164,7 +164,7 @@ SCRIPTS = AssetKind(
     mime          = (MIME_SCRIPT,
                      lambda project, path: (project.asset_rel(path)
                                             if project else path)),
-    dir_of        = resource_dir("scripts_dir"),
+    file_of       = own_path,
 )
 
 
@@ -226,7 +226,7 @@ SPRITES = AssetKind(
     # dialogue (il lui faut un parent), le finder ne fait que le demander.
     add_tooltip_key = 'akind.import_a_sprite_sheet',
     actions       = (_relink_action("sprites"),),
-    dir_of        = resource_dir("sprites_dir"),
+    file_of       = store_file("sprites"),
 )
 
 
@@ -245,7 +245,7 @@ BACKGROUNDS = AssetKind(
     rename = _renamer("rename_background"),
     delete = _store_deleter("backgrounds"),
     actions = (_relink_action("backgrounds"),),
-    dir_of = resource_dir("backgrounds_dir"),
+    file_of = store_file("backgrounds"),
 )
 
 
@@ -272,7 +272,7 @@ def _background_of_kind(bg_kind: str, label: str, add_tooltip: str,
         add_tooltip_key = add_tooltip,      # sans `add` : l'écran ouvre l'import
         mime        = mime,
         actions     = (_relink_action("backgrounds"),),
-        dir_of      = resource_dir("backgrounds_dir"),
+        file_of     = store_file("backgrounds"),
     )
 
 
@@ -299,7 +299,7 @@ FONTS = AssetKind(
     rename     = _renamer("rename_font"),
     delete     = _font_source_deleter,
     actions    = (_relink_action("fonts"),),
-    dir_of     = resource_dir("fonts_dir"),
+    file_of    = store_file("fonts"),
     # Pas de « + » : une police se crée depuis un PNG, un .fnt, un .ttf ou un .otf, par *Create* dans l'onglet Disk
     # (core.asset_creation), comme sprites et fonds.
     empty_text_key = 'akind.no_font_drop_a_png_or_a_fnt',
@@ -337,7 +337,7 @@ FONT_ASSETS = AssetKind(
     delete=_store_deleter("font_assets"),
     add=_new_font_asset,
     add_tooltip_key="akind.new_font_asset",
-    dir_of=resource_dir("font_assets_dir"),
+    file_of=store_file("font_assets"),
     empty_text_key="akind.no_font_assets",
     tooltip_of=lambda asset: tooltip(
         title=asset.name,
@@ -424,7 +424,7 @@ PALETTES = AssetKind(
     add_tooltip_key = 'akind.add_palette',
     add_tip_key = 'akind.add_palette_tip',
     actions     = (('common.duplicate', _duplicate_palette),),
-    dir_of      = resource_dir("palettes_dir"),
+    file_of     = store_file("palettes"),
 )
 
 
@@ -456,7 +456,7 @@ SFX = AssetKind(
     add           = _add_sound("sfx", "Sfx", "SFX"),
     add_tooltip_key = 'akind.add_an_sfx',
     actions       = (_relink_action("sfx"),),
-    dir_of        = resource_dir("sfx_dir"),
+    file_of       = store_file("sfx"),
 )
 
 MUSIC = AssetKind(
@@ -473,7 +473,7 @@ MUSIC = AssetKind(
     add           = _add_sound("music", "Music", "Track"),
     add_tooltip_key = 'akind.add_a_track',
     actions       = (_relink_action("music"),),
-    dir_of        = resource_dir("music_dir"),
+    file_of       = store_file("music"),
 )
 
 # Un jingle est un module comme une musique, mais d'un autre DOSSIER — et c'est
@@ -490,7 +490,7 @@ JINGLES = AssetKind(
     add           = _add_sound("jingles", "Jingle", "Jingle"),
     add_tooltip_key = 'akind.add_a_jingle',
     actions       = (_relink_action("jingles"),),
-    dir_of        = resource_dir("jingles_dir"),
+    file_of       = store_file("jingles"),
 )
 
 
@@ -530,7 +530,7 @@ DATA_TABLES = AssetKind(
     delete_prompt = lambda t: label('akind.delete_table_name_ctrl_z_to_undo', name=t.name),
     add           = _add_data_table,
     add_tooltip_key = 'akind.new_table',
-    dir_of        = resource_dir("data_tables_dir"),
+    file_of       = store_file("data_tables"),
 )
 
 

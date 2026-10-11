@@ -4,7 +4,7 @@ from pathlib import Path
 
 from asset_fixtures import create
 from core import blank_assets
-from core.disk_commands import CreateFileCmd, CreateFolderCmd, ImportFilesCmd, MoveFilesCmd, RenameFolderCmd
+from core.disk_commands import CreateFileCmd, CreateFolderCmd, ImportFilesCmd, MoveFilesCmd, RenamePathCmd
 from core.history import CommandHistory, CreateAssetCmd
 from core.project import Project
 
@@ -100,10 +100,61 @@ def test_renaming_a_folder_is_undoable(tmp_path: Path):
     folder.mkdir()
     history = CommandHistory()
 
-    history.push(RenameFolderCmd(folder, "New", p.assets_dir))
+    history.push(RenamePathCmd(p, folder, "New"))
     assert (p.assets_dir / "New").is_dir() and not folder.exists()
     history.undo()
     assert folder.is_dir() and not (p.assets_dir / "New").exists()
+
+
+def test_renaming_a_folder_or_a_source_keeps_the_asset_pointing_at_its_source(tmp_path: Path):
+    p = _project(tmp_path)
+    pack = p.assets_dir / "Pack"
+    source = _wav(pack / "boom.wav")
+    boom = create(p, "sfx", source)
+    history = CommandHistory()
+
+    history.push(RenamePathCmd(p, pack, "Crates"))
+    assert boom.asset == "assets/Crates/boom.wav" and (p.assets_dir / "Crates" / "boom.wav").is_file()
+
+    history.push(RenamePathCmd(p, p.assets_dir / "Crates" / "boom.wav", "bang.wav"))
+    assert boom.asset == "assets/Crates/bang.wav"
+
+    history.undo()
+    history.undo()
+    assert boom.asset == "assets/Pack/boom.wav" and source.is_file()
+
+
+def test_a_bad_or_taken_name_or_the_assets_folder_is_refused_and_nothing_moves(tmp_path: Path):
+    p = _project(tmp_path)
+    (p.assets_dir / "sfx").mkdir(exist_ok=True)
+    (p.assets_dir / "music").mkdir(exist_ok=True)
+    for bad in ("", "  ", ".", "..", "a/b", "a\b", "what?", "dots.", "music"):
+        cmd = RenamePathCmd(p, p.assets_dir / "sfx", bad)
+        cmd.execute()
+        assert cmd.renamed is None, bad
+    cmd = RenamePathCmd(p, p.assets_dir, "other")
+    cmd.execute()
+    assert cmd.renamed is None and p.assets_dir.is_dir()
+    assert (p.assets_dir / "sfx").is_dir() and (p.assets_dir / "music").is_dir()
+
+
+def test_an_unchanged_name_is_a_no_op_and_a_case_change_is_allowed(tmp_path: Path):
+    p = _project(tmp_path)
+    folder = p.assets_dir / "Audio"
+    folder.mkdir()
+    same = RenamePathCmd(p, folder, "Audio")
+    same.execute()
+    assert same.renamed == folder
+    upper = RenamePathCmd(p, folder, "AUDIO")
+    upper.execute()
+    assert upper.renamed == p.assets_dir / "AUDIO" and "AUDIO" in [e.name for e in p.assets_dir.iterdir()]
+
+
+def test_the_project_tables_cannot_be_renamed(tmp_path: Path):
+    p = _project(tmp_path)
+    cmd = RenamePathCmd(p, p.texts_file, "words.json")
+    cmd.execute()
+    assert cmd.renamed is None and p.texts_file.is_file()
 
 
 def test_every_blank_kind_builds_a_named_asset_that_is_created_in_the_folder_and_undone(tmp_path: Path):

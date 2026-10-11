@@ -19,6 +19,7 @@ from scripting.api import (
     DOMAIN_FONT, DOMAIN_PALETTE, DOMAIN_TEXT, DOMAIN_LANG, DOMAIN_ACTOR,
     DOMAIN_UI_ELEMENT, DOMAIN_GLOBAL, REF_TYPE_TABLE,
     DOMAIN_SOUND_BOX_STATE, DOMAIN_JINGLE_BOX_STATE, DOMAIN_MUSIC_BOX_TRIGGER,
+    DOMAIN_MUSIC_SECTION,
     DOMAIN_KEY, DOMAIN_WIN_REGION, WIN_REGIONS, DOMAIN_BOX_TAG, DOMAIN_ANIM,
     DOMAIN_ACTOR_NAME,
 )
@@ -134,6 +135,8 @@ def names_by_domain(project, scene=None) -> dict[str, list[str]]:
         out[DOMAIN_JINGLE_BOX_STATE] = list(project.sound_state_names(KIND_JINGLE))
     if hasattr(project, "sound_trigger_names"):
         out[DOMAIN_MUSIC_BOX_TRIGGER] = list(project.sound_trigger_names())
+    from core.music_structure import music_section_names
+    out[DOMAIN_MUSIC_SECTION] = music_section_names(has("music") or [])
 
     # Acteurs : ceux de la scène ACTIVE (comme la sidebar et le checker) — une
     # référence à un acteur d'une AUTRE scène n'a pas de cible où on écrit.

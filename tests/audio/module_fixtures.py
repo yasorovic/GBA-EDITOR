@@ -23,6 +23,10 @@ from __future__ import annotations
 
 import struct
 
+# Les quatre fonctions acceptent `orders` : la table d'ordres BRUTE du fichier
+# (254 = séparateur, 255 = fin — cf. module_model.ORDER_SKIP). Tous les ordres
+# désignent le pattern 0 : ce qu'on éprouve est la numérotation, pas la musique.
+
 # L'onde carrée : 16 points hauts, 16 bas. Assez courte pour tenir dans un
 # fichier de test, assez longue pour que sa fréquence se mesure.
 SQUARE_LEN = 32
@@ -39,7 +43,7 @@ def _pad(buf: bytearray, alignment: int) -> None:
         buf.append(0)
 
 
-def make_mod() -> bytes:
+def make_mod(orders=None, restart: int = 0) -> bytes:
     """ProTracker, 4 canaux, tag M.K."""
     b = bytearray()
     b += b"FIXTURE".ljust(20, b"\x00")
@@ -53,8 +57,9 @@ def make_mod() -> bytes:
             b += struct.pack(">HH", 0, SQUARE_LEN // 2)
         else:
             b += struct.pack(">H", 0) + bytes([0, 0]) + struct.pack(">HH", 0, 0)
-    b += bytes([1, 0])              # longueur de morceau, restart
-    b += bytes([0] * 128)           # table d'ordre — position 0 = pattern 0
+    orders = list(orders) if orders is not None else [0]
+    b += bytes([len(orders), restart])      # longueur de morceau, restart
+    b += bytes(orders).ljust(128, b"\x00")   # table d'ordre — par défaut position 0 = pattern 0
     b += b"M.K."
     # Un pattern ProTracker fait TOUJOURS 64 lignes.
     for row in range(64):
@@ -70,13 +75,14 @@ def make_mod() -> bytes:
     return bytes(b)
 
 
-def make_s3m() -> bytes:
+def make_s3m(orders=None) -> bytes:
     """ScreamTracker 3, un canal actif."""
+    orders = list(orders) if orders is not None else [0]
     header = bytearray(0x60)
     header[0:8] = b"FIXTURE\x00"
     header[0x1C] = 0x1A
     header[0x1D] = 16                    # type : module
-    struct.pack_into("<HHH", header, 0x20, 1, 1, 1)      # ordres, instruments, patterns
+    struct.pack_into("<HHH", header, 0x20, len(orders), 1, 1)   # ordres, instruments, patterns
     struct.pack_into("<HHH", header, 0x26, 0, 0x1320, 2)  # flags, cwtv, ffv (2 = non signé)
     header[0x2C:0x30] = b"SCRM"
     header[0x30] = 64                    # volume global
@@ -89,7 +95,7 @@ def make_s3m() -> bytes:
         header[0x40 + c] = 0xFF          # les autres, coupés
 
     b = bytearray(header)
-    b += bytes([0])                      # table d'ordre : position 0
+    b += bytes(orders)                   # table d'ordre
     ins_ptr_at = len(b); b += b"\x00\x00"
     pat_ptr_at = len(b); b += b"\x00\x00"
 
@@ -131,7 +137,7 @@ def make_s3m() -> bytes:
     return bytes(b)
 
 
-def make_xm(linear: bool = True) -> bytes:
+def make_xm(linear: bool = True, orders=None, restart: int = 0) -> bytes:
     """FastTracker II, un canal, un instrument à un échantillon."""
     b = bytearray()
     b += b"Extended Module: "
@@ -140,8 +146,9 @@ def make_xm(linear: bool = True) -> bytes:
     b += b"fixtures".ljust(20, b" ")
     b += struct.pack("<H", 0x0104)
     b += struct.pack("<I", 20 + 256)          # taille d'en-tête
-    b += struct.pack("<HHHHHHHH", 1, 0, 1, 1, 1, 1 if linear else 0, SPEED, BPM)
-    b += bytes([0] * 256)                     # table d'ordre : tout sur le pattern 0
+    orders = list(orders) if orders is not None else [0]
+    b += struct.pack("<HHHHHHHH", len(orders), restart, 1, 1, 1, 1 if linear else 0, SPEED, BPM)
+    b += bytes(orders).ljust(256, b"\x00")    # table d'ordre : par défaut tout sur le pattern 0
 
     # ── Pattern ───────────────────────────────────────────────────
     packed = bytearray()
@@ -215,12 +222,13 @@ def _compress_it8(values: list) -> bytes:
     return struct.pack("<H", len(out)) + bytes(out)
 
 
-def make_it(compressed: bool = False) -> bytes:
+def make_it(compressed: bool = False, orders=None) -> bytes:
     """Impulse Tracker, un canal, sans couche d'instrument."""
+    orders = list(orders) if orders is not None else [0]
     b = bytearray(0xC0)
     b[0:4] = b"IMPM"
     b[4:11] = b"FIXTURE"
-    struct.pack_into("<HHHH", b, 0x20, 1, 0, 1, 1)     # ordres, instr, samples, patterns
+    struct.pack_into("<HHHH", b, 0x20, len(orders), 0, 1, 1)   # ordres, instr, samples, patterns
     struct.pack_into("<HHHH", b, 0x28, 0x0214, 0x0214, 0x08, 0)   # cwtv, cmwt, flags(linéaire)
     b[0x30] = 128        # volume global
     b[0x31] = 48         # volume de mixage
@@ -230,7 +238,7 @@ def make_it(compressed: bool = False) -> bytes:
         b[0x40 + c] = 32          # panoramique centré
         b[0x80 + c] = 64          # volume de canal
 
-    b += bytes([0])               # table d'ordre
+    b += bytes(orders)            # table d'ordre
     smp_off_at = len(b); b += b"\x00" * 4
     pat_off_at = len(b); b += b"\x00" * 4
 

@@ -32,7 +32,7 @@ import struct
 import numpy as np
 
 from .module_model import (
-    Cell, Module, Sample, LOOP_FORWARD, LOOP_NONE, NOTE_NONE,
+    Cell, Module, Sample, LOOP_FORWARD, LOOP_NONE, NOTE_NONE, effective_restart,
     FX_NONE, FX_ARPEGGIO, FX_PORTA_UP, FX_PORTA_DOWN, FX_TONE_PORTA,
     FX_VIBRATO, FX_TONE_PORTA_VOL, FX_VIBRATO_VOL, FX_TREMOLO, FX_SET_PAN,
     FX_SAMPLE_OFFSET, FX_VOLUME_SLIDE, FX_POSITION_JUMP, FX_SET_VOLUME,
@@ -134,7 +134,7 @@ def parse_mod(data: bytes) -> Module:
         off += 30
 
     song_length = data[off]; off += 1
-    off += 1  # position de restart — cf. ROADMAP v0.8.1 : mesurée à 0 partout
+    restart = data[off]; off += 1
     order = list(data[off:off + 128])[:song_length]
     off += 128
 
@@ -188,6 +188,7 @@ def parse_mod(data: bytes) -> Module:
         kind="mod", name=name, num_channels=num_channels,
         amiga_table=True, linear_freq=False,
         slide_scale=1.0, effect_memory=False,
-        order=order, patterns=patterns, samples=samples,
+        order=order, restart=effective_restart(restart, len(order)),
+        patterns=patterns, samples=samples,
         channel_pan=pan, channel_volume=[64] * num_channels,
     )

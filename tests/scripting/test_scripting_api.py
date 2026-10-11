@@ -246,6 +246,9 @@ def test_aucune_fonction_de_module_ne_contourne_lacquisition():
     ALLOWED = {
         "actor.spawn", "actor.get", "interface.get", "sfx.play",
         "music.play", "music.jingle", "music.fade_to", "music.cut_to",
+        # Démarrer une piste avec un fondu : le même verbe que `music.play`, qui acquiert la
+        # lecture musicale unique.
+        "music.fade_in",
         "scene.switch", "camera.switch", "text.set_font", "window.get",
         "palette.set_bg", "palette.set_obj",
     }

@@ -216,7 +216,7 @@ def _script(project, text, name="Song.lua"):
 def test_deux_morceaux_de_structure_differente_ne_se_relaient_pas(project, monkeypatch):
     _music_files(project, monkeypatch, A=(4, 4), B=(8, 4))
     _script(project, 'function on_start()\n music.play("B")\n music.cut_to("A")\nend\n')
-    assert says(run(project, validator._check_music_cut_compat), "warning", "does not have the same structure")
+    assert says(run(project, validator._check_music_cut_compat), "warning", "has no music from position 4")
 
 
 def test_une_frame_qui_cite_une_action_ou_un_sfx_inconnus_avertit(project):

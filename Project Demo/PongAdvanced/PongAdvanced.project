@@ -1,7 +1,7 @@
 {
   "format_version": 1,
   "start_scene": "SCR_Main",
-  "last_scene": "SCR_Main",
+  "last_scene": "SCR_Arena",
   "author": "",
   "version": "0.1",
   "backdrop_color": 16912,

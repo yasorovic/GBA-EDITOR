@@ -180,7 +180,7 @@
           "exports_values": {}
         }
       ],
-      "x": 112,
+      "x": 120,
       "y": 80,
       "flip_h": false,
       "flip_v": false,
@@ -210,7 +210,7 @@
       "anchor": "screen",
       "anchor_actor": "",
       "target": "",
-      "bg_slot": 1
+      "bg_slot": 0
     }
   ],
   "font_name": "",

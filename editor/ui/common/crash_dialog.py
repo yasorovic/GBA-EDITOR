@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QRectF
+from PyQt6.QtCore import Qt, QRectF, QTimer
 from PyQt6.QtGui import QFont, QGuiApplication, QPainter
 from PyQt6.QtWidgets import (
     QDialog, QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget,
@@ -121,6 +121,25 @@ class CrashDialog(QDialog):
         QGuiApplication.clipboard().setText(self._details)
 
 
+_dialog_open = False
+
+
 def show_crash_dialog(summary: str, details: str, log_path: Path) -> None:
-    """Le reporter que `main.py` branche sur `core.crash_log`."""
-    CrashDialog(summary, details, log_path).exec()
+    """Le reporter que `main.py` branche sur `core.crash_log`.
+
+    La fenêtre s'ouvre APRÈS le retour au tour d'événements, jamais depuis l'exception : une erreur de
+    `paintEvent` se lève avec le painter du widget fautif encore actif, et une boucle modale lancée à ce
+    moment-là repeint par-dessus lui — fenêtre à moitié dessinée, repaints récursifs. Une seule fenêtre à
+    la fois : une erreur qui survient pendant qu'elle est ouverte n'en empile pas une seconde."""
+    QTimer.singleShot(0, lambda: _exec_dialog(summary, details, log_path))
+
+
+def _exec_dialog(summary: str, details: str, log_path: Path) -> None:
+    global _dialog_open
+    if _dialog_open:
+        return
+    _dialog_open = True
+    try:
+        CrashDialog(summary, details, log_path).exec()
+    finally:
+        _dialog_open = False

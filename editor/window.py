@@ -50,7 +50,7 @@ from ui.common.three_column_body import ThreeColumnBody
 from ui.common.build_panel import BuildPanel, ToolchainBar, AnimatedBuildButton, mascot_renderer
 from ui.common.disk_tree_view import DiskTreeView
 from ui.common.disk_view import add_disk_tab
-from ui.common.panel_bar import tab_widget
+from ui.common.panel_bar import restore_tab_order, tab_order, tab_widget
 from ui.common.save_status_indicator import SaveStatusIndicator
 from ui.common.settings_dialog import SettingsDialog
 from core.external_tools import ExternalTools
@@ -59,6 +59,7 @@ from core import crash_log, disk_tree
 from core.app_info import APP_DOCS_URL, APP_NAME
 from ui.common.about_dialog import AboutDialog
 from core.diagnostics import diagnostic_report
+from ui.common.locate_bus import get_locate_bus
 from ui.common.reveal import reveal_in_file_manager
 from ui.scene_manager.inspectors import DynamicInspector
 from ui.home.project_picker import HomeScreen, push_recent, PROJECTS_DIR
@@ -398,6 +399,8 @@ _WATCHER_WARNING_MS = 60000
 #  Fenêtre principale
 # ──────────────────────────────────────────────────────────────────
 class MainWindow(QMainWindow):
+    _disk_refresh_suspended = False     # vrai le temps d'un Locate : les bascules d'onglet ne relisent pas le disque (cf. `_locate_file`)
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle(APP_NAME)
@@ -498,10 +501,14 @@ class MainWindow(QMainWindow):
         panel.disk.move_requested.connect(self._move_disk_items)
         panel.disk.asset_open_requested.connect(self._open_disk_asset)
         panel.disk.actor_dropped.connect(self._export_actor_to_disk)
+        panel.disk.folder_color_changed.connect(self._refresh_disk)
+        panel.disk.rename_requested.connect(self._rename_disk_item)
         panel.disk.set_callbacks(self._disk_callbacks())
         panel.disk.set_drop_check(self._disk_drop_verdict)
         panel.disk.drop_blocked.connect(self._say_move_refused)
         panel.disk.set_layout_mode(QSettings(APP_NAME, "Layout").value("disk_layout", "grid"))
+        panel.disk.set_grid_cell_width(QSettings(APP_NAME, "Layout").value("disk_grid_cell", 124))
+        panel.restore_tab_order(QSettings(APP_NAME, "Layout").value("build_tab_order"))
         # Première ouverture : Disk. Ensuite, le dernier onglet vu (cf. _save_layout).
         if QSettings(APP_NAME, "Layout").value("build_tab") == "console":
             panel.show_console_tab()
@@ -769,6 +776,7 @@ class MainWindow(QMainWindow):
             self.scene_editor._reload_ui_regions)
         self.scene_tree_panel.editor_visibility_changed.connect(
             self.scene_editor.set_editor_hidden_members)
+        get_locate_bus().requested.connect(self._locate_file)
         self._inspector.ui_regions_changed.connect(
             self.scene_tree_panel.refresh)
         self.scene_editor.scene_changed.connect(
@@ -860,7 +868,10 @@ class MainWindow(QMainWindow):
         on_project = self._left_tab_widget.currentWidget() is self.assets_finder_panel
         s.setValue("left_tab", "project" if on_project else "disk")
         s.setValue("disk_layout", self.build_panel.disk.layout_mode())
+        s.setValue("disk_grid_cell", self.build_panel.disk.grid_cell_width())
         s.setValue("build_tab", "disk" if self.build_panel.tab_is_disk() else "console")
+        s.setValue("left_tab_order", tab_order(self._left_tab_widget, self._left_tab_keys()))
+        s.setValue("build_tab_order", self.build_panel.tab_order())
 
     def closeEvent(self, event):
         if not self._confirm_close():
@@ -1339,10 +1350,11 @@ class MainWindow(QMainWindow):
         self.disk_tree_view = DiskTreeView()
         self.disk_tree_view.refresh_requested.connect(self._refresh_disk)
         self.disk_tree_view.folder_selected.connect(self._show_disk_folder)
-        self.disk_tree_view.folder_rename_requested.connect(self._rename_disk_folder)
+        self.disk_tree_view.rename_requested.connect(self._rename_disk_item)
         self.disk_tree_view.move_requested.connect(self._move_disk_items)
         self.disk_tree_view.asset_open_requested.connect(self._open_disk_asset)
         self.disk_tree_view.actor_dropped.connect(self._export_actor_to_disk)
+        self.disk_tree_view.folder_color_changed.connect(self._refresh_disk)
         self.disk_tree_view.set_callbacks(self._disk_callbacks())
         self.disk_tree_view.set_drop_check(self._disk_drop_verdict)
         self.disk_tree_view.drop_blocked.connect(self._say_move_refused)
@@ -1355,11 +1367,39 @@ class MainWindow(QMainWindow):
         tabs.setMinimumWidth(180)
         tabs.setMaximumWidth(420)
         self._left_tab_widget = tabs
+        restore_tab_order(tabs, self._left_tab_keys(), QSettings(APP_NAME, "Layout").value("left_tab_order"))
         # Première ouverture : Disk. Ensuite, le dernier onglet vu (cf. _save_layout).
         saved = QSettings(APP_NAME, "Layout").value("left_tab")
         tabs.setCurrentWidget(self.assets_finder_panel if saved == "project"
                               else self.disk_tree_view)
         return tabs
+
+    def _left_tab_keys(self) -> tuple:
+        return (("project", self.assets_finder_panel), ("disk", self.disk_tree_view))
+
+    def _locate_file(self, path, name: str):
+        """LOCATE : l'arbre et le panneau du bas de l'onglet Disk montrent `path`, sélectionné (cf. `ui/common/locate_bus.py`).
+        Relit le disque d'abord, pour qu'un fichier créé depuis le dernier rafraîchissement s'y trouve."""
+        if not self.project:
+            return
+        if path is None or not Path(path).exists():
+            self._status.showMessage(label("disk.locate_missing", name=name), 6000)
+            return
+        # UN SEUL rafraîchissement. Changer d'onglet Disk en déclenche un par lui-même (l'arbre et le panneau se
+        # relisent à l'ouverture de leur onglet) : on les suspend le temps des bascules, puis on relit une fois,
+        # une fois les deux onglets en place et avant d'y sélectionner le fichier.
+        self._disk_refresh_suspended = True
+        try:
+            self._left_tab_widget.setCurrentWidget(self.disk_tree_view)
+            # L'onglet Disk de la colonne de gauche n'existe que dans le Scene Manager : sur tout autre écran
+            # (Sounds, Palettes…), seul le panneau du bas peut montrer le fichier — encore faut-il qu'il soit ouvert.
+            self._open_build_panel()
+            self.build_panel.show_disk_tab()
+        finally:
+            self._disk_refresh_suspended = False
+        self._refresh_disk()
+        self.disk_tree_view.select_file(str(path))
+        self.build_panel.disk.select_file(path)
 
     def _show_disk_folder(self, path: str):
         """Un dossier choisi dans l'arbre : son contenu s'affiche dans le panneau du bas."""
@@ -1401,12 +1441,14 @@ class MainWindow(QMainWindow):
         if command.created is not None:
             self.disk_tree_view.begin_rename(str(command.created))
 
-    def _rename_disk_folder(self, path: str, new_name: str):
+    def _rename_disk_item(self, path: str, new_name: str):
+        """Un dossier, une source ou un script renommé EN PLACE dans l'arbre ou la vue à plat (annulable). Les
+        assets qui citent ce qui a changé de chemin le suivent."""
         if not self.project:
             return
-        from core.disk_commands import RenameFolderCmd
-        command = RenameFolderCmd(Path(path), new_name, self.project.assets_dir, around=self._watcher.suspended)
-        self._disk_push(command)
+        from core.disk_commands import RenamePathCmd
+        command = RenamePathCmd(self.project, Path(path), new_name, around=self._watcher.suspended)
+        self._disk_push(command, after=self._after_disk_move)
         if command.renamed is None:
             self._status.showMessage(label('disk.rename_refused'), 6000)
             get_history().undo()                  # un refus ne laisse pas d'entrée d'historique vide
@@ -1493,9 +1535,10 @@ class MainWindow(QMainWindow):
         kinds = [(kind, label(f"disk.blank_{kind}")) for kind, _f, _b in blank_assets.BLANK_KINDS]
         kinds += [(kind, label(f"disk.blank_{kind}")) for kind in blank_assets.SCRIPT_KINDS]
         return DiskCallbacks(
-            create_options=self._disk_create_options, create_from_source=self._disk_create_from_source,
+            create_options=self._disk_create_options, create_from_sources=self._disk_create_from_sources,
             delete_items=self._disk_delete_items, deletable=self._disk_deletable,
-            import_files=self._disk_import_files, create_blank=self._disk_create_blank,
+            import_files=self._disk_import_files, import_paths=self._disk_import_paths,
+            create_blank=self._disk_create_blank,
             new_folder=self._create_disk_folder, blank_kinds=kinds, edit_externally=self._edit_externally)
 
     def _edit_externally(self, path: Path) -> None:
@@ -1515,18 +1558,34 @@ class MainWindow(QMainWindow):
         return [(family, label(f"disk.family_{family}"), asset_creation.asset_name(self.project, family, source))
                 for family in asset_creation.families_for(self.project, source)]
 
-    def _disk_create_from_source(self, path: str, family: str):
-        """*Create asset* : l'asset naît à côté de sa source, qu'il pointe ; annulable."""
+    def _disk_create_from_sources(self, paths: list, family: str):
+        """*Create asset* : un asset par source, né à côté d'elle, qu'il pointe ; UNE entrée d'historique pour le lot.
+        Les noms sont uniques entre eux aussi (deux `coin.wav` de deux dossiers donnent `coin` et `coin_2`) ; une source
+        qui ne convient pas est signalée, les autres sont créées."""
         if not self.project:
             return
         from core import asset_creation
-        creation = asset_creation.build_from_source(self.project, family, Path(path))
-        if creation.error is not None:
-            self._status.showMessage(label("disk.create_refused", error=creation.error), 8000)
+        from core.models.unique_name import unique_name
+        taken = {item.name for item in getattr(self.project, family)}
+        commands, created, warnings, errors = [], [], [], []
+        for path in paths:
+            name = unique_name(Path(path).stem, taken)
+            creation = asset_creation.build_from_source(self.project, family, Path(path), name)
+            if creation.error is not None:
+                errors.append(creation.error)
+                continue
+            taken.add(name)
+            commands.append(CreateAssetCmd(creation.store, creation.item, creation.folder))
+            created.append(name)
+            if creation.warning:
+                warnings.append(creation.warning)
+        if commands:
+            self._disk_push(commands[0] if len(commands) == 1 else MacroCmd(commands, f"Créer {len(commands)} assets"))
+        if not created:
+            self._status.showMessage(label("disk.create_refused", error=" ".join(errors)), 8000)
             return
-        self._disk_push(CreateAssetCmd(creation.store, creation.item, creation.folder))
-        message = label("disk.created", name=creation.item.name)
-        self._status.showMessage(f"{message} {creation.warning}" if creation.warning else message, 6000)
+        message = label("disk.created", name=created[0]) if len(created) == 1 else label("disk.created_many", n=len(created))
+        self._status.showMessage(" ".join([message, *warnings, *errors]), 8000 if errors else 6000)
 
     def _disk_deletable(self, node) -> bool:
         """Tout se supprime depuis l'onglet Disk, sauf les tables de tout le projet (textes, variables) — et un
@@ -1612,22 +1671,41 @@ class MainWindow(QMainWindow):
         if not self.project:
             return
         from core import asset_creation
-        from core.disk_commands import ImportFilesCmd
-        from core.models.unique_name import unique_name
         patterns = " ".join(f"*{ext}" for ext in sorted(asset_creation.SOURCE_FAMILIES))
         files, _ = QFileDialog.getOpenFileNames(
             self, label("disk.import_title"), "", f"{label('disk.import_filter')} ({patterns})")
-        if not files:
+        if files:
+            self._disk_import_paths(files, folder)
+
+    def _disk_import_paths(self, files: list, folder: str):
+        """Copie ces fichiers source dans `folder` (le dialogue d'import et le dépôt depuis l'explorateur s'y rejoignent).
+        Un dossier déposé est recopié avec son arborescence, sans ses sous-dossiers vides de fichiers lisibles. Seuls
+        les formats que l'éditeur sait lire passent ; si aucun ne convient, la barre d'état le dit."""
+        if not self.project:
             return
+        from core import asset_creation
+        from core.disk_commands import ImportFilesCmd
+        from core.models.unique_name import unique_name
+        readable = lambda p: p.is_file() and p.suffix.lower() in asset_creation.SOURCE_FAMILIES
         target = Path(folder)
         taken = {entry.name for entry in target.iterdir()} if target.is_dir() else set()
         copies = []
         for raw in files:
             source = Path(raw)
-            name = unique_name(source.stem, {Path(n).stem for n in taken})
-            copy = target / f"{name}{source.suffix}"
-            taken.add(copy.name)
-            copies.append((source, copy))
+            if source.is_dir():
+                inside = [p for p in sorted(source.rglob("*")) if readable(p)]
+                if inside:
+                    root = target / unique_name(source.name, taken)
+                    taken.add(root.name)
+                    copies += [(p, root / p.relative_to(source)) for p in inside]
+            elif readable(source):
+                name = unique_name(source.stem, {Path(n).stem for n in taken})
+                copy = target / f"{name}{source.suffix}"
+                taken.add(copy.name)
+                copies.append((source, copy))
+        if not copies:
+            self._status.showMessage(label("disk.import_none"), 6000)
+            return
         self._disk_push(ImportFilesCmd(copies, around=self._watcher.suspended))
         self._status.showMessage(label("disk.imported", n=len(copies)), 6000)
 
@@ -1654,7 +1732,7 @@ class MainWindow(QMainWindow):
         """Relit `assets/` et alimente l'onglet Disk des deux panneaux. À l'ouverture
         de l'onglet et au bouton Refresh. Les familles différées sont chargées d'abord :
         sans elles, leurs assets passeraient pour des sources sans asset."""
-        if not self.project:
+        if not self.project or self._disk_refresh_suspended:
             return
         from core.disk_tree import build_disk_tree
         self.project.load_all_resources()

@@ -54,3 +54,29 @@ def test_selection_venue_du_canvas_pose_l_item_courant(qapp, tmp_path):
 
     assert tree.currentItem().data(0, _ROLE_OBJ) is actors[1]
     assert len(tree.selectedItems()) == 2
+
+
+def test_scene_viewer_efface_la_multi_selection_quand_le_canvas_se_vide(qapp, tmp_path):
+    """Une désélection du canvas ne doit laisser aucun acteur surligné.
+
+    Le panneau possède deux projections (Contenu et Priorité) : les deux
+    doivent être remises à zéro, même si l'une est masquée au moment du clic.
+    """
+    from ui.scene_manager.scene_tree_panel import SceneTreePanel
+    from core.selection_bus import ActorSelection
+
+    actors = [Actor(name="First"), Actor(name="Second")]
+    panel = SceneTreePanel()
+    panel._content_state = SceneTreeState(tmp_path)
+    scene = Scene(name="Test", actors=actors)
+    panel._tree.populate(None, scene)
+    panel._priority_tree.populate(None, scene)
+
+    panel.on_selection(ActorSelection(actors, actors[1]))
+    assert len(panel._tree.selectedItems()) == 2
+    assert len(panel._priority_tree.selectedItems()) == 2
+
+    panel.on_selection(None)
+
+    assert panel._tree.selectedItems() == []
+    assert panel._priority_tree.selectedItems() == []

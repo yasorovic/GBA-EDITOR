@@ -37,7 +37,8 @@ from core.lua_scripts import require_name
 from core.models.audio import (
     volume_to_effect, volume_to_module, pitch_to_rate, panning_to_hardware,
     volume_to_effect_expr, volume_to_module_expr, pitch_to_rate_expr,
-    panning_to_hardware_expr,
+    panning_to_hardware_expr, tempo_to_module, pitch_to_module,
+    tempo_to_module_expr, pitch_to_module_expr,
 )
 from .api import (
     RUNTIME_API, EVENT_C_SIGNATURES, KNOWN_EVENTS, ApiFunc, REF_TYPE_TABLE,
@@ -49,6 +50,7 @@ from .api import (
     DOMAIN_INPUT_SEQUENCE,
     DOMAIN_ACTOR_NAME, DOMAIN_SCENE, DOMAIN_LANG,
     DOMAIN_SOUND_BOX_STATE, DOMAIN_JINGLE_BOX_STATE, DOMAIN_MUSIC_BOX_TRIGGER,
+    DOMAIN_MUSIC_SECTION, music_section_constant,
     DOMAIN_CAMERA, camera_constant, DOMAIN_BOX_TAG, box_tag_constant,
     window_region_constant,
     DOMAIN_TEXT, DOMAIN_FONT, DOMAIN_IMAGE_STATE,
@@ -237,6 +239,9 @@ class CodegenContext:
     child_refs: dict = field(default_factory=dict)
     # Parmi `music_names`, les modules de assets/jingles/ : `music.jingle` n'accepte qu'eux.
     jingle_names: list[str] = field(default_factory=list)
+    # Les noms de section des musiques, TRIÉS : l'index est la constante `MSEC_*` (cf.
+    # `core/music_structure.music_section_names`, qui est aussi la clé de la table de main.c).
+    music_section_names: list[str] = field(default_factory=list)
     # Fonctions citées par une frame de sprite : elles sont appelées depuis
     # main.c et doivent donc rester publiques, pas devenir des helpers static.
     frame_event_names: list[str] = field(default_factory=list)
@@ -411,6 +416,8 @@ class CodeGen:
         # plutôt que `+` sur un `a + b` dont les deux côtés sont des vecteurs.
         # Cf. scripting/vec_types.py — même règle que checker.py.
         self._vec_types: dict[str, str] = {}
+        # Étiquettes des exports `enum` : l'index de l'étiquette est la valeur C.
+        self._enum_exports: dict[str, list[str]] = {}
         # Locals qui tiennent une référence : nom → type (cf. expr_types).
         self._ref_types: dict[str, str] = {}
         # Le nom de l'élément d'interface qu'un local tient (cf. expr_types.element_of),
@@ -447,6 +454,8 @@ class CodeGen:
         # et `_emit_locals` en a besoin pour le poser au bon endroit (champ de
         # la structure de pool, ou statique de fichier).
         self._script = script
+        self._enum_exports = {loc.name: list(loc.export_values) for loc in script.locals
+                              if loc.export_type == "enum" and loc.export_values}
         self._plan_sequences(script)
         self._local_names = local_names(script)
         self._helpers = {fn.name: fn for fn in script.functions
@@ -875,6 +884,7 @@ class CodeGen:
                 sfx_names    = self.ctx.sfx_names,
                 music_names  = self.ctx.music_names,
                 jingle_names = self.ctx.jingle_names,
+                music_section_names = self.ctx.music_section_names,
                 scene_names  = self.ctx.scene_names,
                 global_names = list(self.ctx.global_names) if self.ctx.global_names else None,
                 const_names  = list(self.ctx.const_names) if self.ctx.const_names else None,
@@ -993,6 +1003,13 @@ class CodeGen:
             self._w("/* Music */")
             for i, name in enumerate(self.ctx.music_names):
                 self._w(f"#define {music_constant(name)} {i}")
+        # Constantes de section — l'index est le rang du NOM dans la liste triée des noms
+        # de section du projet, la même qui clé la table `g_music_sec` de main.c.
+        if self.ctx.music_section_names:
+            self._w("")
+            self._w("/* Music sections (music.set_section) */")
+            for i, name in enumerate(self.ctx.music_section_names):
+                self._w(f"#define {music_section_constant(name)} {i}")
         # Constantes Texte — index dans la table g_texts émise par main_gen
         if self.ctx.text_keys:
             self._w("")
@@ -1457,7 +1474,26 @@ class CodeGen:
                 c_args.append(value)
                 self._w(f"{setter}({', '.join(c_args)});")
                 return
+            # `self.position.x = v` : un champ d'une propriété composée. Le C n'a
+            # que le setter de la valeur ENTIÈRE, donc on lit, on change la
+            # composante, on réécrit — dans un bloc, pour que le temporaire ne
+            # survive pas à l'instruction.
+            if isinstance(s.target, ExprIndex):
+                owner = resolve_prop(s.target.obj, self._ref_types, self._kinds)
+                if (owner is not None and owner[1].ptype in VEC_CONSTRUCTORS
+                        and owner[1].c_setter is not None):
+                    receiver, p = owner
+                    receiver = self._prop_receiver_c(s.target.obj, receiver, p)
+                    c_args = [receiver] if p.self_first else []
+                    self._w(f"{{ {C_TYPES[p.ptype]} _field = {self._prop_read(receiver, p)}; "
+                            f"_field.{s.target.field} = {self._expr(s.value)}; "
+                            f"{p.c_setter}({', '.join(c_args + ['_field'])}); }}")
+                    return
             tgt = self._expr(s.target)
+            index = self._enum_label_index(s.target, s.value)
+            if index is not None:
+                self._w(f"{tgt} = {index};")
+                return
             # `global.titre = "Bonjour"` : une globale string tient un index de
             # texte, le littéral se résout comme celui d'un export string.
             if (isinstance(s.value, ExprString) and isinstance(s.target, ExprIndex)
@@ -1695,6 +1731,11 @@ class CodeGen:
             enum_cmp = self._prop_enum_compare(e)
             if enum_cmp is not None:
                 return enum_cmp
+            if e.op in ("==", "!="):
+                for side, other in ((e.left, e.right), (e.right, e.left)):
+                    index = self._enum_label_index(side, other)
+                    if index is not None:
+                        return f"({self._expr(side)} {e.op} {index})"
             lt = infer_vec_type(e.left, self._vec_types, self._ref_types, self._kinds)
             rt = infer_vec_type(e.right, self._vec_types, self._ref_types, self._kinds)
             vt = lt or rt
@@ -1714,6 +1755,11 @@ class CodeGen:
                 elif not rt:
                     right = f"{vt}_splat({right})"
                 return f"{vt}_{fn}({left}, {right})"
+            if e.op in ("<<", ">>"):
+                # Le C seul diffère du Lua sur un décalage (indéfini à 32+, `>>`
+                # arithmétique) : cf. `bits_shl`/`bits_shr` de runtime_api_inline.h.
+                fn = "bits_shl" if e.op == "<<" else "bits_shr"
+                return f"{fn}({self._expr(e.left)}, {self._expr(e.right)})"
             return f"({self._expr(e.left)} {e.op} {self._expr(e.right)})"
         if isinstance(e, ExprUnop):
             if e.op == "#":
@@ -1780,6 +1826,16 @@ class CodeGen:
             return p.getter_expr
         fn = (p.c_getter_named or p.c_getter) if named else p.c_getter
         return f"{fn}({receiver})" if p.self_first else f"{fn}()"
+
+    def _enum_label_index(self, var, label) -> Optional[int]:
+        """`team` / `"BLUE"` → 1, quand `var` est un export `enum` et `label` une
+        de ses étiquettes (le checker a déjà refusé une étiquette inconnue)."""
+        if not (isinstance(var, ExprName) and isinstance(label, ExprString)):
+            return None
+        labels = self._enum_exports.get(var.name)
+        if labels is None or label.value not in labels:
+            return None
+        return labels.index(label.value)
 
     def _prop_enum_compare(self, e) -> Optional[str]:
         """`blend.mode == "alpha"` → `(blend_get_mode() == BLD_MODE_ALPHA)`, et
@@ -2112,6 +2168,23 @@ class CodeGen:
     def _emit_music_set_volume(self, args: list) -> str:
         return (f"music_set_volume("
                 f"{self._percent_arg(args, volume_to_module, volume_to_module_expr)})")
+
+    def _emit_music_set_tempo(self, args: list) -> str:
+        return (f"music_set_tempo("
+                f"{self._percent_arg(args, tempo_to_module, tempo_to_module_expr)})")
+
+    def _emit_music_set_pitch(self, args: list) -> str:
+        return (f"music_set_pitch("
+                f"{self._percent_arg(args, pitch_to_module, pitch_to_module_expr)})")
+
+    def _emit_music_fade_in(self, args: list) -> str:
+        """music:fade_in("Name", frames) → music_fade_in(MUSIC_NAME, loop, volume, frames) —
+        comme `music.play`, loop et volume lus sur la ressource ; seul le fondu vient de l'appel."""
+        if len(args) < 2 or not isinstance(args[0], ExprString):
+            return "/* music:fade_in() : argument invalide */"
+        loop, volume = self.ctx.music_info.get(args[0].value, (True, 100))
+        return (f"music_fade_in({music_constant(args[0].value)}, {1 if loop else 0}, "
+                f"{volume_to_module(volume)}, {self._expr(args[1])})")
 
     def _emit_sound_box_set_volume(self, args: list) -> str:
         return (f"sfx_set_effects_volume("
@@ -2610,6 +2683,7 @@ _DOMAIN_CONSTANT: dict = {
     DOMAIN_SPRITE_ID: lambda g, name: sprite_id_constant(g.ctx.actor_sym, name),
     DOMAIN_SFX:     lambda g, name: sfx_constant(name),
     DOMAIN_MUSIC:   lambda g, name: music_constant(name),
+    DOMAIN_MUSIC_SECTION: lambda g, name: music_section_constant(name),
     DOMAIN_JINGLE:  lambda g, name: music_constant(name),
     # `pressed`/`released` (accord simple, jamais une séquence depuis la
     # décision de l'auteur du 2026-09-27) passent par ce chemin générique ;
@@ -2698,6 +2772,9 @@ _CALL_CUSTOM: dict = {
     "sfx.play":    CodeGen._emit_sfx_play,
     "music.play":    CodeGen._emit_music_play,
     "music.set_volume":      CodeGen._emit_music_set_volume,
+    "music.set_tempo":       CodeGen._emit_music_set_tempo,
+    "music.set_pitch":       CodeGen._emit_music_set_pitch,
+    "music.fade_in":         CodeGen._emit_music_fade_in,
     "sound_box.set_volume":  CodeGen._emit_sound_box_set_volume,
     "jingle_box.set_volume": CodeGen._emit_jingle_box_set_volume,
     "sound_box.set_state":  CodeGen._emit_sound_box_set_state,

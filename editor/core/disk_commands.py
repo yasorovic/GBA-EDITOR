@@ -1,8 +1,8 @@
 """
 core/disk_commands.py — les gestes de l'onglet Disk qui touchent au disque, rendus annulables.
 
-Créer, importer, déplacer, renommer un dossier : chacun est une `Command` de l'historique (Ctrl+Z / Ctrl+Y).
-Les écritures elles-mêmes restent dans `core.disk_folders`, `core.disk_move` et `core.asset_creation` : une commande
+Créer, importer, déplacer, renommer un dossier ou un fichier : chacun est une `Command` de l'historique (Ctrl+Z / Ctrl+Y).
+Les écritures elles-mêmes restent dans `core.disk_folders`, `core.disk_move` (qui déplace et renomme) et `core.asset_creation` : une commande
 ne fait que les appeler dans un sens, puis dans l'autre.
 
 `around` : une fonction sans argument qui rend un gestionnaire de contexte entourant l'écriture (la fenêtre y
@@ -57,24 +57,33 @@ class CreateFileCmd(Command):
 
 
 class ImportFilesCmd(Command):
-    """Copier des fichiers de l'extérieur dans `assets/`. Annuler retire les copies ; l'original, hors du projet,
-    n'est jamais touché."""
+    """Copier des fichiers de l'extérieur dans `assets/`. Annuler retire les copies et les dossiers que l'import a
+    créés ; l'original, hors du projet, n'est jamais touché."""
 
     def __init__(self, copies: list[tuple[Path, Path]], around: Callable = nullcontext):
         self._copies = [(Path(src), Path(dst)) for src, dst in copies]      # (source extérieure, copie dans le projet)
         self._around = around
+        self._made: list[Path] = []                                         # les dossiers créés, du plus haut au plus bas
         self.label = f"Importer {len(self._copies)} fichier(s)"
 
     def execute(self):
         with self._around():
+            self._made = []
             for source, copy in self._copies:
+                missing = [d for d in reversed(copy.parents) if not d.exists()]
                 copy.parent.mkdir(parents=True, exist_ok=True)
+                self._made += [d for d in missing if d not in self._made]
                 shutil.copy2(source, copy)
 
     def undo(self):
         with self._around():
             for _source, copy in self._copies:
                 copy.unlink(missing_ok=True)
+            for folder in reversed(self._made):
+                try:
+                    folder.rmdir()
+                except OSError:                 # l'auteur y a rangé autre chose depuis : on n'y touche pas
+                    pass
 
 
 class MoveFilesCmd(Command):
@@ -151,20 +160,21 @@ class CreateFolderCmd(Command):
                     pass
 
 
-class RenameFolderCmd(Command):
-    """Renommer un dossier de `assets/` (`disk_folders.rename_folder`) ; annuler lui rend son nom."""
+class RenamePathCmd(Command):
+    """Renommer un fichier ou un dossier de `assets/` (`disk_move.rename_in_place`) ; annuler lui rend son nom. Les
+    références des assets suivent dans les deux sens, comme à un déplacement."""
 
-    def __init__(self, folder: Path, new_name: str, root: Path, around: Callable = nullcontext):
-        self._folder, self._new_name, self._root = Path(folder), new_name, Path(root)
+    def __init__(self, project, path: Path, new_name: str, around: Callable = nullcontext):
+        self._project, self._path, self._new_name = project, Path(path), new_name
         self._around = around
         self.renamed: Optional[Path] = None
-        self.label = f"Renommer {self._folder.name}"
+        self.label = f"Renommer {self._path.name}"
 
     def execute(self):
         with self._around():
-            self.renamed = disk_folders.rename_folder(self._folder, self._new_name, self._root)
+            self.renamed = disk_move.rename_in_place(self._project, self._path, self._new_name)
 
     def undo(self):
         if self.renamed is not None:
             with self._around():
-                disk_folders.rename_folder(self.renamed, self._folder.name, self._root)
+                disk_move.rename_in_place(self._project, self.renamed, self._path.name)

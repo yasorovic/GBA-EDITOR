@@ -30,7 +30,7 @@ import struct
 import numpy as np
 
 from .module_model import (
-    Cell, Envelope, Instrument, Module, Sample,
+    Cell, Envelope, Instrument, Module, Sample, effective_restart,
     LOOP_FORWARD, LOOP_NONE, LOOP_PINGPONG, NOTE_NONE, NOTE_OFF,
     FX_NONE, FX_ARPEGGIO, FX_PORTA_UP, FX_PORTA_DOWN, FX_TONE_PORTA,
     FX_VIBRATO, FX_TONE_PORTA_VOL, FX_VIBRATO_VOL, FX_TREMOLO, FX_SET_PAN,
@@ -148,7 +148,7 @@ def _decode_delta(raw: bytes, wide: bool) -> np.ndarray:
 def parse_xm(data: bytes) -> Module:
     name = data[17:37].rstrip(b" \x00").decode("latin-1", "ignore")
     header_size = struct.unpack_from("<I", data, 0x3C)[0]
-    (song_len, _restart, n_channels, n_patterns, n_instruments,
+    (song_len, restart, n_channels, n_patterns, n_instruments,
      flags, speed, bpm) = struct.unpack_from("<HHHHHHHH", data, 0x40)
     n_channels = max(1, min(64, n_channels))
     order = list(data[0x50:0x50 + song_len])
@@ -282,6 +282,7 @@ def parse_xm(data: bytes) -> Module:
         speed=max(1, speed), bpm=max(32, bpm),
         linear_freq=bool(flags & 0x01), amiga_table=False,
         slide_scale=4.0, effect_memory=True,
-        order=order, patterns=patterns, samples=samples, instruments=instruments,
+        order=order, restart=effective_restart(restart, len(order)),
+        patterns=patterns, samples=samples, instruments=instruments,
         channel_pan=[128] * n_channels, channel_volume=[64] * n_channels,
     )

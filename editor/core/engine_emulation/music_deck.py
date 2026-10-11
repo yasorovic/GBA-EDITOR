@@ -1,10 +1,11 @@
 """
 engine_emulation/music_deck.py — La couche MODULE, telle que la ROM la pilote.
 
-Pendant exact de `music_transition_tick()` (main.c) et des deux entrées
-`music_fade_to` / `music_cut_to` (gba_engine.h). Le but n'est pas de faire
-« quelque chose qui ressemble » : c'est de laisser régler une transition dans
-l'éditeur et d'entendre CE QUE LA ROM FERA, sans build.
+Pendant exact de `music_transition_tick()` / `music_loop_tick()` (main.c) et des
+entrées `music_play` / `music_stop` / `music_fade_to` / `music_cut_to`
+(gba_engine.h). Le but n'est pas de faire « quelque chose qui ressemble » : c'est de
+laisser régler une transition, une section de boucle ou un fondu dans l'éditeur et
+d'entendre CE QUE LA ROM FERA, sans build.
 
 Ce que la ROM tient, et donc ce qui est reproduit ici :
 
@@ -13,6 +14,18 @@ Ce que la ROM tient, et donc ce qui est reproduit ici :
                        Il n'y a pas de fondu enchaîné : une seule couche.
     coupe à la position on attend la frontière de motif, puis on démarre
                        l'autre module au MÊME index d'ordre. Sans creux.
+    fondu d'entrée     `Music.fade_in` : le volume monte de zéro à `music_play`.
+    fondu de sortie    `Music.fade_out` : à `music_stop`, le volume tombe à zéro
+                       puis le module s'arrête. Ce sont deux MODES (3 et 4) du même
+                       pas par frame que les transitions : un seul point d'écriture
+                       du volume, comme dans le C.
+    section de boucle  `Music.loop_section` : chaque frame, si la position d'ordre
+                       a atteint la fin de la section, on revient à son début ; une
+                       sortie par l'arrière (le module qui rebouclait seul) est
+                       renvoyée au début. Un module à section boucle QUEL QUE SOIT son
+                       drapeau : sans la section il s'arrêterait (`music_mode`).
+    boucle d'échantillon  un WAV à section : l'échantillon boucle lui-même, le module
+                       ne finit plus (cf. `core/wav_module`).
 
 Ce qui n'est PAS reproduit, parce que la ROM ne le fait pas non plus :
 `MusicState.intensity` et sa cible ne sont pas émis par le codegen (le C ne
@@ -24,6 +37,7 @@ Sans Qt : cette classe dit quels échantillons sortent, pas comment les jouer.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Optional
 
 import numpy as np
 
@@ -34,6 +48,9 @@ FRAME_HZ = 60
 # L'échelle de `mmSetModuleVolume` (cf. models/audio.volume_to_module).
 MODULE_FULL = 1024
 
+# Les modes du pas par frame — les mêmes nombres que `g_mtr_mode` dans main.c.
+_NONE, _CROSSFADE, _CUT, _FADE_IN, _FADE_OUT = 0, 1, 2, 3, 4
+
 
 @dataclass
 class Track:
@@ -43,9 +60,32 @@ class Track:
     pas une propriété du module. Le poser sur le Track — qui est mis en cache
     par fichier — ferait que deux états partageant une piste se marcheraient
     dessus.
+
+    Les champs qui suivent `order_count` sont les RÉGLAGES de l'asset, tels que la
+    ROM les lit (`core/music_structure.music_info_row`) : ils ne changent pas ce que
+    le fichier rend, seulement comment le deck le joue.
     """
     pcm: np.ndarray                       # (n, 2) int16
     marks: dict = field(default_factory=dict)   # index d'ordre -> échantillon
+    restart: int = 0                      # index d'ordre où `MM_PLAY_LOOP` reboucle
+    order_count: int = 0                  # longueur de la table BRUTE ; 0 = sans structure (WAV)
+    loop_orders: Optional[tuple] = None   # section de boucle : positions d'ordre [début, fin)
+    sample_loop: Optional[tuple] = None   # boucle d'échantillon d'un WAV : échantillons [début, fin)
+    fade_in: int = 0                      # frames
+    fade_out: int = 0                     # frames
+
+    @property
+    def forces_loop(self) -> bool:
+        """Une section de boucle fait boucler le module quel que soit son drapeau."""
+        return self.loop_orders is not None or self.sample_loop is not None
+
+    @property
+    def restart_at(self) -> int:
+        """L'échantillon où la boucle reprend : le début de l'ordre de restart.
+
+        C'est ce que la ROM fait de la position de restart du fichier ; reboucler
+        à 0 aurait rejoué une intro que la console ne rejoue pas."""
+        return self.marks.get(self.restart, 0)
 
     def order_at(self, pos: int) -> int:
         """L'index d'ordre joué à cet échantillon — ce que rend `mmGetPosition`."""
@@ -55,22 +95,33 @@ class Track:
                 best, best_off = order, off
         return best
 
-    def start_of(self, order: int) -> int:
-        """L'échantillon où commence cet index d'ordre — `mmPosition(pat)`.
+    def start_of(self, order: int) -> Optional[int]:
+        """L'échantillon où commence cet index d'ordre — `mmPosition(pat)` — ou None
+        si la piste n'a PAS de musique à cette position.
 
-        Un ordre absent (l'autre module est plus court) retombe sur 0 : c'est
-        ce que fait maxmod d'une position hors bornes, et mieux vaut le début
-        du morceau qu'un silence inexpliqué.
+        Mesuré sur ROM le 2026-10-11 : un séparateur (254) tombe sur le pattern
+        SUIVANT ; une position hors table, ou un 255, n'a pas de musique — c'est
+        à l'appelant de dire ce qui suit, car cela dépend du mode de lecture. Une
+        piste sans repères (un WAV) n'a pas de structure à violer : le début.
         """
-        return self.marks.get(order, 0)
+        if not self.marks:
+            return 0
+        if order in self.marks:
+            return self.marks[order]
+        if order < self.order_count:
+            later = [k for k in self.marks if k > order]
+            if later:
+                return self.marks[min(later)]
+        return None
 
 
 class MusicDeck:
     """L'unique couche de module : ce qui joue, à quelle position, à quel volume.
 
-    Le vocabulaire est celui du runtime — `play`, `fade_to`, `cut_to` — parce
-    que c'est le même mécanisme. Un nom différent ici laisserait croire à un
-    second chemin.
+    Le vocabulaire est celui du runtime — `play`, `music_stop`, `fade_to`, `cut_to` —
+    parce que c'est le même mécanisme. Un nom différent ici laisserait croire à un
+    second chemin. `stop()` est l'arrêt SEC du lecteur (le bouton Stop) ; `music_stop()`
+    est l'appel du jeu, qui passe par le fondu de sortie.
     """
 
     def __init__(self, mix_rate: int):
@@ -85,10 +136,12 @@ class MusicDeck:
         self._loop = True
         self._pos = 0
         self._vol = MODULE_FULL          # volume courant, échelle maxmod
+        self._music_vol = MODULE_FULL    # `g_music_vol` : le dernier niveau DEMANDÉ
         self._ended = False              # module non bouclé arrivé au bout
+        self._loop_in = False            # `g_mloop_in` : on est entré dans la section
 
         # L'état de transition — les `g_mtr_*` du runtime, mot pour mot.
-        self._mode = 0                   # 0 rien, 1 fondu, 2 coupe
+        self._mode = _NONE
         self._to: Track | None = None
         self._to_vol = MODULE_FULL
         self._to_loop = True
@@ -117,19 +170,44 @@ class MusicDeck:
         return self._loop
 
     def set_looping(self, enabled: bool):
-        """Change la boucle de la lecture en cours et de la transition pendante."""
-        self._loop = bool(enabled)
+        """Change la boucle de la lecture en cours et de la transition pendante.
+
+        Un module à section de boucle ne peut pas cesser de boucler : la ROM le
+        démarre toujours en `MM_PLAY_LOOP`."""
+        forced = self._track is not None and self._track.forces_loop
+        self._loop = bool(enabled) or forced
         self._to_loop = bool(enabled)
 
-    def play(self, track: Track, volume: int, loop: bool = True):
-        """`music_play` : démarrage sec, sans transition."""
-        self._track, self._pos, self._vol = track, 0, volume
-        self._loop, self._ended = loop, False
-        self._mode = 0
+    def play(self, track: Track, volume: int, loop: bool = True, start_at: int = 0):
+        """`music_play` : démarrage sec, sans transition — mais avec le fondu d'entrée.
+
+        `start_at` (en échantillons) n'existe pas dans la ROM : c'est l'aperçu d'une section, qui
+        commence à SON début. Un `mmStart` suivi d'un `mmPosition` donnerait la même chose."""
+        self._start(track, loop)
+        self._pos = max(0, min(int(start_at), max(0, track.pcm.shape[0] - 1)))
+        self._music_vol = volume
+        if track.fade_in > 1:
+            # Le volume part de zéro et monte : c'est le mode 3 du pas par frame.
+            self._vol = 0
+            self._mode, self._to_vol, self._i, self._n = _FADE_IN, volume, 0, track.fade_in
+        else:
+            self._vol = volume
 
     def stop(self):
+        """L'arrêt sec : le bouton Stop du lecteur, pas l'appel du jeu."""
         self._track = None
-        self._mode = 0
+        self._mode = _NONE
+
+    def music_stop(self):
+        """`music_stop()` : avec un fondu de sortie, la musique s'éteint puis s'arrête."""
+        if self._mode == _FADE_OUT:
+            return                                   # déjà en train de s'éteindre
+        track = self._track
+        if track is not None and track.fade_out > 1 and self.playing:
+            self._mode, self._to_vol = _FADE_OUT, self._music_vol
+            self._i, self._n = 0, track.fade_out
+            return
+        self.stop()
 
     def fade_to(self, track: Track, volume: int, frames: int,
                 loop: bool = True):
@@ -137,7 +215,7 @@ class MusicDeck:
         if frames < 2 or not self.playing:
             self.play(track, volume, loop)
             return
-        self._mode, self._to, self._to_vol = 1, track, volume
+        self._mode, self._to, self._to_vol = _CROSSFADE, track, volume
         self._to_loop = loop
         self._i, self._n = 0, frames
 
@@ -146,17 +224,44 @@ class MusicDeck:
         if not self.playing:
             self.play(track, volume, loop)
             return
-        self._mode, self._to, self._to_vol = 2, track, volume
+        self._mode, self._to, self._to_vol = _CUT, track, volume
         self._to_loop = loop
         self._row_order = self._track.order_at(self._pos)
+
+    def _start(self, track: Track, loop: bool):
+        """`mmStart` suivi de `music_apply` : le module démarre, ses réglages s'appliquent."""
+        self._track, self._pos = track, 0
+        self._loop = loop or track.forces_loop
+        self._ended = False
+        self._loop_in = False
+        self._mode = _NONE
 
     # ── L'horloge ─────────────────────────────────────────────────
 
     def _tick(self):
-        """Une frame de `music_transition_tick()`."""
-        if not self._mode:
+        """Une frame : `music_transition_tick()` puis `music_loop_tick()`."""
+        self._transition_tick()
+        self._loop_tick()
+
+    def _transition_tick(self):
+        if self._mode == _NONE:
             return
-        if self._mode == 1:
+        if self._mode == _FADE_IN:
+            self._i += 1
+            if self._i >= self._n:
+                self._vol = self._to_vol
+                self._mode = _NONE
+            else:
+                self._vol = self._to_vol * self._i // self._n
+            return
+        if self._mode == _FADE_OUT:
+            self._i += 1
+            if self._i >= self._n:
+                self.stop()
+            else:
+                self._vol = self._to_vol * (self._n - self._i) // self._n
+            return
+        if self._mode == _CROSSFADE:
             # Fondu traversant. La bascule tombe à la moitié, quand le volume
             # est à zéro : c'est là qu'un changement s'entend le moins.
             half = self._n // 2
@@ -164,12 +269,13 @@ class MusicDeck:
             if self._i < half:
                 self._vol = self._to_vol * (half - self._i) // max(1, half)
             elif self._i == half:
-                self._track, self._pos = self._to, 0
-                self._loop, self._ended = self._to_loop, False
+                self._start(self._to, self._to_loop)
+                self._mode = _CROSSFADE              # `_start` l'a remis à zéro
                 self._vol = 0
             elif self._i >= self._n:
                 self._vol = self._to_vol
-                self._mode = 0
+                self._music_vol = self._to_vol
+                self._mode = _NONE
             else:
                 k, n = self._i - half, self._n - half
                 self._vol = self._to_vol * k // max(1, n)
@@ -180,13 +286,43 @@ class MusicDeck:
         # frontière et se lit directement sur les repères du rendu.
         order = self._track.order_at(self._pos)
         if order != self._row_order:
-            self._track = self._to
-            self._pos = self._to.start_of(order)
-            self._loop, self._ended = self._to_loop, False
+            target = self._to
+            land = target.start_of(order)
+            self._start(target, self._to_loop)
+            if land is None and self._loop:
+                # Mesuré : sans musique à cette position, MM_PLAY_LOOP redémarre la
+                # cible à son restart…
+                land = target.restart_at
+            self._pos = land or 0
+            # …et MM_PLAY_ONCE l'arrête.
+            self._ended = land is None
             self._vol = self._to_vol
-            self._mode = 0
+            self._music_vol = self._to_vol
         else:
             self._row_order = order
+
+    def _loop_tick(self):
+        """`music_loop_tick()` : tenir la position dans la section de boucle."""
+        track = self._track
+        if track is None or self._ended or track.loop_orders is None:
+            return
+        start, end = track.loop_orders
+        order = track.order_at(self._pos)
+        if order >= end:
+            self._jump_to_order(start)
+            self._loop_in = True
+        elif order >= start:
+            self._loop_in = True
+        elif self._loop_in:
+            # Une sortie par l'ARRIÈRE : le module a rebouclé tout seul (une boucle qui
+            # va jusqu'à la fin du morceau, ou un saut), et on le renvoie au début.
+            self._jump_to_order(start)
+
+    def _jump_to_order(self, order: int):
+        """`mmPosition(order)`."""
+        land = self._track.start_of(order)
+        if land is not None:
+            self._pos = land
 
     # ── La sortie ─────────────────────────────────────────────────
 
@@ -213,12 +349,17 @@ class MusicDeck:
         parts, need = [], n
         while need > 0:
             if self._pos >= total:
-                if not self._loop:
+                if track.sample_loop is not None:
+                    # La boucle d'échantillon du WAV : le mixeur reboucle lui-même, et
+                    # le module, qui ne finit plus, ne s'arrête jamais.
+                    self._pos = min(track.sample_loop[0], total - 1)
+                elif not self._loop:
                     # Un module qui ne boucle pas s'arrête, comme MM_PLAY_ONCE.
                     self._ended = True
                     parts.append(np.zeros((need, 2), dtype=np.int16))
                     break
-                self._pos = 0
+                else:
+                    self._pos = min(track.restart_at, total - 1)
             take = min(need, total - self._pos)
             parts.append(track.pcm[self._pos:self._pos + take])
             self._pos += take

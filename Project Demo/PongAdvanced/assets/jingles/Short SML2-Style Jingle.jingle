@@ -3,5 +3,13 @@
   "id": "df678b072d26",
   "asset": "assets/jingles/Short SML2-Style Jingle.mod",
   "loop": true,
-  "volume": 100
+  "volume": 100,
+  "unit": "order",
+  "sections": [],
+  "loop_section": "",
+  "tempo": 100,
+  "pitch": 100,
+  "fade_in": 0,
+  "fade_out": 0,
+  "sample_rate": 0
 }

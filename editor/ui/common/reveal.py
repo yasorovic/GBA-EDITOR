@@ -1,14 +1,16 @@
-"""ui/common/reveal.py — ouvrir l'explorateur de fichiers du système sur le
-dossier RÉEL d'une famille d'assets.
+"""ui/common/reveal.py — REVEAL : ouvrir l'explorateur de fichiers du système sur un élément.
 
-Un finder liste ce qu'un projet contient, mais l'utilisateur retrouve parfois
-plus vite un fichier en le manipulant directement sur le disque (le glisser
-ailleurs, l'ouvrir avec un autre outil, vérifier ce qui traîne à côté). Ce
-module ne fait qu'ouvrir le dossier — jamais un fichier précis : révéler UN
-asset supposerait que l'explorateur du système sache le sélectionner, ce que
-Qt ne garantit pas hors Windows/macOS.
-"""
+Deux gestes portent deux noms dans tout l'éditeur, et ne se mélangent pas :
+
+* **Locate** — ouvre l'onglet Disk de l'éditeur et y trouve le fichier (cf. `ui/common/locate_bus.py`).
+* **Reveal** — ouvre l'explorateur du système et y trouve le fichier (ce module).
+
+Un fichier est SÉLECTIONNÉ dans son dossier là où le système sait le faire (Windows, macOS) ;
+ailleurs, Qt ne garantit rien, on ouvre alors son dossier. Un dossier s'ouvre simplement."""
 from __future__ import annotations
+
+import subprocess
+import sys
 from pathlib import Path
 
 from PyQt6.QtCore import QUrl
@@ -16,13 +18,19 @@ from PyQt6.QtGui import QDesktopServices
 
 
 def reveal_in_file_manager(path) -> None:
-    """Ouvre `path` (ou son dossier parent si c'est un fichier) dans
-    l'explorateur de fichiers par défaut du système. Silencieux si `path` est
-    vide ou n'existe pas encore — pas de message d'erreur pour un dossier
-    qu'un projet fraîchement créé n'a simplement pas encore créé sur disque."""
+    """Montre `path` dans l'explorateur de fichiers par défaut du système : le fichier y est sélectionné,
+    le dossier y est ouvert. Silencieux si `path` est vide ou n'existe pas encore — pas de message
+    d'erreur pour un dossier qu'un projet fraîchement créé n'a simplement pas encore créé sur disque."""
     if not path:
         return
     p = Path(path)
+    if p.is_file():
+        if sys.platform == "win32":
+            subprocess.Popen(["explorer", "/select,", str(p)])
+            return
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", "-R", str(p)])
+            return
     target = p if p.is_dir() else p.parent
     if not target.exists():
         return

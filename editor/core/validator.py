@@ -187,6 +187,7 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
     _check_data_tables(ctx)
     _check_screen_space(ctx)
     _check_audio_files(ctx)
+    _check_music_structure(ctx)
     _check_music_cut_compat(ctx)
     _check_sound_names_unique(ctx)
     _check_module_channels(ctx)
@@ -1545,7 +1546,7 @@ def _check_audio_files(ctx: ValidationContext):
                 continue    # signalé une fois, en erreur, par `_check_missing_sources`
             if reason := check_audio_file(path, at_import=False):
                 ctx.error(None, f"{kind} \"{a.name}\" ({path.name}): {reason}")
-            elif kind != "SFX" and (reason := wav_too_long(path)):
+            elif kind != "SFX" and (reason := wav_too_long(path, a.sample_rate)):
                 ctx.warn(None, f"{kind} \"{a.name}\" ({path.name}): {reason} Playing it fails the build.")
 
     # `Scene.music` nomme une piste sans qu'aucun script ne la cite : c'est une
@@ -1570,37 +1571,62 @@ def _check_audio_files(ctx: ValidationContext):
             "Scene.music — rename it.")
 
 
-def _check_music_cut_compat(ctx: ValidationContext):
-    """`music.cut_to` reprend l'autre module au MÊME index d'ordre. Deux
-    modules dont la table d'ordre n'a pas la même longueur ne peuvent donc pas
-    se relayer : la reprise tomberait ailleurs dans le morceau.
+def _check_music_structure(ctx: ValidationContext):
+    """Les réglages d'une musique (sections, boucle, tempo, fondus, taux) face à
+    son fichier. Le sidecar surcharge sans jamais toucher le fichier : il peut donc
+    décrire un morceau qui n'existe plus tel quel — remplacé, raccourci, d'une autre
+    famille — et c'est ici, pas au `make`, qu'on le dit (cf. core/music_structure)."""
+    from core.music_structure import ERROR, jingle_ignored_settings, music_problems
+    p = ctx.project
+    for kind, assets in (("Music", getattr(p, "music", [])),
+                         ("Jingle", getattr(p, "jingles", []))):
+        for a in assets or []:
+            path = p.asset_abs(a.asset) if a.asset else None
+            if path is not None and not path.exists():
+                path = None      # signalé une fois, en erreur, par `_check_missing_sources`
+            for level, message in music_problems(a, path, ctx.module):
+                emit = ctx.error if level == ERROR else ctx.warn
+                emit(None, f"{kind} \"{a.name}\": {message}")
+            if kind == "Jingle" and (ignored := jingle_ignored_settings(a)):
+                ctx.warn(None, f"Jingle \"{a.name}\": {', '.join(ignored)} do not apply to a jingle "
+                               "(it plays on maxmod's second layer, with its own volume) — ignored.")
 
-    Sans ce contrôle, l'auteur entend un saut sans savoir d'où il vient — et
-    c'est le genre de défaut qu'on ne rattache jamais à sa cause. En
+
+def _cut_side(ctx: ValidationContext, by_name: dict, name: str):
+    """Ce que le contrôle de coupe doit savoir d'une musique : (son module, est-ce un
+    WAV, boucle-t-elle). Un WAV n'est pas lu : son « module » est un emballage sans
+    structure musicale (cf. core/wav_module)."""
+    from core.music_structure import is_wav_asset
+    m = by_name.get(name)
+    if m is None:
+        return None, False, True
+    if is_wav_asset(m.asset):
+        return None, True, m.loop
+    ap = ctx.project.asset_abs(m.asset) if m.asset else None
+    module = ctx.module(ap) if ap and ap.exists() else None
+    return module, False, m.loop
+
+
+def _check_music_cut_compat(ctx: ValidationContext):
+    """`music.cut_to` reprend l'autre module au MÊME index d'ordre : la cible doit donc
+    avoir un pattern à chaque position où la source peut se trouver (le détail, et ce
+    que la ROM fait sinon, est dans `core/music_structure.cut_problems`).
+
+    Sans ce contrôle, l'auteur entend un saut ou un silence sans savoir d'où il vient —
+    et c'est le genre de défaut qu'on ne rattache jamais à sa cause. En
     AVERTISSEMENT : la ROM se construit et joue, c'est le résultat musical qui
     est douteux, et une structure volontairement différente reste un choix
     défendable.
 
     On compare chaque piste citée par `cut_to` à celles que le script peut
     avoir en cours — c'est-à-dire toutes les autres du même script. Grossier,
-    mais du bon côté : on préfère un avertissement de trop qu'un saut muet."""
+    mais du bon côté : on préfère un avertissement de trop qu'un saut muet. Les
+    arêtes `cut` d'une MusicBox, elles, sont explicites : `_check_sound_boxes`."""
+    from core.music_structure import cut_problems
     from scripting.api import DOMAIN_MUSIC
     from scripting.refactor import iter_refs, script_paths
     p = ctx.project
     by_name = {m.name: m for m in getattr(p, "music", [])}
-    orders: dict[str, int] = {}
-
-    def order_len(name: str) -> Optional[int]:
-        if name in orders:
-            return orders[name]
-        m = by_name.get(name)
-        ap = p.asset_abs(m.asset) if m and m.asset else None
-        n = None
-        if ap and ap.exists():
-            mod = ctx.module(ap)
-            n = len(mod.order) if mod is not None else None
-        orders[name] = n
-        return n
 
     for path in script_paths(p):
         try:
@@ -1609,20 +1635,20 @@ def _check_music_cut_compat(ctx: ValidationContext):
             continue
         if "cut_to" not in text:            # évite de parser pour rien
             continue
-        cited = {r.value for r in iter_refs(text, path=path, domain=DOMAIN_MUSIC)}
-        targets = {r.value for r in iter_refs(text, path=path, domain=DOMAIN_MUSIC)
-                   if r.api_key == "music.cut_to"}
+        refs = list(iter_refs(text, path=path, domain=DOMAIN_MUSIC))
+        cited = {r.value for r in refs}
+        targets = {r.value for r in refs if r.api_key == "music.cut_to"}
         for target in sorted(targets):
-            n_t = order_len(target)
-            if n_t is None:
+            dst_mod, dst_wav, dst_loop = _cut_side(ctx, by_name, target)
+            if target not in by_name:
                 continue
             for other in sorted(cited - {target}):
-                n_o = order_len(other)
-                if n_o is not None and n_o != n_t:
-                    ctx.warn(None,
-                        f"{path.name}: music:cut_to(\"{target}\") resumes at the current position, "
-                        f"but \"{other}\" does not have the same structure ({n_o} patterns "
-                        f"against {n_t}) — the resume would land elsewhere in the song.")
+                if other not in by_name:
+                    continue
+                src_mod, src_wav, _ = _cut_side(ctx, by_name, other)
+                for message in cut_problems(other, target, src_mod, dst_mod,
+                                            src_wav=src_wav, dst_wav=dst_wav, dst_loop=dst_loop):
+                    ctx.warn(None, f"{path.name}: music:cut_to(\"{target}\"): {message}")
 
 
 def _check_sound_names_unique(ctx: ValidationContext):
@@ -1708,20 +1734,30 @@ def _check_sound_boxes(ctx: ValidationContext):
                     f"MusicBox \"{box.name}\", state \"{st.name}\": music \"{st.music}\" does not exist — the "
                     "state will be silent.")
 
-    # Une coupe REPREND à la position courante (`music_cut_to`). Une piste WAV n'a
-    # sa note qu'à l'ordre 0 de son module : reprise plus loin, elle ne sonne pas.
+    # Une coupe REPREND à la position courante (`music_cut_to`) : la cible doit avoir de
+    # la musique à chaque position de la source (cf. core/music_structure.cut_problems).
+    # Une arête sans `src` vaut « depuis n'importe quel état » : on les regarde tous.
     from core.models.sound_box import TRANSITION_CUT
+    from core.music_structure import cut_problems
     by_music = {m.name: m for m in getattr(p, "music", [])}
     for box in getattr(p, "music_boxes", []):
         states = {s.name: s for s in box.states}
         for tr in box.transitions:
             dst = states.get(tr.dst)
-            m = by_music.get(dst.music) if dst and dst.music else None
-            if tr.kind == TRANSITION_CUT and m and (m.asset or "").lower().endswith(".wav"):
-                ctx.warn(None,
-                    f"MusicBox \"{box.name}\": the cut to \"{tr.dst}\" targets a WAV track "
-                    f"(\"{m.name}\") — it resumes mid-module, where a WAV track has no note, so it "
-                    "stays silent. Use a fade.")
+            if tr.kind != TRANSITION_CUT or dst is None or dst.music not in by_music:
+                continue
+            sources = [states[tr.src]] if tr.src in states else (
+                [] if tr.src else [s for s in box.states if s is not dst])
+            dst_mod, dst_wav, _ = _cut_side(ctx, by_music, dst.music)
+            seen: set = set()
+            for src in sources:
+                if src.music not in by_music or src.music == dst.music or src.music in seen:
+                    continue
+                seen.add(src.music)
+                src_mod, src_wav, _ = _cut_side(ctx, by_music, src.music)
+                for message in cut_problems(src.music, dst.music, src_mod, dst_mod,
+                                            src_wav=src_wav, dst_wav=dst_wav, dst_loop=dst.loop):
+                    ctx.warn(None, f"MusicBox \"{box.name}\", cut {tr.src or '*'} → {tr.dst}: {message}")
 
     for store, known, label, target in (
             (getattr(p, "sound_boxes", []), sfx_names, "SoundBox", "sound effect"),
