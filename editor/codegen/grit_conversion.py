@@ -25,12 +25,12 @@ from core.models.sprite import SpriteAsset
 from core.models.background import BackgroundLayer
 from core.project import Project
 from core.diagnostic import build_error, build_warning
-from core.music_structure import wav_loop_region
+from core.music_structure import wav_boundaries, wav_section_orders
 from core.wav_module import encode_music_for_build
 # `sym` importée sous le nom `c_sym` : « sym » est un nom de variable locale
 # très courant dans la génération (`sym = bg_layer_sym(...)`), et une locale
 # masquerait la fonction dans toute la portée où elle apparaît.
-from codegen.c_names import sym as c_sym
+from codegen.c_names import module_constant, sym as c_sym
 import codegen.build_output as build_output
 from codegen.asset_cache import AssetBuildCache, file_digest, tool_signature
 
@@ -745,35 +745,46 @@ class MmutilAudio:
         self._run_cmd = run_cmd
         self._cache   = asset_cache
 
-    def _check_ids(self, soundbank_h: Path, sound_assets: dict) -> bool:
-        """Vérifie que mmutil a numéroté dans l'ordre où on lui a passé les
-        fichiers — l'hypothèse dont dépendent les `#define SFX_*` / `MUSIC_*`
-        émis par le transpileur Lua.
+    def _number_ids(self, soundbank_h: Path, sound_assets: dict) -> bool:
+        """Donne au header de mmutil les noms des ASSETS, après avoir vérifié sa numérotation.
 
-        Elle n'était écrite nulle part, et elle a lâché en silence : tant que
-        le build émettait TOUT le catalogue, le rang dans le projet et l'id du
-        soundbank coïncidaient. Le jour où le build a filtré, `music.play` s'est
-        mis à jouer un autre module — sans symbole manquant, donc sans erreur de
-        compilation, donc invisible jusqu'à ce qu'on écoute. Une hypothèse qui
-        se trompe en silence doit devenir un contrôle qui bloque.
+        mmutil numérote par POSITION — les effets dans l'ordre où on les lui passe, puis les modules — mais il nomme
+        d'après le fichier (`SFX_COIN` pour `coin.wav`). Or un asset pointe sa source par chemin : deux effets
+        réglés différemment sur le même `.wav` portent le même nom de fichier. Le nom du fichier n'a donc aucune
+        raison d'être celui de l'asset, et le build ne s'en sert plus : il lit le RANG de chaque ligne `SFX_*` /
+        `MOD_*`, vérifie qu'il est celui attendu, puis réécrit la ligne avec la constante de l'asset
+        (`sfx_constant`, `module_constant`) — celle que le code généré cite.
+
+        La position est l'hypothèse dont dépendent les `#define SFX_*` / `MUSIC_*` émis par le transpileur Lua. Elle
+        n'était écrite nulle part, et elle a lâché en silence : tant que le build émettait TOUT le catalogue, le rang
+        dans le projet et l'id du soundbank coïncidaient. Le jour où le build a filtré, `music.play` s'est mis à
+        jouer un autre module — sans symbole manquant, donc sans erreur de compilation, donc invisible jusqu'à ce
+        qu'on écoute. Une hypothèse qui se trompe en silence est donc un contrôle qui bloque.
+
+        Idempotent : un header déjà réécrit (build en cache) se relit et se réécrit à l'identique.
         """
         import re
+        from scripting.api import sfx_constant
         try:
             text = soundbank_h.read_text(encoding="utf-8", errors="replace")
         except OSError as e:
             self._emit("diagnostic", build_error(f"soundbank.h unreadable: {e}", "mmutil"))
             return False
-        found = {m.group(1): int(m.group(2))
-                 for m in re.finditer(r"#define\s+(\w+)\s+(\d+)", text)}
+        pattern = re.compile(r"^#define[ \t]+(SFX|MOD)_\w+[ \t]+(\d+)[ \t]*$", re.MULTILINE)
+        found = {"SFX": [], "MOD": []}
+        for m in pattern.finditer(text):
+            found[m.group(1)].append(int(m.group(2)))
+        wanted = {"SFX": [(sfx_constant(item.name), item.name) for item, _ap in sound_assets.get("sfx", [])],
+                  "MOD": [(module_constant(item.name), item.name) for item, _ap in sound_assets.get("music", [])]}
         bad = []
-        for prefix, key in (("SFX_", "sfx"), ("MOD_", "music")):
-            for expected, (item, _ap) in enumerate(sound_assets.get(key, [])):
-                sym = f"{prefix}{c_sym(item.name).upper()}"
-                got = found.get(sym)
-                if got is None:
-                    bad.append(f"{sym} absent de soundbank.h")
-                elif got != expected:
-                    bad.append(f"{sym} is {got}, expected {expected}")
+        for prefix, constants in wanted.items():
+            if found[prefix] != list(range(len(constants))):
+                bad.append(f"{prefix}_* lines are numbered {found[prefix]}, expected 0..{len(constants) - 1}")
+            names = [constant for constant, _asset in constants]
+            for constant in dict.fromkeys(names):
+                if names.count(constant) > 1:
+                    twins = ", ".join(f'"{asset}"' for c, asset in constants if c == constant)
+                    bad.append(f"{twins} would all be called {constant} in C")
         for msg in bad:
             self._emit("diagnostic", build_error(f"unexpected numbering: {msg}", "mmutil"))
         if bad:
@@ -781,7 +792,16 @@ class MmutilAudio:
                 "the SFX_*/MUSIC_* constants of the generated code "
                 "would be wrong — build interrupted rather than a ROM with "
                 "shifted sound.", "mmutil"))
-        return not bad
+            return False
+
+        def rename(m) -> str:
+            prefix, rank = m.group(1), int(m.group(2))
+            return f"#define {wanted[prefix][rank][0]} {rank}"
+
+        renamed = pattern.sub(rename, text)
+        if renamed != text:
+            soundbank_h.write_text(renamed, encoding="utf-8", newline="\n")
+        return True
 
     def run(self, p: Project, sound_assets: dict) -> bool:
         if not self._mmutil:
@@ -803,14 +823,15 @@ class MmutilAudio:
         music_files = []
         for m, ap in sound_assets["music"]:
             if ap.suffix.lower() == ".wav":
-                dst = p.build_dir / "music" / f"{ap.stem}.xm"
-                loop_ms = wav_loop_region(m)
+                # Nommé d'après l'ASSET : deux musiques sur le même `.wav` (réglées autrement) ne se marchent pas dessus.
+                dst = p.build_dir / "music" / f"{m.name}.xm"
                 try:
-                    size = encode_music_for_build(ap, dst, m.sample_rate, loop_ms)
+                    size = encode_music_for_build(ap, dst, m.sample_rate, wav_boundaries(m))
                 except ValueError as e:
                     self._emit("diagnostic", build_error(f"\"{m.name}\": {e}", "music"))
                     return False
-                detail = (f", loops {loop_ms[0]}-{loop_ms[1]} ms" if loop_ms else "") + (
+                sections = wav_section_orders(m, ap)
+                detail = (f", {len(sections)} section(s)" if sections else "") + (
                     f", {m.sample_rate} Hz" if m.sample_rate else "")
                 self._emit("log_line",
                            f"[music] \"{m.name}\" wav -> module  ({size} bytes in ROM{detail})")
@@ -838,7 +859,7 @@ class MmutilAudio:
         }) if self._cache else "")
         if self._cache and self._cache.hit("audio", fingerprint, outputs):
             self._emit("log_line", "[cache] audio — unchanged")
-            return self._check_ids(soundbank_h, sound_assets)
+            return self._number_ids(soundbank_h, sound_assets)
         cmd = [str(self._mmutil)] + all_files + ["-osoundbank.bin", "-hsoundbank.h"]
         self._emit("log_line",
                    f"[mmutil] {len(sound_assets['sfx'])} sfx + "
@@ -863,7 +884,7 @@ class MmutilAudio:
                 self._emit("log_line", f"           · … and {len(skipped) - 10} more")
         ok = self._run_cmd(cmd, "[mmutil]", cwd=p.build_dir)
         if ok and soundbank_h.exists():
-            ok = self._check_ids(soundbank_h, sound_assets) and ok
+            ok = self._number_ids(soundbank_h, sound_assets) and ok
         if ok and soundbank_h.exists():
             # mmutil écrit soundbank.h dans build/ — le Makefile ne compile
             # que depuis build/src/ (-Isrc), donc le header doit y être copié

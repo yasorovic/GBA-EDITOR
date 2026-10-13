@@ -30,6 +30,8 @@ Backstage-*-windows-portable.zip
 
 run.bat
 
+proto/
+
 # Backstage — corbeille d'un projet ouvert (vidée à la fermeture)
 Project Demo/*/.temp/
 

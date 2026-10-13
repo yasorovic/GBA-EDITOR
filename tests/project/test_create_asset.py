@@ -123,13 +123,14 @@ def test_nothing_is_created_for_a_file_that_does_not_fit(tmp_path: Path):
     png = _png(p.assets_dir / "x" / "hero.png")
     notes = p.assets_dir / "x" / "notes.txt"
     notes.write_text("hi", encoding="utf-8")
-    broken = _wav(p.assets_dir / "x" / "deep.wav", bits=24)                        # mmutil ne convertit que 8 et 16 bits
+    broken = p.assets_dir / "x" / "deep.wav"
+    broken.write_bytes(b"not a wav")                                               # ni PCM ni lisible
     asset_creation.create_from_source(p, "sprites", png)
 
     assert asset_creation.create_from_source(p, "sprites", notes).error
     assert asset_creation.create_from_source(p, "sfx", png).error                  # un PNG ne devient pas un effet
     refused = asset_creation.create_from_source(p, "sfx", broken)
-    assert refused.error and "24" in refused.error and not list(p.sfx)
+    assert refused.error and "not recognised" in refused.error and not list(p.sfx)
     assert asset_creation.can_create_from(p, broken)
 
 

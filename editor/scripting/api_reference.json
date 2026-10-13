@@ -640,7 +640,7 @@
         {
           "label": "music:set_section(\"section\")",
           "snippet": "music:set_section(\"Phase 2\")",
-          "description": "Makes the playing track loop on another section of its own — a boss changing phase: the same song, another part of it. Nothing happens if the playing track has no section by this name. Modules only: a WAV track has a single loop, fixed at build.",
+          "description": "Makes the playing track loop on another section of its own — a boss changing phase: the same song, another part of it. Nothing happens if the playing track has no section by this name. A WAV track has sections too: each one is a part of the track, cut at the nearest line of its module (about 11 ms).",
           "params": [
             {
               "name": "section",
@@ -653,7 +653,7 @@
         {
           "label": "music:leave_loop()",
           "snippet": "music:leave_loop()",
-          "description": "Lets the playing track leave its loop section: it plays on through the rest of the song — the outro — and then stops. Modules only: a WAV track never leaves its loop, so its outro is never played.",
+          "description": "Lets the playing track leave its loop section: it plays on through the rest of the song — the outro — and then stops. A WAV track does it like a module: what follows its loop section is its outro.",
           "params": [],
           "doc_anchor": "music-leave_loop"
         },

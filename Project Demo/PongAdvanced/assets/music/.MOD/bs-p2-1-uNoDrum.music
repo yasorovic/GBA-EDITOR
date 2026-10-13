@@ -3,12 +3,34 @@
   "id": "5df2c3c63530",
   "asset": "assets/music/.MOD/bs-p2-1-uNoDrum.mod",
   "loop": true,
-  "volume": 100,
+  "volume": 66,
   "unit": "order",
-  "sections": [],
-  "loop_section": "",
-  "tempo": 100,
-  "pitch": 100,
+  "sections": [
+    {
+      "name": "intro",
+      "color": "#82aaff",
+      "start": 0,
+      "end": 2,
+      "loop": true
+    },
+    {
+      "name": "Loop 1",
+      "color": "#e8c547",
+      "start": 2,
+      "end": 4,
+      "loop": true
+    },
+    {
+      "name": "Loop 2",
+      "color": "#7aab7a",
+      "start": 4,
+      "end": 5,
+      "loop": true
+    }
+  ],
+  "loop_section": "intro",
+  "tempo": 171,
+  "pitch": 79,
   "fade_in": 0,
   "fade_out": 0,
   "sample_rate": 0

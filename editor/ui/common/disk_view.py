@@ -34,6 +34,7 @@ from ui.common.elide_name import ElidedNameDelegate
 from ui.common.disk_folder_colors import COLORS as FOLDER_COLORS, color_for as folder_color_for, set_color as set_folder_color
 from ui.common.labels import label
 from ui.common.panel_bar import bar_button, panel_bar
+from ui.common import shortcut_hints
 from ui.common.reveal import reveal_in_file_manager
 from ui.common.theme import C, QSS, S, T
 from ui.common.tooltip import tooltip
@@ -125,6 +126,8 @@ class DiskCallbacks:
     new_folder: Callable[[str], None]                   # dossier parent
     blank_kinds: list = field(default_factory=list)     # [(type, mot)] dans l'ordre du menu
     edit_externally: Callable[[Path], None] | None = None   # ouvre un .json dans l'éditeur de texte réglé ; sans elle, pas d'entrée
+    duplicate_items: Callable[[list], None] | None = None   # [DiskNode] : une copie de chaque asset, en UNE entrée d'historique
+    duplicable: Callable[[object], bool] | None = None      # ce nœud (un asset, une source) se duplique-t-il ?
 
 
 # L'icône de chaque entrée d'un menu de création : la même grammaire que le « + » de l'arbre des scènes
@@ -145,6 +148,29 @@ def bind_delete_key(widget, selected_nodes, callbacks) -> None:
     shortcut = QShortcut(QKeySequence(QKeySequence.StandardKey.Delete), widget)
     shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
     shortcut.activated.connect(delete_selection)
+
+
+def bind_duplicate_key(widget, selected_nodes, callbacks) -> None:
+    """Ctrl+D (la touche réglée pour `common.duplicate`) sur `widget` duplique la sélection, comme l'entrée *Duplicate* du
+    clic droit. Rien ne se passe si un nœud choisi n'est pas un asset duplicable : le geste est tout ou rien."""
+    from core.keybindings import bind
+
+    def duplicate_selection():
+        cb = callbacks()
+        nodes = selected_nodes()
+        if cb is not None and duplicable_nodes(nodes, cb):
+            cb.duplicate_items(nodes)
+    shortcut = QShortcut(QKeySequence(), widget)
+    shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
+    shortcut.activated.connect(duplicate_selection)
+    bind("common.duplicate", shortcut)
+
+
+def duplicable_nodes(nodes: list, callbacks: DiskCallbacks) -> bool:
+    """Toute la sélection se duplique (assets et sources, que la fenêtre juge). Un dossier ou un fichier inconnu dans le
+    lot, et la duplication n'est pas proposée : le geste est tout ou rien, comme *Create*."""
+    return bool(nodes) and callbacks.duplicate_items is not None and callbacks.duplicable is not None and all(
+        callbacks.duplicable(n) for n in nodes)
 
 
 def renamable(node: disk_tree.DiskNode) -> bool:
@@ -199,6 +225,10 @@ def add_asset_actions(menu: QMenu, nodes: list, callbacks: DiskCallbacks,
         for family, word, _name in options:
             sub.addAction(_icon(_FAMILY_ICONS.get(family, "add")), word).triggered.connect(
                 lambda _=False, f=family: callbacks.create_from_sources(paths, f))
+    if duplicable_nodes(nodes, callbacks):
+        dup = menu.addAction(_icon("copy"), label('disk.duplicate', n=len(nodes)))
+        dup.setShortcut(shortcut_hints.bound("common.duplicate"))
+        dup.triggered.connect(lambda _=False: callbacks.duplicate_items(list(nodes)))
     if (callbacks.edit_externally is not None and len(nodes) == 1
             and nodes[0].kind == disk_tree.ASSET and nodes[0].family in _TEXT_FILE_FAMILIES):
         path = nodes[0].path
@@ -750,6 +780,7 @@ class DiskView(QWidget):
         self._list.itemDoubleClicked.connect(self._enter)
         self._list.itemSelectionChanged.connect(self._sync_create_button)
         bind_delete_key(self._list, self._selected_nodes, lambda: self._callbacks)
+        bind_duplicate_key(self._list, self._selected_nodes, lambda: self._callbacks)
         self._list.itemChanged.connect(self._on_item_changed)
         self._list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._list.customContextMenuRequested.connect(self._on_context_menu)

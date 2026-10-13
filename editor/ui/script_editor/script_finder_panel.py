@@ -60,6 +60,7 @@ class ScriptFinderPanel(QWidget):
         # ── Constantes / globales — PAS des assets : des variables typées,
         #    avec leur valeur. Leur table reste. ────────────────────────
         sec_const = FinderSection(label("vartbl.constants"))
+        sec_const.remember_fold("section/script_constants")
         self._constants_panel = VarTablePanel(kind="const")
         self._constants_panel.snippet_requested.connect(self.snippet_requested)
         sec_const.set_widget(self._constants_panel)
@@ -67,6 +68,7 @@ class ScriptFinderPanel(QWidget):
         self._scripts.add_section(sec_const)
 
         sec_globals = FinderSection(label("vartbl.globals"))
+        sec_globals.remember_fold("section/script_globals")
         self._globals_panel = VarTablePanel(kind="global")
         self._globals_panel.snippet_requested.connect(self.snippet_requested)
         sec_globals.set_widget(self._globals_panel)

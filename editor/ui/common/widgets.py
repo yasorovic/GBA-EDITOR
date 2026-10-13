@@ -958,6 +958,7 @@ class FinderSection(QFrame):
     """
 
     add_clicked = pyqtSignal()
+    toggled_by_user = pyqtSignal(bool)      # un clic sur l'en-tête, pas un set_expanded()
 
     # Air au-dessus du titre et sous le corps. Le bas ne compte que déplié :
     # replié, doubler la marge ferait flotter des sections vides.
@@ -1081,6 +1082,13 @@ class FinderSection(QFrame):
     def set_add_tooltip(self, tooltip: str):
         self._btn_add.setToolTip(tooltip)
 
+    def remember_fold(self, key: str):
+        """Replie la section tant que l'auteur ne l'a pas dépliée, puis retient son choix
+        d'une session à l'autre (cf. `finder_fold_state`)."""
+        from ui.common import finder_fold_state
+        self.set_expanded(finder_fold_state.is_expanded(key))
+        self.toggled_by_user.connect(lambda expanded: finder_fold_state.set_expanded(key, expanded))
+
     def set_add_menu(self, opens_menu: bool = True):
         """Le « + » de cette section ouvre un menu : il prend l'icône « + ▾ »."""
         if opens_menu:
@@ -1100,6 +1108,7 @@ class FinderSection(QFrame):
 
     def _toggle(self):
         self.set_expanded(not self._expanded)
+        self.toggled_by_user.emit(self._expanded)
 
     def set_expanded(self, expanded: bool):
         """Fixe l'état initial ou répond à un repli demandé par un finder."""

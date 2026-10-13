@@ -144,7 +144,7 @@ def test_un_nom_de_musique_et_de_jingle_identiques_sont_une_erreur(project):
 # ── Pistes WAV : deux limites du matériel ───────────────────────────────
 
 
-def test_une_piste_wav_trop_longue_pour_un_echantillon_est_refusee(tmp_path):
+def test_une_piste_wav_trop_longue_pour_la_table_d_ordres_est_refusee(tmp_path):
     import wave
     from core import wav_module
     path = tmp_path / "long.wav"

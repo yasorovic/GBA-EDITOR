@@ -3,5 +3,11 @@
   "id": "ee521bafd607",
   "asset": "assets/sfx/GAMEOVER.wav",
   "volume": 100,
-  "sample_rate": 0
+  "sample_rate": 0,
+  "trim_start": 0,
+  "trim_end": 0,
+  "pitch": 100,
+  "panning": 5,
+  "pitch_variation": 31,
+  "fade_out": 0
 }

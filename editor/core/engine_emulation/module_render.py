@@ -50,8 +50,10 @@ from .module_model import (
 from .mod_file import note_to_period
 
 GBA_MIX_RATE = 13379          # Hz — taux « qualité standard » des presets maxmod GBA
+ROM_MIXER_RATE = 15768        # Hz — le mixeur « 16 kHz » de maxmod, tel qu'il tourne vraiment sur la console
 AMIGA_PAL_CLOCK = 7093789.2   # Hz — horloge de référence période → fréquence
-_MAX_VISITED = 4096           # anti-boucle infinie sur des patterns qui se rebouclent
+_MAX_VISITED = 256 * 256 + 1  # anti-boucle infinie : une table de 256 ordres de 256 lignes au plus, donc jamais atteint
+                              # par un morceau qui finit (un WAV de 12 min en a 65 536 ; 4 096 le coupait à 47 s)
 
 # Table sinusoïdale des trackers : un quart de période sur 32 pas, en 0..255.
 # La même sert au vibrato et au trémolo, comme dans ProTracker.
@@ -175,26 +177,55 @@ def render_module(mod: Module, mix_rate: int = GBA_MIX_RATE,
     return render_module_marked(mod, mix_rate, tempo, pitch)[0]
 
 
-def render_module_marked(mod: Module, mix_rate: int = GBA_MIX_RATE,
-                         tempo: float = 1.0, pitch: float = 1.0) -> tuple[np.ndarray, dict]:
-    """Le rendu, PLUS l'offset où commence chaque position d'ordre.
+@dataclass
+class TickState:
+    """Ce qu'un appelant pose sur le rendu EN COURS DE ROUTE : le tempo et la hauteur lus à chaque tick, et un
+    saut de position demandé (`jump_to`, un index d'ordre). `ended` : le morceau est arrivé au bout."""
+    tempo: float = 1.0
+    pitch: float = 1.0
+    jump_to: int | None = None
+    jump_row: int = 0                  # la ligne où tombe `jump_to` (0 : le début de l'ordre)
+    ended: bool = False
+    # Le pic de chaque canal sur le DERNIER tick rendu (après volume, enveloppe et fondu, avant panoramique) :
+    # le rendu entier le recueille à chaque tick, le lecteur en direct l'ignore.
+    levels: np.ndarray | None = None
 
-    `marks[i]` = l'échantillon où débute la position d'ordre `i`, la première
-    fois qu'elle est jouée. C'est la frontière de motif que la « coupe à la
-    position » guette (`mmGetPosition` / `mmPosition` dans le runtime) : sans
-    ces repères, l'aperçu ne saurait ni quand couper, ni où reprendre l'autre
-    module. Un seul parcours produit les deux — un rendu et une table de
-    positions calculés séparément finiraient par diverger.
 
-    `tempo` et `pitch` sont les facteurs de `mmSetModuleTempo` / `mmSetModulePitch`
-    (1,0 = le fichier tel qu'il est ; la ROM les borne à 0,5–2,0). Le tempo raccourcit
-    ou allonge le TICK — les lignes passent plus vite, les échantillons gardent leur
-    hauteur — ; la hauteur multiplie la vitesse de lecture de chaque échantillon, donc sa
-    durée change avec elle. Mesuré sur ROM le 2026-10-11 : les deux prennent effet
-    appliqués juste après `mmStart`, et le facteur de tempo SE MULTIPLIE avec un
-    changement de tempo du morceau lui-même (`Fxx` à 250 bpm : ×2 ; facteur 200 % : ×2 ;
-    les deux : ×4) — d'où le facteur appliqué à chaque tick, quel que soit le tempo courant.
-    """
+@dataclass
+class ChannelLevels:
+    """Ce que chaque canal du module a fait entendre, tick par tick, sur la même frise que le PCM du mix.
+
+    `starts[i]` : l'échantillon où commence le tick `i` ; `peaks[i, c]` : le pic du canal `c` sur ce tick, 0..1 de
+    l'échelle d'un canal seul (1 = volume plein). Un canal muet, ou qui ne joue rien, vaut 0."""
+    starts: np.ndarray       # (ticks,) int64
+    peaks: np.ndarray        # (ticks, canaux) float32
+
+    @property
+    def channel_count(self) -> int:
+        return int(self.peaks.shape[1])
+
+    def active_counts(self, threshold: float = 0.0) -> np.ndarray:
+        """Le nombre de canaux qui sonnent, tick par tick (la polyphonie)."""
+        return (self.peaks > threshold).sum(axis=1)
+
+
+@dataclass
+class ModuleRender:
+    pcm: np.ndarray          # (n, 2) int16
+    marks: dict              # index d'ordre -> échantillon
+    levels: ChannelLevels
+
+
+def iter_module_ticks(mod: Module, mix_rate: int, state: TickState, guard: bool = True):
+    """Rejoue un module tick par tick : rend `(ordre, ligne, (gauche, droite) ou None)` à chaque tick.
+
+    C'est le CŒUR du rendu : `render_module_marked` le consomme d'un trait pour produire un morceau entier, et le
+    lecteur en direct (`module_stream`) le consomme au rythme de la carte son — d'où un tempo ou une hauteur
+    qu'on change pendant qu'on écoute, lus à CHAQUE tick dans `state`.
+
+    `guard` (hors ligne) : un morceau qui reboucle sur lui-même est coupé (`_MAX_VISITED`), sinon le rendu ne
+    finirait jamais. En direct il n'y a pas de garde : un morceau infini joue sans fin, et à la fin d'un morceau
+    qui finit le générateur rend `(None, None, None)` en attendant un `jump_to`."""
     n_ch = max(1, mod.num_channels)
     channels = [_Channel() for _ in range(n_ch)]
     for ci, ch in enumerate(channels):
@@ -206,11 +237,6 @@ def render_module_marked(mod: Module, mix_rate: int = GBA_MIX_RATE,
     order_pos = 0
     row = 0
     visited: set = set()
-
-    out_l: list = []
-    out_r: list = []
-    marks: dict = {}
-    written = 0        # échantillons déjà produits — l'horloge des repères
 
     def sample_of(cell_instrument: int, note: int) -> tuple[Sample | None, Instrument | None, int]:
         """(échantillon, instrument, index) pour ce couple instrument/note.
@@ -285,19 +311,30 @@ def render_module_marked(mod: Module, mix_rate: int = GBA_MIX_RATE,
                 tick = env.points[env.sustain][0]
         return tick
 
+    owed = 0.0     # la fraction d'échantillon que l'arrondi d'un tick a rendue ou prise : reportée au suivant
+
     def render_tick():
-        """Mixe un tick — la plus petite tranche de temps d'un tracker."""
-        nonlocal written
-        n = round(mix_rate * 2.5 / (bpm * tempo))
+        """Mixe un tick — la plus petite tranche de temps d'un tracker.
+
+        Sa durée est celle de la ROM : maxmod compte un nombre ENTIER d'échantillons de son mixeur par tick
+        (il tronque), et la fraction qui reste à notre taux de rendu est reportée au tick suivant — sans quoi
+        un module de cent lignes dériverait de plusieurs lignes par rapport à ce que la console joue."""
+        nonlocal owed
+        rom_samples = math.floor(ROM_MIXER_RATE * 2.5 / (bpm * state.tempo))
+        want = mix_rate * rom_samples / ROM_MIXER_RATE + owed
+        n = round(want)
+        owed = want - n
         if n <= 0:
-            return
+            return None
         left = np.zeros(n, dtype=np.float32)
         right = np.zeros(n, dtype=np.float32)
-        for ch in channels:
+        levels = np.zeros(n_ch, dtype=np.float32)
+        state.levels = levels
+        for ci, ch in enumerate(channels):
             samp = ch.sample
             if not ch.playing or samp is None or samp.data.size == 0:
                 continue
-            step = _step(mod, ch.period + _vib_delta(ch), samp, mix_rate) * pitch
+            step = _step(mod, ch.period + _vib_delta(ch), samp, mix_rate) * state.pitch
             if step <= 0:
                 continue
             vol = ch.volume + _trem_delta(ch)
@@ -321,11 +358,10 @@ def render_module_marked(mod: Module, mix_rate: int = GBA_MIX_RATE,
                 pan = int(max(0, min(255, pan + dev * 4)))
 
             vals = _read_samples(ch, samp, step, n)
+            levels[ci] = float(np.abs(vals).max()) * gain if vals.size else 0.0
             left += vals * (gain * (255 - pan) / 255.0)
             right += vals * (gain * pan / 255.0)
-        out_l.append(left)
-        out_r.append(right)
-        written += n
+        return left, right
 
     def _vib_delta(ch: _Channel) -> float:
         if not ch.vib_depth:
@@ -400,286 +436,366 @@ def render_module_marked(mod: Module, mix_rate: int = GBA_MIX_RATE,
     pattern_loop_row = [0] * n_ch
     pattern_loop_count = [0] * n_ch
 
-    while 0 <= order_pos < len(mod.order):
-        pattern_idx = mod.order[order_pos]
-        if pattern_idx == ORDER_END:
-            break            # fin du morceau : ce qui suit n'est jamais joué (ROM comprise)
-        if pattern_idx >= len(mod.patterns):    # ORDER_SKIP compris : sauté
-            order_pos += 1
-            row = 0
-            continue
-        pattern = mod.patterns[pattern_idx]
-        n_rows = len(pattern)
-        looped_out = False
-        marks.setdefault(order_pos, written)
-
-        while row < n_rows:
-            key = (order_pos, row)
-            if key in visited or len(visited) > _MAX_VISITED:
-                looped_out = True
-                break
-            visited.add(key)
-
-            cells = pattern[row]
-            next_order_jump = None
-            next_row_break = None
-            row_repeat = 0        # EEx : le nombre de fois où la ligne est REJOUÉE
-            loop_jump = None
-
-            # ── Tick 0 : déclenchements et effets immédiats ───────
-            for ci in range(n_ch):
-                if ci >= len(cells):
-                    continue
-                cell = cells[ci]
-                ch = channels[ci]
-                ch.cut_tick = -1
-                ch.delay_ticks = -1
-                ch.retrig_every = 0
-                ch.tremor_mute = False
-                fx, par = cell.effect, cell.param
-
-                tone_porta = fx in (FX_TONE_PORTA, FX_TONE_PORTA_VOL) or cell.vol_fx == VOL_TONE_PORTA
-
-                if fx == FX_NOTE_DELAY and par > 0:
-                    ch.delay_ticks = par
-                    ch.pending = cell
-                elif cell.note == NOTE_OFF:
-                    key_off(ch)
-                elif tone_porta and cell.note not in (NOTE_NONE, NOTE_OFF):
-                    # Un glissé VERS une note ne la déclenche pas : il pose la
-                    # cible et laisse le son en cours y aller.
-                    samp, inst, _i = sample_of(cell.instrument, cell.note)
-                    if samp is not None and ch.sample is None:
-                        ch.sample, ch.instrument = samp, inst
-                        ch.volume = float(samp.volume)
-                    ch.porta_target = _period_of(mod, cell.note, ch.sample)
-                    ch.note = cell.note
-                    if ch.sample is not None and not ch.playing:
-                        ch.playing = True
-                elif cell.note != NOTE_NONE or cell.instrument:
-                    start_note(ch, cell)
-
-                # Colonne de volume — un réglage, pas une commande.
-                if cell.vol_fx == VOL_SET:
-                    ch.volume = float(min(64, cell.vol_param))
-                elif cell.vol_fx == VOL_PAN:
-                    ch.pan = min(255, cell.vol_param * 4)
-                elif cell.vol_fx == VOL_VIBRATO:
-                    ch.vib_depth = cell.vol_param
-                elif cell.vol_fx == VOL_FINE_UP:
-                    ch.volume = min(64.0, ch.volume + cell.vol_param)
-                elif cell.vol_fx == VOL_FINE_DOWN:
-                    ch.volume = max(0.0, ch.volume - cell.vol_param)
-                elif cell.vol_fx == VOL_TONE_PORTA and cell.vol_param:
-                    ch.porta_speed = cell.vol_param * 16
-
-                if fx == FX_SET_VOLUME:
-                    ch.volume = float(min(64, par))
-                elif fx == FX_SET_PAN:
-                    ch.pan = par
-                elif fx == FX_SAMPLE_OFFSET:
-                    ch.mem_offset = par or ch.mem_offset
-                    if cell.note not in (NOTE_NONE, NOTE_OFF):
-                        ch.pos = float(ch.mem_offset) * 256.0
-                elif fx == FX_POSITION_JUMP:
-                    next_order_jump = par
-                elif fx == FX_PATTERN_BREAK:
-                    next_row_break = par
-                elif fx == FX_SET_SPEED:
-                    if par:
-                        speed = par
-                elif fx == FX_SET_TEMPO:
-                    if par:
-                        bpm = par
-                elif fx == FX_GLOBAL_VOLUME:
-                    global_vol = min(64, par)
-                elif fx == FX_CHANNEL_VOLUME:
-                    ch.volume = float(min(64, par))
-                elif fx in (FX_TONE_PORTA, FX_TONE_PORTA_VOL):
-                    if fx == FX_TONE_PORTA and par:
-                        ch.mem_tone = par
-                    ch.porta_speed = (ch.mem_tone or par) * mod.slide_scale
-                elif fx in (FX_PORTA_UP, FX_PORTA_DOWN):
-                    if par:
-                        ch.mem_porta = par
-                elif fx in (FX_VIBRATO, FX_VIBRATO_VOL):
-                    if fx == FX_VIBRATO:
-                        if par >> 4:
-                            ch.vib_speed = par >> 4
-                        if par & 0x0F:
-                            ch.vib_depth = par & 0x0F
-                elif fx == FX_TREMOLO:
-                    if par >> 4:
-                        ch.trem_speed = par >> 4
-                    if par & 0x0F:
-                        ch.trem_depth = par & 0x0F
-                elif fx == FX_FINE_PORTA_UP:
-                    ch.period = _clamp_period(mod, ch.period - par * mod.slide_scale)
-                elif fx == FX_FINE_PORTA_DOWN:
-                    ch.period = _clamp_period(mod, ch.period + par * mod.slide_scale)
-                elif fx == FX_XFINE_PORTA_UP:
-                    ch.period = _clamp_period(mod, ch.period - par * mod.slide_scale / 4.0)
-                elif fx == FX_XFINE_PORTA_DOWN:
-                    ch.period = _clamp_period(mod, ch.period + par * mod.slide_scale / 4.0)
-                elif fx == FX_FINE_VOL_UP:
-                    ch.volume = min(64.0, ch.volume + par)
-                elif fx == FX_FINE_VOL_DOWN:
-                    ch.volume = max(0.0, ch.volume - par)
-                elif fx == FX_NOTE_CUT:
-                    ch.cut_tick = par
-                    if par == 0:
-                        ch.volume = 0.0
-                elif fx == FX_RETRIGGER:
-                    ch.retrig_every = par
-                elif fx == FX_TREMOR:
-                    ch.tremor_on = (par >> 4) + 1
-                    ch.tremor_off = (par & 0x0F) + 1
-                    ch.tremor_count = 0
-                elif fx == FX_KEY_OFF:
-                    key_off(ch)
-                elif fx == FX_PATTERN_DELAY:
-                    row_repeat = max(row_repeat, par)
-                elif fx == FX_PATTERN_LOOP:
-                    if par == 0:
-                        pattern_loop_row[ci] = row
-                    elif pattern_loop_count[ci] < par:
-                        pattern_loop_count[ci] += 1
-                        loop_jump = pattern_loop_row[ci]
-                    else:
-                        pattern_loop_count[ci] = 0
-
-                if fx in (FX_VOLUME_SLIDE, FX_TONE_PORTA_VOL, FX_VIBRATO_VOL) and par:
-                    ch.mem_volslide = par
-
-            # ── Les ticks de la ligne ─────────────────────────────
-            for repeat in range(row_repeat + 1):
-                for tick in range(speed):
-                    if tick > 0:
-                        for ci in range(n_ch):
-                            if ci >= len(cells):
-                                continue
-                            cell = cells[ci]
-                            ch = channels[ci]
-                            fx, par = cell.effect, cell.param
-
-                            if ch.delay_ticks == tick and ch.pending is not None:
-                                start_note(ch, ch.pending)
-                                ch.pending = None
-
-                            if fx == FX_PORTA_UP:
-                                amount = _memo(mod, par, ch.mem_porta)
-                                ch.period = _clamp_period(mod, ch.period - amount * mod.slide_scale)
-                            elif fx == FX_PORTA_DOWN:
-                                amount = _memo(mod, par, ch.mem_porta)
-                                ch.period = _clamp_period(mod, ch.period + amount * mod.slide_scale)
-                            elif fx in (FX_TONE_PORTA, FX_TONE_PORTA_VOL) or cell.vol_fx == VOL_TONE_PORTA:
-                                if ch.porta_target:
-                                    ch.period = _slide_toward(ch.period, ch.porta_target,
-                                                              ch.porta_speed)
-
-                            if fx in (FX_VOLUME_SLIDE, FX_TONE_PORTA_VOL, FX_VIBRATO_VOL):
-                                p = _memo(mod, par if fx == FX_VOLUME_SLIDE else 0,
-                                          ch.mem_volslide)
-                                up, down = p >> 4, p & 0x0F
-                                if up:
-                                    ch.volume = min(64.0, ch.volume + up)
-                                elif down:
-                                    ch.volume = max(0.0, ch.volume - down)
-                            elif cell.vol_fx == VOL_SLIDE_UP:
-                                ch.volume = min(64.0, ch.volume + cell.vol_param)
-                            elif cell.vol_fx == VOL_SLIDE_DOWN:
-                                ch.volume = max(0.0, ch.volume - cell.vol_param)
-
-                            if fx == FX_GLOBAL_VOL_SLIDE:
-                                up, down = par >> 4, par & 0x0F
-                                if up:
-                                    global_vol = min(64, global_vol + up)
-                                elif down:
-                                    global_vol = max(0, global_vol - down)
-                            elif fx == FX_PAN_SLIDE:
-                                up, down = par >> 4, par & 0x0F
-                                ch.pan = max(0, min(255, ch.pan + (up - down) * 4))
-
-                            if fx in (FX_VIBRATO, FX_VIBRATO_VOL) or cell.vol_fx == VOL_VIBRATO:
-                                ch.vib_pos = (ch.vib_pos + ch.vib_speed) & 63
-                            if fx == FX_TREMOLO:
-                                ch.trem_pos = (ch.trem_pos + ch.trem_speed) & 63
-
-                            if fx == FX_NOTE_CUT and ch.cut_tick == tick:
-                                ch.volume = 0.0
-                            if ch.retrig_every and tick % ch.retrig_every == 0:
-                                ch.pos = 0.0
-                                ch.direction = 1
-                                ch.playing = ch.sample is not None
-                            if ch.tremor_on:
-                                cycle = ch.tremor_on + ch.tremor_off
-                                ch.tremor_mute = (tick % cycle) >= ch.tremor_on
-
-                    # L'arpège change la hauteur SANS toucher à l'état du canal :
-                    # il se lit sur le tick, il ne se mémorise pas.
-                    saved = []
-                    for ci in range(min(n_ch, len(cells))):
-                        cell, ch = cells[ci], channels[ci]
-                        if cell.effect == FX_ARPEGGIO and cell.param and ch.period:
-                            semis = 0
-                            if tick % 3 == 1:
-                                semis = cell.param >> 4
-                            elif tick % 3 == 2:
-                                semis = cell.param & 0x0F
-                            if semis:
-                                saved.append((ch, ch.period))
-                                if mod.linear_freq:
-                                    ch.period -= semis * 64
-                                else:
-                                    ch.period /= 2.0 ** (semis / 12.0)
-
-                    render_tick()
-
-                    for ch, period in saved:
-                        ch.period = period
-
-                    # Enveloppes et extinction : une horloge par tick joué.
-                    for ch in channels:
-                        inst = ch.instrument
-                        if inst is None:
-                            continue
-                        ch.env_vol_tick = advance_env(inst.vol_env, ch.env_vol_tick, ch.keyed_off)
-                        ch.env_pan_tick = advance_env(inst.pan_env, ch.env_pan_tick, ch.keyed_off)
-                        if ch.keyed_off and inst.fadeout:
-                            ch.fade -= inst.fadeout / 65536.0
-                            if ch.fade <= 0.0:
-                                ch.fade = 0.0
-                                ch.playing = False
-
-            if loop_jump is not None:
-                row = loop_jump
+    while True:
+        while 0 <= order_pos < len(mod.order):
+            if state.jump_to is not None:                  # un saut demandé entre deux ordres
+                order_pos, row, state.jump_to, state.jump_row = state.jump_to, state.jump_row, None, 0
                 continue
-            if next_row_break is not None or next_order_jump is not None:
-                order_pos = next_order_jump if next_order_jump is not None else order_pos + 1
-                row = next_row_break if next_row_break is not None else 0
+            pattern_idx = mod.order[order_pos]
+            if pattern_idx == ORDER_END:
+                break            # fin du morceau : ce qui suit n'est jamais joué (ROM comprise)
+            if pattern_idx >= len(mod.patterns):    # ORDER_SKIP compris : sauté
+                order_pos += 1
+                row = 0
+                continue
+            pattern = mod.patterns[pattern_idx]
+            n_rows = len(pattern)
+            looped_out = False
+
+            while row < n_rows:
+                if state.jump_to is not None:              # `mmPosition` : on repart de cet ordre, canaux gardés
+                    order_pos, row, state.jump_to, state.jump_row = state.jump_to, state.jump_row, None, 0
+                    break
+                key = (order_pos, row)
+                if guard:
+                    if key in visited or len(visited) > _MAX_VISITED:
+                        looped_out = True
+                        break
+                    visited.add(key)
+
+                cells = pattern[row]
+                next_order_jump = None
+                next_row_break = None
+                row_repeat = 0        # EEx : le nombre de fois où la ligne est REJOUÉE
+                loop_jump = None
+
+                # ── Tick 0 : déclenchements et effets immédiats ───────
+                for ci in range(n_ch):
+                    if ci >= len(cells):
+                        continue
+                    cell = cells[ci]
+                    ch = channels[ci]
+                    ch.cut_tick = -1
+                    ch.delay_ticks = -1
+                    ch.retrig_every = 0
+                    ch.tremor_mute = False
+                    fx, par = cell.effect, cell.param
+
+                    tone_porta = fx in (FX_TONE_PORTA, FX_TONE_PORTA_VOL) or cell.vol_fx == VOL_TONE_PORTA
+
+                    if fx == FX_NOTE_DELAY and par > 0:
+                        ch.delay_ticks = par
+                        ch.pending = cell
+                    elif cell.note == NOTE_OFF:
+                        key_off(ch)
+                    elif tone_porta and cell.note not in (NOTE_NONE, NOTE_OFF):
+                        # Un glissé VERS une note ne la déclenche pas : il pose la
+                        # cible et laisse le son en cours y aller.
+                        samp, inst, _i = sample_of(cell.instrument, cell.note)
+                        if samp is not None and ch.sample is None:
+                            ch.sample, ch.instrument = samp, inst
+                            ch.volume = float(samp.volume)
+                        ch.porta_target = _period_of(mod, cell.note, ch.sample)
+                        ch.note = cell.note
+                        if ch.sample is not None and not ch.playing:
+                            ch.playing = True
+                    elif cell.note != NOTE_NONE or cell.instrument:
+                        start_note(ch, cell)
+
+                    # Colonne de volume — un réglage, pas une commande.
+                    if cell.vol_fx == VOL_SET:
+                        ch.volume = float(min(64, cell.vol_param))
+                    elif cell.vol_fx == VOL_PAN:
+                        ch.pan = min(255, cell.vol_param * 4)
+                    elif cell.vol_fx == VOL_VIBRATO:
+                        ch.vib_depth = cell.vol_param
+                    elif cell.vol_fx == VOL_FINE_UP:
+                        ch.volume = min(64.0, ch.volume + cell.vol_param)
+                    elif cell.vol_fx == VOL_FINE_DOWN:
+                        ch.volume = max(0.0, ch.volume - cell.vol_param)
+                    elif cell.vol_fx == VOL_TONE_PORTA and cell.vol_param:
+                        ch.porta_speed = cell.vol_param * 16
+
+                    if fx == FX_SET_VOLUME:
+                        ch.volume = float(min(64, par))
+                    elif fx == FX_SET_PAN:
+                        ch.pan = par
+                    elif fx == FX_SAMPLE_OFFSET:
+                        ch.mem_offset = par or ch.mem_offset
+                        if cell.note not in (NOTE_NONE, NOTE_OFF):
+                            ch.pos = float(ch.mem_offset) * 256.0
+                    elif fx == FX_POSITION_JUMP:
+                        next_order_jump = par
+                    elif fx == FX_PATTERN_BREAK:
+                        next_row_break = par
+                    elif fx == FX_SET_SPEED:
+                        if par:
+                            speed = par
+                    elif fx == FX_SET_TEMPO:
+                        if par:
+                            bpm = par
+                    elif fx == FX_GLOBAL_VOLUME:
+                        global_vol = min(64, par)
+                    elif fx == FX_CHANNEL_VOLUME:
+                        ch.volume = float(min(64, par))
+                    elif fx in (FX_TONE_PORTA, FX_TONE_PORTA_VOL):
+                        if fx == FX_TONE_PORTA and par:
+                            ch.mem_tone = par
+                        ch.porta_speed = (ch.mem_tone or par) * mod.slide_scale
+                    elif fx in (FX_PORTA_UP, FX_PORTA_DOWN):
+                        if par:
+                            ch.mem_porta = par
+                    elif fx in (FX_VIBRATO, FX_VIBRATO_VOL):
+                        if fx == FX_VIBRATO:
+                            if par >> 4:
+                                ch.vib_speed = par >> 4
+                            if par & 0x0F:
+                                ch.vib_depth = par & 0x0F
+                    elif fx == FX_TREMOLO:
+                        if par >> 4:
+                            ch.trem_speed = par >> 4
+                        if par & 0x0F:
+                            ch.trem_depth = par & 0x0F
+                    elif fx == FX_FINE_PORTA_UP:
+                        ch.period = _clamp_period(mod, ch.period - par * mod.slide_scale)
+                    elif fx == FX_FINE_PORTA_DOWN:
+                        ch.period = _clamp_period(mod, ch.period + par * mod.slide_scale)
+                    elif fx == FX_XFINE_PORTA_UP:
+                        ch.period = _clamp_period(mod, ch.period - par * mod.slide_scale / 4.0)
+                    elif fx == FX_XFINE_PORTA_DOWN:
+                        ch.period = _clamp_period(mod, ch.period + par * mod.slide_scale / 4.0)
+                    elif fx == FX_FINE_VOL_UP:
+                        ch.volume = min(64.0, ch.volume + par)
+                    elif fx == FX_FINE_VOL_DOWN:
+                        ch.volume = max(0.0, ch.volume - par)
+                    elif fx == FX_NOTE_CUT:
+                        ch.cut_tick = par
+                        if par == 0:
+                            ch.volume = 0.0
+                    elif fx == FX_RETRIGGER:
+                        ch.retrig_every = par
+                    elif fx == FX_TREMOR:
+                        ch.tremor_on = (par >> 4) + 1
+                        ch.tremor_off = (par & 0x0F) + 1
+                        ch.tremor_count = 0
+                    elif fx == FX_KEY_OFF:
+                        key_off(ch)
+                    elif fx == FX_PATTERN_DELAY:
+                        row_repeat = max(row_repeat, par)
+                    elif fx == FX_PATTERN_LOOP:
+                        if par == 0:
+                            pattern_loop_row[ci] = row
+                        elif pattern_loop_count[ci] < par:
+                            pattern_loop_count[ci] += 1
+                            loop_jump = pattern_loop_row[ci]
+                        else:
+                            pattern_loop_count[ci] = 0
+
+                    if fx in (FX_VOLUME_SLIDE, FX_TONE_PORTA_VOL, FX_VIBRATO_VOL) and par:
+                        ch.mem_volslide = par
+
+                # ── Les ticks de la ligne ─────────────────────────────
+                jumped = False
+                for repeat in range(row_repeat + 1):
+                    for tick in range(speed):
+                        if jumped:
+                            break                            # un saut est demandé : plus rien à jouer ici
+                        if tick > 0:
+                            for ci in range(n_ch):
+                                if ci >= len(cells):
+                                    continue
+                                cell = cells[ci]
+                                ch = channels[ci]
+                                fx, par = cell.effect, cell.param
+
+                                if ch.delay_ticks == tick and ch.pending is not None:
+                                    start_note(ch, ch.pending)
+                                    ch.pending = None
+
+                                if fx == FX_PORTA_UP:
+                                    amount = _memo(mod, par, ch.mem_porta)
+                                    ch.period = _clamp_period(mod, ch.period - amount * mod.slide_scale)
+                                elif fx == FX_PORTA_DOWN:
+                                    amount = _memo(mod, par, ch.mem_porta)
+                                    ch.period = _clamp_period(mod, ch.period + amount * mod.slide_scale)
+                                elif fx in (FX_TONE_PORTA, FX_TONE_PORTA_VOL) or cell.vol_fx == VOL_TONE_PORTA:
+                                    if ch.porta_target:
+                                        ch.period = _slide_toward(ch.period, ch.porta_target,
+                                                                  ch.porta_speed)
+
+                                if fx in (FX_VOLUME_SLIDE, FX_TONE_PORTA_VOL, FX_VIBRATO_VOL):
+                                    p = _memo(mod, par if fx == FX_VOLUME_SLIDE else 0,
+                                              ch.mem_volslide)
+                                    up, down = p >> 4, p & 0x0F
+                                    if up:
+                                        ch.volume = min(64.0, ch.volume + up)
+                                    elif down:
+                                        ch.volume = max(0.0, ch.volume - down)
+                                elif cell.vol_fx == VOL_SLIDE_UP:
+                                    ch.volume = min(64.0, ch.volume + cell.vol_param)
+                                elif cell.vol_fx == VOL_SLIDE_DOWN:
+                                    ch.volume = max(0.0, ch.volume - cell.vol_param)
+
+                                if fx == FX_GLOBAL_VOL_SLIDE:
+                                    up, down = par >> 4, par & 0x0F
+                                    if up:
+                                        global_vol = min(64, global_vol + up)
+                                    elif down:
+                                        global_vol = max(0, global_vol - down)
+                                elif fx == FX_PAN_SLIDE:
+                                    up, down = par >> 4, par & 0x0F
+                                    ch.pan = max(0, min(255, ch.pan + (up - down) * 4))
+
+                                if fx in (FX_VIBRATO, FX_VIBRATO_VOL) or cell.vol_fx == VOL_VIBRATO:
+                                    ch.vib_pos = (ch.vib_pos + ch.vib_speed) & 63
+                                if fx == FX_TREMOLO:
+                                    ch.trem_pos = (ch.trem_pos + ch.trem_speed) & 63
+
+                                if fx == FX_NOTE_CUT and ch.cut_tick == tick:
+                                    ch.volume = 0.0
+                                if ch.retrig_every and tick % ch.retrig_every == 0:
+                                    ch.pos = 0.0
+                                    ch.direction = 1
+                                    ch.playing = ch.sample is not None
+                                if ch.tremor_on:
+                                    cycle = ch.tremor_on + ch.tremor_off
+                                    ch.tremor_mute = (tick % cycle) >= ch.tremor_on
+
+                        # L'arpège change la hauteur SANS toucher à l'état du canal :
+                        # il se lit sur le tick, il ne se mémorise pas.
+                        saved = []
+                        for ci in range(min(n_ch, len(cells))):
+                            cell, ch = cells[ci], channels[ci]
+                            if cell.effect == FX_ARPEGGIO and cell.param and ch.period:
+                                semis = 0
+                                if tick % 3 == 1:
+                                    semis = cell.param >> 4
+                                elif tick % 3 == 2:
+                                    semis = cell.param & 0x0F
+                                if semis:
+                                    saved.append((ch, ch.period))
+                                    if mod.linear_freq:
+                                        ch.period -= semis * 64
+                                    else:
+                                        ch.period /= 2.0 ** (semis / 12.0)
+
+                        rendered = render_tick()
+                        yield order_pos, row, rendered
+                        if state.jump_to is not None:        # demandé pendant ce tick : le suivant est ailleurs
+                            jumped = True
+                            break
+
+                        for ch, period in saved:
+                            ch.period = period
+
+                        # Enveloppes et extinction : une horloge par tick joué.
+                        for ch in channels:
+                            inst = ch.instrument
+                            if inst is None:
+                                continue
+                            ch.env_vol_tick = advance_env(inst.vol_env, ch.env_vol_tick, ch.keyed_off)
+                            ch.env_pan_tick = advance_env(inst.pan_env, ch.env_pan_tick, ch.keyed_off)
+                            if ch.keyed_off and inst.fadeout:
+                                ch.fade -= inst.fadeout / 65536.0
+                                if ch.fade <= 0.0:
+                                    ch.fade = 0.0
+                                    ch.playing = False
+
+                if jumped:
+                    continue                                 # le saut s'applique en tête de ligne
+                if loop_jump is not None:
+                    row = loop_jump
+                    continue
+                if next_row_break is not None or next_order_jump is not None:
+                    order_pos = next_order_jump if next_order_jump is not None else order_pos + 1
+                    row = next_row_break if next_row_break is not None else 0
+                    break
+                row += 1
+            else:
+                order_pos += 1
+                row = 0
+                continue
+
+            if looped_out:
                 break
-            row += 1
-        else:
-            order_pos += 1
-            row = 0
-            continue
 
-        if looped_out:
-            break
+        if guard:
+            return                                      # hors ligne : le morceau est rendu
+        state.ended = True                              # en direct : on attend qu'on le relance (`jump_to`)
+        while state.jump_to is None:
+            yield None, None, None
+        order_pos, row, state.jump_to, state.jump_row = state.jump_to, state.jump_row, None, 0
+        state.ended = False
 
-    if not out_l:
-        return np.zeros((0, 2), dtype=np.int16), {}
 
-    left = np.concatenate(out_l)
-    right = np.concatenate(out_r)
-    # Gain global : les échantillons sont normalisés en −1..+1 et pondérés par
-    # volume/64 ; on remet à l'échelle int16 avec de la marge pour limiter
-    # l'écrêtage quand plusieurs canaux forts se superposent (comportement
-    # « authentique » GBA : ça peut quand même saturer, comme sur la console).
+def to_stereo16(left: np.ndarray, right: np.ndarray) -> np.ndarray:
+    """Les échantillons (normalisés −1..+1, pondérés par volume/64) mis à l'échelle int16, avec de la marge pour
+    limiter l'écrêtage quand plusieurs canaux forts se superposent (comportement « authentique » GBA : ça peut
+    quand même saturer, comme sur la console)."""
     scale = 190.0 * 128.0
-    left = np.clip(left * scale, -32768, 32767).astype(np.int16)
-    right = np.clip(right * scale, -32768, 32767).astype(np.int16)
     stereo = np.empty((left.size, 2), dtype=np.int16)
-    stereo[:, 0] = left
-    stereo[:, 1] = right
-    return stereo, marks
+    stereo[:, 0] = np.clip(left * scale, -32768, 32767).astype(np.int16)
+    stereo[:, 1] = np.clip(right * scale, -32768, 32767).astype(np.int16)
+    return stereo
+
+
+def render_module_marked(mod: Module, mix_rate: int = GBA_MIX_RATE,
+                         tempo: float = 1.0, pitch: float = 1.0) -> tuple[np.ndarray, dict]:
+    """Le rendu et ses repères d'ordre : `render_module_detailed` sans le détail par canal."""
+    rendered = render_module_detailed(mod, mix_rate, tempo, pitch)
+    return rendered.pcm, rendered.marks
+
+
+class RenderCancelled(Exception):
+    """Levée par le point de contrôle d'un rendu (cf. `render_module_detailed`) pour l'abandonner en route."""
+
+
+_CHECKPOINT_TICKS = 32      # le point de contrôle passe tous les 32 ticks rendus : de l'ordre de la milliseconde de calcul
+
+
+def render_module_detailed(mod: Module, mix_rate: int = GBA_MIX_RATE,
+                           tempo: float = 1.0, pitch: float = 1.0, checkpoint=None) -> ModuleRender:
+    """Le rendu, PLUS l'offset où commence chaque position d'ordre, PLUS le pic de chaque canal à chaque tick.
+
+    `marks[i]` = l'échantillon où débute la position d'ordre `i`, la première
+    fois qu'elle est jouée. C'est la frontière de motif que la « coupe à la
+    position » guette (`mmGetPosition` / `mmPosition` dans le runtime) : sans
+    ces repères, l'aperçu ne saurait ni quand couper, ni où reprendre l'autre
+    module. Un seul parcours produit les deux — un rendu et une table de
+    positions calculés séparément finiraient par diverger.
+
+    `tempo` et `pitch` sont les facteurs de `mmSetModuleTempo` / `mmSetModulePitch`
+    (1,0 = le fichier tel qu'il est ; la ROM les borne à 0,5–2,0). Le tempo raccourcit
+    ou allonge le TICK — les lignes passent plus vite, les échantillons gardent leur
+    hauteur — ; la hauteur multiplie la vitesse de lecture de chaque échantillon, donc sa
+    durée change avec elle. Mesuré sur ROM le 2026-10-11 : les deux prennent effet
+    appliqués juste après `mmStart`, et le facteur de tempo SE MULTIPLIE avec un
+    changement de tempo du morceau lui-même (`Fxx` à 250 bpm : ×2 ; facteur 200 % : ×2 ;
+    les deux : ×4) — d'où le facteur appliqué à chaque tick, quel que soit le tempo courant.
+
+    `checkpoint()` (facultatif) est appelé tous les `_CHECKPOINT_TICKS` ticks : il laisse un appelant abandonner le
+    rendu en levant `RenderCancelled`.
+    """
+    state = TickState(tempo=tempo, pitch=pitch)
+    out_l: list = []
+    out_r: list = []
+    marks: dict = {}
+    tick_starts: list = []
+    tick_peaks: list = []
+    written = 0        # échantillons déjà produits — l'horloge des repères
+    for order_pos, _row, rendered in iter_module_ticks(mod, mix_rate, state, guard=True):
+        marks.setdefault(order_pos, written)
+        if rendered is not None:
+            out_l.append(rendered[0])
+            out_r.append(rendered[1])
+            tick_starts.append(written)
+            tick_peaks.append(state.levels)
+            written += rendered[0].size
+            if checkpoint is not None and len(tick_starts) % _CHECKPOINT_TICKS == 0:
+                checkpoint()
+    n_ch = max(1, mod.num_channels)
+    if not out_l:
+        empty = ChannelLevels(np.zeros(0, dtype=np.int64), np.zeros((0, n_ch), dtype=np.float32))
+        return ModuleRender(np.zeros((0, 2), dtype=np.int16), {}, empty)
+    levels = ChannelLevels(np.asarray(tick_starts, dtype=np.int64), np.stack(tick_peaks))
+    return ModuleRender(to_stereo16(np.concatenate(out_l), np.concatenate(out_r)), marks, levels)

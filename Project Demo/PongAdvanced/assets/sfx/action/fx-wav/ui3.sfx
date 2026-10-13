@@ -1,0 +1,13 @@
+{
+  "name": "ui3",
+  "id": "f6690c5e6857",
+  "asset": "assets/sfx/action/fx-wav/ui3.wav",
+  "volume": 100,
+  "sample_rate": 0,
+  "trim_start": 0,
+  "trim_end": 0,
+  "pitch": 100,
+  "panning": 0,
+  "pitch_variation": 0,
+  "fade_out": 0
+}

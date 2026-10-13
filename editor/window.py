@@ -538,7 +538,7 @@ class MainWindow(QMainWindow):
             EditorScreen("Animations",  self._make_sprite_editor),
             EditorScreen("Palettes",    self._make_palette_editor),
             EditorScreen("Texts",       self._make_text_editor),
-            EditorScreen("Sounds",      self._make_sound_mixer),
+            EditorScreen("Sounds",      self._make_sound_mixer,           build_panel_open=True),
             EditorScreen("Scripts",     self._make_script_editor,         build_panel_open=True),
         ] + plugin_screens()
 
@@ -1267,6 +1267,10 @@ class MainWindow(QMainWindow):
                 self._status.showMessage(
                     label("win.screen_error", name=spec.name, error=exc), 8000)
                 return
+        if spec.name == "Sounds":
+            store = self.assets_finder_panel.folder_store
+            if store is not None:
+                widget.set_folder_store(store)
         self._project_loaded_screen_indices.add(index)
 
     def _refresh_screen_for_project(self, index: int):
@@ -1539,7 +1543,8 @@ class MainWindow(QMainWindow):
             delete_items=self._disk_delete_items, deletable=self._disk_deletable,
             import_files=self._disk_import_files, import_paths=self._disk_import_paths,
             create_blank=self._disk_create_blank,
-            new_folder=self._create_disk_folder, blank_kinds=kinds, edit_externally=self._edit_externally)
+            new_folder=self._create_disk_folder, blank_kinds=kinds, edit_externally=self._edit_externally,
+            duplicate_items=self._disk_duplicate_items, duplicable=self._disk_duplicable)
 
     def _edit_externally(self, path: Path) -> None:
         """Ouvre `path` dans l'éditeur de texte des réglages « External Tools », sinon dans l'application du système."""
@@ -1586,6 +1591,54 @@ class MainWindow(QMainWindow):
             return
         message = label("disk.created", name=created[0]) if len(created) == 1 else label("disk.created_many", n=len(created))
         self._status.showMessage(" ".join([message, *warnings, *errors]), 8000 if errors else 6000)
+
+    def _disk_duplicable(self, node) -> bool:
+        """Une source se duplique (libre ou citée : la copie est une source libre) ; un asset du projet aussi (sa famille a un
+        catalogue), un script (c'est un fichier) ; les textes et les variables, un fichier pour tout le projet, non, et ni un
+        dossier ni un fichier que l'éditeur ne lit pas."""
+        from core import asset_duplication
+        if not self.project:
+            return False
+        if node.kind in (disk_tree.FREE_SOURCE, disk_tree.LINKED_SOURCE):
+            return True
+        return node.kind == disk_tree.ASSET and (
+            node.family == "scripts" or asset_duplication.is_duplicable(self.project, node.family))
+
+    def _disk_duplicate_items(self, nodes: list):
+        """*Duplicate* : une copie de chaque asset choisi, qui pointe la même source et naît à côté de l'original, et de chaque
+        source (copie du fichier, source libre) ; UNE entrée d'historique pour le lot, les noms uniques entre eux."""
+        if not self.project or not nodes:
+            return
+        from core import asset_duplication
+        from core.lua_scripts import lua_files
+        commands, copied = [], []
+        sources = [node for node in nodes if node.kind != disk_tree.ASSET]
+        nodes = [node for node in nodes if node.kind == disk_tree.ASSET]
+        if sources:
+            command, targets = asset_duplication.duplicate_sources([node.path for node in sources])
+            commands.append(command)
+            copied += [target.name for target in targets]
+        families = list(dict.fromkeys(node.family for node in nodes))
+        for family in families:
+            group = [node for node in nodes if node.family == family]
+            if family == "scripts":
+                taken = {path.stem for path in lua_files(self.project)}
+                for node in group:
+                    command, target = asset_duplication.duplicate_script(node.path, taken)
+                    taken.add(target.stem)
+                    commands.append(command)
+                    copied.append(target.stem)
+                continue
+            store = getattr(self.project, family)
+            items = [item for item in (store.get(node.owner) for node in group) if item is not None]
+            for duplication in asset_duplication.duplicate_many(self.project, family, items):
+                commands.append(duplication.command)
+                copied.append(duplication.item.name)
+        if not commands:
+            return
+        self._disk_push(commands[0] if len(commands) == 1 else MacroCmd(commands, f"Dupliquer {len(commands)} assets"))
+        self._status.showMessage(label("disk.duplicated", name=copied[0]) if len(copied) == 1
+                                 else label("disk.duplicated_many", n=len(copied)), 6000)
 
     def _disk_deletable(self, node) -> bool:
         """Tout se supprime depuis l'onglet Disk, sauf les tables de tout le projet (textes, variables) — et un

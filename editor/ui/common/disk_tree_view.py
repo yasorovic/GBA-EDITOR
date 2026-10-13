@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import QHBoxLayout, QLabel, QMenu, QTreeWidget, QTreeWidget
 from core import disk_tree
 from ui.common import icons
 from ui.common.disk_view import (
-    DRAGGING_ROLE, MIME_DISK_PATHS, DiskCallbacks, DragDimDelegate, DropCheckMixin, add_asset_actions, add_folder_color_actions, bind_delete_key, disk_mime,
+    DRAGGING_ROLE, MIME_DISK_PATHS, DiskCallbacks, DragDimDelegate, DropCheckMixin, add_asset_actions, add_folder_color_actions, bind_delete_key, bind_duplicate_key, disk_mime,
     dropped_paths, file_icon, mark_color, mark_text, openable, paint_drop_target, renamable, show_plus_menu, show_sort_menu, sort_nodes, SORT_MODES,
 )
 from ui.common.labels import label
@@ -239,6 +239,7 @@ class DiskTreeView(QWidget):
         self._tree.itemClicked.connect(self._on_clicked)
         self._tree.itemDoubleClicked.connect(self._on_double_clicked)
         bind_delete_key(self._tree, self._selected_nodes, lambda: self._callbacks)
+        bind_duplicate_key(self._tree, self._selected_nodes, lambda: self._callbacks)
         self._tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._tree.customContextMenuRequested.connect(self._on_context_menu)
         self._callbacks: DiskCallbacks | None = None

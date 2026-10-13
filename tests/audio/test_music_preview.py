@@ -23,9 +23,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import module_fixtures as F                                            # noqa: E402
 from core.engine_emulation.module_render import GBA_MIX_RATE, render_module  # noqa: E402
 from core.engine_emulation.music_deck import MODULE_FULL, MusicDeck, Track  # noqa: E402
-from core.engine_emulation.wav_render import render_wav                # noqa: E402
 from core.engine_emulation.xm_file import parse_xm                     # noqa: E402
 from core.models.audio import Music, MusicSection, UNIT_MS              # noqa: E402
+from core.music_structure import wav_section_orders                    # noqa: E402
 
 # 100 échantillons par frame ; 400 par ordre, donc 4 frames par ordre.
 MIX = 6000
@@ -94,21 +94,6 @@ def test_le_drapeau_ne_peut_pas_eteindre_une_boucle_de_section():
     assert deck.looping
     deck.set_looping(False)
     assert deck.looping          # la ROM le démarre toujours en MM_PLAY_LOOP
-
-
-# ── La boucle d'échantillon d'un WAV ──────────────────────────────
-
-
-def test_une_boucle_d_echantillon_ne_s_arrete_jamais():
-    pcm = np.zeros((1000, 2), dtype=np.int16)
-    pcm[:, 0] = np.arange(1000)
-    deck = MusicDeck(MIX)
-    deck.play(Track(pcm=pcm, sample_loop=(400, 1000)), MODULE_FULL, loop=False)
-    out = deck.pull(2600)[:, 0]
-    assert deck.playing
-    assert list(out[1000:1003]) == [400, 401, 402]          # le retour au début de la boucle
-    assert list(out[1600:1603]) == [400, 401, 402]
-    assert out.min() == 0 and out[1000:].min() == 400       # l'intro ne revient pas
 
 
 # ── Les fondus, comme la ROM ──────────────────────────────────────
@@ -211,25 +196,43 @@ def _wav(path: Path, seconds: float = 3.0, rate: int = 44100) -> Path:
     return path
 
 
-def test_un_wav_sans_boucle_garde_sa_duree(tmp_path):
-    track = render_wav(_wav(tmp_path / "a.wav"))
-    assert abs(len(track.pcm) / GBA_MIX_RATE - 3.0) < 0.01
-    assert track.sample_loop is None
+def _wav_track(player, tmp_path, **kw):
+    path = _wav(tmp_path / "a.wav", **{k: kw.pop(k) for k in ("seconds", "rate") if k in kw})
+    music = Music(name="W", asset="a.wav", unit=UNIT_MS, **kw)
+    return player._render_file(SimpleNamespace(asset_abs=lambda rel: path), music, "W"), music, path
 
 
-def test_un_wav_a_boucle_ne_garde_que_l_intro_et_la_boucle(tmp_path):
-    track = render_wav(_wav(tmp_path / "a.wav"), loop_ms=(500, 2000))
-    assert abs(len(track.pcm) / GBA_MIX_RATE - 2.0) < 0.05           # le final n'y est pas
-    start, end = track.sample_loop
-    assert end == len(track.pcm) and abs(start / GBA_MIX_RATE - 0.5) < 0.05
+def test_un_wav_sans_section_garde_sa_duree(player, tmp_path):
+    track, _music, _path = _wav_track(player, tmp_path)
+    assert abs(len(track.pcm) / GBA_MIX_RATE - 3.0) < 0.02
+    assert track.loop_orders is None and not track.forces_loop
 
 
-def test_le_taux_choisi_se_voit_dans_le_rendu(tmp_path):
+def test_un_wav_est_joue_comme_le_module_que_le_build_ecrit(player, tmp_path):
+    """Deux sections = deux positions d'ordre, avec leurs repères : le deck coupe et reboucle comme pour un module."""
+    track, music, path = _wav_track(
+        player, tmp_path, loop_section="Main",
+        sections=[MusicSection("Intro", start=0, end=500), MusicSection("Main", start=500, end=2000, loop=True)])
+    assert track.order_count == 3                    # l'intro, la boucle, la fin de piste
+    assert sorted(track.marks) == [0, 1, 2]
+    assert track.loop_orders == (1, 2)
+    assert track.loop_orders == wav_section_orders(music, path)[1][1:]
+    # Les repères tombent sur les frontières, à une ligne près.
+    assert abs(track.marks[1] / GBA_MIX_RATE - 0.5) < 0.012 and abs(track.marks[2] / GBA_MIX_RATE - 2.0) < 0.012
+
+
+def test_la_duree_d_un_wav_en_sections_ne_derive_pas(player, tmp_path):
+    """Les lignes du rendu ont la durée de la ROM : trois secondes restent trois secondes, découpées ou non."""
+    cut, _m, _p = _wav_track(player, tmp_path, sections=[MusicSection("A", start=0, end=1000),
+                                                         MusicSection("B", start=1000, end=2000)])
+    assert abs(len(cut.pcm) / GBA_MIX_RATE - 3.0) < 0.02
+
+
+def test_le_taux_choisi_se_voit_dans_le_rendu(player, tmp_path):
     """À 4 000 Hz l'échantillon est tenu 3 à 4 fois : le rendu change de marche, comme la ROM."""
-    src = _wav(tmp_path / "a.wav")
-    fine = render_wav(src, sample_rate=16726).pcm[:, 0]
-    coarse = render_wav(src, sample_rate=4000).pcm[:, 0]
-    runs = lambda a: int((np.diff(a) != 0).sum())
+    fine, _m, _p = _wav_track(player, tmp_path)
+    coarse, _m, _p = _wav_track(player, tmp_path, sample_rate=4000)
+    runs = lambda t: int((np.diff(t.pcm[:, 0]) != 0).sum())
     assert runs(coarse) < runs(fine) / 2
 
 
@@ -278,9 +281,24 @@ def test_deux_etats_qui_partagent_un_fichier_ne_se_marchent_pas_dessus(player, t
     assert with_fade.pcm is plain.pcm                      # le rendu, lui, est partagé
 
 
-def test_un_wav_a_section_donne_une_boucle_d_echantillon(player, tmp_path):
-    path = _wav(tmp_path / "w.wav")
-    music = Music(name="W", asset="w.wav", unit=UNIT_MS, loop_section="L", sample_rate=11025,
-                  sections=[MusicSection("L", start=500, end=2000, loop=True)])
-    track = player._render_file(_project_of(path), music, "W")
-    assert track.sample_loop is not None and track.loop_orders is None
+def test_un_long_wav_est_rendu_en_entier(player, tmp_path):
+    """Plus de 4 096 lignes (47 s) : le rendu ne s'arrête plus au garde-fou contre les boucles sans fin."""
+    path = _wav(tmp_path / "long.wav", seconds=60.0, rate=8000)
+    music = Music(name="L", asset="long.wav", unit=UNIT_MS,
+                  sections=[MusicSection("A", start=0, end=20000), MusicSection("B", start=20000, end=40000)])
+    track = player._render_file(SimpleNamespace(asset_abs=lambda rel: path), music, "L")
+    assert abs(len(track.pcm) / GBA_MIX_RATE - 60.0) < 0.05
+
+
+# ── Les curseurs : volume, tempo, hauteur ─────────────────────────
+
+
+def test_le_volume_change_tout_de_suite_et_pas_pendant_un_fondu_d_entree():
+    deck = MusicDeck(MIX)
+    deck.play(_tracker(), 1024, loop=True)
+    deck.set_volume(512)
+    assert deck._vol == 512
+    fading = MusicDeck(MIX)
+    fading.play(_tracker(fade_in=10), 1024, loop=True)
+    fading.set_volume(512)
+    assert fading._vol == 0 and fading._to_vol == 512      # la rampe monte vers le nouveau niveau

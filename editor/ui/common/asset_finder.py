@@ -43,17 +43,19 @@ from PyQt6.QtWidgets import (
     QAbstractItemView, QMessageBox, QSizePolicy, QScrollArea, QHeaderView,
 )
 from PyQt6 import sip
-from PyQt6.QtGui import QFont, QColor, QDrag
+from PyQt6.QtGui import QFont, QColor, QDrag, QCursor, QKeySequence, QShortcut
 from PyQt6.QtCore import (
     Qt, pyqtSignal, QRect, QSize, QTimer, QMimeData, QByteArray, QItemSelectionModel,
 )
 
 from ui.common.theme import C, T, S, QSS, ui_font
 from ui.common.selection_grammar import RowSelectionDelegate
+from ui.common import finder_fold_state as fold_state
 from ui.common.widgets import W, FinderSection
 from ui.common.icons import get as _ico, folder_icon, COLOR_DEFAULT, COLOR_FOLDER
 from ui.common.locate_bus import get_locate_bus
 from ui.common.reveal import reveal_in_file_manager
+from ui.common import shortcut_hints
 from core import disk_locate
 from core.asset_usages import usages_of
 from core.command_dispatcher import get_dispatcher
@@ -222,9 +224,6 @@ class AssetKind:
     add_tooltip_key: str = ""
     add_tip_key: str = ""
     empty_text_key: str = ""
-    # L'état initial est une propriété de la famille, non du finder qui la
-    # montre : une source encombrante peut démarrer repliée partout.
-    section_expanded: bool = True
     # La famille d'`AssetFolderStore` où ses assets se rangent en dossiers d'auteur
     # ("" = pas de dossiers : la famille s'affiche à plat ou en arbre deviné). Une
     # famille rangeable a des assets qui portent un `id` (tout `Resource`) — pas les
@@ -233,6 +232,10 @@ class AssetKind:
     folder_family: str = ""
     # Le « + » ouvre un menu de types à créer : il porte l'icône « + ▾ » plutôt que le « + » nu.
     add_menu: bool = False
+    # (projet, [asset]) -> [Duplication], commandes NON poussées (cf. `core.asset_duplication`). Prend le LOT d'un coup :
+    # les noms des copies doivent être uniques entre eux. Le finder les pousse en une entrée d'historique. Une famille
+    # sans `duplicate` n'offre ni l'entrée de menu ni Ctrl+D.
+    duplicate: Optional[Callable[[Any, list], list]] = None
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -422,12 +425,29 @@ class _KindTree(QTreeWidget):
         self.itemDoubleClicked.connect(self._on_double_clicked)
         self.customContextMenuRequested.connect(self._on_ctx_menu)
         self.itemChanged.connect(self._on_item_changed)
+        if kind.duplicate is not None:
+            from core.keybindings import bind
+            self._duplicate_shortcut = QShortcut(QKeySequence(), self)
+            self._duplicate_shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
+            self._duplicate_shortcut.activated.connect(lambda: self._duplicate(self._selected_objs()))
+            bind("common.duplicate", self._duplicate_shortcut)
         self.model().rowsInserted.connect(self._fit)
         self.model().rowsRemoved.connect(self._fit)
         self.itemExpanded.connect(self._fit)
         self.itemCollapsed.connect(self._fit)
         self.itemExpanded.connect(lambda it: self._refresh_folder_icon(it, True))
         self.itemCollapsed.connect(lambda it: self._refresh_folder_icon(it, False))
+        # `populate` tourne sous blockSignals : seuls les clics de l'auteur sont retenus.
+        self.itemExpanded.connect(lambda it: fold_state.set_expanded(self._folder_key(it), True))
+        self.itemCollapsed.connect(lambda it: fold_state.set_expanded(self._folder_key(it), False))
+
+    def _folder_key(self, item: QTreeWidgetItem) -> str:
+        """Chemin du dossier dans sa famille — c'est lui, pas l'item, qui survit au repeuplement."""
+        names = []
+        while item is not None and not sip.isdeleted(item):
+            names.append(item.text(0))
+            item = item.parent()
+        return "/".join(["folder", self._kind.label, *reversed(names)])
 
     # ── Locate : l'icône ferrée à droite de chaque asset ──────────
 
@@ -586,8 +606,9 @@ class _KindTree(QTreeWidget):
             item = QTreeWidgetItem(parent)
             item.setFont(0, ui_font(T.LG))
             if node.is_folder:
-                item.setIcon(0, folder_icon(True, node.color or COLOR_FOLDER))
                 item.setText(0, node.name)
+                expanded = fold_state.is_expanded(self._folder_key(item))
+                item.setIcon(0, folder_icon(expanded, node.color or COLOR_FOLDER))
                 item.setForeground(0, QColor(C.TEXT_DIM))
                 # Un dossier d'AUTEUR (folder_id) est renommable et accueille un
                 # drop ; un dossier deviné n'a ni l'un ni l'autre.
@@ -598,7 +619,7 @@ class _KindTree(QTreeWidget):
                                        | Qt.ItemFlag.ItemIsDropEnabled)
                                       & ~Qt.ItemFlag.ItemIsDragEnabled)
                 self._fill(item, node.children)
-                item.setExpanded(True)
+                item.setExpanded(expanded)
             else:
                 item.setIcon(0, self._kind.icon_of(node.obj) if self._kind.icon_of
                                 else _ico(self._kind.icon, self._kind.color))
@@ -967,6 +988,13 @@ class _KindTree(QTreeWidget):
             # clic. On retrouve la ligne par identité au moment de l'action.
             act.triggered.connect(lambda _=False, o=obj: self.edit_obj(o))
 
+        if kind.duplicate is not None:
+            if not menu.isEmpty() and kind.rename is None:
+                menu.addSeparator()
+            dup = menu.addAction(label('common.duplicate'))
+            dup.setShortcut(shortcut_hints.bound("common.duplicate"))
+            dup.triggered.connect(lambda _=False, o=obj: self._duplicate([o]))
+
         scheme = self._panel.folder_scheme(kind.label)
         if scheme is not None:
             if scheme.group is not None:
@@ -1023,6 +1051,10 @@ class _KindTree(QTreeWidget):
         menu = QMenu(self)
         menu.setStyleSheet(QSS.menu)
         menu.setFont(QFont(T.UI, T.MD))
+        if kind.duplicate is not None:
+            dup = menu.addAction(label('assetfind.duplicate_selection', n=len(objs)))
+            dup.setShortcut(shortcut_hints.bound("common.duplicate"))
+            dup.triggered.connect(lambda _=False, os=list(objs): self._duplicate(os))
         scheme = self._panel.folder_scheme(kind.label)
         if scheme is not None:
             if scheme.group is not None:
@@ -1051,6 +1083,30 @@ class _KindTree(QTreeWidget):
                 lambda _=False, fid=folder.id, os=list(objs): self._move_many_to_folder(scheme, os, fid))
         menu.addAction(label('assetfind.remove_from_folder')).triggered.connect(
             lambda _=False, os=list(objs): self._move_many_to_folder(scheme, os, None))
+
+    def _duplicate(self, objs):
+        """Duplique des assets en UNE entrée d'historique (un Ctrl+Z défait tout le lot). Chaque copie naît à côté de
+        son original — dans le même dossier d'auteur — et, s'il n'y en a qu'une, s'ouvre en renommage en place."""
+        kind, project = self._kind, self._panel.project
+        if project is None or kind.duplicate is None or not objs:
+            return
+        copies = kind.duplicate(project, list(objs))
+        if not copies:
+            return
+        commands = [copy.command for copy in copies]
+        command = commands[0] if len(commands) == 1 else MacroCmd(commands, f"Duplicate {len(commands)} {kind.label.lower()}")
+        get_history().push(RefreshAfterCmd(command, self._panel.refresh))
+        scheme = self._panel.folder_scheme(kind.label)
+        if scheme is not None:
+            for source, copy in zip(objs, copies):
+                folder_id = scheme.folder_of(source)
+                if folder_id is not None:
+                    scheme.move(copy.item, folder_id)
+            self._panel.folders_changed.emit()
+        self._panel.refresh()
+        get_dispatcher().status(label('assetfind.duplicated', n=len(copies)))
+        if len(copies) == 1 and kind.rename is not None:
+            self.edit_obj(copies[0].item)
 
     def _delete(self, obj):
         kind, project = self._kind, self._panel.project
@@ -1159,7 +1215,7 @@ class AssetFinder(QWidget):
             # Titre en tons de thème : les finders n'ont plus de code couleur
             # par famille, la distinction se fait à la forme de l'icône.
             section = FinderSection(label(kind.label_key) if kind.label_key else kind.label)
-            section.set_expanded(kind.section_expanded)
+            section.remember_fold(f"section/{kind.label}")
             tree = _KindTree(self, kind)
             self._trees[kind.label] = tree
             self._sections[kind.label] = section
@@ -1345,6 +1401,12 @@ class AssetFinder(QWidget):
             self._folder_schemes.pop(kind_label, None)
         else:
             self._folder_schemes[kind_label] = scheme
+            # Une famille qui sait se créer elle-même (`add`) et se ranger a maintenant DEUX gestes sous
+            # son « + » — un asset, un dossier — donc un choix : il prend l'icône « + ▾ ». (Une famille qui
+            # délègue à l'écran, comme les scènes, a déjà son menu et son icône.)
+            kind = next((k for k in self._kinds if k.label == kind_label), None)
+            if kind is not None and kind.add is not None and kind_label in self._sections:
+                self._sections[kind_label].set_add_menu(True)
         tree = self._trees.get(kind_label)
         if tree is not None:
             tree._configure_dnd()
@@ -1354,7 +1416,7 @@ class AssetFinder(QWidget):
         """Ajoute une entrée au menu contextuel d'une famille, DANS CET ÉCRAN.
 
         Ce qu'une famille sait faire d'elle-même vit dans `AssetKind.actions`
-        (dupliquer une palette : vrai partout). Ce qui dépend de l'écran passe
+        (relier une source : vrai partout). Ce qui dépend de l'écran passe
         par ici — « Voir les instances » suppose un inspecteur pour les
         afficher, que seul le Scene Manager possède."""
         self._extra_actions.setdefault(kind_label, []).append((text, fn))
@@ -1370,6 +1432,26 @@ class AssetFinder(QWidget):
         if kind.add is None:
             self.add_requested.emit(kind.label)   # l'écran prend la main
             return
+        scheme = self._folder_schemes.get(kind.label)
+        if scheme is not None:
+            self._add_menu(kind, scheme).exec(QCursor.pos())
+            return
+        self._add_asset(kind)
+
+    def _add_menu(self, kind: AssetKind, scheme: FolderScheme) -> QMenu:
+        """Le menu du « + » d'une famille rangeable : un asset, ou un dossier. Le dossier naît nommé d'office
+        et s'ouvre en renommage en place, comme l'asset — jamais une fenêtre de saisie."""
+        menu = QMenu(self)
+        menu.setStyleSheet(QSS.menu)
+        menu.setFont(QFont(T.UI, T.MD))
+        menu.addAction(label(kind.add_tooltip_key) if kind.add_tooltip_key
+                       else kind.add_tooltip or label('assetfind.add_an_item')
+                       ).triggered.connect(lambda _=False, k=kind: self._add_asset(k))
+        menu.addAction(label('assetfind.new_folder')).triggered.connect(
+            lambda _=False, k=kind, s=scheme: self._trees[k.label]._create_folder(s, None))
+        return menu
+
+    def _add_asset(self, kind: AssetKind):
         obj = kind.add(self._project)
         self.refresh()
         if obj is not None:

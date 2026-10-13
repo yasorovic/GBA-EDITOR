@@ -78,8 +78,8 @@ def _project_with_settings(tmp_path) -> Project:
 
     ambient = create(project, "music", music / "Ambient.wav")
     ambient.unit = UNIT_MS
-    ambient.sections = [MusicSection("Loop", start=500, end=2500, loop=True)]
-    ambient.loop_section = "Loop"
+    ambient.sections = [MusicSection("Zone", start=500, end=2500, loop=True)]
+    ambient.loop_section = "Zone"
     ambient.sample_rate = 11025
     project.save_music(ambient)
 
@@ -126,23 +126,25 @@ def test_des_musiques_reglees_produisent_une_rom(tmp_path):
     assert ok is True and not errors, "ne builde pas :\n  " + "\n  ".join(errors)
     assert project.rom_path.is_file() and project.rom_path.stat().st_size > 1024
 
-    # La table : une ligne pour le morceau réglé, aucune pour le WAV (sa boucle est dans le module).
+    # La table : une ligne pour le morceau réglé, et une pour le WAV — qui est un module comme lui : sa
+    # section « Zone » (500-2500 ms) est la plage d'ordres [1, 2) du module que le build a écrit.
     main_c = (project.src_dir / "main.c").read_text(encoding="utf-8")
     assert "[MOD_THEME] = { 2, 6, 1229, 1126, 30, 60 }" in main_c
-    assert "MOD_AMBIENT" not in main_c.split("g_music_info[MSL_NSONGS + 1]")[1].split("};")[0]
+    assert "[MOD_AMBIENT] = { 1, 2, 0, 0, 0, 0 }" in main_c
     assert "void music_play(int id, int loop, int volume){" in main_c
     assert "music_loop_tick();" in main_c
     # Le script, lui, appelle les six surcharges, et la table de main.c porte la section citée.
     sources = "\n".join(f.read_text(encoding="utf-8", errors="replace")
                         for f in project.src_dir.glob("*.c"))
     assert "music_set_section(MSEC_MAIN)" in sources and "music_leave_loop()" in sources
-    # Rangs triés : Intro = 0, Main = 1 — les mêmes que les `#define MSEC_*` du script.
+    # Rangs triés : Intro = 0, Main = 1, Zone = 2 — les mêmes que les `#define MSEC_*` du script.
     assert "{ MOD_THEME, 0, 0, 2 }" in main_c and "{ MOD_THEME, 1, 2, 6 }" in main_c
-    assert "#define MSEC_INTRO 0" in sources and "#define MSEC_MAIN 1" in sources
+    assert "{ MOD_AMBIENT, 2, 1, 2 }" in main_c
+    assert "#define MSEC_INTRO 0" in sources and "#define MSEC_MAIN 1" in sources and "#define MSEC_ZONE 2" in sources
 
-    # Le WAV : encapsulé avec sa boucle et son taux, et dit dans le journal.
-    assert any("loops 500-2500 ms, 11025 Hz" in line for line in logs)
+    # Le WAV : encapsulé en module avec ses sections et son taux, et dit dans le journal.
+    assert any("1 section(s), 11025 Hz" in line for line in logs)
     module = project.build_dir / "music" / "Ambient.xm"
     assert module.is_file()
-    # 2,5 s à 11 025 Hz : ce qui suit la boucle n'est pas dans la ROM.
-    assert module.stat().st_size < 3.0 * 11025 + 2000
+    # 3 s à 11 025 Hz, TOUTE la piste (ce qui suit la section est son outro) : un échantillon par segment.
+    assert 2.9 * 11025 < module.stat().st_size < 3.0 * 11025 + 4000

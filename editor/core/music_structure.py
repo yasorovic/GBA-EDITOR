@@ -22,10 +22,19 @@ from core.models.audio import (
     FADE_MAX_FRAMES, PITCH_MAX, PITCH_MIN, TEMPO_MAX, TEMPO_MIN,
     UNIT_MS, UNIT_ORDER, Music, pitch_to_module, tempo_to_module,
 )
-from core.wav_module import CUT_WAIT_SECONDS, MUSIC_SAMPLE_RATE_MIN, WAV_MUSIC_RATE
+from core.wav_module import (
+    CUT_WAIT_SECONDS, MUSIC_SAMPLE_RATE_MIN, WAV_MUSIC_RATE, WavPlan, effective_rate, plan_wav,
+    wav_seconds, wav_to_xm,
+)
 
 ERROR = "error"
 WARNING = "warning"
+
+# Une section WAV ne peut pas être plus courte : elle tiendrait en moins de quelques lignes du module
+# (une ligne = ~11 ms) et l'oreille n'y trouverait plus de musique. L'éditeur le tient aux poignées comme au tableau.
+MIN_SECTION_MS = 50
+# Le plus de sections qu'une musique en propose : l'éditeur les tient toutes à l'écran, sans défilement.
+MAX_SECTIONS = 6
 
 
 def is_wav_asset(asset: Optional[str]) -> bool:
@@ -59,18 +68,21 @@ def jingle_ignored_settings(music: Music) -> list[str]:
 # l'éditeur la lit aussi : un seul calcul pour la ROM et pour ce qu'on entend, sinon
 # l'un des deux finit par régler autre chose que l'autre (cf. ROADMAP « L'asset .music »).
 
-def music_info_row(m) -> tuple[int, int, int, int, int, int]:
+def music_info_row(m, path=None) -> tuple[int, int, int, int, int, int]:
     """(début de boucle, fin de boucle, tempo, hauteur, fondu d'entrée, fondu de sortie).
 
-    Ce qu'un WAV n'a PAS ici, et pourquoi : sa boucle est dans le module lui-même
-    (l'échantillon boucle, cf. `wav_module`), et son tempo comme sa hauteur sont des
-    réglages du MODULE — qui n'a qu'une note, calée sur la durée de la piste : les
-    changer la couperait avant sa fin ou la laisserait finir en silence."""
+    `path` est le fichier de la musique : un WAV en a besoin, parce que ses sections sont en millisecondes
+    et que la ROM les lit en positions d'ordre (`wav_section_orders`). Un module tracker n'en a pas besoin.
+
+    Ce qu'un WAV n'a PAS ici, et pourquoi : son tempo comme sa hauteur sont des réglages du MODULE, et
+    celui d'un WAV est calé sur la durée de la piste — les changer décalerait les segments les uns par
+    rapport aux autres (les lignes iraient plus vite, pas les échantillons)."""
     wav = is_wav_asset(m.asset)
     start = end = 0
-    section = m.section(m.loop_section) if m.loop_section else None
-    if section is not None and not wav and m.unit == UNIT_ORDER and 0 <= section.start < section.end:
-        start, end = section.start, section.end
+    if m.loop_section:
+        for name, first, last in music_section_rows(m, path):
+            if name == m.loop_section:
+                start, end = first, last
     tempo = 0 if wav or m.tempo == 100 else tempo_to_module(m.tempo)
     pitch = 0 if wav or m.pitch == 100 else pitch_to_module(m.pitch)
     fade_in = max(0, min(FADE_MAX_FRAMES, int(m.fade_in)))
@@ -78,13 +90,16 @@ def music_info_row(m) -> tuple[int, int, int, int, int, int]:
     return start, end, tempo, pitch, fade_in, fade_out
 
 
-def music_section_rows(music: Music) -> list[tuple[str, int, int]]:
-    """Les sections d'un module que `music.set_section` peut atteindre, en (nom, début, fin).
+def music_section_rows(music: Music, path=None) -> list[tuple[str, int, int]]:
+    """Les sections que `music.set_section` peut atteindre, en (nom, début, fin) — des positions d'ordre.
 
-    Des positions d'ordre : un WAV n'a qu'une boucle, posée au build, et ne change pas
-    de section à l'exécution. Une plage vide, inversée ou d'une autre unité n'en est pas
-    une — le validateur la signale."""
-    if is_wav_asset(music.asset) or music.unit != UNIT_ORDER:
+    Pour un module tracker c'est le modèle tel quel. Pour un WAV, les millisecondes du modèle sont
+    traduites par le plan du build (`wav_section_orders`), qui a besoin du fichier : sans `path`, un WAV
+    n'a pas de ligne. Une plage vide, inversée ou d'une autre unité n'en est pas une — le validateur la
+    signale."""
+    if is_wav_asset(music.asset):
+        return wav_section_orders(music, path) if path is not None else []
+    if music.unit != UNIT_ORDER:
         return []
     return [(s.name, s.start, s.end) for s in music.sections if 0 <= s.start < s.end]
 
@@ -98,22 +113,52 @@ def music_section_names(musics) -> list[str]:
     from core.models.audio import Jingle
     names: set = set()
     for m in musics:
-        if not isinstance(m, Jingle):
-            names.update(name for name, _s, _e in music_section_rows(m))
+        if isinstance(m, Jingle):
+            continue
+        if m.unit == (UNIT_MS if is_wav_asset(m.asset) else UNIT_ORDER):
+            names.update(s.name for s in m.sections if 0 <= s.start < s.end)
     return sorted(names)
 
 
-def wav_loop_region(music: Music) -> Optional[tuple[int, int]]:
-    """La section de boucle d'une musique WAV, en millisecondes, ou None.
+def wav_boundaries(music: Music) -> list[int]:
+    """Les frontières (début ET fin de chaque section) où le build coupe une piste WAV, en millisecondes.
 
-    Lue par le build (`wav_module.encode_music_for_build`) et par rien d'autre : c'est
-    l'unique endroit où une section devient un réglage du module. Une section dans
-    une autre unité, vide ou inconnue n'est pas une région — le validateur la signale,
-    le build n'invente rien."""
-    section = music.section(music.loop_section) if music.loop_section else None
-    if section is None or music.unit != UNIT_MS or not 0 <= section.start < section.end:
+    Lues par le build et par l'aperçu : c'est l'unique endroit où des sections deviennent des segments. Une
+    section dans une autre unité ou vide n'en pose pas — le validateur la signale, le build n'invente rien."""
+    if music.unit != UNIT_MS:
+        return []
+    bounds: set = set()
+    for section in music.sections:
+        if 0 <= section.start < section.end:
+            bounds.update((section.start, section.end))
+    return sorted(bounds)
+
+
+def wav_plan(music: Music, path) -> Optional[WavPlan]:
+    """Le plan de découpe de la piste WAV de `music` (où tombent ses segments), ou None si le fichier n'est
+    pas convertible — le validateur en dit la cause."""
+    try:
+        return plan_wav(wav_seconds(path), effective_rate(music.sample_rate), wav_boundaries(music))
+    except ValueError:
         return None
-    return section.start, section.end
+
+
+def wav_section_orders(music: Music, path) -> list[tuple[str, int, int]]:
+    """Les sections d'une musique WAV, en (nom, début, fin) de POSITIONS D'ORDRE — ce que la ROM lit.
+
+    La seule traduction des millisecondes du modèle en ordres : `music_info_row`, la table des sections de
+    `main.c` et l'aperçu passent tous par ici, comme le build passe par le même plan. Une section dont les
+    deux bords tombent sur la même ligne (moins de ~11 ms) est vide et disparaît."""
+    plan = wav_plan(music, path)
+    if plan is None or music.unit != UNIT_MS:
+        return []
+    rows = []
+    for section in music.sections:
+        if 0 <= section.start < section.end:
+            first, last = plan.order_at(section.start), plan.order_at(section.end)
+            if first < last:
+                rows.append((section.name, first, last))
+    return rows
 
 
 def cut_problems(src_name: str, dst_name: str, src_module, dst_module, *,
@@ -233,9 +278,12 @@ def music_problems(music: Music, path,
                                     "plays about 16 kHz at most)."))
 
     if unit == UNIT_MS and (music.tempo != 100 or music.pitch != 100):
-        problems.append((WARNING, "tempo and pitch do not apply to a WAV track: it is a module of one "
-                                  "note, timed to the length of the track — changing them would cut "
-                                  "it short or let it finish in silence. They are ignored."))
+        problems.append((WARNING, "tempo and pitch do not apply to a WAV track: its sections are samples "
+                                  "chained by the module's lines — speeding the lines up would not speed "
+                                  "the samples, and the sections would drift apart. They are ignored."))
+    if len(music.sections) > MAX_SECTIONS:
+        problems.append((WARNING, f"{len(music.sections)} sections: the editor offers {MAX_SECTIONS} at most "
+                                  "and will not let a new one be added."))
     if music.loop_section and not music.loop:
         problems.append((WARNING, f"the loop flag is off but the loop section \"{music.loop_section}\" "
                                   "is set: a module with a loop section never ends, so it loops "
@@ -295,8 +343,39 @@ def music_problems(music: Music, path,
                                       "— it will not loop."))
 
     if unit == UNIT_MS:
-        loops = [s.name for s in music.sections if s.loop]
-        if len(loops) > 1:
-            problems.append((ERROR, f"a WAV has one native loop, and {len(loops)} sections have "
-                                    f"loop on ({', '.join(loops)})."))
+        try:
+            plan = plan_wav(wav_seconds(path), effective_rate(music.sample_rate), wav_boundaries(music))
+        except ValueError as exc:
+            problems.append((ERROR, str(exc)))
+        else:
+            kept = {name for name, _a, _b in wav_section_orders(music, path)}
+            for sec in music.sections:
+                if 0 <= sec.start < sec.end and sec.name not in kept:
+                    problems.append((ERROR, f"section \"{sec.name}\" is shorter than one line of the "
+                                            "module (about 11 ms): it would be empty."))
     return problems
+
+
+# ── Le poids en ROM ──────────────────────────────────────────────
+
+# Au-delà de ces tailles, UNE musique pèse lourd dans une cartouche de jeu : la pastille de l'éditeur
+# vire à l'orange puis au rouge.
+WEIGHT_WARN_BYTES = 1 << 20
+WEIGHT_HIGH_BYTES = 2 << 20
+
+
+def weight_level(size: int) -> str:
+    """"ok", "warn" ou "high" : la gravité du poids d'une musique."""
+    if size > WEIGHT_HIGH_BYTES:
+        return "high"
+    return "warn" if size > WEIGHT_WARN_BYTES else "ok"
+
+
+def wav_rom_bytes(music: Music, path: Path) -> Optional[int]:
+    """Ce que pèsera une musique WAV en ROM, sans build : c'est le module que le build écrit, au taux et
+    avec les sections que le build utilisera (`wav_to_xm`). None si le WAV n'est pas convertible — le
+    validateur en dit la cause."""
+    try:
+        return len(wav_to_xm(path, effective_rate(music.sample_rate), wav_boundaries(music)))
+    except ValueError:
+        return None

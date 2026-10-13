@@ -203,6 +203,34 @@ class Sfx(_MigrateVolumeMixin, Resource):
     # fichier de `assets/` n'est jamais réécrit. On peut donc remonter le taux
     # après coup sans avoir rien perdu (ROADMAP v0.8.1).
     sample_rate: int = 0
+    # La plage GARDÉE du fichier, en ms depuis son début. Le fichier n'est jamais touché : le build ne rend que cette
+    # plage (cf. `core/sfx_render.py`), et le poids ROM suit. `trim_end` à 0 = jusqu'à la fin du fichier ; les deux à
+    # 0 = l'effet entier, ce que lisent aussi les sidecars d'avant ces champs.
+    trim_start: int = 0
+    trim_end: int = 0
+    # Hauteur et panoramique PAR DÉFAUT : celles avec lesquelles l'effet démarre. La règle du volume — la ressource
+    # propose, l'API surcharge : `sfx:set_pitch` / `sfx:set_panning` posent une valeur ABSOLUE sur une lecture, quelle que
+    # soit celle de la ressource. Pourcentage de la hauteur d'origine (100 = le fichier tel quel, 200 = une octave plus
+    # haut) et −100 (gauche) .. +100 (droite). Rien ne s'écrit dans la ROM : la console les lit dans deux tables, au
+    # lancement de l'effet (cf. `sfx_play`).
+    pitch: int = 100
+    panning: int = 0
+    # Variation aléatoire de la hauteur : à chaque lecture l'effet démarre à `pitch` ± ce pourcentage, tiré au hasard
+    # (0 = toujours la même). Ce qui rend naturels les sons qui se répètent — pas, coups, pièces. Le tirage a son propre
+    # générateur, côté console : un effet qui varie ne consomme jamais le `math.rand` du jeu.
+    pitch_variation: int = 0
+    # Fondu de sortie, en FRAMES (1/60 s) comme tous les fondus de l'éditeur : l'effet descend linéairement à zéro sur ses
+    # dernières frames. Cuit dans l'échantillon par le build (cf. `core/sfx_render.py`) — rien ne se calcule sur la console ;
+    # c'est ce qui évite le clic d'une découpe qui tombe en plein signal.
+    fade_out: int = 0
+
+
+# La plage du réglage de hauteur d'un effet : deux octaves de chaque côté du fichier. `mm_sound_effect.rate` est un
+# facteur 6.10 que `pitch_to_rate` borne à 1–4096 ; en dessous d'un quart, un effet n'est plus qu'un grondement.
+SFX_PITCH_MIN = 25
+SFX_PITCH_MAX = 400
+# La variation aléatoire s'écrit ± en % de la hauteur de départ ; à 50 %, l'effet va d'une demi à une fois et demie sa hauteur.
+SFX_PITCH_VARIATION_MAX = 50
 
 
 # Extensions reconnues dans assets/sfx/ et assets/music/ (fichiers bruts
@@ -240,6 +268,11 @@ WAV_MUSIC_EXT = ".wav"
 # construit et l'effet est muet. C'est un FAIT sur le format, donc il vit ici ;
 # c'est `asset_reconciliation.check_audio_file` qui s'en sert pour dire non.
 WAV_BITS_OK = (8, 16)
+
+# Profondeurs qu'un WAV peut avoir à l'import, effet, musique ou jingle : l'éditeur décode lui-même le 24 et le 32 bits
+# (`core/sfx_render.read_wav`) et ne passe à mmutil qu'un 16 bits écrit dans le dossier de build (effet), ou un module
+# (musique, jingle) — jamais le fichier d'origine. `WAV_BITS_OK` reste ce que mmutil lit tel quel.
+WAV_BITS_DECODED = WAV_BITS_OK + (24, 32)
 
 
 def file_dialog_filter(label: str, exts) -> str:
@@ -326,8 +359,7 @@ class Music(_MigrateVolumeMixin, Resource):
     fade_in: int = 0           # frames
     fade_out: int = 0          # frames
     # WAV seulement : le taux auquel la piste devient un module. 0 = le défaut
-    # (`wav_module.WAV_MUSIC_RATE`). Un taux plus bas allonge ce qui tient dans
-    # un échantillon, au prix des aigus (cf. `wav_module.max_seconds`).
+    # (`wav_module.WAV_MUSIC_RATE`). Un taux plus bas allège la ROM, au prix des aigus.
     sample_rate: int = 0
 
     @classmethod
@@ -366,19 +398,6 @@ class Music(_MigrateVolumeMixin, Resource):
         self.sections = [s for s in self.sections if s.name != name]
         if self.loop_section == name:
             self.loop_section = next((s.name for s in self.sections if s.loop), "")
-
-    def set_single_loop(self, start: int, end: int, name: str = "Loop") -> "MusicSection":
-        """LA boucle d'un WAV (il n'en a qu'une, native) : la crée ou la déplace.
-
-        Les autres sections, s'il y en a, ne sont pas touchées — mais elles ne bouclent plus :
-        deux sections qui bouclent sur un WAV est une erreur du validateur."""
-        section = self.section(name) or self.add_section(start, end, name)
-        section.start, section.end, section.loop = start, end, True
-        for other in self.sections:
-            if other is not section:
-                other.loop = False
-        self.loop_section = section.name
-        return section
 
     def rename_section(self, old: str, new: str) -> None:
         """Renomme une section ET ce qui la cite : `loop_section` ne doit pas

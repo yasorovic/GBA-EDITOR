@@ -1522,6 +1522,19 @@ def _check_actor_name_collisions(ctx: ValidationContext):
             seen.setdefault(s, actor.name)
 
 
+def _sfx_trim_problem(sfx, path) -> str | None:
+    """La découpe d'un effet face à son fichier : elle peut décrire un son qui n'existe plus tel quel (fichier remplacé,
+    raccourci). None si elle tient, ou si le fichier ne se lit pas (`check_audio_file` le dit)."""
+    import wave
+    from core.sfx_render import trim_problem
+    try:
+        with wave.open(str(path)) as w:
+            total_ms = w.getnframes() * 1000 / max(1, w.getframerate())
+    except Exception:  # tolerated: unreadable WAV, `check_audio_file` reports it
+        return None
+    return trim_problem(sfx, total_ms)
+
+
 def _check_audio_files(ctx: ValidationContext):
     """Second filet derrière le refus à l'import : le ProjectWatcher crée aussi
     des ressources pour les fichiers déposés à la main dans assets/sfx/ et
@@ -1546,8 +1559,10 @@ def _check_audio_files(ctx: ValidationContext):
                 continue    # signalé une fois, en erreur, par `_check_missing_sources`
             if reason := check_audio_file(path, at_import=False):
                 ctx.error(None, f"{kind} \"{a.name}\" ({path.name}): {reason}")
-            elif kind != "SFX" and (reason := wav_too_long(path, a.sample_rate)):
+            elif kind != "SFX" and (reason := wav_too_long(path)):
                 ctx.warn(None, f"{kind} \"{a.name}\" ({path.name}): {reason} Playing it fails the build.")
+            elif kind == "SFX" and (reason := _sfx_trim_problem(a, path)):
+                ctx.warn(None, f"SFX \"{a.name}\": {reason} The whole effect goes into the ROM.")
 
     # `Scene.music` nomme une piste sans qu'aucun script ne la cite : c'est une
     # référence de plus à vérifier. En AVERTISSEMENT — le codegen sait ne pas

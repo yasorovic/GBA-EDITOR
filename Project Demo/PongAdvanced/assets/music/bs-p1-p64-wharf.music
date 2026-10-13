@@ -4,9 +4,17 @@
   "asset": "assets/music/bs-p1-p64-wharf.wav",
   "loop": true,
   "volume": 100,
-  "unit": "order",
-  "sections": [],
-  "loop_section": "",
+  "unit": "ms",
+  "sections": [
+    {
+      "name": "Loop",
+      "color": "",
+      "start": 7657,
+      "end": 29416,
+      "loop": true
+    }
+  ],
+  "loop_section": "Loop",
   "tempo": 100,
   "pitch": 100,
   "fade_in": 0,

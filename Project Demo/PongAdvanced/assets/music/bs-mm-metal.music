@@ -3,13 +3,28 @@
   "id": "eefd572338a6",
   "asset": "assets/music/bs-mm-metal.wav",
   "loop": true,
-  "volume": 100,
+  "volume": 80,
   "unit": "ms",
-  "sections": [],
-  "loop_section": "",
+  "sections": [
+    {
+      "name": "Loop",
+      "color": "#82aaff",
+      "start": 6475,
+      "end": 16285,
+      "loop": true
+    },
+    {
+      "name": "Loop 2",
+      "color": "#7aab7a",
+      "start": 17120,
+      "end": 22812,
+      "loop": true
+    }
+  ],
+  "loop_section": "Loop",
   "tempo": 100,
   "pitch": 100,
-  "fade_in": 0,
+  "fade_in": 232,
   "fade_out": 0,
-  "sample_rate": 0
+  "sample_rate": 8000
 }

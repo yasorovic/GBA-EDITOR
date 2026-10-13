@@ -5,8 +5,23 @@
   "loop": true,
   "volume": 100,
   "unit": "ms",
-  "sections": [],
-  "loop_section": "",
+  "sections": [
+    {
+      "name": "Loop",
+      "color": "#82aaff",
+      "start": 3489,
+      "end": 12676,
+      "loop": true
+    },
+    {
+      "name": "Loop 2",
+      "color": "#7aab7a",
+      "start": 16491,
+      "end": 21356,
+      "loop": true
+    }
+  ],
+  "loop_section": "Loop 2",
   "tempo": 100,
   "pitch": 100,
   "fade_in": 0,

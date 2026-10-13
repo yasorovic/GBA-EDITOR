@@ -6,7 +6,7 @@ from pathlib import Path
 
 from core.engine_emulation.module_model import load_module
 from core.resources.asset_reconciliation import check_audio_file
-from core.wav_module import WAV_MUSIC_RATE, wav_to_xm
+from core.wav_module import ROW_SECONDS, WAV_MUSIC_RATE, wav_to_xm
 
 
 def _write_wav(path: Path, seconds: float, rate: int = 44100, channels: int = 2, width: int = 2):
@@ -30,7 +30,7 @@ def test_wav_becomes_a_module_as_long_as_the_track():
     mod = load_module(wav)
     assert mod.samples[0].data.size == round(3.0 * WAV_MUSIC_RATE)
     rows = sum(mod.rows(i) for i in mod.order)
-    assert abs(rows * 0.0196 - 3.0) < 0.03          # l'écart à la jointure d'une boucle
+    assert abs(rows * ROW_SECONDS - 3.0) < ROW_SECONDS      # au plus une ligne de plus que la piste
 
 
 def test_wav_in_music_folder_is_accepted_and_xm_roundtrips():

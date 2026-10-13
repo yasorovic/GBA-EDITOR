@@ -14,7 +14,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from PyQt6.QtCore import QPointF, Qt
+from PyQt6.QtCore import QPoint, QPointF, Qt
 from PyQt6.QtTest import QTest
 
 REPO_DIR = Path(__file__).resolve().parents[2]
@@ -70,12 +70,10 @@ def editor(qapp, player, project):
 def test_un_module_montre_l_onde_la_bande_et_le_tableau(editor, project):
     music = _module(project)
     editor.load(project, music)
-    assert not editor._structure.isHidden() and not editor._module_zone.isHidden()
-    assert editor._wav_zone.isHidden()
+    assert not editor._structure.isHidden() and not editor._strip_zone.isHidden()
+    assert not editor._sections_zone.isHidden()
     assert len(editor._strip._table) == 8
     assert len(editor._wave._peaks) > 0 and editor._wave.seconds > 0
-    assert "Module" in editor._subtitle.text() and "8 orders" in editor._subtitle.text()
-    assert editor._status.text() == "READY FOR BUILD"
 
 
 def test_les_trois_composants_peints_a_la_main_se_dessinent(editor, project):
@@ -162,46 +160,69 @@ def test_la_duree_d_une_section_se_lit_sur_les_reperes_du_rendu(editor, project)
     assert abs(editor._seconds_of(0, 3) - 1.44) < 0.05
 
 
-def test_un_changement_est_signale_et_l_etat_a_corriger_se_voit(editor, project):
-    music = _module(project)
-    editor.load(project, music)
-    music.add_section(2, 99, "Trop loin")                      # dépasse la table : erreur du validateur
-    editor._on_table_changed()
-    assert editor._status.text() == "1 TO FIX"
-    assert "ends at 99" in editor._status.toolTip()
-
-
 # ── Un WAV ────────────────────────────────────────────────────────
 
 
-def test_un_wav_montre_la_boucle_a_deux_poignees_et_pas_de_tableau(editor, project):
+def test_un_wav_a_la_meme_bande_qu_un_module_mais_en_une_seule_cellule(editor, project):
     music = _wav(project)
     editor.load(project, music)
-    assert editor._module_zone.isHidden() and not editor._wav_zone.isHidden()
-    assert editor._wave._editable and "WAV" in editor._subtitle.text()
-    assert not editor._wav_loop.isChecked()
+    assert not editor._strip_zone.isHidden() and not editor._sections_zone.isHidden()
+    assert len(editor._strip._table) == 1 and editor._strip._extent_ms == 3000
+    assert editor._wave._editable
+    assert music.sections == [] and editor._wave._loop is None
 
 
-def test_cocher_la_boucle_d_un_wav_en_pose_une_entre_le_quart_et_les_trois_quarts(editor, project):
-    music = _wav(project)
+def test_la_premiere_section_d_un_wav_prend_le_milieu_de_la_piste(editor, project):
+    music = _wav(project)                                      # 3 s
     editor.load(project, music)
-    editor._wav_loop.setChecked(True)
+    editor._table._on_add()
     section = music.section(music.loop_section)
-    total = round(editor._wave.seconds * 1000)
-    assert (section.start, section.end) == (total // 4, 3 * total // 4)
-    assert music.unit == UNIT_MS and editor._wave._loop == (section.start, section.end)
-    editor._wav_loop.setChecked(False)
-    assert music.sections == [] and music.loop_section == ""
+    assert (section.start, section.end) == (750, 2250)        # ¼ et ¾ de la piste
+    assert music.unit == UNIT_MS and section.loop
+    assert editor._wave._loop == (section.start, section.end)
+
+
+def test_les_sections_suivantes_d_un_wav_prennent_la_suite(editor, project):
+    music = _wav(project)
+    editor.load(project, music)
+    editor._table._on_add()
+    editor._table._on_add()
+    first, second = music.sections
+    assert (second.start, second.end) == (first.end, 3000)    # la suite, jusqu'à la fin du fichier
+    assert music.loop_section == first.name                   # la boucle par défaut ne bouge pas
+
+
+def test_un_compteur_de_secondes_ecrit_des_millisecondes(editor, project):
+    music = _wav(project)
+    editor.load(project, music)
+    editor._table._on_add()
+    section = music.sections[0]
+    start, end = editor._table._spins[id(section)]
+    start.setValue(500)
+    end.setValue(2500)
+    assert (section.start, section.end) == (500, 2500)
+    start.setValue(2490)                                       # la fin suit : une section ne passe pas sous 50 ms
+    assert section.end >= section.start + 50
+
+
+def test_les_bandes_d_un_wav_suivent_ses_sections(editor, project):
+    music = _wav(project)
+    editor.load(project, music)
+    editor._table._on_add()
+    editor._table._on_add()
+    assert [(round(a, 2), round(b, 2)) for a, b, _c in editor._wave._bands] == [(0.75, 2.25), (2.25, 3.0)]
 
 
 def test_glisser_une_poignee_ecrit_la_boucle_au_relachement(editor, project):
     music = _wav(project)
     editor.load(project, music)
-    editor._wav_loop.setChecked(True)
+    editor._table._on_add()
     seen = []
     editor.changed.connect(lambda: seen.append(1))
+    section = music.section(music.loop_section)
+    spins = editor._table._spins[id(section)]
     editor._wave.loop_moving.emit(300, 1800)                   # pendant le glisser : les bornes suivent
-    assert abs(editor._wav_start.value() - 0.3) < 1e-6 and not seen
+    assert spins[0].value() == 300 and not seen
     editor._wave.loop_changed.emit(300, 1800)                  # au relâchement : on écrit
     section = music.section(music.loop_section)
     assert (section.start, section.end) == (300, 1800) and seen
@@ -210,7 +231,7 @@ def test_glisser_une_poignee_ecrit_la_boucle_au_relachement(editor, project):
 def test_les_poignees_se_saisissent_et_ne_se_croisent_pas(editor, project):
     music = _wav(project)
     editor.load(project, music)
-    editor._wav_loop.setChecked(True)
+    editor._table._on_add()
     wave_view = editor._wave
     start_x = wave_view._x_of(wave_view._loop[0] / 1000)
     QTest.mousePress(wave_view, Qt.MouseButton.LeftButton, pos=QPointF(start_x, 60).toPoint())
@@ -227,7 +248,7 @@ def test_des_sections_d_un_module_sur_un_wav_ne_sont_pas_reinterpretees(editor, 
     music.sections.append(MusicSection("Old", start=2, end=5, loop=True))
     editor.load(project, music)
     assert editor._mismatched and not editor._mismatch.isHidden()
-    assert editor._module_zone.isHidden() and editor._wav_zone.isHidden()
+    assert editor._strip_zone.isHidden() and editor._sections_zone.isHidden()
     editor._reset_sections()
     assert music.sections == [] and music.unit == UNIT_MS and not editor._mismatched
 
@@ -243,7 +264,7 @@ def test_un_jingle_montre_l_onde_sans_les_sections(editor, project):
     assert isinstance(jingle, Jingle)
     editor.load(project, jingle, sections=False)
     assert not editor._structure.isHidden()
-    assert editor._module_zone.isHidden() and editor._wav_zone.isHidden()
+    assert editor._strip_zone.isHidden() and editor._sections_zone.isHidden()
 
 
 def test_sans_fichier_ou_avec_un_fichier_illisible_l_editeur_le_dit(editor, project):
@@ -271,17 +292,213 @@ def test_l_apercu_d_une_section_commence_a_son_debut_et_boucle_dessus(player, pr
     music = _module(project)
     section = music.add_section(3, 5, "Main")
     assert player.preview(project, music, section)
-    track = player.track_for(project, music)
-    assert player._deck.position == track.start_of(3)
-    assert player._deck.looping                                  # une section boucle, drapeau ou pas
-    player._deck.pull(4000)
-    assert player._deck.playing
+    deck = player._deck
+    deck.pull(4000)
+    assert deck.track.order_at(deck.position) == 3               # le son part de l'ordre 3 : le début de la section
+    assert deck.looping                                          # une section boucle, drapeau ou pas
+    assert deck.playing
 
 
 def test_l_apercu_d_un_wav_commence_a_sa_boucle(player, project, monkeypatch):
     monkeypatch.setattr(BoxPlayer, "_open_sink", lambda self: None)
     music = _wav(project)
     music.unit = UNIT_MS                    # ce que l'éditeur pose au chargement d'un WAV
-    section = music.set_single_loop(500, 2000)
+    section = music.add_section(500, 2000, "Main")
     assert player.preview(project, music, section)
-    assert abs(player._deck.position / 13379 - 0.5) < 0.05
+    deck = player._deck
+    deck.pull(4000)
+    assert deck.track.order_at(deck.position) == deck.track.loop_orders[0] == 1     # le segment qui commence à 0,5 s
+    assert deck.looping                                          # une section WAV boucle comme celle d'un module
+
+
+# ── Le poids en ROM ───────────────────────────────────────────────
+
+
+def test_un_wav_montre_son_poids_exact_et_il_suit_le_taux(editor, project):
+    from core.wav_module import wav_to_xm
+    music = _wav(project, seconds=3.0)
+    editor.load(project, music)
+    path = project.asset_abs(music.asset)
+    assert not editor._weight.isHidden()
+    assert editor._weight.text() == f"ROM {len(wav_to_xm(path, 16726)) / 1024:.1f} KiB"   # le module que le build écrit
+    music.sample_rate = 8000
+    editor.reload()
+    assert editor._weight.text() == f"ROM {len(wav_to_xm(path, 8000)) / 1024:.1f} KiB"    # moitié moins d'octets
+
+
+def test_la_pastille_vire_a_l_orange_puis_au_rouge(editor, project, monkeypatch):
+    from ui.sound_mixer import music_editor
+    from ui.common.theme import C
+    music = _wav(project)
+    for size, color in ((900 * 1024, C.TEXT_DIM), (1536 * 1024, C.ACCENT_WARM), (3 << 20, C.ACCENT_RED)):
+        monkeypatch.setattr(music_editor, "wav_rom_bytes", lambda _m, _p, size=size: size)
+        editor.load(project, music)
+        assert color in editor._weight.styleSheet()
+
+
+def test_un_module_montre_la_mesure_du_dernier_build_ou_rien(qapp, player, project):
+    from types import SimpleNamespace
+    music = _module(project)
+    entry = SimpleNamespace(own_bytes=48 * 1024, shared_bytes=0, shared_with=0)
+    measured = MusicEditor(player.track_for, lambda _m: entry)
+    measured.load(project, music)
+    assert measured._weight.text() == "ROM 48.0 KiB"
+    unbuilt = MusicEditor(player.track_for, lambda _m: None)
+    unbuilt.load(project, music)
+    assert unbuilt._weight.text().startswith("ROM ~")        # pas de build : une estimation, marquée d'un ~
+
+
+# ── Tout tient à l'écran ──────────────────────────────────────────
+
+
+def _add_buttons(table):
+    """Le « + » vivant : un tableau reconstruit laisse ses anciens boutons attendre leur suppression."""
+    from PyQt6.QtCore import QEvent
+    from PyQt6.QtWidgets import QApplication, QPushButton
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
+    return [b for b in table.findChildren(QPushButton) if b.text().startswith("＋")]
+
+
+def test_le_plus_se_desactive_a_six_sections(editor, project):
+    from core.music_structure import MAX_SECTIONS
+    music = _module(project)
+    editor.load(project, music)
+    for _ in range(MAX_SECTIONS - 1):
+        editor._table._on_add()
+    assert _add_buttons(editor._table)[0].isEnabled()
+    editor._table._on_add()
+    assert len(music.sections) == MAX_SECTIONS
+    assert _add_buttons(editor._table) == []                     # au maximum, le bouton n'est plus là
+
+
+def _shown(editor, project, music, height: int):
+    editor.resize(1000, height)
+    editor.show()
+    editor.load(project, music)
+    QTest.qWait(60)
+    return editor._wave.height(), not editor._banner.isHidden()
+
+
+def test_l_onde_grandit_avec_la_fenetre_jusqu_a_sa_hauteur_maximale(editor, project):
+    from ui.sound_mixer.music_editor import _WAVE_MAX
+    music = _module(project)
+    small, _b = _shown(editor, project, music, 260)
+    medium, _b = _shown(editor, project, music, 340)
+    huge, _b = _shown(editor, project, music, 1500)
+    assert small < medium <= _WAVE_MAX
+    assert huge == _WAVE_MAX                                   # sur un grand écran, elle ne prend pas toute la hauteur
+
+
+def test_le_bandeau_n_apparait_que_s_il_reste_de_la_hauteur(editor, project):
+    music = _module(project)
+    _h, shown = _shown(editor, project, music, 300)
+    assert not shown                                           # l'onde et la bande des ordres passent d'abord
+    _h, shown = _shown(editor, project, music, 1500)
+    assert shown and "Module" in editor._summary.text() and "8 orders" in editor._summary.text()
+    assert "bs-p2" not in editor._summary.text() and music.name not in editor._summary.text()   # sans le nom
+
+
+def test_le_bandeau_d_un_wav_dit_sa_duree_et_la_pastille_de_poids_existe(editor, project):
+    music = _wav(project)
+    _shown(editor, project, music, 1500)
+    assert not editor._banner.isHidden() and "WAV" in editor._summary.text() and "3 s" in editor._summary.text()
+    assert not editor._weight.isHidden()
+
+
+def test_la_bande_porte_la_duree_et_le_play_d_une_section(editor, project):
+    """La durée et l'écoute vivent sur la bande, pour un module comme pour un WAV."""
+    for music in (_module(project), _wav(project)):
+        music.sections.clear()
+        editor.resize(900, 760)
+        editor.load(project, music)
+        section = music.add_section(0, 4 if music.unit == "order" else 2000, "Main")
+        editor._refresh_sections()
+        strip = editor._strip
+        assert strip._duration_text(section) != ""
+        heard = []
+        editor.preview_section.connect(heard.append)
+        band = strip._band_of(section)
+        QTest.mousePress(strip, Qt.MouseButton.LeftButton, pos=QPoint(int(band.left()) + 6, int(band.center().y())))
+        assert heard == [section]
+        editor.preview_section.disconnect(heard.append)
+
+
+def test_la_section_cliquee_devient_la_plage_qui_boucle(editor, project):
+    """Un clic sur le nom d'une section pose ses bornes ; le vide les retire, et la lecture redevient libre."""
+    music = _module(project)
+    music.sections.clear()
+    editor.resize(900, 760)
+    editor.load(project, music)
+    section = music.add_section(0, 4, "Main")
+    editor._refresh_sections()
+    strip = editor._strip
+    assert editor.scope_section is None and editor.scope_seconds() is None
+
+    band = strip._band_of(section)
+    QTest.mousePress(strip, Qt.MouseButton.LeftButton, pos=QPoint(int(band.center().x()), int(band.center().y())))
+    QTest.mouseRelease(strip, Qt.MouseButton.LeftButton, pos=QPoint(int(band.center().x()), int(band.center().y())))
+    assert editor.scope_section is section
+    start, end = editor.scope_seconds()
+    assert 0 <= start < end
+    assert editor._wave._scope is not None
+
+    editor._wave.set_cue(end + 1.0)                       # une poignée hors de la section : la section part de son début
+    assert editor.start_seconds() is None
+    editor._wave.set_cue((start + end) / 2)
+    assert editor.start_seconds() is not None
+
+    QTest.mousePress(strip, Qt.MouseButton.LeftButton, pos=QPoint(int(strip.width()) - 3, int(band.center().y())))
+    assert editor.scope_section is None and editor._wave._scope is None
+
+
+def test_les_poignees_d_un_wav_suivent_la_section_selectionnee(editor, project):
+    """Pas de poignées sans sélection ; celles de la section choisie, la première comme la suivante, sinon."""
+    music = _wav(project)
+    editor.resize(900, 760)
+    editor.load(project, music)
+    editor._table._on_add()
+    editor._table._on_add()
+    first, second = music.sections
+    assert editor._wave._loop == (second.start, second.end)      # « + » choisit la section qu'il vient de créer
+
+    strip = editor._strip
+    band = strip._band_of(first)
+    QTest.mousePress(strip, Qt.MouseButton.LeftButton, pos=QPoint(int(band.center().x()), int(band.center().y())))
+    QTest.mouseRelease(strip, Qt.MouseButton.LeftButton, pos=QPoint(int(band.center().x()), int(band.center().y())))
+    assert editor._wave._loop == (first.start, first.end)
+    editor._wave.loop_changed.emit(100, 900)                    # la poignée écrit la section choisie, pas la « par défaut »
+    assert (first.start, first.end) == (100, 900) and (second.start, second.end) != (100, 900)
+
+    QTest.mousePress(strip, Qt.MouseButton.LeftButton, pos=QPoint(int(strip._x(1500)), int(band.center().y())))   # le vide entre les deux
+    assert editor._wave._loop is None
+
+
+def test_les_bords_d_une_section_de_wav_se_glissent_sur_la_bande(editor, project):
+    music = _wav(project)
+    editor.resize(900, 760)
+    editor.load(project, music)
+    editor._table._on_add()
+    section = music.sections[0]
+    strip = editor._strip
+    band = strip._band_of(section)
+    y = int(band.center().y())
+    QTest.mousePress(strip, Qt.MouseButton.LeftButton, pos=QPoint(int(band.right()), y))
+    QTest.mouseMove(strip, QPoint(int(band.right()) - 60, y))
+    QTest.mouseRelease(strip, Qt.MouseButton.LeftButton, pos=QPoint(int(band.right()) - 60, y))
+    assert section.end < 2250 and section.end >= section.start + 50
+    assert isinstance(section.end, int)
+
+
+def test_un_wav_n_affiche_aucune_virgule(editor, project):
+    music = _wav(project)
+    editor.resize(900, 760)
+    editor.load(project, music)
+    editor._table._on_add()
+    section = music.sections[0]
+    assert strip_text_is_whole(editor._strip._duration_text(section))
+    start, end = editor._table._spins[id(section)]
+    assert type(start).__name__ == "QSpinBox" and start.suffix() == ""
+
+
+def strip_text_is_whole(text: str) -> bool:
+    return "." not in text and "," not in text

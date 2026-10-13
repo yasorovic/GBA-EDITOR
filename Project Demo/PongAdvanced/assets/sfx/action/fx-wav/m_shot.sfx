@@ -1,0 +1,13 @@
+{
+  "name": "m_shot",
+  "id": "771fa719b405",
+  "asset": "assets/sfx/action/fx-wav/m_shot.wav",
+  "volume": 100,
+  "sample_rate": 0,
+  "trim_start": 0,
+  "trim_end": 0,
+  "pitch": 100,
+  "panning": 0,
+  "pitch_variation": 0,
+  "fade_out": 0
+}

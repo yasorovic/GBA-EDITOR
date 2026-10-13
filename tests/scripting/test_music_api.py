@@ -123,14 +123,15 @@ def test_les_noms_de_section_sont_tries_et_sans_doublon():
     assert music_section_names([boss, town]) == ["Main", "Phase 2"]
 
 
-def test_un_jingle_un_wav_et_une_plage_invalide_n_ont_pas_de_section_atteignable():
+def test_un_jingle_et_une_plage_invalide_n_ont_pas_de_section_atteignable():
     jingle = Jingle(name="J", asset="assets/jingles/J.it", sections=[MusicSection("S", 0, 2)])
     wav = Music(name="W", asset="assets/music/W.wav", unit=UNIT_MS,
-                sections=[MusicSection("L", 500, 2000, loop=True)])
+                sections=[MusicSection("L", start=500, end=2000, loop=True)])
     bad = Music(name="B", asset="assets/music/B.it",
                 sections=[MusicSection("Rev", 6, 2), MusicSection("Neg", -1, 3)])
-    assert music_section_names([jingle, wav, bad]) == []
-    assert music_section_rows(wav) == [] and music_section_rows(bad) == []
+    assert music_section_names([jingle, bad]) == []
+    assert music_section_names([wav]) == ["L"]          # un WAV a des sections, lues sur le fichier
+    assert music_section_rows(wav) == [] and music_section_rows(bad) == []   # sans fichier, pas d'ordres
 
 
 def test_la_table_de_main_porte_le_rang_du_nom_et_la_plage():

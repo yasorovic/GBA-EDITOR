@@ -19,7 +19,6 @@ sys.path.insert(0, str(REPO_DIR / "editor"))
 from codegen.runtime_codegen import sound_emit                      # noqa: E402
 from core.models import audio                                        # noqa: E402
 from core.models.audio import Jingle, Music, MusicSection            # noqa: E402
-from core.music_structure import wav_loop_region                     # noqa: E402
 
 
 def _tracker(**kw) -> Music:
@@ -116,21 +115,25 @@ def test_sans_soundbank_les_trois_fonctions_existent_quand_meme():
         assert f"void {name}(" in code
 
 
-# ── La région de boucle d'un WAV, lue par le build ─────────────────
+# ── Un WAV est un module : ses sections sortent comme celles d'un module ──
 
 
-def test_la_region_de_boucle_d_un_wav():
-    m = _wav(loop_section="L", sections=[MusicSection("L", start=500, end=2500, loop=True)])
-    assert wav_loop_region(m) == (500, 2500)
+def test_un_wav_a_section_emet_sa_ligne_et_sa_table_en_positions_d_ordre(tmp_path):
+    import wave
+    import numpy as np
+    path = tmp_path / "Amb.wav"
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(22050)
+        w.writeframes((np.sin(np.arange(55125) * 0.1) * 9000).astype("<i2").tobytes())      # 2,5 s
+    m = _wav(loop_section="Main", sections=[MusicSection("Intro", start=0, end=500),
+                                            MusicSection("Main", start=500, end=1500, loop=True)])
+    code = "\n".join(sound_emit.music_runtime_lines(None, {"music": [(m, path)]}))
+    assert "{ 1, 2, 0, 0, 0, 0 },   /* Amb */" in code                       # la boucle : l'ordre 1, fin exclue 2
+    assert "{ MOD_AMB, 0, 0, 1 },   /* Amb / Intro */" in code
+    assert "{ MOD_AMB, 1, 1, 2 },   /* Amb / Main */" in code
 
 
-@pytest.mark.parametrize("kw", [
-    dict(),                                                        # pas de section
-    dict(loop_section="X", sections=[MusicSection("L", 500, 900)]),     # nom inconnu
-    dict(loop_section="L", sections=[MusicSection("L", 900, 500)]),     # inversée
-    dict(unit=audio.UNIT_ORDER, loop_section="L",
-         sections=[MusicSection("L", 1, 4)]),                           # autre unité
-])
-def test_pas_de_region_quand_la_section_n_en_est_pas_une(kw):
-    assert wav_loop_region(_wav(**kw) if "unit" not in kw else
-                           Music(name="W", asset="assets/music/W.wav", **kw)) is None
+def test_sans_son_fichier_un_wav_n_a_ni_ligne_ni_section():
+    m = _wav(loop_section="Main", sections=[MusicSection("Main", start=500, end=1500, loop=True)])
+    code = "\n".join(sound_emit.music_runtime_lines(None, {"music": [(m, None)]}))
+    assert "/* Amb" not in code

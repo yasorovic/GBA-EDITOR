@@ -8,11 +8,13 @@ l'écoute d'une section passe par le lecteur de l'écran.
 from __future__ import annotations
 
 import sys
+import time
 import wave
 from pathlib import Path
 
 import numpy as np
 import pytest
+from PyQt6.QtWidgets import QApplication
 
 REPO_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_DIR / "tests"))
@@ -80,17 +82,34 @@ def test_un_jingle_montre_l_onde_sans_les_sections_et_sans_les_reglages_de_musiq
     screen._on_asset_selected(project.jingles.get("Fanfare"))
     editor = screen._music_editor
     assert not editor.isHidden() and not editor._structure.isHidden()
-    assert editor._module_zone.isHidden()
-    assert not hasattr(screen._jingle_insp, "_tempo")          # ni tempo ni fondus : la ROM les ignore
-    assert hasattr(screen._music_insp, "_tempo")
+    assert editor._strip_zone.isHidden() and editor._sections_zone.isHidden()
+    assert not hasattr(screen._jingle_insp, "_rate")           # pas de taux : la ROM l'ignore
+    assert hasattr(screen._music_insp, "_rate")
+    assert not any(spin.isEnabled() for spin in editor._faders._fades.values())   # ni de fondus
 
 
-def test_un_wav_desactive_tempo_et_hauteur_et_active_le_taux(screen, project):
+def test_un_wav_active_le_taux_et_un_module_non(screen, project):
     screen._on_asset_selected(project.music.get("Ambient"))
     insp = screen._music_insp
-    assert not insp._tempo.isEnabled() and not insp._pitch.isEnabled() and insp._rate.isEnabled()
+    assert insp._rate.isEnabled()
     screen._on_asset_selected(project.music.get("Theme"))
-    assert insp._tempo.isEnabled() and not insp._rate.isEnabled()
+    assert not insp._rate.isEnabled()
+
+
+def test_volume_tempo_et_hauteur_sont_a_la_table_de_mixage_pas_dans_l_inspecteur(screen, project):
+    screen._on_asset_selected(project.music.get("Theme"))
+    assert not hasattr(screen._music_insp, "_vol") and not hasattr(screen._music_insp, "_tempo")
+    faders = screen._music_editor._faders
+    assert all(faders.fader(f).isEnabled() for f in ("volume", "tempo", "pitch"))
+
+
+def test_un_wav_grise_tempo_et_hauteur_et_un_jingle_aussi(screen, project):
+    faders = screen._music_editor._faders
+    for asset, expected in ((project.music.get("Ambient"), (True, False, False)),
+                            (project.jingles.get("Fanfare"), (True, False, False)),
+                            (project.music.get("Theme"), (True, True, True))):
+        screen._on_asset_selected(asset)
+        assert tuple(faders.fader(f).isEnabled() for f in ("volume", "tempo", "pitch")) == expected
 
 
 # ── Ce qu'on règle arrive sur le disque ───────────────────────────
@@ -101,11 +120,16 @@ def test_les_reglages_de_l_inspecteur_sont_enregistres_et_changent_le_rendu(scre
     screen._on_asset_selected(theme)
     editor = screen._music_editor
     normal = len(editor._track.pcm)
-    insp = screen._music_insp
-    insp._tempo.setValue(200)
-    insp._fade_in.setValue(30)
-    insp._fade_out.setValue(60)
+    editor._faders.fader("tempo").setValue(200)
+    editor._faders._fades["fade_in"].setValue(30)
+    editor._faders._fades["fade_out"].setValue(60)
+    screen._retune()                                           # ce que fait la minuterie quand le curseur s'arrête
+    deadline = time.monotonic() + 10                           # le rendu se fait hors du fil d'interface : on l'attend
+    while len(editor._track.pcm) >= 0.6 * normal and time.monotonic() < deadline:
+        QApplication.processEvents()
+        time.sleep(0.01)
     assert len(editor._track.pcm) < 0.6 * normal               # l'éditeur a relu : l'onde est celle du nouveau tempo
+    editor._save_timer.timeout.emit()                          # et le disque, quand on lâche le curseur
     saved = _reloaded(project).music.get("Theme")
     assert (saved.tempo, saved.fade_in, saved.fade_out) == (200, 30, 60)
 
@@ -130,7 +154,7 @@ def test_une_section_ajoutee_dans_l_editeur_est_enregistree(screen, project):
 def test_la_boucle_d_un_wav_est_enregistree_en_millisecondes(screen, project):
     ambient = project.music.get("Ambient")
     screen._on_asset_selected(ambient)
-    screen._music_editor._wav_loop.setChecked(True)
+    screen._music_editor._table._on_add()
     saved = _reloaded(project).music.get("Ambient")
     assert saved.unit == UNIT_MS and len(saved.sections) == 1
     assert saved.sections[0].start == 500 and saved.sections[0].end == 1500    # ¼ et ¾ de 2 s
@@ -146,7 +170,118 @@ def test_ecouter_une_section_arme_le_lecteur_de_l_ecran(screen, project):
     screen._music_editor.reload()
     screen._preview_section(section)
     assert screen._btn_rom.isChecked() and screen._armed_asset is theme
-    track = screen._box_player.track_for(project, theme)
-    assert screen._box_player._deck.position == track.start_of(3)
+    deck = screen._box_player._deck
+    deck.pull(4000)
+    assert deck.track.order_at(deck.position) == 3
     screen._stop_rom_playback()
     assert not screen._btn_rom.isChecked()
+
+
+# ── La table de mixage s'entend pendant qu'on la règle ───────────
+
+
+def _playing(screen, project, name="Theme"):
+    asset = project.music.get(name)
+    screen._on_asset_selected(asset)
+    assert screen._box_player.preview(project, asset)
+    return asset
+
+
+def test_un_curseur_de_volume_change_le_volume_de_l_apercu_en_cours(screen, project):
+    from core.models.audio import volume_to_module
+    asset = _playing(screen, project)
+    screen._music_editor._faders.fader("volume").setValue(40)
+    assert asset.volume == 40
+    assert screen._box_player._deck._vol == volume_to_module(40)
+
+
+def test_un_curseur_de_tempo_est_lu_par_le_rendu_en_direct_au_tick_suivant(screen, project):
+    from core.engine_emulation.module_stream import StreamTrack
+    asset = _playing(screen, project)
+    deck = screen._box_player._deck
+    track = deck.track
+    assert isinstance(track, StreamTrack)                        # l'aperçu est joué tick par tick
+    deck.pull(10000)
+    screen._music_editor._faders.fader("tempo").setValue(200)    # aucun rendu à refaire, rien à attendre
+    assert track._state.tempo == 2.0 and deck.track is track
+    assert deck.playing
+
+
+def test_un_curseur_de_hauteur_est_lu_au_tick_suivant_lui_aussi(screen, project):
+    asset = _playing(screen, project)
+    screen._music_editor._faders.fader("pitch").setValue(150)
+    assert asset.pitch == 150 and abs(screen._box_player._deck.track._state.pitch - 1.5) < 0.01
+
+
+def test_sans_apercu_en_cours_un_curseur_ne_touche_que_le_modele(screen, project):
+    asset = project.music.get("Theme")
+    screen._on_asset_selected(asset)
+    screen._music_editor._faders.fader("volume").setValue(55)
+    screen._music_editor._faders.fader("tempo").setValue(80)   # rien ne joue : rien à régler
+    assert asset.volume == 55 and asset.tempo == 80 and not screen._box_player._deck.playing
+
+
+def test_un_double_clic_remet_le_curseur_au_neutre(screen, project):
+    from PyQt6.QtCore import QEvent, QPointF, Qt
+    from PyQt6.QtGui import QMouseEvent
+    screen._on_asset_selected(project.music.get("Theme"))
+    fader = screen._music_editor._faders.fader("tempo")
+    fader.setValue(160)
+    fader.mouseDoubleClickEvent(QMouseEvent(QEvent.Type.MouseButtonDblClick, QPointF(5, 5), Qt.MouseButton.LeftButton,
+                                            Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+    assert fader.value() == 100
+
+
+def test_un_reglage_de_section_est_enregistre_sans_recharger_le_sound_finder(screen, project, monkeypatch):
+    theme = project.music.get("Theme")
+    screen._on_asset_selected(theme)
+    reloads = []
+    monkeypatch.setattr(screen._finder, "refresh", lambda *a, **k: reloads.append(1))
+    screen._music_editor._table._on_add()                       # une section
+    section = theme.sections[0]
+    screen._music_editor._table._on_loop(section, False)        # sa case « Loop »
+    screen._music_editor._table._on_default(section)            # son bouton « Default »
+    assert not reloads
+    assert _reloaded(project).music.get("Theme").sections[0].loop is False
+
+
+def test_le_son_suit_chaque_cran_d_un_glisse(screen, project):
+    from core.models.audio import tempo_to_module
+    asset = _playing(screen, project)
+    track = screen._box_player._deck.track
+    fader = screen._music_editor._faders.fader("tempo")
+    for value in (110, 130, 150, 170, 190):                      # un glissé : le rendu en direct lit le dernier cran
+        fader.setValue(value)
+        assert track._state.tempo == tempo_to_module(value) / 1024     # le facteur Q10 de maxmod, comme la ROM
+    assert asset.tempo == 190
+
+
+def test_le_json_s_ecrit_au_relachement_et_pas_pendant_que_le_curseur_est_tenu(screen, project, monkeypatch):
+    asset = project.music.get("Theme")
+    screen._on_asset_selected(asset)
+    writes = []
+    original = project.save_music
+    monkeypatch.setattr(project, "save_music", lambda a: (writes.append(1), original(a))[1])
+    fader = screen._music_editor._faders.fader("tempo")
+    fader.setSliderDown(True)                                    # le curseur est saisi
+    for value in range(101, 160, 7):
+        fader.setValue(value)
+    from PyQt6.QtTest import QTest
+    QTest.qWait(500)                                             # même une pause, curseur tenu : rien n'est écrit
+    assert writes == [] and asset.tempo == 157
+    fader.setSliderDown(False)                                   # relâché : une seule écriture
+    assert len(writes) == 1
+    assert _reloaded(project).music.get("Theme").tempo == 157
+
+
+def test_un_cran_de_molette_s_ecrit_apres_un_instant_de_calme(screen, project, monkeypatch):
+    asset = project.music.get("Theme")
+    screen._on_asset_selected(asset)
+    writes = []
+    original = project.save_music
+    monkeypatch.setattr(project, "save_music", lambda a: (writes.append(1), original(a))[1])
+    from PyQt6.QtTest import QTest
+    screen._music_editor._faders.fader("pitch").setValue(120)    # ni tenu ni glissé : molette ou clavier
+    assert writes == []
+    QTest.qWait(450)
+    assert len(writes) == 1

@@ -224,6 +224,12 @@ class AssetsFinderPanel(QWidget):
         objs = [s for s in self._project.scenes if s.name in wanted]
         self._finder.highlight_selection(SCENES.label, objs, fold_to_folder=True)
 
+    @property
+    def folder_store(self):
+        """Le store de dossiers de la session, que les autres écrans partagent : deux instances du même
+        fichier se réécriraient l'une l'autre et perdraient des dossiers."""
+        return self._folder_store
+
     def set_folder_store(self, store) -> None:
         """Active les dossiers d'auteur de la famille Scenes, adossés au store
         partagé (mêmes dossiers que les groupes du Graphe). Les scènes sont

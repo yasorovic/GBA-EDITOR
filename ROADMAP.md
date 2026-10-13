@@ -296,14 +296,94 @@ chantiers clos ; ce tableau ne garde que ceux **non livrés**.
 | Le cache de scène | 2026-09-16 | À ouvrir — voir [ci-dessous](#le-cache-de-scène-rouvrir-une-scène-déjà-visitée-sans-tout-redécoder) |
 | Undo/redo des sidecars d'éditeur | — | À ouvrir — envisagé pour **V2**, voir [ci-dessous](#undoredo-des-sidecars-déditeur-annuler-la-création-dun-groupe-un-déplacement-de-nœud) |
 | L'écran Texte n'édite et ne range que du contenu | 2026-10-10 | **À ouvrir** — conception proposée, **rien de verrouillé**, code non commencé ; retire l'aperçu écran et édite le contenu dans la table. Remplace « L'atelier Texte réuni » (abandonné). Voir [ci-dessous](#lécran-texte-nédite-et-ne-range-que-du-contenu) |
+| L'écran Son montre le geste sans recalculer l'onde | 2026-10-12 | **Livré pour l'essentiel (2026-10-12)** — plus aucun rendu pendant qu'un potard est tenu, bascule Onde \| Scope (oscilloscope du mix, tiré du son qui joue), durée sur la règle, barres des canaux qui suivent le volume ; **reste ouvert** : un indicateur de marge du mix (proposé, **non décidé**), un scope par canal. Voir [ci-dessous](#lécran-son-montre-le-geste-sans-recalculer-londe) |
 | L'asset `.music` — sections, boucle surchargée, indépendant du format source | 2026-10-11 | **Livré dans ses six étapes (2026-10-11)** — voir « Ordre d'implémentation » ci-dessous ; ce qui suit est l'état de départ, gardé pour mémoire. **Était : À ouvrir** — modèle décidé (surcharge du fichier, unité `order`/`ms`, réglages par défaut surchargeables par l'API), **trois mesures faites le 2026-10-11, toutes positives** (mais les lecteurs d'IT/S3M et de restart de l'éditeur divergent de la ROM : à corriger d'abord) ; l'écran Son suit. Voir [ci-dessous](#lasset-music--sections-boucle-surchargée-indépendant-du-format-source) |
 | Un pont entre l'écran Texte et les tables de données — créer un dialogue sans tout renseigner à la main | 2026-10-10 | **À ouvrir** — besoin posé, pistes A (Texte → table) et B (« Nouveau texte » dans la cellule) **retenues**, le reste non verrouillé, code non commencé ; le dialogue reste une table de données (pas d'éditeur de dialogue). Voir [ci-dessous](#un-pont-entre-lécran-texte-et-les-tables-de-données--créer-un-dialogue) |
 | La chaîne `if/elseif` sur une constante devient un `switch` C | 2026-10-06 | Route vers v1.0-stable — non prioritaire pour l'alpha ; piste de réflexion, **rien de verrouillé**, code non commencé, gain de perf non mesuré. Voir [ci-dessous](#chantier-transverse--la-chaîne-ifelseif-sur-une-constante-devient-un-switch-c) |
 | L'élément d'interface appartient à sa scène — des noms locaux | 2026-10-03 | À ouvrir — priorité non arbitrée ; conception proposée, **aucune décision verrouillée**, code non commencé. Garde-fou en place : un nom en double entre deux layouts est une erreur de build. Voir [ci-dessous](#lélément-dinterface-appartient-à-sa-scène--des-noms-locaux) |
 | Tout ce que l'auteur manipule vit dans `assets/` | 2026-10-10 | **En cours** — scènes, prefabs, mises en page, boîtes sonores, tables de données, polices logiques, textes, variables : de `project/` vers `assets/`. Voir [ci-dessous](#tout-ce-que-lauteur-manipule-vit-dans-assets) |
 | Une seule règle de nom libre | 2026-10-09 | **En cours** — huit règles de suffixe coexistent (`_2`, `_02`, `_copy`, `_1`, `Camera 2`, `axis1`, `Actor_0`, `Palette 2`) ; toutes passent à `coin`, `coin_2`, `coin_3`. Voir [ci-dessous](#une-seule-règle-de-nom-libre) |
-| Source ≠ asset — l'arborescence du disque et l'id stable | 2026-10-09 | **Livré pour l'essentiel (2026-10-11)** — ids dans tous les sidecars, extension par type d'asset, assets et sources rangés où l'on veut sous `assets/` (fonds, palettes, scripts compris), onglet Disk (glisser-déposer, *Create asset*, suppression annulable, détachement complet source ≠ asset) ; **reste** : dossiers virtuels des autres finders, références par id, associations de fichiers (installateur, zip portable, AppImage). Voir [ci-dessous](#source--asset--larborescence-du-disque-et-lid-stable) |
+| Source ≠ asset — l'arborescence du disque et l'id stable | 2026-10-09 | **Livré pour l'essentiel (2026-10-11)** — ids dans tous les sidecars, extension par type d'asset, assets et sources rangés où l'on veut sous `assets/` (fonds, palettes, scripts compris), onglet Disk (glisser-déposer, *Create asset*, suppression annulable, détachement complet source ≠ asset) ; **reste** : dossiers virtuels des autres finders (**Sound finder livré le 2026-10-11** : effets, musiques et jingles, dans le store partagé de la session ; sprites, fonds, palettes, tables, polices et prefabs restent à plat), références par id, associations de fichiers (installateur, zip portable, AppImage). Voir [ci-dessous](#source--asset--larborescence-du-disque-et-lid-stable) |
 | La fiabilité du journal de build | 2026-10-03 | **Tranche 1 livrée le 2026-10-03** (aucune erreur avalée, tout script vérifié, fautes injectées) ; **tranche 2 livrée le 2026-10-03** (diagnostic unique, `build.log`, sortie des outils classée) ; reste ouvert : les codes stables, si le besoin apparaît. Voir [ci-dessous](#la-fiabilité-du-journal-de-build) |
+
+---
+
+## L'écran Son montre le geste sans recalculer l'onde
+
+### D'où vient la question (2026-10-12)
+
+L'auteur voulait que l'onde de l'écran Son suive **en direct** ce qu'il règle (volume, tempo, hauteur), et butait sur le
+rendu Qt. Le chantier a d'abord cherché à rendre l'onde plus vite, puis a changé de question : l'onde est-elle la bonne chose
+à recalculer ?
+
+### Ce qui a été mesuré (démo PongAdvanced, 2026-10-12)
+
+| Mesure | Résultat |
+| --- | --- |
+| Rendu complet d'un module (`render_track`) | 0,15 à 0,7 s ; **plancher ≈ 0,5 s**, indépendant du taux (554 / 491 / 458 ms à 13,4 / 6,7 / 3,3 kHz) : c'est la boucle Python par tick (4488 ticks pour 75 s), pas le mixage |
+| `peak_envelope` | 10 à 40 ms |
+| Repeinture complète de l'onde (1400 px, boucle) | 42 ms → **19 ms** (28 → 11 ms à 700 px) une fois le remplissage fait en numpy |
+| Enveloppe rendue au tempo ×0,8 à ×1,5, comparée à l'enveloppe de base étirée | 0,1 à 3,7 % d'écart, corrélation ≥ 0,967 ; durée exactement `durée / tempo` |
+| Enveloppe rendue à la hauteur ×0,8 et ×1,25 | 0,1 à 3,2 % d'écart ; durée inchangée |
+| Attente d'un thread concurrent pendant un rendu (le thread audio tire le deck en Python) | jusqu'à **44 ms** (p95 22 ms) pour un tampon audio de 50 ms ; **2,7 ms** avec `sys.setswitchinterval(0,2 ms)`, sans ralentir le rendu |
+
+Conséquence : l'enveloppe ne change presque pas avec le tempo (la frise tient la largeur : seule la règle se regradue) ni avec la
+hauteur (un pixel vaut 50 ms : une hauteur ne s'y voit pas). Recalculer l'onde pendant un glisser courait après une différence
+invisible, et un rendu complet ne pouvait de toute façon pas rafraîchir l'écran plus de deux fois par seconde.
+
+### Ce qui a été essayé, puis retiré
+
+- **Throttle, annulation et rendu progressif** : le minuteur de rendu devenu un throttle, un rendu qui s'annule en route
+  (`RenderCancelled`, point de contrôle tous les 32 ticks), un début de rendu affiché à la place du début de l'onde, la suite en
+  retrait. Cela a révélé un défaut plus ancien : un rendu terminé était **jeté** dès qu'une demande plus récente existait, donc
+  aucune onde complète ne s'affichait pendant un glisser. Corrigé, puis l'ensemble a été jugé insatisfaisant : le plancher de
+  0,5 s restait. L'affichage progressif a été **retiré** ; le point de contrôle annulable et le correctif GIL restent.
+- **Vue « Notes »** (un trait par canal, hauteur de la note, décalée par le réglage de hauteur) : essayée, **non convaincante**,
+  retirée avec `ChannelLevels.semitones` et ses tests.
+
+### Ce qui est livré
+
+- **Aucun rendu tant que la main tient un potard.** L'onde (gain) et la règle (tempo) suivent sans rendu ; un rendu exact part au
+  repos pour la frise de scrub du deck, et il est abandonné si la main reprend (`_schedule_retune`, `_retune`).
+- **Bascule Onde \| Scope** au bout de la règle : un oscilloscope du mix, les 30 dernières ms que le lecteur fait entendre
+  (`_DeckDevice.tail` → `_AudioOutput.heard_window` → `BoxPlayer.scope_window`), décalées de l'avance du deck sur la carte son,
+  avec déclenchement sur un passage montant par zéro. Il suit donc le tempo, la hauteur et le volume **à chaque cran**. À
+  l'arrêt : une fenêtre fixe du rendu à la poignée de départ. Dans le scope, la frise (bandes, boucle, fondus, poignées) et le
+  glisser horizontal sont désactivés.
+- **Durée totale** lue au bout de la règle, à l'accent quand le tempo la change.
+- **Corps de l'onde en numpy** (image à couverture fractionnaire au lieu d'un polygone rempli) : 2,2 à 2,6 fois plus rapide,
+  même rendu à l'œil.
+- **Barres des canaux** : elles multiplient le pic du rendu par le volume de la musique (le lecteur l'applique en jouant ; le rendu
+  ne le contient pas), donc elles rétrécissent quand le volume baisse (`ChannelMeters.set_gain`, `MusicEditor._show_mix`).
+- **Tests ajoutés** : `tests/audio/test_render_checkpoint.py`, `tests/ui/test_waveform_scope.py` (scope, tampon du lecteur, worker
+  annulé, glisser sans rendu puis un seul au relâchement, rendu abandonné par un cran, barres et volume).
+
+### Ce que la mesure du mix a appris (2026-10-12, aucun code)
+
+Les barres de canaux affichent le **pic** d'échantillon : elles collent en haut dès qu'un canal joue au volume par défaut (73 % des
+ticks de `bs-p2-dungeon`, 8 % de `bs-p2-greenhatwake`). Ce n'est pas un défaut : un module chiptune est fait d'ondes carrées, dont
+le pic et le niveau efficace (RMS) sont identiques (rapport 1,00 sur la plupart des canaux ; 0,49 à 0,71 seulement sur le bruit et
+le triangle). Passer les barres en RMS ne les ferait donc pas bouger.
+
+Pour la saturation, la **somme des pics** des canaux (à l'échelle de `to_stereo16`) ne manque aucune saturation sur les deux modules
+qui saturent (100 % des ticks saturés signalés) mais donne des fausses alertes (7 % sur `dungeon`, 61 % sur `mblaster`, 21 % des ticks
+de `1-u` qui ne sature jamais). La racine de la somme des RMS² ne prédit pas mieux le pic du mix (corrélation 0,82 / 0,93 / 0,92 / 0,87
+contre 0,75 / 0,92 / 0,94 / 0,95). Le mix émulé de `dungeon` sature réellement (26,9 % des échantillons), celui de `mblaster` à
+2,9 %.
+
+### Ouvert
+
+- **Un indicateur de marge du mix** : une jauge, la somme des pics par rapport au seuil de saturation, à côté des barres (niveaux
+  déjà capturés dans `ChannelLevels`, aucun nouveau calcul moteur). Proposé, **non décidé**.
+- **Un scope par canal** : le scope du mix devient du bruit sur un morceau dense ; il demanderait de capturer les échantillons de
+  chaque canal dans le moteur, avec une option pour ne pas ralentir le rendu complet.
+- **À juger à l'usage** : la lisibilité du scope sur un morceau dense, et la place de la bascule au bout de la règle.
+- **Limite assumée** : le scope ne bouge que pendant la lecture ; à l'arrêt, l'effet d'une hauteur n'apparaît qu'au rendu exact, environ
+  0,6 s après le lâcher.
+- **Non mesuré** : si la console sature comme `to_stereo16` (échelle 190 × 128) le fait. Les taux de saturation ci-dessus sont ceux de
+  l'émulation de l'éditeur, sur quatre modules d'un seul projet.
+- **Plancher du rendu** : 0,5 s par rendu complet reste vrai ; l'abaisser demanderait un moteur plus rapide (les tests d'équivalence
+  avec la ROM en dépendent) ou un rendu par morceaux (l'état du module se propage d'un tick à l'autre).
 
 ---
 
@@ -1224,7 +1304,9 @@ de gauche (avant Project viewer) comme dans le panneau du bas (avant Console).
 ### Ce que ça ne fait pas
 
 - Ne change ni le runtime C ni le format de la ROM.
-- Ne fait pas de l'éditeur un outil de dessin (cf. périmètre).
+- Ne fait pas de l'éditeur un outil de dessin généraliste (cf. périmètre). Le **Color Tile
+  Painter**, s'il est ouvert, est l'exception volontairement étroite : il sert à poser un fond
+  de prototype en couleurs pleines, pas à retoucher ou illustrer une image.
 
 ---
 
@@ -1357,8 +1439,8 @@ reflet de ce modèle ; il vient après.
 | --- | --- |
 | Volume, boucle oui/non | Déjà là (`mmSetModuleVolume`, `MM_PLAY_LOOP` / `ONCE`). |
 | Boucle sur une zone | **Tracker : au motif près** — `mmGetPosition()` surveillé à chaque frame, `mmPosition(début)` au dépassement ; même mécanisme que la coupe à la position (`music_transition_tick`). **WAV : à l'échantillon près**, par la boucle d'échantillon du XM encapsulé (`wav_to_xm` écrit aujourd'hui `loop_start=0, loop_len=0`). |
-| Plusieurs boucles nommées | Tracker oui (plages d'ordres, une active à la fois). WAV non : une seule boucle d'échantillon. |
-| Intro → boucle → outro | Tracker seulement, avec une sortie de boucle commandée. **WAV : l'outro est inatteignable** (une boucle d'échantillon ne se termine pas) ; l'écran le montre grisé. |
+| Plusieurs boucles nommées | Tracker oui (plages d'ordres, une active à la fois). WAV : *non en v1* (une seule boucle d'échantillon) — **oui depuis l'étape 7** (un échantillon par section). |
+| Intro → boucle → outro | Tracker seulement, avec une sortie de boucle commandée. WAV : *l'outro était inatteignable* en v1 (une boucle d'échantillon ne se termine pas) — **atteignable depuis l'étape 7**. |
 | Tempo | Un FACTEUR 0,5 à 2,0 (`mmSetModuleTempo`), pas un BPM. Le BPM du fichier est de l'information. |
 | Hauteur | Idem, facteur 0,5 à 2,0 (`mmSetModulePitch`). |
 | Priorité | **N'existe pas** : une seule couche de module. Pas de champ. |
@@ -1385,8 +1467,9 @@ refusé tel quel ; un taux de build par musique (comme `Sfx.sample_rate`) le fai
   l'unité : l'éditeur le dit et propose de réinitialiser les sections, jamais de les réinterpréter en silence.
 - **WAV : millisecondes, calées sur le passage par zéro le plus proche au build** (pas de clic à la jointure).
   Tranché par défaut le 2026-10-11, l'auteur n'ayant pas d'avis : l'unité survit à un changement de taux.
-- **Le WAV reste à UNE boucle native en v1** (pas d'outro, pas de découpe en sections). Découper un WAV en un
-  échantillon par section est un chantier séparé, décidé le 2026-10-11.
+- **Le WAV a eu UNE boucle native en v1** (pas d'outro, pas de découpe en sections). Découper un WAV en un
+  échantillon par section était un chantier séparé, décidé le 2026-10-11 — **ouvert et décidé le 2026-10-11 : voir
+  l'étape 7**, qui REMPLACE la boucle d'échantillon.
 
 ### Le modèle
 
@@ -1402,7 +1485,7 @@ suivent `_MigrateVolumeMixin` : un sidecar sans ces champs relit les défauts, q
   `[4, 12)` ; le modèle n'a qu'une convention.
 - **`order` = index BRUT de la table d'ordres** (cf. mesure 1) ; une section ne peut pas commencer sur un marqueur
   (`254` / `255`) — un saut là ne tomberait pas sur de la musique.
-- **Un WAV n'a qu'une boucle native** : au plus une section avec `loop` actif, et `loop_section` la nomme.
+- **Un WAV n'avait qu'une boucle native** (v1) ; depuis l'étape 7 il a des sections comme un module.
 - **Bornes** : tempo et hauteur 50–200 % (le facteur Q10 de maxmod, 0x200–0x800), fondus 0–600 frames (10 s),
   `sample_rate` 0 ou 4 000–16 726 Hz. Hors bornes : avertissement, la valeur est ramenée dans la plage au build.
 - **La durée qui tient dépend du taux** : `wav_module.max_seconds(rate)` — 62 s à 16 726 Hz, ~80 s à 13 kHz. Le
@@ -1520,7 +1603,7 @@ le dépôt ; les chiffres ci-dessous sont ce qu'on en retient.
    2026-10-11**. `music_info_row` est dans `core/music_structure` : le build ET l'aperçu lisent la même ligne. `MusicDeck`
    rejoue la machine d'états du C — modes 3 et 4 (fondus d'entrée et de sortie), `music_stop` distinct de l'arrêt sec du
    lecteur, tick de section avec son retour arrière, boucle forcée, boucle d'échantillon d'un WAV, coupe sans musique
-   (redémarrage ou arrêt selon la boucle). `render_module_marked` prend un tempo et une hauteur ; `render_wav` passe par
+   (redémarrage ou arrêt selon la boucle). `render_module_marked` prend un tempo et une hauteur ; `render_wav` (supprimé à l'étape 7) passait par
    `wav_module.render_at_rate` / `loop_frames` — le taux, la quantification à 8 bits et la jointure sont ceux du
    build. `BoxPlayer` clé son cache par tout ce qui change le rendu (chemin, tempo, hauteur, taux, boucle) et pose les
    fondus et la section sur une copie du `Track`. Tests : `tests/audio/test_music_preview.py` — le deck rejoué contre les
@@ -1562,11 +1645,354 @@ le dépôt ; les chiffres ci-dessous sont ce qu'on en retient.
    tableau écrasé quand il est reconstruit alors que l'éditeur est caché (la demande de mise en page ne remonte pas) —
    corrigé par un `updateGeometry()` après chaque reconstruction.
 
+7. ~~**Le WAV en sections — un échantillon par section**~~ — **livré le 2026-10-11**. Voir ci-dessous.
+
+### Étape 7 — aligner le WAV sur le module
+
+**Le but** : un seul modèle pour tout le module musical. Un `.wav` a des sections nommées, une section de boucle,
+un outro atteignable, et les widgets de l'écran Son sont ceux d'un module (tableau des sections, ▶ par ligne).
+`set_section`, `leave_loop`, `cut_to` et les fondus marchent sans cas particulier : **le build écrit un VRAI module**
+(un échantillon XM et un ou plusieurs patterns par segment, une position d'ordre par pattern), et tout ce qui lit des
+positions d'ordre — `music_info_row`, `g_music_sec`, le tick de boucle, le deck — le lit tel quel.
+
+**Décidé le 2026-10-11.**
+- **L'unité d'un WAV reste la milliseconde** (`unit: "ms"`) : elle survit à un changement de taux. Le build convertit
+  les millisecondes en positions d'ordre (`wav_module.plan_wav`), et c'est cette conversion que `music_info_row` et
+  `music_section_rows` consultent pour un WAV.
+- **Le segment est l'unité de découpe** : les frontières de toutes les sections (début et fin) découpent la piste en
+  segments, un échantillon XM chacun ; une section est une plage de segments contigus. Des sections qui se recouvrent
+  ou laissent des trous restent légales (comme pour un module).
+- **Les frontières tombent sur la grille des lignes.** Une section qui change d'échantillon doit le faire PILE à la
+  fin de celui d'avant (sinon un trou ou une reprise), et le module ne déclenche une note qu'au début d'une ligne : la
+  frontière est donc arrondie à la ligne la plus proche, soit **±5,7 ms**. Le calage sur un passage par zéro de la v1
+  disparaît (il déplaçait la frontière hors de la grille) ; une jointure de boucle n'est plus protégée du clic.
+- **Vitesse 1, 219 BPM : une ligne = 180 échantillons de mixage = 11,4155 ms, exactement.** Mesuré sur ROM : à 255 BPM
+  (l'ancien réglage) maxmod tronque le tick à un nombre entier d'échantillons de mixage (154 au lieu de 154,59), donc
+  les lignes passent **0,4 % trop vite** — 33 ms de dérive sur 8 s, de quoi couper la queue d'un segment. À 219 BPM le
+  tick tombe juste (15 768 Hz × 2,5 / 219 = 180) : cinq segments de 8 s enchaînés se suivent de 478 frames chacun, sans
+  dérive ni trou.
+- **L'échantillon est ré-échantillonné au taux RÉELLEMENT joué** : `_tuning` arrondit à 1/128 de demi-ton (jusqu'à
+  0,27 % d'écart de hauteur), ce qui allongerait ou raccourcirait un segment par rapport aux lignes ; on rend donc la
+  piste au taux accordé (le défaut, 16 726 Hz = 2 × 8 363, est exact).
+- **Un segment trop long est coupé en morceaux** à une limite de ligne (`MAX_SAMPLE_FRAMES`, ~61 s à 16 726 Hz) : la
+  limite de durée n'est plus celle d'un échantillon mais celle de la table d'ordres (256 positions de 256 lignes au
+  plus, soit ~12 min).
+- **La boucle d'une section WAV se fait comme celle d'un module : par la surveillance de la position**
+  (`music_loop_tick`). Mesuré sur ROM le 2026-10-11 : à chaque tour, ~10 ms de la section suivante fuient avant que la
+  position ne soit renvoyée (zéro-passages 112–124 au lieu de 108 sur trois frames) ; un saut `Bxx` écrit dans la
+  dernière ligne de la section aurait été exact mais aurait interdit `leave_loop`. **Choix de l'auteur** : le même
+  comportement qu'un module, `leave_loop` compris.
+- **Tempo et hauteur restent ignorés pour un WAV** (les lignes accélèrent, l'échantillon non : les segments se
+  décaleraient). Les fondus s'appliquent.
+- **La piste entière est maintenant dans la ROM** : l'ancien WAV à boucle jetait ce qui suit la boucle, qui est
+  désormais l'outro. La pastille de poids le dit déjà (c'est le module que le build écrit).
+
+**Ordre** : 7a `wav_module` (plan, grille, build multi-échantillon, constantes) · 7b `music_structure` (frontières,
+ordres, lignes d'info et de sections, poids, problèmes) · 7c build (`grit_conversion`, `sound_emit`) · 7d aperçu (le
+`Track` d'un WAV est celui du module généré ; `wav_render` et `sample_loop` supprimés) · 7e validateur et API (plus de
+« une seule boucle », `leave_loop` documenté) · 7f écran (tableau des sections en secondes, bandes sur la forme
+d'onde) · 7g documentation, test de build réel, mesure ROM du module généré. **Les sept sont livrés (2026-10-11).**
+
+**Livré.**
+- `wav_module` : `plan_wav` (frontières → lignes → segments → positions d'ordre), `wav_to_xm(path, rate, boundaries_ms)`,
+  `played_rate`, `ROW_SECONDS`, `max_seconds()` (la table d'ordres, ~12 min, ne dépend plus du taux). Disparus : la boucle
+  d'échantillon, le saut `Bxx`, le calage sur un passage par zéro, `loop_frames`, `render_at_rate`.
+- `music_structure` : `wav_boundaries`, `wav_plan`, `wav_section_orders` (l'unique traduction ms → ordres) ;
+  `music_info_row(m, path)` et `music_section_rows(m, path)` prennent le fichier ; `MIN_SECTION_MS` (50 ms) ; le validateur
+  signale une section plus courte qu'une ligne ; plus d'erreur « une seule boucle ».
+- Aperçu : `BoxPlayer` rend un WAV par `parse_xm(wav_to_xm(…))` puis `render_module_marked`, comme un module — le `Track`
+  a ses repères et ses sections en ordres. Le rendu des modules reporte maintenant la durée de tick de la ROM (tronquée à un
+  nombre entier d'échantillons du mixeur, fraction reportée d'un tick au suivant) ; le garde-fou `_MAX_VISITED` passe de
+  4 096 à 65 537 lignes (il coupait un WAV à 47 s).
+- Écran : le MÊME tableau des sections pour un WAV (début et fin en secondes, fin exclue) et pour un module (ordres) ;
+  bandes colorées sur la forme d'onde ; les deux poignées déplacent la section de boucle par défaut ; la bande des ordres
+  reste propre au module ; « + » ajoute une section après la dernière (le milieu de la piste pour la première).
+- API : `set_section` et `leave_loop` valent pour un WAV (docs corrigées).
+
+**Mesuré sur ROM (2026-10-11, banc jetable, C réellement généré).**
+10. *Boucle d'une section par la surveillance* : à chaque tour, ~10 ms de la section suivante fuient (zéro-passages
+    112–124 au lieu de 108 sur trois frames) ; avec un `Bxx` en dernière ligne : 108 partout. Choix de l'auteur : la
+    surveillance (le comportement d'un module, `leave_loop` compris).
+11. *Dérive ligne ↔ échantillon* : cinq segments de 8 s à 255 BPM se suivent de 475,8 frames au lieu de 477,8 (0,4 % trop
+    vite : maxmod tronque le tick à 154 échantillons de mixeur au lieu de 154,59). À 219 BPM : 478 frames chacun, exact.
+12. *Le module que le build écrit, de bout en bout* (intro 300 Hz, boucle 800 Hz, outro 1 200 Hz ; `music_info_row` = [1, 2)) :
+    l'intro joue une fois, la boucle tient (107–108 zéro-passages, jamais de 1 200 Hz) ; `music_leave_loop` à la frame 150
+    finit la boucle, joue l'outro (160 zéro-passages, ~1 s) puis s'arrête (`mmActive() == 0`). Taux choisi de 11 025 Hz
+    (accordé à 11 023,1) : cinq segments de 8 s enchaînés, 478 frames chacun — aucune dérive.
+
+**La table de mixage (2026-10-11).** Volume, tempo et hauteur d'une musique ne sont plus dans l'inspecteur : ce sont
+trois curseurs verticaux à droite des sections (`ui/sound_mixer/mix_faders.py`), un double-clic remet le neutre. **L'aperçu
+les suit en direct, au tick près** : le volume passe tout de suite (`MusicDeck.set_volume`), et l'aperçu d'un module
+n'est plus un rendu entier joué d'un trait mais un module joué TICK PAR TICK (`core/engine_emulation/module_stream.py`,
+`StreamTrack`) : le tempo et la hauteur sont lus à chaque tick, donc un curseur qu'on bouge s'entend au tick suivant, sans
+rendu à refaire ni saut. **Pourquoi** : une première version rendait le morceau en arrière-plan à chaque cran (0,3 à
+0,7 s par rendu sur les modules de la démo) et figeait l'écran ; les pauses du curseur tenu relançaient aussi un
+rendu synchrone et une écriture du JSON. **Comment** : `render_module_marked` est devenu `iter_module_ticks`, un
+générateur qui rend un tick à la fois (sortie bit à bit identique au rendu précédent, vérifiée sur dix rendus) ; un
+saut de position (`mmPosition`) y est demandé par `TickState.jump_to` et prend effet au tick suivant, canaux gardés.
+`StreamTrack` est un `Track` pour le deck (mêmes réglages, mêmes questions) : la boucle d'une section, les fondus et
+le volume restent ceux de `MusicDeck`, un seul endroit où la ROM est rejouée. Le rendu entier ne sert plus qu'à dessiner
+l'onde (la frise sur laquelle la tête de lecture se situe) et aux boîtes. **Le JSON ne s'écrit qu'au relâchement** du
+curseur (une molette ou une flèche du clavier attend 300 ms de calme) ; l'onde ne se redessine qu'au relâchement aussi.
+L'onde elle-même est peinte une fois et gardée (`QPixmap`) : seule la tête de lecture se repeint à chaque image (mesuré :
+la boucle d'événements passe de 44 à 6 ms par image pendant l'écoute). Un WAV grise tempo et hauteur, un jingle ne garde
+que le volume ; l'infobulle du curseur grisé dit pourquoi. L'inspecteur garde les fondus et le taux.
+
+**Tout tient à l'écran, sans défilement** : une musique propose au plus **6 sections** (`music_structure.MAX_SECTIONS` :
+le « + » disparaît au maximum, le validateur avertit d'un fichier qui en porte plus), le tableau est dans une carte au fond
+plus sombre, ferrée en bas et de hauteur constante (la place de six lignes), l'onde prend toute la hauteur que le reste ne
+demande pas, et les curseurs remplissent la hauteur de la zone du bas. Les réglages d'une section ou d'un curseur n'ont
+plus à recharger le Sound finder.
+
+**Limites assumées.** Les frontières sont arrondies à la ligne (±5,7 ms) ; la jointure d'une boucle n'est plus calée
+sur un passage par zéro (un clic est possible si l'auteur place mal ses bornes) ; ~10 ms de la section suivante fuient à
+chaque tour de boucle ; tempo et hauteur restent ignorés pour un WAV ; la piste entière est dans la ROM (l'outro aussi) ;
+`cut_to` depuis ou vers un WAV garde son avertissement (la coupe n'atterrit sur une note qu'au début d'un segment).
+
 ### Ce que ça ne fait pas
 
-- Ne découpe pas un WAV en sections, et n'offre pas d'outro à un WAV.
+- Ne donne pas de tempo ni de hauteur à un WAV (voir l'étape 7).
 - Ne modifie jamais le fichier source, et ne réécrit pas un module tracker.
 - N'ajoute ni muet par canal ni solo : Maxmod n'a pas d'API pour ça, l'aperçu mentirait.
+
+---
+
+## Dupliquer un asset, et régler SFX et jingles
+
+### D'où vient la question (2026-10-12)
+
+Deux besoins, dans cet ordre parce que le premier donne son sens au second.
+
+1. **Plusieurs assets sur une même source, avec des réglages différents.** Le modèle « source ≠ asset » le permet
+   (un asset pointe un fichier par un chemin, rien d'autre ne les lie), mais le geste manque : seule la palette sait
+   se dupliquer (`_duplicate_palette`, `ui/common/asset_kinds.py`). Pour un effet, l'auteur veut `coin` et `coin_high`
+   (même `.wav`, hauteur différente) sans réimporter ni recréer.
+2. **Un SFX n'a aujourd'hui que deux réglages** (`volume`, `sample_rate`) et un jingle, qui est une `Music`, n'en
+   montre qu'un ou deux. La question posée : qu'est-ce que l'auteur voudra vraiment régler ?
+
+### État au 2026-10-13
+
+| Tranche | État | Où lire le détail |
+| --- | --- | --- |
+| 1. Duplication (assets, sources, scripts ; finders et Disk) | **Livrée le 2026-10-12** | « Ordre d'implémentation », 1 |
+| 2a. Découpe non destructive d'un SFX | **Livrée le 2026-10-12** | 2a |
+| — Constantes sonores nommées d'après l'ASSET, plus d'après un fichier | **Livré (2026-10-12, repris le 2026-10-13)** : correction du modèle, découverte en route | 2a, « Constat » |
+| 2b. Hauteur et panoramique par défaut | **Livrés le 2026-10-13** | 2b |
+| 2c. Variation aléatoire de hauteur, fondu de sortie | **Livrés le 2026-10-13** | 2c |
+| — Correctif : un son court ne s'entendait pas à l'aperçu | **Corrigé le 2026-10-13**, confirmé par l'auteur | 2c, « Correctif » |
+| — Correctif : un WAV 24 ou 32 bits était refusé (effet, musique, jingle) | **Corrigé le 2026-10-13** ; reste à confirmer à l'oreille par l'auteur | 2c, « Correctif : WAV 24 bits » |
+| 2d. Écoute A/B du taux, avec le poids ROM à côté | **Reste**, non commencée | « Proposé » 2, point 5 |
+| 3. Jingles : politique vis-à-vis de la musique, plage jouée, avertissement de canaux | **Reste**, non commencée | « Proposé » 3 |
+
+**Ce que la session a changé hors du périmètre annoncé** (chaque point est détaillé plus bas) :
+
+- le build ne dépend plus du nom d'un fichier pour nommer un son dans la ROM — `MmutilAudio._number_ids` réécrit `SFX_*` /
+  `MOD_*` d'après l'asset (un défaut du modèle « source ≠ asset », que la duplication a rendu visible à chaque geste) ;
+- `Sfx` gagne six champs (`trim_start`, `trim_end`, `pitch`, `panning`, `pitch_variation`, `fade_out`), tous à leur défaut dans
+  un sidecar d'avant ;
+- `core/sfx_render.py` devient l'unique endroit qui découpe, fond et ré-échantillonne un effet, pour le build ET pour l'aperçu ;
+- l'aperçu d'un effet joue enfin le taux du projet, la découpe, le fondu et la hauteur (le panoramique reste inaudible à
+  l'aperçu : le lecteur est mono) ;
+- `WaveformView` sert aussi les effets (règle en millisecondes, bascule Onde | Scope et poignée de départ masquables, rampe de
+  fondu) ;
+- `BoxPlayer.sounding` suit ce que la carte son a joué.
+
+**Vérifications restantes, à la charge de l'auteur :** écouter sur émulateur un effet à hauteur variable et un effet à
+panoramique réglé (seuls les tests de génération et un test C compilé sur l'hôte les couvrent) ; rien d'autre : le correctif
+de l'aperçu est confirmé sur les effets qu'il avait signalés.
+
+### Décisions verrouillées (2026-10-12)
+
+- **Ordre** : (1) la duplication, (2) les réglages d'un SFX, (3) les réglages d'un jingle.
+- **Une source se duplique aussi** (2026-10-12, à la demande de l'auteur) : la copie est une source libre.
+- **Le défaut est dans le modèle, pas dans le build** (2026-10-13) : le nom d'un son ne vient pas d'un nom de fichier.
+- **Le tirage de la variation de hauteur a son propre générateur, à graine fixe** (2026-10-13) : il ne consomme jamais `math.rand`.
+- **Un fondu d'effet est en frames** (2026-10-13), comme tous les fondus de l'éditeur.
+
+### Proposé, non verrouillé
+
+#### 1. Dupliquer
+
+- **Une seule fonction**, `core/asset_duplication.py` (sur le modèle de `core/asset_creation.py`), appelée par le finder
+  ET par l'onglet Disk. Aucune copie de logique dans l'interface.
+- **La copie** passe par la sérialisation du sidecar : mêmes réglages, **même champ `asset`** (la source n'est jamais
+  copiée), **nouvel id**, nom libre selon la règle commune (`coin`, `coin_2`), posée à côté de l'original. Les sections
+  d'une musique sont copiées en profondeur.
+- **Indépendante** : aucun lien vivant avec l'original. Un asset « variante » qui hérite de son parent est une autre
+  question, hors de cette tranche.
+- **Annulable** : UNE entrée d'historique (`AddResourceCmd`), un `MacroCmd` pour une multi-sélection.
+- **Interface** : entrée *Duplicate* (clé `common.duplicate`, déjà au catalogue), Ctrl+D, puis renommage EN PLACE de la
+  copie (pas de fenêtre), comme le bouton « + ». Chaque `AssetKind` la reçoit par `actions` ; une famille qui ne peut pas
+  l'avoir (textes, variables : un fichier pour tout le projet) n'en déclare pas.
+- **Disk** : *Duplicate* sur une entrée qui EST un asset. Pas sur une source libre : copier le fichier ne répond pas au
+  besoin, et le geste d'une source est *Create*. (À confirmer par l'auteur.)
+- **Vérifié avant de coder (2026-10-12)** : sprites et fonds portent leur encodage dans le sidecar ; une palette copie ses
+  couleurs dans son propre `.hex` ; les ids internes d'une scène sont locaux ; un script se copie comme fichier
+  (les attaches se font par nom : la copie n'en reçoit aucune).
+
+#### 2. Réglages d'un SFX (par ordre de valeur)
+
+1. **Découpe non destructive** — début et fin (en ms), dans le sidecar ; le fichier source reste intact. Un effet pèse
+   un octet par frame : couper la queue de silence se lit directement dans le poids ROM. L'onde existe déjà
+   (`ui/sound_mixer/waveform_view.py`). Le build l'applique, au même endroit que le taux : `codegen/sfx_encode.py`.
+2. **Hauteur et panoramique par défaut.** Le runtime les expose déjà dans `sfx` (`pitch`, `panning`), l'asset ne les
+   porte pas. Règle du volume : la ressource propose, l'API surcharge à l'appel. Avec la duplication, c'est ce qui donne
+   deux effets depuis une seule source.
+3. **Variation aléatoire de hauteur (± %)** : rend naturels les sons répétés (pas, coups). Un tirage côté C au moment du
+   déclenchement ; à décider : le générateur de nombres du runtime est-il déterministe (rejeu, démo) ?
+4. **Fondu de sortie au build**, pour que la découpe ne tombe pas sur un clic (même motif que la jointure de boucle d'un WAV).
+5. **Écoute A/B du taux avec le poids ROM à côté.** À vérifier : l'aperçu joue-t-il déjà le fichier ré-échantillonné ?
+
+**Hors de cette tranche** : une priorité entre effets quand les canaux sont pleins, et un délai minimum entre deux
+déclenchements du même effet. `mm_sound_effect` ne porte pas de priorité (comme pour la musique, cf. « Ce que Maxmod
+tient ») : ce serait de la logique C à nous, donc un chantier de runtime à part.
+
+#### 3. Réglages d'un jingle (par ordre de valeur)
+
+1. **Politique vis-à-vis de la musique**, par jingle : *mélanger*, *baisser la musique de X % puis la remonter en fondu*,
+   ou *mettre la musique en pause puis la reprendre*. Le matériel a un scaler par couche (cf. « le singleton `mixer` »),
+   l'idée ne ment donc pas. C'est le réglage attendu d'une fanfare de victoire. Chantier de runtime : le jingle doit
+   savoir quand il se termine.
+2. **Plage jouée (début / fin).** Un jingle tiré d'un long module a besoin d'un point d'arrêt. Réemploie la machinerie
+   des sections avec UNE plage implicite, pas la liste complète (un jingle n'a pas de sections, cf. l'asset `.music`).
+3. **Avertissement sur les canaux** : maxmod ne donne que 4 canaux à la couche jingle (`JINGLE_MAX_CHANNELS`), un module
+   qui en demande plus est joué tronqué sans erreur. L'écran dit « ce module en utilise N » ; le validateur avertit.
+   Pas de muet par canal : Maxmod n'a pas d'API pour ça.
+4. **Fondu de sortie** : existe dans `Music`, mais un jingle « n'applique que son volume » (décidé le 2026-10-11) ; à
+   rouvrir seulement si la politique (1) ne le rend pas inutile.
+
+### Ce que ça touche (provisoire)
+
+`core/asset_duplication.py` (nouveau) ; `ui/common/asset_kinds.py` (`actions` de chaque famille) ;
+`ui/common/asset_finder.py` (menu, Ctrl+D, renommage en place) ; `ui/common/disk_view.py` et le callback de Disk ;
+`core/models/audio.py` (champs `Sfx` : découpe, hauteur, panoramique ; champs `Jingle` : politique, plage) ;
+`codegen/sfx_encode.py` (découpe, fondu) ; `ui/sound_mixer/sound_panel.py` (inspecteurs) ; le runtime audio généré pour
+la hauteur par défaut, la variation et la politique du jingle ; `core/validator.py` ; `labels.json` et `labels_fr.json`
+(clés FR d'office) ; tests dans `tests/audio/`.
+
+### Ordre d'implémentation (proposé)
+
+1. **Duplication — livrée le 2026-10-12.** `core/asset_duplication.py` (`duplicate`, `duplicate_many`, `duplicate_script`,
+   `copy_name`) ; `AssetKind.duplicate` (chaque famille de finder la déclare par `_store_duplicator`) ; *Duplicate* + Ctrl+D
+   (la touche réglée pour `common.duplicate`) dans le menu des finders, simple (« Duplicate ») et de lot (« Duplicate N items ») ;
+   dans l'onglet Disk (les deux vues), `DiskCallbacks.duplicate_items` / `duplicable`, `window._disk_duplicate_items`.
+   La copie : champs de l'original relus par la sérialisation du sidecar, MÊME `asset`, nouvel id, nom `coin_2` (dupliquer
+   `coin_2` donne `coin_3`, pas `coin_2_2`), rangée à côté de l'original et, dans un finder, dans le même dossier d'auteur.
+   Un finder ouvre aussitôt le renommage en place de l'unique copie. Un lot est UNE entrée d'historique (`MacroCmd`) et ses
+   copies ont des noms uniques entre elles. **Disk : tout ou rien** — l'entrée n'apparaît que si TOUTE la sélection est faite
+   d'assets duplicables et de sources (ni dossier, ni fichier non lu, ni texte/variables). **Une source se duplique aussi
+   (demandé le 2026-10-12, sur la décision précédente de s'en abstenir)** : `asset_duplication.duplicate_sources` copie le
+   fichier à côté de l'original, sous un nom libre dans SON dossier (toutes extensions confondues), en UNE commande annulable
+   (`ImportFilesCmd`) ; la copie est une source LIBRE, aucun asset ne la cite — c'est ce qui permet de repartir d'un `.wav`
+   retouché sans toucher à celui que des assets pointent. *Create* reste le geste qui en tire un asset ; un lot peut mêler
+   assets et sources. `_duplicate_palette` (l'ancienne entrée « Duplicate » de la seule palette) est retirée : la palette
+   passe par le même chemin. **Constats des vérifications :** sprites et fonds portent leur encodage DANS le sidecar, la
+   copie n'est donc pas ré-encodée ; une palette copie ses couleurs et reçoit SON `.hex` (deux palettes ne partagent jamais
+   un `.hex`, cf. `asset_creation.palette_is_taken`) ; les ids internes d'une scène sont locaux (ids de composants), aucun
+   doublon à craindre ; un script se copie comme fichier, sous un nom libre parmi TOUS les `.lua`. **Restent :** les palettes
+   n'ont pas encore d'id (5a), la copie n'en reçoit donc pas non plus ; annuler la copie d'une palette laisse son `.hex`
+   (le `.palette` seul est retiré), comme pour la création — un `.hex` laissé dans `assets/palettes/` redevient une palette
+   au chargement suivant. Tests : `tests/project/test_duplicate_asset.py`, `tests/ui/test_duplicate_ui.py`.
+2. **SFX** : découpe (modèle, build, interface), puis hauteur et panoramique par défaut, puis le reste selon l'usage.
+   - **2a. La découpe — livrée le 2026-10-12.** `Sfx.trim_start` / `Sfx.trim_end` (ms depuis le début du fichier ; fin à 0 = jusqu'à
+     la fin ; les deux à 0 = l'effet entier, ce que relit un sidecar d'avant). `core/sfx_render.py` est le SEUL endroit qui
+     découpe et ré-échantillonne (il reprend `effective_rate` et le rendu de `codegen/sfx_encode.py`) : le build et l'aperçu
+     l'appellent tous les deux, donc ce qu'on voit et entend est ce que la ROM porte. La découpe se fait à la frame, sur le
+     fichier au taux d'origine, AVANT le ré-échantillonnage ; sortie 16 bits mono, mmutil descend à 8. Écran : un nouvel
+     éditeur d'effet (`ui/sound_mixer/sfx_editor.py`) prend la colonne centrale à la place de l'éditeur de musique — l'onde du
+     fichier (`WaveformView`, les poignées sont celles de la boucle d'un WAV), deux champs début / fin en ms, *Reset trim*, et le
+     poids annoncé (« 3,9 Kio en ROM au lieu de 7,8 Kio »), qui suit aussi le taux. `WaveformView` gagne une règle en ms pour une
+     piste courte, et peut cacher la bascule Onde | Scope et la poignée de départ (ni l'un ni l'autre n'a de sens pour un
+     effet). L'aperçu (`box_playback._prepare`) joue le rendu de la ROM, donc aussi le taux du projet — ce que l'aperçu d'un
+     effet ignorait jusque-là. Le validateur avertit d'une découpe qui ne laisse rien (l'effet entier part alors en ROM, et
+     le build le dit). Tests : `tests/audio/test_sfx_render.py`, `tests/ui/test_sfx_editor.py`.
+   - **Constat, corrigé au passage (2026-10-12, repris le 2026-10-13) : le nom d'un son dans la ROM ne vient plus d'un nom de
+     fichier.** mmutil numérote par POSITION (les effets dans l'ordre où on les lui passe, puis les modules) mais nomme
+     `SFX_*` / `MOD_*` d'après le fichier (mesuré : `Coin Two.wav` donne `SFX_COIN_TWO` ; trois fois le même `coin.wav` donne
+     trois lignes `SFX_COIN` numérotées 0, 1, 2 — il ne déduplique pas). Depuis qu'un asset pointe sa source, un effet nommé
+     autrement que son fichier — `coin_2` sur `coin.wav`, ce que la duplication produit à chaque geste, mais aussi tout second
+     asset créé depuis un `coin.wav` — faisait échouer le contrôle d'ids du build (« SFX_COIN_2 absent de soundbank.h »).
+     Un premier correctif recopiait chaque fichier sous le nom de son asset (`stage_by_name`) ; **c'était un contournement**, et
+     l'auteur l'a dit : le défaut est dans le modèle, l'identité d'un son dépendait d'un fichier de build alors qu'un asset
+     ne devrait rien devoir à sa source. **Décision (2026-10-13) :** `MmutilAudio._number_ids` lit le RANG de chaque ligne
+     `SFX_*` / `MOD_*` de `soundbank.h`, vérifie qu'il est celui attendu (effets puis modules, 0..n-1, dans l'ordre
+     donné — le contrôle d'ids d'avant, qui cherchait des NOMS, devient un contrôle de rang), puis réécrit la ligne avec la
+     constante de l'ASSET (`sfx_constant`, et `c_names.module_constant`, désormais le seul endroit qui écrit `MOD_*` : `main.c`,
+     les tables de boîtes et le build s'y réfèrent). Les lignes `MSL_*` restent. Idempotent (un build en cache relit le header
+     déjà réécrit). Deux assets dont les noms donneraient la même constante C (`coin 2` et `coin_2`) bloquent le build avec
+     les deux noms. Plus aucune copie de fichier : `stage_by_name` est supprimé, seuls les fichiers réellement rendus
+     (découpe, taux) passent par `build/sfx/<asset>.wav`, nommés d'après l'asset pour ne pas s'écraser entre eux ; les WAV de
+     musique encapsulés s'appellent de même `<asset>.xm`. **Reste :** deux assets sur la même source sans réglage différent
+     portent deux fois les mêmes octets en ROM (mmutil ne déduplique pas) ; à mesurer avant de s'en préoccuper.
+     Tests : `tests/audio/test_soundbank_ids.py` (dont un mmutil réel sur trois effets d'un même `coin.wav`).
+   - **2b. Hauteur et panoramique par défaut — livrés le 2026-10-13.** `Sfx.pitch` (% de la hauteur du fichier, 100 = tel quel,
+     bornes 25–400 : `SFX_PITCH_MIN` / `SFX_PITCH_MAX`) et `Sfx.panning` (−100 gauche .. +100 droite, 0 centre) : la règle du
+     volume, la ressource propose, l'API surcharge — `sfx:set_pitch` / `sfx:set_panning` posent une valeur ABSOLUE sur une
+     lecture, quelle que soit celle de la ressource (la doc de l'API le disait déjà : « absolue »). **Rien ne change dans les
+     octets de la ROM :** le build émet deux tables dans `main.c` (`sound_emit.sfx_default_tables`), une case par effet dans
+     l'ordre du soundbank — l'`id` que reçoit `sfx_play` —, que `sfx_play` lit à la place des constantes `1024` et `128`
+     (`headers.py`). Comme `sfx_set_pitch` raisonne sur la hauteur COURANTE de chaque poignée (`g_sfx_rate`, qui existe parce
+     qu'`mmEffectScaleRate` est cumulatif), `sfx_play` y range la hauteur de DÉPART et non plus 1024 ; sans cela, un
+     `set_pitch` sur un effet réglé à 150 % se serait calculé sur une base fausse. Aucun site d'appel de `sfx_play` n'a changé
+     (scripts, SoundFxComponent, boîtes sonores, frames d'animation, destruction d'acteur : tous passent l'`id`). Inspecteur
+     d'effet : deux champs, Pitch et Panning. **Limites assumées :** l'aperçu de l'éditeur fait entendre la hauteur (le rendu
+     est déclaré à un taux plus haut ou plus bas : mêmes échantillons, joués plus vite ou plus lentement) mais PAS le
+     panoramique — le lecteur joue un module mono au centre ; l'onde de la découpe ne bouge pas avec la hauteur (elle montre le
+     fichier). Tests : `tests/audio/test_sfx_defaults.py`, `tests/ui/test_sfx_inspector_defaults.py`.
+   - **2c. Variation aléatoire de hauteur et fondu de sortie — livrés le 2026-10-13.**
+     **Variation :** `Sfx.pitch_variation` (± %, 0–50 : `SFX_PITCH_VARIATION_MAX`). À chaque lecture `sfx_play` tire la hauteur de
+     départ dans `pitch` ± ce pourcentage, au dixième de pour cent près (1 % vaut déjà ~17 cents, un pas entier s'entendrait).
+     **Décision, posée ici parce que le ROADMAP la laissait ouverte : le tirage a SON générateur** (`g_sfx_seed`, un LCG défini
+     dans `main.c` et partagé par tous les fichiers C, comme la graine de la secousse de caméra), jamais celui de `math.rand` —
+     régler la variation d'un effet ne doit pas changer ce que le jeu tire au hasard (une partie rejouée, un test de
+     non-régression, un déterminisme que l'auteur croit tenir). **Et la graine est fixe** : la même suite de sons à chaque mise
+     sous tension, comme `math.rand` ; l'amorcer sur le temps ou les touches est un choix de jeu, pas un défaut du moteur. La
+     valeur tirée est mémorisée comme hauteur COURANTE (`g_sfx_rate`) : `set_pitch` reste absolu. Table de plus
+     (`g_sfx_default_spread`). Le C généré de `sfx_play` est compilé sur l'hôte avec un `mmEffectEx` factice (gcc de msys2, test
+     `test_the_generated_sfx_play_draws_inside_the_spread_and_never_outside`) : 2 000 tirages restent dans la marge et
+     l'explorent en entier. L'aperçu de l'éditeur joue la hauteur de départ, sans tirage.
+     **Fondu de sortie :** `Sfx.fade_out`, en FRAMES (1/60 s) comme tous les fondus de l'éditeur (« une durée ne s'écrit pas de
+     deux façons selon l'écran »). Cuit dans l'échantillon par `core/sfx_render.render_sfx`, APRÈS la découpe et le
+     ré-échantillonnage : rampe linéaire sur les dernières frames de la plage GARDÉE, jusqu'à un zéro exact sur le dernier
+     échantillon — c'est lui qui supprime le clic d'une découpe en plein signal. Ni durée ni poids ne changent, et la console ne
+     calcule rien. Un fondu SEUL suffit à faire rendre l'effet par le build (`sfx_render.is_edited`). Plus long que l'effet, il
+     le couvre en entier. Écran : un champ *Fade out* (frames) à côté de la plage, et la rampe dessinée sur l'onde (une
+     diagonale, la part étouffée assombrie) à la fin de la plage gardée ; l'aperçu joue le même rendu. Le fondu de sortie des
+     MUSIQUES (`Music.fade_out`, appliqué à `music_stop`) reste un autre mécanisme, à l'exécution. **Reste :** un fondu d'ENTRÉE
+     d'effet (non demandé), l'écoute A/B du taux. Tests : `tests/audio/test_sfx_render.py`, `tests/audio/test_sfx_defaults.py`,
+     `tests/ui/test_sfx_editor.py`, `tests/ui/test_sfx_inspector_defaults.py`.
+   - **Correctif (2026-10-13) : un son COURT ne s'entendait pas à l'aperçu.** Signalé sur des effets de l'auteur (`ball_roll`, `bomb_lay2`,
+     `break`, `bump`… — 0,13 à 0,2 s ; `blade` et `bomb`, plus longs, jouaient). Le deck tire loin devant la carte son : un effet
+     court est tout entier produit dès le premier paquet, `deck.playing` retombe aussitôt, et `_refresh_rom_progress` (qui
+     décoche le bouton quand `BoxPlayer.sounding` est faux) fermait la carte son avant qu'on ait entendu quoi que ce soit.
+     Ce n'était ni le format (24 bits stéréo 44,1 kHz : les 63 effets du dossier `fx-wav` se rendent, démarrent et produisent de
+     l'audio dans un test sans carte son) ni les réglages. `sounding` suit désormais ce que la carte son a JOUÉ :
+     `_DeckDevice.sound_frames` (les trames tirées jusqu'à la fin du son) et `_AudioOutput.still_audible`, calculé sur les valeurs
+     que `_publish` donne déjà à l'interface (qui ne touche pas à la carte son depuis son thread). Test sans carte son :
+     `tests/audio/test_short_sound_stays_audible.py`. **Confirmé à l'oreille par l'auteur (2026-10-13)** sur les effets qu'il avait signalés.
+   - **Correctif (2026-10-13) : un WAV 24 ou 32 bits était refusé à l'import.** Signalé sur les 21 effets d'un dossier `platformer/wav`
+     (tous en 24 bits). `check_audio_file` les écartait parce que mmutil ne convertit que le 8 et le 16 bits — et qu'il construit la
+     ROM sans le dire, avec un effet muet. **Le refus était juste, mais il tombait au mauvais endroit :** l'éditeur ré-encode déjà
+     un effet pour la découpe et le taux, dans le dossier de build, sans toucher au fichier. Il le fait donc aussi pour la
+     profondeur. `sfx_render.read_wav` décode le 24 bits (trois octets little-endian posés en tête d'un entier 32 bits signé) et le
+     32 bits entier ; `write_sfx` réécrit en 16 bits mono, que mmutil reçoit. `sfx_encode` et `preview_file` ré-encodent tout WAV dont
+     la largeur n'est pas 8 ou 16 bits, même sans découpe ni changement de taux (`sfx_render.WAV_BITS_OK_BYTES`).
+     **Étendu aux musiques et aux jingles le même jour :** `wav_module._read_mono` lit par ce décodeur unique (plus de second
+     décodeur), donc `wav_to_xm` encapsule un WAV 24 bits comme un 16. `WAV_BITS_DECODED` (`core/models/audio.py`) = ce que l'import
+     accepte, pour les trois familles ; `WAV_BITS_OK` reste ce que mmutil lit tel quel. Seul un autre format (flottant, ADPCM,
+     fichier abîmé) est encore refusé, avec la raison. Un essai sur `coin.wav` (24 bits) : accepté comme musique et comme jingle,
+     module de 7 693 octets. Tests : `tests/project/test_create_asset.py` (le cas « refusé » est désormais un fichier illisible,
+     plus un 24 bits) ; `tests/audio/test_sfx_render.py`, `tests/audio/test_wav_music.py` inchangés et verts.
+     **Reste :** un test dédié au décodage 24/32 bits (rien ne le couvre à part l'essai manuel) ; l'écoute sur émulateur d'un
+     effet sorti d'un 24 bits.
+3. **Jingle** : politique vis-à-vis de la musique, puis plage jouée, puis l'avertissement de canaux.
+
+### Ce que ça ne fait pas
+
+- Ne modifie jamais le fichier source.
+- Ne lie pas une copie à son original.
+- N'ajoute ni priorité ni délai entre effets (voir plus haut).
+- Ne fait pas de l'éditeur un outil de montage audio : découper, régler, jamais composer.
 
 ---
 
@@ -1776,6 +2202,14 @@ clavier, la manette, le volume et des sauvegardes rangées par jeu. Le titre, l'
 fond éventuelle, la taille de fenêtre et le démarrage en plein écran sont les métadonnées de
 l'export. macOS et Linux restent hors de ce premier périmètre.
 
+Le Player est une **application de jeu native à fenêtre unique**, pas une fenêtre d'émulateur
+rhabillée : ses réglages et sa pause vivent dans un overlay rendu au-dessus du jeu, comme des
+menus du jeu lui-même. Aucune barre de menus ni surface de réglages mGBA ne doit être visible.
+Selon le choix de l'auteur, la sortie est soit nue (pixels nets, jeu seul), soit composée avec un
+fond, un cadre, un logo et des éléments décoratifs. Le rendu du jeu reste une surface distincte :
+elle peut recevoir un profil de shader fourni (pixels stricts, LCD doux, CRT léger…) ou un shader
+GLSL personnalisé, sans que cela affecte l'habillage ni le coeur d'émulation.
+
 **Une API de plateforme, pas une API Steam dans la ROM.** Le runtime exposera à terme des actions
 neutres telles que `platform:unlock_achievement("first_boss")`, `platform:set_stat(...)` et
 `platform:increment_stat(...)`. Elles émettent un événement vers le Player par un pont ROM →
@@ -1795,6 +2229,12 @@ l'auteur du jeu. Le premier périmètre exclut le Workshop, le multijoueur, l'in
 - La ROM est inchangée et reste exportable seule ; le desktop est une cible supplémentaire.
 - Le lecteur est générique et habillé avec les métadonnées du jeu, pas un fork par projet.
 - L'expérience de base (plein écran, pixels nets, contrôles, sauvegardes) précède Steam.
+- Le coeur mGBA est intégré nativement au Player : jamais lancement ou encapsulation de
+  l'application mGBA installée sur la machine.
+- Le Player est une fenêtre unique dont pause, volume, contrôles, plein écran et quitter sont un
+  overlay maison ; ils font partie de l'expérience de jeu, pas du chrome système.
+- L'auteur choisit l'habillage (aucun, ou fond/cadre/logo/décor) et le rendu de la surface du jeu
+  (profil de shader livré ou shader GLSL personnalisé).
 - L'API de script est indépendante de tout distributeur ; Steamworks vit uniquement dans le
   Player et seulement dans l'export Steam.
 - L'intégration Steam commence par succès, statistiques, Cloud et présence ; le reste est hors
@@ -1802,8 +2242,6 @@ l'auteur du jeu. Le premier périmètre exclut le Workshop, le multijoueur, l'in
 
 ### Ouvert
 
-- Le choix d'intégration du coeur mGBA dans le Player : lancement encapsulé d'un binaire existant
-  pour le premier prototype, ou intégration native du coeur pour contrôler totalement la fenêtre.
 - Le format du pont ROM → Player et la persistance éventuelle de succès locaux.
 - Le moment où l'export quitte le ZIP portable pour un installateur signé, et les critères pour
   ouvrir macOS puis Linux.
@@ -2035,6 +2473,45 @@ test à l'appui. Reste la tranche bitmap : son propre panneau.
 
 Pas d'annulation pas-à-pas (Ctrl+Z) : la recompression est asynchrone et « Original » suffit à
 revenir. Pas de réglage de couleurs (le mode et la profondeur existent déjà dans l'inspecteur).
+
+### Chantier produit à planifier — Color Tile Painter : commencer un niveau sans assets
+
+**Noté le 2026-10-12. Non commencé ; version et rang à décider.** Un auteur qui arrive sans
+assets ne doit pas être bloqué avant même de pouvoir tester son level design. Ce petit outil lui
+permet de composer vite un fond de prototype, jouable immédiatement, puis de le remplacer ou de
+le retravailler plus tard avec ses vrais visuels.
+
+#### Le minimum utile
+
+- Choisir une palette existante, puis une des **16 couleurs** sous forme de pastilles rondes ; la
+  première correspond à la transparence.
+- Peindre sur une grille, par clic ou glisser, avec un pinceau carré aligné sur les tuiles de
+  **8 px, 16 px ou 32 px**. Le pinceau 32 px reste une pose de couleur par cellules de base, pas
+  une image redimensionnée.
+- Créer ou mettre à jour un **BackgroundAsset éditable** : le projet conserve les indices de
+  palette et la grille, pas seulement une image aplatie, afin que l'auteur puisse changer une
+  couleur ou repeindre plus tard.
+- Exporter ce même résultat en **PNG**, pour l'archiver, le partager ou le poursuivre dans un
+  outil graphique externe.
+
+#### Décisions déjà claires
+
+- C'est un outil de **blockout**, délibérément limité aux aplats : ni pinceau libre, ni import
+  d'illustration, ni retouche photo. Il ne remet donc pas en cause le refus d'un éditeur d'image
+  généraliste.
+- Le résultat suit le pipeline de fonds existant et ses contraintes GBA (palette indexée,
+  transparence, tuilage) dès la première peinture : pas de conversion opaque au moment du build.
+- Un fond créé ainsi reste un fond normal dans le projet ; l'export PNG est une sortie
+  complémentaire, jamais sa seule forme sauvegardée.
+
+#### À trancher au démarrage
+
+- Où placer l'entrée dans l'interface : mode du Background Editor, ou création de fond vierge
+  depuis le navigateur d'assets.
+- Les dimensions initiales et le comportement hors limites (agrandir le canevas, ou demander une
+  taille à la création).
+- L'annulation/historique de peinture, et les raccourcis pour le sélecteur, la gomme et les trois
+  tailles de pinceau.
 
 ### Chantier transverse — la caméra change de cible en jeu, avec une transition
 

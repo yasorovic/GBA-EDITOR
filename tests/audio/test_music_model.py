@@ -87,9 +87,9 @@ def test_tempo_et_hauteur_sont_des_facteurs_q10_bornes(percent, q10):
 # ── 3. Le taux de build, la durée qui tient ───────────────────────
 
 
-def test_un_taux_plus_bas_allonge_la_piste_qui_tient():
+def test_la_duree_qui_tient_est_celle_de_la_table_d_ordres():
     assert wav_module.max_seconds() == wav_module.MAX_SECONDS
-    assert wav_module.max_seconds(13000) > 80      # le titre de 1:18 des maquettes passe
+    assert wav_module.MAX_SECONDS > 600            # le titre de 1:18 des maquettes passe largement
     assert wav_module.effective_rate(0) == wav_module.WAV_MUSIC_RATE
     assert wav_module.effective_rate(11025) == 11025
 
@@ -101,10 +101,10 @@ def _wav(path: Path, seconds: int) -> Path:
     return path
 
 
-def test_la_limite_de_duree_suit_le_taux_choisi(tmp_path):
-    long = _wav(tmp_path / "long.wav", 70)
+def test_la_limite_de_duree_ne_depend_plus_du_taux(tmp_path):
+    assert asset_reconciliation.wav_too_long(_wav(tmp_path / "ok.wav", 70)) is None
+    long = _wav(tmp_path / "long.wav", 800)
     assert "limited" in (asset_reconciliation.wav_too_long(long) or "")
-    assert asset_reconciliation.wav_too_long(long, 12000) is None
 
 
 # ── 4. Les réglages face au fichier ───────────────────────────────
@@ -182,13 +182,21 @@ def test_des_sections_d_une_autre_famille_de_fichier_sont_signalees(project):
     assert _levels(problems) == ["error"] and "reset" in problems[0][1]
 
 
-def test_un_wav_n_a_qu_une_boucle_native(project):
+def test_un_wav_peut_avoir_plusieurs_sections_qui_bouclent(project):
+    """Un WAV est un module : chaque section est une plage d'ordres, et plusieurs peuvent boucler."""
     _drop_wav(project, "w.wav", 4)
     m = Music(name="W", asset="assets/music/w.wav", unit=audio.UNIT_MS, loop_section="A",
               sections=[MusicSection("A", start=0, end=1000, loop=True),
                         MusicSection("B", start=1000, end=3000, loop=True)])
+    assert _problems(project, m) == []
+
+
+def test_une_section_plus_courte_qu_une_ligne_est_une_erreur(project):
+    _drop_wav(project, "w.wav", 4)
+    m = Music(name="W", asset="assets/music/w.wav", unit=audio.UNIT_MS,
+              sections=[MusicSection("Blip", start=1000, end=1004)])
     problems = _problems(project, m)
-    assert _levels(problems) == ["error"] and "one native loop" in problems[0][1]
+    assert _levels(problems) == ["error"] and "shorter than one line" in problems[0][1]
 
 
 def test_la_boucle_nommee_doit_exister_et_boucler(project):
@@ -252,3 +260,10 @@ def test_un_jingle_avertit_des_reglages_que_le_build_n_applique_pas(project):
     validator._check_music_structure(ctx)
     found = [m.message for m in ctx._msgs if m.message.startswith('Jingle "J"')]
     assert len(found) == 1 and "sections, tempo, fades" in found[0]
+
+
+def test_plus_de_six_sections_avertissent(project):
+    rel = _drop(project, "six.xm", F.make_xm(orders=[0] * 10))
+    music = Music(name="Six", asset=rel, sections=[MusicSection(f"S{i}", start=i, end=i + 1) for i in range(7)])
+    problems = _problems(project, music)
+    assert [lvl for lvl, msg in problems if "6 at most" in msg] == ["warning"]

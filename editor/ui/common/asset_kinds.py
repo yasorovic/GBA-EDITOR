@@ -62,6 +62,30 @@ def _store_deleter(attr: str):
     return delete
 
 
+def _store_duplicator(family: str):
+    """Bâtit la duplication d'un LOT d'assets d'un `ResourceStore` : une `Duplication` par asset, commandes NON poussées.
+    La copie pointe la même source (cf. core/asset_duplication) ; le finder pousse le lot en une entrée d'historique."""
+    def duplicate(project, objs):
+        from core import asset_duplication
+        return asset_duplication.duplicate_many(project, family, objs)
+    return duplicate
+
+
+def _duplicate_scripts(project, paths):
+    """Un script est un fichier : sa copie est un fichier voisin, sous un nom libre parmi TOUS les scripts du projet
+    (un behavior se retrouve par son nom)."""
+    from core import asset_duplication
+    from core.command_dispatcher import get_dispatcher
+    from core.lua_scripts import lua_files
+    taken = {path.stem for path in lua_files(project)}
+    copies = []
+    for path in paths:
+        command, target = asset_duplication.duplicate_script(path, taken, around=get_dispatcher().suspended)
+        taken.add(target.stem)
+        copies.append(asset_duplication.Duplication(command, target))
+    return copies
+
+
 def _font_source_deleter(project, obj):
     """Une suppression de source met aussi à jour les familles vectorielles."""
     from core.history import DeleteFontSourceCmd
@@ -107,6 +131,7 @@ SCENES = AssetKind(
     file_of       = store_file("scenes"),
     folder_family = "scenes",
     add_menu      = True,                    # scène ou groupe : le « + » déroule un menu
+    duplicate     = _store_duplicator("scenes"),
 )
 
 PREFABS = AssetKind(
@@ -121,6 +146,7 @@ PREFABS = AssetKind(
     # Glisser un prefab sur le canvas l'y instancie.
     mime          = (MIME_PREFAB_TEMPLATE, lambda project, pf: pf.name),
     file_of       = store_file("prefabs"),
+    duplicate     = _store_duplicator("prefabs"),
 )
 
 
@@ -165,6 +191,7 @@ SCRIPTS = AssetKind(
                      lambda project, path: (project.asset_rel(path)
                                             if project else path)),
     file_of       = own_path,
+    duplicate     = _duplicate_scripts,
 )
 
 
@@ -227,6 +254,7 @@ SPRITES = AssetKind(
     add_tooltip_key = 'akind.import_a_sprite_sheet',
     actions       = (_relink_action("sprites"),),
     file_of       = store_file("sprites"),
+    duplicate     = _store_duplicator("sprites"),
 )
 
 
@@ -246,6 +274,7 @@ BACKGROUNDS = AssetKind(
     delete = _store_deleter("backgrounds"),
     actions = (_relink_action("backgrounds"),),
     file_of = store_file("backgrounds"),
+    duplicate = _store_duplicator("backgrounds"),
 )
 
 
@@ -273,6 +302,7 @@ def _background_of_kind(bg_kind: str, label: str, add_tooltip: str,
         mime        = mime,
         actions     = (_relink_action("backgrounds"),),
         file_of     = store_file("backgrounds"),
+        duplicate   = _store_duplicator("backgrounds"),
     )
 
 
@@ -300,12 +330,10 @@ FONTS = AssetKind(
     delete     = _font_source_deleter,
     actions    = (_relink_action("fonts"),),
     file_of    = store_file("fonts"),
+    duplicate  = _store_duplicator("fonts"),
     # Pas de « + » : une police se crée depuis un PNG, un .fnt, un .ttf ou un .otf, par *Create* dans l'onglet Disk
     # (core.asset_creation), comme sprites et fonds.
     empty_text_key = 'akind.no_font_drop_a_png_or_a_fnt',
-    # Les fichiers source servent surtout au diagnostic : l'auteur travaille
-    # normalement avec les Font Assets au-dessus, donc ce dossier démarre clos.
-    section_expanded=False,
     tooltip_of = lambda f: (
         tooltip(
             title=f.name,
@@ -338,6 +366,7 @@ FONT_ASSETS = AssetKind(
     add=_new_font_asset,
     add_tooltip_key="akind.new_font_asset",
     file_of=store_file("font_assets"),
+    duplicate=_store_duplicator("font_assets"),
     empty_text_key="akind.no_font_assets",
     tooltip_of=lambda asset: tooltip(
         title=asset.name,
@@ -400,16 +429,6 @@ def _add_palette(project):
     ])
 
 
-def _duplicate_palette(project, bank):
-    """Partir d'une palette existante pour en dériver une variante, sans toucher
-    à l'originale ni aux scènes qui la citent par nom. Annulable (Ctrl+Z)."""
-    from core.models.palette import PaletteBank
-    from core.history import AddResourceCmd
-    copy = PaletteBank(name=unique_name(f"{bank.name} copy", {item.name for item in project.palettes}),
-                       colors=list(bank.colors), size=bank.size)
-    get_history().push(AddResourceCmd(project.palettes, copy))
-
-
 PALETTES = AssetKind(
     label       = "Palettes",
     label_key = 'common.palettes',
@@ -423,8 +442,8 @@ PALETTES = AssetKind(
     add         = _add_palette,
     add_tooltip_key = 'akind.add_palette',
     add_tip_key = 'akind.add_palette_tip',
-    actions     = (('common.duplicate', _duplicate_palette),),
     file_of     = store_file("palettes"),
+    duplicate   = _store_duplicator("palettes"),
 )
 
 
@@ -457,6 +476,8 @@ SFX = AssetKind(
     add_tooltip_key = 'akind.add_an_sfx',
     actions       = (_relink_action("sfx"),),
     file_of       = store_file("sfx"),
+    folder_family = "sfx",
+    duplicate     = _store_duplicator("sfx"),
 )
 
 MUSIC = AssetKind(
@@ -474,6 +495,8 @@ MUSIC = AssetKind(
     add_tooltip_key = 'akind.add_a_track',
     actions       = (_relink_action("music"),),
     file_of       = store_file("music"),
+    folder_family = "music",
+    duplicate     = _store_duplicator("music"),
 )
 
 # Un jingle est un module comme une musique, mais d'un autre DOSSIER — et c'est
@@ -491,6 +514,8 @@ JINGLES = AssetKind(
     add_tooltip_key = 'akind.add_a_jingle',
     actions       = (_relink_action("jingles"),),
     file_of       = store_file("jingles"),
+    folder_family = "jingles",
+    duplicate     = _store_duplicator("jingles"),
 )
 
 
@@ -531,6 +556,7 @@ DATA_TABLES = AssetKind(
     add           = _add_data_table,
     add_tooltip_key = 'akind.new_table',
     file_of       = store_file("data_tables"),
+    duplicate     = _store_duplicator("data_tables"),
 )
 
 

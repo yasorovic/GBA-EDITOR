@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont, QColor
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 
+from ui.common import finder_fold_state as fold_state
 from ui.common.widgets import W, FinderSection
 from ui.common.asset_finder import AssetFinder
 from ui.common.asset_kinds import SPRITES
@@ -96,6 +97,7 @@ class SpriteFinderPanel(QWidget):
         # PAS un asset finder : l'arbre montre la structure INTERNE du sprite
         # choisi (états × directions), pas des assets du projet.
         sec_anim = FinderSection(label('sprfind.animation_states'))
+        sec_anim.remember_fold("section/sprite_animation_states")
         sec_anim._btn_add.setToolTip(tooltip(
             title=label('sprfind.add_state'), body=label('sprfind.add_state_tip')
         ))
@@ -114,6 +116,9 @@ class SpriteFinderPanel(QWidget):
         self._anim_tree.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._anim_tree.itemExpanded.connect(self._fit_anim_tree)
         self._anim_tree.itemCollapsed.connect(self._fit_anim_tree)
+        # `_refresh_anim_tree` tourne sous blockSignals : seuls les clics de l'auteur sont retenus.
+        self._anim_tree.itemExpanded.connect(lambda it: fold_state.set_expanded(self._state_fold_key(it), True))
+        self._anim_tree.itemCollapsed.connect(lambda it: fold_state.set_expanded(self._state_fold_key(it), False))
         self._anim_tree.currentItemChanged.connect(self._on_anim_item_changed)
         self._anim_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._anim_tree.customContextMenuRequested.connect(self._on_anim_context_menu)
@@ -150,6 +155,10 @@ class SpriteFinderPanel(QWidget):
         self._refresh_anim_tree(self._current_sprite, select=(state, sd))
 
     # ── Peuplement anim tree ──────────────────────────────────────
+
+    def _state_fold_key(self, state_item: QTreeWidgetItem) -> str:
+        state = state_item.data(0, Qt.ItemDataRole.UserRole)[0]
+        return f"anim_state/{self._current_sprite.name}/{state.name}"
 
     def _fit_anim_tree(self, *_):
         rows, stack = 0, [self._anim_tree.topLevelItem(i)
@@ -189,7 +198,7 @@ class SpriteFinderPanel(QWidget):
             state_item.setData(0, Qt.ItemDataRole.UserRole, (state, None))
             state_item.setFlags(state_item.flags() | Qt.ItemFlag.ItemIsEditable)
             self._anim_tree.addTopLevelItem(state_item)
-            state_item.setExpanded(True)
+            state_item.setExpanded(fold_state.is_expanded(self._state_fold_key(state_item)))
 
             for sd in state.directions:
                 lbl = dir_label(sd)
@@ -232,6 +241,9 @@ class SpriteFinderPanel(QWidget):
             if first and first.childCount():
                 target_item = first.child(0)
         if target_item is not None:
+            # Une direction choisie ne reste pas cachée dans un état replié.
+            if target_item.parent() is not None:
+                target_item.parent().setExpanded(True)
             self._anim_tree.setCurrentItem(target_item)
 
     # ── Slots ─────────────────────────────────────────────────────

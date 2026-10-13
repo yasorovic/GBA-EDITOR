@@ -102,10 +102,10 @@ def test_une_coupe_vers_un_wav_reste_signalee():
 
 
 def test_une_coupe_depuis_un_wav_attend_la_fin_de_son_pattern():
-    """Le runtime guette le retour de la LIGNE à zéro ; un WAV encapsulé n'en a
-    qu'une toutes les 256 lignes, soit ~5 s."""
+    """Le runtime guette le retour de la LIGNE à zéro ; un segment de WAV n'en a
+    qu'une toutes les 256 lignes, soit ~3 s au pire."""
     found = cut_problems("W", "B", None, _mod([0, 0]), src_wav=True)
-    assert len(found) == 1 and "5 s" in found[0] and "fade" in found[0]
+    assert len(found) == 1 and "3 s" in found[0] and "fade" in found[0]
 
 
 # ── Le même contrôle, sur les arêtes d'une MusicBox ────────────────
@@ -211,3 +211,16 @@ def test_une_coupe_sans_musique_a_cette_position_s_arrete_sans_la_boucle():
     deck, out = _cut_at_order_one(loop=False)
     assert not deck.playing
     assert not out[100:150].any()
+
+
+def test_poser_la_tete_de_lecture_saute_a_l_ordre_sans_etre_ramene_par_la_section():
+    from core.engine_emulation.music_deck import MusicDeck
+    track = _track({0: 0, 1: 100, 2: 200, 3: 300}, order_count=4)
+    track.loop_orders = (2, 4)                                 # la section commence à l'ordre 2
+    deck = MusicDeck(mix_rate=6000)
+    deck.play(track, volume=1024, loop=True, start_at=250)     # dedans : la section est « entrée »
+    deck.pull(10)
+    deck.seek_to_order(0)                                      # avant la section : on y reste
+    assert deck.position == 0
+    deck.pull(150)
+    assert track.order_at(deck.position) == 1                  # pas ramené au début de la section

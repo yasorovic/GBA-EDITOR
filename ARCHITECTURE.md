@@ -35,7 +35,7 @@ backstage/
 │   │   │   ├── palette_store.py     ← palettes .hex + sidecar JSON
 │   │   │   └── asset_reconciliation.py ← synchronisation des fichiers assets et de leurs sidecars
 │   │   ├── music_structure.py       ← les réglages d'une `.music` face à son fichier : sections, boucle, coupe (`cut_problems`), ce que la ROM lit (`music_info_row`)
-│   │   ├── wav_module.py            ← une piste WAV encapsulée en module XM : taux choisi, boucle d'échantillon calée sur un passage par zéro
+│   │   ├── wav_module.py            ← une piste WAV encapsulée en VRAI module XM : un échantillon par segment (frontières des sections), une ligne = 180 échantillons du mixeur, `plan_wav` traduit les ms en positions d'ordre
 │   │   ├── disk_tree.py             ← `assets/` tel qu'il est sur le disque, chaque fichier marqué (asset, source reliée, source libre, non géré) — sans Qt, lecture seule
 │   │   ├── disk_folders.py          ← créer un dossier de `assets/` (refuse tout ce qui sort de `assets/`)
 │   │   ├── asset_creation.py        ← *Create asset* : un format de source → les types qu'il peut devenir ; construit l'asset (nom unique, à côté de sa source, qui le POINTE), l'historique le range (`CreateAssetCmd`)
@@ -55,7 +55,7 @@ backstage/
 │   │   │   ├── blend_preview.py     ← les formules BLDCNT/BLDALPHA/BLDY appliquées aux images
 │   │   │   ├── module_render.py     ← rejoue un module façon mixeur maxmod (taux réduit, sans interpolation)
 │   │   │   ├── music_deck.py        ← la couche module : transitions, fondus, section de boucle (jumeau : music_transition_tick() / music_loop_tick())
-│   │   │   ├── wav_render.py        ← une piste WAV rendue comme le build la portera (taux choisi, 8 bits, boucle d'échantillon)
+│   │   │   ├── module_stream.py     ← un module joué EN DIRECT, tick par tick (`StreamTrack`) : tempo et hauteur lus à chaque tick, sauts demandés au rendu
 │   │   │   ├── module_model.py      ← le modèle commun aux 4 formats + reconnaissance par signature
 │   │   │   └── mod/s3m/xm/it_file.py ← les 4 lecteurs de format que maxmod accepte
 │   │   ├── text_markup.py           ← langage de balisage des textes (BBCode) : analyse → affiché + effets
@@ -130,9 +130,10 @@ backstage/
 │       ├── sound_mixer/
 │       │   ├── box_playback.py             ← lecture ROM d'une MusicBox ou d'un asset (sortie audio, cache des rendus, aperçu d'une section)
 │       │   ├── music_editor.py             ← centre, pour une musique : en-tête, forme d'onde, et la zone de structure du FORMAT (module ou WAV)
-│       │   ├── waveform_view.py            ← la forme d'onde du `Track` ; bandes de sections (module) ou poignées de boucle (WAV)
+│       │   ├── waveform_view.py            ← la forme d'onde du `Track`, ou (bascule Onde | Scope) un oscilloscope du mix : les 30 dernières ms que le lecteur fait entendre (`BoxPlayer.scope_window`, tiré du tampon que garde `_DeckDevice`), sinon une fenêtre fixe du rendu ; bandes de sections, et pour un WAV les poignées de sa section de boucle. Volume, tempo et hauteur s'y voient sans rendu
 │       │   ├── order_strip.py              ← la table d'ordres BRUTE d'un module, ses sections, la sélection d'une plage
-│       │   ├── section_table.py            ← les sections d'un module en tableau, éditées en place
+│       │   ├── section_table.py            ← les sections d'une musique en tableau, éditées en place (ordres pour un module, secondes pour un WAV)
+│       │   ├── mix_faders.py               ← volume / tempo / hauteur en curseurs verticaux (l'aperçu les suit au tick près : `BoxPlayer.set_preview_tuning`)
 │       │   ├── section_colors.py           ← la couleur d'une section (lue par les quatre composants ci-dessus)
 │       │   ├── music_graph.py              ← centre : le graphe de la MusicBox (nœuds déplaçables)
 │       │   ├── sound_commands.py           ← écritures annulables (déplacer, supprimer, renommer un état)

@@ -5,7 +5,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QShortcut, QKeySequence
 from PyQt6.QtWidgets import QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
 
-from ui.common import icons
+from ui.common import finder_fold_state as fold_state, icons
 from ui.common.labels import label
 from ui.common.theme import C, S, T
 from ui.common.widgets import W
@@ -55,7 +55,18 @@ class TextFinder(QWidget):
                   context=Qt.ShortcutContext.WidgetShortcut)
         self._tree.itemExpanded.connect(lambda it: self._refresh_folder_icon(it, True))
         self._tree.itemCollapsed.connect(lambda it: self._refresh_folder_icon(it, False))
+        self._tree.itemExpanded.connect(lambda it: self._remember_fold(it, True))
+        self._tree.itemCollapsed.connect(lambda it: self._remember_fold(it, False))
         root.addWidget(self._tree, 1)
+
+    @staticmethod
+    def _fold_key(path: tuple[str, ...]) -> str:
+        return "/".join(["text_folder", *path])
+
+    def _remember_fold(self, item: QTreeWidgetItem, expanded: bool) -> None:
+        # `refresh` pose les états sous `_blocking` : seuls les clics de l'auteur sont retenus.
+        if not self._blocking:
+            fold_state.set_expanded(self._fold_key(tuple(item.data(0, _ROLE_PATH) or ())), expanded)
 
     def load_project(self, project):
         self._project = project
@@ -69,6 +80,7 @@ class TextFinder(QWidget):
                                                   n=len(self._project.texts) if self._project else 0)])
         root.setData(0, _ROLE_PATH, ())
         root.setData(0, _ROLE_IS_FOLDER, True)
+        root.setExpanded(fold_state.is_expanded(self._fold_key(())))
         root.setIcon(0, icons.folder_icon(root.isExpanded(), icons.COLOR_FOLDER))
         nodes: dict[tuple[str, ...], QTreeWidgetItem] = {(): root}
         counts: dict[tuple[str, ...], int] = {(): 0}
@@ -95,9 +107,7 @@ class TextFinder(QWidget):
                 if not has_child:
                     item.setIcon(0, icons.get("ui_text", C.TEXT_DIM))
                 else:
-                    # À l'ouverture, les grands dossiers restent lisibles mais
-                    # leurs descendants ne déroulent pas toute l'arborescence.
-                    expanded = len(path) == 1
+                    expanded = fold_state.is_expanded(self._fold_key(path))
                     item.setExpanded(expanded)
                     item.setIcon(0, icons.folder_icon(expanded, icons.COLOR_FOLDER))
         target = nodes.get(selected, root)

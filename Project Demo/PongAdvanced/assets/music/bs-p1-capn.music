@@ -3,10 +3,18 @@
   "id": "2f87dd07ccc2",
   "asset": "assets/music/bs-p1-capn.wav",
   "loop": true,
-  "volume": 100,
+  "volume": 33,
   "unit": "ms",
-  "sections": [],
-  "loop_section": "",
+  "sections": [
+    {
+      "name": "Loop",
+      "color": "#82aaff",
+      "start": 4855,
+      "end": 14566,
+      "loop": true
+    }
+  ],
+  "loop_section": "Loop",
   "tempo": 100,
   "pitch": 100,
   "fade_in": 0,

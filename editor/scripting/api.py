@@ -955,15 +955,16 @@ RUNTIME_API: dict[str, ApiFunc] = {
         params=[Param("section", PARAM_STR, DOMAIN_MUSIC_SECTION)],
         doc="Makes the playing track loop on another section of ITS OWN (a boss "
             "changing phase: the same song, another part of it). Nothing happens if the "
-            "playing track has no section by this name. Modules only: a WAV track has a "
-            "single loop, fixed at build.",
+            "playing track has no section by this name. A WAV track has sections too: "
+            "each one is a part of the track, cut at the nearest line of its module "
+            "(about 11 ms).",
     ),
     "music.leave_loop": ApiFunc(
         lua_name="music.leave_loop", c_func="music_leave_loop",
         params=[],
         doc="Lets the playing track leave its loop section: it plays on through the "
-            "rest of the song — the outro — and then stops. Modules only: a WAV track "
-            "never leaves its loop, so its outro is never played.",
+            "rest of the song — the outro — and then stops. A WAV track does it like a "
+            "module: what follows its loop section is its outro.",
     ),
     # Le jingle : la seule superposition que la console autorise. Il ne boucle
     # pas, prend jusqu'à 4 des 8 canaux, et il n'y en a qu'un à la fois — trois

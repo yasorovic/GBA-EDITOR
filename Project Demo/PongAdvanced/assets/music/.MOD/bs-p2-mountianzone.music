@@ -3,7 +3,7 @@
   "id": "5f79e32bef92",
   "asset": "assets/music/.MOD/bs-p2-mountianzone.mod",
   "loop": true,
-  "volume": 100,
+  "volume": 15,
   "unit": "order",
   "sections": [
     {
@@ -22,7 +22,7 @@
     }
   ],
   "loop_section": "Loop",
-  "tempo": 100,
+  "tempo": 154,
   "pitch": 100,
   "fade_in": 0,
   "fade_out": 0,

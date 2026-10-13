@@ -1,0 +1,13 @@
+{
+  "name": "feet",
+  "id": "f217c5db81f4",
+  "asset": "assets/sfx/action/fx-wav/feet.wav",
+  "volume": 100,
+  "sample_rate": 0,
+  "trim_start": 0,
+  "trim_end": 0,
+  "pitch": 100,
+  "panning": 0,
+  "pitch_variation": 0,
+  "fade_out": 0
+}

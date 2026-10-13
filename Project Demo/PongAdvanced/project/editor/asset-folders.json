@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "families": {
+    "scenes": {
+      "folders": []
+    },
+    "sfx": {
+      "folders": []
+    },
+    "music": {
+      "folders": [
+        {
+          "id": "c9642edb77b9",
+          "name": ".MOD",
+          "parent_id": null,
+          "members": [
+            "721848eef196",
+            "5df2c3c63530",
+            "3a3d1e8b2748",
+            "da9576d0cb1d",
+            "9cbdd87026ab",
+            "5f79e32bef92",
+            "e3ec446c7001",
+            "ea91125b8989",
+            "4f5adafe9aed",
+            "1b6abca4f07e",
+            "8a39d106a7cb",
+            "cebd3023dc2e",
+            "a8b66a42bd16",
+            "849d221eea9d"
+          ],
+          "color": ""
+        },
+        {
+          "id": "69e4cb3a41c1",
+          "name": ".WAV",
+          "parent_id": null,
+          "members": [
+            "eefd572338a6",
+            "2f87dd07ccc2",
+            "d88e78aa92df",
+            "e61bdb33d4bd",
+            "bcb9dd1d84ec",
+            "949a12af591f",
+            "707dd87888f2",
+            "cafd1c17c035",
+            "18f1de2e3318",
+            "5bf0e2c1c10c",
+            "fa4d6bf9d668",
+            "5c29d0918825",
+            "5368e97adc7e"
+          ],
+          "color": ""
+        }
+      ]
+    },
+    "jingles": {
+      "folders": []
+    }
+  }
+}

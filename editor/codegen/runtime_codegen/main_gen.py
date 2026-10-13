@@ -89,7 +89,7 @@ from codegen.actor_budget import prefab_group
 from codegen.grit_conversion import (
     count_frames, sprite_unique_frames, seq_key,
 )
-from codegen.c_names import sym as c_sym, scene_actor_sym
+from codegen.c_names import module_constant, sym as c_sym, scene_actor_sym
 from core.app_paths import RUNTIME_DIR
 import codegen.build_output as build_output
 
@@ -1200,7 +1200,7 @@ def _scene_music_lines(p: Project, scene: Scene, sound_assets: dict | None) -> l
     loop = 1 if getattr(music, "loop", True) else 0
     # `volume` est un POURCENTAGE ; mmSetModuleVolume attend 0–1024.
     vol  = volume_to_module(int(getattr(music, "volume", 100)))
-    return [f"    music_play(MOD_{c_sym(want).upper()}, {loop}, {vol});"]
+    return [f"    music_play({module_constant(want)}, {loop}, {vol});"]
 
 
 def _gen_ui_routes(p: Project, scene) -> list[str]:
@@ -2568,7 +2568,8 @@ def generate_main(
         # oblige à la retenir).
         L += ["mm_hword g_sfx_rate[16] = {1024,1024,1024,1024,1024,1024,1024,1024,"
               "1024,1024,1024,1024,1024,1024,1024,1024};", ""]
-        from codegen.runtime_codegen.sound_emit import emit as _emit_sound_boxes
+        from codegen.runtime_codegen.sound_emit import emit as _emit_sound_boxes, sfx_default_tables
+        L += sfx_default_tables(sound_assets)
         L += _emit_sound_boxes(p)
 
     # ── scene_init_X() par scène ──────────────────────────────────

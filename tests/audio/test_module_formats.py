@@ -114,11 +114,14 @@ def test_la_duree_suit_les_lignes_et_le_tempo():
     aussi — c'est le format qui l'impose, pas la fixture."""
     from core.engine_emulation.module_render import render_module, GBA_MIX_RATE
 
-    per_tick = round(GBA_MIX_RATE * 2.5 / F.BPM)
+    # Un tick dure un nombre ENTIER d'échantillons du mixeur de la console (maxmod tronque) : c'est
+    # cette durée que le rendu reporte à son propre taux, fraction comprise.
+    from core.engine_emulation.module_render import ROM_MIXER_RATE
+    per_tick = GBA_MIX_RATE * (ROM_MIXER_RATE * 2.5 // F.BPM) / ROM_MIXER_RATE
     attendu = {"mod": 64, "s3m": 64, "xm": F.ROWS, "it": F.ROWS}
     for kind, rows in attendu.items():
         audio = render_module(_parse(kind, _data(kind)))
-        assert audio.shape[0] == rows * F.SPEED * per_tick, kind
+        assert abs(audio.shape[0] - rows * F.SPEED * per_tick) <= 1, kind
 
 
 # ── 3. La décompression d'Impulse Tracker ─────────────────────────

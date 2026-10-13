@@ -27,7 +27,7 @@ from __future__ import annotations
 from core.models.audio import volume_to_effect, volume_to_module
 from core.music_structure import music_info_row   # une seule définition, que l'aperçu lit aussi
 from core.models.sound_box import KIND_SOUND, KIND_JINGLE, TRANSITION_CUT
-from codegen.c_names import sym as c_sym
+from codegen.c_names import module_constant
 
 
 def _sfx_const(name: str) -> str:
@@ -42,7 +42,27 @@ def _music_const(name: str) -> str:
     header de mmutil. `MUSIC_*` est un alias que le transpileur Lua pose dans
     les fichiers de script, et qui n'existe pas ici.
     """
-    return f"MOD_{c_sym(name).upper()}"
+    return module_constant(name)
+
+
+def sfx_default_tables(sound_assets: dict | None) -> list[str]:
+    """Ce avec quoi chaque effet DÉMARRE : sa hauteur (facteur 6.10), son panoramique (0–255) et la variation aléatoire
+    de sa hauteur (± %) — `Sfx.pitch`, `Sfx.panning`, `Sfx.pitch_variation` convertis vers l'échelle du matériel. Un rang par
+    effet, dans l'ordre du soundbank — celui de `SFX_*`, que `sfx_play` reçoit en `id`. Au moins une case : un projet sans
+    effet (de la musique seule) garde des tables que `sfx_play` ne lira jamais.
+
+    Et la graine du tirage de cette variation : un générateur À LUI, défini ici et partagé par tous les fichiers C (comme
+    la graine de la secousse de caméra). Il ne touche jamais celui de `math.rand` : régler la variation d'un effet ne doit
+    pas changer ce que le jeu tire au hasard. La graine est fixe, donc une partie rejouée refait les mêmes sons."""
+    from core.models.audio import SFX_PITCH_VARIATION_MAX, panning_to_hardware, pitch_to_rate
+    sfx_rows = [sfx for sfx, _path in (sound_assets or {}).get("sfx", [])] or [None]
+    rates = [pitch_to_rate(getattr(sfx, "pitch", 100)) for sfx in sfx_rows]
+    pans = [panning_to_hardware(getattr(sfx, "panning", 0)) for sfx in sfx_rows]
+    spreads = [max(0, min(SFX_PITCH_VARIATION_MAX, int(getattr(sfx, "pitch_variation", 0) or 0))) for sfx in sfx_rows]
+    return [f"const mm_hword g_sfx_default_rate[{len(rates)}] = {{{','.join(map(str, rates))}}};",
+            f"const mm_byte  g_sfx_default_pan[{len(pans)}] = {{{','.join(map(str, pans))}}};",
+            f"const mm_byte  g_sfx_default_spread[{len(spreads)}] = {{{','.join(map(str, spreads))}}};",
+            "mm_word g_sfx_seed = 1013904223u;", ""]
 
 
 def collect(p) -> dict:
@@ -239,22 +259,23 @@ def music_runtime_lines(p, sound_assets) -> list[str]:
     surcharge ne survit pas à la piste suivante."""
     from core.models.audio import Jingle
     from core.music_structure import music_section_names, music_section_rows
-    musics = [m for m, _path in (sound_assets or {}).get("music", []) if not isinstance(m, Jingle)]
+    musics = [(m, path) for m, path in (sound_assets or {}).get("music", []) if not isinstance(m, Jingle)]
     rows = []
-    for m, _path in (sound_assets or {}).get("music", []):
+    for m, path in (sound_assets or {}).get("music", []):
         if isinstance(m, Jingle):
             continue        # un jingle joue par `mmJingle`, sur sa propre couche : aucun de ces réglages
-        row = music_info_row(m)
+        row = music_info_row(m, path)
         if any(row):
             rows.append(f"    [{_music_const(m.name)}] = {{ {', '.join(str(v) for v in row)} }},"
                         f"   /* {m.name} */")
 
     # Les sections qu'un script peut choisir : (module, rang du NOM, début, fin). Le rang est
     # celui de `music_section_names` — la même liste que les `MSEC_*` du script.
-    names = music_section_names(getattr(p, "music", musics) if p is not None else musics)
+    names = music_section_names(getattr(p, "music", [m for m, _path in musics]) if p is not None
+                                else [m for m, _path in musics])
     section_rows = []
-    for m in musics:
-        for name, start, end in music_section_rows(m):
+    for m, path in musics:
+        for name, start, end in music_section_rows(m, path):
             section_rows.append(f"    {{ {_music_const(m.name)}, {names.index(name)}, {start}, {end} }},"
                                 f"   /* {m.name} / {name} */")
     return [

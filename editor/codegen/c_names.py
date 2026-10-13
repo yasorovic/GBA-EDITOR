@@ -47,6 +47,13 @@ def scene_actor_sym(scene_name: str, actor_name: str) -> str:
     return f"{sym(scene_name)}_{sym(actor_name)}"
 
 
+def module_constant(music_name: str) -> str:
+    """La constante `MOD_*` d'un module (musique, jingle) dans `soundbank.h` : celle que `main.c` et les tables de boîtes
+    citent. Elle vient du NOM DE L'ASSET — le build réécrit le header de mmutil pour qu'il en soit ainsi
+    (cf. `grit_conversion.MmutilAudio._number_ids`), jamais du nom du fichier source."""
+    return f"MOD_{sym(music_name).upper()}"
+
+
 def c_ident(name: str) -> str:
     """Assainit un nom de ressource en fragment de #define, EN MAJUSCULES :
     'Ruin At Last DX' -> 'RUIN_AT_LAST_DX'.

@@ -8,7 +8,7 @@ from typing import Optional
 
 from core.models.background import BackgroundAsset
 from core.models.sprite import SpriteAsset, IMAGE_FILE_EXTS
-from core.models.audio import MUSIC_FILE_EXTS, SFX_FILE_EXTS, WAV_BITS_OK, JINGLE_MAX_CHANNELS
+from core.models.audio import MUSIC_FILE_EXTS, SFX_FILE_EXTS, WAV_BITS_DECODED, JINGLE_MAX_CHANNELS
 
 
 def _citing(store, path: Path, resolve) -> list:
@@ -23,14 +23,13 @@ def _citing(store, path: Path, resolve) -> list:
     return found
 
 
-def wav_too_long(path, sample_rate: int = 0) -> Optional[str]:
+def wav_too_long(path) -> Optional[str]:
     """La raison pour laquelle ce WAV ne tiendra pas dans un module de musique,
-    ou None. Une piste devient UN module d'UN échantillon : sa durée est bornée
-    par ce que le mixeur sait lire d'un échantillon (cf. `wav_module`) — et cette
-    borne dépend du taux de build (`Music.sample_rate`, 0 = le défaut)."""
+    ou None. Une piste devient un module dont chaque segment est un échantillon : sa
+    durée est bornée par la table d'ordres (cf. `wav_module`)."""
     import wave
-    from core.wav_module import effective_rate, max_seconds
-    limit = max_seconds(effective_rate(sample_rate))
+    from core.wav_module import max_seconds
+    limit = max_seconds()
     try:
         with wave.open(str(path)) as w:
             seconds = w.getnframes() / max(1, w.getframerate())
@@ -38,7 +37,7 @@ def wav_too_long(path, sample_rate: int = 0) -> Optional[str]:
         return None          # `check_audio_file` dit déjà pourquoi il est illisible
     if seconds > limit:
         return (f"WAV of {seconds:.0f} s: a music track is limited to "
-                f"{limit:.0f} s once turned into a module at this sample rate.")
+                f"{limit:.0f} s once turned into a module.")
     return None
 
 
@@ -101,9 +100,8 @@ def check_audio_file(path, into: Optional[str] = None, at_import: bool = True) -
                     "required.")
         except Exception as e:
             return f"cannot be read ({e})."
-        if bits not in WAV_BITS_OK:
-            return (f"WAV {bits} bits: mmutil only converts 8 and 16 bits. It would build"
-                    " the ROM without saying so, with a silent result.")
+        if bits not in WAV_BITS_DECODED:
+            return f"WAV {bits} bits: only 8, 16, 24 and 32 bits PCM are read."
         if at_import and folder in ("music", "jingles"):
             # Refusé à l'import. Dans le validateur, le même constat n'est qu'un
             # avertissement : un fichier trop long qu'aucun état ne joue ne

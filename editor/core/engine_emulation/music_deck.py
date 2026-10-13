@@ -36,10 +36,14 @@ Sans Qt : cette classe dit quels échantillons sortent, pas comment les jouer.
 """
 from __future__ import annotations
 
+import functools
+import threading
 from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
+
+from .module_render import ChannelLevels
 
 # Une frame de VBlank. Le stepper du runtime tourne une fois par frame, et
 # c'est cette horloge-là qui donne au fondu sa durée exacte.
@@ -48,8 +52,31 @@ FRAME_HZ = 60
 # L'échelle de `mmSetModuleVolume` (cf. models/audio.volume_to_module).
 MODULE_FULL = 1024
 
+# Le scrub : la vitesse de lecture suit le geste, bornée en multiples de la vitesse normale ; et la part de
+# l'écart restant à la cible que chaque paquet rattrape (plus c'est grand, plus le son colle au pointeur).
+_SCRUB_MAX_RATE = 6.0
+_SCRUB_FOLLOW = 0.8
+
 # Les modes du pas par frame — les mêmes nombres que `g_mtr_mode` dans main.c.
 _NONE, _CROSSFADE, _CUT, _FADE_IN, _FADE_OUT = 0, 1, 2, 3, 4
+
+
+def _locked(method):
+    """Le deck est produit par le thread audio (`pull`) et piloté par celui de l'interface : une seule main à la fois."""
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self.lock:
+            return method(self, *args, **kwargs)
+    return wrapper
+
+
+@dataclass
+class _Scrub:
+    """Le son qui suit la main : le rendu entier lu à la position `pos` (en échantillons, fractionnaire), qui court
+    vers `target`."""
+    pcm: np.ndarray
+    pos: float
+    target: float
 
 
 @dataclass
@@ -68,16 +95,16 @@ class Track:
     pcm: np.ndarray                       # (n, 2) int16
     marks: dict = field(default_factory=dict)   # index d'ordre -> échantillon
     restart: int = 0                      # index d'ordre où `MM_PLAY_LOOP` reboucle
-    order_count: int = 0                  # longueur de la table BRUTE ; 0 = sans structure (WAV)
+    order_count: int = 0                  # longueur de la table BRUTE ; 0 = sans structure
     loop_orders: Optional[tuple] = None   # section de boucle : positions d'ordre [début, fin)
-    sample_loop: Optional[tuple] = None   # boucle d'échantillon d'un WAV : échantillons [début, fin)
     fade_in: int = 0                      # frames
     fade_out: int = 0                     # frames
+    levels: Optional[ChannelLevels] = None   # le pic de chaque canal par tick ; None pour un rendu en direct
 
     @property
     def forces_loop(self) -> bool:
         """Une section de boucle fait boucler le module quel que soit son drapeau."""
-        return self.loop_orders is not None or self.sample_loop is not None
+        return self.loop_orders is not None
 
     @property
     def restart_at(self) -> int:
@@ -95,7 +122,18 @@ class Track:
                 best, best_off = order, off
         return best
 
-    def start_of(self, order: int) -> Optional[int]:
+    def rewind(self) -> int:
+        """Où le deck reprend quand un module qui boucle arrive à sa fin : son ordre de restart."""
+        return min(self.restart_at, max(0, int(self.pcm.shape[0]) - 1))
+
+    def song_seconds(self, pos: int, mix_rate: int) -> float:
+        """La position DANS LE MORCEAU, en secondes (un rendu en direct la situe sur une frise, cf. module_stream)."""
+        return pos / mix_rate
+
+    def total_seconds(self, mix_rate: int) -> float:
+        return int(self.pcm.shape[0]) / mix_rate
+
+    def start_of(self, order: int, row: int = 0) -> Optional[int]:
         """L'échantillon où commence cet index d'ordre — `mmPosition(pat)` — ou None
         si la piste n'a PAS de musique à cette position.
 
@@ -103,6 +141,8 @@ class Track:
         SUIVANT ; une position hors table, ou un 255, n'a pas de musique — c'est
         à l'appelant de dire ce qui suit, car cela dépend du mode de lecture. Une
         piste sans repères (un WAV) n'a pas de structure à violer : le début.
+
+        `row` n'a de sens que pour un rendu en direct (cf. module_stream) : un rendu fini se lit à l'ordre.
         """
         if not self.marks:
             return 0
@@ -125,6 +165,9 @@ class MusicDeck:
     """
 
     def __init__(self, mix_rate: int):
+        # Réentrant : un appel verrouillé en fait d'autres (`play` → `_start`). Quiconque lit l'intérieur d'un
+        # `Track` en direct pendant que le thread audio le remplit (cf. `StreamTrack`) le prend aussi.
+        self.lock = threading.RLock()
         self._mix = mix_rate
         # Échantillons par frame. Le volume et la bascule ne bougent QU'ICI,
         # comme la ROM ne les touche qu'au VBlank : un fondu de 30 frames dure
@@ -148,6 +191,7 @@ class MusicDeck:
         self._i = 0
         self._n = 1
         self._row_order = 0              # pour la coupe : l'ordre observé
+        self._scrub: Optional[_Scrub] = None
 
     # ── Ce que la boîte demande ───────────────────────────────────
 
@@ -161,6 +205,10 @@ class MusicDeck:
         return self._pos
 
     @property
+    def track(self) -> Optional[Track]:
+        return self._track
+
+    @property
     def duration(self) -> int:
         """Durée du module courant, en échantillons stéréo."""
         return 0 if self._track is None else int(self._track.pcm.shape[0])
@@ -169,6 +217,7 @@ class MusicDeck:
     def looping(self) -> bool:
         return self._loop
 
+    @_locked
     def set_looping(self, enabled: bool):
         """Change la boucle de la lecture en cours et de la transition pendante.
 
@@ -178,6 +227,17 @@ class MusicDeck:
         self._loop = bool(enabled) or forced
         self._to_loop = bool(enabled)
 
+    @_locked
+    def set_volume(self, volume: int):
+        """`music_set_volume` : le niveau demandé change, et se fait entendre tout de suite — sauf pendant un
+        fondu, où le pas de la frame suivante reprend la rampe vers le nouveau niveau."""
+        self._music_vol = volume
+        if self._mode == _FADE_IN:
+            self._to_vol = volume
+        elif self._mode == _NONE:
+            self._vol = volume
+
+    @_locked
     def play(self, track: Track, volume: int, loop: bool = True, start_at: int = 0):
         """`music_play` : démarrage sec, sans transition — mais avec le fondu d'entrée.
 
@@ -193,11 +253,14 @@ class MusicDeck:
         else:
             self._vol = volume
 
+    @_locked
     def stop(self):
         """L'arrêt sec : le bouton Stop du lecteur, pas l'appel du jeu."""
+        self._scrub = None
         self._track = None
         self._mode = _NONE
 
+    @_locked
     def music_stop(self):
         """`music_stop()` : avec un fondu de sortie, la musique s'éteint puis s'arrête."""
         if self._mode == _FADE_OUT:
@@ -209,6 +272,7 @@ class MusicDeck:
             return
         self.stop()
 
+    @_locked
     def fade_to(self, track: Track, volume: int, frames: int,
                 loop: bool = True):
         """`music_fade_to`. Sous deux frames, il n'y a pas de fondu à jouer."""
@@ -219,6 +283,7 @@ class MusicDeck:
         self._to_loop = loop
         self._i, self._n = 0, frames
 
+    @_locked
     def cut_to(self, track: Track, volume: int, loop: bool = True):
         """`music_cut_to`. Rien ne joue = aucune position à respecter."""
         if not self.playing:
@@ -231,6 +296,7 @@ class MusicDeck:
     def _start(self, track: Track, loop: bool):
         """`mmStart` suivi de `music_apply` : le module démarre, ses réglages s'appliquent."""
         self._track, self._pos = track, 0
+        self._scrub = None
         self._loop = loop or track.forces_loop
         self._ended = False
         self._loop_in = False
@@ -318,16 +384,78 @@ class MusicDeck:
             # va jusqu'à la fin du morceau, ou un saut), et on le renvoie au début.
             self._jump_to_order(start)
 
-    def _jump_to_order(self, order: int):
+    @_locked
+    def seek_to_order(self, order: int):
+        """Pose la tête de lecture au début de cet ordre — le saut `mmPosition`, à l'ordre près : la console
+        ne sait pas repartir d'une ligne. Quitter la section de boucle par l'arrière n'est pas une boucle qui
+        déborde : on le dit au deck, qui ne ramène donc pas la lecture au début de la section."""
+        if self._track is not None and not self._ended:
+            self._jump_to_order(order)
+            self._loop_in = False
+
+    @property
+    def scrubbing(self) -> bool:
+        return self._scrub is not None
+
+    @property
+    def scrub_position(self) -> float:
+        """Où le scrub lit le rendu entier, en échantillons."""
+        return 0.0 if self._scrub is None else self._scrub.pos
+
+    @property
+    def scrub_target(self) -> float:
+        """Où la main tient la tête de lecture, en échantillons : c'est là qu'on la dessine, le son la rattrape."""
+        return 0.0 if self._scrub is None else self._scrub.target
+
+    @_locked
+    def scrub_to(self, pcm: np.ndarray, target: float, start: float):
+        """La main tient la tête de lecture : la lecture automatique se met en pause et le son court vers `target`
+        (en échantillons du rendu entier `pcm`) à la vitesse du geste — vers l'arrière aussi — puis se tait quand la
+        main s'arrête. `start` : d'où le son part au premier appel."""
+        if self._scrub is None:
+            self._scrub = _Scrub(pcm, float(start), float(target))
+        self._scrub.target = float(target)
+
+    @_locked
+    def scrub_end(self):
+        """La main lâche : la lecture reprend où l'appelant la repose (cf. `seek_to_row`)."""
+        self._scrub = None
+
+    def _scrub_chunk(self, n: int) -> np.ndarray:
+        s = self._scrub
+        total = int(s.pcm.shape[0])
+        step = max(-_SCRUB_MAX_RATE * n, min(_SCRUB_MAX_RATE * n, (s.target - s.pos) * _SCRUB_FOLLOW))
+        if total == 0 or abs(step) < 0.02 * n:                     # la main est arrêtée : silence
+            return np.zeros((n, 2), dtype=np.int16)
+        where = np.clip(s.pos + np.arange(n) * (step / n), 0, total - 1)
+        low = where.astype(np.int64)
+        high = np.minimum(low + 1, total - 1)
+        frac = (where - low)[:, None]
+        block = s.pcm[low] * (1.0 - frac) + s.pcm[high] * frac
+        s.pos = float(np.clip(s.pos + step, 0, total - 1))
+        return (block * min(1.0, self._vol / MODULE_FULL)).astype(np.int16)
+
+    @_locked
+    def seek_to_row(self, order: int, row: int):
+        """Comme `seek_to_order`, mais à une ligne du motif : ce que ne sait pas la console, et que l'aperçu
+        s'autorise pour qu'on puisse poser la tête de lecture où l'on veut."""
+        if self._track is not None and not self._ended:
+            self._jump_to_order(order, row)
+            self._loop_in = False
+
+    def _jump_to_order(self, order: int, row: int = 0):
         """`mmPosition(order)`."""
-        land = self._track.start_of(order)
+        land = self._track.start_of(order, row)
         if land is not None:
             self._pos = land
 
     # ── La sortie ─────────────────────────────────────────────────
 
+    @_locked
     def pull(self, n: int) -> np.ndarray:
         """Produit `n` échantillons stéréo, en faisant tourner l'horloge."""
+        if self._scrub is not None:
+            return self._scrub_chunk(n)
         out = np.zeros((n, 2), dtype=np.int16)
         done = 0
         while done < n:
@@ -343,23 +471,25 @@ class MusicDeck:
     def _chunk(self, n: int) -> np.ndarray:
         """`n` échantillons du module courant, bouclés et mis au volume."""
         track = self._track
-        if track is None or self._ended or track.pcm.shape[0] == 0:
+        if track is None or self._ended:
             return np.zeros((n, 2), dtype=np.int16)
-        total = track.pcm.shape[0]
-        parts, need = [], n
+        ensure = getattr(track, "ensure", None)          # un rendu en direct produit ce qu'on lui demande
+        if ensure is None and track.pcm.shape[0] == 0:
+            return np.zeros((n, 2), dtype=np.int16)
+        parts, need, rewinds = [], n, 0
         while need > 0:
+            if ensure is not None:
+                ensure(self._pos + need)
+            total = track.pcm.shape[0]
             if self._pos >= total:
-                if track.sample_loop is not None:
-                    # La boucle d'échantillon du WAV : le mixeur reboucle lui-même, et
-                    # le module, qui ne finit plus, ne s'arrête jamais.
-                    self._pos = min(track.sample_loop[0], total - 1)
-                elif not self._loop:
+                if not self._loop or rewinds >= 2:
                     # Un module qui ne boucle pas s'arrête, comme MM_PLAY_ONCE.
                     self._ended = True
                     parts.append(np.zeros((need, 2), dtype=np.int16))
                     break
-                else:
-                    self._pos = min(track.restart_at, total - 1)
+                rewinds += 1
+                self._pos = track.rewind()
+                continue
             take = min(need, total - self._pos)
             parts.append(track.pcm[self._pos:self._pos + take])
             self._pos += take

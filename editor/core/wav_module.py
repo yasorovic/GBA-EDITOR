@@ -4,19 +4,23 @@ core/wav_module.py — Un `.wav` déposé dans assets/music/, rendu en module XM
 maxmod ne sait jouer de la musique que sous forme de module. Plutôt que de
 greffer un second chemin de lecture (un « moteur d'effets en boucle ») à tout ce
 qui parle de musique — `MOD_*`, fondus, jingles, MusicBox, aperçu —, le WAV est
-ENCAPSULÉ : un module d'un seul instrument, dont l'échantillon est la piste
-entière, mono 8 bits. Tout ce qui est en aval le voit comme un `.xm`.
+ENCAPSULÉ : un VRAI module, que tout ce qui est en aval voit comme un `.xm`.
 
-  - l'échantillon est rendu à `WAV_MUSIC_RATE` Hz : au-dessus, le mixeur de la
-    console (16 kHz) ne le restituerait pas, et la ROM paierait pour rien ;
-  - le module dure autant que la piste : un `loop` rejoue donc le morceau, et
-    un `once` s'arrête avec lui. La ligne dure ~20 ms, ce qui borne l'écart à
-    la jointure ;
-  - pas de boucle d'échantillon : c'est le module qui boucle, pas le matériel —
-    SAUF quand la musique porte une section de boucle (`loop_ms`, ci-dessous) :
-    l'échantillon boucle alors lui-même, à l'échantillon près, et le module ne finit
-    plus (cf. `wav_to_xm`). Mesuré sur ROM le 2026-10-11 : sans l'une ou l'autre des
-    deux pièces, le son s'arrête ou le module s'éteint.
+  - la piste est découpée en SEGMENTS aux frontières des sections de la musique ;
+    chaque segment est un échantillon XM (mono, 8 bits) joué par une note au début
+    d'un pattern. Une section est donc une plage de positions d'ordre, exactement
+    comme dans un module tracker : `music_info_row`, la table des sections, le tick
+    de boucle, la coupe et `leave_loop` n'ont aucun cas particulier pour un WAV ;
+  - les frontières tombent sur la GRILLE DES LIGNES : le module ne déclenche une
+    note qu'au début d'une ligne, et un segment doit commencer pile à la fin du
+    précédent. Une ligne dure 11,4155 ms (vitesse 1, 219 BPM = 180 échantillons du
+    mixeur de maxmod, exactement : à 255 BPM maxmod tronque le tick et les lignes
+    passent 0,4 % trop vite — mesuré sur ROM le 2026-10-11) ;
+  - l'échantillon est rendu à `WAV_MUSIC_RATE` Hz (ou au taux choisi) : au-dessus,
+    le mixeur de la console (16 kHz) ne le restituerait pas, et la ROM paierait pour
+    rien ;
+  - un segment plus long que ce qu'un échantillon peut porter est coupé en morceaux
+    à une limite de ligne : la durée maximale est celle de la table d'ordres.
 
 Le fichier de `assets/` n'est jamais réécrit : la sortie va dans le dossier de
 build (`encode_music_for_build`) ou en mémoire (aperçu, validateur).
@@ -26,36 +30,49 @@ from __future__ import annotations
 import math
 import struct
 import wave
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable
 
 import numpy as np
+
+from core.sfx_render import read_wav
 
 # 8363 Hz est le C-4 d'un XM ; une octave plus haut (relative note +12), c'est
 # 16 726 Hz — le plus proche du mixeur 16 kHz que le format sache exprimer sans
 # finetune.
 WAV_MUSIC_RATE = 16726
 # Le plancher d'un taux choisi : en dessous, un morceau n'est plus qu'un grésillement,
-# et le gain de place (une piste plus longue dans un échantillon) ne vaut plus la perte.
+# et le gain de place ne vaut plus la perte.
 MUSIC_SAMPLE_RATE_MIN = 4000
 _NOTE_C4 = 49
 
-_ROWS_PER_PATTERN = 256
-_MAX_ORDERS = 256
-_SPEED = 2
-_BPM = 255
-_ROW_SECONDS = _SPEED * 2.5 / _BPM
-# Ce que la table d'ordre peut porter : un pattern plein tient 256 lignes.
-_PATTERN_SECONDS = _MAX_ORDERS * _ROWS_PER_PATTERN * _ROW_SECONDS
-# Une coupe (`music.cut_to`) attend le retour de la LIGNE à zéro : pour une piste WAV,
-# la fin de son pattern de 256 lignes, soit ~5 s au pire.
-CUT_WAIT_SECONDS = _ROWS_PER_PATTERN * _ROW_SECONDS
+# Le mixeur « 16 kHz » de maxmod (celui que `mmInitDefault` choisit) tourne en vrai à
+# 15 768 Hz. Un tick dure un NOMBRE ENTIER de ses échantillons : à 219 BPM,
+# 15 768 × 2,5 / 219 = 180 pile, donc une ligne (vitesse 1) dure 180 échantillons et le
+# module ne dérive pas par rapport au temps réel.
+MIXER_RATE = 15768
+_SPEED = 1
+_BPM = 219
+SAMPLES_PER_ROW = 180
+assert MIXER_RATE * 5 * _SPEED == SAMPLES_PER_ROW * _BPM * 2, "the row length must be a whole number of mixer samples"
+ROW_SECONDS = SAMPLES_PER_ROW / MIXER_RATE
+
+ROWS_PER_PATTERN = 256
+MAX_ORDERS = 256
+MAX_INSTRUMENTS = 128
+# Ce que la table d'ordres peut porter : des patterns pleins, bout à bout.
+MAX_SECONDS = MAX_ORDERS * ROWS_PER_PATTERN * ROW_SECONDS
+# Une coupe (`music.cut_to`) attend le retour de la LIGNE à zéro : pour un segment long,
+# la fin de son pattern de 256 lignes, soit ~3 s au pire.
+CUT_WAIT_SECONDS = ROWS_PER_PATTERN * ROW_SECONDS
 
 # Le mixeur de maxmod range la longueur d'un échantillon décalée de 12 bits dans
 # un mot de 32 (`longueur << 12`, relevé dans `mmMixerMix` de libmm) : un
 # échantillon de 2^20 points ou plus déborde, et la piste se coupe au bout du
-# reste — un titre de 75 s s'arrêtait après une douzaine de secondes. La borne est
-# donc celle de l'ÉCHANTILLON, bien avant celle de la table d'ordre.
+# reste — un titre de 75 s s'arrêtait après une douzaine de secondes. Un segment qui
+# dépasse est donc coupé en plusieurs échantillons.
 MAX_SAMPLE_FRAMES = (1 << 20) - 1
-MAX_SECONDS = min(_PATTERN_SECONDS, MAX_SAMPLE_FRAMES / WAV_MUSIC_RATE)
 
 
 def effective_rate(sample_rate: int) -> int:
@@ -64,35 +81,55 @@ def effective_rate(sample_rate: int) -> int:
     return int(sample_rate) or WAV_MUSIC_RATE
 
 
-def max_seconds(rate: int = WAV_MUSIC_RATE) -> float:
-    """Ce que dure, au plus, une piste à ce taux : la borne est celle de l'ÉCHANTILLON
-    (`MAX_SAMPLE_FRAMES`), donc plus le taux baisse, plus la piste peut être longue —
-    à 13 kHz, ~78 s tiennent là où 16,7 kHz en refuse 62."""
-    return min(_PATTERN_SECONDS, MAX_SAMPLE_FRAMES / max(1, rate))
+def max_seconds() -> float:
+    """Ce que dure, au plus, une piste : la borne est celle de la table d'ordres."""
+    return MAX_SECONDS
+
+
+def _tuning(rate: int) -> tuple[int, int]:
+    """(note relative, finetune) qui font sonner un échantillon à `rate` Hz sur un C-4.
+
+    Un C-4 d'XM joue à 8 363 Hz ; la note relative décale en demi-tons, le finetune
+    en 128es de demi-ton. À `WAV_MUSIC_RATE` (le double exact) c'est (12, 0)."""
+    semitones = 12.0 * math.log2(rate / 8363.0)
+    relative = int(round(semitones))
+    fine = int(round((semitones - relative) * 128))
+    return max(-96, min(95, relative)), max(-128, min(127, fine))
+
+
+def played_rate(rate: int) -> float:
+    """Le taux auquel l'échantillon sonnera RÉELLEMENT : `_tuning` arrondit à 1/128 de demi-ton, soit
+    jusqu'à 0,27 % d'écart. On rend la piste à ce taux-là, pas à celui demandé : sinon un segment durerait
+    un peu plus ou un peu moins que ses lignes, et le suivant arriverait trop tôt ou trop tard."""
+    relative, fine = _tuning(rate)
+    return 8363.0 * 2.0 ** ((relative + fine / 128.0) / 12.0)
 
 
 def _read_mono(path) -> tuple[np.ndarray, int]:
     """(échantillons float32 mono dans [-1, 1], taux). ValueError si illisible."""
     try:
-        with wave.open(str(path)) as w:
-            rate, channels, width, frames = (
-                w.getframerate(), w.getnchannels(), w.getsampwidth(), w.getnframes())
-            raw = w.readframes(frames)
+        got = read_wav(Path(path))
     except wave.Error as e:
         raise ValueError(f"WAV not recognised ({e})") from e
-    if width == 1:
-        data = (np.frombuffer(raw, dtype=np.uint8).astype(np.float32) - 128.0) / 128.0
-    elif width == 2:
-        data = np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32768.0
-    else:
-        raise ValueError(f"WAV {width * 8} bits: only 8 and 16 bits are converted")
+    if got is None:
+        raise ValueError("WAV depth not read: only 8, 16, 24 and 32 bits PCM")
+    data, rate, channels = got
     data = data[: (data.size // channels) * channels].reshape(-1, channels).mean(axis=1)
     if data.size == 0:
         raise ValueError("WAV without any sample")
     return data, rate
 
 
-def _resample(data: np.ndarray, rate: int, target: int) -> np.ndarray:
+def wav_seconds(path) -> float:
+    """La durée d'un WAV, lue dans son en-tête. ValueError s'il est illisible."""
+    try:
+        with wave.open(str(path)) as w:
+            return w.getnframes() / max(1, w.getframerate())
+    except wave.Error as e:
+        raise ValueError(f"WAV not recognised ({e})") from e
+
+
+def _resample(data: np.ndarray, rate: float, target: float) -> np.ndarray:
     """Moyenne glissante puis interpolation : même filtre que `sfx_encode`.
 
     Sans le filtre, ce qui dépasse la moitié du nouveau taux se replie en
@@ -113,127 +150,133 @@ def _resample(data: np.ndarray, rate: int, target: int) -> np.ndarray:
     return np.interp(pos, np.arange(data.size), data).astype(np.float32)
 
 
-def _pattern(rows: int, trigger: bool, jump_to: int | None = None) -> bytes:
-    """Un pattern à 2 canaux (le minimum du format) ; seule la 1re case sonne.
+# ── Le plan : où tombent les segments ─────────────────────────────────────────
 
-    `jump_to` pose un saut de position (`Bxx`) sur le canal 1 de la DERNIÈRE ligne :
-    le module retourne à cet ordre au lieu de finir. Le canal 0, lui, n'est pas touché
-    — il continue de jouer son échantillon."""
+@dataclass(frozen=True)
+class WavPlan:
+    """Comment une piste se découpe en échantillons et en positions d'ordre.
+
+    `chunks[k]` est la plage de LIGNES [début, fin) du k-ième échantillon ; `first_order[k]` est
+    la position d'ordre où il démarre. Les deux se lisent aussi bien pour le build (qui écrit le module)
+    que pour la table des sections (qui traduit des millisecondes en positions d'ordre)."""
+    play_rate: float
+    total_rows: int
+    chunks: tuple
+    first_order: tuple
+    order_count: int
+
+    def order_at(self, ms: float) -> int:
+        """La position d'ordre où démarre le segment qui commence à `ms` (arrondie à la ligne), ou la
+        longueur de la table si `ms` est la fin de la piste. ValueError si aucun segment n'y commence —
+        la frontière doit avoir été donnée à `plan_wav`."""
+        row = min(self.total_rows, max(0, round(ms / 1000.0 / ROW_SECONDS)))
+        if row >= self.total_rows:
+            return self.order_count
+        for (start, _end), order in zip(self.chunks, self.first_order):
+            if start == row:
+                return order
+        raise ValueError(f"no segment starts at {ms} ms")
+
+
+def plan_wav(seconds: float, rate: int, boundaries_ms: Iterable[float] = ()) -> WavPlan:
+    """Le plan d'une piste de `seconds`, rendue à `rate`, coupée aux frontières `boundaries_ms`.
+
+    ValueError si la piste ne tient pas dans un module (table d'ordres, nombre d'instruments)."""
+    total_rows = max(1, math.ceil(seconds / ROW_SECONDS - 1e-9))
+    cuts = {0, total_rows}
+    for ms in boundaries_ms:
+        cuts.add(min(total_rows, max(0, round(ms / 1000.0 / ROW_SECONDS))))
+    cuts = sorted(cuts)
+    play_rate = played_rate(rate)
+    # Des morceaux d'un nombre ENTIER de patterns : un morceau qui s'arrête au milieu d'un pattern
+    # gaspillerait le reste de sa position d'ordre, et la table n'en a que 256.
+    max_rows = max(ROWS_PER_PATTERN, int(MAX_SAMPLE_FRAMES / (play_rate * ROW_SECONDS)) // ROWS_PER_PATTERN
+                   * ROWS_PER_PATTERN)
+
+    chunks, first_order, order = [], [], 0
+    for a, b in zip(cuts, cuts[1:]):
+        start = a
+        while start < b:
+            end = min(b, start + max_rows)
+            chunks.append((start, end))
+            first_order.append(order)
+            order += math.ceil((end - start) / ROWS_PER_PATTERN)
+            start = end
+    if order > MAX_ORDERS:
+        raise ValueError(f"track too long ({seconds:.0f} s): a module holds {MAX_SECONDS:.0f} s at most")
+    if len(chunks) > MAX_INSTRUMENTS:
+        raise ValueError(f"too many segments ({len(chunks)}): a module holds {MAX_INSTRUMENTS} samples")
+    return WavPlan(play_rate=play_rate, total_rows=total_rows, chunks=tuple(chunks),
+                   first_order=tuple(first_order), order_count=order)
+
+
+# ── Le module ─────────────────────────────────────────────────────────────────
+
+def _pattern(rows: int, instrument: int = 0) -> bytes:
+    """Un pattern à 2 canaux (le minimum du format) ; seule la 1re case sonne, et seulement si
+    `instrument` désigne un instrument (1…) : sinon le pattern est vide."""
     packed = bytearray()
-    if trigger:
-        packed += bytes([0x80 | 0x01 | 0x02, _NOTE_C4, 1])   # canal 0 : note + instrument
+    if instrument:
+        packed += bytes([0x80 | 0x01 | 0x02, _NOTE_C4, instrument])   # canal 0 : note + instrument
     else:
         packed += bytes([0x80])
-    packed += bytes([0x80])                                   # canal 1 : vide
+    packed += bytes([0x80])                                           # canal 1 : vide
     packed += bytes([0x80]) * (2 * (rows - 1))
-    if jump_to is not None:
-        # Le canal 1 de la dernière ligne est le dernier octet du pattern.
-        packed = packed[:-1] + bytes([0x80 | 0x08 | 0x10, 0x0B, jump_to])
     return struct.pack("<IBHH", 9, 0, rows, len(packed)) + bytes(packed)
 
 
-def _tuning(rate: int) -> tuple[int, int]:
-    """(note relative, finetune) qui font sonner un échantillon à `rate` Hz sur un C-4.
-
-    Un C-4 d'XM joue à 8 363 Hz ; la note relative décale en demi-tons, le finetune
-    en 128es de demi-ton. À `WAV_MUSIC_RATE` (le double exact) c'est (12, 0) : la
-    sortie du taux par défaut ne change pas d'un octet."""
-    semitones = 12.0 * math.log2(rate / 8363.0)
-    relative = int(round(semitones))
-    fine = int(round((semitones - relative) * 128))
-    return max(-96, min(95, relative)), max(-128, min(127, fine))
-
-
-def _snap_to_zero_crossing(pcm: np.ndarray, index: int, window: int) -> int:
-    """L'indice le plus proche de `index` où le signal PASSE de négatif à positif.
-
-    Une boucle d'échantillon saute de `end` à `start` : si les deux sont des
-    passages par zéro montants, la jointure ne fait pas de marche, donc pas de
-    clic. Dans `window` échantillons ; sans passage, on garde `index`."""
-    lo, hi = max(1, index - window), min(pcm.size - 1, index + window)
-    best = None
-    for i in range(lo, hi + 1):
-        if pcm[i - 1] <= 0 < pcm[i] and (best is None or abs(i - index) < abs(best - index)):
-            best = i
-    return index if best is None else best
+def _instrument(index: int, pcm: np.ndarray, rate: int) -> bytes:
+    name = f"wav{index}".encode("ascii").ljust(22, b"\x00")
+    out = bytearray()
+    out += struct.pack("<I", 263) + name + bytes([0])
+    out += struct.pack("<H", 1) + struct.pack("<I", 40)
+    out += bytes(96) + bytes(48) + bytes(48)             # carte, enveloppes
+    out += bytes(2) + bytes(6) + bytes(2) + bytes(4)     # compteurs, boucles, types, vibrato
+    out += struct.pack("<H", 0) + bytes(22)              # fondu, réservé
+    delta = np.diff(pcm.astype(np.int16), prepend=np.int16(0)).astype(np.int8)
+    relative, fine = _tuning(rate)
+    out += struct.pack("<IIIBbBBbB", pcm.size, 0, 0, 64, fine, 0, 128, relative, 0)
+    out += name
+    out += delta.tobytes()
+    return bytes(out)
 
 
-# Un morceau qui boucle sur moins que ça n'est plus une boucle, c'est un bourdonnement.
-_MIN_LOOP_SECONDS = 0.05
-# Jusqu'où la jointure peut se déplacer pour tomber sur un passage par zéro.
-_SNAP_SECONDS = 0.02
-
-
-def render_at_rate(path, rate: int) -> np.ndarray:
-    """La piste telle que le module la portera : mono, `rate` Hz, 8 bits signés.
-
-    Lue par le build ET par l'aperçu — ce qu'on entend est ce que la ROM contiendra,
-    avec la même perte (taux choisi, quantification à 8 bits), pas la source."""
-    data, src_rate = _read_mono(path)
-    data = _resample(data, src_rate, rate)
-    return np.clip(np.round(data * 127.0), -128, 127).astype(np.int8)
-
-
-def loop_frames(pcm: np.ndarray, rate: int, loop_ms: tuple[int, int]) -> tuple[int, int]:
-    """(début, fin) de la boucle d'échantillon, en échantillons de `pcm`, ramenés au
-    passage par zéro montant le plus proche. ValueError si ce n'est plus une boucle.
-
-    Un seul calcul pour le build (`wav_to_xm`) et pour l'aperçu."""
-    window = max(1, int(rate * _SNAP_SECONDS))
-    start = _snap_to_zero_crossing(pcm, int(round(loop_ms[0] * rate / 1000)), window)
-    end = _snap_to_zero_crossing(pcm, min(pcm.size, int(round(loop_ms[1] * rate / 1000))), window)
-    if end <= start or (end - start) < rate * _MIN_LOOP_SECONDS:
-        raise ValueError(f"loop of {loop_ms[0]}-{loop_ms[1]} ms is too short or empty "
-                         f"(at least {int(_MIN_LOOP_SECONDS * 1000)} ms)")
-    return start, end
-
-
-def wav_to_xm(path, rate: int = WAV_MUSIC_RATE, loop_ms: tuple[int, int] | None = None) -> bytes:
+def wav_to_xm(path, rate: int = WAV_MUSIC_RATE, boundaries_ms: Iterable[float] = ()) -> bytes:
     """Le module XM qui joue ce WAV. ValueError si le WAV n'est pas convertible.
 
-    Sans `loop_ms`, la piste joue UNE fois : le module dure autant qu'elle.
+    Chaque frontière de `boundaries_ms` (arrondie à la ligne) ouvre un nouveau segment : un échantillon, une
+    position d'ordre. Sans frontière la piste est un seul segment, qui joue une fois : le module dure autant
+    qu'elle, un `loop` la rejoue et un `once` s'arrête avec elle."""
+    data, src_rate = _read_mono(path)
+    plan = plan_wav(data.size / src_rate, rate, boundaries_ms)
+    pcm = np.clip(np.round(_resample(data, src_rate, plan.play_rate) * 127.0), -128, 127).astype(np.int8)
 
-    Avec `loop_ms = (début, fin)` en millisecondes, la piste est intro puis boucle :
-    l'ÉCHANTILLON boucle entre ces deux points (ramenés au passage par zéro montant
-    le plus proche, pour que la jointure ne claque pas), et le module ne finit plus —
-    sa dernière ligne saute sur elle-même. Il faut les DEUX : sans la boucle
-    d'échantillon, le son s'arrête à la fin de la piste alors que le module continue ;
-    sans le saut, le module s'arrête et coupe l'échantillon (mesuré sur ROM le
-    2026-10-11). Ce qui suit la fin de la boucle n'est jamais joué : il n'entre pas
-    dans l'échantillon, donc pas dans la ROM.
-    """
-    pcm = render_at_rate(path, rate)
+    frames_per_row = plan.play_rate * ROW_SECONDS
+    samples = []
+    for k, (a, b) in enumerate(plan.chunks):
+        lo = min(pcm.size - 1, round(a * frames_per_row))
+        hi = pcm.size if b >= plan.total_rows else min(pcm.size, round(b * frames_per_row))
+        samples.append(pcm[lo:max(hi, lo + 1)])
 
-    loop = None
-    if loop_ms is not None:
-        start, end = loop_frames(pcm, rate, loop_ms)
-        pcm = pcm[:end]
-        loop = (start, end - start)
+    patterns, index_of, orders = [], {}, []
 
-    if pcm.size > MAX_SAMPLE_FRAMES:
-        raise ValueError(
-            f"track too long ({pcm.size / rate:.0f} s): the console's mixer plays "
-            f"{max_seconds(rate):.0f} s of one sample at most")
+    def pattern(rows: int, instrument: int = 0) -> int:
+        key = (rows, instrument)
+        if key not in index_of:
+            index_of[key] = len(patterns)
+            patterns.append(_pattern(rows, instrument))
+        return index_of[key]
 
-    if loop is not None:
-        # Un pattern d'une ligne qui porte la note, un autre qui saute sur lui-même.
-        patterns = [_pattern(1, trigger=True), _pattern(1, trigger=False, jump_to=1)]
-        orders = [0, 1]
-    else:
-        # Ce qu'il faut de lignes pour couvrir la piste : un pattern plein qui
-        # porte la note, des patterns vides partagés, et un dernier tronqué.
-        total_rows = max(1, math.ceil(pcm.size / rate / _ROW_SECONDS))
-        first = min(_ROWS_PER_PATTERN, total_rows)
-        rest = total_rows - first
-        full, tail = divmod(rest, _ROWS_PER_PATTERN)
-        orders = [0] + [1] * full + ([2] if tail else [])
-        if len(orders) > _MAX_ORDERS:
-            raise ValueError(
-                f"track too long ({pcm.size / rate:.0f} s): a module holds "
-                f"{max_seconds(rate):.0f} s at most")
-        patterns = [_pattern(first, trigger=True),
-                    _pattern(_ROWS_PER_PATTERN, trigger=False),
-                    _pattern(tail or 1, trigger=False)]
+    for k, (a, b) in enumerate(plan.chunks):
+        rows = b - a
+        first = min(ROWS_PER_PATTERN, rows)
+        orders.append(pattern(first, k + 1))
+        rest = rows - first
+        while rest > 0:
+            n = min(ROWS_PER_PATTERN, rest)
+            orders.append(pattern(n))
+            rest -= n
+    assert len(orders) == plan.order_count
 
     out = bytearray()
     out += b"Extended Module: " + b"wav".ljust(20, b" ") + bytes([0x1A])
@@ -241,37 +284,24 @@ def wav_to_xm(path, rate: int = WAV_MUSIC_RATE, loop_ms: tuple[int, int] | None 
     out += struct.pack("<I", 20 + 256)
     # longueur, restart, canaux, patterns, instruments, flags (fréquences
     # linéaires), vitesse, tempo
-    out += struct.pack("<HHHHHHHH", len(orders), 0, 2, len(patterns), 1, 1, _SPEED, _BPM)
+    out += struct.pack("<HHHHHHHH", len(orders), 0, 2, len(patterns), len(samples), 1, _SPEED, _BPM)
     out += bytes(orders).ljust(256, b"\x00")
-
-    for pattern in patterns:
-        out += pattern
-
-    out += struct.pack("<I", 263) + b"wav".ljust(22, b"\x00") + bytes([0])
-    out += struct.pack("<H", 1) + struct.pack("<I", 40)
-    out += bytes(96) + bytes(48) + bytes(48)             # carte, enveloppes
-    out += bytes(2) + bytes(6) + bytes(2) + bytes(4)     # compteurs, boucles, types, vibrato
-    out += struct.pack("<H", 0) + bytes(22)              # fondu, réservé
-
-    delta = np.diff(pcm.astype(np.int16), prepend=np.int16(0)).astype(np.int8)
-    relative, fine = _tuning(rate)
-    loop_start, loop_length = loop if loop is not None else (0, 0)
-    out += struct.pack("<IIIBbBBbB", pcm.size, loop_start, loop_length, 64, fine,
-                       1 if loop is not None else 0, 128, relative, 0)
-    out += b"wav".ljust(22, b"\x00")
-    out += delta.tobytes()
+    for p in patterns:
+        out += p
+    for k, chunk in enumerate(samples):
+        out += _instrument(k, chunk, rate)
     return bytes(out)
 
 
 def encode_music_for_build(src, dst, sample_rate: int = 0,
-                           loop_ms: tuple[int, int] | None = None) -> int:
+                           boundaries_ms: Iterable[float] = ()) -> int:
     """Écrit le module de `src` dans `dst` ; rend sa taille en octets.
 
-    `sample_rate` est celui de `Music.sample_rate` (0 = le défaut), `loop_ms` la
-    section de boucle de la musique, en millisecondes (cf. `wav_to_xm`)."""
+    `sample_rate` est celui de `Music.sample_rate` (0 = le défaut), `boundaries_ms` les frontières des
+    sections de la musique, en millisecondes (cf. `wav_to_xm`)."""
     from pathlib import Path
     dst = Path(dst)
     dst.parent.mkdir(parents=True, exist_ok=True)
-    data = wav_to_xm(src, effective_rate(sample_rate), loop_ms)
+    data = wav_to_xm(src, effective_rate(sample_rate), boundaries_ms)
     dst.write_bytes(data)
     return len(data)

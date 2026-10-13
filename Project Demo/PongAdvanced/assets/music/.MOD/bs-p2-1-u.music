@@ -3,13 +3,35 @@
   "id": "721848eef196",
   "asset": "assets/music/.MOD/bs-p2-1-u.mod",
   "loop": true,
-  "volume": 100,
+  "volume": 62,
   "unit": "order",
-  "sections": [],
-  "loop_section": "",
+  "sections": [
+    {
+      "name": "Loop",
+      "color": "#82aaff",
+      "start": 0,
+      "end": 2,
+      "loop": false
+    },
+    {
+      "name": "Loop 2",
+      "color": "#e05050",
+      "start": 1,
+      "end": 4,
+      "loop": true
+    },
+    {
+      "name": "Loop 3",
+      "color": "#c48b3c",
+      "start": 3,
+      "end": 5,
+      "loop": false
+    }
+  ],
+  "loop_section": "Loop 2",
   "tempo": 100,
-  "pitch": 100,
-  "fade_in": 0,
-  "fade_out": 0,
+  "pitch": 163,
+  "fade_in": 41,
+  "fade_out": 34,
   "sample_rate": 0
 }
