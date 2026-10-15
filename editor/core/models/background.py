@@ -110,6 +110,20 @@ class BackgroundLayer:
     blend_role:   str   = ""
 
 
+def decode_tile_paint(raw) -> dict:
+    """Relit `tile_paint` du JSON ({"col,row": [couleur, palette]}) ; tolère l'absence et les entrées mal formées."""
+    out: dict = {}
+    for key, value in (raw or {}).items():
+        try:
+            col, row = (int(v) for v in key.split(","))
+            color, pal = int(value[0]), int(value[1])
+        except (ValueError, TypeError, IndexError, AttributeError):
+            continue
+        if 0 <= color < 16 and 0 <= pal < 16:
+            out[(col, row)] = (color, pal)
+    return out
+
+
 def decode_tile_palette_overrides(raw) -> dict:
     """Relit tile_palette_overrides du JSON ({"col,row": slot}) en dict[(col,row), slot].
     Tolère l'absence (None) et les clés mal formées (ignorées)."""
@@ -164,6 +178,15 @@ def _read_ints(raw, minimums: tuple) -> Optional[tuple]:
     return vals
 
 
+def _read_axis(raw) -> Optional[int]:
+    """Axe de miroir en pixels (≥ 1), ou None : une valeur illisible se relit comme « pas de miroir »."""
+    try:
+        axis = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return axis if axis >= 1 else None
+
+
 def _read_ui_role(raw) -> str:
     return raw if raw in UI_ROLES else UI_ROLE_NINE
 
@@ -173,6 +196,11 @@ def _read_animation_mode(raw) -> str:
     plutôt qu'en erreur. Un fichier écrit par une version plus récente reste
     ouvrable, et l'auteur voit dans l'inspecteur ce que le build fera."""
     return raw if raw in ANIM_MODES else ANIM_INSTANCE
+
+
+# Les façons de répartir l'erreur de la réduction de couleurs : diffusion (Floyd–Steinberg), ou trames ordonnées
+# (Bayer 4×4 / 8×8) — régulières, donc plus propres une fois tuilées. Le jeton est ce qui s'écrit dans le sidecar.
+DITHER_KINDS = ("floyd_steinberg", "bayer4", "bayer8")
 
 
 @dataclass
@@ -199,6 +227,7 @@ class BackgroundCompression:
     global_colors: int = 0
     tile_target: int = 0
     palette_colors: int = 255
+    dither_kind: str = "floyd_steinberg"   # n'agit que si le dithering est coché
 
     def is_default(self) -> bool:
         return self == BackgroundCompression()
@@ -226,7 +255,41 @@ class BackgroundCompression:
             global_colors=_int("global_colors", 0, 256, 0),
             tile_target=_int("tile_target", 0, 1024, 0),
             palette_colors=_int("palette_colors", 2, 255, 255),
+            dither_kind=d.get("dither_kind") if d.get("dither_kind") in DITHER_KINDS else "floyd_steinberg",
         )
+
+
+@dataclass
+class BackgroundAdjust:
+    """Réglages de l'IMAGE avant la compression : teinte, saturation, luminosité, contraste. Ils dirigent ce que
+    la compression reçoit — d'où leur place AVANT elle. Neutres à 0 : un fond qui n'y touche pas s'encode à
+    l'identique et n'écrit rien dans son sidecar. Le PNG source n'est jamais modifié.
+
+    `hue`  −180…180 degrés ; `saturation`, `brightness`, `contrast`  −100…100 (pourcentage autour du neutre)."""
+    hue: int = 0
+    saturation: int = 0
+    brightness: int = 0
+    contrast: int = 0
+
+    def is_default(self) -> bool:
+        return self == BackgroundAdjust()
+
+    def to_dict(self) -> dict:
+        base = BackgroundAdjust()
+        return {k: v for k, v in self.__dict__.items() if v != getattr(base, k)}
+
+    @classmethod
+    def from_dict(cls, d) -> "BackgroundAdjust":
+        d = d if isinstance(d, dict) else {}
+
+        def _int(key: str, lo: int, hi: int) -> int:
+            try:
+                return max(lo, min(hi, int(d.get(key, 0))))
+            except (TypeError, ValueError):
+                return 0
+
+        return cls(hue=_int("hue", -180, 180), saturation=_int("saturation", -100, 100),
+                   brightness=_int("brightness", -100, 100), contrast=_int("contrast", -100, 100))
 
 
 @dataclass
@@ -313,6 +376,11 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
     # `tilemap` reste intacte ; `effective_tilemap()` applique ces overrides.
     # Analogue à BackgroundLayer.tile_palette_overrides mais au niveau de l'asset.
     tile_palette_overrides: dict = field(default_factory=dict)  # dict[(col,row), pal_index]
+    # Peinture de CASES (niveau éditeur) : un CALQUE par-dessus l'image. Une case peinte montre une tuile pleine de
+    # la couleur `color` (index dans la sous-palette `pal`) ; `color` 0 la rend transparente. Effacer une case la
+    # retire du dict et rend la tuile initiale. Ni `tileset` ni `tilemap` ne sont touchés : une recompression de
+    # l'image garde donc la peinture. `effective_tileset()` / `effective_tilemap()` la composent.
+    tile_paint: dict = field(default_factory=dict)  # dict[(col,row), (color, pal_index)]
     # Diagnostics de compression (validateur éditeur, non-bloquant) — calculés à
     # la compression, cf. bg_import.encode_background. Le PNG reste intact.
     diagnostics: dict = field(default_factory=dict)
@@ -331,8 +399,19 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
     # None = pas de préparation (« Original »).
     import_crop: Optional[tuple] = None
     import_size: Optional[tuple] = None
+    # Miroir de l'image préparée, APRÈS recadrage et redimensionnement : position
+    # de l'axe en pixels de l'image préparée (None = pas de miroir sur cet axe).
+    # `mirror_x` est une barre verticale (le côté gauche se reflète à droite),
+    # `mirror_y` une barre horizontale (le haut se reflète en bas). Il précède la
+    # compression, puisqu'il change les tuiles que celle-ci trouvera.
+    mirror_x: Optional[int] = None
+    mirror_y: Optional[int] = None
+    # Côté GARDÉ : par défaut le gauche / le haut ; `True` garde le droit / le bas (le gauche / haut en est le reflet).
+    mirror_flip_x: bool = False
+    mirror_flip_y: bool = False
     # Réglages de l'encodage tuilé 4bpp (cf. BackgroundCompression).
     compression: BackgroundCompression = field(default_factory=BackgroundCompression)
+    adjust: BackgroundAdjust = field(default_factory=BackgroundAdjust)   # teinte, saturation… avant la compression
     # Origine des sous-palettes pour l'éditeur (modèle scène : grisé + override).
     # `source_palettes` = snapshot des palettes DÉRIVÉES du PNG à la compression
     # (baseline restaurable). Les indices < len(source_palettes) sont dérivés
@@ -386,7 +465,8 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
         """La préparation de la source, sous la forme que prend `bg_import` —
         les DEUX appelants qui encodent (worker de l'éditeur, chemin synchrone
         de la réconciliation) la lisent ici, pour ne jamais diverger."""
-        return {"crop": self.import_crop, "size": self.import_size}
+        return {"crop": self.import_crop, "size": self.import_size, "adjust": self.adjust,
+                "mirror": (self.mirror_x, self.mirror_y, self.mirror_flip_x, self.mirror_flip_y)}
 
     # ── Type ──────────────────────────────────────────────────────
     @property
@@ -472,18 +552,46 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
                 return pl
         return None
 
+    def painted_cells(self) -> dict:
+        """Les cases peintes qui comptent : dans la grille, et seulement en tuilé 4bpp (la peinture
+        pose des tuiles pleines d'UNE sous-palette — rien d'équivalent en 8bpp ni en bitmap)."""
+        if not self.tile_paint or self.mode != "tiled" or self.bpp != 4:
+            return {}
+        return {cell: v for cell, v in self.tile_paint.items()
+                if 0 <= cell[0] < self.tiles_w and 0 <= cell[1] < self.tiles_h}
+
+    @staticmethod
+    def solid_tile(color: int) -> str:
+        return f"{color:x}" * 64
+
+    def effective_tileset(self) -> list:
+        """Le tileset tel qu'il part à l'écran et dans la ROM : celui de l'image, puis une tuile pleine par
+        couleur peinte (réutilisée si l'image en a déjà une identique). Les ids de la baseline ne bougent pas."""
+        tiles = list(self.tileset)
+        for color in sorted({c for c, _pal in self.painted_cells().values()}):
+            if self.solid_tile(color) not in tiles:
+                tiles.append(self.solid_tile(color))
+        return tiles
+
     def effective_tilemap(self) -> list[int]:
         """Tilemap avec les overrides d'inpainting asset appliqués (pal_bank par
         tuile). La baseline `tilemap` n'est jamais modifiée — c'est ce helper que
         consomment le canvas de scène, le canvas du Background Editor et le build,
         pour que l'inpainting soit partagé partout."""
-        if not self.tile_palette_overrides:
+        painted = self.painted_cells()
+        if not self.tile_palette_overrides and not painted:
             return list(self.tilemap)
         tw = self.tiles_w or 1
+        tiles = self.effective_tileset() if painted else []
         out: list[int] = []
         for cell, se in enumerate(self.tilemap):
+            key = (cell % tw, cell // tw)
+            if key in painted:
+                color, pal = painted[key]
+                out.append(pack_se(tiles.index(self.solid_tile(color)), pal, False, False))
+                continue
             tid, pb, fh, fv = unpack_se(se)
-            ov = self.tile_palette_overrides.get((cell % tw, cell // tw))
+            ov = self.tile_palette_overrides.get(key)
             out.append(pack_se(tid, pb if ov is None else ov, fh, fv))
         return out
 
@@ -514,8 +622,18 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
             d["import_crop"] = list(self.import_crop)
         if self.import_size:
             d["import_size"] = list(self.import_size)
+        if self.mirror_x is not None:
+            d["mirror_x"] = self.mirror_x
+        if self.mirror_y is not None:
+            d["mirror_y"] = self.mirror_y
+        if self.mirror_flip_x:
+            d["mirror_flip_x"] = True
+        if self.mirror_flip_y:
+            d["mirror_flip_y"] = True
         if not self.compression.is_default():
             d["compression"] = self.compression.to_dict()
+        if not self.adjust.is_default():
+            d["adjust"] = self.adjust.to_dict()
         if self.tileset:
             # ROADMAP v0.24 : couleurs en #RRGGBB et tilemap rangée en RANGÉES,
             # pour que deux personnes qui retouchent deux zones d'un même fond
@@ -530,6 +648,10 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
             if self.tile_palette_overrides:
                 d["tile_palette_overrides"] = {
                     f"{c},{r}": s for (c, r), s in self.tile_palette_overrides.items()
+                }
+            if self.tile_paint:
+                d["tile_paint"] = {
+                    f"{c},{r}": [color, pal] for (c, r), (color, pal) in self.tile_paint.items()
                 }
             if self.source_palettes:
                 d["source_palettes"] = write_palettes(self.source_palettes)
@@ -565,11 +687,17 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
             quantize_method=d.get("quantize_method", d.get("compress_method", "median_cut")),
             tile_palette_overrides=decode_tile_palette_overrides(
                 d.get("tile_palette_overrides")),
+            tile_paint=decode_tile_paint(d.get("tile_paint")),
             diagnostics=dict(d.get("diagnostics") or {}),
             source_stamp=str(d.get("source_stamp", "")),
             import_crop=_read_ints(d.get("import_crop"), (0, 0, 1, 1)),
             import_size=_read_ints(d.get("import_size"), (1, 1)),
+            mirror_x=_read_axis(d.get("mirror_x")),
+            mirror_y=_read_axis(d.get("mirror_y")),
+            mirror_flip_x=bool(d.get("mirror_flip_x", False)),
+            mirror_flip_y=bool(d.get("mirror_flip_y", False)),
             compression=BackgroundCompression.from_dict(d.get("compression")),
+            adjust=BackgroundAdjust.from_dict(d.get("adjust")),
             bpp=int(d.get("bpp", 4)),
             dither=bool(d.get("dither", False)),
             mode=d.get("mode", "tiled"),

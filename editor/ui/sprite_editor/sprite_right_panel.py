@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QFrame, QComboBox, QScrollArea
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import pyqtSignal
 
+from ui.common.deferred_writes import schedule_save
 from ui.common.theme import C, T
 from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import W
@@ -265,8 +266,11 @@ class SpriteRightPanel(QWidget):
         self._cb_h.blockSignals(False)
 
     def _save(self):
+        # Un champ qu'on tourne (vitesse d'animation…) passe ici à chaque cran : le sidecar s'écrit après un silence (cf.
+        # `ui/common/deferred_writes.py`) ; les canvas de scène, eux, sont prévenus tout de suite (rien ne relit le disque).
         if self._sprite and self._project:
-            get_dispatcher().save_sprite(self._sprite)
+            schedule_save(self._project.sprites, self._sprite)
+            get_dispatcher()._emit("scene_sprites_changed")
             self.sprite_changed.emit()
 
     # ── Slots ─────────────────────────────────────────────────────

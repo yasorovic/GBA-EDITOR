@@ -104,6 +104,9 @@ class PaletteBankStrip(QFrame):
             btn.setChecked(id_ == self._active)
             btn.clicked.connect(lambda _c=False, i=id_: self._select(i))
             self._layout.addWidget(btn)
+            # Un enfant ajouté à un parent DÉJÀ visible reste caché jusqu'au prochain événement : le layout ignore
+            # les widgets cachés, et `reflow` calerait alors le bandeau sur ses seules marges (un carré de 14 px).
+            btn.show()
             self._btns[id_] = btn
         self.reflow()
 

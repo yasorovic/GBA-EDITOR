@@ -129,6 +129,24 @@ def is_pattern_order(entry: int) -> bool:
     return entry < ORDER_SKIP
 
 
+def lead_in_orders(module) -> int:
+    """Combien d'ordres de tête ne sont qu'une amorce : 1, ou 0.
+
+    Un MOD n'a pas d'en-tête de tempo ; `tools/convert_uge_to_mod.py` pose donc le tempo et la vitesse dans un
+    premier ordre SANS aucune note, puis fait reboucler le fichier à l'ordre 1. On le reconnaît à ces deux traits
+    ensemble : un ordre 0 muet, et un restart qui le saute. Ce n'est qu'une présentation (l'ordre reste dans la
+    table brute et dans la ROM) : l'écran Son le range et les sections commencent après lui."""
+    if not module.order or not is_pattern_order(module.order[0]):
+        return 0
+    if effective_restart(module.restart, len(module.order)) < 1:
+        return 0
+    pattern = module.order[0]
+    if pattern >= len(module.patterns):
+        return 0
+    silent = not any(cell.note or cell.instrument for row in module.patterns[pattern] for cell in row)
+    return 1 if silent else 0
+
+
 # Notes. La numérotation est celle d'IT — **60 = C-5**, la note qui sonne au
 # `c5_speed` de l'échantillon. Les autres formats s'y ramènent à la lecture,
 # pour que le lecteur audio n'ait qu'une convention à connaître.
@@ -301,13 +319,18 @@ def load_module(path) -> Module:
     """
     path = Path(path)
     data = path.read_bytes()
-    kind = detect_format(data)
-    if kind is None:
-        raise ValueError("unrecognised module format (neither MOD, S3M, XM nor IT)")
-    if kind == "wav":
+    if detect_format(data) == "wav":
         from core.wav_module import wav_to_xm
         from .xm_file import parse_xm
         return parse_xm(wav_to_xm(path))
+    return parse_module(data)
+
+
+def parse_module(data: bytes) -> Module:
+    """Lit les OCTETS d'un module (le fichier lui-même, ou celui que `core/module_trim.cut_orders` en a tiré)."""
+    kind = detect_format(data)
+    if kind is None:
+        raise ValueError("unrecognised module format (neither MOD, S3M, XM nor IT)")
     if kind == "mod":
         from .mod_file import parse_mod
         return parse_mod(data)
@@ -317,5 +340,7 @@ def load_module(path) -> Module:
     if kind == "xm":
         from .xm_file import parse_xm
         return parse_xm(data)
-    from .it_file import parse_it
-    return parse_it(data)
+    if kind == "it":
+        from .it_file import parse_it
+        return parse_it(data)
+    raise ValueError("a WAV is not a module: it is wrapped by core/wav_module.py")

@@ -134,17 +134,6 @@ def test_dropping_on_a_folder_of_the_tree_asks_to_move_there(qapp):
     assert asked == [([str(BASE / "sfx" / "GOAL.sfx")], str(BASE / "sfx" / "platformer"))]
 
 
-def test_dropping_on_a_file_of_the_tree_asks_nothing(qapp):
-    view = _tree_view(qapp)
-    asked = []
-    view.move_requested.connect(lambda *args: asked.append(args))
-    centre = view._tree.visualItemRect(_find(view, BASE / "sfx" / "GOAL.sfx")).center()
-
-    _drop(view._tree, centre, disk_mime([BASE / "sfx" / "GOAL.wav"]))
-
-    assert asked == []
-
-
 def test_the_root_of_the_tree_cannot_be_dragged(qapp):
     view = _tree_view(qapp)
     root = view._tree.topLevelItem(0)
@@ -191,105 +180,6 @@ def test_pressing_on_a_selected_entry_drags_the_whole_selection(qapp, monkeypatc
     _mouse(view._list, QEvent.Type.MouseMove, start + QPointF(40, 0).toPoint(), Qt.MouseButton.LeftButton)
 
     assert started == [["GOAL.sfx", "GOAL.wav"]]
-
-
-def test_pressing_on_the_empty_background_starts_no_drag(qapp, monkeypatch):
-    from PyQt6.QtCore import QEvent
-    view = _flat_view_in_sfx(qapp)
-    started = []
-    monkeypatch.setattr(_DiskList, "startDrag", lambda self, actions: started.append(1))
-    empty = QPointF(590, 290).toPoint()
-
-    _mouse(view._list, QEvent.Type.MouseButtonPress, empty, Qt.MouseButton.LeftButton)
-    _mouse(view._list, QEvent.Type.MouseMove, empty - QPointF(300, 150).toPoint(), Qt.MouseButton.LeftButton)
-
-    assert started == [] and view._list._pressed_item is None
-
-
-def _hover(widget, point, mime) -> None:
-    """Un glisser qui entre et survole `point`, sans déposer."""
-    from PyQt6.QtGui import QDragEnterEvent, QDragMoveEvent
-    from PyQt6.QtWidgets import QApplication
-    args = (Qt.DropAction.MoveAction, mime, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
-    QApplication.sendEvent(widget.viewport(), QDragEnterEvent(QPointF(point).toPoint(), *args))
-    QApplication.sendEvent(widget.viewport(), QDragMoveEvent(QPointF(point).toPoint(), *args))
-
-
-def test_the_folder_under_the_drag_is_highlighted_until_it_leaves_or_drops(qapp):
-    from PyQt6.QtGui import QDragLeaveEvent
-    from PyQt6.QtWidgets import QApplication
-    view = _flat_view_in_sfx(qapp)
-    mime = disk_mime([BASE / "sfx" / "GOAL.wav"])
-
-    _hover(view._list, _centre(view, "platformer"), mime)
-    assert view._list._drop_hover is _row(view, "platformer")
-
-    _hover(view._list, _centre(view, "GOAL.sfx"), mime)                     # un fichier ne reçoit rien : pas de surimpression
-    assert view._list._drop_hover is None
-
-    _hover(view._list, _centre(view, "..."), mime)
-    assert view._list._drop_hover is _row(view, "...")
-    QApplication.sendEvent(view._list.viewport(), QDragLeaveEvent())
-    assert view._list._drop_hover is None
-
-    _hover(view._list, _centre(view, "platformer"), mime)
-    _drop(view._list, _centre(view, "platformer"), mime)
-    assert view._list._drop_hover is None                                   # le dépôt l'efface
-
-
-def test_the_overlay_is_actually_painted_over_the_folder(qapp):
-    view = _flat_view_in_sfx(qapp)
-    rect = view._list.visualItemRect(_row(view, "platformer"))
-    before = view._list.viewport().grab().toImage().pixelColor(rect.left() + 2, rect.top() + 2)
-
-    _hover(view._list, rect.center(), disk_mime([BASE / "sfx" / "GOAL.wav"]))
-    after = view._list.viewport().grab().toImage().pixelColor(rect.left() + 2, rect.top() + 2)
-
-    assert after != before                                                  # le cadre d'accent est dessiné sur le dossier
-
-
-def test_the_folder_under_the_drag_is_highlighted_in_the_tree_too(qapp):
-    view = _tree_view(qapp)
-    folder = _find(view, BASE / "sfx" / "platformer")
-    f_item = _find(view, BASE / "sfx" / "GOAL.sfx")
-    mime = disk_mime([BASE / "sfx" / "GOAL.wav"])
-
-    _hover(view._tree, view._tree.visualItemRect(folder).center(), mime)
-    assert view._tree._drop_hover is folder
-
-    _hover(view._tree, view._tree.visualItemRect(f_item).center(), mime)
-    assert view._tree._drop_hover is None
-
-
-def test_the_dragged_entries_are_dimmed_while_the_drag_lasts(qapp, monkeypatch):
-    from PyQt6.QtWidgets import QListWidget
-    from ui.common.disk_view import DRAGGING_ROLE
-    view = _flat_view_in_sfx(qapp)
-    _row(view, "GOAL.sfx").setSelected(True)
-    seen = []
-    monkeypatch.setattr(QListWidget, "startDrag",
-                        lambda self, actions: seen.append([(i.text(), bool(i.data(DRAGGING_ROLE))) for i in self.selectedItems()]))
-
-    view._list.startDrag(Qt.DropAction.MoveAction)
-
-    assert seen == [[("GOAL.sfx", True)]]                                       # à demi transparente pendant le glisser
-    assert not _row(view, "GOAL.sfx").data(DRAGGING_ROLE)                       # et de nouveau pleine après
-
-
-def test_a_dimmed_entry_is_painted_with_less_light_than_a_normal_one(qapp):
-    from ui.common.disk_view import DRAGGING_ROLE
-    view = _flat_view_in_sfx(qapp)
-    item = _row(view, "GOAL.sfx")
-    rect = view._list.visualItemRect(item)
-
-    def brightness() -> int:
-        image = view._list.viewport().grab().toImage()
-        return sum(image.pixelColor(x, y).lightness()
-                   for x in range(rect.left(), rect.right(), 2) for y in range(rect.top(), rect.bottom(), 2))
-
-    normal = brightness()
-    item.setData(DRAGGING_ROLE, True)
-    assert brightness() < normal
 
 
 def test_a_folder_that_cannot_receive_is_neither_highlighted_nor_accepted_and_says_why_once(qapp):

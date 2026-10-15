@@ -1,9 +1,11 @@
 """UILayout — géométrie AUTHORÉE des éléments d'interface d'une scène.
 
-**Quatre types.** Un `UIText` (là où du texte se pose), un `UIContainer` (le
-conteneur), un `UIList` (un conteneur qui se PARCOURT) et un `UIImage` (un sprite
-à état). Les deux conteneurs dessinent un fond — c'est une CAPACITÉ (`FillMixin`,
-`can_fill`), pas un type.
+**Cinq types, deux familles.** Les BRIQUES de base : `UIText` (une chaîne posée
+en un point), `UIContainer` (le conteneur) et `UIImage` (un sprite à état). Les
+ASSEMBLAGES, qui rangent selon une règle : `UIList` (un conteneur qui se PARCOURT)
+et `UITextbox` (une boîte de texte, qui coupe et aligne dans son rectangle). Les
+deux conteneurs dessinent un fond — c'est une CAPACITÉ (`FillMixin`,
+`can_fill`), pas un type. Cf. `KINDS_BRICK` / `KINDS_ASSEMBLY`.
 
 `UIList` a d'abord été un drapeau du conteneur (`is_list`, v0.22). Le
 motif tenait — « le moteur prend la NAVIGATION, pas la mise en page » — mais pas
@@ -12,21 +14,22 @@ déjà `list.*`, et `to_dict` écrivait cinq clés selon un booléen. Un objet q
 pas la même forme selon un champ est un type qui s'ignore. Cf. `UIList`.
 
 Le type « zone de texte » a existé à côté de `UIText` et a été RETIRÉ : les deux
-portaient la même géométrie, le même ancrage, la même allocation OBJ et la même
-entrée de `g_ui_regions`, et ne différaient que par l'écrivain — le script pour
-l'une, `scene_init` pour l'autre. Ce n'était pas deux types mais un type et un
-champ vide : un `UIText` sans `text_key` EST une zone que le script remplit.
-Deux widgets pour ça obligeaient à choisir avant de savoir, et à convertir
-ensuite. Cf. `UIText`.
+portaient la même géométrie et ne différaient que par l'écrivain — le script pour
+l'une, `scene_init` pour l'autre. Un type et un champ vide. La boîte de texte
+(`UITextbox`) est revenue pour une autre raison, de RENDU : c'est la distinction
+d'Illustrator entre une chaîne et une boîte de texte. Le contenu (`text_key`
+vide ou non) reste un champ, jamais un type.
 
 **Un élément de texte ne dessine rien.** Il dit *où* le texte se pose, jamais à
 quoi il ressemble — même contrat que la window matérielle (`WindowSlot`), qui
 est un pochoir et pas un cadre. C'est pour ça que le mot était « région » et non
 « frame » : dans GB Studio, `frame.png` EST l'image de bordure 9-slice, et le
 mot promettrait donc un dessin que le moteur ne fait pas. Le vocabulaire est
-celui que fixe ROADMAP v0.3.2 (« région, layer, tilemap — jamais dialogue,
-message, textbox ») ; `frame` collisionnerait de surcroît avec les frames
-d'animation (`Sprite.frame_w`) et la frame vidéo.
+celui que fixait ROADMAP v0.3.2 (« région, layer, tilemap — jamais dialogue,
+message ») ; « textbox » en a été retiré le 2026-10-14, quand la boîte de texte
+est devenue un type de rendu à part entière (cf. `UITextbox`) ; `frame`
+collisionnerait de surcroît avec les frames d'animation (`Sprite.frame_w`) et la
+frame vidéo.
 
 **Ce qui reste au script.** L'élément porte la GÉOMÉTRIE, pas l'enchaînement :
 rien ici ne dit quel texte s'affiche quand, ni sur quel événement. Un contenu
@@ -93,18 +96,40 @@ ALIGNS = ("left", "center", "right")
 # Une mise en page est une liste ordonnée : son ordre fixe l'empilement et l'arbre.
 KIND_CONTAINER  = "container"  # Groupe ; une racine porte l'ancrage.
 KIND_LIST   = "list"     # conteneur qui se PARCOURT — ses enfants sont ses rangées
-KIND_TEXT   = "text"     # texte (authoré ET/OU écrit par un script) — feuille
+KIND_TEXT   = "text"     # BRIQUE — une chaîne posée en un point : une ligne, jamais coupée — feuille
+KIND_TEXTBOX = "textbox" # une boîte de texte : le rectangle EST la largeur de coupe — feuille
 KIND_IMAGE  = "image"    # sprite à état posé sur l'interface — feuille
 
 # Types écrits dans les nouveaux fichiers.
-KINDS = (KIND_CONTAINER, KIND_LIST, KIND_TEXT, KIND_IMAGE)
+KINDS = (KIND_CONTAINER, KIND_LIST, KIND_TEXT, KIND_TEXTBOX, KIND_IMAGE)
+
+# Briques de base et assemblages — la distinction que montre le menu d'ajout.
+# Une brique est un élément que le moteur dessine tel quel ; un assemblage est un
+# conteneur ou une boîte qui range d'autres éléments selon une règle (la liste se
+# parcourt, la boîte de texte coupe).
+KINDS_BRICK = (KIND_TEXT, KIND_CONTAINER, KIND_IMAGE)
+KINDS_ASSEMBLY = (KIND_TEXTBOX, KIND_LIST)
+
+# Les deux types qui écrivent des glyphes. Toute question « cet élément porte-t-il
+# du texte ? » passe par `is_text`, jamais par `kind == KIND_TEXT` — la deuxième
+# forme oublie la boîte.
+TEXT_KINDS = (KIND_TEXT, KIND_TEXTBOX)
+
+# Contenu d'aperçu d'une chaîne neuve : de quoi voir où elle est, et de quoi
+# l'éditer sur place. Jamais compilé ni ajouté à la table (cf. `preview_text`).
+PREFILL_TEXT = "Text"
+
+
+def is_text(el) -> bool:
+    """Cet élément écrit-il des glyphes ? (une chaîne ou une boîte de texte)"""
+    return getattr(el, "kind", "") in TEXT_KINDS
 
 # Types hérités, lus seulement pour migrer les anciens fichiers.
 KIND_REGION = "region"
 KIND_PANEL_LEGACY = "panel"
 
 # Types qui occupent une entrée de `g_ui_regions`.
-KIND_SLOTS = (KIND_TEXT,)
+KIND_SLOTS = TEXT_KINDS
 
 # Fonds de conteneur
 # Un fond décrit l'apparence du conteneur, indépendamment de sa géométrie.
@@ -277,6 +302,13 @@ class UIText(RectGeometryMixin):
     """
     kind = KIND_TEXT         # attribut de classe (pas un champ dataclass)
     can_contain = ()         # feuille : n'accueille jamais d'enfants
+    # Le texte passe-t-il à la ligne dans le rectangle ? Une chaîne : non, ni
+    # coupe ni alignement — l'origine seule compte. La boîte : oui, cf. `UITextbox`.
+    wraps = False
+    # L'auteur dessine-t-il un rectangle ? Une chaîne n'en a pas : l'outil la
+    # POSE d'un clic et le canvas n'offre aucune poignée. Son étendue réservée
+    # (w×h) reste un fait du build, pas un geste.
+    resizable = False
     name:   str = "text"
     # Nom du parent. Une chaîne vide ou une référence absente désigne la racine.
     parent: str = ""
@@ -335,7 +367,12 @@ class UIText(RectGeometryMixin):
 
     def to_dict(self) -> dict:
         return {
-            "kind": KIND_TEXT,
+            "kind": self.kind,
+            # Marqueur de migration : avant la séparation chaîne / boîte, tout
+            # `kind: "text"` était une boîte (le rectangle coupait). Seule la
+            # chaîne écrit `point`, donc un `text` sans `point` se relit en boîte
+            # et garde son comportement (cf. `element_from_dict`).
+            **({"point": True} if self.kind == KIND_TEXT else {}),
             "name": self.name, "parent": self.parent, "visible": self.visible,
             "text_color": self.text_color,
             "highlight_color": self.highlight_color,
@@ -389,6 +426,25 @@ class UIText(RectGeometryMixin):
             # nouveaux fichiers portent explicitement le littéral.
             preview_is_literal = bool(d.get("preview_is_literal", False)),
         )
+
+
+@dataclass
+class UITextbox(UIText):
+    """Une BOÎTE de texte — le texte passe à la ligne dans son rectangle.
+
+    La distinction est celle d'Illustrator : une chaîne se pose en un point
+    (`UIText`), une boîte de texte se dessine comme une surface (`UITextbox`).
+    Mêmes champs, même emplacement dans `g_ui_regions`, même allocation — seule la
+    règle de rendu change : la boîte COUPE à sa largeur et ALIGNE dans son
+    rectangle, la chaîne ne fait ni l'un ni l'autre.
+
+    Ce n'est pas le type « zone de texte » retiré plus haut, qui ne différait de
+    `UIText` que par l'écrivain (script ou `scene_init`) — deux types pour un
+    champ vide. Ici le comportement du rendu diffère, ce qui justifie un type."""
+    kind = KIND_TEXTBOX
+    wraps = True
+    resizable = True
+    name: str = "textbox"
 
 
 def _ceil_tile(px: int) -> int:
@@ -768,7 +824,7 @@ class UIList(RectGeometryMixin, FillMixin):
     # Ses enfants SONT ses rangées. Accueillir une image reviendrait à poser dans
     # la liste un élément qu'elle ne parcourt pas et que le build ignore — ce que
     # l'arbre laissait faire tant que la liste était un drapeau du conteneur.
-    can_contain = (KIND_TEXT,)
+    can_contain = TEXT_KINDS
     name: str = "list"
     parent: str = ""
     # Cf. `UIText.visible` — même contrat, même remontée par `UILayout.is_visible`.
@@ -994,7 +1050,8 @@ class UIImage(RectGeometryMixin):
 # généralisation multi-types : que des zones de texte, donc `UIText`. Même
 # entrée que `KIND_REGION`, pour la même raison.
 _ELEMENT_FROM_DICT = {
-    KIND_REGION:       UIText.from_dict,       # hérités — cf. KIND_REGION
+    KIND_REGION:       UITextbox.from_dict,    # hérités — cf. KIND_REGION
+    KIND_TEXTBOX:      UITextbox.from_dict,
     KIND_PANEL_LEGACY: UIContainer.from_dict,
     KIND_CONTAINER:    UIContainer.from_dict,
     KIND_LIST:         UIList.from_dict,
@@ -1016,7 +1073,11 @@ def element_from_dict(d: dict):
     kind = d.get("kind", KIND_REGION)
     if kind == KIND_PANEL_LEGACY and d.get("is_list"):
         kind = KIND_LIST
-    return _ELEMENT_FROM_DICT.get(kind, UIText.from_dict)(d)
+    # Un `text` sans `point` date d'avant la séparation chaîne / boîte : il
+    # coupait à son rectangle, c'est donc une boîte (cf. `UIText.to_dict`).
+    if kind == KIND_TEXT and not d.get("point"):
+        kind = KIND_TEXTBOX
+    return _ELEMENT_FROM_DICT.get(kind, UITextbox.from_dict)(d)
 
 
 @dataclass
@@ -1528,7 +1589,7 @@ class UILayout(Resource):
             if getattr(e, "kind", "") != KIND_LIST or e.name not in horizontal:
                 continue
             e.nav_columns = max(1, len([c for c in self.children(e.name)
-                                        if getattr(c, "kind", "") == KIND_TEXT]))
+                                        if is_text(c)]))
             e.nav_major = NAV_ROW
 
 

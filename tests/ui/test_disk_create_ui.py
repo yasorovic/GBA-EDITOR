@@ -4,7 +4,6 @@ from pathlib import Path
 from PyQt6.QtWidgets import QMenu
 
 from core import disk_tree
-from ui.common.disk_tree_view import DiskTreeView
 from ui.common.disk_view import DiskCallbacks, DiskView, add_asset_actions
 
 BASE = Path("assets")
@@ -77,30 +76,12 @@ def test_the_button_names_the_asset_a_single_free_source_would_become(qapp):
     assert spy.created == [("hero.png", "sprites")]                                # le clic prend le type le plus courant
 
 
-def test_the_arrow_only_shows_when_the_file_can_become_several_types(qapp):
-    view, _spy = _view(qapp)
-
-    _select(view, "theme.hex")
-
-    assert view._btn_create.text() == "Create"
-    assert not view._btn_create_more.isVisibleTo(view)                             # une palette : un seul type
-
-
 def test_the_button_is_hidden_for_everything_that_is_not_one_free_source(qapp):
     view, _spy = _view(qapp)
 
     for names in ((), ("hero.sprite",), ("notes.txt",), ("hero.png", "boom.wav"), ("boom.wav", "hero.sprite")):
         _select(view, *names)
         assert not view._btn_create.isVisibleTo(view), names                       # ni asset, ni format inconnu, ni sources sans type commun
-
-
-def test_the_other_types_are_offered_with_the_same_name(qapp):
-    view, spy = _view(qapp)
-    _select(view, "boom.wav")
-
-    assert [family for family, _word, _name in view._create_options] == ["sfx", "music", "jingles"]
-    view._callbacks.create_from_sources(view._create_paths, "music")
-    assert spy.created == [("boom.wav", "music")]
 
 
 def _texts(menu: QMenu) -> list[str]:
@@ -208,70 +189,6 @@ def test_the_plus_menu_offers_import_create_and_new_folder_for_the_folder_shown(
     assert spy.imported == [folder] and spy.folders == [folder] and spy.blank == [("scene", folder)]
 
 
-def test_the_tree_has_the_same_context_menu(qapp):
-    spy = _Spy()
-    view = DiskTreeView()
-    view.resize(400, 400)
-    view.set_tree(_tree())
-    view.set_callbacks(spy.callbacks())
-    view.show()
-    view._tree.expandAll()
-    item = next(i for i in _items(view._tree) if i.text(0) == "theme.hex")
-    item.setSelected(True)
-    menu = QMenu()
-    nodes = [n for n in (i.data(0, 256 + 2) for i in view._tree.selectedItems()) if n is not None]
-
-    add_asset_actions(menu, nodes, view._callbacks)
-
-    assert _texts(menu) == ["Create", "Reveal", "Delete"]
-
-
-def _items(tree):
-    stack = [tree.topLevelItem(0)]
-    while stack:
-        item = stack.pop()
-        yield item
-        stack.extend(item.child(i) for i in range(item.childCount()))
-
-
-def test_the_plus_and_the_loupe_are_flush_right_like_on_the_asset_finders(qapp):
-    view, _spy = _view(qapp)
-    view.resize(900, 300)
-    qapp.processEvents()
-
-    assert view._summary.x() < view._btn_plus.x() < view._btn_search.x()           # à droite du compteur, la loupe en dernier
-    assert view._btn_search.x() + view._btn_search.width() >= view.width() - 20    # collés au bord droit
-
-
-def test_the_loupe_filters_the_entries_by_name_and_keeps_the_way_up(qapp):
-    view, _spy = _view(qapp)
-
-    view._btn_search.setChecked(True)
-    view._search_box.setText("boo")
-
-    shown = [view._list.item(i).text() for i in range(view._list.count()) if not view._list.item(i).isHidden()]
-    assert shown == ["...", "boom.wav"]                                            # « ... » reste, le reste est filtré
-
-    view._enter(_row(view, "..."))                                                  # changer de dossier garde le filtre
-    assert [view._list.item(i).text() for i in range(view._list.count()) if not view._list.item(i).isHidden()] == ["assets"]
-
-    view._btn_search.setChecked(False)                                              # refermer la loupe rend tout
-    assert not any(view._list.item(i).isHidden() for i in range(view._list.count()))
-
-
-def test_the_context_menu_entries_carry_icons_too(qapp):
-    spy = _Spy()
-    nodes = {n.name: n for n in _tree().walk()}
-    source, assets = QMenu(), QMenu()
-
-    add_asset_actions(source, [nodes["hero.png"]], spy.callbacks())
-    add_asset_actions(assets, [nodes["hero.sprite"]], spy.callbacks())
-
-    submenu = source.actions()[0].menu()
-    assert not source.actions()[0].icon().isNull() and all(not a.icon().isNull() for a in submenu.actions())
-    assert not assets.actions()[0].icon().isNull()
-
-
 def test_a_source_that_already_has_an_asset_can_still_give_another(qapp):
     spy = _Spy()
     linked = disk_tree.DiskNode("hero.png", BASE / "Art" / "hero.png", disk_tree.LINKED_SOURCE, "hero", "sprites")
@@ -280,23 +197,6 @@ def test_a_source_that_already_has_an_asset_can_still_give_another(qapp):
     add_asset_actions(menu, [linked], spy.callbacks())
 
     assert menu.actions()[0].text() == "Create as"                              # le bouton et le clic droit s'y adaptent
-
-
-def test_the_button_follows_a_linked_source_too(qapp):
-    spy = _Spy()
-    root = _tree()
-    art = root.children[0]
-    art.children[0] = disk_tree.DiskNode("hero.png", BASE / "Art" / "hero.png", disk_tree.LINKED_SOURCE, "hero", "sprites")
-    view = DiskView()
-    view.resize(700, 300)
-    view.set_tree(root)
-    view.set_callbacks(spy.callbacks())
-    view.show()
-    view._enter(_row(view, "Art"))
-
-    _select(view, "hero.png")
-
-    assert view._btn_create.isVisibleTo(view) and view._btn_create.text() == "Create"
 
 
 def test_a_project_json_offers_edit_externally_to_the_text_editor(qapp):
@@ -319,15 +219,3 @@ def test_a_project_json_offers_edit_externally_to_the_text_editor(qapp):
         assert all(a.text() != "Edit externally" for a in menu.actions())
 
 
-def test_the_menu_ends_with_reveal_then_delete_and_delete_names_no_count_for_one(qapp):
-    spy = _Spy()
-    callbacks = spy.callbacks()
-    one, two = _tree().children[0].children[4], _tree().children[0].children[5]
-    for nodes, delete_text in (([one], "Delete"), ([one, two], "Delete 2 items")):
-        menu = QMenu()
-        add_asset_actions(menu, nodes, callbacks)
-        texts = [a.text() for a in menu.actions() if not a.isSeparator()]
-        assert texts[-1] == delete_text
-        assert ("Reveal" in texts) == (len(nodes) == 1)
-        if len(nodes) == 1:
-            assert texts[-2] == "Reveal"

@@ -100,6 +100,11 @@ BINDINGS: list[Binding] = [
     Binding("canvas.tool_inpaint",   "scene_canvas", "B"),
     Binding("canvas.tool_ui",        "scene_canvas", "T"),
 
+    # Background Editor — le pinceau a son raccourci propre ; ses
+    # tailles restent dans le menu de paramètres, pour ne pas concurrencer les
+    # touches globales de zoom.
+    Binding("background.tool_brush", "background_editor", "B"),
+
     # Sprite editor (ui/sprite_editor/*)
     Binding("sprite.flip_h", "sprite_editor", "Shift+X"),
     Binding("sprite.flip_v", "sprite_editor", "Shift+Y"),

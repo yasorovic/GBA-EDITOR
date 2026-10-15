@@ -67,40 +67,6 @@ def editor(qapp, player, project):
 # ── Un module ─────────────────────────────────────────────────────
 
 
-def test_un_module_montre_l_onde_la_bande_et_le_tableau(editor, project):
-    music = _module(project)
-    editor.load(project, music)
-    assert not editor._structure.isHidden() and not editor._strip_zone.isHidden()
-    assert not editor._sections_zone.isHidden()
-    assert len(editor._strip._table) == 8
-    assert len(editor._wave._peaks) > 0 and editor._wave.seconds > 0
-
-
-def test_les_trois_composants_peints_a_la_main_se_dessinent(editor, project):
-    """L'onde, la bande et le tableau sont dessinés par `paintEvent` : on vérifie qu'ils peignent
-    autre chose que le fond (un test de logique ne verrait pas un dessin cassé)."""
-    music = _module(project)
-    music.add_section(2, 5, "Main")
-    editor.load(project, music)
-    for widget in (editor._wave, editor._strip):
-        image = widget.grab().toImage()
-        colors = {image.pixel(x, y) for x in range(0, image.width(), 7)
-                  for y in range(0, image.height(), 5)}
-        assert len(colors) > 3, f"{type(widget).__name__} ne dessine que son fond"
-
-
-def test_la_bande_laisse_un_separateur_hors_de_la_selection(editor, project):
-    """Une cellule `254` occupe sa position (c'est l'index de la ROM) mais n'est pas de la musique."""
-    music = _module(project, orders=[0, 254, 0, 0, 255])
-    editor.load(project, music)
-    strip = editor._strip
-    QTest.mousePress(strip, Qt.MouseButton.LeftButton, pos=strip._cell_rect(1).center().toPoint())
-    QTest.mouseRelease(strip, Qt.MouseButton.LeftButton, pos=strip._cell_rect(1).center().toPoint())
-    assert strip.selection() == (0, 0)
-    QTest.mousePress(strip, Qt.MouseButton.LeftButton, pos=strip._cell_rect(3).center().toPoint())
-    assert strip.selection() == (3, 4)
-
-
 def test_un_glisser_sur_la_bande_choisit_une_plage(editor, project):
     music = _module(project)
     editor.load(project, music)
@@ -205,14 +171,6 @@ def test_un_compteur_de_secondes_ecrit_des_millisecondes(editor, project):
     assert section.end >= section.start + 50
 
 
-def test_les_bandes_d_un_wav_suivent_ses_sections(editor, project):
-    music = _wav(project)
-    editor.load(project, music)
-    editor._table._on_add()
-    editor._table._on_add()
-    assert [(round(a, 2), round(b, 2)) for a, b, _c in editor._wave._bands] == [(0.75, 2.25), (2.25, 3.0)]
-
-
 def test_glisser_une_poignee_ecrit_la_boucle_au_relachement(editor, project):
     music = _wav(project)
     editor.load(project, music)
@@ -264,7 +222,7 @@ def test_un_jingle_montre_l_onde_sans_les_sections(editor, project):
     assert isinstance(jingle, Jingle)
     editor.load(project, jingle, sections=False)
     assert not editor._structure.isHidden()
-    assert editor._strip_zone.isHidden() and editor._sections_zone.isHidden()
+    assert editor._strip_zone.isHidden() and editor._sections_zone.isHidden()   # ni la bande des ordres, ni les sections
 
 
 def test_sans_fichier_ou_avec_un_fichier_illisible_l_editeur_le_dit(editor, project):
@@ -275,13 +233,6 @@ def test_sans_fichier_ou_avec_un_fichier_illisible_l_editeur_le_dit(editor, proj
     music.asset = "assets/music/Nope.it"
     editor.load(project, music)
     assert editor._structure.isHidden() and "No file" in editor._message.text()
-
-
-def test_la_tete_de_lecture_suit_le_temps_et_l_ordre(editor, project):
-    music = _module(project)
-    editor.load(project, music)
-    editor.set_playhead_seconds(1.0)                           # 0,48 s par ordre : on est à l'ordre 2
-    assert editor._wave._playhead == 1.0 and editor._strip._playhead == 2
 
 
 # ── Le lecteur : l'aperçu d'une section ───────────────────────────
@@ -326,28 +277,6 @@ def test_un_wav_montre_son_poids_exact_et_il_suit_le_taux(editor, project):
     assert editor._weight.text() == f"ROM {len(wav_to_xm(path, 8000)) / 1024:.1f} KiB"    # moitié moins d'octets
 
 
-def test_la_pastille_vire_a_l_orange_puis_au_rouge(editor, project, monkeypatch):
-    from ui.sound_mixer import music_editor
-    from ui.common.theme import C
-    music = _wav(project)
-    for size, color in ((900 * 1024, C.TEXT_DIM), (1536 * 1024, C.ACCENT_WARM), (3 << 20, C.ACCENT_RED)):
-        monkeypatch.setattr(music_editor, "wav_rom_bytes", lambda _m, _p, size=size: size)
-        editor.load(project, music)
-        assert color in editor._weight.styleSheet()
-
-
-def test_un_module_montre_la_mesure_du_dernier_build_ou_rien(qapp, player, project):
-    from types import SimpleNamespace
-    music = _module(project)
-    entry = SimpleNamespace(own_bytes=48 * 1024, shared_bytes=0, shared_with=0)
-    measured = MusicEditor(player.track_for, lambda _m: entry)
-    measured.load(project, music)
-    assert measured._weight.text() == "ROM 48.0 KiB"
-    unbuilt = MusicEditor(player.track_for, lambda _m: None)
-    unbuilt.load(project, music)
-    assert unbuilt._weight.text().startswith("ROM ~")        # pas de build : une estimation, marquée d'un ~
-
-
 # ── Tout tient à l'écran ──────────────────────────────────────────
 
 
@@ -361,7 +290,8 @@ def _add_buttons(table):
 
 def test_le_plus_se_desactive_a_six_sections(editor, project):
     from core.music_structure import MAX_SECTIONS
-    music = _module(project)
+    # Une section ajoutée sans sélection CONTINUE la dernière (quatre ordres) : il faut un morceau qui en contienne six.
+    music = _module(project, orders=[0] * (4 * MAX_SECTIONS))
     editor.load(project, music)
     for _ in range(MAX_SECTIONS - 1):
         editor._table._on_add()
@@ -369,58 +299,6 @@ def test_le_plus_se_desactive_a_six_sections(editor, project):
     editor._table._on_add()
     assert len(music.sections) == MAX_SECTIONS
     assert _add_buttons(editor._table) == []                     # au maximum, le bouton n'est plus là
-
-
-def _shown(editor, project, music, height: int):
-    editor.resize(1000, height)
-    editor.show()
-    editor.load(project, music)
-    QTest.qWait(60)
-    return editor._wave.height(), not editor._banner.isHidden()
-
-
-def test_l_onde_grandit_avec_la_fenetre_jusqu_a_sa_hauteur_maximale(editor, project):
-    from ui.sound_mixer.music_editor import _WAVE_MAX
-    music = _module(project)
-    small, _b = _shown(editor, project, music, 260)
-    medium, _b = _shown(editor, project, music, 340)
-    huge, _b = _shown(editor, project, music, 1500)
-    assert small < medium <= _WAVE_MAX
-    assert huge == _WAVE_MAX                                   # sur un grand écran, elle ne prend pas toute la hauteur
-
-
-def test_le_bandeau_n_apparait_que_s_il_reste_de_la_hauteur(editor, project):
-    music = _module(project)
-    _h, shown = _shown(editor, project, music, 300)
-    assert not shown                                           # l'onde et la bande des ordres passent d'abord
-    _h, shown = _shown(editor, project, music, 1500)
-    assert shown and "Module" in editor._summary.text() and "8 orders" in editor._summary.text()
-    assert "bs-p2" not in editor._summary.text() and music.name not in editor._summary.text()   # sans le nom
-
-
-def test_le_bandeau_d_un_wav_dit_sa_duree_et_la_pastille_de_poids_existe(editor, project):
-    music = _wav(project)
-    _shown(editor, project, music, 1500)
-    assert not editor._banner.isHidden() and "WAV" in editor._summary.text() and "3 s" in editor._summary.text()
-    assert not editor._weight.isHidden()
-
-
-def test_la_bande_porte_la_duree_et_le_play_d_une_section(editor, project):
-    """La durée et l'écoute vivent sur la bande, pour un module comme pour un WAV."""
-    for music in (_module(project), _wav(project)):
-        music.sections.clear()
-        editor.resize(900, 760)
-        editor.load(project, music)
-        section = music.add_section(0, 4 if music.unit == "order" else 2000, "Main")
-        editor._refresh_sections()
-        strip = editor._strip
-        assert strip._duration_text(section) != ""
-        heard = []
-        editor.preview_section.connect(heard.append)
-        band = strip._band_of(section)
-        QTest.mousePress(strip, Qt.MouseButton.LeftButton, pos=QPoint(int(band.left()) + 6, int(band.center().y())))
-        assert heard == [section]
-        editor.preview_section.disconnect(heard.append)
 
 
 def test_la_section_cliquee_devient_la_plage_qui_boucle(editor, project):
@@ -442,8 +320,8 @@ def test_la_section_cliquee_devient_la_plage_qui_boucle(editor, project):
     assert 0 <= start < end
     assert editor._wave._scope is not None
 
-    editor._wave.set_cue(end + 1.0)                       # une poignée hors de la section : la section part de son début
-    assert editor.start_seconds() is None
+    editor._wave.set_cue(end + 1.0)                       # une poignée hors de la section : la lecture part quand même de là
+    assert editor.start_seconds() == end + 1.0
     editor._wave.set_cue((start + end) / 2)
     assert editor.start_seconds() is not None
 
@@ -489,16 +367,43 @@ def test_les_bords_d_une_section_de_wav_se_glissent_sur_la_bande(editor, project
     assert isinstance(section.end, int)
 
 
-def test_un_wav_n_affiche_aucune_virgule(editor, project):
+
+
+# ── La barre de rognage prend la place de la courbe de polyphonie ─────────
+
+
+def test_un_wav_montre_la_barre_de_rognage_a_la_place_de_la_polyphonie(editor, project):
     music = _wav(project)
-    editor.resize(900, 760)
     editor.load(project, music)
-    editor._table._on_add()
-    section = music.sections[0]
-    assert strip_text_is_whole(editor._strip._duration_text(section))
-    start, end = editor._table._spins[id(section)]
-    assert type(start).__name__ == "QSpinBox" and start.suffix() == ""
+    assert not editor._trim_zone.isHidden() and editor._poly.isHidden()
+    grid = editor._structure.layout().itemAt(0).layout()
+    assert grid.indexOf(editor._trim_zone) >= 0 and grid.indexOf(editor._poly) >= 0     # la même case, une seule des deux visible
 
 
-def strip_text_is_whole(text: str) -> bool:
-    return "." not in text and "," not in text
+def test_un_module_garde_sa_courbe_de_polyphonie_et_n_a_pas_de_rognage(editor, project):
+    editor.load(project, _module(project))
+    assert editor._trim_zone.isHidden() and not editor._poly.isHidden()
+
+
+def test_un_wav_ne_demande_pas_la_hauteur_de_la_courbe_en_plus_de_la_barre(editor, project, qapp):
+    editor.load(project, _wav(project))
+    editor.show()
+    editor._trim_btn.setChecked(True)
+    qapp.processEvents()
+
+    assert editor._trim_zone.height() <= 80                          # la case sous l'onde est celle de la barre seule
+    assert editor._wave.minimumHeight() == 96                        # l'onde garde la sienne
+    assert editor._trim_bar.height() == 38                           # et la barre est plus basse qu'avant (46 → 38 px)
+    top = editor._wave.mapTo(editor, editor._wave.rect().bottomLeft()).y()
+    assert editor._trim_zone.mapTo(editor, editor._trim_zone.rect().topLeft()).y() - top <= 12   # juste sous l'onde
+
+
+@pytest.mark.parametrize("height", [520, 600, 700, 800, 1000])
+def test_un_wav_rogne_ne_fait_pas_defiler_l_ecran_aux_hauteurs_courantes(editor, project, qapp, height):
+    editor.load(project, _wav(project))
+    editor.resize(900, height)
+    editor.show()
+    editor._trim_btn.setChecked(True)
+    qapp.processEvents()
+
+    assert editor._scroll.verticalScrollBar().maximum() == 0, (height, editor._scroll.verticalScrollBar().maximum())

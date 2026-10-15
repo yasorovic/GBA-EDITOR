@@ -660,7 +660,7 @@
         {
           "label": "music:jingle(\"name\")",
           "snippet": "music:jingle(\"name\")",
-          "description": "Plays a module OVER the current music, without stopping it. It never loops, only one at a time, and it takes up to 4 of the 8 channels. It is the only way to make two musics sound together on this console.",
+          "description": "Plays a module OVER the current music, without stopping it. It never loops, only one at a time, and it takes up to 4 of the 8 channels. What the music does under it (keeps playing, lowered, paused) is a setting of the jingle asset.",
           "params": [
             {
               "name": "name",
@@ -719,7 +719,7 @@
         {
           "label": "jingle_box:set_volume(percent)",
           "snippet": "jingle_box:set_volume(25)",
-          "description": "Sets the volume of the jingle layer, as a percentage. Together with `music.set_volume`, it is half of the duck: the music fades out during the fanfare, then comes back up.",
+          "description": "Sets the volume of the jingle layer, as a percentage. Together with `music.set_volume`, it is a manual duck. The usual case needs no call: each jingle asset says what happens to the music under it (keeps playing, lowered, paused).",
           "params": [
             {
               "name": "percent",

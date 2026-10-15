@@ -130,11 +130,6 @@
     "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
   },
   {
-    "file": "editor/ui/sprite_editor/sprite_canvas.py",
-    "text": "PNG",
-    "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
-  },
-  {
     "file": "editor/ui/scene_manager/inspectors/scene_inspector.py",
     "text": "f'0x{v:04X}'",
     "reason": "Hardware register/bank notation, independent of the interface language."

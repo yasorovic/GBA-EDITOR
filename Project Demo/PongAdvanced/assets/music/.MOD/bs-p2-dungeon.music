@@ -11,5 +11,8 @@
   "pitch": 152,
   "fade_in": 0,
   "fade_out": 0,
-  "sample_rate": 0
+  "sample_rate": 0,
+  "trim_start": 0,
+  "trim_end": 0,
+  "cues": []
 }

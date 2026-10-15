@@ -59,9 +59,11 @@ def sfx_default_tables(sound_assets: dict | None) -> list[str]:
     rates = [pitch_to_rate(getattr(sfx, "pitch", 100)) for sfx in sfx_rows]
     pans = [panning_to_hardware(getattr(sfx, "panning", 0)) for sfx in sfx_rows]
     spreads = [max(0, min(SFX_PITCH_VARIATION_MAX, int(getattr(sfx, "pitch_variation", 0) or 0))) for sfx in sfx_rows]
+    protected = [1 if getattr(sfx, "protected", False) else 0 for sfx in sfx_rows]
     return [f"const mm_hword g_sfx_default_rate[{len(rates)}] = {{{','.join(map(str, rates))}}};",
             f"const mm_byte  g_sfx_default_pan[{len(pans)}] = {{{','.join(map(str, pans))}}};",
             f"const mm_byte  g_sfx_default_spread[{len(spreads)}] = {{{','.join(map(str, spreads))}}};",
+            f"const mm_byte  g_sfx_default_protected[{len(protected)}] = {{{','.join(map(str, protected))}}};",
             "mm_word g_sfx_seed = 1013904223u;", ""]
 
 
@@ -278,6 +280,10 @@ def music_runtime_lines(p, sound_assets) -> list[str]:
         for name, start, end in music_section_rows(m, path):
             section_rows.append(f"    {{ {_music_const(m.name)}, {names.index(name)}, {start}, {end} }},"
                                 f"   /* {m.name} / {name} */")
+    cue_rows, cue_kinds = _music_cue_rows(p, musics)
+    jingles = [j for j, _path in (sound_assets or {}).get("music", []) if isinstance(j, Jingle)]
+    jingle_rows, jingle_kinds = _jingle_cue_rows(p, jingles)
+    cue_reset = ["    g_cue_last = -1;   /* a module that starts again fires its first cue again */"] if cue_rows else []
     return [
         "/* ── Music settings per module (ROADMAP « L'asset .music ») ──────────── */",
         "/* {loop start, loop end, tempo, pitch, fade in, fade out}. Zero = the file as it",
@@ -297,8 +303,27 @@ def music_runtime_lines(p, sound_assets) -> list[str]:
         "};",
         "int g_music_cur = -1;                 /* the module playing, -1 = none */",
         "int g_music_vol = 0;                  /* its volume, on maxmod's 0-1024 scale */",
+        "",
+        "/* ── The module volume has ONE writer ─────────────────────────────── */",
+        "/* Every volume a script or a fade asks for goes through music_write_volume(), which",
+        "   scales it by the DUCK: 0-1024, 1024 = no duck. A jingle with a duck policy lowers",
+        "   it while it sounds. Two writers of the same register that do not know about each",
+        "   other is the defect the camera had (v0.6.1). */",
+        "static int g_duck = 1024, g_duck_to = 1024, g_duck_step = 1024;",
+        "static int g_jingle_watch = 0, g_jingle_release = 0, g_jingle_paused = 0;",
+        "static int g_jingle_cur = -1, g_jingle_frame = 0;   /* the jingle sounding, and the frames since it started */",
+        "static void music_write_volume(int volume){",
+        "    mmSetModuleVolume((mm_word)(volume * g_duck / 1024));",
+        "}",
+        "/* A level already on its way: only the fades (modes 3 and 4) and the crossfade write",
+        "   the volume on their own, every frame, with the duck of the moment. */",
+        "static void music_rewrite_volume(void){",
+        "    if(g_mtr_mode == 0 || g_mtr_mode == 2) music_write_volume(g_music_vol);",
+        "}",
         "static int g_mloop_start = 0, g_mloop_end = 0, g_mloop_in = 0;",
         "static int g_mloop_rel = 0, g_mloop_last = 0;   /* a released loop: plays on to the end, then stops */",
+        *(["static int g_cue_last = -1;                  /* the order position seen on the previous frame */"]
+          if cue_rows else []),
         "",
         "/* A module with a loop section must LOOP, whatever its `loop` flag: the section",
         "   is what makes it loop, and a module played once would simply end. */",
@@ -317,6 +342,8 @@ def music_runtime_lines(p, sound_assets) -> list[str]:
         "    mmSetModuleTempo((mm_word)(m->tempo ? m->tempo : 1024));",
         "    mmSetModulePitch((mm_word)(m->pitch ? m->pitch : 1024));",
         "    g_mloop_start = m->loop_start; g_mloop_end = m->loop_end;",
+        *cue_reset,
+        "    if(g_jingle_paused) mmPause();   /* a jingle that pauses the music keeps a NEW module waiting too */",
         "}",
         "/* `fade_in` < 0 = the fade in of the asset; otherwise the call's own. */",
         "static void music_begin(int id, int loop, int volume, int fade_in){",
@@ -327,10 +354,10 @@ def music_runtime_lines(p, sound_assets) -> list[str]:
         "    g_music_vol = volume;",
         "    if(fade_in < 0) fade_in = (id < MSL_NSONGS) ? g_music_info[id].fade_in : 0;",
         "    if(fade_in > 1){",
-        "        mmSetModuleVolume(0);",
+        "        music_write_volume(0);",
         "        g_mtr_mode = 3; g_mtr_vol = volume; g_mtr_i = 0; g_mtr_n = fade_in;",
         "    } else {",
-        "        mmSetModuleVolume((mm_word)volume);",
+        "        music_write_volume(volume);",
         "    }",
         "}",
         "/* `fade_out` < 0 = the fade out of the asset; otherwise the call's own. */",
@@ -347,6 +374,45 @@ def music_runtime_lines(p, sound_assets) -> list[str]:
         "    mmStop(); g_music_cur = -1; g_mloop_end = 0; g_mloop_rel = 0;",
         "}",
         "void music_play(int id, int loop, int volume){ music_begin(id, loop, volume, -1); }",
+        "/* ── The jingle and the music under it ─────────────────────────────── */",
+        "/* policy 0 = mix (the music goes on), 1 = duck (the music drops to `level`, 0-1024, at",
+        "   once, and climbs back over `release` frames when the jingle ends), 2 = pause (the",
+        "   music waits, then goes on where it was). One jingle sounds at a time, so a new one",
+        "   replaces the old one AND its policy. The end is read from maxmod's second layer. */",
+        "void music_jingle(int id, int volume, int policy, int level, int release){",
+        "    if(id < 0) return;",
+        "    mmJingle((mm_word)id);",
+        "    g_jingle_cur = id; g_jingle_frame = 0;   /* a new jingle counts from its own start */",
+        "    mmSetJingleVolume((mm_word)volume);",
+        "    if(g_jingle_paused){ mmResume(); g_jingle_paused = 0; }",
+        "    g_jingle_release = release;",
+        "    g_jingle_watch = 1;",
+        "    if(policy == 1){",
+        "        g_duck = g_duck_to = level;",
+        "    } else {",
+        "        g_duck_to = 1024;",
+        "        g_duck_step = (release > 1) ? (1024 - g_duck + release - 1) / release : 1024;",
+        "        if(g_duck_step < 1) g_duck_step = 1;",
+        "        if(release <= 1) g_duck = 1024;   /* no climb asked: the old duck ends with its jingle */",
+        "    }",
+        "    if(policy == 2 && mmActive()){ mmPause(); g_jingle_paused = 1; }",
+        "    music_rewrite_volume();",
+        "}",
+        "/* Once per frame: the jingle's end gives the music back, and the climb goes on. */",
+        "static void music_jingle_tick(void){",
+        "    if(g_jingle_watch && !mmActiveSub()){",
+        "        g_jingle_watch = 0;",
+        "        if(g_jingle_paused){ mmResume(); g_jingle_paused = 0; }",
+        "        g_duck_to = 1024;",
+        "        g_duck_step = (g_jingle_release > 1) ? (1024 - g_duck + g_jingle_release - 1) / g_jingle_release : 1024;",
+        "        if(g_duck_step < 1) g_duck_step = 1;",
+        "    }",
+        "    if(g_duck < g_duck_to){",
+        "        g_duck += g_duck_step;",
+        "        if(g_duck > g_duck_to) g_duck = g_duck_to;",
+        "        music_rewrite_volume();",
+        "    }",
+        "}",
         "void music_fade_in(int id, int loop, int volume, int frames){",
         "    music_begin(id, loop, volume, frames < 0 ? 0 : frames);",
         "}",
@@ -355,7 +421,7 @@ def music_runtime_lines(p, sound_assets) -> list[str]:
         "void music_set_volume(int volume){",
         "    g_music_vol = volume;",
         "    if(g_mtr_mode >= 3) g_mtr_vol = volume;   /* the fade now aims at this level */",
-        "    mmSetModuleVolume((mm_word)volume);",
+        "    music_write_volume(volume);",
         "}",
         "/* Tempo and pitch of the PLAYING module, on maxmod's Q10 scale (0x200-0x800 = 0.5x-2x).",
         "   They last until the next module starts, which re-applies its asset's own. */",
@@ -403,8 +469,159 @@ def music_runtime_lines(p, sound_assets) -> list[str]:
         "    else if(pos >= g_mloop_start){ g_mloop_in = 1; }",
         "    else if(g_mloop_in){ mmPosition((mm_word)g_mloop_start); }",
         "}",
+        *_music_cue_runtime_lines(cue_rows, jingle_rows, cue_kinds | jingle_kinds, sound_assets),
         "",
     ]
+
+
+# Les natures d'un repère, dans l'ordre de `core.models.audio.CUE_KINDS` : c'est le `kind` que porte chaque ligne de la table.
+def _cue_resolver(p):
+    """`resolve(cue) -> (cible C, volume)` ou None : ce que le build met dans la table pour un repère.
+
+    La cible est résolue ICI : l'index d'une action (la boîte dit à l'exécution vers quoi elle pointe), la constante d'un effet
+    ou d'un jingle avec son volume (lu sur la ressource comme `music.jingle` et `sfx.play`). Un repère qui ne vise rien de
+    résolu n'a pas de ligne — le validateur le dit, silencieux ici plutôt que faux."""
+    from core.models.audio import CUE_JINGLE, CUE_JINGLE_ACTION, CUE_SFX, CUE_SOUND_ACTION
+    actions = {CUE_SOUND_ACTION: list(p.sound_action_names(KIND_SOUND)),
+               CUE_JINGLE_ACTION: list(p.sound_action_names(KIND_JINGLE))}
+    sfx_by_name = {s.name: s for s in getattr(p, "sfx", [])}
+    jingle_by_name = {j.name: j for j in getattr(p, "jingles", [])}
+
+    def resolve(cue):
+        if cue.kind in actions:
+            return (actions[cue.kind].index(cue.target), 0) if cue.target in actions[cue.kind] else None
+        if cue.kind == CUE_SFX and cue.target in sfx_by_name:
+            return _sfx_const(cue.target), volume_to_effect(sfx_by_name[cue.target].volume)
+        if cue.kind == CUE_JINGLE and cue.target in jingle_by_name:
+            return _music_const(cue.target), volume_to_module(jingle_by_name[cue.target].volume)
+        return None
+    return resolve
+
+
+def _music_cue_rows(p, musics) -> tuple[list[str], set]:
+    """Les lignes de la table des repères d'ORDRE, et les natures qu'elles emploient : `{module, ordre, nature, cible, volume}`."""
+    if p is None or not any(music.cues for music, _path in musics):
+        return [], set()           # sans repère, il n'y a rien à résoudre (ni boîtes, ni effets) : rien d'émis
+    from core.models.audio import CUE_KINDS
+    from core.music_structure import music_cue_rows
+    resolve = _cue_resolver(p)
+    rows, kinds = [], set()
+    for music, path in musics:
+        for order, cue in music_cue_rows(music, path):
+            resolved = resolve(cue)
+            if resolved is None:
+                continue
+            kinds.add(cue.kind)
+            rows.append(f"    {{ {_music_const(music.name)}, {order}, {CUE_KINDS.index(cue.kind)}, {resolved[0]}, {resolved[1]} }},"
+                        f"   /* {music.name} @ {order}: {cue.kind} {cue.target} */")
+    return rows, kinds
+
+
+def _jingle_cue_rows(p, jingles) -> tuple[list[str], set]:
+    """Les lignes de la table des repères de JINGLE : même forme, mais le second champ est une IMAGE depuis le début du jingle,
+    pas un ordre (cf. `jingle_cue_frames` : maxmod ne donne aucune position sur la couche jingle)."""
+    if p is None or not any(j.cues for j in jingles):
+        return [], set()
+    from core.models.audio import CUE_KINDS
+    from core.music_structure import jingle_cue_frames
+    resolve = _cue_resolver(p)
+    rows, kinds = [], set()
+    for jingle in jingles:
+        for frame, cue in jingle_cue_frames(jingle):
+            resolved = resolve(cue)
+            if resolved is None:
+                continue
+            kinds.add(cue.kind)
+            rows.append(f"    {{ {_music_const(jingle.name)}, {frame}, {CUE_KINDS.index(cue.kind)}, {resolved[0]}, {resolved[1]} }},"
+                        f"   /* {jingle.name} @ frame {frame}: {cue.kind} {cue.target} */")
+    return rows, kinds
+
+
+def _music_cue_runtime_lines(rows: list[str], jingle_rows: list[str], kinds: set, sound_assets) -> list[str]:
+    """Le C des repères : les tables, ce qui les joue, et `music_cue_tick` (une fois par frame).
+
+    Deux observations : la musique par POSITION D'ORDRE (`mmGetPosition`), le jingle par IMAGES comptées depuis `mmJingle`
+    (maxmod ne donne aucune position sur sa couche). Sans repère, `music_cue_tick` existe quand même, vide : la boucle
+    principale l'appelle sans savoir s'il y en a."""
+    if not rows and not jingle_rows:
+        return ["static void music_cue_tick(void){}"]
+    from core.models.audio import CUE_JINGLE, CUE_JINGLE_ACTION, CUE_KINDS, CUE_SFX, CUE_SOUND_ACTION, Jingle
+    code = {kind: CUE_KINDS.index(kind) for kind in CUE_KINDS}
+    L = [
+        "/* ── Music cues (ROADMAP « Des déclencheurs sur la musique ») ──────────── */",
+        "/* {module, position, kind, target, volume}. Kinds: 0 SoundBox action, 1 JingleBox action, 2 effect,",
+        "   3 jingle. An action's target is its INDEX: the box says, at run time, what it points to. The position",
+        "   is an ORDER for a music, a FRAME since the jingle started for a jingle. */",
+        "typedef struct { s16 music, order, kind, id, vol; } MusicCue;",
+    ]
+    if rows:
+        L += [f"#define MUSIC_CUE_COUNT {len(rows)}",
+              "static const MusicCue g_music_cue[MUSIC_CUE_COUNT] = {", *rows, "};"]
+    if jingle_rows:
+        L += [f"#define JINGLE_CUE_COUNT {len(jingle_rows)}",
+              "static const MusicCue g_jingle_cue[JINGLE_CUE_COUNT] = {", *jingle_rows, "};"]
+    if kinds & {CUE_JINGLE, CUE_JINGLE_ACTION}:
+        # La politique envers la musique est celle de l'ASSET (cf. `music:jingle`), une ligne par module-jingle.
+        policy = [f"    [{_music_const(m.name)}] = {{ {', '.join(str(v) for v in m.runtime_policy())} }},   /* {m.name} */"
+                  for m, _path in (sound_assets or {}).get("music", []) if isinstance(m, Jingle)]
+        L += [
+            "/* {policy, duck level, release} of each jingle, by module. */",
+            "static const s16 g_jingle_policy[MSL_NSONGS + 1][3] = {",
+            *policy,
+            "};",
+            "static void music_cue_jingle(int id, int volume){",
+            "    if(id < 0 || id > MSL_NSONGS) return;",
+            "    music_jingle(id, volume, g_jingle_policy[id][0], g_jingle_policy[id][1], g_jingle_policy[id][2]);",
+            "}",
+        ]
+    L += ["static void music_cue_fire(const MusicCue *c){", "    switch(c->kind){"]
+    if CUE_SOUND_ACTION in kinds:
+        L += [f"    case {code[CUE_SOUND_ACTION]}:",
+              "        if(g_sound_box_action[c->id] >= 0)",
+              "            sfx_play(g_sound_box_action[c->id], g_sound_box_action_vol[c->id], 0);",
+              "        break;"]
+    if CUE_JINGLE_ACTION in kinds:
+        L += [f"    case {code[CUE_JINGLE_ACTION]}:",
+              "        if(g_jingle_box_action[c->id] >= 0)",
+              "            music_cue_jingle(g_jingle_box_action[c->id], g_jingle_box_action_vol[c->id]);",
+              "        break;"]
+    if CUE_SFX in kinds:
+        L += [f"    case {code[CUE_SFX]}: if(c->id >= 0) sfx_play(c->id, c->vol, 0); break;"]
+    if CUE_JINGLE in kinds:
+        L += [f"    case {code[CUE_JINGLE]}: music_cue_jingle(c->id, c->vol); break;"]
+    L += ["    default: break;", "    }", "}"]
+    ticks = []
+    if rows:
+        L += [
+            "/* The music: a position is a cue's when the module ENTERS it, so every lap of a loop fires it again. The",
+            "   end of a loop section is never played (the loop sends the module back). */",
+            "static void music_cue_music_tick(void){",
+            "    int pos, i;",
+            "    if(g_music_cur < 0 || !mmActive()){ g_cue_last = -1; return; }",
+            "    pos = (int)mmGetPosition();",
+            "    if(pos == g_cue_last) return;",
+            "    g_cue_last = pos;",
+            "    if(g_mloop_end > 0 && pos >= g_mloop_end) return;",
+            "    for(i = 0; i < MUSIC_CUE_COUNT; i++)",
+            "        if(g_music_cue[i].music == g_music_cur && g_music_cue[i].order == pos) music_cue_fire(&g_music_cue[i]);",
+            "}",
+        ]
+        ticks.append("music_cue_music_tick();")
+    if jingle_rows:
+        L += [
+            "/* The jingle: maxmod reads no position on its layer, so the frames are COUNTED from `music_jingle`.",
+            "   The watch is cleared by music_jingle_tick when the jingle ends: no later cue fires. */",
+            "static void music_cue_jingle_tick(void){",
+            "    int i;",
+            "    if(!g_jingle_watch) return;",
+            "    for(i = 0; i < JINGLE_CUE_COUNT; i++)",
+            "        if(g_jingle_cue[i].music == g_jingle_cur && g_jingle_cue[i].order == g_jingle_frame) music_cue_fire(&g_jingle_cue[i]);",
+            "    g_jingle_frame++;",
+            "}",
+        ]
+        ticks.append("music_cue_jingle_tick();")
+    L += ["static void music_cue_tick(void){", *[f"    {t}" for t in ticks], "}"]
+    return L
 
 
 def music_runtime_stub_lines() -> list[str]:
@@ -421,6 +638,8 @@ def music_runtime_stub_lines() -> list[str]:
         "void music_set_pitch(int pitch){(void)pitch;}",
         "void music_set_section(int section){(void)section;}",
         "void music_leave_loop(void){}",
+        "void music_jingle(int id, int volume, int policy, int level, int release)"
+        "{(void)id;(void)volume;(void)policy;(void)level;(void)release;}",
         "",
     ]
 

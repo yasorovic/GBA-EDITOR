@@ -236,7 +236,7 @@ class ProjectRenameMixin:
         domaine, y compris pour un conteneur. Retourne le nom RÉELLEMENT appliqué
         (peut différer si collision)."""
         from core.models.ui_region import (
-            KIND_TEXT, KIND_IMAGE, KIND_LIST)
+            KIND_TEXT, KIND_TEXTBOX, KIND_IMAGE, KIND_LIST)
         new_name = new_name.strip()
         if not new_name or new_name == element.name:
             return element.name
@@ -247,7 +247,7 @@ class ProjectRenameMixin:
         # Un élément ne se cite que par `interface:get("Nom")`, quelle que soit sa nature :
         # UN domaine, donc un conteneur — qu'aucun domaine ne couvrait — est réécrit aussi.
         domain = DOMAIN_UI_ELEMENT
-        label = {KIND_TEXT: "Text", KIND_IMAGE: "Image",
+        label = {KIND_TEXT: "Text", KIND_TEXTBOX: "Textbox", KIND_IMAGE: "Image",
                  KIND_LIST: "List"}.get(kind, "UI element")
         old_name = element.name
         with self._renaming():

@@ -29,6 +29,7 @@ from core.models.input_expression import (
     InputExpressionError, BUILTIN_MOVEMENTS, parse_input_expression,
 )
 from ui.common.theme import C, T, QSS
+from ui.common.unit_spin import UnitSpin
 from ui.common.widgets import CollapsibleCard, W
 
 
@@ -170,7 +171,7 @@ class SequencesCard(CollapsibleCard):
         expr.setCompleter(completer)
         top.addWidget(expr, 1)
 
-        window = QSpinBox()
+        window = UnitSpin()
         window.setFont(QFont(T.UI, T.SM))
         window.setStyleSheet(QSS.spinbox)
         window.setRange(1, 255)

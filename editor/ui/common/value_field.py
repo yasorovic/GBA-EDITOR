@@ -52,21 +52,8 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from ui.common.theme import C, T, QSS
+from ui.common.unit_spin import QuietSpin
 from core.models.field_value import FieldValue, TILE_SIZE, is_ref_raw
-
-
-class _QuietSpin(QSpinBox):
-    """N'attrape la molette que s'il a déjà le focus (sinon vole le scroll du
-    panneau d'inspecteur)."""
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-
-    def wheelEvent(self, e):
-        if self.hasFocus():
-            super().wheelEvent(e)
-        else:
-            e.ignore()
 
 
 class ValueField(QWidget):
@@ -89,7 +76,7 @@ class ValueField(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(3)
 
-        self._spin = _QuietSpin()
+        self._spin = QuietSpin()
         self._spin.setFont(QFont(T.MONO, T.MD))
         self._spin.setStyleSheet(QSS.spinbox)
         self._spin.valueChanged.connect(self._on_spin)
@@ -239,7 +226,7 @@ class ValueField(QWidget):
 
 
 class _QuietDoubleSpin(QDoubleSpinBox):
-    """Pendant de `_QuietSpin` pour les flottants."""
+    """Pendant de `QuietSpin` pour les flottants."""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -281,7 +268,7 @@ class NumberField(QWidget):
             self._spin.setDecimals(2)
             self._spin.setSingleStep(step)
         else:
-            self._spin = _QuietSpin()
+            self._spin = QuietSpin()
             self._spin.setSingleStep(int(step))
         self._spin.setRange(min_v, max_v)
         if suffix:

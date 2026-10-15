@@ -15,6 +15,7 @@ _TITLES = {
     "inpaint_brush": "cvtool.scene_inpainting",
     "inpaint_rect": "cvtool.scene_inpainting",
     "ui_text": "cvtool.interface_widget",
+    "ui_textbox": "cvtool.interface_widget",
     "ui_container": "cvtool.interface_widget",
     "ui_list": "cvtool.interface_widget",
     "ui_image": "cvtool.interface_widget",

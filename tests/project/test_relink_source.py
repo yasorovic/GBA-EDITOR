@@ -135,3 +135,74 @@ def test_a_file_that_does_not_fit_is_refused_and_the_asset_is_left_alone(tmp_pat
         asset_relink.relink_source(p, "sfx", boom, p.sfx_dir / "missing.wav")
 
     assert (boom.asset, hero.asset, list(hero.palettes)) == before
+
+
+def test_the_relink_picker_lists_only_the_files_the_family_accepts(tmp_path):
+    from core.asset_relink import compatible_files
+    from core.project import Project
+    project = Project(tmp_path)
+    for rel in ("images/a.png", "deep/er/b.PNG", "sounds/c.wav", "notes.txt", "pal/d.hex"):
+        target = project.assets_dir / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"x")
+
+    names = lambda family: [p.relative_to(project.assets_dir).as_posix() for p in compatible_files(project, family)]
+
+    assert names("backgrounds") == ["deep/er/b.PNG", "images/a.png"] == names("sprites")
+    assert names("sfx") == ["sounds/c.wav"] and names("palettes") == ["pal/d.hex"]
+
+
+def test_a_relink_is_one_undoable_step_and_redo_does_not_reread_the_file(tmp_path: Path):
+    from core.history import get_history
+    from core.asset_relink import RelinkSourceCmd
+    p = _project(tmp_path)
+    boom = p.sfx.get("boom")
+    before = boom.asset
+    elsewhere = p.sfx_dir / "kept" / "explosion.wav"
+    elsewhere.parent.mkdir()
+    _wav(elsewhere)
+    refreshed = []
+    history = get_history()
+    depth = len(history._undo)
+
+    history.push(RelinkSourceCmd(p, "sfx", boom, elsewhere, after=lambda: refreshed.append(1)))
+
+    assert boom.asset == "assets/sfx/kept/explosion.wav" and len(history._undo) == depth + 1
+    history.undo()
+    assert boom.asset == before and p.sfx.get("boom").asset == before and len(refreshed) == 2
+    elsewhere.unlink()                                               # le fichier relié disparaît : le refaire n'en a pas besoin
+    history.redo()
+    assert boom.asset == "assets/sfx/kept/explosion.wav"
+
+
+def test_a_refused_relink_leaves_no_history_entry(tmp_path: Path):
+    import pytest
+    from core.history import get_history
+    from core.asset_relink import RelinkSourceCmd
+    p = _project(tmp_path)
+    notes = p.assets_dir / "notes.txt"
+    notes.write_text("x")
+    history = get_history()
+    depth = len(history._undo)
+
+    with pytest.raises(ValueError):
+        history.push(RelinkSourceCmd(p, "sfx", p.sfx.get("boom"), notes))
+
+    assert len(history._undo) == depth
+
+
+def test_relinking_a_background_re_imports_the_image_and_keeps_the_painting(tmp_path: Path):
+    from PIL import Image
+    p = _project(tmp_path)
+    sky = p.backgrounds.get("sky")
+    sky.import_crop, sky.import_size = (0, 0, 8, 8), (8, 8)          # réglages de l'ANCIENNE image
+    sky.tile_paint = {(1, 1): (1, 0)}
+    sky.tile_palette_overrides = {(2, 2): 0}
+    bigger = p.assets_dir / "backgrounds" / "bigger.png"
+    Image.new("P", (240, 160), 0).save(bigger)
+
+    asset_relink.relink_source(p, "backgrounds", sky, bigger)
+
+    assert (sky.tiles_w, sky.tiles_h) == (30, 20)                    # la taille suit la NOUVELLE image
+    assert sky.import_crop is None and sky.import_size is None and sky.compression.is_default()
+    assert sky.tile_paint == {(1, 1): (1, 0)} and sky.tile_palette_overrides == {(2, 2): 0}

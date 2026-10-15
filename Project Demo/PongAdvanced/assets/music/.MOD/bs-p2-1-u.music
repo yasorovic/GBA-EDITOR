@@ -33,5 +33,19 @@
   "pitch": 163,
   "fade_in": 41,
   "fade_out": 34,
-  "sample_rate": 0
+  "sample_rate": 0,
+  "trim_start": 0,
+  "trim_end": 0,
+  "cues": [
+    {
+      "position": 2,
+      "kind": "sfx",
+      "target": "GoalTaken"
+    },
+    {
+      "position": 3,
+      "kind": "jingle",
+      "target": "Pitfall Death"
+    }
+  ]
 }

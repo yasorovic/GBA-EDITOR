@@ -31,7 +31,10 @@
   "loop_section": "intro",
   "tempo": 171,
   "pitch": 79,
-  "fade_in": 0,
+  "fade_in": 7,
   "fade_out": 0,
-  "sample_rate": 0
+  "sample_rate": 0,
+  "trim_start": 0,
+  "trim_end": 0,
+  "cues": []
 }

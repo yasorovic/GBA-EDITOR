@@ -20,15 +20,25 @@ from typing import Callable, Optional
 
 from core.models.audio import (
     FADE_MAX_FRAMES, PITCH_MAX, PITCH_MIN, TEMPO_MAX, TEMPO_MIN,
-    UNIT_MS, UNIT_ORDER, Music, pitch_to_module, tempo_to_module,
+    CUE_SFX, CUE_SOUND_ACTION, UNIT_MS, UNIT_ORDER, Jingle, Music, MusicCue, pitch_to_module, tempo_to_module,
 )
+from core.module_trim import is_order_cut, order_problem
+from core.wav_edit import fade_in_of, fade_out_of, is_trimmed, trim_of, trim_problem
 from core.wav_module import (
     CUT_WAIT_SECONDS, MUSIC_SAMPLE_RATE_MIN, WAV_MUSIC_RATE, WavPlan, effective_rate, plan_wav,
-    wav_seconds, wav_to_xm,
+    wav_kept_seconds, wav_to_xm,
 )
 
 ERROR = "error"
 WARNING = "warning"
+
+# La cadence de la console : 16 777 216 Hz / 280 896 cycles par image. La ROM compte des IMAGES, pas des secondes — un jingle
+# dont les repères sont en temps les convertit avec ce chiffre-là (le deck de l'aperçu, lui, tourne à 60 par commodité).
+VBLANK_HZ = 16777216 / 280896
+# Ce qu'un jingle peut déclencher : un effet, ou une action de SoundBox. Pas un autre jingle — il remplacerait celui qui sonne.
+JINGLE_CUE_KINDS = (CUE_SFX, CUE_SOUND_ACTION)
+# Un repère de jingle tient dans un s16 de la table C : plus de 9 minutes d'images n'est plus un jingle.
+_MAX_CUE_FRAME = 32767
 
 # Une section WAV ne peut pas être plus courte : elle tiendrait en moins de quelques lignes du module
 # (une ligne = ~11 ms) et l'oreille n'y trouverait plus de musique. L'éditeur le tient aux poignées comme au tableau.
@@ -55,8 +65,10 @@ def jingle_ignored_settings(music: Music) -> list[str]:
         ignored.append("tempo")
     if music.pitch != 100:
         ignored.append("pitch")
-    if music.fade_in or music.fade_out:
-        ignored.append("fades")
+    if (music.fade_in or music.fade_out) and not is_wav_asset(music.asset):
+        ignored.append("fades")          # un jingle WAV a les siens, cuits dans la piste (cf. `wav_cut`)
+    if is_trimmed(music) and not is_wav_asset(music.asset):
+        ignored.append("trim")           # un module ne se rogne pas
     return ignored
 
 
@@ -120,6 +132,47 @@ def music_section_names(musics) -> list[str]:
     return sorted(names)
 
 
+def wav_cut(music: Music) -> tuple[tuple[int, int], tuple[int, int]]:
+    """Ce que le build fait au SIGNAL d'une piste WAV avant de l'encapsuler : `(plage gardée, fondus cuits)`.
+
+    Lu par le build, l'aperçu et le poids ROM : c'est l'unique endroit où les réglages d'une musique deviennent des arguments de
+    `wav_to_xm`. La plage est celle de `core/wav_edit.py` (ms depuis le début du fichier). Les fondus ne sont cuits que pour
+    un JINGLE, qui n'en a pas à l'exécution : ceux d'une musique sont appliqués par la console (cf. `music_info_row`), les cuire
+    les ferait deux fois."""
+    fades = (fade_in_of(music), fade_out_of(music)) if isinstance(music, Jingle) else (0, 0)
+    return trim_of(music), fades
+
+
+def retrim(music: Music, start: int, end: int, total_ms: float) -> list[str]:
+    """Change la plage gardée de `music` pour `(start, end)` (ms depuis le début du FICHIER, `end` à 0 = jusqu'au bout) et fait
+    suivre ses sections : elles sont dans le temps de la plage gardée, donc elles glissent avec le son. Rend les noms des
+    sections que la nouvelle plage a fait disparaître (hors d'elle, ou réduites sous `MIN_SECTION_MS`).
+
+    `total_ms` est la durée du fichier entier. Une plage qui couvre tout le fichier s'écrit « pas de découpe » (0, 0) : la fin à
+    0 suit un fichier qu'on remplacerait par un plus long. Une section écartée emporte la boucle qui la citait (`remove_section`)."""
+    from core.wav_edit import trim_window
+    old_start, _old_end = trim_window(music, total_ms)
+    total = max(0, round(total_ms))
+    start = max(0, min(int(start), total))
+    end = total if end <= 0 else max(start, min(int(end), total))
+    shift = start - old_start
+    kept = end - start
+    music.trim_start = start
+    music.trim_end = 0 if end >= total else end
+    gone = []
+    for section in list(music.sections):
+        section.start, section.end = max(0, section.start - shift), min(kept, section.end - shift)
+        if section.end - section.start < MIN_SECTION_MS:
+            music.remove_section(section.name)
+            gone.append(section.name)
+    # Un repère glisse avec le son, et disparaît avec lui : il n'a pas de nom à rendre, la plage rognée l'emporte.
+    for cue in list(music.cues):
+        cue.position -= shift
+        if not 0 <= cue.position < kept:
+            music.remove_cue(cue)
+    return gone
+
+
 def wav_boundaries(music: Music) -> list[int]:
     """Les frontières (début ET fin de chaque section) où le build coupe une piste WAV, en millisecondes.
 
@@ -131,6 +184,10 @@ def wav_boundaries(music: Music) -> list[int]:
     for section in music.sections:
         if 0 <= section.start < section.end:
             bounds.update((section.start, section.end))
+    # Un repère tombe à la LIGNE près, comme une section : sans frontière il se déclencherait au début du pattern
+    # qui le contient, jusqu'à une pleine position d'ordre trop tôt.
+    if not isinstance(music, Jingle):               # ceux d'un jingle sont en temps, comptés en images par la ROM
+        bounds.update(cue.position for cue in music.cues if cue.position > 0)
     return sorted(bounds)
 
 
@@ -138,7 +195,7 @@ def wav_plan(music: Music, path) -> Optional[WavPlan]:
     """Le plan de découpe de la piste WAV de `music` (où tombent ses segments), ou None si le fichier n'est
     pas convertible — le validateur en dit la cause."""
     try:
-        return plan_wav(wav_seconds(path), effective_rate(music.sample_rate), wav_boundaries(music))
+        return plan_wav(wav_kept_seconds(path, trim_of(music)), effective_rate(music.sample_rate), wav_boundaries(music))
     except ValueError:
         return None
 
@@ -159,6 +216,65 @@ def wav_section_orders(music: Music, path) -> list[tuple[str, int, int]]:
             if first < last:
                 rows.append((section.name, first, last))
     return rows
+
+
+def music_cue_rows(music: Music, path=None) -> list[tuple[int, "MusicCue"]]:
+    """Les repères d'une musique, en (position d'ordre, repère) — ce que la ROM lit et ce que l'aperçu observera.
+
+    Un module tracker : la position du modèle telle quelle. Un WAV : ses millisecondes passent par le plan du build
+    (`wav_plan`, qui a une frontière à chaque repère), comme `wav_section_orders` pour les sections ; sans `path`, un
+    WAV n'a pas de ligne. Un repère d'une autre unité que le fichier n'en est pas un — le validateur le signale."""
+    if not music.cues or isinstance(music, Jingle):      # un jingle a ses repères en temps (cf. `jingle_cue_frames`)
+        return []
+    if is_wav_asset(music.asset):
+        plan = wav_plan(music, path) if path is not None else None
+        if plan is None or music.unit != UNIT_MS:
+            return []
+        return [(plan.order_at(cue.position), cue) for cue in music.cues if cue.position >= 0]
+    if music.unit != UNIT_ORDER:
+        return []
+    return [(cue.position, cue) for cue in music.cues if cue.position >= 0]
+
+
+def jingle_cue_frames(jingle: Jingle) -> list[tuple[int, "MusicCue"]]:
+    """Les repères d'un jingle, en (image depuis le début du jingle, repère) — ce que la ROM lit.
+
+    Les repères d'un jingle sont TOUJOURS en millisecondes, module ou WAV : maxmod ne donne aucune position sur la couche
+    jingle (`mmGetPosition` ne lit que la principale), donc la ROM COMPTE les images depuis `mmJingle`. Et un ordre ne dit rien
+    d'un jingle d'un seul pattern (13 des 19 de la démo) : il ne pourrait viser que son début. Aucun rendu n'est nécessaire,
+    la conversion est un produit. Une nature interdite (un jingle qui en lance un autre) ou un repère trop loin n'a pas de
+    ligne — le validateur le dit."""
+    rows: list[tuple[int, MusicCue]] = []
+    for cue in jingle.cues:
+        frame = round(cue.position / 1000.0 * VBLANK_HZ)
+        if cue.kind in JINGLE_CUE_KINDS and 0 <= frame <= _MAX_CUE_FRAME:
+            rows.append((frame, cue))
+    return sorted(rows, key=lambda row: row[0])
+
+
+def cue_problems(music: Music, unit: Optional[str], extent: Optional[int], table=None) -> list[tuple[str, str]]:
+    """Ce qui cloche dans la POSITION des repères d'une musique, ce fichier étant le sien (leurs noms visés, eux, se
+    vérifient contre le projet : `validator._check_sound_boxes`). `unit`/`extent`/`table` sont ceux des sections."""
+    out: list[tuple[str, str]] = []
+    if not music.cues or unit is None:
+        return out
+    if not isinstance(music, Jingle) and music.unit != unit:      # un jingle est toujours en ms
+        out.append((ERROR, f"cues are written in \"{music.unit}\" but this file is cut in \"{unit}\" — reset them."))
+        return out
+    from core.engine_emulation.module_model import is_pattern_order
+    for cue in music.cues:
+        if isinstance(music, Jingle) and cue.kind not in JINGLE_CUE_KINDS:
+            out.append((WARNING, f"a cue at {cue.position} plays a jingle from a jingle, which would replace the one "
+                                 "that is sounding — it will play nothing."))
+        if cue.position < 0 or (extent is not None and cue.position >= extent):
+            out.append((ERROR, f"a cue at {cue.position} is outside the file ({extent} "
+                               f"{'ms' if unit == UNIT_MS else 'order positions'})."))
+        elif table is not None and not isinstance(music, Jingle) and not is_pattern_order(table[cue.position]):
+            out.append((WARNING, f"a cue at position {cue.position} sits on a marker of the order table, not a "
+                                 "pattern — it would never fire."))
+        if not cue.target:
+            out.append((WARNING, f"a cue at {cue.position} points to nothing — it will play nothing."))
+    return out
 
 
 def cut_problems(src_name: str, dst_name: str, src_module, dst_module, *,
@@ -234,11 +350,11 @@ def source_unit(path) -> Optional[str]:
     return UNIT_MS if kind == "wav" else UNIT_ORDER
 
 
-def _wav_milliseconds(path) -> Optional[int]:
-    import wave
+def _wav_milliseconds(path, trim: tuple[int, int] = (0, 0)) -> Optional[int]:
+    """La durée de la plage gardée d'un WAV (le fichier entier sans `trim`), en ms ; None s'il est illisible ou si la
+    découpe ne laisse rien."""
     try:
-        with wave.open(str(path)) as w:
-            return w.getnframes() * 1000 // max(1, w.getframerate())
+        return int(wav_kept_seconds(path, trim) * 1000)
     except Exception:  # tolerated: `check_audio_file` already says why the WAV is unreadable
         return None
 
@@ -277,6 +393,15 @@ def music_problems(music: Music, path,
                                     f"{MUSIC_SAMPLE_RATE_MIN}–{WAV_MUSIC_RATE} Hz (the console's mixer "
                                     "plays about 16 kHz at most)."))
 
+    if is_trimmed(music):
+        if unit != UNIT_MS:
+            problems.append((WARNING, "a trim only applies to a WAV: this file is a module, whose parts are "
+                                      "sections in order positions. It is ignored."))
+        else:
+            problem = trim_problem(music, (_wav_milliseconds(path) or 0))
+            if problem:
+                problems.append((ERROR, problem))
+
     if unit == UNIT_MS and (music.tempo != 100 or music.pitch != 100):
         problems.append((WARNING, "tempo and pitch do not apply to a WAV track: its sections are samples "
                                   "chained by the module's lines — speeding the lines up would not speed "
@@ -289,19 +414,30 @@ def music_problems(music: Music, path,
                                   "is set: a module with a loop section never ends, so it loops "
                                   "anyway."))
 
-    if not music.sections and not music.loop_section:
+    if isinstance(music, Jingle):
+        # Ses sections sont ignorées (`jingle_ignored_settings`) ; ses repères sont en ms quelle que soit la famille du fichier.
+        extent = _wav_milliseconds(path, trim_of(music)) if unit == UNIT_MS else None   # un module : durée inconnue sans rendu
+        if is_order_cut(music):
+            if unit == UNIT_MS:
+                problems.append((WARNING, "an order range only applies to a module: this file is a WAV, which is "
+                                          "trimmed in milliseconds. It is ignored."))
+            elif (mod := module_of(path) if module_of else None) is not None:
+                if problem := order_problem(music, len(mod.order)):
+                    problems.append((ERROR, problem))
+        return problems + cue_problems(music, UNIT_MS, extent)
+    if not music.sections and not music.loop_section and not music.cues:
         return problems
 
-    # ── Les sections, mises en face du fichier ──
+    # ── Les sections et les repères, mis en face du fichier ──
     if music.unit != unit:
-        problems.append((ERROR, f"sections are written in \"{music.unit}\" but this file is cut in "
+        problems.append((ERROR, f"sections and cues are written in \"{music.unit}\" but this file is cut in "
                                 f"\"{unit}\" (it was probably replaced by another kind of file) — "
                                 "reset them."))
         return problems
 
     table: Optional[list] = None
     if unit == UNIT_MS:
-        extent = _wav_milliseconds(path)
+        extent = _wav_milliseconds(path, trim_of(music))        # les sections sont dans le temps de la plage GARDÉE
         unit_label = "ms"
     else:
         mod = module_of(path) if module_of else None
@@ -312,6 +448,7 @@ def music_problems(music: Music, path,
         unit_label = "order positions"
     if extent is None:
         return problems
+    problems += cue_problems(music, unit, extent, table)
 
     from core.engine_emulation.module_model import is_pattern_order
     seen: set = set()
@@ -344,7 +481,8 @@ def music_problems(music: Music, path,
 
     if unit == UNIT_MS:
         try:
-            plan = plan_wav(wav_seconds(path), effective_rate(music.sample_rate), wav_boundaries(music))
+            plan = plan_wav(wav_kept_seconds(path, trim_of(music)), effective_rate(music.sample_rate),
+                            wav_boundaries(music))
         except ValueError as exc:
             problems.append((ERROR, str(exc)))
         else:
@@ -376,6 +514,7 @@ def wav_rom_bytes(music: Music, path: Path) -> Optional[int]:
     avec les sections que le build utilisera (`wav_to_xm`). None si le WAV n'est pas convertible — le
     validateur en dit la cause."""
     try:
-        return len(wav_to_xm(path, effective_rate(music.sample_rate), wav_boundaries(music)))
+        trim, fades = wav_cut(music)
+        return len(wav_to_xm(path, effective_rate(music.sample_rate), wav_boundaries(music), trim=trim, fades=fades))
     except ValueError:
         return None

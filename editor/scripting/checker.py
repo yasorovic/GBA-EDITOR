@@ -392,7 +392,9 @@ class Checker:
         frame_events = set(self.ctx.frame_event_names or ())
         for fn in script.functions:
             name = fn.name
-            if ("." in name or name in ALL_KNOWN_EVENTS or name in frame_events
+            # Un événement RETIRÉ a déjà son diagnostic, qui dit quoi écrire à la place (`_check_function`) : un second
+            # message, générique, le noierait.
+            if ("." in name or name in ALL_KNOWN_EVENTS or name in frame_events or name in REMOVED_EVENTS
                     or sequence_name(name) is not None):
                 continue
             camel = len(name) > 2 and name[:2].lower() == "on" and name[2].isupper()
@@ -511,6 +513,8 @@ class Checker:
                     walk(s.body)
 
         for loc in script.locals:
+            if loc.export_type in ("vec2", "vec3", "rect"):
+                continue      # sa valeur par défaut est une table `{0, 0}`, mais l'export EST un vecteur : pas un tableau
             note(loc.name, loc.value)
         for fn in script.functions:
             walk(fn.body)

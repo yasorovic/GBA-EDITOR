@@ -51,6 +51,7 @@ from ui.common.build_panel import BuildPanel, ToolchainBar, AnimatedBuildButton,
 from ui.common.disk_tree_view import DiskTreeView
 from ui.common.disk_view import add_disk_tab
 from ui.common.panel_bar import restore_tab_order, tab_order, tab_widget
+from ui.common.deferred_writes import get_deferred_writes
 from ui.common.save_status_indicator import SaveStatusIndicator
 from ui.common.settings_dialog import SettingsDialog
 from core.external_tools import ExternalTools
@@ -424,11 +425,6 @@ class MainWindow(QMainWindow):
         QGuiApplication.instance().applicationStateChanged.connect(self._on_application_state_changed)
         self._history = get_history()
 
-        # Debounce : regrouper les sauvegardes rapides (SpinBox drag, etc.)
-        self._save_timer = QTimer(); self._save_timer.setSingleShot(True)
-        self._save_timer.setInterval(400)
-        self._save_timer.timeout.connect(self._flush_changes)
-
         self._setup_ui()
 
         # Raccourcis clavier globaux — après _setup_ui() pour que _btn_undo existe
@@ -630,6 +626,8 @@ class MainWindow(QMainWindow):
     def _make_background_editor(self) -> QWidget:
         from ui.background_editor.background_editor_screen import BackgroundEditorScreen
         self._bg_editor = BackgroundEditorScreen()
+        # Un fond importé ou créé naît dans le dossier que l'onglet Disk affiche.
+        self._bg_editor.folder_provider = lambda: self.build_panel.disk.shown_folder()
         return self._bg_editor
 
     def _make_sprite_editor(self) -> QWidget:
@@ -888,6 +886,7 @@ class MainWindow(QMainWindow):
         perdre du travail en silence : l'abandon est un choix explicite."""
         if not self.project:
             return True
+        get_deferred_writes().flush()       # un réglage différé n'a pas à faire poser la question : il part, c'est son rôle
         if self._has_pending_changes():
             box = QMessageBox(self)
             # La mascotte « working » plutôt que le triangle système : le
@@ -1106,7 +1105,7 @@ class MainWindow(QMainWindow):
 
     def _has_pending_changes(self) -> bool:
         """Vrai tant qu'une modification n'a pas encore été écrite sur le disque."""
-        if self._save_timer.isActive() or self.scene_editor.has_pending_save():
+        if self.scene_editor.has_pending_save() or get_deferred_writes().has_pending():
             return True
         se = getattr(self, "_script_editor", None)
         return se is not None and se.has_unsaved_edits()
@@ -1169,6 +1168,7 @@ class MainWindow(QMainWindow):
         # construction (`_build_screens` monte dans l'ordre de `_screens`).
         # Démarrage paresseux : l'écran est construit maintenant s'il ne l'était
         # pas — c'est sa première visite.
+        get_deferred_writes().flush()       # ce qu'on règle ici s'écrit avant qu'on le quitte : l'autre écran lit le disque
         self._ensure_screen(index)
         self._move_build_panel_to(index)
         # Revisite ? On le capture AVANT `_load_screen_for_project`, qui ajoute
@@ -1875,6 +1875,7 @@ class MainWindow(QMainWindow):
         self._open_project(Path(path))
 
     def _new_project(self, name: str, path, starter_id: str = "Basic"):
+        get_deferred_writes().flush()           # les réglages en attente appartiennent au projet qu'on quitte
         path = Path(path)
         self.project = Project.create(path, name, starter_id)
         self._project_loaded_screen_indices.clear()
@@ -1892,6 +1893,7 @@ class MainWindow(QMainWindow):
         # Plusieurs .project dans le dossier : on refuse d'en choisir un
         # (cf. ROADMAP v0.10). On le dit et on abandonne l'ouverture — l'écran
         # courant reste, aucun projet n'est à moitié chargé.
+        get_deferred_writes().flush()           # les réglages en attente appartiennent au projet qu'on quitte
         try:
             self.project = Project.open(path)
         except ProjectManifestError as exc:
@@ -2140,11 +2142,10 @@ class MainWindow(QMainWindow):
         """Un champ a changé dans l'inspector — payload propre, pas d'accès privé."""
         if actor:
             self.scene_editor.move_actor_item(actor)
-        self._save_timer.start()    # 400 ms → _flush_changes (debounce)
-
-    def _flush_changes(self):
-        """Sauvegarde globale différée (400 ms après le dernier changement inspector)."""
-        get_dispatcher().save_all()
+        # Filet : tout le projet, une fois, après le dernier changement de l'inspecteur (la file différée, cf.
+        # `ui/common/deferred_writes.py`, qui le vide aussi à Ctrl+S, au changement d'écran, au build et à la fermeture).
+        # Les inspecteurs écrivent déjà chacun ce qu'ils touchent ; celui-ci rattrape ce qu'un chemin n'aurait pas écrit.
+        get_deferred_writes().schedule("save_all", get_dispatcher().save_all)
 
     def _save_project(self):
         """
@@ -2163,10 +2164,10 @@ class MainWindow(QMainWindow):
         """Écrit tout ce qui est en attente, puis le projet entier.
 
         Partagé par Ctrl+S et par la fermeture : les écritures différées
-        (debounce de 400 ms, nudge du canvas, frappe du Script Editor) ne
+        (la file des réglages, nudge du canvas, frappe du Script Editor) ne
         partent pas toutes seules quand la fenêtre se ferme avant leur
         minuterie."""
-        self._save_timer.stop()
+        get_deferred_writes().flush()
         self.scene_editor.flush_camera_pos()
         # Le Script Editor n'a du texte non enregistré que s'il a été ouvert.
         if (se := getattr(self, "_script_editor", None)) is not None:
@@ -2263,6 +2264,8 @@ class MainWindow(QMainWindow):
     def _on_application_state_changed(self, state):
         if state == Qt.ApplicationState.ApplicationActive and self.project:
             self._watcher.rescan()
+        elif state != Qt.ApplicationState.ApplicationActive:
+            get_deferred_writes().flush()       # on quitte l'éditeur (un autre outil peut lire le disque) : tout est écrit
 
     def _connect_watcher(self):
         """
@@ -2480,6 +2483,7 @@ class MainWindow(QMainWindow):
     def _run_build(self):
         if not self.project or not self.project.active_scene: return
         if self._worker is not None: return     # un build tourne déjà : le clic est ignoré
+        get_deferred_writes().flush()           # le build lit les sidecars sur le disque
         if not (self.toolchain.devkitpro_ok and self.toolchain.mgba_ok):
             self.toolchain.recheck()    # outils installés depuis le dernier inventaire ?
             if not (self.toolchain.devkitpro_ok and self.toolchain.mgba_ok):

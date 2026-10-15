@@ -41,22 +41,26 @@ pytestmark = [pytest.mark.slow,
 
 # Les fichiers que l'on abîme (relatifs à la racine de la démo). Les gros lots homogènes
 # (105 musiques, 20 palettes) sont représentés par un seul fichier.
+#
+# Depuis « Tout ce que l'auteur manipule vit dans `assets/` », chaque famille d'asset a SON extension (`.scene`, `.layout`,
+# `.sprite`…) : le contenu reste du JSON, mais le nom ne dit plus `.json`.
 FILES = [
     "PongAdvanced.project",
-    "assets/scenes/SCR_Arena.json", "assets/scenes/SCR_Main.json", "assets/scenes/SCR_Victory.json",
+    "assets/scenes/SCR_Arena.scene", "assets/scenes/SCR_Main.scene", "assets/scenes/SCR_Victory.scene",
     "assets/texts.json", "assets/texts_jap.json", "assets/variables.json",
-    "assets/ui_layouts/SCR_Main.json", "assets/ui_layouts/SCR_Victory.json",
-    "assets/fonts_assets/Font8x8 Latin.json", "assets/fonts_assets/Misaki Gothic 8.json",
-    "assets/music_boxes/musics.json",
+    "assets/ui_layouts/SCR_Main.layout", "assets/ui_layouts/SCR_Victory.layout",
+    "assets/fonts_assets/Font8x8 Latin.fontasset", "assets/fonts_assets/Misaki Gothic 8.fontasset",
+    "assets/music_boxes/musics.musicbox",
     "assets/scripts/Ball.lua", "assets/scripts/PaddleAuto.lua", "assets/scripts/PaddlePlayer.lua",
     "assets/scripts/SCR_Arena.lua", "assets/scripts/SCR_Main.lua", "assets/scripts/SCR_Victory.lua",
-    "assets/sprites/Ball.json", "assets/sprites/Ball.png", "assets/sprites/Paddle.json",
+    "assets/sprites/Ball.sprite", "assets/sprites/Ball.png", "assets/sprites/Paddle.sprite",
     "assets/sprites/Paddle.png",
-    "assets/backgrounds/Background.json", "assets/backgrounds/Background.png",
-    "assets/fonts/Font8x8 Latin.json", "assets/fonts/font8x8-latin.png",
-    "assets/fonts/misaki-gothic.json",
-    "assets/palettes/_Microsoft Windows 16.json", "assets/palettes/_Microsoft Windows 16.hex",
-    "assets/music/Claimed DX.mod", "assets/music/Claimed DX.json",
+    "assets/backgrounds/Background.background", "assets/backgrounds/Background.png",
+    "assets/fonts/Font8x8 Latin.font", "assets/fonts/font8x8-latin.png",
+    "assets/fonts/misaki-gothic.font",
+    "assets/palettes/_Microsoft Windows 16.palette", "assets/palettes/_Microsoft Windows 16.hex",
+    "assets/music/.MOD/bs-p2-1-u.mod", "assets/music/.MOD/bs-p2-1-u.music",
+    "assets/sfx/GAMEOVER.sfx",
 ]
 
 # (fichier, panne) → pourquoi l'invariant n'est pas tenu. Vide, c'est l'état voulu ; une entrée est une
@@ -138,9 +142,11 @@ def _stray_semicolon(data: bytes, rng):
 
 
 COMMON = {"truncate": _truncate_half, "empty": _empty, "noise": _noise}
+_JSON_FAULTS = {**COMMON, "drop_key": _drop_key, "wrong_type": _wrong_type}
 BY_KIND = {
-    ".json": {**COMMON, "drop_key": _drop_key, "wrong_type": _wrong_type},
-    ".project": {**COMMON, "drop_key": _drop_key, "wrong_type": _wrong_type},
+    # Un sidecar d'asset est du JSON sous une extension propre à sa famille.
+    **{suffix: _JSON_FAULTS for suffix in (".json", ".project", ".scene", ".layout", ".fontasset", ".musicbox",
+                                           ".sprite", ".background", ".font", ".palette", ".music", ".sfx")},
     ".lua": {**COMMON, "drop_token": _drop_token, "stray_semicolon": _stray_semicolon},
 }
 

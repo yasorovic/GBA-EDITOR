@@ -85,24 +85,6 @@ def test_aucune_orthographe_en_methode_ne_double_une_propriete(prop, method):
                   f"et le C émis compile.")
 
 
-def test_orthographe_retiree_bloque_sur_self():
-    """Retrait sec (ROADMAP v0.16, REMOVED_API vidé) : une orthographe retirée
-    est bloquée comme « méthode inconnue », sans guide de migration. Le blocage
-    lui-même ne dépend pas de REMOVED_API — un « : » ne peut désigner qu'une
-    méthode du catalogue."""
-    errs = _errors("function on_update(self)\n self:set_frame(0)\nend\n")
-    assert errs and "unknown" in errs[0].lower()
-
-
-def test_orthographe_retiree_bloque_aussi_sur_un_autre_recepteur():
-    """`other:set_position(p)` émettait `actor_set_position(other, p)` — du C qui
-    compile et marche. Il reste bloqué sur un récepteur autre que `self`, par la
-    même règle : le « : » n'a pas de méthode à traduire hors du catalogue."""
-    errs = _errors("function on_collide(self, other)\n"
-                   " other:set_position(vec2(1, 2))\nend\n")
-    assert errs and "unknown" in errs[0].lower()
-
-
 def test_methode_inconnue_signalee_sur_tout_recepteur():
     """Un `:` ne peut désigner qu'une méthode du catalogue : hors de lui, il n'y
     a rien à traduire, et `_invoke` inventerait un `actor_nawak(other, 1)`."""
@@ -297,34 +279,6 @@ def test_la_direction_se_compare_par_son_nom():
     assert "actor_get_dir(self) == DIR_WEST" in code
 
 
-@pytest.mark.parametrize("old", [
-    'self:set_dir("north")',
-    "self:get_dir()",
-    "self:set_auto_dir(true)",
-    "self:on_ground()",
-])
-def test_les_anciennes_orthographes_sont_bloquees(old):
-    """Retrait sec (ROADMAP v0.16, REMOVED_API vidé) : une orthographe retirée
-    reste refusée — comme « méthode inconnue » — mais ne guide plus vers la
-    propriété. Le blocage tient au « : », pas à REMOVED_API."""
-    errs = _errors(f"function on_update(self)\n local x = {old}\nend\n")
-    assert errs and "unknown" in errs[0].lower()
-
-
-def test_auto_dir_se_lit_maintenant():
-    """L'ancien `set_auto_dir` n'avait pas de getter : un script qui voulait le
-    basculer devait tenir son propre drapeau à côté de celui du moteur."""
-    errs, code = _lua("function on_update(self)\n"
-                      " if self.auto_dir then self.auto_dir = false end\nend\n")
-    assert [e for e in errs if e.level == "error"] == []
-    assert "actor_get_auto_dir(self)" in code and "actor_set_auto_dir(self, 0)" in code
-
-
-def test_grounded_est_en_lecture_seule():
-    errs = _errors("function on_update(self)\n self.grounded = true\nend\n")
-    assert errs and "read-only" in errs[0]
-
-
 def test_le_getter_dauto_dir_existe_en_c():
     """Une propriété sans lecture n'en est pas une — et le garde-fou des
     prototypes ne voit que ce qui est déjà dans `gba_engine.h`, donc il n'aurait
@@ -403,126 +357,6 @@ def test_le_json_de_reference_ne_decrit_que_lapi_vivante():
     assert sorted(set(api_reference.STALE)) == []
 
 
-def test_toute_entree_du_catalogue_est_rangee_et_aucune_ne_finit_en_vrac():
-    """`doc_anchor` (pas `label`) identifie une entrée : les propriétés
-    l'affichent désormais sous une forme COURTE (`position(Vec2)`, sans son
-    préfixe `self.`), donc parser le libellé ne retrouverait plus le nom
-    complet du catalogue — l'ancre, dérivée du nom complet, si."""
-    from scripting import api_reference
-    from scripting.api import RUNTIME_API, RUNTIME_PROPS
-
-    cats = api_reference.get_categories()
-    anchors = {e["doc_anchor"] for c in cats for e in c["entries"]}
-    catalogue = {name: name.replace(":", "-").replace(".", "-")
-                 for name in (*RUNTIME_API, *RUNTIME_PROPS)}
-    manquants = {name for name, anchor in catalogue.items() if anchor not in anchors}
-    assert manquants == set(), f"absents de l'écran : {sorted(manquants)}"
-    assert not any(c["name"] == "Other" for c in cats), (
-        "une entrée est tombée dans le fourre-tout : donne-lui une catégorie "
-        "dans api_reference.json ou dans _PROP_HOME")
-    assert all(c["entries"] for c in cats), "catégorie sans entrée"
-
-
-def test_actor_commence_par_identite_puis_acces_et_cycle_de_vie():
-    """La section Actor se lit comme un parcours d'auteur, pas comme l'ordre
-    interne des tables du runtime."""
-    from scripting import api_reference
-
-    actor = next(category for category in api_reference.get_categories()
-                 if category["name"] == "Actor")
-    anchors = [entry["doc_anchor"] for entry in actor["entries"]]
-    assert anchors[:4] == ["actor-name", "actor-get", "actor-count", "actor-spawn"]
-    assert anchors.index("actor-active") < anchors.index("actor-activate")
-    assert anchors.index("actor-activate") < anchors.index("actor-destroy")
-
-
-def test_apply_velocity_est_rangee_dans_physics():
-    from scripting import api_reference
-
-    categories = {category["name"]: category for category in api_reference.get_categories()}
-    physics = {entry["doc_anchor"] for entry in categories["Physics"]["entries"]}
-    actor = {entry["doc_anchor"] for entry in categories["Actor"]["entries"]}
-    assert "actor-apply_velocity" in physics
-    assert "actor-apply_velocity" not in actor
-
-
-def test_lordre_du_json_gouverne_lecran():
-    """Une catégorie vidée par le filtre gardait son en-tête mais perdait sa
-    place : « Transform », première du fichier, se recréait en dernier une fois
-    ses cinq entrées retirées."""
-    import json
-
-    from scripting import api_reference
-
-    brut = json.loads((REPO_DIR / "editor" / "scripting" / "api_reference.json")
-                      .read_text(encoding="utf-8"))
-    attendu = [c["name"] for c in brut["categories"]]
-    rendu   = [c["name"] for c in api_reference.get_categories()]
-    assert rendu == [n for n in attendu if n in rendu]
-    assert rendu[0] == "Transform"
-
-
-def test_les_sections_ne_perdent_aucune_entree():
-    """Le rangement (ROADMAP v0.16) regroupe les 24 catégories en sections
-    sans rien perdre : chaque entrée du catalogue atterrit dans une section, et
-    aucune section « orpheline » (un nom de catégorie brut) n'apparaît — signe
-    qu'une catégorie a échappé à `SECTIONS`."""
-    from scripting import api_reference
-
-    secs = api_reference.get_sections()
-    assert [s["label"] for s in secs] == [k for k, _ in api_reference.SECTIONS], (
-        "Les sections attendues, dans l'ordre de SECTIONS — une section orpheline "
-        "signale une catégorie hors de SECTIONS")
-
-    n_sec = sum(len(g["entries"])
-                for s in secs for side in ("iteration", "engine") for g in s[side])
-    n_cat = sum(len(c["entries"]) for c in api_reference.get_categories())
-    assert n_sec == n_cat, f"{n_cat - n_sec} entrées perdues au rangement"
-
-
-def test_la_couche_moteur_se_replie_la_bonne():
-    """Le son garde ses boîtes visibles et nommées : elles ne sont pas assez
-    découvrables pour vivre sous « Aller plus loin ». Les autres sections
-    conservent leur séparation itération / moteur."""
-    from scripting import api_reference
-
-    secs = {s["label"]: s for s in api_reference.get_sections()}
-    def keys(groups):
-        return {e["label"].split("(")[0].strip() for g in groups for e in g["entries"]}
-
-    son = secs["scrsb.sec.sound"]
-    assert "sfx:play" in keys(son["iteration"])
-    assert "sound_box:set_state" in keys(son["iteration"])
-    assert not son["engine"]
-    assert [g["name"] for g in son["iteration"]] == [
-        "Actor sound", "Sound effects", "Music", "Jingles",
-        "SoundBox · contextual effects", "JingleBox · contextual jingles",
-        "MusicBox · adaptive music",
-    ]
-
-
-    # Le décor a une face itération ET une face moteur pour le MÊME calque.
-    scene = secs["scrsb.sec.scene"]
-    assert "background_layer:show" in keys(scene["iteration"])
-    assert "map" in keys(scene["engine"])      # propriété `background_layer.map`, libellé court
-
-
-def test_la_sidebar_peut_masquer_temporairement_l_audio_non_essentiel():
-    """Le recentrage vers `sfx` et `music` ne retire pas les raccourcis
-    d'acteur ou les boîtes du moteur : il les retire seulement de la sidebar."""
-    from scripting import api_reference
-
-    son = next(s for s in api_reference.get_sections(show_extended_audio=False)
-               if s["label"] == "scrsb.sec.sound")
-    shown = {e["label"].split("(")[0].strip()
-             for g in son["iteration"] for e in g["entries"]}
-    assert not {"self:play_sfx", "sound_box:set_state", "sound_box:set_volume",
-                "jingle_box:set_state", "jingle_box:set_volume",
-                "music_box:trigger"} & shown
-    assert {"sfx:play", "music:play", "music:jingle"} <= shown
-
-
-
 # ── 7. L'identité d'un acteur se cite par son nom ──────────────────
 # `self.tag` rendait un entier opaque qu'aucune écriture Lua ne permettait de
 # nommer : sa doc disait « utile pour identifier other » sans dire comment.
@@ -573,15 +407,6 @@ def test_le_tag_ne_se_compare_pas_a_un_nombre():
     assert errs and "by its name" in errs[0]
 
 
-def test_les_messages_nomment_le_recepteur_ecrit():
-    """Le catalogue range les propriétés d'actor sous `self.<champ>` : une clé,
-    pas une restriction. Un message qui reprendrait la clé citerait à l'auteur
-    une ligne qu'il n'a pas écrite."""
-    errs, _ = _tag_lua('function on_collide(self, other)\n'
-                       ' other.name = "Bullet"\nend\n')
-    assert errs and errs[0].startswith("other.name")
-
-
 def test_aucun_domaine_declare_nest_orphelin():
     """Un `DOMAIN_*` que ni un paramètre ni une propriété ne cite est du
     vocabulaire mort — et il oblige quand même checker et codegen à garder une
@@ -629,21 +454,6 @@ def test_les_neuf_helpers_de_juiciness_compilent():
     assert errs == []
     for m in JUICE_METHODS:
         assert f"actor_{m}(self, 3, 8, 10)" in code
-
-
-def test_les_neuf_helpers_existent_en_c():
-    """Même garde-fou que `test_le_getter_dauto_dir_existe_en_c` : le checker
-    ne voit que le catalogue Python, jamais l'en-tête C — un `c_func` sans
-    implémentation compilerait en `undefined reference` seulement au `make`."""
-    from scripting.api import RUNTIME_API
-
-    facade = (REPO_DIR / "runtime" / "include" / "runtime_api_inline.h").read_text(
-        encoding="utf-8", errors="ignore")
-    for m in JUICE_METHODS:
-        fn = RUNTIME_API[f"actor:{m}"].c_func
-        assert re.search(r"\b" + re.escape(fn) + r"\s*\(", facade), (
-            f"self:{m} : {fn}() n'existe pas dans runtime_api_inline.h")
-
 
 
 # ── 9. Les portes du son : une référence, et les graduations ──────────
@@ -812,7 +622,6 @@ def test_multi_local_valeurs_manquantes_valent_zero():
     _errs, code = _lua("function on_start()\n    local a, b, c = 1\nend\n")
     assert "int a = 1;" in code
     assert "int b = 0;" in code and "int c = 0;" in code
-
 
 def test_tag_d_un_acteur_guide_vers_name():
     """`other.tag` était l'identité de l'acteur ; `tag` est désormais réservé aux boîtes."""

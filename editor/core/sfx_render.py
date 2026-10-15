@@ -17,6 +17,7 @@ poids ROM.
 from __future__ import annotations
 
 import hashlib
+import random
 import tempfile
 import wave
 from pathlib import Path
@@ -25,12 +26,10 @@ from typing import Optional
 import numpy as np
 
 from core.models.audio import WAV_BITS_OK
+from core.wav_edit import apply_fades, fade_in_of, fade_out_of, is_trimmed, kept_range, trim_of
 
 # Largeurs d'échantillon (en octets) que mmutil lit tel quel ; toute autre est décodée ici puis réécrite en 16 bits.
 WAV_BITS_OK_BYTES = tuple(bits // 8 for bits in WAV_BITS_OK)
-
-# Une découpe plus courte ne laisse pas un son : l'écran la refuse à la souris, le validateur la signale.
-MIN_TRIM_MS = 10
 
 
 def effective_rate(sfx, settings) -> int:
@@ -46,63 +45,12 @@ def effective_rate(sfx, settings) -> int:
     return max(0, int(getattr(settings, "sfx_sample_rate", 0) or 0))
 
 
-# ── Le fondu de sortie ────────────────────────────────────────────────
-
-_FRAMES_PER_SECOND = 60            # l'unité des fondus de l'éditeur : la frame de la console
-
-
-def fade_out_of(sfx) -> int:
-    """Le fondu de sortie de l'effet, en frames (1/60 s) : 0 = aucun."""
-    return max(0, int(getattr(sfx, "fade_out", 0) or 0))
-
-
 def is_edited(sfx) -> bool:
     """L'effet demande un rendu — une découpe ou un fondu : sans l'un ni l'autre, son fichier part tel quel."""
-    return is_trimmed(sfx) or fade_out_of(sfx) > 0
+    return is_trimmed(sfx) or fade_out_of(sfx) > 0 or fade_in_of(sfx) > 0
 
 
-# ── La découpe ────────────────────────────────────────────────────────
-
-def trim_of(sfx) -> tuple[int, int]:
-    """`(début, fin)` en ms depuis le début du fichier, tels que l'asset les porte. Fin à 0 : jusqu'à la fin du fichier."""
-    return max(0, int(getattr(sfx, "trim_start", 0) or 0)), max(0, int(getattr(sfx, "trim_end", 0) or 0))
-
-
-def is_trimmed(sfx) -> bool:
-    start, end = trim_of(sfx)
-    return start > 0 or end > 0
-
-
-def trim_window(sfx, total_ms: float) -> tuple[int, int]:
-    """La plage gardée, en ms, bornée au fichier : `(début, fin)` avec `fin` jamais à 0. Ce que l'écran dessine."""
-    start, end = trim_of(sfx)
-    total = max(0, round(total_ms))
-    end = total if end == 0 else min(end, total)
-    return min(start, end), end
-
-
-def trim_problem(sfx, total_ms: float) -> Optional[str]:
-    """Pourquoi cette découpe ne donne pas un son, ou None : la plage est vide, ou plus courte que `MIN_TRIM_MS`."""
-    start, end = trim_of(sfx)
-    if start == 0 and end == 0:
-        return None
-    total = round(total_ms)
-    if start >= total:
-        return f"the trim starts at {start} ms, past the end of the file ({total} ms)."
-    kept = (total if end == 0 else min(end, total)) - start
-    if kept < MIN_TRIM_MS:
-        return f"the trim keeps {max(0, kept)} ms of the file ; the shortest it can keep is {MIN_TRIM_MS} ms."
-    return None
-
-
-def kept_range(sfx, frames: int, rate: int) -> Optional[tuple[int, int]]:
-    """`(première, dernière + 1)` frame gardées d'un fichier de `frames` frames à `rate` Hz, ou None si la découpe ne
-    laisse rien. Les ms se convertissent À LA FRAME : l'arrondi se fait une fois, ici."""
-    start, end = trim_of(sfx)
-    first = min(frames, round(start * rate / 1000))
-    last = frames if end == 0 else min(frames, round(end * rate / 1000))
-    return (first, last) if last > first else None
-
+# ── La découpe : cf. `core/wav_edit.py` ────────────────────────────────
 
 def planned_frames(sfx, frames: int, rate: int, target_rate: int) -> int:
     """Les frames — donc les octets de ROM — que l'effet portera : la plage gardée, au taux visé. 0 si la découpe est vide."""
@@ -145,7 +93,7 @@ def read_wav(path: Path) -> Optional[tuple[np.ndarray, int, int]]:
 def render_sfx(src: Path, sfx, target_rate: int) -> Optional[tuple[np.ndarray, int]]:
     """`(échantillons mono float32, taux)` de `src` tel que la ROM le portera : mixé en mono, découpé selon `sfx`, puis
     ré-échantillonné à `target_rate` (0 : le taux du fichier). None si le fichier n'est pas convertible, ou si la
-    découpe ne laisse rien. Le fondu de sortie (`Sfx.fade_out`) est cuit dans les dernières frames du résultat."""
+    découpe ne laisse rien. Les fondus (`Sfx.fade_in`, `Sfx.fade_out`) sont cuits dans les premières et les dernières frames du résultat."""
     got = read_wav(src)
     if got is None:
         return None
@@ -172,12 +120,16 @@ def render_sfx(src: Path, sfx, target_rate: int) -> Optional[tuple[np.ndarray, i
         pos = np.linspace(0, data.size - 1, n_out, dtype=np.float32)
         data = np.interp(pos, np.arange(data.size, dtype=np.float32), data)
         rate = target_rate
-    ramp = min(int(data.size), round(fade_out_of(sfx) * rate / _FRAMES_PER_SECOND))
-    if ramp > 0:
-        # Linéaire, jusqu'à zéro EXACT sur le dernier échantillon : c'est ce zéro qui supprime le clic.
-        data = data.copy()
-        data[-ramp:] *= np.linspace(1.0, 0.0, ramp, dtype=np.float32)
+    data = apply_fades(data, rate, fade_in_of(sfx), fade_out_of(sfx))
     return data, rate
+
+
+def varied_pitch(sfx, rng=random) -> float:
+    """La hauteur de départ d'UNE lecture de `sfx` : `pitch` ± `pitch_variation` %, uniforme, au dixième de pour cent —
+    ce que tire `sfx_play` sur la console (cf. `headers.py`). L'aperçu de l'éditeur s'en sert à chaque ▶."""
+    spread = int(getattr(sfx, "pitch_variation", 0) or 0)
+    tenths = rng.randint(-10 * spread, 10 * spread)
+    return int(getattr(sfx, "pitch", 100) or 100) * (1000 + tenths) / 1000
 
 
 def preview_file(src: Path, sfx, settings) -> Path:
@@ -189,15 +141,16 @@ def preview_file(src: Path, sfx, settings) -> Path:
 
     La hauteur par défaut (`Sfx.pitch`) s'entend en déclarant le rendu à un taux plus haut ou plus bas : mêmes
     échantillons, joués plus vite ou plus lentement — ce que fait la console avec `mm_sound_effect.rate`, sans rien
-    changer à la ROM. Le panoramique, lui, ne s'entend pas à l'aperçu : le lecteur de l'éditeur joue un module au centre."""
+    changer à la ROM. Le panoramique, lui, ne passe pas par le fichier (toujours mono) : l'aperçu le pose sur l'échantillon
+    du module (cf. `wav_to_xm`, `pan`)."""
     try:
         with wave.open(str(src)) as w:
             rate, width = w.getframerate(), w.getsampwidth()
         target = effective_rate(sfx, settings)
-        pitch = int(getattr(sfx, "pitch", 100) or 100)
+        pitch = float(getattr(sfx, "pitch", 100) or 100)      # fractionnaire quand l'aperçu tire une variation
         if width in WAV_BITS_OK_BYTES and not is_edited(sfx) and pitch == 100 and (target <= 0 or target == rate):
             return src
-        stamp = f"{src.resolve()}|{src.stat().st_mtime_ns}|{trim_of(sfx)}|{fade_out_of(sfx)}|{target}|{pitch}"
+        stamp = f"{src.resolve()}|{src.stat().st_mtime_ns}|{trim_of(sfx)}|{fade_in_of(sfx)}|{fade_out_of(sfx)}|{target}|{pitch}"
         directory = Path(tempfile.gettempdir()) / "backstage_sfx_preview"
         out = directory / f"{hashlib.sha1(stamp.encode('utf-8')).hexdigest()[:16]}.wav"
         if not out.is_file() and write_sfx(src, out, sfx, target, pitch / 100) is None:

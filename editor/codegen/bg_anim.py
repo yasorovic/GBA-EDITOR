@@ -155,8 +155,8 @@ def compose_placement(host_ba, anim_ba, geom: PlacedAnim) -> tuple:
             g = flip_v(g)
         return g, pb
 
-    htiles = [hex_to_tile(t) for t in host_ba.tileset]
-    atiles = [hex_to_tile(t) for t in anim_ba.tileset]
+    htiles = [hex_to_tile(t) for t in host_ba.effective_tileset()]
+    atiles = [hex_to_tile(t) for t in anim_ba.effective_tileset()]
     hmap, amap = host_ba.effective_tilemap(), anim_ba.effective_tilemap()
     htw, atw = host_ba.tiles_w or 1, anim_ba.tiles_w or 1
 
@@ -303,7 +303,7 @@ def resolve_blocks(p, host_ba, on_error=None) -> tuple:
             by_key[key] = blk
             blocks.append(blk)
         for_pl[id(pl)] = blk
-    base = len(getattr(host_ba, "tileset", None) or [])
+    base = len(host_ba.effective_tileset())
     for blk in blocks:
         blk.tile_base = base
         base += blk.size
@@ -318,7 +318,7 @@ def merged_tileset(p, host_ba) -> list:
     """Tileset du CHARBLOCK : celui de l'hôte, puis un bloc par fusion distincte.
     Les tuiles de l'hôte d'abord — ainsi sa propre carte, émise sans décalage,
     reste valable telle quelle."""
-    tiles = list(getattr(host_ba, "tileset", None) or [])
+    tiles = host_ba.effective_tileset()
     for blk in host_blocks(p, host_ba):
         tiles += blk.initial_tiles()
     return tiles

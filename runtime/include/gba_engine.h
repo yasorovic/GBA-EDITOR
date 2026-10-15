@@ -912,6 +912,11 @@ typedef struct UIRegionInfo {
     /* Index dans `g_ui_elements` (visibilité) — cf. plus bas. Une zone existe
        toujours comme élément, donc toujours >= 0 en pratique. */
     short elem;
+    /* 1 = une CHAÎNE (`Text`) : posée en un point, jamais coupée à la largeur de
+       la zone ni alignée dedans. 0 = une BOÎTE (`Textbox`) : le rectangle EST la
+       largeur de coupe. La zone garde son w×h dans les deux cas — c'est
+       l'empreinte VRAM que le build a réservée — mais seule la boîte s'y plie. */
+    unsigned char nowrap;
 } UIRegionInfo;
 
 extern const UIRegionInfo g_ui_regions[];
@@ -2780,7 +2785,7 @@ static void text_layout(const unsigned short *s, int slen, int tx, int ty,
    qu'un jour l'un des deux dérive. */
 static void text_render_cp_al(const unsigned short *s, int slen,
                               int tx, int ty, int wrap, int n, int align,
-                              int box_h) {
+                              int box_w, int box_h) {
     if (g_text_layer < 0 || !g_font) return;
     blit_use_bg_surface();
     /* Origine du bloc propre : celle de la zone MAINTENANT, pas au build —
@@ -2815,7 +2820,7 @@ static void text_render_cp_al(const unsigned short *s, int slen,
         g_hl_w = (short)(w > x0 ? w - x0 : 0);
         g_hl_h = (short)h;
         if (box_h > 0) {
-            if (wrap > 0) w = wrap;
+            if (box_w > 0) w = box_w;
             h = box_h;
         }
         text_surf_prepare(tx, ty, w, h);
@@ -2836,7 +2841,7 @@ static void text_render_cp(const unsigned short *s, int slen,
        d'origine de la police — la variante 0. */
     g_var_cur = 0;
     g_zone_ink = 0;
-    text_render_cp_al(s, slen, tx, ty, wrap, n, TEXT_ALIGN_LEFT, 0);
+    text_render_cp_al(s, slen, tx, ty, wrap, n, TEXT_ALIGN_LEFT, 0, 0);
 }
 
 static void text_render(int id, int tx, int ty, int wrap, int n) {
@@ -3095,7 +3100,8 @@ static void text_render_region_cp(const unsigned short *s, int slen,
        ce qui l'empêche de partager ses tuiles avec une zone voisine (cf.
        `RegionSurf`). Absent = repli sur la surface partagée, comme avant. */
     g_surf_cur = text_region_surf(r);
-    text_render_cp_al(s, slen, ox >> 3, oy >> 3, R->w >> 3, n, R->align, R->h >> 3);
+    text_render_cp_al(s, slen, ox >> 3, oy >> 3, R->nowrap ? 0 : R->w >> 3, n,
+                      R->align, R->w >> 3, R->h >> 3);
     g_text_palette_locked = 0;
     g_pal_bank_bg = _save_bank;
     g_surf_cur = 0;
@@ -3402,7 +3408,7 @@ static void text_render_obj(const unsigned short *s, int slen,
        évite aussi d'hériter du cadre du rendu précédent. */
     text_clip_set(ox, oy, R->w, rows * 8);
     text_layout(s, slen, ox >> 3, oy >> 3,
-                R->w >> 3, n, 0, R->align, 0, 0, 0);
+                R->nowrap ? 0 : R->w >> 3, n, 0, R->align, 0, 0, 0);
     int captured = g_cap_n;
     g_cap_max = 0;
 

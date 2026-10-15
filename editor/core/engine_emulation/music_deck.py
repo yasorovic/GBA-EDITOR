@@ -192,6 +192,11 @@ class MusicDeck:
         self._n = 1
         self._row_order = 0              # pour la coupe : l'ordre observé
         self._scrub: Optional[_Scrub] = None
+        # Les repères de la musique : `{ordre: [(pcm, gain)]}`, rendus d'avance par l'appelant (le thread audio ne
+        # rend rien). Chaque passage dans l'ordre lance une VOIX, mixée par-dessus le module — `music_cue_tick`.
+        self._cues: dict = {}
+        self._cue_last = -1
+        self._voices: list = []          # [pcm, position, gain] : les sons de repère en cours
 
     # ── Ce que la boîte demande ───────────────────────────────────
 
@@ -238,6 +243,13 @@ class MusicDeck:
             self._vol = volume
 
     @_locked
+    def set_cues(self, cues: dict):
+        """Les repères de la piste qui joue (vide : aucun). À poser APRÈS `play`, qui n'y touche pas."""
+        self._cues = dict(cues)
+        self._cue_last = -1
+        self._voices = []
+
+    @_locked
     def play(self, track: Track, volume: int, loop: bool = True, start_at: int = 0):
         """`music_play` : démarrage sec, sans transition — mais avec le fondu d'entrée.
 
@@ -259,6 +271,7 @@ class MusicDeck:
         self._scrub = None
         self._track = None
         self._mode = _NONE
+        self._cues, self._voices = {}, []
 
     @_locked
     def music_stop(self):
@@ -297,6 +310,7 @@ class MusicDeck:
         """`mmStart` suivi de `music_apply` : le module démarre, ses réglages s'appliquent."""
         self._track, self._pos = track, 0
         self._scrub = None
+        self._cue_last = -1          # un module relancé rejoue son premier repère
         self._loop = loop or track.forces_loop
         self._ended = False
         self._loop_in = False
@@ -308,6 +322,25 @@ class MusicDeck:
         """Une frame : `music_transition_tick()` puis `music_loop_tick()`."""
         self._transition_tick()
         self._loop_tick()
+        self._cue_tick()
+
+    def _cue_tick(self):
+        """`music_cue_tick()` : un repère part quand la lecture ENTRE dans son ordre — donc à chaque tour d'une boucle."""
+        track = self._track
+        if not self._cues or track is None or self._ended:
+            return
+        order = track.order_at(self._pos)
+        if order == self._cue_last:
+            return
+        self._cue_last = order
+        self.start_voices(self._cues.get(order, ()))
+
+    @_locked
+    def start_voices(self, voices):
+        """Lance des sons par-dessus la piste : `(pcm, gain)` ou `(pcm, gain, retard en échantillons)`. Le retard sert à un
+        jingle, dont les repères sont en TEMPS depuis son début (la ROM compte des images)."""
+        for pcm, gain, *delay in voices:
+            self._voices.append([pcm, -int(delay[0]) if delay else 0, gain])
 
     def _transition_tick(self):
         if self._mode == _NONE:
@@ -463,10 +496,27 @@ class MusicDeck:
                 self._tick()
                 self._until_tick = self._frame_len
             step = min(n - done, self._until_tick)
-            out[done:done + step] = self._chunk(step)
+            block = self._chunk(step)
+            out[done:done + step] = self._with_voices(block) if self._voices else block
             done += step
             self._until_tick -= step
         return out
+
+    def _with_voices(self, out: np.ndarray) -> np.ndarray:
+        """Mixe les sons de repère en cours sur `out`, et fait avancer chacun (il s'éteint à sa fin)."""
+        mixed, alive = out.astype(np.int32), []
+        for voice in self._voices:
+            pcm, pos, gain = voice
+            lead = min(out.shape[0], max(0, -pos))             # un son retardé commence plus loin dans le bloc
+            first = max(0, pos)
+            take = min(out.shape[0] - lead, pcm.shape[0] - first)
+            if take > 0:
+                mixed[lead:lead + take] += pcm[first:first + take].astype(np.int32) * gain // MODULE_FULL
+            voice[1] = pos + out.shape[0]
+            if voice[1] < pcm.shape[0]:
+                alive.append(voice)
+        self._voices = alive
+        return np.clip(mixed, -32768, 32767).astype(np.int16)
 
     def _chunk(self, n: int) -> np.ndarray:
         """`n` échantillons du module courant, bouclés et mis au volume."""

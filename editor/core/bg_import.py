@@ -48,10 +48,13 @@ def open_image(source):
     return source if hasattr(source, "mode") else Image.open(source)
 
 
-def prepare_source(source, crop=None, size=None):
+def prepare_source(source, crop=None, size=None, adjust=None, mirror=None):
     """Image PIL préparée pour l'encodage : recadrée (`crop` = x, y, w, h en pixels
-    de la source), PUIS redimensionnée (`size` = w, h). Ni l'un ni l'autre : la
-    source est rendue telle quelle. Le fichier n'est jamais modifié — tout se
+    de la source), PUIS redimensionnée (`size` = w, h), PUIS mise en miroir
+    (`mirror` = axe_x, axe_y, cf. `core.bg_mirror`), PUIS réglée (`adjust` =
+    `BackgroundAdjust`, cf. `core.bg_adjust`). Le miroir précède la compression
+    puisqu'il change les tuiles qu'elle trouvera. Rien de tout cela : la source est
+    rendue telle quelle. Le fichier n'est jamais modifié — tout se
     passe en mémoire, c'est ce qui laisse revenir à l'original.
 
     Rééchantillonnage AUTOMATIQUE : plus proche voisin pour une source indexée (le
@@ -71,6 +74,12 @@ def prepare_source(source, crop=None, size=None):
     if size and tuple(size) != img.size:
         filt = Image.NEAREST if is_indexed(img) else Image.LANCZOS
         img = img.resize((max(1, int(size[0])), max(1, int(size[1]))), filt)
+    if mirror and any(axis is not None for axis in mirror[:2]):
+        from core.bg_mirror import apply_mirror
+        img = apply_mirror(img, mirror)
+    if adjust is not None and not adjust.is_default():
+        from core.bg_adjust import apply_adjust
+        img = apply_adjust(img, adjust)
     return img
 
 
@@ -174,8 +183,7 @@ def detect_import_mode(source, tile_budget: int = TILE_BUDGET) -> dict:
 
     warning = None
     if not indexed and (bpp == 16 or capped):
-        warning = ("Non-indexed PNG with many colours: palette derived automatically "
-                   "(some loss possible).")
+        warning = "Non-indexed PNG with many colours (some loss possible)."
 
     return {
         "indexed": indexed,
@@ -258,6 +266,7 @@ def _pack_palettes(tile_colors: list, editable: int, method: str) -> tuple:
     en ouvre une. Retourne (palettes, tile_pal, tile_cmap). Partagé entre
     compression et diagnostic."""
     palettes: list = []          # list[list[(r,g,b)]] (ordre = index 1..N)
+    members: list = []           # le même contenu en ensembles : le test d'union ne reconstruit rien
     tile_pal: list = [0] * len(tile_colors)
     tile_cmap: list = [None] * len(tile_colors)   # réduction couleur par tuile si >15
     for i, colors in enumerate(tile_colors):
@@ -268,17 +277,21 @@ def _pack_palettes(tile_colors: list, editable: int, method: str) -> tuple:
             tile_cmap[i] = cmap
         cset = set(cols)
         best = None
-        for pi, pal in enumerate(palettes):
-            if len(set(pal) | cset) <= editable:
+        for pi, held in enumerate(members):
+            # |palette ∪ tuile| <= editable, sans fabriquer l'union
+            if len(cset - held) <= editable - len(held):
                 best = pi
                 break
         if best is None:
             palettes.append(list(cset))
+            members.append(set(cset))
             best = len(palettes) - 1
         else:
+            held = members[best]
             for c in cset:
-                if c not in palettes[best]:
+                if c not in held:
                     palettes[best].append(c)
+                    held.add(c)
         tile_pal[i] = best
     return palettes, tile_pal, tile_cmap
 
@@ -386,17 +399,23 @@ def _indexed_direct_source(source):
 
 def _encode_background_indexed_4bpp(source) -> Optional[dict]:
     """Chemin direct 4bpp : PNG indexé dont les index utilisés tiennent dans UNE
-    sous-palette (≤ 15). None si non indexé, ou index utilisé > 15 (plusieurs
-    sous-palettes nécessaires → repli sur le packing déduit de encode_background)."""
+    sous-palette (≤ 15), ou « PAR BANQUES » : index = banque × 16 + couleur, chaque tuile dans une seule
+    banque (la convention des outils GBA, celle que `core.bg_bake` écrit). Dans les deux cas la palette
+    déclarée et les banques sont gardées telles quelles. None si non indexé, ou si le PNG ne se lit pas
+    exactement ainsi (une tuile à cheval sur deux banques, un index 16·b opaque : l'index 0 de chaque
+    banque est le transparent) → repli sur le packing déduit de encode_background."""
     from PIL import Image
     prep = _indexed_direct_source(source)
     if prep is None:
         return None
     pimg, alpha, pal_raw, used = prep
-    if any(idx > 15 for _c, idx in used):
-        return None
-    palette = _native_palette_bgr555(pal_raw, 16)
-    n_declared = min(16, len(pal_raw) // 3)
+    n_entries = len(pal_raw) // 3
+    # Les banques DÉCLARÉES comptent (une palette ajoutée mais pas encore peinte survit au fichier) — sauf une PLTE
+    # pleine de 256 entrées, qui n'est que le remplissage habituel des outils : là, seules les banques utilisées.
+    declared = (n_entries + 15) // 16 if 16 < n_entries < 256 else 1
+    n_banks = max(1, min(16, max(declared, (max((idx for _c, idx in used), default=0) >> 4) + 1)))
+    palettes = [_native_palette_bgr555(pal_raw[b * 48:(b + 1) * 48], 16) for b in range(n_banks)]
+    n_declared = min(16 * n_banks, n_entries)
 
     w, h = pimg.size
     tw, th = (w + 7) // 8, (h + 7) // 8
@@ -414,21 +433,27 @@ def _encode_background_indexed_4bpp(source) -> Optional[dict]:
         for tx in range(tw):
             grid = []
             seen: set = set()
+            banks: set = set()
             for y in range(8):
                 for x in range(8):
                     px, py = tx * 8 + x, ty * 8 + y
                     idx = ipx[px, py] & 0xFF
-                    if apx[px, py] == 0 or idx == 0 or idx > 15:
+                    if apx[px, py] == 0 or idx == 0:
                         grid.append(0)            # transparent (backdrop)
-                    else:
-                        grid.append(idx)          # index natif = index GBA (identité)
-                        seen.add(idx)
+                        continue
+                    if idx & 15 == 0:
+                        return None               # index 0 d'une autre banque, mais opaque : pas une lecture par banques
+                    grid.append(idx & 15)         # couleur dans la banque (identité en banque 0)
+                    banks.add(idx >> 4)
+                    seen.add(idx)
+            if len(banks) > 1:
+                return None                       # une tuile à cheval sur deux banques
             tid, fh, fv = _dedup_tile(tuple(grid), lookup, tileset)
-            tilemap.append(pack_se(tid, 0, fh, fv))
+            tilemap.append(pack_se(tid, next(iter(banks), 0), fh, fv))
             tile_used.append(len(seen))
 
     return {
-        "palettes": [palette],                     # UNE sous-palette de 16 (PLTE native)
+        "palettes": palettes,                      # les banques de 16 de la PLTE native (une seule, en général)
         "tileset": [tile_to_hex(t) for t in tileset],
         "tilemap": tilemap,
         "tiles_w": tw,
@@ -445,8 +470,8 @@ def _encode_background_indexed_4bpp(source) -> Optional[dict]:
             "tiles_w": tw, "tiles_h": th,
             "max_tile_colors": max(tile_used, default=0),
             "tiles_reduced": 0,                    # aucune réduction : indexation directe
-            "pre_merge_palettes": 1,
-            "final_palettes": 1,
+            "pre_merge_palettes": n_banks,
+            "final_palettes": n_banks,
             "unique_tiles": len(tileset),
             # Origine : renseignée ici pour que l'inspecteur affiche la taille de
             # la PALETTE DÉCLARÉE (et non les seules couleurs peintes). Lu en
@@ -652,18 +677,29 @@ def compiled_background(ba, source_path, project=None) -> Optional[dict]:
         # (BackgroundInpainting), pour que le rendu montre le fond tel qu'édité
         # au niveau éditeur, partagé entre toutes les scènes.
         base = {"tiles_w": ba.tiles_w, "tiles_h": ba.tiles_h,
-                "tileset": ba.tileset, "tilemap": ba.effective_tilemap(),
+                "tileset": ba.effective_tileset(), "tilemap": ba.effective_tilemap(),
                 "palettes": ba.palettes, "bpp": getattr(ba, "bpp", 4)}
         return compose_animations(ba, project, base)
     if source_path and source_path.is_file():
         try:
             return encode_background(
-                prepare_source(source_path, ba.import_crop if ba else None,
-                               ba.import_size if ba else None),
+                prepare_source(source_path, **ba.import_prep()) if ba else prepare_source(source_path),
                 compression=ba.compression if ba else None)
         except (ValueError, OSError):
             return None
     return None
+
+
+def _asks_for_reduction_4bpp(params: BackgroundCompression) -> bool:
+    """Un réglage de compression 4bpp s'écarte-t-il du défaut ? (Le type de dithering n'en est pas un : il ne réduit rien.)"""
+    base = BackgroundCompression()
+    return (params.palettes_max, params.colors_per_palette, params.global_colors, params.tile_target) != (
+        base.palettes_max, base.colors_per_palette, base.global_colors, base.tile_target)
+
+
+def _asks_for_reduction_8bpp(params: BackgroundCompression) -> bool:
+    base = BackgroundCompression()
+    return (params.palette_colors, params.tile_target) != (base.palette_colors, base.tile_target)
 
 
 def encode_background(source, method: str = "median_cut",
@@ -680,10 +716,12 @@ def encode_background(source, method: str = "median_cut",
     PNG INDEXÉ tenant en 4bpp : la palette déclarée est préservée telle quelle
     (cf. `_encode_background_indexed_4bpp`) au lieu d'être re-déduite depuis les
     seules couleurs peintes."""
-    direct = _encode_background_indexed_4bpp(source)
+    params = compression or BackgroundCompression()
+    # Le chemin « indexé direct » garde la palette d'auteur telle quelle — il ne réduit rien. Dès que l'auteur DEMANDE une
+    # réduction (palettes, couleurs, réduction globale, cible de tuiles), on la lui doit : le packing déduit prend le relais.
+    direct = None if _asks_for_reduction_4bpp(params) else _encode_background_indexed_4bpp(source)
     if direct is not None:
         return direct
-    params = compression or BackgroundCompression()
     # Un fond passé du 8bpp ou du bitmap porte « quantize_256 » : c'est le nom du
     # quantifieur de PIL, pas une méthode de réduction par tuile. On retombe sur le
     # défaut plutôt que de refuser une image que l'auteur vient de basculer.
@@ -693,7 +731,7 @@ def encode_background(source, method: str = "median_cut",
     editable = params.colors_per_palette   # couleurs utiles (l'index 0 est le transparent)
     img, w, h, tw, th = _open_padded(source)
     if params.global_colors:
-        img = _reduce_globally(img, params.global_colors, dither)
+        img = _reduce_globally(img, params.global_colors, dither, params.dither_kind)
 
     # 1. Grille de pixels + jeu de couleurs par tuile (couleurs snappées 5-bit).
     _, _, tile_grids, tile_colors = _extract_tile_colors(img)
@@ -776,7 +814,33 @@ def encode_background(source, method: str = "median_cut",
     }
 
 
-def _reduce_globally(img, colors: int, dither: bool):
+def _bayer(n: int):
+    """Matrice de Bayer n×n (n = 4 ou 8), centrée sur 0 : des seuils dans ]−0,5 ; 0,5[."""
+    import numpy as np
+    m = np.array([[0, 2], [3, 1]], dtype=np.float32)
+    while m.shape[0] < n:
+        m = np.block([[4 * m, 4 * m + 2], [4 * m + 3, 4 * m + 1]])
+    return (m + 0.5) / (n * n) - 0.5
+
+
+def _remap(rgb, palette_img, colors: int, kind: str = "floyd_steinberg"):
+    """`rgb` repassé sur la palette de `palette_img`, l'erreur répartie selon `kind`. Diffusion : celle de PIL.
+    Trame ordonnée : chaque pixel reçoit le seuil de sa case avant de prendre la couleur la plus proche — l'amplitude
+    suit l'écart moyen des `colors` couleurs dans le cube RGB."""
+    from PIL import Image
+    if kind in ("bayer4", "bayer8"):
+        import numpy as np
+        n = 4 if kind == "bayer4" else 8
+        arr = np.asarray(rgb.convert("RGB"), dtype=np.float32)
+        h, w, _ = arr.shape
+        threshold = np.tile(_bayer(n), (h // n + 1, w // n + 1))[:h, :w, None]
+        spread = 255.0 / max(2.0, max(2, colors) ** (1 / 3))
+        shifted = np.clip(arr + threshold * spread, 0, 255).astype(np.uint8)
+        return Image.fromarray(shifted, "RGB").quantize(palette=palette_img, dither=Image.Dither.NONE)
+    return rgb.quantize(palette=palette_img, dither=Image.Dither.FLOYDSTEINBERG)
+
+
+def _reduce_globally(img, colors: int, dither: bool, kind: str = "floyd_steinberg"):
     """RGBA → RGBA dont les pixels opaques n'emploient que `colors` couleurs.
     Fait AVANT le découpage en tuiles : deux tuiles voisines qui se ressemblent
     tombent alors sur les mêmes couleurs, donc sur les mêmes palettes. La
@@ -789,7 +853,7 @@ def _reduce_globally(img, colors: int, dither: bool):
         # `quantize(dither=…)` est ignoré tant qu'on ne fournit pas de palette :
         # on repasse l'image sur celle qu'on vient de calculer pour que la
         # diffusion d'erreur ait vraiment lieu.
-        q = rgb.quantize(palette=q, dither=Image.Dither.FLOYDSTEINBERG)
+        q = _remap(rgb, q, colors, kind)
     out = q.convert("RGB").convert("RGBA")
     out.putalpha(alpha)
     return out
@@ -800,7 +864,7 @@ def _reduce_globally(img, colors: int, dither: bool):
 QUANTIZERS_8BPP = ("median_cut", "octree", "max_coverage")
 
 
-def _quantize_rgb(rgb, colors: int, method: str, dither: bool):
+def _quantize_rgb(rgb, colors: int, method: str, dither: bool, kind: str = "floyd_steinberg"):
     """Image PIL 'P' à `colors` couleurs. `quantize(dither=…)` est IGNORÉ tant qu'on
     ne lui donne pas de palette — le dithering des modes 8bpp et bitmap n'a donc
     jamais rien fait. On calcule la palette d'abord, puis on repasse l'image dessus
@@ -811,7 +875,7 @@ def _quantize_rgb(rgb, colors: int, method: str, dither: bool):
             "max_coverage": Image.Quantize.MAXCOVERAGE}.get(method, Image.Quantize.MEDIANCUT)
     q = rgb.quantize(colors=max(2, colors), method=algo)
     if dither:
-        q = rgb.quantize(palette=q, dither=Image.Dither.FLOYDSTEINBERG)
+        q = _remap(rgb, q, colors, kind)
     return q
 
 
@@ -829,16 +893,16 @@ def encode_background_8bpp(source, dither: bool = False, method: str = "median_c
     `compression` : `palette_colors` (taille de la palette, 255 par défaut — l'index
     0 reste au transparent) et `tile_target` (fusion des tuiles, cf. bg_tile_merge) ;
     `method` : un des `QUANTIZERS_8BPP`, sinon median-cut."""
-    direct = _encode_background_indexed_8bpp(source)
+    params = compression or BackgroundCompression()
+    direct = None if _asks_for_reduction_8bpp(params) else _encode_background_indexed_8bpp(source)
     if direct is not None:
         return direct
-    params = compression or BackgroundCompression()
     if method not in QUANTIZERS_8BPP:
         method = "median_cut"
     img, w, h, tw, th = _open_padded(source)
     alpha = img.getchannel("A").load()
     rgb = img.convert("RGB")
-    q = _quantize_rgb(rgb, params.palette_colors, method, dither)
+    q = _quantize_rgb(rgb, params.palette_colors, method, dither, params.dither_kind)
     qidx = q.load()
     pal_raw = q.getpalette() or []   # [r,g,b, ...]
 
@@ -957,7 +1021,7 @@ def render_bg_preview(compiled: dict):
     return out
 
 
-def encode_background_bitmap(source, dither: bool = False) -> dict:
+def encode_background_bitmap(source, dither: bool = False, compression: Optional[BackgroundCompression] = None) -> dict:
     """PNG -> représentation GBA Mode 4 : bitmap plein écran ≤240×160, 8bpp (un
     index par pixel) + palette de 256. L'image est ajustée « contain » (ratio
     préservé, jamais agrandie) dans 240×160. Le source n'est jamais modifié.
@@ -980,7 +1044,7 @@ def encode_background_bitmap(source, dither: bool = False) -> dict:
         img = img.resize((out_w, out_h), Image.LANCZOS)
     alpha = img.getchannel("A").load()
     rgb = img.convert("RGB")
-    q = _quantize_rgb(rgb, 255, "median_cut", dither)
+    q = _quantize_rgb(rgb, 255, "median_cut", dither, compression.dither_kind if compression else "floyd_steinberg")
     qidx = q.load()
     pal_raw = q.getpalette() or []
 
@@ -1033,9 +1097,9 @@ def encode_by_mode(source, mode_token: str, method: str = "median_cut",
     `prep` (`BackgroundAsset.import_prep()`) recadre/redimensionne la source avant
     d'encoder — le SEUL endroit où la préparation s'applique."""
     if prep:
-        source = prepare_source(source, prep.get("crop"), prep.get("size"))
+        source = prepare_source(source, **prep)
     if mode_token in ("bitmap", "bitmap16"):
-        return encode_background_bitmap(source, dither=dither)
+        return encode_background_bitmap(source, dither=dither, compression=compression)
     if mode_token == "tiled8":
         return encode_background_8bpp(source, dither=dither, method=method,
                                       compression=compression)
@@ -1081,8 +1145,3 @@ def detect_bg_mode(source, tile_budget: int = TILE_BUDGET) -> str:
     a = a.reshape(th, 8, tw, 8, 3).transpose(0, 2, 1, 3, 4).reshape(th * tw, 8 * 8 * 3)
     uniq = len(np.unique(a, axis=0))
     return "bitmap" if uniq > tile_budget else "tiled"
-
-
-def bg_fits_vram(tileset: list, budget: int = TILE_BUDGET) -> tuple[bool, int]:
-    """(rentre ?, budget) — nombre de tuiles uniques vs budget VRAM d'un charblock."""
-    return len(tileset) <= budget, budget

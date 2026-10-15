@@ -182,14 +182,14 @@ def scene_text_reservation(p, scene) -> dict:
     # dessous : une base RELATIVE au bloc de la scène, dans l'ordre de la
     # mise en page.
     from codegen.font_emit import scene_writes_free
-    from core.models.ui_region import KIND_TEXT, TARGET_BG
+    from core.models.ui_region import is_text, TARGET_BG
     rm = int(getattr(scene, "render_mode", 0) or 0)
     slot_idx = {el.name: i for i, (_l, el) in enumerate(p.all_regions())}
     surf_layout: list[dict] = []
     base = 0
     if needs_surface:
         for lay_ui, el in scene_slots:
-            if getattr(el, "kind", "") != KIND_TEXT or el.name not in slot_idx:
+            if not is_text(el) or el.name not in slot_idx:
                 continue
             if lay_ui.resolved_target(el, rm) != TARGET_BG:
                 continue      # une bande OBJ a déjà son bloc propre
@@ -367,8 +367,8 @@ def fonts_and_texts_lines(p, emit=None) -> list[str]:
 
     regions = p.all_regions() if hasattr(p, "all_regions") else []
     if emit and regions:
-        from core.models.ui_region import KIND_TEXT
-        n_auth = sum(1 for _l, r in regions if getattr(r, "kind", "") == KIND_TEXT)
+        from core.models.ui_region import is_text
+        n_auth = sum(1 for _l, r in regions if is_text(r))
         detail = f", including {n_auth} authored text(s)" if n_auth else ""
         emit("log_line", f"[text] {len(regions)} text slot(s){detail} ({len(p.ui_layouts)} layout(s))")
     font_names = [f.name for f in project_fonts(p)]
@@ -460,14 +460,14 @@ def scene_region_colors(p: Project, scene, fills: list[dict]) -> list[dict]:
     de l'aplat dans la palette du conteneur, `bank` la banque de ce conteneur
     (le texte enfant y lit son encre, il PREND la palette du conteneur), `color`
     la valeur BGR555 (pour l'aperçu éditeur)."""
-    from core.models.ui_region import KIND_TEXT, FILL_COLOR
+    from core.models.ui_region import is_text, FILL_COLOR
     if not fills:
         return []
     by_container = {f["name"]: f for f in fills}
     slot_idx = {el.name: i for i, (_l, el) in enumerate(p.all_regions())}
     out: list[dict] = []
     for lay, el in p.scene_ui_slots(scene):
-        if getattr(el, "kind", "") != KIND_TEXT or el.name not in slot_idx:
+        if not is_text(el) or el.name not in slot_idx:
             continue
         container = region_fill_container(lay, el)
         if container is None or getattr(container, "fill_kind", "") != FILL_COLOR:
@@ -501,14 +501,14 @@ def scene_region_backdrops(p: Project, scene, img_fills: list[dict]) -> list[dic
     directement la carte du container avec cet offset (cf. `RegionFill` dans
     `gba_engine.h`) plutôt que de recevoir une carte à la taille de la zone :
     une donnée, pas deux à tenir d'accord."""
-    from core.models.ui_region import KIND_TEXT, FILL_NINE, FILL_BG
+    from core.models.ui_region import is_text, FILL_NINE, FILL_BG
     if not img_fills:
         return []
     by_container = {f["name"]: i for i, f in enumerate(img_fills)}
     slot_idx = {el.name: i for i, (_l, el) in enumerate(p.all_regions())}
     out: list[dict] = []
     for lay, el in p.scene_ui_slots(scene):
-        if getattr(el, "kind", "") != KIND_TEXT or el.name not in slot_idx:
+        if not is_text(el) or el.name not in slot_idx:
             continue
         container = region_fill_container(lay, el)
         if container is None or getattr(container, "fill_kind", "") not in (FILL_NINE, FILL_BG):
@@ -568,7 +568,7 @@ def gen_ui_texts(p: Project, scene, text_bg: int, emit=None) -> list[str]:
     Posé une seule fois, à l'init : un texte qui doit CHANGER est le travail
     d'un script.
     """
-    from core.models.ui_region import KIND_TEXT, ANCHOR_ACTOR, TARGET_OBJ
+    from core.models.ui_region import is_text, ANCHOR_ACTOR, TARGET_OBJ
 
     # Index PROJET-GLOBAUX : `g_ui_regions` suit l'ordre de `all_regions()`,
     # `g_texts` celui de `build_texts()`. Recalculés ici plutôt que reçus, pour
@@ -581,7 +581,7 @@ def gen_ui_texts(p: Project, scene, text_bg: int, emit=None) -> list[str]:
 
     L: list[str] = []
     for lay, el in p.scene_ui_slots(scene):
-        if getattr(el, "kind", "") != KIND_TEXT:
+        if not is_text(el):
             continue
         key = getattr(el, "text_key", "") or ""
         if not key:
@@ -743,7 +743,7 @@ def scene_image_fills(p: Project, scene) -> tuple[list[dict], list[dict]]:
 
         if ba.name not in by_name:
             from codegen.bg_emit import tileset_words
-            words = tileset_words(ba.tileset, 4)   # 8 mots u32 = 1 tuile 4bpp
+            words = tileset_words(ba.effective_tileset(), 4)   # 8 mots u32 = 1 tuile 4bpp
             by_name[ba.name] = len(assets)
             assets.append({"name": ba.name, "sym": f"ui_bg_{c_sym(ba.name)}",
                            "words": words, "tiles": len(words) // 8})

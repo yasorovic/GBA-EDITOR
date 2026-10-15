@@ -21,6 +21,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
 from PyQt6.QtWidgets import QApplication
 
+from ui.common.deferred_writes import get_deferred_writes
+
 # Référence de module : le `QApplication` doit survivre au GC final de pytest
 # (`pytest_unconfigure` -> `gc_collect_harder`), sinon des widgets pris dans des
 # cycles sont finalisés APRÈS sa destruction : violation d'accès intermittente.
@@ -58,4 +60,7 @@ def _drain_qt_events():
     yield
     app = QApplication.instance()
     if app is not None:
+        # Les écritures différées d'un test partent AVEC lui, pas au hasard d'un test suivant (cf. `deferred_writes`).
+        if get_deferred_writes().has_pending():
+            get_deferred_writes().flush()
         app.processEvents()

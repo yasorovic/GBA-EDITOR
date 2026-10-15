@@ -3,7 +3,7 @@ ui/scene_manager/inspectors/project_settings_dialog.py — fenêtre « Project
 Settings », ouverte depuis Game → Project Settings. Même pattern que
 `SettingsDialog` (ui/common/settings_dialog.py) : une colonne de catégories à
 gauche, un panneau à droite, chaque champ se sauvegarde à l'instant où il
-change (undo par `SetFieldCmd`, persistance immédiate dans project.json).
+change (undo par `SetFieldCmd`, écriture de project.json après un court silence — cf. `deferred_writes`).
 
 Ce que cette fenêtre regroupe (2026-08-25) — tout ce que `ProjectSettings`
 porte SAUF l'identité du projet :
@@ -52,7 +52,9 @@ from core.history import (get_history, SetFieldCmd, AddListItemCmd,
                           RemoveCollisionTagCmd)
 from core.command_dispatcher import get_dispatcher
 from core.models.gba_color import bgr555_to_rgb888, rgb888_to_bgr555
+from ui.common.deferred_writes import schedule_unwatched
 from ui.common.theme import C, T, QSS
+from ui.common.unit_spin import UnitSpin
 from ui.common.widgets import W
 from ui.common.notice import note, tip
 from ui.scene_manager.inspectors.languages_card import LanguagesCard
@@ -60,6 +62,11 @@ from ui.scene_manager.inspectors.inputs_card import InputsCard
 from ui.scene_manager.inspectors.sequences_card import SequencesCard
 from ui.scene_manager.inspectors.axes_card import AxesCard
 from ui.scene_manager.inspectors.project_inspector import TRANSITION_LABELS
+
+
+def _save_settings_soon(project: Project) -> None:
+    """Écrit les réglages du projet après un silence (cf. `ui/common/deferred_writes.py`) : un champ qu'on tourne en change dix fois par seconde."""
+    schedule_unwatched(("settings", id(project)), project.save_settings)
 
 
 def _category_title(text: str) -> QLabel:
@@ -160,7 +167,7 @@ class BuildPanel(QWidget):
         self._combo_cart.blockSignals(False)
 
     def _persist(self):
-        self._project.save_settings()
+        _save_settings_soon(self._project)
         self._blocking = True
         try:
             self._refresh_fields()   # resynchronise l'UI après execute ET undo
@@ -237,9 +244,9 @@ class VisualPanel(QWidget):
         self._combo_trans.currentIndexChanged.connect(
             lambda i: self._set_setting("transition_kind",
                                         self._combo_trans.itemData(i) or "none"))
-        self._spin_trans = QSpinBox()
+        self._spin_trans = UnitSpin()
         self._spin_trans.setRange(1, 255)
-        self._spin_trans.setFixedWidth(64)
+        self._spin_trans.setFixedWidth(88)
         self._spin_trans.setSuffix(" f")
         self._spin_trans.setFont(QFont(T.MONO, T.MD))
         self._spin_trans.setStyleSheet(QSS.spinbox)
@@ -277,7 +284,7 @@ class VisualPanel(QWidget):
         self._spin_trans.setEnabled(kind != "none")
 
     def _persist(self):
-        self._project.save_settings()
+        _save_settings_soon(self._project)
         self._blocking = True
         try:
             self._refresh_fields()
@@ -389,7 +396,7 @@ class SoundPanel(QWidget):
         self._spin_channels.blockSignals(False)
 
     def _persist(self):
-        self._project.save_settings()
+        _save_settings_soon(self._project)
         self._blocking = True
         try:
             self._refresh_fields()
@@ -447,7 +454,7 @@ class InputsPanel(QWidget):
         self._axes_card.load(project)
 
     def _persist(self):
-        self._project.save_settings()
+        _save_settings_soon(self._project)
 
     def _refresh_both(self):
         # Un input renommé/retiré change la liste que la carte Axes propose
@@ -618,7 +625,7 @@ class LanguagesPanel(QWidget):
         ))
 
     def _persist(self):
-        self._project.save_settings()
+        _save_settings_soon(self._project)
 
     def _set_source_field(self, field: str, value: str):
         """La langue source n'a pas de fichier side : le maître EST sa
@@ -1002,7 +1009,7 @@ class CollisionsPanel(QWidget):
         ))
 
     def _persist(self):
-        self._project.save_settings()
+        _save_settings_soon(self._project)
         self._blocking = True
         try:
             self._refresh_matrix()

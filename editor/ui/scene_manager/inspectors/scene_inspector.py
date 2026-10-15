@@ -22,7 +22,9 @@ from core.history import (
     RemoveListItemCmd, SetSceneModeCmd,
 )
 from core.command_dispatcher import get_dispatcher
+from ui.common.deferred_writes import schedule_save
 from ui.common.theme import C, T, QSS
+from ui.common.unit_spin import UnitSpin
 from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import W, ScriptPickerPopup, NotesEdit, CollapsibleCard
 from ui.common.labels import label
@@ -318,9 +320,9 @@ class SceneInspector(QWidget):
             body=label("sceneinsp.transition_tip"),
         ))
         self._combo_trans.currentIndexChanged.connect(self._on_transition_kind)
-        self._spin_trans = QSpinBox()
+        self._spin_trans = UnitSpin()
         self._spin_trans.setRange(1, 255)
-        self._spin_trans.setFixedWidth(60)
+        self._spin_trans.setFixedWidth(84)
         self._spin_trans.setSuffix(label("sceneinsp.frames_suffix"))
         self._spin_trans.setFont(QFont(T.MONO, T.SM))
         self._spin_trans.setStyleSheet(QSS.spinbox)
@@ -800,9 +802,9 @@ class SceneInspector(QWidget):
             # qu'on vient d'écrire est re-détecté comme « modifié en externe »,
             # ce qui recharge la scène et RECONSTRUIT l'inspecteur — détruisant
             # le widget en cours d'interaction (ex. le QDoubleSpinBox de vitesse
-            # d'un BG sous la molette) → crash. Cf. dispatcher._save_scene.
-            with get_dispatcher().suspended():
-                self._project.save_scene(self._scene)
+            # d'un BG sous la molette) → crash. Cf. dispatcher._save_scene. `schedule_save` suspend le watcher, et
+            # l'écriture part après un silence : un champ qu'on tourne passe ici à chaque cran.
+            schedule_save(self._project.scenes, self._scene)
 
     def _on_layer_image(self, layer, name: str):
         """Un BackgroundImage (nom) a été choisi pour un layer — l'image existe
@@ -1433,8 +1435,9 @@ class SceneInspector(QWidget):
         self.changed.emit()
 
     def _persist(self):
+        # Un champ qu'on tourne passe ici à chaque cran : la scène s'écrit après un silence (cf. `deferred_writes`).
         if self._project and self._scene:
-            get_dispatcher().save_scene()
+            schedule_save(self._project.scenes, self._scene)
 
     def _set_scene_field(self, field: str, value, extra_persist=None):
         """Pousse un SetFieldCmd undoable sur un champ scalaire de la scène

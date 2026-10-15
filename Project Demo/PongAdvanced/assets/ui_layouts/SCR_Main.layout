@@ -6,7 +6,7 @@
   "target": "",
   "elements": [
     {
-      "kind": "text",
+      "kind": "textbox",
       "name": "txt_press_start",
       "parent": "",
       "visible": true,
@@ -26,7 +26,7 @@
       "preview_is_literal": false
     },
     {
-      "kind": "text",
+      "kind": "textbox",
       "name": "txt_language_selection",
       "parent": "",
       "visible": true,

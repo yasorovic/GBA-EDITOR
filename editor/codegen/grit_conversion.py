@@ -25,7 +25,9 @@ from core.models.sprite import SpriteAsset
 from core.models.background import BackgroundLayer
 from core.project import Project
 from core.diagnostic import build_error, build_warning
-from core.music_structure import wav_boundaries, wav_section_orders
+from core.models.audio import Jingle
+from core.module_trim import cut_orders, is_order_cut, order_of
+from core.music_structure import wav_boundaries, wav_cut, wav_section_orders
 from core.wav_module import encode_music_for_build
 # `sym` importée sous le nom `c_sym` : « sym » est un nom de variable locale
 # très courant dans la génération (`sym = bg_layer_sym(...)`), et une locale
@@ -609,7 +611,7 @@ def referenced_sound_names(p: Project) -> tuple[set[str], set[str]]:
     dynamiques » laissé ouvert pour le graphe des scènes (ROADMAP v0.12) ne se
     pose pas ici, et aucun drapeau « garde-le quand même » n'est nécessaire.
 
-    Cinq sources, parce qu'un son se cite de cinq façons :
+    Six sources, parce qu'un son se cite de six façons (la sixième, ⑥, est plus bas) :
       ① un littéral d'appel — `sfx:play("GOAL")`, `music:play("Dreamy DX")` ;
       ② un `SoundFxComponent` posé sur un acteur ou un prefab, que
          `self:play_sfx()` joue sans jamais nommer le son dans le script ;
@@ -677,6 +679,16 @@ def referenced_sound_names(p: Project) -> tuple[set[str], set[str]]:
                     name = getattr(fr, "direct_sfx_name", "") or ""
                     if name:
                         sfx_names.add(name)
+
+    # ⑥ Les repères d'une musique (`Music.cues`) : un effet ou un jingle NOMMÉ, direct, comme ⑤. Les repères qui visent une
+    # ACTION de boîte ne nomment rien — ③ a déjà gardé ce que les états de la boîte désignent.
+    from core.models.audio import CUE_JINGLE, CUE_SFX
+    for music in [*getattr(p, "music", []), *getattr(p, "jingles", [])]:
+        for cue in getattr(music, "cues", []) or []:
+            if cue.kind == CUE_SFX and cue.target:
+                sfx_names.add(cue.target)
+            elif cue.kind == CUE_JINGLE and cue.target:
+                music_names.add(cue.target)
 
     return sfx_names, music_names
 
@@ -826,7 +838,8 @@ class MmutilAudio:
                 # Nommé d'après l'ASSET : deux musiques sur le même `.wav` (réglées autrement) ne se marchent pas dessus.
                 dst = p.build_dir / "music" / f"{m.name}.xm"
                 try:
-                    size = encode_music_for_build(ap, dst, m.sample_rate, wav_boundaries(m))
+                    trim, fades = wav_cut(m)
+                    size = encode_music_for_build(ap, dst, m.sample_rate, wav_boundaries(m), trim, fades)
                 except ValueError as e:
                     self._emit("diagnostic", build_error(f"\"{m.name}\": {e}", "music"))
                     return False
@@ -835,6 +848,18 @@ class MmutilAudio:
                     f", {m.sample_rate} Hz" if m.sample_rate else "")
                 self._emit("log_line",
                            f"[music] \"{m.name}\" wav -> module  ({size} bytes in ROM{detail})")
+                ap = dst
+            elif isinstance(m, Jingle) and is_order_cut(m):
+                # Un jingle en module coupé aux ordres : le module que la console jouera, écrit dans le dossier de build
+                # (le fichier de `assets/` n'est jamais réécrit), nommé d'après l'ASSET comme le WAV ci-dessus.
+                dst = p.build_dir / "music" / f"{m.name}{ap.suffix.lower()}"
+                try:
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    dst.write_bytes(cut_orders(ap.read_bytes(), *order_of(m)))
+                except (ValueError, OSError) as e:
+                    self._emit("diagnostic", build_error(f"\"{m.name}\": {e}", "music"))
+                    return False
+                self._emit("log_line", f"[music] \"{m.name}\" module cut to orders {order_of(m)[0]}–{order_of(m)[1] or 'end'}")
                 ap = dst
             music_files.append(relative_arg(ap, p.build_dir))
         all_files = (

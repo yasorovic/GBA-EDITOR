@@ -2770,10 +2770,10 @@ def generate_main(
             "    if(g_mtr_mode == 3){",
             "        g_mtr_i++;",
             "        if(g_mtr_i >= g_mtr_n){",
-            "            mmSetModuleVolume((mm_word)g_mtr_vol);",
+            "            music_write_volume(g_mtr_vol);",
             "            g_mtr_mode = 0;",
             "        } else {",
-            "            mmSetModuleVolume((mm_word)(g_mtr_vol * g_mtr_i / g_mtr_n));",
+            "            music_write_volume((g_mtr_vol * g_mtr_i / g_mtr_n));",
             "        }",
             "        return;",
             "    }",
@@ -2783,7 +2783,7 @@ def generate_main(
             "            mmStop(); g_music_cur = -1; g_mloop_end = 0;",
             "            g_mtr_mode = 0;",
             "        } else {",
-            "            mmSetModuleVolume((mm_word)(g_mtr_vol * (g_mtr_n - g_mtr_i) / g_mtr_n));",
+            "            music_write_volume((g_mtr_vol * (g_mtr_n - g_mtr_i) / g_mtr_n));",
             "        }",
             "        return;",
             "    }",
@@ -2794,18 +2794,18 @@ def generate_main(
             "        int half = g_mtr_n / 2;",
             "        g_mtr_i++;",
             "        if(g_mtr_i < half){",
-            "            mmSetModuleVolume((mm_word)(g_mtr_vol * (half - g_mtr_i) / half));",
+            "            music_write_volume((g_mtr_vol * (half - g_mtr_i) / half));",
             "        } else if(g_mtr_i == half){",
             "            mmStart((mm_word)g_mtr_id, (mm_pmode)music_mode(g_mtr_id, g_mtr_loop));",
             "            music_apply(g_mtr_id);",
-            "            mmSetModuleVolume(0);",
+            "            music_write_volume(0);",
             "        } else if(g_mtr_i >= g_mtr_n){",
-            "            mmSetModuleVolume((mm_word)g_mtr_vol);",
+            "            music_write_volume(g_mtr_vol);",
             "            g_music_vol = g_mtr_vol;",
             "            g_mtr_mode = 0;",
             "        } else {",
             "            int k = g_mtr_i - half, n = g_mtr_n - half;",
-            "            mmSetModuleVolume((mm_word)(g_mtr_vol * k / n));",
+            "            music_write_volume((g_mtr_vol * k / n));",
             "        }",
             "        return;",
             "    }",
@@ -2822,7 +2822,7 @@ def generate_main(
             "            mmStart((mm_word)g_mtr_id, (mm_pmode)music_mode(g_mtr_id, g_mtr_loop));",
             "            mmPosition(pat);",
             "            music_apply(g_mtr_id);",
-            "            mmSetModuleVolume((mm_word)g_mtr_vol);",
+            "            music_write_volume(g_mtr_vol);",
             "            g_music_vol = g_mtr_vol;",
             "            g_mtr_mode = 0;",
             "        } else {",
@@ -2924,8 +2924,10 @@ def generate_main(
     if has_sound and soundbank_h.exists():
         L.append("        mmFrame();   /* maxmod.h doc: _must_ be called every frame "
                  "*/")
+        L.append("        music_jingle_tick();")        # avant le pas des fondus : ils écrivent le volume avec le duck déjà à jour
         L.append("        music_transition_tick();")
         L.append("        music_loop_tick();")
+        L.append("        music_cue_tick();")          # après la boucle : la fin d'une section de boucle n'est jamais jouée
     L += [
         "        _g_frame++;",
         "        scanKeys();",

@@ -407,6 +407,7 @@ class ShortcutsPanel(QWidget):
     _CONTEXT_KEYS = {
         "global": "settings.shortcuts.context.global",
         "scene_canvas": "settings.shortcuts.context.scene_canvas",
+        "background_editor": "settings.shortcuts.context.background_editor",
         "sprite_editor": "settings.shortcuts.context.sprite_editor",
         "sound_mixer": "settings.shortcuts.context.sound_mixer",
         "scene_manager": "settings.shortcuts.context.scene_manager",
@@ -443,6 +444,7 @@ class ShortcutsPanel(QWidget):
         "canvas.tool_collision": "settings.shortcuts.action.canvas.tool_collision",
         "canvas.tool_inpaint": "settings.shortcuts.action.canvas.tool_inpaint",
         "canvas.tool_ui": "settings.shortcuts.action.canvas.tool_ui",
+        "background.tool_brush": "settings.shortcuts.action.background.brush",
         "sprite.flip_h": "settings.shortcuts.action.sprite.flip_h",
         "sprite.flip_v": "settings.shortcuts.action.sprite.flip_v",
         "sound.play_pause": "settings.shortcuts.action.sound.play_pause",

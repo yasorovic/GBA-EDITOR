@@ -317,6 +317,7 @@ def transpile_all(
                    if hasattr(p, "audio_modules") else {})
     # Parmi les modules ci-dessus, ceux qui vivent dans assets/jingles/.
     jingle_names = [j.name for j in getattr(p, "jingles", [])]
+    jingle_policy = {j.name: j.runtime_policy() for j in getattr(p, "jingles", [])}
     # Les noms de section des musiques : l'index est la constante `MSEC_*`, et la même liste clé
     # la table de main.c (cf. core/music_structure.music_section_names).
     from core.music_structure import music_section_names
@@ -622,6 +623,7 @@ def transpile_all(
             sfx_component_name = sfx_comp_name,
             sfx_volumes   = sfx_volumes,
             music_info    = music_info,
+            jingle_policy = jingle_policy,
             sound_box_states   = _snd_index,
             jingle_box_states  = _jgl_index,
             music_box_triggers = _trigger_index,
@@ -757,6 +759,7 @@ def transpile_all(
             sfx_component_name = pf_sfx_comp_name,
             sfx_volumes   = sfx_volumes,
             music_info    = music_info,
+            jingle_policy = jingle_policy,
             sound_box_states   = _snd_index,
             jingle_box_states  = _jgl_index,
             music_box_triggers = _trigger_index,
@@ -826,6 +829,7 @@ def transpile_all(
             scene_names   = _scene_names,
             sfx_volumes   = sfx_volumes,
             music_info    = music_info,
+            jingle_policy = jingle_policy,
             sound_box_states   = _snd_index,
             jingle_box_states  = _jgl_index,
             music_box_triggers = _trigger_index,
@@ -941,6 +945,7 @@ def transpile_all(
             scene_names   = _scene_names,
             sfx_volumes   = sfx_volumes,
             music_info    = music_info,
+            jingle_policy = jingle_policy,
             sound_box_states   = _snd_index,
             jingle_box_states  = _jgl_index,
             music_box_triggers = _trigger_index,

@@ -22,6 +22,7 @@ from __future__ import annotations
 from ui.common.labels import label
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional
 
 import sys
@@ -33,14 +34,15 @@ from PyQt6.QtCore import (
 )
 from PyQt6.QtMultimedia import QAudioFormat, QAudioSink, QMediaDevices
 
-from core.engine_emulation.module_model import load_module
+from core.engine_emulation.module_model import load_module, parse_module
+from core.module_trim import cut_orders, order_of
 from core.engine_emulation.module_render import render_module_detailed, GBA_MIX_RATE
 from core.engine_emulation.module_stream import StreamTrack
 from core.engine_emulation.music_deck import MusicDeck, Track, MODULE_FULL
 from core.engine_emulation.xm_file import parse_xm
-from core.models.audio import Jingle, Music, Sfx, volume_to_module
-from core.sfx_render import preview_file
-from core.music_structure import music_info_row, wav_boundaries
+from core.models.audio import Jingle, Music, PAN_CENTER, Sfx, panning_to_hardware, volume_to_module
+from core.sfx_render import preview_file, varied_pitch
+from core.music_structure import VBLANK_HZ, jingle_cue_frames, music_cue_rows, music_info_row, wav_boundaries, wav_cut
 from core.wav_module import effective_rate, wav_to_xm
 from core.models.sound_box import TRANSITION_CUT
 
@@ -51,16 +53,25 @@ _SINK_BUFFER_SECONDS = 0.05      # le tampon de la carte son : plus court, le sc
 _SCOPE_TAIL = 8192               # trames gardées derrière le deck pour l'oscilloscope : de quoi couvrir l'avance sur l'oreille
 
 
-def load_playable(path: Path, wav: bool, rate: int, bounds: tuple):
-    """Le module que le build écrirait pour ce fichier : un module tracker tel quel, un WAV encapsulé."""
-    return parse_xm(wav_to_xm(path, effective_rate(rate), bounds)) if wav else load_module(path)
+def load_playable(path: Path, wav: bool, rate: int, bounds: tuple, pan: int = PAN_CENTER,
+                  trim: tuple = (0, 0), fades: tuple = (0, 0), orders: tuple = (0, 0)):
+    """Le module que le build écrirait pour ce fichier : un module tracker tel quel, un WAV encapsulé. `pan` : le
+    panoramique que l'aperçu d'un effet donne à l'échantillon (le build n'en donne pas) ; un module tracker a les siens.
+    `trim` et `fades` : la plage gardée et les fondus cuits d'une piste WAV (cf. `music_structure.wav_cut`), les mêmes que le build.
+    `orders` : la plage d'ordres d'un jingle en module, coupée par la MÊME fonction que le build (cf. `core/module_trim`)."""
+    if wav:
+        return parse_xm(wav_to_xm(path, effective_rate(rate), bounds, pan, trim, fades))
+    if orders != (0, 0):
+        return parse_module(cut_orders(path.read_bytes(), *orders))
+    return load_module(path)
 
 
 def render_track(path: Path, wav: bool, rate: int, bounds: tuple, tempo_q: int, pitch_q: int,
+                 pan: int = PAN_CENTER, trim: tuple = (0, 0), fades: tuple = (0, 0), orders: tuple = (0, 0),
                  checkpoint=None) -> Track:
     """Le rendu entier d'un fichier, sans rien d'autre : ni Qt, ni cache, ni asset. `checkpoint` : cf.
     `render_module_detailed`."""
-    mod = load_playable(path, wav, rate, bounds)
+    mod = load_playable(path, wav, rate, bounds, pan, trim, fades, orders)
     rendered = render_module_detailed(
         mod, GBA_MIX_RATE, (tempo_q or MODULE_FULL) / MODULE_FULL, (pitch_q or MODULE_FULL) / MODULE_FULL,
         checkpoint)
@@ -126,6 +137,7 @@ class _AudioOutput(QObject):
         self._timer: Optional[QTimer] = None
         # Publiés pour l'interface, qui ne touche pas à la carte son depuis son thread.
         self.queued_frames = 0          # tiré du deck mais pas encore joué
+        self.published = False          # `queued_frames` a été mesuré depuis l'ouverture (avant, il vaut 0 par défaut, pas par mesure)
         self.active = False
 
     @pyqtSlot(float)
@@ -145,6 +157,7 @@ class _AudioOutput(QObject):
         self._timer.setInterval(5)
         self._timer.timeout.connect(self._publish)
         self._timer.start()
+        self.published = False
         self.active = True
 
     @pyqtSlot()
@@ -192,6 +205,7 @@ class _AudioOutput(QObject):
         if self._sink is not None and self._device is not None:
             played = int(self._sink.processedUSecs() * GBA_MIX_RATE / 1_000_000)
             self.queued_frames = max(0, self._device.pulled_frames - played)
+            self.published = True
 
 
 class BoxPlayer(QObject):
@@ -228,6 +242,13 @@ class BoxPlayer(QObject):
         self._previewed = None       # (asset, section) que l'aperçu joue, ou None
         self._hold = None            # (seconde, échantillon d'atterrissage) : la tête s'affiche là tant que le saut ne s'entend pas
         self._last_seek = None       # (ordre, ligne) où le dernier saut a posé la tête : un glisser n'en relance pas le même
+        self._original_rate = False  # écoute A/B d'un effet : le fichier à son propre taux, sans le taux de la ROM
+
+    def set_original_rate(self, on: bool) -> None:
+        """Écoute A/B du taux (cf. `SfxEditor`) : les effets se rendent au taux de leur FICHIER au lieu de celui du build,
+        pour juger ce que le rééchantillonnage leur coûte. Ne change que l'aperçu ; les autres réglages (découpe, fondus,
+        hauteur) s'appliquent toujours."""
+        self._original_rate = bool(on)
 
     # ── Chargement ────────────────────────────────────────────────
 
@@ -325,6 +346,9 @@ class BoxPlayer(QObject):
         section pour boucle par défaut — le même chemin que `music:set_section` à l'exécution.
         """
         played = replace(asset, loop_section=section.name) if section is not None else asset
+        if isinstance(asset, Sfx) and asset.pitch_variation:
+            # Chaque ▶ d'un effet à variation tire sa hauteur, comme `sfx_play` à chaque lecture sur la console.
+            played = replace(asset, pitch=varied_pitch(asset))
         track = self._live_track(project, played)
         if track is None:
             return False
@@ -338,6 +362,9 @@ class BoxPlayer(QObject):
         self._previewed = (asset, section)
         self._hold = None
         self._deck.play(track, volume_to_module(asset.volume), loop, start_at)
+        self._deck.set_cues(self._cue_voices(project, asset))
+        if isinstance(asset, Jingle):                   # ses repères sont en temps depuis son début : des voix à retard
+            self._deck.start_voices(self._jingle_cue_voices(project, asset))
         self.track_changed.emit(asset.name, loop)
         return True
 
@@ -411,7 +438,8 @@ class BoxPlayer(QObject):
             return None
         _path, _key, params, (start, end, fade_in, fade_out) = prepared
         try:
-            mod = load_playable(params["path"], params["wav"], params["rate"], params["bounds"])
+            mod = load_playable(params["path"], params["wav"], params["rate"], params["bounds"], params["pan"],
+                                params["trim"], params["fades"])
         except Exception as exc:
             self.message.emit(label('boxplay.name_illisible_exc', name=asset.name, exc=exc))
             return None
@@ -458,9 +486,13 @@ class BoxPlayer(QObject):
         encore joué."""
         frame = self._deck.position
         if self._output is not None:
+            if self._output.active and not self._output.published:
+                return 0                   # la carte son vient de s'ouvrir : rien ne s'entend encore, le deck a déjà tiré devant
             frame -= self._output.queued_frames
-        if frame < 0:                      # le deck a rebouclé, l'oreille pas encore
-            frame += track.pcm.shape[0]
+        if frame < 0:
+            if isinstance(track, StreamTrack):
+                return 0                   # un rendu en direct ne reboucle jamais en arrière : c'est le son de la piste PRÉCÉDENTE qui finit de jouer
+            frame += track.pcm.shape[0]    # le deck a rebouclé, l'oreille pas encore
         return max(0, frame)
 
     @property
@@ -506,6 +538,7 @@ class BoxPlayer(QObject):
         self._previewed = None
         self._current = name
         self.state_changed.emit(name)
+        self._deck.set_cues({})
 
         track = self._track_of(st)
         volume = volume_to_module(st.level)
@@ -523,7 +556,56 @@ class BoxPlayer(QObject):
             self._deck.cut_to(track, volume, loop)
         else:
             self._deck.fade_to(track, volume, frames, loop)
+        music = self._project.music.get(st.music)
+        if not transition and music is not None:      # un repère suit sa musique ; au fondu, la piste suivante n'est pas encore la courante
+            self._deck.set_cues(self._cue_voices(self._project, music))
         self.track_changed.emit(st.music, loop)
+
+    # ── Les repères d'une musique ─────────────────────────────────
+
+    def _cue_voices(self, project, asset) -> dict:
+        """`{ordre: [(pcm, gain)]}` : ce que chaque repère de la musique fait entendre, rendu d'avance. Les positions
+        viennent de `music_cue_rows`, la fonction du build ; les sons, du MÊME rendu que l'aperçu d'un effet ou d'un jingle.
+        Un jingle d'aperçu se mixe tel quel : sa politique envers la musique (duck, pause) ne s'écoute pas ici."""
+        if isinstance(asset, (Sfx, Jingle)) or not getattr(asset, "cues", None):
+            return {}
+        cues: dict = {}
+        for order, cue in music_cue_rows(asset, project.asset_abs(asset.asset) if asset.asset else None):
+            cues.setdefault(order, []).extend(self._cue_voice(project, cue))
+        return cues
+
+    def _jingle_cue_voices(self, project, jingle) -> list:
+        """Les sons des repères d'un jingle : `(pcm, gain, retard)`, le retard en échantillons depuis son début. Mêmes
+        positions que la ROM (`jingle_cue_frames`, en images) ramenées en échantillons du mixeur."""
+        voices = []
+        for frame, cue in jingle_cue_frames(jingle):
+            voice = self._cue_voice(project, cue, nested=False)
+            voices += [(pcm, gain, round(frame / VBLANK_HZ * GBA_MIX_RATE)) for pcm, gain, *_ in voice]
+        return voices
+
+    def _cue_voice(self, project, cue, nested: bool = True) -> list:
+        """Les sons d'un repère : `[(pcm, gain[, retard])]`, vide s'il ne vise rien de résolu (le validateur le dit). Un
+        jingle lancé par un repère de musique emporte les siens, retardés de leur temps dans le jingle."""
+        from core.models.audio import CUE_JINGLE, CUE_JINGLE_ACTION, CUE_SFX, CUE_SOUND_ACTION
+        target = cue.target
+        if cue.kind in (CUE_SOUND_ACTION, CUE_JINGLE_ACTION):
+            # La boîte dit vers quoi pointe l'action : sa première par nom, dans son état de départ (cf. `sound_emit.collect`).
+            boxes = sorted(project.sound_boxes if cue.kind == CUE_SOUND_ACTION else project.jingle_boxes,
+                           key=lambda b: b.name)
+            box = boxes[0] if boxes else None
+            state = next((st for st in box.states if st.name == box.start), box.states[0] if box.states else None) if box else None
+            target = (state.mapping.get(target, "") if state else "") or ""
+        sfx_like = cue.kind in (CUE_SFX, CUE_SOUND_ACTION)
+        asset = (project.sfx if sfx_like else project.jingles).get(target) if target else None
+        if asset is None or not asset.asset:
+            return []
+        track = self._render_file(project, asset, asset.name)
+        if track is None or track.pcm.shape[0] == 0:
+            return []
+        voices = [(track.pcm, volume_to_module(asset.volume))]
+        if nested and isinstance(asset, Jingle):
+            voices += self._jingle_cue_voices(project, asset)
+        return voices
 
     # ── Rendu des modules ─────────────────────────────────────────
 
@@ -566,9 +648,15 @@ class BoxPlayer(QObject):
         if path is None or not path.exists():
             self.message.emit(label('boxplay.tat_name_fichier_manquant', name=owner))
             return None
+        pan = PAN_CENTER
         if isinstance(asset, Sfx):
-            # Un effet s'écoute découpé et au taux du build : le MÊME rendu que la ROM (cf. core/sfx_render).
-            path = preview_file(path, asset, project.settings)
+            # Un effet s'écoute découpé et au taux du build : le MÊME rendu que la ROM (cf. core/sfx_render) ; et placé
+            # dans le champ stéréo comme `mmEffectPanning` le place (le mixeur de maxmod règle un volume gauche et un droit).
+            if self._original_rate:
+                path = preview_file(path, replace(asset, sample_rate=0), SimpleNamespace(sfx_sample_rate=0))
+            else:
+                path = preview_file(path, asset, project.settings)
+            pan = panning_to_hardware(asset.panning)
         # Les réglages de la musique, lus par la MÊME fonction que le build : un jingle
         # n'en applique aucun (il joue sur l'autre couche), un effet n'en a pas.
         is_music = isinstance(asset, Music) and not isinstance(asset, Jingle)
@@ -579,8 +667,13 @@ class BoxPlayer(QObject):
         # Un WAV est joué comme le build l'écrit : le MÊME module (taux, segments, quantification à 8 bits),
         # rendu par le même chemin qu'un module tracker.
         bounds = tuple(wav_boundaries(asset)) if is_music and wav else ()
-        key = (path, path.stat().st_mtime_ns, tempo_q, pitch_q, rate, bounds)
-        params = dict(path=path, wav=wav, rate=rate, bounds=bounds, tempo_q=tempo_q, pitch_q=pitch_q)
+        # La plage gardée et, pour un jingle, ses fondus cuits : lus par la MÊME fonction que le build.
+        trim, fades = wav_cut(asset) if wav and isinstance(asset, Music) else ((0, 0), (0, 0))
+        # La plage d'ordres d'un jingle en module : lue par la MÊME fonction que le build.
+        orders = order_of(asset) if isinstance(asset, Jingle) and not wav else (0, 0)
+        key = (path, path.stat().st_mtime_ns, tempo_q, pitch_q, rate, bounds, pan, trim, fades, orders)
+        params = dict(path=path, wav=wav, rate=rate, bounds=bounds, tempo_q=tempo_q, pitch_q=pitch_q, pan=pan,
+                      trim=trim, fades=fades, orders=orders)
         return path, key, params, (start, end, fade_in, fade_out)
 
     def _remember(self, key, track: Track) -> None:

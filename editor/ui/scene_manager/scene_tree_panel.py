@@ -38,7 +38,8 @@ from core.history import (
     get_history, AddListItemCmd, RemoveListItemCmd, UILayoutOrderCmd,
     DeleteInterfaceCmd, SceneActorOrderCmd, SetFieldCmd,
 )
-from core.models.ui_region import KIND_CONTAINER, KIND_LIST, KIND_TEXT, KIND_IMAGE
+from core.models.ui_region import (
+    KIND_CONTAINER, KIND_LIST, KIND_TEXT, KIND_TEXTBOX, KIND_IMAGE, KINDS_ASSEMBLY)
 from core import disk_locate
 from ui.common.locate_bus import get_locate_bus
 from core.scene_tree_state import SceneTreeState
@@ -75,12 +76,31 @@ def _ui_element_member(layout, element) -> str:
 # Icône par type d'élément UI (la couleur reste celle de la famille Interface —
 # le type se lit à la FORME, cf. project_theme_gba_redesign).
 _UI_ELEM_ICON = {KIND_CONTAINER: "ui_container", KIND_LIST: "ui_list",
-                 KIND_TEXT: "ui_text", KIND_IMAGE: "ui_image"}
+                 KIND_TEXT: "ui_text", KIND_TEXTBOX: "ui_textbox",
+                 KIND_IMAGE: "ui_image"}
 _UI_ELEM_LABEL = {KIND_CONTAINER: "container", KIND_LIST: "list",
-                  KIND_TEXT: "text", KIND_IMAGE: "image"}
-# Les types proposés à la création, dans l'ordre où l'auteur les rencontre.
+                  KIND_TEXT: "text", KIND_TEXTBOX: "textbox", KIND_IMAGE: "image"}
+# Les types proposés à la création : les briques de base, puis les assemblages.
 _UI_ELEM_ADD = ((KIND_TEXT, "common.text"), (KIND_CONTAINER, "common.container"),
-                (KIND_LIST, "common.list"), (KIND_IMAGE, "common.image"))
+                (KIND_IMAGE, "common.image"),
+                (KIND_TEXTBOX, "common.textbox"), (KIND_LIST, "common.list"))
+KINDS_ALL = tuple(k for k, _ in _UI_ELEM_ADD)
+
+
+def _add_kind_actions(menu, kinds, on_create) -> None:
+    """Remplit un menu d'ajout : briques d'abord, assemblages après un titre.
+
+    Un seul endroit pour la distinction que montre le menu, qu'on ajoute à la
+    racine d'une interface ou dans un parent."""
+    started = False
+    for kind, lbl_key in (kl for kl in _UI_ELEM_ADD if kl[0] in kinds):
+        if kind in KINDS_ASSEMBLY and (not started or kind == KINDS_ASSEMBLY[0]):
+            menu.addSection(label("common.assemblies"))
+        elif not started:
+            menu.addSection(label("common.bricks"))
+        started = True
+        act = menu.addAction(_ico(_UI_ELEM_ICON[kind], COLOR_UI), label(lbl_key))
+        act.triggered.connect(lambda _, k=kind: on_create(k))
 
 
 def _lua_handle(node_type: str, obj) -> str:
@@ -97,7 +117,7 @@ def _lua_handle(node_type: str, obj) -> str:
         return f'camera:switch("{obj.name}")'
     if node_type == T_UI_ELEM:
         kind = getattr(obj, "kind", "")
-        if kind == KIND_TEXT:
+        if kind in (KIND_TEXT, KIND_TEXTBOX):
             return f'interface:get("{obj.name}"):draw(…)'
         if kind == KIND_IMAGE:
             return f'interface:get("{obj.name}").state = …'
@@ -853,10 +873,8 @@ class _ActiveSceneTree(_Tree):
             layout = item.data(0, _ROLE_OBJ)
             add = menu.addMenu(label("scttree.add_widget"))
             add.setFont(QFont(T.UI, T.MD))
-            for kind, lbl_key in _UI_ELEM_ADD:
-                act = add.addAction(_ico(_UI_ELEM_ICON[kind], COLOR_UI), label(lbl_key))
-                act.triggered.connect(
-                    lambda _, k=kind, lay=layout: self._create_ui_elem(lay, k, ""))
+            _add_kind_actions(add, KINDS_ALL,
+                              lambda k, lay=layout: self._create_ui_elem(lay, k, ""))
             menu.addSeparator()
             self._add_folder_actions(menu, T_UI_LAYOUT, layout)
             menu.addSeparator()
@@ -895,10 +913,8 @@ class _ActiveSceneTree(_Tree):
                 # Ce que CE parent accueille : une liste ne prend que des
                 # textes, ses enfants étant ses rangées. Offrir une image ici
                 # ferait poser un élément que le build ignore ensuite.
-                for kind, lbl_key in (kl for kl in _UI_ELEM_ADD if kl[0] in accepted):
-                    act = sub.addAction(_ico(_UI_ELEM_ICON[kind], COLOR_UI), label(lbl_key))
-                    act.triggered.connect(
-                        lambda _, k=kind, lay=layout, p=el.name: self._create_ui_elem(lay, k, p))
+                _add_kind_actions(sub, accepted,
+                                  lambda k, lay=layout, p=el.name: self._create_ui_elem(lay, k, p))
             menu.addSeparator()
             self.add_rename_action(menu, item, label("scttree.rename"))
             menu.addAction(label("common.delete")).triggered.connect(
@@ -986,7 +1002,7 @@ class _ActiveSceneTree(_Tree):
         if proj is None:
             return
         from core.models.ui_region import (
-            UIContainer, UIList, UIText, UIImage)
+            UIContainer, UIList, UIText, UITextbox, UIImage, PREFILL_TEXT)
         if self._scene is not None and proj.seed_default_ui_palette(self._scene):
             get_dispatcher().save_scene()
         taken = set(layout.element_names()) | set(proj.ui_element_names())
@@ -999,9 +1015,13 @@ class _ActiveSceneTree(_Tree):
         elif kind == KIND_IMAGE:
             el = UIImage(name=unique_name("image", taken),
                          parent=parent_name, x=8, y=8, w=16, h=16)
+        elif kind == KIND_TEXTBOX:
+            el = UITextbox(name=unique_name("textbox", taken),
+                           parent=parent_name, x=8, y=8, w=96, h=32)
         else:
             el = UIText(name=unique_name("text", taken),
-                        parent=parent_name, x=8, y=8, w=80, h=16)
+                        parent=parent_name, x=8, y=8, w=80, h=16,
+                        preview_text=PREFILL_TEXT)
         get_history().push(AddListItemCmd(
             layout.elements, el, persist_fn=self._panel._after_ui_change,
             label=f"New {_UI_ELEM_LABEL.get(kind, kind)} {el.name}"))

@@ -180,6 +180,26 @@ def test_a_second_blank_asset_gets_a_unique_name(tmp_path: Path):
     assert (first.name, second.name) == ("Prefab", "Prefab_2")
 
 
+def test_a_blank_background_is_a_ready_to_paint_gba_canvas(tmp_path: Path):
+    p = _project(tmp_path)
+    _store, bg = blank_assets.build_background(p)
+
+    assert (bg.tiles_w, bg.tiles_h) == (30, 20)
+    assert bg.tileset == ["0" * 64]
+    assert bg.tilemap == [0] * 600
+    assert bg.palettes[0][:2] == [0x0000, 0x7FFF]
+    assert len(bg.palettes[0]) == 16
+
+
+def test_a_blank_background_uses_the_requested_grid_and_palette(tmp_path: Path):
+    p = _project(tmp_path)
+    _store, bg = blank_assets.build_background(p, size=(128, 72), colors=[123] * 16)
+
+    assert (bg.tiles_w, bg.tiles_h) == (16, 9)
+    assert len(bg.tilemap) == 144
+    assert bg.palettes == [[0, *([123] * 15)]]
+
+
 def test_a_new_script_and_a_new_behavior_are_files_that_come_and_go_with_undo(tmp_path: Path):
     from core import lua_scripts
     p = _project(tmp_path)

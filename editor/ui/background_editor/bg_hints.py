@@ -16,10 +16,15 @@ _TITLES = {
 }
 
 _ROWS = {
-    "brush": [(mouse("left_drag"), "hints.bg.paint")],
+    "brush": [(mouse("left_drag"), "hints.bg.paint"), (mouse("right_drag"), "hints.bg.erase")],
     "fill": [(mouse("left_click"), "hints.bg.fill")],
     "rect": [(mouse("left_drag"), "hints.bg.paint_rect")],
-    "eraser": [(mouse("left_drag"), "hints.bg.erase")],
+    "eraser": [(mouse("left_drag"), "hints.bg.erase_all")],
+    # Mode Paint du pinceau : `<outil>_paint`, mêmes outils, geste « poser une couleur ».
+    "brush_paint": [(mouse("left_drag"), "hints.bg.paint_tiles"), (mouse("right_drag"), "hints.bg.erase_tiles")],
+    "fill_paint": [(mouse("left_click"), "hints.bg.fill_tiles")],
+    "rect_paint": [(mouse("left_drag"), "hints.bg.paint_rect_tiles")],
+    "eraser_paint": [(mouse("left_drag"), "hints.bg.erase_all")],
     "crop": [
         (mouse("left_drag"), "hints.bg.crop_adjust"),
         (combo("Shift", mouse("left_drag")), "hints.bg.keep_ratio"),
@@ -38,6 +43,6 @@ _ROWS = {
 def background_hints(context: str) -> Hints:
     rows = list(_ROWS.get(context, []))
     # Les fonds animés posés se déplacent et se retirent quel que soit l'outil.
-    if context in ("brush", "fill", "rect", "eraser"):
+    if context.removesuffix("_paint") in ("brush", "fill", "rect", "eraser"):
         rows += [(label("hints.bg.key_animated_drag"), "hints.bg.move_animated")]
-    return _TITLES.get(context, "bginp.brush"), rows
+    return _TITLES.get(context.removesuffix("_paint"), "bginp.brush"), rows

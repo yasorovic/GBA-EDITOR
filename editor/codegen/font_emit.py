@@ -428,13 +428,13 @@ def layout_texts(p, scene) -> list:
     portant une clé RÉSOLUE. Une clé introuvable n'est pas une inconnue mais un
     non-événement — l'émetteur la signale et n'écrit rien —, d'où l'omission
     plutôt qu'un `None` qui ferait charger la police entière."""
-    from core.models.ui_region import KIND_TEXT
+    from core.models.ui_region import is_text
     if not hasattr(p, "build_texts"):
         return []
     by_key = {t.key: t for t in p.build_texts()}
     out = []
     for _lay, el in p.scene_ui_slots(scene):
-        if getattr(el, "kind", "") != KIND_TEXT:
+        if not is_text(el):
             continue
         t = by_key.get(getattr(el, "text_key", "") or "")
         if t is not None:
@@ -1074,7 +1074,8 @@ def emit_ui_regions_c(regions: list, font_names: list, emit=None,
             f"    {{ {x}, {y}, {w}, {h}, {ALIGNS.index(r.align)}, "
             f"{font_idx}, {1 if target_obj else 0}, {ANCHORS.index(eff_anchor)}, "
             f"{alloc}, {int(getattr(r, 'highlight_color', 0) or 0) & 0xF}, "
-            f"{int(getattr(r, 'text_color', 0) or 0) & 0xF}, {elem} }},"
+            f"{int(getattr(r, 'text_color', 0) or 0) & 0xF}, {elem}, "
+            f"{0 if getattr(r, 'wraps', True) else 1} }},"
             f"  /* {r.name} — {origin} */"
         )
         if target_obj and emit and pl:
@@ -1091,7 +1092,7 @@ def emit_ui_regions_c(regions: list, font_names: list, emit=None,
                 "it will be placed at the screen origin.", "text"))
     L.append(f"const UIRegionInfo g_ui_regions[{max(1, len(rows))}] = {{")
     L += rows or ["    { 0, 0, 240, 32, 0, 255, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, "
-                  "0, -1 },   /* no text */"]
+                  "0, -1, 0 },   /* no text */"]
     L.append("};")
     L.append(f"const int g_ui_region_count = {len(rows)};")
     L.append("")

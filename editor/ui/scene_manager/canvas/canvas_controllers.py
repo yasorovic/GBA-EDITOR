@@ -124,8 +124,8 @@ class UIRegionController(QObject):
         alors sur sa frame. Lui en attribuer un d'office (« le premier du
         projet ») poserait un dessin que personne n'a demandé."""
         from core.models.ui_region import (
-            UIContainer, UIList, UIText, UIImage,
-            KIND_CONTAINER, KIND_LIST, KIND_IMAGE,
+            UIContainer, UIList, UIText, UITextbox, UIImage, PREFILL_TEXT,
+            KIND_CONTAINER, KIND_LIST, KIND_IMAGE, KIND_TEXTBOX,
         )
         from core.models.unique_name import unique_name
         from core.history import get_history, AddListItemCmd
@@ -148,9 +148,13 @@ class UIRegionController(QObject):
             el = UIImage(name=unique_name("image", taken),
                          x=x, y=y, w=w, h=h)
             label = "image"
+        elif kind == KIND_TEXTBOX:
+            el = UITextbox(name=unique_name("textbox", taken),
+                           x=x, y=y, w=w, h=h)
+            label = "textbox"
         else:
             el = UIText(name=unique_name("text", taken),
-                        x=x, y=y, w=w, h=h)
+                        x=x, y=y, w=w, h=h, preview_text=PREFILL_TEXT)
             label = "text"
         # Par l'historique : dessiner un élément est une modification comme une
         # autre, elle doit s'annuler. `_ensure_layout` reste hors historique —

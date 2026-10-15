@@ -152,13 +152,19 @@ class CommandDispatcher(EventEmitter):
     def relink_asset_source(self, family: str, asset, path) -> str:
         """Relie `asset` à un autre fichier source (cf. `core.asset_relink`) et rafraîchit ce qui l'affiche.
         `ValueError` — l'asset inchangé — si le fichier ne convient pas."""
-        from core.asset_relink import relink_source
+        from core.asset_relink import RelinkSourceCmd
+        from core.history import get_history
         if not self._project:
             raise ValueError("no project is open")
+
+        def refresh():
+            self._emit("scene_sprites_changed")
+            self._emit("project_tree_changed")
+
+        # Annulable : Ctrl+Z rend l'asset et sa source d'avant. Le surveillant de fichiers reste suspendu à chaque sens.
+        command = RelinkSourceCmd(self._project, family, asset, path, after=refresh)
         with self.suspended():
-            relink_source(self._project, family, asset, path)
-        self._emit("scene_sprites_changed")
-        self._emit("project_tree_changed")
+            get_history().push(command)
         self._emit("status_message", f"Relinked “{asset.name}” to {Path(path).name}")
         return asset.name
 

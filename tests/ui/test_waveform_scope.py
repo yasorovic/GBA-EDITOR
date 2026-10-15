@@ -120,6 +120,8 @@ def test_dans_le_scope_rien_de_la_frise_ne_se_saisit(qapp):
 class _Deck:
     """Un deck qui rend un compteur : on retrouve chaque trame par sa valeur."""
 
+    playing = True                      # un deck qui joue toujours : le périphérique le lit à chaque paquet (cf. `sound_frames`)
+
     def __init__(self):
         self.n = 0
 

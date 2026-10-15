@@ -95,9 +95,10 @@ def test_un_soundbank_aux_numeros_decales_est_une_erreur(tmp_path):
     header = tmp_path / "soundbank.h"
     header.write_text("#define SFX_BOOM 3\n", encoding="utf-8")
     audio = grit_conversion.MmutilAudio("mmutil", "bin2s", journal, _failing_run_cmd)
-    assert audio._check_ids(header, _sounds("Boom", "Missing")) is False
-    assert journal.says("error", "SFX_BOOM is 3, expected 0")
-    assert journal.says("error", "SFX_MISSING absent de soundbank.h")
+    # Le contrôle lit le RANG des lignes `SFX_*` (plus leur nom, qui venait du fichier) : une seule ligne numérotée 3 pour
+    # deux effets, c'est une numérotation que le code généré citerait de travers.
+    assert audio._number_ids(header, _sounds("Boom", "Missing")) is False
+    assert journal.says("error", "SFX_* lines are numbered [3], expected 0..1")
     assert journal.says("error", "build interrupted")
 
 

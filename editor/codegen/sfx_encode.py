@@ -18,7 +18,8 @@ import wave
 from pathlib import Path
 
 from core.diagnostic import build_warning
-from core.sfx_render import WAV_BITS_OK_BYTES, effective_rate, fade_out_of, is_edited, is_trimmed, write_sfx
+from core.sfx_render import WAV_BITS_OK_BYTES, effective_rate, is_edited, write_sfx
+from core.wav_edit import fade_in_of, fade_out_of, is_trimmed
 
 __all__ = ["effective_rate", "encode_sfx_for_build"]
 
@@ -61,6 +62,8 @@ def encode_sfx_for_build(project, sfx_items: list, emit=None) -> dict[str, Path]
             parts = []
             if trimmed:
                 parts.append(f"trim {sfx.trim_start}–{sfx.trim_end or 'end'} ms")
+            if fade_in_of(sfx):
+                parts.append(f"fade in {fade_in_of(sfx)} fr")
             if fade_out_of(sfx):
                 parts.append(f"fade out {fade_out_of(sfx)} fr")
             if target > 0 and target != src_rate:

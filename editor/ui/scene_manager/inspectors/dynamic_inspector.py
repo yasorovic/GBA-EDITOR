@@ -284,7 +284,7 @@ class DynamicInspector(QWidget):
     # font partie depuis que leur inspecteur n'a plus de champ « Name » : le nom
     # se change là où il s'affiche, comme pour une scène ou un acteur.
     _RENAMABLE = ("scene", "actor", "prefab", "camera", "script_asset",
-                  "ui_text", "ui_container", "ui_list", "ui_image", "ui_element",
+                  "ui_text", "ui_textbox", "ui_container", "ui_list", "ui_image", "ui_element",
                   "ui_layout")
 
     def _set_header(self, kind: str, type_text: str, name_text: str, editable=None):
@@ -422,7 +422,7 @@ class DynamicInspector(QWidget):
         bandeau prend le kind exact (même famille bleue Interface, titre par
         type) et devient l'endroit où le nom se change."""
         from core.models.ui_region import (
-            KIND_CONTAINER, KIND_LIST, KIND_TEXT, KIND_IMAGE)
+            KIND_CONTAINER, KIND_LIST, KIND_TEXT, KIND_TEXTBOX, KIND_IMAGE)
         kind = getattr(element, "kind", KIND_TEXT)
         scene = project.active_scene if project else None
         self._ensure(self._MODE_UI)
@@ -431,6 +431,7 @@ class DynamicInspector(QWidget):
             KIND_CONTAINER: ("ui_container", label('common.container')),
             KIND_LIST:  ("ui_list",  label('common.list')),
             KIND_TEXT:  ("ui_text",  label('common.text')),
+            KIND_TEXTBOX: ("ui_textbox", label('common.textbox')),
             KIND_IMAGE: ("ui_image", label('common.image')),
         }.get(kind, ("ui_element", label('dyninsp.ui_element')))
         self._set_header(header_kind, title, element.name)

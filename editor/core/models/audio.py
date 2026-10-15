@@ -61,7 +61,7 @@ def volume_to_module(percent: int) -> int:
 # l'échelle, mais un décalage autour du centre (ROADMAP v0.8.6).
 
 _RATE_NORMAL = 1024     # mm_sound_effect.rate — facteur 6.10, 1024 = normale
-_PAN_CENTER  = 128      # mmEffectPanning : 0 = gauche, 255 = droite
+PAN_CENTER  = 128      # mmEffectPanning : 0 = gauche, 255 = droite
 _PAN_SIDE    = 127      # ce qu'un côté vaut, depuis le centre
 
 PANNING_MAX = 100       # l'API Lua écrit −100..+100, centrée sur 0
@@ -142,7 +142,7 @@ def pitch_to_rate(percent: int) -> int:
 def panning_to_hardware(panning: int) -> int:
     """−100..+100 → l'échelle de `mmEffectPanning` (0–255, centrée sur 128)."""
     p = max(-PANNING_MAX, min(PANNING_MAX, panning))
-    return _PAN_CENTER + round(p * _PAN_SIDE / PANNING_MAX)
+    return PAN_CENTER + round(p * _PAN_SIDE / PANNING_MAX)
 
 
 # ── Les mêmes conversions, pour une valeur qui n'existe qu'À L'EXÉCUTION ──
@@ -168,7 +168,7 @@ def pitch_to_rate_expr(c_expr: str) -> str:
 
 
 def panning_to_hardware_expr(c_expr: str) -> str:
-    return f"({_PAN_CENTER} + ({c_expr}) * {_PAN_SIDE} / {PANNING_MAX})"
+    return f"({PAN_CENTER} + ({c_expr}) * {_PAN_SIDE} / {PANNING_MAX})"
 
 
 class _MigrateVolumeMixin:
@@ -223,6 +223,13 @@ class Sfx(_MigrateVolumeMixin, Resource):
     # dernières frames. Cuit dans l'échantillon par le build (cf. `core/sfx_render.py`) — rien ne se calcule sur la console ;
     # c'est ce qui évite le clic d'une découpe qui tombe en plein signal.
     fade_out: int = 0
+    # Fondu d'entrée, même règle et même unité : l'effet monte linéairement depuis zéro sur ses premières frames, cuit dans
+    # l'échantillon par le build. Le pendant du fondu de sortie pour une découpe qui commence en plein signal.
+    fade_in: int = 0
+    # Effet PROTÉGÉ : maxmod ne peut jamais lui voler son canal quand les canaux du projet sont tous pris. Sans cette case, un
+    # effet lancé sans référence (`sfx.play("Bip")` posé seul) reste volable — le plus faible cède — ; avec elle, il tient son
+    # canal jusqu'à la fin de son échantillon, quoi que fasse l'appelant. Le build le range dans une table (`sfx_play`).
+    protected: bool = False
 
 
 # La plage du réglage de hauteur d'un effet : deux octaves de chaque côté du fichier. `mm_sound_effect.rate` est un
@@ -339,6 +346,42 @@ class MusicSection:
                    loop=bool(d.get("loop", False)))
 
 
+# ── Les repères d'une musique ─────────────────────────────────────────
+#
+# Un repère déclenche un SON quand la lecture atteint une position du morceau (ROADMAP « Des déclencheurs sur la
+# musique »). Quatre natures, les quatre façons dont l'éditeur de sprites pose déjà un son sur une frame, moins
+# l'appel d'événement (qui n'a pas encore de destinataire : une musique n'a pas d'acteur) :
+#
+#   "sound_action"   une ACTION de SoundBox : l'état courant de la boîte dit vers quel effet elle pointe ;
+#   "jingle_action"  une ACTION de JingleBox, même principe, vers un jingle ;
+#   "sfx"            un effet nommé, direct ;
+#   "jingle"         un jingle nommé, direct.
+#
+# La position est dans l'UNITÉ de la musique, comme une section (`Music.unit`) : un index d'ordre pour un module,
+# des millisecondes pour un WAV. Elle est atteinte à CHAQUE passage — chaque tour d'une boucle la rejoue.
+
+CUE_SOUND_ACTION  = "sound_action"
+CUE_JINGLE_ACTION = "jingle_action"
+CUE_SFX           = "sfx"
+CUE_JINGLE        = "jingle"
+CUE_KINDS = (CUE_SOUND_ACTION, CUE_JINGLE_ACTION, CUE_SFX, CUE_JINGLE)
+# L'ORDRE est le code C de `music_cue_fire` (cf. runtime_codegen/sound_emit).
+
+
+@dataclass
+class MusicCue:
+    position: int = 0
+    kind: str = CUE_SFX
+    target: str = ""           # un nom d'action (SoundBox / JingleBox), d'effet ou de jingle selon `kind`
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "MusicCue":
+        kind = str(d.get("kind", CUE_SFX))
+        return cls(position=int(d.get("position", 0)),
+                   kind=kind if kind in CUE_KINDS else CUE_SFX,
+                   target=str(d.get("target", "")))
+
+
 @dataclass
 class Music(_MigrateVolumeMixin, Resource):
     sidecar_extension = asset_extensions.MUSIC
@@ -361,13 +404,34 @@ class Music(_MigrateVolumeMixin, Resource):
     # WAV seulement : le taux auquel la piste devient un module. 0 = le défaut
     # (`wav_module.WAV_MUSIC_RATE`). Un taux plus bas allège la ROM, au prix des aigus.
     sample_rate: int = 0
+    # WAV seulement : la plage GARDÉE du fichier, en ms depuis son début (même convention qu'un effet, cf. `core/wav_edit.py` :
+    # fin à 0 = jusqu'au bout, les deux à 0 = le fichier entier). Le fichier n'est jamais réécrit : le build et l'aperçu ne
+    # rendent que cette plage. Les SECTIONS d'une musique WAV sont dans le temps de la plage gardée — celui de l'onde qu'on voit
+    # et qu'on entend — et suivent le son quand la plage bouge (cf. `music_structure.retrim`). Un module tracker ne se rogne
+    # pas : ses plages sont des sections en positions d'ordre.
+    trim_start: int = 0
+    trim_end: int = 0
+    # Les sons que la lecture déclenche en atteignant une position (cf. `MusicCue`). Dans l'unité de `unit`, comme les
+    # sections : ils suivent le son quand la plage d'un WAV bouge (`music_structure.retrim`).
+    cues: list = field(default_factory=list)           # list[MusicCue]
 
     @classmethod
     def from_dict(cls, d: dict):
         obj = super().from_dict(d)
         obj.sections = [MusicSection.from_dict(sec) for sec in obj.sections
                         if isinstance(sec, dict)]
+        obj.cues = [MusicCue.from_dict(cue) for cue in obj.cues if isinstance(cue, dict)]
         return obj
+
+    def add_cue(self, position: int, kind: str, target: str) -> "MusicCue":
+        """Pose un repère et le rend ; la liste reste triée par position (l'ordre où l'on les lit, et où le build les émet)."""
+        cue = MusicCue(max(0, int(position)), kind, target)
+        self.cues.append(cue)
+        self.cues.sort(key=lambda c: c.position)
+        return cue
+
+    def remove_cue(self, cue: "MusicCue") -> None:
+        self.cues = [c for c in self.cues if c is not cue]
 
     def section(self, name: str):
         return next((s for s in self.sections if s.name == name), None)
@@ -415,6 +479,12 @@ class Music(_MigrateVolumeMixin, Resource):
 # comme une erreur, il s'entend comme un morceau raté.
 JINGLE_MAX_CHANNELS = 4
 
+# La politique d'un jingle envers la musique. L'ORDRE est le code C de `music_jingle` (0 = mix, 1 = duck, 2 = pause).
+JINGLE_MIX, JINGLE_DUCK, JINGLE_PAUSE = "mix", "duck", "pause"
+JINGLE_POLICIES = (JINGLE_MIX, JINGLE_DUCK, JINGLE_PAUSE)
+JINGLE_DUCK_LEVEL_DEFAULT = 30       # % : assez bas pour qu'une fanfare passe devant, assez haut pour que la musique reste là
+JINGLE_DUCK_RELEASE_DEFAULT = 30     # frames : une demi-seconde
+
 
 @dataclass
 class Jingle(Music):
@@ -427,3 +497,33 @@ class Jingle(Music):
     contrôle demande l'une ou l'autre famille par son nom."""
     sidecar_extension = asset_extensions.JINGLE
     name: str = "jingle"
+    # Ce que devient la MUSIQUE pendant que ce jingle sonne (le jingle a sa propre couche : elle ne s'arrête pas d'elle-même).
+    # `music_policy` : « mix » (elle continue, le défaut — l'ancien comportement), « duck » (elle descend à `duck_level` %
+    # de son volume, puis remonte en `duck_release` frames à la fin du jingle) ou « pause » (elle est suspendue, puis
+    # reprend là où elle s'était arrêtée). La console en tient un seul réglage par jingle : un seul jingle sonne à la fois.
+    music_policy: str = JINGLE_MIX
+    duck_level: int = JINGLE_DUCK_LEVEL_DEFAULT      # pourcentage du volume de la musique, tant que le jingle sonne
+    duck_release: int = JINGLE_DUCK_RELEASE_DEFAULT  # frames, pour que la musique remonte
+    # Un jingle en MODULE se coupe aux positions d'ordre, pas en ms (cf. `core/module_trim.py`) : l'entrée de la table brute
+    # où il commence, et celle où il finit (exclue ; 0 = jusqu'au bout). Le fichier n'est jamais réécrit : le build et
+    # l'aperçu lisent le module coupé. Sans effet sur un WAV, qui a sa propre plage (`trim_start` / `trim_end`).
+    order_start: int = 0
+    order_end: int = 0
+
+    @classmethod
+    def from_dict(cls, d: dict):
+        obj = super().from_dict(d)
+        if obj.music_policy not in JINGLE_POLICIES:           # un sidecar écrit à la main : le défaut, pas un plantage
+            obj.music_policy = JINGLE_MIX
+        obj.duck_level = max(0, min(100, int(obj.duck_level)))
+        obj.duck_release = max(0, min(FADE_MAX_FRAMES, int(obj.duck_release)))
+        obj.order_start, obj.order_end = max(0, int(obj.order_start)), max(0, int(obj.order_end))
+        return obj
+
+    def runtime_policy(self) -> tuple[int, int, int]:
+        """(code, niveau, remontée) tels que `music_jingle` les lit : le niveau sur l'échelle 0–1024 du module, la remontée en
+        frames. Le niveau et la remontée ne valent que pour « duck » : les autres politiques les émettent à leur neutre."""
+        code = JINGLE_POLICIES.index(self.music_policy)
+        if self.music_policy != JINGLE_DUCK:
+            return code, volume_to_module(100), 0
+        return code, volume_to_module(self.duck_level), max(0, min(FADE_MAX_FRAMES, int(self.duck_release)))

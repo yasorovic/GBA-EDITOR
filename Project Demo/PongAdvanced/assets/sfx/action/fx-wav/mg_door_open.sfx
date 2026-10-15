@@ -9,5 +9,7 @@
   "pitch": 100,
   "panning": 0,
   "pitch_variation": 0,
-  "fade_out": 0
+  "fade_out": 0,
+  "fade_in": 0,
+  "protected": false
 }

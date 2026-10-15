@@ -464,7 +464,8 @@ class UIWidgetTool(BaseTool):
     _BORDER = QColor(79, 143, 247, 230)
     # Taille au simple clic, par type — multiples de 8.
     _DEFAULTS = {
-        "text":  (128, 32),    # une boîte de dialogue basse plausible
+        "text":  (96, 16),     # un libellé d'une ligne
+        "textbox": (128, 32),  # une boîte de dialogue basse plausible
         "container": (96, 48),  # un cadre de menu
         "image": (16, 16),     # une icône de HUD ; le sprite choisi la recalera
     }
@@ -526,6 +527,9 @@ class UIWidgetTool(BaseTool):
         if e.button() != Qt.MouseButton.LeftButton:
             return True
         self._anchor = self._snap(pos)
+        if self._kind == "text":
+            # Une chaîne se pose, elle ne se dessine pas : pas de rectangle.
+            return self.on_release(pos, e)
         self._apply_preview(*self._rect(pos))
         return True
 
@@ -539,7 +543,7 @@ class UIWidgetTool(BaseTool):
         if self._anchor is None:
             return True
         x, y, w, h = self._rect(pos)
-        if w <= _BG_TILE and h <= _BG_TILE:      # simple clic
+        if self._kind == "text" or (w <= _BG_TILE and h <= _BG_TILE):   # simple clic
             w, h = self._DEFAULTS.get(self._kind, self._DEFAULTS["text"])
         self._anchor = None
         if self._preview:

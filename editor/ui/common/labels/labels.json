@@ -119,6 +119,7 @@
     "settings.shortcuts.context.scene_canvas": {
       "text": "Scene canvas"
     },
+    "settings.shortcuts.context.background_editor": { "text": "Background Editor" },
     "settings.shortcuts.context.sprite_editor": {
       "text": "Sprite editor"
     },
@@ -212,6 +213,7 @@
     "settings.shortcuts.action.canvas.tool_ui": {
       "text": "UI tool"
     },
+    "settings.shortcuts.action.background.brush": { "text": "Brush tool" },
     "common.copy": {
       "text": "Copy"
     },
@@ -363,18 +365,13 @@
       "text": "Auto (actor)"
     },
     "uiinsp.priority.tip": { "text": "Sets the depth when this element renders as a sprite, which happens when its node follows an actor. Auto inherits the depth of the actor, live." },
-    "uiinsp.text.content_section": {
-      "text": "CONTENT"
-    },
     "uiinsp.text.content_placeholder": {
       "text": "Text drawn by your script…"
     },
     "uiinsp.text.content_tip": { "text": "Without an entry, this previews text:draw(tx, ty, string) and never creates a text-table entry. Choose an entry to edit shared, translatable text." },
-    "uiinsp.text.entry_tip": { "text": "Binds this element to another existing entry, to share one label between several screens." },
     "uiinsp.text.create_entry": { "text": "Create new entry" },
     "uiinsp.text.create_entry_title": { "text": "Create a text entry" },
     "uiinsp.text.create_entry_tip": { "text": "Open the Text editor to create a named, shared and translatable entry." },
-    "uiinsp.text.entry_search": { "text": "Search an entry…" },
     "common.none_paren": {
       "text": "(none)"
     },
@@ -1204,12 +1201,6 @@
     "sndpanel.weight": {
       "text": "In ROM: {kb} KiB  (last build)"
     },
-    "sndpanel.import_rejected_title": {
-      "text": "File not imported"
-    },
-    "sndpanel.import_rejected_text": {
-      "text": "{name}\n\n{reason}"
-    },
     "common.sfx": {
       "text": "SFX"
     },
@@ -1222,12 +1213,6 @@
     "sndpanel.sfx_empty": {
       "text": "Select an SFX"
     },
-    "sndpanel.sfx_import_btn": {
-      "text": "Import WAV…"
-    },
-    "sndpanel.sfx_import_title": {
-      "text": "Import SFX"
-    },
     "sndpanel.sfx_source": {
       "text": "  (source {kb} KiB)"
     },
@@ -1236,14 +1221,23 @@
     },
     "sndpanel.rate_tip": { "text": "Sets the sample rate used when this effect is built. The source file is not modified." },
     "sndpanel.sfx_pitch": { "text": "Pitch" },
-    "sndpanel.sfx_pitch_title": { "text": "Starting pitch" },
-    "sndpanel.sfx_pitch_tip": { "text": "Sets the pitch the effect starts with, as a percentage of the pitch of the file: 100 is the file as it is, 200 one octave above, 50 one octave below. A script call to set_pitch replaces it with an absolute value." },
     "sndpanel.sfx_pan": { "text": "Panning" },
-    "sndpanel.sfx_pan_title": { "text": "Starting panning" },
     "sndpanel.sfx_spread": { "text": "Variation" },
-    "sndpanel.sfx_spread_title": { "text": "Random pitch variation" },
-    "sndpanel.sfx_spread_tip": { "text": "Each time the effect starts, its pitch is drawn at random within this many percent above or below the starting pitch. Zero keeps it identical every time. Makes sounds that repeat — steps, hits, coins — feel natural. A script call to set_pitch replaces the drawn value." },
-    "sndpanel.sfx_pan_tip": { "text": "Sets where the effect starts in the stereo field: −100 is left, 0 the centre, +100 right. A script call to set_panning replaces it." },
+    "sndpanel.policy": { "text": "Music" },
+    "sndpanel.policy_title": { "text": "Music during the jingle" },
+    "sndpanel.policy_tip": { "text": "What happens to the music while this jingle plays. Keeps playing: nothing changes. Lowered: the music drops at once, then climbs back when the jingle ends. Paused: the music waits and resumes where it stopped." },
+    "sndpanel.policy_mix": { "text": "Keeps playing" },
+    "sndpanel.policy_duck": { "text": "Lowered" },
+    "sndpanel.policy_pause": { "text": "Paused" },
+    "sndpanel.duck_level": { "text": "Lowered to" },
+    "sndpanel.duck_level_title": { "text": "Music level" },
+    "sndpanel.duck_level_tip": { "text": "The music's volume while the jingle plays, as a percentage of its own volume. Only used when the music is lowered." },
+    "sndpanel.duck_release": { "text": "Back up in" },
+    "sndpanel.duck_release_title": { "text": "Climb back" },
+    "sndpanel.duck_release_tip": { "text": "How many frames the music takes to climb back to its volume once the jingle ends (60 per second). Zero brings it back at once. Only used when the music is lowered." },
+    "sndpanel.sfx_protected": { "text": "Protected" },
+    "sndpanel.sfx_protected_title": { "text": "Protected effect" },
+    "sndpanel.sfx_protected_tip": { "text": "Keeps the effect's channel until its sample ends, even when every channel of the project is busy. An unprotected effect can lose its channel to a newer one; the weakest is the first to give way. Protected effects use up channels that the music and other effects can no longer take." },
     "sndpanel.music_empty": {
       "text": "Select a track"
     },
@@ -1362,26 +1356,14 @@
     "sprframe.next_frame_tip": { "text": "Stays within the current direction." },
     "sprframe.grid": { "text": "Tile grid" },
     "sprframe.grid_tip": { "text": "Shows the 8×8 pixel GBA tile grid on the frame canvas." },
-    "sprframe.indexed": {
-      "text": "Indexed"
-    },
-    "sprframe.preview_png_tip": { "text": "Shows the compressed sprite with its own palette." },
-    "sprframe.preview_png": { "text": "PNG palette preview" },
-    "sprframe.preview_indexed_tip": { "text": "Recolors the sprite with the active palette of the PALETTE strip, as in the game." },
-    "sprframe.preview_indexed": { "text": "Palette preview" },
     "sprframe.flip_x": { "text": "Flip brush horizontally" },
     "sprframe.flip_y": { "text": "Flip brush vertically" },
     "sprframe.fit": {
       "text": "Fit"
     },
     "sprframe.fit_title": { "text": "Fit to view" },
-    "sprframe.zoom_out": { "text": "Zoom out" },
-    "sprframe.zoom_in": { "text": "Zoom in" },
     "common.no_palette": {
       "text": "No palette"
-    },
-    "sprframe.canvas_title": {
-      "text": "Sprite canvas"
     },
     "sprframe.info": {
       "text": "Tiles={tiles}  Unique={unique}"
@@ -1433,8 +1415,6 @@
     },
     "sprsheet.edit_tip": { "text": "Opens the source PNG in the configured image editor." },
     "sprsheet.edit": { "text": "Edit file" },
-    "sprsheet.zoom_out": { "text": "Zoom out" },
-    "sprsheet.zoom_in": { "text": "Zoom in" },
     "sprsheet.brush": {
       "text": "Brush: {n} tile(s)"
     },
@@ -1879,18 +1859,6 @@
     },
     "win.screen_contract": {
       "text": "'{name}' does not fulfill the ProjectScreen contract (no load_project). The screen will receive no project."
-    },
-    "win.asset_imported": {
-      "text": "{kind} imported: {name}"
-    },
-    "win.asset_misplaced": {
-      "text": "{name} ignored: {folder}/ does not accept {ext} files"
-    },
-    "win.asset_removed": {
-      "text": "{kind} removed: {name}"
-    },
-    "win.asset_renamed": {
-      "text": "{kind} renamed: {old} → {new}"
     },
     "win.asset_reloaded": {
       "text": "{kind} reloaded: {name}"
@@ -2869,7 +2837,7 @@
       "text": "Background finder"
     },
     "bginp.edit_image": {
-      "text": "Edit image…"
+      "text": "Edit .png"
     },
     "bginp.edit_image_tip": { "text": "Opens the source PNG in the configured image editor. A right-click offers another editor." },
     "bginp.crop_tip": { "text": "The handles adjust the area. The image file is never changed." },
@@ -2880,7 +2848,15 @@
     "bginp.resize": {
       "text": "Resize image"
     },
-    "bginp.prep_reset_tip": { "text": "Cancels the crop and resize adjustments." },
+    "bginp.mirror_x_tip": { "text": "Adds a vertical bar. The left side is mirrored onto the right; dragging the arrow handle across the bar keeps the right side instead. Ctrl snaps to 8 px. Applied before compression, so it can change the tile count. The image file is never changed." },
+    "bginp.mirror_x": {
+      "text": "Mirror horizontally"
+    },
+    "bginp.mirror_y_tip": { "text": "Adds a horizontal bar. The top side is mirrored onto the bottom; dragging the arrow handle across the bar keeps the bottom side instead. Ctrl snaps to 8 px. Applied before compression, so it can change the tile count. The image file is never changed." },
+    "bginp.mirror_y": {
+      "text": "Mirror vertically"
+    },
+    "bginp.prep_reset_tip": { "text": "Cancels the crop, resize and mirror adjustments." },
     "bginp.prep_reset": {
       "text": "Restore source image"
     },
@@ -2924,6 +2900,39 @@
     "bgedit.an_lossy": {
       "text": "✗ lossy in 4bpp — {over} tiles to reduce"
     },
+    "bgedit.comp_toggle": { "text": "Compression…" },
+    "bgedit.comp_toggle_tip": { "text": "Shows the settings that reduce the image to what the GBA accepts. It opens by itself when the image does not fit as it is." },
+    "bgedit.save_png": { "text": "Save as PNG" },
+    "bgedit.save_png_tip": { "text": "Bakes the painting and the palette repaints into a PNG in the project's assets, and makes it the source of this background. The palettes keep their banks (indexed PNG, 16 colors per bank). The old source file is left untouched." },
+    "bgedit.save_png_confirm": { "text": "Save this background as a PNG?\nThe painting and the palette repaints are baked into the image, which becomes its source." },
+    "bgedit.save_png_failed": { "text": "The saved PNG did not read back identically. Nothing was changed." },
+    "bgedit.export_png": { "text": "Export to PNG…" },
+    "bgedit.export_png_tip": { "text": "Saves the image as it is displayed to a PNG file of your choice. The background itself is not changed." },
+    "bgedit.export_png_filter": { "text": "PNG image (*.png)" },
+    "bgedit.menu_import": { "text": "Import image" },
+    "bgedit.menu_create_empty": { "text": "Create empty" },
+    "bgedit.compress_apply": { "text": "Compress" },
+    "bgedit.compress_apply_tip": { "text": "Applies the chosen mode and dithering: the image is compressed again. Nothing is compressed until this button is pressed." },
+    "bgedit.compressing": { "text": "Compressing…" },
+    "akind.relink_warn_background": { "text": "Relinking re-imports the image: its crop, size and compression settings are reset, and its color mode is detected again. The painting and the palette repaints are kept.\nRelink anyway?" },
+    "akind.relink_warn_image": { "text": "Relinking re-imports the image: what was derived from the old file (palettes, tiles) is computed again.\nRelink anyway?" },
+    "bgedit.adj_title": { "text": "Image adjustments" },
+    "bgedit.adj_hue": { "text": "Hue" },
+    "bgedit.adj_hue_tip": { "text": "Rotates the colors around the color wheel, in degrees." },
+    "bgedit.adj_saturation": { "text": "Saturation" },
+    "bgedit.adj_saturation_tip": { "text": "Makes the colors more or less vivid. At the minimum the image is gray." },
+    "bgedit.adj_brightness": { "text": "Brightness" },
+    "bgedit.adj_brightness_tip": { "text": "Lightens or darkens the whole image." },
+    "bgedit.adj_contrast": { "text": "Contrast" },
+    "bgedit.adj_contrast_tip": { "text": "Widens or narrows the gap between light and dark areas." },
+    "bgedit.adj_reset": { "text": "Reset adjustments" },
+    "bgedit.adj_reset_tip": { "text": "Puts hue, saturation, brightness and contrast back to neutral." },
+    "bgedit.dither_kind": { "text": "Dithering type" },
+    "bgedit.dither_kind_tip": { "text": "How the color reduction spreads its error. Diffusion follows the image; ordered patterns are regular, so they tile cleanly." },
+    "bgedit.dither_floyd": { "text": "Diffusion (Floyd–Steinberg)" },
+    "bgedit.dither_bayer4": { "text": "Ordered 4×4" },
+    "bgedit.dither_bayer8": { "text": "Ordered 8×8" },
+    "bgedit.dithering_needs_global": { "text": "Needs « Global colors » above Off: without a first color reduction there is no error to spread." },
     "bgedit.comp_title": {
       "text": "4bpp compression"
     },
@@ -3201,6 +3210,25 @@
     "bginp.brush": {
       "text": "Brush"
     },
+    "bginp.tile_brush_tip": { "text": "Paints the selected color of the palette over each 8×8 cell crossed. Right-click restores the original tile." },
+    "bginp.tile_brush_size": { "text": "{size}×{size} px brush" },
+    "bginp.tile_brush_size_tip": { "text": "Paints a {size}×{size} px square aligned to the tile grid." },
+    "bginp.tile_color_transparent": { "text": "Transparent (hides the image)" },
+    "bginp.tile_color_i": { "text": "Color {i} of the palette" },
+    "bginp.mode_inpaint": { "text": "Inpaint (palette)" },
+    "bginp.mode_inpaint_tip": { "text": "Repaints the palette of the tiles crossed. The tiles themselves are not changed. Right-click restores the original palette." },
+    "bginp.mode_paint": { "text": "Paint (color)" },
+    "bginp.mode_paint_tip": { "text": "Paints a layer over the image: a solid tile of the selected color in each cell crossed. Right-click restores the original tile." },
+    "bginp.fill_tip_paint": { "text": "Fills a contiguous area of identical cells with the selected color." },
+    "bginp.rectangle_tip_paint": { "text": "Puts the selected color in every cell of a rectangular area." },
+    "bginp.eraser_tip_paint": { "text": "Removes both the palette repaint and the painted color of each 8×8 cell crossed: the original tile and palette come back." },
+    "hints.bg.fill_tiles": { "text": "Fills the connected cells with the selected color" },
+    "hints.bg.paint_rect_tiles": { "text": "Paints a rectangle with the selected color" },
+    "hints.bg.erase_tiles": { "text": "Restores the original tiles" },
+    "hints.bg.erase_all": { "text": "Restores the original tiles and palettes" },
+    "bginp.preview_computing": { "text": "Preview — compressing…" },
+    "bginp.preview_ready": { "text": "Preview of the compression — not applied" },
+    "bginp.adjust_preview": { "text": "Preview — before compression" },
     "bginp.fill_tip": { "text": "Repaints the palette of a contiguous area of tiles. The image pixels are not changed." },
     "bginp.fill": {
       "text": "Paint bucket"
@@ -3209,7 +3237,7 @@
       "text": "Rectangle"
     },
     "bginp.rectangle_tip": { "text": "Repaints the palette of every tile in a rectangular area. The image pixels are not changed." },
-    "bginp.eraser_tip": { "text": "Restores the original palette of each 8×8 tile crossed." },
+    "bginp.eraser_tip": { "text": "Removes both the palette repaint and the painted color of each 8×8 cell crossed: the original tile and palette come back." },
     "bginp.eraser": {
       "text": "Eraser"
     },
@@ -3355,7 +3383,6 @@
     "uiinsp.priority.note": { "text": "0 is frontmost and 3 is backmost; a number overrides the actor." },
     "uiinsp.text.content_title": { "text": "Text content" },
     "uiinsp.text.content_note": { "text": "Markup is accepted: [speed=…], $var…" },
-    "uiinsp.text.entry_title": { "text": "Text entry" },
     "uiinsp.text.bank_title": { "text": "UI palette bank" },
     "uiinsp.text.bank_note": { "text": "One more bank would cost one more copy of the glyphs in VRAM. This is also the Scene inspector setting: changing it here changes it for the whole scene." },
     "uiinsp.text.ink_title": { "text": "Ink" },
@@ -3440,7 +3467,11 @@
       "text": "Rectangle"
     },
     "cvtool.inpaint_rect_tip": { "text": "Repaints the palette of every tile in a rectangular area. The image pixels are not changed." },
-    "cvtool.text_tip": { "text": "Creates a text area. Its content is written here, or left empty for a script to fill." },
+    "cvtool.text_tip": { "text": "Places a text string at a point. It never wraps. Its content is written here, or left empty for a script to fill." },
+    "cvtool.textbox_tip": { "text": "Creates a text box. The text wraps and aligns inside its rectangle." },
+    "common.textbox": { "text": "Textbox" },
+    "common.bricks": { "text": "Basic blocks" },
+    "common.assemblies": { "text": "Assemblies" },
     "cvtool.container_tip": { "text": "Creates a parent area for grouping elements. It can anchor children and draw a background." },
     "cvtool.list_tip": { "text": "Creates a container the engine can navigate as rows with a cursor and selection." },
     "cvtool.image_tip": { "text": "Creates an image element. A script can switch the state of its sprite." },
@@ -3527,6 +3558,18 @@
     },
     "bgedit.palettes_merged": {
       "text": "⚠ {pre} palettes needed &gt; 16. Merged into {value} (lossy)."
+    },
+    "bgedit.preview_tiles": {
+      "text": "Unique tiles: {value} / {budget}  {gauge}"
+    },
+    "bgedit.preview_palettes": {
+      "text": "Palettes: {value} / 16  {gauge}"
+    },
+    "bgedit.preview_was": {
+      "text": "  (now {was})"
+    },
+    "bgedit.preview_lossy": {
+      "text": "Lossy: {reduced} tile(s) reduced · {merged} merged"
     },
     "bgedit.iw_ih_not_divisible_by_fw_fh_value": {
       "text": "⚠ {iw}×{ih} not divisible by {fw}×{fh}. {value}×{value_2} px left out."
@@ -4287,8 +4330,6 @@
     "sndmix.intensity_value_title": { "text": "Intensity value" },
     "sndmix.add_transition_title": { "text": "Add transition" },
     "sndmix.add_transition_tip": { "text": "Creates a transition from the selected state." },
-    "sndpanel.import_title": { "text": "Import audio file" },
-    "sndpanel.import_tip": { "text": "Copies a supported audio file into the project and assigns it to this asset." },
     "sndpanel.rate_title": { "text": "Sample rate" },
     "sndpanel.box_title": { "text": "Active box" },
     "sndpanel.rename_box_title": { "text": "Rename box" },
@@ -4407,7 +4448,7 @@
     "disk.up_tip": { "text": "Goes back to the parent folder." },
     "akind.relink_source": { "text": "Relink source…" },
     "akind.relink_source_title": { "text": "Relink source — {name}" },
-    "akind.relink_filter": { "text": "Source files" },
+    "akind.relink_none": { "text": "No compatible file in the project." },
     "disk.open_assets_tip": { "text": "Opens the assets folder in the file explorer." },
     "common.reveal": { "text": "Reveal" },
     "assetfind.locate_tip": { "text": "Shows the file of this asset in the Disk tab." },
@@ -4429,7 +4470,6 @@
     "disk.sort_name": { "text": "Sort by name" },
     "disk.sort_extension": { "text": "Sort by extension" },
     "disk.sort_status": { "text": "Sort by status" },
-    "disk.folder_color": { "text": "Folder color" },
     "disk.folder_color_none": { "text": "No color" },
     "disk.folder_color_blue": { "text": "Blue" },
     "disk.folder_color_violet": { "text": "Violet" },
@@ -4465,7 +4505,6 @@
     "disk.delete_items_confirm": { "singular": "Delete this item from the disk? Ctrl+Z undoes.", "plural": "Delete these {n} items from the disk? Ctrl+Z undoes." },
     "disk.delete_cited": { "text": "Cited by an asset (it will lose its source):" },
     "disk.deleted_items": { "singular": "{n} item deleted. Ctrl+Z undoes.", "plural": "{n} items deleted. Ctrl+Z undoes." },
-    "disk.delete_assets": { "singular": "Delete {n} asset", "plural": "Delete {n} assets" },
     "disk.delete_confirm": { "singular": "Delete this asset? Its source file stays on disk. Ctrl+Z undoes.", "plural": "Delete these {n} assets? Their source files stay on disk. Ctrl+Z undoes." },
     "disk.import_title": { "text": "Import files" },
     "disk.import_filter": { "text": "Source files" },
@@ -4531,9 +4570,10 @@
     "hints.graph.search": { "text": "Searches for a scene" },
     "hints.graph.minimap": { "text": "Shows or hides the minimap" },
     "hints.bg.paint": { "text": "Paints the active palette on tiles" },
+    "hints.bg.paint_tiles": { "text": "Paints cells with the selected color" },
     "hints.bg.fill": { "text": "Fills the connected area with the active palette" },
     "hints.bg.paint_rect": { "text": "Paints a rectangle with the active palette" },
-    "hints.bg.erase": { "text": "Removes the palette from tiles" },
+    "hints.bg.erase": { "text": "Restores the original palette of the tiles" },
     "hints.bg.crop_adjust": { "text": "Moves the crop rectangle or its handles" },
     "hints.bg.crop_apply": { "text": "Applies the crop" },
     "hints.bg.crop_cancel": { "text": "Cancels the crop" },
@@ -4570,7 +4610,6 @@
     "sndedit.loop_sections": { "text": "Loop sections" },
     "sndedit.col_loop": { "text": "Loop" },
     "sndedit.col_default": { "text": "Default" },
-    "sndedit.col_color": { "text": "Color" },
     "sndedit.col_name": { "text": "Name" },
     "sndedit.col_start": { "text": "Start order" },
     "sndedit.col_end": { "text": "End order" },
@@ -4579,14 +4618,27 @@
     "sndedit.new_section_tip_time": { "text": "Adds a section after the last one, or in the middle of an empty track. Its name can be typed right away." },
     "sndedit.loop_tip": { "text": "The section can be played in a loop." },
     "sndedit.default_tip": { "text": "The section the music loops on when nothing else is asked." },
-    "sndedit.color_tip": { "text": "Moves on to the next color." },
     "sndedit.preview_section": { "text": "Listen to this section" },
     "sndedit.preview_section_tip": { "text": "Plays the music from the start of the section and loops on it." },
+    "sndedit.lead_in": { "text": "Tempo lead-in (order 0)" },
+    "sndedit.lead_in_tip": { "text": "A silent order added when a tracker song is converted to a module: it sets the tempo and speed, then the song restarts at order 1. It holds no note and is never heard. New sections start after it." },
+    "sndedit.cue_menu_sound_action": { "text": "Play SoundBox action" },
+    "sndedit.cue_menu_jingle_action": { "text": "Play JingleBox action" },
+    "sndedit.cue_menu_sfx": { "text": "Play sound effect" },
+    "sndedit.cue_menu_jingle": { "text": "Play jingle" },
+    "sndedit.cue_menu_current": { "text": "{title} ({current})" },
+    "sndedit.cue_none_in_project": { "text": "None in the project" },
+    "sndedit.cue_delete": { "text": "Delete cue" },
+    "sndedit.cue_kind_sound_action": { "text": "SoundBox action" },
+    "sndedit.cue_kind_jingle_action": { "text": "JingleBox action" },
+    "sndedit.cue_kind_sfx": { "text": "Sound effect" },
+    "sndedit.cue_kind_jingle": { "text": "Jingle" },
+    "sndedit.cue_tip": { "text": "{target}, played each time the music reaches {where}. Dragging the flag moves it, and a right-click changes or deletes it." },
     "sndedit.remove_section": { "text": "Remove section" },
     "sndedit.wav_start": { "text": "Start (ms)" },
     "sndedit.wav_end": { "text": "End (ms)" },
-    "sndedit.unit_mismatch": { "text": "These loop sections were set for another kind of file. They cannot apply to this one." },
-    "sndedit.reset": { "text": "Reset sections" },
+    "sndedit.unit_mismatch": { "text": "These loop sections and cues were set for another kind of file. They cannot apply to this one." },
+    "sndedit.reset": { "text": "Reset sections and cues" },
     "sndedit.no_file": { "text": "No file is associated with this music." },
     "sndedit.unreadable": { "text": "This file cannot be read." },
     "sndedit.unreadable_why": { "text": "This file cannot be read: {reason}" },
@@ -4602,6 +4654,15 @@
     "sndedit.module_orders": { "singular": "{n} order", "plural": "{n} orders" },
     "sndedit.module_patterns": { "singular": "{n} pattern", "plural": "{n} patterns" },
     "sndedit.module_channels": { "singular": "{n} channel", "plural": "{n} channels" },
+    "sndedit.trim_btn": { "text": "Trim" },
+    "sndedit.trim_tip": { "text": "Shows, under the wave, the whole file with two handles: only the part between them goes into the ROM, and the ROM weight follows. The file itself is not modified. Sections keep their place on the sound when the handles move; one left outside is removed." },
+    "sndedit.trim_bar_tip": { "text": "Drag a handle to keep a part of the file. Double-click keeps the whole file again." },
+    "sndedit.trim_note": { "text": "Keeps {start} – {end} ({kept} of {total})" },
+    "sndedit.trim_note_whole": { "text": "Whole file ({total})" },
+    "sndedit.order_bar_tip": { "text": "Drag a handle to play only some of the module's orders. Only the orders between the handles go into the ROM. Double-click plays the whole module again." },
+    "sndedit.order_note": { "text": "Plays orders {start}–{last} ({kept} of {total})" },
+    "sndedit.order_note_whole": { "text": "Whole module ({total} orders)" },
+    "sndedit.trim_removed": { "text": " · left outside, removed: {names}" },
     "sndedit.mix_title": { "text": "Mix" },
     "sndedit.mix_volume_tip": { "text": "Volume of the music, as a percentage. Double-click resets it to 100 %." },
     "sndedit.mix_tempo_tip": { "text": "Speed of the music, as a percentage of the file's own; the pitch does not move. Heard as it changes. Double-click resets it to 100 %." },
@@ -4622,13 +4683,23 @@
     "sndedit.scope_still": { "text": "{ms} ms at {time}, still" },
     "sndedit.wave_title": { "text": "Waveform" },
     "sfxedit.wave_title": { "text": "Trim" },
-    "sfxedit.wave_tip": { "text": "The two handles keep a part of the file: what lies outside them stays out of the ROM. The source file is not modified.\nAn effect weighs one byte per frame kept, so cutting a silent tail makes the ROM lighter.\nPlayback uses the same trim and the same sample rate as the build." },
+    "sfxedit.wave_tip": { "text": "The two handles keep a part of the file: what lies outside them stays out of the ROM. The source file is not modified.\nAn effect weighs one byte per frame kept, so cutting a silent tail makes the ROM lighter.\nThe round handle at the bottom sets the fade out: drag it left from the end of the kept part.\nPlayback uses the same trim, fade and sample rate as the build. The bars on the right show the channel the effect takes among the project's; Scope shows the sound that plays." },
     "sfxedit.start": { "text": "Start" },
     "sfxedit.end": { "text": "End" },
     "sfxedit.start_tip": { "text": "Start of the kept part, in milliseconds from the start of the file." },
     "sfxedit.end_tip": { "text": "End of the kept part, in milliseconds from the start of the file. The end of the file means no cut." },
     "sfxedit.fade": { "text": "Fade out" },
     "sfxedit.fade_tip": { "text": "Makes the effect fade linearly to silence over its last frames (a frame is 1/60 s), inside the kept part. Applied to the sample when the ROM is built, so the console computes nothing; it removes the click of a cut that lands in the middle of the signal. Zero means no fade." },
+    "sfxedit.mix_volume_tip": { "text": "Volume of the effect, as a percentage. Double-click resets it to 100 %." },
+    "sfxedit.mix_pitch_tip": { "text": "Pitch the effect starts with, as a percentage of the pitch of its file: 100 is the file as it is, 200 one octave above, 50 one octave below. Heard at the next playback. A script call to set_pitch replaces it with an absolute value. Double-click resets it to 100 %." },
+    "sfxedit.mix_pan_tip": { "text": "Where the effect starts in the stereo field: left, centre or right. The bar fills from the centre. A script call to set_panning replaces it for that playback. Double-click re-centres it." },
+    "sndedit.mix_pan_type_tip": { "text": "Click to type: L 40, C, R 25, or -40 / 25. Enter applies it." },
+    "sfxedit.mix_variation_tip": { "text": "Each time the effect starts, its pitch is drawn at random within this many percent above or below the starting pitch. Zero keeps it identical every time. Makes sounds that repeat — steps, hits, coins — feel natural. Heard at each playback. Double-click resets it to zero." },
+    "sfxedit.fade_in": { "text": "Fade in" },
+    "sfxedit.fade_in_tip": { "text": "Makes the effect rise linearly from silence over its first frames (a frame is 1/60 s), inside the kept part. Applied to the sample when the ROM is built, so the console computes nothing; it removes the click of a cut that starts in the middle of the signal. Zero means no fade." },
+    "sfxedit.ab": { "text": "File rate" },
+    "sfxedit.ab_tip": { "text": "Plays the effect at the sample rate of its file instead of the rate the ROM will use, to hear what the lower rate costs. Only the preview changes; the build keeps the rate of the effect or of the project. Available when the two rates differ; the weight at the file's rate is shown below." },
+    "sfxedit.summary_rate": { "text": " · {kb} KiB at the file's rate ({rate} Hz)" },
     "sfxedit.reset": { "text": "Reset trim" },
     "sfxedit.reset_tip": { "text": "Keeps the whole file again." },
     "sfxedit.summary": { "text": "Keeps {start}–{end} ms ({kept} of {total} ms) · {kb} KiB in ROM instead of {whole} KiB" },
@@ -4648,6 +4719,11 @@
     "sndpanel.fade_out_tip": { "text": "Time for the volume to fall when the music stops, in frames (60 per second)." },
     "sndpanel.music_rate": { "text": "Sample rate" },
     "sndpanel.music_rate_tip": { "text": "Quality of the track in the game. A lower rate makes it lighter and allows a longer track." },
-    "sndpanel.rate_default": { "text": "Default (16 726 Hz)" }
+    "sndpanel.rate_default": { "text": "Default (16 726 Hz)" },
+    "sndpanel.volume_title": { "text": "Effect volume" },
+    "sndpanel.volume_tip": { "text": "Sets the effect volume in the game." },
+    "sndpanel.loop_title": { "text": "Loop track" },
+    "sndpanel.loop_tip": { "text": "Restarts the track when it reaches its end." },
+    "sndedit.reset_warning": { "text": "Removes every loop section from this track." }
   }
 }

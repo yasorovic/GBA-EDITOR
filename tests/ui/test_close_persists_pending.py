@@ -1,6 +1,6 @@
 """Fermer la fenêtre n'abandonne aucune modification en attente.
 
-Les écritures différées (debounce de 400 ms, cadrage caméra, texte du Script
+Les écritures différées (la file des réglages, cadrage caméra, texte du Script
 Editor) ne partent pas toutes seules si la fenêtre se ferme avant leur
 minuterie. `_confirm_close` les vide avant de laisser fermer, et, si le disque
 refuse, laisse l'utilisateur choisir au lieu de perdre le travail en silence.
@@ -11,7 +11,15 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
 from PyQt6.QtWidgets import QMessageBox
+
+
+@pytest.fixture(autouse=True)
+def _application(qapp):
+    """La boîte de fermeture dessine une mascotte (`QPixmap`) : sans `QGuiApplication`, Qt abandonne le processus
+    au lieu de lever une exception — le fichier plantait quand on le lançait seul."""
+    yield
 
 
 class _Recorder:
@@ -42,7 +50,6 @@ def _make_window(log, *, project=True, save_error=None, pending=False):
 
     win = SimpleNamespace(
         project=_Recorder(log, "project", fail=save_error) if project else None,
-        _save_timer=_Recorder(log, "timer"),
         scene_editor=_Recorder(log, "scene"),
         _script_editor=_Recorder(log, "script"),
         _has_pending_changes=lambda: pending,
@@ -57,7 +64,7 @@ def test_fermer_vide_les_ecritures_en_attente_puis_sauvegarde():
     win = _make_window(log)
 
     assert win._confirm_close() is True
-    assert log == ["timer.stop", "scene.flush_camera_pos",
+    assert log == ["scene.flush_camera_pos",
                    "script.flush_pending_edits", "project.save"]
 
 

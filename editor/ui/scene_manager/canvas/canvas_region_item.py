@@ -26,7 +26,7 @@ from ui.scene_manager.align_snap import (
 from ui.scene_manager.canvas.canvas_const import GBA_W, GBA_H
 from core.models.ui_region import ANCHOR_SCREEN
 from ui.scene_manager.canvas.canvas_items import hw_layer_z
-from PyQt6.QtCore import QPointF, QRectF, Qt
+from PyQt6.QtCore import QEvent, QPointF, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QBrush, QColor, QImage, QPainter, QPainterPath, QPen, QPixmap,
 )
@@ -34,6 +34,8 @@ from PyQt6.QtWidgets import (
     QGraphicsItem, QGraphicsRectItem,
 )
 
+# Largeur de coupe d'une chaîne : assez grande pour que rien ne se coupe.
+NO_WRAP_PX = 1 << 16
 
 # Poignées de redimensionnement — chaque nom porte les bords qu'il déplace
 # (left, top, right, bottom). Les coins bougent deux bords, les milieux un seul.
@@ -111,6 +113,11 @@ class UIRegionItem(QGraphicsRectItem):
         self._layout, self._region = layout_asset, region
         self._project, self._scene = project, scene
         self._save = save_fn
+        # Édition en place d'une chaîne : le champ Qt (invisible) ne fait que
+        # SAISIR ; le texte et le curseur se DESSINENT avec la police du jeu.
+        self._edit_box = None
+        self._caret_on = True
+        self._blink = None
         self._press_pos = None
         # Le type reste distingué par son icône et sa géométrie, jamais par une
         # teinte locale : le canvas Interface suit la palette neutre du thème.
@@ -451,6 +458,8 @@ class UIRegionItem(QGraphicsRectItem):
         `text:draw` — le script décidera du moment où il l'écrit.
         Les deux passent par `display_text`, sinon l'aperçu montrerait les
         crochets d'un `[speed=6]` que le joueur ne verra jamais."""
+        if self._edit_box is not None:
+            return self._edit_box.toPlainText()      # ce qu'on tape, tel quel
         el, p = self._region, self._project
         if p is None:
             return ""
@@ -472,6 +481,8 @@ class UIRegionItem(QGraphicsRectItem):
 
     def _text_source(self) -> str:
         """Source balisée de l'entrée affichée, ou ``""`` si inconnue."""
+        if self._edit_box is not None:
+            return self._edit_box.toPlainText()
         el, p = self._region, self._project
         if p is None:
             return ""
@@ -784,15 +795,21 @@ class UIRegionItem(QGraphicsRectItem):
             return False
         from core.engine_emulation.text_layout import layout_text, layout_marked_text
         r = self.rect()
+        # Une chaîne (`Text`) ne se coupe pas et ne s'aligne pas dans son
+        # rectangle : largeur de coupe illimitée, ferrage à gauche — le
+        # `nowrap` que le runtime lit dans `g_ui_regions`.
+        wraps = getattr(self._region, "wraps", True)
+        wrap_w = int(r.width()) if wraps else NO_WRAP_PX
+        align = getattr(self._region, "align", "left") if wraps else "left"
         if has_font_markup:
             placed, over = layout_marked_text(
                 font, source, self._paint_font_map(),
                 self._project.text_values() if hasattr(self._project, "text_values") else {},
-                int(r.width()), int(r.height()), getattr(self._region, "align", "left"),
+                wrap_w, int(r.height()), align,
                 self._composited())
         else:
-            plain, over = layout_text(font, text, int(r.width()), int(r.height()),
-                                      align=getattr(self._region, "align", "left"),
+            plain, over = layout_text(font, text, wrap_w, int(r.height()),
+                                      align=align,
                                       composited=self._composited())
             placed = [(font, glyph, gx, gy) for glyph, gx, gy in plain]
         if not placed:
@@ -934,7 +951,7 @@ class UIRegionItem(QGraphicsRectItem):
                 lines.append((line, pen)); line, pen = [], 0
                 continue
             advance = max(1, glyph.advance)
-            if pen and pen + advance > width:
+            if pen and pen + advance > (width if getattr(self._region, "wraps", True) else NO_WRAP_PX):
                 lines.append((line, pen)); line, pen = [], 0
             if len(lines) * line_height + line_height > height:
                 overflow = True
@@ -943,9 +960,13 @@ class UIRegionItem(QGraphicsRectItem):
         if line and not overflow:
             lines.append((line, pen))
 
+        if lines and not getattr(self._region, "wraps", True):
+            # Une chaîne n'est pas bornée par son rectangle : l'image s'élargit.
+            width = max(width, max(lw for _e, lw in lines) + 8)
         image = QImage(width, height, QImage.Format.Format_ARGB32)
         image.fill(Qt.GlobalColor.transparent)
-        align = getattr(self._region, "align", "left")
+        align = (getattr(self._region, "align", "left")
+                 if getattr(self._region, "wraps", True) else "left")
 
         def _line_offset(line_width: int) -> int:
             return ((width - line_width) // 2 if align == "center"
@@ -1014,6 +1035,9 @@ class UIRegionItem(QGraphicsRectItem):
         r = self.rect()
         sel = self.isSelected()
         active = getattr(self.scene(), "active_item", None) is self
+        if not getattr(self._region, "resizable", True):
+            self._paint_point(painter, sel and active)
+            return
         path = QPainterPath()
         path.addRect(r)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -1033,6 +1057,7 @@ class UIRegionItem(QGraphicsRectItem):
         # Le TEXTE en dernier, et sous le clip : le moteur borne le rendu au
         # rectangle (`text_clip_set`), l'aperçu doit couper au même endroit.
         overflows = self._paint_text(painter)
+        self._paint_caret(painter)
         painter.restore()   # lève le clip avant le contour (sinon la moitié du trait est rognée)
 
         # Débordement : liseré ambre en bas. Le moteur tronque au dernier glyphe
@@ -1072,6 +1097,260 @@ class UIRegionItem(QGraphicsRectItem):
                 painter.drawEllipse(QPointF(hx, hy), radius, radius)
         painter.restore()
 
+    # ── Chaîne : un point d'origine ──────────────────────────────
+    def _paint_point(self, painter, strong: bool) -> None:
+        """Une chaîne (`Text`) n'a pas de cadre : le texte, et une croix à son
+        origine. Ni clip (le texte déborde comme il le fera à l'écran), ni
+        contour, ni poignées — il n'y a pas de rectangle à tenir."""
+        painter.save()
+        self._paint_text(painter)
+        col = QColor("#ffffff") if strong else QColor(self._COLOR)
+        col.setAlpha(255 if self.isSelected() else (230 if self._hovered else 160))
+        pen = QPen(col)
+        pen.setWidthF(1.4)
+        pen.setCosmetic(True)
+        painter.setPen(pen)
+        arm = 3.0
+        painter.drawLine(QPointF(-arm, 0), QPointF(arm, 0))
+        painter.drawLine(QPointF(0, -arm), QPointF(0, arm))
+        self._paint_caret(painter)
+        painter.restore()
+
+    def _paint_caret(self, painter) -> None:
+        """Le curseur clignotant de l'édition en place — un trait à la hauteur
+        d'une ligne, posé là où le prochain glyphe s'écrira."""
+        box = self._edit_box
+        if box is None or not self._caret_on:
+            return
+        text = box.toPlainText()
+        x, y, line_px = self._caret_pos(text[:box.textCursor().position()])
+        pen = QPen(QColor("#ffffff"))
+        pen.setWidthF(1.0)
+        pen.setCosmetic(True)
+        painter.save()
+        painter.setPen(pen)
+        painter.drawLine(QPointF(x + 0.5, y), QPointF(x + 0.5, y + line_px))
+        painter.restore()
+
+    def _click_in_text(self) -> bool:
+        """Le bouton gauche est-il enfoncé sur le texte en cours d'édition ?
+        La zone est celle du rectangle ÉLARGIE à l'étendue du texte — une chaîne
+        déborde de son rectangle."""
+        from PyQt6.QtGui import QCursor
+        from PyQt6.QtWidgets import QApplication
+        sc = self.scene()
+        views = sc.views() if sc else []
+        if not views or not (QApplication.mouseButtons() & Qt.MouseButton.LeftButton):
+            return False
+        view = views[0]
+        local = self.mapFromScene(view.mapToScene(view.mapFromGlobal(QCursor.pos())))
+        tw, ty, line_px = self._caret_pos(self._edit_box.toPlainText()) if self._edit_box else (0, 0, 8)
+        r = self.rect()
+        area = QRectF(0, 0, max(r.width(), tw), max(r.height(), ty + line_px))
+        return area.adjusted(-4, -4, 4, 4).contains(local)
+
+    def _set_caret(self, index: int) -> None:
+        from PyQt6.QtGui import QTextCursor
+        box = self._edit_box
+        if box is None:
+            return
+        cur = box.textCursor()
+        cur.setPosition(max(0, min(index, len(box.toPlainText()))),
+                        QTextCursor.MoveMode.MoveAnchor)
+        box.setTextCursor(cur)
+
+    def _index_at(self, px: float, py: float, same_line_of: int | None = None) -> int:
+        """Indice de caractère le plus proche du point `(px, py)` local.
+
+        On rejoue la position du curseur pour chaque indice plutôt que d'inverser
+        la mise en page : la règle de coupe reste celle du rendu, un seul endroit.
+        La ligne est choisie d'abord (la plus proche de `py`), puis la colonne."""
+        text = self._edit_box.toPlainText() if self._edit_box is not None else ""
+        spots = [self._caret_pos(text[:i]) for i in range(len(text) + 1)]
+        line_px = spots[0][2] if spots else 8
+        best_y = min({y for _x, y, _l in spots}, key=lambda y: abs(y + line_px / 2 - py))
+        cands = [(abs(x - px), i) for i, (x, y, _l) in enumerate(spots) if y == best_y]
+        return min(cands)[1]
+
+    def _move_caret_vertical(self, direction: int) -> None:
+        """Haut/bas : même colonne en pixels, ligne voisine DU RENDU — le champ
+        invisible n'a pas la largeur de la boîte, son propre haut/bas ne
+        correspondrait à rien."""
+        box = self._edit_box
+        text = box.toPlainText()
+        x, y, line_px = self._caret_pos(text[:box.textCursor().position()])
+        self._set_caret(self._index_at(x, y + direction * line_px + line_px / 2))
+
+    def _move_caret_line_edge(self, to_end: bool) -> None:
+        box = self._edit_box
+        text = box.toPlainText()
+        x, y, line_px = self._caret_pos(text[:box.textCursor().position()])
+        self._set_caret(self._index_at(1e9 if to_end else -1, y + line_px / 2))
+
+    def _caret_pos(self, prefix: str) -> tuple[int, int, int]:
+        """(x, y, interligne) de la fin de `prefix`, en pixels, avec la MÊME
+        police et la même règle de coupe que le rendu : une boîte coupe à sa
+        largeur, une chaîne jamais. L'alignement centre/droite n'est pas suivi —
+        le curseur reste ferré à gauche."""
+        wraps = getattr(self._region, "wraps", True)
+        width = int(self.rect().width()) if wraps else NO_WRAP_PX
+        try:
+            asset = self._text_font_asset()
+            if asset is not None:
+                from core.font_rasterizer import rasterize_asset_glyph
+                weight = int(getattr(self._region, "font_weight", 400) or 400)
+                italic = bool(getattr(self._region, "font_italic", False))
+                line = max(8, int(asset.line_height))
+                x = y = 0
+                for ch in prefix:
+                    if ch == "\n":
+                        x, y = 0, y + line
+                        continue
+                    adv = max(1, rasterize_asset_glyph(
+                        self._project, asset, ch, weight=weight, italic=italic).advance)
+                    if x and x + adv > width:
+                        x, y = 0, y + line
+                    x += adv
+                return x, y, line
+            font = self._text_font()
+            from codegen.font_emit import (glyph_advance_px, font_line_px,
+                                           font_fallback_adv_px)
+            from core.engine_emulation.text_layout import layout_text
+            line = font_line_px(font)
+            placed, _over = layout_text(font, prefix, width, 1 << 16, composited=self._composited())
+            if placed:
+                g, gx, gy = max(placed, key=lambda t: (t[2], t[1]))
+                x, y = gx + glyph_advance_px(g, font), gy
+            else:
+                x = y = 0
+            # Ce que `layout_text` ne pose pas : les retours à la ligne finaux.
+            tail = len(prefix) - len(prefix.rstrip("\n"))
+            if tail:
+                x, y = 0, y + line * tail if placed else line * tail
+            return x, y, line
+        except Exception:
+            return 0, 0, 8
+
+    def mouseDoubleClickEvent(self, e):
+        """Double-clic sur une chaîne : on écrit dedans, sur place. Un texte
+        LIÉ à la table se corrige dans l'écran Texte — le littéral d'aperçu
+        n'est pas ce que la ROM affichera."""
+        from core.models.ui_region import is_text
+        if (e.button() != Qt.MouseButton.LeftButton or not is_text(self._region)
+                or getattr(self._region, "text_key", "")):
+            super().mouseDoubleClickEvent(e)
+            return
+        self._begin_inline_edit()
+        e.accept()
+
+    def _begin_inline_edit(self) -> None:
+        """Saisie sur place : un champ Qt INVISIBLE reçoit le clavier (IME,
+        déplacement du curseur, raccourcis d'édition) pendant que l'item dessine
+        le texte avec la police du jeu et un curseur clignotant. Entrée ou perte
+        de focus valide, Échap annule."""
+        from PyQt6.QtWidgets import QPlainTextEdit
+        sc = self.scene()
+        views = sc.views() if sc else []
+        if not views or self._edit_box is not None:
+            return
+        cancelled = []
+        # Une boîte est multiligne (Entrée = retour à la ligne, Ctrl+Entrée ou un
+        # clic ailleurs valide) ; une chaîne tient sur une ligne (Entrée valide).
+        multiline = bool(getattr(self._region, "wraps", True))
+        item = self
+
+        class _Edit(QPlainTextEdit):
+            done = pyqtSignal()
+            # Surcharges de classe — un attribut d'instance ne serait jamais
+            # appelé par le dispatch virtuel de Qt.
+            def keyPressEvent(self, ev):
+                key = ev.key()
+                if key == Qt.Key.Key_Escape:
+                    cancelled.append(True)
+                    self.clearFocus()
+                    return
+                if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and (
+                        not multiline or ev.modifiers() & Qt.KeyboardModifier.ControlModifier):
+                    self.clearFocus()
+                    return
+                nav = {Qt.Key.Key_Up: lambda: item._move_caret_vertical(-1),
+                       Qt.Key.Key_Down: lambda: item._move_caret_vertical(1),
+                       Qt.Key.Key_Home: lambda: item._move_caret_line_edge(False),
+                       Qt.Key.Key_End: lambda: item._move_caret_line_edge(True)}
+                if key in nav and not ev.modifiers():
+                    nav[key]()
+                    return
+                super().keyPressEvent(ev)
+
+            def event(self, ev):
+                # Pendant la saisie, TOUTES les touches sont au texte : sans cela
+                # les raccourcis du canvas passent devant — flèches = déplacer
+                # l'élément, Retour arrière / Suppr = le supprimer, lettres =
+                # changer d'outil. Accepter `ShortcutOverride` les lui retire.
+                if ev.type() == QEvent.Type.ShortcutOverride:
+                    ev.accept()
+                    return True
+                return super().event(ev)
+
+            def focusOutEvent(self, ev):
+                super().focusOutEvent(ev)
+                # Un clic DANS le texte vole le focus à ce champ (la vue le
+                # prend avant même que l'item voie l'événement) : ce n'est pas
+                # la fin de l'édition, c'est un repositionnement du curseur.
+                if item._click_in_text():
+                    QTimer.singleShot(0, self.setFocus)
+                    return
+                self.done.emit()
+
+        box = _Edit(views[0].viewport())
+        old = getattr(self._region, "preview_text", "") or ""
+        box.setPlainText(old)
+        box.setFrameShape(QPlainTextEdit.Shape.NoFrame)
+        box.setStyleSheet("background:transparent; border:none; color:transparent;")
+        box.setGeometry(0, 0, 1, 1)
+        self._edit_box = box
+        self._caret_on = True
+        self._blink = QTimer(box)
+        self._blink.timeout.connect(self._toggle_caret)
+        self._blink.start(530)
+        box.textChanged.connect(self._edit_changed)
+        box.cursorPositionChanged.connect(self._edit_changed)
+
+        def finish():
+            if self._edit_box is not box:
+                return
+            new = box.toPlainText()
+            self._edit_box = None
+            self._blink.stop()
+            box.hide()
+            box.deleteLater()
+            self.prepareGeometryChange()
+            self.update()
+            if cancelled or new == old:
+                return
+            from core.history import get_history, SetFieldCmd
+            self._region.preview_text = new
+            self._region.preview_is_literal = True
+            get_history().push(SetFieldCmd(
+                self._region, "preview_text", old, new,
+                label="Edit text", persist_fn=self._save))
+
+        box.done.connect(finish)
+        box.show()
+        box.setFocus()
+        self._set_caret(len(old))
+        self.update()
+
+    def _toggle_caret(self) -> None:
+        self._caret_on = not self._caret_on
+        self.update()
+
+    def _edit_changed(self) -> None:
+        self._caret_on = True            # le curseur reste plein pendant la frappe
+        if self._blink is not None:
+            self._blink.start(530)
+        self.update()
+
     # ── Poignées ─────────────────────────────────────────────────
     def _view_scale(self) -> float:
         """Facteur de zoom de la vue (m11), 1.0 s'il n'y a pas encore de vue."""
@@ -1085,6 +1364,8 @@ class UIRegionItem(QGraphicsRectItem):
         Centrées sur les bords : les contrôles restent à l'EXTÉRIEUR du
         contenu, avec une marge déjà incluse dans `boundingRect()` pour le
         repaint."""
+        if not getattr(self._region, "resizable", True):
+            return {}
         r = self.rect()
         l, t, rt, b = r.left(), r.top(), r.right(), r.bottom()
         mx, my = (r.left() + r.right()) / 2, (r.top() + r.bottom()) / 2
@@ -1209,6 +1490,11 @@ class UIRegionItem(QGraphicsRectItem):
         super().hoverLeaveEvent(e)
 
     def mousePressEvent(self, e):
+        if self._edit_box is not None and e.button() == Qt.MouseButton.LeftButton:
+            # En édition, un clic REPLACE le curseur — l'item ne se déplace pas.
+            self._set_caret(self._index_at(e.pos().x(), e.pos().y()))
+            e.accept()
+            return
         self._press_pos = self.pos()
         # Figé AVANT le select : le bus resélectionne synchroniquement, donc
         # `isSelected()` serait déjà vrai juste après. Une poignée n'est dessinée
@@ -1232,6 +1518,9 @@ class UIRegionItem(QGraphicsRectItem):
         super().mousePressEvent(e)
 
     def mouseMoveEvent(self, e):
+        if self._edit_box is not None:
+            e.accept()
+            return
         if self._resize_handle:
             self._drag_resize(e.scenePos())
             e.accept()
@@ -1239,6 +1528,9 @@ class UIRegionItem(QGraphicsRectItem):
         super().mouseMoveEvent(e)
 
     def mouseReleaseEvent(self, e):
+        if self._edit_box is not None:
+            e.accept()
+            return
         if self._resize_handle:
             self._resize_handle = None
             self._resize_start = None

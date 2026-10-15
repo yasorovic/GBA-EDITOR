@@ -7,8 +7,8 @@ from ui.common.three_column_body import ThreeColumnBody
 
 
 @pytest.fixture(scope="module")
-def app():
-    return QApplication.instance() or QApplication([])
+def app(qapp):
+    return qapp              # l'application de la session (cf. `tests/ui/conftest.py`), jamais une qu'on détruirait avec ce module
 
 
 def _body():

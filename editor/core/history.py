@@ -861,6 +861,23 @@ class BackgroundInpaintingCmd(Command):
         self._ctrl.apply_override_delta(self._ba, self._delta, False)
 
 
+class BackgroundTilePaintCmd(Command):
+    """Geste du pinceau en mode Paint : les cases du calque de peinture qui ont changé, `(avant, après)`
+    — `None` pour « pas de peinture ». Ne touche que `BackgroundAsset.tile_paint`."""
+
+    def __init__(self, controller, ba, delta: dict):
+        self._ctrl = controller
+        self._ba = ba
+        self._delta = delta
+        self.label = "Peinture de tiles"
+
+    def execute(self):
+        self._ctrl.apply_tile_delta(self._ba, self._delta, True)
+
+    def undo(self):
+        self._ctrl.apply_tile_delta(self._ba, self._delta, False)
+
+
 class SetSceneModeCmd(Command):
     """Change le mode vidéo d'une scène (0-5). Le changement élague les calques/
     palettes BG incompatibles → on snapshot (render_mode, background_layers,

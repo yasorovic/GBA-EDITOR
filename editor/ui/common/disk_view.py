@@ -490,9 +490,6 @@ def add_folder_color_actions(menu: QMenu, node: disk_tree.DiskNode, changed: Cal
     layout = QHBoxLayout(row)
     layout.setContentsMargins(10, 4, 10, 4)
     layout.setSpacing(5)
-    title = QLabel(label('disk.folder_color'))
-    title.setStyleSheet(f"color:{C.TEXT_NORM};")
-    layout.addWidget(title)
 
     def add_dot(name: str, color: str | None) -> None:
         selected = current == color
@@ -882,6 +879,10 @@ class DiskView(QWidget):
 
     def _selected_nodes(self) -> list:
         return [n for n in (i.data(_NODE_ROLE) for i in self._list.selectedItems()) if n is not None]
+
+    def shown_folder(self) -> str | None:
+        """Le dossier que l'onglet affiche : celui où l'auteur « se trouve » (None sans projet)."""
+        return self._shown_folder()
 
     def _shown_folder(self) -> str | None:
         folder = self._current() if self._root is not None else None

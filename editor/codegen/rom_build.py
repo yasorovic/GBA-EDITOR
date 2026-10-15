@@ -696,7 +696,7 @@ class BuildWorker(EventEmitter, threading.Thread):
         p.grit_out_dir.mkdir(parents=True, exist_ok=True)
         build_output.write(p.grit_out_dir / f"{sym}.c", c)
         build_output.write(p.grit_out_dir / f"{sym}.h", h)
-        extra = len(tileset) - len(ba.tileset)
+        extra = len(tileset) - len(ba.effective_tileset())
         self._emit("log_line",
                    f"[bg] {ba.name} compressed ({bpp}bpp) -> {sym} ({len(tileset)} tiles"
                    + (f", including {extra} from placed animated backgrounds" if extra else "")
@@ -843,7 +843,7 @@ class BuildWorker(EventEmitter, threading.Thread):
                 budget = budgets.get(key)
                 if budget is None or used <= budget:
                     continue
-                own = len(ba.tileset)
+                own = len(ba.effective_tileset())
                 extra = used - own
                 self._emit("diagnostic", build_error(
                     f"'{ba.name}' BG{layer.bg_slot}: {used} tiles to load ({own} for the background"

@@ -36,7 +36,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont, QFontMetrics
 from PyQt6.QtCore import pyqtSignal
 
-from core.command_dispatcher import get_dispatcher
+from ui.common.deferred_writes import schedule_save
 from core.models.field_value import FieldValue, make_resolver, variables_from_project
 from core.models.camera import Camera, CAM_FIXED, CAM_FOLLOW, CAM_SCRIPT
 from core.models.scene import Scene
@@ -367,10 +367,12 @@ class CameraInspector(QWidget):
 
         Le watcher est suspendu : sans cela, la scène qu'on vient d'écrire est
         re-détectée comme « modifiée en externe », rechargée, et la sélection du
-        canvas est perdue à chaque champ modifié (cf. scene_inspector)."""
+        canvas est perdue à chaque champ modifié (cf. scene_inspector).
+
+        Différé : un champ qu'on tourne passe ici à chaque cran ; la scène s'écrit après un silence (cf.
+        `ui/common/deferred_writes.py`, qui suspend le watcher pour l'écriture)."""
         if self._project and self._scene:
-            with get_dispatcher().suspended():
-                self._project.save_scene(self._scene)
+            schedule_save(self._project.scenes, self._scene)
 
     def _edit(self, fields, label: str, refresh: bool = True) -> bool:
         """Applique un GROUPE de champs comme UNE entrée d'historique annulable.

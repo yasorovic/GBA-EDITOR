@@ -1437,6 +1437,7 @@ class AssetHeaderBar(QWidget):
                 "ui_container":   kind_colors(icons.COLOR_UI),
                 "ui_list":    kind_colors(icons.COLOR_UI),
                 "ui_text":    kind_colors(icons.COLOR_UI),
+                "ui_textbox": kind_colors(icons.COLOR_UI),
                 "ui_image":   kind_colors(icons.COLOR_UI),
                 "ui_element": kind_colors(icons.COLOR_UI),
                 "ui_layout":  kind_colors(icons.COLOR_UI),

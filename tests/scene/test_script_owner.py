@@ -76,7 +76,7 @@ def test_validateur_bloque_un_behavior_qui_ecrit_self(tmp_path):
 # ── Événements par famille ──────────────────────────────────────────
 
 def test_evenement_d_acteur_refuse_dans_une_camera():
-    errs = _errors("function on_collision_enter(other, a, b)\nend\n", "camera")
+    errs = _errors("function on_collision_enter(other)\nend\n", "camera")
     assert len(errs) == 1 and "on_collision_enter" in errs[0] and "camera script" in errs[0]
 
 

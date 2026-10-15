@@ -788,9 +788,9 @@ def _check_text_overflow(ctx: ValidationContext):
     # Textes AUTHORÉS : le couple (élément, contenu) est connu sans lire un
     # script, et plus sûr que le cas script — c'est `scene_init` qui l'écrit,
     # rien ne peut changer le texte avant l'affichage.
-    from core.models.ui_region import KIND_TEXT
+    from core.models.ui_region import is_text
     for _lay, el in p.all_regions():
-        if getattr(el, "kind", "") != KIND_TEXT:
+        if not is_text(el):
             continue
         text = p.get_text(getattr(el, "text_key", "") or "")
         if text is None:
@@ -924,9 +924,9 @@ def _check_font_coverage(ctx: ValidationContext):
                 if missing:
                     _warn(text.key, lbl, "the zone", region.name, missing)
 
-    from core.models.ui_region import KIND_TEXT
+    from core.models.ui_region import is_text
     for _lay, el in p.all_regions():
-        if getattr(el, "kind", "") != KIND_TEXT:
+        if not is_text(el):
             continue
         text = p.get_text(getattr(el, "text_key", "") or "")
         if text is None:
@@ -1526,7 +1526,7 @@ def _sfx_trim_problem(sfx, path) -> str | None:
     """La découpe d'un effet face à son fichier : elle peut décrire un son qui n'existe plus tel quel (fichier remplacé,
     raccourci). None si elle tient, ou si le fichier ne se lit pas (`check_audio_file` le dit)."""
     import wave
-    from core.sfx_render import trim_problem
+    from core.wav_edit import trim_problem
     try:
         with wave.open(str(path)) as w:
             total_ms = w.getnframes() * 1000 / max(1, w.getframerate())
@@ -1809,6 +1809,22 @@ def _check_sound_boxes(ctx: ValidationContext):
                             f"Sprite \"{spr.name}\", state \"{stt.name}\": the frame cites Sfx "
                             f"\"{sfx_name}\", which does not exist — it will play nothing.")
                         _warned_sfx = True
+
+    # Les repères d'une musique visent les mêmes choses qu'une frame : une action qu'aucune boîte ne déclare, un effet ou
+    # un jingle qui n'existe pas. Même philosophie — silencieux à l'exécution, donc dit ici. (Leur POSITION se vérifie
+    # contre le fichier : `music_structure.cue_problems`.)
+    from core.models.audio import CUE_JINGLE, CUE_JINGLE_ACTION, CUE_SFX, CUE_SOUND_ACTION
+    from core.models.sound_box import KIND_JINGLE
+    known = {CUE_SOUND_ACTION: (declared, "SoundBox action", "no SoundBox declares"),
+             CUE_JINGLE_ACTION: (set(p.sound_action_names(KIND_JINGLE)), "JingleBox action", "no JingleBox declares"),
+             CUE_SFX: (sfx_names, "sound effect", "does not exist in the project"),
+             CUE_JINGLE: (jingle_names, "jingle", "does not exist in the project")}
+    for music in [*getattr(p, "music", []), *getattr(p, "jingles", [])]:
+        for cue in music.cues:
+            names, what, why = known[cue.kind]
+            if cue.target and cue.target not in names:
+                ctx.warn(None, f"{type(music).__name__} \"{music.name}\", cue at {cue.position}: the {what} \"{cue.target}\" "
+                               f"{why} — it will play nothing.")
 
 
 def _check_frame_events(ctx: ValidationContext):

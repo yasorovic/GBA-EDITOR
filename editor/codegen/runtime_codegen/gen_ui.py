@@ -130,10 +130,9 @@ def list_rows_of(lay, lst) -> list:
     """Les RANGÉES d'une liste : ses zones de texte enfants, dans l'ordre de la
     mise en page. Rien à déclarer — ce qu'on voit dans l'éditeur est ce que la
     liste parcourt (ROADMAP v0.22)."""
-    from core.models.ui_region import KIND_TEXT
+    from core.models.ui_region import is_text
     return [e for e in lay.elements
-            if getattr(e, "parent", "") == lst.name
-            and getattr(e, "kind", "") == KIND_TEXT]
+            if getattr(e, "parent", "") == lst.name and is_text(e)]
 
 
 def emit_ui_lists_c(p: Project, emit=None) -> list[str]:

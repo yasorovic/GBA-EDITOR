@@ -219,24 +219,46 @@ def _rename_sprite(project, sprite, new_name: str) -> str:
 
 def _relink_action(family: str):
     """« Relink source… » : relier l'asset à un autre fichier, quand le sien a disparu — ou pour en changer.
-    Le dialogue s'ouvre sur le dossier de l'ancien fichier ; un refus (format, dossier) se dit, et
-    l'asset reste inchangé."""
+    Un petit sélecteur à recherche liste les fichiers du projet de CE format (ceux que la famille accepte) ; un
+    refus se dit, et l'asset reste inchangé."""
     def run(project, asset):
-        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        from PyQt6.QtGui import QCursor
+        from PyQt6.QtWidgets import QApplication, QMessageBox
         from core import asset_relink
         from core.command_dispatcher import get_dispatcher
+        from ui.common.theme import C
+        from ui.common.widgets import ScriptPickerPopup
         title = label('akind.relink_source_title', name=asset.name)
-        known = project.asset_abs(getattr(asset, "asset", None))
-        start = known.parent if known and known.parent.is_dir() else project.assets_dir
-        extensions = " ".join(f"*{ext}" for ext in sorted(asset_relink.FAMILY_EXTENSIONS[family]))
-        chosen, _ = QFileDialog.getOpenFileName(
-            None, title, str(start), f"{label('akind.relink_filter')} ({extensions})")
-        if not chosen:
+        files = asset_relink.compatible_files(project, family)
+        if not files:
+            QMessageBox.information(None, title, label('akind.relink_none'))
             return
-        try:
-            get_dispatcher().relink_asset_source(family, asset, chosen)
-        except ValueError as error:
-            QMessageBox.warning(None, title, str(error))
+        entries = [(p.relative_to(project.assets_dir).as_posix(), str(p)) for p in files]
+        popup = ScriptPickerPopup(entries, C.ACCENT, new_label=None)
+
+        warning = {"backgrounds": "akind.relink_warn_background",
+                   "sprites": "akind.relink_warn_image"}.get(family)
+
+        def picked(chosen: str):
+            # Une image relue repart de ses réglages d'import : on le dit avant, pas après.
+            if warning and QMessageBox.question(
+                    None, title, label(warning),
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            ) != QMessageBox.StandardButton.Yes:
+                return
+            try:
+                get_dispatcher().relink_asset_source(family, asset, chosen)
+            except ValueError as error:
+                QMessageBox.warning(None, title, str(error))
+
+        popup.picked.connect(picked)
+        popup.adjustSize()
+        pos = QCursor.pos()
+        geo = (QApplication.screenAt(pos) or QApplication.primaryScreen()).availableGeometry()
+        pos.setX(max(geo.left(), min(pos.x(), geo.right() - popup.width() + 1)))
+        pos.setY(max(geo.top(), min(pos.y(), geo.bottom() - popup.height() + 1)))
+        popup.move(pos)
+        popup.show()
     return ('akind.relink_source', run)
 
 
@@ -282,7 +304,7 @@ _BACKGROUND_LABEL_KEYS = {'scene': 'common.backgrounds', 'ui': 'akind.ui_backgro
 
 
 def _background_of_kind(bg_kind: str, label: str, add_tooltip: str,
-                        mime=None) -> AssetKind:
+                        mime=None, add_menu: bool = False) -> AssetKind:
     """Une famille par `kind` de fond — le Background Editor donne à chacune sa
     propre section, parce que chacune a son propre import (« un PNG », « un
     cadre d'UI », « une planche d'animation ») : trois boutons, trois phrases,
@@ -299,6 +321,7 @@ def _background_of_kind(bg_kind: str, label: str, add_tooltip: str,
         rename      = _renamer("rename_background"),
         delete      = _store_deleter("backgrounds"),
         add_tooltip_key = add_tooltip,      # sans `add` : l'écran ouvre l'import
+        add_menu    = add_menu,
         mime        = mime,
         actions     = (_relink_action("backgrounds"),),
         file_of     = store_file("backgrounds"),
@@ -306,7 +329,8 @@ def _background_of_kind(bg_kind: str, label: str, add_tooltip: str,
     )
 
 
-BACKGROUNDS_SCENE = _background_of_kind("scene", "Backgrounds", 'akind.import_a_png')
+BACKGROUNDS_SCENE = _background_of_kind("scene", "Backgrounds", 'akind.import_a_png',
+                                        add_menu=True)
 BACKGROUNDS_UI    = _background_of_kind("ui", "UI backgrounds",
                                         'akind.import_a_ui_frame_or_panel_png')
 # Un fond animé se POSE sur le canvas d'un fond hôte : c'est la seule famille de

@@ -42,6 +42,7 @@ class SectionTable(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._music = None
+        self._lead_in = 0                          # les ordres de tête qui ne sont qu'une amorce
         self._extent = 0                           # positions de la table d'ordres (ou millisecondes d'un WAV)
         self._unit = UNIT_ORDER
         self._selection = (0, 0)
@@ -55,9 +56,10 @@ class SectionTable(QWidget):
 
     # ── Ce qu'on lui donne ────────────────────────────────────────
 
-    def load(self, music, extent: int, unit: str = UNIT_ORDER) -> None:
-        """`extent` : le nombre de positions de la table (ou, pour un WAV, sa durée en ms)."""
-        self._music, self._extent, self._unit = music, int(extent), unit
+    def load(self, music, extent: int, unit: str = UNIT_ORDER, lead_in: int = 0) -> None:
+        """`extent` : le nombre de positions de la table (ou, pour un WAV, sa durée en ms). `lead_in` : les ordres de
+        tête qui ne sont qu'une amorce (cf. `lead_in_orders`) — une section ajoutée commence après eux."""
+        self._music, self._extent, self._unit, self._lead_in = music, int(extent), unit, int(lead_in)
         self._rebuild()
 
     def set_selection(self, start: int, end: int) -> None:
@@ -287,7 +289,7 @@ class SectionTable(QWidget):
             # Une nouvelle section continue naturellement la dernière, sans
             # déplacer les plages déjà définies. Une sélection explicite sur
             # la bande des ordres garde toutefois toujours la priorité.
-            start = max((s.end for s in self._music.sections), default=0)
+            start = max((s.end for s in self._music.sections), default=self._lead_in)
             if start >= self._extent:
                 return None
             return start, min(self._extent, start + 4)

@@ -21,14 +21,21 @@ import numpy as np
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QSizePolicy,
+    QFrame, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
-from core.engine_emulation.module_model import load_module
+from core.engine_emulation.module_model import lead_in_orders, load_module
 from core.engine_emulation.module_render import GBA_MIX_RATE
-from core.models.audio import JINGLE_MAX_CHANNELS, UNIT_MS, UNIT_ORDER
-from core.music_structure import source_unit, wav_rom_bytes, weight_level
-from core.wav_module import wav_seconds
+from core.models.audio import (
+    CUE_JINGLE, CUE_JINGLE_ACTION, CUE_SFX, CUE_SOUND_ACTION, JINGLE_MAX_CHANNELS, Jingle, UNIT_MS, UNIT_ORDER,
+)
+from core.models.sound_box import KIND_JINGLE, KIND_SOUND
+from core.music_structure import JINGLE_CUE_KINDS, retrim, source_unit, wav_rom_bytes, weight_level
+from core.sfx_render import read_wav
+from core.module_trim import is_order_cut, order_window
+from core.wav_edit import is_trimmed, trim_of, trim_window
+from core.wav_module import wav_kept_seconds, wav_seconds
 from ui.common.labels import label
 from ui.common.theme import C, QSS, T
 from ui.common.tooltip import tooltip
@@ -38,7 +45,9 @@ from ui.sound_mixer.order_strip import OrderStrip
 from ui.sound_mixer.polyphony_view import PolyphonyView
 from ui.sound_mixer.section_colors import section_color
 from ui.sound_mixer.section_table import SectionTable
-from ui.sound_mixer.waveform_view import WaveformView
+from ui.sound_mixer.order_range_bar import OrderRangeBar
+from ui.sound_mixer.trim_bar import TrimBar
+from ui.sound_mixer.waveform_view import WaveformView, peak_envelope
 
 
 def _title(text: str) -> QLabel:
@@ -77,7 +86,10 @@ class MusicEditor(QWidget):
         self._module = None
         self._unit: Optional[str] = None
         self._mismatched = False                   # des sections d'une autre unité que le fichier
-        self._duration_ms = 0                      # la durée du fichier WAV, pas celle de son rendu (arrondie à la ligne)
+        self._duration_ms = 0                      # la durée de la plage GARDÉE d'un WAV : l'axe de l'onde et des sections
+        self._file_ms = 0                          # la durée du FICHIER WAV entier : l'axe de la barre de découpe
+        self._file_peaks: dict = {}                # (chemin, date) -> crêtes du fichier entier, pour la barre de découpe
+        self._baked_fades = False                  # un jingle WAV : ses fondus sont cuits dans la piste, donc l'onde se refait
         self._scope = None                         # la `MusicSection` sélectionnée : celle que le ▶ fait boucler ; None = tout le morceau
         self._sections_on = True                   # faux pour un jingle : il ne boucle pas, il n'a pas de section
         self.setStyleSheet(f"background:{C.BG_PANEL};")
@@ -133,6 +145,9 @@ class MusicEditor(QWidget):
         mismatch_text.setStyleSheet(f"color:{C.TEXT_NORM}; border:none;")
         reset = QPushButton(label("sndedit.reset"))
         reset.setStyleSheet(QSS.button_neutral)
+        reset.setToolTip(tooltip(
+            title=label("sndedit.reset"), warning=label("sndedit.reset_warning"),
+        ))
         reset.clicked.connect(self._reset_sections)
         mismatch_lay.addWidget(mismatch_text, 1)
         mismatch_lay.addWidget(reset)
@@ -171,6 +186,43 @@ class MusicEditor(QWidget):
         grid.setColumnStretch(0, 1)
         s_lay.addLayout(grid, 1)
 
+        # Rogner un WAV : un bouton à cocher qui montre, sous l'onde, le fichier ENTIER avec deux poignées. Un module
+        # ne se rogne pas (ses plages sont des sections en ordres) : la zone n'apparaît que pour un WAV.
+        self._trim_zone = QWidget()
+        trim_lay = QVBoxLayout(self._trim_zone)
+        trim_lay.setContentsMargins(0, 0, 0, 0)
+        trim_lay.setSpacing(4)
+        trim_row = QHBoxLayout()
+        self._trim_btn = QPushButton(label("sndedit.trim_btn"))
+        self._trim_btn.setCheckable(True)
+        self._trim_btn.setFont(QFont(T.UI, T.MD))
+        self._trim_btn.setToolTip(tooltip(title=label("sndedit.trim_btn"), body=label("sndedit.trim_tip")))
+        self._trim_btn.toggled.connect(self._on_trim_toggled)
+        self._trim_note = QLabel()
+        self._trim_note.setFont(QFont(T.UI, T.SM))
+        self._trim_note.setStyleSheet(f"color:{C.TEXT_DIM};")
+        trim_row.addWidget(self._trim_btn)
+        trim_row.addWidget(self._trim_note, 1)
+        trim_lay.addLayout(trim_row)
+        self._trim_bar = TrimBar()
+        self._trim_bar.setToolTip(tooltip(title=label("sndedit.trim_btn"), body=label("sndedit.trim_bar_tip")))
+        self._trim_bar.moving.connect(self._on_trim_moving)
+        self._trim_bar.changed.connect(self._on_trim_changed)
+        self._trim_bar.setVisible(False)
+        trim_lay.addWidget(self._trim_bar)
+        # Un jingle en MODULE se coupe aux ordres, pas en millisecondes : la même place, la même case, une autre barre.
+        self._order_bar = OrderRangeBar()
+        self._order_bar.setToolTip(tooltip(title=label("sndedit.trim_btn"), body=label("sndedit.order_bar_tip")))
+        self._order_bar.moving.connect(self._on_order_moving)
+        self._order_bar.changed.connect(self._on_order_changed)
+        self._order_bar.setVisible(False)
+        trim_lay.addWidget(self._order_bar)
+        self._trim_zone.setVisible(False)
+        # La barre de rognage prend la place de la courbe de polyphonie, sous l'onde : un WAV n'a qu'une voie, la courbe n'y
+        # dit presque rien, et les deux empilées faisaient défiler l'écran. Un module garde sa courbe.
+        self._trim_zone.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)   # sa hauteur, pas celle qui reste
+        grid.addWidget(self._trim_zone, 1, 0)
+
         # Un module : la bande des ordres, pour choisir une plage. Seule structure du bas : le tableau des
         # sections et la table de mixage vivent dans `sections_panel` et `mix_panel`, que l'écran loge dans l'inspecteur.
         self._strip_zone = QWidget()
@@ -183,6 +235,9 @@ class MusicEditor(QWidget):
         self._strip.section_preview.connect(self.preview_section)
         self._strip.section_range_moving.connect(self._on_strip_section_moving)
         self._strip.section_range_changed.connect(self._commit)
+        self._strip.cue_context_requested.connect(self._on_cue_menu)
+        self._strip.cue_moving.connect(self._on_cue_moving)
+        self._strip.cue_moved.connect(self._on_cue_moved)
         m_lay.addWidget(self._strip)
         s_lay.addWidget(self._strip_zone)
 
@@ -224,6 +279,10 @@ class MusicEditor(QWidget):
         self._save_timer.setSingleShot(True)
         self._save_timer.setInterval(300)
         self._save_timer.timeout.connect(self.changed.emit)
+        self._rerender_timer = QTimer(self)                  # les fondus d'un jingle WAV sont CUITS : l'onde se refait
+        self._rerender_timer.setSingleShot(True)
+        self._rerender_timer.setInterval(300)
+        self._rerender_timer.timeout.connect(self.reload)
         self._blank()
 
     # ── Chargement ────────────────────────────────────────────────
@@ -273,35 +332,43 @@ class MusicEditor(QWidget):
 
         # Une musique sans section prend l'unité de son fichier ; avec des sections d'une autre unité,
         # on le dit (jamais réinterprétées en silence).
-        if not music.sections:
+        if not music.sections and not music.cues:
             music.unit = self._unit
         if self._unit == UNIT_MS:
-            self._duration_ms = round(wav_seconds(path) * 1000)
+            self._file_ms = round(wav_seconds(path) * 1000)
+            self._duration_ms = round(wav_kept_seconds(path, trim_of(music)) * 1000)
+        elif not self._sections_on:                # un jingle module : ses repères sont en ms, la durée est celle du rendu
+            self._duration_ms = round(self._track.pcm.shape[0] / GBA_MIX_RATE * 1000)
         self._message.setVisible(False)
         self._structure.setVisible(True)
         self.mix_panel.setVisible(True)
         self._wave.set_track(self._track.pcm, GBA_MIX_RATE, self._render_tempo())
         self._refresh_polyphony()
-        self._mismatched = self._sections_on and bool(music.sections) and music.unit != self._unit
+        self._mismatched = self._sections_on and bool(music.sections or music.cues) and music.unit != self._unit
         self._mismatch.setVisible(self._mismatched)
         editable = not self._mismatched and self._sections_on
-        self._strip_zone.setVisible(editable)
+        self._strip_zone.setVisible(editable)        # un jingle n'a ni sections ni bande : sa voie des repères ne montre plus rien d'utile
         self._sections_zone.setVisible(editable)
         self.sections_panel.setVisible(editable)
         self._wave.set_editable(self._unit == UNIT_MS and editable)
         self._refresh_sections()
         self._summary.setText(self._kind_text())
         self._refresh_weight(path)
+        self._sync_trim(path)
         self._fit_banner()
         # Tempo et hauteur : un module seulement (un WAV les ignore, un jingle n'applique que son volume).
         tempo_pitch = self._unit == UNIT_ORDER and self._sections_on
-        self._faders.load(music, tempo_pitch=tempo_pitch, fades=self._sections_on,
+        # Les fondus : ceux d'une musique sont appliqués par la console ; ceux d'un jingle WAV sont cuits dans sa piste (cf.
+        # `music_structure.wav_cut`) ; un jingle module n'en a pas.
+        self._baked_fades = self._unit == UNIT_MS and not self._sections_on
+        fades_ok = self._sections_on or self._baked_fades
+        self._faders.load(music, tempo_pitch=tempo_pitch, fades=fades_ok,
                           unavailable_key="sndedit.mix_wav_tip" if self._sections_on else "sndedit.mix_jingle_tip")
         # Les mêmes réglages se glissent sur l'onde : mêmes champs, mêmes bornes que les curseurs ; les fondus
         # sont ceux de la musique (un jingle n'en applique pas).
         self._show_mix()
         self._wave.set_tunable(("volume", "tempo", "pitch") if tempo_pitch else ("volume",))
-        self._wave.set_fades(music.fade_in, music.fade_out, self._sections_on)
+        self._wave.set_fades(music.fade_in, music.fade_out, fades_ok)
         self._structure.updateGeometry()
         self.structure_changed.emit()
 
@@ -309,12 +376,29 @@ class MusicEditor(QWidget):
         """La courbe des canaux qui sonnent. Le plafond est celui du projet ; un jingle, lui, n'a que ses voies à lui.
         Un WAV a les siens : joué comme le module que le build en tire, il occupe un canal par voie."""
         levels = self._track.levels
-        self._poly.setVisible(levels is not None)
+        self._sync_poly_visibility()
         self._meters.setVisible(levels is not None)
         if levels is not None:
-            ceiling = self._project.settings.sound_channels if self._sections_on else JINGLE_MAX_CHANNELS
+            ceiling = (self._project.settings.sound_channels - self._cue_channels()
+                       if self._sections_on else JINGLE_MAX_CHANNELS)
             self._poly.set_levels(levels, self._track.pcm.shape[0], GBA_MIX_RATE, ceiling)
             self._meters.set_levels(levels, GBA_MIX_RATE, ceiling)
+
+    def _trim_replaces_polyphony(self) -> bool:
+        """La barre de rognage (en ms pour un WAV, en ordres pour un jingle module) occupe la place de la courbe."""
+        return self._unit == UNIT_MS or self._cuts_by_orders()
+
+    def _sync_poly_visibility(self) -> None:
+        shown = self._track is not None and self._track.levels is not None and not self._trim_replaces_polyphony()
+        self._poly.setVisible(shown)
+
+    def _cue_channels(self) -> int:
+        """Les canaux que les repères de la musique peuvent faire sonner EN MÊME TEMPS qu'elle : un canal pour un effet,
+        ceux de la couche jingle (4 au plus) pour un jingle. Un majorant : on ne sait pas quels repères se recouvrent.
+        Retranchés du plafond, la courbe de polyphonie dit ce qui reste à la musique."""
+        kinds = {c.kind for c in self._music.cues} if self._music is not None else set()
+        return (1 if kinds & {CUE_SFX, CUE_SOUND_ACTION} else 0) + (
+            JINGLE_MAX_CHANNELS if kinds & {CUE_JINGLE, CUE_JINGLE_ACTION} else 0)
 
     def set_live_source(self, source) -> None:
         """D'où l'oscilloscope tire le son qui joue : `source(frames)` rend les dernières trames entendues, ou None."""
@@ -424,6 +508,127 @@ class MusicEditor(QWidget):
         self._weight.setStyleSheet(f"color:{color}; border:1px solid {color}; padding:0 10px; background:transparent;")
         self._weight.setToolTip(tooltip(title=label("sndedit.weight_title"), body=tip))
 
+    # ── Rogner un WAV ─────────────────────────────────────────────
+
+    def _file_envelope(self, path):
+        """Le fichier ENTIER en crêtes min/max, pour la barre de découpe (gardé : la barre ne relit pas le disque à chaque
+        réglage). None si le fichier ne se lit pas."""
+        try:
+            key = (path, path.stat().st_mtime_ns)
+        except OSError:
+            return None
+        if key not in self._file_peaks:
+            try:
+                got = read_wav(path)
+            except Exception:                       # un fichier abîmé : le validateur en dit la cause
+                return None
+            if got is None:
+                return None
+            data, rate, channels = got
+            if channels > 1:
+                data = data.reshape(-1, channels).mean(axis=1)
+            mono = np.clip(data * 32767.0, -32768, 32767).astype(np.int16)
+            peaks, _seconds = peak_envelope(np.stack([mono, mono], axis=1), rate)
+            if len(self._file_peaks) >= 4:
+                self._file_peaks.pop(next(iter(self._file_peaks)))
+            self._file_peaks[key] = peaks
+        return self._file_peaks[key]
+
+    def _sync_trim(self, path) -> None:
+        """Le bouton « Rogner » et sa barre. Un asset déjà rogné montre sa barre ; un module n'a rien à rogner."""
+        is_wav = self._unit == UNIT_MS
+        by_orders = self._cuts_by_orders()
+        self._trim_zone.setVisible(is_wav or by_orders)
+        self._sync_poly_visibility()
+        self._order_bar.setVisible(False)
+        if by_orders:
+            return self._sync_order_cut()
+        if not is_wav:
+            return
+        peaks = self._file_envelope(path)
+        start, end = trim_window(self._music, self._file_ms)
+        if peaks is not None:
+            self._trim_bar.load(peaks, self._file_ms, start, end)
+        self._trim_btn.blockSignals(True)
+        self._trim_btn.setChecked(is_trimmed(self._music))
+        self._trim_btn.blockSignals(False)
+        self._trim_btn.setEnabled(peaks is not None)
+        self._trim_bar.setVisible(self._trim_btn.isChecked() and peaks is not None)
+        self._trim_note.setText(self._trim_text(start, end))
+
+    def _cuts_by_orders(self) -> bool:
+        """Un jingle dont le fichier est un module : sa plage se dit en positions d'ordre (cf. `core/module_trim.py`)."""
+        return (self._unit == UNIT_ORDER and isinstance(self._music, Jingle)
+                and self._module is not None and bool(self._module.order))
+
+    def _sync_order_cut(self) -> None:
+        """Le bouton « Rogner » et la barre d'ordres d'un jingle en module. Un jingle déjà coupé montre sa barre."""
+        entries = self._module.order
+        start, end = order_window(self._music, len(entries))
+        self._order_bar.load(entries, start, end)
+        self._trim_btn.blockSignals(True)
+        self._trim_btn.setChecked(is_order_cut(self._music))
+        self._trim_btn.blockSignals(False)
+        self._trim_btn.setEnabled(True)
+        self._order_bar.setVisible(self._trim_btn.isChecked())
+        self._trim_bar.setVisible(False)
+        self._trim_note.setText(self._order_text(start, end))
+
+    def _order_text(self, start: int, end: int) -> str:
+        """Ce que la plage garde : « Garde les ordres 02–03 (2 sur 4) » ; l'écran compte comme les sections : de 0, fin comprise."""
+        total = len(self._module.order)
+        if start <= 0 and end >= total:
+            return label("sndedit.order_note_whole", total=total)
+        return label("sndedit.order_note", start=f"{start:02d}", last=f"{end - 1:02d}", kept=end - start, total=total)
+
+    def _on_order_moving(self, start: int, end: int) -> None:
+        """Pendant le glisser : la note suit, rien n'est écrit ni rendu."""
+        self._trim_note.setText(self._order_text(start, end))
+
+    def _on_order_changed(self, start: int, end: int) -> None:
+        """Une poignée est lâchée : la plage est écrite (« tout le module » s'écrit 0, 0) et le rendu se refait pour elle — le
+        module coupé, par la même fonction que le build."""
+        if self._music is None or self._module is None:
+            return
+        total = len(self._module.order)
+        whole = start <= 0 and end >= total
+        self._music.order_start = 0 if whole else start
+        self._music.order_end = 0 if whole or end >= total else end
+        self.changed.emit()
+        self.reload()
+
+    def _trim_text(self, start: int, end: int, removed=()) -> str:
+        """Ce que la plage garde, en secondes : « Garde 2,3 – 8,1 (5,8 sur 12,4) »."""
+        def seconds(ms: int) -> str:
+            return f"{ms / 1000:.1f} s"
+        if start <= 0 and end >= self._file_ms:
+            text = label("sndedit.trim_note_whole", total=seconds(self._file_ms))
+        else:
+            text = label("sndedit.trim_note", start=seconds(start), end=seconds(end), kept=seconds(end - start),
+                         total=seconds(self._file_ms))
+        if removed:
+            text += label("sndedit.trim_removed", names=", ".join(removed))
+        return text
+
+    def _on_trim_toggled(self, on: bool) -> None:
+        (self._order_bar if self._cuts_by_orders() else self._trim_bar).setVisible(on)
+
+    def _on_trim_moving(self, start: int, end: int) -> None:
+        """Pendant le glisser : la note suit, rien n'est écrit ni rendu."""
+        self._trim_note.setText(self._trim_text(start, end))
+
+    def _on_trim_changed(self, start: int, end: int) -> None:
+        """Une poignée est lâchée : la plage est écrite, les sections suivent le son, et l'onde se refait pour la plage gardée
+        (le rendu et le poids ROM aussi, par `reload`)."""
+        if self._music is None:
+            return
+        removed = retrim(self._music, start, end, self._file_ms)
+        self._scope = None                          # la section choisie a pu disparaître
+        self.changed.emit()
+        self.reload()
+        if removed:
+            self._trim_note.setText(self._trim_text(*trim_window(self._music, self._file_ms), removed))
+
     # ── Les sections ──────────────────────────────────────────────
 
     def _seconds_of(self, start: int, end: int) -> float:
@@ -438,15 +643,18 @@ class MusicEditor(QWidget):
         music = self._music
         if self._mismatched:
             return
-        if self._unit == UNIT_ORDER and self._module is not None:
-            self._strip.set_orders(self._module.order)
+        if self._unit == UNIT_ORDER and self._module is not None and self._sections_on:
+            lead_in = lead_in_orders(self._module)
+            self._strip.set_orders(self._module.order, lead_in)
             self._strip.set_seconds_provider(self._seconds_of)
-            self._table.load(music, len(self._module.order))
-        elif self._unit == UNIT_MS:
+            self._table.load(music, len(self._module.order), lead_in=lead_in)
+        elif self._unit == UNIT_MS or not self._sections_on:     # un WAV, ou un jingle : une seule cellule, en ms
             self._strip.set_timeline(self._duration_ms)
             self._strip.set_seconds_provider(lambda start, end: max(0, end - start) / 1000.0)
-            self._table.load(music, self._duration_ms, UNIT_MS)
+            if self._sections_on:
+                self._table.load(music, self._duration_ms, UNIT_MS)
         self._strip.set_sections(music.sections)
+        self._strip.set_cues(music.cues)
         self._refresh_bands()
 
     def _refresh_bands(self) -> None:
@@ -491,6 +699,71 @@ class MusicEditor(QWidget):
         self._strip.set_sections(self._music.sections)   # recalcule les rangées si deux plages se croisent
         self._refresh_bands()
 
+    # ── Les repères : des sons que la lecture déclenche ───────────
+
+    def _cue_choices(self) -> list[tuple[str, str, list[str]]]:
+        """Les quatre natures de repère, avec le nom de leur menu et ce qu'elles peuvent viser dans le projet."""
+        project = self._project
+        choices = [
+            (CUE_SOUND_ACTION, label("sndedit.cue_menu_sound_action"), list(project.sound_action_names(KIND_SOUND))),
+            (CUE_JINGLE_ACTION, label("sndedit.cue_menu_jingle_action"), list(project.sound_action_names(KIND_JINGLE))),
+            (CUE_SFX, label("sndedit.cue_menu_sfx"), [s.name for s in project.sfx]),
+            (CUE_JINGLE, label("sndedit.cue_menu_jingle"), [j.name for j in project.jingles]),
+        ]
+        # Un jingle ne lance qu'un effet : un autre jingle remplacerait celui qui sonne (cf. `JINGLE_CUE_KINDS`).
+        return choices if self._sections_on else [c for c in choices if c[0] in JINGLE_CUE_KINDS]
+
+    def _on_cue_menu(self, cue, position: int, global_pos) -> None:
+        """Le clic droit sur la voie des repères : le même menu que celui d'une frame de sprite — un sous-menu par nature,
+        la liste des cibles dedans, sans dialogue. Sur un drapeau il le CHANGE ; dans le vide il en POSE un."""
+        if self._music is None or self._project is None:
+            return
+        menu = QMenu(self)
+        for kind, title, names in self._cue_choices():
+            current = cue.target if cue is not None and cue.kind == kind else ""
+            sub = menu.addMenu(label("sndedit.cue_menu_current", title=title, current=current) if current else title)
+            if not names:
+                sub.addAction(label("sndedit.cue_none_in_project")).setEnabled(False)
+            for name in names:
+                act = sub.addAction(name)
+                act.setCheckable(True)
+                act.setChecked(name == current)
+                act.triggered.connect(lambda _c=False, k=kind, n=name: self._set_cue(cue, position, k, n))
+        if cue is not None:
+            menu.addSeparator()
+            menu.addAction(label("sndedit.cue_delete")).triggered.connect(lambda: self._delete_cue(cue))
+        menu.exec(global_pos)
+
+    def _set_cue(self, cue, position: int, kind: str, target: str) -> None:
+        if cue is None:
+            self._music.add_cue(position, kind, target)
+        else:
+            cue.kind, cue.target = kind, target
+        self._commit_cues()
+
+    def _delete_cue(self, cue) -> None:
+        self._music.remove_cue(cue)
+        self._commit_cues()
+
+    def _on_cue_moving(self, cue, position: int) -> None:
+        """Le drapeau suit la souris ; le disque attend qu'on le lâche (`_on_cue_moved`)."""
+        cue.position = position
+        self._music.cues.sort(key=lambda c: c.position)
+        self._strip.set_cues(self._music.cues)
+
+    def _on_cue_moved(self) -> None:
+        self._commit_cues()
+
+    def _commit_cues(self) -> None:
+        """Un repère a changé : la bande le redessine, l'écran enregistre. Un WAV est coupé en segments à chaque
+        repère (cf. `music_structure.wav_boundaries`) : ce que la ROM porte change, le poids avec."""
+        self._strip.set_cues(self._music.cues)
+        if self._track is not None:
+            self._refresh_polyphony()
+        self.changed.emit()
+        if self._unit == UNIT_MS and self._sections_on:
+            self.reload()                              # la piste est recoupée : son rendu, son poids et ses repères d'ordre avec
+
     # ── Les curseurs ──────────────────────────────────────────────
 
     @property
@@ -503,8 +776,10 @@ class MusicEditor(QWidget):
         flèche du clavier ne tient rien : le disque attend alors un instant de calme.)"""
         setattr(self._music, field, value)
         if field in ("fade_in", "fade_out"):           # un fondu ne s'entend pas en direct : l'onde le dessine, le disque l'écrit
-            self._wave.set_fades(self._music.fade_in, self._music.fade_out, self._sections_on)
+            self._wave.set_fades(self._music.fade_in, self._music.fade_out, self._sections_on or self._baked_fades)
             self._save_timer.start()
+            if self._baked_fades:
+                self._rerender_timer.start()
             return
         self._show_mix()
         self.mix_changed.emit(field)
@@ -597,12 +872,11 @@ class MusicEditor(QWidget):
     # ── Le point de départ ────────────────────────────────────────
 
     def start_seconds(self):
-        """Où poser la tête de lecture une fois la musique lancée : la poignée de la règle, tant qu'elle tombe dans
-        la section sélectionnée (hors d'elle, la section démarre à son début : None, rien à poser)."""
-        cue, span = self.cue_seconds, self.scope_seconds()
-        if cue <= 0 or (span is not None and not span[0] <= cue < span[1]):
-            return None
-        return cue
+        """Où poser la tête de lecture une fois la musique lancée : la poignée de la règle, où qu'elle tombe. Avant la
+        section sélectionnée, la lecture la rejoint et boucle dessus, comme la ROM ; sans poignée posée (0), la section
+        démarre à son début : None, rien à poser."""
+        cue = self.cue_seconds
+        return cue if cue > 0 else None
 
     @property
     def cue_seconds(self) -> float:
@@ -625,10 +899,23 @@ class MusicEditor(QWidget):
     def _reset_sections(self) -> None:
         """Les sections d'un autre type de fichier : on les efface (l'auteur l'a demandé)."""
         self._music.sections.clear()
+        self._music.cues.clear()
         self._music.loop_section = ""
         self._music.unit = self._unit
         self.reload()
         self.changed.emit()
+
+    def _playhead_in_order(self, seconds: float) -> tuple[int, float]:
+        """(ordre joué, avancée dans sa case) : la bande est à l'échelle des ORDRES, pas du temps — la même seconde n'y
+        tombe pas au même x que sur l'onde. La fraction est lue sur les repères du rendu, comme la durée d'une section."""
+        if seconds < 0:
+            return -1, 0.0
+        pos = int(seconds * GBA_MIX_RATE)
+        marks, total = self._track.marks, self._track.pcm.shape[0]
+        order = self._track.order_at(pos)
+        start = marks.get(order, 0)
+        end = min((m for m in marks.values() if m > start), default=total)
+        return order, (pos - start) / (end - start) if end > start else 0.0
 
     def set_playhead_seconds(self, seconds: float) -> None:
         if self._track is None:
@@ -636,7 +923,7 @@ class MusicEditor(QWidget):
         self._wave.set_playhead(seconds)
         self._poly.set_playhead(seconds)
         self._meters.set_playhead(seconds)
-        if self._module is not None:
-            self._strip.set_playhead_order(self._track.order_at(int(seconds * GBA_MIX_RATE)))
+        if self._module is not None and self._sections_on:
+            self._strip.set_playhead_order(*self._playhead_in_order(seconds))
         else:
             self._strip.set_playhead_ms(seconds * 1000.0 if seconds >= 0 else -1.0)

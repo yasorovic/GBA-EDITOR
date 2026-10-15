@@ -39,6 +39,10 @@ def ui_ref_kinds(project) -> dict[str, str]:
     porte — ni l'une ni l'autre n'est réécrite ici. Un `kind` que la table ne connaît
     pas retombe sur le type de base : il garde au moins son cycle de vie."""
     by_kind = {t.ui_kind: name for name, t in REF_TYPE_TABLE.items() if t.ui_kind}
+    # Une boîte de texte s'écrit comme une chaîne (`:draw`) : même type de
+    # référence, la différence n'est que de rendu.
+    from core.models.ui_region import KIND_TEXT, KIND_TEXTBOX
+    by_kind[KIND_TEXTBOX] = by_kind[KIND_TEXT]
     base = next(name for name, t in REF_TYPE_TABLE.items() if t.ui_kind and not t.base)
     all_elements = getattr(project, "all_elements", None)
     return {el.name: by_kind.get(getattr(el, "kind", ""), base)

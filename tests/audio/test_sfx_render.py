@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from codegen.sfx_encode import encode_sfx_for_build
-from core import sfx_render
+from core import sfx_render, wav_edit
 from core.models.audio import Sfx
 
 
@@ -37,29 +37,29 @@ def _frames(path: Path) -> tuple[int, int]:
 
 def test_a_sidecar_from_before_the_trim_keeps_the_whole_effect():
     sfx = Sfx.from_dict({"name": "coin", "asset": "assets/coin.wav", "volume": 80})
-    assert (sfx.trim_start, sfx.trim_end) == (0, 0) and not sfx_render.is_trimmed(sfx)
+    assert (sfx.trim_start, sfx.trim_end) == (0, 0) and not wav_edit.is_trimmed(sfx)
 
 
 def test_the_kept_range_is_in_frames_and_end_zero_means_the_end_of_the_file():
     sfx = Sfx(name="coin", trim_start=250, trim_end=750)
-    assert sfx_render.kept_range(sfx, 8000, 8000) == (2000, 6000)
-    assert sfx_render.kept_range(Sfx(name="x", trim_start=500), 8000, 8000) == (4000, 8000)
-    assert sfx_render.kept_range(Sfx(name="x"), 8000, 8000) == (0, 8000)
-    assert sfx_render.kept_range(Sfx(name="x", trim_end=99999), 8000, 8000) == (0, 8000)     # une fin trop loin est bornée
-    assert sfx_render.kept_range(Sfx(name="x", trim_start=2000), 8000, 8000) is None          # rien après la fin
+    assert wav_edit.kept_range(sfx, 8000, 8000) == (2000, 6000)
+    assert wav_edit.kept_range(Sfx(name="x", trim_start=500), 8000, 8000) == (4000, 8000)
+    assert wav_edit.kept_range(Sfx(name="x"), 8000, 8000) == (0, 8000)
+    assert wav_edit.kept_range(Sfx(name="x", trim_end=99999), 8000, 8000) == (0, 8000)     # une fin trop loin est bornée
+    assert wav_edit.kept_range(Sfx(name="x", trim_start=2000), 8000, 8000) is None          # rien après la fin
 
 
 def test_the_window_the_screen_draws_is_the_same_clamped_range():
-    assert sfx_render.trim_window(Sfx(name="x"), 1000) == (0, 1000)
-    assert sfx_render.trim_window(Sfx(name="x", trim_start=100, trim_end=400), 1000) == (100, 400)
-    assert sfx_render.trim_window(Sfx(name="x", trim_start=100, trim_end=5000), 1000) == (100, 1000)
+    assert wav_edit.trim_window(Sfx(name="x"), 1000) == (0, 1000)
+    assert wav_edit.trim_window(Sfx(name="x", trim_start=100, trim_end=400), 1000) == (100, 400)
+    assert wav_edit.trim_window(Sfx(name="x", trim_start=100, trim_end=5000), 1000) == (100, 1000)
 
 
 def test_a_trim_that_keeps_nothing_is_a_problem_and_a_sane_one_is_not():
-    assert sfx_render.trim_problem(Sfx(name="x"), 1000) is None
-    assert sfx_render.trim_problem(Sfx(name="x", trim_start=100, trim_end=400), 1000) is None
-    assert "past the end" in sfx_render.trim_problem(Sfx(name="x", trim_start=1500), 1000)
-    assert "shortest" in sfx_render.trim_problem(Sfx(name="x", trim_start=100, trim_end=105), 1000)
+    assert wav_edit.trim_problem(Sfx(name="x"), 1000) is None
+    assert wav_edit.trim_problem(Sfx(name="x", trim_start=100, trim_end=400), 1000) is None
+    assert "past the end" in wav_edit.trim_problem(Sfx(name="x", trim_start=1500), 1000)
+    assert "shortest" in wav_edit.trim_problem(Sfx(name="x", trim_start=100, trim_end=105), 1000)
 
 
 def test_the_planned_weight_follows_the_trim_and_the_rate():

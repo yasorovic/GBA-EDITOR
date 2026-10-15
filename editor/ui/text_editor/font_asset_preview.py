@@ -18,6 +18,7 @@ from codegen.font_emit import glyph_tiles_w, glyph_advance_px, font_line_px
 from core.font_rasterizer import (FontRasterizerError, FontRasterizerUnavailable,
                                   display_coverage, raster_glyph_cell)
 from ui.common.theme import C, T, QSS
+from ui.common.unit_spin import UnitSpin
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 
@@ -219,7 +220,7 @@ class FontAssetPreview(QWidget):
         size_col = QHBoxLayout(); size_col.setSpacing(8); size_col.addStretch(1)
         size_label = QLabel(label("fontasset.preview_size")); size_label.setStyleSheet(QSS.label_field)
         size_col.addWidget(size_label)
-        self._size = QSpinBox(); self._size.setRange(1, 128); self._size.setSuffix(" px"); self._size.setFont(QFont(T.MONO, T.SM)); self._size.setStyleSheet(QSS.spinbox)
+        self._size = UnitSpin(); self._size.setRange(1, 128); self._size.setSuffix(" px"); self._size.setFont(QFont(T.MONO, T.SM)); self._size.setStyleSheet(QSS.spinbox)
         self._size.setToolTip(tooltip(title=label("fontasset.preview_size_title"), body=label("fontasset.preview_size_tip"))); size_col.addWidget(self._size)
         # Une planche bitmap a une taille FIXE : le spinbox ne peut rien y changer,
         # donc l'éditer serait mentir. Un simple libellé informatif prend sa place.

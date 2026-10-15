@@ -73,6 +73,8 @@ class SubPaletteAssetMixin:
             for cell, se in enumerate(tilemap):
                 tid, pb, fh, fv = unpack_se(se)
                 tilemap[cell] = pack_se(tid, _remap(pb), fh, fv)
+        if getattr(self, "tile_paint", None):
+            self.tile_paint = {k: (c, _remap(p)) for k, (c, p) in self.tile_paint.items()}
         # Origine/override suivent le décalage d'index (retirer une dérivée
         # raccourcit la baseline ; l'override d'une dérivée disparue est levé).
         if idx < len(self.source_palettes):

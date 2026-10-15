@@ -993,8 +993,9 @@ RUNTIME_API: dict[str, ApiFunc] = {
         lua_name="jingle_box.set_volume", c_func="music_jingle_volume",
         params=[Param("percent", PARAM_INT)],
         doc="Sets the volume of the jingle layer, as a percentage. Together with "
-            "`music.set_volume`, it is half of the duck: the music fades out during "
-            "the fanfare, then comes back up.",
+            "`music.set_volume`, it is a MANUAL duck. The usual case needs no call: "
+            "each jingle asset says what happens to the music under it (keeps playing, "
+            "lowered, paused).",
     ),
     "music_box.trigger": ApiFunc(
         lua_name="music_box.trigger", c_func="music_box_trigger",
@@ -1007,7 +1008,8 @@ RUNTIME_API: dict[str, ApiFunc] = {
         lua_name="music.jingle", c_func="music_jingle",
         params=[Param("name", PARAM_STR, DOMAIN_JINGLE)],
         doc="Plays a jingle (a module of assets/jingles/) OVER the current music, without"
-            " stopping it — a victory fanfare, a chime. It never loops and ends by itself. Only one at a time,"
+            " stopping it — a victory fanfare, a chime. It never loops and ends by itself. What the music does under it"
+            " (keeps playing, lowered, paused) is a setting of the jingle asset. Only one at a time,"
             " and it takes up to 4 of the project's 8 channels. It is the only way to"
             " make two musics sound together on this console.",
     ),

@@ -31,12 +31,14 @@ def test_an_effect_starts_at_the_pitch_of_its_file_in_the_centre_and_without_var
 def test_the_tables_hold_the_hardware_values_one_entry_per_effect_in_soundbank_order():
     sounds = {"sfx": [(Sfx(name="plain"), Path("a.wav")),
                       (Sfx(name="high", pitch=200, panning=100), Path("b.wav")),
-                      (Sfx(name="low_left", pitch=50, panning=-100, pitch_variation=12), Path("c.wav"))], "music": []}
+                      (Sfx(name="low_left", pitch=50, panning=-100, pitch_variation=12, protected=True), Path("c.wav"))],
+              "music": []}
 
     assert sound_emit.sfx_default_tables(sounds) == [
         "const mm_hword g_sfx_default_rate[3] = {1024,2048,512};",
         "const mm_byte  g_sfx_default_pan[3] = {128,255,1};",
         "const mm_byte  g_sfx_default_spread[3] = {0,0,12};",
+        "const mm_byte  g_sfx_default_protected[3] = {0,0,1};",
         "mm_word g_sfx_seed = 1013904223u;", ""]
 
 
@@ -75,6 +77,15 @@ def test_sfx_play_starts_from_the_tables_and_remembers_the_pitch_it_started_with
     assert "math_rand" not in play                 # un effet qui varie ne consomme jamais le hasard du jeu
 
 
+def test_a_protected_effect_always_asks_for_a_custom_channel_so_maxmod_cannot_steal_it(tmp_path: Path):
+    text, play = _sfx_play_c(tmp_path)
+
+    assert "extern const mm_byte  g_sfx_default_protected[];" in text
+    assert "ex.handle = (mm_hword)((hold || g_sfx_default_protected[id]) ? 0 : 255);" in play
+    assert Sfx.from_dict({"name": "old"}).protected is False                          # un sidecar d'avant relit « volable »
+    assert Sfx.from_dict(Sfx(name="boss", protected=True).to_dict()).protected is True
+
+
 # ── Le C généré, compilé et exécuté sur l'hôte ────────────────────────
 
 _HARNESS = r"""
@@ -88,6 +99,7 @@ mm_hword g_sfx_rate[16];
 const mm_hword g_sfx_default_rate[3] = {1024, 2048, 1024};
 const mm_byte  g_sfx_default_pan[3] = {128, 128, 128};
 const mm_byte  g_sfx_default_spread[3] = {0, 10, 50};
+const mm_byte  g_sfx_default_protected[3] = {0, 0, 0};
 mm_word g_sfx_seed = 1013904223u;
 static inline int sfx_slot(mm_sfxhand h){return (int)(h & 0xFF) - 1;}
 @@PLAY@@

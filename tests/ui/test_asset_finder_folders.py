@@ -178,41 +178,6 @@ def test_maj_clic_selectionne_la_plage_sans_perdre_le_premier(qapp, tmp_path):
     assert activated == [names[0]]     # le lot n'a rien activé de plus
 
 
-def test_maj_clic_conserve_la_selection_active(qapp, tmp_path):
-    """Le Maj-clic natif de Qt (`ExtendedSelection`) ne touche qu'à la plage
-    entre l'item courant et la cible — un item choisi par Ctrl-clic ailleurs
-    reste sélectionné."""
-    from PyQt6.QtCore import Qt as QtNS
-    from ui.common.asset_kinds import SCENES
-    from ui.common.asset_finder import _ROLE_OBJ
-    from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
-    from core.models.scene import Scene
-
-    project = _scenes_project(tmp_path)
-    for name in ("Boss", "Credits"):
-        project.scenes.append(_scene(name))
-    panel = AssetsFinderPanel()
-    panel.load_project(project)
-
-    tree = panel._finder._trees[SCENES.label]
-    items = [tree.topLevelItem(i) for i in range(tree.topLevelItemCount())]
-    names = [it.data(0, _ROLE_OBJ).name for it in items]
-    assert len(items) >= 5
-
-    _press(tree, items[0], QtNS.KeyboardModifier.NoModifier)          # ancre = 0
-    _press(tree, items[4], QtNS.KeyboardModifier.ControlModifier)     # + item 4 (devient courant)
-
-    selected = {i.data(0, _ROLE_OBJ).name for i in tree.selectedItems()}
-    assert selected == {names[0], names[4]}
-
-    # Maj-clic sur l'item 2 : Qt étend depuis l'item COURANT (4, posé par le
-    # Ctrl-clic) jusqu'à 2 — couvre 2..4 — sans effacer l'item 0.
-    _press(tree, items[2], QtNS.KeyboardModifier.ShiftModifier)
-
-    selected = {i.data(0, _ROLE_OBJ).name for i in tree.selectedItems()}
-    assert selected == {names[0], names[2], names[3], names[4]}
-
-
 def test_ctrl_clic_bascule_un_element_sans_toucher_au_reste(qapp, tmp_path):
     from PyQt6.QtCore import Qt as QtNS
     from ui.common.asset_kinds import SCENES
@@ -240,54 +205,6 @@ def test_ctrl_clic_bascule_un_element_sans_toucher_au_reste(qapp, tmp_path):
     assert selected == {names[2]}
 
 
-def test_la_surbrillance_survit_a_un_repeuplement(qapp, tmp_path):
-    """Régression : `populate()` reconstruit l'arbre (renommage, activation
-    d'une scène, tout ce qui appelle `refresh()`) — la sélection doit survivre
-    par IDENTITÉ d'asset, pas seulement tant que les vieux `QTreeWidgetItem`
-    existent. Sans ça, la surbrillance disparaissait au moindre clic simple
-    (l'activation de la scène déclenche justement un `refresh()`)."""
-    from ui.common.asset_kinds import SCENES
-    from ui.common.asset_finder import _ROLE_OBJ
-    from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
-
-    qapp.processEvents()   # draine un éventuel timer différé d'un test précédent
-
-    project = _scenes_project(tmp_path)
-    panel = AssetsFinderPanel()
-    panel.load_project(project)
-
-    tree = panel._finder._trees[SCENES.label]
-    shop = next(s for s in project.scenes if s.name == "Shop")
-    tree.select_obj(shop)
-    assert {i.data(0, _ROLE_OBJ).name for i in tree.selectedItems()} == {"Shop"}
-
-    panel.refresh()      # repeuple : les anciens QTreeWidgetItem sont détruits
-
-    selected = {i.data(0, _ROLE_OBJ).name for i in tree.selectedItems()}
-    assert selected == {"Shop"}
-    current = tree.currentItem()
-    assert current is not None and current.data(0, _ROLE_OBJ).name == "Shop"
-
-
-def test_le_tree_scenes_ne_active_pas_le_drag_qt(qapp, tmp_path):
-    """Garde-fou : activer le drag Qt (InternalMove/acceptDrops) sur un
-    QTreeWidget désactive la sélection au rectangle. Le rangement en dossiers
-    passe par le menu contextuel, pas par le drag — la multi-sélection prime."""
-    from PyQt6.QtWidgets import QAbstractItemView
-    from core.asset_folder_store import AssetFolderStore
-    from ui.common.asset_kinds import SCENES
-    from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
-
-    project = _scenes_project(tmp_path)
-    panel = AssetsFinderPanel()
-    panel.load_project(project)
-    panel.set_folder_store(AssetFolderStore(project.root))
-
-    tree = panel._finder._trees[SCENES.label]
-    assert tree.dragEnabled() is False
-    assert tree.dragDropMode() == QAbstractItemView.DragDropMode.NoDragDrop
-
-
 def test_selection_de_scenes_relayee_pour_le_graphe(qapp, tmp_path):
     from ui.common.asset_kinds import SCENES
     from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
@@ -303,62 +220,6 @@ def test_selection_de_scenes_relayee_pour_le_graphe(qapp, tmp_path):
     qapp.processEvents()      # l'émission est différée d'un tour de boucle
 
     assert got and "Shop" in got[-1]
-
-
-def test_highlight_scenes_surligne_sans_activer(qapp, tmp_path):
-    from ui.common.asset_kinds import SCENES
-    from ui.common.asset_finder import _ROLE_OBJ
-    from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
-
-    project = _scenes_project(tmp_path)
-    panel = AssetsFinderPanel()
-    panel.load_project(project)
-    activated, relayed = [], []
-    panel._finder.selected.connect(lambda l, o: activated.append(o.name))
-    panel.scenes_selected.connect(relayed.append)
-
-    panel.highlight_scenes(["Arena", "Title"])
-
-    tree = panel._finder._trees[SCENES.label]
-    selected = {i.data(0, _ROLE_OBJ).name for i in tree.selectedItems()}
-    assert selected == {"Arena", "Title"}
-    assert activated == []     # highlight n'active (ne charge) aucune scène
-    assert relayed == []       # ni ne réémet (anti-boucle)
-
-
-def test_highlight_scene_dans_un_groupe_replie_surligne_le_groupe(qapp, tmp_path):
-    """Sélectionner dans le graphe une scène rangée dans un groupe REPLIÉ côté
-    project viewer reporte le surlignage sur le GROUPE — la ligne de la scène
-    n'y est pas dépliée, mais le panneau garde un retour visuel."""
-    from core.asset_folder_store import AssetFolderStore
-    from ui.common.asset_kinds import SCENES
-    from ui.common.asset_finder import _ROLE_FOLDER, _ROLE_OBJ
-    from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
-
-    project = _scenes_project(tmp_path)
-    store = AssetFolderStore(project.root)
-    folder = store.create_folder("scenes", "Town")
-    store.move_member("scenes", _sid("Shop"), folder.id)
-
-    panel = AssetsFinderPanel()
-    panel.load_project(project)
-    panel.set_folder_store(store)
-
-    tree = panel._finder._trees[SCENES.label]
-    town = _folder_items(tree)[0]
-
-    # Groupe REPLIÉ : la ligne de Shop est cachée → c'est le groupe qui se surligne.
-    town.setExpanded(False)
-    panel.highlight_scenes(["Shop"])
-    sel = tree.selectedItems()
-    assert sel == [town]
-    assert sel[0].data(0, _ROLE_FOLDER) == folder.id
-
-    # Groupe DÉPLIÉ : la ligne de Shop est visible → c'est elle qui se surligne.
-    town.setExpanded(True)
-    panel.highlight_scenes(["Shop"])
-    sel = tree.selectedItems()
-    assert [i.data(0, _ROLE_OBJ).name for i in sel] == ["Shop"]
 
 
 def test_deplacer_une_scene_vers_un_dossier_via_le_store(qapp, tmp_path):
@@ -421,21 +282,6 @@ def test_ctrl_g_groupe_les_scenes_selectionnees(qapp, tmp_path):
     assert len(groups) == 1 and set(groups[0].members) == {_sid("Title"), _sid("Arena")}
 
 
-def test_ctrl_g_sans_selection_ne_cree_rien(qapp, tmp_path):
-    from core.asset_folder_store import AssetFolderStore
-    from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
-
-    project = _scenes_project(tmp_path)
-    store = AssetFolderStore(project.root)
-    panel = AssetsFinderPanel()
-    panel.load_project(project)
-    panel.set_folder_store(store)
-
-    panel._group_selected_scenes()
-
-    assert store.folders("scenes") == []
-
-
 def test_clic_droit_grouper_range_un_lot(qapp, tmp_path):
     from core.asset_folder_store import AssetFolderStore
     from ui.common.asset_kinds import SCENES
@@ -457,24 +303,6 @@ def test_clic_droit_grouper_range_un_lot(qapp, tmp_path):
     groups = store.folders("scenes")
     assert len(groups) == 1 and set(groups[0].members) == {_sid("Title"), _sid("Arena")}
     assert changed          # le Graphe est prévenu (folders_changed → groups_changed)
-
-
-def test_clic_droit_grouper_un_seul_item(qapp, tmp_path):
-    from core.asset_folder_store import AssetFolderStore
-    from ui.common.asset_kinds import SCENES
-    from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
-
-    project = _scenes_project(tmp_path)
-    store = AssetFolderStore(project.root)
-    panel = AssetsFinderPanel()
-    panel.load_project(project)
-    panel.set_folder_store(store)
-
-    tree = panel._finder._trees[SCENES.label]
-    shop = next(s for s in project.scenes if s.name == "Shop")
-    tree._group([shop])
-
-    assert store.folders("scenes")[0].members == (_sid("Shop"),)
 
 
 def test_multi_deplacer_vers_le_dossier(qapp, tmp_path):

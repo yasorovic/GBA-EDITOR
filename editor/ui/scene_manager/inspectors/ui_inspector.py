@@ -41,7 +41,7 @@ from core.project import Project
 from core.models.gba_color import bgr555_to_rgb888
 from core.models.ui_region import (
     ANCHOR_ACTOR, ALIGNS, TARGET_BG, TARGET_OBJ, PRIORITY_INHERIT,
-    KIND_LIST, KIND_TEXT, KIND_IMAGE, can_fill,
+    KIND_LIST, KIND_TEXT, TEXT_KINDS, KIND_IMAGE, can_fill,
     NAV_ROW, NAV_COLUMN, CURSOR_SNAP, CURSOR_SLIDE,
     FILL_NONE, FILL_COLOR, FILL_NINE, FILL_BG, FILL_SPRITE, fill_allowed,
     sprite_grid,
@@ -49,7 +49,9 @@ from core.models.ui_region import (
     preset_rect, H_LEFT, H_CENTER, H_RIGHT, V_TOP, V_MIDDLE, V_BOTTOM,
 )
 from ui.common import icons
+from ui.common.deferred_writes import get_deferred_writes, schedule_save, schedule_unwatched
 from ui.common.theme import C, T, QSS
+from ui.common.unit_spin import UnitSpin
 from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import W, CollapsibleCard, ScriptSlot, ScriptPickerPopup
 from ui.common.notice import note, notice, text
@@ -460,7 +462,7 @@ class UIInspector(QWidget):
         self._fill_state_row = W.row(label("uiinsp.fill.state"), self._fill_state,
                                      self._fill_card.body_layout).parentWidget()
 
-        self._fill_speed = QSpinBox()
+        self._fill_speed = UnitSpin()
         self._fill_speed.setFont(QFont(T.MONO, T.MD))
         self._fill_speed.setStyleSheet(QSS.spinbox)
         self._fill_speed.setRange(0, 255)
@@ -587,7 +589,7 @@ class UIInspector(QWidget):
                        self._sync_list_cursor()))
         W.row(label("uiinsp.list.motion"), self._list_cursor_mode, self._list_card.body_layout)
 
-        self._list_cursor_speed = QSpinBox()
+        self._list_cursor_speed = UnitSpin()
         self._list_cursor_speed.setFont(QFont(T.MONO, T.SM))
         self._list_cursor_speed.setStyleSheet(QSS.spinbox)
         self._list_cursor_speed.setRange(1, 64)
@@ -741,7 +743,7 @@ class UIInspector(QWidget):
             self._sync_visible_hint()
 
             # Sections par type — tout se montre/cache ICI, une seule fois.
-            is_text  = kind == KIND_TEXT
+            is_text  = kind in TEXT_KINDS
             is_list  = kind == KIND_LIST
             is_image = kind == KIND_IMAGE
             # Le FOND suit la capacité et non le type : les deux conteneurs en
@@ -757,8 +759,11 @@ class UIInspector(QWidget):
             # pas faire. Les presets de PLACEMENT restent actifs (ils ne
             # redimensionnent pas sans `stretch_*`).
             for k in ("w", "h"):
-                self._sp[k].setEnabled(not is_image)
+                self._sp[k].setEnabled(not is_image and getattr(element, "resizable", True))
             if is_text:
+                # L'alignement n'a de sens que dans une boîte : une chaîne se
+                # pose en un point, sans rectangle dans lequel se ferrer.
+                self._align_row.setVisible(bool(getattr(element, "wraps", True)))
                 self._reload_fonts()
                 btn = self._align_group.button(
                     ALIGNS.index(element.align) if element.align in ALIGNS else 0)
@@ -1000,7 +1005,7 @@ class UIInspector(QWidget):
         """Frappe : on écrit dans le modèle TOUT DE SUITE — c'est ce qui fait
         vivre l'aperçu du canvas — mais on ne sauve ni ne pousse d'historique
         avant la fin de la salve."""
-        if self._blocking or not self._element or self._kind() != KIND_TEXT:
+        if self._blocking or not self._element or self._kind() not in TEXT_KINDS:
             return
         new = self._content.toPlainText()
         t = self._current_text()
@@ -1103,7 +1108,7 @@ class UIInspector(QWidget):
             self._anim_lbl.clear()
             self._sync_image_note()
             return
-        if self._kind() != KIND_TEXT:
+        if self._kind() not in TEXT_KINDS:
             self._size_lbl.clear()
             self._anim_lbl.clear()
             return
@@ -1353,9 +1358,26 @@ class UIInspector(QWidget):
         # JSON changer, croit à une édition externe et fait recharger la scène —
         # ce qui rebascule l'inspecteur sur la scène et fait perdre l'élément en
         # cours d'édition à chaque champ modifié.
+        #
+        # Différé et CIBLÉ : un champ qu'on tourne passe ici à chaque cran. Ce que ce geste peut toucher est la mise en
+        # page qui porte l'élément, le texte qu'il affiche (`texts.json`) et la scène (banque de palette du texte) :
+        # trois écritures, une fois chacune après un silence (cf. `ui/common/deferred_writes.py`), au lieu de
+        # `save_all`, qui réécrit tout le projet. `changed`, qui rafraîchit les autres écrans, reste immédiat.
+        project = self._project
+        if project:
+            if self._layout_asset is not None:
+                schedule_save(project.ui_layouts, self._layout_asset)
+            schedule_unwatched("texts", project.save_texts)
+            if self._scene is not None:
+                schedule_save(project.scenes, self._scene)
+        self.changed.emit()
+
+    def _persist_all(self):
+        """Écrit tout le projet, après un silence : pour un geste qui réécrit au-delà de la mise en page (le renommage
+        d'un élément réécrit scripts et références)."""
         if self._project:
             from core.command_dispatcher import get_dispatcher
-            get_dispatcher().save_all()
+            get_deferred_writes().schedule("save_all", get_dispatcher().save_all)
         self.changed.emit()
 
     def _reload_list(self):
@@ -1437,11 +1459,10 @@ class UIInspector(QWidget):
         e = self._element
         if e is None or self._kind() != KIND_LIST:
             return
-        from core.models.ui_region import KIND_TEXT
+        from core.models.ui_region import is_text
         lay = self._layout_asset
         rows = [x for x in (lay.elements if lay else [])
-                if getattr(x, "parent", "") == e.name
-                and getattr(x, "kind", "") == KIND_TEXT]
+                if getattr(x, "parent", "") == e.name and is_text(x)]
         if rows:
             self._list_why.show_text("ui.list.rows", n=len(rows),
                                      names=", ".join(r.name for r in rows))
@@ -1490,7 +1511,7 @@ class UIInspector(QWidget):
         old = el.name
         applied = self._project.rename_ui_element(lay, el, new_name)
         if applied != old:
-            self._persist()
+            self._persist_all()
             self.renamed.emit(applied)
         return applied
 
@@ -1572,10 +1593,10 @@ class UIInspector(QWidget):
 
         Renvoie `(banque, nom_de_banque, nom_du_conteneur)` ou None — `banque`
         porte `.colors`, ce qu'attend `ColorIndexSlot`."""
-        from core.models.ui_region import KIND_TEXT
+        from core.models.ui_region import is_text
         if not (self._project and self._scene and self._element):
             return None
-        if getattr(self._element, "kind", "") != KIND_TEXT:
+        if not is_text(self._element):
             return None
         from codegen.runtime_codegen.gen_text import region_ink_bank
         resolved = region_ink_bank(self._project, self._scene, self._element)
@@ -1839,10 +1860,11 @@ class UIInspector(QWidget):
 
     # ── Nine-slice (asset partagé) ────────────────────────────────
     def _persist_ns(self):
-        """Le cadre est un asset PARTAGÉ : sauver le projet + redessiner."""
-        if self._project:
-            from core.command_dispatcher import get_dispatcher
-            get_dispatcher().save_all()
+        """Le cadre est un asset PARTAGÉ (le fond d'interface qui porte l'image et les marges) : sauver ce fond +
+        redessiner."""
+        ns = self._current_ns()
+        if ns is not None:
+            schedule_save(self._project.backgrounds, ns)
         self.changed.emit()
 
     def _set_ns(self, ns, field, value, label):

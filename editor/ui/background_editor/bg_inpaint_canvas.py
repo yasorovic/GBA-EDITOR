@@ -30,18 +30,18 @@ from ui.common.tooltip import tooltip
 from typing import Optional
 
 from PyQt6.QtWidgets import (
-    QWidget, QFrame, QVBoxLayout, QLabel, QToolButton, QMenu,
+    QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QToolButton, QMenu, QPushButton,
     QGraphicsOpacityEffect,
     QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsItem,
 )
 from PyQt6.QtGui import (
-    QColor, QPainter, QPixmap, QImage, QTransform, QPen, QBrush, QKeySequence, QShortcut,
+    QRegion, QColor, QPainter, QPixmap, QImage, QTransform, QPen, QBrush, QKeySequence, QShortcut, QFont, QPainterPath,
 )
 from core.keybindings import bind, get_keybindings
 from PyQt6.QtCore import Qt, QPoint, QPointF, QSize, QRectF, QTimer, QPropertyAnimation, pyqtSignal
 
 from core.bg_import import render_bg_preview, render_bitmap_preview
-from core.models.tile_codec import unpack_se, hex_to_tile, flip_h, flip_v
+from core.models.tile_codec import pack_se, unpack_se, hex_to_tile, flip_h, flip_v
 from core.models.gba_color import bgr555_to_rgb888
 from core.models.resource import MIME_ANIMATED_BG
 from core.models.background import (
@@ -53,6 +53,7 @@ from ui.common.canvas_top_bar import CanvasTopBar, BAR_HEIGHT
 from ui.common.shortcut_hints import ShortcutHints
 from ui.background_editor.bg_hints import background_hints
 from ui.background_editor.bg_prepare_overlay import PrepareOverlay, MODE_CROP, MODE_RESIZE
+from ui.background_editor.bg_mirror_overlay import MirrorOverlay
 from ui.common.icons import get as _ico, COLOR_DEFAULT, COLOR_ACTIVE, COLOR_UI
 from ui.common import external_editor
 from ui.common.canvas_backdrop import draw_grid, draw_grid_halo
@@ -107,6 +108,10 @@ class _HoverOverlay(QLabel):
 # ──────────────────────────────────────────────────────────────────
 #  Contrôleur de peinture (état + rendu + undo + persistance)
 # ──────────────────────────────────────────────────────────────────
+MODE_INPAINT = "inpaint"
+MODE_PAINT = "paint"
+
+
 class BgInpaintController:
     """Pilote la peinture par palette d'un BackgroundAsset. Détient l'image
     rendue (baseline + overrides), applique/persiste les overrides tuile par
@@ -116,7 +121,11 @@ class BgInpaintController:
         self._project = None
         self._ba = None
         self._active_pal = 0
+        self._active_color = 1
+        self._mode = MODE_INPAINT
+        self._both = False
         self._stroke: Optional[dict] = None
+        self._tile_stroke: Optional[dict] = None
         self._qimg: Optional[QImage] = None
         self._tiles: list = []          # tuiles décodées (cache patch)
         self._pal_rgb: list = []        # palettes RGB (cache patch)
@@ -128,11 +137,16 @@ class BgInpaintController:
         self._project = project
         self._ba = ba
         self._stroke = None
+        self._tile_stroke = None
         self._active_pal = 0
+        self._active_color = 1
         self._render_full()
 
     def set_active_palette(self, idx: int):
         self._active_pal = idx
+
+    def set_active_color(self, idx: int):
+        self._active_color = max(0, min(15, int(idx)))
 
     @property
     def ready(self) -> bool:
@@ -144,6 +158,16 @@ class BgInpaintController:
 
     def set_paint_enabled(self, on: bool):
         self._paint_enabled = on
+
+    def set_mode(self, mode: str):
+        """`inpaint` : le geste surcharge la palette de la tuile (l'image ne bouge pas).
+        `paint` : il pose une tuile pleine de la couleur active dans la case.
+        Les deux valent pour n'importe quel fond tuilé 4bpp."""
+        self._mode = MODE_PAINT if mode == MODE_PAINT else MODE_INPAINT
+
+    @property
+    def mode(self) -> str:
+        return self._mode
 
     @property
     def paintable(self) -> bool:
@@ -191,11 +215,11 @@ class BgInpaintController:
             return
         compiled = {
             "tiles_w": ba.tiles_w, "tiles_h": ba.tiles_h,
-            "tileset": ba.tileset, "palettes": ba.palettes,
+            "tileset": ba.effective_tileset(), "palettes": ba.palettes,
             "tilemap": ba.effective_tilemap(), "bpp": getattr(ba, "bpp", 4),
         }
         self._qimg = _pil_to_qimage(render_bg_preview(compiled))
-        self._tiles = [hex_to_tile(t) for t in ba.tileset]
+        self._tiles = [hex_to_tile(t) for t in compiled["tileset"]]
         self._pal_rgb = [[bgr555_to_rgb888(c) for c in pal] for pal in ba.palettes]
 
     def reload_render(self):
@@ -211,14 +235,18 @@ class BgInpaintController:
         cell = row * tw + col
         if not (0 <= cell < len(self._ba.tilemap)):
             return
-        tid, pb, fh, fv = unpack_se(self._ba.tilemap[cell])
-        ov = self._ba.tile_palette_overrides.get((col, row))
-        eff = pb if ov is None else ov
-        grid = tuple(self._tiles[tid]) if tid < len(self._tiles) else tuple([0] * 64)
-        if fh:
-            grid = flip_h(grid)
-        if fv:
-            grid = flip_v(grid)
+        painted = self._ba.painted_cells().get((col, row))
+        if painted is not None:
+            grid, eff = tuple([painted[0]] * 64), painted[1]
+        else:
+            tid, pb, fh, fv = unpack_se(self._ba.tilemap[cell])
+            ov = self._ba.tile_palette_overrides.get((col, row))
+            eff = pb if ov is None else ov
+            grid = tuple(self._tiles[tid]) if tid < len(self._tiles) else tuple([0] * 64)
+            if fh:
+                grid = flip_h(grid)
+            if fv:
+                grid = flip_v(grid)
         pal = self._pal_rgb[eff] if eff < len(self._pal_rgb) else (
             self._pal_rgb[0] if self._pal_rgb else [(0, 0, 0)] * 16)
         blk = QImage(8, 8, QImage.Format.Format_RGBA8888)
@@ -245,8 +273,14 @@ class BgInpaintController:
         return self._base_pb(col, row) if ov is None else ov
 
     # ── Peinture ─────────────────────────────────────────────────
-    def begin_stroke(self):
-        self._stroke = {}
+    def begin_stroke(self, both: bool = False):
+        """Ouvre un geste. `both` (la gomme) : il agit sur les DEUX calques, surcharge de palette et peinture,
+        et s'annule d'un seul Ctrl+Z. Sinon il agit dans le mode courant."""
+        self._both = both
+        if both or self._mode == MODE_INPAINT:
+            self._stroke = {}
+        if both or self._mode == MODE_PAINT:
+            self._tile_stroke = {}
 
     def _paint_one(self, col: int, row: int, erase: bool):
         """Applique la palette active (ou restaure l'origine si `erase`) à UNE
@@ -271,11 +305,27 @@ class BgInpaintController:
             self._ba.tile_palette_overrides[key] = new
         self._patch(col, row)
 
-    def set_tile(self, col: int, row: int, erase: bool = False):
+    def paint_cells(self, cells, erase: bool = False):
+        """Un geste de pinceau ou de gomme sur ces cases, un seul rafraîchissement."""
         if not self.paintable:
             return
-        self._paint_one(col, row, erase)
+        for col, row in cells:
+            self._write_cell(col, row, erase)
         self._notify()
+
+    def _write_cell(self, col: int, row: int, erase: bool):
+        """UNE case, selon le mode. Effacer rend la palette d'origine (inpaint) ou la tuile initiale (paint) ;
+        la gomme (`_both`) rend les deux."""
+        if erase and self._both:
+            self.erase_tile(col, row)
+            self._paint_one(col, row, True)
+        elif self._mode == MODE_PAINT:
+            if erase:
+                self.erase_tile(col, row)
+            else:
+                self.paint_tile(col, row)
+        else:
+            self._paint_one(col, row, erase)
 
     def fill(self, col: int, row: int):
         """Flood-fill contigu (4-voisins) des tuiles de même palette effective."""
@@ -284,8 +334,21 @@ class BgInpaintController:
         tw, th = self.tiles_size()
         if not (0 <= col < tw and 0 <= row < th):
             return
-        target = self._effective_pb(col, row)
-        if self._active_pal == target:
+        paint = self._mode == MODE_PAINT
+
+        painted = self._ba.painted_cells()
+
+        def kind(c, r):
+            # Inpaint : les cases de même palette. Paint : celles de même peinture, ou — sans peinture — de
+            # même tuile et même palette (une zone de l'image que le geste couvrirait d'un coup).
+            if not paint:
+                return self._effective_pb(c, r)
+            if (c, r) in painted:
+                return painted[(c, r)]
+            return (unpack_se(self._ba.tilemap[r * tw + c])[0], self._effective_pb(c, r))
+
+        target = kind(col, row)
+        if not paint and self._active_pal == target:
             return
         seen: set = set()
         stack = [(col, row)]
@@ -293,10 +356,10 @@ class BgInpaintController:
             c, r = stack.pop()
             if (c, r) in seen or not (0 <= c < tw and 0 <= r < th):
                 continue
-            if self._effective_pb(c, r) != target:
+            if kind(c, r) != target:
                 continue
             seen.add((c, r))
-            self._paint_one(c, r, erase=False)
+            self._write_cell(c, r, erase=False)
             stack += [(c + 1, r), (c - 1, r), (c, r + 1), (c, r - 1)]
         self._notify()
 
@@ -305,22 +368,62 @@ class BgInpaintController:
             return
         for r in range(min(r0, r1), max(r0, r1) + 1):
             for c in range(min(c0, c1), max(c0, c1) + 1):
-                self._paint_one(c, r, erase)
+                self._write_cell(c, r, erase)
         self._notify()
 
     def end_stroke(self):
-        """Clôt le stroke : pousse la commande d'historique + persiste."""
-        delta = self._stroke or {}
-        self._stroke = None
-        if not delta or not self.ready:
+        """Clôt le geste : une commande d'historique (deux réunies pour la gomme) + persistance."""
+        from core.history import (BackgroundInpaintingCmd, BackgroundTilePaintCmd, MacroCmd, get_history)
+        inpaint, painted = self._stroke or {}, self._tile_stroke or {}
+        self._stroke = self._tile_stroke = None
+        self._both = False
+        cmds = []
+        if inpaint:
+            cmds.append(BackgroundInpaintingCmd(self, self._ba, dict(inpaint)))
+        if painted:
+            cmds.append(BackgroundTilePaintCmd(self, self._ba, dict(painted)))
+        if not cmds or not self.ready:
             return
-        from core.history import BackgroundInpaintingCmd, get_history
-        cmd = BackgroundInpaintingCmd(self, self._ba, dict(delta))
+        cmd = cmds[0] if len(cmds) == 1 else MacroCmd(cmds, "Gomme")
         h = get_history()
         h._undo.append(cmd)
         h._redo.clear()
         h.changed.emit()
         self._persist()
+
+    # ── Peinture de tiles ───────────────────────────────────────
+    def paint_tile(self, col: int, row: int, color: int = None):
+        """Peint une case : elle montre une tuile pleine de `color` (défaut : la couleur active) sous la sous-palette
+        active. La couleur est un index de la palette EMBARQUÉE par le fond ; l'index 0 rend la case transparente.
+        L'image n'est pas touchée : c'est un calque. Ne rafraîchit pas — l'appelant notifie une fois par geste."""
+        if self.paintable and self._in_grid(col, row):
+            self._set_painted((col, row), (self._active_color if color is None else color, self._active_pal))
+
+    def erase_tile(self, col: int, row: int):
+        """Retire la peinture d'une case : la tuile initiale de l'image réapparaît."""
+        if self.paintable and self._in_grid(col, row):
+            self._set_painted((col, row), None)
+
+    def _in_grid(self, col: int, row: int) -> bool:
+        tw, th = self.tiles_size()
+        return 0 <= col < tw and 0 <= row < th
+
+    def _set_painted(self, key: tuple, new):
+        old = self._ba.tile_paint.get(key)
+        if old == new:
+            return
+        if self._tile_stroke is not None:
+            first = self._tile_stroke.get(key)
+            self._tile_stroke[key] = (old if first is None else first[0], new)
+        self._store_painted(self._ba, key, new)
+        self._patch(*key)
+
+    @staticmethod
+    def _store_painted(ba, key: tuple, value):
+        if value is None:
+            ba.tile_paint.pop(key, None)
+        else:
+            ba.tile_paint[key] = value
 
     # ── Undo/redo (appelé par BackgroundInpaintingCmd) ───────────
     def apply_override_delta(self, ba, delta: dict, forward: bool):
@@ -330,6 +433,18 @@ class BgInpaintController:
                 ba.tile_palette_overrides.pop(key, None)
             else:
                 ba.tile_palette_overrides[key] = val
+        if self._project:
+            from core.command_dispatcher import get_dispatcher
+            with get_dispatcher().suspended():
+                self._project.save_background(ba)
+            get_dispatcher().notify_background_changed(ba)
+        if ba is self._ba:
+            self._render_full()
+            self._notify()
+
+    def apply_tile_delta(self, ba, delta: dict, forward: bool):
+        for key, (old, new) in delta.items():
+            self._store_painted(ba, key, new if forward else old)
         if self._project:
             from core.command_dispatcher import get_dispatcher
             with get_dispatcher().suspended():
@@ -404,7 +519,7 @@ def asset_pixmap(ba) -> Optional[QPixmap]:
             return None
         img = render_bg_preview({
             "tiles_w": ba.tiles_w, "tiles_h": ba.tiles_h,
-            "tileset": ba.tileset, "palettes": ba.palettes,
+            "tileset": ba.effective_tileset(), "palettes": ba.palettes,
             "tilemap": ba.effective_tilemap(), "bpp": getattr(ba, "bpp", 4),
         })
     return QPixmap.fromImage(_pil_to_qimage(img))
@@ -654,6 +769,22 @@ class _PlacementOverlay(QGraphicsItem):
 # ──────────────────────────────────────────────────────────────────
 #  Vue zoomable / pan / peinture
 # ──────────────────────────────────────────────────────────────────
+_CHECKER_CACHE: list = []
+
+
+def _checker_tile() -> QPixmap:
+    """Le damier de transparence : cases de 8 px (une tuile), deux gris neutres du thème."""
+    if not _CHECKER_CACHE or _CHECKER_CACHE[0][0] != (C.CHECKER_A, C.CHECKER_B):
+        tile = QPixmap(16, 16)
+        tile.fill(QColor(C.CHECKER_A))
+        painter = QPainter(tile)
+        painter.fillRect(8, 0, 8, 8, QColor(C.CHECKER_B))
+        painter.fillRect(0, 8, 8, 8, QColor(C.CHECKER_B))
+        painter.end()
+        _CHECKER_CACHE[:] = [((C.CHECKER_A, C.CHECKER_B), tile)]
+    return _CHECKER_CACHE[0][1]
+
+
 class BgInpaintView(QGraphicsView):
     zoom_changed = pyqtSignal(float)
     cursor_moved = pyqtSignal(int, int)   # px dans l'image ; (-1,-1) = hors image
@@ -666,6 +797,7 @@ class BgInpaintView(QGraphicsView):
     prepare_live = pyqtSignal(int, int)     # taille du recadrage / du redimensionnement en cours
     resize_released = pyqtSignal(int, int)  # poignée lâchée → nouvelle taille
     crop_finished = pyqtSignal(bool)        # Entrée (True) / Échap (False) en recadrage
+    mirror_released = pyqtSignal(object, object, object, object)   # barre lâchée → axe X, axe Y (None = absent), côté droit gardé, côté bas gardé
 
     _ZOOM_LEVELS = [0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0]
 
@@ -676,6 +808,11 @@ class BgInpaintView(QGraphicsView):
         self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
         self.setRenderHint(QPainter.RenderHint.Antialiasing, False)
         self.setBackgroundBrush(QColor(C.BG_DEEP))
+        # Le fond (damier + grille) ne change qu'au zoom et à la taille de l'image : Qt le garde en pixmap et le
+        # fait glisser pendant un panoramique, au lieu de retracer ses lignes à chaque événement souris.
+        self.setCacheMode(QGraphicsView.CacheModeFlag.CacheBackground)
+        self.setOptimizationFlags(QGraphicsView.OptimizationFlag.DontSavePainterState
+                                  | QGraphicsView.OptimizationFlag.DontAdjustForAntialiasing)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -683,8 +820,15 @@ class BgInpaintView(QGraphicsView):
 
         self._pix_item = QGraphicsPixmapItem()
         self._scene.addItem(self._pix_item)
+        # L'aperçu des ajustements : l'image réglée, en couleurs, à la place du rendu compressé tant qu'ils diffèrent.
+        self._adjust_item = QGraphicsPixmapItem()
+        self._adjust_item.setVisible(False)
+        self._scene.addItem(self._adjust_item)
         self._grid = _GridOverlay(0, 0)
         self._grid.setZValue(10)
+        # La grille 8×8 (une centaine de lignes) est gardée en pixmap à l'échelle courante : un panoramique la fait
+        # glisser sans la retracer ; seul un changement de zoom la refait.
+        self._grid.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
         self._scene.addItem(self._grid)
         self._grid_on = True     # préférence utilisateur (toggle de la barre)
 
@@ -707,6 +851,11 @@ class BgInpaintView(QGraphicsView):
         self._prep = PrepareOverlay()
         self._prep.setZValue(40)
         self._scene.addItem(self._prep)
+        # Les barres de miroir : sous les poignées de préparation, au-dessus du reste.
+        self.mirror = MirrorOverlay()
+        self.mirror.setZValue(35)
+        self._scene.addItem(self.mirror)
+        self.zoom_changed.connect(self.mirror.set_zoom)
         # Le recadrage montre la SOURCE entière, à la place de l'image encodée.
         self._src_item = QGraphicsPixmapItem()
         self._src_item.setVisible(False)
@@ -734,6 +883,8 @@ class BgInpaintView(QGraphicsView):
         self.viewport().setMouseTracking(True)
 
         self._tool = "brush"
+        self._brush_size = 8
+        self._erase_gesture = False     # clic droit : le pinceau efface (le même geste que la gomme)
         self._painting = False
         self._rect_start: Optional[tuple[int, int]] = None
         self._panning = False
@@ -749,9 +900,24 @@ class BgInpaintView(QGraphicsView):
         lignes tracées reste borné, plutôt que de croître avec la surface de
         fond visible (c'est ce qui ramait en dézoomant beaucoup)."""
         painter.fillRect(rect, QColor(C.BG_DEEP))
-        step = self._adaptive_step()
-        draw_grid(painter, rect, step)
-        draw_grid_halo(painter, rect, step, self._hover_scene)
+        # Sous l'image, un damier neutre : la transparence se voit, au lieu de se confondre avec le fond du canvas.
+        w, h = self._ctrl.image_size()
+        image_rect = QRectF(0, 0, w, h).intersected(rect)
+        if not image_rect.isEmpty():
+            painter.fillRect(image_rect, QBrush(_checker_tile()))
+        draw_grid(painter, rect, self._adaptive_step())
+
+    def drawForeground(self, painter: QPainter, rect: QRectF):
+        """Le halo de survol, hors du fond mis en cache : il bouge avec le pointeur. Il ne se voit que là où l'image
+        ne couvre rien — comme quand il se tracait sous elle."""
+        if self._hover_scene is None:
+            return
+        w, h = self._ctrl.image_size()
+        painter.save()
+        region = QRegion(rect.toAlignedRect()).subtracted(QRegion(QRectF(0, 0, w, h).toAlignedRect()))
+        painter.setClipRegion(region)
+        draw_grid_halo(painter, rect, self._adaptive_step(), self._hover_scene)
+        painter.restore()
 
     def _adaptive_step(self, min_screen_px: float = 8.0) -> float:
         step = _BACKDROP_STEP
@@ -792,7 +958,16 @@ class BgInpaintView(QGraphicsView):
         self.slices.set_image_size(w, h)
         self.placements.set_image_size(w, h)
         self._sync_grid()
-        self._scene.setSceneRect(0, 0, max(w, 1), max(h, 1))
+        self._set_scene_rect(0, 0, max(w, 1), max(h, 1))
+        self.resetCachedContent()      # le damier suit la taille de l'image
+
+    _PAN_MARGIN = 4096
+
+    def _set_scene_rect(self, x: float, y: float, w: float, h: float):
+        """Le rectangle de la scène, élargi d'une grande marge : les barres de défilement sont masquées, et un rectangle
+        calé sur l'image bornerait le panoramique (impossible de sortir l'image du cadre, ou de la ramener au centre)."""
+        m = self._PAN_MARGIN
+        self._scene.setSceneRect(x - m, y - m, w + 2 * m, h + 2 * m)
 
     def _extent(self) -> tuple[int, int]:
         """Ce que la vue montre : la source entière pendant un recadrage, l'image
@@ -806,6 +981,17 @@ class BgInpaintView(QGraphicsView):
 
     def set_tool(self, tool: str):
         self._tool = tool
+
+    def set_brush_size(self, px: int):
+        self._brush_size = px if px in (8, 16, 32) else 8
+
+    def _apply_brush(self, col: int, row: int):
+        """Pinceau ou gomme : un carré 8/16/32 px, ancré à la grille de sa taille."""
+        cells = self._brush_size // 8
+        c0, r0 = col - col % cells, row - row % cells
+        self._ctrl.paint_cells(
+            [(cc, rr) for rr in range(r0, r0 + cells) for cc in range(c0, c0 + cells)],
+            erase=(self._tool == "eraser" or self._erase_gesture))
 
     # ── Préparation de la source ──────────────────────────────────
     @property
@@ -826,11 +1012,11 @@ class BgInpaintView(QGraphicsView):
         # Tout le reste décrit l'image ENCODÉE : dans les pixels de la source il
         # dirait faux, on le range le temps du recadrage.
         self._hidden_by_crop = [it for it in (self._pix_item, self._grid, self.placements,
-                                              self.slices, self.frames) if it.isVisible()]
+                                              self.slices, self.frames, self.mirror) if it.isVisible()]
         for it in self._hidden_by_crop:
             it.setVisible(False)
         self._crop_src_size = (sw, sh)
-        self._scene.setSceneRect(-16, -16, sw + 32, sh + 32)   # place pour les poignées
+        self._set_scene_rect(-16, -16, sw + 32, sh + 32)   # place pour les poignées
         # La source est souvent plus grande que ce que le zoom courant montre : on
         # la cadre en entier (poignées comprises), le zoom d'avant revient à la sortie.
         self._zoom_before_crop = self._zoom
@@ -866,8 +1052,8 @@ class BgInpaintView(QGraphicsView):
         # agrandit : on laisse de la place autour, sans bouger ce qu'on regarde.
         centre = self.mapToScene(self.viewport().rect().center())
         w, h = self._ctrl.image_size()
-        self._scene.setSceneRect(-max(w, size[0]), -max(h, size[1]),
-                                 3 * max(w, size[0]), 3 * max(h, size[1]))
+        self._set_scene_rect(-max(w, size[0]), -max(h, size[1]),
+                             3 * max(w, size[0]), 3 * max(h, size[1]))
         self.centerOn(centre)
         self._prep.set_zoom(self._zoom)
         self._prep.start_resize(size)
@@ -880,6 +1066,12 @@ class BgInpaintView(QGraphicsView):
             self.sync_image_size()
             self.centerOn(centre)
 
+    def set_mirror(self, axis_x, axis_y, flips: tuple, prepared: tuple, display: tuple):
+        """Les barres de miroir d'après le fond : axes en pixels de l'image préparée `prepared`, `display` = la
+        taille à laquelle l'image est montrée."""
+        self.mirror.set_axes(axis_x, axis_y, flips, prepared, display)
+        self.mirror.set_zoom(self._zoom)
+
     def _emit_prepare_live(self):
         w, h = self._prep.size() if self._prep.mode == MODE_RESIZE else self._prep.crop_rect()[2:]
         self.prepare_live.emit(w, h)
@@ -889,6 +1081,19 @@ class BgInpaintView(QGraphicsView):
         """La grille 8×8 n'a de sens qu'en tuilé : le toggle ne peut que la
         masquer, jamais la forcer sur un bitmap."""
         self._grid.setVisible(self._grid_on and self._ctrl.grid_visible())
+
+    def set_adjust_preview(self, image):
+        """`image` (PIL RGBA) montrée à la taille du fond, ou None pour revenir au rendu compressé."""
+        if image is None:
+            self._adjust_item.setVisible(False)
+            self._pix_item.setVisible(True)
+            return
+        pix = QPixmap.fromImage(_pil_to_qimage(image))
+        self._adjust_item.setPixmap(pix)
+        w, h = self._ctrl.image_size()
+        self._adjust_item.setTransform(QTransform.fromScale(w / max(1, pix.width()), h / max(1, pix.height())))
+        self._adjust_item.setVisible(True)
+        self._pix_item.setVisible(False)
 
     def set_grid_visible(self, on: bool):
         self._grid_on = on
@@ -903,8 +1108,14 @@ class BgInpaintView(QGraphicsView):
 
     def wheelEvent(self, event):
         factor = 1.15 if event.angleDelta().y() > 0 else 1 / 1.15
+        # Le point de l'image sous le curseur y reste : `setTransform` ne passe pas par l'ancrage de la vue.
+        anchor = event.position().toPoint()
+        under = self.mapToScene(anchor)
         self._zoom = max(0.25, min(self._zoom * factor, 16.0))
         self._apply_zoom()
+        moved = self.mapFromScene(under) - anchor
+        self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() + moved.x())
+        self.verticalScrollBar().setValue(self.verticalScrollBar().value() + moved.y())
 
     def zoom_step(self, direction: int):
         """Zoom par crans (boutons de la barre) — cran le plus proche, puis ±1."""
@@ -978,6 +1189,13 @@ class BgInpaintView(QGraphicsView):
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
             e.accept()
             return
+        if (e.button() == Qt.MouseButton.RightButton and not self._prep.mode and self._ctrl.paintable
+                and self._tool in ("brush", "eraser") and not self._painting):
+            # Clic droit = gomme : en Paint la tuile initiale revient, en Inpaint la palette d'origine.
+            self._erase_gesture = True
+            self._handle_press(e)
+            e.accept()
+            return
         if e.button() == Qt.MouseButton.LeftButton and self._prep.mode:
             # Recadrage / redimensionnement actif : le clic est à ses poignées, ou
             # à personne — jamais à la peinture ni aux fonds posés.
@@ -987,6 +1205,11 @@ class BgInpaintView(QGraphicsView):
             return
         if e.button() == Qt.MouseButton.LeftButton:
             x, y = self._scene_pos(e)
+            grabbed = self.mirror.hit(x, y) if self.mirror.isVisible() else None
+            if grabbed:
+                self.mirror.begin(grabbed)
+                e.accept()
+                return
             if self.slices.isVisible():
                 guide = self.slices.guide_at(x, y)
                 if guide:
@@ -1037,6 +1260,11 @@ class BgInpaintView(QGraphicsView):
                 self.setCursor(cur) if cur else self.unsetCursor()
             e.accept()
             return
+        if self.mirror.dragging:
+            x, y = self._scene_pos(e)
+            self.mirror.drag(x, y, bool(e.modifiers() & Qt.KeyboardModifier.ControlModifier))
+            e.accept()
+            return
         if self._drag_guide:
             x, y = self._scene_pos(e)
             self.slice_dragged.emit(self._drag_guide,
@@ -1050,10 +1278,18 @@ class BgInpaintView(QGraphicsView):
             e.accept()
             return
         if self._painting and self._tool in ("brush", "eraser"):
-            c, r = self._cell_at(e)
-            self._ctrl.set_tile(c, r, erase=(self._tool == "eraser"))
+            self._apply_brush(*self._cell_at(e))
             e.accept()
             return
+        # Idem pour une barre de miroir.
+        if self.mirror.isVisible():
+            hovered = self.mirror.hit(*self._scene_pos(e))
+            if hovered:
+                self.setCursor(self.mirror.cursor_for(hovered))
+                e.accept()
+                return
+            if not self.slices.isVisible():
+                self.unsetCursor()
         # Curseur de redimensionnement au survol d'un guide : sans ça, rien ne
         # dit que la ligne se prend.
         if self.slices.isVisible():
@@ -1077,6 +1313,11 @@ class BgInpaintView(QGraphicsView):
                 self.resize_released.emit(*self._prep.size())
             e.accept()
             return
+        if self.mirror.dragging and e.button() == Qt.MouseButton.LeftButton:
+            self.mirror.end()
+            self.mirror_released.emit(*self.mirror.axes(), *self.mirror.flips())
+            e.accept()
+            return
         if self._drag_guide and e.button() == Qt.MouseButton.LeftButton:
             self._drag_guide = None
             self.slice_released.emit()
@@ -1087,7 +1328,8 @@ class BgInpaintView(QGraphicsView):
             self.slice_released.emit()   # même signal : « le geste est fini, persiste »
             e.accept()
             return
-        if self._painting and e.button() == Qt.MouseButton.LeftButton:
+        if self._painting and (e.button() == Qt.MouseButton.LeftButton
+                               or (self._erase_gesture and e.button() == Qt.MouseButton.RightButton)):
             if self._tool == "rect" and self._rect_start is not None:
                 c, r = self._cell_at(e)
                 c0, r0 = self._rect_start
@@ -1095,6 +1337,7 @@ class BgInpaintView(QGraphicsView):
                 self._rect_start = None
             self._ctrl.end_stroke()
             self._painting = False
+            self._erase_gesture = False
             e.accept()
             return
         super().mouseReleaseEvent(e)
@@ -1156,9 +1399,9 @@ class BgInpaintView(QGraphicsView):
         c, r = self._cell_at(e)
         tool = self._tool
         if tool in ("brush", "eraser"):
-            self._ctrl.begin_stroke()
+            self._ctrl.begin_stroke(both=(tool == "eraser"))
             self._painting = True
-            self._ctrl.set_tile(c, r, erase=(tool == "eraser"))
+            self._apply_brush(c, r)
         elif tool == "fill":
             self._ctrl.begin_stroke()
             self._ctrl.fill(c, r)
@@ -1170,23 +1413,127 @@ class BgInpaintView(QGraphicsView):
 
 
 # ──────────────────────────────────────────────────────────────────
-#  Barre d'outils flottante
+#  Pastilles de couleurs et barre d'outils flottantes
 # ──────────────────────────────────────────────────────────────────
+class _ColorDot(QToolButton):
+    """Une pastille ronde : la couleur de l'entrée, ou la transparence barrée.
+
+    L'index 0 d'une sous-palette GBA est toujours transparent, quelle que soit
+    la valeur qu'il porte : la pastille ne montre jamais cette valeur, elle
+    montre un damier barré, que `colors[0]` soit noir ou autre chose.
+    """
+
+    def __init__(self, index: int, parent=None):
+        super().__init__(parent)
+        self._index = index
+        self._rgb = QColor(0, 0, 0)
+        self.setCheckable(True)
+        self.setFixedSize(22, 22)
+
+    def set_color(self, bgr555: int):
+        self._rgb = QColor(*bgr555_to_rgb888(bgr555))
+        self.update()
+
+    def paintEvent(self, _event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = QRectF(self.rect()).adjusted(2, 2, -2, -2)
+        clip = QPainterPath()
+        clip.addEllipse(rect)
+        painter.setClipPath(clip)
+        if self._index == 0:
+            half = rect.width() / 2
+            painter.fillRect(rect, QColor(C.CHECKER_B))
+            painter.fillRect(QRectF(rect.left(), rect.top(), half, half), QColor("#ffffff"))
+            painter.fillRect(QRectF(rect.left() + half, rect.top() + half, half, half), QColor("#ffffff"))
+        else:
+            painter.fillRect(rect, self._rgb)
+        painter.setClipping(False)
+        if self._index == 0:
+            painter.setPen(QPen(QColor("#e04040"), 2))
+            painter.drawLine(rect.bottomLeft() + QPointF(1, -1), rect.topRight() + QPointF(-1, 1))
+        if self.isChecked():
+            border, width = QColor(C.ACCENT), 3
+        else:
+            border, width = QColor(C.TEXT_HI if self.underMouse() else C.BORDER), 1
+        painter.setPen(QPen(border, width))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawEllipse(rect)
+
+    def enterEvent(self, e):
+        self.update(); super().enterEvent(e)
+
+    def leaveEvent(self, e):
+        self.update(); super().leaveEvent(e)
+
+
+class TileColorStrip(QFrame):
+    """Les 16 entrées de la sous-palette embarquée active, en pastilles rondes.
+
+    C'est le pendant couleur de `PaletteBankStrip` : celui-ci choisit la
+    banque, celui-là l'index qui sera écrit dans les tiles. La première
+    pastille est la transparence (index 0), toujours barrée.
+    """
+    selected = pyqtSignal(int)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._active = 1
+        self._buttons: list[_ColorDot] = []
+        self.setStyleSheet(f"TileColorStrip{{background:{C.BG_BASE};border:1px solid {C.BORDER_MID};border-radius:8px;}}")
+        row = QHBoxLayout(self); row.setContentsMargins(6, 5, 6, 5); row.setSpacing(3)
+        for idx in range(16):
+            b = _ColorDot(idx, self)
+            b.clicked.connect(lambda _=False, i=idx: self._select(i))
+            row.addWidget(b)
+            self._buttons.append(b)
+        self.setVisible(False)
+
+    def active(self) -> int:
+        return self._active
+
+    def load(self, colors: list, active: int = None):
+        if active is not None:
+            self._active = max(0, min(15, active))
+        for i, button in enumerate(self._buttons):
+            button.set_color(colors[i] if i < len(colors) else 0)
+            button.setToolTip(label('bginp.tile_color_transparent') if i == 0
+                              else label('bginp.tile_color_i', i=i))
+            button.setChecked(i == self._active)
+        self.adjustSize()
+
+    def _select(self, idx: int):
+        # Un clic sur la pastille déjà active ne doit pas la décocher.
+        for i, b in enumerate(self._buttons):
+            b.setChecked(i == idx)
+        if idx == self._active:
+            return
+        self._active = idx
+        self.selected.emit(idx)
+
+
 class BgInpaintToolbar(QFrame):
     tool_changed = pyqtSignal(str)
+    size_changed = pyqtSignal(int)
+    mode_changed = pyqtSignal(str)
 
+    # (outil, icône, titre, infobulle Inpaint, infobulle Paint) : le geste dépend du mode du pinceau.
     _TOOLS = [
-        ("brush",  "tool_inpaint_brush", "bginp.brush", "bginp.brush_tip"),
-        ("fill",   "tool_fill",          "bginp.fill", "bginp.fill_tip"),
-        ("rect",   "tool_inpaint_rect",  "bginp.rectangle_repaint_an_area", "bginp.rectangle_tip"),
-        ("eraser", "tool_erase",         "bginp.eraser", "bginp.eraser_tip"),
+        ("brush",  "tool_inpaint_brush", "bginp.brush", "bginp.brush_tip", "bginp.tile_brush_tip"),
+        ("fill",   "tool_fill",          "bginp.fill", "bginp.fill_tip", "bginp.fill_tip_paint"),
+        ("rect",   "tool_inpaint_rect",  "bginp.rectangle_repaint_an_area", "bginp.rectangle_tip",
+         "bginp.rectangle_tip_paint"),
+        ("eraser", "tool_erase",         "bginp.eraser", "bginp.eraser_tip", "bginp.eraser_tip_paint"),
     ]
+    _BRUSH_SIZES = (8, 16, 32)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._dragging = False
         self._drag_offset = QPoint()
         self._current = "brush"
+        self._mode = MODE_INPAINT
+        self._brush_size = 8
         self.min_y = 0     # borne haute du drag (la barre du canvas l'occupe)
 
         self.setFixedWidth(46)
@@ -1219,25 +1566,118 @@ class BgInpaintToolbar(QFrame):
         layout.addWidget(sep)
 
         self._btns: dict[str, QToolButton] = {}
-        for tool_id, icon_key, title_key, body_key in self._TOOLS:
+
+        for tool_id, icon_key, _title_key, _body_key, _paint_body in self._TOOLS:
             btn = QToolButton()
             btn.setIcon(_ico(icon_key, COLOR_DEFAULT, COLOR_ACTIVE))
             btn.setIconSize(QSize(24, 24))
             btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-            btn.setToolTip(tooltip(title=label(title_key), body=label(body_key)))
             btn.setCheckable(True)
             btn.setFixedSize(36, 36)
-            btn.clicked.connect(lambda _=False, t=tool_id: self._select(t))
+            # Seul le pinceau porte le choix du mode et de la taille. La gomme n'en a pas : elle purge les DEUX
+            # calques ; fill et rect suivent le mode du pinceau, sans le proposer.
+            if tool_id == "brush":
+                btn.clicked.connect(lambda _=False, t=tool_id: self._show_brush_menu(t))
+            else:
+                btn.clicked.connect(lambda _=False, t=tool_id: self._set_tool(t))
             layout.addWidget(btn, 0, Qt.AlignmentFlag.AlignHCenter)
             self._btns[tool_id] = btn
 
-        self._btns["brush"].setChecked(True)
+        self._sync_buttons()
+        self._refresh_tips()
 
-    def _select(self, tool: str):
+    def _refresh_tips(self):
+        """Infobulles et icône du pinceau selon le mode : le même outil, deux gestes."""
+        paint = self._mode == MODE_PAINT
+        for tool_id, _icon, title_key, body_key, paint_body in self._TOOLS:
+            shortcut = get_keybindings().resolve("background.tool_brush") if tool_id == "brush" else None
+            self._btns[tool_id].setToolTip(tooltip(
+                title=label(title_key), shortcut=shortcut, body=label(paint_body if paint else body_key)))
+        self._btns["brush"].setIcon(_ico("tool_tile_brush" if paint else "tool_inpaint_brush",
+                                         COLOR_DEFAULT, COLOR_ACTIVE))
+
+    def _show_brush_menu(self, tool: str):
+        """Dropdown du pinceau : mode (Inpaint / Paint) puis taille, calqué sur `FloatingToolbar` du canvas."""
+        from PyQt6.QtGui import QAction
+
+        menu = QMenu(self)
+        menu.setFont(QFont(T.UI, T.MD))
+        menu.setStyleSheet(f"""
+            QMenu {{ background:{C.BG_RAISED}; color:{C.TEXT_NORM}; border:1px solid {C.BORDER_MID};
+                    border-radius:4px; padding:4px; }}
+            QMenu::item {{ padding:5px 14px 5px 8px; border-radius:3px; icon-size:20px; }}
+            QMenu::item:selected {{ background:{C.BG_SEL}; color:{C.ACCENT}; }}
+            QMenu::item:checked  {{ color:{C.ACCENT}; }}
+        """)
+        for mode, icon_key, title_key, body_key in (
+                (MODE_INPAINT, "tool_inpaint_brush", "bginp.mode_inpaint", "bginp.mode_inpaint_tip"),
+                (MODE_PAINT, "tool_tile_brush", "bginp.mode_paint", "bginp.mode_paint_tip")):
+            action = QAction(label(title_key), self)
+            action.setIcon(_ico(icon_key, COLOR_DEFAULT))
+            action.setToolTip(tooltip(title=label(title_key), body=label(body_key)))
+            action.setCheckable(True)
+            action.setChecked(mode == self._mode)
+            action.triggered.connect(lambda _=False, m=mode: self._select_mode(m, tool))
+            menu.addAction(action)
+        menu.addSeparator()
+        for size in self._BRUSH_SIZES:
+            action = QAction(label('bginp.tile_brush_size', size=size), self)
+            action.setToolTip(tooltip(
+                title=label('bginp.tile_brush_size', size=size),
+                body=label('bginp.tile_brush_size_tip', size=size),
+            ))
+            action.setCheckable(True)
+            action.setChecked(size == self._brush_size)
+            action.triggered.connect(lambda _=False, s=size: self._select_size(s, tool))
+            menu.addAction(action)
+
+        owner = self._btns[tool]
+        self._exec_tool_menu(menu, owner.mapToGlobal(QPoint(owner.width() + 4, 0)), owner)
+
+    def _select_mode(self, mode: str, tool: str):
+        self.set_mode(mode)
+        self._set_tool(tool)
+
+    def _select_size(self, size: int, tool: str):
+        self._brush_size = size
+        self.size_changed.emit(size)
+        self._set_tool(tool)
+
+    def set_mode(self, mode: str):
+        mode = MODE_PAINT if mode == MODE_PAINT else MODE_INPAINT
+        if mode == self._mode:
+            return
+        self._mode = mode
+        self._refresh_tips()
+        self.mode_changed.emit(mode)
+
+    @property
+    def mode(self) -> str:
+        return self._mode
+
+    @property
+    def hint_context(self) -> str:
+        """Contexte de la table des raccourcis : l'outil, suffixé `_paint` quand le geste pose une couleur."""
+        return f"{self._current}_paint" if self._mode == MODE_PAINT else self._current
+
+    def _set_tool(self, tool: str):
         self._current = tool
-        for tid, b in self._btns.items():
-            b.setChecked(tid == tool)
+        self._sync_buttons()
         self.tool_changed.emit(tool)
+
+    def _sync_buttons(self):
+        """Une seule source de l'état coché, identique au canvas de scène."""
+        for tool_id, button in self._btns.items():
+            button.setChecked(tool_id == self._current)
+
+    def _exec_tool_menu(self, menu: QMenu, pos: QPoint, owner: QToolButton):
+        for button in self._btns.values():
+            button.setChecked(button is owner)
+        menu.exec(pos)
+        self._sync_buttons()
+
+    def select_brush(self):
+        self._set_tool("brush")
 
     @property
     def current_tool(self) -> str:
@@ -1271,10 +1711,10 @@ class BgInpaintCanvas(QWidget):
     slices_dragged = pyqtSignal(dict)      # marges posées au canvas → inspecteur
     placements_changed = pyqtSignal()      # fond animé posé/déplacé/retiré
     placement_selected = pyqtSignal(object)  # placement | None (relayé du view)
-    # Recadrage / taille voulus pour la source, (None, None) = « Original ». Le
-    # canvas ne compresse pas lui-même : l'écran le fait hors-thread et écrit le
-    # résultat sur le fond.
-    prepare_requested = pyqtSignal(object, object)
+    # Recadrage / taille / miroir voulus pour la source, (None, None, (None, None)) =
+    # « Original ». Le canvas ne compresse pas lui-même : l'écran le fait
+    # hors-thread et écrit le résultat sur le fond. Le miroir est (axe X, axe Y).
+    prepare_requested = pyqtSignal(object, object, object)
 
     # Cadence de la lecture : un tick GBA (60 Hz), l'unité dans laquelle les
     # vitesses sont DÉCLARÉES. Rejouer à l'unité près est ce qui rend l'aperçu
@@ -1304,13 +1744,25 @@ class BgInpaintCanvas(QWidget):
                                  body=label('bginp.grid_tip')),
             self._view.set_grid_visible)
         self._chk_grid.setChecked(True)
-        # Éditer l'image dans un logiciel externe (cf. external_editor) : ce
-        # canvas peint des PALETTES, pas des pixels — pour le dessin, on
-        # délègue plutôt que d'inventer un éditeur d'image dans Qt.
-        self._btn_edit = self._bar.add_action(
-            "edit_external", tooltip(title=label('bginp.edit_image'),
-                                      body=label('bginp.edit_image_tip')),
-            self._on_edit_image)
+        # Les PNG sources gardent leur éditeur externe ; le Tile Painter ne
+        # dessine que dans un fond vierge, indexé et déjà GBA-compatible.
+        # Un bouton texte en surimpression, comme celui de l'écran Animation : « Edit .png », centré sous la barre.
+        self._btn_edit = QPushButton(label('bginp.edit_image'), self)
+        self._btn_edit.setFont(QFont(T.UI, T.XS, QFont.Weight.DemiBold))
+        self._btn_edit.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_edit.setStyleSheet(
+            f"QPushButton{{color:{C.TEXT_DIM};background:{C.BG_RAISED};"
+            f"border:1px solid {C.BORDER_DARK};border-radius:4px;padding:3px 10px;}}"
+            f"QPushButton:hover{{color:{C.TEXT_HI};}}"
+            f"QPushButton:disabled{{color:{C.TEXT_MUTED};}}")
+        self._btn_edit.setToolTip(tooltip(title=label('bginp.edit_image'), body=label('bginp.edit_image_tip')))
+        self._btn_edit.clicked.connect(self._on_edit_image)
+        # « Aperçu avant compression » : tant que l'image réglée remplace le rendu compressé, on le dit.
+        self._preview_badge = QLabel(label('bginp.adjust_preview'), self)
+        self._preview_badge.setFont(QFont(T.UI, T.XS, QFont.Weight.DemiBold))
+        self._preview_badge.setStyleSheet(
+            f"color:{C.TEXT_HI};background:{C.BG_RAISED};border:1px solid {C.ACCENT};border-radius:4px;padding:2px 8px;")
+        self._preview_badge.setVisible(False)
         self._btn_edit.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._btn_edit.customContextMenuRequested.connect(self._on_edit_menu)
         # Préparer la source d'une image « riche » : recadrer, redimensionner,
@@ -1322,14 +1774,22 @@ class BgInpaintCanvas(QWidget):
         self._tb_resize = self._bar.add_toggle(
             "prep_resize", tooltip(title=label('bginp.resize'), body=label('bginp.resize_tip')),
             self._on_resize_toggled)
+        self._tb_mirror_x = self._bar.add_toggle(
+            "prep_mirror_x", tooltip(title=label('bginp.mirror_x'), body=label('bginp.mirror_x_tip')),
+            lambda on: self._on_mirror_toggled(on, horizontal=True))
+        self._tb_mirror_y = self._bar.add_toggle(
+            "prep_mirror_y", tooltip(title=label('bginp.mirror_y'), body=label('bginp.mirror_y_tip')),
+            lambda on: self._on_mirror_toggled(on, horizontal=False))
         self._btn_prep_reset = self._bar.add_action(
             "prep_reset", tooltip(title=label('bginp.prep_reset'), body=label('bginp.prep_reset_tip')),
             self._on_prep_reset)
+        self._mirror_wanted = (None, None, False, False)   # cf. _mirror
         self._crop_cancelled = False   # Échap / changement de fond : pas d'application
         self._src_size = (0, 0)        # taille du PNG source, lue à la sélection
         self._view.prepare_live.connect(self._bar.set_canvas_size)
         self._view.resize_released.connect(self._on_resize_released)
         self._view.crop_finished.connect(self._on_crop_finished)
+        self._view.mirror_released.connect(self._on_mirror_released)
         self._view.zoom_changed.connect(self._bar.set_zoom)
         self._view.cursor_moved.connect(self._on_cursor_moved)
         self._bar.set_zoom(self._view._zoom)
@@ -1346,17 +1806,27 @@ class BgInpaintCanvas(QWidget):
         self._paint_strip.selected.connect(self.set_active_palette)
         self._paint_strip.setVisible(False)
         self._paint_strip.raise_()
+        self._color_strip = TileColorStrip(self)
+        self._color_strip.selected.connect(self.set_active_color)
+        self._color_strip.raise_()
 
         self._toolbar = BgInpaintToolbar(self)
         self._toolbar.min_y = BAR_HEIGHT
         self._toolbar.move(10, BAR_HEIGHT + 10)
         self._toolbar.tool_changed.connect(self._view.set_tool)
+        self._toolbar.size_changed.connect(self._view.set_brush_size)
+        self._toolbar.mode_changed.connect(self._on_mode_changed)
         self._toolbar.raise_()
+        brush_shortcut = QShortcut(QKeySequence(), self)
+        brush_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        brush_shortcut.activated.connect(self._toolbar.select_brush)
+        bind("background.tool_brush", brush_shortcut)
 
         # Table des raccourcis (bas-droite) : suit l'outil, ou le mode de
         # préparation (recadrer / redimensionner) quand il est ouvert.
-        self._hints = ShortcutHints(self, background_hints, self._toolbar.current_tool)
+        self._hints = ShortcutHints(self, background_hints, self._toolbar.hint_context)
         self._toolbar.tool_changed.connect(lambda _tool: self._sync_hints())
+        self._toolbar.mode_changed.connect(lambda _mode: self._sync_hints())
         self._tb_crop.toggled.connect(lambda _on: self._sync_hints())
         self._tb_resize.toggled.connect(lambda _on: self._sync_hints())
 
@@ -1482,10 +1952,11 @@ class BgInpaintCanvas(QWidget):
     def _refresh_prepare_ui(self):
         """Boutons et poignées d'après l'état du fond courant."""
         ok = self._prep_available()
-        for b in (self._tb_crop, self._tb_resize):
+        for b in (self._tb_crop, self._tb_resize, self._tb_mirror_x, self._tb_mirror_y):
             b.setEnabled(ok)
+        self._sync_mirror()
         self._btn_prep_reset.setEnabled(
-            ok and bool(self._ba.import_crop or self._ba.import_size))
+            ok and bool(self._ba.import_crop or self._ba.import_size or self._mirror()[:2] != (None, None)))
         if not ok:
             self._set_checked(self._tb_crop, False)
             self._set_checked(self._tb_resize, False)
@@ -1494,13 +1965,70 @@ class BgInpaintCanvas(QWidget):
         elif self._tb_resize.isChecked():
             self._view.begin_resize(self._prepared_size())
 
+    # ── Miroir ───────────────────────────────────────────────────
+    # Un bouton par axe : coché, une barre à mi-image avec sa poignée ; on la tire,
+    # le côté gauche (haut) se reflète de l'autre côté. Le miroir précède la
+    # compression (il change les tuiles), donc comme le recadrage il passe par
+    # `prepare_requested` : la barre bouge à la souris, l'image se recompresse au
+    # relâchement.
+
+    def _mirror(self) -> tuple:
+        """Le miroir VOULU : celui du fond, sauf entre un geste et la fin de sa compression — deux gestes rapprochés
+        s'ajoutent alors, au lieu que le second parte d'un fond qui n'a pas encore reçu le premier."""
+        return self._mirror_wanted
+
+    def _sync_mirror(self):
+        """Barres et boutons d'après le fond courant."""
+        ba = self._ba
+        self._mirror_wanted = (tuple(ba.import_prep()["mirror"]) if ba and self._prep_available()
+                               else (None, None, False, False))
+        self._show_mirror()
+
+    def _show_mirror(self):
+        axis_x, axis_y, flip_x, flip_y = self._mirror_wanted
+        self._set_checked(self._tb_mirror_x, axis_x is not None)
+        self._set_checked(self._tb_mirror_y, axis_y is not None)
+        prepared = self._prepared_size() if self._ba else (0, 0)
+        # Seul un bitmap est ajusté à l'encodage (≤ 240×160) ; un tuilé est rembourré, pas mis à l'échelle.
+        display = self._ctrl.image_size() if self._ba and self._ba.mode == "bitmap" else prepared
+        self._view.set_mirror(axis_x, axis_y, (flip_x, flip_y), prepared, display)
+
+    def _on_mirror_toggled(self, on: bool, horizontal: bool):
+        pw, ph = self._prepared_size()
+        axis_x, axis_y, flip_x, flip_y = self._mirror()
+        if horizontal:
+            axis_x, flip_x = (max(1, pw // 2) if on and pw > 1 else None), False
+        else:
+            axis_y, flip_y = (max(1, ph // 2) if on and ph > 1 else None), False
+        self._emit_prepare(self._ba.import_crop, self._ba.import_size, (axis_x, axis_y, flip_x, flip_y))
+
+    def _on_mirror_released(self, axis_x, axis_y, flip_x, flip_y):
+        mirror = (axis_x, axis_y, flip_x, flip_y)
+        if mirror != self._mirror():
+            self._emit_prepare(self._ba.import_crop, self._ba.import_size, mirror)
+
+    def _emit_prepare(self, crop, size, mirror, rescale: bool = False):
+        """Le miroir suit une image qui change de taille : `rescale` (redimensionnement) garde l'axe à sa place
+        relative, sinon (recadrage) il est seulement ramené dans l'image. Un axe ne sort jamais du cadre."""
+        old_w, old_h = self._prepared_size()
+        sw, sh = self._src_size
+        new_w, new_h = size or (crop[2:] if crop else (sw, sh))
+        axes = []
+        for axis, old, new in ((mirror[0], old_w, new_w), (mirror[1], old_h, new_h)):
+            if rescale and axis is not None:
+                axis = round(axis * new / old)    # redimensionné : l'axe garde sa place relative
+            axes.append(None if axis is None or new < 2 else max(1, min(axis, new - 1)))
+        self._mirror_wanted = (*axes, mirror[2], mirror[3])
+        self._show_mirror()
+        self.prepare_requested.emit(crop, size, self._mirror_wanted)
+
     def _sync_hints(self):
         if self._tb_crop.isChecked():
             self._hints.set_context("crop")
         elif self._tb_resize.isChecked():
             self._hints.set_context("resize")
         else:
-            self._hints.set_context(self._toolbar.current_tool)
+            self._hints.set_context(self._toolbar.hint_context)
 
     def _cancel_prepare_modes(self):
         """Quitte recadrage/redimensionnement sans rien appliquer (autre fond
@@ -1544,7 +2072,7 @@ class BgInpaintCanvas(QWidget):
             ow, oh = old[2:] if old else (sw, sh)
             nw, nh = crop[2:] if crop else (sw, sh)
             size = (max(1, round(nw * size[0] / ow)), max(1, round(nh * size[1] / oh)))
-        self.prepare_requested.emit(crop, size)
+        self._emit_prepare(crop, size, self._mirror())
 
     def _on_resize_toggled(self, on: bool):
         if not on:
@@ -1559,11 +2087,11 @@ class BgInpaintCanvas(QWidget):
         base = tuple(crop[2:]) if crop else self._src_size
         size = None if (w, h) == base else (w, h)
         if size != self._ba.import_size:
-            self.prepare_requested.emit(crop, size)
+            self._emit_prepare(crop, size, self._mirror(), rescale=True)
 
     def _on_prep_reset(self):
         self._cancel_prepare_modes()
-        self.prepare_requested.emit(None, None)
+        self.prepare_requested.emit(None, None, (None, None, False, False))
 
     # ── Édition externe ──────────────────────────────────────────
 
@@ -1599,8 +2127,13 @@ class BgInpaintCanvas(QWidget):
         strip = self._paint_strip
         strip.reflow()
         x = max(0, (self.width() - strip.width()) // 2)
-        y = max(BAR_HEIGHT, self.height() - strip.height() - 12)
+        color_h = self._color_strip.height() + 6 if self._color_strip.isVisible() else 0
+        y = max(BAR_HEIGHT, self.height() - strip.height() - color_h - 12)
         strip.move(x, y)
+        if self._color_strip.isVisible():
+            self._color_strip.move(max(0, (self.width() - self._color_strip.width()) // 2),
+                                   y + strip.height() + 6)
+            self._color_strip.raise_()
 
     @staticmethod
     def _palette_entries(palettes: list) -> list:
@@ -1744,14 +2277,19 @@ class BgInpaintCanvas(QWidget):
                          and getattr(ba, "bpp", 4) == 4)
         self._ctrl.set_paint_enabled(paintable)
         self._toolbar.setVisible(paintable)
+        if ba and not ba.asset:
+            # Un fond sans image n'a rien à surcharger : le geste naturel y est de poser des couleurs.
+            self._toolbar.set_mode(MODE_PAINT)
         if paintable:
             self._paint_strip.load(self._palette_entries(ba.palettes), active=0)
             self._paint_strip.setVisible(True)
+            self._sync_color_strip(active=1)
             self._position_paint_strip()
             QTimer.singleShot(0, self._position_paint_strip)
             self._ctrl.set_active_palette(self._paint_strip.active())
         else:
             self._paint_strip.setVisible(False)
+            self._color_strip.setVisible(False)
         self._view.load_background()
         self.reload_geometry()
         self._bar.set_canvas_size(*self._ctrl.image_size())
@@ -1760,8 +2298,59 @@ class BgInpaintCanvas(QWidget):
         self._src_size = self._read_source_size()
         self._refresh_prepare_ui()
 
+    def set_adjust_preview(self, image, state: str = "adjust"):
+        """Montre `image` (PIL RGBA) à la place du rendu compressé, ou None : retour au rendu.
+        `state` dit ce que c'est : « adjust » l'image réglée avant compression, « ready » le résultat d'une compression
+        non appliquée. Le badge le dit."""
+        self._view.set_adjust_preview(image)
+        self.set_preview_state(state if image is not None else None)
+
+    def set_preview_state(self, state):
+        """Le badge de l'aperçu : « adjust », « computing » (une compression se calcule), « ready », ou None (caché)."""
+        keys = {"adjust": 'bginp.adjust_preview', "computing": 'bginp.preview_computing', "ready": 'bginp.preview_ready'}
+        if state in keys:
+            self._preview_badge.setText(label(keys[state]))
+        self._preview_badge.setVisible(state in keys)
+        self._preview_badge.adjustSize()
+        self._preview_badge.move((self.width() - self._preview_badge.width()) // 2, BAR_HEIGHT + 40)
+        self._preview_badge.raise_()
+
+    def start_painting(self):
+        """Sélectionne le pinceau en mode Paint (après la création d'une image vide)."""
+        self._toolbar.set_mode(MODE_PAINT)
+        self._toolbar.select_brush()
+
+    def _on_mode_changed(self, mode: str):
+        self._ctrl.set_mode(mode)
+        self._sync_color_strip()
+        self._position_paint_strip()
+
+    def _paintable(self) -> bool:
+        ba = self._ba
+        return bool(ba and getattr(ba, "mode", "tiled") == "tiled" and getattr(ba, "bpp", 4) == 4)
+
+    def _sync_color_strip(self, active: int = None):
+        """La bande de couleurs montre la palette EMBARQUÉE par l'asset.
+
+        Une seule source : `ba.palettes[banque active]`. Elle se relit à chaque
+        changement de banque et à chaque édition des palettes côté inspecteur ;
+        elle n'est visible que là où le pinceau de tuiles l'est.
+        """
+        bank = self._paint_strip.active()
+        palettes = self._ba.palettes if self._ba else []
+        colors = palettes[bank] if isinstance(bank, int) and 0 <= bank < len(palettes) else []
+        self._color_strip.load(colors, active=active)
+        # Les couleurs ne servent qu'au mode Paint : en Inpaint, seule la banque compte.
+        self._color_strip.setVisible(self._paintable() and bool(colors) and self._toolbar.mode == MODE_PAINT)
+        self._ctrl.set_active_color(self._color_strip.active())
+
     def set_active_palette(self, idx: int):
         self._ctrl.set_active_palette(idx)
+        self._sync_color_strip()
+        self._position_paint_strip()
+
+    def set_active_color(self, idx: int):
+        self._ctrl.set_active_color(idx)
 
     def reload(self):
         """Re-render après édition des palettes (inspecteur) — reconstruit aussi
@@ -1772,6 +2361,7 @@ class BgInpaintCanvas(QWidget):
             self._paint_strip.load(self._palette_entries(self._ba.palettes), active=cur)
             self._position_paint_strip()
             self._ctrl.set_active_palette(self._paint_strip.active())
+            self._sync_color_strip()
         self._ctrl.reload_render()
         self._view.sync_image_size()
         self._bar.set_canvas_size(*self._ctrl.image_size())
@@ -1793,5 +2383,8 @@ class BgInpaintCanvas(QWidget):
             self._position_paint_strip()
             self._paint_strip.raise_()
         self._reposition_overlays()
+        self._btn_edit.adjustSize()
+        self._btn_edit.move((self.width() - self._btn_edit.width()) // 2, BAR_HEIGHT + 8)
+        self._btn_edit.raise_()
         if self._busy.isVisible():
             self._center_busy()

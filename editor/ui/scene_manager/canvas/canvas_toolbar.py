@@ -93,13 +93,16 @@ class FloatingToolbar(QFrame):
          'cvtool.text_tip'),
         ("ui_container", "ui_container", 'common.container',
          'cvtool.container_tip'),
-        ("ui_list", "ui_list", 'common.list',
-         'cvtool.list_tip'),
         ("ui_image", "ui_image", 'common.image',
          'cvtool.image_tip'),
+        ("ui_textbox", "ui_textbox", 'common.textbox',
+         'cvtool.textbox_tip'),
+        ("ui_list", "ui_list", 'common.list',
+         'cvtool.list_tip'),
     ]
     _UI_ICON_KEYS = {
         "ui_text": "ui_text",
+        "ui_textbox": "ui_textbox",
         "ui_container": "ui_container",
         "ui_list": "ui_list",
         "ui_image": "ui_image",
@@ -347,7 +350,14 @@ class FloatingToolbar(QFrame):
         from ui.common.icons import COLOR_UI
         from ui.common.icons import get as _ico
 
+        from core.models.ui_region import KINDS_ASSEMBLY
         for mode_id, icon_key, lbl_key, tip in self._UI_MODES:
+            # Deux familles dans le même menu : les briques d'abord, puis ce
+            # qui s'assemble. L'ordre de `_UI_MODES` les range déjà ainsi.
+            if mode_id[3:] == KINDS_ASSEMBLY[0]:
+                menu.addSection(label('common.assemblies'))
+            elif mode_id == self._UI_MODES[0][0]:
+                menu.addSection(label('common.bricks'))
             act = QAction(label(lbl_key), self)
             act.setIcon(_ico(icon_key, COLOR_UI))
             act.setToolTip(tooltip(title=label(lbl_key), body=label(tip)))

@@ -1932,15 +1932,24 @@ et sa page ne doit pas créer une seconde police en doublon.
 
 ---
 
-## Éléments d'interface — `UIText` / `UIContainer` / `UIList` / `UIImage` dans un `UILayout`
+## Éléments d'interface — `UIText` / `UITextbox` / `UIContainer` / `UIList` / `UIImage` dans un `UILayout`
 
 `core/models/ui_region.py`, stockage dans `assets/ui_layouts/<nom>.layout`. Un élément de
 texte répond à **où** le texte se pose ; il remplace les arguments de géométrie que
 `text_draw_box` prenait dans le script, donc invisibles depuis l'éditeur et incalculables
 avant le build.
 
-**Quatre types.** `UIText` (là où du texte se pose), `UIContainer` (le groupe), `UIList`
-(un conteneur qui se PARCOURT) et `UIImage` (un sprite à état). Le type « zone de texte » a
+**Cinq types, deux familles.** Les **briques de base** : `UIText` (une chaîne posée en un
+point : une ligne, jamais coupée ni alignée), `UIContainer` (le groupe) et `UIImage` (un
+sprite à état). Les **assemblages**, qui rangent selon une règle : `UIList` (un conteneur qui
+se PARCOURT) et `UITextbox` (une boîte de texte : le rectangle est la largeur de coupe, le
+texte s'y aligne). C'est la distinction d'Illustrator entre une chaîne et une boîte de texte ;
+le menu d'ajout (arbre, toolbar du canvas) la montre en deux sections (`KINDS_BRICK` /
+`KINDS_ASSEMBLY`). Les deux types de texte partagent la même entrée de `g_ui_regions` ; seul
+`UIRegionInfo.nowrap` (émis depuis `UIText.wraps`) change le rendu. Un fichier d'avant la
+séparation relit tout `kind: "text"` sans marqueur `point` comme une **boîte**, qui coupait
+déjà ; seule la chaîne écrit `point`. Toute question « cet élément porte-t-il du texte ? »
+passe par `is_text`, jamais par `kind == KIND_TEXT`. Le type « zone de texte » a
 existé à côté de `UIText` et a été RETIRÉ : les deux portaient la même géométrie, le même
 ancrage, la même allocation OBJ et la même entrée de `g_ui_regions`, et ne différaient que
 par l'écrivain — le script pour l'une, `scene_init` pour l'autre. Ce n'était pas deux types
@@ -2840,14 +2849,21 @@ jamais silencieux : `bank_index` retombe sur la banque 0 et le validateur averti
   | Bitmap | `mode="bitmap"` | Mode 4 plein écran (photos) — **éditable mais pas encore émis au build** |
 
   **Préparation de la source** — une image « riche » (photo, plus grande que le budget de
-  tuiles) se recadre (`import_crop`, en pixels du PNG) puis se redimensionne (`import_size`)
-  **avant** l'encodage. Le PNG n'est jamais modifié : `bg_import.prepare_source` produit une
+  tuiles) se recadre (`import_crop`, en pixels du PNG), se redimensionne (`import_size`) puis
+  peut se mettre en **miroir** (`mirror_x` / `mirror_y`, position de l'axe en pixels de
+  l'image préparée ; `core/bg_mirror.apply_mirror` : le côté gauche — haut — est gardé, l'autre
+  en est le reflet, en zigzag si le reflet n'atteint pas le bord) **avant** l'encodage. Le miroir
+  précède la compression parce qu'il change les tuiles qu'elle dédupliquera. Côté canvas,
+  chaque axe est une barre avec poignée centrale (`bg_mirror_overlay`) ; la barre se tire à la
+  souris (Ctrl = 8 px, aimantation au centre) et l'image se recompresse au relâchement. Une
+  poignée en flèche, posée sur le côté gardé, se tire de l'autre côté de la barre pour inverser
+  ce côté (`mirror_flip_x` / `mirror_flip_y`). Le PNG n'est jamais modifié : `bg_import.prepare_source` produit une
   image PIL en mémoire, que reçoit `encode_by_mode(…, prep=ba.import_prep())` — le seul
   endroit qui l'applique, donc le seul que lisent le worker de l'éditeur et la
   réconciliation (`encode_background_asset`). Rééchantillonnage automatique : plus proche
   voisin si la source est indexée, Lanczos sinon. Côté UI, `bg_prepare_geometry` (pur calcul,
   testé) porte les règles de modificateurs, `bg_prepare_overlay` dessine les poignées, et
-  le canvas n'émet que `prepare_requested(crop, size)`. Toute la géométrie que le build ou
+  le canvas n'émet que `prepare_requested(crop, size, mirror)`. Toute la géométrie que le build ou
   le Scene Manager affichent vient de `BackgroundAsset.pixel_size()`, jamais du PNG.
 
 ### Inpainting — repeindre la palette par tuile (non-destructif)

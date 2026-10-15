@@ -293,6 +293,7 @@ class CodegenContext:
     # (déclenchement manuel depuis un script) reste résolu ici.
     sfx_volumes: dict = field(default_factory=dict)  # {nom Sfx: volume EN %} — converti à l'émission
     music_info: dict = field(default_factory=dict)
+    jingle_policy: dict = field(default_factory=dict)   # {nom de jingle: (code, niveau 0–1024, remontée en frames)} — cf. `Jingle.runtime_policy`
     # {nom d'état: rang dans SA boîte}, par famille, et {déclencheur: rang}
     sound_box_states: dict = field(default_factory=dict)
     jingle_box_states: dict = field(default_factory=dict)
@@ -2247,7 +2248,7 @@ class CodeGen:
         return f"music_box_trigger({idx})"
 
     def _emit_music_jingle(self, args: list) -> str:
-        """music:jingle("Fanfare") → music_jingle(MUSIC_X, volume).
+        """music:jingle("Fanfare") → music_jingle(MUSIC_X, volume, policy, level, release).
 
         `mmSetJingleVolume` partage l'échelle 0–1024 de `mmSetModuleVolume` :
         c'est bien la conversion « module », pas celle d'un effet.
@@ -2256,7 +2257,9 @@ class CodeGen:
             return "/* music:jingle() : argument invalide */"
         name = args[0].value
         _loop, volume = self.ctx.music_info.get(name, (True, 100))
-        return f"music_jingle({music_constant(name)}, {volume_to_module(volume)})"
+        # La politique envers la musique est celle de l'ASSET, comme le volume : le script dit quel jingle, pas ce qui arrive à la musique.
+        policy, level, release = self.ctx.jingle_policy.get(name, (0, 1024, 0))
+        return f"music_jingle({music_constant(name)}, {volume_to_module(volume)}, {policy}, {level}, {release})"
 
     def _emit_music_fade_to(self, args: list) -> str:
         frames = self._expr(args[1]) if len(args) > 1 else "30"

@@ -6,9 +6,9 @@ la jauge est vide ; en lecture, elle monte d'un coup et retombe doucement, comme
 Le pic du rendu n'a pas le volume de la musique : le lecteur l'applique en jouant, comme `mmSetModuleVolume`. Les
 barres le multiplient (`set_gain`), pour montrer ce que chaque canal fait réellement entendre.
 
-Il y a une barre par canal du PROJET (`mmInitDefault(bank, n)`), pour voir ce qui reste de place ; un module qui
-en demande davantage en montre autant, et les barres au-delà du plafond sont rouges — ces voix-là n'ont nulle
-part où sonner.
+Il y a une barre par canal de la SOURCE (un module à 4 voies en montre 4, un effet — une seule voix — en montre une) ;
+le plafond du projet (`mmInitDefault(bank, n)`) ne fait pas ajouter de barres, il fait peindre en rouge celles qui le
+dépassent — ces voix-là n'ont nulle part où sonner. La place qui reste est dite par la courbe de polyphonie.
 """
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ class ChannelMeters(QWidget):
 
     def set_levels(self, levels: ChannelLevels | None, mix_rate: int, ceiling: int) -> None:
         self._levels, self._mix_rate, self._ceiling = levels, max(1, int(mix_rate)), int(ceiling)
-        self._count = 0 if levels is None else max(self._ceiling, levels.channel_count)
+        self._count = 0 if levels is None else levels.channel_count
         self._shown = np.zeros(self._count, dtype=np.float32)
         self._peaks = np.zeros(self._count, dtype=np.float32)
         self._apply_width()

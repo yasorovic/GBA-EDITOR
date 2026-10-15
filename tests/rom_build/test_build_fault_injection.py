@@ -90,10 +90,12 @@ def test_une_faute_dans_un_script_d_acteur_est_dite(tmp_path, script, attendu):
 
 
 def test_un_behavior_casse_bloque_le_build(tmp_path):
+    # Un behavior est un `.lua` MARQUÉ `-- @behavior` (cf. `core/lua_scripts`), où qu'il soit : sans le marqueur, ce serait un
+    # script attaché à rien, donc un simple avertissement.
     ok, _log, errors = _build(_projet(
-        tmp_path, behavior="local M = {}\nfunction M.update(actor)\n  actor.x = 1; ADFZ\nend\nreturn M\n"))
+        tmp_path, behavior="-- @behavior\nlocal M = {}\nfunction M.update(actor)\n  actor.x = 1; ADFZ\nend\nreturn M\n"))
     assert ok is False
-    assert any("ai.lua:3: unexpected `ADFZ`" in e for e in errors), errors
+    assert any("ai.lua:4: unexpected `ADFZ`" in e for e in errors), errors
 
 
 def test_un_prefab_sans_instance_est_quand_meme_lu(tmp_path):

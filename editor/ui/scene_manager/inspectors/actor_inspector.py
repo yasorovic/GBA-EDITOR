@@ -24,6 +24,7 @@ from core.history import (get_history, SetFieldCmd, AddComponentCmd, RemoveCompo
 from core.selection_bus import get_bus
 from core.command_dispatcher import get_dispatcher
 from ui.common.theme import C, T, QSS
+from ui.common.deferred_writes import schedule_save
 from ui.common.responsive import InspectorScrollArea
 from ui.common.widgets import NotesEdit, CollapsibleCard
 from ui.common.field_binder import FieldBinder
@@ -949,7 +950,11 @@ class ActorInspector(QWidget):
             # le Prefab qu'il faut enregistrer, pas son actor racine seul.
             get_dispatcher().save_prefab(self._prefab)
         else:
-            get_dispatcher().save_scene()
+            # Un champ qu'on tourne passe ici à chaque cran : la scène s'écrit après un silence (cf.
+            # `ui/common/deferred_writes.py`), pas à chaque valeur. Le rafraîchissement, lui, reste immédiat.
+            scene = self._scene or self._project.active_scene
+            if scene is not None:
+                schedule_save(self._project.scenes, scene)
             get_dispatcher()._emit("scene_sprites_changed")
 
     def _open_prefab(self):

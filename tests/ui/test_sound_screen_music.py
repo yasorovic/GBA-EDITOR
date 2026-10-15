@@ -24,6 +24,7 @@ import module_fixtures as F                                    # noqa: E402
 from asset_fixtures import create                              # noqa: E402
 from core.models.audio import UNIT_MS                          # noqa: E402
 from core.project import Project                               # noqa: E402
+from ui.common.deferred_writes import get_deferred_writes      # noqa: E402
 from ui.sound_mixer.box_playback import BoxPlayer              # noqa: E402
 from ui.sound_mixer.sound_panel import SoundMixerScreen        # noqa: E402
 
@@ -61,6 +62,7 @@ def screen(qapp, project, monkeypatch):
 
 
 def _reloaded(project: Project) -> Project:
+    get_deferred_writes().flush()          # les réglages s'écrivent après un silence (cf. `deferred_writes`) : on relit le disque tenu à jour
     reopened = Project.open(project.root)
     reopened.load_all_resources()
     return reopened
@@ -75,14 +77,19 @@ def test_le_panneau_central_suit_le_type_de_l_asset(screen, project):
     assert not screen._music_editor.isHidden() and screen._center_filler.isHidden()
     assert screen._music_editor._music.name == "Theme"
     screen._on_asset_selected(project.sfx.get("Beep"))
-    assert screen._music_editor.isHidden() and not screen._center_filler.isHidden()
+    # Un effet a SON éditeur (la découpe), qui prend la colonne à la place de celui d'une musique : ni l'un ni le remplissage.
+    assert screen._music_editor.isHidden() and not screen._sfx_editor.isHidden() and screen._center_filler.isHidden()
+    # ... et sa table de mixage prend, en bas de la colonne de droite, la place de celle d'une musique : une seule se montre.
+    assert not screen._sfx_editor.mix_panel.isHidden() and screen._music_editor.mix_panel.isHidden()
+    screen._on_asset_selected(project.music.get("Theme"))
+    assert screen._sfx_editor.mix_panel.isHidden() and not screen._music_editor.mix_panel.isHidden()
 
 
 def test_un_jingle_montre_l_onde_sans_les_sections_et_sans_les_reglages_de_musique(screen, project):
     screen._on_asset_selected(project.jingles.get("Fanfare"))
     editor = screen._music_editor
     assert not editor.isHidden() and not editor._structure.isHidden()
-    assert editor._strip_zone.isHidden() and editor._sections_zone.isHidden()
+    assert editor._strip_zone.isHidden() and editor._sections_zone.isHidden()   # ni la bande des ordres, ni les sections
     assert not hasattr(screen._jingle_insp, "_rate")           # pas de taux : la ROM l'ignore
     assert hasattr(screen._music_insp, "_rate")
     assert not any(spin.isEnabled() for spin in editor._faders._fades.values())   # ni de fondus

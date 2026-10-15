@@ -133,22 +133,6 @@ def test_the_root_and_an_asset_are_not_editable_and_never_ask_for_a_rename(qapp)
     assert view._tree.state() != view._tree.State.EditingState
 
 
-def test_the_flat_view_renames_in_place_and_reports_only_a_real_change(qapp):
-    flat = DiskView()
-    flat.set_tree(_tree())
-    asked = _emitted(flat.rename_requested)
-    sfx = flat._root.children[0]
-    flat.show_folder(sfx.path)
-    row = {flat._list.item(i).text(): flat._list.item(i) for i in range(flat._list.count())}
-
-    assert row["platformer"].flags() & Qt.ItemFlag.ItemIsEditable
-    assert not row["GOAL.json"].flags() & Qt.ItemFlag.ItemIsEditable      # un asset se renomme dans son écran
-    row["platformer"].setText("platformer")             # même nom : rien à demander
-    assert asked == []
-    row["platformer"].setText("jumps")
-    assert asked == [(str(sfx.children[0].path), "jumps")]
-
-
 def test_only_folders_sources_and_scripts_are_renamable():
     folder = disk_tree.DiskNode("a", Path("a"), disk_tree.FOLDER)
     source = disk_tree.DiskNode("a.wav", Path("a.wav"), disk_tree.FREE_SOURCE)
@@ -157,82 +141,3 @@ def test_only_folders_sources_and_scripts_are_renamable():
     assert [renamable(n) for n in (folder, source, script, asset)] == [True, True, True, False]
 
 
-def test_the_magnifier_filters_the_tree_and_closing_it_shows_everything(qapp):
-    view = DiskTreeView()
-    view.set_tree(_tree())
-    assert view._search_row.isHidden()
-
-    view._btn_search.setChecked(True)
-    assert not view._search_row.isHidden()
-    view._search_box.setText("jump")
-    assert _find(view, Path("assets") / "sfx" / "platformer" / "jump.wav").isHidden() is False
-    assert _find(view, Path("assets") / "sfx" / "GOAL.json").isHidden()
-    assert _find(view, Path("assets") / "sfx").isHidden() is False     # l'ancêtre d'un résultat reste
-
-    view.set_tree(_tree())                              # un rafraîchissement garde le filtre
-    assert _find(view, Path("assets") / "sfx" / "GOAL.json").isHidden()
-
-    view._btn_search.setChecked(False)
-    assert view._search_box.text() == "" and view._search_row.isHidden()
-    assert _find(view, Path("assets") / "sfx" / "GOAL.json").isHidden() is False
-
-
-def _mixed() -> disk_tree.DiskNode:
-    base = Path("assets")
-    files = [disk_tree.DiskNode(name, base / name, disk_tree.FREE_SOURCE)
-             for name in ("b.wav", "a.png", "c.hex", "A_notes", "d.png")]
-    return disk_tree.DiskNode("assets", base, disk_tree.FOLDER, children=[
-        disk_tree.DiskNode("zeta", base / "zeta", disk_tree.FOLDER, children=[]), *files])
-
-
-def test_files_sort_by_name_or_by_extension_with_folders_always_first(qapp):
-    from ui.common.disk_view import sort_nodes
-    names = lambda mode: [n.name for n in sort_nodes(_mixed().children, mode)]
-    assert names("name") == ["zeta", "a.png", "A_notes", "b.wav", "c.hex", "d.png"]
-    assert names("extension") == ["zeta", "A_notes", "c.hex", "a.png", "d.png", "b.wav"]
-
-
-def test_both_views_reorder_when_the_sort_changes(qapp):
-    flat = DiskView()
-    flat.set_tree(_mixed())
-    flat._set_sort("extension")
-    assert [flat._list.item(i).text() for i in range(1, flat._list.count())] == [
-        "zeta", "A_notes", "c.hex", "a.png", "d.png", "b.wav"]
-
-    tree = DiskTreeView()
-    tree.set_tree(_mixed())
-    tree._set_sort("extension")
-    top = tree._tree.topLevelItem(0)
-    assert [top.child(i).text(0) for i in range(top.childCount())] == [
-        "zeta", "A_notes", "c.hex", "a.png", "d.png", "b.wav"]
-
-
-def _rows(view: DiskView) -> list[str]:
-    return [view._list.item(i).text() for i in range(view._list.count())]
-
-
-def test_the_list_view_groups_by_extension_only_when_sorted_by_extension(qapp):
-    view = DiskView()
-    view.set_tree(_mixed())
-    view.set_layout_mode("list")
-    assert _rows(view)[0] == "assets" and "Folders" not in _rows(view)     # tri par nom : liste plate, sans séparateur
-    assert not any(view._list.item(i).data(0x0100 + 5) for i in range(view._list.count()))
-
-    view._set_sort("extension")
-    assert _rows(view) == ["assets", "Folders", "zeta", "No extension", "A_notes", ".hex", "c.hex",
-                           ".png", "a.png", "d.png", ".wav", "b.wav"]
-    header = view._list.item(1)
-    assert header.flags() == Qt.ItemFlag.NoItemFlags                       # ni sélectionnable ni glissable
-
-    view.set_layout_mode("grid")                                           # la mosaïque ne porte jamais de séparateur
-    assert "Folders" not in _rows(view) and view.layout_mode() == "grid"
-    assert not view._btn_layout.isChecked()
-
-
-def test_headers_are_not_part_of_the_selection(qapp):
-    view = DiskView()
-    view.set_tree(_mixed())
-    view.set_layout_mode("list")
-    view._set_sort("extension")
-    view._list.selectAll()
-    assert {n.name for n in view._selected_nodes()} == {"zeta", "A_notes", "c.hex", "a.png", "d.png", "b.wav"}

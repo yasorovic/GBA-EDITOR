@@ -5,11 +5,43 @@
   "loop": true,
   "volume": 100,
   "unit": "ms",
-  "sections": [],
-  "loop_section": "",
+  "sections": [
+    {
+      "name": "Loop",
+      "color": "#82aaff",
+      "start": 4854,
+      "end": 14564,
+      "loop": true
+    },
+    {
+      "name": "Loop 2",
+      "color": "#7aab7a",
+      "start": 14564,
+      "end": 19419,
+      "loop": true
+    },
+    {
+      "name": "Loop 3",
+      "color": "#c48b3c",
+      "start": 18419,
+      "end": 19419,
+      "loop": true
+    },
+    {
+      "name": "Loop 4",
+      "color": "#c586c0",
+      "start": 18419,
+      "end": 19419,
+      "loop": true
+    }
+  ],
+  "loop_section": "Loop",
   "tempo": 100,
   "pitch": 100,
   "fade_in": 0,
   "fade_out": 0,
-  "sample_rate": 0
+  "sample_rate": 0,
+  "trim_start": 0,
+  "trim_end": 0,
+  "cues": []
 }

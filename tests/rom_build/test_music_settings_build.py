@@ -148,3 +148,77 @@ def test_des_musiques_reglees_produisent_une_rom(tmp_path):
     assert module.is_file()
     # 3 s à 11 025 Hz, TOUTE la piste (ce qui suit la section est son outro) : un échantillon par segment.
     assert 2.9 * 11025 < module.stat().st_size < 3.0 * 11025 + 4000
+
+
+def test_un_jingle_module_coupe_aux_ordres_produit_une_rom(tmp_path):
+    """La plage d'ordres d'un jingle en module : le build écrit le module COUPÉ dans `build/music/`, mmutil l'accepte, et la ROM
+    sort. Le fichier de `assets/` n'est jamais réécrit."""
+    from core.engine_emulation.module_model import ORDER_END, load_module
+    starter = next(s.id for s in available_starters() if s.builtin)
+    project = Project.create(tmp_path / "Neuf", "Neuf", starter)
+    project.save()
+    folder = project.assets_dir / "jingles"
+    folder.mkdir(parents=True, exist_ok=True)
+    source = F.make_it(orders=[0] * 8)
+    (folder / "Fanfare.it").write_bytes(source)
+    fanfare = create(project, "jingles", folder / "Fanfare.it")
+    fanfare.order_start, fanfare.order_end = 2, 6
+    fanfare.music_policy = "duck"
+    project.save_jingle(fanfare)
+    project.scripts_dir.mkdir(parents=True, exist_ok=True)
+    (project.scripts_dir / "Level.lua").write_text(
+        'function on_update()\n  music:jingle("Fanfare")\nend\n', encoding="utf-8")
+    project.scenes[0].script = "assets/scripts/Level.lua"
+    project.save()
+
+    ok, diagnostics, tool_output, logs = _build(project)
+
+    errors = [d.console_line() for d in diagnostics if d.level == "error"] + tool_output[-40:]
+    assert ok is True and not errors, "ne builde pas :\n  " + "\n  ".join(errors)
+    assert project.rom_path.is_file()
+    assert any("cut to orders 2–6" in line for line in logs)
+    cut = project.build_dir / "music" / "Fanfare.it"
+    assert cut.is_file() and load_module(cut).order == [0, 0, 0, 0] + [ORDER_END] * 4
+    assert (folder / "Fanfare.it").read_bytes() == source
+    sources = "\n".join(f.read_text(encoding="utf-8", errors="replace") for f in project.src_dir.glob("*.c"))
+    assert "music_jingle(MUSIC_FANFARE" in sources and ", 1, 307, 30)" in sources     # la politique « baisser » voyage avec l'appel
+
+
+def _project_with_cut_jingle(tmp_path, **fields) -> Project:
+    starter = next(s.id for s in available_starters() if s.builtin)
+    project = Project.create(tmp_path / "Neuf", "Neuf", starter)
+    project.save()
+    folder = project.assets_dir / "jingles"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "Fanfare.it").write_bytes(F.make_it(orders=[0] * 4))
+    fanfare = create(project, "jingles", folder / "Fanfare.it")
+    for name, value in fields.items():
+        setattr(fanfare, name, value)
+    project.save_jingle(fanfare)
+    project.scripts_dir.mkdir(parents=True, exist_ok=True)
+    (project.scripts_dir / "Level.lua").write_text('function on_update()\n  music:jingle("Fanfare")\nend\n', encoding="utf-8")
+    project.scenes[0].script = "assets/scripts/Level.lua"
+    project.save()
+    return project
+
+
+def test_une_plage_d_ordres_hors_du_module_arrete_le_build_en_le_disant(tmp_path):
+    """Le validateur la nomme avant tout : pas une ROM sans le jingle."""
+    project = _project_with_cut_jingle(tmp_path, order_start=9)
+
+    ok, diagnostics, _tool_output, _logs = _build(project)
+
+    assert ok is False
+    assert any("Fanfare" in d.console_line() and "past the last order" in d.console_line() for d in diagnostics)
+
+
+def test_une_coupe_qui_echoue_au_build_est_une_erreur_nommee(tmp_path, monkeypatch):
+    """Ce que le validateur ne voit pas (un module abîmé que la coupe refuse) s'arrête au build, avec le nom du jingle."""
+    import codegen.grit_conversion as conversion
+    project = _project_with_cut_jingle(tmp_path, order_start=1)
+    monkeypatch.setattr(conversion, "cut_orders", lambda *_args: (_ for _ in ()).throw(ValueError("boom")))
+
+    ok, diagnostics, _tool_output, _logs = _build(project)
+
+    assert ok is False
+    assert any("Fanfare" in d.console_line() and "boom" in d.console_line() for d in diagnostics)

@@ -1,4 +1,4 @@
-"""Sound Mixer screen — import/preview SFX + Music."""
+"""Sound Mixer screen — preview SFX + Music."""
 
 import sys
 from pathlib import Path
@@ -6,7 +6,7 @@ from typing import Optional
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QFrame, QFileDialog, QToolButton, QSlider, QProgressBar,
+    QFrame, QToolButton, QSlider, QProgressBar,
     QSpinBox, QCheckBox, QMessageBox,
     QButtonGroup, QComboBox, QStackedWidget, QScrollArea, QSizePolicy,
 )
@@ -20,14 +20,11 @@ from ui.common.three_column_body import ThreeColumnBody
 from ui.common.widgets import W
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
+from ui.common.unit_spin import UnitSpin
 from ui.common.icons import get as _ico
 
-from core.resources.asset_reconciliation import check_audio_file
 from core.engine_emulation.module_render import GBA_MIX_RATE, RenderCancelled
-from core.models.audio import (
-    Jingle, Music, PANNING_MAX, Sfx, SFX_FILE_EXTS, SFX_PITCH_MAX, SFX_PITCH_MIN, SFX_PITCH_VARIATION_MAX,
-    file_dialog_filter, sfx_rom_bytes,
-)
+from core.models.audio import Jingle, Music, Sfx, sfx_rom_bytes
 from ui.sound_mixer.state_machines import (
     ActionMatrix, MusicMachinePanel, MusicStateInspector,
 )
@@ -43,6 +40,7 @@ from core.keybindings import bind
 from core.project import Project
 from core.history import get_history, DeleteResourceCmd
 from core.command_dispatcher import get_dispatcher
+from ui.common.deferred_writes import get_deferred_writes, schedule_save
 
 
 _RENDER_SWITCH_INTERVAL = 0.0002    # s : la durée max qu'un thread tient le GIL face aux autres pendant un rendu d'onde
@@ -91,20 +89,15 @@ class _WaveformRenderTask(QRunnable):
 # ──────────────────────────────────────────────────────────────────
 class _AssetInspectorBase(QWidget):
     """Base commune à SfxInspector/MusicInspector : header renommable,
-    import de fichier, volume 0-255. Les sous-classes ne fournissent que
+    volume 0-255. Les sous-classes ne fournissent que
     leurs textes/filtres spécifiques et le manager de persistence."""
     changed = pyqtSignal()
 
     _EMPTY_TEXT = ""
     _HEADER_KIND = ""
     _HEADER_LABEL = ""
-    _IMPORT_BTN_TEXT = ""
-    _IMPORT_DIALOG_TITLE = ""
-    _IMPORT_FILTER = ""
-    _IMPORT_FOLDER = ""
     _HAS_LOOP = False
     _HAS_FILE_LABEL = True   # le nom du fichier sous celui de l'asset ; le lecteur du bas le donne pour une musique
-    _HAS_IMPORT = True
     _HAS_VOLUME = True       # une musique règle son volume à la table de mixage de l'éditeur
 
     def __init__(self, parent=None):
@@ -148,19 +141,13 @@ class _AssetInspectorBase(QWidget):
             self._file_lbl.setVisible(False)
         cl.addWidget(self._file_lbl)
 
-        if self._HAS_IMPORT:
-            btn_import = QPushButton(label(self._IMPORT_BTN_TEXT))
-            btn_import.setFont(QFont(T.UI, T.MD))
-            btn_import.setToolTip(tooltip(
-                title=label("sndpanel.import_title"), body=label("sndpanel.import_tip"),
-            ))
-            btn_import.clicked.connect(self._import)
-            cl.addWidget(btn_import)
-
         if self._HAS_LOOP:
             self._loop = QCheckBox(label("common.loop"))
             self._loop.setFont(QFont(T.UI, T.MD))
             self._loop.setStyleSheet(f"color:{C.TEXT_NORM};")
+            self._loop.setToolTip(tooltip(
+                title=label("sndpanel.loop_title"), body=label("sndpanel.loop_tip"),
+            ))
             self._loop.toggled.connect(self._on_loop)
             # Une seule ligne ferrée en haut : la case Loop, puis ce que la famille y ajoute (le taux).
             self._loop_line = QHBoxLayout()
@@ -168,12 +155,15 @@ class _AssetInspectorBase(QWidget):
             cl.addLayout(self._loop_line)
 
         if self._HAS_VOLUME:
-            self._vol = QSpinBox(); self._vol.setRange(0, 100); self._vol.setSuffix(" %")
+            self._vol = UnitSpin(); self._vol.setRange(0, 100); self._vol.setSuffix(" %")
             self._vol.setFont(QFont(T.MONO, T.MD))
             self._vol.setStyleSheet(
                 f"QSpinBox{{background:{C.BG_INPUT};color:{C.TEXT_NORM};border:1px solid {C.BORDER_MID};"
                 "border-radius:3px;padding:2px;}"
             )
+            self._vol.setToolTip(tooltip(
+                title=label("sndpanel.volume_title"), body=label("sndpanel.volume_tip"),
+            ))
             self._vol.valueChanged.connect(self._on_vol)
             row(label("sndpanel.volume"), self._vol)
 
@@ -208,22 +198,15 @@ class _AssetInspectorBase(QWidget):
         self._weight.setText(self._weight_text(entry) if entry else "")
         self._weight.setVisible(entry is not None)
 
-    def _manager(self):
-        raise NotImplementedError
-
-    def _save(self):
+    def _store(self, project: Project):
+        """Le magasin de la famille de cet asset."""
         raise NotImplementedError
 
     def _persist(self):
-        """Écrit le sidecar SANS réveiller le watcher.
-
-        Les sidecars de assets/sfx|music|jingles sont surveillés : une écriture
-        non suspendue revient comme une modification externe, `load_one`
-        remplace l'asset par une copie et l'écran se recharge — l'inspecteur se
-        vide à chaque réglage. Même règle que tout écran qui écrit sous assets/.
-        """
-        with get_dispatcher().suspended():
-            self._save()
+        """Planifie l'écriture du sidecar (cf. `ui/common/deferred_writes.py`) : un champ qu'on tourne ne le réécrit
+        pas à chaque cran. L'asset en mémoire est déjà à jour ; la file l'écrit après un silence, ou dès que la
+        fenêtre la vide."""
+        schedule_save(self._store(self._project), self._asset)
 
     def load(self, asset, project: Project):
         self._asset = asset; self._project = project
@@ -249,6 +232,7 @@ class _AssetInspectorBase(QWidget):
         if new_name and new_name != self._asset.name:
             # Passe par le projet (pas le ResourceStore brut) : il met aussi
             # à jour les sfx:play()/music:play() des scripts.
+            get_deferred_writes().flush()           # un réglage en attente s'écrit sous l'ancien nom, avant le déménagement
             with get_dispatcher().suspended():
                 self._project.rename_sound(self._asset, new_name)
             self.changed.emit()
@@ -274,37 +258,12 @@ class _AssetInspectorBase(QWidget):
             self._file_lbl.setText(label("sndpanel.no_file")); return
         self._file_lbl.setText(f"{path.name}{self._file_hint(path)}")
 
-    def _import(self):
-        if not self._project or not self._asset: return
-        path, _ = QFileDialog.getOpenFileName(
-            self, label(self._IMPORT_DIALOG_TITLE), "", self._IMPORT_FILTER
-        )
-        if not path:
-            return
-        # Refuser AVANT la copie : un fichier écarté ne doit pas atterrir dans
-        # assets/. Et c'est le seul refus possible — mmutil construit la ROM
-        # sans broncher sur un wav 24 bits, en la laissant muette.
-        if reason := check_audio_file(Path(path), into=self._IMPORT_FOLDER):
-            QMessageBox.warning(self, label("sndpanel.import_rejected_title"),
-                                label("sndpanel.import_rejected_text",
-                                      name=Path(path).name, reason=reason))
-            return
-        with get_dispatcher().suspended():
-            dst = self._project.import_asset(Path(path), self._IMPORT_FOLDER)
-        self._asset.asset = self._project.asset_rel(dst)
-        self._persist()
-        self._set_file_label(dst)
-        self.changed.emit()
-
 
 class SfxInspector(_AssetInspectorBase):
     _EMPTY_TEXT = "sndpanel.sfx_empty"
     _HEADER_KIND = "sfx"
     _HEADER_LABEL = "common.sfx"
-    _IMPORT_BTN_TEXT = "sndpanel.sfx_import_btn"
-    _IMPORT_DIALOG_TITLE = "sndpanel.sfx_import_title"
-    _IMPORT_FILTER = file_dialog_filter("WAV PCM 8/16 bits", SFX_FILE_EXTS)
-    _IMPORT_FOLDER = "sfx"
+    _HAS_VOLUME = False      # volume, hauteur, variation et fondus : la table de mixage de l'éditeur d'effet
 
     # Taux proposés. Maxmod mixe autour de 16 kHz : au-delà on paie de la ROM
     # pour un détail que la console ne restitue pas.
@@ -333,72 +292,37 @@ class SfxInspector(_AssetInspectorBase):
         self._rate.currentIndexChanged.connect(self._on_rate)
         row(label("sndpanel.rate"), self._rate)
 
-        # La hauteur et le panoramique avec lesquels l'effet démarre ; un script les surcharge à l'appel.
-        spin_style = (f"QSpinBox{{background:{C.BG_INPUT};color:{C.TEXT_NORM};border:1px solid {C.BORDER_MID};"
-                      "border-radius:3px;padding:2px;}")
-        self._pitch = QSpinBox()
-        self._pitch.setRange(SFX_PITCH_MIN, SFX_PITCH_MAX)
-        self._pitch.setSuffix(" %")
-        self._pitch.setFont(QFont(T.MONO, T.MD))
-        self._pitch.setStyleSheet(spin_style)
-        self._pitch.setToolTip(tooltip(title=label("sndpanel.sfx_pitch_title"), body=label("sndpanel.sfx_pitch_tip")))
-        self._pitch.valueChanged.connect(self._on_pitch)
-        row(label("sndpanel.sfx_pitch"), self._pitch)
-        self._pan = QSpinBox()
-        self._pan.setRange(-PANNING_MAX, PANNING_MAX)
-        self._pan.setFont(QFont(T.MONO, T.MD))
-        self._pan.setStyleSheet(spin_style)
-        self._pan.setToolTip(tooltip(title=label("sndpanel.sfx_pan_title"), body=label("sndpanel.sfx_pan_tip")))
-        self._pan.valueChanged.connect(self._on_pan)
-        row(label("sndpanel.sfx_pan"), self._pan)
-        self._spread = QSpinBox()
-        self._spread.setRange(0, SFX_PITCH_VARIATION_MAX)
-        self._spread.setPrefix("± ")
-        self._spread.setSuffix(" %")
-        self._spread.setFont(QFont(T.MONO, T.MD))
-        self._spread.setStyleSheet(spin_style)
-        self._spread.setToolTip(tooltip(title=label("sndpanel.sfx_spread_title"), body=label("sndpanel.sfx_spread_tip")))
-        self._spread.valueChanged.connect(self._on_spread)
-        row(label("sndpanel.sfx_spread"), self._spread)
+        # Protégé : maxmod ne volera jamais le canal de cet effet quand tous les canaux du projet sont pris.
+        self._protected = QCheckBox(label("sndpanel.sfx_protected"))
+        self._protected.setFont(QFont(T.UI, T.MD))
+        self._protected.setStyleSheet(f"color:{C.TEXT_NORM};")
+        self._protected.setToolTip(tooltip(
+            title=label("sndpanel.sfx_protected_title"), body=label("sndpanel.sfx_protected_tip"),
+        ))
+        self._protected.toggled.connect(self._on_protected)
+        layout.addWidget(self._protected)
 
     def load(self, asset, project):
         super().load(asset, project)
         if asset:
             self._blocking = True
-            self._pitch.setValue(int(getattr(asset, "pitch", 100)))
-            self._pan.setValue(int(getattr(asset, "panning", 0)))
-            self._spread.setValue(int(getattr(asset, "pitch_variation", 0)))
+            self._protected.setChecked(bool(getattr(asset, "protected", False)))
             self._blocking = False
 
-    def _manager(self):
-        return self._project.sfx
+    def _store(self, project: Project):
+        return project.sfx
 
-    def _on_pitch(self, value: int):
+    # Un réglage de ROM qui ne change ni le rendu ni l'explorateur, donc pas de `changed`.
+    def _on_protected(self, checked: bool):
         if self._blocking or not self._asset: return
-        self._asset.pitch = value
+        self._asset.protected = checked
         self._persist()
-        self.changed.emit()
-
-    def _on_spread(self, value: int):
-        if self._blocking or not self._asset: return
-        self._asset.pitch_variation = value
-        self._persist()
-        self.changed.emit()
-
-    def _on_pan(self, value: int):
-        if self._blocking or not self._asset: return
-        self._asset.panning = value
-        self._persist()
-        self.changed.emit()
 
     def _on_rate(self, idx: int):
         if self._blocking or not self._asset: return
         self._asset.sample_rate = int(self._rate.itemData(idx) or 0)
         self._persist()
         self.changed.emit()
-
-    def _save(self):
-        self._project.save_sfx(self._asset)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -410,7 +334,6 @@ class MusicInspector(_AssetInspectorBase):
     _HEADER_LABEL = "sndpanel.header_music"
     _HAS_LOOP = True
     _HAS_VOLUME = False      # volume, tempo, hauteur et fondus : la table de mixage de l'éditeur
-    _HAS_IMPORT = False      # le module vient de l'explorateur d'assets, pas d'un bouton ici
     _HAS_FILE_LABEL = False  # son nom de fichier est dans le lecteur, en bas
     # Le taux de build, seul réglage de ROM resté ici. Un jingle n'en applique aucun (il joue sur
     # l'autre couche, avec son propre volume) : son inspecteur ne le propose pas.
@@ -458,25 +381,99 @@ class MusicInspector(_AssetInspectorBase):
 
     def _on_rate(self, index): self._set_setting("sample_rate", int(self._rate.itemData(index) or 0))
 
-    def _manager(self):
-        return self._project.music
-
-    def _save(self):
-        self._project.save_music(self._asset)
+    def _store(self, project: Project):
+        return project.music
 
 
 class JingleInspector(MusicInspector):
-    """Même réglages qu'une musique, d'un autre dossier : le jingle ne boucle pas
-    dans le jeu (maxmod le joue une fois), mais le réglage reste celui du module."""
+    """Un jingle ne boucle pas (maxmod le joue une fois : la case Loop n'a pas de sens ici), et il règle ce que devient la
+    MUSIQUE sous lui : elle continue, descend, ou attend (`Jingle.music_policy`)."""
     _EMPTY_TEXT = "sndpanel.jingle_empty"
     _SETTINGS = False
+    _HAS_LOOP = False
     _HEADER_LABEL = "sndpanel.header_jingle"
 
-    def _manager(self):
-        return self._project.jingles
+    def _build_extra_rows(self, row, layout):
+        from core.models.audio import FADE_MAX_FRAMES, JINGLE_POLICIES
+        spin_style = (f"QSpinBox{{background:{C.BG_INPUT};color:{C.TEXT_NORM};border:1px solid {C.BORDER_MID};"
+                      "border-radius:3px;padding:2px;}")
+        # Un titre, le sélecteur dessous, puis — seulement quand la politique les demande — le niveau et la remontée.
+        caption = QLabel(label("sndpanel.policy"))
+        caption.setFont(QFont(T.UI, T.SM))
+        caption.setStyleSheet(f"color:{C.TEXT_DIM};")
+        layout.addWidget(caption)
+        self._policy = QComboBox()
+        self._policy.setFont(QFont(T.UI, T.MD))
+        for policy in JINGLE_POLICIES:
+            self._policy.addItem(label(f"sndpanel.policy_{policy}"), policy)
+        self._policy.setToolTip(tooltip(title=label("sndpanel.policy_title"), body=label("sndpanel.policy_tip")))
+        self._policy.currentIndexChanged.connect(self._on_policy)
+        layout.addWidget(self._policy)
 
-    def _save(self):
-        self._project.save_jingle(self._asset)
+        self._duck_box = QWidget()
+        box = QVBoxLayout(self._duck_box)
+        box.setContentsMargins(0, 0, 0, 0)
+        box.setSpacing(6)
+
+        def duck_row(caption_key: str, widget: UnitSpin) -> None:
+            line = QHBoxLayout()
+            name = QLabel(label(caption_key))
+            name.setFont(QFont(T.UI, T.SM))
+            name.setStyleSheet(f"color:{C.TEXT_DIM};")
+            name.setFixedWidth(92)
+            line.addWidget(name)
+            line.addWidget(widget, 1)
+            box.addLayout(line)
+
+        self._duck_level = UnitSpin()
+        self._duck_level.setRange(0, 100)
+        self._duck_level.setSuffix(" %")
+        self._duck_level.setFont(QFont(T.MONO, T.MD))
+        self._duck_level.setStyleSheet(spin_style)
+        self._duck_level.setToolTip(tooltip(title=label("sndpanel.duck_level_title"), body=label("sndpanel.duck_level_tip")))
+        self._duck_level.valueChanged.connect(lambda value: self._write("duck_level", value))
+        duck_row("sndpanel.duck_level", self._duck_level)
+
+        self._duck_release = UnitSpin()
+        self._duck_release.setRange(0, FADE_MAX_FRAMES)
+        self._duck_release.setSuffix(" fr")
+        self._duck_release.setFont(QFont(T.MONO, T.MD))
+        self._duck_release.setStyleSheet(spin_style)
+        self._duck_release.setToolTip(tooltip(title=label("sndpanel.duck_release_title"),
+                                              body=label("sndpanel.duck_release_tip")))
+        self._duck_release.valueChanged.connect(lambda value: self._write("duck_release", value))
+        duck_row("sndpanel.duck_release", self._duck_release)
+        layout.addWidget(self._duck_box)
+        self._duck_box.setVisible(False)
+
+    def load(self, asset, project):
+        super().load(asset, project)
+        if not asset:
+            return
+        self._blocking = True
+        self._policy.setCurrentIndex(max(0, self._policy.findData(asset.music_policy)))
+        self._duck_level.setValue(asset.duck_level)
+        self._duck_release.setValue(asset.duck_release)
+        self._sync_duck_fields()
+        self._blocking = False
+
+    def _sync_duck_fields(self) -> None:
+        """Le niveau et la remontée ne valent que pour « baisser » : les autres politiques ne les montrent pas."""
+        self._duck_box.setVisible(self._policy.currentData() == "duck")
+
+    # Rien ne change au rendu ni à l'explorateur : l'asset est à jour, le sidecar s'écrit après un silence, pas de `changed`.
+    def _write(self, field: str, value) -> None:
+        if self._blocking or not self._asset:
+            return
+        setattr(self._asset, field, value)
+        self._persist()
+
+    def _on_policy(self, _index: int) -> None:
+        self._sync_duck_fields()
+        self._write("music_policy", self._policy.currentData())
+
+    def _store(self, project: Project):
+        return project.jingles
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -753,8 +750,10 @@ class SoundMixerScreen(QWidget):
         self._music_editor.hide()
         center_layout.addWidget(self._music_editor, 1)
         # La découpe d'un effet : même place que l'éditeur de musique, qu'il remplace quand c'est un effet qu'on ouvre.
-        self._sfx_editor = SfxEditor()
+        self._sfx_editor = SfxEditor(self._box_player.track_for)
+        self._sfx_editor.set_live_source(self._live_scope_window)
         self._sfx_editor.changed.connect(self._on_changed)
+        self._sfx_editor.original_rate_toggled.connect(self._box_player.set_original_rate)     # écoute A/B du taux
         self._sfx_editor.hide()
         center_layout.addWidget(self._sfx_editor, 1)
         # Le lecteur ne dépend pas de l'éditeur de boîtes : il reste ancré en bas de la colonne (hauteur
@@ -785,7 +784,7 @@ class SoundMixerScreen(QWidget):
 
         self._sfx_insp = SfxInspector()
         self._sfx_insp.changed.connect(self._on_changed)
-        self._sfx_insp.changed.connect(self._sfx_editor.refresh)       # le taux change le poids annoncé de la découpe
+        self._sfx_insp.changed.connect(self._sfx_editor.refresh_soon)  # le taux change le poids annoncé de la découpe
         self._right_stack.addWidget(self._sfx_insp)   # 1
 
         self._music_insp = MusicInspector()
@@ -843,6 +842,7 @@ class SoundMixerScreen(QWidget):
         right_lay.addWidget(self._header_stack)
         right_lay.addWidget(upper_scroll, 1)
         right_lay.addWidget(self._music_editor.mix_panel)
+        right_lay.addWidget(self._sfx_editor.mix_panel)         # au même endroit : une seule des deux tables se montre
         self._music_editor.structure_changed.connect(self._sync_right_column)
 
         self.body = ThreeColumnBody(self._finder, center, right,
@@ -1170,6 +1170,10 @@ class SoundMixerScreen(QWidget):
         if self._music_editor.isVisible():
             self._music_editor.set_playhead_seconds(
                 self._box_player.position_seconds if self._box_player.sounding else -1.0)
+        if self._sfx_editor.isVisible():
+            self._sfx_editor.set_playhead_seconds(
+                self._box_player.position_seconds
+                if self._box_player.sounding and self._box_player.previewing(self._edited_sfx()) else -1.0)
         if duration <= 0:
             self._rom_progress.setValue(0)
             return
@@ -1354,6 +1358,7 @@ class SoundMixerScreen(QWidget):
             else self._music_editor.load(None, None)
         self._music_editor.setVisible(asset is not None)
         self._sfx_editor.setVisible(False)             # `_on_sfx_selected` le remontre : un seul des deux occupe la colonne
+        self._sfx_editor.mix_panel.setVisible(False)   # et sa table de mixage avec lui
         self._center_filler.setVisible(asset is None)
         self._edited_music = asset
 
@@ -1411,8 +1416,12 @@ class SoundMixerScreen(QWidget):
 
     def _live_scope_window(self, frames: int):
         """Ce que l'aperçu de la musique en cours d'édition fait entendre à l'instant : le tracé de l'oscilloscope."""
-        asset = self._edited_music
+        asset = self._edited_music if self._edited_music is not None else self._edited_sfx()
         return None if asset is None else self._box_player.scope_window(asset, frames)
+
+    def _edited_sfx(self):
+        """L'effet dont l'éditeur de découpe est ouvert, ou None."""
+        return self._sfx_editor._sfx if self._sfx_editor.isVisible() else None
 
     def _scrub_preview(self, seconds: float, held: bool) -> None:
         """La tête de lecture est glissée dans l'onde : tant que la main est posée, la lecture automatique attend et
@@ -1540,6 +1549,7 @@ class SoundMixerScreen(QWidget):
         self._show_music_editor(None)
         self._sfx_editor.load(self._project, sfx)
         self._sfx_editor.setVisible(True)
+        self._sfx_editor.mix_panel.setVisible(True)
         self._center_filler.setVisible(False)
         self._sfx_insp.load(sfx, self._project)
         self._sfx_insp.refresh_weight(self._sound_weights().get(("sfx", sfx.name)))

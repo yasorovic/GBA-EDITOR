@@ -77,12 +77,20 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     # vide, la forme disant ce que le type fait de plus que le conteneur.
     "ui_list":               ("mdi.format-list-bulleted",    "☰"),
     "ui_text":               ("mdi.format-text",             "T"),
+    # Boîte de texte : un champ rectangulaire, la surface dans laquelle le texte
+    # passe à la ligne — la forme dit ce que la boîte fait de plus que la chaîne.
+    "ui_textbox":            ("mdi.form-textbox",            "▤"),
     # Image : le pictogramme d'image, pas celui de sprite — c'est un ÉLÉMENT
     # d'interface qui affiche un sprite, pas le sprite lui-même.
     "ui_image":              ("mdi.image-outline",           "▣"),
-    "tool_inpaint_brush":         ("mdi.brush",                   "🖌"),
+    # Deux gestes différents dans le Background Editor : le pinceau simple
+    # pose des tiles, alors que celui-ci ne touche qu'au bank de palette d'une
+    # tile. Son rendu compose volontairement une image et un pinceau.
+    "tool_tile_brush":            ("mdi.brush",                   "🖌"),
+    "tool_inpaint_brush":         ("mdi.image-edit-outline",      "🖼"),
     "tool_inpaint_rect":          ("mdi.select-drag",             "▭"),
     "tool_fill":                  ("mdi.format-color-fill",       "🪣"),
+    "export_png":                 ("mdi.export-variant",          "⇩"),
     # Rôle d'un layer dans le mélange de couleurs — la FORME dit le rôle :
     # hors du mélange, au-dessus (ce qui est mélangé), en dessous (ce avec quoi).
     "blend_off":             ("mdi.circle-outline",          "○"),
@@ -229,11 +237,12 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "add_column":             ("mdi.table-column-plus-after", "+▯"),
     # Édition externe — ouvrir un asset image dans le logiciel de dessin
     # configuré par l'utilisateur (cf. ui/common/external_editor.py).
-    "edit_external":          ("mdi.image-edit-outline",      "✎"),
     # Préparation de la source d'un fond (Background Editor) — recadrer,
     # redimensionner, revenir à l'original.
     "prep_crop":              ("mdi.crop",                    "▣"),
     "prep_resize":            ("mdi.resize",                  "⇲"),
+    "prep_mirror_x":          ("mdi.reflect-horizontal",        "⇋"),
+    "prep_mirror_y":          ("mdi.reflect-vertical",        "⥮"),
     "prep_reset":             ("mdi.backup-restore",          "↺"),
     # LOCATE : montrer un élément dans l'onglet Disk (cf. ui/common/locate_bus.py).
     # À droite de chaque ligne d'un finder ; le même geste partout.
@@ -280,6 +289,8 @@ def get(name: str,
     qta_key, _ = entry
     if name == "add_menu":
         return _add_menu_icon(color)
+    if name == "tool_inpaint_brush":
+        return _inpaint_brush_icon(color, color_active)
     if _qta is not None:
         try:
             kw: dict = {"color": color}
@@ -289,6 +300,29 @@ def get(name: str,
         except Exception:
             pass
     return QIcon()
+
+
+def _inpaint_brush_icon(color: str, color_active: str | None = None) -> QIcon:
+    """Image + pinceau superposés : l'inpainting recolore une image existante.
+
+    `qtawesome` ne garantit pas la composition de deux glyphes entre ses
+    versions ; la petite composition locale garde donc exactement cette forme
+    dans toutes les installations de l'éditeur.
+    """
+    if _qta is None:
+        return QIcon()
+    size = 64
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    try:
+        _qta.icon("mdi.image-outline", color=color).paint(painter, 2, 2, 52, 52)
+        _qta.icon("mdi.brush", color=color).paint(painter, 27, 27, 35, 35)
+    except Exception:
+        painter.end()
+        return QIcon()
+    painter.end()
+    return QIcon(pixmap)
 
 
 def _add_menu_icon(color: str) -> QIcon:

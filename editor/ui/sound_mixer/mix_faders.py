@@ -15,7 +15,9 @@ from PyQt6.QtCore import QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QPainter, QPen
 from PyQt6.QtWidgets import QBoxLayout, QLabel, QLayout, QLineEdit, QSlider, QVBoxLayout, QHBoxLayout, QWidget
 
-from core.models.audio import FADE_MAX_FRAMES, PITCH_MAX, PITCH_MIN, TEMPO_MAX, TEMPO_MIN
+from core.models.audio import (
+    FADE_MAX_FRAMES, PANNING_MAX, PITCH_MAX, PITCH_MIN, SFX_PITCH_MAX, SFX_PITCH_MIN, SFX_PITCH_VARIATION_MAX, TEMPO_MAX, TEMPO_MIN,
+)
 from ui.common.labels import label
 from ui.common.theme import C, T
 from ui.common.tooltip import tooltip
@@ -32,6 +34,22 @@ _FADES = (
     ("fade_in", "sndpanel.fade_in", "sndpanel.fade_in_tip", "IN"),
     ("fade_out", "sndpanel.fade_out", "sndpanel.fade_out_tip", "OUT"),
 )
+
+# La table d'un EFFET : le même schéma (trois curseurs, deux fondus), d'autres réglages. La variation aléatoire de la hauteur
+# a sa valeur neutre à zéro, une extrémité de la course : pas d'aimant, le bout de course la tient déjà.
+SFX_FADERS = (
+    ("volume", "sndpanel.volume", "sfxedit.mix_volume_tip", 0, 100, 100, "V"),
+    ("pitch", "sndpanel.sfx_pitch", "sfxedit.mix_pitch_tip", SFX_PITCH_MIN, SFX_PITCH_MAX, 100, "P"),
+    ("pitch_variation", "sndpanel.sfx_spread", "sfxedit.mix_variation_tip", 0, SFX_PITCH_VARIATION_MAX, 0, "VAR"),
+)
+SFX_FADES = (
+    ("fade_in", "sfxedit.fade_in", "sfxedit.fade_in_tip", "IN"),
+    ("fade_out", "sfxedit.fade", "sfxedit.fade_tip", "OUT"),
+)
+
+# Le panoramique d'un EFFET : un axe gauche–droite sous les curseurs, pas un cinquième curseur vertical (ce n'est pas un niveau, c'est une
+# position). (champ, libellé, infobulle, lettres)
+SFX_PAN = ("panning", "sndpanel.sfx_pan", "sfxedit.mix_pan_tip", "PAN")
 
 # Les bornes de chaque champ, pour qui règle la musique autrement qu'avec ces curseurs (cf. waveform_view).
 RANGES = {field: (low, high) for field, _caption, _tip, low, high, *_rest in _FADERS}
@@ -129,14 +147,65 @@ def _initial(text: str) -> QLabel:
     return name
 
 
+def _digits(text: str):
+    digits = "".join(ch for ch in text if ch.isdigit())
+    return int(digits) if digits else None
+
+
+def pan_text(value: int) -> str:
+    """−40 → « L 40 », 0 → « C », 25 → « R 25 » : la position se lit sans avoir à connaître le signe."""
+    return "C" if value == 0 else f"L {-value}" if value < 0 else f"R {value}"
+
+
+def pan_value(text: str):
+    """Le contraire de `pan_text` ; « -40 » et « 40 » se lisent aussi (le signe fait le côté). Illisible : None."""
+    text = text.strip().upper()
+    magnitude = _digits(text)
+    if text.startswith("C") or magnitude == 0:
+        return 0
+    if magnitude is None:
+        return None
+    return -magnitude if text.startswith(("L", "-")) else magnitude
+
+
+class PanFader(Fader):
+    """L'axe du panoramique : couché, centré sur 0. Le niveau ne se remplit pas depuis la gauche, mais depuis le CENTRE
+    jusqu'au capuchon — la distance au milieu est ce qu'on règle. Même rail, même double-clic, même aimant que les autres."""
+
+    def __init__(self, parent=None):
+        super().__init__(-PANNING_MAX, PANNING_MAX, 0, Qt.Orientation.Horizontal, parent)
+
+    def set_sense(self, orientation) -> None:
+        super().set_sense(Qt.Orientation.Horizontal)
+        self.setStyleSheet(self.styleSheet() + f"QSlider::sub-page:horizontal{{background:transparent;}}")
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self.isEnabled() or self.value() == 0:
+            return
+        span = max(1, self.width() - 16)
+        centre, here = (8 + span // 2), int(8 + (self.value() - self.minimum()) / (self.maximum() - self.minimum()) * span)
+        p = QPainter(self)
+        p.fillRect(min(centre, here), self.height() // 2 - 4, abs(here - centre), 8, QColor(C.TEXT_DIM))
+        p.end()
+
+
+def _axis_end(text: str) -> QLabel:
+    end = QLabel(text)
+    end.setFont(QFont(T.UI, T.SM))
+    end.setStyleSheet(f"color:{C.TEXT_DIM};")
+    return end
+
+
 class _Readout(QLineEdit):
     """La valeur d'un curseur, dans un cadre d'afficheur ; on la tape à la main pour les valeurs que la souris
     atteint mal. Entrée l'applique (bornée à la course du curseur) ; un texte illisible est remplacé par la
     valeur courante."""
 
-    def __init__(self, slider: Fader, unit: str):
+    def __init__(self, slider: Fader, unit: str, show=None, read=None):
         super().__init__()
         self._slider, self._unit = slider, unit
+        self._show, self._read = show, read        # un axe se lit « L 40 » et se tape de même ; sinon : le nombre et son unité
         self.setFont(QFont(T.MONO, T.SM))
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setMinimumWidth(0)
@@ -148,16 +217,16 @@ class _Readout(QLineEdit):
         self.editingFinished.connect(self._apply)
 
     def show_value(self, value: int) -> None:
-        self.setText(f"{value} {self._unit}")
+        self.setText(self._show(value) if self._show else f"{value} {self._unit}")
 
     def focusInEvent(self, event):
         super().focusInEvent(event)
         QTimer.singleShot(0, self.selectAll)
 
     def _apply(self) -> None:
-        digits = "".join(ch for ch in self.text() if ch.isdigit())
-        if digits:
-            self._slider.setValue(int(digits))        # bornée par le curseur lui-même
+        typed = self._read(self.text()) if self._read else _digits(self.text())
+        if typed is not None:
+            self._slider.setValue(typed)              # bornée par le curseur lui-même
         self.show_value(self._slider.value())         # texte illisible, ou valeur bornée : on montre ce qui est
         self.clearFocus()
 
@@ -201,13 +270,15 @@ class _Cell(QWidget):
 
 
 class MixFaders(QWidget):
-    """Cinq curseurs verticaux côte à côte (volume, tempo, hauteur, fondu d'entrée, fondu de sortie). Quand la
-    place manque, les deux fondus descendent sous les trois autres et se couchent à l'horizontale."""
-    changed = pyqtSignal(str, int)         # (champ de la Music, valeur) à chaque cran
+    """Cinq curseurs verticaux côte à côte (par défaut ceux d'une musique : volume, tempo, hauteur, fondu d'entrée,
+    fondu de sortie ; `SFX_FADERS` / `SFX_FADES` pour un effet). Quand la place manque, les deux fondus descendent
+    sous les trois autres et se couchent à l'horizontale."""
+    changed = pyqtSignal(str, int)         # (champ de l'asset, valeur) à chaque cran
     released = pyqtSignal()                # un curseur tenu vient d'être lâché
 
-    def __init__(self, parent=None):
+    def __init__(self, faders=_FADERS, fades=_FADES, pan=None, parent=None):
         super().__init__(parent)
+        self._spec_faders, self._spec_fades, self._spec_pan = faders, fades, pan
         self._faders: dict[str, Fader] = {}
         self._readouts: dict[str, _Readout] = {}
         self._blocking = False
@@ -222,7 +293,7 @@ class MixFaders(QWidget):
         self._lower.setSpacing(6)
         root.addLayout(self._upper, 1)
         root.addLayout(self._lower)
-        for field, caption, tip, low, high, neutral, letter in _FADERS:
+        for field, caption, tip, low, high, neutral, letter in self._spec_faders:
             fader = Fader(low, high, neutral)
             fader.valueChanged.connect(lambda value, f=field: self._on_value(f, value))
             fader.sliderReleased.connect(self.released)
@@ -236,7 +307,7 @@ class MixFaders(QWidget):
         self._fades: dict[str, Fader] = {}
         self._fade_readouts: dict[str, _Readout] = {}
         self._fade_cells: list[_Cell] = []
-        for field, caption, tip, letters in _FADES:
+        for field, caption, tip, letters in self._spec_fades:
             slider = Fader(0, FADE_MAX_FRAMES, 0)
             slider.setToolTip(tooltip(title=label(caption), body=label(tip)))
             slider.valueChanged.connect(lambda value, f=field: self._on_fade(f, value))
@@ -246,7 +317,30 @@ class MixFaders(QWidget):
             name.setToolTip(tooltip(title=label(caption), body=label(tip)))
             self._fade_cells.append(_Cell(readout, slider, name))
             self._fades[field], self._fade_readouts[field] = slider, readout
+        self._pan: PanFader | None = None
+        if pan is not None:
+            self._build_pan(root, *pan)
         self._arrange(True)
+
+    def _build_pan(self, root: QVBoxLayout, field: str, caption: str, tip: str, letters: str) -> None:
+        """L'axe du panoramique, sous les curseurs : « PAN  L ——|—— R  C » — la valeur à droite, comme celle d'un fondu couché."""
+        self._pan = PanFader()
+        self._pan.setToolTip(tooltip(title=label(caption), body=label(tip)))
+        self._pan.valueChanged.connect(lambda value: self._on_value(field, value))
+        self._pan.sliderReleased.connect(self.released)
+        readout = _Readout(self._pan, "", pan_text, pan_value)
+        readout.setToolTip(tooltip(title=label(caption), body=label("sndedit.mix_pan_type_tip")))
+        readout.setFixedWidth(48)
+        readout.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        name = _initial(letters)
+        name.setFixedWidth(34)
+        name.setToolTip(tooltip(title=label(caption), body=label(tip)))
+        row = QHBoxLayout()
+        row.setSpacing(4)
+        for part in (name, _axis_end("L"), self._pan, _axis_end("R"), readout):
+            row.addWidget(part, 1 if part is self._pan else 0)
+        root.addLayout(row)
+        self._faders[field], self._readouts[field] = self._pan, readout
 
     def _arrange(self, wide: bool) -> None:
         """Les fondus à côté des trois curseurs (`wide`), ou dessous, couchés."""
@@ -280,12 +374,17 @@ class MixFaders(QWidget):
             self.changed.emit(field, value)
 
     def fader(self, field: str) -> Fader:
+        """Un curseur vertical par son champ, ou l'axe du panoramique (`panning`)."""
         return self._faders[field]
+
+    def fade(self, field: str) -> Fader:
+        """Le curseur d'un fondu (`fade_in` ou `fade_out`)."""
+        return self._fades[field]
 
     @property
     def held(self) -> bool:
         """Un curseur est tenu à la souris."""
-        return any(fader.isSliderDown() for fader in self._faders.values())
+        return any(fader.isSliderDown() for fader in self._faders.values())   # l'axe du panoramique compte aussi
 
     def load(self, music, *, tempo_pitch: bool, fades: bool, unavailable_key: str = "") -> None:
         """Pose les valeurs de `music` SANS rien émettre. `tempo_pitch` faux grise les deux derniers curseurs,
@@ -296,7 +395,7 @@ class MixFaders(QWidget):
             slider.setEnabled(fades)
             self._fade_readouts[field].setEnabled(fades)
         self._blocking = True
-        for field, caption, tip, _low, _high, *_rest in _FADERS:
+        for field, caption, tip, _low, _high, *_rest in self._spec_faders:
             fader = self._faders[field]
             fader.setValue(int(getattr(music, field)))
             self._readouts[field].show_value(fader.value())
@@ -305,9 +404,28 @@ class MixFaders(QWidget):
             self._readouts[field].setEnabled(enabled)
             body = label(tip) if enabled else label(unavailable_key)
             fader.setToolTip(tooltip(title=label(caption), body=body))
+        if self._pan is not None:
+            field = self._spec_pan[0]
+            self._pan.setValue(int(getattr(music, field, 0)))
+            self._readouts[field].show_value(self._pan.value())
         self._blocking = False
 
     def _on_value(self, field: str, value: int) -> None:
         self._readouts[field].show_value(value)
         if not self._blocking:
             self.changed.emit(field, value)
+
+
+def mix_panel(faders: MixFaders) -> QWidget:
+    """Le panneau « Mix » d'un asset : son titre et ses curseurs, avec les marges de celui d'une musique (cf.
+    `MusicEditor.mix_panel`), pour que l'écran Son monte l'un ou l'autre au même endroit de sa colonne de droite."""
+    panel = QWidget()
+    lay = QVBoxLayout(panel)
+    lay.setContentsMargins(10, 8, 10, 8)
+    lay.setSpacing(8)
+    title = QLabel(label("sndedit.mix_title"))
+    title.setFont(QFont(T.UI, T.MD, QFont.Weight.DemiBold))
+    title.setStyleSheet(f"color:{C.TEXT_HI};")
+    lay.addWidget(title)
+    lay.addWidget(faders)
+    return panel

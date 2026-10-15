@@ -111,6 +111,8 @@ class WaveformView(QWidget):
     tuning_moving = pyqtSignal(str, int)    # (« tempo » | « pitch » | « volume », valeur en %), pendant le glisser
     tuning_released = pyqtSignal()          # le glisser dans l'onde est lâché
     fades_changed = pyqtSignal(int, int)    # (fondu d'entrée, fondu de sortie) en frames, au relâchement
+    ramp_moving = pyqtSignal(int)           # fondu de sortie d'un EFFET (frames), pendant le glisser de sa poignée
+    ramp_changed = pyqtSignal(int)          # idem, au relâchement : c'est lui qui écrit
     cue_requested = pyqtSignal(float, bool, bool)   # (seconde visée, Maj enfoncé, glisser en cours) : la poignée de départ, sur la règle
     seek_requested = pyqtSignal(float, bool)        # (seconde visée, main toujours posée) : la tête de lecture, glissée dans l'onde
 
@@ -142,6 +144,7 @@ class WaveformView(QWidget):
         self._switch_shown = True                           # un effet n'a pas de scope : la bascule disparaît
         self._cue_shown = True                              # ni de départ à choisir : un effet joue d'une traite
         self._ramp: tuple | None = None                     # (début ms, fin ms) : la rampe d'un fondu de sortie d'effet
+        self._ramp_editable = False                         # sa poignée se saisit (elle vit sur la fin de la plage `_loop`)
         self._osc_live = None                               # ce que le lecteur fait entendre à l'instant (mono, −1..1), ou None
         self._osc_source = None                             # frames -> les dernières trames qui s'entendent, ou None : le lecteur
         self._osc_still = None                              # (seconde, frames) -> une fenêtre du rendu, quand rien ne joue
@@ -238,6 +241,12 @@ class WaveformView(QWidget):
             self._set_mode("wave")
         self._redraw()
 
+    def set_ramp_editable(self, editable: bool) -> None:
+        """La poignée du fondu de sortie d'un effet : posée au début de la rampe — sur la fin de la plage gardée quand il n'y a
+        pas de fondu —, elle se glisse vers la gauche pour l'allonger, comme les poignées de fondu d'une musique."""
+        self._ramp_editable = bool(editable)
+        self._redraw()
+
     def set_ramp(self, ramp: tuple | None) -> None:
         """La rampe d'un fondu de sortie, de `ramp[0]` à `ramp[1]` ms : l'onde s'y éteint. Un effet fond sur la fin de sa
         plage GARDÉE, pas sur celle du fichier — c'est pourquoi ce n'est pas le fondu des musiques, collé aux bords."""
@@ -268,14 +277,19 @@ class WaveformView(QWidget):
         self._osc_source, self._osc_still = live, still
 
     def _osc_shown(self) -> bool:
-        return self._mode == "osc"
+        return getattr(self, "_mode", "wave") == "osc"
 
     def _sync_osc_timer(self) -> None:
         """On ne relit le lecteur que si l'oscilloscope se voit."""
+        timer = getattr(self, "_osc_timer", None)
+        if timer is None:
+            # Un widget encore affiché qu'on détruit reçoit son `hideEvent` quand ses attributs Python n'existent plus :
+            # l'exception levée dans ce slot faisait avorter tout le processus (à la fermeture, ou à la fin d'un test).
+            return
         if self._osc_shown() and self.isVisible():
-            self._osc_timer.start()
+            timer.start()
         else:
-            self._osc_timer.stop()
+            timer.stop()
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -370,10 +384,17 @@ class WaveformView(QWidget):
             return self._x_of(fade_in / _FRAMES_PER_SECOND)
         return self._x_of(self._seconds - fade_out / _FRAMES_PER_SECOND)
 
+    def _ramp_x(self) -> float:
+        """L'abscisse de la poignée du fondu d'un effet : le début de sa rampe, ou la fin de la plage gardée sans rampe."""
+        return self._x_of((self._ramp[0] if self._ramp else self._loop[1]) / 1000)
+
     def _handle_at(self, x: float, y: float) -> str | None:
         """La poignée sous le pointeur : un fondu (bande du bas) avant une borne de boucle."""
         if self._seconds <= 0 or self._osc_shown():
             return None
+        if self._ramp_editable and self._loop and y >= self.height() - _FADE_BAND:
+            if abs(x - self._ramp_x()) <= _GRAB:
+                return "ramp"
         if self._fades_editable and y >= self.height() - _FADE_BAND:
             near = min(("fade_in", "fade_out"), key=lambda which: abs(x - self._fade_x(which)))
             if abs(x - self._fade_x(near)) <= _GRAB:
@@ -406,6 +427,8 @@ class WaveformView(QWidget):
             self._emit_cue(e, dragging=True)
         elif self._drag in ("fade_in", "fade_out"):
             self._move_fade(pos)
+        elif self._drag == "ramp":
+            self._move_ramp(pos)
         elif self._drag is not None:
             self._move_loop(pos.x())
         else:
@@ -421,6 +444,8 @@ class WaveformView(QWidget):
         self.update()
         if drag in ("fade_in", "fade_out"):
             self.fades_changed.emit(*self._fades)
+        elif drag == "ramp":
+            self.ramp_changed.emit(self._ramp_frames())
         elif drag == "cue":
             pass
         elif drag is not None:
@@ -467,6 +492,26 @@ class WaveformView(QWidget):
         x = self._fade_x(self._drag)
         self._overlay = ("v", x, None, QPointF(x, self.height() - _FADE_BAND),
                          label(key, frames=frames))
+        self._redraw()
+
+    def _ramp_frames(self) -> int:
+        """Le fondu de sortie que la rampe dessinée représente, en frames."""
+        if not self._ramp:
+            return 0
+        return round((self._ramp[1] - self._ramp[0]) * _FRAMES_PER_SECOND / 1000)
+
+    def _move_ramp(self, pos: QPointF) -> None:
+        """La poignée glisse sur la plage gardée : la rampe va d'elle à la fin de la plage, sans dépasser ni le plafond des
+        fondus ni le début de la plage."""
+        start, end = self._loop
+        longest = min(FADE_MAX_FRAMES, round((end - start) * _FRAMES_PER_SECOND / 1000))
+        ms = self._seconds_of(pos.x()) * 1000
+        frames = max(0, min(longest, round((end - ms) * _FRAMES_PER_SECOND / 1000)))
+        self._ramp = (end - round(frames * 1000 / _FRAMES_PER_SECOND), end) if frames else None
+        x = self._ramp_x()
+        self._overlay = ("v", x, None, QPointF(x, self.height() - _FADE_BAND),
+                         label("sndedit.gesture_fade_out", frames=frames))
+        self.ramp_moving.emit(frames)
         self._redraw()
 
     def _move_gesture(self, pos: QPointF, modifiers) -> None:
@@ -603,6 +648,8 @@ class WaveformView(QWidget):
             self._paint_loop(p, plot)
         if self._ramp:
             self._paint_ramp(p, plot)
+        if self._ramp_editable and self._loop:
+            self._paint_ramp_handle(p, plot)
         if self._fades_editable:
             self._paint_fades(p, plot)
         if self._scope is not None:
@@ -636,6 +683,14 @@ class WaveformView(QWidget):
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.setPen(QPen(QColor(C.ACCENT_WARM), 1))
         p.drawLine(QPointF(lo, plot.top()), QPointF(hi, plot.bottom()))
+
+    def _paint_ramp_handle(self, p: QPainter, plot: QRectF) -> None:
+        """La poignée du fondu, sur le bas de l'onde, comme celles des fondus d'une musique."""
+        p.setBrush(QColor(C.ACCENT_WARM))
+        p.setPen(QPen(QColor(C.BG_BASE), 1))
+        x = max(5.0, min(plot.width() - 5.0, self._ramp_x()))
+        p.drawEllipse(QPointF(x, plot.bottom() - _FADE_BAND / 2), 4.5, 4.5)
+        p.setBrush(Qt.BrushStyle.NoBrush)
 
     def _paint_fades(self, p: QPainter, plot: QRectF) -> None:
         """Chaque fondu : la rampe de volume (une diagonale), la part étouffée de l'onde assombrie, et la poignée

@@ -50,6 +50,14 @@ def missing_sources(project) -> list[MissingSource]:
     return out
 
 
+def compatible_files(project, family: str) -> list[Path]:
+    """Les fichiers de `assets/` qu'une asset de cette famille peut prendre pour source : ceux dont le format est le
+    sien, quel que soit le dossier. Triés par chemin."""
+    wanted = {ext.lower() for ext in FAMILY_EXTENSIONS[family]}
+    return sorted((p for p in project.assets_dir.rglob("*") if p.is_file() and p.suffix.lower() in wanted),
+                  key=lambda p: p.as_posix().lower())
+
+
 def _slot(project, family: str, item) -> str:
     """Le champ du fichier à relier : celui qui manque. Une police importée d'un `.fnt` en a deux ;
     les autres familles n'en ont qu'un (`asset`)."""
@@ -80,7 +88,19 @@ def _refresh_derived(project, family: str, item, path: Path) -> None:
         reconcile.apply_sprite_encoding(item, encode_sprite(path, item.quantize_method))
         item.source_stamp = reconcile.file_stamp(path)
     elif family == "backgrounds":
-        reconcile.encode_background_asset(item, path)
+        # L'import NATIF de la nouvelle image : recadrage, taille et réglages de compression de l'ancienne ne valent
+        # plus pour elle, le mode (tuilé / bitmap, 4 / 8 bpp) se détecte de nouveau, et la taille du fond suit
+        # l'image. La peinture et les repeints de palette, eux, sont gardés : s'ils ne tombent plus où il faut,
+        # le canvas le montre tout de suite.
+        from core.bg_import import detect_import_mode, encode_by_mode
+        from core.models.background import BackgroundCompression, KIND_SCENE
+        item.import_crop = item.import_size = item.mirror_x = item.mirror_y = None
+        item.mirror_flip_x = item.mirror_flip_y = False
+        item.compression = BackgroundCompression()
+        token = detect_import_mode(path)["token"]
+        if item.kind != KIND_SCENE and token.startswith("bitmap"):
+            token = "tiled8"                    # un cadre ou une planche sont des tuiles (cf. l'import)
+        reconcile.apply_bg_encoding(item, encode_by_mode(path, token, item.quantize_method, item.dither, None, item.compression))
         item.source_stamp = reconcile.file_stamp(path)
     elif family == "palettes":
         from core.models.palette import PaletteBank
@@ -110,3 +130,45 @@ def relink_source(project, family: str, item, new_path) -> str:
     store = next(s for f, s, _ in project.source_families() if f == family)
     store.save(item)
     return slot
+
+
+class RelinkSourceCmd:
+    """« Relink source… » comme entrée d'historique (`core.history.Command`) : Ctrl+Z rend l'asset TEL QU'IL ÉTAIT — le
+    champ relié et tout ce que l'éditeur en déduit (palettes, tuiles) —, Ctrl+Y le rend tel que le relien l'a fait,
+    sans relire le fichier. Le premier `execute` relie pour de bon et laisse monter la `ValueError` d'un fichier
+    refusé : `History.push` n'enregistre alors rien."""
+
+    def __init__(self, project, family: str, item, new_path, after=None):
+        self._project, self._family, self._item, self._new_path = project, family, item, new_path
+        self._after = after            # rafraîchit ce qui montre l'asset, dans les deux sens
+        self._before = self._snapshot()
+        self._done = None
+        self.label = f"Relink {getattr(item, 'name', '')}"
+
+    def _snapshot(self) -> dict:
+        import copy
+        return copy.deepcopy(vars(self._item))
+
+    def _restore(self, state: dict) -> None:
+        import copy
+        vars(self._item).clear()
+        vars(self._item).update(copy.deepcopy(state))
+        store = next(s for f, s, _ in self._project.source_families() if f == self._family)
+        store.save(self._item)
+
+    def execute(self):
+        if self._done is None:
+            relink_source(self._project, self._family, self._item, self._new_path)
+            self._done = self._snapshot()
+        else:
+            self._restore(self._done)
+        if self._after:
+            self._after()
+
+    def undo(self):
+        self._restore(self._before)
+        if self._after:
+            self._after()
+
+    def merge(self, newer) -> bool:
+        return False

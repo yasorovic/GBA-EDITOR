@@ -32,6 +32,7 @@ from PyQt6.QtWidgets import (
 from core.history import get_history, AddListItemCmd, RemoveListItemCmd, SetFieldCmd
 from core.keybindings import get_keybindings
 from ui.common.theme import C, T, QSS
+from ui.common.unit_spin import UnitSpin
 from ui.common.widgets import W
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
@@ -442,7 +443,7 @@ class _TransitionRow(QFrame):
         self._kind.currentIndexChanged.connect(self._on_kind)
         W.row(label("sndmix.transition"), self._kind, lay, label_width=78)
 
-        self._frames = QSpinBox(); self._frames.setRange(2, 255)
+        self._frames = UnitSpin(); self._frames.setRange(2, 255)
         self._frames.setValue(tr.frames); self._frames.setSuffix(label("sndmix.frames_suffix"))
         self._frames.setStyleSheet(QSS.spinbox)
         # En frames et non en ms : c'est l'unité du runtime et celle des
@@ -522,7 +523,7 @@ class MusicStateInspector(QWidget):
         self._loop.toggled.connect(lambda v: self._set("loop", bool(v)))
         root.addWidget(self._loop)
 
-        self._level = QSpinBox(); self._level.setRange(0, 100)
+        self._level = UnitSpin(); self._level.setRange(0, 100)
         self._level.setSuffix(" %"); self._level.setStyleSheet(QSS.spinbox)
         self._level.setToolTip(tooltip(title=label("sndmix.level_title")))
         self._level.valueChanged.connect(lambda v: self._set("level", int(v)))
@@ -536,7 +537,7 @@ class MusicStateInspector(QWidget):
             lambda _i: self._set("intensity_target", self._itarget.currentData()))
         W.row(label("sndmix.intensity"), self._itarget, root)
 
-        self._ivalue = QSpinBox(); self._ivalue.setRange(50, 200)
+        self._ivalue = UnitSpin(); self._ivalue.setRange(50, 200)
         self._ivalue.setSuffix(" %"); self._ivalue.setStyleSheet(QSS.spinbox)
         self._ivalue.setToolTip(tooltip(title=label("sndmix.intensity_value_title"), body=label("sndmix.ivalue_tip")))
         self._ivalue.valueChanged.connect(

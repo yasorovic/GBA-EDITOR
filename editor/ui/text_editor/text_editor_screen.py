@@ -49,6 +49,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 
 from core.history import get_history, SetFieldCmd
+from ui.common.deferred_writes import schedule_save
 from ui.common.theme import C
 from ui.common.labels import label
 from ui.common.asset_finder import AssetFinder
@@ -379,7 +380,7 @@ class TextEditorScreen(QWidget):
         self._font_asset_insp.load(asset, self._project)
         self._font_asset_preview.refresh()
         if self._project:
-            self._project.save_font_asset(asset)
+            schedule_save(self._project.font_assets, asset)       # un champ qu'on tourne : écrit après un silence
 
     def _on_text_selected(self, text):
         """Sélection dans la table : revient au contexte Texte, même si une

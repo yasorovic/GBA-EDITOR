@@ -36,7 +36,9 @@ from typing import Iterable
 
 import numpy as np
 
+from core.models.audio import PAN_CENTER
 from core.sfx_render import read_wav
+from core.wav_edit import apply_fades, kept_frames
 
 # 8363 Hz est le C-4 d'un XM ; une octave plus haut (relative note +12), c'est
 # 16 726 Hz — le plus proche du mixeur 16 kHz que le format sache exprimer sans
@@ -105,8 +107,9 @@ def played_rate(rate: int) -> float:
     return 8363.0 * 2.0 ** ((relative + fine / 128.0) / 12.0)
 
 
-def _read_mono(path) -> tuple[np.ndarray, int]:
-    """(échantillons float32 mono dans [-1, 1], taux). ValueError si illisible."""
+def _read_mono(path, trim: tuple[int, int] = (0, 0)) -> tuple[np.ndarray, int]:
+    """(échantillons float32 mono dans [-1, 1], taux) de la plage GARDÉE du fichier (`trim` : début et fin en ms, cf.
+    `core/wav_edit.py` ; (0, 0) = tout). ValueError si illisible, ou si la découpe ne laisse rien."""
     try:
         got = read_wav(Path(path))
     except wave.Error as e:
@@ -117,7 +120,10 @@ def _read_mono(path) -> tuple[np.ndarray, int]:
     data = data[: (data.size // channels) * channels].reshape(-1, channels).mean(axis=1)
     if data.size == 0:
         raise ValueError("WAV without any sample")
-    return data, rate
+    kept = kept_frames(trim[0], trim[1], data.size, rate)
+    if kept is None:
+        raise ValueError("the trim leaves nothing of the WAV")
+    return data[kept[0]:kept[1]], rate
 
 
 def wav_seconds(path) -> float:
@@ -127,6 +133,20 @@ def wav_seconds(path) -> float:
             return w.getnframes() / max(1, w.getframerate())
     except wave.Error as e:
         raise ValueError(f"WAV not recognised ({e})") from e
+
+
+def wav_kept_seconds(path, trim: tuple[int, int] = (0, 0)) -> float:
+    """La durée de la plage GARDÉE d'un WAV (`trim` : cf. `_read_mono`), lue dans son en-tête. ValueError s'il est illisible,
+    ou si la découpe ne laisse rien. C'est la durée de la piste que le build écrit : celle du plan des sections."""
+    try:
+        with wave.open(str(path)) as w:
+            frames, rate = w.getnframes(), max(1, w.getframerate())
+    except wave.Error as e:
+        raise ValueError(f"WAV not recognised ({e})") from e
+    kept = kept_frames(trim[0], trim[1], frames, rate)
+    if kept is None:
+        raise ValueError("the trim leaves nothing of the WAV")
+    return (kept[1] - kept[0]) / rate
 
 
 def _resample(data: np.ndarray, rate: float, target: float) -> np.ndarray:
@@ -225,7 +245,7 @@ def _pattern(rows: int, instrument: int = 0) -> bytes:
     return struct.pack("<IBHH", 9, 0, rows, len(packed)) + bytes(packed)
 
 
-def _instrument(index: int, pcm: np.ndarray, rate: int) -> bytes:
+def _instrument(index: int, pcm: np.ndarray, rate: int, pan: int = PAN_CENTER) -> bytes:
     name = f"wav{index}".encode("ascii").ljust(22, b"\x00")
     out = bytearray()
     out += struct.pack("<I", 263) + name + bytes([0])
@@ -235,21 +255,31 @@ def _instrument(index: int, pcm: np.ndarray, rate: int) -> bytes:
     out += struct.pack("<H", 0) + bytes(22)              # fondu, réservé
     delta = np.diff(pcm.astype(np.int16), prepend=np.int16(0)).astype(np.int8)
     relative, fine = _tuning(rate)
-    out += struct.pack("<IIIBbBBbB", pcm.size, 0, 0, 64, fine, 0, 128, relative, 0)
+    out += struct.pack("<IIIBbBBbB", pcm.size, 0, 0, 64, fine, 0, pan, relative, 0)
     out += name
     out += delta.tobytes()
     return bytes(out)
 
 
-def wav_to_xm(path, rate: int = WAV_MUSIC_RATE, boundaries_ms: Iterable[float] = ()) -> bytes:
+def wav_to_xm(path, rate: int = WAV_MUSIC_RATE, boundaries_ms: Iterable[float] = (), pan: int = PAN_CENTER,
+              trim: tuple[int, int] = (0, 0), fades: tuple[int, int] = (0, 0)) -> bytes:
     """Le module XM qui joue ce WAV. ValueError si le WAV n'est pas convertible.
+
+    `trim` (début et fin en ms depuis le début du FICHIER, cf. `core/wav_edit.py`) rogne le signal AVANT le plan : la coupe
+    est à l'échantillon près, la piste qu'on encapsule est la plage gardée, et `boundaries_ms` est dans SON temps (celui
+    de l'onde qu'on voit). `fades` (entrée, sortie, en frames) sont cuits dans les premiers et les derniers échantillons de
+    la piste : pour une piste qui n'a pas de fondu à l'exécution (un jingle).
+
+    `pan` (0 gauche … 255 droite) est le panoramique de l'échantillon, celui que le lecteur de l'éditeur applique :
+    seul l'aperçu d'un effet en donne un (cf. `BoxPlayer`) ; le build n'en donne jamais, il reste au centre.
 
     Chaque frontière de `boundaries_ms` (arrondie à la ligne) ouvre un nouveau segment : un échantillon, une
     position d'ordre. Sans frontière la piste est un seul segment, qui joue une fois : le module dure autant
     qu'elle, un `loop` la rejoue et un `once` s'arrête avec elle."""
-    data, src_rate = _read_mono(path)
+    data, src_rate = _read_mono(path, trim)
     plan = plan_wav(data.size / src_rate, rate, boundaries_ms)
-    pcm = np.clip(np.round(_resample(data, src_rate, plan.play_rate) * 127.0), -128, 127).astype(np.int8)
+    track = apply_fades(_resample(data, src_rate, plan.play_rate), plan.play_rate, *fades)
+    pcm = np.clip(np.round(track * 127.0), -128, 127).astype(np.int8)
 
     frames_per_row = plan.play_rate * ROW_SECONDS
     samples = []
@@ -289,19 +319,20 @@ def wav_to_xm(path, rate: int = WAV_MUSIC_RATE, boundaries_ms: Iterable[float] =
     for p in patterns:
         out += p
     for k, chunk in enumerate(samples):
-        out += _instrument(k, chunk, rate)
+        out += _instrument(k, chunk, rate, pan)
     return bytes(out)
 
 
 def encode_music_for_build(src, dst, sample_rate: int = 0,
-                           boundaries_ms: Iterable[float] = ()) -> int:
+                           boundaries_ms: Iterable[float] = (),
+                           trim: tuple[int, int] = (0, 0), fades: tuple[int, int] = (0, 0)) -> int:
     """Écrit le module de `src` dans `dst` ; rend sa taille en octets.
 
     `sample_rate` est celui de `Music.sample_rate` (0 = le défaut), `boundaries_ms` les frontières des
-    sections de la musique, en millisecondes (cf. `wav_to_xm`)."""
+    sections de la musique, en millisecondes, `trim` et `fades` la plage gardée et les fondus cuits (cf. `wav_to_xm`)."""
     from pathlib import Path
     dst = Path(dst)
     dst.parent.mkdir(parents=True, exist_ok=True)
-    data = wav_to_xm(src, effective_rate(sample_rate), boundaries_ms)
+    data = wav_to_xm(src, effective_rate(sample_rate), boundaries_ms, trim=trim, fades=fades)
     dst.write_bytes(data)
     return len(data)

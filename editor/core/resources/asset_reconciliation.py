@@ -318,6 +318,7 @@ def _resync_background(project, ba, png_path: Path) -> Optional[str]:
     """
     before = (ba.tiles_w, ba.tiles_h, len(ba.palettes))
     tile_overrides = dict(ba.tile_palette_overrides)
+    painted = dict(ba.tile_paint)
     pal_overrides = dict(ba.palette_overrides)
 
     encode_background_asset(ba, png_path)
@@ -327,10 +328,11 @@ def _resync_background(project, ba, png_path: Path) -> Optional[str]:
     if same_geometry:
         # Simple retouche : les repeints désignent toujours les mêmes tuiles.
         ba.tile_palette_overrides = tile_overrides
+        ba.tile_paint = painted
         ba.palette_overrides = pal_overrides
     project.backgrounds.save(ba)
 
-    dropped = len(tile_overrides) + len(pal_overrides)
+    dropped = len(tile_overrides) + len(pal_overrides) + len(painted)
     if dropped and not same_geometry:
         return (f"“{ba.name}”: image geometry changed, {dropped} palette "
                 f"repaint(s) could not be kept.")
@@ -412,6 +414,7 @@ def apply_bg_encoding(ba: "BackgroundAsset", c: dict):
         ba.tiles_w = 0
         ba.tiles_h = 0
         ba.tile_palette_overrides = {}
+        ba.tile_paint = {}
     else:
         ba.tileset = c["tileset"]
         ba.tilemap = c["tilemap"]
