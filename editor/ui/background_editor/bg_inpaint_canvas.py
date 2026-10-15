@@ -27,6 +27,7 @@ Composants :
 from __future__ import annotations
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
+from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtWidgets import (
@@ -38,9 +39,11 @@ from PyQt6.QtGui import (
     QRegion, QColor, QPainter, QPixmap, QImage, QTransform, QPen, QBrush, QKeySequence, QShortcut, QFont, QPainterPath,
 )
 from core.keybindings import bind, get_keybindings
+from ui.background_editor.bg_placement_overlay import PlacementOverlay
+from ui.background_editor import bg_placement_geometry as placement_geometry
 from PyQt6.QtCore import Qt, QPoint, QPointF, QSize, QRectF, QTimer, QPropertyAnimation, pyqtSignal
 
-from core.bg_import import render_bg_preview, render_bitmap_preview
+from core.bg_import import render_bg_preview, render_bitmap_preview, GBA_SCREEN_W, GBA_SCREEN_H
 from core.models.tile_codec import pack_se, unpack_se, hex_to_tile, flip_h, flip_v
 from core.models.gba_color import bgr555_to_rgb888
 from core.models.resource import MIME_ANIMATED_BG
@@ -52,13 +55,16 @@ from ui.common.palette_bank_strip import PaletteBankStrip
 from ui.common.canvas_top_bar import CanvasTopBar, BAR_HEIGHT
 from ui.common.shortcut_hints import ShortcutHints
 from ui.background_editor.bg_hints import background_hints
-from ui.background_editor.bg_prepare_overlay import PrepareOverlay, MODE_CROP, MODE_RESIZE
 from ui.background_editor.bg_mirror_overlay import MirrorOverlay
 from ui.common.icons import get as _ico, COLOR_DEFAULT, COLOR_ACTIVE, COLOR_UI
 from ui.common import external_editor
 from ui.common.canvas_backdrop import draw_grid, draw_grid_halo
 
 _BACKDROP_STEP = 16   # pas de la grille de fond, en pixels IMAGE (indépendant du zoom)
+
+# Les réglages de préparation et de compression restent disponibles pendant que
+# le canvas du fond évolue : chacun passe par le même encodage non destructif.
+PREPARATION_TOOLS_ENABLED = True
 
 
 def _snap8(v) -> int:
@@ -394,10 +400,13 @@ class BgInpaintController:
     # ── Peinture de tiles ───────────────────────────────────────
     def paint_tile(self, col: int, row: int, color: int = None):
         """Peint une case : elle montre une tuile pleine de `color` (défaut : la couleur active) sous la sous-palette
-        active. La couleur est un index de la palette EMBARQUÉE par le fond ; l'index 0 rend la case transparente.
+        active, qui doit être une palette ajoutée. La couleur est un index de cette palette ; 0 rend la case transparente.
         L'image n'est pas touchée : c'est un calque. Ne rafraîchit pas — l'appelant notifie une fois par geste."""
-        if self.paintable and self._in_grid(col, row):
-            self._set_painted((col, row), (self._active_color if color is None else color, self._active_pal))
+        # La peinture ne se pose que sur une palette AJOUTÉE (une référence au catalogue, que l'encodage ne touche pas) et
+        # se range par sa POSITION dans `added_palettes` : une palette dérivée du PNG peut changer à chaque encodage.
+        position = self._ba.added_position(self._active_pal) if isinstance(self._active_pal, int) else -1
+        if self.paintable and position >= 0 and self._in_grid(col, row):
+            self._set_painted((col, row), (self._active_color if color is None else color, position))
 
     def erase_tile(self, col: int, row: int):
         """Retire la peinture d'une case : la tuile initiale de l'image réapparaît."""
@@ -794,10 +803,9 @@ class BgInpaintView(QGraphicsView):
     placement_moved = pyqtSignal(object, int, int)  # (placement, x, y)
     placement_selected = pyqtSignal(object)         # placement | None
     placement_deleted = pyqtSignal(object)
-    prepare_live = pyqtSignal(int, int)     # taille du recadrage / du redimensionnement en cours
-    resize_released = pyqtSignal(int, int)  # poignée lâchée → nouvelle taille
-    crop_finished = pyqtSignal(bool)        # Entrée (True) / Échap (False) en recadrage
     mirror_released = pyqtSignal(object, object, object, object)   # barre lâchée → axe X, axe Y (None = absent), côté droit gardé, côté bas gardé
+    canvas_rect_live = pyqtSignal(object)       # mode Canvas : l'image posée (x, y, w, h) pendant le geste
+    canvas_finished = pyqtSignal(bool)          # Entrée (True) / Échap (False) en mode Canvas
 
     _ZOOM_LEVELS = [0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0]
 
@@ -846,24 +854,20 @@ class BgInpaintView(QGraphicsView):
         self.frames.setVisible(False)
         self._scene.addItem(self.frames)
 
-        # Préparation de la source (recadrer / redimensionner). Au-dessus de tout :
-        # tant qu'un de ces modes est actif, ses poignées priment sur le reste.
-        self._prep = PrepareOverlay()
-        self._prep.setZValue(40)
-        self._scene.addItem(self._prep)
-        # Les barres de miroir : sous les poignées de préparation, au-dessus du reste.
+        # Les barres de miroir : au-dessus du reste.
         self.mirror = MirrorOverlay()
         self.mirror.setZValue(35)
         self._scene.addItem(self.mirror)
         self.zoom_changed.connect(self.mirror.set_zoom)
-        # Le recadrage montre la SOURCE entière, à la place de l'image encodée.
-        self._src_item = QGraphicsPixmapItem()
-        self._src_item.setVisible(False)
-        self._scene.addItem(self._src_item)
-        self._crop_src_size: Optional[tuple] = None
-        self._zoom_before_crop = 2.0
-        self._hidden_by_crop: list = []
-        self.zoom_changed.connect(self._prep.set_zoom)
+        # Le mode Canvas : le FICHIER posé dans le canvas, au-dessus de tout (cf. begin_canvas_mode).
+        self.canvas_place = PlacementOverlay()
+        self.canvas_place.setZValue(40)
+        self._scene.addItem(self.canvas_place)
+        self.zoom_changed.connect(self.canvas_place.set_zoom)
+        self._hidden_by_canvas_mode: list = []
+        self._canvas_mode_size: Optional[tuple] = None    # taille du canvas pendant le mode, None hors mode
+        self._source_pix = QPixmap()
+        self._source_pix_key: Optional[tuple] = None
 
         # Dépôt d'un fond animé venu du finder.
         self.setAcceptDrops(True)
@@ -901,7 +905,7 @@ class BgInpaintView(QGraphicsView):
         fond visible (c'est ce qui ramait en dézoomant beaucoup)."""
         painter.fillRect(rect, QColor(C.BG_DEEP))
         # Sous l'image, un damier neutre : la transparence se voit, au lieu de se confondre avec le fond du canvas.
-        w, h = self._ctrl.image_size()
+        w, h = self._extent()
         image_rect = QRectF(0, 0, w, h).intersected(rect)
         if not image_rect.isEmpty():
             painter.fillRect(image_rect, QBrush(_checker_tile()))
@@ -912,7 +916,7 @@ class BgInpaintView(QGraphicsView):
         ne couvre rien — comme quand il se tracait sous elle."""
         if self._hover_scene is None:
             return
-        w, h = self._ctrl.image_size()
+        w, h = self._extent()
         painter.save()
         region = QRegion(rect.toAlignedRect()).subtracted(QRegion(QRectF(0, 0, w, h).toAlignedRect()))
         painter.setClipRegion(region)
@@ -949,10 +953,7 @@ class BgInpaintView(QGraphicsView):
     def sync_image_size(self):
         """Grille, calques et sceneRect sur les dimensions courantes de l'image
         (elles changent au changement de mode ou à la recompression), sans
-        toucher au zoom. Sans effet pendant un recadrage : la vue y montre la
-        source, dont la taille est déjà posée."""
-        if self._crop_src_size:
-            return
+        toucher au zoom."""
         w, h = self._ctrl.image_size()
         self._grid.resize(w, h)
         self.slices.set_image_size(w, h)
@@ -970,9 +971,9 @@ class BgInpaintView(QGraphicsView):
         self._scene.setSceneRect(x - m, y - m, w + 2 * m, h + 2 * m)
 
     def _extent(self) -> tuple[int, int]:
-        """Ce que la vue montre : la source entière pendant un recadrage, l'image
-        encodée sinon. Centrage, cadrage et curseur se mesurent sur la même."""
-        return self._crop_src_size or self._ctrl.image_size()
+        """Ce que la vue montre : l'image encodée, ou le canvas pendant le mode Canvas. Centrage, cadrage, damier et
+        curseur se mesurent sur la même."""
+        return self._canvas_mode_size or self._ctrl.image_size()
 
     def _center(self):
         w, h = self._extent()
@@ -993,88 +994,87 @@ class BgInpaintView(QGraphicsView):
             [(cc, rr) for rr in range(r0, r0 + cells) for cc in range(c0, c0 + cells)],
             erase=(self._tool == "eraser" or self._erase_gesture))
 
-    # ── Préparation de la source ──────────────────────────────────
-    @property
-    def prepare_mode(self) -> Optional[str]:
-        return self._prep.mode
+    # ── Passe-partout et mode Canvas ──────────────────────────────
+    def _source_pixmap(self, png_path) -> QPixmap:
+        """Le fichier source en pixmap, gardé tant que ni son chemin ni sa date ne changent : le passe-partout se remet
+        à chaque rechargement du fond, une photo ne se relit pas à chaque fois."""
+        try:
+            key = (str(png_path), Path(png_path).stat().st_mtime_ns)
+        except OSError:
+            return QPixmap()
+        if self._source_pix_key != key:
+            self._source_pix, self._source_pix_key = QPixmap(str(png_path)), key
+        return self._source_pix
 
-    def begin_crop(self, png_path, crop: Optional[tuple]) -> bool:
-        """Entre en recadrage : la source entière remplace l'image encodée, le
-        rectangle part de `crop` (x, y, w, h) — ou de l'image entière. False si
-        la source est illisible."""
-        pm = QPixmap(str(png_path))
-        if pm.isNull():
+    def set_overflow(self, png_path, canvas: tuple, rect: tuple) -> None:
+        """Le passe-partout : le fichier posé en `rect`, visible hors du canvas `canvas`, grisé. Sans effet pendant le mode
+        Canvas (qui montre le fichier en entier)."""
+        if self._canvas_mode_size is not None:
+            return
+        pix = self._source_pixmap(png_path)
+        if pix.isNull():
+            self.canvas_place.stop()
+            return
+        self.canvas_place.show_passive(pix, canvas, rect)
+
+    def clear_overflow(self) -> None:
+        if self._canvas_mode_size is None:
+            self.canvas_place.stop()
+
+    def canvas_mode_active(self) -> bool:
+        return self._canvas_mode_size is not None
+
+    def begin_canvas_mode(self, png_path, canvas: tuple, rect: tuple) -> bool:
+        """Entre en mode Canvas : le fichier entier remplace l'image encodée, posé en `rect` (x, y, w, h) dans un
+        canvas `canvas` (w, h). Rien ne se compresse tant qu'on règle. False si le fichier est illisible."""
+        pix = self._source_pixmap(png_path)
+        if pix.isNull():
             return False
-        self.end_resize()
-        sw, sh = pm.width(), pm.height()
-        self._src_item.setPixmap(pm)
-        self._src_item.setVisible(True)
-        # Tout le reste décrit l'image ENCODÉE : dans les pixels de la source il
-        # dirait faux, on le range le temps du recadrage.
-        self._hidden_by_crop = [it for it in (self._pix_item, self._grid, self.placements,
-                                              self.slices, self.frames, self.mirror) if it.isVisible()]
-        for it in self._hidden_by_crop:
+        # Tout le reste décrit l'image ENCODÉE : dans l'espace du canvas il dirait faux, on le range le temps du mode.
+        self._hidden_by_canvas_mode = [it for it in (self._pix_item, self._adjust_item, self._grid, self.placements,
+                                                     self.slices, self.frames, self.mirror) if it.isVisible()]
+        for it in self._hidden_by_canvas_mode:
             it.setVisible(False)
-        self._crop_src_size = (sw, sh)
-        self._set_scene_rect(-16, -16, sw + 32, sh + 32)   # place pour les poignées
-        # La source est souvent plus grande que ce que le zoom courant montre : on
-        # la cadre en entier (poignées comprises), le zoom d'avant revient à la sortie.
-        self._zoom_before_crop = self._zoom
+        self._canvas_mode_size = tuple(canvas)
+        self._set_scene_rect(0, 0, max(canvas[0], 1), max(canvas[1], 1))
+        self.resetCachedContent()
+        self.canvas_place.start(pix, canvas, rect)
         self.fit(margin=12)
-        self._prep.set_zoom(self._zoom)
-        self._prep.start_crop((sw, sh), crop or (0, 0, sw, sh))
+        self.setFocus()
         return True
 
-    def end_crop(self) -> Optional[tuple]:
-        """Sort du recadrage et rend le rectangle (x, y, w, h) de la SOURCE, ou
-        None si on n'y était pas."""
-        if self._prep.mode != MODE_CROP:
+    def end_canvas_mode(self) -> Optional[tuple]:
+        """Sort du mode Canvas et rend l'image posée (x, y, w, h), ou None si on n'y était pas."""
+        if self._canvas_mode_size is None:
             return None
-        rect = self._prep.crop_rect()
-        self._prep.stop()
-        self._src_item.setVisible(False)
-        self._crop_src_size = None
-        for it in self._hidden_by_crop:
+        rect = self.canvas_place.rect()
+        self.canvas_place.stop()
+        self._canvas_mode_size = None
+        for it in self._hidden_by_canvas_mode:
             it.setVisible(True)
-        self._hidden_by_crop = []
+        self._hidden_by_canvas_mode = []
         self.unsetCursor()
         self.sync_image_size()
-        self._zoom = self._zoom_before_crop
-        self._apply_zoom()
-        self._center()
         return rect
 
-    def begin_resize(self, size: tuple):
-        """Poignées de redimensionnement sur l'image préparée `size` (w, h)."""
-        if self._prep.mode == MODE_CROP:
+    def set_canvas_geometry(self, canvas: tuple, rect: tuple) -> None:
+        """Le canvas ou l'image posée changent depuis l'inspecteur : la vue suit, sans quitter le mode."""
+        if self._canvas_mode_size is None:
             return
-        # Les poignées de gauche et du haut sortent du repère de l'image quand on
-        # agrandit : on laisse de la place autour, sans bouger ce qu'on regarde.
-        centre = self.mapToScene(self.viewport().rect().center())
-        w, h = self._ctrl.image_size()
-        self._set_scene_rect(-max(w, size[0]), -max(h, size[1]),
-                             3 * max(w, size[0]), 3 * max(h, size[1]))
-        self.centerOn(centre)
-        self._prep.set_zoom(self._zoom)
-        self._prep.start_resize(size)
+        resized = tuple(canvas) != self._canvas_mode_size
+        self._canvas_mode_size = tuple(canvas)
+        self.canvas_place.set_geometry(canvas, rect)
+        if resized:
+            self._set_scene_rect(0, 0, max(canvas[0], 1), max(canvas[1], 1))
+            self.resetCachedContent()
+        self.viewport().update()
 
-    def end_resize(self):
-        if self._prep.mode == MODE_RESIZE:
-            centre = self.mapToScene(self.viewport().rect().center())
-            self._prep.stop()
-            self.unsetCursor()
-            self.sync_image_size()
-            self.centerOn(centre)
-
+    # ── Miroir ────────────────────────────────────────────────────
     def set_mirror(self, axis_x, axis_y, flips: tuple, prepared: tuple, display: tuple):
         """Les barres de miroir d'après le fond : axes en pixels de l'image préparée `prepared`, `display` = la
         taille à laquelle l'image est montrée."""
         self.mirror.set_axes(axis_x, axis_y, flips, prepared, display)
         self.mirror.set_zoom(self._zoom)
-
-    def _emit_prepare_live(self):
-        w, h = self._prep.size() if self._prep.mode == MODE_RESIZE else self._prep.crop_rect()[2:]
-        self.prepare_live.emit(w, h)
 
     # ── Grille ───────────────────────────────────────────────────
     def _sync_grid(self):
@@ -1189,18 +1189,17 @@ class BgInpaintView(QGraphicsView):
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
             e.accept()
             return
-        if (e.button() == Qt.MouseButton.RightButton and not self._prep.mode and self._ctrl.paintable
+        if self._canvas_mode_size is not None:
+            # Mode Canvas : le clic est aux poignées ou à l'image, ou à personne — jamais à la peinture ni aux fonds posés.
+            if e.button() == Qt.MouseButton.LeftButton and self.canvas_place.begin(*self._scene_pos(e)):
+                self.canvas_rect_live.emit(self.canvas_place.rect())
+            e.accept()
+            return
+        if (e.button() == Qt.MouseButton.RightButton and self._ctrl.paintable
                 and self._tool in ("brush", "eraser") and not self._painting):
             # Clic droit = gomme : en Paint la tuile initiale revient, en Inpaint la palette d'origine.
             self._erase_gesture = True
             self._handle_press(e)
-            e.accept()
-            return
-        if e.button() == Qt.MouseButton.LeftButton and self._prep.mode:
-            # Recadrage / redimensionnement actif : le clic est à ses poignées, ou
-            # à personne — jamais à la peinture ni aux fonds posés.
-            if self._prep.begin(*self._scene_pos(e)):
-                self._emit_prepare_live()
             e.accept()
             return
         if e.button() == Qt.MouseButton.LeftButton:
@@ -1248,16 +1247,16 @@ class BgInpaintView(QGraphicsView):
             self.verticalScrollBar().setValue(self.verticalScrollBar().value() - d.y())
             e.accept()
             return
-        if self._prep.mode:
+        if self._canvas_mode_size is not None:
             x, y = self._scene_pos(e)
-            if self._prep.dragging:
+            if self.canvas_place.dragging:
                 mods = e.modifiers()
-                self._prep.drag(x, y, bool(mods & Qt.KeyboardModifier.ShiftModifier),
-                                bool(mods & Qt.KeyboardModifier.ControlModifier))
-                self._emit_prepare_live()
+                self.canvas_place.drag(x, y, bool(mods & Qt.KeyboardModifier.ShiftModifier),
+                                       bool(mods & Qt.KeyboardModifier.ControlModifier))
+                self.canvas_rect_live.emit(self.canvas_place.rect())
             else:
-                cur = self._prep.cursor_at(x, y)
-                self.setCursor(cur) if cur else self.unsetCursor()
+                cursor = self.canvas_place.cursor_at(x, y)
+                self.setCursor(cursor) if cursor else self.unsetCursor()
             e.accept()
             return
         if self.mirror.dragging:
@@ -1307,10 +1306,9 @@ class BgInpaintView(QGraphicsView):
             self.unsetCursor()
             e.accept()
             return
-        if self._prep.dragging and e.button() == Qt.MouseButton.LeftButton:
-            self._prep.end()
-            if self._prep.mode == MODE_RESIZE:
-                self.resize_released.emit(*self._prep.size())
+        if self.canvas_place.dragging and e.button() == Qt.MouseButton.LeftButton:
+            self.canvas_place.end()
+            self.canvas_rect_live.emit(self.canvas_place.rect())
             e.accept()
             return
         if self.mirror.dragging and e.button() == Qt.MouseButton.LeftButton:
@@ -1357,9 +1355,9 @@ class BgInpaintView(QGraphicsView):
             self.placement_deleted.emit(pl)
 
     def keyPressEvent(self, e):
-        if self._prep.mode == MODE_CROP and e.key() in (
+        if self._canvas_mode_size is not None and e.key() in (
                 Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Escape):
-            self.crop_finished.emit(e.key() != Qt.Key.Key_Escape)
+            self.canvas_finished.emit(e.key() != Qt.Key.Key_Escape)
             e.accept()
             return
         if e.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
@@ -1518,7 +1516,9 @@ class BgInpaintToolbar(QFrame):
     mode_changed = pyqtSignal(str)
 
     # (outil, icône, titre, infobulle Inpaint, infobulle Paint) : le geste dépend du mode du pinceau.
+    # « select » vient en premier : c'est lui qui pose l'image dans son canvas (mode Canvas), il n'a pas de mode Paint.
     _TOOLS = [
+        ("select", "tool_select",        "bginp.select", "bginp.select_tip", "bginp.select_tip"),
         ("brush",  "tool_inpaint_brush", "bginp.brush", "bginp.brush_tip", "bginp.tile_brush_tip"),
         ("fill",   "tool_fill",          "bginp.fill", "bginp.fill_tip", "bginp.fill_tip_paint"),
         ("rect",   "tool_inpaint_rect",  "bginp.rectangle_repaint_an_area", "bginp.rectangle_tip",
@@ -1532,6 +1532,7 @@ class BgInpaintToolbar(QFrame):
         self._dragging = False
         self._drag_offset = QPoint()
         self._current = "brush"
+        self._previous = "brush"        # l'outil que « select » rend en le quittant ("" : aucun, un fond qui ne se peint pas)
         self._mode = MODE_INPAINT
         self._brush_size = 8
         self.min_y = 0     # borne haute du drag (la barre du canvas l'occupe)
@@ -1661,6 +1662,10 @@ class BgInpaintToolbar(QFrame):
         return f"{self._current}_paint" if self._mode == MODE_PAINT else self._current
 
     def _set_tool(self, tool: str):
+        if tool == "select" and self._current == "select":
+            tool = self._previous              # re-cliquer « select » le quitte, comme le bouton qu'il remplace
+        if tool != "select":
+            self._previous = tool
         self._current = tool
         self._sync_buttons()
         self.tool_changed.emit(tool)
@@ -1669,6 +1674,38 @@ class BgInpaintToolbar(QFrame):
         """Une seule source de l'état coché, identique au canvas de scène."""
         for tool_id, button in self._btns.items():
             button.setChecked(tool_id == self._current)
+
+    def configure(self, paintable: bool, can_select: bool):
+        """Ce que la barre propose pour le fond courant : « select » quand l'image se pose dans un canvas, les outils de
+        peinture quand le fond se peint. Un fond qui ne se peint pas garde la barre — « select » seul — et aucun outil
+        n'y est choisi d'office : le canvas montre l'encodage tant qu'on ne pose rien."""
+        for tool_id, button in self._btns.items():
+            if tool_id == "select":
+                button.setEnabled(can_select)
+            else:
+                button.setVisible(paintable)
+        before = self._current
+        if self._current == "select" and not can_select:
+            self._current = self._previous
+        if paintable:
+            self._previous = self._previous or "brush"
+            self._current = self._current or "brush"
+        else:
+            self._previous = ""
+            if self._current != "select":
+                self._current = ""
+        self._sync_buttons()
+        if self._current != before:
+            self.tool_changed.emit(self._current)
+
+    def leave_select(self):
+        """Quitte « select » (autre fond, outil devenu indisponible) pour l'outil d'avant."""
+        if self._current == "select":
+            self._set_tool("select")
+
+    def choose_select(self):
+        if self._current != "select":
+            self._set_tool("select")
 
     def _exec_tool_menu(self, menu: QMenu, pos: QPoint, owner: QToolButton):
         for button in self._btns.values():
@@ -1711,10 +1748,13 @@ class BgInpaintCanvas(QWidget):
     slices_dragged = pyqtSignal(dict)      # marges posées au canvas → inspecteur
     placements_changed = pyqtSignal()      # fond animé posé/déplacé/retiré
     placement_selected = pyqtSignal(object)  # placement | None (relayé du view)
-    # Recadrage / taille / miroir voulus pour la source, (None, None, (None, None)) =
-    # « Original ». Le canvas ne compresse pas lui-même : l'écran le fait
-    # hors-thread et écrit le résultat sur le fond. Le miroir est (axe X, axe Y).
-    prepare_requested = pyqtSignal(object, object, object)
+    # Ce qui change dans la préparation de la source : un dict partiel de `BackgroundAsset.import_prep()` — « canvas »,
+    # « pos », « size » (mode Canvas) et/ou « mirror » (axe X, axe Y, côté droit gardé, côté bas gardé). Le canvas ne
+    # compresse pas lui-même : l'écran le fait hors-thread et écrit le résultat sur le fond.
+    prepare_requested = pyqtSignal(object)
+    # Le canvas du fond et l'image posée, pour les champs de l'inspecteur : (canvas, rect, taille du fichier, canvas
+    # modifiable). (None, None, (0, 0), False) quand le fond n'a pas de canvas à régler.
+    canvas_state = pyqtSignal(object, object, object, bool)
 
     # Cadence de la lecture : un tick GBA (60 Hz), l'unité dans laquelle les
     # vitesses sont DÉCLARÉES. Rejouer à l'unité près est ce qui rend l'aperçu
@@ -1765,15 +1805,13 @@ class BgInpaintCanvas(QWidget):
         self._preview_badge.setVisible(False)
         self._btn_edit.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._btn_edit.customContextMenuRequested.connect(self._on_edit_menu)
-        # Préparer la source d'une image « riche » : recadrer, redimensionner,
-        # revenir à l'original. Le PNG n'est jamais touché (cf. bg_import.prepare_source).
+        # Préparer la source : poser l'image dans son canvas, puis le miroir. Le PNG n'est jamais touché (cf.
+        # bg_import.prepare_source).
         self._bar.add_spacing(8)
-        self._tb_crop = self._bar.add_toggle(
-            "prep_crop", tooltip(title=label('bginp.crop'), body=label('bginp.crop_tip')),
-            self._on_crop_toggled)
-        self._tb_resize = self._bar.add_toggle(
-            "prep_resize", tooltip(title=label('bginp.resize'), body=label('bginp.resize_tip')),
-            self._on_resize_toggled)
+        # (le mode Canvas s'ouvre par l'outil « select » de la barre flottante, cf. `_on_tool_changed`)
+        self._canvas_cancelled = False   # Échap / changement de fond : pas d'application
+        self._shown_layout: Optional[str] = None   # le layout que l'inspecteur montre (cf. set_shown_layout)
+        self._tiled_canvas: Optional[tuple] = None  # le canvas du mode Canvas avant un passage en bitmap (fixe)
         self._tb_mirror_x = self._bar.add_toggle(
             "prep_mirror_x", tooltip(title=label('bginp.mirror_x'), body=label('bginp.mirror_x_tip')),
             lambda on: self._on_mirror_toggled(on, horizontal=True))
@@ -1784,12 +1822,10 @@ class BgInpaintCanvas(QWidget):
             "prep_reset", tooltip(title=label('bginp.prep_reset'), body=label('bginp.prep_reset_tip')),
             self._on_prep_reset)
         self._mirror_wanted = (None, None, False, False)   # cf. _mirror
-        self._crop_cancelled = False   # Échap / changement de fond : pas d'application
         self._src_size = (0, 0)        # taille du PNG source, lue à la sélection
-        self._view.prepare_live.connect(self._bar.set_canvas_size)
-        self._view.resize_released.connect(self._on_resize_released)
-        self._view.crop_finished.connect(self._on_crop_finished)
         self._view.mirror_released.connect(self._on_mirror_released)
+        self._view.canvas_rect_live.connect(lambda _rect: self._emit_canvas_state())
+        self._view.canvas_finished.connect(self._on_canvas_finished)
         self._view.zoom_changed.connect(self._bar.set_zoom)
         self._view.cursor_moved.connect(self._on_cursor_moved)
         self._bar.set_zoom(self._view._zoom)
@@ -1814,6 +1850,7 @@ class BgInpaintCanvas(QWidget):
         self._toolbar.min_y = BAR_HEIGHT
         self._toolbar.move(10, BAR_HEIGHT + 10)
         self._toolbar.tool_changed.connect(self._view.set_tool)
+        self._toolbar.tool_changed.connect(self._on_tool_changed)
         self._toolbar.size_changed.connect(self._view.set_brush_size)
         self._toolbar.mode_changed.connect(self._on_mode_changed)
         self._toolbar.raise_()
@@ -1827,8 +1864,6 @@ class BgInpaintCanvas(QWidget):
         self._hints = ShortcutHints(self, background_hints, self._toolbar.hint_context)
         self._toolbar.tool_changed.connect(lambda _tool: self._sync_hints())
         self._toolbar.mode_changed.connect(lambda _mode: self._sync_hints())
-        self._tb_crop.toggled.connect(lambda _on: self._sync_hints())
-        self._tb_resize.toggled.connect(lambda _on: self._sync_hints())
 
         # Overlay « Compression… » (compression hors-thread — voir screen).
         self._busy = QLabel(label('bginp.compressing'), self)
@@ -1912,11 +1947,7 @@ class BgInpaintCanvas(QWidget):
         self._bar.set_cursor_px(*((None, None) if x < 0 else (x, y)))
 
     # ── Préparation de la source ─────────────────────────────────
-    # Deux gestes, une seule sortie : `prepare_requested(crop, size)`. Le
-    # recadrage s'applique à la sortie du mode (Entrée ou bascule) — pendant qu'on
-    # règle, la vue montre la source, pas l'encodage, donc rien à recompresser à
-    # chaque poignée. Le redimensionnement, lui, s'applique au relâchement : c'est
-    # l'image encodée qu'il montre.
+    # Un seul geste pour l'instant, le miroir, et une seule sortie : `prepare_requested(mirror)`.
 
     def _prep_available(self) -> bool:
         ba = self._ba
@@ -1935,13 +1966,41 @@ class BgInpaintCanvas(QWidget):
             return (0, 0)
 
     def _prepared_size(self) -> tuple:
-        """Taille de l'image préparée, avant le rembourrage à un multiple de 8."""
+        """Taille du canvas du fond (ou de l'image posée, ou du fichier), avant le rembourrage à un multiple de 8.
+        Un bitmap a un canvas fixe de 240×160 : c'est la taille de son encodage."""
         ba = self._ba
-        if ba.import_size:
-            return tuple(ba.import_size)
-        if ba.import_crop:
-            return tuple(ba.import_crop[2:])
-        return self._src_size
+        if self._layout() == "bitmap":
+            return (GBA_SCREEN_W, GBA_SCREEN_H)
+        return tuple(ba.canvas_size or ba.image_size or self._src_size)
+
+    def _layout(self) -> str:
+        """« tiled » | « bitmap » : le layout que l'inspecteur MONTRE — le choix en attente de compression compris —, à
+        défaut celui du fond. Le canvas se règle pour le layout voulu, pas seulement pour celui déjà compressé."""
+        return self._shown_layout or (self._ba.mode if self._ba else "tiled")
+
+    def set_shown_layout(self, layout: str):
+        """L'inspecteur dit quel layout est montré (cf. `BgPropertiesPanel.layout_shown`)."""
+        if layout == self._shown_layout:
+            return
+        self._shown_layout = layout
+        if not self._ba:
+            return
+        if self._view.canvas_mode_active():
+            # Le mode Canvas est ouvert : sa fenêtre suit le layout choisi. Un bitmap a un canvas fixe ; le retour en tuilé
+            # rend le canvas que le mode avait avant (ou celui du fond).
+            rect = self._view.canvas_place.rect()
+            if layout == "bitmap":
+                self._tiled_canvas = self._view.canvas_place.canvas()
+                canvas = (GBA_SCREEN_W, GBA_SCREEN_H)
+            else:
+                canvas = self._tiled_canvas or self._prepared_size()
+                self._tiled_canvas = None
+            self._view.set_canvas_geometry(canvas, rect)
+            self._bar.set_canvas_size(*canvas)
+            self._view.fit(margin=12)
+        else:
+            self._refresh_overflow()           # le cadre du passe-partout suit lui aussi
+        self._emit_canvas_state()
 
     @staticmethod
     def _set_checked(btn, on: bool):
@@ -1951,19 +2010,29 @@ class BgInpaintCanvas(QWidget):
 
     def _refresh_prepare_ui(self):
         """Boutons et poignées d'après l'état du fond courant."""
-        ok = self._prep_available()
-        for b in (self._tb_crop, self._tb_resize, self._tb_mirror_x, self._tb_mirror_y):
+        available = self._prep_available()
+        ok = available and PREPARATION_TOOLS_ENABLED
+        for b in (self._tb_mirror_x, self._tb_mirror_y):
             b.setEnabled(ok)
         self._sync_mirror()
-        self._btn_prep_reset.setEnabled(
-            ok and bool(self._ba.import_crop or self._ba.import_size or self._mirror()[:2] != (None, None)))
-        if not ok:
-            self._set_checked(self._tb_crop, False)
-            self._set_checked(self._tb_resize, False)
-            self._view.end_crop()
-            self._view.end_resize()
-        elif self._tb_resize.isChecked():
-            self._view.begin_resize(self._prepared_size())
+        self._btn_prep_reset.setEnabled(ok and self._mirror()[:2] != (None, None))
+        # Le mode Canvas n'est pas gelé : c'est lui qu'on bâtit. La barre flottante reste, pour « select », même quand le
+        # fond ne se peint pas.
+        if not available:
+            self._cancel_canvas_mode()
+        self._toolbar.configure(paintable=self._paintable(), can_select=available)
+        if not self._view.canvas_mode_active():
+            self._refresh_overflow()
+            self._emit_canvas_state()
+
+    def _refresh_overflow(self):
+        """Le passe-partout : ce qui sort du canvas reste visible, grisé."""
+        path = self._source_png_path()
+        if self._ba and self._prep_available() and path is not None:
+            canvas, rect = self._canvas_values()
+            self._view.set_overflow(path, canvas, rect)
+        else:
+            self._view.clear_overflow()
 
     # ── Miroir ───────────────────────────────────────────────────
     # Un bouton par axe : coché, une barre à mi-image avec sa poignée ; on la tire,
@@ -1989,9 +2058,8 @@ class BgInpaintCanvas(QWidget):
         self._set_checked(self._tb_mirror_x, axis_x is not None)
         self._set_checked(self._tb_mirror_y, axis_y is not None)
         prepared = self._prepared_size() if self._ba else (0, 0)
-        # Seul un bitmap est ajusté à l'encodage (≤ 240×160) ; un tuilé est rembourré, pas mis à l'échelle.
-        display = self._ctrl.image_size() if self._ba and self._ba.mode == "bitmap" else prepared
-        self._view.set_mirror(axis_x, axis_y, (flip_x, flip_y), prepared, display)
+        # Le canvas est ce que l'encodeur reçoit, sans ajustement : montré tel quel.
+        self._view.set_mirror(axis_x, axis_y, (flip_x, flip_y), prepared, prepared)
 
     def _on_mirror_toggled(self, on: bool, horizontal: bool):
         pw, ph = self._prepared_size()
@@ -2000,98 +2068,128 @@ class BgInpaintCanvas(QWidget):
             axis_x, flip_x = (max(1, pw // 2) if on and pw > 1 else None), False
         else:
             axis_y, flip_y = (max(1, ph // 2) if on and ph > 1 else None), False
-        self._emit_prepare(self._ba.import_crop, self._ba.import_size, (axis_x, axis_y, flip_x, flip_y))
+        self._emit_prepare((axis_x, axis_y, flip_x, flip_y))
 
     def _on_mirror_released(self, axis_x, axis_y, flip_x, flip_y):
         mirror = (axis_x, axis_y, flip_x, flip_y)
         if mirror != self._mirror():
-            self._emit_prepare(self._ba.import_crop, self._ba.import_size, mirror)
+            self._emit_prepare(mirror)
 
-    def _emit_prepare(self, crop, size, mirror, rescale: bool = False):
-        """Le miroir suit une image qui change de taille : `rescale` (redimensionnement) garde l'axe à sa place
-        relative, sinon (recadrage) il est seulement ramené dans l'image. Un axe ne sort jamais du cadre."""
-        old_w, old_h = self._prepared_size()
-        sw, sh = self._src_size
-        new_w, new_h = size or (crop[2:] if crop else (sw, sh))
-        axes = []
-        for axis, old, new in ((mirror[0], old_w, new_w), (mirror[1], old_h, new_h)):
-            if rescale and axis is not None:
-                axis = round(axis * new / old)    # redimensionné : l'axe garde sa place relative
-            axes.append(None if axis is None or new < 2 else max(1, min(axis, new - 1)))
+    def _emit_prepare(self, mirror):
+        """Un axe ne sort jamais du canvas."""
+        sizes = self._prepared_size()
+        axes = [None if axis is None or new < 2 else max(1, min(axis, new - 1))
+                for axis, new in zip(mirror[:2], sizes)]
         self._mirror_wanted = (*axes, mirror[2], mirror[3])
         self._show_mirror()
-        self.prepare_requested.emit(crop, size, self._mirror_wanted)
+        self.prepare_requested.emit({"mirror": self._mirror_wanted})
 
     def _sync_hints(self):
-        if self._tb_crop.isChecked():
-            self._hints.set_context("crop")
-        elif self._tb_resize.isChecked():
-            self._hints.set_context("resize")
-        else:
-            self._hints.set_context(self._toolbar.hint_context)
-
-    def _cancel_prepare_modes(self):
-        """Quitte recadrage/redimensionnement sans rien appliquer (autre fond
-        choisi, réinitialisation)."""
-        if self._tb_crop.isChecked():
-            self._crop_cancelled = True
-            self._tb_crop.setChecked(False)
-        if self._tb_resize.isChecked():
-            self._tb_resize.setChecked(False)
-
-    def _on_crop_toggled(self, on: bool):
-        if on:
-            if self._tb_resize.isChecked():
-                self._tb_resize.setChecked(False)
-            if not self._view.begin_crop(self._source_png_path(), self._ba.import_crop):
-                self._set_checked(self._tb_crop, False)
-                return
-            self._bar.set_canvas_size(*self._src_size)
-            self._view.setFocus()
-            return
-        rect = self._view.end_crop()
-        self._bar.set_canvas_size(*self._ctrl.image_size())
-        cancelled, self._crop_cancelled = self._crop_cancelled, False
-        if rect is not None and not cancelled:
-            self._apply_crop(rect)
-
-    def _on_crop_finished(self, accept: bool):
-        self._crop_cancelled = not accept
-        self._tb_crop.setChecked(False)
-
-    def _apply_crop(self, rect: tuple):
-        sw, sh = self._src_size
-        crop = None if tuple(rect) == (0, 0, sw, sh) else tuple(rect)
-        old = self._ba.import_crop
-        if crop == old:
-            return
-        # Recadrer ne change pas l'échelle : une taille déjà réglée suit le
-        # nouveau cadre, sinon le fond changerait de grain à chaque coup de ciseaux.
-        size = self._ba.import_size
-        if size:
-            ow, oh = old[2:] if old else (sw, sh)
-            nw, nh = crop[2:] if crop else (sw, sh)
-            size = (max(1, round(nw * size[0] / ow)), max(1, round(nh * size[1] / oh)))
-        self._emit_prepare(crop, size, self._mirror())
-
-    def _on_resize_toggled(self, on: bool):
-        if not on:
-            self._view.end_resize()
-            return
-        if self._tb_crop.isChecked():
-            self._tb_crop.setChecked(False)   # applique le recadrage en cours
-        self._view.begin_resize(self._prepared_size())
-
-    def _on_resize_released(self, w: int, h: int):
-        crop = self._ba.import_crop
-        base = tuple(crop[2:]) if crop else self._src_size
-        size = None if (w, h) == base else (w, h)
-        if size != self._ba.import_size:
-            self._emit_prepare(crop, size, self._mirror(), rescale=True)
+        self._hints.set_context(self._toolbar.hint_context)
 
     def _on_prep_reset(self):
-        self._cancel_prepare_modes()
-        self.prepare_requested.emit(None, None, (None, None, False, False))
+        self._mirror_wanted = (None, None, False, False)
+        self._show_mirror()
+        self.prepare_requested.emit({"mirror": self._mirror_wanted})
+
+    # ── Canvas ───────────────────────────────────────────────────
+    # Le mode Canvas pose le FICHIER dans le canvas du fond : on déplace l'image, on la met à l'échelle, on règle la taille
+    # du canvas (inspecteur). Rien ne se compresse pendant qu'on règle — la vue montre le fichier, pas l'encodage — ; la
+    # sortie du mode (Entrée, re-clic, autre fond) applique, et `prepare_requested` recompresse une seule fois.
+
+    def _canvas_values(self) -> tuple:
+        """(canvas, image posée) du fond courant, d'après son sidecar."""
+        ba = self._ba
+        canvas = self._prepared_size()
+        return canvas, placement_geometry.rect_of(canvas, ba.image_pos, ba.image_size, self._src_size)
+
+    def _canvas_editable(self) -> bool:
+        """La taille du canvas se règle en tuilé ; un bitmap a un canvas fixe."""
+        return bool(self._ba and self._layout() != "bitmap")
+
+    def _emit_canvas_state(self):
+        if not (self._ba and self._prep_available()):
+            self.canvas_state.emit(None, None, (0, 0), False)
+            return
+        if self._view.canvas_mode_active():
+            canvas, rect = self._view.canvas_place.canvas(), self._view.canvas_place.rect()
+        else:
+            canvas, rect = self._canvas_values()
+        self.canvas_state.emit(canvas, rect, self._src_size, self._canvas_editable())
+
+    def _on_tool_changed(self, tool: str):
+        """L'outil « select » de la barre flottante EST le mode Canvas : le choisir l'ouvre, choisir un autre outil (ou
+        re-cliquer « select ») le ferme et applique."""
+        self._set_canvas_mode(tool == "select")
+
+    def _set_canvas_mode(self, on: bool):
+        if on:
+            if self._view.canvas_mode_active() or not (self._ba and self._prep_available()):
+                return
+            canvas, rect = self._canvas_values()
+            if not self._view.begin_canvas_mode(self._source_png_path(), canvas, rect):
+                self._toolbar.leave_select()
+                return
+            self._bar.set_canvas_size(*canvas)
+            self._emit_canvas_state()
+            return
+        if not self._view.canvas_mode_active():
+            return
+        canvas = self._view.canvas_place.canvas()
+        rect = self._view.end_canvas_mode()
+        self._bar.set_canvas_size(*self._ctrl.image_size())
+        cancelled, self._canvas_cancelled = self._canvas_cancelled, False
+        if rect is not None and not cancelled:
+            self._apply_canvas(canvas, rect)
+        self._refresh_overflow()
+        self._emit_canvas_state()
+
+    def _on_canvas_finished(self, accept: bool):
+        self._canvas_cancelled = not accept
+        self._toolbar.leave_select()
+
+    def _cancel_canvas_mode(self):
+        """Quitte le mode Canvas sans rien appliquer (autre fond choisi, outil devenu indisponible)."""
+        if self._view.canvas_mode_active():
+            self._canvas_cancelled = True
+            self._toolbar.leave_select()
+            self._set_canvas_mode(False)      # la barre n'a rien émis si « select » n'était pas son outil courant
+
+    def _apply_canvas(self, canvas: tuple, rect: tuple):
+        if (tuple(canvas), tuple(rect)) == self._canvas_values():
+            return
+        # Le passe-partout montre déjà le nouveau placement pendant que le fond se recompresse.
+        path = self._source_png_path()
+        if path is not None:
+            self._view.set_overflow(path, tuple(canvas), tuple(rect))
+        new_canvas, pos, size = placement_geometry.normalize(canvas, rect, self._src_size)
+        # Le miroir suit le canvas : un axe ne sort jamais de lui.
+        axes = [None if a is None or n < 2 else max(1, min(a, n - 1)) for a, n in zip(self._mirror()[:2], canvas)]
+        self._mirror_wanted = (*axes, *self._mirror()[2:])
+        self.prepare_requested.emit({"canvas": new_canvas, "pos": pos, "size": size, "mirror": self._mirror_wanted})
+
+    def edit_canvas(self, canvas: tuple, rect: tuple):
+        """Un champ de l'inspecteur change le canvas ou l'image posée : la vue suit tout de suite. Éditer un champ
+        ouvre le mode Canvas s'il ne l'est pas ; la sortie du mode applique."""
+        if not self._view.canvas_mode_active():
+            self._toolbar.choose_select()
+            if not self._view.canvas_mode_active():
+                return
+        canvas = tuple(canvas) if self._canvas_editable() else self._view.canvas_place.canvas()
+        self._view.set_canvas_geometry(canvas, rect)
+        self._bar.set_canvas_size(*canvas)
+        self._emit_canvas_state()
+
+    def fit_canvas(self, how: str):
+        """Les aides au placement : « fit », « fill » ou « one_to_one » (cf. `bg_placement_geometry`)."""
+        if not self._view.canvas_mode_active():
+            self._toolbar.choose_select()
+            if not self._view.canvas_mode_active():
+                return
+        rect = {"fit": placement_geometry.fit_rect, "fill": placement_geometry.fill_rect,
+                "one_to_one": placement_geometry.one_to_one_rect}[how](self._src_size, self._view.canvas_place.canvas())
+        self._view.set_canvas_geometry(self._view.canvas_place.canvas(), rect)
+        self._emit_canvas_state()
 
     # ── Édition externe ──────────────────────────────────────────
 
@@ -2138,6 +2236,27 @@ class BgInpaintCanvas(QWidget):
     @staticmethod
     def _palette_entries(palettes: list) -> list:
         return [(i, label('common.palette_i', i=i), cols) for i, cols in enumerate(palettes)]
+
+    def _strip_entries(self) -> list:
+        """Les pastilles de la bande : toutes les palettes pour repeindre (Inpaint) ; en Paint seulement les palettes
+        AJOUTÉES, désignées par leur nom de banque — c'est sur elles, et sur elles seules, que la peinture se pose."""
+        ba = self._ba
+        if self._toolbar.mode != MODE_PAINT:
+            return self._palette_entries(ba.palettes)
+        derived = ba.derived_count()
+        return [(derived + k, name, ba.palettes[derived + k])
+                for k, name in enumerate(ba.added_palettes) if derived + k < len(ba.palettes)]
+
+    def _reload_strip(self, active=None):
+        """Rebâtit la bande d'après le mode et les palettes du fond, puis resynchronise ce qui en dépend."""
+        if not (self._ba and self._ctrl.paintable):
+            return
+        paint = self._toolbar.mode == MODE_PAINT
+        self._paint_strip.set_hint(label('bginp.paint_needs_palette') if paint else label('common.no_palette'))
+        self._paint_strip.load(self._strip_entries(), active=self._paint_strip.active() if active is None else active)
+        self._ctrl.set_active_palette(self._paint_strip.active())
+        self._sync_color_strip()
+        self._position_paint_strip()
 
     # ── Superpositions par type ──────────────────────────────────
 
@@ -2265,28 +2384,29 @@ class BgInpaintCanvas(QWidget):
         self.placements_changed.emit()
 
     def load(self, project, ba):
-        self._cancel_prepare_modes()   # avant de changer de fond : rien n'est appliqué
+        self._cancel_canvas_mode()          # avant de changer de fond : rien n'est appliqué
+        self._tiled_canvas = None
         self._ba = ba
         self._project = project
         self._view.placements.set_selected(None)
         self.placement_selected.emit(None)   # referme la section PLACEMENT
         self._ctrl.set_context(project, ba)
         # Inpainting = tuilé 4bpp uniquement. En 8bpp (une palette 256) et en
-        # bitmap (Mode 4) : peinture désactivée, toolbar + bande masquées (aperçu seul).
+        # bitmap (Mode 4) : peinture désactivée, outils de peinture et bande masqués ; la barre reste pour « select »
+        # (cf. `BgInpaintToolbar.configure`, appelé par `_refresh_prepare_ui`).
         paintable = bool(ba and getattr(ba, "mode", "tiled") == "tiled"
                          and getattr(ba, "bpp", 4) == 4)
         self._ctrl.set_paint_enabled(paintable)
-        self._toolbar.setVisible(paintable)
+        self._toolbar.setVisible(bool(ba))
         if ba and not ba.asset:
             # Un fond sans image n'a rien à surcharger : le geste naturel y est de poser des couleurs.
             self._toolbar.set_mode(MODE_PAINT)
         if paintable:
-            self._paint_strip.load(self._palette_entries(ba.palettes), active=0)
+            self._reload_strip(active=0)
             self._paint_strip.setVisible(True)
             self._sync_color_strip(active=1)
             self._position_paint_strip()
             QTimer.singleShot(0, self._position_paint_strip)
-            self._ctrl.set_active_palette(self._paint_strip.active())
         else:
             self._paint_strip.setVisible(False)
             self._color_strip.setVisible(False)
@@ -2322,8 +2442,7 @@ class BgInpaintCanvas(QWidget):
 
     def _on_mode_changed(self, mode: str):
         self._ctrl.set_mode(mode)
-        self._sync_color_strip()
-        self._position_paint_strip()
+        self._reload_strip()      # Paint ne propose que les palettes ajoutées, Inpaint toutes
 
     def _paintable(self) -> bool:
         ba = self._ba
@@ -2356,12 +2475,7 @@ class BgInpaintCanvas(QWidget):
         """Re-render après édition des palettes (inspecteur) — reconstruit aussi
         la bande de peinture (la liste des palettes a pu changer) puis met à jour
         le pixmap via on_rendered, sans réinitialiser le zoom."""
-        if self._ba is not None and self._ctrl.paintable:
-            cur = self._paint_strip.active()
-            self._paint_strip.load(self._palette_entries(self._ba.palettes), active=cur)
-            self._position_paint_strip()
-            self._ctrl.set_active_palette(self._paint_strip.active())
-            self._sync_color_strip()
+        self._reload_strip()
         self._ctrl.reload_render()
         self._view.sync_image_size()
         self._bar.set_canvas_size(*self._ctrl.image_size())

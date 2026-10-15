@@ -100,19 +100,18 @@ def _new_sprite(project, name: str, path: Path):
 
 
 def _new_background(project, name: str, path: Path):
-    from core.resources.asset_reconciliation import encode_background_asset
+    from core.resources.asset_reconciliation import encode_background_asset, catalogue_lookup
     from core.models.background import BackgroundAsset
     ba = BackgroundAsset(name=name, asset=project.asset_rel(path))
     warning = None
     try:
         from core.bg_import import detect_import_mode
         d = detect_import_mode(path)
-        ba.mode = "bitmap" if d["token"] in ("bitmap", "bitmap16") else "tiled"
-        ba.bpp = 8 if d["token"] == "tiled8" else 4
+        ba.choose_layout(d["token"])        # l'import décide du layout À LA PLACE de l'auteur, comme réglage
         warning = d["warning"]
     except Exception:
         pass
-    encode_background_asset(ba, path)
+    encode_background_asset(ba, path, lookup=catalogue_lookup(project))
     return ba, warning, None
 
 

@@ -12,7 +12,8 @@ def _painted():
     """Un fond vierge de deux palettes, peint dans les DEUX banques, avec une surcharge de palette."""
     _store, ba = build_background(type("P", (), {"backgrounds": []})())
     ba.palettes[0][1:4] = [0x7FFF, 0x001F, 0x03E0]
-    ba.add_palette_colors([0, 0x7C00, 0x7FE0, 0x4210] + [0] * 12)
+    ba.added_palettes = ["P0"]                       # la peinture ne se pose que sur des palettes AJOUTÉES (références)
+    ba.add_palette_ref("P1", [0, 0x7C00, 0x7FE0, 0x4210] + [0] * 12)
     ba.tile_paint = {(0, 0): (1, 0), (1, 0): (2, 0), (2, 0): (1, 1), (3, 0): (3, 1), (4, 0): (0, 0)}
     ba.tileset.append("0" * 63 + "2")                            # une tuile de l'image, repeinte en banque 1
     ba.tilemap[5] = (1 & 0x3FF)
@@ -110,8 +111,9 @@ def test_a_baked_png_dropped_into_another_project_is_imported_as_4bpp_with_its_b
 def test_a_sixteen_bank_png_is_still_imported_as_4bpp_with_sixteen_banks(tmp_path):
     from core.bg_import import detect_import_mode, encode_by_mode
     _store, ba = build_background(type("P", (), {"backgrounds": []})())
+    ba.added_palettes = ["P0"]
     for bank in range(1, 16):
-        ba.add_palette_colors([0] + [(bank * 2 + k) & 0x7FFF for k in range(1, 16)])
+        ba.add_palette_ref(f"P{bank}", [0] + [(bank * 2 + k) & 0x7FFF for k in range(1, 16)])
     ba.palettes[0][1:16] = list(range(1, 16))
     ba.tile_paint = {(bank, 0): (1 + bank % 15, bank) for bank in range(16)}
     path = tmp_path / "full.png"

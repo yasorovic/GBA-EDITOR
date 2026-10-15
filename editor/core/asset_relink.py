@@ -94,13 +94,16 @@ def _refresh_derived(project, family: str, item, path: Path) -> None:
         # le canvas le montre tout de suite.
         from core.bg_import import detect_import_mode, encode_by_mode
         from core.models.background import BackgroundCompression, KIND_SCENE
-        item.import_crop = item.import_size = item.mirror_x = item.mirror_y = None
-        item.mirror_flip_x = item.mirror_flip_y = False
-        item.compression = BackgroundCompression()
         token = detect_import_mode(path)["token"]
         if item.kind != KIND_SCENE and token.startswith("bitmap"):
             token = "tiled8"                    # un cadre ou une planche sont des tuiles (cf. l'import)
-        reconcile.apply_bg_encoding(item, encode_by_mode(path, token, item.quantize_method, item.dither, None, item.compression))
+        item.canvas_size = item.image_pos = item.image_size = item.mirror_x = item.mirror_y = None
+        item.mirror_flip_x = item.mirror_flip_y = False
+        item.palette_overrides = {}          # ils visaient les palettes dérivées de l'ANCIENNE image (les ajoutées restent)
+        item.compression = BackgroundCompression()
+        item.choose_layout(token)             # le layout détecté pour la NOUVELLE image : un réglage, posé avant l'encodage
+        reconcile.apply_bg_encoding(item, encode_by_mode(path, token, item.quantize_method, item.dither, None, item.compression),
+                                    reconcile.catalogue_lookup(project))
         item.source_stamp = reconcile.file_stamp(path)
     elif family == "palettes":
         from core.models.palette import PaletteBank

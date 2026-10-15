@@ -308,34 +308,22 @@ def _resync_background(project, ba, png_path: Path) -> Optional[str]:
     pour toujours — à l'écran ET dans la ROM, puisque le build lit `ba.tileset`
     et non le PNG.
 
-    Les choix de l'utilisateur sont conservés : `encode_background_asset` ne
-    re-détecte pas le mode, et le `kind`, le rôle UI, les marges de découpe et
-    les animations ne dépendent pas des pixels. Les repeints par tuile, eux,
-    sont indexés par (colonne, ligne) : ils ne survivent que si la géométrie n'a
-    pas bougé — sinon ils désigneraient d'autres tuiles que celles peintes.
+    Les réglages sont conservés — `apply_bg_encoding` n'y touche pas : le mode (`encode_background_asset` ne
+    re-détecte pas), le `kind`, le rôle UI, les marges de découpe, les animations, les palettes ajoutées et les
+    overrides (références au catalogue), la peinture et les repeints. La peinture et les repeints par tuile sont rangés par
+    (colonne, ligne) : si la géométrie a bougé, ils restent en place mais peuvent recouvrir d'autres tuiles.
 
-    Renvoie un avertissement si des repeints ont dû être abandonnés, None sinon.
+    Renvoie un avertissement dans ce cas, None sinon.
     """
-    before = (ba.tiles_w, ba.tiles_h, len(ba.palettes))
-    tile_overrides = dict(ba.tile_palette_overrides)
-    painted = dict(ba.tile_paint)
-    pal_overrides = dict(ba.palette_overrides)
-
-    encode_background_asset(ba, png_path)
+    before = (ba.tiles_w, ba.tiles_h, len(ba.source_palettes))
+    encode_background_asset(ba, png_path, lookup=catalogue_lookup(project))
     ba.source_stamp = file_stamp(png_path)
-
-    same_geometry = (ba.tiles_w, ba.tiles_h, len(ba.palettes)) == before
-    if same_geometry:
-        # Simple retouche : les repeints désignent toujours les mêmes tuiles.
-        ba.tile_palette_overrides = tile_overrides
-        ba.tile_paint = painted
-        ba.palette_overrides = pal_overrides
     project.backgrounds.save(ba)
 
-    dropped = len(tile_overrides) + len(pal_overrides) + len(painted)
-    if dropped and not same_geometry:
-        return (f"“{ba.name}”: image geometry changed, {dropped} palette "
-                f"repaint(s) could not be kept.")
+    kept = len(ba.tile_palette_overrides) + len(ba.tile_paint)
+    if kept and (ba.tiles_w, ba.tiles_h, len(ba.source_palettes)) != before:
+        return (f"“{ba.name}”: image geometry changed, {kept} palette "
+                f"repaint(s) kept in place — they may now cover other tiles.")
     return None
 
 
@@ -390,21 +378,25 @@ def source_changed(path: Path, stored: str) -> tuple[bool, str]:
     return changed, fresh
 
 
-def apply_bg_encoding(ba: "BackgroundAsset", c: dict):
+def apply_bg_encoding(ba: "BackgroundAsset", c: dict, lookup=None):
     """Applique un résultat de compression (dict de bg_import.encode_background)
     à un BackgroundAsset. Séparé du calcul pour permettre une compression
     hors-thread : le worker calcule `c`, le thread UI applique via ce helper.
 
-    Ne touche pas à `ba.asset` : l'asset POINTE sa source, que l'encodage ne change pas."""
+    Ne touche ni à `ba.asset` (l'asset POINTE sa source, que l'encodage ne change pas) ni à AUCUN réglage : layout,
+    profondeur, méthode, canvas, retouches de tuiles sont ceux que l'appelant a posés (cf. `BackgroundAsset.choose_layout`).
+    Un encodage ne range que son RÉSULTAT — le bloc `encoded` du sidecar.
+
+    Les palettes AJOUTÉES et les overrides sont des réglages (références au catalogue) : l'encodage refait les palettes
+    dérivées du PNG, puis `resolve_palettes` y remet les overrides et les ajoutées, d'après `lookup(nom) -> couleurs`
+    (cf. `catalogue_lookup`). Sans `lookup`, une ajoutée garde ses couleurs en cache. Un override devenu sans objet
+    (le nouvel encodage a moins de palettes dérivées) est levé et noté dans les diagnostics."""
+    kept = ba.added_palette_colors()
     ba.palettes = c["palettes"]
-    # Nouvelle baseline dérivée du PNG : snapshot restaurable + reset des
-    # overrides (l'origine des palettes repart de la compression fraîche).
+    # Nouvelle baseline dérivée du PNG : snapshot restaurable.
     ba.source_palettes = [list(p) for p in c["palettes"]]
-    ba.palette_overrides = {}
-    ba.diagnostics = c.get("diagnostics", {})
-    ba.bpp = c.get("bpp", 4)
-    ba.mode = c.get("mode", "tiled")
-    if ba.mode == "bitmap":
+    ba.diagnostics = dict(c.get("diagnostics", {}))
+    if c.get("mode", "tiled") == "bitmap":
         ba.bitmap = c["bitmap"]
         ba.out_w = c["out_w"]
         ba.out_h = c["out_h"]
@@ -413,33 +405,45 @@ def apply_bg_encoding(ba: "BackgroundAsset", c: dict):
         ba.tilemap = []
         ba.tiles_w = 0
         ba.tiles_h = 0
-        ba.tile_palette_overrides = {}
-        ba.tile_paint = {}
     else:
         ba.tileset = c["tileset"]
         ba.tilemap = c["tilemap"]
         ba.tiles_w = c["tiles_w"]
         ba.tiles_h = c["tiles_h"]
-        ba.quantize_method = c["quantize_method"]
         ba.bitmap = ""
         ba.out_w = 0
         ba.out_h = 0
+    dropped = ba.resolve_palettes(lookup, kept)
+    if dropped:
+        ba.diagnostics["palette_overrides_dropped"] = dropped
 
 
-def encode_background_asset(ba: "BackgroundAsset", png_path: Path, method: str = None):
+def catalogue_lookup(project):
+    """`lookup(nom) -> couleurs | None` sur le catalogue de palettes du projet, pour `apply_bg_encoding` et
+    `BackgroundAsset.resolve_palettes`. Sans projet, aucune banque n'est résolue (les caches servent)."""
+    if project is None:
+        return None
+
+    def lookup(name: str):
+        bank = project.get_palette(name)
+        return list(bank.colors) if bank is not None else None
+    return lookup
+
+
+def encode_background_asset(ba: "BackgroundAsset", png_path: Path, method: str = None, lookup=None):
     """Calcule et stocke la compression GBA d'un fond (palettes/tileset/tilemap)
     depuis son PNG — sans modifier le fichier. cf. core/bg_import. No-op si
     illisible. Chemin SYNCHRONE (import via watcher, reconcile au chargement).
     Dispatch selon le mode DÉJÀ choisi de l'asset (`ba.mode`/`ba.bpp`) — ne
     re-détecte PAS (la détection est faite une fois à la création), pour ne
-    jamais écraser un choix de mode existant lors d'un reconcile."""
+    jamais écraser un choix de mode existant lors d'un reconcile. `lookup` : cf. `catalogue_lookup`."""
     try:
         from core.bg_import import encode_by_mode
         mode_token = "bitmap" if getattr(ba, "mode", "tiled") == "bitmap" \
             else ("tiled8" if getattr(ba, "bpp", 4) == 8 else "tiled4")
         c = encode_by_mode(png_path, mode_token, method or ba.quantize_method,
                            getattr(ba, "dither", False), ba.import_prep(), ba.compression)
-        apply_bg_encoding(ba, c)
+        apply_bg_encoding(ba, c, lookup)
     except Exception:
         pass
 
@@ -468,10 +472,10 @@ def reconcile_background(project, ba) -> None:
     ap = project.background_image_path(ba) if ba.asset else None
     if not (ap and ap.exists()):
         return
-    if not ba.tileset and ba.mode != "bitmap":
-        encode_background_asset(ba, ap)
+    if not ba.tileset and not ba.bitmap:
+        encode_background_asset(ba, ap, lookup=catalogue_lookup(project))
         ba.source_stamp = file_stamp(ap)
-        if ba.tileset:
+        if ba.tileset or ba.bitmap:
             project.backgrounds.save(ba)
         return
     # Le watcher ne voit que ce qui bouge pendant que l'éditeur tourne ; une

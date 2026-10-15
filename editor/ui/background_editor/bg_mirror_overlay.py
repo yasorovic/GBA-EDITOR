@@ -1,8 +1,9 @@
 """ui/background_editor/bg_mirror_overlay.py — barres de miroir posées sur le canvas du Background Editor.
 
 Une barre verticale (axe X) et/ou une barre horizontale (axe Y). Deux prises par barre : la LIGNE, qu'on tire pour
-déplacer l'axe, et la poignée-FLÈCHE en son centre, posée sur le côté gardé et dirigée vers le côté reflété (qu'on teinte :
-c'est ce que le miroir remplace) ; tirer la flèche de l'autre côté de la barre inverse le côté gardé.
+déplacer l'axe — avec un point posé sur elle, à son milieu —, et la poignée-FLÈCHE, à côté du point sur le côté gardé et
+dirigée vers le côté reflété (qu'on teinte : c'est ce que le miroir remplace) ; tirer la flèche de l'autre côté de la barre
+inverse le côté gardé.
 
 Comme `PrepareOverlay`, l'item dessine et tient un geste ; il n'émet rien et ne connaît ni la souris ni le modèle.
 Près du milieu de l'image, la barre s'aimante au centre. Les positions des axes sont en pixels de l'image PRÉPARÉE (ce que stocke le modèle) ; `set_scale` les ramène aux pixels
@@ -16,7 +17,7 @@ from PyQt6.QtGui import QColor, QPainter, QPen, QBrush, QPolygonF
 from PyQt6.QtCore import Qt, QRectF, QPointF
 
 from ui.common.theme import C
-from ui.background_editor.bg_prepare_geometry import SNAP
+SNAP = 8   # Ctrl accroche l'axe à la grille 8×8 du matériel
 
 AXIS_X = "x"      # barre verticale : par défaut le côté gauche se reflète à droite
 AXIS_Y = "y"      # barre horizontale : par défaut le haut se reflète en bas
@@ -24,6 +25,8 @@ GRAB_MOVE = "move"   # la ligne : déplace l'axe
 GRAB_SIDE = "side"   # la flèche : change le côté gardé
 
 _HANDLE_PX = 14   # taille de la flèche À L'ÉCRAN (indépendante du zoom)
+_DOT_PX = 10      # diamètre du point posé SUR la barre, à son milieu : la prise visible de la ligne
+_ARROW_GAP_PX = 3  # l'écart entre le point et la flèche : ils ne se superposent pas
 _HIT_PX = 8       # rayon de saisie à l'écran, sur la barre comme sur la flèche
 _CENTER_PX = 6    # à cette distance À L'ÉCRAN du milieu de l'image, la barre s'y aimante
 
@@ -77,11 +80,12 @@ class MirrorOverlay(QGraphicsItem):
         return axis * (self._scale[0] if which == AXIS_X else self._scale[1])
 
     def _arrow_center(self, which: str) -> Optional[QPointF]:
-        """La flèche, à côté de la barre sur le côté GARDÉ, au milieu de sa longueur."""
+        """La flèche, à côté de la barre sur le côté GARDÉ, au milieu de sa longueur — décalée du point de la barre, pour
+        qu'ils ne se superposent pas."""
         pos = self._shown(which)
         if pos is None:
             return None
-        gap = (_HANDLE_PX / 2 + 2) / self._zoom * (1 if self._flips[which] else -1)
+        gap = (_DOT_PX / 2 + _ARROW_GAP_PX + _HANDLE_PX / 2) / self._zoom * (1 if self._flips[which] else -1)
         w, h = self._display
         return QPointF(pos + gap, h / 2) if which == AXIS_X else QPointF(w / 2, pos + gap)
 
@@ -181,6 +185,12 @@ class MirrorOverlay(QGraphicsItem):
         ring = QPen(QColor(C.BG_DEEP))
         ring.setCosmetic(True)
         painter.setPen(ring)
+        # Le point, SUR la barre et à son milieu : on l'attrape pour déplacer l'axe, comme la ligne elle-même.
+        radius = _DOT_PX / 2 / self._zoom
+        for which, pos in ((AXIS_X, x_pos), (AXIS_Y, y_pos)):
+            if pos is not None:
+                centre = QPointF(pos, h / 2) if which == AXIS_X else QPointF(w / 2, pos)
+                painter.drawEllipse(centre, radius, radius)
         for which in (AXIS_X, AXIS_Y):
             c = self._arrow_center(which)
             if c is None:

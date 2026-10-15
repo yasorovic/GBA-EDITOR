@@ -8,11 +8,21 @@ from core.models.background import BackgroundAsset
 from core.models.gba_color import bgr555_to_rgb888
 from core.models.tile_codec import pack_se, unpack_se
 from ui.background_editor.bg_inpaint_canvas import BgInpaintController, BgInpaintView
+import pytest
+
+
+@pytest.fixture
+def preparation_tools(monkeypatch):
+    """Rouvre les outils gelés (compression, ajustements, miroir) pour les tests qui les exercent encore : le gel
+    est temporaire, ces fonctions n'ont pas changé (cf. PREPARATION_TOOLS_ENABLED)."""
+    from ui.background_editor import bg_inpaint_canvas
+    monkeypatch.setattr(bg_inpaint_canvas, "PREPARATION_TOOLS_ENABLED", True)
 
 
 def _blank():
     _store, ba = build_background(type("P", (), {"backgrounds": []})())
     ba.palettes[0][1:3] = [0x7FFF, 0x001F]
+    ba.added_palettes = ["Test"]          # la peinture ne se pose que sur une palette AJOUTÉE : la banque 0 en est une
     return ba
 
 
@@ -147,7 +157,7 @@ def test_a_right_click_gesture_erases_with_the_brush(qapp):
 
 def test_the_inpaint_override_survives_under_the_paint_and_comes_back(qapp):
     ba = _with_image()
-    ba.add_palette_colors([0, 0x03E0] + [0] * 14)
+    ba.add_palette_ref("Green", [0, 0x03E0] + [0] * 14)
     ctrl = _controller(ba, "inpaint")
     ctrl.set_active_palette(1)
     _stroke(ctrl, [(1, 1)])
@@ -163,7 +173,7 @@ def test_the_inpaint_override_survives_under_the_paint_and_comes_back(qapp):
 
 def test_inpaint_mode_only_overrides_the_palette(qapp):
     ba = _blank()
-    ba.add_palette_colors([0, 0x03E0] + [0] * 14)
+    ba.add_palette_ref("Green", [0, 0x03E0] + [0] * 14)
     ctrl = _controller(ba, "inpaint")
     ctrl.set_active_palette(1)
 
@@ -196,14 +206,15 @@ def test_the_layer_composes_the_tileset_without_duplicating_tiles(qapp):
 
 def test_the_layer_round_trips_and_follows_palette_removal(qapp):
     ba = _blank()
-    ba.add_palette_colors([0, 0x03E0] + [0] * 14)
-    ba.tile_paint = {(0, 0): (2, 1), (1, 0): (2, 0)}
+    ba.add_palette_ref("Green", [0, 0x03E0] + [0] * 14)
+    ba.tile_paint = {(0, 0): (2, 1), (1, 0): (2, 0)}                 # une peinture par POSITION dans added_palettes
 
     again = BackgroundAsset.from_dict(ba.to_dict())
-    assert again.tile_paint == ba.tile_paint
+    assert again.tile_paint == ba.tile_paint and again.added_palettes == ["Test", "Green"]
 
     ba.remove_palette(0)
-    assert ba.tile_paint == {(0, 0): (2, 0), (1, 0): (2, 0)}         # la banque 1 devient 0, la 0 retombe sur 0
+    assert ba.added_palettes == ["Green"]
+    assert ba.tile_paint == {(0, 0): (2, 0)}         # la peinture de la palette retirée disparaît, la suivante avance d'un cran
 
 
 def test_the_layer_is_ignored_outside_tiled_4bpp_and_off_grid(qapp):
@@ -229,7 +240,7 @@ def test_the_first_color_dot_is_the_crossed_transparency_whatever_the_slot_value
 def test_the_color_strip_follows_the_palette_embedded_by_the_asset(qapp):
     from ui.background_editor.bg_inpaint_canvas import BgInpaintCanvas
     ba = _blank()
-    ba.add_palette_colors([0x0000, 0x03E0] + [0] * 14)
+    ba.add_palette_ref("Green", [0x0000, 0x03E0] + [0] * 14)
     canvas = BgInpaintCanvas()
     canvas.load(None, ba)
     assert canvas._color_strip.isVisibleTo(canvas)
@@ -278,7 +289,7 @@ def test_a_background_without_image_opens_in_paint_mode_and_a_sourced_one_keeps_
 def test_the_eraser_purges_both_layers_in_one_undo_while_right_click_follows_the_mode(qapp):
     from core.history import MacroCmd, get_history
     ba = _with_image()
-    ba.add_palette_colors([0, 0x03E0] + [0] * 14)
+    ba.add_palette_ref("Green", [0, 0x03E0] + [0] * 14)
     ctrl = _controller(ba, "inpaint")
     ctrl.set_active_palette(1)
     _stroke(ctrl, [(1, 1)])                                          # surcharge de palette
@@ -339,7 +350,7 @@ def test_the_palette_strip_keeps_its_width_when_a_palette_is_added_while_shown(q
     qapp.processEvents()
     before = canvas._paint_strip.width()
 
-    ba.add_palette_colors([0, 0x03E0] + [0] * 14)
+    ba.add_palette_ref("Green", [0, 0x03E0] + [0] * 14)
     canvas.reload()
     qapp.processEvents()
 
@@ -364,15 +375,15 @@ def test_the_compression_box_is_absent_for_a_background_without_image(qapp):
     assert not panel._btn_tune.isVisibleTo(panel) and not panel._tune_host.isVisibleTo(panel)
 
 
-def test_the_compression_box_stays_folded_when_the_image_fits_and_opens_on_click(qapp):
+def test_the_compression_box_is_always_open_on_load_even_when_the_image_fits_and_folds_on_click(qapp, preparation_tools):
     panel = _panel()
     panel.load(_sourced({"multiple_of_8": True, "max_tile_colors": 4}), None)
 
-    assert panel._btn_tune.isVisibleTo(panel) and not panel._tune_host.isVisibleTo(panel)
-    panel._btn_tune.click()
-    assert panel._tune_host.isVisibleTo(panel) and panel._comp_host.isVisibleTo(panel)
+    assert panel._btn_tune.isVisibleTo(panel) and panel._tune_host.isVisibleTo(panel) and panel._comp_host.isVisibleTo(panel)
     panel._btn_tune.click()
     assert not panel._tune_host.isVisibleTo(panel)
+    panel._btn_tune.click()
+    assert panel._tune_host.isVisibleTo(panel) and panel._comp_host.isVisibleTo(panel)
 
 
 def test_the_compression_box_opens_by_itself_when_the_image_does_not_fit(qapp):
@@ -391,24 +402,26 @@ def test_the_compression_box_opens_when_settings_leave_the_default(qapp):
     assert panel._tune_host.isVisibleTo(panel)
 
 
-def test_reloading_the_same_background_never_folds_the_box_under_the_user(qapp):
+def test_reloading_the_same_background_keeps_the_users_fold_and_another_one_opens_the_box(qapp, preparation_tools):
     ba = _sourced({"multiple_of_8": True, "max_tile_colors": 20, "tiles_reduced": 3})
     panel = _panel()
     panel.load(ba, None)
+    assert panel._tune_host.isVisibleTo(panel)
+    panel._btn_tune.click()                                              # l'auteur replie la boîte
     ba.diagnostics = {"multiple_of_8": True, "max_tile_colors": 4}      # la recompression a réglé le problème
 
     panel.load(ba, None)
 
+    assert not panel._tune_host.isVisibleTo(panel)                       # le même fond ne rouvre ni ne referme rien sous lui
+    panel.load(_sourced({"multiple_of_8": True, "max_tile_colors": 4}), None)   # un AUTRE fond : la boîte est toujours ouverte
     assert panel._tune_host.isVisibleTo(panel)
-    panel.load(_sourced({"multiple_of_8": True, "max_tile_colors": 4}), None)   # un AUTRE fond repart de son besoin
-    assert not panel._tune_host.isVisibleTo(panel)
 
 
 def _panel_with_project(tmp_path):
     from core.project import Project
     project = Project(tmp_path)
     ba = _blank()
-    ba.add_palette_colors([0, 0x7C00, 0x03E0] + [0] * 13)
+    ba.add_palette_ref("Second", [0, 0x7C00, 0x03E0] + [0] * 13)
     ba.tile_paint = {(0, 0): (1, 0), (1, 0): (2, 1), (2, 0): (0, 0)}
     ba.tile_palette_overrides = {(3, 3): 1}
     project.backgrounds.append(ba)
@@ -624,7 +637,7 @@ def test_edit_png_is_a_text_button_over_the_canvas_enabled_only_with_a_source(qa
     assert canvas._btn_edit.contextMenuPolicy() == Qt.ContextMenuPolicy.CustomContextMenu   # le clic droit propose un autre éditeur
 
 
-def test_compression_box_leads_with_the_method_and_dithering_follows_the_sliders(qapp):
+def test_compression_box_is_in_resolution_order_with_global_colors_and_dithering_first(qapp):
     ba = _sourced({"multiple_of_8": True, "max_tile_colors": 20, "tiles_reduced": 3})
     panel = _panel()
     panel.load(ba, None)
@@ -632,10 +645,12 @@ def test_compression_box_leads_with_the_method_and_dithering_follows_the_sliders
     qapp.processEvents()
     comp = panel._comp_host.layout()
 
-    assert comp.itemAt(2).widget() is panel._cmb_method                  # sous le titre, avant les curseurs
+    assert comp.itemAt(2).widget() is panel._sl_global._row              # sous le titre : la réduction globale d'abord
     assert not panel._btn_analyze.isVisibleTo(panel)                     # la mesure reste, masquée
     ys = lambda w: w.mapTo(panel, w.rect().topLeft()).y()
-    assert ys(panel._cmb_method) < ys(panel._sl_palettes._row) < ys(panel._chk_dither)
+    # L'ordre où l'encodeur résout : global, dithering, méthode, couleurs par palette, palettes, tuiles.
+    assert (ys(panel._sl_global._row) < ys(panel._chk_dither) < ys(panel._cmb_method) < ys(panel._sl_colors._row)
+            < ys(panel._sl_palettes._row) < ys(panel._sl_tiles._row))
 
 
 def test_the_adjust_sliders_sit_above_the_compression_box_and_feed_one_request(qapp):
@@ -649,7 +664,7 @@ def test_the_adjust_sliders_sit_above_the_compression_box_and_feed_one_request(q
     ys = lambda w: w.mapTo(panel, w.rect().topLeft()).y()
 
     assert panel._current_adjust() == ba.adjust                                    # les curseurs montrent le fond
-    assert ys(panel._sl_hue) < ys(panel._cmb_method) < ys(panel._chk_dither)       # avant la compression
+    assert ys(panel._sl_hue) < ys(panel._sl_global._row) < ys(panel._chk_dither)   # avant la compression
     asked = []
     panel.apply_requested.connect(lambda *a: asked.append(a))
     panel._sl_con.setValue(30)
@@ -768,7 +783,7 @@ def test_the_screen_shows_the_adjusted_image_in_place_of_the_compressed_render_t
     assert not view._adjust_item.isVisible() and view._pix_item.isVisible()
 
 
-def test_the_dithering_checkbox_and_its_type_unlock_together_when_global_colors_is_raised(qapp):
+def test_the_dithering_checkbox_and_its_type_unlock_together_when_global_colors_is_raised(qapp, preparation_tools):
     ba = _sourced({"multiple_of_8": True, "max_tile_colors": 20, "tiles_reduced": 3})
     panel = _panel()
     panel.load(ba, None)
@@ -807,6 +822,7 @@ def _screen_on_photo(tmp_path, qapp):
     project, ba, _panel = _panel_with_project(tmp_path)
     ba.asset = project.asset_rel(_photo_png(project))
     ba.palettes = [list(ba.palettes[0])]
+    ba.added_palettes = []                      # le fixture repart d'une seule palette, sans référence ajoutée
     screen = _screen_in(tmp_path, tmp_path)[1]
     screen._project = project
     screen._props._ba = ba
@@ -870,7 +886,7 @@ def test_only_one_preview_computes_at_a_time_and_the_last_request_wins(qapp, tmp
     assert screen._preview_running and screen._preview_next is not None
 
     assert _wait(qapp, lambda: not screen._preview_running and screen._preview_next is None)
-    keys = [k[6] for k in screen._preview_cache]                                      # la compression de chaque résultat
+    keys = [k[7] for k in screen._preview_cache]                                  # la compression de chaque résultat
     assert (4, 15, 0, 0, 255, "floyd_steinberg") in keys                              # le dernier a été calculé
     assert (3, 15, 0, 0, 255, "floyd_steinberg") not in keys                          # celui du milieu a été sauté
 
@@ -884,7 +900,7 @@ def test_nothing_pending_clears_the_preview_and_the_cache_is_bounded(qapp, tmp_p
     assert len(screen._preview_cache) == screen._PREVIEW_CACHE_SIZE
 
 
-def test_the_mirror_button_adds_a_bar_at_mid_image_and_the_background_is_recompressed_mirrored(qapp, tmp_path):
+def test_the_mirror_button_adds_a_bar_at_mid_image_and_the_background_is_recompressed_mirrored(qapp, tmp_path, preparation_tools):
     """Coché : une barre à mi-image, le fond recompressé en miroir ; décoché : le miroir disparaît ; « Restaurer
     l'image source » l'annule aussi."""
     project, ba, screen = _screen_on_photo(tmp_path, qapp)
@@ -946,13 +962,13 @@ def test_the_compression_findings_read_measures_so_a_preview_says_what_the_appli
     assert lines("tiled", 8, {}, tiles=300, palettes=1)[0][0] and not lines("tiled", 8, {}, tiles=256, palettes=1)
 
 
-def test_a_bitmap_preview_says_what_the_encoder_scaled_instead_of_leaving_the_previous_layouts_overlays(qapp, tmp_path):
+def test_a_bitmap_preview_says_its_canvas_instead_of_leaving_the_previous_layouts_overlays(qapp, tmp_path):
     from PIL import Image
     from core.bg_import import encode_by_mode, prepare_source
     project, ba, _panel = _panel_with_project(tmp_path)
     png = project.background_images_dir / "big.png"
     png.parent.mkdir(parents=True, exist_ok=True)
-    Image.new("RGB", (480, 268), (30, 90, 200)).save(png)
+    Image.new("RGB", (240, 134), (30, 90, 200)).save(png)
     ba.asset = project.asset_rel(png)
     screen = _screen_in(tmp_path, tmp_path)[1]
     screen._project = project
@@ -962,5 +978,293 @@ def test_a_bitmap_preview_says_what_the_encoder_scaled_instead_of_leaving_the_pr
     screen._show_compressed_preview(encode_by_mode(prepare_source(png), "bitmap"))
 
     text = screen._canvas._info_ov.text() + screen._canvas._warn_ov.text()
-    assert "240×134" in text and "480" not in text            # l'ajustement est dit, avec la taille obtenue
-    assert not screen._canvas._warn_ov.isHidden()
+    assert "240×160 px" in text                               # le canvas d'un bitmap, pas la taille du fond d'avant
+
+
+# ── Le mode Canvas : le fichier posé dans le canvas ───────────────────────────
+
+def _canvas_on_photo(tmp_path, qapp):
+    project, ba, screen = _screen_on_photo(tmp_path, qapp)
+    canvas = screen._canvas
+    canvas._src_size = canvas._read_source_size()         # 32×32
+    canvas._refresh_prepare_ui()
+    return project, ba, screen, canvas
+
+
+def test_the_canvas_card_shows_the_canvas_and_the_image_posed_in_it(qapp, tmp_path):
+    _project, _ba, screen, _canvas = _canvas_on_photo(tmp_path, qapp)
+
+    spins = screen._props._canvas_spins
+    assert not screen._props._canvas_card.isHidden()
+    assert (spins["canvas_w"].value(), spins["canvas_h"].value()) == (32, 32)
+    assert (spins["pos_x"].value(), spins["pos_y"].value(), spins["size_w"].value(), spins["size_h"].value()) == (0, 0, 32, 32)
+
+
+def test_editing_the_canvas_size_in_the_inspector_opens_the_canvas_mode_and_the_central_view_follows(qapp, tmp_path):
+    _project, _ba, screen, canvas = _canvas_on_photo(tmp_path, qapp)
+
+    screen._props._canvas_spins["canvas_w"].setValue(48)
+
+    assert canvas._view.canvas_mode_active() and canvas._toolbar.current_tool == "select"
+    assert canvas._view.canvas_place.canvas() == (48, 32)
+    assert canvas._view.canvas_place.rect() == (0, 0, 32, 32)                 # l'image n'a pas bougé
+
+
+def test_dragging_the_image_updates_the_inspector_fields_live(qapp, tmp_path):
+    _project, _ba, screen, canvas = _canvas_on_photo(tmp_path, qapp)
+    canvas._toolbar.choose_select()
+    place = canvas._view.canvas_place
+
+    assert place.begin(10, 10)                                                 # le corps de l'image
+    place.drag(18, 14, False, False)
+    canvas._view.canvas_rect_live.emit(place.rect())
+    place.end()
+
+    spins = screen._props._canvas_spins
+    assert (spins["pos_x"].value(), spins["pos_y"].value()) == (8, 4)
+
+
+def test_leaving_the_canvas_mode_applies_the_placement_with_one_recompression(qapp, tmp_path):
+    _project, ba, screen, canvas = _canvas_on_photo(tmp_path, qapp)
+    asked = []
+    canvas.prepare_requested.connect(asked.append)
+    screen._props._canvas_spins["canvas_w"].setValue(16)
+    screen._props._canvas_spins["pos_x"].setValue(-8)
+    assert asked == []                                                         # rien ne se compresse pendant qu'on règle
+
+    canvas._toolbar.leave_select()
+
+    assert len(asked) == 1 and asked[0]["canvas"] == (16, 32) and asked[0]["pos"] == (-8, 0)
+    assert _wait(qapp, lambda: ba.canvas_size == (16, 32) and ba.image_pos == (-8, 0))
+    assert (ba.tiles_w, ba.tiles_h) == (2, 4)                                  # le canvas fait 16×32, l'image déborde
+
+
+def test_escape_leaves_the_canvas_mode_without_applying(qapp, tmp_path):
+    _project, ba, screen, canvas = _canvas_on_photo(tmp_path, qapp)
+    asked = []
+    canvas.prepare_requested.connect(asked.append)
+    screen._props._canvas_spins["canvas_w"].setValue(16)
+
+    canvas._view.canvas_finished.emit(False)
+
+    assert not canvas._view.canvas_mode_active() and asked == [] and ba.canvas_size is None
+
+
+def test_a_bitmap_has_a_fixed_canvas_the_card_cannot_change(qapp, tmp_path):
+    _project, ba, screen, canvas = _canvas_on_photo(tmp_path, qapp)
+    ba.mode = "bitmap"
+    screen._props.load(ba, screen._project)                                    # l'inspecteur dit le layout montré
+    canvas._refresh_prepare_ui()
+
+    props = screen._props
+    assert props._canvas_size_host.isHidden() and not props._canvas_fixed.isHidden()    # pas des champs grisés : une ligne qui dit « fixe »
+    assert "240" in props._canvas_fixed.text() and "160" in props._canvas_fixed.text()
+    assert props._canvas_spins["size_w"].isEnabled()                           # l'image, elle, se règle
+
+
+def test_choosing_tiled_makes_the_canvas_size_editable_before_the_layout_is_even_compressed(qapp, tmp_path):
+    """Le canvas se règle pour le layout CHOISI : un bitmap qu'on vient de passer en tuilé (en attente) ouvre les champs."""
+    _project, ba, screen, canvas = _canvas_on_photo(tmp_path, qapp)
+    ba.mode = "bitmap"
+    screen._props.load(ba, screen._project)
+    props = screen._props
+    assert not props._canvas_fixed.isHidden()
+
+    props._set_layout("tiled")                                                 # en attente : rien n'est compressé
+
+    assert ba.mode == "bitmap"
+    assert not props._canvas_size_host.isHidden() and props._canvas_fixed.isHidden()
+    props._canvas_spins["canvas_w"].setValue(48)
+    assert canvas._view.canvas_place.canvas() == (48, 32)                      # la vue suit, au lieu de forcer 240×160
+
+
+def test_the_fit_buttons_place_the_image_in_the_canvas(qapp, tmp_path):
+    _project, _ba, screen, canvas = _canvas_on_photo(tmp_path, qapp)
+    screen._props._canvas_spins["canvas_w"].setValue(64)
+
+    screen._props.canvas_fit_requested.emit("fill")
+
+    assert canvas._view.canvas_place.rect() == (0, -16, 64, 64)               # 32×32 couvre 64×32 : à 200 %, rogné en haut et en bas
+
+
+def test_the_canvas_mode_paints_the_whole_file_and_dims_what_falls_outside_the_canvas(qapp, tmp_path):
+    _project, _ba, screen, canvas = _canvas_on_photo(tmp_path, qapp)
+    view = canvas._view
+    view.resize(400, 300)
+    screen._props._canvas_spins["canvas_w"].setValue(16)                      # le canvas ne couvre que la moitié gauche
+    view._zoom = 8.0
+    view._apply_zoom()
+    view.centerOn(16, 16)
+
+    image = view.viewport().grab().toImage()
+
+    def brightness(scene_x):
+        p = view.mapFromScene(scene_x, 16)
+        block = [image.pixelColor(p.x() + dx, p.y() + dy) for dx in range(-3, 4) for dy in range(-3, 4)]
+        return sum(c.red() + c.green() + c.blue() for c in block) / len(block)
+
+    assert brightness(24) < 0.7 * brightness(8)                              # hors du cadre : même image, grisée
+
+
+def test_the_toolbar_stays_for_a_bitmap_with_the_select_tool_alone(qapp, tmp_path):
+    _project, ba, _screen, canvas = _canvas_on_photo(tmp_path, qapp)
+    ba.mode = "bitmap"
+    canvas.load(canvas._project, ba)
+
+    toolbar = canvas._toolbar
+    assert not toolbar.isHidden()
+    assert not toolbar._btns["select"].isHidden() and toolbar._btns["select"].isEnabled()
+    assert all(toolbar._btns[t].isHidden() for t in ("brush", "fill", "rect", "eraser"))      # rien à peindre
+    assert toolbar.current_tool == "" and not canvas._view.canvas_mode_active()               # aucun outil choisi d'office
+
+
+def test_select_comes_first_in_the_toolbar_and_a_paintable_background_keeps_its_brush(qapp, tmp_path):
+    _project, _ba, _screen, canvas = _canvas_on_photo(tmp_path, qapp)
+
+    toolbar = canvas._toolbar
+    assert list(toolbar._btns)[0] == "select"
+    assert toolbar.current_tool == "brush" and not canvas._view.canvas_mode_active()
+    toolbar.choose_select()
+    assert canvas._view.canvas_mode_active()
+    toolbar.choose_select()                                                # re-cliquer « select » ne le quitte pas…
+    assert canvas._view.canvas_mode_active()
+    toolbar._btns["select"].click()                                        # …mais son bouton, si
+    assert toolbar.current_tool == "brush" and not canvas._view.canvas_mode_active()
+
+
+def test_what_falls_outside_the_canvas_stays_visible_dimmed_outside_the_mode_too(qapp, tmp_path):
+    """Le passe-partout : sans mode Canvas, le fichier déborde et on le voit, grisé, autour du canvas."""
+    _project, ba, screen, canvas = _canvas_on_photo(tmp_path, qapp)
+    ba.canvas_size = (16, 32)                                              # un canvas plus étroit que l'image (32×32)
+    canvas._refresh_prepare_ui()
+    view = canvas._view
+    view.resize(400, 300)
+    view._zoom = 8.0
+    view._apply_zoom()
+    view.centerOn(16, 16)
+
+    assert not view.canvas_mode_active() and view.canvas_place.isVisible() and not view.canvas_place.active
+    image = view.viewport().grab().toImage()
+    def brightness(scene_x):
+        p = view.mapFromScene(scene_x, 16)
+        block = [image.pixelColor(p.x() + dx, p.y() + dy) for dx in range(-3, 4) for dy in range(-3, 4)]
+        return sum(c.red() + c.green() + c.blue() for c in block) / len(block)
+
+    assert brightness(24) > 60                                             # l'image y est, pas un fond noir
+    assert not view.canvas_place.hit(24, 16)                               # et le passe-partout ne se manipule pas
+
+
+# ── La boîte de compression suit le layout CHOISI ; les ajustements se replient ───────────────────────────────
+
+def test_the_compression_box_follows_the_chosen_depth_before_anything_is_compressed(qapp, tmp_path):
+    _project, ba, screen = _screen_on_photo(tmp_path, qapp)
+    props = screen._props
+    props._refresh_compression_ui()
+    assert ba.bpp == 4 and all(r.isVisibleTo(props) is not None for r in props._rows_4bpp)
+    assert props._comp_title.text() == label_of("bgedit.comp_title")
+
+    props._set_depth(8)                                                    # en attente : rien n'est compressé
+
+    assert ba.bpp == 4
+    assert props._comp_title.text() == label_of("bgedit.comp_title8")
+    assert all(r.isHidden() for r in props._rows_4bpp) and not any(r.isHidden() for r in props._rows_8bpp)
+    assert [props._cmb_method.itemData(i) for i in range(props._cmb_method.count())] == list(
+        __import__("core.bg_import", fromlist=["QUANTIZERS_8BPP"]).QUANTIZERS_8BPP)
+
+    props._set_depth(4)                                                    # le retour réaffiche les options du 4bpp
+
+    assert props._comp_title.text() == label_of("bgedit.comp_title")
+    assert not any(r.isHidden() for r in props._rows_4bpp) and all(r.isHidden() for r in props._rows_8bpp)
+
+
+def test_a_pending_slider_survives_a_change_of_depth(qapp, tmp_path):
+    _project, _ba, screen = _screen_on_photo(tmp_path, qapp)
+    props = screen._props
+    props._sl_palettes.setValue(5)
+
+    props._set_depth(8)
+    props._set_depth(4)
+
+    assert props._sl_palettes.value() == 5                                 # un curseur déjà tiré reste où il est
+
+
+def test_the_bitmap_choice_hides_the_tile_target_before_it_is_compressed(qapp, tmp_path):
+    _project, _ba, screen = _screen_on_photo(tmp_path, qapp)
+    props = screen._props
+
+    props._set_layout("bitmap")
+
+    assert props._sl_tiles._row.isHidden()                                 # un bitmap n'a pas de tuiles
+
+
+def test_the_adjustments_card_folds_and_opens_by_itself_when_one_is_set(qapp, tmp_path, preparation_tools):
+    from core.models.background import BackgroundAdjust
+    project, ba, screen = _screen_on_photo(tmp_path, qapp)
+    props = screen._props
+    assert not props._adj_host.isVisibleTo(props) or props._adj_host.isHidden() is False
+    props._adj_open = False
+    props._refresh_tune_visibility()
+    assert props._adj_host.isHidden() and props._btn_adj.text().startswith("▸")
+
+    props._btn_adj.click()
+    assert not props._adj_host.isHidden() and props._btn_adj.text().startswith("▾")
+
+    ba.adjust = BackgroundAdjust(hue=20)
+    other = _with_image()
+    props.load(other, project)                                             # un autre fond, sans ajustement : replié
+    assert props._adj_host.isHidden()
+    props.load(ba, project)                                                # un fond déjà réglé : ouvert d'office
+    assert not props._adj_host.isHidden()
+
+
+def test_the_compression_settings_follow_the_order_the_encoder_resolves_them(qapp, tmp_path):
+    """De haut en bas : un réglage ne refait que ce qui le suit. 4bpp : global, dithering, méthode, couleurs, palettes,
+    tuiles ; 8bpp : méthode, couleurs, dithering, tuiles. « Reset » reste en dernier."""
+    _project, _ba, screen = _screen_on_photo(tmp_path, qapp)
+    props = screen._props
+    lay = props._comp_host.layout()
+
+    def order(*widgets):
+        indexes = [lay.indexOf(w) for w in widgets]
+        return indexes == sorted(indexes) and -1 not in indexes
+
+    props._refresh_compression_ui()
+    assert order(props._sl_global._row, props._dither_host, props._cmb_method, props._sl_colors._row,
+                 props._sl_palettes._row, props._sl_tiles._row, props._btn_comp_reset)
+
+    props._set_depth(8)
+    assert order(props._cmb_method, props._sl_pal8._row, props._dither_host, props._sl_tiles._row, props._btn_comp_reset)
+
+    props._set_depth(4)                                                    # le retour remet l'ordre du 4bpp
+    assert order(props._sl_global._row, props._dither_host, props._cmb_method, props._sl_colors._row,
+                 props._sl_palettes._row, props._sl_tiles._row, props._btn_comp_reset)
+    assert props._chk_dither.parent() is props._dither_host                # le dithering vit dans la boîte
+
+
+def test_choosing_bitmap_makes_the_canvas_card_and_the_window_follow_with_the_canvas_mode_open_or_not(qapp, tmp_path):
+    from PIL import Image
+    _project, ba, screen, canvas = _canvas_on_photo(tmp_path, qapp)
+    props = screen._props
+    props._canvas_spins["canvas_w"].setValue(48)                          # un canvas tuilé réglé, mode Canvas ouvert
+    assert canvas._view.canvas_mode_active() and canvas._view.canvas_place.canvas() == (48, 32)
+
+    props._set_layout("bitmap")                                           # en attente : rien n'est compressé
+
+    assert canvas._view.canvas_place.canvas() == (240, 160)               # la fenêtre suit
+    assert "240" in props._canvas_fixed.text() and "160" in props._canvas_fixed.text()
+    assert canvas._view.canvas_place.rect() == (0, 0, 32, 32)             # l'image n'a pas bougé
+
+    props._set_layout("tiled")                                            # le retour rend le canvas réglé avant
+
+    assert canvas._view.canvas_place.canvas() == (48, 32) and not props._canvas_size_host.isHidden()
+
+
+def test_choosing_bitmap_outside_the_canvas_mode_moves_the_passe_partout_frame(qapp, tmp_path):
+    _project, ba, screen, canvas = _canvas_on_photo(tmp_path, qapp)
+    assert not canvas._view.canvas_mode_active()
+    assert canvas._view.canvas_place.canvas() == (32, 32)
+
+    screen._props._set_layout("bitmap")
+
+    assert canvas._view.canvas_place.canvas() == (240, 160)               # le cadre du passe-partout suit
+    assert "240" in screen._props._canvas_fixed.text()

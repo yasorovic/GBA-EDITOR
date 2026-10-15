@@ -178,6 +178,13 @@ def _read_ints(raw, minimums: tuple) -> Optional[tuple]:
     return vals
 
 
+_POS_LIMIT = 1 << 20   # une position se lit signée : seul ce plancher la distingue d'un sidecar corrompu
+
+# Le canvas FIXE d'un fond bitmap (Mode 4, plein écran). Une seule définition : l'encodeur (core.bg_import) et le
+# modèle la lisent ici.
+BITMAP_SIZE = (240, 160)
+
+
 def _read_axis(raw) -> Optional[int]:
     """Axe de miroir en pixels (≥ 1), ou None : une valeur illisible se relit comme « pas de miroir »."""
     try:
@@ -380,7 +387,9 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
     # la couleur `color` (index dans la sous-palette `pal`) ; `color` 0 la rend transparente. Effacer une case la
     # retire du dict et rend la tuile initiale. Ni `tileset` ni `tilemap` ne sont touchés : une recompression de
     # l'image garde donc la peinture. `effective_tileset()` / `effective_tilemap()` la composent.
-    tile_paint: dict = field(default_factory=dict)  # dict[(col,row), (color, pal_index)]
+    # `pal` = la POSITION de la palette dans `added_palettes` (pas un numéro de banque : le numéro se calcule, cf.
+    # `painted_cells`) — un encodage qui change le nombre de palettes dérivées ne déplace donc pas la peinture.
+    tile_paint: dict = field(default_factory=dict)  # dict[(col,row), (color, position dans added_palettes)]
     # Diagnostics de compression (validateur éditeur, non-bloquant) — calculés à
     # la compression, cf. bg_import.encode_background. Le PNG reste intact.
     diagnostics: dict = field(default_factory=dict)
@@ -392,15 +401,16 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
     # reposent l'ancienne date en enregistrant. Vide = origine inconnue (asset
     # d'avant ce champ). Cf. core.resources.asset_reconciliation.resync_background_png.
     source_stamp: str = ""
-    # Préparation de la source AVANT encodage — le PNG reste intact, c'est
-    # l'image en mémoire qu'on recadre puis redimensionne (cf.
-    # bg_import.prepare_source). `import_crop` = (x, y, w, h) en pixels du PNG ;
-    # `import_size` = (w, h) de l'image préparée, appliqué APRÈS le recadrage.
-    # None = pas de préparation (« Original »).
-    import_crop: Optional[tuple] = None
-    import_size: Optional[tuple] = None
-    # Miroir de l'image préparée, APRÈS recadrage et redimensionnement : position
-    # de l'axe en pixels de l'image préparée (None = pas de miroir sur cet axe).
+    # Plan de travail — le PNG reste intact, c'est l'image en mémoire qu'on pose dans un canvas (cf.
+    # bg_import.prepare_source). `canvas_size` = (w, h) du canvas, valeur DISTINCTE de la taille de l'image : ce
+    # que l'encodeur reçoit. `image_size` = (w, h) de l'image une fois mise à l'échelle ; `image_pos` = (x, y) de son
+    # coin haut-gauche dans le canvas, qui peut déborder (le surplus est rogné) ou laisser du vide (transparent).
+    # None partout = « Original » : canvas = image = fichier, posée en (0, 0).
+    canvas_size: Optional[tuple] = None
+    image_pos: Optional[tuple] = None
+    image_size: Optional[tuple] = None
+    # Miroir du canvas, APRÈS la pose de l'image : position
+    # de l'axe en pixels du canvas (None = pas de miroir sur cet axe).
     # `mirror_x` est une barre verticale (le côté gauche se reflète à droite),
     # `mirror_y` une barre horizontale (le haut se reflète en bas). Il précède la
     # compression, puisqu'il change les tuiles que celle-ci trouvera.
@@ -420,7 +430,12 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
     # inchangés) : une dérivée overridée a ses couleurs = celles du catalogue et
     # son index figure dans `palette_overrides` (idx -> nom de banque catalogue).
     source_palettes: list = field(default_factory=list)    # list[list[int]] BGR555
-    palette_overrides: dict = field(default_factory=dict)  # dict[int, str]
+    palette_overrides: dict = field(default_factory=dict)  # dict[int, str]  — un RÉGLAGE (cf. `settings`)
+    # Les palettes AJOUTÉES (« + ») : des RÉFÉRENCES au catalogue de palettes, par nom — jamais des copies. Un RÉGLAGE :
+    # l'encodage ne les voit pas, donc ne peut ni les perdre ni les changer. Leurs couleurs, comme celles d'un override,
+    # viennent du catalogue ; `palettes` n'en garde que le cache résolu (cf. `resolve_palettes`). Une tuile peinte
+    # (`tile_paint`) en désigne une par sa POSITION dans cette liste.
+    added_palettes: list = field(default_factory=list)     # list[str] noms de banques du catalogue
 
     # ── Emploi de l'image (cf. BG_KINDS en tête de module) ─────────
     kind: str = KIND_SCENE
@@ -461,11 +476,26 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
     # une image), mais rien dans l'éditeur ne le propose.
     animations: list = field(default_factory=list)   # list[BackgroundAnimation]
 
+    def choose_layout(self, token: str) -> None:
+        """Le layout VOULU, comme RÉGLAGE : « tiled4 » | « tiled8 » | « bitmap » | « bitmap16 » (le vocabulaire de
+        `bg_import.detect_import_mode`). C'est le geste de l'auteur — ou de l'import, qui décide à sa place —, jamais
+        un effet de l'encodage : `apply_bg_encoding` range un résultat, il ne touche pas aux réglages.
+
+        Un bitmap est un tampon plein écran : son canvas vaut 240×160, ENREGISTRÉ pour que repasser en tuilé garde la
+        taille connue, et il n'a pas de tuiles à repeindre."""
+        if token.startswith("bitmap"):
+            self.mode, self.bpp = "bitmap", 8
+            self.canvas_size = BITMAP_SIZE
+            self.tile_palette_overrides = {}
+            self.tile_paint = {}
+        else:
+            self.mode, self.bpp = "tiled", 8 if token == "tiled8" else 4
+
     def import_prep(self) -> dict:
         """La préparation de la source, sous la forme que prend `bg_import` —
         les DEUX appelants qui encodent (worker de l'éditeur, chemin synchrone
         de la réconciliation) la lisent ici, pour ne jamais diverger."""
-        return {"crop": self.import_crop, "size": self.import_size, "adjust": self.adjust,
+        return {"canvas": self.canvas_size, "pos": self.image_pos, "size": self.image_size, "adjust": self.adjust,
                 "mirror": (self.mirror_x, self.mirror_y, self.mirror_flip_x, self.mirror_flip_y)}
 
     # ── Type ──────────────────────────────────────────────────────
@@ -552,13 +582,90 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
                 return pl
         return None
 
+    # ── Palettes : dérivées du PNG, overrides, ajoutées par référence ─────
+    def added_bank(self, position: int) -> int:
+        """Le numéro de banque (index dans `palettes`) de la palette ajoutée à cette POSITION : les dérivées d'abord."""
+        return self.derived_count() + position
+
+    def added_position(self, bank: int) -> int:
+        """La position dans `added_palettes` de la banque `bank`, ou -1 si c'est une palette dérivée du PNG."""
+        position = bank - self.derived_count()
+        return position if 0 <= position < len(self.added_palettes) else -1
+
+    def added_palette_colors(self) -> list:
+        """Les couleurs en cache des palettes ajoutées, dans l'ordre de `added_palettes` — à lire AVANT qu'un
+        encodage remplace `palettes`, pour que `resolve_palettes` retombe dessus si une banque a quitté le catalogue."""
+        return [list(p) for p in self.palettes[self.derived_count():][:len(self.added_palettes)]]
+
+    def add_palette_ref(self, name: str, colors: list) -> int:
+        """« + » : ajoute la banque `name` du catalogue. Retourne son numéro de banque, ou -1 si les 16 sont prises."""
+        if len(self.palettes) >= 16:
+            return -1
+        self.added_palettes.append(name)
+        self.palettes.append((list(colors) + [0] * 16)[:16])
+        return len(self.palettes) - 1
+
+    def replace_added_palette(self, bank: int, name: str, colors: list) -> bool:
+        """Remplace la palette ajoutée `bank` par la banque `name` : la peinture suit, c'est la même position."""
+        position = self.added_position(bank)
+        if position < 0:
+            return False
+        self.added_palettes[position] = name
+        self.palettes[bank] = (list(colors) + [0] * 16)[:16]
+        return True
+
+    def remove_palette(self, idx: int) -> None:
+        """Retire la palette `idx`. Une palette AJOUTÉE emporte sa référence et sa peinture : un trait ne retombe pas sur
+        une autre palette, il disparaît ; les positions suivantes avancent d'un cran."""
+        position = self.added_position(idx)
+        paint, self.tile_paint = self.tile_paint, {}       # le mixin remappe des numéros de banque, pas des positions
+        super().remove_palette(idx)
+        if position >= 0:
+            self.added_palettes.pop(position)
+            paint = {cell: (color, pal - 1 if pal > position else pal)
+                     for cell, (color, pal) in paint.items() if pal != position}
+        self.tile_paint = paint
+
+    def resolve_palettes(self, lookup=None, kept: Optional[list] = None) -> list:
+        """Recompose `palettes` — ce que lisent le rendu et le build — depuis les RÉGLAGES : les palettes dérivées du PNG
+        (`source_palettes`), chacune remplacée par sa banque quand elle est overridée, puis les palettes ajoutées.
+
+        `lookup(nom)` rend les couleurs d'une banque du catalogue, ou None si elle n'existe pas. Une banque disparue ne
+        casse rien : une ajoutée garde `kept` (ses couleurs en cache), un override garde la couleur du PNG ; le validateur
+        le dit. Un override dont la palette dérivée n'existe plus (un nouvel encodage en a moins) est levé : ses indices
+        sont rendus. Un fond 8bpp ou bitmap n'a qu'une palette de 256 couleurs : ni ajoutées ni overrides n'y ont de sens."""
+        from core.models.gba_color import RESERVED_SLOT_COLOR
+        derived = [list(p) for p in self.source_palettes]
+        if self.mode == "bitmap" or self.bpp == 8:
+            self.palettes = derived
+            return []
+        dropped = [idx for idx in self.palette_overrides if idx >= len(derived)]
+        for idx in dropped:
+            del self.palette_overrides[idx]
+        for idx, name in self.palette_overrides.items():
+            colors = lookup(name) if lookup else None
+            if colors is not None:
+                derived[idx] = (list(colors) + [0] * 16)[:16]
+        added = []
+        kept = kept or []
+        for position, name in enumerate(self.added_palettes):
+            colors = lookup(name) if lookup else None
+            if colors is None and position < len(kept):
+                colors = kept[position]
+            added.append((list(colors) + [0] * 16)[:16] if colors is not None
+                         else [RESERVED_SLOT_COLOR] + [0] * 15)
+        self.palettes = derived + added
+        return dropped
+
     def painted_cells(self) -> dict:
         """Les cases peintes qui comptent : dans la grille, et seulement en tuilé 4bpp (la peinture
-        pose des tuiles pleines d'UNE sous-palette — rien d'équivalent en 8bpp ni en bitmap)."""
+        pose des tuiles pleines d'UNE sous-palette — rien d'équivalent en 8bpp ni en bitmap). La palette de chaque
+        trait est rendue en NUMÉRO DE BANQUE (les dérivées d'abord, puis la position dans `added_palettes`) : tout ce
+        qui rend ou construit lit ce numéro, jamais la position stockée."""
         if not self.tile_paint or self.mode != "tiled" or self.bpp != 4:
             return {}
-        return {cell: v for cell, v in self.tile_paint.items()
-                if 0 <= cell[0] < self.tiles_w and 0 <= cell[1] < self.tiles_h}
+        return {cell: (color, self.added_bank(pal)) for cell, (color, pal) in self.tile_paint.items()
+                if 0 <= cell[0] < self.tiles_w and 0 <= cell[1] < self.tiles_h and pal < len(self.added_palettes)}
 
     @staticmethod
     def solid_tile(color: int) -> str:
@@ -614,69 +721,94 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
             d["animations"] = [a.to_dict() for a in self.animations]
         if self.asset:
             d["asset"] = self.asset
-        # Hors des branches ci-dessous : l'empreinte décrit l'IMAGE SOURCE, pas
-        # la forme de l'encodage — elle vaut autant en tuilé qu'en bitmap.
-        if self.source_stamp:
-            d["source_stamp"] = self.source_stamp
-        if self.import_crop:
-            d["import_crop"] = list(self.import_crop)
-        if self.import_size:
-            d["import_size"] = list(self.import_size)
+        # Deux blocs, deux responsabilités. `settings` : ce que l'auteur a décidé (et ses retouches de tuiles) — la vérité,
+        # avec le PNG. `encoded` : ce que l'encodage en a tiré — une fonction des réglages et de la source, que le build lit
+        # et qu'un nouvel encodage remplace en entier. Rien dans `encoded` ne s'écrit de la main de l'auteur.
+        settings = self._settings_dict()
+        encoded = self._encoded_dict()
+        if settings:
+            d["settings"] = settings
+        if encoded:
+            d["encoded"] = encoded
+        return d
+
+    def _settings_dict(self) -> dict:
+        """Les RÉGLAGES du fond : layout, préparation de la source (canvas, pose, miroir, ajustements), compression, et
+        les retouches de tuiles de l'auteur (clés par case de la grille encodée)."""
+        s = {}
+        if self.mode != "tiled":
+            s["mode"] = self.mode
+        if self.bpp != 4:
+            s["bpp"] = self.bpp
+        if self.dither:
+            s["dither"] = True
+        if self.quantize_method != "median_cut":
+            s["quantize_method"] = self.quantize_method
+        if self.canvas_size:
+            s["canvas_size"] = list(self.canvas_size)
+        if self.image_pos:
+            s["image_pos"] = list(self.image_pos)
+        if self.image_size:
+            s["image_size"] = list(self.image_size)
         if self.mirror_x is not None:
-            d["mirror_x"] = self.mirror_x
+            s["mirror_x"] = self.mirror_x
         if self.mirror_y is not None:
-            d["mirror_y"] = self.mirror_y
+            s["mirror_y"] = self.mirror_y
         if self.mirror_flip_x:
-            d["mirror_flip_x"] = True
+            s["mirror_flip_x"] = True
         if self.mirror_flip_y:
-            d["mirror_flip_y"] = True
+            s["mirror_flip_y"] = True
         if not self.compression.is_default():
-            d["compression"] = self.compression.to_dict()
+            s["compression"] = self.compression.to_dict()
         if not self.adjust.is_default():
-            d["adjust"] = self.adjust.to_dict()
+            s["adjust"] = self.adjust.to_dict()
+        if self.tile_palette_overrides:
+            s["tile_palette_overrides"] = {
+                f"{c},{r}": v for (c, r), v in self.tile_palette_overrides.items()
+            }
+        if self.added_palettes:
+            s["added_palettes"] = list(self.added_palettes)
+        if self.palette_overrides:
+            s["palette_overrides"] = {str(i): n for i, n in self.palette_overrides.items()}
+        if self.tile_paint:
+            s["tile_paint"] = {
+                f"{c},{r}": [color, pal] for (c, r), (color, pal) in self.tile_paint.items()
+            }
+        return s
+
+    def _encoded_dict(self) -> dict:
+        """Le RÉSULTAT de l'encodage : ce que le build lit. `source_stamp` dit de quelle version du PNG il vient (il vaut
+        autant en tuilé qu'en bitmap). `palettes` y est le CACHE résolu — les dérivées du PNG, leurs overrides, puis les
+        ajoutées, dont les couleurs viennent du catalogue (cf. `resolve_palettes`) : un nouvel encodage le refait."""
+        e = {}
+        if self.source_stamp:
+            e["source_stamp"] = self.source_stamp
         if self.tileset:
             # ROADMAP v0.24 : couleurs en #RRGGBB et tilemap rangée en RANGÉES,
             # pour que deux personnes qui retouchent deux zones d'un même fond
             # produisent deux diffs que git sait fusionner. La donnée ne change
             # pas — seule sa forme écrite (cf. core/project_json.py).
-            d.update({
+            e.update({
                 "palettes": write_palettes(self.palettes), "tileset": self.tileset,
                 "tilemap": write_grid(self.tilemap, self.tiles_w),
-                "tiles_w": self.tiles_w,
-                "tiles_h": self.tiles_h, "quantize_method": self.quantize_method,
+                "tiles_w": self.tiles_w, "tiles_h": self.tiles_h,
             })
-            if self.tile_palette_overrides:
-                d["tile_palette_overrides"] = {
-                    f"{c},{r}": s for (c, r), s in self.tile_palette_overrides.items()
-                }
-            if self.tile_paint:
-                d["tile_paint"] = {
-                    f"{c},{r}": [color, pal] for (c, r), (color, pal) in self.tile_paint.items()
-                }
             if self.source_palettes:
-                d["source_palettes"] = write_palettes(self.source_palettes)
-            if self.palette_overrides:
-                d["palette_overrides"] = {
-                    str(i): n for i, n in self.palette_overrides.items()
-                }
+                e["source_palettes"] = write_palettes(self.source_palettes)
             if self.diagnostics:
-                d["diagnostics"] = self.diagnostics
-            if self.bpp != 4:
-                d["bpp"] = self.bpp
-            if self.dither:
-                d["dither"] = True
+                e["diagnostics"] = self.diagnostics
         if self.mode == "bitmap" and self.bitmap:
-            d.update({
-                "mode": "bitmap", "bitmap": self.bitmap,
-                "out_w": self.out_w, "out_h": self.out_h,
-                "palettes": write_palettes(self.palettes),
-            })
+            e.update({"bitmap": self.bitmap, "out_w": self.out_w, "out_h": self.out_h,
+                      "palettes": write_palettes(self.palettes)})
             if self.diagnostics:
-                d["diagnostics"] = self.diagnostics
-        return d
+                e["diagnostics"] = self.diagnostics
+        return e
 
     @classmethod
     def from_dict(cls, d: dict) -> "BackgroundAsset":
+        # Lecture TOLÉRANTE : un sidecar d'avant les deux blocs porte tout à plat, et se lit tel quel ; il est réécrit en
+        # `settings` / `encoded` à la prochaine sauvegarde. Les blocs priment sur le plat.
+        d = {**d, **(d.get("encoded") or {}), **(d.get("settings") or {})}
         ba = cls(
             name=d.get("name", "background"),
             asset=d.get("asset", d.get("source", "")),   # rétro-compat: ancienne clé "source"
@@ -690,8 +822,9 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
             tile_paint=decode_tile_paint(d.get("tile_paint")),
             diagnostics=dict(d.get("diagnostics") or {}),
             source_stamp=str(d.get("source_stamp", "")),
-            import_crop=_read_ints(d.get("import_crop"), (0, 0, 1, 1)),
-            import_size=_read_ints(d.get("import_size"), (1, 1)),
+            canvas_size=_read_ints(d.get("canvas_size"), (1, 1)),
+            image_pos=_read_ints(d.get("image_pos"), (-_POS_LIMIT, -_POS_LIMIT)),
+            image_size=_read_ints(d.get("image_size"), (1, 1)),
             mirror_x=_read_axis(d.get("mirror_x")),
             mirror_y=_read_axis(d.get("mirror_y")),
             mirror_flip_x=bool(d.get("mirror_flip_x", False)),
@@ -705,6 +838,7 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
             out_w=int(d.get("out_w", 0)), out_h=int(d.get("out_h", 0)),
             source_palettes=read_palettes(d.get("source_palettes", [])),
             palette_overrides=decode_palette_overrides(d.get("palette_overrides")),
+            added_palettes=[str(n) for n in (d.get("added_palettes") or [])],
             kind=_read_kind(d.get("kind")),
             ui_role=_read_ui_role(d.get("ui_role")),
             slice_left=int(d.get("slice_left", 8) or 0),

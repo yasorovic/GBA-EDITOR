@@ -1017,14 +1017,25 @@
     "rombar.free_space": {
       "text": "{size:,.1f} KiB libres"
     },
-    "bginp.crop_tip": { "text": "Les poignées ajustent la zone. Le fichier image n’est jamais modifié." },
-    "bginp.crop": {
-      "text": "Recadrer l’image"
-    },
-    "bginp.resize_tip": { "text": "Faire glisser le bord droit ou inférieur redimensionne l’image. Maj conserve les proportions. Ctrl aligne sur 8 px. Le fichier image n’est jamais modifié." },
-    "bginp.resize": {
-      "text": "Redimensionner l’image"
-    },
+    "bginp.select": { "text": "Sélection" },
+    "bginp.select_tip": { "text": "Pose l’image dans son canvas. Le fichier entier est montré, grisé là où il sort du canvas. Glisser l’image la déplace ; les poignées la mettent à l’échelle. Maj conserve les proportions, Ctrl aligne sur 8 px. Choisir un autre outil applique, Échap annule. Le fichier image n’est jamais modifié." },
+    "bgedit.canvas_title": { "text": "Canvas" },
+    "bgedit.canvas_size": { "text": "Taille du canvas" },
+    "bgedit.canvas_image_pos": { "text": "Position de l’image" },
+    "bgedit.canvas_image_size": { "text": "Taille de l’image" },
+    "bgedit.canvas_fit": { "text": "Ajuster" },
+    "bgedit.canvas_fit_tip": { "text": "Fait tenir l’image entière dans le canvas, centrée." },
+    "bgedit.canvas_fill": { "text": "Remplir" },
+    "bgedit.canvas_fill_tip": { "text": "Couvre tout le canvas ; ce qui dépasse est rogné." },
+    "bgedit.canvas_one_to_one": { "text": "1:1" },
+    "bgedit.canvas_one_to_one_tip": { "text": "Montre l’image à la taille du fichier, centrée." },
+    "bginp.paint_needs_palette": { "text": "Aucune palette ajoutée : « + » dans la grille des palettes en ajoute une" },
+    "bgedit.canvas_fixed": { "text": "{w} × {h} · fixe" },
+    "bgedit.canvas_fixed_title": { "text": "Canvas fixe" },
+    "bgedit.canvas_fixed_tip": { "text": "Un fond bitmap est un tampon plein écran de 240×160 (Mode 4) : son canvas ne change pas. Le layout tuilé accepte toutes les tailles." },
+    "hints.bg.canvas_move": { "text": "Déplace l’image, ou la met à l’échelle par ses poignées" },
+    "hints.bg.canvas_apply": { "text": "Applique le canvas" },
+    "hints.bg.canvas_cancel": { "text": "Annule les changements" },
     "bginp.mirror_x_tip": { "text": "Ajoute une barre verticale. Le côté gauche est reflété sur la droite ; tirer la poignée en flèche de l’autre côté de la barre garde le côté droit. Ctrl aligne sur 8 px. Appliqué avant la compression, il peut donc changer le nombre de tuiles. Le fichier image n’est jamais modifié." },
     "bginp.mirror_x": {
       "text": "Miroir horizontal"
@@ -1160,7 +1171,6 @@
     "bgedit.bitmap_ok": { "text": "✓ Bitmap GBA (Mode 4). Plein écran, sans perte de tuile." },
     "bgedit.compression_failed": { "text": "⚠ Compression impossible. Image vide ou illisible." },
     "bgedit.bitmap_needs_tiles": { "text": "⚠ Bitmap (Mode 4). Un {value} nécessite des tuiles : passez en tuilé." },
-    "bgedit.image_scaled_out_w_out_h_240_160": { "text": "⚠ Image redimensionnée → {out_w}×{out_h} (≤ 240×160)." },
     "bgedit.n_tile_s_gt_15_colors_max_mtc": { "text": "⚠ {n} tuile(s) > 15 couleurs (max. {mtc}). Couleurs réduites, avec perte." },
     "bgedit.palettes_merged": { "text": "⚠ {pre} palettes nécessaires > 16. Fusionnées en {value}, avec perte." },
     "bgedit.preview_tiles": { "text": "Tuiles uniques : {value} / {budget}  {gauge}" },
@@ -1236,12 +1246,13 @@
     "bgedit.export_png_filter": { "text": "Image PNG (*.png)" },
     "bgedit.menu_import": { "text": "Importer une image" },
     "bgedit.menu_create_empty": { "text": "Créer une image vide" },
-    "bgedit.compress_apply": { "text": "Compresser" },
-    "bgedit.compress_apply_tip": { "text": "Applique le mode et le dithering choisis : l’image est compressée de nouveau. Rien n’est compressé tant que ce bouton n’est pas pressé." },
+    "bgedit.compress_apply": { "text": "Recalculer" },
+    "bgedit.compress_apply_tip": { "text": "Applique le mode, les réglages et le dithering choisis : l’image est compressée de nouveau. Rien n’est compressé tant que ce bouton n’est pas pressé." },
     "bgedit.compressing": { "text": "Compression en cours…" },
     "akind.relink_warn_background": { "text": "Relier une autre source ré-importe l’image : son recadrage, sa taille et ses réglages de compression sont remis à zéro, et son mode couleur est détecté de nouveau. La peinture et les repeints de palette sont conservés.\nRelier quand même ?" },
     "akind.relink_warn_image": { "text": "Relier une autre source ré-importe l’image : ce qui en était déduit (palettes, tuiles) est recalculé.\nRelier quand même ?" },
     "bgedit.adj_title": { "text": "Ajustements de l’image" },
+    "bgedit.adj_toggle_tip": { "text": "Affiche les réglages qui changent les couleurs de l’image avant la compression. Ils s’ouvrent d’eux-mêmes quand un ajustement est posé." },
     "bgedit.adj_hue": { "text": "Teinte" },
     "bgedit.adj_hue_tip": { "text": "Fait tourner les couleurs sur le cercle chromatique, en degrés." },
     "bgedit.adj_saturation": { "text": "Saturation" },
@@ -1287,7 +1298,7 @@
       "text": "Comment les couleurs sont fusionnées dans une tuile qui en a trop."
     },
     "bgedit.comp_reset": {
-      "text": "Réinitialiser la compression"
+      "text": "Réinitialiser"
     },
     "bgedit.comp_reset_tip": { "text": "Rétablit les réglages de compression par défaut." },
     "bgedit.comp_off": {
@@ -2156,10 +2167,6 @@
     "hints.bg.fill": { "text": "Remplit la zone connexe avec la palette active" },
     "hints.bg.paint_rect": { "text": "Peint un rectangle avec la palette active" },
     "hints.bg.erase": { "text": "Rend la palette d’origine des tuiles" },
-    "hints.bg.crop_adjust": { "text": "Déplace le cadre de recadrage ou ses poignées" },
-    "hints.bg.crop_apply": { "text": "Applique le recadrage" },
-    "hints.bg.crop_cancel": { "text": "Annule le recadrage" },
-    "hints.bg.resize_drag": { "text": "Redimensionne l’image par ses poignées" },
     "hints.bg.keep_ratio": { "text": "Garde les proportions" },
     "hints.bg.snap_grid": { "text": "Accroche à la grille 8×8" },
     "hints.bg.key_animated_drag": { "text": "Glisser une animation" },

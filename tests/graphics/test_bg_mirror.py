@@ -86,21 +86,21 @@ def _asymmetric_photo(tmp_path):
 def test_the_mirror_reaches_the_encoder_and_lets_tiles_be_shared(tmp_path):
     path = _asymmetric_photo(tmp_path)
     plain = encode_by_mode(path, "tiled4")
-    mirrored = encode_by_mode(path, "tiled4", prep={"crop": None, "size": None, "adjust": None, "mirror": (32, None)})
+    mirrored = encode_by_mode(path, "tiled4", prep={"canvas": None, "pos": None, "size": None, "adjust": None, "mirror": (32, None)})
     assert (plain["tiles_w"], plain["tiles_h"]) == (mirrored["tiles_w"], mirrored["tiles_h"])
     assert len(mirrored["tileset"]) < len(plain["tileset"])
 
 
-def test_the_mirror_follows_the_crop_and_the_size(tmp_path):
+def test_the_mirror_follows_the_canvas(tmp_path):
     path = _asymmetric_photo(tmp_path)
-    out = prepare_source(path, crop=(0, 0, 32, 32), size=(16, 16), mirror=(8, None))
+    out = prepare_source(path, canvas=(16, 16), size=(16, 16), mirror=(8, None))
     assert out.size == (16, 16)
     assert [out.getpixel((15 - i, 3)) for i in range(8)] == [out.getpixel((i, 3)) for i in range(8)]
 
 
 def test_the_asset_writes_the_mirror_only_when_there_is_one_and_reads_it_back():
     ba = BackgroundAsset(name="room")
-    assert "mirror_x" not in ba.to_dict() and "mirror_y" not in ba.to_dict()
+    assert "settings" not in ba.to_dict()
     assert ba.import_prep()["mirror"] == (None, None, False, False)
 
     ba.mirror_x, ba.mirror_y, ba.mirror_flip_x = 120, 80, True

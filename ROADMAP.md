@@ -1,11 +1,11 @@
 
 # Roadmap
 
-Ce document explique **le pourquoi** derrière les jalons qui restent à ouvrir : le scope,
-les décisions déjà verrouillées avant même de commencer, et les questions volontairement
-laissées ouvertes.
+Ce document explique **le pourquoi** derrière les jalons et chantiers non clos : le scope,
+les décisions déjà verrouillées, les tranches déjà livrées quand elles éclairent le reliquat,
+et les questions volontairement laissées ouvertes.
 
-Une fois un jalon **livré**, son détail quitte ce fichier : la discussion complète (décisions
+Une fois un jalon **entièrement livré**, son détail quitte ce fichier : la discussion complète (décisions
 verrouillées, pièges rencontrés, mesures) part dans [changelog/archives/](changelog/archives/), un
 fichier par version — ou par chantier, pour un [chantier technique](#chantiers-techniques). Un
 jalon **produit** gagne en plus une ligne au [CHANGELOG](changelog/CHANGELOG.md) ; un chantier technique
@@ -19,7 +19,7 @@ Six documents, six rôles :
 | [README](README.md) | un visiteur | une ligne par version |
 | [CHANGELOG](changelog/CHANGELOG.md) | qui veut savoir ce qui a changé | une entrée courte par version livrée |
 | [changelog/archives/](changelog/archives/) | qui rouvre une décision passée | le détail complet d'une version livrée |
-| **ce fichier** | qui décide de la suite | scope, décisions, ouvert — jalons **non livrés** seulement |
+| **ce fichier** | qui décide de la suite | scope, décisions, reliquat ouvert — jalons et chantiers **non clos** |
 | [ARCHITECTURE](ARCHITECTURE.md) | qui modifie le code | comment c'est construit |
 | [Référence de scripting](docs/scripting-reference.md) | qui écrit un script | le Lua accepté, et ce qui ne l'est pas |
 
@@ -40,8 +40,8 @@ numéroté, jamais mélangé aux jalons produit.
 
 ## Où on en est
 
-Ce fichier ne garde que les jalons **non livrés** — c'est son rôle propre, cf. le tableau des six
-documents en tête. Toute version livrée (v0.2 à v0.28 à ce jour) a son entrée dans le
+Ce fichier garde les jalons et chantiers **non clos** — c'est son rôle propre, cf. le tableau des six
+documents en tête. Une version entièrement livrée (v0.2 à v0.28 à ce jour) a son entrée dans le
 [CHANGELOG](changelog/CHANGELOG.md) et son détail complet dans [changelog/archives/](changelog/archives/) ;
 elle ne reste pas ici en doublon.
 
@@ -286,7 +286,7 @@ seulement une réécriture, une clarification ou une garantie côté code. Il n'
 [README](README.md) ni dans le [CHANGELOG](changelog/CHANGELOG.md), et ne porte pas de numéro `vX.Y` : une
 fois refermé, son détail rejoint [changelog/archives/](changelog/archives/) comme n'importe quel
 jalon, mais référencé par son nom plutôt que par un numéro — c'est là qu'est l'index complet des
-chantiers clos ; ce tableau ne garde que ceux **non livrés**.
+chantiers clos ; ce tableau ne garde que ceux **non clos**.
 
 | Chantier | Ouvert le | État |
 | --- | --- | --- |
@@ -298,7 +298,7 @@ chantiers clos ; ce tableau ne garde que ceux **non livrés**.
 | L'écran Texte n'édite et ne range que du contenu | 2026-10-10 | **À ouvrir** — conception proposée, **rien de verrouillé**, code non commencé ; retire l'aperçu écran et édite le contenu dans la table. Remplace « L'atelier Texte réuni » (abandonné). Voir [ci-dessous](#lécran-texte-nédite-et-ne-range-que-du-contenu) |
 | L'écran Données — une grille de jeu, pas un tableur | 2026-10-14 | **À ouvrir** — direction proposée : rendre l'édition et les conséquences d'index visibles, sans tri, filtre ni formules ; conception à valider sur une vraie table, code non commencé. Voir [ci-dessous](#lécran-données--une-grille-de-jeu-pas-un-tableur) |
 | L'écran Son montre le geste sans recalculer l'onde | 2026-10-12 | **Livré pour l'essentiel (2026-10-12)** — plus aucun rendu pendant qu'un potard est tenu, bascule Onde \| Scope (oscilloscope du mix, tiré du son qui joue), durée sur la règle, barres des canaux qui suivent le volume ; **reste ouvert** : les repères sonores de musique sont **livrés le 2026-10-14** (quatre natures, voir ci-dessous) ; les repères de **jingle** sont livrés le 2026-10-14 (tranche 1, en temps) ; restent l'appel d'événement et les points de sortie pour les music box (**chantier à décider**), un indicateur de marge du mix (proposé, **non décidé**), un scope par canal. Voir [ci-dessous](#lécran-son-montre-le-geste-sans-recalculer-londe) |
-| L'asset `.music` — sections, boucle surchargée, indépendant du format source | 2026-10-11 | **Livré dans ses six étapes (2026-10-11)** — voir « Ordre d'implémentation » ci-dessous ; ce qui suit est l'état de départ, gardé pour mémoire. **Était : À ouvrir** — modèle décidé (surcharge du fichier, unité `order`/`ms`, réglages par défaut surchargeables par l'API), **trois mesures faites le 2026-10-11, toutes positives** (mais les lecteurs d'IT/S3M et de restart de l'éditeur divergent de la ROM : à corriger d'abord) ; l'écran Son suit. Voir [ci-dessous](#lasset-music--sections-boucle-surchargée-indépendant-du-format-source) |
+| L'asset `.music` — sections, boucle surchargée, indépendant du format source | 2026-10-11 | **Livré (2026-10-11)** — étapes 1 à 7, plus le contrôle `1b`, voir « Ordre d'implémentation » ci-dessous ; ce qui suit est l'état de départ, gardé pour mémoire. **Était : À ouvrir** — modèle décidé (surcharge du fichier, unité `order`/`ms`, réglages par défaut surchargeables par l'API), **trois mesures faites le 2026-10-11, toutes positives** (mais les lecteurs d'IT/S3M et de restart de l'éditeur divergent de la ROM : à corriger d'abord) ; l'écran Son suit. Voir [ci-dessous](#lasset-music--sections-boucle-surchargée-indépendant-du-format-source) |
 | Un pont entre l'écran Texte et les tables de données — créer un dialogue sans tout renseigner à la main | 2026-10-10 | **À ouvrir** — besoin posé, pistes A (Texte → table) et B (« Nouveau texte » dans la cellule) **retenues**, le reste non verrouillé, code non commencé ; le dialogue reste une table de données (pas d'éditeur de dialogue). Voir [ci-dessous](#un-pont-entre-lécran-texte-et-les-tables-de-données--créer-un-dialogue) |
 | La chaîne `if/elseif` sur une constante devient un `switch` C | 2026-10-06 | Route vers v1.0-stable — non prioritaire pour l'alpha ; piste de réflexion, **rien de verrouillé**, code non commencé, gain de perf non mesuré. Voir [ci-dessous](#chantier-transverse--la-chaîne-ifelseif-sur-une-constante-devient-un-switch-c) |
 | Les prefabs — l'instance garde ce qu'elle surcharge, le reste suit le prefab | 2026-10-13 | **À ouvrir** — modèle décidé par l'auteur (surcharges par champ), **dix points à trancher** avant d'ouvrir (unité d'une surcharge, structure, sens d'Expose, migration, enfants…), priorité **non arbitrée**, code non commencé. Règle le cas « prefab » de la fluidité des réglages (un seul fichier écrit). Voir [ci-dessous](#les-prefabs--linstance-garde-ce-quelle-surcharge-le-reste-suit-le-prefab) |
@@ -1525,12 +1525,11 @@ chaque outil a son repère. L'auteur attend qu'à l'import on **voie son fichier
 
 ### Le modèle (décidé par l'auteur, 2026-10-15)
 
-À la manière de Photoshop ou d'Affinity, mais **sans jamais plus d'une image** :
+À la manière de Photoshop ou d'Affinity, mais **sans jamais plus d'une image à traiter en même temps** :
 
 1. **On importe une image : un asset se crée, c'est un fond.** Un mode par défaut est posé à l'import
    (`detect_import_mode`) ; l'auteur le change quand il veut (tuilé / bitmap).
-2. **Une nouvelle valeur, la taille du canvas** (*canvas-size*), distincte de la taille de l'image importée et modifiable :
-   **libre en tuilé**, **240×160 en bitmap**.
+2. **Une nouvelle valeur, la taille du canvas** (*canvas-size*), distincte de la taille de l'image importée et modifiable.
 3. **L'image est posée dans le canvas**, déplaçable librement. Elle peut **déborder** (ce qui dépasse est rogné à
    l'usage) ou être **plus petite**. L'image entière reste visible, le hors-canvas est grisé : d'un coup d'œil, l'auteur
    voit que son image est trop grande, puisqu'elle sort du cadre.
@@ -1589,16 +1588,114 @@ chaque outil a son repère. L'auteur attend qu'à l'import on **voie son fichier
 ### À trancher
 
 1. **Le miroir** agit-il dans l'espace de l'image ou dans celui du canvas ? Proposé : le canvas — on réfléchit la
-   composition. (Non tranché explicitement par l'auteur.)
+   composition. (Non tranché explicitement par l'auteur.) --> Dans le canvas, décision tranchée (15/10/26 19h50)
 2. **Passer d'un layout à l'autre** : tuilé → bitmap ramène le canvas à 240×160 et garde la position de l'image par rapport
-   à l'origine ; bitmap → tuilé garde le canvas tel quel. À confirmer.
-3. **Le canvas change de taille alors qu'un bitmap est fixe** : la taille est-elle simplement grisée, ou masquée ?
+   à l'origine ; bitmap → tuilé garde le canvas tel quel. À confirmer --> Existe-t-il des techniques de streaming d'image bitmap ? Comment fonctionne un flux vidéo sur GBA ? Comment fonctionne un aperçu 3D également. On a peut-être des pistes pour étendre l'affichage d'une image bitmap.
+3. **Le canvas change de taille alors qu'un bitmap est fixe** : la taille est-elle simplement grisée, ou masquée ? (l'image déborde du canvas, l'utilisateur peut la repositionner --> Importance de créer un nouvel outil de sélection simple dans la barre d'outils qui deviendra l'outils par défaut de cet écran et qui permettra de simplement déplacer l'image dans le canvas)
+
+### Réglages et résultats : l'encodage à la fin (réflexion de l'auteur, 2026-10-15)
+
+Pile voulue : **source** (le PNG) → **préparée** (canvas, échelle, miroir, ajustements — `prepare_source`, en mémoire) →
+**filtre de compression** (réduction de couleurs, fusion de tuiles, dithering) → **encodée** (tuiles, tilemap, palettes,
+buffer bitmap : ce que le build lit). L'encodage appelé à la création d'un asset, avec les réglages par défaut, remplit un
+cache : l'asset est utilisable tout de suite. Ce qui ne va pas, c'est que chaque geste de préparation relance un encodage.
+*Livré le 2026-10-15* : (1) `apply_bg_encoding` ne touche plus à aucun réglage — le layout se pose par
+`BackgroundAsset.choose_layout` ; (2) le sidecar a deux blocs, `settings` et `encoded` (voir ARCHITECTURE.md), lecture
+tolérante d'un sidecar à plat, démos migrées. *Pas fait, à décider* : un seul geste « Appliquer » qui encode (canvas et miroir
+compris, aujourd'hui commités à la sortie du geste) ; une empreinte réglages + source qui dise si `encoded` est périmé ;
+couper `encode_background` en filtre puis encodage (le chemin « indexé direct » est déjà l'encodage seul) ; les caches par
+étage ; que devient une retouche d'après-encodage (surcharges de palette, peinture) quand un réglage change en amont.
+
+### Décisions de l'auteur, état et reste à faire (point du 2026-10-16)
+
+**Décisions prises**
+
+- **Pas d'« Ajuster » à l'import, jamais de réduction cachée.** Un bitmap a un canvas FIXE de 240×160 : l'image garde sa taille
+  en (0, 0), déborde, le surplus est rogné. Le canvas est une valeur du fond, pas du layout : bitmap → tuilé garde 240×160.
+- **Un encodage ne range que son résultat.** Les réglages (layout, profondeur, méthode, canvas, palettes citées, retouches) sont
+  posés par l'appelant (`choose_layout`), jamais par `apply_bg_encoding`. Le sidecar a deux blocs : `settings` et `encoded`.
+- **Outils gelés le temps du chantier** (`PREPARATION_TOOLS_ENABLED`) : compression, ajustements, miroir. Recadrer et
+  Redimensionner sont supprimés, remplacés par le canvas.
+- **L'outil « select », en tête de la barre flottante, EST le mode Canvas** ; la barre reste pour tous les fonds. Un
+  **passe-partout** permanent garde visible, grisé, ce qui sort du canvas. Choisir un autre outil applique, Échap annule.
+- **Les palettes d'un fond sont des RÉFÉRENCES au catalogue, par nom — jamais des copies.** « + » ajoute une référence ; un
+  override (palette dérivée remplacée par une banque) en est une aussi ; leurs couleurs viennent du catalogue et ne se changent
+  pas depuis le fond ; éditer une banque met à jour les fonds qui la citent ; le renommage les répare.
+- **La peinture de tuiles est un calque attaché au canvas, par case.** Elle ne se pose que sur une palette AJOUTÉE, et se range
+  par la POSITION de cette palette : un encodage qui change les palettes dérivées ne la déplace pas, et ne la perd pas.
+- **L'encodage vise la fin du traitement, en arrière-plan.** Pile : source → préparée → filtre de compression → encodée. Pas
+  d'étapes montrées à l'auteur ; une petite fenêtre d'état (à jour, en attente, en calcul, échec) avec un bouton « Run
+  encoding » à l'état « en attente » ; l'encodage part tout seul quand il est bon marché. En attente, on montre l'image
+  préparée, avec la mention « pas encore le rendu GBA ».
+- **Tests : ciblés en cours de route**, la suite complète seulement à la livraison d'une fonctionnalité.
+
+**Fait (testé en ciblé ; pas essayé à la souris au-delà des premiers essais de l'auteur)**
+
+- Modèle du canvas (`canvas_size`, `image_pos`, `image_size`), `prepare_source`, bitmap sans ajustement caché, canvas bitmap fixe.
+- Mode Canvas : outil « select », poignées (Maj, Ctrl), passe-partout, carte « Canvas » de l'inspecteur (la taille se règle en
+  tuilé et suit le layout CHOISI, avant même la compression ; en bitmap une ligne « fixe ») ; labels FR/EN.
+- Sidecar en deux blocs, lecture tolérante d'un sidecar à plat, `apply_bg_encoding` sans réglage, `choose_layout`.
+- Palettes par référence : `added_palettes` et `palette_overrides` dans `settings` ; `resolve_palettes` recompose le cache
+  `palettes` (dérivées, overrides, ajoutées) après chaque encodage, « + », remplacement, retrait, ou édition d'une banque ;
+  banque disparue = dernières couleurs gardées + avertissement du validateur ; override sans palette dérivée = levé et dit ;
+  usages et renommage au courant ; la bande de peinture ne propose que les palettes ajoutées en Paint ; un fond vierge reçoit
+  d'office la première palette du projet.
+
+**Reste à faire**
+
+1. **Documentation** : ARCHITECTURE.md décrit encore les palettes ajoutées comme des copies (à corriger).
+2. **Inpainting** (`tile_palette_overrides`) : appliquer la même règle (ne cibler que des palettes ajoutées), c'est la passe
+   suivante. Il dépend encore des numéros de banque de l'encodage.
+3. **Un seul geste « Appliquer » imperceptible** : un service d'encodage unique (réglages → pause → calcul → validation,
+   le dernier réglage gagne), l'état explicite avec empreinte réglages + source, l'affichage provisoire (image préparée),
+   la fenêtre d'état. À trancher : le seuil de coût « bon marché » (~1,5 s mesuré sur le dernier encodage ?), et le
+   processus de travail séparé — à MESURER d'abord : les boucles Python pures de l'encodeur peuvent saccader l'interface même
+   dans un thread, et un thread ne s'annule pas.
+4. **Couper `encode_background` en filtre de compression puis encodage** (le chemin « indexé direct » est déjà l'encodage seul,
+   et se réutilise tel quel), puis des caches par étage.
+5. **Dégeler** compression, ajustements et miroir ; miroir dans l'espace du canvas ; mode « compress view » (barre source /
+   compressé) ; constats géométriques en liste de choses à faire ; chasse au code mort (`prep_crop` / `prep_resize` icônes
+   inutilisées, étiquette muette).
+6. **Limite réelle du canvas tuilé** (cartes de tuiles, streaming) : à lire et à poser à la place du garde-fou de 4096 px.
+7. **Sprites** : ils partagent le mécanisme de sous-palettes (`SubPaletteAssetMixin`) et gardent des copies ; non touchés.
+8. **À vérifier à la souris** : le cadrage à l'ouverture du mode Canvas (la vue est mise en page tard), l'empilement
+   passe-partout / grille 8×8 ; l'opacité du grisé est fixe (60 %), réglable plus tard comme dans Blender.
+9. **Données de démo** : la lecture à plat d'un sidecar d'avant les blocs, et celle des anciennes palettes ajoutées en copie, se
+   retirent quand les projets ont été resauvegardés ; `tools/create_build_benchmark.py` écrit encore à plat. Le fond `Background`
+   de PongAdvanced n'a plus ses traits de peinture (cause non établie : effacés dans l'éditeur, ou défaut du script de migration)
+   ; la banque `untitled palette 1`, créée par ce script, n'est plus citée par personne et attend l'accord de l'auteur pour être
+   supprimée. Plus aucun script ne touche aux démos : l'auteur y travaille dans l'éditeur.
+10. **Suite complète** à lancer quand le chantier est livré.
 
 ### Ordre d'implémentation (proposé)
 
-1. Le modèle et la migration, et `prepare_source` qui compose dans le canvas — tests d'identité pixel pour pixel sur les
-   fonds migrés de la démo.
-2. L'encodeur bitmap cesse d'ajuster ; une image qui dépasserait malgré tout est une erreur franche, pas un repli.
+*Étape 3 livrée le 2026-10-15, vérifiée par tests ciblés seulement (rendu hors écran compris), pas encore à la souris :*
+mode Canvas (fichier posé, grisé hors cadre, déplacer / poignées, Maj / Ctrl) et carte « Canvas » de l'inspecteur
+(taille du canvas, position et taille de l'image, Ajuster / Remplir / 1:1) — voir ARCHITECTURE.md. Le plafond des champs
+est 4096 px, un garde-fou : **la limite réelle du canvas tuilé (cartes de tuiles, streaming) reste à lire et à poser**.
+*Retour de l'auteur, 2026-10-15 (premier essai) :* le mode devient l'outil « select », en tête de la barre flottante (qui
+reste visible, même pour un bitmap) ; et ce qui sort du canvas reste TOUJOURS visible, grisé, comme le passe-partout d'une
+caméra de Blender — corrigé le jour même.
+
+1. *Livré le 2026-10-15.* Le modèle (`canvas_size`, `image_pos`, `image_size`) et `prepare_source` qui compose dans le
+   canvas — tests d'identité pixel pour pixel avec l'ancien « recadrer puis redimensionner » (`tests/graphics/test_bg_prepare.py`).
+   **Écart avec le texte plus haut** : `resize(box=)` n'est PAS identique à `crop` puis `resize` (le filtre lit au-delà de
+   la boîte) ; on rogne d'abord. **Migration** : pas de code dans le produit — il n'y avait que deux sidecars de démo
+   (`Photo1`, `562c…_high`), convertis une fois à la main ; un sidecar qui porterait encore `import_crop` / `import_size`
+   les ignore. Aucun template concerné. Outils Recadrer / Redimensionner et leurs fichiers
+   (`bg_prepare_overlay`, `bg_prepare_geometry`) supprimés ; compression, ajustements et miroir gelés
+   (`PREPARATION_TOOLS_ENABLED`).
+2. *Livré le 2026-10-15.* L'encodeur bitmap cesse d'ajuster. **Décision de l'auteur** : pas d'« Ajuster » à l'import, et
+   un bitmap a un canvas fixe de 240×160 (posé par `encode_by_mode`) — l'image garde sa taille en (0, 0) et **déborde**,
+   le surplus est rogné ; plus petite, elle laisse du vide transparent. Aucune erreur à l'import (l'idée d'une erreur
+   franche, écrite plus haut, est abandonnée). Tuilé → bitmap garde donc l'image où elle est. **Le canvas est une valeur du fond, pas du
+   layout** (tranché par l'auteur) : l'encodage d'un bitmap l'ENREGISTRE (`canvas_size` = 240×160, `apply_bg_encoding`),
+   donc **bitmap → tuilé garde 240×160** au lieu de retomber sur la taille de l'image.
+   **Tranché par l'auteur le 2026-10-15 : pas d'« Ajuster » à l'import, même en transition.** L'auteur doit voir
+   l'image qu'il a importée ; tant que l'interface du plan de travail n'existe pas, une photo trop grande en bitmap
+   donne une erreur, et on avance pas à pas. Les fonctions qui ne servent pas ce chantier (à lister avec
+   l'auteur : compression, ajustements, recadrage, redimensionnement, miroir) sont **désactivées temporairement** le temps
+   de bâtir le canvas, valeur distincte de la taille de l'image.
 3. Le canvas : image posée, hors-canvas grisé, déplacement et échelle à la souris, taille du canvas éditable ; les outils
    Recadrer et Redimensionner s'y fondent.
 4. Le miroir dans l'espace du canvas.
@@ -2902,21 +2999,22 @@ que c'est faux, et où. Un platformer sans sous-pixel (v0.19) n'a ni accélérat
 hauteur variable ; un metroidvania sans collection persistante (v0.20) écrit une variable par
 coffre. Les deux genres réputés acquis sont donc, en réalité, les deux qui ouvrent la liste.
 
-### Le deuxième jeu de démo se choisit dans cette liste
+### Le deuxième jeu de démo — la démo tactique
 
-Et **pas parmi les deux premiers**. Un platformer ne validerait presque rien de neuf : il
-n'exerce ni les tables, ni les menus, ni la sauvegarde longue. Un proto-tactique ou un
-proto-gestion, à l'inverse, échoue immédiatement si la v0.7 a manqué sa cible — ce qui est
-exactement ce qu'on attend d'un jeu de validation.
+Le genre tactique a été choisi et la boucle complète a été construite : grille, curseur,
+sélection, statistiques pilotées par table, portée, déplacement, menu d'action et tour
+sauvegardé. Le test à 40 scènes / 200 sprites a également validé le passage à l'échelle.
+Les frictions que cette démo a mises au jour sont consignées [plus haut](#frictions-relevées-en-construisant-la-démo-tactique-2026-09-20) ; elles bornent le reliquat de
+stabilisation plutôt que de laisser le choix du jeu de validation ouvert.
 
-Le reste de la version est ce qu'il était : stabilisation du runtime et de l'éditeur,
+Le reste de la version demeure la stabilisation du runtime et de l'éditeur, ainsi que la
 documentation utilisateur.
 
 ### Ce qu'une « v1.0-alpha » exige, et qui n'est pas une fonctionnalité
 
 Quatre points sans lesquels le mot « 1.0 » ne tient pas, même en `-alpha`. Aucun n'ajoute de capacité au moteur ;
-tous conditionnent le fait que quelqu'un puisse réellement bâtir dessus. **Le premier est
-réglé** ; il reste trois.
+tous conditionnent le fait que quelqu'un puisse réellement bâtir dessus. **Trois sont
+réglés** ; il reste le contenu de départ qui accompagne l'auteur.
 
 - ~~**Une licence.**~~ **FAIT.** Le point était plus aigu ici qu'ailleurs : l'éditeur **copie
   son propre C dans la ROM de l'utilisateur** (`gba_engine.h` et les sources générées), donc
@@ -2927,32 +3025,22 @@ réglé** ; il reste trois.
   `THIRD-PARTY-NOTICES.md` recense les composants redistribués, obligation déjà active
   puisqu'ils sont dans l'installateur. Reste hors de ce point, et à trancher ailleurs : le nom
   et la marque, où « GBA » porte un risque Nintendo.
-- **Des formats que git sait relire** — devenu la **v0.24**, où il est traité avec le build et le chargement, parce que la revue du 2026-08-19 a montré qu'il ne se comporte pas comme une finition de v1.0 mais comme un préalable. Aujourd'hui un fond fait 688 lignes et la carte de
-  collision d'une scène environ 600, à raison d'**un entier par ligne** ; les couleurs sont
-  des entiers BGR555 décimaux. Ce n'est pas qu'un défaut de lisibilité : chaque modification
-  de scène produit un diff illisible, l'historique devient inexploitable, et deux personnes ne
-  peuvent pas toucher la même scène sans un conflit qu'aucun humain ne résout à la main. **Ça
-  plafonne le logiciel au travail solitaire**, ce qui est incompatible avec « projet de
-  production ».
-
-  La correction est connue et petite : une ligne de texte par rangée de grille — c'est
-  exactement ce que `tileset` fait déjà, une chaîne hexadécimale par tuile, et c'est de loin
-  la partie la plus lisible du sidecar. Et les couleurs en hexadécimal (`#39A8FF`), les deux
-  formes acceptées en lecture.
+- ~~**Des formats que git sait relire.**~~ **FAIT dans la v0.24.** Les grilles s'écrivent par
+  rangée et les couleurs en hexadécimal ; les anciens formats restent lisibles. La migration a
+  réduit le projet de démo de 14 444 à 3 679 lignes, donnée pour donnée, et le détail est dans
+  [l'archive v0.24](changelog/archives/v0.24.md).
 - **Des modèles de départ.** Un seul projet de démo existe (Pong). Un modèle « platformer »
   enseigne l'API sans qu'on lise une ligne de documentation, et c'est ce qui décide qu'on
   reste après la première heure. Même famille que le deuxième jeu de démo : du contenu qui
   enseigne, pas une fonctionnalité.
-- **La vérification que ça tient à l'échelle** (le chargement paresseux lui-même est en v0.24 ; ce qui reste ici, c'est la vérification sur un vrai projet). `Project.load()` charge tout, tout de suite —
-  chaque sidecar de chaque collection. Pong et ses 118 fichiers vont très bien ; quarante
-  scènes et deux cents sprites, personne n'en sait rien. L'affirmation « absorbe un projet de
-  production » se vérifie ou s'écroule exactement là, et c'est le deuxième jeu de démo qui
-  tranchera.
+- ~~**La vérification que ça tient à l'échelle.**~~ **FAIT.** Le projet de test à 40 scènes /
+  200 sprites passe de bout en bout ; les mesures et les limites relevées sont consignées dans
+  [les frictions de la démo tactique](#frictions-relevées-en-construisant-la-démo-tactique-2026-09-20).
 
 ### Ouvert
 
-- Lequel des trois genres bloqués sert de démo. À trancher quand la v0.7 est livrée, sur ce
-  qu'elle rend réellement confortable.
+- Le contenu exact du modèle de départ : il doit enseigner l'API dès la première heure, sans
+  devenir une fonctionnalité supplémentaire du moteur.
 - ~~Les menus et listes (curseur, défilement, sélection)~~ **Tranché le 2026-08-19 : le moteur
   en prend une part, et c'est la v0.22.** La question posée ici — « si les trois genres à menus
   le rendent pénible, c'est ici que ça se verra » — a reçu sa réponse d'un projet cible à arbre

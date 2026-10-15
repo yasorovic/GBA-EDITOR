@@ -162,6 +162,7 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
     _check_ui_node_slots(ctx)
     _check_ui_element_names_unique(ctx)
     _check_pal_bank_reference(ctx)
+    _check_background_palette_refs(ctx)
     _check_palette_bank_overflow(ctx)
     _check_api_prototypes(ctx)
     _check_api_domains(ctx)
@@ -2077,6 +2078,25 @@ def _check_pal_bank_reference(ctx: ValidationContext):
                     f"Background '{layer.background_name}' BG{layer.bg_slot} (scene '{scene.name}') points to BG bank {pb}, "
                     "empty or outside the active selection — the layer will display "
                     "with the default content of that slot.")
+
+
+def _check_background_palette_refs(ctx: ValidationContext):
+    """Les palettes AJOUTÉES d'un fond (« + ») et ses overrides sont des références au catalogue, par nom. Une banque
+    supprimée du catalogue ne casse rien — le fond garde les dernières couleurs en cache — mais ces couleurs ne suivent
+    plus le catalogue : on le dit, par fond et par nom. Un override levé par un nouvel encodage (la palette dérivée visée
+    n'existe plus) se dit aussi."""
+    p = ctx.project
+    for ba in p.backgrounds:
+        names = list(getattr(ba, "added_palettes", []) or []) + list((getattr(ba, "palette_overrides", {}) or {}).values())
+        for name in sorted({n for n in names if n and not p.get_palette(n)}):
+            ctx.warn(ba,
+                f"Background '{ba.name}' uses palette '{name}', which is no longer in the palette catalogue — "
+                "it keeps the last colours it had; add the palette back or replace it.")
+        dropped = (getattr(ba, "diagnostics", {}) or {}).get("palette_overrides_dropped")
+        if dropped:
+            ctx.warn(ba,
+                f"Background '{ba.name}': the palette override(s) on derived palette(s) "
+                f"{', '.join(str(i) for i in dropped)} were lifted — the latest encoding has fewer derived palettes.")
 
 
 def _check_palette_bank_overflow(ctx: ValidationContext):

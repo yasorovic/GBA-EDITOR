@@ -62,6 +62,10 @@ class PaletteBankStrip(QFrame):
         """Id de l'entrée actuellement sélectionnée (None si la bande est vide)."""
         return self._active
 
+    def set_hint(self, text: str):
+        """Ce que dit la bande quand elle est vide (par défaut : « pas de palette »)."""
+        self._hint.setText(text)
+
     def reflow(self):
         """Recale la taille du bandeau sur son contenu, de façon fiable.
 

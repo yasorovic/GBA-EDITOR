@@ -54,7 +54,10 @@ _LABEL_OF_KIND = {KIND_SCENE:    BACKGROUNDS_SCENE.label,
 _KIND_OF_LABEL = {v: k for k, v in _LABEL_OF_KIND.items()}
 from core.history import get_history, DeleteResourceCmd, CreateAssetCmd
 from core.bg_import import QUANTIZERS_8BPP
+from . import bg_inpaint_canvas
 from .bg_inpaint_canvas import BgInpaintCanvas
+
+_CANVAS_MAX = 4096    # plafond des champs de la carte Canvas, en pixels : assez grand pour un décor qui défile
 
 _BG_COLOR = COLOR_BACKGROUND
 
@@ -78,7 +81,7 @@ class _CompressSignals(QObject):
 
 class _EncodeTask(QRunnable):
     def __init__(self, token: int, png_path: Path, mode: str, method: str, dither: bool,
-                 prep: dict, compression: BackgroundCompression):
+                 prep: dict, compression: BackgroundCompression, work_cache=None):
         super().__init__()
         self._token = token
         self._png = str(png_path)
@@ -88,13 +91,14 @@ class _EncodeTask(QRunnable):
         self._dither = dither
         self._prep = prep           # recadrage/redimensionnement de la source
         self._compression = compression   # réglages du tuilé 4bpp
+        self._work_cache = work_cache
         self.signals = _CompressSignals()
 
     def run(self):
         try:
             from core.bg_import import encode_by_mode
             c = encode_by_mode(self._png, self._mode, self._method, self._dither, self._prep,
-                               self._compression)
+                               self._compression, self._work_cache)
             self.signals.done.emit(self._token, self._name, c)
         except Exception as e:  # noqa: BLE001 — remonté à l'UI, pas avalé
             self.signals.failed.emit(self._token, str(e))
@@ -287,7 +291,10 @@ class BgPropertiesPanel(QWidget):
     palettes_changed = pyqtSignal()     # liste des palettes mutée → re-render du canvas
     geometry_changed = pyqtSignal()  # marges de coupe / découpe de frames → canvas
     recompress_requested = pyqtSignal(object, object, str, bool)  # (ba, png, mode_token, dither) → hors-thread
-    restore_requested = pyqtSignal()    # « Restore original » : source entière, sans recadrage ni taille
+    restore_requested = pyqtSignal()    # « Restore original » : source entière, à sa taille, sans canvas ni miroir
+    canvas_edited = pyqtSignal(object, object)   # (canvas (w, h), image posée (x, y, w, h)) : un champ de la carte Canvas
+    canvas_fit_requested = pyqtSignal(str)       # « fit » | « fill » | « one_to_one » : les aides au placement
+    layout_shown = pyqtSignal(str)               # « tiled » | « bitmap » : le layout que les boutons montrent (en attente compris)
     overlays_changed = pyqtSignal(list, list)  # (info_lines, warning_lines) → overlays du canvas
     placement_changed = pyqtSignal()  # cadence / image de départ d'une copie → rejouer le canvas
     adjust_preview_requested = pyqtSignal(object)   # BackgroundAdjust à prévisualiser, ou None : retour au rendu compressé
@@ -401,6 +408,55 @@ class BgPropertiesPanel(QWidget):
         self._btn_tune.toggled.connect(self._on_tune_toggled)
         # Deux cartes, détachées : les AJUSTEMENTS (on y touche librement, l'aperçu suit en direct) puis la COMPRESSION,
         # dont le bouton « Compress » ferme le processus, tout en bas.
+        # La carte CANVAS : la taille du canvas et l'image posée dedans, en chiffres. Modifier un champ ouvre le mode
+        # Canvas du canvas central, qui suit tout de suite (cf. BgInpaintCanvas.edit_canvas).
+        self._canvas_card, canvas_card = self._make_card()
+        root.addWidget(self._canvas_card)
+        W.section(label("bgedit.canvas_title"), canvas_card)
+        self._canvas_spins: dict[str, QSpinBox] = {}
+        for row_label, names, lo in ((label("bgedit.canvas_size"), (("canvas_w", "W"), ("canvas_h", "H")), 1),
+                                     (label("bgedit.canvas_image_pos"), (("pos_x", "X"), ("pos_y", "Y")), -_CANVAS_MAX),
+                                     (label("bgedit.canvas_image_size"), (("size_w", "W"), ("size_h", "H")), 1)):
+            host = QWidget(); host.setStyleSheet("background:transparent;")
+            hrow = QHBoxLayout(host); hrow.setContentsMargins(0, 0, 0, 0); hrow.setSpacing(4)
+            for field_name, axis in names:
+                tag = QLabel(axis)
+                tag.setFont(QFont(T.MONO, T.MD, QFont.Weight.Bold))
+                tag.setStyleSheet(f"color:{C.TEXT_DIM}; background:transparent; border:none;")
+                tag.setFixedWidth(14)
+                sp = QSpinBox()
+                sp.setFont(QFont(T.MONO, T.SM))
+                sp.setStyleSheet(QSS.spinbox)
+                sp.setRange(lo, _CANVAS_MAX)
+                sp.setKeyboardTracking(False)
+                sp.valueChanged.connect(lambda _v: self._on_canvas_field())
+                hrow.addWidget(tag); hrow.addWidget(sp, 1)
+                self._canvas_spins[field_name] = sp
+            if names[0][0] == "canvas_w":
+                # Un bitmap a un canvas FIXE : plutôt que des champs grisés (qui disent « pas maintenant »), une ligne qui dit
+                # « jamais, et pourquoi ». Les deux se partagent la ligne ; `show_canvas_state` montre l'une ou l'autre.
+                self._canvas_size_host = host
+                self._canvas_fixed = QLabel("")
+                self._canvas_fixed.setFont(QFont(T.MONO, T.SM))
+                self._canvas_fixed.setStyleSheet(
+                    f"color:{C.TEXT_DIM}; background:{C.BG_PANEL}; border:1px dashed {C.BORDER_MID};"
+                    f"border-radius:3px; padding:3px 8px;")
+                self._canvas_fixed.setToolTip(tooltip(title=label("bgedit.canvas_fixed_title"),
+                                                      body=label("bgedit.canvas_fixed_tip")))
+                self._canvas_fixed.setVisible(False)
+                row_host = QWidget(); row_host.setStyleSheet("background:transparent;")
+                rrow = QHBoxLayout(row_host); rrow.setContentsMargins(0, 0, 0, 0); rrow.setSpacing(0)
+                rrow.addWidget(host, 1); rrow.addWidget(self._canvas_fixed, 1)
+                host = row_host
+            W.row(row_label, host, canvas_card, label_width=124)
+        fit_host = QWidget(); fit_host.setStyleSheet("background:transparent;")
+        frow = QHBoxLayout(fit_host); frow.setContentsMargins(0, 2, 0, 0); frow.setSpacing(4)
+        for how, key in (("fit", "bgedit.canvas_fit"), ("fill", "bgedit.canvas_fill"), ("one_to_one", "bgedit.canvas_one_to_one")):
+            b = self._mini_btn(label(key), tooltip(title=label(key), body=label(key + "_tip")))
+            b.clicked.connect(lambda _=False, h=how: self.canvas_fit_requested.emit(h))
+            frow.addWidget(b, 1)
+        canvas_card.addWidget(fit_host)
+        self._canvas_card.setVisible(False)
         self._adj_card, adj_card = self._make_card()
         root.addWidget(self._adj_card)
         self._comp_card, comp_card = self._make_card()
@@ -494,9 +550,16 @@ class BgPropertiesPanel(QWidget):
         self._btn_comp_reset.clicked.connect(self._on_comp_reset)
         comp.addWidget(self._btn_comp_reset)
         # ── AJUSTEMENTS de l'image : avant la compression, parce qu'ils dirigent ce qu'elle reçoit.
+        # Repliable, comme la compression : fermée tant qu'aucun ajustement n'est posé (cf. `_refresh_tune_visibility`).
+        self._adj_open = False
+        self._btn_adj = self._mini_btn(
+            label("bgedit.adj_title"),
+            tooltip(title=label("bgedit.adj_title"), body=label("bgedit.adj_toggle_tip")))
+        self._btn_adj.setCheckable(True)
+        self._btn_adj.toggled.connect(self._on_adj_toggled)
+        adj_card.addWidget(self._btn_adj)
         self._adj_host = QWidget(); self._adj_host.setStyleSheet("background:transparent;")
         adj = QVBoxLayout(self._adj_host); adj.setContentsMargins(0, 0, 0, 0); adj.setSpacing(2)
-        W.section(label("bgedit.adj_title"), adj)
         self._sl_hue = self._slider_row(adj, label("bgedit.adj_hue"), label("bgedit.adj_hue_tip"), -180, 180)
         self._sl_sat = self._slider_row(adj, label("bgedit.adj_saturation"), label("bgedit.adj_saturation_tip"), -100, 100)
         self._sl_bri = self._slider_row(adj, label("bgedit.adj_brightness"), label("bgedit.adj_brightness_tip"), -100, 100)
@@ -509,10 +572,14 @@ class BgPropertiesPanel(QWidget):
         self._adj_card.setVisible(False)
         tune.addWidget(self._comp_host)
         self._comp_host.setVisible(False)
-        # Les réglages de RENDU (dithering, puis ceux qu'on ajoutera) passent après ceux de la compression.
-        dither_row = QHBoxLayout(); dither_row.setContentsMargins(0, 2, 0, 2); dither_row.setSpacing(8)
+        # Le dithering vit DANS la boîte de compression : sa place suit l'ordre de résolution, qui dépend de la
+        # profondeur (cf. `_arrange_compression`).
+        self._dither_host = QWidget(); self._dither_host.setStyleSheet("background:transparent;")
+        dither_row = QHBoxLayout(self._dither_host)
+        dither_row.setContentsMargins(0, 2, 0, 2); dither_row.setSpacing(8)
         dither_row.addWidget(self._chk_dither); dither_row.addWidget(self._cmb_dither, 1)
-        tune.addLayout(dither_row)
+        comp.insertWidget(comp.indexOf(self._btn_comp_reset), self._dither_host)
+        self._arrange_compression(4)
         comp_card.addWidget(self._tune_host)
         self._tune_host.setVisible(False)
         comp_card.addWidget(self._btn_apply_mode)
@@ -801,6 +868,27 @@ class BgPropertiesPanel(QWidget):
         sl.valueChanged.connect(self._on_comp_changed)
         return sl
 
+    def show_canvas_state(self, canvas, rect, source_size, canvas_editable: bool):
+        """La carte Canvas d'après le canvas central : le canvas, l'image posée, et si la taille du canvas se règle.
+        `canvas` est None quand le fond n'a pas de canvas à régler (la carte se cache)."""
+        self._canvas_card.setVisible(canvas is not None)
+        if canvas is None:
+            return
+        values = {"canvas_w": canvas[0], "canvas_h": canvas[1], "pos_x": rect[0], "pos_y": rect[1],
+                  "size_w": rect[2], "size_h": rect[3]}
+        for name, sp in self._canvas_spins.items():
+            sp.blockSignals(True)
+            sp.setValue(values[name])
+            sp.blockSignals(False)
+        self._canvas_size_host.setVisible(canvas_editable)
+        self._canvas_fixed.setVisible(not canvas_editable)
+        self._canvas_fixed.setText(label("bgedit.canvas_fixed", w=canvas[0], h=canvas[1]))
+
+    def _on_canvas_field(self):
+        s = self._canvas_spins
+        self.canvas_edited.emit((s["canvas_w"].value(), s["canvas_h"].value()),
+                                (s["pos_x"].value(), s["pos_y"].value(), s["size_w"].value(), s["size_h"].value()))
+
     def _make_card(self):
         """Une carte : un cadre arrondi qui regroupe un geste et le détache de ce qui l'entoure."""
         card = QFrame()
@@ -937,6 +1025,7 @@ class BgPropertiesPanel(QWidget):
             self._chk_dither.setChecked(bool(self._ba and self._ba.dither))
         self._blocking = False
         self._refresh_apply_button()
+        self.layout_shown.emit(layout)       # la carte Canvas suit le layout CHOISI, avant même qu'il soit compressé
 
     def _apply_axes(self, layout: str, depth: int):
         """Met (layout, depth) en attente : les boutons le montrent et « Compress » le propose. Rien ne se compresse."""
@@ -947,6 +1036,7 @@ class BgPropertiesPanel(QWidget):
             self._refresh_mode_buttons(); return
         self._staged = None if self._axes_token(layout, depth) == self._cur_mode_token() else (layout, depth)
         self._refresh_mode_buttons()
+        self._refresh_compression_layout()      # la boîte suit le layout et la profondeur CHOISIS, avant la compression
 
     def _set_layout(self, layout: str):
         # Bascule d'axe : on snappe la profondeur sur une valeur valide du layout
@@ -1167,10 +1257,11 @@ class BgPropertiesPanel(QWidget):
         self._refresh_kind_buttons()
         self._refresh_kind_sections()
         self._refresh_mode_buttons()
-        # Un autre fond repart de son propre besoin ; le même fond (recompression qu'on vient de lancer) ne se
-        # referme jamais : le curseur qu'on tire ne doit pas disparaître parce que l'image tient maintenant.
-        if ba is not previous or self._compression_needs_attention(ba):
-            self._tune_open = self._compression_needs_attention(ba)
+        # Les outils de compression sont toujours visibles pour permettre les
+        # essais créatifs, y compris sur un fond déjà compatible.
+        if ba is not previous:
+            self._tune_open = True
+            self._adj_open = bool(ba and not ba.adjust.is_default())     # fermés tant qu'aucun ajustement n'est posé
         self._refresh_compression_ui()
         self._refresh_apply_button()
         self.adjust_preview_requested.emit(None)      # un autre fond, ou la compression est faite : le rendu compressé
@@ -1239,20 +1330,66 @@ class BgPropertiesPanel(QWidget):
         return (f'<div style="white-space:pre">{body}\n'
                 f'<span style="color:{color}">{html.escape(verdict)}</span></div>')
 
-    # ── Compression du tuilé (4bpp / 8bpp) ────────────────────────
+    # ── Compression (tuilé 4/8bpp et bitmap 8bpp) ─────────────────
     def _comp_visible(self) -> bool:
         ba = self._ba
-        return bool(ba and ba.mode == "tiled" and ba.bpp in (4, 8) and ba.tileset)
+        return bool(ba and self._shown_axes()[1] in (4, 8) and (ba.tileset or ba.bitmap))
 
     def _fill_methods(self, bpp: int):
         """La liste des méthodes dit ce que le mode sait faire : réduire les
-        couleurs d'une tuile en 4bpp, quantifier la palette unique en 8bpp."""
+        couleurs d'une tuile en 4bpp, quantifier la palette unique en 8bpp. La méthode choisie reste choisie quand
+        elle existe dans la nouvelle liste."""
         tokens = (QUANTIZERS_8BPP if bpp == 8 else [t for t, _n in COMPRESSION_METHODS])
+        current = self._cmb_method.currentData()
         self._cmb_method.blockSignals(True)
         self._cmb_method.clear()
         for token in tokens:
             self._cmb_method.addItem(self._method_names[token], token)
+        self._cmb_method.setCurrentIndex(max(0, self._cmb_method.findData(current)))
         self._cmb_method.blockSignals(False)
+
+    def _arrange_compression(self, bpp: int):
+        """Range les réglages dans l'ordre où l'encodeur les RÉSOUT — de haut en bas, un réglage ne refait que ce qui
+        le suit, donc plus il est bas moins il coûte (cf. `encode_background`) :
+          4bpp : couleurs globales → dithering → méthode → couleurs par palette → palettes → tuiles ;
+          8bpp : méthode → couleurs → dithering → tuiles (le dithering agit sur la quantification même).
+        Les réglages d'une autre profondeur restent cachés derrière, sans importance."""
+        lay = self._comp_host.layout()
+        by_depth = {
+            4: [self._sl_global._row, self._dither_host, self._cmb_method, self._sl_colors._row,
+                self._sl_palettes._row, self._sl_tiles._row],
+            8: [self._cmb_method, self._sl_pal8._row, self._dither_host, self._sl_tiles._row],
+        }[8 if bpp == 8 else 4]
+        movable = [self._cmb_method, self._sl_global._row, self._sl_colors._row, self._sl_palettes._row,
+                   self._sl_pal8._row, self._sl_tiles._row, self._dither_host]
+        for widget in movable:
+            lay.removeWidget(widget)
+        start = lay.indexOf(self._btn_comp_reset)          # « Reset » reste en dernier
+        for offset, widget in enumerate(by_depth + [w for w in movable if w not in by_depth]):
+            lay.insertWidget(start + offset, widget)
+
+    def _refresh_compression_layout(self):
+        """La boîte de compression d'après le layout et la profondeur MONTRÉS par les boutons — le choix en attente de
+        compression compris : titre, ordre et lignes de curseurs, liste des méthodes, dithering. Elle ne touche à aucune
+        valeur : un curseur déjà tiré reste où il est."""
+        self._arrange_compression(self._shown_axes()[1])
+        show = self._comp_visible()
+        self._comp_host.setVisible(show)
+        if not show:
+            return
+        layout, bpp = self._shown_axes()
+        was, self._blocking = self._blocking, True
+        self._comp_title.setText(label("bgedit.comp_title8") if bpp == 8 else label("bgedit.comp_title"))
+        for row in self._rows_4bpp:
+            row.setVisible(bpp == 4)
+        for row in self._rows_8bpp:
+            row.setVisible(bpp == 8)
+        # Un bitmap n'a pas de tileset : la cible de tuiles ne s'y applique pas. Les couleurs, la méthode et le
+        # dithering restent, eux, utiles.
+        self._sl_tiles._row.setVisible(layout != "bitmap")
+        self._fill_methods(bpp)
+        self._sync_dither_enabled()
+        self._blocking = was
 
     def _refresh_compression_ui(self):
         """Montre la boîte pour le mode qu'elle règle et y recopie l'état du fond.
@@ -1266,24 +1403,15 @@ class BgPropertiesPanel(QWidget):
                           (self._sl_bri, a.brightness), (self._sl_con, a.contrast)):
                 sl.setValue(v)
             self._blocking = was
-        show = self._comp_visible()
-        self._comp_host.setVisible(show)
-        if not show:
+        self._refresh_compression_layout()
+        if not self._comp_visible():
             return
-        bpp = self._ba.bpp
         c = self._ba.compression
         was, self._blocking = self._blocking, True
-        self._comp_title.setText(label("bgedit.comp_title8") if bpp == 8
-                                 else label("bgedit.comp_title"))
-        for row in self._rows_4bpp:
-            row.setVisible(bpp == 4)
-        for row in self._rows_8bpp:
-            row.setVisible(bpp == 8)
         for sl, v in ((self._sl_palettes, c.palettes_max), (self._sl_colors, c.colors_per_palette),
                       (self._sl_global, c.global_colors), (self._sl_pal8, c.palette_colors),
                       (self._sl_tiles, c.tile_target or self._sl_tiles.maximum())):
             sl.setValue(v)
-        self._fill_methods(bpp)
         self._cmb_method.setCurrentIndex(max(0, self._cmb_method.findData(self._ba.quantize_method)))
         self._sync_dither_enabled()
         self._cmb_dither.setCurrentIndex(max(0, self._cmb_dither.findData(c.dither_kind)))
@@ -1301,10 +1429,22 @@ class BgPropertiesPanel(QWidget):
         self._btn_tune.blockSignals(False)
         self._btn_tune.setText(("▾ " if self._tune_open else "▸ ") + label("bgedit.comp_toggle"))
         self._tune_host.setVisible(has_image and self._tune_open)
+        self._btn_adj.blockSignals(True)
+        self._btn_adj.setChecked(self._adj_open)
+        self._btn_adj.blockSignals(False)
+        self._btn_adj.setText(("▾ " if self._adj_open else "▸ ") + label("bgedit.adj_title"))
+        self._adj_host.setVisible(self._adj_open)
+        # Gel temporaire : la carte Compression reste, avec son bouton d'application du mode et sa barre d'attente.
+        for frozen in (self._btn_adj, self._adj_host, self._btn_tune, self._tune_host):
+            frozen.setEnabled(bg_inpaint_canvas.PREPARATION_TOOLS_ENABLED)
 
     def _on_tune_toggled(self, on: bool):
         self._tune_open = on
         self._refresh_compression_ui()
+
+    def _on_adj_toggled(self, on: bool):
+        self._adj_open = on
+        self._refresh_tune_visibility()
 
     def _compression_needs_attention(self, ba) -> bool:
         """Vrai si l'image ne tient pas telle quelle (un constat de compression), ou si l'auteur a déjà réglé
@@ -1327,7 +1467,7 @@ class BgPropertiesPanel(QWidget):
     def _dither_applies(self) -> bool:
         """En 8bpp le dithering agit sur la quantification ; en 4bpp seulement sur la
         réduction globale — sans elle, il n'y a aucune erreur à diffuser."""
-        if self._ba and self._ba.bpp == 8:
+        if self._ba and self._shown_axes()[1] == 8:
             return True
         return self._sl_global.value() > 0
 
@@ -1560,11 +1700,7 @@ class BgPropertiesPanel(QWidget):
         warn, err, ok = C.ACCENT_YLW, C.ACCENT_RED, "#ffffff"
         kind_lines = self._kind_validation_lines(ba)
         if ba.mode == "bitmap":
-            diag = self._diag_for(ba)
-            lines: list = []
-            if diag.get("scaled"):
-                lines.append((label('bgedit.image_scaled_out_w_out_h_240_160', out_w=ba.out_w, out_h=ba.out_h), warn))
-            lines += self._compression_lines(ba)
+            lines: list = self._compression_lines(ba)
             if not lines and not kind_lines:
                 lines.append((label('bgedit.bitmap_ok'), ok))
             return kind_lines + lines
@@ -1591,18 +1727,16 @@ class BgPropertiesPanel(QWidget):
     def preview_overlays(self, encoded: dict):
         """Les overlays du canvas pour un aperçu de compression pas encore appliqué : mêmes constats que pour le fond
         compressé, mais d'après le résultat de l'aperçu, avec ce que le fond compressé a aujourd'hui en regard.
-        Un bitmap n'a ni tuiles ni palettes à jauger : il dit sa taille et ce que l'encodeur a dû ajuster."""
+        Un bitmap n'a ni tuiles ni palettes à jauger : il dit sa taille."""
         ba = self._ba
         if not ba:
             return None
         diag = encoded.get("diagnostics", {})
         if "bitmap" in encoded:
             out_w, out_h = encoded["out_w"], encoded["out_h"]
-            warns = [(label('bgedit.image_scaled_out_w_out_h_240_160', out_w=out_w, out_h=out_h), C.ACCENT_YLW)] \
-                if diag.get("scaled") else []
             return ([label('bgedit.out_w_out_h_px_bitmap_240_160', out_w=out_w, out_h=out_h),
                      label('bgedit.palette_256_colors_1')],
-                    warns + self._compression_lines_from("bitmap", 8, diag, 0, 1))
+                    self._compression_lines_from("bitmap", 8, diag, 0, 1))
         bpp = encoded.get("bpp", 4)
         tiles, palettes = len(encoded["tileset"]), len(encoded["palettes"])
         budget = 256 if bpp == 8 else 512
@@ -1656,7 +1790,7 @@ class BgPropertiesPanel(QWidget):
         bank = self._project.get_palette(name)
         if not bank:
             return
-        idx = self._ba.add_palette_colors(bank.colors)
+        idx = self._ba.add_palette_ref(name, bank.colors)       # une RÉFÉRENCE au catalogue, jamais une copie
         if idx < 0:
             QMessageBox.warning(self, label("bgedit.limit_title"),
                                 label("bgedit.limit_text"))
@@ -1671,9 +1805,8 @@ class BgPropertiesPanel(QWidget):
         if not self._ba or not self._project or not (0 <= idx < len(self._ba.palettes)):
             return
         bank = self._project.get_palette(name)
-        if not bank:
+        if not bank or not self._ba.replace_added_palette(idx, name, bank.colors):
             return
-        self._ba.replace_palette(idx, bank.colors)
         self._persist_bg()
         self._reload_palettes()
         self.palettes_changed.emit()
@@ -1744,6 +1877,7 @@ class BgPropertiesPanel(QWidget):
         # taille préparée sont aussi remis à None : « original » = la source entière, à sa taille.
         self._ba.tile_palette_overrides = {}
         self._ba.tile_paint = {}
+        self._ba.added_palettes, self._ba.palette_overrides = [], {}     # « original » : les palettes repartent du PNG
         self.restore_requested.emit()
 
     def _on_rename(self, new_name: str):
@@ -1834,9 +1968,11 @@ class BgPropertiesPanel(QWidget):
             QMessageBox.warning(self, label("bgedit.save_png"), label("bgedit.save_png_failed"))
             return
         ba.asset = project.asset_rel(dst)
-        ba.import_crop = ba.import_size = None
+        ba.canvas_size = ba.image_pos = ba.image_size = None
         ba.tile_palette_overrides = {}
         ba.tile_paint = {}
+        ba.added_palettes, ba.palette_overrides = [], {}          # cuits dans l'image : ses banques les portent maintenant
+        ba.choose_layout("tiled4")
         apply_bg_encoding(ba, encoded)
         ba.source_stamp = file_stamp(dst)
         self._persist_bg()
@@ -1896,9 +2032,10 @@ class BgPropertiesPanel(QWidget):
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, dst)
         self._ba.asset = self._project.asset_rel(dst)
-        # Un recadrage se dit en pixels de l'ANCIENNE image : sur la nouvelle il
-        # désignerait autre chose.
-        self._ba.import_crop = self._ba.import_size = None
+        # Le canvas et la pose se disent pour l'ANCIENNE image : sur la nouvelle ils
+        # désigneraient autre chose.
+        self._ba.canvas_size = self._ba.image_pos = self._ba.image_size = None
+        self._ba.palette_overrides = {}      # ils visaient les palettes dérivées de l'ANCIENNE image (les ajoutées restent)
         # Ré-auto-détecter le mode pour la nouvelle image (pivot indexé/non-indexé).
         from core.bg_import import detect_import_mode
         try:
@@ -1962,9 +2099,15 @@ class BackgroundEditorScreen(QWidget):
         # (Re)compression demandée par l'inspecteur (algo / remplacer / restaurer)
         # → exécutée hors-thread par l'écran.
         self._props.recompress_requested.connect(self._on_recompress)
-        self._props.restore_requested.connect(lambda: self._on_prepare(None, None, (None, None, False, False)))
-        # Recadrer / redimensionner la source au canvas → même worker.
+        self._props.restore_requested.connect(lambda: self._on_prepare(
+            {"canvas": None, "pos": None, "size": None, "mirror": (None, None, False, False)}))
+        # Poser l'image dans son canvas / miroir → même worker.
         self._canvas.prepare_requested.connect(self._on_prepare)
+        # La carte Canvas de l'inspecteur et le mode Canvas du canvas central se suivent dans les deux sens.
+        self._canvas.canvas_state.connect(self._props.show_canvas_state)
+        self._props.canvas_edited.connect(self._canvas.edit_canvas)
+        self._props.canvas_fit_requested.connect(self._canvas.fit_canvas)
+        self._props.layout_shown.connect(self._canvas.set_shown_layout)
         # Curseurs de compression → même worker, rendu visible au canvas.
         self._props.apply_requested.connect(self._on_apply)
         self._props.adjust_preview_requested.connect(self._on_adjust_preview)
@@ -1976,6 +2119,11 @@ class BackgroundEditorScreen(QWidget):
         from collections import OrderedDict
         self._preview_overlays_on = False     # les overlays montrent-ils les chiffres d'un aperçu, pas ceux du fond ?
         self._preview_cache = OrderedDict()   # clé de réglages -> résultat de compression, pour l'aperçu et « Compress »
+        # Étapes lourdes mais indépendantes des curseurs palettes/cible : image
+        # préparée et couleurs par tuile. Ce cache est partagé par les workers
+        # de prévisualisation et de compression finale, sans écrire sur l'asset.
+        from core.bg_import import BackgroundWorkCache
+        self._encode_work_cache = BackgroundWorkCache()
         self._preview_running = False
         self._preview_next = None
         self._compress_tasks: set = set()
@@ -2022,14 +2170,17 @@ class BackgroundEditorScreen(QWidget):
 
     # ── Compression hors-thread ───────────────────────────────────
 
-    def _commit_encoding(self, ba, c, used_prep: dict, used_comp):
-        """Un résultat de compression devient celui du fond : préparation, réglages, encodage, écriture."""
+    def _commit_encoding(self, ba, c, used_prep: dict, used_comp, layout: str, method: str):
+        """Un résultat de compression devient celui du fond : les RÉGLAGES qui l'ont produit (préparation, compression,
+        layout, méthode) d'abord, puis le résultat, puis l'écriture. `apply_bg_encoding` ne range que le résultat."""
         from core.resources import asset_reconciliation
-        ba.import_crop, ba.import_size = used_prep["crop"], used_prep["size"]
+        ba.canvas_size, ba.image_pos, ba.image_size = used_prep["canvas"], used_prep["pos"], used_prep["size"]
         ba.adjust = used_prep["adjust"]
         ba.mirror_x, ba.mirror_y, ba.mirror_flip_x, ba.mirror_flip_y = used_prep["mirror"]
         ba.compression = used_comp
-        asset_reconciliation.apply_bg_encoding(ba, c)
+        ba.choose_layout(layout)
+        ba.quantize_method = method
+        asset_reconciliation.apply_bg_encoding(ba, c, asset_reconciliation.catalogue_lookup(self._project))
         with get_dispatcher().suspended():
             self._project.backgrounds.save(ba)
         get_dispatcher().notify_background_changed(ba)
@@ -2053,13 +2204,13 @@ class BackgroundEditorScreen(QWidget):
         used_prep = {**ba.import_prep(), **(prep or {})}
         used_comp = compression if compression is not None else ba.compression
         task = _EncodeTask(token, Path(png_path), mode, method or ba.quantize_method, dither,
-                           used_prep, used_comp)
+                           used_prep, used_comp, self._encode_work_cache)
 
         def _done(tok, name, c):
             self._compress_tasks.discard(task)
             if tok != self._compress_token:
                 return  # résultat périmé (une compression plus récente a été lancée)
-            self._commit_encoding(ba, c, used_prep, used_comp)
+            self._commit_encoding(ba, c, used_prep, used_comp, mode, method or ba.quantize_method)
             self._canvas.set_busy(False)
             self._props.set_compressing(False)
             if then:
@@ -2084,19 +2235,21 @@ class BackgroundEditorScreen(QWidget):
             ba, png_path, mode, ba.quantize_method, dither,
             then=lambda: (self._props.load(ba, self._project), self._canvas.reload()))
 
-    def _on_prepare(self, crop, size, mirror):
-        """Recadrage / redimensionnement / miroir posé au canvas (ou « Original » :
-        tout à None). Même mode et même dithering, seule la source préparée change."""
+    def _on_prepare(self, prep: dict):
+        """Ce qui change dans la préparation de la source (cf. `BgInpaintCanvas.prepare_requested`) : le canvas, la pose
+        de l'image et/ou le miroir. Même mode et même dithering, seule la source préparée change ; ce que `prep` ne
+        dit pas reste ce que le fond a déjà."""
         ba = self._props._ba
         if not ba or not self._project or not ba.asset:
             return
-        token = ("bitmap" if ba.mode == "bitmap"
-                 else "tiled8" if ba.bpp == 8 else "tiled4")
+        # Le layout CHOISI (en attente compris) : régler le canvas d'un fond qu'on vient de passer en tuilé le compresse en
+        # tuilé, au lieu de forcer 240×160 d'un bitmap qui n'est plus voulu.
+        token = self._props._axes_token(*self._props._shown_axes())
         self._compress_async(
             ba, self._project.background_image_path(ba), token,
             ba.quantize_method, ba.dither,
             then=lambda: (self._props.load(ba, self._project), self._canvas.reload()),
-            prep={"crop": crop, "size": size, "mirror": mirror})
+            prep=prep)
 
     _PREVIEW_CACHE_SIZE = 8       # résultats gardés : un réglage déjà vu revient sans calcul
 
@@ -2105,7 +2258,8 @@ class BackgroundEditorScreen(QWidget):
         import dataclasses
         png = self._project.background_image_path(ba)
         stamp = png.stat().st_mtime_ns if png.exists() else 0
-        return (str(png), stamp, ba.import_crop, ba.import_size, settings["token"], settings["dither"],
+        prep = ba.import_prep()
+        return (str(png), stamp, prep["canvas"], prep["pos"], prep["size"], settings["token"], settings["dither"],
                 dataclasses.astuple(settings["compression"]), dataclasses.astuple(settings["adjust"]),
                 settings["method"], ba.import_prep()["mirror"])
 
@@ -2162,7 +2316,7 @@ class BackgroundEditorScreen(QWidget):
         used_prep = {**ba.import_prep(), "adjust": settings["adjust"]}
         self._preview_running = True
         task = _EncodeTask(0, png, settings["token"], settings["method"], settings["dither"], used_prep,
-                           settings["compression"])
+                           settings["compression"], self._encode_work_cache)
 
         def finish():
             self._compress_tasks.discard(task)
@@ -2200,12 +2354,13 @@ class BackgroundEditorScreen(QWidget):
             return
         self._restore_overlays()       # l'image réglée n'est pas encore compressée : pas de chiffres d'aperçu
         png = self._project.background_image_path(ba)
-        key = (str(png), png.stat().st_mtime_ns if png.exists() else 0, ba.import_crop, ba.import_size,
-               ba.import_prep()["mirror"])
+        prep = ba.import_prep()
+        key = (str(png), png.stat().st_mtime_ns if png.exists() else 0,
+               prep["canvas"], prep["pos"], prep["size"], prep["mirror"])
         if getattr(self, "_preview_key", None) != key:
             from core.bg_import import prepare_source
             try:
-                base = prepare_source(png, ba.import_crop, ba.import_size, mirror=ba.import_prep()["mirror"])
+                base = prepare_source(png, prep["canvas"], prep["pos"], prep["size"], mirror=prep["mirror"])
                 base = base.copy()
                 base.thumbnail((self._PREVIEW_MAX, self._PREVIEW_MAX))
             except (OSError, ValueError):
@@ -2224,7 +2379,8 @@ class BackgroundEditorScreen(QWidget):
         cached = self._preview_cache.get(self._encode_key(ba, settings))
         if cached is not None:
             # L'aperçu l'a déjà calculé : on le valide sans recalculer.
-            self._commit_encoding(ba, cached, {**ba.import_prep(), "adjust": settings["adjust"]}, settings["compression"])
+            self._commit_encoding(ba, cached, {**ba.import_prep(), "adjust": settings["adjust"]}, settings["compression"],
+                                  settings["token"], settings["method"])
             props.load(ba, self._project)
             self._canvas.reload()
             return
@@ -2309,7 +2465,9 @@ class BackgroundEditorScreen(QWidget):
         image.putpalette([c for k in range(16) for c in (bgr555_to_rgb888(colors[k]) if k else (0, 0, 0))])
         path = folder / f"{name}.png"
         image.save(path, "PNG", transparency=0)
-        self._import_png(path, KIND_SCENE, then_paint=True)
+        # Peindre ne se fait que sur une palette AJOUTÉE (une référence au catalogue) : la première du projet, celle dont
+        # l'image vide porte déjà les couleurs, est ajoutée d'office.
+        self._import_png(path, KIND_SCENE, then_paint=True, paint_palette=palette.name if palette else None)
 
     def _on_import(self, kind: str = KIND_SCENE):
         if not self._project:
@@ -2328,8 +2486,10 @@ class BackgroundEditorScreen(QWidget):
             shutil.copy2(path, dst)
         self._import_png(dst, kind)
 
-    def _import_png(self, dst: Path, kind: str, then_paint: bool = False):
-        """Un PNG déjà dans le projet devient un fond rangé À CÔTÉ de lui, puis se compresse hors-thread."""
+    def _import_png(self, dst: Path, kind: str, then_paint: bool = False, paint_palette: Optional[str] = None):
+        """Un PNG déjà dans le projet devient un fond rangé À CÔTÉ de lui, puis se compresse hors-thread.
+        `paint_palette` : la banque du catalogue que le fond reçoit d'office comme palette ajoutée (une image vide, faite
+        pour être peinte)."""
         name = dst.stem
         ba = self._project.get_background(name)
         if ba is None:
@@ -2341,6 +2501,8 @@ class BackgroundEditorScreen(QWidget):
         # range l'image dit son emploi mieux que n'importe quelle heuristique
         # (rien dans les pixels ne distingue un cadre de dialogue d'un décor).
         ba.kind = kind
+        if paint_palette and paint_palette not in ba.added_palettes:
+            ba.added_palettes.append(paint_palette)      # ses couleurs se résolvent à la compression qui suit
         # Auto-détection unifiée (pivot indexé/non-indexé) : profondeur ← couleurs,
         # layout tuilé/bitmap ← unicité des tuiles.
         from core.bg_import import detect_import_mode

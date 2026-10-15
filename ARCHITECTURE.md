@@ -2848,10 +2848,27 @@ jamais silencieux : `bank_index` retombe sur la banque 0 et le validateur averti
   | Tuilé 8bpp | `bpp=8`, 1 palette de 256 | Mode 0, occupe toute la `PAL_BG_RAM` (1 seul layer) |
   | Bitmap | `mode="bitmap"` | Mode 4 plein écran (photos) — **éditable mais pas encore émis au build** |
 
-  **Préparation de la source** — une image « riche » (photo, plus grande que le budget de
-  tuiles) se recadre (`import_crop`, en pixels du PNG), se redimensionne (`import_size`) puis
-  peut se mettre en **miroir** (`mirror_x` / `mirror_y`, position de l'axe en pixels de
-  l'image préparée ; `core/bg_mirror.apply_mirror` : le côté gauche — haut — est gardé, l'autre
+  **Le sidecar a deux blocs** (`BackgroundAsset._settings_dict` / `_encoded_dict`) : `settings` — ce que l'auteur
+  a décidé (layout `mode`/`bpp`, `dither`, `quantize_method`, canvas / pose / miroir / ajustements, compression, et ses
+  retouches de tuiles `tile_paint` / `tile_palette_overrides`) — et `encoded` — ce que l'encodage en a tiré (`tileset`,
+  `tilemap`, `palettes`, `source_palettes`, `palette_overrides`, `bitmap`, `diagnostics`, `source_stamp`), que le build lit
+  et qu'un nouvel encodage remplace en entier. **Un encodage ne range que son résultat** : `apply_bg_encoding` ne touche à
+  aucun réglage ; le layout se pose par `choose_layout(token)` (un bitmap : canvas 240×160 enregistré, retouches de tuiles
+  vidées), avant l'encodage. **Les palettes d'un fond sont des références au catalogue, par nom** : `added_palettes`
+  (« + ») et `palette_overrides` sont des réglages ; `palettes` n'en est que le cache résolu, recomposé par
+  `BackgroundAsset.resolve_palettes` (dérivées du PNG, overrides, ajoutées) après un encodage, une action sur la grille
+  ou l'édition d'une banque (`CommandDispatcher.save_palette`). Une tuile peinte (`tile_paint`) désigne sa palette par la
+  position dans `added_palettes` ; `painted_cells()` la rend en numéro de banque (dérivées d'abord). La lecture est tolérante : un sidecar à plat d'avant les blocs se lit tel quel et passe en deux
+  blocs à la prochaine sauvegarde.
+
+  **Préparation de la source** — l'image est **posée dans un canvas** qui a sa propre taille
+  (`canvas_size`), distincte de celle de l'image : elle est mise à l'échelle (`image_size`) et posée
+  (`image_pos`, coin haut-gauche dans le canvas). Elle peut déborder (le surplus est rogné) ou
+  laisser du vide (transparent) ; rien n'est jamais rétréci en douce. Un **bitmap** a un canvas FIXE
+  de 240×160, posé par `encode_by_mode` quoi qu'en dise `canvas_size` : l'image garde sa taille en
+  (0, 0) et déborde (un encodeur bitmap appelé directement avec plus grand lève une erreur). Les trois champs à `None` = « Original »
+  (canvas = image = fichier, en (0, 0)). Elle peut ensuite se mettre en **miroir** (`mirror_x` / `mirror_y`, position de
+  l'axe en pixels du canvas ; `core/bg_mirror.apply_mirror` : le côté gauche — haut — est gardé, l'autre
   en est le reflet, en zigzag si le reflet n'atteint pas le bord) **avant** l'encodage. Le miroir
   précède la compression parce qu'il change les tuiles qu'elle dédupliquera. Côté canvas,
   chaque axe est une barre avec poignée centrale (`bg_mirror_overlay`) ; la barre se tire à la
@@ -2861,9 +2878,16 @@ jamais silencieux : `bank_index` retombe sur la banque 0 et le validateur averti
   image PIL en mémoire, que reçoit `encode_by_mode(…, prep=ba.import_prep())` — le seul
   endroit qui l'applique, donc le seul que lisent le worker de l'éditeur et la
   réconciliation (`encode_background_asset`). Rééchantillonnage automatique : plus proche
-  voisin si la source est indexée, Lanczos sinon. Côté UI, `bg_prepare_geometry` (pur calcul,
-  testé) porte les règles de modificateurs, `bg_prepare_overlay` dessine les poignées, et
-  le canvas n'émet que `prepare_requested(crop, size, mirror)`. Toute la géométrie que le build ou
+  voisin si la source est indexée (le canvas reste alors en mode `P`, même palette, le vide est
+  l'index 0), Lanczos sinon ; l'image est rognée à la partie visible AVANT d'être rééchantillonnée.
+  Côté UI, en permanence, un **passe-partout** (comme celui d'une caméra de Blender) garde visible, grisé, ce
+  qui sort du canvas ; le **mode Canvas** — l'outil « select », en tête de la barre flottante, qui reste pour
+  tous les fonds (`bg_inpaint_canvas`) — montre le FICHIER entier posé dans le canvas, grisé hors cadre
+  (`bg_placement_overlay`) : glisser l'image la déplace, les poignées la mettent à l'échelle (règles de Maj / Ctrl dans `bg_placement_geometry`, pur calcul testé). La carte
+  « Canvas » de l'inspecteur dit les mêmes valeurs en chiffres et les modifie ; modifier un champ ouvre le
+  mode, et la sortie (Entrée, autre outil, autre fond = annulation) recompresse UNE fois via
+  `prepare_requested({canvas, pos, size, mirror})`. Les ajustements et la compression sont **gelés** (`PREPARATION_TOOLS_ENABLED`, `bg_inpaint_canvas`) le
+  temps de bâtir le canvas (ROADMAP, « Le fond est un plan de travail »). Toute la géométrie que le build ou
   le Scene Manager affichent vient de `BackgroundAsset.pixel_size()`, jamais du PNG.
 
 ### Inpainting — repeindre la palette par tuile (non-destructif)

@@ -83,6 +83,7 @@ def asset_palette_view(asset, read_only: bool = False) -> AssetPaletteGridView:
     source_palettes = list(getattr(asset, "source_palettes", []) or [])
     derived = len(source_palettes)
     overrides = getattr(asset, "palette_overrides", {}) or {}
+    added_names = list(getattr(asset, "added_palettes", []) or [])    # les ajoutées sont des références au catalogue
     scene_entries: list = []
     asset_entries: list = []
     for idx, cols in enumerate(palettes):
@@ -100,8 +101,9 @@ def asset_palette_view(asset, read_only: bool = False) -> AssetPaletteGridView:
                     instances=[_Inst(label('asspalview.palette_idx_png', idx=idx))],
                 ))
         else:
-            scene_entries.append(SceneEntryView(
-                slot=idx, name=label('asspalview.palette_idx', idx=idx), colors=list(cols)))
+            position = idx - derived
+            name = added_names[position] if position < len(added_names) else label('asspalview.palette_idx', idx=idx)
+            scene_entries.append(SceneEntryView(slot=idx, name=name, colors=list(cols)))
     return AssetPaletteGridView(scene_entries, asset_entries)
 
 

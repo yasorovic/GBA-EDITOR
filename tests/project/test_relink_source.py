@@ -195,7 +195,7 @@ def test_relinking_a_background_re_imports_the_image_and_keeps_the_painting(tmp_
     from PIL import Image
     p = _project(tmp_path)
     sky = p.backgrounds.get("sky")
-    sky.import_crop, sky.import_size = (0, 0, 8, 8), (8, 8)          # réglages de l'ANCIENNE image
+    sky.canvas_size, sky.image_pos, sky.image_size = (8, 8), (0, 0), (8, 8)   # réglages de l'ANCIENNE image
     sky.tile_paint = {(1, 1): (1, 0)}
     sky.tile_palette_overrides = {(2, 2): 0}
     bigger = p.assets_dir / "backgrounds" / "bigger.png"
@@ -204,5 +204,7 @@ def test_relinking_a_background_re_imports_the_image_and_keeps_the_painting(tmp_
     asset_relink.relink_source(p, "backgrounds", sky, bigger)
 
     assert (sky.tiles_w, sky.tiles_h) == (30, 20)                    # la taille suit la NOUVELLE image
-    assert sky.import_crop is None and sky.import_size is None and sky.compression.is_default()
+    assert sky.canvas_size is None and sky.image_pos is None and sky.image_size is None
+    assert sky.compression.is_default()
     assert sky.tile_paint == {(1, 1): (1, 0)} and sky.tile_palette_overrides == {(2, 2): 0}
+

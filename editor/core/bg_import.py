@@ -15,6 +15,9 @@ par canal (représentables en BGR555) dès l'extraction, donc la dédup couleur 
 exacte vis-à-vis du hardware.
 """
 from __future__ import annotations
+from collections import OrderedDict
+from pathlib import Path
+from threading import RLock
 from typing import Optional
 
 from core.models.gba_color import (
@@ -22,7 +25,7 @@ from core.models.gba_color import (
     COMPRESSION_METHODS,
 )
 from core.models.gba_color import RESERVED_SLOT_COLOR
-from core.models.background import BackgroundCompression
+from core.models.background import BackgroundCompression, BITMAP_SIZE
 from core.bg_tile_merge import merge_tiles
 from core.bg_palette_cluster import cluster_palettes
 
@@ -37,8 +40,92 @@ from core.models.tile_codec import (
 
 TILE_BUDGET = 512        # tuiles 4bpp par charblock (16 Ko)
 TILE_BUDGET_8BPP = 256   # tuiles 8bpp par charblock (2× la taille → moitié moins)
-GBA_SCREEN_W = 240
-GBA_SCREEN_H = 160
+GBA_SCREEN_W, GBA_SCREEN_H = BITMAP_SIZE
+
+
+class BackgroundWorkCache:
+    """Cache borné des étapes invariantes d'une compression interactive.
+
+    Il appartient à un écran Background Editor (il n'est donc jamais sérialisé).
+    Une modification de palettes ou de cible de tuiles réutilise l'image préparée
+    et la liste des couleurs par tuile ; modifier seulement la cible réutilise
+    aussi le regroupement de palettes et la déduplication. Une modification de la
+    source, du canvas, de l'ajustement ou de la réduction globale produit
+    naturellement une autre clé.
+    Les workers Qt peuvent le consulter : les accès sont protégés, et les valeurs
+    stockées ne sont ensuite lues que par les encodeurs.
+    """
+
+    def __init__(self, prepared_limit: int = 2, tiles_limit: int = 3):
+        self._prepared_limit = prepared_limit
+        self._tiles_limit = tiles_limit
+        self._prepared = OrderedDict()
+        self._tiles = OrderedDict()
+        self._lock = RLock()
+
+    @staticmethod
+    def _source_key(source):
+        if hasattr(source, "mode"):
+            return None
+        try:
+            path = Path(source)
+            stat = path.stat()
+        except (OSError, TypeError, ValueError):
+            return None
+        return str(path.resolve()), stat.st_mtime_ns, stat.st_size
+
+    @staticmethod
+    def _prep_key(prep: dict) -> tuple:
+        adjust = prep.get("adjust")
+        return (prep.get("canvas"), prep.get("pos"), prep.get("size"),
+                prep.get("mirror"),
+                (getattr(adjust, "hue", 0), getattr(adjust, "saturation", 0),
+                 getattr(adjust, "brightness", 0), getattr(adjust, "contrast", 0)))
+
+    @staticmethod
+    def _put(cache: OrderedDict, key, value, limit: int) -> None:
+        cache[key] = value
+        cache.move_to_end(key)
+        while len(cache) > limit:
+            cache.popitem(last=False)
+
+    def prepare(self, source, prep: dict):
+        """Retourne ``(image, clé)`` ; ``clé`` est aussi celle du cache de tuiles."""
+        source_key = self._source_key(source)
+        if source_key is None:
+            return prepare_source(source, **prep), None
+        key = (source_key, self._prep_key(prep))
+        with self._lock:
+            image = self._prepared.get(key)
+            if image is not None:
+                self._prepared.move_to_end(key)
+                return image, key
+        image = prepare_source(source, **prep)
+        with self._lock:
+            # Un second worker a pu finir entre-temps : préférer sa valeur pour
+            # que toutes les tâches partagent la même image immuable.
+            existing = self._prepared.get(key)
+            if existing is not None:
+                self._prepared.move_to_end(key)
+                return existing, key
+            self._put(self._prepared, key, image, self._prepared_limit)
+        return image, key
+
+    def tile_data(self, key, variant: tuple):
+        if key is None:
+            return None
+        full_key = (key, variant)
+        with self._lock:
+            data = self._tiles.get(full_key)
+            if data is not None:
+                self._tiles.move_to_end(full_key)
+            return data
+
+    def store_tile_data(self, key, variant: tuple, data: tuple) -> None:
+        if key is None:
+            return
+        with self._lock:
+            self._put(self._tiles, (key, variant), data, self._tiles_limit)
 
 
 def open_image(source):
@@ -48,32 +135,29 @@ def open_image(source):
     return source if hasattr(source, "mode") else Image.open(source)
 
 
-def prepare_source(source, crop=None, size=None, adjust=None, mirror=None):
-    """Image PIL préparée pour l'encodage : recadrée (`crop` = x, y, w, h en pixels
-    de la source), PUIS redimensionnée (`size` = w, h), PUIS mise en miroir
+def prepare_source(source, canvas=None, pos=None, size=None, adjust=None, mirror=None):
+    """Image PIL préparée pour l'encodage : l'image, mise à l'échelle (`size` = w, h) puis POSÉE dans un canvas
+    (`canvas` = w, h ; `pos` = x, y du coin haut-gauche de l'image dans le canvas), PUIS mise en miroir
     (`mirror` = axe_x, axe_y, cf. `core.bg_mirror`), PUIS réglée (`adjust` =
     `BackgroundAdjust`, cf. `core.bg_adjust`). Le miroir précède la compression
     puisqu'il change les tuiles qu'elle trouvera. Rien de tout cela : la source est
     rendue telle quelle. Le fichier n'est jamais modifié — tout se
     passe en mémoire, c'est ce qui laisse revenir à l'original.
 
+    Le canvas a SA taille : l'image peut le déborder (le surplus est rogné) ou le laisser en partie vide
+    (transparent). Rien n'est jamais ajusté en douce — ce que l'auteur a posé est ce qui est encodé.
+
     Rééchantillonnage AUTOMATIQUE : plus proche voisin pour une source indexée (le
     mode 'P' et sa palette d'auteur survivent, un pixel art n'est pas lissé),
-    Lanczos sinon (photo). Le recadrage est ramené dans l'image : une préparation
-    écrite pour une source plus grande, remplacée depuis, ne plante pas."""
+    Lanczos sinon (photo). Seule la partie VISIBLE de l'image est rééchantillonnée (`box`) : une photo posée
+    en grand dans un petit canvas ne se redimensionne pas en entier."""
     from PIL import Image
     img = open_image(source)
-    if crop:
-        x, y, w, h = crop
-        x = max(0, min(int(x), img.width - 1))
-        y = max(0, min(int(y), img.height - 1))
-        w = max(1, min(int(w), img.width - x))
-        h = max(1, min(int(h), img.height - y))
-        if (x, y, w, h) != (0, 0, img.width, img.height):
-            img = img.crop((x, y, x + w, y + h))
-    if size and tuple(size) != img.size:
-        filt = Image.NEAREST if is_indexed(img) else Image.LANCZOS
-        img = img.resize((max(1, int(size[0])), max(1, int(size[1]))), filt)
+    size = (max(1, int(size[0])), max(1, int(size[1]))) if size else img.size
+    canvas = (max(1, int(canvas[0])), max(1, int(canvas[1]))) if canvas else size
+    pos = (int(pos[0]), int(pos[1])) if pos else (0, 0)
+    if size != img.size or canvas != size or pos != (0, 0):
+        img = _place_in_canvas(img, size, canvas, pos)
     if mirror and any(axis is not None for axis in mirror[:2]):
         from core.bg_mirror import apply_mirror
         img = apply_mirror(img, mirror)
@@ -81,6 +165,61 @@ def prepare_source(source, crop=None, size=None, adjust=None, mirror=None):
         from core.bg_adjust import apply_adjust
         img = apply_adjust(img, adjust)
     return img
+
+
+def _place_in_canvas(img, size, canvas, pos):
+    """`img` mise à `size` puis posée en `pos` dans un canvas `canvas`. Indexé : le canvas reste 'P', même palette,
+    le vide est l'index 0 (le transparent par convention). Sinon RGBA, le vide est transparent."""
+    from PIL import Image
+    indexed = is_indexed(img)
+    # Zone du canvas que l'image recouvre, puis la part de la source qu'elle montre.
+    x0, y0 = max(0, pos[0]), max(0, pos[1])
+    x1, y1 = min(canvas[0], pos[0] + size[0]), min(canvas[1], pos[1] + size[1])
+    if indexed:
+        out = Image.new("P", canvas, 0)
+        out.putpalette(img.getpalette() or [])
+        if (x0, y0, x1, y1) != (0, 0, canvas[0], canvas[1]):
+            out.info["transparency"] = _transparency_with_index_zero(img)    # il y a du vide à marquer
+        elif "transparency" in img.info:
+            out.info["transparency"] = img.info["transparency"]
+    else:
+        out = Image.new("RGBA", canvas, (0, 0, 0, 0))
+    if x1 <= x0 or y1 <= y0:
+        return out
+    sx, sy = img.width / size[0], img.height / size[1]
+    box = ((x0 - pos[0]) * sx, (y0 - pos[1]) * sy, (x1 - pos[0]) * sx, (y1 - pos[1]) * sy)
+    piece = img if indexed else img.convert("RGBA")
+    if indexed and piece.mode != "P":
+        piece = piece.convert("P")
+    if (x1 - x0, y1 - y0) != img.size or box != (0, 0, img.width, img.height):
+        filt = Image.NEAREST if indexed else Image.LANCZOS
+        # On rogne D'ABORD : `resize(box=)` laisse le filtre lire les pixels au-delà de la boîte, et le rendu
+        # différerait de « recadrer puis redimensionner », l'ancien geste que ce canvas remplace. Seule une boîte
+        # non entière (échelle fractionnaire) garde un `box` relatif, au pixel près.
+        left, top = int(box[0] // 1), int(box[1] // 1)
+        right, bottom = -int(-box[2] // 1), -int(-box[3] // 1)
+        piece = piece.crop((left, top, right, bottom))
+        rel = (box[0] - left, box[1] - top, box[2] - left, box[3] - top)
+        whole = (0, 0, right - left, bottom - top)
+        piece = piece.resize((x1 - x0, y1 - y0), filt, box=None if rel == whole else rel)
+    out.paste(piece, (x0, y0))
+    return out
+
+
+def _transparency_with_index_zero(img):
+    """La table de transparence de `img` ('P'), index 0 rendu transparent : le vide du canvas est l'index 0."""
+    raw = img.info.get("transparency")
+    if raw is None:
+        return 0
+    if isinstance(raw, int):
+        table = bytearray(b"\xff" * (raw + 1))
+        table[raw] = 0
+    else:
+        table = bytearray(raw)
+    if not table:
+        return 0
+    table[0] = 0
+    return bytes(table)
 
 
 def is_indexed(img) -> bool:
@@ -237,26 +376,61 @@ def _open_padded(source):
 def _extract_tile_colors(img) -> tuple:
     """Grilles de pixels + jeu de couleurs opaques par tuile (couleurs snappées
     5-bit). `img` doit déjà être RGBA et paddé. Retourne (tw, th, tile_grids,
-    tile_colors). Partagé entre compression et diagnostic (aucune divergence)."""
+    tile_colors). Partagé entre compression et diagnostic (aucune divergence).
+
+    La lecture PIL ``px[x, y]`` est étonnamment chère : une grande photo déclenche
+    un appel Python par pixel, avant même le travail de compression. On lit donc
+    le raster d'un coup et on le remet en tuiles avec NumPy. Les listes retournées
+    restent volontairement identiques au contrat historique (tuples RGB ou
+    ``None``, puis ``set`` de couleurs) : le packing, le clustering et les
+    diagnostics n'ont pas à connaître cette optimisation.
+    """
     w, h = img.size
     tw, th = w // 8, h // 8
-    px = img.load()
-    tile_grids: list = []   # 64 éléments : (r,g,b) ou None (transparent)
-    tile_colors: list = []  # set de couleurs opaques
-    for ty in range(th):
-        for tx in range(tw):
-            grid, colors = [], set()
-            for y in range(8):
-                for x in range(8):
-                    r, g, b, a = px[tx * 8 + x, ty * 8 + y]
-                    if a == 0:
-                        grid.append(None)
-                    else:
-                        c = _snap5(r, g, b)
-                        grid.append(c)
-                        colors.add(c)
-            tile_grids.append(grid)
-            tile_colors.append(colors)
+    try:
+        import numpy as np
+    except ImportError:
+        # NumPy est une dépendance de l'éditeur, mais garder ce repli rend le
+        # coeur importable dans les installations minimales et préserve le
+        # comportement précédent à l'identique.
+        px = img.load()
+        tile_grids, tile_colors = [], []
+        for ty in range(th):
+            for tx in range(tw):
+                grid, colors = [], set()
+                for y in range(8):
+                    for x in range(8):
+                        r, g, b, a = px[tx * 8 + x, ty * 8 + y]
+                        if a == 0:
+                            grid.append(None)
+                        else:
+                            c = _snap5(r, g, b)
+                            grid.append(c)
+                            colors.add(c)
+                tile_grids.append(grid)
+                tile_colors.append(colors)
+        return tw, th, tile_grids, tile_colors
+
+    rgba = np.asarray(img, dtype=np.uint8)
+    # (hauteur, largeur, RGBA) -> (tuile en ordre de balayage, 64, RGBA).
+    # Le transpose est essentiel : ``reshape`` seul prendrait huit lignes
+    # consécutives au lieu des 8×8 pixels de la tuile suivante.
+    tiles = (rgba.reshape(th, 8, tw, 8, 4)
+             .transpose(0, 2, 1, 3, 4)
+             .reshape(tw * th, 64, 4))
+    visible = tiles[..., 3] != 0
+    # Toutes les opérations coûteuses (lecture, découpage et snap 5 bits) sont
+    # vectorisées. ``tolist`` ne sert ensuite qu'à rétablir des entiers Python
+    # hashables, nécessaires aux dictionnaires du reste du pipeline.
+    rgb = (tiles[..., :3] & np.uint8(0xF8)).tolist()
+    alpha = visible.tolist()
+    tile_grids = []
+    tile_colors = []
+    for pixels, opaque in zip(rgb, alpha):
+        grid = [tuple(color) if is_opaque else None
+                for color, is_opaque in zip(pixels, opaque)]
+        tile_grids.append(grid)
+        tile_colors.append({color for color in grid if color is not None})
     return tw, th, tile_grids, tile_colors
 
 
@@ -538,11 +712,18 @@ def _encode_background_indexed_8bpp(source) -> Optional[dict]:
     }
 
 
+def _require_bitmap_canvas(w: int, h: int) -> None:
+    """Un bitmap est au plus 240×160 : l'encodeur ne rétrécit JAMAIS en douce. `encode_by_mode` pose le canvas à cette
+    taille (l'image déborde, le surplus est rogné) ; un appel direct avec une image plus grande est une erreur."""
+    if w > GBA_SCREEN_W or h > GBA_SCREEN_H:
+        raise ValueError(f"A bitmap background is at most {GBA_SCREEN_W}x{GBA_SCREEN_H}; "
+                         f"the canvas is {w}x{h}.")
+
+
 def _encode_background_indexed_bitmap(source) -> Optional[dict]:
     """Chemin direct bitmap (Mode 4) : PNG indexé (≤ 256), palette native (256)
-    préservée. L'ajustement « contain » ≤240×160 se fait en NEAREST sur l'image
-    'P' (les index natifs restent valides, aucune couleur inventée). None si non
-    indexé."""
+    préservée, buffer indexé directement. Un canvas au-delà de 240×160 est une erreur (cf.
+    `_require_bitmap_canvas`). None si non indexé."""
     from PIL import Image
     prep = _indexed_direct_source(source)
     if prep is None:
@@ -553,12 +734,8 @@ def _encode_background_indexed_bitmap(source) -> Optional[dict]:
     n_used = len(used)
 
     w, h = pimg.size
-    scale = min(GBA_SCREEN_W / w, GBA_SCREEN_H / h, 1.0)   # jamais d'agrandissement
-    out_w = max(1, min(GBA_SCREEN_W, round(w * scale)))
-    out_h = max(1, min(GBA_SCREEN_H, round(h * scale)))
-    if (out_w, out_h) != (w, h):
-        pimg = pimg.resize((out_w, out_h), Image.NEAREST)
-        alpha = alpha.resize((out_w, out_h), Image.NEAREST)
+    _require_bitmap_canvas(w, h)
+    out_w, out_h = w, h
     ipx = pimg.load()
     apx = alpha.load()
 
@@ -578,7 +755,6 @@ def _encode_background_indexed_bitmap(source) -> Optional[dict]:
         "diagnostics": {
             "src_w": w, "src_h": h,
             "out_w": out_w, "out_h": out_h,
-            "scaled": (out_w, out_h) != (w, h),
             "total_colors": n_used,
             "dither": False,
             "mode": "bitmap",
@@ -704,7 +880,9 @@ def _asks_for_reduction_8bpp(params: BackgroundCompression) -> bool:
 
 def encode_background(source, method: str = "median_cut",
                         compression: Optional[BackgroundCompression] = None,
-                        dither: bool = False) -> dict:
+                        dither: bool = False,
+                        work_cache: Optional[BackgroundWorkCache] = None,
+                        cache_key=None) -> dict:
     """PNG -> représentation GBA (palettes BGR555 + tileset + tilemap). Ne modifie
     jamais le source. `compression` (cf. BackgroundCompression) fixe le nombre de
     sous-palettes, leurs couleurs, la réduction globale préalable et la cible de
@@ -729,61 +907,77 @@ def encode_background(source, method: str = "median_cut",
         method = "median_cut"
     max_palettes = params.palettes_max
     editable = params.colors_per_palette   # couleurs utiles (l'index 0 est le transparent)
-    img, w, h, tw, th = _open_padded(source)
-    if params.global_colors:
-        img = _reduce_globally(img, params.global_colors, dither, params.dither_kind)
+    # Cette variante couvre TOUT ce qui change les pixels avant le découpage.
+    # Les curseurs palettes/cible n'y figurent pas : ils reprennent donc les
+    # tuiles déjà extraites au lieu de relire chaque pixel de la photo.
+    tile_variant = ("tiled4", params.global_colors, dither, params.dither_kind)
+    cached_tiles = work_cache.tile_data(cache_key, tile_variant) if work_cache else None
+    if cached_tiles is None:
+        img, w, h, tw, th = _open_padded(source)
+        if params.global_colors:
+            img = _reduce_globally(img, params.global_colors, dither, params.dither_kind)
+        # 1. Grille de pixels + jeu de couleurs par tuile (couleurs snappées 5-bit).
+        _, _, tile_grids, tile_colors = _extract_tile_colors(img)
+        cached_tiles = (w, h, tw, th, tile_grids, tile_colors)
+        if work_cache:
+            work_cache.store_tile_data(cache_key, tile_variant, cached_tiles)
+    w, h, tw, th, tile_grids, tile_colors = cached_tiles
 
-    # 1. Grille de pixels + jeu de couleurs par tuile (couleurs snappées 5-bit).
-    _, _, tile_grids, tile_colors = _extract_tile_colors(img)
+    # 2–3. Le regroupement des palettes et la déduplication ne dépendent PAS de
+    # la cible de tuiles. Conserver ce résultat évite de les refaire quand on
+    # déplace uniquement ce curseur ; la fusion ci-dessous reste seule à courir.
+    base_variant = tile_variant + (method, max_palettes, editable)
+    cached_base = work_cache.tile_data(cache_key, base_variant) if work_cache else None
+    if cached_base is None:
+        # Répartition des tuiles entre sous-palettes. SANS PERTE d'abord : le
+        # packing glouton exact, quand chaque tuile tient et que les palettes
+        # suffisent. Sinon, une photo est regroupée par similarité.
+        max_tile_colors = max((len(c) for c in tile_colors), default=0)
+        tiles_reduced = sum(1 for c in tile_colors if len(c) > editable)
+        palettes = None
+        if max_tile_colors <= editable:
+            packed, tile_pal, tile_cmap = _pack_palettes(tile_colors, editable, method)
+            pre_merge_palettes = len(packed)
+            if len(packed) <= max_palettes:
+                palettes = packed
+        if palettes is None:
+            if max_tile_colors > editable:
+                # Minimum pour tenir sans perte : palettes des tuiles qui tiennent.
+                pre_merge_palettes = len(_pack_palettes(
+                    [c for c in tile_colors if len(c) <= editable], editable, method)[0])
+            palettes, tile_pal = cluster_palettes(tile_grids, max_palettes, editable, method)
+            tile_cmap = [None] * len(tile_grids)
 
-    # 2. Répartition des tuiles entre sous-palettes. SANS PERTE d'abord : le packing
-    #    glouton exact, quand chaque tuile tient en `editable` couleurs et que les
-    #    palettes suffisent (pixel art). Sinon — une photo — on regroupe les tuiles
-    #    qui se ressemblent et on taille une palette par groupe (cf.
-    #    bg_palette_cluster) au lieu de garder les plus employées et de renvoyer
-    #    les autres au hasard, ce qui laissait l'océan sans ses bleus.
-    max_tile_colors = max((len(c) for c in tile_colors), default=0)
-    tiles_reduced = sum(1 for c in tile_colors if len(c) > editable)
-    palettes = None
-    if max_tile_colors <= editable:
-        packed, tile_pal, tile_cmap = _pack_palettes(tile_colors, editable, method)
-        pre_merge_palettes = len(packed)
-        if len(packed) <= max_palettes:
-            palettes = packed
-    if palettes is None:
-        if max_tile_colors > editable:
-            # Minimum pour tenir sans perte : palettes des seules tuiles qui tiennent.
-            pre_merge_palettes = len(_pack_palettes(
-                [c for c in tile_colors if len(c) <= editable], editable, method)[0])
-        palettes, tile_pal = cluster_palettes(tile_grids, max_palettes, editable, method)
-        tile_cmap = [None] * len(tile_grids)
-
-    # 3. Indexation des pixels dans la palette de chaque tuile + dédup (flips).
-    pal_lists = [list(pal) for pal in palettes]
-    pal_index = [{c: k + 1 for k, c in enumerate(pal)} for pal in pal_lists]
-    tileset: list = []
-    lookup: dict = {}
-    cells: list = []
-    near: dict = {}     # (palette, couleur) -> index le plus proche, calculé une fois
-    for i, grid in enumerate(tile_grids):
-        pb = tile_pal[i]
-        cmap = tile_cmap[i]
-        pidx = pal_index[pb]
-        pal = pal_lists[pb]
-        idxgrid = []
-        for c in grid:
-            if c is None:
-                idxgrid.append(0)
-                continue
-            cc = cmap[c] if cmap else c
-            k = pidx.get(cc)
-            if k is None:   # hors palette -> la couleur la plus proche de CETTE palette
-                k = near.get((pb, cc))
-                if k is None:
-                    k = near[(pb, cc)] = pidx[nearest_rgb(cc, pal)] if pal else 0
-            idxgrid.append(k)
-        tid, fh, fv = _dedup_tile(tuple(idxgrid), lookup, tileset)
-        cells.append((tid, pb, fh, fv))
+        # Indexation des pixels dans la palette de chaque tuile + dédup (flips).
+        pal_lists = [list(pal) for pal in palettes]
+        pal_index = [{c: k + 1 for k, c in enumerate(pal)} for pal in pal_lists]
+        tileset: list = []
+        lookup: dict = {}
+        cells: list = []
+        near: dict = {}     # (palette, couleur) -> index le plus proche, calculé une fois
+        for i, grid in enumerate(tile_grids):
+            pb = tile_pal[i]
+            cmap = tile_cmap[i]
+            pidx = pal_index[pb]
+            pal = pal_lists[pb]
+            idxgrid = []
+            for c in grid:
+                if c is None:
+                    idxgrid.append(0)
+                    continue
+                cc = cmap[c] if cmap else c
+                k = pidx.get(cc)
+                if k is None:   # hors palette -> la couleur la plus proche de CETTE palette
+                    k = near.get((pb, cc))
+                    if k is None:
+                        k = near[(pb, cc)] = pidx[nearest_rgb(cc, pal)] if pal else 0
+                idxgrid.append(k)
+            tid, fh, fv = _dedup_tile(tuple(idxgrid), lookup, tileset)
+            cells.append((tid, pb, fh, fv))
+        cached_base = (pal_lists, tileset, cells, max_tile_colors, tiles_reduced, pre_merge_palettes)
+        if work_cache:
+            work_cache.store_tile_data(cache_key, base_variant, cached_base)
+    pal_lists, tileset, cells, max_tile_colors, tiles_reduced, pre_merge_palettes = cached_base
 
     # 4. Cible de tuiles : fusionne les moins employées (avec perte) — après la
     #    dédup exacte, qui elle est sans perte et passe toujours d'abord.
@@ -1021,37 +1215,38 @@ def render_bg_preview(compiled: dict):
     return out
 
 
-def encode_background_bitmap(source, dither: bool = False, compression: Optional[BackgroundCompression] = None) -> dict:
+def encode_background_bitmap(source, dither: bool = False, compression: Optional[BackgroundCompression] = None,
+                             method: str = "median_cut") -> dict:
     """PNG -> représentation GBA Mode 4 : bitmap plein écran ≤240×160, 8bpp (un
-    index par pixel) + palette de 256. L'image est ajustée « contain » (ratio
-    préservé, jamais agrandie) dans 240×160. Le source n'est jamais modifié.
+    index par pixel) + palette de 256. L'image est encodée telle qu'elle est : au-delà de 240×160 c'est une
+    erreur (cf. `_require_bitmap_canvas`). Le source n'est jamais modifié.
     Rapide (quantifieur C de PIL). Convient aux photos (pas de tuiles → pas de
     limite de déduplication).
 
     PNG INDEXÉ : la palette déclarée (≤256) est préservée telle quelle et le
-    buffer est indexé directement (redimension « contain » en NEAREST pour garder
-    des index valides), cf. `_encode_background_indexed_bitmap`."""
-    direct = _encode_background_indexed_bitmap(source)
+    buffer est indexé directement, sauf si l'auteur demande moins de couleurs —
+    ce réglage implique nécessairement une nouvelle quantification."""
+    params = compression or BackgroundCompression()
+    direct = None if params.palette_colors != 255 else _encode_background_indexed_bitmap(source)
     if direct is not None:
         return direct
+    if method not in QUANTIZERS_8BPP:
+        method = "median_cut"
     from PIL import Image
     img = (source if hasattr(source, "mode") else Image.open(source)).convert("RGBA")
     w, h = img.size
-    scale = min(GBA_SCREEN_W / w, GBA_SCREEN_H / h, 1.0)   # jamais d'agrandissement
-    out_w = max(1, min(GBA_SCREEN_W, round(w * scale)))
-    out_h = max(1, min(GBA_SCREEN_H, round(h * scale)))
-    if (out_w, out_h) != (w, h):
-        img = img.resize((out_w, out_h), Image.LANCZOS)
+    _require_bitmap_canvas(w, h)
+    out_w, out_h = w, h
     alpha = img.getchannel("A").load()
     rgb = img.convert("RGB")
-    q = _quantize_rgb(rgb, 255, "median_cut", dither, compression.dither_kind if compression else "floyd_steinberg")
+    q = _quantize_rgb(rgb, params.palette_colors, method, dither, params.dither_kind)
     qidx = q.load()
     pal_raw = q.getpalette() or []
 
     pal256 = [RESERVED_SLOT_COLOR]
     for i in range(255):
         base = i * 3
-        if base + 2 < len(pal_raw):
+        if i < params.palette_colors and base + 2 < len(pal_raw):
             pal256.append(rgb888_to_bgr555(pal_raw[base], pal_raw[base + 1], pal_raw[base + 2]))
         else:
             pal256.append(0)
@@ -1070,11 +1265,12 @@ def encode_background_bitmap(source, dither: bool = False, compression: Optional
         "bitmap": buf.hex(),
         "out_w": out_w, "out_h": out_h,
         "bpp": 8,
+        "quantize_method": method,
         "diagnostics": {
             "src_w": w, "src_h": h,
             "out_w": out_w, "out_h": out_h,
-            "scaled": (out_w, out_h) != (w, h),
             "total_colors": total_colors,
+            "palette_colors": params.palette_colors,
             "dither": dither,
             "mode": "bitmap",
         },
@@ -1083,7 +1279,8 @@ def encode_background_bitmap(source, dither: bool = False, compression: Optional
 
 def encode_by_mode(source, mode_token: str, method: str = "median_cut",
                     dither: bool = False, prep: Optional[dict] = None,
-                    compression: Optional[BackgroundCompression] = None) -> dict:
+                    compression: Optional[BackgroundCompression] = None,
+                    work_cache: Optional[BackgroundWorkCache] = None) -> dict:
     """Dispatch unique vers `encode_background`/`encode_background_8bpp`/
     `encode_background_bitmap` selon un token de mode ("tiled4"|"tiled8"|
     "bitmap"|"bitmap16" — vocabulaire de `detect_import_mode`). Partagé par
@@ -1094,16 +1291,29 @@ def encode_by_mode(source, mode_token: str, method: str = "median_cut",
     "bitmap16" = vrai 16bpp direct (détecté), pas encore implémenté : repli
     interim sur le Mode 4 paletté (quantif 256), cf. `detect_import_mode`.
 
-    `prep` (`BackgroundAsset.import_prep()`) recadre/redimensionne la source avant
-    d'encoder — le SEUL endroit où la préparation s'applique."""
+    `prep` (`BackgroundAsset.import_prep()`) pose l'image dans le canvas avant
+    d'encoder — le SEUL endroit où la préparation s'applique. Un bitmap a un canvas FIXE de 240×160, quoi qu'en
+    dise `prep` : l'image garde sa taille et déborde, le surplus est rogné (jamais d'ajustement en douce).
+
+    `work_cache`, réservé au flux interactif de l'éditeur, réutilise l'image
+    préparée et les données par tuile lorsque leur clé est inchangée. Il ne
+    modifie ni le PNG ni le résultat produit par cet appel."""
+    bitmap = mode_token in ("bitmap", "bitmap16")
+    if bitmap:
+        prep = {**(prep or {}), "canvas": (GBA_SCREEN_W, GBA_SCREEN_H)}
+    cache_key = None
     if prep:
-        source = prepare_source(source, **prep)
-    if mode_token in ("bitmap", "bitmap16"):
-        return encode_background_bitmap(source, dither=dither, compression=compression)
+        if work_cache:
+            source, cache_key = work_cache.prepare(source, prep)
+        else:
+            source = prepare_source(source, **prep)
+    if bitmap:
+        return encode_background_bitmap(source, dither=dither, compression=compression, method=method)
     if mode_token == "tiled8":
         return encode_background_8bpp(source, dither=dither, method=method,
                                       compression=compression)
-    return encode_background(source, method=method, compression=compression, dither=dither)
+    return encode_background(source, method=method, compression=compression, dither=dither,
+                             work_cache=work_cache, cache_key=cache_key)
 
 
 def render_bitmap_preview(compiled: dict):

@@ -1,6 +1,5 @@
 """ui/background_editor/bg_hints.py — contenu de la table des raccourcis du
-Background Editor. Contexte = outil de peinture actif, ou « crop » / « resize »
-quand un mode de préparation de la source est ouvert (il prend alors la main)."""
+Background Editor. Contexte = outil de peinture actif, ou « select » (le mode Canvas)."""
 from __future__ import annotations
 
 from ui.common.labels import label
@@ -11,8 +10,7 @@ _TITLES = {
     "fill": "bginp.fill",
     "rect": "cvtool.rectangle",
     "eraser": "bginp.eraser",
-    "crop": "bginp.crop",
-    "resize": "bginp.resize",
+    "select": "bginp.select",
 }
 
 _ROWS = {
@@ -25,17 +23,13 @@ _ROWS = {
     "fill_paint": [(mouse("left_click"), "hints.bg.fill_tiles")],
     "rect_paint": [(mouse("left_drag"), "hints.bg.paint_rect_tiles")],
     "eraser_paint": [(mouse("left_drag"), "hints.bg.erase_all")],
-    "crop": [
-        (mouse("left_drag"), "hints.bg.crop_adjust"),
+    # L'outil « select » est le mode Canvas : poser l'image dans le canvas.
+    "select": [
+        (mouse("left_drag"), "hints.bg.canvas_move"),
         (combo("Shift", mouse("left_drag")), "hints.bg.keep_ratio"),
         (combo("Ctrl", mouse("left_drag")), "hints.bg.snap_grid"),
-        ("Enter", "hints.bg.crop_apply"),
-        ("Esc", "hints.bg.crop_cancel"),
-    ],
-    "resize": [
-        (mouse("left_drag"), "hints.bg.resize_drag"),
-        (combo("Shift", mouse("left_drag")), "hints.bg.keep_ratio"),
-        (combo("Ctrl", mouse("left_drag")), "hints.bg.snap_grid"),
+        ("Enter", "hints.bg.canvas_apply"),
+        ("Esc", "hints.bg.canvas_cancel"),
     ],
 }
 

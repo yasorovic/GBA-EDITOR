@@ -267,3 +267,29 @@ def test_a_palette_is_the_one_exception_its_colours_live_in_the_hex(tmp_path: Pa
     assert again.error and "colours" in again.error and len(list(p.palettes)) == count
     assert not asset_creation.can_create_from(p, hexfile)                             # rien d'autre à en tirer
     assert asset_creation.families_for(p, hexfile) == ()
+
+
+def _noisy_photo(path: Path, size=(300, 200)) -> Path:
+    """Aucune tuile ne se répète et plus de 256 couleurs : l'import la prend pour un bitmap."""
+    img = Image.new("RGB", size)
+    px = img.load()
+    for y in range(size[1]):
+        for x in range(size[0]):
+            px[x, y] = ((x * 7) % 256, (y * 11) % 256, ((x + y) * 5) % 256)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    img.save(path)
+    return path
+
+
+def test_a_photo_bigger_than_the_screen_becomes_a_240x160_bitmap_that_shows_its_top_left_corner(tmp_path: Path):
+    """Un bitmap a un canvas fixe de 240×160 : l'image garde sa taille, déborde, le surplus est rogné — rien n'est rétréci."""
+    p = _project(tmp_path)
+    photo = _noisy_photo(p.backgrounds_dir / "photo.png")
+
+    ba = asset_creation.build_from_source(p, "backgrounds", photo).item
+
+    assert ba.mode == "bitmap" and (ba.out_w, ba.out_h) == (240, 160)
+    assert ba.canvas_size == (240, 160) and ba.image_size is None and ba.image_pos is None   # l'image reste à sa taille, en (0, 0)
+    from core.bg_import import render_bitmap_preview
+    shown = render_bitmap_preview({"out_w": ba.out_w, "out_h": ba.out_h, "palettes": ba.palettes, "bitmap": ba.bitmap})
+    assert shown.getpixel((0, 0))[:3] != (0, 0, 0) and shown.size == (240, 160)

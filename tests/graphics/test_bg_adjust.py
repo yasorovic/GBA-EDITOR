@@ -61,7 +61,7 @@ def test_alpha_survives_a_direct_color_adjust():
 def test_the_adjust_is_part_of_the_preparation_and_reaches_the_encoder(tmp_path):
     path = _indexed(tmp_path)
     plain = encode_by_mode(path, "tiled4")
-    bright = encode_by_mode(path, "tiled4", prep={"crop": None, "size": None, "adjust": BackgroundAdjust(brightness=60)})
+    bright = encode_by_mode(path, "tiled4", prep={"canvas": None, "pos": None, "size": None, "adjust": BackgroundAdjust(brightness=60)})
 
     assert plain["tilemap"] == bright["tilemap"]                                   # même découpage…
     assert plain["palettes"][0][1] != bright["palettes"][0][1]                     # …couleurs réglées
@@ -70,11 +70,11 @@ def test_the_adjust_is_part_of_the_preparation_and_reaches_the_encoder(tmp_path)
 
 def test_the_adjust_round_trips_clamps_and_writes_nothing_when_neutral():
     ba = BackgroundAsset(name="sky")
-    assert "adjust" not in ba.to_dict()
+    assert "settings" not in ba.to_dict()
 
     ba.adjust = BackgroundAdjust(hue=-30, contrast=20)
     again = BackgroundAsset.from_dict(ba.to_dict())
-    assert again.adjust == ba.adjust and ba.to_dict()["adjust"] == {"hue": -30, "contrast": 20}
+    assert again.adjust == ba.adjust and ba.to_dict()["settings"]["adjust"] == {"hue": -30, "contrast": 20}
 
     wild = BackgroundAdjust.from_dict({"hue": 999, "saturation": "x", "brightness": -500})
     assert (wild.hue, wild.saturation, wild.brightness) == (180, 0, -100)

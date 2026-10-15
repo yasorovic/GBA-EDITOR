@@ -340,6 +340,12 @@ class ProjectRenameMixin:
                     usages.append(PaletteUsage(
                         kind, asset.name,
                         "sous-palette " + ", ".join(str(i) for i in slots)))
+                # Un fond cite aussi, par nom, les palettes qu'on lui a AJOUTÉES (« + »).
+                added = [k for k, n in enumerate(getattr(asset, "added_palettes", None) or []) if n == name]
+                if added:
+                    usages.append(PaletteUsage(
+                        kind, asset.name,
+                        "palette ajoutée " + ", ".join(str(asset.derived_count() + k) for k in added)))
 
         for scene in self.scenes:
             slots = []
@@ -366,7 +372,8 @@ class ProjectRenameMixin:
             `active_bg_palettes`) — remplacement EN PLACE : l'index dans la liste
             est la banque hardware, il ne doit jamais bouger ;
           - les overrides de sous-palette des sprites et des fonds
-            (`palette_overrides` = {idx dérivé -> nom de banque}).
+            (`palette_overrides` = {idx dérivé -> nom de banque}) ;
+          - les palettes AJOUTÉES des fonds (`added_palettes`, des noms de banques).
         Sans cette réparation, `palettes.rename()` seul laisse les scènes pointer
         un nom mort : le slot devient vide au build (garde-fou du validateur) et
         l'asset s'affiche avec le contenu par défaut de la banque.
@@ -394,6 +401,11 @@ class ProjectRenameMixin:
                     hits = [i for i, n in overrides.items() if n == old_name]
                     for i in hits:
                         overrides[i] = new_name
+                    added = getattr(asset, "added_palettes", None) or []
+                    for k, n in enumerate(added):
+                        if n == old_name:
+                            added[k] = new_name
+                            hits.append(k)
                     if hits:
                         save(asset)
         self._notify_renamed("Palette", old_name, new_name)

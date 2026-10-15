@@ -424,7 +424,21 @@ class CommandDispatcher(EventEmitter):
             self._project.palettes.append(bank)
         with self._watcher.suspended():
             self._project.palettes.save(bank)
+        self._refresh_background_palettes(bank.name)
         self._emit("palettes_changed")
+
+    def _refresh_background_palettes(self, name: str) -> None:
+        """Une banque du catalogue vient d'être éditée : les fonds qui la CITENT (palettes ajoutées, overrides) en
+        reprennent les couleurs — ce sont des références, pas des copies. Leur cache (`palettes`) est recomposé, le fond
+        est réécrit, et les canvas de scène qui l'affichent se rafraîchissent."""
+        from core.resources.asset_reconciliation import catalogue_lookup
+        lookup = catalogue_lookup(self._project)
+        for ba in self._project.backgrounds:
+            if name in ba.added_palettes or name in ba.palette_overrides.values():
+                ba.resolve_palettes(lookup, ba.added_palette_colors())
+                with self.suspended():
+                    self._project.save_background(ba)
+                self.notify_background_changed(ba)
 
     # ── Background ────────────────────────────────────────────────
 

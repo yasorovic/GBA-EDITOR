@@ -29,14 +29,14 @@ def _photo(size=(96, 64)):
 
 def test_defauts_n_ecrivent_rien():
     assert BC().is_default() and BC().to_dict() == {}
-    assert "compression" not in BackgroundAsset(name="x", asset="x.png").to_dict()
+    assert "settings" not in BackgroundAsset(name="x", asset="x.png").to_dict()
 
 
 def test_seul_l_ecart_au_defaut_est_ecrit_et_relu():
     ba = BackgroundAsset(name="x", asset="x.png")
     ba.compression = BC(palettes_max=4, global_colors=48)
     d = ba.to_dict()
-    assert d["compression"] == {"palettes_max": 4, "global_colors": 48}
+    assert d["settings"]["compression"] == {"palettes_max": 4, "global_colors": 48}
     assert BackgroundAsset.from_dict(d).compression == ba.compression
 
 

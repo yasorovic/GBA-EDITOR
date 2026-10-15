@@ -2840,14 +2840,25 @@
       "text": "Edit .png"
     },
     "bginp.edit_image_tip": { "text": "Opens the source PNG in the configured image editor. A right-click offers another editor." },
-    "bginp.crop_tip": { "text": "The handles adjust the area. The image file is never changed." },
-    "bginp.crop": {
-      "text": "Crop image"
-    },
-    "bginp.resize_tip": { "text": "Dragging the right or bottom edge resizes the image. Shift keeps the proportions. Ctrl snaps to 8 px. The image file is never changed." },
-    "bginp.resize": {
-      "text": "Resize image"
-    },
+    "bginp.select": { "text": "Select" },
+    "bginp.select_tip": { "text": "Places the image in its canvas. The whole file is shown, dimmed where it falls outside the canvas. Dragging the image moves it; the handles scale it. Shift keeps the proportions, Ctrl snaps to 8 px. Choosing another tool applies, Esc cancels. The image file is never changed." },
+    "bgedit.canvas_title": { "text": "Canvas" },
+    "bgedit.canvas_size": { "text": "Canvas size" },
+    "bgedit.canvas_image_pos": { "text": "Image position" },
+    "bgedit.canvas_image_size": { "text": "Image size" },
+    "bgedit.canvas_fit": { "text": "Fit" },
+    "bgedit.canvas_fit_tip": { "text": "Fits the whole image inside the canvas, centered." },
+    "bgedit.canvas_fill": { "text": "Fill" },
+    "bgedit.canvas_fill_tip": { "text": "Covers the whole canvas; what overflows is cropped." },
+    "bgedit.canvas_one_to_one": { "text": "1:1" },
+    "bgedit.canvas_one_to_one_tip": { "text": "Shows the image at its file size, centered." },
+    "bginp.paint_needs_palette": { "text": "No added palette: “+” in the palettes grid adds one" },
+    "bgedit.canvas_fixed": { "text": "{w} × {h} · fixed" },
+    "bgedit.canvas_fixed_title": { "text": "Fixed canvas" },
+    "bgedit.canvas_fixed_tip": { "text": "A bitmap background is a full-screen 240×160 buffer (Mode 4), so its canvas cannot change. The tiled layout allows any size." },
+    "hints.bg.canvas_move": { "text": "Moves the image, or scales it by its handles" },
+    "hints.bg.canvas_apply": { "text": "Applies the canvas" },
+    "hints.bg.canvas_cancel": { "text": "Cancels the changes" },
     "bginp.mirror_x_tip": { "text": "Adds a vertical bar. The left side is mirrored onto the right; dragging the arrow handle across the bar keeps the right side instead. Ctrl snaps to 8 px. Applied before compression, so it can change the tile count. The image file is never changed." },
     "bginp.mirror_x": {
       "text": "Mirror horizontally"
@@ -2911,12 +2922,13 @@
     "bgedit.export_png_filter": { "text": "PNG image (*.png)" },
     "bgedit.menu_import": { "text": "Import image" },
     "bgedit.menu_create_empty": { "text": "Create empty" },
-    "bgedit.compress_apply": { "text": "Compress" },
-    "bgedit.compress_apply_tip": { "text": "Applies the chosen mode and dithering: the image is compressed again. Nothing is compressed until this button is pressed." },
+    "bgedit.compress_apply": { "text": "Recompute" },
+    "bgedit.compress_apply_tip": { "text": "Applies the chosen mode, settings and dithering: the image is compressed again. Nothing is compressed until this button is pressed." },
     "bgedit.compressing": { "text": "Compressing…" },
     "akind.relink_warn_background": { "text": "Relinking re-imports the image: its crop, size and compression settings are reset, and its color mode is detected again. The painting and the palette repaints are kept.\nRelink anyway?" },
     "akind.relink_warn_image": { "text": "Relinking re-imports the image: what was derived from the old file (palettes, tiles) is computed again.\nRelink anyway?" },
     "bgedit.adj_title": { "text": "Image adjustments" },
+    "bgedit.adj_toggle_tip": { "text": "Shows the settings that change the colors of the image before compression. They open by themselves when an adjustment is set." },
     "bgedit.adj_hue": { "text": "Hue" },
     "bgedit.adj_hue_tip": { "text": "Rotates the colors around the color wheel, in degrees." },
     "bgedit.adj_saturation": { "text": "Saturation" },
@@ -2962,7 +2974,7 @@
       "text": "How colors are merged inside a tile that has too many."
     },
     "bgedit.comp_reset": {
-      "text": "Reset compression"
+      "text": "Reset"
     },
     "bgedit.comp_reset_tip": { "text": "Restores the default compression settings." },
     "bgedit.comp_off": {
@@ -3549,9 +3561,6 @@
     },
     "bgedit.compat_ok": {
       "text": "✓ GBA-compatible ({bpp}bpp). Compressed losslessly."
-    },
-    "bgedit.image_scaled_out_w_out_h_240_160": {
-      "text": "⚠ Image scaled → {out_w}×{out_h} (≤ 240×160)."
     },
     "bgedit.n_tile_s_gt_15_colors_max_mtc": {
       "text": "⚠ {n} tile(s) &gt; 15 colors (max {mtc}). Colors reduced (lossy)."
@@ -4574,10 +4583,6 @@
     "hints.bg.fill": { "text": "Fills the connected area with the active palette" },
     "hints.bg.paint_rect": { "text": "Paints a rectangle with the active palette" },
     "hints.bg.erase": { "text": "Restores the original palette of the tiles" },
-    "hints.bg.crop_adjust": { "text": "Moves the crop rectangle or its handles" },
-    "hints.bg.crop_apply": { "text": "Applies the crop" },
-    "hints.bg.crop_cancel": { "text": "Cancels the crop" },
-    "hints.bg.resize_drag": { "text": "Resizes the image by its handles" },
     "hints.bg.keep_ratio": { "text": "Keeps the proportions" },
     "hints.bg.snap_grid": { "text": "Snaps to the 8×8 grid" },
     "hints.bg.key_animated_drag": { "text": "Drag an animation" },
