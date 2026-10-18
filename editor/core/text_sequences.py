@@ -9,7 +9,8 @@ LIBRE sinon. Les consommateurs la suivent d'eux-mêmes (cf. `sync_consumers`).
 import re
 
 # Le suffixe est le dernier segment après `_` qui finit par des chiffres.
-# shortcut: `A_Page1` et `A_Line1` partagent le préfixe `A`.
+# shortcut: `A_Page1` et `A_Line1` partagent le préfixe `A` et se fondent en une seule
+# séquence ; à revoir si un projet nomme deux séquences distinctes sous le même préfixe.
 _SUFFIX = re.compile(r"(.+)_[^_]*?([0-9]+)")
 
 

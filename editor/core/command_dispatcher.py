@@ -291,6 +291,16 @@ class CommandDispatcher(EventEmitter):
             new.x = FieldValue.parse(src.x, _vn).px(r) + dx
             new.y = FieldValue.parse(src.y, _vn).px(r) + dy
             copies.append(new)
+        # Les `parent` sont des NOMS : une copie dont le parent est du lot suit la copie de ce parent (sinon le
+        # sous-arbre copié resterait accroché à l'original) ; un parent resté en place est gardé ; un parent absent de
+        # la scène (collé ailleurs) devient racine plutôt que de pendre dans le vide.
+        renamed = {src.name: new.name for src, new in zip(sources, copies)}
+        kept = {a.name for a in scene.actors}
+        for new in copies:
+            if new.parent in renamed:
+                new.parent = renamed[new.parent]
+            elif new.parent and new.parent not in kept:
+                new.parent = None
 
         def persist():
             self._save_scene()
@@ -610,6 +620,14 @@ class CommandDispatcher(EventEmitter):
     def save_all(self):
         """Sauvegarde globale différée (après changements inspector)."""
         self._save_all()
+
+    def save_ui_layouts(self):
+        """Écrit les seules mises en page d'interface (geste de canvas sur une zone) :
+        `save_all` relit et recompare les quatorze collections du projet à chaque relâchement."""
+        if not self._project:
+            return
+        with self.suspended():
+            self._project.ui_layouts.save_all()
 
     def notify_scripts_changed(self):
         """Notifie que la liste des scripts a changé (création, suppression)."""

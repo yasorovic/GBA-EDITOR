@@ -417,7 +417,7 @@ def remap_tiles_to_bank(c_path: Path, bank_colors: list[int], emit: Callable) ->
     (suffixe différent de Tiles/Pal)."""
     import re
 
-    text = c_path.read_text()
+    text = c_path.read_text(encoding="utf-8", errors="replace")
     tiles_m = re.search(_ARRAY_RE.format(suffix="Tiles"), text)
     pal_m   = re.search(_ARRAY_RE.format(suffix="Pal"), text)
     if not tiles_m or not pal_m:

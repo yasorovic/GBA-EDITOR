@@ -172,6 +172,7 @@ class TextTable(QWidget):
         self._values: dict = {}
         self._markup_font = None
         self._number_groups = []
+        self._signature_shown = None   # structure de l'arbre affiché (cf. `_signature`) ; None = rien de fiable
         self._row_by_id = {}           # id du texte -> sa ligne : pas de parcours de l'arbre à chaque frappe
         self._revealed_ids = set()
         self._collapsed_entries = set()
@@ -450,15 +451,21 @@ class TextTable(QWidget):
         """Reconstruit la table depuis le projet, sélection conservée."""
         if select_ids is None:
             select_ids = [t.id for t in self.selected_texts()]
+        display_rows = sorted(editor_rows(self._project),
+            key=lambda r: (tuple(x.casefold() for x in r[1]), r[0].key.casefold())) if self._project else []
+        texts = [r[0] for r in display_rows]
+        usages = self._usage_index()
+        signature = (self._signature(display_rows), self._active_lang)
+        if signature == self._signature_shown and self._reorder_in_place(display_rows, usages):
+            self.select_by_ids(select_ids)
+            self._on_sel()
+            return
+        self._signature_shown = None
         self._blocking = True
         self._revealed_ids.clear()
         self._number_groups = []
         self._row_by_id = {}
         self._tree.clear()
-        display_rows = sorted(editor_rows(self._project),
-            key=lambda r: (tuple(x.casefold() for x in r[1]), r[0].key.casefold())) if self._project else []
-        texts = [r[0] for r in display_rows]
-        usages = self._usage_index()
         self._flags = {}
 
         # Une séquence est dérivée des clés (cf. core/text_sequences) : on monte son
@@ -490,10 +497,81 @@ class TextTable(QWidget):
             self._tree.setUpdatesEnabled(True)
             self._blocking = False
         self._materialize_visible()
+        self._signature_shown = signature
 
         if select_ids:
             self.select_by_ids(select_ids)
         self._on_sel()
+
+    @staticmethod
+    def _signature(display_rows):
+        """Ce qui fixe la STRUCTURE de l'arbre : les entrées isolées (id, clé, rangement) et, pour chaque séquence,
+        ses membres. Deux états de même signature ne diffèrent que par l'ORDRE des pages dans les séquences."""
+        loose = tuple((t.id, t.key, tuple(path)) for t, path, prefix in display_rows if prefix is None)
+        groups: dict = {}
+        for t, _path, prefix in display_rows:
+            if prefix is not None:
+                groups.setdefault(prefix, []).append(t.id)
+        return (loose, tuple((prefix, frozenset(ids)) for prefix, ids in groups.items()))
+
+    def _reorder_in_place(self, display_rows, usages) -> bool:
+        """Réordonner des pages ne change que quel texte occupe quel rang : les widgets (coûteux à construire) restent,
+        on leur donne l'entrée du nouveau rang. Faux si l'arbre ne correspond pas (l'appelant reconstruit)."""
+        members_of: dict = {}
+        for t, _path, prefix in display_rows:
+            if prefix is not None:
+                members_of.setdefault(prefix, []).append(t)
+        shown = {header.prefix: (group_row, header) for group_row, header in self._number_groups}
+        if set(shown) != set(members_of):
+            return False
+        ordered = {prefix: sorted(members, key=lambda text: (sequence_of(text.key)[1], text.key))
+                   for prefix, members in members_of.items()}
+        if any(shown[p][0].childCount() != len(m) for p, m in ordered.items()):
+            return False
+        self._blocking = True
+        self._flags = {}
+        try:
+            for t, path, prefix in display_rows:
+                if prefix is None:                       # entrée isolée : mêmes lignes, contenu relu
+                    row = self._row_by_id.get(t.id)
+                    if row is None:
+                        return False
+                    self._fill_row(row, t, usages)
+                    self._refresh_entry(row, t)
+            for prefix, members in ordered.items():
+                group_row, header = shown[prefix]
+                for position, text in enumerate(members):
+                    row = group_row.child(position)
+                    self._fill_row(row, text, usages)
+                    row.setData(0, _ROLE_DISPLAY_PATH, tuple(text.path))
+                    if getattr(row, "spec", None) is not None:      # éditeur pas encore construit
+                        row.spec = (text, f'{position+1:02}', prefix)
+                    else:
+                        entry = self._tree.itemWidget(row, COL_KEY)
+                        entry.rebind(text, self._editable_content(text))
+                        blocked = entry.collapse.blockSignals(True)
+                        entry.collapse.setChecked((prefix, text.id) in self._collapsed_entries)
+                        entry.collapse.blockSignals(blocked)
+                        entry.used.setText(row.text(COL_USED))
+                        entry.used.setToolTip(row.toolTip(COL_USED))
+                        entry.status.setText(row.text(COL_STATUS))
+                header.display_path = tuple(members[0].path[:-1])
+                header.table_bar.refresh(self._project, prefix)
+            self._apply_filter()
+        finally:
+            self._blocking = False
+        return True
+
+    def _refresh_entry(self, row, text):
+        """Relit une entrée isolée. L'objet `Text` peut avoir été remplacé (annulation) sous le même id."""
+        if getattr(row, "spec", None) is not None:
+            row.spec = (text, *row.spec[1:])
+        entry = self._tree.itemWidget(row, COL_KEY)
+        if entry is not None:
+            entry._text = text
+            entry.set_content(self._editable_content(text))
+            entry.used.setText(row.text(COL_USED))
+            entry.status.setText(row.text(COL_STATUS))
 
     def _mount_numbered_group(self, prefix, members, usages):
         members = sorted(members, key=lambda text: (sequence_of(text.key)[1], text.key))
@@ -579,18 +657,16 @@ class TextTable(QWidget):
         if prefix is None:
             entry.remove.setToolTip(label('txttbl.delete_title'))
             entry.remove.setAccessibleName(entry.remove.toolTip())
-        fold_key = (prefix, text.id)
-        entry.collapse.setChecked(fold_key in self._collapsed_entries)
+        # Les rappels lisent `entry._text` à l'émission : `rebind` peut donner à ce widget une autre entrée.
+        entry.collapse.setChecked((prefix, text.id) in self._collapsed_entries)
         entry.collapsed_changed.connect(lambda collapsed: (
-            self._collapsed_entries.add(fold_key) if collapsed
-            else self._collapsed_entries.discard(fold_key)))
+            self._collapsed_entries.add((prefix, entry._text.id)) if collapsed
+            else self._collapsed_entries.discard((prefix, entry._text.id))))
         if prefix is not None:
             entry.grip.moved.connect(lambda y, pre=prefix: self._entry_drag_over(pre, y))
-            entry.grip.released.connect(lambda y, pre=prefix, tid=text.id: self._entry_drop(pre, tid, y))
-        entry.add_asked.connect(lambda tid=text.id, pre=prefix: QTimer.singleShot(0,
-            lambda: self.entry_structure.emit(pre, tid, 'add')))
-        entry.remove_asked.connect(lambda tid=text.id, pre=prefix: QTimer.singleShot(0,
-            lambda: self.entry_structure.emit(pre, tid, 'remove')))
+            entry.grip.released.connect(lambda y, pre=prefix: self._entry_drop(pre, entry._text.id, y))
+        entry.add_asked.connect(lambda: self._ask_structure(prefix, entry, 'add'))
+        entry.remove_asked.connect(lambda: self._ask_structure(prefix, entry, 'remove'))
         entry.markup.set_font(self._markup_font)
         entry.used.setText(row.text(COL_USED))
         entry.used.setToolTip(row.toolTip(COL_USED))
@@ -607,10 +683,9 @@ class TextTable(QWidget):
         entry.activated.connect(lambda: self._activate_entry(index))
         lang = self._active_lang
         entry.content_edited.connect(
-            lambda before, after: self.content_edited.emit(text, before, after, lang))
+            lambda before, after: self.content_edited.emit(entry._text, before, after, lang))
         # Le renommage reconstruit la liste : attendre la fin du signal du champ.
-        entry.key_edited.connect(lambda key: QTimer.singleShot(
-            0, lambda: self.key_edited.emit(text, key)))
+        entry.key_edited.connect(lambda key: self._ask_key(entry, key))
         row.setSizeHint(COL_KEY, QSize(0, entry.sizeHint().height()))
         self._tree.setItemWidget(row, COL_KEY, entry)
         entry.set_selected(row.isSelected())
@@ -618,6 +693,14 @@ class TextTable(QWidget):
         if group is not None:
             self._sync_group_target(group)
         return entry
+
+    def _ask_structure(self, prefix, entry, action):
+        tid = entry._text.id       # lu maintenant : `rebind` peut changer l'entrée avant le tour de boucle suivant
+        QTimer.singleShot(0, lambda: self.entry_structure.emit(prefix, tid, action))
+
+    def _ask_key(self, entry, key):
+        text = entry._text
+        QTimer.singleShot(0, lambda: self.key_edited.emit(text, key))
 
     def _group_entries(self, prefix):
         """[(texte, page)] visibles de la séquence, dans l'ordre affiché."""

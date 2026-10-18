@@ -237,14 +237,14 @@ class TextFinder(QWidget):
                     item.setData(0, _ROLE_VIRTUAL, True)
                     item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsDragEnabled)
                 parent = item
+        parents = {path[:-1] for path in nodes if len(path) > 1}      # les nœuds sont clos par préfixe : parent direct suffit
         for path, item in nodes.items():
             if path:
                 item.setText(0, f"{path[-1]}  ({counts[path]})")
                 item.setToolTip(0, SEP.join(path))
                 # Un dernier niveau peut encore contenir plusieurs textes :
                 # l'icône texte est réservée à une entrée seule.
-                has_child = any(other[:len(path)] == path and len(other) > len(path)
-                                for other in nodes)
+                has_child = path in parents
                 is_folder = has_child or counts[path] > 1
                 item.setData(0, _ROLE_IS_FOLDER, is_folder)
                 if not is_folder:

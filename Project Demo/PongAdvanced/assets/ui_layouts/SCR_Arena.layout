@@ -14,7 +14,7 @@
       "highlight_color": 0,
       "priority": -1,
       "x": 24,
-      "y": 112,
+      "y": 104,
       "w": 192,
       "h": 40,
       "text_key": "",
@@ -24,7 +24,7 @@
       "align": "left",
       "preview_text": "",
       "preview_is_literal": true,
-      "sequence_prefix": "scr_text"
+      "sequence_prefix": "scr_arena_text"
     }
   ],
   "notes": ""

@@ -303,10 +303,18 @@ class MusicEditor(QWidget):
     def load(self, project, music, sections: bool = True) -> None:
         """`sections=False` pour un jingle : on montre la forme d'onde, pas de quoi régler une boucle
         que la ROM ne jouera pas."""
+        self.flush_pending()
         self._project, self._music, self._sections_on = project, music, sections
         self._wave.set_cue(0.0)
         self._scope = None
         self.reload()
+
+    def flush_pending(self) -> None:
+        """Une écriture attend son minuteur : elle part maintenant, tant que l'écran vise encore la musique qui l'a causée
+        (sinon elle s'écrirait sur la suivante, ou dans un autre projet)."""
+        if self._save_timer.isActive():
+            self._save_timer.stop()
+            self.changed.emit()
 
     def reload(self) -> None:
         """Relit le fichier et le `Track` : à appeler quand le FICHIER ou ce qui change son rendu

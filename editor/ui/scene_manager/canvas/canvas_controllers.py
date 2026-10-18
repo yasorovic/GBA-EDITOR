@@ -453,10 +453,7 @@ class SceneInpaintingController:
             return
         from core.history import SceneInpaintingCmd, get_history
         cmd = SceneInpaintingCmd(self, self._layer, self._layer.bg_slot, dict(delta))
-        h = get_history()
-        h._undo.append(cmd)
-        h._redo.clear()
-        h.changed.emit()
+        get_history().push_executed(cmd)
         self._persist()
 
     # ── Undo/redo (appelé par SceneInpaintingCmd) ────────────────────────

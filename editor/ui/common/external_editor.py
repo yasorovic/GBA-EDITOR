@@ -18,6 +18,7 @@ Le fichier réédité est repris par `project_watcher` (déjà en place pour tou
 """
 from __future__ import annotations
 from core.app_info import APP_NAME
+from core.tool_process import tool_environment
 from ui.common.labels import label
 import subprocess
 from pathlib import Path
@@ -72,7 +73,7 @@ def open_with(editor, path: Path) -> None:
         return
     if editor and Path(editor).exists():
         try:
-            subprocess.Popen([str(editor), str(path)])
+            subprocess.Popen([str(editor), str(path)], env=tool_environment())
             return
         except OSError:
             pass  # exécutable configuré cassé : on retombe sur le défaut système

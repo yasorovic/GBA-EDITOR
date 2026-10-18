@@ -24,7 +24,7 @@ from typing import Optional
 from core import crash_log
 from core.events import EventEmitter
 from core.toolchain import Toolchain
-from core.tool_process import run_tool
+from core.tool_process import run_tool, tool_environment
 from codegen.grit_conversion import (
     GritBackground, GritSprites, MmutilAudio,
     resolve_sound_assets, png_size,
@@ -97,6 +97,9 @@ def path_too_long_message(p: Project) -> Optional[str]:
 # Le démarrage de `make` peut échouer sans raison (cf. `BuildWorker._run_cmd`) : on le relance, deux fois au plus.
 _MSYS_START_FAILURE = "fatal error - add_item"
 _TOOL_START_RETRIES = 2
+# Un outil (make, grit, mmutil) qui ne rend pas la main en ce temps est tenu pour bloqué : sans limite, un `make` figé
+# gelait le build jusqu'à la fermeture de l'éditeur.
+_TOOL_TIMEOUT_SECONDS = 15 * 60
 
 
 class _PalKey:
@@ -575,7 +578,7 @@ class BuildWorker(EventEmitter, threading.Thread):
             # page de code (accents d'un dossier de projet) ; un octet que le
             # décodeur refuse tuait le thread de lecture de `subprocess` et le
             # build perdait toute la sortie de l'outil, erreurs comprises.
-            proc = run_tool(cmd, cwd=str(cwd) if cwd else None, env=env)
+            proc = run_tool(cmd, cwd=str(cwd) if cwd else None, env=env, timeout=_TOOL_TIMEOUT_SECONDS)
             # Le runtime msys2 de devkitPro (`make`, `sh`) échoue parfois AU DÉMARRAGE, avant d'avoir rien fait :
             # `fatal error - add_item ("\??\C:\devkitPro\msys2", "/", ...) failed`. Il ne manque ni fichier ni
             # réglage, l'appel suivant passe (mesuré le 2026-10-11 : trois échecs de suite, puis des builds propres sans
@@ -586,7 +589,7 @@ class BuildWorker(EventEmitter, threading.Thread):
                 self._emit("log_line", f"{prefix} msys2 failed to start (transient); retrying "
                                        f"({attempt}/{_TOOL_START_RETRIES})")
                 time.sleep(0.5 * attempt)
-                proc = run_tool(cmd, cwd=str(cwd) if cwd else None, env=env)
+                proc = run_tool(cmd, cwd=str(cwd) if cwd else None, env=env, timeout=_TOOL_TIMEOUT_SECONDS)
             failed = proc.returncode != 0
             for line in proc.stdout.splitlines():
                 self._emit("log_line", f"  {line}")
@@ -598,6 +601,10 @@ class BuildWorker(EventEmitter, threading.Thread):
                 self._emit("diagnostic", build_error(
                     f"failed (code {proc.returncode})", prefix.strip("[]")))
             return not failed
+        except subprocess.TimeoutExpired:
+            self._emit("diagnostic", build_error(
+                f"no answer after {_TOOL_TIMEOUT_SECONDS // 60} minutes: the tool was stopped", prefix.strip("[]")))
+            return False
         except FileNotFoundError as e:
             self._emit("diagnostic", build_error(f"not found: {e}", prefix.strip("[]")))
             return False
@@ -610,7 +617,7 @@ class BuildWorker(EventEmitter, threading.Thread):
             return False
 
     def _make_env(self) -> dict:
-        env = os.environ.copy()
+        env = tool_environment()
         dkp = self.toolchain.devkitpro_root or Path("C:/devkitPro")
         arm = self.toolchain.resolve_arm_gcc()
         env["DEVKITPRO"] = str(dkp).replace("\\", "/")
@@ -797,7 +804,7 @@ class BuildWorker(EventEmitter, threading.Thread):
                                       (8 - map_sbb_count) * 64)
             sym = bg_layer_sym(asset.name, layer.bg_slot)
             header = p.grit_out_dir / f"{sym}.h"
-            m = re.search(rf"{sym}TilesLen\s+(\d+)", header.read_text()) if header.exists() else None
+            m = re.search(rf"{sym}TilesLen\s+(\d+)", header.read_text(encoding="utf-8", errors="replace")) if header.exists() else None
             if not m:
                 self._emit("diagnostic", build_error(
                     f"{sym}.h not found/unreadable — build cancelled", "grit"))
@@ -1125,6 +1132,7 @@ class BuildWorker(EventEmitter, threading.Thread):
         mgba = self.toolchain.resolve_mgba()
         if not mgba:
             self._emit("diagnostic", build_error("not found", "mgba")); return False
-        BuildWorker._mgba_proc = subprocess.Popen([str(mgba), str(p.rom_path)])
+        BuildWorker._mgba_proc = subprocess.Popen([str(mgba), str(p.rom_path)],
+                                                  env=tool_environment())
         self._emit("log_line","[mgba] launched")
         return True

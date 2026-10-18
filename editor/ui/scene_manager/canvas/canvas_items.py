@@ -169,6 +169,7 @@ class SpriteItem(QGraphicsPixmapItem):
         # faire suivre en translation groupée pendant le drag — cf. itemChange.
         self._drag_descendants: list = []
         self._drag_desc_origin: list = []
+        self._drag_peers: list = []     # les autres acteurs sélectionnés, déplacés avec celui-ci
         self._mask_rects: list = []   # découpe par les windows (cf. set_mask_rects)
         self._canvas_w = canvas_w
         self._canvas_h = canvas_h
@@ -243,58 +244,83 @@ class SpriteItem(QGraphicsPixmapItem):
     # mouvement, faisant "sauter" l'acteur au clic (cf bug rapporté).
     _CLICK_THRESHOLD = 2
 
-    def mousePressEvent(self, e):
-        # Capturer la position (résolue en px) avant le début du drag
+    def _begin_drag(self) -> None:
+        """Capture la pose de départ : la sienne et celle de son sous-arbre (cf. itemChange)."""
         self._drag_origin = self.pos_px()
         self._drag_confirmed = False
         sc = self.scene()
         self._drag_descendants = sc.descendant_sprite_items(self) if sc is not None else []
         self._drag_desc_origin = [(it, *it.pos_px()) for it in self._drag_descendants]
+
+    def _end_drag(self) -> None:
+        self._drag_origin = None
+        self._drag_confirmed = False
+        self._drag_descendants = []
+        self._drag_desc_origin = []
+
+    def mousePressEvent(self, e):
+        self._begin_drag()
         super().mousePressEvent(e)
+        # Qt déplace TOUTE la sélection avec l'item saisi, mais seul celui-ci recevrait le clic : les autres armés
+        # ici écrivent eux aussi leur position au modèle (itemChange), et entrent dans la même entrée d'historique.
+        sc = self.scene()
+        candidates = [] if sc is None else [
+            it for it in sc.selectedItems() if isinstance(it, SpriteItem) and it is not self]
+        # Un acteur sélectionné dont un ancêtre l'est aussi (ou dont l'ancêtre est l'item saisi) suit déjà par la
+        # translation groupée de cet ancêtre : l'armer en plus le déplacerait deux fois.
+        followers = {id(d) for it in (self, *candidates)
+                     for d in (it._drag_descendants if it is self else sc.descendant_sprite_items(it))}
+        self._drag_peers = [it for it in candidates if id(it) not in followers]
+        for peer in self._drag_peers:
+            peer._begin_drag()
+
+    def _dragged_poses(self) -> list:
+        """[(actor, ancien x, ancien y, nouveau x, nouveau y)] de ce qui a bougé : cet item, son sous-arbre, puis les
+        autres acteurs sélectionnés et leurs sous-arbres, chacun une fois."""
+        moves, seen = [], set()
+        for node in (self, *self._drag_peers):
+            if node._drag_origin is None:
+                continue
+            poses = [(node, *node._drag_origin)] + list(node._drag_desc_origin)
+            for it, ox, oy in poses:
+                nx, ny = it.pos_px()
+                if (ox, oy) != (nx, ny) and id(it.scene_sprite) not in seen:
+                    seen.add(id(it.scene_sprite))
+                    moves.append((it.scene_sprite, ox, oy, nx, ny))
+        return moves
 
     def mouseReleaseEvent(self, e):
         super().mouseReleaseEvent(e)
         if self._drag_origin is not None:
-            old_x, old_y = self._drag_origin
-            new_x, new_y = self.pos_px()
-            if (old_x, old_y) != (new_x, new_y):
-                # Le sous-arbre a suivi en direct (itemChange) : réunir ses
-                # déplacements dans la MÊME entrée d'historique que le parent.
-                items = [(self.scene_sprite, old_x, old_y, new_x, new_y)]
-                for it, ox, oy in self._drag_desc_origin:
-                    nx, ny = it.pos_px()
-                    if (ox, oy) != (nx, ny):
-                        items.append((it.scene_sprite, ox, oy, nx, ny))
+            items = self._dragged_poses()
+            if items:
+                # Le sous-arbre et les autres acteurs sélectionnés ont suivi en direct (itemChange) : tous les
+                # déplacements entrent dans la MÊME entrée d'historique que l'item saisi.
                 cmd = (MoveActorGroupCmd(items) if len(items) > 1 else
-                       MoveActorCmd(self.scene_sprite, old_x, old_y, new_x, new_y))
+                       MoveActorCmd(*items[0]))
                 # Pousser la commande SANS re-exécuter (le drag a déjà modifié actor)
-                h = get_history()
-                h._undo.append(cmd)  # bypass execute() — déjà fait par le drag
-                h._redo.clear()
-                h.changed.emit()
+                get_history().push_executed(cmd)
                 if self._save_fn:
                     self._save_fn()
-            self._drag_origin = None
-            self._drag_confirmed = False
-            self._drag_descendants = []
-            self._drag_desc_origin = []
+            for peer in self._drag_peers:
+                peer._end_drag()
+            self._drag_peers = []
+            self._end_drag()
 
     def cancel_drag(self) -> None:
         """Abandonne le déplacement en cours : l'acteur (et son sous-arbre) retrouve sa pose du press, et le
         relâchement qui suivra n'écrira aucune entrée d'historique. Pour un glisser qui QUITTE le canvas."""
         if self._drag_origin is None:
             return
-        ox, oy = self._drag_origin
-        descendants = self._drag_desc_origin
-        self._drag_origin = None                  # d'abord : itemChange ne doit plus réécrire le modèle
-        self._drag_confirmed = False
-        self.scene_sprite.x, self.scene_sprite.y = ox, oy
-        self.setPos(ox, oy)
-        for it, dx, dy in descendants:
-            it.scene_sprite.x, it.scene_sprite.y = dx, dy
-            it.setPos(dx, dy)
-        self._drag_descendants = []
-        self._drag_desc_origin = []
+        nodes = (self, *self._drag_peers)
+        poses = [(it, ox, oy) for node in nodes if node._drag_origin is not None
+                 for it, ox, oy in [(node, *node._drag_origin)] + list(node._drag_desc_origin)]
+        for node in nodes:
+            node._end_drag()                      # d'abord : itemChange ne doit plus réécrire le modèle
+        self._drag_peers = []
+        for it, ox, oy in poses:
+            it.scene_sprite.x, it.scene_sprite.y = ox, oy
+            it.setPos(ox, oy)
         if self.scene() is not None:
             self.scene().sprite_moved.emit()
 

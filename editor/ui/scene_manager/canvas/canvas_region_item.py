@@ -807,7 +807,6 @@ class UIRegionItem(QGraphicsRectItem):
         if (not has_font_markup and not getattr(font, "raster_glyphs", None)
                 and self._load_text_sheet(font) is None):
             return False
-        from core.engine_emulation.text_layout import layout_text, layout_marked_text
         r = self.rect()
         # Une chaîne (`Text`) ne se coupe pas et ne s'aligne pas dans son
         # rectangle : largeur de coupe illimitée, ferrage à gauche — le
@@ -815,36 +814,27 @@ class UIRegionItem(QGraphicsRectItem):
         wraps = getattr(self._region, "wraps", True)
         wrap_w = int(r.width()) if wraps else NO_WRAP_PX
         align = getattr(self._region, "align", "left") if wraps else "left"
-        if has_font_markup:
-            placed, over = layout_marked_text(
-                font, source, self._paint_font_map(),
-                self._project.text_values() if hasattr(self._project, "text_values") else {},
-                wrap_w, int(r.height()), align,
-                self._composited())
+        # La mise en page balaie les glyphes de la police (~10 ms) : elle ne se
+        # refait que si l'un de ses ingrédients change, pas à chaque repaint
+        # (survol, sélection, pas de glissé). `id(font)` : une police
+        # reconstruite est un autre objet.
+        values = (tuple(sorted(self._project.text_values().items(), key=str))
+                  if has_font_markup and hasattr(self._project, "text_values") else ())
+        key = (text, source, values, has_font_markup, id(font), wrap_w, int(r.height()), align)
+        cached = getattr(self, "_layout_cache", None)
+        if cached is not None and cached[0] == key:
+            placed, over, extent = cached[1]
         else:
-            plain, over = layout_text(font, text, wrap_w, int(r.height()),
-                                      align=align,
-                                      composited=self._composited())
-            placed = [(font, glyph, gx, gy) for glyph, gx, gy in plain]
+            placed, over, extent = self._compute_text_layout(
+                font, text, source, has_font_markup, wrap_w, int(r.height()), align)
+            self._layout_cache = (key, (placed, over, extent))
         if not placed:
             return over
         painter.save()
         # Pixel art : jamais d'interpolation, à aucun zoom.
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-        # Surlignement SOUS les glyphes, sur l'étendue rendue arrondie à la
-        # TUILE — le moteur peint des tuiles de surface, pas des pixels libres
-        # (cf. `text_surf_seed`). Bornes prises comme les siennes : la plume
-        # (donc la CHASSE, pas la largeur d'encre) à droite, l'INTERLIGNE en
-        # bas. Les mesurer autrement donnerait une tuile d'écart avec la ROM sur
-        # une police dont les glyphes sont plus petits que leur cellule.
-        from codegen.font_emit import glyph_advance_px, font_line_px
-        line = font_line_px(font)
-        x0 = min(gx for _f, _g, gx, _gy in placed) // 8 * 8
-        y0 = min(gy for _f, _g, _gx, gy in placed) // 8 * 8
-        x1 = -(-max(gx + glyph_advance_px(g, f) for f, g, gx, _gy in placed) // 8) * 8
-        y1 = -(-(max(gy for _f, _g, _gx, gy in placed) + line) // 8) * 8
-        self._fill_highlight(painter, x0, y0, x1, y1)
+        self._fill_highlight(painter, *extent)
         for f, g, gx, gy in placed:
             if self._paint_built_glyph(painter, f, g, r.left() + gx, r.top() + gy,
                                        ink_color):
@@ -858,6 +848,35 @@ class UIRegionItem(QGraphicsRectItem):
                                glyph_sheet, QRectF(g.x, g.y, g.w, g.h))
         painter.restore()
         return over
+
+    def _compute_text_layout(self, font, text, source, has_font_markup,
+                             wrap_w, height, align):
+        """(glyphes posés, débordement, étendue de surlignement) — sans cache."""
+        from core.engine_emulation.text_layout import layout_text, layout_marked_text
+        if has_font_markup:
+            placed, over = layout_marked_text(
+                font, source, self._paint_font_map(),
+                self._project.text_values() if hasattr(self._project, "text_values") else {},
+                wrap_w, height, align, self._composited())
+        else:
+            plain, over = layout_text(font, text, wrap_w, height, align=align,
+                                      composited=self._composited())
+            placed = [(font, glyph, gx, gy) for glyph, gx, gy in plain]
+        if not placed:
+            return placed, over, None
+        # Surlignement SOUS les glyphes, sur l'étendue rendue arrondie à la
+        # TUILE — le moteur peint des tuiles de surface, pas des pixels libres
+        # (cf. `text_surf_seed`). Bornes prises comme les siennes : la plume
+        # (donc la CHASSE, pas la largeur d'encre) à droite, l'INTERLIGNE en
+        # bas. Les mesurer autrement donnerait une tuile d'écart avec la ROM sur
+        # une police dont les glyphes sont plus petits que leur cellule.
+        from codegen.font_emit import glyph_advance_px, font_line_px
+        line = font_line_px(font)
+        x0 = min(gx for _f, _g, gx, _gy in placed) // 8 * 8
+        y0 = min(gy for _f, _g, _gx, gy in placed) // 8 * 8
+        x1 = -(-max(gx + glyph_advance_px(g, f) for f, g, gx, _gy in placed) // 8) * 8
+        y1 = -(-(max(gy for _f, _g, _gx, gy in placed) + line) // 8) * 8
+        return placed, over, (x0, y0, x1, y1)
 
     def _paint_built_glyph(self, painter, font, glyph, x: float, y: float,
                             ink: "QColor | None") -> bool:

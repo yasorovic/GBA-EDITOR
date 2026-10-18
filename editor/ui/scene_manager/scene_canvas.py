@@ -201,7 +201,6 @@ class SceneEditor(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._project: Optional[Project] = None
-        self._sprite_pixmaps: dict[int, QPixmap] = {}
         # Frames AVANT mélange — cf. `refresh_blend`.
         self._raw_sprite: dict[int, QPixmap] = {}
         # Layers AVANT mélange — idem.
@@ -218,7 +217,6 @@ class SceneEditor(QWidget):
         # pas écrire la scène sur disque à chaque frappe — on ne persiste qu'une
         # fois l'utilisateur arrêté, ce qui évite la rafale d'écritures atomiques
         # (source des verrous transitoires Windows) et réduit l'I/O.
-        from PyQt6.QtCore import QTimer
         self._nudge_save_timer = QTimer(self)
         self._nudge_save_timer.setSingleShot(True)
         self._nudge_save_timer.setInterval(180)
@@ -226,7 +224,6 @@ class SceneEditor(QWidget):
         self._setup_ui()
 
     def _flush_nudge_save(self):
-        from core.command_dispatcher import get_dispatcher
         get_dispatcher().save_scene()
 
     def _setup_ui(self):
@@ -438,7 +435,6 @@ class SceneEditor(QWidget):
         `item` sert de repli quand il vient d'un clic hors sélection. Renommer
         reste réservé à un actor unique (un seul nom à saisir)."""
         from PyQt6.QtWidgets import QMenu
-        from core.command_dispatcher import get_dispatcher
         actors = [it.scene_sprite for it in self._selected_sprite_items()]
         if item.scene_sprite not in actors:
             actors = [item.scene_sprite]
@@ -479,18 +475,24 @@ class SceneEditor(QWidget):
         new_name = new_name.strip()
         if not new_name or new_name == actor.name:
             return
-        from core.command_dispatcher import get_dispatcher
+        from core.history import get_history, RenameActorCmd
         disp = get_dispatcher()
-        # Via le projet : réécrit les actor:get("…") des scripts et poste le
-        # message de statut (même chemin que le renommage par l'en-tête).
-        if self._project:
-            self._project.rename_actor(actor, new_name)
-        else:
+        if not self._project:
             actor.name = new_name
-        disp.save_scene()
-        disp._emit("actors_list_changed")
-        disp._emit("scene_sprites_changed")
-        get_bus().select(actor)   # rafraîchit l'inspecteur / l'en-tête
+            return
+
+        def refresh():
+            disp.save_scene()
+            disp._emit("actors_list_changed")
+            disp._emit("scene_sprites_changed")
+            get_bus().select(actor)   # rafraîchit l'inspecteur / l'en-tête
+
+        # Annulable, et via le projet : réécrit les actor:get("…") des scripts et poste le message de statut (même
+        # chemin que le renommage par l'en-tête). Un nom déjà pris dans la scène est refusé sans rien changer.
+        scene = self._project.active_scene
+        if scene is not None and any(a is not actor and a.name == new_name for a in scene.actors):
+            return
+        get_history().push(RenameActorCmd(self._project, actor, new_name, refresh))
 
     def _shortcut_tool(self, group: str):
         self._canvas_container.activate_tool_shortcut(group)
@@ -590,8 +592,9 @@ class SceneEditor(QWidget):
         for item in self._gba_scene.selectedItems():
             item.setSelected(False)
         first = None
+        by_actor = self._items_by_actor()
         for a in actors:
-            it = self._find_item(a)
+            it = by_actor.get(id(a))
             if it is not None:
                 it.setSelected(True)
                 first = first or it
@@ -615,22 +618,31 @@ class SceneEditor(QWidget):
         get_dispatcher().status(label(verb, n=n))
 
     def _shortcut_nudge(self, dx: int, dy: int):
-        items = self._selected_sprite_items()
-        if not items:
+        selected = self._selected_sprite_items()
+        if not selected:
             return
-        from core.history import get_history, MoveActorCmd
+        from core.history import get_history, MoveActorCmd, MoveActorGroupCmd
+        # Comme un glisser à la souris : la sélection ET le sous-arbre de chaque parent bougent ensemble, en une
+        # seule entrée d'historique (qui fusionne tant que la flèche reste enfoncée). Ordre de la scène, pas de la
+        # sélection : la fusion compare les listes d'acteurs.
+        moving = {id(it) for it in selected}
+        for it in selected:
+            moving.update(id(d) for d in self._gba_scene.descendant_sprite_items(it))
+        items = [it for it in self._gba_scene._sprite_items if id(it) in moving]
+        moves = []
         for it in items:
-            a = it.scene_sprite
             ox, oy = it.pos_px()   # résout px/tile/réf avant d'ajouter le delta
+            moves.append((it.scene_sprite, ox, oy, ox + dx, oy + dy))
 
-            def persist(it=it):
-                # Le garde-fou itemChange (_drag_origin is None) empêche le
-                # re-snap et la réécriture du modèle sur ce setPos programmatique.
+        def persist():
+            # Le garde-fou itemChange (_drag_origin is None) empêche le
+            # re-snap et la réécriture du modèle sur ce setPos programmatique.
+            for it in items:
                 it.sync_pos()
-                self._update_actor_box_overlay()
+            self._update_actor_box_overlay()
 
-            get_history().push(
-                MoveActorCmd(a, ox, oy, ox + dx, oy + dy, persist_fn=persist))
+        get_history().push(MoveActorCmd(*moves[0], persist_fn=persist) if len(moves) == 1
+                           else MoveActorGroupCmd(moves, persist_fn=persist))
         # Persistance différée/coalescée (cf. _nudge_save_timer) : un maintien de
         # flèche déclenche une seule sauvegarde après relâchement, pas une par
         # frappe. Le modèle en mémoire est déjà à jour pour l'affichage.
@@ -699,8 +711,6 @@ class SceneEditor(QWidget):
 
         match tool_id:
             case t if t.startswith("collision"):
-                from ui.scene_manager.canvas_tools import CollisionTool
-
                 self._gba_view.set_tool(CollisionTool(self._gba_view, t))
             case t if t.startswith("inpaint"):
                 from ui.scene_manager.canvas_tools import SceneInpaintingTool
@@ -745,9 +755,9 @@ class SceneEditor(QWidget):
         # Écriture par le dispatcher (watcher suspendu) — cf. la même règle dans
         # UIRegionInspector._persist : une écriture nue passe pour une édition
         # externe et déclenche un rechargement de scène en plein geste.
-        get_dispatcher().save_all()
+        get_dispatcher().save_ui_layouts()
         self.scene_changed.emit()
-        from core.selection_bus import get_bus, UIRegionSelection
+        from core.selection_bus import UIRegionSelection
         cur = get_bus().current
         if isinstance(cur, UIRegionSelection):
             get_bus().changed.emit(cur)
@@ -761,7 +771,7 @@ class SceneEditor(QWidget):
         l'ajouter à une."""
         if not self._project:
             return
-        from core.selection_bus import get_bus, UIRegionSelection
+        from core.selection_bus import UIRegionSelection
         get_bus().select(UIRegionSelection(layout, region))
         users = self._project.ui_layout_users(layout.name)
         shared = label('scncanvas.shared_layout', count=len(users)) if len(users) > 1 else ""
@@ -781,7 +791,6 @@ class SceneEditor(QWidget):
             return
         scene = self._project.active_scene
         scene.collision_map = self._gba_scene.collision_overlay.get_map()
-        from core.command_dispatcher import get_dispatcher
 
         get_dispatcher().save_scene()
 
@@ -789,7 +798,6 @@ class SceneEditor(QWidget):
 
     def load_project(self, project: Project):
         self._project = project
-        self._sprite_pixmaps.clear()
         self._raw_sprite.clear()
 
         scene = project.active_scene
@@ -1006,6 +1014,7 @@ class SceneEditor(QWidget):
         }
         # Bloquer les signaux AVANT clear pour que selectionChanged ne fire pas
         # pendant le rebuild et ne vide pas l'inspector via get_bus().clear()
+        self._raw_sprite.clear()      # un acteur devenu repère (sprite retiré) ne doit pas retrouver son ancienne image
         self._gba_scene.blockSignals(True)
         self._gba_scene.clear_sprites()
         p = self._project
@@ -1053,7 +1062,6 @@ class SceneEditor(QWidget):
                 # placeholder n'y entre pas — il ne représente aucun pixel réel.
                 self._raw_sprite[id(actor)] = frame_px
                 frame_px = self._blend_sprite(actor, frame_px)
-            self._sprite_pixmaps[id(actor)] = frame_px
             save_fn = lambda _s=self: _s.scene_changed.emit()
             ox  = getattr(sprite_comp, "origin_x", 0)   if sprite_comp else 0
             oy  = getattr(sprite_comp, "origin_y", 0)   if sprite_comp else 0
@@ -1132,10 +1140,10 @@ class SceneEditor(QWidget):
         for item in self._gba_scene.camera_items():
             if item.isSelected():
                 x, y = int(item.pos().x()), int(item.pos().y())
-                if not dragging:
-                    self._write_camera_pos(x, y, item)
+                written = not dragging and self._write_camera_pos(x, y, item)
                 self.camera_position_changed.emit(item.camera, x, y)
-                if not dragging:
+                # `changed` part à chaque repaint de la scène : sans écriture réelle, rien à sauver ni à reconstruire.
+                if written:
                     self.scene_changed.emit()
 
     def _commit_camera_drag(self):
@@ -1252,7 +1260,8 @@ class SceneEditor(QWidget):
         # rectangle désélectionnait/resélectionnait tout et recentrait la vue.
         from core.selection_bus import ActorSelection
         if isinstance(obj, ActorSelection):
-            wanted = [self._find_item(a) for a in obj.actors]
+            by_actor = self._items_by_actor()
+            wanted = [by_actor.get(id(a)) for a in obj.actors]
             current = {id(it) for it in self._gba_scene.selectedItems()}
             if (None not in wanted and current == {id(it) for it in wanted}):
                 active = self._find_item(obj.active)
@@ -1267,8 +1276,9 @@ class SceneEditor(QWidget):
         from core.selection_bus import ActorSelection
         if isinstance(obj, ActorSelection):
             active_item = None
+            by_actor = self._items_by_actor()
             for actor in obj.actors:
-                item = self._find_item(actor)
+                item = by_actor.get(id(actor))
                 if item:
                     item.setSelected(True)
                     if actor is obj.active:
@@ -1319,6 +1329,11 @@ class SceneEditor(QWidget):
             # Bascule de `screen_space` : le repère change, pas seulement la
             # position — sync_sprite_space repositionne aussi.
             self._gba_scene.sync_sprite_space(item)
+
+    def _items_by_actor(self) -> dict:
+        """{id(acteur): item}, construit une fois pour un geste qui en cherche N (sélection de lot) : N appels de
+        `_find_item` parcourraient N fois toute la liste."""
+        return {id(item.scene_sprite): item for item in self._gba_scene._sprite_items}
 
     def _find_item(self, actor: Actor) -> Optional[SpriteItem]:
         for item in self._gba_scene._sprite_items:
@@ -1388,23 +1403,24 @@ class SceneEditor(QWidget):
             x, y = int(item.pos().x()), int(item.pos().y())
             self._write_camera_pos(x, y, item)
 
-    def _write_camera_pos(self, x: int, y: int, item):
-        """Écrit le cadrage dans la caméra possédée par la scène active.
+    def _write_camera_pos(self, x: int, y: int, item) -> bool:
+        """Écrit le cadrage dans la caméra possédée par la scène active. Rend True si la position a changé.
 
         `item.camera is None` désigne le support invisible d'une scène sans
         caméra (cf. CameraItem) : il n'est pas déplaçable, rien à écrire."""
         scene = self._project.active_scene if self._project else None
         cam = item.camera
         if scene is None or cam is None:
-            return
+            return False
         if (cam.px('x', self._project), cam.px('y', self._project)) == (x, y):
-            return
+            return False
         # Annulable comme un drag d'actor (cf. MoveActorCmd) : la MATÉRIALISATION
         # ci-dessus reste hors historique, seul le cadrage se défait.
         from core.history import get_history, MoveCameraCmd
         get_history().push(MoveCameraCmd(
             cam, cam.px('x', self._project), cam.px('y', self._project), x, y,
             persist_fn=lambda s=scene: self._save_scene_quietly(s)))
+        return True
 
     def _save_scene_quietly(self, scene):
         """Écrit la scène SANS que le watcher la reprenne pour une modification

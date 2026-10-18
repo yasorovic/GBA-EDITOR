@@ -32,7 +32,7 @@ L'éditeur détecte ces installations automatiquement.
 - [Guide utilisateur](https://yasorovic.github.io/GBA-EDITOR/user-guide/) : créer ou ouvrir un projet, naviguer, importer des ressources et lancer une première ROM.
 - [Guide de scripting](docs/scripting.md) : écrire le comportement d'un acteur.
 - [Référence de scripting](docs/scripting-reference.md) : vérifier la syntaxe disponible et les limites du langage.
-- [Projet de démo Pong](https://github.com/yasorovic/GBA-EDITOR/tree/main/Project%20Demo/Pong) : un projet complet à télécharger puis ouvrir dans l'éditeur.
+- [Projet de démo Pong Advanced](https://github.com/yasorovic/GBA-EDITOR/tree/main/Project%20Demo/PongAdvanced) : un projet complet à télécharger puis ouvrir dans l'éditeur.
 
 Le détail des travaux en cours et des prochaines versions se trouve dans la [roadmap](ROADMAP.md).
 

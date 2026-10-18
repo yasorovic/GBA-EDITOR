@@ -263,10 +263,7 @@ class CollisionTool(BaseTool):
                 dict(self._stroke_delta),
                 persist_fn=lambda: self._view.collision_painted.emit(),
             )
-            h = get_history()
-            h._undo.append(cmd)
-            h._redo.clear()
-            h.changed.emit()
+            get_history().push_executed(cmd)
             self._stroke_delta = {}
 
         if self._dirty:

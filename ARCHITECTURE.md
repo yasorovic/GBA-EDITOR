@@ -9,223 +9,72 @@ Détails techniques du projet — terminologie, structure des fichiers, pipeline
 ```
 backstage/
 ├── editor/                          ← application Python (PyQt6)
-│   ├── main.py                      ← point d'entrée
-│   ├── window.py                    ← MainWindow + onglets
-│   ├── core/
-│   │   ├── project.py               ← classe Project : registres, scène active, recherches, save/load
-│   │   ├── project_paths.py         ← tranche de Project : où chaque chose vit sur le disque
-│   │   ├── project_variables.py     ← tranche de Project : globals et constantes
-│   │   ├── project_texts.py         ← tranche de Project : table de textes + règles de la clé
-│   │   ├── project_langs.py         ← tranche de Project : traductions, un fichier par langue
-│   │   ├── project_renames.py       ← tranche de Project : renommer et réparer ce qui cite
-│   │   ├── models/                  ← modèle de domaine (dataclasses + sérialisation), un fichier par sous-domaine
-│   │   │   ├── ids.py                   ← id opaque (12 chiffres hexadécimaux) partagé (données) vs nom lisible (code écrit à la main)
-│   │   │   ├── unique_name.py           ← la règle unique du nom libre : `coin`, `coin_2`, `coin_3`
-│   │   │   ├── resource.py, settings.py, palette.py, sub_palette.py
-│   │   │   ├── components.py            ← Components ECS (CollisionBox/Sprite/SoundFx/Script) + registre
-│   │   │   ├── sprite.py, background.py, audio.py
-│   │   │   ├── font.py, font_asset.py    ← source Font/Glyph vs recette logique FontAsset
-│   │   │   ├── text.py                  ← Text + clé dérivée + arbre de rangement (dérivé de la liste plate)
-│   │   │   ├── scene.py                 ← Actor, Prefab, Scene, collision map
-│   │   │   └── tile_codec.py            ← format binaire tuile/entrée de carte — module FEUILLE, n'importe rien
+│   ├── main.py, window.py           ← point d'entrée ; MainWindow + onglets
+│   ├── core/                        ← tout ce qui ne dessine rien
+│   │   ├── project.py               ← classe Project (registres, scène active, save/load), en tranches :
+│   │   │                              project_paths / _variables / _texts / _langs / _renames
+│   │   ├── models/                  ← modèle de domaine (dataclasses + sérialisation), un fichier par sous-domaine ;
+│   │   │                              `tile_codec.py` est une FEUILLE (n'importe rien)
 │   │   ├── resources/               ← persistance disque ↔ modèles, sans dépendre de Project
-│   │   │   ├── resource_index.py    ← inventaire léger nom → chemin, sans lire les JSON ; RÉCURSIF (un sidecar peut vivre dans un sous-dossier de sa famille), le moins profond l'emporte sur un homonyme
-│   │   │   ├── resource_store.py    ← ResourceStore générique (I/O JSON par collection) ; un item est lu, écrit, renommé et supprimé là où il vit, `save(item, folder)` pose un nouvel asset où l'on veut
-│   │   │   ├── deleted_files.py     ← `.temp/` du projet : ce qu'on supprime y est déplacé, Ctrl+Z le rend, la fermeture le vide
-│   │   │   ├── palette_store.py     ← palettes .hex + sidecar JSON
-│   │   │   └── asset_reconciliation.py ← synchronisation des fichiers assets et de leurs sidecars
-│   │   ├── music_structure.py       ← les réglages d'une `.music` face à son fichier : sections, boucle, coupe (`cut_problems`), ce que la ROM lit (`music_info_row`)
-│   │   ├── wav_module.py            ← une piste WAV encapsulée en VRAI module XM : un échantillon par segment (frontières des sections), une ligne = 180 échantillons du mixeur, `plan_wav` traduit les ms en positions d'ordre
-│   │   ├── disk_tree.py             ← `assets/` tel qu'il est sur le disque, chaque fichier marqué (asset, source reliée, source libre, non géré) — sans Qt, lecture seule
-│   │   ├── disk_folders.py          ← créer un dossier de `assets/` (refuse tout ce qui sort de `assets/`)
-│   │   ├── asset_creation.py        ← *Create asset* : un format de source → les types qu'il peut devenir ; construit l'asset (nom unique, à côté de sa source, qui le POINTE), l'historique le range (`CreateAssetCmd`)
-│   │   ├── asset_usages.py          ← ce qui cite encore un asset (composants, calques, prefabs, palettes, scripts) : l'avertissement avant de le supprimer
-│   │   ├── blank_assets.py          ← les assets vierges sans source (scène, prefab, mise en page, boîtes, table, palette) et le contenu d'un script / behavior neuf
-│   │   ├── disk_commands.py         ← importer, déplacer, créer un dossier, renommer un dossier / une source / un script (arbre et vue à plat, clic sur le nom ou F2), créer un fichier : des `Command` annulables autour de `disk_folders`, `disk_move`, `asset_creation`
-│   │   ├── disk_move.py             ← déplacer fichiers et dossiers de `assets/` (glisser-déposer de l'onglet Disk) : réécrit le chemin de source des assets, n'écrase jamais, `drop_verdict` répond au survol sans rien toucher, une image de fond se déplace comme n'importe quelle source (`BackgroundAsset.asset` est un chemin relatif au projet, lu par `Project.background_image_path`), refuse palettes / textes / variables / scripts / images de fonds
-│   │   ├── asset_relink.py          ← l'asset dont la source manque (`missing_sources`, erreur de build du validateur) et `relink_source` : le relier à un autre fichier sans le recréer
-│   │   ├── collision_slopes.py      ← génération des tiles de pente (Bresenham) pour CollisionTool
-│   │   ├── project_watcher.py       ← détection live des assets (déplacement vers projects/ à venir)
-│   │   ├── sprite_compose.py        ← composition d'une frame de sprite depuis son PNG source (PIL)
-│   │   ├── font_import.py           ← import de police (PNG / BMFont .fnt), mesure des chasses
-│   │   ├── font_metadata.py / font_rasterizer.py ← lecture SFNT et RasterGlyph FreeType à la demande
-│   │   ├── engine_emulation/           ← ce que l'éditeur REFAIT en Python parce que la console
-│   │   │   │                          le fait en C — DEUX implémentations à tenir d'accord
-│   │   │   ├── text_layout.py       ← où atterrit chaque glyphe (jumeau : text_layout() du moteur)
-│   │   │   ├── blend_preview.py     ← les formules BLDCNT/BLDALPHA/BLDY appliquées aux images
-│   │   │   ├── module_render.py     ← rejoue un module façon mixeur maxmod (taux réduit, sans interpolation)
-│   │   │   ├── music_deck.py        ← la couche module : transitions, fondus, section de boucle (jumeau : music_transition_tick() / music_loop_tick())
-│   │   │   ├── module_stream.py     ← un module joué EN DIRECT, tick par tick (`StreamTrack`) : tempo et hauteur lus à chaque tick, sauts demandés au rendu
-│   │   │   ├── module_model.py      ← le modèle commun aux 4 formats + reconnaissance par signature
-│   │   │   └── mod/s3m/xm/it_file.py ← les 4 lecteurs de format que maxmod accepte
-│   │   ├── text_markup.py           ← langage de balisage des textes (BBCode) : analyse → affiché + effets
-│   │   ├── toolchain.py             ← détection devkitPro/mGBA (PATH, config, emplacements connus)
-│   │   │                             + `config_dir()`, où les 4 réglages de MACHINE posent leur JSON
-│   │   ├── interface_preferences.py ← ce que l'interface montre d'elle-même (astuces) — par machine
-│   │   └── ...
-│   ├── codegen/
-│   │   ├── rom_build.py             ← orchestration build (BuildWorker)
-│   │   ├── grit_conversion.py        ← grit (sprites + BG + Sounds)
-│   │   └── runtime_codegen/         ← génération main.c, scènes, acteurs
-│   │       └── data_tables.py       ← tables de données du projet, en `const` dans la ROM
+│   │   │                              (index nom → chemin sans lire les JSON, ResourceStore générique, `.temp/` des suppressions)
+│   │   ├── engine_emulation/        ← ce que l'éditeur REFAIT en Python parce que la console le fait en C :
+│   │   │                              DEUX implémentations à tenir d'accord (mise en page du texte, BLDCNT, rendu des modules
+│   │   │                              façon maxmod, transitions de musique)
+│   │   ├── disk_*.py, asset_*.py    ← l'onglet Disk et ses gestes annulables (arbre de `assets/`, déplacer, relier une source,
+│   │   │                              créer un asset, ce qui cite encore un asset avant de le supprimer)
+│   │   ├── toolchain.py             ← détection devkitPro/mGBA (PATH, config, emplacements connus) + `config_dir()`
+│   │   └── …                        ← le reste est un module par sujet (polices, textes et balisage, audio, watcher de projet)
+│   ├── codegen/                     ← du projet à la ROM
+│   │   ├── rom_build.py             ← orchestration du build (BuildWorker)
+│   │   ├── grit_conversion.py       ← grit (sprites, fonds, sons) ; `asset_cache.py` : sorties déjà converties
+│   │   ├── vram_alloc.py, palette_alloc.py, oam_alloc.py, window_alloc.py ← allocateurs matériels
+│   │   └── runtime_codegen/         ← génération de main.c, des scènes et des acteurs (`gen_*.py`, `data_tables.py`)
 │   ├── scripting/                   ← compilation Lua → C (voir section dédiée)
-│   │   ├── parser.py / checker.py / codegen.py  ← Lua texte → AST → C
+│   │   ├── parser.py / checker.py / codegen.py ← Lua texte → AST → C
 │   │   ├── api.py                   ← RUNTIME_API : catalogue unique de l'API Lua ↔ C
-│   │   ├── lua_subset.py            ← le Lua accepté, et le refus qui dit quoi écrire (→ docs/scripting-reference.md)
-│   │   └── script_templates.py      ← contenu initial d'un nouveau script (scène/actor/vide)
+│   │   └── lua_subset.py            ← le Lua accepté, et le refus qui dit quoi écrire (→ docs/scripting-reference.md)
 │   ├── plugins/                     ← plugins chargés dynamiquement (spec_from_file_location)
+│   ├── project_starters/            ← modèles de projet proposés à la création
 │   └── ui/                          ← rangé par écran, pas par type de widget
-│       ├── screens.py               ← le contrat d'un écran (ProjectScreen), le
-│       │                              descripteur EditorScreen, et register_screen()
+│       ├── screens.py               ← le contrat d'un écran (ProjectScreen), le descripteur EditorScreen, `register_screen()`
 │       │                              pour les plugins (cf. « Ajouter un écran »)
-│       ├── common/                  ← transverse à tous les écrans
-│       │   ├── theme.py             ← C (couleurs) / T (typographie) — jamais de valeurs en dur
-│       │   ├── icons.py, widgets.py, reorderable_bar.py, build_panel.py
-│       │   ├── panel_bar.py         ← la barre d'outils fine d'un onglet (Clear, Refresh) — panneau Build / debug et onglet Disk de la colonne de gauche — et `tab_widget()`, le jeu d'onglets de l'éditeur (mode document : la barre occupe toute la largeur). Le look des ONGLETS eux-mêmes n'est pas ici : `QSS.tab` (theme.py), global, la seule règle ; l'accueil des projets en est l'unique exception, voulue
-│       │   ├── three_column_body.py ← le squelette d'un écran : finder | centre | inspecteur, et sous le centre l'emplacement du panneau de build (`attach_dock`, `set_dock_open`) — chaque écran l'utilise au lieu de refaire son `QSplitter`
-│       │   ├── elide_name.py        ← couper un nom de fichier trop long en gardant son extension (`monnomq... .extension`) : retour à la ligne d'abord, puis coupe — la règle commune de la vue à plat et de l'arbre de l'onglet Disk
-│       │   ├── disk_tree_view.py    ← l'onglet Disk de la colonne de gauche (à côté de Project viewer) : l'arbre vertical de `assets/`, racine « Assets » ; choisir un dossier l'affiche dans `disk_view` ; « + » crée un dossier (renommé en place), la loupe filtre par nom
-│       │   ├── disk_view.py         ← l'onglet Disk du panneau Build / debug : le contenu d'UN dossier de `assets/` à plat (icône + nom), fil d'ariane « Assets › … », lecture seule
-│       │   ├── locate_bus.py        ← LOCATE : le canal par lequel un finder, le canvas ou l'arbre de scène demandent à la fenêtre d'ouvrir l'onglet Disk sur un fichier ; `reveal.py` est son jumeau, REVEAL, vers l'explorateur du système (cf. « Locate et Reveal » ci-dessous)
-│       │   ├── catalog.py           ← cœur partagé maître+side (join par clé, pluriel, set_language)
-│       │   ├── notice.py            ← les 3 niveaux de contenu informatif (bâti sur catalog.py)
-│       │   ├── notices/             ← notices.json (source EN) + notices_<code>.json (traductions)
-│       │   ├── labels.py            ← label("clé") : libellés, titres, menus, infobulles (bâti sur catalog.py)
-│       │   └── labels/              ← labels.json (source EN) + labels_<code>.json (traductions) — cf. docs/development/ui-text.md
-│       ├── home/
-│       │   └── project_picker.py    ← écran d'accueil (HomeScreen)
-│       ├── scene_manager/
-│       │   ├── assets_finder_panel.py
-│       │   └── inspectors/            ← un fichier par classe d'inspecteur
-│       │       ├── actor_inspector.py, scene_inspector.py, camera_inspector.py
-│       │       ├── uses_inspectors.py     ← Prefab/Script/Variable Uses (groupés, structure proche)
-│       │       ├── languages_card.py      ← carte « Languages » du ProjectInspector (v0.9)
-│       │       ├── dynamic_inspector.py   ← routeur ; construit chaque inspecteur à sa PREMIÈRE venue (paresseux, cf. « L'ouverture d'un projet, et l'écran blanc »)
-│       │       └── component_editors/     ← un fichier par type de Component
-│       ├── sprite_editor/             ← un fichier par sous-zone de l'écran
-│       │   ├── sprite_finder_panel.py     ← panneau gauche (sprites + anims)
-│       │   ├── sprite_canvas.py           ← le sprite canvas : composition tuile par tuile + barre flottante
-│       │   ├── spritesheet_selector.py    ← le spritesheet : sélecteur de tuiles sur le PNG source
-│       │   ├── sprite_timeline.py         ← la timeline : les frames de la direction, en vignettes
-│       │   ├── sprite_canvas_hints.py     ← table des raccourcis du sprite canvas
-│       │   ├── direction_widget.py        ← sélecteur 3×3 de directions
-│       │   ├── sprite_center_panel.py     ← assemble sprite canvas | spritesheet, timeline dessous
-│       │   ├── sprite_right_panel.py      ← propriétés/collision/anim settings/palette
-│       │   └── sprite_editor_screen.py    ← écran complet (assemble les 3 colonnes)
-│       ├── palette_editor/            ← un fichier par sous-zone de l'écran
-│       │   ├── palette_file_io.py           ← lecture/écriture .gpl / .pal / liste hex
-│       │   ├── swatch_button.py             ← case de palette peinte (contour animé)
-│       │   ├── color_wheel.py               ← roue teinte + triangle saturation/luminosité
-│       │   ├── palette_finder_panel.py      ← panneau gauche (catalogue du projet)
-│       │   ├── palette_grid_panel.py        ← centre : grille de swatches, sélection, zoom, écritures
-│       │   ├── color_inspector_panel.py     ← panneau droit : roue/hex/RGB/TSL de la couleur active
-│       │   ├── palette_usage_card.py        ← carte USAGE (bas du panneau droit) : qui utilise la palette
-│       │   └── palette_editor_screen.py     ← écran complet (assemble les 3 colonnes)
-│       ├── data_editor/              ← un fichier par sous-zone de l'écran
-│       │   ├── data_commands.py            ← écritures annulables (cellule, ligne, colonne)
-│       │   ├── data_finder_panel.py        ← panneau gauche (les tables du projet)
-│       │   ├── data_grid_panel.py          ← centre : la grille, en-tête éditable en place
-│       │   ├── data_inspector_panel.py     ← panneau droit : la colonne, et ce que la cellule désigne
-│       │   └── data_editor_screen.py       ← écran complet (assemble les 3 colonnes)
-│       ├── sound_mixer/
-│       │   ├── box_playback.py             ← lecture ROM d'une MusicBox ou d'un asset (sortie audio, cache des rendus, aperçu d'une section)
-│       │   ├── music_editor.py             ← centre, pour une musique : en-tête, forme d'onde, et la zone de structure du FORMAT (module ou WAV)
-│       │   ├── waveform_view.py            ← la forme d'onde du `Track`, ou (bascule Onde | Scope) un oscilloscope du mix : les 30 dernières ms que le lecteur fait entendre (`BoxPlayer.scope_window`, tiré du tampon que garde `_DeckDevice`), sinon une fenêtre fixe du rendu ; bandes de sections, et pour un WAV les poignées de sa section de boucle. Volume, tempo et hauteur s'y voient sans rendu
-│       │   ├── order_strip.py              ← la table d'ordres BRUTE d'un module, ses sections, la sélection d'une plage
-│       │   ├── section_table.py            ← les sections d'une musique en tableau, éditées en place (ordres pour un module, secondes pour un WAV)
-│       │   ├── mix_faders.py               ← volume / tempo / hauteur en curseurs verticaux (l'aperçu les suit au tick près : `BoxPlayer.set_preview_tuning`)
-│       │   ├── section_colors.py           ← la couleur d'une section (lue par les quatre composants ci-dessus)
-│       │   ├── music_graph.py              ← centre : le graphe de la MusicBox (nœuds déplaçables)
-│       │   ├── sound_commands.py           ← écritures annulables (déplacer, supprimer, renommer un état)
-│       │   ├── state_machines.py           ← hôte du graphe, inspecteur d'état, tables actions × états
-│       │   ├── sound_budget_bar.py         ← bandeau canaux, LOCAL à l'écran (jumeau de GbaStatusBar)
-│       │   └── sound_panel.py              ← écran complet (finder + éditeur de musique + 3 onglets de boîtes + inspecteurs) ; le lecteur (`_build_player_bar`) est séparé des boîtes
-│       ├── script_editor/             ← un fichier par sous-zone de l'écran
-│       │   ├── colors.py                  ← proxys couleur partagés par tout l'écran
-│       │   ├── lua_editor.py               ← coloration syntaxique + widget d'édition
-│       │   ├── sidebar_widgets.py          ← briques section/sous-section/bouton
-│       │   ├── var_table_panel.py          ← table GLOBALS/CONSTANTS de la sidebar
-│       │   ├── sidebar_panel.py            ← sections EVENTS/API/RÉFÉRENCES
-│       │   ├── script_finder_panel.py      ← arbre de fichiers scripts
-│       │   └── script_editor.py            ← écran complet (assemble sidebar+éditeur+finder)
-│       └── text_editor/               ← un fichier par sous-zone de l'écran
-│           ├── colors.py                  ← familles police / texte, partagées par l'écran
-│           ├── glyph_paint.py              ← trouage des couleurs-clés + damier
-│           ├── text_commands.py            ← commandes annulables (clé, rangement, planche)
-│           ├── font_asset_inspector.py / font_asset_preview.py ← recette et aperçu raster vectoriel
-│           ├── text_panel.py               ← centre, contexte Texte : arbitre table et atelier
-│           ├── text_table.py               ← la table des textes (haut du centre)
-│           ├── text_workbench.py           ← l'atelier d'écriture (bas du centre)
-│           ├── font_screen_preview.py      ← aperçu écran GBA (monté par l'atelier)
-│           ├── glyph_sheet.py              ← planche de glyphes (canvas)
-│           ├── glyph_sheet_panel.py        ← centre, contexte Police : planche + outils
-│           ├── markup_highlighter.py       ← coloration des balises (lit les spans du parseur)
-│           ├── markup_toolbar.py           ← boutons de balisage (dérivés de TAGS, agissent sur la sélection)
-│           ├── inspector_shell.py          ← coquille commune aux deux inspecteurs
-│           ├── text_inspector.py / font_inspector.py  ← colonne droite, un par contexte
-│           └── text_editor_screen.py       ← écran complet (assemble les 3 colonnes)
-├── runtime/                         ← le moteur GBA écrit À LA MAIN, en C. Aucun .py :
-│   │                                  pour l'éditeur c'est de la DONNÉE, jamais importée,
-│   │                                  seulement recopiée dans build/ (cf. app_paths.RUNTIME_DIR)
+│       ├── common/                  ← transverse : theme.py (C couleurs / T typographie — jamais de valeur en dur),
+│       │                              three_column_body.py (le squelette finder | centre | inspecteur), catalog.py,
+│       │                              labels.py et notice.py (textes de l'éditeur, cf. « Textes de l'ÉDITEUR »), locate_bus.py
+│       │                              (cf. « Locate et Reveal »), panneaux Build et Disk
+│       └── <écran>/                 ← home, scene_manager, sprite_editor, background_editor, palette_editor, data_editor,
+│                                      sound_mixer, script_editor, text_editor : un fichier par sous-zone
+│                                      (`*_finder_panel` | centre | `*_inspector*`), assemblées par `*_screen.py`
+│                                      (scene_manager : `inspectors/`, un fichier par classe d'inspecteur, routés par
+│                                      `dynamic_inspector.py` qui construit chaque inspecteur à sa PREMIÈRE venue)
+├── runtime/                         ← le moteur GBA écrit À LA MAIN, en C. Aucun .py : pour l'éditeur c'est de la DONNÉE,
+│   │                                  jamais importée, seulement recopiée dans build/ (cf. app_paths.RUNTIME_DIR)
 │   ├── Makefile                     ← copié dans build/, pilote arm-none-eabi-gcc
 │   └── include/
-│       ├── gba_engine.h             ← le gros du moteur (~2 750 l.) : VRAM, layers, windows,
-│       │                              blending, palettes, fonds animés, texte, SRAM.
+│       ├── gba_engine.h             ← le gros du moteur : VRAM, layers, windows, blending, palettes, fonds animés, texte, SRAM.
 │       │                              Inclus UNE SEULE FOIS, depuis le main.c généré
-│       ├── actor_api_static.h       ← la même API REDÉCLARÉE en extern, pour les unités de
-│       │                              compilation des acteurs et des scènes, qui n'incluent
-│       │                              pas le moteur (cf. « Deux listes de prototypes »)
+│       ├── runtime_api_inline.h     ← l'API des scripts écrite à la main, incluse par chaque unité de compilation après le
+│       │                              `runtime_api.h` GÉNÉRÉ (cf. « Prototypes et énumérations »)
 │       ├── actor_types_static.h     ← structs et constantes GBA, partie non générée
-│       └── runtime.h                ← API partagée entre le main.c généré et les scripts
-├── packaging/                       ← packaging Nuitka + CI (voir section dédiée)
-│   ├── nuitka_build.py              ← commande de build unique (CI et local)
-│   ├── check_deps.py                ← garde-fou requirements.txt vs imports réels
-│   ├── icon.ico / icon.png
-│   ├── windows/installer.nsi        ← installateur NSIS (par utilisateur)
-│   └── linux/                       ← AppImage (job CI en pause)
-├── tools/
-│   ├── check_architecture.py        ← les règles de ce document, rendues exécutables
-│   │                                  (voir « Les règles ci-dessus se vérifient toutes seules »)
-│   └── convert_uge_to_mod.py        ← hUGETracker (.uge) → module ProTracker (.mod) 4 canaux : des modules
-│                                      réalistes pour essayer l'écran Son et le build audio
-├── tests/                           ← `pytest tests` — un dossier par tâche ; les tests
-│   │                                  d'erreurs SILENCIEUSES (pas d'exception, une ROM
-│   │                                  fausse) sont dans graphics/ et text/
-│   ├── rom_build/                   ← build, diagnostics des outils, injection de fautes
-│   │                                  (pas `build/` : pytest l'ignore par défaut, git aussi)
-│   ├── scripting/                   ← sous-ensemble Lua, vérificateur, API, complétion
-│   ├── input/  scene/  project/     ← entrées ; scène et acteurs ; ouverture, sauvegarde,
-│   │                                  écriture interrompue, assets manquants
-│   ├── graphics/                    ← VRAM, palettes, OAM (`test_vram_alloc`,
-│   │                                  `test_palette_alloc`, `test_oam_alloc`), sprites, fonds
-│   ├── audio/  interface/           ← modules musicaux, budget son ; éléments d'interface
-│   ├── text/                        ← polices, textes, langues ; `test_text_layout_native`
-│   │                                  = ÉQUIVALENCE Python ↔ C (compile le vrai gba_engine.h,
-│   │                                  saute sans compilateur C hôte, cf. `CC`)
-│   ├── i18n/  packaging/            ← catalogues et infobulles ; installateur, notices, smoke test
-│   ├── ui/                          ← widgets Qt sous `QApplication` hors écran
-│   ├── native_toolchain.py          ← le compilateur C hôte, partagé par les sondes
-│   ├── oam_fixtures.py              ← sprites d'essai partagés (graphics/ et scene/)
-│   └── native/                      ← la sonde C et six en-têtes libgba bidon,
-│                                      de quoi compiler le moteur sur PC
-├── .github/workflows/tests.yml      ← contrôle d'architecture + tests, à chaque poussée
-├── .github/workflows/release.yml    ← build + release GitHub automatique
+│       └── gba_debug.h              ← sortie de debug
+├── packaging/                       ← packaging Nuitka + CI (voir section dédiée) : nuitka_build.py (commande unique, CI et local),
+│                                      check_deps.py (requirements.txt vs imports réels), windows/installer.nsi, linux/ (AppImage)
+├── tools/                           ← check_architecture.py (les règles de ce document, rendues exécutables, cf. « Les règles
+│                                      ci-dessus se vérifient toutes seules »), check_ui_text.py, migrations ponctuelles de format
+├── tests/                           ← `pytest tests` — un dossier par tâche (rom_build, scripting, graphics, text, ui, audio, …).
+│                                      Les tests d'erreurs SILENCIEUSES (pas d'exception, une ROM fausse) sont dans graphics/ et
+│                                      text/ ; `text/test_text_layout_native` = ÉQUIVALENCE Python ↔ C (compile le vrai
+│                                      gba_engine.h, saute sans compilateur C hôte, cf. `CC`) ; `native/` = la sonde C et des
+│                                      en-têtes libgba bidon, de quoi compiler le moteur sur PC
+├── .github/workflows/               ← tests.yml (contrôle d'architecture + tests à chaque poussée), release.yml (build + release)
 └── Project Demo/                    ← modèles de projet téléchargeables (voir README)
-    └── MyGame/                      ← projet démo (OrbitTest suit la même structure)
-        ├── MyGame.project       ← manifeste : config racine (scène de démarrage, auteur, version) ET point d'entrée double-clic ; le nom du projet EST le nom du fichier (v0.10, remplace project.json)
-        ├── assets/                  ← TOUT ce que l'auteur manipule ; il l'organise lui-même
-        │   ├── sprites/             ← PNG + JSON sidecar (SpriteAsset)
-        │   ├── backgrounds/         ← PNG + JSON sidecar (BackgroundAsset)
-        │   ├── scripts/             ← scripts Lua source (acteurs, scènes, caméras)
-        │   ├── palettes/            ← PaletteBank (.hex + .json) — catalogue de palettes nommées, 1 fichier/palette
-        │   ├── scenes/              ← définition des scènes (.scene, du JSON)
-        │   ├── prefab/              ← préfabs d'acteurs (.prefab)
-        │   ├── data/                ← tables de données (.table) — colonnes typées, lignes
-        │   ├── ui_layouts/          ← mises en page d'interface (.layout), partagées entre scènes
-        │   ├── music_boxes/ jingle_boxes/ sound_boxes/ fonts_assets/   ← boîtes sonores (.musicbox .jinglebox .soundbox), polices logiques (.fontasset)
-        │   ├── texts.json           ← corpus source : id, clé, rangement et contenu (à la racine d'assets/)
-        │   ├── texts_<code>.json    ← side de traduction partiel, joint au maître par id
-        │   └── variables.json       ← globals + constants du projet
+    └── <Projet>/
+        ├── <Projet>.project         ← manifeste : config racine (scène de départ, auteur, version) ET point d'entrée du
+        │                              double-clic ; le nom du projet EST le nom du fichier
+        ├── assets/                  ← TOUT ce que l'auteur manipule ; il l'organise lui-même. Un asset = un fichier (+ sidecar
+        │                              JSON pour une image) : sprites, backgrounds, scripts Lua, palettes, scenes, prefab, data
+        │                              (.table), ui_layouts, boîtes sonores, fonts_assets ; à la racine texts.json (corpus),
+        │                              texts_<code>.json (traductions jointes par id) et variables.json
         ├── project/                 ← ce qui n'est PAS à l'auteur : editor/ (état interne), licenses/, README.md
         └── build/                   ← 100% généré, gitignored — compile assets/
 ```
@@ -245,16 +94,9 @@ construction de l'interface. Créer l'enfant avec son parent, attacher ses layou
 puis appliquer sa visibilité. Un layout encore détaché ne garantit pas le parentage.
 Lors d'une reconstruction, masquer aussi un enfant visible **avant** `setParent(None)`.
 
-Régression du **2026-10-17** dans les Project Settings : le sélecteur de vue de
-`CartridgePreview` appelait `setVisible(True)` avant son ajout au layout. Le sélecteur
-est maintenant créé avec `self` comme parent et sa visibilité appliquée après montage.
-Le même piège avait déjà été rencontré dans `ui/common/widgets.py` et
-`ui/common/reorderable_bar.py` ; ne pas le traiter par un délai ou un masquage tardif.
-
 Garde-fou : `tests/ui/test_cartridge_preview.py::test_project_settings_never_show_temporary_top_level_widgets`
-observe les événements Qt `Show` : aucune fenêtre pendant la construction, puis
-seul `ProjectSettingsDialog` à l'ouverture. Il couvre les catégories Build et Visual,
-depuis les sources et avec le filtrage des versions distribuées.
+observe les événements Qt `Show` : aucune fenêtre pendant la construction. Ne pas le traiter par un délai
+ou un masquage tardif.
 
 ### La casse dit la nature
 
@@ -427,47 +269,18 @@ par le codegen) qui touche les champs. `scripting/api.py`, `codegen.py`, `checke
 aucun — ils n'émettent que des `&g_actors[ACTOR_*]` et des appels `actor_get/set_*`. C'est cette
 couche d'accesseurs qui a rendu le découpage possible sans rupture pour les projets existants.
 
-**`self.anim_length`/`self.anim_loop`/`self.anim_finished` sont écrites sur `OamEntry`,
-pas lues dans la table du sprite — et ce n'est pas une duplication.** `{sprite}_state_loop[]`
-est `static`, déclarée dans le fichier où `scene_tick` est généré — invisible d'un script qui
-vit dans `actor_{sym}.c`. Mais la vraie raison est ailleurs : `anim_length` n'est pas
-`state_len[state]`, c'est la longueur du bloc de la **direction actuellement jouée**, que le
-tick trouve par un parcours de `anim_dirs[]` avec repli sur la direction omni. Les trois
-champs **mémoïsent ce parcours** — un script qui lit `self.anim_length` ne le refait pas.
-Exposer les tables aux scripts a été évalué puis écarté dans le chantier technique *La grammaire
-de la struct `Actor`* (ROADMAP) : ça déplacerait la boucle
-dans chaque lecture. Le tick d'animation (`main_gen._anim_tick_lines`) les écrit donc CHAQUE
-frame, comme `resolve_actor_tiles` écrit `collision.grounded`. Même raison pour
-`self.frame_w`/`self.frame_h` : posées une fois à l'init/au spawn depuis
-`SpriteAsset.frame_w/frame_h`, elles fonctionnent aussi sur un AUTRE acteur (`other.frame_w`)
-sans le piège des propriétés à domaine (`self.anim`, `_RECEIVER_DOMAINS`) — ce ne sont que des
-entiers ordinaires sur la struct, pas des noms résolus contre l'acteur qui exécute le script.
-`anim_finished` compare la position dans la séquence (`frame - fs`, 0-based) à `anim_length` :
-vrai dès que la dernière case est atteinte, reste vrai tant que l'état ne change pas (comme
-`grounded` reste vrai tant qu'on ne quitte pas le sol), et vaut toujours faux pour un état qui
-boucle.
+**`self.anim_length`/`anim_loop`/`anim_finished` sont écrites sur `OamEntry`, pas lues dans la table du sprite.**
+`anim_length` n'est pas `state_len[state]` mais la longueur du bloc de la **direction actuellement jouée**, que le
+tick trouve par un parcours de `anim_dirs[]` avec repli sur la direction omni : les trois champs **mémoïsent ce
+parcours**, et le tick d'animation (`main_gen._anim_tick_lines`) les écrit CHAQUE frame. `frame_w`/`frame_h` sont
+posées une fois à l'init/au spawn, ce qui les rend lisibles sur un AUTRE acteur (`other.frame_w`). `anim_finished`
+compare la position dans la séquence à `anim_length` : vrai dès la dernière case, jusqu'à un changement d'état, et
+toujours faux pour un état qui boucle. À CHAQUE tick, avant tout calcul d'avancée, un `frame` hors de
+`[_fs, _fs+_fc)` est ramené à `_fs` (et `timer` à 0) : `play_anim` remet `frame` à 0, absolu dans le sheet
+dédupliqué, donc hors du bloc de tout état qui ne commence pas à l'offset 0.
 
-**Bug découvert en construisant `anim_finished` (2026-08-23) : `frame` pouvait pointer hors de
-l'état courant.** `self:play_anim` remet `frame` à 0 — une frame ABSOLUE dans le sheet
-dédupliqué du sprite entier (ROADMAP v0.8.1), qui ne tombe dans le bloc du nouvel état que
-si celui-ci commence pile à l'offset 0. Pour tout état suivant (`Walk` après `Idle`, par
-exemple), l'acteur affichait donc quelques frames d'un AUTRE état — jusqu'à `state_speed`
-ticks, soit jusqu'à ~130 ms à 60 fps — avant de reconverger par hasard via l'arithmétique de
-`_fi = frame - _fs` (qui partait négative). Un changement de DIRECTION vers un bloc de frames
-différent au sein du même état souffrait du même trou. Corrigé par un recalage inconditionnel,
-à CHAQUE tick, avant tout calcul d'avancée : `frame` hors de `[_fs, _fs+_fc)` est immédiatement
-ramené à `_fs` (et `timer` à 0). C'est ce recalage qui rend `anim_finished`/`anim_length`
-fiables dès la première frame d'un état — sans lui, les deux auraient hérité du même glitch.
-
-**`self.priority` n'existait pas du tout — pas même en lecture — malgré un tooltip qui
-l'affirmait (2026-08-24).** `Actor.priority` (éditeur) était un LITTÉRAL Python soudé
-directement dans l'émission OAM (`{actor.priority}<<10`, `main_gen`), exactement comme
-`frame_w`/`frame_h` l'étaient avant eux — donc rien à lire depuis un script. Devenu un champ
-`int priority` ordinaire sur `Actor` (même registre OAM que `pal_bank`/`obj_mode`, donc la
-même liberté), posé à l'init depuis la valeur authorée pour un acteur de scène, à 0 pour un
-acteur poolé (sans sens pour un template, cf. `core/models/scene.py::Prefab`) — mais
-modifiable ensuite par script dans les deux cas, l'émission OAM lisant désormais
-`g_actors[i].priority` plutôt que la constante.
+**`self.priority`** est un champ `int` ordinaire d'`OamEntry` (même registre OAM que `pal_bank`/`obj_mode`), posé à
+l'init depuis la valeur authorée (0 pour un acteur poolé) et modifiable par script ; l'émission OAM le lit.
 
 ### Règles clés
 
@@ -498,21 +311,42 @@ texte Lua → parser.py → AST Python → checker.py (validation) → codegen.p
                                           (RUNTIME_API : catalogue unique)
 ```
 
-- **`parser.py`** — modélise la grammaire Lua en dataclasses Python (`StmtIf`, `ExprInvoke` pour `self:method()`, etc.). Spécifique à Lua : remplacer le langage de script demanderait de réécrire ce fichier (et une partie du pattern-matching de `checker.py`/`codegen.py` sur ces formes syntaxiques), mais pas le reste de la chaîne.
-- **`api.py`** (`RUNTIME_API`) — source de vérité unique pour toute fonction Lua exposée au runtime : nom Lua, fonction C cible, types de paramètres, domaine de résolution des chaînes (`DOMAIN_ANIM`, `DOMAIN_SFX`, `DOMAIN_SCENE`...). Utilisé à la fois par `checker.py` (valider un appel connu) et `codegen.py` (générer l'appel C générique via `_emit_api_call`).
-- **`checker.py`** — parcourt l'AST et valide les appels contre `RUNTIME_API` (fonction connue, bon nombre d'arguments — y compris les fonctions variadiques comme `display.print`, nom de ressource existant). Ne bloque le build que sur les erreurs (`CheckError.level == "error"`) ; les avertissements (ex. valeur littérale hors plage écrite dans une globale typée, `global.score = 70000` sur un `u16`) sont journalisés sans empêcher la compilation. Appliqué uniformément aux scripts actor, scène et prefab via `lua_compiler.py::_compile_script` — un prefab avec une erreur bloque désormais le build comme un actor, plutôt que d'être silencieusement sauté. Les behaviors (`require("behaviors/x")`, résolus PAR NOM parmi les `.lua` marqués `-- @behavior` où qu'ils soient — `core/lua_scripts.py`, `CodegenContext.behavior_paths` —, inlinés par `codegen.py::_emit_inlined_behaviors`) passent par le même checker avec `check_event_names=False` (leurs fonctions top-level sont des noms de méthode arbitraires, pas des handlers d'événement) ; fichier manquant ou erreur de parse y remontent comme avertissement plutôt que de casser silencieusement ou de lever une exception Python brute.
-- **`codegen.py`** — pour la majorité des appels, `_emit_api_call` génère l'appel C directement depuis l'entrée `RUNTIME_API` correspondante. Une poignée de fonctions ne se traduisent pas par un simple appel de fonction (`self:destroy` → deux instructions enchaînées, `sfx.play` → arguments synthétisés depuis la ressource Sfx du projet...) : elles sont réunies dans deux tables de dispatch en fin de fichier, `_INVOKE_CUSTOM` et `_CALL_CUSTOM`, plutôt que dispersées en `if`/`elif` dans le code de traduction. Chacune de ces fonctions a quand même une entrée dans `RUNTIME_API` pour la validation/documentation. `global.nom`/`const.nom` ne sont ni l'un ni l'autre (chantier global/const) : ce sont des accès POINTÉS, pas des appels — comme `self.position` (RUNTIME_PROPS) ou `data.Objets`, résolus directement dans la branche `ExprIndex` de `_expr` (accès direct à la variable C `g_nom` / au symbole `CONST_NOM`), et validés côté checker par `_check_global_scalar`/`_check_global_indexed`/`_check_const_scalar` plutôt que par le catalogue.
+- **`parser.py`** — la grammaire Lua en dataclasses (`StmtIf`, `ExprInvoke` pour `self:method()`…). Spécifique à Lua : changer de
+  langage de script réécrirait ce fichier et une partie du pattern-matching de `checker.py`/`codegen.py`, pas le reste.
+- **`api.py`** (`RUNTIME_API`) — source de vérité unique de toute fonction Lua exposée : nom Lua, fonction C cible, types de
+  paramètres, domaine de résolution des chaînes (`DOMAIN_ANIM`, `DOMAIN_SFX`, `DOMAIN_SCENE`…). Lu par `checker.py` (valider) et
+  `codegen.py` (`_emit_api_call`).
+- **`checker.py`** — valide l'AST contre `RUNTIME_API` (fonction connue, nombre d'arguments, variadiques comprises, nom de
+  ressource existant). Seules les erreurs (`CheckError.level == "error"`) bloquent le build ; les avertissements (valeur littérale
+  hors plage dans une globale typée) sont journalisés. Appliqué à tous les scripts (actor, scène, prefab) via
+  `lua_compiler.py::_compile_script`. Les behaviors (`require("behaviors/x")`, résolus PAR NOM parmi les `.lua` marqués
+  `-- @behavior`, `core/lua_scripts.py`, inlinés par `codegen.py::_emit_inlined_behaviors`) passent par le même checker avec
+  `check_event_names=False` ; fichier manquant ou erreur de parse y remontent en avertissement.
+- **`codegen.py`** — `_emit_api_call` génère l'appel C directement depuis l'entrée `RUNTIME_API`. Les fonctions qui ne se
+  traduisent pas par un simple appel (`self:destroy` → deux instructions, `sfx.play` → arguments synthétisés) sont dans deux
+  tables de dispatch en fin de fichier, `_INVOKE_CUSTOM` et `_CALL_CUSTOM`, et ont quand même une entrée de catalogue.
+  `global.nom`/`const.nom`, `self.position` (RUNTIME_PROPS) et `data.Objets` sont des accès POINTÉS, résolus dans la branche
+  `ExprIndex` de `_expr` et validés côté checker (`_check_global_scalar`, `_check_const_scalar`…), pas par le catalogue.
 - **Important pour toute nouvelle fonction Lua** : si elle se traduit par un simple appel C avec conversion d'arguments, une entrée dans `RUNTIME_API` suffit *côté traduction*. Ce n'est que si elle a besoin de logique de traduction (nom C dynamique, arguments non présents côté Lua, émission multi-instructions) qu'elle doit aussi rejoindre `_INVOKE_CUSTOM`/`_CALL_CUSTOM`.
-- **Mais une fonction du moteur doit être déclarée DEUX fois** — voir « Deux listes de prototypes » ci-dessous. C'est le piège le plus coûteux de cette chaîne, parce qu'il ne se manifeste qu'au `make`.
-- **`lua_subset.py`** — la LISTE de ce que le langage accepte, et de ce qu'il refuse en le disant (`changelog/archives/v0.7.md`, v0.7.5). Chaque nœud de luaparser y est rangé dans une des trois cases — `ACCEPTED` (il se traduit), `REFUSED` (avec la phrase qui dit quoi écrire à la place) ou `STRUCTURAL` (jamais dispatché) — et la bibliothèque standard de Lua (`print`, `math.floor`, `table.*`…) reçoit le même traitement, par nom. Trois consommateurs : `checker.py` (refuser en nommant l'issue), `docs/scripting-reference.md` (expliquer — un test échoue si un refus n'y est pas documenté) et `validator._check_lua_subset` (**erreur bloquante** si un nœud de luaparser n'est classé nulle part, exactement comme `_check_api_domains` pour les domaines d'arguments). Avant elle, `parser.py` rendait `None` pour tout statement non géré — un `repeat` ou un `for … in` disparaissait du jeu sans un mot — et `ExprName("__unsupported_<Type>")` pour toute expression non gérée, qui n'échouait qu'au `make`. Les nœuds non traduits sont désormais PORTÉS (`StmtUnsupported`, `ExprUnsupported`, avec leur ligne) : le parser décrit, le checker juge. Ce qui n'atteint même pas l'AST — une faute de SYNTAXE — est le seul refus que le parser prononce lui-même, et il le prononce dans la même langue : `LuaParseError` porte sa `line` et une phrase, reconstruites depuis la chaîne d'exceptions d'antlr que luaparser jette en formatant son `syntax errors: None` (cf. `_syntax_message`, et la table de faux amis qui ne se balaie qu'après un échec).
-- **`expr_types.py`** — les deux exceptions au sous-ensemble Lua entièrement scalaire (ROADMAP v0.7.3 et v0.8.6) : `vec2(x, y)`/`vec3(x, y, z)` sont des constructeurs de langage, pas des entrées `RUNTIME_API`. `checker.py` et `codegen.py` partagent ce module pour savoir si une expression EST un vec2/vec3 (locals `self._vec_types`, remplie au fil d'un même parcours à plat dans les deux fichiers — même approximation que `self._arrays`) plutôt que de laisser chacun réinventer sa propre inférence. `+`/`-`/`*`/`/` s'y traduisent en appels `vec2_add`/`vec2_sub`/`vec2_scale`/`vec2_div` (`runtime_api_inline.h`) : le C n'a pas d'opérateur sur les structs. Un entier mêlé à un vecteur par `+`/`-` vaut le vecteur dont toutes les composantes sont cet entier (`vec2_splat`) : `v + 2` = `v + vec2(2, 2)`, `10 - v` = `vec2(10, 10) - v` ; Deux vecteurs du MÊME type se combinent composante par composante avec `+ - * /` (`vec2_mul`, `vec2_div`…) ; `dot(a, b)` (`vec2_dot`/`vec3_dot`, fonction de langage listée dans `VEC_FUNCTIONS`) rend un entier. La division est entière. La seconde exception sont les **références** — ce qu'un appel REND (`local pas = sfx:play("Pas")`) : une valeur composée se copie, une référence DÉSIGNE un slot pris dans un pool du matériel, mais les deux répondent à la même question (« quel type porte ce nom ? ») et deux modules y auraient fini par répondre différemment. Le module s'appelait `vec_types.py` tant qu'il n'y avait qu'une exception.
+- **Une fonction du moteur exposée a son prototype GÉNÉRÉ** (« Prototypes et énumérations » ci-dessous) ; seules les énumérations redéfinies à la main côté moteur et l'ordre des arguments sont comparés au build.
+- **`lua_subset.py`** — la LISTE de ce que le langage accepte, et de ce qu'il refuse en le disant. Chaque nœud de luaparser est
+  `ACCEPTED` (il se traduit), `REFUSED` (avec la phrase qui dit quoi écrire) ou `STRUCTURAL` (jamais dispatché) ; la bibliothèque
+  standard de Lua reçoit le même traitement, par nom. Trois consommateurs : `checker.py` (refuser en nommant l'issue),
+  `docs/scripting-reference.md` (un test échoue si un refus n'y est pas documenté) et `validator._check_lua_subset` (**erreur
+  bloquante** si un nœud n'est classé nulle part). Les nœuds non traduits sont PORTÉS (`StmtUnsupported`, `ExprUnsupported`, avec
+  leur ligne) : le parser décrit, le checker juge. Une faute de SYNTAXE est le seul refus que le parser prononce (`LuaParseError`
+  porte `line` et une phrase, cf. `_syntax_message`).
+- **`expr_types.py`** — les deux exceptions au sous-ensemble Lua scalaire. `vec2(x, y)`/`vec3(x, y, z)` sont des constructeurs de
+  langage, pas des entrées `RUNTIME_API` ; `+ - * /` s'y traduisent en `vec2_add`/`vec2_sub`/`vec2_scale`/`vec2_div`
+  (`runtime_api_inline.h`), un entier mêlé à un vecteur vaut ce vecteur dont toutes les composantes sont cet entier (`v + 2` =
+  `v + vec2(2, 2)`), la division est entière, et `dot(a, b)` (`VEC_FUNCTIONS`) rend un entier. La seconde exception sont les
+  **références** (`local pas = sfx:play("Pas")`) : une valeur composée se copie, une référence DÉSIGNE un slot de pool. Checker et
+  codegen partagent ce module pour répondre à « quel type porte ce nom ? » (`self._vec_types`, remplie au fil d'un parcours à plat).
 
 ### La grammaire cible de l'API — trois formes, une par nature
 
-**Proposition v0.16 (2026-09-24, non verrouillée).** Le catalogue livré emploie encore
-`module.action(…)` ; la forme ci-dessous est la grammaire vers laquelle l'amendement le fait
-migrer. La forme n'est pas un choix stylistique : c'est elle qui dit au parseur quoi produire
-(`Invoke` pour `:` — parser.py —, `Index` pour `.`), donc qui décide de la résolution.
+**Grammaire visée (ROADMAP v0.16, non verrouillée).** Le catalogue livré emploie encore `module.action(…)` ; la forme n'est pas
+un choix stylistique : elle dit au parseur quoi produire (`Invoke` pour `:`, `Index` pour `.`), donc qui décide de la résolution.
 
 | Syntaxe | Nature | Compile en |
 |---|---|---|
@@ -521,22 +355,13 @@ migrer. La forme n'est pas un choix stylistique : c'est elle qui dit au parseur 
 | `module.member` | **propriété de singleton** — état d'un système moteur | `module_get_member()` / `module_set_member()` |
 | `module:member(...)` | **méthode de singleton** — opération au niveau du système | `module_member(...)` |
 
-`identifier` dans la forme méthode est une **instance** : un acteur (`self`, `other`, une
-variable d'actor) ou une **référence** rendue par un appel (`local pas = sfx:play("Pas")` →
-`pas:set_volume(80)`, ROADMAP v0.8.6). Le catalogue range les méthodes d'acteur sous la clé
-`self:` et celles d'une référence sous le TYPE qu'elle porte (`sfx:`) : c'est ce type, relevé
-sur le `local` par `expr_types.infer_ref_type`, qui décide de la fonction C émise — sans lui,
-`pas:set_volume` retomberait sur le repli `actor_set_volume(pas, …)`, qui ne compile pas.
-Une référence porte des méthodes ET, depuis la boîte de collision (ROADMAP « L'API dit tout ce que
-l'inspecteur règle », amendement du 2026-09-24), des **propriétés** : `hb.solid = false`. Le type
-`collision_box` les déclare dans `RUNTIME_PROPS` sous la clé `collision_box.champ`, et le checker
-refuse l'écriture d'un champ lecture seule (`hb.tag`).
-Un module du moteur est un **singleton**, donc un récepteur comme une instance : ses états
-sont des propriétés (`camera.position`, `music.volume`) et ses opérations des méthodes
-(`camera:follow(...)`, `music:play(...)`). Il n'y a pas une seconde grammaire à apprendre
-pour les systèmes du moteur. Une bibliothèque sans état ni identité runtime, telle que
-`math`, reste une exception nommée : ses fonctions pures gardent l'appel pointé
-`math.abs(x)`.
+`identifier` dans la forme méthode est une **instance** : un acteur (`self`, `other`, une variable d'actor) ou une **référence**
+rendue par un appel (`local pas = sfx:play("Pas")` → `pas:set_volume(80)`). Le catalogue range les méthodes d'acteur sous la clé
+`self:` et celles d'une référence sous le TYPE qu'elle porte (`sfx:`), relevé sur le `local` par `expr_types.infer_ref_type` ; une
+référence porte aussi des **propriétés** (`hb.solid = false`, déclarées dans `RUNTIME_PROPS` sous `collision_box.champ`, le
+checker refusant l'écriture d'un champ en lecture seule). Un module du moteur est un **singleton**, donc un récepteur comme une
+instance : états en propriétés (`camera.position`, `music.volume`), opérations en méthodes (`camera:follow(...)`). Une
+bibliothèque sans état, telle que `math`, reste une exception nommée (`math.abs(x)`).
 
 La règle de décision pour TOUTE API future, dérivée des définitions ci-dessus :
 
@@ -561,67 +386,38 @@ La règle de décision pour TOUTE API future, dérivée des définitions ci-dess
   (`local hb = self:collision_box("hitbox")`) ; ses champs sont alors des propriétés
   (`hb.solid`, `hb.size`) et ses actions des méthodes (`hb:overlaps(other)`).
 
-Deux cas hors des trois formes : la **fonction libre** `array` (une déclaration,
-pas un appel) et les **constructeurs** (`vec2(x, y)`) — ni instance, ni module.
-(`get_actor` en faisait partie ; renommé `actor:get`, il rentre dans la forme
-module — ROADMAP v0.16.)
-
-`global.nom` / `const.nom` (chantier global/const) sont de la forme PROPRIÉTÉ — lues et
-écrites comme `identifier.member` — sans compiler en getter/setter : `nom` est
-un nom de PROJET, pas un membre de langage fixe, donc pas d'entrée
-`RUNTIME_PROPS` possible (une par variable déclarée serait un catalogue qui se
-régénère à chaque édition de l'écran Variables). Elles compilent en accès
-direct — `g_nom` / `CONST_NOM` — validé par nom via `BuildContext.global_counts`
-/ `.const_names` plutôt que par catalogue figé, même schéma que `data.Objets`.
+Deux cas hors des trois formes : la **fonction libre** `array` (une déclaration) et les **constructeurs** (`vec2(x, y)`).
+`global.nom` / `const.nom` sont de la forme PROPRIÉTÉ, sans getter/setter : `nom` est un nom de PROJET (pas d'entrée
+`RUNTIME_PROPS` possible, ce serait un catalogue régénéré à chaque édition de l'écran Variables). Ils compilent en accès direct
+(`g_nom` / `CONST_NOM`), validés par `BuildContext.global_counts` / `.const_names`, comme `data.Objets`.
 
 Deux conséquences qui se paient cher si on les oublie :
 
-- **Méthode et propriété s'écrivent sur N'IMPORTE QUEL acteur nommé**, pas seulement
-  `self` : `other.velocity`, `other:move(...)`. Le catalogue les range sous la clé
-  `self:`/`self.` — c'est une clé, pas une restriction — et `checker.py` valide donc
-  tous les récepteurs. N'en valider qu'un laissait `other:set_position(p)` traverser
-  sans un mot, pendant que `codegen._invoke` en émettait du C qui compile : l'API
-  retirée survivait tant qu'on ne l'écrivait pas sur `self`. Seule exception, bloquée
-  explicitement : un argument OU une comparaison de propriété dont le nom appartient
-  au sprite du RÉCEPTEUR (`other:play_anim("walk")`, `other.anim == "walk"`), que le
-  contexte de build ne peut ni vérifier ni résoudre — il ne décrit que l'acteur qui
-  *exécute* (`checker._RECEIVER_DOMAINS`, jugé dans `_check_args` ET
-  `_check_prop_domain_value` — les deux portes par lesquelles un nom de domaine entre).
-- **Une propriété peut porter un domaine** (`ApiProp.domain`), donc s'écrire et se
-  comparer par un NOM : `self.obj_mode = "window"`, `blend.mode == "alpha"`,
-  `other.name == "Ball"`. C'est le même `DOMAIN_*` que sur un paramètre, jugé par les
-  mêmes tables (`checker._DOMAIN_CHECKS`, `codegen._DOMAIN_CONSTANT`) — une énumération
-  du matériel et un espace de noms du projet s'y traitent donc pareil. Sans ce champ,
-  faire d'un réglage une propriété le faisait
-  retomber sur l'entier nu que les énumérations nommées existent pour supprimer — c'est
-  l'asymétrie qu'avaient `self:set_dir("north")` et `self:get_dir()` rendant un `0-8`,
-  tous deux absorbés depuis par `self.direction`. Le C, lui, ne change pas :
-  `OBJ_MODE_WINDOW` vaut toujours un entier. Quand la forme nommée n'atteint pas l'état
-  par la même fonction C que la forme ordinaire — `self.direction` est un vec2 côté
-  calcul, une boussole côté nom — `c_getter_named`/`c_setter_named` portent la seconde
-  porte. Une seule propriété, deux écritures.
+- **Méthode et propriété s'écrivent sur N'IMPORTE QUEL acteur nommé**, pas seulement `self` (`other.velocity`,
+  `other:move(...)`) : le catalogue les range sous la clé `self:`/`self.` — une clé, pas une restriction — et `checker.py` valide
+  tous les récepteurs. Seule exception, bloquée explicitement : un argument OU une comparaison de propriété dont le nom appartient
+  au sprite du RÉCEPTEUR (`other:play_anim("walk")`, `other.anim == "walk"`), que le contexte de build ne peut ni vérifier ni
+  résoudre (`checker._RECEIVER_DOMAINS`, jugé dans `_check_args` ET `_check_prop_domain_value`).
+- **Une propriété peut porter un domaine** (`ApiProp.domain`) et s'écrire ou se comparer par un NOM : `self.obj_mode = "window"`,
+  `blend.mode == "alpha"`, `other.name == "Ball"`. C'est le même `DOMAIN_*` que sur un paramètre, jugé par les mêmes tables
+  (`checker._DOMAIN_CHECKS`, `codegen._DOMAIN_CONSTANT`) ; le C ne change pas (`OBJ_MODE_WINDOW` vaut un entier). Quand la forme
+  nommée n'atteint pas l'état par la même fonction C que la forme ordinaire (`self.direction` : vec2 côté calcul, boussole côté
+  nom), `c_getter_named`/`c_setter_named` portent la seconde porte.
 
-### Module, type, instance — d'où vient le récepteur (proposition du 2026-09-24, non verrouillée)
+### Module, type, instance — d'où vient le récepteur (ROADMAP v0.16, non verrouillée)
 
-Les trois formes ci-dessus disent **comment ça s'écrit**. La règle de provenance de la ROADMAP
-(v0.16, « La règle de construction ») dit **d'où vient la chose**. Il manque le maillon entre les
-deux : **de quel TYPE est le récepteur, et où le catalogue le range**. Le vocabulaire :
+Les trois formes disent **comment ça s'écrit** ; il manque **de quel TYPE est le récepteur, et où le catalogue le range**.
 
 | Mot | Ce que c'est | Exemple |
 |---|---|---|
 | **module** | un namespace : un système unique (singleton), ou une **fabrique** d'instances | `camera`, `scene`, `actor` (`get`/`spawn`/`count`) |
-| **type** | une sorte de chose qui a des instances ; **son nom est la clé du catalogue** | `sfx`, `collision_box`, `ui_element` (et `actor`, encore rangé sous `self:`) |
+| **type** | une sorte de chose qui a des instances ; **son nom est la clé du catalogue** | `sfx`, `collision_box`, `ui_element`, `actor` |
 | **instance** | une chose précise ; `self` et `other` en sont, une variable qui tient une référence aussi | `self`, `local hb = …` |
-| **référence** | la valeur qui désigne une instance quand elle ne se déduit pas du contexte | rendue par une acquisition (`actor.get`, `interface.get`) ou par une action (`sfx.play`) |
+| **référence** | la valeur qui désigne une instance quand elle ne se déduit pas du contexte | rendue par une acquisition (`actor.get`, `interface.get`) ou une action (`sfx.play`) |
 
-**Le module gère, crée ou acquiert ; le type expose l'état et les opérations d'une instance**
-(ROADMAP v0.16, « Relecture de conception »). Un module et un type peuvent porter le même nom
-aujourd'hui (`sfx`, `collision_box`) ; ce sont deux choses, et la relecture propose de les
-séparer pour le son (`mixer` lance, `sfx` opère).
-
-**La règle.** Un module n'opère jamais sur UNE instance désignée par un nom du projet : il est
-soit un système sans instance (`scene`, `camera`), soit une fabrique (`actor`). Tout ce qui
-porte sur une instance nommée s'écrit en méthode ou en propriété **sur la référence** :
+**Le module gère, crée ou acquiert ; le type expose l'état et les opérations d'une instance.** Un module n'opère jamais sur UNE
+instance désignée par un nom du projet : c'est soit un système sans instance (`scene`, `camera`), soit une fabrique (`actor`). Tout
+ce qui porte sur une instance nommée s'écrit en méthode ou en propriété **sur la référence** :
 
 ```lua
 local menu = interface:get("Menu")     -- fabrique : une chose nommée du projet
@@ -629,22 +425,16 @@ menu.index = 0                         -- propriété
 menu:show()                            -- méthode
 ```
 
-Le numéro de matériel reste la porte des choses numérotées par le matériel, mais il est aussi une
-acquisition (`layer:get(n)`, provenance 3 de la ROADMAP) : le fond `n` est une référence du type
-`background_layer`, comme `interface:get("Menu")` en est une du type `list`. Les fonds qu'une scène a
-dépendent de son mode vidéo (`api.LAYERS_BY_MODE` × `Scene.render_mode`, passé au checker par
-`lua_compiler`) : un numéro écrit en clair qu'elle n'a pas est une erreur. C'est une ANTICIPATION
-INTERNE : seul le mode 0 est offert à l'auteur, et rien de ce qu'il lit (doc, indices, messages) ne parle
-de mode — un test le garde. Les fonds affines et bitmap auront leur propre type avec leur rendu.
+Le numéro de matériel reste la porte des choses numérotées par le matériel, mais c'est aussi une acquisition (`layer:get(n)`) : le
+fond `n` est une référence de type `background_layer`. Les fonds qu'une scène a dépendent de son mode vidéo
+(`api.LAYERS_BY_MODE` × `Scene.render_mode`, passé au checker par `lua_compiler`) ; seul le mode 0 est offert à l'auteur, et rien
+de ce qu'il lit ne parle de mode (un test le garde).
 
-**Où le catalogue diverge aujourd'hui** (à migrer, ROADMAP v0.16 « Amendement du 2026-09-24 ») :
-
-| Écart | Où | Ce que dit la règle |
-|---|---|---|
-| ~~Le type acteur s'appelle `self:`~~ — **fait (v0.16, étape e)** | `RUNTIME_API["actor:…"]` et `RUNTIME_PROPS["actor.…"]` : `actor` est un type de `REF_TYPE_TABLE` (`Actor*`). `self` n'est pas le type : c'est le récepteur implicite, comme `other` ou un acteur de la scène — tout nom qui ne tient pas une référence typée est un acteur | la clé est le NOM DU TYPE : `actor:` |
-| ~~Une fonction de module reçoit le nom d'une instance~~ — **fait pour `interface` (v0.16, étape c)** | `list.*`, `interface.image_*`, `interface.draw_text`/`clear_text`/`reading`/`skip` ont disparu : `interface:get(nom)` rend une `list`, une `image`, une `text_region` ou un `ui_element` selon la nature de l'élément, lue dans la mise en page. Reste `window.*` (7), et `layer.*` (numéroté par le matériel) | méthodes/propriétés du type visé, obtenu par `interface.get` / `window.get` |
-| ~~Trois mécanismes de « valeur qui désigne »~~ — **fait (v0.16, étape b)** | `sfx`, `collision_box` et `ui_element` sont trois lignes de `api.REF_TYPE_TABLE` ; plus de cas spécial d'`interface.get` dans le checker. Reste `actor`, dont la clé `self:` est l'étape (e) | UN mécanisme : un type déclaré, avec sa représentation C |
-| ~~Trois façons de dire « absent »~~ | dans le C émis, c'est déjà UNE : `nil` vaut 0 et une référence absente vaut 0 (`if p ~= nil` → `(p != 0)` pour un acteur, un effet, une boîte — `tests/scripting/test_ref_type_table.py`). Une référence d'élément d'interface est un index connu au build : jamais absente | écrire la règle par type ; refuser le test de `nil` inutile sur un statique (critère 4) |
+**Ce qui reste à migrer** : `window.*` (7 fonctions qui reçoivent encore le nom d'une instance) et
+`layer.*` (numéroté par le matériel). Le type acteur est rangé sous `actor:` ; `sfx`, `collision_box` et
+`ui_element` sont des lignes de `api.REF_TYPE_TABLE`. Dans le C émis, « absent » est UNE chose : `nil` vaut 0
+(`if p ~= nil` → `(p != 0)`, `tests/scripting/test_ref_type_table.py`) ; une référence d'élément d'interface est un
+index connu au build, jamais absente.
 
 **Ce que ça ne coûte pas.** Une référence à une chose STATIQUE du projet (`interface:get("Menu")`,
 `window:get("Panel")`) se résout au build en constante, comme `TEXT_<clé>` : aucun slot, aucun
@@ -706,73 +496,42 @@ Règles :
   Les types `background_layer` et `window_region` ne portent pas le nom de leur module : un type
   `layer` aurait donné à `layer.priority` deux lectures (propriété du type, ou fonction du module).
 
-### Deux listes de prototypes, et le garde-fou qui les tient d'accord
+### Prototypes et énumérations : générés depuis le moteur
 
-`gba_engine.h` porte l'implémentation du moteur ; `actor_api_static.h` **redéclare** la même
-chose en `extern`, parce que les scripts d'actor et de scène sont compilés en unités de
-traduction séparées qui n'incluent pas le moteur.
+`gba_engine.h` porte l'implémentation du moteur ; les scripts d'actor et de scène sont compilés en unités de
+traduction séparées qui ne l'incluent pas. Leurs prototypes sont **générés** dans `runtime_api.h`
+(`codegen/runtime_codegen/api_prototypes.py`) pour le seul sous-ensemble exposé par le catalogue : une fonction
+exposée ne peut plus manquer de déclaration. `runtime_api_inline.h` porte, à la main, l'API en `static inline`.
 
-Une fonction ajoutée d'un seul côté franchit donc tout le chemin sans rien signaler —
-checker vert, C émis correct — pour échouer au `make` sur un `implicit declaration of
-function`, message qui pointe la ligne générée et jamais la cause. C'est exactement ce
-qui a maintenu `text_clear_in` inatteignable depuis Lua : écrite dans le moteur, jamais
-redéclarée.
+`validator._check_api_prototypes` garde ce que la génération ne couvre pas, en **erreur bloquante** :
 
-`validator._check_api_prototypes` compare donc les deux listes à chaque build, en **erreur
-bloquante** : le lien est de toute façon perdu, autant le dire avant de lancer la chaîne C.
-La règle est *dérivée* — est exigé dans `actor_api_static.h` ce qui est déjà présent dans
-`gba_engine.h`. Les fonctions résolues ailleurs (méthodes d'actor, `scene_switch`,
-`sfx_play`, helpers de globals — générées dans `actor_api.h` ou déclarées dans
-`runtime.h`) sortent du test d'elles-mêmes, sans liste d'exceptions à maintenir.
-
-**Les CONSTANTES tombent dans le même trou**, et y sont tombées : le codegen émet `WINR_0`
-et `BLD_SIDE_TOP` (c'est tout l'intérêt des énumérations nommées — cf. `api.py`,
-« Énumérations matérielles »), or ces `#define` ne vivaient que dans `gba_engine.h`. Tout
-`window.set_layer` / `blend.set_layer` écrit depuis un script échouait donc au `make` sur un
-identifiant inconnu, alors que `OBJ_MODE_*`, `DIR_*` et `EASE_*` — recopiés, eux — passaient.
-Elles sont maintenant déclarées des deux côtés et comparées par le même garde-fou, dérivé de
-`HARDWARE_ENUMS`. Sans `#ifndef` : main.c voyant les deux fichiers, une valeur qui divergerait
-ferait crier le préprocesseur au lieu de dériver en silence.
+- l'ACCORD de VALEUR des énumérations entre `api.py` (leur source, d'où sont générés les `#define`) et les
+  quelques-unes que `gba_engine.h` redéfinit à la main (`BLD_MODE_*`, `BLD_SIDE_*`) : sinon `main.c` et les scripts
+  verraient deux valeurs, sans erreur ;
+- l'ORDRE des arguments entre `api.py` et `gba_engine.h` : une permutation compile proprement (tout est `int`) et
+  range chaque valeur dans le mauvais paramètre.
 
 ### Ce que l'éditeur INSÈRE dérive du catalogue
 
-`scripting/api_snippets.py` fabrique le Lua que la sidebar du Script Editor propose au clic,
-depuis `RUNTIME_API`. Écrits en dur, ces snippets pourrissaient sans que rien ne le signale :
-la sidebar a proposé pendant des mois `scene_goto("X")` et `instantiate("X", x, y)`, deux
-noms qui n'ont jamais existé dans le catalogue — et le checker les laisse passer (un appel
-inconnu peut être un helper de l'utilisateur), donc l'erreur n'arrivait qu'à la compilation C.
-
-`call(name, **by_domain)` remplit les arguments **par domaine** et non par position : c'est
-ce qui fait qu'un réordonnancement de paramètres dans `api.py` n'invalide aucun appelant.
-
-Même logique pour `api_reference.json`, qui ne décrit que la *présentation* (groupes, ordre,
-descriptions rédigées) : `api_reference.get_categories()` le filtre par le catalogue puis le
-complète avec lui. Une fonction retirée disparaît de l'écran, une fonction ajoutée y
-apparaît sans qu'on touche au JSON — les deux dérives que ce fichier avait accumulées
-(`display.print`, `display.clear`, `text.draw_box` encore proposées ; `interface.draw_text`
-absente).
+`scripting/api_snippets.py` fabrique le Lua que la sidebar du Script Editor propose au clic, depuis `RUNTIME_API` : écrits en dur,
+ces snippets pourrissaient (le checker laisse passer un appel inconnu, qui peut être un helper de l'utilisateur, donc l'erreur
+n'arrivait qu'à la compilation C). `call(name, **by_domain)` remplit les arguments **par domaine** et non par position : un
+réordonnancement de paramètres dans `api.py` n'invalide aucun appelant. Même logique pour `api_reference.json`, qui ne décrit que
+la *présentation* (groupes, ordre, descriptions) : `api_reference.get_categories()` le filtre par le catalogue puis le complète
+avec lui, si bien qu'une fonction retirée disparaît de l'écran et qu'une ajoutée y apparaît sans toucher au JSON.
 
 ### Un domaine a TROIS consommateurs, et deux ne le disaient pas
 
-Le `domain` d'un `Param` sert à `refactor` (suivre les renommages), au
-`checker` (le nom existe-t-il ?) et au `codegen` (quelle constante C émettre ?).
-Le premier **dérive** sa table du catalogue (`_reference_sites()`) et n'a rien à
-oublier. Les deux autres portaient une liste écrite à la main — une chaîne
-d'`elif` et un `match` — et un domaine absent n'y produisait **aucun signal** :
-le checker ne validait simplement rien, et le codegen retombait sur `case _`,
-c'est-à-dire la chaîne émise telle quelle, donc du texte C là où le C attend un
-entier. Panne au `make`, sur la ligne générée, jamais sur la cause. Même famille
-que « deux listes de prototypes » ci-dessus.
-
-Les deux listes sont devenues des **tables**, comparées à `api.ALL_DOMAINS` au
-build par `validator._check_api_domains`, en **erreur bloquante**. `ALL_DOMAINS`
-est lui-même dérivé des constantes `DOMAIN_*` du module : déclarer un domaine
-suffit à entrer dans le contrôle. Placer un nouveau domaine dans l'une des cases
-fait partie de son ajout :
+Le `domain` d'un `Param` sert à `refactor` (suivre les renommages), au `checker` (le nom existe-t-il ?) et au `codegen` (quelle
+constante C émettre ?). Le premier **dérive** sa table du catalogue (`_reference_sites()`). Les deux autres sont des **tables**,
+comparées à `api.ALL_DOMAINS` (dérivé des constantes `DOMAIN_*`) par `validator._check_api_domains`, en **erreur bloquante** : un
+domaine absent n'y produirait aucun signal (le checker ne validerait rien, le codegen émettrait la chaîne telle quelle, donc du
+texte C là où le C attend un entier, avec une panne au `make` loin de la cause). Placer un nouveau domaine dans une case fait
+partie de son ajout :
 
 | Côté | Cases |
 |---|---|
-| `checker` | validé par domaine (`_DOMAIN_CHECKS`) ou non validé **avec sa raison** (`_DOMAINS_UNCHECKED` — seul `tag` y est, l'auteur y met ce qu'il veut) |
+| `checker` | validé par domaine (`_DOMAIN_CHECKS`) ou non validé **avec sa raison** (`_DOMAINS_UNCHECKED` — seul `tag` y est) |
 | `codegen` | constante générique (`_DOMAIN_CONSTANT`) ou émetteur dédié (`_DOMAIN_EMITTED_ELSEWHERE`) |
 
 Chacun n'expose qu'un `covered_domains()` — le contrôle demande « ce domaine
@@ -780,44 +539,18 @@ t'est-il connu ? », pas la mécanique interne.
 
 ### Un nom se vérifie par son DOMAINE, pas par le nom de l'appel
 
-Cinq domaines étaient vérifiés par un contrôle accroché au nom de l'appel —
-`scene.switch`, `actor.get`, `global.get`/`set`, `const.get` — et
-`actor.spawn` ne l'était par rien. Deux conséquences, corrigées ensemble :
+Le contrôle d'un nom s'accroche au `domain` du `Param`, jamais à la clé de l'appel : une seconde fonction prenant
+`DOMAIN_SCENE` est validée sans rien ajouter. `DOMAIN_PREFAB` est une **erreur** de checker (sinon `spawn_<Scene>_<Nom>`
+n'échoue qu'au `make`, sur un « implicit declaration »), contre la liste PROJET des prefabs
+(`BuildContext.prefab_names`, remplie par `lua_compiler`) — le raffiner en « poolé DANS CETTE scène » est possible
+depuis le spawn per-scène (ROADMAP v0.17). Ce qui reste accroché à un appel dans `_check_call_expr` : le numéro
+d'emplacement d'un `save.*`. La **valeur** d'un `global.nom = v` (plage du type déclaré) se vérifie à l'ASSIGNATION
+(`_check_global_write_value`, sur `StmtAssign`).
 
-- **une seconde fonction prenant le même domaine n'aurait rien déclenché.** Le
-  contrôle regardait `key == "scene.switch"`, pas « ce paramètre porte
-  `DOMAIN_SCENE` ». Ajouter une `scene.preload` aurait donc rendu le domaine
-  muet, sans que rien ne le dise ;
-- **`DOMAIN_PREFAB` n'était validé nulle part.** `_emit_actor_spawn` émet
-  `spawn_<Scene>_<Nom>(...)` sans rien vérifier, donc un nom fautif n'apparaissait
-  qu'à la compilation C, sur un « implicit declaration of function » pointant la
-  ligne générée. C'est une **erreur** de checker maintenant, pour la même raison
-  qu'une scène inconnue : le build échouerait de toute façon, avec un message
-  bien pire. (Le checker valide le nom contre la liste PROJET des prefabs ; le
-  raffiner en « ce prefab est-il poolé DANS CETTE scène ? » est un gain que le
-  spawn per-scène rend possible, pas encore cueilli — cf. ROADMAP v0.17.)
-
-Ce qui reste accroché à un appel précis dans `_check_call_expr` ne porte plus
-sur un nom : le numéro d'emplacement d'un `save.*`. Ce contrôle n'interrompt
-plus la suite — d'où un effet de bord bienvenu : le **nombre d'arguments** de
-ces appels est désormais vérifié lui aussi, alors qu'un `return` prématuré le
-sautait. La **valeur** d'un `global.nom = v` (plage du type déclaré) n'est
-plus accrochée à un appel : `global.get`/`set` et `const.get` ont quitté
-`RUNTIME_API` au profit de l'accès pointé (chantier global/const) — cette valeur se
-vérifie désormais à l'ASSIGNATION (`_check_global_write_value`, branchée sur
-`StmtAssign`), pas sur un appel qui n'existe plus.
-
-`BuildContext.prefab_names` porte la liste, remplie par `lua_compiler` depuis le
-projet entier — un prefab est poolé au niveau projet, pas au niveau scène.
-
-**Une collision a deux côtés, et chacun l'apprend dans son propre script.** Le tick de
-scène teste deux familles de paires : scène↔scène et pool↔scène. La première appelait
-déjà `on_collision_enter` des DEUX acteurs ; la seconde ne prévenait que le prefab. Un
-acteur de scène heurté par un projectile poolé n'avait donc aucun moyen de réagir, et
-devait passer par une variable globale que le projectile posait pour lui — une seconde
-source de vérité pour un événement que le runtime connaissait déjà. Les deux appels
-partagent maintenant le même test de recouvrement et le même souvenir de frame
-(`_pcol_`), avec les boxes échangées : la `my_box` de l'un est l'`other_box` de l'autre.
+**Une collision a deux côtés, et chacun l'apprend dans son propre script.** Le tick de scène teste scène↔scène et
+pool↔scène, et appelle `on_collision_enter` des DEUX acteurs dans les deux cas, avec les boxes échangées (la
+`my_box` de l'un est l'`other_box` de l'autre), sur le même test de recouvrement et le même souvenir de frame
+(`_pcol_`).
 
 ### Tableaux — la forme est reconnue une fois, employée deux fois
 
@@ -844,30 +577,14 @@ Trois pièges, et où ils sont tenus :
   conteneur du langage.
 - **`#t` est une constante de compilation** (`CodeGen._array_length`) : la taille
   fait partie du type, elle n'est rangée nulle part à l'exécution.
-- **Un tableau d'état est permis partout, y compris dans un prefab poolé.** Ça
-  n'a pas toujours été vrai : les locals de tête d'un prefab poolé vivaient dans
-  `Actor.data[8]`, huit entiers par instance, où ni un tableau ni un vec2 ne
-  tenaient. Cf. « L'état d'un prefab poolé » plus bas pour ce qui l'a remplacé.
+- **Un tableau d'état est permis partout, y compris dans un prefab poolé** (cf. « L'état d'un prefab poolé »).
 
-Deux corrections sont venues avec, toutes deux invisibles jusque-là :
-
-- **le `for` numérique ne s'exécutait jamais.** Les champs de `Fornum` étaient
-  lus décalés d'un cran par rapport à luaparser, qui expose
-  `(target, start, stop, step, body)` : `for i = 1, 10` produisait
-  `for (int i = 10; i <= 0; i += 1)`. Et le pas omis n'est pas `None` chez
-  luaparser mais l'**entier Python 1**, que `_expr` traduisait en
-  `__unsupported_int` ;
-- **`Checker._check_expr` ne descendait que dans les appels posés seuls** : ni
-  les opérandes d'un calcul ni les arguments d'un appel n'étaient visités, si
-  bien qu'un appel imbriqué échappait à toute validation. Une erreur de bornes
-  ne peut pas se permettre le même angle mort — `t[9] + 1` doit se voir — donc le
-  parcours couvre maintenant l'expression entière, cible d'affectation comprise.
+`Checker._check_expr` parcourt l'expression entière (opérandes, arguments, cible d'affectation) : une erreur de
+bornes dans `t[9] + 1` doit se voir.
 
 `ExprIndex` (notation pointée, un NOM connu à l'écriture) et `ExprIndexAt`
-(crochets, une EXPRESSION calculée) sont deux noeuds distincts. Les confondre —
-ce que faisait un `hasattr(node.idx, "id")` — rendait `t[i]` indiscernable de
-`t.i`, et le C émis lisait un champ de structure là où le script voulait un
-élément.
+(crochets, une EXPRESSION calculée) sont deux noeuds distincts : les confondre rendrait `t[i]` indiscernable de
+`t.i`, et le C lirait un champ de structure là où le script veut un élément.
 
 ### Tables de données — `data.Objets[i].prix`
 
@@ -942,9 +659,8 @@ priorité (z-order), screenblock affiché.
   runtime — même mécanique `SE_PALBANK`, mêmes 16 banques.
 
 Ces fonctions sont déclarées dans `gba_engine.h` et définies dans `main.c` (via
-`GBA_ENGINE_IMPL`) ; `actor_api_static.h` les redéclare `extern` pour que les scripts
-d'actor et de scène, compilés en TU séparées, puissent les appeler — avec le garde-fou
-décrit en « Deux listes de prototypes ».
+`GBA_ENGINE_IMPL`) ; `runtime_api.h` (généré) les déclare `extern` pour que les scripts
+d'actor et de scène, compilés en TU séparées, puissent les appeler.
 
 ### Windows — le pochoir
 
@@ -1021,12 +737,8 @@ les pools de prefabs que la scène déclare (`Scene.prefab_pools`), dans cet ord
   `Scene.actor_slots` (réservation d'auteur, hérité du 96/32) ne pilote PLUS la géométrie de
   build : il ne survit que dans la carte budget de l'inspecteur, comme une vue d'INTENTION.
 
-**Rupture assumée dans l'API Lua** : `window.set`/`window.show`/`window.is_visible`
-adressaient par index matériel brut (0/1/2) — la règle même que cette section interdit. Les
-quatre appels `window.*` qui touchent une window rectangle adressent désormais TOUS par nom
-(`DOMAIN_WIN_REGION`), résolu comme `camera_names`/`scene_names` (liste du projet, plus les
-deux mots-clés fixes `"object"`/`"outside"`). Un script qui citait `window.set(0, …)` ou
-`"win0"` littéralement ne compile plus — la maison ne migre pas les formats.
+Les appels `window.*` adressent une window rectangle par NOM (`DOMAIN_WIN_REGION` : la liste du projet, plus les
+mots-clés `"object"`/`"outside"`), jamais par index matériel.
 
 ### Blending — deux jeux de cibles
 
@@ -1070,7 +782,7 @@ dans `core/models/collision_tiles.py`, et deux consommateurs en dérivent :
 
 Tant que la forme n'existait que dans les polygones du canvas, la physique du jeu
 n'en avait aucune — et l'y réécrire à la main aurait créé la même divergence que
-les « deux listes de prototypes ». Une tuile s'y décrit par sa **droite de
+une liste écrite deux fois. Une tuile s'y décrit par sa **droite de
 surface** (ordonnées en `x=0` et `x=8`, autorisées à sortir de la tuile) et le
 côté plein ; les 22 types y tiennent, pentes raides comprises.
 
@@ -1119,7 +831,7 @@ scène — comme `actors`/`background_layers`) : mode, cible, zone morte, bornes
 scène peut en posséder plusieurs ; une seule est active à la fois — la GBA n'a qu'un écran.
 
 - **Table en ROM, index actif en RAM.** `main_gen` aplatit les caméras de TOUTES les scènes
-  dans une seule table `g_cam_table[]` (`Camera` défini dans `actor_api_static.h`) et
+  dans une seule table `g_cam_table[]` (`Camera` défini dans `runtime_api.h`) et
   `g_cam_active`. L'entrée **0 est toujours la caméra par défaut** — fixe à l'origine, sans
   bornes — celle qu'obtient une scène qui n'en désigne aucune. La donner comme entrée réelle
   évite un cas particulier à chaque activation.
@@ -1194,28 +906,17 @@ core/models/   les données du projet, et le format binaire qu'elles décrivent
 codegen/       la génération du C, qui consomme le modèle
 ```
 
-Deux règles pratiques qui en découlent, et l'état du code au 2026-08-12 :
+Trois règles pratiques en découlent :
 
-- **`core/models/tile_codec.py` n'importe rien.** Le format d'une tuile et d'une entrée
-  de carte est réclamé par les modèles, par l'import, par la génération et par le canvas.
-  Tant qu'il vivait dans `core/bg_import.py`, tout le monde remontait jusqu'à la couche
-  import — et `bg_import` redescendait vers `codegen/bg_anim.py`, ce qui refermait une
-  boucle de dix modules, invisible parce que contournée par des imports posés au fond des
-  fonctions. Un module feuille ne peut, par construction, participer à aucun cycle.
-- **`Project` ne connaît pas l'application.** Il énonce des faits sur son propre
-  `EventEmitter` (`renamed`, `status`) et reçoit sa `rename_scope` — un appelable rendant
-  le gestionnaire de contexte dans lequel dérouler un renommage. `CommandDispatcher.setup()`
-  s'y abonne, met les faits en mots et rafraîchit les vues. Un projet ouvert sans interface
-  (build en ligne de commande, test) est donc muet **de lui-même**, sans repli à écrire ;
-  auparavant `project.py` importait le dispatcher dans un `try/except ImportError`, ce qui
-  était à la fois la boucle et son camouflage.
-
-- **Un nom s'importe du module qui le DÉFINIT.** `from core.models.scene import Scene`, et
-  jamais à travers `core.project`, qui a longtemps ré-exporté tout le domaine — trente
-  fichiers citaient ainsi une classe par une adresse où elle n'est pas écrite. Le piège
-  survit à la correction : `core/models/scene.py` importe `OWN_PAL_BANK` pour son propre
-  usage, donc l'emprunter *fonctionnerait*. Ce n'est pas parce qu'un module a un nom sous
-  la main qu'il en est la source.
+- **`core/models/tile_codec.py` n'importe rien.** Le format d'une tuile et d'une entrée de carte est réclamé par les
+  modèles, l'import, la génération et le canvas ; logé plus haut, il refermait une boucle de dix modules, masquée par
+  des imports posés au fond des fonctions. Un module feuille ne peut participer à aucun cycle.
+- **`Project` ne connaît pas l'application.** Il énonce des faits sur son propre `EventEmitter` (`renamed`, `status`)
+  et reçoit sa `rename_scope` (le gestionnaire de contexte dans lequel dérouler un renommage). `CommandDispatcher.setup()`
+  s'y abonne, met les faits en mots et rafraîchit les vues : un projet ouvert sans interface (build en ligne de
+  commande, test) est muet de lui-même, sans repli à écrire.
+- **Un nom s'importe du module qui le DÉFINIT** : `from core.models.scene import Scene`, jamais à travers `core.project`.
+  Qu'un module ait un nom sous la main (`OWN_PAL_BANK` dans `scene.py`) ne fait pas de lui la source.
 
 **Un import posé dans une fonction est un signal.** Il y en a de légitimes (coupure d'un
 coût de démarrage, dépendance optionnelle), mais quand il évite une boucle, il la cache :
@@ -1233,39 +934,20 @@ module cité et vérifier que chaque nom y existe — plutôt que se fier au dé
 python tools/check_architecture.py
 ```
 
-Huit contrôles, sortie non nulle si l'un échoue, chacun né d'un défaut réel de ce dépôt :
-boucles d'import (dix modules enchevêtrés, masqués par des imports différés), sens des
-dépendances (un fichier d'interface rangé dans `core/`), imports résolus (six imports
-différés cassés par un déplacement de symbole), **noms résolus** (une fonction dupliquée
-retirée d'un module qui continuait de l'appeler — pas d'import fautif, il n'y en avait
-plus du tout), code mort, et frontières respectées (vingt et un symboles privés importés
-d'ailleurs).
+Huit contrôles, sortie non nulle si l'un échoue : boucles d'import, sens des dépendances, imports résolus, **noms
+résolus** (une fonction retirée d'un module qui continuait de l'appeler), code mort, frontières respectées (symboles
+privés importés d'ailleurs).
 
-Deux boucles restantes y sont **assumées et datées**, pas ignorées : elles s'affichent
-avec leur raison sans faire échouer la commande, parce qu'un contrôle rouge en permanence
-est un contrôle que plus personne ne lance. Toute boucle nouvelle, elle, échoue.
+Les boucles restantes sont **assumées et datées** : elles s'affichent avec leur raison sans faire échouer la
+commande (un contrôle rouge en permanence n'est plus lancé par personne) ; toute boucle nouvelle échoue. Les
+exemptions se justifient **par écrit dans le script** (`BOUCLES_ACCEPTEES`, `VIVANTS_SANS_APPELANT`).
 
-Les exemptions se justifient **par écrit dans le script** (`BOUCLES_ACCEPTEES`,
-`VIVANTS_SANS_APPELANT`). Sans motif, une liste d'exemptions redevient une liste qui
-grossit.
+Le huitième contrôle ne tourne qu'à la demande, `python tools/check_architecture.py --fresh` (~55 s) : il importe
+chaque module **seul, dans un interpréteur neuf**, seul moyen de voir une boucle qui dépend de l'ORDRE (le premier
+import réussi amorce le cache et masque le problème aux suivants).
 
-Le huitième contrôle ne tourne qu'à la demande :
-
-```
-python tools/check_architecture.py --fresh
-```
-
-Il importe chaque module **seul, dans un interpréteur neuf** (~55 s). C'est le seul moyen
-de voir une boucle qui dépend de l'ORDRE : charger tous les modules d'affilée amorce le
-cache, et le premier import réussi masque le problème pour les suivants. Il est né de
-ceci — `scripting/api.py` importait `codegen/c_names.py`, sept lignes sans aucune
-dépendance ; mais importer un module d'un paquet exécute d'abord son `__init__.py`, et
-celui de `codegen` tirait toute la chaîne de build jusqu'à `core.project`, déjà en cours
-d'initialisation.
-
-**Corollaire : un `__init__.py` de paquet ne devrait rien importer au chargement.** Ce
-qu'il expose se donne paresseusement (`__getattr__`, PEP 562), sinon le module le plus
-modeste du paquet traîne derrière lui tout ce que ses voisins tirent.
+**Corollaire : un `__init__.py` de paquet ne devrait rien importer au chargement** — importer un module d'un paquet
+exécute d'abord son `__init__.py`. Ce qu'il expose se donne paresseusement (`__getattr__`, PEP 562).
 
 ### Deux implémentations qu'il faut tenir d'accord — `core/engine_emulation/`
 
@@ -1287,21 +969,12 @@ sert à l'aperçu ».
 
 ### `Project` est découpé en tranches, pas en collaborateurs
 
-`core/project.py` fait ~500 lignes et garde ce qui fait de lui un tout : registres
-d'assets, scène active, recherches, `save`/`load`/`create`/`open`. Quatre responsabilités
-volumineuses vivent à côté, en **mixins** dont `Project` hérite :
-`project_paths` (où chaque chose est rangée), `project_variables` (globals et constantes),
-`project_texts` (la table du joueur et les règles de sa clé), `project_renames` (renommer
-et réparer ce qui cite).
-
-Des mixins et non des objets délégués (`project.renamer.rename_scene(...)`) : la découpe
-sert la LECTURE, et ne doit rien coûter à l'écriture. `project.rename_scene(...)` s'écrit
-comme avant chez ses vingt-deux appelants, et rien n'a gagné un saut d'appel — un mixin
-est résolu une fois, à la construction de la classe. Le prix, assumé et à ne pas
-travestir : ces fichiers ne sont pas autonomes, chacun suppose le reste de `Project`
-(`project_variables` appelle `self._notify_renamed`, `project_texts` lit
-`self.texts_file`). Aucun d'eux ne doit importer `core.project` — ce serait un cycle
-immédiat.
+`core/project.py` garde ce qui fait de lui un tout (registres d'assets, scène active, recherches, `save`/`load`) ;
+`project_paths`, `project_variables`, `project_texts` et `project_renames` vivent à côté, en **mixins** dont
+`Project` hérite. Des mixins et non des objets délégués : la découpe sert la LECTURE et ne coûte rien à l'écriture
+(`project.rename_scene(...)` s'écrit comme avant, sans saut d'appel). Le prix, assumé : ces fichiers ne sont pas
+autonomes, chacun suppose le reste de `Project` (`self._notify_renamed`, `self.texts_file`), et aucun ne doit importer
+`core.project` (cycle immédiat).
 
 ---
 
@@ -1326,40 +999,21 @@ sa collection. Ainsi, le démarrage interactif ne paie pas le rattrapage d'un
 PNG que l'utilisateur ne consulte pas, tandis que l'écran qui le rend ou une
 opération globale travaille toujours avec des données à jour.
 
-Le point d'entrée **ouvre le projet fenêtre cachée, puis l'affiche déjà dessinée**
-(chantier « L'ouverture d'un projet, et l'écran blanc ») : `main.py` construit
-`MainWindow`, peuple l'éditeur (`_open_project`, sous curseur d'attente), et
-n'appelle `show()` qu'ensuite. La mesure a montré que le premier `show()` — la
-première mise en page et le premier paint de tout l'arbre de widgets — est
-justement l'endroit coûteux ; l'afficher avant que le projet soit chargé exposait
-un éditeur vide (panneaux blancs) puis figé le temps de l'I/O et du premier dessin.
-Il n'y a pas d'écran de chargement séparé : la fenêtre n'apparaît qu'une fois prête.
+Le point d'entrée **ouvre le projet fenêtre cachée, puis l'affiche déjà dessinée** : `main.py` construit `MainWindow`,
+peuple l'éditeur (`_open_project`, sous curseur d'attente) et n'appelle `show()` qu'ensuite, le premier `show()` (mise
+en page et paint de tout l'arbre de widgets) étant l'endroit coûteux. Pas d'écran de chargement séparé.
 
-Deux coûts que ce premier paint tirait ont été sortis de son chemin. Le
-**`DynamicInspector`** construit ses neuf sous-inspecteurs à leur première venue,
-pas au démarrage (même paresse que les écrans). Et l'**aperçu des boîtes de texte
-du canvas** — qui résout les couleurs de banque via `codegen/palette_alloc` et
-tirait ainsi la rasterisation de la police ROM entière — est **pré-chauffé hors
-écran** à la (re)construction des items (`GBAScene.set_ui_regions`), en partageant
-une seule allocation de scène (`palette_alloc.scene_layout_cache()`, un cache à
-portée de contexte que le build n'ouvre jamais).
+Deux coûts ont été sortis de ce premier paint : le **`DynamicInspector`** construit ses neuf sous-inspecteurs à leur
+première venue, et l'**aperçu des boîtes de texte du canvas** (qui tirait la rasterisation de la police ROM entière)
+est **pré-chauffé hors écran** à la reconstruction des items (`GBAScene.set_ui_regions`), en partageant une seule
+allocation de scène (`palette_alloc.scene_layout_cache()`, un cache à portée de contexte que le build n'ouvre jamais).
 
 ---
 
 ## Ajouter un écran — le catalogue et le contrat
 
-Un écran n'était pas une donnée : il fallait l'épeler à **cinq** endroits de
-`window.py` — le tableau `SCREENS`, l'ordre des `addWidget`, un attribut, une
-ligne dans `_refresh_ui`, les abonnements du dispatcher — dont deux listes
-parallèles dont l'accord n'était tenu que par un commentaire (« l'ordre doit
-rester synchronisé »). Un écran inséré au milieu décalait l'autre liste sans un
-mot, et un écriteau « coming soon » occupait l'index 1 pour tenir le compte.
-
-Cet écriteau — le `Tileset Manager` — a été **remplacé par le Data Editor**, et
-la classe `PlaceholderScreen` qui le portait a disparu avec lui : le tileset
-comme asset de premier rang est sorti du périmètre en v0.4 (« ce logiciel n'est
-pas un outil de dessin »), donc l'entrée de navigation promettait un écran qui
-ne viendra pas.
+Un écran est une donnée du catalogue, pas du code épelé à plusieurs endroits de `window.py` : deux listes parallèles
+dont l'accord ne tenait que par un commentaire décalaient l'une sans un mot dès qu'un écran s'insérait.
 
 **Il n'y a plus qu'une liste**, `MainWindow._screen_catalogue()`. Les libellés
 de la barre de navigation, l'ordre du `QStackedWidget` et la propagation du
@@ -1369,37 +1023,21 @@ projet en dérivent tous. Ajouter un écran, c'est une ligne et une fabrique :
 EditorScreen("Sound Editor", self._make_sound_editor)
 ```
 
-- **`ProjectScreen`** (`ui/screens.py`) nomme le contrat : `load_project(project)`.
-  Il existait déjà sans nom, écrit `load_project` par six écrans et
-  `set_project` par un septième — le Script Editor a été aligné. Un `Protocol`
-  et non une classe de base : un écran est un `QWidget` d'abord.
-- **Le contrat est vérifié à la CONSTRUCTION** (`_ensure_screen`), pas
-  statiquement : un écran venu d'un plugin n'existe pour personne avant ce
-  moment. Un écran qui ne le remplit pas est monté quand même — il s'affiche,
-  il ne reçoit jamais le projet — et le défaut est annoncé, dans la même boîte
-  que les erreurs de plugin. Un écran muet ne se distingue sinon pas d'un écran
-  vide.
-- **L'écran natif se construit à sa PREMIÈRE VISITE** (chantier « L'écran
-  construit à sa première visite ») : `_build_screens` ne bâtit au démarrage que
-  le Scene Manager et les écrans de plugin, et pose un placeholder pour les
-  autres ; `_ensure_screen` remplace le placeholder à la première visite. C'est
-  le prolongement du chargement paresseux (v0.24) de la donnée au widget — les
-  imports lourds (QtMultimedia + numpy pour l'audio, grammaire luaparser pour les
-  scripts) quittent le chemin de démarrage. Les **plugins**, eux, restent
-  construits au démarrage : c'est le seul contrat qui doit se constater tout de
-  suite, un écran natif satisfaisant le sien par construction. Un accès
-  transversal (build, réglages, undo) à un écran non encore construit le saute
-  (`getattr(self, "_x", None)`), l'écran lira l'état frais à sa venue.
-- **Une fabrique et non une classe** dans le descripteur : deux écrans ne se
-  construisent pas par simple appel de constructeur (le Scene Manager est
-  assemblé par la fenêtre, l'écriteau prend un titre), et les plugins sont
-  chargés après la `QApplication`, mais avant que `MainWindow` construise son
-  catalogue — construire un widget à l'import planterait. Le branchement propre
-  à un écran vit dans sa fabrique, à côté de
-  sa construction, au lieu d'être dispersé dans `_setup_ui`.
-- **`SceneManagerScreen`** existe pour porter ce contrat : ses trois colonnes
-  restent des attributs de la fenêtre (lues d'une trentaine d'endroits), les
-  faire descendre est un chantier à part. Sa `load_project` propage aux trois.
+- **`ProjectScreen`** (`ui/screens.py`) nomme le contrat : `load_project(project)`. Un `Protocol` et non une classe de
+  base : un écran est un `QWidget` d'abord.
+- **Le contrat est vérifié à la CONSTRUCTION** (`_ensure_screen`), pas statiquement : un écran venu d'un plugin n'existe
+  pour personne avant ce moment. Un écran qui ne le remplit pas est monté quand même et le défaut est annoncé, dans la
+  même boîte que les erreurs de plugin (sinon un écran muet ne se distingue pas d'un écran vide).
+- **L'écran natif se construit à sa PREMIÈRE VISITE** : `_build_screens` ne bâtit au démarrage que le Scene Manager et
+  les écrans de plugin, et pose un placeholder pour les autres ; `_ensure_screen` le remplace. Les imports lourds
+  (QtMultimedia + numpy, grammaire luaparser) quittent le chemin de démarrage. Les **plugins** restent construits au
+  démarrage : leur contrat doit se constater tout de suite. Un accès transversal (build, réglages, undo) à un écran non
+  construit le saute (`getattr(self, "_x", None)`) ; l'écran lira l'état frais à sa venue.
+- **Une fabrique et non une classe** dans le descripteur : le Scene Manager est assemblé par la fenêtre, et les plugins
+  sont chargés après la `QApplication` mais avant le catalogue (construire un widget à l'import planterait). Le
+  branchement propre à un écran vit dans sa fabrique.
+- **`SceneManagerScreen`** porte ce contrat ; ses trois colonnes restent des attributs de la fenêtre (lues d'une
+  trentaine d'endroits).
 - Les écrans de plugin sont ajoutés **après** les natifs : les index de ces
   derniers ne bougent pas quand un plugin est installé, et l'ordre de nav
   enregistré par l'utilisateur survit. Leurs appels sont entourés d'un
@@ -1407,10 +1045,8 @@ EditorScreen("Sound Editor", self._make_sound_editor)
 
 ### Le panneau de build — un seul, accroché à l'écran affiché
 
-Console, diagnostics et onglet Disk vivent dans **un seul** `BuildPanel`
-(`MainWindow._make_build_panel`), qui n'appartient à aucun écran. Il y en avait
-deux (Scene Manager et Script Editor), la seconde recevant une copie de chaque
-ligne de log ; elle a disparu avec ses points d'appel.
+Console, diagnostics et onglet Disk vivent dans **un seul** `BuildPanel` (`MainWindow._make_build_panel`), qui
+n'appartient à aucun écran.
 
 - **Chaque écran est bâti sur `ThreeColumnBody`** (`ui/common/three_column_body.py`)
   et l'expose en `body`. La colonne centrale y est un splitter vertical
@@ -1478,34 +1114,16 @@ est toujours caché à ce moment-là. Les abonnements `_d.on(…)` qui subsisten
 pilotent l'écran **visible** (le Scene Manager) ; les invalidations paresseuses
 (`invalidate_script_usages`) marquent un cache périmé, ce n'est pas un refresh.
 
-Et le **routage des assets** (`MainWindow._ASSET_ROUTES`) est une autre table :
-elle associe `assets/<dossier>/*.ext` aux fonctions d'`asset_reconciliation` que le
-watcher appelle. Elle a porté des **noms de méthodes** appelés par `getattr`
-sur `Project` jusqu'à ce que les passe-plats correspondants soient retirés de
-`Project` : plus rien ne pouvait le voir — ni l'import, ni
-`check_architecture.py`, qui contrôle pourtant les noms résolus — et déposer un
-PNG dans `assets/sprites/` levait un `AttributeError` dans un slot Qt, donc
-tuait l'éditeur. La table porte désormais les fonctions elles-mêmes.
+Le **routage des assets** (`MainWindow._ASSET_ROUTES`) est une autre table : elle associe `assets/<dossier>/*.ext` aux
+fonctions d'`asset_reconciliation` que le watcher appelle. Elle porte les fonctions elles-mêmes, pas des noms de
+méthodes appelés par `getattr` (un nom périmé n'était vu par rien, et levait un `AttributeError` dans un slot Qt).
+Elle a **trois** fonctions par famille : créer, supprimer, **renommer**. Un renommage arrive du système de fichiers
+comme une disparition ET une apparition dans le même événement ; le watcher les **apparie** (même taille, même date
+à la nanoseconde, `project_watcher.pair_renames`), et l'asset **suit son fichier** : `asset_reconciliation.rename_*`
+appelle le `Project.rename_*` de la famille, donc le sidecar se déplace et les références sont réécrites.
 
-Elle a **trois** fonctions par famille, pas deux : créer, supprimer, **renommer**.
-Un renommage n'est pas la somme des deux autres. Il arrive du système de
-fichiers comme une disparition ET une apparition dans le même événement, et le
-watcher les **apparie** avant de prévenir la fenêtre — même taille, même date à
-la nanoseconde, ce que seul un renommage préserve (`project_watcher.pair_renames`).
-Sans cet appariement, renommer une planche dans l'explorateur pendant que
-l'éditeur tourne détruisait l'asset avec tout ce qui avait été authoré dessus
-(la découpe en frames d'un sprite, les caractères d'une planche de police) pour
-faire naître un asset vierge sous le nouveau nom. Avec, l'asset **suit son
-fichier** : `asset_reconciliation.rename_*` appelle le `Project.rename_*` de la
-famille — celui-là même que le finder utilise —, donc le sidecar se déplace et
-les scènes, prefabs et scripts qui citent l'asset sont réécrits.
-
-C'est le pendant en séance de la règle appliquée au chargement : **le nom de
-fichier fait foi**. `ResourceStore.load` adopte le stem du fichier quand le
-champ `name` a dérivé, et `asset_reconciliation._relink_source` raccroche un asset
-dont le fichier cité a disparu à celui qui porte son nom. Les trois lectures
-d'une même identité — nom de sidecar, champ `name`, fichier cité — ne peuvent
-plus se perdre de vue.
+**Le nom de fichier fait foi** : `ResourceStore.load` adopte le stem du fichier quand le champ `name` a dérivé, et
+`asset_reconciliation._relink_source` raccroche un asset dont le fichier cité a disparu à celui qui porte son nom.
 
 ---
 
@@ -1522,10 +1140,8 @@ Ce qui est sauvé, ce sont les `GlobalVar` dont `persist` est vrai. Le moteur ne
 aucun autre état : ni scène courante, ni position d'acteur. Reprendre une partie est un
 aiguillage que l'auteur écrit.
 
-**Le socle vient de `globals.h`, il n'a pas été construit pour ça** : `GLOBAL_<NOM>` et
-`global_read/global_write(i)` existent depuis la table de textes (une valeur interpolée
-connaît une variable par index, jamais par nom). C'est exactement ce dont un sérialiseur
-a besoin — `g_save_idx[]` ne contient que ces index-là.
+Le socle est `globals.h` : `GLOBAL_<NOM>` et `global_read/global_write(i)` (une valeur interpolée connaît une variable par
+index, jamais par nom) ; `g_save_idx[]` ne contient que ces index-là.
 
 Format d'un emplacement, écrit par `save_write` :
 
@@ -1538,24 +1154,17 @@ Format d'un emplacement, écrit par `save_write` :
 | 12 | `u32` numéro de l'emplacement (depuis le format 3) |
 | 16 | `n` enregistrements : `u32` id, `u32` taille de charge utile, `u32` métadonnées, puis les cases empaquetées (1 à 32 bits selon leur type) |
 
-Le format 4 réserve 24 bits des métadonnées au nombre exact de cases et 8 bits à
-leur largeur, avec le bit `0x80` pour un type signé. Le remplissage jusqu'au mot de
-32 bits n'est donc jamais pris pour des cases : un tableau agrandi garde les valeurs
-par défaut au-delà de sa longueur sauvegardée. La lecture utilise la largeur et le
-signe enregistrés, même si le type de la variable a changé depuis.
+Le format 4 réserve 24 bits des métadonnées au nombre exact de cases et 8 bits à leur largeur (bit `0x80` : type signé) :
+le remplissage jusqu'au mot de 32 bits n'est jamais pris pour des cases, et un tableau agrandi garde ses valeurs par
+défaut au-delà de sa longueur sauvegardée. La lecture utilise la largeur et le signe enregistrés, même si le type de la
+variable a changé depuis.
 
-Les emplacements occupent des partitions égales de la SRAM, arrondies à quatre octets.
-Leur adresse ne dépend plus du nombre de variables. Le format 2 (en-tête de 12 octets,
-emplacements compacts) reste lisible ; son numéro d'emplacement se déduit de l'adresse
-et de la taille des enregistrements. La première écriture ou suppression migre les parties
-existantes vers le format 4. Le format 3 reste également lisible et suit cette migration.
-Ces anciens formats n'enregistraient ni longueur exacte ni type : leurs enregistrements
-migrés gardent des métadonnées nulles et leur comportement de lecture antérieur,
-jusqu'à la réécriture de l'emplacement par le jeu. La longueur d'origine ne peut pas
-être retrouvée à partir du remplissage. Un changement du nombre d'emplacements utilise le même chemin.
-La migration réserve temporairement 32 Kio en RAM, puis les libère. Si la mémoire manque,
-si une ancienne partie dépasse sa nouvelle partition, ou si un emplacement existant serait
-perdu, l'opération rend 0 sans modifier la SRAM. Les lectures ne migrent ni ne modifient la SRAM.
+Les emplacements occupent des partitions égales de la SRAM, arrondies à quatre octets : leur adresse ne dépend pas du
+nombre de variables. Les formats 2 et 3 restent lisibles ; la première écriture ou suppression migre les parties
+existantes vers le format 4 (un changement du nombre d'emplacements emprunte le même chemin), en gardant des
+métadonnées nulles et le comportement de lecture antérieur jusqu'à la réécriture de l'emplacement par le jeu. La
+migration réserve temporairement 32 Kio en RAM ; si la mémoire manque, si une ancienne partie dépasse sa nouvelle
+partition ou si un emplacement serait perdu, l'opération rend 0 sans modifier la SRAM. Les lectures ne migrent rien.
 Une sauvegarde passée au format 4 n'est plus lisible par les anciennes ROMs.
 
 **Rangé par id, pas par rang.** Ajouter, retirer ou réordonner une variable persistante
@@ -1571,15 +1180,10 @@ courant laisse un emplacement illisible plutôt qu'une sauvegarde à moitié éc
 relit très bien. `save_read` (`save.load` côté Lua) repose d'abord tous les défauts : une
 lecture rend un état complet, jamais un mélange entre le fichier et la partie en cours.
 
-**`save:read(slot, "nom")` lit UNE variable sans les trois tests ci-dessus** (ROADMAP
-v0.22) : elle rend le défaut de la variable dès que `save_exists` répond faux, et sinon
-s'arrête au premier enregistrement du même format qui porte son id — sans jamais appeler
-`global_write_at`, donc sans toucher aux globales de la partie en cours. C'est le geste
-qui manquait pour peindre un écran de sélection de partie (chapitre, temps de jeu, nom)
-sans écraser une partie déjà en cours pour aller regarder les autres emplacements. Côté
-codegen, le nom de `save.read` reste un argument LITTÉRAL (contrairement à `global.nom`,
-résolu par accès pointé depuis le chantier global/const) : il résout à `GLOBAL_<NOM>` à la
-compilation (`codegen._emit_save_read`), jamais passé en chaîne au runtime.
+**`save:read(slot, "nom")` lit UNE variable sans les trois tests ci-dessus** : elle rend le défaut de la variable dès que
+`save_exists` répond faux, sinon s'arrête au premier enregistrement qui porte son id, sans jamais appeler
+`global_write_at` — donc sans toucher aux globales de la partie en cours (de quoi peindre un écran de sélection de
+partie). Le nom reste un argument LITTÉRAL, résolu à `GLOBAL_<NOM>` à la compilation (`codegen._emit_save_read`).
 
 Côté build (`main_gen._save_lines`) : trois tableaux parallèles (`g_save_id`, `g_save_idx`,
 `g_save_def`), émis **même vides** parce que `gba_engine.h` les déclare sans condition —
@@ -1620,14 +1224,10 @@ est dans l'UI, et la clé est lisible. **La règle de nommage** est `<écran>.<s
 snake_case, avec un préfixe `common.*` pour les atomes universels (browse, cancel, close,
 open, create…) traduits une seule fois.
 
-Ce que le catalogue de libellés ne reçoit PAS, délibérément (chacun a sa raison) : les
-libellés d'annulation (`SetFieldCmd label=…`, visibles dans le menu Undo, corpus à part),
-les identifiants techniques (noms de type `int`/`bool`…), les noms de format (BGR555,
-PNG), les données de l'utilisateur et les diagnostics reçus du cœur ou d'outils externes.
-Les titres d'`AssetFinder`, les tables d'affichage et les diagnostics formulés par l'UI
-sont désormais extraits. Les identifiants de familles restent distincts de leurs titres
-traduits. [Le contrat des textes](docs/development/ui-text.md) précise les exceptions et les limites
-du contrôle ciblé `tools/check_ui_text.py`, intégré au contrôle d'architecture.
+Ce que le catalogue de libellés ne reçoit PAS, délibérément : les libellés d'annulation (`SetFieldCmd label=…`, corpus à
+part), les identifiants techniques (`int`/`bool`…), les noms de format (BGR555, PNG), les données de l'utilisateur et les
+diagnostics reçus du cœur ou d'outils externes. [Le contrat des textes](docs/development/ui-text.md) précise les
+exceptions et les limites du contrôle ciblé `tools/check_ui_text.py`, intégré au contrôle d'architecture.
 
 **Le niveau est choisi par l'appelant, le ton est écrit dans le catalogue.** Le niveau est
 une question de place dans l'écran ; le ton est une propriété du message. Les mélanger est
@@ -1676,12 +1276,9 @@ Deux règles qui viennent de ce que la traduction exige, et qu'aucun test n'aura
   `"s" if n > 1`. Un champ `code` porte l'expression Lua qu'un champ miroite ; il vit dans le
   maître seul, parce qu'une expression d'API ne se traduit pas.
 
-`tools/check_architecture.py` vérifie les deux sens, pour les DEUX catalogues (notices ET
-libellés) : toute clé citée existe, toute entrée est citée. Sans lui l'extraction se déferait
-toute seule — une clé mal tapée donne un message vide, et **un message vide ne se plaint
-jamais**. C'est précisément ce qu'on a trouvé en écrivant ce contrôle : quatre infobulles
-d'inspecteur citaient une clé absente de leur propre dictionnaire et n'affichaient rien depuis
-toujours.
+`tools/check_architecture.py` vérifie les deux sens, pour les DEUX catalogues (notices ET libellés) : toute clé citée
+existe, toute entrée est citée. Sans lui l'extraction se déferait toute seule — une clé mal tapée donne un message vide,
+et **un message vide ne se plaint jamais**.
 
 **Piège de mise en œuvre.** `label` est aussi un nom de variable tentant. Un `for k, label in …`
 ou un `label = …` dans une méthode qui appelle par ailleurs `label("clé")` masque la fonction
@@ -1732,10 +1329,8 @@ fichier se lit sans erreur), les nœuds sont dérivés à chaque reconstruction 
 diffs git lisibles, dep-graph inchangé). Contrepartie assumée : **pas de nœud vide**, créer un
 rangement veut dire y créer un texte.
 
-`_repair_texts()` rattrape un fichier édité à la main (id ou clé manquant/dupliqué,
-chemin mal formé) : l'id prime, c'est l'identité ; une clé en double est celle qu'on
-renumérote. `Text.from_dict` migre au passage l'ancien champ plat `label` en `path`
-à un seul niveau.
+`_repair_texts()` rattrape un fichier édité à la main (id ou clé manquant/dupliqué, chemin mal formé) : l'id prime, c'est
+l'identité ; une clé en double est celle qu'on renumérote.
 
 Un `Text` est destiné au **joueur**, donc traduisible — c'est ce qui le distingue d'un
 `string` technique (nom de fichier, code interne), qui reste un littéral dans le script.
@@ -1786,73 +1381,44 @@ entier. Signalé aux deux endroits qui peuvent le savoir, le build et l'inspecte
 
 ## Polices — un asset, deux points d'entrée
 
-`core/models/font.py` + `core/font_import.py`, sidecar à côté de la source dans
-`assets/fonts/`. Les sources bitmap acceptent **PNG nu** ou **BMFont `.fnt`** ;
-les sources vectorielles **TTF** et **OTF** sont aussi reconnues par le watcher et
-reçoivent leur sidecar immédiatement. Une source vectorielle ne fabrique surtout
-pas de planche à l'import : `core/font_rasterizer.py` la lit à la demande avec
-FreeType pour l'aperçu comme pour le build. Sa sortie `RasterGlyph` est une grille
-de couverture indépendante des tuiles et de la palette GBA.
+`core/models/font.py` + `core/font_import.py`, sidecar à côté de la source dans `assets/fonts/`. Les sources bitmap sont un
+**PNG nu** ou un **BMFont `.fnt`** ; les sources vectorielles **TTF**/**OTF** reçoivent leur sidecar dès que le watcher les voit,
+sans fabriquer de planche : `core/font_rasterizer.py` les lit à la demande avec FreeType, pour l'aperçu comme pour le build. Sa
+sortie `RasterGlyph` est une grille de couverture indépendante des tuiles et de la palette GBA. Un format d'entrée n'est qu'une
+façade sur le même sidecar (comme `detect_import_mode` pour les fonds).
 
-Deux détails de **coût** (chantier « L'ouverture d'un projet, et l'écran blanc »).
-`build_font_asset` passe une **table de passe** `faces` à travers la rasterisation :
-chaque fichier source — `Face` FreeType, planche PNG, et chemin résolu par
-`asset_abs` — n'est chargé qu'**une fois** pour tous ses glyphes, au lieu d'un
-rechargement par caractère. Elle est locale à l'appel (aucun état de module, rien
-partagé entre threads). L'extraction de couverture (chemins PNG et `_coverage`
-FreeType) est **vectorisée** (numpy) : même sortie, à l'octet près.
+`build_font_asset` passe une table `faces` à travers la rasterisation : chaque fichier source n'est chargé qu'**une fois** pour tous
+ses glyphes (locale à l'appel, aucun état de module), et l'extraction de couverture est **vectorisée** (numpy).
 
-Une `FontAsset` porte aussi sa politique `pixel_fit`. `auto` choisit une
-bitmap strike seulement si elle correspond exactement à la hauteur demandée,
-sinon aligne le rendu sur la grille à 6 px ou moins et garde le rendu natif
-au-dessus. `native`, `grid_fit` et `bitmap_strike` restent des choix d'auteur :
-une fonte vectorielle ne devient pas magiquement une bonne police 5 px, mais
-la recette est déterministe dans l'aperçu et reprise telle quelle par le build.
+Une `FontAsset` porte sa politique `pixel_fit` : `auto` choisit une bitmap strike seulement si elle correspond exactement à la
+hauteur demandée, sinon aligne sur la grille à 6 px ou moins et garde le rendu natif au-dessus ; `native`, `grid_fit` et
+`bitmap_strike` sont des choix d'auteur. La recette est déterministe dans l'aperçu et reprise telle quelle par le build.
 
-**Découverte : une source, un usage possible.** À l'apparition d'un PNG, `.fnt`,
-TTF ou OTF, `sync_font_file()` crée ou réconcilie immédiatement un `FontAsset`.
-Les sources bitmap reçoivent un asset du même nom ; les sources vectorielles
-de même famille fusionnent leurs faces natives dans un seul asset. La
-réconciliation complète les faces ou retire les références disparues, mais ne
-remplace jamais les paramètres de rasterisation ni les fallbacks écrits par
-l'auteur.
+**Découverte : une source, un usage possible.** À l'apparition d'un PNG, `.fnt`, TTF ou OTF, `sync_font_file()` crée ou réconcilie
+un `FontAsset` (les sources bitmap reçoivent un asset du même nom ; les vectorielles de même famille fusionnent leurs faces natives
+dans un seul). La réconciliation complète les faces ou retire les références disparues, sans jamais remplacer les paramètres de
+rasterisation ni les fallbacks de l'auteur. Elle distingue deux échecs : **dur** (format illisible, planche introuvable) → aucun
+asset créé ; **mou** (planche lisible, aucun glyphe) → asset créé avec avertissement. `reconcile_fonts()` traite les `.fnt` d'abord :
+le descripteur fait foi et sa page ne crée pas de doublon.
 
-Un TextBox référence la police logique par `font_name` (le nom d'un
-`FontAsset`) et son `font_weight` natif (400 Regular, 700 Bold, etc.). Les
-anciens fichiers qui citent une source restent lisibles ; le sélecteur les
-reconnaît et propose l'asset qui les contient sans réécriture silencieuse.
-Les formats bitmap remplissent le même sidecar — un format d'entrée n'est qu'une
-façade, comme `detect_import_mode` pour les fonds.
+Un TextBox référence la police logique par `font_name` (le nom d'un `FontAsset`) et son `font_weight` natif (400, 700…). Un ancien
+fichier qui cite une source reste lisible : le sélecteur propose l'asset qui la contient sans réécriture silencieuse.
 
-**Le modèle est à rectangles, pas à grille.** Chaque `Glyph` porte son propre rectangle
-dans la planche : c'est ce qui permet d'accueillir BMFont, dont les glyphes sont posés
-librement dans la page. Une planche régulière n'est que le cas où tous les rectangles
-sont identiques ; `cell_w`/`cell_h` ne restent qu'une aide à la déduction et à
-l'affichage.
+**Le modèle est à rectangles, pas à grille.** Chaque `Glyph` porte son rectangle dans la planche, ce qui accueille BMFont (glyphes
+posés librement) ; une planche régulière est le cas où tous les rectangles sont identiques, `cell_w`/`cell_h` ne restant qu'une aide.
 
-- **Le charset n'est pas un champ** — c'est `"".join(g.char for g in glyphs)`. Une seule
-  source de vérité, et l'écran Police éditera `Glyph.char` case par case plutôt qu'une
-  chaîne de 95 caractères.
-- **PNG nu = cas dégradé.** `detect_grid()` énumère les découpages réguliers et note les
-  candidats : tomber sur un nombre de cases d'un charset connu pèse le plus lourd, puis
-  les cellules carrées, puis les multiples de 8. `propose_charset()` fournit une première
-  attribution, corrigeable. Les cases vides **en fin** de planche sont du bourrage et sont
-  retirées — une case vide *au milieu* est légitime, c'est l'espace.
-- **`.fnt` = rien à deviner** : codepoints, rectangles, `xadvance` et `lineHeight` sont
-  déclarés. `xadvance` prime sur toute mesure d'encre — c'est une décision typographique
-  de l'auteur, pas un constat. Formats texte et XML gérés ; le binaire lève une erreur
-  explicite plutôt que de produire une police vide.
-- **`advance` était mesuré dès l'import bien avant de servir**, ce qui a permis au rendu
-  proportionnel d'arriver ensuite sans réimporter une seule police. Trois sources par
-  ordre d'autorité : le `xadvance` d'un `.fnt`, sinon le marqueur d'espacement s'il a été
-  désigné à la pipette, sinon **mono** (chasse = cellule). Pas de repli sur une mesure
-  d'encre : sans flanc déclaré, une chasse proportionnelle colle les lettres, là où du mono
-  reste toujours lisible.
-- **`tile_count()`** donne le coût VRAM en tuiles 8×8 : ces tuiles vivent dans le
-  charblock du layer d'UI, en concurrence directe avec le décor.
-- **`missing_chars()`** croise une police avec un texte. Couplé à la table de textes, ça
-  signale les caractères manquants *avant* de les découvrir sur la console — notamment
-  lorsqu'une traduction apporte des `ß` ou d'autres glyphes absents de la langue source.
+- **Le charset n'est pas un champ** : c'est `"".join(g.char for g in glyphs)`, une seule source de vérité.
+- **PNG nu = cas dégradé** : `detect_grid()` note les découpages réguliers (un nombre de cases d'un charset connu pèse le plus
+  lourd, puis les cellules carrées, puis les multiples de 8) et `propose_charset()` fait une première attribution, corrigeable. Les
+  cases vides **en fin** de planche sont du bourrage ; une case vide *au milieu* est légitime (l'espace).
+- **`.fnt` = rien à deviner** : codepoints, rectangles, `xadvance` et `lineHeight` sont déclarés, et `xadvance` prime sur toute
+  mesure d'encre. Formats texte et XML ; le binaire lève une erreur explicite plutôt que de produire une police vide.
+- **`advance`** a trois sources, par ordre d'autorité : le `xadvance` d'un `.fnt`, sinon le marqueur d'espacement désigné à la
+  pipette, sinon **mono** (chasse = cellule). Pas de repli sur une mesure d'encre : sans flanc déclaré, une chasse proportionnelle
+  colle les lettres, là où du mono reste lisible.
+- **`tile_count()`** donne le coût VRAM en tuiles 8×8 (dans le charblock du layer d'UI, en concurrence avec le décor).
+- **`missing_chars()`** croise une police avec un texte et signale les caractères manquants *avant* la console (par exemple un `ß`
+  qu'apporte une traduction).
 
 ### Du sidecar à la ROM
 
@@ -1885,14 +1451,11 @@ existants ouvrables.
   composition ; une police mono réserve ses tuiles de glyphes. Ce n'est pas une
   estimation séparée de l'encodage.
 
-- **Un glyphe → `tiles_x × tiles_y` tuiles** (une seule pour du 8×8, le cas courant),
-  déposées à la suite dans le charblock du texte. Leur base n'est plus une constante :
-  `text_set_tile_base()` la reçoit de l'allocateur de charblock (`codegen/vram_alloc.py`),
-  qui glisse le texte dans les trous que laisse le décor — `FONT_TILE_BASE_DEFAULT = 1`
-  n'est que le repli. La tuile 0 reste vide, c'est celle que pose `text_clear()`. La palette
-  d'une police libre est chargée dans une banque allouée ; `Scene.font_pal_banks` peut la
-  remplacer par une banque BG de la scène, héritée par les zones dans un conteneur. La constante
-  `FONT_PAL_BANK` ne reste qu'un repli de compatibilité.
+- **Un glyphe → `tiles_x × tiles_y` tuiles** (une seule pour du 8×8), déposées à la suite dans le charblock du texte. Leur base
+  vient de l'allocateur de charblock (`text_set_tile_base()`, `codegen/vram_alloc.py`), qui glisse le texte dans les trous du
+  décor ; `FONT_TILE_BASE_DEFAULT = 1` n'est que le repli. La tuile 0 reste vide (celle de `text_clear()`). La palette d'une police
+  libre est chargée dans une banque allouée ; `Scene.font_pal_banks` peut la remplacer par une banque BG de la scène, héritée par
+  les zones d'un conteneur.
 - **Deux chemins de rendu, choisis par la donnée.** `font_emit.is_proportional()` /
   `render_composited()` décident, et `FontInfo.composited` désigne le CHEMIN, pas la
   typographie. *Tilemap* : les tuiles de glyphes vont en VRAM, écrire du texte revient à
@@ -1903,77 +1466,48 @@ existants ouvrables.
   possible). Chasses, interligne et avance de secours sont émis **déjà résolus**
   (`font_line_px`, `font_fallback_adv_px`) : sans ça, basculer de chemin changerait
   l'interligne en silence.
-- **La surface de composition est allouée PAR ZONE, pas partagée.** Une zone authorée a un
-  rectangle connu au build : `scene_text_reservation` lui donne son propre bloc
-  (`surf_layout` → `text_set_region_surf`, cf. `RegionSurf` dans `gba_engine.h`), et
-  l'adressage borné — la branche `g_blit_h != 0` de `text_surf_tile`, écrite pour les bandes
-  OBJ — tronque hors cadre au lieu de replier chez le voisin. La surface PARTAGÉE de 240
-  tuiles, adressée `(tx % 30, ty % 8)`, ne subsiste que pour l'**écriture libre**
-  (`text.draw`, `text.clear`), qui n'a pas de rectangle à qui donner un bloc ; elle n'est
-  même réservée que si un script de la scène en appelle une (`font_emit.scene_writes_free`).
-  Le partage était la seule cause d'un bug qu'aucun garde-fou ne pouvait rendre acceptable :
-  ne couvrant que 8 rangées sur les 20 de l'écran, il faisait s'écraser en VRAM un titre en
-  haut et une boîte de dialogue en bas — une mise en page banale. Le coût suit désormais ce
-  que l'auteur déclare au lieu d'un forfait ; un dépassement devient une erreur d'allocation
-  franche plutôt qu'une corruption silencieuse.
-- **Le remplacement de la police par langue entre dans cette décision.** La police logique par
-  défaut peut rester une Font8x8 latine et être remappée vers Misaki pour le japonais
-  (`g_lang_font` dans le runtime). `region_is_composited()` examine donc toutes les polices
-  EFFECTIVES de la zone : si l'une est composée, `scene_text_reservation()` crée son
-  `surf_layout` et `main.c` émet `text_set_region_surf`. Résoudre la langue seulement au
-  runtime donnerait une police correctement choisie, mais sans l'espace VRAM où composer ses
-  pixels — une troncature silencieuse. Le canvas lit cette même règle.
-- **La banque d'encre d'une police est un réglage de scène persistant.**
-  `Scene.font_pal_banks` associe une police logique à une banque BG de la scène ; la clé vide
-  désigne la police par défaut. L'inspecteur, l'allocateur de palettes, le canvas et
-  `text_set_font_pal()` lisent cette unique donnée. Une banque propre reste l'absence de clé,
-  non une seconde valeur d'interface : ainsi le choix d'encre survit à la réouverture du projet.
+- **La surface de composition est allouée PAR ZONE, pas partagée.** Une zone authorée a un rectangle connu au build :
+  `scene_text_reservation` lui donne son propre bloc (`surf_layout` → `text_set_region_surf`, `RegionSurf` dans `gba_engine.h`), et
+  l'adressage borné (la branche `g_blit_h != 0` de `text_surf_tile`) tronque hors cadre au lieu de replier chez le voisin. La surface
+  PARTAGÉE de 240 tuiles, adressée `(tx % 30, ty % 8)`, ne subsiste que pour l'**écriture libre** (`text.draw`, `text.clear`), et
+  n'est réservée que si un script de la scène en appelle une (`font_emit.scene_writes_free`). Partagée, elle faisait s'écraser en
+  VRAM un titre en haut et une boîte en bas ; le coût suit désormais ce que l'auteur déclare, et un dépassement est une erreur
+  d'allocation franche.
+- **Le remplacement de la police par langue entre dans cette décision** : la police par défaut peut rester une Font8x8 latine et être
+  remappée vers Misaki pour le japonais (`g_lang_font`). `region_is_composited()` examine donc toutes les polices EFFECTIVES de la
+  zone ; si l'une est composée, `scene_text_reservation()` crée son `surf_layout`. Résoudre la langue au seul runtime donnerait une
+  police bien choisie mais sans l'espace VRAM où composer ses pixels. Le canvas lit la même règle.
+- **La banque d'encre d'une police est un réglage de scène persistant** : `Scene.font_pal_banks` associe une police logique à une
+  banque BG (la clé vide désigne la police par défaut), lu par l'inspecteur, l'allocateur de palettes, le canvas et
+  `text_set_font_pal()`. Une banque propre reste l'absence de clé.
 - **Un texte est émis en codepoints `u16`, pas en glyphes.** La correspondance
   caractère → tuile se fait au runtime, par dichotomie sur la table triée de la police
   courante. C'est ce qui rend un texte **indépendant de la police** : une traduction peut
   exiger un autre jeu de glyphes. Le coût est une recherche par caractère à l'affichage,
   pas par frame.
-- **Le slot BG d'une zone appartient à son nœud `Interface`, par scène** (v0.12) : plus de
-  `Scene.text_bg` unique. Chaque `InterfaceNode.bg_slot` dit où SA zone se rend ; `scene_init`
-  installe une table de routage (`scene_route_region`/`scene_route_image`) que le rendu lit
-  au lieu d'un layer global. Un même layout partagé peut donc vivre sur BG0 dans une scène et
-  BG2 dans une autre. L'API texte n'a toujours pas de paramètre `layer` : la zone porte le
-  sien, et l'écriture libre (`text.draw` aux coordonnées) garde un layer courant par défaut,
-  posé au premier slot d'UI de la scène. Cf. « Éléments d'interface » plus bas.
+- **Le slot BG d'une zone appartient à son nœud `Interface`, par scène** : chaque `InterfaceNode.bg_slot` dit où SA zone se
+  rend ; `scene_init` installe une table de routage (`scene_route_region`/`scene_route_image`) que le rendu lit au lieu
+  d'un layer global. L'API texte n'a pas de paramètre `layer` : la zone porte le sien, et l'écriture libre (`text.draw`)
+  garde un layer courant par défaut, posé au premier slot d'UI de la scène. Cf. « Éléments d'interface ».
 - **Une seule police résidente** à la fois : `text_set_font()` recopie glyphes et palette
   en VRAM. C'est un appel délibéré, pas un coût par frame.
-- **Celle que `scene_init` charge est `Scene.font_name`**, et `font_emit.scene_default_font()`
-  est le point UNIQUE qui la résout — l'émission, la réservation VRAM, les sous-ensembles de
-  glyphes, le validateur de débordement et l'aperçu du canvas passent tous par lui. Réserver
-  pour une police et en charger une autre écrit le texte DANS le décor, sans erreur avant
-  l'exécution : c'est la seule raison d'être de cette fonction. `""` (et un nom introuvable)
-  retombent sur la première police encodable — il faut bien charger quelque chose ; le second
-  cas est un avertissement du validateur, pas le premier.
+- **Celle que `scene_init` charge est `Scene.font_name`**, et `font_emit.scene_default_font()` est le point UNIQUE qui la résout
+  (émission, réservation VRAM, sous-ensembles de glyphes, validateur de débordement, aperçu du canvas) : réserver pour une police
+  et en charger une autre écrit le texte DANS le décor, sans erreur avant l'exécution. `""` ou un nom introuvable retombent sur la
+  première police encodable (le second cas est un avertissement du validateur).
 - L'ordre des tables fait foi : `project_fonts()` (dans `main_gen`) est la source unique
   dont `lua_compiler` dérive les `#define FONT_*`, et l'ordre de `project.texts` donne les
   `TEXT_*`. Les deux côtés doivent voir la même liste, sinon un script pointerait sur la
   mauvaise entrée.
-- **`project_fonts()` n'émet que les polices UTILISÉES**, pas toutes les polices encodables
-  du projet : `project_used_font_names()` fait l'union, sur toutes les scènes, de
-  `scene_font_names()` (mise en page + `text.set_font`, toujours complétée par la police par
-  défaut de la scène) et de la police par défaut de chaque langue (`Language.default_font`,
-  jamais citée par un script). Une scène indécidable (police choisie au runtime) fait retomber sur
-  `None` → repli sur toutes les polices encodables, pour tout le projet, sans élagage — même
-  arbitrage de sûreté que `scene_font_names`. `encodable_project_fonts()` reste la liste NON
-  élaguée : c'est elle que l'éditeur utilise pour lister les polices choisissables dans un
-  sélecteur encore vide (`scene_inspector._reload_scene_font`), où `project_fonts()` grèserait
-  à tort toute police pas encore posée nulle part.
+- **`project_fonts()` n'émet que les polices UTILISÉES** : `project_used_font_names()` fait l'union, sur toutes les scènes, de
+  `scene_font_names()` (mise en page + `text.set_font`, plus la police par défaut de la scène) et de la police par défaut de chaque
+  langue (`Language.default_font`). Une scène indécidable (police choisie au runtime) fait retomber sur `None` → toutes les polices
+  encodables, sans élagage. `encodable_project_fonts()` reste la liste NON élaguée, que l'éditeur utilise pour remplir un sélecteur
+  encore vide (`scene_inspector._reload_scene_font`).
 
 Une clé de texte ou un nom de police inconnus sont une **erreur** de checker, pas un
 avertissement : le `#define` n'existerait pas et la compilation C échouerait de toute
 façon, avec un message bien moins clair.
-
-`sync_font_file()` distingue deux échecs : **dur** (format illisible, planche
-introuvable) → aucun asset créé, mieux vaut rien qu'une police vide qui se sauvegarde ;
-**mou** (planche lisible, aucun glyphe trouvé) → asset créé avec avertissement,
-l'utilisateur corrigera la taille de cellule. `reconcile_fonts()` traite les `.fnt`
-d'abord : quand descripteur et planche sont tous deux présents, le descripteur fait foi
-et sa page ne doit pas créer une seconde police en doublon.
 
 ---
 
@@ -1989,41 +1523,29 @@ deux textes, ordonnée par la valeur du numéro. Elle est **liée** quand un con
 chaque lecture (sa séquence, sinon son `text_key`) ; `region_text`, `region_texts`, le validateur,
 l'index des usages et la réservation des polices passent tous par elle. Aucun `page_ids`.
 
-La table, elle, garde ses lignes (les autres colonnes sont à l'auteur) : `CommandHistory.after_execute`
-est branché par le dispatcher sur `sync_linked_tables`, qui réaligne les lignes sur la séquence
-dans la MÊME entrée d'historique et rend de quoi les restaurer à l'undo. Aucun bouton « mettre à
-jour ». Un groupe renommé d'un bloc emporte ses consommateurs (`Project.consumers_follow`, autour de
-`rename_text_key(s)` et de `SetTextPathCmd`) ; un groupe éclaté les laisse et la synchro retire les lignes.
+La table garde ses lignes (les autres colonnes sont à l'auteur) : `CommandHistory.after_execute` est branché par le dispatcher
+sur `sync_linked_tables`, qui réaligne les lignes sur la séquence dans la MÊME entrée d'historique et rend de quoi les restaurer
+à l'undo — aucun bouton « mettre à jour ». Un groupe renommé d'un bloc emporte ses consommateurs (`Project.consumers_follow`,
+autour de `rename_text_key(s)` et de `SetTextPathCmd`) ; un groupe éclaté les laisse et la synchro retire les lignes.
 
-L'écran Texte monte un en-tête par séquence (`TextEntryGroup` + `SequenceTableBar`) : l'état
-(« Reliée à … » / « Séquence libre ») et, si libre, « Relier à une table existante » / « Créer une
-table ». `+` ajoute le texte suivant (`next_key`, numéro max + 1), `−` supprime l'entrée.
-L'inspecteur de TextBox monte `inspectors/textbox_sequence.py` : lier à une séquence (le champ
-de texte unique s'efface) ou délier. Les anciens `sequences` de `texts.json`, `page_ids` des
-layouts et `textbox_export`/`$editor` des tables sont ignorés à la lecture.
+L'écran Texte monte un en-tête par séquence (`TextEntryGroup` + `SequenceTableBar`) : son état (reliée à une table / libre) et,
+si libre, de la relier ou de créer une table ; `+` ajoute le texte suivant (`next_key`, numéro max + 1), `−` supprime l'entrée.
+L'inspecteur de TextBox (`inspectors/textbox_sequence.py`) lie à une séquence (le champ de texte unique s'efface) ou délie.
 
 `core/models/ui_region.py`, stockage dans `assets/ui_layouts/<nom>.layout`. Un élément de
 texte répond à **où** le texte se pose ; il remplace les arguments de géométrie que
 `text_draw_box` prenait dans le script, donc invisibles depuis l'éditeur et incalculables
 avant le build.
 
-**Cinq types, deux familles.** Les **briques de base** : `UIText` (une chaîne posée en un
-point : une ligne, jamais coupée ni alignée), `UIContainer` (le groupe) et `UIImage` (un
-sprite à état). Les **assemblages**, qui rangent selon une règle : `UIList` (un conteneur qui
-se PARCOURT) et `UITextbox` (une boîte de texte : le rectangle est la largeur de coupe, le
-texte s'y aligne). C'est la distinction d'Illustrator entre une chaîne et une boîte de texte ;
-le menu d'ajout (arbre, toolbar du canvas) la montre en deux sections (`KINDS_BRICK` /
-`KINDS_ASSEMBLY`). Les deux types de texte partagent la même entrée de `g_ui_regions` ; seul
-`UIRegionInfo.nowrap` (émis depuis `UIText.wraps`) change le rendu. Un fichier d'avant la
-séparation relit tout `kind: "text"` sans marqueur `point` comme une **boîte**, qui coupait
-déjà ; seule la chaîne écrit `point`. Toute question « cet élément porte-t-il du texte ? »
-passe par `is_text`, jamais par `kind == KIND_TEXT`. Le type « zone de texte » a
-existé à côté de `UIText` et a été RETIRÉ : les deux portaient la même géométrie, le même
-ancrage, la même allocation OBJ et la même entrée de `g_ui_regions`, et ne différaient que
-par l'écrivain — le script pour l'une, `scene_init` pour l'autre. Ce n'était pas deux types
-mais un type et un champ vide : **un `UIText` sans `text_key` EST une zone qu'un script
-remplit**. `KIND_REGION` ne survit que comme alias de désérialisation ; l'espace de
-constantes reste `REGION_*`.
+**Cinq types, deux familles.** Les **briques de base** : `UIText` (une chaîne posée en un point : une ligne, jamais coupée ni
+alignée), `UIContainer` (le groupe) et `UIImage` (un sprite à état). Les **assemblages**, qui rangent selon une règle : `UIList` (un
+conteneur qui se PARCOURT) et `UITextbox` (le rectangle est la largeur de coupe, le texte s'y aligne) — la distinction d'une chaîne
+et d'une boîte de texte ; le menu d'ajout la montre en deux sections (`KINDS_BRICK` / `KINDS_ASSEMBLY`). Les deux types de texte
+partagent la même entrée de `g_ui_regions` ; seul `UIRegionInfo.nowrap` (émis depuis `UIText.wraps`) change le rendu. Un ancien
+`kind: "text"` sans marqueur `point` se relit comme une **boîte** ; seule la chaîne écrit `point`. Toute question « cet élément
+porte-t-il du texte ? » passe par `is_text`, jamais par `kind == KIND_TEXT`. Le type « zone de texte » a été RETIRÉ : **un `UIText`
+sans `text_key` EST une zone qu'un script remplit** (`KIND_REGION` ne survit que comme alias de désérialisation ; l'espace de
+constantes reste `REGION_*`).
 
 **Deux capacités traversent ces types, et ce sont elles que le code interroge.**
 `can_contain` dit ce qu'un type accueille (un tuple de kinds : rien pour une feuille, tout
@@ -2033,23 +1555,18 @@ pour un conteneur, `KIND_TEXT` seul pour une liste dont les enfants SONT les ran
 en a gagné un. Une capacité se déclare sur le type et se lit partout ; un test de type se
 réécrit à huit endroits et en oublie un.
 
-**Une zone ne dessine rien.** Même contrat que la window matérielle : elle dit où, jamais
-à quoi ça ressemble. C'est pour ça que le mot est « région » et non « frame » — dans
-GB Studio, `frame.png` *est* l'image de bordure 9-slice, le mot promettrait donc un dessin
-que le moteur ne fait pas (et collisionnerait avec les frames d'animation).
+**Une zone ne dessine rien** — même contrat que la window matérielle : elle dit où, jamais à quoi ça ressemble. D'où le mot
+« région » et non « frame » (qui promettrait une image de bordure 9-slice et collisionnerait avec les frames d'animation).
 
-**Ce qui reste au script** : la zone porte la géométrie, pas l'enchaînement. Rien ici ne
-dit quel texte s'affiche quand, ni sur quel événement — c'est ce qui empêche l'objet de
-devenir un éditeur de dialogue par accident.
+**Ce qui reste au script** : la zone porte la géométrie, pas l'enchaînement. Rien ici ne dit quel texte s'affiche quand — c'est ce
+qui empêche l'objet de devenir un éditeur de dialogue par accident.
 
 ### Le chemin matériel appartient au NŒUD, pas à l'élément (v0.25)
 
-L'ancrage (`anchor`) et la cible (`target`) ne vivent plus sur chaque élément : ils sont
-portés par le nœud `Interface` (`UILayout`), une seule fois, et **tout le sous-arbre en
-hérite**. C'est la réparation jumelle de « la liste devient un TYPE » — une capacité qui se
-lisait comme un cas particulier de chaque élément devient une propriété de son propriétaire,
-à source de vérité unique. `effective_anchor()` / `resolved_target()` lisent le nœud ;
-l'élément ne porte plus que sa géométrie.
+L'ancrage (`anchor`) et la cible (`target`) ne vivent pas sur chaque élément : ils sont portés par le nœud `Interface`
+(`UILayout`), une seule fois, et **tout le sous-arbre en hérite** (`effective_anchor()` / `resolved_target()`). Une capacité qui se
+lisait comme un cas particulier de chaque élément devient une propriété de son propriétaire, à source de vérité unique ;
+l'élément ne porte que sa géométrie.
 
 Ces deux réglages ne sont pas libres — ils contraignent la mémoire :
 
@@ -2059,63 +1576,42 @@ Ces deux réglages ne sont pas libres — ils contraignent la mémoire :
 | `world` | défile avec la caméra (conteneur posé dans le décor) | BG |
 | `actor` | suit un acteur à l'offset près (bulle) | **OBJ, sans alternative** |
 
-Un actor bouge au pixel, la grille BG avance par 8 : une bulle en texte BG sauterait par
-crans de 8 px. Ce n'est pas une préférence de qualité, c'est une impossibilité — d'où
-`forced_target()`, calculé **une fois sur le nœud** ; l'inspecteur du nœud (`UINodeInspector`)
-affiche la cible imposée ET sa raison via les notices `ui.anchor.forced_*` (une contrainte
-muette se lit comme un bug de l'éditeur). Même mécanique pour une scène en mode bitmap : plus
-de tilemap du tout, donc OBJ. `target` ne porte une valeur que lorsque l'auteur a fait un
-choix réel.
+Un actor bouge au pixel, la grille BG avance par 8 : une bulle en texte BG sauterait par crans de 8 px. C'est une impossibilité,
+pas une préférence — d'où `forced_target()`, calculé **une fois sur le nœud** ; l'inspecteur du nœud (`UINodeInspector`) affiche la
+cible imposée ET sa raison (notices `ui.anchor.forced_*` : une contrainte muette se lit comme un bug de l'éditeur). Même mécanique
+pour une scène en mode bitmap (plus de tilemap, donc OBJ). `target` ne porte une valeur que lorsque l'auteur a fait un choix réel.
 
-Une scène qui a besoin de deux chemins pose **deux nœuds** `Interface` (un HUD fixe en BG,
-une bulle actor-OBJ) — cf. plus bas. Basculer un nœud d'une cible à l'autre transfère la
-charge entre **deux budgets disjoints** — VRAM BG (64 Ko, arbitrée par
-`codegen/vram_alloc.py`) et VRAM OBJ (32 Ko). C'est l'échappatoire quand un charblock est
-plein.
+Une scène qui a besoin de deux chemins pose **deux nœuds** `Interface` (un HUD fixe en BG, une bulle actor-OBJ). Basculer un nœud
+d'une cible à l'autre transfère la charge entre **deux budgets disjoints** — VRAM BG (64 Ko, `codegen/vram_alloc.py`) et VRAM OBJ
+(32 Ko) — ce qui est l'échappatoire quand un charblock est plein.
 
 ### Le slot BG appartient à l'INSTANCE dans la scène, pas à l'asset (v0.12)
 
-La v0.25 conflait « le nœud » et l'asset `UILayout` : une scène ne citait qu'un nom, donc le
-chemin matériel vivait physiquement sur l'asset partagé. Le contexte **Priority** du Scene
-Tree (chaque scène est une pile de composition matérielle) a rendu ce raccourci faux : chaque
-interface doit pouvoir se ranger indépendamment dans la pile. Le principe qui tranche —
-**distinguer un asset de sa cible de rendu, et le z-order en fait partie**.
+Chaque interface doit pouvoir se ranger indépendamment dans la pile de composition du Scene Tree (contexte **Priority**) : le
+principe qui tranche est de **distinguer un asset de sa cible de rendu, et le z-order en fait partie**.
 
-- **`InterfaceNode`** (dans `models/ui_region.py`, le pendant de `BackgroundLayer`) est
-  l'instance d'un layout DANS une scène : `{layout_name, anchor, anchor_actor, target,
-  bg_slot}`. Le champ **par-scène** effectivement en vigueur aujourd'hui est `bg_slot` — le
-  slot BG où l'interface se compose, qui remplace l'ancien `Scene.text_bg` unique. Un HUD
-  partagé peut donc être sur BG0 dans une scène et BG2 dans une autre.
-- **`BoundInterface`** est la vue COMPOSÉE que `scene_ui_layouts(scene)` rend : le contenu
-  (éléments, géométrie) délégué à l'asset, `bg_slot` lu du nœud. `anchor`/`target` restent
-  lus de l'**asset** (leur passage par nœud est différé — cf. « Ouvert » plus bas) ; les lire
-  du nœud figerait une valeur périmée dès qu'on édite l'asset.
-- **Routage de rendu par scène.** Les tables de contenu (`g_ui_regions` / `g_ui_images`,
-  indexées par nom d'élément UNIQUE au projet — d'où l'ABI `REGION_*`/`IMAGE_*`) restent
-  per-asset : les rekeyer par nœud casserait ce nommage. C'est la **cible** qui sort en table
-  de routage par scène — `scene_init` pose `scene_route_region(r, slot)` / `scene_route_image`,
-  et `text_draw_in` / effacement / reveal / listes / `ui_image_update` lisent le slot du nœud
-  (`region_layer_of`) au lieu du layer global. L'écriture libre garde `text_set_layer`.
-- **VRAM multi-slot** (`vram_alloc.scene_layout(..., ui_slots=…)`) : une map (SBB) par slot
-  d'UI utilisé, les **glyphes partagés** dans un seul charblock. `dispcnt`/`bg_cnt` activent
-  chaque slot.
-- **Édition.** L'inspecteur du nœud (`UINodeInspector`) porte un combo **BG slot** (seulement
-  les slots que le mode vidéo expose, masqué en OBJ) ; le contexte Priority range chaque nœud
-  sous son slot et le **glisser** d'un Background à l'autre change `bg_slot`. Le z-order du
-  canvas suit ce slot par nœud (`hw_layer_z`), et réordonner la colonne Priority rafraîchit le
-  canvas (`scene_sprites_changed` / rechargement des zones).
-- **Validation** (`_check_ui_node_slots`, `_check_bg_text_cbb_conflict`) : slot indisponible
-  dans le mode vidéo → erreur (source cœur `BG_SLOTS_BY_MODE`, dont `MODE_INFO` de l'UI
-  dérive) ; même layout posé deux fois dans une scène → erreur (collision de noms d'élément) ;
-  interface partageant son slot avec un décor → erreur (charblock écrasé).
+- **`InterfaceNode`** (`models/ui_region.py`, le pendant de `BackgroundLayer`) est l'instance d'un layout DANS une scène :
+  `{layout_name, anchor, anchor_actor, target, bg_slot}`. Le champ **par-scène** en vigueur est `bg_slot`, le slot BG où
+  l'interface se compose (il remplace l'ancien `Scene.text_bg` unique) : un HUD partagé peut être sur BG0 dans une scène et BG2
+  dans une autre. `BoundInterface` est la vue COMPOSÉE que rend `scene_ui_layouts(scene)` : contenu délégué à l'asset, `bg_slot`
+  lu du nœud ; `anchor`/`target` restent lus de l'**asset** (les lire du nœud figerait une valeur périmée dès qu'on édite l'asset).
+- **Routage de rendu par scène.** Les tables de contenu (`g_ui_regions` / `g_ui_images`, indexées par nom d'élément UNIQUE au projet,
+  d'où l'ABI `REGION_*`/`IMAGE_*`) restent per-asset ; c'est la **cible** qui sort en table de routage par scène : `scene_init` pose
+  `scene_route_region(r, slot)` / `scene_route_image`, et `text_draw_in`, l'effacement, les listes et `ui_image_update` lisent le
+  slot du nœud (`region_layer_of`). L'écriture libre garde `text_set_layer`.
+- **VRAM multi-slot** (`vram_alloc.scene_layout(..., ui_slots=…)`) : une map (SBB) par slot d'UI utilisé, les **glyphes partagés**
+  dans un seul charblock ; `dispcnt`/`bg_cnt` activent chaque slot.
+- **Édition.** L'inspecteur du nœud porte un combo **BG slot** (les slots que le mode vidéo expose, masqué en OBJ) ; le contexte
+  Priority range chaque nœud sous son slot, et le glisser d'un Background à l'autre change `bg_slot`. Le z-order du canvas suit
+  ce slot (`hw_layer_z`).
+- **Validation** (`_check_ui_node_slots`, `_check_bg_text_cbb_conflict`), en erreur : slot indisponible dans le mode vidéo
+  (`BG_SLOTS_BY_MODE`) ; même layout posé deux fois dans une scène (collision de noms d'élément) ; interface partageant son slot
+  avec un décor (charblock écrasé).
 
-**Ouvert — routage par nœud de `anchor`/`target`.** Les champs existent sur `InterfaceNode`
-mais sont DORMANTS : `anchor`/`target` restent per-asset. Les router par scène demande (1) la
-copie vivante runtime portant target/anchor + l'édition sur le nœud (sûr, dans le même plan
-BG), et (2) pour la divergence **BG↔OBJ** (« HUD ici, bulle-acteur là »), d'émettre le
-placement OBJ inconditionnellement dans `g_ui_regions`, de réconcilier la géométrie BG/OBJ et
-de résoudre l'`actor` (index g_actors) PAR scène — coûteux et vérifiable seulement sur un vrai
-build ROM. Reporté à un chantier dédié.
+**Ouvert — routage par nœud de `anchor`/`target`.** Les champs existent sur `InterfaceNode` mais sont DORMANTS : ils
+restent per-asset. Les router par scène demande la copie vivante runtime portant target/anchor et, pour la divergence
+**BG↔OBJ**, d'émettre le placement OBJ inconditionnellement, de réconcilier la géométrie BG/OBJ et de résoudre l'`actor`
+PAR scène — vérifiable seulement sur un vrai build ROM. Reporté à un chantier dédié.
 
 ### Tout en pixels, une seule unité
 
@@ -2146,10 +1642,8 @@ partage : éditer un élément depuis le canvas modifie un objet **partagé**, e
 `ui_layout_users()` alimente le badge « partagée — N scènes », sans quoi on casserait N
 scènes en croyant en ajuster une.
 
-Le passage 1→N est celui qu'annonçait la v0.3 (« additif ; l'inverse ne l'est pas ») : les
-formes anciennes — `Scene.ui_layout` (nom unique), puis `ui_layouts` liste de NOMS (v0.25) —
-se relisent, seule la liste de nœuds s'écrit (recette *une forme ancienne se lit, une seule
-s'écrit* ; migration dans `_ui_nodes_from_dict`).
+Les formes anciennes — `Scene.ui_layout` (nom unique), puis une liste de NOMS — se relisent, seule la liste de nœuds
+s'écrit (*une forme ancienne se lit, une seule s'écrit*, `_ui_nodes_from_dict`).
 
 `Project.scene_ui_layouts(scene)` résout la liste ; `scene_ui_slots` / `scene_ui_images` /
 `scene_ui_elements` en donnent les paires `(nœud, élément)` que les émetteurs **par scène**
@@ -2167,33 +1661,21 @@ usage d'un nœud emporte l'asset (`DeleteInterfaceCmd`).
 Un nom de zone inconnu est une **erreur** de checker (`DOMAIN_REGION`), pas un
 avertissement.
 
-Le runtime a deux chemins, choisis par `UIRegionInfo.target` — un drapeau **par entrée**,
-émis au build en résolvant `resolved_target()` du NŒUD porteur (v0.25) : le runtime ne
-connaît aucune notion de « nœud », juste des entrées à la cible déjà tranchée. N nœuds par
-scène ne changent donc rien à la ROM sinon le nombre d'appels de setup dans `scene_init`.
+Le runtime a deux chemins, choisis par `UIRegionInfo.target` — un drapeau **par entrée**, émis au build en résolvant
+`resolved_target()` du NŒUD porteur : le runtime ne connaît aucune notion de « nœud », juste des entrées à la cible déjà tranchée.
 
-- **BG** — `text_render_cp_al()` avec la position, la largeur de coupe et l'alignement de
-  la zone. Rien de spécifique : c'est le chemin libre avec une géométrie qui vient d'une
-  table au lieu des arguments — sauf la hauteur de boîte (`R->h`), passée en plus : une
-  zone AUTEURE prépare toujours toute sa boîte avant de composer, pas seulement l'étendue
-  du texte du moment, sinon un texte plus court que le précédent laisse l'encre de
-  l'ancien rendu hors de la nouvelle étendue mesurée. L'écriture libre (`text_draw`) n'a
-  pas de boîte à reboucher et garde l'ancien comportement (étendue mesurée seule).
-  Préparer n'est pas SURLIGNER : la boîte entière est préparée, seule l'étendue rendue
-  reçoit la couleur de surlignement (cf. ci-dessous).
-- **OBJ** — la zone est couverte d'une **bande de sprites** de 8 px de haut, et le texte
-  s'y compose par le même code, seul le bloc de destination change. Blocs de 8 px et non
-  un sprite par ligne parce que l'interligne vient de la police, qu'un script peut changer :
-  une allocation qui en dépendrait ne serait pas calculable au build. `strip_columns()`
-  découpe en 32/16/8 px — **un OBJ 64×8 n'existe pas** dans le matériel, d'où le plafond à
-  32. Le moteur (`text_strip_col`) doit reproduire ce découpage à l'identique, sinon les
-  tuiles allouées ne sont pas celles que le sprite lit.
+- **BG** — `text_render_cp_al()` avec la position, la largeur de coupe et l'alignement de la zone : le chemin libre, avec une
+  géométrie qui vient d'une table. Seule la hauteur de boîte (`R->h`) s'ajoute : une zone AUTEURE prépare toute sa boîte avant de
+  composer, sinon un texte plus court que le précédent laisse l'encre de l'ancien rendu hors de la nouvelle étendue. L'écriture libre
+  (`text_draw`) garde l'étendue mesurée seule. Préparer n'est pas SURLIGNER : seule l'étendue rendue reçoit le surlignement.
+- **OBJ** — la zone est couverte d'une **bande de sprites** de 8 px de haut, où le texte se compose par le même code (seul le bloc de
+  destination change). Blocs de 8 px et non un sprite par ligne : l'interligne vient de la police, qu'un script peut changer, donc
+  une allocation qui en dépendrait ne serait pas calculable au build. `strip_columns()` découpe en 32/16/8 px (**un OBJ 64×8
+  n'existe pas**) et `text_strip_col` doit reproduire ce découpage à l'identique.
 
-Le placement OBJ (`layout_obj_budget`) est **relatif** à la mise en page : une même mise en
-page sert plusieurs scènes, qui n'ont pas le même nombre d'acteurs donc pas la même base —
-même raisonnement que `FontInfo.slot`. `text_obj_set_base()` reçoit la base absolue à
-l'init de scène ; à −1, les zones OBJ ne s'affichent pas plutôt que d'aller écrire dans les
-sprites des acteurs.
+Le placement OBJ (`layout_obj_budget`) est **relatif** à la mise en page (une même mise en page sert plusieurs scènes, qui n'ont pas
+la même base) : `text_obj_set_base()` reçoit la base absolue à l'init de scène ; à −1, les zones OBJ ne s'affichent pas plutôt que
+d'écrire dans les sprites des acteurs.
 
 `animated_glyphs` est **déclaré, jamais déduit** : quel texte atterrit dans une zone est une
 décision de script prise au runtime, et une portée d'effet change de longueur avec le
@@ -2210,70 +1692,40 @@ cosmétique, un dépassement d'OAM corrompt les sprites des acteurs.
 | `text.draw_num_in(zone, valeur)` | un nombre, aligné et polices héritées — **intérimaire** |
 | `zone:clear()` | vide la zone, BG **ou** OBJ |
 
-**Grammaire : conteneur (ou position) d'abord, contenu ensuite**, tenue par toute la
-famille `text.*` — c'est le contenu qui grandira avec les valeurs interpolées, la géométrie
-non. L'ordre est le même en Lua et en C, parce que `codegen._emit_api_call` mappe les
-arguments par **position** : une permutation entre les deux couches serait invisible à la
-relecture de chacune, et tous les paramètres étant des `int`, le compilateur ne pourrait
-rien en dire. `validator._check_api_prototypes` compare donc aussi les deux ordres, et ne
-signale que les *permutations* — un renommage délibéré (un paramètre `n` en Lua contre `bg` en C)
-reste juste sur le fond.
+**Grammaire : conteneur (ou position) d'abord, contenu ensuite**, pour toute la famille `text.*` (c'est le contenu qui grandira avec
+les valeurs interpolées, pas la géométrie). L'ordre est le même en Lua et en C parce que `codegen._emit_api_call` mappe les arguments
+par **position** ; tous étant des `int`, le compilateur ne verrait pas une permutation, d'où `validator._check_api_prototypes`, qui ne
+signale que les *permutations* (un renommage délibéré reste juste sur le fond).
 
-`text_render_region_cp()` prend une suite de codepoints et non un id de table, pour la même
-raison que `text_render_cp` côté libre : la table n'est qu'une source parmi d'autres. Un
-second chemin de rendu pour les nombres finirait par dériver du premier.
+`text_render_region_cp()` prend une suite de codepoints et non un id de table (la table n'est qu'une source parmi d'autres ; un
+second chemin pour les nombres dériverait du premier). `text_clear_in()` applique **la police de la zone avant d'effacer** : une
+police composée range ses pixels dans les tuiles de surface, une mono pose des index dans le tilemap, et effacer avec la police
+d'à côté vide le mauvais des deux.
 
-`text_clear_in()` applique **la police de la zone avant d'effacer**. L'effacement en dépend :
-une police composée range ses pixels dans les tuiles de surface, une police mono pose des
-index dans le tilemap. Effacer avec la police d'à côté vide le mauvais des deux et laisse
-l'encre en place.
+Côté éditeur : outil « Widget d'interface » (T) au canvas de scène — un bouton, trois types au dropdown (zone /
+conteneur / texte), même geste rectangle, création du nœud à la volée si la scène n'en a pas (`UIWidgetTool` +
+`create_element`, qui dépose dans le nœud primaire). `UIList` et `UIImage` se créent depuis l'arbre de scène. `UIRegionItem`
+est déplaçable avec snap 8 px en BG et 1 px en OBJ ; les descendants d'un conteneur suivent visuellement pendant le drag
+(leur modèle est relatif au parent) ; `MoveUIRegionCmd` est annulable et fusionnable.
 
-Côté éditeur : outil « Widget d'interface » (T) au canvas de scène — un bouton, trois
-types au dropdown (zone / conteneur / texte, comme collision et inpainting), même geste
-rectangle pour les trois, et création du nœud à la volée si la scène n'en a pas. `UIList`
-et `UIImage` se créent depuis l'arbre de scène : leur configuration ne se réduit pas au
-geste rectangle.
-(`UIWidgetTool` + `create_element`, qui dépose dans le nœud primaire). `UIRegionItem`
-déplaçable avec snap 8 px en BG et 1 px en OBJ, avec une palette locale qui fait lire les
-zones manipulées sans masquer la scène ; les types restent distingués par leur forme. Les
-descendants d'un conteneur suivent visuellement pendant le drag (leur modèle est relatif
-au parent, rien à réécrire) ; `MoveUIRegionCmd` annulable et fusionnable.
+**Deux inspecteurs, deux niveaux.** Le NŒUD (`UINodeInspector`, `UILayoutSelection`) porte ancrage, cible et badge de partage (clic
+sur la racine « Interface »). L'ÉLÉMENT (`UIInspector`, `UIRegionSelection`) porte la géométrie ; il **lit** la cible héritée
+(`resolved_target`) pour adapter le pas de grille et le fond, sans menu qui la change. Le nom se change dans l'en-tête partagé
+(`AssetHeaderBar`).
 
-**Deux inspecteurs, deux niveaux (v0.25).** Le NŒUD (`UINodeInspector`, sélection
-`UILayoutSelection`) porte ancrage + cible + le badge de partage — clic sur la racine
-« Interface ». L'ÉLÉMENT (`UIInspector`, sélection `UIRegionSelection`) porte la géométrie
-et le reste ; il ne fait plus que **lire** la cible héritée du nœud (`resolved_target`) pour
-adapter le pas de grille et le fond, sans menu qui la changerait. Les deux sont routés par le
-`selection_bus`, le nom se change dans l'en-tête partagé (`AssetHeaderBar`) pour l'un comme
-pour l'autre.
+**L'arbre vit dans l'arbre de SCÈNE** (`scene_tree_panel.py`) : sous chaque scène, un nœud racine par `Interface` référencé
+(`_populate_ui_branch`), étiqueté « Interface » s'il est seul, par son NOM sinon, avec un badge « — N scènes » quand il est partagé.
+L'arbre montre ce qu'un **script Lua peut référencer** (un actor, une zone) en clair, et un conteneur ou un texte authoré en grisé. Le
+**+** crée un nœud (nouvel asset, `_add_interface`) ; son menu ajoute un widget ou le supprime (`DeleteInterfaceCmd` : retire la
+référence et emporte l'asset si plus aucune scène ne l'emploie). Création, réordonnancement, renommage et suppression des éléments s'y
+font aussi (`Project.rename_ui_element` ; `Project.rename_ui_layout` pour un nœud : fichier + refs de toutes les scènes).
 
-**L'arbre vit dans l'arbre de SCÈNE** (`scene_tree_panel.py`), pas dans un panneau séparé :
-sous chaque scène, un nœud racine par `Interface` référencé (`_populate_ui_branch` itère
-`scene_ui_layouts`) — étiqueté « Interface » tant qu'il n'y en a qu'un, par son NOM dès
-qu'il y en a plusieurs, badge « — N scènes » quand partagé. Objectif : l'arbre montre d'un
-coup d'œil ce qu'un **script Lua peut référencer** — un actor (`actor.get`) et une zone
-(`interface:get(…):draw` / `REGION_*`) s'affichent en clair, un conteneur ou un texte authoré en grisé.
-Le **+** crée un nouveau nœud (nouvel asset, comme un acteur — `_add_interface`) ; le menu
-contextuel du nœud ajoute un widget ou le supprime (`DeleteInterfaceCmd` : retire la référence
-de la scène, et emporte l'asset si plus aucune scène ne l'emploie). Création /
-réordonnancement / renommage / suppression des éléments s'y font aussi (menu + drag), et
-`ui_layout_changed` déclenche sauvegarde + redessin. Le renommage d'un élément passe par
-`Project.rename_ui_element`, celui d'un nœud par `Project.rename_ui_layout` (fichier + refs
-`Scene.ui_layouts` de toutes les scènes).
-
-**Z-order = ordre de `elements`** (frère tardif au-dessus), lu par trois consommateurs :
-l'arbre (`children`), le canvas (base `_hw_layer_z` du layer matériel, plus un offset qui
-départage — l'indice du NŒUD dans la scène, puis l'ordre d'arbre en fraction : parent sous
-ses enfants) et le codegen (ordre de dessin des fonds). Un réordonnancement — menu contextuel
-Monter/Descendre, ou drop entre deux frères — réécrit `elements` en DFS canonique via
-`UILayout.move_sibling` / `place_child`, sous une commande snapshot `UILayoutOrderCmd`
-(ordre + refs `parent`), pour que les trois s'accordent. Le drop porte à la fois le parent
-visé ET la position, d'où un seul chemin (l'ancien `ReparentUIRegionCmd`, parent seul, a été
-retiré).
-`preview_text` affiche une entrée réelle dans le canvas — le mesureur
-existait déjà (`FontScreenPreview` rejoue `text_layout` avec les vrais glyphes), il ne lui
-manquait qu'un rectangle contre lequel se mesurer, ce qui rend le débordement visible **à la
-conception**.
+**Z-order = ordre de `elements`** (frère tardif au-dessus), lu par trois consommateurs : l'arbre, le canvas (base `_hw_layer_z` du
+layer matériel, plus un offset : l'indice du NŒUD dans la scène, puis l'ordre d'arbre en fraction — parent sous ses enfants) et le
+codegen (ordre de dessin des fonds). Un réordonnancement (Monter/Descendre, ou drop entre deux frères, qui porte le parent visé ET la
+position) réécrit `elements` en DFS canonique (`UILayout.move_sibling` / `place_child`) sous une commande snapshot
+`UILayoutOrderCmd`, pour que les trois s'accordent. `preview_text` affiche une entrée réelle dans le canvas (`FontScreenPreview`
+rejoue `text_layout` avec les vrais glyphes contre le rectangle de la zone) : le débordement se voit **à la conception**.
 
 ### Réservation VRAM du texte — pourquoi tout retombe sur `None`
 
@@ -2291,16 +1743,12 @@ ensemble inconnu sont deux choses différentes ; les confondre ferait réserver 
 
 Même raisonnement pour `scene_codepoints`, qui restreint le sous-ensemble de glyphes chargé.
 
-**Ce qui est réservé est ce qui est chargé, et ça se dérive d'un seul calcul.** Le
-sous-ensemble de glyphes d'une scène est l'UNION de toutes les langues déclarées
-(`scene_codepoints_union`, ROADMAP v0.9) : c'est ce qui permet à `lang.set` de recharger une
-scène dans une autre langue sans reconstruire la police en VRAM. Or `text_set_font` recopie ce
-sous-ensemble **entier** (`n_var × n_load`), quelle que soit la langue active — la réservation
-compte donc la même union, sur la même liste de langues (`main_gen._declared_lang_codes`,
-point unique). Les deux ont divergé entre les phases 3.3 et 5.1 du jalon, la réservation
-comptant la seule langue SOURCE : une scène réservait 12 tuiles pour 24 chargées, et le
-chargement écrasait les bases des polices voisines, la surface composée et les sprites en
-cible BG. C'est la raison d'être du point unique — pas une précaution théorique.
+**Ce qui est réservé est ce qui est chargé, et ça se dérive d'un seul calcul.** Le sous-ensemble de glyphes d'une scène est
+l'UNION de toutes les langues déclarées (`scene_codepoints_union`) : c'est ce qui permet à `lang.set` de recharger une scène
+dans une autre langue sans reconstruire la police en VRAM. `text_set_font` recopie ce sous-ensemble **entier** quelle que soit
+la langue active ; la réservation compte donc la même union, sur la même liste de langues (`main_gen._declared_lang_codes`,
+point unique). Réserver la seule langue SOURCE faisait écraser par le chargement les bases des polices voisines, la surface
+composée et les sprites en cible BG.
 
 ### Ce qu'une mise en page garde, et ce qu'un script peut animer
 
@@ -2308,33 +1756,20 @@ La géométrie d'une mise en page est **authorée** : ce qui existe, sa taille, 
 ancrage, son parent et sa profondeur se décident dans le canvas, jamais au runtime. Rouvrir ça
 au script reprendrait ce que la mise en page existe pour fermer.
 
-La **position d'une image** fait exception depuis la v0.22 (2026-09-02), et la nuance est la
-raison d'être de l'exception : `image.offset` pose un décalage **relatif** à la position
-authorée, qui reste la vérité — `(0, 0)` rend l'image à sa mise en page sans que le script ait
-mémorisé quoi que ce soit. La géométrie n'est pas rendue au script, elle est **animée**, comme
-`self.position` anime un acteur sans que la scène cesse de décider où il commence. Le moteur
-déplaçait d'ailleurs déjà des images de lui-même : `ui_image_origin` retranche la caméra pour
-une image ancrée au monde et suit l'acteur pour une bulle — seul le script en était tenu à
-l'écart.
-
-Deux `short` (`dx`, `dy`) dans `UIImageState`, remis à zéro par `ui_images_reset` comme le
-reste de l'état de scène. Rien à écrire côté déménagement : `ui_image_update` comparait déjà
-l'origine à celle de la frame précédente et, en cible BG, effaçait l'ancienne empreinte avant
-de réécrire (`ui_image_clear_bg`).
+La **position d'une image** fait exception, et la nuance est la raison d'être de l'exception : `image.offset` pose un décalage
+**relatif** à la position authorée, qui reste la vérité — `(0, 0)` rend l'image à sa mise en page sans que le script ait
+mémorisé quoi que ce soit. La géométrie n'est pas rendue au script, elle est **animée**, comme `self.position` anime un acteur.
+Deux `short` (`dx`, `dy`) dans `UIImageState`, remis à zéro par `ui_images_reset` ; `ui_image_update` compare l'origine à celle de
+la frame précédente et, en cible BG, efface l'ancienne empreinte avant de réécrire (`ui_image_clear_bg`).
 
 **Une zone de texte et un panneau ne se déplacent pas**, et ce n'est pas une omission : le bloc
 de composition d'une zone est alloué à un rectangle fixe par `scene_init` (`RegionSurf`), et le
 fond d'un panneau est peint une fois dans la tilemap. `DOMAIN_IMAGE` ne connaît que les images,
 donc citer autre chose est refusé au build sans qu'un contrôle dédié existe.
 
-**Une propriété, pas un appel de module** (`interface:get("Cursor").offset = vec2(0, 40)`) —
-depuis l'étape (c) de la v0.16. La v0.22 avait écrit `interface.image_move("Cursor", 0, 40)` faute
-de récepteur que le langage TIENNE (`resolve_prop` exigeait un `ExprName`) : le chaînage
-(`_resolve_chained_prop`, étape a) et les types d'élément (`REF_TYPE_TABLE`, étapes b et c) ont
-levé l'obstacle. `offset` est un `vec2` de la famille des propriétés (`ui_image_offset` /
-`ui_image_set_offset`, construits dans la façade `runtime_api_inline.h` sur les trois entiers du
-moteur), et ne demande **aucune ligne** de checker ni de codegen : un membre déclaré sur un type
-passe par les chemins génériques.
+**Une propriété, pas un appel de module** (`interface:get("Cursor").offset = vec2(0, 40)`) : `offset` est un `vec2` de la
+famille des propriétés (`ui_image_offset` / `ui_image_set_offset`, construits dans `runtime_api_inline.h` sur les trois entiers du
+moteur), et ne demande **aucune ligne** de checker ni de codegen : un membre déclaré sur un type passe par les chemins génériques.
 
 ### UI en sprite — `Actor.screen_space`
 
@@ -2367,11 +1802,7 @@ acteur d'écran est un **acteur de jeu** (script, composants, logique) qui ne d�
 
 ### Trois couleurs, trois champs — fond, encre, surlignement
 
-Elles se ressemblent à l'écran et n'ont ni le même propriétaire, ni le même référentiel, ni
-le même coût. Les avoir tenues par deux champs pour trois effets est ce qui a produit un
-conteneur qui ne colorait qu'une partie de sa zone : le fond du panneau était écarté du build
-faute de banque, mais sa couleur apparaissait quand même dans la boîte de son texte enfant,
-par un second chemin qui n'appliquait pas les mêmes conditions.
+Elles se ressemblent à l'écran et n'ont ni le même propriétaire, ni le même référentiel, ni le même coût :
 
 | | Champ | Référentiel | Qui la dessine |
 | --- | --- | --- | --- |
@@ -2379,92 +1810,53 @@ par un second chemin qui n'appliquait pas les mêmes conditions.
 | **Encre** | `UIText.text_color` | index 0-15 de la **banque d'UI** | une VARIANTE des glyphes (`scene_text_colors`) |
 | **Surlignement** | `UIText.highlight_color` | index 0-15 de la **banque d'UI** | `text_surf_seed` — le fond des tuiles de surface |
 
-- **Un texte prend le fond de son conteneur, sans rien déclarer** — et le SURLIGNEMENT le
-  surcharge, sur l'étendue qu'il écrit. Ce n'est pas une teinte héritée mais une règle de
-  non-destruction : le chemin tilemap remplacerait la cellule par une tuile de glyphe, dont
-  l'index 0 est transparent, et percerait le fond là où le texte passe. Le fond dit ce qu'il
-  y a dessous, le surlignement ce que l'auteur veut y voir à la place.
-- **Le fond d'une zone est de l'état de SCÈNE, dérivé des fonds ÉMIS.** `RegionFill` est
-  posée par `scene_init` depuis `scene_color_fills` / `scene_image_fills` — donc un panneau
-  que le build écarte ne peut pas colorer le texte qu'il contient. L'ancienne table
-  projet-globale ne connaissait aucune condition d'émission : c'est exactement ce qui a fait
-  apparaître une couleur dans la seule boîte du texte.
-- **Deux formes, une table.** Une carte de tuiles (nine-slice, background) ou un aplat
-  (couleur), distingués par `se == NULL`. C'est une seule question — « qu'y a-t-il sous cette
-  zone ? » ; deux tables auraient permis à une zone d'avoir deux fonds, ou aucun. La règle
-  « le fond le plus proche gagne » vit dans `region_fill_panel()`, lue des deux côtés.
-- **Le FOND décide de composer autant que la police.** `text_is_composited()` est vrai dès
-  qu'une zone a un fond ou un surlignement, police mono comprise. C'est ce qui manquait au
-  cas nine-slice, où un texte mono trouait le cadre alors que la donnée pour le recomposer
-  existait déjà.
-- **Le surlignement vit dans la banque d'UI, pas dans une palette au choix.** La tuile de
-  surface porte UNE banque de palette (`g_pal_bank_bg`) : le matériel n'en offre pas deux. Un
-  champ « palette + index » aurait promis n'importe quelle couleur là où il n'y en a que
-  seize — et il aurait fallu la recopier dans cette banque de toute façon.
-- **Il couvre l'étendue RENDUE**, origine comprise : `text_layout` rend le coin gauche de ce
-  qu'il a tracé en plus de sa taille, sans quoi un texte centré surlignerait sa marge gauche.
-  La boîte entière reste préparée — préparer efface, surligner colore, ce ne sont pas les
-  mêmes tuiles.
-- **Où loger l'aplat dépend de `scene.ui_pal_bank`.** En mode automatique la banque d'UI
-  appartient à la police : le build y grave la couleur du conteneur, depuis le haut (15,
-  14, …) en sautant les index que l'encre et les surlignements de la scène occupent — une
-  réservation PAR SCÈNE, donc sans collision possible, là où l'ancienne était projet-globale.
-  En banque désignée le build n'écrit rien (ce serait remplacer les couleurs choisies) et
-  `_check_ui_text_fill_bank` exige que la banque désignée soit celle du conteneur — même
-  contrat que le cadre nine-slice, pour la même raison matérielle (cf. ligne suivante).
-- **Troisième valeur : `UI_PAL_BANK_CONTAINER` (-2), « banque du conteneur ».** Désigner un
-  numéro de banque à la main exige de connaître un détail d'ALLOCATION (`scene_bank_layout`,
-  `bg_block_offset`) qui bouge dès qu'un autre asset de la scène change — c'était le piège :
-  un projet qui buildait hier peut se remettre à échouer sans qu'on ait touché le texte.
-  `main_gen.scene_container_ink_bank` résout ce sentinel vers le vrai numéro, à partir du MÊME
-  calcul que les deux validateurs (`scene_region_colors`/`scene_region_backdrops`) — jamais
-  recalculé à côté, jamais en désaccord avec ce que le build écrit. Il ne résout RIEN (reste
-  en erreur, à la main d'y remédier) si la scène a plusieurs conteneurs recomposés à des
-  banques différentes : le matériel n'offre qu'UNE banque par tuile de surface, un seul
-  sentinel ne peut pas en satisfaire deux.
-- **Cible OBJ : aucun fond ni surlignement.** Une bande de sprites ne passe pas par la
-  surface BG. L'inspecteur masque le champ plutôt que de le proposer sans effet — même règle
-  que `_FILL_TARGETS`, qui dit ce que le build ÉMET.
+- **Un texte prend le fond de son conteneur, sans rien déclarer** — et le SURLIGNEMENT le surcharge, sur l'étendue qu'il écrit. C'est
+  une règle de non-destruction : le chemin tilemap remplacerait la cellule par une tuile de glyphe (index 0 transparent) et percerait
+  le fond là où le texte passe. Le fond dit ce qu'il y a dessous, le surlignement ce que l'auteur veut y voir à la place.
+- **Le fond d'une zone est de l'état de SCÈNE, dérivé des fonds ÉMIS.** `RegionFill` est posée par `scene_init` depuis
+  `scene_color_fills` / `scene_image_fills` : un panneau que le build écarte ne peut pas colorer le texte qu'il contient.
+- **Deux formes, une table** : une carte de tuiles (nine-slice, background) ou un aplat (couleur), distingués par `se == NULL` — une
+  seule question (« qu'y a-t-il sous cette zone ? »), sinon une zone pourrait avoir deux fonds, ou aucun. « Le fond le plus proche
+  gagne » vit dans `region_fill_panel()`, lue des deux côtés.
+- **Le FOND décide de composer autant que la police** : `text_is_composited()` est vrai dès qu'une zone a un fond ou un surlignement,
+  police mono comprise (sinon un texte mono trouerait un cadre nine-slice).
+- **Le surlignement vit dans la banque d'UI, pas dans une palette au choix** : la tuile de surface porte UNE banque de palette
+  (`g_pal_bank_bg`), le matériel n'en offre pas deux.
+- **Il couvre l'étendue RENDUE**, origine comprise (`text_layout` rend le coin gauche de ce qu'il a tracé, sinon un texte centré
+  surlignerait sa marge gauche). La boîte entière reste préparée : préparer efface, surligner colore, ce ne sont pas les mêmes tuiles.
+- **Où loger l'aplat dépend de `scene.ui_pal_bank`.** En mode automatique la banque d'UI appartient à la police : le build y grave la
+  couleur du conteneur depuis le haut (15, 14, …) en sautant les index que l'encre et les surlignements de la scène occupent —
+  une réservation PAR SCÈNE. En banque désignée le build n'écrit rien (ce serait remplacer les couleurs choisies) et
+  `_check_ui_text_fill_bank` exige que la banque désignée soit celle du conteneur (même contrat que le cadre nine-slice).
+- **Troisième valeur : `UI_PAL_BANK_CONTAINER` (-2), « banque du conteneur ».** Désigner un numéro de banque à la main exige de
+  connaître un détail d'ALLOCATION (`scene_bank_layout`, `bg_block_offset`) qui bouge dès qu'un autre asset de la scène change.
+  `main_gen.scene_container_ink_bank` résout ce sentinel à partir du MÊME calcul que les deux validateurs
+  (`scene_region_colors`/`scene_region_backdrops`). Il ne résout RIEN (reste en erreur) si la scène a plusieurs conteneurs
+  recomposés à des banques différentes : le matériel n'offre qu'UNE banque par tuile de surface.
+- **Cible OBJ : aucun fond ni surlignement** (une bande de sprites ne passe pas par la surface BG) : l'inspecteur masque le champ
+  plutôt que de le proposer sans effet, comme `_FILL_TARGETS`.
 
 ### `UIList` — la navigation, pas la mise en page
 
-`UIList` porte ce qu'un menu demande au MOTEUR : un index courant, des bornes, un pas et de
-quoi le faire bouger. Ses RANGÉES sont ses enfants de type texte, dans l'ordre de l'arbre —
-rien à déclarer, ce qu'on voit dans l'éditeur est ce que la liste parcourt. Le nombre
-d'ITEMS reste de la donnée (`menu.count = …`), à défaut le compte de rangées, ce qui suffit
-à un menu statique. Ce qu'elle ne fait pas : ÉCRIRE. Le contenu d'une rangée est posé par
-le script (`menu:row(1):draw(...)`), parce qu'un item est une ligne de donnée et
-non un objet d'interface — c'est ce qui fait qu'un inventaire, un arbre de compétences et
-un menu de sauvegarde partagent un seul mécanisme.
+`UIList` porte ce qu'un menu demande au MOTEUR : un index courant, des bornes, un pas et de quoi le faire bouger. Ses RANGÉES sont
+ses enfants de type texte, dans l'ordre de l'arbre (ce qu'on voit dans l'éditeur est ce que la liste parcourt). Le nombre d'ITEMS
+reste de la donnée (`menu.count = …`), à défaut le compte de rangées. Elle n'ÉCRIT pas : le contenu d'une rangée est posé par le
+script (`menu:row(1):draw(...)`), parce qu'un item est une ligne de donnée et non un objet d'interface — un inventaire, un arbre de
+compétences et un menu de sauvegarde partagent ainsi un seul mécanisme. C'est un type à part entière ; un ancien
+`{"kind": "panel", "is_list": true}` se relit et ne se réécrit jamais.
 
-Elle a été un DRAPEAU du conteneur (`is_list`) jusqu'au 2026-09-02. Le principe
-tenait, son rangement non : le C avait déjà `UIListInfo` et ses sept fonctions, l'API disait
-déjà `list.*`, et `to_dict` écrivait cinq clés selon un booléen. Un `{"kind": "panel",
-"is_list": true}` se relit encore et ne se réécrit jamais — même recette que `KIND_REGION`.
-
-- **La grille tient en deux nombres**, `nav_columns` et `nav_major`, et non en quatre modes :
-  un parcours en Z ou en W a besoin de savoir DE COMBIEN sauter en changeant de ligne, donc
-  un énuméré aurait de toute façon dû s'accompagner du compte. Une colonne = liste verticale,
-  une ligne = rangée d'onglets. Le pas transverse **n'existe pas** quand la grille n'a qu'une
-  ligne : sinon la croix entière piloterait un menu à un seul axe, et le jeu perdrait l'autre.
-- **Le défilement est à la LIGNE.** Dans une grille, une ligne vaut `nav_columns` items et la
-  fenêtre s'aligne dessus — avancer d'un item décalerait les colonnes d'un cran à chaque pas.
-- **`active` est la sélection, pas l'affichage.** Une liste inactive reste dessinée, garde son
-  index et son curseur, et cesse de lire la croix. Sans ce champ, `ui_list_tick` faisait
-  bouger toutes les listes au même appui — un menu et son sous-menu à l'écran ensemble était
-  donc impossible.
-- **La liste possède son CURSEUR** : elle nomme un `UIImage` de la même mise en page, et le
-  moteur le déplace par le chemin de `image.offset` — un décalage RELATIF à la position
-  authorée. L'auteur pose son curseur en face de la première rangée ; la liste l'écarte de la
-  distance qui sépare cette rangée de la rangée courante. Une implémentation, deux portes :
-  l'authoring pour le cas courant, l'appel de script pour le reste.
-- **Le style de la rangée choisie, c'est `highlight` et `color`, rien d'autre** — les deux
-  réglages qu'une zone porte déjà, appliqués en suivant l'index. Le redessin passe par
-  `text_render_region`, avec deux globales de surcharge (`g_row_color`, `g_row_highlight`) le
-  temps du rendu : pas de second chemin de dessin. Le texte à reposer vient de
-  `g_ui_list_row_text`, une table par RANGÉE remplie par `text_draw_in` — et non des têtes de
-  lecture (`TEXT_READ_MAX`), dont le plafond est global au projet et laisserait dehors le
-  troisième menu d'un jeu. Une ANIMATION sur la rangée choisie n'est pas offerte : sur cible
+- **La grille tient en deux nombres**, `nav_columns` et `nav_major`, et non en quatre modes : un parcours en Z ou en W doit savoir DE
+  COMBIEN sauter en changeant de ligne. Une colonne = liste verticale, une ligne = rangée d'onglets ; le pas transverse **n'existe
+  pas** quand la grille n'a qu'une ligne (sinon la croix entière piloterait un menu à un seul axe).
+- **Le défilement est à la LIGNE** : une ligne vaut `nav_columns` items et la fenêtre s'aligne dessus.
+- **`active` est la sélection, pas l'affichage** : une liste inactive reste dessinée, garde son index et son curseur, et cesse de lire
+  la croix — c'est ce qui permet un menu et son sous-menu à l'écran ensemble.
+- **La liste possède son CURSEUR** : elle nomme un `UIImage` de la même mise en page, que le moteur déplace par le chemin de
+  `image.offset` (décalage RELATIF à la position authorée) de la distance qui sépare la première rangée de la rangée courante.
+- **Le style de la rangée choisie, c'est `highlight` et `color`**, les deux réglages qu'une zone porte déjà : le redessin passe par
+  `text_render_region` avec deux globales de surcharge (`g_row_color`, `g_row_highlight`), sans second chemin de dessin. Le texte à
+  reposer vient de `g_ui_list_row_text`, une table par RANGÉE remplie par `text_draw_in` (pas des têtes de lecture, `TEXT_READ_MAX`,
+  dont le plafond global laisserait dehors le troisième menu d'un jeu). Une ANIMATION de la rangée choisie n'est pas offerte : en
   BG elle réécrirait des tuiles à chaque frame.
 
 Vérification : `tests/interface/test_ui_list_type.py` (le type, la relecture, ce que le build émet) et
@@ -2474,34 +1866,22 @@ tourne.
 
 ### Fond d'un conteneur — deux chemins que la CIBLE choisit
 
-`FillMixin.fill_kind` est polymorphe — porté par les DEUX types qui dessinent un fond,
-le conteneur et la liste —
-et `_FILL_TARGETS` dit ce que le build ÉMET, pas ce qui
-serait concevable : couleur / nine-slice / background posent des tuiles et écrivent une
-carte, donc **BG seulement** (`scene_color_fills`, `scene_image_fills`) ; sprite pave des
-OBJ, donc **OBJ seulement**. La table promettait autrefois couleur et nine-slice sur OBJ,
-que rien n'émettait — un mode permis mais jamais émis est pire qu'un mode absent.
+`FillMixin.fill_kind` est polymorphe — porté par les DEUX types qui dessinent un fond, le conteneur et la liste — et
+`_FILL_TARGETS` dit ce que le build ÉMET, pas ce qui serait concevable : couleur / nine-slice / background posent des tuiles et
+écrivent une carte, donc **BG seulement** (`scene_color_fills`, `scene_image_fills`) ; sprite pave des OBJ, donc **OBJ
+seulement**. Un mode permis mais jamais émis est pire qu'un mode absent.
 
-- **Un fond OBJ se PAVE** (`sprite_grid`) : `⌈w/fw⌉ × ⌈h/fh⌉` cases, parce qu'un OBJ ne
-  s'étire pas sans mode affine et qu'un panneau dont la taille serait dictée par son fond ne
-  serait plus un conteneur. La dernière colonne/rangée déborde plutôt que d'être rognée — le
-  matériel ne sait pas couper un sprite. Coût : des slots OAM, **aucune tuile de plus**
-  (toutes les cases pointent la même frame).
-- **Aucune table de plus** : le conteneur entre dans `g_ui_images` avec les `UIImage`, et
-  `FillMixin` expose la surface commune (`sprite_name`, `state_name`, `playing`, `priority`,
-  `state_index`) en propriétés dérivées de ses champs `fill_*`. Les deux types demandent la
-  même chose au moteur à la répétition près ; `UIImageInfo` ne gagne que `cols`/`rows` et
-  `speed`. Corollaire : `IMAGE_<nom du panneau>` existe, un script anime le fond comme une
-  image.
-- **`fill_speed` est une surcharge** (0 = la vitesse de l'état du sprite, qui reste la source
-  de vérité). Le sprite garde ses frames, ses vitesses et son bouclage — même refus de
-  duplication que pour les frames d'un `UIImage`.
+- **Un fond OBJ se PAVE** (`sprite_grid`) : `⌈w/fw⌉ × ⌈h/fh⌉` cases, parce qu'un OBJ ne s'étire pas sans mode affine et qu'un panneau
+  dont la taille serait dictée par son fond ne serait plus un conteneur. La dernière colonne/rangée déborde plutôt que d'être rognée.
+  Coût : des slots OAM, **aucune tuile de plus** (toutes les cases pointent la même frame).
+- **Aucune table de plus** : le conteneur entre dans `g_ui_images` avec les `UIImage`, et `FillMixin` expose la surface commune
+  (`sprite_name`, `state_name`, `playing`, `priority`, `state_index`) en propriétés dérivées de ses champs `fill_*` ; `UIImageInfo`
+  ne gagne que `cols`/`rows` et `speed`. `IMAGE_<nom du panneau>` existe donc : un script anime le fond comme une image.
+  `fill_speed` est une surcharge (0 = la vitesse de l'état du sprite, qui reste la source de vérité).
 - **L'ordre d'allocation OAM est l'ordre de profondeur** (`layout_obj_budget`) : bandes de
   texte, puis images, puis fonds de conteneur. Un slot bas passe devant, et la priorité OBJ
   ne départage pas deux OBJ de même priorité — c'est donc l'ordre qui met le fond au fond.
-- **Le débordement OAM bloque le build.** Les deux dépassements OBJ n'étaient que
-  journalisés, `generate_main` rendant `True` quoi qu'il arrive : la ROM se construisait avec
-  des slots hors des 128 du matériel, donc rien à l'écran et aucune erreur.
+- **Le débordement OAM bloque le build** : une ROM construite avec des slots hors des 128 du matériel n'affiche rien, sans erreur.
 
 ---
 
@@ -2570,54 +1950,39 @@ frame) :
   collision restées à `(0, 0)` passent à `(−w/2, −h/2)`. Un réglage déjà fait par l'auteur n'est
   jamais écrasé ;
 - les quatre paramètres `pa/pb/pc/pd` sont écrits à partir du cosinus/sinus de la
-  rotation effective (table `SIN_LUT[360]`, Q8 — `gba_sin`/`gba_cos`) et des scales,
+  rotation effective (table `SIN_LUT[91]`, Q8 : un quadrant, `gba_sin`/`gba_cos` déduisent les trois autres) et des scales,
   et le sprite est étiqueté `ATTR_AFFINE` avec son `affine_slot`.
 
 ### Pourquoi le stockage est PAR-ACTOR et non par slot
 
-Le stockage runtime vit **dans la struct `Actor`** (`g_actors[i].rotation`,
-`.sprite.rotation`, …) et non dans des tableaux indexés par slot. Deux raisons, la seconde
-étant un bug qui a coûté cher :
+Le stockage runtime vit **dans la struct `Actor`** (`g_actors[i].rotation`, `.sprite.rotation`, …) et non dans des tableaux
+indexés par slot :
 
-1. **Un script de prefab poolé est une fonction C partagée** par toutes ses instances.
-   Chaque instance a sa propre struct `Actor`, mais un slot `affine_slot` différent :
-   les valeurs propres à l'instance doivent donc partir de son `g_actors[i]`, jamais
-   d'un tableau global keyé par slot.
-2. **Les anciens `g_affine_*` étaient `static` dans un header multi-inclus** — une
-   copie PAR UNITÉ DE COMPILATION. Les écritures `self.rotation`/`self.scale` d'un
-   script `actor_*.c` n'atteignaient jamais le rendu dans `main.c`. Stocker dans la
-   struct partagée `Actor` supprime la distinction, et avec elle la classe de bug.
+1. **Un script de prefab poolé est une fonction C partagée** par toutes ses instances, chacune avec sa propre struct
+   `Actor` et un `affine_slot` différent : les valeurs propres à l'instance partent de son `g_actors[i]`.
+2. **Un `static` dans un header multi-inclus est une copie PAR UNITÉ DE COMPILATION** : les écritures d'un script `actor_*.c`
+   n'atteindraient jamais le rendu dans `main.c`. La struct partagée supprime la distinction, et la classe de bug.
 
 Le seed de scène écrit donc les valeurs de départ dans les champs de la struct
 (`g_actors[i].rotation`, `.sprite.rotation`, `.sprite.offset_x`, …), et les getters/setters Lua
 (`actor_get/set_rotation`, `actor_get/set_sprite_rotation`, … — header
-`actor_api_static.h`) lisent/écrivent ces mêmes champs.
+`runtime_api.h`) lisent/écrivent ces mêmes champs.
 
 ### Ces accesseurs ne sont PAS gardés par le slot
 
-Ils l'ont été — `if (affine_slot >= 0)`, setter no-op et getter identité — et le checker
-refusait en plus au build tout `self.rotation` sur un actor sans « Affine transform ». Les
-deux sont tombés (ROADMAP — chantier technique *La grammaire de la struct `Actor`*) : ces champs
-occupent leur place dans **chaque** `Actor`
-qu'un slot soit réservé ou non, et un `self.rotation = self.rotation + 1` qui n'incrémente
-rien — la valeur ne faisant même pas l'aller-retour — est un piège plus coûteux que le
-diagnostic qu'il achetait. Seule l'écriture de la matrice OAM demande le slot.
-
-Le checker garde son contrôle — il reste le seul endroit qui voit qu'un script écrit
-`self.rotation` — mais il descend d'un cran, `error` → `warning` : même registre que le cas
-parent/enfant juste au-dessus, le jeu tourne, c'est l'affichage qui ment.
-`BuildContext.affine_transform` est alimenté par `lua_compiler._affine_reserved`, qui lit la
-case sur le SpriteComponent.
+Ces champs occupent leur place dans **chaque** `Actor`, qu'un slot soit réservé ou non, et les getters/setters lisent et
+écrivent toujours la valeur : un `self.rotation = self.rotation + 1` qui n'incrémente rien serait un piège plus coûteux que
+le diagnostic qu'il achèterait. Seule l'écriture de la matrice OAM demande le slot. Le checker garde un contrôle — le seul
+endroit qui voit qu'un script écrit `self.rotation` sans « Affine transform » — au niveau `warning` : le jeu tourne, c'est
+l'affichage qui ment. `BuildContext.affine_transform` est alimenté par `lua_compiler._affine_reserved`, qui lit la case sur le
+SpriteComponent.
 
 ---
 
 ## L'état d'un prefab poolé
 
-Un script de prefab poolé est **une fonction C partagée** par toutes ses instances :
-ses variables de tête ne peuvent donc pas être de simples `static` de fichier, qui
-seraient communes aux vingt copies. Elles vivaient dans `Actor.data[8]` — huit
-entiers par instance — un plafond arbitraire qui refusait les tableaux et les
-vecteurs, et qui coûtait 32 octets dans **chaque** `Actor`, poolé ou non.
+Un script de prefab poolé est **une fonction C partagée** par toutes ses instances : ses variables de tête ne peuvent donc
+pas être de simples `static` de fichier, qui seraient communes aux vingt copies.
 
 À la place, `CodeGen._emit_pool_state` émet un état dimensionné par le pool :
 
@@ -2642,13 +2007,10 @@ Quatre points s'y tiennent :
   recalculé : un écart avec la boucle de pool de `main.c` serait un débordement
   silencieux.
 
-  Les quatre ne disent pas la même chose, et c'est la v0.23 qui les a séparées :
-  une instance de prefab **segmenté** occupe un GROUPE d'entrées de `g_actors`
-  (la racine, puis ses parties) mais n'exécute qu'**un** script, celui de la
-  racine. `_SIZE` compte donc les entrées réservées — ce qui est payé — et
-  `_INSTANCES` compte les scripts. C'est `_INSTANCES` qui dimensionne l'état, et
-  `_GROUP` qui ramène `self` à son rang d'instance. Pour un prefab plat, `_GROUP`
-  vaut 1 et le C émis est mot pour mot celui d'avant.
+  Les quatre ne disent pas la même chose : une instance de prefab **segmenté** occupe un GROUPE d'entrées de `g_actors` (la
+  racine, puis ses parties) mais n'exécute qu'**un** script, celui de la racine. `_SIZE` compte les entrées réservées (ce qui
+  est payé), `_INSTANCES` les scripts : c'est lui qui dimensionne l'état, et `_GROUP` ramène `self` à son rang d'instance
+  (1 pour un prefab plat).
 - **Seul ce que le script ÉCRIT est de l'état.** `assigned_names()` (codegen)
   parcourt les handlers ; un local de tête qu'aucune ligne n'assigne est une
   constante et reste un `static` de fichier. Sur `Ball.lua`, quatre des six
@@ -2734,9 +2096,8 @@ Cinq points s'y tiennent :
   répond à « ce `local` est-il encore lu dans une tranche suivante ? » ; si oui
   il devient un champ, et son `local x = …` n'est plus qu'une affectation. Sinon
   il reste un local C, et ne coûte rien.
-- **L'état vit là où vit celui du script** (`_state_ref`) : statique de fichier
-  pour un propriétaire unique, champ de `g_state_<sym>[]` pour un prefab poolé.
-  La v0.7.6 a posé les deux, il n'y a rien de spécifique aux séquences ici.
+- **L'état vit là où vit celui du script** (`_state_ref`) : statique de fichier pour un propriétaire unique, champ de
+  `g_state_<sym>[]` pour un prefab poolé.
 
 **Le pompage vit à la fin de `on_update`** (`_emit_sequence_pump`), dans l'ordre
 de déclaration. Rien n'est ajouté à la boucle de frame de `main.c`, qui appelle
@@ -2790,11 +2151,9 @@ serait une faute : ils partagent un vocabulaire, jamais une implémentation.
 | Coût admis | élevé — il tourne une fois | quasi nul — il tourne 60 fois par seconde |
 | Peut prévenir l'auteur | **oui**, et c'est sa raison d'être | non, il n'a personne à qui parler |
 
-Les windows ont changé de colonne le 2026-08-25 : le nombre d'intentions d'une scène (une
-caméra à cadre réduit + ses `WindowSlot` nommés) est connu au build, pas seulement à la
-frame — c'est ce qui permet à `window_alloc.py` de prévenir l'auteur AVANT de compiler,
-contrairement à `entrées OAM`/`canaux DMA` qui varient selon ce qu'un script fait à
-l'exécution et n'ont personne à qui parler.
+Les windows sont de la colonne BUILD : le nombre d'intentions d'une scène (une caméra à cadre réduit + ses `WindowSlot`
+nommés) est connu au build, ce qui permet à `window_alloc.py` de prévenir l'auteur AVANT de compiler — contrairement aux
+entrées OAM dynamiques et aux canaux DMA, qui varient selon ce qu'un script fait à l'exécution.
 
 Trois instances existent déjà et sont exactement ça : `codegen/palette_alloc.py`,
 `codegen/vram_alloc.py` et `codegen/window_alloc.py` (décrits ci-dessous). Elles arbitrent,
@@ -2821,21 +2180,12 @@ qu'ils occupent. Un allocateur qui traiterait WIN0 et WIN1 comme équivalents pr
 allocation *valide* et une image *fausse* — rien ne planterait, rien ne se signalerait.
 
 La ressource n'est pas « une fenêtre » mais **« une fenêtre à un rang donné »**, et le rang
-appartient au modèle. `window_alloc.py` (2026-08-25) ne le laisse pas à l'auteur pour autant :
+appartient au modèle. `window_alloc.py` ne le laisse pas à l'auteur pour autant :
 pas de champ « priorité » authorable, l'intention caméra prend TOUJOURS la première place
 (`WINR_0`) quand elle existe, déterministe et documenté — cf. « Windows — le pochoir ».
 
 De même, `WINR_OUT` n'est pas une quatrième ressource à distribuer : c'est le complément, et
 son contenu change à chaque allocation. Personne ne peut le demander.
-
-### Ce qui violait cette règle — réglé le 2026-08-25
-
-`Scene.windows`/`WindowSlot.region` (l'auteur choisissait l'index matériel lui-même) et
-l'adressage brut de `window.set`/`window.show` sont résorbés par `codegen/window_alloc.py`
-et le renommage `WindowSlot.region` → `WindowSlot.name` (cf. « Windows — le pochoir » plus
-haut). Ni l'un ni l'autre n'était un accident à l'origine : à un seul consommateur,
-l'indirection n'aurait rien acheté. C'est devenu un problème le jour où la caméra a aussi
-voulu un masque (viewport, même jour) — exactement le scénario que ce paragraphe annonçait.
 
 ## Allocation de la VRAM BG — `codegen/vram_alloc.py`
 
@@ -2863,16 +2213,15 @@ scène**.
   jamais casser un projet qui passait. Et le budget est vérifié au build, en erreur bloquante
   et non en avertissement : ici c'est de la mémoire écrasée, pas une mauvaise couleur.
 
-Effet mesuré sur le démo : le décor d'une scène passe de 448 à 1024 tuiles. Les modes bitmap
-restent hors périmètre — leur framebuffer occupe la VRAM BG et se traite avec le rendu
-bitmap. Le pendant OBJ (128 slots OAM, 1024 tuiles) est arbitré séparément, dans `main_gen`.
+Les modes bitmap restent hors périmètre — leur framebuffer occupe la VRAM BG et se traite avec le rendu bitmap. Le pendant
+OBJ (128 slots OAM, 1024 tuiles) est arbitré séparément, dans `main_gen`.
 
 ---
 
 ## Système de palette & compression d'assets
 
-Ajouté par la branche `ColorPaletteSystem`. Deux idées structurent tout : **un catalogue
-de palettes nommées** activées par scène. — les PNG sources ne sont jamais réécrits ; les couleurs et la tuilerie vivent dans des sidecars JSON, recalculés au build.
+Deux idées structurent tout : **un catalogue de palettes nommées** activées par scène, et des PNG sources jamais réécrits —
+les couleurs et la tuilerie vivent dans des sidecars JSON, recalculés au build.
 
 ### Catalogue et sélection par scène
 
@@ -2885,8 +2234,7 @@ de palettes nommées** activées par scène. — les PNG sources ne sont jamais 
   cette sélection (pas le catalogue) qui occupe réellement les banques
   `PAL_OBJ_RAM` / `PAL_BG_RAM` au build. Les deux pools GBA sont physiquement séparés.
 - **`pal_bank`** sur `Actor` / `Prefab` / `BackgroundLayer` — soit un slot `0-15` dans la
-  sélection de la scène, soit le sentinel **`OWN_PAL_BANK` (-1)** = « palette issu de l'asset » :
-
+  sélection de la scène, soit le sentinel **`OWN_PAL_BANK` (-1)** = « palette issu de l'asset ».
 
 ### Allocation des banques — source de vérité unique
 
@@ -2894,7 +2242,7 @@ de palettes nommées** activées par scène. — les PNG sources ne sont jamais 
 et un pool, quelles couleurs occupent chacune des 16 banques hardware :
 
 1. palettes référencées → à leur slot fixe (index dans `active_*_palettes`) ;
-4. fonds compressés → un **bloc de banques contiguës** (une par sous-palette).
+2. fonds compressés → un **bloc de banques contiguës** (une par sous-palette).
 
 Déterministe : `rom_build.py` (quantification grit) et `main_gen.py` (émission des
 `PAL_*_RAM`) lisent le même layout sans se coordonner. Le débordement (>16 banques) n'est
@@ -2916,60 +2264,35 @@ jamais silencieux : `bank_index` retombe sur la banque 0 et le validateur averti
   | Tuilé 8bpp | `bpp=8`, 1 palette de 256 | Mode 0, occupe toute la `PAL_BG_RAM` (1 seul layer) |
   | Bitmap | `mode="bitmap"` | Mode 4 plein écran (photos) — **éditable mais pas encore émis au build** |
 
-  **Le sidecar a deux blocs** (`BackgroundAsset._settings_dict` / `_encoded_dict`) : `settings` — ce que l'auteur
-  a décidé (layout `mode`/`bpp`, `dither`, `quantize_method`, canvas / pose / miroir / ajustements, compression, et ses
-  retouches de tuiles `tile_paint` / `tile_palette_overrides`) — et `encoded` — ce que l'encodage en a tiré (`tileset`,
-  `tilemap`, `palettes`, `source_palettes`, `palette_overrides`, `bitmap`, `diagnostics`, `source_stamp`), que le build lit
-  et qu'un nouvel encodage remplace en entier. **Un encodage ne range que son résultat** : `apply_bg_encoding` ne touche à
-  aucun réglage ; le layout se pose par `choose_layout(token)` (un bitmap : canvas 240×160 enregistré, retouches de tuiles
-  vidées), avant l'encodage. **Les palettes d'un fond sont des références au catalogue, par nom** : `added_palettes`
-  (« + ») et `palette_overrides` sont des réglages ; `palettes` n'en est que le cache résolu, recomposé par
-  `BackgroundAsset.resolve_palettes` (dérivées du PNG, overrides, ajoutées) après un encodage, une action sur la grille
-  ou l'édition d'une banque (`CommandDispatcher.save_palette`). Une tuile peinte (`tile_paint`) désigne sa palette par la
-  position dans `added_palettes` ; `painted_cells()` la rend en numéro de banque (dérivées d'abord). La lecture est tolérante : un sidecar à plat d'avant les blocs se lit tel quel et passe en deux
-  blocs à la prochaine sauvegarde. **Un résultat sait de quels réglages il vient** : `encoded.encoded_for` est
-  l'empreinte (`BackgroundAsset.encode_settings_fingerprint`) des réglages qui DÉTERMINENT l'encodage — layout, profondeur,
-  dithering, méthode, canvas effectif, pose, taille, miroir, ajustements, compression ; ni les palettes citées, ni la peinture,
-  ni les repeints. `apply_bg_encoding` la pose, `encoding_is_current(source_stamp)` dit « à jour » ou « périmé » sans rien
-  recalculer ; un sidecar d'avant ce champ est tenu pour à jour.
+  **Le sidecar a deux blocs** (`BackgroundAsset._settings_dict` / `_encoded_dict`) : `settings` — ce que l'auteur a décidé
+  (layout `mode`/`bpp`, dithering, méthode de quantification, canvas / pose / miroir / ajustements, compression, retouches de
+  tuiles) — et `encoded` — ce que l'encodage en a tiré (tileset, tilemap, palettes, bitmap, diagnostics, `source_stamp`), que
+  le build lit et qu'un nouvel encodage remplace en entier. `apply_bg_encoding` ne range que son résultat et ne touche à aucun
+  réglage ; le layout se pose par `choose_layout(token)` avant l'encodage. **Les palettes d'un fond sont des références au
+  catalogue, par nom** : `added_palettes` et `palette_overrides` sont des réglages, `palettes` n'en est que le cache résolu
+  (`BackgroundAsset.resolve_palettes`). Un sidecar à plat d'avant les blocs se lit tel quel et passe en deux blocs à la
+  prochaine sauvegarde.
 
-  **Un seul chemin pour encoder** : `ui/background_editor/background_encoding.py`. L'écran donne un `EncodingJob` (fond,
-  PNG, layout, méthode, dithering, préparation, compression) à `BackgroundEncodingService.request` ; le service calcule hors
-  du thread de l'interface (`ThreadExecutor`, interchangeable), un seul calcul à la fois, le DERNIER réglage voulu gagne (un
-  résultat périmé va au cache, jamais sur le fond), et il valide le résultat par le rappel `commit` de l'écran
-  (`_commit_encoding` : réglages posés, `choose_layout`, `apply_bg_encoding`, sauvegarde). Un encodage part toujours tout seul (le
-  dernier réglage gagne) ; un seuil de coût (`auto_seconds` : au-delà, « en attente » jusqu'à `run_now`) existe mais est
-  éteint par défaut. États : à jour / en attente / en calcul / échec ; un échec ne reboucle pas, `run_now` le rejoue. Un
-  résultat déjà vu (cache de 8) se valide sans calcul. **L'état se lit dans le canvas** : une ligne au-dessus des infos (`BgInpaintCanvas.set_encoding_state`) dit « En attente / Encodage… / Échec » avec le layout voulu, et porte le bouton « Run encoding » (`run_encoding_requested` → `_on_run_encoding`) quand l'encodage attend ou a échoué ; tant que le fond n'est pas à jour, le canvas montre l'image préparée du travail voulu (`_show_prepared`, badge « pas encore le rendu GBA ») ; revenir aux réglages validés annule la demande (`cancel`). **Le build avertit** (`validator._check_background_encoding_current`, non bloquant) d'un fond dont `encoded_for` ne correspond plus aux réglages : la ROM prendrait l'ancien résultat.
+  **Un résultat sait de quels réglages il vient** : `encoded.encoded_for` est l'empreinte
+  (`BackgroundAsset.encode_settings_fingerprint`) des réglages qui DÉTERMINENT l'encodage (layout, profondeur, dithering,
+  méthode, canvas, pose, taille, miroir, ajustements, compression — ni les palettes citées, ni la peinture).
+  `encoding_is_current(source_stamp)` dit « à jour » ou « périmé » sans rien recalculer, et le build avertit
+  (`validator._check_background_encoding_current`, non bloquant) d'un fond périmé : la ROM prendrait l'ancien résultat.
 
-  **Préparation de la source** — l'image est **posée dans un canvas** qui a sa propre taille
-  (`canvas_size`), distincte de celle de l'image : elle est mise à l'échelle (`image_size`) et posée
-  (`image_pos`, coin haut-gauche dans le canvas). Elle peut déborder (le surplus est rogné) ou
-  laisser du vide (transparent) ; rien n'est jamais rétréci en douce. Un **bitmap** a un canvas FIXE
-  de 240×160, posé par `encode_by_mode` quoi qu'en dise `canvas_size` : l'image garde sa taille en
-  (0, 0) et déborde (un encodeur bitmap appelé directement avec plus grand lève une erreur). Les trois champs à `None` = « Original »
-  (canvas = image = fichier, en (0, 0)). Elle peut ensuite se mettre en **miroir** (`mirror_x` / `mirror_y`, position de
-  l'axe en pixels du canvas ; `core/bg_mirror.apply_mirror` : le côté gauche — haut — est gardé, l'autre
-  en est le reflet, en zigzag si le reflet n'atteint pas le bord) **avant** l'encodage. Le miroir
-  précède la compression parce qu'il change les tuiles qu'elle dédupliquera. Côté canvas,
-  chaque axe est une barre avec poignée centrale (`bg_mirror_overlay`) ; la barre se tire à la
-  souris (Ctrl = 8 px, aimantation au centre) et l'image se recompresse au relâchement. Une
-  poignée en flèche, posée sur le côté gardé, se tire de l'autre côté de la barre pour inverser
-  ce côté (`mirror_flip_x` / `mirror_flip_y`). Le PNG n'est jamais modifié : `bg_import.prepare_source` produit une
-  image PIL en mémoire, que reçoit `encode_by_mode(…, prep=ba.import_prep())` — le seul
-  endroit qui l'applique, donc le seul que lisent le worker de l'éditeur et la
-  réconciliation (`encode_background_asset`). Rééchantillonnage automatique : plus proche
-  voisin si la source est indexée (le canvas reste alors en mode `P`, même palette, le vide est
-  l'index 0), Lanczos sinon ; l'image est rognée à la partie visible AVANT d'être rééchantillonnée.
-  Côté UI, en permanence, un **passe-partout** (comme celui d'une caméra de Blender) garde visible, grisé, ce
-  qui sort du canvas ; le **mode Canvas** — l'outil « select », en tête de la barre flottante, qui reste pour
-  tous les fonds (`bg_inpaint_canvas`) — montre le FICHIER entier posé dans le canvas, grisé hors cadre
-  (`bg_placement_overlay`) : glisser l'image la déplace, les poignées la mettent à l'échelle (règles de Maj / Ctrl dans `bg_placement_geometry`, pur calcul testé). La carte
-  « Canvas » de l'inspecteur dit les mêmes valeurs en chiffres et les modifie ; modifier un champ ouvre le
-  mode, et la sortie (Entrée, autre outil, autre fond = annulation) recompresse UNE fois via
-  `prepare_requested({canvas, pos, size, mirror})`. Les ajustements et la compression sont **gelés** (`PREPARATION_TOOLS_ENABLED`, `bg_inpaint_canvas`) le
-  temps de bâtir le canvas (ROADMAP, « Le fond est un plan de travail »). Toute la géométrie que le build ou
-  le Scene Manager affichent vient de `BackgroundAsset.pixel_size()`, jamais du PNG.
+  **Un seul chemin pour encoder** : `ui/background_editor/background_encoding.py`. L'écran donne un `EncodingJob` à
+  `BackgroundEncodingService.request` ; le service calcule hors du thread de l'interface, un calcul à la fois, le DERNIER
+  réglage voulu gagne (un résultat périmé va au cache, jamais sur le fond), et valide par le rappel `commit` de l'écran. Un
+  échec ne reboucle pas (`run_now` le rejoue) ; un résultat déjà vu (cache de 8) se valide sans calcul.
+
+  **Préparation de la source** — l'image est **posée dans un canvas** de taille propre (`canvas_size`) : mise à l'échelle
+  (`image_size`), posée (`image_pos`), elle peut déborder (rognée) ou laisser du vide (transparent) ; rien n'est jamais
+  rétréci en douce. Un **bitmap** a un canvas FIXE de 240×160 (posé par `encode_by_mode`) : l'image garde sa taille en (0, 0) et
+  déborde. Trois champs à `None` = « Original ». Le **miroir** (`mirror_x`/`mirror_y`, `core/bg_mirror.apply_mirror`) précède
+  la compression, parce qu'il change les tuiles qu'elle dédupliquera. Le PNG n'est jamais modifié : `bg_import.prepare_source`
+  produit une image PIL en mémoire, que reçoit `encode_by_mode(…, prep=ba.import_prep())` — le seul endroit qui l'applique,
+  donc le seul que lisent le worker de l'éditeur et la réconciliation. Rééchantillonnage : plus proche voisin si la source est
+  indexée, Lanczos sinon, après rognage à la partie visible. Toute la géométrie que le build ou le Scene Manager affichent vient
+  de `BackgroundAsset.pixel_size()`, jamais du PNG.
 
 ### Inpainting — repeindre la palette par tuile (non-destructif)
 
@@ -3082,8 +2405,8 @@ cliquable. Le validateur, le checker Lua, le codegen et la sortie des outils pas
   clé stable `fichier::fonction::empreinte du message`) et enregistre ceux qu'un run déclenche (`Recorder`, installé
   par `tests/conftest.py`). À la fin d'un run COMPLET, `pytest` AVERTIT (sans échouer) d'un diagnostic couvert qui
   ne l'est plus ou d'un nouveau jamais déclenché ; la référence est `tools/diagnostic_coverage_baseline.json`
-  (172 sites sur 278 exercés, par choix : un échantillon, pas un objectif de 100 % ; `DIAGNOSTIC_COVERAGE_UPDATE=1` pour la relever, `python tools/diagnostic_coverage.py` pour lister les sites
-  jamais atteints). `tests/rom_build/test_build_invariants.py` (marqué `slow`, isolé le 2026-10-04 : `pytest -m slow`, et `release.yml` avant publication) corrompt les fichiers de la démo un à un (une compilation réelle par cas, ~3 min à lui seul) et exige cinq
+  (un échantillon, pas un objectif de 100 % ; `DIAGNOSTIC_COVERAGE_UPDATE=1` pour la relever, `python tools/diagnostic_coverage.py` pour lister les sites
+  jamais atteints). `tests/rom_build/test_build_invariants.py` (marqué `slow` : `pytest -m slow`, et `release.yml` avant publication) corrompt les fichiers de la démo un à un (une compilation réelle par cas, ~3 min à lui seul) et exige cinq
   invariants du journal (pas d'« internal error », échec = erreur, anglais sans chemin du projet, le fichier
   abîmé est nommé, un fichier cassé n'est jamais ignoré sans un mot).
 - **Aucune erreur n'est avalée.** Un `except` large (`Exception`, nu, `LuaParseError`) de `codegen/`,
@@ -3102,51 +2425,27 @@ cliquable. Le validateur, le checker Lua, le codegen et la sortie des outils pas
 - **`packaging/nuitka_build.py`** — définition unique de la commande de build, utilisée à l'identique par la CI et en local (`python packaging/nuitka_build.py --version 0.3.2 --output-dir build-out`). Nuitka en mode **standalone** (dossier), pas onefile : l'installateur pose de toute façon un dossier, et le onefile ne ferait que ré-extraire à chaque lancement. Sortie : `build-out/Backstage/`.
 - **`packaging/check_deps.py`** — relève les imports réels du code par AST et vérifie que `requirements.txt` les couvre tous. Lancé en CI **avant** le build : c'est le filet qui manquait quand `luaparser` est parti en release sans être déclaré.
 - **`packaging/windows/installer.nsi`** — installateur NSIS **par utilisateur** (`%LOCALAPPDATA%\Programs\Backstage`, aucune élévation UAC, désinstallation sous HKCU). La désinstallation laisse volontairement en place les projets (`~/BackstageProjects`) et la config toolchain (`%APPDATA%\Backstage`).
-- **`editor/core/app_paths.py`** — source unique de vérité pour « où tourne-t-on ». `IS_FROZEN` s'appuie sur `__compiled__` (le marqueur Nuitka ; **`sys._MEIPASS` n'existe pas** hors PyInstaller), et `APP_DIR` vaut le dossier de l'exe en distribution, la racine du repo depuis les sources. `RUNTIME_DIR` en dérive. Tout module ayant besoin d'un chemin de données passe par ici — c'est la duplication de ce calcul qui avait laissé `runtime_codegen/{main_gen,headers}.py` chercher `runtime/` hors du bundle, faisant échouer les copies de `.h` en silence.
+- **`editor/core/app_paths.py`** — source unique de vérité pour « où tourne-t-on ». `IS_FROZEN` s'appuie sur `__compiled__` (le
+  marqueur Nuitka ; **`sys._MEIPASS` n'existe pas** hors PyInstaller), et `APP_DIR` vaut le dossier de l'exe en distribution, la
+  racine du repo depuis les sources. `RUNTIME_DIR` en dérive : tout module ayant besoin d'un chemin de données passe par ici.
 - **`editor/core/app_info.py`** — source unique de « qui est ce logiciel » : `APP_NAME` (Backstage), `APP_AUTHOR` (Yasorovic), `APP_VERSION` (`X.Y.Z-alpha|beta|stable`, cf. ROADMAP, « La numérotation d'une release »). Stdlib seule, sans importation, pour que les scripts de packaging la lisent sur un Python nu. Y puisent la fenêtre, l'« À propos », le rapport de diagnostic, le dossier de config (`config_dir`), les `QSettings`, le build Nuitka (`--product-name`, `--company-name`, nom de l'exe), l'installateur et le workflow. **La version vit dans le dépôt, le tag la confirme** : `nuitka_build.py --version` échoue si le tag diverge, et le job `version` de la release lit `--print-version` ; un build qui écraserait le fichier d'après le tag ferait annoncer à un lancement depuis les sources une version qu'il n'a pas. `tests/packaging/test_app_info.py` garde l'alignement (installateur, build, workflow, libellés) et l'absence des anciens identifiants.
 - **Disposition des données** — les données embarquées reproduisent l'arborescence des sources (`runtime/`, `plugins/`, `scripting/api_reference.json`), parce que les modules les résolvent via `Path(__file__).parent` et que Nuitka donne aux modules compilés un `__file__` cohérent dans la distribution. Les images référencées par les QSS ne sont **pas** embarquées : `ui/common/icons.py:qss_image()` les rend depuis qtawesome dans `%TEMP%/backstage_icons/` au démarrage (`ensure_qss_assets()`, appelé après la `QApplication` et avant `setStyleSheet`) — un cache en zone temporaire, donc toujours inscriptible même pour une installation en lecture seule.
 - **`editor/plugins/`** est copié tel quel, **non compilé** : chargé dynamiquement via `importlib.util.spec_from_file_location`, ça nécessite des `.py` réels sur disque au runtime. Corollaire assumé : le code des plugins reste lisible dans la distribution, contrairement au reste.
 - **`editor/smoke_test.py`** (`Backstage --smoke-test=<rapport>`) — ce que la CI exécute sur le binaire LIVRÉ avant de publier : crée un projet temporaire, le rouvre, **visite chaque écran** (importés paresseusement par leur nom : un module que Nuitka n'a pas vu n'échouerait qu'au premier clic), valide, enregistre, et contrôle les données embarquées (licences, runtime, starter, API, notices). Le verdict va dans un fichier : la distribution Windows est sans console. Sans devkitPro, il ne construit pas de ROM. **Sortie ordonnée** (`main._shutdown_qt`) : la fenêtre doit être détruite tant que la `QApplication` existe ; sinon le processus plantait à la sortie (violation d'accès, 4 fois sur 6 sous Windows) après avoir tout enregistré.
 - **`packaging/windows/test_installer.ps1`** — joué par la CI sur le runner (machine propre) : installation silencieuse, mise à jour par-dessus (un fichier de l'ancienne version doit disparaître, un plugin de l'utilisateur rester), désinstallation (application, raccourci, clés supprimés ; projets et configuration conservés), smoke test après chaque installation. Il écrit dans HKCU et le menu Démarrer : il refuse de tourner hors CI sans `-AllowLocal`. Côté `installer.nsi`, `CleanPreviousInstall` purge l'ancienne installation avant la copie, **sauf `plugins\`**, et seulement si l'exécutable attendu est présent.
-- **`.github/workflows/release.yml`** — se déclenche sur `release: published` (ou `workflow_dispatch` pour tester sans publier). Publie deux artefacts Windows : l'installateur `.exe` et un ZIP portable. Le job Linux/AppImage est présent mais `if: false`, en pause en attendant un test sur une vraie distro. Le cache Nuitka est indispensable : un build à froid est nettement plus long que l'ancien assemblage PyInstaller.
-- **mGBA / devkitPro ne sont jamais embarqués** — dépendances système externes, détectées à l'exécution par `editor/core/toolchain.py` (`resolve_mgba`, `resolve_grit`, `resolve_make`, `resolve_arm_gcc`). Un mécanisme d'auto-download de mGBA a été tenté (Inno Setup puis AppImage) et **abandonné délibérément** — flux 100% manuel par choix (voir historique de conversation packaging).
+- **`.github/workflows/release.yml`** — se déclenche sur `release: published` (ou `workflow_dispatch` pour tester sans publier).
+  Publie l'installateur Windows `.exe`, un ZIP portable et l'AppImage Linux (smoke test du fichier livré avant publication) ; le
+  job `windows-rom-build` (build de ROM sous Windows, devkitPro installé en silence) est hors des `needs` tant qu'il n'a pas passé
+  un `workflow_dispatch`. Le cache Nuitka est indispensable : un build à froid est nettement plus long.
+- **mGBA / devkitPro ne sont jamais embarqués** — dépendances système externes, détectées à l'exécution par
+  `editor/core/toolchain.py` (`resolve_mgba`, `resolve_grit`, `resolve_make`, `resolve_arm_gcc`). L'auto-téléchargement de mGBA a
+  été tenté puis **abandonné délibérément** : flux 100% manuel par choix.
 
-### Pièges connus (Python figé vs. dev)
+### Piège connu : Python de dev vs Python de CI
 
-- Le poste de dev local tourne en Python 3.14 (annotations évaluées paresseusement par défaut, PEP 649). Le CI GitHub Actions utilise Python 3.12 (évaluation immédiate). Deux bugs de ce type ont déjà cassé le build CI sans jamais se voir en local :
-  - `core/scene_editor.py` : `-> CollisionOverlay` (annotation de retour non protégée, classe définie plus bas dans le même fichier) → citée en `-> "CollisionOverlay"` (le pattern déjà utilisé ailleurs dans le même fichier pour la même classe, juste pas appliqué de façon cohérente).
-  - `editor/ui/inspectors_module.py` : `Background` utilisé en annotation (`bg: Background`) mais jamais importé du tout (il existe bien dans `core/project.py`, marqué "stub rétrocompat") → ajouté à l'import `from core.project import (...)`.
-  - Pas de `from __future__ import annotations` global appliqué au projet (la plupart des fichiers l'ont déjà individuellement ; `core/project.py`, `core/scene_editor.py`, `editor/ui/inspectors_module.py` et quelques autres ne l'ont pas).
-- **Script de détection** (à relancer après tout changement de signature/annotation, avant de attendre un aller-retour CI) : vérifie les annotations de méthodes/fonctions ET les champs de classe (dataclasses) en accès brut (`func.__annotations__`, pas `typing.get_type_hints()` qui donne de faux positifs sur les forward refs correctement cités entre guillemets ou sous `TYPE_CHECKING`) :
-  ```python
-  import sys, importlib, inspect, pathlib
-  sys.path.insert(0, 'editor')
-  errors = []
-  def check_module(modname):
-      try:
-          mod = importlib.import_module(modname)
-      except Exception as e:
-          errors.append((modname, "IMPORT", f"{type(e).__name__}: {e}")); return
-      for name, obj in list(vars(mod).items()):
-          if inspect.isclass(obj) and obj.__module__ == modname:
-              try: _ = obj.__annotations__
-              except Exception as e: errors.append((modname, f"{obj.__name__} (fields)", str(e)))
-              for attr_name, attr in list(vars(obj).items()):
-                  func = attr.__func__ if isinstance(attr, (staticmethod, classmethod)) else (attr.fget if isinstance(attr, property) else (attr if inspect.isfunction(attr) else None))
-                  if func is None: continue
-                  try: _ = func.__annotations__
-                  except Exception as e: errors.append((modname, f"{obj.__name__}.{attr_name}", str(e)))
-          elif inspect.isfunction(obj) and obj.__module__ == modname:
-              try: _ = obj.__annotations__
-              except Exception as e: errors.append((modname, name, str(e)))
-  root = pathlib.Path('editor')
-  for pyfile in sorted(root.rglob('*.py')):
-      if '__pycache__' in pyfile.parts or 'plugins' in pyfile.parts: continue
-      modname = '.'.join(pyfile.relative_to(root).with_suffix('').parts)
-      if modname != 'main': check_module(modname)
-  print(f"{len(errors)} issues"); [print(f"  {m} :: {l} -> {e}") for m, l, e in errors]
-  ```
-  Dernier passage (2026-07-04) : 0 problème restant après les deux fixes ci-dessus.
+La CI et le build Nuitka figent Python 3.12 (évaluation immédiate des annotations) ; un poste en 3.14 les évalue
+paresseusement (PEP 649). Une annotation non protégée vers une classe définie plus bas, ou un nom jamais importé, ne casse que
+la CI. Remède : travailler dans le venv 3.12 ci-dessous, et citer entre guillemets toute référence en avant.
 
 ### Environnement de dev figé sur la version CI (`.venv-build312`)
 
@@ -3177,37 +2476,8 @@ Un manque de **bibliothèque système Linux** (p. ex. `libpulse.so.0`, réclamé
 
 ## Dépendances externes
 
-```mermaid
-flowchart TD
-    APP["Backstage<br/>(Python + PyQt6)"]
-
-    subgraph PY["Runtime Python"]
-        PYQT["PyQt6<br/>interface graphique"]
-        PIL["Pillow<br/>traitement d'images (asset pipeline)"]
-        QTA["qtawesome<br/>icônes (optionnel)"]
-    end
-
-    subgraph DKP["devkitPro — toolchain GBA"]
-        ARM["devkitARM<br/>arm-none-eabi-gcc"]
-        GRIT["grit<br/>PNG → tiles/palettes GBA"]
-        LIBGBA["libgba<br/>bibliothèque hardware"]
-        MMUTIL["mmutil<br/>conversion audio (maxmod)"]
-        MAKE["make<br/>orchestration du build"]
-    end
-
-    MGBA["mGBA<br/>émulateur (Build &amp; Run)"]
-
-    APP --> PY
-    APP --> DKP
-    APP --> MGBA
-    PY --> PYQT
-    PY --> PIL
-    PY --> QTA
-    DKP --> ARM
-    DKP --> GRIT
-    DKP --> LIBGBA
-    DKP --> MMUTIL
-    DKP --> MAKE
-```
+- **Runtime Python** : PyQt6 (interface), Pillow (pipeline d'images), qtawesome (icônes, optionnel).
+- **devkitPro** (toolchain GBA) : devkitARM (`arm-none-eabi-gcc`), grit (PNG → tuiles/palettes), libgba, mmutil (audio maxmod), make.
+- **mGBA** : émulateur de Build & Run.
 
 `PyQt6` et `Pillow` sont des paquets Python (voir `requirements.txt`). `devkitPro` et `mGBA` sont des outils système installés séparément — ils n'apparaissent pas dans un gestionnaire de paquets Python.

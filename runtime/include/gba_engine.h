@@ -763,7 +763,7 @@ int save_read(int slot) {
                    tolérance que pour un scalaire absent (v0.5) — c'est elle
                    qui garantit qu'ajouter dix coffres n'efface pas les parties
                    déjà commencées. */
-                /* shortcut: legacy records omit their count and type; rewriting the slot records them. */
+                /* shortcut: legacy records omit their count and type; rewriting the slot records them; drop this branch at the next save-format break. */
                 int stored = meta ? (int)(meta & 0xFFFFFFu) : (sz * 8) / bits;
                 if (stored > g_save_len[i]) stored = g_save_len[i];
                 for (int k = 0; k < stored; k++) {

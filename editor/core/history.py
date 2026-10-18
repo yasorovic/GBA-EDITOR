@@ -732,6 +732,30 @@ def _collision_tag_owners(project):
         ch for pf in project.prefabs for ch in (getattr(pf, "children", []) or [])]
 
 
+class RenameActorCmd(Command):
+    """Renommage d'un acteur de scène, scripts compris (`Project.rename_actor` réécrit les `actor:get("…")`) : défaire
+    renomme dans l'autre sens, avec les mêmes réécritures. `refresh_fn()` remet l'écran à jour après chaque sens."""
+
+    def __init__(self, project, actor, new_name: str, refresh_fn=None):
+        self._project = project
+        self._actor = actor
+        self._old, self._new = actor.name, new_name.strip()
+        self.label = f"Renommer {self._old} en {self._new}"
+        self._refresh = refresh_fn
+        # La scène propriétaire, fixée maintenant : défaire depuis une autre scène doit sauvegarder CELLE-CI.
+        self._scene = next((s for s in project.scenes if any(a is actor for a in s.actors)), None)
+
+    def execute(self):
+        self._project.rename_actor(self._actor, self._new, scene=self._scene)
+        if self._refresh:
+            self._refresh()
+
+    def undo(self):
+        self._project.rename_actor(self._actor, self._old, scene=self._scene)
+        if self._refresh:
+            self._refresh()
+
+
 class RenameCollisionTagCmd(Command):
     """Renomme un tag de collision PARTOUT en une seule étape d'annulation :
     chaque CollisionBoxComponent qui le portait (tag explicite OU vide,
@@ -1234,12 +1258,25 @@ class CommandHistory(QObject):
 
         self.changed.emit()
 
+    def push_executed(self, cmd: Command):
+        """Enregistre une commande dont l'effet est DÉJÀ posé (un glisser, un coup de pinceau) : pas de `execute()`,
+        mais la même pile — vidage du refaire, plafond `_MAX_HISTORY` — que `push`."""
+        self._undo.append(cmd)
+        self._redo.clear()
+        if len(self._undo) > _MAX_HISTORY:
+            self._undo = self._undo[-_MAX_HISTORY:]
+        self.changed.emit()
+
     def undo(self) -> Optional[str]:
         """Annule la dernière commande. Retourne son label ou None."""
         if not self._undo:
             return None
         cmd = self._undo.pop()
-        cmd.undo()
+        try:
+            cmd.undo()
+        except Exception:
+            self._undo.append(cmd)      # un défaire qui échoue ne perd pas la commande
+            raise
         self._undone(cmd)
         self._redo.append(cmd)
         self.changed.emit()
@@ -1250,7 +1287,11 @@ class CommandHistory(QObject):
         if not self._redo:
             return None
         cmd = self._redo.pop()
-        cmd.execute()
+        try:
+            cmd.execute()
+        except Exception:
+            self._redo.append(cmd)
+            raise
         self._executed(cmd)
         self._undo.append(cmd)
         self.changed.emit()

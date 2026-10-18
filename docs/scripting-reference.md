@@ -244,9 +244,7 @@ abs   atan2   clamp   cos   ease   lerp   max   min   rand   sign   sin   sqrt
 | `math.pow(x, n)` | Une multiplication explicite, par exemple `x * x`. |
 | `math.fmod(a, b)` | `a % b` |
 
-Les autres noms de Lua qui ne sont pas proposés sont `math.ceil(x)`, `math.huge`, `math.modf(x)` et `math.randomseed(n)`.
-
-Les décalages et opérations binaires `a >> b`, `a ~ b` et `~a` ne sont pas disponibles non plus.
+Les autres noms de Lua qui ne sont pas proposés sont `math.huge`, `math.modf(x)` et `math.randomseed(n)`.
 
 ## Scène
 
@@ -275,9 +273,6 @@ Le Build refuse les éléments suivants :
 | `a .. b` | Une entrée de texte et ses marqueurs de valeur. |
 | `a ^ b` | Multipliez explicitement, par exemple `x * x`. |
 | `a // b` | `/` effectue déjà une division entière. |
-| `a & b`, `a | b`, `a << b` | Utilisez l'API matérielle ou des multiplications et divisions. |
-
-`~=` signifie bien « différent de ». Seul `~`, utilisé pour une opération binaire ou unaire, n'est pas disponible.
 
 ## Bibliothèque standard Lua
 

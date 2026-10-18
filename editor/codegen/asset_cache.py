@@ -9,8 +9,12 @@ naturellement sur une conversion complète.
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
+from functools import lru_cache
 from pathlib import Path
+
+from core.app_info import APP_VERSION
 
 import codegen.build_output as build_output
 
@@ -35,6 +39,29 @@ def tool_signature(path: Path | None) -> str:
         return str(path)
 
 
+# Les modules dont le CODE décide de ce que produit une conversion (quantification,
+# recomposition des feuilles, découpe des modules audio).
+_CONVERSION_MODULES = ("codegen.grit_conversion", "core.models.gba_color",
+                       "core.module_trim", "core.music_structure", "core.wav_module")
+
+
+@lru_cache(maxsize=1)
+def pipeline_signature() -> str:
+    """Empreinte du code de conversion : la version de l'application, plus le contenu
+    des modules ci-dessus quand leurs sources existent (checkout de développement).
+
+    Sans elle, l'empreinte d'un asset ne dit rien du code qui l'a converti : après
+    une mise à jour, ou une retouche de `quantize_asset`, le cache resservait les
+    anciennes sorties. Une distribution Nuitka n'a pas les `.py` : la version suffit,
+    le code n'y change qu'avec elle."""
+    digest = hashlib.sha256(APP_VERSION.encode("utf-8"))
+    for name in _CONVERSION_MODULES:
+        source = Path(getattr(importlib.import_module(name), "__file__", "") or "")
+        if source.suffix == ".py" and source.is_file():
+            digest.update(source.read_bytes())
+    return digest.hexdigest()
+
+
 class AssetBuildCache:
     """Index persistant `{entrée: empreinte}` des sorties déjà dans build/."""
 
@@ -49,7 +76,7 @@ class AssetBuildCache:
 
     @staticmethod
     def fingerprint(value: object) -> str:
-        encoded = json.dumps(value, ensure_ascii=False, sort_keys=True,
+        encoded = json.dumps({"pipeline": pipeline_signature(), "value": value}, ensure_ascii=False, sort_keys=True,
                              separators=(",", ":"), default=str).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 

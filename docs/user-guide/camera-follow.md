@@ -12,14 +12,14 @@ script n'est nécessaire.
 Dans le **Scene Manager**, ouvrez le menu **+** de l'arbre de la scène et ajoutez une
 **Camera**. Donnez-lui un nom, par exemple `Joueur`, puis sélectionnez-la.
 
-Dans la carte **This Camera** de l'inspecteur, choisissez-la aussi comme **Starting Camera**.
+Dans la carte **This camera** de l'inspecteur, choisissez-la aussi comme **Starting camera**.
 Elle sera alors active au lancement de la scène.
 
 ## 2. Suivre l'acteur
 
 Dans l'inspecteur de la caméra :
 
-1. choisissez le mode **Follow an actor** ;
+1. choisissez le mode **Follow an Actor** ;
 2. sélectionnez votre acteur dans la liste de suivi ;
 3. commencez avec des marges de `40` pixels sur X et `20` pixels sur Y.
 
@@ -29,7 +29,7 @@ pour laisser davantage d'espace devant le joueur.
 
 ## 3. Définir les limites du monde
 
-Dans la carte **World Bounds**, donnez la taille de votre zone jouable. Si vos décors couvrent
+Dans la carte **World bounds**, donnez la taille de votre zone jouable. Si vos décors couvrent
 déjà toute la scène, utilisez **Recompute from backgrounds** pour proposer ces valeurs.
 
 Les limites empêchent la caméra de montrer l'extérieur du monde. Pour une scène de 640 × 320

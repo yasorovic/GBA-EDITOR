@@ -208,9 +208,11 @@ class Toolchain:
         return None
 
     def resolve_make(self) -> Path | None:
-        """Retourne le chemin absolu de make, ou None."""
-        if p := shutil.which("make"):
-            return Path(p)
+        """Retourne le chemin absolu de make, ou None.
+
+        Le `make` de devkitPro (msys2) passe AVANT celui du PATH : le Makefile appelle
+        `mkdir -p` et `rm -rf`, que le `make` de GnuWin32 ou d'un MinGW seul, sans `sh`,
+        ne sait pas lancer. Sous Linux ces emplacements n'existent pas : le PATH décide."""
         if dkp := self.devkitpro_path:
             for candidate in [
                 dkp / "msys2" / "usr" / "bin" / "make.exe",
@@ -223,6 +225,8 @@ class Toolchain:
                 c = base / sub
                 if c.exists():
                     return c
+        if p := shutil.which("make"):
+            return Path(p)
         return None
 
     def resolve_arm_gcc(self) -> Path | None:

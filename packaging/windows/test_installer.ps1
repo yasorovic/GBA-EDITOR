@@ -14,7 +14,13 @@
    3. mise a jour : un fichier de l'ancienne version disparait, un plugin de
       l'utilisateur reste, le binaire demarre toujours ;
    4. desinstallation : l'application, son raccourci et ses cles disparaissent ;
-      les projets et la configuration de l'utilisateur RESTENT.
+      les projets, la configuration et les plugins de l'utilisateur RESTENT.
+
+  NON COUVERT : l'installation est SILENCIEUSE (/S /D=), qui saute les pages de l'assistant,
+  donc la regle de DirectoryLeave (ajouter \Backstage a un dossier choisi qui ne se termine pas
+  ainsi) n'est jamais exercee ici. A verifier a la main avant une release : lancer le setup,
+  choisir un dossier existant et non vide (ex. D:\Games), controler que l'adresse affichee
+  devient D:\Games\Backstage, puis desinstaller et constater que D:\Games est intact.
 #>
 param(
   [Parameter(Mandatory = $true)][string]$Installer,
@@ -101,6 +107,7 @@ Check (-not (Test-Path $UninstKey))                "la cle de desinstallation es
 Check (-not (Test-Path $AssocKey))                 "l'association .project est supprimee"
 Check (-not (Test-Path $ProgIdKey))                "le ProgID est supprime"
 Check (-not (Test-Path $StartMenu))                "le dossier du menu Demarrer est supprime"
+Check (Test-Path "$InstDir\plugins\mon_plugin\plugin.py") "le plugin de l'utilisateur est conserve par la desinstallation"
 Check (Test-Path "$Projects\Keep.project")         "les projets de l'utilisateur sont conserves"
 Check (Test-Path "$Config\toolchain.json")         "la configuration de l'utilisateur est conservee"
 

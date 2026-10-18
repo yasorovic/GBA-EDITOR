@@ -40,3 +40,6 @@ editor/core/toolchain.json
 .pytest-tmp-*/
 .pytest-*-results.txt
 data-audio-rom-*/
+
+# Sorties de profilage (cProfile)
+*.out

@@ -292,3 +292,53 @@ def test_un_cran_de_molette_s_ecrit_apres_un_instant_de_calme(screen, project, m
     assert writes == []
     QTest.qWait(450)
     assert len(writes) == 1
+
+
+def test_un_reglage_en_attente_s_ecrit_sur_sa_musique_quand_on_en_ouvre_une_autre(screen, project):
+    theme, ambient = project.music.get("Theme"), project.music.get("Ambient")
+    screen._on_asset_selected(theme)
+    screen._music_editor._faders.fader("pitch").setValue(120)    # le minuteur de 300 ms est armé
+    screen._on_asset_selected(ambient)                           # ... et on change de musique avant son échéance
+    assert _reloaded(project).music.get("Theme").pitch == 120
+
+
+def test_renommer_un_son_vers_un_nom_pris_est_refuse_sans_planter(screen, project):
+    screen._on_asset_selected(project.music.get("Theme"))
+    screen._music_insp._on_renamed("Ambient")                    # déjà pris par l'autre musique
+    assert project.music.get("Theme") is not None and screen._music_insp._asset.name == "Theme"
+
+
+def test_le_renommage_d_un_son_s_annule(screen, project):
+    from core.history import get_history
+    theme = project.music.get("Theme")
+    screen._on_asset_selected(theme)
+    screen._music_insp._on_renamed("Hymn")
+    assert theme.name == "Hymn" and project.music.get("Hymn") is theme
+    get_history().undo()
+    assert theme.name == "Theme" and project.music.get("Theme") is theme
+
+
+# ── Les boîtes (panneau caché pour l'instant) : elles doivent se construire et se charger ──
+
+
+def test_le_panneau_des_boites_cache_se_charge_pour_les_trois_familles(screen, project):
+    from core.models.sound_box import ActionState, JingleBox, MusicBox, MusicState, SoundBox
+    from ui.sound_mixer.sound_commands import AddBoxStateCmd, RemoveMusicStateCmd
+    project.music_boxes.append(MusicBox(name="M", states=[MusicState(name="a", music="Theme"),
+                                                          MusicState(name="b", music="Ambient")], start="a"))
+    project.sound_boxes.append(SoundBox(name="S", actions=["hit"], states=[ActionState(name="s", mapping={"hit": "Beep"})], start="s"))
+    project.jingle_boxes.append(JingleBox(name="J", actions=["win"], states=[ActionState(name="j", mapping={"win": "Fanfare"})], start="j"))
+    screen.load_project(project)
+    screen._machines_panel.show()
+    for index, tab in enumerate(screen._box_tabs()):
+        screen._tabs.setCurrentIndex(index)
+        assert tab.current() is not None and not tab._editor.isHidden()
+    music_box = project.music_boxes[0]
+    state = music_box.states[1]
+    cmd = RemoveMusicStateCmd(music_box, state)
+    cmd.execute()
+    assert [s.name for s in music_box.states] == ["a"]
+    cmd.undo()
+    assert [s.name for s in music_box.states] == ["a", "b"]
+    AddBoxStateCmd(music_box, MusicState(name="c")).execute()
+    assert len(music_box.states) == 3

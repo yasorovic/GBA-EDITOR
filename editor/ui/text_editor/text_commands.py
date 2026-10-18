@@ -320,14 +320,18 @@ class RenameTextKeysCmd(Command):
         self._persist = persist_fn
 
     def execute(self):
-        self._project.rename_text_keys(self._pairs)
-        if self._persist:
-            self._persist()
+        self._apply(self._pairs)
 
     def undo(self):
-        self._project.rename_text_keys(self._before)
-        if self._persist:
-            self._persist()
+        self._apply(self._before)
+
+    def _apply(self, pairs):
+        # Un seul parcours d'`assets/` pour le renommage ET le rafraîchissement qui suit (index d'usage).
+        from core.lua_scripts import lua_files_cached
+        with lua_files_cached(self._project):
+            self._project.rename_text_keys(pairs)
+            if self._persist:
+                self._persist()
 
 
 class SetTextPathCmd(Command):

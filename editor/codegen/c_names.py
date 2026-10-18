@@ -27,9 +27,13 @@ UnboundLocalError.
 """
 
 
+def _clean(s: str) -> str:
+    return "".join(c if (c.isalnum() or c == "_") else "_" for c in s)
+
+
 def sym(s: str) -> str:
     """Convertit un nom arbitraire en identifiant C valide, casse préservée."""
-    r = "".join(c if (c.isalnum() or c == "_") else "_" for c in s)
+    r = _clean(s)
     return ("_" + r) if r and r[0].isdigit() else r
 
 
@@ -61,5 +65,4 @@ def c_ident(name: str) -> str:
     Sans ça, un nom de Sfx ou de Music contenant un espace génère un `#define`
     invalide — le préprocesseur C coupe le nom de macro au premier espace et
     traite le reste comme du texte de substitution."""
-    r = "".join(c if (c.isalnum() or c == "_") else "_" for c in name)
-    return r.upper()
+    return _clean(name).upper()

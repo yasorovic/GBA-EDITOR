@@ -328,3 +328,19 @@ def test_un_enfant_sans_slot_affine_sous_un_parent_qui_tourne_avertit(project):
     journal = Journal()
     main_gen.generate_main(project, _scene_data(project, parent, child), None, [], [], journal)
     assert journal.says("warning", "has no affine slot")
+
+
+def test_le_main_demarre_sur_la_scene_choisie_et_en_liste_deux(project):
+    from codegen.runtime_codegen import main_gen
+    from core.models.scene import Scene
+    first = project.active_scene
+    second = Scene(name="Second")
+    project.scenes.append(second)
+    project.settings.start_scene = "Second"
+    data = [{"scene": s, "bg_pairs": [], "scene_actors": [], "extra_sprites": [], "prefab_sprites": []}
+            for s in (first, second)]
+    assert main_gen.generate_main(project, data, None, [], [], Journal()) is True
+    text = (project.src_dir / "main.c").read_text(encoding="utf-8")
+    assert "g_next_scene = 1;" in text
+    assert "scene_init_Second, scene_tick_Second" in text
+    assert "g_scene_vtable[2] = {" in text

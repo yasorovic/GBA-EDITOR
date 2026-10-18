@@ -388,7 +388,8 @@ class ProjectTextsMixin:
     def rename_text_keys(self, entries) -> None:
         """Rename a complete set, including swaps, without merging references."""
         entries = [(text, key) for text, key in entries if text.key != key]
-        with self.consumers_follow([text for text, _ in entries]):
+        from core.lua_scripts import lua_files_cached
+        with lua_files_cached(self), self.consumers_follow([text for text, _ in entries]):
             self._rename_text_keys(entries)
 
     def _rename_text_keys(self, entries) -> None:

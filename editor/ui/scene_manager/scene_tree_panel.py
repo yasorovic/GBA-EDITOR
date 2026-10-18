@@ -204,7 +204,19 @@ class _Tree(QTreeWidget):
         act.triggered.connect(lambda _=False, it=item: self.editItem(it, 0))
         return act
 
+    def populate(self, project, scene):
+        """Repeuple l'arbre. `_fit` (O(lignes), puis `setFixedHeight` → resizeEvent) ne tourne qu'UNE fois, à la fin :
+        sinon chaque ligne insérée la relançait (≈ 2 appels par ligne)."""
+        self._fit_hold = True
+        try:
+            self._populate(project, scene)
+        finally:
+            self._fit_hold = False
+        self._fit()
+
     def _fit(self):
+        if getattr(self, "_fit_hold", False):
+            return
         # Compter les lignes VISIBLES : un nœud, plus les descendants de chaque
         # parent déplié.
         total = 0
@@ -311,7 +323,7 @@ class _ActiveSceneTree(_Tree):
 
     # ── Peuplement ────────────────────────────────────────────────
 
-    def populate(self, project: Project, scene: Scene | None):
+    def _populate(self, project: Project, scene: Scene | None):
         self._scene = scene
         self.blockSignals(True)
         self.clear()
@@ -435,6 +447,11 @@ class _ActiveSceneTree(_Tree):
         """Pose les contrôles œil du contexte Content."""
         if QTreeWidgetItemIterator is None:
             return
+        # Deux états seulement : icône et infobulle se construisent une fois, pas par ligne (centaines d'acteurs).
+        looks = {True: (_ico("eye", C.TEXT_DIM),
+                        tooltip(title=label("scttree.hide_in_editor"))),
+                 False: (_ico("eye_off", "#555"),
+                         tooltip(title=label("scttree.show_in_editor")))}
         it = QTreeWidgetItemIterator(self)
         while it.value():
             item = it.value()
@@ -451,13 +468,10 @@ class _ActiveSceneTree(_Tree):
                 button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
                 button.setFixedSize(24, 24)
                 button.setIconSize(QSize(16, 16))
-                button.setIcon(_ico("eye" if visible else "eye_off",
-                                    C.TEXT_DIM if visible else "#555"))
+                icon, tip = looks[bool(visible)]
+                button.setIcon(icon)
                 button.setStyleSheet("QToolButton{background:transparent;border:none;padding:0;}")
-                button.setToolTip(tooltip(title=(
-                    label("scttree.hide_in_editor") if visible
-                    else label("scttree.show_in_editor")
-                )))
+                button.setToolTip(tip)
                 button.clicked.connect(
                     lambda _=False, typ=node_type, value=obj, lay=layout:
                     self._toggle_editor_visibility(typ, value, lay))
@@ -1130,7 +1144,12 @@ class _ActiveSceneTree(_Tree):
             # ne plus y toucher après cet appel (même mise en garde que
             # ci-dessus et que `_commit_rename_scene` dans assets_finder_panel).
             old_name = actor.name
-            proj.rename_actor(actor, new_name, scene=self._scene)
+            if not proj.rename_actor(actor, new_name, scene=self._scene):
+                # Nom déjà pris dans la scène : refusé, la ligne reprend l'ancien nom.
+                self.blockSignals(True)
+                self._update_actor_item(item, actor)
+                self.blockSignals(False)
+                return
             if self._panel._content_state:
                 self._panel._content_state.rename_member(
                     self._scene.name, f"actor:{old_name}", f"actor:{actor.name}")
@@ -1174,7 +1193,7 @@ class _PrioritySceneTree(_Tree):
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.itemClicked.connect(self._on_click)
 
-    def populate(self, project: Project, scene: Scene | None):
+    def _populate(self, project: Project, scene: Scene | None):
         self._scene = scene
         self.blockSignals(True)
         self.clear()

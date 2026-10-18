@@ -98,6 +98,8 @@ def download_template(
                 if not rel:
                     continue
                 out_path = dest / rel
+                if not out_path.resolve().is_relative_to(dest.resolve()):
+                    raise ValueError(f"Unsafe path in the archive: {member}")
                 if member.endswith("/"):
                     out_path.mkdir(parents=True, exist_ok=True)
                 else:

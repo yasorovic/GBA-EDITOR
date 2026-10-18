@@ -2273,10 +2273,14 @@ def generate_main(
         _add_inc(f'#include "{soundbank_h.name}"')
         _add_inc('#include "soundbank.bin.h"')
 
+    # Une seule fois par scène : `scene_init` et `scene_tick` relisent ce placement
+    # (posé sur la scène par `_apply_vram_layout`), ils ne le recalculent pas.
+    scene_bgi: list[list[dict]] = []
     for d in all_scene_data:
         bgi_d = bg_info(p, d["scene"])
         _apply_vram_layout(p, d["scene"], bgi_d, scene_text_reservation(p, d["scene"]))
         _log_vram_layout(d["scene"], emit)
+        scene_bgi.append(bgi_d)
         for bi in bgi_d:
             _add_inc(f'#include "{bi["sym"]}.h"')
         # Tables d'images des fonds animés — un header par scène, toujours émis
@@ -2520,6 +2524,13 @@ def generate_main(
         "int   g_mtr_mode = 0, g_mtr_id = 0, g_mtr_loop = 1, g_mtr_vol = 255;",
         "int   g_mtr_i = 0, g_mtr_n = 1, g_mtr_row = 0;",
         "int   _g_frame = 0;",
+        # Graine de `math_rand`, UNE pour tout le jeu : `static` dans le header,
+        # chaque unité de script avait la sienne et tirait la même suite.
+        "u32   _g_rand_seed = 73244475u;",
+        # Brassée une fois, au premier bouton pressé (cf. la boucle principale) : sans ça, chaque mise sous tension
+        # rejouait la même suite de tirages.
+        "u32   _g_rand_ticks = 0;",
+        "int   _g_rand_seeded = 0;",
         # Taille du monde de la scène courante, lue par `scene.size` : déclarée
         # `extern` dans runtime_api_inline.h et posée par chaque scene_init — il
         # manquait sa DÉFINITION, et le lien échouait sur tout projet.
@@ -2572,22 +2583,24 @@ def generate_main(
         L += sfx_default_tables(sound_assets)
         L += _emit_sound_boxes(p)
 
+    # Indices (GLOBAUX) des acteurs de chaque scène dont le script est du Lua.
+    scene_lua_idx: list[set[int]] = []
+    for off, d in zip(scene_offsets, all_scene_data):
+        idx: set[int] = set()
+        for j, (actor, _) in enumerate(d["scene_actors"]):
+            sp_path = _actor_script(actor)
+            abs_sp = p.asset_abs(sp_path) if sp_path else None
+            if abs_sp and abs_sp.suffix.lower() == ".lua":
+                idx.add(off + j)
+        scene_lua_idx.append(idx)
+
     # ── scene_init_X() par scène ──────────────────────────────────
     for i, d in enumerate(all_scene_data):
         sc         = d["scene"]
         act_off    = scene_offsets[i]
-        bgi_d      = bg_info(p, d["scene"])
-        _apply_vram_layout(p, sc, bgi_d, scene_text_reservation(p, sc))
+        bgi_d      = scene_bgi[i]
         sa         = d["scene_actors"]
-
-        # lua_idx local (indices GLOBAUX)
-        lua_idx_d: set[int] = set()
-        for j, (actor, _) in enumerate(sa):
-            sp_path = _actor_script(actor)
-            if sp_path:
-                abs_sp = p.asset_abs(sp_path)
-                if abs_sp and abs_sp.suffix.lower() == ".lua":
-                    lua_idx_d.add(act_off + j)
+        lua_idx_d  = scene_lua_idx[i]
 
         # DISPCNT — activer CHAQUE slot d'UI de la scène (v0.12 : plusieurs
         # possibles), plus les slots des fonds ci-dessous.
@@ -2625,17 +2638,9 @@ def generate_main(
     for i, d in enumerate(all_scene_data):
         sc      = d["scene"]
         act_off = scene_offsets[i]
-        bgi_d   = bg_info(p, d["scene"])
-        _apply_vram_layout(p, sc, bgi_d, scene_text_reservation(p, sc))
+        bgi_d   = scene_bgi[i]
         sa      = d["scene_actors"]
-
-        lua_idx_d: set[int] = set()
-        for j, (actor, _) in enumerate(sa):
-            sp_path = _actor_script(actor)
-            if sp_path:
-                abs_sp = p.asset_abs(sp_path)
-                if abs_sp and abs_sp.suffix.lower() == ".lua":
-                    lua_idx_d.add(act_off + j)
+        lua_idx_d = scene_lua_idx[i]
 
         # La matrice de collision (ROADMAP v0.23) retire ici les paires qui ne
         # peuvent PAS se rencontrer — « les projectiles du joueur ignorent ceux
@@ -2760,78 +2765,9 @@ def generate_main(
     # d'écriture de sa position (v0.6.1) : deux mécanismes qui écrivent le même
     # registre sans se coordonner, c'est le défaut qu'on a déjà corrigé une fois.
     if has_sound and soundbank_h.exists():
-        from codegen.runtime_codegen.sound_emit import music_runtime_lines
+        from codegen.runtime_codegen.sound_emit import music_runtime_lines, music_transition_tick_lines
         L += music_runtime_lines(p, sound_assets)
-        L += [
-            "static void music_transition_tick(void){",
-            "    if(!g_mtr_mode) return;",
-            "    /* Modes 3 and 4 are the module's own fades (Music.fade_in / fade_out): the",
-            "       volume ramps up from zero, or down to zero and then the module stops. */",
-            "    if(g_mtr_mode == 3){",
-            "        g_mtr_i++;",
-            "        if(g_mtr_i >= g_mtr_n){",
-            "            music_write_volume(g_mtr_vol);",
-            "            g_mtr_mode = 0;",
-            "        } else {",
-            "            music_write_volume((g_mtr_vol * g_mtr_i / g_mtr_n));",
-            "        }",
-            "        return;",
-            "    }",
-            "    if(g_mtr_mode == 4){",
-            "        g_mtr_i++;",
-            "        if(g_mtr_i >= g_mtr_n){",
-            "            mmStop(); g_music_cur = -1; g_mloop_end = 0;",
-            "            g_mtr_mode = 0;",
-            "        } else {",
-            "            music_write_volume((g_mtr_vol * (g_mtr_n - g_mtr_i) / g_mtr_n));",
-            "        }",
-            "        return;",
-            "    }",
-            "    if(g_mtr_mode == 1){",
-            "        /* Cross fade. The switch falls at the half, when the",
-            "           volume is at zero: that is where a change is heard the",
-            "           least. */",
-            "        int half = g_mtr_n / 2;",
-            "        g_mtr_i++;",
-            "        if(g_mtr_i < half){",
-            "            music_write_volume((g_mtr_vol * (half - g_mtr_i) / half));",
-            "        } else if(g_mtr_i == half){",
-            "            mmStart((mm_word)g_mtr_id, (mm_pmode)music_mode(g_mtr_id, g_mtr_loop));",
-            "            music_apply(g_mtr_id);",
-            "            music_write_volume(0);",
-            "        } else if(g_mtr_i >= g_mtr_n){",
-            "            music_write_volume(g_mtr_vol);",
-            "            g_music_vol = g_mtr_vol;",
-            "            g_mtr_mode = 0;",
-            "        } else {",
-            "            int k = g_mtr_i - half, n = g_mtr_n - half;",
-            "            music_write_volume((g_mtr_vol * k / n));",
-            "        }",
-            "        return;",
-            "    }",
-            "    /* Cut at position. We watch for the ROW going backward:",
-            "       it is the pattern boundary, and it also works for a module",
-            "       of a single pattern, whose order index would never change.",
-            "       mmPosition() can only target a pattern — cutting mid-pattern",
-            "       would therefore replay the rows already passed, which is audible."
-            " */",
-            "    {",
-            "        int row = (int)mmGetPositionRow();",
-            "        if(row < g_mtr_row){",
-            "            mm_word pat = mmGetPosition();",
-            "            mmStart((mm_word)g_mtr_id, (mm_pmode)music_mode(g_mtr_id, g_mtr_loop));",
-            "            mmPosition(pat);",
-            "            music_apply(g_mtr_id);",
-            "            music_write_volume(g_mtr_vol);",
-            "            g_music_vol = g_mtr_vol;",
-            "            g_mtr_mode = 0;",
-            "        } else {",
-            "            g_mtr_row = row;",
-            "        }",
-            "    }",
-            "}",
-            "",
-        ]
+        L += music_transition_tick_lines()
 
     elif has_sound:
         from codegen.runtime_codegen.sound_emit import music_runtime_stub_lines
@@ -2935,6 +2871,9 @@ def generate_main(
         "        _g_keys_pressed = keysDown();",
         "        _input_ring_push(_g_keys_held);",
         "        _input_update_hold_frames(_g_keys_held);",
+        # Premier bouton pressé : le nombre de frames écoulées, qui dépend du joueur, brasse la graine.
+        "        _g_rand_ticks++;",
+        "        if(!_g_rand_seeded && _g_keys_pressed){ _g_rand_seed ^= _g_rand_ticks * 2654435761u; _g_rand_seeded = 1; }",
     ]
     if has_transitions:
         # La musique et le compteur de frames continuent pendant le fondu : une
@@ -2973,5 +2912,6 @@ def generate_main(
 
     out = p.src_dir / "main.c"
     build_output.write(out, "\n".join(L) + "\n")
-    emit("log_line", f"[gen] {out.relative_to(p.root)}")
+    if emit:
+        emit("log_line", f"[gen] {out.relative_to(p.root)}")
     return True

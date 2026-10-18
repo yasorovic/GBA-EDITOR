@@ -33,9 +33,12 @@ jobs:
       # du dépôt.
       - id: v
         shell: bash
+        env:
+          # Par l'environnement, pas collé dans le script : un tag contenant `"` ou `$(…)`
+          # s'exécuterait sinon dans le job.
+          TAG: ${{ github.event.release.tag_name }}
         run: |
           FILE_VERSION="$(python3 packaging/nuitka_build.py --print-version)"
-          TAG="${{ github.event.release.tag_name }}"
           if [ -n "$TAG" ] && [ "${TAG#v}" != "$FILE_VERSION" ]; then
             echo "::error::Le tag $TAG ne correspond pas à APP_VERSION ($FILE_VERSION) dans editor/core/app_info.py : alignez l'un sur l'autre."
             exit 1
@@ -132,6 +135,43 @@ jobs:
       - name: Tests lents
         run: python -m pytest tests -m slow -q -rs
 
+  # Le build de ROM sous Windows : msys2 de devkitPro, chemins C:\devkitPro, limite de
+  # 260 caractères, relance de `make` — du code qui ne tournait que sur le poste de
+  # l'auteur. Hors `needs` des builds tant qu'il n'a pas passé un workflow_dispatch :
+  # l'installation silencieuse de devkitPro (`/S`) n'a pas encore été vérifiée sur un
+  # runner. Une fois verte, ajouter `windows-rom-build` aux `needs` de build-windows.
+  windows-rom-build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      QT_QPA_PLATFORM: offscreen
+      GBA_TESTS_REQUIRE_DEVKITPRO: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installer les dépendances Python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      # Même installateur, même empreinte que packaging/windows/installer.nsi.
+      - name: Installer devkitPro
+        shell: pwsh
+        run: |
+          $f = Join-Path $env:RUNNER_TEMP "devkitProUpdater.exe"
+          Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/devkitPro/installer/releases/download/v3.0.3/devkitProUpdater-3.0.3.exe" -OutFile $f
+          if ((Get-FileHash -Algorithm SHA256 $f).Hash -ne "038a99dc84f1ca0b52e9e0e074a94a3b0672e6d7bf0988563f0ab0812dcbb38d") { throw "empreinte de devkitProUpdater inattendue" }
+          Start-Process -FilePath $f -ArgumentList "/S" -Wait
+          if (-not (Test-Path "C:\devkitPro\devkitARM\bin\arm-none-eabi-gcc.exe")) { throw "devkitPro (GBA) n'est pas installé : l'installation silencieuse n'a pas tout posé" }
+
+      - name: Tests lents
+        run: python -m pytest tests -m slow -q -rs
+
   build-windows:
     needs: [version, tests, slow-tests]
     runs-on: windows-latest
@@ -151,15 +191,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: '~\AppData\Local\Nuitka\Nuitka\Cache'
-          key: nuitka-windows-${{ hashFiles('requirements.txt') }}-${{ github.sha }}
+          key: nuitka-windows-${{ hashFiles('requirements.txt', 'packaging/requirements-build.txt') }}-${{ github.sha }}
           restore-keys: |
-            nuitka-windows-${{ hashFiles('requirements.txt') }}-
+            nuitka-windows-${{ hashFiles('requirements.txt', 'packaging/requirements-build.txt') }}-
             nuitka-windows-
 
       - name: Installer les dépendances Python
         run: |
-          pip install -r requirements.txt
-          pip install nuitka
+          pip install -r requirements.txt -r packaging/requirements-build.txt
 
       # Le runner part d'un Python nu : tout import du code que
       # requirements.txt ne couvre pas échoue ici, avant le build, au lieu
@@ -266,15 +305,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/Nuitka
-          key: nuitka-linux-${{ hashFiles('requirements.txt') }}-${{ github.sha }}
+          key: nuitka-linux-${{ hashFiles('requirements.txt', 'packaging/requirements-build.txt') }}-${{ github.sha }}
           restore-keys: |
-            nuitka-linux-${{ hashFiles('requirements.txt') }}-
+            nuitka-linux-${{ hashFiles('requirements.txt', 'packaging/requirements-build.txt') }}-
             nuitka-linux-
 
       - name: Installer les dépendances Python
         run: |
-          pip install -r requirements.txt
-          pip install nuitka
+          pip install -r requirements.txt -r packaging/requirements-build.txt
 
       - name: Vérifier que requirements.txt couvre tous les imports
         run: python packaging/check_deps.py
@@ -293,8 +331,12 @@ jobs:
 
       - name: Récupérer appimagetool
         run: |
-          curl -L -o appimagetool \
-            https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          # Version numérotée (1.9.1), pas `continuous` : ce tag est reconstruit en amont et son empreinte changerait.
+          # Empreinte épinglée, comme celles de devkitPro et mGBA dans installer.nsi :
+          # un fichier remplacé en amont fait échouer le build au lieu de partir en release.
+          curl -fL -o appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+          echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  appimagetool" | sha256sum -c -
           chmod +x appimagetool
 
       - name: Assembler l'AppDir
@@ -363,6 +405,18 @@ jobs:
           VERSION="${{ needs.version.outputs.version }}"
           ARCH=x86_64 ./appimagetool --appimage-extract-and-run AppDir "Backstage-${VERSION}-x86_64.AppImage"
 
+      # Le smoke test plus haut tourne sur le dossier Nuitka ; celui-ci lance le FICHIER
+      # livré : AppRun, les libs xcb copiées, l'exclusion de la glibc. Une AppImage
+      # cassée échoue ici, avant d'être publiée. --appimage-extract-and-run : pas de FUSE
+      # sur le runner ; les arguments suivants vont à l'éditeur.
+      - name: Smoke test de l'AppImage
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          xvfb-run -a "./Backstage-${VERSION}-x86_64.AppImage" --appimage-extract-and-run \
+            --smoke-test="$PWD/smoke-appimage.txt" || status=$?
+          cat smoke-appimage.txt || true
+          exit "${status:-0}"
+
       # On livre l'AppImage DANS un .tar.gz : un .zip (ou un téléchargement direct)
       # perd le bit exécutable, et l'utilisateur Linux doit alors faire un chmod +x
       # avant que le double-clic fonctionne. tar le conserve ; extraire l'archive
@@ -400,4 +454,5 @@ jobs:
       - name: Attacher les artefacts à la release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" artifacts/* --clobber --repo "${{ github.repository }}"
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" artifacts/* --clobber --repo "${{ github.repository }}"

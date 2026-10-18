@@ -79,7 +79,7 @@ class TextEntry(QFrame):
         copy.setStyleSheet(BTN_ICON)
         copy.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         copy.setToolTip(label("txtwb.key_title"))
-        copy.clicked.connect(lambda: QApplication.clipboard().setText(text.key))
+        copy.clicked.connect(lambda: QApplication.clipboard().setText(self._text.key))
         header.addWidget(copy)
         self.used = QLabel()
         self.used.setTextFormat(Qt.TextFormat.PlainText)
@@ -215,6 +215,14 @@ class TextEntry(QFrame):
         self.key.show()
         self.key.setFocus()
         self.key.selectAll()
+
+    def rebind(self, text, content: str):
+        """Reprend une autre entrée sans reconstruire le widget (réordonnancement en place d'une séquence)."""
+        self._text = text
+        if not self.key.hasFocus():
+            self.key.setText(text.key)
+        self.number.setToolTip(text.key)
+        self.set_content(content)
 
     def set_content(self, content: str):
         if self.edit.toPlainText() != content:

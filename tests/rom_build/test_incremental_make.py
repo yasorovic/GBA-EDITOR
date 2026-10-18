@@ -23,10 +23,10 @@ def make_build(tmp_path):
         (tmp_path / directory).mkdir()
     env = environnement(compiler)
 
-    def run(target="obj/probe.o", *options):
+    def run(target="obj/probe.o", *options, cflags="-O0 -Isrc -Igrit_out"):
         result = subprocess.run(
             [make, *options, target, "DEVKITPRO=unused", f"CC={compiler}", "ARCH=",
-             "CFLAGS=-O0 -Isrc -Igrit_out"],
+             f"CFLAGS={cflags}"],
             cwd=tmp_path, env=env, capture_output=True, text=True)
         assert result.returncode == 0, result.stdout + result.stderr
         return result.stdout
@@ -82,3 +82,16 @@ def test_existing_objects_without_dependency_files_are_rebuilt(tmp_path, make_bu
 
     assert " -c " in run()
     assert (tmp_path / "obj" / "probe.d").is_file()
+
+
+def test_changed_compile_flags_rebuild_objects(tmp_path, make_build):
+    """Passer de debug à release (-DGBA_DEBUG_BUILD) ne change aucun fichier source : sans
+    dépendance sur les drapeaux, make garderait les .o compilés avec l'ancien."""
+    run, _compiler, _env = make_build
+    (tmp_path / "src" / "probe.c").write_text("int probe(void) { return 7; }\n", encoding="utf-8")
+    flags = "-O0 -Isrc -Igrit_out"
+    assert " -c " in run(cflags=flags)
+    assert " -c " not in run(cflags=flags)
+    assert " -c " in run(cflags=flags + " -DGBA_DEBUG_BUILD")
+    assert " -c " not in run(cflags=flags + " -DGBA_DEBUG_BUILD")
+    assert " -c " in run(cflags=flags)

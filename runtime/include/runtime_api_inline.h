@@ -93,11 +93,13 @@ static inline Rect camera_get_bounds(void) {
 static inline void camera_apply_bounds(void) {
     if (g_bounds_w > 0) {
         int lo = g_bounds_x, hi = g_bounds_x + g_bounds_w - SCREEN_W;
+        if (hi < lo) hi = lo;   /* monde plus étroit que l'écran : collé au bord, pas dehors */
         if (cam_x < lo) cam_x = lo;
         if (cam_x > hi) cam_x = hi;
     }
     if (g_bounds_h > 0) {
         int lo = g_bounds_y, hi = g_bounds_y + g_bounds_h - SCREEN_H;
+        if (hi < lo) hi = lo;
         if (cam_y < lo) cam_y = lo;
         if (cam_y > hi) cam_y = hi;
     }
@@ -142,8 +144,9 @@ extern int g_cam_frame_w, g_cam_frame_h;
 
 static inline Vec2 camera_get_margin(void) { return (Vec2){ g_cam_margin_x, g_cam_margin_y }; }
 static inline void camera_set_margin(Vec2 m) {
-    g_cam_margin_x = m.x < 0 ? 0 : m.x;
-    g_cam_margin_y = m.y < 0 ? 0 : m.y;
+    /* Au plus la demi-largeur : au-delà les deux bords du suivi se croisent et la caméra oscille. */
+    g_cam_margin_x = m.x < 0 ? 0 : m.x > SCREEN_W / 2 ? SCREEN_W / 2 : m.x;
+    g_cam_margin_y = m.y < 0 ? 0 : m.y > SCREEN_H / 2 ? SCREEN_H / 2 : m.y;
 }
 
 /* Nom de la caméra active : l'index de la table est la constante CAM_<NOM>. */
@@ -163,9 +166,7 @@ static inline void camera_set_frame(Vec2 f) {
     }
 }
 
-/* Déclarées en avance : camera_switch() les appelle avant le bloc Windows
-   plus bas (redéclaration légale en C, mêmes signatures — même raison que les
-   constantes WINR_* dupliquées en tête de fichier). */
+/* `window_set`/`window_show` viennent du bloc de prototypes de runtime_api.h, émis avant ce fichier. */
 
 /* Activer une caméra POSE son cadrage et ses bornes : c'est ce que « caméra
    fixe » veut dire, et une caméra en suivi se recale dans la frame même. Les
@@ -250,8 +251,9 @@ static inline Vec2 vec2_mul  (Vec2 a, Vec2 b) { return (Vec2){ a.x*b.x, a.y*b.y 
 static inline Vec3 vec3_mul  (Vec3 a, Vec3 b) { return (Vec3){ a.x*b.x, a.y*b.y, a.z*b.z }; }
 static inline int  vec2_dot  (Vec2 a, Vec2 b) { return a.x*b.x + a.y*b.y; }
 static inline int  vec3_dot  (Vec3 a, Vec3 b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
-static inline Vec2 vec2_div  (Vec2 a, Vec2 b) { return (Vec2){ a.x/b.x, a.y/b.y }; }
-static inline Vec3 vec3_div  (Vec3 a, Vec3 b) { return (Vec3){ a.x/b.x, a.y/b.y, a.z/b.z }; }
+/* Une composante divisée par 0 vaut 0 : la division matérielle n'a pas de résultat défini. */
+static inline Vec2 vec2_div  (Vec2 a, Vec2 b) { return (Vec2){ b.x ? a.x/b.x : 0, b.y ? a.y/b.y : 0 }; }
+static inline Vec3 vec3_div  (Vec3 a, Vec3 b) { return (Vec3){ b.x ? a.x/b.x : 0, b.y ? a.y/b.y : 0, b.z ? a.z/b.z : 0 }; }
 static inline Vec3 vec3_scale(Vec3 v, int k)  { return (Vec3){ v.x*k,   v.y*k,   v.z*k   }; }
 /* Un entier mêlé à un vecteur par `+`/`-` vaut ce vecteur dont TOUTES les
    composantes sont cet entier : `v + 2` = `v + vec2(2, 2)`. */
@@ -325,6 +327,7 @@ static inline void actor_move_to(Actor* s, Vec2 target, int speed) {
     int cx = s->x>>8, cy = s->y>>8;
     int dx = target.x - cx, dy = target.y - cy;
     int dist = isqrt(dx*dx + dy*dy);
+    if (speed < 0) speed = 0;   /* vitesse négative : sur place, et jamais dist == 0 en diviseur */
     if (dist <= speed) { s->x = target.x<<8; s->y = target.y<<8; return; }
     s->x += (dx * speed / dist) << 8;
     s->y += (dy * speed / dist) << 8;
@@ -414,7 +417,7 @@ static inline void actor_set_flip_v(Actor* s, int v) { actor_oam_entry(s)->flip_
    écritures self.rotation/self.scale n'atteignaient jamais le rendu.
    Pas de FPU sur GBA : SIN_LUT est une table degrés→Q8 (×256) écrite en dur.
    gba_cos se déduit d'un déphasage de 90° plutôt qu'une seconde table. */
-static const s16 SIN_LUT[360] = {
+static const s16 SIN_LUT[91] = {
     0, 4, 9, 13, 18, 22, 27, 31, 36, 40, 44, 49,
     53, 58, 62, 66, 71, 75, 79, 83, 88, 92, 96, 100,
     104, 108, 112, 116, 120, 124, 128, 132, 136, 139, 143, 147,
@@ -422,31 +425,16 @@ static const s16 SIN_LUT[360] = {
     190, 193, 196, 199, 202, 204, 207, 210, 212, 215, 217, 219,
     222, 224, 226, 228, 230, 232, 234, 236, 237, 239, 241, 242,
     243, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 254,
-    255, 255, 255, 256, 256, 256, 256, 256, 256, 256, 255, 255,
-    255, 254, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245,
-    243, 242, 241, 239, 237, 236, 234, 232, 230, 228, 226, 224,
-    222, 219, 217, 215, 212, 210, 207, 204, 202, 199, 196, 193,
-    190, 187, 184, 181, 178, 175, 171, 168, 165, 161, 158, 154,
-    150, 147, 143, 139, 136, 132, 128, 124, 120, 116, 112, 108,
-    104, 100, 96, 92, 88, 83, 79, 75, 71, 66, 62, 58,
-    53, 49, 44, 40, 36, 31, 27, 22, 18, 13, 9, 4,
-    0, -4, -9, -13, -18, -22, -27, -31, -36, -40, -44, -49,
-    -53, -58, -62, -66, -71, -75, -79, -83, -88, -92, -96, -100,
-    -104, -108, -112, -116, -120, -124, -128, -132, -136, -139, -143, -147,
-    -150, -154, -158, -161, -165, -168, -171, -175, -178, -181, -184, -187,
-    -190, -193, -196, -199, -202, -204, -207, -210, -212, -215, -217, -219,
-    -222, -224, -226, -228, -230, -232, -234, -236, -237, -239, -241, -242,
-    -243, -245, -246, -247, -248, -249, -250, -251, -252, -253, -254, -254,
-    -255, -255, -255, -256, -256, -256, -256, -256, -256, -256, -255, -255,
-    -255, -254, -254, -253, -252, -251, -250, -249, -248, -247, -246, -245,
-    -243, -242, -241, -239, -237, -236, -234, -232, -230, -228, -226, -224,
-    -222, -219, -217, -215, -212, -210, -207, -204, -202, -199, -196, -193,
-    -190, -187, -184, -181, -178, -175, -171, -168, -165, -161, -158, -154,
-    -150, -147, -143, -139, -136, -132, -128, -124, -120, -116, -112, -108,
-    -104, -100, -96, -92, -88, -83, -79, -75, -71, -66, -62, -58,
-    -53, -49, -44, -40, -36, -31, -27, -22, -18, -13, -9, -4,
+    255, 255, 255, 256, 256, 256, 256,
 };
-static inline int gba_sin(int deg) { deg = ((deg % 360) + 360) % 360; return SIN_LUT[deg]; }
+/* La table couvre 0..90° ; les trois autres quadrants s'en déduisent par symétrie. */
+static inline int gba_sin(int deg) {
+    deg = ((deg % 360) + 360) % 360;
+    int neg = deg >= 180;
+    if (neg) deg -= 180;
+    if (deg > 90) deg = 180 - deg;
+    return neg ? -SIN_LUT[deg] : SIN_LUT[deg];
+}
 static inline int gba_cos(int deg) { return gba_sin(deg + 90); }
 
 /* Un matrix slot est réservé au build quand « Affine transform » est coché sur
@@ -796,12 +784,14 @@ static inline int scene_frame(void) { return _g_frame; }
 extern int collision_map_tile(int px, int py);
 
 /* Aléatoire — LCG 32-bit, zéro overhead, pas de division flottante */
-static u32 _rand_seed = 73244475u;
+/* La graine est définie dans main.c : `static` ici, chaque unité de script
+   aurait sa propre suite, identique aux autres. */
+extern u32 _g_rand_seed;
 static inline int math_rand(int lo, int hi) {
-    _rand_seed = _rand_seed * 1664525u + 1013904223u;
+    _g_rand_seed = _g_rand_seed * 1664525u + 1013904223u;
     int range = hi - lo + 1;
     if (range <= 0) return lo;
-    return lo + (int)((_rand_seed >> 16) % (u32)range);
+    return lo + (int)((_g_rand_seed >> 16) % (u32)range);
 }
 
 /* Trigonométrie — réutilise SIN_LUT/gba_sin/gba_cos (déjà écrits plus haut
@@ -841,7 +831,11 @@ static inline int math_atan2(int y, int x) {
             int mid = (lo + hi) / 2;
             if (gba_sin(mid) * ax >= gba_cos(mid) * ay) hi = mid; else lo = mid;
         }
-        deg = hi;
+        /* La dichotomie rend le premier degré PASSANT (arrondi vers le haut) ; on garde
+           du couple lo/hi celui dont le produit croisé est le plus proche de zéro. */
+        int err_lo = math_abs(gba_sin(lo) * ax - gba_cos(lo) * ay);
+        int err_hi = math_abs(gba_sin(hi) * ax - gba_cos(hi) * ay);
+        deg = (err_lo < err_hi) ? lo : hi;
     }
     if (x >= 0 && y >= 0) return deg;
     if (x <  0 && y >= 0) return 180 - deg;
@@ -938,51 +932,6 @@ static inline void camera_follow(Vec2 target, int mx, int my) {
     if (ty - cam_y > SCREEN_H - my)   cam_y = ty - (SCREEN_H - my);
 }
 
-/* Envoi d'event à tous les actors actifs (G_ACTOR_COUNT défini dans runtime_api.h) */
-/* La fn C cible (event_handler) est appelée si l'actor est actif. */
-/* broadcast("on_receive", 42) → tous les on_receive reçoivent (0, 42) */
-/* Implémenté comme macro pour éviter les pointeurs de fonction sur GBA. */
-/* Usage codegen : broadcast(tag, value) — résolu statiquement dans main.c. */
-/* Note : broadcast est résolu directement dans le codegen de chaque scène. */
-
-/* (`tile_solid_at` a été retirée : elle répondait « il y a quelque chose ici »
-   sans distinguer un bloc plein d'une pente, ce qui n'a plus de sens depuis que
-   la résolution connaît la géométrie. Son dernier appelant était
-   `actor_on_ground`, et aucune entrée de l'API Lua ne la citait. Un script qui
-   veut inspecter la carte lit `collision_box.get_tile`.) */
-
-/* Layers BG vivants — définis dans main.c via GBA_ENGINE_IMPL (gba_engine.h).
-   `bg` = bg_slot 0-3 ; tx/ty en tuiles dans la map du layer. */
-
-/* Windows — pochoirs par région d'écran (r : 0=WIN0, 1=WIN1, 2=fenêtre-objet,
-   3=extérieur). Ne dessinent rien : autorisent ou non l'affichage. */
-
-/* Texte — le texte vit sur LE layer d'UI de la scène (Scene.text_bg) : les
-   glyphes sont chargés dans le charblock de ce layer, d'où l'absence de
-   paramètre `layer`. tx/ty en tuiles. `n` = nombre de caractères révélés
-   (machine à écrire) ; le rythme appartient au script. */
-/* GRAMMAIRE : position ou conteneur d'abord, contenu ensuite — même ordre qu'en
-   Lua (cf. api.py, section Texte). */
-/* Rendu dans une zone dessinée dans le canvas de scène : elle porte position,
-   largeur de coupe, alignement et police. Remplace `text_draw_box`, dont la
-   géométrie vivait dans le script (donc invisible dans l'éditeur).
-
-   ATTENTION — cette liste DOUBLE celle de `gba_engine.h` : les scènes et les
-   actors sont des unités de compilation distinctes qui n'incluent pas le moteur.
-   Une fonction déclarée là-bas et oubliée ici passe le checker, s'émet en C, et
-   échoue au `make` sur un « implicit declaration » qui ne dit rien de la cause.
-   `validate_project` compare donc les deux listes plutôt que de compter sur
-   la vigilance. */
-/* Groupe LECTURE — état d'un texte à tempo dans sa zone. */
-
-/* Langue (ROADMAP v0.9, phase 4) — même découpe que text_set_font juste
-   au-dessus : implémentation unique dans gba_engine.h (GBA_ENGINE_IMPL),
-   redéclarée ici en `extern` pour les unités de compilation qui n'incluent
-   pas le moteur. */
-
-/* Images d'interface — un sprite à état posé sur la mise en page. Rien pour
-   créer ni déplacer : la géométrie est authorée, seul l'ÉTAT est au script. */
-
 /* Visibilité — commune aux trois types d'élément (texte, conteneur, image) :
    `ui.get("nom")` résout au NOM d'élément DIRECTEMENT en `UIELEM_*` (cf.
    ui_element_constant), donc AUCUN appel de fonction pour `ui.get` lui-même
@@ -1014,30 +963,6 @@ extern int  ui_image_dy(int img);
 static inline Vec2 ui_image_offset(int img) { return (Vec2){ ui_image_dx(img), ui_image_dy(img) }; }
 static inline void ui_image_set_offset(int img, Vec2 v) { ui_image_move(img, v.x, v.y); }
 
-/* ── Listes d'interface (ROADMAP v0.22) ───────────────────────────
-   La NAVIGATION d'un menu, et rien d'autre : le moteur suit un index, le
-   script écrit ce que chaque rangée affiche. `list.row(...)` rend la zone de
-   texte d'une rangée, à passer à `text_draw_in` — un item est une ligne de
-   donnée, pas un objet d'interface. */
-/* La main, pas l'affichage : une liste inactive reste dessinée et garde son
-   index. C'est ce qui permet un menu et son sous-menu à l'écran ensemble. */
-
-/* Blending — `side` 0 = le dessus (ce qui est mélangé), 1 = le dessous (ce
-   avec quoi, situé derrière). Modes : 0 aucun, 1 alpha, 2 vers le blanc,
-   3 vers le noir. */
-
-/* Palettes au runtime — remplace les seize couleurs d'une banque matérielle.
-   Là où le mélange ci-dessus agit sur un CALQUE entier et seulement vers le
-   blanc ou le noir, une banque ne concerne que les tuiles qui la citent : on
-   peut refroidir un décor en gardant ses lanternes allumées. Les deux pools
-   sont physiquement distincts, d'où deux fonctions. */
-
-/* Sauvegarde — écrit ou relit les variables globales marquées persistantes
-   dans l'emplacement `slot`. Rendent 0 si l'emplacement n'existe pas, et
-   save_read 0 aussi si ce qui s'y trouve n'est pas relisible (marque, version
-   ou somme de contrôle) : le jeu doit pouvoir distinguer « pas de partie » de
-   « partie chargée » sans deviner. Lua appelle save_read `save.load` — cf.
-   save_read_var juste dessous pour ce que `save.read` désigne côté Lua. */
 /* save:read(slot, "nom") côté Lua (ROADMAP v0.22) : la valeur d'UNE variable
    persistante dans un emplacement, sans toucher aux globales de la partie en
    cours — contrairement à save_read ci-dessus. `idx` est un GLOBAL_*, résolu
@@ -1045,11 +970,6 @@ static inline void ui_image_set_offset(int img, Vec2 v) { ui_image_move(img, v.x
    par accès pointé — chantier global/const). */
 extern int save_read_var(int slot, int idx);
 
-
-/* Fonctions texte HUD — définies dans main.c via GBA_ENGINE_IMPL (wrappers TTE) */
-/* draw_printf / draw_clear retirés avec libtonc TTE — cf. gba_engine.h.
-   Remplacements : text_draw (libellé, depuis la table) et text_draw_num
-   (valeur). */
 
 /* Y a-t-il un sol sous les pieds ?
 

@@ -278,10 +278,10 @@ Une **Liste** de l'interface gère déjà sa navigation. Le script lit l'éléme
 
 ## Quand le Build signale un problème
 
-Le panneau de build affiche chaque erreur avec le fichier et la ligne quand elle est connue :
+Le panneau de build affiche chaque erreur avec le fichier et la ligne quand elle est connue (les messages sont en anglais) :
 
 ```text
-[error] Ball.lua, ligne 12 : `repeat … until` n'existe pas. Utilisez `while`.
+[error] Ball.lua:12: `repeat … until` does not exist: the only conditional loop is `while`, tested at the top.
 ```
 
 Une **erreur** arrête le build. Un **avertissement** le laisse continuer, mais signale un résultat probablement inattendu, par exemple un son inexistant ou une valeur hors de sa plage. La [référence de scripting](scripting-reference.md) détaille les écritures disponibles et leurs équivalents.

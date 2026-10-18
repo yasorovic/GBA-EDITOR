@@ -32,6 +32,8 @@ Cf. docs/asset-finder.md pour l'état des lieux et la décision.
 """
 from __future__ import annotations
 
+import os
+
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 from dataclasses import dataclass, field
@@ -304,19 +306,23 @@ def dir_nodes(attr: str, suffixes: tuple[str, ...], prune_empty: bool = False
     portant leur `Path`. `prune_empty` : un dossier sans aucune feuille n'est pas montré (on parcourt tout
     `assets/` pour n'y montrer que les scripts)."""
     def walk(directory: Path) -> list[AssetNode]:
+        # `scandir` : le type de chaque entrée vient avec le listing (un `stat` par fichier avec `Path.is_dir`).
         try:
-            entries = sorted(directory.iterdir(),
-                             key=lambda p: (not p.is_dir(), p.name.lower()))
+            with os.scandir(directory) as scan:
+                entries = sorted(((e, e.is_dir()) for e in scan),
+                                 key=lambda pair: (not pair[1], pair[0].name.lower()))
         except (OSError, PermissionError):
             return []
         out: list[AssetNode] = []
-        for entry in entries:
-            if entry.is_dir():
-                children = walk(entry)
+        for entry, is_dir in entries:
+            if is_dir:
+                children = walk(Path(entry.path))
                 if children or not prune_empty:
                     out.append(AssetNode(name=entry.name, children=children))
-            elif entry.suffix in suffixes:
-                out.append(AssetNode(name=entry.name, obj=entry))
+            else:
+                path = Path(entry.path)
+                if path.suffix in suffixes:
+                    out.append(AssetNode(name=entry.name, obj=path))
         return out
 
     def build(project) -> list[AssetNode]:

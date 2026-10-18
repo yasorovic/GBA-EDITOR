@@ -430,3 +430,42 @@ def test_une_camera_inconnue_est_refusee_a_la_comparaison():
     errs, _ = _lua_scene("function on_update(self)\n"
                          "  if camera.name == \"Nulle\" then self:show() end\nend\n")
     assert errs, "une caméra qui n'existe pas doit être refusée à la compilation"
+
+
+def test_c_la_camera_reste_dans_un_monde_plus_etroit_que_l_ecran(sortie_sonde):
+    """Régression : bornes < écran => `hi < lo`, et le second clamp poussait la
+    caméra à gauche/au-dessus du monde."""
+    assert sortie_sonde["cam_large"] == [170, 20]       # 10+400-240, y borné à 20
+    assert sortie_sonde["cam_etroit_haut"] == [10, 20]  # collée au bord
+    assert sortie_sonde["cam_etroit_bas"] == [10, 20]
+
+
+def test_c_une_division_par_zero_donne_zero_et_move_to_ignore_une_vitesse_negative(sortie_sonde):
+    assert sortie_sonde["div2"] == [0, 3]
+    assert sortie_sonde["div3"] == [3, 0, 0]
+    assert sortie_sonde["move_sur_cible"] == [5, 5]
+    assert sortie_sonde["move_vitesse_negative"] == [5, 5]
+
+
+def test_c_atan2_arrondit_au_degre_le_plus_proche(sortie_sonde):
+    """Régression : la dichotomie rendait le degré passant, donc 1 pour 0,06°."""
+    assert sortie_sonde["atan2"] == [0, 45, 90, 180, 225, 271]
+
+
+def test_c_les_courbes_ont_leurs_bornes_et_leur_milieu(sortie_sonde):
+    assert sortie_sonde["ease_bornes"] == [10, 90, 10, 7]
+    assert sortie_sonde["ease_milieu"] == [20, 80, 50]
+
+
+def test_c_le_sinus_replie_la_table_sur_les_quatre_quadrants(sortie_sonde):
+    assert sortie_sonde["sin"] == [0, 128, 256, 128, -128, -256, -4, -128]
+    assert sortie_sonde["cos"] == [256, -256, 0]
+
+
+def test_c_wobble_demarre_a_moins_amount_finit_a_zero_et_survit_a_une_duree_nulle(sortie_sonde):
+    assert sortie_sonde["wobble"] == [350, 0, 0]
+
+
+def test_c_la_marge_de_suivi_est_bornee_a_la_moitie_de_l_ecran(sortie_sonde):
+    assert sortie_sonde["marge"] == [120, 0]
+    assert sortie_sonde["marge_y"] == [7, 80]

@@ -49,7 +49,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 
 from core.history import get_history, SetFieldCmd
-from ui.common.deferred_writes import schedule_save
+from ui.common.deferred_writes import schedule_save, schedule_unwatched
 from ui.common.theme import C
 from ui.common.labels import label
 from ui.common.asset_finder import AssetFinder
@@ -530,9 +530,9 @@ class TextEditorScreen(QWidget):
     # ── Persistance ───────────────────────────────────────────────
 
     def _persist(self):
-        """Écrit texts.json."""
+        """Planifie l'écriture de texts.json (fusionnée, une frappe par fichier réécrit) et prévient les autres écrans."""
         if self._project:
-            self._project.save_texts()
+            schedule_unwatched("save_texts", self._project.save_texts)
             from core.command_dispatcher import get_dispatcher
             get_dispatcher().notify_texts_changed()
 

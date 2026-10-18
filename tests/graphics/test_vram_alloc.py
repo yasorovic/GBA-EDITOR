@@ -287,3 +287,14 @@ def test_le_plan_reste_dans_la_vram_bg():
         for slot in slots:
             assert 0 <= lay.map_sbb[slot] < BLOCKS
             assert lay.map_sbb[slot] + map_blocks[slot] <= BLOCKS
+
+
+def test_text_filling_its_blocks_at_charblock_base_does_not_spill_into_next_block():
+    """Texte de 64 tuiles pile en base de charblock : décalé d'une tuile (tuile 0 libre),
+    il débordait sur le bloc 1, déjà occupé par une map."""
+    lay = scene_layout({1: 512, 2: 512, 3: 512}, {1: 1, 2: 1, 3: 4}, 0, 64)
+    maps = {b for slot, n in {1: 1, 2: 1, 3: 4}.items()
+            for b in range(lay.map_sbb[slot], lay.map_sbb[slot] + n)} | set(lay.ui_sbb.values())
+    first = lay.text_cbb * BLOCKS_PER_CBB * BLOCK_TILES + lay.text_base
+    text_blocks = set(range(first // BLOCK_TILES, (first + 63) // BLOCK_TILES + 1))
+    assert not text_blocks & maps

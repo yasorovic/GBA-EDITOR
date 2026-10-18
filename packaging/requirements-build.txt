@@ -1,0 +1,8 @@
+# Outils du build de distribution (Nuitka) — `pip install -r packaging/requirements-build.txt`.
+#
+# Version EXACTE, à la différence de requirements.txt : une nouvelle version de
+# Nuitka change ce qu'il embarque (cf. les notes de nuitka_build.py sur plugins/ et
+# qtawesome), et l'échec tombe alors après des heures de compilation, ou pire, passe
+# inaperçu. Pour monter de version : changer la ligne, lancer `release.yml` en
+# workflow_dispatch, et ne fusionner que si les deux plateformes passent leur smoke test.
+nuitka==4.2.2

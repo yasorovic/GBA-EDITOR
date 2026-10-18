@@ -52,12 +52,11 @@ CFLAGS    := $(ARCH) \
 LDFLAGS   := $(ARCH) -specs=gba.specs
 # libtonc retirée : elle ne servait qu'à TTE (display.print), sorti du workflow.
 LIBS      := -L$(DEVKITPRO)/libgba/lib \
-             -L$(DEVKITPRO)/maxmod/lib -lgba -lmm \
-             -Wl,--allow-multiple-definition
+             -L$(DEVKITPRO)/maxmod/lib -lgba -lmm
 
 TARGET    := rom
 
-.PHONY: all clean
+.PHONY: all clean FORCE
 
 all: $(TARGET).gba
 
@@ -71,16 +70,25 @@ $(TARGET).elf: $(OFILES) | $(BUILD)
 	$(LD) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 # Compilation depuis src/
-$(BUILD)/%.o: src/%.c Makefile | $(BUILD)
+$(BUILD)/%.o: src/%.c Makefile $(BUILD)/cflags.txt | $(BUILD)
 	$(CC) $(CFLAGS) -MMD -MP -c -o $@ $<
 
 # Compilation depuis grit_out/
-$(BUILD)/%.o: grit_out/%.c Makefile | $(BUILD)
+$(BUILD)/%.o: grit_out/%.c Makefile $(BUILD)/cflags.txt | $(BUILD)
 	$(CC) $(CFLAGS) -MMD -MP -c -o $@ $<
 
 # Assemblage soundbank (bin2s output)
 $(BUILD)/%.o: src/%.s Makefile | $(BUILD)
 	$(CC) $(ARCH) -MMD -MP -x assembler-with-cpp -c -o $@ $<
+
+# Les drapeaux de compilation, sous forme de fichier : make compare des DATES, pas des
+# options, donc passer de debug à release (-DGBA_DEBUG_BUILD vient de l'environnement)
+# laissait les anciens .o en place. Le fichier n'est réécrit que si les drapeaux
+# changent ; chaque .o en dépend, et change de date avec lui.
+$(BUILD)/cflags.txt: FORCE | $(BUILD)
+	@[ "$$(cat $@ 2>/dev/null)" = '$(CFLAGS)' ] || echo '$(CFLAGS)' > $@
+
+FORCE:
 
 # Créer obj/ si nécessaire
 $(BUILD):

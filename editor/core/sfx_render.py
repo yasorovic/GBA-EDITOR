@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import random
+import shutil
 import tempfile
 import wave
 from pathlib import Path
@@ -132,6 +133,14 @@ def varied_pitch(sfx, rng=random) -> float:
     return int(getattr(sfx, "pitch", 100) or 100) * (1000 + tenths) / 1000
 
 
+_PREVIEW_DIR = "backstage_sfx_preview"
+
+
+def clear_preview_cache() -> None:
+    """Vide les rendus d'aperçu : chaque réglage (et chaque hauteur tirée au hasard) en laisse un, que rien d'autre ne retire."""
+    shutil.rmtree(Path(tempfile.gettempdir()) / _PREVIEW_DIR, ignore_errors=True)
+
+
 def preview_file(src: Path, sfx, settings) -> Path:
     """Le fichier que l'aperçu doit jouer pour que l'oreille entende ce que la ROM portera : `src` lui-même quand l'effet
     n'est ni découpé ni ré-échantillonné ni changé de hauteur, sinon son rendu (cf. `write_sfx`), rangé dans le dossier
@@ -151,7 +160,7 @@ def preview_file(src: Path, sfx, settings) -> Path:
         if width in WAV_BITS_OK_BYTES and not is_edited(sfx) and pitch == 100 and (target <= 0 or target == rate):
             return src
         stamp = f"{src.resolve()}|{src.stat().st_mtime_ns}|{trim_of(sfx)}|{fade_in_of(sfx)}|{fade_out_of(sfx)}|{target}|{pitch}"
-        directory = Path(tempfile.gettempdir()) / "backstage_sfx_preview"
+        directory = Path(tempfile.gettempdir()) / _PREVIEW_DIR
         out = directory / f"{hashlib.sha1(stamp.encode('utf-8')).hexdigest()[:16]}.wav"
         if not out.is_file() and write_sfx(src, out, sfx, target, pitch / 100) is None:
             return src

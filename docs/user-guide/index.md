@@ -23,15 +23,15 @@ après la création d'une scène, et un script peut être ajouté dès que l'act
 
 À l'ouverture, l'écran d'accueil propose vos projets récents et des modèles.
 
-1. Cliquez sur **Créer un projet**.
+1. Cliquez sur **New project**.
 2. Donnez-lui un nom et choisissez son emplacement.
 3. Ouvrez-le : le **Scene Manager** devient l'espace de travail principal.
 
-Le projet de démonstration Pong, disponible dans l'onglet des modèles, est un bon point de
+Le projet de démonstration Pong Advanced, disponible dans l'onglet des modèles, est un bon point de
 départ pour observer une scène, un sprite, un script et du son déjà reliés.
 
-Pour reprendre un projet existant, utilisez **Charger** depuis l'accueil ou **Fichier → Ouvrir
-un projet**. Ouvrez toujours le dossier racine du projet, pas un sous-dossier `assets`.
+Pour reprendre un projet existant, utilisez **Browse…** depuis l'accueil ou **File → Open
+project**. Ouvrez toujours le dossier racine du projet, pas un sous-dossier `assets`.
 
 ## Se repérer dans l'éditeur
 
@@ -54,7 +54,7 @@ panneaux se redimensionnent en faisant glisser leurs séparateurs.
 
 Quelques raccourcis utiles : `Ctrl+S` enregistre, `Ctrl+Z` annule, `Ctrl+Y` rétablit et `F5`
 lance **Build & Run**. Les autres raccourcis peuvent être consultés et personnalisés dans
-**Fichier → Réglages → Raccourcis**.
+**File → Settings → Shortcuts**.
 
 ## Créer, importer, modifier : trois gestes distincts
 
@@ -82,9 +82,9 @@ projet : l'éditeur peut ainsi vérifier le format et préparer les métadonnée
 | --- | --- | --- |
 | Une planche de personnages ou d'objets en PNG | **Sprites** | Cliquez sur **+**, puis choisissez le PNG. Définissez ensuite la taille des frames et les animations. |
 | Un décor, une image d'interface ou une planche animée PNG | **Backgrounds** | Utilisez le **+** de la section correspondante : décor, interface ou animation. |
-| Une palette `.gpl`, `.pal` ou une liste de couleurs | **Palettes** | Cliquez sur **+**, puis **Importer**. |
-| Un effet sonore WAV ou un morceau tracker | **Sound** | Créez l'effet ou la piste avec **+**, sélectionnez-le, puis utilisez **Importer** dans l'inspecteur. |
-| Une police PNG ou `.fnt` | **Text** | Déposez le fichier dans `assets/fonts/` du projet ; l'éditeur le détecte et le rend disponible. |
+| Une palette `.gpl`, `.pal` ou une liste de couleurs | **Palettes** | Cliquez sur **+**, puis **Import**. |
+| Un effet sonore WAV ou un morceau tracker | **Sound** | Créez l'effet ou la piste avec **+**, sélectionnez-le, puis utilisez **Import** dans l'inspecteur. |
+| Une police PNG, `.fnt`, `.ttf` ou `.otf` | Onglet **Disk** | Importez le fichier (**Import…**), puis faites un clic droit dessus et choisissez **Create** : un fichier déposé dans le projet n'est pas une police tant que vous ne l'avez pas créée. |
 
 Après un import, sélectionnez la ressource dans sa liste : l'inspecteur indique ce qui manque
 éventuellement et les réglages à vérifier. Un avertissement de palette, de format ou de budget
@@ -104,7 +104,7 @@ l'approche ou au dépassement d'une limite : prenez-les comme un tableau de bord
 
 Quand votre scène contient au moins ce que vous souhaitez tester, sauvegardez et cliquez sur
 **Build & Run**. L'éditeur génère la ROM puis l'ouvre dans mGBA, si devkitPro et mGBA sont
-configurés. L'écran d'accueil et **Fichier → Réglages** indiquent où les renseigner si besoin.
+configurés. L'écran d'accueil et **File → Settings** indiquent où les renseigner si besoin.
 
 ## Continuer
 

@@ -149,6 +149,7 @@ def test_retired_editor_focus_is_ignored_after_refresh(entries, grouped):
     old_entry = entry(panel, first)
     old_row = table._row_of(first)
     old_header = table._number_groups[0][1] if grouped else None
+    table._signature_shown = None     # une structure inchangée se met à jour en place : on force la reconstruction
     panel.refresh()
     assert sip.isdeleted(old_row)
     # Qt garde encore l'ancien widget en vie jusqu'au DeferredDelete.
@@ -397,3 +398,26 @@ def test_dragging_a_page_grip_reorders_pages_by_renaming_their_keys(entries, qap
     get_history().undo()
     qapp.processEvents()
     assert (first.key, second.key, third.key) == ('Main_Page01', 'Main_Page02', 'Main_Page03')
+
+
+def test_reordering_pages_keeps_the_widgets_and_swaps_their_entries(entries):
+    panel, project, first, second = entries
+    put(first, 'Dialogue', 'Page01')
+    put(second, 'Dialogue', 'Page02')
+    adopt(project, first, second)
+    panel.refresh()
+    table = panel._table
+    group = table._number_groups[0][0]
+    rows = [group.child(i) for i in range(group.childCount())]
+    widgets = [table._entry_of(row) for row in rows]
+    from core.text_sequences import group_texts, reordered_keys
+    pages = group_texts(project, table._number_groups[0][1].prefix)
+    project.rename_text_keys(reordered_keys(pages, 0, 1))
+    panel.refresh()
+    # mêmes lignes, mêmes widgets, entrées échangées
+    assert [group.child(i) for i in range(2)] == rows
+    assert [table._entry_of(row) for row in rows] == widgets
+    now = [row.data(0, 256) for row in rows]
+    assert now == group_texts(project, table._number_groups[0][1].prefix)
+    assert [w._text for w in widgets] == now
+    assert [w.edit.toPlainText() for w in widgets] == [t.content for t in now]

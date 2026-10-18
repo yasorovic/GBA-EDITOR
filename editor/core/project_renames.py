@@ -179,12 +179,19 @@ class ProjectRenameMixin:
             refs = self.rename_lua_refs(DOMAIN_PREFAB, old_name, new_name)
         self._notify_renamed("Prefab", old_name, new_name, refs)
 
-    def rename_actor(self, actor, new_name: str, scene: Optional[Scene] = None):
+    def rename_actor(self, actor, new_name: str, scene: Optional[Scene] = None) -> bool:
         """Actor placé dans une scène (pas un template de prefab — cf.
-        rename_prefab). `scene` est sauvegardée si fournie."""
+        rename_prefab). `scene` est sauvegardée si fournie.
+
+        Rend False, sans rien changer, pour un nom vide, inchangé ou déjà pris dans la scène de l'acteur : le nom
+        est la clé de `actor:get("…")`, deux acteurs du même nom rendraient les scripts ambigus (même refus
+        silencieux que `rename_camera`)."""
         new_name = new_name.strip()
         if not new_name or new_name == actor.name:
-            return
+            return False
+        owner = scene or next((s for s in self.scenes if any(a is actor for a in s.actors)), None)
+        if owner is not None and any(a is not actor and a.name == new_name for a in owner.actors):
+            return False
         old_name = actor.name
         with self._renaming():
             refs = self.rename_lua_refs(DOMAIN_ACTOR, old_name, new_name)
@@ -194,6 +201,7 @@ class ProjectRenameMixin:
             if scene is not None:
                 self.save_scene(scene)
         self._notify_renamed("Actor", old_name, new_name, refs)
+        return True
 
     def _rename_actor_ref_exports(self, old_name: str, new_name: str) -> dict:
         """Un export `actor_ref` choisi dans l'inspecteur (menu déroulant, cf.

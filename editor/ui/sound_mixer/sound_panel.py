@@ -33,7 +33,9 @@ from ui.sound_mixer.music_editor import MusicEditor
 from ui.sound_mixer.sfx_editor import SfxEditor
 from ui.sound_mixer.waveform_view import peak_envelope
 from core.music_structure import is_wav_asset
+from core.sfx_render import clear_preview_cache
 from ui.sound_mixer.sound_budget_bar import SoundBudgetBar
+from ui.sound_mixer.sound_commands import RenameSoundCmd
 from ui.common.asset_finder import AssetFinder
 from ui.common.asset_kinds import SFX, MUSIC, JINGLES
 from core.keybindings import bind
@@ -232,10 +234,25 @@ class _AssetInspectorBase(QWidget):
         if new_name and new_name != self._asset.name:
             # Passe par le projet (pas le ResourceStore brut) : il met aussi
             # à jour les sfx:play()/music:play() des scripts.
-            get_deferred_writes().flush()           # un réglage en attente s'écrit sous l'ancien nom, avant le déménagement
-            with get_dispatcher().suspended():
-                self._project.rename_sound(self._asset, new_name)
-            self.changed.emit()
+            taken = self._store(self._project).get(new_name)
+            if taken is not None and taken is not self._asset:
+                self._restore_header_name()         # nom déjà pris : refus sans fenêtre, le champ reprend l'ancien nom
+                return
+            try:
+                get_history().push(RenameSoundCmd(self._project, self._asset, new_name, self._after_rename))
+            except FileExistsError:                 # fichier voisin de même nom (casse comprise, sous Windows)
+                self._restore_header_name()
+
+    def _after_rename(self, asset):
+        """Après un renommage, ou son annulation : l'en-tête n'est remis à jour que si l'inspecteur montre cet asset."""
+        if asset is self._asset:
+            self._restore_header_name()
+        self.changed.emit()
+
+    def _restore_header_name(self):
+        self._blocking = True
+        self._header.set_header(self._HEADER_KIND, label(self._HEADER_LABEL), self._asset.name)
+        self._blocking = False
 
     def _on_loop(self, v):
         if self._blocking or not self._asset: return
@@ -682,6 +699,7 @@ class SoundMixerScreen(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        clear_preview_cache()                  # les rendus d'aperçu des sessions précédentes ne servent plus
         self._project: Optional[Project] = None
         self._weights: Optional[dict] = None   # poids du dernier build, à la demande
         self._last_selected = None             # cf. _on_state_selected
@@ -1115,7 +1133,13 @@ class SoundMixerScreen(QWidget):
                 self._seek_to_cue()
             return
         if on:
-            box =self._music_tab.current()
+            box = self._music_tab.current()
+            # Panneau des boîtes caché : jouer une boîte que l'auteur ne voit pas serait un son sans cause visible.
+            if self._machines_panel.isHidden():
+                self._btn_rom.blockSignals(True)
+                self._btn_rom.setChecked(False)
+                self._btn_rom.blockSignals(False)
+                return
             if box is None or not box.states:
                 # Décoché sans signal : le rappel de décochage remettrait « IDLE »
                 # par-dessus le message.
@@ -1231,6 +1255,8 @@ class SoundMixerScreen(QWidget):
         """
         if not self._project:
             return
+        # Il lit les boîtes : sans leur panneau à l'écran, le chiffre décrirait des boîtes invisibles.
+        self._budget_bar.setVisible(not self._machines_panel.isHidden())
         limit = int(getattr(self._project.settings, "sound_channels", 8))
         self._budget_bar.update_boxes(
             self._project, self._music_tab.current(), self._jingle_tab.current(), limit)
@@ -1250,6 +1276,7 @@ class SoundMixerScreen(QWidget):
         if self._btn_rom.isChecked():
             self._btn_rom.setChecked(False)
         self._last_selected = None
+        self._music_editor.flush_pending()      # avant le changement de projet : l'écriture en attente vise l'ancien
         self._project = project
         self._show_music_editor(None)
         self._finder.load_project(project)

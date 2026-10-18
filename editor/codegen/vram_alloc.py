@@ -166,6 +166,12 @@ def scene_layout(slots: dict, map_blocks: dict, text_bg: int,
     n_text = tiles_to_blocks(text_tiles)
     if n_text:
         pos = _free_run_high(occupied, 0, BLOCKS, n_text)
+        # Posé pile à la base d'un charblock, le texte est décalé d'une tuile (voir plus bas) :
+        # s'il remplit ses blocs, il lui en faut un de plus.
+        if (pos is not None and pos % BLOCKS_PER_CBB == 0
+                and text_tiles % BLOCK_TILES == 0):
+            n_text += 1
+            pos = _free_run_high(occupied, 0, BLOCKS, n_text)
         if pos is None:
             return legacy
         for b in range(pos, pos + n_text):

@@ -186,6 +186,7 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
     _check_duplicate_behaviors(ctx)
     _check_window_regions(ctx)
     _check_actor_name_collisions(ctx)
+    _check_asset_symbol_collisions(ctx)
     _check_actor_budget(ctx)
     _check_data_column_types(ctx)
     _check_data_tables(ctx)
@@ -1531,6 +1532,28 @@ def _check_actor_name_collisions(ctx: ValidationContext):
                     f"file actor_{c_sym(scene.name)}_{s}.c, hence the same behaviour. Rename one of "
                     "them.")
             seen.setdefault(s, actor.name)
+
+
+def _check_asset_symbol_collisions(ctx: ValidationContext):
+    """Deux assets de même nature dont les noms donnent le MÊME symbole C.
+
+    « My Scene » et « My_Scene » sont deux noms, un seul identifiant : ils émettent les
+    mêmes `sprite_X`, `bg_X` ou `actor_<Scène>_*.c`. Sans ce contrôle l'éditeur de liens
+    garde le premier et tait l'autre, et la ROM montre l'image d'un asset à la place de
+    l'autre. Erreur, pas avertissement : la ROM sort, mais fausse, sans un mot."""
+    from codegen.c_names import sym as c_sym
+    p = ctx.project
+    for kind, assets in (("scene", p.scenes), ("sprite", p.sprites),
+                         ("background", p.backgrounds), ("prefab", p.prefabs)):
+        seen: dict[str, str] = {}
+        for asset in assets:
+            s = c_sym(asset.name)
+            if s in seen:
+                ctx.error(None,
+                    f"The {kind}s \"{seen[s]}\" and \"{asset.name}\" give the same C symbol `{s}` — "
+                    "one would replace the other in the ROM. Rename one of them.")
+            else:
+                seen[s] = asset.name
 
 
 def _sfx_trim_problem(sfx, path) -> str | None:

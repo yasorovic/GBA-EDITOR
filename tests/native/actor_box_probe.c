@@ -51,6 +51,8 @@ int collision_map_tile(int px, int py) { return px * 10 + py; }
 int g_cam_active = 0;
 int g_cam_margin_x = 0, g_cam_margin_y = 0;
 int g_cam_frame_w = 240, g_cam_frame_h = 160;
+int cam_x = 0, cam_y = 0;
+int g_bounds_x = 0, g_bounds_y = 0, g_bounds_w = 0, g_bounds_h = 0;
 
 /* Le moteur (gba_engine.h) n'est pas compilé ici : substituts minimaux. La vitesse d'un fond
    est un vrai tableau (c'est elle que la conversion pourcent ↔ Q8 doit round-tripper) ; les
@@ -253,5 +255,51 @@ int main(void) {
     layer_set_scroll_speed(2, -20);
     printf("speed_negative %d\n", layer_get_scroll_speed(2));
     printf("speed_voisin %d\n", layer_get_speed(3));   /* jamais écrit : la vitesse d'un autre n'a pas bougé */
+
+    /* Bornes de caméra : monde large (bornage normal), puis monde plus étroit que
+       l'écran (la caméra reste collée au bord, jamais en dehors). */
+    g_bounds_x = 10; g_bounds_y = 20; g_bounds_w = 400; g_bounds_h = 300;
+    cam_x = 999; cam_y = -5;
+    camera_apply_bounds();
+    printf("cam_large %d %d\n", cam_x, cam_y);
+    g_bounds_w = 100; g_bounds_h = 50;
+    cam_x = 500; cam_y = 500;
+    camera_apply_bounds();
+    printf("cam_etroit_haut %d %d\n", cam_x, cam_y);
+    cam_x = -500; cam_y = -500;
+    camera_apply_bounds();
+    printf("cam_etroit_bas %d %d\n", cam_x, cam_y);
+    /* Divisions par zéro : une composante nulle donne 0, jamais une trappe. */
+    vec("div2", vec2_div((Vec2){ 10, 7 }, (Vec2){ 0, 2 }));
+    Vec3 d3 = vec3_div((Vec3){ 9, 8, 7 }, (Vec3){ 3, 0, 0 });
+    printf("div3 %d %d %d\n", d3.x, d3.y, d3.z);
+    /* actor_move_to : vitesse négative sur la cible (dist == 0), puis loin de la cible. */
+    Actor m; m.x = 5 << 8; m.y = 5 << 8;
+    actor_move_to(&m, (Vec2){ 5, 5 }, -3);
+    printf("move_sur_cible %d %d\n", m.x >> 8, m.y >> 8);
+    actor_move_to(&m, (Vec2){ 50, 5 }, -3);
+    printf("move_vitesse_negative %d %d\n", m.x >> 8, m.y >> 8);
+    /* atan2 : arrondi au degré le plus proche (et non vers le haut), quadrants conservés. */
+    printf("atan2 %d %d %d %d %d %d\n", math_atan2(1, 1000), math_atan2(100, 100),
+           math_atan2(100, 0), math_atan2(0, -5), math_atan2(-100, -100), math_atan2(-100, 1));
+    /* Courbes : bornes (num hors [0, den], den nul) puis milieu de chaque courbe. */
+    printf("ease_bornes %d %d %d %d\n", math_ease(10, 90, -3, 10, EASE_IN), math_ease(10, 90, 12, 10, EASE_IN),
+           math_ease(10, 90, 5, 0, EASE_IN), math_lerp(7, 99, 3, 0));
+    printf("ease_milieu %d %d %d\n", math_ease(0, 100, 5, 10, EASE_IN), math_ease(0, 100, 5, 10, EASE_OUT),
+           math_ease(0, 100, 5, 10, EASE_IN_OUT));
+    /* Sinus : table 0..90° repliée sur les quatre quadrants, angles négatifs compris. */
+    printf("sin %d %d %d %d %d %d %d %d\n", math_sin(0), math_sin(30), math_sin(90), math_sin(150),
+           math_sin(210), math_sin(270), math_sin(359), math_sin(-30));
+    printf("cos %d %d %d\n", math_cos(0), math_cos(180), math_cos(-90));
+    /* Wobble : départ à -amount (350°), retombe à 0 en fin de durée, durée nulle sans division. */
+    actor_wobble(a, 0, 30, 10);   int w0 = actor_get_sprite_rotation(a);
+    actor_wobble(a, 30, 30, 10);  int w1 = actor_get_sprite_rotation(a);
+    actor_wobble(a, 0, 0, 10);    int w2 = actor_get_sprite_rotation(a);
+    printf("wobble %d %d %d\n", w0, w1, w2);
+    /* Marge de suivi : bornée à la demi-largeur / demi-hauteur, jamais négative. */
+    camera_set_margin((Vec2){ 500, -3 });
+    printf("marge %d %d\n", g_cam_margin_x, g_cam_margin_y);
+    camera_set_margin((Vec2){ 7, 500 });
+    printf("marge_y %d %d\n", g_cam_margin_x, g_cam_margin_y);
     return 0;
 }

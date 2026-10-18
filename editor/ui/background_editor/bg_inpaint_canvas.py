@@ -419,10 +419,7 @@ class BgInpaintController:
         if not cmds or not self.ready:
             return
         cmd = cmds[0] if len(cmds) == 1 else MacroCmd(cmds, "Gomme")
-        h = get_history()
-        h._undo.append(cmd)
-        h._redo.clear()
-        h.changed.emit()
+        get_history().push_executed(cmd)
         self._persist()
 
     # ── Peinture de tiles ───────────────────────────────────────

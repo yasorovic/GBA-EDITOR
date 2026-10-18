@@ -16,7 +16,9 @@ L'ajout d'une TRANSITION ou d'une ACTION, lui, reste générique
 """
 from __future__ import annotations
 
+from core.command_dispatcher import get_dispatcher
 from core.history import Command
+from ui.common.deferred_writes import get_deferred_writes
 
 
 class MoveMusicNodesCmd(Command):
@@ -253,3 +255,32 @@ class RenameMusicStateCmd(Command):
 
     def undo(self):
         self._rename(self._new, self._old)
+
+
+class RenameSoundCmd(Command):
+    """Renommage d'un effet, d'une musique ou d'un jingle, et de tout ce qui le cite (scripts, scènes, boîtes, repères).
+
+    Passe par `Project.rename_sound`, qui réécrit les références : défaire renomme dans l'autre sens, avec les mêmes
+    réécritures. `refresh_fn(asset)` remet l'écran à jour après chaque sens.
+    """
+
+    def __init__(self, project, asset, new_name: str, refresh_fn=None):
+        self._project = project
+        self._asset = asset
+        self._old, self._new = asset.name, new_name
+        self.label = f"Renommer {self._old} en {new_name}"
+        self._refresh = refresh_fn
+
+    def _rename(self, name: str):
+        get_deferred_writes().flush()           # un réglage en attente s'écrit sous l'ancien nom, avant le déménagement
+        with get_dispatcher().suspended():
+            self._project.rename_sound(self._asset, name)
+        if self._refresh:
+            self._refresh(self._asset)
+
+    def execute(self):
+        self._rename(self._new)
+
+    def undo(self):
+        self._rename(self._old)
+

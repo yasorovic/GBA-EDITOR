@@ -11,6 +11,7 @@ départagent pas : c'est une erreur de build (`core.validator`).
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
 
 BEHAVIOR_MARKER = "-- @behavior"
@@ -27,9 +28,34 @@ def is_behavior(path) -> bool:
 
 
 def lua_files(project) -> list[Path]:
-    """Tous les `.lua` de `assets/`, à toute profondeur."""
+    """Tous les `.lua` de `assets/`, à toute profondeur.
+
+    Dans `lua_files_cached`, le parcours (plusieurs centaines de ms sur un gros `assets/`) n'est fait qu'une fois."""
+    memo = getattr(project, "_lua_files_memo", None)
+    if memo is not None:
+        if memo["files"] is None:
+            memo["files"] = _scan(project)
+        return list(memo["files"])
+    return _scan(project)
+
+
+def _scan(project) -> list[Path]:
     assets = project.assets_dir
     return sorted(assets.rglob("*.lua")) if assets.is_dir() else []
+
+
+@contextmanager
+def lua_files_cached(project):
+    """Le temps d'une opération qui ne crée ni ne supprime de script (renommage par lot, rafraîchissement qui suit),
+    `lua_files` ne parcourt `assets/` qu'une fois. Imbriqué, c'est le plus extérieur qui compte."""
+    if getattr(project, "_lua_files_memo", None) is not None:
+        yield
+        return
+    project._lua_files_memo = {"files": None}
+    try:
+        yield
+    finally:
+        project._lua_files_memo = None
 
 
 def behavior_files(project) -> list[Path]:

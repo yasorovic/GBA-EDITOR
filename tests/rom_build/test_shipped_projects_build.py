@@ -107,3 +107,32 @@ def test_une_demo_publique_s_ouvre_et_produit_une_rom(tmp_path, demo):
     root = tmp_path / demo.name
     shutil.copytree(demo, root, ignore=shutil.ignore_patterns("build"))
     _assert_rom(root, f"démo {demo.name}")
+
+
+@pytest.mark.skipif(os.name != "nt", reason="la limite de 260 caractères est celle des outils Windows")
+def test_un_projet_au_plus_pres_de_la_limite_windows_builde_pour_de_vrai(tmp_path):
+    """`path_too_long_message` estime le plus long chemin que le build écrit ; son calibrage
+    (`_BUILD_PATH_OVERHEAD`) ne vaut que si grit, gcc et make passent VRAIMENT juste en dessous
+    de la limite. Les autres tests de chemins n'ont pas d'outil : ils ne peuvent pas le dire."""
+    from codegen.rom_build import WINDOWS_PATH_LIMIT, _BUILD_PATH_OVERHEAD, path_too_long_message
+
+    starter_id = next(iter(_starters())).values[0]
+    source = tmp_path / "Neuf"
+    Project.create(source, "Neuf", starter_id).save()
+    probe = Project.open(source)
+    names = [x.name for coll in (probe.sprites, probe.backgrounds, probe.scenes, probe.prefabs)
+             for x in coll]
+    longest = max((len(n) for n in names), default=0)
+
+    # Le plus long chemin estimé vaut LIMITE - 1 : le plus profond que le contrôle laisse passer.
+    build_dir_length = WINDOWS_PATH_LIMIT - 1 - _BUILD_PATH_OVERHEAD - 2 * longest
+    parent_length = build_dir_length - len(os.sep + "build") - len(os.sep + "Neuf")
+    padding = parent_length - len(str(tmp_path)) - 1
+    assert padding >= 1, "le dossier temporaire est déjà trop profond pour ce test"
+    root = tmp_path / ("x" * padding) / "Neuf"
+    shutil.copytree(source, root)
+
+    assert len(str(Project.open(root).build_dir)) == build_dir_length
+    assert path_too_long_message(Project.open(root)) is None
+    _assert_rom(root, "projet à la limite de chemin Windows")
+

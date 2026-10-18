@@ -16,6 +16,8 @@ Règles de génération :
 """
 
 from __future__ import annotations
+
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -360,6 +362,39 @@ class CodegenContext:
 # Marqueur d'une ligne à remplacer, à la toute fin, par `#line <n> "<fichier .c>"`. Le numéro
 # n'est connu qu'une fois le texte final assemblé (l'état par instance est inséré après coup).
 _LINE_RESET = "/*@@line-reset@@*/"
+
+
+def _c_octal(data: bytes) -> str:
+    r"""Des octets en échappements octaux à trois chiffres : contrairement à `\x`, ils ne mangent pas le caractère suivant."""
+    return "".join(f"\\{b:03o}" for b in data)
+
+
+# Un échappement Lua, ou un `"` nu, ou tout autre caractère (laissé tel quel).
+_LUA_PIECE = re.compile(
+    r"\\(?:(?P<dec>\d{1,3})|x(?P<hex>[0-9A-Fa-f]{2})|u\{(?P<uni>[0-9A-Fa-f]+)\}|(?P<skip>z\s*)"
+    r"|(?P<nl>\r\n|\n\r|\n|\r)|(?P<other>.))|(?P<quote>\")", re.S)
+
+
+def _c_quoted(raw: str) -> str:
+    r"""Un littéral Lua (`ExprString.value`, gardé tel qu'écrit : `\n` et `\"` restent des échappements)
+    en chaîne C entre guillemets. Un `"` nu — dans une chaîne Lua à apostrophes — est à échapper. Les échappements que
+    Lua et C lisent différemment sont réécrits : `\65` est DÉCIMAL en Lua (octal en C), `\xHH`, `\u{…}` et `\z`
+    n'ont pas d'équivalent exact en C."""
+    def convert(m):
+        if m["dec"] is not None:
+            return _c_octal(bytes([int(m["dec"]) & 0xFF]))
+        if m["hex"] is not None:
+            return _c_octal(bytes([int(m["hex"], 16)]))
+        if m["uni"] is not None:
+            return _c_octal(chr(int(m["uni"], 16)).encode("utf-8", "surrogatepass"))
+        if m["skip"] is not None:
+            return ""
+        if m["nl"] is not None:
+            return "\\n"
+        if m["quote"] is not None:
+            return '\\"'
+        return m.group(0)
+    return '"' + _LUA_PIECE.sub(convert, raw) + '"'
 
 
 def _c_file_name(name: str) -> str:
@@ -1658,7 +1693,7 @@ class CodeGen:
             return f"0 /* not translated: {e.node} (line {e.line}) */"
         if isinstance(e, ExprString):
             # String littérale en dehors d'un appel API → chaîne C (rare en v1)
-            return f'"{e.value}"'
+            return _c_quoted(e.value)
         if isinstance(e, ExprName):
             # Une variable d'une séquence qui traverse une attente vit dans
             # l'état de cette séquence — et masque un éventuel homonyme de tête,
@@ -2062,7 +2097,7 @@ class CodeGen:
         if param.ptype == PARAM_STR_LITERAL:
             # Chaîne littérale → guillemets C, sans résolution de constante
             val = arg.value if isinstance(arg, ExprString) else self._expr(arg)
-            return f'"{val}"' if isinstance(arg, ExprString) else val
+            return _c_quoted(val) if isinstance(arg, ExprString) else val
         if not isinstance(arg, ExprString) or param.domain is None:
             return self._expr(arg)
         name = arg.value
@@ -2292,8 +2327,7 @@ class CodeGen:
         calls = []
         for arg in args:
             if isinstance(arg, ExprString):
-                escaped = arg.value.replace("\\", "\\\\").replace('"', '\\"')
-                calls.append(f'debug_write_str("{escaped}")')
+                calls.append(f"debug_write_str({_c_quoted(arg.value)})")
             else:
                 calls.append(f"debug_write_int({self._expr(arg)})")
         calls.append("debug_flush()")

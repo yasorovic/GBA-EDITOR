@@ -113,6 +113,10 @@ VIAddVersionKey "LegalCopyright"  "${PUBLISHER}"
 !define MUI_PAGE_CUSTOMFUNCTION_SHOW WelcomeShow
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_COMPONENTS
+; Le dossier choisi recoit un sous-dossier "Backstage" s'il ne se termine pas deja
+; ainsi (cf. DirectoryLeave) : la mise a jour et la desinstallation font un RMDir /r
+; sur $INSTDIR, qui ne doit jamais etre un dossier partage (D:\Games, Documents...).
+!define MUI_PAGE_CUSTOMFUNCTION_LEAVE DirectoryLeave
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 ; devkitPro et mGBA ne sont pas embarques : ce sont des cases a cocher qui les
@@ -167,6 +171,29 @@ LangString MSG_APP_RUNNING ${LANG_ENGLISH} "${APP_NAME} is running. Close it, th
 ;  - plugins\ est CONSERVE : c'est la que l'utilisateur depose les siens, et les
 ;    plugins livres y sont de toute facon recopies par la suite ;
 ;  - projets et configuration vivent hors de $INSTDIR (BackstageProjects, %APPDATA%).
+; Vide $INSTDIR SAUF plugins\ (les plugins de l'utilisateur). Utilise par la mise a
+; jour (CleanPreviousInstall) et par la desinstallation (un.PurgeInstallDir) : la meme
+; regle des deux cotes, sinon l'une des deux detruit ce que l'autre epargne.
+; Les etiquettes sont locales a la fonction qui l'appelle ; $0 et $1 sont a sauvegarder.
+!macro PurgeInstallDirKeepingPlugins
+  FindFirst $0 $1 "$INSTDIR\*.*"
+  clean_loop:
+    StrCmp $1 "" clean_end
+    StrCmp $1 "." clean_next
+    StrCmp $1 ".." clean_next
+    StrCmp $1 "plugins" clean_next
+    IfFileExists "$INSTDIR\$1\*.*" clean_isdir 0
+      Delete "$INSTDIR\$1"
+      Goto clean_next
+    clean_isdir:
+      RMDir /r "$INSTDIR\$1"
+    clean_next:
+    FindNext $0 $1
+    Goto clean_loop
+  clean_end:
+  FindClose $0
+!macroend
+
 Function CleanPreviousInstall
   Push $0
   Push $1
@@ -184,22 +211,7 @@ Function CleanPreviousInstall
     Abort
 
   clean_purge:
-  FindFirst $0 $1 "$INSTDIR\*.*"
-  clean_loop:
-    StrCmp $1 "" clean_end
-    StrCmp $1 "." clean_next
-    StrCmp $1 ".." clean_next
-    StrCmp $1 "plugins" clean_next
-    IfFileExists "$INSTDIR\$1\*.*" clean_isdir 0
-      Delete "$INSTDIR\$1"
-      Goto clean_next
-    clean_isdir:
-      RMDir /r "$INSTDIR\$1"
-    clean_next:
-    FindNext $0 $1
-    Goto clean_loop
-  clean_end:
-  FindClose $0
+  !insertmacro PurgeInstallDirKeepingPlugins
 
   clean_done:
   Pop $1
@@ -399,6 +411,17 @@ Function .onInit
   mgba_check_done:
 FunctionEnd
 
+; Une installation EXISTANTE garde son dossier (on ne la deplace pas en douce) ; une
+; nouvelle installation dans un dossier qui n'est pas le notre y ajoute "\Backstage".
+; Le mode silencieux (/S /D=...) ne passe pas par les pages : le dossier donne est pris tel quel.
+Function DirectoryLeave
+  StrCmp $OldVersion "" 0 directory_done
+  StrCpy $0 "$INSTDIR" "" -10
+  StrCmp $0 "\${APP_KEY}" directory_done
+  StrCpy $INSTDIR "$INSTDIR\${APP_KEY}"
+  directory_done:
+FunctionEnd
+
 ; Page d'accueil : le titre reste le meme, le texte dit ce que l'installateur a trouve
 ; (mise a jour, meme version, version plus recente). Suivant continue, Annuler quitte.
 Function WelcomeShow
@@ -477,6 +500,14 @@ LangString MSG_DOWNLOAD_FAILED ${LANG_ENGLISH} "the download failed (no connecti
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 
+Function un.PurgeInstallDir
+  Push $0
+  Push $1
+  !insertmacro PurgeInstallDirKeepingPlugins
+  Pop $1
+  Pop $0
+FunctionEnd
+
 Section "Uninstall"
   ; Garde-fou : $INSTDIR vient du registre ou d'une saisie utilisateur, et
   ; on s'apprete a faire un RMDir /r dessus. On ne touche a rien si le
@@ -488,7 +519,10 @@ Section "Uninstall"
 
   Delete "$DESKTOP\${APP_NAME}.lnk"
   RMDir /r "$SMPROGRAMS\${APP_NAME}"
-  RMDir /r "$INSTDIR"
+  ; plugins\ reste, comme a la mise a jour : l'utilisateur y depose les siens. RMDir
+  ; (sans /r) retire ensuite le dossier s'il est vide, et le laisse sinon.
+  Call un.PurgeInstallDir
+  RMDir "$INSTDIR"
 
   DeleteRegKey HKCU "${UNINST_KEY}"
   DeleteRegKey HKCU "Software\${APP_KEY}"

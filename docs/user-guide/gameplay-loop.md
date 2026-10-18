@@ -44,7 +44,7 @@ Dans `Victoire`, ajoutez un texte de félicitations et un script qui retourne ve
 
 ## 4. Ajouter une transition
 
-Ouvrez **Fichier → Réglages du projet** et choisissez une transition de scène, puis sa durée. Ce réglage s'applique à toutes les scènes. Vous pouvez aussi sélectionner une scène et remplacer ce choix dans son inspecteur, par exemple pour faire apparaître `Victoire` plus lentement.
+Ouvrez **Game → Project Settings** et choisissez une transition de scène, puis sa durée. Ce réglage s'applique à toutes les scènes. Vous pouvez aussi sélectionner une scène et remplacer ce choix dans son inspecteur, par exemple pour faire apparaître `Victoire` plus lentement.
 
 `scene:switch("Niveau1")` effectue le changement au début de la frame suivante ; la transition choisie masque ce rechargement.
 

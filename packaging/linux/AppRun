@@ -9,5 +9,8 @@ HERE="$(dirname "$(readlink -f "${0}")")"
 # LD_LIBRARY_PATH — la seule voie qui couvre les resolutions dlopen du plugin
 # (le DT_RUNPATH de l'exe ne s'applique pas transitivement). Sans ca, l'appli
 # meurt au demarrage : "Could not load the Qt platform plugin xcb".
+# La valeur d'origine est gardée : les outils lancés par l'éditeur (make, gcc, mGBA)
+# ne doivent pas charger NOS bibliothèques (cf. core/tool_process.py).
+export BACKSTAGE_ORIG_LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
 export LD_LIBRARY_PATH="$HERE/usr/bin${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 exec "$HERE/usr/bin/Backstage" "$@"

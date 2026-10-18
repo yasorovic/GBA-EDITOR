@@ -39,7 +39,7 @@ class DragGrip(QLabel):
         self._offset = QPoint()
         self.setFixedWidth(14)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setCursor(Qt.CursorShape.SizeVerCursor)
+        self.setCursor(Qt.CursorShape.OpenHandCursor)
         self.setStyleSheet(f"color:{C.TEXT_DIM};background:transparent;")
         self.setToolTip(label("uiinsp.text.page_drag"))
 
@@ -49,6 +49,7 @@ class DragGrip(QLabel):
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self._down = True
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
             self._press = event.globalPosition().toPoint()
             event.accept()
 
@@ -65,6 +66,7 @@ class DragGrip(QLabel):
     def mouseReleaseEvent(self, event):
         if self._down:
             self._down = False
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
             self._stop_ghost()
             self.released.emit(int(event.globalPosition().y()))
 

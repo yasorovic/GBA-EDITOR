@@ -238,6 +238,8 @@ def rename_in_text(text: str, domain: str, old: str, new: str) -> tuple[str, int
     """(texte réécrit, nombre de remplacements). Texte inchangé si le script
     ne parse pas — mieux vaut une référence non mise à jour, signalée par le
     checker au build, qu'un fichier corrompu par une substitution à l'aveugle."""
+    if old not in text:      # le parse Lua coûte des centaines de ms : un script qui ne cite pas `old` n'a rien à réécrire
+        return text, 0
     refs = sorted(iter_refs(text, domain=domain, value=old),
                   key=lambda r: r.start, reverse=True)
     if not refs:
@@ -404,13 +406,26 @@ def index_refs_in_project(project, domain: str) -> dict[str, dict[Path, int]]:
     index: dict[str, dict[Path, int]] = {}
     for p in script_paths(project):
         try:
-            text = p.read_text(encoding="utf-8")
+            st = p.stat()
+            key = (str(p), st.st_mtime_ns, st.st_size, domain)
+            values = _INDEX_VALUES.get(key)
+            if values is None:
+                text = p.read_text(encoding="utf-8")
+                values = [ref.value for ref in iter_refs(text, path=p, domain=domain)]
+                if len(_INDEX_VALUES) > 512:
+                    _INDEX_VALUES.clear()
+                _INDEX_VALUES[key] = values
         except OSError:
             continue
-        for ref in iter_refs(text, path=p, domain=domain):
-            index.setdefault(ref.value, {}).setdefault(p, 0)
-            index[ref.value][p] += 1
+        for value in values:
+            index.setdefault(value, {}).setdefault(p, 0)
+            index[value][p] += 1
     return index
+
+
+# Valeurs citées par script, par (chemin, mtime, taille, domaine) : un script inchangé n'est pas reparsé
+# (luaparser ≈ 100 ms par script) quand l'index est reconstruit, par ex. après un réordonnancement de pages.
+_INDEX_VALUES: dict[tuple, list[str]] = {}
 
 
 # ── Tables de données, globals, constantes — le second type de site ──

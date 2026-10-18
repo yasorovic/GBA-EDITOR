@@ -4,6 +4,7 @@ réutilisé par Project pour chacune de ses collections (scenes, sprites,
 backgrounds, prefabs, sfx, music, fonts, palettes)."""
 
 import json
+import os
 import shutil
 import time
 from pathlib import Path
@@ -78,6 +79,8 @@ def atomic_write(path: Path, text: str, encoding: str = "utf-8") -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     try:
         tmp.write_text(text, encoding=encoding)
+        with open(tmp, "rb+") as f:
+            os.fsync(f.fileno())    # sans ça, une coupure juste après le rename peut laisser un fichier vide
         for attempt in range(_REPLACE_RETRIES):
             try:
                 tmp.replace(path)   # atomique sur NTFS/ext4
