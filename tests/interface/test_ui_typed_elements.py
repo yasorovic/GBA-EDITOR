@@ -1,6 +1,6 @@
 """`interface:get("Nom")` rend le type RÉEL de l'élément — ROADMAP v0.16, étape (c), tranche 2.
 
-Un élément d'interface est une liste, une image, une zone de texte ou un conteneur : sa
+Un élément d’interface est une image, une zone de texte ou un conteneur : sa
 NATURE, lue dans la mise en page au build, décide de ses membres (`menu.index`, `heart.state`,
 `box:draw(...)`) et de la constante C qu'`interface.get` émet. Ce fichier tient ce qui n'est pas
 déjà juré ailleurs : la lecture de la nature, la chaîne `menu:row(n):draw(...)`, les paires
@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 from core.models.ui_region import KIND_CONTAINER, KIND_IMAGE, KIND_LIST, KIND_TEXT
 
-KINDS = {"Menu": "list", "Heart": "image", "Box": "textBox", "Hud": "ui_element"}
+KINDS = {"Menu": "ui_element", "Heart": "image", "Box": "textBox", "Hud": "ui_element"}
 
 
 def _errors(body: str) -> list[str]:
@@ -47,32 +47,18 @@ def test_la_nature_d_un_element_vient_de_la_mise_en_page():
                 (("Menu", KIND_LIST), ("Heart", KIND_IMAGE), ("Box", KIND_TEXT),
                  ("Hud", KIND_CONTAINER), ("Autre", "kind_inconnu"))]
     project = SimpleNamespace(all_elements=lambda: elements)
-    # Un `kind` que la table ne connaît pas retombe sur le type de base : il garde au moins
-    # son cycle de vie, il ne disparaît pas.
+    # Un `kind` que la table ne connaît pas (une liste : son type de script est retiré) retombe sur le type
+    # de base : il garde au moins son cycle de vie, il ne disparaît pas.
     assert ui_ref_kinds(project) == {**KINDS, "Autre": "ui_element"}
 
 
 def test_la_constante_emise_suit_la_nature():
-    assert _c_body('interface:get("Menu"):activate()\n'
-                   'interface:get("Heart"):play()\n'
+    assert _c_body('interface:get("Heart"):play()\n'
                    'interface:get("Box"):clear()\n'
                    'interface:get("Hud"):hide()') == [
-        "ui_list_set_active(UILIST_MENU, 1);",
         "ui_image_play(IMAGE_HEART, 1);",
         "text_clear_in(REGION_BOX);",
         "ui_element_show(UIELEM_HUD, 0);",
-    ]
-
-
-# ── Les rangées d'une liste sont des zones de texte ────────────────────────
-
-def test_une_rangee_de_liste_s_ecrit_par_chainage():
-    body = 'interface:get("Menu"):row(1):draw("hello")\nlocal r = interface:get("Menu"):row(2)\nr:clear()'
-    assert _errors(body) == []
-    assert _c_body(body) == [
-        "text_draw_in(ui_list_row(UILIST_MENU, 1), TEXT_HELLO);",
-        "int r = ui_list_row(UILIST_MENU, 2);",
-        "text_clear_in(r);",
     ]
 
 
@@ -82,8 +68,8 @@ def test_un_membre_d_un_autre_type_est_refuse_en_nommant_ceux_du_type():
     (msg,) = _errors('local i = interface:get("Heart").index')
     assert "image" in msg and "state" in msg and "offset" in msg
     assert "visible" in msg                       # l'héritage se lit dans la liste des champs
-    (msg,) = _errors('interface:get("Menu"):draw("hello")')
-    assert "list" in msg and ":row()" in msg and ":hide()" in msg
+    (msg,) = _errors('interface:get("Hud"):draw("hello")')
+    assert "ui_element" in msg and ":hide()" in msg
 
 
 def test_les_etats_d_image_se_jugent_dans_le_sprite_de_l_image():

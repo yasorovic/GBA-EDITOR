@@ -291,7 +291,7 @@ def anim_tick_lines(idx: int, sym: str, has_frame_sfx: bool = False,
         f"        }}",
         f"        g_oam_entries[{e}].timer++;",
         # self.anim_speed surcharge la vitesse de l'état ; 0 = celle du sprite
-        # (même règle que UIImageInfo.speed, cf. ARCHITECTURE.md « Animation »).
+        # (même règle que UIImageInfo.speed, cf. docs/development/ui-elements.md).
         f"        int _asp=g_oam_entries[{e}].anim_speed?g_oam_entries[{e}].anim_speed:{sym}_state_speed[_st];",
         f"        if(g_oam_entries[{e}].timer>=_asp){{",
         f"            g_oam_entries[{e}].timer=0;",

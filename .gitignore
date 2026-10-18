@@ -43,3 +43,12 @@ data-audio-rom-*/
 
 # Sorties de profilage (cProfile)
 *.out
+
+# Audio échantillonné (trop lourd pour GitHub, gardé en local).
+# Les .mod/.xm/.it/.s3m (trackers, légers) restent suivis.
+*.wav
+*.mp3
+*.ogg
+*.flac
+*.aif
+*.aiff

@@ -10,5 +10,13 @@ modifient l'éditeur, pas aux personnes qui créent un jeu.
 - [Cartouches : correspondances matérielles et photos](cartridge-hardware-matrix.md) : cartes,
   composants observés, jeux de référence et inventaire des visuels à réunir.
 
+- [Scripting : la chaîne Lua → C](scripting-internals.md) : catalogue d'API, grammaire, domaines, séquences,
+  état des prefabs poolés.
+- [Éléments d'interface](ui-elements.md) : `UILayout`, nœud et asset, chemin BG/OBJ, fonds, listes.
+- [Textes et polices](texts-and-fonts.md) : notices, libellés, table de chaînes, balisage, pipeline des polices.
+- [Build de la ROM, sauvegarde et compression d'assets](build-and-assets.md) : pipeline en neuf étapes, journal,
+  SRAM, fonds et sprites.
+- [Packaging et environnement de dev](packaging.md) : Nuitka, NSIS, GitHub Releases, venv figé sur la CI.
+
 Pour la structure générale du code et du pipeline de build, consultez
 [ARCHITECTURE.md](https://github.com/yasorovic/GBA-EDITOR/blob/main/ARCHITECTURE.md).

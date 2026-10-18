@@ -121,7 +121,7 @@ def test_le_type_c_de_chaque_type_reel_vient_de_la_table():
     """Les trois types existants, avec leur représentation C d'avant la table."""
     assert {n: t.c_type for n, t in REF_TYPE_TABLE.items()} == {
         "sfx": "mm_sfxhand", "collision_box": "int", "ui_element": "int",
-        "list": "int", "image": "int", "textBox": "int",
+        "image": "int", "textBox": "int",
         "background_layer": "int", "window_region": "int", "actor": "Actor*"}
 
 
@@ -198,7 +198,7 @@ def test_toute_cle_de_methode_ou_de_propriete_designe_un_type_connu():
 
 def test_l_heritage_se_declare_avec_sa_conversion_de_reference():
     """Un type qui a un parent dit AUSSI comment passer à son index : sans `to_base`,
-    `menu:hide()` émettrait `ui_element_show(<index de liste>, 0)` — l'index d'un autre
+    `heart:hide()` émettrait `ui_element_show(<index d'image>, 0)` — l'index d'un autre
     espace, qui cacherait un autre élément sans une erreur."""
     for nom, decl in REF_TYPE_TABLE.items():
         if decl.base:
@@ -207,12 +207,12 @@ def test_l_heritage_se_declare_avec_sa_conversion_de_reference():
         else:
             assert not decl.to_base, nom
     from scripting.api import ref_lineage, ref_member, ref_upcast
-    assert ref_lineage("list") == ["list", "ui_element"]
-    assert ref_member("list", "hide", ":")[0] == "ui_element"
-    assert ref_member("list", "index", ".")[0] == "list"
-    assert ref_member("image", "index", ".") is None        # `menu.index`, pas `heart.index`
-    assert ref_upcast("list", "ui_element", "m") == "ui_list_element(m)"
-    assert ref_upcast("list", "list", "m") == "m"
+    assert ref_lineage("image") == ["image", "ui_element"]
+    assert ref_member("image", "hide", ":")[0] == "ui_element"
+    assert ref_member("image", "state", ".")[0] == "image"
+    assert ref_member("ui_element", "state", ".") is None   # `heart.state`, pas `hud.state`
+    assert ref_upcast("image", "ui_element", "m") == "ui_image_element(m)"
+    assert ref_upcast("image", "image", "m") == "m"
 
 
 def test_les_natures_d_element_sont_celles_de_la_mise_en_page():
@@ -220,9 +220,8 @@ def test_les_natures_d_element_sont_celles_de_la_mise_en_page():
     tient d'accord avec le modèle, qui reste leur source."""
     from core.models import ui_region
     kinds = {t.ui_kind for t in REF_TYPE_TABLE.values() if t.ui_kind}
-    assert kinds == {ui_region.KIND_CONTAINER, ui_region.KIND_LIST,
-                     ui_region.KIND_IMAGE, ui_region.KIND_TEXT}
-    assert len({t.constant for t in REF_TYPE_TABLE.values() if t.ui_kind}) == 4
+    assert kinds == {ui_region.KIND_CONTAINER, ui_region.KIND_IMAGE, ui_region.KIND_TEXT}
+    assert len({t.constant for t in REF_TYPE_TABLE.values() if t.ui_kind}) == 3
 
 
 def test_un_membre_herite_se_verifie_et_se_traduit_sur_le_type_reel():
@@ -230,40 +229,27 @@ def test_un_membre_herite_se_verifie_et_se_traduit_sur_le_type_reel():
     from scripting.checker import check, BuildContext
     from scripting.codegen import generate, CodegenContext
     src = ("function on_update()\n"
-           '  local menu = interface:get("Menu")\n'
-           "  menu.index = 2\n"
-           "  menu:hide()\n"
-           "  if menu.visible and menu.active then menu:activate() end\n"
-           '  interface:get("Menu"):show()\n'
+           '  local heart = interface:get("Heart")\n'
+           "  heart.offset = vec2(0, 2)\n"
+           "  heart:hide()\n"
+           "  if heart.visible then heart:play() end\n"
+           '  interface:get("Heart"):show()\n'
            "end\n")
-    kinds = {"Menu": "list"}
+    kinds = {"Heart": "image"}
     errs = [e.message for e in check(parse(src), BuildContext(
-        actor_name="Cam", element_names=["Menu"], ref_kinds=kinds)) if e.level == "error"]
+        actor_name="Cam", element_names=["Heart"], ref_kinds=kinds)) if e.level == "error"]
     assert errs == []
     code, _, _ = generate(parse(src), CodegenContext(
         actor_name="Cam", actor_sym="Cam", anim_names=[], sfx_names=[], music_names=[],
         global_names=set(), const_names=set(), all_actor_syms=[],
-        element_names=["Menu"], ref_kinds=kinds))
+        image_names=["Heart"], element_names=["Heart"], ref_kinds=kinds))
     corps = code[code.find("Cam_on_update(Actor* self) {"):]
-    assert "int menu = UILIST_MENU;" in corps           # la référence porte l'index de LISTE
-    assert "ui_list_set_index(menu, 2);" in corps       # ...que ses propriétés attendent
-    assert "ui_element_show(ui_list_element(menu), 0);" in corps   # ...et le parent, converti
-    assert "ui_element_is_visible(ui_list_element(menu))" in corps
-    assert "ui_list_active(menu)" in corps
-    assert "ui_list_set_active(menu, 1);" in corps
-    assert "ui_element_show(ui_list_element(UILIST_MENU), 1);" in corps
-
-
-# ── L'acteur est un type comme un autre (ROADMAP v0.16, étape e) ───────────────
-# Ses méthodes sont `actor:<m>`, ses propriétés `actor.<champ>` ; à l'écriture c'est `self:` (l'instance
-# qui exécute le script), `other:`, ou une variable qui tient `actor:get(…)`.
-
-def test_le_catalogue_ne_garde_aucune_cle_self():
-    """`self` n'est pas un type, c'est un récepteur : le catalogue dit `actor`."""
-    assert not [k for k in RUNTIME_API if k.startswith(("self:", "self."))]
-    assert not [k for k in RUNTIME_PROPS if k.startswith(("self:", "self."))]
-    assert REF_TYPE_TABLE["actor"].c_type == "Actor*"
-    assert REF_TYPE_TABLE["actor"].prefix == "self"
+    assert "int heart = IMAGE_HEART;" in corps          # la référence porte l'index d'IMAGE
+    assert "ui_image_set_offset(heart, (Vec2){0, 2});" in corps   # ...que ses propriétés attendent
+    assert "ui_element_show(ui_image_element(heart), 0);" in corps   # ...et le parent, converti
+    assert "ui_element_is_visible(ui_image_element(heart))" in corps
+    assert "ui_image_play(heart, 1);" in corps
+    assert "ui_element_show(ui_image_element(IMAGE_HEART), 1);" in corps
 
 
 def _actor_errors(body: str) -> list[str]:

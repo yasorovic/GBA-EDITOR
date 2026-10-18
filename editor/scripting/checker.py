@@ -838,7 +838,7 @@ class Checker:
         """L'indice du type, ou celui de son plus proche ancêtre qui en a un : une liste
         n'a pas à répéter ce que `ui_element` dit de la géométrie authorée."""
         hint = next((REF_TYPE_TABLE[t].hint for t in ref_lineage(ref)
-                     if REF_TYPE_TABLE[t].hint), "")
+                     if t in REF_TYPE_TABLE and REF_TYPE_TABLE[t].hint), "")
         return f" {hint}" if hint else ""
 
     def _unknown_ref_method(self, shown: str, ref: str, holder: str) -> None:

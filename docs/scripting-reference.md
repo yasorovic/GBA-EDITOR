@@ -238,7 +238,7 @@ abs   atan2   clamp   cos   ease   lerp   max   min   rand   sign   sin   sqrt
 | Vous écrivez | À la place |
 | --- | --- |
 | `math.floor(x)` | Rien : `/` tronque déjà. |
-| `math.ceil(a / b)` | `(a + b - 1) / b` pour une division positive arrondie au-dessus. |
+| `math.ceil(x)` | `(a + b - 1) / b` pour une division positive arrondie au-dessus. |
 | `math.random(a, b)` | `math.rand(a, b)` |
 | `math.pi` | Des angles en degrés. |
 | `math.pow(x, n)` | Une multiplication explicite, par exemple `x * x`. |

@@ -11,7 +11,7 @@ Portée des catégories, volontairement inégale (2026-08-23) :
   - **Toolchains** — devkitPro + mgba, ce qui existait déjà dans l'ancien
     dialogue, réemployé tel quel.
   - **Theme** — un seul thème existe aujourd'hui (indigo/périwinkle,
-    cf. ARCHITECTURE.md « Thème GBA redesign ») : l'écran le DIT plutôt que
+    cf. ui/common/theme.py) : l'écran le DIT plutôt que
     de proposer un choix qui n'existe pas.
   - **Interface** — ce que l'éditeur MONTRE de lui-même
     (`core/interface_preferences.py`) : la langue et l'affichage des astuces,

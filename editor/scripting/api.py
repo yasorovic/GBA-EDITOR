@@ -58,8 +58,8 @@ class RefType:
     1. UNE ligne dans `REF_TYPE_TABLE` ci-dessous ;
     2. les entrées du catalogue : la fabrique (`ret=<type>`), les méthodes sous
        `"<type>:<méthode>"` et les propriétés sous `"<type>.<champ>"` ;
-    3. les fonctions C qui les portent, déclarées DEUX fois (cf. ARCHITECTURE,
-       « Deux listes de prototypes »).
+    3. les fonctions C qui les portent (prototype GÉNÉRÉ dans `runtime_api.h`, cf.
+       ARCHITECTURE, « Ce que le build vérifie »).
 
     Tout le reste s'en DÉRIVE : le type C d'un `local` qui tient la référence
     (`codegen`), le refus d'une méthode ou d'un champ inconnu (`checker`), la

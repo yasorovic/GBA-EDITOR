@@ -31,7 +31,7 @@ import pytest
 REPO_DIR = Path(__file__).resolve().parents[2]
 
 
-def _lua(src: str, images=("Curseur",), lists=("Menu",)):
+def _lua(src: str, images=("Curseur",), lists=()):
     from scripting.parser import parse
     from scripting.checker import check, BuildContext
     from scripting.codegen import generate, CodegenContext
@@ -85,9 +85,9 @@ def test_la_lecture_est_symetrique_de_lecriture():
 def test_le_decalage_se_compose_avec_une_expression():
     """Le cas qui a motivé le chantier : un curseur qui suit l'item choisi."""
     errors, code = _lua(_body(
-        'interface:get("Curseur").offset = vec2(0, 16 * interface:get("Menu").index)'))
+        'interface:get("Curseur").offset = vec2(0, 16 * 3)'))
     assert errors == []
-    assert "ui_image_set_offset(IMAGE_CURSEUR, (Vec2){0, (16 * ui_list_index(UILIST_MENU))})" in code
+    assert "ui_image_set_offset(IMAGE_CURSEUR, (Vec2){0, (16 * 3)})" in code
 
 
 def test_un_local_tient_l_image_comme_la_forme_chainee():
@@ -111,12 +111,6 @@ def test_une_image_inconnue_est_refusee_en_nommant_les_autres():
 def test_un_scalaire_n_est_pas_un_decalage():
     errors, _code = _lua(_body('interface:get("Curseur").offset = 8'))
     assert errors and "vec2" in errors[0]
-
-
-def test_une_liste_n_a_pas_de_decalage():
-    """`offset` est une propriété d'IMAGE : la liste garde ses propres membres."""
-    errors, _code = _lua(_body('interface:get("Menu").offset = vec2(0, 8)'))
-    assert len(errors) == 1 and "list" in errors[0]
 
 
 # ── La forme n'a demandé aucun chemin dédié ───────────────────────
@@ -148,7 +142,7 @@ def test_le_domaine_porte_le_renommage():
 
 
 @pytest.mark.parametrize("fn", ["ui_image_set_state", "ui_image_state", "ui_image_play",
-                                "ui_list_element", "ui_image_element", "ui_region_element"])
+                                "ui_image_element", "ui_region_element"])
 def test_la_fonction_est_vue_des_deux_contextes(fn):
     """`main.c` voit `gba_engine.h` ; une unité d'acteur ou de scène voit le prototype GÉNÉRÉ dans
     `runtime_api.h` (A2, « 4e lecteur »). Ce qui est dans le moteur et exposé est extrait et émis
