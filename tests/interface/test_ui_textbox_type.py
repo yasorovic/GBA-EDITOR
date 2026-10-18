@@ -64,7 +64,7 @@ def test_une_boite_se_cite_comme_une_chaine_dans_un_script():
     project = SimpleNamespace(all_elements=lambda: [
         (lay, UIText(name="titre")), (lay, UITextbox(name="boite"))])
     kinds = ui_ref_kinds(project)
-    assert kinds["titre"] == kinds["boite"] == "text_region"
+    assert kinds["titre"] == kinds["boite"] == "textBox"
 
 
 def test_seule_la_boite_se_redimensionne():

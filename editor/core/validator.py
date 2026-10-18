@@ -163,6 +163,9 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
     _check_ui_element_names_unique(ctx)
     _check_pal_bank_reference(ctx)
     _check_background_palette_refs(ctx)
+    _check_background_encoding_current(ctx)
+    _check_build_language(ctx)
+    _check_background_tile_capacity(ctx)
     _check_palette_bank_overflow(ctx)
     _check_api_prototypes(ctx)
     _check_api_domains(ctx)
@@ -658,7 +661,7 @@ def _text_variants(p, text, globals_names: set) -> list:
     source remplissait tout juste, et rien ne le dirait avant la ROM en jeu.
     Une langue non encore traduite montre la source — la revérifier
     produirait le même avertissement une seconde fois, donc elle est exclue
-    par le test d'égalité de contenu, pas par un `if` sur `auto_key` ou autre
+    par le test d'égalité de contenu, pas par un `if` sur un
     état qui pourrait diverger de ce que `text_content()` rend réellement."""
     from core.text_markup import parse, KIND_VALUE
     source = text.content or ""
@@ -793,20 +796,18 @@ def _check_text_overflow(ctx: ValidationContext):
     for _lay, el in p.all_regions():
         if not is_text(el):
             continue
-        text = p.get_text(getattr(el, "text_key", "") or "")
-        if text is None:
-            continue          # clé vide ou cassée : _check_ui_text_key le dit
-        for lbl, source, _parsed in _text_variants(p, text, globals_names):
-            for font in _fonts_for(el):
-                _placed, over = layout_marked_text(
-                    font, source, fonts, consts, el.w, el.h)
-                if over:
-                    ctx.warn(None,
-                        f"Text '{text.key}'"
-                        + (f" (language \"{lbl}\")" if lbl else "")
-                        + f" overflows the element '{el.name}' ({el.w}×{el.h} px, font "
-                          f"'{font.name}') — it will be cut at the last glyph that fits. "
-                          "Enlarge the element in the canvas, or shorten the text.")
+        for text in p.region_texts(el):
+            for lbl, source, _parsed in _text_variants(p, text, globals_names):
+                for font in _fonts_for(el):
+                    _placed, over = layout_marked_text(
+                        font, source, fonts, consts, el.w, el.h)
+                    if over:
+                        ctx.warn(None,
+                            f"Text '{text.key}'"
+                            + (f" (language \"{lbl}\")" if lbl else "")
+                            + f" overflows the element '{el.name}' ({el.w}×{el.h} px, font "
+                              f"'{font.name}') — it will be cut at the last glyph that fits. "
+                              "Enlarge the element in the canvas, or shorten the text.")
 
 
 def _check_font_coverage(ctx: ValidationContext):
@@ -929,19 +930,17 @@ def _check_font_coverage(ctx: ValidationContext):
     for _lay, el in p.all_regions():
         if not is_text(el):
             continue
-        text = p.get_text(getattr(el, "text_key", "") or "")
-        if text is None:
-            continue
-        for lbl, _source, parsed in _text_variants(p, text, globals_names):
-            for font in _fonts_for(el):
-                eff = _effective(lbl, font)
-                quad = (el.name, text.key, eff.name, lbl, parsed.display)
-                if quad in seen:
-                    continue
-                seen.add(quad)
-                missing = _missing(parsed, eff)
-                if missing:
-                    _warn(text.key, lbl, "the element", el.name, missing)
+        for text in p.region_texts(el):
+            for lbl, _source, parsed in _text_variants(p, text, globals_names):
+                for font in _fonts_for(el):
+                    eff = _effective(lbl, font)
+                    quad = (el.name, text.key, eff.name, lbl, parsed.display)
+                    if quad in seen:
+                        continue
+                    seen.add(quad)
+                    missing = _missing(parsed, eff)
+                    if missing:
+                        _warn(text.key or el.name, lbl, "the element", el.name, missing)
 
 
 def _check_literal_texts(ctx: ValidationContext):
@@ -1031,6 +1030,14 @@ def _check_ui_text_key(ctx: ValidationContext):
     script, c'est-à-dire sur le cas le plus courant."""
     p = ctx.project
     for lay, el in p.all_regions():
+        prefix = getattr(el, "sequence_prefix", "")
+        if prefix:
+            if not p.textbox_pages(el):
+                ctx.error(None,
+                    f"Textbox '{el.name}' (layout '{lay.name}') follows the text sequence "
+                    f"'{prefix}', which no longer has any text.",
+                    DiagnosticTarget("ui_element", el.name, lay.name))
+            continue
         key = getattr(el, "text_key", "") or ""
         if key and p.get_text(key) is None:
             ctx.error(None,
@@ -1192,7 +1199,7 @@ def _check_data_column_types(ctx: ValidationContext):
     Erreur bloquante et non avertissement : un type sans domaine émettrait un 0
     silencieux dans la ROM, et un type sans source rendrait la colonne
     inéditable sans que rien ne le dise."""
-    from core.models.data_table import COLUMN_REFERENCES
+    from core.models.data_table import COLUMN_REFERENCES, COLUMN_ASSET_REFERENCES
     from core.project import DATA_COLUMN_SOURCES
     from scripting.api import ALL_DOMAINS, REF_TYPE_TABLE
 
@@ -1200,7 +1207,10 @@ def _check_data_column_types(ctx: ValidationContext):
     # (une zone de texte, une image : leur index EST le handle du type, `RefType.column`).
     # Le nom d'un élément d'interface ne se cite plus dans un argument — `interface.get` est
     # la seule porte —, mais sa colonne reste une donnée valide.
-    citables = ALL_DOMAINS | {t.column for t in REF_TYPE_TABLE.values() if t.column}
+    # Les assets graphiques sont des références de catalogue, distinctes des
+    # handles runtime (`sprite_id` local à un acteur, couche BG matérielle).
+    citables = (ALL_DOMAINS | {t.column for t in REF_TYPE_TABLE.values() if t.column}
+                | set(COLUMN_ASSET_REFERENCES))
     inconnus = sorted(set(COLUMN_REFERENCES) - citables)
     if inconnus:
         ctx.error(None,
@@ -2097,6 +2107,60 @@ def _check_background_palette_refs(ctx: ValidationContext):
             ctx.warn(ba,
                 f"Background '{ba.name}': the palette override(s) on derived palette(s) "
                 f"{', '.join(str(i) for i in dropped)} were lifted — the latest encoding has fewer derived palettes.")
+
+
+def _check_background_encoding_current(ctx: ValidationContext):
+    """Le build lit le RÉSULTAT enregistré d'un fond (tuiles, cartes, palettes, bitmap). Si ses réglages ont changé depuis
+    (`encoded_for`) ou s'il n'a jamais été encodé, la ROM embarquerait un autre rendu que celui de l'éditeur : on le dit,
+    sans bloquer — « Run encoding » dans l'éditeur de fonds le remet à jour. Les animés ont leur propre encodage."""
+    p = ctx.project
+    for ba in p.backgrounds:
+        if not ba.asset or ba.is_animated or not p.background_image_path(ba).exists():
+            continue
+        if ba.encoding_is_current():
+            continue
+        what = ("has not been encoded yet" if not (ba.tileset or ba.bitmap)
+                else "has settings that its encoded result does not reflect")
+        ctx.warn(ba,
+            f"Background '{ba.name}' {what} — the ROM would use the last encoding. "
+            "Open it in the Background editor and press Run encoding.")
+
+
+def _check_build_language(ctx: ValidationContext):
+    """En mode mono-langue, `build_language` désigne la langue embarquée. Si elle a été retirée ou renommée, le build prend
+    la langue source sans rien dire : on le dit, sans bloquer."""
+    settings = ctx.project.settings
+    if getattr(settings, "language_mode", "") != "monolingual" or not settings.build_language:
+        return
+    codes = {settings.source_lang.code} | {lang.code for lang in settings.languages}
+    if settings.build_language not in codes:
+        ctx.warn(None,
+            f"The build language \"{settings.build_language}\" no longer exists in the project — "
+            "the ROM embeds the source language instead. Pick a language in the Project settings.")
+
+
+TILE_INDEX_LIMIT = 1024   # un index de tuile tient sur 10 bits (cf. `tile_codec.pack_se`)
+
+
+def _check_background_tile_capacity(ctx: ValidationContext):
+    """Une case de carte ne désigne que 1024 tuiles : au-delà, `pack_se` coupe l'index et la case retombe sur une autre tuile
+    (un trou environ une case sur 1024). On le dit, sans bloquer — l'auteur peut réduire « Tiles » ou découper l'image."""
+    from core.bg_tile_merge import MAX_TILES
+    for ba in ctx.project.backgrounds:
+        if ba.is_animated or ba.mode == "bitmap" or not ba.tileset:
+            continue
+        target = getattr(getattr(ba, "compression", None), "tile_target", 0)
+        if target and len(ba.tileset) > target:
+            ctx.warn(ba,
+                f"Background '{ba.name}' asks for {target} tiles but has {len(ba.tileset)}: the merge was not applied "
+                f"(it is skipped above {MAX_TILES} unique tiles in the source image). "
+                "Resize or split the image, then press Run encoding.")
+        count = len(ba.effective_tileset())
+        if count > TILE_INDEX_LIMIT:
+            ctx.warn(ba,
+                f"Background '{ba.name}' has {count} unique tiles but a map cell can only point to "
+                f"{TILE_INDEX_LIMIT}: the extra cells will show the wrong tile. "
+                "Lower the Tiles target in the Background editor, or split the image.")
 
 
 def _check_palette_bank_overflow(ctx: ValidationContext):

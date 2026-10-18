@@ -17,11 +17,12 @@ from __future__ import annotations
 # cycle depuis que scripting ne remonte plus vers codegen (le paquet).
 from scripting.globals import save_bits
 
-SAVE_HEADER_BYTES = 12
-# En-tête d'UN enregistrement : id (4) + taille de la charge (4). La charge
-# suit, de longueur variable depuis la v0.20 — cf. `save_var_bytes`.
-SAVE_RECORD_HEAD_BYTES = 8
+SAVE_HEADER_BYTES = 16
+# En-tête : id (4), taille de charge (4), nombre de cases et type (4).
+SAVE_RECORD_HEAD_BYTES = 12
 SRAM_BYTES        = 32768
+# Chaque emplacement garde deux copies : une coupure de courant en pleine écriture épargne la précédente.
+SAVE_COPIES       = 2
 
 
 def save_vars(p) -> list[tuple[int, object]]:
@@ -46,8 +47,8 @@ def save_id32(vid: str) -> int:
 def save_var_bytes(g) -> int:
     """Ce qu'UNE variable persistante occupe dans un emplacement : l'en-tête de
     son enregistrement, plus ses cases empaquetées arrondies au mot de 32 bits
-    (ROADMAP v0.20). Un scalaire retombe sur 8 + 4 octets ; un tableau de 400
-    booléens sur 8 + 52, et non 8 + 1600."""
+    (ROADMAP v0.20). Un scalaire coûte 12 + 4 octets ; un tableau de 400
+    booléens 12 + 52, et non 12 + 1600."""
     n = max(1, int(getattr(g, "count", 1) or 1))
     payload = ((n * save_bits(g) + 31) // 32) * 4
     return SAVE_RECORD_HEAD_BYTES + payload
@@ -58,12 +59,12 @@ def save_slot_size(p) -> int:
 
 
 def save_total_bytes(p) -> int:
-    """Octets de SRAM que la sauvegarde occupe : emplacements × taille d'un
+    """Octets de SRAM que la sauvegarde occupe : emplacements × copies × taille d'un
     emplacement. 0 sans variable persistante — le moteur ne touche alors pas la
     SRAM (cf. `save_fatal`, même formule)."""
     if not save_vars(p):
         return 0
-    return max(1, int(getattr(p.settings, "save_slots", 1))) * save_slot_size(p)
+    return max(1, int(getattr(p.settings, "save_slots", 1))) * SAVE_COPIES * save_slot_size(p)
 
 
 def save_fatal(p) -> list[str]:
@@ -132,7 +133,8 @@ def save_lines(p, emit=None) -> list[str]:
                  + ", ".join(str(max(1, int(getattr(g, "count", 1) or 1)))
                              for _i, g in vars_) + "};")
         L.append("const unsigned char g_save_bits[] = {"
-                 + ", ".join(str(save_bits(g)) for _i, g in vars_) + "};")
+                 + ", ".join(str(save_bits(g) | (0x80 if g.type in ("int", "s8", "s16") else 0))
+                             for _i, g in vars_) + "};")
     else:
         L += ["const unsigned int   g_save_id[]  = {0};",
               "const unsigned short g_save_idx[] = {0};",
@@ -145,6 +147,6 @@ def save_lines(p, emit=None) -> list[str]:
     L.append("")
     if emit and vars_:
         emit("log_line",
-             f"[save] {len(vars_)} persistent variable(s), {slots} slot(s) of {save_slot_size(p)} bytes "
-             f"({slots * save_slot_size(p)} of {SRAM_BYTES} of SRAM)")
+             f"[save] {len(vars_)} persistent variable(s), {slots} slot(s) of {save_slot_size(p)} bytes, "
+             f"{SAVE_COPIES} copies each ({save_total_bytes(p)} of {SRAM_BYTES} of SRAM)")
     return L

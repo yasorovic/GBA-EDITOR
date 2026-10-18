@@ -7,9 +7,9 @@ from typing import Optional
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
     QFrame, QToolButton, QSlider, QProgressBar,
-    QSpinBox, QCheckBox, QMessageBox,
-    QButtonGroup, QComboBox, QStackedWidget, QScrollArea, QSizePolicy,
+    QSpinBox, QCheckBox, QButtonGroup, QComboBox, QStackedWidget, QScrollArea, QSizePolicy,
 )
+from ui.common.popup import MessageBox as QMessageBox
 from PyQt6.QtGui import QFont, QKeySequence, QShortcut
 from PyQt6.QtCore import (
     Qt, QSize, QObject, QRunnable, QThreadPool, pyqtSignal, QTimer,

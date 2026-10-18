@@ -26,8 +26,9 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QSpinBox, QCheckBox,
     QTableWidget, QHeaderView, QFrame,
-    QLineEdit, QInputDialog, QMessageBox, QAbstractItemView,
+    QLineEdit, QInputDialog, QAbstractItemView,
 )
+from ui.common.popup import MessageBox as QMessageBox
 
 from core.history import get_history, AddListItemCmd, RemoveListItemCmd, SetFieldCmd
 from core.keybindings import get_keybindings

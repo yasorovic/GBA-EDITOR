@@ -74,7 +74,9 @@ def signature(name: str) -> str:
     parts = [p.name for p in f.params]
     if f.variadic:
         parts.append("...")
-    return f"{module_call_form(name)}({', '.join(parts)})"
+    # Une méthode de référence se lit avec le nom public de son type (`textBox`,
+    # `element`…), jamais avec sa clé technique du catalogue.
+    return f"{_on_variable(name)}({', '.join(parts)})"
 
 
 
@@ -116,7 +118,7 @@ def call(name: str, **by_domain: str) -> str:
 
 def element_call(element: str, name: str, **by_domain: str) -> str:
     """Le snippet d'une méthode d'ÉLÉMENT d'interface, écrite sur son acquisition :
-    `text_region:draw` sur « boite_bas » → `interface:get("boite_bas"):draw("texte")`.
+    `textBox:draw` sur « boite_bas » → `interface:get("boite_bas"):draw("texte")`.
     Les arguments de la méthode se remplissent par domaine, comme pour `call`."""
     inner = call(name, **by_domain)
     method = name.split(":", 1)[1]
@@ -187,8 +189,13 @@ def prop_entry_dict(name: str) -> dict:
     snippet = bare(name)
     short = name.rsplit(".", 1)[-1]
     typ = _short_type(p, enum) if p is not None else ""
+    # `visible` est une consultation sans argument. Pour l'élément d'UI, la
+    # sidebar conserve explicitement son préfixe afin que le groupe « UI » se
+    # lise comme les méthodes voisines (`element:show()` / `element:hide()`).
+    label = ("element.visible()" if name == "ui_element.visible"
+             else f"{short}({typ})" if typ else short)
     return {
-        "label":       f"{short}({typ})" if typ else short,
+        "label":       label,
         "snippet":     snippet,
         "description": p.doc if p is not None else "",
         # Ce que le label court ne dit plus (peut-on ÉCRIRE cette propriété)

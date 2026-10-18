@@ -152,6 +152,8 @@ def build_bg_raster(p: Project, scene, layer, ap) -> Optional["BgLayerRaster"]:
     if not layer.background_name or not ap.is_file():
         return None
     ba = p.get_background(layer.background_name)
+    if ba is not None and ba.mode == "bitmap":
+        return None          # un bitmap n'a ni tuiles ni palettes par case : ni peinture, ni raster (cf. `bg_pixmap`)
     from core.bg_import import compiled_background
     # `p` transmis : le canvas montre aussi les fonds animés posés sur ce fond
     # dans le Background Editor, figés sur leur première image.
@@ -177,10 +179,22 @@ def bg_pixmap(p: Project, scene, layer, ap) -> Optional[QPixmap]:
     # silencieusement, mais Image.open(dir) lève PermissionError).
     if not layer.background_name or not ap.is_file():
         return None
+    ba = p.get_background(layer.background_name)
+    if ba is not None and ba.mode == "bitmap":
+        return bitmap_pixmap(ba)
     raster = build_bg_raster(p, scene, layer, ap)
     if raster is not None:
         return raster.to_pixmap()
     return QPixmap(str(ap))
+
+
+def bitmap_pixmap(ba) -> Optional[QPixmap]:
+    """Le fond bitmap tel que l'encodage le porte (image préparée, couleurs réduites à la palette de 256) — la même image
+    que montre le Background Editor, et non le PNG brut ni une ré-encodation tuilée. None tant que rien n'est compressé."""
+    if not ba.bitmap:
+        return None
+    from core.bg_bake import render_rgba
+    return QPixmap.fromImage(_pil_to_qimage(render_rgba(ba)))
 
 
 # dir_x/dir_y (-1|0|1) → dir id 1-8, identique au _dlut du runtime

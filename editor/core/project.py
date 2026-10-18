@@ -94,7 +94,7 @@ from core.project_renames import ProjectRenameMixin
 # DÉFINI** — y compris quand un module voisin se trouve l'avoir sous la main
 # (`core.models.scene` importe `OWN_PAL_BANK` pour son propre usage ; il ne
 # faut pas le lui emprunter).
-from core.models.settings import (ProjectSettings, GlobalVar, Constant, DEFAULT_COLLISION_TAGS,
+from core.models.settings import (ProjectSettings, GlobalVar, Constant, DEFAULT_COLLISION_TAGS, lang_code,
                                   Language, InputBinding, InputSequence, InputAxis, InputMovement)
 from core.models.text import Text
 from core.models.palette import PaletteBank, OWN_PAL_BANK, DEFAULT_UI_PALETTE
@@ -126,6 +126,8 @@ DATA_COLUMN_SOURCES = {
     "font":    lambda p: [a.name for a in p.font_assets],
     "palette": lambda p: [b.name for b in p.palettes],
     "region":  lambda p: p.region_names(),
+    "sprite":  lambda p: [s.name for s in p.sprites],
+    "background": lambda p: [b.name for b in p.backgrounds],
     "image":   lambda p: p.image_names(),
 }
 
@@ -500,6 +502,11 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         `DATA_COLUMN_SOURCES` couvre exactement `COLUMN_REFERENCES` (vérifié au
         build par `validator._check_data_column_types`) : un type de colonne
         ajouté sans source n'offrirait aucun choix, en silence."""
+        # Ces catalogues peuvent encore être différés à l'ouverture du projet.
+        if column_type == "sprite":
+            self.load_sprites()
+        elif column_type == "background":
+            self.load_backgrounds()
         source = DATA_COLUMN_SOURCES.get(column_type)
         return list(source(self)) if source else []
 
@@ -972,6 +979,8 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
                if self.settings.source_lang.code else {}),
             **({"languages": [l.to_dict() for l in self.settings.languages]}
                if self.settings.languages else {}),
+            "language_mode": self.settings.language_mode,
+            "build_language": self.settings.build_language,
             **({"default_font": self.settings.default_font}
                if self.settings.default_font else {}),
             # Placeholder (cf. InputBinding) : un projet sans input déclaré ne
@@ -1066,6 +1075,9 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         # Absentes = projet monolingue, le cas de tous ceux d'avant la v0.9 :
         # le maître EST la seule langue et rien ne change.
         self.settings.source_lang = Language.from_dict(d.get("source_lang") or {})
+        self.settings.language_mode = ("monolingual" if d.get("language_mode") == "monolingual"
+                                       else "multilingual")
+        self.settings.build_language = lang_code(d.get("build_language", ""))
         self.settings.languages = [Language.from_dict(x)
                                    for x in (d.get("languages") or [])
                                    if (x or {}).get("code")]
@@ -1218,11 +1230,12 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         self.jingles.scan_index()
         self.fonts.load()
         self.font_assets.load()
-        self.load_warnings = []
+        self.load_warnings = list(getattr(self, "_text_repairs", []))
         asset_reconciliation.reconcile_font_assets(self)
         # Avant les scènes : une scène référence sa mise en page et ses prefabs
         # par nom, et doit les trouver déjà chargés.
         self.ui_layouts.load()
+        self.migrate_legacy_pages()
         self._migrate_box_dirs()
         self._migrate_sound_states()
         self.music_boxes.load()

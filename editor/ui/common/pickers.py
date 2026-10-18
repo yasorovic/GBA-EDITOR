@@ -10,8 +10,8 @@ from ui.common.tooltip import tooltip
 from typing import Callable, Optional
 
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QToolButton
-from PyQt6.QtGui import QFont, QIcon, QPixmap, QColor
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QFont, QIcon, QPixmap, QColor, QPainter, QPen
+from PyQt6.QtCore import Qt, QSize, pyqtSignal
 
 from ui.common.widgets import ScriptSlot, ScriptPickerPopup
 from ui.common.palette_swatch import bank_icon
@@ -86,7 +86,8 @@ def ui_pal_bank_slot(
     on_picked: Callable[[int], None],
     project=None,
     parent=None,
-) -> ScriptSlot:
+    compact: bool = False,
+) -> ScriptSlot | QToolButton:
     """Slot pour choisir la banque d'encre de la police PAR DÉFAUT d'une scène —
     un INDEX dans `active` (jusqu'à 16 entrées, vides comprises), pas un nom.
 
@@ -103,9 +104,17 @@ def ui_pal_bank_slot(
     « la police, une palette d'asset »).
 
     `ScriptPickerPopup.picked` est typé `str` (chemins de script, son usage
-    d'origine) : l'index voyage donc en texte, comme dans `ColorIndexSlot`."""
-    slot = ScriptSlot(add_label=label('pick.choose_the_ui_bank'), accent_color=accent,
-                      show_clear=False)
+    d'origine) : l'index voyage donc en texte, comme dans `ColorIndexSlot`.
+    `compact` conserve le même sélecteur derrière un bouton de barre d'outils."""
+    if compact:
+        slot = QToolButton(parent)
+        slot.setFixedSize(32, 32)
+        slot.setIconSize(QSize(20, 20))
+        slot.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        slot.setStyleSheet(QSS.toolbutton_icon)
+    else:
+        slot = ScriptSlot(add_label=label('pick.choose_the_ui_bank'), accent_color=accent,
+                          show_clear=False)
 
     def _label_and_icon(i: int):
         name = active[i] if 0 <= i < len(active) else ""
@@ -114,9 +123,17 @@ def ui_pal_bank_slot(
 
     def _show(value: int):
         if value < 0:
-            slot.set_script(label(_UI_BANK_AUTO_LABEL))
+            lab, icon = label(_UI_BANK_AUTO_LABEL), None
         else:
             lab, icon = _label_and_icon(value)
+        if compact:
+            slot.setIcon(icon or icons.toolbar_icon('bank', C.TEXT_DIM))
+            slot.setIconSize(QSize(18, 18) if icon is not None else QSize(26, 26))
+            slot.setToolTip(tooltip(
+                title=label('uiinsp.text.bank_title'),
+                body=lab, note=label('uiinsp.text.bank_tip')))
+            slot.setAccessibleName(f"{label('uiinsp.text.bank')}: {lab}")
+        else:
             slot.set_script(lab, icon=icon)
 
     _show(current_index)
@@ -139,7 +156,10 @@ def ui_pal_bank_slot(
         popup.picked.connect(_picked)
         popup.show_below(slot)
 
-    slot.set_callbacks(on_add=_open_picker, on_open=_open_picker)
+    if compact:
+        slot.clicked.connect(_open_picker)
+    else:
+        slot.set_callbacks(on_add=_open_picker, on_open=_open_picker)
     return slot
 
 
@@ -303,16 +323,21 @@ class ColorIndexSlot(QWidget):
 
     Un index déjà posé qui sort de la banque (banque changée depuis) reste
     montré, signalé comme pendant — l'effacer sans le dire perdrait un choix
-    que quelqu'un a fait."""
+    que quelqu'un a fait. `compact_label` active le bouton sans libellé : son
+    nom accessible et son infobulle portent le rôle et la valeur, tandis que
+    `role` choisit l'icône commune d'encre ou de surlignement."""
 
     picked = pyqtSignal(int)
 
-    def __init__(self, zero_label: str, accent: str, parent=None):
+    def __init__(self, zero_label: str, accent: str, parent=None,
+                 compact_label: str = "", role: str = "ink"):
         super().__init__(parent)
         self._zero_label = zero_label
         self._accent = accent
         self._bank = None
         self._index = 0
+        self._compact_label = compact_label
+        self._role = role
 
         row = QHBoxLayout(self)
         row.setContentsMargins(0, 0, 0, 0)
@@ -335,11 +360,20 @@ class ColorIndexSlot(QWidget):
         self._btn = QToolButton()
         self._btn.setFixedSize(24, 24)
         self._btn.setStyleSheet(QSS.toolbutton_icon)
-        self._btn.setIcon(icons.get("palette", C.TEXT_DIM))
+        self._btn.setIcon(icons.get(role, C.TEXT_DIM))
         self._btn.setToolTip(tooltip(
             title=label('pick.open_palette_title'), body=label('pick.pick_hint')))
         self._btn.clicked.connect(self._open)
         row.addWidget(self._btn)
+        if compact_label:
+            self._swatch.hide()
+            self._code.hide()
+            self._btn.setFixedSize(32, 32)
+            self._btn.setIconSize(QSize(26, 26))
+            self._btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+            self.setFixedSize(32, 32)
+            row.setSpacing(0)
+            self._sync()
 
     # ── Lecture ───────────────────────────────────────────────────
 
@@ -355,6 +389,33 @@ class ColorIndexSlot(QWidget):
         return bgr555_to_rgb888(self._bank.colors[idx])
 
     def _sync(self):
+        self._sync_details()
+        if self._compact_label:
+            # Le symbole occupe toute la place ; la couleur vit dans une
+            # pastille en coin, sans réduire l'icône pour loger une barre.
+            rgb = self._color_at(self._index)
+            missing = bool(self._index and rgb is None)
+            color = C.ACCENT_YLW if missing else C.TEXT_DIM
+            pixmap = QPixmap(52, 52)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pixmap)
+            icons.toolbar_icon(self._role, color).paint(painter, 0, 0, 52, 52)
+            if self._index:
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                painter.setPen(QPen(QColor("#000000"), 2))
+                painter.setBrush(QColor(*rgb) if rgb is not None else QColor(color))
+                painter.drawEllipse(30, 30, 20, 20)
+            painter.end()
+            self._btn.setIcon(QIcon(pixmap))
+            value = self._code.text()
+            if self._index:
+                value = f"{self._index} · {value}"
+            self._btn.setToolTip(tooltip(
+                title=self._compact_label, body=value,
+                note=label('pick.pick_hint')))
+            self._btn.setAccessibleName(f"{self._compact_label}: {self._code.text()}")
+
+    def _sync_details(self):
         """Le swatch est un aplat SEULEMENT quand il montre une vraie couleur.
 
         Les deux autres états ne SONT pas des couleurs — un rectangle en
@@ -366,7 +427,7 @@ class ColorIndexSlot(QWidget):
         pour une couleur."""
         rgb = self._color_at(self._index)
         if self._index == 0:
-            self._swatch.setPixmap(icons.get("font", C.TEXT_DIM).pixmap(18, 18))
+            self._swatch.setPixmap(icons.get(self._role, C.TEXT_DIM).pixmap(18, 18))
             self._swatch.setStyleSheet(
                 f"background:{C.BG_INPUT}; border:1px solid {C.BORDER_MID};"
                 f"border-radius:3px;")
@@ -410,11 +471,12 @@ class ColorIndexSlot(QWidget):
             pm = QPixmap(14, 14)
             pm.fill(QColor(r, g, b))
             out.append((f"{idx}   #{r:02X}{g:02X}{b:02X}", str(idx), QIcon(pm)))
-        if not self._bank:
+        if not n:
             # Aucune banque désignée : l'index reste un choix valide (la scène
             # peut en désigner une plus tard), on ne peut simplement pas en
             # montrer la couleur.
-            out += [(f"{i}", str(i), None) for i in range(1, 16)]
+            out += [(f"{i} — {label('pick.empty')}", str(i), None)
+                    for i in range(1, 16)]
         return out
 
     def _open(self):

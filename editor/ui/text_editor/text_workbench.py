@@ -166,7 +166,6 @@ class TextWorkbench(QWidget):
     content_committed = pyqtSignal(str, str)   # (avant, après — langue ACTIVE)
     key_committed = pyqtSignal(str)            # clé saisie
     path_committed = pyqtSignal(int, str)      # (niveau, segment)
-    relink_asked = pyqtSignal()                # clé manuelle ré-accrochée
     parsed = pyqtSignal(object)                # ParsedText de l'entrée courante
     preview_font_changed = pyqtSignal(object)  # Font | None
     active_lang_changed = pyqtSignal(str)      # code cliqué dans les onglets
@@ -184,9 +183,6 @@ class TextWorkbench(QWidget):
         # Un seul niveau de rangement à la création ; les suivants se révèlent
         # sur demande, jusqu'au plafond du modèle.
         self._path_depth = 1
-        # Cadenas ouvert : le champ est éditable, mais `auto_key` ne tombera
-        # qu'au commit d'un nom réellement différent.
-        self._key_unlocked = False
 
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -218,15 +214,9 @@ class TextWorkbench(QWidget):
         self._key_edit.setFixedWidth(180)
         self._key_edit.setPlaceholderText(label("txtwb.key_ph"))
         self._key_edit.editingFinished.connect(self._commit_key)
+        self._key_edit.setToolTip(tooltip(
+            title=label("txtwb.key_title"), body=label("txtwb.key_tip")))
         hl.addWidget(self._key_edit)
-
-        # Cadenas : la clé est en lecture seule tant qu'elle DÉRIVE du
-        # rangement. La nommer à la main l'en détache définitivement.
-        self._btn_lock = QToolButton()
-        self._btn_lock.setFixedSize(22, 22)
-        self._btn_lock.setStyleSheet(BTN_ICON)
-        self._btn_lock.clicked.connect(self._toggle_key_lock)
-        hl.addWidget(self._btn_lock)
 
         self._btn_copy = QToolButton()
         self._btn_copy.setFixedSize(22, 22)
@@ -452,7 +442,6 @@ class TextWorkbench(QWidget):
         self._texts = list(texts)
         one = self._texts[0] if len(self._texts) == 1 else None
         multi = len(self._texts) > 1
-        self._key_unlocked = False      # le cadenas se referme d'une entrée à l'autre
 
         self._blocking = True
         self._key_edit.setText(one.key if one else "")
@@ -467,7 +456,6 @@ class TextWorkbench(QWidget):
         self._path_depth = max(
             1, min(MAX_DEPTH, max((len(t.path) for t in self._texts), default=1)))
         self._sync_path_fields()
-        self._sync_key_lock()
         self._blocking = False
 
         self._set_enabled(one is not None, multi)
@@ -569,7 +557,6 @@ class TextWorkbench(QWidget):
         self._preview.set_editable(single)
         self._markup_bar.setEnabled(single)
         self._key_edit.setEnabled(single)
-        self._btn_lock.setEnabled(single)
         self._btn_copy.setEnabled(single)
         self._btn_add_path.setEnabled(single or multi)
         for e in self._path_edits:
@@ -618,54 +605,6 @@ class TextWorkbench(QWidget):
         self._blocking = True
         self._key_edit.setText(self._texts[0].key if self._texts else "")
         self._blocking = False
-
-    def _toggle_key_lock(self):
-        """Ouvre le champ clé, ou ré-accroche une clé manuelle au rangement."""
-        if len(self._texts) != 1:
-            return
-        t = self._texts[0]
-        if not t.auto_key:
-            self._key_unlocked = False
-            self.relink_asked.emit()
-            return
-        # Le cadenas n'ouvre que le champ : cliquer par curiosité ne doit rien
-        # casser, `auto_key` ne tombe qu'au commit.
-        self._key_unlocked = not self._key_unlocked
-        self._blocking = True
-        self._key_edit.setText(t.key)
-        self._sync_key_lock()
-        self._blocking = False
-        if self._key_unlocked:
-            self._key_edit.setFocus()
-            self._key_edit.selectAll()
-
-    def _sync_key_lock(self):
-        """Reflète l'état de la clé : dérivée (verrouillée), dérivée mais
-        déverrouillée le temps de l'édition, ou nommée à la main."""
-        t = self._texts[0] if len(self._texts) == 1 else None
-        auto = bool(t and t.auto_key)
-        editable = t is not None and (not auto or self._key_unlocked)
-        self._key_edit.setReadOnly(not editable)
-        self._key_edit.setStyleSheet(
-            QSS.lineedit if editable else
-            QSS.lineedit + f"QLineEdit{{color:{C.TEXT_MUTED}; background:{C.BG_PANEL};}}"
-        )
-        self._key_edit.setToolTip(tooltip(
-            title=label("txtwb.key_title"),
-            body=label("txtwb.key_tip_auto") if auto else label("txtwb.key_tip_hand"),
-        ))
-        self._btn_lock.setIcon(icons.get(
-            "key_auto" if auto else "key_manual",
-            C.TEXT_DIM if auto else TEXT_COLOR))
-        if auto and not self._key_unlocked:
-            lock_tip = tooltip(title=label("txtwb.lock_attached"),
-                               body=label("txtwb.lock_attached_tip"))
-        elif auto:
-            lock_tip = tooltip(title=label("txtwb.lock_reattach"))
-        else:
-            lock_tip = tooltip(title=label("txtwb.lock_hand"),
-                               body=label("txtwb.lock_hand_tip"))
-        self._btn_lock.setToolTip(lock_tip)
 
     def _copy_key(self):
         """Copie la clé dans le presse-papier (à coller dans un script)."""

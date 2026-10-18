@@ -55,7 +55,7 @@ from .api import (
     window_region_constant,
     DOMAIN_TEXT, DOMAIN_FONT, DOMAIN_IMAGE_STATE,
     DOMAIN_PALETTE, DOMAIN_UI_ELEMENT, ui_list_constant,
-    ref_member, ref_upcast, ref_constant, REF_ACTOR, REF_UI_ELEMENT, REF_TEXT_REGION,
+    ref_member, ref_upcast, ref_constant, REF_ACTOR, REF_UI_ELEMENT, REF_TEXT_BOX,
     REF_COLLISION_BOX, COLLISION_EVENTS, BOX_PARAMS,
     DOMAIN_PREFAB, DOMAIN_ACTOR, DOMAIN_GLOBAL, DOMAIN_SEQUENCE,
     anim_constant, sprite_id_constant, sfx_constant, music_constant, key_constant, actor_name_constant, scene_constant,
@@ -311,7 +311,7 @@ class CodegenContext:
     # de visibilité plate, UIELEM_*) — cf. Project.all_elements.
     element_names: list[str] = field(default_factory=list)
     # nom d'élément → type de référence que `interface:get(nom)` rend (`list`, `image`,
-    # `text_region`, `ui_element`) — le même dictionnaire que `BuildContext.ref_kinds` :
+    # `textBox`, `ui_element`) — le même dictionnaire que `BuildContext.ref_kinds` :
     # le type jugé par le checker et la constante émise par le codegen parlent du même élément.
     ref_kinds: Optional[dict] = None
     # {nom d'image: [noms d'état de SON sprite]} — un état n'a de sens que dans
@@ -2053,8 +2053,8 @@ class CodeGen:
     def _emit_text_draw(self, args: list) -> str:
         return self._emit_text_literal("text.draw", args, 2)
 
-    def _emit_text_region_draw(self, args: list, receiver: str) -> str:
-        return self._emit_text_literal(f"{REF_TEXT_REGION}:draw", args, 0, receiver)
+    def _emit_text_box_draw(self, args: list, receiver: str) -> str:
+        return self._emit_text_literal(f"{REF_TEXT_BOX}:draw", args, 0, receiver)
 
     def _resolve_arg(self, param, arg) -> str:
         """Convertit un arg Lua en expression C, résolvant les strings → constantes."""
@@ -2674,7 +2674,7 @@ _INVOKE_CUSTOM: dict = {
     "actor:destroy":  CodeGen._emit_destroy,
     "actor:play_sfx": CodeGen._emit_play_sfx,
     # Le littéral d'un texte pose ses `$locale` avant l'appel (cf. `_emit_text_literal`).
-    f"{REF_TEXT_REGION}:draw": CodeGen._emit_text_region_draw,
+    f"{REF_TEXT_BOX}:draw": CodeGen._emit_text_box_draw,
 }
 
 # ── Résolution des domaines : un domaine → la constante C ──────────

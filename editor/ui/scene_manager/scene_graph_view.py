@@ -29,8 +29,9 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QApplication, QGraphicsOpacityEffect, QGraphicsScene, QGraphicsView, QMenu,
-    QMessageBox, QLineEdit, QToolButton, QVBoxLayout, QWidget,
+    QLineEdit, QToolButton, QVBoxLayout, QWidget,
 )
+from ui.common.popup import MessageBox as QMessageBox
 
 from core.history import Command, get_history, SetFieldCmd
 from core.models.ids import new_id

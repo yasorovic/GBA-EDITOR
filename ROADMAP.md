@@ -288,6 +288,11 @@ fois refermé, son détail rejoint [changelog/archives/](changelog/archives/) co
 jalon, mais référencé par son nom plutôt que par un numéro — c'est là qu'est l'index complet des
 chantiers clos ; ce tableau ne garde que ceux **non clos**.
 
+**Livré le 2026-10-17 — [Le gabarit commun des pop-up](changelog/archives/common-popups.md).**
+Les messages d'information, d'attention, d'erreur et de confirmation des 22 modules concernés
+passent par `ui/common/popup.py` : illustrations adaptées au type de message, boutons et
+styles partagés, icônes cohérentes par type. Le détail et les vérifications sont archivés.
+
 | Chantier | Ouvert le | État |
 | --- | --- | --- |
 | Préparer une image riche à l'import — recadrer, redimensionner | 2026-09-26 | Route vers v1.0-stable — non prioritaire pour l'alpha (décidé le 2026-09-29) ; tranches 4bpp/8bpp livrées, reste la tranche bitmap et la validation à la souris. Voir [ci-dessous](#chantier-transverse--préparer-une-image-riche-à-limport-recadrer-et-redimensionner-sans-toucher-au-png) |
@@ -296,7 +301,7 @@ chantiers clos ; ce tableau ne garde que ceux **non clos**.
 | Le cache de scène | 2026-09-16 | À ouvrir — voir [ci-dessous](#le-cache-de-scène-rouvrir-une-scène-déjà-visitée-sans-tout-redécoder) |
 | Undo/redo des sidecars d'éditeur | — | À ouvrir — envisagé pour **V2**, voir [ci-dessous](#undoredo-des-sidecars-déditeur-annuler-la-création-dun-groupe-un-déplacement-de-nœud) |
 | L'écran Texte n'édite et ne range que du contenu | 2026-10-10 | **À ouvrir** — conception proposée, **rien de verrouillé**, code non commencé ; retire l'aperçu écran et édite le contenu dans la table. Remplace « L'atelier Texte réuni » (abandonné). Voir [ci-dessous](#lécran-texte-nédite-et-ne-range-que-du-contenu) |
-| L'écran Données — une grille de jeu, pas un tableur | 2026-10-14 | **À ouvrir** — direction proposée : rendre l'édition et les conséquences d'index visibles, sans tri, filtre ni formules ; conception à valider sur une vraie table, code non commencé. Voir [ci-dessous](#lécran-données--une-grille-de-jeu-pas-un-tableur) |
+| L'écran Données — une grille de jeu, pas un tableur | 2026-10-14 | **En cours — première tranche livrée le 2026-10-17** : grille et barre d'actions revues, couleurs de colonnes, références aux assets sprite/background et sélecteurs filtrables partagés ; reste la saisie en série, la navigation vers les références et la validation d'usage. Voir [ci-dessous](#lécran-données--une-grille-de-jeu-pas-un-tableur) |
 | L'écran Son montre le geste sans recalculer l'onde | 2026-10-12 | **Livré pour l'essentiel (2026-10-12)** — plus aucun rendu pendant qu'un potard est tenu, bascule Onde \| Scope (oscilloscope du mix, tiré du son qui joue), durée sur la règle, barres des canaux qui suivent le volume ; **reste ouvert** : les repères sonores de musique sont **livrés le 2026-10-14** (quatre natures, voir ci-dessous) ; les repères de **jingle** sont livrés le 2026-10-14 (tranche 1, en temps) ; restent l'appel d'événement et les points de sortie pour les music box (**chantier à décider**), un indicateur de marge du mix (proposé, **non décidé**), un scope par canal. Voir [ci-dessous](#lécran-son-montre-le-geste-sans-recalculer-londe) |
 | L'asset `.music` — sections, boucle surchargée, indépendant du format source | 2026-10-11 | **Livré (2026-10-11)** — étapes 1 à 7, plus le contrôle `1b`, voir « Ordre d'implémentation » ci-dessous ; ce qui suit est l'état de départ, gardé pour mémoire. **Était : À ouvrir** — modèle décidé (surcharge du fichier, unité `order`/`ms`, réglages par défaut surchargeables par l'API), **trois mesures faites le 2026-10-11, toutes positives** (mais les lecteurs d'IT/S3M et de restart de l'éditeur divergent de la ROM : à corriger d'abord) ; l'écran Son suit. Voir [ci-dessous](#lasset-music--sections-boucle-surchargée-indépendant-du-format-source) |
 | Un pont entre l'écran Texte et les tables de données — créer un dialogue sans tout renseigner à la main | 2026-10-10 | **À ouvrir** — besoin posé, pistes A (Texte → table) et B (« Nouveau texte » dans la cellule) **retenues**, le reste non verrouillé, code non commencé ; le dialogue reste une table de données (pas d'éditeur de dialogue). Voir [ci-dessous](#un-pont-entre-lécran-texte-et-les-tables-de-données--créer-un-dialogue) |
@@ -310,6 +315,8 @@ chantiers clos ; ce tableau ne garde que ceux **non clos**.
 | La compression d'un fond se joue, elle ne s'attend pas | 2026-10-14 | **À ouvrir** — analyse du parcours faite (lecture du code, rien mesuré à l'usage), sept frictions relevées, direction non arbitrée entre feedback en direct, perception de la perte et réglage par objectif ; code non commencé. Voir [ci-dessous](#la-compression-dun-fond-se-joue-elle-ne-sattend-pas) |
 | Le fond est un plan de travail — canvas, image posée, comparaison source/compressé | 2026-10-15 | **À ouvrir** — modèle décidé par l'auteur le 2026-10-15 (canvas-size distinct de l'image, image déplaçable qui peut déborder, barre source/compressé, une seule image visible), **six points à vérifier ou trancher** avant de coder (palette indexée préservée, limites du canvas tuilé, miroir dans le canvas, types UI/animé, peintures par tuile), code non commencé. Remplace la piste « un seul espace » de la compression. Voir [ci-dessous](#le-fond-est-un-plan-de-travail--canvas-image-posée-comparaison-sourcecompressé) |
 | Briques de base et assemblages — `Text` (chaîne) et `Textbox` (boîte), écrits directement dans le canvas | 2026-10-14 | **Livré pour l'essentiel (2026-10-14)** — deux types de texte, menu d'ajout en deux familles, `Text` posé en un point et édité sur place avec un curseur clignotant ; **reste** : emprise d'une chaîne qui suit son contenu, sélection non dessinée, vérification à la main et build ROM. Voir [ci-dessous](#briques-de-base-et-assemblages--text-chaîne-et-textbox-boîte) |
+| TextBox — plusieurs entrées pour préparer un dialogue | 2026-10-17 | **Livré pour l’essentiel (2026-10-17)** — pages éditables, aperçu, références et build multi-page, export/mise à jour de Data Table annulables ; **reste** : nommage des layouts partagés, suivi des noms scène/objet, duplication des textes et déplacement des blocs. Voir [ci-dessous](#textbox--plusieurs-entrées-pour-préparer-un-dialogue) |
+| Écran Texte — suites liées aux TextBox et aux tables | 2026-10-17 | **Link/Relink, Apply et +/− livrés** — édition structurelle sur les blocs, état précis et synchronisation fixés en bas. Reste l'export autonome des suites sans TextBox. Voir [ci-dessous](#écran-texte--suites-liées-aux-textbox-et-aux-tables) |
 | La fiabilité du journal de build | 2026-10-03 | **Tranche 1 livrée le 2026-10-03** (aucune erreur avalée, tout script vérifié, fautes injectées) ; **tranche 2 livrée le 2026-10-03** (diagnostic unique, `build.log`, sortie des outils classée) ; reste ouvert : les codes stables, si le besoin apparaît. Voir [ci-dessous](#la-fiabilité-du-journal-de-build) |
 
 ---
@@ -329,7 +336,32 @@ différent de celui que le runtime indexe ; des formules changeraient la nature 
 `const` en ROM. Le but est une grille compacte qui permet de créer et corriger rapidement des
 données de jeu, tout en rendant leurs contraintes explicites.
 
-### Direction proposée
+### Livré (2026-10-17)
+
+- **Présentation de la grille.** Nom de table, résumé lignes/colonnes et indexation à partir de 1,
+  barre « + Ligne / Dupliquer / Supprimer / + Colonne », en-têtes compacts avec badges de type
+  colorés, alternance discrète des lignes et sélection continue avec repère de cellule active.
+  Les insertions/suppressions au milieu annoncent le décalage des indices Lua.
+- **Couleurs de colonnes.** Le clic droit sur un en-tête reprend les pastilles du menu des
+  dossiers : cinq couleurs et une croix pour revenir au rendu neutre. La couleur habille
+  l'en-tête, est enregistrée dans le fichier `.table` et passe par Annuler/Rétablir ; elle ne
+  change ni les valeurs ni leur émission en ROM. Le widget est partagé avec le menu Disk.
+- **Références graphiques explicites.** Les types proposés comprennent `sprite` et `background`,
+  chacun alimenté par son catalogue d'assets ; les cellules suivent le renommage de l'asset.
+  `image` n'est plus proposé : il désignait un élément d'interface, pas un asset. Les anciennes
+  colonnes de ce type restent lisibles, sans conversion automatique vers une autre référence.
+- **Sélecteurs d'assets filtrables.** Les cellules de référence ouvrent le popup partagé
+  `ScriptPickerPopup` : recherche, icônes et aperçu des palettes, avec un choix « Aucun ».
+  Choisir écrit par l'historique de la grille ; fermer ou appuyer sur Échap conserve la valeur,
+  même si sa cible n'existe plus. Un popup ouvert avant un rechargement ne peut pas écrire
+  dans la nouvelle table. Le filtre porte uniquement sur les choix d'assets, jamais sur les lignes.
+
+**Vérification.** Tests ciblés de grille, de couleurs (widget partagé, persistance, annulation),
+de références graphiques (catalogues, validation, génération et renommage) et de sélecteur
+(filtre, choix, effacement, fermeture et rechargement). Rendu contrôlé, ouverture clavier et
+Échap vérifiés ; l'usage prolongé sur une table de jeu dense reste à valider.
+
+### Direction retenue et suite
 
 1. **La table dit ce qu'elle est.** L'en-tête central porte le nom, le nombre de lignes et de
    colonnes, et rappelle que les rangs commencent à 1. Chaque en-tête de colonne affiche un
@@ -349,12 +381,13 @@ données de jeu, tout en rendant leurs contraintes explicites.
 
 ### À ne pas faire
 
-- Ni tri, ni filtre : l'ordre affiché doit toujours être l'ordre réel des index Lua.
+- Ni tri, ni filtre des lignes : l'ordre affiché doit toujours être l'ordre réel des index Lua.
+  Le filtre du sélecteur de références ne change pas cet ordre.
 - Ni formules, ni calculs de feuille : les tables sont des données authorées, lues en ROM.
 - Ni panneau droit transformé en second éditeur : il explique et mène à la ressource citée ;
   l'écriture passe toujours par la grille et son historique unique.
 
-### Points à vérifier avant de coder
+### Points restant à vérifier
 
 1. **La confirmation de décalage.** La montrer à chaque insertion/suppression au milieu serait
    sûre mais possiblement pénible ; une option « ne plus demander pour cette session » peut
@@ -367,12 +400,33 @@ données de jeu, tout en rendant leurs contraintes explicites.
 4. **Le message de changement de type.** L'interface doit dire la vérité : les valeurs de la
    colonne sont effacées (et restaurables par Annuler), elles ne sont pas converties.
 
-### Ordre d'implémentation proposé
+### Références graphiques : la ROM ne les consomme pas encore (constaté le 2026-10-18)
 
-1. Correction du message de changement de type et ajout du résumé de table / badges de type.
-2. Barre d'actions visibles, duplication de ligne et avertissement d'index.
-3. Sélection de plage, copier/coller TSV et suppression clavier, avec tests de validation.
-4. Navigation vers la ressource référencée, puis recherche / « aller à la ligne » si les
+**Le besoin (auteur).** Lier une donnée à un élément visuel — portraits affichés dans un dialogue, tables de monstres.
+Ce que le script en fait reste le choix de l'auteur du jeu.
+
+**Ce qui est vrai aujourd'hui.** Une colonne `sprite` ou `background` est une référence d'éditeur complète (choix filtrable,
+renommage suivi, validation). En ROM, la cellule vaut la position de l'asset dans la liste du projet
+(`reference_index` dans `data_tables.py`), et **rien ne la lit** : aucune table de ROM, aucune fonction de script. Les assets
+que seules les tables citent ne sont pas chargés en VRAM. Une cellule vide vaut 0, comme pour les autres références.
+
+**Décision (2026-10-18) : on s'arrête là pour la ROM.** Ni catalogue, ni API, ni code runtime tant que la consommation n'est
+pas tranchée : ce n'est pas un choix à prendre à la légère. La table reste l'outil d'authoring.
+
+**Pistes relevées, rien de verrouillé.** Le moteur sait déjà copier depuis la ROM vers un bloc VRAM réservé (`BgTileAnim`,
+frames d'un sprite contiguës par direction, `UIImageInfo` pour les images d'interface). Un « emplacement » réservé, rempli à la
+demande depuis un catalogue ROM des seuls assets cités, couvrirait portrait (sprite ou image d'interface) et fond. Questions
+ouvertes à trancher avant d'y toucher : (1) emplacement chargé à la demande ou assets tous résidents ; (2) animation chargée
+en entier ou première frame seulement ; (3) candidats de tailles différentes, rognés avec avertissement ou refusés ; (4) un
+fond se copie écran éteint (jusqu'à 32 Ko de tuiles), donc une transition ; (5) budget VRAM et palettes signalés par un
+avertissement, sans bloquer.
+
+### Prochaines étapes
+
+1. Valider les gestes sur une vraie table de jeu, la place de l'inspecteur et le message de
+   changement de type : il doit annoncer l'effacement des valeurs, restaurables par Annuler.
+2. Sélection de plage, copier/coller TSV et suppression clavier, avec tests de validation.
+3. Navigation vers la ressource référencée, puis recherche / « aller à la ligne » si les
    tables de projet en justifient le besoin.
 
 ---
@@ -1593,6 +1647,57 @@ chaque outil a son repère. L'auteur attend qu'à l'import on **voie son fichier
    à l'origine ; bitmap → tuilé garde le canvas tel quel. À confirmer --> Existe-t-il des techniques de streaming d'image bitmap ? Comment fonctionne un flux vidéo sur GBA ? Comment fonctionne un aperçu 3D également. On a peut-être des pistes pour étendre l'affichage d'une image bitmap.
 3. **Le canvas change de taille alors qu'un bitmap est fixe** : la taille est-elle simplement grisée, ou masquée ? (l'image déborde du canvas, l'utilisateur peut la repositionner --> Importance de créer un nouvel outil de sélection simple dans la barre d'outils qui deviendra l'outils par défaut de cet écran et qui permettra de simplement déplacer l'image dans le canvas)
 
+### Au-delà de 240×160 : étendre un fond bitmap (étude du 2026-10-16, réponse au point 2)
+
+*Étude seulement : rien n'est codé, rien n'est exécuté sur émulateur.*
+
+**Ce que le matériel offre.** Le Mode 4 a deux pages de 240×160 en 8 bpp (bit 4 de DISPCNT) mais une seule palette,
+partagée entre elles : une palette par image se change donc exactement à la bascule. Le Mode 3 n'a pas de double tampon
+(75 Ko sur 96 Ko). Le Mode 5 en a deux, en 160×128 et 15 bpp, agrandissables par l'affine de BG2. En bitmap il ne reste
+que BG2 (plus de BG0/BG1/BG3 : le texte et l'UI actuels doivent passer par des sprites ou du dessin logiciel) et les
+sprites perdent la moitié de leur VRAM (tuiles 512 à 1023).
+
+**Le double tampon ne fait pas défiler.** Il cache le redessin : on écrit dans la page invisible, puis on bascule au
+VBlank. Le défilement vient d'une **source plus grande que l'écran, gardée en ROM**, dont un DMA copie la fenêtre visible
+vers la page cachée, ligne par ligne avec le stride de la source. Ordre de grandeur (à mesurer) : 38 Ko par image, soit
+40 000 à 80 000 cycles sur les 280 000 d'une image — 60 fps sans décodage CPU tant que la source n'est pas compressée.
+L'affine de BG2 ajoute déplacement sous-pixel, rotation et zoom gratuits, mais seulement à l'intérieur de la page (pas de
+bouclage en bitmap).
+
+**Pourquoi c'est utile malgré les calques tuilés.** Une peinture sans répétition dépasse les 1024 tuiles d'un charblock
+8 bpp : elle ne peut pas défiler en tuilé. Le bitmap fenêtré comble ce cas (grand décor non tuilable). Autres usages du
+double tampon : rendu logiciel (v3.0), transitions et diaporamas (image suivante préparée en arrière-plan), vidéo.
+
+**Vidéo.** Possible mais hors de portée d'un asset ordinaire : un flux séquentiel en ROM (32 Mo max), décodé image par
+image dans l'IWRAM (delta, RLE ou LZ77 BIOS, palette réduite), synchronisé sur l'horloge audio, avec un seul écrivain du
+volume (voir la politique musique des jingles). Il n'entre ni dans la déduplication de tuiles ni dans `palette_alloc` :
+c'est un `kind` à part, qui réserve le fond et la palette de la scène pendant la lecture. Le transcodage se ferait hors
+éditeur (outil externe type ffmpeg, à trancher : vendorisé ou demandé à l'auteur), et le recadrage ou la cadence restent
+des gestes explicites de l'auteur (pas de réduction cachée).
+
+**Ce que le code fait aujourd'hui.** Le bitmap n'existe que dans l'éditeur : `rom_build.py` (lignes 330, 671, 836, 876)
+et `gen_scene_query.py` sautent les fonds bitmap avec un avertissement. Il n'y a ni DISPCNT en Mode 4, ni bascule de
+page, ni blit. La borne 240×160 est `BITMAP_SIZE` (`models/background.py`) et `_require_bitmap_canvas` /
+`encode_by_mode` (`bg_import.py`), qui rognent le surplus.
+
+**Découpage proposé, dans cet ordre.**
+
+| Étape | Contenu | Dépend de |
+| --- | --- | --- |
+| A | Émission ROM d'un bitmap 240×160 statique : buffer 8 bpp, palette de 256 couleurs, DISPCNT Mode 4, `render_mode` de la scène, cap OBJ à partir de la tuile 512 | — (à valider sur émulateur d'abord) |
+| B | Bascule de page et rendu hors écran (substrat commun avec le rendu logiciel de la v3.0) | A |
+| C | Canvas bitmap **libre** côté éditeur (par exemple 1024×160), puis blit fenêtré en runtime | A, B |
+| D | Vidéo : flux en ROM, codec, synchronisation audio | A, B |
+
+**Ce qui rouvre une décision.** L'étape C contredit la décision du 2026-10-15 (« un bitmap a un canvas fixe de 240×160 »).
+Elle ne la supprime pas : le canvas serait libre en option, et la fenêtre de 240×160 deviendrait une valeur du runtime.
+Le sidecar porte déjà `canvas_size`. Un buffer 8 bpp de 1024×160 fait 160 Ko en ROM.
+
+**À vérifier avant C.** (1) Si la caméra (v0.6) peut piloter l'origine de la fenêtre comme elle pilote les calques
+tuilés ; ce serait l'intégration la plus propre. (2) Compressé ou non : sous environ 200 Ko décompressé, une
+décompression LZ77 BIOS en EWRAM au chargement de la scène permet un DMA depuis la RAM, plus rapide que depuis la ROM.
+(3) Le coût des sprites et de l'UI en bitmap (BG2 seul).
+
 ### Réglages et résultats : l'encodage à la fin (réflexion de l'auteur, 2026-10-15)
 
 Pile voulue : **source** (le PNG) → **préparée** (canvas, échelle, miroir, ajustements — `prepare_source`, en mémoire) →
@@ -1640,17 +1745,65 @@ couper `encode_background` en filtre puis encodage (le chemin « indexé direct 
   banque disparue = dernières couleurs gardées + avertissement du validateur ; override sans palette dérivée = levé et dit ;
   usages et renommage au courant ; la bande de peinture ne propose que les palettes ajoutées en Paint ; un fond vierge reçoit
   d'office la première palette du projet.
+- Retours de l'auteur du 2026-10-16, corrigés : la boîte de compression suit le layout et la profondeur CHOISIS (avant la
+  compression) et se range dans l'ordre où l'encodeur résout (4bpp : global colors → dithering → méthode → colors / palette →
+  palettes → tiles ; 8bpp : méthode → colors → dithering → tiles — un réglage ne refait que ce qui le suit) ; la carte
+  Ajustements se replie ; « Reset » et « Recompute » ; choisir Bitmap (ou Tuilé) fait suivre la carte Canvas, la fenêtre du
+  mode Canvas et le cadre du passe-partout ; le miroir a de nouveau un point sur sa barre, la flèche est décalée.
 
 **Reste à faire**
 
-1. **Documentation** : ARCHITECTURE.md décrit encore les palettes ajoutées comme des copies (à corriger).
-2. **Inpainting** (`tile_palette_overrides`) : appliquer la même règle (ne cibler que des palettes ajoutées), c'est la passe
-   suivante. Il dépend encore des numéros de banque de l'encodage.
+1. ~~Documentation~~ : ARCHITECTURE.md décrit les palettes par référence (fait le 2026-10-16).
+1 bis. **Trous dans une grande image — constaté le 2026-10-16, SANS solution encore.** Sur une image de 1650×952 (22 798 tuiles
+   uniques), des tuiles noires apparaissent, et le rendu est brouillé par bandes. Deux causes lues dans le code, reproduites sur
+   une image de test : (a) l'index de tuile est codé sur 10 bits (`pack_se`) et tronqué en silence au-delà de 1023 — les index
+   1024, 2048… retombent sur la tuile 0, d'où un trou sur ~1 tuile sur 1024 ; (b) `merge_tiles` ne fait rien au-delà de
+   `MAX_TILES = 6000` tuiles (sa matrice de coûts est carrée), donc « Tiles » est ignoré sans le dire. Le souhait de l'auteur : une
+   tuile retirée doit être REMPLACÉE par une tuile réutilisée visuellement proche, jamais devenir un trou. Pistes à étudier (rien
+   n'est décidé) : plafond dur à 1024 index dans l'encodeur, passage préalable bon marché qui ramène les tuiles sous 6000 avant
+   la fusion, avertissement clair quand un fond dépasse 64×64 tuiles ou 1024 tuiles uniques. Une couche de fond GBA ne dépasse
+   pas 64×64 tuiles (512 px) : une image de cette taille ne tient pas comme un seul fond, quoi que fasse la fusion.
+2. ~~Inpainting~~ : fait le 2026-10-17, même règle que la peinture. Un repeint ne cible qu'une palette AJOUTÉE et se range par
+   sa POSITION dans `added_palettes` (`BackgroundAsset.repaint_bank` la rend en numéro de banque) ; la bande de peinture ne
+   propose plus que ces palettes, en Inpaint comme en Paint. Le sidecar l'écrit sous `settings.tile_repaint` ; l'ancienne clé
+   `tile_palette_overrides` (des numéros de banque) se relit — position pour une palette ajoutée, **abandon** pour un repeint
+   qui visait une palette dérivée du PNG. Aucune démo n'avait de repeint. Aussi livré : un petit slider du passe-partout dans la
+   barre du canvas (l'intensité du grisé, 59 % par défaut, propre à la session).
 3. **Un seul geste « Appliquer » imperceptible** : un service d'encodage unique (réglages → pause → calcul → validation,
    le dernier réglage gagne), l'état explicite avec empreinte réglages + source, l'affichage provisoire (image préparée),
    la fenêtre d'état. À trancher : le seuil de coût « bon marché » (~1,5 s mesuré sur le dernier encodage ?), et le
    processus de travail séparé — à MESURER d'abord : les boucles Python pures de l'encodeur peuvent saccader l'interface même
    dans un thread, et un thread ne s'annule pas.
+3 ter. **Plan du service d'encodage unique — décidé le 2026-10-17.** Seuil « bon marché » de l'encodage automatique : **~4 s**
+   (en dessous il part tout seul après la pause, au-dessus l'état reste « en attente » avec un bouton « Run encoding »).
+   **Révisé le 2026-10-17 : seuil éteint par défaut** (`auto_seconds=None`) — bloquer un encodage de 4 s surprenait plus qu'il
+   ne protégeait ; le mécanisme reste pour la phase 5. Le
+   bouton vit dans la fenêtre d'infos du canvas. Phases : 0 mesure (faite, ci-dessous) ; **1 empreinte et état (faite le
+   2026-10-17)** : `encoded.encoded_for`, `encode_settings_fingerprint()`, `encoding_is_current(source_stamp)` ; **2 le service (fait le
+   2026-10-17)** : `ui/background_editor/background_encoding.py` (`EncodingJob`, `BackgroundEncodingService`, `ThreadExecutor`) —
+   un seul chemin, le dernier réglage gagne, un calcul à la fois, validation automatique, états à jour / en attente / en calcul /
+   échec, cache de 8 résultats, exécuteur interchangeable ; l'écran n'a plus que `_commit_job` (validation), `_on_encoding_wanted`
+   (curseurs), `_on_run_encoding` (bouton) et `_compress_async` (geste, immédiat) ; l'aperçu non appliqué et son bouton « Compress »
+   sont supprimés ; **3 la ligne d'état (faite le 2026-10-17)** : dans le canvas, au-dessus des infos (`set_encoding_state`) — « En attente / Encodage… / Échec » avec le layout voulu, et le bouton **Run encoding** (attente ou échec) ; l'échec se lit en ligne, plus de fenêtre ; tant que le fond n'est pas à jour le canvas montre l'image préparée de ce qui est voulu (badge « pas encore le rendu GBA »), `service.cancel` quand l'auteur revient aux réglages validés ; le bouton « Recompute » et la barre d'attente de l'inspecteur sont retirés ; **4 nettoyage et build (fait le 2026-10-17)** : `_check_background_encoding_current` (validateur) avertit, sans bloquer, qu'un fond dont les réglages ont changé depuis son encodage embarquerait l'ancien résultat ; (ancienne ligne :) la fenêtre d'état et l'affichage provisoire de l'image préparée ; 4 nettoyage des trois anciens
+   chemins, le build qui vérifie l'empreinte, suite complète ; 5 le processus séparé, pour les grandes images.
+3 bis. **Phase 0 mesurée le 2026-10-17** (poste de l'auteur, un `QTimer` de 16 ms sur le thread de l'interface pendant l'encodage,
+   thread Qt contre processus séparé ; rendu non peint, donc un MINIMUM de saccade ; scripts jetables, rien d'écrit dans le projet) :
+
+   | image | réglage | calcul | thread : écart max entre deux ticks | processus : écart max |
+   |---|---|---|---|---|
+   | photo 540×540 (4561 tuiles) | 4bpp défaut | 2,4 s | **99 ms** (4 % de ticks perdus) | 17 ms |
+   | idem | 8bpp | 0,5 s | 21 ms | 17 ms |
+   | idem | 4bpp, cible 256 tuiles | 5,6 s | **81 ms** | 17 ms |
+   | photo 1650×950 (23 167 tuiles) | 4bpp défaut | 14,2 s | **562 ms**, 5 gels > 100 ms (7 % perdus) | 18 ms |
+   | idem | 8bpp | 2,6 s | 59 ms | 17 ms |
+
+   Lecture : (1) l'encodage est bien plus rapide que le 2026-10-14 (photo 540 : 4bpp défaut 10,7 → 2,4 s, cible 256 32 → 5,6 s,
+   8bpp 1,7 → 0,5 s) ; (2) un thread suffit pour une image qui tient dans une couche de fond — un à-coup de ~100 ms au pire ; (3) sur une
+   grande image il fait vraiment saccader (562 ms), parce que l'indexation, la déduplication et le regroupement sont des
+   boucles Python pures qui gardent le verrou ; (4) un processus séparé garde l'interface fluide (≤ 18 ms) pour le MÊME temps de
+   calcul, et le seul moyen d'annuler un calcul de 14 s. Conséquence : bâtir le service avec un exécuteur interchangeable, le
+   thread d'abord, le processus (préchauffé, avec le cache d'étage dedans) ensuite. Pour le seuil « bon marché » : une photo de
+   540 px prend 2,4 s en 4bpp ; un seuil à 1,5 s la mettrait au bouton, à ~4 s au tout-automatique — à trancher.
 4. **Couper `encode_background` en filtre de compression puis encodage** (le chemin « indexé direct » est déjà l'encodage seul,
    et se réutilise tel quel), puis des caches par étage.
 5. **Dégeler** compression, ajustements et miroir ; miroir dans l'espace du canvas ; mode « compress view » (barre source /
@@ -1758,6 +1911,457 @@ une chaîne en Lua), tests `tests/interface/test_ui_textbox_type.py`.
 - Pas de `textbox:draw` côté Lua : une boîte et une chaîne s'écrivent par `interface:get(nom):draw`.
 - **Non vérifié à la main** : l'édition en place a été corrigée à trois reprises sur retour de
   l'auteur (raccourcis, déplacement, focus) ; aucun build ROM complet n'a été fait avec `nowrap`.
+
+---
+
+## TextBox — plusieurs entrées pour préparer un dialogue
+
+### État au 2026-10-17 — livré pour l'essentiel
+
+Les quatre étapes convenues sont implémentées : modèle de pages, blocs dans l'inspecteur,
+prise en compte de toutes les pages au build, puis **Export as table / Update table**.
+Le périmètre demandé — préparer les répliques et les rendre accessibles au script — fonctionne.
+Le chantier reste ici pour les arbitrages de nommage, de duplication des textes et de
+manipulation de l'ordre décrits en fin de section.
+
+### Le parcours livré
+
+- Les TextBox affichent des blocs multi-lignes dans l'inspecteur. Les réglages de police,
+  couleur et alignement sont communs à toutes leurs pages ; `Text` conserve son champ unique.
+- **+** insère une page après le bloc concerné, crée son entrée dans Texte et lui donne le focus.
+  **−** détache une page supplémentaire et conserve son entrée dans Texte. La première page reste.
+- Le bloc actif est entouré de rose et prévisualisé dans le rectangle du canvas. Ce choix est
+  transitoire : il ne change pas la première page enregistrée pour l'affichage initial en jeu.
+- Une boîte vide présente un bloc vide sans créer d'entrée. La première saisie crée l'entrée ;
+  le premier ajout crée les deux pages correspondant aux deux blocs.
+- Le premier geste d'édition, d'ajout ou d'export reprend le contenu historique : une entrée
+  liée reste la même ; un texte local devient une véritable entrée. La simple sélection et
+  l'ouverture du projet ne convertissent rien.
+- La saisie modifie directement l'entrée de Texte. Les traductions restent attachées à son id.
+  Saisie, conversion, ajout, retrait, export et mise à jour de table sont annulables.
+
+### Identités et nommage actuels
+
+`UITextbox.page_ids` conserve l'ordre des références stables ; le contenu reste dans les `Text`.
+La première page est résolue par id, avec `text_key` comme pont de compatibilité pour les
+lecteurs existants. Les numéros attribués ne sont pas réutilisés après un retrait.
+
+Une nouvelle entrée est rangée sous **scène / nom de l'élément TextBox / numéro**, par exemple
+`Village / Dialogue / 01`. Sa clé suit la règle existante de `Text` : segments normalisés,
+séparés par `_`, avec suffixe d'unicité en cas de collision. Une entrée déjà liée conserve son
+identité, son rangement et ses traductions lors de la conversion.
+
+À la création, le contexte vient de la scène ouverte ; les ajouts suivants réutilisent la
+scène d'origine de la première entrée si elle est renseignée. Les règles à affiner pour les
+layouts partagés et les renommages de scène/objet sont listées plus bas.
+
+### Export vers Données — contrat implémenté
+
+**Export as table** crée une Data Table ordinaire, nommée `<Scène>_<TextBox>` avec suffixe
+si le nom est pris, et une colonne `replique` de type `text`. Les lignes suivent l'ordre des
+pages. Elles contiennent les clés des entrées, jamais une copie des chaînes.
+
+Exemple : `interface:get("Dialogue"):draw(data.Village_Dialogue[1].replique)`.
+Les indices commencent à 1. Le script décide quand avancer et quand terminer le dialogue.
+Une correction du contenu ou d'une traduction est partagée ; elle ne nécessite pas de mise
+à jour de la table tant que les références et l'ordre des pages ne changent pas.
+
+La TextBox mémorise l'id de la table et un jeton d'association, indépendants de son nom.
+**Update table** retrouve les lignes par une identité persistante, pas par leur position :
+les colonnes ajoutées à la main (portrait, son, locuteur…) restent attachées aux bonnes pages.
+
+Avant une mise à jour, un récapitulatif présente les ajouts, retraits, déplacements,
+références de texte rétablies, lignes manquantes recréées et lignes manuelles conservées.
+Annuler ce récapitulatif ne modifie rien ; appliquer crée une seule commande annulable.
+
+| Modification dans Données | Comportement de la mise à jour |
+| --- | --- |
+| Valeur d'une colonne supplémentaire modifiée | Valeur conservée avec sa page |
+| Référence de texte modifiée dans la colonne exportée | Référence de la page rétablie, annoncé dans le récapitulatif |
+| Ligne exportée supprimée | Ligne recréée pour sa page, autres colonnes à leurs valeurs par défaut |
+| Ligne ajoutée manuellement ou dupliquée dans la grille | Ligne conservée à la fin ; une duplication ne copie pas la propriété de l'export |
+| Page détachée de la TextBox | Ligne exportée retirée avec ses autres valeurs, annoncé avant application |
+| Colonne exportée renommée | Lien suivi ; elle reste la colonne propriétaire |
+| Colonne exportée supprimée ou devenue non-`text` | Mise à jour bloquée jusqu'à restauration de la colonne |
+| Table renommée | Association conservée par id |
+| Table supprimée ou indisponible | Nouvel export possible sous une nouvelle identité, sans adopter une table homonyme |
+| Table, boîte ou layout dupliqué | La copie ne conserve pas la propriété de l'export de l'original |
+
+La mise à jour respecte aussi les renommages de clés de texte, y compris lors de son
+annulation/rétablissement. Elle ne recopie jamais automatiquement des cellules de Données
+vers la liste de pages. Ce parcours réutilise le [pont Texte / Données](#un-pont-entre-lécran-texte-et-les-tables-de-données--créer-un-dialogue),
+sans nouvel asset « Dialogue ».
+
+### Build et vérifications réalisées
+
+- Une seule entrée runtime et un seul rectangle réservé par TextBox ; seule la première
+  page est dessinée à l'initialisation. La sélection de l'aperçu n'intervient pas au build.
+- Toutes les pages et traductions alimentent les glyphes, les polices balisées et les
+  diagnostics de débordement/couverture. Une page absente bloque le build avec son numéro.
+- Le budget de glyphes animés prend le **maximum** entre pages et langues, jamais leur somme.
+  Une portée `[font]` sur une page suivante peut imposer une surface composée ; celle-ci
+  reste unique pour la boîte.
+- L'index des usages couvre toutes les pages, les scripts et les cellules `text` des tables.
+  Les cellules suivent les renommages de clés ; les pages conservent leurs références par id.
+- Vérifications du 2026-10-17 : **335 tests passent**, dont un build ROM réel avec devkitPro.
+  Le test ROM utilise le véritable export, renomme table et colonne, puis fait lire la deuxième
+  réplique depuis Lua. Les marqueurs du journal mGBA confirment le démarrage et l'appel de
+  dessin de cette page à la frame 30 ; ce contrôle ne compare pas les pixels de l'écran.
+
+Tests : `tests/text/test_textbox_pages.py`, `tests/text/test_textbox_pages_build.py`,
+`tests/text/test_textbox_table_export.py`, `tests/ui/test_textbox_page_editor.py` et
+`tests/rom_build/test_textbox_pages_rom.py` (lent ; exécution mGBA si son frontend SDL est présent).
+Le modèle et les mécanismes de persistance sont détaillés dans `ARCHITECTURE.md`.
+
+### Reliquat ouvert
+
+Le [chantier des suites dans l’écran Texte](#écran-texte--suites-liées-aux-textbox-et-aux-tables)
+prépare les associations inverses, les états et la synchronisation explicite depuis ce nouvel écran.
+
+- **Layouts partagés :** confirmer à l'usage le contexte de nommage actuel, fondé sur la scène
+  ouverte puis sur l'origine de la première entrée, ou proposer un choix explicite d'origine.
+- **Renommage de scène ou d'objet :** les références restent stables, mais les clés déjà créées
+  ne sont pas recalculées automatiquement d'après ces noms. Trancher ce suivi en respectant
+  les clés nommées manuellement.
+- **Duplication des textes :** une copie de boîte partage actuellement les références de pages,
+  tout en détachant son export. Décider si elle doit plutôt créer ses propres textes et traductions.
+- **Déplacement d'une page existante :** l'ordre est stocké et pris en compte par l'export,
+  mais l'inspecteur ne propose pas encore de geste dédié pour déplacer un bloc ; il permet
+  l'insertion après un bloc et le retrait des pages supplémentaires.
+
+### Hors du périmètre livré
+
+Déroulement automatique du dialogue, passage sur appui, temporisation, effet machine à écrire,
+choix branchés, arbre de conversation et découpage automatique d'un long texte en pages.
+La prévisualisation des traductions dans le canvas reste rattachée au chantier de l'écran Texte.
+
+---
+
+## Écran Texte — suites liées aux TextBox et aux tables
+
+### Demande et état du chantier (2026-10-17)
+
+L'écran Texte est retravaillé en parallèle pour privilégier la création et l'édition du contenu.
+Les entrées partageant un préfixe de clé et un suffixe numérique sont présentées sous un en-tête
+commun. L'auteur souhaite ajouter **+ / −** sur ces blocs, puis **Create table / Update table**
+et **Update TextBox**. Avant ces actions, l'écran doit connaître ses cibles réelles et leur état.
+
+**Étape 1 livrée : contexte des liens en lecture seule.** `core/text_sequence_context.py` résout
+les correspondances par ids, ordre et occurrences. L'en-tête affiche la TextBox, la table exportée
+et les écarts observés ; l'infobulle détaille toutes les candidates, leurs scènes et les usages
+en cellules. La table est reconnue par son id et son jeton, puis ses colonne et lignes gérées
+sont vérifiées. Les liens partiels ou multiples ne créent aucune association implicite.
+
+Les filtres conservent le périmètre complet du groupe, trié numériquement comme à l'écran.
+Les notifications d'usages actualisent le contexte sans reconstruire les champs ni déplacer le
+curseur ; la revisite recalcule aussi les références. Aucune écriture, migration ou identité de
+suite n'est créée par cette lecture. Les états décrivent les écarts, sans attribuer de direction
+de mise à jour au groupe visuel. Validation : 77 tests ciblés, dont 20 nouveaux tests de contexte
+et d'intégration, et contrôle visuel du cas réel `SCR_Arena / textbox_2` avec table conforme.
+**Étape 2a livrée : identité persistante et Relink.** `core/text_sequences.py` conserve les
+suites explicitement adoptées dans le champ optionnel `sequences` de `texts.json`, avec ids de
+textes, ordre/occurrences et placements attendus. Link mémorise une suite ; Relink peut adopter
+une correspondance partielle puis réintégrer les entrées choisies en une commande annulable.
+La destination proposée d'un ancien groupe sans historique est indiquée dans l'infobulle ;
+elle est reconstruite depuis l'ordre de la boîte et les conventions des entrées présentes,
+pas présentée comme un ancien rangement récupéré avec certitude.
+
+L'en-tête présente le nombre d'entrées hors du groupe et un bloc repliable avec Retrouver,
+Relink individuel et Relink tout. La suite demeure visible même vidée de toutes ses entrées.
+Le contenu, les traductions et les lignes de table ne sont ni recréés ni supprimés par Relink ;
+les références suivent les renommages de clés habituels. Les filtres restent un affichage.
+L'association de boîte utilise l'id du layout et un `UITextbox.sequence_id` attribué uniquement
+à cette première action ; les duplications détachent ce lien. Renommer le préfixe ou déplacer
+le dossier complet conserve l'identité de suite ; déplacer une feuille crée un écart.
+Un état des références gérées de table est mémorisé, sans les contenus ni les colonnes libres.
+Les collisions de clés et destinations déjà associées sont refusées.
+
+**Apply livré pour les suites liées à une TextBox.** `core/text_sequence_apply.py` prépare un
+plan sans mutation depuis la suite complète, indépendamment des filtres et de la langue.
+Les entrées écartées sortent des projections mais leurs `Text` et traductions restent disponibles.
+Les occurrences sont conservées et les nouvelles entrées du groupe sont ajoutées à la suite.
+Le plan réutilise le rapprochement de lignes de `plan_export(..., text_ids=...)`, sans créer de
+boîte invisible ni dupliquer cet algorithme. La numérotation consommée par une nouvelle page
+est réservée pour les créations suivantes dans l'inspecteur.
+
+**Apply reste dans l’écran Texte, sans fenêtre modale.** Le bouton applique la suite
+complète en un pas d’historique. L’option de création de table, les erreurs et les conflits
+restent dans le bandeau inférieur. Une table liée absente, un lien ambigu ou un schéma invalide
+sont refusés sans redirection ni recréation silencieuse. Un groupe ancien peut être adopté
+explicitement par Apply, puis projeté, en un seul pas d’historique.
+
+Un conflit avec une modification de TextBox ou de références gérées en table demande une case
+explicite dans le bandeau. Cette acceptation est périmée dès que l’état concerné change, même
+si seul un champ libre en table a changé. Contenus et traductions restent compatibles avec
+les mêmes ids. Les références de textes absents sont nommées dans l’écran ; chaque référence
+peut être retirée explicitement et de façon annulable avant Apply.
+L'application et l'undo coordonnent suite, layout et table, en conservant les objets de ligne
+pour les commandes de cellule antérieures. Les autres usages des textes ne sont pas des cibles.
+Les notifications rafraîchissent Données, Disk et le contexte de texte, avec conservation des filtres.
+Validation : 171 tests ciblés, plus contrôle visuel en lecture seule du cas réel de la capture.
+**Commandes +/− et bandeau fixe livrés.** Chaque entrée possède ses contrôles en bas à droite.
+`EditTextSequenceCmd` insère un `Text` vide après l'entrée choisie dans l'ordre de la suite ;
+le champ prend le focus, y compris sous un filtre ou pendant la traduction. L'entrée neuve
+reste temporairement visible sous le filtre sans modifier celui-ci. Une première action peut
+adopter explicitement un groupe libre ou lié. Le compteur `TextSequence.next_number` réserve
+les numéros consommés, même après retrait, Apply et suppression ultérieure d'un texte écarté.
+Apply transmet aussi ce compteur à la TextBox pour ses créations suivantes.
+
+**Révision du 2026-10-17 : liste explicite et retrait prévisible.** À la première
+édition structurelle, la suite conserve sa liste ordonnée indépendamment du classement.
+Les numéros affichés sont les positions continues `#01`, `#02`… ; les clés et ids restent
+stables. Le − retire exactement l'occurrence choisie, sans déplacer le `Text`. Annuler
+restaure sa position. Le + insère après la ligne choisie. Les deux boutons utilisent des
+icônes dans le champ, sur une ligne de contrôles distincte du défilement. La zone de saisie
+s’agrandit avec le contenu jusqu’à une hauteur plafonnée. Le fond utilise `BG_INPUT` et les
+libellés restent transparents, conformément à la charte.
+
+Pour une suite liée, le texte retiré reste disponible pour ses anciennes références jusqu'à
+Apply. Apply actualise les pages et lignes gérées, puis supprime le texte et ses traductions
+s'il n'a plus aucun usage. Les scripts, autres éléments d'interface, autres suites et cellules
+manuelles ou colonnes libres protègent un texte partagé. Le bandeau explique les conservations ;
+les usages sont revérifiés à l'application. Sans destination, un texte exclusif est supprimé
+immédiatement. Les deux opérations sont annulables, données et traductions comprises.
+
+Le Finder et la liste centrale utilisent la même projection des entrées actives et sont
+rafraîchis ensemble à chaque ajout, retrait, undo et redo. Un texte partagé conservé reste
+accessible comme entrée libre, sans déplacement de son rangement. Une suite vide reste
+visible avec un compteur nul et son bouton +. Les anciennes suites sont lues sans migration
+sur ouverture ; leur première édition structurelle rend leur ordre explicite.
+
+Les commandes générales d'ajout/suppression ont quitté la barre supérieure ; Nouveau texte
+reste disponible en bas pour les entrées libres et les projets vides. Le contexte technique
+de correspondance reste consultable en infobulle, sans ligne « Partial correspondence ».
+Le nombre précis d'entrées écartées/à ajouter et les actions Link/Relink/Apply vivent dans un
+bandeau fixé sous la liste et suivent le groupe actif. La liste des entrées écartées se déplie
+dans une zone de défilement plafonnée. Validation de la correction : tests ciblés sur Apply
+direct, les conflits, les références manquantes et la hauteur des champs, avec contrôle visuel
+dans l’écran complet sur une fixture isolée. Reste la création de table autonome sans TextBox.
+
+### Séquences dérivées, liées ou libres (décidé le 2026-10-18 — REMPLACE l'adoption explicite)
+
+L'auteur ne veut jamais « mettre à jour » une table ou une TextBox à la main : la
+synchronisation est **intrinsèque à l'état**. Tout ce qui précède dans ce chantier
+(`TextSequence`, Adopt/Relink/Apply, `sequences` dans `texts.json`, `textbox_export` et
+marqueurs `$editor`, `sequence_id`, `table_export_*`) est **retiré** au profit de ce qui suit.
+
+- **Séquence = dérivée, jamais stockée.** Les textes dont la clé finit par `_<chiffres>`
+  (n'importe quel suffixe : `_1`, `_Page01`, `_007`) et qui partagent le même préfixe forment une
+  séquence à partir de **deux textes**. L'ordre est la valeur numérique du suffixe. Aucune
+  identité, aucun fichier : renommer ou ranger un texte la fait apparaître ou disparaître.
+- **État d'une séquence : liée ou libre**, calculé. *Liée* = au moins un consommateur (une table
+  de l'écran Données dont `text_link.prefix` est ce préfixe ; une TextBox qui la lit). *Libre* =
+  aucun : l'en-tête propose **Link to existing table** et **Create table**.
+- **État d'une table : liée ou libre.** *Liée* = `text_link` posé. *Libre* : l'écran Données
+  propose **Link to text sequence**. Une table liée a ses lignes pilotées par la séquence (une
+  ligne = une clé de la colonne `text`), les autres colonnes sont à l'auteur.
+- **Synchronisation intrinsèque.** Ajouter, retirer, renommer ou réordonner un texte d'une
+  séquence liée réécrit ses consommateurs **dans la même commande** (un seul pas d'historique,
+  Ctrl+Z restitue texte et lignes). Il n'y a ni bouton Update, ni aperçu périmé, ni conflit.
+  Une page retirée emporte sa ligne, colonnes libres comprises.
+- **Ce qui reste du code actuel :** `core/text_table_link.py` (`text_link`, `LinkTableCmd`,
+  `UnlinkTableCmd`), généralisé de `_PageXX` à `_<chiffres>`.
+- **Livré le 2026-10-18 :** dérivation pure (`core/text_sequences.py`) ; tables synchronisées dans
+  l'historique (`after_execute`) ; en-tête Texte lié/libre ; **`page_ids` retiré** — une TextBox
+  suit une séquence par `sequence_prefix` (ou affiche son `text_key`), les pages sont dérivées ;
+  ancien moteur supprimé (adoption, Apply, export de TextBox, ~17 fichiers de tests). Les anciens
+  `page_ids`, `sequences` et `$editor` sont ignorés à la lecture : une boîte multipage d'avant
+  garde son `text_key` et doit être reliée à la main à sa séquence.
+- **Reste :** contrôle visuel de l'en-tête et de l'inspecteur ; test ROM `test_textbox_pages_rom`
+  adapté mais non relancé (devkitPro) ; libellés `txtseq.*` orphelins à purger.
+
+### Le chemin est dérivé de la clé — plus de libellés stockés (décidé le 2026-10-18)
+
+`Text.path` (les libellés des niveaux, avec accents et espaces) dupliquait la clé et se
+désynchronisait dès qu'un renommage ne le recalait pas (Finder à `Page03` pour la clé `Page02`,
+après une renumération). **Il n'est plus stocké** : `Text.path` est une propriété en lecture
+seule, les segments de `key`. `texts.json` n'écrit plus `path` ; un ancien fichier se lit
+sans erreur (le champ est ignoré, sauf pour dériver une clé manquante).
+
+- **Ranger, c'est renommer la clé.** Glisser-déposer, renommer un dossier du Finder, éditer un
+  niveau depuis l'inspecteur : chacun calcule les nouvelles clés (`Project.text_path_keys`) et les
+  applique en un lot (`rename_text_keys`), scripts, cellules de table, boîtes et séquences liées
+  suivent. Plus de renommage « cosmétique » d'un libellé.
+- **Affichage** : le segment tel qu'il est dans la clé. Les libellés libres (`La forêt`) disparaissent ;
+  taper `La forêt` pour un dossier donne le segment `LaForet`.
+- **Retiré** : le champ `path`, `path_from_key`, l'alignement des libellés après chaque renommage,
+  l'ancien `SetTextPathCmd` à deux modes (libellé seul / clé).
+
+### Simplification de la clé (décidée le 2026-10-18)
+
+Deux exceptions retirées, pour qu'il reste un comportement attendu et fiable :
+- **`auto_key` est supprimé** (champ, badge, cadenas, `RelinkTextKeyCmd`, renommage de feuille
+  du Finder qui visait la clé). La clé porte la structure ; renommer un libellé ne la touche
+  jamais ; la renommer ou déposer le texte dans un autre dossier la change partout où elle est
+  citée. Les anciens `texts.json` qui contiennent `auto_key` se lisent sans erreur.
+- **Une page peut apparaître plusieurs fois dans une TextBox.** Aucun besoin n'est présumé :
+  la règle n'a simplement pas de cas particulier. Seule la renumérotation d'un texte partagé
+  reste refusée, puisqu'on ne peut pas renuméroter une même entrée deux fois.
+
+### Constats vérifiés dans le code et le projet de la capture
+
+| Sujet | État actuel |
+| --- | --- |
+| Groupe numéroté | Vue calculée à partir du dossier et du préfixe ; Link/Relink peut désormais lui donner une identité éditoriale persistante |
+| Numérotation | Les suffixes numériques suffisent au regroupement ; ils n'ont pas besoin d'être consécutifs |
+| Ordre à l'écran | Tri numérique pour un groupe libre ; ordre mémorisé de la suite après adoption, occurrences conservées dans le modèle |
+| Bloc et en-tête | `TextEntry` porte un `Text` ; l'en-tête porte le contexte calculé et les actions Link/Relink, l'association persistante reste dans le modèle |
+| Usages | `TextUsageIndex` fournit les scripts, les couples `(layout, élément)` et les cellules `(table, ligne, colonne)`. L'écran affiche des compteurs et détails, sans résoudre un propriétaire de suite |
+| TextBox | `page_ids` donne l'ordre réel des textes par id ; `table_export_id` et `table_export_token` désignent son export |
+| Table exportée | `DataTable.textbox_export` conserve la colonne et les paires `text_id` / `row_id` ; les lignes gérées portent leur marqueur `$editor` |
+| État de mise à jour | `plan_export` sait comparer une table à sa TextBox. Il ne compare pas une suite modifiée dans Texte à une TextBox encore inchangée |
+| Actions de Texte | Le + général crée une entrée dans le rangement sélectionné ; la suppression générale supprime des `Text`. Ni l'une ni l'autre ne modifie les pages d'une TextBox |
+| Rafraîchissement | Usages invalidés puis recalculés paresseusement ; contexte des liens actualisé sans reconstruire les champs, relecture à la revisite et après undo. Aucun historique de synchronisation de suite n'est encore maintenu |
+
+**Cas concret vérifié sans modifier les fichiers :** dans `Project Demo/PongAdvanced`, le groupe
+`scr_arena_textbox_2` contient trois textes. Leurs ids, dans l'ordre affiché, correspondent aux
+pages de `SCR_Arena.layout / textbox_2`. La table `SCR_Arena_textbox_2` porte le même id et le même
+jeton que le lien de la boîte ; ses enregistrements de pages sont cohérents avec les trois ids.
+Les données nécessaires existent donc pour ce cas ; leur exploitation manque à l'écran Texte.
+Ce constat ne permet pas de généraliser à tous les groupes ayant un nom ressemblant à une boîte.
+
+### Les pièges à traiter avant les boutons
+
+- **Un nom n'est pas un lien.** Un groupe peut être sans usage, référencé par plusieurs TextBox,
+  partagé entre scènes ou cité dans plusieurs tables. Une cellule `text` est un usage, pas la
+  preuve que sa table est l'export géré de la boîte.
+- **Le suffixe n'est pas l'ordre de lecture.** Une insertion entre 01 et 02 peut créer la page 04 :
+  la TextBox lit `01, 04, 02, 03`, tandis que le groupe actuel affiche `01, 02, 03, 04`.
+  Renommer ou ranger une entrée peut aussi la faire sortir du regroupement visuel sans changer
+  ses références. Ne jamais renuméroter les clés pour remettre artificiellement ces ordres d'accord.
+- **Les filtres ne définissent pas la suite.** Recherche, dossier, Empty, Unused et langue peuvent
+  ne montrer qu'une partie des membres. Les opérations structurelles doivent porter sur la suite
+  entière, en annonçant leur portée, jamais sur la seule liste des blocs visibles.
+- **Le contenu est déjà partagé.** Modifier une source ou sa traduction ne nécessite aucune copie
+  vers la boîte ou la table. Ce sont les membres et leur ordre qui peuvent diverger.
+- **Un retrait n'est pas une suppression globale.** Réutiliser la suppression générale de Texte
+  pour le − d'une suite pourrait casser une autre boîte, une table ou un script.
+- **Une comparaison ne révèle pas toujours l'intention.** Si la suite et la boîte ont changé
+  séparément depuis leur dernier accord, un simple remplacement perdrait l'un des deux travaux.
+
+### Première étape — résoudre les références et exposer leur état
+
+Créer une requête métier partagée, indépendante des widgets, par exemple
+`resolve_text_sequence_context(project, text_ids)`. Elle doit conserver l'ordre et les occurrences,
+retourner les candidats et les raisons des états, et ne rien modifier ni enregistrer.
+
+1. Retrouver les TextBox par leurs références effectives : correspondance ordonnée complète,
+   même ensemble dans un autre ordre, recouvrement partiel et usages extérieurs. Pour une boîte,
+   retrouver aussi le layout et toutes les scènes qui l'instancient.
+2. Résoudre la table réellement liée par id et jeton ; vérifier la colonne, les lignes gérées,
+   leurs références et les lignes manuelles. Distinguer cet export des autres usages de table.
+3. Ne désigner une cible unique que lorsqu'elle est établie. Plusieurs candidats restent une
+   liste explicite ; aucune cible ne doit être choisie à partir du nom du groupe.
+4. Fournir un contexte à l'en-tête sans en faire un propriétaire : cibles identifiées, état
+   de chacune, détails consultables et actions permises. Les compteurs d'usage restent distincts.
+
+Les correspondances partielles servent à expliquer et proposer des candidats ; elles ne suffisent
+pas à créer une association persistante. Une première association doit être explicite lorsque les
+références ne la déterminent pas sans ambiguïté. Une entrée utilisée plusieurs fois dans une boîte
+ne doit pas être confondue avec une seule occurrence dans le groupe visuel actuel.
+
+| État à présenter | Signification / conséquence |
+| --- | --- |
+| Sans lien | Textes libres ; création d'une association possible |
+| À jour | Membres, ordre et références de la projection concordent |
+| TextBox à mettre à jour | La suite a changé ; la boîte conserve son dernier état synchronisé |
+| Table à créer / à mettre à jour | Export absent ou projection différente ; les valeurs des colonnes libres ne rendent pas la table « périmée » |
+| Référence indisponible | Boîte, layout, table, colonne ou texte manquant ; proposer une action adaptée |
+| Plusieurs destinations | Choisir la cible concernée avant une opération structurelle |
+| Modifications concurrentes | La suite et sa projection ont changé depuis leur dernier accord ; montrer les différences avant de trancher |
+
+« À mettre à jour » suppose une association et une direction connues. Pour un ancien groupe sans
+historique commun, présenter un écart à résoudre plutôt que prétendre savoir quel côté est récent.
+Les états de TextBox et de table sont indépendants : l'une peut être à jour et l'autre non.
+
+### Modèle retenu — première partie livrée, projections à poursuivre
+
+**Recommandation : une suite éditoriale persistante et ordonnée**, distincte du simple groupe de
+présentation, identifiée par un id stable et contenant des références de `Text`. Son libellé,
+son préfixe et son rangement ne déterminent pas son identité. Cette donnée reste dans l'éditeur ;
+elle ne constitue ni un nouvel asset Dialogue, ni un moteur de conversation.
+
+Le bouton **Update TextBox** implique que la suite puisse évoluer sans modifier immédiatement
+la boîte. Cette liste et son ordre doivent survivre à une réouverture, y compris sans TextBox.
+Les seules clés numérotées et les compteurs d'usage ne suffisent donc pas à porter ce contrat.
+Une association vers la boîte résiste à son renommage : l'id d'asset du layout et le nouvel
+identifiant opaque `UITextbox.sequence_id` sont mémorisés au moment de l'association explicite.
+La duplication retire cet identifiant sur la copie.
+
+Conserver les derniers états synchronisés des projections pour distinguer une modification d'un
+seul côté d'un conflit. À la reprise des projets existants, préserver les ids de textes, jetons
+et ids de lignes déjà exportées. Ne pas créer de suites en masse à la simple ouverture de l'écran :
+la lecture déduit un contexte ; une première action explicite peut matérialiser la suite.
+
+Pour une suite liée, l'ordre affiché doit suivre cette donnée, et non les suffixes des clés.
+Les groupes libres non matérialisés peuvent garder leur présentation actuelle.
+
+### Contrat proposé pour les actions
+
+- **+ sur un bloc :** créer une nouvelle entrée après celui-ci dans la suite complète, lui donner
+  le focus et préserver toutes les identités existantes. Ce n'est pas un retour à la ligne dans
+  le texte courant. Le compteur de nommage ne doit pas réutiliser les numéros retirés.
+- **− sur un bloc :** retirer son occurrence sans déplacement ; Apply supprime le `Text` et ses traductions s'il n'a plus d'autre usage (révision du 2026-10-17).
+  Les projections deviennent à mettre à jour ; leurs changements ne se font pas en silence.
+- **Create table :** exporter la suite (création depuis une suite sans TextBox encore à faire) ; **Update table :** projeter son ordre
+  et ses références avec le même récapitulatif et la même préservation des colonnes personnalisées
+  que l'export existant. Les lignes manuelles restent traitées selon ce contrat.
+- **Update TextBox :** proposer la liste et l'ordre à appliquer à la cible choisie, sans toucher à
+  son rectangle, sa police ou ses couleurs. Annoncer un éventuel changement de première page,
+  puisque celle-ci constitue l'affichage initial en jeu.
+- Chaque geste est annulable avec ses créations et associations. Apply coordonne explicitement
+  les destinations associées ; l'export depuis l'inspecteur de scène reste un parcours distinct.
+  Une traduction utilise la même structure de suite que
+  la source : ajouter une entrée ne crée pas une structure indépendante pour cette langue.
+
+L'export partage désormais son rapprochement de lignes avec la source ordonnée passée par
+`text_ids`. L'extraction d'un export autonome sans TextBox reste à faire. **Ne pas simuler une boîte
+invisible pour exporter un groupe libre**, et ne pas recopier l'algorithme de rapprochement des
+lignes dans l'écran Texte. Une table projetée depuis la suite ne doit pas rester prisonnière de
+l'ancien ordre d'une TextBox que l'auteur n'a pas encore choisi de mettre à jour.
+
+### Ordre d'implémentation recommandé
+
+1. **Contexte en lecture seule — livré :** requête inverse, état des cibles, branchement à l'en-tête et
+   tests des groupes libres, liés, partiels et ambigus. Aucun +/− structurel à ce stade.
+2. **Identité et ordre — première partie livrée :** modèle de suite, associations stables,
+   état de référence, reprise explicite du cas existant et Relink individuel/en lot.
+3. **Apply — livré pour les suites liées :** plan d'export partagé, aperçu des changements et
+   application aux seules destinations associées, avec comparaison et gestion des conflits.
+   Commandes +/− et bandeau fixe livrés ; reste l'export autonome des suites sans TextBox.
+4. **Réactivité et validation :** invalidations après édition structurelle, commandes de scène,
+   modifications de table, renommage, suppression, watcher et undo/redo. Conserver le focus,
+   le curseur et les filtres lors d'une simple actualisation de l'état.
+
+Les suites sont désormais persistées avec les textes dans `texts.json` ; l'association explicite
+persiste aussi l'identité de boîte dans le layout. Les autres projections passeront par leurs
+commandes de persistance propres. Les notifications actuelles d'usages actualisent aussi le
+contexte de suite ; Apply notifie aussi les différentes destinations après application et undo.
+Validation de l'étape 2a : 139 tests ciblés sur les suites, le contexte, les pages/export,
+les références, l'écran Texte, les déplacements, la sauvegarde de projet et la duplication.
+
+### Critères de validation
+
+- Cas réel `SCR_Arena / textbox_2` : résolution de la boîte et de sa table exportée, état cohérent.
+- Groupe numéroté libre, suffixes troués, clé renommée, entrée rangée ailleurs : aucun lien inventé.
+- Insertion donnant `01, 04, 02, 03` : ordre préservé dans Texte, TextBox et table après mise à jour.
+- Filtres et langues : opérations sur la bonne suite complète, sans perdre les traductions.
+- Plusieurs boîtes/scènes/tables et références répétées : destinations et occurrences explicites.
+- Retrait d'une entrée partagée : aucun `Text` supprimé, autres usages intacts.
+- Création de table sans boîte ; mise à jour de table alors que la boîte est encore en retard.
+- Conservation des portraits/sons/autres colonnes, lignes manuelles et identités de lignes.
+- Modification indépendante dans le Scene Manager ou Données : écart/conflit expliqué ; aucun
+  remplacement silencieux ni aperçu périmé appliqué.
+- Renommage, duplication, cible supprimée, undo/redo, sauvegarde/réouverture et changement d'écran.
+- ROM lisant les répliques de la table exportée ; aucun nouveau déroulement automatique du dialogue.
+
+### Points à trancher avant la deuxième étape
+
+Adopter le modèle de suite proposé et sa place de stockage ; définir l'identité des occurrences
+si une même entrée est répétée ; fixer les associations autorisées et la sélection d'une cible
+parmi plusieurs ; préciser le retrait du dernier bloc et l'emplacement des actions communes dans
+l'en-tête. La direction de synchronisation et la résolution des modifications concurrentes doivent
+être établies avant d'activer Update TextBox ou de changer le propriétaire d'un export existant.
 
 ---
 
@@ -2006,7 +2610,7 @@ Le second brouille le message du premier : l'œil va vers le rectangle noir, pas
 mettre en ordre. Le rendu fidèle a servi à poser le pipeline des polices ; il a un autre lieu naturel (la
 scène, l'écran Police). L'écran Texte ne doit plus chercher qu'**une chose : éditer et ranger le contenu**.
 
-### Le parcours visé (précisé le 2026-10-10)
+### Le parcours visé (précisé les 2026-10-10 et 2026-10-17)
 
 Deux lieux, deux métiers, et ils ne se recouvrent pas :
 
@@ -2028,10 +2632,36 @@ point 4 de « À trancher »).
 
 - **L'aperçu écran disparaît** de l'atelier : plus de rectangle 240×160, plus de sélecteur de police d'aperçu,
   plus de bouton « Afficher le balisage » (la source balisée est la seule vue du contenu).
-- **Le contenu s'édite dans la colonne centrale**, dans la table elle-même — éditer là où l'on lit, même geste
-  que la clé et le rangement (inline, jamais de dialogue ; cf. cellule de clé et `_PathDelegate`).
-- **L'atelier du bas rétrécit** à ce qui n'est pas le contenu : clé (cadenas, copie), fil d'Ariane du rangement,
-  onglets de langue, barre de balisage. Plus de séparateur ni de zone repliable.
+- **Décision de l'auteur du 2026-10-17 : le contenu occupe la place principale.** Remplacer les lignes
+  compactes `Key / Content / Used` par de grands blocs de texte multi-lignes directement éditables,
+  comme sur la maquette. Le traducteur ou le correcteur doit pouvoir lire et travailler les textes
+  longs sans les retrouver comprimés dans une cellule. Cette direction remplace le délégué de
+  cellule initialement proposé le 2026-10-10.
+- **Regrouper les blocs par scène**, avec un en-tête repliable. Une indication discrète au-dessus
+  du contenu situe l'objet et la scène ; les clés et les informations d'usage ne prennent plus
+  la place du texte. Le traitement des entrées partagées ou sans scène reste à définir.
+- **Alléger les outils autour du contenu.** Garder accessibles langue, balisage, clé et rangement,
+  sans maintenir par principe l'atelier du bas ou l'inspecteur actuels. Leur disposition exacte
+  reste à dessiner ; la priorité est la surface de lecture et d'édition.
+
+### Find — rejoindre le lieu d'usage (décision du 2026-10-17)
+
+Depuis l'écran Texte, un bouton **Find** permet de retrouver un texte dans le projet lorsqu'il
+est référencé : ouvrir la scène concernée et sélectionner/révéler l'élément qui l'utilise.
+La maquette place également une loupe dans l'en-tête de scène pour rejoindre ce contexte.
+L'emplacement exact des actions scène et texte reste à préciser, mais l'accès doit être direct.
+
+- Un seul lieu d'usage : navigation directe vers la cible.
+- Plusieurs lieux : proposition d'une liste de destinations explicites (scène, objet, script ou
+  table selon la référence), sans choisir arbitrairement une scène.
+- Aucune référence : état « non référencé », sans destination inventée.
+
+Les deux derniers comportements sont proposés pour préciser le contrat. Il faudra distinguer
+les références directes d'une TextBox, celles d'un script et celles d'une Data Table : une cellule
+de table identifie un usage, mais ne prouve pas dans quelle scène le script affichera son texte.
+Le bouton s'appuie sur les références réelles, pas seulement sur le nom ou le rangement de l'entrée.
+Compléter l'index des usages si nécessaire, notamment avec toutes les pages des TextBox et les
+colonnes `text` des tables ; gérer aussi les mises en page partagées entre plusieurs scènes.
 
 ### Le conflit avec l'ancien chantier
 
@@ -2044,7 +2674,7 @@ du 2026-09-19 tombe avec elle ; la section qui la portait n'est plus qu'un renvo
 **Constat de code, à dire avant d'ouvrir :** l'ancien chantier était annoncé « aucune étape codée »,
 mais `TextWorkbench` monte déjà `FontScreenPreview` en surface **éditable** (`set_editable(True)`, signaux
 `edited` / `committed`) et y branche `MarkupToolbar`. Le code est donc à mi-chemin d'une direction qu'on
-abandonne : l'état d'arrivée de ce chantier n'est pas « l'ancien QTextEdit », c'est la table qui édite.
+abandonne : l'état d'arrivée de ce chantier est désormais la liste de blocs éditables décidée le 2026-10-17.
 
 ### Ce que ça touche
 
@@ -2052,9 +2682,9 @@ abandonne : l'état d'arrivée de ce chantier n'est pas « l'ancien QTextEdit »
 | --- | --- |
 | `font_screen_preview.py` | **supprimé** — seul `TextWorkbench` le monte |
 | `text_workbench.py` | perd `_build_preview`, le `QSplitter`, `_preview`, le sélecteur de police d'aperçu, `_btn_markup` ; garde l'identité (clé, rangement, langues) et la barre de balisage |
-| `text_table.py` | la colonne Content devient éditable : délégué de cellule multi-ligne portant la source, coloration par `MarkupHighlighter`, au repos la source (plus le texte résolu avec `⏎`) |
-| `text_panel.py` | reste l'unique arbitre : la saisie de cellule devient la commande annulable que produit aujourd'hui `content_committed` |
-| `markup_toolbar.py` | vise l'éditeur de la cellule en cours plutôt que `FontScreenPreview` — son contrat (`source()`, `selection_source()`, `replace_source()`) est déjà abstrait ; désactivée hors édition |
+| `text_table.py` | remplacer la présentation compacte par des blocs multi-lignes regroupés par scène ; préciser si le composant est refondu ou remplacé |
+| `text_panel.py` | reste l'arbitre des modifications annulables ; sélection, regroupement et actions Find |
+| `markup_toolbar.py` | vise le bloc en cours plutôt que `FontScreenPreview` — son contrat (`source()`, `selection_source()`, `replace_source()`) est déjà abstrait ; désactivée hors édition |
 | `text_editor_screen.py`, `text_inspector.py` | `preview_font_changed` / `set_font` : voir « À trancher » |
 | `markup_highlighter.py` | **conservé** — `ui_inspector.py` l'utilise aussi |
 | `tests/ui/test_text_preview_font_assets.py` | retiré avec l'aperçu |
@@ -2062,14 +2692,17 @@ abandonne : l'état d'arrivée de ce chantier n'est pas « l'ancien QTextEdit »
 
 `core.text_markup`, `texts.json`, les sides de traduction et la ROM ne bougent pas : c'est un chantier d'**interface**.
 `ScreenTextPreview` (la jauge de longueur de l'inspecteur de script) est un autre composant, il reste.
+Find touche également l'index des usages (`core/project_texts.py`) et la navigation vers les
+scènes, leurs éléments, les scripts et les tables. Vérifier ces points dans le code au démarrage.
 
 ### À trancher avant d'ouvrir
 
-1. **Ce que la cellule montre au repos.** La source balisée (ce qu'on édite = ce qu'on lit, balises teintées),
+1. **Ce que le bloc montre au repos.** La source balisée (ce qu'on édite = ce qu'on lit, balises teintées),
    ou le texte résolu comme aujourd'hui (plus propre pour parcourir, mais deux représentations du même
    contenu). Penchant : la source, une seule représentation.
-2. **Hauteur des lignes.** Un texte multi-ligne s'étale-t-il (ligne qui grandit, plafonnée) ou reste-t-il sur une
-   ligne avec `⏎` jusqu'à l'édition ? Une ligne qui grandit casse le rythme d'une table de centaines d'entrées.
+2. **Dimensionnement des blocs.** Le contenu multi-ligne doit être lisible, décision du 2026-10-17.
+   Fixer la hauteur minimale, un éventuel plafond pour les très longs textes et le comportement
+   sur des centaines d'entrées ; la ligne compacte avec `⏎` n'est plus la cible.
 3. **Ce que devient la police d'aperçu.** Elle alimente encore l'inspecteur (caractères manquants via
    `missing_chars()`) et la liste des icônes de la barre de balisage. Sans sélecteur : la « Default Font » du
    projet (v0.9) comme police de référence, ou le sélecteur déménage dans l'inspecteur de droite. Si l'apparence
@@ -2088,24 +2721,31 @@ abandonne : l'état d'arrivée de ce chantier n'est pas « l'ancien QTextEdit »
    scène ou par session, si le liseré ambre de troncature suit la langue affichée, si l'on peut voir plusieurs
    langues à la fois. Rien de tout cela n'est arrêté. Ce n'est pas un prérequis du retrait de l'aperçu, mais
    tant que ce n'est pas livré l'auteur qui traduit perd un repère : le dire dans la clôture.
-5. **Édition de la traduction.** La référence source en lecture seule (visible seulement en traduisant) tient-elle
-   dans la bande du bas, ou devient-elle une colonne de la table ?
+5. **Édition de la traduction.** Disposer la source en lecture seule à côté ou au-dessus du bloc
+   traduit, en gardant une grande surface d'édition ; fixer la place du sélecteur de langue.
+6. **Regroupement et Find.** Place des textes sans scène et des textes partagés, ordre des pages,
+   gestion des usages indirects et destinations multiples ; fixer le retour vers le texte après navigation.
 
 ### Ordre d'implémentation (proposé)
 
-1. **Délégué de contenu** dans `text_table.py` : édition en place, source au repos, commit via `text_panel`
-   (annulable). L'aperçu existe encore : on vérifie que les deux chemins d'édition ne se disputent pas.
-2. **Rebrancher `MarkupToolbar`** sur l'éditeur de cellule.
+1. **Liste de blocs éditables** : regroupement par scène, contenu multi-ligne et traduction,
+   modifications annulables via `text_panel`, conservation de la recherche et de la sélection.
+2. **Rebrancher `MarkupToolbar`** sur le bloc actif et alléger les panneaux annexes.
 3. **Retirer l'aperçu** : `FontScreenPreview`, splitter, sélecteur, bouton, signaux de police, clés de
    traduction, test dédié. Trancher le point 3 avant cette étape.
 4. **Chercher le mort** : signaux sans abonné, `set_font` orphelin, helpers de rendu qu'aucun autre écran
    n'appelle ; mettre à jour `ARCHITECTURE.md` (arbre des fichiers, section de l'écran Texte).
+5. **Find** : indexer les usages nécessaires et câbler les destinations ; vérifier navigation,
+   absence de référence, références multiples, mises en page partagées et pages de dialogue.
+6. Vérifier la lecture et l'édition de textes longs, les traductions, l'annulation et le comportement
+   sur un projet contenant de nombreuses entrées.
 
 ### Ce que ça ne fait pas
 
 - Ne retire pas le rendu fidèle de l'éditeur : il reste dans l'écran Police et en scène.
 - Ne change ni `texts.json`, ni le format des traductions, ni la ROM.
-- Ne crée pas de second éditeur : le contenu n'a qu'un seul lieu de saisie, la table.
+- Dans cet écran, les blocs sont la surface d'édition du contenu ; les TextBox peuvent aussi éditer
+  les mêmes entrées depuis la scène, conformément au chantier des pages de dialogue.
 
 ---
 
@@ -2875,6 +3515,13 @@ la hauteur par défaut, la variation et la politique du jingle ; `core/validator
 
 ## Un pont entre l'écran Texte et les tables de données — créer un dialogue
 
+**Parcours livré le 2026-10-17 :** le chantier
+[TextBox à plusieurs entrées](#textbox--plusieurs-entrées-pour-préparer-un-dialogue) fournit
+**Export as table / Update table** depuis la boîte, vers les tables ordinaires et leurs colonnes
+`text`. Le contrat de mise à jour, de conservation des colonnes personnalisées et des lignes
+manuelles est implémenté et décrit dans cette section. Les pistes A et B ci-dessous restent
+des parcours complémentaires.
+
 ### D'où vient la question (2026-10-10)
 
 Depuis la v0.21, un dialogue est une **table de données** dont une colonne est de type `text`
@@ -2906,7 +3553,7 @@ tient la ligne posée dès la v0.3 : pas d'arbre de conversation, pas de choix b
   tête de sa liste, *Nouveau texte…* : l'entrée est créée à l'instant (clé proposée par le rangement, jamais
   tapée), rangée sous le nom de la table, et la cellule la référence. C'est le geste de qui construit la
   conversation ligne à ligne. Le contenu s'écrit ensuite dans l'écran Texte, ou sur place si la cellule le permet.
-- **C — Les deux sens se rejoignent sur le rangement.** Le chemin d'un texte propose sa clé (`auto_key`) ; si le
+- **C — Les deux sens se rejoignent sur le rangement.** Le chemin d'un texte donne sa clé à la création ; si le
   rangement d'un dialogue porte le nom de sa table, la clé de la réplique `n` se dérive d'elle-même
   (`<table>_<n>`) et plus personne ne la nomme à la main. Le lien table ↔ rangement reste une convention de
   création, jamais une contrainte (les deux peuvent diverger ensuite).
@@ -3747,6 +4394,84 @@ La config SRAM de la v0.5 est déjà un morceau de « ce que porte la cartouche 
 Le profil **l'absorbe** : une seule source de vérité, pas deux partielles. C'est un **vrai
 chantier de migration** — migration du modèle de save existant et relecture du codegen de
 sauvegarde, l'ancien supprimé avant de dire terminé — pas un bonus glissé dans autre chose.
+
+#### État au 2026-10-17 — aperçu des circuits dans le panneau Build
+
+**Première tranche intégrée, chantier ouvert.** Le panneau Build des réglages du projet
+affiche une photo de circuit avec des repères **ROM / SRAM / pile**, la capacité ROM visée,
+la référence du circuit photographié et ses crédits. L'aperçu suit le choix de capacité et
+l'annulation/rétablissement. Le moteur reste sur sa sauvegarde **SRAM de 32 Kio** ; aucun
+nouveau pilote de sauvegarde n'a été ajouté.
+
+**Références documentées déjà intégrées :**
+
+| ROM visée | Circuit photographié | Sauvegarde et pile | Correspondance |
+| --- | --- | --- | --- |
+| 4 Mio | AGB-E06-01 (F-Zero: Maximum Velocity) | SRAM 32 Kio, pile CR1616 retirée sur la photo | mêmes capacité ROM et type/taille de sauvegarde |
+| 8 Mio | AGB-E06-10 (Wario Land 4) | SRAM 32 Kio, pile CR1616 montée | mêmes capacité ROM et type/taille de sauvegarde |
+| 16 / 32 Mio | même photo de la carte de 8 Mio | SRAM 32 Kio, pile CR1616 montée | exemple explicitement signalé ; aucune correspondance ROM revendiquée |
+
+**Règle retenue :** une photo illustre un spécimen identifié, pas une carte détectée ni une
+garantie de compatibilité avec une cartouche physique. Une pile retirée pour la photo ne
+décrit pas une sauvegarde sans pile. Capacité ROM, type/taille de sauvegarde et rôle de la
+pile restent des caractéristiques distinctes ; quatre capacités ROM ne constituent pas
+quatre formats de circuits.
+
+Les photos originales, leurs sources et licences sont conservées dans
+[`editor/ui/common/images/cartridges/`](editor/ui/common/images/cartridges/README.md).
+Les photos affichées proviennent de la Game Boy hardware database, sous **CC BY-SA 4.0** ;
+les crédits et les images sont inclus dans la distribution. Vérification : **49 tests ciblés
+passent**, rendu du dialogue contrôlé pour 4, 8 et 32 Mio. Le contrôle d'architecture global
+signale encore des problèmes hors de ce chantier.
+
+**Reste à faire :** trouver des spécimens documentés pour les ROM de 16 et 32 Mio avec la
+sauvegarde correspondante ; étendre les références aux circuits avec et sans pile en
+précisant son rôle (sauvegarde ou horloge). La sélection effective de SRAM / EEPROM / Flash
+reste liée à la migration du profil et à l'implémentation des pilotes moteur/codegen :
+ajouter une photo ne débloque pas le matériel associé. Le jalon v2.0 reste non ordonnancé.
+
+**Préparation du catalogue (2026-10-17)** : la [matrice des cartes, composants et photos](docs/development/cartridge-hardware-matrix.md)
+recense douze configurations ordinaires avec des jeux de référence, les cartes spéciales,
+les composants à photographier et les 36 fiches de scans retrouvées sur Archive.org.
+Les associations observées sont distinguées des montages encore à confirmer. Aucun nouveau
+visuel n'a été téléchargé pour cette recherche ; la collecte attend cet inventaire.
+
+**Six profils simplifiés en aperçu (2026-10-17)** : sans sauvegarde, SRAM 32 Kio,
+EEPROM 512 octets / 8 Kio, Flash 64 / 128 Kio, FRAM 32 Kio et Flash 128 Kio + horloge.
+Le sélecteur « Matériel à visualiser » est disponible **depuis les sources uniquement**.
+Première étape : SRAM conservait ses photos documentées ; les autres profils utilisaient
+un schéma provisoire. Ces schémas sont désormais remplacés par les photos décrites ci-dessous.
+
+Ce choix reste **local au dialogue** : ni réglage de projet ni donnée de compilation ; changer
+la ROM ou annuler ce changement conserve le profil visualisé. La compilation et ses contrôles
+restent en SRAM 32 Kio, quelle que soit la prévisualisation. Les versions distribuées
+(`IS_FROZEN`, y compris Nuitka) n'exposent que SRAM. Les tests vérifient l'absence d'effet
+sur les réglages, l'historique et le pilote de sauvegarde généré, ainsi que ce filtrage.
+
+**Activation ultérieure en release** : implémenter et valider le pilote, la capacité et les
+contrôles de sauvegarde dans le modèle/codegen/moteur, puis relier le vrai réglage au profil
+et lever son filtrage. Le drapeau d'aperçu ne constitue pas une prise en charge matérielle.
+
+**Photos récupérées (2026-10-17)** : [bibliothèque de travail des six profils](research/cartridges/README.md),
+31 images vérifiées (12 cartes nues recto/verso et 19 vues assemblées, variantes ou détails).
+Les sources, auteurs, licences, dimensions et empreintes sont conservés avec les fichiers.
+Les vues de composants sont disponibles sur les assemblages ; les détourages individuels
+et leur superposition sur les cartes nues restent à faire. Les sources Archive.org à licence non précisée
+restent dans `research/`, hors des images empaquetées avec l'application.
+
+**Photos intégrées au panneau Build (2026-10-17)** : neuf exemplaires documentés,
+18 vues recto/verso sous CC BY-SA 4.0, couvrent les six profils et leurs capacités.
+Les repères identifient la ROM, la sauvegarde, la pile et le RTC selon le montage.
+La capacité réelle de la ROM photographiée reste indiquée, avec mention si elle diffère
+de la cible. Les crédits ouvrent la fiche source et la licence. Les vues et profils
+restent locaux au dialogue ; la compilation demeure en SRAM 32 Kio.
+
+Le mode « Carte nue » consulte les fichiers de recherche depuis les sources uniquement,
+sans repères de composants ni mention de composants présents. Il est désactivé pour
+AGB-E06-10 faute de scan correspondant. Aucun scan Archive.org à licence non précisée
+n’est empaqueté. Les versions distribuées conservent uniquement le profil SRAM.
+Un schéma identifié sert de secours si une photo assemblée est absente.
+Validation : 56 tests ciblés réussis et vérification visuelle FR/EN du panneau.
 
 #### Deux pièges matériels à encoder
 

@@ -21,6 +21,7 @@ Retourne une liste ordonnée de dicts :
 """
 from __future__ import annotations
 import re
+from core.resources.resource_store import atomic_write
 from pathlib import Path
 from typing import Any
 
@@ -248,7 +249,7 @@ def add_export(lua_path: Path, name: str, typ: str, label: str | None = None) ->
         entries.append(new_entry)
         new_inner = "\n" + ",\n".join(f"    {e.strip()}" for e in entries) + ",\n"
         text = text[:start] + new_inner + text[end:]
-    lua_path.write_text(text, encoding="utf-8")
+    atomic_write(lua_path, text)
 
 
 def _entry_key(entry: str) -> str | None:
@@ -280,7 +281,7 @@ def _rewrite_entry(lua_path: Path, name: str, transform) -> bool:
     if not changed:
         return False
     new_inner = ("\n" + ",\n".join(f"    {x.strip()}" for x in out) + ",\n") if out else "\n"
-    lua_path.write_text(text[:start] + new_inner + text[end:], encoding="utf-8")
+    atomic_write(lua_path, text[:start] + new_inner + text[end:])
     return True
 
 
@@ -349,4 +350,4 @@ def remove_export(lua_path: Path, name: str) -> None:
         return
     new_inner = ("\n" + ",\n".join(f"    {e.strip()}" for e in kept) + ",\n") if kept else "\n"
     text = text[:start] + new_inner + text[end:]
-    lua_path.write_text(text, encoding="utf-8")
+    atomic_write(lua_path, text)

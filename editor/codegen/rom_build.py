@@ -133,10 +133,11 @@ class BuildWorker(EventEmitter, threading.Thread):
     # processus mGBA en cours (partagé entre toutes les instances)
     _mgba_proc: "subprocess.Popen | None" = None
 
-    def __init__(self, project: Project, toolchain: Toolchain):
+    def __init__(self, project: Project, toolchain: Toolchain, language_code=None):
         EventEmitter.__init__(self)
         threading.Thread.__init__(self, daemon=True)
-        self.project   = project
+        from codegen.language_build import language_build_project
+        self.project   = language_build_project(project, language_code)
         self.toolchain = toolchain
         self._build_log = None
         self._counts = {"error": 0, "warning": 0}
@@ -462,7 +463,7 @@ class BuildWorker(EventEmitter, threading.Thread):
             # Tables de données — AVANT la transpilation : chaque unité d'acteur
             # inclut `data_tables.h`, il doit donc exister quand gcc y arrive.
             if ok:
-                self._write_project_data_tables(p)
+                self._write_project_data_tables(p, sound_assets)
 
             # Transpilation Lua → C pour chaque scène. Les caméras sont des
             # assets PARTAGÉS (compilés une fois). Les prefabs, eux, sont
@@ -1007,10 +1008,10 @@ class BuildWorker(EventEmitter, threading.Thread):
 
     # ── Tables de données projet ────────────────────────────────────────
 
-    def _write_project_data_tables(self, p) -> list[str]:
+    def _write_project_data_tables(self, p, sound_assets=None) -> list[str]:
         """Génère data_tables.h/.c depuis project.data_tables."""
         from codegen.runtime_codegen.data_tables import write_data_tables
-        return write_data_tables(p.src_dir, p, self._emit)
+        return write_data_tables(p.src_dir, p, self._emit, sound_assets)
 
     # ── Transpilation Lua → C ─────────────────────────────────────────
 

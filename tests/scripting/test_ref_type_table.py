@@ -121,7 +121,7 @@ def test_le_type_c_de_chaque_type_reel_vient_de_la_table():
     """Les trois types existants, avec leur représentation C d'avant la table."""
     assert {n: t.c_type for n, t in REF_TYPE_TABLE.items()} == {
         "sfx": "mm_sfxhand", "collision_box": "int", "ui_element": "int",
-        "list": "int", "image": "int", "text_region": "int",
+        "list": "int", "image": "int", "textBox": "int",
         "background_layer": "int", "window_region": "int", "actor": "Actor*"}
 
 

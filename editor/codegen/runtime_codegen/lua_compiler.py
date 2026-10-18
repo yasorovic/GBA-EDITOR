@@ -335,7 +335,8 @@ def transpile_all(
     # v0.9, phase 4). [] dans un projet monolingue, jamais None : lang.set /
     # lang.get n'ont alors aucun code valide, refusés comme n'importe quel
     # nom absent — pas un cas spécial.
-    lang_codes  = ([l.code for l in p.settings.all_languages()]
+    lang_codes  = ([l.code for l in getattr(p.settings, "_script_languages",
+                                          p.settings.all_languages())]
                    if hasattr(p, "settings") else [])
     input_layout = compute_input_layout(p)
     input_names = list(input_layout.masks)

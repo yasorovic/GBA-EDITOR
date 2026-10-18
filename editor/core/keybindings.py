@@ -55,6 +55,7 @@ pas, donc une valeur par défaut modifiée dans une prochaine version profite
 from __future__ import annotations
 
 import json
+from core.resources.resource_store import read_config_json
 from dataclasses import dataclass
 
 from PyQt6.QtCore import QKeyCombination, QObject, Qt, pyqtSignal
@@ -148,12 +149,7 @@ class Keybindings(QObject):
         self._overrides: dict[str, str] = self._load()
 
     def _load(self) -> dict[str, str]:
-        if CONFIG_FILE.exists():
-            try:
-                return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-        return {}
+        return read_config_json(CONFIG_FILE)
 
     def save(self):
         CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)

@@ -27,8 +27,8 @@ from typing import Optional
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFrame,
-    QInputDialog, QMessageBox,
-)
+    QInputDialog, )
+from ui.common.popup import MessageBox as QMessageBox
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import pyqtSignal, QTimer, QFileSystemWatcher
 
@@ -37,6 +37,7 @@ from ui.common.theme import C, T
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 from core.keybindings import get_keybindings
+from core.resources.resource_store import atomic_write
 from ui.common.icons import COLOR_SCRIPT
 from ui.common.three_column_body import ThreeColumnBody
 from .colors import _BG, _BG_HDR, _BORDER, _TEXT_HI, _TEXT_NORM, _C_EVENT
@@ -368,7 +369,7 @@ class ScriptEditorScreen(QWidget):
         if not self._path:
             return
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(self._editor.toPlainText(), encoding="utf-8")
+        atomic_write(self._path, self._editor.toPlainText())
         self._dirty = False
         self._save_btn.setEnabled(False)
         self._title_lbl.setText(self._path.name)

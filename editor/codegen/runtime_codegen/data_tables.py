@@ -33,7 +33,7 @@ from core.models.data_table import COLUMN_REFERENCES
 import codegen.build_output as build_output
 
 
-def reference_index(p) -> dict[str, dict[str, int]]:
+def reference_index(p, sound_assets=None) -> dict[str, dict[str, int]]:
     """{type de colonne: {nom: index}} — les MÊMES ordres que les tables ROM.
 
     Chaque source est celle dont l'émetteur correspondant tire sa table : les
@@ -42,21 +42,31 @@ def reference_index(p) -> dict[str, dict[str, int]]:
     """
     from codegen.font_emit import project_fonts
     from codegen.runtime_codegen.gen_camera import project_cameras
+    from codegen.grit_conversion import resolve_sound_assets
+
+    if sound_assets is None:
+        sound_assets = resolve_sound_assets(p)
 
     def index_of(names) -> dict[str, int]:
         return {n: i for i, n in enumerate(names)}
 
+    audio = {kind: index_of(item.name for item, _path in sound_assets.get(kind, []))
+             for kind in ("sfx", "music")}
     return {
         # Les entrées authorées gardent leur rang dans `build_texts()` (les
         # littéraux de script sont ajoutés APRÈS), donc `p.texts` suffit.
         "text":    index_of([t.key for t in getattr(p, "texts", [])]),
-        "sfx":     index_of([s.name for s in getattr(p, "sfx", [])]),
-        "music":   index_of([m.name for m in getattr(p, "music", [])]),
+        # Un fichier manquant reste silencieux, comme les constantes des scripts.
+        "sfx":     {s.name: audio["sfx"].get(s.name, -1) for s in getattr(p, "sfx", [])},
+        "music":   {m.name: audio["music"].get(m.name, -1) for m in getattr(p, "music", [])},
         "scene":   index_of([s.name for s in getattr(p, "scenes", [])]),
         "font":    index_of([f.name for f in project_fonts(p)]),
         "palette": index_of([b.name for b in getattr(p, "palettes", [])]),
         "region":  index_of(p.region_names() if hasattr(p, "region_names") else []),
         "image":   index_of(p.image_names() if hasattr(p, "image_names") else []),
+        # Références du catalogue d'assets, pas des composants/layers de scène.
+        "sprite":  index_of(p.data_column_choices("sprite")),
+        "background": index_of(p.data_column_choices("background")),
         # La caméra par DÉFAUT occupe l'entrée 0 et n'a pas de fichier : c'est
         # `project_cameras` qui porte cette convention, pas cette table.
         "camera":  {c.name: i for i, c in enumerate(project_cameras(p)) if c is not None},
@@ -151,7 +161,7 @@ def generate_data_tables_c(tables, index: dict) -> str:
     return "\n".join(lines)
 
 
-def write_data_tables(src_dir: Path, p, emit=None) -> list[str]:
+def write_data_tables(src_dir: Path, p, emit=None, sound_assets=None) -> list[str]:
     """Écrit les deux fichiers et retourne les noms des tables émises.
 
     `data_tables.h` est écrit MÊME SANS TABLE : chaque unité d'acteur l'inclut
@@ -163,7 +173,7 @@ def write_data_tables(src_dir: Path, p, emit=None) -> list[str]:
     build_output.write(src_dir / "data_tables.h", generate_data_tables_h(tables))
     c_path = src_dir / "data_tables.c"
     if tables:
-        build_output.write(c_path, generate_data_tables_c(tables, reference_index(p)))
+        build_output.write(c_path, generate_data_tables_c(tables, reference_index(p, sound_assets)))
         if emit:
             cells = sum(len(t.rows) * len(t.columns) for t in tables)
             emit("log_line", f"[data] {len(tables)} table(s) in ROM ({cells} value(s), {cells * 4} bytes)")

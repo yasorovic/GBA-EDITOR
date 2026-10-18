@@ -910,7 +910,7 @@ class ActorInspector(QWidget):
             return
         names = sorted(sprite.name for sprite in self._project.sprites)
         if not names:
-            from PyQt6.QtWidgets import QMessageBox
+            from ui.common.popup import MessageBox as QMessageBox
             QMessageBox.information(self, label("actorinsp.no_sprite_title"),
                 label("actorinsp.no_sprite_text"))
             return

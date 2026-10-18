@@ -13,9 +13,11 @@ pas tronqué : il a déjà un moyen de tenir.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QProxyStyle
+from PyQt6.QtGui import QIcon
+from PyQt6.QtWidgets import QProxyStyle, QStyle
 
 
 MIN_ELIDED_LENGTH = 2
@@ -28,6 +30,36 @@ class ElidingStyle(QProxyStyle):
 
     def __init__(self):
         super().__init__("Fusion")
+
+    def styleHint(self, hint, option=None, widget=None, returnData=None):
+        from ui.common.tooltip import TOOLTIP_WAKEUP_MS
+        if hint == QStyle.StyleHint.SH_ToolTip_WakeUpDelay:
+            return TOOLTIP_WAKEUP_MS
+        if hint == QStyle.StyleHint.SH_ToolTip_FallAsleepDelay:
+            return 0  # Same hover delay after closing or switching to another control.
+        return super().styleHint(hint, option, widget, returnData)
+
+    def standardIcon(self, standardIcon, option=None, widget=None):
+        filename = {
+            QStyle.StandardPixmap.SP_MessageBoxInformation: "BUILD-STUDY.svg",
+            QStyle.StandardPixmap.SP_MessageBoxWarning: "Warning_icon.svg",
+            QStyle.StandardPixmap.SP_MessageBoxQuestion: "QuestionMark_icon.svg",
+            QStyle.StandardPixmap.SP_MessageBoxCritical: "BUILD-FAILED.svg",
+        }.get(standardIcon)
+        if filename:
+            icon = QIcon(str(Path(__file__).parent / "CustomIcons" / filename))
+            if not icon.isNull():
+                return icon
+        return super().standardIcon(standardIcon, option, widget)
+
+    def standardPixmap(self, standardPixmap, option=None, widget=None):
+        if standardPixmap in (QStyle.StandardPixmap.SP_MessageBoxInformation,
+                              QStyle.StandardPixmap.SP_MessageBoxWarning,
+                              QStyle.StandardPixmap.SP_MessageBoxQuestion,
+                              QStyle.StandardPixmap.SP_MessageBoxCritical):
+            size = self.pixelMetric(QStyle.PixelMetric.PM_MessageBoxIconSize, option, widget)
+            return self.standardIcon(standardPixmap, option, widget).pixmap(size, size)
+        return super().standardPixmap(standardPixmap, option, widget)
 
     @staticmethod
     def elided(painter, rect, flags, text: str) -> str:

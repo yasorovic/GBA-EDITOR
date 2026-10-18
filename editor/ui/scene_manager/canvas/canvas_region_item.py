@@ -464,6 +464,10 @@ class UIRegionItem(QGraphicsRectItem):
         if p is None:
             return ""
         from core.text_markup import display_text
+        if getattr(el, "sequence_prefix", "") and hasattr(p, "region_text"):
+            page = self._preview_page(el, p)
+            values = p.text_values() if hasattr(p, "text_values") else {}
+            return display_text(page.content if page is not None else "", values)
         key = getattr(el, "text_key", "") or ""
         get_text = getattr(p, "get_text", None)
         t = get_text(key) if (key and get_text) else None
@@ -479,6 +483,13 @@ class UIRegionItem(QGraphicsRectItem):
         values = p.text_values() if hasattr(p, "text_values") else {}
         return display_text(t.content or "", values)
 
+    @staticmethod
+    def _preview_page(el, p):
+        """La page que l'inspecteur a choisie pour l'aperçu, sinon la première."""
+        page_id = getattr(el, "_editor_page_id", None)
+        page = p.get_text_by_id(page_id) if page_id else None
+        return page if page is not None else p.region_text(el)
+
     def _text_source(self) -> str:
         """Source balisée de l'entrée affichée, ou ``""`` si inconnue."""
         if self._edit_box is not None:
@@ -486,6 +497,9 @@ class UIRegionItem(QGraphicsRectItem):
         el, p = self._region, self._project
         if p is None:
             return ""
+        if getattr(el, "sequence_prefix", "") and hasattr(p, "region_text"):
+            page = self._preview_page(el, p)
+            return page.content if page is not None else ""
         key = getattr(el, "text_key", "") or ""
         text = p.get_text(key) if key and hasattr(p, "get_text") else None
         if text is not None:
@@ -863,7 +877,7 @@ class UIRegionItem(QGraphicsRectItem):
         mode = getattr(font, "raster_mode", "binary")
         threshold = int(getattr(font, "coverage_threshold", 128) or 128)
         dither = getattr(font, "dither_pattern", "none")
-        key = (raster, color.rgb(), mode, threshold, dither)
+        key = (raster, color.rgb(), ink is not None, mode, threshold, dither)
         image = _GLYPH_IMAGES.get(key)
         if image is None:
             from core.font_rasterizer import display_coverage
@@ -875,7 +889,8 @@ class UIRegionItem(QGraphicsRectItem):
                         raster.coverage_at(px, py), px, py, raster_mode=mode,
                         threshold=threshold, dither_pattern=dither)
                     if alpha:
-                        pixel = QColor(color)
+                        rgb = raster.color_at(px, py) if ink is None else None
+                        pixel = QColor(*rgb) if rgb is not None else QColor(color)
                         pixel.setAlpha(alpha)
                         image.setPixelColor(px, py, pixel)
             if len(_GLYPH_IMAGES) >= 4096:      # tout un charset × quelques encres
@@ -904,8 +919,11 @@ class UIRegionItem(QGraphicsRectItem):
         width, height = max(1, int(r.width())), max(1, int(r.height()))
         ink_index = int(getattr(self._region, "text_color", 0) or 0)
         colors = self._bank_colors()
-        ink = self._own_ink_color(asset)
-        if ink_index and colors and ink_index < len(colors):
+        # Le FontAsset est une recette sans planche : seule la police
+        # matérialisée porte la palette que le build émet réellement.
+        ink = self._own_ink_color(self._text_font())
+        recolored = bool(ink_index and colors and ink_index < len(colors))
+        if recolored:
             ink = QColor(*colors[ink_index])
         source_names = set(asset.source_names()) | {face.source_name for face in asset.faces}
         source_stamp = []
@@ -922,7 +940,7 @@ class UIRegionItem(QGraphicsRectItem):
             asset.pixel_height, asset.line_height, asset.pixel_fit, asset.hinting, asset.raster_mode,
             asset.coverage_threshold, asset.dither_pattern, asset.offset_x, asset.offset_y,
             asset.prefer_bitmap_strike, getattr(self._region, "align", "left"),
-            ink.red(), ink.green(), ink.blue(), ink_index,
+            ink.red(), ink.green(), ink.blue(), ink_index, recolored,
         )
         cached = _VECTOR_TEXT_IMAGES.get(cache_key)
         if cached is not None:
@@ -1004,7 +1022,9 @@ class UIRegionItem(QGraphicsRectItem):
                             dither_pattern=asset.dither_pattern,
                         )
                         if alpha:
-                            color = QColor(ink); color.setAlpha(alpha)
+                            rgb = glyph.color_at(px, py) if not recolored else None
+                            color = QColor(*rgb) if rgb is not None else QColor(ink)
+                            color.setAlpha(alpha)
                             image.setPixelColor(x, y, color)
         if len(_VECTOR_TEXT_IMAGES) >= 128:
             _VECTOR_TEXT_IMAGES.clear()

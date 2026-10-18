@@ -92,14 +92,28 @@ _ENGINE_KEYS: frozenset[str] = frozenset({
     # indécouvrables. Elles vivent plus bas dans des sous-groupes nommés de
     # la section Sound, avec leur préfixe complet.
     # L'interface : le module moteur nommé par la ROADMAP. `text.*` (afficher un
-    # texte ponctuel) reste l'itération ; les zones nommées, images et listes
+    # texte ponctuel) reste l'itération ; les zones nommées et images
     # sont le moteur.
     "interface.get", "ui_element:show", "ui_element:hide", "ui_element.visible",
-    "list:row", "list:activate", "list:deactivate",
-    "list.count", "list.index", "list.first", "list.active",
     "image:play", "image:pause", "image.state", "image.offset",
-    "text_region:draw", "text_region:clear", "text_region:skip", "text_region.reading",
+    "textBox:draw", "textBox:clear", "textBox:skip", "textBox.reading",
 })
+
+# Noms concis réservés à l'affichage de l'API Interface. Les clés du catalogue
+# restent techniques (`ui_element:*`) afin que le checker et le codegen ne
+# changent pas de contrat.
+_DISPLAY_LABELS: dict[str, str] = {
+    "ui_element:show": "element:show()",
+    "ui_element:hide": "element:hide()",
+}
+
+# Noms concis réservés à l'affichage de l'API Interface. Les clés du catalogue
+# restent techniques (`ui_element:*`) afin que le checker et le codegen ne
+# changent pas de contrat.
+_DISPLAY_LABELS: dict[str, str] = {
+    "ui_element:show": "element:show()",
+    "ui_element:hide": "element:hide()",
+}
 
 # Où ranger les PROPRIÉTÉS (RUNTIME_PROPS) : contrairement aux fonctions, un
 # module (`self`) ne suffit pas à dire la catégorie — self.position est du
@@ -140,10 +154,8 @@ _PROP_HOME: dict[str, str] = {
     "background_layer.scroll": "Layer", "background_layer.map": "Layer",
     "background_layer.scroll_speed": "Layer", "background_layer.pal_bank": "Layer",
     "window_region.visible": "Window",
-    "list.count": "Interface", "list.index": "Interface",
-    "list.first": "Interface", "list.active": "Interface",
     "image.state": "Interface", "image.offset": "Interface",
-    "text_region.reading": "Interface",
+    "textBox.reading": "Interface",
     "collision_box.tag":    "CollisionBox",
     "collision_box.active": "CollisionBox",
     "collision_box.solid":  "CollisionBox",
@@ -192,10 +204,9 @@ _FUNC_HOME: dict[str, str] = {
     "collision_box:activate": "CollisionBox",
 
     "collision_box:deactivate": "CollisionBox",
-    "list:row": "Interface", "list:activate": "Interface", "list:deactivate": "Interface",
     "image:play": "Interface", "image:pause": "Interface",
-    "text_region:draw": "Interface", "text_region:clear": "Interface",
-    "text_region:skip": "Interface",
+    "textBox:draw": "Interface", "textBox:clear": "Interface",
+    "textBox:skip": "Interface",
     # Lecture de la carte : l'ancienne méthode de boîte reste compatible mais
     # vit avec son équivalent direct `collision:tile_at`.
     "collision_box:get_collision_tile": "Collision",
@@ -249,6 +260,23 @@ _SOUND_SHELVES: tuple[tuple[str, frozenset[str]], ...] = (
     ("MusicBox · adaptive music", frozenset({"music_box.trigger"})),
 )
 
+# L'interface conserve son API typée actuelle. Cette liste ne change donc ni
+# les préfixes ni les signatures : elle donne seulement au panneau Scripts un
+# ordre de lecture stable, depuis l'accès à l'élément jusqu'à ses capacités
+# spécialisées. Un conteneur n'a pas de membre propre : il utilise exactement
+# les actions communes ci-dessous.
+_INTERFACE_SHELVES: tuple[tuple[str, frozenset[str]], ...] = (
+    ("UI", frozenset({
+        "interface.get", "ui_element:show", "ui_element:hide", "ui_element.visible",
+    })),
+    ("Image", frozenset({
+        "image:play", "image:pause", "image.state", "image.offset",
+    })),
+    ("textBox", frozenset({
+        "textBox:draw", "textBox:clear", "textBox:skip", "textBox.reading",
+    })),
+)
+
 # Les boîtes contextuelles existent encore dans le runtime et dans les projets
 # qui les emploient. Elles ne sont simplement pas proposées dans la sidebar
 # Scripts tant que leur modèle d'auteur n'est pas assez clair. Ce filtre ne
@@ -277,6 +305,38 @@ def _sound_shelves(entries: list[dict]) -> list[dict]:
             shelves.append({"name": name, "entries": picked})
     if pending:
         shelves.append({"name": "Other audio", "entries": list(pending.values())})
+    return shelves
+
+
+def _interface_shelves(entries: list[dict]) -> list[dict]:
+    """Présente l'API Interface par accès, commun, puis type spécialisé.
+
+    « Container » n'apparaît pas comme sous-groupe vide : il n'a aucun membre
+    propre et relève donc entièrement de « Common actions and properties »."""
+    def api_key(entry: dict) -> str:
+        """Retrouve aussi la clé complète d'une propriété.
+
+        Son libellé est volontairement court (`state(int)`), contrairement aux
+        méthodes (`image:play()`), mais son ancre est dérivée de sa clé API.
+        On s'appuie donc sur cette ancre pour ne pas classer `image.state` dans
+        « Other interface »."""
+        short = canonical_key(entry["label"].split("(")[0].strip())
+        if short in RUNTIME_API or short in RUNTIME_PROPS:
+            return short
+        anchor = entry.get("doc_anchor", "")
+        return next((key for key in (*RUNTIME_API, *RUNTIME_PROPS)
+                     if key.replace(":", "-").replace(".", "-") == anchor), short)
+
+    pending = {api_key(e): e for e in entries}
+    shelves: list[dict] = []
+    for name, keys in _INTERFACE_SHELVES:
+        picked = [entry for key, entry in pending.items() if key in keys]
+        for key in [key for key in pending if key in keys]:
+            del pending[key]
+        if picked:
+            shelves.append({"name": name, "entries": picked})
+    if pending:
+        shelves.append({"name": "Other interface", "entries": list(pending.values())})
     return shelves
 
 
@@ -323,6 +383,10 @@ def _mark_layer(entry: dict, name: str) -> dict:
     faux pour l'itération (le défaut). `name` est la clé API — le préfixe du
     libellé pour une fonction, la clé pointée pour une propriété (`blend.mode`)."""
     entry["engine"] = name in _ENGINE_KEYS
+    if name in _DISPLAY_LABELS:
+        entry["label"] = _DISPLAY_LABELS[name]
+    if name in _DISPLAY_LABELS:
+        entry["label"] = _DISPLAY_LABELS[name]
     # L'ancre se dérive de la CLÉ du catalogue : le JSON écrit `self:move_to`, le catalogue
     # `actor:move_to`, et l'ancre suit le catalogue.
     entry["doc_anchor"] = name.replace(":", "-").replace(".", "-")
@@ -465,6 +529,10 @@ def get_sections(show_extended_audio: bool = True) -> list[dict]:
                           not in _EXTENDED_AUDIO_KEYS]
                 iteration.extend(_sound_shelves(it))
                 engine.extend(_sound_shelves(en))
+                continue
+            if label_ == "scrsb.sec.text_ui" and cname == "Interface":
+                iteration.extend(_interface_shelves(it))
+                engine.extend(_interface_shelves(en))
                 continue
             if it:
                 iteration.append({"name": cname, "entries": it})

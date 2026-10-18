@@ -50,7 +50,8 @@ def project_codepoints(project) -> set[str]:
     Les caractères BMP sont la limite déjà imposée par le runtime.
     """
     out = {" "}
-    for text in getattr(project, "texts", ()):
+    texts = project.build_texts() if hasattr(project, "build_texts") else getattr(project, "texts", ())
+    for text in texts:
         values = [getattr(text, "content", "")]
         for code in [getattr(lang, "code", "")
                      for lang in getattr(getattr(project, "settings", None), "languages", ())]:
@@ -127,7 +128,9 @@ def project_build_fonts(project) -> list[Font]:
         source_state.append((source.name, stamp))
     signature = (tuple(repr(asset.to_dict()) for asset in getattr(project, "font_assets", ())),
                  tuple(source_state),
-                 tuple((text.id, text.content) for text in getattr(project, "texts", ())),
+                 tuple((text.id, text.content) for text in (
+                     project.build_texts() if hasattr(project, "build_texts")
+                     else getattr(project, "texts", ()))),
                  repr(getattr(project, "translations", {})))
     cached = getattr(project, "_font_build_cache", None)
     if cached and cached[0] == signature:

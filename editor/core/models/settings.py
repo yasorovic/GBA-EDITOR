@@ -251,9 +251,11 @@ class ProjectSettings:
     source_lang: Language = field(default_factory=Language)
     # Les TRADUCTIONS, une par fichier `texts_<code>.json`. La source n'y est
     # pas : elle y serait une seconde copie de l'anglais, donc une seconde
-    # vérité à tenir d'accord. Liste vide = projet monolingue, exactement ce
-    # qu'était tout projet avant la v0.9.
+    # vérité à tenir d'accord. Leur présence est indépendante du mode de build.
     languages: list = field(default_factory=list)
+    # Keep the historical build (all declared translations) by default.
+    language_mode: str = "multilingual"
+    build_language: str = ""
     # Police choisie quand une zone ou `text.draw` n'en nomme pas. Les projets
     # multilingues peuvent la remplacer dans chaque Language ; la couverture
     # d'une FontAsset explicite reste configurée dans cette FontAsset elle-même.
@@ -276,9 +278,15 @@ class ProjectSettings:
         Ne rend rien tant que rien n'est déclaré : un projet monolingue n'a pas
         « une langue », il n'a pas de langues du tout, et c'est ce qui lui
         permet de ne pas changer de comportement."""
+        if hasattr(self, "_build_languages"):
+            return self._build_languages
         if not self.languages and not self.source_lang.code:
             return []
         return [self.source_lang] + list(self.languages)
+
+    def selected_build_language(self) -> Language:
+        return next((lang for lang in self.all_languages()
+                     if lang.code == self.build_language), self.source_lang)
 
 
 # ── Variables du projet ───────────────────────────────────────────

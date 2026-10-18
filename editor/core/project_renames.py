@@ -25,7 +25,7 @@ from typing import Optional
 
 from core.models.audio import Jingle, Music
 from core.models.background import BackgroundAsset
-from core.models.components import SpriteComponent, ScriptComponent
+from core.models.components import SpriteComponent, ScriptComponent, SoundFxComponent
 from core.models.palette import PaletteBank, PaletteUsage, OWN_PAL_BANK
 from core.models.scene import Scene
 from core.models.sprite import SpriteAsset
@@ -57,6 +57,7 @@ class ProjectRenameMixin:
                     touched = True
             if touched:
                 self.save_scene(scene)
+        self._rename_data_asset_refs("background", old_name, new_name)
         self._notify_renamed("Background", old_name, new_name)
 
     def rename_sprite(self, sprite: SpriteAsset, new_name: str):
@@ -87,7 +88,22 @@ class ProjectRenameMixin:
                 self.save_prefab(prefab)
         # Aucun domaine Lua : un sprite se référence par son composant, pas
         # depuis un script (les animations, elles, ont DOMAIN_ANIM).
+        self._rename_data_asset_refs("sprite", old_name, new_name)
         self._notify_renamed("Sprite", old_name, new_name)
+
+    def _rename_data_asset_refs(self, column_type: str, old_name: str, new_name: str):
+        """Répare les cellules qui citent un asset renommé."""
+        for table in self.data_tables:
+            touched = False
+            for column in table.columns:
+                if column.type != column_type:
+                    continue
+                for row in table.rows:
+                    if str(row.get(column.name) or "").strip() == old_name:
+                        row[column.name] = new_name
+                        touched = True
+            if touched:
+                self.data_tables.save(table)
 
     def rename_scene(self, scene: Scene, new_name: str):
         new_name = new_name.strip()
@@ -311,7 +327,76 @@ class ProjectRenameMixin:
         with self._renaming():
             store.rename(asset, new_name)
             refs = self.rename_lua_refs(domain, old_name, new_name)
+            self._rename_sound_asset_refs(domain, old_name, new_name)
         self._notify_renamed(kind, old_name, new_name, refs)
+
+    def _rename_sound_asset_refs(self, domain: str, old_name: str, new_name: str):
+        def fix_components(actors) -> bool:
+            touched = False
+            for actor in actors:
+                for comp in actor.components:
+                    if isinstance(comp, SoundFxComponent) and comp.sfx_name == old_name:
+                        comp.sfx_name = new_name
+                        touched = True
+            return touched
+
+        for scene in self.scenes:
+            touched = fix_components(scene.actors) if domain == DOMAIN_SFX else False
+            if domain == DOMAIN_MUSIC and scene.music == old_name:
+                scene.music = new_name
+                touched = True
+            if touched:
+                self.save_scene(scene)
+
+        if domain == DOMAIN_SFX:
+            for prefab in self.prefabs:
+                if fix_components([prefab, *prefab.children]):
+                    self.save_prefab(prefab)
+            # Ne matérialise que les sprites différés qui citent ce son.
+            self.sprites.load_mentioning(old_name)
+            for sprite in self.sprites:
+                touched = False
+                for state in sprite.states:
+                    for direction in state.directions:
+                        for frame in direction.frames:
+                            if frame.direct_sfx_name == old_name:
+                                frame.direct_sfx_name = new_name
+                                touched = True
+                if touched:
+                    self.save_sprite(sprite)
+
+        if domain == DOMAIN_MUSIC:
+            for box in self.music_boxes:
+                touched = False
+                for state in box.states:
+                    if state.music == old_name:
+                        state.music = new_name
+                        touched = True
+                if touched:
+                    self.music_boxes.save(box)
+        else:
+            boxes = self.sound_boxes if domain == DOMAIN_SFX else self.jingle_boxes
+            for box in boxes:
+                touched = False
+                for state in box.states:
+                    for action, target in state.mapping.items():
+                        if target == old_name:
+                            state.mapping[action] = new_name
+                            touched = True
+                if touched:
+                    boxes.save(box)
+            # Les repères (`MusicCue`) ne visent que des sfx ou des jingles, jamais une musique.
+            for modules in (self.music, self.jingles):
+                modules.load_mentioning(old_name)
+                for module in modules:
+                    touched = False
+                    for cue in module.cues:
+                        if cue.kind == domain and cue.target == old_name:
+                            cue.target = new_name
+                            touched = True
+                    if touched:
+                        modules.save(module)
+        self._rename_data_asset_refs(domain, old_name, new_name)
 
     def palette_usages(self, name: str) -> list[PaletteUsage]:
         """Tout ce qui utilise la banque `name` — alimente la carte « USAGE »
@@ -544,6 +629,8 @@ class ProjectRenameMixin:
                 if old_name in row:
                     row[new_name] = row.pop(old_name)
             column.name = new_name
+            if table.text_link.get("column") == old_name:
+                table.text_link["column"] = new_name
             self.data_tables.save(table)
         self._notify_renamed(f"Colonne de {table.name}", old_name, new_name, refs)
         return True

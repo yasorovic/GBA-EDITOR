@@ -154,3 +154,73 @@ def test_un_projet_sans_langue_declaree_ne_change_pas(tmp_path):
     # au reste de l'éditeur d'appeler `text_content` sans se demander si le
     # projet est traduit.
     assert p.text_content(t) == "PONG"
+
+
+@pytest.mark.parametrize("damaged", [b'{"texts":[{"content":"recoverable"}],', b'\xff\xfeunfinished'])
+def test_editing_a_damaged_translation_preserves_its_exact_bytes(projet, damaged):
+    path = projet.translation_file("de")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(damaged)
+    projet.load_translations()
+    assert "de" in projet.translation_problems
+
+    intro = projet.texts[0]
+    projet.translations["de"][intro.id] = "PONG!"
+    projet.save_translation("de")
+
+    backup = path.with_name(path.name + ".corrupt")
+    assert backup.read_bytes() == damaged
+    assert json.loads(path.read_text(encoding="utf-8"))["texts"][0]["content"] == "PONG!"
+    assert "de" not in projet.translation_problems
+    projet.save_translation("de")
+    assert list(path.parent.glob(path.name + ".corrupt*")) == [backup]
+    projet.load_translations()
+    assert projet.text_content(intro, "de") == "PONG!"
+
+
+def test_translation_backups_do_not_overwrite_older_backups(projet):
+    path = projet.translation_file("de")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    first = path.with_name(path.name + ".corrupt")
+    second = path.with_name(path.name + ".corrupt2")
+    first.write_bytes(b"first damaged translation")
+    second.write_bytes(b"second damaged translation")
+    path.write_bytes(b"third damaged translation")
+    projet.load_translations()
+
+    projet.save_translation("de")
+
+    assert first.read_bytes() == b"first damaged translation"
+    assert second.read_bytes() == b"second damaged translation"
+    assert path.with_name(path.name + ".corrupt3").read_bytes() == b"third damaged translation"
+
+
+@pytest.mark.parametrize("failure", ["backup", "write"])
+def test_failed_translation_repair_preserves_original_and_can_be_retried(projet, monkeypatch, failure):
+    from core import project_langs
+    from core.resources import resource_store
+
+    path = projet.translation_file("de")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    damaged = b'{"texts":[{"content":"recoverable"}],'
+    path.write_bytes(damaged)
+    projet.load_translations()
+    projet.translations["de"][projet.texts[0].id] = "PONG!"
+
+    def fail(*args, **kwargs):
+        raise OSError("simulated disk failure")
+
+    if failure == "backup":
+        monkeypatch.setattr(resource_store.shutil, "copy2", fail)
+    else:
+        monkeypatch.setattr(project_langs, "atomic_write", fail)
+    with pytest.raises(OSError, match="simulated disk failure"):
+        projet.save_translation("de")
+
+    assert path.read_bytes() == damaged
+    assert "de" in projet.translation_problems
+    monkeypatch.undo()
+    projet.save_translation("de")
+    assert "de" not in projet.translation_problems
+    assert any(backup.read_bytes() == damaged for backup in path.parent.glob(path.name + ".corrupt*"))
+    assert json.loads(path.read_text(encoding="utf-8"))["texts"][0]["content"] == "PONG!"

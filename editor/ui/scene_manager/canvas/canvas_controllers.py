@@ -124,7 +124,7 @@ class UIRegionController(QObject):
         alors sur sa frame. Lui en attribuer un d'office (« le premier du
         projet ») poserait un dessin que personne n'a demandé."""
         from core.models.ui_region import (
-            UIContainer, UIList, UIText, UITextbox, UIImage, PREFILL_TEXT,
+            UIContainer, UIText, UITextbox, UIImage, PREFILL_TEXT,
             KIND_CONTAINER, KIND_LIST, KIND_IMAGE, KIND_TEXTBOX,
         )
         from core.models.unique_name import unique_name
@@ -141,9 +141,9 @@ class UIRegionController(QObject):
                          x=x, y=y, w=w, h=h)
             label = "container"
         elif kind == KIND_LIST:
-            el = UIList(name=unique_name("list", taken),
-                        x=x, y=y, w=w, h=h)
-            label = "list"
+            # Les listes existantes restent importables, mais leur création est
+            # volontairement désactivée dans l'éditeur.
+            return None
         elif kind == KIND_IMAGE:
             el = UIImage(name=unique_name("image", taken),
                          x=x, y=y, w=w, h=h)
@@ -298,6 +298,7 @@ class UIRegionController(QObject):
             pairs: list = []
             for src in group:
                 new = copy.deepcopy(src)
+                new.__dict__.pop("_editor_page_id", None)
                 # Espace de noms : le projet entier, tous types confondus (cf.
                 # Project.ui_element_names) — les refs `parent` restent ainsi
                 # sans ambiguïté et les constantes C ne collisionnent pas.

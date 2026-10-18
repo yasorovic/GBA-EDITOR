@@ -48,7 +48,7 @@ from core.models.tile_codec import pack_se, unpack_se, hex_to_tile, flip_h, flip
 from core.models.gba_color import bgr555_to_rgb888
 from core.models.resource import MIME_ANIMATED_BG
 from core.models.background import (
-    KIND_UI, KIND_ANIMATED, UI_ROLE_NINE, BackgroundAnimation,
+    KIND_UI, KIND_ANIMATED, UI_ROLE_NINE, BackgroundAnimation, INPAINT_REMAP_MODES,
 )
 from ui.common.theme import C, T, QSS
 from ui.common.palette_bank_strip import PaletteBankStrip
@@ -171,6 +171,16 @@ class BgInpaintController:
         Les deux valent pour n'importe quel fond tuilé 4bpp."""
         self._mode = MODE_PAINT if mode == MODE_PAINT else MODE_INPAINT
 
+    def set_inpaint_mapping(self, mapping: str):
+        """Choisit comment les index se transforment en changeant de palette."""
+        mapping = mapping if mapping in INPAINT_REMAP_MODES else "direct"
+        if self._ba is None or self._ba.inpaint_mode == mapping:
+            return
+        self._ba.inpaint_mode = mapping
+        self._render_full()
+        self._persist()
+        self._notify()
+
     @property
     def mode(self) -> str:
         return self._mode
@@ -246,7 +256,7 @@ class BgInpaintController:
             grid, eff = tuple([painted[0]] * 64), painted[1]
         else:
             tid, pb, fh, fv = unpack_se(self._ba.tilemap[cell])
-            ov = self._ba.tile_palette_overrides.get((col, row))
+            ov = self._ba.repaint_bank((col, row))
             eff = pb if ov is None else ov
             grid = tuple(self._tiles[tid]) if tid < len(self._tiles) else tuple([0] * 64)
             if fh:
@@ -275,8 +285,13 @@ class BgInpaintController:
         return unpack_se(self._ba.tilemap[row * tw + col])[1]
 
     def _effective_pb(self, col: int, row: int) -> int:
-        ov = self._ba.tile_palette_overrides.get((col, row))
+        ov = self._ba.repaint_bank((col, row))
         return self._base_pb(col, row) if ov is None else ov
+
+    def _active_position(self) -> int:
+        """La position, dans `added_palettes`, de la palette active — ou -1 si c'est une palette dérivée du PNG : on ne
+        repeint ni ne peint qu'avec une palette AJOUTÉE (une référence au catalogue, que l'encodage ne touche pas)."""
+        return self._ba.added_position(self._active_pal) if isinstance(self._active_pal, int) else -1
 
     # ── Peinture ─────────────────────────────────────────────────
     def begin_stroke(self, both: bool = False):
@@ -298,8 +313,11 @@ class BgInpaintController:
         if erase:
             new = None
         else:
-            # Peindre la palette de base = pas d'override (JSON minimal, gomme cohérente).
-            new = None if self._active_pal == self._base_pb(col, row) else self._active_pal
+            position = self._active_position()
+            if position < 0:
+                return                      # une palette dérivée du PNG ne se cible pas : l'encodage peut la changer
+            # Peindre la palette de base = pas d'override (JSON minimal, gomme cohérente). Rangé par POSITION.
+            new = None if self._active_pal == self._base_pb(col, row) else position
         old = self._ba.tile_palette_overrides.get(key)
         if old == new:
             return
@@ -309,7 +327,11 @@ class BgInpaintController:
             self._ba.tile_palette_overrides.pop(key, None)
         else:
             self._ba.tile_palette_overrides[key] = new
-        self._patch(col, row)
+        # Un mode de correspondance recode les index : la variante de tuile
+        # peut être nouvelle, donc un rendu complet est plus sûr qu'un patch
+        # qui s'appuierait sur le cache précédent.
+        if self._ba.inpaint_mode == "direct":
+            self._patch(col, row)
 
     def paint_cells(self, cells, erase: bool = False):
         """Un geste de pinceau ou de gomme sur ces cases, un seul rafraîchissement."""
@@ -317,6 +339,8 @@ class BgInpaintController:
             return
         for col, row in cells:
             self._write_cell(col, row, erase)
+        if self._ba.inpaint_mode != "direct":
+            self._render_full()
         self._notify()
 
     def _write_cell(self, col: int, row: int, erase: bool):
@@ -367,6 +391,8 @@ class BgInpaintController:
             seen.add((c, r))
             self._write_cell(c, r, erase=False)
             stack += [(c + 1, r), (c - 1, r), (c, r + 1), (c, r - 1)]
+        if self._ba.inpaint_mode != "direct":
+            self._render_full()
         self._notify()
 
     def paint_rect(self, c0: int, r0: int, c1: int, r1: int, erase: bool = False):
@@ -375,6 +401,8 @@ class BgInpaintController:
         for r in range(min(r0, r1), max(r0, r1) + 1):
             for c in range(min(c0, c1), max(c0, c1) + 1):
                 self._write_cell(c, r, erase)
+        if self._ba.inpaint_mode != "direct":
+            self._render_full()
         self._notify()
 
     def end_stroke(self):
@@ -404,7 +432,7 @@ class BgInpaintController:
         L'image n'est pas touchée : c'est un calque. Ne rafraîchit pas — l'appelant notifie une fois par geste."""
         # La peinture ne se pose que sur une palette AJOUTÉE (une référence au catalogue, que l'encodage ne touche pas) et
         # se range par sa POSITION dans `added_palettes` : une palette dérivée du PNG peut changer à chaque encodage.
-        position = self._ba.added_position(self._active_pal) if isinstance(self._active_pal, int) else -1
+        position = self._active_position()
         if self.paintable and position >= 0 and self._in_grid(col, row):
             self._set_painted((col, row), (self._active_color if color is None else color, position))
 
@@ -865,6 +893,7 @@ class BgInpaintView(QGraphicsView):
         self._scene.addItem(self.canvas_place)
         self.zoom_changed.connect(self.canvas_place.set_zoom)
         self._hidden_by_canvas_mode: list = []
+        self._adjust_image = None      # le dernier aperçu demandé (None : le rendu encodé)
         self._canvas_mode_size: Optional[tuple] = None    # taille du canvas pendant le mode, None hors mode
         self._source_pix = QPixmap()
         self._source_pix_key: Optional[tuple] = None
@@ -984,7 +1013,7 @@ class BgInpaintView(QGraphicsView):
         self._tool = tool
 
     def set_brush_size(self, px: int):
-        self._brush_size = px if px in (8, 16, 32) else 8
+        self._brush_size = px if px in BRUSH_SIZES else BRUSH_SIZES[0]
 
     def _apply_brush(self, col: int, row: int):
         """Pinceau ou gomme : un carré 8/16/32 px, ancré à la grille de sa taille."""
@@ -1017,6 +1046,10 @@ class BgInpaintView(QGraphicsView):
             return
         self.canvas_place.show_passive(pix, canvas, rect)
 
+    def set_passe_partout(self, percent: int) -> None:
+        """L'intensité du grisé hors du canvas, de 0 à 100 %."""
+        self.canvas_place.set_dim(percent)
+
     def clear_overflow(self) -> None:
         if self._canvas_mode_size is None:
             self.canvas_place.stop()
@@ -1039,7 +1072,7 @@ class BgInpaintView(QGraphicsView):
         self._set_scene_rect(0, 0, max(canvas[0], 1), max(canvas[1], 1))
         self.resetCachedContent()
         self.canvas_place.start(pix, canvas, rect)
-        self.fit(margin=12)
+        self.centerOn(canvas[0] / 2, canvas[1] / 2)      # le zoom de l'auteur reste : seul le cadrage suit le canvas
         self.setFocus()
         return True
 
@@ -1055,6 +1088,7 @@ class BgInpaintView(QGraphicsView):
         self._hidden_by_canvas_mode = []
         self.unsetCursor()
         self.sync_image_size()
+        self.set_adjust_preview(self._adjust_image)      # ce qui a été demandé pendant le mode
         return rect
 
     def set_canvas_geometry(self, canvas: tuple, rect: tuple) -> None:
@@ -1080,10 +1114,16 @@ class BgInpaintView(QGraphicsView):
     def _sync_grid(self):
         """La grille 8×8 n'a de sens qu'en tuilé : le toggle ne peut que la
         masquer, jamais la forcer sur un bitmap."""
+        if self._canvas_mode_size is not None:
+            return          # le mode Canvas range la grille ; `end_canvas_mode` la rend par ce même chemin
         self._grid.setVisible(self._grid_on and self._ctrl.grid_visible())
 
     def set_adjust_preview(self, image):
-        """`image` (PIL RGBA) montrée à la taille du fond, ou None pour revenir au rendu compressé."""
+        """`image` (PIL RGBA) montrée à la taille du fond, ou None pour revenir au rendu compressé. Pendant le mode Canvas
+        la vue montre le fichier source : l'image est gardée et ne se montre qu'à la sortie."""
+        self._adjust_image = image
+        if self._canvas_mode_size is not None:
+            return
         if image is None:
             self._adjust_item.setVisible(False)
             self._pix_item.setVisible(True)
@@ -1510,10 +1550,13 @@ class TileColorStrip(QFrame):
         self.selected.emit(idx)
 
 
+BRUSH_SIZES = (8, 16, 32)       # côtés de la brosse en pixels : 1, 2 ou 4 tuiles
+
+
 class BgInpaintToolbar(QFrame):
     tool_changed = pyqtSignal(str)
-    size_changed = pyqtSignal(int)
     mode_changed = pyqtSignal(str)
+    inpaint_mapping_changed = pyqtSignal(str)
 
     # (outil, icône, titre, infobulle Inpaint, infobulle Paint) : le geste dépend du mode du pinceau.
     # « select » vient en premier : c'est lui qui pose l'image dans son canvas (mode Canvas), il n'a pas de mode Paint.
@@ -1525,8 +1568,6 @@ class BgInpaintToolbar(QFrame):
          "bginp.rectangle_tip_paint"),
         ("eraser", "tool_erase",         "bginp.eraser", "bginp.eraser_tip", "bginp.eraser_tip_paint"),
     ]
-    _BRUSH_SIZES = (8, 16, 32)
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self._dragging = False
@@ -1534,7 +1575,7 @@ class BgInpaintToolbar(QFrame):
         self._current = "brush"
         self._previous = "brush"        # l'outil que « select » rend en le quittant ("" : aucun, un fond qui ne se peint pas)
         self._mode = MODE_INPAINT
-        self._brush_size = 8
+        self._inpaint_mapping = "direct"
         self.min_y = 0     # borne haute du drag (la barre du canvas l'occupe)
 
         self.setFixedWidth(46)
@@ -1620,17 +1661,17 @@ class BgInpaintToolbar(QFrame):
             action.setChecked(mode == self._mode)
             action.triggered.connect(lambda _=False, m=mode: self._select_mode(m, tool))
             menu.addAction(action)
-        menu.addSeparator()
-        for size in self._BRUSH_SIZES:
-            action = QAction(label('bginp.tile_brush_size', size=size), self)
-            action.setToolTip(tooltip(
-                title=label('bginp.tile_brush_size', size=size),
-                body=label('bginp.tile_brush_size_tip', size=size),
-            ))
+        mapping_menu = menu.addMenu(label("bginp.remap_title"))
+        for mapping, key in (
+                ("direct", "bginp.remap_direct"),
+                ("nearest", "bginp.remap_nearest"),
+                ("luminance", "bginp.remap_luminance"),
+                ("optimal", "bginp.remap_optimal"),
+                ("ramp", "bginp.remap_ramp")):
+            action = mapping_menu.addAction(label(key))
             action.setCheckable(True)
-            action.setChecked(size == self._brush_size)
-            action.triggered.connect(lambda _=False, s=size: self._select_size(s, tool))
-            menu.addAction(action)
+            action.setChecked(mapping == self._inpaint_mapping)
+            action.triggered.connect(lambda _=False, m=mapping: self._select_inpaint_mapping(m, tool))
 
         owner = self._btns[tool]
         self._exec_tool_menu(menu, owner.mapToGlobal(QPoint(owner.width() + 4, 0)), owner)
@@ -1639,10 +1680,17 @@ class BgInpaintToolbar(QFrame):
         self.set_mode(mode)
         self._set_tool(tool)
 
-    def _select_size(self, size: int, tool: str):
-        self._brush_size = size
-        self.size_changed.emit(size)
+    def _select_inpaint_mapping(self, mapping: str, tool: str):
+        self.set_inpaint_mapping(mapping)
+        self.set_mode(MODE_INPAINT)
         self._set_tool(tool)
+
+    def set_inpaint_mapping(self, mapping: str):
+        mapping = mapping if mapping in INPAINT_REMAP_MODES else "direct"
+        if mapping == self._inpaint_mapping:
+            return
+        self._inpaint_mapping = mapping
+        self.inpaint_mapping_changed.emit(mapping)
 
     def set_mode(self, mode: str):
         mode = MODE_PAINT if mode == MODE_PAINT else MODE_INPAINT
@@ -1752,6 +1800,7 @@ class BgInpaintCanvas(QWidget):
     # « pos », « size » (mode Canvas) et/ou « mirror » (axe X, axe Y, côté droit gardé, côté bas gardé). Le canvas ne
     # compresse pas lui-même : l'écran le fait hors-thread et écrit le résultat sur le fond.
     prepare_requested = pyqtSignal(object)
+    run_encoding_requested = pyqtSignal()   # le bouton « Run encoding » de la ligne d'état
     # Le canvas du fond et l'image posée, pour les champs de l'inspecteur : (canvas, rect, taille du fichier, canvas
     # modifiable). (None, None, (0, 0), False) quand le fond n'a pas de canvas à régler.
     canvas_state = pyqtSignal(object, object, object, bool)
@@ -1784,6 +1833,11 @@ class BgInpaintCanvas(QWidget):
                                  body=label('bginp.grid_tip')),
             self._view.set_grid_visible)
         self._chk_grid.setChecked(True)
+        # La taille de la brosse, accessible quel que soit l'outil actif : pinceau, rectangle, gomme.
+        self._brush_size_buttons = self._bar.add_choice(
+            lambda size: tooltip(title=label('bginp.tile_brush_size', size=size),
+                                 body=label('bginp.tile_brush_size_tip', size=size)),
+            list(BRUSH_SIZES), BRUSH_SIZES[0], self._view.set_brush_size)
         # Les PNG sources gardent leur éditeur externe ; le Tile Painter ne
         # dessine que dans un fond vierge, indexé et déjà GBA-compatible.
         # Un bouton texte en surimpression, comme celui de l'écran Animation : « Edit .png », centré sous la barre.
@@ -1823,6 +1877,10 @@ class BgInpaintCanvas(QWidget):
             self._on_prep_reset)
         self._mirror_wanted = (None, None, False, False)   # cf. _mirror
         self._src_size = (0, 0)        # taille du PNG source, lue à la sélection
+        # L'intensité du passe-partout, à droite de la barre, avant les dimensions (propre à la session).
+        self._sl_passe_partout = self._bar.add_slider(
+            tooltip(title=label('bginp.passe_partout'), body=label('bginp.passe_partout_tip')),
+            0, 100, 59, self._view.set_passe_partout)
         self._view.mirror_released.connect(self._on_mirror_released)
         self._view.canvas_rect_live.connect(lambda _rect: self._emit_canvas_state())
         self._view.canvas_finished.connect(self._on_canvas_finished)
@@ -1851,8 +1909,8 @@ class BgInpaintCanvas(QWidget):
         self._toolbar.move(10, BAR_HEIGHT + 10)
         self._toolbar.tool_changed.connect(self._view.set_tool)
         self._toolbar.tool_changed.connect(self._on_tool_changed)
-        self._toolbar.size_changed.connect(self._view.set_brush_size)
         self._toolbar.mode_changed.connect(self._on_mode_changed)
+        self._toolbar.inpaint_mapping_changed.connect(self._on_inpaint_mapping_changed)
         self._toolbar.raise_()
         brush_shortcut = QShortcut(QKeySequence(), self)
         brush_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
@@ -1865,14 +1923,29 @@ class BgInpaintCanvas(QWidget):
         self._toolbar.tool_changed.connect(lambda _tool: self._sync_hints())
         self._toolbar.mode_changed.connect(lambda _mode: self._sync_hints())
 
-        # Overlay « Compression… » (compression hors-thread — voir screen).
-        self._busy = QLabel(label('bginp.compressing'), self)
-        self._busy.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._busy.setStyleSheet(
-            f"background:rgba(0,0,0,160); color:#eeeeee; font-family:{T.UI_STACK};"
-            "font-size:13px; border-radius:6px; padding:10px 20px;"
-        )
-        self._busy.hide()
+        # État de l'encodage (service d'encodage unique, cf. `background_encoding`) : une ligne au-dessus des infos, et le
+        # bouton « Run encoding » quand l'encodage attend ou a échoué. Cachée quand le fond est à jour.
+        self._enc_box = QWidget(self)
+        self._enc_box.setStyleSheet(
+            f"background:rgba(12,12,15,215); border-radius:5px;")
+        enc_row = QHBoxLayout(self._enc_box)
+        enc_row.setContentsMargins(8, 4, 6, 4)
+        enc_row.setSpacing(8)
+        self._enc_label = QLabel()
+        self._enc_label.setFont(QFont(T.UI, T.SM))
+        self._enc_label.setStyleSheet("background:transparent;")
+        self._btn_run_encoding = QPushButton(label('bginp.run_encoding'))
+        self._btn_run_encoding.setFont(QFont(T.UI, T.XS, QFont.Weight.DemiBold))
+        self._btn_run_encoding.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_run_encoding.setStyleSheet(
+            f"QPushButton{{color:{C.TEXT_HI};background:{C.BG_RAISED};"
+            f"border:1px solid {C.ACCENT};border-radius:4px;padding:2px 10px;}}"
+            f"QPushButton:hover{{background:{C.ACCENT};}}")
+        self._btn_run_encoding.setToolTip(tooltip(title=label('bginp.run_encoding'), body=label('bginp.run_encoding_tip')))
+        self._btn_run_encoding.clicked.connect(self.run_encoding_requested)
+        enc_row.addWidget(self._enc_label)
+        enc_row.addWidget(self._btn_run_encoding)
+        self._enc_box.hide()
 
         # Overlays d'infos : infos read-only du fond (bas-gauche) + warnings de
         # validation empilés (haut-droite). Alimentés par l'inspecteur via
@@ -1930,18 +2003,31 @@ class BgInpaintCanvas(QWidget):
         self._info_ov.move(m, max(top, self.height() - self._info_ov.height() - m))
         self._warn_ov.move(max(m, self.width() - self._warn_ov.width() - m), top)
         self._info_ov.raise_(); self._warn_ov.raise_()
+        info_top = self._info_ov.y() if self._info_ov.isVisibleTo(self) else self.height() - m
+        self._enc_box.move(m, max(top, info_top - self._enc_box.height() - 4))
+        self._enc_box.raise_()
 
-    def set_busy(self, on: bool, text: str = label('bginp.compressing')):
-        self._busy.setText(text)
-        self._busy.setVisible(on)
-        if on:
-            self._busy.adjustSize()
-            self._center_busy()
-            self._busy.raise_()
-
-    def _center_busy(self):
-        self._busy.move((self.width() - self._busy.width()) // 2,
-                        BAR_HEIGHT + (self.height() - BAR_HEIGHT - self._busy.height()) // 2)
+    def set_encoding_state(self, state: str, mode: str = "", message: str = "", seconds: Optional[float] = None) -> None:
+        """La ligne d'état de l'encodage : `state` = up_to_date | pending | computing | failed ; tout autre (« none » :
+        pas de fond) la cache. `mode` nomme le layout voulu (« Tiled 4bpp »), `message` l'erreur d'un échec, `seconds` la
+        durée du dernier encodage (inconnue : rien). Le bouton « Recompute » est toujours là, sauf pendant le calcul."""
+        took = " · " + label('bginp.enc_took', seconds=f"{seconds:.1f}") if seconds is not None else ""
+        texts = {
+            "up_to_date": (label('bginp.enc_up_to_date', mode=mode) + took, C.TEXT_NORM),
+            "pending": (label('bginp.enc_pending', mode=mode) + took, C.TEXT_NORM),
+            "computing": (label('bginp.enc_computing', mode=mode), C.TEXT_NORM),
+            "failed": (label('bginp.enc_failed', msg=message), C.ACCENT_RED),
+        }
+        if state not in texts:
+            self._enc_box.hide()
+            return
+        text, color = texts[state]
+        self._enc_label.setText(text)
+        self._enc_label.setStyleSheet(f"background:transparent; color:{color};")
+        self._btn_run_encoding.setEnabled(state != "computing")
+        self._enc_box.adjustSize()
+        self._enc_box.show()
+        self._reposition_overlays()
 
     def _on_cursor_moved(self, x: int, y: int):
         self._bar.set_cursor_px(*((None, None) if x < 0 else (x, y)))
@@ -1997,7 +2083,7 @@ class BgInpaintCanvas(QWidget):
                 self._tiled_canvas = None
             self._view.set_canvas_geometry(canvas, rect)
             self._bar.set_canvas_size(*canvas)
-            self._view.fit(margin=12)
+            self._view.centerOn(canvas[0] / 2, canvas[1] / 2)      # le zoom de l'auteur reste
         else:
             self._refresh_overflow()           # le cadre du passe-partout suit lui aussi
         self._emit_canvas_state()
@@ -2021,6 +2107,7 @@ class BgInpaintCanvas(QWidget):
         if not available:
             self._cancel_canvas_mode()
         self._toolbar.configure(paintable=self._paintable(), can_select=available)
+        self._sync_paint_widgets(self._paintable())
         if not self._view.canvas_mode_active():
             self._refresh_overflow()
             self._emit_canvas_state()
@@ -2238,11 +2325,9 @@ class BgInpaintCanvas(QWidget):
         return [(i, label('common.palette_i', i=i), cols) for i, cols in enumerate(palettes)]
 
     def _strip_entries(self) -> list:
-        """Les pastilles de la bande : toutes les palettes pour repeindre (Inpaint) ; en Paint seulement les palettes
-        AJOUTÉES, désignées par leur nom de banque — c'est sur elles, et sur elles seules, que la peinture se pose."""
+        """Les pastilles de la bande : les palettes AJOUTÉES, désignées par leur nom de banque — c'est sur elles, et sur
+        elles seules, que se posent la peinture (Paint) comme les repeints (Inpaint)."""
         ba = self._ba
-        if self._toolbar.mode != MODE_PAINT:
-            return self._palette_entries(ba.palettes)
         derived = ba.derived_count()
         return [(derived + k, name, ba.palettes[derived + k])
                 for k, name in enumerate(ba.added_palettes) if derived + k < len(ba.palettes)]
@@ -2251,8 +2336,7 @@ class BgInpaintCanvas(QWidget):
         """Rebâtit la bande d'après le mode et les palettes du fond, puis resynchronise ce qui en dépend."""
         if not (self._ba and self._ctrl.paintable):
             return
-        paint = self._toolbar.mode == MODE_PAINT
-        self._paint_strip.set_hint(label('bginp.paint_needs_palette') if paint else label('common.no_palette'))
+        self._paint_strip.set_hint(label('bginp.paint_needs_palette'))
         self._paint_strip.load(self._strip_entries(), active=self._paint_strip.active() if active is None else active)
         self._ctrl.set_active_palette(self._paint_strip.active())
         self._sync_color_strip()
@@ -2391,25 +2475,18 @@ class BgInpaintCanvas(QWidget):
         self._view.placements.set_selected(None)
         self.placement_selected.emit(None)   # referme la section PLACEMENT
         self._ctrl.set_context(project, ba)
+        if ba:
+            self._toolbar.set_inpaint_mapping(ba.inpaint_mode)
         # Inpainting = tuilé 4bpp uniquement. En 8bpp (une palette 256) et en
         # bitmap (Mode 4) : peinture désactivée, outils de peinture et bande masqués ; la barre reste pour « select »
         # (cf. `BgInpaintToolbar.configure`, appelé par `_refresh_prepare_ui`).
         paintable = bool(ba and getattr(ba, "mode", "tiled") == "tiled"
                          and getattr(ba, "bpp", 4) == 4)
-        self._ctrl.set_paint_enabled(paintable)
         self._toolbar.setVisible(bool(ba))
         if ba and not ba.asset:
             # Un fond sans image n'a rien à surcharger : le geste naturel y est de poser des couleurs.
             self._toolbar.set_mode(MODE_PAINT)
-        if paintable:
-            self._reload_strip(active=0)
-            self._paint_strip.setVisible(True)
-            self._sync_color_strip(active=1)
-            self._position_paint_strip()
-            QTimer.singleShot(0, self._position_paint_strip)
-        else:
-            self._paint_strip.setVisible(False)
-            self._color_strip.setVisible(False)
+        self._sync_paint_widgets(paintable, active=0)
         self._view.load_background()
         self.reload_geometry()
         self._bar.set_canvas_size(*self._ctrl.image_size())
@@ -2418,16 +2495,31 @@ class BgInpaintCanvas(QWidget):
         self._src_size = self._read_source_size()
         self._refresh_prepare_ui()
 
+    def _sync_paint_widgets(self, paintable: bool, active: int = None):
+        """Les bandes de palettes et de couleurs suivent ce que le fond permet : montrées s'il se peint, cachées sinon.
+        Appelé au chargement ET quand le fond change de mode (la compression qui finit le rend tuilé 4bpp)."""
+        self._ctrl.set_paint_enabled(paintable)
+        if paintable:
+            if self._paint_strip.isVisibleTo(self) and active is None:
+                return                      # déjà montrées : rien à refaire
+            self._reload_strip(active=0 if active is None else active)
+            self._paint_strip.setVisible(True)
+            self._sync_color_strip(active=1)
+            self._position_paint_strip()
+            QTimer.singleShot(0, self._position_paint_strip)
+        else:
+            self._paint_strip.setVisible(False)
+            self._color_strip.setVisible(False)
+
     def set_adjust_preview(self, image, state: str = "adjust"):
         """Montre `image` (PIL RGBA) à la place du rendu compressé, ou None : retour au rendu.
-        `state` dit ce que c'est : « adjust » l'image réglée avant compression, « ready » le résultat d'une compression
-        non appliquée. Le badge le dit."""
+        `state` dit ce que c'est (« adjust » : l'image réglée avant compression). Le badge le dit."""
         self._view.set_adjust_preview(image)
         self.set_preview_state(state if image is not None else None)
 
     def set_preview_state(self, state):
-        """Le badge de l'aperçu : « adjust », « computing » (une compression se calcule), « ready », ou None (caché)."""
-        keys = {"adjust": 'bginp.adjust_preview', "computing": 'bginp.preview_computing', "ready": 'bginp.preview_ready'}
+        """Le badge de l'aperçu : « adjust » (image réglée avant compression), ou None (caché)."""
+        keys = {"adjust": 'bginp.adjust_preview'}
         if state in keys:
             self._preview_badge.setText(label(keys[state]))
         self._preview_badge.setVisible(state in keys)
@@ -2443,6 +2535,9 @@ class BgInpaintCanvas(QWidget):
     def _on_mode_changed(self, mode: str):
         self._ctrl.set_mode(mode)
         self._reload_strip()      # Paint ne propose que les palettes ajoutées, Inpaint toutes
+
+    def _on_inpaint_mapping_changed(self, mapping: str):
+        self._ctrl.set_inpaint_mapping(mapping)
 
     def _paintable(self) -> bool:
         ba = self._ba
@@ -2500,5 +2595,3 @@ class BgInpaintCanvas(QWidget):
         self._btn_edit.adjustSize()
         self._btn_edit.move((self.width() - self._btn_edit.width()) // 2, BAR_HEIGHT + 8)
         self._btn_edit.raise_()
-        if self._busy.isVisible():
-            self._center_busy()

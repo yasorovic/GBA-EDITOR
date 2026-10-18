@@ -40,8 +40,9 @@ from typing import Any, Callable, Optional
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QTreeWidget, QTreeWidgetItem, QMenu,
-    QAbstractItemView, QMessageBox, QSizePolicy, QScrollArea, QHeaderView,
+    QAbstractItemView, QSizePolicy, QScrollArea, QHeaderView,
 )
+from ui.common.popup import MessageBox as QMessageBox
 from PyQt6 import sip
 from PyQt6.QtGui import QFont, QColor, QDrag, QCursor, QKeySequence, QShortcut
 from PyQt6.QtCore import (
@@ -192,6 +193,9 @@ class AssetKind:
     # Le nom NU reste l'identité : c'est lui qu'on édite et qu'on cherche.
     suffix_of: Optional[Callable[[Any], str]] = None
     tooltip_of: Optional[Callable[[Any], str]] = None
+    # (projet, asset) -> (nom d'icône, infobulle) quand l'asset est dans un état à signaler
+    # (une table reliée à des textes) ; remplace alors l'icône de la famille, en accent.
+    state_of: Optional[Callable[[Any, Any], Optional[tuple]]] = None
 
     # (projet, asset, nouveau_nom) -> nom RÉELLEMENT appliqué ("" si refusé).
     rename: Optional[Callable[[Any, Any, str], str]] = None
@@ -377,6 +381,7 @@ class _KindTree(QTreeWidget):
         self._panel = panel
         self._kind = kind
         self._hover: tuple = (None, -1)         # (ligne survolée, colonne survolée), pour l'icône Locate
+        self._project = None
         self.setMouseTracking(True)
         # Asset ACTIF (chargé dans le canvas) — distinct de la sélection, peint
         # en barre gauche par la grammaire de sélection partagée
@@ -544,6 +549,7 @@ class _KindTree(QTreeWidget):
         prev_current = cur.data(0, _ROLE_OBJ) if cur else None
         self.blockSignals(True)
         self.clear()
+        self._project = project
         if project is not None:
             nodes = self._kind.nodes(project)
             scheme = self._panel.folder_scheme(self._kind.label)
@@ -623,6 +629,9 @@ class _KindTree(QTreeWidget):
             else:
                 item.setIcon(0, self._kind.icon_of(node.obj) if self._kind.icon_of
                                 else _ico(self._kind.icon, self._kind.color))
+                state = self._kind.state_of(self._project, node.obj) if self._kind.state_of else None
+                if state:
+                    item.setIcon(0, _ico(state[0], C.ACCENT))
                 item.setData(0, _ROLE_OBJ, node.obj)
                 item.setForeground(0, QColor(C.TEXT_NORM))
                 self._set_label(item, node.obj)
@@ -635,6 +644,8 @@ class _KindTree(QTreeWidget):
                                   & ~Qt.ItemFlag.ItemIsDropEnabled)
                 if self._kind.tooltip_of is not None:
                     item.setToolTip(0, self._kind.tooltip_of(node.obj))
+                if state:
+                    item.setToolTip(0, state[1])
                 if self._kind.file_of is not None:
                     item.setToolTip(_LOCATE_COL, tooltip(title=label('common.locate'), body=label('assetfind.locate_tip')))
                 if node.children:

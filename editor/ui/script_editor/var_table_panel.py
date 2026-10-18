@@ -1,8 +1,9 @@
 """ui/script_editor/var_table_panel.py — liste GLOBALS/CONSTANTS de la sidebar Script Editor."""
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QComboBox, QMenu,
-    QMessageBox, QSizePolicy,
+    QSizePolicy,
 )
+from ui.common.popup import MessageBox as QMessageBox
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 
 from ui.common.theme import C, T, S, QSS

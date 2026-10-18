@@ -6,9 +6,10 @@ from typing import Any, Optional
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QSizePolicy,
-    QMenu, QMessageBox, QAbstractItemView,
+    QMenu, QAbstractItemView,
     QTreeWidget, QTreeWidgetItem,
 )
+from ui.common.popup import MessageBox as QMessageBox
 from PyQt6.QtGui import QFont, QColor
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 

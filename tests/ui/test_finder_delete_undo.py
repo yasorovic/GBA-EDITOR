@@ -7,7 +7,7 @@ jamais dans la liste affichée.
 from __future__ import annotations
 
 import pytest
-from PyQt6.QtWidgets import QMessageBox
+from ui.common.popup import MessageBox as QMessageBox
 
 from core.history import get_history
 

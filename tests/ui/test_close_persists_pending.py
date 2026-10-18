@@ -12,7 +12,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from PyQt6.QtWidgets import QMessageBox
+from ui.common.popup import MessageBox as QMessageBox
 
 
 @pytest.fixture(autouse=True)

@@ -42,9 +42,9 @@ contexte actif :
 from __future__ import annotations
 
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget, QMessageBox,
-    QFrame, QToolButton, QLabel, QButtonGroup,
+    QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget, QFrame, QToolButton, QLabel, QButtonGroup,
 )
+from ui.common.popup import MessageBox as QMessageBox
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 
@@ -119,7 +119,8 @@ class TextEditorScreen(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet(f"background:{C.BG_DEEP};")
+        self.setObjectName('textEditorScreen')
+        self.setStyleSheet(f"QWidget#textEditorScreen{{background:{C.BG_DEEP};}}")
         self._project = None
 
         root = QVBoxLayout(self)
@@ -140,8 +141,8 @@ class TextEditorScreen(QWidget):
         self._text_finder = TextFinder()
         self._text_finder.path_selected.connect(self._texts_set_folder_filter)
         self._text_finder.folder_renamed.connect(self._on_folder_renamed)
-        self._text_finder.key_renamed.connect(
-            lambda t, key: self._texts.rename_key(t, key))
+        self._text_finder.move_requested.connect(
+            lambda source, target: self._texts.move_path(source, target))
         self._finder_views = QStackedWidget()
         self._finder_views.addWidget(self._fonts)
         self._finder_views.addWidget(self._text_finder)
@@ -154,6 +155,9 @@ class TextEditorScreen(QWidget):
         # pixmap fixe : seul le splitter arbitre les trois colonnes.
         self._center.setMinimumWidth(0)
         self._texts = TextPanel()
+        self._text_finder.create_requested.connect(self._texts.create_at_path)
+        self._text_finder.delete_requested.connect(self._texts.delete_from_finder)
+        self._text_finder.duplicate_requested.connect(self._texts.duplicate_text)
         self._sheet = GlyphSheetPanel()
         self._font_asset_preview = FontAssetPreview()
         self._center.addWidget(self._texts)   # _CTX_TEXT
@@ -190,6 +194,7 @@ class TextEditorScreen(QWidget):
         # Clé/rangement édités au centre : l'inspecteur affiche la clé dans
         # son en-tête, il doit se relire.
         self._texts.identity_changed.connect(self._on_identity_changed)
+        self._texts.filing_moved.connect(self._on_filing_moved)
         # Le balisage se relit à la FRAPPE, comme l'aperçu : voir ce qui cloche
         # pendant qu'on écrit, pas au build.
         self._texts.parsed.connect(self._text_insp.set_parsed)
@@ -236,10 +241,12 @@ class TextEditorScreen(QWidget):
         l'inspecteur. Elles lisent le même index, elles se périment ensemble."""
         self._text_insp.invalidate_usages()
         self._texts.invalidate_usages()
+        self._text_finder.refresh_links()
 
     def _on_identity_changed(self, text):
         """Clé renommée : les scripts viennent d'être réécrits, l'index des
         utilisations et l'inspecteur sont périmés tous les deux."""
+        self._text_finder.refresh()
         self._text_insp.invalidate_usages()
         self._text_insp.load(text, self._project)
 
@@ -330,6 +337,10 @@ class TextEditorScreen(QWidget):
         new_path = tuple(path[:-1]) + (segment,)
         self._texts.set_folder_filter(new_path)
         self._text_finder.refresh()
+
+    def _on_filing_moved(self, path):
+        self._text_finder.refresh()
+        self._text_finder.select_path(path)
 
     def _on_pipeline_context(self, ctx: int):
         """Navigation explicite, sans forcer une sélection d'asset.
@@ -522,6 +533,8 @@ class TextEditorScreen(QWidget):
         """Écrit texts.json."""
         if self._project:
             self._project.save_texts()
+            from core.command_dispatcher import get_dispatcher
+            get_dispatcher().notify_texts_changed()
 
     def _on_text_insp_changed(self):
         self._persist()

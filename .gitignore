@@ -37,3 +37,6 @@ Project Demo/*/.temp/
 
 # Ancienne config locale de la chaîne d'outils (désormais dans le dossier de config utilisateur)
 editor/core/toolchain.json
+.pytest-tmp-*/
+.pytest-*-results.txt
+data-audio-rom-*/

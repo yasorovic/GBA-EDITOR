@@ -15,6 +15,7 @@ bloc — le reste du script est préservé tel quel.
 """
 from __future__ import annotations
 import re
+from core.resources.resource_store import atomic_write
 from pathlib import Path
 from typing import Optional
 
@@ -45,4 +46,4 @@ def write_note(lua_path: Path, note: str) -> None:
         text = text[:span[0]] + block + text[span[1]:]
     else:
         text = block + text
-    lua_path.write_text(text, encoding="utf-8")
+    atomic_write(lua_path, text)

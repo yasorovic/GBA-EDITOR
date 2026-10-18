@@ -27,7 +27,13 @@
       "code": "jap",
       "name": "Japanese",
       "default_font": "Misaki Gothic 8"
+    },
+    {
+      "code": "fr",
+      "name": "French"
     }
   ],
+  "language_mode": "multilingual",
+  "build_language": "",
   "default_font": "Font8x8 Latin"
 }

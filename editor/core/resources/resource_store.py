@@ -17,6 +17,39 @@ from core.resources.resource_index import ResourceIndex, safe_filename
 T = TypeVar("T", bound=Resource)
 
 
+def preserve_corrupt_file(path: Path) -> Path:
+    """Copie le fichier illisible à côté, sans écraser une copie précédente."""
+    backup = path.with_name(path.name + ".corrupt")
+    n = 2
+    while backup.exists():
+        backup = path.with_name(f"{path.name}.corrupt{n}")
+        n += 1
+    shutil.copy2(path, backup)
+    return backup
+
+
+def read_config_json(path: Path) -> dict:
+    """Lit un fichier de réglages de l'éditeur ; `{}` s'il est absent.
+
+    Illisible : on en garde une copie `.corrupt` et on écrit la raison dans `crash.log`,
+    au lieu de repartir de zéro sans rien dire (la sauvegarde suivante l'écraserait)."""
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return data
+        raise ValueError("settings file is not a JSON object")
+    except Exception:
+        from core.crash_log import log_current_exception
+        log_current_exception(f"Unreadable settings file kept as .corrupt: {path}")
+        try:
+            preserve_corrupt_file(path)
+        except OSError:
+            pass
+        return {}
+
+
 def atomic_write(path: Path, text: str, encoding: str = "utf-8") -> None:
     """Écrit `text` dans `path` de façon atomique (tmp → rename).
 
@@ -182,6 +215,20 @@ class ResourceStore(Generic[T]):
             return None
         return self.get(name) or self.load_one(name)
 
+    def load_mentioning(self, needle: str) -> None:
+        """Charge les seuls items différés dont le fichier cite `needle` : de quoi corriger
+        une référence sans lire tout le catalogue. Les items déjà chargés sont inchangés."""
+        for name in self.known_names():
+            path = self.index.path_for(name)
+            if path is None or any(i.name == name for i in self.items):
+                continue
+            try:
+                mentions = needle in path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if mentions:
+                self.ensure_loaded(name)
+
     # -- I/O --
     def _path(self, name: str, folder: Optional[Path] = None) -> Path:
         """Le fichier de `name` : là où l'index le connaît, sinon un NOUVEAU fichier à la racine
@@ -293,12 +340,7 @@ class ResourceStore(Generic[T]):
         auraient pu être récupérés à la main."""
         if self.unreadable.pop(self._key(path), None) is None or not path.exists():
             return
-        backup = path.with_name(path.name + ".corrupt")
-        n = 2
-        while backup.exists():
-            backup = path.with_name(f"{path.name}.corrupt{n}")
-            n += 1
-        shutil.copy2(path, backup)
+        backup = preserve_corrupt_file(path)
         self.preserved[self._key(path)] = backup.name
 
     def save_all(self):
@@ -454,9 +496,21 @@ class ResourceStore(Generic[T]):
 
     def rename(self, item: T, new_name: str):
         """Renomme `item` ET son fichier, qui reste dans son dossier."""
-        old_path = self._path(item.name)
-        if old_path.exists():
-            old_path.unlink()
-        self.index.forget(item.name)
+        old_name = item.name
+        old_path = self._path(old_name)
+        new_path = self._path(new_name, old_path.parent)
+        if new_path != old_path and new_path.exists():
+            raise FileExistsError(f"{new_path} already exists")
         item.name = new_name
-        self.save(item, old_path.parent)
+        try:
+            self.save(item, old_path.parent)
+            if new_path != old_path:
+                old_path.unlink(missing_ok=True)
+        except Exception:
+            item.name = old_name
+            if new_path != old_path:
+                self.index.forget(new_name)
+                new_path.unlink(missing_ok=True)
+            raise
+        if safe_filename(old_name) != safe_filename(new_name):
+            self.index.forget(old_name)

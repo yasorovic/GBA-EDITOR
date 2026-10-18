@@ -611,7 +611,7 @@ def referenced_sound_names(p: Project) -> tuple[set[str], set[str]]:
     dynamiques » laissé ouvert pour le graphe des scènes (ROADMAP v0.12) ne se
     pose pas ici, et aucun drapeau « garde-le quand même » n'est nécessaire.
 
-    Six sources, parce qu'un son se cite de six façons (la sixième, ⑥, est plus bas) :
+    Sept sources (⑥ et ⑦ sont plus bas) :
       ① un littéral d'appel — `sfx:play("GOAL")`, `music:play("Dreamy DX")` ;
       ② un `SoundFxComponent` posé sur un acteur ou un prefab, que
          `self:play_sfx()` joue sans jamais nommer le son dans le script ;
@@ -689,6 +689,17 @@ def referenced_sound_names(p: Project) -> tuple[set[str], set[str]]:
                 sfx_names.add(cue.target)
             elif cue.kind == CUE_JINGLE and cue.target:
                 music_names.add(cue.target)
+
+    # ⑦ Les tables sont toutes émises en ROM, même sans lecteur dans un script.
+    for table in getattr(p, "data_tables", []):
+        for column in table.columns:
+            if column.type not in ("sfx", "music"):
+                continue
+            names = sfx_names if column.type == "sfx" else music_names
+            for row in table.rows:
+                name = str(table.value(row, column) or "").strip()
+                if name:
+                    names.add(name)
 
     return sfx_names, music_names
 

@@ -25,10 +25,12 @@ _EDITOR_DIR = str(Path(__file__).resolve().parent)
 if _EDITOR_DIR not in sys.path:
     sys.path.insert(0, _EDITOR_DIR)
 
-from PyQt6.QtCore import Qt, QObject, QEvent, QPoint, QRectF
-from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox, QFrame, QLabel, QVBoxLayout
-from PyQt6.QtGui import QPalette, QColor, QHelpEvent, QPainter, QPen
-from ui.common.theme import GLOBAL_QSS, C, T, ui_font
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication, QDialog
+from ui.common.popup import MessageBox as QMessageBox
+from PyQt6.QtGui import QPalette, QColor
+from ui.common.theme import GLOBAL_QSS, C
+from ui.common.tooltip_controller import install_tooltips
 from ui.common.numeric_drag import install_numeric_drag_behavior
 from ui.common.eliding_style import ElidingStyle
 from ui.common import icons
@@ -63,94 +65,10 @@ def dark_palette() -> QPalette:
     p.setColor(QPalette.ColorRole.HighlightedText, QColor(C.ON_ACCENT))
     # Ces couleurs restent cohérentes pour les widgets Qt qui utilisent les rôles
     # d'aide de la palette. Les infobulles de l'éditeur sont rendues séparément
-    # par `_ThemedTooltip`, sans passer par le composant natif de Qt.
+    # par `ui.common.tooltip_controller`, sans passer par le composant natif de Qt.
     p.setColor(QPalette.ColorRole.ToolTipBase, QColor(C.BG_RAISED))
     p.setColor(QPalette.ColorRole.ToolTipText, QColor(C.TEXT_NORM))
     return p
-
-
-class _ThemedTooltip(QFrame):
-    """Bulle d'aide de l'éditeur, sans passage par le widget natif de Qt."""
-
-    def __init__(self):
-        super().__init__(None, Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
-        self.setObjectName("editor_tooltip")
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        # La fenêtre elle-même est transparente : le rayon du cadre laisse donc
-        # réellement voir les coins, sans le rectangle opaque de Windows/Qt.
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self._background = QColor(240, 240, 240, 230) if C.IS_LIGHT else QColor(0, 0, 0, 209)
-        self._border = QColor(C.BORDER_MID)
-        self.setStyleSheet(
-            f"QFrame#editor_tooltip{{background:transparent;color:{C.TEXT_NORM};"
-            "border:none;padding:0;}"
-            "QLabel{background:transparent;border:none;padding:0;}"
-        )
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 5, 8, 5)
-        self._text = QLabel()
-        self._text.setTextFormat(Qt.TextFormat.RichText)
-        self._text.setWordWrap(True)
-        self._text.setMaximumWidth(420)
-        self._text.setFont(ui_font(T.SM))
-        self._text.setStyleSheet(f"color:{C.TEXT_NORM};")
-        layout.addWidget(self._text)
-
-    def paintEvent(self, event):  # noqa: N802 - API Qt
-        """Peint la surface, plutôt que de déléguer son alpha à la feuille Qt.
-
-        Avec `WA_TranslucentBackground`, Windows peut omettre le fond défini en
-        QSS pour une fenêtre ToolTip. Un dessin explicite conserve le rayon et
-        l'opacité sur toutes les versions de Qt utilisées par l'éditeur.
-        """
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setBrush(self._background)
-        painter.setPen(QPen(self._border))
-        painter.drawRoundedRect(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), 7, 7)
-
-    def show_text(self, position: QPoint, text: str):
-        self._text.setText(text)
-        self._text.adjustSize()
-        self.adjustSize()
-        screen = QApplication.screenAt(position) or QApplication.primaryScreen()
-        if screen is not None:
-            area = screen.availableGeometry()
-            x = min(position.x() + 14, area.right() - self.width())
-            y = min(position.y() + 20, area.bottom() - self.height())
-            position = QPoint(max(area.left(), x), max(area.top(), y))
-        else:
-            position += QPoint(14, 20)
-        self.move(position)
-        self.show()
-
-
-class _TooltipThemeFilter(QObject):
-    """Remplace les infobulles natives par une unique bulle thémée."""
-
-    def __init__(self):
-        super().__init__()
-        self._bubble = _ThemedTooltip()
-        self._anchor = None
-
-    def eventFilter(self, obj, event):
-        if event.type() == QEvent.Type.ToolTip and isinstance(event, QHelpEvent):
-            text = obj.toolTip() if hasattr(obj, "toolTip") else ""
-            if text:
-                self._anchor = obj
-                self._bubble.show_text(event.globalPos(), text)
-            else:
-                self._bubble.hide()
-                self._anchor = None
-            return True
-
-        if obj is self._anchor and event.type() in (QEvent.Type.Leave, QEvent.Type.Hide):
-            self._bubble.hide()
-            self._anchor = None
-        elif event.type() in (QEvent.Type.MouseButtonPress, QEvent.Type.ApplicationDeactivate):
-            self._bubble.hide()
-            self._anchor = None
-        return False
 
 
 def _shutdown_qt(app, *widgets) -> None:
@@ -164,6 +82,9 @@ def _shutdown_qt(app, *widgets) -> None:
     fermeture de la fenêtre et l'enregistrement du projet : aucune donnée perdue,
     mais un code de sortie non nul, un rapport d'erreur Windows possible, et une
     CI qui ne peut pas se fier au code de sortie du binaire."""
+    controller = getattr(app, '_tooltip_controller', None)
+    if controller is not None:
+        controller.shutdown()
     for widget in widgets:
         if widget is not None:
             widget.close()
@@ -226,8 +147,9 @@ if __name__ == "__main__":
     # rendre maintenant (la QApplication existe) avant d'appliquer la feuille.
     icons.ensure_qss_assets()
     app.setStyleSheet(GLOBAL_QSS)
-    app._tooltip_theme_filter = _TooltipThemeFilter()
-    app.installEventFilter(app._tooltip_theme_filter)
+    from ui.common.popup import install_popup_template
+    install_popup_template(app)
+    install_tooltips(app)
 
     # L'import de la fenêtre entraîne celui de tous les écrans (même ceux qui
     # resteront invisibles au départ). Il est volontairement différé jusqu'à
@@ -260,6 +182,7 @@ if __name__ == "__main__":
     if project_path is None:
         picker = HomeScreen(PROJECTS_DIR)
         if picker.exec() != QDialog.DialogCode.Accepted or not picker.result_path:
+            _shutdown_qt(app, picker)
             sys.exit(0)
         project_path = picker.result_path
         _is_new  = picker.result_is_new

@@ -2,6 +2,9 @@
 BackgroundImage = simple PNG dans assets/backgrounds/ (pas de JSON).
 BackgroundAsset = sidecar d'import dans assets/backgrounds/{name}.json (à côté du PNG)."""
 
+import hashlib
+import json
+import math
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -39,6 +42,78 @@ BG_KIND_LABELS = {
     KIND_UI:       "UI background",
     KIND_ANIMATED: "Animated background",
 }
+
+
+INPAINT_REMAP_MODES = ("direct", "nearest", "luminance", "optimal", "ramp")
+
+
+def _palette_mapping(source: list, target: list, mode: str) -> list[int]:
+    """Association des 16 index d'une sous-palette 4bpp.
+
+    L'index zéro reste transparent. Les distances sont calculées dans l'espace
+    perceptuel OKLab : deux couleurs qui paraissent proches sont ainsi mieux
+    associées qu'avec une simple distance RGB.
+    """
+    count = min(16, len(source), len(target))
+    mapping = list(range(16))
+    if mode == "direct" or count < 2:
+        return mapping
+    def oklab(word):
+        # BGR555 GBA -> sRGB linéaire -> OKLab (Björn Ottosson).
+        rgb = [((word >> shift) & 31) / 31 for shift in (0, 5, 10)]
+        rgb = [v / 12.92 if v <= .04045 else ((v + .055) / 1.055) ** 2.4 for v in rgb]
+        r, g, b = rgb
+        l = .4122214708 * r + .5363325363 * g + .0514459929 * b
+        m = .2119034982 * r + .6806995451 * g + .1073969566 * b
+        s = .0883024619 * r + .2817188376 * g + .6299787005 * b
+        l, m, s = (math.copysign(abs(v) ** (1 / 3), v) for v in (l, m, s))
+        return (.2104542553 * l + .7936177850 * m - .0040720468 * s,
+                1.9779984951 * l - 2.4285922050 * m + .4505937099 * s,
+                .0259040371 * l + .7827717662 * m - .8086757660 * s)
+    labs_source = [oklab(word) for word in source[:count]]
+    labs_target = [oklab(word) for word in target[:count]]
+    def hue(lab):
+        return math.atan2(lab[2], lab[1])
+    def cost(a, b):
+        return sum((x - y) ** 2 for x, y in zip(labs_source[a], labs_target[b]))
+    src, dst = list(range(1, count)), list(range(1, count))
+    if mode == "luminance":
+        src.sort(key=lambda i: labs_source[i][0]); dst.sort(key=lambda i: labs_target[i][0])
+        for a, b in zip(src, dst): mapping[a] = b
+        return mapping
+    if mode == "ramp":
+        # Une rampe colorée garde l'ordre teinte -> saturation -> valeur.
+        src.sort(key=lambda i: (hue(labs_source[i]), math.hypot(labs_source[i][1], labs_source[i][2]), labs_source[i][0]))
+        dst.sort(key=lambda i: (hue(labs_target[i]), math.hypot(labs_target[i][1], labs_target[i][2]), labs_target[i][0]))
+        for a, b in zip(src, dst): mapping[a] = b
+        return mapping
+    if mode == "nearest":
+        for a in src: mapping[a] = min(dst, key=lambda b: cost(a, b))
+        return mapping
+    # Appariement global Hongrois : une couleur cible est utilisée une seule
+    # fois et la distance perceptuelle totale est minimale.
+    n = len(src)
+    u, v, p, way = [0.0] * (n + 1), [0.0] * (n + 1), [0] * (n + 1), [0] * (n + 1)
+    for i in range(1, n + 1):
+        p[0], j0, minv, used = i, 0, [float("inf")] * (n + 1), [False] * (n + 1)
+        while True:
+            used[j0] = True; i0, delta, j1 = p[j0], float("inf"), 0
+            for j in range(1, n + 1):
+                if not used[j]:
+                    cur = cost(src[i0 - 1], dst[j - 1]) - u[i0] - v[j]
+                    if cur < minv[j]: minv[j], way[j] = cur, j0
+                    if minv[j] < delta: delta, j1 = minv[j], j
+            for j in range(n + 1):
+                if used[j]: u[p[j]] += delta; v[j] -= delta
+                else: minv[j] -= delta
+            j0 = j1
+            if p[j0] == 0: break
+        while True:
+            j1, p[j0], j0 = way[j0], p[way[j0]], way[j0]
+            if j0 == 0: break
+    for j in range(1, n + 1):
+        mapping[src[p[j] - 1]] = dst[j - 1]
+    return mapping
 
 # ── Rôle d'un fond d'INTERFACE ────────────────────────────────────
 # Les valeurs sont volontairement CELLES de `UIContainer.fill_kind` (FILL_NINE /
@@ -381,8 +456,13 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
     # BackgroundInpainting (niveau ÉDITEUR, partagé entre scènes) : réassigne la
     # palette (pal_bank local, index dans `palettes`) d'une tuile 8×8. La baseline
     # `tilemap` reste intacte ; `effective_tilemap()` applique ces overrides.
-    # Analogue à BackgroundLayer.tile_palette_overrides mais au niveau de l'asset.
-    tile_palette_overrides: dict = field(default_factory=dict)  # dict[(col,row), pal_index]
+    # Analogue à BackgroundLayer.tile_palette_overrides mais au niveau de l'asset. Comme la peinture, un repeint ne cible
+    # qu'une palette AJOUTÉE (une référence au catalogue, que l'encodage ne touche pas) et la désigne par sa POSITION dans
+    # `added_palettes` — pas par un numéro de banque, qu'un encodage peut déplacer (cf. `repaint_bank`).
+    tile_palette_overrides: dict = field(default_factory=dict)  # dict[(col,row), position dans added_palettes]
+    # Comment les index d'une tuile repeinte sont associés à sa nouvelle palette.
+    # "direct" préserve le comportement historique (i -> i).
+    inpaint_mode: str = "direct"
     # Peinture de CASES (niveau éditeur) : un CALQUE par-dessus l'image. Une case peinte montre une tuile pleine de
     # la couleur `color` (index dans la sous-palette `pal`) ; `color` 0 la rend transparente. Effacer une case la
     # retire du dict et rend la tuile initiale. Ni `tileset` ni `tilemap` ne sont touchés : une recompression de
@@ -401,6 +481,10 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
     # reposent l'ancienne date en enregistrant. Vide = origine inconnue (asset
     # d'avant ce champ). Cf. core.resources.asset_reconciliation.resync_background_png.
     source_stamp: str = ""
+    # Empreinte des RÉGLAGES qui ont produit `tileset`/`palettes`/`bitmap` (cf. `encode_settings_fingerprint`) : « ce
+    # résultat vient de CES réglages ». Quand les réglages d'aujourd'hui en ont une autre, le résultat est périmé
+    # (cf. `encoding_is_current`). Vide = origine inconnue (asset d'avant ce champ) : traité comme à jour.
+    encoded_for: str = ""
     # Plan de travail — le PNG reste intact, c'est l'image en mémoire qu'on pose dans un canvas (cf.
     # bg_import.prepare_source). `canvas_size` = (w, h) du canvas, valeur DISTINCTE de la taille de l'image : ce
     # que l'encodeur reçoit. `image_size` = (w, h) de l'image une fois mise à l'échelle ; `image_pos` = (x, y) de son
@@ -475,6 +559,34 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
     # N'a de sens que sur un hôte ; un animé peut en porter (une planche reste
     # une image), mais rien dans l'éditeur ne le propose.
     animations: list = field(default_factory=list)   # list[BackgroundAnimation]
+
+    # ── Le résultat est-il à jour ? ───────────────────────────────
+    def encode_settings_fingerprint(self) -> str:
+        """Empreinte des réglages qui DÉTERMINENT l'encodage : layout, profondeur, dithering, méthode, canvas (EFFECTIF : un
+        bitmap a toujours 240×160), pose et taille de l'image, miroir, ajustements, compression. Les palettes citées, la
+        peinture et les repeints n'y sont pas : ils se posent par-dessus le résultat sans le changer. Stable d'une
+        session à l'autre (JSON trié, SHA-1), courte."""
+        canvas = BITMAP_SIZE if self.mode == "bitmap" else self.canvas_size
+        settings = {
+            "mode": self.mode, "bpp": self.bpp, "dither": self.dither, "method": self.quantize_method,
+            "canvas": canvas, "pos": self.image_pos, "size": self.image_size,
+            "mirror": [self.mirror_x, self.mirror_y, self.mirror_flip_x, self.mirror_flip_y],
+            "compression": self.compression.to_dict(), "adjust": self.adjust.to_dict(),
+        }
+        blob = json.dumps(settings, sort_keys=True, default=list)
+        return hashlib.sha1(blob.encode("utf-8")).hexdigest()[:12]
+
+    def encoding_is_current(self, source_stamp: Optional[str] = None) -> bool:
+        """Le résultat (`tileset` / `bitmap`) correspond-il aux réglages d'aujourd'hui — et, si on donne l'empreinte
+        ACTUELLE du fichier source, à la version du PNG dont il est tiré ? Faux sans résultat. Un asset d'avant `encoded_for`
+        est tenu pour à jour : on ne réencode pas tout un projet existant à l'ouverture."""
+        if not (self.tileset or self.bitmap):
+            return False
+        if self.encoded_for and self.encoded_for != self.encode_settings_fingerprint():
+            return False
+        if source_stamp is not None and self.source_stamp and source_stamp != self.source_stamp:
+            return False
+        return True
 
     def choose_layout(self, token: str) -> None:
         """Le layout VOULU, comme RÉGLAGE : « tiled4 » | « tiled8 » | « bitmap » | « bitmap16 » (le vocabulaire de
@@ -618,13 +730,25 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
         """Retire la palette `idx`. Une palette AJOUTÉE emporte sa référence et sa peinture : un trait ne retombe pas sur
         une autre palette, il disparaît ; les positions suivantes avancent d'un cran."""
         position = self.added_position(idx)
-        paint, self.tile_paint = self.tile_paint, {}       # le mixin remappe des numéros de banque, pas des positions
+        # Le mixin remappe des numéros de banque ; la peinture et les repeints se rangent par POSITION.
+        paint, self.tile_paint = self.tile_paint, {}
+        repaint, self.tile_palette_overrides = self.tile_palette_overrides, {}
         super().remove_palette(idx)
         if position >= 0:
             self.added_palettes.pop(position)
             paint = {cell: (color, pal - 1 if pal > position else pal)
                      for cell, (color, pal) in paint.items() if pal != position}
-        self.tile_paint = paint
+            repaint = {cell: pal - 1 if pal > position else pal for cell, pal in repaint.items() if pal != position}
+        self.tile_paint, self.tile_palette_overrides = paint, repaint
+
+    def repaint_bank(self, cell: tuple) -> Optional[int]:
+        """Le numéro de banque du repeint de cette case (les dérivées d'abord, puis la position dans `added_palettes`),
+        ou None si la case n'est pas repeinte ou que sa palette n'existe plus. Tout ce qui rend ou construit lit ce
+        numéro, jamais la position stockée."""
+        position = self.tile_palette_overrides.get(cell)
+        if position is None or not 0 <= position < len(self.added_palettes):
+            return None
+        return self.added_bank(position)
 
     def resolve_palettes(self, lookup=None, kept: Optional[list] = None) -> list:
         """Recompose `palettes` — ce que lisent le rendu et le build — depuis les RÉGLAGES : les palettes dérivées du PNG
@@ -674,7 +798,7 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
     def effective_tileset(self) -> list:
         """Le tileset tel qu'il part à l'écran et dans la ROM : celui de l'image, puis une tuile pleine par
         couleur peinte (réutilisée si l'image en a déjà une identique). Les ids de la baseline ne bougent pas."""
-        tiles = list(self.tileset)
+        tiles, _remapped = self._remapped_tile_variants()
         for color in sorted({c for c, _pal in self.painted_cells().values()}):
             if self.solid_tile(color) not in tiles:
                 tiles.append(self.solid_tile(color))
@@ -689,7 +813,11 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
         if not self.tile_palette_overrides and not painted:
             return list(self.tilemap)
         tw = self.tiles_w or 1
-        tiles = self.effective_tileset() if painted else []
+        tiles, remapped = self._remapped_tile_variants()
+        if painted:
+            for color in sorted({c for c, _pal in painted.values()}):
+                if self.solid_tile(color) not in tiles:
+                    tiles.append(self.solid_tile(color))
         out: list[int] = []
         for cell, se in enumerate(self.tilemap):
             key = (cell % tw, cell // tw)
@@ -698,9 +826,41 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
                 out.append(pack_se(tiles.index(self.solid_tile(color)), pal, False, False))
                 continue
             tid, pb, fh, fv = unpack_se(se)
-            ov = self.tile_palette_overrides.get(key)
+            ov = self.repaint_bank(key)
+            if key in remapped:
+                tid = remapped[key]
             out.append(pack_se(tid, pb if ov is None else ov, fh, fv))
         return out
+
+    def _remapped_tile_variants(self) -> tuple[list, dict]:
+        """Tileset de rendu et ID de variante par case repeinte.
+
+        Les tuiles codées restent intactes : les variantes ne vivent que dans
+        cette vue effective, exactement comme les tuiles pleines de Paint.
+        """
+        variants = list(self.tileset)
+        if self.inpaint_mode == "direct" or not self.tile_palette_overrides or self.bpp != 4:
+            return variants, {}
+        out, mapping_cache = {}, {}
+        tw = self.tiles_w or 1
+        for cell, se in enumerate(self.tilemap):
+            key = (cell % tw, cell // tw)
+            target = self.repaint_bank(key)
+            if target is None:
+                continue
+            tid, source, _fh, _fv = unpack_se(se)
+            if not (tid < len(self.tileset) and source < len(self.palettes) and target < len(self.palettes)):
+                continue
+            cache_key = (source, target, self.inpaint_mode)
+            mapping = mapping_cache.get(cache_key)
+            if mapping is None:
+                mapping = _palette_mapping(self.palettes[source], self.palettes[target], self.inpaint_mode)
+                mapping_cache[cache_key] = mapping
+            variant = "".join(format(mapping[int(v, 16)], "x") for v in self.tileset[tid])
+            if variant not in variants:
+                variants.append(variant)
+            out[key] = variants.index(variant)
+        return variants, out
 
     def to_dict(self) -> dict:
         d = {"name": self.name}
@@ -763,9 +923,12 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
         if not self.adjust.is_default():
             s["adjust"] = self.adjust.to_dict()
         if self.tile_palette_overrides:
-            s["tile_palette_overrides"] = {
+            # Une clé À PART de l'ancienne `tile_palette_overrides` (des numéros de banque) : le sens des valeurs a changé.
+            s["tile_repaint"] = {
                 f"{c},{r}": v for (c, r), v in self.tile_palette_overrides.items()
             }
+        if self.inpaint_mode != "direct":
+            s["inpaint_mode"] = self.inpaint_mode
         if self.added_palettes:
             s["added_palettes"] = list(self.added_palettes)
         if self.palette_overrides:
@@ -783,6 +946,8 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
         e = {}
         if self.source_stamp:
             e["source_stamp"] = self.source_stamp
+        if self.encoded_for:
+            e["encoded_for"] = self.encoded_for
         if self.tileset:
             # ROADMAP v0.24 : couleurs en #RRGGBB et tilemap rangée en RANGÉES,
             # pour que deux personnes qui retouchent deux zones d'un même fond
@@ -817,11 +982,12 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
             tilemap=read_grid(d.get("tilemap", [])),
             tiles_w=int(d.get("tiles_w", 0) or 0), tiles_h=int(d.get("tiles_h", 0) or 0),
             quantize_method=d.get("quantize_method", d.get("compress_method", "median_cut")),
-            tile_palette_overrides=decode_tile_palette_overrides(
-                d.get("tile_palette_overrides")),
+            tile_palette_overrides=decode_tile_palette_overrides(d.get("tile_repaint")),
+            inpaint_mode=(d.get("inpaint_mode") if d.get("inpaint_mode") in INPAINT_REMAP_MODES else "direct"),
             tile_paint=decode_tile_paint(d.get("tile_paint")),
             diagnostics=dict(d.get("diagnostics") or {}),
             source_stamp=str(d.get("source_stamp", "")),
+            encoded_for=str(d.get("encoded_for", "")),
             canvas_size=_read_ints(d.get("canvas_size"), (1, 1)),
             image_pos=_read_ints(d.get("image_pos"), (-_POS_LIMIT, -_POS_LIMIT)),
             image_size=_read_ints(d.get("image_size"), (1, 1)),
@@ -858,6 +1024,13 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
         # toutes deviennent grisées/overridables. Idempotent (persisté au save).
         if ba.tileset and not ba.source_palettes and ba.palettes:
             ba.source_palettes = [list(p) for p in ba.palettes]
+        # Lecture tolérante : un sidecar d'avant `tile_repaint` porte ses repeints sous l'ancienne clé, en NUMÉROS DE BANQUE.
+        # Ceux qui visaient une palette ajoutée passent en position ; ceux qui visaient une palette dérivée du PNG ne
+        # peuvent plus exister (on ne repeint qu'avec une palette ajoutée) et sont abandonnés.
+        legacy = decode_tile_palette_overrides(d.get("tile_palette_overrides"))
+        if legacy and not ba.tile_palette_overrides:
+            derived = len(ba.source_palettes)
+            ba.tile_palette_overrides = {cell: bank - derived for cell, bank in legacy.items() if bank >= derived}
         return ba
 
 

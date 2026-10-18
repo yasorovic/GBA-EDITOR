@@ -38,9 +38,8 @@ REF_SFX = "sfx"                   # un effet EN TRAIN de jouer — un mm_sfxhand
 REF_COLLISION_BOX = "collision_box"  # une boîte de collision d'un acteur — un rang, 0 = absente
 REF_UI_ELEMENT = "ui_element"     # un élément d'interface — son index, connu au build
 # Les éléments d'interface héritent de `ui_element`.
-REF_LIST = "list"                 # un conteneur qui se PARCOURT — son index dans `g_ui_lists`
 REF_IMAGE = "image"               # un sprite à état — son index dans `g_ui_images`
-REF_TEXT_REGION = "text_region"   # une zone de texte — son index dans `g_ui_regions`
+REF_TEXT_BOX = "textBox"           # une textbox — son index dans `g_ui_regions`
 # Un acteur est un `Actor*` ; `self` est un récepteur implicite, pas un type.
 REF_ACTOR = "actor"
 # Références matérielles distinctes des modules qui les créent.
@@ -88,18 +87,15 @@ REF_TYPE_TABLE: dict[str, RefType] = {
     REF_COLLISION_BOX: RefType(c_type="int", prefix="collision_box"),
     # Le conteneur utilise les capacités de son type de base.
     REF_UI_ELEMENT: RefType(
-        c_type="int", prefix="ui_element", ui_kind="container", constant="UIELEM_",
+        c_type="int", prefix="element", ui_kind="container", constant="UIELEM_",
         hint="The geometry of an element is authored: it does not open up at runtime."
              " A list, an image and a text zone have their own members — the type of "
              "`interface:get(name)` is that of the element."),
-    REF_LIST: RefType(
-        c_type="int", prefix="list", base=REF_UI_ELEMENT, to_base="ui_list_element",
-        ui_kind="list", constant="UILIST_"),
     REF_IMAGE: RefType(
         c_type="int", prefix="image", base=REF_UI_ELEMENT, to_base="ui_image_element",
         ui_kind="image", constant="IMAGE_", column="image"),
-    REF_TEXT_REGION: RefType(
-        c_type="int", prefix="text_region", base=REF_UI_ELEMENT, to_base="ui_region_element",
+    REF_TEXT_BOX: RefType(
+        c_type="int", prefix="textBox", base=REF_UI_ELEMENT, to_base="ui_region_element",
         ui_kind="text", constant="REGION_", column="region"),
     REF_LAYER: RefType(
         c_type="int", prefix="layer",
@@ -684,7 +680,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
 
     # ── Éléments d'interface, typés (ROADMAP v0.16, étape c) ─────────
     # `interface:get("Nom")` rend une référence du TYPE RÉEL de l'élément, lu dans la
-    # mise en page au build : `list`, `image`, `text_region`, ou `ui_element` pour un
+    # mise en page au build : `list`, `image`, `textBox`, ou `ui_element` pour un
     # conteneur. Les membres d'un élément vivent sur SON type — `menu.index`,
     # `heart.state`, `box:draw(...)` — et le cycle de vie (`show`/`hide`/`visible`) sur
     # `ui_element`, dont les autres héritent. Plus aucune fonction de module ne prend
@@ -717,33 +713,6 @@ RUNTIME_API: dict[str, ApiFunc] = {
         doc=("Hides the element and its whole subtree. Ex: "
              "interface:get(\"alert\"):hide()"),
     ),
-    # Une LISTE : la navigation d'un menu (ROADMAP v0.22). Le moteur suit un index ; il
-    # ne dessine rien. Les rangées sont les zones de texte du panneau, et c'est le script
-    # qui écrit leur contenu (`menu:row(1):draw(...)`). Un item est une LIGNE DE DONNÉE,
-    # pas un objet d'interface : c'est ce qui évite un widget par genre de menu. Son
-    # nombre, son index, son premier item affiché et sa main sont des PROPRIÉTÉS
-    # (cf. RUNTIME_PROPS, `list.*`) ; `activate`/`deactivate` sont les verbes communs.
-    f"{REF_LIST}:row": ApiFunc(
-        lua_name=f"{REF_LIST}:row", c_func="ui_list_row",
-        params=[Param("r", PARAM_INT)], ret=REF_TEXT_REGION, self_first=True,
-        doc="The text zone carrying row r (1 = the first visible), where to write the"
-            " item: menu:row(1):draw(\"Potion\"). Out of bounds, the reference is -1 "
-            "and writes nothing.",
-    ),
-    f"{REF_LIST}:activate": ApiFunc(
-        lua_name=f"{REF_LIST}:activate", c_func="ui_list_set_active",
-        params=[], self_first=True, fixed_args=(1,),
-        doc="Gives the directional pad to this list. This is what allows a menu and "
-            "its submenu on screen at the same time: without it, both move on the "
-            "same press. Ex: menu:activate()",
-    ),
-    f"{REF_LIST}:deactivate": ApiFunc(
-        lua_name=f"{REF_LIST}:deactivate", c_func="ui_list_set_active",
-        params=[], self_first=True, fixed_args=(0,),
-        doc="Takes the control away from this list: it stays on screen and keeps its "
-            "current item, only the SELECTION is cut. Hiding it (:hide()) is "
-            "something else — it disappears. Ex: menu:deactivate()",
-    ),
     # Une IMAGE : un sprite à état posé sur la mise en page. L'élément est AUTHORÉ dans le
     # canvas (position, sprite, état de départ) et le script ne fait que changer d'état
     # ou décaler — ce qui rouvrirait la géométrie au runtime reste fermé (cf.
@@ -762,15 +731,15 @@ RUNTIME_API: dict[str, ApiFunc] = {
     # Une ZONE DE TEXTE : c'est ELLE qui écrit, pas un module. La cible (BG ou sprites) ne
     # remonte pas jusqu'ici : c'est une conséquence de l'ancrage du nœud Interface, pas un
     # choix d'appel. `draw` se traduit par un émetteur (le littéral pose ses `$locale`).
-    f"{REF_TEXT_REGION}:draw": ApiFunc(
-        lua_name=f"{REF_TEXT_REGION}:draw", c_func="text_draw_in",
+    f"{REF_TEXT_BOX}:draw": ApiFunc(
+        lua_name=f"{REF_TEXT_BOX}:draw", c_func="text_draw_in",
         params=[Param("id", PARAM_STR, DOMAIN_TEXT, literal_ok=True)], self_first=True,
         doc="Displays a text in this zone. A key is translatable; a literal can read "
             "a local with `$name` and truncate with `!1` to `!9`. Ex: "
             "interface:get(\"bottom_box\"):draw(\"HP: $hp!3\")",
     ),
-    f"{REF_TEXT_REGION}:clear": ApiFunc(
-        lua_name=f"{REF_TEXT_REGION}:clear", c_func="text_clear_in",
+    f"{REF_TEXT_BOX}:clear": ApiFunc(
+        lua_name=f"{REF_TEXT_BOX}:clear", c_func="text_clear_in",
         params=[], self_first=True,
         doc="Clears this text zone. Ex: interface:get(\"bottom_box\"):clear()",
     ),
@@ -778,8 +747,8 @@ RUNTIME_API: dict[str, ApiFunc] = {
     # s'affiche plus, il se lit (`reading`, cf. RUNTIME_PROPS). `skip` révèle tout d'un
     # coup — le bouton « passer » —, et sans les deux un script n'aurait aucun moyen de
     # savoir quand enchaîner.
-    f"{REF_TEXT_REGION}:skip": ApiFunc(
-        lua_name=f"{REF_TEXT_REGION}:skip", c_func="text_skip",
+    f"{REF_TEXT_BOX}:skip": ApiFunc(
+        lua_name=f"{REF_TEXT_BOX}:skip", c_func="text_skip",
         params=[], self_first=True,
         doc=("Reveals the whole text at once. Ex: if input:pressed(\"A\") then "
              "box:skip() end"),
@@ -1501,7 +1470,8 @@ RUNTIME_API: dict[str, ApiFunc] = {
         lua_name="save.write", c_func="save_write",
         params=[Param("slot", PARAM_INT)], ret="int",
         doc="Writes the persistent variables into slot `slot` (0 = the first). "
-            "Returns 0 if the slot does not exist.",
+            "Returns 0 if the slot does not exist or existing saves cannot be migrated safely "
+            "(not enough SRAM space or temporary memory).",
     ),
     "save.load": ApiFunc(
         lua_name="save.load", c_func="save_read",
@@ -1536,7 +1506,8 @@ RUNTIME_API: dict[str, ApiFunc] = {
     "save.erase": ApiFunc(
         lua_name="save.erase", c_func="save_erase",
         params=[Param("slot", PARAM_INT)], ret="int",
-        doc="Empties slot `slot`: save.exists then answers false for it.",
+        doc="Empties slot `slot`: save.exists then answers false for it. "
+            "Returns 0 if the slot does not exist or existing saves cannot be migrated safely.",
     ),
 
     # blend.mode (int 0-3) : cf. RUNTIME_PROPS — l'état du mélange est une
@@ -1850,35 +1821,6 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
             " is the \"Active\" box of the inspector, which only sets the starting "
             "state.",
     ),
-    # ── Une LISTE ────────────────────────────────────────────────
-    f"{REF_LIST}.count": ApiProp(
-        lua_name=f"{REF_LIST}.count", c_getter="ui_list_count",
-        c_setter="ui_list_set_count", ptype=PARAM_INT, self_first=True,
-        doc="How many items this list walks through. Equals the number of authored "
-            "rows by default — a static menu therefore navigates without anything "
-            "set. To be written when the items exceed the visible rows (a scrolling "
-            "inventory): #my_array, the number of rows of a data table, or a "
-            "hand-kept count. Ex: menu.count = #bag",
-    ),
-    f"{REF_LIST}.index": ApiProp(
-        lua_name=f"{REF_LIST}.index", c_getter="ui_list_index",
-        c_setter="ui_list_set_index", ptype=PARAM_INT, self_first=True,
-        doc="The selected item, from 1 (0 if the list is empty). Writing places the "
-            "cursor on that item; the window re-centres so that it is visible. Ex: "
-            "menu.index = 2",
-    ),
-    f"{REF_LIST}.first": ApiProp(
-        lua_name=f"{REF_LIST}.first", c_getter="ui_list_first",
-        ptype=PARAM_INT, self_first=True, read_only=True,
-        doc="The first DISPLAYED item, from 1 — the position of the window. The item "
-            "of row r is first + r - 1. Read-only.",
-    ),
-    f"{REF_LIST}.active": ApiProp(
-        lua_name=f"{REF_LIST}.active", c_getter="ui_list_active",
-        ptype=PARAM_BOOL, self_first=True, read_only=True,
-        doc="Does this list take the directional pad? It is the SELECTION, not the "
-            "display. Read-only: menu:activate() / menu:deactivate() write it.",
-    ),
     # ── Une IMAGE ────────────────────────────────────────────────
     # L'état se pose par son NOM dans le sprite de CETTE image (`IMGST_{image}_{état}`) :
     # deux images de sprites différents citent légitimement des états différents. Le
@@ -1900,8 +1842,8 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
             "must give the OBJ target. Ex: cursor.offset = vec2(0, 16 * menu.index)",
     ),
     # ── Une ZONE DE TEXTE ────────────────────────────────────────
-    f"{REF_TEXT_REGION}.reading": ApiProp(
-        lua_name=f"{REF_TEXT_REGION}.reading", c_getter="text_reading",
+    f"{REF_TEXT_BOX}.reading": ApiProp(
+        lua_name=f"{REF_TEXT_BOX}.reading", c_getter="text_reading",
         ptype=PARAM_BOOL, self_first=True, read_only=True,
         doc="True while the text is being written in this zone (typewriter). "
             "Read-only. Ex: if not box.reading then scene.goto(\"NEXT\") end",

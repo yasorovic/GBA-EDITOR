@@ -168,6 +168,10 @@ def scene_text_reservation(p, scene) -> dict:
     # fond : sans ça `blit_use_bg_surface` retombe sur la base des glyphes et
     # écrase la police mono voisine.
     needs_surface = needs_surface or any(render_composited(f) for _i, f in scene_fonts)
+    # Une portée [font] sur une page ultérieure compose aussi avec une police
+    # mono : ce besoin ne se déduit pas des seules polices résidentes.
+    needs_surface = needs_surface or any(
+        region_is_composited(p, lay, el, default_font) for lay, el in scene_slots)
 
     img_tiles = sum(a["tiles"] for a in img_assets)
 
@@ -414,9 +418,13 @@ def region_is_composited(p: Project, lay, el, default_font_name: str) -> bool:
     # en page, et le runtime peut rencontrer une police proportionnelle dans le
     # segment. Les traductions sont incluses : changer de langue ne doit jamais
     # faire écrire les pixels dans les tuiles de glyphes mono.
-    key = getattr(el, "text_key", "") or ""
-    text = p.get_text(key) if key and hasattr(p, "get_text") else None
-    if text is not None:
+    if hasattr(p, "region_texts"):
+        texts = p.region_texts(el)
+    else:
+        text = p.region_text(el) if hasattr(p, "region_text") else (
+            p.get_text(getattr(el, "text_key", "") or "") if hasattr(p, "get_text") else None)
+        texts = [text] if text is not None else []
+    for text in texts:
         contents = [getattr(text, "content", "") or ""]
         for lang in getattr(getattr(p, "settings", None), "languages", []):
             raw = getattr(p, "translations", {}).get(lang.code, {}).get(text.id, "")
@@ -569,6 +577,7 @@ def gen_ui_texts(p: Project, scene, text_bg: int, emit=None) -> list[str]:
     d'un script.
     """
     from core.models.ui_region import is_text, ANCHOR_ACTOR, TARGET_OBJ
+    from core.project_texts import ui_text_build_key
 
     # Index PROJET-GLOBAUX : `g_ui_regions` suit l'ordre de `all_regions()`,
     # `g_texts` celui de `build_texts()`. Recalculés ici plutôt que reçus, pour
@@ -583,7 +592,7 @@ def gen_ui_texts(p: Project, scene, text_bg: int, emit=None) -> list[str]:
     for lay, el in p.scene_ui_slots(scene):
         if not is_text(el):
             continue
-        key = getattr(el, "text_key", "") or ""
+        key = ui_text_build_key(lay, el, p)
         if not key:
             continue          # le validateur le signale déjà, et mieux
         if key not in text_idx or el.name not in slot_idx:

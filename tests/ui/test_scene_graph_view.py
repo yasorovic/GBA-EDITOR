@@ -271,7 +271,7 @@ def test_glisser_une_scene_dans_le_cadre_la_rend_membre(qapp, tmp_path):
 
 
 def test_clic_droit_supprimer_une_scene_annulable(qapp, tmp_path, monkeypatch):
-    from PyQt6.QtWidgets import QMessageBox
+    from ui.common.popup import MessageBox as QMessageBox
     from core.history import get_history
     from ui.scene_manager.scene_graph_view import SceneGraphView
 

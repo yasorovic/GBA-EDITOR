@@ -71,20 +71,22 @@ $(TARGET).elf: $(OFILES) | $(BUILD)
 	$(LD) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 # Compilation depuis src/
-$(BUILD)/%.o: src/%.c | $(BUILD)
-	$(CC) $(CFLAGS) -c -o $@ $<
+$(BUILD)/%.o: src/%.c Makefile | $(BUILD)
+	$(CC) $(CFLAGS) -MMD -MP -c -o $@ $<
 
 # Compilation depuis grit_out/
-$(BUILD)/%.o: grit_out/%.c | $(BUILD)
-	$(CC) $(CFLAGS) -c -o $@ $<
+$(BUILD)/%.o: grit_out/%.c Makefile | $(BUILD)
+	$(CC) $(CFLAGS) -MMD -MP -c -o $@ $<
 
 # Assemblage soundbank (bin2s output)
-$(BUILD)/%.o: src/%.s | $(BUILD)
-	$(CC) $(ARCH) -x assembler-with-cpp -c -o $@ $<
+$(BUILD)/%.o: src/%.s Makefile | $(BUILD)
+	$(CC) $(ARCH) -MMD -MP -x assembler-with-cpp -c -o $@ $<
 
 # Créer obj/ si nécessaire
 $(BUILD):
 	mkdir -p $(BUILD)
+
+-include $(OFILES:.o=.d)
 
 clean:
 	rm -rf $(BUILD) $(TARGET).elf $(TARGET).gba

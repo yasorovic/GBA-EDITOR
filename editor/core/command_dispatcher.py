@@ -46,6 +46,7 @@ from core.events import EventEmitter
 from core.models.scene import Actor, Prefab, Scene
 from core.models.unique_name import unique_name
 from core.history import get_history, AddActorCmd
+from core.text_table_link import TableSync
 from core.selection_bus import get_bus
 
 if TYPE_CHECKING:
@@ -83,6 +84,22 @@ class CommandDispatcher(EventEmitter):
         project.events.on("renamed", self._on_project_renamed)
         project.events.on("status", self._on_project_status)
         project.rename_scope = self._rename_scope
+        self._table_sync = TableSync(project)
+        get_history().after_execute = self._sync_linked_tables
+
+    def _sync_linked_tables(self):
+        """Une table liée suit sa séquence de textes dans la même entrée d'historique."""
+        restore = self._table_sync()
+        if restore is None:
+            return None
+        if restore.changed:
+            self.notify_data_tables_changed()
+
+        def undo():
+            restore()
+            if restore.changed:
+                self.notify_data_tables_changed()
+        return undo
 
     # ── Ce que le projet annonce ──────────────────────────────────
 
@@ -603,6 +620,16 @@ class CommandDispatcher(EventEmitter):
         `text_key` — l'écran Texte cache qui cite quoi (`text_usage_index`) et
         doit l'oublier, sous peine d'afficher « unused » sur une entrée qu'on
         vient pourtant de brancher."""
+        self._emit("ui_text_links_changed")
+
+    def notify_texts_changed(self):
+        """Rafraîchit les autres écrans qui projettent les textes."""
+        self._emit("texts_changed")
+
+    def notify_data_tables_changed(self):
+        """Une table créée/mise à jour hors de l'écran Données."""
+        self._emit("data_tables_changed")
+        self._emit("disk_changed")
         self._emit("ui_text_links_changed")
 
     def flush_script_edits(self):

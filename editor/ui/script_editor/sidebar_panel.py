@@ -101,7 +101,7 @@ class SidebarPanel(QWidget):
     # Sections — une par CHOSE qu'on tient (ROADMAP v0.16). Les anciennes
     # catégories deviennent des SOUS-SECTIONS repliables, plus des
     # portes : la seule navigation est la section. Dans chacune, l'itération se
-    # montre, le moteur suit sous « Go further ».
+    # montre, puis la couche moteur suit dans le même groupe.
 
     def _api_button(self, entry: dict):
         from scripting.api_reference import tooltip_parts
@@ -135,8 +135,8 @@ class SidebarPanel(QWidget):
         for section in get_sections(show_extended_audio=False):
             sec = _Section(label(section["label"]), _C_API, expanded=False)
             # Une sous-section repliable par ancienne catégorie ; le moteur se
-            # range dans la sienne, sous l'annotation « Go further » — pas un
-            # troisième niveau de dépliage dans une colonne de 200 px.
+            # range dans la sienne, sans ajouter un troisième niveau de
+            # dépliage dans une colonne de 200 px.
             iteration = {grp["name"]: grp["entries"] for grp in section["iteration"]}
             engine = {grp["name"]: grp["entries"] for grp in section["engine"]}
             for name in [*iteration, *(n for n in engine if n not in iteration)]:
@@ -144,7 +144,6 @@ class SidebarPanel(QWidget):
                 for entry in iteration.get(name, []):
                     sub.add_widget(self._api_button(entry))
                 if name in engine:
-                    sub.add_widget(_group_label(label("scrsb.go_further")))
                     for entry in engine[name]:
                         sub.add_widget(self._api_button(entry))
             self._api_sections.append(sec)
@@ -265,10 +264,10 @@ class SidebarPanel(QWidget):
                 key = getattr(r, "text_key", "") or getattr(r, "preview_text", "") or ""
                 doms = {"text": key} if key else {}
                 # La zone s'écrit sur SON acquisition : interface:get("zone"):draw(...).
-                sn = api_snippets.element_call(r.name, "text_region:draw", **doms)
+                sn = api_snippets.element_call(r.name, "textBox:draw", **doms)
                 extra = (label('scrsb.interface_name', name=layout.name)
                          + (label('scrsb.preview_value', value=key) if key else ""))
-                sub.add_widget(_ref_btn(r.name, sn, _api_tip("text_region:draw", sn, extra)))
+                sub.add_widget(_ref_btn(r.name, sn, _api_tip("textBox:draw", sn, extra)))
 
         # ── Polices ────────────────────────────────────────────────
         if nbd.get(DOMAIN_FONT):

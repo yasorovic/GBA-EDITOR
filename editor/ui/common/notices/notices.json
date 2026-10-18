@@ -225,7 +225,7 @@
     },
     "ui.text.key_none": {
       "tone": "info",
-      "text": "No entry yet. Typing here creates one."
+      "text": "Local text · displayed at scene start. Create an entry to share or translate it."
     },
     "ui.text.key_shared": {
       "tone": "accent",

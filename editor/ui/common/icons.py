@@ -158,6 +158,10 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "sprite":                ("mdi.image-outline",           "▧"),
     "background":            ("mdi.image-multiple-outline",  "▥"),
     "palette":               ("mdi.palette-outline",         "◐"),
+    # Rôles communs aux sélecteurs de couleurs dans tout l'éditeur.
+    "bank":                  ("mdi.palette-outline",         "◐"),
+    "ink":                   ("mdi.format-color-text",       "A"),
+    "highlight":             ("mdi.format-color-highlight",  "▰"),
     "font":                  ("mdi.format-font",             "A"),
     "align_left":            ("mdi.format-align-left",       "⇤"),
     "align_center":          ("mdi.format-align-center",     "↔"),
@@ -167,6 +171,7 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "music":                 ("mdi.music-note",              "♫"),
     "jingle":                ("mdi.bell-ring-outline",       "♫"),
     "data_table":            ("mdi.table",                   "▦"),
+    "data_table_linked":     ("mdi.link-variant",             "▦"),
     "asset_missing":         ("mdi.circle-outline",          "○"),
     "camera":                ("mdi.video",                   "▰"),
     # Sprite Editor — directions
@@ -220,8 +225,6 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "mk_value":              ("mdi.variable",                "$"),
     "mk_tag":                ("mdi.tag-outline",             "⌗"),
     # Text Editor — clé d'un texte : accrochée au rangement ou nommée à la main
-    "key_auto":              ("mdi.link-variant",            "⚯"),
-    "key_manual":            ("mdi.link-variant-off",        "⚮"),
     "copy":                  ("mdi.content-copy",            "⧉"),
     "copied":                ("mdi.check",                   "✓"),
     # Chrome des widgets — consommées par les QSS via qss_image()
@@ -300,6 +303,44 @@ def get(name: str,
         except Exception:
             pass
     return QIcon()
+
+
+_TOOLBAR_ICONS: dict = {}
+
+
+def toolbar_icon(name: str, color: str = COLOR_DEFAULT,
+                 color_active: str | None = None) -> QIcon:
+    """Centre les pixels visibles dans 26 px, avec un symbole de 18 px.
+
+    Les glyphes de la police d'icônes ont des marges différentes : une même
+    iconSize Qt ne suffit pas à leur donner une taille et un axe communs.
+    """
+    key = (name, color, color_active)
+    if key in _TOOLBAR_ICONS:
+        return _TOOLBAR_ICONS[key]
+
+    def render(ink):
+        source = get(name, ink).pixmap(64, 64)
+        image = source.toImage()
+        points = [(x, y) for y in range(image.height()) for x in range(image.width())
+                  if image.pixel(x, y) >> 24]
+        canvas = QPixmap(52, 52)
+        canvas.fill(Qt.GlobalColor.transparent)
+        if points:
+            xs, ys = zip(*points)
+            glyph = source.copy(min(xs), min(ys), max(xs) - min(xs) + 1, max(ys) - min(ys) + 1)
+            glyph = glyph.scaled(36, 36, Qt.AspectRatioMode.KeepAspectRatio,
+                                 Qt.TransformationMode.SmoothTransformation)
+            painter = QPainter(canvas)
+            painter.drawPixmap((52 - glyph.width()) // 2, (52 - glyph.height()) // 2, glyph)
+            painter.end()
+        return canvas
+
+    result = QIcon(render(color))
+    if color_active:
+        result.addPixmap(render(color_active), QIcon.Mode.Normal, QIcon.State.On)
+    _TOOLBAR_ICONS[key] = result
+    return result
 
 
 def _inpaint_brush_icon(color: str, color_active: str | None = None) -> QIcon:

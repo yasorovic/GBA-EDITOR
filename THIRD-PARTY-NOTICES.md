@@ -134,6 +134,20 @@ Les polices vectorielles que **vous** importez dans un projet restent soumises �
 leur propre licence : à vous de vérifier qu'elle autorise leur incorporation dans
 un jeu.
 
+## Photos de cartouches
+
+Les photos du panneau Build sont fournies par **3615Retro**, **gekkio**, **Granmastro**,
+**ikk5** et **Kurodo**,
+via la [Game Boy hardware database](https://gbhwdb.gekkio.fi/), sous licence
+[Creative Commons Attribution-ShareAlike 4.0 International](https://creativecommons.org/licenses/by-sa/4.0/).
+Les photos originales sont intactes ; l'interface ajoute des repères numérotés.
+Les sources individuelles, les composants identifiés et les crédits des autres
+photos de référence figurent dans `ui/common/images/cartridges/README.md`
+(`editor/ui/common/images/cartridges/README.md` dans les sources). Le fichier voisin
+`photo-catalog.json` associe les 18 vues des neuf exemplaires à leur auteur, source,
+licence et empreinte. Les scans de cartes nues utilisés en développement restent
+dans le dossier de recherche et ne sont pas redistribués.
+
 ## Chaîne de compilation (non redistribuée)
 
 L'éditeur ne redistribue **pas** ces outils : il détecte une installation

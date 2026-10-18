@@ -30,7 +30,7 @@ from ui.common.palette_bank_strip import PaletteBankStrip
 from ui.common.canvas_top_bar import CanvasTopBar
 from PyQt6.QtCore import QPointF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QImage, QPixmap
-from PyQt6.QtWidgets import QApplication, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
 # Rasterisation des fonds + aperçus — extrait (A3, sous-package canvas/).
 from ui.scene_manager.canvas.canvas_raster import (
     BgLayerRaster, build_bg_raster, bg_pixmap, preview_frame_for_actor,
@@ -94,6 +94,27 @@ class CanvasContainer(QWidget):
         self._inpaint_bank_strip.selected.connect(self._on_inpaint_bank_selected)
         self._inpaint_bank_strip.raise_()
 
+        # Notice non bloquante (haut-droite) : ce que la scène ne peut pas montrer ni construire tel quel.
+        self._notice = QLabel(self)
+        self._notice.setWordWrap(True)
+        self._notice.setStyleSheet(
+            f"background:rgba(12,12,15,215); color:{C.ACCENT_YLW}; font-family:{T.UI_STACK};"
+            "font-size:11px; border-radius:5px; padding:5px 8px;")
+        self._notice.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._notice.hide()
+
+    def set_notice(self, text: str):
+        self._notice.setText(text)
+        self._notice.setVisible(bool(text))
+        self._position_notice()
+
+    def _position_notice(self):
+        n = self._notice
+        n.setFixedWidth(min(340, max(120, self.width() - 2 * 10 - 160)))
+        n.adjustSize()
+        n.move(max(10, self.width() - n.width() - 10), 10)
+        n.raise_()
+
     def bind_inpainting(self, ctrl: "SceneInpaintingController"):
         self._inpaint_ctrl = ctrl
 
@@ -145,6 +166,8 @@ class CanvasContainer(QWidget):
         if self._inpaint_bank_strip.isVisible():
             self._position_inpaint_strip()
             self._inpaint_bank_strip.raise_()
+        if self._notice.isVisible():
+            self._position_notice()
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -708,6 +731,12 @@ class SceneEditor(QWidget):
         self._apply_editor_visibility()
         self.ui_regions_reloaded.emit()
 
+    def refresh_ui_texts(self):
+        """Repeint les zones existantes après une édition dans l'écran Texte."""
+        for item in self._gba_scene.items():
+            if isinstance(item, UIRegionItem):
+                item.update()
+
     def _save_ui_regions(self):
         """Persiste après un déplacement de zone au canvas, et recharge
         l'inspecteur : ses spinbox montreraient sinon l'ancienne position."""
@@ -830,6 +859,7 @@ class SceneEditor(QWidget):
         self._ui_region_ctrl.set_context(project, scene)
         self._reload_ui_regions()
         self._canvas_container.refresh_inpaint_banks()
+        self._refresh_bg_notice(scene)
 
         self._reload_sprites()
 
@@ -1435,6 +1465,20 @@ class SceneEditor(QWidget):
         self._reload_ui_regions()
         self._inpainting_ctrl.set_inpaint_layer(prev_slot)
         self._canvas_container.refresh_inpaint_banks()
+        self._refresh_bg_notice(scene)
+
+    def _refresh_bg_notice(self, scene):
+        """Un fond bitmap n'existe qu'en vidéo 3/4/5 : sur une scène tuilée il s'affiche ici, mais le build ne le posera pas.
+        Une simple notice, qui ne bloque rien."""
+        names = []
+        if scene and self._project and int(getattr(scene, "render_mode", 0) or 0) in (0, 1, 2):
+            for layer in scene.background_layers:
+                ba = self._project.get_background(layer.background_name) if layer.background_name else None
+                if ba is not None and ba.mode == "bitmap":
+                    names.append(ba.name)
+        self._canvas_container.set_notice(
+            label("scncanvas.bitmap_in_tiled_mode", names=", ".join(names), mode=int(getattr(scene, "render_mode", 0) or 0))
+            if names else "")
 
     def set_inpaint_layer(self, bg_slot: int):
         """Choisit le layer BG peint par l'outil de peinture (via l'inspecteur)."""

@@ -72,7 +72,11 @@ def _copy_of(store, item):
     if hasattr(item, "colors"):
         # Une palette : ses couleurs, SANS le chemin de son `.hex` — la copie en écrit un à elle.
         return store.cls(name=item.name, colors=list(item.colors), size=item.size)
-    return store.cls.from_dict(json.loads(project_json.dumps(item.to_dict())))
+    copied = store.cls.from_dict(json.loads(project_json.dumps(item.to_dict())))
+    # Une copie de table n'hérite pas du lien de l'original.
+    if getattr(copied, "text_link", None):
+        copied.text_link = {}
+    return copied
 
 
 def duplicate(project, family: str, item, taken: Optional[set] = None) -> Duplication:

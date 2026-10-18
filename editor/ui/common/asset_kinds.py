@@ -223,7 +223,8 @@ def _relink_action(family: str):
     refus se dit, et l'asset reste inchangé."""
     def run(project, asset):
         from PyQt6.QtGui import QCursor
-        from PyQt6.QtWidgets import QApplication, QMessageBox
+        from PyQt6.QtWidgets import QApplication
+        from ui.common.popup import MessageBox as QMessageBox
         from core import asset_relink
         from core.command_dispatcher import get_dispatcher
         from ui.common.theme import C
@@ -422,7 +423,8 @@ def _new_palette(project, size: int):
 def _import_palette(project):
     """Crée une palette depuis un fichier (.gpl / .pal / liste hex) — nom = nom
     de fichier, taille déduite du nombre de couleurs."""
-    from PyQt6.QtWidgets import QFileDialog, QMessageBox
+    from PyQt6.QtWidgets import QFileDialog
+    from ui.common.popup import MessageBox as QMessageBox
     from pathlib import Path as _P
     from core.history import AddResourceCmd
     from core.palette_io import PALETTE_IMPORT_FILTER, import_palette
@@ -568,12 +570,18 @@ def _rename_data_table(project, table, new_name: str) -> str:
     return table.name
 
 
+def _table_state(project, table):
+    return (("data_table_linked", label('akind.table_linked_tip', group=table.text_link.get("prefix", "")))
+            if table.text_link else None)
+
+
 DATA_TABLES = AssetKind(
     label         = "Tables",
     label_key = 'akind.tables',
     icon          = "data_table",
     nodes         = store_nodes("data_tables"),
     suffix_of     = lambda t: f"{len(t.rows)} × {len(t.columns)}",
+    state_of      = _table_state,
     rename        = _rename_data_table,
     delete        = _store_deleter("data_tables"),
     delete_prompt = lambda t: label('akind.delete_table_name_ctrl_z_to_undo', name=t.name),

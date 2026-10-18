@@ -10,30 +10,15 @@ Trois identifiants, un seul résolvable :
             build vers un index de table C (comme SFX_* ou SCENE_IDX_*) : elle
             ne vit pas au runtime. Renommable — c'est alors à l'éditeur de
             réécrire les références.
-  `path`  — le rangement : 1 à 6 niveaux de libellés libres, avec accents,
-            espaces et doublons autorisés. Jamais résolu, jamais référencé.
+  `path`  — PROPRIÉTÉ, jamais stockée : les segments de `key` (`SCR_Arena_Page01`
+            ↔ `SCR › Arena › Page01`). Ranger un texte, c'est donc renommer sa clé.
 
-**La clé situe, elle ne résume pas.** Elle est dérivée de la PLACE du texte
-(son chemin de rangement), jamais du contenu : le contenu d'un texte est
-réécrit vingt fois pendant l'écriture, sa place dans le jeu bouge rarement. Une
-clé tirée du contenu (`garde_je_suis`) devient un mensonge dès que le garde
-devient un mendiant — et personne ne va la corriger. Une clé positionnelle
-reste au pire imprécise.
+**La clé porte la structure.** Chaque `_` ouvre un niveau. Un libellé stocké à
+côté la dupliquait et se désynchronisait au premier renommage qui ne le recalait
+pas : il a été retiré (ROADMAP, « Le chemin est dérivé de la clé »).
 
-**Le chemin PROPOSE la clé, il ne la POSSÈDE pas.** Tant que `auto_key` est
-vrai, ranger le texte ailleurs recale sa clé (et réécrit les scripts qui la
-citent : c'est sans danger, une clé automatique est par définition jetable).
-Dès que l'utilisateur la nomme à la main, `auto_key` tombe à faux et la clé se
-détache définitivement — réorganiser l'arbre ne la touchera plus jamais.
-
-Sans ce détachement, ranger reviendrait à refactorer : renommer un nœud
-« Village » en « Village Nord » réécrirait N clés dans M fichiers `.lua`
-versionnés en git, pour un geste purement cosmétique.
-
-Le chemin ne suffit pas non plus à identifier : deux répliques rangées au même
-endroit produisent la même clé, d'où un rang numéroté (`village_garde_02`). Si
-la clé était strictement dérivée, il faudrait imposer un dernier niveau unique
-— et le libellé ne serait plus libre, juste une clé déguisée.
+Le chemin ne suffit pas à identifier : deux répliques rangées au même endroit
+produisent la même clé, d'où un rang numéroté (`village_garde_02`).
 
 Le texte est destiné au JOUEUR, donc traduisible (cf. ROADMAP.md v0.8) : c'est
 ce qui le distingue d'un `string` technique, qui reste un littéral dans le
@@ -56,10 +41,9 @@ from core.models.unique_name import unique_name
 # pas à raconter).
 _SEGMENT_MAX = 16
 
-# Profondeur max du chemin de rangement. Plafond de départ, choisi pour que la
-# clé dérivée reste lisible (6 × 16 caractères reste exploitable) — pas une
-# limite structurelle : le chemin est une liste, la relever ne coûtera rien.
-MAX_DEPTH = 6
+# Profondeur proposée par l'éditeur. Le chargement ne tronque jamais une clé :
+# chaque `_` doit rester visible, même au-delà de ce confort d'édition.
+MAX_DEPTH = 10
 
 # Séparateur d'AFFICHAGE seulement. Le stockage est une liste : un libellé
 # libre a le droit de contenir « / » ou « > » sans qu'on ait à inventer une
@@ -72,36 +56,39 @@ class Text:
     """Une entrée de la table de textes du projet."""
     id:      str = ""   # opaque, stable à vie — voir en-tête du module
     key:     str = ""    # poignée unique et lisible, référencée depuis Lua
-    path:    list[str] = field(default_factory=list)  # rangement libre, 1..6 niveaux
     content: str = ""    # le texte lui-même, tel qu'affiché au joueur
     note:    str = ""    # contexte pour le traducteur (v0.8)
     scene:   str = ""    # scène d'origine — filtre d'affichage uniquement
-    auto_key: bool = True  # clé jamais renommée à la main → badge « auto »
+
+    @property
+    def path(self) -> list[str]:
+        """Les niveaux de la clé, dans l'ordre. Dérivé : jamais écrit."""
+        return [part for part in str(self.key).split("_") if part]
 
     def path_str(self) -> str:
         return SEP.join(self.path)
 
     def to_dict(self) -> dict:
         # Dérivé des champs : ajouter un champ à Text le persiste sans risquer
-        # d'oublier cette méthode. `from_dict` reste explicite — il porte la
-        # migration de l'ancienne table plate (`label` → `path`).
+        # d'oublier cette méthode. `from_dict` reste explicite.
         return asdict(self)
 
     @classmethod
     def from_dict(cls, d: dict) -> "Text":
-        raw = d.get("path")
-        if raw is None:
-            # Migration depuis la table plate : le `label` unique devient le
-            # premier — et pour l'instant seul — niveau du chemin.
-            raw = [d["label"]] if d.get("label") else []
+        key = d.get("key", "")
+        if not key:
+            # Anciens fichiers sans clé : elle se dérive de leur ancien chemin (ou du `label`
+            # de la table plate). Les doublons sont renumérotés au chargement (`_repair_texts`).
+            legacy = d.get("path")
+            if legacy is None:
+                legacy = [d["label"]] if d.get("label") else []
+            key = key_from_path(legacy) if legacy else ""
         return cls(
             id       = str(d.get("id") or ""),
-            key      = d.get("key", ""),
-            path     = norm_path(raw),
+            key      = key,
             content  = d.get("content", ""),
             note     = d.get("note", ""),
             scene    = d.get("scene", ""),
-            auto_key = bool(d.get("auto_key", True)),
         )
 
 
@@ -121,17 +108,62 @@ def slug(s: str) -> str:
 
 
 def norm_path(path) -> list[str]:
-    """Chemin propre : segments rognés, trous supprimés, profondeur plafonnée.
+    """Libellés propres : un niveau par segment, segments rognés, trous supprimés.
 
+    Règle unique : un `_` ouvre un niveau, comme dans une clé. `SCR_Arena` vaut
+    donc `SCR`, `Arena` — pour un nom de scène, de TextBox ou un libellé tapé.
     Les trous sont compactés (`["", "Garde"]` → `["Garde"]`) : un niveau vide
     au milieu d'un chemin ne veut rien dire, et le laisser passer produirait
     deux nœuds distincts d'apparence identique dans l'arbre."""
     if isinstance(path, str):
         path = [path]
-    return [s for s in (str(p).strip() for p in (path or [])) if s][:MAX_DEPTH]
+    parts = (part.strip() for label in (path or []) for part in str(label).split("_"))
+    return [part for part in parts if part]
+
+
+def key_segment(label: str) -> str:
+    """Identifiant d'un niveau, sans `_` puisque celui-ci sépare les niveaux."""
+    value = unicodedata.normalize("NFKD", str(label or ""))
+    value = "".join(c for c in value if not unicodedata.combining(c))
+    words = []
+    word = ""
+    for char in value:
+        if char.isalnum():
+            word += char
+        elif word:
+            words.append(word)
+            word = ""
+    if word:
+        words.append(word)
+    return "".join(words[:1] + [part[:1].upper() + part[1:] for part in words[1:]])[:_SEGMENT_MAX]
 
 
 # ── Rangement ─────────────────────────────────────────────────────
+def moved_text_paths(texts, source, destination):
+    """Déplace un nœud sous un dossier, en conservant son nom et ses enfants.
+
+    Une liste vide signale une destination invalide ou un déplacement nul.
+    La vue et la commande utilisent la même validation, sans modifier le modèle.
+    """
+    source, destination = tuple(source), tuple(destination)
+    if (not source or destination[:len(source)] == source or
+            destination == source[:-1]):
+        return []
+    targets = [t for t in texts if tuple(t.path[:len(destination)]) == destination]
+    if destination and not (len(targets) > 1 or
+                            any(len(t.path) > len(destination) for t in targets)):
+        return []
+    entries = []
+    for text in texts:
+        if tuple(text.path[:len(source)]) != source:
+            continue
+        new = list(destination) + list(text.path[len(source) - 1:])
+        if len(new) > MAX_DEPTH:
+            return []
+        entries.append((text, list(text.path), new))
+    return entries
+
+
 # Toujours DÉRIVÉ de la liste plate : `texts.json` reste une liste dont chaque
 # entrée porte son chemin. `tree_paths` (les nœuds d'un arbre à reconstruire)
 # a disparu avec `text_tree_panel.py` — la table qui l'a remplacé (ROADMAP
@@ -157,7 +189,7 @@ def repath_segment(texts, path, new_seg: str) -> list[tuple]:
     ]
 
 
-def key_from_path(path, *, taken: set[str] | None = None) -> str:
+def key_from_path(path, *, taken: set[str] | None = None, like: str = "") -> str:
     """Clé positionnelle unique dérivée du chemin : `village_garde`.
 
     Le rang `_2`, `_3`… n'apparaît qu'en cas de collision — plusieurs répliques
@@ -165,6 +197,12 @@ def key_from_path(path, *, taken: set[str] | None = None) -> str:
     le cas courant (un texte par nœud), qui est aussi celui qu'on copie dans un
     script.
 
+    `like` : une clé existante dont les segments gardent leur casse. Les libellés par défaut
+    (`scr` → `Scr`) n'en portent pas : sans elle, déplacer un dossier recaserait des clés que
+    personne n'a renommées, et réécrirait les scripts qui les citent.
+
     Chemin vide : la base est `texte`."""
-    segs = [s for s in (slug(p) for p in norm_path(path)) if s]
+    cased = {part.casefold(): part for part in like.split("_") if part}
+    segs = [s for s in (key_segment(p) for p in norm_path(path)) if s]
+    segs = [cased.get(s.casefold(), s) for s in segs]
     return unique_name("_".join(segs) or "texte", taken or set())

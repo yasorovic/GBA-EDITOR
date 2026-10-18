@@ -68,6 +68,8 @@ def generate_globals_h(globals_) -> str:
         "#ifndef GLOBALS_H",
         "#define GLOBALS_H",
         "",
+        "#include <gba_types.h>",
+        "",
     ]
     if globals_:
         for g in globals_:

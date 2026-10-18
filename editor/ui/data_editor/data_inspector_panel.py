@@ -25,7 +25,7 @@ from ui.common.notice import note
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 
-from core.models.data_table import DataColumn, COLUMN_TYPES, COLUMN_REFERENCES
+from core.models.data_table import DataColumn, COLUMN_CHOICES, COLUMN_REFERENCES
 from core.project import Project
 
 
@@ -54,7 +54,7 @@ class DataInspectorPanel(QWidget):
         W.row(label("datainsp.name"), self._name, column_card.body_layout)
 
         self._type = QComboBox()
-        self._type.addItems(COLUMN_TYPES)
+        self._type.addItems(COLUMN_CHOICES)
         self._type.setStyleSheet(QSS.combobox)
         self._type.setToolTip(tooltip(
             title=label("datainsp.type_title"), body=label("datainsp.type_tip"),
@@ -97,7 +97,9 @@ class DataInspectorPanel(QWidget):
         else:
             self._name.setText(column.name)
             self._type.setEnabled(True)
-            self._type.setCurrentText(column.type)
+            # Un ancien type reste affiché sans redevenir un choix de création.
+            self._type.setPlaceholderText(column.type)
+            self._type.setCurrentIndex(self._type.findText(column.type))
             self._value.setText("—" if value is None else str(value))
             self._target.setText(self._describe(column, value))
         self._updating = False

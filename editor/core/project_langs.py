@@ -32,7 +32,7 @@ import json
 from pathlib import Path
 from typing import Optional
 
-from core.resources.resource_store import atomic_write
+from core.resources.resource_store import atomic_write, preserve_corrupt_file
 from core.models import project_json
 
 
@@ -108,8 +108,12 @@ class ProjectLangsMixin:
             if tid not in by_id_master and content:
                 entries.append({"id": tid, "content": content})
         self.texts_file.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write(self.translation_file(code),
+        path = self.translation_file(code)
+        if code in self.translation_problems and path.exists():
+            preserve_corrupt_file(path)
+        atomic_write(path,
                      project_json.dumps({"lang": code, "texts": entries}))
+        self.translation_problems.pop(code, None)
 
     def ensure_translation_file(self, code: str):
         """Crée le side vide d'une langue qu'on vient de déclarer.

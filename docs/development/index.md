@@ -7,6 +7,8 @@ modifient l'éditeur, pas aux personnes qui créent un jeu.
   l'éditeur.
 - [Pipeline de rendu des polices](font-render-pipeline.md) : préparation des polices utilisées
   par le moteur.
+- [Cartouches : correspondances matérielles et photos](cartridge-hardware-matrix.md) : cartes,
+  composants observés, jeux de référence et inventaire des visuels à réunir.
 
 Pour la structure générale du code et du pipeline de build, consultez
 [ARCHITECTURE.md](https://github.com/yasorovic/GBA-EDITOR/blob/main/ARCHITECTURE.md).

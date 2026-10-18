@@ -4,23 +4,29 @@
   "columns": [
     {
       "name": "valeur",
-      "type": "text"
+      "type": "sfx",
+      "color": ""
     },
     {
       "name": "column",
-      "type": "int"
+      "type": "image",
+      "color": ""
     },
     {
       "name": "column_2",
-      "type": "int"
+      "type": "int",
+      "color": ""
     },
     {
       "name": "column_3",
-      "type": "int"
+      "type": "int",
+      "color": ""
     }
   ],
   "rows": [
-    {},
+    {
+      "valeur": "bomb"
+    },
     {},
     {}
   ]

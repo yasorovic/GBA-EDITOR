@@ -21,6 +21,7 @@ puisque `project.py` l'importe pour composer la classe.
 """
 
 import json
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -39,17 +40,18 @@ from core.models.text import (
 class TextUsage:
     """Les citations d'une entrée de la table, par source.
 
-    **Deux sources, jamais une seule** : un script (`text:draw("clé")`) et une
-    mise en page (`UIText.text_key`). N'en compter qu'une afficherait
+    Trois sources : scripts, éléments d'interface (toutes les pages) et
+    cellules de table de données de type text. En oublier une afficherait
     « orphelin » sur un texte posé dans une boîte de dialogue — et un orphelin,
     ça se supprime.
     """
     scripts: dict = field(default_factory=dict)   # {chemin du .lua: occurrences}
     regions: list = field(default_factory=list)   # [(mise en page, région)]
+    tables: list = field(default_factory=list)    # [(table, ligne 1-based, colonne)]
 
     @property
     def count(self) -> int:
-        return sum(self.scripts.values()) + len(self.regions)
+        return sum(self.scripts.values()) + len(self.regions) + len(self.tables)
 
     def summary(self) -> str:
         """Ce qui tient dans une cellule : « 2 scripts · 1 layout »."""
@@ -60,6 +62,9 @@ class TextUsage:
         if self.regions:
             parts.append(f"{len(self.regions)} layout"
                          + ("s" if len(self.regions) > 1 else ""))
+        if self.tables:
+            parts.append(f"{len(self.tables)} table cell"
+                         + ("s" if len(self.tables) > 1 else ""))
         return " · ".join(parts)
 
     def detail(self) -> str:
@@ -67,6 +72,7 @@ class TextUsage:
         lines = [f"{p.name} ×{n}" if n > 1 else p.name
                  for p, n in sorted(self.scripts.items())]
         lines += [f"{lay} › {reg}" for lay, reg in sorted(self.regions)]
+        lines += [f"{table} › {row} › {col}" for table, row, col in sorted(self.tables)]
         return "\n".join(lines)
 
 
@@ -83,6 +89,19 @@ class TextUsageIndex:
     def get(self, key: str) -> TextUsage:
         """Jamais None : une clé jamais citée a des usages vides, pas absents."""
         return self.by_key.get(key) or TextUsage()
+
+
+def ui_text_build_key(layout, element, project=None) -> str:
+    """Référence de build du contenu initial, sans entrée dans l'éditeur."""
+    if getattr(element, "sequence_prefix", "") and project is not None:
+        pages = project.textbox_pages(element)
+        return pages[0].key if pages else ""
+    key = getattr(element, "text_key", "") or ""
+    if key or not getattr(element, "preview_text", ""):
+        return key
+    from hashlib import sha256
+    identity = json.dumps([layout.name, element.name], ensure_ascii=True)
+    return "__ui_inline_" + sha256(identity.encode("utf-8")).hexdigest()
 
 
 class ProjectTextsMixin:
@@ -169,11 +188,28 @@ class ProjectTextsMixin:
         return [Text(key=k, content=v) for k, v in sorted(found.items())]
     def build_texts(self) -> list:
         """La table de textes VUE PAR LE BUILD : les entrées du projet, puis les
-        littéraux des scripts.
+        littéraux des scripts et les contenus locaux de l'interface.
 
         Les entrées réelles gardent leur rang — c'est lui qui fait l'index dans
         `g_texts`, et un littéral ajouté ne doit décaler aucune clé."""
-        return list(self.texts) + list(getattr(self, "_anon_texts", []))
+        return (list(self.texts) + list(getattr(self, "_anon_texts", []))
+                + self.inline_ui_texts())
+
+    def inline_ui_texts(self) -> list:
+        """Contenus locaux éphémères, jamais ajoutés à la table de l'éditeur.
+
+        L'identité dépend de l'élément, pas du contenu ; les textes identiques
+        de deux éléments restent indépendants.
+        """
+        out = []
+        for lay, el in self.all_regions():
+            if getattr(el, "text_key", "") or not getattr(el, "preview_text", ""):
+                continue
+            text = self.region_text(el)
+            if text is not None:
+                key = ui_text_build_key(lay, el)
+                out.append(Text(id=key, key=key, content=text.content))
+        return out
     def text_values(self) -> dict:
         """Valeurs à substituer aux marqueurs `$nom` d'un texte, à l'ÉDITION.
 
@@ -187,32 +223,57 @@ class ProjectTextsMixin:
     # ── I/O textes (table de chaînes destinées au joueur) ───────────
 
     def save_texts(self):
+        self._validate_texts(self.texts)
         data = {"texts": [t.to_dict() for t in self.texts]}
         self.texts_file.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(self.texts_file, project_json.dumps(data))
 
     def load_texts(self):
-        self.texts = []
+        self._text_repairs = []
         if not self.texts_file.exists():
+            self.texts = []
             return
-        d = json.loads(self.texts_file.read_text(encoding="utf-8"))
+        def unique_object(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError(f'Duplicate JSON key in texts.json: {key}')
+                result[key] = value
+            return result
+        d = json.loads(self.texts_file.read_text(encoding="utf-8"), object_pairs_hook=unique_object)
         self.texts = [Text.from_dict(t) for t in d.get("texts", [])]
-        self._repair_texts()
+        # Un doublon (une fusion git, une édition à la main) ne ferme pas le projet : il est réparé et dit à l'ouverture.
+        self._text_repairs = self._repair_texts()
 
-    def _repair_texts(self):
-        """Rattrape un fichier édité à la main : id manquant ou dupliqué, clé
-        manquante ou dupliquée. L'id prime — c'est lui l'identité ; une clé en
-        double est celle qu'on renumérote."""
+    @staticmethod
+    def _validate_texts(texts):
+        for field in ('id', 'key'):
+            seen = set()
+            for text in texts:
+                value = getattr(text, field)
+                if value and value in seen:
+                    raise ValueError(f'Duplicate text {field}: {value}')
+                seen.add(value)
+
+    def _repair_texts(self) -> list[str]:
+        """Complète les identités manquantes des anciens fichiers et renumérote les doublons (l'id prime, c'est lui
+        l'identité ; une clé en double est celle qu'on renumérote). Une phrase par doublon, pour `load_warnings`."""
         seen_ids: set[str] = set()
         seen_keys: set[str] = set()
+        notes: list[str] = []
         for t in self.texts:
-            t.path = norm_text_path(t.path)
             if not t.id or t.id in seen_ids:
+                if t.id:
+                    notes.append(f"texts.json: id \"{t.id}\" was used twice; one entry got a new id")
                 t.id = new_id(seen_ids)
             seen_ids.add(t.id)
             if not t.key or t.key in seen_keys:
-                t.key = text_key_from_path(t.path, taken=seen_keys)
+                old = t.key
+                t.key = text_key_from_path(t.path, taken=seen_keys, like=old)
+                if old:
+                    notes.append(f"texts.json: key \"{old}\" was used twice; the second entry is now \"{t.key}\"")
             seen_keys.add(t.key)
+        return notes
 
     # ── CRUD textes ─────────────────────────────────────────────────
 
@@ -226,7 +287,47 @@ class ProjectTextsMixin:
     def get_text_by_id(self, tid: str) -> Optional[Text]:
         """Résolution par id — pour les références stockées dans les fichiers
         de données (inspecteurs, scènes), insensibles au renommage."""
-        return next((t for t in self.texts if t.id == tid), None)
+        # Index id → rang, vérifié à chaque lecture : la liste est modifiée de partout (ajout, suppression, restauration
+        # d'un undo), donc un rang périmé se détecte (`texts[i].id` ne correspond plus) et l'index se refait.
+        position = getattr(self, "_text_positions", {}).get(tid)
+        texts = self.texts
+        if position is None or position >= len(texts) or texts[position].id != tid:
+            self._text_positions = {t.id: i for i, t in enumerate(texts)}
+            position = self._text_positions.get(tid)
+            if position is None:
+                return None
+        return texts[position]
+
+    def migrate_legacy_pages(self) -> None:
+        """Les anciennes `page_ids` d'une boîte deviennent une séquence ou un `text_key`.
+
+        En mémoire seulement : le fichier n'est réécrit qu'à la prochaine sauvegarde du
+        layout. Si les pages sont exactement une séquence, la boîte la suit ; sinon elle
+        garde sa première page (les autres ne sont pas une séquence, rien à relier)."""
+        from core.text_sequences import sequence_of
+        for _layout, box in self.all_regions():
+            ids = box.__dict__.pop("_legacy_page_ids", None)
+            if not ids or getattr(box, "sequence_prefix", ""):
+                continue
+            pages = [t for tid in ids if (t := self.get_text_by_id(tid)) is not None]
+            prefixes = {s[0] for t in pages if (s := sequence_of(t.key))}
+            if len(pages) >= 2 and len(prefixes) == 1:
+                from core.text_sequences import group_keys
+                prefix = prefixes.pop()
+                if group_keys(self, prefix) == [t.key for t in pages]:
+                    box.sequence_prefix = prefix
+                    continue
+            if pages and not box.text_key:
+                box.text_key = pages[0].key
+
+    def textbox_pages(self, box) -> list:
+        """Les textes qu'une boîte lit, dans l'ordre : sa séquence entière si elle
+        en suit une, sinon son seul `text_key`. Dérivé à chaque lecture."""
+        if getattr(box, "sequence_prefix", ""):
+            from core.text_sequences import group_texts
+            return group_texts(self, box.sequence_prefix)
+        entry = self.get_text(box.text_key) if getattr(box, "text_key", "") else None
+        return [entry] if entry is not None else []
 
     def new_text(self, content: str = "", scene: str = "", path=None) -> Text:
         """Crée une entrée. La clé dérive du chemin de rangement, jamais du
@@ -238,50 +339,108 @@ class ProjectTextsMixin:
         t = Text(
             id      = new_id({x.id for x in self.texts}),
             key     = text_key_from_path(p, taken=self.text_keys()),
-            path    = p,
             content = content,
             scene   = scene,
         )
         self.texts.append(t)
         return t
 
-    def text_path_key(self, text: Text) -> str:
-        """Clé que le chemin actuel de `text` produirait — sans l'appliquer.
-        Sa propre clé est exclue des collisions, sinon un texte déjà posé au
-        bon endroit se verrait proposer un rang `_02` contre lui-même."""
-        return text_key_from_path(text.path, taken=self.text_keys() - {text.key})
+    def text_path_keys(self, entries) -> list:
+        """[(texte, clé)] que de nouveaux chemins produiraient, sans rien appliquer.
+
+        `entries` : [(texte, nouveau chemin)]. Les clés du lot ne comptent pas comme prises (elles
+        changent ensemble) mais chaque clé choisie l'est pour la suivante ; le résultat convient à
+        `rename_text_keys`, échanges compris. Ranger un texte, c'est renommer sa clé."""
+        members = {text.id for text, _path in entries}
+        taken = {t.key for t in self.texts if t.id not in members}
+        out = []
+        for text, path in entries:
+            key = text_key_from_path(path, taken=taken, like=text.key)
+            taken.add(key)
+            out.append((text, key))
+        return out
 
     def rename_text_key(self, text: Text, new_key: str) -> bool:
-        """Renommage MANUEL. Retourne False si le nom est vide ou déjà pris —
+        """Renomme la clé. Retourne False si le nom est vide ou déjà pris —
         l'appelant (UI) affiche l'erreur. Les appels text:draw("clé") des
         scripts suivent (cf. rename_lua_refs).
 
-        La clé se DÉTACHE alors du chemin (`auto_key=False`) : elle appartient
-        à l'utilisateur, ranger le texte ailleurs ne la touchera plus."""
-        return self._apply_text_key(text, new_key, manual=True)
+        Les libellés de `path` se réalignent sur la nouvelle clé."""
+        with self.consumers_follow([text]):
+            return self._apply_text_key(text, new_key)
 
-    def resync_text_key(self, text: Text) -> Optional[str]:
-        """Recale une clé automatique sur le chemin de rangement, et retourne
-        la nouvelle clé (None si rien n'a bougé).
+    @contextmanager
+    def consumers_follow(self, texts):
+        """Un groupe renommé d'un bloc emporte les tables et boîtes qui le lisent.
+        Seul l'appel le plus extérieur agit : les clés temporaires d'un échange n'en sont pas."""
+        from core.text_sequences import snapshot_groups, follow_groups
+        if getattr(self, "_following", False):
+            yield
+            return
+        self._following = True
+        try:
+            before = snapshot_groups(self, texts)
+            yield
+            follow_groups(self, before)
+        finally:
+            self._following = False
 
-        No-op sur une clé nommée à la main — c'est tout l'intérêt de
-        `auto_key` : le rangement reste un geste cosmétique tant que
-        l'utilisateur n'a pas pris la main sur la clé."""
-        if not text.auto_key:
-            return None
-        want = self.text_path_key(text)
-        return want if (want != text.key
-                        and self._apply_text_key(text, want, manual=False)) else None
+    def rename_text_keys(self, entries) -> None:
+        """Rename a complete set, including swaps, without merging references."""
+        entries = [(text, key) for text, key in entries if text.key != key]
+        with self.consumers_follow([text for text, _ in entries]):
+            self._rename_text_keys(entries)
 
-    def restore_text_key(self, text: Text, key: str) -> bool:
-        """Repose une clé telle quelle sans la marquer « nommée à la main ».
+    def _rename_text_keys(self, entries) -> None:
+        members = {text.id for text, _ in entries}
+        targets = [key for _, key in entries]
+        if (len(members) != len(entries) or len(set(targets)) != len(targets)
+                or any(not key or self.get_text_by_id(text.id) is not text for text, key in entries)
+                or any(t.key in targets for t in self.texts if t.id not in members)):
+            raise ValueError('Text key already exists')
+        from core.models.unique_name import unique_name
+        taken = self.text_keys() | set(targets)
+        temporary = []
+        for text, key in entries:
+            temp = unique_name('__text_rename_' + text.id, taken)
+            taken.add(temp)
+            temporary.append((text, temp, key))
+        applied = []
+        with self._renaming():
+            from scripting.refactor import script_paths
+            files = set(script_paths(self))
+            files.update(self.ui_layouts.path_of(layout) for layout in self.ui_layouts)
+            files.update(self.data_tables.path_of(table) for table in self.data_tables)
+            disk = {path: path.read_text(encoding='utf-8') if path.exists() else None for path in files}
+            original = [(t, t.key) for t, _ in entries]
+            regions = [(r, r.text_key) for _, r in self.all_regions()]
+            cells = [(row, col.name, col.name in row, row.get(col.name))
+                     for table in self.data_tables for row in table.rows for col in table.columns
+                     if col.type == 'text']
+            try:
+                for text, key in ([(t, temp) for t, temp, _ in temporary] + entries):
+                    old = text.key
+                    if not self.rename_text_key(text, key):
+                        raise ValueError('Cannot rename text key')
+                    applied.append((text, old))
+            except Exception:
+                for text, key in original:
+                    text.key = key
+                for region, key in regions:
+                    region.text_key = key
+                for row, name, present, value in cells:
+                    if present:
+                        row[name] = value
+                    else:
+                        row.pop(name, None)
+                for path, content in disk.items():
+                    if content is None:
+                        path.unlink(missing_ok=True)
+                    else:
+                        atomic_write(path, content)
+                raise
 
-        Sert à l'ANNULATION d'un rangement : rejouer `resync_text_key` en sens
-        inverse ne rendrait pas forcément la même clé (le rang `_NN` dépend des
-        clés prises à cet instant), il faut donc remettre l'exacte ancienne."""
-        return self._apply_text_key(text, key, manual=False)
-
-    def _apply_text_key(self, text: Text, new_key: str, *, manual: bool) -> bool:
+    def _apply_text_key(self, text: Text, new_key: str) -> bool:
         new_key = (new_key or "").strip()
         if not new_key or any(t.key == new_key and t is not text for t in self.texts):
             return False
@@ -310,9 +469,20 @@ class ProjectTextsMixin:
                     n_regions += 1
             for layout in touched_layouts:
                 self.ui_layouts.save(layout)
+            # Les cellules text contiennent des clés lisibles ; les pages,
+            # elles, gardent leurs ids et n'ont aucune réécriture à subir.
+            for table in getattr(self, "data_tables", []):
+                changed = False
+                for col in table.columns:
+                    if col.type != "text":
+                        continue
+                    for row in table.rows:
+                        if str(table.value(row, col) or "").strip() == old_key:
+                            row[col.name] = new_key
+                            changed = True
+                if changed:
+                    self.data_tables.save(table)
             text.key = new_key
-            if manual:
-                text.auto_key = False
         self._notify_renamed("Text", old_key, new_key, refs, n_regions=n_regions)
         return True
 
@@ -327,14 +497,16 @@ class ProjectTextsMixin:
     def region_text(self, region):
         """L'entrée de la table qu'une zone d'interface montre, ou None.
 
-        Deux sources dans cet ordre : le contenu AUTHORÉ (`text_key`, posé à
-        l'init), sinon le littéral d'aperçu (`preview_text`) que le script
-        écrira avec `text:draw`. Ce dernier ne devient jamais une entrée du
-        projet ; on le présente seulement sous la forme minimale attendue par
-        les outils de mesure et de validation.
+        La première page par id, sinon le contenu AUTHORÉ (`text_key`, posé à
+        l'init), sinon le contenu local (`preview_text`), également posé à
+        l'init. Ce dernier ne devient jamais une entrée du projet ; le build
+        lui attribue une référence interne.
 
         Une ancienne valeur de `preview_text` qui est une clé reste comprise :
         les projets enregistrés avant le littéral conservent leur aperçu."""
+        if getattr(region, "sequence_prefix", ""):
+            pages = self.textbox_pages(region)
+            return pages[0] if pages else None
         key = getattr(region, "text_key", "") or ""
         if key:
             return self.get_text(key)
@@ -348,10 +520,19 @@ class ProjectTextsMixin:
         from core.models.text import Text
         return Text(content=preview)
 
+    def region_texts(self, region) -> list:
+        """Tous les contenus possibles d'un élément, sans dépendre de l'aperçu.
+        Les références absentes sont diagnostiquées séparément au build.
+        """
+        if getattr(region, "sequence_prefix", ""):
+            return self.textbox_pages(region)
+        initial = self.region_text(region)
+        return [initial] if initial is not None else []
+
     def region_animated_glyphs(self, region) -> int:
         """Glyphes animés à RÉSERVER pour cette zone — dérivé, jamais déclaré.
 
-        Le maximum sur toutes les langues, pas seulement la source : une
+        Le maximum sur toutes les pages et langues, pas seulement la source : une
         traduction peut poser `[wave]` sur plus de caractères que l'original,
         et la ROM contient les deux. Sous-réserver ferait retomber l'effet en
         statique dans cette langue-là, sans que rien ne l'ait annoncé — même
@@ -362,14 +543,13 @@ class ProjectTextsMixin:
         plutôt que de réserver ce que le matériel refuse."""
         from core.text_markup import parse
         from core.models.ui_region import ANIM_GLYPH_MAX
-        text = self.region_text(region)
-        if text is None:
-            return 0
-        best = parse(text.content or "").animated_glyphs
-        for lang in getattr(self.settings, "languages", []):
-            raw = self.translations.get(lang.code, {}).get(text.id, "")
-            if raw:
-                best = max(best, parse(raw).animated_glyphs)
+        best = 0
+        for text in self.region_texts(region):
+            best = max(best, parse(text.content or "").animated_glyphs)
+            for lang in getattr(self.settings, "languages", []):
+                raw = self.translations.get(lang.code, {}).get(text.id, "")
+                if raw:
+                    best = max(best, parse(raw).animated_glyphs)
         return min(ANIM_GLYPH_MAX, best)
 
     def layout_animated_glyphs(self, layout) -> dict:
@@ -400,7 +580,19 @@ class ProjectTextsMixin:
             # zéro ferait passer tout le projet pour orphelin.
             idx.scripts_scanned = False
         for layout, region in self.all_regions():
-            if region.text_key:
-                idx.by_key.setdefault(region.text_key, TextUsage()).regions.append(
+            keys = ([t.key for t in self.textbox_pages(region)]
+                    if getattr(region, "sequence_prefix", "") else [region.text_key])
+            for key in dict.fromkeys(keys):
+                if not key:
+                    continue
+                idx.by_key.setdefault(key, TextUsage()).regions.append(
                     (layout.name, region.name))
+        for table in getattr(self, "data_tables", []):
+            for col in table.columns:
+                if col.type == "text":
+                    for n, row in enumerate(table.rows, 1):
+                        key = str(table.value(row, col) or "").strip()
+                        if key:
+                            idx.by_key.setdefault(key, TextUsage()).tables.append(
+                                (table.name, n, col.name))
         return idx

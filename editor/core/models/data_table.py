@@ -58,20 +58,24 @@ IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 # (`validator._check_data_column_types`), pas supposée — ce module ne peut pas
 # importer `scripting` (cf. les couches, ARCHITECTURE.md).
 #
-# N'y figurent que les domaines que le runtime sait INDEXER : chacun est déjà un
-# `#define NOM i` désignant une entrée d'une table en ROM, donc une colonne de ce
-# type EST cet entier. `sprite` et `prefab` en sont absents pour deux raisons
-# différentes, dites dans la ROADMAP (v0.7.2).
+# Les références d'assets graphiques désignent leur rang dans le catalogue du
+# projet ; elles ne sont ni un composant sprite d'acteur ni une couche BG.
+# L'ancien type `image` désigne un élément d'interface : on continue à le lire,
+# mais on ne le propose plus pour une nouvelle colonne.
 COLUMN_SCALARS = ("int", "bool")
+COLUMN_ASSET_REFERENCES = ("sprite", "background")
+LEGACY_COLUMN_REFERENCES = ("image",)
 COLUMN_REFERENCES = ("text", "sfx", "music", "scene", "camera", "font",
-                     "palette", "region", "image")
+                     "palette", "region") + COLUMN_ASSET_REFERENCES + LEGACY_COLUMN_REFERENCES
 COLUMN_TYPES = COLUMN_SCALARS + COLUMN_REFERENCES
+COLUMN_CHOICES = tuple(t for t in COLUMN_TYPES if t not in LEGACY_COLUMN_REFERENCES)
 
 
 @dataclass
 class DataColumn:
     name: str = "colonne"
     type: str = "int"
+    color: str = ""  # Repère d'éditeur uniquement, sans effet sur les valeurs ROM.
 
     def default(self) -> Any:
         """Ce que vaut la colonne quand une ligne ne la mentionne pas."""
@@ -82,12 +86,18 @@ class DataColumn:
         return 0
 
 
+# Ancienne métadonnée d'éditeur d'une ligne (export de TextBox, retiré) : ignorée à la lecture.
+_LEGACY_ROW_META = "$editor"
+
+
 @dataclass
 class DataTable(Resource):
     sidecar_extension = asset_extensions.TABLE
     name:    str = "Table"
     columns: list[DataColumn] = field(default_factory=list)
     rows:    list[dict]       = field(default_factory=list)
+    # Lien avec une séquence de textes : {"prefix", "column"}, vide si la table est libre.
+    text_link: dict = field(default_factory=dict)
 
     def column(self, name: str):
         return next((c for c in self.columns if c.name == name), None)
@@ -102,6 +112,7 @@ class DataTable(Resource):
             "name":    self.name,
             "columns": [asdict(c) for c in self.columns],   # dérivé des champs de DataColumn
             "rows":    list(self.rows),
+            **({"text_link": self.text_link} if self.text_link else {}),
         }
 
     @classmethod
@@ -109,7 +120,10 @@ class DataTable(Resource):
         return cls(
             name    = d.get("name", "Table"),
             columns = [DataColumn(name=c.get("name", "colonne"),
-                                  type=c.get("type", "int"))
+                                  type=c.get("type", "int"),
+                                  color=c.get("color", ""))
                        for c in d.get("columns", [])],
-            rows    = [r for r in d.get("rows", []) if isinstance(r, dict)],
+            rows    = [{k: v for k, v in r.items() if k != _LEGACY_ROW_META}
+                       for r in d.get("rows", []) if isinstance(r, dict)],
+            text_link = dict(d.get("text_link", {})),
         )

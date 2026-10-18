@@ -3,74 +3,93 @@
     {
       "id": "a08c50984406",
       "key": "scr_main_pressstart",
-      "path": [
-        "SCR_Main",
-        "PressStart"
-      ],
       "content": "PRESS START",
       "note": "",
-      "scene": "SCR_Main",
-      "auto_key": true
+      "scene": "SCR_Main"
     },
     {
       "id": "aa42c6c0b029",
       "key": "scr_main_Language",
-      "path": [
-        "SCR_Main",
-        "text_03"
-      ],
       "content": "< English >",
       "note": "",
-      "scene": "SCR_Main",
-      "auto_key": false
+      "scene": "SCR_Main"
     },
     {
       "id": "ca536f594a09",
       "key": "scr_victory_victory",
-      "path": [
-        "SCR_Victory",
-        "Victory"
-      ],
       "content": "VICTORY",
       "note": "",
-      "scene": "SCR_Victory",
-      "auto_key": false
+      "scene": "SCR_Victory"
     },
     {
       "id": "0794e44f3181",
       "key": "scr_victory_defeat",
-      "path": [
-        "SCR_Victory",
-        "Defeat"
-      ],
       "content": "DEFEAT",
       "note": "",
-      "scene": "SCR_Victory",
-      "auto_key": false
+      "scene": "SCR_Victory"
     },
     {
       "id": "79021d015201",
-      "key": "scr_arena_score_player",
-      "path": [
-        "SCR_Arena",
-        "ScorePlayer"
-      ],
+      "key": "scr_score_player",
       "content": "[font=Font8x8 Latin]$score_player[/font]",
       "note": "",
-      "scene": "SCR_Arena",
-      "auto_key": false
+      "scene": "SCR_Arena"
     },
     {
       "id": "209ef2e2628b",
-      "key": "scr_arena_score_cpu",
-      "path": [
-        "SCR_Arena",
-        "ScoreCpu"
-      ],
+      "key": "scr_score_cpu",
       "content": "[font=Font8x8 Latin]$score_cpu[/font]",
       "note": "",
-      "scene": "SCR_Arena",
-      "auto_key": false
+      "scene": "SCR_Arena"
+    },
+    {
+      "id": "027a4282b4bd",
+      "key": "scr_arena_textbox_Page01",
+      "content": "grzerfnhfhjnbntrsdrfg",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "7cfef9929af3",
+      "key": "scr_arena_textbox_Page02",
+      "content": "tretrhvdgfherfh\nhrtehrtehr",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "34befefa272f",
+      "key": "scr_arena_textbox_Page04",
+      "content": "frezrgrhgrherth\nhrthtrhe\nherthrthr",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "f885614f7f6c",
+      "key": "scr_arena_textbox_Page03",
+      "content": "zfzergrhgrhtjnyt",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "56452ba8e8d2",
+      "key": "scr_text_1",
+      "content": "vergzesrg",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "e7064ba3dbba",
+      "key": "scr_text_2",
+      "content": "grezgrzgr",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "207eb1e6b2fd",
+      "key": "scr_score_player_2",
+      "content": "",
+      "note": "",
+      "scene": ""
     }
   ]
 }

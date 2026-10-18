@@ -16,6 +16,7 @@
 #include <gba_systemcalls.h>
 #include <gba_interrupt.h>
 #include <gba_input.h>
+#include <stdlib.h>
 
 /* ── Accès mémoire GBA ──────────────────────────────────────────── */
 #define TILE_RAM(cbb)  ((vu16*)(0x06000000+(cbb)*0x4000))
@@ -273,19 +274,24 @@ void palette_set_obj(int bank, int idx) {
    une entrée par variable persistante. Un projet qui n'en a aucune reçoit
    `g_save_count == 0`, et rien ici ne touche la SRAM. */
 
+#ifndef SRAM_MEM
 #define SRAM_MEM       ((vu8*)0x0E000000)
+#endif
 #define SRAM_SIZE      32768
 #define REG_WAITCNT   (*(vu16*)0x04000204)
 
-/* En-tête d'un emplacement, 12 octets :
+/* En-tête d'un emplacement, 16 octets :
      0  'G','B','S','V'   marque de reconnaissance
-     4  u16 version du format
+     4  u8  version du format
+     5  u8  génération (voir ci-dessous)
      6  u16 nombre d'enregistrements qui suivent
-     8  u32 somme de contrôle des enregistrements
+     8  u32 somme de contrôle du numéro et des enregistrements
+    12  u32 numéro de l'emplacement
    Puis `n` enregistrements de TAILLE VARIABLE (ROADMAP v0.20) :
      0  u32 id de la variable
      4  u32 taille de la charge utile, en octets (multiple de 4)
-     8  la charge utile
+     8  u32 nombre de cases (24 bits), largeur et signe (8 bits)
+    12  la charge utile
 
    Une variable y écrit ses cases les unes derrière les autres, chacune sur
    `bits` bits — 1 pour un booléen, 32 pour un int. Un tableau de 400 coffres
@@ -293,22 +299,30 @@ void palette_set_obj(int bank, int idx) {
    paquetage, l'auteur n'en entend jamais parler (décision verrouillée v0.20).
 
    Un scalaire n'est que le cas `count == 1` : sa charge utile fait 4 octets,
-   exactement la valeur qu'écrivait le format v1. Seul l'en-tête d'enregistrement
-   grandit de 4 octets, d'où la version 2 — un emplacement écrit par une version
-   antérieure est REFUSÉ proprement plutôt que relu de travers. */
+   exactement la valeur qu'écrivait le format v1. La version 3 a ajouté les
+   partitions et le numéro d'emplacement ; la version 4 mémorise la longueur et
+   le type de chaque tableau. Les versions 2 et 3 restent lisibles.
+
+   Chaque emplacement a DEUX copies (A au début de sa place, B à la moitié) :
+   une écriture va toujours dans la copie la plus ancienne, avec une génération
+   plus grande, et sa somme de contrôle est posée en dernier. Une coupure de
+   courant en plein milieu laisse donc l'autre copie — la dernière sauvegarde
+   complète — intacte et lisible. */
 #define SAVE_MAGIC0    'G'
 #define SAVE_MAGIC1    'B'
 #define SAVE_MAGIC2    'S'
 #define SAVE_MAGIC3    'V'
-#define SAVE_VERSION   2
-#define SAVE_HEADER    12
-#define SAVE_REC_HEAD  8
+#define SAVE_VERSION   4
+#define SAVE_HEADER    16
+#define SAVE_V2_HEADER 12
+#define SAVE_REC_HEAD  12
+#define SAVE_OLD_REC_HEAD 8
 
 extern const unsigned int   g_save_id[];    /* id opaque de la variable, replié sur 32 bits */
 extern const unsigned short g_save_idx[];   /* son index GLOBAL_* — l'entrée de global_read/write */
 extern const int            g_save_def[];   /* sa valeur par défaut, la même pour toutes ses cases */
 extern const unsigned short g_save_len[];   /* son nombre de CASES (1 = scalaire) */
-extern const unsigned char  g_save_bits[];  /* ce qu'une case coûte en SRAM, en bits */
+extern const unsigned char  g_save_bits[];  /* largeur en bits, avec 0x80 si signé */
 extern const int            g_save_count;
 extern const int            g_save_slots;
 extern const int            g_save_slot_size;
@@ -343,15 +357,24 @@ static void sram_put32(int off, unsigned int v) {
    variable, donc de n'importe quoi. */
 static int save_slot_base(int slot) {
     if (g_save_count <= 0 || slot < 0 || slot >= g_save_slots) return -1;
-    int base = slot * g_save_slot_size;
-    if (base + g_save_slot_size > SRAM_SIZE) return -1;
-    return base;
+    int room = (SRAM_SIZE / g_save_slots) & ~3;
+    return room >= SAVE_HEADER ? slot * room : -1;
 }
 
-static unsigned int save_sum(int base, int nbytes) {
-    unsigned int s = 0;
+/* Place d'UNE copie d'un emplacement : la moitié de la place de l'emplacement. */
+static int save_half(void) {
+    return ((SRAM_SIZE / g_save_slots) / 2) & ~3;
+}
+
+static int save_copy_base(int slot, int copy) {
+    int base = save_slot_base(slot);
+    return base < 0 ? -1 : base + copy * save_half();
+}
+
+static unsigned int save_sum(int base, int header, int nbytes) {
+    unsigned int s = header == SAVE_HEADER ? sram_get32(base + 12) : 0;
     for (int i = 0; i < nbytes; i++)
-        s = s * 31u + SRAM_MEM[base + SAVE_HEADER + i];
+        s = s * 31u + SRAM_MEM[base + header + i];
     return s;
 }
 
@@ -399,13 +422,22 @@ static int save_payload_bytes(int len, int bits) {
 /* Longueur totale des `n` enregistrements présents, ou -1 si le parcours sort
    de l'emplacement — une SRAM à pile vide rend des tailles arbitraires, et
    les suivre à l'aveugle ferait lire l'emplacement voisin. */
-static int save_records_bytes(int base, int n) {
-    int room = g_save_slot_size - SAVE_HEADER, off = 0;
+static int save_records_bytes(int base, int header, int n) {
+    int room = SRAM_SIZE - base - header, off = 0;
+    int head = SRAM_MEM[base + 4] >= 4 ? SAVE_REC_HEAD : SAVE_OLD_REC_HEAD;
     for (int r = 0; r < n; r++) {
-        if (off + SAVE_REC_HEAD > room) return -1;
-        unsigned int sz = sram_get32(base + SAVE_HEADER + off + 4);
-        if (sz > (unsigned int)room) return -1;
-        off += SAVE_REC_HEAD + (int)sz;
+        if (off + head > room) return -1;
+        unsigned int sz = sram_get32(base + header + off + 4);
+        if (sz < 4 || (sz & 3) || sz > (unsigned int)room) return -1;
+        if (head == SAVE_REC_HEAD) {
+            unsigned int meta = sram_get32(base + header + off + 8);
+            int count = (int)(meta & 0xFFFFFFu), bits = (meta >> 24) & 0x7F;
+            if (meta && (count < 1 || count > 65535
+                || (bits != 1 && bits != 8 && bits != 16 && bits != 32)
+                || (bits == 1 && (meta & 0x80000000u))
+                || save_payload_bytes(count, bits) != (int)sz)) return -1;
+        }
+        off += head + (int)sz;
         if (off > room) return -1;
     }
     return off;
@@ -414,32 +446,269 @@ static int save_records_bytes(int base, int n) {
 /* Vrai si l'emplacement porte une sauvegarde LISIBLE : marque, version et somme
    de contrôle. Une cartouche à pile vide rend des octets plausibles — sans ces
    trois tests, le jeu restaurerait un état inventé sans un mot. */
-int save_exists(int slot) {
-    int base = save_slot_base(slot);
-    if (base < 0) return 0;
+static int save_block_bytes(int base) {
+    if (base < 0 || base + SAVE_V2_HEADER > SRAM_SIZE) return -1;
     if (SRAM_MEM[base]     != SAVE_MAGIC0 || SRAM_MEM[base + 1] != SAVE_MAGIC1 ||
         SRAM_MEM[base + 2] != SAVE_MAGIC2 || SRAM_MEM[base + 3] != SAVE_MAGIC3)
-        return 0;
-    if ((SRAM_MEM[base + 4] | (SRAM_MEM[base + 5] << 8)) != SAVE_VERSION) return 0;
+        return -1;
+    int version = SRAM_MEM[base + 4];
+    if (version < 2 || version > SAVE_VERSION) return -1;
+    int header = version == 2 ? SAVE_V2_HEADER : SAVE_HEADER;
+    if (base + header > SRAM_SIZE) return -1;
     int n = SRAM_MEM[base + 6] | (SRAM_MEM[base + 7] << 8);
-    if (n < 0) return 0;
+    if (n == 0) return -1;
     /* Des enregistrements qui débordent de l'emplacement feraient lire
        l'emplacement suivant : la sauvegarde est alors tenue pour illisible. */
-    int len = save_records_bytes(base, n);
-    if (len < 0) return 0;
-    return sram_get32(base + 8) == save_sum(base, len);
+    int len = save_records_bytes(base, header, n);
+    if (len < 0 || sram_get32(base + 8) != save_sum(base, header, len)) return -1;
+    return header + len;
+}
+
+static int save_block_slot(int base, int size) {
+    if (SRAM_MEM[base + 4] == 2)
+        return base % size == 0 ? base / size : -1;
+    unsigned int slot = sram_get32(base + 12);
+    return slot < SRAM_SIZE / SAVE_HEADER ? (int)slot : -1;
+}
+
+static int save_needs_relayout = -1;
+
+/* Vrai si la copie en `a` est plus récente que celle en `b` : la génération
+   tourne sur 8 bits, on compare donc la distance et non les valeurs. */
+static int save_newer(int a, int b) {
+    int d = (SRAM_MEM[a + 5] - SRAM_MEM[b + 5]) & 0xFF;
+    return d != 0 && d < 128;
+}
+
+/* Une copie lisible au format courant, pour CET emplacement. */
+static int save_copy_valid(int base, int slot) {
+    return base >= 0 && save_block_bytes(base) > 0 && SRAM_MEM[base + 4] == SAVE_VERSION
+           && sram_get32(base + 12) == (unsigned int)slot;
+}
+
+/* La copie la plus récente des deux, ou -1. À égalité, la copie A. */
+static int save_current(int slot) {
+    int a = save_copy_base(slot, 0), b = save_copy_base(slot, 1);
+    int va = save_copy_valid(a, slot), vb = save_copy_valid(b, slot);
+    if (va && vb) return save_newer(b, a) ? b : a;
+    return va ? a : vb ? b : -1;
+}
+
+/* Un bloc lisible qui n'est pas au format courant, ni sur l'une des deux copies de son emplacement. */
+static int save_misplaced(int base, int size, int number) {
+    return SRAM_MEM[base + 4] != SAVE_VERSION
+           || (save_copy_base(number, 0) != base && save_copy_base(number, 1) != base)
+           || size > save_half();
+}
+
+static int save_find(int slot) {
+    int target = save_slot_base(slot);
+    if (target < 0) return -1;
+    if (save_needs_relayout == 0) return save_current(slot);
+    int found = -1, misplaced = 0;
+    for (int base = 0; base + SAVE_V2_HEADER <= SRAM_SIZE; base += 4) {
+        int size = save_block_bytes(base);
+        if (size < 0) continue;
+        int number = save_block_slot(base, size);
+        if (number >= 0) {
+            if (number == slot && (found < 0 || save_newer(base, found))) found = base;
+            if (save_misplaced(base, size, number)) misplaced = 1;
+        }
+        base += size - 4;
+    }
+    save_needs_relayout = misplaced;
+    return found;
+}
+
+/* Une copie du même emplacement, plus récente ou à égalité plus basse : celle-ci
+   est périmée et la migration ne la recopie pas. */
+static int save_superseded(int base, int slot) {
+    for (int other = 0; other + SAVE_V2_HEADER <= SRAM_SIZE; other += 4) {
+        int size = save_block_bytes(other);
+        if (size < 0) continue;
+        if (other != base && save_block_slot(other, size) == slot
+            && (save_newer(other, base) || (SRAM_MEM[other + 5] == SRAM_MEM[base + 5] && other < base)))
+            return 1;
+        other += size - 4;
+    }
+    return 0;
+}
+
+/* Dernier recours : réécrit toute la SRAM depuis une copie en RAM. Une coupure en plein milieu peut abîmer des
+   emplacements — on n'y vient que si la migration bloc par bloc ne trouve aucune place libre. */
+static int save_relayout_in_memory(void) {
+    if (save_needs_relayout < 0) (void)save_find(0);
+    if (!save_needs_relayout) return 1;
+    int room = (SRAM_SIZE / g_save_slots) & ~3, half = save_half();
+    /* Toute la source reste intacte si la mémoire ou la place manque. */
+    u8 *copy = (u8*)calloc(SRAM_SIZE, 1);
+    if (!copy) return 0;
+    int direction = 0;
+    for (int base = 0; base + SAVE_V2_HEADER <= SRAM_SIZE; base += 4) {
+        int size = save_block_bytes(base);
+        if (size < 0) continue;
+        int slot = save_block_slot(base, size);
+        if (slot >= 0 && save_superseded(base, slot)) { base += size - 4; continue; }
+        int header = SRAM_MEM[base + 4] == 2 ? SAVE_V2_HEADER : SAVE_HEADER;
+        int head = SRAM_MEM[base + 4] >= 4 ? SAVE_REC_HEAD : SAVE_OLD_REC_HEAD;
+        int count = SRAM_MEM[base + 6] | (SRAM_MEM[base + 7] << 8);
+        int new_size = size - header + SAVE_HEADER + count * (SAVE_REC_HEAD - head);
+        int target = save_slot_base(slot);
+        if (target < 0 || new_size > half || copy[target]) {
+            free(copy);
+            return 0;
+        }
+        int step = target < base ? 1 : target > base ? -1 : 0;
+        if (step && direction && step != direction) { free(copy); return 0; }
+        if (step) direction = step;
+        for (int i = 0; i < SAVE_V2_HEADER; i++) copy[target + i] = SRAM_MEM[base + i];
+        copy[target + 4] = SAVE_VERSION;
+        copy[target + 5] = 0;
+        for (int i = 0; i < 4; i++) copy[target + 12 + i] = (u8)((unsigned int)slot >> (8 * i));
+        int off = header, out = SAVE_HEADER;
+        for (int r = 0; r < count; r++) {
+            int sz = (int)sram_get32(base + off + 4);
+            for (int i = 0; i < head; i++) copy[target + out + i] = SRAM_MEM[base + off + i];
+            /* Les anciens formats ne permettent pas de retrouver la longueur : métadonnées nulles. */
+            for (int i = 0; i < sz; i++) copy[target + out + SAVE_REC_HEAD + i] = SRAM_MEM[base + off + head + i];
+            off += head + sz;
+            out += SAVE_REC_HEAD + sz;
+        }
+        unsigned int sum = (unsigned int)slot;
+        for (int i = SAVE_HEADER; i < new_size; i++) sum = sum * 31u + copy[target + i];
+        for (int i = 0; i < 4; i++) copy[target + 8 + i] = (u8)(sum >> (8 * i));
+        base += size - 4;
+    }
+    /* Déplacer les voisins avant de réutiliser leur ancien espace. */
+    int step = direction > 0 ? 1 : -1;
+    for (int slot = step > 0 ? 0 : g_save_slots - 1; slot >= 0 && slot < g_save_slots; slot += step) {
+        int base = slot * room;
+        for (int i = 0; i < room; i++)
+            if (i < 8 || i >= 12) SRAM_MEM[base + i] = copy[base + i];
+        for (int i = 8; i < 12; i++) SRAM_MEM[base + i] = copy[base + i];
+    }
+    for (int i = room * g_save_slots; i < SRAM_SIZE; i++) SRAM_MEM[i] = 0;
+    free(copy);
+    save_needs_relayout = 0;
+    return 1;
+}
+
+static void save_clear_block(int base) {
+    for (int i = 0; i < SAVE_V2_HEADER; i++) SRAM_MEM[base + i] = 0;
+}
+
+/* Vrai si un bloc lisible occupe une partie de [start, start + len). */
+static int save_overlaps(int start, int len) {
+    for (int base = 0; base + SAVE_V2_HEADER <= SRAM_SIZE; base += 4) {
+        int size = save_block_bytes(base);
+        if (size < 0) continue;
+        if (base < start + len && start < base + size) return 1;
+        base += size - 4;
+    }
+    return 0;
+}
+
+/* Migre UN bloc : le réécrit au format courant sur une place LIBRE (copie A ou B de son emplacement, jamais sur un autre
+   bloc lisible, ni sur le sien), pose sa somme en dernier, puis efface l'ancien. Une coupure à n'importe quel moment
+   laisse l'ancien bloc, le nouveau, ou les deux — jamais ni l'un ni l'autre. 1 = un bloc traité, 0 = plus rien à
+   migrer, -1 = pas de place libre. */
+static int save_migrate_one(void) {
+    for (int base = 0; base + SAVE_V2_HEADER <= SRAM_SIZE; base += 4) {
+        int size = save_block_bytes(base);
+        if (size < 0) continue;
+        int number = save_block_slot(base, size);
+        if (number < 0) return -1;
+        if (!save_misplaced(base, size, number)) { base += size - 4; continue; }
+        if (save_superseded(base, number)) { save_clear_block(base); return 1; }
+        int version = SRAM_MEM[base + 4], header = version == 2 ? SAVE_V2_HEADER : SAVE_HEADER;
+        int head = version >= 4 ? SAVE_REC_HEAD : SAVE_OLD_REC_HEAD;
+        int count = SRAM_MEM[base + 6] | (SRAM_MEM[base + 7] << 8);
+        int new_size = size - header + SAVE_HEADER + count * (SAVE_REC_HEAD - head);
+        if (new_size > save_half()) return -1;
+        int dest = -1;
+        for (int copy = 0; copy < 2 && dest < 0; copy++) {
+            int candidate = save_copy_base(number, copy);
+            if (candidate >= 0 && candidate + new_size <= SRAM_SIZE && !save_overlaps(candidate, new_size))
+                dest = candidate;
+        }
+        if (dest < 0) return -1;
+        int off = header, out = SAVE_HEADER;
+        for (int r = 0; r < count; r++) {
+            int sz = (int)sram_get32(base + off + 4);
+            sram_put32(dest + out,     sram_get32(base + off));
+            sram_put32(dest + out + 4, (unsigned int)sz);
+            /* Les anciens formats ne permettent pas de retrouver la longueur : métadonnées nulles. */
+            sram_put32(dest + out + 8, head == SAVE_REC_HEAD ? sram_get32(base + off + 8) : 0);
+            for (int i = 0; i < sz; i++) SRAM_MEM[dest + out + SAVE_REC_HEAD + i] = SRAM_MEM[base + off + head + i];
+            off += head + sz;
+            out += SAVE_REC_HEAD + sz;
+        }
+        for (int i = 0; i < 4; i++) SRAM_MEM[dest + i] = SRAM_MEM[base + i];
+        SRAM_MEM[dest + 4] = SAVE_VERSION;
+        SRAM_MEM[dest + 5] = version >= 4 ? SRAM_MEM[base + 5] : 1;   /* plus récent que l'ancien bloc, qui vaut 0 */
+        SRAM_MEM[dest + 6] = (u8)(count & 0xFF);
+        SRAM_MEM[dest + 7] = (u8)(count >> 8);
+        sram_put32(dest + 12, (unsigned int)number);
+        sram_put32(dest + 8, save_sum(dest, SAVE_HEADER, out - SAVE_HEADER));
+        save_clear_block(base);
+        return 1;
+    }
+    return 0;
+}
+
+/* Aucun bloc à migrer n'est hors d'atteinte (emplacement disparu, bloc trop gros) : sinon on refuse AVANT d'écrire quoi
+   que ce soit, pour ne laisser qu'une migration à moitié faite. */
+static int save_migration_possible(void) {
+    for (int base = 0; base + SAVE_V2_HEADER <= SRAM_SIZE; base += 4) {
+        int size = save_block_bytes(base);
+        if (size < 0) continue;
+        int number = save_block_slot(base, size);
+        if (number < 0 || save_slot_base(number) < 0) return 0;
+        if (save_misplaced(base, size, number) && !save_superseded(base, number)) {
+            int version = SRAM_MEM[base + 4], header = version == 2 ? SAVE_V2_HEADER : SAVE_HEADER;
+            int head = version >= 4 ? SAVE_REC_HEAD : SAVE_OLD_REC_HEAD;
+            int count = SRAM_MEM[base + 6] | (SRAM_MEM[base + 7] << 8);
+            if (size - header + SAVE_HEADER + count * (SAVE_REC_HEAD - head) > save_half()) return 0;
+        }
+        base += size - 4;
+    }
+    return 1;
+}
+
+static int save_relayout(void) {
+    if (save_needs_relayout < 0) (void)save_find(0);
+    if (!save_needs_relayout) return 1;
+    if (!save_migration_possible()) return 0;
+    for (;;) {
+        int step = save_migrate_one();
+        if (step < 0) return save_relayout_in_memory();
+        if (!step) break;
+    }
+    save_needs_relayout = -1;
+    (void)save_find(0);
+    return save_needs_relayout == 0 || save_relayout_in_memory();
+}
+
+int save_exists(int slot) {
+    return save_find(slot) >= 0;
 }
 
 int save_write(int slot) {
-    int base = save_slot_base(slot);
-    if (base < 0) return 0;
+    if (save_slot_base(slot) < 0 || g_save_slot_size > save_half() || !save_relayout()) return 0;
+    /* On écrit dans la copie qui n'est PAS la plus récente : la dernière
+       sauvegarde complète reste lisible jusqu'à ce que celle-ci soit finie. */
+    int latest = save_current(slot);
+    int base = save_copy_base(slot, latest == save_copy_base(slot, 0) ? 1 : 0);
+    int generation = latest < 0 ? 1 : (SRAM_MEM[latest + 5] + 1) & 0xFF;
+    if (!generation) generation = 1;
     int n = g_save_count, off = 0;
     for (int i = 0; i < n; i++) {
-        int len = g_save_len[i], bits = g_save_bits[i];
+        int len = g_save_len[i], bits = g_save_bits[i] & 0x7F;
         int sz  = save_payload_bytes(len, bits);
         int rec = base + SAVE_HEADER + off;
         sram_put32(rec,     g_save_id[i]);
         sram_put32(rec + 4, (unsigned int)sz);
+        sram_put32(rec + 8, ((unsigned int)g_save_bits[i] << 24) | (unsigned int)len);
         /* La charge est mise à zéro avant d'être remplie : les bits de
            bourrage du dernier mot n'appartiennent à aucune case, et sans ça
            ils garderaient ce que la SRAM contenait — donc une somme de
@@ -455,19 +724,22 @@ int save_write(int slot) {
     SRAM_MEM[base + 2] = SAVE_MAGIC2;
     SRAM_MEM[base + 3] = SAVE_MAGIC3;
     SRAM_MEM[base + 4] = SAVE_VERSION & 0xFF;
-    SRAM_MEM[base + 5] = (SAVE_VERSION >> 8) & 0xFF;
+    SRAM_MEM[base + 5] = (u8)generation;
     SRAM_MEM[base + 6] = n & 0xFF;
     SRAM_MEM[base + 7] = (n >> 8) & 0xFF;
+    sram_put32(base + 12, (unsigned int)slot);
     /* La somme est écrite EN DERNIER : une coupure de courant en plein milieu
        laisse alors un emplacement qui ne se relit pas, plutôt qu'une sauvegarde
        à moitié écrite qui se relit très bien. */
-    sram_put32(base + 8, save_sum(base, off));
+    sram_put32(base + 8, save_sum(base, SAVE_HEADER, off));
     return 1;
 }
 
 int save_read(int slot) {
-    if (!save_exists(slot)) return 0;
-    int base = save_slot_base(slot);
+    int base = save_find(slot);
+    if (base < 0) return 0;
+    int header = SRAM_MEM[base + 4] == 2 ? SAVE_V2_HEADER : SAVE_HEADER;
+    int head = SRAM_MEM[base + 4] >= 4 ? SAVE_REC_HEAD : SAVE_OLD_REC_HEAD;
     /* Les défauts d'abord : ce qui manque au fichier ne doit pas hériter de la
        valeur qu'avait la partie en cours. Toutes les CASES, pas seulement la
        première — c'est ce qui fait qu'un tableau agrandi depuis la dernière
@@ -478,28 +750,31 @@ int save_read(int slot) {
     int n = SRAM_MEM[base + 6] | (SRAM_MEM[base + 7] << 8);
     int off = 0;
     for (int r = 0; r < n; r++) {
-        int rec = base + SAVE_HEADER + off;
+        int rec = base + header + off;
         unsigned int id = sram_get32(rec);
         int sz = (int)sram_get32(rec + 4);
         for (int i = 0; i < g_save_count; i++)
             if (g_save_id[i] == id) {
-                int bits = g_save_bits[i];
+                unsigned int meta = head == SAVE_REC_HEAD ? sram_get32(rec + 8) : 0;
+                int bits = meta ? (meta >> 24) & 0x7F : g_save_bits[i] & 0x7F;
                 /* Ce que le FICHIER contient, borné par ce que le jeu attend
                    AUJOURD'HUI : un tableau qui a rétréci se tronque, un
                    tableau qui a grandi garde ses défauts au-delà. Même
                    tolérance que pour un scalaire absent (v0.5) — c'est elle
                    qui garantit qu'ajouter dix coffres n'efface pas les parties
                    déjà commencées. */
-                int stored = bits ? (sz * 8) / bits : 0;
+                /* shortcut: legacy records omit their count and type; rewriting the slot records them. */
+                int stored = meta ? (int)(meta & 0xFFFFFFu) : (sz * 8) / bits;
                 if (stored > g_save_len[i]) stored = g_save_len[i];
-                for (int k = 0; k < stored; k++)
+                for (int k = 0; k < stored; k++) {
+                    unsigned int value = save_get_bits(rec + head, k * bits, bits);
                     global_write_at(g_save_idx[i], k,
-                        save_signed(save_get_bits(rec + SAVE_REC_HEAD,
-                                                  k * bits, bits), bits));
+                        meta && !(meta & 0x80000000u) ? (int)value : save_signed(value, bits));
+                }
                 break;   /* les ids sont uniques — le build le vérifie */
             }
         /* Un id inconnu est une variable retirée du jeu depuis : on l'ignore. */
-        off += SAVE_REC_HEAD + sz;
+        off += head + sz;
     }
     return 1;
 }
@@ -523,29 +798,43 @@ int save_read_var(int slot, int idx) {
         if (g_save_idx[k] == idx) { i = k; break; }
     if (i < 0) return 0;   /* variable non persistante : le checker prévient déjà */
     int def = g_save_def[i];
-    if (!save_exists(slot)) return def;
-    int base = save_slot_base(slot);
+    int base = save_find(slot);
+    if (base < 0) return def;
+    int header = SRAM_MEM[base + 4] == 2 ? SAVE_V2_HEADER : SAVE_HEADER;
+    int head = SRAM_MEM[base + 4] >= 4 ? SAVE_REC_HEAD : SAVE_OLD_REC_HEAD;
     unsigned int id = g_save_id[i];
-    int bits = g_save_bits[i];
+    int bits = g_save_bits[i] & 0x7F;
     int n = SRAM_MEM[base + 6] | (SRAM_MEM[base + 7] << 8);
     int off = 0;
     for (int r = 0; r < n; r++) {
-        int rec = base + SAVE_HEADER + off;
+        int rec = base + header + off;
         unsigned int rid = sram_get32(rec);
         int sz = (int)sram_get32(rec + 4);
-        if (rid == id)
-            return save_signed(save_get_bits(rec + SAVE_REC_HEAD, 0, bits), bits);
-        off += SAVE_REC_HEAD + sz;
+        if (rid == id) {
+            unsigned int meta = head == SAVE_REC_HEAD ? sram_get32(rec + 8) : 0;
+            if (meta) bits = (meta >> 24) & 0x7F;
+            unsigned int value = save_get_bits(rec + head, 0, bits);
+            return meta && !(meta & 0x80000000u) ? (int)value : save_signed(value, bits);
+        }
+        off += head + sz;
     }
     return def;   /* id absent de ce fichier : jeu plus récent que la sauvegarde */
 }
 
-/* Efface la MARQUE, pas les octets : l'emplacement redevient « vide » pour
+/* Efface la MARQUE des deux copies, pas les octets : l'emplacement redevient « vide » pour
    save_exists, et la réécriture suivante repasse dessus de toute façon. */
 int save_erase(int slot) {
-    int base = save_slot_base(slot);
-    if (base < 0) return 0;
-    for (int i = 0; i < SAVE_HEADER; i++) SRAM_MEM[base + i] = 0;
+    if (save_slot_base(slot) < 0 || !save_relayout()) return 0;
+    /* La copie ancienne d'abord : une coupure en plein effacement ne doit pas
+       faire revenir une vieille partie à la place de la plus récente. */
+    int latest = save_current(slot);
+    for (int copy = 0; copy < 2; copy++) {
+        int base = save_copy_base(slot, copy);
+        if (base == latest) continue;
+        for (int i = 0; i < SAVE_HEADER; i++) SRAM_MEM[base + i] = 0;
+    }
+    if (latest >= 0)
+        for (int i = 0; i < SAVE_HEADER; i++) SRAM_MEM[latest + i] = 0;
     return 1;
 }
 
@@ -3740,37 +4029,6 @@ static void ui_list_sync_style(int l) {
     if (row > 0) ui_list_style_row(l, row, 1);
 }
 
-/* Rapproche `v` de `target` d'au plus `step` — le glissement du curseur, sans
-   dépassement. */
-static int ui_list_approach(int v, int target, int step) {
-    if (v < target) { v += step; if (v > target) v = target; }
-    else if (v > target) { v -= step; if (v < target) v = target; }
-    return v;
-}
-
-/* Pose le curseur sur la rangée choisie. Un DÉCALAGE relatif à la position
-   authorée (cf. `UIListInfo.cursor`) : l'auteur place son curseur en face de la
-   première rangée, et la liste le déplace de ce qui sépare cette rangée de la
-   rangée courante. Appelé même pour une liste inactive — rendre la main ne
-   déplace pas le curseur. */
-static void ui_list_cursor_follow(int l) {
-    int img = g_ui_lists[l].cursor;
-    if (img < 0) return;
-    int row = ui_list_shown_row(l);
-    if (row < 1) return;
-    int row0 = g_ui_lists[l].row0;
-    int r_first = g_ui_list_rows[row0];
-    int r_here  = g_ui_list_rows[row0 + row - 1];
-    if (r_first < 0 || r_here < 0) return;
-    int tx = g_ui_regions[r_here].x - g_ui_regions[r_first].x;
-    int ty = g_ui_regions[r_here].y - g_ui_regions[r_first].y;
-    if (!g_ui_lists[l].cursor_mode) { ui_image_move(img, tx, ty); return; }
-    int sp = g_ui_lists[l].cursor_speed;
-    if (sp < 1) sp = 1;
-    ui_image_move(img, ui_list_approach(ui_image_dx(img), tx, sp),
-                       ui_list_approach(ui_image_dy(img), ty, sp));
-}
-
 /* Un pas dans la liste, répétition comprise. Le compteur est NÉGATIF pendant le
    délai initial et positif ensuite : un seul entier porte les deux cadences,
    sans drapeau à côté qui pourrait mentir sur l'état.
@@ -3837,7 +4095,6 @@ void ui_list_tick(void) {
             }
         }
         ui_list_sync_style(l);
-        ui_list_cursor_follow(l);
     }
 }
 

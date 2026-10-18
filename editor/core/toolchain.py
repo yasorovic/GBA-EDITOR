@@ -7,6 +7,7 @@ utilisateur (voir CONFIG_FILE).
 
 import glob
 import json
+from core.resources.resource_store import read_config_json
 import os
 import shutil
 from pathlib import Path
@@ -134,10 +135,7 @@ class Toolchain:
     def _load_config(self) -> dict:
         for path in (CONFIG_FILE, _LEGACY_CONFIG_FILE):
             if path.exists():
-                try:
-                    return json.loads(path.read_text(encoding="utf-8"))
-                except Exception:
-                    pass
+                return read_config_json(path)
         return {}
 
     def save(self):

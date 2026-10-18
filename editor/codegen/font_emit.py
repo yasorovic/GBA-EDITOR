@@ -422,13 +422,14 @@ def scene_codepoints_union(p, scene, lang_codes) -> "set | None":
 
 
 def layout_texts(p, scene) -> list:
-    """Entrées de la table écrites par la mise en page d'une scène, à l'init.
+    """Contenus possibles des éléments de texte, toutes les pages comprises.
 
-    Le même parcours que `_gen_ui_texts` côté émission : un slot de type texte
-    portant une clé RÉSOLUE. Une clé introuvable n'est pas une inconnue mais un
-    non-événement — l'émetteur la signale et n'écrit rien —, d'où l'omission
-    plutôt qu'un `None` qui ferait charger la police entière."""
+    Les pages suivantes alimentent les glyphes et les polices à charger,
+    même sans référence littérale dans un script. `gen_ui_texts` n'écrit que
+    la première à l'init. Les références absentes sont signalées par le
+    validateur ; on les omet ici plutôt que charger une police entière."""
     from core.models.ui_region import is_text
+    from core.project_texts import ui_text_build_key
     if not hasattr(p, "build_texts"):
         return []
     by_key = {t.key: t for t in p.build_texts()}
@@ -436,7 +437,10 @@ def layout_texts(p, scene) -> list:
     for _lay, el in p.scene_ui_slots(scene):
         if not is_text(el):
             continue
-        t = by_key.get(getattr(el, "text_key", "") or "")
+        if getattr(el, "sequence_prefix", "") and hasattr(p, "region_texts"):
+            out.extend(p.region_texts(el))
+            continue
+        t = by_key.get(ui_text_build_key(_lay, el, p))
         if t is not None:
             out.append(t)
     return out

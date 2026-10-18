@@ -46,6 +46,7 @@ Pour un résumé court, voir le [CHANGELOG](../CHANGELOG.md). Pour ce qui reste 
 
 | Chantier | Sujet |
 | --- | --- |
+| [Le gabarit commun des pop-up](common-popups.md) | Messages et confirmations centralisés dans `ui/common`, illustrations et présentation partagées |
 | [La grammaire de la struct `Actor`](actor-struct-grammar.md) | L'API C tient les trois concepts de l'éditeur (acteur/prefab/scène) |
 | [Les trois couleurs de l'interface](three-colors.md) | Une seule notion de banque de palette en portait trois |
 | [`global.nom` / `const.nom`](global-const.md) | L'accès pointé remplace les accesseurs |

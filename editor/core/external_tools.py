@@ -12,6 +12,7 @@ du système. Les trois autres attendent leur câblage, finder par finder.
 from __future__ import annotations
 
 import json
+from core.resources.resource_store import read_config_json
 from pathlib import Path
 
 from core.toolchain import config_dir
@@ -35,12 +36,7 @@ class ExternalTools:
         self._config: dict = self._load()
 
     def _load(self) -> dict:
-        if CONFIG_FILE.exists():
-            try:
-                return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-        return {}
+        return read_config_json(CONFIG_FILE)
 
     def save(self):
         CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)

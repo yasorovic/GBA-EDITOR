@@ -236,6 +236,26 @@ backstage/
 
 Comment nommer et écrire, dans les trois langages que le projet fait cohabiter (Python de l'éditeur, C généré, C écrit à la main). La règle n'est pas esthétique : chaque casse **porte une information**, et un lecteur doit pouvoir déduire la nature d'un identifiant de sa seule forme.
 
+### Visibilité Qt et micro-fenêtres
+
+**Toujours donner un parent à un widget enfant avant `show()` ou `setVisible(True)`.**
+Sans parent, Qt le considère comme une fenêtre indépendante : le montrer puis le
+rattacher à un layout provoque une micro-fenêtre qui apparaît et disparaît à la
+construction de l'interface. Créer l'enfant avec son parent, attacher ses layouts,
+puis appliquer sa visibilité. Un layout encore détaché ne garantit pas le parentage.
+Lors d'une reconstruction, masquer aussi un enfant visible **avant** `setParent(None)`.
+
+Régression du **2026-10-17** dans les Project Settings : le sélecteur de vue de
+`CartridgePreview` appelait `setVisible(True)` avant son ajout au layout. Le sélecteur
+est maintenant créé avec `self` comme parent et sa visibilité appliquée après montage.
+Le même piège avait déjà été rencontré dans `ui/common/widgets.py` et
+`ui/common/reorderable_bar.py` ; ne pas le traiter par un délai ou un masquage tardif.
+
+Garde-fou : `tests/ui/test_cartridge_preview.py::test_project_settings_never_show_temporary_top_level_widgets`
+observe les événements Qt `Show` : aucune fenêtre pendant la construction, puis
+seul `ProjectSettingsDialog` à l'ouverture. Il couvre les catégories Build et Visual,
+depuis les sources et avec le filtrage des versions distribuées.
+
 ### La casse dit la nature
 
 | Casse | Nature | Exemples |
@@ -1514,8 +1534,29 @@ Format d'un emplacement, écrit par `save_write` :
 | 0 | `'G' 'B' 'S' 'V'` — marque de reconnaissance |
 | 4 | `u16` version du format |
 | 6 | `u16` nombre d'enregistrements |
-| 8 | `u32` somme de contrôle des enregistrements |
-| 12 | `n` enregistrements de TAILLE VARIABLE : `u32` id de la variable, `u32` taille de la charge utile en octets, puis la charge utile (ROADMAP v0.20 — une variable au-delà du scalaire y range ses cases empaquetées, 1 à 32 bits chacune selon son type) |
+| 8 | `u32` somme de contrôle du numéro d'emplacement et des enregistrements |
+| 12 | `u32` numéro de l'emplacement (depuis le format 3) |
+| 16 | `n` enregistrements : `u32` id, `u32` taille de charge utile, `u32` métadonnées, puis les cases empaquetées (1 à 32 bits selon leur type) |
+
+Le format 4 réserve 24 bits des métadonnées au nombre exact de cases et 8 bits à
+leur largeur, avec le bit `0x80` pour un type signé. Le remplissage jusqu'au mot de
+32 bits n'est donc jamais pris pour des cases : un tableau agrandi garde les valeurs
+par défaut au-delà de sa longueur sauvegardée. La lecture utilise la largeur et le
+signe enregistrés, même si le type de la variable a changé depuis.
+
+Les emplacements occupent des partitions égales de la SRAM, arrondies à quatre octets.
+Leur adresse ne dépend plus du nombre de variables. Le format 2 (en-tête de 12 octets,
+emplacements compacts) reste lisible ; son numéro d'emplacement se déduit de l'adresse
+et de la taille des enregistrements. La première écriture ou suppression migre les parties
+existantes vers le format 4. Le format 3 reste également lisible et suit cette migration.
+Ces anciens formats n'enregistraient ni longueur exacte ni type : leurs enregistrements
+migrés gardent des métadonnées nulles et leur comportement de lecture antérieur,
+jusqu'à la réécriture de l'emplacement par le jeu. La longueur d'origine ne peut pas
+être retrouvée à partir du remplissage. Un changement du nombre d'emplacements utilise le même chemin.
+La migration réserve temporairement 32 Kio en RAM, puis les libère. Si la mémoire manque,
+si une ancienne partie dépasse sa nouvelle partition, ou si un emplacement existant serait
+perdu, l'opération rend 0 sans modifier la SRAM. Les lectures ne migrent ni ne modifient la SRAM.
+Une sauvegarde passée au format 4 n'est plus lisible par les anciennes ROMs.
 
 **Rangé par id, pas par rang.** Ajouter, retirer ou réordonner une variable persistante
 laisse les sauvegardes existantes lisibles, là où un tableau positionnel aurait fait lire
@@ -1655,17 +1696,16 @@ qu'un par entrée (contrairement aux palettes) : des centaines d'entrées courte
 traducteur veut voir d'un coup. Chaque langue déclarée possède à côté un side
 `texts_<code>.json`, partiel et joint au maître par `id` (cf. `core/project_langs.py`).
 
-**Trois identifiants, un seul résolvable** — c'est la décision structurante :
+**Deux identifiants, un seul résolvable** — c'est la décision structurante :
 
 | Champ | Rôle | Résolvable ? |
 | --- | --- | --- |
 | `id` | opaque (12 chiffres hexadécimaux), tiré une fois, jamais affiché | dans les **fichiers de données** — insensible au renommage |
 | `key` | poignée lisible, ce qu'écrit un script Lua | oui, **au build** uniquement → index de table C, comme `SFX_*` |
-| `path` | rangement libre, 1 à 3 niveaux, peut se répéter | **jamais** |
 
-Deux identifiants résolvables donneraient de l'ambiguïté (deux entrées au même
-rangement), un signal brouillé (un libellé *invite* à être retouché, une clé non) et un
-graphe de dépendances à deux passes. Le confort de lecture est rendu par l'UI —
+`Text.path` existe, mais comme **propriété dérivée** : les segments de la clé, jamais stockés
+(ROADMAP, « Le chemin est dérivé de la clé »). Un libellé stocké à côté de la clé la dupliquait et se
+désynchronisait au premier renommage qui ne le recalait pas. Le confort de lecture est rendu par l'UI —
 autocomplétion et aperçu du contenu en ligne — pas par un second chemin de résolution.
 
 **La clé situe, elle ne résume pas.** Elle est dérivée de la *place* du texte
@@ -1673,18 +1713,23 @@ autocomplétion et aperçu du contenu en ligne — pas par un second chemin de r
 l'écriture, la place dans le jeu bouge rarement. Une clé tirée du contenu
 (`garde_je_suis`) devient un mensonge dès que le garde devient un mendiant.
 
-**Le chemin propose la clé, il ne la possède pas.** Tant que `auto_key` est vrai, ranger
-le texte ailleurs recale sa clé et réécrit les scripts qui la citent — sans danger, une
-clé automatique est jetable. Dès que l'utilisateur la nomme à la main, `auto_key` tombe et
-la clé se détache définitivement. Sans ce détachement, ranger reviendrait à **refactorer** :
-renommer un nœud produirait un diff de N fichiers `.lua` versionnés pour un geste
-cosmétique. Et une clé strictement dérivée forcerait un dernier niveau unique — le libellé
-ne serait plus libre, juste une clé déguisée ; d'où le rang `_2`, `_3`… en cas de collision (la règle unique `unique_name`).
+**La clé porte la structure ; une seule règle, sans exception.** Chaque `_` de la clé ouvre
+un niveau, et `Text.path` en est la liste des segments (`SCR_Arena_Page01` ↔ `SCR › Arena › Page01`).
+Il n'existe ni libellé libre, ni clé « automatique » ou « nommée à la main » : **ranger, c'est
+renommer la clé** —
+- **renommer une clé** la change partout où elle est citée (scripts, zones d'interface,
+  cellules de table, boîtes et séquences liées) ;
+- **déposer un texte dans un autre dossier**, **renommer un dossier** du Finder ou **éditer un niveau**
+  depuis l'inspecteur calculent les nouvelles clés du lot (`Project.text_path_keys`) et les appliquent
+  d'un coup (`rename_text_keys`, échanges compris) ; `SetTextPathCmd` les pose et les restitue à l'undo.
+La même règle vaut partout où un nom devient un chemin : un nom de scène ou de TextBox
+(`SCR_Arena`) ou un nom tapé s'éclate sur `_` (`SCR`, `Arena`), via `norm_path`, seul
+point de conversion ; `key_segment` retire accents et espaces (`La forêt` → `LaForet`).
+Une collision prend le rang `_2`, `_3`… (la règle unique `unique_name`).
 
-Le chemin est stocké comme **liste**, jamais comme chaîne à séparateur : un libellé libre
-a le droit de contenir `/`. L'arbre de l'écran Textes est une **vue** — `texts.json` reste
-plat, les nœuds sont dérivés à chaque reconstruction (rien à garbage-collecter, diffs git
-lisibles, dep-graph inchangé). Contrepartie assumée : **pas de nœud vide**, créer un
+L'arbre de l'écran Textes est une **vue** — `texts.json` reste plat (sans champ `path` ; un ancien
+fichier se lit sans erreur), les nœuds sont dérivés à chaque reconstruction (rien à garbage-collecter,
+diffs git lisibles, dep-graph inchangé). Contrepartie assumée : **pas de nœud vide**, créer un
 rangement veut dire y créer un texte.
 
 `_repair_texts()` rattrape un fichier édité à la main (id ou clé manquant/dupliqué,
@@ -1933,6 +1978,29 @@ et sa page ne doit pas créer une seconde police en doublon.
 ---
 
 ## Éléments d'interface — `UIText` / `UITextbox` / `UIContainer` / `UIList` / `UIImage` dans un `UILayout`
+
+### Séquences de textes — dérivées, liées ou libres
+
+`core/text_sequences.py` ne stocke rien. Les textes dont la clé finit par un segment numérique
+(`Dialogue_1`, `Dialogue_Page01`) et qui partagent le même préfixe forment une **séquence** dès
+deux textes, ordonnée par la valeur du numéro. Elle est **liée** quand un consommateur la cite,
+**libre** sinon. Deux consommateurs : une `DataTable` (`text_link = {prefix, column}`) et une
+`UITextbox` (`sequence_prefix`). `Project.textbox_pages(box)` dérive les pages de la boîte à
+chaque lecture (sa séquence, sinon son `text_key`) ; `region_text`, `region_texts`, le validateur,
+l'index des usages et la réservation des polices passent tous par elle. Aucun `page_ids`.
+
+La table, elle, garde ses lignes (les autres colonnes sont à l'auteur) : `CommandHistory.after_execute`
+est branché par le dispatcher sur `sync_linked_tables`, qui réaligne les lignes sur la séquence
+dans la MÊME entrée d'historique et rend de quoi les restaurer à l'undo. Aucun bouton « mettre à
+jour ». Un groupe renommé d'un bloc emporte ses consommateurs (`Project.consumers_follow`, autour de
+`rename_text_key(s)` et de `SetTextPathCmd`) ; un groupe éclaté les laisse et la synchro retire les lignes.
+
+L'écran Texte monte un en-tête par séquence (`TextEntryGroup` + `SequenceTableBar`) : l'état
+(« Reliée à … » / « Séquence libre ») et, si libre, « Relier à une table existante » / « Créer une
+table ». `+` ajoute le texte suivant (`next_key`, numéro max + 1), `−` supprime l'entrée.
+L'inspecteur de TextBox monte `inspectors/textbox_sequence.py` : lier à une séquence (le champ
+de texte unique s'efface) ou délier. Les anciens `sequences` de `texts.json`, `page_ids` des
+layouts et `textbox_export`/`$editor` des tables sont ignorés à la lecture.
 
 `core/models/ui_region.py`, stockage dans `assets/ui_layouts/<nom>.layout`. Un élément de
 texte répond à **où** le texte se pose ; il remplace les arguments de géométrie que
@@ -2859,7 +2927,20 @@ jamais silencieux : `bank_index` retombe sur la banque 0 et le validateur averti
   `BackgroundAsset.resolve_palettes` (dérivées du PNG, overrides, ajoutées) après un encodage, une action sur la grille
   ou l'édition d'une banque (`CommandDispatcher.save_palette`). Une tuile peinte (`tile_paint`) désigne sa palette par la
   position dans `added_palettes` ; `painted_cells()` la rend en numéro de banque (dérivées d'abord). La lecture est tolérante : un sidecar à plat d'avant les blocs se lit tel quel et passe en deux
-  blocs à la prochaine sauvegarde.
+  blocs à la prochaine sauvegarde. **Un résultat sait de quels réglages il vient** : `encoded.encoded_for` est
+  l'empreinte (`BackgroundAsset.encode_settings_fingerprint`) des réglages qui DÉTERMINENT l'encodage — layout, profondeur,
+  dithering, méthode, canvas effectif, pose, taille, miroir, ajustements, compression ; ni les palettes citées, ni la peinture,
+  ni les repeints. `apply_bg_encoding` la pose, `encoding_is_current(source_stamp)` dit « à jour » ou « périmé » sans rien
+  recalculer ; un sidecar d'avant ce champ est tenu pour à jour.
+
+  **Un seul chemin pour encoder** : `ui/background_editor/background_encoding.py`. L'écran donne un `EncodingJob` (fond,
+  PNG, layout, méthode, dithering, préparation, compression) à `BackgroundEncodingService.request` ; le service calcule hors
+  du thread de l'interface (`ThreadExecutor`, interchangeable), un seul calcul à la fois, le DERNIER réglage voulu gagne (un
+  résultat périmé va au cache, jamais sur le fond), et il valide le résultat par le rappel `commit` de l'écran
+  (`_commit_encoding` : réglages posés, `choose_layout`, `apply_bg_encoding`, sauvegarde). Un encodage part toujours tout seul (le
+  dernier réglage gagne) ; un seuil de coût (`auto_seconds` : au-delà, « en attente » jusqu'à `run_now`) existe mais est
+  éteint par défaut. États : à jour / en attente / en calcul / échec ; un échec ne reboucle pas, `run_now` le rejoue. Un
+  résultat déjà vu (cache de 8) se valide sans calcul. **L'état se lit dans le canvas** : une ligne au-dessus des infos (`BgInpaintCanvas.set_encoding_state`) dit « En attente / Encodage… / Échec » avec le layout voulu, et porte le bouton « Run encoding » (`run_encoding_requested` → `_on_run_encoding`) quand l'encodage attend ou a échoué ; tant que le fond n'est pas à jour, le canvas montre l'image préparée du travail voulu (`_show_prepared`, badge « pas encore le rendu GBA ») ; revenir aux réglages validés annule la demande (`cancel`). **Le build avertit** (`validator._check_background_encoding_current`, non bloquant) d'un fond dont `encoded_for` ne correspond plus aux réglages : la ROM prendrait l'ancien résultat.
 
   **Préparation de la source** — l'image est **posée dans un canvas** qui a sa propre taille
   (`canvas_size`), distincte de celle de l'image : elle est mise à l'échelle (`image_size`) et posée

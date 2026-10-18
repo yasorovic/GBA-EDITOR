@@ -1179,14 +1179,34 @@ class CommandHistory(QObject):
         super().__init__(parent)
         self._undo: list[Command] = []
         self._redo: list[Command] = []
+        # Appelé après chaque exécution ; renvoie de quoi défaire ce qu'il a
+        # dérivé (ex. les lignes des tables liées à une séquence de textes).
+        # Appelé après chaque exécution ; renvoie de quoi défaire ce qu'il a
+        # dérivé (ex. les lignes des tables liées à une séquence de textes).
+        self.after_execute = None
+
+    def _executed(self, cmd: Command):
+        if self.after_execute:
+            restore = self.after_execute()
+            # Une frappe fusionnée repasse ici : le premier restore garde l'état d'AVANT le geste.
+            if restore and getattr(cmd, "_derived_restore", None) is None:
+                cmd._derived_restore = restore
+
+    def _undone(self, cmd: Command):
+        restore = getattr(cmd, "_derived_restore", None)
+        if restore:
+            restore()
+            cmd._derived_restore = None
 
     # ── API ──────────────────────────────────────────────────────
 
     def record(self, cmd: Command):
         """Enregistre une commande SANS l'exécuter (déjà exécutée par l'appelant)."""
         if self._undo and self._undo[-1].merge(cmd):
+            self._executed(self._undo[-1])
             self.changed.emit()
             return
+        self._executed(cmd)
         self._undo.append(cmd)
         self._redo.clear()
         if len(self._undo) > _MAX_HISTORY:
@@ -1199,10 +1219,12 @@ class CommandHistory(QObject):
         if self._undo and self._undo[-1].merge(cmd):
             # Fusion réussie : on réexécute la commande mergée (nouvelle valeur)
             cmd.execute()
+            self._executed(self._undo[-1])
             self.changed.emit()
             return
 
         cmd.execute()
+        self._executed(cmd)
         self._undo.append(cmd)
         self._redo.clear()
 
@@ -1218,6 +1240,7 @@ class CommandHistory(QObject):
             return None
         cmd = self._undo.pop()
         cmd.undo()
+        self._undone(cmd)
         self._redo.append(cmd)
         self.changed.emit()
         return cmd.label
@@ -1228,6 +1251,7 @@ class CommandHistory(QObject):
             return None
         cmd = self._redo.pop()
         cmd.execute()
+        self._executed(cmd)
         self._undo.append(cmd)
         self.changed.emit()
         return cmd.label

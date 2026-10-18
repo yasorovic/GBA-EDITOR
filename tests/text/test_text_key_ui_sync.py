@@ -39,16 +39,13 @@ def test_renommage_manuel_repointe_la_zone(projet):
     assert zone.text_key != old_key
 
 
-def test_resync_automatique_sur_rangement_repointe_la_zone(projet):
+def test_rangement_repointe_la_zone(projet):
+    from ui.text_editor.text_commands import SetTextPathCmd
     p, _lay, zone, t = projet
-    assert t.auto_key is True   # jamais renommée à la main : la clé suit le chemin
+    SetTextPathCmd(p, [(t, t.path, ["Dialogue", "Farewell"])], "move").execute()
 
-    t.path = ["Dialogue", "Farewell"]
-    new_key = p.resync_text_key(t)
-
-    assert new_key is not None
-    assert t.key == new_key
-    assert zone.text_key == new_key
+    assert t.key == "Dialogue_Farewell"
+    assert zone.text_key == t.key
 
 
 def test_le_repointage_est_persiste_sur_le_disque(projet):
@@ -61,17 +58,17 @@ def test_le_repointage_est_persiste_sur_le_disque(projet):
     assert region["text_key"] == "salut"
 
 
-def test_une_clef_nommee_a_la_main_n_est_pas_touchee_par_un_rangement(projet):
-    """`resync_text_key` est un no-op sur une clé détachée : la zone ne doit
-    donc pas non plus bouger — elle suit la clé, pas le chemin."""
+def test_un_deplacement_recale_la_cle_meme_renommee_et_la_zone_suit(projet):
+    """Une seule règle : la clé porte la structure, un déplacement la recale
+    — qu'elle ait été tapée à la main ou dérivée."""
     p, _lay, zone, t = projet
-    p.rename_text_key(t, "salut")  # détache la clé (auto_key -> False)
+    p.rename_text_key(t, "salut")
     assert zone.text_key == "salut"
 
-    t.path = ["Ailleurs"]
-    assert p.resync_text_key(t) is None
-    assert t.key == "salut"
-    assert zone.text_key == "salut"
+    from ui.text_editor.text_commands import SetTextPathCmd
+    SetTextPathCmd(p, [(t, t.path, ["Ailleurs"])], "move").execute()
+    assert t.key == "Ailleurs"
+    assert zone.text_key == "Ailleurs"
 
 
 def test_texte_cree_depuis_l_inspecteur_reste_lie_apres_rangement(projet):

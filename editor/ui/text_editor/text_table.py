@@ -1,6 +1,6 @@
 """
-ui/text_editor/text_table.py — colonne centre (contexte Texte), partie HAUTE :
-la table des textes.
+ui/text_editor/text_table.py — liste centrale des textes, avec un en-tête
+et une zone d'édition balisée par entrée.
 
 `texts.json` reste une liste plate, mais son rangement est montré comme un
 arbre : un chemin de six niveaux ne doit ni disparaître, ni devenir six
@@ -24,21 +24,26 @@ from typing import Optional
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QToolButton, QApplication,
     QTreeWidget, QTreeWidgetItem, QAbstractItemView, QHeaderView,
-    QStyledItemDelegate, QStyle,
+    QStyledItemDelegate, QStyle, QPushButton,
 )
 from PyQt6.QtGui import (
     QFont, QFontMetrics, QColor, QBrush, QPen, QPainter, QShortcut, QKeySequence,
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QRectF, QPointF, QEvent
+from PyQt6.QtCore import (
+    Qt, pyqtSignal, QTimer, QRectF, QPoint, QPointF, QEvent, QSize,
+    QPersistentModelIndex, QModelIndex,
+)
 
 from core.text_markup import parse, resolve
 from core.models.text import SEP
-from ui.common.theme import C, T, S
+from core.text_sequences import editor_rows, sequence_of
+from ui.common.theme import C, T, QSS
 from ui.common.widgets import W
 from ui.common import icons
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 from ui.text_editor.colors import TEXT_COLOR
+from ui.text_editor.text_entry import TextEntry, TextEntryGroup
 
 
 # Une colonne = un rôle, nommé une fois ici : la construction des lignes, le
@@ -51,6 +56,7 @@ _HEADER_KEYS = ("txttbl.h_key", "txttbl.h_content", "txttbl.h_status",
 _ROLE_TEXT = Qt.ItemDataRole.UserRole        # Text, sur une ligne
 _ROLE_GROUP = Qt.ItemDataRole.UserRole + 1   # tuple[str, ...], nœud de rangement
 _ROLE_SORT = Qt.ItemDataRole.UserRole + 2    # clé de tri, quand ≠ de l'affichage
+_ROLE_DISPLAY_PATH = Qt.ItemDataRole.UserRole + 3
 
 # Ce que la ligne raconte d'elle-même, indépendamment du filtre.
 FLAG_EMPTY = "empty"      # référencée peut-être, mais rien à afficher
@@ -60,6 +66,7 @@ FLAG_UNUSED = "unused"    # écrite, mais personne ne la demande
 # vide), et une entrée traduite peut très bien être vide. Deux axes, deux
 # flags, comme le veut la ROADMAP v0.9.
 FLAG_MISSING = "missing"
+
 
 class _PathDelegate(QStyledItemDelegate):
     """Peint chaque nœud de rangement avec la même pastille."""
@@ -118,12 +125,18 @@ class _KeyDelegate(QStyledItemDelegate):
         painter.restore()
 
 
+_ENTRY_PLACEHOLDER = 96    # hauteur réservée à une entrée dont l'éditeur n'est pas encore construit
+_LAZY_MARGIN = 400         # pixels au-dessus et en dessous de l'écran où les éditeurs sont déjà construits
+
+
 class _Row(QTreeWidgetItem):
     """Une ligne qui se trie par ce qu'elle VAUT, pas par ce qu'elle affiche.
 
     « 12 scripts » se range avant « 2 scripts » dans l'ordre alphabétique, et
     une colonne d'usage qui trie faux est pire qu'une colonne qui ne trie
     pas."""
+
+    spec = None     # (texte, numéro, préfixe) tant que l'éditeur de la ligne n'est pas construit
 
     def __lt__(self, other):
         tree = self.treeWidget()
@@ -142,16 +155,26 @@ class TextTable(QWidget):
     selection_changed = pyqtSignal(list)               # [Text] (vide = plus rien)
     key_edited = pyqtSignal(object, str)               # (Text, clé saisie)
     group_renamed = pyqtSignal(object, str)            # (chemin du nœud, nouveau nom)
-    add_asked = pyqtSignal()
     delete_asked = pyqtSignal()
+    content_edited = pyqtSignal(object, str, str, str)  # Text, avant, après, langue
+    group_key_edited = pyqtSignal(object, str)  # Tous les textes du groupe, préfixe
+    sequence_delete_asked = pyqtSignal(str)            # préfixe de la séquence à détruire
+    entry_reorder_asked = pyqtSignal(str, str, str)    # préfixe, id du texte déplacé, id du texte visé
+    entry_structure = pyqtSignal(object, object, str)  # préfixe, id du texte, "add" | "remove"
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet(f"background:{C.BG_BASE};")
+        self.setObjectName('textTable')
+        self.setStyleSheet(f"QWidget#textTable{{background:{C.BG_BASE};}}")
         self._project = None
         self._usages = None            # TextUsageIndex, None = à reconstruire
         self._blocking = False
         self._values: dict = {}
+        self._markup_font = None
+        self._number_groups = []
+        self._row_by_id = {}           # id du texte -> sa ligne : pas de parcours de l'arbre à chaque frappe
+        self._revealed_ids = set()
+        self._collapsed_entries = set()
         # "" = source. Reçue de l'extérieur — cf. `set_active_lang` — la table
         # ne CHOISIT plus la langue depuis la v0.9.2 : les onglets de l'atelier
         # s'en chargent, elle en tire juste ce que Content/Status/le chip
@@ -192,11 +215,12 @@ class TextTable(QWidget):
         # Garder la décoration d'arbre ici réservait inutilement une indentation
         # sur chaque clé et rognait sa fin derrière l'icône de copie.
         self._tree.setRootIsDecorated(False)
+        self._tree.setIndentation(0)
         # Un double-clic appartient déjà au pliage natif. Le renommage passe
         # par un clic sur le badge d'un nœud ouvert et sélectionné — voir le
         # filtre d'événements plus bas.
         self._tree.setExpandsOnDoubleClick(False)
-        self._tree.setUniformRowHeights(True)
+        self._tree.setUniformRowHeights(False)
         self._tree.setAllColumnsShowFocus(True)
         # Multi-sélection : ranger vingt entrées d'un coup est le geste que le
         # glisser-déposer d'un arbre ne savait pas faire.
@@ -212,8 +236,8 @@ class TextTable(QWidget):
         self._tree.setStyleSheet(
             f"QTreeWidget{{background:{C.BG_BASE}; color:{C.TEXT_NORM}; border:none;"
             f"font-family:{T.UI_STACK}; font-size:{T.MD}px; outline:none;}}"
-            f"QTreeWidget::item{{padding:6px 10px; height:{S.ROW + 10}px; border:none;}}"
-            f"QTreeWidget::item:selected{{background:{C.BG_SEL}; color:{TEXT_COLOR};}}"
+            f"QTreeWidget::item{{padding:0px; border:none;}}"
+            f"QTreeWidget::item:selected{{background:{C.BG_BASE}; color:{TEXT_COLOR};}}"
             f"QTreeWidget::item:hover:!selected{{background:{C.BG_PANEL};}}"
             f"QHeaderView::section{{background:transparent; color:{C.TEXT_MUTED};"
             f"border:none; border-bottom:1px solid {C.BORDER_DARK}; padding:4px 6px;"
@@ -236,6 +260,12 @@ class TextTable(QWidget):
         # Le rangement appartient exclusivement au Finder : le centre liste
         # toujours des entrées, y compris à la racine du projet.
         self._tree.setColumnHidden(COL_PATH, True)
+        # Les colonnes restent disponibles pour les filtres et métadonnées ;
+        # chaque entrée visible occupe toute la largeur sur deux lignes.
+        for col in (COL_CONTENT, COL_STATUS, COL_USED):
+            self._tree.setColumnHidden(col, True)
+        th.hide()
+        th.setSectionResizeMode(COL_KEY, QHeaderView.ResizeMode.Stretch)
         # L'ordre est celui du chemin : trier une colonne transverse casserait
         # visuellement la relation parent → enfant.
         self._tree.setSortingEnabled(False)
@@ -243,6 +273,8 @@ class TextTable(QWidget):
         self._tree.itemChanged.connect(self._on_item_changed)
         self._tree.itemExpanded.connect(lambda it: self._on_fold(it, False))
         self._tree.itemCollapsed.connect(lambda it: self._on_fold(it, True))
+        self._tree.verticalScrollBar().valueChanged.connect(lambda _value: self._materialize_visible())
+        self._tree.itemExpanded.connect(lambda _it: self._materialize_visible())
         self._tree.viewport().installEventFilter(self)
         # La clé est la seule cellule éditable du centre : le double-clic (ou
         # F2) l'ouvre en place, jamais une modale.
@@ -295,24 +327,16 @@ class TextTable(QWidget):
 
         self._search = W.search_box(label("txttbl.search"))
         self._search.setFixedWidth(200)
-        self._search.textChanged.connect(lambda _q: self._apply_filter())
+        self._search.textChanged.connect(self._search_changed)
         hl.addWidget(self._search)
 
-        self._btn_add = W.btn_add(tooltip(
-            title=label("txttbl.add_title"), body=label("txttbl.add_tip")))
-        self._btn_add.clicked.connect(self.add_asked.emit)
-        hl.addWidget(self._btn_add)
-        self._btn_del = W.btn_danger(tooltip(title=label("txttbl.delete_title")))
-        self._btn_del.clicked.connect(self.delete_asked.emit)
-        self._btn_del.setEnabled(False)
-        hl.addWidget(self._btn_del)
         return hdr
 
     def _build_footer(self) -> QFrame:
         """Ce que la sélection couvre et ce que le filtre cache : deux nombres
         qu'on ne peut pas deviner en regardant des lignes."""
         bar = QFrame()
-        bar.setFixedHeight(20)
+        bar.setFixedHeight(28)
         bar.setStyleSheet(
             f"background:{C.BG_PANEL}; border-top:1px solid {C.BORDER_DARK};")
         bl = QHBoxLayout(bar)
@@ -332,10 +356,35 @@ class TextTable(QWidget):
 
     def load_project(self, project):
         self._project = project
+        self._collapsed_entries.clear()
         self._values = project.text_values() if project else {}
         self._usages = None
         self._active_lang = ""
+        self._revealed_ids.clear()
         self.refresh()
+
+    def _search_changed(self, _query):
+        self._revealed_ids.clear()
+        self._apply_filter()
+
+    def focus_entry(self, tid):
+        self._revealed_ids.add(tid)
+        self._apply_filter()
+        self.select_by_ids([tid])
+        text = self._project.get_text_by_id(tid) if self._project else None
+        row = self._row_of(text) if text else None
+        if row is not None:
+            self._tree.scrollToItem(row)
+            entry = self._entry_of(row)
+            entry.collapse.setChecked(False)
+            entry.edit.setFocus()
+            self._materialize_visible()
+
+    def refresh_sequence_contexts(self):
+        """Met à jour l'état lié/libre des en-têtes sans reconstruire les éditeurs."""
+        for row, header in self._number_groups:
+            header.table_bar.refresh(self._project, header.prefix)
+            row.setSizeHint(COL_KEY, QSize(0, header.sizeHint().height()))
 
     def invalidate_usages(self):
         """Les scripts ont bougé : l'index est périmé.
@@ -343,6 +392,7 @@ class TextTable(QWidget):
         Reconstruit paresseusement, au prochain `refresh` — luaparser est trop
         lent pour être relancé sur un écran qui n'est peut-être pas affiché."""
         self._usages = None
+        self.refresh_sequence_contexts()
 
     def _usage_index(self):
         if self._usages is None and self._project is not None:
@@ -372,7 +422,7 @@ class TextTable(QWidget):
             return
         self._active_lang = code
         translating = self.is_translating()
-        self._tree.setColumnHidden(COL_STATUS, not translating)
+        self._tree.setColumnHidden(COL_STATUS, True)
         self._chips[FLAG_MISSING].setVisible(translating)
         if not translating:
             self._chips[FLAG_MISSING].setChecked(False)
@@ -382,9 +432,11 @@ class TextTable(QWidget):
         """Limite la liste au dossier choisi dans le Finder des textes."""
         path = tuple(path or ())
         if path != self._folder_filter:
+            self._revealed_ids.clear()
             self._folder_filter = path
             self._update_breadcrumb()
-            self.refresh()
+            self._apply_filter()
+            self._on_sel()
 
     def _update_breadcrumb(self) -> None:
         """Le chemin est dans le Finder ; le centre le rappelle sans arbre."""
@@ -399,34 +451,264 @@ class TextTable(QWidget):
         if select_ids is None:
             select_ids = [t.id for t in self.selected_texts()]
         self._blocking = True
+        self._revealed_ids.clear()
+        self._number_groups = []
+        self._row_by_id = {}
         self._tree.clear()
-        texts = sorted(self._project.texts, key=lambda t: (tuple(x.casefold() for x in t.path),
-                                                            t.key.casefold())) if self._project else []
+        display_rows = sorted(editor_rows(self._project),
+            key=lambda r: (tuple(x.casefold() for x in r[1]), r[0].key.casefold())) if self._project else []
+        texts = [r[0] for r in display_rows]
         usages = self._usage_index()
         self._flags = {}
 
-        groups: dict[tuple[str, ...], QTreeWidgetItem] = {}
-        for t in texts:
-            row = _Row()
-            self._fill_row(row, t, usages)
-            # Le Finder porte toute l'arborescence. La zone centrale ne montre
-            # jamais de nœuds techniques : elle reste une liste d'entrées.
-            self._tree.addTopLevelItem(row)
+        # Une séquence est dérivée des clés (cf. core/text_sequences) : on monte son
+        # en-tête à la première de ses entrées.
+        members_of: dict = {}
+        for t, _path, prefix in display_rows:
+            if prefix is not None:
+                members_of.setdefault(prefix, []).append(t)
+        # Chaque insertion dans un arbre affiché relance la mise en page de toutes les lignes (non uniformes) :
+        # on construit hors affichage, une seule mise en page à la fin.
+        self._tree.setUpdatesEnabled(False)
+        try:
+            mounted = set()
+            for t, display_path, prefix in display_rows:
+                if prefix is not None:
+                    if prefix not in mounted:
+                        mounted.add(prefix)
+                        self._mount_numbered_group(prefix, members_of[prefix], usages)
+                    continue
+                row = _Row()
+                self._fill_row(row, t, usages)
+                row.setData(0, _ROLE_DISPLAY_PATH, display_path)
+                self._tree.addTopLevelItem(row)
+                self._mount_entry(row, t)
 
-        for path, item in groups.items():
-            item.setExpanded(path not in self._collapsed)
-
-        self._count.setText(f"  {len(texts)}")
-        self._apply_filter()
-        if self._folder_filter:
-            shown = sum(1 for text in texts
-                        if tuple(text.path[:len(self._folder_filter)]) == self._folder_filter)
-            self._crumb_count.setText(label("txttbl.text_count", n=shown))
-        self._blocking = False
+            self._count.setText(f"  {len(texts)}")
+            self._apply_filter()
+        finally:
+            self._tree.setUpdatesEnabled(True)
+            self._blocking = False
+        self._materialize_visible()
 
         if select_ids:
             self.select_by_ids(select_ids)
         self._on_sel()
+
+    def _mount_numbered_group(self, prefix, members, usages):
+        members = sorted(members, key=lambda text: (sequence_of(text.key)[1], text.key))
+        group_row = _Row()
+        group_row.setFlags(Qt.ItemFlag.ItemIsEnabled)
+        # Les entrées d'abord, sur une ligne encore détachée : insérer sous un en-tête déjà affiché coûte une mise en
+        # page par ligne.
+        rows = []
+        for position, text in enumerate(members):
+            row = _Row()
+            self._fill_row(row, text, usages)
+            group_row.addChild(row)
+            row.setData(0, _ROLE_DISPLAY_PATH, tuple(text.path))
+            self._mount_entry(row, text, number=f'{position+1:02}', prefix=prefix)
+            rows.append(row)
+        self._tree.addTopLevelItem(group_row)
+        for row in rows:
+            row.setFirstColumnSpanned(True)
+        header = TextEntryGroup(prefix, len(members), self._project)
+        header.prefix = prefix
+        header.display_path = tuple(members[0].path[:-1])
+        header.resize_row = lambda: group_row.setSizeHint(COL_KEY, QSize(0, header.sizeHint().height()))
+        header.table_bar.refresh(self._project, prefix)
+        header.prefix_edited.connect(lambda new, group=members: QTimer.singleShot(
+            0, lambda: self.group_key_edited.emit(group, new)))
+        header.add_asked.connect(lambda: QTimer.singleShot(0,
+            lambda: self.entry_structure.emit(prefix, None, 'add')))
+        header.delete_asked.connect(lambda: QTimer.singleShot(
+            0, lambda: self.sequence_delete_asked.emit(prefix)))
+        header.markup.set_font(self._markup_font)
+        group_row.setFirstColumnSpanned(True)
+        header.resize_row()
+        self._tree.setItemWidget(group_row, COL_KEY, header)
+        self._number_groups.append((group_row, header))
+        group_row.setExpanded(True)
+
+    def _editable_content(self, t) -> str:
+        if self.is_translating():
+            return self._project.translations.get(self._active_lang, {}).get(t.id, "")
+        return t.content
+
+    def _mount_entry(self, row, text, *, number=None, prefix=None):
+        """Réserve la place de l'entrée. Son éditeur coûte cher à construire (et chaque insertion relance la mise en
+        page des éditeurs déjà là) : il n'existe que pour les lignes proches de l'écran (`_materialize_visible`)."""
+        row.spec = (text, number, prefix)
+        if row.treeWidget() is not None:         # une ligne encore détachée est étalée par son appelant, une fois posée
+            row.setFirstColumnSpanned(True)
+        row.setSizeHint(COL_KEY, QSize(0, _ENTRY_PLACEHOLDER))
+
+    def _entry_of(self, row):
+        """L'éditeur de cette ligne, construit à la demande ; None pour une ligne qui n'en porte pas."""
+        if getattr(row, "spec", None) is not None:
+            self._build_entry(row)
+        return self._tree.itemWidget(row, COL_KEY)
+
+    def _materialize_visible(self):
+        """Construit les éditeurs des lignes visibles, plus une marge au-dessus et en dessous."""
+        tree = self._tree
+        item = tree.itemAt(0, 0)
+        if item is None:
+            return
+        above = tree.itemAbove(item)
+        while above is not None and tree.visualItemRect(above).bottom() > -_LAZY_MARGIN:
+            item, above = above, tree.itemAbove(above)
+        limit = tree.viewport().height() + _LAZY_MARGIN
+        while item is not None and tree.visualItemRect(item).top() <= limit:
+            if getattr(item, "spec", None) is not None:
+                self._build_entry(item)
+            item = tree.itemBelow(item)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._materialize_visible()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._materialize_visible()
+
+    def _build_entry(self, row):
+        text, number, prefix = row.spec
+        row.spec = None
+        entry = TextEntry(text, self._editable_content(text), self._project, number=number)
+        if prefix is None:
+            entry.remove.setToolTip(label('txttbl.delete_title'))
+            entry.remove.setAccessibleName(entry.remove.toolTip())
+        fold_key = (prefix, text.id)
+        entry.collapse.setChecked(fold_key in self._collapsed_entries)
+        entry.collapsed_changed.connect(lambda collapsed: (
+            self._collapsed_entries.add(fold_key) if collapsed
+            else self._collapsed_entries.discard(fold_key)))
+        if prefix is not None:
+            entry.grip.moved.connect(lambda y, pre=prefix: self._entry_drag_over(pre, y))
+            entry.grip.released.connect(lambda y, pre=prefix, tid=text.id: self._entry_drop(pre, tid, y))
+        entry.add_asked.connect(lambda tid=text.id, pre=prefix: QTimer.singleShot(0,
+            lambda: self.entry_structure.emit(pre, tid, 'add')))
+        entry.remove_asked.connect(lambda tid=text.id, pre=prefix: QTimer.singleShot(0,
+            lambda: self.entry_structure.emit(pre, tid, 'remove')))
+        entry.markup.set_font(self._markup_font)
+        entry.used.setText(row.text(COL_USED))
+        entry.used.setToolTip(row.toolTip(COL_USED))
+        entry.status.setText(row.text(COL_STATUS))
+        entry.status.setVisible(self.is_translating())
+        if self.is_translating():
+            entry.edit.setToolTip(text.content)
+        # Les widgets sont détruits en différé, contrairement aux items de
+        # l'arbre : un ancien éditeur peut encore recevoir un événement de
+        # focus après clear(). L'index devient invalide dès le retrait de l'item.
+        index = QPersistentModelIndex(self._tree.indexFromItem(row))
+        entry.geometry_changed.connect(lambda: self._resize_entry(index, entry),
+                                       Qt.ConnectionType.QueuedConnection)
+        entry.activated.connect(lambda: self._activate_entry(index))
+        lang = self._active_lang
+        entry.content_edited.connect(
+            lambda before, after: self.content_edited.emit(text, before, after, lang))
+        # Le renommage reconstruit la liste : attendre la fin du signal du champ.
+        entry.key_edited.connect(lambda key: QTimer.singleShot(
+            0, lambda: self.key_edited.emit(text, key)))
+        row.setSizeHint(COL_KEY, QSize(0, entry.sizeHint().height()))
+        self._tree.setItemWidget(row, COL_KEY, entry)
+        entry.set_selected(row.isSelected())
+        group = row.parent()
+        if group is not None:
+            self._sync_group_target(group)
+        return entry
+
+    def _group_entries(self, prefix):
+        """[(texte, page)] visibles de la séquence, dans l'ordre affiché."""
+        for row, header in self._number_groups:
+            if header.prefix == prefix:
+                out = []
+                for i in range(row.childCount()):
+                    child = row.child(i)
+                    entry = self._tree.itemWidget(child, COL_KEY)
+                    if entry is not None and not child.isHidden():
+                        out.append((child.data(0, _ROLE_TEXT), entry))
+                return out
+        return []
+
+    def _entry_at(self, prefix, global_y):
+        entries = self._group_entries(prefix)
+        for text, entry in entries:
+            if global_y < entry.mapToGlobal(QPoint(0, 0)).y() + entry.height():
+                return text, entry
+        return entries[-1] if entries else (None, None)
+
+    def _entry_drag_over(self, prefix, global_y):
+        _text, hovered = self._entry_at(prefix, global_y)
+        for _t, entry in self._group_entries(prefix):
+            entry.set_drop_target(entry is hovered)
+
+    def _entry_drop(self, prefix, source_id, global_y):
+        target, _entry = self._entry_at(prefix, global_y)
+        for _t, entry in self._group_entries(prefix):
+            entry.set_drop_target(False)
+        if target is not None and target.id != source_id:
+            self.entry_reorder_asked.emit(prefix, source_id, target.id)
+
+    def _resize_entry(self, index, entry):
+        if index.isValid():
+            row = self._tree.itemFromIndex(QModelIndex(index))
+            row.setSizeHint(COL_KEY, QSize(0, entry.sizeHint().height()))
+            self._tree.doItemsLayout()
+
+    def _sync_group_targets(self):
+        for row, _header in self._number_groups:
+            self._sync_group_target(row)
+
+    def _sync_group_target(self, group_row):
+        header = self._tree.itemWidget(group_row, COL_KEY)
+        if not isinstance(header, TextEntryGroup):
+            return
+        current = self._tree.currentItem()
+        visible = [group_row.child(i) for i in range(group_row.childCount())
+                   if not group_row.child(i).isHidden()]
+        target = next((child for child in visible if child is current),
+                      visible[0] if visible else None)
+        # Un éditeur pas encore construit ne cible rien : il le fera à sa construction.
+        header.set_active_entry(self._tree.itemWidget(target, COL_KEY) if target is not None else None)
+
+    def set_markup_font(self, font):
+        self._markup_font = font
+        for row in self._iter_rows():
+            entry = self._tree.itemWidget(row, COL_KEY)
+            if entry is not None:
+                entry.markup.set_font(font)
+
+    def _activate_entry(self, index):
+        if self._blocking or not index.isValid():
+            return
+        row = self._tree.itemFromIndex(QModelIndex(index))
+        if not row.isSelected():
+            self._tree.setCurrentItem(row)
+        # La sélection peut à son tour déclencher un rafraîchissement.
+        if self._blocking or not index.isValid():
+            return
+        row = self._tree.itemFromIndex(QModelIndex(index))
+        if row.parent() is not None:
+            header = self._tree.itemWidget(row.parent(), COL_KEY)
+            entry = self._tree.itemWidget(row, COL_KEY)
+            if isinstance(header, TextEntryGroup) and entry is not None:
+                header.set_active_entry(entry)
+
+    def sync_entry(self, text):
+        """Relire le modèle après édition/undo sans détruire le curseur."""
+        blocking, self._blocking = self._blocking, True
+        row = self._row_of(text)
+        if row is not None:
+            self._fill_row(row, text, self._usage_index())
+            entry = self._tree.itemWidget(row, COL_KEY)      # pas construit : il lira le modèle à sa construction
+            if entry is not None:
+                entry.set_content(self._editable_content(text))
+                entry.used.setText(row.text(COL_USED))
+                entry.status.setText(row.text(COL_STATUS))
+        self._blocking = blocking
+        self._update_footer()
 
     def _path_item(self, path: list[str], groups: dict) -> QTreeWidgetItem:
         """Retourne le nœud du chemin, en créant chacun de ses ancêtres."""
@@ -462,17 +744,13 @@ class TextTable(QWidget):
         """Une ligne : où c'est rangé, comment ça s'appelle, ce que ça dit, et
         qui s'en sert."""
         row.setData(0, _ROLE_TEXT, t)
+        self._row_by_id[t.id] = row
 
         row.setText(COL_KEY, t.key)
         row.setFont(COL_KEY, QFont(T.CODE, T.SM))
-        # Clé dérivée = jetable, en retrait ; clé nommée à la main = un contrat
-        # posé par quelqu'un, elle mérite l'accent.
-        row.setForeground(COL_KEY,
-                          QColor(C.TEXT_MUTED if t.auto_key else TEXT_COLOR))
+        row.setForeground(COL_KEY, QColor(TEXT_COLOR))
         row.setToolTip(COL_KEY, tooltip(
-            title=label("txttbl.rename_key"), shortcut="F2",
-            body=(label("txttbl.key_auto") if t.auto_key else label("txttbl.key_hand")),
-        ))
+            title=label("txttbl.rename_key"), shortcut="F2"))
 
         flags = set()
         # Le texte tel qu'on le LIT dans la langue ACTIVE : balises retirées,
@@ -557,7 +835,7 @@ class TextTable(QWidget):
         regarde."""
         items = self._tree.selectedItems()
         if not items:
-            return []
+            return list(self._folder_filter)
         t = items[0].data(0, _ROLE_TEXT)
         if t is not None:
             return list(t.path)
@@ -592,10 +870,8 @@ class TextTable(QWidget):
         self._update_footer()
 
     def _row_of(self, t) -> Optional[QTreeWidgetItem]:
-        for item in self._iter_rows():
-            if item.data(0, _ROLE_TEXT) is t:
-                return item
-        return None
+        row = self._row_by_id.get(t.id)
+        return row if row is not None and row.data(0, _ROLE_TEXT) is t else None
 
     def _iter_rows(self, parent: Optional[QTreeWidgetItem] = None):
         node = parent if parent is not None else self._tree.invisibleRootItem()
@@ -607,17 +883,23 @@ class TextTable(QWidget):
     def _on_sel(self):
         if self._blocking:
             return
+        self._sync_group_targets()
         texts = self.selected_texts()
-        self._btn_del.setEnabled(bool(texts))
+        for row in self._iter_rows():
+            entry = self._tree.itemWidget(row, COL_KEY)
+            if entry is not None:
+                entry.set_selected(row.isSelected())
         self._update_footer()
         self.selection_changed.emit(texts)
 
     def _update_footer(self):
         n = len(self.selected_texts())
         self._sel_lbl.setText(label("txttbl.n_selected", n=n) if n else "")
-        total = len(self._project.texts) if self._project else 0
+        total = sum(1 for it in self._iter_rows() if it.data(0, _ROLE_TEXT) is not None)
         shown = sum(1 for it in self._iter_rows()
                     if it.data(0, _ROLE_TEXT) is not None and not it.isHidden())
+        if self._folder_filter:
+            self._crumb_count.setText(label("txttbl.text_count", n=shown))
         self._total_lbl.setText(
             label("txttbl.text_count", n=total) if shown == total
             else label("txttbl.shown_of", shown=shown, total=total))
@@ -635,22 +917,26 @@ class TextTable(QWidget):
             t = item.data(0, _ROLE_TEXT)
             hits = [visit(item.child(i)) for i in range(item.childCount())]
             if t is None:
-                item.setHidden(not any(hits))
-                return any(hits)
+                visible = any(hits)
+                item.setHidden(not visible)
+                return visible
             hay = " ".join((*t.path, t.key, item.text(COL_CONTENT))).casefold()
             # Les deux chips se CUMULENT : « Empty » + « Unused » demande les
             # entrées qui sont les deux, pas leur réunion.
             in_folder = (not self._folder_filter or
-                         tuple(t.path[:len(self._folder_filter)]) == self._folder_filter)
+              tuple((item.data(0, _ROLE_DISPLAY_PATH) or tuple(t.path))[:len(self._folder_filter)]) == self._folder_filter)
             visible = in_folder and ((not q) or (q in hay)) and \
                       wanted <= self._flags.get(t.id, set())
+            visible = visible or t.id in self._revealed_ids
             item.setHidden(not visible)
             return visible
 
         for i in range(self._tree.invisibleRootItem().childCount()):
             visit(self._tree.invisibleRootItem().child(i))
+        self._sync_group_targets()
         self._blocking = was_blocking
         self._update_footer()
+        self._materialize_visible()
 
     def _on_fold(self, item: QTreeWidgetItem, collapsed: bool):
         path = item.data(COL_PATH, _ROLE_GROUP)
@@ -747,6 +1033,10 @@ class TextTable(QWidget):
 
     def _start_edit(self, item: QTreeWidgetItem, col: int):
         """Ouvre l'éditeur natif sans réintroduire le double-clic ambigu."""
+        entry = self._entry_of(item)
+        if col == COL_KEY and entry is not None:
+            entry.begin_key_edit()
+            return
         # `setFlags` émet itemChanged : ne pas laisser son handler retirer le
         # flag avant que Qt ait créé le QLineEdit.
         self._blocking = True

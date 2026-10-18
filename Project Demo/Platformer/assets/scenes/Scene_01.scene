@@ -82,7 +82,7 @@
           "h": 4
         }
       ],
-      "x": 56,
+      "x": 77,
       "y": 160,
       "flip_h": false,
       "flip_v": false,
@@ -251,7 +251,7 @@
         }
       ],
       "x": 152,
-      "y": 120,
+      "y": 128,
       "flip_h": false,
       "flip_v": false,
       "priority": 0,

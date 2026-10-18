@@ -8,12 +8,13 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QSplitter, QLabel, QPushButton, QFrame,
     QStatusBar, QDialog,
-    QMessageBox, QFileDialog,
+    QFileDialog,
     QToolButton, QStackedWidget, QToolBar, QSizePolicy, QTabWidget,
 )
+from ui.common.popup import MessageBox as QMessageBox
 from PyQt6.QtGui import QAction, QFont, QKeySequence, QShortcut, QDesktopServices
-from PyQt6.QtCore import Qt, QSettings, QByteArray, QRectF, QTimer, QUrl
-from PyQt6.QtGui import QGuiApplication, QPixmap, QPainter
+from PyQt6.QtCore import Qt, QSettings, QByteArray, QTimer, QUrl
+from PyQt6.QtGui import QGuiApplication
 
 from ui.common.theme import C, T, QSS, brand_font
 from ui.common.labels import label
@@ -47,7 +48,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
 from ui.scene_manager.scene_tree_panel import SceneTreePanel
 from ui.common.three_column_body import ThreeColumnBody
-from ui.common.build_panel import BuildPanel, ToolchainBar, AnimatedBuildButton, mascot_renderer
+from ui.common.build_panel import BuildPanel, ToolchainBar, AnimatedBuildButton
 from ui.common.disk_tree_view import DiskTreeView
 from ui.common.disk_view import add_disk_tab
 from ui.common.panel_bar import restore_tab_order, tab_order, tab_widget
@@ -820,6 +821,9 @@ class MainWindow(QMainWindow):
         # venue (`load_project`). D'où `_call_if_built` plutôt qu'un accès direct.
         _d.on("scripts_changed",       lambda: self._call_if_built("_text_editor", "invalidate_script_usages"))
         _d.on("ui_text_links_changed", lambda: self._call_if_built("_text_editor", "invalidate_script_usages"))
+        _d.on("texts_changed",         self.scene_editor.refresh_ui_texts)
+        _d.on("texts_changed",         self._inspector.refresh_current)
+        _d.on("data_tables_changed", lambda: self._call_if_built("_data_editor", "refresh"))
         _d.on("flush_script_edits",    lambda: self._call_if_built("_script_editor", "flush_pending_edits"))
         # NB : l'écran Palettes n'a PAS d'abonnement `palettes_changed`. Seuls le
         # Sprite Editor et le Background Editor émettent cet événement (via
@@ -889,25 +893,7 @@ class MainWindow(QMainWindow):
         get_deferred_writes().flush()       # un réglage différé n'a pas à faire poser la question : il part, c'est son rôle
         if self._has_pending_changes():
             box = QMessageBox(self)
-            # La mascotte « working » plutôt que le triangle système : le
-            # projet est en cours de travail, pas en erreur.
-            mascot = mascot_renderer("working")
-            if mascot is not None:
-                pixmap = QPixmap(64, 64)
-                pixmap.fill(Qt.GlobalColor.transparent)
-                # L'illustration n'est pas carrée : proportions conservées,
-                # centrée dans le carré plutôt qu'étirée.
-                view = mascot.viewBoxF()
-                scale = pixmap.width() / max(view.width(), view.height())
-                width, height = view.width() * scale, view.height() * scale
-                painter = QPainter(pixmap)
-                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-                mascot.render(painter, QRectF(
-                    (pixmap.width() - width) / 2, (pixmap.height() - height) / 2, width, height))
-                painter.end()
-                box.setIconPixmap(pixmap)
-            else:
-                box.setIcon(QMessageBox.Icon.Warning)
+            box.setIcon(QMessageBox.Icon.Question)
             # Application-modale : la fermeture peut venir du dialogue de
             # réglages (redémarrage), lui-même modal.
             box.setWindowModality(Qt.WindowModality.ApplicationModal)
@@ -970,6 +956,8 @@ class MainWindow(QMainWindow):
         a_build = QAction(label("common.build_run"), self); bind("game.build", a_build)
         a_build.triggered.connect(self._run_build)
         m_game.addAction(a_build)
+        m_game.aboutToShow.connect(lambda: self._fill_language_build_menu(m_game, a_build))
+        self._language_build_actions = []
         m_game.addSeparator()
         a_project_settings = QAction(label("win.project_settings"), self)
         a_project_settings.triggered.connect(self._open_project_settings)
@@ -1794,7 +1782,10 @@ class MainWindow(QMainWindow):
     def _show_disk(self, tree):
         if (view := getattr(self, "disk_tree_view", None)) is not None:
             view.set_tree(tree)
+        from ui.common.disk_preview import resource_preview
         self.build_panel.disk.set_tree(tree)
+        self.build_panel.disk.set_preview_provider(
+            lambda node, render: resource_preview(self.project, node, render))
 
     def _refresh_diagnostics(self):
         """Relance `validate_project` sur la scène active et alimente les deux
@@ -1897,7 +1888,7 @@ class MainWindow(QMainWindow):
         try:
             self.project = Project.open(path)
         except ProjectManifestError as exc:
-            from PyQt6.QtWidgets import QMessageBox
+            from ui.common.popup import MessageBox as QMessageBox
             QMessageBox.critical(self, label("common.open_project"), str(exc))
             return
         self._project_loaded_screen_indices.clear()
@@ -2480,7 +2471,31 @@ class MainWindow(QMainWindow):
         if dialog.open_settings_requested:
             self._open_settings("Toolchains")
 
-    def _run_build(self):
+    def _fill_language_build_menu(self, menu, build_action):
+        for action in self._language_build_actions:
+            menu.removeAction(action)
+            action.deleteLater()
+        self._language_build_actions = []
+        mono = self.project and self.project.settings.language_mode == "monolingual"
+        selected = self.project.settings.selected_build_language() if mono else None
+        build_action.setText(
+            f"{label('common.build_run')} ({selected.code or label('langcard.source')})"
+            if mono else label('common.build_run'))
+        if not mono:
+            return
+        before = menu.actions()[1]
+        settings = self.project.settings
+        for lang in settings.all_languages() or [settings.source_lang]:
+            action = QAction(f"Build_{lang.code or label('langcard.source')}", self)
+            action.setEnabled(bool(self.project.scenes) and self._worker is None)
+            action.triggered.connect(lambda _checked=False, code=lang.code: self._run_build(code))
+            menu.insertAction(before, action)
+            self._language_build_actions.append(action)
+
+    def _run_build(self, language_code=None):
+        # Qt buttons pass a checked flag; only menu language actions pass a code.
+        if isinstance(language_code, bool):
+            language_code = None
         if not self.project or not self.project.active_scene: return
         if self._worker is not None: return     # un build tourne déjà : le clic est ignoré
         get_deferred_writes().flush()           # le build lit les sidecars sur le disque
@@ -2507,7 +2522,8 @@ class MainWindow(QMainWindow):
         self._build_drain.setInterval(30)
         self._build_drain.timeout.connect(self._drain_build_queue)
 
-        self._worker = BuildWorker(project=self.project, toolchain=self.toolchain)
+        self._worker = BuildWorker(project=self.project, toolchain=self.toolchain,
+                                   language_code=language_code)
         self._worker.on("log_line",   lambda m:  self._build_queue.put(("log",      m)))
         self._worker.on("error_line", lambda m:  self._build_queue.put(("error",    m)))
         self._worker.on("diagnostic", lambda d:  self._build_queue.put(("diagnostic", d)))

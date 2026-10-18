@@ -7,7 +7,93 @@ vues n'ont pas à porter.
 """
 from __future__ import annotations
 
+from copy import deepcopy
+
 from core.history import Command
+from core.text_sequences import sequence_of
+
+
+class DeleteTextsCmd(Command):
+    """Supprime des textes, leurs traductions et les `text_key` qui les affichaient.
+
+    Les tables et boîtes liées à une séquence suivent d'elles-mêmes (synchro de l'historique)."""
+
+    def __init__(self, project, texts, persist_fn=None, label="Delete texts"):
+        self.project = project
+        self.texts = list({id(text): text for text in texts}.values())
+        self.label = label
+        self._persist = persist_fn
+        self._text_order = list(project.texts)
+        self._translations = deepcopy(project.translations)
+        self._regions = [(region, getattr(region, "text_key", ""))
+                         for _layout, region in project.all_regions()]
+        ids = {text.id for text in self.texts}
+        self.translation_langs = {
+            code for code, values in project.translations.items() if ids & values.keys()
+        }
+        keys = {text.key for text in self.texts}
+        self.touched_layouts = list({id(layout): layout for layout, region in project.all_regions()
+                                     if getattr(region, "text_key", "") in keys}.values())
+        # Les séquences touchées : si une table ou une boîte les lit, leur numérotation reste continue.
+        self._prefixes = sorted({seq[0] for t in self.texts if (seq := sequence_of(t.key))})
+        self._renamed = []
+        self._table_restore = None
+
+    def execute(self):
+        ids = {text.id for text in self.texts}
+        keys = {text.key for text in self.texts}
+        self.project.texts[:] = [text for text in self.project.texts if text.id not in ids]
+        for values in self.project.translations.values():
+            for text_id in ids:
+                values.pop(text_id, None)
+        for region, _key in self._regions:
+            if getattr(region, "text_key", "") in keys:
+                region.text_key = ""
+        self._renumber_linked()
+        if self._persist:
+            self._persist()
+
+    def _renumber_linked(self):
+        """Une séquence liée garde une numérotation continue : les pages suivantes remontent.
+
+        Les lignes des tables liées d'abord (celle de la page supprimée part), puis les clés :
+        le renommage réécrit les cellules, chaque ligne garde donc ses autres colonnes."""
+        from core.text_sequences import consumers, renumbered_keys
+        from core.text_table_link import sync_linked_tables
+        self._renamed, self._table_restore = [], None
+        linked = [p for p in self._prefixes if consumers(self.project, p)]
+        if not linked:
+            return
+        self._table_restore = sync_linked_tables(self.project)
+        for prefix in linked:
+            pairs = renumbered_keys(self.project, prefix)
+            before = [(text, text.key) for text, _key in pairs]
+            try:
+                self.project.rename_text_keys(pairs)
+            except ValueError:
+                continue                  # clé déjà prise : on laisse la numérotation telle quelle
+            self._renamed += before
+        self._notify_tables()
+
+    def _notify_tables(self):
+        if self._renamed or self._table_restore:
+            from core.command_dispatcher import get_dispatcher
+            get_dispatcher().notify_data_tables_changed()
+
+    def undo(self):
+        # Avant de rendre les textes supprimés : leurs anciennes clés sont encore libres.
+        if self._renamed:
+            self.project.rename_text_keys([(text, old) for text, old in self._renamed])
+        if self._table_restore:
+            self._table_restore()
+        self._notify_tables()
+        self.project.texts[:] = self._text_order
+        self.project.translations.clear()
+        self.project.translations.update(deepcopy(self._translations))
+        for region, key in self._regions:
+            region.text_key = key
+        if self._persist:
+            self._persist()
 
 
 class RenameTextKeyCmd(Command):
@@ -17,15 +103,11 @@ class RenameTextKeyCmd(Command):
     aussi les `text:draw("clé")` des scripts, remettre le champ ne suffirait pas.
     """
 
-    def __init__(self, project, text, old_key: str, new_key: str,
-                 old_auto: bool, persist_fn=None):
+    def __init__(self, project, text, old_key: str, new_key: str, persist_fn=None):
         self._project = project
         self._text = text
         self._old = old_key
         self._new = new_key
-        # Passé par l'appelant : le renommage a déjà eu lieu et a mis auto_key
-        # à False, le lire ici restaurerait la nouvelle valeur.
-        self._old_auto = old_auto
         self.label = f"Rename text → {new_key}"
         self._persist = persist_fn
         self._first = True   # le renommage a déjà été appliqué par l'appelant
@@ -40,7 +122,35 @@ class RenameTextKeyCmd(Command):
 
     def undo(self):
         self._project.rename_text_key(self._text, self._old)
-        self._text.auto_key = self._old_auto   # garde le badge « auto » cohérent
+        if self._persist:
+            self._persist()
+
+
+class RenameTextGroupKeysCmd(Command):
+    """Renomme le préfixe d'une séquence en un seul pas d'historique.
+
+    Ses consommateurs (tables, boîtes) suivent le nouveau préfixe (`rename_text_keys`)."""
+
+    def __init__(self, project, texts, prefix, persist_fn=None):
+        self._project = project
+        texts = list({text.id: text for text in texts}.values())
+        self._entries = [(text, text.key, f"{prefix}_{text.key.rsplit('_', 1)[1]}")
+                         for text in texts]
+        self._persist = persist_fn
+        self.label = f"Rename text group → {prefix}"
+
+    def execute(self):
+        members = {id(text) for text, *_ in self._entries}
+        occupied = {text.key for text in self._project.texts if id(text) not in members}
+        targets = [new for _, _, new in self._entries]
+        if len(set(targets)) != len(targets) or any(new in occupied for new in targets):
+            raise ValueError("Text key already exists")
+        self._project.rename_text_keys([(t, new) for t, _, new in self._entries])
+        if self._persist:
+            self._persist()
+
+    def undo(self):
+        self._project.rename_text_keys([(text, old) for text, old, _ in self._entries])
         if self._persist:
             self._persist()
 
@@ -93,9 +203,8 @@ class CreateTextForElementCmd(Command):
     Écrire dans un élément de texte sans entrée est UNE intention, pas deux :
     la commande porte les deux effets, une seule annulation les défait.
 
-    Le chemin de rangement est PROPOSÉ par l'appelant, jamais imposé : la clé
-    qui en dérive reste `auto_key`, donc ranger l'entrée ailleurs la recalera
-    (contrat de `models/text.py`).
+    Le chemin de rangement est PROPOSÉ par l'appelant ; la clé en est dérivée
+    à la création, ensuite elle porte la structure (`models/text.py`).
     """
 
     def __init__(self, project, element, content: str, path,
@@ -155,76 +264,96 @@ class CreateTextForElementCmd(Command):
         return False
 
 
-class SetTextPathCmd(Command):
-    """Range un ou plusieurs textes (déplacer une entrée = renommer un nœud, à
-    l'échelle près).
+class DeleteSequenceCmd(Command):
+    """Détruit toute une séquence : ses textes (et traductions), les lignes des tables liées, et
+    vide les TextBox qui la suivaient (déliées, sans page). Un seul pas d'historique.
 
-    Les clés AUTO se recalent derrière — donc les scripts sont réécrits ; les
-    clés nommées à la main ne bougent pas (contrat de `auto_key`).
+    Les textes passent par `DeleteTextsCmd` : la synchro retire les lignes de table et les références
+    `text_key` tombent. Les boîtes sont déliées d'abord, pour ne pas rester sur une séquence disparue."""
 
-    `order` : la liste plate telle qu'elle doit être APRÈS le geste. Un
-    glisser-déposer range ET place — lâcher une entrée entre deux autres dit
-    aussi où elle va. Deux commandes auraient demandé deux annulations pour un
-    seul geste, d'où le paramètre plutôt qu'une commande de plus.
-    """
+    def __init__(self, project, prefix: str, persist_fn=None):
+        from core.text_sequences import group_texts
+        self.project, self.prefix, self._persist = project, prefix, persist_fn
+        self._boxes = [(layout, box) for layout, box in project.all_regions()
+                       if getattr(box, "sequence_prefix", "") == prefix]
+        self._inner = DeleteTextsCmd(project, group_texts(project, prefix))
+        self.label = f"Delete sequence {prefix}"
 
-    def __init__(self, project, entries, label: str, persist_fn=None, order=None):
+    @property
+    def translation_langs(self):
+        return self._inner.translation_langs
+
+    def _save_layouts(self):
+        layouts = {id(layout): layout for layout, _box in self._boxes}
+        layouts.update({id(layout): layout for layout in self._inner.touched_layouts})
+        for layout in layouts.values():
+            self.project.ui_layouts.save(layout)
+
+    def execute(self):
+        for _layout, box in self._boxes:
+            box.sequence_prefix = ""
+        self._inner.execute()
+        self._save_layouts()
+        if self._persist:
+            self._persist()
+
+    def undo(self):
+        self._inner.undo()
+        for _layout, box in self._boxes:
+            box.sequence_prefix = self.prefix
+        self._save_layouts()
+        if self._persist:
+            self._persist()
+
+
+class RenameTextKeysCmd(Command):
+    """Renomme un lot de clés d'un coup (réordonner des pages = échanger leurs numéros).
+
+    Scripts, cellules de table, boîtes et séquences liées suivent (`Project.rename_text_keys`) ;
+    l'undo repose les clés exactes d'avant."""
+
+    def __init__(self, project, pairs, label: str, persist_fn=None):
         self._project = project
-        # (texte, ancien chemin, nouveau chemin, ancienne clé) — la clé est
-        # capturée MAINTENANT, avant le premier execute().
-        self._entries = [(t, list(old), list(new), t.key) for t, old, new in entries]
-        self._order_after = list(order) if order is not None else None
-        self._order_before = list(project.texts) if order is not None else None
+        self._pairs = list(pairs)
+        self._before = [(t, t.key) for t, _key in pairs]
         self.label = label
         self._persist = persist_fn
 
-    def _set_order(self, order):
-        # En place : `AddListItemCmd` et le projet gardent une référence sur
-        # CETTE liste, la remplacer les laisserait sur l'ancienne.
-        if order is not None:
-            self._project.texts[:] = order
-
     def execute(self):
-        self._set_order(self._order_after)
-        for t, _old, new, _key in self._entries:
-            t.path = list(new)
-            self._project.resync_text_key(t)
+        self._project.rename_text_keys(self._pairs)
         if self._persist:
             self._persist()
 
     def undo(self):
-        self._set_order(self._order_before)
-        for t, old, _new, key in self._entries:
-            t.path = list(old)
-            # `restore` et non `resync` : le rang `_NN` d'une clé dérivée dépend
-            # des clés prises à l'instant du calcul, la rejouer ne rendrait pas
-            # forcément la même.
-            if t.auto_key:
-                self._project.restore_text_key(t, key)
+        self._project.rename_text_keys(self._before)
         if self._persist:
             self._persist()
 
 
-class RelinkTextKeyCmd(Command):
-    """Ré-accroche une clé nommée à la main à son chemin de rangement — exact
-    inverse du renommage manuel : elle redevient dérivée."""
+class SetTextPathCmd(Command):
+    """Range un ou plusieurs textes : déplacer une entrée ou renommer un dossier, c'est renommer
+    les clés (le chemin n'est que leurs segments, cf. models/text.py).
 
-    def __init__(self, project, text, persist_fn=None):
+    `entries` : [(texte, ancien chemin, nouveau chemin)]. Tout le lot change d'un coup — une clé
+    qui prend la place d'une autre ne s'y heurte pas — et scripts, cellules de table, boîtes et
+    séquences liées suivent. L'undo repose les anciennes clés exactes : rejouer la dérivation ne les
+    rendrait pas forcément (le rang `_NN` dépend des clés prises)."""
+
+    def __init__(self, project, entries, label: str, persist_fn=None):
         self._project = project
-        self._text = text
-        self._old_key = text.key
-        self.label = f"Ré-accrocher {text.key} au rangement"
+        self._targets = [(t, list(new)) for t, _old, new in entries]
+        self._before = [(t, t.key) for t, _old, _new in entries]
+        self.label = label
         self._persist = persist_fn
 
     def execute(self):
-        self._text.auto_key = True
-        self._project.resync_text_key(self._text)
+        pairs = self._project.text_path_keys(self._targets)
+        self._project.rename_text_keys(pairs)
         if self._persist:
             self._persist()
 
     def undo(self):
-        self._project.restore_text_key(self._text, self._old_key)
-        self._text.auto_key = False
+        self._project.rename_text_keys(self._before)
         if self._persist:
             self._persist()
 

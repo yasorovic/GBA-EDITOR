@@ -311,7 +311,7 @@ def test_the_eraser_purges_both_layers_in_one_undo_while_right_click_follows_the
 
 def test_restore_original_purges_both_layers_of_a_background_without_image(qapp, tmp_path, monkeypatch):
     from core.project import Project
-    from PyQt6.QtWidgets import QMessageBox
+    from ui.common.popup import MessageBox as QMessageBox
     from ui.background_editor.background_editor_screen import BgPropertiesPanel
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
     project = Project(tmp_path)
@@ -372,17 +372,17 @@ def test_the_compression_box_is_absent_for_a_background_without_image(qapp):
     panel = _panel()
     panel.load(_blank(), None)
 
-    assert not panel._btn_tune.isVisibleTo(panel) and not panel._tune_host.isVisibleTo(panel)
+    assert not panel._comp_card.isVisibleTo(panel) and not panel._tune_host.isVisibleTo(panel)
 
 
 def test_the_compression_box_is_always_open_on_load_even_when_the_image_fits_and_folds_on_click(qapp, preparation_tools):
     panel = _panel()
     panel.load(_sourced({"multiple_of_8": True, "max_tile_colors": 4}), None)
 
-    assert panel._btn_tune.isVisibleTo(panel) and panel._tune_host.isVisibleTo(panel) and panel._comp_host.isVisibleTo(panel)
-    panel._btn_tune.click()
+    assert panel._comp_card.isVisibleTo(panel) and panel._tune_host.isVisibleTo(panel) and panel._comp_host.isVisibleTo(panel)
+    panel._comp_card.set_expanded(not panel._comp_card.is_expanded())
     assert not panel._tune_host.isVisibleTo(panel)
-    panel._btn_tune.click()
+    panel._comp_card.set_expanded(not panel._comp_card.is_expanded())
     assert panel._tune_host.isVisibleTo(panel) and panel._comp_host.isVisibleTo(panel)
 
 
@@ -390,7 +390,7 @@ def test_the_compression_box_opens_by_itself_when_the_image_does_not_fit(qapp):
     panel = _panel()
     panel.load(_sourced({"multiple_of_8": True, "max_tile_colors": 20, "tiles_reduced": 3}), None)
 
-    assert panel._tune_host.isVisibleTo(panel) and panel._btn_tune.isChecked()
+    assert panel._tune_host.isVisibleTo(panel) and panel._comp_card.is_expanded()
 
 
 def test_the_compression_box_opens_when_settings_leave_the_default(qapp):
@@ -407,7 +407,7 @@ def test_reloading_the_same_background_keeps_the_users_fold_and_another_one_open
     panel = _panel()
     panel.load(ba, None)
     assert panel._tune_host.isVisibleTo(panel)
-    panel._btn_tune.click()                                              # l'auteur replie la boîte
+    panel._comp_card.set_expanded(not panel._comp_card.is_expanded())                                              # l'auteur replie la boîte
     ba.diagnostics = {"multiple_of_8": True, "max_tile_colors": 4}      # la recompression a réglé le problème
 
     panel.load(ba, None)
@@ -431,7 +431,7 @@ def _panel_with_project(tmp_path):
 
 
 def test_save_as_png_bakes_every_layer_into_a_new_source_without_changing_the_picture(qapp, tmp_path, monkeypatch):
-    from PyQt6.QtWidgets import QMessageBox
+    from ui.common.popup import MessageBox as QMessageBox
     from core.bg_bake import render_rgba
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
     project, ba, panel = _panel_with_project(tmp_path)
@@ -447,7 +447,7 @@ def test_save_as_png_bakes_every_layer_into_a_new_source_without_changing_the_pi
 
 
 def test_save_as_png_never_overwrites_an_existing_source(qapp, tmp_path, monkeypatch):
-    from PyQt6.QtWidgets import QMessageBox
+    from ui.common.popup import MessageBox as QMessageBox
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
     project, ba, panel = _panel_with_project(tmp_path)
     taken = project.background_images_dir / f"{ba.name}.png"
@@ -460,7 +460,7 @@ def test_save_as_png_never_overwrites_an_existing_source(qapp, tmp_path, monkeyp
 
 
 def test_save_as_png_changes_nothing_when_declined_or_when_the_background_cannot_be_baked(qapp, tmp_path, monkeypatch):
-    from PyQt6.QtWidgets import QMessageBox
+    from ui.common.popup import MessageBox as QMessageBox
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.No)
     project, ba, panel = _panel_with_project(tmp_path)
 
@@ -539,25 +539,20 @@ def test_choosing_a_mode_only_stages_it_until_compress_is_pressed(qapp, tmp_path
     ba.asset = project.asset_rel(png)
     panel.load(ba, project)
     asked = []
-    panel.apply_requested.connect(lambda *a: asked.append(a))
+    panel.preview_requested.connect(asked.append)
 
     panel._d8.click()
-    assert asked == [] and panel._btn_apply_mode.isVisibleTo(panel) and panel._d8.isChecked()
+    assert asked == [] and panel._is_pending() and panel._d8.isChecked()      # choisir ne demande rien tout de suite
 
     panel._d4.click()                                                # revenir au mode courant : plus rien à valider
-    assert not panel._btn_apply_mode.isVisibleTo(panel)
+    assert not panel._is_pending()
 
     panel._d8.click()
-    panel._btn_apply_mode.click()
-    assert asked == [("tiled8", False)] and not panel._btn_apply_mode.isVisibleTo(panel)
-
-
-def test_the_inspector_shows_a_busy_bar_while_compressing(qapp):
-    panel = _panel()
-    panel.set_compressing(True)
-    assert panel._busy_box.isVisibleTo(panel) and panel._busy_bar.maximum() == 0
-    panel.set_compressing(False)
-    assert not panel._busy_box.isVisibleTo(panel)
+    panel._emit_request()                                   # après la pause, le service reçoit le mode choisi
+    assert len(asked) == 1 and asked[0]["token"] == "tiled8" and panel.settings()["token"] == "tiled8"
+    panel._d4.click()
+    panel._emit_request()
+    assert asked[-1] is None                                         # revenu au fond courant : la demande tombe
 
 
 def test_the_inspector_scrolls_instead_of_squashing_its_widgets_when_the_compression_box_opens(qapp):
@@ -573,7 +568,7 @@ def test_the_inspector_scrolls_instead_of_squashing_its_widgets_when_the_compres
     body = scroll.widget()
 
     assert body.height() >= body.minimumSizeHint().height() and body.height() > scroll.viewport().height()
-    assert panel._btn_apply_mode.height() >= 20 and panel._sl_palettes._row.height() >= 20
+    assert panel._sl_palettes._row.height() >= 20
 
 
 def _shown_canvas(qapp):
@@ -666,9 +661,8 @@ def test_the_adjust_sliders_sit_above_the_compression_box_and_feed_one_request(q
     assert panel._current_adjust() == ba.adjust                                    # les curseurs montrent le fond
     assert ys(panel._sl_hue) < ys(panel._sl_global._row) < ys(panel._chk_dither)   # avant la compression
     asked = []
-    panel.apply_requested.connect(lambda *a: asked.append(a))
     panel._sl_con.setValue(30)
-    assert asked == [] and panel._btn_apply_mode.isVisibleTo(panel)               # un curseur ne compresse pas
+    assert asked == [] and panel._is_pending()               # un curseur ne compresse pas
     assert panel._current_adjust().contrast == 30
 
     panel._on_adjust_reset()
@@ -684,13 +678,11 @@ def test_the_dither_type_waits_for_compress_like_the_checkbox_and_lands_in_the_c
     ba.asset = project.asset_rel(png)
     panel.load(ba, project)
     asked = []
-    panel.apply_requested.connect(lambda *a: asked.append(a))
 
     panel._cmb_dither.setCurrentIndex(panel._cmb_dither.findData("bayer4"))
-    assert asked == [] and panel._btn_apply_mode.isVisibleTo(panel)
+    assert asked == [] and panel._is_pending()
 
-    panel._btn_apply_mode.click()
-    assert len(asked) == 1 and panel._current_compression().dither_kind == "bayer4"
+    assert panel._current_compression().dither_kind == "bayer4" and panel.settings()["compression"].dither_kind == "bayer4"
 
 
 def test_no_slider_compresses_by_itself_and_every_reset_only_stages(qapp):
@@ -699,24 +691,23 @@ def test_no_slider_compresses_by_itself_and_every_reset_only_stages(qapp):
     panel = _panel()
     panel.load(ba, None)
     asked = []
-    panel.apply_requested.connect(lambda *a: asked.append(a))
     panel.recompress_requested.connect(lambda *a: asked.append(a))
-    assert not panel._btn_apply_mode.isVisibleTo(panel)                            # rien à valider à l'ouverture
+    assert not panel._is_pending()                            # rien à valider à l'ouverture
 
     panel._sl_palettes.setValue(4)
     panel._sl_hue.setValue(25)
-    assert asked == [] and panel._btn_apply_mode.isVisibleTo(panel)
+    assert asked == [] and panel._is_pending()
     panel._sl_palettes.setValue(16)
     panel._sl_hue.setValue(0)
-    assert not panel._btn_apply_mode.isVisibleTo(panel)                            # revenu au fond courant : plus rien
+    assert not panel._is_pending()                            # revenu au fond courant : plus rien
 
     ba.compression = BackgroundCompression(palettes_max=4)
     ba.adjust = BackgroundAdjust(hue=40)
     panel.load(ba, None)
-    assert not panel._btn_apply_mode.isVisibleTo(panel)
+    assert not panel._is_pending()
     panel._on_comp_reset()
     panel._on_adjust_reset()
-    assert asked == [] and panel._btn_apply_mode.isVisibleTo(panel)                # les remises au neutre attendent « Compress »
+    assert asked == [] and panel._is_pending()                # les remises au neutre attendent « Compress »
     assert panel._current_compression().is_default() and panel._current_adjust().is_default()
 
 
@@ -741,9 +732,7 @@ def test_the_adjustments_and_the_compression_are_two_detached_cards_and_compress
     assert panel._adj_card.isAncestorOf(panel._sl_hue) and not panel._comp_card.isAncestorOf(panel._sl_hue)
     panel._sl_hue.setValue(30)                                       # un réglage en attente ouvre la carte de compression…
     assert panel._comp_card.isVisibleTo(panel) and panel._tune_host.isVisibleTo(panel)
-    assert panel._btn_apply_mode.isVisibleTo(panel) and panel._comp_card.isAncestorOf(panel._btn_apply_mode)
-    assert ys(panel._adj_card) < ys(panel._comp_card) < ys(panel._btn_apply_mode)   # … dont « Compress » est le dernier mot
-    assert ys(panel._sl_tiles._row) < ys(panel._btn_apply_mode)
+    assert panel._is_pending() and ys(panel._adj_card) < ys(panel._comp_card)
 
 
 def test_moving_an_adjustment_previews_the_adjusted_image_live_and_never_compresses(qapp, tmp_path):
@@ -752,7 +741,6 @@ def test_moving_an_adjustment_previews_the_adjusted_image_live_and_never_compres
     panel.load(ba, project)
     previews, applied = [], []
     panel.adjust_preview_requested.connect(previews.append)
-    panel.apply_requested.connect(lambda *a: applied.append(a))
 
     panel._sl_bri.setValue(40)
     panel._emit_adjust_preview()
@@ -793,7 +781,7 @@ def test_the_dithering_checkbox_and_its_type_unlock_together_when_global_colors_
     assert panel._chk_dither.isEnabled() and panel._cmb_dither.isEnabled()
     panel._chk_dither.setChecked(True)
     panel._cmb_dither.setCurrentIndex(panel._cmb_dither.findData("bayer4"))
-    assert panel._chk_dither.isChecked() and panel._btn_apply_mode.isVisibleTo(panel)
+    assert panel._chk_dither.isChecked() and panel._is_pending()
 
     panel._on_comp_reset()                                                               # retour à Off : les deux se regrisent
     assert not panel._chk_dither.isEnabled() and not panel._cmb_dither.isEnabled()
@@ -832,19 +820,9 @@ def _screen_on_photo(tmp_path, qapp):
     return project, ba, screen
 
 
-def test_a_pending_setting_computes_a_compression_preview_in_the_background_without_touching_the_background(qapp, tmp_path):
-    project, ba, screen = _screen_on_photo(tmp_path, qapp)
-    before = (list(ba.tileset), [list(p) for p in ba.palettes], ba.compression)
-
-    screen._props._sl_palettes.setValue(3)
-    settings = screen._props.settings()
-    screen._on_compress_preview(settings)
-
-    assert screen._canvas._preview_badge.text() == label_of("bginp.preview_computing")
-    assert _wait(qapp, lambda: screen._preview_cache)                                 # le calcul part en arrière-plan
-    assert _wait(qapp, lambda: screen._canvas._preview_badge.text() == label_of("bginp.preview_ready"))
-    assert screen._canvas._view._adjust_item.isVisible()
-    assert (list(ba.tileset), [list(p) for p in ba.palettes], ba.compression) == before    # le fond n'a pas bougé
+def _idle(screen) -> bool:
+    """Plus aucun calcul en cours dans le service d'encodage de l'écran."""
+    return screen._encoding._running is None
 
 
 def label_of(key):
@@ -852,52 +830,144 @@ def label_of(key):
     return label(key)
 
 
-def test_compress_validates_the_cached_preview_without_computing_again(qapp, tmp_path):
+def test_a_pending_setting_is_encoded_in_the_background_and_commits_by_itself_when_it_is_cheap(qapp, tmp_path):
     project, ba, screen = _screen_on_photo(tmp_path, qapp)
+    assert ba.compression.palettes_max != 3
+
     screen._props._sl_palettes.setValue(3)
-    screen._on_compress_preview(screen._props.settings())
-    assert _wait(qapp, lambda: len(screen._preview_cache) == 1 and not screen._preview_running)
-    screen._compress_async = lambda *a, **k: (_ for _ in ()).throw(AssertionError("recalculé"))
+    screen._on_encoding_wanted(screen._props.settings())
 
-    screen._on_apply(*[screen._props.settings()[k] for k in ("token", "dither")])
+    assert screen._canvas._enc_box.isVisibleTo(screen._canvas)                         # l'attente se voit, dans la ligne d'état
+    assert not screen._canvas._btn_run_encoding.isEnabled()                            # le calcul est parti tout seul : le bouton attend
+    assert _wait(qapp, lambda: ba.compression.palettes_max == 3 and _idle(screen))     # le calcul part tout seul et se valide
+    assert ba.encoding_is_current() and len(ba.palettes) <= 3
+    assert screen._canvas._enc_box.isVisibleTo(screen._canvas) and screen._canvas._btn_run_encoding.isEnabled()   # la ligne reste : « Encoded »
 
-    assert ba.compression.palettes_max == 3 and len(ba.palettes) <= 3                 # appliqué, sans nouveau calcul
 
-
-def test_a_setting_already_seen_comes_back_from_the_cache_instantly(qapp, tmp_path):
+def test_an_expensive_background_waits_for_recompute_then_commits(qapp, tmp_path):
     project, ba, screen = _screen_on_photo(tmp_path, qapp)
-    started = []
-    real = screen._start_preview
-    screen._start_preview = lambda key, settings: (started.append(key), real(key, settings))
+    screen._encoding._auto_seconds = 4.0                                              # le seuil de coût, quand il est posé
+    screen._encoding._seconds[screen._encoding._id(ba)] = 9.0                         # son dernier encodage a été cher
     screen._props._sl_palettes.setValue(3)
-    screen._on_compress_preview(screen._props.settings())
-    assert _wait(qapp, lambda: len(screen._preview_cache) == 1 and not screen._preview_running)
 
-    screen._on_compress_preview(screen._props.settings())                            # le même réglage
+    screen._on_encoding_wanted(screen._props.settings())
 
-    assert len(started) == 1 and screen._canvas._preview_badge.text() == label_of("bginp.preview_ready")
+    assert _idle(screen) and ba.compression.palettes_max != 3                          # rien ne part tout seul
+    assert screen._encoding.state(ba) == "pending"
+    box, button = screen._canvas._enc_box, screen._canvas._btn_run_encoding
+    assert box.isVisibleTo(screen._canvas) and button.isVisibleTo(screen._canvas)      # la ligne d'état propose le bouton
+    assert screen._canvas._preview_badge.isVisibleTo(screen._canvas)                   # et l'image préparée, pas le rendu GBA
+    button.click()                                                                     # « Run encoding »
+    assert _wait(qapp, lambda: ba.compression.palettes_max == 3 and _idle(screen))
+    assert box.isVisibleTo(screen._canvas) and not screen._canvas._preview_badge.isVisibleTo(screen._canvas)
 
 
-def test_only_one_preview_computes_at_a_time_and_the_last_request_wins(qapp, tmp_path):
+def test_run_encoding_applies_the_chosen_mode_even_when_the_current_mode_is_cached(qapp, tmp_path):
     project, ba, screen = _screen_on_photo(tmp_path, qapp)
+    current = screen._props._cur_mode_token()
+    other = "bitmap" if current != "bitmap" else "tiled4"
+    layout, depth = ("bitmap", 8) if other == "bitmap" else ("tiled", 4)
+    screen._props._apply_axes(layout, depth)                      # le choix est en attente
+    assert screen._props._staged is not None
+    assert screen._props.settings()["token"] == other
+
+    screen._on_run_encoding()                                     # « Run encoding » : le mode choisi doit survivre
+
+    assert _wait(qapp, lambda: screen._props._cur_mode_token() == other and _idle(screen))
+    assert screen._props._staged is None
+    assert screen._canvas._enc_box.isVisibleTo(screen._canvas)
+
+
+def test_a_failed_encoding_says_so_in_the_status_line_and_keeps_the_pending_choice(qapp, tmp_path, monkeypatch):
+    project, ba, screen = _screen_on_photo(tmp_path, qapp)
+    before = screen._props._cur_mode_token()
+    layout, depth = ("bitmap", 8) if before != "bitmap" else ("tiled", 4)
+    screen._props._apply_axes(layout, depth)
+
+    def boom(*_a, **_k):
+        raise RuntimeError("boom")
+    monkeypatch.setattr("core.bg_import.encode_by_mode", boom)
+
+    screen._on_run_encoding()
+
+    assert _wait(qapp, lambda: screen._encoding.state(ba) == "failed" and _idle(screen))
+    canvas = screen._canvas
+    assert canvas._enc_box.isVisibleTo(canvas) and "boom" in canvas._enc_label.text()   # l'échec se lit en ligne, sans fenêtre
+    assert canvas._btn_run_encoding.isVisibleTo(canvas)                                 # et « Run encoding » se rejoue
+    assert screen._props._staged == (layout, depth)                     # rien n'a abouti : le choix reste
+    assert screen._props._cur_mode_token() == before
+
+
+def test_the_toolbar_and_strips_follow_a_mode_change_applied_by_recompute(qapp, tmp_path):
+    project, ba, screen = _screen_on_photo(tmp_path, qapp)
+    canvas = screen._canvas
+    screen._props._apply_axes("bitmap", 8)
+    screen._on_run_encoding()
+    assert _wait(qapp, lambda: ba.mode == "bitmap" and _idle(screen))
+    assert not canvas._paint_strip.isVisibleTo(canvas) and not canvas._toolbar._btns["brush"].isVisibleTo(canvas._toolbar)
+
+    screen._props._apply_axes("tiled", 4)
+    screen._on_run_encoding()
+    assert _wait(qapp, lambda: ba.mode == "tiled" and _idle(screen))
+    assert canvas._paint_strip.isVisibleTo(canvas) and canvas._toolbar._btns["brush"].isVisibleTo(canvas._toolbar)
+
+
+def test_the_status_line_names_the_chosen_layout_and_follows_each_change_of_mode(qapp, tmp_path):
+    project, ba, screen = _screen_on_photo(tmp_path, qapp)
+    screen._encoding._auto_seconds = 4.0
+    screen._encoding._seconds[screen._encoding._id(ba)] = 9.0                         # cher : l'encodage attend le bouton
+    canvas = screen._canvas
+
+    screen._props._apply_axes("bitmap", 8)
+    screen._on_encoding_wanted(screen._props.settings())
+    assert "Bitmap 8bpp" in canvas._enc_label.text() and canvas._btn_run_encoding.isVisibleTo(canvas)
+
+    screen._props._apply_axes("tiled", 8)                                              # le choix change : la ligne aussi
+    screen._on_encoding_wanted(screen._props.settings())
+    assert "Tiled 8bpp" in canvas._enc_label.text()
+
+    screen._props._apply_axes(*screen._props._cur_axes())                              # revenu au mode courant : plus rien
+    screen._on_encoding_wanted(None)
+    assert screen._encoding.state(ba) == "up_to_date" and "Pending" not in canvas._enc_label.text()
+
+
+def test_a_setting_already_seen_comes_back_from_the_cache_without_computing_again(qapp, tmp_path):
+    project, ba, screen = _screen_on_photo(tmp_path, qapp)
+    runs = []
+    real = screen._encoding._executor.run
+    screen._encoding._executor.run = lambda *a, **k: (runs.append(1), real(*a, **k))
+    for palettes in (3, 4):
+        screen._props._sl_palettes.setValue(palettes)
+        screen._on_encoding_wanted(screen._props.settings())
+        assert _wait(qapp, lambda: ba.compression.palettes_max == palettes and _idle(screen))
+    assert len(runs) == 2
+
+    screen._props._sl_palettes.setValue(3)                                              # le premier réglage, déjà vu
+    screen._on_encoding_wanted(screen._props.settings())
+
+    assert ba.compression.palettes_max == 3 and len(runs) == 2                          # validé sur-le-champ, sans calcul
+
+
+def test_only_one_encoding_computes_at_a_time_and_the_last_request_wins(qapp, tmp_path):
+    project, ba, screen = _screen_on_photo(tmp_path, qapp)
+    committed = []
+    screen._encoding.committed.connect(lambda _ba, job: committed.append(job.compression.palettes_max))
     for palettes in (2, 3, 4):
         screen._props._sl_palettes.setValue(palettes)
-        screen._on_compress_preview(screen._props.settings())
-    assert screen._preview_running and screen._preview_next is not None
+        screen._on_encoding_wanted(screen._props.settings())
+    assert screen._encoding._running is not None                                        # un seul calcul à la fois
 
-    assert _wait(qapp, lambda: not screen._preview_running and screen._preview_next is None)
-    keys = [k[7] for k in screen._preview_cache]                                  # la compression de chaque résultat
-    assert (4, 15, 0, 0, 255, "floyd_steinberg") in keys                              # le dernier a été calculé
-    assert (3, 15, 0, 0, 255, "floyd_steinberg") not in keys                          # celui du milieu a été sauté
+    assert _wait(qapp, lambda: ba.compression.palettes_max == 4 and _idle(screen))
+    assert committed == [4]                                                             # ni le premier (périmé) ni celui du milieu
 
 
-def test_nothing_pending_clears_the_preview_and_the_cache_is_bounded(qapp, tmp_path):
+def test_nothing_pending_asks_for_nothing(qapp, tmp_path):
     project, ba, screen = _screen_on_photo(tmp_path, qapp)
-    screen._on_compress_preview(None)
+
+    screen._on_encoding_wanted(None)
+
+    assert _idle(screen) and not screen._encoding._wanted
     assert not screen._canvas._preview_badge.isVisibleTo(screen._canvas)
-    for n in range(screen._PREVIEW_CACHE_SIZE + 3):
-        screen._cache_put(("k", n), {})
-    assert len(screen._preview_cache) == screen._PREVIEW_CACHE_SIZE
 
 
 def test_the_mirror_button_adds_a_bar_at_mid_image_and_the_background_is_recompressed_mirrored(qapp, tmp_path, preparation_tools):
@@ -908,7 +978,7 @@ def test_the_mirror_button_adds_a_bar_at_mid_image_and_the_background_is_recompr
     width, height = canvas._prepared_size()
 
     canvas._tb_mirror_x.click()
-    assert _wait(qapp, lambda: ba.mirror_x is not None and not screen._compress_tasks)
+    assert _wait(qapp, lambda: ba.mirror_x is not None and _idle(screen))
     assert ba.mirror_x == width // 2 and ba.mirror_y is None
     assert canvas._view.mirror.isVisible() and canvas._tb_mirror_x.isChecked() and not canvas._tb_mirror_y.isChecked()
 
@@ -916,43 +986,24 @@ def test_the_mirror_button_adds_a_bar_at_mid_image_and_the_background_is_recompr
     canvas._view.mirror.drag(16, 0, snap=True)
     canvas._view.mirror.end()
     canvas._view.mirror_released.emit(*canvas._view.mirror.axes(), *canvas._view.mirror.flips())
-    assert _wait(qapp, lambda: ba.mirror_x == 16 and not screen._compress_tasks)
+    assert _wait(qapp, lambda: ba.mirror_x == 16 and _idle(screen))
 
     canvas._view.mirror.begin(("x", "side"))                                         # tirer la flèche de l'autre côté
     canvas._view.mirror.drag(30, 0, snap=False)
     canvas._view.mirror.end()
     canvas._view.mirror_released.emit(*canvas._view.mirror.axes(), *canvas._view.mirror.flips())
-    assert _wait(qapp, lambda: ba.mirror_flip_x and not screen._compress_tasks)
+    assert _wait(qapp, lambda: ba.mirror_flip_x and _idle(screen))
 
     canvas._tb_mirror_y.click()
-    assert _wait(qapp, lambda: ba.mirror_y == height // 2 and not screen._compress_tasks)
+    assert _wait(qapp, lambda: ba.mirror_y == height // 2 and _idle(screen))
 
     canvas._btn_prep_reset.click()
-    assert _wait(qapp, lambda: ba.mirror_x is None and ba.mirror_y is None and not screen._compress_tasks)
+    assert _wait(qapp, lambda: ba.mirror_x is None and ba.mirror_y is None and _idle(screen))
     assert not ba.mirror_flip_x
     assert not canvas._view.mirror.isVisible() and not canvas._tb_mirror_x.isChecked()
 
 
-def test_a_compression_preview_puts_its_own_budget_in_the_overlays_then_gives_them_back(qapp, tmp_path):
-    from core.bg_import import encode_by_mode, prepare_source
-    project, ba, _panel = _panel_with_project(tmp_path)
-    png = _bright_png(project)
-    ba.asset = project.asset_rel(png)
-    screen = _screen_in(tmp_path, tmp_path)[1]
-    screen._project = project
-    screen._props._ba = ba
-    screen._canvas.load(project, ba)
-    encoded = encode_by_mode(prepare_source(png), "tiled4")
-    info = screen._canvas._info_ov
-
-    screen._show_compressed_preview(encoded)                         # l'aperçu : ses chiffres, pas ceux du fond
-    assert not info.isHidden() and f"{len(encoded['tileset'])} / 512" in info.text() and "░" in info.text()
-
-    screen._on_adjust_preview(None)                                  # plus d'aperçu : le fond compressé reprend la main
-    assert "░" not in info.text() and "█" not in info.text()         # plus de jauge : seul l'aperçu en portait
-
-
-def test_the_compression_findings_read_measures_so_a_preview_says_what_the_applied_background_would(qapp):
+def test_the_compression_findings_read_measures_so_a_background_says_what_it_would_after_compression(qapp):
     from ui.background_editor.background_editor_screen import BgPropertiesPanel
     from ui.common.theme import C
     lines = BgPropertiesPanel._compression_lines_from
@@ -962,20 +1013,23 @@ def test_the_compression_findings_read_measures_so_a_preview_says_what_the_appli
     assert lines("tiled", 8, {}, tiles=300, palettes=1)[0][0] and not lines("tiled", 8, {}, tiles=256, palettes=1)
 
 
-def test_a_bitmap_preview_says_its_canvas_instead_of_leaving_the_previous_layouts_overlays(qapp, tmp_path):
+def test_a_bitmap_background_says_its_canvas_in_the_overlay(qapp, tmp_path):
     from PIL import Image
     from core.bg_import import encode_by_mode, prepare_source
+    from core.resources.asset_reconciliation import apply_bg_encoding
     project, ba, _panel = _panel_with_project(tmp_path)
     png = project.background_images_dir / "big.png"
     png.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", (240, 134), (30, 90, 200)).save(png)
     ba.asset = project.asset_rel(png)
+    ba.choose_layout("bitmap")
+    apply_bg_encoding(ba, encode_by_mode(prepare_source(png), "bitmap"))
     screen = _screen_in(tmp_path, tmp_path)[1]
     screen._project = project
     screen._props._ba = ba
     screen._canvas.load(project, ba)
 
-    screen._show_compressed_preview(encode_by_mode(prepare_source(png), "bitmap"))
+    screen._props._emit_overlays()
 
     text = screen._canvas._info_ov.text() + screen._canvas._warn_ov.text()
     assert "240×160 px" in text                               # le canvas d'un bitmap, pas la taille du fond d'avant
@@ -1204,17 +1258,17 @@ def test_the_adjustments_card_folds_and_opens_by_itself_when_one_is_set(qapp, tm
     assert not props._adj_host.isVisibleTo(props) or props._adj_host.isHidden() is False
     props._adj_open = False
     props._refresh_tune_visibility()
-    assert props._adj_host.isHidden() and props._btn_adj.text().startswith("▸")
+    assert not props._adj_host.isVisibleTo(props) and not props._adj_card.is_expanded()
 
-    props._btn_adj.click()
-    assert not props._adj_host.isHidden() and props._btn_adj.text().startswith("▾")
+    props._adj_card.set_expanded(True)
+    assert props._adj_host.isVisibleTo(props) and props._adj_card.is_expanded()
 
     ba.adjust = BackgroundAdjust(hue=20)
     other = _with_image()
     props.load(other, project)                                             # un autre fond, sans ajustement : replié
-    assert props._adj_host.isHidden()
+    assert not props._adj_host.isVisibleTo(props)
     props.load(ba, project)                                                # un fond déjà réglé : ouvert d'office
-    assert not props._adj_host.isHidden()
+    assert props._adj_host.isVisibleTo(props)
 
 
 def test_the_compression_settings_follow_the_order_the_encoder_resolves_them(qapp, tmp_path):
@@ -1268,3 +1322,110 @@ def test_choosing_bitmap_outside_the_canvas_mode_moves_the_passe_partout_frame(q
 
     assert canvas._view.canvas_place.canvas() == (240, 160)               # le cadre du passe-partout suit
     assert "240" in screen._props._canvas_fixed.text()
+
+
+def test_inpainting_only_targets_an_added_palette_and_stores_its_position(qapp):
+    ba = _with_image()
+    ba.source_palettes = [list(ba.palettes[0])]                       # une palette DÉRIVÉE du PNG, en banque 0
+    ba.palettes = [list(ba.palettes[0])]
+    ba.added_palettes = []
+    bank = ba.add_palette_ref("Green", [0, 0x03E0] + [0] * 14)        # banque 1 = position 0
+    ctrl = _controller(ba, "inpaint")
+
+    ctrl.set_active_palette(0)                                         # la palette dérivée : refusée
+    _stroke(ctrl, [(2, 2)])
+    assert ba.tile_palette_overrides == {}
+
+    ctrl.set_active_palette(bank)
+    _stroke(ctrl, [(2, 2)])
+    assert ba.tile_palette_overrides == {(2, 2): 0}                    # la POSITION, pas le numéro de banque
+    assert unpack_se(ba.effective_tilemap()[2 * ba.tiles_w + 2])[1] == bank
+
+
+def test_the_palette_strip_lists_added_palettes_only_in_both_modes(qapp):
+    from ui.background_editor.bg_inpaint_canvas import BgInpaintCanvas
+    ba = _with_image()
+    ba.source_palettes = [list(ba.palettes[0])]
+    ba.palettes = [list(ba.palettes[0])]
+    ba.added_palettes = []
+    ba.add_palette_ref("Green", [0, 0x03E0] + [0] * 14)
+    canvas = BgInpaintCanvas()
+    canvas.load(None, ba)
+
+    for mode in ("inpaint", "paint"):
+        canvas._toolbar.set_mode(mode)
+        assert list(canvas._paint_strip._colors) == [1], mode          # la banque 0 est dérivée : pas une cible
+
+
+def test_the_passe_partout_slider_sets_how_much_the_outside_is_dimmed(qapp):
+    from ui.background_editor.bg_inpaint_canvas import BgInpaintCanvas
+    canvas = BgInpaintCanvas()
+    place = canvas._view.canvas_place
+
+    canvas._sl_passe_partout.setValue(100)
+    assert place._dim == 255
+    canvas._sl_passe_partout.setValue(0)
+    assert place._dim == 0
+    assert canvas._bar.layout().indexOf(canvas._sl_passe_partout) < canvas._bar.layout().indexOf(canvas._bar._size_label)
+
+
+def test_a_compression_from_the_screen_leaves_the_result_current_for_the_settings_it_used(qapp, tmp_path):
+    from core.models.background import BackgroundCompression
+    project, ba, screen = _screen_on_photo(tmp_path, qapp)
+    assert not ba.encoded_for                                          # la fixture n'a rien encodé par l'écran
+
+    screen._compress_async(ba, project.background_image_path(ba), "tiled4", ba.quantize_method, ba.dither,
+                           compression=BackgroundCompression(palettes_max=2))
+
+    assert _wait(qapp, lambda: screen._encoding._running is None and ba.encoded_for)
+    assert ba.compression.palettes_max == 2 and ba.encoding_is_current()    # les réglages posés AVANT l'encodage
+    ba.compression = BackgroundCompression(palettes_max=5)
+    assert not ba.encoding_is_current()                                # un réglage de plus : périmé
+
+
+
+def test_the_status_line_stays_visible_when_up_to_date_and_recompute_redoes_the_encoding(qapp, tmp_path):
+    project, ba, screen = _screen_on_photo(tmp_path, qapp)
+    canvas = screen._canvas
+    screen._on_selected(ba)
+    assert canvas._enc_box.isVisibleTo(canvas) and canvas._btn_run_encoding.isEnabled()   # à jour : l'état se lit, le bouton est là
+
+    runs = []
+    import core.bg_import as bg_import
+    real = bg_import.encode_by_mode
+    bg_import.encode_by_mode = lambda *a, **k: (runs.append(1), real(*a, **k))[1]
+    try:
+        canvas._btn_run_encoding.click()
+        assert _wait(qapp, lambda: runs and _idle(screen))
+    finally:
+        bg_import.encode_by_mode = real
+    assert ba.encoding_is_current() and "last run" in canvas._enc_label.text()
+
+
+def test_the_brush_size_lives_in_the_top_bar_and_drives_the_view(qapp, tmp_path):
+    project, ba, screen = _screen_on_photo(tmp_path, qapp)
+    canvas = screen._canvas
+    assert not hasattr(canvas._toolbar, "size_changed")                 # plus dans le menu du pinceau
+    assert canvas._brush_size_buttons[8].isChecked()
+    canvas._brush_size_buttons[32].click()
+    assert canvas._view._brush_size == 32 and canvas._brush_size_buttons[32].isChecked()
+    assert not canvas._brush_size_buttons[8].isChecked()
+
+
+def test_an_encoding_finishing_in_canvas_mode_leaves_the_source_on_screen_until_the_mode_ends(qapp, tmp_path, preparation_tools):
+    """Le mode Canvas montre le FICHIER source : une fin d'encodage (ou un aperçu) ne doit pas remettre l'image encodée, la
+    grille ou l'aperçu par-dessus ; ils reviennent, à jour, à la sortie du mode."""
+    project, ba, screen = _screen_on_photo(tmp_path, qapp)
+    canvas, view = screen._canvas, screen._canvas._view
+    canvas._toolbar.choose_select()
+    assert view.canvas_mode_active()
+
+    screen._props._d8.click()
+    screen._on_run_encoding()
+    assert _wait(qapp, lambda: ba.bpp == 8 and _idle(screen))
+
+    assert view.canvas_mode_active() and not view._pix_item.isVisible() and not view._adjust_item.isVisible()
+    assert not view._grid.isVisible()
+    canvas._toolbar.leave_select()
+    qapp.processEvents()
+    assert not view.canvas_mode_active() and view._pix_item.isVisible() and not view._adjust_item.isVisible()

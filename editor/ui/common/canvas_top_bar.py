@@ -13,7 +13,7 @@ from __future__ import annotations
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 from core.keybindings import get_keybindings
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QToolButton
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSlider, QToolButton
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
 
@@ -142,6 +142,63 @@ class CanvasTopBar(QFrame):
         self._lay.insertWidget(self._extras_at, b)
         self._extras_at += 1
         return b
+
+    def add_slider(self, tip: str, lo: int, hi: int, value: int, slot=None, width: int = 72) -> QSlider:
+        """Petit curseur horizontal posé à DROITE, juste avant les dimensions du canvas (ex : l'intensité du passe-partout).
+        `slot(valeur)` est appelé à chaque cran."""
+        s = QSlider(Qt.Orientation.Horizontal)
+        s.setRange(lo, hi)
+        s.setValue(value)
+        s.setFixedWidth(width)
+        s.setToolTip(tip)
+        s.setStyleSheet(
+            f"QSlider::groove:horizontal{{height:4px; background:{C.BORDER_MID}; border-radius:2px;}}"
+            f"QSlider::sub-page:horizontal{{background:{C.ACCENT}; border-radius:2px;}}"
+            f"QSlider::handle:horizontal{{width:10px; height:10px; margin:-3px 0; border-radius:5px;"
+            f"background:{C.TEXT_NORM};}}"
+            f"QSlider::handle:horizontal:hover{{background:{C.ACCENT};}}")
+        if slot is not None:
+            s.valueChanged.connect(slot)
+        at = self._lay.indexOf(self._size_label)
+        if at >= 0:
+            self._lay.insertWidget(at, s)
+        else:
+            self._lay.addWidget(s)
+        return s
+
+    def add_choice(self, tip_for, values: list, current, slot=None) -> dict:
+        """Petit sélecteur à choix exclusifs (ex : la taille de la brosse), posé dans la zone des extras. `tip_for(valeur)`
+        rend l'infobulle d'un choix ; `slot(valeur)` est appelé à chaque changement. Rend {valeur: bouton}."""
+        from PyQt6.QtWidgets import QButtonGroup
+        group = QButtonGroup(self)
+        group.setExclusive(True)
+        box = QFrame()
+        box.setStyleSheet("background:transparent; border:none;")
+        row = QHBoxLayout(box)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(2)
+        buttons = {}
+        for value in values:
+            b = QToolButton()
+            b.setText(str(value))
+            b.setFont(self._font)
+            b.setCheckable(True)
+            b.setChecked(value == current)
+            b.setFixedSize(30, 28)
+            b.setToolTip(tip_for(value))
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setStyleSheet(
+                f"QToolButton{{border:1px solid {C.BORDER};background:{C.BG_INPUT};color:{C.TEXT_NORM};"
+                f"border-radius:4px;padding:0px;}}"
+                f"QToolButton:hover{{background:{C.BG_HOVER};border-color:{C.BORDER_MID};}}"
+                f"QToolButton:checked{{background:{C.BG_SEL};border:1px solid {C.ACCENT};color:{C.ACCENT};}}")
+            if slot is not None:
+                b.clicked.connect(lambda _=False, v=value: slot(v))
+            group.addButton(b)
+            row.addWidget(b)
+            buttons[value] = b
+        self.add_widget(box)
+        return buttons
 
     def add_widget(self, widget) -> None:
         """Insère un widget quelconque dans la zone des extras (ex: champ de

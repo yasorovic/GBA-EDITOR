@@ -416,6 +416,8 @@ def apply_bg_encoding(ba: "BackgroundAsset", c: dict, lookup=None):
     dropped = ba.resolve_palettes(lookup, kept)
     if dropped:
         ba.diagnostics["palette_overrides_dropped"] = dropped
+    # « Ce résultat vient de ces réglages » : ceux que l'appelant a posés avant d'appeler, donc ceux de l'encodage.
+    ba.encoded_for = ba.encode_settings_fingerprint()
 
 
 def catalogue_lookup(project):

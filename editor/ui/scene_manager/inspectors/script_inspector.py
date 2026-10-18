@@ -11,8 +11,9 @@ from typing import Optional
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QScrollArea,
-    QLineEdit, QMessageBox, QSlider, QPlainTextEdit, QPushButton, QButtonGroup,
+    QLineEdit, QSlider, QPlainTextEdit, QPushButton, QButtonGroup,
 )
+from ui.common.popup import MessageBox as QMessageBox
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import pyqtSignal, QTimer, Qt
 

@@ -31,8 +31,9 @@ from typing import Optional
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QScrollArea,
-    QPushButton, QMessageBox, QInputDialog,
+    QPushButton, QInputDialog,
 )
+from ui.common.popup import MessageBox as QMessageBox
 from PyQt6.QtGui import QFont, QFontMetrics
 from PyQt6.QtCore import pyqtSignal
 

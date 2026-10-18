@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Iterator, Optional
 
 import re
+from core.resources.resource_store import atomic_write
 
 from .api import (RUNTIME_API, RUNTIME_PROPS, REF_TYPES, REF_ACTOR, PARAM_STR, DOMAIN_UI_ELEMENT,
                   MODULE_CALLS)
@@ -124,7 +125,7 @@ def _element_locals(tree) -> dict[str, Optional[str]]:
 
 def _node_key(node, elems: dict) -> Optional[str]:
     """`_call_key`, plus les méthodes d'un ÉLÉMENT d'interface : `box:draw("k")` sur
-    `interface:get("Box")` (ou un local qui le tient) est l'entrée `text_region:draw`.
+    `interface:get("Box")` (ou un local qui le tient) est l'entrée `textBox:draw`.
     Le repérage est structurel, comme le reste : la méthode se cherche dans le
     catalogue, sur les types de référence, jamais dans une liste écrite ici."""
     if isinstance(node, _nodes.Invoke):
@@ -549,7 +550,7 @@ def _rename_by_position(project, new: str, find) -> dict[Path, int]:
         if not refs:
             continue
         new_text, n = _rewrite_data_refs(text, refs, new)
-        p.write_text(new_text, encoding="utf-8")
+        atomic_write(p, new_text)
         changed[p] = n
     return changed
 
@@ -638,6 +639,6 @@ def rename_in_files(paths, domain: str, old: str, new: str) -> dict[Path, int]:
             continue
         new_text, n = rename_in_text(text, domain, old, new)
         if n:
-            p.write_text(new_text, encoding="utf-8")
+            atomic_write(p, new_text)
             changed[p] = n
     return changed

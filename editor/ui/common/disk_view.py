@@ -20,8 +20,8 @@ from typing import Callable
 from PyQt6.QtCore import QMimeData, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QKeySequence, QPainter, QPen, QShortcut
 from PyQt6.QtWidgets import (
-    QApplication, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMenu, QPushButton, QTabWidget, QToolButton,
-    QSlider, QVBoxLayout, QWidget, QWidgetAction,
+    QApplication, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMenu, QPushButton, QTabWidget,
+    QSlider, QVBoxLayout, QWidget,
 )
 
 from core import disk_tree
@@ -31,13 +31,15 @@ from core.models.resource import MIME_CANVAS_ACTOR, MIME_PREFAB_TEMPLATE, MIME_U
 from core.models.sprite import IMAGE_FILE_EXTS
 from ui.common import icons
 from ui.common.elide_name import ElidedNameDelegate
-from ui.common.disk_folder_colors import COLORS as FOLDER_COLORS, color_for as folder_color_for, set_color as set_folder_color
+from ui.common.disk_folder_colors import color_for as folder_color_for, set_color as set_folder_color
+from ui.common.color_menu import add_color_actions
 from ui.common.labels import label
 from ui.common.panel_bar import bar_button, panel_bar
 from ui.common import shortcut_hints
 from ui.common.reveal import reveal_in_file_manager
 from ui.common.theme import C, QSS, S, T
 from ui.common.tooltip import tooltip
+from ui.common.tooltip_controller import TooltipContent, set_tooltip_provider
 from ui.common.widgets import W
 
 # Une cellule, toujours la même : la surbrillance d'une entrée est un rectangle de taille fixe,
@@ -483,37 +485,11 @@ def add_folder_color_actions(menu: QMenu, node: disk_tree.DiskNode, changed: Cal
     """Six pastilles de couleur directement dans le menu d'un vrai dossier."""
     if node.kind != disk_tree.FOLDER:
         return
-    if not menu.isEmpty():
-        menu.addSeparator()
-    current = folder_color_for(node.path)
-    row = QWidget(menu)
-    layout = QHBoxLayout(row)
-    layout.setContentsMargins(10, 4, 10, 4)
-    layout.setSpacing(5)
+    def selected(color):
+        set_folder_color(node.path, color)
+        changed()
 
-    def add_dot(name: str, color: str | None) -> None:
-        selected = current == color
-        dot = QToolButton(row)
-        dot.setFixedSize(18, 18)
-        dot.setCursor(Qt.CursorShape.PointingHandCursor)
-        dot.setToolTip(label(name))
-        dot.setText("×" if color is None else "")
-        fill = color or "transparent"
-        border = C.TEXT_HI if selected else (C.BORDER_MID if color is None else color)
-        text = C.TEXT_DIM if color is None else C.BG_DEEP
-        dot.setStyleSheet(
-            f"QToolButton{{background:{fill};color:{text};border:2px solid {border};border-radius:9px;"
-            f"padding:0;font-size:12px;font-weight:700;}}"
-            f"QToolButton:hover{{border-color:{C.TEXT_HI};}}")
-        dot.clicked.connect(lambda _=False, c=color: (set_folder_color(node.path, c), changed(), menu.close()))
-        layout.addWidget(dot)
-
-    add_dot('disk.folder_color_none', None)
-    for key, color in FOLDER_COLORS.items():
-        add_dot(f'disk.folder_color_{key}', color)
-    action = QWidgetAction(menu)
-    action.setDefaultWidget(row)
-    menu.addAction(action)
+    add_color_actions(menu, folder_color_for(node.path), selected)
 
 
 class _DiskList(DropCheckMixin, QListWidget):
@@ -776,18 +752,50 @@ class DiskView(QWidget):
             f"QListWidget::item:focus{{outline:none;}}")
         self._list.itemDoubleClicked.connect(self._enter)
         self._list.itemSelectionChanged.connect(self._sync_create_button)
+        self._list.itemSelectionChanged.connect(self._sync_preview)
+        set_tooltip_provider(self._list.viewport(), self._tooltip_at)
         bind_delete_key(self._list, self._selected_nodes, lambda: self._callbacks)
         bind_duplicate_key(self._list, self._selected_nodes, lambda: self._callbacks)
         self._list.itemChanged.connect(self._on_item_changed)
         self._list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._list.customContextMenuRequested.connect(self._on_context_menu)
-        v.addWidget(self._list, 1)
+        from ui.common.disk_preview import DiskPreviewPanel
+        self._preview_provider = None
+        self._preview = DiskPreviewPanel()
+        content = QHBoxLayout()
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(0)
+        content.addWidget(self._list, 1)
+        content.addWidget(self._preview)
+        v.addLayout(content, 1)
 
         self._root: disk_tree.DiskNode | None = None
         self._trail: list[str] = []   # noms des dossiers qu'on a descendus sous la racine
         self._apply_layout()
 
     # ── Mosaïque ou liste ─────────────────────────────────────────
+
+    def set_preview_provider(self, provider) -> None:
+        """`provider(node, render)` supplies live metadata without coupling Disk to Project."""
+        self._preview_provider = provider
+        self._sync_preview()
+
+    def _sync_preview(self) -> None:
+        nodes = self._selected_nodes()
+        node = nodes[0] if len(nodes) == 1 else None
+        result = self._preview_provider(node, True) if node and self._preview_provider else None
+        self._preview.show_preview(node.name if node else '', result)
+
+    def _tooltip_at(self, position):
+        item = self._list.itemAt(position)
+        node = item.data(_NODE_ROLE) if item else None
+        if node is not None and self._preview_provider:
+            result = self._preview_provider(node, False)
+            if result is not None:
+                text = tooltip(title=node.name, body='\n'.join(result.lines),
+                               note=mark_text(node), warning=result.note)
+                return TooltipContent(text, self._list.visualItemRect(item))
+        return None
 
     def layout_mode(self) -> str:
         return self._layout_mode

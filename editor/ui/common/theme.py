@@ -32,7 +32,7 @@ Stylesheet globale à appliquer une seule fois dans main.py :
     app.setStyleSheet(GLOBAL_QSS)
 
 Bulles d'aide : les widgets définissent leur contenu avec `setToolTip()`, mais
-`main.py` intercepte leur demande et affiche `_ThemedTooltip`. La bulle est un
+`ui/common/tooltip_controller.py` résout leur contenu et affiche la même bulle. C'est un
 widget de l'éditeur, pas le composant natif `QToolTip`, afin de ne jamais
 dessiner une première fois les couleurs de Windows.
 """
@@ -770,7 +770,7 @@ QToolTip {{
     border: 1px solid {C.BORDER_MID};
     padding: 5px 8px;
     font-family: {T.UI_STACK};
-    font-size: {T.MD}px;
+    font-size: {T.SM}px;
 }}
 """
     # PAS de `border-radius` ici : avec un arrondi, Qt rend la bulle dans une fenêtre

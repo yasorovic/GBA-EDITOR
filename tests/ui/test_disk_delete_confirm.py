@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from PIL import Image
-from PyQt6.QtWidgets import QMessageBox
+from ui.common.popup import MessageBox as QMessageBox
 
 from asset_fixtures import create
 from core import disk_tree

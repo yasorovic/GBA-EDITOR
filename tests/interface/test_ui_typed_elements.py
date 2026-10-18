@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 from core.models.ui_region import KIND_CONTAINER, KIND_IMAGE, KIND_LIST, KIND_TEXT
 
-KINDS = {"Menu": "list", "Heart": "image", "Box": "text_region", "Hud": "ui_element"}
+KINDS = {"Menu": "list", "Heart": "image", "Box": "textBox", "Hud": "ui_element"}
 
 
 def _errors(body: str) -> list[str]:
@@ -155,7 +155,7 @@ DATA = {"Dialogue": (["boite", "icone", "n"], 3)}
 
 def _kinds_data():
     from scripting.expr_types import data_column_key
-    return {data_column_key("Dialogue", "boite"): "text_region",
+    return {data_column_key("Dialogue", "boite"): "textBox",
             data_column_key("Dialogue", "icone"): "image"}
 
 
@@ -211,9 +211,9 @@ def test_la_cellule_garde_sa_nature_de_donnee_constante():
 
 def test_un_membre_d_un_autre_type_est_refuse_sur_une_cellule():
     (msg,) = _data_errors("local i = data.Dialogue[1].boite.offset")
-    assert "text_region" in msg and "data.Dialogue[…].boite" in msg
+    assert "textBox" in msg and "data.Dialogue[…].boite" in msg
     (msg,) = _data_errors('data.Dialogue[1].boite:play()')
-    assert "text_region" in msg
+    assert "textBox" in msg
 
 
 def test_l_etat_d_image_par_nom_exige_une_image_connue_au_build():
@@ -238,5 +238,5 @@ def test_le_build_type_les_colonnes_de_reference_du_projet():
                         columns=[col("boite", "region"), col("icone", "image"),
                                  col("texte", "text"), col("n", "int")])])
     assert data_column_kinds(project) == {
-        data_column_key("Dialogue", "boite"): "text_region",
+        data_column_key("Dialogue", "boite"): "textBox",
         data_column_key("Dialogue", "icone"): "image"}

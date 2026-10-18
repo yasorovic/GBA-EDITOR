@@ -71,7 +71,7 @@ class MarkupToolbar(QFrame):
         self.setFixedHeight(32)
         self.setStyleSheet(
             f"QFrame{{background:{C.BG_PANEL}; "
-            f"border-top:1px solid {C.BORDER_DARK};}}")
+            f"border:none;}}")
 
         lay = QHBoxLayout(self)
         lay.setContentsMargins(6, 0, 6, 0)
@@ -92,15 +92,10 @@ class MarkupToolbar(QFrame):
                 lambda _c=False, n=name, d=default: self._on_click(n, d),
             ))
 
-        sep = QFrame()
-        sep.setFixedWidth(1)
-        sep.setStyleSheet(f"background:{C.BORDER};")
-        lay.addSpacing(4)
-        lay.addWidget(sep)
         lay.addSpacing(4)
 
         # Le marqueur de valeur n'est PAS une balise (il ne met rien en forme,
-        # il substitue) — d'où le séparateur, et sa place en bout de barre.
+        # il substitue) — d'où l'espacement et sa place en bout de barre.
         lay.addWidget(self._button(
             "mk_value",
             tooltip(title="$name", body=label("mktool.value_tip")),
@@ -138,6 +133,10 @@ class MarkupToolbar(QFrame):
         return b
 
     # ── Contexte projet ───────────────────────────────────────────
+
+    def set_editor(self, edit):
+        """Dirige une barre partagée vers le bloc de texte actif."""
+        self._edit = edit
 
     def set_project(self, project):
         self._project = project

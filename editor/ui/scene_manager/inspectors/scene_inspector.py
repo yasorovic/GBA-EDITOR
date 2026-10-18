@@ -5,9 +5,10 @@ from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QComboBox,
-    QScrollArea, QPushButton, QMessageBox, QMenu, QToolButton, QSpinBox,
+    QScrollArea, QPushButton, QMenu, QToolButton, QSpinBox,
     QLineEdit,
 )
+from ui.common.popup import MessageBox as QMessageBox
 from PyQt6.QtGui import QFont, QColor
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPoint
 

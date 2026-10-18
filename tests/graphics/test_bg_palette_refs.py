@@ -217,3 +217,75 @@ def test_catalogue_lookup_rend_les_couleurs_d_une_banque_ou_rien(tmp_path):
 
     assert lookup("Night") == list(night.colors) and lookup("Nope") is None
     assert catalogue_lookup(None) is None
+
+
+# ── Le repeint de tuiles (inpainting) suit la même règle que la peinture ──────
+
+def test_un_repeint_se_range_par_position_et_se_rend_en_numero_de_banque(tmp_path):
+    ba, path = _fond(tmp_path, palettes_max=1)
+    ba.add_palette_ref("Green", GREEN)
+    ba.tile_palette_overrides = {(1, 1): 0}                                    # position 0 dans added_palettes
+    derived_before = ba.derived_count()
+    assert ba.repaint_bank((1, 1)) == derived_before
+
+    _encode(ba, path, palettes_max=4)                                          # plus de palettes dérivées
+
+    assert ba.derived_count() > derived_before
+    assert ba.repaint_bank((1, 1)) == ba.derived_count()                       # le repeint a suivi sa palette
+    assert ba.tile_palette_overrides == {(1, 1): 0}                            # et rien n'a bougé dans le réglage
+
+
+def test_un_repeint_dont_la_palette_n_existe_plus_est_ignore_au_rendu():
+    ba = BackgroundAsset(name="x")
+    ba.tile_palette_overrides = {(0, 0): 3}                                    # aucune palette ajoutée à cette position
+
+    assert ba.repaint_bank((0, 0)) is None and ba.repaint_bank((9, 9)) is None
+
+
+def test_retirer_une_palette_ajoutee_emporte_ses_repeints_et_avance_les_suivants():
+    ba = BackgroundAsset(name="x")
+    ba.add_palette_ref("Green", GREEN)
+    ba.add_palette_ref("Blue", BLUE)
+    ba.tile_palette_overrides = {(0, 0): 0, (1, 0): 1}
+
+    ba.remove_palette(0)
+
+    assert ba.added_palettes == ["Blue"] and ba.tile_palette_overrides == {(1, 0): 0}
+
+
+def test_le_sidecar_ecrit_les_repeints_sous_tile_repaint_et_relit_l_ancienne_cle_en_banques():
+    ba = BackgroundAsset(name="x")
+    ba.add_palette_ref("Green", GREEN)
+    ba.tile_palette_overrides = {(2, 3): 0}
+    d = ba.to_dict()
+    assert d["settings"]["tile_repaint"] == {"2,3": 0} and "tile_palette_overrides" not in d["settings"]
+    assert BackgroundAsset.from_dict(d).tile_palette_overrides == {(2, 3): 0}
+
+    legacy = {"name": "x", "source_palettes": [[0] * 16, [0] * 16], "palettes": [[0] * 16] * 3,
+              "tile_palette_overrides": {"2,3": 2, "4,4": 1}}                   # des numéros de banque d'avant
+    old = BackgroundAsset.from_dict(legacy)
+    assert old.tile_palette_overrides == {(2, 3): 0}                           # la banque 2 = 1re ajoutée ; la 1 est dérivée : abandonnée
+
+
+def test_un_fond_dont_l_encodage_est_perime_est_signale_sans_bloquer(tmp_path):
+    from core.validator import validate_project
+    from PIL import Image
+    from core.resources.asset_reconciliation import encode_background_asset
+    p, ba, _night = _project(tmp_path)
+    png = p.background_images_dir / "sky.png"
+    png.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (16, 16), (200, 40, 40)).save(png)
+    ba.asset = p.asset_rel(png)
+    encode_background_asset(ba, png)
+    assert ba.encoding_is_current()
+    p.backgrounds.save(ba)
+    assert not any("Run encoding" in str(m) for m in validate_project(p)[0])      # à jour : rien à dire
+
+    ba.compression.palettes_max = 3                          # un réglage change sans réencodage
+    assert not ba.encoding_is_current()
+    p.backgrounds.save(ba)
+
+    warnings, errors = validate_project(p)
+
+    assert any("sky" in str(w) and "Run encoding" in str(w) for w in warnings)
+    assert not any("Run encoding" in str(e) for e in errors)  # un avertissement, jamais une erreur

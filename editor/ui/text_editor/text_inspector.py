@@ -231,8 +231,6 @@ class TextInspector(QWidget):
             self.set_parsed(parse(text.content))
             self._meta.setText(
                 label('txtinsp.id_id_folder_value', id=text.id, value=text.path_str() or label('txtinsp.root'))
-                + (label('txtinsp.key_auto_note')
-                   if text.auto_key else label('txtinsp.key_manual_note'))
                 + (label('txtinsp.originating_scene_scene', scene=text.scene) if text.scene else "")
             )
         else:

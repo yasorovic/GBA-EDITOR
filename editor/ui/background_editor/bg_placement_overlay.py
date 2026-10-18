@@ -40,6 +40,8 @@ class PlacementOverlay(QGraphicsItem):
         self._rect = (0, 0, 0, 0)
         self._zoom = 1.0
         self._active = False
+        self._selected = False
+        self._dim = 150                   # l'opacité du grisé hors canvas (0-255) : le passe-partout, réglable à la barre
         self._grab: Optional[str] = None
         self._start_rect = self._rect
         self._start_point = (0.0, 0.0)
@@ -59,10 +61,11 @@ class PlacementOverlay(QGraphicsItem):
         """Le mode Canvas : le fichier entier et ses poignées."""
         self.show_passive(pixmap, canvas, rect)
         self._active = True
+        self._selected = False        # les poignées n'apparaissent qu'au clic sur l'image
 
     def stop(self) -> None:
         """Rien n'est montré (fond sans fichier, ou mode quitté en attendant que le passe-partout soit remis)."""
-        self._active, self._grab = False, None
+        self._active, self._grab, self._selected = False, None, False
         self._pix = QPixmap()
         self.setVisible(False)
 
@@ -76,6 +79,11 @@ class PlacementOverlay(QGraphicsItem):
 
     def set_zoom(self, zoom: float) -> None:
         self._zoom = zoom
+        self.update()
+
+    def set_dim(self, percent: int) -> None:
+        """L'intensité du passe-partout, de 0 (ce qui déborde se voit tel quel) à 100 (noir)."""
+        self._dim = round(255 * max(0, min(100, int(percent))) / 100)
         self.update()
 
     def rect(self) -> tuple:
@@ -105,12 +113,12 @@ class PlacementOverlay(QGraphicsItem):
             painter.drawPixmap(QRectF(x, y, w, h), self._pix, QRectF(self._pix.rect()))
             painter.restore()
         # Hors du canvas : le passe-partout. L'image reste visible dessous, c'est ce qui dit qu'elle déborde.
-        painter.fillPath(around, QBrush(QColor(0, 0, 0, 150)))
+        painter.fillPath(around, QBrush(QColor(0, 0, 0, self._dim)))
         pen_w = 1.0 / max(self._zoom, 0.01)
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.setPen(QPen(QColor(C.ACCENT), pen_w * 2))
         painter.drawRect(QRectF(0, 0, cw, ch))                      # le cadre du canvas
-        if not self._active:
+        if not self._active or not self._selected:
             return
         painter.setPen(QPen(QColor("#ffffff"), pen_w, Qt.PenStyle.DashLine))
         painter.drawRect(QRectF(x, y, w, h))                        # le contour de l'image
@@ -134,7 +142,7 @@ class PlacementOverlay(QGraphicsItem):
         if not self._active:
             return None
         reach = _HANDLE_PX / max(self._zoom, 0.01)
-        for name in HANDLES:
+        for name in HANDLES if self._selected else ():
             hx, hy = self._handle_point(name)
             if abs(px - hx) <= reach and abs(py - hy) <= reach:
                 return name
@@ -147,6 +155,9 @@ class PlacementOverlay(QGraphicsItem):
 
     def begin(self, px: float, py: float) -> bool:
         grab = self.hit(px, py)
+        if self._selected != (grab is not None):      # clic sur l'image = sélection ; clic à côté = désélection
+            self._selected = grab is not None
+            self.update()
         if grab is None:
             return False
         self._grab, self._start_rect, self._start_point = grab, self._rect, (px, py)

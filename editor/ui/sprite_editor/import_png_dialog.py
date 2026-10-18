@@ -12,7 +12,8 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
-from PyQt6.QtWidgets import QFileDialog, QMessageBox
+from PyQt6.QtWidgets import QFileDialog
+from ui.common.popup import MessageBox as QMessageBox
 
 from core.resources import asset_reconciliation
 from core.command_dispatcher import get_dispatcher

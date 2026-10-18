@@ -115,8 +115,7 @@ KINDS_ASSEMBLY = (KIND_TEXTBOX, KIND_LIST)
 # forme oublie la boîte.
 TEXT_KINDS = (KIND_TEXT, KIND_TEXTBOX)
 
-# Contenu d'aperçu d'une chaîne neuve : de quoi voir où elle est, et de quoi
-# l'éditer sur place. Jamais compilé ni ajouté à la table (cf. `preview_text`).
+# Contenu initial d'une chaîne neuve, local à l'élément (cf. `preview_text`).
 PREFILL_TEXT = "Text"
 
 
@@ -319,7 +318,7 @@ class UIText(RectGeometryMixin):
     y: int = 0
     w: int = 96
     h: int = 16
-    # Clé du texte initial. Vide : le script fournit le contenu.
+    # Clé du texte initial. Vide : contenu local, ou rempli par script si vide.
     text_key: str = ""
     # Police utilisée ; vide pour la police par défaut de la scène.
     font_name: str = ""
@@ -328,9 +327,8 @@ class UIText(RectGeometryMixin):
     # Sélectionne la face italique native.
     font_italic: bool = False
     align: str = "left"
-    # Littéral affiché dans l'éditeur quand aucune clé n'est définie : la
-    # représentation visuelle du `text:draw(tx, ty, string)` que le script
-    # écrira. Il n'est jamais compilé ni ajouté à la table de textes.
+    # Contenu local quand aucune clé n'est définie : affiché dès l'init de la
+    # scène et compilé sous une référence interne, sans entrée dans Texts.
     preview_text: str = ""
     # Les fichiers antérieurs portaient une CLÉ dans `preview_text`. Ce marqueur
     # de migration empêche qu'un littéral neuf égal à une clé existante soit
@@ -445,6 +443,24 @@ class UITextbox(UIText):
     wraps = True
     resizable = True
     name: str = "textbox"
+    # Préfixe d'une séquence de textes (`Dialogue` pour `Dialogue_1`, `Dialogue_2`…).
+    # Renseigné : la boîte lit la séquence entière, dans l'ordre des numéros, et la
+    # suit d'elle-même. Vide : elle affiche son `text_key` (un seul texte).
+    sequence_prefix: str = ""
+
+    def to_dict(self) -> dict:
+        return {**super().to_dict(),
+                **({"sequence_prefix": self.sequence_prefix} if self.sequence_prefix else {})}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "UITextbox":
+        box = super().from_dict(d)
+        box.sequence_prefix = str(d.get("sequence_prefix", ""))
+        # Ancien format : lu ici, converti à l'ouverture du projet (`migrate_legacy_pages`).
+        pages = d.get("page_ids", [])
+        if isinstance(pages, list) and pages:
+            box._legacy_page_ids = [tid for tid in pages if isinstance(tid, str) and tid]
+        return box
 
 
 def _ceil_tile(px: int) -> int:

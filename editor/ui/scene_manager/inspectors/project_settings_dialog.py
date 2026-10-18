@@ -56,6 +56,7 @@ from ui.common.deferred_writes import schedule_unwatched
 from ui.common.theme import C, T, QSS
 from ui.common.unit_spin import UnitSpin
 from ui.common.widgets import W
+from ui.common.cartridge_preview import CartridgePreview, save_preview_profiles, save_capacity_text
 from ui.common.notice import note, tip
 from ui.scene_manager.inspectors.languages_card import LanguagesCard
 from ui.scene_manager.inspectors.inputs_card import InputsCard
@@ -111,6 +112,16 @@ class BuildPanel(QWidget):
         lay.setSpacing(10)
         lay.addWidget(_category_title(label('projset.build')))
 
+        body = QHBoxLayout()
+        body.setSpacing(16)
+        controls = QVBoxLayout()
+        controls.setContentsMargins(0, 0, 0, 0)
+        controls.setSpacing(10)
+        body.addLayout(controls)
+        self._cartridge_preview = CartridgePreview()
+        body.addWidget(self._cartridge_preview, 1, Qt.AlignmentFlag.AlignTop)
+        lay.addLayout(body)
+
         # ── Emplacements de sauvegarde ────────────────────────────
         self._spin_slots = QSpinBox()
         self._spin_slots.setRange(1, 99)
@@ -122,7 +133,7 @@ class BuildPanel(QWidget):
             note=label('projset.save_slots_note')))
         self._spin_slots.valueChanged.connect(
             lambda v: self._set_setting("save_slots", int(v)))
-        _row(label('projset.save_slots'), self._spin_slots, lay, stretch=False)
+        _row(label('projset.save_slots'), self._spin_slots, controls, stretch=False)
 
         # ── Cartouche visée ───────────────────────────────────────
         from codegen.rom_report import CARTRIDGE_SIZES_MIB
@@ -136,7 +147,43 @@ class BuildPanel(QWidget):
             note=label('projset.cartridge_note')))
         self._combo_cart.currentIndexChanged.connect(
             lambda i: self._set_setting("cartridge_mib", int(self._combo_cart.itemData(i) or 4)))
-        _row(label('projset.cartridge'), self._combo_cart, lay, stretch=False)
+        _row(label('projset.cartridge'), self._combo_cart, controls, stretch=False)
+
+        # Session-only exploration: never written to project settings or passed to codegen.
+        self._combo_save_preview = QComboBox()
+        self._combo_save_preview.setFont(QFont(T.UI, T.SM))
+        self._combo_save_preview.setStyleSheet(QSS.combobox)
+        for profile in save_preview_profiles():
+            self._combo_save_preview.addItem(label(profile.title_key), profile.key)
+        self._combo_save_preview.setCurrentIndex(self._combo_save_preview.findData("sram"))
+        self._combo_save_capacity = QComboBox()
+        self._combo_save_capacity.setFont(QFont(T.UI, T.SM))
+        self._combo_save_capacity.setStyleSheet(QSS.combobox)
+        self._capacity_preview_label = QLabel(label('cartpreview.capacity_label'))
+        self._capacity_preview_label.setFont(QFont(T.UI, T.SM))
+        self._capacity_preview_label.setStyleSheet(f"color:{C.TEXT_DIM};")
+        preview_controls = QWidget()
+        preview_layout = QVBoxLayout(preview_controls)
+        preview_layout.setContentsMargins(0, 8, 0, 8)
+        preview_layout.setSpacing(6)
+        preview_title = QLabel(label('cartpreview.profile_label'))
+        preview_title.setFont(QFont(T.UI, T.SM, QFont.Weight.DemiBold))
+        preview_title.setStyleSheet(f"color:{C.TEXT_HI};")
+        preview_layout.addWidget(preview_title)
+        preview_layout.addWidget(self._combo_save_preview)
+        preview_layout.addWidget(self._capacity_preview_label)
+        preview_layout.addWidget(self._combo_save_capacity)
+        preview_status = QLabel(label('cartpreview.build_sram'))
+        preview_status.setWordWrap(True)
+        preview_status.setFont(QFont(T.UI, T.SM))
+        preview_status.setStyleSheet(f"color:{C.TEXT_DIM};")
+        preview_status.setMaximumWidth(240)
+        preview_layout.addWidget(preview_status)
+        controls.addWidget(preview_controls)
+        preview_controls.setVisible(self._combo_save_preview.count() > 1)
+        self._combo_save_preview.currentIndexChanged.connect(self._refresh_save_preview)
+        self._combo_save_capacity.currentIndexChanged.connect(self._update_save_preview)
+        self._refresh_save_preview()
 
         # ── Build debug ─────────────────────────────────────────────
         self._chk_debug = QCheckBox(label('projset.debug_build'))
@@ -146,7 +193,9 @@ class BuildPanel(QWidget):
             note=label('projset.debug_note')))
         self._chk_debug.toggled.connect(
             lambda v: self._set_setting("debug_build", bool(v)))
-        _row(label('projset.build'), self._chk_debug, lay, stretch=False)
+        _row(label('projset.build'), self._chk_debug, controls, stretch=False)
+
+        controls.addStretch()
 
         lay.addStretch()
         self._refresh_fields()
@@ -165,6 +214,24 @@ class BuildPanel(QWidget):
         idx = self._combo_cart.findData(getattr(p.settings, "cartridge_mib", 4))
         self._combo_cart.setCurrentIndex(idx if idx >= 0 else 0)
         self._combo_cart.blockSignals(False)
+        self._cartridge_preview.set_target(self._combo_cart.currentData())
+
+    def _refresh_save_preview(self):
+        profile = next(p for p in save_preview_profiles()
+                       if p.key == self._combo_save_preview.currentData())
+        self._combo_save_capacity.blockSignals(True)
+        self._combo_save_capacity.clear()
+        for capacity in profile.capacities:
+            self._combo_save_capacity.addItem(save_capacity_text(capacity), capacity)
+        self._combo_save_capacity.blockSignals(False)
+        variable_capacity = len(profile.capacities) > 1
+        self._combo_save_capacity.setVisible(variable_capacity)
+        self._capacity_preview_label.setVisible(variable_capacity)
+        self._update_save_preview()
+
+    def _update_save_preview(self):
+        self._cartridge_preview.set_profile(
+            self._combo_save_preview.currentData(), self._combo_save_capacity.currentData())
 
     def _persist(self):
         _save_settings_soon(self._project)
@@ -559,6 +626,23 @@ class LanguagesPanel(QWidget):
         lay.setSpacing(10)
         lay.addWidget(_category_title(label('projset.languages')))
 
+        self._combo_mode = QComboBox()
+        self._combo_mode.setStyleSheet(QSS.combobox)
+        self._combo_mode.addItem(label('langcard.multilingual'), 'multilingual')
+        self._combo_mode.addItem(label('langcard.monolingual'), 'monolingual')
+        self._combo_mode.currentIndexChanged.connect(
+            lambda: self._set_build_setting('language_mode', self._combo_mode.currentData()))
+        _row(label('langcard.project_mode'), self._combo_mode, lay)
+        self._combo_build_language = QComboBox()
+        self._combo_build_language.setStyleSheet(QSS.combobox)
+        self._combo_build_language.setToolTip(label('langcard.run_language_tip'))
+        self._combo_build_language.currentIndexChanged.connect(
+            lambda: self._set_build_setting('build_language', self._combo_build_language.currentData()))
+        _row(label('langcard.run_language'), self._combo_build_language, lay)
+        self._mode_hint = QLabel()
+        self._mode_hint.setWordWrap(True)
+        lay.addWidget(self._mode_hint)
+
         # ── Police par défaut ─────────────────────────────────────
         # Celle qu'une zone ou `text.draw` emploie sans choix explicite. Une
         # langue peut la remplacer dans la carte ci-dessous ; la couverture des
@@ -583,6 +667,35 @@ class LanguagesPanel(QWidget):
 
         self._card.load(project)
         self._refresh_fallback()
+        self._refresh_build_settings()
+
+    def _refresh_build_settings(self):
+        self._blocking = True
+        try:
+            settings = self._project.settings
+            self._combo_mode.setCurrentIndex(
+                self._combo_mode.findData(settings.language_mode))
+            self._combo_build_language.clear()
+            for lang in settings.all_languages() or [settings.source_lang]:
+                self._combo_build_language.addItem(
+                    lang.name or lang.code or label('langcard.source'), lang.code)
+            self._combo_build_language.setCurrentIndex(max(0,
+                self._combo_build_language.findData(settings.selected_build_language().code)))
+            mono = settings.language_mode == 'monolingual'
+            self._combo_build_language.setEnabled(mono)
+            self._mode_hint.setText(label('langcard.monolingual_tip' if mono
+                                          else 'langcard.multilingual_tip'))
+        finally:
+            self._blocking = False
+
+    def _set_build_setting(self, field, value):
+        if self._blocking or value is None:
+            return
+        old = getattr(self._project.settings, field)
+        if old != value:
+            get_history().push(SetFieldCmd(
+                self._project.settings, field, old, value,
+                label=f'Projet.{field}', persist_fn=self._persist))
 
     # ── Police par défaut ─────────────────────────────────────────
 
@@ -626,6 +739,7 @@ class LanguagesPanel(QWidget):
 
     def _persist(self):
         _save_settings_soon(self._project)
+        self._refresh_build_settings()
 
     def _set_source_field(self, field: str, value: str):
         """La langue source n'a pas de fichier side : le maître EST sa
@@ -1140,7 +1254,7 @@ class ProjectSettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(label('projset.project_settings'))
         self.setStyleSheet(QSS.dialog)
-        self.resize(820, 480)
+        self.resize(900, 600)
 
         root = QVBoxLayout(self)
         body = QHBoxLayout()

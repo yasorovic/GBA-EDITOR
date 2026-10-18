@@ -2126,7 +2126,7 @@ class Checker:
             check = _DOMAIN_CHECKS.get(param.domain)
             if check:
                 check(self, key, arg.value, param, args)
-            if key in ("text.draw", "text_region:draw") and param.domain == DOMAIN_TEXT:
+            if key in ("text.draw", "textBox:draw") and param.domain == DOMAIN_TEXT:
                 self._check_text_literal_locals(arg.value)
 
     def _check_text_literal_locals(self, text: str):

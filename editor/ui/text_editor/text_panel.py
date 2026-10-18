@@ -17,19 +17,19 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSplitter, QMessageBox
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtWidgets import QWidget, QVBoxLayout
+from ui.common.popup import MessageBox as QMessageBox
+from PyQt6.QtCore import pyqtSignal
 
-from core.models.text import MAX_DEPTH, SEP, norm_path, repath_segment
-from core.history import (
-    get_history, SetFieldCmd, AddListItemCmd, RemoveListItemsCmd,
-)
-from ui.common.theme import QSS
+from core.models.text import MAX_DEPTH, SEP, norm_path, repath_segment, moved_text_paths
+from core.text_markup import parse
+from core.history import get_history, SetFieldCmd, AddListItemCmd
 from ui.common.labels import label
 from ui.text_editor.text_table import TextTable
 from ui.text_editor.text_workbench import TextWorkbench
 from ui.text_editor.text_commands import (
-    RenameTextKeyCmd, SetTextPathCmd, RelinkTextKeyCmd, SetTranslationCmd,
+    DeleteTextsCmd, RenameTextKeyCmd, RenameTextGroupKeysCmd, SetTextPathCmd,
+    SetTranslationCmd,
 )
 
 
@@ -41,6 +41,7 @@ class TextPanel(QWidget):
     identity_changed = pyqtSignal(object)   # clé/chemin modifiés
     parsed = pyqtSignal(object)             # ParsedText de l'entrée courante
     preview_font_changed = pyqtSignal(object)   # Font | None
+    filing_moved = pyqtSignal(object)       # Chemin à sélectionner après move/undo
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -58,32 +59,35 @@ class TextPanel(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        split = QSplitter(Qt.Orientation.Vertical)
-        split.setStyleSheet(QSS.splitter)
-        split.setChildrenCollapsible(False)
         self._table = TextTable()
-        self._bench = TextWorkbench()
-        split.addWidget(self._table)
-        split.addWidget(self._bench)
-        split.setSizes([300, 300])
-        split.setStretchFactor(0, 1)
-        split.setStretchFactor(1, 0)
-        root.addWidget(split, 1)
+        # Garder l'atelier pour ses relais internes, sans l'exposer à l'écran
+        # ni laisser une poignée de séparation permettre de le rouvrir.
+        self._bench = TextWorkbench(self)
+        self._bench.setEnabled(False)
+        self._bench.hide()
+        # Réemployer aussi les onglets de langue de l'atelier ; le reste de
+        # l'ancien panneau et son aperçu demeurent masqués.
+        root.addWidget(self._bench._lang_tabs)
+        root.addWidget(self._table, 1)
 
         self._table.selection_changed.connect(self._on_selection)
         self._table.key_edited.connect(self._on_table_key)
+        self._table.group_key_edited.connect(self._on_group_key)
+        self._table.entry_structure.connect(self._edit_sequence_entry)
         self._table.group_renamed.connect(self._on_group_renamed)
-        self._table.add_asked.connect(self._add_text)
         self._table.delete_asked.connect(self._delete_texts)
+        self._table.sequence_delete_asked.connect(self._delete_sequence)
+        self._table.entry_reorder_asked.connect(self._reorder_entry)
+        self._table.content_edited.connect(self._on_inline_content)
 
         self._bench.content_committed.connect(self._on_content_committed)
         self._bench.active_lang_changed.connect(self._on_lang_changed)
         self._bench.key_committed.connect(self._on_bench_key)
         self._bench.path_committed.connect(
             lambda lvl, seg: self._repath(self._selection, lvl, seg))
-        self._bench.relink_asked.connect(self._relink_key)
         self._bench.parsed.connect(self._on_parsed)
         self._bench.preview_font_changed.connect(self.preview_font_changed.emit)
+        self._bench.preview_font_changed.connect(self._table.set_markup_font)
 
     # ── Chargement ────────────────────────────────────────────────
 
@@ -138,12 +142,50 @@ class TextPanel(QWidget):
         """Relais du renommage en place demandé depuis le Finder."""
         self._on_group_renamed(path, segment)
 
+    def move_path(self, source, destination):
+        """Le drop suit le nouveau rangement, y compris pour une clé manuelle."""
+        if self._project is None:
+            return
+        source, destination = tuple(source), tuple(destination)
+        entries = moved_text_paths(self._project.texts, source, destination)
+        if not entries:
+            return
+        new_root = destination + (source[-1],)
+
+        def persist():
+            moved = tuple(entries[0][0].path) == tuple(entries[0][2])
+            path = new_root if moved else source
+            self._after_identity_change()
+            self.set_folder_filter(path)
+            self._table.refresh(select_ids=[text.id for text, _old, _new in entries])
+            self.filing_moved.emit(path)
+
+        get_history().push(SetTextPathCmd(
+            self._project, entries, label=f"Move text filing {SEP.join(source)}",
+            persist_fn=persist))
+
     def rename_key(self, t, typed: str) -> None:
-        """Renommage de clé demandé depuis le Finder."""
+        """Renommage de clé par le code (les cellules et le champ de l'atelier passent par `_rename_key`)."""
         if self._rename_key(t, typed):
             self._table.refresh()
 
     # ── Sélection ─────────────────────────────────────────────────
+
+    def _edit_sequence_entry(self, prefix, tid, operation):
+        """+ ajoute le texte suivant de la séquence (numéro max + 1) ; − supprime l'entrée."""
+        if not self._project:
+            return
+        text = self._project.get_text_by_id(tid) if tid else None
+        if operation == 'remove':
+            if text is not None:
+                self._table.select_by_ids([tid])
+                self._on_selection([text])
+                self._delete_texts()
+            return
+        anchor = text.path if text is not None else self._table.selected_path()
+        # Un texte seul n'a pas de préfixe : son + le promeut en séquence (sa clé sert de base).
+        added, promoted = self._new_text_after(prefix or text.key, list(anchor))
+        self._push_new_text(added, promoted)
 
     def _on_selection(self, texts: list):
         # Commiter AVANT de changer d'entrée, sinon la frappe non validée
@@ -193,6 +235,29 @@ class TextPanel(QWidget):
 
     # ── Contenu ───────────────────────────────────────────────────
 
+    def _on_inline_content(self, text, before: str, after: str, lang: str):
+        if self._project is None or before == after:
+            return
+        translating = bool(lang and lang != self._project.settings.source_lang.code)
+
+        def persist():
+            if translating:
+                self._project.save_translation(lang)
+            self._table.sync_entry(text)
+            if self._current is text:
+                self._bench.set_texts([text])
+                self.parsed.emit(parse(self._table._editable_content(text)))
+            self.changed.emit()
+
+        if translating:
+            command = SetTranslationCmd(
+                self._project, lang, text, before, after,
+                label=f"Translate {text.key} ({lang})", persist_fn=persist)
+        else:
+            command = SetFieldCmd(text, "content", before, after,
+                                  label=f"Content of {text.key}", persist_fn=persist)
+        get_history().push(command)
+
     def _on_content_committed(self, before: str, after: str):
         t = self._current
         if t is None:
@@ -231,6 +296,22 @@ class TextPanel(QWidget):
         if not self._rename_key(t, typed):
             self._table.refresh()       # repose la clé du modèle dans la cellule
 
+    def _on_group_key(self, texts, prefix: str):
+        prefix = prefix.strip()
+        if (not self._project or not prefix or
+                any(not any(text is current for current in self._project.texts)
+                    for text in texts)):
+            self._table.refresh()
+            return
+        try:
+            get_history().push(RenameTextGroupKeysCmd(
+                self._project, texts, prefix, persist_fn=self._after_identity_change))
+        except ValueError:
+            QMessageBox.warning(
+                self, label("txtpnl.invalid_key_title"),
+                label("txtpnl.invalid_key_msg", name=prefix))
+            self._table.refresh()
+
     def _on_bench_key(self, typed: str):
         if len(self._selection) != 1:
             return
@@ -240,31 +321,29 @@ class TextPanel(QWidget):
     def _rename_key(self, t, raw: str) -> bool:
         """Renomme la clé — refuse le vide et les doublons.
 
-        Point unique du renommage MANUEL : la cellule de la table et le champ
-        de l'atelier écrivent la même chose (la clé se détache du rangement),
-        il ne doit pas y avoir deux versions de cette règle."""
+        Point unique du renommage : la cellule de la table et le champ de
+        l'atelier écrivent la même chose, il ne doit pas y avoir deux versions
+        de cette règle."""
         new = (raw or "").strip()
         if not self._project or not new or new == t.key:
             return False
-        old, old_auto = t.key, t.auto_key
+        from core.text_sequences import would_empty_linked
+        if would_empty_linked(self._project, t, new) and QMessageBox.question(
+                self, label("txtpnl.empty_sequence_title"),
+                label("txtpnl.empty_sequence_msg", page=t.key, name=new),
+        ) != QMessageBox.StandardButton.Yes:
+            return False
+        old = t.key
         if not self._project.rename_text_key(t, new):
             QMessageBox.warning(
                 self, label("txtpnl.invalid_key_title"),
                 label("txtpnl.invalid_key_msg", name=new))
             return False
         get_history().push(RenameTextKeyCmd(
-            self._project, t, old, new, old_auto,
+            self._project, t, old, new,
             persist_fn=self._after_identity_change,
         ))
         return True
-
-    def _relink_key(self):
-        """Ré-accroche une clé nommée à la main à son rangement."""
-        if len(self._selection) != 1 or not self._project:
-            return
-        get_history().push(RelinkTextKeyCmd(
-            self._project, self._selection[0],
-            persist_fn=self._after_identity_change))
 
     # ── Rangement ─────────────────────────────────────────────────
 
@@ -310,34 +389,70 @@ class TextPanel(QWidget):
     def _after_identity_change(self):
         """Persiste, reconstruit la table et prévient l'inspecteur."""
         self.changed.emit()
+        self._table.invalidate_usages()
         self._table.refresh()
         self._bench.set_texts(self._selection)
         self.identity_changed.emit(self._current)
 
     # ── CRUD ──────────────────────────────────────────────────────
 
-    def _add_text(self):
+    def _add_text(self, path=None):
         """Crée un texte DANS le rangement courant — seul moyen de créer une
-        catégorie, et évite de re-ranger chaque entrée après coup."""
+        catégorie, et évite de re-ranger chaque entrée après coup.
+
+        Le texte est une feuille nommée `text` sous le dossier (`scr_text`, puis `scr_text_2`…) :
+        sans ce nom, sa clé serait celle du dossier lui-même (`scr`)."""
         if not self._project:
             return
-        t = self._project.new_text(content="", path=self._table.selected_path())
+        from core.models.text import key_from_path
+        folder = list(self._table.selected_path() if path is None else path)
+        leaf_path = folder + ["text"]
+        added, promoted = self._new_text_after(key_from_path(leaf_path), leaf_path)
+        self._push_new_text(added, promoted)
 
+    def _new_text_after(self, base, path, content="", scene=""):
+        """Crée un texte sous la clé `base`, sans que `base` soit à la fois entrée et séquence.
+
+        (texte, promotions) : si `base` est déjà un texte seul, il sera renommé `base_1` et le
+        nouveau prend `base_2` ; si la séquence existe, il prend le numéro suivant ; sinon il
+        porte `base`. Les promotions ne sont appliquées que par la commande qu'on pousse."""
+        from core.text_sequences import group_texts, next_key, promotion
+        project = self._project
+        promoted = promotion(project, base)
+        added = project.new_text(content, scene=scene, path=path)
+        if promoted:
+            project.rename_text_key(added, f"{base}_2")
+        elif group_texts(project, base):
+            project.rename_text_key(added, next_key(project, base))
+        return added, promoted
+
+    def _promoting(self, command, promoted, label):
+        """`command` précédée de la promotion, en UNE entrée d'historique."""
+        if not promoted:
+            return command
+        from core.history import MacroCmd
+        from ui.text_editor.text_commands import RenameTextKeysCmd
+        return MacroCmd([RenameTextKeysCmd(self._project, promoted, label), command], label)
+
+    def _push_new_text(self, t, promoted=()):
         def _after():
             self.changed.emit()
             self._table.refresh(
                 select_ids=[t.id] if t in self._project.texts else [])
+            if t in self._project.texts:
+                self._table.focus_entry(t.id)
+            self.identity_changed.emit(t if t in self._project.texts else None)
 
         # new_text a déjà ajouté l'entrée : execute() est un no-op au premier
         # passage, undo la retire, redo la remet.
-        get_history().push(AddListItemCmd(
-            self._project.texts, t, persist_fn=_after,
-            label=f"New text {t.key}",
-        ))
+        label_ = f"New text {t.key}"
+        get_history().push(self._promoting(
+            AddListItemCmd(self._project.texts, t, persist_fn=_after, label=label_),
+            promoted, label_))
 
-    def _delete_texts(self):
+    def _delete_texts(self, texts=None):
         """Supprime la sélection, après confirmation."""
-        texts = list(self._selection)
+        texts = list(self._selection if texts is None else texts)
         if not texts or not self._project:
             return
         what = (f"“{texts[0].key}”" if len(texts) == 1
@@ -350,14 +465,102 @@ class TextPanel(QWidget):
 
         def _after():
             self.changed.emit()
+            for code in command.translation_langs:
+                self._project.save_translation(code)
+            for layout in command.touched_layouts:
+                self._project.ui_layouts.save(layout)
             alive = [t.id for t in texts if t in self._project.texts]
             self._selection = [t for t in texts if t in self._project.texts]
             self._table.refresh(select_ids=alive)
             if not alive:
                 self._current = None
                 self.text_selected.emit(None)
+            self.identity_changed.emit(self._current)
 
-        get_history().push(RemoveListItemsCmd(
-            self._project.texts, texts, persist_fn=_after,
-            label=f"Delete {what}",
-        ))
+        command = DeleteTextsCmd(self._project, texts,
+                                 persist_fn=_after, label=f"Delete {what}")
+        get_history().push(command)
+
+    def _reorder_entry(self, prefix: str, source_id: str, target_id: str):
+        """Poignée d'une page : la déplace, ce qui échange les numéros de clé (annulable)."""
+        from core.text_sequences import group_texts, reordered_keys
+        from ui.text_editor.text_commands import RenameTextKeysCmd
+        if not self._project:
+            return
+        pages = group_texts(self._project, prefix)
+        ids = [t.id for t in pages]
+        if source_id not in ids or target_id not in ids:
+            return
+        pairs = reordered_keys(pages, ids.index(source_id), ids.index(target_id))
+        if pairs:
+            get_history().push(RenameTextKeysCmd(
+                self._project, pairs, "Reorder pages", persist_fn=self._after_identity_change))
+
+    def _delete_sequence(self, prefix: str):
+        """Poubelle de l'en-tête : détruit la séquence, vide ses tables et ses boîtes (après confirmation)."""
+        from core.text_sequences import consumers, group_texts
+        from ui.text_editor.text_commands import DeleteSequenceCmd
+        project = self._project
+        texts = group_texts(project, prefix) if project else []
+        if not texts:
+            return
+        users = ", ".join(c.name for c in consumers(project, prefix))
+        if QMessageBox.question(
+            self, label("txtpnl.delete_sequence_title"),
+            label("txtpnl.delete_sequence_msg", name=prefix, n=len(texts), users=users or "—"),
+        ) != QMessageBox.StandardButton.Yes:
+            return
+
+        def _after():
+            self.changed.emit()
+            for code in command.translation_langs:
+                project.save_translation(code)
+            self._selection = [t for t in self._selection if t in project.texts]
+            self._table.refresh(select_ids=[t.id for t in self._selection])
+            if not self._selection:
+                self._current = None
+                self.text_selected.emit(None)
+            self.identity_changed.emit(self._current)
+
+        command = DeleteSequenceCmd(project, prefix, persist_fn=_after)
+        get_history().push(command)
+
+    def create_at_path(self, path):
+        self._add_text(list(path))
+
+    def delete_from_finder(self, texts):
+        self._delete_texts(texts)
+
+    def duplicate_text(self, source):
+        if not self._project or source not in self._project.texts:
+            return
+        from core.text_sequences import sequence_of
+        seq = sequence_of(source.key)
+        duplicate, promoted = self._new_text_after(
+            seq[0] if seq else source.key, source.path, source.content, source.scene)
+        duplicate.note = source.note
+        copied_translations = {}
+        for code, values in self._project.translations.items():
+            if source.id in values:
+                values[duplicate.id] = values[source.id]
+                copied_translations[code] = values[source.id]
+
+        def _after():
+            present = duplicate in self._project.texts
+            for code, content in copied_translations.items():
+                values = self._project.translations.setdefault(code, {})
+                if present:
+                    values[duplicate.id] = content
+                else:
+                    values.pop(duplicate.id, None)
+                self._project.save_translation(code)
+            self.changed.emit()
+            self._table.refresh(select_ids=[duplicate.id] if present else [])
+            if present:
+                self._table.focus_entry(duplicate.id)
+            self.identity_changed.emit(duplicate if present else None)
+
+        label_ = f"Duplicate {source.key}"
+        get_history().push(self._promoting(
+            AddListItemCmd(self._project.texts, duplicate, persist_fn=_after, label=label_),
+            promoted, label_))

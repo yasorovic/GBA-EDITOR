@@ -41,17 +41,20 @@ def ui_ref_kinds(project) -> dict[str, str]:
     by_kind = {t.ui_kind: name for name, t in REF_TYPE_TABLE.items() if t.ui_kind}
     # Une boîte de texte s'écrit comme une chaîne (`:draw`) : même type de
     # référence, la différence n'est que de rendu.
-    from core.models.ui_region import KIND_TEXT, KIND_TEXTBOX
+    from core.models.ui_region import KIND_LIST, KIND_TEXT, KIND_TEXTBOX
     by_kind[KIND_TEXTBOX] = by_kind[KIND_TEXT]
     base = next(name for name, t in REF_TYPE_TABLE.items() if t.ui_kind and not t.base)
     all_elements = getattr(project, "all_elements", None)
+    # Les listes historiques restent lisibles, mais leur API dédiée est retirée :
+    # elles ne donnent plus accès qu'au cycle de vie commun d'un conteneur.
+    by_kind[KIND_LIST] = by_kind["container"]
     return {el.name: by_kind.get(getattr(el, "kind", ""), base)
             for _lay, el in (all_elements() if all_elements else [])}
 
 
 def data_column_kinds(project) -> dict[str, str]:
     """{`data.Table.colonne` → type de référence} pour les colonnes de données qui stockent le
-    handle d'un type (`RefType.column` : `region` → `text_region`, `image` → `image`).
+    handle d'un type (`RefType.column` : `region` → `textBox`, `image` → `image`).
 
     Le build range dans ces colonnes l'INDEX de la zone ou de l'image — exactement la valeur du
     type —, donc `data.Dialogue[i].boite:draw("…")` se juge et se traduit comme

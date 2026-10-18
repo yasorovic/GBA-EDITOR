@@ -14,8 +14,8 @@ def test_unique_name_keeps_a_free_base_and_counts_from_two():
 
 
 def test_text_keys_follow_the_same_rule():
-    assert key_from_path(["Village", "Garde"]) == "village_garde"
-    assert key_from_path(["Village", "Garde"], taken={"village_garde"}) == "village_garde_2"
+    assert key_from_path(["Village", "Garde"]) == "Village_Garde"
+    assert key_from_path(["Village", "Garde"], taken={"Village_Garde"}) == "Village_Garde_2"
     assert key_from_path([]) == "texte"
     assert key_from_path([], taken={"texte"}) == "texte_2"
 

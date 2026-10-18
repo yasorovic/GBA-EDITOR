@@ -25,9 +25,10 @@ from ui.common.labels import label
 from ui.common.tooltip import tooltip
 from typing import Optional
 
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QSizePolicy, QToolTip, QMenu
+from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QSizePolicy, QMenu
 from PyQt6.QtGui import QFont, QPainter, QColor, QCursor
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QRect, pyqtSignal
+from ui.common.tooltip_controller import TooltipContent, set_tooltip_provider
 
 from ui.common.theme import C, T, QSS
 from ui.common.icons import COLOR_DEFAULT
@@ -84,6 +85,7 @@ class _Gauge(QWidget):
         self.setFixedHeight(16)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setMouseTracking(True)
+        set_tooltip_provider(self, self._tooltip_at)
         # [(catégorie, octets, couleur)], et le total (octets de la cartouche
         # visée) sur lequel la largeur de chaque segment se calcule.
         self._segments: list[tuple[str, int, str]] = []
@@ -160,24 +162,29 @@ class _Gauge(QWidget):
         p.drawRect(0, 0, max(0, w - 1), max(0, h - 1))
         p.end()
 
-    def mouseMoveEvent(self, event):
-        hit = self._segment_at(int(event.position().x()))
+    def _tooltip_at(self, position):
+        hit = self._segment_at(position.x())
         if hit is None:
             if self._mode == "fill" and self._rom_bytes < self._total:
                 free_kib = (self._total - self._rom_bytes) / 1024
-                QToolTip.showText(event.globalPosition().toPoint(),
-                                  label('rombar.free_space', size=free_kib), self)
-            else:
-                QToolTip.hideText()
-            return
+                left = round(self.width() * self._rom_bytes / self._total)
+                return TooltipContent(label('rombar.free_space', size=free_kib),
+                                      QRect(left, 0, self.width() - left, self.height()))
+            return TooltipContent('', self.rect())
         cat, size = hit
         pct = 100 * size / max(1, self._rom_bytes)
         category = label(_CATEGORY_KEYS[cat]) if cat in _CATEGORY_KEYS else cat
-        QToolTip.showText(event.globalPosition().toPoint(),
-                          label('rombar.category_usage', category=category, size=size / 1024, percent=pct), self)
-
-    def leaveEvent(self, event):
-        QToolTip.hideText()
+        denominator = self._rom_bytes if self._mode == "breakdown" else self._total
+        preceding = 0
+        for segment, amount, _color in self._segments:
+            if segment == cat:
+                break
+            preceding += amount
+        left = int(self.width() * preceding / max(1, denominator))
+        right = int(self.width() * (preceding + size) / max(1, denominator))
+        return TooltipContent(label('rombar.category_usage', category=category,
+                                    size=size / 1024, percent=pct),
+                              QRect(left, 0, max(1, right - left), self.height()))
 
 
 class RomBudgetBar(QWidget):

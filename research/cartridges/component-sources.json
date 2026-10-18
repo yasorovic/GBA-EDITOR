@@ -1,0 +1,95 @@
+{
+  "status": "Photographies sources disponibles ; aucune puce detouree.",
+  "components": [
+    {
+      "components": "ROM MX23L3206-12B",
+      "photo": "assembled/none/AGB-E01-10--front.jpg",
+      "source_page": "https://gbhwdb.gekkio.fi/cartridges/AGB-APCP-0/ikk5-1.html",
+      "author": "ikk5",
+      "license": "CC BY-SA 4.0",
+      "isolated": false,
+      "preparation": "Detourage et controle des contours, du boitier et de l echelle a faire."
+    },
+    {
+      "components": "SRAM GM76V256CLLFW10 ; superviseur ; reset",
+      "photo": "assembled/sram/AGB-E06-01--front.jpg",
+      "source_page": "https://gbhwdb.gekkio.fi/cartridges/AGB-AFZP-0/3615retro-1.html",
+      "author": "3615Retro",
+      "license": "CC BY-SA 4.0",
+      "isolated": false,
+      "preparation": "Detourage et controle des contours, du boitier et de l echelle a faire."
+    },
+    {
+      "components": "ROM MX23L6406-12B ; pile CR1616 a languettes deposee",
+      "photo": "assembled/sram/AGB-E06-01--battery-detached--front.jpg",
+      "source_page": "https://gbhwdb.gekkio.fi/cartridges/AGB-AAMP-0/3615retro-1.html",
+      "author": "3615Retro",
+      "license": "CC BY-SA 4.0",
+      "isolated": false,
+      "preparation": "Detourage et controle des contours, du boitier et de l echelle a faire."
+    },
+    {
+      "components": "EEPROM ROHM 9853 (512 octets)",
+      "photo": "assembled/eeprom/AGB-E03-20--512b--front.jpg",
+      "source_page": "https://gbhwdb.gekkio.fi/cartridges/AGB-BLPF-0/3615retro-1.html",
+      "author": "3615Retro",
+      "license": "CC BY-SA 4.0",
+      "isolated": false,
+      "preparation": "Detourage et controle des contours, du boitier et de l echelle a faire."
+    },
+    {
+      "components": "ROM MX23L12806-12C ; EEPROM ROHM 9854 (8 Kio)",
+      "photo": "assembled/eeprom/AGB-E03-20--front.jpg",
+      "source_page": "https://gbhwdb.gekkio.fi/cartridges/AGB-BZMP-0/granmastro-1.html",
+      "author": "Granmastro",
+      "license": "CC BY-SA 4.0",
+      "isolated": false,
+      "preparation": "Detourage et controle des contours, du boitier et de l echelle a faire."
+    },
+    {
+      "components": "Flash SST39VF512 (64 Kio)",
+      "photo": "assembled/flash/AGB-E02-30--64kib--front.jpg",
+      "source_page": "https://gbhwdb.gekkio.fi/cartridges/AGB-B3SP-0/kurodo-1.html",
+      "author": "Kurodo",
+      "license": "CC BY-SA 4.0",
+      "isolated": false,
+      "preparation": "Detourage et controle des contours, du boitier et de l echelle a faire."
+    },
+    {
+      "components": "Flash MX29L010TC-15A1 (128 Kio)",
+      "photo": "assembled/flash/AGB-E02-30--front.jpg",
+      "source_page": "https://gbhwdb.gekkio.fi/cartridges/AGB-BPRF-0/3615retro-1.html",
+      "author": "3615Retro",
+      "license": "CC BY-SA 4.0",
+      "isolated": false,
+      "preparation": "Detourage et controle des contours, du boitier et de l echelle a faire."
+    },
+    {
+      "components": "FRAM MB85R256 (32 Kio)",
+      "photo": "assembled/fram/AGB-E11-01--front.jpg",
+      "source_page": "https://gbhwdb.gekkio.fi/cartridges/AGB-A2CP-0/3615retro-1.html",
+      "author": "3615Retro",
+      "license": "CC BY-SA 4.0",
+      "isolated": false,
+      "preparation": "Detourage et controle des contours, du boitier et de l echelle a faire."
+    },
+    {
+      "components": "ROM MX23L12807-12C ; RTC S-3511A ; quartz ; Flash ; pile deposee",
+      "photo": "assembled/flash_rtc/AGB-E05-01--front.jpg",
+      "source_page": "https://gbhwdb.gekkio.fi/cartridges/AGB-BPEF-0/3615retro-1.html",
+      "author": "3615Retro",
+      "license": "CC BY-SA 4.0",
+      "isolated": false,
+      "preparation": "Detourage et controle des contours, du boitier et de l echelle a faire."
+    },
+    {
+      "components": "ROM MX23L12807-12C, gros plan du composant sur sa carte",
+      "photo": "assembled/flash_rtc/AGB-E05-01--rom-closeup.jpg",
+      "source_page": "https://gbhwdb.gekkio.fi/cartridges/AGB-BPEE-0/fexcollects-1.html",
+      "author": "FexCollects",
+      "license": "CC BY-SA 4.0",
+      "isolated": false,
+      "preparation": "Detourage et controle des contours, du boitier et de l echelle a faire."
+    }
+  ]
+}

@@ -97,14 +97,11 @@ class FloatingToolbar(QFrame):
          'cvtool.image_tip'),
         ("ui_textbox", "ui_textbox", 'common.textbox',
          'cvtool.textbox_tip'),
-        ("ui_list", "ui_list", 'common.list',
-         'cvtool.list_tip'),
     ]
     _UI_ICON_KEYS = {
         "ui_text": "ui_text",
         "ui_textbox": "ui_textbox",
         "ui_container": "ui_container",
-        "ui_list": "ui_list",
         "ui_image": "ui_image",
     }
 

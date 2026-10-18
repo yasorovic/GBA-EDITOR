@@ -52,7 +52,7 @@ class DataEditorScreen(QWidget):
         self._inspector = DataInspectorPanel()
 
         self.body = ThreeColumnBody(self._finder, self._grid, self._inspector,
-                                    sizes=(240, 700, 300))
+                                    sizes=(280, 820, 320))
         self.body.setCollapsible(1, False)
         root.addWidget(self.body, 1)
 

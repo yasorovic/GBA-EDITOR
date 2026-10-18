@@ -41,11 +41,9 @@ class MoveResult:
 
 
 def _is_under(path: Path, folder: Path) -> bool:
-    try:
-        path.relative_to(folder)
-    except ValueError:
-        return False
-    return True
+    """`path` est `folder` ou dedans. Comparé par parties, donc SENSIBLE à la casse : `Path.relative_to` sous Windows
+    confond `scr` et `SCR`, qui sont pourtant deux dossiers distincts quand le dossier parent est sensible à la casse."""
+    return path.parts[:len(folder.parts)] == folder.parts
 
 
 def _protected_files(project) -> set[Path]:
@@ -80,9 +78,9 @@ def _verdict(raw, target: Path, assets: Path, protected: set[Path]) -> tuple[Pat
     if not source.exists() or not inside(assets, source) or source.resolve() == assets:
         return source, OUTSIDE
     source = source.resolve()
-    if source.parent == target:
+    if source.parent.parts == target.parts:
         return source, _NOTHING
-    if source == target or _is_under(target, source):
+    if _is_under(target, source):
         return source, INTO_ITSELF
     if (target / source.name).exists():
         return source, EXISTS
@@ -173,7 +171,7 @@ def _rewritten(project, value, moved: list[tuple[Path, Path]], root: Path) -> st
         return None
     current = current.resolve()
     for before, after in moved:
-        if current == before or _is_under(current, before):
+        if _is_under(current, before):
             return (after / current.relative_to(before)).relative_to(root).as_posix()
     return None
 

@@ -19,8 +19,9 @@ from typing import Optional
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QFrame, QFileDialog, QSizePolicy,
-    QLineEdit, QWidget, QMessageBox, QTabWidget, QComboBox, QMenu, QTabBar, QStackedWidget,
+    QLineEdit, QWidget, QTabWidget, QComboBox, QMenu, QTabBar, QStackedWidget,
 )
+from ui.common.popup import MessageBox as QMessageBox
 from PyQt6.QtGui import QFont, QColor, QIcon, QDesktopServices
 from PyQt6.QtCore import Qt, QSize, QUrl, pyqtSignal, QThread
 

@@ -22,6 +22,40 @@ est autorisée et revient à la source.
 
 ## Infobulles
 
+L'affichage et le comportement passent par `ui/common/tooltip_controller.py`,
+installé une seule fois au démarrage par `install_tooltips(app)`. Le style commun
+fixe le délai de survol à **600 ms**, y compris entre deux contrôles ; la bulle
+expire après **10 secondes**. Elle se ferme au clic, à la saisie clavier, au
+défilement, à la désactivation de l'application, au masquage/destruction du
+contrôle et quand le pointeur sort de l'élément concerné. Elle ne prend ni le
+focus ni les événements de souris.
+
+Une seule surface utilise les couleurs du thème, la police `T.SM`, un contour
+arrondi et les mêmes marges. Le texte brut conserve ses retours à la ligne ; les
+chemins sans espaces passent à la ligne. Largeur maximale : **420 pixels logiques**,
+limitée à l'écran disponible. Une note dépassant sa hauteur est abrégée par « … ».
+Le positionnement reste dans l'écran du pointeur, y compris près des bords.
+
+Le contrôleur lit les `ToolTipRole` des cellules et des en-têtes, les aides des
+onglets et les notes des items graphiques avant de consommer `QEvent.ToolTip`.
+Ne pas se limiter à `obj.toolTip()` : cela masquait les infobulles des tableaux
+et du canvas. Le mécanisme de rôles est celui de la
+[documentation Qt](https://doc.qt.io/qt-6/qabstractitemdelegate.html#helpEvent).
+Les contrôles conservent `setToolTip()` et les vues conservent leurs rôles Qt.
+
+Pour un contenu calculé au survol (métadonnées Disk, segment de jauge ROM),
+enregistrer `set_tooltip_provider(widget, callback)`. Le callback reçoit le point
+local et renvoie `TooltipContent(texte, rectangle)` ; `None` revient au contenu
+standard, un texte vide supprime la bulle. Le calcul reste paresseux, hors des
+déplacements de souris. **Aucun appel direct à `QToolTip.showText/hideText` dans
+les écrans** : ces appels contournaient le rendu commun et produisaient des bulles
+natives au style et aux délais différents. La bulle commune est créée uniquement
+au premier survol, sans fenêtre parasite à la construction des réglages.
+
+Les tests `tests/ui/test_tooltips.py` couvrent les sources de contenu, les règles
+de fermeture, le délai commun, les propriétaires détruits, les bords d'écran et
+les textes longs. Le test de micro-fenêtre des Project Settings reste applicable.
+
 Le catalogue porte du texte brut ; `ui/common/tooltip.py` compose le balisage
 commun. Une infobulle courte emploie `tooltip(title=..., body=...)`. Si un
 raccourci existe, `shortcut=...` le place avant l'effet : le raccourci est en

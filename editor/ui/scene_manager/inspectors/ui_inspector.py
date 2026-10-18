@@ -35,14 +35,14 @@ from PyQt6.QtWidgets import (
     QScrollArea, QSpinBox, QLineEdit, QTextEdit, QToolButton,
 )
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPen, QColor
-from PyQt6.QtCore import pyqtSignal, QTimer, Qt
+from PyQt6.QtCore import pyqtSignal, QTimer, Qt, QSize
 
 from core.project import Project
 from core.models.gba_color import bgr555_to_rgb888
 from core.models.ui_region import (
     ANCHOR_ACTOR, ALIGNS, TARGET_BG, TARGET_OBJ, PRIORITY_INHERIT,
-    KIND_LIST, KIND_TEXT, TEXT_KINDS, KIND_IMAGE, can_fill,
-    NAV_ROW, NAV_COLUMN, CURSOR_SNAP, CURSOR_SLIDE,
+    KIND_LIST, KIND_TEXT, KIND_TEXTBOX, TEXT_KINDS, KIND_IMAGE, can_fill,
+    NAV_ROW, NAV_COLUMN,
     FILL_NONE, FILL_COLOR, FILL_NINE, FILL_BG, FILL_SPRITE, fill_allowed,
     sprite_grid,
     image_geometry,
@@ -270,15 +270,21 @@ class UIInspector(QWidget):
         for i, (key, tip_key) in enumerate(zip(_ALIGN_ICONS, _ALIGN_TIP_KEYS)):
             b = QToolButton()
             b.setCheckable(True)
-            b.setFixedHeight(24)
+            b.setFixedSize(32, 32)
+            b.setIconSize(QSize(26, 26))
             b.setStyleSheet(_SEGMENTED)
-            b.setIcon(icons.get(key, C.TEXT_DIM, TEXT_ACCENT))
+            b.setIcon(icons.toolbar_icon(key, C.TEXT_DIM, TEXT_ACCENT))
             b.setToolTip(label(tip_key))
-            ab.addWidget(b, 1)
+            ab.addWidget(b)
             self._align_group.addButton(b, i)
         self._align_group.idToggled.connect(self._on_align_toggled)
         self._align_row = align_box
-        self._text_card.body_layout.addWidget(align_box)
+        self._text_toolbar = QWidget()
+        toolbar = QHBoxLayout(self._text_toolbar)
+        toolbar.setContentsMargins(0, 0, 0, 0)
+        toolbar.setSpacing(6)
+        toolbar.addWidget(align_box)
+        self._text_card.body_layout.addWidget(self._text_toolbar)
 
         # Le texte libre est la représentation de `text:draw`. Créer une
         # entrée est un choix EXPLICITE : le bouton mène à l'écran Texte ; le
@@ -315,6 +321,18 @@ class UIInspector(QWidget):
         self._commit_timer.timeout.connect(self._commit_content)
         self._content_baseline = None
         self._text_card.body_layout.addWidget(self._content)
+        from .textbox_sequence import TextboxSequenceRow
+        self._sequence_row = TextboxSequenceRow()
+        self._sequence_row.prefix_chosen.connect(self._on_sequence_chosen)
+        self._text_card.body_layout.addWidget(self._sequence_row)
+        from .textbox_pages import TextboxPages
+        self._pages = TextboxPages()
+        self._pages.changed.connect(self.changed)
+        self._pages.persist_asked.connect(self._persist)
+        self._pages.add_asked.connect(self._on_page_add)
+        self._pages.remove_asked.connect(self._on_page_remove)
+        self._pages.reorder_asked.connect(self._on_page_reorder)
+        self._text_card.body_layout.addWidget(self._pages)
         self._key_lbl = note(self._text_card.body_layout)
         self._key_shared = note(self._text_card.body_layout, "ui.text.key_shared")
 
@@ -322,8 +340,6 @@ class UIInspector(QWidget):
         # RGB — le matériel n'offre que des index. 0 = encre d'origine (seul
         # moyen de garder une police à contour) ; sinon l'encre est APLATIE,
         # comme avec `[color=n]`.
-        W.section(label("uiinsp.text.colors"), self._text_card.body_layout)
-
         # LA MÊME liste que le fond du conteneur (les banques ACTIVES de la
         # scène) — mais un texte n'en choisit qu'UNE pour toute la scène, là où
         # un fond choisit librement PAR élément. Ce n'est pas un manque : le
@@ -349,27 +365,30 @@ class UIInspector(QWidget):
         self._ui_pal_box = QVBoxLayout(self._ui_pal_host)
         self._ui_pal_box.setContentsMargins(0, 0, 0, 0)
         self._ui_pal_slot = None
-        self._ui_pal_row = W.row(label("uiinsp.text.bank"), self._ui_pal_host,
-                                 self._text_card.body_layout).parentWidget()
+        self._ui_pal_row = self._ui_pal_host
+        toolbar.addWidget(self._ui_pal_host)
         self._ui_pal_host.setToolTip(tooltip(
             title=label("uiinsp.text.bank_title"), body=label("uiinsp.text.bank_tip"), note=label("uiinsp.text.bank_note")))
 
-        self._color = ColorIndexSlot(label("uiinsp.text.ink_default"), TEXT_ACCENT)
+        self._color = ColorIndexSlot(label("uiinsp.text.ink_default"), TEXT_ACCENT,
+                                    compact_label=label("uiinsp.text.ink"))
         self._color.picked.connect(self._on_color)
         self._color.setToolTip(tooltip(
             title=label("uiinsp.text.ink_title"), body=label("uiinsp.text.ink_tip"), note=label("uiinsp.text.ink_note")))
-        self._color_row = W.row(label("uiinsp.text.ink"), self._color,
-                                self._text_card.body_layout).parentWidget()
+        self._color_row = self._color
+        toolbar.addWidget(self._color)
 
         # Surlignement — la couleur posée SOUS le texte. Même banque et même
         # plage que l'encre : la tuile où le texte se compose ne porte qu'UNE
         # banque de palette, le matériel n'en offre pas deux.
-        self._highlight = ColorIndexSlot(label("uiinsp.text.highlight_none"), TEXT_ACCENT)
+        self._highlight = ColorIndexSlot(label("uiinsp.text.highlight_none"), TEXT_ACCENT,
+                                        compact_label=label("uiinsp.text.highlight"), role="highlight")
         self._highlight.picked.connect(self._on_highlight)
         self._highlight.setToolTip(tooltip(
             title=label("uiinsp.text.highlight_title"), body=label("uiinsp.text.highlight_tip"), note=label("uiinsp.text.highlight_note")))
-        self._highlight_row = W.row(label("uiinsp.text.highlight"), self._highlight,
-                                    self._text_card.body_layout).parentWidget()
+        self._highlight_row = self._highlight
+        toolbar.addWidget(self._highlight)
+        toolbar.addStretch(1)
         self._bank_why = note(self._text_card.body_layout)
 
         # Ce que la zone COÛTE, sous les réglages qui le font bouger. La ligne
@@ -566,43 +585,6 @@ class UIInspector(QWidget):
         self._list_why = note(self._list_card.body_layout)
         self._list_shape = note(self._list_card.body_layout)
 
-        # ── Curseur — la liste le POSSÈDE ─────────────────────────
-        # Elle NOMME une image de la même mise en page ; le moteur la déplace
-        # par le chemin de `interface.image_move`, un décalage relatif à la position
-        # authorée. L'auteur pose donc son curseur en face de la PREMIÈRE
-        # rangée, et n'a rien à écrire pour qu'il suive la sélection.
-        W.section(label("uiinsp.list.cursor_section"), self._list_card.body_layout)
-        self._list_cursor = W.combobox([])
-        self._list_cursor.setToolTip(tooltip(
-            title=label("uiinsp.list.cursor_title"), body=label("uiinsp.list.cursor_tip"), note=label("uiinsp.list.cursor_note")))
-        self._list_cursor.currentIndexChanged.connect(self._on_list_cursor)
-        W.row(label("common.image"), self._list_cursor, self._list_card.body_layout)
-
-        self._list_cursor_mode = W.combobox([label("uiinsp.list.motion_snap"),
-                                             label("uiinsp.list.motion_slide")])
-        self._list_cursor_mode.setToolTip(tooltip(
-            title=label("uiinsp.list.motion_title"), body=label("uiinsp.list.motion_tip")))
-        self._list_cursor_mode.currentIndexChanged.connect(
-            lambda i: (self._set("cursor_mode",
-                                 CURSOR_SLIDE if i == 1 else CURSOR_SNAP,
-                                 "Cursor motion"),
-                       self._sync_list_cursor()))
-        W.row(label("uiinsp.list.motion"), self._list_cursor_mode, self._list_card.body_layout)
-
-        self._list_cursor_speed = UnitSpin()
-        self._list_cursor_speed.setFont(QFont(T.MONO, T.SM))
-        self._list_cursor_speed.setStyleSheet(QSS.spinbox)
-        self._list_cursor_speed.setRange(1, 64)
-        self._list_cursor_speed.setSuffix(label("uiinsp.list.speed_suffix"))
-        self._list_cursor_speed.setKeyboardTracking(False)
-        self._list_cursor_speed.valueChanged.connect(
-            lambda v: self._set("cursor_speed", int(v), "Cursor speed"))
-        self._list_cursor_speed_row = W.row(
-            label("common.speed"), self._list_cursor_speed,
-            self._list_card.body_layout).parentWidget()
-        self._list_cursor_why = note(self._list_card.body_layout,
-                                     "ui.list.cursor_missing")
-
         # ── Style de la rangée choisie ────────────────────────────
         # Les deux réglages qu'une zone porte déjà, appliqués par le moteur en
         # suivant l'index : même banque, même plage, même zéro. Une ANIMATION
@@ -616,7 +598,8 @@ class UIInspector(QWidget):
             title=label("uiinsp.list.ink_title"), body=label("uiinsp.list.ink_tip"), note=label("uiinsp.list.ink_note")))
         W.row(label("uiinsp.list.ink"), self._list_ink, self._list_card.body_layout)
 
-        self._list_hl = ColorIndexSlot(label("uiinsp.list.highlight_none"), TEXT_ACCENT)
+        self._list_hl = ColorIndexSlot(label("uiinsp.list.highlight_none"), TEXT_ACCENT,
+                                      role="highlight")
         self._list_hl.picked.connect(
             lambda i: self._set("selected_highlight_color", int(i),
                                 "Selected highlight"))
@@ -716,6 +699,8 @@ class UIInspector(QWidget):
         # Une frappe en attente appartient à l'élément PRÉCÉDENT : la commiter
         # avant de changer de contexte, sinon le timer tirera sur le nouveau.
         self._commit_content()
+        if element is not self._element:
+            self._pages.clear_preview()
         self._layout_asset, self._element = layout_asset, element
         self._project, self._scene = project, scene
         self._blocking = True
@@ -959,16 +944,26 @@ class UIInspector(QWidget):
             # première modification qui le transforme explicitement en texte.
             legacy = self._project.get_text(preview)
             preview = legacy.content if legacy is not None else preview
-        self._content.setPlainText(t.content if t else preview)
+        text = t.content if t else preview
+        # Même texte : ne pas le reposer, `setPlainText` renvoie le curseur au début
+        # (rechargement de l'inspecteur pendant la frappe).
+        if self._content.toPlainText() != text:
+            self._content.setPlainText(text)
         self._content_baseline = None
         self._sync_key_badge()
 
     def _sync_text_rows(self):
-        """Le champ de contenu garde la même place dans les deux modes.
-
-        Le choix « script draw » affiche et édite le littéral de prévisualisation;
-        choisir une entrée fait éditer son contenu. Rien d'autre à basculer.
-        """
+        """Une chaîne garde le champ unique ; une boîte édite ses pages, un bloc par texte."""
+        is_box = self._kind() == KIND_TEXTBOX
+        self._sequence_row.setVisible(is_box)
+        self._pages.setVisible(is_box)
+        self._content.setVisible(not is_box)
+        self._text_key_row.setVisible(not is_box)
+        self._key_lbl.setVisible(not is_box)
+        self._key_shared.setVisible(not is_box)
+        if is_box:
+            self._sequence_row.bind(self._project, self._element)
+            self._pages.bind(self._project, self._element)
 
     def _sync_key_badge(self):
         """Le badge sous l'éditeur : quelle entrée, dérivée ou nommée, partagée
@@ -1046,7 +1041,7 @@ class UIInspector(QWidget):
         from core.history import get_history, SetFieldCmd
         get_history().push(SetFieldCmd(
             target, field, old, value,
-            label=(f"Edit text {t.key}" if t is not None else "Edit script text preview"),
+            label=(f"Edit text {t.key}" if t is not None else "Edit local text"),
             persist_fn=self._persist))
 
     # ── Géométrie : pas de grille selon la cible HÉRITÉE du nœud ───
@@ -1389,7 +1384,6 @@ class UIInspector(QWidget):
         self._list_major.setCurrentIndex(
             1 if getattr(el, "nav_major", NAV_COLUMN) == NAV_ROW else 0)
         self._list_wrap.setChecked(bool(getattr(el, "wrap", True)))
-        self._reload_list_cursor()
         # Le style de sélection vit dans la MÊME banque que l'encre d'une zone
         # (`Scene.ui_pal_bank`) : le matériel ne charge qu'une banque d'UI par
         # scène, et deux banques feraient dire deux couleurs au même index.
@@ -1399,58 +1393,6 @@ class UIInspector(QWidget):
         self._list_hl.set_value(
             bank, int(getattr(el, "selected_highlight_color", 0) or 0))
         self._sync_list_rows()
-
-    def _reload_list_cursor(self):
-        """(Re)peuple le choix de curseur avec les IMAGES de cette mise en page.
-
-        Seulement celles-ci : une liste qui déplacerait l'image d'une autre page
-        bougerait quelque chose que l'auteur ne voit pas à côté d'elle. Un nom
-        posé qui n'y est plus reste montré et signalé, jamais effacé en
-        silence — même règle que `ColorIndexSlot` pour un index hors banque."""
-        from core.models.ui_region import KIND_IMAGE
-        el, lay = self._element, self._layout_asset
-        cur = str(getattr(el, "cursor_image", "") or "")
-        names = [x.name for x in (lay.elements if lay else [])
-                 if getattr(x, "kind", "") == KIND_IMAGE]
-        if cur and cur not in names:
-            names.append(cur)
-        was = self._blocking
-        self._blocking = True
-        try:
-            self._list_cursor.clear()
-            self._list_cursor.addItem(label("uiinsp.list.cursor_none"), "")
-            for n in names:
-                self._list_cursor.addItem(n, n)
-            i = self._list_cursor.findData(cur)
-            self._list_cursor.setCurrentIndex(i if i >= 0 else 0)
-        finally:
-            self._blocking = was
-        self._sync_list_cursor()
-
-    def _on_list_cursor(self, _i: int):
-        if self._blocking or self._element is None:
-            return
-        self._set("cursor_image", str(self._list_cursor.currentData() or ""),
-                  "List cursor")
-        self._sync_list_cursor()
-
-    def _sync_list_cursor(self):
-        """La vitesse ne compte qu'en mode glissant, et un curseur introuvable
-        se dit ici plutôt qu'au Build."""
-        from core.models.ui_region import KIND_IMAGE
-        el, lay = self._element, self._layout_asset
-        if el is None:
-            return
-        cur = str(getattr(el, "cursor_image", "") or "")
-        self._list_cursor_speed_row.setVisible(
-            getattr(el, "cursor_mode", CURSOR_SNAP) == CURSOR_SLIDE)
-        self._list_cursor_speed.setValue(
-            max(1, int(getattr(el, "cursor_speed", 2) or 2)))
-        target = lay.get(cur) if (lay and cur) else None
-        if cur and getattr(target, "kind", "") != KIND_IMAGE:
-            self._list_cursor_why.show_text("ui.list.cursor_missing", name=cur)
-        else:
-            self._list_cursor_why.clear()
 
     def _sync_list_rows(self):
         """Dit combien de rangées la liste porte et quelle grille elles font —
@@ -1649,22 +1591,27 @@ class UIInspector(QWidget):
         self._clear_ui_pal_host()
         self._ui_pal_slot = ui_pal_bank_slot(
             active, cur, _icons.COLOR_UI, on_picked=self._on_ui_pal_bank,
-            project=self._project, parent=self)
+            project=self._project, parent=self, compact=True)
         self._ui_pal_box.addWidget(self._ui_pal_slot)
 
-    def _show_inherited_bank(self, name: str):
+    def _show_inherited_bank(self, name: str, bank=None):
         """Remplace le slot éditable par le nom de la banque HÉRITÉE, en lecture
         seule : un texte imbriqué ne CHOISIT pas sa banque, il la prend de son
         conteneur (cf. `_ink_bank`). Le « pourquoi » va dans la note en dessous
         (`ui.text.bank_inherited`), la couleur des pastilles vient de cette
         banque-là."""
         self._clear_ui_pal_host()
-        lbl = QLabel(name)
-        lbl.setFont(QFont(T.MONO, T.MD))
+        from ui.common.palette_swatch import bank_icon
+        lbl = QLabel()
+        lbl.setFixedSize(32, 32)
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon = bank_icon(bank, 18) if bank is not None else icons.toolbar_icon("bank", C.TEXT_DIM)
+        lbl.setPixmap(icon.pixmap(18, 18) if bank is not None else icon.pixmap(26, 26))
+        lbl.setAccessibleName(f"{label('uiinsp.text.bank')}: {name}")
         lbl.setStyleSheet(f"color:{C.TEXT_DIM}; background:transparent;")
         lbl.setToolTip(tooltip(
             title=label("uiinsp.bank_inherited_title"),
-            body=label("uiinsp.bank_inherited_tip"),
+            body=f"{name}\n{label('uiinsp.bank_inherited_tip')}",
             note=label("uiinsp.bank_inherited_note")))
         self._ui_pal_box.addWidget(lbl)
 
@@ -1729,7 +1676,7 @@ class UIInspector(QWidget):
         inherited = self._ink_bank()
         if inherited is not None:
             bank, bank_name, container = inherited
-            self._show_inherited_bank(bank_name)
+            self._show_inherited_bank(bank_name, bank)
             self._bank_why.show_text("ui.text.bank_inherited", container=container)
         else:
             self._reload_ui_pal_slot()
@@ -1779,6 +1726,91 @@ class UIInspector(QWidget):
         popup.picked.connect(self._on_text_key)
         popup.new_requested.connect(self.text_editor_requested.emit)
         popup.show_below(self._text_key)
+
+    def _on_sequence_chosen(self, prefix: str):
+        """Lier la boîte à une séquence (ou la délier avec "")."""
+        if self._blocking or not self._element:
+            return
+        self._commit_content()
+        self._set("sequence_prefix", prefix, "Element text sequence")
+        from core.command_dispatcher import get_dispatcher
+        get_dispatcher().notify_ui_text_links_changed()
+        self._blocking = True
+        try:
+            self._reload_content()
+            self._sync_text_rows()
+        finally:
+            self._blocking = False
+        self._refresh_diagnostics()
+
+    def _pages_changed(self):
+        """Après un ajout/retrait de page : persister textes et layout, rafraîchir les vues."""
+        from core.command_dispatcher import get_dispatcher
+        schedule_unwatched(("textbox-texts", id(self._project)), self._project.save_texts)
+        self._persist()
+        get_dispatcher().notify_ui_text_links_changed()
+        self._blocking = True
+        try:
+            self._reload_content()
+            self._sync_text_rows()
+        finally:
+            self._blocking = False
+        self.changed.emit()
+
+    def _on_page_add(self):
+        """+ : ajoute une page (une boîte libre devient une séquence de deux pages)."""
+        if self._blocking or not self._element or not self._project:
+            return
+        self._pages.commit()
+        from core.history import get_history
+        from core.textbox_sequence_commands import AddTextboxPageCmd
+        get_history().push(AddTextboxPageCmd(
+            self._project, self._element, getattr(self._scene, "name", ""),
+            persist_fn=self._pages_changed))
+        self._pages.focus_page(len(self._project.textbox_pages(self._element)) - 1)
+
+    def _on_page_reorder(self, source: int, target: int):
+        """Poignée : déplace une page, ce qui échange les numéros de clé (annulable)."""
+        if self._blocking or not self._element or not self._project:
+            return
+        pages = self._project.textbox_pages(self._element)
+        if not (0 <= source < len(pages) and 0 <= target < len(pages)) or source == target:
+            return
+        self._pages.commit()
+        from core.text_sequences import reordered_keys
+        pairs = reordered_keys(pages, source, target)
+        from core.history import get_history
+        from ui.text_editor.text_commands import RenameTextKeysCmd
+        get_history().push(RenameTextKeysCmd(self._project, pairs, "Reorder pages",
+                                             persist_fn=self._pages_changed))
+        self._pages.activate(target)
+
+    def _on_page_remove(self, index: int):
+        """− : supprime la page choisie de la séquence (annulable)."""
+        if self._blocking or not self._element or not self._project:
+            return
+        pages = self._project.textbox_pages(self._element)
+        if len(pages) < 2 or not 0 < index < len(pages):
+            return
+        self._pages.commit()
+        from ui.common.popup import MessageBox as QMessageBox
+        if QMessageBox.question(
+                self, label("uiinsp.text.page_remove_title"),
+                label("uiinsp.text.page_remove_msg", page=pages[index].key),
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        from core.history import get_history
+        from ui.text_editor.text_commands import DeleteTextsCmd
+        project = self._project
+
+        def persist():
+            for code in command.translation_langs:
+                project.save_translation(code)
+            self._pages_changed()
+
+        command = DeleteTextsCmd(project, [pages[index]], persist_fn=persist,
+                                 label=f"Delete {pages[index].key}")
+        get_history().push(command)
 
     def _clear_text_link(self):
         """Le × du slot revient au mode `text:draw`."""

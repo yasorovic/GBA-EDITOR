@@ -17,11 +17,11 @@ function on_late_update()
     if global.score_player ~= shown_player then
         shown_player = global.score_player
         text:clear(9, 1, 2, 1)
-        text:draw(9, 1, "scr_arena_score_player")
+        text:draw(9, 1, "scr_score_player")
     end
     if global.score_cpu ~= shown_cpu then
         shown_cpu = global.score_cpu
         text:clear(19, 1, 2, 1)
-        text:draw(19, 1, "scr_arena_score_cpu")
+        text:draw(19, 1, "scr_score_cpu")
     end
 end

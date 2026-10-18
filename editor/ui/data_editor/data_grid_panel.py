@@ -15,46 +15,64 @@ from __future__ import annotations
 from typing import Optional
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView,
-    QAbstractItemView, QMenu, QLineEdit, QStyledItemDelegate, QComboBox,
-    QSpinBox, QMessageBox,
+    QWidget, QVBoxLayout, QTableView, QHeaderView,
+    QAbstractItemView, QMenu, QLineEdit, QStyledItemDelegate,
+    QSpinBox, QHBoxLayout, QLabel, QPushButton, QStyle,
+    QStyleOptionViewItem,
 )
-from PyQt6.QtGui import QColor
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint
+from ui.common.popup import MessageBox as QMessageBox
+from PyQt6.QtGui import QColor, QBrush, QPen, QPalette
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QModelIndex, QPersistentModelIndex, QSize
 
-from ui.common.theme import C, T, S, QSS
-from ui.common.widgets import W
+from ui.common.theme import C, T, S, QSS, ui_font
+from ui.common.widgets import W, ScriptPickerPopup
+from ui.common.palette_swatch import bank_icon
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
+from ui.common import icons
+from ui.common.color_menu import add_color_actions
 
 from core.models.unique_name import unique_name
-from core.models.data_table import (DataTable, DataColumn, COLUMN_TYPES,
+from core.models.data_table import (DataTable, DataColumn, COLUMN_CHOICES,
                                     COLUMN_REFERENCES)
-from core.history import get_history, RemoveListItemCmd
+from core.history import get_history, RemoveListItemCmd, SetFieldCmd
+from core.text_sequences import sequences
+from core.text_table_link import (link_state, key_column,
+                                  row_changes, LinkTableCmd, UnlinkTableCmd)
 from core.project import Project
 
 from .data_commands import (SetCellCmd, InsertRowCmd, AddColumnCmd,
                             RemoveColumnCmd, SetColumnTypeCmd)
+from .data_table_model import DataTableModel
 
 
 _TBL_SS = f"""
-QTableWidget {{
-    background:{C.BG_BASE}; color:{C.TEXT_HI};
-    border:none; gridline-color:{C.BORDER_DARK};
-    font-family:{T.CODE}; font-size:{T.MD}px;
+QTableView {{
+    background:{C.BG_BASE}; alternate-background-color:{C.BG_PANEL}; color:{C.TEXT_HI};
+    border:1px solid {C.BORDER}; border-radius:0;
+    gridline-color:{C.BORDER};
+    font-family:{T.CODE}; font-size:{T.LG}px;
     outline:none;
-    selection-background-color:{C.BG_SEL}; selection-color:{C.ACCENT};
+    selection-background-color:{C.BG_SEL}; selection-color:{C.TEXT_HI};
 }}
 QHeaderView::section {{
-    background:transparent; color:{C.TEXT_MUTED};
+    background:{C.BG_PANEL}; color:{C.TEXT_DIM};
     border:none; border-bottom:1px solid {C.BORDER_DARK};
     border-right:1px solid {C.BORDER_DARK};
-    font-family:{T.UI_STACK}; font-size:{T.XS}px;
-    font-weight:700; letter-spacing:1px;
-    padding:3px 6px;
+    font-family:{T.CODE}; font-size:{T.SM}px;
+    font-weight:400;
+    padding:0;
 }}
-QTableWidget::item {{ padding:1px 4px; }}
-QTableWidget::item:hover {{ background:{C.BG_PANEL}; }}
+QHeaderView::section:checked {{
+    background:{C.BG_SEL}; color:{C.ACCENT};
+}}
+QTableCornerButton::section {{
+    background:{C.BG_RAISED}; border:none;
+    border-bottom:1px solid {C.BORDER_DARK};
+    border-right:1px solid {C.BORDER_DARK};
+}}
+QTableView::item {{ padding:3px 14px; }}
+QTableView::item:hover {{ background:{C.BG_HOVER}; }}
 """
 
 
@@ -67,9 +85,12 @@ class _ColumnHeader(QHeaderView):
 
     rename_requested = pyqtSignal(int, str)
 
-    def __init__(self, parent=None):
+    def __init__(self, type_for_section, parent=None):
         super().__init__(Qt.Orientation.Horizontal, parent)
+        self._type_for_section = type_for_section
         self.setSectionsClickable(True)
+        self.setFixedHeight(58)
+        self.setMinimumSectionSize(120)
         self._editor: Optional[QLineEdit] = None
         self._section = -1
         self.sectionDoubleClicked.connect(self._edit_section)
@@ -87,6 +108,52 @@ class _ColumnHeader(QHeaderView):
         editor.setFocus()
         editor.editingFinished.connect(self._commit)
         self._editor = editor
+
+    def paintSection(self, painter, rect, logical_index):
+        """Un nom et son type dans le même en-tête, sans ajouter une colonne
+        de métadonnées à la grille. Le schéma reste lisible avant les valeurs."""
+        if rect.width() <= 0:
+            return
+        name = str(self.model().headerData(logical_index, Qt.Orientation.Horizontal) or "")
+        column = self._type_for_section(logical_index)
+        type_name = column.type if column is not None else ""
+
+        painter.save()
+        painter.setClipRect(rect)
+        painter.fillRect(rect, QColor(C.BG_RAISED))
+        column_color = QColor(column.color) if column and column.color else QColor()
+        if column_color.isValid():
+            fill = QColor(column_color)
+            fill.setAlpha(22)
+            painter.fillRect(rect, fill)
+            painter.fillRect(rect.x(), rect.y(), rect.width(), 3, column_color)
+        painter.setPen(QColor(C.BORDER))
+        painter.drawLine(rect.bottomLeft(), rect.bottomRight())
+        painter.setPen(QColor(C.BORDER_DARK))
+        painter.drawLine(rect.topRight(), rect.bottomRight())
+        painter.setPen(column_color if column_color.isValid() else QColor(C.TEXT_HI))
+        font = ui_font(T.LG, bold=True)
+        painter.setFont(font)
+        name_rect = rect.adjusted(14, 7, -14, -29)
+        name = painter.fontMetrics().elidedText(name, Qt.TextElideMode.ElideRight,
+                                               max(0, name_rect.width()))
+        painter.drawText(name_rect,
+                         Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                         name)
+        if type_name:
+            color = QColor({"int": C.SYNTAX_NUMBER, "bool": C.SYNTAX_KEYWORD,
+                            "text": C.SYNTAX_STRING}.get(type_name, C.ACCENT_COOL))
+            painter.setFont(ui_font(T.SM, family=T.CODE))
+            badge = rect.adjusted(14, 32, -14, -8)
+            badge.setWidth(min(badge.width(), painter.fontMetrics().horizontalAdvance(type_name) + 16))
+            fill = QColor(color)
+            fill.setAlpha(20)
+            painter.setBrush(fill)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRoundedRect(badge.adjusted(0, 0, -1, -1), 3, 3)
+            painter.setPen(color)
+            painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, type_name)
+        painter.restore()
 
     def _commit(self):
         if self._editor is None:
@@ -114,18 +181,40 @@ class _CellDelegate(QStyledItemDelegate):
         super().__init__(panel)
         self._panel = panel
 
+    def paint(self, painter, option, index):
+        """Peint la sélection comme UNE rangée continue, comme dans la
+        maquette, tout en laissant Qt dessiner texte et cases à cocher."""
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        styled = QStyleOptionViewItem(option)
+        self.initStyleOption(styled, index)
+        if selected:
+            styled.state &= ~QStyle.StateFlag.State_Selected
+            styled.state &= ~QStyle.StateFlag.State_MouseOver
+            styled.state &= ~QStyle.StateFlag.State_HasFocus
+            styled.backgroundBrush = QBrush(QColor(C.BG_SEL))
+            styled.palette.setColor(QPalette.ColorRole.Text, QColor(C.TEXT_HI))
+        super().paint(painter, styled, index)
+
+        painter.save()
+        painter.setPen(QPen(QColor(C.BORDER_DARK), 1))
+        painter.drawLine(option.rect.bottomLeft(), option.rect.bottomRight())
+        if selected and index.column() == 0:
+            painter.fillRect(option.rect.x(), option.rect.y(), 3,
+                             option.rect.height(), QColor(C.ACCENT))
+        if selected and option.state & QStyle.StateFlag.State_HasFocus:
+            edge = QColor(C.ACCENT)
+            edge.setAlpha(100)
+            painter.setPen(QPen(edge, 1))
+            painter.drawRect(option.rect.adjusted(1, 1, -1, -1))
+        painter.restore()
+
     def createEditor(self, parent, option, index):
         col = self._panel.column_at(index.column())
-        if col is None:
+        if col is None or self._panel.is_key_cell(col):
             return None
         if col.type in COLUMN_REFERENCES:
-            combo = QComboBox(parent)
-            combo.setStyleSheet(QSS.combobox)
-            # Une entrée vide en tête : « aucune référence » est une valeur
-            # légitime, et le build l'émet en 0.
-            combo.addItem("")
-            combo.addItems(self._panel.choices_for(col))
-            return combo
+            self._pick_reference(parent, option, index, col)
+            return None
         if col.type == "int":
             spin = QSpinBox(parent)
             spin.setStyleSheet(QSS.spinbox)
@@ -133,21 +222,47 @@ class _CellDelegate(QStyledItemDelegate):
             return spin
         return None
 
+    def _pick_reference(self, parent, option, index, column):
+        # Le popup écrit seulement au choix explicite. Le fermer (Échap ou
+        # clic ailleurs) ne remplace donc jamais une référence manquante.
+        target = QPersistentModelIndex(index)
+        entries = [(label("common.none_paren"), "", None)]
+        project = self._panel._project
+        icon = (icons.get(column.type, C.TEXT_DIM) if column.type in
+                {"sprite", "background", "palette", "scene", "camera", "font", "sfx", "music"}
+                else None)
+        for name in self._panel.choices_for(column):
+            entry_icon = icon
+            if column.type == "palette" and project:
+                bank = project.palettes.get(name)
+                if bank:
+                    entry_icon = bank_icon(bank)
+            entries.append((name, name, entry_icon))
+        popup = ScriptPickerPopup(entries, C.ACCENT, parent=parent, new_label=None)
+        popup.setFixedWidth(max(260, min(420, option.rect.width())))
+
+        def picked(value):
+            # Un rechargement de la table invalide l'index : un ancien popup
+            # ne doit pas écrire dans la nouvelle sélection.
+            if target.isValid():
+                target.model().setData(QModelIndex(target), value, Qt.ItemDataRole.EditRole)
+
+        popup.picked.connect(picked)
+        anchor = QWidget(parent)
+        anchor.setGeometry(option.rect)
+        popup.show_below(anchor)
+        anchor.deleteLater()
+
     def setEditorData(self, editor, index):
         value = index.data(Qt.ItemDataRole.EditRole) or ""
-        if isinstance(editor, QComboBox):
-            pos = editor.findText(str(value))
-            editor.setCurrentIndex(max(0, pos))
-        elif isinstance(editor, QSpinBox):
+        if isinstance(editor, QSpinBox):
             try:
                 editor.setValue(int(value or 0))
             except (TypeError, ValueError):
                 editor.setValue(0)
 
     def setModelData(self, editor, model, index):
-        if isinstance(editor, QComboBox):
-            model.setData(index, editor.currentText(), Qt.ItemDataRole.EditRole)
-        elif isinstance(editor, QSpinBox):
+        if isinstance(editor, QSpinBox):
             model.setData(index, str(editor.value()), Qt.ItemDataRole.EditRole)
 
 
@@ -170,22 +285,92 @@ class DataGridPanel(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        self._bar = W.section_bar(label("datagrid.table_bar"), C.ACCENT)
-        hl = self._bar.layout()
-        self._btn_row = W.btn_add(label("datagrid.add_row"), icon="add_row")
+        self._bar = QWidget()
+        self._bar.setObjectName("dataToolbar")
+        self._bar.setStyleSheet(f"""
+            QWidget#dataToolbar {{ background:{C.BG_BASE}; border-bottom:1px solid {C.BORDER_DARK}; }}
+            QLabel {{ background:transparent; border:none; }}
+        """)
+        self._bar.setMinimumHeight(76)
+        bar_layout = QHBoxLayout(self._bar)
+        bar_layout.setContentsMargins(S.XL, S.MD, S.XL, S.MD)
+        bar_layout.setSpacing(S.MD)
+        heading = QVBoxLayout()
+        heading.setContentsMargins(0, 0, 0, 0)
+        heading.setSpacing(S.SM)
+        self._table_title = QLabel(label("datagrid.table_bar"))
+        self._table_title.setStyleSheet(
+            f"color:{C.TEXT_HI}; font-family:{T.UI_STACK}; font-size:{T.XXL}px; font-weight:600;")
+        self._table_meta = QLabel("")
+        self._table_meta.setStyleSheet(
+            f"color:{C.TEXT_DIM}; font-family:{T.UI_STACK}; font-size:{T.SM}px;")
+        heading.addWidget(self._table_title)
+        heading.addWidget(self._table_meta)
+        self._link_label = QLabel("")
+        self._link_label.setStyleSheet(
+            f"color:{C.ACCENT}; font-family:{T.UI_STACK}; font-size:{T.SM}px;")
+        heading.addWidget(self._link_label)
+        bar_layout.addLayout(heading, 1)
+
+        self._btn_row = QPushButton(label("datagrid.add_row_action"))
+        self._btn_row.setStyleSheet(QSS.button_primary)
+        self._btn_row.setMinimumHeight(32)
+        self._btn_row.setIcon(icons.get("add", C.BTN_PRIMARY_TEXT))
+        self._btn_row.setIconSize(QSize(15, 15))
         self._btn_row.setToolTip(tooltip(title=label("datagrid.add_row")))
         self._btn_row.clicked.connect(lambda: self._insert_row(len(self._table.rows)
                                                                if self._table else 0))
-        hl.addWidget(self._btn_row)
-        self._btn_col = W.btn_add(label("datagrid.add_column"), icon="add_column")
+        bar_layout.addWidget(self._btn_row)
+        self._btn_duplicate = QPushButton(label("datagrid.duplicate_row"))
+        secondary_style = QSS.button_ghost + f"QPushButton {{ font-size:{T.MD}px; padding:4px 10px; }}"
+        self._btn_duplicate.setStyleSheet(secondary_style)
+        self._btn_duplicate.setMinimumHeight(32)
+        self._btn_duplicate.setIcon(icons.get("copy", C.TEXT_DIM))
+        self._btn_duplicate.setIconSize(QSize(15, 15))
+        self._btn_duplicate.clicked.connect(self._duplicate_selected_row)
+        bar_layout.addWidget(self._btn_duplicate)
+        self._btn_delete = QPushButton(label("datagrid.delete_row"))
+        self._btn_delete.setStyleSheet(secondary_style + f"QPushButton:hover {{ color:{C.ACCENT_RED}; }}")
+        self._btn_delete.setMinimumHeight(32)
+        self._btn_delete.setIcon(icons.get("clear", C.TEXT_DIM))
+        self._btn_delete.setIconSize(QSize(15, 15))
+        self._btn_delete.clicked.connect(self._delete_selected_row)
+        bar_layout.addWidget(self._btn_delete)
+        self._btn_link = QPushButton(label("datagrid.link_action"))
+        self._btn_unlink = QPushButton(label("datagrid.unlink_action"))
+        for button, handler in ((self._btn_link, self._link_menu), (self._btn_unlink, self._unlink)):
+            button.setStyleSheet(secondary_style)
+            button.setMinimumHeight(32)
+            button.clicked.connect(handler)
+            bar_layout.addWidget(button)
+        separator = QWidget()
+        separator.setFixedSize(1, 20)
+        separator.setStyleSheet(f"background:{C.BORDER};")
+        bar_layout.addWidget(separator)
+        self._btn_col = QPushButton(label("datagrid.add_column_action"))
+        self._btn_col.setStyleSheet(secondary_style)
+        self._btn_col.setMinimumHeight(32)
+        self._btn_col.setIcon(icons.get("add", C.TEXT_DIM))
+        self._btn_col.setIconSize(QSize(15, 15))
         self._btn_col.setToolTip(tooltip(title=label("datagrid.add_column"), body=label("datagrid.add_column_tip")))
         self._btn_col.clicked.connect(self._add_column)
-        hl.addWidget(self._btn_col)
+        bar_layout.addWidget(self._btn_col)
         root.addWidget(self._bar)
 
-        self._tbl = QTableWidget(0, 0)
+        self._tbl = QTableView()
         self._tbl.setStyleSheet(_TBL_SS)
-        self._header = _ColumnHeader(self._tbl)
+        self._tbl.setShowGrid(False)
+        self._tbl.setAlternatingRowColors(True)
+        self._tbl.setMouseTracking(True)
+        self._tbl.setWordWrap(False)
+        self._tbl.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self._tbl.verticalHeader().setFixedWidth(44)
+        self._tbl.verticalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._tbl.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
+        self._tbl.verticalHeader().setDefaultSectionSize(36)
+        self._model = DataTableModel(self._write_cell, self._text_preview, self._tbl)
+        self._tbl.setModel(self._model)
+        self._header = _ColumnHeader(self.column_at, self._tbl)
         self._tbl.setHorizontalHeader(self._header)
         self._header.rename_requested.connect(self._rename_column)
         self._header.setToolTip(tooltip(
@@ -193,15 +378,24 @@ class DataGridPanel(QWidget):
         ))
         self._header.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._header.customContextMenuRequested.connect(self._column_menu)
+        self._fit_key = None            # (table, nombre de colonnes) dont les largeurs sont posées
+        self._fitting = False
+        self._user_widths = False       # l'auteur a tiré une colonne : plus rien ne les remplace
+        self._header.sectionResized.connect(self._on_section_resized)
         self._tbl.setItemDelegate(_CellDelegate(self))
-        self._tbl.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
+        self._tbl.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._tbl.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked
                                   | QAbstractItemView.EditTrigger.EditKeyPressed)
         self._tbl.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._tbl.customContextMenuRequested.connect(self._row_menu)
-        self._tbl.itemChanged.connect(self._on_item_changed)
-        self._tbl.currentCellChanged.connect(self._on_current_cell)
-        root.addWidget(self._tbl, 1)
+        self._tbl.selectionModel().currentChanged.connect(self._on_current_index)
+        self._grid_host = QWidget()
+        self._grid_host.setStyleSheet(f"background:{C.BG_BASE};")
+        grid_layout = QVBoxLayout(self._grid_host)
+        grid_layout.setContentsMargins(S.XL, S.XL, S.XL, S.XL)
+        grid_layout.setSpacing(0)
+        grid_layout.addWidget(self._tbl, 1)
+        root.addWidget(self._grid_host, 1)
 
         self._empty = W.empty_state(label("datagrid.empty"))
         root.addWidget(self._empty)
@@ -228,74 +422,156 @@ class DataGridPanel(QWidget):
 
     def _show_empty(self, empty: bool):
         self._empty.setVisible(empty)
-        self._tbl.setVisible(not empty)
+        self._grid_host.setVisible(not empty)
         self._bar.setVisible(not empty)
+
+    def _update_table_header(self):
+        if not self._table:
+            return
+        self._table_title.setText(self._table.name)
+        self._table_meta.setText(label("datagrid.table_summary",
+                                       rows=len(self._table.rows),
+                                       columns=len(self._table.columns)))
+        self._sync_link_ui()
+        self._sync_row_actions()
+
+    def _sync_row_actions(self):
+        has_row = self._tbl.currentIndex().row() >= 0
+        locked = self._is_linked()
+        self._btn_row.setEnabled(not locked)
+        self._btn_duplicate.setEnabled(has_row and not locked)
+        self._btn_delete.setEnabled(has_row and not locked)
+
+    # ── Lien avec un groupe de textes ─────────────────────────────
+
+    def _is_linked(self) -> bool:
+        return bool(self._table and self._table.text_link)
+
+    def is_key_cell(self, column: DataColumn) -> bool:
+        return self._is_linked() and key_column(self._table) is column
+
+    def _sync_link_ui(self):
+        state = link_state(self._project, self._table) if self._is_linked() else None
+        self._link_label.setVisible(state is not None)
+        if state:
+            self._link_label.setText(label("datagrid.link_" + state,
+                                           group=self._table.text_link["prefix"]))
+        self._link_label.setToolTip(label("datagrid.link_locked"))
+        self._btn_link.setVisible(state is None)
+        self._btn_unlink.setVisible(state is not None)
+
+    def _text_column(self):
+        return next((c for c in self._table.columns if c.type == "text"), None)
+
+    def _link_menu(self):
+        if not self._table:
+            return
+        column = self._text_column()
+        if column is None:
+            QMessageBox.information(self, label("datagrid.link_title"), label("datagrid.link_no_text_column"))
+            return
+        menu = QMenu(self)
+        menu.setStyleSheet(QSS.menu)
+        groups = list(sequences(self._project))
+        for prefix in groups:
+            menu.addAction(prefix).setData(prefix)
+        if not groups:
+            menu.addAction(label("datagrid.link_no_group")).setEnabled(False)
+        action = menu.exec(self._btn_link.mapToGlobal(QPoint(0, self._btn_link.height())))
+        if action is not None and action.data() is not None:
+            self._apply_link(action.data(), column.name)
+
+    def _confirm_link(self, prefix, added, lost) -> bool:
+        return QMessageBox.question(
+            self, label("datagrid.link_title"),
+            label("datagrid.link_confirm", group=prefix, added=added, lost=lost),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        ) == QMessageBox.StandardButton.Yes
+
+    def _apply_link(self, prefix, column_name):
+        column = self._table.column(column_name)
+        added, lost = row_changes(self._project, self._table, prefix, column)
+        if (added or lost) and not self._confirm_link(prefix, added, lost):
+            return
+        get_history().push(LinkTableCmd(self._project, self._table, prefix, column_name,
+                                        self._after_change))
+
+    def _unlink(self):
+        if self._is_linked():
+            get_history().push(UnlinkTableCmd(self._project, self._table, self._after_change))
 
     # ── Chargement ────────────────────────────────────────────────
 
     def load_project(self, project: Project):
         self._project = project
         self._table = None
+        self._model.set_table(None)
         self._show_empty(True)
 
     def show_table(self, name: str):
         self._table = self._project.get_data_table(name) if self._project else None
         self._show_empty(self._table is None)
+        if self._table is None:
+            self._model.set_table(None)
+            self.cell_selected.emit(None, None)
         self.reload()
 
     def on_table_deleted(self):
         self._table = None
+        self._model.set_table(None)
+        self.cell_selected.emit(None, None)
         self._show_empty(True)
 
     def reload(self):
         if not self._table:
             return
+        # Une réinitialisation du modèle efface les largeurs de l'en-tête : celles de l'auteur sont reposées après.
+        kept = None
+        if self._user_widths and self._fit_key == (id(self._table), len(self._table.columns)):
+            kept = [self._tbl.columnWidth(c) for c in range(self._model.columnCount())]
         self._updating = True
-        self._tbl.clear()
-        self._tbl.setColumnCount(len(self._table.columns))
-        self._tbl.setRowCount(len(self._table.rows))
-        self._tbl.setHorizontalHeaderLabels([c.name for c in self._table.columns])
+        self._model.set_table(self._table)
         # Les lignes sont numérotées À PARTIR DE 1 : c'est l'index qu'un script
-        # écrit, et l'afficher à partir de 0 obligerait à traduire de tête.
-        self._tbl.setVerticalHeaderLabels([str(i + 1)
-                                           for i in range(len(self._table.rows))])
+        # écrit, et le modèle les expose donc à partir de 1.
         for c in range(len(self._table.columns)):
             self._tbl.horizontalHeader().setSectionResizeMode(
                 c, QHeaderView.ResizeMode.Interactive)
-            self._tbl.setColumnWidth(c, 120)
-        for r, row in enumerate(self._table.rows):
-            self._tbl.setRowHeight(r, S.ROW)
-            for c, col in enumerate(self._table.columns):
-                self._tbl.setItem(r, c, self._make_item(row, col))
         self._updating = False
+        self._fit_columns(kept)
+        self._update_table_header()
 
-    def _make_item(self, row: dict, col: DataColumn) -> QTableWidgetItem:
-        value = self._table.value(row, col)
-        item = QTableWidgetItem()
-        if col.type == "bool":
-            # Une case à cocher, sans texte : la colonne dit déjà ce qu'elle coche.
-            item.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled
-                          | Qt.ItemFlag.ItemIsSelectable)
-            item.setCheckState(Qt.CheckState.Checked if value
-                               else Qt.CheckState.Unchecked)
-            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        else:
-            item.setText(str(value))
-            if col.type in COLUMN_REFERENCES:
-                item.setForeground(QColor(C.ACCENT if value else C.TEXT_DIM))
-                # Une colonne de textes montre une CLÉ, qui ne dit pas ce que
-                # le joueur lira (ROADMAP v0.21). Le contenu vient donc en
-                # infobulle : la cellule garde sa clé — c'est elle que
-                # `_read_item` relit — et l'auteur voit sa réplique sans
-                # ouvrir l'écran Texte.
-                if col.type == "text" and value:
-                    item.setToolTip(tooltip(
-                        title=label("datagrid.text_preview_title"),
-                        body=self._text_preview(str(value)),
-                    ))
-            else:
-                item.setForeground(QColor(C.SYNTAX_NUMBER))
-        return item
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._fit_columns()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._fit_columns()
+
+    def _on_section_resized(self, *_):
+        if not self._fitting and not self._updating:
+            self._user_widths = True
+
+    def _fit_columns(self, kept=None):
+        """La grille est un plan de travail, pas une petite table collée au
+        coin : ses colonnes initiales occupent la largeur disponible. Dès que
+        l'auteur tire une colonne, ses largeurs ne sont plus jamais remplacées
+        (`kept` : celles à reposer après un rechargement de la même table)."""
+        count = self._model.columnCount()
+        if not count:
+            return
+        key = (id(self._table), count)
+        if key != self._fit_key:
+            self._fit_key, self._user_widths, kept = key, False, None
+        if self._user_widths and not kept:
+            return
+        self._fitting = True
+        try:
+            width = max(120, self._tbl.viewport().width() // count)
+            for column in range(count):
+                self._tbl.setColumnWidth(column, kept[column] if kept else width)
+        finally:
+            self._fitting = False
 
     def _text_preview(self, key: str) -> str:
         """La réplique que cette clé désigne, telle que le joueur la lira —
@@ -305,7 +581,7 @@ class DataGridPanel(QWidget):
         entry = next((x for x in getattr(self._project, "texts", [])
                       if x.key == key), None)
         if entry is None:
-            return label("datagrid.text_not_found", key=key)
+            return label("datagrid.text_not_found", name=key)
         try:
             from core.text_markup import parse, resolve
             consts = {c.name: c.value for c in getattr(self._project, "constants", [])}
@@ -315,47 +591,29 @@ class DataGridPanel(QWidget):
         body = body.replace(chr(10), " ")
         if len(body) > 160:
             body = body[:157] + "…"
-        return label("datagrid.text_preview", key=key, body=body)
+        return label("datagrid.text_preview", name=key, body=body)
 
     # ── Écriture d'une cellule ────────────────────────────────────
 
-    def _on_item_changed(self, item: QTableWidgetItem):
+    def _write_cell(self, row_index: int, column_index: int, new) -> bool:
+        """Seul chemin d'écriture du modèle vers la donnée et l'historique."""
         if self._updating or not self._table:
-            return
-        col = self.column_at(item.column())
-        if col is None or item.row() >= len(self._table.rows):
-            return
-        row = self._table.rows[item.row()]
+            return False
+        col = self.column_at(column_index)
+        if col is None or self.is_key_cell(col) or not (0 <= row_index < len(self._table.rows)):
+            return False
+        row = self._table.rows[row_index]
         old = self._table.value(row, col)
-        new = self._read_item(item, col)
         if new == old:
-            return
+            return True
         get_history().push(SetCellCmd(self._table, row, col.name, old, new,
                                       self._persist))
-        self._refresh_cell(item.row(), item.column())
         self.cell_selected.emit(col, new)
+        return True
 
-    def _read_item(self, item: QTableWidgetItem, col: DataColumn):
-        if col.type == "bool":
-            return item.checkState() == Qt.CheckState.Checked
-        if col.type == "int":
-            try:
-                return int(item.text().strip() or 0)
-            except ValueError:
-                return 0
-        return item.text().strip()
-
-    def _refresh_cell(self, r: int, c: int):
-        """Réaffiche une cellule depuis la donnée — une saisie invalide dans une
-        colonne d'entiers ne doit pas rester à l'écran sous sa forme tapée."""
-        if not self._table:
-            return
-        self._updating = True
-        self._tbl.setItem(r, c, self._make_item(self._table.rows[r],
-                                                self._table.columns[c]))
-        self._updating = False
-
-    def _on_current_cell(self, r: int, c: int, _pr, _pc):
+    def _on_current_index(self, current: QModelIndex, _previous: QModelIndex):
+        self._sync_row_actions()
+        r, c = current.row(), current.column()
         col = self.column_at(c)
         if col is None or not self._table or not (0 <= r < len(self._table.rows)):
             self.cell_selected.emit(col, None)
@@ -365,23 +623,57 @@ class DataGridPanel(QWidget):
     # ── Lignes ────────────────────────────────────────────────────
 
     def _insert_row(self, index: int):
-        if not self._table:
+        if not self._table or self._is_linked():
             return
         if not self._table.columns:
             QMessageBox.information(self, label("datagrid.no_column_title"),
                                     label("datagrid.no_column_text"))
             return
+        if not self._confirm_index_shift(index, inserting=True):
+            return
         get_history().push(InsertRowCmd(self._table, index, {}, self._after_change))
 
     def _delete_row(self, index: int):
-        if not self._table or not (0 <= index < len(self._table.rows)):
+        if not self._table or self._is_linked() or not (0 <= index < len(self._table.rows)):
+            return
+        if not self._confirm_index_shift(index, inserting=False):
             return
         get_history().push(RemoveListItemCmd(
             self._table.rows, self._table.rows[index], self._after_change,
             label=f"Ligne {index + 1}"))
 
-    def _row_menu(self, pos: QPoint):
+    def _duplicate_selected_row(self):
+        if not self._table or self._is_linked():
+            return
+        row = self._tbl.currentIndex().row()
+        if 0 <= row < len(self._table.rows):
+            if not self._confirm_index_shift(row + 1, inserting=True):
+                return
+            copied = dict(self._table.rows[row])
+            get_history().push(InsertRowCmd(
+                self._table, row + 1, copied, self._after_change))
+
+    def _delete_selected_row(self):
+        self._delete_row(self._tbl.currentIndex().row())
+
+    def _confirm_index_shift(self, index: int, *, inserting: bool) -> bool:
+        """L'ordre affiché est celui que Lua indexe. Ajouter en fin ou retirer
+        la dernière ligne ne décale rien ; tous les autres gestes le disent
+        avant d'écrire (la roadmap interdit de masquer cette conséquence)."""
         if not self._table:
+            return False
+        shifts = index < len(self._table.rows) if inserting else index < len(self._table.rows) - 1
+        if not shifts:
+            return True
+        message = label("datagrid.insert_shifts_indices" if inserting
+                        else "datagrid.delete_shifts_indices", index=index + 1)
+        return QMessageBox.question(
+            self, label("datagrid.index_shift_title"), message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        ) == QMessageBox.StandardButton.Yes
+
+    def _row_menu(self, pos: QPoint):
+        if not self._table or self._is_linked():
             return
         r = self._tbl.rowAt(pos.y())
         menu = QMenu(self)
@@ -446,7 +738,7 @@ class DataGridPanel(QWidget):
         menu.setStyleSheet(QSS.menu)
         type_menu = menu.addMenu(label("datagrid.type"))
         actions = {}
-        for t in COLUMN_TYPES:
+        for t in COLUMN_CHOICES:
             a = type_menu.addAction(t)
             a.setCheckable(True)
             a.setChecked(t == col.type)
@@ -454,6 +746,8 @@ class DataGridPanel(QWidget):
         menu.addSeparator()
         a_add = menu.addAction(label("datagrid.add_column_menu"))
         a_del = menu.addAction(label("datagrid.delete_column"))
+        add_color_actions(menu, col.color,
+                          lambda color: self._set_column_color(col, color))
         act = menu.exec(self._header.mapToGlobal(pos))
         if act is None:
             return
@@ -465,6 +759,12 @@ class DataGridPanel(QWidget):
             self._add_column()
         elif act == a_del:
             get_history().push(RemoveColumnCmd(self._table, col, self._after_change))
+
+    def _set_column_color(self, column: DataColumn, color: str | None):
+        color = color or ""
+        if self._table and column in self._table.columns and column.color != color:
+            get_history().push(SetFieldCmd(column, "color", column.color, color,
+                                           label=column.name, persist_fn=self._after_change))
 
     # ── Après toute écriture de structure ─────────────────────────
 

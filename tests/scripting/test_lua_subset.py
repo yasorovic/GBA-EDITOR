@@ -226,7 +226,7 @@ def test_text_draw_in_litteral_interpole_une_locale():
     from scripting.codegen import generate, CodegenContext
 
     src = _in_handler('    local hp = 7\n    interface:get("hud"):draw("PV : $hp!3")')
-    kinds = {"hud": "text_region"}
+    kinds = {"hud": "textBox"}
     assert not _errors(src, global_names=[], const_names=[], text_keys=[],
                        element_names=["hud"], ref_kinds=kinds)
     code, _, _ = generate(parse(src), CodegenContext(

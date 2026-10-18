@@ -1,0 +1,33 @@
+{
+  "name": "Table",
+  "id": "1fccf4bd624a",
+  "columns": [
+    {
+      "name": "valeur",
+      "type": "bool"
+    },
+    {
+      "name": "column",
+      "type": "music"
+    },
+    {
+      "name": "column_2",
+      "type": "scene"
+    },
+    {
+      "name": "column_3",
+      "type": "int"
+    },
+    {
+      "name": "column_5",
+      "type": "int"
+    }
+  ],
+  "rows": [
+    {},
+    {},
+    {},
+    {},
+    {}
+  ]
+}

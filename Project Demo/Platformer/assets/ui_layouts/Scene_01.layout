@@ -6,7 +6,7 @@
   "target": "",
   "elements": [
     {
-      "kind": "text",
+      "kind": "textbox",
       "name": "txt_score",
       "parent": "",
       "visible": true,
@@ -24,6 +24,47 @@
       "align": "left",
       "preview_text": "",
       "preview_is_literal": false
+    },
+    {
+      "kind": "textbox",
+      "name": "textbox",
+      "parent": "",
+      "visible": true,
+      "text_color": 1,
+      "highlight_color": 4,
+      "priority": -1,
+      "x": 8,
+      "y": 80,
+      "w": 224,
+      "h": 64,
+      "text_key": "",
+      "font_name": "Font8x8 Latin",
+      "font_weight": 400,
+      "font_italic": false,
+      "align": "left",
+      "preview_text": "vfdsfhbgncn",
+      "preview_is_literal": true
+    },
+    {
+      "kind": "text",
+      "point": true,
+      "name": "text",
+      "parent": "",
+      "visible": true,
+      "text_color": 0,
+      "highlight_color": 0,
+      "priority": -1,
+      "x": 8,
+      "y": 40,
+      "w": 96,
+      "h": 16,
+      "text_key": "",
+      "font_name": "",
+      "font_weight": 400,
+      "font_italic": false,
+      "align": "left",
+      "preview_text": "Text",
+      "preview_is_literal": true
     }
   ],
   "notes": ""
