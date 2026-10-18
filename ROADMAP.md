@@ -7,9 +7,9 @@ et les questions volontairement laissées ouvertes.
 
 Une fois un jalon **entièrement livré**, son détail quitte ce fichier : la discussion complète (décisions
 verrouillées, pièges rencontrés, mesures) part dans [changelog/archives/](changelog/archives/), un
-fichier par version — ou par chantier, pour un [chantier technique](#chantiers-techniques). Un
+fichier par version, ou par chantier, pour un [chantier technique](#chantiers-techniques). Un
 jalon **produit** gagne en plus une ligne au [CHANGELOG](changelog/CHANGELOG.md) ; un chantier technique
-n'y va jamais, il ne concerne que le code. Rien n'est perdu, ça change juste d'endroit — pour
+n'y va jamais, il ne concerne que le code. Rien n'est perdu, ça change juste d'endroit. Pour
 rouvrir une décision passée, c'est là qu'elle est.
 
 Six documents, six rôles :
@@ -19,44 +19,44 @@ Six documents, six rôles :
 | [README](README.md) | un visiteur | une ligne par version |
 | [CHANGELOG](changelog/CHANGELOG.md) | qui veut savoir ce qui a changé | une entrée courte par version livrée |
 | [changelog/archives/](changelog/archives/) | qui rouvre une décision passée | le détail complet d'une version livrée |
-| **ce fichier** | qui décide de la suite | scope, décisions, reliquat ouvert — jalons et chantiers **non clos** |
+| **ce fichier** | qui décide de la suite | scope, décisions, reliquat ouvert (jalons et chantiers **non clos**) |
 | [ARCHITECTURE](ARCHITECTURE.md) | qui modifie le code | comment c'est construit |
 | [Référence de scripting](docs/scripting-reference.md) | qui écrit un script | le Lua accepté, et ce qui ne l'est pas |
 
-Convention : **Décisions verrouillées** = tranché, à implémenter tel quel — on ne rouvre
+Convention : **Décisions verrouillées** = tranché, à implémenter tel quel. On ne rouvre
 pas sans raison neuve. **Ouvert** = identifié mais volontairement non tranché : à rouvrir
 quand le chantier démarre réellement, le contexte du moment valant mieux que des
 suppositions faites à l'avance.
 
 Un **jalon produit** porte un numéro (`vX.Y`) : il figure dans le tableau qui suit, et une fois
-livré, une ligne rejoint le [README](README.md) — c'est ce qu'un visiteur vient chercher. Un
+livré, une ligne rejoint le [README](README.md). C'est ce qu'un visiteur vient chercher. Un
 **chantier technique** n'en porte pas : né en cours de route (une question posée à
 l'architecture, une dette relevée en marchant), il ne change rien pour qui joue au jeu produit
 avec l'éditeur, seulement pour qui modifie le code. Il vit dans sa propre section,
-[Chantiers techniques](#chantiers-techniques), à l'écart du tableau et du README — jamais
+[Chantiers techniques](#chantiers-techniques), à l'écart du tableau et du README, jamais
 numéroté, jamais mélangé aux jalons produit.
 
 ---
 
 ## Où on en est
 
-Ce fichier garde les jalons et chantiers **non clos** — c'est son rôle propre, cf. le tableau des six
+Ce fichier garde les jalons et chantiers **non clos**. C'est son rôle propre, cf. le tableau des six
 documents en tête. Une version entièrement livrée (v0.2 à v0.28 à ce jour) a son entrée dans le
 [CHANGELOG](changelog/CHANGELOG.md) et son détail complet dans [changelog/archives/](changelog/archives/) ;
 elle ne reste pas ici en doublon.
 
-**Un seul jalon produit est ouvert : [v0.29](#v029--diffuser-une-rom-dans-le-navigateur-itchio)**
+**Un seul jalon produit est ouvert : [v0.29](#v029-diffuser-une-rom-dans-le-navigateur-itchio)**
 (empaqueter une ROM pour le navigateur, ouvert le 2026-10-05, aucune ligne de code). Pour mémoire,
 v0.16 (« L'API : règle de construction et
-rangement ») s'est fermé le 2026-09-27 — huit sections, cinq renommages, `REF_TYPE_TABLE`, cycle
+rangement ») s'est fermé le 2026-09-27 (huit sections, cinq renommages, `REF_TYPE_TABLE`, cycle
 de vie en cinq verbes, éléments d'interface typés, `module:fonction()` généralisé, garde-fou du
-catalogue — voir le [CHANGELOG](changelog/CHANGELOG.md) et son [détail](changelog/archives/v0.16-api-construction.md).
+catalogue). Voir le [CHANGELOG](changelog/CHANGELOG.md) et son [détail](changelog/archives/v0.16-api-construction.md).
 Le singleton `mixer`, seule chose restée non tranchée, est sorti en chantier transverse (route
 vers v1.0-stable, voir [ci-dessous](#au-delà-de-la-v10)) plutôt que de garder v0.16 ouvert pour
 une proposition qui ne le concerne plus vraiment.
 
-**v0.13** (« Édition mixte — les appels d'API en blocs ») a été retiré le 2026-09-27 : jamais
-engagé (aucune ligne de code), et hors scope — ce logiciel n'est pas un outil de visual
+**v0.13** (« Édition mixte, les appels d'API en blocs ») a été retiré le 2026-09-27 : jamais
+engagé (aucune ligne de code), et hors scope. Ce logiciel n'est pas un outil de visual
 scripting. Son numéro n'est pas réattribué (une version reste une identité, pas un rang) ; son
 détail (désormais purement historique) reste consultable dans l'historique git de ce fichier.
 
@@ -64,28 +64,28 @@ détail (désormais purement historique) reste consultable dans l'historique git
 
 ## Frictions relevées en construisant la démo tactique (2026-09-20)
 
-La démo tactique (type Advance Wars) est le **deuxième jeu de démo** exigé par la v1.0 — un
+La démo tactique (type Advance Wars) est le **deuxième jeu de démo** exigé par la v1.0, un
 jeu de validation, dont le rôle est précisément de faire remonter ce sur quoi un projet non
 trivial bute. La boucle complète a été construite et compile (grille + curseur, sélection,
 stats pilotées par `data.Units`, portée surlignée par pool spawné, déplacement d'unité, menu
 d'action, tour sauvegardé), assets 100 % auto-générés passés par le vrai pipeline d'import.
-Voici les points de friction rencontrés en chemin, **par ordre d'importance** — ce ne sont pas
+Voici les points de friction rencontrés en chemin, **par ordre d'importance**. Ce ne sont pas
 des bugs de la démo mais des manques de l'outil qu'elle a révélés. Les cinq premiers
 toucheront TOUT projet non trivial, pas seulement ce genre. Les points 1 et 2 ont été
 relevés en construisant la boucle ; le 2 a été confirmé par le **test d'échelle** (40 scènes /
 200 sprites, cf. la note en fin de section).
 
-1. ~~**Aucun moyen d'adresser un acteur dynamique.**~~ **Corrigé (2026-09-20)** — `actor.get`
+1. ~~**Aucun moyen d'adresser un acteur dynamique.**~~ **Corrigé (2026-09-20)**. `actor.get`
    accepte un index dynamique 1-based (`actor:get(i)`), voir [test_actor_scene_naming.py](tests/scripting/test_actor_scene_naming.py).
    La piste restée ouverte à l'époque (les `exports_values` par instance non câblées au codegen)
-   est depuis livrée — voir [le chantier des exports de script](changelog/archives/script-exports.md).
+   est depuis livrée. Voir [le chantier des exports de script](changelog/archives/script-exports.md).
 
 2. **Les acteurs posés ne sont pas namespacés par scène.** Deux scènes qui posent chacune un
    acteur nommé « Cursor » (ou « Enemy », « Boss »…) collisionnent sur un seul symbole C :
    `actor_Cursor.c` de la seconde écrase celui de la première, et `ACTOR_CURSOR` est défini deux
    fois avec des valeurs différentes. Les prefabs et les scripts de scène, eux, SONT qualifiés
    (`<Scène>_<Prefab>`, `<Scène>_scene`) ; les acteurs posés font exception. Le validateur
-   l'attrape et nomme le doublon (bien) — mais dans un jeu à 40 scènes, réutiliser un nom
+   l'attrape et nomme le doublon (bien), mais dans un jeu à 40 scènes, réutiliser un nom
    d'acteur par scène est le réflexe naturel, et l'auteur se retrouve à préfixer ses noms à la
    main. Relevé au **test d'échelle** : 40 scènes réutilisant « Cursor »/« U0 »… ont produit
    229 avertissements de collision, tous levés en préfixant par la scène. La qualification par
@@ -113,10 +113,10 @@ relevés en construisant la boucle ; le 2 a été confirmé par le **test d'éch
    curseur de carte) rejouera ce conflit (runtime `ui_list_tick`, v0.22).
 
 6. **Deux idiomes non évidents du transpileur, et une doc qui mentait.**
-   ~~`actor:get(...):méthode()` en chaîne directe ne transpile pas~~ **Corrigé (2026-09-20)** —
+   ~~`actor:get(...):méthode()` en chaîne directe ne transpile pas~~ **Corrigé (2026-09-20)**,
    voir [test_lua_subset.py](tests/scripting/test_lua_subset.py) (`test_get_actor_chaine_directe_une_methode`).
    **Reste** : un `vec2` ne se stocke toujours pas dans un local (`local c = …:get_position()`
-   devient `int c = /* ignoré */`) — lire `self.position.x` **inline** ; et `get_position()`
+   devient `int c = /* ignoré */`). Lire `self.position.x` **inline** ; et `get_position()`
    n'existe pas comme méthode (seulement la propriété `self.position`) (`editor/scripting/codegen.py`
    `_invoke`, `editor/scripting/api.py`).
 
@@ -128,22 +128,22 @@ relevés en construisant la boucle ; le 2 a été confirmé par le **test d'éch
 
 8. **Aucune API headless « builder le projet ».** Le codegen n'est pas exposé comme une simple
    fonction : il a fallu instancier `BuildWorker` (un `threading.Thread`/`EventEmitter`) et
-   appeler `run()` en câblant les callbacks. Pire, `run()` **couple build et lancement mGBA** —
-   en headless il a fallu sous-classer pour neutraliser `_step_launch_mgba`, sinon le worker
+   appeler `run()` en câblant les callbacks. Pire, `run()` **couple build et lancement mGBA**.
+   En headless il a fallu sous-classer pour neutraliser `_step_launch_mgba`, sinon le worker
    rapporte `finished(False)` alors que la ROM est bel et bien produite. Il manque un point
    d'entrée « build seul, sans run », utile à la CI et à toute génération automatisée
    (`editor/codegen/rom_build.py`).
 
 9. **Création programmatique d'un projet : pas de raccourcis, et un piège.** Ajouter un sprite
    depuis un PNG impose d'enchaîner soi-même `encode_sprite_asset` + `file_stamp` + `append` +
-   `save` (les sidecars portent des champs calculés — `source_stamp`, palettes quantifiées,
-   mapping de tuiles — donc rien à écrire à la main) ; rien n'expose ça comme une opération
+   `save` (les sidecars portent des champs calculés (`source_stamp`, palettes quantifiées,
+   mapping de tuiles), donc rien à écrire à la main) ; rien n'expose ça comme une opération
    unique. Et `Project.create` écrit une `Scene_01` de starter **sur le disque** : remplacer la
-   liste de scènes en mémoire ne l'efface pas, et le build recompile alors une scène fantôme —
-   il faut `project.scenes.delete()` explicitement. Aucun chemin évident « remplace la scène par
+   liste de scènes en mémoire ne l'efface pas, et le build recompile alors une scène fantôme.
+   Il faut `project.scenes.delete()` explicitement. Aucun chemin évident « remplace la scène par
    défaut » (`editor/core/project.py`, `editor/core/resources/asset_reconciliation.py`).
 
-**Le test d'échelle (Temps 2) — le point « vérification à l'échelle » de la v1.0 est validé.**
+**Le test d'échelle (Temps 2). Le point « vérification à l'échelle » de la v1.0 est validé.**
 Un projet généré de **40 scènes / 200 sprites** (assets auto-générés, scène de tension à 120
 acteurs posés) passe de bout en bout. Mesures (VM de dev, `.venv-build312`) : `Project.open`
 paresseux **≈190 ms** (**≈125 ms** à froid ensuite), `load_all_resources` **≈690 ms**,
@@ -159,13 +159,13 @@ test est le point 2 ci-dessus (collision de noms d'acteurs entre scènes).
 Séance du 2026-08-19 : relecture du logiciel du point de vue d'un projet cible (metroidvania à
 composante RPG, équipe de trois, cartouche réelle au bout), qui a fixé un ordre de traitement
 recommandé pour sept jalons alors ouverts (v0.14 → v0.19 → v0.24 → v0.20 → v0.23 → v0.21 →
-v0.22). **Les sept sont désormais livrés**, dans cet ordre — voir le [CHANGELOG](changelog/CHANGELOG.md)
+v0.22). **Les sept sont désormais livrés**, dans cet ordre. Voir le [CHANGELOG](changelog/CHANGELOG.md)
 pour chacun. Le détail du raisonnement (pourquoi ce rang plutôt qu'un autre) reste consultable
 dans l'historique git de ce fichier.
 
 ---
 
-## v0.29 — Diffuser une ROM dans le navigateur (itch.io)
+## v0.29 (Diffuser une ROM dans le navigateur (itch.io))
 
 **Ouvert le 2026-10-05. Faisabilité vérifiée, aucune ligne de code.**
 
@@ -212,7 +212,7 @@ rien d'où elle vient.
 - **Pas de fonctions d'émulateur qui n'ont rien à faire là** : rembobinage, états de sauvegarde
   rapides, filtres d'écran. Une page de diffusion, pas un émulateur de confort.
 
-### Le point dur — les threads
+### Le point dur (les threads)
 
 Le cœur mGBA est multi-thread : la page doit être **isolée** (en-têtes COOP/COEP) pour que
 `SharedArrayBuffer` existe, et `mgba.js`/`mgba.wasm` sont servis **depuis la même origine** (les
@@ -225,7 +225,7 @@ workers sont chargés depuis l'URL du script). Côté itch.io :
 - `credentialless` est mal supporté hors Chromium ; une erreur `SharedArrayBuffer` sur Firefox est
   signalée dans les échanges d'itch. **Risque principal, non levé.**
 
-Limites itch (relevées dans des extraits de forum, pas dans la documentation officielle — à
+Limites itch (relevées dans des extraits de forum, pas dans la documentation officielle, à
 reconfirmer) : un fichier extrait de 200 Mo au plus, 500 Mo au total, 1000 fichiers, `index.html`
 à la racine du zip. Une ROM GBA fait 32 Mo au plus : aucune n'est atteinte.
 
@@ -257,7 +257,7 @@ reconfirmer) : un fichier extrait de 200 Mo au plus, 500 Mo au total, 1000 fichi
 Création : le module du générateur, la fenêtre Qt, le gabarit de page, le binaire vendorisé et
 son empreinte, les tests, la page de guide. Modification : `THIRD-PARTY-NOTICES.md`,
 `ARCHITECTURE.md`, `ROADMAP.md`. **Non touchés** : le build ROM, le codegen, le runtime, le
-packaging de l'éditeur (`packaging/`, PyInstaller, installateur) — c'est précisément ce que
+packaging de l'éditeur (`packaging/`, PyInstaller, installateur). C'est précisément ce que
 « hors de l'éditeur » garantit.
 
 ### Ouvert
@@ -281,47 +281,47 @@ packaging de l'éditeur (`packaging/`, PyInstaller, installateur) — c'est pré
 
 ## Chantiers techniques
 
-Un chantier technique ne livre rien de visible pour qui joue au jeu produit avec l'éditeur —
+Un chantier technique ne livre rien de visible pour qui joue au jeu produit avec l'éditeur,
 seulement une réécriture, une clarification ou une garantie côté code. Il n'apparaît ni dans le
 [README](README.md) ni dans le [CHANGELOG](changelog/CHANGELOG.md), et ne porte pas de numéro `vX.Y` : une
 fois refermé, son détail rejoint [changelog/archives/](changelog/archives/) comme n'importe quel
-jalon, mais référencé par son nom plutôt que par un numéro — c'est là qu'est l'index complet des
+jalon, mais référencé par son nom plutôt que par un numéro. C'est là qu'est l'index complet des
 chantiers clos ; ce tableau ne garde que ceux **non clos**.
 
-**Livré le 2026-10-17 — [Le gabarit commun des pop-up](changelog/archives/common-popups.md).**
+**Livré le 2026-10-17, [Le gabarit commun des pop-up](changelog/archives/common-popups.md).**
 Les messages d'information, d'attention, d'erreur et de confirmation des 22 modules concernés
 passent par `ui/common/popup.py` : illustrations adaptées au type de message, boutons et
 styles partagés, icônes cohérentes par type. Le détail et les vérifications sont archivés.
 
 | Chantier | Ouvert le | État |
 | --- | --- | --- |
-| Préparer une image riche à l'import — recadrer, redimensionner | 2026-09-26 | Route vers v1.0-stable — non prioritaire pour l'alpha (décidé le 2026-09-29) ; tranches 4bpp/8bpp livrées, reste la tranche bitmap et la validation à la souris. Voir [ci-dessous](#chantier-transverse--préparer-une-image-riche-à-limport-recadrer-et-redimensionner-sans-toucher-au-png) |
-| L'API dit tout ce que l'inspecteur règle | 2026-09-23 | **En cours** — tranche 1 (acteur, sprite, collision) livrée le 2026-09-23, sauf `parent` et `sprite_name` — **la collision est rouverte le 2026-09-24** (boîte = référence typée, `collision_box.get_tile`) ; tranches 2 (caméra, scène, calque) et 3 (interface) à suivre. Voir [ci-dessous](#lapi-dit-tout-ce-que-linspecteur-règle) |
-| Piste Collision — un `Contact` d'événement | 2026-09-25 | À ouvrir — non verrouillée (normale acteur↔acteur), extraite de la struct `Actor` allégée, code non commencé — voir [ci-dessous](#piste-collision--un-contact-dévénement-pas-une-dernière-collision) |
-| Le cache de scène | 2026-09-16 | À ouvrir — voir [ci-dessous](#le-cache-de-scène-rouvrir-une-scène-déjà-visitée-sans-tout-redécoder) |
-| Undo/redo des sidecars d'éditeur | — | À ouvrir — envisagé pour **V2**, voir [ci-dessous](#undoredo-des-sidecars-déditeur-annuler-la-création-dun-groupe-un-déplacement-de-nœud) |
-| L'écran Texte n'édite et ne range que du contenu | 2026-10-10 | **À ouvrir** — conception proposée, **rien de verrouillé**, code non commencé ; retire l'aperçu écran et édite le contenu dans la table. Remplace « L'atelier Texte réuni » (abandonné). Voir [ci-dessous](#lécran-texte-nédite-et-ne-range-que-du-contenu) |
-| L'écran Données — une grille de jeu, pas un tableur | 2026-10-14 | **En cours — première tranche livrée le 2026-10-17** : grille et barre d'actions revues, couleurs de colonnes, références aux assets sprite/background et sélecteurs filtrables partagés ; reste la saisie en série, la navigation vers les références et la validation d'usage. Voir [ci-dessous](#lécran-données--une-grille-de-jeu-pas-un-tableur) |
-| L'écran Son montre le geste sans recalculer l'onde | 2026-10-12 | **Livré pour l'essentiel (2026-10-12)** — plus aucun rendu pendant qu'un potard est tenu, bascule Onde \| Scope (oscilloscope du mix, tiré du son qui joue), durée sur la règle, barres des canaux qui suivent le volume ; **reste ouvert** : les repères sonores de musique sont **livrés le 2026-10-14** (quatre natures, voir ci-dessous) ; les repères de **jingle** sont livrés le 2026-10-14 (tranche 1, en temps) ; restent l'appel d'événement et les points de sortie pour les music box (**chantier à décider**), un indicateur de marge du mix (proposé, **non décidé**), un scope par canal. Voir [ci-dessous](#lécran-son-montre-le-geste-sans-recalculer-londe) |
-| L'asset `.music` — sections, boucle surchargée, indépendant du format source | 2026-10-11 | **Livré (2026-10-11)** — étapes 1 à 7, plus le contrôle `1b`, voir « Ordre d'implémentation » ci-dessous ; ce qui suit est l'état de départ, gardé pour mémoire. **Était : À ouvrir** — modèle décidé (surcharge du fichier, unité `order`/`ms`, réglages par défaut surchargeables par l'API), **trois mesures faites le 2026-10-11, toutes positives** (mais les lecteurs d'IT/S3M et de restart de l'éditeur divergent de la ROM : à corriger d'abord) ; l'écran Son suit. Voir [ci-dessous](#lasset-music--sections-boucle-surchargée-indépendant-du-format-source) |
-| Un pont entre l'écran Texte et les tables de données — créer un dialogue sans tout renseigner à la main | 2026-10-10 | **À ouvrir** — besoin posé, pistes A (Texte → table) et B (« Nouveau texte » dans la cellule) **retenues**, le reste non verrouillé, code non commencé ; le dialogue reste une table de données (pas d'éditeur de dialogue). Voir [ci-dessous](#un-pont-entre-lécran-texte-et-les-tables-de-données--créer-un-dialogue) |
-| La chaîne `if/elseif` sur une constante devient un `switch` C | 2026-10-06 | Route vers v1.0-stable — non prioritaire pour l'alpha ; piste de réflexion, **rien de verrouillé**, code non commencé, gain de perf non mesuré. Voir [ci-dessous](#chantier-transverse--la-chaîne-ifelseif-sur-une-constante-devient-un-switch-c) |
-| Les prefabs — l'instance garde ce qu'elle surcharge, le reste suit le prefab | 2026-10-13 | **À ouvrir** — modèle décidé par l'auteur (surcharges par champ), **dix points à trancher** avant d'ouvrir (unité d'une surcharge, structure, sens d'Expose, migration, enfants…), priorité **non arbitrée**, code non commencé. Règle le cas « prefab » de la fluidité des réglages (un seul fichier écrit). Voir [ci-dessous](#les-prefabs--linstance-garde-ce-quelle-surcharge-le-reste-suit-le-prefab) |
-| L'élément d'interface appartient à sa scène — des noms locaux | 2026-10-03 | À ouvrir — priorité non arbitrée ; conception proposée, **aucune décision verrouillée**, code non commencé. Garde-fou en place : un nom en double entre deux layouts est une erreur de build. Voir [ci-dessous](#lélément-dinterface-appartient-à-sa-scène--des-noms-locaux) |
-| Tout ce que l'auteur manipule vit dans `assets/` | 2026-10-10 | **En cours** — scènes, prefabs, mises en page, boîtes sonores, tables de données, polices logiques, textes, variables : de `project/` vers `assets/`. Voir [ci-dessous](#tout-ce-que-lauteur-manipule-vit-dans-assets) |
-| Une seule règle de nom libre | 2026-10-09 | **En cours** — huit règles de suffixe coexistent (`_2`, `_02`, `_copy`, `_1`, `Camera 2`, `axis1`, `Actor_0`, `Palette 2`) ; toutes passent à `coin`, `coin_2`, `coin_3`. Voir [ci-dessous](#une-seule-règle-de-nom-libre) |
-| Source ≠ asset — l'arborescence du disque et l'id stable | 2026-10-09 | **Livré pour l'essentiel (2026-10-11)** — ids dans tous les sidecars, extension par type d'asset, assets et sources rangés où l'on veut sous `assets/` (fonds, palettes, scripts compris), onglet Disk (glisser-déposer, *Create asset*, suppression annulable, détachement complet source ≠ asset) ; **reste** : dossiers virtuels des autres finders (**Sound finder livré le 2026-10-11** : effets, musiques et jingles, dans le store partagé de la session ; sprites, fonds, palettes, tables, polices et prefabs restent à plat), références par id, associations de fichiers (installateur, zip portable, AppImage). Voir [ci-dessous](#source--asset--larborescence-du-disque-et-lid-stable) |
-| Finder et Disk — « Asset library » et « Project files » | 2026-10-14 | **À ouvrir** — renommage décidé (asset finder → asset library, dossier de l'auteur → Project files), **quatre points à trancher** (nom affiché ou dossier sur disque, périmètre de « library »), code non commencé. Voir [ci-dessous](#finder-et-disk--asset-library-et-project-files) |
-| La compression d'un fond se joue, elle ne s'attend pas | 2026-10-14 | **À ouvrir** — analyse du parcours faite (lecture du code, rien mesuré à l'usage), sept frictions relevées, direction non arbitrée entre feedback en direct, perception de la perte et réglage par objectif ; code non commencé. Voir [ci-dessous](#la-compression-dun-fond-se-joue-elle-ne-sattend-pas) |
-| Le fond est un plan de travail — canvas, image posée, comparaison source/compressé | 2026-10-15 | **À ouvrir** — modèle décidé par l'auteur le 2026-10-15 (canvas-size distinct de l'image, image déplaçable qui peut déborder, barre source/compressé, une seule image visible), **six points à vérifier ou trancher** avant de coder (palette indexée préservée, limites du canvas tuilé, miroir dans le canvas, types UI/animé, peintures par tuile), code non commencé. Remplace la piste « un seul espace » de la compression. Voir [ci-dessous](#le-fond-est-un-plan-de-travail--canvas-image-posée-comparaison-sourcecompressé) |
-| Briques de base et assemblages — `Text` (chaîne) et `Textbox` (boîte), écrits directement dans le canvas | 2026-10-14 | **Livré pour l'essentiel (2026-10-14)** — deux types de texte, menu d'ajout en deux familles, `Text` posé en un point et édité sur place avec un curseur clignotant ; **reste** : emprise d'une chaîne qui suit son contenu, sélection non dessinée, vérification à la main et build ROM. Voir [ci-dessous](#briques-de-base-et-assemblages--text-chaîne-et-textbox-boîte) |
-| TextBox — plusieurs entrées pour préparer un dialogue | 2026-10-17 | **Livré pour l’essentiel (2026-10-17)** — pages éditables, aperçu, références et build multi-page, export/mise à jour de Data Table annulables ; **reste** : nommage des layouts partagés, suivi des noms scène/objet, duplication des textes et déplacement des blocs. Voir [ci-dessous](#textbox--plusieurs-entrées-pour-préparer-un-dialogue) |
-| Écran Texte — suites liées aux TextBox et aux tables | 2026-10-17 | **Link/Relink, Apply et +/− livrés** — édition structurelle sur les blocs, état précis et synchronisation fixés en bas. Reste l'export autonome des suites sans TextBox. Voir [ci-dessous](#écran-texte--suites-liées-aux-textbox-et-aux-tables) |
+| Préparer une image riche à l'import, recadrer, redimensionner | 2026-09-26 | Route vers v1.0-stable, non prioritaire pour l'alpha (décidé le 2026-09-29) ; tranches 4bpp/8bpp livrées, reste la tranche bitmap et la validation à la souris. Voir [ci-dessous](#chantier-transverse-préparer-une-image-riche-à-limport-recadrer-et-redimensionner-sans-toucher-au-png) |
+| L'API dit tout ce que l'inspecteur règle | 2026-09-23 | **En cours**, tranche 1 (acteur, sprite, collision) livrée le 2026-09-23, sauf `parent` et `sprite_name`, **la collision est rouverte le 2026-09-24** (boîte = référence typée, `collision_box.get_tile`) ; tranches 2 (caméra, scène, calque) et 3 (interface) à suivre. Voir [ci-dessous](#lapi-dit-tout-ce-que-linspecteur-règle) |
+| Piste Collision, un `Contact` d'événement | 2026-09-25 | À ouvrir, non verrouillée (normale acteur↔acteur), extraite de la struct `Actor` allégée, code non commencé. Voir [ci-dessous](#piste-collision-un-contact-dévénement-pas-une--dernière-collision-) |
+| Le cache de scène | 2026-09-16 | À ouvrir. Voir [ci-dessous](#le-cache-de-scène-rouvrir-une-scène-déjà-visitée-sans-tout-redécoder) |
+| Undo/redo des sidecars d'éditeur | Non renseigné | À ouvrir, envisagé pour **V2**, voir [ci-dessous](#undoredo-des-sidecars-déditeur-annuler-la-création-dun-groupe-un-déplacement-de-nœud) |
+| L'écran Texte n'édite et ne range que du contenu | 2026-10-10 | **À ouvrir**, conception proposée, **rien de verrouillé**, code non commencé ; retire l'aperçu écran et édite le contenu dans la table. Remplace « L'atelier Texte réuni » (abandonné). Voir [ci-dessous](#lécran-texte-nédite-et-ne-range-que-du-contenu) |
+| L'écran Données, une grille de jeu, pas un tableur | 2026-10-14 | **En cours, première tranche livrée le 2026-10-17** : grille et barre d'actions revues, couleurs de colonnes, références aux assets sprite/background et sélecteurs filtrables partagés ; reste la saisie en série, la navigation vers les références et la validation d'usage. Voir [ci-dessous](#lécran-données-une-grille-de-jeu-pas-un-tableur) |
+| L'écran Son montre le geste sans recalculer l'onde | 2026-10-12 | **Livré pour l'essentiel (2026-10-12)**, plus aucun rendu pendant qu'un potard est tenu, bascule Onde \| Scope (oscilloscope du mix, tiré du son qui joue), durée sur la règle, barres des canaux qui suivent le volume ; **reste ouvert** : les repères sonores de musique sont **livrés le 2026-10-14** (quatre natures, voir ci-dessous) ; les repères de **jingle** sont livrés le 2026-10-14 (tranche 1, en temps) ; restent l'appel d'événement et les points de sortie pour les music box (**chantier à décider**), un indicateur de marge du mix (proposé, **non décidé**), un scope par canal. Voir [ci-dessous](#lécran-son-montre-le-geste-sans-recalculer-londe) |
+| L'asset `.music`, sections, boucle surchargée, indépendant du format source | 2026-10-11 | **Livré (2026-10-11)**, étapes 1 à 7, plus le contrôle `1b`, voir « Ordre d'implémentation » ci-dessous ; ce qui suit est l'état de départ, gardé pour mémoire. **Était : À ouvrir**, modèle décidé (surcharge du fichier, unité `order`/`ms`, réglages par défaut surchargeables par l'API), **trois mesures faites le 2026-10-11, toutes positives** (mais les lecteurs d'IT/S3M et de restart de l'éditeur divergent de la ROM : à corriger d'abord) ; l'écran Son suit. Voir [ci-dessous](#lasset-music-sections-boucle-surchargée-indépendant-du-format-source) |
+| Un pont entre l'écran Texte et les tables de données, créer un dialogue sans tout renseigner à la main | 2026-10-10 | **À ouvrir**, besoin posé, pistes A (Texte → table) et B (« Nouveau texte » dans la cellule) **retenues**, le reste non verrouillé, code non commencé ; le dialogue reste une table de données (pas d'éditeur de dialogue). Voir [ci-dessous](#un-pont-entre-lécran-texte-et-les-tables-de-données-créer-un-dialogue) |
+| La chaîne `if/elseif` sur une constante devient un `switch` C | 2026-10-06 | Route vers v1.0-stable, non prioritaire pour l'alpha ; piste de réflexion, **rien de verrouillé**, code non commencé, gain de perf non mesuré. Voir [ci-dessous](#chantier-transverse-la-chaîne-ifelseif-sur-une-constante-devient-un-switch-c) |
+| Les prefabs, l'instance garde ce qu'elle surcharge, le reste suit le prefab | 2026-10-13 | **À ouvrir**, modèle décidé par l'auteur (surcharges par champ), **dix points à trancher** avant d'ouvrir (unité d'une surcharge, structure, sens d'Expose, migration, enfants…), priorité **non arbitrée**, code non commencé. Règle le cas « prefab » de la fluidité des réglages (un seul fichier écrit). Voir [ci-dessous](#les-prefabs-linstance-garde-ce-quelle-surcharge-le-reste-suit-le-prefab) |
+| L'élément d'interface appartient à sa scène, des noms locaux | 2026-10-03 | À ouvrir, priorité non arbitrée ; conception proposée, **aucune décision verrouillée**, code non commencé. Garde-fou en place : un nom en double entre deux layouts est une erreur de build. Voir [ci-dessous](#lélément-dinterface-appartient-à-sa-scène-des-noms-locaux) |
+| Tout ce que l'auteur manipule vit dans `assets/` | 2026-10-10 | **En cours**, scènes, prefabs, mises en page, boîtes sonores, tables de données, polices logiques, textes, variables : de `project/` vers `assets/`. Voir [ci-dessous](#tout-ce-que-lauteur-manipule-vit-dans-assets) |
+| Une seule règle de nom libre | 2026-10-09 | **En cours**, huit règles de suffixe coexistent (`_2`, `_02`, `_copy`, `_1`, `Camera 2`, `axis1`, `Actor_0`, `Palette 2`) ; toutes passent à `coin`, `coin_2`, `coin_3`. Voir [ci-dessous](#une-seule-règle-de-nom-libre) |
+| Source ≠ asset, l'arborescence du disque et l'id stable | 2026-10-09 | **Livré pour l'essentiel (2026-10-11)**, ids dans tous les sidecars, extension par type d'asset, assets et sources rangés où l'on veut sous `assets/` (fonds, palettes, scripts compris), onglet Disk (glisser-déposer, *Create asset*, suppression annulable, détachement complet source ≠ asset) ; **reste** : dossiers virtuels des autres finders (**Sound finder livré le 2026-10-11** : effets, musiques et jingles, dans le store partagé de la session ; sprites, fonds, palettes, tables, polices et prefabs restent à plat), références par id, associations de fichiers (installateur, zip portable, AppImage). Voir [ci-dessous](#source--asset-larborescence-du-disque-et-lid-stable) |
+| Finder et Disk, « Asset library » et « Project files » | 2026-10-14 | **À ouvrir**, renommage décidé (asset finder → asset library, dossier de l'auteur → Project files), **quatre points à trancher** (nom affiché ou dossier sur disque, périmètre de « library »), code non commencé. Voir [ci-dessous](#finder-et-disk--asset-library--et--project-files-) |
+| La compression d'un fond se joue, elle ne s'attend pas | 2026-10-14 | **À ouvrir**, analyse du parcours faite (lecture du code, rien mesuré à l'usage), sept frictions relevées, direction non arbitrée entre feedback en direct, perception de la perte et réglage par objectif ; code non commencé. Voir [ci-dessous](#la-compression-dun-fond-se-joue-elle-ne-sattend-pas) |
+| Le fond est un plan de travail, canvas, image posée, comparaison source/compressé | 2026-10-15 | **À ouvrir**, modèle décidé par l'auteur le 2026-10-15 (canvas-size distinct de l'image, image déplaçable qui peut déborder, barre source/compressé, une seule image visible), **six points à vérifier ou trancher** avant de coder (palette indexée préservée, limites du canvas tuilé, miroir dans le canvas, types UI/animé, peintures par tuile), code non commencé. Remplace la piste « un seul espace » de la compression. Voir [ci-dessous](#le-fond-est-un-plan-de-travail-canvas-image-posée-comparaison-sourcecompressé) |
+| Briques de base et assemblages, `Text` (chaîne) et `Textbox` (boîte), écrits directement dans le canvas | 2026-10-14 | **Livré pour l'essentiel (2026-10-14)**, deux types de texte, menu d'ajout en deux familles, `Text` posé en un point et édité sur place avec un curseur clignotant ; **reste** : emprise d'une chaîne qui suit son contenu, sélection non dessinée, vérification à la main et build ROM. Voir [ci-dessous](#briques-de-base-et-assemblages-text-chaîne-et-textbox-boîte) |
+| TextBox, plusieurs entrées pour préparer un dialogue | 2026-10-17 | **Livré pour l’essentiel (2026-10-17)**, pages éditables, aperçu, références et build multi-page, export/mise à jour de Data Table annulables ; **reste** : nommage des layouts partagés, suivi des noms scène/objet, duplication des textes et déplacement des blocs. Voir [ci-dessous](#textbox-plusieurs-entrées-pour-préparer-un-dialogue) |
+| Écran Texte, suites liées aux TextBox et aux tables | 2026-10-17 | **Link/Relink, Apply et +/− livrés**, édition structurelle sur les blocs, état précis et synchronisation fixés en bas. Reste l'export autonome des suites sans TextBox. Voir [ci-dessous](#écran-texte-suites-liées-aux-textbox-et-aux-tables) |
 | La fiabilité du journal de build | 2026-10-03 | **Tranche 1 livrée le 2026-10-03** (aucune erreur avalée, tout script vérifié, fautes injectées) ; **tranche 2 livrée le 2026-10-03** (diagnostic unique, `build.log`, sortie des outils classée) ; reste ouvert : les codes stables, si le besoin apparaît. Voir [ci-dessous](#la-fiabilité-du-journal-de-build) |
 
 ---
 
-## L'écran Données — une grille de jeu, pas un tableur
+## L'écran Données (une grille de jeu, pas un tableur)
 
 ### Le problème (2026-10-14)
 
@@ -402,7 +402,7 @@ de références graphiques (catalogues, validation, génération et renommage) e
 
 ### Références graphiques : la ROM ne les consomme pas encore (constaté le 2026-10-18)
 
-**Le besoin (auteur).** Lier une donnée à un élément visuel — portraits affichés dans un dialogue, tables de monstres.
+**Le besoin (auteur).** Lier une donnée à un élément visuel, portraits affichés dans un dialogue, tables de monstres.
 Ce que le script en fait reste le choix de l'auteur du jeu.
 
 **Ce qui est vrai aujourd'hui.** Une colonne `sprite` ou `background` est une référence d'éditeur complète (choix filtrable,
@@ -496,7 +496,7 @@ contre 0,75 / 0,92 / 0,94 / 0,95). Le mix émulé de `dungeon` sature réellemen
 
 ### Ouvert
 
-- **Des repères sonores sur la musique — LIVRÉS (2026-10-14)**, quatre natures. Un repère est un drapeau posé sur la voie
+- **Des repères sonores sur la musique, LIVRÉS (2026-10-14)**, quatre natures. Un repère est un drapeau posé sur la voie
   au-dessus des sections de la barre de structure ; la lecture le joue **à chaque passage** (chaque tour de boucle le rejoue).
   - **Natures** : action de SoundBox, action de JingleBox, effet direct, jingle direct (`MusicCue`, `Music.cues`, dans l'unité de
     la musique : ordre pour un module, ms pour un WAV). Geste : clic droit sur la voie (menu inline comme celui d'une frame de
@@ -517,11 +517,11 @@ contre 0,75 / 0,92 / 0,94 / 0,95). Le mix émulé de `dungeon` sature réellemen
   - **Non prouvé sur console** : que le son parte au bon pas (le C compile et la table est la bonne : `tests/rom_build/test_music_cues_build.py`).
     La politique d'un jingle envers la musique (duck, pause) ne s'écoute pas à l'aperçu ; les repères ne sont posés dans
     l'aperçu MusicBox qu'au démarrage d'un état, pas après un fondu.
-- **Reste ouvert — l'appel d'événement.** Une frame de sprite appelle une fonction du script de l'acteur ; une musique n'a pas
+- **Reste ouvert, l'appel d'événement.** Une frame de sprite appelle une fonction du script de l'acteur ; une musique n'a pas
   d'acteur. Ni « fonction du script de la scène » ni « callback global » n'est retenu : l'auteur a posé la question d'un
   **signal** (diffusé, reçu par tout script abonné). Le moteur n'a aucun bus de signaux (vérifié) : ce serait un mécanisme nouveau,
-  à poser une fois pour tous les usages (musique, frames, collisions) — **jalon à part, à décider**.
-- **Repères de jingle — LIVRÉS (2026-10-14, tranche 1)**, en **temps**. maxmod n'offre aucune lecture de position sur la couche
+  à poser une fois pour tous les usages (musique, frames, collisions), **jalon à part, à décider**.
+- **Repères de jingle, LIVRÉS (2026-10-14, tranche 1)**, en **temps**. maxmod n'offre aucune lecture de position sur la couche
   jingle (`mmGetPosition`/`Row`/`Tick` ne lisent que la principale ; seule `mmActiveSub()` dit s'il joue encore, vérifié dans
   `maxmod.h`) : la ROM **compte les images** depuis `mmJingle` (`g_jingle_frame`, remis à zéro par chaque `music_jingle`) et
   `music_cue_jingle_tick()` joue la ligne de `g_jingle_cue` dont l'image est atteinte.
@@ -530,7 +530,7 @@ contre 0,75 / 0,92 / 0,94 / 0,95). Le mix émulé de `dungeon` sature réellemen
     `jingle_cue_frames`), donc pas de coût. Les 19 jingles de la démo se rendent en 26 à 319 ms chacun (1,5 s au total) : c'est
     ce que la piste « ordres » aurait coûté, et elle est abandonnée.
   - **Cadence** : 16 777 216 / 280 896 = **59,7275 images/s** (`VBLANK_HZ`), pas 60. Le deck de l'aperçu tourne à 60 par commodité
-    (écart ~45 ms sur 10 s) — **non corrigé, à mesurer** (tranche 2).
+    (écart ~45 ms sur 10 s), **non corrigé, à mesurer** (tranche 2).
   - **Ce qu'un jingle peut lancer** : un effet ou une action de SoundBox (`JINGLE_CUE_KINDS`). Pas un autre jingle : il
     remplacerait celui qui sonne (avertissement du validateur, pas de ligne en ROM).
   - **Éditeur** : la bande d'un jingle montre une cellule en ms avec la voie des repères, sans sections ; le menu ne propose que
@@ -538,7 +538,7 @@ contre 0,75 / 0,92 / 0,94 / 0,95). Le mix émulé de `dungeon` sature réellemen
     voix à retard (`MusicDeck.start_voices`).
   - **Non prouvé** : la dérive du compteur d'images contre l'audio réel de maxmod (mesure sur ROM ou mGBA à faire, comme pour
     les sections) ; le tir d'un repère à l'image 0 tombe à la frame suivant `music_jingle`.
-- **Reste ouvert — des points de sortie pour les music box** : des endroits d'une musique où la boîte peut la quitter. À décider :
+- **Reste ouvert, des points de sortie pour les music box** : des endroits d'une musique où la boîte peut la quitter. À décider :
   leur définition (une position posée à la main, ou les débuts d'ordre que la frise connaît déjà) ; leur rapport avec la coupe
   à la position qui existe déjà dans les boîtes (`TRANSITION_CUT`, les repères d'ordre du `Track`) ; ce que la boîte fait
   quand une sortie est demandée entre deux points. La voie des repères est un emplacement naturel pour les poser.
@@ -573,7 +573,7 @@ refuse), mais le défaut n'était pas isolé : en cherchant autour, trois autres
 
 Le journal est le seul témoin de ce que fait le build. Un silence y vaut une garantie fausse.
 
-### Tranche 1 — aucun silence (livrée le 2026-10-03)
+### Tranche 1 (aucun silence (livrée le 2026-10-03))
 
 1. **Un `except` large dit pourquoi ou parle.** Dans `codegen/`, `scripting/` et `core/validator.py`, un
    handler de `Exception`, nu ou de `LuaParseError` doit lever, émettre un diagnostic, ou porter sur sa
@@ -599,7 +599,7 @@ première scène), donc une faute sémantique sort avant qu'une scène ne le dé
 rien reste vérifié pour sa seule syntaxe : sans propriétaire, il n'a pas de contexte (`self`, événements)
 contre lequel être jugé.
 
-### Tranche 2 — un seul diagnostic, un journal conservé (livrée le 2026-10-03)
+### Tranche 2 (un seul diagnostic, un journal conservé (livrée le 2026-10-03))
 
 Le problème, relevé dans le code : le validateur produit des `ValidationMessage` structurés (niveau,
 cible cliquable) que l'onglet Diagnostics affiche, mais le build les aplatit en lignes
@@ -632,7 +632,7 @@ verdict, `build.log` réécrit) et trois cas d'interface dans `tests/ui/test_dia
 réel de la démo `PongAdvanced` (17 s) donne `[build] 0 error(s), 1 warning(s)` et un `build.log` de 19 Ko.
 Mécanique décrite dans ARCHITECTURE.md, « Le journal de build ».
 
-**Suite (2026-10-03) — gcc cite le script.** Pas de table de correspondance : le générateur pose
+**Suite (2026-10-03), gcc cite le script.** Pas de table de correspondance : le générateur pose
 `#line N "Script.lua"` avant chaque statement (la ligne vient du parseur, `Stmt*.line`) et rend gcc à son
 `.c` en fin de corps de fonction, avec le numéro calculé sur le texte final. Une erreur de gcc sur le C
 émis sort donc comme un diagnostic `Script.lua:N`, cliquable. Un behavior inliné porte ses propres
@@ -641,7 +641,7 @@ gcc (`tests/rom_build/test_gcc_cites_the_script.py`) et par la démo, dont la RO
 
 Ce que ça ne fait pas : un réglage « avertissements = erreurs ».
 
-### Tranche 3 — la couverture, mesurée (livrée le 2026-10-03)
+### Tranche 3 (la couverture, mesurée (livrée le 2026-10-03))
 
 Une matrice de pannes (31 cas injectés dans une copie de la démo, un vrai `BuildWorker` par cas) a mesuré
 ce que le journal dit. Le bilan : les fautes de script sont toutes localisées ; trois familles de trous.
@@ -670,7 +670,7 @@ entre scènes, et les noms d'acteurs sont locaux à leur scène).
 
 
 
-### Tranche 4 — la couverture, tenue (livrée le 2026-10-03)
+### Tranche 4 (la couverture, tenue (livrée le 2026-10-03))
 
 La matrice de la tranche 3 était un script jetable de 31 cas écrits à la main. Mesurée (274 sites qui
 peuvent émettre un diagnostic, comptés dans le code puis comparés à ceux qui se déclenchent
@@ -707,7 +707,7 @@ checker, conversion grit).
 
 **Isolés le 2026-10-04.** `test_build_fault_injection.py`, `test_build_diagnostics.py`, `test_build_invariants.py`, `test_gcc_cites_the_script.py`, `test_smoke_test.py` et un cas de `test_codegen_diagnostics.py` compilent un projet entier par cas : lancés à chaque modification, la suite durait ~20 min. Ils portent le marqueur `slow`, exclu par défaut (`addopts` de `pyproject.toml`) ; `pytest -m slow` les lance, et le job `slow-tests` de `release.yml` les exige avant toute publication.
 
-### Tranche 5 — les 175 sites jamais atteints (livrée le 2026-10-03, réduite le 2026-10-04)
+### Tranche 5 (les 175 sites jamais atteints (livrée le 2026-10-03, réduite le 2026-10-04))
 
 Les 175 sites ont d'abord tous été exercés : 274 sur 278. C'était un compteur satisfait, pas une
 garantie : ces ~170 tests vérifiaient qu'un fragment de message sort, pas qu'il est juste, et ne m'ont
@@ -729,7 +729,7 @@ diagnostics avait ouverte entre `core.validator` et les générateurs (que `chec
 
 Trouvé en chemin : deux messages restés en français (`frame_w/h invalides`, `l'image`, et deux libellés
 d'audio), corrigés ; et l'outil de couverture comptait à tort les appels à une fonction locale `_warn` comme
-des sites — un conduit, désormais ignoré.
+des sites, un conduit, désormais ignoré.
 
 ---
 
@@ -757,8 +757,8 @@ ARCHITECTURE.md « La grammaire de l'API »). Aucun mécanisme nouveau.
 
 - **Trois tranches**, chacune livrée, testée et documentée avant la suivante : (1) acteur + sprite +
   collision ; (2) caméra + scène + calque de fond ; (3) éléments d'interface.
-- **Boîtes de collision** : ~~adressées par leur tag, en requêtes indexées~~ — **rouvert le
-  2026-09-24**, voir [l'amendement ci-dessous](#amendement-2026-09-24--la-boîte-de-collision-devient-une-référence-typée).
+- **Boîtes de collision** : ~~adressées par leur tag, en requêtes indexées~~, **rouvert le
+  2026-09-24**, voir [l'amendement ci-dessous](#amendement-2026-09-24-la-boîte-de-collision-devient-une-référence-typée).
   La forme initiale (`self:box_rect("hitbox")`, `self:set_box_solid(...)`) avait écarté l'idée
   `self:box("tag").w` parce qu'une propriété sur une boîte exige un TYPE de référence dans le
   checker et le codegen. Ce coût est maintenant accepté : la boîte est un composant à part entière
@@ -766,9 +766,9 @@ ARCHITECTURE.md « La grammaire de l'API »). Aucun mécanisme nouveau.
 - **Interface** : décision remplacée par l'amendement v0.16 du 2026-09-25 : le singleton
   `interface` acquiert un élément typé (`interface:get("Nom")`) ; l'élément porte ses
   propriétés et méthodes. Les fonctions qui recevaient un nom d'élément en premier argument
-  migrent avec la surface décrite dans « Interface — singleton et éléments typés ».
+  migrent avec la surface décrite dans « Interface, singleton et éléments typés ».
 
-### Amendement (2026-09-24) — la boîte de collision devient une référence typée
+### Amendement (2026-09-24) (la boîte de collision devient une référence typée)
 
 Le type `collision_box` rejoint `REF_TYPES` (à côté de `sfx`). Un script obtient une boîte par son
 tag ; le tag reste la CLÉ de la boîte, donc lecture seule.
@@ -787,25 +787,25 @@ local t = hb:get_collision_tile(x, y)     -- type de tile de collision au point 
 
 | Porte | Nature | Remplace |
 | --- | --- | --- |
-| `self:collision_box(tag)` | constructeur de référence, `nil` possible | — |
+| `self:collision_box(tag)` | constructeur de référence, `nil` possible | s.o. |
 | `hb.tag` | lecture seule | la clé des anciens appels |
-| `hb.active` | lecture seule — **champ à créer au runtime**, écrit par `hb:activate()` / `hb:deactivate()` (cycle de vie en cinq verbes, 2026-09-25) : la résolution contre la carte et le test de chevauchement doivent l'ignorer quand il est faux | (aucune porte) |
+| `hb.active` | lecture seule, **champ à créer au runtime**, écrit par `hb:activate()` / `hb:deactivate()` (cycle de vie en cinq verbes, 2026-09-25) : la résolution contre la carte et le test de chevauchement doivent l'ignorer quand il est faux | (aucune porte) |
 | `hb.solid` | modifiable | `self:box_solid` / `self:set_box_solid` |
 | `hb.offset`, `hb.size` | modifiables, bornés (offset −128..127, taille 0..255) | `self:box_rect` / `self:set_box_rect` |
 | `hb.bounds` | lecture seule, rect monde | le calcul que chaque script refaisait |
-| `hb:overlaps(other)` | méthode, bool | — |
-| `hb.is_grounded` | lecture seule, bool | (aucune porte par boîte) — `self.grounded` reste, et en est le OU |
+| `hb:overlaps(other)` | méthode, bool | s.o. |
+| `hb.is_grounded` | lecture seule, bool | (aucune porte par boîte), `self.grounded` reste, et en est le OU |
 | `hb:get_collision_tile(x, y)` | méthode, requête indexée (point monde ABSOLU) | `tile.get` (la carte lue est la carte de collision ; le verbe `get` est juste ici : le tile n'est pas un champ de la boîte) |
-| `self.box_count` | lecture seule, inchangée | — |
+| `self.box_count` | lecture seule, inchangée | s.o. |
 
 `overlaps(other)` prend un acteur (« ma hitbox touche-t-elle N'IMPORTE QUELLE boîte de cet
-acteur ? ») ou une autre boîte (« ... précisément sa hurtbox ? ») — la même distinction que
+acteur ? ») ou une autre boîte (« ... précisément sa hurtbox ? »), la même distinction que
 `on_collide(other, my_box, other_box)`. `touches_tile` a été écartée : `hb:get_collision_tile` sur
 `hb.bounds` fait la même chose sans nouvelle action. Le point de `get_collision_tile` est absolu : la
 boîte sert de porte d'entrée (une boîte absente répond 0) mais ne relativise rien.
 
 Ce que le chantier ajoute, hors renommage : des **propriétés sur une référence** (jusqu'ici une
-référence n'a que des méthodes — `sfx`, élément d'interface). Le checker doit typer la lecture et
+référence n'a que des méthodes, comme `sfx` et les éléments d'interface). Le checker doit typer la lecture et
 l'écriture `ref.champ`, refuser l'écriture d'un champ lecture seule, et le codegen émettre les
 `actor_get/set_box_*` existants. Les quatre fonctions `self:box_*` sont **supprimées** à la livraison
 (pas d'alias), de même que `tile.get`.
@@ -820,7 +820,7 @@ l'écriture `ref.champ`, refuser l'écriture d'un champ lecture seule, et le cod
   plus `active`. La résolution contre la carte, `actors_overlap_boxes` (donc `on_collide`) et
   `overlaps` l'ignorent tant qu'elle vaut 0.
 - **Bug trouvé en route, corrigé** : `box_overlap` recevait les positions d'acteur en Q8 (v0.19) et les
-  comparait à des offsets en pixels — deux boîtes à 5 px ne se voyaient pas comme se chevauchant, donc
+  comparait à des offsets en pixels, deux boîtes à 5 px ne se voyaient pas comme se chevauchant, donc
   `on_collide` / `on_collision_enter` ne se déclenchaient qu'à moins d'1/256 de pixel. Régression tenue
   par la sonde native (`overlap_5px`, `actors_overlap`).
 - **La référence est un entier** (rang de l'acteur × `MAX_BOXES` + rang de la boîte + 1, 0 = absente),
@@ -829,9 +829,9 @@ l'écriture `ref.champ`, refuser l'écriture d'un champ lecture seule, et le cod
   `self.name`). Le renommage d'un tag suit aussi `hb.tag == "hitbox"` (`refactor._iter_prop_refs`).
 - **Vérifié** : sonde native (`actor_box_probe.c`), `test_inspector_api_parity.py`, et un build ROM complet
   sur une copie d'OrbitTest (deux boîtes sur la tourelle dont une inactive au départ, une sur Moon, script
-  utilisant toute l'API) — `rom.gba` produite.
+  utilisant toute l'API), `rom.gba` produite.
 
-### Tranche 1 — acteur, sprite, collision
+### Tranche 1 (acteur, sprite, collision)
 
 | Champ d'inspecteur | Porte Lua | Nature |
 | --- | --- | --- |
@@ -849,15 +849,15 @@ ajoutée à la tourelle, script utilisant les sept portes). Le renommage d'un ta
 (`RenameCollisionTagCmd`) réécrit maintenant aussi les scripts.
 
 **Tranche 1 close (2026-09-29), vérifiée contre l'API et les règles posées depuis.** Restent sans porte, et c'est
-décidé : `parent` — la parenté est authorée et jamais assignée au runtime (v0.23), donc seule une LECTURE SEULE
+décidé : `parent`, la parenté est authorée et jamais assignée au runtime (v0.23), donc seule une LECTURE SEULE
 aurait un sens, et elle coûte un champ par acteur (un prefab posé N fois a N parents), au rebours de la struct
-`Actor` allégée ; repoussé, à rouvrir sur besoin réel. `sprite_name` — `self.active_sprite` rend l'id du composant,
+`Actor` allégée ; repoussé, à rouvrir sur besoin réel. `sprite_name`, `self.active_sprite` rend l'id du composant,
 pas l'asset ; la question « comment nomme-t-on l'accès à un sous-objet de l'instance ? » est déjà ouverte, en route
-vers v1.0-stable ([ci-dessous](#chantier-transverse--nommer-laccès-à-un-sous-objet-de-linstance)), et la trancher
+vers v1.0-stable ([ci-dessous](#chantier-transverse-nommer-laccès-à-un-sous-objet-de-linstance)), et la trancher
 ici la trancherait deux fois. `initial_state` et `prefab_name` n'ont pas besoin de porte : `self.anim` et
 `self.name` couvrent l'usage.
 
-### Tranche 2 — caméra, scène, calque de fond (livrée le 2026-09-30)
+### Tranche 2 (caméra, scène, calque de fond (livrée le 2026-09-30))
 
 Classement fait en lisant le runtime C (`runtime_api_inline.h`, `gba_engine.h`) et le codegen : ce qui est un
 **littéral dans le C émis** est fixé au build (lecture seule) ; ce qui vit déjà en registre ou en RAM, ou coûte un
@@ -866,24 +866,24 @@ octet de RAM pour le devenir, est modifiable. Les portes déjà là (`camera.pos
 
 | Champ d'inspecteur | Porte Lua proposée | Nature | Raison (ce que le C fait aujourd'hui) |
 | --- | --- | --- | --- |
-| Camera `mode` | — | repoussé | changer de mode et de cible en jeu est voulu, avec une transition : chantier [« La caméra change de cible »](#chantier-transverse--la-caméra-change-de-cible-en-jeu-avec-une-transition) (route vers v1.0-stable). Aucune porte partielle d'ici là : le suivi est un `switch` dont les cas sont émis seulement pour les caméras à cible |
-| Camera `follow_target` | — | repoussé | même chantier que `mode` |
+| Camera `mode` | s.o. | repoussé | changer de mode et de cible en jeu est voulu, avec une transition : chantier [« La caméra change de cible »](#chantier-transverse-la-caméra-change-de-cible-en-jeu-avec-une-transition) (route vers v1.0-stable). Aucune porte partielle d'ici là : le suivi est un `switch` dont les cas sont émis seulement pour les caméras à cible |
+| Camera `follow_target` | s.o. | repoussé | même chantier que `mode` |
 | Camera `margin_x/y` | `camera.margin` (vec2) | **modifiable** | deux littéraux du `switch` → deux octets de RAM lus par `camera_follow` |
 | Camera `frame_w/h` | `camera.frame` (vec2) | **modifiable** | pilote WIN0 (`window_set(0, …)`), qui existe déjà ; un getter du rectangle de WIN0 est à ajouter |
 | Camera `name` | `camera.name` (comparable par son nom) | lecture seule | `DOMAIN_CAMERA` existe ; sert à savoir quelle caméra `camera:switch` a activée |
 | Scene `scroll_h/v` | `scene.scroll_h`, `scene.scroll_v` (bool) | lecture seule | choisit `(g_actors[t].x>>8)` ou `cam_x` DANS le `switch` émis |
-| Scene `blend_eva/evb/evy` | — | repoussé | chantier [« L'API de blending »](#chantier-transverse--lapi-de-blending-des-calques-au-petit-oignon) (route vers v1.0-stable) : `blend.set_alpha` / `blend.set_fade` → propriétés, décidé avec le `mixer` qui pose la même question pour le son |
-| Scene `blend_*_role` | — | repoussé | même chantier [« L'API de blending »](#chantier-transverse--lapi-de-blending-des-calques-au-petit-oignon) |
-| Scene `backdrop_color` | — | repoussé | même chantier [« L'API de blending »](#chantier-transverse--lapi-de-blending-des-calques-au-petit-oignon) : la porte est voulue, lecture ET écriture, sans nouveau type (un `vec3` ou un entier RGB555, à trancher là-bas) |
-| Scene `transition_kind/frames` | — | repoussé | chevauche l'API de blending (la transition possède les registres de blending) : même chantier [« L'API de blending »](#chantier-transverse--lapi-de-blending-des-calques-au-petit-oignon) |
+| Scene `blend_eva/evb/evy` | s.o. | repoussé | chantier [« L'API de blending »](#chantier-transverse-lapi-de-blending-des-calques-au-petit-oignon) (route vers v1.0-stable) : `blend.set_alpha` / `blend.set_fade` → propriétés, décidé avec le `mixer` qui pose la même question pour le son |
+| Scene `blend_*_role` | s.o. | repoussé | même chantier [« L'API de blending »](#chantier-transverse-lapi-de-blending-des-calques-au-petit-oignon) |
+| Scene `backdrop_color` | s.o. | repoussé | même chantier [« L'API de blending »](#chantier-transverse-lapi-de-blending-des-calques-au-petit-oignon) : la porte est voulue, lecture ET écriture, sans nouveau type (un `vec3` ou un entier RGB555, à trancher là-bas) |
+| Scene `transition_kind/frames` | s.o. | repoussé | chevauche l'API de blending (la transition possède les registres de blending) : même chantier [« L'API de blending »](#chantier-transverse-lapi-de-blending-des-calques-au-petit-oignon) |
 | Scene `collision_layer` | `scene.collision_layer` (int) | lecture seule | index BG fixé au build |
-| Scene `render_mode` | — **aucune** | — | échafaudage non offert à l'auteur (règle « anticiper est permis, l'exposer non ») |
-| Scene `music`, `script`, `notes` | — | pas de porte | décidé le 2026-09-29 : `music` ne règle que la musique de DÉPART (le module `music` couvre l'état) ; `script`/`notes` ne sont pas de l'état |
+| Scene `render_mode` | **aucune** | s.o. | échafaudage non offert à l'auteur (règle « anticiper est permis, l'exposer non ») |
+| Scene `music`, `script`, `notes` | s.o. | pas de porte | décidé le 2026-09-29 : `music` ne règle que la musique de DÉPART (le module `music` couvre l'état) ; `script`/`notes` ne sont pas de l'état |
 | BackgroundLayer `scroll_speed` | `layer.scroll_speed` (pourcent, 100 = normal) | **modifiable** | littéral dans la ligne `BGOFS = (cam_x*speed)>>8 + …` → quatre entiers de RAM, un par fond |
 | BackgroundLayer `pal_bank` | `layer.pal_bank` (int) | lecture seule (livré) | banque allouée au build |
 | BackgroundLayer `background_name` | `layer.image` (comparable par son nom) | lecture seule | asset chargé au build |
-| BackgroundLayer `bg_slot` | — | sans objet | c'est la clé de la référence (`layer.get(n)`) |
-| BackgroundLayer `visible` | — | sans objet | visibilité du viewport ÉDITEUR seulement (le codegen ne la lit pas) |
+| BackgroundLayer `bg_slot` | s.o. | sans objet | c'est la clé de la référence (`layer.get(n)`) |
+| BackgroundLayer `visible` | s.o. | sans objet | visibilité du viewport ÉDITEUR seulement (le codegen ne la lit pas) |
 
 **Décidé le 2026-09-29** : `camera.mode` et `camera.target` sortent de la tranche (chantier caméra ci-dessous).
 **Décidé le 2026-09-29** : tout ce qui touche au blending et à la transition de scène sort de la tranche (chantier
@@ -900,7 +900,7 @@ Ce que le chantier a demandé en plus :
   lit désormais `g_cam_margin_*` au lieu d'un littéral. La vitesse de parallax de chaque fond (`g_bg_speed[4]`, Q8) est
   remise à 256 par `display_reset()` puis posée par `scene_init` ; la ligne `BGOFS` la lit. Coût : environ 32 octets.
 - **`camera.frame` réutilise `camera_switch()`** : les deux passent par `camera_set_frame()`, qui borne à l'écran et
-  allume ou éteint WIN0 — une seule porte vers la window de la caméra.
+  allume ou éteint WIN0, une seule porte vers la window de la caméra.
 - **`layer.pal_bank` est en lecture seule, et c'est voulu.** La banque est gravée dans CHAQUE case de la carte (champ
   `SE_PALBANK`) : l'écrire réécrirait la carte, et un fond en streaming reviendrait de la ROM avec l'ancienne. Le
   recolorage se fait par `palette:set_bg(banque, "Nuit")`, qui change toutes les tuiles d'un coup ; la lecture sert à ne
@@ -911,11 +911,11 @@ Ce que le chantier a demandé en plus :
   Sans cela `scroll_speed = scroll_speed + 1` restait bloquée (51 % → Q8 130 → relu 50 %). Tenu par la sonde native.
 - **Vérifié** : `test_inspector_api_parity.py` (43 tests, dont la sonde `actor_box_probe.c` étendue à la caméra et au
   parallax) et un build ROM complet sur un projet neuf (caméra en suivi, fond parallax, script utilisant les six
-  portes) — `rom.gba` produite, `main.c` inspecté.
+  portes), `rom.gba` produite, `main.c` inspecté.
 
 ---
 
-## Le cache de scène — rouvrir une scène déjà visitée sans tout redécoder
+## Le cache de scène (rouvrir une scène déjà visitée sans tout redécoder)
 
 ### D'où vient la question (2026-09-16)
 
@@ -925,7 +925,7 @@ en investiguant `window._on_scene_selected` ([window.py:1128](editor/window.py:1
 
 1. **Corrigé (2026-09-16).** `AssetsFinderPanel.refresh()` reconstruisait les 3 arbres (Scenes,
    Prefabs, Scripts) à chaque clic, alors que rien n'y change quand on change simplement de scène
-   active. Remplacé par un simple surlignage de la scène active, sans repeuplement —
+   active. Remplacé par un simple surlignage de la scène active, sans repeuplement,
    `highlight_active_scene` ([assets_finder_panel.py](editor/ui/scene_manager/assets_finder_panel.py)),
    posé sur `AssetFinder.highlight_selection` déjà existant.
 2. **Pas de bug.** `_refresh_diagnostics` → `validate_project` → `project.load_all_resources()`
@@ -934,10 +934,10 @@ en investiguant `window._on_scene_selected` ([window.py:1128](editor/window.py:1
    (stat + hash de tout le catalogue) n'est payé qu'à la toute première scène ouverte d'une
    session ; ensuite chaque `load_*` est un test d'ensemble vide, donc quasi gratuit.
 3. **Ce chantier.** `SceneEditor.load_project` ([scene_canvas.py:721](editor/ui/scene_manager/scene_canvas.py:721))
-   reconstruit le canvas ENTIER à chaque sélection — y compris en revenant sur une scène déjà
+   reconstruit le canvas ENTIER à chaque sélection, y compris en revenant sur une scène déjà
    visitée dans la même session, où rien n'a changé :
    - `compose_frame_image` ([sprite_compose.py:15](editor/core/sprite_compose.py:15)) rouvre et
-     redécode depuis le disque le PNG source du sprite pour CHAQUE acteur, à CHAQUE visite —
+     redécode depuis le disque le PNG source du sprite pour CHAQUE acteur, à CHAQUE visite,
      aucun cache, même quand le fichier n'a pas bougé depuis la visite précédente.
    - `bg_pixmap` / `BgLayerRaster.render` ([canvas_raster.py:171](editor/ui/scene_manager/canvas/canvas_raster.py:171))
      recompose le rendu tuile par tuile du fond à chaque visite. Le tileset lui-même est déjà en
@@ -949,7 +949,7 @@ en investiguant `window._on_scene_selected` ([window.py:1128](editor/window.py:1
 ### Ce qu'il faudrait trancher avant d'ouvrir
 
 - **Quoi cacher, précisément.** Deux formes envisagées avec l'auteur, pas encore choisies :
-  - un cache des **décodages disque** purs (PNG source des sprites/fonds), invalidé par mtime —
+  - un cache des **décodages disque** purs (PNG source des sprites/fonds), invalidé par mtime,
     la composition par frame/scène (flips, palette, overrides live) continue de tourner à chaque
     visite. Scope net, risque faible : rien ne peut devenir périmé, seul le pixel brut du fichier
     est mémorisé, jamais un résultat qui dépend de l'état vivant du projet.
@@ -957,20 +957,20 @@ en investiguant `window._on_scene_selected` ([window.py:1128](editor/window.py:1
     une scène visitée sans rien recalculer, même pas le raster de palette/bank colors. Gain plus
     net, mais très invasif (`SceneEditor.load_project` en profondeur) et risque de
     désynchronisation si un asset ou une palette change pendant que la scène est en cache
-    (édition d'un sprite ou d'une palette depuis un autre écran) — demanderait une invalidation
+    (édition d'un sprite ou d'une palette depuis un autre écran), demanderait une invalidation
     explicite, pas seulement un mtime.
 - **Recouvrement avec CanvasRework.** Le chantier de refonte du canvas est en cours (`scene_graph`,
   `scene_graph_state`, non encore committés à l'ouverture de cette entrée) : ouvrir un cache de
   scène avant que cette refonte se stabilise risque de dupliquer le travail ou de mettre en cache
   un état que CanvasRework va remplacer. À revérifier au moment d'ouvrir.
 - **Mesurer avant de trancher.** Aucune mesure chiffrée prise pour l'instant, seulement une lecture
-  de code — profiler `load_project` sur un projet réel donnerait la vraie proportion entre
+  de code. Profiler `load_project` sur un projet réel donnerait la vraie proportion entre
   décodage sprite, raster de fond et reconstruction des régions UI, plutôt que de deviner laquelle
   des trois mérite le cache en premier.
 
 ---
 
-## Undo/redo des sidecars d'éditeur — annuler la création d'un groupe, un déplacement de nœud
+## Undo/redo des sidecars d'éditeur (annuler la création d'un groupe, un déplacement de nœud)
 
 ### D'où vient la question (2026-09-16)
 
@@ -979,13 +979,13 @@ des scènes, déplacer et redimensionner les boîtes, déplacer les nœuds), l'a
 vérifier que **toutes** les opérations introduites étaient reliées à undo/redo. Constat :
 
 - **Reliée.** La *suppression de scène* (clic-droit du Graphe) pousse `DeleteResourceCmd` dans
-  l'historique — exactement la commande du project viewer. C'est une vraie mutation de `Resource`.
-- **Non reliées, et à dessein.** Tout le reste — créer / supprimer / renommer / colorer un groupe,
-  ranger une scène (`move_member`), déplacer une carte, déplacer ou redimensionner un cadre —
+  l'historique, exactement la commande du project viewer. C'est une vraie mutation de `Resource`.
+- **Non reliées, et à dessein.** Tout le reste (créer / supprimer / renommer / colorer un groupe,
+  ranger une scène (`move_member`), déplacer une carte, déplacer ou redimensionner un cadre)
   écrit dans **deux sidecars d'éditeur** : `AssetFolderStore` (les groupes, partagés viewer ↔
   Graphe) et `SceneGraphState` (positions des nœuds, géométrie des cadres). Aucun ne passe par
   `get_history()`. Les opérations de dossiers du project viewer n'y sont **jamais** passées non
-  plus, avant ce chantier — ce n'est pas une régression.
+  plus, avant ce chantier. Ce n'est pas une régression.
 
 ### Pourquoi ce n'est pas un simple oubli
 
@@ -1007,8 +1007,8 @@ Deux obstacles durs empêchent de brancher naïvement ces gestes sur l'historiqu
   scène ni d'écran, tant que le projet reste ouvert. C'est le cœur du chantier : sans lui, aucune de
   ces opérations n'est annulable de façon fiable.
 - **Le conflit de Ctrl+Z.** Deux piles undo (modèle per-scène vs organisation projet) réclament la
-  même touche dans le Scene Manager. Décider laquelle répond — selon le focus (Graphe/viewer vs
-  canvas), selon le dernier geste, ou une pile unifiée — sans que Ctrl+Z devienne imprévisible.
+  même touche dans le Scene Manager. Décider laquelle répond (selon le focus (Graphe/viewer vs
+  canvas), selon le dernier geste, ou une pile unifiée) sans que Ctrl+Z devienne imprévisible.
 - **Réversibilité de la suppression de groupe.** `delete_folder` remonte membres et sous-groupes au
   parent ([asset_folder_store.py](editor/core/asset_folder_store.py)) : l'undo doit restaurer
   l'appartenance *exacte* d'avant, donc capturer l'état (id, `parent_id`, `members`) avant de
@@ -1022,13 +1022,13 @@ Deux obstacles durs empêchent de brancher naïvement ces gestes sur l'historiqu
 
 ---
 
-## Piste Collision — un `Contact` d'événement, pas une « dernière collision »
+## Piste Collision (un `Contact` d'événement, pas une « dernière collision »)
 
 Née dans le chantier « La struct `Actor` allégée » ([archive](changelog/archives/actor-struct-lightening.md)), livré à côté de cette piste : elle reste **non verrouillée**, code non commencé.
 
 Une boîte peut toucher plusieurs tuiles ou plusieurs acteurs dans une même frame. Lui demander
 `my_box:get_collision()` ou `get_collision_vector()` imposerait de choisir arbitrairement une
-« dernière » collision — information instable, perdue dès que deux contacts coexistent. La
+« dernière » collision, information instable, perdue dès que deux contacts coexistent. La
 collision doit au contraire livrer un **Contact immuable** au moment où elle est observée.
 
 ```lua
@@ -1058,7 +1058,7 @@ La boîte conserve ses opérations stables (`active`, `solid`, `bounds`, `overla
 `Contact` explique **ce qui vient d'arriver**. Cette frontière évite de mélanger configuration,
 requête de géométrie et événement de collision.
 
-### Extension proposée (2026-09-25) — la normale vaut aussi pour un contact acteur↔acteur
+### Extension proposée (2026-09-25) (la normale vaut aussi pour un contact acteur↔acteur)
 
 **Non verrouillée.** Aujourd'hui la normale n'existe que pour les tuiles (`on_tile_collide(normal_x,
 normal_y)`, deux entiers) ; un contact acteur↔acteur n'en porte aucune (`on_collision_enter(other,
@@ -1086,13 +1086,13 @@ passe de 21 à 17 lignes et perd ses deux boîtes de piétinement.
   la direction dans laquelle il serait repoussé. « On me marche dessus » donne `y < 0` (l'axe Y du GBA
   descend). Pour le joueur qui piétine, le même contact lu de son côté donne `y > 0`. Chaque acteur
   reçoit son propre `Contact` avec sa propre normale ; le contrat ne dépend pas de l'ordre des appels.
-- **Point ouvert — le calcul.** Le runtime ne dérive aujourd'hui aucune normale entre deux boîtes. Pour
+- **Point ouvert, le calcul.** Le runtime ne dérive aujourd'hui aucune normale entre deux boîtes. Pour
   deux AABB, la normale est l'axe de plus petit recouvrement, de signe donné par les centres. À
   vérifier : coût par paire (le budget de détection est un budget de scanline), comportement en
   diagonale (recouvrements égaux : choisir une règle et l'écrire), boîte contenue dans l'autre, et
   vitesse relative très élevée (traversée en une frame). La normale d'un contact tuile, elle, est déjà
   connue.
-- **Point ouvert — la valeur.** Comme pour le `Contact` de tuile, l'introduction attend la vérification
+- **Point ouvert, la valeur.** Comme pour le `Contact` de tuile, l'introduction attend la vérification
   que le sous-ensemble Lua (`lua_subset.py`) sait porter une valeur structurée (`contact.normal.y`,
   `contact.other.name`) et qu'un paramètre de handler peut en être une.
 - **Migration.** Les trois signatures (`on_collision_enter(other, my_box, other_box)`,
@@ -1105,7 +1105,7 @@ passe de 21 à 17 lignes et perd ses deux boîtes de piétinement.
 
 ---
 
-## L'élément d'interface appartient à sa scène — des noms locaux
+## L'élément d'interface appartient à sa scène (des noms locaux)
 
 ### D'où vient la question (2026-10-03)
 
@@ -1195,13 +1195,13 @@ build et jamais stocké** (source de vérité unique).
 
 ---
 
-## Les prefabs — l'instance garde ce qu'elle surcharge, le reste suit le prefab
+## Les prefabs (l'instance garde ce qu'elle surcharge, le reste suit le prefab)
 
 ### D'où vient la question (2026-10-13)
 
 Née de l'inventaire des écrans qui écrivent à chaque cran (cf. « 2e. Fluidité des réglages » de l'écran Son) : régler un
 champ d'un prefab écrit le prefab **plus toutes les scènes qui en portent une instance**, à chaque valeur. L'auteur a
-demandé pourquoi la scène ne charge pas simplement le prefab à l'ouverture — un seul fichier écrit, propagé par le
+demandé pourquoi la scène ne charge pas simplement le prefab à l'ouverture, un seul fichier écrit, propagé par le
 chargement. La réponse est que le modèle actuel est celui de la copie, auquel on a ajouté une propagation.
 
 ### Ce qui existe (lu dans le code le 2026-10-13)
@@ -1214,16 +1214,16 @@ chargement. La réponse est que le modèle actuel est celui de la copie, auquel 
   suivant du prefab. La seule protection est « Unlink » (`prefab_name = None`).
 - **« Lié » veut dire « même chemin de compilation »** (`actor_prefab_linked`, décision du 2026-08-21) : mêmes types de
   composants, mêmes ids, même ordre, même fichier `.lua`. Valeurs de champs, exports, décalages et `active` sont des
-  *paramètres d'instance* qui ne délient pas — et que la propagation écrase pourtant.
+  *paramètres d'instance* qui ne délient pas, et que la propagation écrase pourtant.
 - **Expose / Relink** : Expose pousse composants, palette et notes de l'instance vers le prefab, puis `save_prefab` propage ;
   Relink reprend ceux du prefab. La POSE (x, y, rotation, parent, priorité…) reste à l'instance et n'est jamais propagée.
 - **L'instance d'un prefab n'écrit jamais le prefab** : seul l'inspecteur du prefab et Expose le font.
 - **Ce qui rend le chantier faisable :** `Project.load` charge déjà les prefabs avant les scènes ; le codegen, le
   validateur, l'inspecteur et le canvas travaillent sur des `Actor` en mémoire (environ 75 occurrences de `.components`,
   dans 25 fichiers hors modèle, lectures et écritures confondues) et ne résolvent aucun prefab : si les composants sont
-  résolus en mémoire au chargement, aucun d'eux ne devrait changer — à confirmer fichier par fichier avant d'ouvrir.
+  résolus en mémoire au chargement, aucun d'eux ne devrait changer, à confirmer fichier par fichier avant d'ouvrir.
 
-### Décision (2026-10-13, de l'auteur) — le modèle à surcharges
+### Décision (2026-10-13, de l'auteur) (le modèle à surcharges)
 
 L'instance garde **ce qu'elle surcharge** ; **tout le reste suit le prefab**. Une scène n'écrit, pour une instance, que
 `prefab_name`, sa pose et ses surcharges ; les composants sont résolus en mémoire à l'ouverture. Conséquences voulues :
@@ -1235,7 +1235,7 @@ L'instance garde **ce qu'elle surcharge** ; **tout le reste suit le prefab**. Un
 - **« Expose »** est le geste qui fait passer les surcharges d'une instance dans le prefab, donc aux autres instances ;
   **« Relink »** efface les surcharges de l'instance ;
 - les autres modèles étudiés sont écartés : le statu quo (tout écrasé), et le « tout ou rien » (toute modification
-  détache complètement l'instance — simple, mais une instance dont on a réglé une valeur ne recevrait plus un composant
+  détache complètement l'instance, simple, mais une instance dont on a réglé une valeur ne recevrait plus un composant
   ajouté au prefab).
 
 ### Ce qu'il faudrait trancher avant d'ouvrir
@@ -1270,7 +1270,7 @@ chaud) ; `core/command_dispatcher.py` (`save_prefab`, `relink_actor_to_prefab`, 
 `instantiate_prefab`) ; `core/project_renames.py` ; `ui/scene_manager/inspectors/actor_inspector.py` (marqueur de surcharge,
 badge, `_persist`) ; `core/history.py` (les commandes qui ajoutent ou retirent un composant : **vérifier qu'elles passent toutes
 par `_persist`**, c'est le point de contrôle prévu pour enregistrer une surcharge) ; ARCHITECTURE.md. Le codegen ne devrait
-pas changer — à prouver, voir l'ordre ci-dessous.
+pas changer, à prouver, voir l'ordre ci-dessous.
 
 ### Ordre d'implémentation (proposé)
 
@@ -1302,7 +1302,7 @@ n'est plus pour l'auteur, `assets/` l'est pour tout.
 ### Décisions verrouillées (2026-10-10)
 
 - **Tout ce que l'auteur a le droit de manipuler passe de `project/` à `assets/`**, sous le MÊME nom de dossier (un seul
-  geste, déplacer sans renommer ; normaliser — `prefab` → `prefabs`… — viendra avec les dossiers librement déplaçables) :
+  geste, déplacer sans renommer ; normaliser (`prefab` → `prefabs`…) viendra avec les dossiers librement déplaçables) :
 
   | Avant | Après |
   | --- | --- |
@@ -1316,15 +1316,15 @@ n'est plus pour l'auteur, `assets/` l'est pour tout.
   | `project/variables.json` | `assets/variables.json` |
 
 - **`project/` ne garde que ce qui n'est pas à l'auteur** : `editor/` (positions du Graphe, dossiers virtuels, manifeste de
-  rattrapage — l'état interne de l'éditeur), `licenses/` et `README.md`.
+  rattrapage, l'état interne de l'éditeur), `licenses/` et `README.md`.
 - Les textes et les variables sont des tables du projet entier, pas des assets nommés : ils se posent à la RACINE de
-  `assets/`, pas dans un sous-dossier — `assets/data/` est lu comme « une table par fichier » et les avalerait.
+  `assets/`, pas dans un sous-dossier. `assets/data/` est lu comme « une table par fichier » et les avalerait.
 - Les projets existants se migrent par `tools/migrate_project_to_assets.py` (comme pour les ids : aucune lecture de
   l'ancien emplacement dans l'éditeur, le projet n'étant pas diffusé), appliqué aux deux démos et au starter.
 
 ### Ce que ça touche
 
-- **Chemins** : les propriétés de `core/project_paths.py` (une dizaine), plus les emplacements écrits en dur — la création
+- **Chemins** : les propriétés de `core/project_paths.py` (une dizaine), plus les emplacements écrits en dur, la création
   des dossiers à l'ouverture (`Project.load`, `Project.create`), la surveillance (`ProjectWatcher`), les traductions
   (`texts_<langue>.json`), la copie d'un starter.
 - **L'onglet Disk** : ces fichiers y apparaissent ; ils doivent être marqués ASSET (famille, icône) et non « Non géré ».
@@ -1340,7 +1340,7 @@ n'est plus pour l'auteur, `assets/` l'est pour tout.
 
 ---
 
-## Finder et Disk — « Asset library » et « Project files »
+## Finder et Disk (« Asset library » et « Project files »)
 
 ### D'où vient la question (2026-10-14)
 
@@ -1353,7 +1353,7 @@ l'ambiguïté et rend le code plus clair à maintenir.
 
 ### Décisions verrouillées (2026-10-14)
 
-- **L'« asset finder » devient l'« asset library »** : le nom change partout où il vit — le vocabulaire visible
+- **L'« asset finder » devient l'« asset library »** : le nom change partout où il vit, le vocabulaire visible
   (libellés, infobulles), les classes et modules (`AssetFinder`, `asset_finder.py`, `*_finder_panel.py`), les tests, la
   doc (`editor/ui/asset-finder.md`, ARCHITECTURE). Aucun alias de l'ancien nom : une fois le renommage fait, plus un
   « finder » ne reste.
@@ -1363,7 +1363,7 @@ l'ambiguïté et rend le code plus clair à maintenir.
   plus qu'un seul modèle (l'asset library) dont ils sont des vues par type d'asset, au lieu de quatre panneaux qui
   portent chacun leur nom (« Sprite finder »…). Les `*_finder_panel.py` disparaissent comme noms de famille.
 - **Le « Project viewer » (un temps nommé « Scene viewer ») est la « Scene library »** : à l'usage c'est la bibliothèque
-  de la scène — l'auteur y ouvre une scène, y prend un prefab. Ce n'est pas une vue du projet entier (« Project files »
+  de la scène. L'auteur y ouvre une scène, y prend un prefab. Ce n'est pas une vue du projet entier (« Project files »
   prend ce rôle) mais une **instance du même modèle d'asset library**, comme les trois autres, avec trois filtres :
   **scene / prefab / script**. Le filtre **script** pourrait même être retiré (à trancher, point 2) : le Script
   finder a déjà sa propre bibliothèque.
@@ -1408,7 +1408,7 @@ l'ambiguïté et rend le code plus clair à maintenir.
 
 L'auteur voudrait que la compression, dans le Background Editor, soit un moment **créatif** plutôt qu'une étape
 barbante : on bouge des potards et on attend. Analyse du parcours faite le même jour, **en lisant le code**
-(`background_editor_screen.py`, `bg_import.py`, `bg_inpaint_canvas.py`) — rien n'a été chronométré ni essayé à la
+(`background_editor_screen.py`, `bg_import.py`, `bg_inpaint_canvas.py`). Rien n'a été chronométré ni essayé à la
 souris. Les points 7 et 8 ci-dessous sont à vérifier avant de s'appuyer dessus.
 
 ### Le parcours actuel
@@ -1435,7 +1435,7 @@ souris. Les points 7 et 8 ci-dessous sont à vérifier avant de s'appuyer dessus
 3. **Les curseurs parlent la langue de l'encodeur** (`palettes_max`, `colors_per_palette`, `global_colors`,
    `tile_target`), et leurs liens sont invisibles : le dithering se grise en 4bpp tant que « Global colors » est à Off ;
    surtout, dès qu'un curseur s'écarte du défaut, `_asks_for_reduction_4bpp` coupe le chemin « indexé direct » qui
-   préservait la palette d'auteur — une **falaise** que l'interface n'annonce pas.
+   préservait la palette d'auteur, une **falaise** que l'interface n'annonce pas.
 4. **L'objectif réel n'est pas exprimé.** L'auteur veut « que ça tienne sur GBA » (tuiles, 16 palettes, VRAM) avec le
    moins de dégâts ; seule la cible de tuiles est orientée but. Les diagnostics savent quel levier répare quel problème
    mais s'affichent en texte jaune sans action. `analyze_tile_colors` (couleurs par tuile, tuiles partagées, palettes
@@ -1449,7 +1449,7 @@ souris. Les points 7 et 8 ci-dessous sont à vérifier avant de s'appuyer dessus
    **est** la compression, le bouton la valide. Pas de « revenir au compressé actuel » : « Reset » remet les
    **défauts**. Deux aperçus de nature différente (ajustements en direct, compression différée) se partagent canvas et
    badge.
-7. **À vérifier** — ce que devient un réglage en attente quand on change de fond (`_staged` est un état du panneau ;
+7. **À vérifier**, ce que devient un réglage en attente quand on change de fond (`_staged` est un état du panneau ;
    le chemin de rechargement n'a pas été lu).
 8. **Mesuré le 2026-10-14** (`encode_by_mode`, poste de l'auteur, une seule passe, sans l'UI) :
    - **PNG indexé de pixel art** (démo Platformer 544×224, PongAdvanced 240×160) : de 0,04 à 0,55 s, tous réglages
@@ -1458,7 +1458,7 @@ souris. Les points 7 et 8 ci-dessous sont à vérifier avant de s'appuyer dessus
      10,7 s** (24 s sous cProfile), 4bpp global 64 + dithering 8,2 s, **4bpp cible 256 tuiles 32 s**, 8bpp 1,7 s.
    - **Où part le temps** (profil du 4bpp défaut, 24 s) : `_pack_palettes` **13,3 s**, soit plus de la moitié ; or sur une
      photo il ne sert qu'à compter `pre_merge_palettes`, un chiffre de **diagnostic** (`encode_background`, branche
-     « max_tile_colors > editable ») — le résultat n'alimente pas l'encodage. Avec une cible de tuiles, `_ward_groups`
+     « max_tile_colors > editable »). Le résultat n'alimente pas l'encodage. Avec une cible de tuiles, `_ward_groups`
      ajoute 13,2 s. Le clustering de palettes (3,5 s) et l'extraction (2,7 s) sont le reste utile.
    - **Conséquence** : sur une photo, un curseur ne peut pas se jouer en direct (10 à 30 s par réglage, le cache exact
      ne sert pas). Il y a au moins un gain quasi gratuit (calculer `pre_merge_palettes` à la demande plutôt qu'à chaque
@@ -1471,7 +1471,7 @@ souris. Les points 7 et 8 ci-dessous sont à vérifier avant de s'appuyer dessus
    l'auteur l'ait décidé, alors que le recadrage et le redimensionnement existent pour qu'il le décide. Le tuilé, lui, ne
    redimensionne jamais (il ne fait que remplir jusqu'au multiple de 8). Les 256 couleurs, en revanche, sont la compression
    elle-même, pas une réduction de géométrie. **Conséquence pour la comparaison à la source** : en bitmap, l'image compressée
-   (240×133) n'a pas la grille de l'image préparée — la carte d'écart par tuile n'a pas de sens tant que cette réduction est
+   (240×133) n'a pas la grille de l'image préparée. La carte d'écart par tuile n'a pas de sens tant que cette réduction est
    cachée dans l'encodeur.
 
 ### Le problème de fond (relevé le 2026-10-15, d'après deux captures de l'auteur et la lecture du code)
@@ -1479,8 +1479,8 @@ souris. Les points 7 et 8 ci-dessous sont à vérifier avant de s'appuyer dessus
 L'écran mélange **trois images** et ne dit jamais laquelle il montre :
 
 1. **le fichier** de l'auteur (`_src_size`, en pixels du PNG) ;
-2. **l'image préparée** — recadrée, redimensionnée, miroitée, ajustée : ce que l'auteur a décidé (`_prepared_size`) ;
-3. **l'image encodée** — ce que la GBA affichera, avec sa propre géométrie : le tuilé remplit jusqu'au multiple de 8, le
+2. **l'image préparée**, recadrée, redimensionnée, miroitée, ajustée : ce que l'auteur a décidé (`_prepared_size`) ;
+3. **l'image encodée**, ce que la GBA affichera, avec sa propre géométrie : le tuilé remplit jusqu'au multiple de 8, le
    bitmap est **ajusté en 240×160** par l'encodeur.
 
 S'y ajoute un quatrième axe, **validé / en attente** (layout et curseurs mis en attente, aperçu non appliqué).
@@ -1501,13 +1501,13 @@ décrivent (3) mais ne lisent que l'état **validé**, et chaque outil a reçu s
   mettre le layout en attente ne les recalcule pas. L'aperçu les met à jour depuis le 2026-10-14 (tuilé) et le
   2026-10-15 (bitmap, qui laissait ceux du layout précédent), mais seulement une fois l'aperçu calculé.
 - **L'auteur ne voit jamais son fichier tel quel** : l'import choisit le layout, l'encodeur réduit, et le canvas montre
-  le résultat — « une version tronquée » (auteur, 2026-10-15) — avec des constats qui disent ce que l'encodeur a fait,
+  le résultat (« une version tronquée » (auteur, 2026-10-15)) avec des constats qui disent ce que l'encodeur a fait,
   pas ce que l'auteur doit faire pour que ce soit compatible.
 
-**Piste remplacée le 2026-10-15** par le chantier [Le fond est un plan de travail](#le-fond-est-un-plan-de-travail--canvas-image-posée-comparaison-sourcecompressé), plus radical : l'auteur y pose
+**Piste remplacée le 2026-10-15** par le chantier [Le fond est un plan de travail](#le-fond-est-un-plan-de-travail-canvas-image-posée-comparaison-sourcecompressé), plus radical : l'auteur y pose
 l'image dans un canvas à lui plutôt que de la voir à travers un cadre matériel. Le texte qui suit est l'état de départ.
 
-**Piste (non verrouillée) — un seul espace, celui du fichier préparé.** Le canvas montre l'image de l'auteur **entière**,
+**Piste (non verrouillée), un seul espace, celui du fichier préparé.** Le canvas montre l'image de l'auteur **entière**,
 à sa taille ; le matériel est un **cadre** posé dessus (240×160 en bitmap, la grille 8×8 en tuilé), le hors-cadre grisé.
 Recadrer et redimensionner agissent dans cet espace et le cadre bouge avec : plus de désynchronisation possible. Les
 constats deviennent une **liste de choses à faire** (« dépasse de 242×109 px → recadrer / ajuster au cadre »), chacune avec
@@ -1519,7 +1519,7 @@ dépasse du cadre est ce que le cadre montre, grisé en dehors. À trancher : vo
 - **Budget en direct** : les jauges tuiles / palettes / VRAM suivent l'aperçu, depuis les diagnostics déjà calculés
   (friction 1). Le plus petit geste, et il débloque les autres.
 - **Voir la perte** : comparaison curseur ou bascule avec la source, et carte des tuiles sacrifiées (tuiles > 15 couleurs,
-  tuiles fusionnées) — le diagnostic par tuile existe (frictions 2 et 4).
+  tuiles fusionnées). Le diagnostic par tuile existe (frictions 2 et 4).
 - **Diagnostics actionnables** : un avertissement devient un bouton qui pose le curseur qui le règle (friction 4).
 - **Réglage par objectif** : « tenir en N tuiles », « garder le plus de couleurs possible », les curseurs passant au
   second plan (frictions 3 et 4).
@@ -1528,17 +1528,17 @@ dépasse du cadre est ce que le cadre montre, grisé en dehors. À trancher : vo
 
 ### Ordre retenu (2026-10-14)
 
-1. **Petits gains de latence** — *livré le 2026-10-14.* `_pack_palettes` teste l'union par différence d'ensembles au
+1. **Petits gains de latence**, *livré le 2026-10-14.* `_pack_palettes` teste l'union par différence d'ensembles au
    lieu de la reconstruire : sortie **identique octet pour octet** sur les cinq fonds de la démo (4bpp, réglage par
    défaut et réduit, 12 cas comparés par empreinte), `_pack_palettes` passe de 13,3 s à 6,6 s sur la photo. Le calcul de
    `pre_merge_palettes` n'est **pas** sorti du chemin chaud : il reste la moitié du temps restant.
-2. **Jauges en direct** (friction 1) — *livré le 2026-10-14, pas vérifié à la souris.* Quand l'aperçu d'une compression est
+2. **Jauges en direct** (friction 1), *livré le 2026-10-14, pas vérifié à la souris.* Quand l'aperçu d'une compression est
    montré, les overlays du canvas portent **ses** chiffres : tuiles uniques et palettes en jauge de texte (rouge au-delà
    du budget), « (actuel : N) » à côté, tuiles réduites / fusionnées, et les mêmes avertissements que pour un fond
    compressé (`_compression_lines_from`, règles uniques). Le fond compressé reprend la main quand l'aperçu disparaît.
    Bitmap : pas de jauge (ni tuiles ni palettes). Le chiffre d'un aperçu **exclut les calques de peinture**, comme
    l'image. Pendant le calcul, les chiffres affichés sont ceux de l'état précédent.
-3. **Comparer à l'image source** (frictions 2 et 4) — demandé par l'auteur le 2026-10-14 : le diagnostic se lit **contre
+3. **Comparer à l'image source** (frictions 2 et 4), demandé par l'auteur le 2026-10-14 : le diagnostic se lit **contre
    le fichier source**, pas seulement en chiffres (carte d'écart par tuile, fidélité globale, bascule source/compressé).
    À concevoir ; le coût dépend de la taille, donc sur photo à calculer sur une version réduite.
 
@@ -1550,7 +1550,7 @@ dépasse du cadre est ce que le cadre montre, grisé en dehors. À trancher : vo
 3. La falaise du chemin « indexé direct » (friction 3) : la signale-t-on, ou change-t-on le comportement ?
 4. Que fait-on du bouton « Analyser » masqué : réintégré dans le tableau de bord, ou retiré ?
 5. ~~Le canvas montre-t-il le fichier préparé entier avec le cadre matériel posé dessus ?~~ **Tranché le 2026-10-15** :
-   un canvas à soi, l'image posée dedans — voir [Le fond est un plan de travail](#le-fond-est-un-plan-de-travail--canvas-image-posée-comparaison-sourcecompressé).
+   un canvas à soi, l'image posée dedans. Voir [Le fond est un plan de travail](#le-fond-est-un-plan-de-travail-canvas-image-posée-comparaison-sourcecompressé).
    L'encodeur qui ajuste seul est écarté (règle de l'auteur, voir friction 9).
 
 ### Ce que ça touche (à confirmer en lisant le code avant d'ouvrir)
@@ -1566,13 +1566,13 @@ Pas d'outil de dessin (voir « Jouer avec la compression » plus haut : le jeu r
 
 ---
 
-## Le fond est un plan de travail — canvas, image posée, comparaison source/compressé
+## Le fond est un plan de travail (canvas, image posée, comparaison source/compressé)
 
 ### D'où vient la question (2026-10-15)
 
 Deux captures de l'auteur sur un fond bitmap (« Image scaled → 240×134 », poignées de redimensionnement qui ne
-correspondent pas à l'image) ont montré que l'écran mélange **trois images** — le fichier, l'image préparée, l'image
-encodée — sans dire laquelle il montre ; le détail est dans « Le problème de fond » de [La compression d'un fond se
+correspondent pas à l'image) ont montré que l'écran mélange **trois images** (le fichier, l'image préparée, l'image
+encodée) sans dire laquelle il montre ; le détail est dans « Le problème de fond » de [La compression d'un fond se
 joue](#la-compression-dun-fond-se-joue-elle-ne-sattend-pas). Les rustines locales (miroir, recadrage) ne suffisent pas :
 chaque outil a son repère. L'auteur attend qu'à l'import on **voie son fichier**, et qu'on lui dise ce qu'il lui reste
 à faire pour le rendre compatible.
@@ -1590,11 +1590,11 @@ chaque outil a son repère. L'auteur attend qu'à l'import on **voie son fichier
 4. **À l'import, tout est déjà réglé** : le mode par défaut, la taille du canvas qui va avec, l'image à sa taille
    d'origine en (0, 0). Rien n'est rétréci. À partir de là, le plan de travail est prêt à recevoir les gestes de l'auteur.
 5. **Le mode « compress view »** fait apparaître une **barre verticale** sur le plan de travail, sur le modèle des barres
-   de miroir : d'un côté la source, de l'autre la version compressée, à la même grille — c'est ce qui rend enfin
+   de miroir : d'un côté la source, de l'autre la version compressée, à la même grille. C'est ce qui rend enfin
    possible la comparaison à la source et la carte d'écart par tuile (voir « La compression se joue »).
 6. **Une seule image visible, jamais de panneau de calques.** Les calques existent déjà dans le code (décidé par l'auteur :
    l'utilisateur ne les voit jamais, et c'est le but). On reste simple : pas de composition de plusieurs images, pas de
-   peinture — la règle « pas un outil de dessin » tient.
+   peinture. La règle « pas un outil de dessin » tient.
 
 **Proposé, non verrouillé** : trois boutons d'aide au placement, **Ajuster** (tout l'image dans le canvas), **Remplir**
 (le canvas entier couvert), **1:1** ; sans eux, une photo de 1000 px s'ouvre sur son coin haut-gauche.
@@ -1636,12 +1636,12 @@ chaque outil a son repère. L'auteur attend qu'à l'import on **voie son fichier
    canvas verrouillé sur l'image.
 4. **Les peintures par tuile** (inpainting, par scène) sont posées sur la grille encodée : déplacer l'image sous elles
    change ce qu'elles recouvrent, comme le fait déjà un recadrage. À vérifier, pas à craindre.
-5. **Les consommateurs de la taille** : `pixel_size()` (Scene Manager), le placement d'animés, la taille déclarée en ROM
-   — tous lisent aujourd'hui la taille préparée ; ils doivent lire la taille du canvas.
+5. **Les consommateurs de la taille** : `pixel_size()` (Scene Manager), le placement d'animés, la taille déclarée en ROM.
+   Tous lisent aujourd'hui la taille préparée ; ils doivent lire la taille du canvas.
 
 ### À trancher
 
-1. **Le miroir** agit-il dans l'espace de l'image ou dans celui du canvas ? Proposé : le canvas — on réfléchit la
+1. **Le miroir** agit-il dans l'espace de l'image ou dans celui du canvas ? Proposé : le canvas. On réfléchit la
    composition. (Non tranché explicitement par l'auteur.) --> Dans le canvas, décision tranchée (15/10/26 19h50)
 2. **Passer d'un layout à l'autre** : tuilé → bitmap ramène le canvas à 240×160 et garde la position de l'image par rapport
    à l'origine ; bitmap → tuilé garde le canvas tel quel. À confirmer --> Existe-t-il des techniques de streaming d'image bitmap ? Comment fonctionne un flux vidéo sur GBA ? Comment fonctionne un aperçu 3D également. On a peut-être des pistes pour étendre l'affichage d'une image bitmap.
@@ -1660,7 +1660,7 @@ sprites perdent la moitié de leur VRAM (tuiles 512 à 1023).
 **Le double tampon ne fait pas défiler.** Il cache le redessin : on écrit dans la page invisible, puis on bascule au
 VBlank. Le défilement vient d'une **source plus grande que l'écran, gardée en ROM**, dont un DMA copie la fenêtre visible
 vers la page cachée, ligne par ligne avec le stride de la source. Ordre de grandeur (à mesurer) : 38 Ko par image, soit
-40 000 à 80 000 cycles sur les 280 000 d'une image — 60 fps sans décodage CPU tant que la source n'est pas compressée.
+40 000 à 80 000 cycles sur les 280 000 d'une image, 60 fps sans décodage CPU tant que la source n'est pas compressée.
 L'affine de BG2 ajoute déplacement sous-pixel, rotation et zoom gratuits, mais seulement à l'intérieur de la page (pas de
 bouclage en bitmap).
 
@@ -1684,7 +1684,7 @@ page, ni blit. La borne 240×160 est `BITMAP_SIZE` (`models/background.py`) et `
 
 | Étape | Contenu | Dépend de |
 | --- | --- | --- |
-| A | Émission ROM d'un bitmap 240×160 statique : buffer 8 bpp, palette de 256 couleurs, DISPCNT Mode 4, `render_mode` de la scène, cap OBJ à partir de la tuile 512 | — (à valider sur émulateur d'abord) |
+| A | Émission ROM d'un bitmap 240×160 statique : buffer 8 bpp, palette de 256 couleurs, DISPCNT Mode 4, `render_mode` de la scène, cap OBJ à partir de la tuile 512 | (à valider sur émulateur d'abord) |
 | B | Bascule de page et rendu hors écran (substrat commun avec le rendu logiciel de la v3.0) | A |
 | C | Canvas bitmap **libre** côté éditeur (par exemple 1024×160), puis blit fenêtré en runtime | A, B |
 | D | Vidéo : flux en ROM, codec, synchronisation audio | A, B |
@@ -1700,11 +1700,11 @@ décompression LZ77 BIOS en EWRAM au chargement de la scène permet un DMA depui
 
 ### Réglages et résultats : l'encodage à la fin (réflexion de l'auteur, 2026-10-15)
 
-Pile voulue : **source** (le PNG) → **préparée** (canvas, échelle, miroir, ajustements — `prepare_source`, en mémoire) →
+Pile voulue : **source** (le PNG) → **préparée** (canvas, échelle, miroir, ajustements, `prepare_source`, en mémoire) →
 **filtre de compression** (réduction de couleurs, fusion de tuiles, dithering) → **encodée** (tuiles, tilemap, palettes,
 buffer bitmap : ce que le build lit). L'encodage appelé à la création d'un asset, avec les réglages par défaut, remplit un
 cache : l'asset est utilisable tout de suite. Ce qui ne va pas, c'est que chaque geste de préparation relance un encodage.
-*Livré le 2026-10-15* : (1) `apply_bg_encoding` ne touche plus à aucun réglage — le layout se pose par
+*Livré le 2026-10-15* : (1) `apply_bg_encoding` ne touche plus à aucun réglage. Le layout se pose par
 `BackgroundAsset.choose_layout` ; (2) le sidecar a deux blocs, `settings` et `encoded` (voir ARCHITECTURE.md), lecture
 tolérante d'un sidecar à plat, démos migrées. *Pas fait, à décider* : un seul geste « Appliquer » qui encode (canvas et miroir
 compris, aujourd'hui commités à la sortie du geste) ; une empreinte réglages + source qui dise si `encoded` est périmé ;
@@ -1723,7 +1723,7 @@ couper `encode_background` en filtre puis encodage (le chemin « indexé direct 
   Redimensionner sont supprimés, remplacés par le canvas.
 - **L'outil « select », en tête de la barre flottante, EST le mode Canvas** ; la barre reste pour tous les fonds. Un
   **passe-partout** permanent garde visible, grisé, ce qui sort du canvas. Choisir un autre outil applique, Échap annule.
-- **Les palettes d'un fond sont des RÉFÉRENCES au catalogue, par nom — jamais des copies.** « + » ajoute une référence ; un
+- **Les palettes d'un fond sont des RÉFÉRENCES au catalogue, par nom, jamais des copies.** « + » ajoute une référence ; un
   override (palette dérivée remplacée par une banque) en est une aussi ; leurs couleurs viennent du catalogue et ne se changent
   pas depuis le fond ; éditer une banque met à jour les fonds qui la citent ; le renommage les répare.
 - **La peinture de tuiles est un calque attaché au canvas, par case.** Elle ne se pose que sur une palette AJOUTÉE, et se range
@@ -1747,16 +1747,16 @@ couper `encode_background` en filtre puis encodage (le chemin « indexé direct 
   d'office la première palette du projet.
 - Retours de l'auteur du 2026-10-16, corrigés : la boîte de compression suit le layout et la profondeur CHOISIS (avant la
   compression) et se range dans l'ordre où l'encodeur résout (4bpp : global colors → dithering → méthode → colors / palette →
-  palettes → tiles ; 8bpp : méthode → colors → dithering → tiles — un réglage ne refait que ce qui le suit) ; la carte
+  palettes → tiles ; 8bpp : méthode → colors → dithering → tiles, un réglage ne refait que ce qui le suit) ; la carte
   Ajustements se replie ; « Reset » et « Recompute » ; choisir Bitmap (ou Tuilé) fait suivre la carte Canvas, la fenêtre du
   mode Canvas et le cadre du passe-partout ; le miroir a de nouveau un point sur sa barre, la flèche est décalée.
 
 **Reste à faire**
 
 1. ~~Documentation~~ : ARCHITECTURE.md décrit les palettes par référence (fait le 2026-10-16).
-1 bis. **Trous dans une grande image — constaté le 2026-10-16, SANS solution encore.** Sur une image de 1650×952 (22 798 tuiles
+1 bis. **Trous dans une grande image, constaté le 2026-10-16, SANS solution encore.** Sur une image de 1650×952 (22 798 tuiles
    uniques), des tuiles noires apparaissent, et le rendu est brouillé par bandes. Deux causes lues dans le code, reproduites sur
-   une image de test : (a) l'index de tuile est codé sur 10 bits (`pack_se`) et tronqué en silence au-delà de 1023 — les index
+   une image de test : (a) l'index de tuile est codé sur 10 bits (`pack_se`) et tronqué en silence au-delà de 1023. Les index
    1024, 2048… retombent sur la tuile 0, d'où un trou sur ~1 tuile sur 1024 ; (b) `merge_tiles` ne fait rien au-delà de
    `MAX_TILES = 6000` tuiles (sa matrice de coûts est carrée), donc « Tiles » est ignoré sans le dire. Le souhait de l'auteur : une
    tuile retirée doit être REMPLACÉE par une tuile réutilisée visuellement proche, jamais devenir un trou. Pistes à étudier (rien
@@ -1766,25 +1766,25 @@ couper `encode_background` en filtre puis encodage (le chemin « indexé direct 
 2. ~~Inpainting~~ : fait le 2026-10-17, même règle que la peinture. Un repeint ne cible qu'une palette AJOUTÉE et se range par
    sa POSITION dans `added_palettes` (`BackgroundAsset.repaint_bank` la rend en numéro de banque) ; la bande de peinture ne
    propose plus que ces palettes, en Inpaint comme en Paint. Le sidecar l'écrit sous `settings.tile_repaint` ; l'ancienne clé
-   `tile_palette_overrides` (des numéros de banque) se relit — position pour une palette ajoutée, **abandon** pour un repeint
+   `tile_palette_overrides` (des numéros de banque) se relit, position pour une palette ajoutée, **abandon** pour un repeint
    qui visait une palette dérivée du PNG. Aucune démo n'avait de repeint. Aussi livré : un petit slider du passe-partout dans la
    barre du canvas (l'intensité du grisé, 59 % par défaut, propre à la session).
 3. **Un seul geste « Appliquer » imperceptible** : un service d'encodage unique (réglages → pause → calcul → validation,
    le dernier réglage gagne), l'état explicite avec empreinte réglages + source, l'affichage provisoire (image préparée),
    la fenêtre d'état. À trancher : le seuil de coût « bon marché » (~1,5 s mesuré sur le dernier encodage ?), et le
-   processus de travail séparé — à MESURER d'abord : les boucles Python pures de l'encodeur peuvent saccader l'interface même
+   processus de travail séparé, à MESURER d'abord : les boucles Python pures de l'encodeur peuvent saccader l'interface même
    dans un thread, et un thread ne s'annule pas.
-3 ter. **Plan du service d'encodage unique — décidé le 2026-10-17.** Seuil « bon marché » de l'encodage automatique : **~4 s**
+3 ter. **Plan du service d'encodage unique, décidé le 2026-10-17.** Seuil « bon marché » de l'encodage automatique : **~4 s**
    (en dessous il part tout seul après la pause, au-dessus l'état reste « en attente » avec un bouton « Run encoding »).
-   **Révisé le 2026-10-17 : seuil éteint par défaut** (`auto_seconds=None`) — bloquer un encodage de 4 s surprenait plus qu'il
+   **Révisé le 2026-10-17 : seuil éteint par défaut** (`auto_seconds=None`). Bloquer un encodage de 4 s surprenait plus qu'il
    ne protégeait ; le mécanisme reste pour la phase 5. Le
    bouton vit dans la fenêtre d'infos du canvas. Phases : 0 mesure (faite, ci-dessous) ; **1 empreinte et état (faite le
    2026-10-17)** : `encoded.encoded_for`, `encode_settings_fingerprint()`, `encoding_is_current(source_stamp)` ; **2 le service (fait le
-   2026-10-17)** : `ui/background_editor/background_encoding.py` (`EncodingJob`, `BackgroundEncodingService`, `ThreadExecutor`) —
+   2026-10-17)** : `ui/background_editor/background_encoding.py` (`EncodingJob`, `BackgroundEncodingService`, `ThreadExecutor`),
    un seul chemin, le dernier réglage gagne, un calcul à la fois, validation automatique, états à jour / en attente / en calcul /
    échec, cache de 8 résultats, exécuteur interchangeable ; l'écran n'a plus que `_commit_job` (validation), `_on_encoding_wanted`
    (curseurs), `_on_run_encoding` (bouton) et `_compress_async` (geste, immédiat) ; l'aperçu non appliqué et son bouton « Compress »
-   sont supprimés ; **3 la ligne d'état (faite le 2026-10-17)** : dans le canvas, au-dessus des infos (`set_encoding_state`) — « En attente / Encodage… / Échec » avec le layout voulu, et le bouton **Run encoding** (attente ou échec) ; l'échec se lit en ligne, plus de fenêtre ; tant que le fond n'est pas à jour le canvas montre l'image préparée de ce qui est voulu (badge « pas encore le rendu GBA »), `service.cancel` quand l'auteur revient aux réglages validés ; le bouton « Recompute » et la barre d'attente de l'inspecteur sont retirés ; **4 nettoyage et build (fait le 2026-10-17)** : `_check_background_encoding_current` (validateur) avertit, sans bloquer, qu'un fond dont les réglages ont changé depuis son encodage embarquerait l'ancien résultat ; (ancienne ligne :) la fenêtre d'état et l'affichage provisoire de l'image préparée ; 4 nettoyage des trois anciens
+   sont supprimés ; **3 la ligne d'état (faite le 2026-10-17)** : dans le canvas, au-dessus des infos (`set_encoding_state`), « En attente / Encodage… / Échec » avec le layout voulu, et le bouton **Run encoding** (attente ou échec) ; l'échec se lit en ligne, plus de fenêtre ; tant que le fond n'est pas à jour le canvas montre l'image préparée de ce qui est voulu (badge « pas encore le rendu GBA »), `service.cancel` quand l'auteur revient aux réglages validés ; le bouton « Recompute » et la barre d'attente de l'inspecteur sont retirés ; **4 nettoyage et build (fait le 2026-10-17)** : `_check_background_encoding_current` (validateur) avertit, sans bloquer, qu'un fond dont les réglages ont changé depuis son encodage embarquerait l'ancien résultat ; (ancienne ligne :) la fenêtre d'état et l'affichage provisoire de l'image préparée ; 4 nettoyage des trois anciens
    chemins, le build qui vérifie l'empreinte, suite complète ; 5 le processus séparé, pour les grandes images.
 3 bis. **Phase 0 mesurée le 2026-10-17** (poste de l'auteur, un `QTimer` de 16 ms sur le thread de l'interface pendant l'encodage,
    thread Qt contre processus séparé ; rendu non peint, donc un MINIMUM de saccade ; scripts jetables, rien d'écrit dans le projet) :
@@ -1798,12 +1798,12 @@ couper `encode_background` en filtre puis encodage (le chemin « indexé direct 
    | idem | 8bpp | 2,6 s | 59 ms | 17 ms |
 
    Lecture : (1) l'encodage est bien plus rapide que le 2026-10-14 (photo 540 : 4bpp défaut 10,7 → 2,4 s, cible 256 32 → 5,6 s,
-   8bpp 1,7 → 0,5 s) ; (2) un thread suffit pour une image qui tient dans une couche de fond — un à-coup de ~100 ms au pire ; (3) sur une
+   8bpp 1,7 → 0,5 s) ; (2) un thread suffit pour une image qui tient dans une couche de fond, un à-coup de ~100 ms au pire ; (3) sur une
    grande image il fait vraiment saccader (562 ms), parce que l'indexation, la déduplication et le regroupement sont des
    boucles Python pures qui gardent le verrou ; (4) un processus séparé garde l'interface fluide (≤ 18 ms) pour le MÊME temps de
    calcul, et le seul moyen d'annuler un calcul de 14 s. Conséquence : bâtir le service avec un exécuteur interchangeable, le
    thread d'abord, le processus (préchauffé, avec le cache d'étage dedans) ensuite. Pour le seuil « bon marché » : une photo de
-   540 px prend 2,4 s en 4bpp ; un seuil à 1,5 s la mettrait au bouton, à ~4 s au tout-automatique — à trancher.
+   540 px prend 2,4 s en 4bpp ; un seuil à 1,5 s la mettrait au bouton, à ~4 s au tout-automatique, à trancher.
 4. **Couper `encode_background` en filtre de compression puis encodage** (le chemin « indexé direct » est déjà l'encodage seul,
    et se réutilise tel quel), puis des caches par étage.
 5. **Dégeler** compression, ajustements et miroir ; miroir dans l'espace du canvas ; mode « compress view » (barre source /
@@ -1824,22 +1824,22 @@ couper `encode_background` en filtre puis encodage (le chemin « indexé direct 
 
 *Étape 3 livrée le 2026-10-15, vérifiée par tests ciblés seulement (rendu hors écran compris), pas encore à la souris :*
 mode Canvas (fichier posé, grisé hors cadre, déplacer / poignées, Maj / Ctrl) et carte « Canvas » de l'inspecteur
-(taille du canvas, position et taille de l'image, Ajuster / Remplir / 1:1) — voir ARCHITECTURE.md. Le plafond des champs
+(taille du canvas, position et taille de l'image, Ajuster / Remplir / 1:1). Voir ARCHITECTURE.md. Le plafond des champs
 est 4096 px, un garde-fou : **la limite réelle du canvas tuilé (cartes de tuiles, streaming) reste à lire et à poser**.
 *Retour de l'auteur, 2026-10-15 (premier essai) :* le mode devient l'outil « select », en tête de la barre flottante (qui
 reste visible, même pour un bitmap) ; et ce qui sort du canvas reste TOUJOURS visible, grisé, comme le passe-partout d'une
-caméra de Blender — corrigé le jour même.
+caméra de Blender, corrigé le jour même.
 
 1. *Livré le 2026-10-15.* Le modèle (`canvas_size`, `image_pos`, `image_size`) et `prepare_source` qui compose dans le
-   canvas — tests d'identité pixel pour pixel avec l'ancien « recadrer puis redimensionner » (`tests/graphics/test_bg_prepare.py`).
+   canvas, tests d'identité pixel pour pixel avec l'ancien « recadrer puis redimensionner » (`tests/graphics/test_bg_prepare.py`).
    **Écart avec le texte plus haut** : `resize(box=)` n'est PAS identique à `crop` puis `resize` (le filtre lit au-delà de
-   la boîte) ; on rogne d'abord. **Migration** : pas de code dans le produit — il n'y avait que deux sidecars de démo
+   la boîte) ; on rogne d'abord. **Migration** : pas de code dans le produit. Il n'y avait que deux sidecars de démo
    (`Photo1`, `562c…_high`), convertis une fois à la main ; un sidecar qui porterait encore `import_crop` / `import_size`
    les ignore. Aucun template concerné. Outils Recadrer / Redimensionner et leurs fichiers
    (`bg_prepare_overlay`, `bg_prepare_geometry`) supprimés ; compression, ajustements et miroir gelés
    (`PREPARATION_TOOLS_ENABLED`).
 2. *Livré le 2026-10-15.* L'encodeur bitmap cesse d'ajuster. **Décision de l'auteur** : pas d'« Ajuster » à l'import, et
-   un bitmap a un canvas fixe de 240×160 (posé par `encode_by_mode`) — l'image garde sa taille en (0, 0) et **déborde**,
+   un bitmap a un canvas fixe de 240×160 (posé par `encode_by_mode`). L'image garde sa taille en (0, 0) et **déborde**,
    le surplus est rogné ; plus petite, elle laisse du vide transparent. Aucune erreur à l'import (l'idée d'une erreur
    franche, écrite plus haut, est abandonnée). Tuilé → bitmap garde donc l'image où elle est. **Le canvas est une valeur du fond, pas du
    layout** (tranché par l'auteur) : l'encodage d'un bitmap l'ENREGISTRE (`canvas_size` = 240×160, `apply_bg_encoding`),
@@ -1864,7 +1864,7 @@ un premier temps.
 
 ---
 
-## Briques de base et assemblages — `Text` (chaîne) et `Textbox` (boîte)
+## Briques de base et assemblages (`Text` (chaîne) et `Textbox` (boîte))
 
 ### D'où vient la question (2026-10-14)
 
@@ -1914,13 +1914,13 @@ une chaîne en Lua), tests `tests/interface/test_ui_textbox_type.py`.
 
 ---
 
-## TextBox — plusieurs entrées pour préparer un dialogue
+## TextBox (plusieurs entrées pour préparer un dialogue)
 
-### État au 2026-10-17 — livré pour l'essentiel
+### État au 2026-10-17 (livré pour l'essentiel)
 
 Les quatre étapes convenues sont implémentées : modèle de pages, blocs dans l'inspecteur,
 prise en compte de toutes les pages au build, puis **Export as table / Update table**.
-Le périmètre demandé — préparer les répliques et les rendre accessibles au script — fonctionne.
+Le périmètre demandé (préparer les répliques et les rendre accessibles au script) fonctionne.
 Le chantier reste ici pour les arbitrages de nommage, de duplication des textes et de
 manipulation de l'ordre décrits en fin de section.
 
@@ -1955,7 +1955,7 @@ identité, son rangement et ses traductions lors de la conversion.
 scène d'origine de la première entrée si elle est renseignée. Les règles à affiner pour les
 layouts partagés et les renommages de scène/objet sont listées plus bas.
 
-### Export vers Données — contrat implémenté
+### Export vers Données (contrat implémenté)
 
 **Export as table** crée une Data Table ordinaire, nommée `<Scène>_<TextBox>` avec suffixe
 si le nom est pris, et une colonne `replique` de type `text`. Les lignes suivent l'ordre des
@@ -1989,7 +1989,7 @@ Annuler ce récapitulatif ne modifie rien ; appliquer crée une seule commande a
 
 La mise à jour respecte aussi les renommages de clés de texte, y compris lors de son
 annulation/rétablissement. Elle ne recopie jamais automatiquement des cellules de Données
-vers la liste de pages. Ce parcours réutilise le [pont Texte / Données](#un-pont-entre-lécran-texte-et-les-tables-de-données--créer-un-dialogue),
+vers la liste de pages. Ce parcours réutilise le [pont Texte / Données](#un-pont-entre-lécran-texte-et-les-tables-de-données-créer-un-dialogue),
 sans nouvel asset « Dialogue ».
 
 ### Build et vérifications réalisées
@@ -2015,7 +2015,7 @@ Le modèle et les mécanismes de persistance sont détaillés dans `ARCHITECTURE
 
 ### Reliquat ouvert
 
-Le [chantier des suites dans l’écran Texte](#écran-texte--suites-liées-aux-textbox-et-aux-tables)
+Le [chantier des suites dans l’écran Texte](#écran-texte-suites-liées-aux-textbox-et-aux-tables)
 prépare les associations inverses, les états et la synchronisation explicite depuis ce nouvel écran.
 
 - **Layouts partagés :** confirmer à l'usage le contexte de nommage actuel, fondé sur la scène
@@ -2037,7 +2037,7 @@ La prévisualisation des traductions dans le canvas reste rattachée au chantier
 
 ---
 
-## Écran Texte — suites liées aux TextBox et aux tables
+## Écran Texte (suites liées aux TextBox et aux tables)
 
 ### Demande et état du chantier (2026-10-17)
 
@@ -2138,7 +2138,7 @@ dans une zone de défilement plafonnée. Validation de la correction : tests cib
 direct, les conflits, les références manquantes et la hauteur des champs, avec contrôle visuel
 dans l’écran complet sur une fixture isolée. Reste la création de table autonome sans TextBox.
 
-### Séquences dérivées, liées ou libres (décidé le 2026-10-18 — REMPLACE l'adoption explicite)
+### Séquences dérivées, liées ou libres (décidé le 2026-10-18 (REMPLACE l'adoption explicite))
 
 L'auteur ne veut jamais « mettre à jour » une table ou une TextBox à la main : la
 synchronisation est **intrinsèque à l'état**. Tout ce qui précède dans ce chantier
@@ -2162,7 +2162,7 @@ marqueurs `$editor`, `sequence_id`, `table_export_*`) est **retiré** au profit 
 - **Ce qui reste du code actuel :** `core/text_table_link.py` (`text_link`, `LinkTableCmd`,
   `UnlinkTableCmd`), généralisé de `_PageXX` à `_<chiffres>`.
 - **Livré le 2026-10-18 :** dérivation pure (`core/text_sequences.py`) ; tables synchronisées dans
-  l'historique (`after_execute`) ; en-tête Texte lié/libre ; **`page_ids` retiré** — une TextBox
+  l'historique (`after_execute`) ; en-tête Texte lié/libre ; **`page_ids` retiré**, une TextBox
   suit une séquence par `sequence_prefix` (ou affiche son `text_key`), les pages sont dérivées ;
   ancien moteur supprimé (adoption, Apply, export de TextBox, ~17 fichiers de tests). Les anciens
   `page_ids`, `sequences` et `$editor` sont ignorés à la lecture : une boîte multipage d'avant
@@ -2170,7 +2170,7 @@ marqueurs `$editor`, `sequence_id`, `table_export_*`) est **retiré** au profit 
 - **Reste :** contrôle visuel de l'en-tête et de l'inspecteur ; test ROM `test_textbox_pages_rom`
   adapté mais non relancé (devkitPro) ; libellés `txtseq.*` orphelins à purger.
 
-### Le chemin est dérivé de la clé — plus de libellés stockés (décidé le 2026-10-18)
+### Le chemin est dérivé de la clé (plus de libellés stockés (décidé le 2026-10-18))
 
 `Text.path` (les libellés des niveaux, avec accents et espaces) dupliquait la clé et se
 désynchronisait dès qu'un renommage ne le recalait pas (Finder à `Page03` pour la clé `Page02`,
@@ -2239,7 +2239,7 @@ Ce constat ne permet pas de généraliser à tous les groupes ayant un nom resse
 - **Une comparaison ne révèle pas toujours l'intention.** Si la suite et la boîte ont changé
   séparément depuis leur dernier accord, un simple remplacement perdrait l'un des deux travaux.
 
-### Première étape — résoudre les références et exposer leur état
+### Première étape (résoudre les références et exposer leur état)
 
 Créer une requête métier partagée, indépendante des widgets, par exemple
 `resolve_text_sequence_context(project, text_ids)`. Elle doit conserver l'ordre et les occurrences,
@@ -2274,7 +2274,7 @@ ne doit pas être confondue avec une seule occurrence dans le groupe visuel actu
 historique commun, présenter un écart à résoudre plutôt que prétendre savoir quel côté est récent.
 Les états de TextBox et de table sont indépendants : l'une peut être à jour et l'autre non.
 
-### Modèle retenu — première partie livrée, projections à poursuivre
+### Modèle retenu (première partie livrée, projections à poursuivre)
 
 **Recommandation : une suite éditoriale persistante et ordonnée**, distincte du simple groupe de
 présentation, identifiée par un id stable et contenant des références de `Text`. Son libellé,
@@ -2322,11 +2322,11 @@ l'ancien ordre d'une TextBox que l'auteur n'a pas encore choisi de mettre à jou
 
 ### Ordre d'implémentation recommandé
 
-1. **Contexte en lecture seule — livré :** requête inverse, état des cibles, branchement à l'en-tête et
+1. **Contexte en lecture seule, livré :** requête inverse, état des cibles, branchement à l'en-tête et
    tests des groupes libres, liés, partiels et ambigus. Aucun +/− structurel à ce stade.
-2. **Identité et ordre — première partie livrée :** modèle de suite, associations stables,
+2. **Identité et ordre, première partie livrée :** modèle de suite, associations stables,
    état de référence, reprise explicite du cas existant et Relink individuel/en lot.
-3. **Apply — livré pour les suites liées :** plan d'export partagé, aperçu des changements et
+3. **Apply, livré pour les suites liées :** plan d'export partagé, aperçu des changements et
    application aux seules destinations associées, avec comparaison et gestion des conflits.
    Commandes +/− et bandeau fixe livrés ; reste l'export autonome des suites sans TextBox.
 4. **Réactivité et validation :** invalidations après édition structurelle, commandes de scène,
@@ -2398,14 +2398,14 @@ NOUVEAUX noms change.
 
 ---
 
-## Source ≠ asset — l'arborescence du disque et l'id stable
+## Source ≠ asset (l'arborescence du disque et l'id stable)
 
 ### D'où vient la question (2026-10-09)
 
 L'auteur a rangé ses sons dans une arborescence (`assets/sfx/platformer/wav/…`, 556 fichiers dont 175 `.wav`
 réels). L'éditeur ne la voit pas : la synchronisation fait `glob("*")` à plat
 (`asset_reconciliation.reconcile_sfx_and_music`), et l'identité d'un asset est **le nom du fichier sans
-extension** (`path.stem`) — le sidecar `GOAL.json` porte `"name"` et `"asset"`, aucun id. 10 noms de `.wav`
+extension** (`path.stem`). Le sidecar `GOAL.json` porte `"name"` et `"asset"`, aucun id. 10 noms de `.wav`
 apparaissent dans plusieurs dossiers (`coin`, `die`, `fireball`…).
 
 Le but à terme : un dossier `assets/` **vierge** que l'auteur organise comme il veut (modèle Unity / Godot /
@@ -2435,7 +2435,7 @@ faisait sortir de son dossier. Le store ne connaît que des clés opaques ; `Res
 (`_scene_id`, `_folder_of_scene`). Aucun outil de migration : un `asset-folders.json` d'avant garde des noms que
 `prune` efface à l'ouverture (aucun projet connu n'en portait).
 **Pour étendre à une autre famille :** lui bâtir un `FolderScheme` qui passe `asset.id`, et ne lancer son `prune`
-qu'une fois la famille entièrement chargée — une famille à chargement différé (sprites, fonds, sons) n'a pas
+qu'une fois la famille entièrement chargée. Une famille à chargement différé (sprites, fonds, sons) n'a pas
 tous ses ids tant qu'elle n'est pas lue, et un `prune` anticipé viderait ses dossiers.
 
 ### Décisions verrouillées (2026-10-09)
@@ -2449,7 +2449,7 @@ tous ses ids tant qu'elle n'est pas lue, et un `prune` anticipé viderait ses do
   forme d'un id (`{"var": <id|nom>}` les distingue à cette seule forme). La sauvegarde SRAM garde les 8
   derniers chiffres de l'id (`save_id32`).
 - **Le sidecar d'un asset porte un `id` opaque** (`ids.new_id`), c'est lui qui est stocké par les références
-  de données. *Pas encore fait* — seule la forme de l'id est livrée. Le nom reste renommable ; le chemin du fichier
+  de données. *Pas encore fait*. Seule la forme de l'id est livrée. Le nom reste renommable ; le chemin du fichier
   source est un simple emplacement. Même règle que les variables et les textes : un id dans les données, un nom lisible dans le Lua.
 
 - **Le nom d'asset est unique dans le projet** (2026-10-09). Il se tranche à la création (*Create asset*
@@ -2479,7 +2479,7 @@ tous ses ids tant qu'elle n'est pas lue, et un `prune` anticipé viderait ses do
 
 - **Un nom déjà pris est suffixé, comme partout dans l'éditeur** (2026-10-09). Le but est d'éviter la
   collision de NOM, pas de départager des fichiers : l'éditeur réutilise `unique_name`
-  (`core/command_dispatcher.py`) — `coin`, `coin_2`, `coin_3`… — à *Create asset* comme au scan de `assets/`.
+  (`core/command_dispatcher.py`) (`coin`, `coin_2`, `coin_3`…) à *Create asset* comme au scan de `assets/`.
   Le scan retrouve chaque asset par son `id`, où qu'il soit ; si un fichier copié dans l'Explorateur apporte un
   nom ou un id déjà pris, il reçoit un nouvel id et un nom suffixé, et le journal le dit. Aucune notion
   d'« original » ni de date de fichier.
@@ -2499,26 +2499,26 @@ tous ses ids tant qu'elle n'est pas lue, et un `prune` anticipé viderait ses do
    NOUVEL id au second d'un doublon, au chargement de l'audio ; `sync_sfx_file` et la création depuis le finder en
    attribuent un d'emblée. Les 5 sidecars de `PongAdvanced` portent leur id. Le reste du chantier (arbre du disque,
    déplacement libre) reste à faire : `ResourceStore` repère encore un sidecar par son nom, à plat.
-2. **Livrée le 2026-10-09 — L'onglet Disk, en lecture seule** (zone Build / debug). Un arbre fidèle du dossier `assets/`, où chaque
+2. **Livrée le 2026-10-09, L'onglet Disk, en lecture seule** (zone Build / debug). Un arbre fidèle du dossier `assets/`, où chaque
    fichier est marqué : source reconnue sans asset, source déjà reliée à un asset, format non pris en charge. Le
    comportement ne change pas : la création automatique d'un asset à partir d'un fichier reste active. C'est la
    tranche qui rend les sources VISIBLES, avant de leur retirer quoi que ce soit.
    Livré : l'onglet **Disk**, racine **Assets**, dans le panneau Build / debug (les deux, scènes et scripts) ;
-   **vue à plat** — le contenu d'un dossier, une icône et un nom par entrée, un fil d'ariane pour remonter, double-clic
+   **vue à plat**, le contenu d'un dossier, une icône et un nom par entrée, un fil d'ariane pour remonter, double-clic
    pour entrer (le bandeau « Build / Debug » a disparu, Clear a rejoint la barre de la console) ;
    `core/disk_tree.py` classe chaque fichier, `ui/common/disk_view.py` l'affiche, `Project.source_families()` est la
    table unique famille → fichiers sources (déjà dupliquée deux fois dans `project.py`). L'arbre se relit à l'ouverture
    de l'onglet et au bouton Refresh, après `load_all_resources()`. **Constat :** le scan actuel étant plat, un `.wav` posé
    dans un SOUS-dossier de `sfx/` ressort comme source libre, tandis qu'un `.wav` posé à la racine de `sfx/` devient un
-   asset d'office — la création automatique que la tranche 3 retire.
+   asset d'office, la création automatique que la tranche 3 retire.
 3. **La lecture récursive** (ordre choisi le 2026-10-10 : elle passe AVANT *Create asset*). Un sidecar peut vivre dans un
    sous-dossier de son dossier de famille (`assets/sfx/platformer/wav/coin.json`) : l'index d'un magasin le trouve, et
    lecture, sauvegarde, suppression et renommage le traitent là où il est, sans le ramener à la racine. Un nouvel asset
-   peut être posé dans un dossier donné — c'est ce qui permettra de créer l'asset à côté de sa source. Deux sidecars de
+   peut être posé dans un dossier donné. C'est ce qui permettra de créer l'asset à côté de sa source. Deux sidecars de
    même nom dans deux dossiers : le premier (le moins profond) est lu, l'autre est ignoré et signalé. **Pas encore** :
    déplacer un asset hors du dossier de sa famille (un sidecar reste dans le dossier de SA famille, `assets/sfx/…`), la
    création automatique d'un nom suffixé pour le doublon, le suivi en direct des sous-dossiers par le surveillant.
-4. **Livrée le 2026-10-11 — *Create asset* au clic droit sur une source, et fin de la création automatique.** `core/asset_creation.py` (un format de source → les types qu'il peut devenir : `.png` sprite / fond / police, `.wav` effet / musique / jingle, `.mod .xm .s3m .it` musique / jingle, `.ttf .otf .fnt` police, `.hex` palette ; l'asset naît À CÔTÉ de sa source, nommé d'après le fichier et unique dans son type), `core/blank_assets.py` (les assets vierges : scène, prefab, mise en page, trois boîtes, table de données, palette ; scripts et behaviors sont des fichiers), `core/disk_commands.py` (importer, déplacer, créer et renommer un dossier, créer un fichier : tous annulables) et `CreateAssetCmd`. Dans l'onglet Disk : un « + » (Import…, Create ▸, New folder) ; un bouton « Create *nom* » quand UNE source libre est sélectionnée (la flèche propose les autres types) ; au clic droit, *Create* sur une source (grisé en multi-sélection, avec la raison) et *Delete* sur des assets. **Supprimer un asset ne supprime plus sa source** ; plus aucun asset ne naît de l'apparition d'un fichier (réconciliation d'ouverture et surveillant), ni ne suit un fichier renommé ; `reconcile_manifest` retiré ; la corbeille ne contient que les fichiers d'asset. **Détachement achevé (2026-10-11) :** `sync_*`, `_relink_source`, `_sourced_by` supprimés ; l'import d'un sprite depuis son finder copie puis crée l'asset en UNE entrée d'historique ; l'inspecteur d'acteur choisit un SPRITE (asset), plus un PNG ; l'appariement des renommages et le signal `asset_renamed` du surveillant sont retirés (un renommage = disparu + apparu) ; supprimer un asset prévient de ce qui le cite encore (`core/asset_usages.py` : composants de sprite, calques de fond, prefabs posés, palettes, scène de départ, scripts — un avertissement, pas un refus). **Création en lot (2026-10-11) :** *Create* n'est plus limité à UNE source — la sélection peut en compter plusieurs, tant que toutes sont des sources et qu'un même type leur convient (`shared_create_options` : l'intersection des types de chacune, dans l'ordre de la première ; plusieurs `.wav` offrent effet / musique / jingle). Le lot est UNE entrée d'historique (`MacroCmd` de `CreateAssetCmd`) ; les noms sont uniques ENTRE EUX aussi (deux `coin.wav` de deux dossiers : `coin`, `coin_2`) ; une source qui ne convient pas est signalée et les autres sont créées. Grisé, avec sa raison : des formats sans type commun (PNG + WAV), ou autre chose que des sources dans la sélection. Le callback `create_from_source` est devenu `create_from_sources(chemins, famille)`. Ancien énoncé :  Les deux vont ensemble :
+4. **Livrée le 2026-10-11, *Create asset* au clic droit sur une source, et fin de la création automatique.** `core/asset_creation.py` (un format de source → les types qu'il peut devenir : `.png` sprite / fond / police, `.wav` effet / musique / jingle, `.mod .xm .s3m .it` musique / jingle, `.ttf .otf .fnt` police, `.hex` palette ; l'asset naît À CÔTÉ de sa source, nommé d'après le fichier et unique dans son type), `core/blank_assets.py` (les assets vierges : scène, prefab, mise en page, trois boîtes, table de données, palette ; scripts et behaviors sont des fichiers), `core/disk_commands.py` (importer, déplacer, créer et renommer un dossier, créer un fichier : tous annulables) et `CreateAssetCmd`. Dans l'onglet Disk : un « + » (Import…, Create ▸, New folder) ; un bouton « Create *nom* » quand UNE source libre est sélectionnée (la flèche propose les autres types) ; au clic droit, *Create* sur une source (grisé en multi-sélection, avec la raison) et *Delete* sur des assets. **Supprimer un asset ne supprime plus sa source** ; plus aucun asset ne naît de l'apparition d'un fichier (réconciliation d'ouverture et surveillant), ni ne suit un fichier renommé ; `reconcile_manifest` retiré ; la corbeille ne contient que les fichiers d'asset. **Détachement achevé (2026-10-11) :** `sync_*`, `_relink_source`, `_sourced_by` supprimés ; l'import d'un sprite depuis son finder copie puis crée l'asset en UNE entrée d'historique ; l'inspecteur d'acteur choisit un SPRITE (asset), plus un PNG ; l'appariement des renommages et le signal `asset_renamed` du surveillant sont retirés (un renommage = disparu + apparu) ; supprimer un asset prévient de ce qui le cite encore (`core/asset_usages.py` : composants de sprite, calques de fond, prefabs posés, palettes, scène de départ, scripts, un avertissement, pas un refus). **Création en lot (2026-10-11) :** *Create* n'est plus limité à UNE source, la sélection peut en compter plusieurs, tant que toutes sont des sources et qu'un même type leur convient (`shared_create_options` : l'intersection des types de chacune, dans l'ordre de la première ; plusieurs `.wav` offrent effet / musique / jingle). Le lot est UNE entrée d'historique (`MacroCmd` de `CreateAssetCmd`) ; les noms sont uniques ENTRE EUX aussi (deux `coin.wav` de deux dossiers : `coin`, `coin_2`) ; une source qui ne convient pas est signalée et les autres sont créées. Grisé, avec sa raison : des formats sans type commun (PNG + WAV), ou autre chose que des sources dans la sélection. Le callback `create_from_source` est devenu `create_from_sources(chemins, famille)`. Ancien énoncé :  Les deux vont ensemble :
    « une source n'est un asset qu'après *Create asset* » n'a de sens que si le geste existe. L'asset est créé à côté de sa
    source (grâce à la tranche 3). L'import par dialogue (copie d'un fichier venu de l'extérieur, asset créé d'office) reste
    un second chemin vers le même résultat. Le nom d'asset est tranché ici (règle commune, unique dans le projet).
@@ -2534,7 +2534,7 @@ tous ses ids tant qu'elle n'est pas lue, et un `prune` anticipé viderait ses do
      ré-encodés depuis le nouveau fichier, par asset et non par nom de fichier) ; un fichier qui ne convient pas est
      refusé, l'asset inchangé. **Limite :** un fond ne se relie qu'à un fichier directement dans `assets/backgrounds/`
      (son encodage ne retient que le nom du fichier).
-   - **5c. Le déplacement libre sous `assets/` — décidé le 2026-10-10 : une extension par type d'asset.** Le sidecar
+   - **5c. Le déplacement libre sous `assets/`, décidé le 2026-10-10 : une extension par type d'asset.** Le sidecar
      cesse de s'appeler `<nom>.json` : son extension dit sa famille (`Player.sprite`, `boom.sfx`), le contenu reste du
      JSON (lisible, diffable, fusionnable). Le balayage global lit donc le TYPE dans le nom du fichier, sans ouvrir son
      contenu : plus de cache d'empreintes, plus d'étiquette de famille dans le sidecar, et un asset peut vivre n'importe où
@@ -2550,8 +2550,8 @@ tous ses ids tant qu'elle n'est pas lue, et un `prune` anticipé viderait ses do
      | palettes | `.palette` (le `.hex` reste le format d'échange) | | | |
      **Restent en `.json`** : `texts.json`, `texts_<langue>.json`, `variables.json` (un fichier pour tout le projet, pas un
      par asset). Aucune extension de sidecar ne reprend celle d'un format de source (`.png .wav .mod .xm .s3m .it .ttf .otf
-     .fnt .hex .lua`). Trois temps : (1) **livré le 2026-10-10** — module de nommage (`core/models/asset_extensions.py`, une constante `sidecar_extension` par modèle) + `tools/migrate_sidecar_extensions.py`, appliqués aux deux démos et au starter Basic (76 fichiers) ; le surveillant et l'arbre Disk suivent la nouvelle extension ;
-     (2) **livré le 2026-10-10** — chaque magasin cherche ses sidecars sous TOUT `assets/` (`ResourceStore(dossier, classe, racine)` : le dossier de la famille ne sert plus qu'à y faire naître un nouvel asset) ; un asset se lit, s'écrit, se renomme et se supprime là où il est, deux types peuvent partager un dossier et un nom ; un homonyme du même type plus profond est ignoré et signalé, son chemin est donné depuis `assets/` ; les palettes restent dans `assets/palettes/` (leur `.hex` y vit avec elles) ; (3) **livré le 2026-10-10** — déplacer fichiers et dossiers par glisser-déposer dans l'onglet Disk (arbre et vue à plat), `core/disk_move.py` étant la seule écriture. Règles : un sidecar se déplace seul (l'asset pointe sa source par chemin) ; une source citée par un asset se déplace avec mise à jour du chemin de l'asset ; une source libre ou un fichier non géré se déplace librement ; un dossier se déplace avec tout son contenu, chemins des assets réécrits ; rien n'est jamais écrasé (un fichier du même nom à destination = refus, sans rien déplacer) ; pas de déplacement d'un dossier dans lui-même. **Refusés** : textes et variables (un seul fichier pour tout le projet) ; les palettes, les images de fonds et les scripts `.lua` se déplacent désormais (temps 4), un script déplacé voyant réécrites ses attaches dans les scènes, caméras, acteurs et prefabs. Le surveillant est suspendu pendant l'opération : un fichier déplacé n'est jamais pris pour un nouvel import. Au survol, le dossier qui peut recevoir est surligné et les entrées glissées passent à demi transparentes ; un dossier qui ne peut pas recevoir (palettes, textes…) montre le curseur « interdit » et dit pourquoi dans la barre d'état dès le survol, pas seulement au dépôt (`disk_move.drop_verdict`, la même règle que le déplacement). **Temps 4 — libres partout (décidé le 2026-10-10, non commencé).** **Modèle (précisé le 2026-10-10) : un asset n'est plus le sidecar d'un fichier source.** C'est un objet à part entière, qui ne fait que POINTER une source par un chemin explicite ; plus aucun lien implicite entre les deux — ni nom commun, ni dossier commun : l'asset ne suit pas sa source (renommée, déplacée), la source ne suit pas son asset. Les conventions qui supposaient ce couplage disparaissent avec *Create asset* : un asset nommé d'après le stem de son fichier, la création automatique à l'apparition d'un fichier, le suivi d'un fichier renommé par le surveillant. Les trois pas ci-dessous se conçoivent dans ce modèle. Lever les derniers refus de `core/disk_move.py`, un par un, chacun avec sa migration, ses tests et le retrait du refus correspondant : (a) **images de fonds — livré le 2026-10-10** (`tools/migrate_background_paths.py` ; `Project.background_image_path` ; renommer un fond ne renomme plus son image ; `disk_move` et `asset_relink` n'ont plus de cas à part ; restent, pour *Create asset*, la création d'un fond à l'apparition d'un PNG dans `assets/backgrounds/` et le raccrochage par le nom) : `BackgroundAsset.asset` passe du seul NOM de fichier à un chemin relatif au projet, comme sprites et sons ; une seule fonction rend le chemin réel de l'image d'un fond et remplace la vingtaine de `background_images_dir / nom` (build, codegen, éditeur de fonds, canvas, inspecteurs, réconciliation) ; la relier à un fichier hors de `assets/backgrounds/` devient possible (`asset_relink`) ; (b) **palettes — livré le 2026-10-10** : le `.palette` cite son `.hex` par un champ `asset` (chemin relatif au projet), les couleurs restent dans le `.hex` et ne sont jamais dupliquées ; l'un et l'autre se rangent où l'on veut sous `assets/` ; les palettes rejoignent `source_families()` (déplacement, relink, source manquante, corbeille : le cas général) ; renommer une palette ne renomme pas son `.hex` ; un `.palette` d'avant le champ le reçoit à la première ouverture (le `.hex` voisin) ; une palette dont le `.hex` a disparu n'est pas chargée et son `.palette` reste intact ; (c) **scripts, option B — livré le 2026-10-10** (`core/lua_scripts.py`, `tools/migrate_behavior_markers.py`, tests `tests/scripting/test_behavior_marker.py`) : le rôle d'un script ne vient plus de son dossier mais de son contenu : une première ligne `-- @behavior` marque un behavior ; `require("behaviors/<nom>")` reste l'appel écrit (le mot `behaviors/` devient un espace de noms, plus un dossier), résolu par NOM parmi les fichiers marqués, où qu'ils soient ; les scripts attachables sont tous les `.lua` non marqués de `assets/` ; deux behaviors de même nom = erreur de build ; « New behavior » écrit le marqueur ; un outil migre les projets d'avant (marqueur ajouté aux fichiers de `scripts/behaviors/`) ; le finder de scripts montre tous les `.lua` de `assets/` (les dossiers sans script sont masqués) ; le surveillant suit les `.lua` de tous les dossiers de `assets/`, les autres sources n'y étant suivies que dans les dossiers de famille. **Ne bougent jamais** : `texts.json`, `texts_<langue>.json`, `variables.json` (un fichier pour tout le projet). **Ensuite, hors de cette
+     .fnt .hex .lua`). Trois temps : (1) **livré le 2026-10-10**, module de nommage (`core/models/asset_extensions.py`, une constante `sidecar_extension` par modèle) + `tools/migrate_sidecar_extensions.py`, appliqués aux deux démos et au starter Basic (76 fichiers) ; le surveillant et l'arbre Disk suivent la nouvelle extension ;
+     (2) **livré le 2026-10-10**, chaque magasin cherche ses sidecars sous TOUT `assets/` (`ResourceStore(dossier, classe, racine)` : le dossier de la famille ne sert plus qu'à y faire naître un nouvel asset) ; un asset se lit, s'écrit, se renomme et se supprime là où il est, deux types peuvent partager un dossier et un nom ; un homonyme du même type plus profond est ignoré et signalé, son chemin est donné depuis `assets/` ; les palettes restent dans `assets/palettes/` (leur `.hex` y vit avec elles) ; (3) **livré le 2026-10-10**, déplacer fichiers et dossiers par glisser-déposer dans l'onglet Disk (arbre et vue à plat), `core/disk_move.py` étant la seule écriture. Règles : un sidecar se déplace seul (l'asset pointe sa source par chemin) ; une source citée par un asset se déplace avec mise à jour du chemin de l'asset ; une source libre ou un fichier non géré se déplace librement ; un dossier se déplace avec tout son contenu, chemins des assets réécrits ; rien n'est jamais écrasé (un fichier du même nom à destination = refus, sans rien déplacer) ; pas de déplacement d'un dossier dans lui-même. **Refusés** : textes et variables (un seul fichier pour tout le projet) ; les palettes, les images de fonds et les scripts `.lua` se déplacent désormais (temps 4), un script déplacé voyant réécrites ses attaches dans les scènes, caméras, acteurs et prefabs. Le surveillant est suspendu pendant l'opération : un fichier déplacé n'est jamais pris pour un nouvel import. Au survol, le dossier qui peut recevoir est surligné et les entrées glissées passent à demi transparentes ; un dossier qui ne peut pas recevoir (palettes, textes…) montre le curseur « interdit » et dit pourquoi dans la barre d'état dès le survol, pas seulement au dépôt (`disk_move.drop_verdict`, la même règle que le déplacement). **Temps 4, libres partout (décidé le 2026-10-10, non commencé).** **Modèle (précisé le 2026-10-10) : un asset n'est plus le sidecar d'un fichier source.** C'est un objet à part entière, qui ne fait que POINTER une source par un chemin explicite ; plus aucun lien implicite entre les deux, ni nom commun, ni dossier commun : l'asset ne suit pas sa source (renommée, déplacée), la source ne suit pas son asset. Les conventions qui supposaient ce couplage disparaissent avec *Create asset* : un asset nommé d'après le stem de son fichier, la création automatique à l'apparition d'un fichier, le suivi d'un fichier renommé par le surveillant. Les trois pas ci-dessous se conçoivent dans ce modèle. Lever les derniers refus de `core/disk_move.py`, un par un, chacun avec sa migration, ses tests et le retrait du refus correspondant : (a) **images de fonds, livré le 2026-10-10** (`tools/migrate_background_paths.py` ; `Project.background_image_path` ; renommer un fond ne renomme plus son image ; `disk_move` et `asset_relink` n'ont plus de cas à part ; restent, pour *Create asset*, la création d'un fond à l'apparition d'un PNG dans `assets/backgrounds/` et le raccrochage par le nom) : `BackgroundAsset.asset` passe du seul NOM de fichier à un chemin relatif au projet, comme sprites et sons ; une seule fonction rend le chemin réel de l'image d'un fond et remplace la vingtaine de `background_images_dir / nom` (build, codegen, éditeur de fonds, canvas, inspecteurs, réconciliation) ; la relier à un fichier hors de `assets/backgrounds/` devient possible (`asset_relink`) ; (b) **palettes, livré le 2026-10-10** : le `.palette` cite son `.hex` par un champ `asset` (chemin relatif au projet), les couleurs restent dans le `.hex` et ne sont jamais dupliquées ; l'un et l'autre se rangent où l'on veut sous `assets/` ; les palettes rejoignent `source_families()` (déplacement, relink, source manquante, corbeille : le cas général) ; renommer une palette ne renomme pas son `.hex` ; un `.palette` d'avant le champ le reçoit à la première ouverture (le `.hex` voisin) ; une palette dont le `.hex` a disparu n'est pas chargée et son `.palette` reste intact ; (c) **scripts, option B, livré le 2026-10-10** (`core/lua_scripts.py`, `tools/migrate_behavior_markers.py`, tests `tests/scripting/test_behavior_marker.py`) : le rôle d'un script ne vient plus de son dossier mais de son contenu : une première ligne `-- @behavior` marque un behavior ; `require("behaviors/<nom>")` reste l'appel écrit (le mot `behaviors/` devient un espace de noms, plus un dossier), résolu par NOM parmi les fichiers marqués, où qu'ils soient ; les scripts attachables sont tous les `.lua` non marqués de `assets/` ; deux behaviors de même nom = erreur de build ; « New behavior » écrit le marqueur ; un outil migre les projets d'avant (marqueur ajouté aux fichiers de `scripts/behaviors/`) ; le finder de scripts montre tous les `.lua` de `assets/` (les dossiers sans script sont masqués) ; le surveillant suit les `.lua` de tous les dossiers de `assets/`, les autres sources n'y étant suivies que dans les dossiers de famille. **Ne bougent jamais** : `texts.json`, `texts_<langue>.json`, `variables.json` (un fichier pour tout le projet). **Ensuite, hors de cette
      tranche :** associations de fichiers (installateur Windows en `HKCU\Software\Classes`, proposition à l'utilisateur
      pour le zip portable, fichier MIME + `.desktop` pour l'AppImage) et un éditeur qui ouvre un sidecar passé en argument.
    - **Plus tard : les références par id** (une scène qui cite un sprite par son id et non par son nom) : un chantier à
@@ -2560,7 +2560,7 @@ tous ses ids tant qu'elle n'est pas lue, et un `prune` anticipé viderait ses do
 
 **Livré aussi (2026-10-10) :** l'arbre vertical de tout `assets/` vit dans la colonne de gauche, sous un onglet **Disk**
 à côté de **Project viewer** (qui devient lui-même un onglet : on ne touche pas au mécanisme d'`AssetFinder`). Choisir un
-dossier de l'arbre l'affiche, à plat, dans l'onglet Disk du panneau du bas — comme le fait Unity ; la vue du bas se
+dossier de l'arbre l'affiche, à plat, dans l'onglet Disk du panneau du bas, comme le fait Unity ; la vue du bas se
 navigue aussi seule (double-clic, fil d'ariane). Le sens inverse (un double-clic en bas qui sélectionne le dossier
 dans l'arbre) n'est pas fait.
 **Un « + » et une loupe sur l'arbre (2026-10-10).** L'onglet n'est plus strictement en lecture seule : le « + » crée un
@@ -2580,10 +2580,10 @@ replié mais abrégé par un « … » qui mangeait l'extension. Même règle da
 Le retour à la ligne choisit sa coupe dans cet ordre : **juste avant l'extension** (`Falling Asleep` puis `.json`), sinon à une
 **espace** (jamais au milieu d'un mot : `Out of Energy` puis `Game Over.json`), sinon en pleine lettre mais sans laisser une ou
 deux lettres seules sur la seconde ligne (`.jso` / `n`). La largeur dont le texte dispose est demandée au STYLE de Qt (`SE_ItemViewItemText`), pas devinée : une marge devinée un peu
-trop grande, et Qt abrégeait de nouveau le nom déjà coupé (`Vi... .m…`) — vu dans l'arbre, avec sa feuille de style.
+trop grande, et Qt abrégeait de nouveau le nom déjà coupé (`Vi... .m…`), vu dans l'arbre, avec sa feuille de style.
 **Iconographie et dossiers (2026-10-10).** La vue à plat reprend les icônes de l'éditeur : un fichier relié à un asset
 prend l'icône de sa famille (sprite, fond, effet, musique, jingle, police, palette, script), une source sans asset celle de
-son format (`.wav` effet, `.png` image — les deux formats partagés entre deux familles donnent le cas courant). Un dossier
+son format (`.wav` effet, `.png` image, les deux formats partagés entre deux familles donnent le cas courant). Un dossier
 **plein** est un dossier où l'on peut descendre ; l'entrée **« ... »**, en filet, est toujours la première hors de la
 racine et remonte d'un niveau ; **à la racine**, où il n'y a rien à remonter, cette place est tenue par une icône de **disque dur**
 nommée `assets`, dont le double-clic ouvre le vrai dossier dans l'explorateur de fichiers du système. `DiskNode.family` porte la famille ; `Project.source_families()` rend `(famille, store,
@@ -2624,7 +2624,7 @@ dans un premier temps ; si le besoin se fait sentir, ce sera un retour de la sc�
 signalé depuis son lieu d'usage), pas un rendu recréé dans l'écran Texte.
 
 Ce que le canvas fait déjà (vérifié dans le code, 2026-10-10) : rendu aux vrais glyphes avec le placement du
-moteur, et liseré ambre quand la boîte tronque. Ce qu'il ne fait pas encore : montrer une **traduction** — il
+moteur, et liseré ambre quand la boîte tronque. Ce qu'il ne fait pas encore : montrer une **traduction**. Il
 n'affiche que la langue source. Décidé qu'il prévisualisera la langue choisie, dans une mesure non définie (voir
 point 4 de « À trancher »).
 
@@ -2644,7 +2644,7 @@ point 4 de « À trancher »).
   sans maintenir par principe l'atelier du bas ou l'inspecteur actuels. Leur disposition exacte
   reste à dessiner ; la priorité est la surface de lecture et d'édition.
 
-### Find — rejoindre le lieu d'usage (décision du 2026-10-17)
+### Find (rejoindre le lieu d'usage (décision du 2026-10-17))
 
 Depuis l'écran Texte, un bouton **Find** permet de retrouver un texte dans le projet lorsqu'il
 est référencé : ouvrir la scène concernée et sélectionner/révéler l'élément qui l'utilise.
@@ -2665,7 +2665,7 @@ colonnes `text` des tables ; gérer aussi les mises en page partagées entre plu
 
 ### Le conflit avec l'ancien chantier
 
-Ce chantier **remplace** « L'atelier Texte réuni — écrire et voir dans un même écran » (2026-09-19), qui
+Ce chantier **remplace** « L'atelier Texte réuni, écrire et voir dans un même écran » (2026-09-19), qui
 allait à l'opposé : faire du rendu GBA la surface d'édition (projection source ↔ affichage, caret et
 sélection dessinés par `FontScreenPreview`, vue balisage en police moteur). Cette direction est abandonnée :
 elle aurait fait de l'aperçu la pièce centrale de l'écran, là où l'on veut le retirer. Sa décision verrouillée
@@ -2680,13 +2680,13 @@ abandonne : l'état d'arrivée de ce chantier est désormais la liste de blocs �
 
 | Fichier | Sort |
 | --- | --- |
-| `font_screen_preview.py` | **supprimé** — seul `TextWorkbench` le monte |
+| `font_screen_preview.py` | **supprimé**, seul `TextWorkbench` le monte |
 | `text_workbench.py` | perd `_build_preview`, le `QSplitter`, `_preview`, le sélecteur de police d'aperçu, `_btn_markup` ; garde l'identité (clé, rangement, langues) et la barre de balisage |
 | `text_table.py` | remplacer la présentation compacte par des blocs multi-lignes regroupés par scène ; préciser si le composant est refondu ou remplacé |
 | `text_panel.py` | reste l'arbitre des modifications annulables ; sélection, regroupement et actions Find |
-| `markup_toolbar.py` | vise le bloc en cours plutôt que `FontScreenPreview` — son contrat (`source()`, `selection_source()`, `replace_source()`) est déjà abstrait ; désactivée hors édition |
+| `markup_toolbar.py` | vise le bloc en cours plutôt que `FontScreenPreview`, son contrat (`source()`, `selection_source()`, `replace_source()`) est déjà abstrait ; désactivée hors édition |
 | `text_editor_screen.py`, `text_inspector.py` | `preview_font_changed` / `set_font` : voir « À trancher » |
-| `markup_highlighter.py` | **conservé** — `ui_inspector.py` l'utilise aussi |
+| `markup_highlighter.py` | **conservé**, `ui_inspector.py` l'utilise aussi |
 | `tests/ui/test_text_preview_font_assets.py` | retiré avec l'aperçu |
 | `labels.json`, `labels_fr.json` | clés `txtwb.show_markup_*`, `txtwb.preview_font_*` retirées |
 
@@ -2708,14 +2708,14 @@ scènes, leurs éléments, les scripts et les tables. Vérifier ces points dans 
    projet (v0.9) comme police de référence, ou le sélecteur déménage dans l'inspecteur de droite. Si l'apparence
    appartient à la scène, la police n'a plus de raison d'être choisie ici : la couverture des glyphes
    (`missing_chars()`) est-elle encore une question de contenu, ou passe-t-elle aussi à la scène ?
-4. ~~La troncature~~ — **tranché le 2026-10-10** : hors de l'écran Texte, pas dans un premier temps (voir « Le
+4. ~~La troncature~~, **tranché le 2026-10-10** : hors de l'écran Texte, pas dans un premier temps (voir « Le
    parcours visé »). Prémisse **vérifiée dans le code le 2026-10-10** : le scene canvas rend déjà le texte d'une
    boîte avec les vrais glyphes (`canvas_region_item.py` : `_paint_text` → `layout_text` / `layout_marked_text`,
    mêmes fonctions que la ROM ; police par `font_emit.scene_default_font`, encre par `font_palette`) et signale
    déjà la troncature (liseré ambre en bas de la boîte). **Un trou : la langue.** `_text_content` et
    `_text_source` lisent `t.content`, donc toujours la langue source ; le canvas n'a ni sélecteur de langue ni
    appel à `Project.text_content(t, lang)`. Une traduction plus longue que l'original peut déborder sans que rien
-   ne le montre — et l'aperçu de l'atelier, qui suivait l'onglet de langue, était le seul endroit où on la voyait
+   ne le montre, et l'aperçu de l'atelier, qui suivait l'onglet de langue, était le seul endroit où on la voyait
    dans sa boîte. **Décidé le 2026-10-10 : le canvas prévisualisera la langue choisie.** La **mesure** reste à
    définir : où se choisit la langue (canvas seul, ou partagée avec l'écran Texte), si elle est mémorisée par
    scène ou par session, si le liseré ambre de troncature suit la langue affichée, si l'on peut voir plusieurs
@@ -2749,7 +2749,7 @@ scènes, leurs éléments, les scripts et les tables. Vérifier ces points dans 
 
 ---
 
-## L'asset `.music` — sections, boucle surchargée, indépendant du format source
+## L'asset `.music` (sections, boucle surchargée, indépendant du format source)
 
 ### D'où vient la question (2026-10-11)
 
@@ -2763,9 +2763,9 @@ reflet de ce modèle ; il vient après.
 | Demande des maquettes | Verdict |
 | --- | --- |
 | Volume, boucle oui/non | Déjà là (`mmSetModuleVolume`, `MM_PLAY_LOOP` / `ONCE`). |
-| Boucle sur une zone | **Tracker : au motif près** — `mmGetPosition()` surveillé à chaque frame, `mmPosition(début)` au dépassement ; même mécanisme que la coupe à la position (`music_transition_tick`). **WAV : à l'échantillon près**, par la boucle d'échantillon du XM encapsulé (`wav_to_xm` écrit aujourd'hui `loop_start=0, loop_len=0`). |
-| Plusieurs boucles nommées | Tracker oui (plages d'ordres, une active à la fois). WAV : *non en v1* (une seule boucle d'échantillon) — **oui depuis l'étape 7** (un échantillon par section). |
-| Intro → boucle → outro | Tracker seulement, avec une sortie de boucle commandée. WAV : *l'outro était inatteignable* en v1 (une boucle d'échantillon ne se termine pas) — **atteignable depuis l'étape 7**. |
+| Boucle sur une zone | **Tracker : au motif près**, `mmGetPosition()` surveillé à chaque frame, `mmPosition(début)` au dépassement ; même mécanisme que la coupe à la position (`music_transition_tick`). **WAV : à l'échantillon près**, par la boucle d'échantillon du XM encapsulé (`wav_to_xm` écrit aujourd'hui `loop_start=0, loop_len=0`). |
+| Plusieurs boucles nommées | Tracker oui (plages d'ordres, une active à la fois). WAV : *non en v1* (une seule boucle d'échantillon), **oui depuis l'étape 7** (un échantillon par section). |
+| Intro → boucle → outro | Tracker seulement, avec une sortie de boucle commandée. WAV : *l'outro était inatteignable* en v1 (une boucle d'échantillon ne se termine pas), **atteignable depuis l'étape 7**. |
 | Tempo | Un FACTEUR 0,5 à 2,0 (`mmSetModuleTempo`), pas un BPM. Le BPM du fichier est de l'information. |
 | Hauteur | Idem, facteur 0,5 à 2,0 (`mmSetModulePitch`). |
 | Priorité | **N'existe pas** : une seule couche de module. Pas de champ. |
@@ -2787,13 +2787,13 @@ refusé tel quel ; un taux de build par musique (comme `Sfx.sample_rate`) le fai
 - **Ce qui vient du fichier n'est jamais stocké** : format, canaux, ordres, patterns, BPM, durée, waveform, poids.
   Lus par `load_module` et `Track.marks`, une seule source de vérité.
 - **Tempo, hauteur, fondu d'entrée et de sortie entrent dans l'asset comme VALEURS PAR DÉFAUT, et l'API peut les
-  surcharger à l'appel** — la règle du volume depuis la v0.8.6, appliquée aux trois autres. Pas de champ « priorité ».
+  surcharger à l'appel**, la règle du volume depuis la v0.8.6, appliquée aux trois autres. Pas de champ « priorité ».
 - **L'unité des sections s'écrit dans le sidecar** (`unit: "order" | "ms"`). Remplacer un `.mod` par un `.wav` change
   l'unité : l'éditeur le dit et propose de réinitialiser les sections, jamais de les réinterpréter en silence.
 - **WAV : millisecondes, calées sur le passage par zéro le plus proche au build** (pas de clic à la jointure).
   Tranché par défaut le 2026-10-11, l'auteur n'ayant pas d'avis : l'unité survit à un changement de taux.
 - **Le WAV a eu UNE boucle native en v1** (pas d'outro, pas de découpe en sections). Découper un WAV en un
-  échantillon par section était un chantier séparé, décidé le 2026-10-11 — **ouvert et décidé le 2026-10-11 : voir
+  échantillon par section était un chantier séparé, décidé le 2026-10-11, **ouvert et décidé le 2026-10-11 : voir
   l'étape 7**, qui REMPLACE la boucle d'échantillon.
 
 ### Le modèle
@@ -2801,7 +2801,7 @@ refusé tel quel ; un taux de build par musique (comme `Sfx.sample_rate`) le fai
 Stocké : `name`, `asset`, `volume` %, `loop`, **`unit`**, **`sections`** (`{name, color, start, end, loop}`),
 **`loop_section`** (nom ; vide = tout le morceau), **`tempo`** % et **`pitch`** % (100 = neutre),
 **`fade_in`** et **`fade_out`** (frames, comme les transitions), **`sample_rate`** (WAV seulement ; **0 = le taux de
-`wav_module.WAV_MUSIC_RATE`**, 16 726 Hz — pas un réglage de projet : il n'y en a pas pour la musique). Les migrations
+`wav_module.WAV_MUSIC_RATE`**, 16 726 Hz, pas un réglage de projet : il n'y en a pas pour la musique). Les migrations
 suivent `_MigrateVolumeMixin` : un sidecar sans ces champs relit les défauts, qui sont exactement l'ancien comportement.
 
 **Précisé à l'écriture (2026-10-11).**
@@ -2809,11 +2809,11 @@ suivent `_MigrateVolumeMixin` : un sidecar sans ces champs relit les défauts, q
   `end`, et deux sections voisines (4–12 puis 12–16) se touchent sans se recouvrir. L'écran écrit « ordres 04–11 » pour
   `[4, 12)` ; le modèle n'a qu'une convention.
 - **`order` = index BRUT de la table d'ordres** (cf. mesure 1) ; une section ne peut pas commencer sur un marqueur
-  (`254` / `255`) — un saut là ne tomberait pas sur de la musique.
+  (`254` / `255`), un saut là ne tomberait pas sur de la musique.
 - **Un WAV n'avait qu'une boucle native** (v1) ; depuis l'étape 7 il a des sections comme un module.
 - **Bornes** : tempo et hauteur 50–200 % (le facteur Q10 de maxmod, 0x200–0x800), fondus 0–600 frames (10 s),
   `sample_rate` 0 ou 4 000–16 726 Hz. Hors bornes : avertissement, la valeur est ramenée dans la plage au build.
-- **La durée qui tient dépend du taux** : `wav_module.max_seconds(rate)` — 62 s à 16 726 Hz, ~80 s à 13 kHz. Le
+- **La durée qui tient dépend du taux** : `wav_module.max_seconds(rate)`, 62 s à 16 726 Hz, ~80 s à 13 kHz. Le
   validateur et `wav_too_long` la lisent à partir de `Music.sample_rate`.
 - **Décidé à l'écriture du build (2026-10-11).**
   - **Une section de boucle boucle quel que soit le drapeau `loop`** : un module à section ne finit jamais (WAV : la
@@ -2822,7 +2822,7 @@ suivent `_MigrateVolumeMixin` : un sidecar sans ces champs relit les défauts, q
   - **Un WAV n'a ni tempo ni hauteur** : ce sont des réglages du module, qui n'a qu'une note, calée sur la durée de la
     piste. Ignorés, et signalés. Ses fondus, eux, s'appliquent (c'est du volume).
   - **Un jingle n'applique que son volume** (et son taux, s'il est WAV) : il joue sur la seconde couche de maxmod.
-  - **Le fondu de sortie s'applique à `music_stop`** — donc à `music.stop()`, au silence d'une scène et à un état de
+  - **Le fondu de sortie s'applique à `music_stop`**, donc à `music.stop()`, au silence d'une scène et à un état de
     MusicBox sans musique. `music.is_playing()` reste vrai pendant le fondu. Les fondus d'une MusicBox gardent leurs
     propres `frames` : le fondu de l'asset n'intervient ni dans un `fade_to` ni dans un `cut_to`.
   - **Une boucle qui va jusqu'à la fin du morceau** passe par le restart du fichier : le module repart à son propre
@@ -2836,12 +2836,12 @@ suivent `_MigrateVolumeMixin` : un sidecar sans ces champs relit les défauts, q
 ### Mesuré le 2026-10-11 (mmutil 1.10.1, maxmod du devkitPro, mGBA 0.10.5)
 
 Méthode : des modules de test écrits à la main, convertis par `mmutil -m` (lecture de l'en-tête MAS), puis une ROM
-de test qui s'auto-mesure — position, ligne, `mmActive()`, énergie et passages par zéro du tampon d'onde, une ligne
-par frame dans la SRAM — lue dans le `.sav` après exécution sous mGBA. Les scripts sont jetables et ne sont pas dans
+de test qui s'auto-mesure, position, ligne, `mmActive()`, énergie et passages par zéro du tampon d'onde, une ligne
+par frame dans la SRAM, lue dans le `.sav` après exécution sous mGBA. Les scripts sont jetables et ne sont pas dans
 le dépôt ; les chiffres ci-dessous sont ce qu'on en retient.
 
 1. **Numérotation des ordres : `mmutil` ne renumérote RIEN.** La séquence MAS est la table d'ordres du fichier, telle
-   quelle — **séparateurs `254` et fin `255` d'un IT compris**, et le `order_count` les compte. Sur la ROM,
+   quelle, **séparateurs `254` et fin `255` d'un IT compris**, et le `order_count` les compte. Sur la ROM,
    `mmGetPosition()` rend cet index brut : avec `[0, 254, 1, 255]` il passe de `0` à **`2`** (le séparateur est sauté,
    mais il occupe l'index 1), puis `3` sur le `255` où la lecture s'arrête. Un `255` au milieu (`[0, 1, 255, 2, 3, 255]`)
    **termine le morceau** : les patterns 2 et 3 ne sonnent jamais, la lecture reboucle au restart. MOD et XM : 1 pour 1,
@@ -2850,31 +2850,31 @@ le dépôt ; les chiffres ci-dessous sont ce qu'on en retient.
    `it_file` et `s3m_file` filtraient `o < 254`, donc sur un IT à séparateurs l'index de l'éditeur était décalé de la
    ROM, et un `255` au milieu laissait l'aperçu jouer des patterns que la ROM n'atteint pas. Les sections s'écrivent en
    **index brut de la table d'ordres**. **S3M mesuré ensuite** (fixture, 4 tables) : `mmutil` garde la table brute comme
-   pour l'IT, `255` de fin compris — `[0, 254, 0, 255]` → `[0, 254, 0, 255]`. Seul le comportement au runtime du S3M
+   pour l'IT, `255` de fin compris, `[0, 254, 0, 255]` → `[0, 254, 0, 255]`. Seul le comportement au runtime du S3M
    n'a pas été relevé sur ROM (le format du soundbank est le même que pour l'IT).
 2. **La position de restart passe.** `mmutil` l'écrit dans `repeat_position` (octet 8 de l'en-tête MAS) pour le MOD
    comme pour le XM ; un MOD à restart `127` (la valeur de ProTracker pour « aucun ») devient `0`. Au runtime,
    `MM_PLAY_LOOP` reboucle bien **à cette position** : restart 1 → `…2 → 1 → 2…`, restart 0 → `…2 → 0 → 1…`. L'IT n'a
    pas de champ restart : repli sur `0`. `mod_file` et `xm_file` la jetaient : l'aperçu rebouclait au début quand la ROM
    rebouclait au restart (corrigé le 2026-10-11).
-3. **La boucle WAV tient.** Un XM d'un instrument — 0,5 s de 300 Hz, puis une région de 4 180 échantillons bouclée
-   (exactement 200 périodes, ~800 Hz) — avec un dernier ordre dont la dernière ligne porte `B01` (saut sur lui-même) :
+3. **La boucle WAV tient.** Un XM d'un instrument (0,5 s de 300 Hz, puis une région de 4 180 échantillons bouclée
+   (exactement 200 périodes, ~800 Hz)) avec un dernier ordre dont la dernière ligne porte `B01` (saut sur lui-même) :
    le module, qui dure ~1,2 s, reste actif et sur l'ordre 1 pendant les **14 s** observées, et le tampon reste à
    108 passages par zéro (~800 Hz) du début à la fin, sans trou ni retour de l'intro. Les témoins confirment que
    chaque pièce compte : **sans boucle d'échantillon**, le son tombe à zéro à 0,8 s alors que le module continue ;
    **sans `Bxx`**, le module s'arrête à 1,2 s (`mmActive() == 0`). Non mesuré, et à dire : l'absence de clic à la
    jointure à l'oreille (la région de test contient un nombre entier de périodes, donc la jointure est continue par
-   construction) — c'est ce que le calage sur un passage par zéro doit garantir pour un vrai morceau.
+   construction). C'est ce que le calage sur un passage par zéro doit garantir pour un vrai morceau.
 4. **`mmPosition()` sur un index qui ne désigne pas de pattern** (table `[0, 0, 254, 0, 0, 255]`, saut commandé depuis
-   le pattern 0) : un **séparateur** (`254`) — la lecture tombe sur le pattern **suivant** et continue ; un **`255`** ou une
-   position **hors table** — avec `MM_PLAY_ONCE` la lecture **s'arrête** (`mmActive() == 0`, silence), avec
+   le pattern 0) : un **séparateur** (`254`), la lecture tombe sur le pattern **suivant** et continue ; un **`255`** ou une
+   position **hors table**, avec `MM_PLAY_ONCE` la lecture **s'arrête** (`mmActive() == 0`, silence), avec
    `MM_PLAY_LOOP` elle **redémarre** à la position de restart. Le commentaire de `music_deck.py` (« retombe sur 0 »)
    n'était donc vrai que pour la boucle. Le mode de lecture d'une coupe est celui de la CIBLE (`Music.loop` pour un
    script, `MusicState.loop` pour une arête du graphe).
 5. **Tempo et hauteur de module** : `mmSetModuleTempo` et `mmSetModulePitch` appelés **juste après `mmStart`** prennent
    effet. Tempo 200 % : les lignes passent deux fois plus vite ; 50 % : deux fois moins. Hauteur 150 % : un 300 Hz
    mesure 60 passages par zéro au lieu de 40, un 800 Hz 160 au lieu de 108 ; 200 % : le double. La hauteur change
-   aussi la DURÉE d'un échantillon (il joue plus vite) sans changer celle du module — d'où leur refus pour un WAV.
+   aussi la DURÉE d'un échantillon (il joue plus vite) sans changer celle du module, d'où leur refus pour un WAV.
 6. **Le C réellement généré, compilé dans une ROM qui s'auto-mesure** (la table, `music_play` / `music_stop`, le tick de
    transition et le tick de boucle tels que `sound_emit` et `main_gen` les écrivent) : section `[2, 5)` d'un module de
    8 ordres joué avec `loop = 0` → positions `0, 1, 2, 3, 4, 2, 3, 4, 2…`, jamais au-delà de 4, lecture toujours active ;
@@ -2886,7 +2886,7 @@ le dépôt ; les chiffres ci-dessous sont ce qu'on en retient.
    dans l'échantillon), module actif sur l'ordre 1 tout du long. Sans boucle (témoin) : 300 → 800 → 1 200 Hz puis arrêt.
    Un 440 Hz rendu à 11 025 Hz mesure 60 passages par zéro (attendu : 59) : `_tuning` accorde bien la hauteur.
 8. **Tempo et `Fxx`** (module de 20 ordres ; 10 ordres parcourus) : base 285 frames ; `Fxx` à 250 bpm 142 ; facteur
-   200 % 141 ; **les deux 71** — le facteur se MULTIPLIE avec le tempo du morceau (×2 × ×2 = ×4), il ne le remplace pas
+   200 % 141 ; **les deux 71**, le facteur se MULTIPLIE avec le tempo du morceau (×2 × ×2 = ×4), il ne le remplace pas
    et ne se perd pas après un `Fxx`. Le rendu de l'aperçu l'applique donc à chaque tick.
 
 9. **Les surcharges d'API, sur le C réellement généré** (module de 8 ordres, 60 frames par seconde) :
@@ -2900,12 +2900,12 @@ le dépôt ; les chiffres ci-dessous sont ce qu'on en retient.
 
 ### Ordre d'implémentation (proposé)
 
-1. ~~Les trois mesures~~ — faites (ci-dessus). ~~Les lecteurs alignés sur la ROM~~ — **livré le 2026-10-11** :
+1. ~~Les trois mesures~~, faites (ci-dessus). ~~Les lecteurs alignés sur la ROM~~, **livré le 2026-10-11** :
    `Module.order` est la table brute (`ORDER_SKIP` 254, `ORDER_END` 255, `is_pattern_order`), `Module.restart` est lu
    par `mod_file` / `xm_file` (`effective_restart` : hors table → 0), le rendu s'arrête sur un `255`, `Track.restart`
    fait reboucler le deck à l'ordre de restart, l'import refuse une table qui ne porte que des marqueurs. Tests :
    `tests/audio/test_module_formats.py` § 3 et 4, fixtures paramétrées par `orders` / `restart`.
-1b. ~~Le contrôle `cut_to`~~ — **livré le 2026-10-11** : `music_structure.cut_problems` vérifie que chaque position où la
+1b. ~~Le contrôle `cut_to`~~, **livré le 2026-10-11** : `music_structure.cut_problems` vérifie que chaque position où la
    source peut se trouver désigne un pattern dans la cible (au lieu de comparer des longueurs), nomme la première
    position fautive et la conséquence selon le mode de lecture, et sert à la fois les scripts
    (`_check_music_cut_compat`) et les arêtes `cut` d'une MusicBox (`_check_sound_boxes`, y compris « depuis n'importe
@@ -2913,10 +2913,10 @@ le dépôt ; les chiffres ci-dessous sont ce qu'on en retient.
    WAV. L'aperçu fait la même chose que la ROM (`Track.start_of` rend `None` hors musique : redémarrage avec la
    boucle, arrêt sans). Limite connue du deck : un pattern jamais atteint par le rendu (sauts `Bxx`) y est traité comme
    un séparateur. Tests : `tests/audio/test_cut_compat.py`.
-2. ~~Modèle : champs, unité, migration, validateur~~ — **livré le 2026-10-11** (voir « Précisé à l'écriture »).
+2. ~~Modèle : champs, unité, migration, validateur~~, **livré le 2026-10-11** (voir « Précisé à l'écriture »).
    Tests : `tests/audio/test_music_model.py`. **Pas encore émis** : rien n'est lu par le build (étape 3), l'aperçu
-   (étape 4) ni l'API (étape 5) — les champs s'écrivent et se relisent, c'est tout.
-3. ~~Build : boucle de section au codegen (tracker), boucle d'échantillon dans `wav_module.py`, fondus et facteurs~~ —
+   (étape 4) ni l'API (étape 5). Les champs s'écrivent et se relisent, c'est tout.
+3. ~~Build : boucle de section au codegen (tracker), boucle d'échantillon dans `wav_module.py`, fondus et facteurs~~,
    **livré le 2026-10-11**. `wav_module` : taux choisi (`_tuning`), boucle d'échantillon calée sur un passage par zéro
    montant, module qui saute sur lui-même, échantillon tronqué à la fin de la boucle (la ROM n'y met pas le final).
    `sound_emit` : `music_info_row` / `music_runtime_lines` (table `g_music_info`, une ligne par module réglé,
@@ -2924,23 +2924,23 @@ le dépôt ; les chiffres ci-dessous sont ce qu'on en retient.
    `main_gen` : modes 3 (fondu d'entrée) et 4 (fondu de sortie) dans `music_transition_tick`, réglages réappliqués à
    chaque `mmStart` (transitions comprises). `grit_conversion` : taux et région passés à l'encapsulation. Tests :
    `test_wav_loop.py`, `test_music_runtime_emit.py`, `rom_build/test_music_settings_build.py` (build réel).
-4. ~~Aperçu : `MusicDeck` apprend la région de boucle — le même code que la ROM, pas un repli de thème~~ — **livré le
+4. ~~Aperçu : `MusicDeck` apprend la région de boucle, le même code que la ROM, pas un repli de thème~~, **livré le
    2026-10-11**. `music_info_row` est dans `core/music_structure` : le build ET l'aperçu lisent la même ligne. `MusicDeck`
-   rejoue la machine d'états du C — modes 3 et 4 (fondus d'entrée et de sortie), `music_stop` distinct de l'arrêt sec du
+   rejoue la machine d'états du C, modes 3 et 4 (fondus d'entrée et de sortie), `music_stop` distinct de l'arrêt sec du
    lecteur, tick de section avec son retour arrière, boucle forcée, boucle d'échantillon d'un WAV, coupe sans musique
    (redémarrage ou arrêt selon la boucle). `render_module_marked` prend un tempo et une hauteur ; `render_wav` (supprimé à l'étape 7) passait par
-   `wav_module.render_at_rate` / `loop_frames` — le taux, la quantification à 8 bits et la jointure sont ceux du
+   `wav_module.render_at_rate` / `loop_frames`, le taux, la quantification à 8 bits et la jointure sont ceux du
    build. `BoxPlayer` clé son cache par tout ce qui change le rendu (chemin, tempo, hauteur, taux, boucle) et pose les
-   fondus et la section sur une copie du `Track`. Tests : `tests/audio/test_music_preview.py` — le deck rejoué contre les
+   fondus et la section sur une copie du `Track`. Tests : `tests/audio/test_music_preview.py`, le deck rejoué contre les
    séquences mesurées sur ROM (mesures 5 à 8).
-5. ~~API : surcharge à l'appel de tempo, hauteur, fondus, et choix de la section~~ — **livré le 2026-10-11**, six appels
+5. ~~API : surcharge à l'appel de tempo, hauteur, fondus, et choix de la section~~, **livré le 2026-10-11**, six appels
    (`music:set_tempo(p)`, `music:set_pitch(p)`, `music:fade_in("Nom", frames)`, `music:fade_out(frames)`,
    `music:set_section("Section")`, `music:leave_loop()`). Ils surchargent la LECTURE EN COURS ; une musique qui démarre
    reprend les réglages de son asset (`music_apply`). **Décidé le 2026-10-11 : `set_section` agit sur la musique en
-   cours, sans la nommer** — d'où une table `g_music_sec` en ROM (module, rang du nom, début, fin) et un nouveau domaine
+   cours, sans la nommer**, d'où une table `g_music_sec` en ROM (module, rang du nom, début, fin) et un nouveau domaine
    `music_section`. Le rang d'un nom est son index dans la liste TRIÉE des noms de section de TOUTES les musiques du
    projet (`core/music_structure.music_section_names`) : c'est à la fois la constante `MSEC_*` du script et la clé de la
-   table, tirées de la même liste — une musique laissée hors de la ROM ne décale rien. Le vérificateur refuse un nom
+   table, tirées de la même liste. Une musique laissée hors de la ROM ne décale rien. Le vérificateur refuse un nom
    qu'AUCUNE musique ne porte ; un nom qui existe ailleurs mais pas dans la piste qui joue ne fait rien à l'exécution
    (dit dans la doc de l'appel). **Limites assumées** : renommer une section dans l'éditeur ne met pas les scripts à
    jour (le build annonce le nom inconnu) ; un nom de section est propre à SA musique, donc non suivi par le
@@ -2951,11 +2951,11 @@ le dépôt ; les chiffres ci-dessous sont ce qu'on en retient.
    c'est le verbe `music.play`, avec un fondu. Tests : `tests/scripting/test_music_api.py`, et le build réel
    (`test_music_settings_build.py`) compile et lie un script qui appelle les six.
 6. ~~Écran Son : un écran, la zone de structure change selon le format ; maquettes corrigées (pas de priorité, budget
-   ROM)~~ — **livré le 2026-10-11**. Pour une musique, la colonne centrale montre un `MusicEditor` (en-tête avec son état
+   ROM)~~, **livré le 2026-10-11**. Pour une musique, la colonne centrale montre un `MusicEditor` (en-tête avec son état
    « prête pour le build » ou « N à corriger », lu sur les mêmes contrôles que le validateur ; forme d'onde ; zone de
    structure du FORMAT). **Module** : la bande des ordres (une cellule par position de la table BRUTE, les séparateurs
    grisés et non sélectionnables, glisser pour choisir une plage) et le tableau des sections (boucle, par défaut,
-   couleur, nom, début, fin, durée, écoute, retrait — tout en place, le « + » crée une ligne dont le nom prend le focus,
+   couleur, nom, début, fin, durée, écoute, retrait, tout en place, le « + » crée une ligne dont le nom prend le focus,
    et prend la plage choisie sur la bande). **WAV** : la boucle à deux poignées sur la forme d'onde, avec ses bornes en
    secondes. La forme d'onde est le `Track` du deck (`BoxPlayer.track_for`) : ce qu'on voit est ce qu'on entend, taux et
    quantification du build compris. L'inspecteur de droite gagne tempo, hauteur, fondus et taux (WAV seulement) ; tempo
@@ -2967,18 +2967,18 @@ le dépôt ; les chiffres ci-dessous sont ce qu'on en retient.
    d'une section), ni marqueurs Intro/Outro sur un WAV (l'outro n'y est jamais jouée), ni « Create loop from selection »
    comme bouton séparé (le « + » prend la sélection). Tests : `tests/ui/test_music_editor.py` et
    `tests/ui/test_sound_screen_music.py`. **Le rendu a été regardé, pas seulement testé** : une capture a montré le
-   tableau écrasé quand il est reconstruit alors que l'éditeur est caché (la demande de mise en page ne remonte pas) —
+   tableau écrasé quand il est reconstruit alors que l'éditeur est caché (la demande de mise en page ne remonte pas),
    corrigé par un `updateGeometry()` après chaque reconstruction.
 
-7. ~~**Le WAV en sections — un échantillon par section**~~ — **livré le 2026-10-11**. Voir ci-dessous.
+7. ~~**Le WAV en sections, un échantillon par section**~~, **livré le 2026-10-11**. Voir ci-dessous.
 
-### Étape 7 — aligner le WAV sur le module
+### Étape 7 (aligner le WAV sur le module)
 
 **Le but** : un seul modèle pour tout le module musical. Un `.wav` a des sections nommées, une section de boucle,
 un outro atteignable, et les widgets de l'écran Son sont ceux d'un module (tableau des sections, ▶ par ligne).
 `set_section`, `leave_loop`, `cut_to` et les fondus marchent sans cas particulier : **le build écrit un VRAI module**
 (un échantillon XM et un ou plusieurs patterns par segment, une position d'ordre par pattern), et tout ce qui lit des
-positions d'ordre — `music_info_row`, `g_music_sec`, le tick de boucle, le deck — le lit tel quel.
+positions d'ordre (`music_info_row`, `g_music_sec`, le tick de boucle, le deck) le lit tel quel.
 
 **Décidé le 2026-10-11.**
 - **L'unité d'un WAV reste la milliseconde** (`unit: "ms"`) : elle survit à un changement de taux. Le build convertit
@@ -2993,7 +2993,7 @@ positions d'ordre — `music_info_row`, `g_music_sec`, le tick de boucle, le dec
   disparaît (il déplaçait la frontière hors de la grille) ; une jointure de boucle n'est plus protégée du clic.
 - **Vitesse 1, 219 BPM : une ligne = 180 échantillons de mixage = 11,4155 ms, exactement.** Mesuré sur ROM : à 255 BPM
   (l'ancien réglage) maxmod tronque le tick à un nombre entier d'échantillons de mixage (154 au lieu de 154,59), donc
-  les lignes passent **0,4 % trop vite** — 33 ms de dérive sur 8 s, de quoi couper la queue d'un segment. À 219 BPM le
+  les lignes passent **0,4 % trop vite**, 33 ms de dérive sur 8 s, de quoi couper la queue d'un segment. À 219 BPM le
   tick tombe juste (15 768 Hz × 2,5 / 219 = 180) : cinq segments de 8 s enchaînés se suivent de 478 frames chacun, sans
   dérive ni trou.
 - **L'échantillon est ré-échantillonné au taux RÉELLEMENT joué** : `_tuning` arrondit à 1/128 de demi-ton (jusqu'à
@@ -3025,7 +3025,7 @@ d'onde) · 7g documentation, test de build réel, mesure ROM du module généré
 - `music_structure` : `wav_boundaries`, `wav_plan`, `wav_section_orders` (l'unique traduction ms → ordres) ;
   `music_info_row(m, path)` et `music_section_rows(m, path)` prennent le fichier ; `MIN_SECTION_MS` (50 ms) ; le validateur
   signale une section plus courte qu'une ligne ; plus d'erreur « une seule boucle ».
-- Aperçu : `BoxPlayer` rend un WAV par `parse_xm(wav_to_xm(…))` puis `render_module_marked`, comme un module — le `Track`
+- Aperçu : `BoxPlayer` rend un WAV par `parse_xm(wav_to_xm(…))` puis `render_module_marked`, comme un module, le `Track`
   a ses repères et ses sections en ordres. Le rendu des modules reporte maintenant la durée de tick de la ROM (tronquée à un
   nombre entier d'échantillons du mixeur, fraction reportée d'un tick au suivant) ; le garde-fou `_MAX_VISITED` passe de
   4 096 à 65 537 lignes (il coupait un WAV à 47 s).
@@ -3043,7 +3043,7 @@ d'onde) · 7g documentation, test de build réel, mesure ROM du module généré
 12. *Le module que le build écrit, de bout en bout* (intro 300 Hz, boucle 800 Hz, outro 1 200 Hz ; `music_info_row` = [1, 2)) :
     l'intro joue une fois, la boucle tient (107–108 zéro-passages, jamais de 1 200 Hz) ; `music_leave_loop` à la frame 150
     finit la boucle, joue l'outro (160 zéro-passages, ~1 s) puis s'arrête (`mmActive() == 0`). Taux choisi de 11 025 Hz
-    (accordé à 11 023,1) : cinq segments de 8 s enchaînés, 478 frames chacun — aucune dérive.
+    (accordé à 11 023,1) : cinq segments de 8 s enchaînés, 478 frames chacun, aucune dérive.
 
 **La table de mixage (2026-10-11).** Volume, tempo et hauteur d'une musique ne sont plus dans l'inspecteur : ce sont
 trois curseurs verticaux à droite des sections (`ui/sound_mixer/mix_faders.py`), un double-clic remet le neutre. **L'aperçu
@@ -3101,22 +3101,22 @@ Deux besoins, dans cet ordre parce que le premier donne son sens au second.
 | --- | --- | --- |
 | 1. Duplication (assets, sources, scripts ; finders et Disk) | **Livrée le 2026-10-12** | « Ordre d'implémentation », 1 |
 | 2a. Découpe non destructive d'un SFX | **Livrée le 2026-10-12** | 2a |
-| — Constantes sonores nommées d'après l'ASSET, plus d'après un fichier | **Livré (2026-10-12, repris le 2026-10-13)** : correction du modèle, découverte en route | 2a, « Constat » |
+| Constantes sonores nommées d'après l'ASSET, plus d'après un fichier | **Livré (2026-10-12, repris le 2026-10-13)** : correction du modèle, découverte en route | 2a, « Constat » |
 | 2b. Hauteur et panoramique par défaut | **Livrés le 2026-10-13** | 2b |
 | 2c. Variation aléatoire de hauteur, fondu de sortie | **Livrés le 2026-10-13** | 2c |
-| — Correctif : un son court ne s'entendait pas à l'aperçu | **Corrigé le 2026-10-13**, confirmé par l'auteur | 2c, « Correctif » |
-| — Correctif : un WAV 24 ou 32 bits était refusé (effet, musique, jingle) | **Corrigé le 2026-10-13** ; reste à confirmer à l'oreille par l'auteur | 2c, « Correctif : WAV 24 bits » |
+| Correctif : un son court ne s'entendait pas à l'aperçu | **Corrigé le 2026-10-13**, confirmé par l'auteur | 2c, « Correctif » |
+| Correctif : un WAV 24 ou 32 bits était refusé (effet, musique, jingle) | **Corrigé le 2026-10-13** ; reste à confirmer à l'oreille par l'auteur | 2c, « Correctif : WAV 24 bits » |
 | 2d. Poignée de fondu, vue par canal, oscilloscope sur l'éditeur d'effet | **Livrés le 2026-10-13** (demandés par l'auteur) | 2d |
 | 2e. Écoute A/B du taux, avec le poids ROM à côté | **Livrée le 2026-10-13** | « Proposé » 2, point 5 ; voir « 2f » |
 | 3. Jingles : politique vis-à-vis de la musique | **Livrée le 2026-10-14** (runtime + inspecteur) ; l'aperçu à l'éditeur reste à faire | « Proposé » 3, point 1 |
 | 3. Jingles : plage jouée | **Livrée le 2026-10-14** pour un module (plage d'ordres) ; un WAV avait déjà sa plage en ms | « Proposé » 3, point 2 |
 | 3. Jingles : avertissement de canaux | **Reste**, non commencé | « Proposé » 3, point 3 |
-| — Barre de découpe aux effets (retire les poignées de l'onde) ; champs avec unité dehors (`UnitSpin`) | **Livrés le 2026-10-14** (demandés par l'auteur) | — |
-| — Panoramique d'un effet : un axe gauche–droite à la table Mix (retiré de l'inspecteur) ; bouton « Import WAV… » retiré de l'inspecteur d'effet | **Livrés le 2026-10-14** (demandés par l'auteur) | — |
+| Barre de découpe aux effets (retire les poignées de l'onde) ; champs avec unité dehors (`UnitSpin`) | **Livrés le 2026-10-14** (demandés par l'auteur) | s.o. |
+| Panoramique d'un effet : un axe gauche–droite à la table Mix (retiré de l'inspecteur) ; bouton « Import WAV… » retiré de l'inspecteur d'effet | **Livrés le 2026-10-14** (demandés par l'auteur) | s.o. |
 
 **Ce que la session a changé hors du périmètre annoncé** (chaque point est détaillé plus bas) :
 
-- le build ne dépend plus du nom d'un fichier pour nommer un son dans la ROM — `MmutilAudio._number_ids` réécrit `SFX_*` /
+- le build ne dépend plus du nom d'un fichier pour nommer un son dans la ROM. `MmutilAudio._number_ids` réécrit `SFX_*` /
   `MOD_*` d'après l'asset (un défaut du modèle « source ≠ asset », que la duplication a rendu visible à chaque geste) ;
 - `Sfx` gagne six champs (`trim_start`, `trim_end`, `pitch`, `panning`, `pitch_variation`, `fade_out`), tous à leur défaut dans
   un sidecar d'avant ;
@@ -3162,7 +3162,7 @@ de l'aperçu est confirmé sur les effets qu'il avait signalés.
 
 #### 2. Réglages d'un SFX (par ordre de valeur)
 
-1. **Découpe non destructive** — début et fin (en ms), dans le sidecar ; le fichier source reste intact. Un effet pèse
+1. **Découpe non destructive**, début et fin (en ms), dans le sidecar ; le fichier source reste intact. Un effet pèse
    un octet par frame : couper la queue de silence se lit directement dans le poids ROM. L'onde existe déjà
    (`ui/sound_mixer/waveform_view.py`). Le build l'applique, au même endroit que le taux : `codegen/sfx_encode.py`.
 2. **Hauteur et panoramique par défaut.** Le runtime les expose déjà dans `sfx` (`pitch`, `panning`), l'asset ne les
@@ -3186,7 +3186,7 @@ tient ») : ce serait de la logique C à nous, donc un chantier de runtime à pa
 
    **Livré le 2026-10-14.** `Jingle.music_policy` (`mix` par défaut = l'ancien comportement, `duck`, `pause`), `duck_level` (%, 30 par
    défaut) et `duck_release` (frames, 30 par défaut). Décisions : (1) **un seul point d'écriture du volume de la musique**,
-   `music_write_volume()`, qui multiplie par un duck 0–1024 — les 12 appels directs à `mmSetModuleVolume` y passent, pour ne pas
+   `music_write_volume()`, qui multiplie par un duck 0–1024. Les 12 appels directs à `mmSetModuleVolume` y passent, pour ne pas
    refaire le défaut de la caméra ; (2) la chute est immédiate, la remontée est une rampe (arrondie par excès pour tenir dans
    `duck_release`) ; (3) la fin du jingle se lit par `mmActiveSub()`, une fois par frame (`music_jingle_tick`, avant le pas des
    fondus) ; (4) `mmPause` ne touche que la couche principale (lu dans `libmm.a`), donc la pause ne coupe pas le jingle ; une musique
@@ -3195,7 +3195,7 @@ tient ») : ce serait de la logique C à nous, donc un chantier de runtime à pa
    niveau, remontée)`, le script ne dit pas ce qui arrive à la musique. Le duck manuel (`music.set_volume` + `jingle_box.set_volume`)
    reste possible et se multiplie au duck automatique. La case **Loop** disparaît de l'inspecteur d'un jingle. Tests :
    `tests/audio/test_jingle_policy.py` (le C généré compilé sur l'hôte contre un maxmod simulé), `tests/ui/test_jingle_inspector_policy.py` ;
-   la ROM de PongAdvanced se construit avec le nouveau runtime. **Reste :** l'aperçu — `music_deck.py` ne connaît pas la couche jingle,
+   la ROM de PongAdvanced se construit avec le nouveau runtime. **Reste :** l'aperçu, `music_deck.py` ne connaît pas la couche jingle,
    donc la politique ne s'entend qu'à l'émulateur ; et l'écoute à l'oreille de la remontée.
 2. **Plage jouée (début / fin).** Un jingle tiré d'un long module a besoin d'un point d'arrêt. Réemploie la machinerie
    des sections avec UNE plage implicite, pas la liste complète (un jingle n'a pas de sections, cf. l'asset `.music`).
@@ -3203,7 +3203,7 @@ tient ») : ce serait de la logique C à nous, donc un chantier de runtime à pa
    **Livré le 2026-10-14, autrement que prévu.** Le runtime ne PEUT pas le faire : `mmPosition` / `mmGetPosition` ne parlent
    qu'à la couche principale (lu dans `libmm.a`), aucune position de la couche jingle n'est lisible ni posable. La plage est donc
    cuite au BUILD : `Jingle.order_start` / `order_end` (positions de la table brute, fin exclue, 0 = jusqu'au bout), et
-   `core/module_trim.cut_orders` — l'unique fonction, lue par le build (`build/music/<asset>.<ext>`) ET par l'aperçu — réécrit
+   `core/module_trim.cut_orders` (l'unique fonction, lue par le build (`build/music/<asset>.<ext>`) ET par l'aperçu) réécrit
    la table d'ordres du module. Par format : XM raccourcit la table ; IT et S3M gardent leur taille (les adresses qui suivent
    sont absolues) et finissent la table par 255 ; MOD réécrit aussi ses motifs (le nombre de motifs se lit dans la table et
    décalerait les échantillons), renumérotés à partir de 0. Écran : le bouton **Rogner** de l'éditeur, une barre d'ordres
@@ -3217,7 +3217,7 @@ tient ») : ce serait de la logique C à nous, donc un chantier de runtime à pa
 4. **Fondu de sortie** : existe dans `Music`, mais un jingle « n'applique que son volume » (décidé le 2026-10-11) ; à
    rouvrir seulement si la politique (1) ne le rend pas inutile.
 
-#### 4. Rogner un WAV — musiques et jingles (demandé par l'auteur le 2026-10-14 ; livré le même jour pour les musiques et jingles WAV)
+#### 4. Rogner un WAV (musiques et jingles (demandé par l'auteur le 2026-10-14 ; livré le même jour pour les musiques et jingles WAV))
 
 L'effet se rogne (`Sfx.trim_start` / `trim_end`, cf. « 2a ») ; l'auteur a demandé le même geste pour une musique ou un jingle dont la
 source est un `.wav`, et pensé une fonctionnalité **commune aux `.wav`** (tout ce qui n'est pas un module tracker) plutôt que trois
@@ -3240,7 +3240,7 @@ avec ses deux poignées, réutilisable pour les trois sons.
   entier) et, dans l'éditeur de musique, un bouton **Rogner** à cocher (un asset déjà rogné s'ouvre barre visible). Seul un WAV l'a. Le
   validateur refuse une découpe qui ne laisse rien, avertit qu'un module ignore la sienne.
 
-**Écart avec la proposition du 2026-10-14 matin — à confirmer par l'auteur :** les sections d'un WAV sont dans le temps de la
+**Écart avec la proposition du 2026-10-14 matin, à confirmer par l'auteur :** les sections d'un WAV sont dans le temps de la
 **plage gardée** (celui de l'onde, que l'éditeur de musique dessine à partir du rendu du module), et NON dans le temps du fichier.
 Elles ne bougent pas par rapport au SON : quand une poignée se déplace, `music_structure.retrim` les fait glisser avec lui. Pourquoi : ce
 que l'éditeur lit sur `Music.sections` (le tableau, la bande, les poignées de l'onde, le plan du build) est en ms de la piste rendue ;
@@ -3264,18 +3264,18 @@ la hauteur par défaut, la variation et la politique du jingle ; `core/validator
 
 ### Ordre d'implémentation (proposé)
 
-1. **Duplication — livrée le 2026-10-12.** `core/asset_duplication.py` (`duplicate`, `duplicate_many`, `duplicate_script`,
+1. **Duplication, livrée le 2026-10-12.** `core/asset_duplication.py` (`duplicate`, `duplicate_many`, `duplicate_script`,
    `copy_name`) ; `AssetKind.duplicate` (chaque famille de finder la déclare par `_store_duplicator`) ; *Duplicate* + Ctrl+D
    (la touche réglée pour `common.duplicate`) dans le menu des finders, simple (« Duplicate ») et de lot (« Duplicate N items ») ;
    dans l'onglet Disk (les deux vues), `DiskCallbacks.duplicate_items` / `duplicable`, `window._disk_duplicate_items`.
    La copie : champs de l'original relus par la sérialisation du sidecar, MÊME `asset`, nouvel id, nom `coin_2` (dupliquer
    `coin_2` donne `coin_3`, pas `coin_2_2`), rangée à côté de l'original et, dans un finder, dans le même dossier d'auteur.
    Un finder ouvre aussitôt le renommage en place de l'unique copie. Un lot est UNE entrée d'historique (`MacroCmd`) et ses
-   copies ont des noms uniques entre elles. **Disk : tout ou rien** — l'entrée n'apparaît que si TOUTE la sélection est faite
+   copies ont des noms uniques entre elles. **Disk : tout ou rien**. L'entrée n'apparaît que si TOUTE la sélection est faite
    d'assets duplicables et de sources (ni dossier, ni fichier non lu, ni texte/variables). **Une source se duplique aussi
    (demandé le 2026-10-12, sur la décision précédente de s'en abstenir)** : `asset_duplication.duplicate_sources` copie le
    fichier à côté de l'original, sous un nom libre dans SON dossier (toutes extensions confondues), en UNE commande annulable
-   (`ImportFilesCmd`) ; la copie est une source LIBRE, aucun asset ne la cite — c'est ce qui permet de repartir d'un `.wav`
+   (`ImportFilesCmd`) ; la copie est une source LIBRE, aucun asset ne la cite. C'est ce qui permet de repartir d'un `.wav`
    retouché sans toucher à celui que des assets pointent. *Create* reste le geste qui en tire un asset ; un lot peut mêler
    assets et sources. `_duplicate_palette` (l'ancienne entrée « Duplicate » de la seule palette) est retirée : la palette
    passe par le même chemin. **Constats des vérifications :** sprites et fonds portent leur encodage DANS le sidecar, la
@@ -3283,32 +3283,32 @@ la hauteur par défaut, la variation et la politique du jingle ; `core/validator
    un `.hex`, cf. `asset_creation.palette_is_taken`) ; les ids internes d'une scène sont locaux (ids de composants), aucun
    doublon à craindre ; un script se copie comme fichier, sous un nom libre parmi TOUS les `.lua`. **Restent :** les palettes
    n'ont pas encore d'id (5a), la copie n'en reçoit donc pas non plus ; annuler la copie d'une palette laisse son `.hex`
-   (le `.palette` seul est retiré), comme pour la création — un `.hex` laissé dans `assets/palettes/` redevient une palette
+   (le `.palette` seul est retiré), comme pour la création, un `.hex` laissé dans `assets/palettes/` redevient une palette
    au chargement suivant. Tests : `tests/project/test_duplicate_asset.py`, `tests/ui/test_duplicate_ui.py`.
 2. **SFX** : découpe (modèle, build, interface), puis hauteur et panoramique par défaut, puis le reste selon l'usage.
-   - **2a. La découpe — livrée le 2026-10-12.** `Sfx.trim_start` / `Sfx.trim_end` (ms depuis le début du fichier ; fin à 0 = jusqu'à
+   - **2a. La découpe, livrée le 2026-10-12.** `Sfx.trim_start` / `Sfx.trim_end` (ms depuis le début du fichier ; fin à 0 = jusqu'à
      la fin ; les deux à 0 = l'effet entier, ce que relit un sidecar d'avant). `core/sfx_render.py` est le SEUL endroit qui
      découpe et ré-échantillonne (il reprend `effective_rate` et le rendu de `codegen/sfx_encode.py`) : le build et l'aperçu
      l'appellent tous les deux, donc ce qu'on voit et entend est ce que la ROM porte. La découpe se fait à la frame, sur le
      fichier au taux d'origine, AVANT le ré-échantillonnage ; sortie 16 bits mono, mmutil descend à 8. Écran : un nouvel
-     éditeur d'effet (`ui/sound_mixer/sfx_editor.py`) prend la colonne centrale à la place de l'éditeur de musique — l'onde du
+     éditeur d'effet (`ui/sound_mixer/sfx_editor.py`) prend la colonne centrale à la place de l'éditeur de musique, l'onde du
      fichier (`WaveformView`, les poignées sont celles de la boucle d'un WAV), deux champs début / fin en ms, *Reset trim*, et le
      poids annoncé (« 3,9 Kio en ROM au lieu de 7,8 Kio »), qui suit aussi le taux. `WaveformView` gagne une règle en ms pour une
      piste courte, et peut cacher la bascule Onde | Scope et la poignée de départ (ni l'un ni l'autre n'a de sens pour un
-     effet). L'aperçu (`box_playback._prepare`) joue le rendu de la ROM, donc aussi le taux du projet — ce que l'aperçu d'un
+     effet). L'aperçu (`box_playback._prepare`) joue le rendu de la ROM, donc aussi le taux du projet, ce que l'aperçu d'un
      effet ignorait jusque-là. Le validateur avertit d'une découpe qui ne laisse rien (l'effet entier part alors en ROM, et
      le build le dit). Tests : `tests/audio/test_sfx_render.py`, `tests/ui/test_sfx_editor.py`.
    - **Constat, corrigé au passage (2026-10-12, repris le 2026-10-13) : le nom d'un son dans la ROM ne vient plus d'un nom de
      fichier.** mmutil numérote par POSITION (les effets dans l'ordre où on les lui passe, puis les modules) mais nomme
      `SFX_*` / `MOD_*` d'après le fichier (mesuré : `Coin Two.wav` donne `SFX_COIN_TWO` ; trois fois le même `coin.wav` donne
-     trois lignes `SFX_COIN` numérotées 0, 1, 2 — il ne déduplique pas). Depuis qu'un asset pointe sa source, un effet nommé
-     autrement que son fichier — `coin_2` sur `coin.wav`, ce que la duplication produit à chaque geste, mais aussi tout second
-     asset créé depuis un `coin.wav` — faisait échouer le contrôle d'ids du build (« SFX_COIN_2 absent de soundbank.h »).
+     trois lignes `SFX_COIN` numérotées 0, 1, 2. Il ne déduplique pas). Depuis qu'un asset pointe sa source, un effet nommé
+     autrement que son fichier (`coin_2` sur `coin.wav`, ce que la duplication produit à chaque geste, mais aussi tout second
+     asset créé depuis un `coin.wav`) faisait échouer le contrôle d'ids du build (« SFX_COIN_2 absent de soundbank.h »).
      Un premier correctif recopiait chaque fichier sous le nom de son asset (`stage_by_name`) ; **c'était un contournement**, et
      l'auteur l'a dit : le défaut est dans le modèle, l'identité d'un son dépendait d'un fichier de build alors qu'un asset
      ne devrait rien devoir à sa source. **Décision (2026-10-13) :** `MmutilAudio._number_ids` lit le RANG de chaque ligne
      `SFX_*` / `MOD_*` de `soundbank.h`, vérifie qu'il est celui attendu (effets puis modules, 0..n-1, dans l'ordre
-     donné — le contrôle d'ids d'avant, qui cherchait des NOMS, devient un contrôle de rang), puis réécrit la ligne avec la
+     donné, le contrôle d'ids d'avant, qui cherchait des NOMS, devient un contrôle de rang), puis réécrit la ligne avec la
      constante de l'ASSET (`sfx_constant`, et `c_names.module_constant`, désormais le seul endroit qui écrit `MOD_*` : `main.c`,
      les tables de boîtes et le build s'y réfèrent). Les lignes `MSL_*` restent. Idempotent (un build en cache relit le header
      déjà réécrit). Deux assets dont les noms donneraient la même constante C (`coin 2` et `coin_2`) bloquent le build avec
@@ -3317,25 +3317,25 @@ la hauteur par défaut, la variation et la politique du jingle ; `core/validator
      musique encapsulés s'appellent de même `<asset>.xm`. **Reste :** deux assets sur la même source sans réglage différent
      portent deux fois les mêmes octets en ROM (mmutil ne déduplique pas) ; à mesurer avant de s'en préoccuper.
      Tests : `tests/audio/test_soundbank_ids.py` (dont un mmutil réel sur trois effets d'un même `coin.wav`).
-   - **2b. Hauteur et panoramique par défaut — livrés le 2026-10-13.** `Sfx.pitch` (% de la hauteur du fichier, 100 = tel quel,
+   - **2b. Hauteur et panoramique par défaut, livrés le 2026-10-13.** `Sfx.pitch` (% de la hauteur du fichier, 100 = tel quel,
      bornes 25–400 : `SFX_PITCH_MIN` / `SFX_PITCH_MAX`) et `Sfx.panning` (−100 gauche .. +100 droite, 0 centre) : la règle du
-     volume, la ressource propose, l'API surcharge — `sfx:set_pitch` / `sfx:set_panning` posent une valeur ABSOLUE sur une
+     volume, la ressource propose, l'API surcharge. `sfx:set_pitch` / `sfx:set_panning` posent une valeur ABSOLUE sur une
      lecture, quelle que soit celle de la ressource (la doc de l'API le disait déjà : « absolue »). **Rien ne change dans les
      octets de la ROM :** le build émet deux tables dans `main.c` (`sound_emit.sfx_default_tables`), une case par effet dans
-     l'ordre du soundbank — l'`id` que reçoit `sfx_play` —, que `sfx_play` lit à la place des constantes `1024` et `128`
+     l'ordre du soundbank (l'`id` que reçoit `sfx_play`), que `sfx_play` lit à la place des constantes `1024` et `128`
      (`headers.py`). Comme `sfx_set_pitch` raisonne sur la hauteur COURANTE de chaque poignée (`g_sfx_rate`, qui existe parce
      qu'`mmEffectScaleRate` est cumulatif), `sfx_play` y range la hauteur de DÉPART et non plus 1024 ; sans cela, un
      `set_pitch` sur un effet réglé à 150 % se serait calculé sur une base fausse. Aucun site d'appel de `sfx_play` n'a changé
      (scripts, SoundFxComponent, boîtes sonores, frames d'animation, destruction d'acteur : tous passent l'`id`). Inspecteur
      d'effet : deux champs, Pitch et Panning. **Limites assumées :** l'aperçu de l'éditeur fait entendre la hauteur (le rendu
      est déclaré à un taux plus haut ou plus bas : mêmes échantillons, joués plus vite ou plus lentement) mais PAS le
-     panoramique — le lecteur joue un module mono au centre ; l'onde de la découpe ne bouge pas avec la hauteur (elle montre le
+     panoramique. Le lecteur joue un module mono au centre ; l'onde de la découpe ne bouge pas avec la hauteur (elle montre le
      fichier). Tests : `tests/audio/test_sfx_defaults.py`, `tests/ui/test_sfx_inspector_defaults.py`.
-   - **2c. Variation aléatoire de hauteur et fondu de sortie — livrés le 2026-10-13.**
+   - **2c. Variation aléatoire de hauteur et fondu de sortie, livrés le 2026-10-13.**
      **Variation :** `Sfx.pitch_variation` (± %, 0–50 : `SFX_PITCH_VARIATION_MAX`). À chaque lecture `sfx_play` tire la hauteur de
      départ dans `pitch` ± ce pourcentage, au dixième de pour cent près (1 % vaut déjà ~17 cents, un pas entier s'entendrait).
      **Décision, posée ici parce que le ROADMAP la laissait ouverte : le tirage a SON générateur** (`g_sfx_seed`, un LCG défini
-     dans `main.c` et partagé par tous les fichiers C, comme la graine de la secousse de caméra), jamais celui de `math.rand` —
+     dans `main.c` et partagé par tous les fichiers C, comme la graine de la secousse de caméra), jamais celui de `math.rand`,
      régler la variation d'un effet ne doit pas changer ce que le jeu tire au hasard (une partie rejouée, un test de
      non-régression, un déterminisme que l'auteur croit tenir). **Et la graine est fixe** : la même suite de sons à chaque mise
      sous tension, comme `math.rand` ; l'amorcer sur le temps ou les touches est un choix de jeu, pas un défaut du moteur. La
@@ -3346,59 +3346,59 @@ la hauteur par défaut, la variation et la politique du jingle ; `core/validator
      **Fondu de sortie :** `Sfx.fade_out`, en FRAMES (1/60 s) comme tous les fondus de l'éditeur (« une durée ne s'écrit pas de
      deux façons selon l'écran »). Cuit dans l'échantillon par `core/sfx_render.render_sfx`, APRÈS la découpe et le
      ré-échantillonnage : rampe linéaire sur les dernières frames de la plage GARDÉE, jusqu'à un zéro exact sur le dernier
-     échantillon — c'est lui qui supprime le clic d'une découpe en plein signal. Ni durée ni poids ne changent, et la console ne
+     échantillon. C'est lui qui supprime le clic d'une découpe en plein signal. Ni durée ni poids ne changent, et la console ne
      calcule rien. Un fondu SEUL suffit à faire rendre l'effet par le build (`sfx_render.is_edited`). Plus long que l'effet, il
      le couvre en entier. Écran : un champ *Fade out* (frames) à côté de la plage, et la rampe dessinée sur l'onde (une
      diagonale, la part étouffée assombrie) à la fin de la plage gardée ; l'aperçu joue le même rendu. Le fondu de sortie des
      MUSIQUES (`Music.fade_out`, appliqué à `music_stop`) reste un autre mécanisme, à l'exécution. **Le fondu d'entrée et l'écoute
      A/B du taux, qui restaient, sont livrés : voir « 2f ».** Tests : `tests/audio/test_sfx_render.py`, `tests/audio/test_sfx_defaults.py`,
      `tests/ui/test_sfx_editor.py`, `tests/ui/test_sfx_inspector_defaults.py`.
-   - **2d. L'éditeur d'effet reprend trois outils de l'éditeur de musique — livrés le 2026-10-13, à la demande de l'auteur.**
+   - **2d. L'éditeur d'effet reprend trois outils de l'éditeur de musique, livrés le 2026-10-13, à la demande de l'auteur.**
      **La poignée du fondu de sortie :** un rond sur le bas de l'onde (même bande et même geste que les poignées de fondu d'une
-     musique), posé au début de la rampe — sur la fin de la plage gardée tant qu'il n'y a pas de fondu —, qu'on glisse vers la
+     musique), posé au début de la rampe (sur la fin de la plage gardée tant qu'il n'y a pas de fondu), qu'on glisse vers la
      gauche. Elle n'est pas collée au bord du FICHIER : un effet fond sur la fin de sa plage gardée. Plafonnée à 600 frames
      et au début de la plage ; le champ *Fade out* suit pendant le glisser, l'effet n'est écrit qu'au relâchement (comme la
      plage). Elle passe avant la poignée de fin de plage dans la bande du bas, comme les fondus d'une musique. Nouveau :
      `WaveformView.ramp_moving` / `ramp_changed`, `set_ramp_editable`.
-     **La vue par canal :** `ChannelMeters`, le même widget qu'une musique, à droite de l'onde — une barre par canal du PROJET
+     **La vue par canal :** `ChannelMeters`, le même widget qu'une musique, à droite de l'onde, une barre par canal du PROJET
      (`sound_channels`), dont l'effet occupe la première (un échantillon mono = une voix) ; elle suit le volume de l'effet et la
      tête de lecture. Elle lit le `Track` de l'aperçu (`BoxPlayer.track_for`), donc le son découpé, fondu et réglé en hauteur.
      **L'oscilloscope :** la bascule Onde | Scope réapparaît pour un effet, alimentée par le lecteur (`scope_window`) pendant
      l'écoute, et, à l'arrêt, par le début du rendu (un effet n'a pas de poignée de départ). **La tête de lecture** se pose sur
      le FICHIER : début de la plage gardée + durée de lecture × hauteur de départ (la hauteur accélère le rendu).
      `SfxEditor(track_provider)` ; sans fournisseur (tests, outils) ni canal ni scope. **Limite :** un effet est rendu une fois
-     par réglage qui change son rendu (plage, fondu, taux, hauteur) dans le fil de l'interface — négligeable pour un effet
+     par réglage qui change son rendu (plage, fondu, taux, hauteur) dans le fil de l'interface, négligeable pour un effet
      court ; **mesuré le 2026-10-13 sur un effet long : voir « 2f »**. Tests : `tests/ui/test_sfx_editor.py` (glisser réel à la souris,
      plafonds, canaux, scope, tête de lecture).
-   - **2e. Fluidité des réglages, panoramique et variation entendus — livrés le 2026-10-13, à la demande de l'auteur.**
+   - **2e. Fluidité des réglages, panoramique et variation entendus, livrés le 2026-10-13, à la demande de l'auteur.**
      **Constat :** chaque cran d'un champ de l'inspecteur d'effet écrivait le sidecar, reconstruisait l'explorateur et
-     re-rendait l'aperçu — dont Panning et Variation, qui ne changent pas le rendu. **Décisions :**
+     re-rendait l'aperçu, dont Panning et Variation, qui ne changent pas le rendu. **Décisions :**
      (1) *Écriture différée.* Une seule file, `ui/common/deferred_writes.py` (`DeferredWrites` : `schedule(clé, écriture)`
      fusionne par clé, `flush()`, `has_pending()`), qui nourrit le même état « Unsaved changes » que les scripts et le canvas
      (`window._has_pending_changes`). Elle part toute seule après un court silence, et AVANT tout ce qui lit le disque ou
      le quitte : changement d'écran, build, ouverture/création d'un projet, Ctrl+S, fermeture, perte du focus de la fenêtre.
      L'inspecteur d'asset sonore et l'éditeur d'effet l'adoptent ; les autres écrans à écriture en boucle (à recenser) la
-     rejoindront un par un. (2) *Panoramique entendu, en stéréo :* la console l'est — `mmMixerMix` lit l'octet de panoramique
+     rejoindront un par un. (2) *Panoramique entendu, en stéréo :* la console l'est. `mmMixerMix` lit l'octet de panoramique
      de chaque voix et en tire un volume gauche (`256 − pan`) et un droit (`pan`), la loi linéaire du rendu de l'éditeur ;
      l'aperçu pose donc `panning_to_hardware(Sfx.panning)` dans le panoramique d'échantillon du module qu'il encapsule
      (`wav_to_xm(pan=…)`), sans que le build, qui n'en donne jamais, change d'un octet. (3) *Variation entendue :* à chaque ▶,
      l'aperçu tire la hauteur dans `pitch ± variation`, au dixième de pour cent comme `sfx_play`. Les rendus sont mis en cache
      par hauteur. Un réglage qui ne change pas le rendu (panoramique, variation) ne re-rend plus et n'actualise plus l'explorateur.
      **Ce que ça change dans le code :** `schedule_save(store, item)` (même fichier) est l'unique chemin d'écriture de
-     l'inspecteur d'asset sonore (les trois familles) et de l'éditeur d'effet — leurs écritures d'un même asset se fusionnent
+     l'inspecteur d'asset sonore (les trois familles) et de l'éditeur d'effet. Leurs écritures d'un même asset se fusionnent
      sous une clé ; elle ne réécrit pas un asset supprimé dans l'intervalle. `SfxEditor.refresh_soon` rend l'aperçu 150 ms
      après le dernier cran (le poids annoncé suit tout de suite). `_AssetInspectorBase._manager` / `_save`, que plus rien
      n'appelait, deviennent `_store(projet)`. `PAN_CENTER` devient public (`core/models/audio.py`), `varied_pitch` vit dans
      `core/sfx_render.py`. **Limites :** le tirage de l'aperçu ne bouge pas la frise (la tête de lecture) ; chaque hauteur
      tirée est rendue au premier ▶ qui la tire (non mesuré sur un effet long) ; la loi de panoramique de l'aperçu est la
      linéaire de maxmod (`256 − pan`, `pan`), vérifiée dans le désassemblage de `mmMixerMix`, pas à l'oreille sur émulateur ;
-     seuls l'inspecteur d'asset sonore et l'éditeur d'effet passent par la file — les autres écrans qui écrivent à chaque
+     seuls l'inspecteur d'asset sonore et l'éditeur d'effet passent par la file, les autres écrans qui écrivent à chaque
      cran (à recenser) restent à y rejoindre. Tests : `tests/ui/test_deferred_writes.py`, `tests/ui/test_sfx_preview_stereo.py`,
      `tests/ui/test_sfx_inspector_defaults.py`, `tests/ui/test_sfx_editor.py`.
-     **Extension (2026-10-13) — inventaire des écrans qui écrivaient à chaque cran, et étape 1.** Constat : les inspecteurs
+     **Extension (2026-10-13), inventaire des écrans qui écrivaient à chaque cran, et étape 1.** Constat : les inspecteurs
      d'acteur, de scène et d'élément d'interface poussent un `SetFieldCmd` par valeur ; `SetFieldCmd.execute/undo` appelle
      `persist_fn` à chaque fois (la fusion ne fusionne que l'annulation), et l'inspecteur d'interface écrivait avec
-     `save_all()` — `Project.save()`, une vingtaine de collections — pour un seul pixel de géométrie. **Livré :** l'inspecteur
+     `save_all()` (`Project.save()`, une vingtaine de collections) pour un seul pixel de géométrie. **Livré :** l'inspecteur
      d'acteur (cas « scène ») et celui de scène écrivent la scène via `schedule_save(project.scenes, scène)` ; l'inspecteur
      d'interface planifie `save_all` sous la clé `"save_all"`. Seule l'ÉCRITURE est différée : `changed` et
      `scene_sprites_changed` (qui rafraîchissent canvas et autres écrans) restent immédiats. **Étape 2, livrée le même jour :**
@@ -3408,7 +3408,7 @@ la hauteur par défaut, la variation et la politique du jingle ; `core/validator
      pour toutes) ; les marges nine-slice écrivent le seul fond qui les porte (`project.backgrounds`) ; le RENOMMAGE d'un
      élément garde `save_all` (`_persist_all`), parce qu'il réécrit scripts et références. **Reste, dans l'ordre :**
      (3) le cas « prefab » de l'inspecteur d'acteur, dont `save_prefab` propage
-     en mémoire dans toutes les scènes et écrit N scènes — **renvoyé au chantier « Les prefabs — l'instance garde ce qu'elle
+     en mémoire dans toutes les scènes et écrit N scènes, **renvoyé au chantier « Les prefabs, l'instance garde ce qu'elle
      surcharge »** (2026-10-13), qui le règle à la racine (le prefab seul s'écrit) ; scinder propagation et écriture n'a pas
      été retenu, ce serait du travail jeté. **Étapes 3 (hors prefab) et 4, livrées le même jour :** passent par la file
      l'éditeur de fond (découpe, taille de frame, vitesse, placement : `_persist_bg`, la notification du canvas reste
@@ -3417,35 +3417,35 @@ la hauteur par défaut, la variation et la politique du jingle ; `core/validator
      (`_persist_scene`) et les réglages du projet (six écritures de `project.json` sous une clé commune,
      `_save_settings_soon`). **Le minuteur de 400 ms de la fenêtre (`_save_timer`) est supprimé** : son filet, `save_all`
      après un champ d'inspecteur d'acteur, passe par la même file (clé `"save_all"`), donc l'indicateur « Unsaved changes »
-     et chaque vidage (écran, build, Ctrl+S, fermeture, perte du focus) le voient — deux mécanismes pour une même idée
+     et chaque vidage (écran, build, Ctrl+S, fermeture, perte du focus) le voient, deux mécanismes pour une même idée
      devenaient un seul. **Limite, volontaire :** ce filet réécrit encore tout le projet, une fois par geste ; l'enlever
      demande de prouver qu'aucun chemin d'écriture d'un acteur ne compte sur lui. **Ne passent PAS encore par la file** (gestes
      ponctuels, ou écrans sans écriture en boucle repérée) : l'éditeur de texte et celui de données (validation sur
      `editingFinished` ou commande), l'inpainting de fond et la peinture de sprite (une écriture par trait), l'inspecteur de
      projet (auteur, version). Tests : `tests/ui/test_inspector_deferred_save.py`.
-   - **2f. Fondu d'entrée, écoute A/B du taux, mesure du rendu et décodage vérifié — livrés le 2026-10-13, à la demande de
+   - **2f. Fondu d'entrée, écoute A/B du taux, mesure du rendu et décodage vérifié, livrés le 2026-10-13, à la demande de
      l'auteur (« termine l'écran SFX »).**
      **Fondu d'entrée :** `Sfx.fade_in`, en FRAMES comme le fondu de sortie, cuit dans les premières frames de la plage GARDÉE
-     par `core/sfx_render.render_sfx` — le même code que le build, donc `sfx_encode`, l'aperçu et l'écran sont d'accord. Rampe
+     par `core/sfx_render.render_sfx`, le même code que le build, donc `sfx_encode`, l'aperçu et l'écran sont d'accord. Rampe
      linéaire depuis un zéro exact sur le premier échantillon ; les deux fondus se multiplient ; plus long que l'effet, il le
      couvre. Un fondu seul suffit à faire rendre l'effet (`is_edited`) ; le fichier d'aperçu porte son empreinte. Un sidecar
      d'avant le champ vaut 0. Écran : un champ *Fade in* à côté de *Fade out*. **Pas de poignée sur l'onde :** `WaveformView`
      ne porte qu'une rampe (celle de la sortie) et c'est un fichier que l'auteur modifie ; le champ suffit pour l'instant.
-     **Écoute A/B du taux :** le ROADMAP demandait de vérifier si l'aperçu jouait déjà le fichier rééchantillonné — oui
+     **Écoute A/B du taux :** le ROADMAP demandait de vérifier si l'aperçu jouait déjà le fichier rééchantillonné, oui
      (`preview_file` applique le taux effectif). Il manquait de quoi COMPARER : un bouton *File rate* dans l'éditeur d'effet fait
      jouer le même effet au taux de son fichier (`BoxPlayer.set_original_rate`), découpe, fondus et hauteur restant appliqués.
      Il n'est disponible que si les deux taux diffèrent, retombe quand on ouvre un autre effet, et le résumé affiche à côté le
      poids ROM au taux du fichier. Ne change que l'aperçu : le build garde le taux de l'effet ou du projet. **Mesure du rendu
-     (2026-10-13, hôte de l'auteur, WAV 44,1 kHz) :** de la lecture du fichier à l'onde — rendu du WAV de l'aperçu, rendu du module,
-     enveloppe — 0,3 s : ~50 ms ; 3 s : ~130 ms ; 8 s : ~290 ms ; 20 s : ~560 ms, dont le rendu du module est les deux tiers. Un
+     (2026-10-13, hôte de l'auteur, WAV 44,1 kHz) :** de la lecture du fichier à l'onde (rendu du WAV de l'aperçu, rendu du module,
+     enveloppe). 0,3 s : ~50 ms ; 3 s : ~130 ms ; 8 s : ~290 ms ; 20 s : ~560 ms, dont le rendu du module est les deux tiers. Un
      effet de GBA est court (un octet par frame en ROM : 8 s à 16 kHz pèsent environ 125 Kio) ; **pas de rendu hors du fil de l'interface**
-     tant qu'un effet de plusieurs secondes n'est pas un cas d'usage — la minuterie de 150 ms de `refresh_soon` borne déjà le
+     tant qu'un effet de plusieurs secondes n'est pas un cas d'usage, la minuterie de 150 ms de `refresh_soon` borne déjà le
      nombre de rendus d'un geste. **Décodage :** `tests/audio/test_wav_decode_depths.py` couvre 8, 16, 24 et 32 bits entiers (signe,
      échelle, ordre des octets), le même signal lu pareil à toute profondeur, le mixage stéréo, la réécriture en 16 bits mono d'un
      24 bits intact, et le refus du WAV flottant. Tests : `tests/audio/test_sfx_fade_in.py`, `tests/ui/test_sfx_editor.py`.
-     **Ce qui reste de l'écran SFX :** rien de décidé ni de demandé — l'écoute sur émulateur d'un 24 bits, la mesure de la
+     **Ce qui reste de l'écran SFX :** rien de décidé ni de demandé, l'écoute sur émulateur d'un 24 bits, la mesure de la
      duplication d'octets en ROM, et une poignée de fondu d'entrée sur l'onde si l'auteur la veut.
-   - **2g. La table de mixage d'un effet — livrée le 2026-10-14, à la demande de l'auteur (« voir le modèle »).** Volume,
+   - **2g. La table de mixage d'un effet, livrée le 2026-10-14, à la demande de l'auteur (« voir le modèle »).** Volume,
      hauteur, variation aléatoire de la hauteur et les deux fondus se règlent à des CURSEURS verticaux, ceux d'une musique
      (`MixFaders`) : trois colonnes V, P, VAR et deux fondus IN, OUT, en bas de la colonne de droite (`SfxEditor.mix_panel`, que
      l'écran monte à la place de la table d'une musique ; une seule se montre). `MixFaders` reçoit désormais la liste de ses
@@ -3455,7 +3455,7 @@ la hauteur par défaut, la variation et la politique du jingle ; `core/validator
      de fondu de l'onde écrit l'effet par le MÊME chemin qu'un curseur tenu (`_on_mix`). Seul ce que le curseur change à l'écran se
      rafraîchit : le volume règle la barre du canal ; la hauteur et les fondus re-rendent l'aperçu après un silence ; la variation
      ne rafraîchit rien. Écriture du sidecar par la file différée (une fois, après le geste). Trois infobulles nouvelles
-     (`sfxedit.mix_*_tip`), quatre retirées. **Reste :** le panoramique est resté dans l'inspecteur — voir « Le panoramique » plus bas.
+     (`sfxedit.mix_*_tip`), quatre retirées. **Reste :** le panoramique est resté dans l'inspecteur. Voir « Le panoramique » plus bas.
      Tests : `tests/ui/test_sfx_editor.py`, `tests/ui/test_sfx_inspector_defaults.py`, `tests/ui/test_sound_screen_music.py`.
    - **Le panoramique d'un effet : piste (a) retenue par l'auteur le 2026-10-14, non codée.** Aujourd'hui `Sfx.panning` est une position FIXE
      par asset (−100 gauche .. +100 droite), que `sfx:set_panning` surcharge à l'appel. Or le panoramique d'un son vient
@@ -3465,7 +3465,7 @@ la hauteur par défaut, la variation et la politique du jingle ; `core/validator
      saurait faire seul :** un son joué depuis un acteur (script attaché, `SoundFxComponent`, frame d'animation, boîte sonore) connaît
      son émetteur ; sa position à l'écran (`x − caméra`, sur 240 px) donnerait le panoramique à `sfx_play`, sans script. **Pistes :**
      (a) garder le panoramique fixe par asset et ajouter un mode positionnel au PROJET (réglage global : actif ou non, point de
-     référence — le centre de l'écran par défaut —, largeur pour le panoramique maximal), l'asset gardant sa valeur pour les sons
+     référence (le centre de l'écran par défaut), largeur pour le panoramique maximal), l'asset gardant sa valeur pour les sons
      sans émetteur ; (b) remplacer le champ de l'asset par un simple « positionnel : oui / non » (un son d'interface ne l'est
      pas), le reste vivant au projet ; (c) retirer le panoramique de l'asset et ne le laisser qu'au script. **À trancher :** le
      rôle du champ de l'asset si le mode positionnel existe ; ce qui compte comme émetteur ; si un son qui dure se met à jour
@@ -3479,7 +3479,7 @@ la hauteur par défaut, la variation et la politique du jingle ; `core/validator
      `sfx_play_at`), l'effet sur un son qui dure, l'aperçu de l'éditeur (un point mobile pour l'entendre), et les tests. Aucune de ces
      questions n'est tranchée.
    - **Correctif (2026-10-13) : un son COURT ne s'entendait pas à l'aperçu.** Signalé sur des effets de l'auteur (`ball_roll`, `bomb_lay2`,
-     `break`, `bump`… — 0,13 à 0,2 s ; `blade` et `bomb`, plus longs, jouaient). Le deck tire loin devant la carte son : un effet
+     `break`, `bump`…, 0,13 à 0,2 s ; `blade` et `bomb`, plus longs, jouaient). Le deck tire loin devant la carte son : un effet
      court est tout entier produit dès le premier paquet, `deck.playing` retombe aussitôt, et `_refresh_rom_progress` (qui
      décoche le bouton quand `BoxPlayer.sounding` est faux) fermait la carte son avant qu'on ait entendu quoi que ce soit.
      Ce n'était ni le format (24 bits stéréo 44,1 kHz : les 63 effets du dossier `fx-wav` se rendent, démarrent et produisent de
@@ -3488,7 +3488,7 @@ la hauteur par défaut, la variation et la politique du jingle ; `core/validator
      que `_publish` donne déjà à l'interface (qui ne touche pas à la carte son depuis son thread). Test sans carte son :
      `tests/audio/test_short_sound_stays_audible.py`. **Confirmé à l'oreille par l'auteur (2026-10-13)** sur les effets qu'il avait signalés.
    - **Correctif (2026-10-13) : un WAV 24 ou 32 bits était refusé à l'import.** Signalé sur les 21 effets d'un dossier `platformer/wav`
-     (tous en 24 bits). `check_audio_file` les écartait parce que mmutil ne convertit que le 8 et le 16 bits — et qu'il construit la
+     (tous en 24 bits). `check_audio_file` les écartait parce que mmutil ne convertit que le 8 et le 16 bits, et qu'il construit la
      ROM sans le dire, avec un effet muet. **Le refus était juste, mais il tombait au mauvais endroit :** l'éditeur ré-encode déjà
      un effet pour la découpe et le taux, dans le dossier de build, sans toucher au fichier. Il le fait donc aussi pour la
      profondeur. `sfx_render.read_wav` décode le 24 bits (trois octets little-endian posés en tête d'un entier 32 bits signé) et le
@@ -3513,10 +3513,10 @@ la hauteur par défaut, la variation et la politique du jingle ; `core/validator
 
 ---
 
-## Un pont entre l'écran Texte et les tables de données — créer un dialogue
+## Un pont entre l'écran Texte et les tables de données (créer un dialogue)
 
 **Parcours livré le 2026-10-17 :** le chantier
-[TextBox à plusieurs entrées](#textbox--plusieurs-entrées-pour-préparer-un-dialogue) fournit
+[TextBox à plusieurs entrées](#textbox-plusieurs-entrées-pour-préparer-un-dialogue) fournit
 **Export as table / Update table** depuis la boîte, vers les tables ordinaires et leurs colonnes
 `text`. Le contrat de mise à jour, de conservation des colonnes personnalisées et des lignes
 manuelles est implémenté et décrit dans cette section. Les pistes A et B ci-dessous restent
@@ -3532,7 +3532,7 @@ bon ; **la saisie est fastidieuse**. Pour écrire dix répliques, l'auteur doit 
 2. pour chaque réplique, aller dans l'écran Texte, créer l'entrée, la ranger, lui donner un contenu ;
 3. revenir dans la grille, ouvrir la cellule de la ligne et y choisir la clé au milieu de toutes les autres.
 
-Deux écrans, un aller-retour par réplique, et la clé — qui n'a d'intérêt que pour la machine — au centre du geste.
+Deux écrans, un aller-retour par réplique, et la clé (qui n'a d'intérêt que pour la machine) au centre du geste.
 L'infobulle de la cellule montre bien le contenu (`_text_preview`), mais seulement une fois la clé posée.
 
 ### Le principe
@@ -3545,15 +3545,15 @@ tient la ligne posée dès la v0.3 : pas d'arbre de conversation, pas de choix b
 
 ### Pistes (proposées, non verrouillées)
 
-- **A — Depuis l'écran Texte : « Envoyer vers une table ».** L'auteur sélectionne des textes dans la table
+- **A. Depuis l'écran Texte : « Envoyer vers une table ».** L'auteur sélectionne des textes dans la table
   (l'ordre de la sélection est l'ordre des lignes), choisit une table de données existante ou en crée une, et
   chaque texte devient une ligne dont la colonne `text` porte sa clé. C'est le geste de qui écrit d'abord ses
   répliques puis les assemble.
-- **B — Depuis la grille de données : « Nouveau texte » dans la cellule.** Une cellule de type `text` offre, en
+- **B. Depuis la grille de données : « Nouveau texte » dans la cellule.** Une cellule de type `text` offre, en
   tête de sa liste, *Nouveau texte…* : l'entrée est créée à l'instant (clé proposée par le rangement, jamais
   tapée), rangée sous le nom de la table, et la cellule la référence. C'est le geste de qui construit la
   conversation ligne à ligne. Le contenu s'écrit ensuite dans l'écran Texte, ou sur place si la cellule le permet.
-- **C — Les deux sens se rejoignent sur le rangement.** Le chemin d'un texte donne sa clé à la création ; si le
+- **C. Les deux sens se rejoignent sur le rangement.** Le chemin d'un texte donne sa clé à la création ; si le
   rangement d'un dialogue porte le nom de sa table, la clé de la réplique `n` se dérive d'elle-même
   (`<table>_<n>`) et plus personne ne la nomme à la main. Le lien table ↔ rangement reste une convention de
   création, jamais une contrainte (les deux peuvent diverger ensuite).
@@ -3576,7 +3576,7 @@ sélection multiple vers un écran voisin. C reste une convention de création, 
 
 ### À trancher avant d'ouvrir
 
-1. ~~A, B, ou les deux ?~~ — **tranché le 2026-10-10 : les deux** (B puis A, voir « Pistes »).
+1. ~~A, B, ou les deux ?~~, **tranché le 2026-10-10 : les deux** (B puis A, voir « Pistes »).
 2. **Le contenu s'écrit où ?** Avec la piste B, l'auteur crée la réplique depuis la grille : l'écrit-il dans la
    cellule (qui doit alors devenir un petit éditeur de texte) ou est-il renvoyé à l'écran Texte ? C'est la même
    question que « le contenu s'édite dans la table » du chantier [L'écran Texte n'édite et ne range que du contenu](#lécran-texte-nédite-et-ne-range-que-du-contenu) :
@@ -3600,9 +3600,9 @@ sélection multiple vers un écran voisin. C reste une convention de création, 
 
 ---
 
-## v1.0 — Le pipeline 2D complet
+## v1.0 (Le pipeline 2D complet)
 
-### L'objectif concret — cinq genres
+### L'objectif concret (cinq genres)
 
 La v1.0 était écrite comme un jalon de *validation* (« un deuxième jeu de démo, plus
 stabilisation »). Elle porte en réalité une **affirmation de capacité** : à la v1.0, le
@@ -3630,7 +3630,7 @@ le même numéro. La version se lit dans `editor/core/app_info.py` (source uniqu
 de la release (`v1.0.0-alpha`) doit lui être égal : la release échoue sinon.
 
 Une affirmation pareille n'est décidable que si on dit *quoi*. Voici le critère, sur le modèle
-de « V-Rally 3 » pour la v3.1 — une cible se compare, une capacité s'étend indéfiniment :
+de « V-Rally 3 » pour la v3.1, une cible se compare, une capacité s'étend indéfiniment :
 
 | Genre | Ce qu'il exerce en propre |
 | --- | --- |
@@ -3646,7 +3646,7 @@ que c'est faux, et où. Un platformer sans sous-pixel (v0.19) n'a ni accélérat
 hauteur variable ; un metroidvania sans collection persistante (v0.20) écrit une variable par
 coffre. Les deux genres réputés acquis sont donc, en réalité, les deux qui ouvrent la liste.
 
-### Le deuxième jeu de démo — la démo tactique
+### Le deuxième jeu de démo (la démo tactique)
 
 Le genre tactique a été choisi et la boucle complète a été construite : grille, curseur,
 sélection, statistiques pilotées par table, portée, déplacement, menu d'action et tour
@@ -3667,7 +3667,7 @@ réglés** ; il reste le contenu de départ qui accompagne l'auteur.
   son propre C dans la ROM de l'utilisateur** (`gba_engine.h` et les sources générées), donc
   sous une licence unique tout jeu construit avec l'outil serait devenu un travail dérivé sous
   GPL. D'où **deux licences, et c'est la découpe qui compte** : `LICENSE` (GPL-3.0-only) couvre
-  l'ÉDITEUR, `runtime/LICENSE` (zlib) couvre le moteur recopié dans la ROM — le jeu et sa ROM
+  l'ÉDITEUR, `runtime/LICENSE` (zlib) couvre le moteur recopié dans la ROM. Le jeu et sa ROM
   appartiennent entièrement à leur auteur, sans rien à publier ni à demander.
   `THIRD-PARTY-NOTICES.md` recense les composants redistribués, obligation déjà active
   puisqu'ils sont dans l'installateur. Reste hors de ce point, et à trancher ailleurs : le nom
@@ -3689,8 +3689,8 @@ réglés** ; il reste le contenu de départ qui accompagne l'auteur.
 - Le contenu exact du modèle de départ : il doit enseigner l'API dès la première heure, sans
   devenir une fonctionnalité supplémentaire du moteur.
 - ~~Les menus et listes (curseur, défilement, sélection)~~ **Tranché le 2026-08-19 : le moteur
-  en prend une part, et c'est la v0.22.** La question posée ici — « si les trois genres à menus
-  le rendent pénible, c'est ici que ça se verra » — a reçu sa réponse d'un projet cible à arbre
+  en prend une part, et c'est la v0.22.** La question posée ici (« si les trois genres à menus
+  le rendent pénible, c'est ici que ça se verra ») a reçu sa réponse d'un projet cible à arbre
   de compétences, inventaire et équipement : ce n'est pas un confort qu'on juge après coup,
   c'est un tiers du contenu, entièrement à la charge de l'auteur.
 
@@ -3698,7 +3698,7 @@ réglés** ; il reste le contenu de départ qui accompagne l'auteur.
 
 ## Au-delà de la v1.0
 
-### Diffuser un jeu desktop — le Backstage Player
+### Diffuser un jeu desktop (le Backstage Player)
 
 **Route vers v1.0-stable, non prioritaire pour la release `-alpha` (décidé le
 2026-10-10).** Une ROM `.gba` reste le coeur et le format universel du jeu, mais elle ne
@@ -3763,7 +3763,7 @@ l'auteur du jeu. Le premier périmètre exclut le Workshop, le multijoueur, l'in
 - La place dans l'interface : générateur autonome éprouvé d'abord, puis éventuellement étape
   finale du build de l'éditeur.
 
-### Chantier transverse — le singleton `mixer`
+### Chantier transverse (le singleton `mixer`)
 
 **Route vers v1.0-stable, non prioritaire pour la release `-alpha` (extrait de v0.16 le
 2026-09-27).** Proposition intacte, rien n'est tranché ni codé.
@@ -3797,7 +3797,7 @@ local victoire = mixer:play_jingle("Victoire")
 | `mixer:play_sfx(name)` | action, rend une référence `sfx` | `sfx.play` |
 | `mixer:play_music(name)` | action, rend la référence `music` de l'unique lecture musicale | `music.play` |
 | `mixer:play_jingle(name)` | action, rend la référence `jingle` de l'unique jingle superposé | `music.jingle` |
-| `mixer.music` / `mixer.jingle` | propriétés lecture seule : lecture active, ou `nil` | — |
+| `mixer.music` / `mixer.jingle` | propriétés lecture seule : lecture active, ou `nil` | s.o. |
 
 **Les trois sorties passent directement par leur référence.** `mixer` acquiert ou remplace une
 lecture ; ensuite, le type opère. Il n'existe donc pas de raccourci parallèle
@@ -3827,7 +3827,7 @@ unifie ainsi les trois types sans mentir sur leur cardinalité (`sfx` 0..N ; `mu
 Le module `sfx` cesse ainsi d'être à la fois fabrique et type : `sfx`, `music` et `jingle` sont
 les types de lecture ; `mixer` est le système qui les lance.
 
-**Avancé — les boîtes ne disparaissent pas, elles changent de niveau.** Elles restent des
+**Avancé, les boîtes ne disparaissent pas, elles changent de niveau.** Elles restent des
 singletons spécialisés, repliés sous « Aller plus loin », et n'exposent plus les volumes :
 
 ```lua
@@ -3854,30 +3854,30 @@ facile à comprendre, facile à employer et extensible sans dette de grammaire.
 
 ---
 
-### Chantier transverse — nommer l'accès à un sous-objet de l'instance
+### Chantier transverse (nommer l'accès à un sous-objet de l'instance)
 
 **Route vers v1.0-stable, non prioritaire pour la release `-alpha` (décidé le 2026-09-27).** Né du
-chantier v0.16 : `self:collision_box("hitbox")` est un constructeur déguisé en méthode — la règle de
+chantier v0.16 : `self:collision_box("hitbox")` est un constructeur déguisé en méthode. La règle de
 provenance ne le range nulle part (le garder tel quel comme exception nommée, ou le ranger sous un
 module `self.boxes.get` ?). Élargi en discutant ce point : le sprite est exactement le même genre de
-composant (il n'appartient qu'à l'acteur), mais suit une forme complètement différente — ses
+composant (il n'appartient qu'à l'acteur), mais suit une forme complètement différente, ses
 propriétés sont APLATIES sur `self` (`self.frame`, `self.visible`...), sans constructeur du tout,
 parce qu'un acteur n'affiche jamais qu'UN SEUL sprite à la fois (aucune ambiguïté sur « lequel »).
 Conséquence : on ne peut aujourd'hui interroger que l'apparence ACTIVE (`self.active_sprite`,
-`self:activate_sprite(id)`) — impossible de lire les propriétés d'une apparence sprite inactive sans
+`self:activate_sprite(id)`), impossible de lire les propriétés d'une apparence sprite inactive sans
 l'activer d'abord.
 
 **Si ce point se rouvre**, il doit couvrir les DEUX cas ensemble (boîtes de collision multiples,
-apparences sprite inactives), pour ne pas trancher deux fois la même question — « comment
-nomme-t-on l'accès à un sous-objet précis d'une instance ? » — avec deux réponses différentes.
+apparences sprite inactives), pour ne pas trancher deux fois la même question (« comment
+nomme-t-on l'accès à un sous-objet précis d'une instance ? ») avec deux réponses différentes.
 
-### Chantier transverse — la chaîne `if/elseif` sur une constante devient un `switch` C
+### Chantier transverse (la chaîne `if/elseif` sur une constante devient un `switch` C)
 
 **Route vers v1.0-stable, non prioritaire pour la release `-alpha` (piste notée le 2026-10-06).**
 Piste de réflexion, **rien de verrouillé, code non commencé.** Le parseur Lua reste la porte
 d'entrée de tous les scripts ; une syntaxe `switch` maison obligerait à préparser le texte avant
 l'AST (numéros de ligne décalés, `case A : …` ambigu avec un appel de méthode Lua, `switch`
-disparu avant que le codegen puisse l'émettre) — **écartée**. Le C brut l'est aussi : le script
+disparu avant que le codegen puisse l'émettre), **écartée**. Le C brut l'est aussi : le script
 sortirait de l'AST sans analyse (identité des variables, types, graphe de dépendances, garde-fous du
 sous-ensemble Lua).
 
@@ -3886,7 +3886,7 @@ sous-ensemble Lua).
 les valeurs sont des constantes ou des membres d'énumération, et émet un `switch` C. Le Lua reste du
 Lua pur ; l'optimisation est invisible pour qui écrit le script.
 
-**Ce que ça apporte — et ce que ça n'apporte pas.** Ce n'est **pas** présenté comme une optimisation :
+**Ce que ça apporte, et ce que ça n'apporte pas.** Ce n'est **pas** présenté comme une optimisation :
 sur l'ARM7TDMI, la table de sauts coûte un saut indirect (pipeline vidé, ~3 cycles) et une lecture en
 ROM avec wait states ; pour 3-4 cas une chaîne de comparaisons peut être plus rapide, et GCC choisit
 lui-même selon la densité des valeurs. Les raisons de le faire : la lisibilité du C généré, et
@@ -3898,11 +3898,11 @@ cas sans `else` ?) ; ce qui se passe quand deux branches testent la même valeur
 première gagnante, comme en Lua) ; si le warning d'énumération non couverte est émis côté éditeur
 ou laissé à GCC.
 
-### Chantier transverse — l'atelier Texte réuni, écrire et voir dans un même écran — **ABANDONNÉ**
+### Chantier transverse (l'atelier Texte réuni, écrire et voir dans un même écran, **ABANDONNÉ**)
 
 **Remplacé le 2026-10-10** par [L'écran Texte n'édite et ne range que du contenu](#lécran-texte-nédite-et-ne-range-que-du-contenu). Ce chantier voulait faire du rendu GBA la surface d'édition (projection source ↔ affichage, vue balisage en police moteur) ; on retire au contraire l'aperçu de l'écran et le contenu s'édite dans la table. Sa décision verrouillée du 2026-09-19 est caduque.
 
-### Chantier transverse — préparer une image riche à l'import, recadrer et redimensionner sans toucher au PNG
+### Chantier transverse (préparer une image riche à l'import, recadrer et redimensionner sans toucher au PNG)
 
 **Route vers v1.0-stable, non prioritaire pour la release `-alpha` (décidé le 2026-09-29).** Les tranches
 4bpp et 8bpp sont livrées ; reste la tranche bitmap (son propre panneau, pas commencée) et la validation à la
@@ -3911,7 +3911,7 @@ souris dans l'éditeur.
 #### D'où vient la question (2026-09-26)
 
 Une photo de 474×314 importée en tuilé 8bpp donne 2194 tuiles uniques pour un budget de 256 : le
-Background Editor le **dit** (avertissement rouge « Exceeds VRAM ») mais ne laisse rien faire —
+Background Editor le **dit** (avertissement rouge « Exceeds VRAM ») mais ne laisse rien faire,
 l'auteur n'a que le mode (tuilé/bitmap, profondeur) et un logiciel externe. Et le tuilé tronque
 l'index de tuile à 10 bits (`pack_se`), donc au-delà de 1024 la carte se brouille en silence.
 
@@ -3925,7 +3925,7 @@ Deux gestes sur la **préparation de la source**, avant l'encodage, portés par 
   par un bouton de l'en-tête du canvas ; le côté gauche (haut) se reflète de l'autre côté. Appliqué
   après le redimensionnement et **avant** la compression (il peut changer le nombre de tuiles) ;
 - le PNG n'est **jamais** modifié : `prepare_source` produit une image PIL en mémoire, que
-  reçoit `encode_by_mode` — l'unique endroit qui choisit l'encodeur. Tous les chemins qui
+  reçoit `encode_by_mode`, l'unique endroit qui choisit l'encodeur. Tous les chemins qui
   encodent (recompression de l'inspecteur, import, resynchronisation d'un PNG retouché,
   réconciliation au chargement) lisent la MÊME préparation, sinon la ROM et l'éditeur
   divergeraient ;
@@ -3939,7 +3939,7 @@ Deux gestes sur la **préparation de la source**, avant l'encodage, portés par 
 - **Recadrer** : libre au pixel ; **Maj** = garde les proportions de l'image d'origine ; **Ctrl**
   = accroche 8×8.
 - **Rééchantillonnage automatique** : plus proche voisin si le PNG source est indexé (palette
-  préservée), Lanczos sinon — aucun réglage exposé.
+  préservée), Lanczos sinon, aucun réglage exposé.
 - **Fonds de scène seulement** : un cadre d'UI ou une planche d'animation ont une géométrie qui
   dépend des pixels d'origine (marges, grille de frames).
 - La taille affichée par le Scene Manager suit la taille **préparée** (`pixel_size()`), plus celle
@@ -3952,37 +3952,37 @@ couleurs par tuile (min / moyenne / max et répartition), tuiles qui tiennent en
 jeux de couleurs distincts et tuiles qui en partagent un, palettes nécessaires, verdict « sans
 perte » ou non. `bg_import.analyze_tile_colors` réutilise l'extraction et le packing de la
 compression : le chiffre annoncé est celui que la compression trouvera. Les palettes comptées
-sont celles des tuiles qui tiennent, sans la réduction — un minimum, pas une promesse.
+sont celles des tuiles qui tiennent, sans la réduction, un minimum, pas une promesse.
 
-#### Jouer avec la compression — l'inspecteur contextuel (2026-09-26)
+#### Jouer avec la compression (l'inspecteur contextuel (2026-09-26))
 
 L'auteur règle la compression avec des curseurs et voit le rendu au canvas ; un réglage relance
 l'encodage hors-thread après 250 ms. **L'inspecteur est contextuel** : chaque mode (tuilé
 4bpp / 8bpp, bitmap 8 / 16bpp) a sa boîte de réglages, absente des autres. Aucun refus d'office :
 une image hors budget s'encode quand même, et les mesures disent ce que ça coûte.
 
-**Tranche 1 — tuilé 4bpp (livrée).** Réglages portés par le sidecar (`BackgroundAsset.compression`,
+**Tranche 1, tuilé 4bpp (livrée).** Réglages portés par le sidecar (`BackgroundAsset.compression`,
 seuls les écarts au défaut sont écrits) :
 
 - **Palettes** (1–16) et **couleurs par palette** (2–15). Sans perte quand l'image le permet (pixel art :
   packing exact) ; sinon `core/bg_palette_cluster.py` regroupe les tuiles qui se ressemblent, taille une
-  palette par groupe depuis ses pixels réels et affine — l'ancienne méthode (garder les 16 palettes les
+  palette par groupe depuis ses pixels réels et affine, l'ancienne méthode (garder les 16 palettes les
   plus employées, renvoyer le reste au plus proche) laissait l'océan d'une photo sans ses bleus, même
   au réglage par défaut ;
-- **Couleurs globales** : réduire toute l'image avant le découpage en tuiles — c'est ce qui rend
+- **Couleurs globales** : réduire toute l'image avant le découpage en tuiles. C'est ce qui rend
   les tuiles voisines compatibles, donc ce qui fait rentrer une photo (le 4bpp par défaut y perd
   la moitié de l'image) ;
 - **Tuiles** : cible de tuiles uniques ; `core/bg_tile_merge.py` regroupe par **plus faible perte**
   (agglomération de Ward, coût pondéré par les cases couvertes, distance qui pèse la luminance),
   garde la tuile la plus centrale de chaque groupe et renvoie les autres cases vers la variante
-  gardée la plus proche. Le premier essai — garder « les plus employées » — écrasait le bas de
+  gardée la plus proche. Le premier essai (garder « les plus employées ») écrasait le bas de
   l'image : sur une photo toutes les tuiles sont employées une fois, et l'égalité tombait sur
   l'ordre de balayage. Reste à explorer : réutiliser une tuile sous une autre banque de palette ;
 - **Méthode** de réduction dans une tuile, et le **dithering** (agit sur la réduction globale).
 
-**Tranche 2 — tuilé 8bpp (livrée).** Même boîte, contextuelle : **Couleurs** de l'unique palette
+**Tranche 2, tuilé 8bpp (livrée).** Même boîte, contextuelle : **Couleurs** de l'unique palette
 (2–255, `palette_colors`), **Tuiles** (la même fusion par plus faible perte, budget 256 par charblock),
-**méthode** de quantification (median-cut, octree, couverture max — quantifieurs de PIL) et
+**méthode** de quantification (median-cut, octree, couverture max, quantifieurs de PIL) et
 **dithering**. Le dithering des modes 8bpp et bitmap était sans effet : `Image.quantize(dither=…)`
 ignore l'option tant qu'on ne lui donne pas de palette. Corrigé pour les deux (`_quantize_rgb`),
 test à l'appui. Reste la tranche bitmap : son propre panneau.
@@ -3992,9 +3992,9 @@ test à l'appui. Reste la tranche bitmap : son propre panneau.
 Pas d'annulation pas-à-pas (Ctrl+Z) : la recompression est asynchrone et « Original » suffit à
 revenir. Pas de réglage de couleurs (le mode et la profondeur existent déjà dans l'inspecteur).
 
-### Chantier produit à planifier — Color Tile Painter : commencer un niveau sans assets
+### Chantier produit à planifier (Color Tile Painter : commencer un niveau sans assets)
 
-**Noté le 2026-10-12. Livré pour l'essentiel le 2026-10-14 — voir la section « L'écran Fond », ci-dessous ; le texte qui suit est l'état de départ, gardé pour mémoire.** Un auteur qui arrive sans
+**Noté le 2026-10-12. Livré pour l'essentiel le 2026-10-14. Voir la section « L'écran Fond », ci-dessous ; le texte qui suit est l'état de départ, gardé pour mémoire.** Un auteur qui arrive sans
 assets ne doit pas être bloqué avant même de pouvoir tester son level design. Ce petit outil lui
 permet de composer vite un fond de prototype, jouable immédiatement, puis de le remplacer ou de
 le retravailler plus tard avec ses vrais visuels.
@@ -4031,7 +4031,7 @@ le retravailler plus tard avec ses vrais visuels.
 - L'annulation/historique de peinture, et les raccourcis pour le sélecteur, la gomme et les trois
   tailles de pinceau.
 
-### L'écran Fond — ce qui est livré le 2026-10-14, et les pistes notées pour plus tard
+### L'écran Fond (ce qui est livré le 2026-10-14, et les pistes notées pour plus tard)
 
 **Livré (2026-10-14), à la demande de l'auteur.** Le Color Tile Painter ci-dessus est devenu un pinceau à deux modes
 (*Inpaint* : surcharge de palette ; *Paint* : couleur posée en CALQUE par-dessus l'image, `BackgroundAsset.tile_paint`, que
@@ -4039,7 +4039,7 @@ la gomme et le clic droit retirent) ; « Create empty » écrit un vrai PNG inde
 l'onglet Disk ; « Save as PNG » cuit tout dans un PNG **indexé par banques** (`core/bg_bake.py` : index = banque × 16 +
 couleur, tRNS) que l'importateur relit à l'identique, banques comprises ; « Export to PNG… » ; « Relink source… » (annulable,
 ré-import natif d'une image) ; deux cartes dans l'inspecteur, *Image adjustments* (teinte, saturation, luminosité,
-contraste : `core/bg_adjust.py`, aperçu en direct) et *Compression* (méthode, curseurs, type de dithering — diffusion ou
+contraste : `core/bg_adjust.py`, aperçu en direct) et *Compression* (méthode, curseurs, type de dithering, diffusion ou
 trames ordonnées de Bayer 4×4 / 8×8) ; plus aucun curseur ne compresse : « Compress » est le seul geste, un aperçu de la
 compression se calcule en arrière-plan avec un cache de 8 résultats. Tests : `tests/ui/test_tile_painter.py`,
 `tests/graphics/test_bg_bake.py`, `tests/graphics/test_bg_adjust.py`.
@@ -4073,55 +4073,55 @@ compression se calcule en arrière-plan avec un cache de 8 résultats. Tests : `
   les curseurs de compression (le nombre de palettes ne bougeait pas). Désormais, dès qu'un curseur de réduction s'écarte du
   défaut, le packing déduit prend le relais ; le type de dithering seul n'y change rien.
 
-### Chantier transverse — la caméra change de cible en jeu, avec une transition
+### Chantier transverse (la caméra change de cible en jeu, avec une transition)
 
 **Route vers v1.0-stable, non prioritaire pour la release `-alpha` (décidé le 2026-09-29).** Né de la tranche 2 de
 « L'API dit tout ce que l'inspecteur règle » : `Camera.mode` et `Camera.follow_target` n'ont pas de porte Lua, et une
-lecture seule ne suffirait pas — l'auteur doit pouvoir CHANGER de cible en jeu. Aujourd'hui le suivi est un
+lecture seule ne suffirait pas, l'auteur doit pouvoir CHANGER de cible en jeu. Aujourd'hui le suivi est un
 `switch(g_cam_active)` dont la cible est une constante par caméra ; changer de cible en cours de scène, c'est de la
 RAM (mode, index de cible) lue par le suivi, et surtout un **système de transition** : passer de l'acteur A à l'acteur B
 d'un coup est une téléportation de cadre. Le chantier pose les deux ensemble (état modifiable + interpolation de la
 caméra vers la nouvelle cible), pour ne pas ouvrir une porte dont la première utilisation est un saut. Rien n'est
 tranché ni codé.
 
-### Chantier transverse — l'API de blending des calques, au petit oignon
+### Chantier transverse (l'API de blending des calques, au petit oignon)
 
 **Route vers v1.0-stable, non prioritaire pour la release `-alpha` (décidé le 2026-09-29).** Né de la tranche 2 de
 « L'API dit tout ce que l'inspecteur règle » : quatre champs d'inspecteur touchent au blending, et chacun mérite d'être pensé avec les autres plutôt que réglé à la volée. Rien n'est tranché ni codé. À rassembler :
 
 - les poids `blend_eva/evb/evy` : aujourd'hui `blend.set_alpha` / `blend.set_fade` s'écrivent, aucune lecture ; elles deviennent des propriétés (état → propriété), **décidé avec le `mixer`** qui pose la même question pour le son ;
 - les rôles (dessus / dessous) des calques, de l'OBJ et du fond de teinte : écriture indexée existante (`set_layer/obj/backdrop`), lecture absente ;
-- `backdrop_color` : une porte en lecture ET écriture, sans nouveau type — un `vec3` (r, g, b) ou un entier RGB555 ; c'est ici qu'on choisit ;
+- `backdrop_color` : une porte en lecture ET écriture, sans nouveau type, un `vec3` (r, g, b) ou un entier RGB555 ; c'est ici qu'on choisit ;
 - la transition de scène (`transition_kind`, `transition_frames`) : elle possède les registres de blending pendant sa durée (`transition_begin/fade/end`), donc elle ne se règle pas sans que l'API de blending soit posée.
 
-### Chantier transverse — l'allocateur de ressources matérielles
+### Chantier transverse (l'allocateur de ressources matérielles)
 
-Ne porte pas de numéro de version : il **se déclenche par un événement**, pas par une date —
+Ne porte pas de numéro de version : il **se déclenche par un événement**, pas par une date,
 le jour où une ressource matérielle a son deuxième consommateur. Le viewport de caméra
-(`Camera.frame_w/h`, réglé le 2026-08-24) a d'abord semblé ne PAS en être un — une seule
+(`Camera.frame_w/h`, réglé le 2026-08-24) a d'abord semblé ne PAS en être un, une seule
 caméra active à la fois, allocation fixe WIN0=caméra/WIN1=scène. **Corrigé le 2026-08-25** :
 c'en était bien un. Le second consommateur n'a pas besoin d'être simultané À L'EXÉCUTION pour
-poser le problème — il suffit que deux INTENTIONS différentes (le cadre d'une caméra, un
+poser le problème. Il suffit que deux INTENTIONS différentes (le cadre d'une caméra, un
 panneau UI) veuillent la même ressource dans la MÊME scène, même si une seule caméra tourne à
 la fois. `codegen/window_alloc.py` est livré : c'est la première instance réelle de ce
-chantier, cf. ARCHITECTURE.md, « Windows — le pochoir ». Le candidat qui reste vraiment ouvert
-est l'**écran partagé** de la v2.0 (plusieurs caméras actives SIMULTANÉMENT — un arbitrage
+chantier, cf. ARCHITECTURE.md, « Windows, le pochoir ». Le candidat qui reste vraiment ouvert
+est l'**écran partagé** de la v2.0 (plusieurs caméras actives SIMULTANÉMENT, un arbitrage
 différent, à l'exécution).
 
 #### Le problème
 
 Les ressources du matériel ne correspondent pas aux concepts du game design. Une window GBA
 n'est pas une fonctionnalité : c'est une ressource. Or une caméra veut une région de rendu,
-l'UI un rectangle de découpe, un acteur un masque de visibilité, un effet un pochoir — quatre
+l'UI un rectangle de découpe, un acteur un masque de visibilité, un effet un pochoir, quatre
 intentions distinctes qui réclament le même stock de trois slots.
 
 Écrire `camera.window = WIN0`, `ui.window = WIN1` fabrique le bug le plus classique de
 l'ingénierie logicielle : chaque fonctionnalité marche parfaitement, jusqu'au jour où deux
-d'entre elles servent en même temps. Et les windows ne sont que le premier exemple — sprites,
+d'entre elles servent en même temps. Et les windows ne sont que le premier exemple, sprites,
 palettes, VRAM, OAM, DMA, canaux sonores, matrices affines posent le même problème.
 
 Le principe et ses trois niveaux (intention / ressource logique / ressource matérielle) sont
-décrits dans [ARCHITECTURE](ARCHITECTURE.md), « Ressources matérielles — l'auteur ne les nomme
+décrits dans [ARCHITECTURE](ARCHITECTURE.md), « Ressources matérielles, l'auteur ne les nomme
 jamais ». Ce jalon est son implémentation.
 
 #### Décisions verrouillées
@@ -4130,7 +4130,7 @@ jamais ». Ce jalon est son implémentation.
   se résout à la FRAME (OAM, DMA, windows disputées) ne partagent qu'un vocabulaire. Le
   premier peut être coûteux et **doit** parler à l'auteur ; le second tourne 60 fois par
   seconde et n'a personne à qui parler. `palette_alloc.py` et `vram_alloc.py` sont déjà des
-  instances correctes du premier — ce chantier ne les refait pas, il leur donne une famille.
+  instances correctes du premier. Ce chantier ne les refait pas, il leur donne une famille.
 - **Le rang fait partie de la ressource.** `WINR_0` > `WINR_1` > `WINR_OBJ` > `WINR_OUT` est
   une priorité câblée : traiter deux slots comme équivalents produit une allocation valide et
   une image fausse. C'est le mode de panne à empêcher par construction, parce que rien ne le
@@ -4138,7 +4138,7 @@ jamais ». Ce jalon est son implémentation.
 - **Déterminisme avant optimalité.** Pas d'ordonnancement par priorités déclarées
   (`critical`/`high`/`medium`) : une allocation qui change parce que l'auteur a posé un sprite
   sans rapport casse son UI sans qu'il puisse faire le lien. Un ordre de résolution stable,
-  documenté et ennuyeux vaut mieux qu'un ordre optimal — il est prévisible, et il est
+  documenté et ennuyeux vaut mieux qu'un ordre optimal. Il est prévisible, et il est
   testable.
 - **Les solutions de repli proposées doivent exister matériellement.** Fusionner deux masques
   identiques, reprogrammer par scanline en HBlank (donne réellement plus de régions, au prix
@@ -4146,52 +4146,52 @@ jamais ». Ce jalon est son implémentation.
   calque tuilé en mode 0 : il faudrait réécrire la tilemap. Une liste courte et vraie, sinon
   l'éditeur promet ce que la machine ne fait pas.
   - **Précisé le 2026-08-25, pour les windows** : « renoncer au masquage » silencieusement est
-    justement le pire cas ici — une région qui ne cache rien à la place d'une région découpée
+    justement le pire cas ici, une région qui ne cache rien à la place d'une région découpée
     est un bug visuel sans signal. `window_alloc.py` choisit donc l'échec de build NOMMÉ
     plutôt que ce repli-là : pas de fusion possible (rangs différents, `WINR_0`/`WINR_1` ne
     sont pas interchangeables), pas de HBlank par scanline (hors périmètre v1), pas
     d'assignation à la main proposée (ce serait renommer la ressource matérielle). Un futur
     consommateur d'un AUTRE type de ressource peut légitimement choisir un vrai repli parmi la
-    liste — ce n'est pas une règle générale, c'est ce que « exister matériellement » a donné
+    liste. Ce n'est pas une règle générale, c'est ce que « exister matériellement » a donné
     pour CE cas.
 - **L'assignation matérielle reste visible, dans un panneau avancé.** Le principe « l'auteur
   peut descendre jusqu'au matériel » n'est pas suspendu : il ne nomme plus la ressource pour
   obtenir un masque, mais il peut voir laquelle lui a été donnée, et la forcer.
 
-#### Ce qui est fait (2026-08-25) — les windows
+#### Ce qui est fait (2026-08-25) (les windows)
 
 1. **Le principe est écrit** (cf. ARCHITECTURE), pour que rien de neuf ne lie un concept de
    haut niveau à un slot matériel.
-2. **`WindowSlot.region` n'est plus un index matériel côté auteur** — renommé `.name`, résolu
+2. **`WindowSlot.region` n'est plus un index matériel côté auteur**, renommé `.name`, résolu
    par `codegen/window_alloc.py`.
 3. **La rupture assumée sur l'API Lua est faite pour les windows** :
    `window.set`/`window.show`/`window.is_visible` adressent maintenant par nom
-   (`DOMAIN_WIN_REGION`), comme `window.set_layer` le faisait déjà — un seul schéma, plus de
+   (`DOMAIN_WIN_REGION`), comme `window.set_layer` le faisait déjà, un seul schéma, plus de
    numéro matériel brut atteignable depuis un script.
 
 #### Ouvert
 
 - Jusqu'où va l'allocateur de frame (OAM, DMA, matrices affines). Un arbitrage par frame est
-  un vrai coût CPU ; il se décide sur un cas mesuré, pas à l'avance — les windows n'en avaient
+  un vrai coût CPU ; il se décide sur un cas mesuré, pas à l'avance, les windows n'en avaient
   pas besoin (résolubles au build, cf. ARCHITECTURE.md « Deux allocateurs, pas un »).
 - L'assignation matérielle « visible dans un panneau avancé, et forçable » (décision
-  verrouillée ci-dessus) n'est pas construite pour les windows — l'auteur voit le budget
+  verrouillée ci-dessus) n'est pas construite pour les windows, l'auteur voit le budget
   (N/2) mais pas quelle intention a reçu quel rang. À rouvrir si un projet réel en a besoin
   pour déboguer un recouvrement.
 
-#### Le cas mesuré de l'allocateur de frame — l'OAM dynamique (2026-09-10)
+#### Le cas mesuré de l'allocateur de frame (l'OAM dynamique (2026-09-10))
 
 La décision « l'allocateur de frame se décide sur un cas mesuré » (« Ouvert » ci-dessus) a son cas.
 Trois familles de consommateurs OAM apparaissent ou disparaissent **en cours de partie**, et aucune
 n'a de place dans le partitionnement build de la scène :
 
-- **Les projectiles** — un acteur poolé les sert déjà (v0.17) : ils ont position, vélocité,
+- **Les projectiles**, un acteur poolé les sert déjà (v0.17) : ils ont position, vélocité,
   collision, un brin de logique. Ce ne sont PAS un cas pour une primitive à part, seulement pour une
   bonne API de spawn/despawn. Ils prennent leurs slots dans le pool de leur scène.
-- **Les particules** — le vrai cas hors-budget : des centaines, éphémères, sans collision ni script.
+- **Les particules**, le vrai cas hors-budget : des centaines, éphémères, sans collision ni script.
   Un `Actor` plein par particule est absurde, et 128 OAM sature instantanément. Elles veulent
-  probablement un modèle À PART (cap fixe, ou effet BG) — peut-être pas de l'OAM du tout.
-- **L'UI en sprites** — déjà des consommateurs OAM légers (texte, images), placés au build et
+  probablement un modèle À PART (cap fixe, ou effet BG), peut-être pas de l'OAM du tout.
+- **L'UI en sprites**, déjà des consommateurs OAM légers (texte, images), placés au build et
   repositionnés par frame. À laisser tels quels côté runtime ; ce qui change pour eux est la
   **source visuelle** (chantier séparé ci-dessous).
 
@@ -4209,32 +4209,32 @@ légère (particule, UI), soit par un Actor si elle a besoin de logique, collisi
 
 **Ce qui reste ouvert** : la forme exacte de l'allocateur OAM de frame (une free-list de slots pour
 ce qui apparaît en jeu), et si les particules relèvent de l'OAM ou d'un effet BG. À trancher sur un
-projet réel qui en a besoin, pas avant — fidèle à la règle du chantier.
+projet réel qui en a besoin, pas avant, fidèle à la règle du chantier.
 
-### Chantier transverse — le Sprite, source visuelle unique
+### Chantier transverse (le Sprite, source visuelle unique)
 
 Ne porte pas de numéro : c'est un remaniement de **données**, déclenché par le constat qu'un même
 dessin animé a aujourd'hui **plusieurs pipelines de définition** selon qui l'affiche. Un acteur
 pointe un `SpriteAsset` (ses tables d'anim émises en ROM) ; une image d'UI pointe une autre voie ;
 un futur projectile ou une particule ne pointent rien. Le dessin, ses frames, ses états et ses
-directions sont pourtant la même chose — celle qu'on édite dans **l'écran d'animation**.
+directions sont pourtant la même chose, celle qu'on édite dans **l'écran d'animation**.
 
-**La direction (2026-09-10)** : tout ce qui s'affiche — acteur, image d'UI, projectile, particule —
+**La direction (2026-09-10)** : tout ce qui s'affiche (acteur, image d'UI, projectile, particule)
 **référence un seul `Sprite`**, l'asset de l'écran d'animation. C'est « source de vérité unique »
 appliquée au visuel. Distinct des deux questions OAM ci-dessus : celles-ci partagent le STOCK
 matériel (les 128 slots) ; celle-ci partage la DÉFINITION (l'asset). Un consommateur peut être léger
 côté runtime (une particule ne porte pas de logique) tout en pointant le même Sprite qu'un acteur
 lourd.
 
-**Ce que ça ne décide pas** : cela ne choisit pas la représentation mémoire de l'Actor — la
-découpe Sprite optionnel relève du chantier « Actor allégé » ci-dessus — et ne crée pas de runtime
+**Ce que ça ne décide pas** : cela ne choisit pas la représentation mémoire de l'Actor (la
+découpe Sprite optionnel relève du chantier « Actor allégé » ci-dessus) et ne crée pas de runtime
 commun. C'est la couche asset qui s'unifie, pas la couche entité.
 
 **Ouvert** : l'inventaire des pipelines actuels (SpriteAsset côté acteur, la voie image de l'UI) et
 lequel absorbe l'autre ; et si le décor animé (v0.4) relève de ce même `Sprite` ou reste une voie BG
 à part.
 
-### Chantier transverse — la Liste d'interface est un contrôleur, pas une collection
+### Chantier transverse (la Liste d'interface est un contrôleur, pas une collection)
 
 La liste actuelle (v0.22) a résolu le morceau qui devait l'être dans le moteur : navigation à la
 croix, sélection, bornes, répétition, défilement et curseur. Elle expose encore une partie de la
@@ -4259,8 +4259,8 @@ seconde ne doit pas être réduite à un « global 2D » : elle est en lecture s
 colonnes portent des références validées au build.
 
 Le but est de conserver le helper là où il évite du code répétitif, tout en rétablissant une seule
-source de vérité. Dans l'inspecteur, une Liste choisira une source déclarée — un vecteur d'état ou
-un catalogue Data — ; le script lira et modifiera l'état directement avec `global.*`, et lira les
+source de vérité. Dans l'inspecteur, une Liste choisira une source déclarée (un vecteur d'état ou
+un catalogue Data) ; le script lira et modifiera l'état directement avec `global.*`, et lira les
 fiches avec `data.*`. La Liste ne sera qu'une vue navigable sur cette source. Un auteur qui veut un
 comportement hors modèle pourra laisser la Liste de côté et écrire son propre contrôleur sans migrer
 ni recopier sa donnée.
@@ -4326,10 +4326,10 @@ cette donnée ; elle ne l'implémentera pas.
   item valide, ou peut-il suivre un identifiant stable ? Le bon choix dépend du modèle de données
   finalement retenu.
 
-### Chantier transverse — la destruction des éléments d'interface
+### Chantier transverse (la destruction des éléments d'interface)
 
 **D'où ça vient (2026-09-27).** En discutant du critère 4 de v0.16 (« unifier absent par type »),
-constat : un élément d'interface, un calque ou une fenêtre sont **statiques par construction** —
+constat : un élément d'interface, un calque ou une fenêtre sont **statiques par construction**,
 `destroy()` n'existe QUE pour `actor`/`sfx` dans le catalogue ([api.py](editor/scripting/api.py)),
 posé une fois pour toutes à l'authoring, sans commande de script pour le faire disparaître. C'est
 ce qui rend `interface:get("Menu") ~= nil` toujours vrai, et c'est ce qui permettait de classer ces
@@ -4339,32 +4339,32 @@ types comme « jamais absents » sans exception à traiter.
 élément d'interface (un menu généré au runtime, une fenêtre jetable) plutôt que de se contenter de
 `hide()`, ça romprait l'hypothèse « statique = jamais nil » du critère 4 : ces types rejoindraient
 la catégorie des références de pool, avec tout ce que ça implique (`nil` testable, retrait du
-`REF_TYPE_TABLE.nullable=False`, etc.). **Aucune décision prise, aucun besoin démontré** — à
+`REF_TYPE_TABLE.nullable=False`, etc.). **Aucune décision prise, aucun besoin démontré**, à
 rouvrir si un projet en butte contre la limite actuelle (`hide()` seul, l'élément reste en mémoire).
 
-### Chantier transverse — les calques par nom
+### Chantier transverse (les calques par nom)
 
 **D'où ça vient (v0.16).** `layer:get(n)` adresse un fond par son NUMÉRO (0 à 3, borné par le mode
-vidéo de la scène) — cohérent avec la provenance « le matériel, numéroté par le matériel » de la
+vidéo de la scène), cohérent avec la provenance « le matériel, numéroté par le matériel » de la
 règle de construction. Question restée ouverte pendant le chantier : offrir aussi `layer:get("Fond")`
 par un nom authoré, comme pour un élément d'interface.
 
 **Pourquoi ce n'est pas fait maintenant.** Recommandation retenue à l'époque : attendre un besoin
-réel avant d'ajouter une seconde façon d'adresser la même chose — deux provenances pour un fond
+réel avant d'ajouter une seconde façon d'adresser la même chose, deux provenances pour un fond
 recréerait exactement le doublon que la grammaire de l'API refuse ailleurs. **Aucune décision
 prise, aucun besoin démontré.**
 
-### v2.0 — Cible cartouche : le matériel embarqué façonne le langage — **JALON OUVERT**
+### v2.0 (Cible cartouche : le matériel embarqué façonne le langage, **JALON OUVERT**)
 
 > La famille v2.0 n'est pas rangée. Ce jalon est **posé, pas ordonnancé** : quand on y sera,
 > on fera le point de tout ce qui s'y accumule et on décidera de la découpe. Ce qui suit fixe
 > l'**intention** et les décisions déjà prises (2026-09-10), pas un périmètre daté.
 
-Un **profil de cartouche** décrit ce que la cartouche embarque **physiquement** — capteurs,
+Un **profil de cartouche** décrit ce que la cartouche embarque **physiquement**, capteurs,
 rumble, RTC, type et taille de sauvegarde. Il reste **100% GBA** : les limites mémoire (IWRAM,
 EWRAM, VRAM, OAM, palettes) sont fixes pour toute la gamme et **ne bougent pas**. Cibler un
 matériel aux limites différentes (NDS…) serait un second backend d'émission, un autre modèle
-mémoire — **hors de ce jalon**, écarté explicitement le 2026-09-10.
+mémoire, **hors de ce jalon**, écarté explicitement le 2026-09-10.
 
 Le profil n'énumère que des **faits matériels** ; il ne porte aucune logique. Il est la **source
 de vérité unique** de « ce que porte la cartouche », d'où tout dérive :
@@ -4380,22 +4380,22 @@ de vérité unique** de « ce que porte la cartouche », d'où tout dérive :
 **Trois conséquences en cascade** (une source, tout en dérive) :
 
 1. **API script.** Chaque capacité présente ajoute son module au langage ; absente, le module
-   **n'existe pas** — pas grisé. Ce sont des modules **moteur spécialisés et nommés**, jamais de
+   **n'existe pas**, pas grisé. Ce sont des modules **moteur spécialisés et nommés**, jamais de
    l'itération par défaut (cf. la règle des deux couches).
 2. **Éditeur.** Les nœuds et champs qui dépendent d'une capacité absente ne s'affichent pas. Le
-   *pourquoi* d'une absence ne sort qu'en notice niveau 3, désactivable — l'éditeur ne commente
+   *pourquoi* d'une absence ne sort qu'en notice niveau 3, désactivable, l'éditeur ne commente
    pas le matériel.
 3. **Émission ROM.** Le codegen n'inclut le driver (lecture capteur, IRQ RTC, registre rumble)
    que si la capacité est déclarée. Pas de code mort dans une ROM qui n'a pas le hardware.
 
-#### Décision verrouillée (2026-09-10) — le profil ABSORBE la sauvegarde
+#### Décision verrouillée (2026-09-10) (le profil ABSORBE la sauvegarde)
 
 La config SRAM de la v0.5 est déjà un morceau de « ce que porte la cartouche » qui vit à côté.
 Le profil **l'absorbe** : une seule source de vérité, pas deux partielles. C'est un **vrai
-chantier de migration** — migration du modèle de save existant et relecture du codegen de
-sauvegarde, l'ancien supprimé avant de dire terminé — pas un bonus glissé dans autre chose.
+chantier de migration**, migration du modèle de save existant et relecture du codegen de
+sauvegarde, l'ancien supprimé avant de dire terminé, pas un bonus glissé dans autre chose.
 
-#### État au 2026-10-17 — aperçu des circuits dans le panneau Build
+#### État au 2026-10-17 (aperçu des circuits dans le panneau Build)
 
 **Première tranche intégrée, chantier ouvert.** Le panneau Build des réglages du projet
 affiche une photo de circuit avec des repères **ROM / SRAM / pile**, la capacité ROM visée,
@@ -4476,13 +4476,13 @@ Validation : 56 tests ciblés réussis et vérification visuelle FR/EN du pannea
 #### Deux pièges matériels à encoder
 
 - **Capteurs analogiques mutuellement exclusifs.** Une cartouche GBA porte *un* capteur
-  analogique (tilt **ou** solaire), pas les deux — même ligne d'acquisition. Le profil doit
+  analogique (tilt **ou** solaire), pas les deux, même ligne d'acquisition. Le profil doit
   interdire la combinaison, sinon on laisse décrire une cartouche qui n'existe pas.
 - **Le tilt n'est pas un axe de pad.** Il rend un angle bruité à calibrer/filtrer. L'exposer
   comme un axe propre mentirait sur le matériel : valeur brute, et au plus un helper de
   calibration nommé.
 
-#### Le catalogue « cartouche conseillée » — trois tiers (2026-09-10)
+#### Le catalogue « cartouche conseillée » (trois tiers (2026-09-10))
 
 Le catalogue s'inscrit dans une démarche homebrew/retrodev : on ne propose que des cartouches
 qu'un utilisateur peut **réellement obtenir ou fabriquer**. Décisions de cadrage :
@@ -4490,56 +4490,56 @@ qu'un utilisateur peut **réellement obtenir ou fabriquer**. Décisions de cadra
 `project_licensing_model`), **flashcarts reprogrammables dépriorisées** au profit des vraies
 cartouches, et **priorité aux créateurs indépendants**.
 
-**Tier 1 — Profils de base : cartouches réelles historiques reproductibles.** Les configs que
+**Tier 1, Profils de base : cartouches réelles historiques reproductibles.** Les configs que
 la logithèque GBA a réellement portées, reproductibles avec des puces standard et un gabarit
-`kicad-gamepaks` (djedditt — contours aux dimensions des coques officielles). La vraie variable
+`kicad-gamepaks` (djedditt, contours aux dimensions des coques officielles). La vraie variable
 est la puce de save + le périphérique embarqué :
 
 | Profil de base | Matériel embarqué | Équivalent historique |
 | --- | --- | --- |
-| Save — SRAM | SRAM sur pile | gros de la logithèque |
-| Save — Flash | Flash 64/128K | jeux à grosse sauvegarde |
-| Save — EEPROM | EEPROM 4/64K | petits jeux |
+| Save, SRAM | SRAM sur pile | gros de la logithèque |
+| Save, Flash | Flash 64/128K | jeux à grosse sauvegarde |
+| Save, EEPROM | EEPROM 4/64K | petits jeux |
 | RTC | horloge + Flash | RPG jour/nuit (Pokémon G3) |
 | Solaire + RTC | photodiode + RTC | Boktai |
 | Rumble | moteur + driver | Drill Dozer, Pinball R/S |
 
-**Tier 2 — Options « cool » : créateurs indépendants.** Cartouches à matériel embarqué,
+**Tier 2, Options « cool » : créateurs indépendants.** Cartouches à matériel embarqué,
 buildables. Référence mature : **insideGadgets** (RTC+Rumble, Solar+RTC, FRAM sans pile, kits
 *build-it-yourself*). Écosystème : **GBMake** (fabrication indé de cartouches sur mesure),
 `kicad-gamepaks` (la brique de conception open source qui rend le Tier 1 fabricable).
 
-**Frontière — documentée, pas livrée comme profil.** De la R&D, pas des cibles stables :
-`jojolebarjos/gba-cartridge` (cartouche **FPGA**, TinyFPGA BX — mappers/périphériques custom) et
-`konsumer/dkart` (framework open hardware avec **ESP32 + SD** soudés — « cartouche
+**Frontière, documentée, pas livrée comme profil.** De la R&D, pas des cibles stables :
+`jojolebarjos/gba-cartridge` (cartouche **FPGA**, TinyFPGA BX, mappers/périphériques custom) et
+`konsumer/dkart` (framework open hardware avec **ESP32 + SD** soudés, « cartouche
 intelligente »). Notés comme horizon, hors catalogue conseillé.
 
-#### Convention de nommage — capacité d'abord, board number en note
+#### Convention de nommage (capacité d'abord, board number en note)
 
 Les cartouches historiques portent une nomenclature Nintendo, mais deux schémas coexistent :
 `AGB-002/013/019…` désigne la **coque/famille physique** (inutile ici) ; `AGB-Exx-nn` est le
 **PCB du jeu** qui encode save + périphérique (p. ex. `AGB-E05-01` = RTC + Flash, la carte
-Pokémon Gen 3 — le seul rock-solid). Le fil nesdev le confirme : pour un jeu GBA, les seules
-variables sont **taille de ROM, type de save, taille de save, présence d'un RTC** — donc notre
+Pokémon Gen 3, le seul rock-solid). Le fil nesdev le confirme : pour un jeu GBA, les seules
+variables sont **taille de ROM, type de save, taille de save, présence d'un RTC**, donc notre
 modèle de capacités *est* déjà la bonne granularité.
 
 **On ne nomme PAS les profils par `AGB-Exx`** : c'est une désignation interne Nintendo (marque,
-écartée), le catalogue de référence est mort (Pocket Heaven — reconstituer une table exhaustive
+écartée), le catalogue de référence est mort (Pocket Heaven, reconstituer une table exhaustive
 serait deviner), et le numéro n'encode rien qu'un nom de capacité ne dise mieux. Les profils
 sont nommés **par capacité** ; le board number n'apparaît qu'en **note historique** pour les cas
-sûrs (« profil RTC — équivalent historique `AGB-E05` »), jamais comme identifiant.
+sûrs (« profil RTC, équivalent historique `AGB-E05` »), jamais comme identifiant.
 
 #### Références externes à surveiller
 
-- [`kicad-gamepaks`](https://github.com/djedditt/kicad-gamepaks) — gabarits KiCad aux dimensions
+- [`kicad-gamepaks`](https://github.com/djedditt/kicad-gamepaks), gabarits KiCad aux dimensions
   des cartouches officielles (la brique de fabrication du Tier 1).
-- [insideGadgets](https://shop.insidegadgets.com/) — cartouches à RTC / Solar / Rumble / FRAM
+- [insideGadgets](https://shop.insidegadgets.com/), cartouches à RTC / Solar / Rumble / FRAM
   (référence Tier 2, kits *build-it-yourself*).
-- [GBMake](https://gbmake.com/us) — fabrication indé de cartouches GB/GBA sur mesure.
-- [`jojolebarjos/gba-cartridge`](https://github.com/jojolebarjos/gba-cartridge) — cartouche
-  FPGA (TinyFPGA BX, KiCad) — frontière.
-- [`konsumer/dkart`](https://github.com/konsumer/dkart) — framework cartouche open hardware
-  ESP32 + SD — frontière.
+- [GBMake](https://gbmake.com/us), fabrication indé de cartouches GB/GBA sur mesure.
+- [`jojolebarjos/gba-cartridge`](https://github.com/jojolebarjos/gba-cartridge), cartouche
+  FPGA (TinyFPGA BX, KiCad), frontière.
+- [`konsumer/dkart`](https://github.com/konsumer/dkart), framework cartouche open hardware
+  ESP32 + SD, frontière.
 
 #### Ouvert
 
@@ -4549,18 +4549,18 @@ sûrs (« profil RTC — équivalent historique `AGB-E05` »), jamais comme iden
 - L'ordre de livraison des capacités (RTC, rumble et les saves sont sûrs et fabricables ;
   l'ordre des capteurs analogiques dépend de la demande réelle). **Le tilt/gyro reste hors
   catalogue** : historique et réel, mais non reproductible (soudé dans la cartouche OEM, aucune
-  flashcart ni repro ne l'embarque) — documenté « OEM-only », jamais proposé comme cible.
+  flashcart ni repro ne l'embarque), documenté « OEM-only », jamais proposé comme cible.
 
-### v2.0 — Backgrounds affines (« Mode 7 »)
+### v2.0 (Backgrounds affines (« Mode 7 »))
 
-Un calque affine ajoute rotation et zoom, au prix de perdre des calques réguliers ailleurs —
+Un calque affine ajoute rotation et zoom, au prix de perdre des calques réguliers ailleurs,
 et il adresse sa carte différemment, donc c'est un **second chemin de génération de code**,
 pas « un calque de plus ».
 
 Volontairement décrit à haut niveau : la portée exacte dépendra de ce qui aura été appris en
 construisant les fondations précédentes.
 
-#### Ce que la v2.0 n'est PAS — l'objectif V-Rally 3 n'est pas ici
+#### Ce que la v2.0 n'est PAS (l'objectif V-Rally 3 n'est pas ici)
 
 Cet objectif a été rangé dans cette version pendant une journée, sur une lecture de captures
 d'écran qui concluait au Mode 7 : sol texturé fuyant vers l'horizon, décor en sprites mis à
@@ -4569,7 +4569,7 @@ l'échelle, HUD en calque normal. **Cette lecture était fausse**, et la mesure 
 
 | Relevé | Lecture |
 | --- | --- |
-| Fond de tuile : *s.o.* | aucune base de tuiles — le fond n'est pas tuilé |
+| Fond de tuile : *s.o.* | aucune base de tuiles, le fond n'est pas tuilé |
 | Taille : 240×160 | un écran, pas une carte |
 | Fond de carte : `0x0600A000` | VRAM + 0xA000 = **frame 1 du mode 4** |
 
@@ -4578,22 +4578,22 @@ Le mode 3 n'a pas de second tampon et le mode 5 afficherait 160×128 : c'est don
 maillages qui tournent dans les menus.
 
 La leçon vaut d'être gardée : **un rasteriseur logiciel et un sol affine produisent la même
-image.** Une capture ne distingue pas les deux — seul le mode vidéo le fait. Aucune décision
+image.** Une capture ne distingue pas les deux. Seul le mode vidéo le fait. Aucune décision
 de rendu ne se verrouille sur une image, ici ou ailleurs.
 
 L'objectif part donc en **v3.1**, derrière le framebuffer dont il dépend. La v2.0 redevient
 ce qu'elle était : une capacité, sans cible de jeu.
 
-#### Piste posée — l'abstraction « caméra » sera remise en cause ici
+#### Piste posée (l'abstraction « caméra » sera remise en cause ici)
 
-La caméra est en train de devenir une entité, en absorbant les fenêtres de la v0.3.2 — auquel
+La caméra est en train de devenir une entité, en absorbant les fenêtres de la v0.3.2, auquel
 cas ce n'est plus « où on regarde » mais **une configuration d'écran nommée qu'on active** :
 cadrage, suivi, et régions qui découpent l'affichage. Comme les caméras sont mutuellement
 exclusives, deux fenêtres par caméra n'impliquent jamais plus de deux rectangles à l'écran :
 la contrainte matérielle tient.
 
 Nom de travail : **Caméra2D** (convention Godot, immédiatement lisible). Réserve à garder en
-tête, il promet une Caméra3D qui n'existera jamais sur GBA — le Mode 7 n'est pas de la 3D mais
+tête, il promet une Caméra3D qui n'existera jamais sur GBA. Le Mode 7 n'est pas de la 3D mais
 une transformation affine en 2D. Le vrai axe est donc *régulière* contre *affine*, pas 2D
 contre 3D.
 
@@ -4602,37 +4602,37 @@ Une chose à traiter à ce moment-là, pas avant : l'**écran partagé**, qui ro
 exclusives (une seule active par scène à la fois), la question ne se pose pas.
 
 *Mise à jour 2026-08-24* : « unifier les mécanismes de caméra concurrents » (l'autre point que
-cette piste listait) est réglé — c'est fait depuis la v0.6.1, et l'objet nommé porteur d'un
+cette piste listait) est réglé. C'est fait depuis la v0.6.1, et l'objet nommé porteur d'un
 état existe déjà. Ce qui a bougé depuis n'est pas cet axe-là mais la PROPRIÉTÉ de la caméra :
 elle appartient désormais à sa scène plutôt qu'au projet (cf. `changelog/archives/v0.6.md`,
-« Révisé le 2026-08-24 »). Ça ne contredit pas Caméra2D — une caméra reste exclusive, une
-seule active à la fois — et ça ne change rien à ce qui reste ouvert ici.
+« Révisé le 2026-08-24 »). Ça ne contredit pas Caméra2D (une caméra reste exclusive, une
+seule active à la fois) et ça ne change rien à ce qui reste ouvert ici.
 
 *Mise à jour 2026-08-24 (suite)* : la question « une région appartient-elle à une caméra, ou
-l'inverse ? » posée ci-dessus est **réglée pour le cas à une seule caméra active** — la
-caméra possède désormais un viewport (`Camera.frame_w/h`, cf. `ARCHITECTURE.md`, « Windows —
+l'inverse ? » posée ci-dessus est **réglée pour le cas à une seule caméra active**, la
+caméra possède désormais un viewport (`Camera.frame_w/h`, cf. `ARCHITECTURE.md`, « Windows,
 le pochoir ») : WIN0 lui appartient, WIN1 reste à la scène. Une allocation FIXE, décidée une
-fois, pas un arbitrage à l'exécution — donc pas l'allocateur de ressources générique que ce
+fois, pas un arbitrage à l'exécution, donc pas l'allocateur de ressources générique que ce
 chantier réserve. Ce qui reste ouvert ici, sans changement, c'est l'**écran partagé** :
 plusieurs caméras actives SIMULTANÉMENT (split-screen), qui redemanderait de vrais
 arbitrages entre plusieurs propriétaires possibles des mêmes deux rectangles.
 
-### v2.1 — Physique et collision
+### v2.1 (Physique et collision)
 
 Le moteur n'a aujourd'hui aucune physique à lui : un script décide du mouvement, la
 résolution de la v0.6.3 ne fait que le corriger. Cette version est **le renversement de cette
-règle** — pas son extension. C'est pour ça qu'elle est ici et pas en v0.6.4 : tant que les
+règle**, pas son extension. C'est pour ça qu'elle est ici et pas en v0.6.4 : tant que les
 fondations 2D ne sont pas finies, un moteur qui décide du mouvement à la place du script
 coûterait plus qu'il ne rendrait.
 
 #### Périmètre
 
-- **Collision par normale.** Le contact rend une direction, pas seulement un booléen — c'est
+- **Collision par normale.** Le contact rend une direction, pas seulement un booléen. C'est
   ce qui distingue « je touche » de « je glisse le long de », et c'est la condition de tout
   le reste.
 - **Gravité**, et deux milieux qui la modulent : **air** (traînée) et **viscosité**
   (résistance d'un fluide). Trois réglages qui vivent quelque part entre la scène et
-  l'acteur — l'endroit reste ouvert.
+  l'acteur, l'endroit reste ouvert.
 - **Nouvelles primitives** : cercle de collision et maillage de collision. Ce sont des
   primitives **2D** ; le mot « mesh » ne promet pas de volume. La distinction devient
   critique une fois la v3.1 au programme : deux choses différentes porteront le même mot si
@@ -4641,17 +4641,17 @@ coûterait plus qu'il ne rendrait.
 
   | Type | Sens |
   | --- | --- |
-  | `rigidbody` | réactif — le moteur calcule sa réponse au contact |
-  | `actor` | simplifié — se déplace, se bloque, ne réagit pas |
-  | `solid` | immobile — ne bouge jamais, sert de décor de collision |
+  | `rigidbody` | réactif, le moteur calcule sa réponse au contact |
+  | `actor` | simplifié, se déplace, se bloque, ne réagit pas |
+  | `solid` | immobile, ne bouge jamais, sert de décor de collision |
 
-- **Import de carte de collision** — un nouvel asset, pour des collisions fidèles à l'image.
+- **Import de carte de collision**, un nouvel asset, pour des collisions fidèles à l'image.
 
 #### Décisions verrouillées
 
 - **Jamais avant la v2.0.** Décidé explicitement (2026-08-12) : les fondations 2D passent
   d'abord. La section « Ouvert » de la v0.6.3 reste donc vraie jusque-là, elle n'est pas
-  contredite — elle est datée.
+  contredite. Elle est datée.
 - **Les trois types ne sont pas un confort, ils sont le budget.** Une réponse par normale sur
   N acteurs se paie en cycles, sans FPU et en virgule fixe. `actor` et `solid` existent pour
   que `rigidbody` reste payable : le coût élevé se réserve à ce qui en a besoin. Une
@@ -4669,32 +4669,32 @@ coûterait plus qu'il ne rendrait.
 
 - **`CollisionBoxComponent.solid` est un booléen aujourd'hui.** Les trois types le
   remplacent : c'est un changement de format de composant, à traiter comme tel (la maison ne
-  migre pas les formats — cf. `core/project.py`).
+  migre pas les formats, cf. `core/project.py`).
 - Où vivent gravité, air et viscosité : propriétés de scène, de zone, ou d'acteur ? Les trois
   se défendent et le choix dépend du premier jeu qui s'en sert.
 - Le maillage de collision est-il authoré, dérivé de l'image importée, ou les deux ? Dérivé
   est cohérent avec le refus de l'outil de dessin ; authoré est ce que réclame une forme qui
   n'existe dans aucune image.
-- Rien n'est dit du coût réel. Il se mesure sur un cas, pas avant — c'est la règle qui a
+- Rien n'est dit du coût réel. Il se mesure sur un cas, pas avant. C'est la règle qui a
   servi pour les animés de décor (v0.4.1, « L'ordre de grandeur, mesuré »).
 
-### v2.2 — Distorsion d'image
+### v2.2 (Distorsion d'image)
 
 Déformer un fond pour l'eau, la chaleur, la vitesse. Rangé ici parce que c'est **la même
 plomberie que le sol affine de la v2.0** : dans les deux cas on réécrit des registres de
 rendu à chaque scanline, seuls les registres visés et la table de valeurs changent. Construire
-l'un donne l'autre presque gratuitement — c'est la raison de leur voisinage, et l'ordre entre
+l'un donne l'autre presque gratuitement. C'est la raison de leur voisinage, et l'ordre entre
 les deux n'a pas d'importance.
 
 #### Décisions verrouillées
 
 - **Sur un fond tuilé, la distorsion est PAR LIGNE, jamais par pixel.** On réécrit les
-  registres de décalage du calque à chaque scanline (HDMA) — c'est l'effet eau/chaleur
+  registres de décalage du calque à chaque scanline (HDMA). C'est l'effet eau/chaleur
   classique, réel et bon marché sur ce matériel. Une flow map par pixel suppose un
   framebuffer : elle appartient donc à la v3.0, et n'a pas de sens avant.
 - **Les sprites n'en font pas partie.** Un OBJ ne connaît que la transformation affine
   (rotation, échelle) ; il n'y a pas de distorsion libre à lui appliquer. Le proposer
-  promettrait un rendu que le matériel ne produit pas — même règle que les modes de mélange
+  promettrait un rendu que le matériel ne produit pas, même règle que les modes de mélange
   *multiply* et *overlay*, absents pour cette raison.
 
 #### Ouvert
@@ -4703,7 +4703,7 @@ les deux n'a pas d'importance.
   écrit la table lui-même ? Le troisième cas existe de toute façon, la question est ce que
   le déclaratif couvre.
 
-### v2.3 — Rendu isométrique
+### v2.3 (Rendu isométrique)
 
 **Ce n'est pas un mode de rendu**, et c'est le piège du sujet : l'isométrique reste du 2D
 tuilé ordinaire, sur le même matériel, avec les mêmes calques. Ce qui change est la
@@ -4717,12 +4717,12 @@ n'est remplacée ; il s'en ajoute.
   autre selon sa position dans le monde, et l'ordre doit être recalculé quand ils bougent.
   Le matériel dessine les OBJ dans l'ordre de la table : c'est donc la table qu'on trie.
 - **La projection.** Une position monde (x, y) devient une position écran en losange. Une
-  seule formule, mais elle doit vivre **au même endroit pour l'éditeur et pour le moteur** —
+  seule formule, mais elle doit vivre **au même endroit pour l'éditeur et pour le moteur**,
   sinon le canvas ment sur l'emplacement des choses (c'est déjà le rôle de
   `core/engine_emulation/`).
 - **La collision en espace isométrique.** Une boîte alignée à l'écran n'est pas une boîte
   alignée dans le monde. À raccorder à la v2.1, qui aura introduit les normales et les
-  nouvelles primitives — les deux versions se touchent ici.
+  nouvelles primitives. Les deux versions se touchent ici.
 - **L'authoring.** Poser un acteur au canvas doit se faire dans la grille du monde, pas dans
   les pixels du losange.
 
@@ -4735,11 +4735,11 @@ n'est remplacée ; il s'en ajoute.
 - La hauteur. Un décor isométrique sans élévation est une grille inclinée ; avec élévation,
   le tri cesse d'être un tri sur Y. À décider avant, parce que ça change la donnée de carte.
 
-### v2.4 — Sucre syntaxique Lua (+=, ++, ?:)
+### v2.4 (Sucre syntaxique Lua (+=, ++, ?:))
 
 Demandé le 2026-08-14 : `x += 1` / `x -= 1` / `x *= 2` / `x /= 2`, `x++` / `x--`, et
-`cond ? a : b`. **Aucun des trois n'est du Lua** — Lua n'a jamais eu d'affectation composée ni
-d'opérateur ternaire, choix délibéré du langage — et `luaparser` (un vrai parseur ANTLR) les
+`cond ? a : b`. **Aucun des trois n'est du Lua**. Lua n'a jamais eu d'affectation composée ni
+d'opérateur ternaire, choix délibéré du langage, et `luaparser` (un vrai parseur ANTLR) les
 refuse net :
 
 ```
@@ -4750,11 +4750,11 @@ a ? b : c       → token recognition error at: '?'
 
 Donc ce n'est pas « étendre l'AST » : `parser.py` reçoit le texte source tel quel et le passe
 à `luaparser.ast.parse()` sans passe intermédiaire (`scripting/parser.py::parse()`). Accepter
-cette syntaxe demande une **réécriture du texte AVANT `luaparser`** — un dialecte Lua-like, pas
+cette syntaxe demande une **réécriture du texte AVANT `luaparser`**, un dialecte Lua-like, pas
 du Lua strict.
 
 **Le ternaire a déjà un équivalent qui ne coûte rien** : `cond and a or b` est du Lua valide
-aujourd'hui et couvre tout ce que ce sous-ensemble manipule (entiers, vec2/vec3, chaînes) —
+aujourd'hui et couvre tout ce que ce sous-ensemble manipule (entiers, vec2/vec3, chaînes),
 sauf le cas où `a` vaut `false`, où Lua bascule sur `b` alors qu'un vrai `? :` ne le ferait
 pas. À vérifier si ce cas se présente en pratique avant d'écrire quoi que ce soit.
 
@@ -4765,18 +4765,18 @@ pas. À vérifier si ce cas se présente en pratique avant d'écrire quoi que ce
 - **Un vrai script Lua copié ailleurs** (interpréteur externe, autre colorateur) ne le
   reconnaîtrait plus comme du Lua valide.
 - **Les numéros de ligne/colonne d'une vraie erreur de syntaxe** se décaleraient : `luaparser`
-  rapporterait la position dans le texte RÉÉCRIT, pas dans ce que l'auteur a tapé — une faute
+  rapporterait la position dans le texte RÉÉCRIT, pas dans ce que l'auteur a tapé, une faute
   ailleurs sur la ligne verrait son message mentir sur l'endroit fautif.
 - `? :` est le plus dur à réécrire sûrement en texte (imbrication, `?`/`:` à l'intérieur d'une
-  chaîne…) — une regex naïve est fragile ; il faudrait un petit tokenizer dédié, pas un
+  chaîne…), une regex naïve est fragile ; il faudrait un petit tokenizer dédié, pas un
   remplacement de texte.
 - `+=`/`++`/`--` sont plus simples : réécriture au niveau de l'instruction complète
   (`NOM (+=|-=|*=|/=) EXPR` ou `NOM (\+\+|--)`), sans ambiguïté de priorité d'opérateurs.
 
-### v3.0 — Le second moteur de rendu
+### v3.0 (Le second moteur de rendu)
 
-**Décidé (2026-08-13) : l'éditeur porte DEUX moteurs de rendu.** Un moteur 2D — tout ce qui
-existe jusqu'à la v2.2 incluse, calques tuilés et OBJ — et un moteur 3D, qui est le sujet de
+**Décidé (2026-08-13) : l'éditeur porte DEUX moteurs de rendu.** Un moteur 2D (tout ce qui
+existe jusqu'à la v2.2 incluse, calques tuilés et OBJ) et un moteur 3D, qui est le sujet de
 cette version.
 
 L'ancienne v3.0 « modes bitmap » disparaît en tant que jalon et **devient le substrat de
@@ -4787,7 +4787,7 @@ contraintes ne changent pas, mais elle ne se livre plus seule.
 Ce n'est pas un mode de plus dans le moteur existant. C'est **un second moteur**, et cette
 version consiste autant à réoutiller l'éditeur qu'à écrire un rasteriseur.
 
-#### Le substrat — les modes bitmap
+#### Le substrat (les modes bitmap)
 
 Famille complètement différente des modes tuilés : un seul calque, pas de tuiles ni de cartes,
 un framebuffer direct. Le budget des sprites y est par ailleurs divisé par deux.
@@ -4798,20 +4798,20 @@ un framebuffer direct. Le budget des sprites y est par ailleurs divisé par deux
 | 4 | 240×160 | 8 bits indexés | 2 (double tampon) |
 | 5 | 160×128 | 16 bits directs | 2, résolution réduite |
 
-**Priorité au mode 4** : 256 couleurs, double tampon, pleine résolution — il évite le
+**Priorité au mode 4** : 256 couleurs, double tampon, pleine résolution. Il évite le
 déchirement d'image du mode 3 et la résolution réduite du mode 5. C'est aussi celui que le
 jeu de référence emploie (relevé du 2026-08-13).
 
 **Exclu délibérément des fondations v0.3** : les modes bitmap cassent tout le pipeline actuel
-(tilesets réutilisables, palettes par banque) au profit d'un framebuffer brut — et c'est aussi
+(tilesets réutilisables, palettes par banque) au profit d'un framebuffer brut, et c'est aussi
 pourquoi de vrais jeux commerciaux les emploient rarement.
 
 Une brique est déjà là : `BackgroundAsset.mode == "bitmap"` existe côté éditeur (image plein
 écran, détectée à l'import) et n'attend que son émission ROM. C'est le plus petit usage du
-framebuffer, sans géométrie — un bon premier pas dans cette version.
+framebuffer, sans géométrie, un bon premier pas dans cette version.
 
-**Ce que le framebuffer débloque, et rien d'autre ne débloquera** : la vraie *flow map* — une
-distorsion décidée par pixel, et non par ligne comme en v2.2 — et le rendu de géométrie
+**Ce que le framebuffer débloque, et rien d'autre ne débloquera** : la vraie *flow map* (une
+distorsion décidée par pixel, et non par ligne comme en v2.2) et le rendu de géométrie
 ci-dessous. C'est le seul mode où l'adresse de chaque pixel de destination est écrite par le
 programme.
 
@@ -4826,13 +4826,13 @@ d'assets et les sidecars. **Rien de tout cela ne connaît le mode de rendu**, et
 l'apprendre.
 
 Les sprites (OBJ) sont partagés aussi, et c'est contre-intuitif : ils survivent au changement
-de moteur puisque le matériel OBJ est le même — mieux, c'est en 3D qu'ils portent le CIEL
+de moteur puisque le matériel OBJ est le même. Mieux, c'est en 3D qu'ils portent le CIEL
 (cf. « rôles inversés » ci-dessous).
 
 #### Ce qui se DÉDOUBLE, et à quel niveau
 
 - **La scène.** `Scene.render_mode` existe déjà en ébauche : c'est le bon endroit, et
-  l'arbitrage est **par scène, pas par projet** — un jeu veut ses menus en 2D et sa course en
+  l'arbitrage est **par scène, pas par projet**. Un jeu veut ses menus en 2D et sa course en
   3D. Conséquence : la moitié des champs de `Scene` n'a de sens que dans un moteur
   (`background_layers`, `collision_map`, `windows`, `text_bg` d'un côté ; la géométrie et la
   caméra à projection de l'autre). À trancher : deux types de scène, ou un type dont les
@@ -4843,7 +4843,7 @@ de moteur puisque le matériel OBJ est le même — mieux, c'est en 3D qu'ils po
 - **Le codegen.** Second chemin d'émission, comme prévu de longue date pour l'affine.
 - **L'API Lua.** `layer.*`, `tilemap.*`, `window.*` ne veulent rien dire en 3D, et la
   géométrie n'a pas d'équivalent en 2D. `RUNTIME_API` doit donc porter la disponibilité par
-  moteur, et le checker refuser un appel 2D dans une scène 3D — sinon la faute n'apparaît
+  moteur, et le checker refuser un appel 2D dans une scène 3D. Sinon la faute n'apparaît
   qu'au `make`, sur une ligne générée, jamais sur la cause. C'est le même défaut que les deux
   listes de prototypes du moteur, et il se règle au même endroit : dans le catalogue.
 - **Les écrans de l'éditeur.** Le Background Editor n'a pas d'objet en 3D ; le Palette Editor
@@ -4851,20 +4851,20 @@ de moteur puisque le matériel OBJ est le même — mieux, c'est en 3D qu'ils po
   pouvoir déclarer les moteurs où il s'applique, faute de quoi l'utilisateur voit des outils
   qui ne peuvent rien produire pour la scène ouverte.
 
-#### L'aperçu fidèle — une source, deux compilations
+#### L'aperçu fidèle (une source, deux compilations)
 
 `core/engine_emulation/` existe parce que **l'éditeur refait en Python ce que la console fait
 en C**, pour montrer le vrai résultat plutôt qu'une approximation : le layout de texte, les
-formules de mélange, le mixeur. Promesse tenue jusqu'ici, à un coût connu — deux
+formules de mélange, le mixeur. Promesse tenue jusqu'ici, à un coût connu, deux
 implémentations à tenir d'accord.
 
 Un moteur 3D aurait mis cette promesse en défaut : porter un rasteriseur en Python fait de la
-double implémentation un vrai risque, et ses divergences sont **invisibles** — un arrondi en
+double implémentation un vrai risque, et ses divergences sont **invisibles**, un arrondi en
 virgule fixe qui diffère ne plante pas, il donne une autre image. L'autre issue était d'admettre
 un aperçu approximatif, c'est-à-dire de mentir pour la première fois.
 
 **Décision (2026-08-13) : ni l'un ni l'autre. Le rasteriseur s'écrit UNE fois, en C portable,
-et se compile DEUX fois** — pour la GBA (ARM, en IWRAM), et pour l'hôte en bibliothèque
+et se compile DEUX fois**, pour la GBA (ARM, en IWRAM), et pour l'hôte en bibliothèque
 partagée que l'éditeur appelle et dont il affiche le tampon rendu. Même source, mêmes types en
 virgule fixe : l'image de l'aperçu est identique au pixel près **par construction**, et non par
 discipline. C'est ce qu'Unity obtient en embarquant son runtime dans son éditeur ; on l'obtient
@@ -4878,18 +4878,18 @@ Ce que ça implique, et qui n'est pas négociable :
   point de cette version dont l'ordre est irréversible** : la contrainte ne coûte rien
   aujourd'hui et ne se rattrape pas après coup.
 - **Ce que l'aperçu ne donnera pas : le temps.** Sur PC il tournera vite quoi qu'il arrive et ne
-  dira jamais si la frame tient dans le budget. mGBA reste l'outil de la cadence — appelé, pas
+  dira jamais si la frame tient dans le budget. mGBA reste l'outil de la cadence, appelé, pas
   incorporé, et le lancement de ROM est déjà outillé.
 - **Un compilateur C hôte devient une dépendance de build**, pour ce composant seulement.
   Relevé sur la machine de développement (2026-08-13) : aucun compilateur hôte, et le msys2
-  livré avec devkitPro n'expose que les dépôts `msys`, `dkp-libs`, `dkp-windows` — pas de
+  livré avec devkitPro n'expose que les dépôts `msys`, `dkp-libs`, `dkp-windows`, pas de
   mingw-w64. C'est donc une installation à part, et elle ne concerne que qui touche au
   rasteriseur : l'éditeur se distribue avec la bibliothèque déjà compilée, et le reste du
   travail Python n'en a pas besoin.
 - **TCC pour développer, gcc pour publier.** TCC (Tiny C Compiler) tient en quelques
   mégaoctets et un seul dossier, et sort la bibliothèque directement (`tcc -shared`) : c'est
   le coût d'entrée le plus bas pour itérer sur le rasteriseur. Il convient d'autant mieux que
-  la source doit de toute façon rester du C conservateur et sans dépendances — elle compile
+  la source doit de toute façon rester du C conservateur et sans dépendances. Elle compile
   pour un ARM7TDMI avec devkitARM, ce qui interdit déjà tout ce que TCC ne saurait pas
   digérer. Les builds de **release** passent par gcc (w64devkit, ou la CI qui en fournit un
   gratuitement), pour du code optimisé et un compilateur éprouvé.
@@ -4897,7 +4897,7 @@ Ce que ça implique, et qui n'est pas négociable :
   Le risque de TCC est réel mais borné : moins éprouvé que gcc, et une compilation fausse
   donnerait une **image fausse** plutôt qu'un plantage. Deux garde-fous tombent tout seuls :
   la même source tourne sur le vrai matériel (mGBA), et la présence des deux chaînes fait du
-  build de release un **test différentiel gratuit** — si l'image TCC et l'image gcc diffèrent,
+  build de release un **test différentiel gratuit**, si l'image TCC et l'image gcc diffèrent,
   l'un des deux compilateurs a tort et on le sait avant l'utilisateur.
 
   **Ce choix n'engage rien.** Le compilateur hôte est un détail de build, pas une décision
@@ -4910,19 +4910,19 @@ Ce que ça implique, et qui n'est pas négociable :
 - Le nom des deux moteurs, dans le code comme dans l'interface. Il sera lu partout et pour
   longtemps.
 - Une scène peut-elle mélanger les deux ? Le matériel dit non pour les calques, mais les OBJ
-  traversent — donc « pas de mélange » est faux tel quel, et « mélange libre » est faux
+  traversent, donc « pas de mélange » est faux tel quel, et « mélange libre » est faux
   aussi.
 - Ce que devient un projet dont l'auteur bascule une scène d'un moteur à l'autre. Rien ne se
   convertit ; la question est ce que l'éditeur en dit.
 
-### v3.1 — Le rasteriseur
+### v3.1 (Le rasteriseur)
 
 Le moteur 3D proprement dit, une fois le substrat et le réoutillage de la v3.0 en place.
 
-#### L'objectif concret — V-Rally 3
+#### L'objectif concret (V-Rally 3)
 
 **Un jeu du niveau de V-Rally 3 sur GBA doit être constructible avec l'éditeur.** Premier
-objectif de la roadmap énoncé comme un résultat visible plutôt que comme une capacité — c'est
+objectif de la roadmap énoncé comme un résultat visible plutôt que comme une capacité. C'est
 ce qui rend sa portée décidable : une capacité s'étend indéfiniment, une cible se compare.
 
 #### Décisions verrouillées
@@ -4930,23 +4930,23 @@ ce qui rend sa portée décidable : une capacité s'étend indéfiniment, une ci
 - **C'est un rasteriseur logiciel, mesuré, pas supposé.** Relevé mGBA du 2026-08-13 : mode 4,
   framebuffer 240×160 8bpp double-tamponné (`0x0600A000` = frame 1), aucune base de tuiles, et
   des maillages qui tournent dans les menus. **Confirmé en course**, où toute la scène passe
-  par ce même framebuffer — le doute « les menus seulement » est levé, il n'y a pas de chemin
+  par ce même framebuffer. Le doute « les menus seulement » est levé, il n'y a pas de chemin
   hybride. Le détail du relevé et l'erreur qu'il corrige sont conservés en v2.0, « Ce que la
   v2.0 n'est PAS ».
 - **Le framebuffer d'abord, sans alternative.** Le rendu écrit chaque pixel : il lui faut le
   substrat bitmap de la v3.0, et il n'y a aucun chemin par les calques tuilés. Ce n'est pas
-  une préférence d'ordonnancement, c'est une dépendance — d'où la découpe v3.0 / v3.1.
+  une préférence d'ordonnancement, c'est une dépendance, d'où la découpe v3.0 / v3.1.
 - **La GBA n'a ni FPU ni matériel 3D.** Tout est en virgule fixe et coûte des cycles
-  proportionnels au nombre de triangles — c'est le seul renderer de la roadmap dont le coût
+  proportionnels au nombre de triangles. C'est le seul renderer de la roadmap dont le coût
   dépend du contenu de la scène et non de sa configuration. Le budget est donc un sujet de
   conception, pas une optimisation de fin de chantier.
 - **Le vocabulaire ne change pas de règle pour autant.** « 3D » décrit ici ce que le
   PROGRAMME calcule, jamais une capacité du matériel : pas de calque 3D, pas de mode vidéo
-  3D. La réserve de la v2.0 sur « Caméra3D » tombe en revanche — une caméra à projection
+  3D. La réserve de la v2.0 sur « Caméra3D » tombe en revanche. Une caméra à projection
   perspective a un sens dans cette version, parce que quelque chose la calcule enfin.
 - **Les rôles fond/sprite sont INVERSÉS par rapport à tout le reste de l'éditeur.** Relevé en
-  course (2026-08-13) : le monde entier — sol, route, panneaux publicitaires, bâtiments,
-  public — est rasterisé dans l'unique fond disponible, et **c'est le ciel qui est fait de
+  course (2026-08-13) : le monde entier (sol, route, panneaux publicitaires, bâtiments,
+  public) est rasterisé dans l'unique fond disponible, et **c'est le ciel qui est fait de
   sprites**.
 
   Mesuré : un seul fond porte toute la scène, aucun élément de décor n'est un OBJ, l'arrière-
@@ -4959,10 +4959,10 @@ ce qui rend sa portée décidable : une capacité s'étend indéfiniment, une ci
 
   - **Le vocabulaire actuel de l'éditeur ne tient pas ici.** Ce que l'auteur appelle « le
     fond » (le ciel) est de l'OBJ ; ce que le matériel appelle le fond est la cible de rendu,
-    que personne n'authore. Les deux sens du mot se croisent — à trancher avant d'écrire le
+    que personne n'authore. Les deux sens du mot se croisent, à trancher avant d'écrire le
     moindre écran, sous peine d'un inspecteur qui ment sur ce qu'il configure.
   - **Le budget OBJ devient un sujet.** Les modes bitmap divisent déjà la VRAM des sprites
-    par deux (cf. v3.0) — et le ciel vient maintenant en réclamer une part. Un ciel en bandes
+    par deux (cf. v3.0), et le ciel vient maintenant en réclamer une part. Un ciel en bandes
     répétées, avare en tuiles uniques, n'est pas une optimisation tardive : c'est la
     condition pour qu'il reste des sprites au jeu.
   - **Aucune contrainte affine ne s'applique.** Les 32 jeux de paramètres OBJ, invoqués tant
@@ -4972,11 +4972,11 @@ ce qui rend sa portée décidable : une capacité s'étend indéfiniment, une ci
 
 - Tout le reste. Format des maillages, texturage ou faces plates, élimination des faces
   cachées, tri en profondeur, découpage, budget par scène, et ce que l'éditeur montre d'un
-  maillage sans devenir un modeleur — le refus de l'outil de dessin s'applique ici aussi, et
+  maillage sans devenir un modeleur. Le refus de l'outil de dessin s'applique ici aussi, et
   il est bien plus dur à tenir face à de la géométrie que face à des tuiles.
 - **Le ciel est-il authoré comme un fond, ou comme des sprites ?** Les deux réponses coûtent
-  quelque chose. « Comme un fond » garde le modèle mental de l'auteur — il dessine un ciel,
-  le build le découpe en OBJ — mais c'est l'éditeur qui commente le matériel au lieu de le
+  quelque chose. « Comme un fond » garde le modèle mental de l'auteur. Il dessine un ciel,
+  le build le découpe en OBJ, mais c'est l'éditeur qui commente le matériel au lieu de le
   rendre, ce que la maison refuse partout ailleurs. « Comme des sprites » est honnête et
   demande à l'auteur de comprendre pourquoi son ciel n'est pas un fond. La tension est réelle
   et ne se tranche pas à l'avance.
@@ -4990,5 +4990,5 @@ ce qui rend sa portée décidable : une capacité s'étend indéfiniment, une ci
 
 ## Hors périmètre (pour l'instant)
 
-- **Multijoueur par câble Link** — envisagé après la v1.0, pas avant. Très spécifique et
+- **Multijoueur par câble Link**, envisagé après la v1.0, pas avant. Très spécifique et
   coûteux à implémenter proprement.
