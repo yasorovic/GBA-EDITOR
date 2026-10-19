@@ -208,8 +208,8 @@ def test_native_drop_rekeys_and_updates_links_then_undo_restores(qapp, tmp_path,
     zone = UIText(name='caption', text_key=old_key)
     layout.elements.append(zone)
     project.ui_layouts.append(layout)
-    project.scripts_dir.mkdir(parents=True, exist_ok=True)
-    script = project.scripts_dir / 'main.lua'
+    (project.assets_dir / "scripts").mkdir(parents=True, exist_ok=True)
+    script = (project.assets_dir / "scripts") / 'main.lua'
     script.write_text(f'text:draw(0, 0, "{old_key}")\n', encoding='utf-8')
     screen = TextEditorScreen()
     screen.load_project(project)

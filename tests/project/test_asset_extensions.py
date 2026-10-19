@@ -54,10 +54,10 @@ def test_the_store_of_every_family_writes_and_finds_its_own_extension(tmp_path: 
         assert store._path("x").suffix == store.cls.sidecar_extension
 
 
-def test_every_folder_in_the_table_is_a_folder_a_project_uses(tmp_path: Path):
+def test_every_extension_in_the_table_is_one_a_project_store_uses(tmp_path: Path):
     project = Project(tmp_path)
-    used = {store.dir.name: store.cls.sidecar_extension for store in project._resource_stores()}
-    assert used == asset_extensions.FAMILY_EXTENSIONS
+    used = {store.cls.sidecar_extension for store in project._resource_stores()}
+    assert used == set(asset_extensions.FAMILY_EXTENSIONS.values())
 
 
 def _old_project(root: Path) -> None:
@@ -114,8 +114,8 @@ def test_a_migrated_project_opens_with_everything_it_had(tmp_path: Path):
     from core.models.scene import Scene
     project.scenes.save(Scene(name="Level"))
     project.save()
-    assert (project.scenes_dir / "Level.scene").is_file()
-    assert not list(project.scenes_dir.glob("*.json"))
+    assert (project.assets_dir / "Level.scene").is_file()
+    assert not list(project.assets_dir.glob("Level.json"))
 
     reopened = Project.open(project.root)
     reopened.load_all_resources()

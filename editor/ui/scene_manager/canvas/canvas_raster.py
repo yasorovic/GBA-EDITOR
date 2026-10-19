@@ -174,7 +174,7 @@ def bg_pixmap(p: Project, scene, layer, ap) -> Optional[QPixmap]:
     """Pixmap d'un layer BG pour le canvas — rendu PAR TUILE depuis la palette
     d'origine de l'asset + overrides de scène peints (`layer.tile_palette_overrides`).
     Repli sur le PNG brut si l'asset n'a pas de représentation exploitable."""
-    # layer.background_name vide -> `ap` pointe sur le DOSSIER background_images_dir
+    # layer.background_name vide -> `ap` pointe sur le DOSSIER assets/
     # (pas un fichier) : ne rien afficher (l'ancien QPixmap(dir) échouait
     # silencieusement, mais Image.open(dir) lève PermissionError).
     if not layer.background_name or not ap.is_file():

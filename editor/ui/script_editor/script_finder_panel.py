@@ -16,9 +16,8 @@ from PyQt6.QtCore import pyqtSignal
 
 from ui.common.widgets import FinderSection
 from ui.common.asset_finder import AssetFinder
-from ui.common.asset_kinds import SCRIPTS
+from ui.common.asset_kinds import SCRIPTS, add_script
 from ui.common.labels import label
-from ui.common.script_creation import show_add_script_menu
 from .colors import _BG
 from .var_table_panel import VarTablePanel
 
@@ -51,8 +50,7 @@ class ScriptFinderPanel(QWidget):
                                     min_width=self._COL_MIN, max_width=self._COL_MAX)
         self._scripts.selected.connect(lambda _kind, p: self.file_requested.emit(str(p)))
         # « + » : même menu que le Project viewer (script seul / behavior).
-        self._scripts.add_requested.connect(
-            lambda _label: show_add_script_menu(self, self._project, self._on_script_created))
+        self._scripts.add_requested.connect(lambda _label: add_script(self._project, self._on_script_created))
         root.addWidget(self._scripts, 1)
         # Les deux sections ci-dessous rejoignent la MÊME colonne défilante que
         # les scripts : posées à côté, elles flotteraient en bas du panneau.
@@ -90,7 +88,7 @@ class ScriptFinderPanel(QWidget):
 
     def set_root(self, _scripts_dir: Path = None):
         """Repeuple l'arbre. Le dossier n'est plus un paramètre — la famille
-        SCRIPTS lit `project.scripts_dir` elle-même ; l'argument reste accepté
+        SCRIPTS lit `project.assets_dir` elle-même ; l'argument reste accepté
         pour les appelants qui le passent encore."""
         self._scripts.refresh()
 

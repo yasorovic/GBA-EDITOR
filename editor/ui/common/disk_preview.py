@@ -6,16 +6,18 @@ from html import escape
 from math import ceil
 from pathlib import Path
 
-from PyQt6.QtCore import QRect, Qt
+from PyQt6.QtCore import QRect, QSize, Qt
 from PyQt6.QtGui import QColor, QFont, QImage, QImageReader, QPainter, QTextOption
 from PyQt6.QtWidgets import (
-    QDialog, QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy, QSplitter, QTextEdit, QVBoxLayout, QWidget,
+    QDialog, QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy, QSplitter, QTextEdit, QToolButton, QVBoxLayout, QWidget,
 )
 
 from core import disk_tree
 from core.models.gba_color import bgr555_to_hex, bgr555_to_rgb888
 from core.models.palette import PaletteBank
 from core.models.sprite import IMAGE_FILE_EXTS
+from core.interface_preferences import disk_preview_collapsed, set_disk_preview_collapsed
+from ui.common import icons
 from ui.common.labels import label
 from ui.common.theme import C, T
 
@@ -313,11 +315,28 @@ class DiskPreviewPanel(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(f'QWidget#diskPreviewPanel{{background:{C.BG_BASE};}}'
                            f'QLabel{{color:{C.TEXT_NORM};}}')
-        self.setFixedWidth(280)
-        layout = QVBoxLayout(self)
+        self._result = None
+        self._collapsed = disk_preview_collapsed()
+        # Vertical handle, always visible: it is the whole collapse control.
+        self._chevron = QToolButton()
+        self._chevron.setFixedWidth(16)
+        self._chevron.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        self._chevron.setIconSize(QSize(12, 12))
+        self._chevron.setStyleSheet(f'QToolButton{{border:none;background:{C.BG_DEEP};padding:0;}}'
+                                    f'QToolButton:hover{{background:{C.BG_SEL};}}')
+        self._chevron.clicked.connect(self._toggle)
+        self._content = QWidget()
+        layout = QVBoxLayout(self._content)
+        self._empty = QLabel(label('disk.preview_empty'))
+        self._empty.setWordWrap(True)
+        self._empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty.setStyleSheet(f'color:{C.TEXT_MUTED};')
         self._title = QLabel()
         self._title.setTextFormat(Qt.TextFormat.PlainText)
         self._title.setWordWrap(True)
+        self._body = QWidget()
+        body = QVBoxLayout(self._body)
+        body.setContentsMargins(0, 0, 0, 0)
         self._image = PreviewImage()
         self._text = QPlainTextEdit()
         self._text.setReadOnly(True)
@@ -333,22 +352,44 @@ class DiskPreviewPanel(QWidget):
         self._details.setWordWrap(True)
         self._enlarge = QPushButton(label('disk.preview_enlarge'))
         self._enlarge.clicked.connect(self._open)
+        body.addWidget(self._image, 1)
+        body.addWidget(self._text, 1)
+        body.addWidget(self._audio)
+        body.addWidget(self._details)
+        body.addWidget(self._enlarge)
+        layout.addWidget(self._empty, 1)
         layout.addWidget(self._title)
-        layout.addWidget(self._image, 1)
-        layout.addWidget(self._text, 1)
-        layout.addWidget(self._audio)
-        layout.addWidget(self._details)
-        layout.addWidget(self._enlarge)
-        self.hide()
+        layout.addWidget(self._body, 1)
+        root = QHBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        root.addWidget(self._chevron)
+        root.addWidget(self._content, 1)
+        self._sync_collapsed()
+
+    def _toggle(self):
+        self._collapsed = not self._collapsed
+        set_disk_preview_collapsed(self._collapsed)
+        self._sync_collapsed()
+
+    def _sync_collapsed(self):
+        """The panel stays in place (header + chevron) so selecting never reflows the list."""
+        self._chevron.setIcon(icons.get('panel_expand_left' if self._collapsed else 'panel_collapse_right', C.TEXT_NORM))
+        self._content.setVisible(not self._collapsed)
+        self._body.setVisible(self._result is not None)
+        self._empty.setVisible(self._result is None)
+        self._title.setVisible(self._result is not None)
+        self.setFixedWidth(16 if self._collapsed else 280)
 
     def show_preview(self, name, result):
         self._audio.set_path(result.audio_path if result else None)
         self._audio.setVisible(result is not None and result.audio_path is not None)
         self._result = result
         if result is None:
-            self.hide()
+            self._title.clear()
             self._image.image = QImage()
             self._text.clear()
+            self._sync_collapsed()
             return
         self._title.setText(name)
         self._image.image = result.image
@@ -359,7 +400,7 @@ class DiskPreviewPanel(QWidget):
         self._text.setPlainText(''.join(result.text.splitlines(keepends=True)[:60]) if is_text else '')
         self._details.setText('\n'.join(result.lines + ([result.note] if result.note else [])))
         self._enlarge.setEnabled(is_text or result.audio_path is not None or not result.image.isNull())
-        self.show()
+        self._sync_collapsed()
 
     def _open(self):
         dialog = QDialog(self)

@@ -23,15 +23,17 @@ def _projet(tmp_path) -> Project:
     """Un projet avec un sprite cité par un acteur, et un effet sonore."""
     root = tmp_path / "Jeu"
     p = Project.create(root, "Jeu")
-    Image.new("RGB", (16, 16), (200, 30, 30)).save(p.sprites_dir / "hero.png")
-    with wave.open(str(p.sfx_dir / "boom.wav"), "wb") as w:
+    for folder in ((p.assets_dir / "sprites"), (p.assets_dir / "backgrounds"), (p.assets_dir / "sfx"), (p.assets_dir / "scripts")):
+        folder.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (16, 16), (200, 30, 30)).save((p.assets_dir / "sprites") / "hero.png")
+    with wave.open(str((p.assets_dir / "sfx") / "boom.wav"), "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(1)
         w.setframerate(8000)
         w.writeframes(bytes(800))
     p = Project.open(root)
     p.load_all_resources()
-    create_all(p, ("sprites", p.sprites_dir / "hero.png"), ("sfx", p.sfx_dir / "boom.wav"))
+    create_all(p, ("sprites", (p.assets_dir / "sprites") / "hero.png"), ("sfx", (p.assets_dir / "sfx") / "boom.wav"))
     hero = Actor(name="Hero")
     hero.components.append(SpriteComponent(sprite_name="hero"))
     p.scenes[0].actors.append(hero)

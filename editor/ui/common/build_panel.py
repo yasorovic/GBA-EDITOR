@@ -543,12 +543,18 @@ class BuildPanel(QWidget):
                  C.ACCENT_RED if diagnostic.level == "error" else C.ACCENT_YLW)
         self._build_diagnostics.append(diagnostic)
 
-    def show_build_diagnostics(self):
+    def show_build_diagnostics(self) -> bool:
         """Fin de build : l'onglet Diagnostics montre ce que le build a dit, y compris ce que
-        le checker, le codegen et les outils ont reproché — pas seulement le validateur."""
+        le checker, le codegen et les outils ont reproché — pas seulement le validateur.
+        Renvoie True s'il contient des erreurs (c'est alors lui qui explique l'échec)."""
         warnings = [d for d in self._build_diagnostics if d.level == "warning"]
         errors = [d for d in self._build_diagnostics if d.level == "error"]
         self.diagnostics.set_diagnostics(warnings, errors)
+        return bool(errors)
+
+    def show_diagnostics_tab(self) -> None:
+        """Met l'onglet Diagnostics au premier plan (un build vient d'échouer sur ses erreurs)."""
+        self._tabs.setCurrentWidget(self.diagnostics)
 
     def set_building(self, b):
         self.btn_build.setEnabled(not b)
@@ -571,6 +577,7 @@ class ToolchainBar(QFrame):
     def __init__(self, toolchain: Toolchain, parent=None):
         super().__init__(parent)
         self.toolchain = toolchain
+        self._in_editor = True
         self.setFixedHeight(28)
         self.setStyleSheet(f"background:{C.BG_RAISED}; border-bottom:{C.SPLITTER_WIDTH}px solid {C.SPLITTER};")
         layout = QHBoxLayout(self)
@@ -613,6 +620,18 @@ class ToolchainBar(QFrame):
         ok2 = self.toolchain.mgba_ok
         self._mgba.setText("mgba ✓" if ok2 else "mgba ✗")
         self._mgba.setStyleSheet(f"color:{C.TEXT_NORM};" if ok2 else f"color:{C.ACCENT_RED};")
+        self._apply_visibility()
+
+    def set_in_editor(self, in_editor: bool):
+        """La barre n'est utile que dans l'éditeur (pas sur l'accueil)."""
+        self._in_editor = in_editor
+        self._apply_visibility()
+
+    def _apply_visibility(self):
+        """Toolchain complète : plus rien à signaler, la barre se retire
+        (File → Settings reste là pour la reconfigurer)."""
+        complete = self.toolchain.devkitpro_ok and self.toolchain.mgba_ok
+        self.setVisible(self._in_editor and not complete)
 
 
 ## L'ancien ToolchainDialog (OK/Cancel, devkitPro + mgba) vit maintenant comme

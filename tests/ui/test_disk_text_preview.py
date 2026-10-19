@@ -115,3 +115,15 @@ def test_text_dialog_is_read_only_and_supports_wrap_zoom_and_metadata(qapp, tmp_
     assert panel._text.toPlainText() == ''
     assert not panel._enlarge.isEnabled()
     panel.close()
+
+
+def test_preview_panel_remembers_collapsed_state_and_shows_empty_hint(qapp, tmp_path, monkeypatch):
+    from core import interface_preferences
+    monkeypatch.setattr(interface_preferences, 'CONFIG_FILE', tmp_path / 'interface.json')
+    monkeypatch.setattr(interface_preferences, '_cache', None)
+    panel = DiskPreviewPanel()
+    assert not panel._empty.isHidden() and panel._body.isHidden()
+    panel._chevron.click()
+    assert DiskPreviewPanel()._collapsed
+    panel._chevron.click()
+    assert not DiskPreviewPanel()._collapsed

@@ -99,14 +99,6 @@ class ProjectPathsMixin:
         return self.root / "project"
 
     @property
-    def scenes_dir(self) -> Path:
-        return self.assets_dir / "scenes"
-
-    @property
-    def prefab_dir(self) -> Path:
-        return self.assets_dir / "prefab"
-
-    @property
     def variables_file(self) -> Path:
         """Globals + constants du projet — assets/variables.json, à la racine de `assets/`."""
         return self.assets_dir / "variables.json"
@@ -122,33 +114,6 @@ class ProjectPathsMixin:
         return self.assets_dir / "texts.json"
 
     @property
-    def ui_layouts_dir(self) -> Path:
-        """Mises en page d'UI — assets/ui_layouts/*.layout.
-
-        Un fichier par mise en page (contrairement aux textes, monolithiques) :
-        une mise en page est un objet qu'on renomme, duplique et partage entre
-        scènes, donc qui mérite une identité de fichier — comme une palette."""
-        return self.assets_dir / "ui_layouts"
-
-    @property
-    def music_boxes_dir(self) -> Path:
-        """MusicBox — assets/music_boxes/*.musicbox.
-
-        Avec les données propres au projet, comme les caméras : une boîte
-        sonore ne dérive d'aucun fichier importé (ROADMAP v0.8.7)."""
-        return self.assets_dir / "music_boxes"
-
-    @property
-    def jingle_boxes_dir(self) -> Path:
-        """JingleBox — assets/jingle_boxes/*.jinglebox."""
-        return self.assets_dir / "jingle_boxes"
-
-    @property
-    def sound_boxes_dir(self) -> Path:
-        """SoundBox — assets/sound_boxes/*.soundbox."""
-        return self.assets_dir / "sound_boxes"
-
-    @property
     def legacy_sound_states_dir(self) -> Path:
         """L'ancien dossier des boîtes à trois machines (avant 2026-08-18).
 
@@ -156,76 +121,6 @@ class ProjectPathsMixin:
         renommé afin que la migration ne se rejoue pas par-dessus le travail
         qui a suivi (cf. Project._migrate_sound_states)."""
         return self.project_dir / "sound_states"
-
-    @property
-    def data_tables_dir(self) -> Path:
-        """Tables de données — assets/data/*.table.
-
-        Un fichier par table, avec les données propres au projet : une table ne
-        dérive d'aucun fichier importé. Le dossier porte le mot que le script
-        écrit (`data.Objets`) — une seule grammaire du disque au Lua."""
-        return self.assets_dir / "data"
-
-    @property
-    def palettes_dir(self) -> Path:
-        """Catalogue de palettes unifié — sources ``.hex`` et sidecars ``.palette``.
-
-        Rangé dans ``assets/`` et non ``project/`` : une palette n'est plus un
-        objet moteur mais une donnée d'éditeur que l'auteur importe et exporte,
-        au même titre qu'un PNG ou un son."""
-        return self.assets_dir / "palettes"
-
-    @property
-    def font_assets_dir(self) -> Path:
-        """Polices logiques — ``assets/fonts_assets/*.fontasset``.
-
-        Une FontAsset configure l'usage d'une ou plusieurs sources dans
-        ``assets/fonts/`` ; elle vit dans son propre dossier, jamais à côté
-        d'un fichier importé.
-        """
-        return self.assets_dir / "fonts_assets"
-
-    @property
-    def sprites_dir(self) -> Path:
-        return self.assets_dir / "sprites"
-
-    @property
-    def backgrounds_dir(self) -> Path:
-        """Dossier des sidecars BackgroundAsset (JSON) — co-localisé avec le PNG
-        source dans assets/backgrounds/, même modèle que SpriteAsset
-        (assets/sprites/)."""
-        return self.assets_dir / "backgrounds"
-
-    @property
-    def background_images_dir(self) -> Path:
-        """Dossier des images brutes PNG background."""
-        return self.assets_dir / "backgrounds"
-
-    @property
-    def sfx_dir(self) -> Path:
-        return self.assets_dir / "sfx"
-
-    @property
-    def music_dir(self) -> Path:
-        return self.assets_dir / "music"
-
-    @property
-    def jingles_dir(self) -> Path:
-        return self.assets_dir / "jingles"
-
-    @property
-    def fonts_dir(self) -> Path:
-        return self.assets_dir / "fonts"
-
-    @property
-    def scripts_dir(self) -> Path:
-        return self.assets_dir / "scripts"
-
-    @property
-    def scripts_behaviors_dir(self) -> Path:
-        """Où « New behavior » crée un behavior. Rien de plus : le RÔLE d'un script vient de son contenu
-        (`-- @behavior`, cf. `core.lua_scripts`), pas de son dossier, et il se range où l'on veut."""
-        return self.scripts_dir / "behaviors"
 
     def script_files(self) -> list[Path]:
         """Les scripts qu'on peut ATTACHER à un acteur, une scène ou une caméra : tout `.lua` de

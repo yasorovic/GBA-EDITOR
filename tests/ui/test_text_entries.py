@@ -321,8 +321,8 @@ def test_group_prefix_rename_updates_references_and_undoes_once(entries, qapp):
              for i, text in enumerate((first, second))]
     layout.elements.extend(zones)
     project.ui_layouts.append(layout)
-    project.scripts_dir.mkdir(parents=True, exist_ok=True)
-    script = project.scripts_dir / 'main.lua'
+    (project.assets_dir / "scripts").mkdir(parents=True, exist_ok=True)
+    script = (project.assets_dir / "scripts") / 'main.lua'
     script.write_text('text:draw(0, 0, "PressStart_Page01")\ntext:draw(0, 8, "PressStart_Page02")\n', encoding='utf-8')
     panel.refresh()
     _, header = panel._table._number_groups[0]

@@ -313,6 +313,8 @@ class UIInspector(QWidget):
             title=label("uiinsp.text.content_title"), body=label("uiinsp.text.content_tip"), note=label("uiinsp.text.content_note")))
         from ui.text_editor.markup_highlighter import MarkupHighlighter
         self._hl = MarkupHighlighter(self._content.document())
+        from ui.text_editor.value_completion import attach_value_completion
+        attach_value_completion(self._content, lambda: self._project)
         self._content.textChanged.connect(self._on_content_typed)
         self._content.focusOutEvent = self._content_focus_out
         self._commit_timer = QTimer(self)

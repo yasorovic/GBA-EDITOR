@@ -255,6 +255,25 @@ def test_source_modifiee_en_place(watcher, root):
     assert spy.names("asset_modified") == ["a.png"]
 
 
+def test_un_dossier_libre_est_surveille_comme_un_dossier_de_famille(watcher, root):
+    """Aucun nom de dossier ne compte : image, sidecar et scène rangés n'importe où sous assets/ sont suivis,
+    y compris dans un sous-dossier créé après le démarrage."""
+    free = root / "assets/Art/Persos"
+    write(free / "hero.png", b"1", mtime_ns=1_000_000_000)
+    write(free / "hero.sprite", b"{}", mtime_ns=1_000_000_000)
+    write(free / "Level.scene", b"{}", mtime_ns=1_000_000_000)
+    spy = start(watcher, root)
+    write(free / "hero.png", b"22", mtime_ns=2_000_000_000)
+    write(free / "hero.sprite", b"{ }", mtime_ns=2_000_000_000)
+    write(free / "Level.scene", b"{ }", mtime_ns=2_000_000_000)
+    write(root / "assets/Later/new.png")
+    settle(watcher)
+    assert spy.names("asset_modified") == ["hero.png"]
+    assert [os.path.basename(a[0]) for a in spy.sidecar_changed] == ["hero.sprite"]
+    assert [os.path.basename(a[0]) for a in spy.scene_changed] == ["Level.scene"]
+    assert spy.names("asset_appeared") == ["new.png"]
+
+
 def test_sauvegarde_atomique_supprime_puis_recree(watcher, root):
     f = root / "assets/backgrounds/a.png"
     write(f, b"1", mtime_ns=1_000_000_000)

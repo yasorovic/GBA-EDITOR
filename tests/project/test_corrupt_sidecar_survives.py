@@ -29,7 +29,9 @@ def _texts(directory) -> list[str]:
 def test_sprite_au_sidecar_illisible_n_est_pas_ecrase(tmp_path):
     root = tmp_path / "Jeu"
     project = Project.create(root, "Jeu")
-    png = project.sprites_dir / "hero.png"
+    for folder in ((project.assets_dir / "sprites"), (project.assets_dir / "backgrounds"), (project.assets_dir / "sfx"), (project.assets_dir / "scripts")):
+        folder.mkdir(parents=True, exist_ok=True)
+    png = (project.assets_dir / "sprites") / "hero.png"
     Image.new("RGB", (16, 16), (200, 30, 30)).save(png)
     project = Project.open(root)
     project.load_all_resources()
@@ -46,5 +48,5 @@ def test_sprite_au_sidecar_illisible_n_est_pas_ecrase(tmp_path):
     reopened.load_all_resources()
     reopened.save()
 
-    assert CORRUPT in _texts(project.sprites_dir), \
+    assert CORRUPT in _texts((project.assets_dir / "sprites")), \
         "le sidecar illisible a été écrasé sans copie de sauvegarde"

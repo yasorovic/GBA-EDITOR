@@ -153,7 +153,7 @@ def test_a_palette_copy_gets_its_own_hex_it_never_shares_the_original(tmp_path: 
     store, bank = blank_assets.build_blank(p, "palette")
     from core.history import CreateAssetCmd
     history = CommandHistory()
-    history.push(CreateAssetCmd(store, bank, p.palettes_dir))
+    history.push(CreateAssetCmd(store, bank, (p.assets_dir / "palettes")))
 
     copy = _duplicate(p, "palettes", bank, history)
 

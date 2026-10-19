@@ -220,11 +220,14 @@ class ScriptEditor(BaseComponentEditor):
         name, ok = QInputDialog.getText(self.insp, label("comped.new_script_title"),
                                         label("common.name_without_lua"))
         if not ok or not name.strip(): return
-        scripts_dir = proj.scripts_dir
-        scripts_dir.mkdir(parents=True, exist_ok=True)
-        sp = scripts_dir / f"{name.strip()}.lua"
-        if not sp.exists():
-            sp.write_text(self._build_template(name.strip()), encoding="utf-8")
+        # *Create blank* comme partout : dans le dossier que l'onglet Disk affiche, annulable (nom pris : suffixé).
+        from core import asset_creation
+        from core.history import RefreshAfterCmd, get_history
+        from ui.common.import_folder import import_folder
+        folder = import_folder(proj)
+        gesture = asset_creation.create_blank(proj, "script", folder, name=name.strip(), template="actor")
+        get_history().push(RefreshAfterCmd(gesture.command, get_dispatcher().notify_disk_changed))
+        sp = folder / f"{gesture.names[0]}.lua"
         comp.script = proj.asset_rel(sp)
         slot.set_script(sp.name)
         self.insp._save_component_change(None)
@@ -238,15 +241,3 @@ class ScriptEditor(BaseComponentEditor):
         comp.exports_values = {}
         slot.clear_script()
         self.insp._save_component_change(None)
-
-    def _build_template(self, script_name: str) -> str:
-        """Crée le point d'entrée minimal, commun à tous les scripts d'acteur.
-
-        L'API Lua et le transpileur résolvent déjà les composants de l'acteur
-        au build ; aucun détail de cette plomberie ne doit être préécrit dans
-        le fichier de l'utilisateur.
-        """
-        from scripting.script_templates import ScriptTemplateContext, generate_script_template
-        return generate_script_template(ScriptTemplateContext(
-            kind="actor", name=script_name,
-        ))

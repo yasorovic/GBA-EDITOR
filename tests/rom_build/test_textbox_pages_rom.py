@@ -23,6 +23,8 @@ def test_textbox_pages_compile_into_one_region(tmp_path, monkeypatch):
     if toolchain.devkitpro_state != DEVKITPRO_OK:
         pytest.skip("devkitPro unavailable")
     p = Project.create(tmp_path / "Pages", "Pages")
+    for folder in ((p.assets_dir / "scripts"),):
+        folder.mkdir(parents=True, exist_ok=True)
     scene = p.active_scene
     p.settings.default_font = "Font8x8 Latin"
     scene.font_name = "Font8x8 Latin"
@@ -42,7 +44,7 @@ def test_textbox_pages_compile_into_one_region(tmp_path, monkeypatch):
     table = p.data_tables[-1]
     p.rename_data_table(table, "Lines")
     p.rename_data_column(table, table.columns[0], "line")
-    script = p.scripts_dir / "Pages.lua"
+    script = (p.assets_dir / "scripts") / "Pages.lua"
     script.write_text('function on_update()\n'
         '    if scene.frame == 1 then\n'
         '        debug:log("TEXTBOX_INITIAL_READY")\n'

@@ -1,5 +1,6 @@
 """Le modèle FontAsset — recette de rendu, séparée des sources de police."""
 
+from asset_fixtures import create_now
 from core.models.font_asset import FontAsset
 from core.models.font import Font
 from core import asset_creation
@@ -68,7 +69,7 @@ def test_project_persists_font_assets_dans_leur_dossier_projet(tmp_path):
     project.font_assets.append(FontAsset(name="dialog", sources={"regular": ["latin"]}))
     project.font_assets.save_all()
 
-    assert (tmp_path / "assets" / "fonts_assets" / "dialog.fontasset").exists()
+    assert (tmp_path / "assets" / "dialog.fontasset").exists()
 
     reopened = Project(tmp_path)
     reopened.font_assets.load()
@@ -94,7 +95,7 @@ def test_deposer_une_source_vectorielle_invalide_est_refusee_sans_rasteriser(tmp
     source.parent.mkdir(parents=True)
     source.write_bytes(b"not a real font: discovery must not rasterize")
 
-    result = asset_creation.create_from_source(project, "fonts", source)
+    result = create_now(project, "fonts", source)
     font = project.fonts.get("ComicNeue")
 
     assert "import failed" in result.error

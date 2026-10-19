@@ -20,9 +20,11 @@ def _textbox_item(tmp_path):
     project.set_active_scene([s.name for s in project.scenes].index("SCR_Arena"))
     editor = SceneEditor()
     editor.load_project(project)
-    items = [i for i in editor._gba_scene.items() if isinstance(i, UIRegionItem)]
+    # Une chaîne (`Text` ponctuel) ne se coupe pas : sa largeur n'entre pas dans la clé, seules les boîtes la changent.
+    items = [i for i in editor._gba_scene.items()
+             if isinstance(i, UIRegionItem) and getattr(i._region, "wraps", True)]
     if not items:
-        pytest.skip("aucune zone dans la démo")
+        pytest.skip("aucune boîte de texte dans la démo")
     return editor, items[0]
 
 

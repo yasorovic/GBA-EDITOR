@@ -53,16 +53,16 @@ def test_a_soft_deleted_nested_sidecar_is_erased_from_its_own_folder(tmp_path: P
 
 def test_a_new_asset_can_be_placed_in_a_folder_but_never_outside_the_collection(tmp_path: Path):
     store = _store(tmp_path / "sfx")
-    store.dir.mkdir(parents=True, exist_ok=True)
-    folder = store.dir / "platformer" / "wav"
+    store.root.mkdir(parents=True, exist_ok=True)
+    folder = store.root / "platformer" / "wav"
 
     store.save(Sfx(name="jump"), folder)
-    assert (folder / "jump.sfx").is_file() and not (store.dir / "jump.sfx").exists()
+    assert (folder / "jump.sfx").is_file() and not (store.root / "jump.sfx").exists()
     placed = store.get("jump")
     assert placed is not None and store.path_of(placed) == folder / "jump.sfx"
 
     store.save(Sfx(name="plain"))                                                 # sans dossier : la racine, comme avant
-    assert (store.dir / "plain.sfx").is_file()
+    assert (store.root / "plain.sfx").is_file()
 
     with pytest.raises(ValueError):
         store.save(Sfx(name="intruder"), tmp_path / "elsewhere")

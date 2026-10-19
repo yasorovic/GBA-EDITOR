@@ -41,6 +41,9 @@ _DEFAULTS = {
     # Facteur d'échelle de toute l'interface, en pourcents. Lu avant la
     # création de la QApplication : le changement prend effet au redémarrage.
     "scale_percent": 100,
+    # Panneau d'aperçu du Disk replié sur sa barre ? Un état d'affichage, donc
+    # propre à la machine comme le reste de ce fichier.
+    "disk_preview_collapsed": False,
 }
 
 SCALE_CHOICES = (75, 100, 125, 150)
@@ -101,6 +104,15 @@ def interface_scale_percent() -> int:
 
 def set_interface_scale_percent(percent: int):
     _load()["scale_percent"] = percent if percent in SCALE_CHOICES else _DEFAULTS["scale_percent"]
+    _save()
+
+
+def disk_preview_collapsed() -> bool:
+    return bool(_load().get("disk_preview_collapsed", _DEFAULTS["disk_preview_collapsed"]))
+
+
+def set_disk_preview_collapsed(value: bool):
+    _load()["disk_preview_collapsed"] = bool(value)
     _save()
 
 

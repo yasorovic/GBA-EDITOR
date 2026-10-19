@@ -17,7 +17,7 @@
     {
       "id": "ca536f594a09",
       "key": "scr_victory_victory",
-      "content": "VICTORY",
+      "content": "$score_cpu",
       "note": "",
       "scene": "SCR_Victory"
     },
@@ -72,14 +72,14 @@
     },
     {
       "id": "56452ba8e8d2",
-      "key": "scr_arena_text_1",
-      "content": "vergzesrg",
+      "key": "scr_arena_text_2",
+      "content": "vergzesrg $score_cpu ",
       "note": "",
       "scene": ""
     },
     {
       "id": "e7064ba3dbba",
-      "key": "scr_arena_text_2",
+      "key": "scr_arena_text_1",
       "content": "grezgrzgr",
       "note": "",
       "scene": ""

@@ -249,6 +249,7 @@
     "disk.meta_frame_ticks": { "text": "Ticks per frame (60 Hz)" },
     "disk.meta_loop": { "text": "Loop" },
     "disk.preview_enlarge": { "text": "Enlarge preview…" },
+    "disk.preview_empty": { "text": "Select an asset to preview it" },
     "disk.preview_fit": { "text": "Fit" },
     "disk.preview_bitmap": { "text": "Bitmap" },
     "disk.preview_tiled": { "text": "Tiled" },
@@ -2253,7 +2254,10 @@
       "text": "Build OK"
     },
     "win.build_failed_log": {
-      "text": "[build] Failed, see console"
+      "text": "[build] Failed, see the log above"
+    },
+    "win.build_failed_diagnostics": {
+      "text": "[build] Failed, see the Diagnostics tab"
     },
     "win.build_error": {
       "text": "Build error"
@@ -4853,6 +4857,7 @@
     "disk.blank_sound_box": { "text": "Sound box" },
     "disk.blank_data_table": { "text": "Data table" },
     "disk.blank_palette": { "text": "Palette" },
+    "disk.blank_font_asset": { "text": "Font asset" },
     "disk.blank_script": { "text": "Script" },
     "disk.blank_behavior": { "text": "Behavior" },
     "disk.delete_items": { "singular": "Delete", "plural": "Delete {n} items" },

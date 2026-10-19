@@ -41,7 +41,9 @@ def _build(project: Project):
 
 def _projet(tmp_path, *, actor_script=None, behavior=None, prefab_script=None, orphan=None):
     project = Project.create(tmp_path / "Game", "Game")
-    scripts = project.scripts_dir
+    for folder in ((project.assets_dir / "scripts"),):
+        folder.mkdir(parents=True, exist_ok=True)
+    scripts = (project.assets_dir / "scripts")
     scripts.mkdir(parents=True, exist_ok=True)
     scene = project.scenes[0]
     if actor_script is not None:
@@ -50,8 +52,8 @@ def _projet(tmp_path, *, actor_script=None, behavior=None, prefab_script=None, o
         actor.components = [ScriptComponent(script="assets/scripts/Hit.lua")]
         scene.actors.append(actor)
     if behavior is not None:
-        project.scripts_behaviors_dir.mkdir(parents=True, exist_ok=True)
-        (project.scripts_behaviors_dir / "ai.lua").write_text(behavior, encoding="utf-8")
+        ((project.assets_dir / "scripts") / "behaviors").mkdir(parents=True, exist_ok=True)
+        (((project.assets_dir / "scripts") / "behaviors") / "ai.lua").write_text(behavior, encoding="utf-8")
     if prefab_script is not None:
         # Aucune instance déclarée dans la scène : le prefab n'est jamais compilé.
         (scripts / "Bullet.lua").write_text(prefab_script, encoding="utf-8")

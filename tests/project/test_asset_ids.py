@@ -4,6 +4,7 @@ import json
 import wave
 from pathlib import Path
 
+from asset_fixtures import create_now
 from core.models.audio import Sfx
 from core.models.data_table import DataTable
 from core.models.ids import is_id
@@ -126,6 +127,6 @@ def test_a_new_audio_file_gets_an_id_when_its_sidecar_is_created(tmp_path: Path)
         out.setframerate(8000)
         out.writeframes(b"\x80" * 80)
 
-    sfx = asset_creation.create_from_source(project, "sfx", path).item
+    sfx = create_now(project, "sfx", path).item
 
     assert is_id(sfx.id) and json.loads((folder / "Zap.sfx").read_text())["id"] == sfx.id

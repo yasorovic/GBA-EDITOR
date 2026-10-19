@@ -552,6 +552,14 @@ class AddResourceCmd(Command):
             self._refresh()
 
 
+def store_asset(store, item, folder=None) -> None:
+    """Range un asset dans son catalogue et l'écrit, dans `folder` (à défaut la racine du catalogue). Le même geste pour
+    un asset vierge et pour un asset créé depuis une source ; l'asset naît à côté de sa source."""
+    if item not in store.items:
+        store.append(item)
+    store.save(item, folder)
+
+
 class CreateAssetCmd(Command):
     """
     Création d'un asset (depuis une source, ou vierge) : *Create asset*.
@@ -572,7 +580,6 @@ class CreateAssetCmd(Command):
         if self._done:
             self._mgr.restore(self._item)
         else:
-            from core.asset_creation import store_asset
             store_asset(self._mgr, self._item, self._folder)
             self._done = True
         if self._refresh:

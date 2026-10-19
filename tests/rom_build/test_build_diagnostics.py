@@ -104,8 +104,10 @@ needs_devkitpro = pytest.mark.skipif(
 
 def _projet(tmp_path, script):
     project = Project.create(tmp_path / "Game", "Game")
-    project.scripts_dir.mkdir(parents=True, exist_ok=True)
-    (project.scripts_dir / "Hit.lua").write_text(script, encoding="utf-8")
+    for folder in ((project.assets_dir / "sprites"), (project.assets_dir / "backgrounds"), (project.assets_dir / "sfx"), (project.assets_dir / "scripts")):
+        folder.mkdir(parents=True, exist_ok=True)
+    (project.assets_dir / "scripts").mkdir(parents=True, exist_ok=True)
+    ((project.assets_dir / "scripts") / "Hit.lua").write_text(script, encoding="utf-8")
     actor = Actor(name="A")
     actor.components = [ScriptComponent(script="assets/scripts/Hit.lua")]
     project.scenes[0].actors.append(actor)
@@ -156,7 +158,7 @@ def test_build_log_copie_le_journal_et_se_reecrit(tmp_path):
     assert "[build] 1 error(s), 0 warning(s)" in log
 
     # Le build suivant le réécrit : rien de l'ancien ne reste.
-    (project.scripts_dir / "Hit.lua").write_text("function on_update()\nend\n", encoding="utf-8")
+    ((project.assets_dir / "scripts") / "Hit.lua").write_text("function on_update()\nend\n", encoding="utf-8")
     _build(project)
     log = (project.root / "build" / "build.log").read_text(encoding="utf-8")
     assert "[error] Hit.lua" not in log

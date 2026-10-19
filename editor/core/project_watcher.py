@@ -2,21 +2,19 @@
 project_watcher.py — Surveillance des fichiers projet en temps réel.
 
 Principe :
-  - assets/  → surveillé par LISTE de sous-dossiers (cf. watch_project), pas
-               récursivement : QFileSystemWatcher ne descend pas tout seul, et
-               un sous-dossier créé après coup n'est donc pas suivi. Tout
-               fichier déposé ou supprimé dans les dossiers listés est notifié
+  - assets/  → surveillé dossier par dossier, À TOUTE PROFONDEUR (cf. watch_project) :
+               l'auteur range ses fichiers où il veut, aucun nom de dossier ne
+               compte. QFileSystemWatcher ne descend pas tout seul : la liste est
+               recalculée à chaque rescan, un dossier créé après coup est suivi
+               dès le retour du focus. Tout fichier déposé ou supprimé est notifié
                via asset_appeared / asset_removed, à condition que son
                extension soit dans _ASSET_SUFFIXES. Les .lua émettent
                lua_changed directement. Un fichier renommé est, pour le
                surveillant, un fichier disparu ET un fichier apparu : un asset
                POINTE sa source, il ne la suit pas.
-  - les sidecars d'assets (sprites, backgrounds, fonts, sfx, music)
-               vivent DANS assets/, à côté de leur fichier source, et sont
-               surveillés eux aussi — sidecar_changed. Ils ne l'étaient pas :
-               éditer une police à la main hors de l'éditeur ne se voyait pas.
-  - assets/scenes/ et assets/prefab/ → leurs JSONs sont surveillés (relus s'ils
-               changent hors de l'éditeur).
+  - les sidecars d'assets (sprites, backgrounds, fonts, sfx, music, jingles) vivent
+               n'importe où sous assets/ et sont surveillés eux aussi — sidecar_changed.
+  - les .scene sont relus s'ils changent hors de l'éditeur, où qu'ils soient.
 
 Signaux principaux
 ------------------
@@ -62,11 +60,6 @@ from core.models.sprite import IMAGE_FILE_EXTS
 
 _ASSET_SUFFIXES = IMAGE_FILE_EXTS | SFX_FILE_EXTS | MUSIC_FILE_EXTS | FONT_FILE_EXTS
 
-# Les familles dont le sidecar vit DANS assets/, à côté du fichier
-# source — le nom du dossier est aussi celui du `ResourceStore` correspondant
-# (`project.fonts`, `project.sprites`…), ce qui évite une table de
-# correspondance de plus.
-_SIDECAR_DIRS = frozenset({"sprites", "backgrounds", "fonts", "sfx", "music", "jingles"})
 _LUA_SUFFIX     = ".lua"
 _SCENE_SUFFIX   = asset_extensions.SCENE
 # L'extension de chaque sidecar qui vit à côté de sa source (`.sprite`, `.sfx`…) : la table des extensions,
@@ -77,22 +70,8 @@ _SIDECAR_SUFFIXES = frozenset({asset_extensions.SPRITE, asset_extensions.BACKGRO
 _WATCHED_SUFFIXES = _ASSET_SUFFIXES | {_LUA_SUFFIX, _SCENE_SUFFIX} | _SIDECAR_SUFFIXES
 
 
-# Les dossiers de `assets/` où l'on surveille TOUT ce qu'un asset peut être (sources, sidecars, scripts) ;
-# partout ailleurs, l'auteur range comme il veut et seuls les `.lua` sont suivis : un fichier source déposé
-# dans un dossier libre est une source sans asset, pas un import à signaler.
-_FULL_WATCH_DIRS = frozenset({"sprites", "backgrounds", "sounds", "sfx", "music", "jingles", "fonts",
-                              "scripts", "scenes", "prefab"})
-
-
-def _suffixes_for(directory: Path) -> frozenset:
-    """Ce que le surveillant suit dans `directory`."""
-    if directory.name == "assets" or directory.parent.name == "assets" and directory.name in _FULL_WATCH_DIRS:
-        return _WATCHED_SUFFIXES
-    return frozenset({_LUA_SUFFIX})
-
-
-def _script_dirs(assets_root: Path) -> list[Path]:
-    """Tous les dossiers de `assets/`, à toute profondeur : un script se range où l'auteur veut."""
+def _asset_dirs(assets_root: Path) -> list[Path]:
+    """Tous les dossiers de `assets/`, à toute profondeur : un fichier se range où l'auteur veut."""
     if not assets_root.is_dir():
         return []
     return sorted(d for d in assets_root.rglob("*") if d.is_dir())
@@ -187,7 +166,8 @@ class ProjectWatcher(QObject):
             return
         self._suppress = False
         self._suppress_timer.stop()
-        for d in self._watched_dirs(root):
+        # Les dossiers existants, plus ceux qu'on suivait et qui ont disparu (la liste ne les nomme plus).
+        for d in dict.fromkeys([*self._watched_dirs(root), *map(Path, self._dir_snapshots)]):
             if not d.exists():
                 if str(d) in self._dir_snapshots:
                     self._on_dir_changed(str(d))    # dossier disparu
@@ -199,20 +179,7 @@ class ProjectWatcher(QObject):
 
     def _watched_dirs(self, project_path: Path) -> list[Path]:
         assets_root = project_path / "assets"
-        return [
-            assets_root,
-            assets_root / "sprites",
-            assets_root / "backgrounds",
-            assets_root / "sounds",
-            assets_root / "sfx",
-            assets_root / "music",
-            assets_root / "jingles",
-            assets_root / "fonts",
-            *_script_dirs(assets_root),
-            # Les JSONs d'édition de l'auteur (scènes, prefabs) : relus s'ils changent hors de l'éditeur
-            assets_root / "scenes",
-            assets_root / "prefab",
-        ]
+        return [assets_root, *_asset_dirs(assets_root)]
 
     def unwatch(self):
         self._clear()
@@ -332,9 +299,8 @@ class ProjectWatcher(QObject):
         out: dict[str, tuple[int, int]] = {}
         if not d.exists():
             return out
-        suffixes = _suffixes_for(d)
         for f in d.iterdir():
-            if not (f.is_file() and f.suffix.lower() in suffixes):
+            if not (f.is_file() and f.suffix.lower() in _WATCHED_SUFFIXES):
                 continue
             try:
                 st = f.stat()
@@ -359,24 +325,15 @@ class ProjectWatcher(QObject):
 
     def _index_files(self, project_path: Path):
         """Ajoute tous les fichiers pertinents à la surveillance."""
-        assets_root = project_path / "assets"
-        asset_dirs = [assets_root / sub for sub in
-                      ("sprites", "backgrounds", "sounds", "sfx", "music", "jingles", "fonts")]
-        for d in asset_dirs + _script_dirs(assets_root):
-            if d.exists():
-                suffixes = _suffixes_for(d)
-                for f in d.iterdir():
-                    # Le sidecar est suivi comme le fichier source :
-                    # sans lui, éditer une police ou un fond à la main hors de
-                    # l'éditeur ne se voyait jamais.
-                    if f.is_file() and f.suffix.lower() in suffixes:
-                        self._watcher.addPath(str(f))
-
-        # JSONs de scènes (éditeur)
-        scenes_dir = assets_root / "scenes"
-        if scenes_dir.exists():
-            for f in scenes_dir.glob(f"*{_SCENE_SUFFIX}"):
-                self._watcher.addPath(str(f))
+        for d in self._watched_dirs(project_path):
+            if not d.is_dir():
+                continue
+            for f in d.iterdir():
+                # Le sidecar est suivi comme le fichier source :
+                # sans lui, éditer une police ou un fond à la main hors de
+                # l'éditeur ne se voyait jamais.
+                if f.is_file() and f.suffix.lower() in _WATCHED_SUFFIXES:
+                    self._watcher.addPath(str(f))
 
     def _clear_suppress(self):
         self._suppress = False
@@ -453,11 +410,9 @@ class ProjectWatcher(QObject):
 
     @staticmethod
     def _is_sidecar_json(path: Path) -> bool:
-        """Un sidecar d'asset vit dans assets/<famille de source>/, à côté de sa source. Les JSON
-        d'`assets/scenes/`, `assets/prefab/`… sont des assets entiers, sans source : pas des sidecars."""
-        return (path.suffix.lower() in _SIDECAR_SUFFIXES
-                and path.parent.name in _SIDECAR_DIRS
-                and path.parent.parent.name == "assets")
+        """Un sidecar d'asset se reconnaît à son extension (`.sprite`, `.sfx`…), où qu'il vive sous `assets/`.
+        Les scènes, prefabs… sont des assets entiers, sans source : pas des sidecars."""
+        return path.suffix.lower() in _SIDECAR_SUFFIXES
 
     def _emit_modified(self, path_str: str):
         """Fin du debounce d'un fichier : n'émet que si l'empreinte diffère de
@@ -486,8 +441,7 @@ class ProjectWatcher(QObject):
         if suffix == _LUA_SUFFIX:
             self.lua_changed.emit(path_str)
         elif suffix == _SCENE_SUFFIX:
-            if path.parent.name == "scenes":
-                self.scene_changed.emit(path_str)
+            self.scene_changed.emit(path_str)
         elif self._is_sidecar_json(path):
             self.sidecar_changed.emit(path_str)
         elif suffix in _ASSET_SUFFIXES:

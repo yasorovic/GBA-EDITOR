@@ -43,7 +43,7 @@ import copy
 
 from core.resources import asset_reconciliation
 from core.events import EventEmitter
-from core.models.scene import Actor, Prefab, Scene
+from core.models.scene import Actor, Prefab
 from core.models.unique_name import unique_name
 from core.history import get_history, AddActorCmd
 from core.text_table_link import TableSync
@@ -336,26 +336,10 @@ class CommandDispatcher(EventEmitter):
 
     # ── Scene ─────────────────────────────────────────────────────
 
-    def add_scene(self, name: str) -> Optional[Scene]:
-        """Crée une nouvelle scène vide et la persiste."""
-        if not self._project:
-            return None
-        # Une scène NEUVE naît en budget AUTO (ROADMAP v0.17, révision
-        # 2026-09-19) : le budget est dérivé, `128 − acteurs_posés − OBJ_UI`,
-        # rien à réserver d'avance. `actor_slots` reste à 0 (override réservé à
-        # plus tard) ; l'ancien seeding 96/32 a disparu avec `DEFAULT_ACTOR_SLOTS`.
-        scene = Scene(name=name)
-        self._project.seed_default_ui_palette(scene)
-        self._project.seed_default_camera(scene)
-        self._project.scenes.append(scene)
-        with self._watcher.suspended():
-            self._project.save_scene(scene)
-        # Une scène de plus change l'arbre projet : les vues qui en dérivent
-        # (project viewer, graphe des scènes) doivent l'apprendre tout de suite,
-        # pas au prochain aller-retour d'écran.
+    def notify_project_tree_changed(self):
+        """Une scène ou un prefab est né, ou a disparu : les vues qui en dérivent (project viewer, graphe des scènes)
+        l'apprennent tout de suite, pas au prochain aller-retour d'écran."""
         self._emit("project_tree_changed")
-        self._emit("status_message",f"Scene created: {name}")
-        return scene
 
     # ── Camera ────────────────────────────────────────────────────
 
@@ -402,17 +386,6 @@ class CommandDispatcher(EventEmitter):
         self._emit("status_message", f"Deleted camera: {camera.name}")
 
     # ── Prefab ────────────────────────────────────────────────────
-
-    def add_prefab(self, name: str) -> Optional[Prefab]:
-        """Crée un nouveau prefab vide et le persiste."""
-        if not self._project:
-            return None
-        prefab = Prefab(name=name)
-        self._project.prefabs.append(prefab)
-        with self._watcher.suspended():
-            self._project.save_prefab(prefab)
-        self._emit("status_message",f"Prefab created: {name}")
-        return prefab
 
     # ── Sprite ────────────────────────────────────────────────────
 
@@ -628,6 +601,10 @@ class CommandDispatcher(EventEmitter):
             return
         with self.suspended():
             self._project.ui_layouts.save_all()
+
+    def notify_disk_changed(self):
+        """Un fichier ou un dossier est né sous `assets/` par un geste de l'éditeur : repeupler l'onglet Disk."""
+        self._emit("disk_changed")
 
     def notify_scripts_changed(self):
         """Notifie que la liste des scripts a changé (création, suppression)."""

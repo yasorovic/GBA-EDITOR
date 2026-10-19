@@ -331,7 +331,7 @@ class CodegenContext:
     has_persistent: Optional[bool] = None
     # {nom d'accord : masque C}, dérivé des `InputBinding` du projet — un
     # simple ET de boutons (cases à cocher), plus de mini-langage ici depuis
-    # la décision de l'auteur du 2026-09-27. Les boutons physiques restent
+    # la décision du 2026-09-27. Les boutons physiques restent
     # résolus par `key_constant`.
     input_masks: dict = field(default_factory=dict)
     # {nom de séquence : (tables C, longueurs, fenêtre)} — le mini-langage
@@ -2336,7 +2336,7 @@ class CodeGen:
     def _input_mask_arg(self, args: list) -> str:
         """Le nom cité par `held`/`buffered` (1er arg) : un bouton nu ou un
         accord déclaré (`InputBinding`) — jamais une séquence, qui n'a plus le
-        même espace de noms depuis la décision de l'auteur du 2026-09-27."""
+        même espace de noms depuis la décision du 2026-09-27."""
         if not args:
             return "0"
         if not isinstance(args[0], ExprString):
@@ -2723,7 +2723,7 @@ _DOMAIN_CONSTANT: dict = {
     DOMAIN_MUSIC_SECTION: lambda g, name: music_section_constant(name),
     DOMAIN_JINGLE:  lambda g, name: music_constant(name),
     # `pressed`/`released` (accord simple, jamais une séquence depuis la
-    # décision de l'auteur du 2026-09-27) passent par ce chemin générique ;
+    # décision du 2026-09-27) passent par ce chemin générique ;
     # `held`/`buffered` ont leur propre émetteur (`_input_mask_arg`) pour
     # l'argument optionnel/le bit de tampon, mais lisent le MÊME dict.
     DOMAIN_KEY:     lambda g, name: g.ctx.input_masks.get(name, key_constant(name)),

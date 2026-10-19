@@ -24,6 +24,7 @@ from PyQt6.QtCore import (
 )
 
 from ui.common.deferred_writes import schedule_save
+from ui.common.import_folder import import_folder
 from ui.common.theme import C, T, QSS, ui_font
 from ui.common.unit_spin import UnitSpin
 from ui.common.widgets import W, FinderSection, AssetHeaderBar, CollapsibleCard
@@ -54,7 +55,7 @@ _LABEL_OF_KIND = {KIND_SCENE:    BACKGROUNDS_SCENE.label,
                   KIND_UI:       BACKGROUNDS_UI.label,
                   KIND_ANIMATED: BACKGROUNDS_ANIM.label}
 _KIND_OF_LABEL = {v: k for k, v in _LABEL_OF_KIND.items()}
-from core.history import get_history, DeleteResourceCmd, CreateAssetCmd
+from core.history import get_history, DeleteResourceCmd, CreateAssetCmd, RefreshAfterCmd
 from core.bg_import import QUANTIZERS_8BPP
 from . import bg_inpaint_canvas
 from .bg_inpaint_canvas import BgInpaintCanvas
@@ -1788,9 +1789,9 @@ class BgPropertiesPanel(QWidget):
             render_rgba(ba).save(path)
 
     def _free_png_path(self):
-        """`<nom>.png` dans le dossier des images de fonds, ou le premier `<nom>_N.png` libre : un « Save as » ne
-        recouvre jamais la source d'un autre fond, ni l'ancienne source de celui-ci."""
-        folder = self._project.background_images_dir
+        """`<nom>.png` dans le dossier affiché par l'onglet Disk, ou le premier `<nom>_N.png` libre : un « Save as »
+        ne recouvre jamais la source d'un autre fond, ni l'ancienne source de celui-ci."""
+        folder = import_folder(self._project)
         n, path = 1, folder / f"{self._ba.name}.png"
         while path.exists():
             n += 1
@@ -1890,8 +1891,9 @@ class BgPropertiesPanel(QWidget):
         if not path:
             return
         import shutil
-        dst = self._project.background_images_dir / f"{self._ba.name}.png"
-        dst.parent.mkdir(parents=True, exist_ok=True)
+        from core.models.unique_name import unique_name
+        folder = import_folder(self._project)
+        dst = folder / f"{unique_name(Path(path).stem, {f.stem for f in folder.iterdir()})}.png"
         shutil.copy2(path, dst)
         self._ba.asset = self._project.asset_rel(dst)
         # Le canvas et la pose se disent pour l'ANCIENNE image : sur la nouvelle ils
@@ -1920,7 +1922,6 @@ class BackgroundEditorScreen(QWidget):
         root = QHBoxLayout(self); root.setContentsMargins(0, 0, 0, 0); root.setSpacing(0)
         # Trois sections, une par `kind` : chacune a son propre import (un PNG,
         # un cadre d'UI, une planche d'animation). Cf. ui/common/asset_kinds.py.
-        self.folder_provider = lambda: None      # branché par la fenêtre : le dossier de l'onglet Disk
         self._finder = AssetFinder(
             label('bgedit.background_finder'),
             [BACKGROUNDS_SCENE, BACKGROUNDS_UI, BACKGROUNDS_ANIM],
@@ -2249,18 +2250,6 @@ class BackgroundEditorScreen(QWidget):
         elif chosen == blank_action:
             self._create_blank_background()
 
-    def _target_folder(self) -> Path:
-        """Où naît un fond : le dossier que l'onglet Disk affiche s'il est dans `assets/`, sinon `assets/backgrounds`."""
-        shown = self.folder_provider()
-        if shown:
-            folder = Path(shown)
-            try:
-                folder.resolve().relative_to(self._project.assets_dir.resolve())
-                return folder
-            except ValueError:
-                pass
-        return self._project.assets_dir / "backgrounds"
-
     def _create_blank_background(self):
         """Crée une image vide (PNG indexé transparent 240 × 160, aux couleurs de la première palette du projet) dans
         le dossier affiché, puis un fond qui la pointe — le même chemin qu'un import. Annulable (Ctrl+Z)."""
@@ -2269,8 +2258,7 @@ class BackgroundEditorScreen(QWidget):
         from PIL import Image
         from core.models.gba_color import bgr555_to_rgb888
         from core.models.unique_name import unique_name
-        folder = self._target_folder()
-        folder.mkdir(parents=True, exist_ok=True)
+        folder = import_folder(self._project)
         taken = {ba.name for ba in self._project.backgrounds} | {p.stem for p in folder.glob("*.png")}
         name = unique_name("Background", taken)
         palette = next(iter(self._project.palettes), None)
@@ -2293,8 +2281,7 @@ class BackgroundEditorScreen(QWidget):
         path, _ = QFileDialog.getOpenFileName(self, title, "", label('bgedit.images_png'))
         if not path:
             return
-        folder = self._target_folder()
-        folder.mkdir(parents=True, exist_ok=True)
+        folder = import_folder(self._project)
         dst = folder / Path(path).name
         if Path(path).resolve() != dst.resolve():
             import shutil
@@ -2305,13 +2292,13 @@ class BackgroundEditorScreen(QWidget):
         """Un PNG déjà dans le projet devient un fond rangé À CÔTÉ de lui, puis se compresse hors-thread.
         `paint_palette` : la banque du catalogue que le fond reçoit d'office comme palette ajoutée (une image vide, faite
         pour être peinte)."""
-        name = dst.stem
-        ba = self._project.get_background(name)
+        ba = self._project.get_background(dst.stem)
+        gesture = None
         if ba is None:
-            from core.asset_creation import store_asset
-            from core.models.background import BackgroundAsset
-            ba = BackgroundAsset(name=name, asset=self._project.asset_rel(dst))
-            store_asset(self._project.backgrounds, ba, dst.parent)
+            from core import asset_creation
+            # Sans encodage : il se fait plus bas, hors-thread. La commande n'est poussée qu'une fois le fond réglé.
+            gesture = asset_creation.create_from_source(self._project, "backgrounds", [dst], defer_encoding=True)
+            ba = gesture.items[0]
         # Le type vient du « + » sur lequel on a cliqué : la section où l'auteur
         # range l'image dit son emploi mieux que n'importe quelle heuristique
         # (rien dans les pixels ne distingue un cadre de dialogue d'un décor).
@@ -2336,10 +2323,21 @@ class BackgroundEditorScreen(QWidget):
             token = "tiled8"
         # Sélectionner immédiatement (canvas vide + « Compression… ») puis
         # compresser hors-thread — l'éditeur n'est jamais bloqué.
-        self._refresh_finder(select=ba.name)
+        if gesture is None:
+            self._refresh_finder(select=ba.name)
+        else:
+            get_history().push(RefreshAfterCmd(gesture.command, lambda: self._after_creation_changed(ba)))
         self._compress_async(
             ba, dst, token, ba.quantize_method, ba.dither,
             then=lambda: self._after_import(ba, then_paint))
+
+    def _after_creation_changed(self, ba) -> None:
+        """Le fond importé vient d'être créé, annulé ou refait : le finder suit ; annulé, sa compression en cours ne valide rien
+        (sinon elle réécrirait le fichier que l'annulation vient de retirer)."""
+        present = ba in self._project.backgrounds
+        if not present:
+            self._encoding.cancel(ba)
+        self._refresh_finder(select=ba.name if present else None)
 
     def _after_import(self, ba, then_paint: bool = False):
         """Réglages qui ne peuvent se poser qu'une fois la taille CONNUE — donc

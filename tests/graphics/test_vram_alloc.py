@@ -134,6 +134,13 @@ def test_la_tuile_zero_du_bloc_de_texte_reste_libre():
         assert lay.text_base >= 1
 
 
+def test_le_texte_ne_partage_pas_le_charblock_d_un_fond_ancre_a_sa_base():
+    """Les cellules vides de la map d'UI pointent sur la tuile 0 du charblock du
+    texte : si un fond y est ancré (Space en BG2, UI en BG0), elle s'afficherait."""
+    lay = scene_layout({2: 196}, {2: 1}, text_bg=0, text_tiles=434)
+    assert lay.text_cbb != 2
+
+
 # ── Multi-slot d'UI (v0.12) ───────────────────────────────────────
 
 def test_multi_slot_ui_une_map_par_slot_glyphes_partages():

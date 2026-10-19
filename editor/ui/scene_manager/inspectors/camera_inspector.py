@@ -527,7 +527,8 @@ class CameraInspector(QWidget):
         if not ok or not name.strip():
             return
         from scripting.script_templates import ScriptTemplateContext, generate_script_template
-        d = self._project.scripts_dir
+        from ui.common.import_folder import import_folder
+        d = import_folder(self._project)
         d.mkdir(parents=True, exist_ok=True)
         sp = d / f"{name.strip()}.lua"
         if not sp.exists():

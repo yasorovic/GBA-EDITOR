@@ -11,6 +11,7 @@ from ui.common.drag_grip import DragGrip
 from ui.common.labels import label
 from ui.common.theme import C, T, QSS
 from ui.text_editor.markup_highlighter import MarkupHighlighter
+from ui.text_editor.value_completion import attach_value_completion
 
 _PAGE_SELECTION = "#d62d79"
 
@@ -138,6 +139,7 @@ class TextboxPages(QWidget):
         block.editor.document().documentLayout().documentSizeChanged.connect(
             lambda size: block.editor.setFixedHeight(min(180, max(44, int(size.height()) + 8))))
         block.highlighter = MarkupHighlighter(block.editor.document())
+        attach_value_completion(block.editor, lambda: self._project)
         block.editor.activated.connect(lambda: self.activate(index))
         block.editor.deactivated.connect(self.commit)
         block.editor.textChanged.connect(lambda: self._typed(index))

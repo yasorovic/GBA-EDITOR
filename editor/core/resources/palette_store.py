@@ -6,8 +6,8 @@ et modifiable sans l'éditeur, et ne sont jamais dupliquées dans le ``.palette`
 familles, l'asset ne suit pas son fichier source, et le fichier ne suit pas son asset : seul le chemin
 ``asset`` les relie.
 
-Un ``.hex`` déposé à la main dans ``assets/palettes/`` devient aussitôt une palette (son ``.palette`` est
-créé à côté). Ailleurs sous ``assets/``, c'est une source libre, comme un PNG qu'aucun asset ne cite.
+Un ``.hex`` que nul ``.palette`` ne cite est une source libre, comme un PNG qu'aucun asset ne cite : il devient
+une palette par *Create from source*, jamais de lui-même. Une palette neuve naît avec son ``.hex`` à côté d'elle.
 """
 
 from __future__ import annotations
@@ -17,14 +17,14 @@ from pathlib import Path
 
 from core.models import project_json
 from core.models.palette import PaletteBank
-from core.resources.resource_store import ResourceStore, atomic_write, safe_filename
+from core.resources.resource_store import ResourceStore, atomic_write
 
 
 class PaletteStore(ResourceStore[PaletteBank]):
     """Catalogue de :class:`PaletteBank`, chacune pointant son fichier ``.hex``."""
 
-    def __init__(self, directory: Path, root: Path | None = None, project_root: Path | None = None):
-        super().__init__(directory, PaletteBank, root)
+    def __init__(self, root: Path, project_root: Path | None = None):
+        super().__init__(root, PaletteBank)
         # Les chemins `asset` sont relatifs à la racine du PROJET (comme ceux des autres familles).
         self._project_root = Path(project_root) if project_root is not None else self.root
 
@@ -42,14 +42,14 @@ class PaletteStore(ResourceStore[PaletteBank]):
 
     def hex_path(self, bank: PaletteBank) -> Path:
         """Le fichier des couleurs de `bank` : celui que son asset cite ; une palette neuve, qui n'en cite pas
-        encore, aura le sien dans le dossier des palettes."""
+        encore, aura le sien à côté de son `.palette`."""
         if bank.asset:
             return self._abs(bank.asset)
-        return self.dir / f"{safe_filename(bank.name)}.hex"
+        return self._path(bank.name).with_suffix(".hex")
 
     def source_path(self, name: str) -> Path:
         bank = next((b for b in self.items if b.name == name), None)
-        return self.hex_path(bank) if bank is not None else self.dir / f"{safe_filename(name)}.hex"
+        return self.hex_path(bank) if bank is not None else self._path(name).with_suffix(".hex")
 
     # ── Lecture ───────────────────────────────────────────────────
 
@@ -128,22 +128,6 @@ class PaletteStore(ResourceStore[PaletteBank]):
             sidecar = self.index.path_for(name)
             if sidecar is not None:
                 self._read(name, sidecar)
-        # Un `.hex` déposé à la main dans le dossier des palettes devient immédiatement une palette
-        # complète pour l'éditeur, sans que ses couleurs soient copiées.
-        cited = {self.hex_path(bank).resolve() for bank in self.items}
-        taken = {bank.name for bank in self.items}
-        for source in sorted(self.dir.glob("*.hex")) if self.dir.exists() else []:
-            if source.resolve() in cited or source.stem in taken:
-                continue
-            try:
-                bank = PaletteBank.from_hex(source.stem, source.read_text(encoding="utf-8"), {})
-            except Exception as error:
-                self.unreadable[self._key(source)] = f"{type(error).__name__}: {error}"
-                print(f"[project] palette read error {source.name}: {error}")
-                continue
-            bank.asset = self._rel(source)
-            self.items.append(bank)
-            self._write_sidecar(bank)
 
     def load_one(self, name: str) -> PaletteBank | None:
         sidecar = self.index.path_for(name)
@@ -153,7 +137,7 @@ class PaletteStore(ResourceStore[PaletteBank]):
 
     def save(self, item: PaletteBank, folder: Path | None = None):
         if not item.asset:
-            item.asset = self._rel(self.dir / f"{safe_filename(item.name)}.hex")
+            item.asset = self._rel(self._path(item.name, folder).with_suffix(".hex"))     # à côté de son .palette
         hex_file = self.hex_path(item)
         hex_file.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(hex_file, item.to_hex())

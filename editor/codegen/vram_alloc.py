@@ -109,6 +109,19 @@ def _free_run_high(occupied: list, start: int, stop: int, n: int):
     return None
 
 
+def _free_run_for_text(occupied: list, n: int):
+    """Comme `_free_run_high`, mais le charblock du run doit avoir sa tuile 0 libre :
+    les cellules vides d'une map d'UI pointent dessus, elle doit donc rester vide
+    (`text_clear`). Un fond ancré à la base du charblock, ou une map, la remplirait."""
+    trial = list(occupied)
+    while (pos := _free_run_high(trial, 0, BLOCKS, n)) is not None:
+        if pos % BLOCKS_PER_CBB == 0 or occupied[pos // BLOCKS_PER_CBB * BLOCKS_PER_CBB] is None:
+            return pos
+        for b in range(pos, pos + n):
+            trial[b] = "rejected"
+    return None
+
+
 def scene_layout(slots: dict, map_blocks: dict, text_bg: int,
                  text_tiles: int, ui_slots=None) -> VramLayout:
     """Alloue la VRAM BG d'une scène.
@@ -165,13 +178,13 @@ def scene_layout(slots: dict, map_blocks: dict, text_bg: int,
     #    dans la portée de son propre charblock (base + n < 1024 tuiles).
     n_text = tiles_to_blocks(text_tiles)
     if n_text:
-        pos = _free_run_high(occupied, 0, BLOCKS, n_text)
+        pos = _free_run_for_text(occupied, n_text)
         # Posé pile à la base d'un charblock, le texte est décalé d'une tuile (voir plus bas) :
         # s'il remplit ses blocs, il lui en faut un de plus.
         if (pos is not None and pos % BLOCKS_PER_CBB == 0
                 and text_tiles % BLOCK_TILES == 0):
             n_text += 1
-            pos = _free_run_high(occupied, 0, BLOCKS, n_text)
+            pos = _free_run_for_text(occupied, n_text)
         if pos is None:
             return legacy
         for b in range(pos, pos + n_text):

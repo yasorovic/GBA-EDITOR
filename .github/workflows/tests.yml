@@ -48,6 +48,9 @@ jobs:
       # Ce contrôle existait déjà mais n'avait jamais tourné automatiquement, et
       # `--fresh` (un interpréteur neuf par module, seul moyen de voir une boucle
       # qui dépend de l'ordre d'import) n'était jamais lancé du tout.
+      - name: Ruff (erreurs certaines)
+        run: ruff check editor tools tests
+
       - name: Contrôle d'architecture
         run: python tools/check_architecture.py --fresh
 

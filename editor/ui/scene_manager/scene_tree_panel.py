@@ -1715,14 +1715,19 @@ class SceneTreePanel(QWidget):
         dans l'arbre — la ligne y affiche « Interface », jamais le nom du .layout."""
         if not self._project or not self._scene:
             return
-        from core.models.ui_region import UILayout, InterfaceNode
-        name = unique_name(self._scene.name or "ui", {l.name for l in self._project.ui_layouts})
-        lay = UILayout(name=name)
-        self._project.ui_layouts.append(lay)
-        self._scene.ui_layouts.append(InterfaceNode(layout_name=name))
-        get_dispatcher().save_all()      # persiste l'asset neuf ET la scène
+        from core import asset_creation
+        from ui.common.import_folder import import_folder
+        gesture = asset_creation.create_interface(self._project, self._scene, import_folder(self._project),
+                                                  persist=self._persist_interface)
+        get_history().push(gesture.command)
+        get_bus().select(UILayoutSelection(gesture.items[0], self._scene))
+
+    def _persist_interface(self):
+        """Après chaque sens d'une création d'interface : la scène (le nœud) est écrite, les vues se remettent d'accord ;
+        l'asset, lui, est écrit par la commande de création."""
+        get_dispatcher().save_all()
+        get_dispatcher().notify_disk_changed()
         self._after_ui_change()
-        get_bus().select(UILayoutSelection(lay, self._scene))
 
     # ── Ajout d'une caméra (inline — même geste que l'acteur) ─────
 

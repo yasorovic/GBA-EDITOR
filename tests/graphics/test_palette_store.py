@@ -11,7 +11,7 @@ from core import project_starters
 
 
 
-def test_hex_dropped_by_user_creates_sidecar_on_open(tmp_path):
+def test_hex_dropped_by_user_is_not_adopted_on_open(tmp_path):
     palette_dir = tmp_path / "assets" / "palettes"
     palette_dir.mkdir(parents=True)
     (palette_dir / "Forest.hex").write_text("#000000\n#4EA832\n", encoding="utf-8")
@@ -19,10 +19,7 @@ def test_hex_dropped_by_user_creates_sidecar_on_open(tmp_path):
     store = PaletteStore(palette_dir)
     store.load()
 
-    assert store.get("Forest").colors == [0, rgb888_to_bgr555(0x4E, 0xA8, 0x32)]
-    assert json.loads((palette_dir / "Forest.palette").read_text(encoding="utf-8")) == {
-        "name": "Forest", "size": 16, "asset": "Forest.hex",
-    }
+    assert store.get("Forest") is None and not (palette_dir / "Forest.palette").exists()
 
 
 def test_palette_bank_owns_the_canonical_hex_format():
@@ -34,7 +31,7 @@ def test_palette_bank_owns_the_canonical_hex_format():
 
 def test_deleted_hex_is_never_recreated_from_its_sidecar(tmp_path):
     project = Project.create(tmp_path / "MyGame", "MyGame")
-    source = project.palettes_dir / "_PICO-8.hex"
+    source = (project.assets_dir / "palettes") / "_PICO-8.hex"
     source.unlink()
 
     reopened = Project.open(project.root)

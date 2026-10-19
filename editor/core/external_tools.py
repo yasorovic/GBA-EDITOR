@@ -4,10 +4,10 @@ core/external_tools.py — chemins des logiciels tiers, réglage du LOGICIEL
 
 Portée actuelle : quatre chemins configurables depuis l'écran Réglages
 (catégorie « External Tools »), pour l'image, le son, la police et le texte
-(éditeur de fichiers `.json` & co). Seul le chemin « text » est lu : le clic droit
-« Edit externally » de l'onglet Disk sur textes, traductions et variables
-(`window._edit_externally`). Un chemin vide s'ouvre dans l'application par défaut
-du système. Les trois autres attendent leur câblage, finder par finder.
+(éditeur de fichiers `.json` & co). « text » sert au clic droit « Edit externally » de
+l'onglet Disk (`window._edit_externally`) ; « image » aux boutons « Edit » des écrans
+Sprite et Background (`ui/common/external_editor.py`). Un chemin vide s'ouvre dans
+l'application par défaut du système. « audio » et « font » attendent leur câblage.
 """
 from __future__ import annotations
 
@@ -43,11 +43,13 @@ class ExternalTools:
         CONFIG_FILE.write_text(json.dumps(self._config, indent=2), encoding="utf-8")
 
     def path(self, kind: str) -> Path | None:
+        self._config = self._load()  # le fichier fait foi : un autre écran a pu écrire entre-temps
         if p := self._config.get(kind):
             return Path(p)
         return None
 
     def set_path(self, kind: str, path: Path | None):
+        self._config = self._load()
         if path:
             self._config[kind] = str(path)
         else:

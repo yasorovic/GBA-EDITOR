@@ -9,12 +9,13 @@ de l'auteur, jamais la conséquence de l'apparition d'un fichier. Deux chemins :
   donne la liste, le premier est le plus courant.
 - **vierge** (`create_blank`) : un asset sans source (scène, prefab, boîte…), dans un dossier donné.
 
-Le module construit l'asset et le range dans son catalogue ; l'historique (annuler / refaire) est affaire de
-`core.history.CreateAssetCmd`, qui appelle ces fonctions.
+Chaque geste rend UNE commande annulable (`Gesture.command`) que l'appelant pousse dans l'historique ; le module
+construit l'asset, `core.history.CreateAssetCmd` le range dans son catalogue et l'écrit.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from contextlib import nullcontext
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -49,6 +50,17 @@ class Creation:
     folder: Optional[Path] = None
     warning: Optional[str] = None
     error: Optional[str] = None
+
+
+@dataclass
+class Gesture:
+    """Ce qu'un geste de création a préparé : `command` (à pousser dans l'historique, None si rien n'est créé), les
+    noms et les assets créés, les constats d'import (`warnings`) et les fichiers refusés (`errors`)."""
+    command: object = None
+    names: list = field(default_factory=list)
+    items: list = field(default_factory=list)
+    warnings: list = field(default_factory=list)
+    errors: list = field(default_factory=list)
 
 
 def candidate_families(path) -> tuple[str, ...]:
@@ -99,10 +111,12 @@ def _new_sprite(project, name: str, path: Path):
     return sprite, warning, None
 
 
-def _new_background(project, name: str, path: Path):
+def _new_background(project, name: str, path: Path, encode: bool = True):
     from core.resources.asset_reconciliation import encode_background_asset, catalogue_lookup
     from core.models.background import BackgroundAsset
     ba = BackgroundAsset(name=name, asset=project.asset_rel(path))
+    if not encode:
+        return ba, None, None       # l'appelant détecte le mode et compresse (hors-thread), cf. l'écran Background
     warning = None
     try:
         from core.bg_import import detect_import_mode
@@ -173,10 +187,11 @@ _BUILDERS = {"sprites": _new_sprite, "backgrounds": _new_background, "sfx": _new
              "palettes": _new_palette}
 
 
-def build_from_source(project, family: str, path, name: str | None = None) -> Creation:
+def build_from_source(project, family: str, path, name: str | None = None, defer_encoding: bool = False) -> Creation:
     """L'asset de type `family` qui POINTERAIT `path`, construit mais NI rangé NI écrit : l'historique le range
     (`core.history.CreateAssetCmd`), pour que le geste s'annule. Un fichier qui ne convient pas (format,
-    contenu illisible, source déjà citée) ne produit rien : `error` le dit."""
+    contenu illisible, source déjà citée) ne produit rien : `error` le dit. `defer_encoding` (fonds seulement) : le fond
+    naît sans layout ni encodage, l'appelant les calcule — l'écran Background compresse hors du thread de l'interface."""
     path = Path(path)
     project.load_all_resources()
     if family not in families_for(project, path):
@@ -184,23 +199,80 @@ def build_from_source(project, family: str, path, name: str | None = None) -> Cr
                   else f"it cannot become a {FAMILY_WORDS.get(family, family).lower()}")
         return Creation(error=f"{path.name}: {reason}.")
     name = name or asset_name(project, family, path)
-    item, warning, error = _BUILDERS[family](project, name, path)
+    if defer_encoding and family == "backgrounds":
+        item, warning, error = _new_background(project, name, path, encode=False)
+    else:
+        item, warning, error = _BUILDERS[family](project, name, path)
     if error:
         return Creation(error=error)
     return Creation(family, _store(project, family), item, path.parent, warning)
 
 
-def store_asset(store, item, folder: Path | None = None) -> None:
-    """Range un asset dans son catalogue et l'écrit, dans `folder` (le dossier de sa famille si absent). Le même
-    geste pour un asset vierge et pour un asset créé depuis une source ; l'asset naît à côté de sa source."""
-    if item not in store.items:
-        store.append(item)
-    store.save(item, folder)
+def import_folder(project, shown: str | None) -> Path:
+    """Où va un fichier importé : le dossier que l'onglet Disk affiche s'il est sous `assets/`, sinon `assets/`
+    elle-même. Aucun dossier de famille n'est imposé — l'auteur range où il veut."""
+    if shown:
+        folder = Path(shown)
+        try:
+            folder.resolve().relative_to(project.assets_dir.resolve())
+            return folder
+        except ValueError:
+            pass
+    return project.assets_dir
 
 
-def create_from_source(project, family: str, path, name: str | None = None) -> Creation:
-    """`build_from_source` puis `store_asset` : sans historique (tests, outils)."""
-    creation = build_from_source(project, family, path, name)
-    if creation.error is None:
-        store_asset(creation.store, creation.item, creation.folder)
-    return creation
+def create_from_source(project, family: str, paths, folder: Path | None = None, defer_encoding: bool = False) -> Gesture:
+    """*Create from source* : un asset de type `family` par source, UNE commande pour le lot. L'asset naît à côté de sa
+    source (ou dans `folder`). Les noms sont uniques entre eux aussi (deux `coin.wav` de deux dossiers donnent `coin`
+    et `coin_2`) ; une source qui ne convient pas est signalée dans `errors`, les autres sont créées. `defer_encoding` :
+    cf. `build_from_source`."""
+    from core.history import CreateAssetCmd, MacroCmd
+    project.load_all_resources()
+    taken = {item.name for item in _store(project, family)}
+    gesture, commands = Gesture(), []
+    for path in map(Path, paths):
+        name = unique_name(path.stem, taken)
+        creation = build_from_source(project, family, path, name, defer_encoding)
+        if creation.error is not None:
+            gesture.errors.append(creation.error)
+            continue
+        taken.add(name)
+        commands.append(CreateAssetCmd(creation.store, creation.item, folder or creation.folder))
+        gesture.names.append(name)
+        gesture.items.append(creation.item)
+        if creation.warning:
+            gesture.warnings.append(creation.warning)
+    if commands:
+        gesture.command = commands[0] if len(commands) == 1 else MacroCmd(commands, f"Créer {len(commands)} assets")
+    return gesture
+
+
+def create_blank(project, kind: str, folder, around=nullcontext, **options) -> Gesture:
+    """*Create blank* : un asset sans source — ou un script, un behavior —, nommé d'office et unique, dans `folder`.
+    `around` entoure l'écriture d'un script (la fenêtre y suspend le surveillant) ; `options` : cf. `blank_assets.build_blank`
+    (`name` : le nom voulu, suffixé s'il est pris). Pour un script, `template` choisit un autre modèle que `kind` (« actor »)."""
+    from core import blank_assets
+    from core.history import CreateAssetCmd
+    folder = Path(folder)
+    if kind in blank_assets.SCRIPT_KINDS:
+        from core.disk_commands import CreateFileCmd
+        from core.lua_scripts import lua_files
+        name = unique_name(options.get("name") or ("Behavior" if kind == "behavior" else "Script"),
+                           {p.stem for p in lua_files(project)})   # un behavior se retrouve par son nom
+        content = blank_assets.script_source(options.get("template") or kind, name).encode("utf-8")
+        return Gesture(CreateFileCmd(folder / f"{name}.lua", content, around=around), [name])
+    store, item = blank_assets.build_blank(project, kind, **options)
+    return Gesture(CreateAssetCmd(store, item, folder), [item.name], [item])
+
+
+def create_interface(project, scene, folder, persist=None) -> Gesture:
+    """Un nœud `Interface` : une mise en page vierge, nommée d'après la scène, et le nœud qui la pose dans `scene` —
+    UNE commande. `persist` : ce qui écrit la scène et remet les vues d'accord, après chaque sens."""
+    from core import blank_assets
+    from core.history import AddListItemCmd, CreateAssetCmd, MacroCmd
+    from core.models.ui_region import InterfaceNode
+    store, layout = blank_assets.build_blank(project, "ui_layout", name=scene.name or "ui")
+    node = AddListItemCmd(scene.ui_layouts, InterfaceNode(layout_name=layout.name), persist_fn=persist,
+                          label=f"Add interface {layout.name}")
+    return Gesture(MacroCmd([CreateAssetCmd(store, layout, folder), node], f"Créer {layout.name}"),
+                   [layout.name], [layout])

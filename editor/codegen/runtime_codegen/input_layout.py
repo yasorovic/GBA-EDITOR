@@ -167,7 +167,7 @@ def compute_input_layout(p) -> InputLayout:
         layout.ring_depth = max(layout.ring_depth, buffered_max + 1)
     # Le bit `buffered` n'est alloué QU'AUX accords interrogés par
     # `buffered()` — un jeu sans tampon, ou un accord jamais bufferisé, n'en
-    # paie pas l'octet (ROADMAP, décision de l'auteur).
+    # paie pas l'octet (ROADMAP).
     for i, name in enumerate(n for n in layout.masks if n in buffered_names):
         layout.buffered_bits[name] = i
 

@@ -59,6 +59,11 @@ class SpriteEditorScreen(QWidget):
         self._project = project
         self._left.load_project(project)
 
+    def reload_image(self):
+        """Un PNG de sprite a changé sur le disque : le centre relit la planche (le finder, lui, restaure
+        sa sélection sans réémettre, donc `load_project` seul laissait l'ancien aperçu)."""
+        self._center.reload_image()
+
     def refresh(self):
         """Re-dérive à la revisite de l'écran — appelé au centre par
         `Window._show_screen` (chantier « L'écran resynchronisé à sa revisite »).

@@ -23,6 +23,7 @@ BLANK_KINDS = (
     ("sound_box",   "sound_boxes",  "SoundBox"),
     ("data_table",  "data_tables",  "Table"),
     ("palette",     "palettes",     "Palette"),
+    ("font_asset",  "font_assets",  "Font"),
 )
 SCRIPT_KINDS = ("script", "behavior")
 
@@ -51,7 +52,14 @@ def _build(project, kind: str, name: str, **options):
     if kind == "palette":
         from core.models.palette import PaletteBank
         from core.palette_presets import hsb_ramp_bgr555
-        return PaletteBank(name=name, colors=hsb_ramp_bgr555(0, 0, steps=16), size=16)
+        size = options.get("size", 16)         # 16 (4bpp) ou 256 (8bpp)
+        return PaletteBank(name=name, colors=hsb_ramp_bgr555(0, 0, steps=size), size=size)
+    if kind == "font_asset":
+        from core.models.font_asset import FontAsset
+        asset = FontAsset(name=name)
+        if project.fonts:                       # préliée à la première source disponible
+            asset.sources = {"regular": [project.fonts[0].name]}
+        return asset
     if kind == "background":
         from core.models.background import BackgroundAsset
         # Un écran GBA complet, vide mais immédiatement peignable. La tuile 0
@@ -73,11 +81,12 @@ def _build(project, kind: str, name: str, **options):
     raise ValueError(f"unknown blank asset kind: {kind}")
 
 
-def build_blank(project, kind: str, **options):
-    """`(catalogue, asset)` : l'asset vierge de ce type, nommé et unique, ni rangé ni écrit."""
+def build_blank(project, kind: str, name: str | None = None, **options):
+    """`(catalogue, asset)` : l'asset vierge de ce type, nommé et unique, ni rangé ni écrit. `name` : le nom voulu
+    (suffixé s'il est pris), sinon le nom de base du type."""
     family, base = next((f, b) for k, f, b in BLANK_KINDS if k == kind)
     store = getattr(project, family)
-    name = unique_name(base, {item.name for item in store})
+    name = unique_name(name or base, {item.name for item in store})
     return store, _build(project, kind, name, **options)
 
 
@@ -93,6 +102,7 @@ def build_background(project, *, size: tuple[int, int] = (240, 160), colors: lis
 
 
 def script_source(kind: str, name: str) -> str:
-    """Le contenu d'un script neuf (`kind` : "script" ou "behavior" ; ce dernier porte le marqueur)."""
+    """Le contenu d'un script neuf (`kind` : "script", "behavior" — qui porte le marqueur — ou "actor", le point
+    d'entrée d'un script d'acteur)."""
     from scripting.script_templates import ScriptTemplateContext, generate_script_template
-    return generate_script_template(ScriptTemplateContext(kind="behavior" if kind == "behavior" else "empty", name=name))
+    return generate_script_template(ScriptTemplateContext(kind=kind if kind in ("behavior", "actor") else "empty", name=name))

@@ -66,7 +66,7 @@ def test_load_one_ne_rajoute_pas_un_double(tmp_path):
     doit pas faire entrer une deuxième fois la même ressource."""
     p = _projet(tmp_path, fichier="ma-police",
                 nom_interne="ma-police", planche_citee="ma-police")
-    path = p.fonts_dir / "ma-police.font"
+    path = (p.assets_dir / "fonts") / "ma-police.font"
     d = json.loads(path.read_text(encoding="utf-8"))
     d["name"] = "Ma Police"
     path.write_text(json.dumps(d), encoding="utf-8")

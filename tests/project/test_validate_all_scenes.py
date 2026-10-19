@@ -18,8 +18,10 @@ from core.validator import ValidationMessage, validate_project
 def _deux_scenes(tmp_path) -> Project:
     """Deux scènes ; la première (active) est saine, la seconde porte les fautes."""
     project = Project.create(tmp_path / "Game", "Game")
+    for folder in ((project.assets_dir / "scripts"),):
+        folder.mkdir(parents=True, exist_ok=True)
     project.scenes.append(Scene(name="Level2"))
-    project.scripts_dir.mkdir(parents=True, exist_ok=True)
+    (project.assets_dir / "scripts").mkdir(parents=True, exist_ok=True)
     return project
 
 
@@ -68,7 +70,7 @@ def test_une_scene_d_interface_sans_acteur_n_avertit_pas(tmp_path):
     """Un écran titre n'a souvent aucun acteur : un script suffit à le justifier. Une scène
     sans acteur, sans script et sans interface, elle, ne fait rien — et le dit."""
     project = _deux_scenes(tmp_path)
-    (project.scripts_dir / "Title.lua").write_text("function on_start()\nend\n", encoding="utf-8")
+    ((project.assets_dir / "scripts") / "Title.lua").write_text("function on_start()\nend\n", encoding="utf-8")
     project.scenes[0].script = "assets/scripts/Title.lua"
 
     warns, _errors = _verdict(project)
@@ -91,7 +93,7 @@ def test_une_scene_de_depart_inconnue_avertit(tmp_path):
 
 def test_un_script_latin_1_est_dit_sans_planter_le_validateur(tmp_path):
     project = _deux_scenes(tmp_path)
-    (project.scripts_dir / "Old.lua").write_bytes("-- café\nfunction on_update()\nend\n".encode("latin-1"))
+    ((project.assets_dir / "scripts") / "Old.lua").write_bytes("-- café\nfunction on_update()\nend\n".encode("latin-1"))
     actor = Actor(name="Hero")
     actor.components = [ScriptComponent(script="assets/scripts/Old.lua")]
     project.scenes[0].actors.append(actor)
@@ -134,6 +136,8 @@ def test_une_police_vectorielle_n_est_pas_controlee_comme_une_image(tmp_path):
     from core.models.font import Font
 
     project = Project.create(tmp_path / "Game", "Game")
+    for folder in ((project.assets_dir / "scripts"),):
+        folder.mkdir(parents=True, exist_ok=True)
     fonts = project.root / "assets" / "fonts"
     fonts.mkdir(parents=True, exist_ok=True)
     (fonts / "vector.ttf").write_bytes(b"not an image")
@@ -148,6 +152,8 @@ def test_une_planche_png_illisible_reste_une_erreur(tmp_path):
     from core.models.font import Font
 
     project = Project.create(tmp_path / "Game", "Game")
+    for folder in ((project.assets_dir / "scripts"),):
+        folder.mkdir(parents=True, exist_ok=True)
     fonts = project.root / "assets" / "fonts"
     fonts.mkdir(parents=True, exist_ok=True)
     (fonts / "sheet.png").write_bytes(b"not an image")

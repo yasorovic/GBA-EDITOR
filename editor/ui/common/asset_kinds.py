@@ -32,7 +32,7 @@ from core.models.resource import (
     MIME_ANIMATED_BG, MIME_MUSIC, MIME_PREFAB_TEMPLATE, MIME_SCRIPT,
 )
 from core.history import (
-    get_history, DeleteResourceCmd, DeleteFileCmd, RenameFileCmd,
+    get_history, DeleteResourceCmd, DeleteFileCmd, RenameFileCmd, RefreshAfterCmd,
 )
 
 
@@ -193,6 +193,34 @@ SCRIPTS = AssetKind(
     file_of       = own_path,
     duplicate     = _duplicate_scripts,
 )
+
+
+def _create_blank(project, kind: str, **options):
+    """« + » d'une famille sans source : *Create blank* dans le dossier que l'onglet Disk affiche. Rend l'asset (le finder
+    ouvre aussitôt son renommage en place)."""
+    from core import asset_creation
+    from ui.common.import_folder import import_folder
+    gesture = asset_creation.create_blank(project, kind, import_folder(project), **options)
+    get_history().push(gesture.command)
+    return gesture.items[0]
+
+
+def add_script(project, on_created) -> None:
+    """« + » de la famille Scripts : un script seul (à attacher ensuite) ou un behavior, par *Create blank* dans le
+    dossier que l'onglet Disk affiche. `on_created(chemin)` : ce que l'écran fait du fichier (le montrer, l'ouvrir)."""
+    if project is None:
+        return
+    from core import asset_creation
+    from core.command_dispatcher import get_dispatcher
+    from ui.common.import_folder import import_folder
+    kind = _menu_choice([(label("assf.script"), lambda: "script", "script_lua"),
+                         (label("assf.behavior_script"), lambda: "behavior", "script_lua")])
+    if kind is None:
+        return
+    folder = import_folder(project)
+    gesture = asset_creation.create_blank(project, kind, folder)
+    get_history().push(RefreshAfterCmd(gesture.command, get_dispatcher().notify_disk_changed))      # l'onglet Disk montre le fichier
+    on_created(folder / f"{gesture.names[0]}.lua")
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -369,18 +397,6 @@ FONTS = AssetKind(
 )
 
 
-def _new_font_asset(project):
-    """Crée une police logique, préliée à la première source disponible."""
-    from core.history import AddResourceCmd
-    from core.models.font_asset import FontAsset
-
-    asset = FontAsset(name=unique_name("Font", {item.name for item in project.font_assets}))
-    if project.fonts:
-        asset.sources = {"regular": [project.fonts[0].name]}
-    get_history().push(AddResourceCmd(project.font_assets, asset))
-    return asset
-
-
 FONT_ASSETS = AssetKind(
     label="Font assets",
     label_key="akind.font_assets",
@@ -388,7 +404,7 @@ FONT_ASSETS = AssetKind(
     nodes=store_nodes("font_assets"),
     rename=_renamer("rename_font_asset"),
     delete=_store_deleter("font_assets"),
-    add=_new_font_asset,
+    add=lambda project: _create_blank(project, "font_asset"),
     add_tooltip_key="akind.new_font_asset",
     file_of=store_file("font_assets"),
     duplicate=_store_duplicator("font_assets"),
@@ -408,16 +424,6 @@ FONT_ASSETS = AssetKind(
 def _palette_icon(bank):
     from ui.common.palette_swatch import bank_icon
     return bank_icon(bank)
-
-
-def _new_palette(project, size: int):
-    from core.models.palette import PaletteBank
-    from core.palette_presets import hsb_ramp_bgr555
-    from core.history import AddResourceCmd
-    bank = PaletteBank(name=unique_name("Palette", {item.name for item in project.palettes}),
-                       colors=hsb_ramp_bgr555(0, 0, steps=size), size=size)
-    get_history().push(AddResourceCmd(project.palettes, bank))
-    return bank
 
 
 def _import_palette(project):
@@ -448,8 +454,8 @@ def _add_palette(project):
     plutôt que dialogues ») : la banque naît nommée, et le finder ouvre aussitôt
     son renommage en place."""
     return _menu_choice([
-        (label('akind.new_16_color_palette_4bpp'),  lambda: _new_palette(project, 16), "palette"),
-        (label('akind.new_256_color_palette_8bpp'), lambda: _new_palette(project, 256), "palette"),
+        (label('akind.new_16_color_palette_4bpp'),  lambda: _create_blank(project, "palette", size=16), "palette"),
+        (label('akind.new_256_color_palette_8bpp'), lambda: _create_blank(project, "palette", size=256), "palette"),
         (None, None),
         (label('akind.import_2'),                      lambda: _import_palette(project), "import"),
     ])
@@ -477,16 +483,12 @@ PALETTES = AssetKind(
 #  Audio — sfx, musiques
 # ──────────────────────────────────────────────────────────────────
 
-def _add_sound(attr: str, cls_name: str, base: str):
-    """Crée un SFX / une piste nommé d'office. Pas de modale qui réclame un nom
-    avant que la chose existe : le finder ouvre le renommage en place ensuite."""
+def _add_sound(family: str, tip_key: str):
+    """« + » d'un SFX / d'une musique / d'un jingle : un son n'existe pas sans fichier, donc *Create from source* — on choisit
+    le fichier, l'asset naît nommé d'après lui et le finder ouvre son renommage en place."""
     def add(project):
-        import core.models.audio as audio_models
-        from core.history import AddResourceCmd
-        store = getattr(project, attr)
-        asset = getattr(audio_models, cls_name)(name=unique_name(base, {item.name for item in store}))
-        get_history().push(AddResourceCmd(store, asset))
-        return asset
+        from ui.common.source_import import import_from_file
+        return import_from_file(project, family, label(tip_key))
     return add
 
 
@@ -498,7 +500,7 @@ SFX = AssetKind(
     rename        = _renamer("rename_sound"),
     delete        = _store_deleter("sfx"),
     delete_prompt = lambda a: label('akind.delete_sfx_name_ctrl_z_to_undo', name=a.name),
-    add           = _add_sound("sfx", "Sfx", "SFX"),
+    add           = _add_sound("sfx", 'akind.add_an_sfx'),
     add_tooltip_key = 'akind.add_an_sfx',
     actions       = (_relink_action("sfx"),),
     file_of       = store_file("sfx"),
@@ -517,7 +519,7 @@ MUSIC = AssetKind(
     rename        = _renamer("rename_sound"),
     delete        = _store_deleter("music"),
     delete_prompt = lambda a: label('akind.delete_track_name_ctrl_z_to_undo', name=a.name),
-    add           = _add_sound("music", "Music", "Track"),
+    add           = _add_sound("music", 'akind.add_a_track'),
     add_tooltip_key = 'akind.add_a_track',
     actions       = (_relink_action("music"),),
     file_of       = store_file("music"),
@@ -536,7 +538,7 @@ JINGLES = AssetKind(
     rename        = _renamer("rename_sound"),
     delete        = _store_deleter("jingles"),
     delete_prompt = lambda a: label('akind.delete_jingle_name_ctrl_z_to_undo', name=a.name),
-    add           = _add_sound("jingles", "Jingle", "Jingle"),
+    add           = _add_sound("jingles", 'akind.add_a_jingle'),
     add_tooltip_key = 'akind.add_a_jingle',
     actions       = (_relink_action("jingles"),),
     file_of       = store_file("jingles"),
@@ -548,19 +550,6 @@ JINGLES = AssetKind(
 # ──────────────────────────────────────────────────────────────────
 #  Données — tables
 # ──────────────────────────────────────────────────────────────────
-
-def _add_data_table(project):
-    """Crée une table d'UNE colonne et d'aucune ligne. Une colonne d'office
-    plutôt qu'une table vide : une grille sans colonne n'a nulle part où poser
-    une ligne."""
-    from core.models.data_table import DataTable, DataColumn
-    from core.history import AddResourceCmd
-
-    name = unique_name("Table", {t.name for t in project.data_tables})
-    table = DataTable(name=name, columns=[DataColumn(name="valeur", type="int")], rows=[])
-    get_history().push(AddResourceCmd(project.data_tables, table))
-    return table
-
 
 def _rename_data_table(project, table, new_name: str) -> str:
     # Seul `rename_*` à rendre un booléen : le nom d'une table s'écrit comme du
@@ -585,7 +574,7 @@ DATA_TABLES = AssetKind(
     rename        = _rename_data_table,
     delete        = _store_deleter("data_tables"),
     delete_prompt = lambda t: label('akind.delete_table_name_ctrl_z_to_undo', name=t.name),
-    add           = _add_data_table,
+    add           = lambda project: _create_blank(project, "data_table"),
     add_tooltip_key = 'akind.new_table',
     file_of       = store_file("data_tables"),
     duplicate     = _store_duplicator("data_tables"),

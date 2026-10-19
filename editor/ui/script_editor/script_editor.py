@@ -208,8 +208,8 @@ class ScriptEditorScreen(QWidget):
         self._file_tree.set_project(project)
         self._refresh_catalogs()
         if project:
-            self._root_scripts_dir = project.scripts_dir
-            self._file_tree.set_root(project.scripts_dir)
+            self._root_scripts_dir = project.assets_dir
+            self._file_tree.set_root(project.assets_dir)
 
     def _refresh_catalogs(self):
         """Re-dérive ce qui dépend des CATALOGUES du projet : la section

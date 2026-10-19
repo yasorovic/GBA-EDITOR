@@ -8,3 +8,11 @@ addopts = "-q -rs -m 'not slow'"
 markers = [
     "slow: construit un vrai projet de bout en bout (quelques minutes) ; exclus par défaut, `pytest -m slow` les lance",
 ]
+
+# Ruff ne lit que les erreurs qui plantent à coup sûr (syntaxe, comparaisons et
+# constructions invalides) : base à zéro faute le 2026-10-19. Les noms indéfinis
+# sont déjà vérifiés par tools/check_architecture.py (ruff y voit à tort les
+# annotations en chaîne) ; imports inutilisés et variables mortes (F401, F841,
+# ~200 relevés) sont laissés de côté tant qu'ils ne sont pas nettoyés.
+[tool.ruff.lint]
+select = ["E9", "F63", "F7"]

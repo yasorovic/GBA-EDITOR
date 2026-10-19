@@ -116,7 +116,7 @@ def test_a_behavior_using_self_is_refused_wherever_it_lives(tmp_path: Path):
 def test_moving_a_script_rewrites_every_reference_to_it(tmp_path: Path):
     from core.models.scene import Scene
     p = _project(tmp_path)
-    script = _write(p.scripts_dir / "Level.lua", "function on_start()\nend\n")
+    script = _write((p.assets_dir / "scripts") / "Level.lua", "function on_start()\nend\n")
     scene = Scene(name="Level")
     scene.script = p.asset_rel(script)
     p.scenes.append(scene)

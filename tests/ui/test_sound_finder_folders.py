@@ -71,7 +71,16 @@ def test_nouveau_dossier_cree_un_dossier_de_la_famille_et_l_ouvre_en_renommage(f
     assert store.folders("sfx") == [] and _folders_shown(finder, SFX) == []     # une autre famille ne voit rien
 
 
-def test_ajouter_un_asset_depuis_le_menu_marche_toujours(finder, project):
+def test_ajouter_un_asset_depuis_le_menu_marche_toujours(finder, project, tmp_path, monkeypatch):
+    import wave
+    from PyQt6.QtWidgets import QFileDialog
+    source = tmp_path / "theme.wav"                     # un son naît d'un fichier : « + » ouvre le sélecteur
+    with wave.open(str(source), "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(1)
+        out.setframerate(8000)
+        out.writeframes(bytes(800))
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(source), ""))
     finder.set_folder_store(AssetFolderStore(project.root))
     menu = finder._add_menu(MUSIC, finder.folder_scheme(MUSIC.label))
     next(a for a in menu.actions() if a.text() == "Add a track").trigger()

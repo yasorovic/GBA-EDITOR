@@ -7,9 +7,9 @@ retouche de forme d'onde, la bonne réponse est de déléguer au logiciel que
 l'utilisateur connaît déjà, pas de réinventer Aseprite/Audacity dans Qt.
 
 Trois niveaux, dans l'ordre :
-  1. logiciel CONFIGURÉ par l'utilisateur pour ce TYPE de fichier (QSettings,
-     réglable depuis le menu du bouton « Edit ») — image et audio ont chacun
-     leur propre réglage, un même outil ne convenant pas aux deux ;
+  1. logiciel CONFIGURÉ par l'utilisateur pour ce TYPE de fichier (Réglages →
+     External Tools, aussi réglable depuis le menu du bouton « Edit ») — image et
+     audio ont chacun leur propre réglage, un même outil ne convenant pas aux deux ;
   2. sinon, l'application par défaut du système pour ce type de fichier ;
   3. sinon, rien — pas de message d'erreur, pas de repli inventé.
 
@@ -17,34 +17,28 @@ Le fichier réédité est repris par `project_watcher` (déjà en place pour tou
 `assets/`) : cette fonction n'a qu'à ouvrir, jamais à ré-importer.
 """
 from __future__ import annotations
-from core.app_info import APP_NAME
+from core.external_tools import ExternalTools
 from core.tool_process import tool_environment
 from ui.common.labels import label
 import subprocess
 from pathlib import Path
 
-from PyQt6.QtCore import QSettings, QUrl
+from PyQt6.QtCore import QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QFileDialog, QWidget
-
-_ORG, _APP = APP_NAME, "Preferences"
 
 KIND_IMAGE = "image"
 KIND_AUDIO = "audio"
 
 
-def _key(kind: str) -> str:
-    return f"{kind}_editor_path"
-
-
 def get_configured_editor(kind: str = KIND_IMAGE) -> str:
-    """Chemin de l'exécutable choisi par l'utilisateur pour `kind`, ou ""
+    """Chemin de l'exécutable réglé pour `kind` dans Réglages → External Tools, ou ""
     (défaut système)."""
-    return QSettings(_ORG, _APP).value(_key(kind), "", type=str)
+    return str(ExternalTools().path(kind) or "")
 
 
 def set_configured_editor(path: str, kind: str = KIND_IMAGE) -> None:
-    QSettings(_ORG, _APP).setValue(_key(kind), path or "")
+    ExternalTools().set_path(kind, Path(path) if path else None)
 
 
 def choose_editor(parent: QWidget | None, kind: str = KIND_IMAGE) -> None:
@@ -71,6 +65,9 @@ def open_with(editor, path: Path) -> None:
     C'est le repli des réglages « External Tools » de l'écran Réglages (`core.external_tools`)."""
     if not path or not Path(path).exists():
         return
+    if editor and Path(editor).is_dir():
+        # Un dossier d'installation (« …\Aseprite ») : on cherche l'exécutable de même nom dedans.
+        editor = Path(editor) / f"{Path(editor).name}.exe"
     if editor and Path(editor).exists():
         try:
             subprocess.Popen([str(editor), str(path)], env=tool_environment())

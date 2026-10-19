@@ -70,8 +70,10 @@ def test_une_faute_de_c_sort_sur_la_ligne_du_script(tmp_path, monkeypatch):
     monkeypatch.setattr(CodeGen, "_call_expr", lambda self, call: "bogus_undeclared_var")
 
     project = Project.create(tmp_path / "Game", "Game")
-    project.scripts_dir.mkdir(parents=True, exist_ok=True)
-    (project.scripts_dir / "Hit.lua").write_text(
+    for folder in ((project.assets_dir / "scripts"),):
+        folder.mkdir(parents=True, exist_ok=True)
+    (project.assets_dir / "scripts").mkdir(parents=True, exist_ok=True)
+    ((project.assets_dir / "scripts") / "Hit.lua").write_text(
         'function on_update()\n  local a = 1\n  debug:log("x")\nend\n', encoding="utf-8")
     actor = Actor(name="A")
     actor.components = [ScriptComponent(script="assets/scripts/Hit.lua")]

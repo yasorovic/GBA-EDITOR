@@ -142,8 +142,8 @@ def test_selection_hover_dialog_zoom_and_navigation(qapp, tmp_path, monkeypatch)
     assert str(path) in captured
     assert any('320 × 16' in value for value in captured)
     view._list.clearSelection()
-    assert view._preview.isHidden()
+    assert view._preview._body.isHidden() and not view._preview._empty.isHidden()   # le panneau reste en place, vide
     view._list.setCurrentRow(1)
     view.set_tree(None)
-    assert view._preview.isHidden()
+    assert view._preview._body.isHidden() and not view._preview._empty.isHidden()
     view.close()

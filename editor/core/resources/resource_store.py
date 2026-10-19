@@ -104,7 +104,8 @@ class ResourceStore(Generic[T]):
     Gère une collection de Resource d'un type donné, persistée dans des
     `<name><extension du type>` n'importe où sous `root` (tout `assets/` pour un projet : l'extension dit
     le type, l'auteur range ses assets comme il veut, `assets/sfx/platformer/coin.sfx` comme
-    `assets/Persos/coin.sfx`), le contenu étant du JSON. Un NOUVEL asset naît dans `directory`. Se comporte
+    `assets/Persos/coin.sfx`), le contenu étant du JSON. Un NOUVEL asset naît dans le dossier que l'appelant désigne, à défaut à
+    la racine de `root`. Aucune famille n'a de dossier à elle. Se comporte
     comme une liste (itération, len, indexation, append) pour rester un drop-in
     replacement des anciennes `list[Actor]` / `list[Background]` etc.
 
@@ -112,12 +113,10 @@ class ResourceStore(Generic[T]):
     collection, quel que soit le dossier : cf. `ResourceIndex` pour les homonymes.
     """
 
-    def __init__(self, directory: Path, cls: Type[T], root: Optional[Path] = None):
-        # `directory` : le dossier où naît un NOUVEL asset de ce type. `root` : sous quoi on cherche les assets
-        # existants — tout `assets/` pour un projet, car l'extension dit le type et l'auteur range où il veut ;
-        # le dossier seul si rien d'autre n'est dit.
-        self.dir = directory
-        self.root = root or directory
+    def __init__(self, root: Path, cls: Type[T]):
+        # `root` : sous quoi on cherche les assets — tout `assets/` pour un projet, car l'extension dit le type et
+        # l'auteur range où il veut. Un asset sans dossier désigné naît ici.
+        self.root = root
         self.cls = cls
         # Inventaire disque, indépendant des objets déjà matérialisés dans
         # ``items``. Aujourd'hui ``load`` continue de tout lire ; la phase
@@ -234,12 +233,12 @@ class ResourceStore(Generic[T]):
 
     # -- I/O --
     def _path(self, name: str, folder: Optional[Path] = None) -> Path:
-        """Le fichier de `name` : là où l'index le connaît, sinon un NOUVEAU fichier à la racine
-        du dossier de la collection — ou dans `folder`, pour un asset qu'on y pose."""
+        """Le fichier de `name` : là où l'index le connaît, sinon un NOUVEAU fichier dans `folder`, à défaut à la
+        racine de la collection."""
         known = self.index.path_for(name)
         if known is not None:
             return known
-        return (folder or self.dir) / f"{safe_filename(name)}{self.suffix}"
+        return (folder or self.root) / f"{safe_filename(name)}{self.suffix}"
 
     # -- identité --
     def _ensure_id(self, item: T) -> None:
@@ -320,7 +319,7 @@ class ResourceStore(Generic[T]):
 
     def save(self, item: T, folder: Optional[Path] = None):
         """Écrit `item`. Un item déjà connu reste là où il est ; `folder` ne sert qu'à poser un NOUVEL
-        asset ailleurs qu'à la racine du dossier de la collection (par exemple à côté de sa source)."""
+        asset ailleurs qu'à la racine de la collection (par exemple à côté de sa source)."""
         if folder is not None and self.index.path_for(item.name) is None:
             try:
                 Path(folder).resolve().relative_to(self.root.resolve())

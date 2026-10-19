@@ -21,6 +21,8 @@ def _wav(path: Path) -> Path:
 
 def _project(tmp_path: Path) -> Project:
     p = Project.create(tmp_path / "Jeu", "Jeu")
+    for folder in ((p.assets_dir / "sfx"),):
+        folder.mkdir(parents=True, exist_ok=True)
     p = Project.open(p.root)
     p.load_all_resources()
     return p
@@ -28,7 +30,7 @@ def _project(tmp_path: Path) -> Project:
 
 def test_a_move_is_undone_and_redone_and_the_asset_keeps_pointing_at_its_source(tmp_path: Path):
     p = _project(tmp_path)
-    source = _wav(p.sfx_dir / "boom.wav")
+    source = _wav((p.assets_dir / "sfx") / "boom.wav")
     boom = create(p, "sfx", source)
     target = p.assets_dir / "Audio"
     target.mkdir()

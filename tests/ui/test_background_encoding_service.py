@@ -363,8 +363,8 @@ def test_project_switch_does_not_save_an_old_encoding_into_the_new_project(qapp,
     projects, backgrounds = [], []
     for name, color in (("old", "red"), ("new", "blue")):
         project = Project(tmp_path / name)
-        project.backgrounds_dir.mkdir(parents=True)
-        Image.new("RGB", (8, 8), color).save(project.backgrounds_dir / "sky.png")
+        (project.assets_dir / "backgrounds").mkdir(parents=True)
+        Image.new("RGB", (8, 8), color).save((project.assets_dir / "backgrounds") / "sky.png")
         ba = BackgroundAsset(name="sky", asset="assets/backgrounds/sky.png")
         project.backgrounds.append(ba)
         project.backgrounds.save(ba)

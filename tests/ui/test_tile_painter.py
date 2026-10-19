@@ -450,7 +450,7 @@ def test_save_as_png_never_overwrites_an_existing_source(qapp, tmp_path, monkeyp
     from ui.common.popup import MessageBox as QMessageBox
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
     project, ba, panel = _panel_with_project(tmp_path)
-    taken = project.background_images_dir / f"{ba.name}.png"
+    taken = project.assets_dir / f"{ba.name}.png"      # le dossier affiché par défaut : la racine de assets/
     taken.parent.mkdir(parents=True, exist_ok=True)
     taken.write_bytes(b"not an image of ours")
 
@@ -490,10 +490,11 @@ def test_export_to_png_writes_the_displayed_image_wherever_asked_and_changes_not
 def _screen_in(tmp_path, folder):
     from core.project import Project
     from ui.background_editor.background_editor_screen import BackgroundEditorScreen
+    from ui.common.import_folder import set_shown_folder_provider
     project = Project(tmp_path)
     screen = BackgroundEditorScreen()
     screen.load_project(project)
-    screen.folder_provider = lambda: str(folder)
+    set_shown_folder_provider(lambda: str(folder))
     return project, screen
 
 
@@ -515,13 +516,42 @@ def test_create_empty_makes_a_transparent_png_and_its_background_in_the_shown_fo
     assert ba.asset and project.background_image_path(ba) == dst
 
 
+def test_importing_a_background_is_one_undoable_gesture_and_compresses_off_thread(qapp, tmp_path):
+    from PIL import Image
+    from core.history import get_history
+    from ui.background_editor.background_editor_screen import KIND_SCENE
+    from ui.common.import_folder import set_shown_folder_provider
+    folder = tmp_path / "assets" / "levels"
+    folder.mkdir(parents=True)
+    png = folder / "sky.png"
+    Image.new("P", (16, 16), 0).save(png)
+    project, screen = _screen_in(tmp_path, folder)
+    started, cancelled = [], []
+    screen._compress_async = lambda ba, dst, token, *a, **k: started.append(ba)
+    screen._encoding.cancel = cancelled.append
+    get_history().clear()
+
+    screen._import_png(png, KIND_SCENE)
+
+    ba = project.backgrounds.get("sky")
+    assert ba is not None and started == [ba] and project.backgrounds.path_of(ba).parent == folder
+    get_history().undo()
+    assert project.backgrounds.get("sky") is None and cancelled == [ba]
+    get_history().redo()
+    assert project.backgrounds.get("sky") is not None
+    set_shown_folder_provider(lambda: None)
+    get_history().clear()
+
+
 def test_import_copies_the_png_into_the_shown_folder_and_outside_assets_falls_back(qapp, tmp_path):
     folder = tmp_path / "assets" / "levels"
     folder.mkdir(parents=True)
     project, screen = _screen_in(tmp_path, folder)
-    assert screen._target_folder() == folder
-    screen.folder_provider = lambda: str(tmp_path / "elsewhere")
-    assert screen._target_folder() == project.assets_dir / "backgrounds"
+    from ui.common.import_folder import import_folder, set_shown_folder_provider
+    assert import_folder(project) == folder
+    set_shown_folder_provider(lambda: str(tmp_path / "elsewhere"))
+    assert import_folder(project) == project.assets_dir
+    set_shown_folder_provider(lambda: None)
 
 
 def test_the_transparent_area_is_a_neutral_checker_under_the_image(qapp):
@@ -533,7 +563,7 @@ def test_the_transparent_area_is_a_neutral_checker_under_the_image(qapp):
 def test_choosing_a_mode_only_stages_it_until_compress_is_pressed(qapp, tmp_path):
     from PIL import Image
     project, ba, panel = _panel_with_project(tmp_path)
-    png = project.background_images_dir / "src.png"
+    png = (project.assets_dir / "backgrounds") / "src.png"
     png.parent.mkdir(parents=True, exist_ok=True)
     Image.new("P", (16, 16), 0).save(png)
     ba.asset = project.asset_rel(png)
@@ -672,7 +702,7 @@ def test_the_adjust_sliders_sit_above_the_compression_box_and_feed_one_request(q
 def test_the_dither_type_waits_for_compress_like_the_checkbox_and_lands_in_the_compression(qapp, tmp_path):
     from PIL import Image
     project, ba, panel = _panel_with_project(tmp_path)
-    png = project.background_images_dir / "d.png"
+    png = (project.assets_dir / "backgrounds") / "d.png"
     png.parent.mkdir(parents=True, exist_ok=True)
     Image.new("P", (16, 16), 0).save(png)
     ba.asset = project.asset_rel(png)
@@ -713,7 +743,7 @@ def test_no_slider_compresses_by_itself_and_every_reset_only_stages(qapp):
 
 def _bright_png(project):
     from PIL import Image
-    png = project.background_images_dir / "bright.png"
+    png = (project.assets_dir / "backgrounds") / "bright.png"
     png.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", (16, 16), (200, 40, 40)).save(png)
     return png
@@ -791,7 +821,7 @@ def _photo_png(project, name="photo.png"):
     import numpy as np
     from PIL import Image
     rng = np.random.default_rng(5)
-    png = project.background_images_dir / name
+    png = (project.assets_dir / "backgrounds") / name
     png.parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(rng.integers(0, 256, (32, 32, 3), dtype=np.uint8), "RGB").save(png)
     return png
@@ -1018,7 +1048,7 @@ def test_a_bitmap_background_says_its_canvas_in_the_overlay(qapp, tmp_path):
     from core.bg_import import encode_by_mode, prepare_source
     from core.resources.asset_reconciliation import apply_bg_encoding
     project, ba, _panel = _panel_with_project(tmp_path)
-    png = project.background_images_dir / "big.png"
+    png = (project.assets_dir / "backgrounds") / "big.png"
     png.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", (240, 134), (30, 90, 200)).save(png)
     ba.asset = project.asset_rel(png)
@@ -1429,3 +1459,26 @@ def test_an_encoding_finishing_in_canvas_mode_leaves_the_source_on_screen_until_
     canvas._toolbar.leave_select()
     qapp.processEvents()
     assert not view.canvas_mode_active() and view._pix_item.isVisible() and not view._adjust_item.isVisible()
+
+
+def test_importing_a_sprite_lands_in_the_shown_folder(qapp, tmp_path, monkeypatch):
+    from PIL import Image
+    from PyQt6.QtWidgets import QFileDialog
+    from core.history import get_history
+    from ui.common.import_folder import set_shown_folder_provider
+    from ui.sprite_editor.import_png_dialog import import_new_sprite
+    project, _screen = _screen_in(tmp_path, tmp_path / "assets" / "Persos" / "Heros")
+    folder = tmp_path / "assets" / "Persos" / "Heros"
+    folder.mkdir(parents=True)
+    source = tmp_path / "outside.png"
+    Image.new("RGB", (16, 16), (200, 30, 30)).save(source)
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(source), ""))
+    get_history().clear()
+
+    sprite = import_new_sprite(project)
+
+    assert sprite is not None and (folder / "outside.png").is_file()
+    assert sprite.asset == "assets/Persos/Heros/outside.png"
+    assert not (tmp_path / "assets" / "sprites").exists()
+    set_shown_folder_provider(lambda: None)
+    get_history().clear()

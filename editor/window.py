@@ -18,6 +18,7 @@ from PyQt6.QtGui import QGuiApplication
 
 from ui.common.theme import C, T, QSS, brand_font
 from ui.common.labels import label
+from ui.common import import_folder
 from ui.common.tooltip import tooltip
 
 from codegen import BuildWorker
@@ -30,10 +31,11 @@ from ui.scene_manager.canvas.canvas_workspace import CanvasWorkspace
 from core.resources import asset_reconciliation
 from core.toolchain import Toolchain
 from core.project_watcher import ProjectWatcher
-from core.history import get_history, SetFieldCmd, CreateAssetCmd, DeleteResourceCmd, MacroCmd, RefreshAfterCmd
+from core.history import get_history, SetFieldCmd, DeleteResourceCmd, MacroCmd, RefreshAfterCmd
 from core.selection_bus import get_bus
 from core.command_dispatcher import get_dispatcher
 from core.models.audio import MUSIC_FILE_EXTS, SFX_FILE_EXTS
+from core.models import asset_extensions
 from core.models.font import FONT_FILE_EXTS
 from core.models.sprite import IMAGE_FILE_EXTS
 from core.models.scene import Scene
@@ -469,6 +471,8 @@ class MainWindow(QMainWindow):
         # (ui/project_picker.py), affiché par main.py avant la fenêtre
         # principale, et rouvrable via _go_home() pour changer de projet.
         self.build_panel = self._make_build_panel()
+        # Tout fichier importé depuis un écran naît dans le dossier que l'onglet Disk affiche.
+        import_folder.set_shown_folder_provider(lambda: self.build_panel.disk.shown_folder())
         self._build_screens()
 
         # Nav cachée tant qu'aucun projet n'est chargé
@@ -627,8 +631,6 @@ class MainWindow(QMainWindow):
     def _make_background_editor(self) -> QWidget:
         from ui.background_editor.background_editor_screen import BackgroundEditorScreen
         self._bg_editor = BackgroundEditorScreen()
-        # Un fond importé ou créé naît dans le dossier que l'onglet Disk affiche.
-        self._bg_editor.folder_provider = lambda: self.build_panel.disk.shown_folder()
         return self._bg_editor
 
     def _make_sprite_editor(self) -> QWidget:
@@ -1328,7 +1330,7 @@ class MainWindow(QMainWindow):
         des scripts du projet."""
         if not self.project:
             return
-        match = next((p for p in self.project.scripts_dir.rglob(filename)), None)
+        match = next((p for p in self.project.assets_dir.rglob(filename)), None)
         if match is None:
             self._status.showMessage(label("win.script_not_found", name=filename), 4000)
             return
@@ -1552,33 +1554,19 @@ class MainWindow(QMainWindow):
                 for family in asset_creation.families_for(self.project, source)]
 
     def _disk_create_from_sources(self, paths: list, family: str):
-        """*Create asset* : un asset par source, né à côté d'elle, qu'il pointe ; UNE entrée d'historique pour le lot.
-        Les noms sont uniques entre eux aussi (deux `coin.wav` de deux dossiers donnent `coin` et `coin_2`) ; une source
-        qui ne convient pas est signalée, les autres sont créées."""
+        """*Create from source* : un asset par source, né à côté d'elle ; UNE entrée d'historique pour le lot."""
         if not self.project:
             return
         from core import asset_creation
-        from core.models.unique_name import unique_name
-        taken = {item.name for item in getattr(self.project, family)}
-        commands, created, warnings, errors = [], [], [], []
-        for path in paths:
-            name = unique_name(Path(path).stem, taken)
-            creation = asset_creation.build_from_source(self.project, family, Path(path), name)
-            if creation.error is not None:
-                errors.append(creation.error)
-                continue
-            taken.add(name)
-            commands.append(CreateAssetCmd(creation.store, creation.item, creation.folder))
-            created.append(name)
-            if creation.warning:
-                warnings.append(creation.warning)
-        if commands:
-            self._disk_push(commands[0] if len(commands) == 1 else MacroCmd(commands, f"Créer {len(commands)} assets"))
-        if not created:
-            self._status.showMessage(label("disk.create_refused", error=" ".join(errors)), 8000)
+        gesture = asset_creation.create_from_source(self.project, family, paths)
+        if gesture.command is not None:
+            self._disk_push(gesture.command)
+        if not gesture.names:
+            self._status.showMessage(label("disk.create_refused", error=" ".join(gesture.errors)), 8000)
             return
-        message = label("disk.created", name=created[0]) if len(created) == 1 else label("disk.created_many", n=len(created))
-        self._status.showMessage(" ".join([message, *warnings, *errors]), 8000 if errors else 6000)
+        names = gesture.names
+        message = label("disk.created", name=names[0]) if len(names) == 1 else label("disk.created_many", n=len(names))
+        self._status.showMessage(" ".join([message, *gesture.warnings, *gesture.errors]), 8000 if gesture.errors else 6000)
 
     def _disk_duplicable(self, node) -> bool:
         """Une source se duplique (libre ou citée : la copie est une source libre) ; un asset du projet aussi (sa famille a un
@@ -1751,23 +1739,14 @@ class MainWindow(QMainWindow):
         self._status.showMessage(label("disk.imported", n=len(copies)), 6000)
 
     def _disk_create_blank(self, kind: str, folder: str):
-        """Un asset vierge (scène, prefab, boîte, table, palette) ou un script, dans le dossier affiché ; annulable."""
+        """*Create blank* : un asset vierge (scène, prefab, boîte, table, palette) ou un script, dans le dossier affiché."""
         if not self.project:
             return
-        from core import blank_assets
-        from core.disk_commands import CreateFileCmd
-        from core.lua_scripts import lua_files
-        from core.models.unique_name import unique_name
-        target = Path(folder)
-        if kind in blank_assets.SCRIPT_KINDS:
-            base = "Behavior" if kind == "behavior" else "Script"
-            name = unique_name(base, {p.stem for p in lua_files(self.project)})      # un behavior se retrouve par son nom
-            content = blank_assets.script_source(kind, name).encode("utf-8")
-            self._disk_push(CreateFileCmd(target / f"{name}.lua", content, around=self._watcher.suspended))
-            return
-        store, item = blank_assets.build_blank(self.project, kind)
-        self._disk_push(CreateAssetCmd(store, item, target))
-        self._status.showMessage(label("disk.created", name=item.name), 4000)
+        from core import asset_creation
+        gesture = asset_creation.create_blank(self.project, kind, folder, around=self._watcher.suspended)
+        self._disk_push(gesture.command)
+        if gesture.items:
+            self._status.showMessage(label("disk.created", name=gesture.names[0]), 4000)
 
     def _refresh_disk(self):
         """Relit `assets/` et alimente l'onglet Disk des deux panneaux. À l'ouverture
@@ -1924,7 +1903,7 @@ class MainWindow(QMainWindow):
         self._btn_redo.setVisible(visible)
         # La barre compacte n'a d'utilité que dans l'éditeur (bouton Configurer
         # rapide) — l'accueil affiche déjà son propre statut, plus explicite.
-        self.toolchain_bar.setVisible(visible)
+        self.toolchain_bar.set_in_editor(visible)
 
     def _refresh_assets_ui(self):
         """Les catalogues d'assets ont changé HORS de l'éditeur (fichier ajouté,
@@ -2086,14 +2065,25 @@ class MainWindow(QMainWindow):
         ref = edge.refs[0]
         self.open_script(ref.path, ref.line)
 
+    def _create_blank(self, kind: str) -> str:
+        """*Create blank* depuis un « + » : un asset vierge dans le dossier que l'onglet Disk affiche, en UNE entrée
+        d'historique. Rend son nom. Les vues d'arbre (project viewer, graphe) et le Disk se remettent d'accord seuls."""
+        from core import asset_creation
+        gesture = asset_creation.create_blank(self.project, kind, import_folder.import_folder(self.project))
+        self._disk_push(gesture.command, after=self._after_tree_change)
+        self._status.showMessage(label("disk.created", name=gesture.names[0]), 4000)
+        return gesture.names[0]
+
+    def _after_tree_change(self):
+        get_dispatcher().notify_project_tree_changed()
+        self._refresh_disk()
+
     def _create_scene(self) -> str:
         """Crée une scène au nom unique. La toute première devient la scène
         active : sans elle le panneau restait sur « No active scene » et le
         canvas vide, alors que le modèle avait déjà une scène."""
-        from core.models.unique_name import unique_name
         was_empty = not self.project.scenes
-        name = unique_name("Scene", {s.name for s in self.project.scenes})
-        get_dispatcher().add_scene(name)
+        name = self._create_blank("scene")
         if was_empty:
             self._on_scene_selected(0)
         return name
@@ -2116,9 +2106,7 @@ class MainWindow(QMainWindow):
 
     def _add_prefab(self):
         if not self.project: return
-        from core.models.unique_name import unique_name
-        name = unique_name("Prefab", {p.name for p in self.project.prefabs})
-        get_dispatcher().add_prefab(name)
+        name = self._create_blank("prefab")
         self.assets_finder_panel.refresh()
         self.assets_finder_panel.begin_rename_prefab(name)
 
@@ -2296,9 +2284,7 @@ class MainWindow(QMainWindow):
     def _on_sidecar_changed(self, path: str):
         """Un sidecar `.json` d'asset a été créé ou modifié hors de l'éditeur.
 
-        Le nom du dossier EST celui du `ResourceStore` (assets/fonts/ →
-        `project.fonts`) : pas de table de correspondance à tenir, la même
-        convention que le watcher applique déjà pour décider quoi surveiller.
+        L'EXTENSION dit le type (`.font` → `project.fonts`), le dossier ne compte pas.
 
         `load_one` recharge cet asset seul depuis le disque. Recharger le
         projet entier serait plus simple et beaucoup plus brutal — on perdrait
@@ -2307,14 +2293,21 @@ class MainWindow(QMainWindow):
         if not self.project:
             return
         p = Path(path)
-        store = getattr(self.project, p.parent.name, None)
+        family = self._sidecar_family(p)
+        store = getattr(self.project, family, None)
         if store is None or not hasattr(store, "load_one"):
             return
         if store.load_one(p.stem) is None:
             return
         self._refresh_assets_ui()
         self._status.showMessage(
-            label("win.asset_reloaded", kind=p.parent.name[:-1].capitalize(), name=p.stem), 3000)
+            label("win.asset_reloaded", kind=family[:-1].capitalize(), name=p.stem), 3000)
+
+    @staticmethod
+    def _sidecar_family(path: Path) -> str:
+        """La famille (`sprites`, `fonts`…, le nom du magasin de `Project`) qu'une extension de sidecar désigne."""
+        return next((family for family, ext in asset_extensions.FAMILY_EXTENSIONS.items()
+                     if ext == path.suffix.lower()), "")
 
     def _on_sidecar_removed(self, path: str):
         """Un sidecar `.json` d'asset a été supprimé hors de l'éditeur : la
@@ -2324,63 +2317,69 @@ class MainWindow(QMainWindow):
         if not self.project:
             return
         p = Path(path)
-        store = getattr(self.project, p.parent.name, None)
+        store = getattr(self.project, self._sidecar_family(p), None)
         if store is None or not hasattr(store, "drop_if_deleted_on_disk"):
             return
         if store.drop_if_deleted_on_disk(p.stem):
             self._refresh_assets_ui()
 
     def _on_asset_modified(self, path: str):
-        """Fichier existant modifié dans assets/ (ex. PNG retouché) — rafraîchir la preview."""
+        """Fichier source modifié sous assets/ (ex. PNG retouché) — rafraîchir ce qui le pointe.
+
+        Le dossier ne compte pas : un fichier est relié à ce qui le CITE (un fond, un sprite, une police), où
+        que l'auteur l'ait rangé."""
         p = Path(path)
-        if p.suffix.lower() in IMAGE_FILE_EXTS and p.parent.name == "backgrounds":
-            # Un fond ne se contente pas d'un rafraîchissement d'affichage : sa
-            # compression (palettes + tuiles) est stockée dans le sidecar, et
-            # c'est ELLE que lit le build. Sans ré-encodage, l'ancienne image
-            # resterait à l'écran ET dans la ROM.
-            if not self.project:
+        if self.project and p.suffix.lower() in IMAGE_FILE_EXTS:
+            self.project.load_backgrounds()
+            self.project.load_sprites()
+            if asset_reconciliation.citing_backgrounds(self.project, p):
+                self._on_background_image_modified(p)
                 return
-            self._load_screen_for_project(self._screen_names.index("Backgrounds"))
-            with self._watcher.suspended():   # le sidecar réécrit est NOTRE écriture
-                warning = asset_reconciliation.resync_background_png(self.project, p)
-            # Le fond retouché reste celui qu'on regardait : `select` le remet à
-            # l'écran plutôt que de renvoyer au premier de la liste.
-            self._bg_editor._refresh_finder(select=p.stem)
-            self.scene_editor.load_project(self.project)
-            self._update_gba_bar()
-            self._status.showMessage(warning or label("win.bg_updated", name=p.stem),
-                                     _WATCHER_WARNING_MS if warning else 3000)
-            return
-        if p.suffix.lower() in IMAGE_FILE_EXTS and p.parent.name == "sprites":
-            # Comme un fond : les palettes stockées viennent des pixels, il faut
-            # les refaire. La ROM, elle, était juste — grit relit le PNG au
-            # build — mais l'éditeur affichait les anciennes couleurs (aperçu
-            # d'acteur, coût en palettes, allocation de banques).
-            if not self.project:
+            if asset_reconciliation.citing_sprites(self.project, p):
+                self._on_sprite_image_modified(p)
                 return
-            self._load_screen_for_project(self._screen_names.index("Animations"))
-            with self._watcher.suspended():   # le sidecar réécrit est NOTRE écriture
-                warning = asset_reconciliation.resync_sprite_png(self.project, p)
-            self._sprite_editor.load_project(self.project)
-            self.scene_editor._reload_sprites()
-            if (actor_insp := self._inspector.actor_inspector) is not None:
-                actor_insp._refresh_sprite_preview()
-            self._update_gba_bar()
-            self._status.showMessage(warning or label("win.sprite_updated", name=p.stem),
-                                     _WATCHER_WARNING_MS if warning else 3000)
-            return
-        if p.parent.name == "fonts":
+        if self.project and p.suffix.lower() in FONT_FILE_EXTS:
             # Planche retouchée : les métriques affichées (glyphes, coût en tuiles) sont dérivées de l'asset,
             # pas du fichier — un refresh suffit, l'asset n'est jamais ré-analysé automatiquement (on
             # écraserait les corrections de l'utilisateur).
-            if self.project:
-                with self._watcher.suspended():
-                    asset_reconciliation.reconcile_font_assets(self.project)
-                if (te := getattr(self, "_text_editor", None)) is not None:
-                    te.refresh()
+            with self._watcher.suspended():
+                asset_reconciliation.reconcile_font_assets(self.project)
+            if (te := getattr(self, "_text_editor", None)) is not None:
+                te.refresh()
         if (actor_insp := self._inspector.actor_inspector) is not None:
             actor_insp._refresh_sprite_preview()
         self._status.showMessage(label("win.asset_modified", name=Path(path).name), 2000)
+
+    def _on_background_image_modified(self, p: Path):
+        """Un fond ne se contente pas d'un rafraîchissement d'affichage : sa compression (palettes + tuiles) est
+        stockée dans le sidecar, et c'est ELLE que lit le build. Sans ré-encodage, l'ancienne image resterait à
+        l'écran ET dans la ROM."""
+        self._load_screen_for_project(self._screen_names.index("Backgrounds"))
+        with self._watcher.suspended():   # le sidecar réécrit est NOTRE écriture
+            warning = asset_reconciliation.resync_background_png(self.project, p)
+        # Le fond retouché reste celui qu'on regardait : `select` le remet à
+        # l'écran plutôt que de renvoyer au premier de la liste.
+        self._bg_editor._refresh_finder(select=p.stem)
+        self.scene_editor.load_project(self.project)
+        self._update_gba_bar()
+        self._status.showMessage(warning or label("win.bg_updated", name=p.stem),
+                                 _WATCHER_WARNING_MS if warning else 3000)
+
+    def _on_sprite_image_modified(self, p: Path):
+        """Comme un fond : les palettes stockées viennent des pixels, il faut les refaire. La ROM, elle, était
+        juste — grit relit le PNG au build — mais l'éditeur affichait les anciennes couleurs (aperçu d'acteur,
+        coût en palettes, allocation de banques)."""
+        self._load_screen_for_project(self._screen_names.index("Animations"))
+        with self._watcher.suspended():   # le sidecar réécrit est NOTRE écriture
+            warning = asset_reconciliation.resync_sprite_png(self.project, p)
+        self._sprite_editor.load_project(self.project)
+        self._sprite_editor.reload_image()
+        self.scene_editor._reload_sprites()
+        if (actor_insp := self._inspector.actor_inspector) is not None:
+            actor_insp._refresh_sprite_preview()
+        self._update_gba_bar()
+        self._status.showMessage(warning or label("win.sprite_updated", name=p.stem),
+                                 _WATCHER_WARNING_MS if warning else 3000)
 
     def _on_lua_changed(self, path: str):
         """Un .lua a changé (éditeur externe). L'inspecteur d'acteur est à
@@ -2398,8 +2397,7 @@ class MainWindow(QMainWindow):
         active = self.project.active_scene
         if not active:
             return
-        scene_file = self.project.scenes._path(active.name)
-        if Path(path) == scene_file:
+        if Path(path).stem == active.name:
             self.project.scenes.load_one(active.name)
             self.scene_editor.load_project(self.project)
             self._inspector.show_scene(self.project.active_scene, self.project)
@@ -2559,11 +2557,15 @@ class MainWindow(QMainWindow):
     def _on_build_finished(self, success: bool):
         self._worker = None
         self.build_panel.set_building(False)
-        self.build_panel.show_build_diagnostics()
+        has_errors = self.build_panel.show_build_diagnostics()
         self._tb_build_btn.build_finished.emit(success)
         if success:
             self.build_panel.log_info(label("win.build_rom_ok"))
             self._status.showMessage(label("win.build_ok"))
         else:
-            self.build_panel.log_error(label("win.build_failed_log"))
+            # Des erreurs de diagnostic expliquent l'échec ; sinon (make, outil) c'est la console.
+            if has_errors:
+                self.build_panel.show_diagnostics_tab()
+            self.build_panel.log_error(label(
+                "win.build_failed_diagnostics" if has_errors else "win.build_failed_log"))
             self._status.showMessage(label("win.build_error"))

@@ -137,11 +137,21 @@ def encode_sprite_asset(sprite: "SpriteAsset", png_path: Path, method: str = Non
     return warning
 
 
+def citing_sprites(project, png_path: Path) -> list:
+    """Les sprites qui POINTENT ce fichier, où qu'il soit rangé."""
+    return _citing(project.sprites, png_path, lambda s: project.asset_abs(s.asset))
+
+
+def citing_backgrounds(project, png_path: Path) -> list:
+    """Les fonds qui POINTENT ce fichier, où qu'il soit rangé."""
+    return _citing(project.backgrounds, png_path, project.background_image_path)
+
+
 def resync_sprite_png(project, png_path: Path) -> Optional[str]:
     """La planche a changé sur le disque : recalcule les palettes de CHAQUE sprite qui la pointe (cf. `_resync_sprite`).
     Renvoie les avertissements réunis, None s'il n'y en a pas."""
     warnings = [w for w in (_resync_sprite(project, sprite, png_path)
-                            for sprite in _citing(project.sprites, png_path, lambda s: project.asset_abs(s.asset))) if w]
+                            for sprite in citing_sprites(project, png_path)) if w]
     return " ".join(warnings) or None
 
 
@@ -296,7 +306,7 @@ def resync_background_png(project, png_path: Path) -> Optional[str]:
     """L'image a changé sur le disque : recompresse CHAQUE fond qui la pointe (cf. `_resync_background`).
     Renvoie les avertissements réunis, None s'il n'y en a pas."""
     warnings = [w for w in (_resync_background(project, ba, png_path)
-                            for ba in _citing(project.backgrounds, png_path, project.background_image_path)) if w]
+                            for ba in citing_backgrounds(project, png_path)) if w]
     return " ".join(warnings) or None
 
 

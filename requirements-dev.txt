@@ -12,3 +12,4 @@
 # compilateur C hôte, pour l'équivalence Python/C — cf.
 # tests/text/test_text_layout_native.py.
 pytest
+ruff

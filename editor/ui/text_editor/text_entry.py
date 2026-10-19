@@ -15,6 +15,7 @@ from ui.text_editor.sequence_table_bar import SequenceTableBar
 from ui.common.theme import C, T, QSS
 from ui.common.widgets import BTN_ICON
 from ui.text_editor.markup_toolbar import MarkupToolbar
+from ui.text_editor.value_completion import attach_value_completion
 
 
 class TextEntry(QFrame):
@@ -112,6 +113,7 @@ class TextEntry(QFrame):
         # balises, menus de valeurs et remplacement de sélection que l'atelier.
         self.markup = MarkupToolbar(self.edit)
         self.markup.set_project(project)
+        attach_value_completion(self.edit, lambda: project)
         header.addWidget(self.markup)
         if number is not None:
             self.markup.hide()

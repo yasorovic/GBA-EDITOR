@@ -76,7 +76,7 @@ def test_an_asset_is_saved_renamed_and_deleted_where_it_lives(tmp_path: Path):
     boom.volume = 55
     project.sfx.save(boom)
     assert json.loads(where.read_text())["volume"] == 55
-    assert not (project.sfx_dir / "boom.sfx").exists()                      # il n'a pas été ramené dans assets/sfx
+    assert not ((project.assets_dir / "sfx") / "boom.sfx").exists()                      # il n'a pas été ramené dans assets/sfx
 
     project.sfx.rename(boom, "bang")
     assert (where.parent / "bang.sfx").is_file() and not where.exists()
@@ -85,10 +85,10 @@ def test_an_asset_is_saved_renamed_and_deleted_where_it_lives(tmp_path: Path):
     assert not (where.parent / "bang.sfx").exists()
 
 
-def test_a_new_asset_is_born_in_its_family_folder_and_may_be_placed_anywhere_under_assets(tmp_path: Path):
+def test_a_new_asset_is_born_at_the_root_of_assets_and_may_be_placed_anywhere_under_it(tmp_path: Path):
     project = _project(tmp_path)
     project.sfx.save(Sfx(name="plain"))
-    assert (project.sfx_dir / "plain.sfx").is_file()
+    assert (project.assets_dir / "plain.sfx").is_file()
 
     elsewhere = tmp_path / "assets" / "My sounds"
     project.music.save(Music(name="tune"), elsewhere)

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from PIL import Image
 
+from asset_fixtures import create_now
 from core.bg_import import encode_by_mode
 from core.models.background import BackgroundAsset, BackgroundCompression
 from core.resources.asset_reconciliation import apply_bg_encoding, catalogue_lookup
@@ -166,7 +167,12 @@ def test_un_sidecar_d_avant_lit_son_palette_overrides_a_plat():
 def _project(tmp_path: Path):
     from core.project import Project
     p = Project.create(tmp_path / "Jeu", "Jeu")
-    (p.palettes_dir / "Night.hex").write_text("#000000\n#102030\n#405060\n", encoding="utf-8")
+    for folder in ((p.assets_dir / "backgrounds"),):
+        folder.mkdir(parents=True, exist_ok=True)
+    hex_file = (p.assets_dir / "palettes") / "Night.hex"
+    hex_file.write_text("#000000\n#102030\n#405060\n", encoding="utf-8")
+    from core import asset_creation
+    create_now(p, "palettes", hex_file)
     p = Project.open(p.root)
     ba = BackgroundAsset(name="sky")
     night = p.palettes.get("Night")
@@ -272,7 +278,7 @@ def test_un_fond_dont_l_encodage_est_perime_est_signale_sans_bloquer(tmp_path):
     from PIL import Image
     from core.resources.asset_reconciliation import encode_background_asset
     p, ba, _night = _project(tmp_path)
-    png = p.background_images_dir / "sky.png"
+    png = (p.assets_dir / "backgrounds") / "sky.png"
     png.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", (16, 16), (200, 40, 40)).save(png)
     ba.asset = p.asset_rel(png)

@@ -224,7 +224,7 @@ posés librement) ; une planche régulière est le cas où tous les rectangles s
 ```
 assets/fonts/ (Font, source) ─┐
                                ├─ FontAsset ─→ RasterGlyph ─→ tuiles + palette 4bpp ─→ ROM
-assets/fonts_assets/ ─────────┘       ↑              ↑                  ↑
+assets/fonts/fonts_assets/ ───┘       ↑              ↑                  ↑
                                   recette auteur   preview/build     rendu + budget VRAM
 ```
 

@@ -17,6 +17,7 @@ from ui.common.popup import MessageBox as QMessageBox
 
 from core.resources import asset_reconciliation
 from core.command_dispatcher import get_dispatcher
+from ui.common.import_folder import import_folder
 
 
 def _encode_and_store(project, sprite, source) -> Optional[str]:
@@ -28,52 +29,12 @@ def _encode_and_store(project, sprite, source) -> Optional[str]:
 
 
 def import_new_sprite(project, parent=None):
-    """Choisit un fichier, le COPIE tel quel dans assets/sprites/ puis crée le sprite qui le pointe et l'encode
+    """Choisit un fichier, le COPIE tel quel dans le dossier que l'onglet Disk affiche, puis crée le sprite qui le pointe et l'encode
     (Validator → Encodage). Une seule entrée d'historique : Ctrl+Z retire la copie ET le sprite. Retourne le
     sprite, ou None."""
-    from core import asset_creation
-    from core.disk_commands import ImportFilesCmd
-    from core.history import CreateAssetCmd, MacroCmd, get_history
-    from core.models.unique_name import unique_name
-    path, _ = QFileDialog.getOpenFileName(
-        parent, label('imgpng.import_an_image'), "", label('imgpng.images_png'))
-    if not path:
-        return None
-    source = Path(path)
-    folder = project.sprites_dir
-    taken = {entry.stem for entry in folder.iterdir()} if folder.is_dir() else set()
-    copy = folder / f"{unique_name(source.stem, taken)}{source.suffix}"
-    copies = ImportFilesCmd([(source, copy)])
-    copies.execute()                                  # la copie doit exister pour être lue et encodée
-    creation = asset_creation.build_from_source(project, "sprites", copy)
-    if creation.error is not None:
-        copies.undo()
-        if parent is not None:
-            QMessageBox.information(parent, label('imgpng.import_sprite'), creation.error)
-        return None
-    get_history().push(MacroCmd([_Executed(copies), CreateAssetCmd(creation.store, creation.item, creation.folder)],
-                                f"Importer {creation.item.name}"))
-    if creation.warning and parent is not None:
-        QMessageBox.information(parent, label('imgpng.import_sprite'), creation.warning)
-    return creation.item
-
-
-class _Executed:
-    """Une commande déjà exécutée : l'historique ne la rejoue pas à l'empilement, mais l'annule et la refait."""
-
-    def __init__(self, cmd):
-        self._cmd = cmd
-        self._first = True
-        self.label = cmd.label
-
-    def execute(self):
-        if self._first:
-            self._first = False
-            return
-        self._cmd.execute()
-
-    def undo(self):
-        self._cmd.undo()
+    from ui.common.source_import import import_from_file
+    return import_from_file(project, "sprites", label('imgpng.import_an_image'), label('imgpng.images_png'),
+                            parent, error_title=label('imgpng.import_sprite'))
 
 
 def replace_sprite_image(project, sprite, parent=None) -> bool:
@@ -85,9 +46,9 @@ def replace_sprite_image(project, sprite, parent=None) -> bool:
         parent, label('imgpng.choose_an_image'), "", label('imgpng.images_png'))
     if not path:
         return False
-    dst_dir = project.assets_dir / "sprites"
-    dst_dir.mkdir(parents=True, exist_ok=True)
-    dst = dst_dir / f"{sprite.name}.png"
+    from core.models.unique_name import unique_name
+    folder = import_folder(project)
+    dst = folder / f"{unique_name(Path(path).stem, {f.stem for f in folder.iterdir()})}.png"
     shutil.copy2(path, dst)            # copie du source, jamais réécrit
     sprite.asset = project.asset_rel(dst)
     warning = _encode_and_store(project, sprite, dst)

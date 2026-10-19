@@ -114,6 +114,8 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "hints_keyboard":        ("mdi.keyboard-outline",        "⌨"),
     "hints_expand":          ("mdi.chevron-up",              "▴"),
     "hints_collapse":        ("mdi.chevron-down",            "▾"),
+    "panel_collapse_right":  ("mdi.chevron-double-right",    "»"),
+    "panel_expand_left":     ("mdi.chevron-double-left",     "«"),
     "warning":               ("mdi.alert",                   "⚠"),
     # Notices (ui/common/notice.py) — l'icône dit ce que le message annonce là
     # où la couleur ne suffit plus : `build` et `render` sont tous deux jaunes,

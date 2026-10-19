@@ -88,7 +88,6 @@ class UIRegionController(QObject):
         return bounds[0].anchor if bounds else ANCHOR_SCREEN
 
     def _ensure_layout(self):
-        from core.models.ui_region import UILayout
         # La scène référence une LISTE de nœuds `Interface` (v0.25). Le
         # récepteur d'un widget dessiné est le DERNIER nœud sélectionné s'il
         # appartient encore à la scène active ; sinon le premier (défaut
@@ -98,20 +97,20 @@ class UIRegionController(QObject):
         # l'asset `UILayout` (`.layout`), pas la vue liée. `_active_layout` est déjà
         # un asset (cf. `_track_selected_layout`), d'où la comparaison par identité
         # d'asset.
-        from core.models.ui_region import InterfaceNode
         bounds = self._project.scene_ui_layouts(self._scene)
         if bounds:
             for b in bounds:
                 if b.layout is self._active_layout:
                     return b.layout
             return bounds[0].layout
-        name = unique_name(getattr(self._scene, "name", "") or "ui",
-                           {l.name for l in self._project.ui_layouts})
-        lay = UILayout(name=name)
-        self._project.ui_layouts.append(lay)
-        if not any(nd.layout_name == name for nd in self._scene.ui_layouts):
-            self._scene.ui_layouts.append(InterfaceNode(layout_name=name))
-        return lay
+        # Le même geste que « + Interface » (`asset_creation.create_interface`), exécuté sans historique : une mise
+        # en page vide et non référencée ne gêne personne, alors qu'un undo qui la retire casserait les éléments
+        # créés ensuite.
+        from core import asset_creation
+        from ui.common.import_folder import import_folder
+        gesture = asset_creation.create_interface(self._project, self._scene, import_folder(self._project))
+        gesture.command.execute()
+        return gesture.items[0]
 
     def create_element(self, kind: str, x: int, y: int, w: int, h: int):
         """Crée un élément du `kind` demandé (texte, conteneur, image) au

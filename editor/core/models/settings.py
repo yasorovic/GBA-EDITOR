@@ -74,7 +74,7 @@ class InputBinding:
     même titre que A/B : `jump = up` et `dash = right + a` ne demandent donc
     aucun cas spécial au runtime.
 
-    Décision de l'auteur (2026-09-27, après coup) : un ACCORD simple reste des
+    Décision du 2026-09-27 (après coup) : un ACCORD simple reste des
     cases à cocher (l'écran d'avant ce chantier, jugé plus clair) — le
     mini-langage complet (`+`/`-`/`(a|b)`/mouvements) ne sert plus qu'aux
     SÉQUENCES, cf. `InputSequence`. `input:held/pressed/released/buffered` ne
@@ -106,7 +106,7 @@ class InputSequence:
     (ROADMAP « Les inputs personnalisés » : `+` accord, `-` pas suivant,
     `(a|b)` alternative, mouvements). Rôle distinct d'`InputBinding` : un
     accord se lit avec held/pressed/released/buffered, une séquence avec
-    get_sequence — jamais l'inverse, décision de l'auteur (2026-09-27)."""
+    get_sequence — jamais l'inverse, décision du 2026-09-27."""
     name: str = ""
     expression: str = ""
     window: int = 15   # fenêtre entre deux pas

@@ -37,6 +37,7 @@ from ui.common.theme import C
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 from ui.common.widgets import ScriptPickerPopup
+from ui.text_editor.value_completion import value_names
 
 
 # Présentation d'une balise : (icône, valeur pré-remplie). Les valeurs par
@@ -175,9 +176,8 @@ class MarkupToolbar(QFrame):
     def _choices(self, name: str) -> list[str]:
         """Ce que la valeur peut désigner, quand le projet le sait. Vide = rien
         à proposer, on insère alors un gabarit à corriger sur place."""
-        if name == KIND_VALUE and self._project:
-            return sorted({v.name for v in self._project.globals}
-                          | {c.name for c in self._project.constants})
+        if name == KIND_VALUE:
+            return value_names(self._project)
         if name == "icon" and self._font:
             # Les glyphes MULTI-caractères seuls : une case qui porte « A » se
             # tape au clavier, `[icon=…]` n'existe que pour les cases fusionnées

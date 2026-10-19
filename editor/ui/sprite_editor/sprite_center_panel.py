@@ -123,6 +123,15 @@ class SpriteCenterPanel(QWidget):
         self._spritesheet.load(self._abs_path())
         self._load_paint_strip()
 
+    def reload_image(self):
+        """Le PNG du sprite courant a été retouché hors de l'éditeur : relit la planche, la bande de
+        palettes, les miniatures de la timeline et le canvas, en gardant le sprite et la direction ouverts."""
+        if self._sprite is None:
+            return
+        self.load_sprite(self._sprite, self._project)
+        if self._state is not None and self._sd is not None:
+            self.load_direction(self._state, self._sd)
+
     # ── Bande de preview (PAL_BANK du sprite, tête du canvas) ──────────
 
     def _load_paint_strip(self):

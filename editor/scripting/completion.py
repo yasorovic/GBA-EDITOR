@@ -396,6 +396,17 @@ def _member_candidates(qual: str, sep: str, project_names: dict | None,
     return []
 
 
+def _project_qualifiers(project_names: dict | None) -> list[Candidate]:
+    """`global`/`const` à l'état de mot nu : ils ouvrent l'accès pointé aux variables
+    et constantes du projet (cf. `_member_candidates`), seulement s'il y en a."""
+    return [
+        Candidate(insert=q, label=q, kind=KIND_MODULE,
+                  tip=_plain_tip(q, f"{word} of the project, read as \"{q}.name\"."))
+        for q, word in (("global", "Variables"), ("const", "Constants"))
+        if (project_names or {}).get(q)
+    ]
+
+
 def _bare_candidates(context: str) -> list[Candidate]:
     """Un mot nu : modules, fonctions globales, constructeurs, mots-clés, et les
     handlers du contexte (un script de caméra n'a pas d'`on_late_update`)."""
@@ -495,4 +506,5 @@ def candidates_at(line_prefix: str, *, context: str = "unknown",
     if qual:
         return _member_candidates(qual.group(1), qual.group(2), project_names, context)
     # Mot nu : les locals d'abord (les plus proches), puis le catalogue.
-    return _local_candidates(source, line) + _bare_candidates(context)
+    return (_local_candidates(source, line) + _bare_candidates(context)
+            + _project_qualifiers(project_names))

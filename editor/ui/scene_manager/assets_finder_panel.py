@@ -21,12 +21,11 @@ from ui.common.theme import QSS
 from ui.common.asset_finder import AssetFinder
 from ui.common.asset_kinds import SCENES, PREFABS, SCRIPTS
 from ui.common.labels import label
-from ui.common.script_creation import show_add_script_menu
+from ui.common.asset_kinds import add_script
 
 from core.project import Project
 from core.selection_bus import get_bus
 from core.command_dispatcher import get_dispatcher
-from core.models.unique_name import unique_name
 from core.keybindings import bind
 # Source unique du dossier de projets par défaut (~/BackstageProjects) — ce module et
 # window.py en avaient chacun une copie pointant vers le projects/ du repo :
@@ -135,9 +134,9 @@ class AssetsFinderPanel(QWidget):
         if kind_label == SCENES.label:
             self._show_scene_add_menu()         # nouvelle scène, ou groupe
         elif kind_label == PREFABS.label:
-            self._add_prefab()
+            self.prefab_add_requested.emit()        # window.py : *Create blank*
         elif kind_label == SCRIPTS.label:
-            self._show_add_script_menu()
+            add_script(self._project, self._on_script_created)
 
     def _show_scene_add_menu(self):
         """« + » de la section Scenes : créer une scène, ou un groupe (dossier
@@ -169,20 +168,6 @@ class AssetsFinderPanel(QWidget):
         ids = [s.id for s in self._finder.selected_objs(SCENES.label)]
         if ids:
             self._create_scene_group(ids)
-
-    def _add_prefab(self):
-        if not self._project:
-            return
-        name = unique_name("Prefab", {p.name for p in self._project.prefabs})
-        get_dispatcher().add_prefab(name)
-        self.refresh()
-        self.begin_rename_prefab(name)
-
-    def _show_add_script_menu(self):
-        """« + » de la section Scripts — menu partagé avec le Script finder. Le
-        script créé est rafraîchi puis ouvert dans le Script Editor interne
-        (window.open_script)."""
-        show_add_script_menu(self, self._project, self._on_script_created)
 
     def _on_script_created(self, path: Path):
         self.refresh()

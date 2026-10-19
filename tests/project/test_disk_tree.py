@@ -94,8 +94,8 @@ def test_a_palette_is_matched_with_its_hex_source(tmp_path: Path):
     reopened.load_all_resources()
     nodes = _by_name(disk_tree.build_disk_tree(reopened))
 
-    assert (nodes["palettes/Night.hex"].kind, nodes["palettes/Night.hex"].owner) == (disk_tree.LINKED_SOURCE, "Night")
-    assert nodes["palettes/Night.palette"].kind == disk_tree.ASSET
+    assert (nodes["Night.hex"].kind, nodes["Night.hex"].owner) == (disk_tree.LINKED_SOURCE, "Night")
+    assert nodes["Night.palette"].kind == disk_tree.ASSET
 
 
 def test_a_missing_assets_folder_gives_an_empty_root(tmp_path: Path):
