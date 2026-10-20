@@ -40,7 +40,7 @@ class ExternalTools:
 
     def save(self):
         CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        CONFIG_FILE.write_text(json.dumps(self._config, indent=2), encoding="utf-8")
+        CONFIG_FILE.write_text(json.dumps(self._config, indent=2), encoding="utf-8", newline="\n")
 
     def path(self, kind: str) -> Path | None:
         self._config = self._load()  # le fichier fait foi : un autre écran a pu écrire entre-temps

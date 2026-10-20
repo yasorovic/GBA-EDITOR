@@ -892,28 +892,19 @@ class CollisionsPanel(QWidget):
         self._hint = note(lay)
         tip("collisions.symmetry", lay)
 
-        # La matrice défile HORIZONTALEMENT sur elle-même : un projet à dix
-        # tags ne doit pas élargir toute la fenêtre.
+        # La matrice prend tout l'espace restant de la page et ne défile que
+        # si celui-ci ne suffit pas (très petit écran) : jamais rognée. Le
+        # « + » vit DANS la zone défilante, juste sous la dernière ligne.
         self._grid_scroll = QScrollArea()
         self._grid_scroll.setWidgetResizable(True)
+        self._grid_scroll.setFrameShape(QFrame.Shape.NoFrame)
         self._grid_scroll.setStyleSheet("background:transparent; border:none;")
-        self._grid_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._grid_host = QWidget()
         self._grid_col = QVBoxLayout(self._grid_host)
         self._grid_col.setContentsMargins(0, 6, 0, 0)
         self._grid_col.setSpacing(2)
         self._grid_scroll.setWidget(self._grid_host)
-        lay.addWidget(self._grid_scroll)
-
-        add_row = QHBoxLayout()
-        add_row.setContentsMargins(0, 4, 0, 0)
-        self._btn_add = W.btn_add(label('projset.declare_a_tag'))
-        self._btn_add.clicked.connect(self._add_tag)
-        add_row.addWidget(self._btn_add)
-        add_row.addStretch(1)
-        lay.addLayout(add_row)
-
-        lay.addStretch()
+        lay.addWidget(self._grid_scroll, 1)
 
         # ── État du drag & drop (poignée → ligne) ─────────────────
         self._row_widgets: dict = {}      # tag -> QWidget (la ligne)
@@ -982,10 +973,9 @@ class CollisionsPanel(QWidget):
         tags = self._all_tags()
         if len(tags) < 2:
             self._hint.show_text("collisions.empty")
-            self._grid_host.setVisible(False)
+            self._append_tail()
             return
         self._hint.show_text("collisions.usage")
-        self._grid_host.setVisible(True)
 
         disabled = set(self._project.settings.collision_disabled_pairs)
 
@@ -1013,17 +1003,30 @@ class CollisionsPanel(QWidget):
             self._row_widgets[ta] = row
             self._grid_col.addWidget(row)
 
-        # Pas de défilement vertical : la zone doit donc être aussi haute que
-        # la matrice, sinon les dernières lignes sont coupées (la barre
-        # horizontale en dessous y gagne sa propre place).
-        self._grid_scroll.setMinimumHeight(
-            self._grid_col.sizeHint().height()
-            + self._grid_scroll.horizontalScrollBar().sizeHint().height() + 4)
+        self._append_tail()
+
+    def _append_tail(self):
+        """Le « + » sous la dernière ligne, puis un ressort : les lignes
+        restent collées en haut quelle que soit la hauteur de la page."""
+        tail = QWidget()   # un widget (pas un layout) : `_clear_rows` ne sait supprimer que ça
+        add_row = QHBoxLayout(tail)
+        add_row.setContentsMargins(_TAG_HANDLE_W, 8, 0, 0)
+        self._btn_add = W.btn_add(label('projset.declare_a_tag'))
+        self._btn_add.clicked.connect(self._add_tag)
+        add_row.addWidget(self._btn_add)
+        add_row.addStretch(1)
+        self._grid_col.addWidget(tail)
+        self._grid_col.addStretch(1)
 
     def _build_row(self, r: int, ta: str, tags: list, disabled: set) -> QWidget:
         host = QWidget()
+        host.setObjectName("tagRow")
+        host.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        host.setStyleSheet(
+            f"#tagRow {{ background: transparent; border-radius: 6px; }}"
+            f"#tagRow:hover {{ background: {C.BG_HOVER}; }}")
         row = QHBoxLayout(host)
-        row.setContentsMargins(0, 0, 0, 0)
+        row.setContentsMargins(0, 2, 0, 2)
         row.setSpacing(_ROW_SPACING)
 
         handle = QLabel("⋮⋮")

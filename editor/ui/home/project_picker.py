@@ -67,7 +67,7 @@ def save_recent(paths: list[Path]):
     try:
         _RECENT_FILE.write_text(
             json.dumps([str(p) for p in paths[:_MAX_RECENT]]),
-            encoding="utf-8",
+            encoding="utf-8", newline="\n",
         )
     except Exception:
         pass

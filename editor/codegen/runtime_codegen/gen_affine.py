@@ -7,6 +7,7 @@ cycle). `affine_entry`/`compute_affine_info` rendent de la donnée ; seul
 """
 from __future__ import annotations
 
+from codegen.oam_alloc import AFFINE_LIMIT
 from codegen.runtime_codegen.gen_scene_query import parent_depths
 from core.models.components import affine_sprite_component
 from core.models.field_value import FieldValue, number_c, number_value
@@ -83,7 +84,7 @@ def compute_affine_info(actor_offset: int, scene_actors: list, pi: list, names=N
 
     idx_of = {a.name: actor_offset + j for j, (a, _) in enumerate(scene_actors)}
     for j, (actor, _) in enumerate(scene_actors):
-        if slot >= 32:
+        if slot >= AFFINE_LIMIT:
             break
         sc = affine_sprite_component(actor)
         if not sc:
@@ -145,8 +146,11 @@ def compute_affine_info(actor_offset: int, scene_actors: list, pi: list, names=N
         if not sc:
             continue
         for oam_idx in range(p2["start"], p2["start"] + p2["size"]):
-            if slot >= 32:
+            if slot >= AFFINE_LIMIT:
                 break
+            # Une instance sans entrée OAM ne s'affiche pas : elle ne prend pas de matrice.
+            if p2["entries_per_instance"] and (oam_idx - p2["start"]) // p2["group"] >= p2["granted"]:
+                continue
             entry = affine_entry(pf, sc, slot, names=names)
             if entry:
                 result[oam_idx] = entry
@@ -169,10 +173,11 @@ def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr
     affine » :
         angle_eff     = rotation + sprite_rot            (somme)
         scale_eff     = scale_x * sprite_scale_x / 256   (produit, Q8)
-        position_eff  = actor.position + R(rotation)·S(scale)·offset  (coin haut-gauche du cadre)
-    L'offset vit dans le repère local de l'actor : il tourne ET scale avec lui
-    (mais ne s'inverse pas avec le flip du sprite). C'est lui qui décale le
-    cadre du sprite par rapport à la position monde (l'actor n'a pas l'offset ;
+        centre_eff    = actor.position + R(rotation)·S(scale)·(offset + demi-cadre)
+    L'offset vit dans le repère local de l'actor : le cadre entier (son coin
+    haut-gauche ET son centre) tourne et scale avec lui, comme un corps rigide
+    (mais l'offset ne s'inverse pas avec le flip du sprite). C'est lui qui décale
+    le cadre du sprite par rapport à la position monde (l'actor n'a pas l'offset ;
     le sprite n'a pas de position monde).
 
     Rotation, échelle et flip (échelle -1, ici le signe de pa/pb/pc/pd)
@@ -209,24 +214,29 @@ def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr
         f"        int _pc=_syq?-_sinA*256/_syq:0; int _pd=_syq?_cosA*256/_syq:0;",
         f"        if(!_pa&&!_pb){{_pa=1;}}",
         f"        if(!_pc&&!_pd){{_pd=1;}}",
-        # Offset local transformé par la matrice de l'ACTOR (hérarchie) :
-        #   ox = R(rotation)·S(scale)·offset. Le flip du SPRITE n'y entre pas :
-        #   il retourne la texture sur place (cf. ci-dessous), il ne déplace rien.
+        # Le cadre est un corps RIGIDE accroché à l'actor : le point P du cadre
+        # (offset + demi-cadre + pivot, repère local de l'actor) est transformé par
+        # la matrice de l'ACTOR en entier, demi-cadre compris :
+        #   P = actor.position + R(rotation)·S(scale)·(offset + (W/2, H/2) + pivot).
+        # Ne tourner que `offset` puis ajouter le demi-cadre à plat décalait le
+        # sprite dès que l'actor tournait ou changeait d'échelle (offset par défaut
+        # (-W/2,-H/2) : le centre décrivait un cercle autour de la position).
+        # Le flip du SPRITE n'y entre pas : il retourne la texture sur place.
+        f"        int _px=g_oam_entries[{e}].pivot_x; int _py=g_oam_entries[{e}].pivot_y;",
+        f"        int _lx=g_oam_entries[{e}].offset_x+{W // 2}+_px; int _ly=g_oam_entries[{e}].offset_y+{H // 2}+_py;",
         f"        int _acos=gba_cos(_arot); int _asin=gba_sin(_arot);",
-        f"        int _ofx=(_acos*_asx*g_oam_entries[{e}].offset_x - _asin*_asy*g_oam_entries[{e}].offset_y)/65536;",
-        f"        int _ofy=(_asin*_asx*g_oam_entries[{e}].offset_x + _acos*_asy*g_oam_entries[{e}].offset_y)/65536;",
+        f"        int _ofx=(_acos*_asx*_lx - _asin*_asy*_ly)/65536;",
+        f"        int _ofy=(_asin*_asx*_lx + _acos*_asy*_ly)/65536;",
         # Position. Le matériel pivote toujours sur le CENTRE de la texture
         # (Tonc, obj_aff_*) : la boîte OAM (double taille) est centrée dessus. Le
         # POINT DE PIVOT de l'auteur (`pivot`, depuis le centre du cadre) est
-        # donc obtenu par calcul : le point P reste FIXE à l'écran, en
-        # `ancre + offset + (W/2 + pivot_x, H/2 + pivot_y)`, et le centre se
-        # place à P - M·pivot (M = rotation·échelle·flip). Pivot (0,0) : le
-        # centre ne bouge pas, le comportement natif.
+        # donc obtenu par calcul : P reste FIXE à l'écran et le centre se place
+        # à P - M·pivot (M = rotation·échelle·flip). Pivot (0,0) : le centre est
+        # en `actor + R·S·(offset + demi-cadre)`, le comportement natif.
         f"        int _ocx=({base_x})+_ofx; int _ocy=({base_y})+_ofy;",
-        f"        int _px=g_oam_entries[{e}].pivot_x; int _py=g_oam_entries[{e}].pivot_y;",
         f"        int _u=(_cosA*_sxs*_px)/65536-(_sinA*_sys*_py)/65536;",
         f"        int _v=(_sinA*_sxs*_px)/65536+(_cosA*_sys*_py)/65536;",
-        f"        int sx=_ocx-{W // 2}+_px-_u; int sy=_ocy-{H // 2}+_py-_v;",
+        f"        int sx=_ocx-{W}-_u; int sy=_ocy-{H}-_v;",
         f"        u16 ti=(u16)({bt}+g_oam_entries[{e}].frame*{tpf});",
         f"        shadow_oam[{aslot*4+0}].dummy=(u16)(s16)(_fh?-_pa:_pa);",
         f"        shadow_oam[{aslot*4+1}].dummy=(u16)(s16)(_fh?-_pb:_pb);",

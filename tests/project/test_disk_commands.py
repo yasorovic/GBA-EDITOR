@@ -79,6 +79,28 @@ def test_an_import_copies_files_in_and_undoing_removes_only_the_copies(tmp_path:
     assert copy.is_file()
 
 
+def test_an_import_over_an_existing_file_restores_it_on_undo(tmp_path: Path):
+    from core import source_collisions
+    outside = tmp_path / "new.png"
+    outside.write_bytes(b"new")
+    folder = tmp_path / "assets"
+    folder.mkdir()
+    existing = folder / "new.png"
+    existing.write_bytes(b"old")
+    history = CommandHistory()
+
+    assert source_collisions.collides(outside, folder)
+    assert source_collisions.destination(outside, folder, overwrite=False) == folder / "new_2.png"
+    assert source_collisions.destination(outside, folder, overwrite=True) == existing
+
+    history.push(ImportFilesCmd([(outside, existing)]))
+    assert existing.read_bytes() == b"new"
+    history.undo()
+    assert existing.read_bytes() == b"old"
+    history.redo()
+    assert existing.read_bytes() == b"new"
+
+
 def test_a_new_folder_is_undone_if_still_empty_and_kept_if_something_was_put_in_it(tmp_path: Path):
     p = _project(tmp_path)
     history = CommandHistory()

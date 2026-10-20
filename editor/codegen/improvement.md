@@ -26,3 +26,27 @@ d'UI avec son index au lieu de 0.
   le repli `text_base = 1` disparaît au profit de la tuile réservée.
 - À envisager si d'autres cas de partage de charblock posent problème après le
   correctif A.
+
+## OAM — liste libre d'entrées au spawn
+
+**Origine.** Le pool ne dépend plus de l'OAM (ROADMAP, « Le pool ne dépend plus de l'OAM »,
+2026-10-20). Les entrées se distribuent à la construction du layout : les `granted` premières
+instances d'un pool ont leurs entrées OAM, les suivantes vivent sur l'entrée poubelle et ne
+s'affichent jamais. Le spawn prend le premier slot libre, donc les instances affichées sont
+celles de tête.
+
+**Limite.** Une instance née dans un slot au-delà de `granted` reste invisible toute sa vie,
+même si une entrée se libère ailleurs (une instance de tête meurt).
+
+**Piste.** Lier l'entrée OAM à l'instance au spawn, dans une réserve commune : une instance en
+prend une en naissant, la rend en mourant (`active = false`, destruction de la racine). Le slot
+d'acteur n'a plus d'importance pour l'affichage.
+
+- Apport : seules les instances nées quand l'OAM est déjà pleine restent invisibles, au lieu de
+  celles des derniers slots. Utile surtout si un pool déborde souvent de l'OAM.
+- Coût : le writer OAM, aujourd'hui déroulé slot par slot avec l'indice d'entrée écrit en dur,
+  devrait lire `oam_entry` à chaque frame ; la prise et la restitution des entrées s'ajoutent
+  au spawn et à la destruction ; la matrice affine suivrait la même liaison. Des cycles par
+  frame, **à mesurer sur ROM** avant de s'y engager.
+- À envisager si un vrai jeu se plaint d'instances invisibles alors que l'OAM n'est pas saturée
+  en permanence.

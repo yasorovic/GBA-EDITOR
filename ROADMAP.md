@@ -45,8 +45,10 @@ documents en tête. Une version entièrement livrée (v0.2 à v0.28 à ce jour) 
 [CHANGELOG](changelog/CHANGELOG.md) et son détail complet dans [changelog/archives/](changelog/archives/) ;
 elle ne reste pas ici en doublon.
 
-**Un seul jalon produit est ouvert : [v0.29](#v029-diffuser-une-rom-dans-le-navigateur-itchio)**
-(empaqueter une ROM pour le navigateur, ouvert le 2026-10-05, aucune ligne de code). Pour mémoire,
+**Deux jalons produit sont ouverts** : [v0.29](#v029-diffuser-une-rom-dans-le-navigateur-itchio)
+(empaqueter une ROM pour le navigateur, ouvert le 2026-10-05, aucune ligne de code) et
+[v0.30](#v030-les-mises-à-jour-depuis-la-fenêtre-about) (vérifier et annoncer les mises à jour
+depuis la fenêtre About, ouvert le 2026-10-20, aucune ligne de code). Pour mémoire,
 v0.16 (« L'API : règle de construction et
 rangement ») s'est fermé le 2026-09-27 (huit sections, cinq renommages, `REF_TYPE_TABLE`, cycle
 de vie en cinq verbes, éléments d'interface typés, `module:fonction()` généralisé, garde-fou du
@@ -97,7 +99,7 @@ relevés en construisant la boucle ; le 2 a été confirmé par le **test d'éch
    (`if global.range_on == 0 then self:destroy()`). Ce détour a façonné toute la machine à
    états du curseur (interdit de re-spawner tant que l'ancien lot vit). Attendu pour tout ce
    qui affiche puis efface un ensemble dynamique : portée de déplacement, cases d'attaque,
-   curseurs multiples, projectiles à purger en fin de phase (`codegen/actor_budget.py`,
+   curseurs multiples, projectiles à purger en fin de phase (`codegen/oam_alloc.py`,
    runtime du pool par scène, ROADMAP v0.17).
 
 4. **`text.draw_num` retiré : afficher un nombre coûte trois artefacts.** Un PV à l'écran
@@ -279,6 +281,85 @@ packaging de l'éditeur (`packaging/`, PyInstaller, installateur). C'est précis
 
 ---
 
+## v0.30 (Les mises à jour depuis la fenêtre About)
+
+**Ouvert le 2026-10-20. Conception posée, aucune ligne de code.**
+
+### D'où vient la question
+
+Le développement continu publie des releases (`release.yml` : installateur NSIS, ZIP portable,
+AppImage), mais l'éditeur ne sait pas qu'une version plus récente existe. La fenêtre About envoie
+vers GitHub pour les notes de version, et son rendu est incohérent : le texte des licences, coupé à
+80 colonnes et centré à coups d'espaces, s'affiche en police proportionnelle, donc à la fois centré
+et collé à gauche, avec la moitié droite de la fenêtre vide.
+
+### Ce que ça livre
+
+- **Une fenêtre About à onglets** : *About* (logo, version, liens), *Release notes*, *Updates*,
+  *Licenses*. La fenêtre `LicensesDialog` séparée disparaît.
+- **Release notes** lit le `CHANGELOG.md` livré avec l'application (hors ligne) ; plus de lien vers
+  GitHub. Rendu Markdown, comme les notices tierces. Les textes de licence passent en police à
+  chasse fixe.
+- **Updates** : un bouton discret « Search for update », qui devient « Update to X » quand une
+  version plus récente existe, avec ses notes au même format.
+- **Une vérification automatique** au démarrage, en tâche de fond, au plus une fois par jour. Hors
+  ligne, elle échoue sans bruit. Une mise à jour disponible se signale par un point discret, sans
+  pop-up.
+- **Une pop-up au lancement, seulement pour une mise à jour importante** (nouvelle fonctionnalité
+  majeure, migration importante, changement d'API) : boutons *Voir*, *Plus tard*, *Ignorer cette
+  version*, une seule fois par version, via le gabarit `ui/common/popup.py`.
+
+### Décisions verrouillées (2026-10-20)
+
+- **Le caractère « important » vient d'un `update.json`** attaché à la release
+  (`{"importance": "major", "reasons": ["feature", "migration", "api"]}`), produit par
+  `release.yml` à partir d'un fichier du dépôt. Pas de marqueur dans le corps de la release.
+- **La vérification automatique est activée par défaut**, avec un réglage pour la couper. Chaque
+  vérification est une requête HTTPS vers GitHub : GitHub voit l'adresse IP de l'utilisateur, la
+  date et un `User-Agent` `Backstage/<version>`. Rien d'autre n'est envoyé (ni identifiant, ni
+  chemin, ni contenu de projet, ni système). Il n'y a pas de serveur à nous, donc pas de
+  télémétrie. L'onglet *Updates* le dit en une phrase.
+- **`/releases/latest` ne convient pas** : il ignore les pré-versions, et nous sommes en `alpha`.
+  On liste `/releases` et on filtre.
+- **L'ordre des versions** suit `X.Y.Z-étiquette`, avec alpha < beta < stable à numéro égal.
+
+### Déroulé
+
+1. **Tranche 0, l'écran About** : onglets, notes de version locales (`nuitka_build.py` embarque le
+   changelog), licences en chasse fixe, retrait de `LicensesDialog`.
+2. **Tranche 1, la vérification** : module sans Qt (comparaison des versions, lecture de l'API et
+   de `update.json`, cache, délai entre deux vérifications), appel réseau dans un `QThread`,
+   onglet *Updates*, réglage et point discret.
+3. **Tranche 2, la pop-up de lancement** : uniquement pour `importance: major`, mémoire de la
+   version ignorée.
+4. **Décision après les tranches 1 et 2** : jusqu'où va « Update ». Soit télécharger, vérifier le
+   SHA-256 et lancer l'installateur sous Windows (l'installateur par utilisateur sait déjà se
+   mettre à jour par-dessus), soit ouvrir la page de téléchargement. Linux (AppImage) et ZIP
+   portable ne peuvent pas se remplacer eux-mêmes.
+5. **Tranche 3 (si retenue)** : le téléchargement, `SHA256SUMS` et `update.json` publiés par
+   `release.yml`.
+6. **Tests ciblés** : ordre des versions, lecture de `update.json`, délai entre deux vérifications.
+   Pas de suite complète.
+7. **Documentation et traductions** : ARCHITECTURE.md, libellés EN et FR, infobulles selon la
+   charte. Le détail part ensuite dans `changelog/archives/v0.30.md`, une ligne au CHANGELOG et au
+   README.
+
+### Fichiers annoncés (à confirmer en relisant le code)
+
+`ui/common/about_dialog.py`, `core/app_info.py` (adresses), `window.py` (démarrage, signal),
+`packaging/nuitka_build.py`, `.github/workflows/release.yml`, les deux `labels*.json`, ARCHITECTURE.md ;
+création : le module de vérification, l'onglet *Updates*, ses tests.
+
+### Ouvert
+
+- **Jusqu'où va « Update »** (voir le déroulé, point 4).
+- **Où vit `update.json` dans le dépôt**, et qui décide du niveau d'importance au moment de la
+  release.
+- **Le binaire Nuitka sous Linux** : `urllib` en HTTPS y trouve-t-il les certificats ? Non
+  vérifié ; le téléchargement des modèles utilise déjà `urllib` sans que ce point soit testé.
+
+---
+
 ## Chantiers techniques
 
 Un chantier technique ne livre rien de visible pour qui joue au jeu produit avec l'éditeur,
@@ -293,8 +374,28 @@ Les messages d'information, d'attention, d'erreur et de confirmation des 22 modu
 passent par `ui/common/popup.py` : illustrations adaptées au type de message, boutons et
 styles partagés, icônes cohérentes par type. Le détail et les vérifications sont archivés.
 
+**Livré le 2026-10-20, la matrice des collisions ne rogne plus** (Project Settings → Collisions).
+La zone de la matrice prend l'espace libre de la page, les lignes restent en haut, le « + » suit la
+dernière ligne, et un défilement n'apparaît que si la fenêtre est trop petite. Les lignes gagnent un
+espacement et un survol. **Non vérifié à l'écran** (seulement compilé) ; une coche dans les cases
+cochées n'a pas été ajoutée.
+
+**Livré le 2026-10-20, l'éditeur écrit ses fichiers texte en LF.** Le dépôt est canonique en LF
+(`.gitattributes` : `* text=auto eol=lf`, sauf `*.nsi` en CRLF), mais Python écrit en CRLF sous Windows :
+chaque sauvegarde de l'éditeur laissait du CRLF sur le disque, d'où des avertissements Git à chaque commande
+et des fichiers aux fins de ligne mélangées. Les 20 écritures de texte qui n'en précisaient pas portent
+maintenant `newline="
+"` (`atomic_write`, `build_output.write`, préférences, scripts créés, journaux, `tools/`),
+et les 138 fichiers suivis qui avaient du CRLF (démos comprises) ont été reconvertis, `installer.nsi` restant en
+CRLF. Une écriture neuve de ce genre doit porter `newline="
+"` ; `git ls-files --eol | grep "w/crlf"` montre
+un oubli. `atomic_write` saute l'écriture d'un contenu identique, sans tenir compte des fins de ligne : un
+fichier repassé en CRLF par un outil externe ne se corrige qu'à sa prochaine vraie modification. Suite complète
+non relancée (seuls `test_disk_commands` et `test_interrupted_write` l'ont été).
+
 | Chantier | Ouvert le | État |
 | --- | --- | --- |
+| Le pool ne dépend plus de l'OAM | 2026-10-20 | **Livré pour l'essentiel (2026-10-20)**, pool automatique (8 par défaut) pour un prefab spawné, entrées OAM par priorité (interface, acteurs posés, pools), avertissements OAM et matrices affines, code mort retiré ; reste une liste libre d'entrées, optionnelle (`editor/codegen/improvement.md`). Voir [ci-dessous](#le-pool-ne-dépend-plus-de-loam) |
 | Préparer une image riche à l'import, recadrer, redimensionner | 2026-09-26 | Route vers v1.0-stable, non prioritaire pour l'alpha (décidé le 2026-09-29) ; tranches 4bpp/8bpp livrées, reste la tranche bitmap et la validation à la souris. Voir [ci-dessous](#chantier-transverse-préparer-une-image-riche-à-limport-recadrer-et-redimensionner-sans-toucher-au-png) |
 | L'API dit tout ce que l'inspecteur règle | 2026-09-23 | **En cours**, tranche 1 (acteur, sprite, collision) livrée le 2026-09-23, sauf `parent` et `sprite_name`, **la collision est rouverte le 2026-09-24** (boîte = référence typée, `collision_box.get_tile`) ; tranches 2 (caméra, scène, calque) et 3 (interface) à suivre. Voir [ci-dessous](#lapi-dit-tout-ce-que-linspecteur-règle) |
 | Piste Collision, un `Contact` d'événement | 2026-09-25 | À ouvrir, non verrouillée (normale acteur↔acteur), extraite de la struct `Actor` allégée, code non commencé. Voir [ci-dessous](#piste-collision-un-contact-dévénement-pas-une--dernière-collision-) |
@@ -2676,12 +2777,21 @@ navigue aussi seule (double-clic, fil d'ariane). Le sens inverse (un double-clic
 dans l'arbre) n'est pas fait.
 **Un `assets/` vierge, des imports dans le dossier affiché, un surveillant sans dossiers imposés (2026-10-19).** Créer ou ouvrir
 un projet ne crée plus aucun sous-dossier (seulement `assets/`) : chaque écriture crée le dossier qu'elle vise. Tout bouton
-d'import d'un écran (importer un sprite, un fond ; remplacer l'image d'un sprite ou d'un fond ; *Save as PNG*) pose le fichier
+d'import d'un écran (importer un sprite, un fond ; *Save as PNG*) pose le fichier
 dans le dossier que l'onglet Disk affiche (`core/asset_creation.import_folder`, branché une fois par la fenêtre dans
 `ui/common/import_folder.py`), sinon à la racine de `assets/`. Le surveillant suit tous les dossiers sous `assets/` à toute
 profondeur, avec tous les types de fichiers : plus de liste de dossiers de famille ni de `parent.name == "sprites"`. Un
 fichier retouché est relié à ce qui le CITE (fond, sprite, police), un sidecar à son extension. *Reste :* l'import de
 palettes (les `.hex` vivent dans `assets/palettes`), les dossiers vides des projets de démo, créés avant ce changement.
+**Écraser plutôt que suffixer (2026-10-20).** *Import / replace image* créait `hero_2.png` au lieu de remplacer le PNG, et le
+« + » d'un fond écrasait sans rien dire. Cartographie des points d'entrée, puis une règle unique : `core/source_collisions.py`
+(même nom exact = collision ; tout autre nom pris = `unique_name`) et une boîte, `ui/common/import_collision.py` (écraser /
+garder les deux / annuler, avec les assets qui citent le fichier). *Remplacer l'image* (sprite, fond) écrit le fichier choisi
+SUR la source de l'asset (`source_import.replace_source`) et ne demande que si un autre asset la cite ; l'import d'un sprite,
+d'un fond ou d'un son et l'import ou le dépôt de l'onglet Disk posent la question sur collision. `ImportFilesCmd` garde le
+contenu écrasé : annuler le restaure. *Reste :* l'encodage d'un sprite ou d'un fond remplacé n'est pas dans l'historique
+(annuler rend le PNG, pas l'encodage, que le rechargement refait) ; un dossier déposé garde son suffixe sans question ; une
+seule réponse vaut pour tout un lot ; aucun test de l'interface (seul l'annulable de `ImportFilesCmd` est couvert).
 **Un « + » et une loupe sur l'arbre (2026-10-10).** L'onglet n'est plus strictement en lecture seule : le « + » crée un
 vrai dossier sur le disque, dans le dossier choisi (ou la racine), nommé d'office `New folder`, `New folder_2`… puis
 renommé EN PLACE dans l'arbre (pas de fenêtre) ; un nom vide, interdit (`/ \ : * ? " < > |`, point ou espace final) ou
@@ -4770,6 +4880,67 @@ ce qui rend sa portée décidable : une capacité s'étend indéfiniment, une ci
   la même chose.
 - La cadence visée. 60 fps n'est pas donné ; le jeu de référence tourne dans un budget qu'il
   faudra mesurer plutôt que supposer.
+
+---
+
+## Le pool ne dépend plus de l'OAM
+
+### D'où vient la question (2026-10-20)
+
+Un build échouait sur `Turret.lua:17: implicit declaration of function 'spawn_Scene_02_Bullet'`. La scène spawnait un prefab sans
+en avoir déclaré le pool : le build n'émet alors ni `spawn_<Scène>_<Prefab>` ni son unité C, et l'erreur ne sortait que du
+compilateur C. Relire la v0.17 a montré que l'éditeur devait *proposer* le pool d'après les scripts (« proposer, pas imposer »),
+et que cette proposition n'avait jamais été livrée : `Scene.prefab_pools` n'avait plus aucun écran qui l'écrive.
+
+En y regardant, **la taille d'un pool servait à quatre choses sans rapport** : les slots d'acteurs de `g_actors[]`, l'état de script par
+instance (EWRAM), les entrées OAM et les matrices affines. Depuis que l'acteur ne réserve plus d'entrée OAM par défaut, le
+plafond de 128 répond à une question d'**affichage**, pas à un plafond d'acteurs ou de prefabs. L'auteur a demandé de découpler
+les deux premiers de l'allocateur OAM.
+
+### Décisions (2026-10-20, de l'auteur)
+
+- **Un prefab spawné obtient un pool tout seul** : 8 instances par défaut (`POOL_DEFAULT_INSTANCES`), ou la valeur déclarée dans
+  `Scene.prefab_pools`, qui sert à l'ajuster. « Spawné » se lit dans les scripts compilés pour la scène, y compris les spawns en
+  chaîne (un prefab poolé qui en spawne un autre).
+- **La taille du pool ne dépend plus de l'OAM.** Elle dit combien d'instances *vivent*, pas combien *s'affichent*.
+- **Priorité des entrées OAM** : acteurs posés (prefabs placés compris, connus au build) et interface d'abord ; les instances de pool
+  ensuite, « vivantes mais qui peuvent ne pas s'afficher correctement ».
+- **Le plafond de 128 et celui des 32 matrices affines avertissent**, ils ne bloquent pas. Le compteur de la barre d'état suffit à
+  l'auteur : aucun affichage de plus dans l'inspecteur.
+
+### Livré le 2026-10-20
+
+- **Pool automatique** : `scene_oam_layout` (`oam_alloc.py`) alloue `POOL_DEFAULT_INSTANCES` à tout prefab que
+  `scripting.refactor.scene_spawned_prefabs` voit spawné par la scène ; un pool déclaré garde la main. Lecture des scripts mise en
+  cache par fichier (0,47 s au premier calcul, 2 ms ensuite). `scene_pool_instances` prend maintenant `(project, scene, prefab)`
+  et rend le pool effectif ; `declared_pool_instances` rend la valeur déclarée.
+- **Les entrées OAM se distribuent par priorité** : interface, acteurs posés, puis instances de pool dans l'ordre du catalogue et
+  des slots. Un acteur posé sans entrée a `oam_entry = -1`.
+- **Une instance sans entrée vit sans s'afficher.** Les `granted` premières instances d'un pool ont leurs entrées ; les suivantes
+  écrivent sur une **entrée poubelle** en fin de `g_oam_entries[]` (`OamLayout.scratch_start`, que le writer OAM ne lit jamais)
+  et ne prennent aucune matrice affine. Le spawn prend le premier slot libre : les instances affichées sont celles de tête.
+- **Avertissements** : `_check_actor_budget` (acteurs posés sans entrée, pool dont des instances ne s'affichent pas) et
+  `_check_affine_budget` (au-delà de `AFFINE_LIMIT` = 32, les derniers sprites sont dessinés sans rotation ni échelle, et le message
+  dit combien). La seule erreur qui reste : l'interface seule dépasse 128, qu'aucune dégradation ne sauve.
+- **La barre d'état montre la demande** (`OamLayout.requested`) : « 140/128 » se voit. `scene_affine_requests` compte comme
+  `compute_affine_info` (une instance sans entrée ne demande pas de matrice).
+- **Code mort retiré** : `codegen/actor_budget.py` (seul `prefab_pool_instances` survit, dans `oam_alloc.py`), `Scene.actor_slots`
+  (champ, sérialisation, clé du générateur de benchmark), `scene_actor_slots`, `scene_actor_budget`, `scene_pool_slots`, le réexport
+  de `prefab_group` dans `main_gen`, le diagnostic « spawn sans pool » devenu inatteignable.
+- **Vérifié** : tests ciblés (budget, OAM, palettes, pools, affine, diagnostics) ; build complet d'une copie d'OrbitTest avec un pool
+  de 140 pour 127 entrées libres, sans erreur, `g_oam_entries[129]`. **Non mesuré** : cycles sur ROM, rendu sur mGBA.
+
+### Ce qui reste ouvert
+
+Une liste libre d'entrées au spawn (une instance prendrait et rendrait une entrée OAM, au lieu d'un slot qui en a une ou pas) est
+**optionnelle** et chiffrée dans [editor/codegen/improvement.md](editor/codegen/improvement.md), avec les autres pistes
+d'allocateurs. `tools/diagnostic_coverage_baseline.json` n'a pas été relevé (il faut un run complet de la suite).
+
+### Ce que ça ne fait pas
+
+- Ne change ni la VRAM (tuiles et palettes d'un sprite sont chargées une fois) ni le comportement des acteurs posés.
+- Ne retire pas `Scene.prefab_pools` : la taille du pool reste un réglage de l'auteur, mais il ne règle plus de l'OAM.
+- Ne devine pas la taille utile d'un pool : 8 est un point de départ, le besoin réel dépend de la logique du jeu.
 
 ---
 

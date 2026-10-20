@@ -113,7 +113,7 @@ def write(path: Path, text: str, encoding: str = "utf-8") -> bool:
     except (OSError, UnicodeDecodeError):
         pass          # absent, illisible, ou d'un autre encodage : on écrit
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding=encoding)
+    path.write_text(text, encoding=encoding, newline="\n")
     written += 1
     return True
 

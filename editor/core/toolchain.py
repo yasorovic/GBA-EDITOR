@@ -142,7 +142,7 @@ class Toolchain:
         CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
         CONFIG_FILE.write_text(
             json.dumps(self._config, indent=2),
-            encoding="utf-8"
+            encoding="utf-8", newline="\n"
         )
 
     # ── Accesseurs / setters ───────────────────────────────────────

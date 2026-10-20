@@ -188,6 +188,7 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
     _check_actor_name_collisions(ctx)
     _check_asset_symbol_collisions(ctx)
     _check_actor_budget(ctx)
+    _check_affine_budget(ctx)
     _check_data_column_types(ctx)
     _check_data_tables(ctx)
     _check_screen_space(ctx)
@@ -1433,34 +1434,55 @@ def _check_behaviors_without_self(ctx: ValidationContext):
 
 
 def _check_actor_budget(ctx: ValidationContext):
-    """Le budget OAM d'une scène — la SEULE faute possible, et elle est BLOQUANTE
-    (ROADMAP v0.17 T7).
+    """Le budget OAM d'une scène : 128 entrées, distribuées par priorité (ROADMAP « Le pool
+    ne dépend plus de l'OAM »).
 
-    Source unique : `scene_oam_layout` (la même que le build lit pour dimensionner
-    `g_actors` et placer les pools). Acteurs actifs + OBJ d'interface + pools
-    doivent tenir dans les 128 entrées de l'OAM. Le validateur et le build ne
-    peuvent donc plus diverger — c'est le sens de « budget unifié ».
-
-    ERREUR et non avertissement, depuis que les trois postes atterrissent sur des
-    entrées OAM RÉELLES : le rendu écrit `shadow_oam[<index>]` avec l'index de
-    `g_actors` (cf. main_gen / `oam_update`), et `shadow_oam` n'a que 128 entrées.
-    Au-delà, ce n'est plus « le surplus ne s'affiche pas » mais un débordement de
-    tableau qui corrompt la mémoire voisine. L'ancienne mesure « avertissement »
-    (v0.7.6) valait quand le pool était une tranche à part ; il partage désormais
-    la fenêtre OAM des acteurs.
-
-    N.B. — l'inspecteur, lui, affiche la RÉSERVATION de l'auteur (override
-    `Scene.actor_slots`, via `actor_budget.scene_actor_budget`) : une vue
-    d'intention, distincte de l'empreinte matérielle mesurée ici."""
+    Source unique : `scene_oam_layout`, la même que le build. L'interface passe d'abord, puis
+    les acteurs posés, puis les instances de pool. Ce qui ne tient pas n'est PAS écrit hors de
+    `shadow_oam` : l'acteur ou l'instance reçoit `oam_entry = -1` (ou l'entrée poubelle), vit
+    sans s'afficher, et le validateur AVERTIT. Une seule ERREUR reste : l'interface seule
+    dépasse 128, aucune dégradation ne la sauve."""
     from codegen.oam_alloc import scene_oam_layout, OAM_LIMIT
     p = ctx.project
     for scene in p.scenes:
         lay = scene_oam_layout(p, scene)
         if lay.over_budget:
             ctx.error(None,
-                f"Scene '{scene.name}': {lay.used} OAM entries requested ({lay.placed_entries} sprite actors + {lay.ui} "
-                f"interface + {lay.pool_entries} pool) for {OAM_LIMIT} available — reduce a background "
-                "tiling, move a zone to a BG target, or shrink the pool.")
+                f"Scene '{scene.name}': the interface alone needs {lay.ui} OAM entries for {OAM_LIMIT} "
+                "available — reduce a background tiling or move a zone to a BG target.")
+        # Priorité : interface, acteurs posés, puis pools. Ce qui ne tient pas vit sans s'afficher.
+        if lay.placed_hidden:
+            ctx.focus(scene)
+            ctx.warn(None,
+                f"Scene '{scene.name}': {lay.placed_hidden} sprite actor(s) have no OAM entry left "
+                f"({lay.placed_entries} actors + {lay.ui} interface fill the {OAM_LIMIT}) — they run but "
+                "are not displayed.")
+        # Un pool ne déborde pas, il reçoit ce qui reste : une instance sans entrée vit (script,
+        # collision) mais n'est pas dessinée. Dit, pas bloquant.
+        for pl in lay.pools:
+            if pl.hidden:
+                ctx.focus(scene)
+                ctx.warn(None,
+                    f"Scene '{scene.name}': pool of '{pl.prefab.name}' has {pl.instances} instance(s) but only "
+                    f"{pl.granted} can be drawn — no OAM entry left for the other {pl.hidden} (they live, "
+                    "but are not displayed). Reduce the pool or free OAM entries.")
+        ctx.focus(None)
+
+
+def _check_affine_budget(ctx: ValidationContext):
+    """Les 32 matrices affines d'une scène : acteurs posés d'abord, puis instances de pool
+    (`compute_affine_info` les attribue dans cet ordre). Au-delà, les derniers sprites s'affichent
+    SANS rotation ni échelle — sans un mot au build avant cet avertissement."""
+    from codegen.oam_alloc import scene_affine_requests, AFFINE_LIMIT
+    for scene in ctx.project.scenes:
+        n = scene_affine_requests(ctx.project, scene)
+        if n > AFFINE_LIMIT:
+            ctx.focus(scene)
+            ctx.warn(None,
+                f"Scene '{scene.name}': {n} affine matrices requested for {AFFINE_LIMIT} available — the last "
+                f"{n - AFFINE_LIMIT} sprite(s) are drawn without rotation or scale. Untick \"Affine transform\" "
+                "on some sprites, or reduce a pool.")
+    ctx.focus(None)
 
 
 def _check_window_regions(ctx: ValidationContext):
@@ -2083,7 +2105,7 @@ def _check_pal_bank_reference(ctx: ValidationContext):
     for scene in p.scenes:
         active = getattr(scene, "active_obj_palettes", [])
         for pf in p.prefabs:
-            if scene_pool_instances(scene, pf) <= 0:
+            if scene_pool_instances(p, scene, pf) <= 0:
                 continue
             pb = getattr(pf, "pal_bank", OWN_PAL_BANK)
             if pb == OWN_PAL_BANK:

@@ -75,7 +75,7 @@ class _RewriteEdgeCmd(Command):
         self.label = "Reconnecter transition"
     def _apply(self, index):
         for path, before, after in self._changes:
-            path.write_text((before, after)[index], encoding="utf-8")
+            path.write_text((before, after)[index], encoding="utf-8", newline="\n")
         self._refresh(index)
     def execute(self): self._apply(1)
     def undo(self): self._apply(0)

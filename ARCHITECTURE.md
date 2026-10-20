@@ -21,7 +21,8 @@ backstage/
 │   │   │                              DEUX implémentations à tenir d'accord (mise en page du texte, BLDCNT, rendu des modules
 │   │   │                              façon maxmod, transitions de musique)
 │   │   ├── disk_*.py, asset_*.py    ← l'onglet Disk et ses gestes annulables (arbre de `assets/`, déplacer, relier une source,
-│   │   │                              créer un asset, ce qui cite encore un asset avant de le supprimer)
+│   │   │                              créer un asset, ce qui cite encore un asset avant de le supprimer, `source_collisions` : un import qui
+│   │   │                              rencontre un fichier du même nom)
 │   │   ├── toolchain.py             ← détection devkitPro/mGBA (PATH, config, emplacements connus) + `config_dir()`
 │   │   └── …                        ← le reste est un module par sujet (polices, textes et balisage, audio, watcher de projet)
 │   ├── codegen/                     ← du projet à la ROM
@@ -120,6 +121,10 @@ Avant de nommer un nouveau type, vérifier que le **même mot** est employé aux
 
 **Locate** mène à l'onglet **Disk** de l'éditeur (`ui/common/locate_bus.py` → `window._locate_file`) : l'émetteur dit seulement QUEL fichier, la fenêtre qui possède l'onglet décide comment l'afficher. **Reveal** mène à l'**explorateur du système** (`ui/common/reveal.py`) et n'a pas besoin de la fenêtre. Un finder tient les deux derrière `AssetKind.file_of` : une famille qui le déclare gagne l'icône et les deux entrées de menu, sans autre câblage.
 
+### Importer sur un fichier du même nom (une règle, une question)
+
+Tout geste qui copie un fichier dans `assets/` (le « + » des sprites, fonds et sons, l'import et le dépôt de l'onglet Disk, *Import / replace image*) suit **la même règle**, écrite une seule fois dans `core/source_collisions.py` : le **même nom exact** dans le dossier est une collision, que l'auteur tranche par une seule boîte (`ui/common/import_collision.py` : écraser, garder les deux, annuler) ; tout autre nom pris est suffixé par `unique_name` (`coin_2`), sans question. La boîte nomme aussi les assets qui citent le fichier (`source_collisions.citing`, lu dans `Project.source_families`), puisque l'écraser les change tous. **Remplacer l'image d'un asset** (`ui/common/source_import.replace_source`) n'est pas un import : le fichier choisi est écrit SUR la source que l'asset cite déjà, et la boîte ne s'ouvre que si un autre asset la cite aussi. Toutes ces copies sont des `ImportFilesCmd` poussées dans l'historique, qui garde le contenu écrasé et le remet à l'annulation. L'encodage de l'asset (sprite, fond) n'y figure pas : il se refait au rechargement de la source.
+
 ---
 
 ## Terminologie
@@ -208,11 +213,11 @@ Une window GBA **ne dessine rien** : c'est un pochoir qui dit, par région de l'
 
 ### Les 128 entrées OAM sont allouées PAR SCÈNE
 
-Une seule scène est vivante à la fois : chaque `scene_init` efface `g_actors[]` et repose sa fenêtre OAM **depuis l'entrée 0**. `scene_oam_layout(project, scene) -> OamLayout` (`codegen/oam_alloc.py`) est la source de vérité unique : acteurs posés, puis bande d'interface en sprites, puis pools de prefabs (`Scene.prefab_pools`). `headers.py`, `main_gen.py` et `actor_budget.py` en sont des **lecteurs**.
+Une seule scène est vivante à la fois : chaque `scene_init` efface `g_actors[]` et repose sa fenêtre OAM **depuis l'entrée 0**. `scene_oam_layout(project, scene) -> OamLayout` (`codegen/oam_alloc.py`) est la source de vérité unique : acteurs posés, puis bande d'interface en sprites, puis pools de prefabs (`Scene.prefab_pools`). `headers.py` et `main_gen.py` en sont des **lecteurs**.
 
 - `g_actors[]` est dimensionné sur la scène la plus gourmande (le MAX, pas la somme).
 - Les symboles portent la scène (`spawn_<Scene>_<Prefab>`, `ACTOR_*`/`POOL_*` repartent de 0 par scène) : un état project-wide indexé par `Actor.tag` doit devenir per-scène (`g_sfx_on_destroy_*` : un pointeur posé au `scene_init`).
-- **Le budget OAM est UNIQUE et bloquant** : `validator._check_actor_budget` refuse `used > 128` (au-delà, c'est une corruption). `Scene.actor_slots` n'est plus qu'une vue d'intention dans l'inspecteur.
+- **Le budget OAM est UNIQUE, par priorité, et n'est jamais bloquant** (sauf une interface seule > 128) : `scene_oam_layout` donne ses entrées à l'interface, puis aux acteurs posés, puis aux instances de pool, dans l'ordre. Ce qui ne tient pas vit sans s'afficher (`oam_entry = -1`, ou l'entrée poubelle `OamLayout.scratch_start` pour un pool) et `validator._check_actor_budget` AVERTIT. La taille d'un pool (`Scene.prefab_pools`, ou `POOL_DEFAULT_INSTANCES` = 8 pour un prefab que les scripts spawnent) ne règle donc que les slots d'acteurs et l'état de script, pas l'OAM.
 
 ### Blending (deux jeux de cibles)
 
@@ -332,7 +337,7 @@ La décision vit sur le **sprite** (`SpriteComponent.affine_transform`, portée 
 | **Monde** | l'`Actor` | `self.rotation`, `self.scale` | `g_actors[i].rotation`, `.scale_x/y` (Q8) |
 | **Local** | le `SpriteComponent` | `self.sprite_offset`, `sprite_pivot`, `sprite_scale`, `sprite_rotation` | `g_oam_entries[i].offset_x/y`, `.pivot_x/y`, `.scale_x/y`, `.rotation` |
 
-Le monde reste sur l'Actor parce que la rotation est un fait de son état de jeu ; le sprite décide si ce fait est **visible**. Le local est exprimé **dans le repère de l'actor** et composé chaque frame (`_affine_oam_lines_dynamic`) : rotation = somme, scale = produit (Q8), offset transformé par la matrice de l'ACTOR, position = actor + offset composé (coin haut-gauche du cadre). Le **pivot** (pixels depuis le centre du cadre) dit AUTOUR DE QUOI le sprite se transforme, l'offset OÙ il est ; le matériel pivote toujours sur le centre, donc le centre de la boîte OAM se place à `P − M·pivot` (M = rotation·échelle·flip). `pa/pb/pc/pd` viennent de `SIN_LUT[91]` (Q8 : un quadrant, `gba_sin`/`gba_cos` déduisent les autres). Au cochage, l'éditeur centre l'actor sur le cadre (`center_on_frame`) sans écraser un réglage de l'auteur.
+Le monde reste sur l'Actor parce que la rotation est un fait de son état de jeu ; le sprite décide si ce fait est **visible**. Le local est exprimé **dans le repère de l'actor** et composé chaque frame (`_affine_oam_lines_dynamic`) : rotation = somme, scale = produit (Q8), offset transformé par la matrice de l'ACTOR, position = actor + R·S·(offset + demi-cadre) : le cadre entier, centre compris, tourne et scale comme un corps rigide autour de la position de l'actor. Le **pivot** (pixels depuis le centre du cadre) dit AUTOUR DE QUOI le sprite se transforme, l'offset OÙ il est ; le matériel pivote toujours sur le centre, donc le centre de la boîte OAM se place à `P − M·pivot` (M = rotation·échelle·flip). `pa/pb/pc/pd` viennent de `SIN_LUT[91]` (Q8 : un quadrant, `gba_sin`/`gba_cos` déduisent les autres). Au cochage, l'éditeur centre l'actor sur le cadre (`center_on_frame`) sans écraser un réglage de l'auteur.
 
 **Le stockage est PAR-ACTOR, pas par slot** : un script de prefab poolé est une fonction C partagée (les valeurs partent du `g_actors[i]` de l'instance), et un `static` dans un header multi-inclus serait une copie PAR unité de compilation (les écritures d'un script `actor_*.c` n'atteindraient jamais `main.c`). Les accesseurs ne sont **pas gardés par le slot** ; seule l'écriture de la matrice OAM le demande, et le checker avertit (`warning`) d'un `self.rotation` sans « Affine transform ».
 

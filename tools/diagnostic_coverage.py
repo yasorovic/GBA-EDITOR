@@ -172,7 +172,7 @@ def write_baseline(sites: list[Site], covered: set[str], collected: int, path: P
         "collected": collected,
         "sites": {s.key: (s.key in covered) for s in sorted(sites, key=lambda s: s.key)},
     }
-    path.write_text(json.dumps(payload, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(payload, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
 
 
 def summary_lines(report: Report, baseline: dict) -> list[str]:

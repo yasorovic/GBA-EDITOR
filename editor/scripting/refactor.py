@@ -31,7 +31,7 @@ import re
 from core.resources.resource_store import atomic_write
 
 from .api import (RUNTIME_API, RUNTIME_PROPS, REF_TYPES, REF_ACTOR, PARAM_STR, DOMAIN_UI_ELEMENT,
-                  MODULE_CALLS)
+                  DOMAIN_PREFAB, MODULE_CALLS)
 
 from .parser import DATA_NS
 
@@ -396,6 +396,73 @@ def find_call_sites_in_project(project, *domains: str) -> list[LuaCallSite]:
     return out
 
 
+def _cached_values(path: Path, domain: str) -> list[str]:
+    """Valeurs littérales citées par un script dans ce domaine, mises en cache par
+    (chemin, mtime, taille) : un script inchangé n'est pas reparsé."""
+    try:
+        st = path.stat()
+        key = (str(path), st.st_mtime_ns, st.st_size, domain)
+        values = _INDEX_VALUES.get(key)
+        if values is None:
+            text = path.read_text(encoding="utf-8")
+            values = [ref.value for ref in iter_refs(text, path=path, domain=domain)]
+            if len(_INDEX_VALUES) > 512:
+                _INDEX_VALUES.clear()
+            _INDEX_VALUES[key] = values
+        return values
+    except OSError:
+        return []
+
+
+def _scene_spawn_closure(project, scene) -> tuple[set[Path], set[str]]:
+    """(scripts compilés pour cette scène, prefabs qu'ils spawnent) — point fixe :
+    le script de la scène, ceux de ses acteurs et de leurs prefabs, ceux des
+    prefabs de son pool DÉCLARÉ, puis ceux des prefabs que ces scripts spawnent
+    à leur tour. Seuls les noms littéraux sont vus."""
+    prefab_by_name = {pf.name: pf for pf in project.prefabs}
+    scripts: set[Path] = set()
+
+    def add_script(owner) -> None:
+        comp = owner.get_component("script") if hasattr(owner, "get_component") else None
+        rel = getattr(comp, "script", "") or getattr(owner, "script", "")
+        if rel:
+            scripts.add(project.asset_abs(rel).resolve())
+
+    add_script(scene)
+    for a in scene.actors:
+        add_script(a)
+        if getattr(a, "prefab_name", "") in prefab_by_name:
+            add_script(prefab_by_name[a.prefab_name])
+    for name in scene.prefab_pools:
+        if name in prefab_by_name:
+            add_script(prefab_by_name[name])
+    spawned: set[str] = set()
+    todo = list(scripts)
+    while todo:
+        for name in _cached_values(todo.pop(), DOMAIN_PREFAB):
+            if name in prefab_by_name and name not in spawned:
+                spawned.add(name)
+                before = set(scripts)
+                add_script(prefab_by_name[name])
+                todo += scripts - before
+    return scripts, spawned
+
+
+def scene_spawned_prefabs(project, scene) -> set[str]:
+    """Noms des prefabs que les scripts compilés pour CETTE scène spawnent."""
+    return _scene_spawn_closure(project, scene)[1]
+
+
+def scene_spawn_sites(project, scene) -> dict[str, list[LuaCallSite]]:
+    """{prefab spawné: appels `actor:spawn`} des scripts compilés pour CETTE scène."""
+    scripts, _ = _scene_spawn_closure(project, scene)
+    spawned: dict[str, list[LuaCallSite]] = {}
+    for site in find_call_sites_in_project(project, DOMAIN_PREFAB):
+        if site.path.resolve() in scripts:
+            spawned.setdefault(site.values[DOMAIN_PREFAB], []).append(site)
+    return spawned
+
+
 def index_refs_in_project(project, domain: str) -> dict[str, dict[Path, int]]:
     """{valeur référencée: {script: nombre d'occurrences}} pour tout un domaine.
 
@@ -405,18 +472,7 @@ def index_refs_in_project(project, domain: str) -> dict[str, dict[Path, int]]:
     d'une entrée à l'autre sans relancer luaparser à chaque sélection."""
     index: dict[str, dict[Path, int]] = {}
     for p in script_paths(project):
-        try:
-            st = p.stat()
-            key = (str(p), st.st_mtime_ns, st.st_size, domain)
-            values = _INDEX_VALUES.get(key)
-            if values is None:
-                text = p.read_text(encoding="utf-8")
-                values = [ref.value for ref in iter_refs(text, path=p, domain=domain)]
-                if len(_INDEX_VALUES) > 512:
-                    _INDEX_VALUES.clear()
-                _INDEX_VALUES[key] = values
-        except OSError:
-            continue
+        values = _cached_values(p, domain)
         for value in values:
             index.setdefault(value, {}).setdefault(p, 0)
             index[value][p] += 1

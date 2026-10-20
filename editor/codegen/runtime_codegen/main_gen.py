@@ -82,10 +82,6 @@ from codegen.runtime_codegen.gen_text import (
     scene_text_reservation, obj_text_alloc, fonts_and_texts_lines,
     scene_region_colors, scene_region_backdrops, gen_ui_texts)
 from codegen.window_alloc import scene_window_layout
-# `prefab_group` est réexporté : `headers.py` l'importe depuis ce module depuis
-# toujours, et sa définition a rejoint le budget d'acteurs (v0.17) — l'éditeur
-# en a besoin pour afficher les slots bien avant qu'un build existe.
-from codegen.actor_budget import prefab_group
 from codegen.grit_conversion import (
     count_frames, sprite_unique_frames, seq_key,
 )
@@ -254,14 +250,26 @@ def _scene_pi(p: Project, scene: Scene) -> list[dict]:
     ciblent bien `actor_<Scène>_<Prefab>.c`. `size` compte les ENTRÉES réservées
     (instances × parties, ROADMAP v0.23), `start` repart de la base OAM 0 de la
     scène (après ses acteurs posés)."""
+    lay = scene_oam_layout(p, scene)
     return [
         {"prefab": pl.prefab, "sym": pl.sym, "prefab_sym": pl.prefab_sym,
          "start": pl.start, "size": pl.size,
          "entry_start": pl.entry_start, "member_entries": pl.member_entries,
          "entries_per_instance": pl.entries_per_instance,
-         "instances": pl.instances, "group": pl.group}
-        for pl in scene_oam_layout(p, scene).pools
+         "instances": pl.instances, "group": pl.group,
+         # Les `granted` premières instances ont leurs entrées OAM ; les autres vivent sur
+         # l'entrée POUBELLE de la scène (`scratch`), que le writer OAM ne lit jamais.
+         "granted": pl.granted, "scratch": lay.scratch_start}
+        for pl in lay.pools
     ]
+
+
+def pool_entry_start(pi: dict, inst: int, rank: int) -> int:
+    """Entrée OAM du membre `rank` de l'instance `inst` d'un pool, ou -1 si cette
+    instance n'a pas d'entrée (membre sans sprite, ou instance au-delà de `granted`)."""
+    if rank < 0 or inst >= pi["granted"]:
+        return -1
+    return pi["entry_start"] + inst * pi["entries_per_instance"] + rank
 
 
 # ─── sections du main.c ───────────────────────────────────────────────────────
@@ -325,7 +333,11 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
             # groupe de 1 : la boucle est alors exactement celle d'avant.
             # `_e` avance du nombre d'ENTRÉES de l'instance : les deux espaces
             # (acteurs, entrées OAM) n'ont pas le même pas.
-            f"    for(int _i={start}, _e={pi['entry_start']}; _i<{start+size}; _i+={group}, _e+={_epi}) {{",
+            f"    for(int _i={start}, _n=0; _i<{start+size}; _i+={group}, _n++) {{",
+            # Une instance sans entrée libre (`_n >= granted`) écrit sur l'entrée POUBELLE :
+            # elle vit, elle n'est jamais dessinée (le writer OAM ne la lit pas).
+            *([f"        int _e = _n < {pi['granted']} ? {pi['entry_start']} + _n*{_epi} : {pi['scratch']};"]
+              if _epi else []),
             f"        if(!g_actors[_i].active) {{",
         ]
 
@@ -962,8 +974,9 @@ def _pool_compose_lines(pi: list[dict]) -> list[str]:
         by_name = {pt.name: pt for pt in parts}
         rank = {pt.name: k for k, pt in enumerate(parts, start=1)}
         L += [f"    /* {pf.name} — subtree of each instance (ROADMAP v0.23) */",
-              f"    for(int _b={start}, _eb={p2['entry_start']}; _b<{start+size}; "
-              f"_b+={group}, _eb+={p2['entries_per_instance']}) {{",
+              f"    for(int _b={start}, _nb=0; _b<{start+size}; _b+={group}, _nb++) {{",
+              *([f"        int _eb = _nb < {p2['granted']} ? {p2['entry_start']} + _nb*{p2['entries_per_instance']}"
+                 f" : {p2['scratch']};"] if p2["entries_per_instance"] else []),
               # Racine éteinte = groupe RENDU AU POOL. C'est ici, en un seul
               # endroit, que se tiennent les deux règles : « détruire la racine
               # détruit le sous-arbre », et « active = false libère tout le
@@ -1756,8 +1769,7 @@ def _gen_scene_init(
             _inst, _member = divmod(slot - p2["start"], p2["group"])
             _rank = p2["member_entries"][_member]
             # Son entrée OAM : la 1re de l'instance + son rang ; -1 pour un marqueur.
-            _e = (p2["entry_start"] + _inst * p2["entries_per_instance"] + _rank
-                  if _rank >= 0 else -1)
+            _e = pool_entry_start(p2, _inst, _rank)
             L.append(f"    g_actors[{slot}].oam_entry = {_e};")
             L.append(f"    g_actors[{slot}].name = ACTOR_{p2['sym'].upper()};")
             L.append(f"    g_actors[{slot}].active = 0;")
@@ -2112,7 +2124,9 @@ def _gen_scene_tick(
                 # Un marqueur (point de tir, ancre de hitbox) n'a pas d'entrée OAM :
                 # rien à écrire, rien à cacher.
                 continue
-            oam_slot = p2["entry_start"] + _inst * p2["entries_per_instance"] + _rank
+            oam_slot = pool_entry_start(p2, _inst, _rank)
+            if oam_slot < 0:
+                continue          # instance sans entrée libre : elle vit, elle ne s'affiche pas
             L += oam_write_lines(a_idx, oam_slot, _appearances(p, owner, sprite_offsets),
                                  aff=_aff.get(a_idx))
 

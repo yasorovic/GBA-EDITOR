@@ -916,28 +916,8 @@ class SceneInspector(QWidget):
             if name:
                 placed[name] = placed.get(name, 0) + 1
 
-        scripts: set[Path] = set()
-        def _add(comp):
-            if comp and getattr(comp, "script", ""):
-                scripts.add(project.asset_abs(comp.script).resolve())
-        if getattr(scene, "script", ""):
-            scripts.add(project.asset_abs(scene.script).resolve())
-        prefab_by_name = {p.name: p for p in project.prefabs}
-        for a in scene.actors:
-            _add(a.get_component("script"))
-            pf = prefab_by_name.get(getattr(a, "prefab_name", ""))
-            if pf:
-                _add(pf.get_component("script"))
-
-        spawned: dict[str, list] = {}
-        if scripts:
-            from scripting.refactor import find_call_sites_in_project
-            from scripting.api import DOMAIN_PREFAB
-            for site in find_call_sites_in_project(project, DOMAIN_PREFAB):
-                if site.path.resolve() in scripts:
-                    name = site.values.get(DOMAIN_PREFAB)
-                    if name:
-                        spawned.setdefault(name, []).append(site)
+        from scripting.refactor import scene_spawn_sites
+        spawned = scene_spawn_sites(project, scene)
         return placed, spawned
 
     def _rebuild_scene_prefabs(self):
@@ -1501,7 +1481,7 @@ class SceneInspector(QWidget):
         sp = d / f"{name.strip()}.lua"
         if not sp.exists():
             ctx = ScriptTemplateContext(kind="scene", name=name.strip(), scene_name=self._scene.name)
-            sp.write_text(generate_script_template(ctx), encoding="utf-8")
+            sp.write_text(generate_script_template(ctx), encoding="utf-8", newline="\n")
         rel = str(sp.relative_to(self._project.root)).replace("\\", "/")
         self._set_scene_field("script", rel, extra_persist=self._refresh_scene_script_label)
         self.changed.emit()

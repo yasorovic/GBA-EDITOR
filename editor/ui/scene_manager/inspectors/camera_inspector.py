@@ -533,7 +533,7 @@ class CameraInspector(QWidget):
         sp = d / f"{name.strip()}.lua"
         if not sp.exists():
             ctx = ScriptTemplateContext(kind="camera", name=name.strip(), camera_name=cam.name)
-            sp.write_text(generate_script_template(ctx), encoding="utf-8")
+            sp.write_text(generate_script_template(ctx), encoding="utf-8", newline="\n")
         rel = str(sp.relative_to(self._project.root)).replace("\\", "/")
         self._edit([(cam, "script", rel)], "Camera script")
         if self._script_open_fn:

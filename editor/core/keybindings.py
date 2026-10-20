@@ -153,7 +153,7 @@ class Keybindings(QObject):
 
     def save(self):
         CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        CONFIG_FILE.write_text(json.dumps(self._overrides, indent=2), encoding="utf-8")
+        CONFIG_FILE.write_text(json.dumps(self._overrides, indent=2), encoding="utf-8", newline="\n")
 
     def resolve(self, binding_id: str) -> str:
         """La touche EFFECTIVE d'un id — la substitution si elle existe,

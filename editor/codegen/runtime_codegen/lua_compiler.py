@@ -659,13 +659,13 @@ def transpile_all(
     scene_sym = c_sym(scene.name)
     pool_state_total = 0
     for pf in prefabs:
-        pf_instances = scene_pool_instances(scene, pf)
+        pf_instances = scene_pool_instances(p, scene, pf)
         # Un prefab qu'aucune scène ne déclare n'émet rien, mais son script est quand même
         # VÉRIFIÉ — une fois, par la première scène : sinon ses fautes sémantiques (un nom qui
         # ne désigne rien, un appel inconnu) ne sortiraient qu'au jour où une scène le déclare.
         check_only = pf_instances <= 0
         if check_only and not (scene is p.scenes[0] and
-                               all(scene_pool_instances(s, pf) <= 0 for s in p.scenes)):
+                               all(scene_pool_instances(p, s, pf) <= 0 for s in p.scenes)):
             continue
         pf_sym = f"{scene_sym}_{c_sym(pf.name)}"
         sc = next((c for c in pf.components if isinstance(c, ScriptComponent)), None)

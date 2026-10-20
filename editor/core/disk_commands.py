@@ -58,18 +58,23 @@ class CreateFileCmd(Command):
 
 class ImportFilesCmd(Command):
     """Copier des fichiers de l'extérieur dans `assets/`. Annuler retire les copies et les dossiers que l'import a
-    créés ; l'original, hors du projet, n'est jamais touché."""
+    créés, et remet en place le contenu des fichiers qu'une copie a ÉCRASÉS ; l'original, hors du projet, n'est jamais
+    touché."""
 
     def __init__(self, copies: list[tuple[Path, Path]], around: Callable = nullcontext):
         self._copies = [(Path(src), Path(dst)) for src, dst in copies]      # (source extérieure, copie dans le projet)
         self._around = around
         self._made: list[Path] = []                                         # les dossiers créés, du plus haut au plus bas
+        self._overwritten: dict[Path, bytes] = {}                           # le contenu d'avant, des copies qui en écrasent un
         self.label = f"Importer {len(self._copies)} fichier(s)"
 
     def execute(self):
         with self._around():
             self._made = []
+            self._overwritten = {}
             for source, copy in self._copies:
+                if copy.is_file():
+                    self._overwritten[copy] = copy.read_bytes()
                 missing = [d for d in reversed(copy.parents) if not d.exists()]
                 copy.parent.mkdir(parents=True, exist_ok=True)
                 self._made += [d for d in missing if d not in self._made]
@@ -78,7 +83,10 @@ class ImportFilesCmd(Command):
     def undo(self):
         with self._around():
             for _source, copy in self._copies:
-                copy.unlink(missing_ok=True)
+                if copy in self._overwritten:
+                    copy.write_bytes(self._overwritten[copy])
+                else:
+                    copy.unlink(missing_ok=True)
             for folder in reversed(self._made):
                 try:
                     folder.rmdir()

@@ -252,7 +252,7 @@ def _scene_prefab_own_palettes(p: Project, scene: Scene) -> list[list[int]]:
                 out.append(cols)
 
     for pf in p.prefabs:
-        if scene_pool_instances(scene, pf) <= 0:
+        if scene_pool_instances(p, scene, pf) <= 0:
             continue
         _add(pf)
         for part in (getattr(pf, "children", []) or []):

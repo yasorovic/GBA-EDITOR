@@ -334,7 +334,7 @@ class PaletteGridPanel(QWidget):
                "hex" if low.endswith(".txt") or "Hex" in sel else "gpl")
         rgb = [bgr555_to_rgb888(c) for c in bank.colors]
         try:
-            Path(path).write_text(serialize_palette(bank.name, rgb, fmt), encoding="utf-8")
+            Path(path).write_text(serialize_palette(bank.name, rgb, fmt), encoding="utf-8", newline="\n")
         except OSError as e:
             QMessageBox.warning(self, label("palgrid.export"),
                                 label("palgrid.write_failed", error=e))

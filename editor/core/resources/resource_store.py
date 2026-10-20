@@ -78,7 +78,7 @@ def atomic_write(path: Path, text: str, encoding: str = "utf-8") -> None:
         pass          # absent, illisible, ou d'un autre encodage : on écrit
     tmp = path.with_suffix(path.suffix + ".tmp")
     try:
-        tmp.write_text(text, encoding=encoding)
+        tmp.write_text(text, encoding=encoding, newline="\n")
         with open(tmp, "rb+") as f:
             os.fsync(f.fileno())    # sans ça, une coupure juste après le rename peut laisser un fichier vide
         for attempt in range(_REPLACE_RETRIES):

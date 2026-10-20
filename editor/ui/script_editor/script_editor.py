@@ -342,7 +342,7 @@ class ScriptEditorScreen(QWidget):
             return
         from scripting.script_templates import ScriptTemplateContext, generate_script_template
         ctx = ScriptTemplateContext(kind="empty", name=name[:-4] if name.endswith(".lua") else name)
-        path.write_text(generate_script_template(ctx), encoding="utf-8")
+        path.write_text(generate_script_template(ctx), encoding="utf-8", newline="\n")
         self._file_tree.set_root(self._root_scripts_dir)
         self._file_tree.highlight_file(path)
         self.open_script(path)

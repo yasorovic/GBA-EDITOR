@@ -545,23 +545,9 @@ class Scene(Resource):
     # un BackgroundAsset (sidecar de compression) par son nom d'image.
     background_layers: list = field(default_factory=list)  # list[BackgroundLayer]
     actors: list = field(default_factory=list)  # list[Actor], inline dans le JSON
-    # ── Le budget d'acteurs de la scène (ROADMAP v0.17) ────────────
-    # Les 128 entrées OAM du matériel, réparties entre ce que la scène POSE et
-    # ce qu'elle SPAWNE. Deux champs qui partagent un plafond : monter l'un
-    # descend l'autre, parce qu'il n'y a qu'un budget.
-    #
-    # `actor_slots` réserve des entrées pour les acteurs posés — il n'en compte
-    # pas. L'auteur peut poser moins que ce qu'il réserve (le validateur
-    # avertit s'il pose plus) ; c'est ce qui rend le champ réglable, donc les
-    # deux champs solidaires.
-    #
-    # 0 = automatique : la réservation vaut le nombre d'acteurs réellement
-    # posés. C'est le comportement d'avant ce champ, donc celui de toute scène
-    # antérieure — le défaut ne s'invente rien.
-    actor_slots: int = 0
     # Les pools de CETTE scène : nom de Prefab → nombre d'INSTANCES simultanées.
     # Le budget, lui, se paie en SLOTS — un prefab à sous-arbre coûte
-    # instances × parties (v0.23). C'est `codegen/actor_budget.py` qui fait la
+    # instances × parties (v0.23). C'est `codegen/oam_alloc.py` qui fait la
     # conversion, en un seul endroit.
     #
     # Remplace `Prefab.max_instances` : combien d'exemplaires vivent en même
@@ -714,7 +700,6 @@ class Scene(Resource):
             # Absents tant que la scène n'a rien réglé : une scène qui n'a
             # jamais ouvert la carte Actor budget ne gagne pas deux clés
             # inertes (même règle que transition_* et music ci-dessous).
-            **({"actor_slots": self.actor_slots} if self.actor_slots else {}),
             **({"prefab_pools": {k: v for k, v in sorted(self.prefab_pools.items()) if v > 0}}
                if any(v > 0 for v in self.prefab_pools.values()) else {}),
             "cameras": [c.to_dict() for c in self.cameras],
@@ -781,7 +766,6 @@ class Scene(Resource):
             name=d.get("name", "Scene"),
             background_layers=bg_layers,
             actors=actors,
-            actor_slots=int(d.get("actor_slots", 0) or 0),
             # Les valeurs nulles ne sont pas retenues : un pool à 0 est un pool
             # qui n'existe pas, et le garder ferait apparaître le prefab dans la
             # carte de budget d'une scène qui ne le spawne pas.

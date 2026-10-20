@@ -41,21 +41,6 @@ def test_pools_partent_apres_les_acteurs_actifs(tmp_path):
     assert pool.size == 4 and lay.used == 6
 
 
-def test_override_actor_slots_n_affecte_pas_la_geometrie(tmp_path):
-    """`Scene.actor_slots` est une réservation d'INSPECTEUR (ROADMAP v0.17) : le
-    build pose les pools après les acteurs RÉELLEMENT posés, jamais après
-    l'override — sinon `g_actors` gonflerait de slots réservés-mais-vides."""
-    ball = Prefab(name="Ball")
-    scene = Scene(name="S", actors=[Actor(name="A")])
-    scene.actor_slots = 96                     # ancien défaut 96/32, resté
-    scene.prefab_pools = {"Ball": 8}
-    p = _projet(tmp_path, scenes=[scene], prefabs=[ball])
-    lay = scene_oam_layout(p, scene)
-    assert lay.placed == 1
-    assert lay.pools[0].start == 1             # après le SEUL acteur, pas 96
-    assert lay.used == 9 and project_actor_count(p) == 9
-
-
 def test_chaque_scene_repart_de_zero(tmp_path):
     """Deux scènes, deux plages qui partent chacune de leur propre base 0 —
     aucune ne porte les acteurs de l'autre."""
@@ -90,7 +75,7 @@ def test_pas_de_repli_sur_max_instances(tmp_path):
     assert not hasattr(ball, "max_instances")     # le champ n'existe plus
     scene = Scene(name="S")
     p = _projet(tmp_path, scenes=[scene], prefabs=[ball])
-    assert scene_pool_instances(scene, ball) == 0
+    assert scene_pool_instances(p, scene, ball) == 0
     assert scene_oam_layout(p, scene).pools == []
 
 

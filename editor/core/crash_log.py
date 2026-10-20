@@ -34,7 +34,7 @@ _MAX_DIALOGS = 3
 def _write(text: str) -> None:
     try:
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with LOG_FILE.open("a", encoding="utf-8") as handle:
+        with LOG_FILE.open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(f"\n=== {datetime.datetime.now().isoformat(timespec='seconds')} ===\n{text}")
     except OSError:
         pass   # un log impossible à écrire ne doit pas aggraver le crash
@@ -110,7 +110,7 @@ def install() -> None:
     sys.excepthook = _excepthook
     try:
         NATIVE_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _native_log = NATIVE_LOG_FILE.open("a", encoding="utf-8")
+        _native_log = NATIVE_LOG_FILE.open("a", encoding="utf-8", newline="\n")
         faulthandler.enable(file=_native_log, all_threads=True)
     except OSError:
         faulthandler.enable()

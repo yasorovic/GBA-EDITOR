@@ -31,7 +31,7 @@ SPRITES_PER_SCENE = SPRITE_COUNT // SCENE_COUNT
 
 def write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n",
-                    encoding="utf-8")
+                    encoding="utf-8", newline="\n")
 
 
 def sprite_palette(index: int) -> list[str]:
@@ -149,7 +149,6 @@ def scene(name: str, actors: list[dict]) -> dict:
             "pal_bank": -1,
         }],
         "actors": actors,
-        "actor_slots": len(actors),
         "cameras": [], "camera": "", "windows": [], "render_mode": 0,
         "scroll_h": False, "scroll_v": False, "script": "", "text_bg": 0,
         "ui_layouts": [], "font_name": "Basic", "collision_layer": 0,
@@ -222,7 +221,7 @@ def main() -> None:
         "par scène.\n\n"
         "Mesures prévues : build froid, rebuild inchangé, modification d'un PNG, "
         "puis modification d'une option de conversion.\n",
-        encoding="utf-8")
+        encoding="utf-8", newline="\n")
     print(f"Créé : {TARGET}")
 
 

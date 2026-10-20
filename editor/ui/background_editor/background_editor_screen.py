@@ -24,6 +24,7 @@ from PyQt6.QtCore import (
 )
 
 from ui.common.deferred_writes import schedule_save
+from ui.common.import_collision import ask_overwrite
 from ui.common.import_folder import import_folder
 from ui.common.theme import C, T, QSS, ui_font
 from ui.common.unit_spin import UnitSpin
@@ -1886,15 +1887,10 @@ class BgPropertiesPanel(QWidget):
     def _on_replace(self):
         if not self._project or not self._ba:
             return
-        path, _ = QFileDialog.getOpenFileName(
-            self, label("bgedit.choose_image"), "", label('bgedit.images_png'))
-        if not path:
+        from ui.common.source_import import replace_source
+        dst = replace_source(self._project, self._ba, label("bgedit.choose_image"), label('bgedit.images_png'), self)
+        if dst is None:
             return
-        import shutil
-        from core.models.unique_name import unique_name
-        folder = import_folder(self._project)
-        dst = folder / f"{unique_name(Path(path).stem, {f.stem for f in folder.iterdir()})}.png"
-        shutil.copy2(path, dst)
         self._ba.asset = self._project.asset_rel(dst)
         # Le canvas et la pose se disent pour l'ANCIENNE image : sur la nouvelle ils
         # désigneraient autre chose.
@@ -2281,11 +2277,20 @@ class BackgroundEditorScreen(QWidget):
         path, _ = QFileDialog.getOpenFileName(self, title, "", label('bgedit.images_png'))
         if not path:
             return
+        from core import source_collisions
+        from core.disk_commands import ImportFilesCmd
         folder = import_folder(self._project)
-        dst = folder / Path(path).name
-        if Path(path).resolve() != dst.resolve():
-            import shutil
-            shutil.copy2(path, dst)
+        if Path(path).parent.resolve() == folder.resolve():
+            dst = Path(path)                                    # déjà dans le dossier affiché : rien à copier
+        else:
+            overwrite = False
+            if source_collisions.collides(Path(path), folder):
+                overwrite = ask_overwrite(self, [Path(path).name],
+                                          source_collisions.citing(self._project, folder / Path(path).name))
+                if overwrite is None:
+                    return
+            dst = source_collisions.destination(Path(path), folder, overwrite)
+            get_history().push(ImportFilesCmd([(Path(path), dst)]))
         self._import_png(dst, kind)
 
     def _import_png(self, dst: Path, kind: str, then_paint: bool = False, paint_palette: Optional[str] = None):

@@ -129,7 +129,10 @@ def test_oam_dynamic_compose_monde_local_et_offset():
     # à P - M·pivot. Pivot (0,0) = le centre ne bouge pas (GBA native).
     assert "int _px=g_oam_entries[7].pivot_x; int _py=g_oam_entries[7].pivot_y;" in lines
     assert "int _u=(_cosA*_sxs*_px)/65536-(_sinA*_sys*_py)/65536;" in lines
-    assert "int sx=_ocx-4+_px-_u; int sy=_ocy-4+_py-_v;" in lines
+    # Le demi-cadre (offset + 4 + pivot) passe DANS la matrice de l'actor ; la boîte
+    # OAM est en double taille, donc son coin est le centre moins la taille du cadre.
+    assert "int _lx=g_oam_entries[7].offset_x+4+_px;" in lines
+    assert "int sx=_ocx-8-_u; int sy=_ocy-8-_v;" in lines
 
 
 def test_le_pivot_est_seme_depuis_le_composant_sprite():

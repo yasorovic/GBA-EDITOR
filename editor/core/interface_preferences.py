@@ -66,7 +66,7 @@ def _load() -> dict:
 
 def _save():
     CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    CONFIG_FILE.write_text(json.dumps(_load(), indent=2), encoding="utf-8")
+    CONFIG_FILE.write_text(json.dumps(_load(), indent=2), encoding="utf-8", newline="\n")
 
 
 def tips_shown() -> bool:

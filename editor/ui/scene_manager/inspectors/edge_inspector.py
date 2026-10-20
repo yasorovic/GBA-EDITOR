@@ -30,7 +30,7 @@ class _ScriptTextCmd(Command):
         self.label = f"Modifier {path.name}"
 
     def _apply(self, text: str) -> None:
-        self._path.write_text(text, encoding="utf-8")
+        self._path.write_text(text, encoding="utf-8", newline="\n")
         self._changed()
 
     def execute(self):

@@ -8,16 +8,12 @@ règle dans l'éditeur (comme le mode d'un background dans son inspecteur).
 """
 from __future__ import annotations
 from ui.common.labels import label
-import shutil
-from pathlib import Path
 from typing import Optional
 
-from PyQt6.QtWidgets import QFileDialog
 from ui.common.popup import MessageBox as QMessageBox
 
 from core.resources import asset_reconciliation
 from core.command_dispatcher import get_dispatcher
-from ui.common.import_folder import import_folder
 
 
 def _encode_and_store(project, sprite, source) -> Optional[str]:
@@ -38,18 +34,14 @@ def import_new_sprite(project, parent=None):
 
 
 def replace_sprite_image(project, sprite, parent=None) -> bool:
-    """Choisit un nouveau fichier, le COPIE comme source du sprite courant, et le
-    ré-encode (PNG jamais réécrit). True si appliqué."""
+    """Choisit un nouveau fichier, l'écrit sur la source du sprite courant (annulable, cf. `replace_source`) et le
+    ré-encode. True si appliqué."""
     if not sprite:
         return False
-    path, _ = QFileDialog.getOpenFileName(
-        parent, label('imgpng.choose_an_image'), "", label('imgpng.images_png'))
-    if not path:
+    from ui.common.source_import import replace_source
+    dst = replace_source(project, sprite, label('imgpng.choose_an_image'), label('imgpng.images_png'), parent)
+    if dst is None:
         return False
-    from core.models.unique_name import unique_name
-    folder = import_folder(project)
-    dst = folder / f"{unique_name(Path(path).stem, {f.stem for f in folder.iterdir()})}.png"
-    shutil.copy2(path, dst)            # copie du source, jamais réécrit
     sprite.asset = project.asset_rel(dst)
     warning = _encode_and_store(project, sprite, dst)
     if warning and parent is not None:

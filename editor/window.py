@@ -223,10 +223,10 @@ class GbaStatusBar(QWidget):
                 self._set(key, 0)
             return
 
-        # OAM : l'empreinte que le build réserve (acteurs actifs à apparence,
-        # visibles ou non — `visible` n'est qu'un drapeau d'affichage —, OBJ
-        # d'interface, pools de prefabs). Le même nombre que `_check_actor_budget`.
-        oam_count = scene_oam_layout(project, scene).used
+        # OAM : ce que la scène DEMANDE (acteurs actifs à apparence, visibles ou non — `visible`
+        # n'est qu'un drapeau d'affichage —, OBJ d'interface, toutes les instances des pools). Au-delà
+        # de 128, le surplus vit sans s'afficher et `_check_actor_budget` l'avertit.
+        oam_count = scene_oam_layout(project, scene).requested
 
         # Rectangles occupant l'écran : (y, hauteur, coût en cycles par ligne).
         spans: list[tuple[int, int, int]] = []
@@ -1714,10 +1714,20 @@ class MainWindow(QMainWindow):
             return
         from core import asset_creation
         from core.disk_commands import ImportFilesCmd
+        from core import source_collisions
         from core.models.unique_name import unique_name
+        from ui.common.import_collision import ask_overwrite
         readable = lambda p: p.is_file() and p.suffix.lower() in asset_creation.SOURCE_FAMILIES
         target = Path(folder)
         taken = {entry.name for entry in target.iterdir()} if target.is_dir() else set()
+        loose = [Path(raw) for raw in files if Path(raw).is_file() and readable(Path(raw))]
+        clashes = [p for p in loose if source_collisions.collides(p, target)]
+        overwrite = False
+        if clashes:
+            citing = [c for p in clashes for c in source_collisions.citing(self.project, target / p.name)]
+            overwrite = ask_overwrite(self, [p.name for p in clashes], citing)
+            if overwrite is None:
+                return
         copies = []
         for raw in files:
             source = Path(raw)
@@ -1728,8 +1738,7 @@ class MainWindow(QMainWindow):
                     taken.add(root.name)
                     copies += [(p, root / p.relative_to(source)) for p in inside]
             elif readable(source):
-                name = unique_name(source.stem, {Path(n).stem for n in taken})
-                copy = target / f"{name}{source.suffix}"
+                copy = source_collisions.destination(source, target, overwrite, {Path(n).stem for n in taken})
                 taken.add(copy.name)
                 copies.append((source, copy))
         if not copies:

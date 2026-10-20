@@ -119,7 +119,7 @@ def _emit(report: list[str], failures: list[str]) -> int:
     text = "\n".join(report) + "\n"
     target = _report_path()
     if target is not None:
-        target.write_text(text, encoding="utf-8")
+        target.write_text(text, encoding="utf-8", newline="\n")
     try:
         sys.stdout.write(text)         # absent dans la distribution sans console
     except (AttributeError, OSError):

@@ -85,7 +85,7 @@ def main() -> None:
         "glyphs": glyphs,
     }
     (fonts_dir / "Font8x8 Latin.font").write_text(
-        json.dumps(sidecar, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        json.dumps(sidecar, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 
 if __name__ == "__main__":

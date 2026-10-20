@@ -34,8 +34,7 @@ from codegen.grit_conversion import (
 from codegen.palette_alloc import (
     scene_bank_layout, effective_palette_colors, ui_image_sprite_pools,
 )
-from codegen.actor_budget import prefab_pool_instances
-from codegen.oam_alloc import scene_pool_instances, owner_appearances
+from codegen.oam_alloc import scene_pool_instances, prefab_pool_instances, owner_appearances
 from core.models.components import displayed_sprite_component
 from core.app_paths import RUNTIME_DIR
 from codegen.runtime_codegen.headers import generate_actor_types, generate_runtime_api
@@ -171,7 +170,7 @@ class BuildWorker(EventEmitter, threading.Thread):
                   "mgba": tc.resolve_mgba()} if tc else {})
         try:
             p.build_dir.mkdir(parents=True, exist_ok=True)
-            self._build_log = open(p.build_dir / "build.log", "w", encoding="utf-8")
+            self._build_log = open(p.build_dir / "build.log", "w", encoding="utf-8", newline="\n")
         except OSError as exc:
             self._build_log = None
             self._emit("log_line", f"[build] build.log could not be written: {exc}")
@@ -993,7 +992,7 @@ class BuildWorker(EventEmitter, threading.Thread):
         for d in all_scene_data:
             scene_sym = c_sym(d["scene"].name)
             for pf in self.project.prefabs:
-                if scene_pool_instances(d["scene"], pf) <= 0:
+                if scene_pool_instances(self.project, d["scene"], pf) <= 0:
                     continue
                 sc = next((c for c in pf.components if isinstance(c, ScriptComponent)), None)
                 if sc and sc.script:
