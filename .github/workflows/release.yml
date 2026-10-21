@@ -186,8 +186,11 @@ jobs:
           $sh = "C:\msys64\usr\bin\bash.exe"
           & $sh -lc @'
           set -e
-          pacman-key --recv BC26F752D25B92CE272E0F44F7FD5492264BB9D0 --keyserver keyserver.ubuntu.com
-          pacman-key --lsign BC26F752D25B92CE272E0F44F7FD5492264BB9D0
+          # Les bases sont signées par WinterMute (BC26…) et par fincs (032F…).
+          for key in BC26F752D25B92CE272E0F44F7FD5492264BB9D0 032F4C9D0B8FF3BC84019B7862C7609ADA219C60; do
+            pacman-key --recv $key --keyserver keyserver.ubuntu.com
+            pacman-key --lsign $key
+          done
           printf '\n[dkp-libs]\nServer = https://pkg.devkitpro.org/packages\n\n[dkp-windows]\nServer = https://pkg.devkitpro.org/packages/windows/$arch\n' >> /etc/pacman.conf
           pacman -Sy --noconfirm
           pacman -S --noconfirm gba-dev
