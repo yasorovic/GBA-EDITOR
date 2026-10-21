@@ -102,6 +102,7 @@ def build_command(version: str, output_dir: Path) -> list[str]:
         "--assume-yes-for-downloads",
         "--remove-output",              # jette le .build, garde le .dist
         "--enable-plugin=pyqt6",
+        "--lto=no",                     # édition de liens bien plus courte ; binaire un peu plus gros
         f"--output-dir={output_dir}",
         f"--output-filename={APP_EXE}",
     ]

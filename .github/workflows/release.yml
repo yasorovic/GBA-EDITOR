@@ -21,11 +21,11 @@ permissions:
 
 jobs:
   version:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.v.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # La version vit dans le dépôt (editor/core/app_info.py) ; le tag de la
       # release la CONFIRME. Un tag qui diverge fait échouer la release ici, avant
@@ -57,15 +57,15 @@ jobs:
   # verte sur une poussée antérieure ne dit rien du commit qui part en release. Un échec ici
   # arrête tout, avant les ~heures de compilation de l'éditeur.
   tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       QT_QPA_PLATFORM: offscreen
       GBA_TESTS_REQUIRE_NATIVE: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -98,9 +98,9 @@ jobs:
       QT_QPA_PLATFORM: offscreen
       GBA_TESTS_REQUIRE_DEVKITPRO: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -117,7 +117,7 @@ jobs:
       # gardée en cache et sert tant que la clé ne change pas (changer `v1` pour la refaire).
       - name: Restaurer devkitPro
         id: dkp-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: C:\msys64\opt\devkitpro
           key: devkitpro-gba-windows-v1
@@ -143,7 +143,7 @@ jobs:
 
       - name: Garder devkitPro en cache
         if: steps.dkp-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: C:\msys64\opt\devkitpro
           key: devkitpro-gba-windows-v1
@@ -173,23 +173,27 @@ jobs:
       - name: Tests lents
         run: python -m pytest tests -m slow -q -rs
 
+  # Les builds n'attendent pas `tests` : ils tournent en parallèle, et seul `publish`
+  # exige que les tests soient verts. Rien ne part en release sur un échec.
   build-windows:
-    needs: [version, tests]
+    needs: [version]
     runs-on: windows-latest
     # Nuitka compile en C : nettement plus long que l'ancien build
     # PyInstaller (qui ne faisait qu'assembler des .pyc).
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
       # Le cache Nuitka (objets compilés + ccache) fait la différence entre
       # un build à froid et un build incrémental sur les runs suivants.
-      - name: Cache Nuitka
-        uses: actions/cache@v4
+      # restore + save séparés : la sauvegarde se fait même si une étape APRÈS le build
+      # échoue (smoke test, installateur), sinon chaque essai repart à froid.
+      - name: Restaurer le cache Nuitka
+        uses: actions/cache/restore@v5
         with:
           path: '~\AppData\Local\Nuitka\Nuitka\Cache'
           key: nuitka-windows-${{ hashFiles('requirements.txt', 'packaging/requirements-build.txt') }}-${{ github.sha }}
@@ -210,6 +214,13 @@ jobs:
 
       - name: Build Nuitka (standalone)
         run: python packaging/nuitka_build.py --version "${{ needs.version.outputs.version }}" --output-dir build-out
+
+      - name: Sauvegarder le cache Nuitka
+        if: always()
+        uses: actions/cache/save@v5
+        with:
+          path: '~\AppData\Local\Nuitka\Nuitka\Cache'
+          key: nuitka-windows-${{ hashFiles('requirements.txt', 'packaging/requirements-build.txt') }}-${{ github.sha }}
 
       # Le binaire LIVRE démarre-t-il, crée-t-il un projet, ouvre-t-il chaque écran,
       # trouve-t-il ses données embarquées ? Les écrans sont importés paresseusement :
@@ -267,7 +278,7 @@ jobs:
           $version = "${{ needs.version.outputs.version }}"
           ./packaging/windows/test_installer.ps1 -Installer (Join-Path $PWD "Backstage-$version-windows-setup.exe") -Version $version
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: windows
           path: |
@@ -275,16 +286,16 @@ jobs:
             Backstage-*-windows-portable.zip
 
   build-linux-appimage:
-    needs: [version, tests]
+    needs: [version]
     # Version figée, pas `ubuntu-latest` : l'AppImage exige au moins la glibc du
     # runner qui la construit. 22.04 (glibc 2.35) couvre aussi Debian 12 et
     # RHEL 9 ; `latest` (24.04, glibc 2.39) les exclurait.
     runs-on: ubuntu-22.04
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -302,8 +313,8 @@ jobs:
             libxcb-render-util0 libxcb-shape0 libxcb-xfixes0 \
             libxcb-xinerama0 libnss3 libxdamage1 libfontconfig1 libpulse0
 
-      - name: Cache Nuitka
-        uses: actions/cache@v4
+      - name: Restaurer le cache Nuitka
+        uses: actions/cache/restore@v5
         with:
           path: ~/.cache/Nuitka
           key: nuitka-linux-${{ hashFiles('requirements.txt', 'packaging/requirements-build.txt') }}-${{ github.sha }}
@@ -320,6 +331,13 @@ jobs:
 
       - name: Build Nuitka (standalone)
         run: python packaging/nuitka_build.py --version "${{ needs.version.outputs.version }}" --output-dir build-out
+
+      - name: Sauvegarder le cache Nuitka
+        if: always()
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.cache/Nuitka
+          key: nuitka-linux-${{ hashFiles('requirements.txt', 'packaging/requirements-build.txt') }}-${{ github.sha }}
 
       # Même vérification que sous Windows, sur le binaire livré. Sous xvfb, avec
       # la vraie plateforme Qt « xcb » : c'est elle qui sera dans l'AppImage.
@@ -428,28 +446,28 @@ jobs:
           tar -czf "Backstage-${VERSION}-x86_64.AppImage.tar.gz" "Backstage-${VERSION}-x86_64.AppImage"
           tar -tvzf "Backstage-${VERSION}-x86_64.AppImage.tar.gz"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: linux-appimage
           path: "*.AppImage.tar.gz"
 
   publish:
     if: github.event_name == 'release'
-    needs: [build-windows, build-linux-appimage]
-    runs-on: ubuntu-latest
+    needs: [tests, build-windows, build-linux-appimage]
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Les deux artefacts tombent à plat dans le même dossier (chacun ne
       # contient que des fichiers, pas de sous-arbre), pour un seul upload.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: windows
           path: artifacts
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: linux-appimage
           path: artifacts

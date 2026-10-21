@@ -186,7 +186,10 @@ class TooltipController(QObject):
         if self._bubble is not None:
             self._bubble.hide()
         if self._anchor is not None and not sip.isdeleted(self._anchor):
-            self._anchor.destroyed.disconnect(self.hide)
+            try:
+                self._anchor.destroyed.disconnect(self.hide)
+            except (TypeError, RuntimeError):
+                pass   # déjà déconnecté : hide() tourne justement parce que `destroyed` vient d'être émis
         self._anchor = None
 
     def shutdown(self):
