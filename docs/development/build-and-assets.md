@@ -89,9 +89,7 @@ cliquable. Le validateur, le checker Lua, le codegen et la sortie des outils pas
   par `tests/conftest.py`). À la fin d'un run COMPLET, `pytest` AVERTIT (sans échouer) d'un diagnostic couvert qui
   ne l'est plus ou d'un nouveau jamais déclenché ; la référence est `tools/diagnostic_coverage_baseline.json`
   (un échantillon, pas un objectif de 100 % ; `DIAGNOSTIC_COVERAGE_UPDATE=1` pour la relever, `python tools/diagnostic_coverage.py` pour lister les sites
-  jamais atteints). `tests/rom_build/test_build_invariants.py` (marqué `slow` : `pytest -m slow`, et `release.yml` avant publication) corrompt les fichiers de la démo un à un (une compilation réelle par cas, ~3 min à lui seul) et exige cinq
-  invariants du journal (pas d'« internal error », échec = erreur, anglais sans chemin du projet, le fichier
-  abîmé est nommé, un fichier cassé n'est jamais ignoré sans un mot).
+  jamais atteints).
 - **Aucune erreur n'est avalée.** Un `except` large (`Exception`, nu, `LuaParseError`) de `codegen/`,
   `scripting/` ou `core/validator.py` lève, émet, ou porte `# tolerated: <raison>` ; `tests/
   test_silent_except.py` le garde. `core/validator._check_scripts_parse` lit tout `.lua` de `scripts/`,

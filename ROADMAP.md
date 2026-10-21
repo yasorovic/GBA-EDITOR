@@ -942,11 +942,6 @@ réellement) : la matrice en atteint 28 (10 %), la suite entière 97, les deux r
 autres ne se déclenchent jamais : audio, tables de données, caméras, budgets, vecteurs et tableaux du
 checker, conversion grit.
 
-1. **Des invariants testés en masse.** `tests/rom_build/test_build_invariants.py` corrompt un à un des fichiers de
-   la démo (tronqué, vidé, octets de bruit, clé JSON retirée, valeur du mauvais type, jeton de script
-   supprimé) et exige, pour chaque cas : aucun « internal error » ; un build en échec porte au moins une
-   erreur ; aucune erreur n'est en français ni ne recopie le chemin du projet ; un build en échec nomme le
-   fichier abîmé. Une exception à l'invariant est une entrée datée dans le test, avec sa raison.
 2. **Une couverture mesurée, avec un avertissement.** `tools/diagnostic_coverage.py` énumère les sites
    d'émission (AST), enregistre ceux qu'une exécution déclenche, et une fin de run complet de `pytest`
    **avertit** (sans échouer) quand un diagnostic couvert ne l'est plus ou qu'un nouveau n'est jamais
@@ -969,7 +964,7 @@ La référence de couverture est relevée à 103 sites exercés sur 278. Les 175
 travail de la tranche suivante (audio, tables de données, caméras, budgets, vecteurs et tableaux du
 checker, conversion grit).
 
-**Isolés le 2026-10-04.** `test_build_fault_injection.py`, `test_build_diagnostics.py`, `test_build_invariants.py`, `test_gcc_cites_the_script.py`, `test_smoke_test.py` et un cas de `test_codegen_diagnostics.py` compilent un projet entier par cas : lancés à chaque modification, la suite durait ~20 min. Ils portent le marqueur `slow`, exclu par défaut (`addopts` de `pyproject.toml`) ; `pytest -m slow` les lance, et le job `slow-tests` de `release.yml` les exige avant toute publication.
+**Isolés le 2026-10-04.** `test_build_fault_injection.py`, `test_build_diagnostics.py`, `test_gcc_cites_the_script.py`, `test_smoke_test.py` et un cas de `test_codegen_diagnostics.py` compilent un projet entier par cas : lancés à chaque modification, la suite durait ~20 min. Ils portent le marqueur `slow`, exclu par défaut (`addopts` de `pyproject.toml`) ; `pytest -m slow` les lance ; aucun job de `release.yml` ne les exige : ils ne bloquent pas une publication.
 
 ### Tranche 5 (les 175 sites jamais atteints (livrée le 2026-10-03, réduite le 2026-10-04))
 

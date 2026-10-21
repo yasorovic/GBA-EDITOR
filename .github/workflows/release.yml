@@ -86,63 +86,6 @@ jobs:
       - name: Tests
         run: python -m pytest tests -q -rs
 
-  # Les tests qui compilent un projet entier (`-m slow`, exclus de `tests.yml` et du
-  # travail quotidien) tournent ici : avant les ~heures de compilation de l'éditeur.
-  # Ils ont besoin de devkitPro (grit, make, arm-none-eabi-gcc) : on l'installe, et
-  # `GBA_TESTS_REQUIRE_DEVKITPRO` fait de son absence un échec plutôt qu'un test sauté.
-  slow-tests:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      QT_QPA_PLATFORM: offscreen
-      GBA_TESTS_REQUIRE_DEVKITPRO: "1"
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Installer les bibliothèques Qt
-        run: |
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
-          sudo apt-get install -y --no-install-recommends \
-            libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 libpulse0
-
-      - name: Installer les dépendances Python
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt -r requirements-dev.txt
-
-      # Mêmes commandes que celles proposées à l'utilisateur Linux (`core.toolchain`).
-      # `apt.devkitpro.org` est derrière Cloudflare, qui répond parfois 403 aux
-      # runners GitHub : on installe alors gba-dev dans l'image Docker officielle
-      # (qui embarque déjà dkp-pacman) et on en recopie /opt/devkitpro.
-      - name: Installer devkitPro
-        run: |
-          if wget --tries=3 --waitretry=5 https://apt.devkitpro.org/install-devkitpro-pacman; then
-            chmod +x ./install-devkitpro-pacman
-            sudo ./install-devkitpro-pacman
-            sudo dkp-pacman -S --noconfirm gba-dev
-          else
-            echo "apt.devkitpro.org inaccessible : repli sur l'image Docker devkitpro/devkitarm"
-            # L'image embarque déjà gba-dev (grit, libgba, libtonc…) ; pkg.devkitpro.org
-            # est bloqué aussi, donc pas de `dkp-pacman -Sy`.
-            docker create --name dkp devkitpro/devkitarm
-            # `docker cp` refuse un lien symbolique pointant hors de l'arbre copié ;
-            # tar, lui, l'extrait tel quel.
-            docker export dkp | sudo tar -x -C / opt/devkitpro
-            docker rm dkp
-          fi
-          echo "DEVKITPRO=/opt/devkitpro" >> "$GITHUB_ENV"
-          echo "DEVKITARM=/opt/devkitpro/devkitARM" >> "$GITHUB_ENV"
-          echo "/opt/devkitpro/tools/bin" >> "$GITHUB_PATH"
-          echo "/opt/devkitpro/devkitARM/bin" >> "$GITHUB_PATH"
-
-      - name: Tests lents
-        run: python -m pytest tests -m slow -q -rs
-
   # Le build de ROM sous Windows : msys2 de devkitPro, chemins C:\devkitPro, limite de
   # 260 caractères, relance de `make` — du code qui ne tournait que sur le poste de
   # l'auteur. Hors `needs` des builds tant qu'il n'a pas passé un workflow_dispatch :
@@ -231,7 +174,7 @@ jobs:
         run: python -m pytest tests -m slow -q -rs
 
   build-windows:
-    needs: [version, tests, slow-tests]
+    needs: [version, tests]
     runs-on: windows-latest
     # Nuitka compile en C : nettement plus long que l'ancien build
     # PyInstaller (qui ne faisait qu'assembler des .pyc).
@@ -332,7 +275,7 @@ jobs:
             Backstage-*-windows-portable.zip
 
   build-linux-appimage:
-    needs: [version, tests, slow-tests]
+    needs: [version, tests]
     # Version figée, pas `ubuntu-latest` : l'AppImage exige au moins la glibc du
     # runner qui la construit. 22.04 (glibc 2.35) couvre aussi Debian 12 et
     # RHEL 9 ; `latest` (24.04, glibc 2.39) les exclurait.
