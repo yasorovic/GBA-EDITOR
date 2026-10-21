@@ -213,6 +213,10 @@ jobs:
           # Même disposition que l'installateur graphique : C:\devkitPro\{devkitARM,tools,…}
           # et C:\devkitPro\msys2 (le make que cherche core.toolchain). Des jonctions, pas
           # une copie ; C:\devkitPro est un vrai dossier pour éviter un cycle msys2 -> opt.
+          # Le msys2 du runner n'a pas `make` (devkitPro apporte le sien) ; dépôt msys2
+          # normal, pas celui de devkitPro. Hors cache : `make` vit dans C:\msys64.
+          & C:\msys64\usr\bin\bash.exe -lc "pacman -S --noconfirm --needed make"
+          if ($LASTEXITCODE -ne 0) { throw "installation de make échouée" }
           New-Item -ItemType Directory C:\devkitPro | Out-Null
           Get-ChildItem $root -Directory | ForEach-Object {
             New-Item -ItemType Junction -Path "C:\devkitPro\$($_.Name)" -Target $_.FullName | Out-Null

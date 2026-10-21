@@ -175,10 +175,20 @@ def _own_crash_log(tmp_path, monkeypatch):
     monkeypatch.setattr(crash_log, "LOG_FILE", tmp_path / "crash.log")
 
 
+def _drop_sfx_without_sample(root: Path) -> None:
+    """Le dépôt suit les `.sfx` des paquets de bruitages mais pas leurs `.wav` (`.gitignore`, trop lourds) :
+    sur un clone, ces sidecars n'ont plus d'échantillon et feraient échouer la démo saine. On les écarte de la copie."""
+    for sidecar in list(root.rglob("*.sfx")):
+        asset = json.loads(sidecar.read_text(encoding="utf-8")).get("asset", "")
+        if asset and not (root / asset).exists():
+            sidecar.unlink()
+
+
 @pytest.fixture(scope="module")
 def demo(tmp_path_factory):
     root = tmp_path_factory.mktemp("fuzz") / "Demo"
     shutil.copytree(DEMO, root, ignore=shutil.ignore_patterns("build"))
+    _drop_sfx_without_sample(root)
     return root
 
 
