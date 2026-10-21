@@ -253,6 +253,12 @@ def _read_ints(raw, minimums: tuple) -> Optional[tuple]:
     return vals
 
 
+def _read_cells(cells: list) -> list:
+    """Les entrées d'une tilemap, ou rien si l'une n'est pas un entier : une grille abîmée se relit comme
+    « pas encore encodée » plutôt que de faire planter le build sur une opération binaire."""
+    return cells if all(type(c) is int for c in cells) else []
+
+
 _POS_LIMIT = 1 << 20   # une position se lit signée : seul ce plancher la distingue d'un sidecar corrompu
 
 # Le canvas FIXE d'un fond bitmap (Mode 4, plein écran). Une seule définition : l'encodeur (core.bg_import) et le
@@ -979,7 +985,7 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
             asset=d.get("asset", d.get("source", "")),   # rétro-compat: ancienne clé "source"
             palettes=read_palettes(d.get("palettes", [])),
             tileset=list(d.get("tileset", [])),
-            tilemap=read_grid(d.get("tilemap", [])),
+            tilemap=_read_cells(read_grid(d.get("tilemap", []))),
             tiles_w=int(d.get("tiles_w", 0) or 0), tiles_h=int(d.get("tiles_h", 0) or 0),
             quantize_method=d.get("quantize_method", d.get("compress_method", "median_cut")),
             tile_palette_overrides=decode_tile_palette_overrides(d.get("tile_repaint")),

@@ -55,7 +55,7 @@ FILES = [
     "assets/scripts/SCR_Arena.lua", "assets/scripts/SCR_Main.lua", "assets/scripts/SCR_Victory.lua",
     "assets/sprites/Ball.sprite", "assets/sprites/Ball.png", "assets/sprites/Paddle.sprite",
     "assets/sprites/Paddle.png",
-    "assets/backgrounds/Background.background", "assets/backgrounds/Background.png",
+    "assets/Space.background", "assets/360_F_360193189_tWKC3HPP8V9u7zjzaPc41nvdMV0RP0y8.png",
     "assets/fonts/Font8x8 Latin.font", "assets/fonts/font8x8-latin.png",
     "assets/fonts/misaki-gothic.font",
     "assets/palettes/_Microsoft Windows 16.palette", "assets/palettes/_Microsoft Windows 16.hex",

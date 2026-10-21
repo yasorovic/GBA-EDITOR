@@ -170,7 +170,17 @@ jobs:
       # devkitProUpdater (l'installateur graphique de l'utilisateur) ne fait rien en
       # silencieux (`/S`) : on passe par le dépôt pacman de devkitPro dans le msys2 du
       # runner, comme sur Linux. Les outils atterrissent dans C:\msys64\opt\devkitpro, exposé en C:\devkitPro.
+      # `pkg.devkitpro.org` répond parfois 403 (Cloudflare) : une installation réussie est
+      # gardée en cache et sert tant que la clé ne change pas (changer `v1` pour la refaire).
+      - name: Restaurer devkitPro
+        id: dkp-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: C:\msys64\opt\devkitpro
+          key: devkitpro-gba-windows-v1
+
       - name: Installer devkitPro
+        if: steps.dkp-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           $sh = "C:\msys64\usr\bin\bash.exe"
@@ -183,8 +193,20 @@ jobs:
           pacman -S --noconfirm gba-dev
           '@
           if ($LASTEXITCODE -ne 0) { throw "installation de gba-dev échouée" }
+          if (-not (Test-Path "C:\msys64\opt\devkitpro\devkitARM\bin\arm-none-eabi-gcc.exe")) { throw "devkitPro (GBA) n'est pas installé" }
+
+      - name: Garder devkitPro en cache
+        if: steps.dkp-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: C:\msys64\opt\devkitpro
+          key: devkitpro-gba-windows-v1
+
+      - name: Exposer devkitPro en C:\devkitPro
+        shell: pwsh
+        run: |
           $root = "C:\msys64\opt\devkitpro"
-          if (-not (Test-Path "$root\devkitARM\bin\arm-none-eabi-gcc.exe")) { throw "devkitPro (GBA) n'est pas installé sous $root" }
+          if (-not (Test-Path "$root\devkitARM\bin\arm-none-eabi-gcc.exe")) { throw "devkitPro (GBA) absent de $root" }
           # Même disposition que l'installateur graphique : C:\devkitPro\{devkitARM,tools,…}
           # et C:\devkitPro\msys2 (le make que cherche core.toolchain). Des jonctions, pas
           # une copie ; C:\devkitPro est un vrai dossier pour éviter un cycle msys2 -> opt.

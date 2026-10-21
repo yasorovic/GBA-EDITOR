@@ -152,7 +152,7 @@ def test_a_bad_or_taken_name_or_the_assets_folder_is_refused_and_nothing_moves(t
     p = _project(tmp_path)
     (p.assets_dir / "sfx").mkdir(exist_ok=True)
     (p.assets_dir / "music").mkdir(exist_ok=True)
-    for bad in ("", "  ", ".", "..", "a/b", "a\b", "what?", "dots.", "music"):
+    for bad in ("", "  ", ".", "..", "a/b", "a\\b", "what?", "dots.", "music"):
         cmd = RenamePathCmd(p, p.assets_dir / "sfx", bad)
         cmd.execute()
         assert cmd.renamed is None, bad

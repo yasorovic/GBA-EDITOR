@@ -61,9 +61,11 @@ class GBAView(QGraphicsView):
         self._zoom = 2.0
         self._apply_zoom()
         # Le canvas change de taille (scène, fond) : la zone défilable suit.
-        scene.sceneRectChanged.connect(lambda _rect: self._update_pan_area())
+        # Méthodes liées, pas des lambdas : Qt coupe seul la connexion quand la vue est détruite
+        # (une lambda survit à la vue et touche un objet C++ supprimé à la fermeture).
+        scene.sceneRectChanged.connect(self._update_pan_area)
         # Le voile hors-caméra dépend de la sélection : repeindre toute la vue.
-        scene.selectionChanged.connect(lambda: self.viewport().update())
+        scene.selectionChanged.connect(self._repaint_viewport)
         self.setAcceptDrops(True)
         # Outil actif — initialisé après import (évite la circularité)
         self._active_tool: "BaseTool | None" = None
@@ -180,7 +182,10 @@ class GBAView(QGraphicsView):
         else:
             super().dropEvent(e)
 
-    def _update_pan_area(self):
+    def _repaint_viewport(self):
+        self.viewport().update()
+
+    def _update_pan_area(self, *_rect):
         """Zone défilable de la VUE : le canvas plus une marge d'une demi-fenêtre.
 
         Sans marge, la zone défilable est celle de la scène (le canvas) : dès
