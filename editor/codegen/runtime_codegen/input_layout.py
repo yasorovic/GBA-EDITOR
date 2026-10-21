@@ -1,5 +1,4 @@
-"""La disposition runtime des inputs du projet (ROADMAP « Les inputs
-personnalisés ») : les masques des accords, les tables C des séquences, la
+"""La disposition runtime des inputs du projet : les masques des accords, les tables C des séquences, la
 profondeur de l'anneau, le bitset `buffered` et les masques des axes —
 calculés UNE FOIS depuis les `InputBinding`/`InputSequence`/`InputAxis`/
 `InputMovement` déclarés (et, pour la profondeur liée à `buffered`, les
@@ -76,8 +75,7 @@ def _iter_script_paths(p):
 def _scan_buffered(p):
     """Chaque `input:buffered(nom, frames)` littéral du projet : le plus grand
     `frames` (pour la profondeur de l'anneau) et l'ensemble des NOMS
-    d'accord interrogés (pour n'allouer un bit `buffered` qu'à ceux-là —
-    ROADMAP, « les autres n'en paient pas »).
+    d'accord interrogés (pour n'allouer un bit `buffered` qu'à ceux-là : les autres n'en paient pas).
 
     Parcours GÉNÉRIQUE par introspection des dataclasses du parseur (`fields`) :
     une visite qui énumérerait les attributs à la main serait un second arbre
@@ -167,7 +165,7 @@ def compute_input_layout(p) -> InputLayout:
         layout.ring_depth = max(layout.ring_depth, buffered_max + 1)
     # Le bit `buffered` n'est alloué QU'AUX accords interrogés par
     # `buffered()` — un jeu sans tampon, ou un accord jamais bufferisé, n'en
-    # paie pas l'octet (ROADMAP).
+    # paie pas l'octet.
     for i, name in enumerate(n for n in layout.masks if n in buffered_names):
         layout.buffered_bits[name] = i
 

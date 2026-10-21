@@ -165,7 +165,7 @@ if __name__ == "__main__":
         _shutdown_qt(app)
         sys.exit(smoke_code)
 
-    # Refus explicite si le dossier porte plusieurs manifestes (ROADMAP v0.10) :
+    # Refus explicite si le dossier porte plusieurs manifestes :
     # on le dit et on retombe sur l'accueil, plutôt que d'en choisir un au hasard.
     # Après la QApplication : une QMessageBox sans elle planterait.
     if project_path is not None:

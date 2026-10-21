@@ -127,7 +127,7 @@ def _action_box_lines(kind: str, box, actions: list[str], p) -> list[str]:
 
     n_states = max(1, len(states))
     L = [
-        f"/* ── {kind} — {n_actions} action(s), {len(states)} state(s) (ROADMAP v0.8.7) ── */",
+        f"/* ── {kind} — {n_actions} action(s), {len(states)} state(s) ── */",
         f"#define {kind.upper()}_ACTIONS {n_actions}",
         f"#define {kind.upper()}_STATES {n_states}",
     ]
@@ -228,14 +228,14 @@ def emit(p) -> list[str]:
     if (info["music_box"] is None and not info["sound_actions"]
             and not info["jingle_actions"]):
         return []
-    L = ["", "/* ═══ Sound boxes (ROADMAP v0.8.7) ═══════════════════════ */"]
+    L = ["", "/* ═══ Sound boxes ═══════════════════════ */"]
     L += _action_box_lines(KIND_SOUND, info["sound_box"], info["sound_actions"], p)
     L += _action_box_lines(KIND_JINGLE, info["jingle_box"], info["jingle_actions"], p)
     L += _music_box_lines(info["music_box"], p, p.sound_trigger_names())
     return L
 
 
-# ── Les réglages d'une musique, au runtime (ROADMAP « L'asset .music ») ──────
+# ── Les réglages d'une musique, au runtime ──────
 #
 # Une ligne par module : la section de boucle (en positions d'ordre), le tempo et la
 # hauteur (facteurs Q10 de maxmod), les deux fondus (en frames). ZÉRO PARTOUT = le
@@ -285,7 +285,7 @@ def music_runtime_lines(p, sound_assets) -> list[str]:
     jingle_rows, jingle_kinds = _jingle_cue_rows(p, jingles)
     cue_reset = ["    g_cue_last = -1;   /* a module that starts again fires its first cue again */"] if cue_rows else []
     return [
-        "/* ── Music settings per module (ROADMAP « L'asset .music ») ──────────── */",
+        "/* ── Music settings per module ──────────── */",
         "/* {loop start, loop end, tempo, pitch, fade in, fade out}. Zero = the file as it",
         "   is: only a module with a setting has a row. The loop is in ORDER POSITIONS,",
         "   end excluded; 0 = no loop section. Tempo and pitch are maxmod's Q10 factors. */",
@@ -548,7 +548,7 @@ def _music_cue_runtime_lines(rows: list[str], jingle_rows: list[str], kinds: set
     from core.models.audio import CUE_JINGLE, CUE_JINGLE_ACTION, CUE_KINDS, CUE_SFX, CUE_SOUND_ACTION, Jingle
     code = {kind: CUE_KINDS.index(kind) for kind in CUE_KINDS}
     L = [
-        "/* ── Music cues (ROADMAP « Des déclencheurs sur la musique ») ──────────── */",
+        "/* ── Music cues ──────────── */",
         "/* {module, position, kind, target, volume}. Kinds: 0 SoundBox action, 1 JingleBox action, 2 effect,",
         "   3 jingle. An action's target is its INDEX: the box says, at run time, what it points to. The position",
         "   is an ORDER for a music, a FRAME since the jingle started for a jingle. */",

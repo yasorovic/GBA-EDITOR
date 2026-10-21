@@ -40,7 +40,7 @@ def actorname_ids(p: Project) -> dict:
 def generate_actor_types(p: Project) -> None:
     """Écrit actor_types_static.h (copie) et actor_types.h (généré).
 
-    ACTOR_* et POOL_* sont émis PAR SCÈNE (ROADMAP v0.17, T1) : chaque scène
+    ACTOR_* et POOL_* sont émis PAR SCÈNE : chaque scène
     repart de la base OAM 0, ses acteurs actifs numérotés 0..N-1, puis les pools
     qu'elle déclare. Les symboles de pool sont préfixés par la scène
     (`<Scène>_<Prefab>`), car chaque scène compile ses propres unités de prefab
@@ -90,7 +90,7 @@ def generate_actor_types(p: Project) -> None:
             u = pl.sym.upper()
             h.append(f"#define ACTOR_{u} {pl.start}  /* prefab pool start */")
             h.append(f"#define POOL_{u}_START {pl.start}")
-            # ROADMAP v0.23 : le pool se dit en INSTANCES, le build multiplie par
+            # le pool se dit en INSTANCES, le build multiplie par
             # les parties. _SIZE = entrées de `g_actors` réellement payées ; les
             # trois autres constantes permettent au C émis de passer de l'une à
             # l'autre sans recalculer.
@@ -127,7 +127,7 @@ def generate_runtime_api(
     _api_static = RUNTIME_DIR / "include" / "runtime_api_inline.h"
 
     # Taille de `g_actors[]` : la scène la plus gourmande (MAX, pas somme) —
-    # chaque scène repart de la base 0 et réutilise la même RAM (ROADMAP v0.17).
+    # chaque scène repart de la base 0 et réutilise la même RAM.
     total_actors = project_actor_count(p)
     total_oam_entries = project_oam_entry_count(p)
 
@@ -190,7 +190,7 @@ def generate_runtime_api(
             "16",
             "   handles were taken (it sounds, without a reference). Two ceilings, "
             "and",
-            "   a single zero — measured on the disassembly, see ROADMAP v0.8.6.",
+            "   a single zero — measured on the disassembly",
             "   A STALE handle does nothing: maxmod stores a counter in the",
             "   handle and rereads it on every call, so the five settings below",
             "   become silent no-ops. Nothing to keep here. */",
@@ -215,7 +215,7 @@ def generate_runtime_api(
             "/* 1 = the effect is PROTECTED on the resource: its channel is never stolen, whether or not the",
             "   caller holds it. Defined in main.c. */",
             "extern const mm_byte  g_sfx_default_protected[];",
-            "/* `hold` says whether the caller HOLDS this effect (ROADMAP v0.8.8).",
+            "/* `hold` says whether the caller HOLDS this effect.",
             "   Measured in mmAllocChannel: a free channel is taken first, otherwise",
             "   the weakest BACKGROUND channel is stolen, and a CUSTOM channel",
             "   never is. Asking for a reference (handle = 0) makes a CUSTOM",
@@ -284,7 +284,7 @@ def generate_runtime_api(
             "static inline void music_jingle_volume(int volume){mmSetJingleVolume((mm_word)volume);}",
             "static inline int  music_jingle_playing(void){return mmActiveSub();}",
             "",
-            "/* ── Sound state boxes (ROADMAP v0.8.7) ─────────────────────────── */",
+            "/* ── Sound state boxes ─────────────────────────── */",
             "/* Defined in main.c, called from the scripts — which are other",
             "   compilation units. The tables, for their part, stay private to "
             "main.c:",
@@ -293,7 +293,7 @@ def generate_runtime_api(
             "void jingle_box_set_state(int state);",
             "void music_box_trigger(int trigger);",
             "",
-            "/* ── Transitions musicales (ROADMAP v0.8.3) ─────────────────────── */",
+            "/* ── Transitions musicales ─────────────────────── */",
             "/* TWO transitions, and only two, because the hardware does not hold",
             "   more: maxmod has a single module layer that loops (mmJingle does not",
             "   loop, by construction). No CROSSFADE is possible on",
@@ -379,8 +379,8 @@ def generate_runtime_api(
     a += [
         "",
         # Tables PAR SCÈNE indexées par TAG, `main_gen` les pose au scene_init
-        # (comme `g_active_cmap`) : depuis que les TAG repartent de 0 par scène
-        # (ROADMAP v0.17, T3), un tableau global unique ne pourrait plus les
+        # (comme `g_active_cmap`) : depuis que les TAG repartent de 0 par scène,
+        # un tableau global unique ne pourrait plus les
         # distinguer. D'où un POINTEUR vers la table de la scène courante.
         "extern const s16 *g_sfx_on_destroy_id;",
         "extern const u8  *g_sfx_on_destroy_vol;",
@@ -396,7 +396,7 @@ def generate_runtime_api(
     ]
 
     # spawn_<Scène>_<Prefab>() — défini dans main.c, un par (scène, prefab
-    # déclaré). Per-scène depuis la compilation par scène (ROADMAP v0.17, T1) :
+    # déclaré). Per-scène depuis la compilation par scène :
     # deux scènes qui poolent le même prefab ont chacune leur plage OAM, donc
     # leur propre fonction. `scene_oam_layout` est la source des couples.
     spawn_protos: list[str] = []
@@ -409,7 +409,7 @@ def generate_runtime_api(
                  "scripts.")
         a.append("   Returns an Actor* on the newly born instance, or NULL if the "
                  "pool is full")
-        a.append("   (ROADMAP v0.17 T6) — a directly usable handle, and an")
+        a.append(" — a directly usable handle, and an")
         a.append("   `if not b then` that really works (a -1 used to be always true)."
                  " */")
         a += spawn_protos
@@ -487,7 +487,7 @@ def generate_runtime_api(
         a.append("/* Named windows of the project — used by window.* */")
         a += _win_lines
 
-    # Tables de séquences d'input (ROADMAP « Les inputs personnalisés ») :
+    # Tables de séquences d'input :
     # DÉFINIES (non `static`) dans main.c par `main_gen` — chaque unité de
     # scène/acteur qui appelle `input_seq_pressed` sur cette action a besoin
     # de la voir, comme `g_sfx_on_destroy_id` ci-dessus.

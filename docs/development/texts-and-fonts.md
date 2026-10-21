@@ -102,7 +102,7 @@ traducteur veut voir d'un coup. Chaque langue déclarée possède à côté un s
 | `key` | poignée lisible, ce qu'écrit un script Lua | oui, **au build** uniquement → index de table C, comme `SFX_*` |
 
 `Text.path` existe, mais comme **propriété dérivée** : les segments de la clé, jamais stockés
-(ROADMAP, « Le chemin est dérivé de la clé »). Un libellé stocké à côté de la clé la dupliquait et se
+Un libellé stocké à côté de la clé la dupliquait et se
 désynchronisait au premier renommage qui ne le recalait pas. Le confort de lecture est rendu par l'UI —
 autocomplétion et aperçu du contenu en ligne — pas par un second chemin de résolution.
 

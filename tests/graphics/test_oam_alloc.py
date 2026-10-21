@@ -1,4 +1,4 @@
-"""L'allocateur OAM per-scène (ROADMAP v0.17, T1+T2+T3).
+"""L'allocateur OAM per-scène.
 
 `oam_alloc.scene_oam_layout` est la source de vérité de la géométrie OAM d'une
 scène : ses acteurs actifs d'abord (base 0), puis les pools qu'ELLE déclare, à
@@ -195,8 +195,7 @@ def test_les_acteurs_inactifs_ne_sont_pas_comptes(tmp_path):
 # ── Ordre acteurs → UI → pools (T4) ───────────────────────────────────
 
 def test_ui_obj_pousse_les_pools_apres_la_bande(tmp_path, monkeypatch):
-    """Ordre OAM : acteurs, puis la bande d'interface en sprites, puis les pools
-    (ROADMAP v0.17 T4). Le poste UI (résolu ailleurs) décale donc le départ des
+    """Ordre OAM : acteurs, puis la bande d'interface en sprites, puis les pools. Le poste UI (résolu ailleurs) décale donc le départ des
     pools de `placed` à `placed + ui` DANS L'OAM ; `g_actors` ne grandit pas (0b :
     les OBJ d'interface ne sont pas des acteurs), seul `g_oam_entries` le fait."""
     import codegen.oam_alloc as oa

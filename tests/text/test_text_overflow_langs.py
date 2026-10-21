@@ -1,6 +1,6 @@
 """Le débordement d'une zone de texte, mesuré contre TOUTES les langues.
 
-Avant ROADMAP v0.9, `_check_text_overflow` ne mesurait que `text.content` — la
+Avant la prise en charge des langues, `_check_text_overflow` ne mesurait que `text.content` — la
 source. Une traduction plus longue qu'elle déborde en silence : le build ne
 dit rien, et la troncature ne se découvre qu'en jouant la ROM dans cette
 langue-là. `_text_variants` est le correctif ; ces tests protègent son

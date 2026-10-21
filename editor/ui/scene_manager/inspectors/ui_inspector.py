@@ -537,7 +537,7 @@ class UIInspector(QWidget):
                                     self._fill_card.body_layout)
         L.addWidget(self._fill_card)
 
-        # ── Section LISTE (ROADMAP v0.22) ─────────────────────────
+        # ── Section LISTE ─────────────────────────
         # L'inspecteur d'un TYPE depuis le 2026-09-02, et non plus une case à
         # cocher posée sur chaque conteneur : le moteur prend toujours la
         # navigation et pas la mise en page, mais la navigation a un

@@ -1902,8 +1902,8 @@ class MainWindow(QMainWindow):
         self._status.showMessage(label("win.new_project_msg", name=name))
 
     def _open_project(self, path: Path):
-        # Plusieurs .project dans le dossier : on refuse d'en choisir un
-        # (cf. ROADMAP v0.10). On le dit et on abandonne l'ouverture — l'écran
+        # Plusieurs .project dans le dossier : on refuse d'en choisir un.
+        # On le dit et on abandonne l'ouverture — l'écran
         # courant reste, aucun projet n'est à moitié chargé.
         get_deferred_writes().flush()           # les réglages en attente appartiennent au projet qu'on quitte
         try:
@@ -2203,8 +2203,7 @@ class MainWindow(QMainWindow):
 
     def _reload_actor_inspector(self):
         """Recharge l'inspecteur d'acteur EN RESPECTANT ce qu'il affiche —
-        acteur de scène, racine d'un prefab, ou partie d'un prefab (ROADMAP
-        v0.23) — pas juste `.load()` à l'aveugle : un prefab EST son actor
+        acteur de scène, racine d'un prefab, ou partie d'un prefab — pas juste `.load()` à l'aveugle : un prefab EST son actor
         racine (core/models/scene.Prefab), `.load()` seule ne sait pas
         retrouver ce contexte depuis l'Actor nu qu'elle affiche déjà."""
         actor_insp = self._inspector.actor_inspector

@@ -11,7 +11,7 @@ ici produit du C qui **compile parfaitement** et se trompe en jeu :
 - la dernière tranche qui ne remet pas l'étape à zéro → `sequence.running`
   reste vrai pour toujours.
 
-Cf. ROADMAP v0.7.7.
+
 """
 from __future__ import annotations
 

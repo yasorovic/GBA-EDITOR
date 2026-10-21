@@ -609,7 +609,7 @@ def _check_ui_node_slots(ctx: ValidationContext):
       s'affiche au bon endroit.
     • Un même layout ne peut être posé DEUX fois dans une scène : ses éléments
       porteraient les mêmes noms, or `REGION_*`/`IMAGE_*` sont indexés par nom
-      unique au projet — collision d'ABI (cf. ROADMAP v0.12)."""
+      unique au projet — collision d'ABI."""
     from core.models.scene import BG_SLOTS_BY_MODE
     from core.models.ui_region import TARGET_BG
     p = ctx.project
@@ -658,8 +658,7 @@ def _check_ui_element_names_unique(ctx: ValidationContext):
 def _text_variants(p, text, globals_names: set) -> list:
     """[(étiquette de langue, source, ParsedText)] à mesurer pour une entrée.
 
-    **La source seule ne suffit plus dès qu'une langue est déclarée**
-    (ROADMAP v0.9) : une traduction plus longue déborde une zone que la
+    **La source seule ne suffit plus dès qu'une langue est déclarée** : une traduction plus longue déborde une zone que la
     source remplissait tout juste, et rien ne le dirait avant la ROM en jeu.
     Une langue non encore traduite montre la source — la revérifier
     produirait le même avertissement une seconde fois, donc elle est exclue
@@ -949,7 +948,7 @@ def _check_literal_texts(ctx: ValidationContext):
     """Un littéral passé à `text:draw("Bonjour")` reste compilable — une
     entrée ANONYME de la table, comme depuis la v0.3.2, un raccourci hors
     interface ASSUMÉ au prix de la traduction. Mais dès qu'une langue est
-    déclarée, c'est un trou de traduction GARANTI (ROADMAP v0.9, décision 6) :
+    déclarée, c'est un trou de traduction GARANTI :
     l'entrée n'a pas de clé dans `texts.json`, donc rien qu'un side puisse
     joindre par id — aucune langue ne pourra jamais le traduire.
 
@@ -979,7 +978,7 @@ def _check_literal_texts(ctx: ValidationContext):
 
 
 def _check_translation_holes(ctx: ValidationContext):
-    """Ce qu'une langue déclarée n'a pas traduit (ROADMAP v0.9, phase 5.3).
+    """Ce qu'une langue déclarée n'a pas traduit.
 
     Décision verrouillée à l'ouverture du jalon — « le build compte les trous
     et les nomme » — et restée sans implémentation jusqu'ici : le compte
@@ -1434,8 +1433,7 @@ def _check_behaviors_without_self(ctx: ValidationContext):
 
 
 def _check_actor_budget(ctx: ValidationContext):
-    """Le budget OAM d'une scène : 128 entrées, distribuées par priorité (ROADMAP « Le pool
-    ne dépend plus de l'OAM »).
+    """Le budget OAM d'une scène : 128 entrées, distribuées par priorité.
 
     Source unique : `scene_oam_layout`, la même que le build. L'interface passe d'abord, puis
     les acteurs posés, puis les instances de pool. Ce qui ne tient pas n'est PAS écrit hors de
@@ -1526,7 +1524,7 @@ def _check_window_regions(ctx: ValidationContext):
 
 def _check_actor_name_collisions(ctx: ValidationContext):
     """Deux acteurs d'une MÊME scène portant le même symbole C se marchent
-    dessus au build (ROADMAP « L'acteur appartient à sa scène », décision B).
+    dessus au build.
 
     Un acteur appartient à sa scène : son nom est LOCAL à la scène, donc
     réutilisable librement d'une scène à l'autre — deux « Cursor » dans deux
@@ -1770,7 +1768,7 @@ def _check_module_channels(ctx: ValidationContext):
 
 
 def _check_sound_boxes(ctx: ValidationContext):
-    """Les trois boîtes sonores (ROADMAP v0.8.7).
+    """Les trois boîtes sonores.
 
     Depuis qu'elles sont trois assets, chaque boîte a son propre espace de
     noms : un même nom d'état dans une SoundBox et dans une JingleBox n'est
@@ -1844,7 +1842,7 @@ def _check_sound_boxes(ctx: ValidationContext):
     # Une action posée sur une frame mais qu'aucune SoundBox ne déclare ne
     # résout vers rien : la frame est silencieuse, et rien ne le dirait.
     # Même chose pour un Sfx direct (`sfx_name`) qui ne correspond à aucun Sfx
-    # du projet — les deux emplacements sont indépendants (ROADMAP v0.8.9).
+    # du projet — les deux emplacements sont indépendants.
     from core.models.sound_box import KIND_SOUND
     declared = set(p.sound_action_names(KIND_SOUND))
     for spr in getattr(p, "sprites", []):
@@ -1888,7 +1886,7 @@ def _check_frame_events(ctx: ValidationContext):
     ne sait pas quel actor l'anime — donc le nom ne se vérifie qu'ICI, contre
     le script de CHAQUE actor qui utilise ce sprite. Même philosophie que
     `action_name`/`sfx_name` : un nom qui ne résout vers rien est silencieux,
-    pas une erreur bloquante (ROADMAP v0.8.9)."""
+    pas une erreur bloquante."""
     p = ctx.project
     for actor in ctx.actors:
         script_comp = actor.get_component("script")
@@ -2060,8 +2058,7 @@ def _check_pal_bank_reference(ctx: ValidationContext):
 
     Résolution des slots identique au build :
     - actors  -> active_obj_palettes de LEUR scène ;
-    - prefabs -> active_obj_palettes de CHAQUE scène qui les poole (ROADMAP v0.17
-      T7 : le spawn est per-scène, plus de « scène d'ancrage ») ;
+    - prefabs -> active_obj_palettes de CHAQUE scène qui les poole ;
     - layers  -> active_bg_palettes de chaque scène utilisant le background."""
     from core.models.palette import OWN_PAL_BANK
     from codegen.oam_alloc import scene_pool_instances

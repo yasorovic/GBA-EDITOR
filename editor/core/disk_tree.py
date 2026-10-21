@@ -11,7 +11,7 @@ Chaque fichier reçoit seulement une MARQUE, qui dit sa place dans le projet :
   UNSUPPORTED    tout le reste
 
 Aucune écriture, aucune décision : la création d'un asset à partir d'une source
-viendra avec le clic droit, plus tard (ROADMAP, « Source ≠ asset »).
+viendra avec le clic droit, plus tard.
 """
 from __future__ import annotations
 

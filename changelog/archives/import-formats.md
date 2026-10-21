@@ -4,7 +4,7 @@
 > l'éditeur, seulement une porte d'entrée qui cesse de promettre ce que la doc et le modèle
 > démentaient. Il n'a donc ni numéro `vX.Y`, ni ligne au [README](../../README.md), ni entrée au
 > [CHANGELOG](../CHANGELOG.md) : c'est la convention des
-> [chantiers techniques](../../ROADMAP.md#chantiers-techniques).
+> [chantiers techniques](../../docs/development/TODO.md#état-des-pistes).
 
 > **Livré le 2026-09-03.** L'éditeur n'accepte plus que `.png` pour les images et, en plus,
 > `.fnt` pour les polices. Le troisième point d'entrée des polices (FreeType) et le `.bmp`

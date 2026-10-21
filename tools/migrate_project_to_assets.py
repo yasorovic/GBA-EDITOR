@@ -1,8 +1,7 @@
 """Déplace ce que l'auteur manipule de `project/` vers `assets/`.
 
 Avant : scènes, prefabs, mises en page, boîtes sonores, tables de données, polices logiques, textes
-et variables vivaient sous `project/`. Après : ils sont dans `assets/`, sous le même nom de dossier
-(cf. ROADMAP, « Tout ce que l'auteur manipule vit dans `assets/` »).
+et variables vivaient sous `project/`. Après : ils sont dans `assets/`, sous le même nom de dossier.
 
     python tools/migrate_project_to_assets.py "Project Demo/PongAdvanced" "Project Demo/Platformer"
     python tools/migrate_project_to_assets.py --dry-run <projet>

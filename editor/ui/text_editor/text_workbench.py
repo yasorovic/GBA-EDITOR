@@ -6,8 +6,7 @@ Identité en haut (clé, fil d'Ariane), source à gauche, aperçu écran à droi
 côte à côte, jamais empilés : l'aperçu suit la frappe, il doit rester visible
 pendant qu'on écrit.
 
-Sous l'identité, des ONGLETS DE LANGUE (ROADMAP v0.9, un par langue déclarée,
-source comprise) — cachés entiers tant qu'aucune traduction n'existe. C'est
+Sous l'identité, des ONGLETS DE LANGUE — cachés entiers tant qu'aucune traduction n'existe. C'est
 LÀ, et nulle part ailleurs, que se choisit ce qu'on écrit : ni la table ni le
 panneau ne portent leur propre notion de langue active, ils suivent celle-ci
 via `active_lang_changed`. Cliquer un onglet de traduction fait apparaître la

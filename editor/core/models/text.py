@@ -15,12 +15,12 @@ Trois identifiants, un seul résolvable :
 
 **La clé porte la structure.** Chaque `_` ouvre un niveau. Un libellé stocké à
 côté la dupliquait et se désynchronisait au premier renommage qui ne le recalait
-pas : il a été retiré (ROADMAP, « Le chemin est dérivé de la clé »).
+pas : il a été retiré.
 
 Le chemin ne suffit pas à identifier : deux répliques rangées au même endroit
 produisent la même clé, d'où un rang numéroté (`village_garde_02`).
 
-Le texte est destiné au JOUEUR, donc traduisible (cf. ROADMAP.md v0.8) : c'est
+Le texte est destiné au JOUEUR, donc traduisible : c'est
 ce qui le distingue d'un `string` technique, qui reste un littéral dans le
 script.
 """
@@ -166,8 +166,7 @@ def moved_text_paths(texts, source, destination):
 
 # Toujours DÉRIVÉ de la liste plate : `texts.json` reste une liste dont chaque
 # entrée porte son chemin. `tree_paths` (les nœuds d'un arbre à reconstruire)
-# a disparu avec `text_tree_panel.py` — la table qui l'a remplacé (ROADMAP
-# v0.9) groupe par catégorie sans en avoir besoin.
+# a disparu avec `text_tree_panel.py` — la table qui l'a remplacé groupe par catégorie sans en avoir besoin.
 
 def texts_under(texts, path) -> list:
     """Textes rangés dans `path` ou dans un de ses sous-nœuds."""

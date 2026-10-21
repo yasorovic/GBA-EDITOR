@@ -1,4 +1,4 @@
-"""Un fond (layer) et une région de window sont des RÉFÉRENCES — ROADMAP v0.16, étape (c)/(d).
+"""Un fond (layer) et une région de window sont des RÉFÉRENCES.
 
 `layer:get(n)` rend le fond `n` (numéroté par le matériel, de 0 à 3) ;
 `window:get("Nom")` rend une région du pochoir (nommée). Plus aucune fonction de module ne prend

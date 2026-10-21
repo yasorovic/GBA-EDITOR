@@ -47,7 +47,7 @@ texte Lua → parser.py → AST Python → checker.py (validation) → codegen.p
 
 ### La grammaire cible de l'API — trois formes, une par nature
 
-**Grammaire visée (ROADMAP v0.16, non verrouillée).** Le catalogue livré emploie encore `module.action(…)` ; la forme n'est pas
+**Grammaire visée (jalon v0.16, non verrouillée).** Le catalogue livré emploie encore `module.action(…)` ; la forme n'est pas
 un choix stylistique : elle dit au parseur quoi produire (`Invoke` pour `:`, `Index` pour `.`), donc qui décide de la résolution.
 
 | Syntaxe | Nature | Compile en |
@@ -106,7 +106,7 @@ Deux conséquences qui se paient cher si on les oublie :
   nommée n'atteint pas l'état par la même fonction C que la forme ordinaire (`self.direction` : vec2 côté calcul, boussole côté
   nom), `c_getter_named`/`c_setter_named` portent la seconde porte.
 
-### Module, type, instance — d'où vient le récepteur (ROADMAP v0.16, non verrouillée)
+### Module, type, instance — d'où vient le récepteur (jalon v0.16, non verrouillée)
 
 Les trois formes disent **comment ça s'écrit** ; il manque **de quel TYPE est le récepteur, et où le catalogue le range**.
 
@@ -194,7 +194,7 @@ Règles :
 - **Le type de base `ui_element` porte `show`/`hide`/`activate`/`deactivate`** ; les types concrets
   (`list`, `image`, `button`…) ajoutent leurs propres états et actions.
 - **Migré** : acteur, boîte, `ui_element` et ses natures, fonds (`background_layer`) et régions de
-  window (`window_region`) — ROADMAP v0.16, étape (c) et (d). Reste `self:` → `actor:` (étape e).
+  window (`window_region`) — jalon v0.16, étape (c) et (d). Reste `self:` → `actor:` (étape e).
   Les types `background_layer` et `window_region` ne portent pas le nom de leur module : un type
   `layer` aurait donné à `layer.priority` deux lectures (propriété du type, ou fonction du module).
 
@@ -245,7 +245,7 @@ Le contrôle d'un nom s'accroche au `domain` du `Param`, jamais à la clé de l'
 `DOMAIN_SCENE` est validée sans rien ajouter. `DOMAIN_PREFAB` est une **erreur** de checker (sinon `spawn_<Scene>_<Nom>`
 n'échoue qu'au `make`, sur un « implicit declaration »), contre la liste PROJET des prefabs
 (`BuildContext.prefab_names`, remplie par `lua_compiler`) — le raffiner en « poolé DANS CETTE scène » est possible
-depuis le spawn per-scène (ROADMAP v0.17). Ce qui reste accroché à un appel dans `_check_call_expr` : le numéro
+depuis le spawn per-scène (jalon v0.17). Ce qui reste accroché à un appel dans `_check_call_expr` : le numéro
 d'emplacement d'un `save.*`. La **valeur** d'un `global.nom = v` (plage du type déclaré) se vérifie à l'ASSIGNATION
 (`_check_global_write_value`, sur `StmtAssign`).
 
@@ -455,7 +455,7 @@ Quatre points s'y tiennent :
   cette paire — handlers, stubs, `pool_init`, séquences, behaviors inlinés — de
   sorte qu'il n'existe qu'UNE forme d'accès à cet état dans le fichier émis.
 - **Le build dit ce que ça coûte, il ne le plafonne pas** — `[ewram] prefab X :
-  état de script N octets × M instances`. Cf. ROADMAP v0.7.6 pour pourquoi il
+  état de script N octets × M instances`. Cf. jalon v0.7.6 pour pourquoi il
   n'y a pas de garde-fou bloquant ici, là où la mémoire vidéo en a un.
 
 Ce n'est pas en contradiction avec « le stockage affine est PAR-ACTOR et non par

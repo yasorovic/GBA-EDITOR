@@ -245,7 +245,7 @@ def _compile_script(sp: Path, ctx_check: "BuildContext", emit, owner: str = ""):
 
 
 def _child_refs_for_actor(actor, scene_actors, scene_name) -> dict:
-    """Les enfants d'un acteur de SCÈNE, nom Lua → expression C (ROADMAP v0.23).
+    """Les enfants d'un acteur de SCÈNE, nom Lua → expression C.
 
     Un enfant est un acteur de la même scène dont `parent` nomme celui-ci ; il
     a donc son propre ACTOR_*, qualifié par la scène comme tout acteur posé
@@ -270,8 +270,7 @@ def _project_lists(p):
 
 
 # `_project_inputs` (masque OR direct depuis `InputBinding.buttons`) est
-# remplacé par `compute_input_layout` (ROADMAP « Les inputs personnalisés »,
-# étape 3) : les noms restent résolus au build, mais l'expression passe par le
+# remplacé par `compute_input_layout` : les noms restent résolus au build, mais l'expression passe par le
 # parseur unique — plus de seconde grammaire pour les combos.
 
 
@@ -331,8 +330,7 @@ def transpile_all(
                    else [t.key for t in getattr(p, "texts", [])])
     font_names  = [f.name for f in project_fonts(p)]
     # Langues : source en index 0 puis `settings.languages` dans l'ordre
-    # déclaré — même ordre que `g_texts[lang]`/`g_lang_font[lang]` (ROADMAP
-    # v0.9, phase 4). [] dans un projet monolingue, jamais None : lang.set /
+    # déclaré — même ordre que `g_texts[lang]`/`g_lang_font[lang]`. [] dans un projet monolingue, jamais None : lang.set /
     # lang.get n'ont alors aucun code valide, refusés comme n'importe quel
     # nom absent — pas un cas spécial.
     lang_codes  = ([l.code for l in getattr(p.settings, "_script_languages",
@@ -451,7 +449,7 @@ def transpile_all(
             continue
 
         anim_names, _anim_maps = _anim_union(p, actor, sprite)
-        # EventCall (ROADMAP v0.8.9) : les `event_name` cités par CE sprite —
+        # EventCall : les `event_name` cités par CE sprite —
         # une fonction de premier niveau qui porte l'un de ces noms est un
         # point d'entrée légitime (cf. `checker._check_function`), pas une
         # fonction inconnue.
@@ -488,11 +486,11 @@ def transpile_all(
             prefab_names = _prefab_names,
             global_names = list(global_names) if global_names else None,
             global_types = {g.name: g.type for g in p.globals},
-            # ROADMAP v0.22 : sert le checker de save:read('nom') — un nom
+            # sert le checker de save:read('nom') — un nom
             # qui existe mais n'est pas persist ne sera jamais dans un fichier
             # de sauvegarde.
             global_persist = {g.name: bool(getattr(g, "persist", False)) for g in p.globals},
-            # ROADMAP v0.20 : 1 = scalaire, au-delà = tableau indexable par
+            # 1 = scalaire, au-delà = tableau indexable par
             # `global.nom[i]`. C'est ce que le checker lit pour distinguer un
             # tableau d'un scalaire et borner un index écrit en clair.
             global_counts = {g.name: max(1, int(getattr(g, "count", 1) or 1))
@@ -554,11 +552,11 @@ def transpile_all(
             prefab_names = _prefab_names,
                 global_names = list(global_names) if global_names else None,
             global_types = {g.name: g.type for g in p.globals},
-            # ROADMAP v0.22 : sert le checker de save:read('nom') — un nom
+            # sert le checker de save:read('nom') — un nom
             # qui existe mais n'est pas persist ne sera jamais dans un fichier
             # de sauvegarde.
             global_persist = {g.name: bool(getattr(g, "persist", False)) for g in p.globals},
-            # ROADMAP v0.20 : 1 = scalaire, au-delà = tableau indexable par
+            # 1 = scalaire, au-delà = tableau indexable par
             # `global.nom[i]`. C'est ce que le checker lit pour distinguer un
             # tableau d'un scalaire et borner un index écrit en clair.
             global_counts = {g.name: max(1, int(getattr(g, "count", 1) or 1))
@@ -651,7 +649,7 @@ def transpile_all(
         build_output.write(out, c_code)
         emit("log_line", f"[lua->c] {sp.name} -> {out.name}")
 
-    # Génération C — prefabs poolés, RECOMPILÉS PAR SCÈNE (ROADMAP v0.17, T1).
+    # Génération C — prefabs poolés, RECOMPILÉS PAR SCÈNE.
     # Chaque scène ne compile QUE les prefabs qu'elle déclare, contre SA
     # géométrie : le symbole est préfixé par la scène (`<Scène>_<Prefab>`), donc
     # `actor_<Scène>_<Prefab>.c`, `POOL_<Scène>_<Prefab>_*` et `spawn_<Scène>_
@@ -704,11 +702,11 @@ def transpile_all(
             prefab_names = _prefab_names,
             global_names = list(global_names) if global_names else None,
             global_types = {g.name: g.type for g in p.globals},
-            # ROADMAP v0.22 : sert le checker de save:read('nom') — un nom
+            # sert le checker de save:read('nom') — un nom
             # qui existe mais n'est pas persist ne sera jamais dans un fichier
             # de sauvegarde.
             global_persist = {g.name: bool(getattr(g, "persist", False)) for g in p.globals},
-            # ROADMAP v0.20 : 1 = scalaire, au-delà = tableau indexable par
+            # 1 = scalaire, au-delà = tableau indexable par
             # `global.nom[i]`. C'est ce que le checker lit pour distinguer un
             # tableau d'un scalaire et borner un index écrit en clair.
             global_counts = {g.name: max(1, int(getattr(g, "count", 1) or 1))
@@ -792,7 +790,7 @@ def transpile_all(
         build_output.write(out_pf, pf_c)
         emit("log_line", f"[lua->c] prefab {pf.name} -> {out_pf.name}")
         # Ce que l'état de script de ce prefab occupe en EWRAM. Le chiffre est
-        # dit et non plafonné (cf. ROADMAP v0.7.6) : le plafond de huit entiers
+        # dit et non plafonné : le plafond de huit entiers
         # qu'il remplace était arbitraire, et la ressource ici est arbitrable.
         pool_state_total += pf_state_bytes * pf_instances
         if pf_state_bytes:
@@ -898,11 +896,11 @@ def transpile_all(
             # générique, non typé par domaine.
             global_names = list(global_names) if global_names else None,
             global_types = {g.name: g.type for g in p.globals},
-            # ROADMAP v0.22 : sert le checker de save:read('nom') — un nom
+            # sert le checker de save:read('nom') — un nom
             # qui existe mais n'est pas persist ne sera jamais dans un fichier
             # de sauvegarde.
             global_persist = {g.name: bool(getattr(g, "persist", False)) for g in p.globals},
-            # ROADMAP v0.20 : 1 = scalaire, au-delà = tableau indexable par
+            # 1 = scalaire, au-delà = tableau indexable par
             # `global.nom[i]`. C'est ce que le checker lit pour distinguer un
             # tableau d'un scalaire et borner un index écrit en clair.
             global_counts = {g.name: max(1, int(getattr(g, "count", 1) or 1))

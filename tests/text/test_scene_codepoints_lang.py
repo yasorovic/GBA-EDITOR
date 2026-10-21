@@ -1,5 +1,4 @@
-"""`scene_codepoints` par langue + `scene_codepoints_union` (ROADMAP v0.9,
-phase 3.3).
+"""`scene_codepoints` par langue + `scene_codepoints_union`.
 
 Ce que ces tests protègent :
 

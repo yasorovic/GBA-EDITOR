@@ -1,4 +1,4 @@
-"""`interface:get("Nom")` rend le type RÉEL de l'élément — ROADMAP v0.16, étape (c), tranche 2.
+"""`interface:get("Nom")` rend le type RÉEL de l'élément.
 
 Un élément d’interface est une image, une zone de texte ou un conteneur : sa
 NATURE, lue dans la mise en page au build, décide de ses membres (`menu.index`, `heart.state`,

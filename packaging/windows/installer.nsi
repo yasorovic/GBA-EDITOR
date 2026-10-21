@@ -104,7 +104,7 @@ VIAddVersionKey "LegalCopyright"  "${PUBLISHER}"
 ; Pas de page de licence : la GPL n'en exige pas, et LICENSE comme
 ; THIRD-PARTY-NOTICES.md sont installes a la racine du dossier de l'application.
 
-; Titres courts : le titre par defaut reprend $(^NameDA) ("Backstage 1.0.0-alpha"), et la
+; Titres courts : le titre par defaut reprend $(^NameDA) ("Backstage 0.1.0-alpha"), et la
 ; version complete deborde du titre de la page d'accueil. Le titre ne garde que le nom ;
 ; la version passe dans le texte.
 !define MUI_WELCOMEPAGE_TITLE "$(WELCOME_TITLE)"

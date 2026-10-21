@@ -23,7 +23,7 @@ Deux unités à ne pas confondre, converties ici :
   - un pool se DÉCLARE en instances (`Scene.prefab_pools`), ou s'alloue tout seul
     (`POOL_DEFAULT_INSTANCES`) pour un prefab que les scripts de la scène spawnent ;
   - un pool se PAIE en slots — instances × parties, un prefab à sous-arbre
-    occupant un groupe contigu par instance (ROADMAP v0.23).
+    occupant un groupe contigu par instance.
 
 Le plafond est celui du matériel : l'OAM de la GBA compte 128 entrées. Il ne se
 règle nulle part — ce n'est pas une préférence. Un acteur SANS sprite ne
@@ -90,8 +90,7 @@ def prefab_group(prefab) -> int:
     """Entrées de `g_actors` qu'occupe UNE instance : la racine plus ses
     parties. Un prefab plat vaut 1.
 
-    C'est ICI que le calcul vit (ROADMAP v0.17, le pool par scène rapatrie sa
-    géométrie ici)."""
+    C'est ICI que le calcul vit."""
     return 1 + len(getattr(prefab, "children", []) or [])
 
 
@@ -106,7 +105,7 @@ def scene_pool_instances(project, scene: Scene, prefab) -> int:
     """Instances du pool de ce prefab dans CETTE scène : le pool déclaré, sinon
     l'allocation automatique ; 0 si la scène ne le spawne pas (ou n'a plus de place).
 
-    Per-scène depuis ROADMAP v0.17 : chaque scène paie EXACTEMENT son layout."""
+    Per-scène : chaque scène paie EXACTEMENT son layout."""
     pool = scene_oam_layout(project, scene).pool_for(prefab)
     return pool.instances if pool else 0
 
@@ -123,8 +122,7 @@ def prefab_pool_instances(project, prefab) -> int:
 
 def scene_ui_obj_slots(scene: Scene, project) -> int:
     """Entrées OAM que les OBJ d'INTERFACE de cette scène consomment — bandes de
-    texte en cible OBJ, images d'UI, fonds de conteneur en sprites (ROADMAP
-    v0.17, T4). Posé ENTRE les acteurs et les pools : le build réserve la bande
+    texte en cible OBJ, images d'UI, fonds de conteneur en sprites. Posé ENTRE les acteurs et les pools : le build réserve la bande
     OBJ juste après les acteurs, et `scene_oam_layout` fait donc démarrer les
     pools à `placed + ui`.
 
@@ -144,7 +142,7 @@ def layout_obj_budget_resolved(p: Project, lay) -> dict:
     c'est ici, qui les connaît, de fournir les frames, les tailles de frame et
     les glyphes animés — sous-réserver ferait écrire une image dans les tuiles de
     la suivante. Source unique lue par `gen_text.obj_text_alloc` (placement des zones) ET
-    `scene_obj_ui_slots` (le pic OBJ d'une scène, ROADMAP v0.17 T4), pour que les
+    `scene_obj_ui_slots` (le pic OBJ d'une scène), pour que les
     deux comptent EXACTEMENT la même chose."""
     from core.models.ui_region import layout_obj_budget
     frames, sizes = {}, {}
@@ -159,8 +157,7 @@ def layout_obj_budget_resolved(p: Project, lay) -> dict:
 
 
 def scene_obj_ui_slots(p: Project, scene) -> int:
-    """Slots OAM que l'interface en sprites de CETTE scène occupe — son pic
-    (ROADMAP v0.17 T4). C'est le poste « UI » du budget OAM par scène
+    """Slots OAM que l'interface en sprites de CETTE scène occupe — son pic. C'est le poste « UI » du budget OAM par scène
     (`oam_alloc.scene_ui_obj_slots`), et la largeur de la bande OBJ que
     `scene_init` réserve juste après les acteurs (ordre acteurs → UI → pools).
 
@@ -185,8 +182,7 @@ def scene_obj_ui_slots(p: Project, scene) -> int:
 class PoolSlot:
     """La géométrie d'un pool de prefab dans UNE scène, repartant de la base
     0 de cette scène. `sym` est PRÉFIXÉ PAR LA SCÈNE (`<scène>_<prefab>`) :
-    chaque scène compile ses propres unités de prefab contre SA géométrie
-    (ROADMAP v0.17, T1), donc les symboles ne peuvent plus être project-wide.
+    chaque scène compile ses propres unités de prefab contre SA géométrie, donc les symboles ne peuvent plus être project-wide.
 
     Deux espaces (marche 0b) : les ACTEURS de l'instance (racine + parties,
     contigus dans `g_actors[]`) et ses ENTRÉES OAM (les seules parties qui
@@ -208,7 +204,7 @@ class PoolSlot:
 
     @property
     def size(self) -> int:
-        """Acteurs réservés — instances × parties (ROADMAP v0.23)."""
+        """Acteurs réservés — instances × parties."""
         return self.instances * self.group
 
     @property
@@ -444,7 +440,7 @@ def project_oam_entry_count(project) -> int:
 
     Une seule scène est vivante à la fois et chaque `scene_init` repart de la
     base 0 : dimensionner sur le max suffit, la somme des unions faisait payer à
-    la scène de menu les slots des balles du niveau d'action (ROADMAP v0.17).
+    la scène de menu les slots des balles du niveau d'action.
     Plancher à 1 — un `OamEntry g_oam_entries[0]` ne compile pas."""
     return max((scene_oam_layout(project, sc).table_size for sc in project.scenes),
                default=0) or 1

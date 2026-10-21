@@ -68,7 +68,7 @@ class ComponentListWidget(QListWidget):
 
 
 # ──────────────────────────────────────────────────────────────────
-#  Arbre des CHILDREN d'un prefab (ROADMAP v0.23)
+#  Arbre des CHILDREN d'un prefab
 # ──────────────────────────────────────────────────────────────────
 class _ChildrenTree(QTreeWidget):
     """Hiérarchie des `children` d'un prefab, dérivée de `Actor.parent` — même
@@ -76,7 +76,7 @@ class _ChildrenTree(QTreeWidget):
     scène, réduit à ce dont ce panneau a besoin : montrer l'arbre et permettre
     le reparentage par glisser-déposer. Pas de réordonnancement de frères ici
     (contrairement au Scene tree) : l'ORDRE de `children` compte pour le spawn
-    groupé au build (ROADMAP v0.23, « le spawn avance d'un groupe à la fois »),
+    groupé au build,
     et cet arbre n'a pas la logique DFS qui le préserverait sans le corrompre.
 
     Le double-clic reste la façon d'ouvrir une partie dans l'inspecteur
@@ -188,7 +188,7 @@ class ActorInspector(QWidget):
         # cf. core/models/scene.Prefab) — posé par `load_prefab`, nécessaire
         # à `_persist` : sauver le prefab prend le Prefab, pas son actor.
         self._prefab: Optional[Prefab] = None
-        # Le prefab qui POSSÈDE la partie en cours d'édition (ROADMAP v0.23),
+        # Le prefab qui POSSÈDE la partie en cours d'édition,
         # ou None quand on n'édite pas une partie. Une partie est un `Actor`,
         # donc l'inspecteur l'édite avec les mêmes champs qu'un acteur de
         # scène ; seul l'ENREGISTREMENT diffère — c'est le prefab qu'il faut
@@ -453,7 +453,7 @@ class ActorInspector(QWidget):
                                      label("actorinsp.objmode.mask")]), values=[0, 2])
         _W.row(label("actorinsp.tr.mode_window"), self._tobj_mode, tl, label_width=_lbl_w)
 
-        # ── Parent (ROADMAP v0.23) ────────────────────────────────
+        # ── Parent ────────────────────────────────
         # Juste avant « Screen space », pour la même raison que lui : les deux
         # changent le SENS de X/Y. Screen space les fait passer du monde à
         # l'écran ; un parent les fait passer du monde à son repère à lui.
@@ -502,7 +502,7 @@ class ActorInspector(QWidget):
         self._comp_card.body_layout.addWidget(self._comp_list)
         cl.addWidget(self._comp_card)
 
-        # ── CHILDREN card (prefab segmenté — ROADMAP v0.23) ────────────
+        # ── CHILDREN card (prefab segmenté) ────────────
         # Visible seulement en mode Prefab : une partie n'a de sens que dans un
         # template. Le « + » ajoute une ligne tout de suite, sans boîte de
         # dialogue — on renomme ensuite dans l'inspecteur, comme partout
@@ -690,7 +690,7 @@ class ActorInspector(QWidget):
             self._fields.load(actor)
             self._refresh_parent_choices(actor)
         # Les ENFANTS ne se montrent qu'ici : un enfant n'a de sens que dans
-        # un template (ROADMAP v0.23).
+        # un template.
         self._children_card.setVisible(is_prefab_root)
         if is_prefab_root:
             self._refresh_children_list()
@@ -703,7 +703,7 @@ class ActorInspector(QWidget):
         if not is_prefab_root:
             self._refresh_sprite_preview()
 
-    # ── Parent (ROADMAP v0.23) ────────────────────────────────────
+    # ── Parent ────────────────────────────────────
 
     def _descendants(self, name: str) -> set:
         """Les acteurs qui descendent de `name`, lui compris.
@@ -730,7 +730,7 @@ class ActorInspector(QWidget):
         exclus = self._descendants(actor.name)
         # Une PARTIE se rattache à une autre partie du même prefab, ou à la
         # racine (« — aucun — »). Rien d'extérieur n'est nommable : c'est ce
-        # qui garde la profondeur connue au build (ROADMAP v0.23).
+        # qui garde la profondeur connue au build.
         if self._child_owner is not None:
             for pt in (getattr(self._child_owner, "children", []) or []):
                 if pt.name not in exclus:
@@ -764,7 +764,7 @@ class ActorInspector(QWidget):
                   if self._child_owner is not None
                   else lambda: get_dispatcher()._emit("actors_list_changed"))
 
-        # ── Enfants d'un prefab (ROADMAP v0.23) ───────────────────────
+        # ── Enfants d'un prefab ───────────────────────
 
     def _refresh_children_list(self):
         self._children_tree.populate(self._prefab)

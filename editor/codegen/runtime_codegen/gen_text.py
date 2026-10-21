@@ -85,8 +85,7 @@ def scene_text_reservation(p, scene) -> dict:
     le garde-fou de budget (`pipeline._scene_tile_budgets`). Les laisser
     diverger validerait un budget que le placement ne tient pas.
 
-    **Dimensionnée sur l'UNION des langues déclarées** (ROADMAP v0.9, phase
-    5.1), parce que c'est ce que le RUNTIME charge : `text_set_font` copie
+    **Dimensionnée sur l'UNION des langues déclarées**, parce que c'est ce que le RUNTIME charge : `text_set_font` copie
     `n_var × n_load` tuiles depuis le `FontSubset` de la scène, et ce
     sous-ensemble est l'union (`_emit_font_subsets`, décision 4 de la phase
     3.3) — quelle que soit la valeur de `g_lang`. Compter la seule langue
@@ -274,7 +273,7 @@ def _emit_font_subsets(p, encoded: list, emit=None) -> list[str]:
     ni pour une scène indécidable (police entière, déjà réservée).
 
     Le sous-ensemble ÉMIS couvre TOUTES les langues déclarées, UNIES
-    (`scene_codepoints_union`, ROADMAP v0.9 décision 4) : c'est ce qui permet
+    (`scene_codepoints_union`) : c'est ce qui permet
     à `lang.set` (phase 4) de recharger une scène dans une autre langue sans
     reconstruire la police en VRAM. La RÉSERVATION (`scene_text_reservation`)
     compte la même union, sur la même liste de langues

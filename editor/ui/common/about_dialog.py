@@ -7,9 +7,10 @@ pas affiché. « Report an issue » ouvre le formulaire de rapport du dépôt.
 « Check for updates » ouvre `UpdatesDialog` (état de `UpdateChecker`) ; un point
 accent s'affiche sur la ligne quand une version plus récente existe.
 
-« Release notes » et « Licenses » ouvrent un `DocumentsDialog` (un onglet par
-texte, lus dans `APP_DIR`) : le journal des versions ; la licence de l'éditeur, celle
-du moteur et les notices tierces. La GPL de l'éditeur et la LGPL de Qt exigent que ces textes soient atteignables
+« Release notes » ouvre `ReleaseNotesDialog` : les notes de la version en cours
+(`RELEASE_NOTES.md`, livré avec l'application), au même format que la fenêtre Updates.
+« Licenses » ouvre un `DocumentsDialog` (un onglet par texte, lus dans `APP_DIR`) :
+la licence de l'éditeur, celle du moteur et les notices tierces. La GPL de l'éditeur et la LGPL de Qt exigent que ces textes soient atteignables
 par l'utilisateur ; un onglet dont le fichier manque n'est pas affiché.
 """
 
@@ -104,10 +105,8 @@ class _LinkRow(_Card):
             self.clicked.emit()
 
 
+_RELEASE_NOTES = APP_DIR / "RELEASE_NOTES.md"
 # (clé de libellé, fichier, rendu Markdown ?)
-_RELEASE_NOTES = (
-    ("about.changelog", APP_DIR / "changelog" / "CHANGELOG.md", True),
-)
 _LICENSES = (
     ("about.license_editor", APP_DIR / "LICENSE", False),
     ("about.license_engine", RUNTIME_DIR / "LICENSE", False),
@@ -161,6 +160,30 @@ class DocumentsDialog(QDialog):
         root.addWidget(tabs)
 
 
+class ReleaseNotesDialog(QDialog):
+    """Les notes de la version en cours : titre, puis texte (Markdown)."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(label("about.release_notes"))
+        self.resize(560, 420)
+        self.setStyleSheet(f"QDialog{{background:{C.BG_BASE};}}")
+        root = QVBoxLayout(self)
+        root.setContentsMargins(24, 20, 24, 20)
+        root.setSpacing(12)
+        title = QLabel(label("about.release_notes_version", version=APP_VERSION))
+        title.setFont(QFont(T.UI, T.MD, QFont.Weight.DemiBold))
+        title.setStyleSheet(f"color:{C.TEXT_HI};background:transparent;")
+        root.addWidget(title)
+        notes = QTextBrowser()
+        notes.setOpenExternalLinks(True)
+        notes.setFrameShape(QFrame.Shape.NoFrame)
+        notes.setStyleSheet(f"QTextBrowser{{background:{C.BG_PANEL};padding:8px;}}")
+        if _RELEASE_NOTES.is_file():
+            notes.setMarkdown(_RELEASE_NOTES.read_text(encoding="utf-8", errors="replace"))
+        root.addWidget(notes, 1)
+
+
 class AboutDialog(QDialog):
     def __init__(self, checker: UpdateChecker, parent=None):
         super().__init__(parent)
@@ -205,7 +228,7 @@ class AboutDialog(QDialog):
             links.addWidget(row)
         release_notes = _LinkRow("release_notes", label("about.release_notes"), trailing_icon="")
         release_notes.clicked.connect(
-            lambda: DocumentsDialog("about.release_notes", _RELEASE_NOTES, self).exec())
+            lambda: ReleaseNotesDialog(self).exec())
         links.addWidget(release_notes)
         if APP_RELEASES_URL:
             self._update_row = _LinkRow(

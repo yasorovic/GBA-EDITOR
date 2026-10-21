@@ -19,7 +19,7 @@ Qt LOCAUX : le bus global est partagé avec un inspecteur qui ne connaît pas
 
 « Textes », jamais « Dialogue » : la table range, elle n'enchaîne pas. Le
 séquencement reste du script — la neutralité de style est une décision de
-ROADMAP v0.3.2.
+conception.
 
 Un fichier par sous-zone ; ce module n'assemble que les colonnes et arbitre le
 contexte actif :

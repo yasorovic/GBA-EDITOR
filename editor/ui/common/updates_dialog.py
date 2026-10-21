@@ -5,8 +5,8 @@ Lit l'état de `UpdateChecker`. Un seul bouton : « Search for update », qui de
 « Update to X » quand une version plus récente existe — il la télécharge (barre de
 progression) puis, selon la distribution, l'installe ou ouvre le dossier de téléchargement
 (cf. `UpdateChecker.download`) ; lancé depuis les sources, il ouvre la page de la
-release. Le réglage de la vérification
-automatique et ce que cette vérification envoie sont dits ici, en une phrase.
+release. Ce que la vérification
+envoie est dit ici, en une phrase ; sa fréquence se règle dans Réglages > Updates.
 """
 
 from __future__ import annotations
@@ -14,8 +14,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
-    QCheckBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton, QTextBrowser,
-    QVBoxLayout,
+    QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton, QTextBrowser,
+    QToolButton, QVBoxLayout,
 )
 from PyQt6.QtGui import QDesktopServices, QFont
 from PyQt6.QtCore import Qt, QUrl
@@ -41,16 +41,16 @@ class UpdatesDialog(QDialog):
         self._status.setStyleSheet(f"color:{C.TEXT_HI};background:transparent;")
         root.addWidget(self._status)
 
+        self._progress = QProgressBar()
+        self._progress.setTextVisible(False)
+        self._progress.setFixedHeight(8)
+        root.addWidget(self._progress)
+
         self._notes = QTextBrowser()
         self._notes.setOpenExternalLinks(True)
         self._notes.setFrameShape(QFrame.Shape.NoFrame)
         self._notes.setStyleSheet(f"QTextBrowser{{background:{C.BG_PANEL};padding:8px;}}")
         root.addWidget(self._notes, 1)
-
-        self._progress = QProgressBar()
-        self._progress.setTextVisible(False)
-        self._progress.setFixedHeight(6)
-        root.addWidget(self._progress)
 
         self._button = QPushButton()
         self._button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -71,14 +71,36 @@ class UpdatesDialog(QDialog):
             folder_row.addWidget(browse)
             root.addLayout(folder_row)
 
-        auto = QCheckBox(label("about.auto_check"))
-        auto.setChecked(checker.auto_check)
-        auto.toggled.connect(lambda enabled: setattr(checker, "auto_check", enabled))
-        root.addWidget(auto)
+        rule = QFrame()
+        rule.setFrameShape(QFrame.Shape.HLine)
+        rule.setStyleSheet(f"color:{C.BORDER};")
+        root.addWidget(rule)
+
         privacy = QLabel(label("about.update_privacy"))
         privacy.setWordWrap(True)
         privacy.setFont(QFont(T.UI, T.SM))
         privacy.setStyleSheet(f"color:{C.TEXT_DIM};background:transparent;")
+        privacy.setVisible(False)
+        toggle = QToolButton()
+        toggle.setText(label("about.privacy_details"))
+        toggle.setCheckable(True)
+        toggle.setArrowType(Qt.ArrowType.RightArrow)
+        toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        toggle.setAutoRaise(True)
+        toggle.setFont(QFont(T.UI, T.SM))
+        toggle.setStyleSheet(f"QToolButton{{color:{C.TEXT_DIM};background:transparent;border:none;}}"
+                             f"QToolButton:hover{{color:{C.TEXT_HI};}}")
+
+        def show_privacy(shown: bool):
+            toggle.setArrowType(Qt.ArrowType.DownArrow if shown else Qt.ArrowType.RightArrow)
+            privacy.setVisible(shown)
+
+        toggle.toggled.connect(show_privacy)
+        toggle_row = QHBoxLayout()
+        toggle_row.addWidget(toggle)
+        toggle_row.addStretch(1)
+        root.addLayout(toggle_row)
         root.addWidget(privacy)
 
         checker.changed.connect(self._refresh)
@@ -96,10 +118,10 @@ class UpdatesDialog(QDialog):
         c = self._checker
         if hasattr(self, "_folder"):
             self._folder.setText(str(c.download_dir))
-        self._button.setEnabled(not (c.checking or c.downloading))
+        self._button.setEnabled(not c.checking)
         self._progress.setVisible(c.downloading)
         self._progress.setValue(c.progress)
-        self._notes.setVisible(c.available is not None and not c.downloading)
+        self._notes.setVisible(c.available is not None)
         if c.checking:
             self._status.setText(label("about.checking_update"))
         elif c.downloading:
@@ -115,12 +137,17 @@ class UpdatesDialog(QDialog):
             self._status.setText(label("about.update_failed"))
         else:
             self._status.setText(label("about.up_to_date"))
-        self._button.setText(
-            label("about.update_to", version=c.available.version) if c.available
-            else label("about.search_update"))
+        if c.downloading:
+            self._button.setText(label("common.cancel"))
+        else:
+            self._button.setText(
+                label("about.update_to", version=c.available.version) if c.available
+                else label("about.search_update"))
 
     def _on_button(self):
-        if self._checker.available and self._checker.kind:
+        if self._checker.downloading:
+            self._checker.cancel_download()
+        elif self._checker.available and self._checker.kind:
             self._checker.download()
         elif self._checker.available:
             QDesktopServices.openUrl(QUrl(self._checker.available.page_url))

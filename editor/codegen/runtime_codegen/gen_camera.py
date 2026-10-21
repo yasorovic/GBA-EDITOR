@@ -75,10 +75,7 @@ def camera_follow_lines(p, scene, scene_actors: list, actor_offset: int) -> list
         i = index_of[id(cam)]
         # Axe désactivé (scroll_h/scroll_v) : la cible sur cet axe devient
         # cam_x/cam_y lui-même → écart nul → camera_follow ne le bouge pas.
-        # cam_x/cam_y restent en pixels (ROADMAP v0.19 : « la caméra arrondit
-        # après avoir suivi, jamais avant » — un seul arrondi, ICI, à la
-        # frontière acteur→caméra ; tout le reste du suivi/scroll/streaming
-        # continue en pixels, inchangé).
+        # cam_x/cam_y restent en pixels.
         tx = f"(g_actors[{t}].x>>8)" if scene.scroll_h else "cam_x"
         ty = f"(g_actors[{t}].y>>8)" if scene.scroll_v else "cam_y"
         cases.append(f"        case {i}: camera_follow((Vec2){{{tx}, {ty}}}, "

@@ -101,7 +101,7 @@ class _VarRow(QWidget):
         row.addWidget(self._value)
         self.refresh_value()
 
-    # « Array » (ROADMAP v0.20) : une fois actif, la cellule ne montre plus le
+    # « Array » : une fois actif, la cellule ne montre plus le
     # défaut mais la TAILLE — couleur distincte pour ne pas la lire comme un
     # défaut ordinaire.
     def _is_array(self) -> bool:

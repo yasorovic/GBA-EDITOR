@@ -955,7 +955,7 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
         if self.encoded_for:
             e["encoded_for"] = self.encoded_for
         if self.tileset:
-            # ROADMAP v0.24 : couleurs en #RRGGBB et tilemap rangée en RANGÉES,
+            # couleurs en #RRGGBB et tilemap rangée en RANGÉES,
             # pour que deux personnes qui retouchent deux zones d'un même fond
             # produisent deux diffs que git sait fusionner. La donnée ne change
             # pas — seule sa forme écrite (cf. core/project_json.py).

@@ -1,7 +1,7 @@
 """
 core/asset_creation.py — créer un asset : depuis une source, ou vierge.
 
-Un asset POINTE sa source par un chemin explicite (cf. ROADMAP, « Source ≠ asset ») : le créer est un geste
+Un asset POINTE sa source par un chemin explicite : le créer est un geste
 de l'auteur, jamais la conséquence de l'apparition d'un fichier. Deux chemins :
 
 - **depuis une source** (`create_from_source`) : le fichier choisi devient la source d'un asset, créé à côté

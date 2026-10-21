@@ -262,7 +262,7 @@ STDLIB_MODULES: dict[str, Refusal] = {
         "there are no coroutines: the engine calls `on_update` once per frame and "
         "takes control back. An action spread over time is written with a state — a "
         "counter in a variable, and the `if` that reads it."),
-    # `debug` n'est plus ici : ROADMAP v0.14 en fait un vrai module, avec un
+    # `debug` n'est plus ici : c'est un vrai module, avec un
     # seul membre (`debug.log`). Un autre membre Lua (`debug.traceback()`
     # notamment) retombe désormais sur `unknown_member_message` — « le
     # module `debug` n'a pas de `traceback`. Il offre : log. » — plus

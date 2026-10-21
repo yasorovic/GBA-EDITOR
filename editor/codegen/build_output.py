@@ -1,7 +1,6 @@
 """editor/codegen/build_output.py — ce que le build ÉCRIT, et quand.
 
-POINT DE VÉRITÉ UNIQUE de la règle « ne pas réécrire un fichier identique »
-(ROADMAP v0.24). Tout ce que le build dépose dans `build/` passe par ici.
+POINT DE VÉRITÉ UNIQUE de la règle « ne pas réécrire un fichier identique ». Tout ce que le build dépose dans `build/` passe par ici.
 
 ── Le problème, mesuré (2026-08-20, projet Pong) ────────────────────────
 Un rebuild où RIEN n'a changé coûtait 9,09 s contre 10,08 s à froid : presque

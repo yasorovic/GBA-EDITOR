@@ -261,7 +261,7 @@ void palette_set_obj(int bank, int idx) {
 
    Ce que le moteur sauve, ce sont les variables globales MARQUÉES persistantes
    dans l'éditeur. Il ne connaît ni la scène courante, ni aucun état interne :
-   reprendre une partie est un aiguillage que l'auteur écrit (cf. ROADMAP v0.5).
+   reprendre une partie est un aiguillage que l'auteur écrit.
 
    Le format est TOLÉRANT à l'évolution du jeu : chaque valeur est rangée avec
    l'id opaque de sa variable, pas à un rang. Ajouter, retirer ou réordonner une
@@ -287,7 +287,7 @@ void palette_set_obj(int bank, int idx) {
      6  u16 nombre d'enregistrements qui suivent
      8  u32 somme de contrôle du numéro et des enregistrements
     12  u32 numéro de l'emplacement
-   Puis `n` enregistrements de TAILLE VARIABLE (ROADMAP v0.20) :
+   Puis `n` enregistrements de TAILLE VARIABLE :
      0  u32 id de la variable
      4  u32 taille de la charge utile, en octets (multiple de 4)
      8  u32 nombre de cases (24 bits), largeur et signe (8 bits)
@@ -779,7 +779,7 @@ int save_read(int slot) {
     return 1;
 }
 
-/* Valeur d'UNE variable persistante dans un emplacement (ROADMAP v0.22) —
+/* Valeur d'UNE variable persistante dans un emplacement —
    `save.read` côté Lua. À la différence de save_read ci-dessus, qui remplace
    TOUTES les globales persistantes de la partie en cours, celle-ci ne touche
    jamais `global_write_at` : elle sert un écran de sélection de partie, où
@@ -935,7 +935,7 @@ void blend_set_fade    (int evy);            /* 0-16, modes 2 et 3 */
 /* ── Transition de scène ─────────────────────────────────────────── */
 /* Un fondu de transition prend le blending POUR LUI le temps de la bascule :
    BLDCNT n'a qu'un champ mode, il n'existe pas de fondu par-dessus une
-   translucidité (cf. ROADMAP v0.6.2). D'où l'instantané — le réglage authoré
+   translucidité. D'où l'instantané — le réglage authoré
    de la scène est repris tel quel à la fin.
 
    `mode` vaut 2 (vers le blanc) ou 3 (vers le noir). Entre begin et end, les
@@ -1061,7 +1061,7 @@ void text_set_font_pal(int font, int bank, int own);
 extern const FontInfo g_fonts[];
 extern const int      g_font_count;   /* taille de g_fonts, émise */
 
-/* Remap de police par langue (ROADMAP v0.9, phase 3.2) : `g_lang_font[lang]`
+/* Remap de police par langue : `g_lang_font[lang]`
    pointe UN indice par police du PROJET (même ordre, même compte que
    `g_fonts`) — la police EFFECTIVE à charger quand cette langue est active.
    Identité (`g_lang_font[lang][f] == f`) dans le cas courant, y compris
@@ -1071,7 +1071,7 @@ extern const int      g_font_count;   /* taille de g_fonts, émise */
 extern const unsigned char* const g_lang_font[];
 
 /* ── Langue active ──────────────────────────────────────────────
-   0 = la langue SOURCE. Une VARIABLE depuis la phase 4 (ROADMAP v0.9) —
+   0 = la langue SOURCE. Une VARIABLE depuis la phase 4 —
    `lang_set` l'écrit — mais rien ne force à l'avoir jamais lue avant : un
    projet qui n'a jamais déclaré de langue compile et joue identique à
    avant, seules les tables ci-dessous gagnent une dimension qui vaut 1. */
@@ -1211,7 +1211,7 @@ typedef struct UIRegionInfo {
 extern const UIRegionInfo g_ui_regions[];
 extern const int g_ui_region_count;
 
-/* ── Listes d'interface (ROADMAP v0.22) ───────────────────────────
+/* ── Listes d'interface ───────────────────────────
    Le moteur prend la NAVIGATION, pas la mise en page : une liste est un conteneur
    de la mise en page dont on suit l'index courant. Ses RANGÉES sont ses zones
    de texte enfants, dans l'ordre de l'arbre — rien à déclarer de plus, et ce
@@ -1404,7 +1404,7 @@ void ui_image_set_bank(int img, int bank);
    taille, de son sprite, de son ancrage, de son parent et de sa profondeur, et
    rouvrir ça au runtime reprendrait ce qu'elle existe pour fermer.
 
-   Le DÉPLACEMENT, lui, a été rouvert (ROADMAP v0.22, 2026-09-02) : c'était une
+   Le DÉPLACEMENT, lui, a été rouvert : c'était une
    même phrase pour deux choses. `ui_image_move` pose un décalage RELATIF à la
    position authorée, qui reste la vérité — (0,0) rend l'image à sa mise en
    page, sans que le script ait rien mémorisé. La géométrie n'est donc pas
@@ -1465,7 +1465,7 @@ void text_read_reset_all(void);   /* posé par scene_init — ferme les lectures
 void text_update  (void);         /* une fois par frame, avant oam_update */
 void text_clear_in    (int region);             /* vide une zone, BG ou OBJ */
 
-/* ── Routage de rendu PAR SCÈNE (ROADMAP v0.12) ──────────────────────
+/* ── Routage de rendu PAR SCÈNE ──────────────────────
    `g_ui_regions`/`g_ui_images` sont per-ASSET : leur index est un nom d'élément
    unique au projet. Mais le SLOT BG où une zone se rend appartient au NŒUD
    `Interface` d'une scène, et peut différer d'une scène à l'autre pour un même
@@ -3864,7 +3864,7 @@ void ui_element_show(int idx, int on) {
     ui_element_sync_text();
 }
 
-/* ── Listes : la navigation, et rien d'autre (ROADMAP v0.22) ──────
+/* ── Listes : la navigation, et rien d'autre ──────
    `l` est un index de `g_ui_lists`, résolu au build depuis le nom du conteneur.
    Hors bornes, tout rend 0 et n'écrit rien : `l` peut venir d'une variable. */
 static int ui_list_ok(int l) { return l >= 0 && l < g_ui_list_count; }

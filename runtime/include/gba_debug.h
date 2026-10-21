@@ -1,4 +1,4 @@
-/* runtime/include/gba_debug.h — canal de diagnostic (ROADMAP v0.14)
+/* runtime/include/gba_debug.h — canal de diagnostic
  *
  * Le C émis par le codegen pour `debug:log(...)` et pour la mesure de
  * budget est LE MÊME en build debug et release (cf. codegen.py,
@@ -7,7 +7,7 @@
  * ProjectSettings.debug_build est coché — cf. runtime/Makefile
  * EXTRA_CFLAGS), soit des stubs `inline` VIDES sinon. À -O2, un appel à un
  * stub vide disparaît par inlining : retiré à la compilation, sans qu'un
- * drapeau soit testé au runtime — la décision verrouillée de la ROADMAP.
+ * drapeau soit testé au runtime — décision verrouillée.
  *
  * ── Le canal de log ─────────────────────────────────────────────
  * mGBA expose un port de debug (protocole documenté par le projet mGBA
@@ -21,8 +21,7 @@
  * `debug:log(...)` (script) ne formate rien : chaque argument est déjà une
  * chaîne littérale ou un entier, et le codegen émet une SÉQUENCE d'appels
  * à `debug_write_str`/`debug_write_int`, terminée par `debug_flush()` — pas
- * un `printf`, que le moteur évite partout ailleurs (ROADMAP v0.14,
- * décisions verrouillées, 2026-08-20).
+ * un `printf`, que le moteur évite partout ailleurs.
  */
 #ifndef GBA_DEBUG_H
 #define GBA_DEBUG_H
@@ -78,7 +77,7 @@ static inline void debug_flush(void) {
  * tient en ~4370 ticks, largement sous les 65535 d'un compteur 16 bits :
  * pas besoin de timer en cascade pour mesurer UNE frame.
  *
- * OAM et canaux sonores/DMA : voir ROADMAP v0.14, section « Ouvert » —
+ * OAM et canaux sonores/DMA :
  * seul le temps de frame et l'OAM sont de VRAIES mesures avec le SDK
  * installé ; les deux autres axes envisagés n'ont pas de source fiable et
  * ont été écartés plutôt que fabriqués.

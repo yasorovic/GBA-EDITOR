@@ -1,4 +1,4 @@
-"""Les TROIS boîtes sonores : MusicBox, JingleBox, SoundBox (ROADMAP v0.8.7).
+"""Les TROIS boîtes sonores : MusicBox, JingleBox, SoundBox.
 
 Trois assets distincts, et non trois machines dans un même fichier — décision
 du 2026-08-18, après avoir constaté que le fichier unique laissait croire à une
@@ -62,7 +62,7 @@ class MusicState:
     level: int = 100           # POURCENTAGE (cf. models/audio.py)
     # « Intensité » porte SA CIBLE, explicitement : un curseur sans cible
     # nommée promettrait un mixeur de couches qui n'existe pas sur cette
-    # console (ROADMAP v0.8.5).
+    # console.
     intensity_target: str = "volume"
     intensity: int = 100       # % — 100 = valeur neutre de la cible
     # Position du nœud dans le graphe, en pixels de scène. De la donnée

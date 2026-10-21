@@ -128,7 +128,7 @@ class _Step:
     kind:  str          # "body" | WAIT_FN | WAIT_UNTIL_FN
     stmts: list = field(default_factory=list)   # kind == "body"
     arg:   Any = None                            # l'attente : durée ou condition
-    # Dernière tranche du corps d'une boucle bornée (ROADMAP v0.23) : au lieu
+    # Dernière tranche du corps d'une boucle bornée : au lieu
     # de passer à la tranche suivante, on incrémente le compteur et on REVIENT
     # en arrière tant qu'il reste des tours. Porté par la tranche plutôt que
     # par une tranche à part, pour que la boucle ne coûte PAS une frame de
@@ -233,8 +233,8 @@ class CodegenContext:
     global_names: set[str]       # noms des variables globales (depuis globals.h)
     const_names:  set[str]       # noms des constantes (depuis constants.h)
     all_actor_syms: list[str]    # tous les acteurs de la scène
-    # Les ENFANTS de ce propriétaire, nom Lua → expression C qui les désigne
-    # (ROADMAP v0.23). `self.bras` s'y lit : pour un acteur de scène c'est
+    # Les ENFANTS de ce propriétaire, nom Lua → expression C qui les désigne.
+    # `self.bras` s'y lit : pour un acteur de scène c'est
     # une constante `&g_actors[ACTOR_*]`, pour la racine d'un prefab poolé un
     # décalage constant dans son groupe (`self + 2`). Résolu au BUILD dans
     # les deux cas — un enfant se NOMME, il ne se construit pas.
@@ -281,7 +281,7 @@ class CodegenContext:
     # d'export → {"type": t, "values": [...]} }. Sert au spawner à résoudre une
     # valeur (bool→0/1, enum→index) et à nommer le setter. Rempli par lua_compiler.
     spawn_exports: dict = field(default_factory=dict)
-    # Symbole C de la scène qui compile ce script (ROADMAP v0.17, T1). Les pools
+    # Symbole C de la scène qui compile ce script. Les pools
     # étant per-scène, `actor:spawn("Bullet")` cible `spawn_<Scène>_Bullet` : il
     # faut donc savoir DANS QUELLE scène on compile. "" pour les unités partagées
     # (caméras) qui ne peuvent pas résoudre une scène — spawn y est refusé.
@@ -306,7 +306,7 @@ class CodegenContext:
     font_names: list[str] = field(default_factory=list)  # polices encodables (ordre = index dans g_fonts)
     palette_names: list[str] = field(default_factory=list)  # catalogue de couleurs (ordre = index dans g_palettes)
     region_names: list[str] = field(default_factory=list)  # emplacements de texte (ordre = index dans g_ui_regions)
-    # Panneaux marqués LISTE (ordre = index dans g_ui_lists) — ROADMAP v0.22
+    # Panneaux marqués LISTE (ordre = index dans g_ui_lists)
     ui_list_names: list[str] = field(default_factory=list)
     image_names:  list[str] = field(default_factory=list)  # images d'interface (ordre = index dans g_ui_images)
     # TOUS les éléments d'UI, tous types confondus (ordre = index dans la table
@@ -818,7 +818,7 @@ class CodeGen:
                 self._w(f"{step_ref} = {suivant};{fin}")
             else:
                 # Refermeture des boucles bornées qui finissent sur cette
-                # tranche (ROADMAP v0.23) : on incrémente le compteur puis on
+                # tranche : on incrémente le compteur puis on
                 # décide où reprendre. Le SENS de la comparaison vient du signe
                 # du pas, écrit en clair — même règle que pour un `for`
                 # ordinaire (checker._check_for_step), et pour la même raison :
@@ -983,7 +983,7 @@ class CodeGen:
         self._w('#include "runtime_api.h"')
         self._w('#include "globals.h"')
         self._w('#include "constants.h"')
-        self._w('#include "gba_debug.h"')   # debug.log — ROADMAP v0.14
+        self._w('#include "gba_debug.h"')   # debug.log
         # Toujours inclus, même sans table : l'en-tête est toujours généré, et
         # un include conditionnel serait un second chemin pour un cas vide.
         self._w('#include "data_tables.h"')
@@ -1055,7 +1055,7 @@ class CodeGen:
         # Constantes Langue — même index que g_texts[lang]/g_lang_font[lang]
         # (source en 0, puis settings.languages dans l'ordre déclaré). Absent
         # d'un projet monolingue : lang.set/lang.get n'y compilent alors plus,
-        # ce qui est le comportement voulu (ROADMAP v0.9, phase 4).
+        # ce qui est le comportement voulu.
         if self.ctx.lang_codes:
             self._w("")
             self._w("/* Langues */")
@@ -1085,7 +1085,7 @@ class CodeGen:
             self._w("/* Text slots */")
             for i, name in enumerate(self.ctx.region_names):
                 self._w(f"#define {region_constant(name)} {i}")
-        # Constantes de LISTE — index dans g_ui_lists (ROADMAP v0.22). Espace
+        # Constantes de LISTE — index dans g_ui_lists. Espace
         # séparé de REGION_*/UIELEM_* : une liste est un panneau, mais son rang
         # est celui des LISTES, pas celui de tous les éléments.
         if self.ctx.ui_list_names:
@@ -1204,7 +1204,7 @@ class CodeGen:
         avec la boucle de pool de `main.c` serait un débordement de tableau
         silencieux. C'est `_INSTANCES` qui la donne, pas `_SIZE` — `_SIZE` compte
         les entrées de `g_actors` réservées, et une instance segmentée en occupe
-        un GROUPE tout en n'exécutant qu'un script (ROADMAP v0.23)."""
+        un GROUPE tout en n'exécutant qu'un script."""
         sym      = self.ctx.actor_sym
         struct_t = f"{sym}State"
         fields, inits, per_instance = [], [], 0
@@ -1274,7 +1274,7 @@ class CodeGen:
             self._w(f)
         self._indent -= 1
         self._w(f"}} {struct_t};")
-        # Un état par INSTANCE, pas par entrée de `g_actors` (ROADMAP v0.23) :
+        # Un état par INSTANCE, pas par entrée de `g_actors` :
         # une instance de prefab segmenté occupe un GROUPE d'entrées — la
         # racine puis ses parties — mais n'exécute qu'un script, celui de la
         # racine. Diviser par le groupe ramène `self` à son rang d'instance ;
@@ -1422,8 +1422,7 @@ class CodeGen:
                 # PAS static : une fonction personnalisée (ni un hook connu, ni
                 # `EVENT_C_SIGNATURES`) est le point d'entrée d'un EventCall —
                 # une frame d'animation du sprite de CET actor peut l'appeler
-                # depuis `main.c`, une autre unité de compilation (ROADMAP
-                # v0.8.9 ; cf. `actor_frame_event_lines` dans gen_sprite.py).
+                # depuis `main.c`, une autre unité de compilation.
                 # Rien ne distingue ici « appelée par une frame » de « jamais
                 # appelée » : les deux cas restent corrects avec une liaison
                 # externe, et le linker élague ce qui ne sert à personne.
@@ -1474,7 +1473,7 @@ class CodeGen:
         if isinstance(s, StmtCall):
             # `sfx:play(...)` posé SEUL ne tient pas sa référence : son canal
             # reste volable par l'effet suivant quand tout est plein (cf.
-            # `hold` dans headers.py, ROADMAP v0.8.8). C'est la seule décision
+            # `hold` dans headers.py). C'est la seule décision
             # de tout le générateur qui dépend de la POSITION de l'appel et non
             # de ce qu'il contient — d'où ce test ici, et pas dans l'émetteur.
             if (isinstance(s.call, ExprCall)
@@ -1582,7 +1581,7 @@ class CodeGen:
                 and self._call_key(s.value.func) == "actor.get"
             ) or (
                 # `local b = actor:spawn("X", pos)` tient l'instance née — un
-                # `Actor*` (ROADMAP v0.17 T6), donc `b:set_velocity(...)` chaîne
+                # `Actor*`, donc `b:set_velocity(...)` chaîne
                 # et `if not b then` teste vraiment le pool plein (NULL).
                 s.value is not None
                 and isinstance(s.value, ExprCall)
@@ -1590,7 +1589,7 @@ class CodeGen:
             ) or (
                 # `local bras = self.bras` tient un acteur, exactement comme
                 # `actor:get(...)` — donc un `Actor*` et non un `int`, sans quoi
-                # `bras:destroy()` ne compilerait pas (ROADMAP v0.23).
+                # `bras:destroy()` ne compilerait pas.
                 isinstance(s.value, ExprIndex)
                 and isinstance(s.value.obj, ExprName)
                 and s.value.obj.name == "self"
@@ -1730,7 +1729,7 @@ class CodeGen:
                 return f"g_data_{table}"
             # `global.nom` → la variable C émise par globals.c — NU (scalaire,
             # chantier global/const) ou base d'une indexation qui se compose toute
-            # seule via `ExprIndexAt` (tableau, ROADMAP v0.20), exactement
+            # seule via `ExprIndexAt` (tableau), exactement
             # comme pour une table de données. Le nom du projet se cite en
             # clair : c'est la grammaire déjà LIVRÉE pour `data.Objets[i].prix`,
             # pas une forme inventée ici. Le checker a déjà refusé un nom
@@ -1744,8 +1743,8 @@ class CodeGen:
             if (isinstance(e.obj, ExprName) and e.obj.name == "const"
                     and self.ctx.const_names and e.field in self.ctx.const_names):
                 return f"CONST_{e.field.upper()}"
-            # `self.bras` → l'enfant, désigné par une expression CONSTANTE
-            # (ROADMAP v0.23). Même geste que dans Godot : on tient son parent,
+            # `self.bras` → l'enfant, désigné par une expression CONSTANTE.
+            # Même geste que dans Godot : on tient son parent,
             # on nomme l'enfant. Rien n'est construit, rien n'est cherché au
             # runtime — c'est un `&g_actors[...]` ou un décalage de groupe.
             if (isinstance(e.obj, ExprName) and e.obj.name == "self"
@@ -2315,7 +2314,7 @@ class CodeGen:
         """`debug:log("hp=", hp, " x=", x)` → une séquence d'appels C, un par
         argument (`debug_write_str`/`debug_write_int`), fermée par
         `debug_flush()` — jamais un unique appel variadique : le moteur
-        n'émet pas de printf (ROADMAP v0.14). L'opérateur virgule enchaîne
+        n'émet pas de printf. L'opérateur virgule enchaîne
         les appels dans une seule expression, valide en position de
         statement comme n'importe quel autre appel de l'API.
 
@@ -2374,8 +2373,7 @@ class CodeGen:
         return calls[0] if len(calls) == 1 else "(" + " || ".join(calls) + ")"
 
     def _emit_get_axis(self, args: list) -> str:
-        """`get_axis(x)` → scalaire (`input_get_axis`, ROADMAP : masque
-        négatif/positif) ; `get_axis(x, y)` → vec2 (`input_get_vector`)."""
+        """`get_axis(x)` → scalaire (`input_get_axis`) ; `get_axis(x, y)` → vec2 (`input_get_vector`)."""
         def axis_masks(arg):
             name = arg.value if isinstance(arg, ExprString) else None
             return self.ctx.input_axes.get(name, ("0", "0"))
@@ -2478,7 +2476,7 @@ class CodeGen:
     def _emit_actor_spawn(self, args: list) -> str:
         """actor:spawn("PrefabName", pos) → spawn_<Scène>_PrefabName(pos.x, pos.y)
 
-        Le pool est per-scène (ROADMAP v0.17, T1) : la fonction de spawn appartient
+        Le pool est per-scène : la fonction de spawn appartient
         à la scène qui compile ce script, d'où le préfixe. Une unité partagée
         (caméra, `scene_sym` vide) n'a pas de scène à cibler — refusé."""
         if len(args) < 2 or not isinstance(args[0], ExprString):
@@ -2773,7 +2771,7 @@ _DOMAIN_EMITTED_ELSEWHERE: frozenset = frozenset({
     DOMAIN_UI_ELEMENT,
     # `get_axis` n'a pas de constante par nom : chaque argument devient une
     # PAIRE d'expressions (masque négatif/positif), assemblées par l'émetteur
-    # dédié (`_emit_get_axis`, ROADMAP « Les inputs personnalisés »).
+    # dédié (`_emit_get_axis`).
     DOMAIN_AXIS,
     # `get_sequence` n'a pas de constante par nom : une alternance dans
     # l'expression développe plusieurs tables C, réunies par un OU — cf.

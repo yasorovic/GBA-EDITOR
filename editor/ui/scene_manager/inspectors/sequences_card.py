@@ -1,7 +1,6 @@
 """
 ui/scene_manager/inspectors/sequences_card.py — la carte « Séquences » de la
-fenêtre Project Settings (catégorie Input, ROADMAP « Les inputs
-personnalisés »).
+fenêtre Project Settings (catégorie Input).
 
 Une séquence nommée (quart de cercle, demi-cercle, dragon punch, ou une
 composition) reconnue par `input:get_sequence("nom")`. Barre d'expression
@@ -33,7 +32,7 @@ from ui.common.unit_spin import UnitSpin
 from ui.common.widgets import CollapsibleCard, W
 
 
-# ── L'aperçu : mêmes glyphes que le ROADMAP ("↓ ↘ → ➜ Ⓐ") ─────────────
+# ── L'aperçu : mêmes glyphes que la documentation ("↓ ↘ → ➜ Ⓐ") ─────────────
 _ARROWS = {"up": "↑", "down": "↓", "left": "←", "right": "→"}
 _DIAGONALS = {
     frozenset({"up", "right"}): "↗", frozenset({"up", "left"}): "↖",

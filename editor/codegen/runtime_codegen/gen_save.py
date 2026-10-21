@@ -46,8 +46,7 @@ def save_id32(vid: str) -> int:
 
 def save_var_bytes(g) -> int:
     """Ce qu'UNE variable persistante occupe dans un emplacement : l'en-tête de
-    son enregistrement, plus ses cases empaquetées arrondies au mot de 32 bits
-    (ROADMAP v0.20). Un scalaire coûte 12 + 4 octets ; un tableau de 400
+    son enregistrement, plus ses cases empaquetées arrondies au mot de 32 bits. Un scalaire coûte 12 + 4 octets ; un tableau de 400
     booléens 12 + 52, et non 12 + 1600."""
     n = max(1, int(getattr(g, "count", 1) or 1))
     payload = ((n * save_bits(g) + 31) // 32) * 4
@@ -126,7 +125,7 @@ def save_lines(p, emit=None) -> list[str]:
                  + ", ".join(str(i) for i, _g in vars_) + "};")
         L.append("const int g_save_def[] = {"
                  + ", ".join(str(int(g.default)) for _i, g in vars_) + "};")
-        # ROADMAP v0.20 : le nombre de cases, et ce qu'une case coûte en SRAM.
+        # le nombre de cases, et ce qu'une case coûte en SRAM.
         # C'est ce couple qui rend l'enregistrement auto-descriptif — donc
         # relisible par une version du jeu où le tableau a changé de taille.
         L.append("const unsigned short g_save_len[] = {"

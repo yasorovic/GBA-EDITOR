@@ -1,5 +1,4 @@
-"""Le câblage catalogue + checker + codegen des inputs personnalisés (ROADMAP
-« Les inputs personnalisés »), après la décision du 2026-09-27 de
+"""Le câblage catalogue + checker + codegen des inputs personnalisés, après la décision du 2026-09-27 de
 séparer ACCORDS (`InputBinding`, cases à cocher, `held`/`pressed`/`released`/
 `buffered`) et SÉQUENCES (`InputSequence`, mini-langage complet, `get_sequence`
 seul) : deux espaces de noms distincts, jamais l'un pour l'autre. Le C

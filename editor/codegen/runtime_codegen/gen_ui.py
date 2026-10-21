@@ -3,7 +3,7 @@
 Extrait de `main_gen` (A3), au-dessus de la couche de requêtes (il consomme
 `ui_item_geometry` de `gen_scene_query`, vers le bas). Les tables PARTAGÉES par
 toutes les scènes : `g_ui_images` (images d'interface), `g_ui_lists` + son état
-vivant (navigation, ROADMAP v0.22), `g_ui_elements` (visibilité). Plus les deux
+vivant (navigation), `g_ui_elements` (visibilité). Plus les deux
 index qui font le lien nom→index avec le C de script : `ui_element_index`
 (`UIELEM_*`) et `region_actor_index` (zones ancrées sur un acteur).
 
@@ -129,14 +129,14 @@ def project_lists(p: Project) -> list:
 def list_rows_of(lay, lst) -> list:
     """Les RANGÉES d'une liste : ses zones de texte enfants, dans l'ordre de la
     mise en page. Rien à déclarer — ce qu'on voit dans l'éditeur est ce que la
-    liste parcourt (ROADMAP v0.22)."""
+    liste parcourt."""
     from core.models.ui_region import is_text
     return [e for e in lay.elements
             if getattr(e, "parent", "") == lst.name and is_text(e)]
 
 
 def emit_ui_lists_c(p: Project, emit=None) -> list[str]:
-    """Tables des listes d'interface + leur état vivant (ROADMAP v0.22).
+    """Tables des listes d'interface + leur état vivant.
 
     Émises MÊME VIDES : `gba_engine.h` les déclare `extern` sans condition, et
     un projet sans liste doit tout de même se lier — c'est `g_ui_list_count`

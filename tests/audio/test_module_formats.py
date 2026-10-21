@@ -166,7 +166,7 @@ def test_le_panoramique_du_mod_reste_cable_a_gauche_et_a_droite():
 
 def test_un_module_sans_echantillon_est_refuse_a_limport():
     """`check_audio_file` est le SEUL refus possible : mmutil construirait la
-    ROM sans un mot (ROADMAP v0.8.1)."""
+    ROM sans un mot."""
     import tempfile
     from core.resources.asset_reconciliation import check_audio_file
 
@@ -182,7 +182,7 @@ def test_un_module_sans_echantillon_est_refuse_a_limport():
 
 # ── 3. La table d'ordres est celle de la ROM ──────────────────────
 #
-# Mesuré le 2026-10-11 (ROADMAP « L'asset .music ») : `mmutil` ne renumérote
+# Mesuré le 2026-10-11 : `mmutil` ne renumérote
 # rien, et `mmGetPosition()` rend l'index BRUT de la table — séparateurs (254)
 # et fin (255) compris. L'éditeur qui les filtrait comptait autrement que la
 # console, et une section de `.music` aurait visé le mauvais motif.

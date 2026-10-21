@@ -4,7 +4,7 @@ import unicodedata
 from dataclasses import dataclass, field
 
 
-# ── Langues (ROADMAP v0.9) ────────────────────────────────────────
+# ── Langues ────────────────────────────────────────
 # Une langue DÉCLARÉE, jamais devinée. C'est la déclaration qui lie une langue
 # à son fichier de traduction et à ses polices — pas un suffixe de nom de
 # fichier : `font_de.fnt` est une praticité au moment d'importer, pas une règle
@@ -102,9 +102,7 @@ class InputBinding:
 class InputSequence:
     """Une séquence de boutons nommée — un mouvement (quart de cercle, demi-
     cercle, dragon punch, ou une composition personnalisée) reconnu par
-    `input:get_sequence("nom")`. Expression dans le mini-langage complet
-    (ROADMAP « Les inputs personnalisés » : `+` accord, `-` pas suivant,
-    `(a|b)` alternative, mouvements). Rôle distinct d'`InputBinding` : un
+    `input:get_sequence("nom")`. Expression dans le mini-langage complet. Rôle distinct d'`InputBinding` : un
     accord se lit avec held/pressed/released/buffered, une séquence avec
     get_sequence — jamais l'inverse, décision du 2026-09-27."""
     name: str = ""
@@ -128,7 +126,7 @@ class InputSequence:
 
 @dataclass
 class InputAxis:
-    """Un axe scalaire déclaré (ROADMAP « Les inputs personnalisés ») :
+    """Un axe scalaire déclaré :
     remappe la croix, ou pilote un axe avec d'autres boutons/actions, sans
     toucher au script. `negative`/`positive` sont un nom de bouton ou
     d'action — jamais `horizontal`/`vertical` (réservés à la croix par
@@ -151,7 +149,7 @@ class InputAxis:
 
 @dataclass
 class InputMovement:
-    """Un mouvement personnalisé (ROADMAP « Les inputs personnalisés ») : une
+    """Un mouvement personnalisé : une
     suite de pas dans le même mini-langage que les actions, mais qui ne
     référence AUCUN mouvement (built-in ou personnalisé) — pas de cycle
     possible par construction. S'utilise comme un mouvement built-in, en tête
@@ -209,16 +207,16 @@ class ProjectSettings:
     # `mmInitDefault(bank, n)` alloue exactement 92 × n + 1056 octets sur le
     # tas (40 o de voie de module + 28 o de voie active + 24 o de voie de
     # mixage par canal, plus le tampon de mixage 16 kHz) — mesuré au
-    # désassemblage, cf. ROADMAP v0.8.8. Défaut 8 : la valeur qui était en dur,
+    # désassemblage. Défaut 8 : la valeur qui était en dur,
     # pour qu'un projet existant ne change pas de son parce qu'un réglage est
     # apparu. Le pool de RÉFÉRENCES d'effets, lui, vaut 16 quoi qu'on mette ici.
     sound_channels: int = 8
-    # Build DEBUG (`debug.log`, mesure de budget par frame — cf. ROADMAP v0.14)
+    # Build DEBUG (`debug.log`, mesure de budget par frame)
     # vs RELEASE (les deux disparaissent de la ROM, à la compilation, pas au
     # runtime). Vrai par défaut : c'est le comportement qu'avait le logiciel
     # avant que ce réglage existe, un projet existant ne doit rien voir changer.
     debug_build: bool = True
-    # Les couples de TAGS de boxes qui ne se rencontrent PAS (ROADMAP v0.23).
+    # Les couples de TAGS de boxes qui ne se rencontrent PAS.
     # Chaque entrée est une clé `pair_key(a, b)`, donc un couple non ordonné :
     # « les projectiles du joueur ignorent ceux du boss » se dit une fois.
     #
@@ -236,14 +234,14 @@ class ProjectSettings:
     # en parcourant les scènes (cf. CollisionsPanel._all_tags). Union des deux
     # ensembles à l'affichage, jamais l'un à la place de l'autre.
     collision_tags: list = field(default_factory=list)
-    # Cadence de répétition des listes de menu, en frames (ROADMAP v0.22) —
+    # Cadence de répétition des listes de menu, en frames —
     # le DÉFAUT du projet, qu'une liste peut surcharger (UIContainer.list_repeat_*).
     # Répondre ici une fois évite trois listes à trois cadences dans le même
     # jeu, ce qu'un joueur sent ; la surcharge laisse un cas particulier
     # possible. Même politique d'héritage que la transition de scène (v0.6.2).
     list_repeat_delay: int = 10   # avant le premier renvoi
     list_repeat_rate: int = 4     # entre les renvois suivants
-    # ── Langues (ROADMAP v0.9) ────────────────────────────────────
+    # ── Langues ────────────────────────────────────
     # La langue SOURCE est celle qu'on écrit dans `texts.json` : c'est le
     # fichier maître qui la porte, elle n'a donc jamais de fichier side. La
     # déclarer sert à la nommer — dans l'éditeur, et plus tard dans le menu de
@@ -314,10 +312,10 @@ class GlobalVar:
     # Cette variable survit-elle à l'extinction de la console ? Un drapeau par
     # variable, et non « tout persister » : un compteur de travail n'a rien à
     # faire en SRAM, et surtout ce qui entre dans la sauvegarde décide de sa
-    # compatibilité (cf. ROADMAP.md v0.5). C'est l'`id` ci-dessus qui l'identifie
+    # compatibilité. C'est l'`id` ci-dessus qui l'identifie
     # dans le fichier de sauvegarde — jamais son rang, jamais son nom.
     persist: bool = False
-    # Combien de CASES cette variable tient (ROADMAP v0.20). 1 = un scalaire,
+    # Combien de CASES cette variable tient. 1 = un scalaire,
     # exactement ce qu'était toute variable avant cette version — un projet
     # existant ne voit donc rien changer. Au-delà, c'est un tableau, écrit
     # `global.coffres[i]` dans un script et indexé À PARTIR DE 1 comme tout
@@ -344,7 +342,7 @@ class Constant:
     id:    str = ""     # opaque, stable à vie
 
 
-# ── La matrice de collision (ROADMAP v0.23) ──────────────────────────
+# ── La matrice de collision ──────────────────────────
 # Une matrice par PAIRES et non un masque par tag. Le masque s'écrit plus vite
 # mais se relit mal : c'est le modèle « layer / mask » de Godot, où il faut
 # tenir deux champs asymétriques dans sa tête pour répondre à « est-ce que A

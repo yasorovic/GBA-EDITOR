@@ -204,7 +204,7 @@ def infer_vec_type(expr, local_types: dict[str, Optional[str]],
             return key
         # `get_axis` est scalaire à 1 argument, vec2 à 2 — le seul appel de
         # l'API dont le type suit le NOMBRE d'arguments plutôt qu'être fixe
-        # dans le catalogue (ROADMAP « Les inputs personnalisés »).
+        # dans le catalogue.
         if key == "input.get_axis":
             return "vec2" if len(expr.args) >= 2 else None
         api = RUNTIME_API.get(key) if key else None

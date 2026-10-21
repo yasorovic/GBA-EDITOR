@@ -71,7 +71,7 @@ class GBAScene(QGraphicsScene):
 
     def descendant_sprite_items(self, item: "SpriteItem") -> list:
         """SpriteItem des acteurs qui descendent de `item.scene_sprite`
-        (`Actor.parent`, ROADMAP v0.23) — pour faire suivre tout le
+        (`Actor.parent`) — pour faire suivre tout le
         sous-arbre quand on déplace un parent dans le canvas."""
         from core.models.scene import actor_descendant_names
         names = actor_descendant_names(

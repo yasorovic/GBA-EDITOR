@@ -1,7 +1,6 @@
 """editor/core/project_json.py — comment le projet écrit son JSON.
 
-POINT DE VÉRITÉ UNIQUE de la MISE EN PAGE des fichiers de projet (ROADMAP
-v0.24). Ce que contiennent ces fichiers appartient aux modèles ; la façon dont
+POINT DE VÉRITÉ UNIQUE de la MISE EN PAGE des fichiers de projet. Ce que contiennent ces fichiers appartient aux modèles ; la façon dont
 ils se posent sur des lignes appartient ici, parce que c'est une seule règle
 et qu'elle doit valoir partout de la même façon.
 
@@ -14,7 +13,7 @@ Ce que ça résout : **l'historique se relit**. Un diff montrait
 « ligne 347 : 0 → 1 », ce dont personne ne peut rien tirer ; il montre
 maintenant la rangée entière, à sa place dans la carte.
 
-Ce que ça NE résout pas — et la ROADMAP v0.24 supposait le contraire, mesure
+Ce que ça NE résout pas — et on avait supposé le contraire, mesure
 à l'appui du contraire (2026-08-20) : **la fusion automatique n'y gagne rien,
 elle y perd**. `git merge-file` travaille à la ligne, donc un scalaire par
 ligne offrait la granularité MAXIMALE : deux modifications quelconques de la

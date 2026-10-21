@@ -13,7 +13,7 @@ préférence de machine**. Un réglage d'application n'a rien à faire dans
 l'historique d'un projet, et c'est le vrai argument des deux.
 
 Portée actuelle : les astuces (le niveau 3 de `ui/common/notice.py`) et la
-langue de l'interface (ROADMAP v0.11). Le fichier existe pour ce qui décrit
+langue de l'interface. Le fichier existe pour ce qui décrit
 l'AFFICHAGE de l'éditeur — pas pour devenir le tiroir de tout ce qui n'a pas
 trouvé de place ailleurs : un réglage qui décrit le JEU va dans
 `ProjectSettings`, un chemin de machine dans `toolchain`/`external_tools`.

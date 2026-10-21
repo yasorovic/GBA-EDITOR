@@ -13,7 +13,7 @@ voit qu'au moment où quelqu'un rouvre sa traduction.
 - un side vide et non déclaré est jetable, un side qui porte une traduction ne
   l'est jamais.
 
-Cf. ROADMAP v0.9, temps 2, phase 1.
+.9, temps 2, phase 1.
 """
 from __future__ import annotations
 

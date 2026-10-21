@@ -5,7 +5,7 @@ scène est à droite de celles qui mènent à elle. C'est de la présentation, p
 domaine — mais c'est du calcul pur (aucun Qt), donc testable seul et remplaçable
 sans toucher au dessin.
 
-Deux règles portées par le plan (ROADMAP v0.12, étape 4) :
+Deux règles portées par le plan :
 
 - **Les cycles et les retours ne décalent pas les couches.** Les arêtes retour
   sont retirées avant le calcul des profondeurs ; elles resteront dessinées en

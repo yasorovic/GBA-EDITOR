@@ -32,7 +32,7 @@ typedef struct { int x, y; }    Vec2;
 typedef struct { int x, y, z; } Vec3;
 typedef struct { int x, y, w, h; } Rect;
 
-/* Deux tables, deux unités (ROADMAP « La struct Actor allégée », marche 0a) :
+/* Deux tables, deux unités :
 
      g_actors[]      — un indice = un ACTEUR : identité, position, vélocité,
                        transform MONDE, collision, et le lien `oam_entry` vers
@@ -174,8 +174,8 @@ typedef struct OamEntry {
 } OamEntry;
 
 typedef struct Actor {
-    /* Position et vélocité MONDE, en Q8 (256 = 1 pixel) depuis la ROADMAP
-       v0.19 (2026-08-20) — le point fixe existait déjà dans cette même
+    /* Position et vélocité MONDE, en Q8 (256 = 1 pixel) depuis le
+       2026-08-20 — le point fixe existait déjà dans cette même
        struct pour scale_x/y, il n'avait simplement jamais atteint la
        position. self.position (script) continue de ne rendre/accepter que
        des pixels entiers ; self.velocity, elle, expose le Q8 directement —
@@ -209,14 +209,12 @@ typedef struct Actor {
     /* ── collision ↔ CollisionBoxComponent ────────────────────────────── */
     struct {
         /* Résolution contre la carte de collision — écrits par
-           resolve_actor_tiles, lus par elle à la frame suivante (cf. ROADMAP
-           v0.6.3) :
+           resolve_actor_tiles, lus par elle à la frame suivante :
              grounded : y avait-il un sol sous les pieds à la fin de la frame ?
                         C'est ce que rend actor_on_ground() ;
              last_x   : abscisse à la fin de la frame précédente, en PIXELS (pas
                         Q8, contrairement à x — resolve_actor_tiles travaille en
-                        pixels du début à la fin, cf. gba_engine.h, ROADMAP
-                        v0.19). Le déplacement horizontal RÉELLEMENT parcouru
+                        pixels du début à la fin, cf. gba_engine.h). Le déplacement horizontal RÉELLEMENT parcouru
                         s'en déduit, quelle que soit la façon dont le script
                         bouge l'acteur (vélocité, move(), move_to(),
                         set_position()) — c'est lui qui donne la distance de

@@ -261,7 +261,7 @@ static inline Vec2 vec2_splat(int k) { return (Vec2){ k, k }; }
 static inline Vec3 vec3_splat(int k) { return (Vec3){ k, k, k }; }
 
 /* Transform — position instantanée, sans notion de temps ni de vitesse.
-   ROADMAP v0.19 : s->x/s->y sont en Q8 en interne (256 = 1 px), mais
+   s->x/s->y sont en Q8 en interne (256 = 1 px), mais
    self.position continue de rendre des PIXELS — décision verrouillée : un
    projet existant ne change pas de comportement, et un auteur qui n'a pas
    besoin de sous-pixel n'en entend jamais parler. L'écriture perd donc toute
@@ -270,8 +270,7 @@ static inline Vec3 vec3_splat(int k) { return (Vec3){ k, k, k }; }
 static inline void actor_set_position(Actor* s, Vec2 p) { s->x=p.x<<8; s->y=p.y<<8; }
 static inline Vec2 actor_get_position(const Actor* s)   { return (Vec2){ s->x>>8, s->y>>8 }; }
 
-/* get_actor rend un acteur VIVANT, ou nil (ROADMAP « L'acteur appartient à sa
-   scène », décision C') : un acteur détruit au runtime (`self:destroy()` →
+/* get_actor rend un acteur VIVANT, ou nil : un acteur détruit au runtime (`self:destroy()` →
    active=0) n'est plus « là », et le dire au script est une information de
    gameplay (« ma cible existe-t-elle encore ? »). Le chemin compile-time de
    get_actor passe donc par ce filtre — coût : un test du drapeau active. */
@@ -337,7 +336,7 @@ static inline void actor_move_to(Actor* s, Vec2 target, int speed) {
    rien seule : c'est le script qui l'applique, via actor_apply_velocity
    (cf. Ball.lua) ou en l'ignorant.
 
-   ROADMAP v0.19 : self.velocity change de SENS — s->vx/s->vy sont Q8, et
+   self.velocity change de SENS — s->vx/s->vy sont Q8, et
    get/set_velocity ne convertissent plus rien (contrairement à la position,
    qui reste pixels). Un script qui lisait/écrivait self.velocity en pixels
    avant cette version doit être migré : c'est la rupture assumée qui rend le
@@ -528,9 +527,7 @@ static inline int input_pressed(int b) {
 }
 
 /* Anneau des masques des derniers frames — `released`, `held(n)` et les
-   séquences en dérivent. Profondeur et emplacements réels définis dans main.c
-   (ROADMAP « Les inputs personnalisés » : calculée au build à partir du plus
-   grand besoin du projet — un jeu sans séquence ni tampon n'en paie pas). */
+   séquences en dérivent. Profondeur et emplacements réels définis dans main.c. */
 extern u16      _g_input_ring[];
 extern int      _g_input_ring_pos;
 extern const int g_input_ring_depth;
@@ -643,7 +640,7 @@ static inline int input_buffered(int action_index, int mask, int frames) {
 /* Position -1/0/1 d'un axe : la différence de deux masques (négatif/positif)
    lus sur _g_keys_held — pas d'état propre. Le codegen résout le NOM de
    l'axe ("horizontal"/"vertical", ou un `InputAxis` déclaré) en cette paire
-   de masques au build (ROADMAP « Les inputs personnalisés ») ; le runtime ne
+   de masques au build ; le runtime ne
    connaît que des boutons. `get_axis(x, y)` compose deux appels dans
    `input_get_vector` — x et y restent lus le même frame, jamais
    désynchronisés. */
@@ -963,7 +960,7 @@ extern int  ui_image_dy(int img);
 static inline Vec2 ui_image_offset(int img) { return (Vec2){ ui_image_dx(img), ui_image_dy(img) }; }
 static inline void ui_image_set_offset(int img, Vec2 v) { ui_image_move(img, v.x, v.y); }
 
-/* save:read(slot, "nom") côté Lua (ROADMAP v0.22) : la valeur d'UNE variable
+/* save:read(slot, "nom") côté Lua : la valeur d'UNE variable
    persistante dans un emplacement, sans toucher aux globales de la partie en
    cours — contrairement à save_read ci-dessus. `idx` est un GLOBAL_*, résolu
    par le codegen depuis le nom littéral (contrairement à global.nom, résolu

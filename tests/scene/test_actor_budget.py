@@ -1,4 +1,4 @@
-"""Le budget d'acteurs DÉRIVÉ d'une scène (ROADMAP v0.17, révision 2026-09-19).
+"""Le budget d'acteurs DÉRIVÉ d'une scène.
 
 Le budget n'est plus réparti entre deux tranches réglables (l'ancien 96/32) : il
 est dérivé. Acteurs posés (et, en B2, OBJ d'interface) se COMPTENT ; le pool est

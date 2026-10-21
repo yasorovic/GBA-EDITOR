@@ -1,4 +1,4 @@
-"""`UIList` est un TYPE, plus un drapeau du conteneur (ROADMAP v0.22, 2026-09-02).
+"""`UIList` est un TYPE, plus un drapeau du conteneur.
 
 Ce que ces tests tiennent, et qui n'a pas de garde ailleurs :
 

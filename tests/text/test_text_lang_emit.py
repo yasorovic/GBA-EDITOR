@@ -1,4 +1,4 @@
-"""`emit_texts_c` gagne une dimension langue (ROADMAP v0.9, phase 3.1).
+"""`emit_texts_c` gagne une dimension langue.
 
 Ce que ces tests protègent :
 
@@ -13,7 +13,7 @@ Ce que ces tests protègent :
 - `g_text_values` (les globals interpolés) est dédupliqué PAR LANGUE, jamais
   partagé entre langues.
 
-Cf. `codegen/font_emit.emit_texts_c` et le design posé dans ROADMAP.md.
+Cf. `codegen/font_emit.emit_texts_c`.
 """
 from __future__ import annotations
 
@@ -86,7 +86,7 @@ def test_la_portee_font_devient_un_evenement_avec_l_index_de_la_police():
 def test_g_text_values_deduplique_par_langue():
     """Un global cité dans une langue et pas l'autre : chaque langue tient sa
     PROPRE table de sources, jamais une partagée (une langue peut réordonner
-    ou omettre ses `$nom`, ROADMAP v0.9)."""
+    ou omettre ses `$nom`)."""
     from codegen.font_emit import emit_texts_c
     t = _text("score", "Score: $score", tid=3)
     contents = {"": "Score: $score", "fr": "Score"}   # FR ne cite pas $score

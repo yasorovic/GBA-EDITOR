@@ -35,7 +35,7 @@ def components_to_bgr555(r5: int, g5: int, b5: int) -> int:
     return ((b5 & 0x1F) << 10) | ((g5 & 0x1F) << 5) | (r5 & 0x1F)
 
 
-# ── La forme ÉCRITE d'une couleur (ROADMAP v0.24) ────────────────────
+# ── La forme ÉCRITE d'une couleur ────────────────────
 # Sur disque, une couleur s'écrit `#39A8FF` et non `20253` : le nombre décimal
 # ne se relit pas — ni en revoyant un diff, ni en ouvrant le fichier — alors
 # que c'est la même donnée. Le passage est EXACTEMENT réversible sur les 32 768

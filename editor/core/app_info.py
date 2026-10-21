@@ -12,11 +12,13 @@ de `.github/workflows/release.yml`). Le sens inverse — un build qui écrase ce
 fichier d'après le tag — ferait dire à un lancement depuis les sources une
 version qu'il n'a pas.
 
-Convention (cf. ROADMAP) : `X.Y.Z-<étiquette>`, l'étiquette toujours écrite.
-`X` = numéro de version, `Y` = jalon standard de la roadmap, `Z` = tout ce qui
-avance d'autre (chantier technique, correction, optimisation). Un jalon sort
-d'abord en `-alpha`, puis `-beta`, puis `-stable`, sous le même numéro :
-`1.0.0-alpha`, `1.0.0-beta`, `1.0.0-stable`.
+Convention : `X.Y.Z-<étiquette>`, l'étiquette toujours écrite.
+`X` = numéro de version (0 tant qu'aucune version n'affirme la stabilité du
+produit), `Y` = jalon standard de la roadmap, `Z` = tout ce qui avance d'autre
+(chantier technique, correction, optimisation). Tant que le produit n'est pas
+stable, l'étiquette est `-alpha` et l'alpha dure jusqu'à `1.0.0-stable`. Le
+compteur est reparti de zéro (2026-10-21) : la version actuelle est `0.1.x`.
+Il n'y a pas encore eu de release publique ; son numéro sera décidé plus tard.
 
 Stdlib seule, et aucune importation : ce module est lu par les scripts de
 packaging, qui n'ont pas les dépendances de l'éditeur.
@@ -24,7 +26,7 @@ packaging, qui n'ont pas les dépendances de l'éditeur.
 
 APP_NAME = "Backstage"
 APP_AUTHOR = "Yasorovic"
-APP_VERSION = "1.0.1-alpha"
+APP_VERSION = "0.1.0-alpha"
 
 # Adresses publiques du produit. Le code qui les lit sait s'en passer si l'une
 # est VIDE (le menu « Documentation » ou l'onglet « Modèles » ne s'affichent

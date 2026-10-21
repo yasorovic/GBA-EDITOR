@@ -30,8 +30,7 @@ def affine_entry(actor, sc, slot: int, force: bool = False, names=None) -> dict 
     plus de chemin statique pré-calculé : le rendu lit rotation/scale/offset
     chaque frame (cf. affine_oam_lines_dynamic).
     """
-    # `force` : l'enfant d'un parent affine qui PARTAGE son slot (ROADMAP
-    # v0.23). Il n'a pas coché `affine_transform` — il n'en réserve aucun — mais
+    # `force` : l'enfant d'un parent affine qui PARTAGE son slot. Il n'a pas coché `affine_transform` — il n'en réserve aucun — mais
     # il lui faut la même entrée pour être émis en OAM affine sur le slot du
     # parent, avec SES propres décalages de sprite.
     if not force and not bool(getattr(sc, "affine_transform", False)):
@@ -97,7 +96,7 @@ def compute_affine_info(actor_offset: int, scene_actors: list, pi: list, names=N
     # ── Enfants sans transform propre : ils PARTAGENT le slot du parent ──
     # Un slot ne contient que pa/pb/pc/pd — la position n'y est pour rien —
     # donc deux OBJ de même rotation et de même échelle peuvent pointer le
-    # même (ROADMAP v0.23). Un enfant qui n'a ni rotation ni échelle propres
+    # même. Un enfant qui n'a ni rotation ni échelle propres
     # hérite EXACTEMENT du transform de son parent : sa matrice est la même.
     # Un boss à six parties qui tourne d'un bloc coûte donc UN slot sur 32,
     # pas sept.
@@ -190,7 +189,7 @@ def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr
     sh, sz = sprite.oam_shape, sprite.oam_size
     tpf    = sprite.tiles_per_frame
 
-    # ROADMAP v0.19 : x/y sont en Q8 en interne (256 = 1 px) ; l'émission OAM
+    # x/y sont en Q8 en interne (256 = 1 px) ; l'émission OAM
     # est UN des deux seuls points d'arrondi du chantier (l'autre est l'entrée
     # de la collision, cf. resolve_actor_tiles). >>8 tronque vers -inf sur un
     # entier signé avec ce compilateur (ARM/GCC, décalage arithmétique) —

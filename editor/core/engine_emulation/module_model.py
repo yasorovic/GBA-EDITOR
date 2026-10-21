@@ -35,7 +35,7 @@ explicitement plutôt que de les cacher :
 Les filtres résonants d'IT, les échantillons stéréo, et les NNA (New Note
 Actions) au-delà de la coupure : maxmod ne les rend pas non plus sur GBA, et
 l'aperçu vise ce que la console jouera, pas ce qu'un lecteur de bureau
-jouerait. Cf. ROADMAP v0.8.8.
+jouerait.
 """
 
 from __future__ import annotations
@@ -106,7 +106,7 @@ LOOP_FORWARD  = 1
 LOOP_PINGPONG = 2
 
 # ── La table d'ordres, telle que la ROM la numérote ───────────────────
-# `mmutil` ne renumérote RIEN (mesuré le 2026-10-11, ROADMAP « L'asset .music ») :
+# `mmutil` ne renumérote RIEN (mesuré le 2026-10-11) :
 # la séquence du soundbank est celle du fichier, marqueurs compris, et
 # `mmGetPosition()` rend l'index BRUT. Avec [0, 254, 1, 255], il passe de 0 à 2
 # (le séparateur est sauté mais occupe l'index 1), puis s'arrête sur le 255.

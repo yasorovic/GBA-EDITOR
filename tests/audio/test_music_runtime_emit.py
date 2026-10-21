@@ -1,7 +1,7 @@
 """Ce que le build émet pour les réglages d'une musique : la table et le C qui la lit.
 
 Le comportement du C lui-même — la section qui boucle, les fondus, le tempo — a été
-MESURÉ sur ROM le 2026-10-11 (ROADMAP « L'asset .music »), en compilant le C
+MESURÉ sur ROM le 2026-10-11, en compilant le C
 réellement généré dans une ROM qui s'auto-mesure. Ces tests tiennent ce qui se
 vérifie sans console : quelle ligne est émise pour quel réglage, et qu'un réglage
 neutre n'en émet aucune.

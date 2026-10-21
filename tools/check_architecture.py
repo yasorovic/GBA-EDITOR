@@ -483,7 +483,7 @@ def main() -> int:
               controle_catalogue(trees, "notices", CITATIONS_NOTICES))
 
     # ── 8. Catalogue de libellés ↔ code ──────────────────────────
-    # Même contrôle, catalogue frère (ROADMAP v0.11) : les libellés d'interface
+    # Même contrôle, catalogue frère : les libellés d'interface
     # extraits vers labels.json. Une clé mal tapée afficherait la clé brute ;
     # une entrée que plus personne ne cite est du texte à traduire pour rien.
     r.section("Catalogue de libellés",

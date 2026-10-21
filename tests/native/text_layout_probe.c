@@ -62,7 +62,7 @@ const int            g_font_count = 0;
 const unsigned char  g_lang_font_0[1] = {0};
 const unsigned char* const g_lang_font[1] = {g_lang_font_0};
 /* Une langue (la source), aucun texte — mêmes types imbriqués que le vrai
-   codegen (ROADMAP v0.9 phase 3) : la sonde ne rend aucun texte de la table,
+   codegen : la sonde ne rend aucun texte de la table,
    elle n'a donc besoin que des symboles pour satisfaire l'éditeur de liens. */
 int g_lang = 0;
 int g_lang_reload = 0;

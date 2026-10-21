@@ -27,7 +27,7 @@ def parent_depths(scene_actors: list) -> tuple[dict, list]:
     Profondeur 0 = pas de parent. C'est ELLE qui donne l'ordre d'émission —
     parents avant enfants — et c'est ce tri au build qui remplace
     l'ordonnanceur, le drapeau de salissure et l'invalidation qu'une hiérarchie
-    au runtime aurait demandés (ROADMAP v0.23). L'ordre d'une frame continue de
+    au runtime aurait demandés. L'ordre d'une frame continue de
     se lire en clair dans le C émis, ce qui était la seule chose à protéger.
 
     Deux fautes sont bloquantes, et pour la même raison : sans profondeur, il
@@ -78,7 +78,7 @@ def actor_box_tags(owner) -> list[str]:
 def actors_can_collide(p, a, b) -> bool:
     """Ces deux acteurs ont-ils UNE SEULE combinaison de tags qui se rencontre ?
 
-    Si non, la paire n'est pas émise du tout (ROADMAP v0.23) : ni bloc de C, ni
+    Si non, la paire n'est pas émise du tout : ni bloc de C, ni
     entrée dans `_col_prev`, ni test par frame. Le gain est donc en ROM autant
     qu'en cycles — c'est la raison de filtrer au BUILD plutôt qu'au runtime.
 

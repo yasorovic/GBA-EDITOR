@@ -12,7 +12,7 @@ checker :
    de champ brut (`runtime_get_actor(…).velocity`), que le checker acceptait et que
    gcc refuse sur une ligne que l'auteur n'a pas écrite.
 
-Le contrat (ROADMAP v0.16, « Amendement du 2026-09-24 ») : la forme chaînée n'est pas
+Le contrat : la forme chaînée n'est pas
 une forme de second rang. Elle donne le MÊME C que via un `local`, ou elle est
 refusée par le checker — jamais ignorée, jamais du C invalide.
 """

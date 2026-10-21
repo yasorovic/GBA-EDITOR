@@ -1,5 +1,5 @@
-"""Un type de référence se déclare dans UNE table (`api.REF_TYPE_TABLE`) — ROADMAP v0.16,
-amendement du 2026-09-24, critère 2.
+"""Un type de référence se déclare dans UNE table (`api.REF_TYPE_TABLE`),
+amendement du 2026-09-24.
 
 Avant, ajouter un type touchait `REF_TYPES`, `C_REF_TYPES` (expr_types), la variable
 des snippets (`_REF_VARIABLE`), un cas spécial du checker (`_is_ui_element`) et un autre du
@@ -194,7 +194,7 @@ def test_toute_cle_de_methode_ou_de_propriete_designe_un_type_connu():
         assert cle.split(".")[0] in proprietes, cle
 
 
-# ── L'héritage : `list` reprend `ui_element` (ROADMAP v0.16, étape c) ──────
+# ── L'héritage : `list` reprend `ui_element` ──────
 
 def test_l_heritage_se_declare_avec_sa_conversion_de_reference():
     """Un type qui a un parent dit AUSSI comment passer à son index : sans `to_base`,

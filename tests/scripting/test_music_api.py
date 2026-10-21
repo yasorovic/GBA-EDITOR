@@ -1,4 +1,4 @@
-"""L'API de musique : surcharger à l'appel ce que l'asset règle (ROADMAP « L'asset .music »).
+"""L'API de musique : surcharger à l'appel ce que l'asset règle.
 
 Tempo, hauteur, fondus et section de boucle se posent sur l'ASSET ; ces six appels les
 surchargent pour la lecture en cours :

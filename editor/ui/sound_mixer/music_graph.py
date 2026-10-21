@@ -1,8 +1,7 @@
 """
 ui/sound_mixer/music_graph.py — Le graphe de la MusicBox.
 
-La MusicBox est la SEULE des trois boîtes à avoir des arêtes (ROADMAP
-v0.8.7) : elle seule est continue, donc elle seule a des transitions. C'est
+La MusicBox est la SEULE des trois boîtes à avoir des arêtes : elle seule est continue, donc elle seule a des transitions. C'est
 aussi la seule où un graphe dit quelque chose qu'une liste ne dit pas — quel
 état mène à quel autre, et par quel déclencheur. Les emplacements (SoundBox,
 JingleBox) restent des tables : ils n'ont pas d'arêtes.

@@ -1,4 +1,4 @@
-"""Le matcheur d'input RÉEL (ROADMAP « Les inputs personnalisés », étape 2) :
+"""Le matcheur d'input RÉEL :
 `held(nom, n)`, `released`, `buffered` et `input_seq_pressed` vivent en C dans
 `runtime/include/runtime_api_inline.h`. Comme `ui_list_probe.c`, il n'y a pas
 de jumeau Python à comparer — c'est de l'arithmétique d'état, pas un rendu que

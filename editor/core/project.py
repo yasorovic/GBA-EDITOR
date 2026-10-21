@@ -43,7 +43,7 @@ d'aujourd'hui » : sans version diffusée, un changement de format se propageait
 en cassant, et un `core/project_migrations.py` a été retiré avec les anciennes
 formes qu'il absorbait.
 
-Ce qui a changé (ROADMAP v0.24) : à plusieurs, l'ancienne forme n'est pas dans
+Ce qui a changé : à plusieurs, l'ancienne forme n'est pas dans
 le passé, elle est **dans la branche d'à côté**. Un coéquipier qui rebase sur
 un fichier écrit avant la bascule doit pouvoir l'ouvrir. Les trois formes
 touchées par ce chantier se relisent donc dans les deux écritures, pour de
@@ -893,8 +893,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
     # ── Build ─────────────────────────────────────────────────────
 
     def prepare_build(self):
-        # Les deux répertoires générés ne sont PLUS effacés ici (ROADMAP
-        # v0.24). Le rmtree répondait au bon risque — le Makefile ramasse
+        # Les deux répertoires générés ne sont PLUS effacés ici. Le rmtree répondait au bon risque — le Makefile ramasse
         # `src/*.c` au glob, donc un asset retiré du projet laissait un `.c`
         # qui continuait d'être compilé — mais il datait à neuf 32 fichiers
         # identiques d'un build à l'autre, et `make` recompilait tout à chaque
@@ -950,7 +949,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         # Pas de clé `name` : le nom du projet EST le nom du fichier
         # (<Nom>.project). L'écrire aussi dans le JSON en ferait un second
         # porteur, à re-synchroniser — exactement ce que « source de vérité
-        # unique » interdit (cf. ROADMAP v0.10).
+        # unique » interdit.
         data = {
             "format_version": PROJECT_FORMAT_VERSION,
             "start_scene": self.settings.start_scene,
@@ -1027,7 +1026,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         self.settings.author      = d.get("author", "")
         self.settings.version     = d.get("version", "0.1")
         # `palette_auto_import_enabled` des anciens project.json est ignoré :
-        # le réservoir auto-import est abandonné (cf. ROADMAP.md v0.2), la clé
+        # le réservoir auto-import est abandonné, la clé
         # disparaît du fichier à la prochaine sauvegarde.
         self.settings.backdrop_color = d.get("backdrop_color", 0)
         # Un projet antérieur à la v0.5 n'a pas d'emplacement déclaré : il en

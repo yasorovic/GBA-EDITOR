@@ -349,7 +349,7 @@ def scene_codepoints(p, scene, code: str = "") -> "set | None":
     citent, on résout leur balisage, on prend les caractères. Un littéral passé
     à `text.draw` est déjà une entrée anonyme et suit le même chemin — et reste
     dans la SOURCE quel que soit `code` : une entrée anonyme n'a pas d'id dans
-    la table, donc pas de traduction possible (ROADMAP v0.9, décision 6).
+    la table, donc pas de traduction possible.
 
     DEUX sources, exactement comme `scene_font_names` : les scripts ET les
     textes AUTHORÉS de la mise en page, que `_gen_ui_texts` écrit à l'init sans
@@ -366,7 +366,7 @@ def scene_codepoints(p, scene, code: str = "") -> "set | None":
     appelée seule par le build : ses deux lecteurs passent tous deux par
     `scene_codepoints_union`, une fois par langue déclarée — le sous-ensemble
     ÉMIS dans la ROM (`_emit_font_subsets`) et la place RÉSERVÉE pour
-    l'accueillir (`scene_text_reservation`). Cf. ROADMAP v0.9, phase 5.1.
+    l'accueillir (`scene_text_reservation`).
 
     Rend None dès qu'un script échappe à l'analyse — même règle et même raison
     que `scene_font_names`."""
@@ -404,8 +404,7 @@ def scene_codepoints(p, scene, code: str = "") -> "set | None":
 
 
 def scene_codepoints_union(p, scene, lang_codes) -> "set | None":
-    """`scene_codepoints`, UNIE sur toutes les langues déclarées (ROADMAP
-    v0.9, décision 4) — ce qui borne le sous-ensemble de glyphes ÉMIS dans la
+    """`scene_codepoints`, UNIE sur toutes les langues déclarées — ce qui borne le sous-ensemble de glyphes ÉMIS dans la
     ROM pour une scène, ET la place réservée pour l'accueillir : le runtime
     charge cette union entière, quelle que soit la langue active (phase 5.1).
 
@@ -1119,7 +1118,7 @@ def _emit_one_text_lang(t, content: str, i_lang: int, i: int,
                         sources: list[str]) -> tuple[list[str], int, str, int]:
     """Les lignes C d'UNE entrée dans UNE langue : (lignes, longueur, nom de
     la table d'événements ou "0", nombre d'événements). Factorisé de
-    `emit_texts_c` (ROADMAP v0.9, phase 3) — même calcul, rejoué une fois par
+    `emit_texts_c` — même calcul, rejoué une fois par
     langue déclarée plutôt qu'une fois pour la source seule.
 
     `sources` est la table des globals de LA LANGUE ENTIÈRE (`g_text_values_<n>`),
@@ -1197,7 +1196,7 @@ def _emit_one_text_lang(t, content: str, i_lang: int, i: int,
                 kind = "TEXT_EV_LOCAL"
             elif m.value in global_names:
                 # Dédoublonnées PAR LANGUE : une traduction peut réordonner ses
-                # `$nom` (ROADMAP), donc citer un global que la source ne cite
+                # `$nom`, donc citer un global que la source ne cite
                 # pas au même rang — chaque langue tient sa PROPRE table de
                 # sources, jamais une partagée entre langues.
                 sym = f"GLOBAL_{m.value.upper()}"
@@ -1220,8 +1219,7 @@ def _emit_one_text_lang(t, content: str, i_lang: int, i: int,
 def emit_texts_c(texts: list, lang_codes: list[str], content_fn,
                  globals_=(), constants=(), emit=None, fonts=()) -> list[str]:
     """Tables C des textes : codepoints affichables, piste d'événements et
-    sources à interpoler — UNE FOIS PAR LANGUE DÉCLARÉE (ROADMAP v0.9, phase
-    3). `lang_codes[0]` est toujours la source ; un projet qui n'a déclaré
+    sources à interpoler — UNE FOIS PAR LANGUE DÉCLARÉE. `lang_codes[0]` est toujours la source ; un projet qui n'a déclaré
     aucune langue passe `[""]` et retrouve exactement les tables d'hier, à
     une dimension de plus qui vaut 1. `g_lang`/`g_lang_reload` (posés ici,
     une seule fois pour le projet) sont ce que `lang.set` écrit (phase 4) —
@@ -1317,7 +1315,7 @@ def emit_texts_c(texts: list, lang_codes: list[str], content_fn,
 def emit_lang_fonts_c(font_names: list[str], languages: list,
                       default_font: str = "") -> list[str]:
     """`g_lang_font[lang][police]` — la police EFFECTIVEMENT chargée pour une
-    police du PROJET, dans une langue donnée (ROADMAP v0.9, phase 3.2).
+    police du PROJET, dans une langue donnée.
 
     `font_names` est l'ordre de `project_fonts()` — le même que `g_fonts` et
     les `#define FONT_*` (`main_gen`/`lua_compiler`, même source de vérité

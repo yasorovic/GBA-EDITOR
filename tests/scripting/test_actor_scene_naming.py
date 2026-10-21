@@ -1,4 +1,4 @@
-"""L'acteur appartient à sa scène (ROADMAP « L'acteur appartient à sa scène »).
+"""L'acteur appartient à sa scène.
 
 Son NOM est local à la scène — deux scènes peuvent chacune poser un « Cursor » —
 tandis que son SYMBOLE C est qualifié par la scène (`<Scène>_<Acteur>`), comme un

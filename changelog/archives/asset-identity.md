@@ -3,7 +3,7 @@
 > **Chantier technique** — il ne livre rien de visible pour qui joue au jeu produit avec
 > l'éditeur, seulement des assets qui cessent de se dédoubler. Il n'a donc ni numéro `vX.Y`,
 > ni ligne au [README](../../README.md), ni entrée au [CHANGELOG](../CHANGELOG.md) : c'est la
-> convention des [chantiers techniques](../../ROADMAP.md#chantiers-techniques).
+> convention des [chantiers techniques](../../docs/development/TODO.md#état-des-pistes).
 
 > **Livré le 2026-09-02.** Le nom de fichier fait foi, un asset dont la source a disparu est
 > raccroché au fichier qui porte son nom, et un renommage n'est plus une suppression suivie

@@ -3,7 +3,7 @@
 La police a quitté ce module pour `core/models/font.py` quand elle a cessé
 d'être un stub (glyphes, grille, charset dérivé).
 
-Les formats acceptés (ROADMAP v0.8.1, élargie en v0.8.8) : les quatre modules
+Les formats acceptés : les quatre modules
 que maxmod sait jouer — `.mod`, `.s3m`, `.xm`, `.it` — et `.wav` PCM 8/16 bits
 pour les effets, ainsi que pour une musique (encapsulé en module au build). Tout le reste est refusé à l'import par `check_audio_file`.
 
@@ -21,7 +21,7 @@ from core.models import asset_extensions
 # ── Les niveaux sont des POURCENTAGES ─────────────────────────────────
 #
 # maxmod a DEUX échelles de volume, et les confondre est le défaut que ce
-# passage corrige (ROADMAP v0.8.5) :
+# passage corrige :
 #
 #   mm_sound_effect.volume   0–255   (mm_byte, par effet)
 #   mmSetModuleVolume        0–1024
@@ -58,7 +58,7 @@ def volume_to_module(percent: int) -> int:
 # La hauteur est un FACTEUR 6.10 (`mm_sound_effect.rate`) : 1024 = la hauteur
 # d'origine de l'échantillon. Le panning est un OFFSET : 0 à gauche, 128 au
 # centre, 255 à droite — d'où une conversion qui n'est pas une mise à
-# l'échelle, mais un décalage autour du centre (ROADMAP v0.8.6).
+# l'échelle, mais un décalage autour du centre.
 
 _RATE_NORMAL = 1024     # mm_sound_effect.rate — facteur 6.10, 1024 = normale
 PAN_CENTER  = 128      # mmEffectPanning : 0 = gauche, 255 = droite
@@ -69,7 +69,7 @@ PANNING_MAX = 100       # l'API Lua écrit −100..+100, centrée sur 0
 
 # ── Les canaux logiciels, et ce qu'ils coûtent ────────────────────────
 #
-# Mesuré au désassemblage de `mmInitDefault` (ROADMAP v0.8.8) : elle alloue
+# Mesuré au désassemblage de `mmInitDefault` : elle alloue
 # `92 × n + 1056` octets, soit 40 o de voie de module, 28 o de voie active et
 # 24 o de voie de mixage par canal, plus le tampon de mixage du mode 16 kHz.
 # Les trois tailles sont aussi dans `maxmod.h` (MM_SIZEOF_MODCH/ACTCH/MIXCH) —
@@ -201,7 +201,7 @@ class Sfx(_MigrateVolumeMixin, Resource):
     #
     # Le ré-échantillonnage a lieu au BUILD, vers le dossier de build ; le
     # fichier de `assets/` n'est jamais réécrit. On peut donc remonter le taux
-    # après coup sans avoir rien perdu (ROADMAP v0.8.1).
+    # après coup sans avoir rien perdu.
     sample_rate: int = 0
     # La plage GARDÉE du fichier, en ms depuis son début. Le fichier n'est jamais touché : le build ne rend que cette
     # plage (cf. `core/sfx_render.py`), et le poids ROM suit. `trim_end` à 0 = jusqu'à la fin du fichier ; les deux à
@@ -244,7 +244,7 @@ SFX_PITCH_VARIATION_MAX = 50
 # sans sidecar) — utilisées à la fois par la resynchronisation au chargement
 # du projet (Project.load) et par le ProjectWatcher pour le live-reload.
 #
-# La règle qui produit ces deux listes (ROADMAP v0.8.1) : on n'accepte que ce
+# La règle qui produit ces deux listes : on n'accepte que ce
 # que la chaîne sait CONSTRUIRE et que l'éditeur sait FAIRE ÉCOUTER.
 #   - musique : les QUATRE formats de maxmod, depuis la v0.8.8. La liste ne
 #     s'est pas allongée par exception : c'est l'aperçu qui a rattrapé le
@@ -314,7 +314,7 @@ def sfx_rom_bytes(path) -> Optional[int]:
 # ── Les sections d'une musique ────────────────────────────────────────
 #
 # Une section est une plage NOMMÉE du morceau, que l'auteur pose par-dessus le
-# fichier sans jamais le toucher (ROADMAP « L'asset .music »). L'unité dépend de
+# fichier sans jamais le toucher. L'unité dépend de
 # la source, et le sidecar l'écrit lui-même (`Music.unit`) :
 #
 #   "order"  un module tracker — un INDEX BRUT de la table d'ordres, celui que
@@ -348,8 +348,7 @@ class MusicSection:
 
 # ── Les repères d'une musique ─────────────────────────────────────────
 #
-# Un repère déclenche un SON quand la lecture atteint une position du morceau (ROADMAP « Des déclencheurs sur la
-# musique »). Quatre natures, les quatre façons dont l'éditeur de sprites pose déjà un son sur une frame, moins
+# Un repère déclenche un SON quand la lecture atteint une position du morceau. Quatre natures, les quatre façons dont l'éditeur de sprites pose déjà un son sur une frame, moins
 # l'appel d'événement (qui n'a pas encore de destinataire : une musique n'a pas d'acteur) :
 #
 #   "sound_action"   une ACTION de SoundBox : l'état courant de la boîte dit vers quel effet elle pointe ;

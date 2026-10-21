@@ -1,5 +1,4 @@
-"""Parseur pur du mini-langage d'expressions d'input (ROADMAP : « Les inputs
-personnalisés »). Source unique de la grammaire : l'écran des actions (barre +
+"""Parseur pur du mini-langage d'expressions d'input. Source unique de la grammaire : l'écran des actions (barre +
 aperçu), le checker et le codegen appellent CE module — il n'existe pas de
 seconde grammaire.
 

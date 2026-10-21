@@ -53,7 +53,7 @@ class RefType:
     en dehors de son catalogue.
 
     Ajouter un type se réduit à trois gestes, et à AUCUN cas spécial dans le
-    checker ou le codegen (ROADMAP v0.16, critère 2 de l'amendement) :
+    checker ou le codegen :
 
     1. UNE ligne dans `REF_TYPE_TABLE` ci-dessous ;
     2. les entrées du catalogue : la fabrique (`ret=<type>`), les méthodes sous
@@ -244,7 +244,7 @@ class ApiProp:
     pointé (`self.position`, `camera.bound`) plutôt que par un appel get/set.
 
     La frontière est celle de la grammaire (ARCHITECTURE, « La grammaire de
-    l'API » ; ROADMAP v0.7.4) : ce qui est un état de l'objet (`self.position`)
+    l'API ») : ce qui est un état de l'objet (`self.position`)
     se lit/s'écrit comme un champ ; ce qui est une ACTION (`self:play_anim`)
     reste un appel. Une propriété composite
     (PARAM_VEC2 / PARAM_RECT) est une valeur IMMUABLE : on lit `self.position.x`
@@ -437,8 +437,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
             "Useful for acceleration or gravity, frame after frame.",
     ),
     # Le pendant manquant de self.velocity depuis que sa réponse à « comment
-    # l'auteur exprime une vélocité fractionnaire » (ROADMAP v0.19,
-    # 2026-08-20) est « self.velocity devient Q8 » : sans cet appel, un
+    # l'auteur exprime une vélocité fractionnaire » est « self.velocity devient Q8 » : sans cet appel, un
     # sous-pixel accumulé n'a nulle part où s'appliquer — self.position ne
     # rend et n'accepte que des pixels entiers, donc `self.position =
     # self.position + self.velocity` n'a plus de sens dimensionnel. C'est lui
@@ -577,7 +576,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
     ),
     # self.name (lecture seule) et self.pal : cf. RUNTIME_PROPS.
 
-    # ── Cycle de vie : les cinq verbes (ROADMAP v0.16, critère 3) ────
+    # ── Cycle de vie : les cinq verbes ────
     # La SEULE porte d'écriture de « visible » et « actif » ; l'état se lit par
     # `self.visible` / `self.active`, en lecture seule. `destroy` est plus haut.
     "actor:show": ApiFunc(
@@ -654,7 +653,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
         # née (chantier « Les exports de script », tranche poolé). variadic pour
         # que le checker l'accepte ; sa validation dédiée vit dans _check_spawn_table.
         variadic=True,
-        ret="actor",   # rend l'instance née, ou nil si le pool est plein (ROADMAP v0.17 T6)
+        ret="actor",   # rend l'instance née, ou nil si le pool est plein
         doc=("Instantiates a pooled prefab at `position` (a vec2) and returns the new "
              "instance, or nil if the pool is full. An optional table sets its "
              "exports: actor:spawn(\"Bullet\", pos, { speed = 8, team = \"RED\" }); absent"
@@ -678,7 +677,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
              " Ex: for i=1,actor:count() do local a=actor:get(i) ... end."),
     ),
 
-    # ── Éléments d'interface, typés (ROADMAP v0.16, étape c) ─────────
+    # ── Éléments d'interface, typés ─────────
     # `interface:get("Nom")` rend une référence du TYPE RÉEL de l'élément, lu dans la
     # mise en page au build : `list`, `image`, `textBox`, ou `ui_element` pour un
     # conteneur. Les membres d'un élément vivent sur SON type — `menu.index`,
@@ -755,8 +754,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
     ),
 
     # ── Input ──────────────────────────────────────────────────────
-    # `held`/`pressed` gardent leur nom (ROADMAP « Les inputs personnalisés »,
-    # décision verrouillée) ; `n` optionnel sur `held` est vérifié à part
+    # `held`/`pressed` gardent leur nom ; `n` optionnel sur `held` est vérifié à part
     # (`checker._check_input_call`) — `variadic` n'existe que pour ça, ce
     # n'est pas une vraie fonction à arité libre. Les quatre ne lisent qu'un
     # ACCORD (bouton ou InputBinding) — jamais une séquence, qui a son propre
@@ -990,7 +988,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
 
     # Les DEUX transitions du matériel. Il n'y en a pas de troisième : maxmod
     # n'a qu'une couche de module qui boucle, donc aucun fondu enchaîné n'est
-    # possible sur cette console (cf. ROADMAP v0.8.3).
+    # possible sur cette console.
     "music.fade_to": ApiFunc(
         lua_name="music.fade_to", c_func="music_fade_to",
         params=[Param("name", PARAM_STR, DOMAIN_MUSIC),
@@ -1017,7 +1015,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
         doc="Switches to another scene at the start of the next frame.",
     ),
 
-    # ── Langue (ROADMAP v0.9, phase 4) ───────────────────────────────
+    # ── Langue ───────────────────────────────
     # Rien de plus que ces deux appels : la police EFFECTIVE (`g_lang_font`,
     # phase 3.2) et le sous-ensemble de glyphes ÉMIS (union de toutes les
     # langues, phase 3.3) sont déjà prêts pour n'importe laquelle — changer
@@ -1057,7 +1055,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
     # les résolvent directement contre `project.globals`/`.constants` — un
     # accès direct en C (g_nom / CONST_NOM), jamais un appel de fonction.
     # Lecture seule côté constante : `const.nom = …` est refusé par le
-    # checker (`_check_const_write`). Un tableau (ROADMAP v0.20) s'indexe :
+    # checker (`_check_const_write`). Un tableau s'indexe :
     # `global.nom[i]`, lecture ET écriture, borné par `_check_global_indexed`.
 
     # ── Tableaux ───────────────────────────────────────────────────
@@ -1077,7 +1075,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
             "size.",
     ),
 
-    # ── Diagnostic (ROADMAP v0.14) ───────────────────────────────────
+    # ── Diagnostic ───────────────────────────────────
     # Ni int ni string : chaque argument peut être l'un ou l'autre, ce
     # qu'aucun PARAM_* existant ne décrit — d'où params=[] plutôt qu'un type
     # inventé qui mentirait sur la moitié des appels. Résolu par codegen, pas
@@ -1485,7 +1483,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
     # touche à aucune globale de la partie en cours. C'est ce qui manquait
     # pour peindre un écran de sélection de partie (chapitre, temps de jeu,
     # nom) sans écraser une partie déjà en cours pour aller regarder les
-    # autres emplacements (ROADMAP v0.22). Même nom que `global_read` en C,
+    # autres emplacements. Même nom que `global_read` en C,
     # pour le même sens : rendre une valeur par référence, rien d'autre.
     "save.read": ApiFunc(
         lua_name="save.read", c_func="_save_read",   # résolu par codegen
@@ -1548,7 +1546,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
 # ─── Propriétés (RUNTIME_PROPS) ────────────────────────────────────
 # L'autre versant de l'API : ce qui est un ÉTAT d'objet se lit/s'écrit par accès
 # pointé (`self.position`, `camera.bound`) au lieu d'un appel get/set. La
-# frontière est celle de la grammaire (ROADMAP v0.7.4) :
+# frontière est celle de la grammaire :
 #   - position, vélocité, rotation, échelle d'un actor → self.*
 #   - position et zone scrollable de la caméra → camera.*
 #   - taille du monde de la scène → scene.size (lecture seule, .w/.h)
@@ -1628,7 +1626,7 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
     ),
 
     # ── Actor — physique ───────────────────────────────────────────
-    # ROADMAP v0.19 (2026-08-20) : unité Q8 (256 = 1 px), pas des pixels — la
+    # unité Q8 (256 = 1 px), pas des pixels — la
     # rupture assumée qui rend le sous-pixel utilisable sans un second nom
     # (self.velocity_q8) à côté de self.velocity. 128 = un demi-pixel/frame,
     # 256 = un pixel/frame, 384 = un pixel et demi/frame. self.position, elle,
@@ -1645,7 +1643,7 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
     # ── Actor — état général ───────────────────────────────────────
     # `visible` et `active` se LISENT ici ; ils s'écrivent par les verbes
     # `:show()` / `:hide()` / `:activate()` / `:deactivate()` — une seule porte
-    # d'écriture (ROADMAP v0.16, critère 3).
+    # d'écriture.
     "actor.visible": ApiProp(
         lua_name="actor.visible", c_getter="actor_get_visible",
         ptype=PARAM_BOOL, self_first=True, read_only=True,
@@ -2047,7 +2045,7 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
 #
 # {clé retirée: message de migration}. VIDE avant la 1.0 : tant que l'API
 # bouge encore, une suppression est un RETRAIT SEC — l'ancien nom devient
-# « inconnu », sans guide (ROADMAP v0.16). Le guidage de migration redevient
+# « inconnu », sans guide. Le guidage de migration redevient
 # un engagement le jour où la 1.0 fige l'API : c'est là qu'une entrée par
 # suppression retrouvera son sens, sur une surface qu'on promet stable.
 
@@ -2058,8 +2056,7 @@ REMOVED_API: dict[str, str] = {}
 # mais des noms de fonction de PREMIER NIVEAU (des handlers), qui ne passent
 # jamais par `REMOVED_API` (celui-ci ne couvre que les appels `récepteur:méthode`
 # ou `module.fonction`). Retrait sec ailleurs, mais nous avons explicitement
-# demandé un message ici (ROADMAP « Les inputs personnalisés », tranche
-# finale, 2026-09-27) : aucun `.lua`/doc/démo du dépôt ne les utilisait déjà,
+# demandé un message ici : aucun `.lua`/doc/démo du dépôt ne les utilisait déjà,
 # donc un guide ne coûte rien et évite la confusion avec `input:pressed`.
 REMOVED_EVENTS: dict[str, str] = {
     name: (f"Event '{name}' no longer exists: write if input:pressed(\"{btn}\") then ... end "
@@ -2214,7 +2211,7 @@ API_MODULES: frozenset[str] = frozenset(
 # (`camera.bound`, `scene.frame`), son action `module:action(…)` (`music:play("Combat")`,
 # `input:pressed("A")`, `save:write(0)`, `text:draw(…)`, `layer:get(0)`), exactement comme
 # `menu.index` et `menu:hide()` sur une instance. Le module et le type ne se distinguent que
-# par leur durée de vie, jamais par une ponctuation à mémoriser (ROADMAP v0.16).
+# par leur durée de vie, jamais par une ponctuation à mémoriser.
 #
 # Une seule EXCEPTION, nommée : une bibliothèque sans état ni identité runtime garde
 # l'appel pointé — `math.abs(x)` —, parce que `math` n'est pas un récepteur du moteur.
@@ -2451,7 +2448,7 @@ KNOWN_SCENE_EVENTS: list[str] = [
 
 # Points d'entrée d'une CAMÉRA — les mêmes, moins `on_late_update` : le moteur
 # n'exécute le script d'une caméra qu'à un seul moment de la frame (juste après
-# le suivi déclaratif, cf. ROADMAP v0.6.1). Deux hooks s'y enchaîneraient sans
+# le suivi déclaratif). Deux hooks s'y enchaîneraient sans
 # que rien ne les sépare, donc l'un d'eux serait un mensonge.
 KNOWN_CAMERA_EVENTS: list[str] = [
     "on_start",
@@ -2479,7 +2476,7 @@ def scene_event_sig(scene_sym: str, event: str, kind: str = "scene") -> str:
     """Signature C namespacée pour un hook sans `self`.
 
     `kind` nomme la famille de propriétaire : une CAMÉRA a exactement les mêmes
-    points d'entrée qu'une scène (cf. ROADMAP v0.6.1) et emprunte donc toute
+    points d'entrée qu'une scène et emprunte donc toute
     cette machinerie — seul le mot dans le symbole change, pour qu'un
     `camera_Boss_camera_on_update` ne prétende pas être une scène."""
     return f"void {scene_sym}_{kind}_{event}(void)"

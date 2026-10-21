@@ -49,7 +49,7 @@ def frame_action_ids(p: Project, sprite: SpriteAsset) -> list[int]:
 
 
 def frame_sfx_syms(p: Project, sprite: SpriteAsset) -> list[tuple[str, int]]:
-    """Le Sfx DIRECT de chaque frame du sprite (ROADMAP v0.8.9), dans l'ordre
+    """Le Sfx DIRECT de chaque frame du sprite, dans l'ordre
     ABSOLU des frames — même patron que `frame_action_ids`, mais résolu au
     nom du Sfx lui-même : pas d'indirection par un espace de noms d'actions,
     `AnimFrame.direct_sfx_name` VISE déjà un Sfx du projet. La constante `SFX_*`
@@ -105,8 +105,7 @@ def _actor_script_functions(p: Project, actor: Actor) -> set[str]:
 
 
 def actor_frame_event_lines(p: Project, actor: Actor, sprite: SpriteAsset) -> tuple[list[str], bool]:
-    """Table de pointeurs de fonction EventCall pour CET actor (ROADMAP
-    v0.8.9) — PAS pour son sprite : contrairement à `frame_action_ids`/
+    """Table de pointeurs de fonction EventCall pour CET actor — PAS pour son sprite : contrairement à `frame_action_ids`/
     `frame_sfx_syms`, la cible d'un EventCall est une fonction du script de
     l'actor, donc deux actors qui partagent le même sprite peuvent résoudre
     le même `event_name` vers deux fonctions différentes (ou aucune). La
@@ -176,7 +175,7 @@ def anim_tables_for(p: Project, sprite: SpriteAsset) -> list[str]:
     # Conséquence ASSUMÉE de la déduplication par séquence : une source et son
     # miroir partagent leur bloc, donc leur effet. C'est voulu (le pas est le
     # même à gauche et à droite) ; deux états identiques le partagent aussi, et
-    # qui veut les différencier renonce au miroir (ROADMAP v0.8.5).
+    # qui veut les différencier renonce au miroir.
     frame_actions = frame_action_ids(p, sprite)
 
     L: list[str] = [
@@ -199,7 +198,7 @@ def anim_tables_for(p: Project, sprite: SpriteAsset) -> list[str]:
             "/* Slot played on arriving at the frame — -1 = none. */",
             f"static const s16 {sym}_frame_action[] = {{{','.join(str(a) for a in frame_actions)}}};",
         ]
-    # Sfx DIRECT par frame (ROADMAP v0.8.9) — même garde qu'au-dessus : une
+    # Sfx DIRECT par frame — même garde qu'au-dessus : une
     # table de -1 ne vaut pas la ROM qu'elle coûterait.
     frame_sfx = frame_sfx_syms(p, sprite)
     if any(s != "-1" for s, _v in frame_sfx):
@@ -237,11 +236,11 @@ def anim_tick_lines(idx: int, sym: str, has_frame_sfx: bool = False,
 
     `has_frame_sfx` dit si le sprite porte des ACTIONS de SoundBox sur ses
     frames (`{sym}_frame_action[]`), `has_frame_direct_sfx` s'il porte des Sfx
-    DIRECTS (`{sym}_frame_sfx[]`, ROADMAP v0.8.9) — deux tables indépendantes,
+    DIRECTS (`{sym}_frame_sfx[]`) — deux tables indépendantes,
     chacune son propre test, pour ne pas payer une comparaison par frame et
     par acteur sur les sprites qui n'en portent aucune.
 
-    `event_lines`/`has_frame_events`/`actor_sym` : EventCall (ROADMAP v0.8.9).
+    `event_lines`/`has_frame_events`/`actor_sym` : EventCall.
     Contrairement aux deux précédents, la table (`{actor_sym}_frame_event`,
     cf. `actor_frame_event_lines`) est par ACTOR et non par sprite — deux
     actors qui partagent un sprite peuvent résoudre le même `event_name` vers
@@ -341,7 +340,7 @@ def anim_tick_lines(idx: int, sym: str, has_frame_sfx: bool = False,
 
 # ── Apparences ────────────────────────────────────────────────────────
 # Un acteur affiche UN sprite (une entrée OAM), mais ce sprite peut être l'un de
-# plusieurs : `OamEntry.appearance` dit lequel (ROADMAP, marche 3). Chaque
+# plusieurs : `OamEntry.appearance` dit lequel. Chaque
 # apparence garde ses constantes de build (base de tuiles, forme, taille,
 # origine, tables d'animation) — le C reste déroulé par entrée, il l'est
 # désormais aussi par apparence. Un acteur à UNE apparence émet exactement le C

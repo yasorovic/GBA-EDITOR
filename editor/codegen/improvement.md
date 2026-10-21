@@ -29,8 +29,7 @@ d'UI avec son index au lieu de 0.
 
 ## OAM — liste libre d'entrées au spawn
 
-**Origine.** Le pool ne dépend plus de l'OAM (ROADMAP, « Le pool ne dépend plus de l'OAM »,
-2026-10-20). Les entrées se distribuent à la construction du layout : les `granted` premières
+**Origine.** Le pool ne dépend plus de l'OAM. Les entrées se distribuent à la construction du layout : les `granted` premières
 instances d'un pool ont leurs entrées OAM, les suivantes vivent sur l'entrée poubelle et ne
 s'affichent jamais. Le spawn prend le premier slot libre, donc les instances affichées sont
 celles de tête.

@@ -4,7 +4,7 @@ Le détail complet de chaque entrée du [CHANGELOG](../CHANGELOG.md) : le pourqu
 décisions verrouillées, les pièges rencontrés, les mesures — extrait de la roadmap au moment
 où chaque version a été livrée, pour que ni l'un ni l'autre ne devienne illisible.
 
-Un fichier par version — et un par [chantier technique](../../ROADMAP.md#chantiers-techniques)
+Un fichier par version — et un par [chantier technique](../../docs/development/TODO.md#état-des-pistes)
 refermé, référencé par son nom plutôt que par un numéro : un chantier technique ne touche ni le
 CHANGELOG ni le README, mais sa discussion se range ici comme les autres. Rien n'est perdu :
 c'est ici qu'on vient rouvrir une décision passée avec le contexte complet qui l'a motivée,

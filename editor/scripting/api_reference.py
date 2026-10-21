@@ -37,7 +37,7 @@ _MISC_FALLBACK  = "Other"
 # ─── `group` interne des catégories ─────────────────────────────────
 # Étiquette héritée que chaque catégorie porte encore (dans le JSON, ou posée
 # par les fallbacks ci-dessous). Elle ne pilote plus AUCUNE navigation depuis
-# le rangement par sections (ROADMAP v0.16) : les trois « grosses parties »
+# le rangement par sections : les trois « grosses parties »
 # Gameplay/Scripting/Hardware ont disparu de la sidebar, remplacées par une
 # navigation unique par NOM (cf. `SECTIONS`). On garde le champ tel quel pour
 # ne pas toucher au JSON — il n'a simplement plus de lecteur.
@@ -49,7 +49,7 @@ _FALLBACK_GROUP: dict[str, str] = {
     _MISC_FALLBACK:  GROUP_GAMEPLAY,
 }
 
-# ─── Les sections — une par CHOSE qu'on tient (ROADMAP v0.16) ───────
+# ─── Les sections — une par CHOSE qu'on tient ───────
 # La navigation de la sidebar. Chaque section absorbe plusieurs des 24
 # catégories du catalogue, qui deviennent de simples SOUS-TITRES en son sein
 # (`blend` reste `blend` pour qui le connaît, mais cesse d'être une porte
@@ -71,7 +71,7 @@ SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 # ─── La couche MOTEUR — repliée sous « Aller plus loin » ────────────
 # La frontière itération / moteur est une MARQUE sur l'entrée, pas une seconde
-# navigation (ROADMAP v0.16) : dans chaque section, l'itération se montre, le
+# navigation : dans chaque section, l'itération se montre, le
 # moteur se replie. Elle est PLUS FINE que la catégorie — `sfx.play` est de
 # l'itération, `sound_box.set_state` du moteur, alors qu'ils partagent « Audio »
 # —, d'où une liste d'entrées et non de catégories. Curée à la main, comme
@@ -91,7 +91,7 @@ _ENGINE_KEYS: frozenset[str] = frozenset({
     # mais les cacher sous un vague « Aller plus loin » les rendait
     # indécouvrables. Elles vivent plus bas dans des sous-groupes nommés de
     # la section Sound, avec leur préfixe complet.
-    # L'interface : le module moteur nommé par la ROADMAP. `text.*` (afficher un
+    # L'interface : le module moteur. `text.*` (afficher un
     # texte ponctuel) reste l'itération ; les zones nommées et images
     # sont le moteur.
     "interface.get", "ui_element:show", "ui_element:hide", "ui_element.visible",
@@ -484,7 +484,7 @@ def get_categories() -> list[dict]:
 
 
 def get_sections(show_extended_audio: bool = True) -> list[dict]:
-    """`get_categories()`, regroupée en sections (ROADMAP v0.16) — la
+    """`get_categories()`, regroupée en sections — la
     navigation de la sidebar.
 
     Rend, dans l'ordre de `SECTIONS`, une liste de

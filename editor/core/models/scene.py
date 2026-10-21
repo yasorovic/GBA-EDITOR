@@ -246,13 +246,13 @@ class Prefab(Resource, ComponentOwnerMixin):
     # template — jamais posé nulle part — et ne sont jamais sérialisés ici
     # (cf. to_dict) : c'est le TYPE qui est réutilisé, pas le sens de la pose.
     actor: "Actor" = field(default_factory=lambda: Actor(name="Prefab"))
-    # (Le pool se déclare sur la SCÈNE — `Scene.prefab_pools`, ROADMAP v0.17 —
+    # (Le pool se déclare sur la SCÈNE — `Scene.prefab_pools` —
     # parce que combien d'exemplaires vivent en même temps est une propriété du
     # niveau, pas du template. L'ancien champ `Prefab.max_instances` a été retiré
     # en T7 : la compilation par scène l'a rendu inerte — plus aucun repli ne le
     # lisait — et le garder aurait laissé croire qu'il pilotait encore un pool.
     # `from_dict` ignore la clé si un vieux projet la porte encore.)
-    # Le SOUS-ARBRE du template (ROADMAP v0.23) : un prefab est un arbre, pas
+    # Le SOUS-ARBRE du template : un prefab est un arbre, pas
     # un objet plat — c'est ce que le `PackedScene` de Godot a de bon, et on
     # n'en prend que ceci. Une chenille à cinq anneaux ou un mini-boss segmenté
     # redevient spawnable.
@@ -384,7 +384,7 @@ class Actor(ComponentOwnerMixin):
     # celui d'avant pour un acteur de monde).
     screen_space: bool = False
     # Nom de l'acteur DE LA MÊME SCÈNE dans le repère duquel ma position est
-    # exprimée (ROADMAP v0.23). Vide = aucun parent, ce qu'étaient tous les
+    # exprimée. Vide = aucun parent, ce qu'étaient tous les
     # acteurs avant cette version.
     #
     # Ce n'est PAS de l'héritage : « ma position est exprimée dans le repère de
@@ -461,7 +461,7 @@ def actor_descendant_names(actors: list, name: str) -> set:
     """Noms des acteurs qui descendent de `name` (lui exclu), calculés depuis
     `Actor.parent`. Source unique pour le garde-fou anti-cycle (inspecteur,
     drop dans l'arbre de scène) et pour faire suivre un sous-arbre entier
-    quand son parent est déplacé dans le canvas (ROADMAP v0.23)."""
+    quand son parent est déplacé dans le canvas."""
     children_of: dict = {}
     for a in actors:
         par = getattr(a, "parent", None)
@@ -479,7 +479,7 @@ def actor_descendant_names(actors: list, name: str) -> set:
 def actor_prefab_linked(actor: "Actor", prefab: "Prefab") -> bool:
     """« Linké » (True) si `actor` reste sur le MÊME chemin de compilation que
     son prefab, « unlinké » (False) s'il en a dérivé — la distinction que le
-    projet a choisie pour ce statut (ROADMAP, décision du 2026-08-21) : ce qui
+    projet a choisie pour ce statut : ce qui
     ne change pas ce qui se compile ne change pas la nature du prefab.
 
     Ce qui compte : les components eux-mêmes (type, ordre, id — ils décident
@@ -521,7 +521,7 @@ class WindowSlot:
     Défaut = tout traverse (visible=False, tous les layers_shown à True,
     obj_shown=True) : ajouter une window sans rien configurer ne doit RIEN
     cacher — l'utilisateur restreint ensuite, jamais l'inverse (neutralité
-    de style, cf. ROADMAP v0.3.2)."""
+    de style)."""
     name: str = ""       # identité de l'intention — vide/ignoré si is_obj
     is_obj: bool = False  # fenêtre-objet (pas de géométrie propre, jamais allouée)
     x: int = 0
@@ -574,8 +574,8 @@ class Scene(Resource):
     render_mode: int = 0
     # Transition jouée en QUITTANT cette scène et en l'OUVRANT — "" = celle du
     # projet. Chaque scène décrit sa propre disparition et sa propre apparition,
-    # il n'y a donc jamais de conflit entre les deux scènes d'une bascule
-    # (cf. ROADMAP v0.6.2). Résolu au build par transition_of().
+    # il n'y a donc jamais de conflit entre les deux scènes d'une bascule.
+    # Résolu au build par transition_of().
     transition_kind: str = TRANSITION_INHERIT   # "" | none | fade_black | fade_white
     transition_frames: int = 16                 # durée d'UNE moitié, ignorée si héritée
     # Musique de la scène — MUSIC_INHERIT ("") = ne touche pas à ce qui joue,

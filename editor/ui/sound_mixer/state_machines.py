@@ -1,7 +1,7 @@
 """
 ui/sound_mixer/state_machines.py — Les trois boîtes de l'écran Son.
 
-L'écran édite TROIS assets indépendants (ROADMAP v0.8.7), qui ne se
+L'écran édite TROIS assets indépendants, qui ne se
 ressemblent pas et ne s'affichent donc pas pareil :
 
     MusicBox   états + ARÊTES  → un graphe déplaçable + un inspecteur

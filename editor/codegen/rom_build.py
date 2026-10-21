@@ -305,7 +305,7 @@ class BuildWorker(EventEmitter, threading.Thread):
                 # Toutes les apparences de la racine sont résidentes (marche 3).
                 for _c, _pf_sprite in owner_appearances(p, pf):
                     prefab_actor_sprites.append((pf, _pf_sprite))
-                # Les PARTIES d'un prefab segmenté (ROADMAP v0.23) : chacune a
+                # Les PARTIES d'un prefab segmenté : chacune a
                 # son propre sprite, qui doit être chargé en VRAM comme celui de
                 # la racine. Sans ça, un bras serait émis en OAM sur des tuiles
                 # qui n'ont jamais été copiées. Une partie sans sprite est un
@@ -442,7 +442,7 @@ class BuildWorker(EventEmitter, threading.Thread):
             if ok:
                 # `generate_runtime_api` a encore besoin de l'union (ANIM_* par
                 # SpriteAsset) ; la taille de `g_actors` et les ACTOR_/POOL_, eux,
-                # sont dérivés par scène de `scene_oam_layout` (ROADMAP v0.17).
+                # sont dérivés par scène de `scene_oam_layout`.
                 all_sa = [(a, s) for d in all_scene_data for a, s in d["scene_actors"]]
                 ok = self._step_generate_actor_headers(
                     p, all_sa, sound_assets, all_scenes=all_scenes,
@@ -469,7 +469,7 @@ class BuildWorker(EventEmitter, threading.Thread):
 
             # Transpilation Lua → C pour chaque scène. Les caméras sont des
             # assets PARTAGÉS (compilés une fois). Les prefabs, eux, sont
-            # RECOMPILÉS par scène depuis le pool par scène (ROADMAP v0.17, T1) :
+            # RECOMPILÉS par scène depuis le pool par scène :
             # chaque scène émet `actor_<Scène>_<Prefab>.c` contre SA géométrie
             # (POOL_<Scène>_<Prefab>_*), donc plus de garde `compiled_prefabs`.
             compiled_cameras: set[str] = set()
@@ -496,7 +496,7 @@ class BuildWorker(EventEmitter, threading.Thread):
                 )
             if ok: self._emit("progress", 0.88)
             # Le balayage remplace le rmtree que `prepare_build` faisait en tête
-            # de build (ROADMAP v0.24) : ce que CE build n'a pas produit n'a plus
+            # de build : ce que CE build n'a pas produit n'a plus
             # lieu d'être compilé. Il doit passer avant `make`, qui ramasse
             # `src/*.c` et `grit_out/*.c` au glob.
             if ok:
@@ -967,7 +967,7 @@ class BuildWorker(EventEmitter, threading.Thread):
                     # Une séquence avance à la fin d'`on_update` : un script qui
                     # n'en écrit pas mais déclare une séquence a quand même
                     # quelque chose à faire à chaque frame, et `main.c` ne
-                    # l'appellerait pas (cf. ROADMAP v0.7.7).
+                    # l'appellerait pas.
                     if any(_sequence_name(n) is not None for n in events):
                         events.add("on_update")
                     actor_defined_events[sym] = events
@@ -984,8 +984,8 @@ class BuildWorker(EventEmitter, threading.Thread):
             if scene_script:
                 _collect_events(c_sym(scene.name) + "_scene", p.asset_abs(scene_script))
 
-        # Prefabs poolés : les fonctions émises sont PER-SCÈNE (`<Scène>_<Prefab>`,
-        # ROADMAP v0.17, T1), donc les events se collectent sous cette même clé,
+        # Prefabs poolés : les fonctions émises sont PER-SCÈNE (`<Scène>_<Prefab>`),
+        # donc les events se collectent sous cette même clé,
         # pour chaque scène qui déclare le prefab — c'est ce que `main_gen`
         # interroge (`_def(p2["sym"], …)`).
         from core.models.components import ScriptComponent
@@ -1069,13 +1069,13 @@ class BuildWorker(EventEmitter, threading.Thread):
                     "again.", "make"))
                 return False
         env = self._make_env()
-        # ROADMAP v0.14 : `debug.*` n'existe dans la ROM que build DEBUG. Le
+        # `debug.*` n'existe dans la ROM que build DEBUG. Le
         # define passe par l'environnement de make (EXTRA_CFLAGS, cf.
         # runtime/Makefile) plutôt que par un flag d'exécution — retiré à la
         # compilation, pas testé à chaque frame.
         if getattr(p.settings, "debug_build", True):
             env["EXTRA_CFLAGS"] = (env.get("EXTRA_CFLAGS", "") + " -DGBA_DEBUG_BUILD").strip()
-        # ROADMAP v0.24 : `-j` n'est pas un réglage. Le nombre de cœurs se lit,
+        # `-j` n'est pas un réglage. Le nombre de cœurs se lit,
         # le build en profite — une case de plus à expliquer n'achèterait rien.
         # `make` était appelé sériel, et il pèse la moitié du temps de build
         # (6,1 s sur 12,3 pour Pong, mesuré le 2026-08-20) : c'est le seul

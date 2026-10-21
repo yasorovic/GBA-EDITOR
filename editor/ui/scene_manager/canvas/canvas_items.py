@@ -165,7 +165,7 @@ class SpriteItem(QGraphicsPixmapItem):
         # appelé dès la construction (ItemSendsGeometryChanges) et les lit.
         self._drag_origin: tuple[int, int] | None = None
         self._drag_confirmed = False
-        # Sous-arbre (Actor.parent, ROADMAP v0.23) capturé au press, pour le
+        # Sous-arbre (Actor.parent) capturé au press, pour le
         # faire suivre en translation groupée pendant le drag — cf. itemChange.
         self._drag_descendants: list = []
         self._drag_desc_origin: list = []
@@ -352,7 +352,7 @@ class SpriteItem(QGraphicsPixmapItem):
             self.scene_sprite.x = int(x)
             self.scene_sprite.y = int(y)
             if self._drag_desc_origin:
-                # Translation groupée du sous-arbre (ROADMAP v0.23) : delta
+                # Translation groupée du sous-arbre : delta
                 # depuis le DÉBUT du drag, pas depuis l'appel précédent — évite
                 # toute dérive par accumulation d'arrondis de snap.
                 ox0, oy0 = self._drag_origin

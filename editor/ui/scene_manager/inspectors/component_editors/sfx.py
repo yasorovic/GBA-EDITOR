@@ -58,8 +58,7 @@ class SfxEditor(BaseComponentEditor):
 
         # Le trigger vise un bouton ou une action déclarée (Project Settings →
         # Input → Inputs, jamais une séquence) — la même liste que
-        # `input:pressed(nom)` (ROADMAP « Les inputs personnalisés », tranche
-        # finale, 2026-09-27, qui a remplacé les dix `on_button_*` fixes).
+        # `input:pressed(nom)`.
         button_labels = _button_labels()
         input_names = ([b.name for b in proj.settings.inputs if b.name]
                        if proj else [])

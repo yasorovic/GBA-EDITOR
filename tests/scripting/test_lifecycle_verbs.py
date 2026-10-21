@@ -1,5 +1,4 @@
-"""Le cycle de vie s'écrit en CINQ verbes, communs à tous les types — ROADMAP v0.16,
-critère 3 (décision du 2026-09-25) : `:show() :hide() :activate() :deactivate() :destroy()`.
+"""Le cycle de vie s'écrit en CINQ verbes, communs à tous les types (décision du 2026-09-25) : `:show() :hide() :activate() :deactivate() :destroy()`.
 
 Une seule porte d'ÉCRITURE ; l'ÉTAT (`visible`, `active`) se lit en lecture seule. Ce
 fichier tient les règles du contrat, pas une liste de fonctions : un type ajouté demain

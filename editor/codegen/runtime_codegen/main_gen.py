@@ -23,7 +23,7 @@ from core.models.field_value import (FieldValue as _FV,
                                      var_names_from_project as _var_names)
 # `region_fill_container` vit dans le modèle (règle de mise en page pure) et se
 # réexporte ici : `palette_alloc` l'importe de ce module depuis toujours, et
-# ROADMAP le cite sous ce nom. Cf. `core.models.ui_region`.
+# Cf. `core.models.ui_region`.
 from core.models.ui_region import region_fill_container
 from codegen.palette_alloc import scene_bank_layout, effective_palette_colors
 # Les requêtes de police vivent désormais dans font_emit (leur domaine) — main_gen
@@ -71,7 +71,7 @@ from codegen.runtime_codegen.gen_sprite import (
 from codegen.runtime_codegen.gen_ui import (
     emit_ui_images_c, emit_ui_lists_c, emit_ui_elements_c,
     region_actor_index, ui_element_index)
-# Géométrie OAM per-scène (ROADMAP v0.17, T1+T2+T3) : source de vérité des plages
+# Géométrie OAM per-scène : source de vérité des plages
 # de pool et de la taille de `g_actors`. main_gen en est un LECTEUR.
 from codegen.oam_alloc import (scene_oam_layout, project_actor_count, project_oam_entry_count, scene_obj_ui_slots,
                                owner_appearances, initial_appearance)
@@ -120,8 +120,7 @@ def _sfx_trigger_info(p: Project, owner) -> tuple[Optional[str], int, str]:
 def _sfx_on_destroy_table(p: Project, all_scene_data: list[dict],
                            scene_pis: list[list[dict]]) -> list[str]:
     """Le SFX à jouer juste avant qu'un actor de tel TAG soit désactivé, indexé
-    par TAG — mais PAR SCÈNE (ROADMAP v0.17, T3 : les TAG repartent de 0 par
-    scène, un tableau global ne les distinguerait plus). On émet donc un couple
+    par TAG — mais PAR SCÈNE. On émet donc un couple
     de tables constantes par scène (id, -1 = aucun ; volume) et DEUX pointeurs
     globaux que chaque scene_init fait pointer sur les siens (comme
     `g_active_cmap`, cf. `_gen_scene_init`).
@@ -244,11 +243,11 @@ def _log_vram_layout(scene, emit) -> None:
 
 def _scene_pi(p: Project, scene: Scene) -> list[dict]:
     """La géométrie des pools de CETTE scène, lue de `scene_oam_layout` (source
-    de vérité unique, ROADMAP v0.17). `sym` est PRÉFIXÉ PAR LA SCÈNE
+    de vérité unique). `sym` est PRÉFIXÉ PAR LA SCÈNE
     (`<Scène>_<Prefab>`) : chaque scène compile ses unités de prefab contre sa
     propre plage, donc les appels `{sym}_pool_init`/`{sym}_on_update` du main.c
     ciblent bien `actor_<Scène>_<Prefab>.c`. `size` compte les ENTRÉES réservées
-    (instances × parties, ROADMAP v0.23), `start` repart de la base OAM 0 de la
+    (instances × parties), `start` repart de la base OAM 0 de la
     scène (après ses acteurs posés)."""
     lay = scene_oam_layout(p, scene)
     return [
@@ -280,7 +279,7 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
     """`pool_info` : les pools de LA scène courante (`_scene_pi`), symboles
     déjà préfixés `<Scène>_<Prefab>`. `obj_layout` : le layout OBJ de CETTE
     scène — chaque scène résout l'index de banque de ses prefabs poolés dans son
-    propre layout (fin de la « scène d'ancrage », ROADMAP v0.17, T1)."""
+    propre layout (plus de « scène d'ancrage »)."""
     if not pool_info:
         return []
 
@@ -322,11 +321,11 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
 
         group = pi.get("group", 1)
         L += [
-            # Rend un Actor* sur l'instance née (ROADMAP v0.17 T6) : un handle
+            # Rend un Actor* sur l'instance née : un handle
             # directement chaînable côté script, et NULL quand le pool est plein —
             # là où l'ancien -1, un entier, ressortait TOUJOURS vrai dans un test.
             f"Actor* spawn_{s}(int x, int y) {{",
-            # Le pas est le GROUPE, pas 1 (ROADMAP v0.23) : une instance
+            # Le pas est le GROUPE, pas 1 : une instance
             # occupe la racine PUIS ses enfants, contiguës. Chercher de un en
             # un tomberait sur l'enfant libre d'une instance vivante et
             # écrirait une racine au milieu d'un boss. Un prefab plat a un
@@ -377,7 +376,7 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
                 f"            g_oam_entries[{_e0}].pivot_y      = {_sp_aff['pivot_y']};",
             ]
         L += [
-            # ROADMAP v0.19 : x/y en Q8 en interne. `x`/`y` ici sont les entiers
+            # x/y en Q8 en interne. `x`/`y` ici sont les entiers
             # pixels passés à actor:spawn() par le script — <<8 à l'entrée.
             f"            g_actors[_i].x = x<<8; g_actors[_i].y = y<<8;",
             f"            g_actors[_i].active   = 1;",
@@ -640,7 +639,7 @@ def _gen_tile_helpers() -> list[str]:
         "    return -1;",
         "}",
         "typedef void (*TileCollideCb)(Actor*,int,int);",
-        "/* Resolution of an actor against the map (see ROADMAP v0.6.3).",
+        "/* Resolution of an actor against the map.",
         "   The order is the rule: X first — slopes do not obstruct it —",
         "   then Y, where the surface is searched at THREE points (the two bottom "
         "corners",
@@ -659,7 +658,7 @@ def _gen_tile_helpers() -> list[str]:
         "        a->collision.last_x=a->x>>8; a->collision.slope_acc=0;",
         "        return;",
         "    }",
-        "    /* ROADMAP v0.19: the Actor's x/y are in Q8 (256 = 1 px), but ALL the",
+        "    /* the Actor's x/y are in Q8 (256 = 1 px), but ALL the",
         "       geometry below (tiles, boxes, slopes) is in pixels, unchanged",
         "       since v0.6.3 — rounding is done ONCE on entry (_px/_py) and",
         "       ONCE on exit. _fx/_fy carry the sub-pixel through the",
@@ -878,7 +877,7 @@ def _parent_compose_lines(scene_actors: list, actor_offset: int,
     deux côtés. (Le champ Position de l'inspecteur reflète aussi ce déplacement
     depuis 2026-09-05 — cf. actor_inspector `_sync_transform_from_canvas`.)
 
-    Tout est en Q8 (ROADMAP v0.19) et l'arrondi reste à l'émission OAM : un
+    Tout est en Q8 et l'arrondi reste à l'émission OAM : un
     arrondi par niveau ferait dériver un bras d'un pixel par cran de
     profondeur.
 
@@ -893,7 +892,7 @@ def _parent_compose_lines(scene_actors: list, actor_offset: int,
         return []
     kids.sort(key=lambda t: depths[t[0].name])   # parents avant enfants
     L = ["    /* Actor hierarchy — parents before children, depth",
-         "       computed at build (ROADMAP v0.23). Same composition as that of",
+         "       computed at build. Same composition as that of",
          "       an actor and its sprite, one level up. */"]
     import math
     by_name = {a.name: a for a, _ in scene_actors}
@@ -952,7 +951,7 @@ def _pool_compose_lines(pi: list[dict]) -> list[str]:
     et sa taille est une constante du build.
 
     Un enfant ÉTEINT ne se compose pas, et il n'est PAS rallumé par sa racine :
-    sa vie lui appartient (ROADMAP v0.23, tranché le 2026-08-21). Un boss qui
+    sa vie lui appartient. Un boss qui
     perd un bras appelle `MonBras:destroy()`, et le bras disparaît pour de bon —
     plus d'OAM, plus de collision. Écrire `enfant.active = racine.active` à
     chaque frame, comme la première version le faisait, annulait cet appel dès
@@ -973,7 +972,7 @@ def _pool_compose_lines(pi: list[dict]) -> list[str]:
         ranks = p2["member_entries"]      # rang d'entrée de chaque membre, -1 si aucun
         by_name = {pt.name: pt for pt in parts}
         rank = {pt.name: k for k, pt in enumerate(parts, start=1)}
-        L += [f"    /* {pf.name} — subtree of each instance (ROADMAP v0.23) */",
+        L += [f"    /* {pf.name} — subtree of each instance */",
               f"    for(int _b={start}, _nb=0; _b<{start+size}; _b+={group}, _nb++) {{",
               *([f"        int _eb = _nb < {p2['granted']} ? {p2['entry_start']} + _nb*{p2['entries_per_instance']}"
                  f" : {p2['scratch']};"] if p2["entries_per_instance"] else []),
@@ -1217,7 +1216,7 @@ def _scene_music_lines(p: Project, scene: Scene, sound_assets: dict | None) -> l
 
 
 def _gen_ui_routes(p: Project, scene) -> list[str]:
-    """Routage de rendu par scène (ROADMAP v0.12) : pour chaque zone/image rendue
+    """Routage de rendu par scène : pour chaque zone/image rendue
     en Background par un nœud `Interface`, son slot BG. Le rendu (`text_draw_in`,
     `ui_image_update`…) l'utilise au lieu du layer global, ce qui permet à un
     layout partagé de vivre sur BG0 dans une scène et BG2 dans une autre.
@@ -1335,8 +1334,7 @@ def _gen_scene_init(
     L.append(f"    g_scene_scroll_h = {int(bool(scene.scroll_h))}; g_scene_scroll_v = {int(bool(scene.scroll_v))};")
     L.append(f"    g_scene_collision_layer = {int(scene.collision_layer)};")
     # Acteurs POSÉS de cette scène, dans l'ordre d'authoring — la borne de
-    # `actor:get(i)`/`actor:count()` (ROADMAP « L'acteur appartient à sa scène »,
-    # adressage dynamique). Les slots [0, placed) tiennent exactement ces
+    # `actor:get(i)`/`actor:count()`. Les slots [0, placed) tiennent exactement ces
     # acteurs ; les pools spawnés vivent après et ne sont pas comptés ici.
     L.append(f"    g_scene_placed = {len(scene_actors)};")
     # Tout acteur repart SANS entrée OAM (-1) ; le lien est posé plus bas, pour les
@@ -1686,7 +1684,7 @@ def _gen_scene_init(
         own = list(sprite.own_palette) if (sprite and getattr(sprite, "own_palette", None)) else []
         pal = obj_layout.bank_index(getattr(actor, "pal_bank", OWN_PAL_BANK), own)
         _lines = [
-            # ROADMAP v0.19 : x/y en Q8 en interne, l'auteur place l'acteur en pixels.
+            # x/y en Q8 en interne, l'auteur place l'acteur en pixels.
             f"    g_actors[{idx}].x       = ({_FV.parse(actor.x, _var_names(p)).c_expr()})<<8;",
             f"    g_actors[{idx}].y       = ({_FV.parse(actor.y, _var_names(p)).c_expr()})<<8;",
             f"    g_actors[{idx}].active  = {1 if actor.visible else 0};",
@@ -1754,8 +1752,7 @@ def _gen_scene_init(
                 f"    g_actors[{idx}].collision.boxes[{bi2}].solid={1 if cb.solid else 0}; g_actors[{idx}].collision.boxes[{bi2}].active={1 if cb.active else 0}; g_actors[{idx}].collision.boxes[{bi2}].tag={tag_s};",
             ]
     # SoundFxComponent en trigger="on_spawn" — TOUS les actors de la scène,
-    # scriptés ou non : c'est une donnée du component, pas du script (ROADMAP,
-    # 2026-08-24). Émis ici plutôt que dans le on_start généré (ancien
+    # scriptés ou non : c'est une donnée du component, pas du script. Émis ici plutôt que dans le on_start généré (ancien
     # comportement) pour qu'un actor sans ScriptComponent en bénéficie aussi.
     for j, (actor, _sprite) in enumerate(scene_actors):
         sfx_sym, sfx_vol, sfx_trig = _sfx_trigger_info(p, actor)
@@ -1791,7 +1788,7 @@ def _gen_scene_init(
                 ]
             elif _e >= 0:
                 L.append(f"    g_oam_entries[{_e}].affine_slot = -1;")
-    # ── Musique de la scène (ROADMAP v0.8.2) ───────────────────────
+    # ── Musique de la scène ───────────────────────
     # Posée AVANT les on_start : le réglage déclaratif passe en premier et le
     # script ajuste ensuite, exactement comme pour la caméra (v0.6.1). Un
     # `music:play()` dans on_start gagne donc, ce qui est ce qu'on attend.
@@ -1912,7 +1909,7 @@ def _gen_scene_tick(
     if pi and col_scene:
         for p2 in pi:
             s, start, size = p2["sym"], p2["start"], p2["size"]
-            # Même filtre que pour les paires de scène (ROADMAP v0.23) : un
+            # Même filtre que pour les paires de scène : un
             # prefab dont aucun tag ne rencontre ceux d'un acteur n'a pas de
             # ligne dans sa table `_pcol_*`, donc pas de test par frame et par
             # instance. C'est le poste qui grandit le plus vite — pool × acteurs.
@@ -1969,8 +1966,7 @@ def _gen_scene_tick(
                 [(ev, f"{sj}_{ev}") for ev in evs if j_lua and _def(sj, ev)],
                 "    ")
 
-    # Déclencheurs SoundFx par nom d'input — ROADMAP « Les inputs
-    # personnalisés », tranche finale (2026-09-27) : les events de script
+    # Déclencheurs SoundFx par nom d'input (2026-09-27) : les events de script
     # on_button_* ont disparu (un script écrit `if input:pressed(nom) then`
     # dans on_update) ; seul le SoundFxComponent garde un déclenchement
     # AUTOMATIQUE — TOUS les actors de la scène, scriptés ou non, c'est ce qui
@@ -2112,7 +2108,7 @@ def _gen_scene_tick(
         pf = p2["prefab"]
         group = p2.get("group", 1)
         # Les MEMBRES d'un groupe, dans l'ordre où le spawn les pose : la
-        # racine puis ses enfants (ROADMAP v0.23). Chacun a son propre sprite —
+        # racine puis ses enfants. Chacun a son propre sprite —
         # un bras n'est pas dessiné avec l'image du corps. Un prefab plat n'a
         # qu'un membre, et le C émis est alors mot pour mot celui d'avant.
         members = [pf] + list(getattr(pf, "children", []) or [])
@@ -2174,7 +2170,7 @@ def generate_main(
     # ── Calcul des offsets globaux des actors ─────────────────────
     # Chaque scène reçoit une tranche de g_actors[].
     # La pool de prefabs commence après tous les actors de scène.
-    # Chaque scène repart de la base OAM 0 (ROADMAP v0.17, T3) : une seule est
+    # Chaque scène repart de la base OAM 0 : une seule est
     # vivante à la fois, le scene_init efface `g_actors` et repose ses acteurs
     # depuis 0. Les offsets sont donc tous nuls, et `g_actors` est dimensionné
     # sur la scène la plus gourmande (max, pas somme).
@@ -2198,7 +2194,7 @@ def generate_main(
     sprite_offsets, sprite_nframes = sprite_offsets_for(p, all_sprite_pairs)
 
     # Bande de texte OBJ. La base de SLOTS OAM est PAR SCÈNE — juste après les
-    # acteurs, avant les pools (ordre acteurs → UI → pools, ROADMAP v0.17 T4) :
+    # acteurs, avant les pools (ordre acteurs → UI → pools) :
     # elle vaut `placed`, calculée dans la boucle scene_init. La base de TUILES,
     # elle, reste l'union projet : les tuiles des sprites sont résidentes et
     # partagées, donc la 1re tuile OBJ libre est la queue de TOUS les sprites.
@@ -2232,7 +2228,7 @@ def generate_main(
     # même règle que ci-dessus, ça bloque. Une sauvegarde qui déborde ne se
     # verrait qu'à l'exécution, chez le joueur.
     _fatal += save_fatal(p)
-    # Parenté (ROADMAP v0.23) : un parent inconnu ou un cycle empêchent de
+    # Parenté : un parent inconnu ou un cycle empêchent de
     # calculer une profondeur, donc d'ordonner la frame. Bloquant comme le
     # budget de tuiles, et pour la même raison — ça ne se verrait qu'en jouant.
     for _d in all_scene_data:
@@ -2281,7 +2277,7 @@ def generate_main(
     _add_inc('#include "runtime_api.h"')
     _add_inc('#include "globals.h"')
     _add_inc('#include "constants.h"')
-    _add_inc('#include "gba_debug.h"')   # mesure de budget par frame — ROADMAP v0.14
+    _add_inc('#include "gba_debug.h"')   # mesure de budget par frame
     if has_sound and soundbank_h.exists():
         _add_inc('#include <maxmod.h>')
         _add_inc(f'#include "{soundbank_h.name}"')
@@ -2480,8 +2476,7 @@ def generate_main(
             ]
 
     # ── Globals ───────────────────────────────────────────────────
-    # `g_actors` est réutilisé d'une scène à l'autre (base 0, ROADMAP v0.17,
-    # T3) : dimensionné sur la scène la plus gourmande, il porte à tout instant
+    # `g_actors` est réutilisé d'une scène à l'autre (base 0) : dimensionné sur la scène la plus gourmande, il porte à tout instant
     # les acteurs de la SEULE scène vivante. C'est un état volumineux, jamais une
     # routine chaude ; EWRAM_DATA évite de consommer les 32 Kio d'IWRAM réservés
     # au code et aux petits états runtime.
@@ -2499,7 +2494,7 @@ def generate_main(
     # `other:destroy()` (scripting/codegen.py, `_emit_destroy`), la cible n'y
     # étant pas toujours un symbole connu au build.
     L += _sfx_on_destroy_table(p, all_scene_data, scene_pis)
-    # Anneau + compteurs d'input (ROADMAP « Les inputs personnalisés ») :
+    # Anneau + compteurs d'input :
     # profondeur et bitset `buffered` calculés depuis les actions RÉELLEMENT
     # déclarées et interrogées par le projet — 0 action bufferisée, 0 octet
     # payé (`compute_input_layout`, seule source, la même que `lua_compiler.py`
@@ -2562,7 +2557,7 @@ def generate_main(
     # Spawn helpers — un jeu par scène (`spawn_<Scène>_<Prefab>`), chacun contre
     # SA plage OAM et SA banque de palette OBJ. Fin de la « scène d'ancrage »
     # figée : chaque scène résout l'index de banque de ses prefabs poolés dans
-    # son propre layout (ROADMAP v0.17, T1).
+    # son propre layout.
     for d, spi in zip(all_scene_data, scene_pis):
         _obj_layout = scene_bank_layout(p, d["scene"], "obj")
         L += _section_spawn(spi, p, _obj_layout,
@@ -2589,7 +2584,7 @@ def generate_main(
         # La hauteur courante de chaque effet — déclarée `extern` dans
         # runtime_api.h, définie ici comme les autres états d'un événement en
         # cours. 1024 = hauteur normale ; `sfx_play` la repose à chaque
-        # lecture (cf. headers.py, et ROADMAP v0.8.6 pour la mesure qui
+        # lecture (cf. headers.py : une mesure
         # oblige à la retenir).
         L += ["mm_hword g_sfx_rate[16] = {1024,1024,1024,1024,1024,1024,1024,1024,"
               "1024,1024,1024,1024,1024,1024,1024,1024};", ""]
@@ -2629,7 +2624,7 @@ def generate_main(
             dispcnt |= 0x1040
 
         # Base OBJ de la bande d'interface de CETTE scène : juste après ses
-        # acteurs (ordre acteurs → UI → pools, ROADMAP v0.17 T4). -1 si la scène
+        # acteurs (ordre acteurs → UI → pools). -1 si la scène
         # n'a aucune UI en sprites. Les pools de `scene_oam_layout` démarrent à
         # `placed + ui`, donc la bande ne les chevauche jamais.
         _sc_lay = scene_oam_layout(p, sc)
@@ -2656,7 +2651,7 @@ def generate_main(
         sa      = d["scene_actors"]
         lua_idx_d = scene_lua_idx[i]
 
-        # La matrice de collision (ROADMAP v0.23) retire ici les paires qui ne
+        # La matrice de collision retire ici les paires qui ne
         # peuvent PAS se rencontrer — « les projectiles du joueur ignorent ceux
         # du boss ». Elles ne coûtent alors plus rien : c'était le seul poste
         # qui grandissait en CARRÉ, en taille de ROM comme en temps de frame,
@@ -2682,7 +2677,7 @@ def generate_main(
     # `trans_mode`/`trans_frames` : la transition de CETTE scène, employée
     # aussi bien quand on la quitte (fermeture) que quand on l'ouvre
     # (ouverture) — chaque scène décrit sa propre disparition et sa propre
-    # apparition, cf. ROADMAP v0.6.2. L'héritage projet→scène est résolu ici :
+    # apparition. L'héritage projet→scène est résolu ici :
     # le runtime ne connaît pas la notion.
     from core.models.scene import TRANSITION_MODES, transition_of
     n_scenes = len(all_scene_data)
@@ -2748,7 +2743,7 @@ def generate_main(
 
     if has_transitions:
         L += [
-            "/* ── Scene transition (see ROADMAP v0.6.2) ──────────────────── */",
+            "/* ── Scene transition ──────────────────── */",
             "/* Phase 0 = none, 1 = closing (the outgoing scene is frozen),",
             "   2 = opening. The intensity goes from 0 (sharp) to 16 (off). */",
             "static int g_trans_phase = 0, g_trans_i = 0, g_trans_n = 1;",
@@ -2773,7 +2768,7 @@ def generate_main(
             "",
         ]
 
-    # ── Transitions musicales (ROADMAP v0.8.3) ────────────────────
+    # ── Transitions musicales ────────────────────
     # Le pas par frame des deux transitions. Un seul point d'écriture du
     # volume de module et de la bascule, comme la caméra n'a qu'un seul point
     # d'écriture de sa position (v0.6.1) : deux mécanismes qui écrivent le même
@@ -2816,7 +2811,7 @@ def generate_main(
         # Plus de mmStart au boot. Il démarrait la PREMIÈRE musique du projet,
         # quelle qu'elle soit — un emplacement réservé qui rendait un bref
         # éclat de la mauvaise piste avant que la scène de départ ne pose la
-        # sienne. C'est `Scene.music` qui décide maintenant (ROADMAP v0.8.2).
+        # sienne. C'est `Scene.music` qui décide maintenant.
 
     # Sprites VRAM (une seule fois au démarrage — toutes scènes). Les
     # palettes OBJ ne sont PLUS copiées ici : chaque scene_init_X() charge
@@ -2866,7 +2861,7 @@ def generate_main(
             "        }",
         ]
     L.append("        VBlankIntrWait();")
-    # ROADMAP v0.14 : la fenêtre mesurée est EXACTEMENT le travail d'une frame —
+    # la fenêtre mesurée est EXACTEMENT le travail d'une frame —
     # de la reprise après ce VBlankIntrWait() à l'entrée du suivant. Hors build
     # debug, `debug_budget_start` est un stub vide éliminé à l'inlining (-O2) :
     # aucun coût, pas un drapeau testé à chaque frame.

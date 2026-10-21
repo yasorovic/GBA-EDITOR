@@ -17,9 +17,8 @@ porte SAUF l'identité du projet :
   - **Input** — actions nommées liées à un combo de boutons physiques
     (placeholder, cf. `InputsCard` — rien ne les consomme encore).
   - **Languages** — déclaration des langues, reprend `LanguagesCard` telle
-    quelle (ROADMAP v0.9).
-  - **Collisions** — matrice triangulaire de tags qui s'ignorent
-    (ROADMAP v0.23), tags renommables/déclarables/retirables en place.
+    quelle.
+  - **Collisions** — matrice triangulaire de tags qui s'ignorent, tags renommables/déclarables/retirables en place.
 
 Ce qui RESTE dans `ProjectInspector` (panneau latéral du Scene Manager, visible
 en permanence quand rien n'est sélectionné) : auteur, version, scène de
@@ -613,7 +612,7 @@ class InputsPanel(QWidget):
 # ── Languages ───────────────────────────────────────────────────────────
 
 class LanguagesPanel(QWidget):
-    """Enveloppe autour de `LanguagesCard` (ROADMAP v0.9) — la carte SIGNALE
+    """Enveloppe autour de `LanguagesCard` — la carte SIGNALE
     un geste, ce panneau en fait une commande annulable, exactement comme le
     faisait ProjectInspector avant que Languages n'en sorte."""
 
@@ -855,7 +854,7 @@ class _TagHeaderLabel(QWidget):
 
 
 class CollisionsPanel(QWidget):
-    """Matrice triangulaire entre tags de boxes (ROADMAP v0.23) — cf.
+    """Matrice triangulaire entre tags de boxes — cf.
     ProjectSettings.collision_disabled_pairs. Cochée = les deux tags se
     rencontrent, ce qui est le défaut : la matrice ne stocke que les
     exceptions.

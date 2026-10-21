@@ -1,5 +1,5 @@
 """Le cœur partagé des catalogues d'interface (ui/common/catalog.py) et le
-catalogue de libellés (ui/common/labels.py), ROADMAP v0.11.
+catalogue de libellés (ui/common/labels.py).
 
 Garde ce que le refactor des notices ne devait PAS changer (repli sur la source,
 pluriel, format, une clé absente = la clé), et ce que le catalogue frère ajoute

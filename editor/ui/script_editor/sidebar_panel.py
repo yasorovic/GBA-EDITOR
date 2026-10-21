@@ -75,7 +75,7 @@ class SidebarPanel(QWidget):
         self._cl.addWidget(self._sec_events)
 
         # ── Sections API — une par chose qu'on tient ──────────────────
-        # ROADMAP v0.16 : le rangement remplace les 3 grosses parties
+        # le rangement remplace les 3 grosses parties
         # (Gameplay/Scripting/Hardware) par une navigation unique par NOM. Les
         # anciennes catégories deviennent des sous-titres ; le moteur se replie
         # sous « Aller plus loin » — cf. api_reference.get_sections().
@@ -98,7 +98,7 @@ class SidebarPanel(QWidget):
             sec.apply_filter(query)
 
     # ── Sections API (statiques, depuis api_reference.json) ───────────
-    # Sections — une par CHOSE qu'on tient (ROADMAP v0.16). Les anciennes
+    # Sections — une par CHOSE qu'on tient. Les anciennes
     # catégories deviennent des SOUS-SECTIONS repliables, plus des
     # portes : la seule navigation est la section. Dans chacune, l'itération se
     # montre, puis la couche moteur suit dans le même groupe.
@@ -168,7 +168,7 @@ class SidebarPanel(QWidget):
 
         # Les noms par domaine viennent de la source unique (`names_by_domain`),
         # celle que lit aussi l'autocomplétion — plus de liste dressée ici à côté
-        # d'elle (ROADMAP v0.27, phase 3). Les sections riches (textes, zones)
+        # d'elle. Les sections riches (textes, zones)
         # gardent leur parcours propre : elles ont besoin des OBJETS, pas des
         # seuls noms.
         nbd = names_by_domain(project)

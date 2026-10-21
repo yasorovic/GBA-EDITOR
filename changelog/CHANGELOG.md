@@ -1,9 +1,34 @@
 # Changelog
 
-Une entrée courte par version **livrée**, dans l'ordre numérique des versions (une version
-reste une identité, pas un rang, voir [ROADMAP.md](../ROADMAP.md)). Pour le détail complet
+> **Numérotation.** Aucune release publique n'existe encore : la version du logiciel est
+> `0.1.x` (le numéro de la première release publique sera décidé plus tard ; l'alpha dure jusqu'à `1.0.0-stable`). Les titres `v0.2` à `v0.28` ci-dessous
+> sont les **jalons de développement** livrés avant, gardés tels quels ; ils ne sont pas des
+> versions du logiciel. Les entrées de release suivront en tête de ce fichier, à partir de `0.1.0-alpha`.
+
+Une entrée courte par jalon **livré**, dans l'ordre numérique des versions (une version
+reste une identité, pas un rang). Pour le détail complet
 d'une version (décisions verrouillées, pièges rencontrés, mesures), voir
 [archives/](archives/). Pour ce qui reste à faire, voir [ROADMAP.md](../ROADMAP.md).
+
+## 0.1.0-alpha - Version de départ (pas encore publiée)
+
+*Le compteur repart de zéro, voir la note ci-dessus.*
+
+Créez un jeu Game Boy Advance de bout en bout depuis l'éditeur, puis compilez-le en ROM `.gba`.
+Cette première version réunit tout ce qui a été livré jusqu'ici (jalons v0.2 à v0.28) :
+
+- **Scènes et décors** : placement des acteurs, collisions et pentes, caméra, fonds animés,
+  palettes, polices et sprites importés depuis vos images.
+- **Scripts** : un Lua simplifié traduit en C, avec complétion, diagnostics et références
+  à l'API vérifiées à la construction.
+- **Son et texte** : musique par scène, effets, jingles, textes traduisibles, dialogues
+  pilotés par des tables de données, menus et listes.
+- **Jeu et données** : sauvegarde (SRAM), collections persistantes, sous-pixel, inputs
+  personnalisés, projets lisibles par git.
+- **Éditeur** : graphe des scènes, éditeur traduit, fenêtre *Updates* qui signale les
+  nouvelles versions (vérification désactivable).
+
+→ [détail des jalons](archives/README.md)
 
 ## v0.2 - Gestion des palettes de couleurs
 

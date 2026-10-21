@@ -371,4 +371,4 @@ sortis de ce chantier plutôt que d'y rester ouverts indéfiniment :
   sonde native) reste à faire — un résidu mineur, pas une décision de conception ;
 - la piste **Collision — un `Contact` d'événement** (normale acteur↔acteur, non verrouillée) a été
   extraite en un chantier technique séparé, encore À OUVRIR — voir
-  [ROADMAP.md](../../ROADMAP.md#piste-collision--un-contact-dévénement-pas-une-dernière-collision).
+  [ROADMAP.md](../../docs/development/TODO.md#piste-collision-un-contact-dévénement-pas-une--dernière-collision-).

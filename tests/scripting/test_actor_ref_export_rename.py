@@ -6,8 +6,7 @@ stocké dans `ScriptComponent.exports_values` — pas une référence vivante.
 `rename_actor` réécrivait déjà les scripts Lua qui citaient l'ancien nom
 (`rename_lua_refs`) ; il ne touchait pas cette autre forme de référence, le
 même trou déjà refermé pour l'`id` d'un composant sprite
-(`rename_sprite_id_refs`). Trouvé en discutant du récepteur direct
-(ROADMAP v0.16, section « Ouvert »).
+(`rename_sprite_id_refs`). Trouvé en discutant du récepteur direct.
 """
 from __future__ import annotations
 

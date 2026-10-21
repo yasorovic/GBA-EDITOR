@@ -64,7 +64,7 @@ FLAG_UNUSED = "unused"    # écrite, mais personne ne la demande
 # N'existe que pendant qu'on TRADUIT une langue — cf. `_apply_filter`. Distinct
 # de FLAG_EMPTY : une entrée non traduite affiche la SOURCE (donc rarement
 # vide), et une entrée traduite peut très bien être vide. Deux axes, deux
-# flags, comme le veut la ROADMAP v0.9.
+# flags.
 FLAG_MISSING = "missing"
 
 

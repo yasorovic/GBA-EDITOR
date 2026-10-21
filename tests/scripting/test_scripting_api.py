@@ -35,7 +35,7 @@ def _errors(src: str, **ctx_kw) -> list[str]:
     return [e.message for e in _lua(src, **ctx_kw)[0] if e.level == "error"]
 
 
-# ── T6 : actor.spawn rend un Actor* (ROADMAP v0.17) ──────────────────
+# ── T6 : actor.spawn rend un Actor* ──────────────────
 
 def test_spawn_local_est_un_actor_pointer():
     """`local b = actor:spawn(...)` tient un `Actor*` (l'instance née), pas un
@@ -205,8 +205,7 @@ def test_aucune_enumeration_materielle_nest_orpheline():
 
 
 def test_aucune_fonction_de_module_ne_contourne_lacquisition():
-    """Garde-fou critère 5 (ROADMAP v0.16, amendement « module fabrique, type
-    opère ») : une fonction de MODULE (`module.fonction`, PAS `type:méthode`)
+    """Garde-fou critère 5 : une fonction de MODULE (`module.fonction`, PAS `type:méthode`)
     ne doit jamais agir sur une chose nommée en la recevant en argument
     (`list.index("Menu")`, avant migration) ni recevoir une référence déjà
     acquise (`interface.move(element, ...)`) — les deux détours qui
@@ -457,7 +456,7 @@ def test_les_neuf_helpers_de_juiciness_compilent():
 
 
 # ── 9. Les portes du son : une référence, et les graduations ──────────
-# ROADMAP v0.8.6. Deux erreurs silencieuses possibles ici : un `pas:set_volume`
+# Deux erreurs silencieuses possibles ici : un `pas:set_volume`
 # traduit en `actor_set_volume(pas, …)` — le repli des méthodes d'actor, qui ne
 # compile pas mais ne dit rien avant le `make` —, et un pourcentage envoyé tel
 # quel dans un registre qui compte en 0–255, en 0–1024 ou en facteur 6.10. Le

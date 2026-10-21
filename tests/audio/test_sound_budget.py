@@ -2,7 +2,7 @@
 
 Purement la fonction de calcul : c'est elle qui décide, le widget ne fait que
 l'afficher (même partage que partout dans ce dépôt entre logique et Qt). Le
-piège qu'un test doit attraper ici est celui que la ROADMAP nomme : les DEUX
+piège qu'un test doit attraper ici est celui-ci : les DEUX
 couches (musique, jingle) sont indépendantes, donc le pire total est une
 SOMME de deux maximums séparés — pas le pire état d'une seule boîte, ni le
 maximum d'un état combiné qui n'existe nulle part dans le modèle.
@@ -64,7 +64,7 @@ def test_le_pire_total_est_la_somme_de_deux_maximums_separes(tmp_path):
 
 
 def test_un_etat_sans_musique_ne_pese_rien():
-    """`MusicState.music == ""` est un silence explicite (ROADMAP v0.8.2) —
+    """`MusicState.music == ""` est un silence explicite —
     il ne doit ni faire planter le calcul, ni compter comme un canal."""
     p = Project(Path("."))
     box = MusicBox(name="m", states=[MusicState(name="silence", music="")])

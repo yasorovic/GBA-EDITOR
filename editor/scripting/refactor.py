@@ -490,8 +490,7 @@ _INDEX_VALUES: dict[tuple, list[str]] = {}
 # et sa table de sites dérive de `RUNTIME_API`. Une table de données, une
 # variable globale ou une constante, elles, se citent comme du CODE :
 # `data.Objets[i].prix`, `global.score`, `const.max` — sans guillemets et sans
-# appel (ROADMAP v0.20 pour les tableaux, chantier global/const pour l'accès
-# pointé qui a remplacé global.get/set et const.get). Invisibles à
+# appel. Invisibles à
 # `iter_refs`, un renommage les laisserait derrière.
 #
 # Le repérage reste STRUCTUREL — c'est l'AST qui dit quelles occurrences sont

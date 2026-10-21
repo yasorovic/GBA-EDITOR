@@ -86,7 +86,7 @@ def test_get_actor_chaine_directe_une_methode():
     from scripting.codegen import generate, CodegenContext
 
     # Un acteur appartient à sa scène : le TAG émis est qualifié par la scène
-    # qui compile le script (ROADMAP « L'acteur appartient à sa scène »).
+    # qui compile le script.
     src = _in_handler('    actor:get("Foe"):move_to(vec2(10, 20), 2)')
     code, _, _ = generate(parse(src), CodegenContext(
         actor_name="Ball", actor_sym="Sc_Ball", scene_sym="Sc", anim_names=[],
@@ -98,7 +98,7 @@ def test_get_actor_chaine_directe_une_methode():
 
 def test_actor_spawn_chaine_directe_une_methode():
     """Même chose pour l'instance rendue par `actor:spawn(...)` : on peut la
-    piloter sans local (ROADMAP v0.17 T6)."""
+    piloter sans local."""
     from scripting.parser import parse
     from scripting.codegen import generate, CodegenContext
 
@@ -166,7 +166,7 @@ def test_zero_est_faux_pas_comme_le_vrai_lua():
 
 def test_data_objets_longueur_accepte_par_le_checker():
     """`#data.Objets` — le nombre de lignes d'une table de données — était listé
-    comme « Ouvert, absent » dans ROADMAP.md ; en réalité déjà validé
+    comme absent ; en réalité déjà validé
     (`checker._check_length`, commentaire « #data.Objets — validée par ailleurs »).
     Ce test fige que le checker ne le refuse PAS."""
     from scripting.parser import parse

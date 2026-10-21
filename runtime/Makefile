@@ -43,7 +43,7 @@ CFLAGS    := $(ARCH) \
              -I$(DEVKITPRO)/maxmod/include \
              $(EXTRA_CFLAGS)
 # EXTRA_CFLAGS vient de l'environnement (cf. rom_build.py::_make_env) — c'est
-# là que passe -DGBA_DEBUG_BUILD (ROADMAP v0.14). En son absence, `debug.*`
+# là que passe -DGBA_DEBUG_BUILD. En son absence, `debug.*`
 # n'entre jamais dans la ROM : la définition dépend d'un define, pas d'un
 # drapeau lu au runtime.
 

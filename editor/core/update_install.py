@@ -71,9 +71,12 @@ def _open(url: str):
 
 
 def download_release(release: LatestRelease, kind: str, folder: Path,
-                     progress: Callable[[int], None] = lambda percent: None) -> Path:
+                     progress: Callable[[int], None] = lambda percent: None,
+                     cancelled: Callable[[], bool] = lambda: False) -> Path:
     """Télécharge et vérifie dans `folder` le fichier de `kind` ; rend son chemin. Lève sur toute anomalie
-    (fichier absent de la release, `SHA256SUMS` absent, empreinte fausse, réseau)."""
+    (fichier absent de la release, `SHA256SUMS` absent, empreinte fausse, réseau).
+    `cancelled` est interrogé entre deux morceaux : s'il rend vrai, le fichier partiel est supprimé
+    et `InterruptedError` est levée."""
     assets = dict(release.assets)
     name = next((n for n in assets if n.endswith(_ASSET_SUFFIX[kind])), None)
     if name is None or "SHA256SUMS" not in assets:
@@ -90,6 +93,10 @@ def download_release(release: LatestRelease, kind: str, folder: Path,
         total = int(response.headers.get("Content-Length") or 0)
         done = 0
         while chunk := response.read(256 * 1024):
+            if cancelled():
+                out.close()
+                partial.unlink()
+                raise InterruptedError("Download cancelled.")
             out.write(chunk)
             digest.update(chunk)
             done += len(chunk)

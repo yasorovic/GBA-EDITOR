@@ -100,7 +100,7 @@ Les deux inconnues laissées ouvertes ont été tranchées par lecture du code, 
   la mise à jour de l'écran actif. Le contrat de revisite ne les touche pas.
 - **`refresh()` est idempotent et bon marché** — re-dérive les catalogues DÉJÀ en mémoire, sans
   toucher au disque, sans re-décoder d'asset, sans raster, en conservant sélection et état d'édition.
-  Même exigence que le [cache de scène](../../ROADMAP.md#le-cache-de-scène-rouvrir-une-scène-déjà-visitée-sans-tout-redécoder) (chantier encore ouvert).
+  Même exigence que le [cache de scène](../../docs/development/TODO.md#le-cache-de-scène-rouvrir-une-scène-déjà-visitée-sans-tout-redécoder) (chantier encore ouvert).
 - **`refresh()` est le crochet OPTIONNEL de revisite, à côté du contrat obligatoire.** Il n'entre
   PAS dans le `Protocol` `ProjectScreen` (qui garde `load_project` seul) : l'y déclarer ferait échouer
   le contrôle `isinstance` de `_ensure_screen` pour tout écran ne l'implémentant pas. Il vit donc dans
@@ -144,6 +144,6 @@ Les deux inconnues laissées ouvertes ont été tranchées par lecture du code, 
 
 - Avec [« L'écran construit à sa première visite »](lazy-screen-build.md) : ce
   chantier est le garde que celui-ci contourne ; il en est la moitié « visites suivantes ».
-- Avec [Le cache de scène](../../ROADMAP.md#le-cache-de-scène-rouvrir-une-scène-déjà-visitée-sans-tout-redécoder) (chantier encore ouvert) :
+- Avec [Le cache de scène](../../docs/development/TODO.md#le-cache-de-scène-rouvrir-une-scène-déjà-visitée-sans-tout-redécoder) (chantier encore ouvert) :
   même famille de questions (que refait-on en revenant sur une vue), et même exigence que le
   `refresh` ne paie pas le décodage.

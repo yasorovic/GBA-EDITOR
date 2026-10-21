@@ -1,5 +1,4 @@
-"""Déplacer une image d'interface depuis un script (ROADMAP v0.22, 2026-09-02 ; reprise en
-propriété typée par l'étape c de la v0.16, 2026-09-26).
+"""Déplacer une image d'interface depuis un script.
 
 Le jalon s'appelle « Menus, listes et CURSEUR » et ne savait pas déplacer un
 curseur : la navigation livrée surligne la rangée choisie, mais aucune API ne

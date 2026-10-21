@@ -26,7 +26,7 @@ from pathlib import Path
 
 # Le manifeste porte le nom du projet : <Nom>.project. Son extension est ce
 # que Windows et Linux associent à l'éditeur — un point d'entrée sans OS, à la
-# place du .bat qui ne valait que sous Windows (cf. ROADMAP v0.10).
+# place du .bat qui ne valait que sous Windows.
 PROJECT_EXT = ".project"
 
 # Ancien manifeste, d'avant v0.10. Encore lu une fois par find_manifest quand
@@ -46,7 +46,7 @@ PROJECT_FORMAT_VERSION = 1
 class ProjectManifestError(Exception):
     """Un dossier porte plusieurs `.project`. L'éditeur refuse de choisir un
     manifeste sur deux — c'est une copie manuelle, un cas anormal qu'on signale
-    au lieu de deviner (cf. ROADMAP v0.10, « refus explicite »)."""
+    au lieu de deviner."""
 
 
 class ProjectFileError(ProjectManifestError):

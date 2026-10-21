@@ -156,7 +156,7 @@ class RenameTextGroupKeysCmd(Command):
 
 
 class SetTranslationCmd(Command):
-    """Écrit une entrée dans un fichier de traduction (ROADMAP v0.9, phase 2).
+    """Écrit une entrée dans un fichier de traduction.
 
     Symétrique de `SetFieldCmd`, mais le champ n'est pas un attribut d'objet :
     c'est `project.translations[code][text.id]`. « » (chaîne vide) ET

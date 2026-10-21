@@ -1,6 +1,6 @@
 """L'aperçu joue ce que la ROM jouera : section de boucle, fondus, tempo, hauteur, WAV.
 
-Le C correspondant a été mesuré sur ROM le 2026-10-11 (ROADMAP « L'asset .music »), en
+Le C correspondant a été mesuré sur ROM le 2026-10-11, en
 compilant le C réellement généré dans une ROM qui s'auto-mesure. Ces tests rejouent les
 mêmes scénarios dans le `MusicDeck` et exigent les mêmes séquences — c'est ce qui tient
 l'aperçu honnête : un réglage qui sonnerait autrement dans l'éditeur que sur la console

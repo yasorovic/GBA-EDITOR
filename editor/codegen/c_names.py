@@ -40,7 +40,7 @@ def sym(s: str) -> str:
 def scene_actor_sym(scene_name: str, actor_name: str) -> str:
     """Symbole C d'un acteur POSÉ, qualifié par sa scène : ``<Scène>_<Acteur>``.
 
-    Un acteur appartient à sa scène (ROADMAP « L'acteur appartient à sa scène ») :
+    Un acteur appartient à sa scène :
     son NOM est local à la scène — deux scènes peuvent chacune poser un
     « Cursor » — tandis que son SYMBOLE C, lui, est qualifié, exactement comme un
     prefab poolé l'est déjà (``<Scène>_<Prefab>``). C'est ce qui empêche deux

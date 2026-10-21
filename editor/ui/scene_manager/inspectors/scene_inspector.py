@@ -341,7 +341,7 @@ class SceneInspector(QWidget):
         # ── Music ─────────────────────────────────────────────────
         # Trois valeurs et non deux : « Keep playing » n'est pas le silence,
         # c'est l'absence d'ordre — traverser une porte ne doit pas relancer
-        # le thème. Le silence se déclare (cf. ROADMAP v0.8.2).
+        # le thème. Le silence se déclare.
         music_row = QHBoxLayout(); music_row.setSpacing(6)
         lbl_music = QLabel(label("sceneinsp.music"))
         lbl_music.setFont(QFont(T.UI, T.SM)); lbl_music.setStyleSheet(f"color:{C.TEXT_DIM};")

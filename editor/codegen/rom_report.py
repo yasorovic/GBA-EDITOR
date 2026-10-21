@@ -1,8 +1,7 @@
 """
 codegen/rom_report.py — Ce que la ROM contient, mesuré sur les artefacts du build.
 
-Tout ici est LU, jamais estimé. C'est la règle de la maison (ROADMAP v0.14,
-« le budget se mesure sur la CIBLE »), et elle a une raison mesurée : la taille
+Tout ici est LU, jamais estimé. C'est la règle de la maison, et elle a une raison mesurée : la taille
 des fichiers source prédit **douze fois trop** le coût ROM d'un module tracker,
 mmutil mutualisant les échantillons entre les modules d'un même soundbank.
 

@@ -36,7 +36,7 @@ def _nsi_defines() -> dict[str, str]:
 
 def test_la_version_suit_la_convention_x_y_z_etiquette():
     # X.Y.Z-alpha, X.Y.Z-beta, X.Y.Z-stable : trois chiffres, étiquette toujours
-    # écrite (jamais de version « nue »). Cf. ROADMAP, « La numérotation d'une release ».
+    # écrite (jamais de version « nue »).
     assert re.fullmatch(r"\d+\.\d+\.\d+-(alpha|beta|stable)", APP_VERSION), APP_VERSION
 
 

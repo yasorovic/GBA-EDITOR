@@ -174,7 +174,7 @@ def test_every_blank_asset_family_can_be_duplicated(tmp_path: Path, kind):
     copy = _duplicate(p, family, item, history)
 
     assert copy is not item and copy.name != item.name
-    assert copy.id != item.id or family == "palettes"                          # les palettes n'ont pas encore d'id (ROADMAP, 5a)
+    assert copy.id != item.id or family == "palettes"                          # les palettes n'ont pas encore d'id
     reopened = Project.open(p.root)
     reopened.load_all_resources()
     assert getattr(reopened, family).get(copy.name) is not None

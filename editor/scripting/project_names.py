@@ -5,7 +5,7 @@ nom de Sfx, `scene:switch("…")` un nom de scène. La réponse vivait en DOUBLE
 inline dans `sidebar_panel.set_project` (pour les boutons de la sidebar) et dans
 `lua_compiler` (pour le `BuildContext` du checker). Cette fonction en est la source
 unique — la sidebar la lit pour ses boutons, et l'autocomplétion pour ne proposer
-QUE ce que le checker accepte (ROADMAP v0.27, phase 3).
+QUE ce que le checker accepte.
 
 Le projet est DUCK-TYPÉ : ses collections se lisent par `getattr`, sans importer
 `Project`. Un projet sans telle famille rend simplement une liste vide — le

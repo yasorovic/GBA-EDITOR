@@ -38,7 +38,7 @@ caméra active** (`camera_switch()` la pilote), **WIN1 reste à la scène**
 (`Scene.windows`, panneau Windows). Pas de négociation à l'exécution : une
 seule caméra active à la fois veut dire un seul propriétaire de WIN0. Le vrai
 « écran partagé » (plusieurs caméras actives SIMULTANÉMENT) reste v2.0 — cf.
-ARCHITECTURE.md « Windows — le pochoir » et ROADMAP.md (Caméra2D).
+ARCHITECTURE.md « Windows — le pochoir ».
 """
 
 from dataclasses import dataclass

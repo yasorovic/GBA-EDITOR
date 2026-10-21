@@ -1,4 +1,4 @@
-"""Le build compte les trous de traduction et les nomme (ROADMAP v0.9, phase 5.3).
+"""Le build compte les trous de traduction et les nomme.
 
 Décision verrouillée à l'ouverture du jalon, restée sans implémentation
 jusqu'à la phase 5 : le compte de trous existait dans l'ÉDITEUR (le badge par

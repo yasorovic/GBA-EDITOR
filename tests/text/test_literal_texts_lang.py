@@ -1,5 +1,5 @@
 """Un littéral `text:draw("...")` devient un avertissement NOMMÉ dès qu'une
-langue est déclarée (ROADMAP v0.9, décision 6 / phase 3.5).
+langue est déclarée.
 
 C'était un raccourci ASSUMÉ au prix de la traduction depuis la v0.3.2 : rien
 ne le signale dans un projet monolingue, parce que personne n'a demandé à le

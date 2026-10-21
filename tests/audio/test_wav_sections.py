@@ -1,6 +1,6 @@
 """Un WAV en sections : un échantillon par segment, une position d'ordre par pattern.
 
-Le build écrit un VRAI module (ROADMAP « L'asset .music », étape 7) : les frontières des
+Le build écrit un VRAI module : les frontières des
 sections découpent la piste, chaque segment est un échantillon XM déclenché au début d'une
 ligne, et une section est une plage de positions d'ordre — celle que lisent la ROM et l'aperçu.
 Ces tests tiennent la structure du module et la traduction millisecondes → ordres ; la tenue

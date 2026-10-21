@@ -564,7 +564,7 @@ class GritSprites:
             # rend différente même à donnée identique (cf. build_output).
             # On le fait donc écrire à côté, puis on republie par
             # `build_output.write` : le fichier définitif ne bouge que si son
-            # contenu bouge, et `make` le saute sinon (ROADMAP v0.24).
+            # contenu bouge, et `make` le saute sinon.
             scratch = p.grit_out_dir / "_grit"
             scratch.mkdir(parents=True, exist_ok=True)
             out_base = str(scratch / sym)
@@ -608,16 +608,16 @@ def referenced_sound_names(p: Project) -> tuple[set[str], set[str]]:
     manipulable (docs/scripting-reference.md, « Le langage »). Une chaîne y est toujours
     un nom cité du projet, résolu au build — il n'existe donc aucun moyen de
     ranger un nom de piste dans une variable. Le problème des « cibles
-    dynamiques » laissé ouvert pour le graphe des scènes (ROADMAP v0.12) ne se
+    dynamiques » laissé ouvert pour le graphe des scènes ne se
     pose pas ici, et aucun drapeau « garde-le quand même » n'est nécessaire.
 
     Sept sources (⑥ et ⑦ sont plus bas) :
       ① un littéral d'appel — `sfx:play("GOAL")`, `music:play("Dreamy DX")` ;
       ② un `SoundFxComponent` posé sur un acteur ou un prefab, que
          `self:play_sfx()` joue sans jamais nommer le son dans le script ;
-      ③ le MAPPING d'un état d'une boîte sonore (ROADMAP v0.8.7) ;
+      ③ le MAPPING d'un état d'une boîte sonore ;
       ④ la musique nommée par une scène ;
-      ⑤ `AnimFrame.direct_sfx_name` (ROADMAP v0.8.9) — un Sfx joué DIRECTEMENT
+      ⑤ `AnimFrame.direct_sfx_name` — un Sfx joué DIRECTEMENT
          en arrivant sur une frame.
 
     `AnimFrame.action_name`, lui, n'est PAS une source : depuis la v0.8.7 il
@@ -662,7 +662,7 @@ def referenced_sound_names(p: Project) -> tuple[set[str], set[str]]:
 
     # ④ `Scene.music` — une scène nomme sa piste sans qu'aucun script ne la
     # cite. Remplace le `mmStart(music[0])` du boot, qui référençait la
-    # première musique du projet faute de mieux (ROADMAP v0.8.2).
+    # première musique du projet faute de mieux.
     from core.models.scene import MUSIC_INHERIT, MUSIC_NONE
     for scene in p.scenes:
         want = getattr(scene, "music", MUSIC_INHERIT) or MUSIC_INHERIT

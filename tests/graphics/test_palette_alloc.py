@@ -174,7 +174,7 @@ def test_le_sprite_d_une_image_d_UI_en_cible_BG_garde_son_slot_reserve(projet):
 # ── T5 : palettes propres des pools, per-scène ────────────────────
 
 def test_pool_palette_propre_reservee_par_scene(projet):
-    """ROADMAP v0.17 T5 : une scène ne réserve de banque OBJ que pour les prefabs
+    """Une scène ne réserve de banque OBJ que pour les prefabs
     QU'ELLE poole. Deux scènes qui poolent des prefabs différents ne se
     contaminent pas, et une scène qui n'en poole aucun n'en réserve aucune — fin
     du slot global réservé partout qu'imposait l'ancien `spawn_X`."""

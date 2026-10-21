@@ -218,8 +218,7 @@ class SceneActorOrderCmd(Command):
 
 
 class MoveActorGroupCmd(Command):
-    """Déplacement groupé : un actor et son SOUS-ARBRE (`Actor.parent`, ROADMAP
-    v0.23) glissés ensemble dans le canvas. Bouger un parent translate ses
+    """Déplacement groupé : un actor et son SOUS-ARBRE (`Actor.parent`) glissés ensemble dans le canvas. Bouger un parent translate ses
     descendants du même delta pour garder leurs positions monde relatives —
     cf. Actor.parent dans core/models/scene.py : l'auteur pose en coordonnées
     monde, ce déplacement groupé est ce qui les garde cohérentes dans

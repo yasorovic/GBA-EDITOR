@@ -13,7 +13,7 @@ gratuitement ; une fonction retirée perd la sienne, et la complétion ne peut d
 pas proposer une fonction morte — le seul bug qui compte ici.
 
 L'aide d'un candidat est celle de la sidebar : `tooltip_parts()` fournit les mêmes
-morceaux des deux côtés (cf. ROADMAP v0.27) ; l'INTERFACE les compose en infobulle.
+morceaux des deux côtés ; l'INTERFACE les compose en infobulle.
 Ce module ne produit aucun HTML : il est en dessous de `ui`.
 
 Périmètre — phase 1, « le catalogue seul » :

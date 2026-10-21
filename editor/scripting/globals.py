@@ -26,7 +26,7 @@ _C_TYPES = {
 
 STRING_TYPE = "string"
 
-# Ce qu'une case COÛTE EN SAUVEGARDE, en bits (ROADMAP v0.20). Rien à voir avec
+# Ce qu'une case COÛTE EN SAUVEGARDE, en bits. Rien à voir avec
 # sa taille en mémoire vive, où chaque type garde son type C : un `bool` occupe
 # un octet en RAM et un BIT en SRAM. C'est la définition même de « le paquetage
 # est une décision d'émission » — l'auteur n'en entend jamais parler.
@@ -77,7 +77,7 @@ def generate_globals_h(globals_) -> str:
             n = _count(g)
             # Un tableau reste un tableau C ORDINAIRE en mémoire vive : c'est
             # `global.coffres[i]` qui s'y indexe directement, au même prix qu'un
-            # scalaire (ROADMAP v0.20). Le paquetage — huit booléens par octet —
+            # scalaire. Le paquetage — huit booléens par octet —
             # ne concerne QUE la SRAM, et c'est l'émetteur de sauvegarde qui le
             # décide (cf. main_gen). Sans quoi on réintroduirait les opérateurs
             # binaires par la porte de la sauvegarde après les avoir refusés par
@@ -108,7 +108,7 @@ def generate_globals_h(globals_) -> str:
         "   knows how to convert each case. */",
         "extern int  global_read (int i);",
         "extern void global_write(int i, int v);",
-        "/* The same ones, CASE BY CASE (ROADMAP v0.20). Only the save and",
+        "/* The same ones, CASE BY CASE. Only the save and",
         "   text interpolation need them: a script writes",
         "   `global.chests[i]`, which the codegen translates into a direct access to "
         "the",

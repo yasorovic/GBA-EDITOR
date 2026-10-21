@@ -1,7 +1,7 @@
 """
 core/asset_duplication.py — dupliquer un asset : une variante, qui POINTE la même source.
 
-Un asset n'est pas son fichier source (cf. ROADMAP, « Source ≠ asset ») : deux assets peuvent citer le même `.wav`
+Un asset n'est pas son fichier source : deux assets peuvent citer le même `.wav`
 ou le même PNG avec des réglages différents. Dupliquer en est le geste — l'auteur ne réimporte pas, ne recrée pas, il
 part d'un asset réglé.
 

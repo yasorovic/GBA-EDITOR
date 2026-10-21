@@ -1,6 +1,6 @@
 """
 ui/scene_manager/inspectors/languages_card.py — la carte « Languages » de
-l'inspecteur de projet (ROADMAP v0.9, phase 1).
+l'inspecteur de projet.
 
 **Déclarer, pas deviner.** C'est cette carte qui lie une langue à son fichier de
 traduction et à ses polices. Rien n'est déduit d'un nom de fichier : `font_de`

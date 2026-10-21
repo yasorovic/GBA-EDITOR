@@ -1,6 +1,6 @@
 """
 ui/scene_manager/inspectors/axes_card.py — la carte « Axes » de la fenêtre
-Project Settings (catégorie Input, ROADMAP « Les inputs personnalisés »).
+Project Settings (catégorie Input).
 
 Un axe scalaire remappe la croix ou pilote un axe avec d'autres boutons/
 actions, sans toucher au script (`input:get_axis("nom")`). "horizontal" et

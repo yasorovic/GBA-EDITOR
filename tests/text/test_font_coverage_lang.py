@@ -1,4 +1,4 @@
-"""Un texte qui cite un caractère absent de sa police (ROADMAP v0.9).
+"""Un texte qui cite un caractère absent de sa police.
 
 `text_glyph_slot` rend -1 pour un glyphe absent (cf. `gba_engine.h`) : le
 caractère disparaît de l'affichage, sans un mot au build. Bug réel rencontré

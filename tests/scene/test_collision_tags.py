@@ -2,7 +2,7 @@
 voyait, parce qu'il ne se manifeste qu'au `make`.
 
 `spawn_<Prefab>()` écrit `boxes[].tag = BOXTAG_<TAG>` pour la box d'un prefab
-poolé et pour celles de ses PARTIES (ROADMAP v0.23). La liste des `#define`,
+poolé et pour celles de ses PARTIES. La liste des `#define`,
 elle, ne parcourait que les acteurs de SCÈNE. Un tag porté seulement par un
 prefab n'avait donc pas de constante, et le C émis ne compilait pas :
 
@@ -60,7 +60,7 @@ def test_le_tag_d_un_prefab_a_sa_constante(tmp_path):
 
 
 def test_le_tag_d_une_partie_de_prefab_aussi(tmp_path):
-    """Une PARTIE de prefab (ROADMAP v0.23) a ses propres boxes, et
+    """Une PARTIE de prefab a ses propres boxes, et
     `spawn_<Prefab>` les écrit comme celles de la racine."""
     p = _projet(tmp_path)
     p.prefabs.items[0].children = [

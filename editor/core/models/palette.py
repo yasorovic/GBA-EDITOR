@@ -70,7 +70,7 @@ class PaletteBank(Resource):
                 self.colors = self.colors[:self.size]
             self.colors[0] = RESERVED_SLOT_COLOR
 
-    # ROADMAP v0.24 : les couleurs s'écrivent en #RRGGBB. Seule raison de
+    # les couleurs s'écrivent en #RRGGBB. Seule raison de
     # surcharger les deux méthodes génériques de Resource — le reste de la
     # palette (`name`, `size`) se sérialise très bien tout seul.
     # Une couleur par ligne, et non les seize sur une seule : deux personnes

@@ -2,7 +2,7 @@
 core/music_structure.py — ce que les réglages d'une musique ont le droit de dire,
 mis en face du fichier qu'ils décrivent.
 
-Le sidecar `.music` surcharge, le fichier propose (ROADMAP « L'asset .music ») :
+Le sidecar `.music` surcharge, le fichier propose :
 les sections sont des plages posées PAR-DESSUS un morceau, et un morceau peut
 être remplacé, raccourci, ou changer de famille. Un sidecar d'hier n'a donc rien
 promis sur le fichier d'aujourd'hui — c'est ici qu'on le vérifie, avant que le
@@ -78,7 +78,7 @@ def jingle_ignored_settings(music: Music) -> list[str]:
 # hauteur (facteurs Q10 de maxmod), les deux fondus (en frames). ZÉRO PARTOUT = le
 # fichier tel qu'il est. Définie ICI, et non dans l'émetteur C, parce que l'aperçu de
 # l'éditeur la lit aussi : un seul calcul pour la ROM et pour ce qu'on entend, sinon
-# l'un des deux finit par régler autre chose que l'autre (cf. ROADMAP « L'asset .music »).
+# l'un des deux finit par régler autre chose que l'autre.
 
 def music_info_row(m, path=None) -> tuple[int, int, int, int, int, int]:
     """(début de boucle, fin de boucle, tempo, hauteur, fondu d'entrée, fondu de sortie).
@@ -289,7 +289,7 @@ def cut_problems(src_name: str, dst_name: str, src_module, dst_module, *,
     nécessaire (une cible plus longue que la source ne risque rien).
 
     Ce qui se passe sur un index qui ne désigne pas de pattern a été MESURÉ sur
-    ROM le 2026-10-11 (ROADMAP « L'asset .music ») :
+    ROM le 2026-10-11 :
         séparateur (254)        la lecture tombe sur le pattern SUIVANT ;
         fin (255) ou hors table  avec `MM_PLAY_LOOP` la cible REDÉMARRE à sa
                                 position de restart ; avec `MM_PLAY_ONCE` elle

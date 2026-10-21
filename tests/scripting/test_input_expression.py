@@ -1,4 +1,4 @@
-"""Le parseur pur du mini-langage d'input (ROADMAP : « Les inputs personnalisés »).
+"""Le parseur pur du mini-langage d'input.
 
 Une seule grammaire, une seule table de mouvements : ces tests couvrent
 l'accord (`+`), la séquence (`-`), les mouvements built-in et leur expansion,

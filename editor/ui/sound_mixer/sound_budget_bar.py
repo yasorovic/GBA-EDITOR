@@ -4,9 +4,7 @@ ui/sound_mixer/sound_budget_bar.py — le bandeau de canaux de l'écran Son.
 `window.py` porte déjà UNE barre de budget matériel (`GbaStatusBar`) : OAM,
 cycles/ligne, VRAM, palettes — fixée en bas de la FENÊTRE, et rattachée à la
 scène active quel que soit l'écran ouvert. Sur l'écran Son, elle continue de
-montrer ces quatre chiffres-là — exacts, mais sur le mauvais sujet (ROADMAP
-v0.8.5 : « un écran de son qui affiche le budget des sprites ment par
-déplacement »). Ce module ne l'étend pas : il lui donne un jumeau LOCAL, pour
+montrer ces quatre chiffres-là — exacts, mais sur le mauvais sujet. Ce module ne l'étend pas : il lui donne un jumeau LOCAL, pour
 la ressource rare de CET écran-ci.
 
     La ressource rare, ici, ce sont les huit canaux logiciels de maxmod
@@ -71,8 +69,7 @@ def worst_case_channels(project, music_box: Optional[MusicBox],
     """(canaux musique, canaux jingle) — le pire état de CHAQUE couche, prise
     séparément, dans les deux boîtes données.
 
-    Les deux couches ne se coordonnent pas (ROADMAP v0.8.7, « TROIS ASSETS
-    indépendants ») : n'importe quel état de musique peut se superposer à
+    Les deux couches ne se coordonnent pas : n'importe quel état de musique peut se superposer à
     n'importe quel état de jingle. Le pire total possible est donc la SOMME
     des deux pires pris séparément — pas le pire d'une paire d'états précise,
     qui supposerait une coordination que le matériel n'offre pas.

@@ -1,4 +1,4 @@
-"""`lang.set`/`lang.get` (ROADMAP v0.9, phase 4).
+"""`lang.set`/`lang.get`.
 
 Rien de plus que ces deux appels côté script : la police effective
 (`g_lang_font`, phase 3.2) et le sous-ensemble de glyphes ÉMIS (union de

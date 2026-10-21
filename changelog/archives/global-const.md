@@ -3,7 +3,7 @@
 > **Chantier technique** — il ne livre rien de visible pour qui joue au jeu produit avec
 > l'éditeur, seulement une grammaire de script cohérente avec elle-même. Il n'a donc ni numéro
 > `vX.Y`, ni ligne au [README](../../README.md), ni entrée au [CHANGELOG](../CHANGELOG.md) : c'est
-> la convention des [chantiers techniques](../../ROADMAP.md#chantiers-techniques).
+> la convention des [chantiers techniques](../../docs/development/TODO.md#état-des-pistes).
 
 > **Livré le 2026-09-01.** `global.get("score")` / `global.set("score", v)` / `const.get("max")`
 > ont quitté `RUNTIME_API` au profit de `global.score`, `global.score = 12` et `const.max`.

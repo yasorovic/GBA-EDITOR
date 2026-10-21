@@ -15,8 +15,7 @@ pool réellement adressable ne contient que DEUX places.
 Déterministe, pas optimal : l'intention caméra (si elle existe) prend
 TOUJOURS la première place (`WINR_0`), puis chaque `WindowSlot` nommé prend ce
 qui reste, dans l'ordre de `Scene.windows`. Pas de champ de priorité
-authorable — cf. ROADMAP.md, chantier « l'allocateur de ressources
-matérielles », décision verrouillée « déterminisme avant optimalité »."""
+authorable (décision : déterminisme avant optimalité)."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field

@@ -1,5 +1,4 @@
-"""La réservation VRAM du texte est ce que le runtime CHARGE (ROADMAP v0.9,
-phase 5.1).
+"""La réservation VRAM du texte est ce que le runtime CHARGE.
 
 Avant cette phase, deux calculs répondaient à la même question et ne
 tombaient pas d'accord : `_emit_font_subsets` émettait le sous-ensemble de

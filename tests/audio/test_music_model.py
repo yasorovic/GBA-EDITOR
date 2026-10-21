@@ -1,6 +1,6 @@
 """L'asset `.music` : ses réglages, leur relecture, et leur accord avec le fichier.
 
-Le sidecar surcharge, le fichier propose (ROADMAP « L'asset .music ») : sections,
+Le sidecar surcharge, le fichier propose : sections,
 boucle, tempo, hauteur, fondus et taux sont posés PAR-DESSUS un morceau sans
 jamais le toucher. Ces tests tiennent ce que ça exige — un sidecar d'avant ces
 champs se relit comme avant, un sidecar qui décrit un morceau disparu est signalé

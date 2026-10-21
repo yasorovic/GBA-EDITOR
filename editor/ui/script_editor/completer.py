@@ -2,8 +2,7 @@
 
 Couche mince : il ne SAIT rien de l'API. Il demande à `scripting.completion` les
 candidats pour le texte à gauche du curseur, les affiche, et insère le choix. La
-connaissance vit dans le catalogue ; ce fichier n'en est que la fenêtre (cf.
-ROADMAP v0.27).
+connaissance vit dans le catalogue ; ce fichier n'en est que la fenêtre.
 """
 from __future__ import annotations
 

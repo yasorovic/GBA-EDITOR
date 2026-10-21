@@ -1,8 +1,7 @@
 """Les réglages d'une musique traversent un VRAI build : le C généré compile, se lie, et la ROM sort.
 
 Rien n'est court-circuité sauf mGBA (cf. `test_shipped_projects_build`). Le comportement du C
-sur console — la section qui boucle, les fondus, le tempo — a été mesuré sur ROM le 2026-10-11
-(ROADMAP « L'asset .music ») ; ce test tient que ce C continue de COMPILER, avec la table qu'on
+sur console — la section qui boucle, les fondus, le tempo — a été mesuré sur ROM le 2026-10-11 ; ce test tient que ce C continue de COMPILER, avec la table qu'on
 attend, et que le WAV est encapsulé avec sa boucle et son taux.
 
 Lent et dépendant de devkitPro : `pytest -m slow`.

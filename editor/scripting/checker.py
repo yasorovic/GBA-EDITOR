@@ -570,8 +570,7 @@ class Checker:
 
         La lecture vit dans `parser.local_names` : à plat, sans portée, cette
         liste sert à REFUSER, donc trop large ne fait que taire un refus, jamais
-        en inventer un. L'autocomplétion la PROPOSE depuis la même source (ROADMAP
-        v0.27, phase 2) — d'où l'extraction, pour qu'un seul parcours nourrisse
+        en inventer un. L'autocomplétion la PROPOSE depuis la même source — d'où l'extraction, pour qu'un seul parcours nourrisse
         les deux."""
         self._local_names |= local_names(script)
 
@@ -872,7 +871,7 @@ class Checker:
                 "variable if it must change."))
 
     def _check_global_indexed(self, name: str, index) -> None:
-        """`global.nom[i]` — la base d'un tableau (ROADMAP v0.20). Trois
+        """`global.nom[i]` — la base d'un tableau. Trois
         fautes à dire ici plutôt que sur la ligne C générée : un nom qui
         n'existe pas, un SCALAIRE indexé (`g_score[0]` ne compile pas), et un
         rang hors bornes quand il est écrit en clair. Un index calculé ne se
@@ -1459,7 +1458,7 @@ class Checker:
         qu'aucune ligne du script n'assigne. Tout le reste — un appel d'API, un
         global, une propriété, une indexation — rend faux, parce qu'on ne sait
         pas ce que ça vaudra à la frame suivante. Le contrôle ferme la faute
-        bête sans jamais accuser à tort (cf. ROADMAP v0.7.7)."""
+        bête sans jamais accuser à tort."""
         if isinstance(e, (ExprNumber, ExprBool, ExprNil, ExprString)):
             return True
         if isinstance(e, ExprName):
@@ -2703,7 +2702,7 @@ class Checker:
     def _check_frame_literal(self, call_key: str, arg, param_name: str):
         """Toutes les durées d'input tiennent dans un `u8` (1 à 255 frames) —
         seul un LITTÉRAL se vérifie ici, une variable reste du ressort de
-        l'auteur (ROADMAP « Les inputs personnalisés »)."""
+        l'auteur."""
         if isinstance(arg, ExprNumber) and not (1 <= arg.value <= 255):
             self.errors.append(CheckError(
                 "error",

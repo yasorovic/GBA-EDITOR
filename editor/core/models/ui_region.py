@@ -25,7 +25,7 @@ quoi il ressemble — même contrat que la window matérielle (`WindowSlot`), qu
 est un pochoir et pas un cadre. C'est pour ça que le mot était « région » et non
 « frame » : dans GB Studio, `frame.png` EST l'image de bordure 9-slice, et le
 mot promettrait donc un dessin que le moteur ne fait pas. Le vocabulaire est
-celui que fixait ROADMAP v0.3.2 (« région, layer, tilemap — jamais dialogue,
+celui qui a été fixé (« région, layer, tilemap — jamais dialogue,
 message ») ; « textbox » en a été retiré le 2026-10-14, quand la boîte de texte
 est devenue un type de rendu à part entière (cf. `UITextbox`) ; `frame`
 collisionnerait de surcroît avec les frames d'animation (`Sprite.frame_w`) et la
@@ -35,8 +35,7 @@ frame vidéo.
 rien ici ne dit quel texte s'affiche quand, ni sur quel événement. Un contenu
 authoré est posé une fois à l'init ; tout ce qui CHANGE reste au Lua
 (`interface.draw_text("boite_bas", "village_garde")`) — c'est ce qui empêche cet objet
-de devenir un éditeur de dialogue par accident, refus tenu depuis ROADMAP
-v0.3.2.
+de devenir un éditeur de dialogue par accident, refus tenu depuis le départ.
 
 **L'ancrage et la cible appartiennent au nœud, pas à l'élément (v0.25).** Un nœud
 `Interface` (`UILayout`) porte UN `anchor` + UN `target` ; tout son sous-arbre en
@@ -1613,8 +1612,7 @@ class UILayout(Resource):
 # Un `UILayout` est un asset de CONTENU réutilisable (éléments, géométrie,
 # glyphes) ; sa CIBLE DE RENDU — ancrage, cible BG/OBJ, acteur suivi, et le slot
 # BG, donc sa place dans la pile de composition — est un fait PAR INSTANCE dans
-# une scène (ROADMAP v0.12, « distinguer un asset de sa cible de rendu, le
-# z-order en fait partie »). Le nœud porte ce chemin matériel ; l'asset n'en sait
+# une scène. Le nœud porte ce chemin matériel ; l'asset n'en sait
 # rien. Cela ACHÈVE la v0.25, qui disait déjà « le nœud possède anchor+target »
 # mais le représentait par un simple nom faute de corps.
 

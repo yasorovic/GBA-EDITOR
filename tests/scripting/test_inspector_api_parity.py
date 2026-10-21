@@ -1,6 +1,6 @@
 """L'API dit ce que l'inspecteur règle — tranche 1 : acteur, sprite, collision.
 
-Règle (ROADMAP « L'API dit tout ce que l'inspecteur règle ») : tout champ
+Règle : tout champ
 d'inspecteur a une porte Lua — écrite quand le runtime sait la changer, en
 LECTURE SEULE quand la valeur est fixée au build.
 

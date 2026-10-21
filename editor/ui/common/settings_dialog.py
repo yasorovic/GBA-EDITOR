@@ -1,7 +1,7 @@
 """
-ui/common/settings_dialog.py — Réglages du logiciel : un dialogue, cinq
+ui/common/settings_dialog.py — Réglages du logiciel : un dialogue, six
 catégories dans une colonne de gauche (Toolchains / Theme / Interface /
-Shortcuts / External Tools), un panneau à droite. Remplace l'ancien `ToolchainDialog`
+Shortcuts / External Tools / Updates), un panneau à droite. Remplace l'ancien `ToolchainDialog`
 (OK/Cancel) — ici chaque champ se sauvegarde à l'instant où il change, comme
 `Toolchain`/`Keybindings`/`ExternalTools` le font déjà chacun de leur côté :
 un bouton Close referme l'écran, il n'y a rien à annuler.
@@ -15,7 +15,7 @@ Portée des catégories, volontairement inégale (2026-08-23) :
     de proposer un choix qui n'existe pas.
   - **Interface** — ce que l'éditeur MONTRE de lui-même
     (`core/interface_preferences.py`) : la langue et l'affichage des astuces,
-    le niveau 3 des notices (ROADMAP v0.11). Ces réglages ont d'abord vécu dans
+    le niveau 3 des notices. Ces réglages ont d'abord vécu dans
     les réglages du PROJET ; il en est sorti parce que `project.json` est
     versionné — couper les astuces les coupait pour toute l'équipe — et parce
     qu'un réglage de projet passe par l'historique d'annulation, où une
@@ -48,6 +48,8 @@ from ui.common.install_commands import InstallCommands
 from ui.common.notice import refresh_tips, tip
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
+from ui.common.update_checker import update_frequency, set_update_frequency
+from core.update_check import CHECK_FREQUENCIES
 from ui.common import catalog
 from core.app_info import APP_NAME
 from core.app_paths import IS_FROZEN, IS_LINUX
@@ -387,6 +389,41 @@ class InterfacePanel(QWidget):
         # la langue de cette session : aucun mélange avant le redémarrage.
 
 
+# ── Updates ─────────────────────────────────────────────────────────────
+
+class UpdatesPanel(QWidget):
+    """Fréquence de la vérification automatique, persistée à l'instant du choix."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        lay = QVBoxLayout(self)
+        lay.setSpacing(14)
+        lay.addWidget(_category_title(label("settings.cat.updates")))
+
+        row = QHBoxLayout()
+        name = QLabel(label("settings.updates.frequency"))
+        name.setFont(QFont(T.UI, T.MD))
+        name.setFixedWidth(140)
+        self._frequency = QComboBox()
+        self._frequency.setFont(QFont(T.UI, T.MD))
+        self._frequency.setStyleSheet(QSS.combobox)
+        for frequency in CHECK_FREQUENCIES:
+            self._frequency.addItem(label(f"settings.updates.{frequency}"), frequency)
+        self._frequency.setCurrentIndex(max(0, self._frequency.findData(update_frequency())))
+        self._frequency.currentIndexChanged.connect(
+            lambda index: set_update_frequency(str(self._frequency.itemData(index))))
+        row.addWidget(name)
+        row.addWidget(self._frequency, 1)
+        lay.addLayout(row)
+
+        note = QLabel(label("about.update_privacy"))
+        note.setFont(QFont(T.UI, T.SM))
+        note.setStyleSheet(f"color:{C.TEXT_DIM};")
+        note.setWordWrap(True)
+        lay.addWidget(note)
+        lay.addStretch()
+
+
 # ── Shortcuts ───────────────────────────────────────────────────────────
 
 # Le contexte des raccourcis valables dans tout le logiciel (cf. core/keybindings).
@@ -674,13 +711,14 @@ class SettingsDialog(QDialog):
     # elles ne se traduisent pas. Le LIBELLÉ affiché passe par `_CAT_LABELS` — le
     # même piège qu'un nom de fichier qui doublerait comme clé (cf. v0.10).
     _CATEGORIES = ("Toolchains", "Theme", "Interface", "Shortcuts",
-                   "External Tools")
+                   "External Tools", "Updates")
     _CAT_LABELS = {
         "Toolchains": "settings.cat.toolchains",
         "Theme": "settings.cat.theme",
         "Interface": "common.interface",
         "Shortcuts": "settings.cat.shortcuts",
         "External Tools": "settings.cat.external_tools",
+        "Updates": "settings.cat.updates",
     }
 
     def __init__(self, toolchain: Toolchain, external_tools: ExternalTools,
@@ -709,6 +747,7 @@ class SettingsDialog(QDialog):
             InterfacePanel(),
             ShortcutsPanel(),
             ExternalToolsPanel(external_tools),
+            UpdatesPanel(),
         ]
         for panel in panels:
             scroll = QScrollArea()

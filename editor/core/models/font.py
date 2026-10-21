@@ -14,7 +14,7 @@ le cas particulier où tous les rectangles font la même taille. La grille
 (`cell_w`/`cell_h`) ne reste qu'une aide à la déduction et à l'affichage.
 
 **`advance` est renseigné dès l'import mais ignoré au rendu v1**, qui est à
-chasse fixe (un glyphe = une tuile 8×8, cf. ROADMAP v0.3.2). Le jour où le rendu
+chasse fixe (un glyphe = une tuile 8×8). Le jour où le rendu
 proportionnel arrive, aucune police n'est à réimporter — c'est tout l'intérêt
 de le stocker maintenant.
 

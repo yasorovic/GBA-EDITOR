@@ -16,7 +16,7 @@ une pop-up. « Ignorer cette version » (`ignore`) retire le point pour elle seu
 distribution en fait) : l'installateur Windows est annoncé par `installer_ready`, que la
 fenêtre principale transforme en fermeture puis lancement ; un ZIP portable ou une AppImage
 atterrissent dans `download_dir` (le dossier choisi par l'utilisateur, « Téléchargements »
-du système par défaut), dossier que l'on ouvre.
+du système par défaut), dossier que l'on ouvre. `cancel_download()` l'interrompt.
 """
 
 from __future__ import annotations
@@ -29,8 +29,26 @@ from PyQt6.QtCore import QObject, QSettings, QStandardPaths, QThread, QUrl, pyqt
 from PyQt6.QtGui import QDesktopServices
 
 from core.app_info import APP_NAME, APP_VERSION
-from core.update_check import LatestRelease, fetch_latest_release, is_due, version_key
+from core.update_check import (
+    CHECK_FREQUENCIES, DEFAULT_CHECK_FREQUENCY, LatestRelease, fetch_latest_release, is_due,
+    version_key,
+)
 from core.update_install import download_release, install_kind, installer_folder
+
+
+def update_frequency() -> str:
+    """La fréquence de la vérification automatique (réglages, catégorie Updates). Lue dans les
+    réglages à chaque appel : la catégorie et le vérificateur n'ont pas à se connaître."""
+    settings = QSettings(APP_NAME, "Updates")
+    stored = settings.value("frequency", "")
+    if stored in CHECK_FREQUENCIES:
+        return stored
+    # Avant la fréquence, une case à cocher : décochée, elle devient « jamais ».
+    return DEFAULT_CHECK_FREQUENCY if settings.value("auto_check", True, type=bool) else "never"
+
+
+def set_update_frequency(frequency: str):
+    QSettings(APP_NAME, "Updates").setValue("frequency", frequency)
 
 
 class _Fetch(QThread):
@@ -48,6 +66,7 @@ class _Download(QThread):
     progress = pyqtSignal(int)
     done = pyqtSignal(object)   # Path
     failed = pyqtSignal()
+    cancelled = pyqtSignal()
 
     def __init__(self, release: LatestRelease, kind: str, folder: Path, parent=None):
         super().__init__(parent)
@@ -56,7 +75,10 @@ class _Download(QThread):
     def run(self):
         try:
             self.done.emit(download_release(
-                self._release, self._kind, self._folder, self.progress.emit))
+                self._release, self._kind, self._folder, self.progress.emit,
+                self.isInterruptionRequested))
+        except InterruptedError:
+            self.cancelled.emit()
         except Exception:
             self.failed.emit()
 
@@ -83,14 +105,6 @@ class UpdateChecker(QObject):
         self.available = self._stored_release()
 
     @property
-    def auto_check(self) -> bool:
-        return self._settings.value("auto_check", True, type=bool)
-
-    @auto_check.setter
-    def auto_check(self, enabled: bool):
-        self._settings.setValue("auto_check", enabled)
-
-    @property
     def download_dir(self) -> Path:
         default = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DownloadLocation)
         return Path(self._settings.value("download_dir", default))
@@ -112,9 +126,9 @@ class UpdateChecker(QObject):
             self.changed.emit()
 
     def check_if_due(self):
-        """Au démarrage : une vérification par jour au plus, et seulement si elle est permise."""
+        """Au démarrage : une vérification si la fréquence choisie (Réglages > Updates) l'exige."""
         last = self._settings.value("last_check", 0.0, type=float)
-        if self.auto_check and is_due(last, time.time()):
+        if is_due(last, time.time(), update_frequency()):
             self.check(automatic=True)
 
     def check(self, automatic: bool = False):
@@ -150,7 +164,17 @@ class UpdateChecker(QObject):
         self._download.progress.connect(self._on_progress)
         self._download.done.connect(self._on_downloaded)
         self._download.failed.connect(self._on_download_failed)
+        self._download.cancelled.connect(self._on_download_cancelled)
         self._download.start()
+        self.changed.emit()
+
+    def cancel_download(self):
+        """Interrompt le téléchargement en cours ; le fichier partiel est supprimé par le fil."""
+        if self.downloading and self._download:
+            self._download.requestInterruption()
+
+    def _on_download_cancelled(self):
+        self.downloading = False
         self.changed.emit()
 
     def _on_progress(self, percent: int):

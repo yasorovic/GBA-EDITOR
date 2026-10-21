@@ -21,7 +21,7 @@ class CollisionBoxComponent:
     CARTE DE COLLISION de la scène (murs, pentes, plafonds) ?
 
         solid=True  → l'acteur est repoussé par les tuiles, se pose sur les
-                      pentes, se cogne aux plafonds (cf. ROADMAP v0.6.3)
+                      pentes, se cogne aux plafonds
         solid=False → la carte l'ignore : à un script de gérer les tuiles s'il
                       le veut, via `collision_box.get_tile`
 
@@ -105,13 +105,13 @@ class SpriteComponent:
 
 
 # Triggers de SoundFxComponent AUTRES que "manual" — tous DÉCLENCHÉS PAR LE
-# MOTEUR, sans qu'aucun script n'existe sur l'actor (ROADMAP, 2026-08-24) :
+# MOTEUR, sans qu'aucun script n'existe sur l'actor :
 # le dispatch est piloté par la DONNÉE du component, pas par la présence d'une
 # fonction Lua compilée. "on_destroy" passe par une table indexée par tag
 # (cf. `actor_destroy_with_sfx`, runtime), "on_spawn" est injecté au spawn de
 # l'actor ; tout AUTRE trigger est un NOM de bouton ou d'action déclarée (la
-# même liste que `input:pressed(nom)`, jamais une séquence — ROADMAP « Les
-# inputs personnalisés », tranche finale, 2026-09-27, qui a remplacé les dix
+# même liste que `input:pressed(nom)`, jamais une séquence ; décision du
+# 2026-09-27, qui a remplacé les dix
 # valeurs fixes `on_button_*` par ce nom libre).
 SFX_AUTO_TRIGGERS: tuple[str, ...] = ("on_spawn", "on_destroy")
 
@@ -169,8 +169,7 @@ def components_to_list(components: list) -> list[dict]:
     ]
 
 
-# Migration à la lecture (ROADMAP « Les inputs personnalisés », tranche
-# finale, 2026-09-27) : `SoundFxComponent.trigger` visait un des dix
+# Migration à la lecture : `SoundFxComponent.trigger` visait un des dix
 # `on_button_*` — il vise désormais un NOM (bouton ou action déclarée), la
 # même liste que `input:pressed(nom)`. Un projet plus ancien ne perd rien.
 _LEGACY_SFX_TRIGGERS: dict = {

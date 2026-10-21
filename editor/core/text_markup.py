@@ -1,7 +1,7 @@
 """
 core/text_markup.py — le langage de balisage des entrées de la table de textes.
 
-Syntaxe à la BBCode (décision ROADMAP v0.3.2, sur le modèle du `RichTextLabel`
+Syntaxe à la BBCode (sur le modèle du `RichTextLabel`
 de Godot) : `[speed=4]`, `[pause=3]`, `[wave]…[/wave]`. Elle est **fermée** —
 sans borne de fin, `/S12` serait indécidable —, les crochets n'apparaissent pas
 en prose là où `/` le fait (« et/ou », « 12/05 »), et elle a des **balises de

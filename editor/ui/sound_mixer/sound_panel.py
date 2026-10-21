@@ -293,7 +293,7 @@ class SfxInspector(_AssetInspectorBase):
         mmutil conserve le taux : sans quantification, un effet en 44,1 kHz
         coûte près de trois fois ce qu'il coûterait en 16 kHz sans rien
         apporter que le mixeur Maxmod sache restituer. On affiche le fait, on
-        ne refuse pas le choix (ROADMAP v0.8.1).
+        ne refuse pas le choix.
         """
         n = sfx_rom_bytes(path)
         return label("sndpanel.sfx_source", kb=f"{n / 1024:.1f}") if n else ""

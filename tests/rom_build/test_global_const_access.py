@@ -17,7 +17,7 @@ tout) :
 - un tableau ne se lit pas nu, un scalaire ne s'indexe pas ;
 - une constante ne s'écrit jamais ;
 - les anciennes orthographes (`global.get`/`const.get`) sont refusées comme
-  « module inconnu » — retrait sec, sans guide (ROADMAP v0.16, REMOVED_API vidé) ;
+  « module inconnu » — retrait sec, sans guide ;
 - un renommage de variable réécrit les DEUX formes pointées dans les scripts.
 """
 from __future__ import annotations
@@ -84,7 +84,7 @@ def test_lecture_dune_constante_compile_en_symbole_c():
 
 
 def test_case_de_tableau_compile_indexee():
-    """La forme indexée (ROADMAP v0.20) n'a jamais eu d'accesseur : elle ne
+    """La forme indexée n'a jamais eu d'accesseur : elle ne
     bouge pas, et sa base est le MÊME accès pointé que le scalaire."""
     assert "g_coffres[" in _gen(_body("global.coffres[3] = 1"))
 
@@ -180,7 +180,7 @@ def test_valeur_hors_plage_avertit_dans_la_grammaire_pointee():
     'local v = const.get("max_vies")',
 ])
 def test_les_accesseurs_retires_sont_bloques(src):
-    """Retrait sec (ROADMAP v0.16, REMOVED_API vidé) : `global.get`/`const.get`
+    """Retrait sec : `global.get`/`const.get`
     ne guident plus vers l'accès pointé — ils sont refusés comme un module
     inexistant. Le blocage tient au checker (module hors catalogue), pas à
     REMOVED_API."""

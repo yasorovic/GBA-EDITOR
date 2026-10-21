@@ -13,7 +13,7 @@ Chaque défaut couvert ici produit du C qui **compile parfaitement** et se tromp
 - un tableau d'état dimensionné par un littéral au lieu de
   `POOL_<SYM>_INSTANCES` → débordement si les deux divergent.
 
-Cf. ROADMAP v0.7.6.
+
 """
 from __future__ import annotations
 

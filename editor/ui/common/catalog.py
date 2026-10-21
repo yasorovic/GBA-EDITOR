@@ -113,7 +113,7 @@ class Catalog:
 def set_language(code: str):
     """Bascule TOUS les catalogues sur une langue (`""` = la source seule).
 
-    C'est le seul geste que l'écran de réglages de langue (ROADMAP v0.11)
+    C'est le seul geste que l'écran de réglages de langue
     appelle : la règle de repli appartient au catalogue, pas à l'écran."""
     global _lang
     _lang = code or ""

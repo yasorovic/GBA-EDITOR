@@ -1,5 +1,4 @@
-"""Un module du moteur est un récepteur singleton : `module:action(…)`, `module.état` —
-ROADMAP v0.16, décision du 2026-09-26.
+"""Un module du moteur est un récepteur singleton : `module:action(…)`, `module.état` (décision du 2026-09-26).
 
 `sfx:play("Bip")`, `input:pressed("A")`, `save:write(0)`, `text:draw(…)`, `layer:get(0)` : l'action
 d'un module s'écrit avec « : », comme celle d'une instance (`menu:hide()`), et son état avec un

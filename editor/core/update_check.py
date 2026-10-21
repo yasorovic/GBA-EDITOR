@@ -36,14 +36,26 @@ class LatestRelease:
 
 CHECK_INTERVAL_SECONDS = 24 * 3600
 
+# Fréquence de la vérification automatique : identifiant -> délai minimal entre deux
+# vérifications (en secondes) ; `None` = jamais. Les identifiants sont ceux des réglages.
+CHECK_FREQUENCIES = {
+    "startup": 0,
+    "daily": CHECK_INTERVAL_SECONDS,
+    "weekly": 7 * CHECK_INTERVAL_SECONDS,
+    "never": None,
+}
+DEFAULT_CHECK_FREQUENCY = "daily"
 
-def is_due(last_check: float, now: float) -> bool:
-    """Vrai si la dernière vérification date d'au moins un jour (ou n'a jamais eu lieu : 0)."""
-    return now - last_check >= CHECK_INTERVAL_SECONDS
+
+def is_due(last_check: float, now: float, frequency: str = DEFAULT_CHECK_FREQUENCY) -> bool:
+    """Vrai si la dernière vérification date d'au moins le délai de `frequency` (ou n'a
+    jamais eu lieu : 0). `never` n'est jamais dû."""
+    interval = CHECK_FREQUENCIES[frequency]
+    return interval is not None and now - last_check >= interval
 
 
 def version_key(version: str) -> tuple:
-    """`1.0.0-alpha` → (1, 0, 0, 0), comparable ; `ValueError` si la forme diffère."""
+    """`0.1.0-alpha` → (0, 1, 0, 0), comparable ; `ValueError` si la forme diffère."""
     numbers, _, label = version.removeprefix("v").partition("-")
     parts = numbers.split(".")
     if len(parts) != 3 or label not in _LABEL_RANK:

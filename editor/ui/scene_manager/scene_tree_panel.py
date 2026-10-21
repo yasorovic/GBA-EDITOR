@@ -687,7 +687,7 @@ class _ActiveSceneTree(_Tree):
                 event.ignore()
                 return
             if target is not None and self.dropIndicatorPosition() == Pos.OnItem:
-                # Lâché SUR un acteur = reparentage (ROADMAP v0.23), pas un
+                # Lâché SUR un acteur = reparentage, pas un
                 # réordonnancement — Qt ne doit pas y toucher.
                 event.accept()
                 self._reparent_actor(dragged.data(0, _ROLE_OBJ), target.data(0, _ROLE_OBJ))
@@ -738,7 +738,7 @@ class _ActiveSceneTree(_Tree):
         event.ignore()
 
     def _reparent_actor(self, actor: Actor, new_parent: Actor):
-        """Pose `actor` sous `new_parent` (Actor.parent, ROADMAP v0.23).
+        """Pose `actor` sous `new_parent` (Actor.parent).
 
         Même garde anti-cycle que l'inspecteur (`_descendants` dans
         actor_inspector.py) : se poser sur soi-même ou sur son propre

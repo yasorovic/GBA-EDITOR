@@ -236,7 +236,7 @@ class PrefabUsesInspector(_UsesInspectorBase):
         # « Spawné par » : les scripts qui appellent `actor:spawn("<ce prefab>")`.
         # Troisième lien de dépendance, distinct des instances posées : le nom
         # du prefab est un littéral obligatoire, donc lisible statiquement sans
-        # rien exécuter (ROADMAP v0.17). Même lecture que celle qui *propose* le
+        # rien exécuter. Même lecture que celle qui *propose* le
         # pool à la scène — pas un second parseur.
         from scripting.refactor import find_call_sites_in_project
         from scripting.api import DOMAIN_PREFAB

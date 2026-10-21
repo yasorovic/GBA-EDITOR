@@ -12,8 +12,7 @@ class LuaHighlighter(QSyntaxHighlighter):
     # Mots-clés et modules ne sont plus tenus à la main : ils DÉRIVENT du même
     # catalogue que l'autocomplétion (`scripting.completion`). L'ancienne liste
     # colorait encore `display`/`send`, disparus de l'API, et ignorait la moitié
-    # des modules vivants — la source unique supprime la dérive (cf. ROADMAP
-    # v0.27). `self` s'y ajoute : c'est le récepteur, pas un module du catalogue.
+    # des modules vivants — la source unique supprime la dérive. `self` s'y ajoute : c'est le récepteur, pas un module du catalogue.
     _KEYWORDS = completion.KEYWORDS
     _API_MODULES = ("self", *completion.MODULES)
 

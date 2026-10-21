@@ -224,7 +224,7 @@ def _actor_own_palettes(p: Project, scene: Scene) -> list[list[int]]:
 
 def _scene_prefab_own_palettes(p: Project, scene: Scene) -> list[list[int]]:
     """Palettes propres (mode OWN) des prefabs que CETTE scène poole — racine ET
-    parties (ROADMAP v0.17 T5).
+    parties.
 
     Per-scène depuis que le spawn l'est (T1) : une scène ne réserve de banque OBJ
     que pour les prefabs qu'ELLE spawne, dans SES slots libres, au lieu du slot
@@ -233,7 +233,7 @@ def _scene_prefab_own_palettes(p: Project, scene: Scene) -> list[list[int]]:
     les tuiles 4bpp ne gravent qu'un index 0-15, la banque venant de `pal_bank`
     à l'OAM (posé au spawn depuis le layout de la scène).
 
-    Racine ET parties : une partie de prefab segmenté (ROADMAP v0.23) porte son
+    Racine ET parties : une partie de prefab segmenté porte son
     propre sprite, donc sa propre palette — l'allocation globale d'avant ne
     réservait que la racine, et une partie en mode propre retombait en silence
     sur la banque 0. Ordre déterministe (catalogue de prefabs, racine puis
@@ -339,7 +339,7 @@ def _scene_font_palettes(p: Project, scene: Scene) -> list[tuple]:
     `pal_bank` = `OWN_PAL_BANK` (palette propre à allouer) ou un slot de scène
     (override), lu via `scene_font_pal_bank`. Police par défaut d'abord (ordre
     stable). Une écriture libre (`text.draw`) ou un script indécidable comptent
-    comme un usage libre de la police PAR DÉFAUT — repli sûr (cf. ROADMAP)."""
+    comme un usage libre de la police PAR DÉFAUT — repli sûr."""
     from core.models.ui_region import region_fill_container
     from codegen.font_emit import (
         encodable_project_fonts,
@@ -857,7 +857,7 @@ def scene_palette_view(p: Project, scene: Scene, pool: str) -> ScenePaletteView:
     # acteurs/layers, cf. `_ui_image_pairs`.
     pairs = pairs + _ui_image_pairs(p, scene, pool)
     # Polices : la scène traque leur palette comme celle d'un sprite. Cible BG
-    # seulement — une bande de texte OBJ se décide plus tard (cf. ROADMAP). MÊME
+    # seulement — une bande de texte OBJ se décide plus tard. MÊME
     # pool de dédup : une police et un fond aux mêmes couleurs partagent la banque.
     if pool == "bg":
         pairs = pairs + [(tuple(cols), InstanceRef("font", name, f"{name} (font)", pb))

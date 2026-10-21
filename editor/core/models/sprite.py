@@ -37,7 +37,7 @@ class AnimFrame:
     # La donnée vit ICI et non dans l'écran Son : un pas appartient au cycle de
     # marche, partout où on le joue. Même règle qu'en v0.4.1, « le placement vit
     # chez l'hôte, la nature de l'animation vit chez l'animé ». L'écran Son en
-    # est une seconde porte, pas le propriétaire (ROADMAP v0.8.5).
+    # est une seconde porte, pas le propriétaire.
     #
     # LIMITE ASSUMÉE DU MODÈLE : les frames sont dédupliquées au niveau
     # SÉQUENCE (cf. grit_conversion.sprite_unique_frames). Deux directions
@@ -49,13 +49,13 @@ class AnimFrame:
     # main. Plus de réglages pour l'auteur, mais la limite est dite.
     # Le nom d'une ACTION de la SoundBox — « PlayerWalk » —, jamais un effet
     # concret : c'est l'état courant de la boîte qui dit vers quel échantillon
-    # elle pointe (ROADMAP v0.8.7). À ne pas confondre avec
+    # elle pointe. À ne pas confondre avec
     # `SoundFxComponent.sfx_name`, qui référence vraiment un Sfx.
     action_name: str = ""
     # Un Sfx joué DIRECTEMENT en arrivant sur cette frame — pas une action de
     # SoundBox indirecte, le nom d'un Sfx du projet (même espace que
     # `SoundFxComponent.sfx_name`). "" = rien. Cumulable avec `action_name` :
-    # les deux sont des emplacements indépendants (ROADMAP v0.8.9).
+    # les deux sont des emplacements indépendants.
     #
     # NOM DÉLIBÉRÉMENT DIFFÉRENT de `sfx_name` : cette clé JSON est déjà prise
     # — `SpriteAsset.from_dict._parse_frame` la lit en ALIAS hérité de
@@ -66,7 +66,7 @@ class AnimFrame:
     # sprite — appelée en arrivant sur cette frame, comme un Animation Event.
     # Le sprite est un asset partagé : il ne sait pas quel actor l'anime, donc
     # ce nom n'est vérifié qu'au build, contre le script de CHAQUE actor qui
-    # réfère ce sprite (ROADMAP v0.8.9). "" = rien.
+    # réfère ce sprite. "" = rien.
     event_name: str = ""
 
     def clone(self) -> "AnimFrame":
@@ -153,8 +153,7 @@ def resolve_direction_mirrors(active_dirs, h_mirror: bool, v_mirror: bool) -> di
 # tenir une seconde liste — c'est ce qui rendait les polices invisibles au
 # ProjectWatcher, qui épelait la sienne.
 #
-# Un seul format, et c'est délibéré (cf. ROADMAP, « Les formats acceptés à
-# l'import ») : `.bmp` était accepté ici sans qu'aucun écran, aucun document ni
+# Un seul format, et c'est délibéré : `.bmp` était accepté ici sans qu'aucun écran, aucun document ni
 # aucun test ne s'y réfère — une seconde entrée dans la chaîne d'encodage que
 # personne n'empruntait, donc que rien ne vérifiait. Une liste d'un seul élément
 # reste une LISTE : c'est elle que le watcher, la table de routage de window.py
@@ -261,7 +260,7 @@ class SpriteAsset(SubPaletteAssetMixin, Resource):
             # Décrit l'image SOURCE, donc hors des blocs conditionnels de
             # palettes ci-dessous — elle vaut même sans encodage réussi.
             **({"source_stamp": self.source_stamp} if self.source_stamp else {}),
-            # ROADMAP v0.24 : les couleurs s'écrivent en #RRGGBB — même donnée,
+            # les couleurs s'écrivent en #RRGGBB — même donnée,
             # relisible par un humain dans un diff (cf. core/gba_color.py).
             **({"own_palette": write_colors(self.own_palette),
                 "quantize_method": self.quantize_method} if self.own_palette else {}),
@@ -321,7 +320,7 @@ class SpriteAsset(SubPaletteAssetMixin, Resource):
                     )
                     for t in f["tiles"]
                 ], action_name=f.get("action_name", f.get("sfx_name", "")),
-                   # `direct_sfx_name`/`event_name` (ROADMAP v0.8.9) : pas de
+                   # `direct_sfx_name`/`event_name` : pas de
                    # legacy à migrer, ce sont de nouveaux champs.
                    direct_sfx_name=f.get("direct_sfx_name", ""),
                    event_name=f.get("event_name", ""))
