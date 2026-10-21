@@ -15,7 +15,7 @@ import json
 from core.resources.resource_store import read_config_json
 from pathlib import Path
 
-from core.toolchain import config_dir
+from core.app_paths import config_dir
 
 CONFIG_FILE = config_dir() / "external_tools.json"
 

@@ -47,7 +47,7 @@ VOLONTAIREMENT absentes de ce registre, remappables nulle part :
     pas le priver de son alias.
 
 Persistance : un fichier JSON à côté de `toolchain.json` (même dossier de
-config, cf. `core/toolchain.config_dir`), qui ne porte QUE les
+config, cf. `core/app_paths.config_dir`), qui ne porte QUE les
 SUBSTITUTIONS à la valeur par défaut — un raccourci jamais changé n'y figure
 pas, donc une valeur par défaut modifiée dans une prochaine version profite
 à qui n'a rien personnalisé.
@@ -61,7 +61,7 @@ from dataclasses import dataclass
 from PyQt6.QtCore import QKeyCombination, QObject, Qt, pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut, QAction
 
-from core.toolchain import config_dir
+from core.app_paths import config_dir
 
 CONFIG_FILE = config_dir() / "keybindings.json"
 

@@ -12,29 +12,7 @@ import os
 import shutil
 from pathlib import Path
 
-from core.app_info import APP_NAME
-from core.app_paths import IS_LINUX, IS_WINDOWS
-
-
-def config_dir() -> Path:
-    """
-    Dossier de config utilisateur, par OS. PUBLIQUE : trois modules y posent
-    leur fichier (`toolchain.json`, `external_tools.json`, `keybindings.json`,
-    et maintenant `interface.json`). Le tiret bas d'origine disait « ne
-    m'appelle pas de dehors » pendant que trois appelants le faisaient.
-
-    Surtout PAS à côté du module : en build onefile, le module vit dans le
-    dossier d'extraction temporaire, détruit à la fermeture — les chemins
-    devkitPro saisis par l'utilisateur étaient donc reperdus à chaque
-    lancement de l'exe.
-    """
-    if IS_WINDOWS:
-        base = os.environ.get("APPDATA")
-        if base:
-            return Path(base) / APP_NAME
-        return Path.home() / "AppData" / "Roaming" / APP_NAME
-    xdg = os.environ.get("XDG_CONFIG_HOME")
-    return (Path(xdg) if xdg else Path.home() / ".config") / APP_NAME.lower()
+from core.app_paths import IS_LINUX, IS_WINDOWS, config_dir
 
 
 # Fichier de config persistant

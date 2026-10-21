@@ -171,10 +171,6 @@
       "singular": "Shared by {n} scene. Editing it changes that scene too.",
       "plural": "Shared by {n} scenes. Editing it changes them all."
     },
-    "ui.list.cursor_missing": {
-      "tone": "build",
-      "text": "Cursor \"{name}\" is not an image of this layout, so the list will navigate without one."
-    },
     "ui.list.empty": {
       "tone": "build",
       "text": "No rows: place text zones INSIDE this list. Those are what it walks."
@@ -231,10 +227,6 @@
       "tone": "accent",
       "singular": "Shown by {n} other element. Fixing the entry fixes both; breaking it breaks both.",
       "plural": "Shown by {n} other elements. Fixing the entry fixes them all; breaking it breaks them all."
-    },
-    "ui.text.sample_only": {
-      "tone": "info",
-      "text": "No entry: a script writes here. The sample is editor-only: it sizes the box and feeds the canvas, and is never compiled."
     },
     "ui.visible.hidden_parent": {
       "tone": "render",

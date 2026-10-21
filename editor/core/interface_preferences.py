@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 
-from core.toolchain import config_dir
+from core.app_paths import config_dir
 
 CONFIG_FILE = config_dir() / "interface.json"
 

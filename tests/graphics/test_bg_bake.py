@@ -5,12 +5,12 @@ from PIL import Image
 
 from core.bg_bake import render_indexed, render_rgba, save_indexed_png
 from core.bg_import import encode_background, render_bg_preview
-from core.blank_assets import build_background
+from core.blank_assets import _build
 
 
 def _painted():
     """Un fond vierge de deux palettes, peint dans les DEUX banques, avec une surcharge de palette."""
-    _store, ba = build_background(type("P", (), {"backgrounds": []})())
+    ba = _build(None, "background", "Background")
     ba.palettes[0][1:4] = [0x7FFF, 0x001F, 0x03E0]
     ba.added_palettes = ["P0"]                       # la peinture ne se pose que sur des palettes AJOUTÉES (références)
     ba.add_palette_ref("P1", [0, 0x7C00, 0x7FE0, 0x4210] + [0] * 12)
@@ -110,7 +110,7 @@ def test_a_baked_png_dropped_into_another_project_is_imported_as_4bpp_with_its_b
 
 def test_a_sixteen_bank_png_is_still_imported_as_4bpp_with_sixteen_banks(tmp_path):
     from core.bg_import import detect_import_mode, encode_by_mode
-    _store, ba = build_background(type("P", (), {"backgrounds": []})())
+    ba = _build(None, "background", "Background")
     ba.added_palettes = ["P0"]
     for bank in range(1, 16):
         ba.add_palette_ref(f"P{bank}", [0] + [(bank * 2 + k) & 0x7FFF for k in range(1, 16)])

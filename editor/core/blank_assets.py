@@ -90,17 +90,6 @@ def build_blank(project, kind: str, name: str | None = None, **options):
     return store, _build(project, kind, name, **options)
 
 
-def build_background(project, *, size: tuple[int, int] = (240, 160), colors: list | None = None):
-    """Fond tuilé vierge, réservé au Color Tile Painter.
-
-    Il ne figure pas dans le menu générique des assets vierges : un fond se
-    crée depuis l'écran Background, qui demande justement sa taille et palette.
-    """
-    store = project.backgrounds
-    name = unique_name("Background", {item.name for item in store})
-    return store, _build(project, "background", name, size=size, colors=colors or [0, 0x7FFF])
-
-
 def script_source(kind: str, name: str) -> str:
     """Le contenu d'un script neuf (`kind` : "script", "behavior" — qui porte le marqueur — ou "actor", le point
     d'entrée d'un script d'acteur)."""

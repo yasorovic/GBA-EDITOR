@@ -18,7 +18,7 @@ import faulthandler
 import sys
 import traceback
 
-from core.toolchain import config_dir
+from core.app_paths import config_dir
 
 LOG_FILE = config_dir() / "crash.log"
 NATIVE_LOG_FILE = config_dir() / "crash_native.log"

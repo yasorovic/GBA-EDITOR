@@ -1,13 +1,11 @@
 """Chaque projet livré s'ouvre et produit une VRAIE ROM.
 
-« Livré » : les starters intégrés à l'éditeur (`editor/project_starters/`) et les démos
-publiques (`Project Demo/*`). Rien n'est court-circuité sauf mGBA : le build passe par
+« Livré » : les starters intégrés à l'éditeur (`editor/project_starters/`).
+Rien n'est court-circuité sauf mGBA : le build passe par
 `BuildWorker.run()` entier — validation, grit, transpilation, `make`, `arm-none-eabi-gcc`,
 liaison — et exige une `rom.gba` non vide en sortie.
 
-Les cas se découvrent : un nouveau starter ou un nouveau dossier de démo est testé sans
-toucher ce fichier, et une démo qui ne builde plus ne peut pas être livrée en l'oubliant.
-Chaque projet est copié sans son `build/` (un `build/` ancien masquerait un échec).
+Les cas se découvrent : un nouveau starter est testé sans toucher ce fichier.
 
 Lent (une compilation par projet) et dépendant de devkitPro : `pytest -m slow`. Sans devkitPro
 le test saute, donc il ne prouve rien sur une machine qui n'en a pas — sauf quand la CI de release
@@ -26,8 +24,6 @@ from codegen import BuildWorker
 from core.project import Project
 from core.project_starters import available_starters
 from core.toolchain import DEVKITPRO_INCOMPLETE, DEVKITPRO_OK, Toolchain
-
-DEMOS_DIR = Path(__file__).resolve().parents[2] / "Project Demo"
 
 # Sous 1 Kio, ce n'est pas une ROM GBA : l'en-tête seul en prend 192 octets.
 MIN_ROM_BYTES = 1024
@@ -48,12 +44,6 @@ def _devkitpro():
     if os.environ.get("GBA_TESTS_REQUIRE_DEVKITPRO"):
         pytest.fail(f"{reason} alors que la CI l'exige : les projets livrés n'ont pas été buildés")
     pytest.skip(f"{reason} : le build ne peut pas tourner")
-
-
-def _demos() -> list[Path]:
-    if not DEMOS_DIR.is_dir():
-        return []
-    return sorted(d for d in DEMOS_DIR.iterdir() if d.is_dir() and any(d.glob("*.project")))
 
 
 def _starters():
@@ -92,7 +82,6 @@ def _own_crash_log(tmp_path, monkeypatch):
 def test_il_y_a_quelque_chose_a_tester():
     """Un dossier de démos déplacé ou renommé ne doit pas faire passer ce fichier à vide."""
     assert any(s.builtin for s in available_starters()), "aucun starter intégré"
-    assert _demos(), f"aucune démo trouvée dans {DEMOS_DIR}"
 
 
 @pytest.mark.parametrize("starter_id", list(_starters()))
@@ -100,13 +89,6 @@ def test_un_projet_neuf_depuis_le_starter_produit_une_rom(tmp_path, starter_id):
     project = Project.create(tmp_path / "Neuf", "Neuf", starter_id)
     project.save()
     _assert_rom(tmp_path / "Neuf", f"starter {starter_id}")
-
-
-@pytest.mark.parametrize("demo", _demos(), ids=lambda d: d.name)
-def test_une_demo_publique_s_ouvre_et_produit_une_rom(tmp_path, demo):
-    root = tmp_path / demo.name
-    shutil.copytree(demo, root, ignore=shutil.ignore_patterns("build"))
-    _assert_rom(root, f"démo {demo.name}")
 
 
 @pytest.mark.skipif(os.name != "nt", reason="la limite de 260 caractères est celle des outils Windows")

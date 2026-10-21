@@ -2,7 +2,7 @@
 gomme et le clic droit rendent la tuile initiale, la couleur 0 cache l'image. Inpaint ne surcharge que la palette."""
 from __future__ import annotations
 
-from core.blank_assets import build_background
+from core.blank_assets import _build
 from core.history import BackgroundTilePaintCmd
 from core.models.background import BackgroundAsset
 from core.models.gba_color import bgr555_to_rgb888
@@ -20,7 +20,7 @@ def preparation_tools(monkeypatch):
 
 
 def _blank():
-    _store, ba = build_background(type("P", (), {"backgrounds": []})())
+    ba = _build(None, "background", "Background")
     ba.palettes[0][1:3] = [0x7FFF, 0x001F]
     ba.added_palettes = ["Test"]          # la peinture ne se pose que sur une palette AJOUTÉE : la banque 0 en est une
     return ba

@@ -90,7 +90,7 @@ def test_only_one_crash_window_at_a_time(qapp, monkeypatch):
 
 def test_the_test_suite_does_not_write_into_the_authors_crash_log(tmp_path):
     """Garde du filet de `tests/conftest.py` : le journal de chaque test est dans son dossier temporaire."""
-    from core.toolchain import config_dir
+    from core.app_paths import config_dir
     assert crash_log.LOG_FILE.parent == tmp_path
     assert config_dir() not in crash_log.LOG_FILE.parents
     assert crash_log.NATIVE_LOG_FILE.parent == tmp_path

@@ -206,7 +206,7 @@ def test_a_second_blank_asset_gets_a_unique_name(tmp_path: Path):
 
 def test_a_blank_background_is_a_ready_to_paint_gba_canvas(tmp_path: Path):
     p = _project(tmp_path)
-    _store, bg = blank_assets.build_background(p)
+    bg = blank_assets._build(p, "background", "Background")
 
     assert (bg.tiles_w, bg.tiles_h) == (30, 20)
     assert bg.tileset == ["0" * 64]
@@ -217,7 +217,7 @@ def test_a_blank_background_is_a_ready_to_paint_gba_canvas(tmp_path: Path):
 
 def test_a_blank_background_uses_the_requested_grid_and_palette(tmp_path: Path):
     p = _project(tmp_path)
-    _store, bg = blank_assets.build_background(p, size=(128, 72), colors=[123] * 16)
+    bg = blank_assets._build(p, "background", "Background", size=(128, 72), colors=[123] * 16)
 
     assert (bg.tiles_w, bg.tiles_h) == (16, 9)
     assert len(bg.tilemap) == 144

@@ -116,7 +116,7 @@ def test_le_manifeste_d_un_projet_porte_l_extension_project(tmp_path):
 
 
 def test_la_config_utilisateur_vit_sous_le_nom_du_produit():
-    from core.toolchain import config_dir
+    from core.app_paths import config_dir
 
     assert config_dir().name.lower() == APP_NAME.lower()
 

@@ -50,6 +50,7 @@ from core.text_table_link import TableSync
 from core.selection_bus import get_bus
 
 if TYPE_CHECKING:
+    from core.models.scene import Scene
     from core.project import Project
     from core.project_watcher import ProjectWatcher
 

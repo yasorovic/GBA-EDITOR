@@ -2,60 +2,9 @@
   "labels": {
     "txtentry.collapse": { "text": "Collapse text field" },
     "txtentry.expand": { "text": "Expand text field" },
-    "txtseq.remove_missing": { "text": "Remove missing reference" },
-    "txtseq.removed_count": {"singular": "{n} entry to remove", "plural": "{n} entries to remove"},
-    "txtseq.review_changes": {"text": "Review changes ({n})"},
-    "txtseq.kept_shared": {"text": "Text kept — still in use"},
-    "txtseq.delete_on_apply": {"text": "Text and translations deleted on Apply"},
-    "txtseq.undo_remove": {"text": "Undo restores this line at its original position."},
-    "txtseq.added_count": { "singular": "{n} entry to add", "plural": "{n} entries to add" },
     "txtseq.add_after": { "text": "Add an entry after this one" },
     "txtseq.remove_entry": { "text": "Remove this line. Apply deletes its text if unused; Undo restores the line." },
     "txtseq.add_first": { "text": "Add the first entry to this sequence" },
-    "txtseq.edit_unavailable": { "text": "Cannot edit this sequence" },
-    "txtseq.numbering_shared": { "text": "Each page must have its own text. This sequence still shares texts with another page or dialogue." },
-    "txtseq.numbering_collision": { "text": "A page key is already used by a text outside this sequence. Rename that text or the sequence first." },
-    "txtseq.numbering_missing": { "text": "A page text is missing. Restore it or remove its reference before numbering the sequence." },
-    "txtseq.page_key_managed": { "text": "Page keys follow the sequence name and page order. Rename the sequence to change their common key." },
-    "txtseq.apply_error_shared": { "text": "Each page must have its own text. This sequence still contains shared pages." },
-    "txtseq.apply_error_collision": { "text": "A page key is already used outside this sequence." },
-    "txtseq.identity_conflict": { "text": "A sequence named “{name}” already exists in “{path}”, even if it is empty. Choose another name or folder. No changes were made." },
-    "txtseq.apply": { "text": "Apply" },
-    "txtseq.apply_title": { "text": "Apply — {name}" },
-    "txtseq.apply_tip": { "text": "Update this sequence’s associated TextBox and table." },
-    "txtseq.position": { "text": "Position" },
-    "txtseq.box_before": { "text": "Current TextBox" },
-    "txtseq.draft_after": { "text": "After Apply" },
-    "txtseq.create_table": { "text": "Create a table for this sequence" },
-    "txtseq.overwrite_conflicts": { "text": "Replace the destination changes shown above with this draft" },
-    "txtseq.cancel": { "text": "Cancel" },
-    "txtseq.apply_destinations": { "text": "TextBox: {layout} › {box} · {before} → {after} pages" },
-    "txtseq.apply_adoption": { "text": "This action also remembers the sequence association." },
-    "txtseq.apply_table_summary": { "text": "Table: {name}\n{added} added · {removed} removed · {moved} moved · {overwritten} text cells replaced · {recreated} restored · {manual} manual rows preserved" },
-    "txtseq.apply_no_table": { "text": "No table is associated. Only the TextBox will be updated unless you choose to create a table." },
-    "txtseq.apply_conflict_box": { "text": "The TextBox has changed since linking. Review its current pages before replacing them." },
-    "txtseq.apply_conflict_table": { "text": "The managed table references have changed since linking. Review the rows and cells before replacing them." },
-    "txtseq.apply_current": { "text": "The sequence and its destinations already match." },
-    "txtseq.row": { "text": "Row" },
-    "txtseq.change": { "text": "Change" },
-    "txtseq.before": { "text": "Before" },
-    "txtseq.after": { "text": "After" },
-    "txtseq.added": { "text": "Added / restored" },
-    "txtseq.removed": { "text": "Removed" },
-    "txtseq.replaced": { "text": "Text cell replaced" },
-    "txtseq.moved": { "text": "Moved" },
-    "txtseq.row_number": { "text": "Row {n}" },
-    "txtseq.apply_error_destination": { "text": "A unique associated TextBox is required. Link the sequence to an available TextBox first." },
-    "txtseq.apply_error_ambiguous": { "text": "The sequence or its destination is ambiguous. Resolve its links before applying." },
-    "txtseq.apply_error_association": { "text": "The table association has changed or is invalid. Apply cannot replace this destination." },
-    "txtseq.apply_error_table_unavailable": { "text": "The linked table is missing or has multiple owners. Restore its association before applying." },
-    "txtseq.apply_error_missing_text": { "text": "A sequence text is missing. Restore it or remove its reference below before applying." },
-    "txtseq.apply_error_missing_page": { "text": "A referenced text is missing. Restore it before applying." },
-    "txtseq.apply_error_column": { "text": "The managed text column is missing or its type has changed. Repair the table before applying." },
-    "txtseq.apply_error_duplicate_rows": { "text": "The managed row identities are invalid or duplicated. Repair the table before applying." },
-    "txtseq.apply_error_empty": { "text": "No text is available to apply." },
-    "txtseq.apply_error_changed": { "text": "The sequence or a destination changed. Check the current state and try Apply again." },
-    "txtseq.apply_error_conflict": { "text": "Review and explicitly accept the destination changes before applying." },
     "cartpreview.component_title": { "text": "{number} · {name}" },
     "cartpreview.chip_battery": { "text": "Battery" },
     "cartpreview.help_rom": { "text": "Holds the game program, images, sounds and text. Progress is saved in a separate chip." },
@@ -111,40 +60,6 @@
     "cartpreview.supported": { "text": "SRAM is the save format currently supported by the engine. Without persistent variables, saves are unused." },
     "cartpreview.photo_accessible": { "text": "{board} circuit: 1 ROM, 2 SRAM, 3 save battery" },
     "cartpreview.unavailable": { "text": "Circuit photo unavailable" },
-    "txtseq.link": { "text": "Link" },
-    "txtseq.link_tip": { "text": "Remember this sequence, its order and its existing destinations." },
-    "txtseq.link_unavailable": { "text": "Choose an unambiguous destination before linking this sequence." },
-    "txtseq.relink": { "text": "Relink" },
-    "txtseq.relink_all": { "text": "Relink all" },
-    "txtseq.relink_tip": { "text": "Reintegrate displaced entries. Content and translations are preserved." },
-    "txtseq.relink_destination": { "text": "Reintegrate as {text_key}\nFiling: {path}" },
-    "txtseq.detached_count": { "singular": "{n} entry outside the group", "plural": "{n} entries outside the group" },
-    "txtseq.missing_count": { "singular": "{n} missing entry", "plural": "{n} missing entries" },
-    "txtseq.review": { "text": "Review displaced entries ({n})" },
-    "txtseq.locate": { "text": "Locate" },
-    "txtseq.box_changed": { "text": "TextBox changed since linking" },
-    "txtseq.tracked": { "text": "Sequence linked" },
-    "txtseq.action_unavailable": { "text": "Cannot link this sequence" },
-    "txtseq.action_unavailable_tip": { "text": "The references changed, the destination is already associated, or a text key is already taken. Review the group and try again." },
-    "txtseq.unlinked": { "text": "No link" },
-    "txtseq.exact": { "text": "Same pages, same order" },
-    "txtseq.reordered": { "text": "Same pages, different order" },
-    "txtseq.partial": { "text": "Partial correspondence" },
-    "txtseq.ambiguous": { "text": "Multiple possible destinations" },
-    "txtseq.current": { "text": "Matches TextBox" },
-    "txtseq.missing_table": { "text": "Linked table missing" },
-    "txtseq.invalid_link": { "text": "Invalid association" },
-    "txtseq.missing_column": { "text": "Text column missing or changed" },
-    "txtseq.invalid_rows": { "text": "Invalid row references" },
-    "txtseq.missing_text": { "text": "Missing text reference" },
-    "txtseq.different_pages": { "text": "Pages differ from TextBox" },
-    "txtseq.different_rows": { "text": "Rows missing or reordered" },
-    "txtseq.different_cells": { "text": "Text cells changed" },
-    "txtseq.box": { "text": "TextBox: {layout} › {box} · {state}" },
-    "txtseq.table": { "text": "Table: {name} / {column} · {state}" },
-    "txtseq.scenes": { "text": "Scenes: {names}" },
-    "txtseq.no_scene": { "text": "No scene uses this layout" },
-    "txtseq.usages": { "text": "Text cell usages (do not establish a table association):" },
     "disk.audio_default_rate": { "text": "Default rate (project/build)" },
     "disk.audio_file_end": { "text": "End of file" },
     "disk.audio_no_device": { "text": "No audio output device" },
@@ -652,18 +567,6 @@
     "uiinsp.text.sequence_linked": { "text": "Follows {prefix} · {n} texts" },
     "uiinsp.text.sequence_free": { "text": "Not linked to a text sequence" },
     "uiinsp.text.no_sequence": { "text": "No text sequence" },
-    "uiinsp.text.page_missing": { "text": "Text entry missing" },
-    "uiinsp.text.export_table": { "text": "Export as table" },
-    "uiinsp.text.update_table": { "text": "Update table" },
-    "uiinsp.text.export_unavailable": { "text": "The linked table is unavailable. Export creates a new table." },
-    "uiinsp.text.table_current": { "text": "{table} is up to date. Text corrections are already shared." },
-    "uiinsp.text.export_preview": { "text": "Update {table} to match the TextBox?\n\nRows added: {added}\nRows removed: {removed}\nRows moved: {moved}\nMissing rows recreated: {recreated}\nText references restored: {overwritten}\n\nOther columns stay attached to their pages. {manual} manually added rows will be kept at the end. Values on removed rows will be removed with them. Row indices used by scripts may change.\n\nApply these changes?" },
-    "uiinsp.text.export_error_empty": { "text": "Write a page before exporting." },
-    "uiinsp.text.export_error_missing_page": { "text": "A text entry is missing. Restore it before exporting." },
-    "uiinsp.text.export_error_association": { "text": "The link between this table and the TextBox has changed. Undo the recent table changes or restore the table before updating." },
-    "uiinsp.text.export_error_column": { "text": "The exported text column was removed or its type changed. Restore that column with type text before updating." },
-    "uiinsp.text.export_error_duplicate_rows": { "text": "Some exported rows cannot be matched to their pages. Undo the recent table changes or restore the table before updating." },
-    "uiinsp.text.export_error_changed": { "text": "The pages or table changed while the update was being reviewed. Try the update again." },
     "uiinsp.text.create_entry_title": { "text": "Create a text entry" },
     "uiinsp.text.create_entry_tip": { "text": "Open the Text editor to create a named, shared and translatable entry." },
     "common.none_paren": {
@@ -671,9 +574,6 @@
     },
     "uiinsp.text.font_scene": {
       "text": "(scene font)"
-    },
-    "uiinsp.text.colors": {
-      "text": "COLORS"
     },
     "uiinsp.text.bank": {
       "text": "Bank"
@@ -786,28 +686,8 @@
     "uiinsp.list.wrap_sub": {
       "text": "Last back to first"
     },
-    "uiinsp.list.cursor_section": {
-      "text": "CURSOR"
-    },
     "common.image": {
       "text": "Image"
-    },
-    "uiinsp.list.cursor_none": {
-      "text": "(none)"
-    },
-    "uiinsp.list.cursor_tip": { "text": "Picks an image of this layout that the list moves onto the selected row. It should face the first row: the engine offsets it by the distance between that row and the current one, so the layout stays the truth." },
-    "uiinsp.list.motion": {
-      "text": "Motion"
-    },
-    "uiinsp.list.motion_snap": {
-      "text": "Snap"
-    },
-    "uiinsp.list.motion_slide": {
-      "text": "Slide"
-    },
-    "uiinsp.list.motion_tip": { "text": "Snap puts the cursor on the row at once; slide travels the distance at the speed below." },
-    "uiinsp.list.speed_suffix": {
-      "text": " px/frame"
     },
     "uiinsp.list.selrow": {
       "text": "SELECTED ROW"
@@ -2519,7 +2399,6 @@
     "txttbl.search": {
       "text": "Filter: key, filing or content…"
     },
-    "txttbl.add_tip": { "text": "Creates a text and files it where the selection is." },
     "txttbl.group_rename_tip": { "text": "A selected and expanded filing is renamed by clicking its label; this renames the filing of every text it contains." },
     "txttbl.status_translated": {
       "text": "Translated"
@@ -2582,7 +2461,6 @@
     "txtwb.source_ref": {
       "text": "SOURCE ({name})"
     },
-    "txttbl.add_title": { "text": "New text" },
     "txttbl.delete_title": { "text": "Delete the selected texts" },
     "txtwb.add_level_tip": {
       "text": "Add a filing level"
@@ -3793,9 +3671,6 @@
     "uiinsp.list.columns_note": { "text": "Scrolling moves by a whole line, so the columns an author laid out stay where they are." },
     "uiinsp.list.order_title": { "text": "Order" },
     "uiinsp.list.order_note": { "text": "With a single column both describe the same walk; the other axis of the D-pad is then left to the game." },
-    "uiinsp.list.cursor_title": { "text": "Cursor" },
-    "uiinsp.list.cursor_note": { "text": "No cursor is a valid choice: the selected row can be marked by its style instead." },
-    "uiinsp.list.motion_title": { "text": "Motion" },
     "uiinsp.list.ink_title": { "text": "Ink of the selected row" },
     "uiinsp.list.ink_note": { "text": "Each color costs one more copy of the glyphs in VRAM." },
     "uiinsp.list.highlight_title": { "text": "Highlight of the selected row" },
@@ -3865,7 +3740,6 @@
     "common.bricks": { "text": "Basic blocks" },
     "common.assemblies": { "text": "Assemblies" },
     "cvtool.container_tip": { "text": "Creates a parent area for grouping elements. It can anchor children and draw a background." },
-    "cvtool.list_tip": { "text": "Creates a container the engine can navigate as rows with a cursor and selection." },
     "cvtool.image_tip": { "text": "Creates an image element. A script can switch the state of its sprite." },
     "bglayer.no_blend_tip": { "text": "Takes no part in the blend; a click makes it the top layer." },
     "bglayer.top_tip": { "text": "This layer is the one that gets blended." },
