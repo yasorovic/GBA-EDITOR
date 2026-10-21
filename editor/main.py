@@ -25,7 +25,7 @@ _EDITOR_DIR = str(Path(__file__).resolve().parent)
 if _EDITOR_DIR not in sys.path:
     sys.path.insert(0, _EDITOR_DIR)
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QApplication, QDialog
 from ui.common.popup import MessageBox as QMessageBox
 from PyQt6.QtGui import QPalette, QColor
@@ -210,6 +210,8 @@ if __name__ == "__main__":
         app.restoreOverrideCursor()
 
     win.show()
+    # Au plus une fois par jour, en tâche de fond, sans bruit si hors ligne.
+    QTimer.singleShot(5000, win.update_checker.check_if_due)
 
     # Défauts des points d'extension, APRÈS que la fenêtre est visible : un
     # plugin qui n'a pas pu être chargé, et un écran qui ne remplit pas le

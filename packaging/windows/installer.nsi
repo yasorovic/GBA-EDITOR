@@ -42,6 +42,7 @@ Var InstallMode
 Var DevkitproDetected
 Var DevkitproInstaller
 Var MgbaInstaller
+Var Relaunch
 
 ; Nom, exe et editeur doivent rester alignes avec editor/core/app_info.py
 ; (APP_NAME, APP_AUTHOR), la SOURCE UNIQUE, lue par packaging/nuitka_build.py
@@ -379,6 +380,25 @@ FunctionEnd
 ; Un outil deja present n'est pas propose par defaut : la case est decochee, pas
 ; masquee, au cas ou l'utilisateur voudrait quand meme le (re)installer.
 Function .onInit
+  ; Mise a jour lancee par l'editeur lui-meme (core/update_install.py) : il se ferme juste
+  ; apres nous avoir lance, d'ou l'attente que son .exe se libere, et la relance en fin
+  ; d'installation. Un drapeau d'environnement plutot qu'un argument : pas d'analyse de ligne
+  ; de commande, et la CI (qui installe en /S sans ce drapeau) ne relance rien.
+  ReadEnvStr $Relaunch BACKSTAGE_RELAUNCH
+  StrCmp $Relaunch "1" 0 relaunch_wait_done
+    StrCpy $1 0
+    relaunch_wait:
+      ClearErrors
+      FileOpen $0 "$INSTDIR\${APP_EXE}" a
+      IfErrors 0 relaunch_free
+      IntOp $1 $1 + 1
+      IntCmp $1 60 relaunch_wait_done 0 relaunch_wait_done
+      Sleep 500
+      Goto relaunch_wait
+    relaunch_free:
+      FileClose $0
+  relaunch_wait_done:
+
   ; Une installation existante ? $INSTDIR vient deja du registre (InstallDirRegKey).
   StrCpy $OldVersion ""
   IfFileExists "$INSTDIR\${APP_EXE}" 0 oldversion_done
@@ -409,6 +429,11 @@ Function .onInit
   mgba_present:
     !insertmacro UnselectSection ${SecMgba}
   mgba_check_done:
+FunctionEnd
+
+Function .onInstSuccess
+  StrCmp $Relaunch "1" 0 +2
+    Exec '"$INSTDIR\${APP_EXE}"'
 FunctionEnd
 
 ; Une installation EXISTANTE garde son dossier (on ne la deplace pas en douce) ; une

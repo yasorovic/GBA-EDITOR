@@ -62,6 +62,9 @@ from core.keybindings import bind, get_keybindings
 from core import crash_log, disk_tree
 from core.app_info import APP_DOCS_URL, APP_NAME
 from ui.common.about_dialog import AboutDialog
+from ui.common.update_checker import UpdateChecker
+from core.update_install import launch_installer
+from ui.common.updates_dialog import UpdatesDialog
 from core.diagnostics import diagnostic_report
 from ui.common.locate_bus import get_locate_bus
 from ui.common.reveal import reveal_in_file_manager
@@ -423,6 +426,9 @@ class MainWindow(QMainWindow):
         self.toolchain = Toolchain()
         self._external_tools = ExternalTools()
         self._watcher = ProjectWatcher(self)
+        self.update_checker = UpdateChecker(self)
+        self.update_checker.important_found.connect(self._offer_important_update)
+        self.update_checker.installer_ready.connect(self._install_update)
         # Retour du focus (Explorateur → éditeur) : on rattrape par comparaison
         # avec le disque tout ce que le watcher temps réel a pu rater.
         QGuiApplication.instance().applicationStateChanged.connect(self._on_application_state_changed)
@@ -984,8 +990,35 @@ class MainWindow(QMainWindow):
         m_help.addAction(a_diag)
         m_help.addSeparator()
         a_about = QAction(label("win.about"), self)
-        a_about.triggered.connect(lambda: AboutDialog(self).exec())
+        a_about.triggered.connect(lambda: AboutDialog(self.update_checker, self).exec())
+        # Point discret : une version plus récente existe.
+        def mark_update():
+            a_about.setText(label("win.about") + (" ●" if self.update_checker.badge else ""))
+        self.update_checker.changed.connect(mark_update)
+        mark_update()
         m_help.addAction(a_about)
+
+    def _offer_important_update(self, release):
+        """Pop-up de lancement, réservée aux versions importantes (cf. `UpdateChecker`)."""
+        box = QMessageBox(QMessageBox.Icon.Information, label("about.important_title"),
+                         label("about.important_text", version=release.version),
+                         QMessageBox.StandardButton.NoButton, self)
+        see = box.addButton(label("about.important_see"), QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(label("about.important_later"), QMessageBox.ButtonRole.RejectRole)
+        ignore = box.addButton(label("about.important_ignore"), QMessageBox.ButtonRole.DestructiveRole)
+        box.setDefaultButton(see)
+        box.exec()
+        if box.clickedButton() is see:
+            UpdatesDialog(self.update_checker, self).exec()
+        elif box.clickedButton() is ignore:
+            self.update_checker.ignore()
+
+    def _install_update(self, installer):
+        """L'installateur est téléchargé et vérifié : on ferme l'éditeur par son chemin normal
+        (question « enregistrer ? » comprise), puis on lance l'installateur, qui relance.
+        Fermeture refusée : l'installateur reste là, on ne lance rien."""
+        if self.close():
+            launch_installer(installer)
 
     def _open_log_folder(self):
         """Ouvre le dossier de `crash.log`. Créé au besoin : tant que rien n'a

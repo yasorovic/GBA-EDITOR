@@ -268,6 +268,7 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "open_external":          ("mdi.open-in-new",             "↗"),
     "docs":                   ("mdi.book-open-variant",       "▤"),
     "release_notes":          ("mdi.text-box-outline",        "≣"),
+    "check_update":           ("mdi.update",                  "⟳"),
     "report_issue":           ("mdi.bug-outline",             "✱"),
     "licenses":               ("mdi.scale-balance",           "§"),
 }

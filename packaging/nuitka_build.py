@@ -142,6 +142,9 @@ def build_command(version: str, output_dir: Path) -> list[str]:
     for notice in ("LICENSE", "THIRD-PARTY-NOTICES.md"):
         cmd.append(f"--include-data-files={REPO_ROOT / notice}={notice}")
 
+    # Le journal des versions, lu par la fenêtre « Release notes » de À propos.
+    cmd.append(f"--include-data-files={REPO_ROOT / 'changelog' / 'CHANGELOG.md'}=changelog/CHANGELOG.md")
+
     # licenses/ — les textes que la LGPL (Qt, FFmpeg) et l'Apache-2.0 (OpenSSL...)
     # exigent d'accompagner le binaire ; LICENSE et THIRD-PARTY-NOTICES.md seuls ne
     # suffisent pas. Les deux installeurs copient tout le dossier de sortie.

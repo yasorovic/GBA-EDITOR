@@ -45,10 +45,13 @@ documents en tête. Une version entièrement livrée (v0.2 à v0.28 à ce jour) 
 [CHANGELOG](changelog/CHANGELOG.md) et son détail complet dans [changelog/archives/](changelog/archives/) ;
 elle ne reste pas ici en doublon.
 
-**Deux jalons produit sont ouverts** : [v0.29](#v029-diffuser-une-rom-dans-le-navigateur-itchio)
-(empaqueter une ROM pour le navigateur, ouvert le 2026-10-05, aucune ligne de code) et
+**Trois jalons produit sont ouverts** : [v0.29](#v029-diffuser-une-rom-dans-le-navigateur-itchio)
+(empaqueter une ROM pour le navigateur, ouvert le 2026-10-05, aucune ligne de code),
 [v0.30](#v030-les-mises-à-jour-depuis-la-fenêtre-about) (vérifier et annoncer les mises à jour
-depuis la fenêtre About, ouvert le 2026-10-20, aucune ligne de code). Pour mémoire,
+depuis la fenêtre About, ouvert le 2026-10-20, aucune ligne de code) et
+[v0.31](#v031-interagir-avec-un-acteur--on_interact-et-le-composant-interactive) (l'événement
+`on_interact`, le composant `interactive` et l'entrée interne `interact`, ouvert le 2026-10-21,
+aucune ligne de code). Pour mémoire,
 v0.16 (« L'API : règle de construction et
 rangement ») s'est fermé le 2026-09-27 (huit sections, cinq renommages, `REF_TYPE_TABLE`, cycle
 de vie en cinq verbes, éléments d'interface typés, `module:fonction()` généralisé, garde-fou du
@@ -295,8 +298,10 @@ et collé à gauche, avec la moitié droite de la fenêtre vide.
 
 ### Ce que ça livre
 
-- **Une fenêtre About à onglets** : *About* (logo, version, liens), *Release notes*, *Updates*,
-  *Licenses*. La fenêtre `LicensesDialog` séparée disparaît.
+- **L'écran About garde ses boutons** (décision du 2026-10-21, qui remplace la fenêtre à onglets
+  imaginée d'abord) : *Documentation*, *Release notes*, *Check for updates*, *Report an issue*,
+  *Licenses*. *Release notes* et *Licenses* ouvrent chacune une fenêtre à onglets (`DocumentsDialog`) ;
+  *Check for updates* sera sa propre fenêtre *Updates*.
 - **Release notes** lit le `CHANGELOG.md` livré avec l'application (hors ligne) ; plus de lien vers
   GitHub. Rendu Markdown, comme les notices tierces. Les textes de licence passent en police à
   chasse fixe.
@@ -325,19 +330,35 @@ et collé à gauche, avec la moitié droite de la fenêtre vide.
 
 ### Déroulé
 
-1. **Tranche 0, l'écran About** : onglets, notes de version locales (`nuitka_build.py` embarque le
-   changelog), licences en chasse fixe, retrait de `LicensesDialog`.
-2. **Tranche 1, la vérification** : module sans Qt (comparaison des versions, lecture de l'API et
-   de `update.json`, cache, délai entre deux vérifications), appel réseau dans un `QThread`,
-   onglet *Updates*, réglage et point discret.
-3. **Tranche 2, la pop-up de lancement** : uniquement pour `importance: major`, mémoire de la
-   version ignorée.
-4. **Décision après les tranches 1 et 2** : jusqu'où va « Update ». Soit télécharger, vérifier le
-   SHA-256 et lancer l'installateur sous Windows (l'installateur par utilisateur sait déjà se
-   mettre à jour par-dessus), soit ouvrir la page de téléchargement. Linux (AppImage) et ZIP
-   portable ne peuvent pas se remplacer eux-mêmes.
-5. **Tranche 3 (si retenue)** : le téléchargement, `SHA256SUMS` et `update.json` publiés par
-   `release.yml`.
+1. **Tranche 0, l'écran About** : **livrée le 2026-10-21** — fenêtres à onglets *Release notes* (le
+   changelog embarqué par `nuitka_build.py`) et *Licenses* en chasse fixe, `LicensesDialog` devenue
+   `DocumentsDialog`. Livré aussi : `core/update_check.py` (ordre des versions, lecture de `/releases`,
+   `User-Agent`).
+2. **Tranche 1 (livrée le 2026-10-21)** : `core/update_check.py` (délai d'un jour),
+   `ui/common/update_checker.py` (état de la session, fil réseau, mémoire d'un lancement à l'autre
+   dans le groupe de réglages `Updates`), vérification au démarrage lancée par `main.py` 5 s après
+   l'affichage, point discret sur *Help ▸ About* et sur la ligne *Check for updates*, fenêtre *Updates*
+   (`ui/common/updates_dialog.py` : notes de la version, « Update to X » qui ouvre la page de la release,
+   case pour couper la vérification automatique, phrase sur ce qui est envoyé).
+3. **Tranche 2 (livrée le 2026-10-21)** : `packaging/update.json` (`importance` `normal` ou `major`,
+   `reasons` parmi `feature`, `migration`, `api`, obligatoire pour `major`), versionné avec
+   `APP_VERSION`, validé par le job `version` de `release.yml` puis attaché à la release. La
+   vérification **automatique** d'une version `major` ouvre une pop-up *View / Later / Ignore this
+   version*, une seule fois par version ; *Ignore* retire le point de cette version. Un
+   `update.json` absent ou illisible côté client = version ordinaire. **À ne pas oublier** : remettre
+   le fichier à `normal` après une version importante.
+4. **Tranche 3, « Update » (décidée et écrite le 2026-10-21, jamais essayée sur une vraie release)** :
+   le bouton télécharge en tâche de fond (barre de progression), vérifie le SHA-256 contre un
+   `SHA256SUMS` publié par `release.yml` (sans lui, rien n'est installé), puis : **installateur
+   Windows** : ferme l'éditeur par son chemin normal (question « enregistrer ? » comprise), lance
+   `setup.exe /S` détaché, qui attend la libération de `Backstage.exe`, installe et relance (drapeau
+   d'environnement `BACKSTAGE_RELAUNCH`, `installer.nsi`) ; **ZIP portable et AppImage** : déposés dans
+   « Téléchargements », dossier ouvert, rien de remplacé (ils ne peuvent pas se remplacer eux-mêmes) ;
+   **lancé depuis les sources** : ouvre la page de la release. Code : `core/update_install.py`.
+5. **À faire avant de s'y fier** : publier une release de test (`1.0.1-alpha`) et dérouler le chemin
+   complet ; compiler `installer.nsi` (non compilé depuis la modification) ; vérifier SmartScreen
+   sur un installateur téléchargé (non signé) ; remplacement automatique du ZIP portable et de
+   l'AppImage, laissé de côté.
 6. **Tests ciblés** : ordre des versions, lecture de `update.json`, délai entre deux vérifications.
    Pas de suite complète.
 7. **Documentation et traductions** : ARCHITECTURE.md, libellés EN et FR, infobulles selon la
@@ -353,10 +374,152 @@ création : le module de vérification, l'onglet *Updates*, ses tests.
 ### Ouvert
 
 - **Jusqu'où va « Update »** (voir le déroulé, point 4).
-- **Où vit `update.json` dans le dépôt**, et qui décide du niveau d'importance au moment de la
-  release.
 - **Le binaire Nuitka sous Linux** : `urllib` en HTTPS y trouve-t-il les certificats ? Non
   vérifié ; le téléchargement des modèles utilise déjà `urllib` sans que ce point soit testé.
+
+---
+
+## v0.31 (Interagir avec un acteur : `on_interact` et le composant `interactive`)
+
+**Ouvert le 2026-10-21. Conception posée, aucune ligne de code.** Rien n'est verrouillé : la demande tient en
+trois pièces, le reste est proposé.
+
+### D'où vient la question
+
+« Appuyer sur A devant un coffre, un panneau, un PNJ » est le geste le plus courant d'un jeu d'aventure, et
+il n'a aujourd'hui aucune expression. Il faut l'écrire à la main dans le script de l'objet : un
+`on_update` qui, à chaque frame, lit `input:pressed("a")` et teste un recouvrement avec le joueur. C'est
+du Lua exécuté pour tous les objets, à chaque frame, pour un événement qui n'arrive qu'à l'appui.
+
+### Ce que ça livre (demandé)
+
+- **Un événement `on_interact`** dans `EVENT_REGISTRY` (`scripting/api.py`), délivré au script de l'acteur
+  interactif. Proposé : `function on_interact(who)`, `who` étant l'acteur qui interagit (le joueur).
+  Signature C : `void {prefix}_on_interact(Actor* self, Actor* who)`.
+- **Un composant `interactive`** (`core/models/components.py`, entrée de `COMPONENT_REGISTRY`) qui définit
+  **comment** l'événement est déclenché. Plusieurs manières sont prévues, d'où un champ `mode`.
+- **Une entrée interne `interact`**, liée par défaut au bouton **A** (décidé le 2026-10-21). Elle est
+  interne comme les dix boutons (`BUTTON_NAMES`) et comme les axes `horizontal`/`vertical`, qui « existent
+  toujours, même sans axe déclaré » (v0.28) : elle existe dans tous les projets sans migration, ne se
+  supprime pas, et **son nom ne se change pas**. Son **réglage**, lui, est libre : A par défaut, mais
+  l'auteur choisit n'importe quel bouton (`B`, `up`…) ou un accord de plusieurs (`up + a`), avec les mêmes
+  cases à icônes et la même validation que toute entrée (`InputBinding.buttons`, sous-ensemble de
+  `BUTTON_NAMES`). Elle apparaît dans *Project Settings → Input → Inputs*, ligne au nom verrouillé.
+  Le nom `interact` est **refusé au build** à toute entrée, axe ou séquence de l'auteur, par le diagnostic
+  unique (le même journal que les autres erreurs de build), avec un message qui dit quoi renommer.
+
+### Les modes (proposés, à trancher)
+
+| Mode | Déclenché quand | État runtime | Se règle sur |
+| --- | --- | --- | --- |
+| `press` | l'entrée nommée vient d'être pressée (front montant) **et** l'interacteur recouvre la zone | aucun | l'entrée, la zone |
+| `facing` | comme `press`, et l'interacteur **regarde** l'acteur (`dir_x`/`dir_y`, déjà dans `Actor`) | aucun | l'entrée, la zone |
+| `hold` | l'entrée est tenue `n` frames d'affilée dans la zone (ouvrir un coffre lourd) | aucun : les dix compteurs `u8` de boutons existent déjà (v0.28) | l'entrée, la zone, `n` |
+
+- **La zone** n'est pas une géométrie nouvelle : le composant désigne une `CollisionBoxComponent` de
+  l'acteur par son `tag` (ex. `reach`, `solid=False`). Une zone, une seule source de vérité, déjà
+  dessinée au canvas et déjà lue par `overlaps`.
+- **Pas de mode `contact`** (décidé le 2026-10-21). Entrer dans une zone sans bouton, c'est
+  `on_collision_enter` sur une boîte `solid=False` : même suivi par paire, même masque, déjà livré. Tous les
+  modes de `interactive` reposent donc sur une entrée, ce qui est ce que `on_collision_enter` n'exprime pas.
+- **L'interacteur** est désigné par une **étiquette de collision** (par défaut `Player`, déjà dans
+  `DEFAULT_COLLISION_TAGS`), pas « n'importe quel acteur » : c'est ce qui garde le coût linéaire. Ce n'est
+  pas un drapeau nouveau sur l'acteur : l'étiquette existe, elle est portée par une boîte, et **autant
+  d'acteurs que l'on veut peuvent la porter** (plusieurs unités, deux joueurs). `who` est l'acteur dont la
+  boîte étiquetée recouvre la zone. Un second mécanisme « acteur joueur » doublerait la source de vérité.
+- **L'étiquette `Player` est réservée** (décidé le 2026-10-21) : ni renommable, ni supprimable dans
+  *Project Settings → Collisions*, puisque `interactive` en dépend. Aujourd'hui rien ne l'empêche
+  (`RenameCollisionTagCmd` et `RemoveCollisionTagCmd` l'acceptent comme n'importe quel tag, et
+  `DEFAULT_COLLISION_TAGS` ne la distingue pas de `body`). Le garde-fou se pose **dans les deux
+  commandes**, pas seulement dans l'interface : l'écran grise le champ et la corbeille, mais c'est la
+  commande qui refuse, sinon un autre appelant contourne l'écran. Une constante nommée
+  (`PLAYER_COLLISION_TAG`) devient la seule source du nom, lue par le codegen et par l'interface ; ses
+  cases de matrice (paires activées ou non avec les autres tags) restent, elles, **éditables**.
+- **L'entrée** est un nom d'`InputBinding`, comme le `trigger` de `SoundFxComponent`. Par défaut
+  `interact`. Un accord à plusieurs boutons marche sans cas particulier.
+
+### Le coût par acteur qui consomme le composant
+
+Chiffré en lisant le codegen et le runtime ; **aucune mesure sur cible**, le protocole est plus bas.
+
+**Principe du coût : le composant se compile en code de scène, comme le déclencheur `SoundFx`.** Il n'ajoute
+aucun champ à `struct Actor`, aucun appel Lua, aucune vtable. Le codegen émet, dans la boucle de la scène,
+un bloc par **nom d'entrée distinct** (le patron de `sfx_by_trigger`, `main_gen.py`), et seuls les acteurs
+dont le script **définit** `on_interact` y sont appelés (comme pour les événements de collision : le
+codegen regarde quelles fonctions le `.lua` définit).
+
+| Poste | Coût (`press`, `facing`, `hold`) |
+| --- | --- |
+| RAM par acteur (`Actor`) | 0 octet |
+| RAM statique | 0 octet |
+| ROM | une ligne C par consommateur (test d'activité + recouvrement + appel), une boucle par prefab poolé |
+| CPU, frame **sans** appui | un seul test de masque, **partagé** par tous les consommateurs de la même entrée : coût nul par acteur |
+| CPU, frame **avec** appui | un test de recouvrement par consommateur et par interacteur : `actors_overlap_boxes`, au plus `MAX_BOXES²` = 16 `box_overlap`, en pratique 1 (une zone contre un corps) |
+| Pool de prefabs | `taille du pool / groupe` tests, seulement sur la frame d'appui |
+
+- **Le gain tient au verrou d'entrée.** Le test de recouvrement n'est évalué que si l'entrée vient d'être
+  pressée. Avec `press`, `facing` et `hold`, 64 coffres ne coûtent qu'un test de masque tant que personne
+  n'appuie ; le script équivalent écrit à la main paie son `on_update` à chaque frame.
+- **Pas de rejet gratuit.** Le test de recouvrement est le seul filtre spatial : il n'y a pas de grille.
+  Le coût d'une frame d'appui croît donc linéairement avec le nombre de consommateurs **actifs** de la scène,
+  multiplié par le nombre d'interacteurs (en pratique 1).
+- **Si plusieurs zones se recouvrent au même appui**, la règle simple est « tous déclenchent », mais c'est
+  rarement ce que veut un jeu (deux panneaux côte à côte). Une règle « un seul, le plus proche » coûte une
+  passe de plus **sur la frame d'appui seulement** (le plus petit écart de centres). À trancher.
+- **Ce que le composant ne paie pas** : pas de `on_update`, pas de script requis pour la détection, pas de
+  champ dans `Actor`. Un acteur sans `on_interact` défini ne génère aucune ligne (avertissement au build :
+  composant sans consommateur).
+
+**Protocole de mesure** (à faire à l'ouverture, avant de promettre un chiffre) : une scène de test avec
+8, 32 et 128 acteurs `interactive`, chaque mode, en frame d'appui et hors appui ; lecture en lignes de balayage
+(`VCOUNT`, l'unité du budget de détection) dans mGBA ; comparaison à la même scène écrite en `on_update`. Les
+valeurs mesurées remplaceront le tableau qualitatif ci-dessus, dans cette section.
+
+### Déroulé (proposé)
+
+1. **L'entrée interne `interact`** : déclarée avec les entrées internes, validée comme nom réservé, listée
+   (verrouillée) dans *Project Settings → Input → Inputs*. Petit, indépendant, testable seul.
+2. **Le composant** : `InteractiveComponent`, enregistrement, sérialisation, inspecteur
+   (`component_editors/`), menu « + Component », libellés EN et FR.
+3. **L'événement** : entrée de `EVENT_REGISTRY`, stub, icône, checker, documentation de l'API
+   (`api_reference.json`).
+4. **Le codegen** : le bloc par entrée dans `main_gen.py`, la variante prefab poolé.
+5. **Les modes** un par un, `press` d'abord (c'est le cas qui rend la mesure utile).
+6. **La mesure**, puis la section « coût » remplacée par les valeurs.
+7. **Documentation** : `docs/user-guide/` (un guide « interagir », qui remplace le recouvrement écrit à la
+   main), ARCHITECTURE.md ; le détail part ensuite dans `changelog/archives/v0.31.md`.
+8. **Tests ciblés** : sérialisation du composant, émission du bloc par entrée, entrée par défaut. Pas de
+   suite complète.
+
+### Fichiers annoncés (à confirmer en relisant le code)
+
+`core/models/components.py`, `core/models/settings.py` (`PLAYER_COLLISION_TAG`, l'entrée interne),
+`core/project.py` (`create`, seulement pour `Player`), `ui/scene_manager/inspectors/inputs_card.py`,
+`codegen/runtime_codegen/input_layout.py` (résolution du nom en masque),
+`RenameCollisionTagCmd` et `RemoveCollisionTagCmd`, `CollisionsPanel` (`project_settings_dialog.py`), `scripting/api.py`
+(`EVENT_REGISTRY`, `api_reference.json`), `codegen/runtime_codegen/main_gen.py` (+ l'en-tête qui déclare les
+fonctions `extern`), `ui/scene_manager/inspectors/component_editors/`, les deux `labels*.json`, les
+infobulles, ARCHITECTURE.md, `docs/user-guide/`.
+
+### Ouvert
+
+- **Où vit le réglage de `interact`** : l'entrée est interne, donc absente de `settings.inputs`. Proposé :
+  un champ de `ProjectSettings` (`interact_buttons`, défaut `["a"]`), écrit seulement s'il diffère du défaut,
+  donc aucun projet existant ne change. Le codegen (`input_layout.py`) le résout comme un accord ordinaire.
+  Un accord vide (aucun bouton coché) est refusé à la saisie : l'entrée ne peut pas devenir inatteignable.
+- **Un projet existant sans `Player`** (absent, ou renommé avant ce jalon) : le tag réservé est recréé à
+  l'ouverture, ou `interactive` signale l'étiquette manquante au build ? Un tag renommé ne se reconnaît
+  pas : on ne le devine pas. (Le même problème n'existe plus pour `interact`, interne.)
+- **Plusieurs interacteurs dans la même zone au même appui** : l'entrée est unique (une seule manette),
+  donc qui interagit ? Tous, ou le plus proche du centre de la zone, comme pour les zones qui se recouvrent.
+  Le coût du tableau suppose un interacteur ; il croît linéairement avec leur nombre, sur la frame d'appui.
+- **Plusieurs zones qui se recouvrent** : tous, ou le plus proche (voir le coût).
+- **`who` dans `on_interact`** : retenu comme un `Actor` (voir plus haut). Reste à fixer ce qu'un script
+  peut en lire, comme pour le `other` de `on_collision_enter`.
+- **Un délai de rechargement** (empêcher le rebond d'un appui) : probablement un champ `cooldown` en frames,
+  qui coûterait un `u8` par consommateur ; non proposé tant que le besoin n'est pas là.
+- **Interaction avec la pause et les boîtes de dialogue** : un appui sur A qui ferme un dialogue ne doit
+  pas rouvrir le coffre. Dépend de la façon dont le texte consomme l'entrée ; non étudié.
 
 ---
 

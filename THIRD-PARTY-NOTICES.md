@@ -18,9 +18,9 @@ une promesse qu'un même numéro de version sera présent dans chaque release.
 
 | Composant | Version déclarée | Licence |
 | --- | --- | --- |
-| [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) — Riverbank Computing | >= 6.11, < 7 | **GPL-3.0-only** |
-| [PyQt6-Qt6](https://www.qt.io/) — The Qt Company | dépendance transitive de PyQt6 | **LGPL-3.0** |
-| PyQt6-sip — Riverbank Computing | dépendance transitive de PyQt6 | BSD-2-Clause |
+| [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) (Riverbank Computing) | >= 6.11, < 7 | **GPL-3.0-only** |
+| [PyQt6-Qt6](https://www.qt.io/) (The Qt Company) | dépendance transitive de PyQt6 | **LGPL-3.0** |
+| PyQt6-sip (Riverbank Computing) | dépendance transitive de PyQt6 | BSD-2-Clause |
 | [Pillow](https://python-pillow.org/) | >= 12.3, < 13 | MIT-CMU |
 | [NumPy](https://numpy.org/) | >= 2.5, < 3 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
 | [freetype-py](https://github.com/rougier/freetype-py) | >= 2.5, < 3 | BSD-3-Clause (binding) ; FreeType est fourni par les wheels standards, voir ci-dessous |
@@ -54,7 +54,7 @@ Les wheels standards de `freetype-py` fournissent une bibliothèque FreeType
 (`libfreetype`), qui sert à rastériser les polices vectorielles importées. Une
 installation depuis les sources peut, elle, utiliser une bibliothèque FreeType
 déjà présente sur le système. FreeType est proposée sous la
-*FreeType License* (FTL, de type BSD, avec mention obligatoire — ci-dessus) **ou**
+*FreeType License* (FTL, de type BSD, avec mention obligatoire ci-dessus) **ou**
 sous la GPL v2. Cet éditeur la redistribue sous la **FTL** : la GPL v2 seule
 (sans « ou ultérieure ») est incompatible avec la GPL-3.0 de l'éditeur.
 
@@ -66,10 +66,10 @@ dans le dossier de l'application (fichiers `.dll`, séparés de l'exécutable).
 | Composant | Version | Licence | Où |
 | --- | --- | --- | --- |
 | [Python](https://www.python.org/) (interpréteur et bibliothèque standard) | 3.12.x | PSF License 2.0 | `python312.dll` |
-| [FFmpeg](https://ffmpeg.org/) — via Qt Multimédia | selon la distribution Qt résolue par `pip` | **LGPL-2.1-or-later** | `avcodec`, `avformat`, `avutil`, `swresample`, `swscale` |
+| [FFmpeg](https://ffmpeg.org/) (via Qt Multimédia) | selon la distribution Qt résolue par `pip` | **LGPL-2.1-or-later** | `avcodec`, `avformat`, `avutil`, `swresample`, `swscale` |
 | [OpenSSL](https://www.openssl.org/) | selon la distribution Python 3.12 utilisée pour le build | Apache-2.0 | `libssl-3.dll`, `libcrypto-3.dll` |
 | [libffi](https://sourceware.org/libffi/) | 3.x | MIT | `libffi-8.dll` |
-| [OpenBLAS](https://github.com/OpenMathLib/OpenBLAS/) — via NumPy | | BSD-3-Clause | `numpy.libs/` |
+| [OpenBLAS](https://github.com/OpenMathLib/OpenBLAS/) (via NumPy) | | BSD-3-Clause | `numpy.libs/` |
 | [LAPACK](https://www.netlib.org/lapack/) (dans OpenBLAS) | | BSD-3-Clause-Open-MPI | `numpy.libs/` |
 | GCC runtime library (dans OpenBLAS) | | GPL-3.0-or-later avec *GCC Runtime Library Exception 3.1* | `numpy.libs/` |
 | Microsoft Visual C++ runtime | 14.x | redistribuable Microsoft (*Visual C++ Redistributable*) | `vcruntime140*.dll`, `msvcp140*.dll` |

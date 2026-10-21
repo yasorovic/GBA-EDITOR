@@ -1,4 +1,4 @@
-Licence du moteur — zlib
+Licence du moteur (zlib)
 ========================
 
 Ce dossier (`runtime/`) n'est pas couvert par la GPL de l'éditeur.
@@ -33,12 +33,12 @@ sources.
 
 **Vous n'avez rien à joindre à votre ROM.** La clause 3 ci-dessous ne porte que
 sur la distribution des sources de ce moteur. Distribuer une ROM compilée
-n'entraîne donc aucune obligation de notice — c'est précisément pourquoi la
+n'entraîne donc aucune obligation de notice. C'est précisément pourquoi la
 licence zlib a été retenue ici plutôt que MIT.
 
 Ces trois points sont l'intention ; le texte qui fait foi est celui qui suit.
 
-**Attention** — votre ROM est liée à `libgba` et `maxmod` (devkitPro), qui ne
+**Attention.** Votre ROM est liée à `libgba` et `maxmod` (devkitPro), qui ne
 sont pas nos logiciels et ont leurs propres conditions. Elles sont permissives et
 compatibles avec un jeu commercial, mais c'est à vérifier auprès de devkitPro,
 pas ici.
