@@ -79,13 +79,14 @@ le moment et le numéro de la première release publique se décident plus tard.
 | --- | --- | --- |
 | 0.1 | État actuel (base) | tout l'existant, jalons v0.2 à v0.28 (voir le [CHANGELOG](../../changelog/CHANGELOG.md)) |
 | 0.2 | [Mises à jour](../../changelog/archives/updates-from-about.md) | **livré le 2026-10-22** : la fenêtre *Updates* ; reste à essayer la pop-up au lancement et le téléchargement sur build empaqueté |
-| 0.3 | Assets et disque | [Tout vit dans `assets/`](#tout-ce-que-lauteur-manipule-vit-dans-assets), [Source ≠ asset](#source--asset-larborescence-du-disque-et-lid-stable), [Créer un asset](#créer-un-asset--deux-gestes-aucun-dossier-titulaire), [Finder et Disk](#finder-et-disk--asset-library--et--project-files-), [Une seule règle de nom](#une-seule-règle-de-nom-libre), [Dupliquer un asset](#dupliquer-un-asset-et-régler-sfx-et-jingles) |
+| 0.3 | Assets et disque (presque livré : il reste les références par id) | [Tout vit dans `assets/`](#tout-ce-que-lauteur-manipule-vit-dans-assets), [Source ≠ asset](#source--asset-larborescence-du-disque-et-lid-stable), [Créer un asset](#créer-un-asset--deux-gestes-aucun-dossier-titulaire), [Finder et Disk (livré)](../../changelog/archives/finder-to-library.md), [Une seule règle de nom](#une-seule-règle-de-nom-libre) |
 | 0.4 | Texte et données | [Écran Texte](#lécran-texte-nédite-et-ne-range-que-du-contenu), [TextBox](#textbox-plusieurs-entrées-pour-préparer-un-dialogue), [le pont vers les tables](#un-pont-entre-lécran-texte-et-les-tables-de-données-créer-un-dialogue), [écran Données](#lécran-données-une-grille-de-jeu-pas-un-tableur), [briques `Text` et `Textbox`](#briques-de-base-et-assemblages-text-chaîne-et-textbox-boîte) |
 | 0.5 | Fonds | [La compression d'un fond](#la-compression-dun-fond-se-joue-elle-ne-sattend-pas), [le plan de travail](#le-fond-est-un-plan-de-travail-canvas-image-posée-comparaison-sourcecompressé), [l'écran Fond](#lécran-fond-ce-qui-est-livré-le-2026-10-14-et-les-pistes-notées-pour-plus-tard), [préparer une image riche](#piste-préparer-une-image-riche-à-limport-recadrer-et-redimensionner-sans-toucher-au-png) |
 | 0.6 | [Interaction avec un acteur](#interagir-avec-un-acteur-on_interact-et-le-composant-interactive) | `on_interact` et le composant `interactive` |
 | 0.7 | [Export navigateur](#diffuser-une-rom-dans-le-navigateur-itchio) | itch.io, ROM jouable dans le navigateur |
 
-Non classés pour l'instant (restent des [pistes](#pistes)) : le son, les prefabs, la famille « API et
+Non classés pour l'instant (restent des [pistes](#pistes)) : le son, dont [les réglages des SFX et des jingles](#dupliquer-un-asset-et-régler-sfx-et-jingles)
+(sortis du 0.3 le 2026-10-22 ; la duplication d'asset, livrée, y est décrite aussi), les prefabs, la famille « API et
 scripts » (mixer, sous-objets, listes d'interface, calques par nom).
 
 ## Diffuser une ROM dans le navigateur (itch.io)
@@ -453,6 +454,26 @@ pas au CHANGELOG ; si elle grossit au point de justifier une release, elle est p
 [changelog/archives/](../../changelog/archives/), référencé par son nom. Ce tableau ne garde que les
 pistes **non closes**.
 
+**Livré le 2026-10-23, un thème clair aux rôles de fond tenus.** Chaque fond a un rôle et un seul : `BG_DEEP`
+les creux (fenêtre, canvas, graphes, listes du Disk, barres de statut), `BG_BASE` le corps d'une library,
+`BG_PANEL` les inspecteurs et le fond des écrans, `BG_RAISED` les barres et menus, `BG_INPUT` les champs et les
+petits boutons. `CANVAS_BG` et `GRAPH_BG` sont supprimés (ils valaient `BG_DEEP` en sombre, un gris à part en clair) ;
+les gris du thème clair codés en dur sont remplacés par ces rôles ; les racines des écrans Sprites, Fonds et Texte
+passent en `BG_PANEL` comme les autres. `tools/light_theme_tuner.py` règle les gris du thème clair avec un aperçu
+(il lit `_LIGHT` dans `theme.py`, ne l'écrit pas). **Piège corrigé** : une feuille de style posée sur un panneau
+sans sélecteur (`background:…; border-left:…`) se recopie sur TOUS ses enfants, d'où des barres verticales à gauche
+de chaque widget ; les neuf cas trouvés sont scopés sur la classe du panneau. Même cause pour l'en-tête de library,
+qui était `transparent` et prenait la couleur de l'écran parent : il peint maintenant `BG_PANEL`. **Non vérifié à
+l'écran** (seulement importé et rendu hors écran).
+
+**Livré le 2026-10-23, un seul fond de canvas.** Le fond du sprite editor (creux `BG_DEEP`, grille grise, halo au
+survol) devient le fond de TOUS les canvas, via `ui/common/canvas_backdrop.py` (`paint_backdrop`,
+`GridBackdropViewMixin`, `GridBackdropScrollArea`) : canvas de scène, graphe de scènes, palette, planche de glyphes
+et aperçu écran des polices ; l'éditeur de fonds et le sprite editor l'utilisaient déjà. Pas encore alignés : la
+comparaison de polices (`font_asset_preview.py`), le graphe de musique et les machines à états (fond propre).
+L'éditeur de fonds montre aussi la case que le prochain clic touchera (pinceau, gomme, seau) et l'aperçu du
+rectangle pendant le glisser. **Non vérifié à l'écran.**
+
 **Livré le 2026-10-17, [Le gabarit commun des pop-up](../../changelog/archives/common-popups.md).**
 Les messages d'information, d'attention, d'erreur et de confirmation des 22 modules concernés
 passent par `ui/common/popup.py` : illustrations adaptées au type de message, boutons et
@@ -477,8 +498,41 @@ un oubli. `atomic_write` saute l'écriture d'un contenu identique, sans tenir co
 fichier repassé en CRLF par un outil externe ne se corrige qu'à sa prochaine vraie modification. Suite complète
 non relancée (seuls `test_disk_commands` et `test_interrupted_write` l'ont été).
 
+**Livré le 2026-10-22, les correctifs urgents et le palier 2 du journal d'un utilisateur** (un petit jeu
+topdown réalisé sur Backstage, journal du 2026-10-20 au 21, classé du meilleur rapport gain/coût au pire).
+- *Plantages et fausses promesses* : la liste Music de l'inspecteur de scène appelait une méthode inexistante
+  (`_refresh_music`) ; `actor:get(i)` est accepté par le vérificateur (le générateur de C et la doc l'acceptaient déjà) ;
+  `scripting.md` dit que `wait` dans un `if` est refusé au Build (pas au diagnostic en direct) et qu'un `return` en tête
+  de `on_update` saute l'avancement des séquences.
+- *Interface invisible* : avertissement quand un décor est devant une interface (le plus petit BG est devant) ; une
+  interface neuve se crée sur BG0 (`InterfaceNode.bg_slot = 0`, un ancien fichier sans la clé garde BG1).
+- *Champs illisibles* : un champ numérique ne descend plus sous 56 px (`MIN_SPIN_WIDTH`), sélectionne son contenu au
+  focus, et `W.pair` replie X/Y l'un sous l'autre quand la place manque. Les champs de la carte Canvas de l'éditeur de
+  fonds sont lisibles (« 24 » n'était que « 240 » tronqué), avec l'unité en px. Une case cochée porte une coche.
+  En thème clair, les icônes de fichiers du Disk sont d'un gris plus doux (`icon_mark_color`).
+- *Imports* : le « + » (sons, sprites, fonds) accepte plusieurs fichiers, en une entrée d'historique ; la ressource
+  sélectionnée dépliait mal sa section (corrigé) ; un build qui échoue à réécrire la ROM parce qu'un émulateur la tient
+  ouverte le dit. Une copie de source n'est suffixée que face à un fichier de **même extension** : `village.xm` et
+  `village.png` coexistent (le nom d'asset est unique par type, pas dans tout le projet).
+- *Renommage* : F2 et « Rename state » sur un état d'animation, un nouvel état s'ouvre en édition ; un nom d'élément
+  d'interface déjà pris ouvre un message (utiliser le nom suffixé, ou garder l'ancien et en choisir un autre), sans option
+  d'écrasement : l'homonyme vit souvent dans une autre interface et des scripts le citent.
+- *Divers* : l'inspecteur de scène se relit à la fermeture des Project Settings ; la position du curseur se lit en
+  pixels ou en tuiles (un clic bascule, tous les canvas à la fois, préférence machine `cursor_unit`, y compris le
+  canvas et la planche du sprite) ; le champ de contenu de l'écran Texte garde le focus quand renommer une clé
+  reconstruit la table.
+
+Refusé : une aide à la création musicale (Backstage n'est ni un tracker ni un DAW). Écarté après vérification : un
+rechargement à chaud de la ROM dans mGBA (0.10.5 n'a aucune option de ligne de commande pour charger un script) ; l'ajout
+rapide de composants qui « n'était pas pris » (un test enchaîne quatre ajouts sans perte, c'était le pilotage du
+testeur). **Non vérifié à l'écran** : tout a été éprouvé par des tests ciblés hors écran. La suite complète n'a montré
+que l'échec intermittent du `make` de devkitPro (`fatal error - add_item`), les deux fichiers concernés repassent seuls.
+
 | Piste | Ouvert le | État |
 | --- | --- | --- |
+| Des cartes de valeurs peintes par l'auteur, lues à l'exécution | 2026-10-23 | **À ouvrir**, réflexion, **rien de verrouillé**, code non commencé ; généraliser la carte de collision en cartes nommées d'entiers (gameplay, pas de rendu), la frontière avec « pas un outil de dessin » est écrite dans la section. Voir [ci-dessous](#piste-des-cartes-de-valeurs-peintes-par-lauteur-lues-à-lexécution) |
+| Une seule primitive pour retenir et rendre des cases de tilemap | 2026-10-23 | **À ouvrir**, réflexion, **rien de verrouillé**, code non commencé ; le fond de conteneur (redessin suivi) et l'image BG (copie des cases) font chacun leur version du même geste, et une API de scripts `layer:save/restore/release` l'exposerait. Voir [ci-dessous](#piste-une-seule-primitive-pour-retenir-et-rendre-des-cases-de-tilemap) |
+| Retours d'un utilisateur sur un petit projet topdown | 2026-10-22 | **Paliers 1 et 2 livrés (2026-10-22), palier 3 en cours (2026-10-23)**. Livré au palier 3 : le Refaire clavier (Ctrl+Y était ambigu sous Windows et ne faisait rien, c'est la vraie cause du « Redo perdu » ; l'annulation du pinceau, elle, est correcte : 16 coups = 16 entrées), le pinceau de collision (trait continu entre deux événements souris, pinceau 16 aligné sur la grille de 16 px), « Effacer la collision » dans la barre du canvas de scène, un glisser d'élément vers une autre interface refusé à voix haute (le déplacement réel entre interfaces reste à décider : cibles BG/OBJ différentes, interface partagée entre scènes), et le diagnostic en direct qui montre une attente dans un `if` (`structure_errors` : le même vérificateur que le Build, sur un contexte vide, limité aux fautes de structure). Écarté : le cadre d'un conteneur qui reste affiché malgré « Shown at scene start » (entre en collision avec le masquage d'un élément dans la scène). Livré ensuite : « Extract from PNG » du sprite dit si la palette est créée ou mise à jour ; le champ largeur d'un `Text` (grisé par construction) dit pourquoi, et le conseil de débordement renvoie vers la `Textbox` ; un « + » dans la bibliothèque de textes ; l'inspecteur d'acteur défile jusqu'à la carte Components quand on clique ou ajoute un composant ; la ligne racine de l'arbre de scène montre l'inspecteur de la scène. Palier 3 clos : une image BG masquée ou déplacée rend ce qu'elle recouvrait (le fond du conteneur) au lieu d'écrire la tuile 0 (`ui_image_snapshot_bg` / `ui_image_clear_bg` dans `gba_engine.h`, 64 cases au plus retenues par image, 2 Ko ; au-delà l'image s'efface comme avant). Vérifié par une sonde native qui pose, masque, repose et déplace une image sur un fond (`tests/native/ui_image_probe.c`, `test_ui_image_hide_native.py`) et par la compilation de vraies ROM, pas jouée sur console. Le fond d'un CONTENEUR (couleur ou nine-slice, écrit en tuiles à l'init) se masque et se remontre avec `hide()`/`show()` : le moteur le retient (`ui_fill_rect_tracked` / `ui_fill_map_tracked`, 8 fonds au plus par scène, index du conteneur émis par `scene_init`), l'efface après le texte et le repose avant lui, et un conteneur caché au départ n'est pas dessiné (`tests/native/ui_fill_probe.c`, `test_ui_container_hide_native.py`). Builds de ROM et suites interface/texte/graphismes au vert, pas joué sur console. Piste notée : une API `layer:save/restore/release` sur un rectangle de tuiles, réutilisant ce mécanisme (pool fixe à dimensionner, cartes streamées à traiter). Palier 4 : interface dessinée dans le canvas, `return` dans `on_update` avec séquences, guide topdown, import d'une planche en N états, zoom de la planche, couleur d'encre. **Décision ouverte** : sprites devant l'interface par défaut (priorité d'un fond UI = son slot, celle d'un acteur = 0). |
 | Le pool ne dépend plus de l'OAM | 2026-10-20 | **Livré pour l'essentiel (2026-10-20)**, pool automatique (8 par défaut) pour un prefab spawné, entrées OAM par priorité (interface, acteurs posés, pools), avertissements OAM et matrices affines, code mort retiré ; reste une liste libre d'entrées, optionnelle (`editor/codegen/improvement.md`). Voir [ci-dessous](#le-pool-ne-dépend-plus-de-loam) |
 | Préparer une image riche à l'import, recadrer, redimensionner | 2026-09-26 | Route vers v1.0-stable, non prioritaire pour l'alpha (décidé le 2026-09-29) ; tranches 4bpp/8bpp livrées, reste la tranche bitmap et la validation à la souris. Voir [ci-dessous](#piste-préparer-une-image-riche-à-limport-recadrer-et-redimensionner-sans-toucher-au-png) |
 | L'API dit tout ce que l'inspecteur règle | 2026-09-23 | **En cours**, tranche 1 (acteur, sprite, collision) livrée le 2026-09-23, sauf `parent` et `sprite_name`, **la collision est rouverte le 2026-09-24** (boîte = référence typée, `collision_box.get_tile`) ; tranches 2 (caméra, scène, calque) et 3 (interface) à suivre. Voir [ci-dessous](#lapi-dit-tout-ce-que-linspecteur-règle) |
@@ -496,7 +550,6 @@ non relancée (seuls `test_disk_commands` et `test_interrupted_write` l'ont ét�
 | Une seule règle de nom libre | 2026-10-09 | **En cours**, huit règles de suffixe coexistent (`_2`, `_02`, `_copy`, `_1`, `Camera 2`, `axis1`, `Actor_0`, `Palette 2`) ; toutes passent à `coin`, `coin_2`, `coin_3`. Voir [ci-dessous](#une-seule-règle-de-nom-libre) |
 | Source ≠ asset, l'arborescence du disque et l'id stable | 2026-10-09 | **Livré pour l'essentiel (2026-10-11)**, ids dans tous les sidecars, extension par type d'asset, assets et sources rangés où l'on veut sous `assets/` (fonds, palettes, scripts compris), onglet Disk (glisser-déposer, *Create asset*, suppression annulable, détachement complet source ≠ asset) ; **reste** : dossiers virtuels des autres finders (**Sound finder livré le 2026-10-11** : effets, musiques et jingles, dans le store partagé de la session ; sprites, fonds, palettes, tables, polices et prefabs restent à plat), références par id, associations de fichiers (installateur, zip portable, AppImage). Voir [ci-dessous](#source--asset-larborescence-du-disque-et-lid-stable) |
 | Créer un asset : deux gestes, aucun dossier titulaire | 2026-10-19 | **À ouvrir**, principe demandé par l'auteur (*Create from source* et *Create blank*, plus de dossier de famille), contrat proposé, **tranches 1 (`PaletteStore`) et 2 (les deux commandes, onglet Disk) livrées le 2026-10-19**, reste les autres appelants et le retrait des `*_dir`. Voir [ci-dessous](#créer-un-asset--deux-gestes-aucun-dossier-titulaire) |
-| Finder et Disk, « Asset library » et « Project files » | 2026-10-14 | **À ouvrir**, renommage décidé (asset finder → asset library, dossier de l'auteur → Project files), **quatre points à trancher** (nom affiché ou dossier sur disque, périmètre de « library »), code non commencé. Voir [ci-dessous](#finder-et-disk--asset-library--et--project-files-) |
 | La compression d'un fond se joue, elle ne s'attend pas | 2026-10-14 | **À ouvrir**, analyse du parcours faite (lecture du code, rien mesuré à l'usage), sept frictions relevées, direction non arbitrée entre feedback en direct, perception de la perte et réglage par objectif ; code non commencé. Voir [ci-dessous](#la-compression-dun-fond-se-joue-elle-ne-sattend-pas) |
 | Le fond est un plan de travail, canvas, image posée, comparaison source/compressé | 2026-10-15 | **À ouvrir**, modèle décidé par l'auteur le 2026-10-15 (canvas-size distinct de l'image, image déplaçable qui peut déborder, barre source/compressé, une seule image visible), **six points à vérifier ou trancher** avant de coder (palette indexée préservée, limites du canvas tuilé, miroir dans le canvas, types UI/animé, peintures par tuile), code non commencé. Remplace la piste « un seul espace » de la compression. Voir [ci-dessous](#le-fond-est-un-plan-de-travail-canvas-image-posée-comparaison-sourcecompressé) |
 | Briques de base et assemblages, `Text` (chaîne) et `Textbox` (boîte), écrits directement dans le canvas | 2026-10-14 | **Livré pour l'essentiel (2026-10-14)**, deux types de texte, menu d'ajout en deux familles, `Text` posé en un point et édité sur place avec un curseur clignotant ; **reste** : emprise d'une chaîne qui suit son contenu, sélection non dessinée, vérification à la main et build ROM. Voir [ci-dessous](#briques-de-base-et-assemblages-text-chaîne-et-textbox-boîte) |
@@ -1614,6 +1667,15 @@ comme les autres assets pointent leur source. Plus aucune famille n'a de raison 
   gestes : « Expose to prefab » et la copie de prefab (ils partent d'un acteur existant), `save_palette` (palette extraite d'un
   sprite ou d'un fond).
 
+- **Tranche 4, `ResourceStore(root, cls)` (constatée livrée le 2026-10-22)** : plus aucun store ne reçoit de dossier de famille
+  (`Project` les construit tous sur `user_library_dir`) et les propriétés `*_dir` de famille ont disparu de `project_paths.py`
+  (ne restent que `user_library_dir`, `project_dir`, les dossiers de build et `legacy_sound_states_dir`, lu une fois par la
+  migration des boîtes sonores). Dernier chemin parallèle retiré : le bouton « New script » du Script Editor, qui demandait
+  un nom par une fenêtre et écrivait le fichier à la racine sans historique, appelle maintenant le « + » de la bibliothèque
+  (*Create blank*, dossier affiché par Disk, annulable) ; `ScriptLibraryPanel.set_root` et `_root_scripts_dir` sont supprimés.
+  **Reste** : le fond vierge et l'import `.gpl` / `.pal` ne sont pas des écarts (décidé le 2026-10-22), et
+  `tools/create_build_benchmark.py` écrit encore `project/scenes` (ancienne disposition).
+
 ### Ordre d'implémentation (proposé)
 
 1. `PaletteStore` d'abord (l'exception réelle), avec son test : `.hex` à côté du sidecar, plus d'adoption.
@@ -1626,69 +1688,7 @@ comme les autres assets pointent leur source. Plus aucune famille n'a de raison 
 
 - Ne déplace aucun fichier d'un projet existant.
 - N'ajoute aucun type d'asset ni aucun geste de création : il en retire.
-- Ne touche ni à la règle des noms libres (`coin`, `coin_2`) ni au chantier « Finder et Disk » (renommage).
-
----
-
-## Finder et Disk (« Asset library » et « Project files »)
-
-### D'où vient la question (2026-10-14)
-
-Deux mots prêtent à confusion. **« Asset finder »** désigne à la fois la famille de panneaux (Project viewer, Sprite
-finder, Script finder, Sound finder…) et le mécanisme commun (`AssetFinder`) ; **« Assets »** désigne à la fois ce que le
-projet *contient* (les assets nommés) et le dossier de l'auteur (`assets/`, racine de l'onglet Disk). Le chantier
-« Tout ce que l'auteur manipule vit dans `assets/` » a encore élargi ce second sens : le dossier contient désormais des
-scènes, des tables, des textes, qui ne sont pas des « assets » au sens d'un sprite ou d'un fond. Renommer lève
-l'ambiguïté et rend le code plus clair à maintenir.
-
-### Décisions verrouillées (2026-10-14)
-
-- **L'« asset finder » devient l'« asset library »** : le nom change partout où il vit, le vocabulaire visible
-  (libellés, infobulles), les classes et modules (`AssetFinder`, `asset_finder.py`, `*_finder_panel.py`), les tests, la
-  doc (`editor/ui/asset-finder.md`, ARCHITECTURE). Aucun alias de l'ancien nom : une fois le renommage fait, plus un
-  « finder » ne reste.
-- **Le dossier de l'auteur devient « Project files »** : c'est le nom que l'auteur voit pour ce qu'il organise lui-même
-  (racine de l'onglet Disk, aujourd'hui « Assets »).
-- **Sprite, Script et Sound rejoignent le modèle de l'asset library** : ils cessent d'être des « finders » à part. Il n'y a
-  plus qu'un seul modèle (l'asset library) dont ils sont des vues par type d'asset, au lieu de quatre panneaux qui
-  portent chacun leur nom (« Sprite finder »…). Les `*_finder_panel.py` disparaissent comme noms de famille.
-- **Le « Project viewer » (un temps nommé « Scene viewer ») est la « Scene library »** : à l'usage c'est la bibliothèque
-  de la scène. L'auteur y ouvre une scène, y prend un prefab. Ce n'est pas une vue du projet entier (« Project files »
-  prend ce rôle) mais une **instance du même modèle d'asset library**, comme les trois autres, avec trois filtres :
-  **scene / prefab / script**. Le filtre **script** pourrait même être retiré (à trancher, point 2) : le Script
-  finder a déjà sa propre bibliothèque.
-
-### À trancher avant de commencer
-
-1. **« Project files » : nom affiché seulement, ou aussi nom du dossier sur disque ?** Le renommage sur disque
-   (`assets/` → `project_files/`, ou autre) touche `core/project_paths.py`, la surveillance, les starters, les deux démos,
-   la migration et une quinzaine de tests, comme le chantier `project/` → `assets/`. Le nom affiché seul est gratuit.
-2. **Les quatre bibliothèques : une instance du même modèle chacune, ou une seule avec filtre ?** Réglé : Sprite,
-   Script, Sound et Scene en font partie ; la Scene library a trois filtres (scene / prefab / script). Reste la forme
-   (aujourd'hui chaque écran embarque son finder) et **le filtre script de la Scene library : le retire-t-on**, puisque
-   la Script library existe ? Le retirer enlève un doublon, mais `script_creation.py` partage aujourd'hui le menu de
-   création entre les deux.
-3. **L'ancien mot « asset » dans `assets_finder_panel.py`, `asset_kinds.py`, le dep-graph** : reste-t-il le mot juste
-   pour un asset nommé (sprite, fond, palette), distinct de « Project files » qui contient aussi du non-asset ? Proposé :
-   oui, « asset » ne désigne plus que l'objet nommé.
-4. **Les clés de traduction** (`labels.json` / `labels_fr.json`, dont `disk.root`) et les raccourcis (`keybindings.py`)
-   suivent le renommage, avec la traduction FR ajoutée d'office.
-
-### Ce que ça touche
-
-- ~70 occurrences dans 24 fichiers (relevé du 2026-10-14) : `editor/ui/common/asset_finder.py`, `asset_kinds.py`,
-  `*_finder_panel.py`, `window.py` (onglet « Project viewer » → « Scene library », voir aussi `script_creation.py`,
-  `script_finder_panel.py`, `assets_finder_panel.py` qui le citent), les écrans qui embarquent un finder, `tools/check_ui_text.py`, `core/keybindings.py`.
-- **Tests** : `test_asset_finder_folders.py`, `test_finder_locate.py`, `test_sound_finder_folders.py`, `conftest.py`.
-- **Docs** : `editor/ui/asset-finder.md` (renommé), ARCHITECTURE, ROADMAP (les sections qui citent « finder »).
-
-### Ordre d'implémentation
-
-1. Trancher les points ci-dessus.
-2. Le renommage du code (classes, modules, tests) en un seul geste, sans alias.
-3. Les libellés, les infobulles, les clés FR.
-4. Si le dossier change de nom sur disque : chemins, surveillance, migration des démos et du starter.
-5. Les docs, la chasse au code mort.
+- Ne touche ni à la règle des noms libres (`coin`, `coin_2`) ni au chantier « Finder et Disk » (renommage, [livré](../../changelog/archives/finder-to-library.md)).
 
 ---
 
@@ -2742,7 +2742,8 @@ tous ses ids tant qu'elle n'est pas lue, et un `prune` anticipé viderait ses do
   de données. *Pas encore fait*. Seule la forme de l'id est livrée. Le nom reste renommable ; le chemin du fichier
   source est un simple emplacement. Même règle que les variables et les textes : un id dans les données, un nom lisible dans le Lua.
 
-- **Le nom d'asset est unique dans le projet** (2026-10-09). Il se tranche à la création (*Create asset*
+- **Le nom d'asset est unique parmi les assets de son type** (2026-10-09 ; précisé le 2026-10-22 : un décor et une
+  musique peuvent porter le même nom, la copie d'une source n'est suffixée que face à un fichier de MÊME extension). Il se tranche à la création (*Create asset*
   propose la stem de la source et refuse ou suffixe un nom déjà pris) ; les SOURCES peuvent être homonymes
   librement. Le Lua écrit toujours `sfx.play("coin")` et les symboles C n'embarquent aucun nom de dossier.
 - **Deux vues, deux questions, pas de conflit de dossiers** (2026-10-09). L'*asset finder* et les panneaux de
@@ -2844,6 +2845,11 @@ tous ses ids tant qu'elle n'est pas lue, et un `prune` anticipé viderait ses do
      (2) **livré le 2026-10-10**, chaque magasin cherche ses sidecars sous TOUT `assets/` (`ResourceStore(dossier, classe, racine)` : le dossier de la famille ne sert plus qu'à y faire naître un nouvel asset) ; un asset se lit, s'écrit, se renomme et se supprime là où il est, deux types peuvent partager un dossier et un nom ; un homonyme du même type plus profond est ignoré et signalé, son chemin est donné depuis `assets/` ; les palettes restent dans `assets/palettes/` (leur `.hex` y vit avec elles) ; (3) **livré le 2026-10-10**, déplacer fichiers et dossiers par glisser-déposer dans l'onglet Disk (arbre et vue à plat), `core/disk_move.py` étant la seule écriture. Règles : un sidecar se déplace seul (l'asset pointe sa source par chemin) ; une source citée par un asset se déplace avec mise à jour du chemin de l'asset ; une source libre ou un fichier non géré se déplace librement ; un dossier se déplace avec tout son contenu, chemins des assets réécrits ; rien n'est jamais écrasé (un fichier du même nom à destination = refus, sans rien déplacer) ; pas de déplacement d'un dossier dans lui-même. **Refusés** : textes et variables (un seul fichier pour tout le projet) ; les palettes, les images de fonds et les scripts `.lua` se déplacent désormais (temps 4), un script déplacé voyant réécrites ses attaches dans les scènes, caméras, acteurs et prefabs. Le surveillant est suspendu pendant l'opération : un fichier déplacé n'est jamais pris pour un nouvel import. Au survol, le dossier qui peut recevoir est surligné et les entrées glissées passent à demi transparentes ; un dossier qui ne peut pas recevoir (palettes, textes…) montre le curseur « interdit » et dit pourquoi dans la barre d'état dès le survol, pas seulement au dépôt (`disk_move.drop_verdict`, la même règle que le déplacement). **Temps 4, libres partout (décidé le 2026-10-10, non commencé).** **Modèle (précisé le 2026-10-10) : un asset n'est plus le sidecar d'un fichier source.** C'est un objet à part entière, qui ne fait que POINTER une source par un chemin explicite ; plus aucun lien implicite entre les deux, ni nom commun, ni dossier commun : l'asset ne suit pas sa source (renommée, déplacée), la source ne suit pas son asset. Les conventions qui supposaient ce couplage disparaissent avec *Create asset* : un asset nommé d'après le stem de son fichier, la création automatique à l'apparition d'un fichier, le suivi d'un fichier renommé par le surveillant. Les trois pas ci-dessous se conçoivent dans ce modèle. Lever les derniers refus de `core/disk_move.py`, un par un, chacun avec sa migration, ses tests et le retrait du refus correspondant : (a) **images de fonds, livré le 2026-10-10** (`tools/migrate_background_paths.py` ; `Project.background_image_path` ; renommer un fond ne renomme plus son image ; `disk_move` et `asset_relink` n'ont plus de cas à part ; restent, pour *Create asset*, la création d'un fond à l'apparition d'un PNG dans `assets/backgrounds/` et le raccrochage par le nom) : `BackgroundAsset.asset` passe du seul NOM de fichier à un chemin relatif au projet, comme sprites et sons ; une seule fonction rend le chemin réel de l'image d'un fond et remplace la vingtaine de `background_images_dir / nom` (build, codegen, éditeur de fonds, canvas, inspecteurs, réconciliation) ; la relier à un fichier hors de `assets/backgrounds/` devient possible (`asset_relink`) ; (b) **palettes, livré le 2026-10-10** : le `.palette` cite son `.hex` par un champ `asset` (chemin relatif au projet), les couleurs restent dans le `.hex` et ne sont jamais dupliquées ; l'un et l'autre se rangent où l'on veut sous `assets/` ; les palettes rejoignent `source_families()` (déplacement, relink, source manquante, corbeille : le cas général) ; renommer une palette ne renomme pas son `.hex` ; un `.palette` d'avant le champ le reçoit à la première ouverture (le `.hex` voisin) ; une palette dont le `.hex` a disparu n'est pas chargée et son `.palette` reste intact ; (c) **scripts, option B, livré le 2026-10-10** (`core/lua_scripts.py`, `tools/migrate_behavior_markers.py`, tests `tests/scripting/test_behavior_marker.py`) : le rôle d'un script ne vient plus de son dossier mais de son contenu : une première ligne `-- @behavior` marque un behavior ; `require("behaviors/<nom>")` reste l'appel écrit (le mot `behaviors/` devient un espace de noms, plus un dossier), résolu par NOM parmi les fichiers marqués, où qu'ils soient ; les scripts attachables sont tous les `.lua` non marqués de `assets/` ; deux behaviors de même nom = erreur de build ; « New behavior » écrit le marqueur ; un outil migre les projets d'avant (marqueur ajouté aux fichiers de `scripts/behaviors/`) ; le finder de scripts montre tous les `.lua` de `assets/` (les dossiers sans script sont masqués) ; le surveillant suit les `.lua` de tous les dossiers de `assets/`, les autres sources n'y étant suivies que dans les dossiers de famille. **Ne bougent jamais** : `texts.json`, `texts_<langue>.json`, `variables.json` (un fichier pour tout le projet). **Ensuite, hors de cette
      tranche :** associations de fichiers (installateur Windows en `HKCU\Software\Classes`, proposition à l'utilisateur
      pour le zip portable, fichier MIME + `.desktop` pour l'AppImage) et un éditeur qui ouvre un sidecar passé en argument.
+     **Tranché et livré le 2026-10-22, réduit à l'argument** : l'éditeur lancé avec un fichier d'asset (`Hero.sprite`,
+     `Level.scene`…) ou un script `.lua` ouvre le projet qui le contient (premier dossier parent à manifeste) et montre le
+     fichier dans son écran, comme un double-clic de Disk (`core/launch_target.py`, `main.py`, `MainWindow.open_asset_file`).
+     **Aucune association système des extensions d'asset** : `.font`, `.table`, `.scene` sont trop génériques pour qu'on les
+     réclame à l'utilisateur ; seule `.project` reste associée (déjà faite, installateur et MIME).
    - **Plus tard : les références par id** (une scène qui cite un sprite par son id et non par son nom) : un chantier à
      part, qui touche toutes les scènes.
 6. Extension aux musiques, jingles, sprites, fonds.
@@ -3904,6 +3910,85 @@ tranché ni codé.
 - `backdrop_color` : une porte en lecture ET écriture, sans nouveau type, un `vec3` (r, g, b) ou un entier RGB555 ; c'est ici qu'on choisit ;
 - la transition de scène (`transition_kind`, `transition_frames`) : elle possède les registres de blending pendant sa durée (`transition_begin/fade/end`), donc elle ne se règle pas sans que l'API de blending soit posée.
 
+## Piste (une seule primitive pour retenir et rendre des cases de tilemap)
+
+**Ouverte le 2026-10-23, réflexion, rien de verrouillé, code non commencé.** Née de deux correctifs livrés le même jour dans
+`gba_engine.h`, qui ont réinventé la même chose côté moteur :
+
+- **Une image BG masquée ou déplacée rend ce qu'elle recouvrait** (`ui_image_snapshot_bg` / `ui_image_clear_bg`) : à sa pose, elle
+  retient les entrées de tilemap de ses cases (jusqu'à 64 par image, un tableau par image, 2 Ko) et les restaure.
+- **Le fond d'un conteneur se masque avec `hide()` et revient avec `show()`** (`ui_fill_rect_tracked` / `ui_fill_map_tracked`) : le
+  moteur retient le rectangle et de quoi le REDESSINER (une tuile unie, ou une carte d'entrées), l'efface quand le conteneur est
+  caché et le repose quand il revient. Deux passes autour du texte, parce que texte et fond se partagent les mêmes cases.
+
+Les deux gèrent le même fait : **des cases de tilemap qui ont un état à rendre plus tard.** Elles le gèrent chacune à leur manière, et elles
+se croisent déjà (une image dans un conteneur caché ne doit pas reposer le fond ; `ui_fill_hidden_at` existe pour cela).
+
+**L'idée.** Un seul mécanisme moteur, « retenir un rectangle de cases, le rendre », dont le fond de conteneur et l'image deviennent deux
+clients, et que l'API de scripts exposerait telle quelle (`layer:get(n):save(tx, ty, w, h)`, `restore`, `release`). Le C écrit et
+éprouvé une fois, par une sonde native, sert alors trois usages : l'interface, la sauvegarde d'une zone par un script (une fenêtre qui
+se ferme, un terrain destructible, un effet à retirer), et le retour au dessous d'un élément masqué. Le gain est technique : moins de
+chemins qui écrivent dans la même tilemap, donc moins de cas où ils se marchent dessus.
+
+**Ce qui est utile et ce qui ne l'est pas dans l'unification.** Le fond d'un conteneur est un cas particulier : on le REDESSINE à partir
+de sa source (couleur, carte), on n'en garde pas une copie des cases. Retenir une copie des cases est ce que fait l'image, et ce que ferait
+l'API de scripts. À instruire : le fond est-il un client qui retient une copie (plus simple, mais une copie périmée si le fond a changé
+entre-temps), ou garde-t-il son redessin à partir de la source (ce qui existe, et ne coûte aucune mémoire de copie) ?
+
+**Points à trancher.**
+
+- *Mémoire* : un pool fixe de réservations. Combien, et de quelle taille ? Valeur de départ envisagée : 4 réservations d'au plus 64 cases (environ
+  512 octets). Les images ont déjà 2 Ko ; si elles deviennent des clients, un seul pool devrait remplacer leur tableau.
+- *Coordonnées* : en cases de la tilemap du calque, pas de l'écran, donc indépendantes du défilement.
+- *Cartes streamées* : quand le fond défile par morceaux, le moteur réécrit la tilemap ; une copie faite avant un défilement est périmée.
+  À interdire (valeur `nil`, ou refus à la compilation) ou à dire clairement.
+- *Ordre* : texte et fond se partagent des cases ; l'ordre « le fond revient avant le texte, part après lui » doit rester vrai pour tout client.
+- *API de scripts* : une réservation est un entier (le sous-ensemble Lua n'a pas de tables) ; `save` rend `nil` si le pool est plein. Pas d'objet
+  « sélection » : un rectangle et une poignée suffisent. Backstage n'est pas un outil de dessin : c'est une primitive d'exécution, pas une peinture de tuiles.
+
+**Ordre de travail envisagé.** D'abord confirmer sur une ROM jouée que `hide()` / `show()` d'un conteneur et le masquage d'une image se
+comportent à l'écran comme les sondes natives le disent. Ensuite seulement, une seule primitive (avec sa sonde) sous les deux clients
+existants, puis l'API de scripts.
+
+## Piste (des cartes de valeurs peintes par l'auteur, lues à l'exécution)
+
+**Ouverte le 2026-10-23, réflexion, rien de verrouillé, code non commencé.** Demandée par l'auteur : pouvoir peindre des entiers dans une
+carte réutilisable à l'exécution, pour faire des opérations ou du gameplay (zones d'eau ou de danger, coût de déplacement d'un terrain,
+points d'apparition, ce qu'un script lit pour décider).
+
+**Ce n'est pas la peinture de tuiles écartée.** La règle « Backstage n'est pas un outil de dessin » refuse de peindre des TUILES GRAPHIQUES (un
+éditeur de carte, un tileset de premier rang). Ici on peint des VALEURS : une grille de données, qui ne dessine rien à l'écran et que
+le moteur ne montre pas. C'est le métier de l'écran Données (une table que le jeu lit), posé sur une grille spatiale. La frontière est à
+tenir dans les deux sens : la carte de valeurs n'a aucun rendu de jeu, et l'éditeur ne gagne ni tileset ni pinceau graphique.
+
+**Le précédent existe déjà : la carte de collision.** Une grille d'entiers par scène (`Scene.collision_map`, un type de case par tuile de 8 px : vide,
+plein, pentes), peinte avec un pinceau 8 ou 16 px, un trait de pente et l'effacement, annulable (`CollisionPaintCmd`), affichée en surcouche, lue
+au runtime (`collision_box.get_tile`). La piste revient à **généraliser cette carte** : plusieurs cartes nommées par scène, chacune avec ses valeurs
+nommées (une légende : valeur, nom, couleur d'affichage), la collision restant la première carte, intégrée.
+
+**Ce que l'auteur gagnerait.** Un script lit `terrain:get("cout", tx, ty)` ou compare à une valeur nommée (`TERRAIN_EAU`), au lieu de recopier une table
+de coordonnées à la main. La démo tactique en a besoin (coût de déplacement par terrain, zones interdites). Et rien de plus : pas de
+cases animées, pas de couches graphiques.
+
+**Points à trancher.**
+
+- *Une carte ou plusieurs* : généraliser `collision_map` (une carte « collision » plus N cartes nommées) ou ajouter un second mécanisme à côté ? La
+  collision a des pentes, des tags et un rendu de pinceau propres : à ne pas casser. Je penche pour une structure commune, la collision en étant un cas riche.
+- *Largeur d'une valeur* : un octet par case suffit-il (256 valeurs nommées au plus) ? Quatre bits pour une carte très grande ?
+- *Résolution* : la tuile de 8 px, ou une cellule plus grosse (16 ou 32 px) pour une carte de gameplay moins coûteuse en ROM ?
+- *Coût en ROM* : `largeur x hauteur` octets par carte et par scène. Une grande carte streamée (plusieurs milliers de cases) pèse ; une compression
+  par plages (`RLE`) vaut d'être chiffrée avant de coder.
+- *Lecture seule ou écriture* : lire une carte est gratuit (elle reste en ROM). L'écrire au jeu (un terrain qui change, une zone qui se vide) demande une
+  copie en RAM, donc un pool à dimensionner, comme pour la piste [une seule primitive](#piste-une-seule-primitive-pour-retenir-et-rendre-des-cases-de-tilemap).
+- *Lien avec la scène* : coordonnées en cases ; une aide pixels vers case (`terrain:at(x, y)`) évite que chaque script refasse la division.
+- *Éditeur* : réutiliser la surcouche, le pinceau, le remplissage et l'annulation de la collision, avec une légende de valeurs en barre latérale et un
+  interrupteur d'affichage par carte. Les valeurs nommées sont aussi des constantes Lua (`MAP_VALUE_*`), générées comme les autres noms du projet.
+- *Diagnostics* : une carte plus petite que la scène, une valeur sans nom, une carte jamais lue par un script (un avertissement, pas un refus).
+
+**Ordre de travail envisagé.** Chiffrer d'abord le coût ROM sur la démo tactique et un niveau plus grand, trancher « une carte ou plusieurs » avec ce que la
+collision impose, puis une lecture seule (cartes nommées, valeurs nommées, `get` et `at`), et seulement ensuite l'écriture en RAM, qui dépend de la
+piste sur les cases de tilemap.
+
 ## Piste (l'allocateur de ressources matérielles)
 
 Ne porte pas de numéro de version : il **se déclenche par un événement**, pas par une date,
@@ -4043,6 +4128,98 @@ commun. C'est la couche asset qui s'unifie, pas la couche entité.
 **Ouvert** : l'inventaire des pipelines actuels (SpriteAsset côté acteur, la voie image de l'UI) et
 lequel absorbe l'autre ; et si le décor animé (v0.4) relève de ce même `Sprite` ou reste une voie BG
 à part.
+
+### Piste (2026-10-23) : séparer l'outil Inpainting et l'outil Painting, et nommer « Color mapping » l'algorithme
+
+**Constat.** La barre d'outils de l'éditeur de fonds mélange deux gestes : le pinceau porte le choix du mode (Inpaint ou
+Paint), et le seau et le rectangle suivent ce mode sans le proposer. La gomme efface les deux calques.
+
+**Livré le 2026-10-23 (non vérifié à l'écran, tests ciblés de la barre d'outils verts).** Deux outils, chacun avec ses sous-outils :
+
+- **Inpainting** (remplacement de palette) : pinceau, rectangle, seau, et l'option « Color mapping » dans son menu.
+- **Painting** (tuiles) : pinceau, rectangle, seau.
+- La gomme reste un outil à part (elle purge les deux calques) ; « select » ne change pas.
+
+Chaque bouton ouvre son menu et montre l'icône de son dernier sous-outil ; le mode (Inpainting ou Painting) suit le
+bouton choisi, la couche logique (`MODE_INPAINT` / `MODE_PAINT`, les outils `brush`, `rect`, `fill`) n'a pas bougé.
+`BgInpaintToolbar` : `_FAMILIES`, `_SUBTOOLS`, `_show_family_menu`.
+
+**Ce qu'est le « palette mapping ».** Pas un outil : l'algorithme qui décide comment les couleurs d'une palette sont
+redistribuées sur les pixels d'un fond portant une autre palette (palette swap). Cinq modes : index directs, couleurs
+perçues les plus proches, luminosité préservée, correspondance optimale, rampe teinte/saturation
+(`COLOR_MAPPING_MODES`, `_color_mapping` dans `core/models/background.py`). **Livré le 2026-10-23** : renommé « Color
+mapping » (FR « Mappage des couleurs »), le mot « palette » étant déjà pris par les banques et leur assignation. Les
+identifiants suivent (`BackgroundAsset.color_mapping`, `set_color_mapping`, `bginp.color_mapping_*`). La clé du sidecar
+passe de `inpaint_mode` à `color_mapping` ; la lecture accepte encore l'ancienne, aucun fond existant n'a été réécrit.
+
+**Ouvert.**
+
+- L'inpainting de SCÈNE (palette par tuile, par calque) ne fait que réassigner la banque (`tile_palette_overrides`), soit
+  le mode « direct ». Offrir les quatre autres modes à ce niveau demanderait un réglage par `BackgroundLayer`, un rendu
+  du canvas de scène qui recolore les tuiles, et des tuiles variantes au build (`rom_build.py`, `grit_conversion.py`) avec
+  leur coût de VRAM. **Abandonné pour l'instant (2026-10-23)** ; à rouvrir avec le point suivant.
+- Le runtime : l'auteur envisage de retrouver l'algorithme dans la ROM (recolorer un fond à l'exécution). Rien n'est
+  écrit côté C ; à instruire avant de décider si l'option y vit.
+- Faut-il écrire cette conception dans le détail (fichiers annoncés, ordre) avant de toucher à la barre d'outils ?
+
+## Piste (API « color swap » : recolorer à l'exécution, avec les options de Color mapping)
+
+### D'où vient la question (2026-10-23)
+
+L'éditeur sait déjà faire un palette swap sur un fond (l'outil Inpainting) avec un algorithme au choix, le
+« Color mapping ». Ce calcul vit uniquement dans l'éditeur : il sort des tuiles variantes au build. Rien n'existe
+côté C ni côté script : un jeu ne peut pas demander « recolore ce fond avec cette palette, de cette façon » pendant
+qu'il tourne.
+
+### Ce qui existe
+
+- Les cinq algorithmes : index directs, couleurs perçues les plus proches, luminosité préservée, correspondance
+  optimale, rampe teinte/saturation (`COLOR_MAPPING_MODES`, `_color_mapping` dans `core/models/background.py`).
+- Le réglage est porté par le fond (`BackgroundAsset.color_mapping`, clé `color_mapping` du sidecar).
+- À l'échelle d'une scène, l'inpainting ne réassigne que la banque de palette d'une tuile (`tile_palette_overrides`) :
+  c'est le mode « direct ». Les quatre autres modes n'y sont pas offerts (piste abandonnée le 2026-10-23, voir
+  [la séparation Inpainting / Painting](#piste-2026-10-23--séparer-loutil-inpainting-et-loutil-painting-et-nommer--color-mapping--lalgorithme)).
+
+### Le principe (décidé le 2026-10-23)
+
+**L'API C, quand elle sera définie, est le modèle à suivre côté outils.** Comme toujours, l'éditeur reflète le modèle
+du runtime, pas l'inverse : on ne fige pas une option d'éditeur en espérant la brancher plus tard. Tant que l'API n'est
+pas dessinée, l'éditeur garde les cinq options telles quelles ; une fois dessinée, l'éditeur s'aligne sur son vocabulaire
+(noms, réglages, bornes), y compris pour le menu « Color mapping » et le sidecar.
+
+### À tester (envie de l'auteur, 2026-10-23)
+
+Deux familles d'algorithmes, à essayer côté éditeur avant de décider ce que le runtime en garde.
+
+- **Perceptuels (déjà là).** Les modes « couleurs perçues les plus proches », « correspondance optimale » et « rampe
+  teinte/saturation » travaillent en OKLab (distance perceptuelle). C'est ce qu'on veut pour un swap qui paraît juste.
+  Le calcul se fait au build : l'éditeur peut se permettre OKLab, le GBA n'a pas à le jouer.
+- **Old school, qui dégradent volontairement.** Pas pour bien recolorer, pour obtenir un rendu daté :
+  - distance RGB brute (la correspondance « bête », qui associe des couleurs qui paraissent étrangères) ;
+  - quantification des canaux (3 ou 4 bits par canal avant l'association : aplats et bandes visibles) ;
+  - luminance seule (tout passe en gris, puis dans la rampe de la palette cible : l'effet d'un écran monochrome teinté) ;
+  - index décalés (une rotation d'index plutôt qu'une association de couleurs : l'effet glitch).
+
+Pour essayer : un mode de plus dans `COLOR_MAPPING_MODES` (`core/models/background.py`) avec son libellé
+(`bginp.color_mapping_*`) ; le menu de l'Inpainting le propose aussitôt, rien d'autre à changer. À comparer d'abord
+à l'œil sur un fond réel, puis à trancher : lesquels méritent d'exister côté runtime (voir « Ouvert »).
+
+### Ouvert
+
+- Précalculé au build (tuiles et palettes variantes dans la ROM, le jeu choisit laquelle afficher) ou calculé à
+  l'exécution (le GBA n'a pas d'OKLab : un algorithme coûteux ne s'y joue pas tel quel) ?
+- Quels algorithmes survivent côté runtime : « direct » est gratuit ; les autres demandent une table d'association
+  par couple de palettes, calculable au build.
+- Un fond seulement, ou aussi les sprites ? Les deux consomment des banques de palette, pas les mêmes (OBJ PAL, BG PAL).
+- Le coût : VRAM des tuiles variantes, ROM des tables d'association, cycles pour appliquer un swap.
+- La forme dans `runtime_api.h` et en Lua : l'appel, ses arguments (cible, palette, algorithme), ce qu'il rend, et son
+  interaction avec le garde-fou VRAM.
+- Où se règle le choix dans l'éditeur : par fond (comme aujourd'hui), par calque de scène, ou à l'appel dans le script.
+
+### Ce que ça ne fait pas
+
+Aucun code, aucune décision d'implémentation. Cette entrée garde la question et le principe ; elle se rouvre quand
+l'auteur décide de dessiner l'API.
 
 ## Piste (la Liste d'interface est un contrôleur, pas une collection)
 

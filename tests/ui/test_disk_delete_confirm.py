@@ -19,7 +19,7 @@ def _window(tmp_path: Path):
     project = Project.open(project.root)
     project.load_all_resources()
     for name in ("hero", "tree"):
-        path = project.assets_dir / "Art" / f"{name}.png"
+        path = project.user_library_dir / "Art" / f"{name}.png"
         path.parent.mkdir(parents=True, exist_ok=True)
         Image.new("RGB", (16, 16), (200, 30, 30)).save(path)
         create(project, "sprites", path)
@@ -30,7 +30,7 @@ def _window(tmp_path: Path):
 
 
 def _node(project, name):
-    return disk_tree.DiskNode(f"{name}.sprite", project.assets_dir / "Art" / f"{name}.sprite",
+    return disk_tree.DiskNode(f"{name}.sprite", project.user_library_dir / "Art" / f"{name}.sprite",
                               disk_tree.ASSET, name, "sprites")
 
 

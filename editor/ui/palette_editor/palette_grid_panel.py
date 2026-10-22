@@ -26,6 +26,7 @@ from ui.common.popup import MessageBox as QMessageBox
 from PyQt6.QtGui import QFont, QGuiApplication
 from PyQt6.QtCore import Qt, QEvent, QPoint, QSize, pyqtSignal
 
+from ui.common.canvas_backdrop import GridBackdropScrollArea
 from ui.common.theme import C, T, QSS
 from ui.common.widgets import W
 from ui.common import icons
@@ -55,7 +56,7 @@ class PaletteGridPanel(QWidget):
 
     color_selected  = pyqtSignal(int, int)   # index, valeur BGR555 du slot actif
     editing_enabled = pyqtSignal(bool)       # une couleur est éditable → afficher l'inspecteur
-    catalog_changed = pyqtSignal()           # nom/icône de banque à rafraîchir dans le finder
+    catalog_changed = pyqtSignal()           # nom/icône de banque à rafraîchir dans la library
     bank_focus_requested = pyqtSignal(str)   # undo/redo visant une banque non affichée
     hex_focus_requested  = pyqtSignal()      # Entrée dans la grille → curseur au champ HEX
 
@@ -146,6 +147,8 @@ class PaletteGridPanel(QWidget):
         # (flèches, Ctrl+C/V), placé dans un QScrollArea qui le CENTRE tant qu'il
         # tient dans la vue et fait apparaître des barres dès qu'on zoome au-delà.
         self._swatch_container = QWidget()
+        self._swatch_container.setObjectName("swatchContainer")
+        self._swatch_container.setStyleSheet("#swatchContainer{background:transparent;}")   # le fond de canvas passe dessous
         self._swatch_container.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._swatch_container.installEventFilter(self)
         self._swatch_grid = QGridLayout(self._swatch_container)
@@ -154,7 +157,7 @@ class PaletteGridPanel(QWidget):
         self._swatch_grid.setSizeConstraint(QGridLayout.SizeConstraint.SetFixedSize)
         self._swatch_btns: list[SwatchButton] = []
 
-        self._scroll = QScrollArea()
+        self._scroll = GridBackdropScrollArea()
         self._scroll.setWidgetResizable(False)      # le conteneur garde sa taille naturelle
         self._scroll.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -819,12 +822,12 @@ class PaletteGridPanel(QWidget):
     def _persist_color(self, bank: PaletteBank, index: int):
         """Rappelée par SetPaletteColorCmd (execute ET undo) : persiste la
         banque et resynchronise l'UI de façon ciblée (swatch + inspecteur si
-        slot actif + finder). Garantit le rafraîchissement sur Ctrl+Z/Y,
+        slot actif + library). Garantit le rafraîchissement sur Ctrl+Z/Y,
         indépendamment de window._flush_after_undo_redo()."""
         self._project.palettes.save(bank)
         if bank is not self._current_bank():
             # Undo/redo visant une banque non affichée : la ramener à l'écran
-            # (re-render complet via la sélection du finder).
+            # (re-render complet via la sélection de la library).
             self._bank_name = bank.name
             self.bank_focus_requested.emit(bank.name)
             return

@@ -1,6 +1,6 @@
 """ui/background_editor/background_editor_screen.py — écran Background Editor.
 
-3 colonnes : finder (backgrounds) · canvas d'inpainting (BackgroundInpainting :
+3 colonnes : library (backgrounds) · canvas d'inpainting (BackgroundInpainting :
 repeindre la palette par tuile 8×8, partagé entre scènes, cf. bg_inpaint_canvas) ·
 inspecteur (dimensions, budget tuiles, liste des palettes éditables, algo de
 compression). La compression est non-destructive (cf. core/bg_import) — le PNG
@@ -27,8 +27,8 @@ from ui.common.deferred_writes import schedule_save
 from ui.common.import_collision import ask_overwrite
 from ui.common.import_folder import import_folder
 from ui.common.theme import C, T, QSS, ui_font
-from ui.common.unit_spin import UnitSpin
-from ui.common.widgets import W, FinderSection, AssetHeaderBar, CollapsibleCard
+from ui.common.unit_spin import QuietSpin, UnitSpin
+from ui.common.widgets import W, LibrarySection, AssetHeaderBar, CollapsibleCard
 from ui.common.responsive import InspectorScrollArea
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
@@ -44,13 +44,13 @@ from core.models.background import (
 )
 from core.models.gba_color import COMPRESSION_METHODS
 from core.command_dispatcher import get_dispatcher
-from ui.common.asset_finder import AssetFinder
+from ui.common.asset_library import AssetLibrary
 from ui.common.three_column_body import ThreeColumnBody
 from ui.common.asset_kinds import (
     BACKGROUNDS_SCENE, BACKGROUNDS_UI, BACKGROUNDS_ANIM,
 )
 
-# Section du finder <-> `kind` du modèle. Le composant partagé ne parle que de
+# Section de la library <-> `kind` du modèle. Le composant partagé ne parle que de
 # libellés de famille ; l'écran, lui, raisonne en `kind`.
 _LABEL_OF_KIND = {KIND_SCENE:    BACKGROUNDS_SCENE.label,
                   KIND_UI:       BACKGROUNDS_UI.label,
@@ -136,10 +136,10 @@ class _AnalyzeTask(QRunnable):
             self.signals.failed.emit(self._token, str(e))
 
 
-# ── Finder (gauche) ─────────────────────────────────────────────────────────
+# ── Library (gauche) ─────────────────────────────────────────────────────────
 
 class _BgList(QListWidget):
-    """Liste d'UNE section du finder.
+    """Liste d'UNE section de la library.
 
     Sous-classe seulement pour le DRAG : les fonds animés se posent sur le
     canvas d'un fond hôte, et Qt ne démarre un drag qu'à partir du widget
@@ -164,7 +164,7 @@ class _BgList(QListWidget):
         self._drag_started = False
         self.currentItemChanged.connect(self._on_current)
         self.setStyleSheet(
-            QSS.finder_list(color)
+            QSS.library_list(color)
             # Éditeur de renommage en place : mêmes police/taille que la ligne,
             # sinon le QLineEdit s'ouvre avec la police par défaut (plus grande)
             # et le texte est rogné verticalement.
@@ -173,7 +173,7 @@ class _BgList(QListWidget):
               f"font-family:{T.MONO}; font-size:{T.MD}px;}}"
         )
         # Renommage en place : clic sur un item déjà sélectionné (même mécanisme
-        # que les autres finders — sprite/scene/prefab).
+        # que les autres libraries — sprite/scene/prefab).
         self.setEditTriggers(QAbstractItemView.EditTrigger.SelectedClicked)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         if draggable:
@@ -221,7 +221,7 @@ class _BgList(QListWidget):
 class _AnimatedSourceList(_BgList):
     """Les animés du projet, à glisser sur le canvas du fond courant.
 
-    Doublon apparent avec la section ANIMATED du finder, mais celle-ci ne peut
+    Doublon apparent avec la section ANIMATED de la library, mais celle-ci ne peut
     pas servir de source : y presser un item change l'asset ÉDITÉ (elle pilote la
     sélection), si bien qu'au relâchement le canvas n'affiche plus le fond hôte
     mais l'animé qu'on croyait déposer. Une source qui ne possède aucune
@@ -234,7 +234,7 @@ class _AnimatedSourceList(_BgList):
 
     def __init__(self, parent=None):
         super().__init__(COLOR_BACKGROUND, draggable=True, parent=parent)
-        # Ni renommage ni menu : ce n'est pas un finder, c'est une réserve.
+        # Ni renommage ni menu : ce n'est pas une library, c'est une réserve.
         self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
         self.setFont(QFont(T.MONO, T.SM))
@@ -259,8 +259,8 @@ class _AnimatedSourceList(_BgList):
 
 class BgPropertiesPanel(QWidget):
     changed = pyqtSignal()          # compression recalculée → re-render du canvas
-    renamed = pyqtSignal()          # fond renommé depuis l'en-tête → rafraîchir le finder
-    kind_changed = pyqtSignal()     # type du fond changé → re-trier le finder
+    renamed = pyqtSignal()          # fond renommé depuis l'en-tête → rafraîchir la library
+    kind_changed = pyqtSignal()     # type du fond changé → re-trier la library
     palettes_changed = pyqtSignal()     # liste des palettes mutée → re-render du canvas
     geometry_changed = pyqtSignal()  # marges de coupe / découpe de frames → canvas
     recompress_requested = pyqtSignal(object, object, str, bool)  # (ba, png, mode_token, dither) → hors-thread
@@ -276,7 +276,8 @@ class BgPropertiesPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumWidth(220); self.setMaximumWidth(440)
-        self.setStyleSheet(f"background:{C.BG_PANEL}; border-left:1px solid {C.BORDER_DARK};")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(f"{type(self).__name__}{{background:{C.BG_PANEL}; border-left:1px solid {C.BORDER_DARK};}}")
         self._project = None
         self._ba = None
         self._blocking = False
@@ -369,7 +370,7 @@ class BgPropertiesPanel(QWidget):
                 tag.setFont(QFont(T.MONO, T.MD, QFont.Weight.Bold))
                 tag.setStyleSheet(f"color:{C.TEXT_DIM}; background:transparent; border:none;")
                 tag.setFixedWidth(14)
-                sp = QSpinBox()
+                sp = QuietSpin()      # largeur minimale : « 240 » ne s'affiche pas « 24 »
                 sp.setFont(QFont(T.MONO, T.SM))
                 sp.setStyleSheet(QSS.spinbox)
                 sp.setRange(lo, _CANVAS_MAX)
@@ -642,7 +643,7 @@ class BgPropertiesPanel(QWidget):
 
         # ── ANIMATIONS À POSER ────────────────────────────────────────
         #    Réserve de glissement vers le canvas. Dans l'inspecteur et non dans
-        #    le finder : celui-ci pilote l'asset édité, y presser un item ferait
+        #    la library : celui-ci pilote l'asset édité, y presser un item ferait
         #    changer le canvas sous le drag (cf. _AnimatedSourceList).
         self._src_card = self._card(label("bgedit.sec_animations"), root)
         self._src_hint = QLabel(label("bgedit.src_hint"))
@@ -972,7 +973,7 @@ class BgPropertiesPanel(QWidget):
 
     def _set_kind(self, kind: str):
         """Convertit l'asset — même PNG, même compression, autre emploi. Le
-        finder re-trie (l'asset change de section) et le canvas change ce qu'il
+        library re-trie (l'asset change de section) et le canvas change ce qu'il
         superpose."""
         if self._blocking or not self._ba or not self._project:
             self._refresh_kind_buttons(); return
@@ -1876,7 +1877,7 @@ class BgPropertiesPanel(QWidget):
             else:
                 bank = PaletteBank(name=name, colors=list(cols), size=size)
             # Passe par le dispatcher : persistance (watcher suspendu) + événement
-            # « palettes_changed » pour rafraîchir le Palette Editor / les finders.
+            # « palettes_changed » pour rafraîchir le Palette Editor / les libraries.
             get_dispatcher().save_palette(bank)
             created.append(bank.name)
         QMessageBox.information(
@@ -1913,30 +1914,30 @@ class BgPropertiesPanel(QWidget):
 class BackgroundEditorScreen(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet(f"background:{C.BG_DEEP};")
+        self.setStyleSheet(f"background:{C.BG_PANEL};")
         self._project = None
         root = QHBoxLayout(self); root.setContentsMargins(0, 0, 0, 0); root.setSpacing(0)
         # Trois sections, une par `kind` : chacune a son propre import (un PNG,
         # un cadre d'UI, une planche d'animation). Cf. ui/common/asset_kinds.py.
-        self._finder = AssetFinder(
-            label('bgedit.background_finder'),
+        self._library = AssetLibrary(
+            label('bgedit.background_library'),
             [BACKGROUNDS_SCENE, BACKGROUNDS_UI, BACKGROUNDS_ANIM],
             min_width=180, max_width=420)
         self._canvas = BgInpaintCanvas()
         self._props = BgPropertiesPanel()
-        self.body = ThreeColumnBody(self._finder, self._canvas, self._props,
+        self.body = ThreeColumnBody(self._library, self._canvas, self._props,
                                     sizes=(240, 800, 300))
         root.addWidget(self.body)
 
-        self._finder.selected.connect(lambda _kind, ba: self._on_selected(ba))
-        self._finder.add_requested.connect(
+        self._library.selected.connect(lambda _kind, ba: self._on_selected(ba))
+        self._library.add_requested.connect(
             lambda section: self._on_add(_KIND_OF_LABEL[section]))
         self._props.changed.connect(self._canvas.reload)
         self._props.renamed.connect(self._on_renamed)
         # Mutation de la liste des palettes → re-render du canvas (sa bande de
         # peinture en tête se reconstruit alors depuis ba.palettes).
         self._props.palettes_changed.connect(self._canvas.reload)
-        # Type changé : l'asset passe d'une section du finder à l'autre, et le
+        # Type changé : l'asset passe d'une section de la library à l'autre, et le
         # canvas change ce qu'il superpose (guides de coupe / grille de frames).
         self._props.kind_changed.connect(self._on_kind_changed)
         # Découpe (marges de coupe, taille de frame, vitesse) → le canvas
@@ -1988,8 +1989,8 @@ class BackgroundEditorScreen(QWidget):
             self._encoding.cancel_all()
             self._encoding_errors.clear()
         self._project = project
-        self._finder.load_project(project)
-        self._refresh_finder()
+        self._library.load_project(project)
+        self._refresh_library()
 
     def refresh(self):
         """Re-dérive à la revisite de l'écran — appelé au centre par
@@ -2004,26 +2005,26 @@ class BackgroundEditorScreen(QWidget):
     def select_background(self, name: str):
         """Ouvre le fond `name` — navigation entrante depuis un autre écran
         (ex. carte « Utilisations » du Palette Editor)."""
-        self._refresh_finder(select=name)
+        self._refresh_library(select=name)
 
-    def _refresh_finder(self, select: str = None):
+    def _refresh_library(self, select: str = None):
         """Repeuple les trois sections et met à l'écran le fond `select` — ou le
         premier trouvé, à défaut. La sélection est posée SIGNAUX COUPÉS puis
         notifiée à la main : `select()` ne réémet rien si la ligne était déjà
         courante, alors que l'appelant attend un rafraîchissement (renommage,
         recompression)."""
-        self._finder.refresh()
+        self._library.refresh()
         bgs = list(self._project.backgrounds) if self._project else []
         target = next((b for b in bgs if b.name == select), None)
         if target is None:
             target = bgs[0] if bgs else None
         if target is None:
-            self._finder.clear_selection()
+            self._library.clear_selection()
             self._on_selected(None)
             return
-        self._finder.blockSignals(True)
-        self._finder.select(_LABEL_OF_KIND.get(target.kind, ""), target)
-        self._finder.blockSignals(False)
+        self._library.blockSignals(True)
+        self._library.select(_LABEL_OF_KIND.get(target.kind, ""), target)
+        self._library.blockSignals(False)
         self._on_selected(target)
 
     # ── Compression hors-thread ───────────────────────────────────
@@ -2209,16 +2210,16 @@ class BackgroundEditorScreen(QWidget):
             self._canvas.set_encoding_state("none")
 
     def _on_renamed(self):
-        # Renommage validé depuis l'en-tête de l'inspecteur : réaligner le finder
+        # Renommage validé depuis l'en-tête de l'inspecteur : réaligner la library
         # sur le nouveau nom (il émettra bg_selected → recharge preview + props).
         ba = self._props._ba
         if ba:
-            self._refresh_finder(select=ba.name)
+            self._refresh_library(select=ba.name)
 
     def _on_kind_changed(self):
         ba = self._props._ba
         if ba:
-            self._refresh_finder(select=ba.name)
+            self._refresh_library(select=ba.name)
 
     def _on_placements_changed(self):
         """Un fond animé posé, déplacé ou retiré : l'inspecteur n'en montre que
@@ -2274,24 +2275,30 @@ class BackgroundEditorScreen(QWidget):
         title = {KIND_SCENE: label("bgedit.import_scene"),
                  KIND_UI: label("bgedit.import_ui"),
                  KIND_ANIMATED: label("bgedit.import_anim")}.get(kind, label("bgedit.import_scene"))
-        path, _ = QFileDialog.getOpenFileName(self, title, "", label('bgedit.images_png'))
-        if not path:
+        paths, _ = QFileDialog.getOpenFileNames(self, title, "", label('bgedit.images_png'))
+        if not paths:
             return
         from core import source_collisions
         from core.disk_commands import ImportFilesCmd
         folder = import_folder(self._project)
-        if Path(path).parent.resolve() == folder.resolve():
-            dst = Path(path)                                    # déjà dans le dossier affiché : rien à copier
-        else:
-            overwrite = False
-            if source_collisions.collides(Path(path), folder):
-                overwrite = ask_overwrite(self, [Path(path).name],
-                                          source_collisions.citing(self._project, folder / Path(path).name))
-                if overwrite is None:
-                    return
-            dst = source_collisions.destination(Path(path), folder, overwrite)
-            get_history().push(ImportFilesCmd([(Path(path), dst)]))
-        self._import_png(dst, kind)
+        outside = [Path(p) for p in paths if Path(p).parent.resolve() != folder.resolve()]
+        clashes = [p for p in outside if source_collisions.collides(p, folder)]
+        overwrite = False
+        if clashes:
+            citing = [c for p in clashes for c in source_collisions.citing(self._project, folder / p.name)]
+            overwrite = ask_overwrite(self, [p.name for p in clashes], citing)
+            if overwrite is None:
+                return
+        taken: set = set()
+        for raw in paths:
+            source = Path(raw)
+            if source in outside:
+                dst = source_collisions.destination(source, folder, overwrite, taken)
+                taken.add(dst.name)                             # deux images de même nom dans le lot ne s'écrasent pas
+                get_history().push(ImportFilesCmd([(source, dst)]))
+            else:
+                dst = source                                    # déjà dans le dossier affiché : rien à copier
+            self._import_png(dst, kind)                         # le dernier importé reste sélectionné
 
     def _import_png(self, dst: Path, kind: str, then_paint: bool = False, paint_palette: Optional[str] = None):
         """Un PNG déjà dans le projet devient un fond rangé À CÔTÉ de lui, puis se compresse hors-thread.
@@ -2329,7 +2336,7 @@ class BackgroundEditorScreen(QWidget):
         # Sélectionner immédiatement (canvas vide + « Compression… ») puis
         # compresser hors-thread — l'éditeur n'est jamais bloqué.
         if gesture is None:
-            self._refresh_finder(select=ba.name)
+            self._refresh_library(select=ba.name)
         else:
             get_history().push(RefreshAfterCmd(gesture.command, lambda: self._after_creation_changed(ba)))
         self._compress_async(
@@ -2337,12 +2344,12 @@ class BackgroundEditorScreen(QWidget):
             then=lambda: self._after_import(ba, then_paint))
 
     def _after_creation_changed(self, ba) -> None:
-        """Le fond importé vient d'être créé, annulé ou refait : le finder suit ; annulé, sa compression en cours ne valide rien
+        """Le fond importé vient d'être créé, annulé ou refait : la library suit ; annulé, sa compression en cours ne valide rien
         (sinon elle réécrirait le fichier que l'annulation vient de retirer)."""
         present = ba in self._project.backgrounds
         if not present:
             self._encoding.cancel(ba)
-        self._refresh_finder(select=ba.name if present else None)
+        self._refresh_library(select=ba.name if present else None)
 
     def _after_import(self, ba, then_paint: bool = False):
         """Réglages qui ne peuvent se poser qu'une fois la taille CONNUE — donc

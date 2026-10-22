@@ -166,8 +166,8 @@ class CollisionTool(BaseTool):
     """
     mode : "collision_8" | "collision_16" | "collision_slope" | "collision_slope_inv"
 
-    Clic droit = peindre / appliquer.
-    Clic gauche = effacer (TILE_EMPTY).
+    Clic gauche = peindre / appliquer.
+    Clic droit = effacer (TILE_EMPTY).
     """
 
     def __init__(self, view: GBAView, mode: str):
@@ -177,6 +177,7 @@ class CollisionTool(BaseTool):
         self._slope_start: Optional[tuple[int, int]] = None
         self._dirty = False
         self._stroke_delta: dict[tuple[int, int], tuple[int, int]] = {}
+        self._last_cell: Optional[tuple[int, int]] = None   # dernière cellule du trait en cours, pour relier deux événements
 
     # ── Cycle de vie ─────────────────────────────────────────────
 
@@ -202,6 +203,7 @@ class CollisionTool(BaseTool):
 
     def on_press(self, pos: QPointF, e) -> bool:
         self._stroke_delta = {}
+        self._last_cell = None
         self._paint_mode = e.button() == Qt.MouseButton.LeftButton
         ov = self._view.collision_overlay
         if not ov:
@@ -255,6 +257,7 @@ class CollisionTool(BaseTool):
             self._slope_start = None
             self._dirty = True
 
+        self._last_cell = None
         if self._stroke_delta:
             from core.history import CollisionPaintCmd, get_history
 
@@ -288,14 +291,47 @@ class CollisionTool(BaseTool):
             ov.set_hover(None)
             return
         size = 2 if self._mode == "collision_16" else 1
-        col, row = ov.scene_to_tile(scene_pos.x(), scene_pos.y())
+        col, row = self._brush_origin(*ov.scene_to_tile(scene_pos.x(), scene_pos.y()), size)
         ov.set_hover((col, row, size, size))
+
+    @staticmethod
+    def _brush_origin(col: int, row: int, brush_tiles: int) -> tuple[int, int]:
+        """Le pinceau de 16 px se pose sur la grille de 16 px (blocs de 2x2 tuiles), pas sur la tuile de 8 px sous le curseur."""
+        return col - col % brush_tiles, row - row % brush_tiles
+
+    @staticmethod
+    def _cells_between(start: tuple[int, int], end: tuple[int, int]):
+        """Les cellules d'un segment (Bresenham), extrémités comprises : deux événements souris éloignés ne laissent pas de trou."""
+        (c0, r0), (c1, r1) = start, end
+        dc, dr = abs(c1 - c0), -abs(r1 - r0)
+        step_c, step_r = (1 if c0 < c1 else -1), (1 if r0 < r1 else -1)
+        error = dc + dr
+        while True:
+            yield c0, r0
+            if (c0, r0) == (c1, r1):
+                return
+            doubled = 2 * error
+            if doubled >= dr:
+                error += dr
+                c0 += step_c
+            if doubled <= dc:
+                error += dc
+                r0 += step_r
 
     def _paint_brush(self, scene_pos: QPointF, brush_tiles: int):
         ov = self._view.collision_overlay
         if not ov:
             return
-        col, row = ov.scene_to_tile(scene_pos.x(), scene_pos.y())
+        cell = self._brush_origin(*ov.scene_to_tile(scene_pos.x(), scene_pos.y()), brush_tiles)
+        # Le pas du trait vaut la taille du pinceau : un pinceau de 2 tuiles avance par blocs de 2.
+        start = self._last_cell if self._last_cell is not None else cell
+        self._last_cell = cell
+        step = brush_tiles
+        for col, row in self._cells_between((start[0] // step, start[1] // step), (cell[0] // step, cell[1] // step)):
+            self._paint_cell(col * step, row * step, brush_tiles)
+
+    def _paint_cell(self, col: int, row: int, brush_tiles: int):
+        ov = self._view.collision_overlay
         new_type = TILE_SOLID if self._paint_mode else TILE_EMPTY
         for dr in range(brush_tiles):
             for dc in range(brush_tiles):

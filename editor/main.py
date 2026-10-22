@@ -39,6 +39,7 @@ from ui.home.project_picker import HomeScreen, PROJECTS_DIR
 from core.project_paths import (
     PROJECT_EXT, find_manifest, ProjectManifestError, ProjectNotFoundError)
 from core import crash_log
+from core.launch_target import parse_launch_arguments
 from core.app_info import APP_NAME, APP_VERSION
 from core.interface_preferences import interface_language, interface_scale_percent
 
@@ -102,19 +103,18 @@ if __name__ == "__main__":
     # redémarrage, comme le dit le panneau Interface.
     catalog.set_language(interface_language())
 
-    # Projet fourni au lancement, deux formes :
+    # Projet fourni au lancement, trois formes :
     #   --project <dossier>          (le picker, les récents)
     #   <chemin>/<Nom>.project   (double-clic : l'OS passe le fichier associé)
+    #   <chemin>/<Nom>.<asset>   (un asset ou un script : son projet s'ouvre, le fichier s'affiche, cf. core/launch_target)
     project_path = None
+    launch_asset = None
     if "--project" in sys.argv:
         idx = sys.argv.index("--project")
         if idx + 1 < len(sys.argv):
             project_path = Path(sys.argv[idx + 1])
-    else:
-        for arg in sys.argv[1:]:
-            if arg.endswith(PROJECT_EXT):
-                project_path = Path(arg)
-                break
+    elif (target := parse_launch_arguments(sys.argv[1:])) is not None:
+        project_path, launch_asset = target.project_root, target.asset
 
     # Le manifeste vit DANS le dossier projet : un .project double-cliqué se
     # ramène à son dossier parent, la racine que MainWindow/Project attendent.
@@ -206,6 +206,8 @@ if __name__ == "__main__":
             win._new_project(_name, project_path, _starter)
         else:
             win._open_project(project_path)
+            if launch_asset is not None:
+                win.open_asset_file(launch_asset)
     finally:
         app.restoreOverrideCursor()
 

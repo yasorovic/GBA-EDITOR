@@ -1104,6 +1104,9 @@
     "scncanvas.collisions": {
       "text": "Collisions de la scène"
     },
+    "scncanvas.clear_collision": { "text": "Effacer la collision" },
+    "scncanvas.clear_collision_tip": { "text": "Vide toute la carte de collision de la scène active. **Ctrl+Z** *la rend.*" },
+    "scncanvas.collision_already_empty": { "text": "La carte de collision est déjà vide." },
     "scncanvas.collisions_tip": { "text": "Affiche la carte de collision peinte pour la scène active." },
     "scncanvas.interface": {
       "text": "Éléments d’interface"
@@ -1170,37 +1173,40 @@
     "common.assemblies": { "text": "Assemblages" },
     "cvtool.container_tip": { "text": "Crée une zone parente pour grouper des éléments. Elle peut ancrer ses enfants et afficher un fond." },
     "cvtool.image_tip": { "text": "Crée un élément image. Un script peut changer l’état de son sprite." },
-    "assf.script": {
+    "scriptlibrary.script": {
       "text": "Script"
     },
-    "assf.behavior_script": {
+    "scriptlibrary.behavior_script": {
       "text": "Script behavior"
     },
-    "assf.edit_scene": {
+    "scriptlibrary.view_uses": {
+      "text": "Voir les utilisations"
+    },
+    "scenelibrary.edit_scene": {
       "text": "Éditer la scène"
     },
-    "assetfind.new_folder": {
+    "assetlibrary.new_folder": {
       "text": "Nouveau dossier"
     },
-    "assetfind.new_subfolder": {
+    "assetlibrary.new_subfolder": {
       "text": "Nouveau sous-dossier"
     },
-    "assetfind.folder_default_name": {
+    "assetlibrary.folder_default_name": {
       "text": "Dossier"
     },
-    "assetfind.create_group": {
+    "assetlibrary.create_group": {
       "text": "Créer un groupe"
     },
-    "assetfind.group": {
+    "assetlibrary.group": {
       "text": "Grouper"
     },
-    "assetfind.group_default_name": {
+    "assetlibrary.group_default_name": {
       "text": "Groupe"
     },
-    "assetfind.move_to_folder": {
+    "assetlibrary.move_to_folder": {
       "text": "Déplacer vers le dossier"
     },
-    "assetfind.remove_from_folder": {
+    "assetlibrary.remove_from_folder": {
       "text": "Retirer du dossier"
     },
     "txtwb.add_level_tip": {
@@ -1228,9 +1234,9 @@
     "bginp.select": { "text": "Sélection" },
     "bginp.select_tip": { "text": "Pose l’image dans son canvas. Le fichier entier est montré, grisé là où il sort du canvas. Glisser l’image la déplace ; les poignées la mettent à l’échelle. Maj conserve les proportions, Ctrl aligne sur 8 px. Choisir un autre outil applique, Échap annule. Le fichier image n’est jamais modifié." },
     "bgedit.canvas_title": { "text": "Canvas" },
-    "bgedit.canvas_size": { "text": "Taille du canvas" },
-    "bgedit.canvas_image_pos": { "text": "Position de l’image" },
-    "bgedit.canvas_image_size": { "text": "Taille de l’image" },
+    "bgedit.canvas_size": { "text": "Taille du canvas (px)" },
+    "bgedit.canvas_image_pos": { "text": "Position de l’image (px)" },
+    "bgedit.canvas_image_size": { "text": "Taille de l’image (px)" },
     "bgedit.canvas_fit": { "text": "Ajuster" },
     "bgedit.canvas_fit_tip": { "text": "Fait tenir l’image entière dans le canvas, centrée." },
     "bgedit.canvas_fill": { "text": "Remplir" },
@@ -1270,16 +1276,16 @@
     "bginp.tile_brush_size_tip": { "text": "Peint un carré de {size} × {size} px aligné sur la grille de tiles." },
     "bginp.tile_color_transparent": { "text": "Transparent (cache l’image)" },
     "bginp.tile_color_i": { "text": "Couleur {i} de la palette" },
-    "bginp.mode_inpaint": { "text": "Inpaint (palette)" },
+    "bginp.mode_inpaint": { "text": "Inpainting (palette)" },
     "bginp.mode_inpaint_tip": { "text": "Repeint la palette des tuiles traversées. Les tuiles elles-mêmes ne changent pas. Le clic droit rend la palette d’origine." },
-    "bginp.mode_paint": { "text": "Paint (couleur)" },
+    "bginp.mode_paint": { "text": "Peinture (couleur)" },
     "bginp.mode_paint_tip": { "text": "Peint un calque par-dessus l’image : une tuile pleine de la couleur choisie dans chaque case traversée. Le clic droit rend la tuile initiale." },
-    "bginp.remap_title": { "text": "Correspondance de palette" },
-    "bginp.remap_direct": { "text": "Index directs" },
-    "bginp.remap_nearest": { "text": "Couleurs perçues les plus proches" },
-    "bginp.remap_luminance": { "text": "Préserver la luminosité" },
-    "bginp.remap_optimal": { "text": "Correspondance optimale" },
-    "bginp.remap_ramp": { "text": "Rampe teinte et saturation" },
+    "bginp.color_mapping_title": { "text": "Mappage des couleurs" },
+    "bginp.color_mapping_direct": { "text": "Index directs" },
+    "bginp.color_mapping_nearest": { "text": "Couleurs perçues les plus proches" },
+    "bginp.color_mapping_luminance": { "text": "Préserver la luminosité" },
+    "bginp.color_mapping_optimal": { "text": "Correspondance optimale" },
+    "bginp.color_mapping_ramp": { "text": "Rampe teinte et saturation" },
     "bginp.fill_tip_paint": { "text": "Remplit une zone contiguë de cases identiques avec la couleur choisie." },
     "bginp.rectangle_tip_paint": { "text": "Pose la couleur choisie dans toutes les cases d’un rectangle." },
     "bginp.eraser_tip_paint": { "text": "Retire à la fois le repeint de palette et la couleur peinte de chaque case de 8 × 8 traversée : la tuile et la palette d’origine reviennent." },
@@ -1338,7 +1344,7 @@
     "bgedit.frame_width": { "text": "Largeur d’image" },
     "bgedit.frame_height": { "text": "Hauteur d’image" },
     "bgedit.frame_tip": { "text": "Définit la taille d’une image de l’animation, en pixels. « Plein » utilise l’image entière sur cet axe." },
-    "bgedit.background_finder": { "text": "Recherche de fonds" },
+    "bgedit.background_library": { "text": "Bibliothèque de fonds" },
     "bgedit.d4": { "text": "4bpp" },
     "bgedit.d8": { "text": "8bpp" },
     "bgedit.d16": { "text": "16bpp" },
@@ -1679,9 +1685,20 @@
     "dirwidget.direction_6": { "text": "Sud-ouest" },
     "dirwidget.direction_7": { "text": "Ouest" },
     "dirwidget.direction_8": { "text": "Nord-ouest" },
-    "sprfind.add_state": { "text": "Ajouter un état d’animation" },
-    "sprfind.add_state_tip": { "text": "Crée un nouvel état d’animation avec ses propres directions, vitesse et réglage de boucle." },
-    "sprfind.animation_tree_tip": { "text": "Une direction sélectionnée ici s’édite dans le canvas des images. Un second clic sur un état d’animation le renomme ; un clic droit propose de le supprimer." },
+    "spritelibrary.add_state": { "text": "Ajouter un état d’animation" },
+    "spritelibrary.add_state_tip": { "text": "Crée un nouvel état d’animation avec ses propres directions, vitesse et réglage de boucle." },
+    "uielemname.taken_title": { "text": "Nom déjà utilisé" },
+    "uielemname.taken_msg": { "text": "Un élément d’interface nommé « {name} » existe déjà (dans « {interface} »). Les noms d’élément sont uniques dans tout le projet, car les scripts les citent avec interface:get.\n\nOui : utiliser « {suggested} ».\nNon : garder le nom actuel et en choisir un autre." },
+    "scttree.ui_drop_other_interface": { "text": "Un élément ne se déplace pas dans une autre interface. Ajoutez-en un nouveau à cet endroit." },
+    "sprpanel.extract_created": { "text": "Palette « {name} » créée depuis l’image. Elle est dans l’écran Palettes." },
+    "sprpanel.extract_updated": { "text": "Palette « {name} » mise à jour depuis l’image. Elle est dans l’écran Palettes." },
+    "sprpanel.extract_no_image": { "text": "Ce sprite n’a pas de fichier image dont extraire une palette." },
+    "uiinsp.size_fixed_title": { "text": "Taille fixe" },
+    "uiinsp.size_fixed_image": { "text": "Une image prend la taille de la frame de son sprite : le matériel ne sait pas l’étirer." },
+    "uiinsp.size_fixed_text": { "text": "Une chaîne Text se pose en un point et sa largeur est un détail du build. Pour choisir une largeur, utilisez une Textbox." },
+    "txtlib.add_text": { "text": "Ajouter un texte dans le dossier choisi" },
+    "spritelibrary.rename_state": { "text": "Renommer l’état" },
+    "spritelibrary.animation_tree_tip": { "text": "Une direction sélectionnée ici s’édite dans le canvas des images. **F2** *renomme l’état d’animation sélectionné* (un second clic dessus aussi) ; un clic droit propose de le renommer ou de le supprimer." },
     "sceneinsp.notes_tip": { "text": "Contient les notes d’édition de cette scène. Elles ne sont pas affichées dans le jeu." },
     "sceneinsp.mode_btn_title": { "text": "Mode vidéo" },
     "sceneinsp.mode_not_impl_note": { "text": "Ce mode n’est pas encore disponible dans l’éditeur." },
@@ -1916,6 +1933,9 @@
     "sceneinsp.ui_font_tip": { "text": "Choisit la police utilisée par les textes d’interface sans police définie." },
     "sceneinsp.ui_font_title": { "text": "Police d’interface" },
     "cvtool.move_toolbar": { "text": "Déplacer les outils" },
+    "cvtop.cursor_unit_title": { "text": "Position du curseur" },
+    "cvtop.cursor_unit_tip": { "text": "Affichée en pixels ou en tuiles de 8 px. **Un clic** *change l’unité dans tous les canvas.*" },
+    "sprframe.coord": { "text": "tuile {c},{r}" },
     "cvtop.fit_to_view": { "text": "Ajuster à la vue" },
     "scncanvas.view_scene": { "text": "Scène" },
     "scncanvas.view_scene_tip": { "text": "Modifie la scène active sur le canvas." },
@@ -2144,7 +2164,7 @@
     "vartbl.type_string_tip": { "text": "Texte affiché par text.draw. Tenu dans le jeu comme une entrée de la table de textes : il se dessine et se compare, mais ne se modifie pas caractère par caractère." },
     "vartbl.type_string_note": { "text": "Une globale de ce type ne peut pas être sauvegardée." },
     "vartbl.string_value_tip": { "text": "Le texte, ou la clé d’un texte existant du projet." },
-    "datascr.data_finder": { "text": "Tables de données" },
+    "datascr.data_library": { "text": "Bibliothèque de tables" },
     "datagrid.table_bar": { "text": "Table" },
     "datagrid.add_row": { "text": "Ajouter une ligne" },
     "datagrid.add_row_action": { "text": "Ligne" },
@@ -2273,13 +2293,13 @@
     "akind.relink_none": { "text": "Aucun fichier compatible dans le projet." },
     "disk.open_assets_tip": { "text": "Ouvre le dossier assets dans l’explorateur de fichiers." },
     "common.reveal": { "text": "Révéler" },
-    "assetfind.locate_tip": { "text": "Montre le fichier de cet asset dans l’onglet Disk." },
+    "assetlibrary.locate_tip": { "text": "Montre le fichier de cet asset dans l’onglet Disk." },
     "disk.edit_externally": { "text": "Modifier dans un éditeur externe" },
     "disk.new_folder": { "text": "Nouveau dossier" },
     "disk.add_folder_tip": { "text": "Ajoute au dossier choisi : importer un fichier, créer un asset ou faire un dossier." },
     "disk.rename": { "text": "Renommer" },
     "disk.rename_refused": { "text": "L’élément n’a pas été renommé : le nom est vide, contient un caractère interdit ou est déjà pris, ou c’est une table du projet." },
-    "assetfind.deleted": { "singular": "{n} élément supprimé. Ctrl+Z annule.", "plural": "{n} éléments supprimés. Ctrl+Z annule." },
+    "assetlibrary.deleted": { "singular": "{n} élément supprimé. Ctrl+Z annule.", "plural": "{n} éléments supprimés. Ctrl+Z annule." },
     "disk.deleted": { "singular": "{n} asset supprimé. Ctrl+Z annule ; son fichier source reste.", "plural": "{n} assets supprimés. Ctrl+Z annule ; leurs fichiers source restent." },
     "disk.delete_used": { "text": "Encore utilisé par :" },
     "akind.no_font_drop_a_png_or_a_fnt": { "text": "Aucune police.\n\nChoisissez un PNG, .fnt, .ttf ou .otf\ndans l’onglet Disk et cliquez sur Créer" },
@@ -2330,7 +2350,7 @@
     "scttree.delete_interface": { "text": "Supprimer" },
     "scncanvas.delete_n": { "text": "Supprimer {n} éléments" },
     "scncanvas.bitmap_in_tiled_mode": { "text": "Fond bitmap {names} : non affiché en mode vidéo {mode}. Utiliser le mode 3, 4 ou 5." },
-    "assetfind.delete_selection": { "singular": "Supprimer", "plural": "Supprimer {n} éléments" },
+    "assetlibrary.delete_selection": { "singular": "Supprimer", "plural": "Supprimer {n} éléments" },
     "disk.delete_items": { "singular": "Supprimer", "plural": "Supprimer {n} éléments" },
     "disk.delete_items_confirm": { "singular": "Supprimer cet élément du disque ? Ctrl+Z annule.", "plural": "Supprimer ces {n} éléments du disque ? Ctrl+Z annule." },
     "disk.delete_cited": { "text": "Cité par un asset (il perdra sa source) :" },
@@ -2350,8 +2370,8 @@
     "disk.duplicate": { "singular": "Dupliquer", "plural": "Dupliquer {n} éléments" },
     "disk.duplicated": { "text": "{name} créé, sur la même source." },
     "disk.duplicated_many": { "text": "{n} copies créées." },
-    "assetfind.duplicate_selection": { "singular": "Dupliquer", "plural": "Dupliquer {n} éléments" },
-    "assetfind.duplicated": { "singular": "{n} copie créée. Ctrl+Z annule.", "plural": "{n} copies créées. Ctrl+Z annule." },
+    "assetlibrary.duplicate_selection": { "singular": "Dupliquer", "plural": "Dupliquer {n} éléments" },
+    "assetlibrary.duplicated": { "singular": "{n} copie créée. Ctrl+Z annule.", "plural": "{n} copies créées. Ctrl+Z annule." },
     "common.duplicate": { "text": "Dupliquer" },
     "disk.create_refused": { "text": "Rien n’a été créé : {error}" },
     "disk.move_done": { "singular": "{n} élément déplacé.", "plural": "{n} éléments déplacés." },
@@ -2563,6 +2583,32 @@
     "langcard.run_language": { "text": "Langue pour Run" },
     "langcard.run_language_tip": { "text": "Le bouton Run et F5 utilisent cette langue en mode monolingue." },
     "langcard.multilingual_tip": { "text": "Le build inclut toutes les traductions et leurs polices de remplacement." },
-    "langcard.monolingual_tip": { "text": "Le build inclut uniquement la langue choisie. Game propose Build_<langue> pour chaque langue." }
+    "langcard.monolingual_tip": { "text": "Le build inclut uniquement la langue choisie. Game propose Build_<langue> pour chaque langue." },
+    "scenelibrary.instantiate_prefab": { "text": "Instancier le prefab" },
+    "scenelibrary.edit_prefab": { "text": "Éditer le prefab" },
+    "scenelibrary.view_instances": { "text": "Voir les instances" },
+    "scenelibrary.open_project": { "text": "Ouvrir un projet" },
+    "scenelibrary.scene_library": { "text": "Bibliothèque de scènes" },
+    "assetlibrary.delete_confirm": { "text": "Supprimer ces {n} éléments ?\n(Ctrl+Z pour annuler)" },
+    "assetlibrary.delete_name_ctrl_z_to_undo": { "text": "Supprimer « {name} » ?\n(Ctrl+Z pour annuler)" },
+    "assetlibrary.add_an_item": { "text": "Ajouter un élément" },
+    "assetlibrary.rename": { "text": "Renommer…" },
+    "spritelibrary.delete_state": { "text": "Supprimer l’état" },
+    "spritelibrary.delete_confirm": { "text": "Supprimer l’état « {name} » ?\n(Ctrl+Z pour annuler)" },
+    "spritelibrary.sprite_library": { "text": "Bibliothèque de sprites" },
+    "spritelibrary.animation_states": { "text": "États d’animation" },
+    "spritelibrary.all_directions": { "text": "Toutes les directions" },
+    "spritelibrary.north": { "text": "Nord" },
+    "spritelibrary.north_east": { "text": "Nord-Est" },
+    "spritelibrary.east": { "text": "Est" },
+    "spritelibrary.south_east": { "text": "Sud-Est" },
+    "spritelibrary.south": { "text": "Sud" },
+    "spritelibrary.south_west": { "text": "Sud-Ouest" },
+    "spritelibrary.west": { "text": "Ouest" },
+    "spritelibrary.north_west": { "text": "Nord-Ouest" },
+    "scriptlibrary.script_library": { "text": "Bibliothèque de scripts" },
+    "palscr.palette_library": { "text": "Bibliothèque de palettes" },
+    "sndpanel.sound_library": { "text": "Bibliothèque de sons" },
+    "txtscr.font_library": { "text": "Bibliothèque de polices" }
   }
 }

@@ -1555,13 +1555,17 @@ def _gen_scene_init(
                  + (f"   /* {_fn_def} */" if _fn_def else ""))
     # Le fond va sur la map du slot de SON nœud (`f['slot']`, v0.12), plus un slot
     # d'UI unique : deux HUD sur deux BG posent chacun leur fond sur son calque.
+    # Chaque fond est posé AVEC l'index de son conteneur (`g_ui_elements`) : le moteur le retient pour que
+    # `hide()` l'efface et `show()` le repose, et un conteneur caché dès le départ ne le dessine pas.
+    from codegen.runtime_codegen.gen_ui import ui_element_index as _ui_element_index
+    _elem_of = _ui_element_index(p)
     for f in fills:
         L.append(
-            f"    ui_fill_rect({f.get('slot', text_bg)}, {f['tx']}, {f['ty']}, {f['w']}, {f['h']}, "
+            f"    ui_fill_rect_tracked({_elem_of.get(f['name'], -1)}, {f.get('slot', text_bg)}, {f['tx']}, {f['ty']}, {f['w']}, {f['h']}, "
             f"{text_base + fill_indices.index(f['index'])}, {f['bank']});   /* colour background '{f['name']}' → BG{f.get('slot', text_bg)} */")
     for f in img_fills:
         L.append(
-            f"    ui_fill_map({f.get('slot', text_bg)}, {f['tx']}, {f['ty']}, {f['w']}, {f['h']}, {sym}_uimap_{c_sym(f['name'])}, "
+            f"    ui_fill_map_tracked({_elem_of.get(f['name'], -1)}, {f.get('slot', text_bg)}, {f['tx']}, {f['ty']}, {f['w']}, {f['h']}, {sym}_uimap_{c_sym(f['name'])}, "
             f"{asset_base[f['asset']]});   /* image background '{f['name']}' → BG{f.get('slot', text_bg)} */")
     # ── Le FOND des zones de texte ────────────────────────────────
     # Un texte prend le fond de son conteneur : sans ça, écrire remplace la

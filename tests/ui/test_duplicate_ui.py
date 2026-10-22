@@ -1,4 +1,4 @@
-"""*Duplicate* dans les finders (menu, Ctrl+D, dossier d'auteur conservé) et dans l'onglet Disk (menu, tout ou rien)."""
+"""*Duplicate* dans les libraries (menu, Ctrl+D, dossier d'auteur conservé) et dans l'onglet Disk (menu, tout ou rien)."""
 from __future__ import annotations
 
 import wave
@@ -12,7 +12,7 @@ from core import disk_tree
 from core.asset_folder_store import AssetFolderStore
 from core.history import get_history
 from core.project import Project
-from ui.common.asset_finder import AssetFinder
+from ui.common.asset_library import AssetLibrary
 from ui.common.asset_kinds import ALL_KINDS, JINGLES, MUSIC, SFX
 from ui.common.disk_view import DiskCallbacks, add_asset_actions
 
@@ -33,22 +33,22 @@ def project(tmp_path) -> Project:
 
 
 @pytest.fixture
-def finder(qapp, project) -> AssetFinder:
-    finder = AssetFinder("Sound finder", [SFX, MUSIC, JINGLES])
-    finder.set_folder_store(AssetFolderStore(project.root))
-    finder.load_project(project)
-    return finder
+def library(qapp, project) -> AssetLibrary:
+    library = AssetLibrary("Sound library", [SFX, MUSIC, JINGLES])
+    library.set_folder_store(AssetFolderStore(project.root))
+    library.load_project(project)
+    return library
 
 
-def test_every_family_a_finder_shows_can_be_duplicated():
+def test_every_family_a_library_shows_can_be_duplicated():
     assert [kind.label for kind in ALL_KINDS if kind.duplicate is None] == []
 
 
-def test_the_single_menu_offers_duplicate_with_the_shortcut_and_the_batch_menu_counts(finder, project, monkeypatch):
-    first = create(project, "sfx", _wav(project.assets_dir / "coin.wav"))
-    second = create(project, "sfx", _wav(project.assets_dir / "boom.wav"))
-    finder.refresh()
-    tree = finder._trees[SFX.label]
+def test_the_single_menu_offers_duplicate_with_the_shortcut_and_the_batch_menu_counts(library, project, monkeypatch):
+    first = create(project, "sfx", _wav(project.user_library_dir / "coin.wav"))
+    second = create(project, "sfx", _wav(project.user_library_dir / "boom.wav"))
+    library.refresh()
+    tree = library._trees[SFX.label]
     shown = []
     monkeypatch.setattr(QMenu, "exec", lambda menu, *a, **k: shown.append([a.text() for a in menu.actions() if not a.isSeparator()]))
 
@@ -59,12 +59,12 @@ def test_the_single_menu_offers_duplicate_with_the_shortcut_and_the_batch_menu_c
     assert "Duplicate 2 items" in shown[1]
 
 
-def test_duplicating_in_a_finder_is_one_undoable_entry_and_keeps_the_author_folder(finder, project):
-    original = create(project, "sfx", _wav(project.assets_dir / "coin.wav"))
-    finder.refresh()
-    scheme = finder.folder_scheme(SFX.label)
+def test_duplicating_in_a_library_is_one_undoable_entry_and_keeps_the_author_folder(library, project):
+    original = create(project, "sfx", _wav(project.user_library_dir / "coin.wav"))
+    library.refresh()
+    scheme = library.folder_scheme(SFX.label)
     scheme.move(original, scheme.create("Pickups", None).id)
-    tree = finder._trees[SFX.label]
+    tree = library._trees[SFX.label]
 
     tree._duplicate([original])
 
@@ -75,10 +75,10 @@ def test_duplicating_in_a_finder_is_one_undoable_entry_and_keeps_the_author_fold
     assert project.sfx.get("coin_2") is None and project.sfx.get("coin") is original
 
 
-def test_ctrl_d_duplicates_the_selection(finder, project):
-    original = create(project, "sfx", _wav(project.assets_dir / "coin.wav"))
-    finder.refresh()
-    tree = finder._trees[SFX.label]
+def test_ctrl_d_duplicates_the_selection(library, project):
+    original = create(project, "sfx", _wav(project.user_library_dir / "coin.wav"))
+    library.refresh()
+    tree = library._trees[SFX.label]
     tree.select_obj(original)
 
     tree._duplicate_shortcut.activated.emit()

@@ -17,7 +17,7 @@ donne une version `0.Y.0` ; les correctifs et petits chantiers, eux, incrémente
 | --- | --- | --- |
 | 0.1 | État actuel | Base : tout ce qui est déjà livré |
 | 0.2 | Mises à jour depuis la fenêtre About | Livré |
-| 0.3 | Assets et disque | En cours |
+| 0.3 | Assets et disque | Presque livré |
 | 0.4 | Texte et données | En cours |
 | 0.5 | Fonds | Conception en cours |
 | 0.6 | Interagir avec un objet (`on_interact`) | Conception en cours, développement non commencé |
@@ -32,8 +32,9 @@ Tout ce que vous manipulez vit dans le dossier `assets/` du projet, rangé où v
 est indépendant du fichier source dont il vient, se crée de deux façons (depuis une source, ou
 vide), se duplique et se renomme avec une seule règle de nom.
 
-- En cours : identifiants stables, onglet Disk, création d'asset, déplacement des fichiers.
-- Reste à faire : les finders des autres familles d'assets, les associations de fichiers.
+- Livré : identifiants stables, onglet Disk, création d'asset, déplacement des fichiers, une library par famille
+  d'assets, l'ouverture d'un asset passé en argument au lancement.
+- Reste à faire : les références par id (une scène citera un asset par son id plutôt que par son nom).
 
 ### 0.4 : texte et données
 
@@ -49,6 +50,8 @@ Préparer et comparer un décor pendant l'import : voir ce que la compression ch
 l'image sur un plan de travail, retoucher les palettes.
 
 - Conception en cours, rien de verrouillé.
+- Livré : deux outils distincts dans l'éditeur de fonds, Inpainting (remplacement de palette) et Painting
+  (tuiles), l'algorithme de redistribution des couleurs s'appelle « Color mapping ».
 
 ### 0.6 : interagir avec un objet
 

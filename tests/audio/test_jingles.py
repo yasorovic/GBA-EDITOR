@@ -32,7 +32,7 @@ def project(tmp_path) -> Project:
 
 
 def _drop(project: Project, folder: str, name: str) -> Path:
-    path = project.assets_dir / folder / f"{name}.mod"
+    path = project.user_library_dir / folder / f"{name}.mod"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(F.make_mod())
     return path
@@ -46,8 +46,8 @@ def test_un_module_de_assets_jingles_devient_un_jingle(project):
     _drop(project, "jingles", "Fanfare")
     project.load()
     project.load_all_resources()
-    create(project, "music", (project.assets_dir / "music") / "Theme.mod")
-    create(project, "jingles", (project.assets_dir / "jingles") / "Fanfare.mod")
+    create(project, "music", (project.user_library_dir / "music") / "Theme.mod")
+    create(project, "jingles", (project.user_library_dir / "jingles") / "Fanfare.mod")
     assert [m.name for m in project.music] == ["Theme"]
     assert [j.name for j in project.jingles] == ["Fanfare"]
     assert isinstance(project.jingles.get("Fanfare"), Jingle)
@@ -59,8 +59,8 @@ def test_audio_modules_donne_les_deux_familles(project):
     _drop(project, "jingles", "Fanfare")
     project.load()
     project.load_all_resources()
-    create(project, "music", (project.assets_dir / "music") / "Theme.mod")
-    create(project, "jingles", (project.assets_dir / "jingles") / "Fanfare.mod")
+    create(project, "music", (project.user_library_dir / "music") / "Theme.mod")
+    create(project, "jingles", (project.user_library_dir / "jingles") / "Fanfare.mod")
     assert sorted(m.name for m in project.audio_modules()) == ["Fanfare", "Theme"]
 
 
@@ -68,9 +68,9 @@ def test_renommer_un_jingle_reecrit_music_jingle_et_pas_music_play(project):
     _drop(project, "jingles", "Fanfare")
     project.load()
     project.load_all_resources()
-    create(project, "jingles", (project.assets_dir / "jingles") / "Fanfare.mod")
-    (project.assets_dir / "scripts").mkdir(parents=True, exist_ok=True)
-    script = (project.assets_dir / "scripts") / "S.lua"
+    create(project, "jingles", (project.user_library_dir / "jingles") / "Fanfare.mod")
+    (project.user_library_dir / "scripts").mkdir(parents=True, exist_ok=True)
+    script = (project.user_library_dir / "scripts") / "S.lua"
     script.write_text('function on_start()\n music.jingle("Fanfare")\n music.play("Fanfare")\nend\n',
                       encoding="utf-8")
     project.rename_sound(project.jingles.get("Fanfare"), "Victory")
@@ -173,7 +173,7 @@ def test_une_coupe_vers_une_piste_wav_avertit(project):
 def test_une_piste_trop_longue_inutilisee_n_est_qu_un_avertissement(project):
     import wave
     from core import wav_module
-    path = project.assets_dir / "music" / "long.wav"
+    path = project.user_library_dir / "music" / "long.wav"
     path.parent.mkdir(parents=True, exist_ok=True)
     seconds = int(wav_module.MAX_SECONDS) + 3
     with wave.open(str(path), "wb") as w:

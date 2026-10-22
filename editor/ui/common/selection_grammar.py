@@ -1,6 +1,6 @@
 """ui/common/selection_grammar.py — la grammaire visuelle de sélection, une fois.
 
-Tous les arbres à sélection multiple de l'éditeur (finders, arbre de contenu de
+Tous les arbres à sélection multiple de l'éditeur (libraries, arbre de contenu de
 scène) parlent le même langage à trois niveaux, distincts et cumulables :
 
 - **active** — l'asset OUVERT dans le canvas (une scène chargée). Signal : une
@@ -23,7 +23,7 @@ fond/texte de base redeviennent neutres), peint le langage de sélection sous le
 texte, puis la barre active par-dessus. Le QSS n'a plus qu'à ne pas dessiner de
 liseré de sélection à gauche (réservé à « active »).
 
-Un arbre qui n'a pas de notion d'« actif » (la plupart des finders) n'expose pas
+Un arbre qui n'a pas de notion d'« actif » (la plupart des libraries) n'expose pas
 `active_item()` : le delegate le tolère et ne peint alors que les deux niveaux de
 sélection.
 """

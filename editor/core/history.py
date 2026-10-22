@@ -71,8 +71,8 @@ class MacroCmd(Command):
 class RefreshAfterCmd(Command):
     """Une commande dont l'exécution ET l'annulation repeuplent une vue.
 
-    Le finder rafraîchit sa liste après SA suppression, mais Ctrl+Z (et Ctrl+Y)
-    passent par l'historique, qui ne connaît pas le finder : la ressource
+    La library rafraîchit sa liste après SA suppression, mais Ctrl+Z (et Ctrl+Y)
+    passent par l'historique, qui ne connaît pas la library : la ressource
     revenait dans le modèle, jamais dans l'arbre. `refresh_fn` est rappelée
     après chacun des deux sens ; la commande enveloppée ne change pas."""
 
@@ -645,7 +645,7 @@ class SetPaletteColorCmd(Command):
     drag de slider / roue = une seule entrée d'undo (comme SetFieldCmd).
 
     apply_fn(index) est fournie par l'écran : elle persiste la banque et
-    resynchronise l'UI (swatch, inspecteur, finder). C'est ce callback qui
+    resynchronise l'UI (swatch, inspecteur, library). C'est ce callback qui
     garantit le rafraîchissement du Palette Editor sur undo/redo, comme
     DeleteResourceCmd.refresh_fn.
     """

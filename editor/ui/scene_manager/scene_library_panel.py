@@ -1,7 +1,7 @@
-"""Panneau gauche (bas) du Scene Manager — ce que le PROJET contient.
+"""Panneau gauche (bas) du Scene Manager — la Scene library : les scènes et les prefabs du projet.
 
-Scènes, prefabs et scripts, rendus par le composant partagé
-(`ui/common/asset_finder.py`) comme dans tous les autres écrans. Ce module ne
+Les scripts ont leur propre bibliothèque (`script_library_panel.py`), rendus par le composant partagé
+(`ui/common/asset_library.py`) comme dans tous les autres écrans. Ce module ne
 garde que ce qui est propre à CET écran : traduire une sélection en geste
 (activer une scène, inspecter un prefab), et les entrées de menu qui supposent
 un inspecteur en face (« Voir les instances », « Voir les utilisations »).
@@ -18,10 +18,9 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QCursor, QShortcut, QKeySequence
 
 from ui.common.theme import QSS
-from ui.common.asset_finder import AssetFinder
-from ui.common.asset_kinds import SCENES, PREFABS, SCRIPTS
+from ui.common.asset_library import AssetLibrary
+from ui.common.asset_kinds import SCENES, PREFABS
 from ui.common.labels import label
-from ui.common.asset_kinds import add_script
 
 from core.project import Project
 from core.selection_bus import get_bus
@@ -34,15 +33,13 @@ from core.keybindings import bind
 from ui.home.project_picker import PROJECTS_DIR
 
 
-class AssetsFinderPanel(QWidget):
+class SceneLibraryPanel(QWidget):
     scene_selected        = pyqtSignal(int)      # INDEX dans project.scenes
     prefab_add_requested  = pyqtSignal()
     scene_add_requested   = pyqtSignal()
-    script_opened         = pyqtSignal(str)
     project_created       = pyqtSignal(str, str, str)   # (name, path, starter_id)
     project_opened        = pyqtSignal(str)        # (path)
     prefab_uses_requested = pyqtSignal(object)     # Prefab
-    script_uses_requested = pyqtSignal(str)        # chemin absolu du script
     scenes_selected       = pyqtSignal(list)       # noms de scènes sélectionnées (sync graphe)
     groups_changed        = pyqtSignal()           # un groupe de scènes a été créé (sync graphe)
 
@@ -57,38 +54,34 @@ class AssetsFinderPanel(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        self._finder = AssetFinder(label('assf.project_viewer'), [SCENES, PREFABS, SCRIPTS],
+        self._library = AssetLibrary(label('scenelibrary.scene_library'), [SCENES, PREFABS],
                                    min_width=180, max_width=420)
-        root.addWidget(self._finder, 1)
+        root.addWidget(self._library, 1)
 
-        # Un changement de dossiers dans le finder (créer/grouper/déplacer/
+        # Un changement de dossiers dans la library (créer/grouper/déplacer/
         # renommer) doit rafraîchir le Graphe, qui lit le même store.
-        self._finder.folders_changed.connect(self.groups_changed)
-        self._finder.selected.connect(self._on_selected)
-        self._finder.activated.connect(self._on_activated)
-        self._finder.add_requested.connect(self._on_add_requested)
+        self._library.folders_changed.connect(self.groups_changed)
+        self._library.selected.connect(self._on_selected)
+        self._library.activated.connect(self._on_activated)
+        self._library.add_requested.connect(self._on_add_requested)
         # Sélection croisée avec le graphe : on ne relaie QUE la famille Scenes.
-        self._finder.selection_changed.connect(self._on_selection_set)
+        self._library.selection_changed.connect(self._on_selection_set)
 
         # Entrées de menu propres à cet écran : elles supposent un inspecteur
         # capable de les afficher, que seul le Scene Manager possède.
         # « Edit scene » ouvre la scène dans le canvas — même geste que le
         # double-clic (bascule), en pendant du « Edit scene » du Graphe.
-        self._finder.add_action(SCENES.label, label("assf.edit_scene"),
+        self._library.add_action(SCENES.label, label("scenelibrary.edit_scene"),
                                 lambda sc: self._on_activated(SCENES.label, sc))
-        self._finder.add_action(PREFABS.label, label("assf.instantiate_prefab"),
+        self._library.add_action(PREFABS.label, label("scenelibrary.instantiate_prefab"),
                                 lambda pf: get_dispatcher().instantiate_prefab(pf.name, 60, 60))
-        self._finder.add_action(PREFABS.label, label("assf.edit_prefab"),
+        self._library.add_action(PREFABS.label, label("scenelibrary.edit_prefab"),
                                 lambda pf: get_bus().select(pf))
-        self._finder.add_action(PREFABS.label, label("assf.view_instances"),
+        self._library.add_action(PREFABS.label, label("scenelibrary.view_instances"),
                                 self.prefab_uses_requested.emit)
-        self._finder.add_action(SCRIPTS.label, label("assf.edit_script"),
-                                lambda p: self.script_opened.emit(str(p)))
-        self._finder.add_action(SCRIPTS.label, label("assf.view_uses"),
-                                lambda p: self.script_uses_requested.emit(str(p)))
 
         # Ctrl+G : ranger les scènes sélectionnées dans un nouveau groupe. Le
-        # raccourci vit dans le registre remappable ; il n'agit que si le finder
+        # raccourci vit dans le registre remappable ; il n'agit que si la library
         # (ou un de ses enfants) a le focus — pas un raccourci global.
         self._sc_group = QShortcut(QKeySequence(), self)
         self._sc_group.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
@@ -96,8 +89,8 @@ class AssetsFinderPanel(QWidget):
         bind("scene.group", self._sc_group)
 
     def hide_title(self) -> None:
-        """Le panneau vit sous un onglet « Project viewer » : son bandeau ferait doublon."""
-        self._finder.set_title_visible(False)
+        """Le panneau vit sous un onglet « Scene library » : son bandeau ferait doublon."""
+        self._library.set_title_visible(False)
 
     # ── Sélection ─────────────────────────────────────────────────
 
@@ -107,24 +100,19 @@ class AssetsFinderPanel(QWidget):
         Le clic simple INSPECTE, il n'ouvre pas : une scène se pose sur le bus,
         où son inspecteur la prend (il édite n'importe quelle scène, pas
         seulement l'active) — la BASCULE du canvas est réservée au double-clic
-        (`_on_activated`). Prefab et script suivent la même règle : sur le bus,
-        l'inspecteur les prend."""
+        (`_on_activated`). Un prefab suit la même règle : sur le bus,
+        l'inspecteur le prend."""
         if kind_label == SCENES.label:
             get_bus().select(obj)     # -> SceneInspector, sans changer la scène active
         elif kind_label == PREFABS.label:
             get_bus().select(obj)
-        elif kind_label == SCRIPTS.label:
-            get_bus().select(obj)     # -> ScriptInspector (note + exports)
 
     def _on_activated(self, kind_label: str, obj):
         """Double-clic. Une scène s'OUVRE (le canvas bascule dessus, window.py la
-        désigne par son index) ; un script s'ouvre dans l'éditeur ; un prefab
-        s'édite."""
+        désigne par son index) ; un prefab s'édite."""
         if kind_label == SCENES.label:
             if self._project is not None and obj in self._project.scenes:
                 self.scene_selected.emit(list(self._project.scenes).index(obj))
-        elif kind_label == SCRIPTS.label:
-            self.script_opened.emit(str(obj))
         elif kind_label == PREFABS.label:
             get_bus().select(obj)
 
@@ -135,8 +123,6 @@ class AssetsFinderPanel(QWidget):
             self._show_scene_add_menu()         # nouvelle scène, ou groupe
         elif kind_label == PREFABS.label:
             self.prefab_add_requested.emit()        # window.py : *Create blank*
-        elif kind_label == SCRIPTS.label:
-            add_script(self._project, self._on_script_created)
 
     def _show_scene_add_menu(self):
         """« + » de la section Scenes : créer une scène, ou un groupe (dossier
@@ -146,7 +132,7 @@ class AssetsFinderPanel(QWidget):
         menu.setStyleSheet(QSS.menu)
         menu.addAction(label("akind.new_scene"),
                        lambda: self.scene_add_requested.emit())   # window.py : reporte la scène active
-        menu.addAction(label("assetfind.create_group"), self._create_scene_group)
+        menu.addAction(label("assetlibrary.create_group"), self._create_scene_group)
         menu.exec(QCursor.pos())
 
     def _create_scene_group(self, member_ids=()):
@@ -156,22 +142,18 @@ class AssetsFinderPanel(QWidget):
         if self._folder_store is None:
             return
         folder = self._folder_store.create_group(
-            "scenes", label("assetfind.group_default_name"), list(member_ids))
-        self._finder.refresh()
+            "scenes", label("assetlibrary.group_default_name"), list(member_ids))
+        self._library.refresh()
         self.groups_changed.emit()
         if folder is not None:
-            self._finder.begin_rename_folder(SCENES.label, folder.id)
+            self._library.begin_rename_folder(SCENES.label, folder.id)
 
     def _group_selected_scenes(self):
         """Ctrl+G : range les scènes SÉLECTIONNÉES dans un nouveau groupe. Sans
         sélection de scènes, ne fait rien — le geste opère sur ce qui est choisi."""
-        ids = [s.id for s in self._finder.selected_objs(SCENES.label)]
+        ids = [s.id for s in self._library.selected_objs(SCENES.label)]
         if ids:
             self._create_scene_group(ids)
-
-    def _on_script_created(self, path: Path):
-        self.refresh()
-        self.script_opened.emit(str(path))
 
     # ── Renommage inline d'un asset fraîchement créé (pas de pop-up) ──
 
@@ -183,13 +165,13 @@ class AssetsFinderPanel(QWidget):
 
     def _begin_rename(self, kind_label: str, obj):
         if obj is not None:
-            self._finder.begin_rename(kind_label, obj)
+            self._library.begin_rename(kind_label, obj)
 
     # ── Chargement ────────────────────────────────────────────────
 
     def load_project(self, project: Project):
         self._project = project
-        self._finder.load_project(project)
+        self._library.load_project(project)
 
     def _on_selection_set(self, kind_label: str, objs) -> None:
         """Relaie la sélection de scènes vers le graphe (highlight croisé)."""
@@ -207,7 +189,7 @@ class AssetsFinderPanel(QWidget):
             return
         wanted = set(names)
         objs = [s for s in self._project.scenes if s.name in wanted]
-        self._finder.highlight_selection(SCENES.label, objs, fold_to_folder=True)
+        self._library.highlight_selection(SCENES.label, objs, fold_to_folder=True)
 
     @property
     def folder_store(self):
@@ -221,10 +203,10 @@ class AssetsFinderPanel(QWidget):
         rangées par ID — leur identité durable : renommer ou déplacer le fichier
         d'une scène ne la fait pas sortir de son dossier."""
         self._folder_store = store
-        self._finder.set_folder_store(store)
+        self._library.set_folder_store(store)
 
     def refresh(self):
-        self._finder.refresh()
+        self._library.refresh()
 
     def highlight_active_scene(self, scene) -> None:
         """Marque la scène ACTIVE (celle ouverte dans le canvas) d'un liseré
@@ -233,12 +215,7 @@ class AssetsFinderPanel(QWidget):
         active/sélectionnée). Ne repeuple pas : la liste des scènes ne change
         pas quand on bascule de scène active (`window._on_scene_selected`), on ne
         fait que déplacer le liseré."""
-        self._finder.set_active(SCENES.label, scene)
-
-    def _refresh_scripts(self):
-        # Une seule famille a bougé, mais tout repeupler coûte un parcours de
-        # listes déjà en mémoire : pas de quoi se doter d'un chemin à part.
-        self._finder.refresh()
+        self._library.set_active(SCENES.label, scene)
 
     # ── Projets ───────────────────────────────────────────────────
 
@@ -250,7 +227,7 @@ class AssetsFinderPanel(QWidget):
                 dlg.result_name, str(dlg.result_path), dlg.result_starter)
 
     def _prompt_open(self):
-        path = QFileDialog.getExistingDirectory(self, label("assf.open_project"), str(PROJECTS_DIR))
+        path = QFileDialog.getExistingDirectory(self, label("scenelibrary.open_project"), str(PROJECTS_DIR))
         if path:
             self.project_opened.emit(path)
 

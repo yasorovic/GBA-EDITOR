@@ -44,6 +44,8 @@ _DEFAULTS = {
     # Panneau d'aperçu du Disk replié sur sa barre ? Un état d'affichage, donc
     # propre à la machine comme le reste de ce fichier.
     "disk_preview_collapsed": False,
+    # Unité de la position du curseur dans les canvas : "px" ou "tile" (réversible d'un clic).
+    "cursor_unit": "px",
 }
 
 SCALE_CHOICES = (75, 100, 125, 150)
@@ -109,6 +111,16 @@ def set_interface_scale_percent(percent: int):
 
 def disk_preview_collapsed() -> bool:
     return bool(_load().get("disk_preview_collapsed", _DEFAULTS["disk_preview_collapsed"]))
+
+
+def cursor_unit() -> str:
+    value = _load().get("cursor_unit", _DEFAULTS["cursor_unit"])
+    return value if value in ("px", "tile") else _DEFAULTS["cursor_unit"]
+
+
+def set_cursor_unit(unit: str):
+    _load()["cursor_unit"] = "tile" if unit == "tile" else "px"
+    _save()
 
 
 def set_disk_preview_collapsed(value: bool):

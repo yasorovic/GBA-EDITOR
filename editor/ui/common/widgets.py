@@ -42,9 +42,9 @@ _LBL_AX_STY = "color:{c}; background:transparent; border:none;"
 
 # Alias vers les fragments centralisés de theme.py — gardés ici pour ne pas
 # casser les call sites existants (W.btn_ghost, W.btn_accent, ...).
-# Hauteur commune des en-têtes de section de viewer — FinderSection et
+# Hauteur commune des en-têtes de section de viewer — LibrarySection et
 # W.section_bar (repliable ou non, une section se lit à la même hauteur).
-FINDER_HEADER_H = 26
+LIBRARY_HEADER_H = 26
 
 BTN_GHOST  = QSS.button_ghost
 BTN_ACCENT = QSS.button_accent_outline
@@ -424,7 +424,7 @@ class _W:
     # ── Hiérarchie de titres (briques theme.py — voir QSS.title_*) ────
 
     def title_panel(self, text: str) -> QLabel:
-        """En-tête de panneau/finder (niveau 1) — discret, uppercase conseillé."""
+        """En-tête de panneau/library (niveau 1) — discret, uppercase conseillé."""
         lbl = QLabel(text); lbl.setFont(_FONT_UI_SM)
         lbl.setStyleSheet(QSS.title_panel)
         return lbl
@@ -441,14 +441,18 @@ class _W:
         )
         return lbl
 
-    def finder_bar(self, text: str) -> QFrame:
-        """Bandeau d'identité d'un viewer (« PROJECT VIEWER », « SPRITE
-        FINDER »). Sans fond ni filet : il nomme le panneau, les sections
-        portent la structure. Le layout est accessible via `.layout()` pour y
+    def library_bar(self, text: str) -> QFrame:
+        """Bandeau d'identité d'un viewer (« SCENE LIBRARY », « SPRITE
+        LIBRARY »). Fond BG_PANEL, un cran plus sombre que le corps de la library
+        (BG_BASE) pour le distinguer du contenu. Jamais « transparent » :
+        transparent, il prenait la couleur de l'écran parent, qui change d'un
+        écran à l'autre. Le layout est accessible via `.layout()` pour y
         ajouter un compteur, un filtre ou des boutons."""
         bar = QFrame()
         bar.setFixedHeight(26)
-        bar.setStyleSheet("background:transparent; border:none;")
+        bar.setObjectName("libraryBar")
+        bar.setStyleSheet(
+            f"QFrame#libraryBar{{background:{C.BG_PANEL}; border:none; border-bottom:1px solid {C.BORDER};}}")
         hl = QHBoxLayout(bar)
         hl.setContentsMargins(S.GUTTER, 0, S.SM, 0)
         hl.setSpacing(S.MD)
@@ -459,22 +463,22 @@ class _W:
         return bar
 
     def section_bar(self, text: str, color: str | None = None) -> QFrame:
-        """En-tête de section NON repliable d'un viewer (Palette finder, Sound
-        mixer). Même grammaire que FinderSection — titre aligné sur la gouttière,
+        """En-tête de section NON repliable d'un viewer (Palette library, Sound
+        mixer). Même grammaire que LibrarySection — titre aligné sur la gouttière,
         pas de bandeau coloré — pour que toutes les listes se ressemblent.
         Ajouter les boutons d'action directement dans `.layout()`."""
         f = QFrame()
         # Hauteur = en-tête + l'air au-dessus (même respiration qu'une
-        # FinderSection, qui le prend en marge de layout).
-        f.setFixedHeight(FINDER_HEADER_H + S.MD)
+        # LibrarySection, qui le prend en marge de layout).
+        f.setFixedHeight(LIBRARY_HEADER_H + S.MD)
         f.setStyleSheet("background:transparent; border:none;")
         hl = QHBoxLayout(f)
         # Décalage à gauche = gouttière + la largeur du chevron d'une
-        # FinderSection, pour que les titres repliables ou non s'alignent.
+        # LibrarySection, pour que les titres repliables ou non s'alignent.
         hl.setContentsMargins(S.GUTTER + S.LG + S.SM, S.MD, S.SM, 0)
         hl.setSpacing(S.XS)
         lbl = QLabel(text)
-        lbl.setStyleSheet(QSS.title_finder(color))
+        lbl.setStyleSheet(QSS.title_library(color))
         hl.addWidget(lbl, 1)
         return f
 
@@ -677,7 +681,7 @@ class ScriptSlot(QWidget):
         self._btn_add.setFont(QFont(T.UI, T.MD))
         self._btn_add.setFixedHeight(36)
         self._btn_add.setStyleSheet(
-            f"QPushButton{{background:{C.BG_DEEP};color:{C.TEXT_DIM};"
+            f"QPushButton{{background:{C.BG_INPUT};color:{C.TEXT_DIM};"
             f"border:1px dashed {C.BORDER};border-radius:4px;}}"
             f"QPushButton:hover{{color:{accent_color};border-color:{accent_color};}}"
         )
@@ -697,7 +701,7 @@ class ScriptSlot(QWidget):
         self._lbl.setFont(QFont(T.MONO, T.SM))
         self._lbl.setFixedHeight(22)
         self._lbl.setStyleSheet(
-            f"QPushButton{{color:{accent_color};background:{C.BG_DEEP};"
+            f"QPushButton{{color:{accent_color};background:{C.BG_INPUT};"
             f"border:1px solid {accent_color};border-radius:4px;padding:0 8px;"
             f"text-align:left;}}"
             f"QPushButton:hover{{background:{C.BG_HOVER};}}"
@@ -820,7 +824,7 @@ class ScriptPickerPopup(QFrame):
         self._search.setPlaceholderText(label('wdg.filter'))
         self._search.setFont(QFont(T.UI, T.SM))
         self._search.setStyleSheet(
-            f"QLineEdit{{background:{C.BG_DEEP};color:{C.TEXT_NORM};border:1px solid {C.BORDER};"
+            f"QLineEdit{{background:{C.BG_INPUT};color:{C.TEXT_NORM};border:1px solid {C.BORDER};"
             f"border-radius:3px;padding:3px 6px;}}"
             f"QLineEdit:focus{{border-color:{accent};}}"
         )
@@ -852,7 +856,7 @@ class ScriptPickerPopup(QFrame):
             btn_new.setFont(QFont(T.UI, T.SM))
             btn_new.setFixedHeight(28)
             btn_new.setStyleSheet(
-                f"QPushButton{{background:{C.BG_DEEP};color:{accent};"
+                f"QPushButton{{background:{C.BG_INPUT};color:{accent};"
                 f"border:1px solid {accent};border-radius:3px;}}"
                 f"QPushButton:hover{{background:{accent};color:{C.BG_DEEP};}}"
             )
@@ -969,19 +973,19 @@ class ScriptPickerPopup(QFrame):
 
 
 # ──────────────────────────────────────────────────────────────────
-#  FinderSection — en-tête de section collapsible commun aux 4 finders
-#  (Assets finder / Sprite finder / Script finder / Sound finder)
+#  LibrarySection — en-tête de section collapsible commun aux 4 libraries
+#  (Assets library / Sprite library / Script library / Sound library)
 # ──────────────────────────────────────────────────────────────────
 
-class FinderSection(QFrame):
+class LibrarySection(QFrame):
     """
     Section collapsible standard : chevron ▾/▸ + titre en capitales espacées,
     boutons "+" et "recherche" à droite, champ de filtre masqué par défaut.
     Le filtre s'applique automatiquement à tout QTreeWidget posé via
     set_widget() (recherche par nom sur les colonnes de l'arbre).
 
-    Utilisée par les 4 finders pour une apparence et un comportement
-    identiques — voir assets_finder_panel.py pour l'exemple de référence.
+    Utilisée par les 4 libraries pour une apparence et un comportement
+    identiques — voir scene_library_panel.py pour l'exemple de référence.
 
     Parti pris visuel : l'en-tête n'est PAS un bandeau — empilées, des sections
     à fond plein donnent un panneau rayé. La séparation vient de l'espace et de
@@ -997,9 +1001,9 @@ class FinderSection(QFrame):
     _PAD_BOTTOM = S.MD
 
     def __init__(self, title: str, color: str = C.TEXT_NORM, parent=None):
-        # `color` par défaut neutre : les finders n'utilisent plus de code
+        # `color` par défaut neutre : les libraries n'utilisent plus de code
         # couleur par type d'asset (distinction par forme d'icône + libellé).
-        # Le paramètre reste pour un usage ponctuel hors finder si besoin.
+        # Le paramètre reste pour un usage ponctuel hors library si besoin.
         super().__init__(parent)
         self._expanded = True
         # Le contenu sait-il occuper plus que sa hauteur naturelle ? Renseigné
@@ -1014,7 +1018,7 @@ class FinderSection(QFrame):
         # Header — le clic sur la zone texte/chevron toggle, les boutons sont
         # indépendants. Transparent : c'est le fond du panneau qui passe.
         hdr = QFrame()
-        hdr.setFixedHeight(FINDER_HEADER_H)
+        hdr.setFixedHeight(LIBRARY_HEADER_H)
         hdr.setStyleSheet("background:transparent; border:none;")
         hl = QHBoxLayout(hdr)
         hl.setContentsMargins(0, 0, S.SM, 0)
@@ -1022,12 +1026,12 @@ class FinderSection(QFrame):
 
         # Zone cliquable pour toggle (chevron + titre) ; le survol l'éclaire.
         toggle_area = QWidget()
-        toggle_area.setObjectName("finderToggle")
+        toggle_area.setObjectName("libraryToggle")
         toggle_area.setCursor(Qt.CursorShape.PointingHandCursor)
         toggle_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         toggle_area.setStyleSheet(
-            f"QWidget#finderToggle {{ background:transparent; border:none; }}"
-            f"QWidget#finderToggle:hover {{ background:{C.BG_PANEL}; }}"
+            f"QWidget#libraryToggle {{ background:transparent; border:none; }}"
+            f"QWidget#libraryToggle:hover {{ background:{C.BG_PANEL}; }}"
         )
         ta_layout = QHBoxLayout(toggle_area)
         ta_layout.setContentsMargins(S.GUTTER, 0, 0, 0)
@@ -1043,7 +1047,7 @@ class FinderSection(QFrame):
         self._set_arrow("down")
 
         title_lbl = QLabel(title)
-        title_lbl.setStyleSheet(QSS.title_finder(color))
+        title_lbl.setStyleSheet(QSS.title_library(color))
 
         # Sans ça, survoler le titre enverrait un Leave à la zone cliquable :
         # survol clignotant, et clic inopérant sur le texte lui-même.
@@ -1115,10 +1119,10 @@ class FinderSection(QFrame):
 
     def remember_fold(self, key: str):
         """Replie la section tant que l'auteur ne l'a pas dépliée, puis retient son choix
-        d'une session à l'autre (cf. `finder_fold_state`)."""
-        from ui.common import finder_fold_state
-        self.set_expanded(finder_fold_state.is_expanded(key))
-        self.toggled_by_user.connect(lambda expanded: finder_fold_state.set_expanded(key, expanded))
+        d'une session à l'autre (cf. `library_fold_state`)."""
+        from ui.common import library_fold_state
+        self.set_expanded(library_fold_state.is_expanded(key))
+        self.toggled_by_user.connect(lambda expanded: library_fold_state.set_expanded(key, expanded))
 
     def set_add_menu(self, opens_menu: bool = True):
         """Le « + » de cette section ouvre un menu : il prend l'icône « + ▾ »."""
@@ -1142,7 +1146,7 @@ class FinderSection(QFrame):
         self.toggled_by_user.emit(self._expanded)
 
     def set_expanded(self, expanded: bool):
-        """Fixe l'état initial ou répond à un repli demandé par un finder."""
+        """Fixe l'état initial ou répond à un repli demandé par une library."""
         self._expanded = bool(expanded)
         self._body.setVisible(self._expanded)
         self._set_arrow("down" if self._expanded else "right")
@@ -1164,7 +1168,7 @@ class FinderSection(QFrame):
         """Repliée, la section ne vaut que son en-tête ; dépliée sur un contenu
         à hauteur fixe, elle ne vaut que ce contenu. Dans les deux cas politique
         Fixed : sinon le facteur d'étirement du parent (3/2 dans le Sprite
-        Finder) ou le rab d'un panneau plus haut que ses sections reste
+        Library) ou le rab d'un panneau plus haut que ses sections reste
         appliqué, et la hauteur reste en blanc sous le titre."""
         grow = self._expanded and self._content_grows
         self.setSizePolicy(
@@ -1196,9 +1200,9 @@ class FinderSection(QFrame):
                 old.hide()
                 old.setParent(None)
                 old.deleteLater()
-        # Un contenu qui sait grandir (Expanding : listes des finders sprite /
+        # Un contenu qui sait grandir (Expanding : listes des libraries sprite /
         # fond / police) remplit la section. Un contenu à hauteur fixe (arbres
-        # du finder projet, tables de variables) est ferré en haut, et la
+        # de la library projet, tables de variables) est ferré en haut, et la
         # section se cale sur lui (_apply_size_policy) : sans ça, QBoxLayout
         # répartit le rab autour du contenu et la liste flotte au milieu de la
         # section au lieu de commencer sous son titre.
@@ -1385,18 +1389,6 @@ class CollapsibleCard(QFrame):
 #  AssetHeaderBar — en-tête unifié "type + nom" pour l'objet sélectionné
 # ──────────────────────────────────────────────────────────────────
 
-def kind_colors(accent: str) -> tuple[str, str, str]:
-    """Dérive (fond sombre, couleur du label TYPE, couleur du nom) depuis une
-    seule couleur d'accent canonique (voir ui/icons.py), pour que toute la
-    palette dérive d'une unique source par type d'objet."""
-    from PyQt6.QtGui import QColor
-    c = QColor(accent)
-    h, s, _v, _a = c.getHsv()
-    bg  = QColor.fromHsv(h, max(0, int(s * 0.55)), C.HEADER_BG_VALUE).name()
-    mid = QColor.fromHsv(h, s, 150).name()
-    return bg, mid, accent
-
-
 class AssetHeaderBar(QWidget):
     """
     En-tête réutilisable affichant le type et le nom (renommable) de l'objet
@@ -1414,8 +1406,6 @@ class AssetHeaderBar(QWidget):
 
     renamed = pyqtSignal(str)   # nouveau nom, émis quand l'utilisateur valide
 
-    _PALETTE: dict[str, tuple[str, str, str]] = {}  # rempli au premier accès (import tardif)
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self._kind = "empty"
@@ -1424,7 +1414,7 @@ class AssetHeaderBar(QWidget):
         root = QHBoxLayout(self)
         root.setContentsMargins(12, 0, 12, 0)
         root.setSpacing(0)
-        self.setFixedHeight(44)
+        self.setFixedHeight(58)
 
         self._type_lbl = QLabel("")
         self._type_lbl.setFont(QFont(T.UI, T.SM, QFont.Weight.DemiBold))
@@ -1442,51 +1432,21 @@ class AssetHeaderBar(QWidget):
 
         self.set_header("empty", "", "")
 
-    @classmethod
-    def _palette(cls) -> dict[str, tuple[str, str, str]]:
-        if not cls._PALETTE:
-            from ui.common import icons
-            cls._PALETTE = {
-                "actor":  kind_colors(icons.COLOR_ACTOR),
-                "prefab": kind_colors(icons.COLOR_PREFAB),
-                "scene":  kind_colors(icons.COLOR_SCENE),
-                "camera": kind_colors(icons.COLOR_SCENE),
-                "script": kind_colors(icons.COLOR_SCRIPT),
-                "script_asset": kind_colors(icons.COLOR_SCRIPT),
-                "sprite": kind_colors(icons.COLOR_SPRITE),
-                "background": kind_colors(icons.COLOR_BACKGROUND),
-                "sfx":    kind_colors(icons.COLOR_SFX),
-                "music":  kind_colors(icons.COLOR_MUSIC),
-                "uses":   kind_colors(icons.COLOR_PREFAB),
-                "project": kind_colors(C.ACCENT),
-                # Arête du Graphe des scènes : une transition ENTRE scènes, même
-                # famille que la scène.
-                  "edge":   kind_colors(icons.COLOR_SCENE),
-                  "group":  kind_colors(icons.COLOR_SCENE),
-                # Interface — un kind par type d'élément (même famille bleue) ;
-                # "ui_element" reste en repli pour les appels génériques.
-                "ui_container":   kind_colors(icons.COLOR_UI),
-                "ui_list":    kind_colors(icons.COLOR_UI),
-                "ui_text":    kind_colors(icons.COLOR_UI),
-                "ui_textbox": kind_colors(icons.COLOR_UI),
-                "ui_image":   kind_colors(icons.COLOR_UI),
-                "ui_element": kind_colors(icons.COLOR_UI),
-                "ui_layout":  kind_colors(icons.COLOR_UI),
-                "empty":  (C.BG_BASE, C.BORDER_MID, C.TEXT_MUTED),
-            }
-        return cls._PALETTE
-
     def set_header(self, kind: str, type_text: str, name_text: str, editable: bool = True):
         """kind : clé de palette (voir _palette()). editable=False → lecture seule
         (ex: caméra, ou un contexte où le renommage se fait ailleurs)."""
-        bg, tc, nc = self._palette().get(kind, self._palette()["empty"])
         editable = editable and kind != "empty"
-        self.setStyleSheet(f"background:{bg};")
-        self._type_lbl.setStyleSheet(f"color:{tc}; font-size:8pt; font-weight:bold;")
+        # Même fond que le corps de l'inspecteur : l'en-tête ne dessine pas de
+        # bande à lui. Le nom éditable est un vrai champ (fond + contour) ;
+        # en lecture seule il redevient du texte nu.
+        self.setStyleSheet(f"background:{C.BG_PANEL};")
+        self._type_lbl.setStyleSheet(
+            f"color:{C.TEXT_DIM}; font-size:8pt; font-weight:bold;")
+        field = (f"background:{C.BG_INPUT}; border:1px solid {C.BORDER_MID}; border-radius:3px;"
+                 f"padding:1px 6px;") if editable else "background:transparent; border:none; padding:1px 0;"
         self._name_edit.setStyleSheet(
-            f"background:transparent; color:{nc}; font-size:13pt; font-weight:bold;"
-            f"border:none; border-bottom:1px solid {C.BORDER_MID if editable else 'transparent'};"
-            f"padding:0;"
+            f"QLineEdit{{color:{C.TEXT_HI}; font-size:13pt; font-weight:bold; {field}}}"
+            f"QLineEdit:focus{{border-color:{C.ACCENT};}}"
         )
         self._name_edit.setReadOnly(not editable)
         self._name_edit.setCursor(

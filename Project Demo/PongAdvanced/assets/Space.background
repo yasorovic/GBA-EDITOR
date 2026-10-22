@@ -265,7 +265,10 @@
       "pre_merge_palettes": 100,
       "final_palettes": 3,
       "unique_tiles": 196,
-      "tiles_merged": 404
+      "tiles_merged": 404,
+      "src_indexed": false,
+      "src_colors": -1,
+      "src_capped": true
     }
   }
 }

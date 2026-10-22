@@ -2,13 +2,13 @@
 """Panneau gauche (haut) — contenu de la scène ACTIVE : acteurs + mise en
 page UI. Sépare deux questions distinctes que l'ancien panneau unique
 posait ensemble : « quelles scènes/prefabs/scripts existent dans le projet »
-(AssetsFinderPanel, cf. assets_finder_panel.py) et « qu'est-ce qu'il y a DANS
+(SceneLibraryPanel, cf. scene_library_panel.py) et « qu'est-ce qu'il y a DANS
 la scène que j'édite en ce moment » (ce module).
 
 Le vocabulaire de l'arbre (rôles QTreeWidgetItem, types de nœud, icônes,
 `_lua_handle`) vit ICI : c'est le seul arbre du Scene Manager à en avoir
 besoin depuis que la liste projet est rendue par le composant partagé
-(ui/common/asset_finder.py)."""
+(ui/common/asset_library.py)."""
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QTreeWidget,
@@ -133,7 +133,7 @@ _SEL_BG  = C.BG_SEL       # fond sélection périwinkle
 _SEL_FG  = C.ACCENT       # texte/liseré sélection
 _TEXT    = C.TEXT_NORM
 _DIM     = C.TEXT_DIM
-# Plus de code couleur par type d'asset dans le finder : texte en tons de
+# Plus de code couleur par type d'asset dans la library : texte en tons de
 # thème, icônes en neutre (COLOR_DEFAULT), distinction par forme d'icône.
 # Le code couleur ne subsiste qu'aux niveaux locaux (scene canvas) et dans
 # l'en-tête d'inspecteur (AssetHeaderBar).
@@ -176,7 +176,7 @@ class _Tree(QTreeWidget):
             | QAbstractItemView.EditTrigger.EditKeyPressed
         )
         self.setStyleSheet(QSS.tree_widget)
-        # Même grammaire de sélection que les finders (active / primaire / passive)
+        # Même grammaire de sélection que les libraries (active / primaire / passive)
         # — source unique, cf. ui/common/selection_grammar.
         self.setItemDelegate(RowSelectionDelegate(self))
         self.setFrameShape(QFrame.Shape.NoFrame)
@@ -600,7 +600,7 @@ class _ActiveSceneTree(_Tree):
         self._highlight(T_CAMERA, camera)
 
     def _highlight(self, node_type: str, obj):
-        # Même geste partagé que le project viewer ; ici le critère est le type
+        # Même geste partagé que la Scene library ; ici le critère est le type
         # de nœud plus l'identité de l'objet, et on cadre sur la 1re occurrence.
         highlight_matching(
             self, lambda node: node.data(0, _ROLE_TYPE) == node_type
@@ -634,6 +634,9 @@ class _ActiveSceneTree(_Tree):
             # L'événement ``itemSelectionChanged`` ci-dessus porte aussi les
             # modificateurs Ctrl/Shift ; ne pas écraser la sélection multiple.
             return
+        elif typ == T_SCENE:
+            # La ligne racine EST la scène : son inspecteur (mode, musique, script, fonds), pas celui du projet.
+            get_bus().select(self._scene)
         elif typ == T_CAMERA:
             get_bus().select(CameraSelection(self._scene, item.data(0, _ROLE_OBJ)))
         elif typ == T_UI_ELEM:
@@ -787,13 +790,24 @@ class _ActiveSceneTree(_Tree):
         if target_item is None or layout is None:
             return
         ttype = target_item.data(0, _ROLE_TYPE)
+
+        def refuse_other_interface():
+            # Un élément ne change pas d'interface par glisser-déposer : on le dit, et l'arbre reprend l'état du modèle
+            # plutôt que de laisser croire à un déplacement qui n'a pas eu lieu.
+            get_dispatcher().status(label("scttree.ui_drop_other_interface"))
+            QTimer.singleShot(0, self._panel.refresh)
+
         if ttype == T_UI_LAYOUT:
             if target_item.data(0, _ROLE_OBJ) is not layout:
-                return                         # autre mise en page → refus
+                refuse_other_interface()       # autre mise en page → refus
+                return
             new_parent, before = "", None      # lâché sur « Interface » = racine
         elif ttype == T_UI_ELEM:
             target = target_item.data(0, _ROLE_OBJ)
-            if target is dragged or target_item.data(0, _ROLE_PATH) is not layout:
+            if target is dragged:
+                return
+            if target_item.data(0, _ROLE_PATH) is not layout:
+                refuse_other_interface()
                 return
             if indicator == Pos.OnItem:
                 new_parent, before = target.name, None
@@ -1122,7 +1136,14 @@ class _ActiveSceneTree(_Tree):
         # avant que cet appel ne rende la main. `item` est un QTreeWidgetItem
         # que cette reconstruction a détruit — ne plus y toucher après.
         old_name = el.name
-        proj.rename_ui_element(layout, el, new_name)
+        from ui.scene_manager.ui_element_name import resolve_ui_element_name
+        chosen = resolve_ui_element_name(self._panel, proj, layout, el, new_name)
+        if chosen is None:                       # l'auteur choisira un autre nom : l'ancien reste
+            self.blockSignals(True)
+            item.setText(0, el.name)
+            self.blockSignals(False)
+            return
+        proj.rename_ui_element(layout, el, chosen)
         if self._panel._content_state and self._scene:
             self._panel._content_state.rename_member(
                 self._scene.name, f"ui_element:{layout.name}:{old_name}",
@@ -1142,7 +1163,7 @@ class _ActiveSceneTree(_Tree):
             # Émet "renamed" → "project_tree_changed" en cascade SYNCHRONE :
             # l'arbre est déjà reconstruit à ce point, `item` déjà détruit —
             # ne plus y toucher après cet appel (même mise en garde que
-            # ci-dessus et que `_commit_rename_scene` dans assets_finder_panel).
+            # ci-dessus et que `_commit_rename_scene` dans scene_library_panel).
             old_name = actor.name
             if not proj.rename_actor(actor, new_name, scene=self._scene):
                 # Nom déjà pris dans la scène : refusé, la ligne reprend l'ancien nom.
@@ -1406,7 +1427,7 @@ class _PrioritySceneTree(_Tree):
 class SceneTreePanel(QWidget):
     # Un élément d'UI a été créé / déplacé / renommé / supprimé depuis
     # l'arbre : le scene_editor sauve et redessine le canvas (câblé dans
-    # window.py) — même contrat que l'ancien AssetsFinderPanel.
+    # window.py) — même contrat que l'ancien SceneLibraryPanel.
     ui_layout_changed = pyqtSignal()
     # Ensemble de clés (actor:/camera:/ui:) que le Canvas masque localement.
     editor_visibility_changed = pyqtSignal(object)

@@ -52,7 +52,8 @@ class PaletteUsageCard(QWidget):
         self._project = None
         self._bank_name: Optional[str] = None
         self.setMinimumHeight(_MIN_H)
-        self.setStyleSheet(f"background:{C.BG_RAISED}; border-left:1px solid {C.BORDER};")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(f"{type(self).__name__}{{background:{C.BG_PANEL}; border-left:1px solid {C.BORDER};}}")
         self._build()
 
     # ── Construction ──────────────────────────────────────────────

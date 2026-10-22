@@ -1,6 +1,6 @@
-"""Les chemins rapides des finders rendent les mêmes arbres que les parcours qu'ils remplacent."""
-from ui.common import finder_fold_state
-from ui.common.asset_finder import dir_nodes
+"""Les chemins rapides des libraries rendent les mêmes arbres que les parcours qu'ils remplacent."""
+from ui.common import library_fold_state
+from ui.common.asset_library import dir_nodes
 
 
 def _shape(nodes):
@@ -24,11 +24,11 @@ def test_dir_nodes_lists_folders_first_then_matching_files_alphabetically(tmp_pa
 
 
 def test_fold_state_reads_through_the_cache(monkeypatch):
-    monkeypatch.setattr(finder_fold_state, "_expanded", set())
-    monkeypatch.setattr(finder_fold_state, "_settings",
+    monkeypatch.setattr(library_fold_state, "_expanded", set())
+    monkeypatch.setattr(library_fold_state, "_settings",
                         lambda: type("S", (), {"setValue": lambda *a: None, "remove": lambda *a: None})())
-    assert not finder_fold_state.is_expanded("folder/x")
-    finder_fold_state.set_expanded("folder/x", True)
-    assert finder_fold_state.is_expanded("folder/x")
-    finder_fold_state.set_expanded("folder/x", False)
-    assert not finder_fold_state.is_expanded("folder/x")
+    assert not library_fold_state.is_expanded("folder/x")
+    library_fold_state.set_expanded("folder/x", True)
+    assert library_fold_state.is_expanded("folder/x")
+    library_fold_state.set_expanded("folder/x", False)
+    assert not library_fold_state.is_expanded("folder/x")

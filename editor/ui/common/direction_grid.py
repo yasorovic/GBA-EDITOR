@@ -56,7 +56,7 @@ def _styles(radius: int) -> tuple[str, str, str]:
         f"background:{tint(C.ACCENT_COOL, 0.18)};}}"
     )
     omni = (
-        f"QToolButton{{color:{C.TEXT_DIM};background:{C.BG_DEEP};"
+        f"QToolButton{{color:{C.TEXT_DIM};background:{C.BG_INPUT};"
         f"border:1px solid {C.BORDER_DARK};border-radius:{radius}px;padding:0;}}"
         f"QToolButton:hover{{color:{C.TEXT_HI};background:{C.BG_HOVER};}}"
         f"QToolButton:checked{{color:{C.ACCENT};border:2px solid {C.ACCENT};"

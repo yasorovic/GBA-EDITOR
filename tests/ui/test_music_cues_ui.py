@@ -46,7 +46,7 @@ def editor(qapp, project, monkeypatch):
 
 
 def _module(project: Project, name: str = "Theme", orders=None):
-    folder = project.assets_dir / "music"
+    folder = project.user_library_dir / "music"
     folder.mkdir(parents=True, exist_ok=True)
     (folder / f"{name}.it").write_bytes(F.make_it(orders=orders or [0] * 8))
     return create(project, "music", folder / f"{name}.it")
@@ -150,7 +150,7 @@ def test_choisir_une_cible_pose_ou_change_un_repere_et_le_supprimer_l_efface(edi
 
 
 def test_les_reperes_d_un_wav_se_posent_a_la_milliseconde(editor, project):
-    path = _wav_file(project.assets_dir / "music", "Ambient")
+    path = _wav_file(project.user_library_dir / "music", "Ambient")
     music = create(project, "music", path)
     editor.load(project, music)
     strip = editor._strip
@@ -177,8 +177,8 @@ def test_des_reperes_ecrits_pour_un_autre_type_de_fichier_ne_se_reinterpretent_p
 
 
 def test_un_effet_cite_par_un_repere_est_garde_en_rom(project):
-    sfx = create(project, "sfx", _wav_file(project.assets_dir / "sfx", "Bip", 0.3))
-    unused = create(project, "sfx", _wav_file(project.assets_dir / "sfx", "Muet", 0.3))
+    sfx = create(project, "sfx", _wav_file(project.user_library_dir / "sfx", "Bip", 0.3))
+    unused = create(project, "sfx", _wav_file(project.user_library_dir / "sfx", "Muet", 0.3))
     music = _module(project)
     music.add_cue(0, CUE_SFX, sfx.name)
     sfx_names, _music_names = referenced_sound_names(project)
@@ -198,7 +198,7 @@ def test_un_repere_vers_un_nom_qui_n_existe_pas_est_un_avertissement(project):
 
 def test_un_jingle_module_n_a_ni_voie_des_reperes_ni_sections(editor, project):
     """Un jingle ne montre plus la voie des repères (elle ne servait pas) : seulement l'onde et, dessous, sa barre de découpe."""
-    folder = project.assets_dir / "jingles"
+    folder = project.user_library_dir / "jingles"
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "Fanfare.it").write_bytes(F.make_it(orders=[0]))
     jingle = create(project, "jingles", folder / "Fanfare.it")

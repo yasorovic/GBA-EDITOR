@@ -212,8 +212,8 @@ def test_save_read_garde_son_nom_litteral():
 class _FakeProject:
     """Le minimum que `refactor.script_paths` sait parcourir : le dossier `assets/` du projet."""
 
-    def __init__(self, assets_dir):
-        self.assets_dir = assets_dir
+    def __init__(self, user_library_dir):
+        self.user_library_dir = user_library_dir
 
 
 def _scripts(tmp_path, src: str) -> _FakeProject:

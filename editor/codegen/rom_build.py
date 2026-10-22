@@ -96,6 +96,9 @@ def path_too_long_message(p: Project) -> Optional[str]:
 # Le démarrage de `make` peut échouer sans raison (cf. `BuildWorker._run_cmd`) : on le relance, deux fois au plus.
 _MSYS_START_FAILURE = "fatal error - add_item"
 _TOOL_START_RETRIES = 2
+# `objcopy` ne peut pas réécrire une ROM qu'un émulateur tient ouverte (fichier mappé en mémoire : « Invalid argument »,
+# ou « Permission denied »). Le test d'ouverture de `_step_make` ne le voit pas, donc on le reconnaît à la sortie.
+_ROM_LOCK_SIGNS = ("Invalid argument", "Permission denied")
 # Un outil (make, grit, mmutil) qui ne rend pas la main en ce temps est tenu pour bloqué : sans limite, un `make` figé
 # gelait le build jusqu'à la fermeture de l'éditeur.
 _TOOL_TIMEOUT_SECONDS = 15 * 60
@@ -599,6 +602,11 @@ class BuildWorker(EventEmitter, threading.Thread):
                 # a échoué, et avec quel code, ferme le bloc.
                 self._emit("diagnostic", build_error(
                     f"failed (code {proc.returncode})", prefix.strip("[]")))
+                if any("objcopy" in line and any(s in line for s in _ROM_LOCK_SIGNS)
+                       for line in proc.stderr.splitlines()):
+                    self._emit("diagnostic", build_error(
+                        "the ROM could not be overwritten: it is probably still open in an emulator. "
+                        "Close it, then run the build again.", prefix.strip("[]")))
             return not failed
         except subprocess.TimeoutExpired:
             self._emit("diagnostic", build_error(

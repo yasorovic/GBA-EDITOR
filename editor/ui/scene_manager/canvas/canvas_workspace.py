@@ -161,7 +161,7 @@ class CanvasWorkspace(QWidget):
 
         `graph_state` (positions/présentation) et `folder_store` (dossiers
         d'assets, dont les groupes de scènes) sont les stores partagés possédés
-        par la fenêtre — mêmes objets que le project viewer. La vue Graphe ne
+        par la fenêtre — mêmes objets que la Scene library. La vue Graphe ne
         projette qu'à son premier affichage (pull mémoïsé) : `set_project` ne fait
         qu'attacher projet et stores, sans re-parser aucun script tant que
         l'utilisateur n'a pas basculé sur « Graph ».

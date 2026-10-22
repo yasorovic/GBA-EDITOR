@@ -31,7 +31,7 @@ def test_palette_bank_owns_the_canonical_hex_format():
 
 def test_deleted_hex_is_never_recreated_from_its_sidecar(tmp_path):
     project = Project.create(tmp_path / "MyGame", "MyGame")
-    source = (project.assets_dir / "palettes") / "_PICO-8.hex"
+    source = (project.user_library_dir / "palettes") / "_PICO-8.hex"
     source.unlink()
 
     reopened = Project.open(project.root)

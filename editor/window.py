@@ -47,7 +47,7 @@ from ui.screens import EditorScreen, ProjectScreen, plugin_screens, refresh_scre
 
 # ── Sous-composants UI ────────────────────────────────────────────
 sys.path.insert(0, str(Path(__file__).parent))
-from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
+from ui.scene_manager.scene_library_panel import SceneLibraryPanel
 from ui.scene_manager.scene_tree_panel import SceneTreePanel
 from ui.common.three_column_body import ThreeColumnBody
 from ui.common.build_panel import BuildPanel, ToolchainBar, AnimatedBuildButton
@@ -358,7 +358,7 @@ class SceneManagerScreen(QWidget):
     empilés : liste projet au-dessus, contenu de la scène active en-dessous).
 
     Assemblée par `MainWindow._build_scene_manager_screen` : ses colonnes sont
-    des attributs de la FENÊTRE (`assets_finder_panel`, `scene_tree_panel`,
+    des attributs de la FENÊTRE (`scene_library_panel`, `scene_tree_panel`,
     `scene_editor`, `_inspector`), lues depuis une trentaine d'endroits. Les
     faire descendre ici est un chantier à part — cette classe existe pour que
     l'écran porte le même contrat que les sept autres, et pour que la
@@ -366,9 +366,9 @@ class SceneManagerScreen(QWidget):
     dispersée dans
     `_refresh_ui`."""
 
-    def __init__(self, finder, scene_tree, canvas, inspector, parent=None):
+    def __init__(self, library, scene_tree, canvas, inspector, parent=None):
         super().__init__(parent)
-        self._finder     = finder
+        self._library     = library
         self._scene_tree = scene_tree
         self._canvas     = canvas
         self._inspector  = inspector
@@ -377,13 +377,13 @@ class SceneManagerScreen(QWidget):
         # Deux sidecars d'éditeur, UNE instance chacun par session, possédés ici
         # et partagés : positions du Graphe (`SceneGraphState`) et dossiers
         # d'assets (`AssetFolderStore`, dont les groupes de scènes du Graphe et
-        # les dossiers du project viewer sont deux vues). Deux instances du même
+        # les dossiers de la Scene library sont deux vues). Deux instances du même
         # fichier se désynchroniseraient.
         self._graph_state = SceneGraphState(project.root)
         self._folder_store = AssetFolderStore(project.root)
         self._folder_store.prune("scenes", {s.id for s in project.scenes})
-        self._finder.load_project(project)
-        self._finder.set_folder_store(self._folder_store)
+        self._library.load_project(project)
+        self._library.set_folder_store(self._folder_store)
         self._scene_tree.load_project(project)
         self._inspector.set_project(project)
         self._inspector.set_graph_state(self._graph_state)
@@ -444,7 +444,9 @@ class MainWindow(QMainWindow):
         self._sc_redo_y = QShortcut(QKeySequence("Ctrl+Y"), self)
         self._sc_redo_y.setContext(Qt.ShortcutContext.ApplicationShortcut)
         self._sc_redo_y.activated.connect(self._do_redo)
-        self._sc_redo_z = QShortcut(QKeySequence.StandardKey.Redo, self)
+        # Ctrl+Shift+Z explicite : `StandardKey.Redo` vaut déjà Ctrl+Y sous Windows, et deux raccourcis identiques
+        # dans le même contexte sont ambigus pour Qt, qui n'en active alors aucun (le Refaire clavier était mort).
+        self._sc_redo_z = QShortcut(QKeySequence("Ctrl+Shift+Z"), self)
         self._sc_redo_z.setContext(Qt.ShortcutContext.ApplicationShortcut)
         self._sc_redo_z.activated.connect(self._do_redo)
         self._restore_layout()
@@ -663,6 +665,7 @@ class MainWindow(QMainWindow):
     def _make_script_editor(self) -> QWidget:
         from ui.script_editor.script_editor import ScriptEditorScreen
         self._script_editor = ScriptEditorScreen()
+        self._script_editor.script_user_requested.connect(self._show_script_user)
         self._script_editor.back_requested.connect(
             lambda: self._switch_screen("Scenes")
         )
@@ -677,21 +680,18 @@ class MainWindow(QMainWindow):
 
         # ── Colonne 1 : Project Panel (haut) + Scene Tree (bas) ───
         # Deux questions distinctes, deux panneaux : « quelles scènes/prefabs/
-        # scripts existe-t-il dans le projet » (AssetsFinderPanel) et « qu'y
+        # scripts existe-t-il dans le projet » (SceneLibraryPanel) et « qu'y
         # a-t-il DANS la scène active » (SceneTreePanel — acteurs + mise en
         # page UI, à la façon du Scene dock de Godot).
-        self.assets_finder_panel = AssetsFinderPanel()
+        self.scene_library_panel = SceneLibraryPanel()
         self._setup_menu()
-        self.assets_finder_panel.scene_selected.connect(self._on_scene_selected)
-        self.assets_finder_panel.scene_add_requested.connect(self._add_scene)
-        self.assets_finder_panel.prefab_add_requested.connect(self._add_prefab)
-        self.assets_finder_panel.script_opened.connect(self.open_script)
-        self.assets_finder_panel.project_created.connect(self._new_project)
-        self.assets_finder_panel.project_opened.connect(self._on_home_open)
-        self.assets_finder_panel.prefab_uses_requested.connect(
+        self.scene_library_panel.scene_selected.connect(self._on_scene_selected)
+        self.scene_library_panel.scene_add_requested.connect(self._add_scene)
+        self.scene_library_panel.prefab_add_requested.connect(self._add_prefab)
+        self.scene_library_panel.project_created.connect(self._new_project)
+        self.scene_library_panel.project_opened.connect(self._on_home_open)
+        self.scene_library_panel.prefab_uses_requested.connect(
             lambda p: self._inspector.show_prefab_uses(p))
-        self.assets_finder_panel.script_uses_requested.connect(
-            lambda path: self._inspector.show_script_uses(path))
 
         self.scene_tree_panel = SceneTreePanel()
 
@@ -726,15 +726,15 @@ class MainWindow(QMainWindow):
         # Basculer Graphe → Scène ouvre la scène sélectionnée dans le graphe :
         # l'éditeur de scène pointe alors sur ce que l'auteur regardait.
         self.canvas_workspace.view_changed.connect(self._on_canvas_view_changed)
-        # Sélection croisée graphe ↔ project viewer (highlight, sans activation) :
+        # Sélection croisée graphe ↔ Scene library (highlight, sans activation) :
         # chaque vue surligne ce que l'autre sélectionne. Les gardes internes
-        # (`_syncing` côté graphe, `blockSignals` côté finder) évitent la boucle.
-        _graph.scenes_selected.connect(self.assets_finder_panel.highlight_scenes)
-        self.assets_finder_panel.scenes_selected.connect(_graph.highlight_scenes)
+        # (`_syncing` côté graphe, `blockSignals` côté library) évitent la boucle.
+        _graph.scenes_selected.connect(self.scene_library_panel.highlight_scenes)
+        self.scene_library_panel.scenes_selected.connect(_graph.highlight_scenes)
         # Créer un groupe dans une vue le fait apparaître dans l'autre : les deux
         # lisent le même store de dossiers, mais chacune doit se redessiner.
-        _graph.groups_changed.connect(self.assets_finder_panel.refresh)
-        self.assets_finder_panel.groups_changed.connect(_graph.reload_groups)
+        _graph.groups_changed.connect(self.scene_library_panel.refresh)
+        self.scene_library_panel.groups_changed.connect(_graph.reload_groups)
 
         # ── Colonne 3 : Inspector (pleine hauteur) ────────────────
         self._inspector = DynamicInspector()
@@ -742,7 +742,7 @@ class MainWindow(QMainWindow):
             lambda: self._switch_screen("Texts"))
         self._inspector.actor_changed.connect(self._on_inspector_actor_changed)
         self._inspector.groups_changed.connect(_graph.reload_groups)
-        self._inspector.groups_changed.connect(self.assets_finder_panel.refresh)
+        self._inspector.groups_changed.connect(self.scene_library_panel.refresh)
         self._inspector.edge_presentation_changed.connect(
             self.canvas_workspace.graph_view.refresh_edge_presentation)
         self._inspector.edge_script_changed.connect(
@@ -812,7 +812,7 @@ class MainWindow(QMainWindow):
         _d.on("windows_changed",        self.scene_editor.refresh_windows)
         _d.on("backdrop_changed",       self.scene_editor.refresh_backdrop)
         _d.on("status_message",        lambda msg: self._status.showMessage(msg, 6000))
-        _d.on("project_tree_changed",  self.assets_finder_panel.refresh)
+        _d.on("project_tree_changed",  self.scene_library_panel.refresh)
         _d.on("project_tree_changed",  self.scene_tree_panel.refresh)
         _d.on("project_tree_changed",  self._update_build_state)
         _d.on("disk_changed",          self._refresh_disk)
@@ -821,7 +821,6 @@ class MainWindow(QMainWindow):
         # (sinon il n'apprend le changement qu'au prochain showEvent). Hors écran,
         # inutile de re-parser : le showEvent s'en charge à la prochaine visite.
         _d.on("project_tree_changed",  self._refresh_graph_if_visible)
-        _d.on("scripts_changed",       self.assets_finder_panel._refresh_scripts)
         # lambda : _text_editor / _script_editor / _palette_editor sont construits
         # à leur PREMIÈRE VISITE (démarrage paresseux), donc après ce bloc
         # d'abonnement. On résout l'attribut au moment de l'émission, et un écran
@@ -844,7 +843,7 @@ class MainWindow(QMainWindow):
                                         self._inspector, sizes=(220, 760, 300))
         self._center_v_split = self._h_split.center_split
 
-        screen = SceneManagerScreen(self.assets_finder_panel, self.scene_tree_panel,
+        screen = SceneManagerScreen(self.scene_library_panel, self.scene_tree_panel,
                                     self.canvas_workspace, self._inspector)
         screen_layout = QVBoxLayout(screen)
         screen_layout.setContentsMargins(0, 0, 0, 0)
@@ -875,7 +874,7 @@ class MainWindow(QMainWindow):
         s.setValue("h_split", self._h_split.saveState())
         s.setValue("center_v_split", self._center_v_split.saveState())
         s.setValue("left_v_split", self._left_v_split.saveState())
-        on_project = self._left_tab_widget.currentWidget() is self.assets_finder_panel
+        on_project = self._left_tab_widget.currentWidget() is self.scene_library_panel
         s.setValue("left_tab", "project" if on_project else "disk")
         s.setValue("disk_layout", self.build_panel.disk.layout_mode())
         s.setValue("disk_grid_cell", self.build_panel.disk.grid_cell_width())
@@ -936,7 +935,7 @@ class MainWindow(QMainWindow):
             f"QMenuBar{{background:{C.BG_PANEL};color:{C.TEXT_NORM};font-family:{T.UI_STACK};font-size:{T.MD}px;padding:4px 4px;border-bottom:{C.SPLITTER_WIDTH}px solid {C.SPLITTER};}}"
             "QMenuBar::item{padding:4px 10px;border-radius:3px;}"
             f"QMenuBar::item:selected{{background:{C.BG_HOVER};}}"
-            f"QMenu{{background:{C.BG_RAISED};color:{C.TEXT_NORM};border:1px solid {C.BORDER_MID};font-family:{T.UI_STACK};font-size:{T.MD}px;}}"
+            f"QMenu{{background:{C.BG_RAISED};color:{C.TEXT_NORM};border:1px solid {C.SPLITTER};font-family:{T.UI_STACK};font-size:{T.MD}px;}}"
             "QMenu::item{padding:5px 20px 5px 12px;}"
             f"QMenu::item:selected{{background:{C.BG_SEL};}}"
         )
@@ -952,8 +951,8 @@ class MainWindow(QMainWindow):
         # même donnée.
         a_file_settings = QAction(label("common.settings"), self)
         a_quit = QAction(label("common.quit"), self); bind("file.quit", a_quit)
-        a_new.triggered.connect(self.assets_finder_panel._prompt_new)
-        a_open.triggered.connect(self.assets_finder_panel._prompt_open)
+        a_new.triggered.connect(self.scene_library_panel._prompt_new)
+        a_open.triggered.connect(self.scene_library_panel._prompt_open)
         a_save.triggered.connect(self._save_project)
         a_file_settings.triggered.connect(self._open_settings)
         a_quit.triggered.connect(self.close)
@@ -1182,6 +1181,9 @@ class MainWindow(QMainWindow):
             te.refresh()
         cart_mib = getattr(self.project.settings, "cartridge_mib", 4)
         self.build_panel.set_cartridge_mib(cart_mib)
+        # L'inspecteur de scène dit ce que la scène HÉRITE du projet (transition « From project (…) ») :
+        # sans relecture il affiche l'ancien réglage jusqu'à ce qu'on reselectionne la scène.
+        self._inspector.refresh_current()
         self._show_disk(None)       # l'arbre d'un autre projet ne doit pas survivre
         if self._left_tab_widget.currentWidget() is self.disk_tree_view:
             self._refresh_disk()    # Disk déjà à l'écran : pas de changement d'onglet pour le relire
@@ -1251,7 +1253,7 @@ class MainWindow(QMainWindow):
         """Prépare un écran lors de sa première visite pour ce projet.
 
         Les autres écrans restent volontairement inertes à l'ouverture : leur
-        finder n'a pas à désérialiser tous les assets juste parce qu'il existe
+        library n'a pas à désérialiser tous les assets juste parce qu'il existe
         dans un ``QStackedWidget`` invisible.
         """
         if not self.project or index in self._project_loaded_screen_indices:
@@ -1291,7 +1293,7 @@ class MainWindow(QMainWindow):
                     label("win.screen_error", name=spec.name, error=exc), 8000)
                 return
         if spec.name == "Sounds":
-            store = self.assets_finder_panel.folder_store
+            store = self.scene_library_panel.folder_store
             if store is not None:
                 widget.set_folder_store(store)
         self._project_loaded_screen_indices.add(index)
@@ -1363,7 +1365,7 @@ class MainWindow(QMainWindow):
         des scripts du projet."""
         if not self.project:
             return
-        match = next((p for p in self.project.assets_dir.rglob(filename)), None)
+        match = next((p for p in self.project.user_library_dir.rglob(filename)), None)
         if match is None:
             self._status.showMessage(label("win.script_not_found", name=filename), 4000)
             return
@@ -1371,9 +1373,9 @@ class MainWindow(QMainWindow):
 
     # ── Disk (arbre de assets/, lecture seule) ────────────────────
     def _left_tabs(self):
-        """Project viewer et Disk, côte à côte : le premier est ce que le projet
-        contient (scènes, prefabs, scripts), le second ce que le disque contient."""
-        self.assets_finder_panel.hide_title()
+        """Scene library et Disk, côte à côte : la première est ce que le projet
+        contient (scènes, prefabs), le second ce que le disque contient."""
+        self.scene_library_panel.hide_title()
         self.disk_tree_view = DiskTreeView()
         self.disk_tree_view.refresh_requested.connect(self._refresh_disk)
         self.disk_tree_view.folder_selected.connect(self._show_disk_folder)
@@ -1386,7 +1388,7 @@ class MainWindow(QMainWindow):
         self.disk_tree_view.set_drop_check(self._disk_drop_verdict)
         self.disk_tree_view.drop_blocked.connect(self._say_move_refused)
         tabs = tab_widget()
-        tabs.addTab(self.assets_finder_panel, label('assf.project_viewer'))
+        tabs.addTab(self.scene_library_panel, label('scenelibrary.scene_library'))
         add_disk_tab(tabs, self.disk_tree_view)
         tabs.currentChanged.connect(
             lambda i: self.disk_tree_view.refresh_requested.emit()
@@ -1397,12 +1399,12 @@ class MainWindow(QMainWindow):
         restore_tab_order(tabs, self._left_tab_keys(), QSettings(APP_NAME, "Layout").value("left_tab_order"))
         # Première ouverture : Disk. Ensuite, le dernier onglet vu (cf. _save_layout).
         saved = QSettings(APP_NAME, "Layout").value("left_tab")
-        tabs.setCurrentWidget(self.assets_finder_panel if saved == "project"
+        tabs.setCurrentWidget(self.scene_library_panel if saved == "project"
                               else self.disk_tree_view)
         return tabs
 
     def _left_tab_keys(self) -> tuple:
-        return (("project", self.assets_finder_panel), ("disk", self.disk_tree_view))
+        return (("project", self.scene_library_panel), ("disk", self.disk_tree_view))
 
     def _locate_file(self, path, name: str):
         """LOCATE : l'arbre et le panneau du bas de l'onglet Disk montrent `path`, sélectionné (cf. `ui/common/locate_bus.py`).
@@ -1434,7 +1436,7 @@ class MainWindow(QMainWindow):
         self.build_panel.show_disk_tab()
 
     def _disk_push(self, command, after=None):
-        """Une commande de l'onglet Disk : le surveillant suspendu, l'arbre et les finders remis d'accord après
+        """Une commande de l'onglet Disk : le surveillant suspendu, l'arbre et les libraries remis d'accord après
         chaque sens (exécution, annulation, refaire). `after` : le rafraîchissement, `_after_disk_change` par défaut."""
         from core.disk_commands import SuspendedCmd
         get_history().push(SuspendedCmd(RefreshAfterCmd(command, after or self._after_disk_change), self._watcher.suspended))
@@ -1454,7 +1456,7 @@ class MainWindow(QMainWindow):
         self._project_loaded_screen_indices.clear()
         if was_loaded:
             self._project_loaded_screen_indices.add(visible)
-        self.assets_finder_panel.refresh()
+        self.scene_library_panel.refresh()
         self._refresh_disk()
 
     def _create_disk_folder(self, parent: str):
@@ -1462,7 +1464,7 @@ class MainWindow(QMainWindow):
         if not self.project:
             return
         from core.disk_commands import CreateFolderCmd
-        command = CreateFolderCmd(Path(parent), label('disk.new_folder'), self.project.assets_dir,
+        command = CreateFolderCmd(Path(parent), label('disk.new_folder'), self.project.user_library_dir,
                                   around=self._watcher.suspended)
         self._disk_push(command)
         if command.created is not None:
@@ -1498,6 +1500,23 @@ class MainWindow(QMainWindow):
         prefab = get_dispatcher().export_actor_to_folder(actor, Path(folder))
         if prefab is not None:                       # l'onglet Disk s'est relu seul (« disk_changed »)
             self._status.showMessage(label("disk.prefab_created", name=prefab.name), 6000)
+
+    def open_asset_file(self, path: Path):
+        """Lancement avec un fichier d'asset ou un script en argument (cf. `core/launch_target`) : le projet est ouvert, on
+        montre le fichier dans son écran, comme un double-clic de l'onglet Disk."""
+        if not self.project:
+            return
+        if path.suffix == ".lua":
+            self.open_script(path)
+            return
+        from ui.common.disk_view import openable
+        self.project.load_all_resources()
+        node = next((n for n in disk_tree.build_disk_tree(self.project).walk() if n.path.resolve() == path), None)
+        target = openable(node) if node is not None else None
+        if target is None:
+            self._status.showMessage(label("disk.no_editor", name=path.name), 6000)
+            return
+        self._open_disk_asset(*target)
 
     def _open_disk_asset(self, family: str, name: str, path: str):
         """Double-clic sur un asset de l'onglet Disk : l'écran qui l'édite, l'asset choisi. Une famille sans écran dédié
@@ -1771,7 +1790,7 @@ class MainWindow(QMainWindow):
                     taken.add(root.name)
                     copies += [(p, root / p.relative_to(source)) for p in inside]
             elif readable(source):
-                copy = source_collisions.destination(source, target, overwrite, {Path(n).stem for n in taken})
+                copy = source_collisions.destination(source, target, overwrite, taken)
                 taken.add(copy.name)
                 copies.append((source, copy))
         if not copies:
@@ -1855,6 +1874,24 @@ class MainWindow(QMainWindow):
             return
         self._switch_screen("Scenes")
         self._bus.select(UIElementSelection(*match))
+
+    def _show_script_user(self, target):
+        """Clic sur une ligne de « Voir les utilisations » d'un script : ouvrir le Scene Manager et y
+        sélectionner l'acteur, le prefab ou la scène qui le pointe. La sélection vient APRÈS le
+        changement d'écran — _show_screen vide le bus."""
+        from core.models.scene import Actor
+        if not self.project:
+            return
+        if isinstance(target, Actor):
+            index = next((i for i, s in enumerate(self.project.scenes) if target in s.actors), None)
+            if index is None:
+                return
+            self._switch_screen("Scenes")
+            if self.project.active_scene is not self.project.scenes[index]:
+                self._on_scene_selected(index)
+        else:
+            self._switch_screen("Scenes")
+        self._bus.select(target)
 
     def _open_palette_usage(self, kind: str, name: str):
         """Clic sur une ligne de la carte « USAGE » du Palette Editor :
@@ -1957,7 +1994,7 @@ class MainWindow(QMainWindow):
         if not self.project:
             return
         self._project_loaded_screen_indices.clear()
-        self.assets_finder_panel.refresh()
+        self.scene_library_panel.refresh()
         self._refresh_ui()      # recharge l'écran visible (index absent du set)
 
     def _recheck_toolchain_on_focus(self, state):
@@ -2012,7 +2049,7 @@ class MainWindow(QMainWindow):
         self._bus.clear()      # nouvelle scène = nouvelle sélection
         self.scene_editor.load_project(self.project)
         self._inspector.show_scene(self.project.active_scene, self.project)
-        self.assets_finder_panel.highlight_active_scene(self.project.active_scene)
+        self.scene_library_panel.highlight_active_scene(self.project.active_scene)
         # Le liseré « scène active » du graphe suit la même bascule (la bascule
         # ne change pas l'empreinte du graphe, donc `refresh` ne le ferait pas).
         self.canvas_workspace.graph_view.set_active_scene(
@@ -2109,7 +2146,7 @@ class MainWindow(QMainWindow):
 
     def _create_blank(self, kind: str) -> str:
         """*Create blank* depuis un « + » : un asset vierge dans le dossier que l'onglet Disk affiche, en UNE entrée
-        d'historique. Rend son nom. Les vues d'arbre (project viewer, graphe) et le Disk se remettent d'accord seuls."""
+        d'historique. Rend son nom. Les vues d'arbre (Scene library, graphe) et le Disk se remettent d'accord seuls."""
         from core import asset_creation
         gesture = asset_creation.create_blank(self.project, kind, import_folder.import_folder(self.project))
         self._disk_push(gesture.command, after=self._after_tree_change)
@@ -2133,8 +2170,8 @@ class MainWindow(QMainWindow):
     def _add_scene(self):
         if not self.project: return
         name = self._create_scene()
-        self.assets_finder_panel.refresh()
-        self.assets_finder_panel.begin_rename_scene(name)
+        self.scene_library_panel.refresh()
+        self.scene_library_panel.begin_rename_scene(name)
 
     def _create_scene_from_graph(self, x: float, y: float):
         """Clic-droit « Créer une scène ici » dans le graphe : même création que
@@ -2149,8 +2186,8 @@ class MainWindow(QMainWindow):
     def _add_prefab(self):
         if not self.project: return
         name = self._create_blank("prefab")
-        self.assets_finder_panel.refresh()
-        self.assets_finder_panel.begin_rename_prefab(name)
+        self.scene_library_panel.refresh()
+        self.scene_library_panel.begin_rename_prefab(name)
 
     def _on_scene_changed(self):
         """Fin de drag actor ou déplacement caméra — sauvegarder via le dispatcher."""
@@ -2267,7 +2304,7 @@ class MainWindow(QMainWindow):
         # Resynchro des ITEMS du canvas depuis le modèle (sprites, caméras,
         # zones) — sans reset zoom/pan/BG. Reposer les seuls sprites laissait un
         # item de caméra ou de zone annulé à sa position draggée (cf. Correctifs).
-        self.assets_finder_panel.refresh()
+        self.scene_library_panel.refresh()
         self.scene_tree_panel.refresh()
         self.scene_editor.reload_scene_items()
         self._update_gba_bar()
@@ -2400,7 +2437,7 @@ class MainWindow(QMainWindow):
             warning = asset_reconciliation.resync_background_png(self.project, p)
         # Le fond retouché reste celui qu'on regardait : `select` le remet à
         # l'écran plutôt que de renvoyer au premier de la liste.
-        self._bg_editor._refresh_finder(select=p.stem)
+        self._bg_editor._refresh_library(select=p.stem)
         self.scene_editor.load_project(self.project)
         self._update_gba_bar()
         self._status.showMessage(warning or label("win.bg_updated", name=p.stem),

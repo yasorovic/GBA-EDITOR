@@ -1,5 +1,5 @@
 """
-ui/common/asset_finder.py — LE panneau qui liste les assets d'un projet.
+ui/common/asset_library.py — LE panneau qui liste les assets d'un projet.
 
 Un seul composant pour toutes les familles (sprites, scènes, prefabs, fonds,
 scripts, polices, palettes, sfx, musiques, tables). Les écrans ne décrivent que
@@ -28,7 +28,7 @@ les familles adossées à un `ResourceStore` n'en rendent qu'un seul niveau —
 - les scripts lisent le DISQUE, parce que c'est leur vérité à eux : ce sont des
   fichiers `.lua`, sans modèle `Resource` qui les tiendrait en mémoire.
 
-Cf. docs/asset-finder.md pour l'état des lieux et la décision.
+Cf. docs/asset-library.md pour l'état des lieux et la décision.
 """
 from __future__ import annotations
 
@@ -53,8 +53,8 @@ from PyQt6.QtCore import (
 
 from ui.common.theme import C, T, S, QSS, ui_font
 from ui.common.selection_grammar import RowSelectionDelegate
-from ui.common import finder_fold_state as fold_state
-from ui.common.widgets import W, FinderSection
+from ui.common import library_fold_state as fold_state
+from ui.common.widgets import W, LibrarySection
 from ui.common.icons import get as _ico, folder_icon, COLOR_DEFAULT, COLOR_FOLDER
 from ui.common.locate_bus import get_locate_bus
 from ui.common.reveal import reveal_in_file_manager
@@ -101,7 +101,7 @@ class FolderScheme:
     """Rend une famille rangeable en dossiers d'auteur, imbricables.
 
     Le panneau la construit en capturant le store partagé (`AssetFolderStore`) et
-    la famille ; le finder ne connaît que ces opérations, jamais le sidecar. Une
+    la famille ; la library ne connaît que ces opérations, jamais le sidecar. Une
     famille sans `FolderScheme` n'a pas de dossiers éditables — c'est l'opt-in qui
     laisse les autres familles inchangées le temps qu'elles l'adoptent."""
 
@@ -132,7 +132,7 @@ class FolderScheme:
             move=lambda asset, fid: store.move_member(family, asset.id, fid),
             folder_of=lambda asset: store.folder_of(family, asset.id),
             group=lambda assets, parent: store.create_group(
-                family, label("assetfind.group_default_name"), [a.id for a in assets], parent),
+                family, label("assetlibrary.group_default_name"), [a.id for a in assets], parent),
         )
 
 
@@ -169,10 +169,10 @@ def folded_nodes(raw_assets: list[AssetNode], scheme: FolderScheme) -> list[Asse
 
 @dataclass(frozen=True)
 class AssetKind:
-    """Ce qu'un écran déclare pour qu'une famille s'affiche dans un finder.
+    """Ce qu'un écran déclare pour qu'une famille s'affiche dans une library.
 
     Tout est optionnel sauf `label`, `icon` et `nodes` : une famille sans
-    `rename` n'est simplement pas renommable depuis le finder, et son entrée de
+    `rename` n'est simplement pas renommable depuis la library, et son entrée de
     menu n'apparaît pas. On ne grise pas une action impossible, on ne la propose
     pas — l'éditeur rend le matériel fidèlement, il ne le commente pas.
     """
@@ -181,7 +181,7 @@ class AssetKind:
     icon: str                                    # clé ui/common/icons.py
     nodes: Callable[[Any], list[AssetNode]]      # projet -> arbre (LA vérité)
 
-    # Icône neutre par défaut : dans un finder, un type se lit à la FORME de
+    # Icône neutre par défaut : dans une library, un type se lit à la FORME de
     # l'icône, pas à sa couleur (cf. project_theme_gba_redesign). `icon_of`
     # n'existe que pour les familles dont l'icône dépend de l'asset lui-même —
     # l'extension d'un script, les couleurs d'une palette.
@@ -201,7 +201,7 @@ class AssetKind:
 
     # (projet, asset, nouveau_nom) -> nom RÉELLEMENT appliqué ("" si refusé).
     rename: Optional[Callable[[Any, Any, str], str]] = None
-    # (projet, asset) -> Command de suppression, PAS encore poussée. Le finder
+    # (projet, asset) -> Command de suppression, PAS encore poussée. La library
     # la pousse (une seule ligne), ou groupe tout un lot dans un `MacroCmd` pour
     # un unique Ctrl+Z. La bâtir sans l'exécuter est ce qui rend le lot possible.
     delete: Optional[Callable[[Any, Any], Any]] = None
@@ -233,13 +233,13 @@ class AssetKind:
     # La famille d'`AssetFolderStore` où ses assets se rangent en dossiers d'auteur
     # ("" = pas de dossiers : la famille s'affiche à plat ou en arbre deviné). Une
     # famille rangeable a des assets qui portent un `id` (tout `Resource`) — pas les
-    # scripts, dont le disque est la vérité. Le finder installe seul le rangement
-    # (cf. `AssetFinder.set_folder_store`).
+    # scripts, dont le disque est la vérité. La library installe seul le rangement
+    # (cf. `AssetLibrary.set_folder_store`).
     folder_family: str = ""
     # Le « + » ouvre un menu de types à créer : il porte l'icône « + ▾ » plutôt que le « + » nu.
     add_menu: bool = False
     # (projet, [asset]) -> [Duplication], commandes NON poussées (cf. `core.asset_duplication`). Prend le LOT d'un coup :
-    # les noms des copies doivent être uniques entre eux. Le finder les pousse en une entrée d'historique. Une famille
+    # les noms des copies doivent être uniques entre eux. La library les pousse en une entrée d'historique. Une famille
     # sans `duplicate` n'offre ni l'entrée de menu ni Ctrl+D.
     duplicate: Optional[Callable[[Any, list], list]] = None
 
@@ -357,7 +357,7 @@ _LOCATE_ICON = 14
 
 
 class _LocateDelegate(RowSelectionDelegate):
-    """La grammaire de sélection des finders, plus l'icône Locate dans sa colonne.
+    """La grammaire de sélection des libraries, plus l'icône Locate dans sa colonne.
 
     L'icône n'est peinte que sur la ligne survolée ou sélectionnée : une liste de cinquante assets
     n'est pas une colonne de cinquante cibles. Elle s'allume (accent) quand c'est elle qu'on survole."""
@@ -382,7 +382,7 @@ class _LocateDelegate(RowSelectionDelegate):
 class _KindTree(QTreeWidget):
     """L'arbre d'UNE famille. Ne connaît que son `AssetKind` et son panneau."""
 
-    def __init__(self, panel: "AssetFinder", kind: AssetKind):
+    def __init__(self, panel: "AssetLibrary", kind: AssetKind):
         super().__init__()
         self._panel = panel
         self._kind = kind
@@ -653,7 +653,7 @@ class _KindTree(QTreeWidget):
                 if state:
                     item.setToolTip(0, state[1])
                 if self._kind.file_of is not None:
-                    item.setToolTip(_LOCATE_COL, tooltip(title=label('common.locate'), body=label('assetfind.locate_tip')))
+                    item.setToolTip(_LOCATE_COL, tooltip(title=label('common.locate'), body=label('assetlibrary.locate_tip')))
                 if node.children:
                     self._fill(item, node.children)
 
@@ -702,7 +702,7 @@ class _KindTree(QTreeWidget):
 
         L'émission proprement dite est DIFFÉRÉE (`QTimer.singleShot(0, ...)`) :
         activer une scène rafraîchit ce panneau (`window._on_scene_selected` ->
-        `assets_finder_panel.refresh()` -> `populate()`), qui reconstruit CET
+        `scene_library_panel.refresh()` -> `populate()`), qui reconstruit CET
         arbre — CELUI-LÀ MÊME qui est en train de traiter le clic qui a causé
         cette activation. Le faire dans le même appel, c'est reconstruire
         l'arbre PENDANT que Qt peint/termine l'évènement souris dessus : c'est ce
@@ -714,7 +714,7 @@ class _KindTree(QTreeWidget):
         QTimer.singleShot(0, lambda k=self._kind.label, os=objs: self._emit_selection(k, os))
 
     def _emit_selection(self, kind_label: str, objs: list) -> None:
-        # L'ENSEMBLE, pour la sélection croisée d'un écran (project viewer ↔ graphe).
+        # L'ENSEMBLE, pour la sélection croisée d'un écran (Scene library ↔ graphe).
         self._panel.selection_changed.emit(kind_label, objs)
         if not objs:
             return
@@ -733,7 +733,7 @@ class _KindTree(QTreeWidget):
         `fold_to_folder` : si un asset est CACHÉ sous un dossier replié, on
         surligne À SA PLACE le dossier replié visible le plus haut. Sans ça,
         sélectionner dans le graphe une scène rangée dans un groupe replié côté
-        project viewer ne donnerait aucun retour — la ligne de la scène n'y est
+        Scene library ne donnerait aucun retour — la ligne de la scène n'y est
         pas dépliée. On garde ainsi toujours un repère dans le panneau."""
         wanted = {id(o) for o in objs}
         targets: list[QTreeWidgetItem] = []
@@ -774,7 +774,7 @@ class _KindTree(QTreeWidget):
     # ── Glisser vers le canvas ────────────────────────────────────
 
     def startDrag(self, _actions):
-        """Le finder ne sait pas ce qu'on fait d'un asset lâché sur un canvas ;
+        """La library ne sait pas ce qu'on fait d'un asset lâché sur un canvas ;
         il ne fait qu'annoncer lequel, dans le type MIME que la famille déclare.
         C'est le canvas qui décide (instancier un prefab, poser un fond animé…)."""
         item = self.currentItem()
@@ -797,13 +797,13 @@ class _KindTree(QTreeWidget):
         menu = QMenu(self)
         menu.setStyleSheet(QSS.menu)
         menu.setFont(QFont(T.UI, T.MD))
-        new_label = (label('assetfind.new_subfolder') if folder_id
-                     else label('assetfind.new_folder'))
+        new_label = (label('assetlibrary.new_subfolder') if folder_id
+                     else label('assetlibrary.new_folder'))
         menu.addAction(new_label).triggered.connect(
             lambda _=False, p=folder_id: self._create_folder(scheme, p))
         if folder_id is not None:
             menu.addSeparator()
-            menu.addAction(label('assetfind.rename')).triggered.connect(
+            menu.addAction(label('assetlibrary.rename')).triggered.connect(
                 lambda _=False, f=folder_id: self._edit_folder(f))
             menu.addSeparator()
             menu.addAction(label('scttree.delete_folder')).triggered.connect(
@@ -811,7 +811,7 @@ class _KindTree(QTreeWidget):
         menu.exec(self.viewport().mapToGlobal(pos))
 
     def _create_folder(self, scheme, parent_id):
-        folder = scheme.create(label('assetfind.folder_default_name'), parent_id)
+        folder = scheme.create(label('assetlibrary.folder_default_name'), parent_id)
         self._panel.refresh()
         self._panel.folders_changed.emit()
         if folder is not None:
@@ -873,11 +873,15 @@ class _KindTree(QTreeWidget):
         it = self._locate(obj)
         if it is None:
             return False
+        parent = it.parent()
+        while parent is not None:          # une ressource sélectionnée dans un dossier replié resterait invisible
+            parent.setExpanded(True)
+            parent = parent.parent()
         self.setCurrentItem(it)
         # `setCurrentItem` sélectionne l'item : le signal de sélection stabilisée
         # (`itemSelectionChanged`) remonte SYNCHRONE jusqu'à
         # `window._on_scene_selected`, qui rafraîchit ce panneau
-        # (`assets_finder_panel.refresh()`) avant de rendre la main — `it` est
+        # (`scene_library_panel.refresh()`) avant de rendre la main — `it` est
         # alors déjà détruit. Même mise en garde que `_on_item_changed` plus bas.
         if not sip.isdeleted(it):
             self.scrollToItem(it)
@@ -998,7 +1002,7 @@ class _KindTree(QTreeWidget):
         if kind.rename is not None:
             if not menu.isEmpty():
                 menu.addSeparator()
-            act = menu.addAction(label('assetfind.rename'))
+            act = menu.addAction(label('assetlibrary.rename'))
             act.setShortcut("F2")       # affiché ; géré par EditKeyPressed
             # Pas `item` capturé : le menu ouvert laisse tourner la boucle
             # d'évènements, un refresh de l'arbre peut le détruire avant le
@@ -1017,7 +1021,7 @@ class _KindTree(QTreeWidget):
             if scheme.group is not None:
                 if not menu.isEmpty():
                     menu.addSeparator()
-                menu.addAction(label('assetfind.group')).triggered.connect(
+                menu.addAction(label('assetlibrary.group')).triggered.connect(
                     lambda _=False, o=obj: self._group([o]))
             self._add_move_to_folder(menu, scheme, obj)
 
@@ -1036,7 +1040,7 @@ class _KindTree(QTreeWidget):
         folders = scheme.folders()
         if not menu.isEmpty():
             menu.addSeparator()
-        sub = menu.addMenu(label('assetfind.move_to_folder'))
+        sub = menu.addMenu(label('assetlibrary.move_to_folder'))
         sub.setFont(QFont(T.UI, T.MD))
         sub.setEnabled(bool(folders))
         for folder in folders:
@@ -1045,7 +1049,7 @@ class _KindTree(QTreeWidget):
             act.triggered.connect(
                 lambda _=False, fid=folder.id, o=obj: self._move_to_folder(scheme, o, fid))
         if current is not None:
-            menu.addAction(label('assetfind.remove_from_folder')).triggered.connect(
+            menu.addAction(label('assetlibrary.remove_from_folder')).triggered.connect(
                 lambda _=False, o=obj: self._move_to_folder(scheme, o, None))
 
     def _move_to_folder(self, scheme, obj, folder_id):
@@ -1069,19 +1073,19 @@ class _KindTree(QTreeWidget):
         menu.setStyleSheet(QSS.menu)
         menu.setFont(QFont(T.UI, T.MD))
         if kind.duplicate is not None:
-            dup = menu.addAction(label('assetfind.duplicate_selection', n=len(objs)))
+            dup = menu.addAction(label('assetlibrary.duplicate_selection', n=len(objs)))
             dup.setShortcut(shortcut_hints.bound("common.duplicate"))
             dup.triggered.connect(lambda _=False, os=list(objs): self._duplicate(os))
         scheme = self._panel.folder_scheme(kind.label)
         if scheme is not None:
             if scheme.group is not None:
-                menu.addAction(label('assetfind.group')).triggered.connect(
+                menu.addAction(label('assetlibrary.group')).triggered.connect(
                     lambda _=False, os=list(objs): self._group(os))
             self._add_move_many_to_folder(menu, scheme, objs)
         if kind.delete is not None:
             if not menu.isEmpty():
                 menu.addSeparator()
-            menu.addAction(label('assetfind.delete_selection', n=len(objs))).triggered.connect(
+            menu.addAction(label('assetlibrary.delete_selection', n=len(objs))).triggered.connect(
                 lambda _=False, os=list(objs): self._delete_many(os))
         if not menu.isEmpty():
             menu.exec(self.viewport().mapToGlobal(pos))
@@ -1091,14 +1095,14 @@ class _KindTree(QTreeWidget):
         un retour à la racine — le lot entier suit la cible choisie."""
         if not menu.isEmpty():
             menu.addSeparator()
-        sub = menu.addMenu(label('assetfind.move_to_folder'))
+        sub = menu.addMenu(label('assetlibrary.move_to_folder'))
         sub.setFont(QFont(T.UI, T.MD))
         folders = scheme.folders()
         sub.setEnabled(bool(folders))
         for folder in folders:
             sub.addAction(folder.name).triggered.connect(
                 lambda _=False, fid=folder.id, os=list(objs): self._move_many_to_folder(scheme, os, fid))
-        menu.addAction(label('assetfind.remove_from_folder')).triggered.connect(
+        menu.addAction(label('assetlibrary.remove_from_folder')).triggered.connect(
             lambda _=False, os=list(objs): self._move_many_to_folder(scheme, os, None))
 
     def _duplicate(self, objs):
@@ -1121,7 +1125,7 @@ class _KindTree(QTreeWidget):
                     scheme.move(copy.item, folder_id)
             self._panel.folders_changed.emit()
         self._panel.refresh()
-        get_dispatcher().status(label('assetfind.duplicated', n=len(copies)))
+        get_dispatcher().status(label('assetlibrary.duplicated', n=len(copies)))
         if len(copies) == 1 and kind.rename is not None:
             self.edit_obj(copies[0].item)
 
@@ -1135,7 +1139,7 @@ class _KindTree(QTreeWidget):
         used = usages_of(project, obj)
         if used:
             prompt = (kind.delete_prompt(obj) if kind.delete_prompt
-                      else label('assetfind.delete_name_ctrl_z_to_undo', name=name))
+                      else label('assetlibrary.delete_name_ctrl_z_to_undo', name=name))
             if QMessageBox.question(
                 self, label('common.delete'), _with_usages(prompt, used),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -1144,7 +1148,7 @@ class _KindTree(QTreeWidget):
         get_history().push(RefreshAfterCmd(kind.delete(project, obj), self._panel.refresh))
         self._panel.refresh()
         self._panel.emptied.emit(kind.label)
-        get_dispatcher().status(label('assetfind.deleted', n=1))
+        get_dispatcher().status(label('assetlibrary.deleted', n=1))
 
     def _delete_many(self, objs):
         """Supprime un lot en UNE entrée d'historique (`MacroCmd`) : un seul
@@ -1157,7 +1161,7 @@ class _KindTree(QTreeWidget):
         used = [f"{self._name_of(o)}: {line}" for o in objs for line in usages_of(project, o)]
         if used and QMessageBox.question(
             self, label('common.delete'),
-            _with_usages(label('assetfind.delete_confirm', n=n), used),
+            _with_usages(label('assetlibrary.delete_confirm', n=n), used),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         ) != QMessageBox.StandardButton.Yes:
             return
@@ -1166,19 +1170,19 @@ class _KindTree(QTreeWidget):
             MacroCmd(cmds, f"Delete {n} {kind.label.lower()}"), self._panel.refresh))
         self._panel.refresh()
         self._panel.emptied.emit(kind.label)
-        get_dispatcher().status(label('assetfind.deleted', n=n))
+        get_dispatcher().status(label('assetlibrary.deleted', n=n))
 
 
 # ──────────────────────────────────────────────────────────────────
 #  Le panneau
 # ──────────────────────────────────────────────────────────────────
 
-class AssetFinder(QWidget):
-    """Colonne « finder » d'un écran : une section repliable par famille.
+class AssetLibrary(QWidget):
+    """Colonne « library » d'un écran : une section repliable par famille.
 
-        finder = AssetFinder("Data finder", [DATA_TABLES])
-        finder.load_project(project)
-        finder.selected.connect(...)
+        library = AssetLibrary("Data library", [DATA_TABLES])
+        library.load_project(project)
+        library.selected.connect(...)
     """
 
     selected      = pyqtSignal(str, object)   # (AssetKind.label, asset)
@@ -1208,7 +1212,7 @@ class AssetFinder(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-        self._title = W.finder_bar(title)
+        self._title = W.library_bar(title)
         self._title_label = self._title.findChild(QLabel)
         root.addWidget(self._title)
 
@@ -1229,9 +1233,9 @@ class AssetFinder(QWidget):
         self._column.setSpacing(0)
 
         for kind in self._kinds:
-            # Titre en tons de thème : les finders n'ont plus de code couleur
+            # Titre en tons de thème : les libraries n'ont plus de code couleur
             # par famille, la distinction se fait à la forme de l'icône.
-            section = FinderSection(label(kind.label_key) if kind.label_key else kind.label)
+            section = LibrarySection(label(kind.label_key) if kind.label_key else kind.label)
             section.remember_fold(f"section/{kind.label}")
             tree = _KindTree(self, kind)
             self._trees[kind.label] = tree
@@ -1244,7 +1248,7 @@ class AssetFinder(QWidget):
                     tooltip(title=label(kind.add_tooltip_key),
                             body=label(kind.add_tip_key) if kind.add_tip_key else "")
                     if kind.add_tooltip_key
-                    else kind.add_tooltip or label('assetfind.add_an_item'))
+                    else kind.add_tooltip or label('assetlibrary.add_an_item'))
                 section.set_add_menu(kind.add_menu)
                 section.add_clicked.connect(lambda k=kind: self._add(k))
             self._column.addWidget(section)
@@ -1254,7 +1258,7 @@ class AssetFinder(QWidget):
         root.addWidget(scroll, 1)
 
     def show_only(self, labels):
-        """N'affiche que ces familles — le finder suit ce qu'on édite.
+        """N'affiche que ces familles — la library suit ce qu'on édite.
 
         Une banque d'effets n'a rien à faire à côté d'un graphe musical : elle
         ne s'y glisse pas et ne s'y référence pas. Masquer plutôt que griser,
@@ -1269,7 +1273,7 @@ class AssetFinder(QWidget):
         self._title.setVisible(visible)
 
     def set_title(self, title: str) -> None:
-        """Nomme le contexte actuellement parcouru par ce finder."""
+        """Nomme le contexte actuellement parcouru par cette library."""
         if self._title_label is not None:
             self._title_label.setText(title)
 
@@ -1349,7 +1353,10 @@ class AssetFinder(QWidget):
     def select(self, kind_label: str, obj) -> bool:
         """Sélectionne `obj` — navigation venue d'un autre écran ou d'un undo."""
         tree = self._trees.get(kind_label)
-        return tree.select_obj(obj) if tree is not None else False
+        found = tree.select_obj(obj) if tree is not None else False
+        if found:
+            self._sections[kind_label].set_expanded(True)   # la section repliée cacherait la ressource qu'on montre
+        return found
 
     def current(self, kind_label: str):
         tree = self._trees.get(kind_label)
@@ -1359,7 +1366,7 @@ class AssetFinder(QWidget):
     def highlight_selection(self, kind_label: str, objs,
                             fold_to_folder: bool = False) -> None:
         """Surligne un lot d'assets sans l'activer ni réémettre — sélection venue
-        d'une autre vue du même écran (project viewer ↔ graphe).
+        d'une autre vue du même écran (Scene library ↔ graphe).
 
         `fold_to_folder` reporte le surlignage d'un asset caché sur son dossier
         replié (retour visuel garanti même groupe fermé, cf. `highlight_objs`)."""
@@ -1378,7 +1385,7 @@ class AssetFinder(QWidget):
 
     def begin_rename(self, kind_label: str, obj):
         """Ouvre l'édition en place sur `obj` — après une création faite ailleurs
-        que par le « + » du finder (le menu Fichier, un import)."""
+        que par le « + » de la library (le menu Fichier, un import)."""
         tree = self._trees.get(kind_label)
         if tree is not None:
             tree.edit_obj(obj)
@@ -1400,9 +1407,9 @@ class AssetFinder(QWidget):
     # ── Actions ajoutées par l'écran ──────────────────────────────
 
     def set_folder_store(self, store) -> None:
-        """Range en dossiers d'auteur chaque famille de ce finder qui le déclare
+        """Range en dossiers d'auteur chaque famille de cette library qui le déclare
         (`AssetKind.folder_family`), dans le store partagé de la fenêtre. Les autres
-        restent inchangées. Un seul geste pour tous les finders."""
+        restent inchangées. Un seul geste pour tous les libraries."""
         for kind in self._kinds:
             if kind.folder_family:
                 self.set_folder_scheme(kind.label, FolderScheme.for_family(store, kind.folder_family))
@@ -1462,9 +1469,9 @@ class AssetFinder(QWidget):
         menu.setStyleSheet(QSS.menu)
         menu.setFont(QFont(T.UI, T.MD))
         menu.addAction(label(kind.add_tooltip_key) if kind.add_tooltip_key
-                       else kind.add_tooltip or label('assetfind.add_an_item')
+                       else kind.add_tooltip or label('assetlibrary.add_an_item')
                        ).triggered.connect(lambda _=False, k=kind: self._add_asset(k))
-        menu.addAction(label('assetfind.new_folder')).triggered.connect(
+        menu.addAction(label('assetlibrary.new_folder')).triggered.connect(
             lambda _=False, k=kind, s=scheme: self._trees[k.label]._create_folder(s, None))
         return menu
 
@@ -1474,4 +1481,5 @@ class AssetFinder(QWidget):
         if obj is not None:
             # Créé nommé d'office puis renommable en place : pas de dialogue qui
             # réclame un nom avant que la chose existe.
+            self._sections[kind.label].set_expanded(True)
             self._trees[kind.label].edit_obj(obj)

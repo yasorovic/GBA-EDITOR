@@ -27,8 +27,7 @@ from typing import Optional
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFrame,
-    QInputDialog, )
-from ui.common.popup import MessageBox as QMessageBox
+    QStackedWidget, )
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import pyqtSignal, QTimer, QFileSystemWatcher
 
@@ -43,19 +42,20 @@ from ui.common.three_column_body import ThreeColumnBody
 from .colors import _BG, _BG_HDR, _BORDER, _TEXT_HI, _TEXT_NORM, _C_EVENT
 from .lua_editor import LuaEditor
 from .sidebar_panel import SidebarPanel
-from .script_finder_panel import ScriptFinderPanel
+from .script_library_panel import ScriptLibraryPanel
+from .script_uses_panel import ScriptUsesPanel
 
 class ScriptEditorScreen(QWidget):
     """Écran complet d'édition de script Lua."""
 
     back_requested = pyqtSignal()
+    script_user_requested = pyqtSignal(object)   # Actor | Prefab | Scene qui utilise le script ouvert en consultation
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._path: Optional[Path] = None
         self._project = None
         self._dirty = False
-        self._root_scripts_dir: Optional[Path] = None
 
         self._refresh_timer = QTimer()
         self._refresh_timer.setSingleShot(True)
@@ -155,18 +155,39 @@ class ScriptEditorScreen(QWidget):
         ))
         self._editor.textChanged.connect(self._on_text_changed)
 
-        # ScriptFinderPanel — colonne droite
-        self._file_tree = ScriptFinderPanel()
+        # ScriptLibraryPanel — colonne droite
+        self._file_tree = ScriptLibraryPanel()
         self._file_tree.file_requested.connect(lambda p: self.open_script(Path(p)))
         self._file_tree.snippet_requested.connect(self._editor_insert_snippet)
+        self._file_tree.uses_requested.connect(self._show_script_uses)
+
+        # La colonne droite alterne : la bibliothèque, ou les utilisations d'un script.
+        self._uses_panel = ScriptUsesPanel()
+        self._uses_panel.edit_requested.connect(lambda p: self.open_script(Path(p)))
+        self._uses_panel.target_requested.connect(self.script_user_requested)
+        self._uses_panel.close_requested.connect(self._show_library)
+        self._right_column = QStackedWidget()
+        self._right_column.addWidget(self._file_tree)
+        self._right_column.addWidget(self._uses_panel)
 
         # Corps : trois colonnes redimensionnables à la souris, comme les autres
         # écrans. Le panneau de build s'accroche sous l'éditeur (cf. ThreeColumnBody).
         # childrenCollapsible=False : la poignée ne réduit pas une colonne à 0 par accident.
-        self.body = ThreeColumnBody(self._sidebar, self._editor, self._file_tree,
+        self.body = ThreeColumnBody(self._sidebar, self._editor, self._right_column,
                                     sizes=(220, 900, 224))
         self.body.setChildrenCollapsible(False)
         root.addWidget(self.body, 1)
+
+    # ── Utilisations d'un script ──────────────────────────────────────
+
+    def _show_script_uses(self, path: str):
+        if self._project is None:
+            return
+        self._uses_panel.load(path, self._project)
+        self._right_column.setCurrentWidget(self._uses_panel)
+
+    def _show_library(self):
+        self._right_column.setCurrentWidget(self._file_tree)
 
     # ── API publique ──────────────────────────────────────────────────
 
@@ -207,9 +228,6 @@ class ScriptEditorScreen(QWidget):
         self._project = project
         self._file_tree.set_project(project)
         self._refresh_catalogs()
-        if project:
-            self._root_scripts_dir = project.assets_dir
-            self._file_tree.set_root(project.assets_dir)
 
     def _refresh_catalogs(self):
         """Re-dérive ce qui dépend des CATALOGUES du projet : la section
@@ -323,29 +341,8 @@ class ScriptEditorScreen(QWidget):
     # ── Création de scripts ───────────────────────────────────────────
 
     def _create_script(self):
-        if not self._root_scripts_dir:
-            QMessageBox.warning(self, label("scred.no_project_title"),
-                                label("scred.no_project_msg"))
-            return
-        name, ok = QInputDialog.getText(self, label("scred.new_script_title"),
-                                        label("scred.script_name"))
-        if not ok or not name.strip():
-            return
-        name = name.strip()
-        if not name.endswith(".lua"):
-            name += ".lua"
-        self._root_scripts_dir.mkdir(parents=True, exist_ok=True)
-        path = self._root_scripts_dir / name
-        if path.exists():
-            QMessageBox.warning(self, label("scred.file_exists_title"),
-                                label("scred.file_exists_msg", name=name))
-            return
-        from scripting.script_templates import ScriptTemplateContext, generate_script_template
-        ctx = ScriptTemplateContext(kind="empty", name=name[:-4] if name.endswith(".lua") else name)
-        path.write_text(generate_script_template(ctx), encoding="utf-8", newline="\n")
-        self._file_tree.set_root(self._root_scripts_dir)
-        self._file_tree.highlight_file(path)
-        self.open_script(path)
+        """Le bouton « New script » : le même geste que le « + » de la bibliothèque (*Create blank*)."""
+        self._file_tree.add_script()
 
     # ── Navigation ───────────────────────────────────────────────────
 

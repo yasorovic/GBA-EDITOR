@@ -1,4 +1,4 @@
-"""Repli des sections et des dossiers des finders, retenu d'une session à l'autre.
+"""Repli des sections et des dossiers des libraries, retenu d'une session à l'autre.
 
 Préférence d'affichage locale (comme `disk_folder_colors`) : elle suit l'auteur,
 pas le projet. Tout est replié tant que l'auteur n'a rien déplié.
@@ -11,10 +11,10 @@ from core.app_info import APP_NAME
 
 
 def _settings() -> QSettings:
-    return QSettings(APP_NAME, "FinderFold")
+    return QSettings(APP_NAME, "LibraryFold")
 
 
-# Les clés dépliées, lues UNE fois : `QSettings` est un accès registre par appel sous Windows, et un finder
+# Les clés dépliées, lues UNE fois : `QSettings` est un accès registre par appel sous Windows, et une library
 # interroge chaque dossier à chaque repeuplement (≈0,2 ms × des centaines).
 _expanded: "set[str] | None" = None
 

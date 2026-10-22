@@ -18,9 +18,7 @@ from ui.scene_manager.inspectors.component_editors import script     # noqa: F40
 from ui.scene_manager.inspectors.actor_inspector import ActorInspector, ComponentListWidget
 from ui.scene_manager.inspectors.scene_inspector import SceneInspector
 from ui.scene_manager.inspectors.camera_inspector import CameraInspector
-from ui.scene_manager.inspectors.uses_inspectors import (
-    PrefabUsesInspector, ScriptUsesInspector,
-)
+from ui.scene_manager.inspectors.uses_inspectors import PrefabUsesInspector
 from ui.scene_manager.inspectors.dynamic_inspector import DynamicInspector
 
 __all__ = [
@@ -29,6 +27,5 @@ __all__ = [
     "SceneInspector",
     "CameraInspector",
     "PrefabUsesInspector",
-    "ScriptUsesInspector",
     "ComponentListWidget",
 ]

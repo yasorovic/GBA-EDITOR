@@ -26,7 +26,7 @@ def _png(path: Path) -> Path:
 
 def test_a_sprite_is_reported_with_the_actors_and_prefabs_that_use_it(tmp_path: Path):
     p = _project(tmp_path)
-    hero = create(p, "sprites", _png(p.assets_dir / "Art" / "hero.png"))
+    hero = create(p, "sprites", _png(p.user_library_dir / "Art" / "hero.png"))
     actor = Actor(name="Hero")
     actor.components.append(SpriteComponent(sprite_name="hero"))
     p.scenes[0].actors.append(actor)
@@ -41,7 +41,7 @@ def test_a_sprite_is_reported_with_the_actors_and_prefabs_that_use_it(tmp_path: 
 
 def test_a_background_is_reported_with_the_layers_that_show_it(tmp_path: Path):
     p = _project(tmp_path)
-    sky = create(p, "backgrounds", _png(p.assets_dir / "Art" / "sky.png"))
+    sky = create(p, "backgrounds", _png(p.user_library_dir / "Art" / "sky.png"))
     p.scenes[0].background_layers.append(BackgroundLayer(background_name="sky", bg_slot=2))
 
     assert usages(p, "backgrounds", sky) == [f'scene "{p.scenes[0].name}": background layer 2']
@@ -52,15 +52,15 @@ def test_a_name_in_quotes_in_a_script_is_a_use_wherever_the_script_lives(tmp_pat
     p = _project(tmp_path)
     boom = Sfx(name="boom")
     p.sfx.append(boom)
-    script = p.assets_dir / "Levels" / "Hero.lua"
+    script = p.user_library_dir / "Levels" / "Hero.lua"
     script.parent.mkdir(parents=True)
     script.write_text('function on_update()\n    sfx.play("boom")\nend\n', encoding="utf-8")
-    (p.assets_dir / "Levels" / "Other.lua").write_text("function on_update()\nend\n", encoding="utf-8")
+    (p.user_library_dir / "Levels" / "Other.lua").write_text("function on_update()\nend\n", encoding="utf-8")
 
     assert usages(p, "sfx", boom) == ["script Hero.lua"]
 
 
 def test_an_unused_asset_has_no_usage(tmp_path: Path):
     p = _project(tmp_path)
-    hero = create(p, "sprites", _png(p.assets_dir / "Art" / "hero.png"))
+    hero = create(p, "sprites", _png(p.user_library_dir / "Art" / "hero.png"))
     assert usages(p, "sprites", hero) == []

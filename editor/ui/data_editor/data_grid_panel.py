@@ -271,7 +271,7 @@ class DataGridPanel(QWidget):
 
     # (colonne, valeur de la cellule) — l'inspecteur détaille la sélection.
     cell_selected  = pyqtSignal(object, object)
-    # Le schéma ou le nombre de lignes a changé : le finder réaffiche « n × m ».
+    # Le schéma ou le nombre de lignes a changé : la library réaffiche « n × m ».
     table_changed  = pyqtSignal()
 
     def __init__(self, parent=None):

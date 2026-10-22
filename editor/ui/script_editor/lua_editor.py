@@ -63,7 +63,7 @@ class LuaEditor(QPlainTextEdit):
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self.setStyleSheet(
             f"QPlainTextEdit{{"
-            f"  background:{C.BG_RAISED}; color:{C.TEXT_HI};"
+            f"  background:{C.BG_INPUT}; color:{C.TEXT_HI};"
             f"  border:none; padding:4px;"
             f"}}"
         )

@@ -68,7 +68,7 @@ def _project_with_cues(tmp_path) -> Project:
     starter = next(s.id for s in available_starters() if s.builtin)
     project = Project.create(tmp_path / "Neuf", "Neuf", starter)
     project.save()
-    assets = project.assets_dir
+    assets = project.user_library_dir
     (assets / "music").mkdir(parents=True, exist_ok=True)
     (assets / "music" / "Theme.it").write_bytes(F.make_it(orders=[0] * 8))
     _wav(assets / "music" / "Ambient.wav")

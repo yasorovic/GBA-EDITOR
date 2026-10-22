@@ -264,6 +264,9 @@ class SceneEditor(QWidget):
                 title=label('scncanvas.collisions'), body=label('scncanvas.collisions_tip')
             ),
             self._on_collision_view_toggle)
+        self._bar.add_action(
+            "clear", tooltip(title=label('scncanvas.clear_collision'), body=label('scncanvas.clear_collision_tip')),
+            self._on_clear_collision)
         self._bar.add_spacing(10)
         self._chk_ui_elements = self._bar.add_toggle(
             "ui_layout", tooltip(
@@ -784,6 +787,21 @@ class SceneEditor(QWidget):
         get_dispatcher().status(
             label('scncanvas.element_created', name=region.name,
                             layout=layout.name, shared=shared, tiles=tiles))
+
+    def _on_clear_collision(self):
+        """Vide toute la carte de collision de la scène, en UNE entrée d'historique (Ctrl+Z la rend)."""
+        from core.history import CollisionPaintCmd, get_history
+        from core.models.collision_tiles import TILE_EMPTY
+        overlay = self._gba_scene.collision_overlay
+        delta = {(col, row): (tile, TILE_EMPTY)
+                 for row, line in enumerate(overlay.get_map()) for col, tile in enumerate(line) if tile != TILE_EMPTY}
+        if not delta:
+            get_dispatcher().status(label('scncanvas.collision_already_empty'))
+            return
+        for (col, row), (_old, new) in delta.items():
+            overlay.set_tile(col, row, new)
+        get_history().push_executed(CollisionPaintCmd(overlay, delta, persist_fn=self._on_collision_painted))
+        self._on_collision_painted()
 
     def _on_collision_painted(self):
         """Persiste la collision_map après chaque stroke."""

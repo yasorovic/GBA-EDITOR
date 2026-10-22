@@ -1,7 +1,7 @@
-# Asset finder unique — état des lieux et conception
+# Asset library unique — état des lieux et conception
 
-Chantier : remplacer les 8 panneaux « finder » de l'éditeur par **un seul
-composant**, sur le modèle d'interaction du Script finder (arbre de dossiers,
+Chantier : remplacer les 8 panneaux « library » de l'éditeur par **un seul
+composant**, sur le modèle d'interaction du Script library (arbre de dossiers,
 sous-sections repliables, ligne = icône + nom).
 
 Périmètre demandé : sprites, scènes, prefabs, backgrounds, scripts, fonts,
@@ -17,17 +17,17 @@ partagé :
 
 | Écran | Panneau | Familles listées | Widget | Lignes |
 |---|---|---|---|---|
-| Scene Manager | `assets_finder_panel.py` | scenes, prefabs, scripts | `QTreeWidget` | 689 |
-| Script Editor | `script_finder_panel.py` | scripts (+ globals/constants) | widgets custom sur disque | 309 |
-| Sprite Editor | `sprite_finder_panel.py` | sprites (+ animations) | `QTreeWidget` | 483 |
-| Palette Editor | `palette_finder_panel.py` | palettes | `QTreeWidget` | 291 |
-| Data Editor | `data_finder_panel.py` | datatables | `QTreeWidget` | 216 |
-| Text Editor | `font_finder_panel.py` | fonts | `QListWidget` | 101 |
+| Scene Manager | `scene_library_panel.py` | scenes, prefabs (les scripts ont leur library, depuis le 2026-10-22) | `QTreeWidget` | 689 |
+| Script Editor | `script_library_panel.py` | scripts (+ globals/constants) | widgets custom sur disque | 309 |
+| Sprite Editor | `sprite_library_panel.py` | sprites (+ animations) | `QTreeWidget` | 483 |
+| Palette Editor | `palette_library_panel.py` | palettes | `QTreeWidget` | 291 |
+| Data Editor | `data_library_panel.py` | datatables | `QTreeWidget` | 216 |
+| Text Editor | `font_library_panel.py` | fonts | `QListWidget` | 101 |
 | Text Editor | `text_table.py` | textes | `QTreeWidget` (mode table) | 520 |
 | Sound Mixer | `sound_panel.py` (section) | sfx, musics | `QTreeWidget` ×2 | — |
-| Background Editor | `background_editor_screen.py` (section) | backgrounds | `FinderSection` | — |
+| Background Editor | `background_editor_screen.py` (section) | backgrounds | `LibrarySection` | — |
 
-Ce qui est **déjà** partagé : `W.finder_bar()`, `FinderSection`,
+Ce qui est **déjà** partagé : `W.library_bar()`, `LibrarySection`,
 `W.section_bar()`, `QSS.tree_widget` (cf. `ui/common/widgets.py`). C'est
 l'habillage. Ce qui ne l'est pas : le peuplement, le renommage en place, le
 menu contextuel, la suppression, la sélection — réécrits huit fois.
@@ -49,7 +49,7 @@ project.backgrounds, prefabs, scenes, sfx, music, fonts, palettes, data_tables
 **Les scripts sont la seule exception** : de simples fichiers `.lua`/`.c`,
 sans modèle `Resource`, dans une arborescence **imbriquée**
 (`actors/`, `behaviors/`, `cameras/`, `scenes/`). Là, le disque **est** la
-source de vérité — c'est pour ça que le Script finder parcourt les dossiers.
+source de vérité — c'est pour ça que le Script library parcourt les dossiers.
 
 Deux conséquences :
 
@@ -57,10 +57,10 @@ Deux conséquences :
    disque.** Re-parcourir créerait une deuxième source de vérité qui diverge :
    un asset renommé en mémoire mais pas encore sauvé, un `soft_delete` dont le
    JSON existe toujours jusqu'à la fermeture, un import en cours. Le Script
-   finder a le droit de lire le disque *parce que* c'est sa vérité ; les neuf
+   library a le droit de lire le disque *parce que* c'est sa vérité ; les neuf
    autres non.
 
-2. **Les dossiers qui donnent son allure au Script finder n'ont pas
+2. **Les dossiers qui donnent son allure au Script library n'ont pas
    d'équivalent ailleurs.** Les neuf `ResourceStore` sont plats par
    construction : `_path()` s'écrit `dir / f"{name}.json"`, et le nom est
    l'identité globale de l'asset — celle que le codegen et les scripts citent
@@ -77,11 +77,11 @@ hiérarchie que neuf familles sur dix n'ont pas.
 n'est donc pas une particularité des scripts : c'est le modèle cible de toutes
 les familles.
 
-Le finder est par conséquent **hiérarchique nativement**, dès maintenant. Sa
+La library est par conséquent **hiérarchique nativement**, dès maintenant. Sa
 source n'est pas une liste mais un **arbre de nœuds** (`AssetNode` : un dossier,
 ou un asset). Aujourd'hui les scripts en rendent un vrai, construit depuis le
 disque, et les neuf `ResourceStore` n'en rendent qu'un seul niveau. Le jour où
-`ResourceStore` saura les sous-dossiers, ils rendront un arbre — **et le finder
+`ResourceStore` saura les sous-dossiers, ils rendront un arbre — **et la library
 ne bougera pas d'une ligne**.
 
 C'est la couture du chantier : l'arbre de nœuds. Elle permet de livrer
@@ -94,7 +94,7 @@ stockage** qu'elles départagent, une question désormais distincte de l'UI.
 ## 4. Les trois façons de trancher (le stockage — chantier séparé)
 
 ### A — Groupes présentation seulement (aucun changement de modèle)
-Le finder affiche des sous-sections quand la famille en propose (scripts :
+La library affiche des sous-sections quand la famille en propose (scripts :
 `actors/`, `behaviors/`… ; sprites : par `kind` ; backgrounds : par `kind`
 scene/ui/animated, qui existe déjà). Les familles sans axe de regroupement
 naturel restent une liste plate sous une seule section.
@@ -125,7 +125,7 @@ Un champ `folder: str` sur `Resource`, purement de rangement, le fichier restant
 
 ## 4. Ce que serait le composant, quelle que soit l'option
 
-`ui/common/asset_finder.py` — un panneau, paramétré par une **description de
+`ui/common/asset_library.py` — un panneau, paramétré par une **description de
 famille** et non par des sous-classes :
 
 ```python
@@ -149,7 +149,7 @@ vérité différente, ce que la description rend explicite.
 
 **Hors périmètre** : `text_table.py` ne liste pas des assets fichiers mais des
 entrées d'une table de textes avec sa propre grammaire de clés — et elle a ses
-propres colonnes (rangement, usages) qu'aucun finder n'a ; et les sous-arbres *métier* (animations d'un sprite, glyphes d'une
+propres colonnes (rangement, usages) qu'aucune library n'a ; et les sous-arbres *métier* (animations d'un sprite, glyphes d'une
 police) restent chez eux.
 
 ---
@@ -157,8 +157,8 @@ police) restent chez eux.
 ## 5. Ordre de marche proposé
 
 1. Trancher §3 (A, B ou C).
-2. Écrire `ui/common/asset_finder.py` + la table des familles.
+2. Écrire `ui/common/asset_library.py` + la table des familles.
 3. Migrer écran par écran, **en supprimant l'ancien panneau à chaque étape**
-   (pas de cohabitation : deux finders pour une famille, c'est deux vérités).
+   (pas de cohabitation : deux libraries pour une famille, c'est deux vérités).
 4. Les huit fichiers listés au §1 disparaissent ou se réduisent à leur partie
    métier.

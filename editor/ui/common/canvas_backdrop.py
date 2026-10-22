@@ -25,10 +25,11 @@ from __future__ import annotations
 
 from PyQt6.QtGui import QPainter, QPen, QColor, QBrush, QPixmap, QRadialGradient, QGradient
 from PyQt6.QtCore import Qt, QPointF, QRectF
+from PyQt6.QtWidgets import QScrollArea
 
 from ui.common.theme import C
 
-# Le fond clair (`CANVAS_BG` ≈ #dcdcdc) est trop proche du gris de grille
+# Le fond clair (`BG_DEEP` clair) est trop proche du gris de grille
 # d'origine (150,150,165) pour que l'alpha faible du thème sombre reste
 # lisible : la ligne se noie dans le fond au lieu de s'en détacher. On fonce
 # le trait et on relève l'alpha uniquement en thème clair.
@@ -117,3 +118,95 @@ def _lines(painter: QPainter, rect: QRectF, step: float, origin: QPointF):
     while y <= rect.bottom() + step:
         painter.drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y))
         y += step
+
+
+# ── Fond de canvas complet ────────────────────────────────────────
+
+def halo_rect(old: QPointF | None, new: QPointF | None, step: float) -> QRectF | None:
+    """Carré à repeindre quand le halo passe de `old` à `new` : l'union des deux
+    carrés qu'il occupe, jamais tout le canvas."""
+    radius = max(48.0, 1.5 * step)
+    united = None
+    for point in (old, new):
+        if point is None:
+            continue
+        square = QRectF(point.x() - radius, point.y() - radius, radius * 2, radius * 2)
+        united = square if united is None else united.united(square)
+    return united
+
+
+def paint_backdrop(painter: QPainter, rect: QRectF, step: float,
+                   origin: QPointF = QPointF(0, 0), hover: QPointF | None = None,
+                   *, tiled: bool = False):
+    """Fond commun de TOUS les canvas : creux `BG_DEEP`, grille grise, halo au
+    survol. Un canvas qui peint son fond autrement n'a pas le droit d'exister."""
+    painter.fillRect(rect, QColor(C.BG_DEEP))
+    draw_grid(painter, rect, step, origin, tiled=tiled)
+    draw_grid_halo(painter, rect, step, hover, origin)
+
+
+class GridBackdropViewMixin:
+    """Fond de canvas d'un QGraphicsView : à mélanger AVANT QGraphicsView.
+
+    La vue fournit `backdrop_step()` (pas de la grille en unités scène) et
+    appelle `paint_backdrop_view` dans `drawBackground`, `track_backdrop_hover`
+    dans `mouseMoveEvent` et `clear_backdrop_hover` dans `leaveEvent`. Le halo
+    est peint dans le fond : il passe sous les items, et seul son carré est
+    invalidé (le fond est mis en cache par la vue)."""
+
+    _backdrop_hover: QPointF | None = None
+
+    def backdrop_step(self) -> float:
+        raise NotImplementedError
+
+    def paint_backdrop_view(self, painter: QPainter, rect: QRectF):
+        paint_backdrop(painter, rect, self.backdrop_step(), hover=self._backdrop_hover)
+
+    def track_backdrop_hover(self, event):
+        old = self._backdrop_hover
+        self._backdrop_hover = self.mapToScene(event.position().toPoint())
+        self._invalidate_backdrop(old, self._backdrop_hover)
+
+    def clear_backdrop_hover(self):
+        old, self._backdrop_hover = self._backdrop_hover, None
+        self._invalidate_backdrop(old, None)
+
+    def _invalidate_backdrop(self, old, new):
+        from PyQt6.QtWidgets import QGraphicsScene
+        dirty = halo_rect(old, new, self.backdrop_step())
+        if dirty is not None:
+            self.invalidateScene(dirty, QGraphicsScene.SceneLayer.BackgroundLayer)
+
+
+class GridBackdropScrollArea(QScrollArea):
+    """QScrollArea dont le fond (la zone hors du widget contenu) est le fond de
+    canvas commun. Le Qt dessine un scroll area SUR son viewport, d'où le
+    paintEvent ici plutôt que sur le viewport lui-même."""
+
+    BACKDROP_STEP = 16
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._hover: QPointF | None = None
+        self.viewport().setMouseTracking(True)
+
+    def paintEvent(self, event):
+        painter = QPainter(self.viewport())
+        paint_backdrop(painter, QRectF(self.viewport().rect()), self.BACKDROP_STEP,
+                       hover=self._hover, tiled=True)
+        painter.end()
+
+    def mouseMoveEvent(self, event):
+        old, self._hover = self._hover, QPointF(event.position())
+        self._invalidate_halo(old, self._hover)
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event):
+        old, self._hover = self._hover, None
+        self._invalidate_halo(old, None)
+        super().leaveEvent(event)
+
+    def _invalidate_halo(self, old, new):
+        dirty = halo_rect(old, new, self.BACKDROP_STEP)
+        if dirty is not None:
+            self.viewport().update(dirty.toAlignedRect())

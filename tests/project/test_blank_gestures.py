@@ -1,4 +1,4 @@
-"""Les gestes de création hors finders passent tous par *Create blank* : un nœud Interface, un script d'acteur, une scène."""
+"""Les gestes de création hors libraries passent tous par *Create blank* : un nœud Interface, un script d'acteur, une scène."""
 from core import asset_creation
 from core.history import CommandHistory
 from core.models.scene import Scene
@@ -14,7 +14,7 @@ def _project(tmp_path) -> Project:
 def test_an_interface_is_a_layout_plus_its_node_and_undoes_as_one(tmp_path):
     p = _project(tmp_path)
     scene = Scene(name="Level")
-    folder = p.assets_dir / "UI"
+    folder = p.user_library_dir / "UI"
     history, persisted = CommandHistory(), []
 
     gesture = asset_creation.create_interface(p, scene, folder, persist=lambda: persisted.append(1))
@@ -33,7 +33,7 @@ def test_an_interface_is_a_layout_plus_its_node_and_undoes_as_one(tmp_path):
 
 def test_an_actor_script_takes_the_wanted_name_and_a_taken_one_is_suffixed(tmp_path):
     p = _project(tmp_path)
-    folder = p.assets_dir / "AI"
+    folder = p.user_library_dir / "AI"
     history = CommandHistory()
 
     for expected in ("Hero", "Hero_2"):
@@ -47,7 +47,7 @@ def test_an_actor_script_takes_the_wanted_name_and_a_taken_one_is_suffixed(tmp_p
 
 def test_a_blank_scene_is_born_in_the_given_folder_with_its_defaults(tmp_path):
     p = _project(tmp_path)
-    folder = p.assets_dir / "Levels"
+    folder = p.user_library_dir / "Levels"
     history = CommandHistory()
 
     gesture = asset_creation.create_blank(p, "scene", folder)

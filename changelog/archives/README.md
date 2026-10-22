@@ -66,3 +66,4 @@ Pour un résumé court, voir le [CHANGELOG](../CHANGELOG.md). Pour ce qui reste 
 | [Correctifs trouvés en marchant](fixes-in-passing.md) | Dix bugs réels sans jalon à qui les rattacher, tous corrigés et testés |
 | [L'asset `.music`](music-asset.md) | Sections, boucle surchargée, indépendant du format source ; lecteurs alignés sur la ROM, contrôle `cut_to`, WAV aligné sur le module |
 | [Les mises à jour depuis la fenêtre About](updates-from-about.md) | Vérification au démarrage, fenêtre *Updates*, pop-up pour une version importante, téléchargement vérifié (SHA-256) |
+| [Finder et Disk devenus des libraries](finder-to-library.md) | `AssetLibrary`, Scene library (scènes et prefabs), `user_library_dir`, « View uses » d'un script dans le Script Editor |

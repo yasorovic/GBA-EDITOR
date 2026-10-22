@@ -45,7 +45,7 @@ def _police(p: Project, nom: str, ink: tuple[int, int, int]) -> Font:
 @pytest.fixture
 def projet(tmp_path) -> Project:
     p = Project(tmp_path)
-    (p.assets_dir / "fonts").mkdir(parents=True, exist_ok=True)
+    (p.user_library_dir / "fonts").mkdir(parents=True, exist_ok=True)
     return p
 
 

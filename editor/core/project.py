@@ -189,32 +189,32 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         self.events = EventEmitter()
         self.rename_scope = nullcontext
 
-        self.backgrounds: ResourceStore[BackgroundAsset] = ResourceStore(self.assets_dir, BackgroundAsset)
-        self.sprites:     ResourceStore[SpriteAsset]     = ResourceStore(self.assets_dir, SpriteAsset)
-        self.prefabs:     ResourceStore[Prefab]      = ResourceStore(self.assets_dir, Prefab)
+        self.backgrounds: ResourceStore[BackgroundAsset] = ResourceStore(self.user_library_dir, BackgroundAsset)
+        self.sprites:     ResourceStore[SpriteAsset]     = ResourceStore(self.user_library_dir, SpriteAsset)
+        self.prefabs:     ResourceStore[Prefab]      = ResourceStore(self.user_library_dir, Prefab)
         # Avertissements du dernier load() — rempli par la réconciliation
         # des assets. Toujours présent : un projet fraîchement créé n'a pas
         # encore chargé, et l'appelant ne doit pas avoir à le vérifier.
         self.load_warnings: list[str] = []
-        self.scenes:      ResourceStore[Scene]       = ResourceStore(self.assets_dir, Scene)
-        self.sfx:         ResourceStore[Sfx]         = ResourceStore(self.assets_dir, Sfx)
-        self.music:       ResourceStore[Music]       = ResourceStore(self.assets_dir, Music)
+        self.scenes:      ResourceStore[Scene]       = ResourceStore(self.user_library_dir, Scene)
+        self.sfx:         ResourceStore[Sfx]         = ResourceStore(self.user_library_dir, Sfx)
+        self.music:       ResourceStore[Music]       = ResourceStore(self.user_library_dir, Music)
         # Les jingles sont des modules comme les musiques ; c'est leur DOSSIER qui
         # dit le rôle (cf. core.models.audio.Jingle).
-        self.jingles:     ResourceStore[Jingle]      = ResourceStore(self.assets_dir, Jingle)
-        self.fonts:       ResourceStore[Font]        = ResourceStore(self.assets_dir, Font)
-        self.font_assets: ResourceStore[FontAsset]   = ResourceStore(self.assets_dir, FontAsset)
-        self.palettes: PaletteStore = PaletteStore(self.assets_dir, self.root)
-        self.ui_layouts: ResourceStore[UILayout] = ResourceStore(self.assets_dir, UILayout)
+        self.jingles:     ResourceStore[Jingle]      = ResourceStore(self.user_library_dir, Jingle)
+        self.fonts:       ResourceStore[Font]        = ResourceStore(self.user_library_dir, Font)
+        self.font_assets: ResourceStore[FontAsset]   = ResourceStore(self.user_library_dir, FontAsset)
+        self.palettes: PaletteStore = PaletteStore(self.user_library_dir, self.root)
+        self.ui_layouts: ResourceStore[UILayout] = ResourceStore(self.user_library_dir, UILayout)
         # Pas de ResourceStore pour Camera : une caméra appartient à sa scène
         # (Scene.cameras), elle se charge/sauve avec elle (cf. camera_names()
         # ci-dessous pour la vue à plat sur tout le projet).
         # Trois registres et non un : les trois couches du matériel ne se
         # coordonnent pas, et un appel Lua nomme la boîte à qui il parle.
-        self.music_boxes: ResourceStore[MusicBox] = ResourceStore(self.assets_dir, MusicBox)
-        self.jingle_boxes: ResourceStore[JingleBox] = ResourceStore(self.assets_dir, JingleBox)
-        self.sound_boxes: ResourceStore[SoundBox] = ResourceStore(self.assets_dir, SoundBox)
-        self.data_tables: ResourceStore[DataTable] = ResourceStore(self.assets_dir, DataTable)
+        self.music_boxes: ResourceStore[MusicBox] = ResourceStore(self.user_library_dir, MusicBox)
+        self.jingle_boxes: ResourceStore[JingleBox] = ResourceStore(self.user_library_dir, JingleBox)
+        self.sound_boxes: ResourceStore[SoundBox] = ResourceStore(self.user_library_dir, SoundBox)
+        self.data_tables: ResourceStore[DataTable] = ResourceStore(self.user_library_dir, DataTable)
         # Ces familles sont nombreuses et une scène ne cite qu'une petite
         # partie d'entre elles. ``load`` les indexe ; leur écran ou une
         # opération globale les matérialise explicitement (v0.24).
@@ -308,14 +308,14 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         `<name>.png` à la racine de assets/ pour un fond inconnu ou sans image."""
         if background is not None and background.asset:
             return self.asset_abs(background.asset)
-        return self.assets_dir / f"{name}.png"
+        return self.user_library_dir / f"{name}.png"
 
     def import_asset(self, src: Path, subdir: str = "") -> Path:
         """
         Copie un fichier dans assets/{subdir}/.
         Retourne le chemin absolu dans le projet.
         """
-        dst_dir = self.assets_dir / subdir if subdir else self.assets_dir
+        dst_dir = self.user_library_dir / subdir if subdir else self.user_library_dir
         dst_dir.mkdir(parents=True, exist_ok=True)
         dst = dst_dir / src.name
         if src.resolve() != dst.resolve():
@@ -772,9 +772,9 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         on ne touche à rien : deux dossiers pleins veulent dire que quelqu'un a
         déjà migré, et écraser serait choisir à sa place.
         """
-        for old, new_dir in (("musics_boxes", self.assets_dir / "music_boxes"),
-                             ("jingles_boxes", self.assets_dir / "jingle_boxes"),
-                             ("sounds_boxes", self.assets_dir / "sound_boxes")):
+        for old, new_dir in (("musics_boxes", self.user_library_dir / "music_boxes"),
+                             ("jingles_boxes", self.user_library_dir / "jingle_boxes"),
+                             ("sounds_boxes", self.user_library_dir / "sound_boxes")):
             old_dir = self.project_dir / old
             if not old_dir.is_dir():
                 continue
@@ -1188,7 +1188,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
     def load(self):
         # Aucun dossier n'est créé d'office : `assets/` est celui de l'auteur, il y range ses fichiers où il veut.
         # Chaque écriture crée le dossier qu'elle vise (`ResourceStore.save`, `atomic_write`).
-        self.assets_dir.mkdir(parents=True, exist_ok=True)
+        self.user_library_dir.mkdir(parents=True, exist_ok=True)
 
         # Chaque registre est suivi de son rattrapage (cf. asset_reconciliation,
         # section « Rattrapage à l'ouverture ») : un fichier déposé éditeur

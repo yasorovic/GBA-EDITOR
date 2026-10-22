@@ -209,8 +209,8 @@ def _music_files(project, monkeypatch, **modules):
 
 
 def _script(project, text, name="Song.lua"):
-    (project.assets_dir / "scripts").mkdir(parents=True, exist_ok=True)
-    ((project.assets_dir / "scripts") / name).write_text(text, encoding="utf-8")
+    (project.user_library_dir / "scripts").mkdir(parents=True, exist_ok=True)
+    ((project.user_library_dir / "scripts") / name).write_text(text, encoding="utf-8")
 
 
 def test_deux_morceaux_de_structure_differente_ne_se_relaient_pas(project, monkeypatch):
@@ -258,14 +258,14 @@ def test_un_script_attache_a_deux_familles_est_refuse(project):
 
 def test_un_script_illisible_est_dit_avec_son_fichier(project, monkeypatch):
     _script(project, "function on_start()\nend\n", name="Locked.lua")
-    real = type((project.assets_dir / "scripts") / "x").read_text
+    real = type((project.user_library_dir / "scripts") / "x").read_text
 
     def refuse(self, *args, **kwargs):
         if self.name == "Locked.lua":
             raise PermissionError("denied")
         return real(self, *args, **kwargs)
 
-    monkeypatch.setattr(type((project.assets_dir / "scripts") / "x"), "read_text", refuse)
+    monkeypatch.setattr(type((project.user_library_dir / "scripts") / "x"), "read_text", refuse)
     ctx = ValidationContext(project)
     validator._check_scripts_parse(ctx)
     assert any("cannot be read" in m.message and m.file == "Locked.lua" for m in ctx._msgs)

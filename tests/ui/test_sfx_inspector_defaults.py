@@ -22,7 +22,7 @@ def project(tmp_path) -> Project:
 
 @pytest.fixture
 def inspector(qapp, project):
-    src = project.assets_dir / "coin.wav"
+    src = project.user_library_dir / "coin.wav"
     src.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(src), "wb") as out:
         out.setnchannels(1)
@@ -70,8 +70,8 @@ def test_a_change_is_written_to_the_effect_and_survives_reopening(pan, inspector
 
 def test_loading_another_effect_does_not_write_anything_back(pan, inspector, project):
     pan.setValue(25)
-    other_src = project.assets_dir / "boom.wav"
-    other_src.write_bytes((project.assets_dir / "coin.wav").read_bytes())
+    other_src = project.user_library_dir / "boom.wav"
+    other_src.write_bytes((project.user_library_dir / "coin.wav").read_bytes())
     other = create(project, "sfx", other_src)
 
     editor = SfxEditor()

@@ -20,7 +20,9 @@
 
 /* ── Accès mémoire GBA ──────────────────────────────────────────── */
 #define TILE_RAM(cbb)  ((vu16*)(0x06000000+(cbb)*0x4000))
+#ifndef MAP_RAM   /* une sonde de test hôte y substitue un tableau : la vraie VRAM n'existe pas sur cette machine */
 #define MAP_RAM(sbb)   ((vu16*)(0x06000000+(sbb)*0x800))
+#endif
 #define PAL_BG_RAM     ((vu16*)0x05000000)
 #define OBJ_VRAM       ((vu16*)0x06010000)
 #define PAL_OBJ_RAM    ((vu16*)0x05000200)
@@ -1518,6 +1520,12 @@ void ui_fill_rect      (int bg, int tx, int ty, int w, int h, int tile, int bank
 #define UI_SE_EMPTY 0xFFFF
 void ui_fill_map       (int bg, int tx, int ty, int w, int h,
                         const unsigned short *se, int tile_base);
+/* Les mêmes, pour le fond d'un CONTENEUR : `elem` est l'index de l'élément dans `g_ui_elements`. Le fond
+   est retenu (rectangle + de quoi le redessiner), et `ui_element_show` l'efface quand le conteneur est caché
+   et le repose quand il revient. Un conteneur déjà caché à la pose n'est pas dessiné du tout. */
+void ui_fill_rect_tracked(int elem, int bg, int tx, int ty, int w, int h, int tile, int bank);
+void ui_fill_map_tracked (int elem, int bg, int tx, int ty, int w, int h,
+                          const unsigned short *se, int tile_base);
 
 #ifdef GBA_ENGINE_IMPL
 
@@ -1684,6 +1692,60 @@ void ui_fill_map(int bg, int tx, int ty, int w, int h,
                ? 0
                : (u16)((e & 0xFC00) | (((e & 0x03FF) + tile_base) & 0x03FF));
         }
+}
+
+/* ── Fonds de conteneur suivis ───────────────────────────────────── */
+#define UI_FILL_MAX 8
+typedef struct UIFillTrack {
+    short elem;                       /* élément (conteneur) dont c'est le fond */
+    short tx, ty;
+    unsigned char bg, w, h, shown;    /* shown : le fond est actuellement dans la tilemap */
+    short tile;                       /* fond uni : tuile ; fond image : base de tuiles */
+    unsigned char bank;
+    const unsigned short *se;         /* fond image : la carte ; 0 = fond uni */
+} UIFillTrack;
+static UIFillTrack g_ui_fills[UI_FILL_MAX];
+static int g_ui_fill_n = 0;
+
+static void ui_fill_track_draw(const UIFillTrack *F) {
+    if (F->se) ui_fill_map(F->bg, F->tx, F->ty, F->w, F->h, F->se, F->tile);
+    else       ui_fill_rect(F->bg, F->tx, F->ty, F->w, F->h, F->tile, F->bank);
+}
+
+static void ui_fill_track_add(int elem, int bg, int tx, int ty, int w, int h, int tile, int bank,
+                              const unsigned short *se) {
+    if (g_ui_fill_n >= UI_FILL_MAX) {        /* au-delà du plafond : posé, jamais suivi (le fond reste affiché) */
+        UIFillTrack F = {(short)elem, (short)tx, (short)ty, (unsigned char)bg, (unsigned char)w, (unsigned char)h,
+                         1, (short)tile, (unsigned char)bank, se};
+        ui_fill_track_draw(&F);
+        return;
+    }
+    UIFillTrack *F = &g_ui_fills[g_ui_fill_n++];
+    F->elem = (short)elem; F->tx = (short)tx; F->ty = (short)ty;
+    F->bg = (unsigned char)bg; F->w = (unsigned char)w; F->h = (unsigned char)h;
+    F->tile = (short)tile; F->bank = (unsigned char)bank; F->se = se;
+    F->shown = (unsigned char)(ui_element_is_visible(elem) ? 1 : 0);
+    if (F->shown) ui_fill_track_draw(F);
+}
+
+void ui_fill_rect_tracked(int elem, int bg, int tx, int ty, int w, int h, int tile, int bank) {
+    ui_fill_track_add(elem, bg, tx, ty, w, h, tile, bank, 0);
+}
+
+void ui_fill_map_tracked(int elem, int bg, int tx, int ty, int w, int h,
+                         const unsigned short *se, int tile_base) {
+    ui_fill_track_add(elem, bg, tx, ty, w, h, tile_base, 0, se);
+}
+
+/* Cette case est-elle sous le fond d'un conteneur CACHÉ ? Une image masquée plus tard dans la même frame
+   ne doit pas y reposer ce qu'elle recouvrait (le fond, justement). */
+static int ui_fill_hidden_at(int bg, int tx, int ty) {
+    for (int i = 0; i < g_ui_fill_n; i++) {
+        const UIFillTrack *F = &g_ui_fills[i];
+        if (!F->shown && F->bg == bg && tx >= F->tx && tx < F->tx + F->w && ty >= F->ty && ty < F->ty + F->h)
+            return 1;
+    }
+    return 0;
 }
 
 /* ── Windows ─────────────────────────────────────────────────────── */
@@ -3277,6 +3339,7 @@ static unsigned char g_ui_element_vis[UI_ELEMENT_MAX];
 void ui_elements_reset(void) {
     int n = g_ui_element_count < UI_ELEMENT_MAX ? g_ui_element_count : UI_ELEMENT_MAX;
     for (int i = 0; i < n; i++) g_ui_element_vis[i] = g_ui_elements[i].visible;
+    g_ui_fill_n = 0;      /* les fonds de la scène précédente ne sont plus à suivre */
 }
 
 int ui_element_is_visible(int idx) {
@@ -3858,10 +3921,33 @@ static void ui_element_sync_text(void) {
     }
 }
 
+static void ui_images_invalidate(void);   /* défini après l'état des images */
+
+/* Met les fonds suivis d'accord avec la visibilité EFFECTIVE de leur conteneur. Deux passes, parce que le texte
+   et le fond se partagent les mêmes cases : au retour du conteneur le fond se repose AVANT que le texte ne s'écrive
+   dessus ; au masquage il s'efface APRÈS que le texte a rendu ses cases (il les rend au fond). */
+static void ui_fills_sync(int hiding) {
+    for (int i = 0; i < g_ui_fill_n; i++) {
+        UIFillTrack *F = &g_ui_fills[i];
+        int vis = ui_element_is_visible(F->elem);
+        if (hiding ? (!vis && F->shown) : (vis && !F->shown)) {
+            if (vis) ui_fill_track_draw(F);
+            else {
+                for (int r = 0; r < F->h; r++)
+                    for (int c = 0; c < F->w; c++) *bg_se_addr(F->bg, F->tx + c, F->ty + r) = 0;
+            }
+            F->shown = (unsigned char)vis;
+            ui_images_invalidate();   /* le fond a recouvert ou vidé les cases des images : qu'elles se reposent */
+        }
+    }
+}
+
 void ui_element_show(int idx, int on) {
     if (idx < 0 || idx >= UI_ELEMENT_MAX) return;
     g_ui_element_vis[idx] = on ? 1 : 0;
+    ui_fills_sync(0);
     ui_element_sync_text();
+    ui_fills_sync(1);
 }
 
 /* ── Listes : la navigation, et rien d'autre ──────
@@ -4164,6 +4250,10 @@ typedef struct UIImageState {
 
 static UIImageState g_ui_img[UI_IMAGE_MAX];
 
+static void ui_images_invalidate(void) {
+    for (int i = 0; i < UI_IMAGE_MAX; i++) g_ui_img[i].last = 255;   /* « aucune frame posée » : la prochaine mise à jour redessine */
+}
+
 /* Routage de rendu par scène — pendant image des zones (cf. scene_route_region). */
 static short         g_image_layer[UI_IMAGE_MAX];
 static unsigned char g_image_active[UI_IMAGE_MAX];
@@ -4288,16 +4378,37 @@ static void ui_image_origin(const UIImageInfo *I, const UIImageState *S,
     }
 }
 
-/* Efface les tuiles d'une image BG à une origine donnée. Nécessaire avant tout
-   déplacement : la tilemap ne s'efface pas seule, et une image ancrée au monde
-   laisserait sa traînée derrière elle. */
-static void ui_image_clear_bg(const UIImageInfo *I, int sx, int sy) {
-    if (g_text_layer < 0) return;
+/* Ce que l'image BG recouvre, retenu à sa pose : le fond du conteneur qui l'entoure (le cadre d'un
+   dialogue) est dans la MÊME tilemap, et masquer ou déplacer l'image doit le rendre, pas le trouer.
+   Une image plus grande que `UI_IMAGE_UNDER_MAX` cases n'est pas retenue : elle s'efface en tuile 0. */
+#define UI_IMAGE_UNDER_MAX 64
+static unsigned short g_ui_img_under[UI_IMAGE_MAX][UI_IMAGE_UNDER_MAX];
+
+static void ui_image_snapshot_bg(int i, const UIImageInfo *I, int sx, int sy) {
+    if (g_text_layer < 0 || i < 0 || i >= UI_IMAGE_MAX) return;
     int tw = (I->w + 7) >> 3, th = (I->h + 7) >> 3;
+    if (tw * th > UI_IMAGE_UNDER_MAX) return;
     int tx = sx >> 3, ty = sy >> 3;
     for (int r = 0; r < th; r++)
         for (int c = 0; c < tw; c++)
-            tilemap_set(g_text_layer, tx + c, ty + r, 0);
+            g_ui_img_under[i][r * tw + c] = *bg_se_addr(g_text_layer, tx + c, ty + r);
+}
+
+/* Efface les tuiles d'une image BG à une origine donnée. Nécessaire avant tout
+   déplacement : la tilemap ne s'efface pas seule, et une image ancrée au monde
+   laisserait sa traînée derrière elle. Rend ce qui était dessous (cf. plus haut). */
+static void ui_image_clear_bg(int i, const UIImageInfo *I, int sx, int sy) {
+    if (g_text_layer < 0) return;
+    int tw = (I->w + 7) >> 3, th = (I->h + 7) >> 3;
+    int tx = sx >> 3, ty = sy >> 3;
+    int kept = (i >= 0 && i < UI_IMAGE_MAX && tw * th <= UI_IMAGE_UNDER_MAX);
+    for (int r = 0; r < th; r++)
+        for (int c = 0; c < tw; c++) {
+            if (kept && !ui_fill_hidden_at(g_text_layer, tx + c, ty + r))
+                *bg_se_addr(g_text_layer, tx + c, ty + r) = g_ui_img_under[i][r * tw + c];
+            else
+                tilemap_set(g_text_layer, tx + c, ty + r, 0);
+        }
 }
 
 static void ui_image_draw_bg(const UIImageInfo *I, UIImageState *S, int sx, int sy) {
@@ -4371,14 +4482,16 @@ void ui_image_update(void) {
             /* Cible BG : n'écrire que si quelque chose a CHANGÉ. Une icône de
                HUD figée ne coûte alors pas une seule écriture par frame. */
             if (!visible) {
-                if (S->drawn) { ui_image_clear_bg(I, S->sx, S->sy); S->drawn = 0; }
+                if (S->drawn) { ui_image_clear_bg(i, I, S->sx, S->sy); S->drawn = 0; }
                 continue;
             }
             sx -= sx % 8;      /* la tilemap ne se pose pas entre deux tuiles */
             sy -= sy % 8;
             int moved = S->drawn && (sx != S->sx || sy != S->sy);
-            if (moved) ui_image_clear_bg(I, S->sx, S->sy);
+            if (moved) ui_image_clear_bg(i, I, S->sx, S->sy);
             if (moved || !S->drawn || S->last != S->frame) {
+                /* Seule une pose NEUVE retient le dessous : un changement de frame réécrit les cases de l'image. */
+                if (moved || !S->drawn) ui_image_snapshot_bg(i, I, sx, sy);
                 S->sx = (short)sx; S->sy = (short)sy;
                 ui_image_draw_bg(I, S, sx, sy);
                 S->drawn = 1;

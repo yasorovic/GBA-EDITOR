@@ -10,8 +10,9 @@ from typing import Optional
 
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtGui import QFont, QPixmap, QPainter, QPen, QColor, QBrush
-from PyQt6.QtCore import Qt, pyqtSignal, QRect, QSize, QPoint
+from PyQt6.QtCore import Qt, pyqtSignal, QRect, QRectF, QSize, QPoint, QPointF
 
+from ui.common.canvas_backdrop import paint_backdrop, halo_rect
 from ui.common.theme import C, T
 from ui.text_editor.glyph_paint import key_out, checker_brush
 
@@ -45,6 +46,7 @@ class GlyphSheet(QWidget):
         self._index = -1          # index du glyphe sélectionné
         self._hover = -1          # index survolé — révèle son caractère
         self._pan_last = None     # origine du pan clic-central
+        self._halo = None         # position du halo du fond de canvas (coord. widget)
         self._range: list = []    # sélection multiple (Maj+clic) — fusion
         self._picking = ""        # rôle de couleur en cours de prélèvement, "" = aucun
         self._backdrop = None     # damier teinté (BackdropButton) — None = fond éditeur
@@ -157,7 +159,8 @@ class GlyphSheet(QWidget):
 
     def paintEvent(self, _e):
         p = QPainter(self)
-        p.fillRect(self.rect(), QColor(C.BG_BASE))
+        paint_backdrop(p, QRectF(self.rect()), max(4, round(8 * self._zoom)),
+                       QPointF(self._origin()), self._halo, tiled=True)
         if not self._pixmap or not self._font:
             return
         z = self._zoom
@@ -310,7 +313,16 @@ class GlyphSheet(QWidget):
         """Cases de la sélection étendue, dans l'ordre de la planche."""
         return list(self._range)
 
+    def _move_halo(self, pos):
+        """Halo du fond de canvas : ne repeint que son carré (voir canvas_backdrop)."""
+        old = self._halo
+        self._halo = QPointF(pos) if pos is not None else None
+        dirty = halo_rect(old, self._halo, max(4.0, 8.0 * self._zoom))
+        if dirty is not None:
+            self.update(dirty.toAlignedRect())
+
     def mouseMoveEvent(self, e):
+        self._move_halo(e.position())
         if self._pan_last is not None and (e.buttons() & Qt.MouseButton.MiddleButton):
             delta = e.position() - self._pan_last
             self._pan_last = e.position()
@@ -335,6 +347,7 @@ class GlyphSheet(QWidget):
         super().mouseReleaseEvent(e)
 
     def leaveEvent(self, e):
+        self._move_halo(None)
         if self._hover != -1:
             self._hover = -1
             self.update()

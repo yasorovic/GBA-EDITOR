@@ -21,7 +21,7 @@ class SceneGraphBreadcrumb(QFrame):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet(f"background:{C.BG_RAISED}; border-top:1px solid {C.BORDER};")
+        self.setStyleSheet(f"{type(self).__name__}{{background:{C.BG_RAISED}; border-top:1px solid {C.BORDER};}}")
         self._lay = QHBoxLayout(self)
         self._lay.setContentsMargins(8, 3, 8, 3)
         self._lay.setSpacing(2)

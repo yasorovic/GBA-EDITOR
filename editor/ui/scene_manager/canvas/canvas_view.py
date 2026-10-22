@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Optional
 
 from core.models.resource import MIME_CANVAS_ACTOR, MIME_PREFAB_TEMPLATE, MIME_UI_LAYOUT
+from ui.common.canvas_backdrop import GridBackdropViewMixin
 from ui.common.theme import C
 from ui.scene_manager.canvas.canvas_const import GBA_W, GBA_H
 from ui.scene_manager.canvas.canvas_alt_duplicate import AltDuplicateGesture
@@ -27,7 +28,7 @@ from PyQt6.QtWidgets import (
 # ──────────────────────────────────────────────────────────────────
 #  Vue zoomable
 # ──────────────────────────────────────────────────────────────────
-class GBAView(QGraphicsView):
+class GBAView(GridBackdropViewMixin, QGraphicsView):
     prefab_template_dropped = pyqtSignal(str, QPointF)
     ui_layout_dropped = pyqtSignal(str)             # nom du layout : son ancrage décide où il se pose, pas le dépôt
     zoom_changed = pyqtSignal(float)
@@ -93,36 +94,19 @@ class GBAView(QGraphicsView):
         # Alt+glisser = dupliquer : geste autonome (cf. canvas_alt_duplicate).
         self._alt_duplicate = AltDuplicateGesture(self)
 
-    def drawBackground(self, painter: QPainter, rect):
-        """Fond de travail mat avec repère pointillé très discret."""
-        painter.save()
-        painter.fillRect(rect, QColor(C.CANVAS_BG))
-        # Repère calé sur la grille de jeu (16px) pour rester lisible comme
-        # repère de placement, pas seulement de texture de fond.
-        pen = QPen(QColor(C.BORDER_MID))
-        pen.setCosmetic(True)
-        pen.setWidthF(2.5)
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        painter.setPen(pen)
-        # En-deçà de 100% de zoom, le pas visuel double tous les -50% de
-        # zoom (donc le nombre de points affichés /2) : moins on voit de la
-        # scène à l'écran, moins la grille encombre.
+    def backdrop_step(self) -> float:
+        """Pas de la grille de jeu (16 px) ; il double tant que son espacement
+        à l'écran serait illisible, pour borner le nombre de lignes tracées."""
         step = 16
         away = 1.0 / self._zoom
         while away >= 1.5:
             step *= 2
             away /= 1.5
-        left = int(rect.left() // step) * step
-        top = int(rect.top() // step) * step
-        # Un seul appel Qt pour tous les points : une boucle drawPoint en Python
-        # ralentissait le rafraîchissement pendant le pan.
-        points = QPolygonF([
-            QPointF(x, y)
-            for x in range(left, int(rect.right()) + 1, step)
-            for y in range(top, int(rect.bottom()) + 1, step)
-        ])
-        painter.drawPoints(points)
-        painter.restore()
+        return step
+
+    def drawBackground(self, painter: QPainter, rect):
+        """Fond de canvas commun (creux + grille + halo) : voir canvas_backdrop."""
+        self.paint_backdrop_view(painter, rect)
 
     def drawForeground(self, painter: QPainter, rect):
         """Assombrit (noir 50 %) le canvas HORS du cadre de la caméra sélectionnée.
@@ -145,6 +129,7 @@ class GBAView(QGraphicsView):
         painter.fillPath(shade, QColor(0, 0, 0, 128))
 
     def leaveEvent(self, e):
+        self.clear_backdrop_hover()
         if self._snap_preview:
             self._snap_preview.setVisible(False)
         if self._active_tool:
@@ -330,6 +315,7 @@ class GBAView(QGraphicsView):
         self._last_click_scene_pos = None
 
     def mouseMoveEvent(self, e):
+        self.track_backdrop_hover(e)
         # Pan au clic-central : translate la vue via les scrollbars, avant toute
         # autre logique (snap preview, délégation outil).
         if self._panning and (e.buttons() & Qt.MouseButton.MiddleButton):

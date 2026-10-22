@@ -76,7 +76,7 @@ def test_an_asset_is_saved_renamed_and_deleted_where_it_lives(tmp_path: Path):
     boom.volume = 55
     project.sfx.save(boom)
     assert json.loads(where.read_text())["volume"] == 55
-    assert not ((project.assets_dir / "sfx") / "boom.sfx").exists()                      # il n'a pas été ramené dans assets/sfx
+    assert not ((project.user_library_dir / "sfx") / "boom.sfx").exists()                      # il n'a pas été ramené dans assets/sfx
 
     project.sfx.rename(boom, "bang")
     assert (where.parent / "bang.sfx").is_file() and not where.exists()
@@ -88,7 +88,7 @@ def test_an_asset_is_saved_renamed_and_deleted_where_it_lives(tmp_path: Path):
 def test_a_new_asset_is_born_at_the_root_of_assets_and_may_be_placed_anywhere_under_it(tmp_path: Path):
     project = _project(tmp_path)
     project.sfx.save(Sfx(name="plain"))
-    assert (project.assets_dir / "plain.sfx").is_file()
+    assert (project.user_library_dir / "plain.sfx").is_file()
 
     elsewhere = tmp_path / "assets" / "My sounds"
     project.music.save(Music(name="tune"), elsewhere)
@@ -120,8 +120,8 @@ def test_the_disk_tab_marks_a_misplaced_asset_as_an_asset(tmp_path: Path):
     _sidecar(tmp_path / "assets" / "Anywhere" / "Hero.sprite", "Hero")
     project = _reopen(tmp_path)
 
-    nodes = {n.path.relative_to(project.assets_dir).as_posix(): n
-             for n in disk_tree.build_disk_tree(project).walk() if n.path != project.assets_dir}
+    nodes = {n.path.relative_to(project.user_library_dir).as_posix(): n
+             for n in disk_tree.build_disk_tree(project).walk() if n.path != project.user_library_dir}
 
     node = nodes["Anywhere/Hero.sprite"]
     assert (node.kind, node.family, node.owner) == (disk_tree.ASSET, "sprites", "Hero")

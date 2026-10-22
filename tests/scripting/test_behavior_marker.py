@@ -43,9 +43,9 @@ def test_the_marker_must_be_the_first_line_exactly(tmp_path: Path):
 
 def test_scripts_and_behaviors_are_told_apart_wherever_they_are_stored(tmp_path: Path):
     p = _project(tmp_path)
-    a = _write(p.assets_dir / "Levels" / "Act1" / "ai.lua", "-- @behavior\n" + MODULE)
-    b = _write(p.assets_dir / "scripts" / "behaviors" / "plain.lua", MODULE)      # l'ancien dossier ne fait plus rien
-    c = _write(p.assets_dir / "Hero.lua", "function on_update()\nend\n")
+    a = _write(p.user_library_dir / "Levels" / "Act1" / "ai.lua", "-- @behavior\n" + MODULE)
+    b = _write(p.user_library_dir / "scripts" / "behaviors" / "plain.lua", MODULE)      # l'ancien dossier ne fait plus rien
+    c = _write(p.user_library_dir / "Hero.lua", "function on_update()\nend\n")
 
     assert p.behavior_files() == [a]
     assert sorted(p.script_files()) == sorted([b, c])
@@ -89,8 +89,8 @@ def test_a_missing_behavior_is_reported_with_the_way_to_make_one():
 
 def test_two_behaviors_with_the_same_name_are_a_build_error(tmp_path: Path):
     p = _project(tmp_path)
-    _write(p.assets_dir / "A" / "ia.lua", "-- @behavior\n" + MODULE)
-    _write(p.assets_dir / "B" / "ia.lua", "-- @behavior\n" + MODULE)
+    _write(p.user_library_dir / "A" / "ia.lua", "-- @behavior\n" + MODULE)
+    _write(p.user_library_dir / "B" / "ia.lua", "-- @behavior\n" + MODULE)
 
     errors = [e for e in _errors(p) if "Behavior \"ia\"" in e]
 
@@ -99,7 +99,7 @@ def test_two_behaviors_with_the_same_name_are_a_build_error(tmp_path: Path):
 
 def test_a_behavior_outside_the_old_folder_is_still_checked_as_a_blocking_script(tmp_path: Path):
     p = _project(tmp_path)
-    _write(p.assets_dir / "Levels" / "broken.lua", "-- @behavior\nlocal M = {\n")
+    _write(p.user_library_dir / "Levels" / "broken.lua", "-- @behavior\nlocal M = {\n")
 
     errors = [e for e in _errors(p) if "broken.lua" in e]
     assert len(errors) == 1 and "incomplete or malformed" in errors[0]
@@ -107,7 +107,7 @@ def test_a_behavior_outside_the_old_folder_is_still_checked_as_a_blocking_script
 
 def test_a_behavior_using_self_is_refused_wherever_it_lives(tmp_path: Path):
     p = _project(tmp_path)
-    _write(p.assets_dir / "Elsewhere" / "bad.lua",
+    _write(p.user_library_dir / "Elsewhere" / "bad.lua",
            "-- @behavior\nlocal M = {}\n\nfunction M.update(actor)\n    self.x = 1\nend\n\nreturn M\n")
 
     assert any("Behavior \"bad\"" in e and "`self` is reserved" in e for e in _errors(p))
@@ -116,12 +116,12 @@ def test_a_behavior_using_self_is_refused_wherever_it_lives(tmp_path: Path):
 def test_moving_a_script_rewrites_every_reference_to_it(tmp_path: Path):
     from core.models.scene import Scene
     p = _project(tmp_path)
-    script = _write((p.assets_dir / "scripts") / "Level.lua", "function on_start()\nend\n")
+    script = _write((p.user_library_dir / "scripts") / "Level.lua", "function on_start()\nend\n")
     scene = Scene(name="Level")
     scene.script = p.asset_rel(script)
     p.scenes.append(scene)
     p.save_scene(scene)
-    target = p.assets_dir / "Levels"
+    target = p.user_library_dir / "Levels"
     target.mkdir()
 
     result = disk_move.move_to_folder(p, [script], target)

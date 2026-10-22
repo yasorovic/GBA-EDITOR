@@ -28,6 +28,7 @@ from typing import Optional
 
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel
 from PyQt6.QtGui import QFont
+from PyQt6.QtCore import Qt
 
 from ui.common.theme import C, T
 from core.models.sound_box import MusicBox, JingleBox
@@ -110,7 +111,8 @@ class SoundBudgetBar(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedHeight(24)
-        self.setStyleSheet(f"background:{C.BG_DEEP}; border-top:1px solid {C.BORDER};")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(f"{type(self).__name__}{{background:{C.BG_DEEP}; border-top:1px solid {C.BORDER};}}")
 
         lay = QHBoxLayout(self)
         lay.setContentsMargins(12, 0, 12, 0)

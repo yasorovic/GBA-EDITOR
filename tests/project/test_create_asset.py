@@ -40,7 +40,7 @@ def _sheet(path: Path, cols=16, rows=14, cell=8) -> Path:
 
 def _project(tmp_path: Path) -> Project:
     p = Project.create(tmp_path / "Jeu", "Jeu")
-    for folder in ((p.assets_dir / "sprites"), (p.assets_dir / "backgrounds"), (p.assets_dir / "sfx"),):
+    for folder in ((p.user_library_dir / "sprites"), (p.user_library_dir / "backgrounds"), (p.user_library_dir / "sfx"),):
         folder.mkdir(parents=True, exist_ok=True)
     p = Project.open(p.root)
     p.load_all_resources()
@@ -58,15 +58,15 @@ def test_each_source_format_offers_the_types_it_can_become_most_common_first(tmp
 
 def test_a_file_dropped_under_assets_is_not_an_asset_until_the_author_creates_it(tmp_path: Path):
     p = _project(tmp_path)
-    _png((p.assets_dir / "sprites") / "hero.png")
-    _wav((p.assets_dir / "sfx") / "boom.wav")
-    _png((p.assets_dir / "backgrounds") / "sky.png")
+    _png((p.user_library_dir / "sprites") / "hero.png")
+    _wav((p.user_library_dir / "sfx") / "boom.wav")
+    _png((p.user_library_dir / "backgrounds") / "sky.png")
 
     reopened = Project.open(p.root)
     reopened.load_all_resources()
 
     assert not list(reopened.sprites) and not list(reopened.sfx) and not list(reopened.backgrounds)
-    assert not list((p.assets_dir / "sprites").glob("*.sprite"))                                # aucun sidecar n'a été écrit non plus
+    assert not list((p.user_library_dir / "sprites").glob("*.sprite"))                                # aucun sidecar n'a été écrit non plus
 
 
 @pytest.mark.parametrize("family,builder,expected", [
@@ -79,7 +79,7 @@ def test_a_file_dropped_under_assets_is_not_an_asset_until_the_author_creates_it
 ])
 def test_an_asset_is_created_next_to_its_source_and_points_at_it(tmp_path: Path, family, builder, expected):
     p = _project(tmp_path)
-    folder = p.assets_dir / "Anywhere" / "Deep"                                   # n'importe où : pas le dossier de la famille
+    folder = p.user_library_dir / "Anywhere" / "Deep"                                   # n'importe où : pas le dossier de la famille
     folder.mkdir(parents=True)
     source = builder(p, folder)
     before = source.read_bytes()
@@ -96,7 +96,7 @@ def test_an_asset_is_created_next_to_its_source_and_points_at_it(tmp_path: Path,
 
 def test_a_palette_is_created_from_a_hex(tmp_path: Path):
     p = _project(tmp_path)
-    hexfile = p.assets_dir / "Colours" / "dusk.hex"
+    hexfile = p.user_library_dir / "Colours" / "dusk.hex"
     hexfile.parent.mkdir()
     hexfile.write_text("#000000\n#ff8800\n", encoding="utf-8")
 
@@ -108,9 +108,9 @@ def test_a_palette_is_created_from_a_hex(tmp_path: Path):
 
 def test_the_name_comes_from_the_file_and_is_made_unique_in_its_type(tmp_path: Path):
     p = _project(tmp_path)
-    one = _wav(p.assets_dir / "a" / "coin.wav")
-    two = _wav(p.assets_dir / "b" / "coin.wav")
-    other_type = _wav(p.assets_dir / "c" / "coin.wav")
+    one = _wav(p.user_library_dir / "a" / "coin.wav")
+    two = _wav(p.user_library_dir / "b" / "coin.wav")
+    other_type = _wav(p.user_library_dir / "c" / "coin.wav")
 
     first = create_now(p, "sfx", one)
     second = create_now(p, "sfx", two)
@@ -123,10 +123,10 @@ def test_the_name_comes_from_the_file_and_is_made_unique_in_its_type(tmp_path: P
 
 def test_nothing_is_created_for_a_file_that_does_not_fit(tmp_path: Path):
     p = _project(tmp_path)
-    png = _png(p.assets_dir / "x" / "hero.png")
-    notes = p.assets_dir / "x" / "notes.txt"
+    png = _png(p.user_library_dir / "x" / "hero.png")
+    notes = p.user_library_dir / "x" / "notes.txt"
     notes.write_text("hi", encoding="utf-8")
-    broken = p.assets_dir / "x" / "deep.wav"
+    broken = p.user_library_dir / "x" / "deep.wav"
     broken.write_bytes(b"not a wav")                                               # ni PCM ni lisible
     create_now(p, "sprites", png)
 
@@ -139,7 +139,7 @@ def test_nothing_is_created_for_a_file_that_does_not_fit(tmp_path: Path):
 
 def test_deleting_an_asset_never_deletes_its_source(tmp_path: Path):
     p = _project(tmp_path)
-    source = _png(p.assets_dir / "Art" / "hero.png")
+    source = _png(p.user_library_dir / "Art" / "hero.png")
     sprite = create_now(p, "sprites", source).item
 
     p.sprites.soft_delete(sprite)
@@ -155,7 +155,7 @@ def test_deleting_an_asset_never_deletes_its_source(tmp_path: Path):
 
 def test_creating_is_undoable_and_redoable_and_never_touches_the_source(tmp_path: Path):
     p = _project(tmp_path)
-    source = _wav(p.assets_dir / "Sounds" / "boom.wav")
+    source = _wav(p.user_library_dir / "Sounds" / "boom.wav")
     creation = asset_creation.build_from_source(p, "sfx", source)
     assert creation.error is None and not list(p.sfx)                              # construit, pas encore rangé
     history = CommandHistory()
@@ -173,7 +173,7 @@ def test_creating_is_undoable_and_redoable_and_never_touches_the_source(tmp_path
 
 def test_deleting_is_undoable_and_the_asset_comes_back_where_it_was(tmp_path: Path):
     p = _project(tmp_path)
-    source = _png(p.assets_dir / "Art" / "hero.png")
+    source = _png(p.user_library_dir / "Art" / "hero.png")
     sprite = create_now(p, "sprites", source).item
     history = CommandHistory()
 
@@ -188,7 +188,7 @@ def test_deleting_is_undoable_and_the_asset_comes_back_where_it_was(tmp_path: Pa
 def test_a_blank_asset_is_created_in_the_folder_it_is_given_and_undone_with_its_file(tmp_path: Path):
     from core.models.scene import Prefab
     p = _project(tmp_path)
-    folder = p.assets_dir / "Enemies"
+    folder = p.user_library_dir / "Enemies"
     folder.mkdir()
     prefab = Prefab(name="Crate")
     history = CommandHistory()
@@ -203,7 +203,7 @@ def test_a_blank_asset_is_created_in_the_folder_it_is_given_and_undone_with_its_
 
 def test_a_blank_palette_gets_its_hex_next_to_its_palette_file(tmp_path: Path):
     p = _project(tmp_path)
-    folder = p.assets_dir / "Colours"
+    folder = p.user_library_dir / "Colours"
     folder.mkdir()
     bank = PaletteBank(name="Fresh", colors=[0, 0x1234])
 
@@ -215,7 +215,7 @@ def test_a_blank_palette_gets_its_hex_next_to_its_palette_file(tmp_path: Path):
 
 def test_one_source_can_give_several_assets_of_the_same_or_of_other_types(tmp_path: Path):
     p = _project(tmp_path)
-    source = _png(p.assets_dir / "Art" / "hero.png")
+    source = _png(p.user_library_dir / "Art" / "hero.png")
 
     first = create_now(p, "sprites", source)
     second = create_now(p, "sprites", source)                 # un second sprite, découpé autrement
@@ -234,7 +234,7 @@ def test_one_source_can_give_several_assets_of_the_same_or_of_other_types(tmp_pa
 def test_a_source_with_assets_is_listed_with_all_of_them_in_the_disk_tree(tmp_path: Path):
     from core import disk_tree
     p = _project(tmp_path)
-    source = _png(p.assets_dir / "Art" / "hero.png")
+    source = _png(p.user_library_dir / "Art" / "hero.png")
     create_now(p, "sprites", source)
     create_now(p, "backgrounds", source)
 
@@ -246,7 +246,7 @@ def test_a_source_with_assets_is_listed_with_all_of_them_in_the_disk_tree(tmp_pa
 def test_retouching_a_shared_source_re_encodes_every_asset_that_points_at_it(tmp_path: Path):
     from core.resources import asset_reconciliation
     p = _project(tmp_path)
-    source = _png(p.assets_dir / "Art" / "hero.png", colour=(200, 30, 30))
+    source = _png(p.user_library_dir / "Art" / "hero.png", colour=(200, 30, 30))
     first = create_now(p, "sprites", source).item
     second = create_now(p, "sprites", source).item
     before = (list(first.palettes), list(second.palettes))
@@ -259,7 +259,7 @@ def test_retouching_a_shared_source_re_encodes_every_asset_that_points_at_it(tmp
 
 def test_a_palette_is_the_one_exception_its_colours_live_in_the_hex(tmp_path: Path):
     p = _project(tmp_path)
-    hexfile = p.assets_dir / "Colours" / "dusk.hex"
+    hexfile = p.user_library_dir / "Colours" / "dusk.hex"
     hexfile.parent.mkdir()
     hexfile.write_text("#000000\n#ff8800\n", encoding="utf-8")
     assert create_now(p, "palettes", hexfile).error is None
@@ -287,7 +287,7 @@ def _noisy_photo(path: Path, size=(300, 200)) -> Path:
 def test_a_photo_bigger_than_the_screen_becomes_a_240x160_bitmap_that_shows_its_top_left_corner(tmp_path: Path):
     """Un bitmap a un canvas fixe de 240×160 : l'image garde sa taille, déborde, le surplus est rogné — rien n'est rétréci."""
     p = _project(tmp_path)
-    photo = _noisy_photo((p.assets_dir / "backgrounds") / "photo.png")
+    photo = _noisy_photo((p.user_library_dir / "backgrounds") / "photo.png")
 
     ba = asset_creation.build_from_source(p, "backgrounds", photo).item
 
@@ -300,11 +300,11 @@ def test_a_photo_bigger_than_the_screen_becomes_a_240x160_bitmap_that_shows_its_
 
 def test_create_from_source_is_one_undoable_command_for_the_whole_batch(tmp_path: Path):
     p = _project(tmp_path)
-    one = _wav(p.assets_dir / "a" / "coin.wav")
-    two = _wav(p.assets_dir / "b" / "coin.wav")
+    one = _wav(p.user_library_dir / "a" / "coin.wav")
+    two = _wav(p.user_library_dir / "b" / "coin.wav")
     history = CommandHistory()
 
-    gesture = asset_creation.create_from_source(p, "sfx", [one, two, p.assets_dir / "notes.txt"])
+    gesture = asset_creation.create_from_source(p, "sfx", [one, two, p.user_library_dir / "notes.txt"])
     history.push(gesture.command)
 
     assert gesture.names == ["coin", "coin_2"] and len(gesture.errors) == 1
@@ -313,13 +313,13 @@ def test_create_from_source_is_one_undoable_command_for_the_whole_batch(tmp_path
     assert p.sfx.get("coin") is None and p.sfx.get("coin_2") is None
     history.redo()
     assert p.sfx.get("coin_2") is not None
-    assert asset_creation.create_from_source(p, "sfx", [p.assets_dir / "notes.txt"]).command is None
+    assert asset_creation.create_from_source(p, "sfx", [p.user_library_dir / "notes.txt"]).command is None
 
 
 def test_create_blank_makes_an_asset_or_a_script_in_the_folder_as_one_undoable_command(tmp_path: Path):
     from core import lua_scripts
     p = _project(tmp_path)
-    folder = p.assets_dir / "Anywhere"
+    folder = p.user_library_dir / "Anywhere"
     folder.mkdir()
     history = CommandHistory()
 

@@ -5,7 +5,7 @@ from typing import Optional
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QFrame, QComboBox, QScrollArea
 from PyQt6.QtGui import QFont
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 
 from ui.common.deferred_writes import schedule_save
 from ui.common.theme import C, T
@@ -33,8 +33,9 @@ class SpriteRightPanel(QWidget):
         super().__init__(parent)
         self.setMinimumWidth(220)
         self.setMaximumWidth(440)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(
-            f"background:{C.BG_PANEL}; border-left:1px solid {C.BORDER_DARK};"
+            f"{type(self).__name__}{{background:{C.BG_PANEL}; border-left:1px solid {C.BORDER_DARK};}}"
         )
         self._project: Optional[Project] = None
         self._sprite:  Optional[SpriteAsset] = None
@@ -280,6 +281,7 @@ class SpriteRightPanel(QWidget):
             return
         ap = self._project.root / self._sprite.asset
         if not ap.exists():
+            get_dispatcher().status(label("sprpanel.extract_no_image"))
             return
         from core.models.gba_color import extract_palette_from_image
         from core.models.palette import PaletteBank
@@ -294,8 +296,10 @@ class SpriteRightPanel(QWidget):
         else:
             bank = PaletteBank(name=name, colors=colors)
         # Passe par le dispatcher : persistance (watcher suspendu) + événement
-        # "palettes_changed" pour que le Palette Finder se rafraîchisse.
+        # "palettes_changed" pour que le Palette Library se rafraîchisse.
         get_dispatcher().save_palette(bank)
+        # Le geste n'a pas d'autre retour visible : on dit ce qui s'est passé et où le retrouver.
+        get_dispatcher().status(label("sprpanel.extract_updated" if existing else "sprpanel.extract_created", name=bank.name))
 
     def _on_name_changed(self, new_name: str):
         if self._blocking or not self._sprite or not self._project:

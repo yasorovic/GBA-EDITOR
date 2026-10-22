@@ -250,7 +250,7 @@ def _grouped_view(tmp_path, collapsed: bool):
 
 # ── Niveaux (tranche 3d) : descente, portes de frontière, fil d'Ariane ──
 
-# ── Sélection croisée avec le project viewer (tranche 4) ────────────────
+# ── Sélection croisée avec la Scene library (tranche 4) ────────────────
 
 # ── Aperçu du fond PAR SCÈNE (pastille du nœud) ─────────────────────────
 

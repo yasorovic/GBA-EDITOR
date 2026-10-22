@@ -40,14 +40,14 @@ def player(qapp):
 
 
 def _module(project: Project, name: str = "Theme", orders=None):
-    folder = project.assets_dir / "music"
+    folder = project.user_library_dir / "music"
     folder.mkdir(parents=True, exist_ok=True)
     (folder / f"{name}.it").write_bytes(F.make_it(orders=orders or [0] * 8))
     return create(project, "music", folder / f"{name}.it")
 
 
 def _wav(project: Project, name: str = "Ambient", seconds: float = 3.0):
-    folder = project.assets_dir / "music"
+    folder = project.user_library_dir / "music"
     folder.mkdir(parents=True, exist_ok=True)
     t = np.arange(int(44100 * seconds)) / 44100
     with wave.open(str(folder / f"{name}.wav"), "wb") as w:
@@ -215,7 +215,7 @@ def test_des_sections_d_un_module_sur_un_wav_ne_sont_pas_reinterpretees(editor, 
 
 
 def test_un_jingle_montre_l_onde_sans_les_sections(editor, project):
-    jingles = project.assets_dir / "jingles"
+    jingles = project.user_library_dir / "jingles"
     jingles.mkdir(parents=True, exist_ok=True)
     (jingles / "Fanfare.it").write_bytes(F.make_it())
     jingle = create(project, "jingles", jingles / "Fanfare.it")

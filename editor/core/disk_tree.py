@@ -136,5 +136,5 @@ def build_disk_tree(project) -> DiskNode:
     (`project.load_all_resources()`), sinon leurs assets passeraient pour des
     sources libres."""
     assets, sources, missing_assets = _linked_files(project)
-    root = project.assets_dir
+    root = project.user_library_dir
     return DiskNode(root.name, root, FOLDER, children=_scan(root, assets, sources, missing_assets))

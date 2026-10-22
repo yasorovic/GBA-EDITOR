@@ -19,6 +19,7 @@ from PyQt6.QtCore import Qt, QSize, pyqtSignal
 
 from ui.common.theme import C, T
 from ui.common import icons
+from ui.common.cursor_unit import CursorUnitButton
 
 BAR_HEIGHT = 36
 
@@ -32,7 +33,7 @@ class CanvasTopBar(QFrame):
             fit_tip = tooltip(title=label('cvtop.fit_to_view'), shortcut=get_keybindings().resolve("common.fit"))
         super().__init__(parent)
         self.setFixedHeight(BAR_HEIGHT)
-        self.setStyleSheet(f"background:{C.BG_RAISED}; border-bottom:1px solid {C.BORDER};")
+        self.setStyleSheet(f"{type(self).__name__}{{background:{C.BG_RAISED}; border-bottom:1px solid {C.BORDER};}}")
         self._font = QFont(T.MONO, T.MD)
 
         lay = QHBoxLayout(self)
@@ -74,9 +75,7 @@ class CanvasTopBar(QFrame):
         self._size_label = QLabel("")
         self._size_label.setFont(self._font)
         self._size_label.setStyleSheet(f"color:{C.TEXT_DIM};")
-        self._coord_label = QLabel()
-        self._coord_label.setFont(self._font)
-        self.set_cursor_px(None, None)
+        self._coord_label = CursorUnitButton(self._font)
         if show_coords:
             lay.addWidget(self._size_label)
             lay.addSpacing(8)
@@ -220,10 +219,5 @@ class CanvasTopBar(QFrame):
         self._size_label.setText(f"{w}×{h}" if w and h else "")
 
     def set_cursor_px(self, x: int | None, y: int | None):
-        """Position du curseur en pixels du canvas — (None, None) hors du canvas."""
-        if x is None or y is None:
-            self._coord_label.setText("x:— y:—")
-            self._coord_label.setStyleSheet(f"color:{C.TEXT_DIM};")
-        else:
-            self._coord_label.setText(f"x:{x} y:{y}")
-            self._coord_label.setStyleSheet(f"color:{C.TEXT_NORM};")
+        """Position du curseur en pixels du canvas, (None, None) hors du canvas. L'unité affichée est celle du réglage commun."""
+        self._coord_label.set_position(x, y)

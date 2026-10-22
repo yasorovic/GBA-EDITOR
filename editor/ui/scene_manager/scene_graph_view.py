@@ -41,6 +41,7 @@ from core.scene_graph_state import SceneGraphState
 from scripting.scene_graph import SceneGraph, node_diagnostics, scene_graph
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
+from ui.common.canvas_backdrop import GridBackdropViewMixin
 from ui.common.theme import C, QSS, T, ui_font
 from ui.common.canvas_top_bar import CanvasTopBar
 from ui.common.shortcut_hints import ShortcutHints
@@ -81,7 +82,7 @@ class _RewriteEdgeCmd(Command):
     def undo(self): self._apply(0)
 
 
-class _GraphCanvas(QGraphicsView):
+class _GraphCanvas(GridBackdropViewMixin, QGraphicsView):
     """Vue graphique : pan/zoom/RubberBand, et remonte le clic gauche sans décider.
 
     Elle n'interprète pas le clic gauche : elle émet l'item sous le curseur (ou
@@ -153,37 +154,23 @@ class _GraphCanvas(QGraphicsView):
         self._pan_last = None
         self._rewire_edges: list[SceneGraphEdgeItem] = []
 
-    def drawBackground(self, painter, rect):
-        """Fond quadrillé léger, en coordonnées du graphe.
-
-        Les points suivent donc le pan et restent stables sous les nœuds ; leur
-        coût est borné par le rectangle visible, pas par la taille du graphe.
-        """
-        painter.fillRect(rect, QColor(C.GRAPH_BG))
-        pen = QPen(QColor(C.GRAPH_GRID))
-        pen.setCosmetic(True)
-        pen.setWidthF(2.5)
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        painter.setPen(pen)
-        # En-deçà de 100% de zoom, le pas visuel double tous les -75% de zoom
-        # (donc le nombre de points affichés /2) : moins on voit de la scène à
-        # l'écran, moins la grille encombre. Le pas d'accrochage des nœuds
-        # (_GRID_STEP) n'est pas concerné.
+    def backdrop_step(self) -> float:
+        """Pas de la grille ; il double au dézoom pour borner le nombre de lignes.
+        Le pas d'accrochage des nœuds (_GRID_STEP) n'est pas concerné."""
         step = _GRID_STEP
         away = 1.0 / self._zoom
         while away >= 1.75:
             step *= 2
             away /= 1.75
-        left = int(rect.left() // step) * int(step)
-        top = int(rect.top() // step) * int(step)
-        right, bottom = rect.right(), rect.bottom()
-        x = float(left)
-        while x <= right:
-            y = float(top)
-            while y <= bottom:
-                painter.drawPoint(int(x), int(y))
-                y += step
-            x += step
+        return step
+
+    def drawBackground(self, painter, rect):
+        """Fond de canvas commun (creux + grille + halo) : voir canvas_backdrop."""
+        self.paint_backdrop_view(painter, rect)
+
+    def leaveEvent(self, event):
+        self.clear_backdrop_hover()
+        super().leaveEvent(event)
 
     # ── Zoom ──────────────────────────────────────────────────────────
 
@@ -247,6 +234,7 @@ class _GraphCanvas(QGraphicsView):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        self.track_backdrop_hover(event)
         if self._rewire_edges:
             scene_pos = self.mapToScene(event.position().toPoint())
             for edge in self._rewire_edges:
@@ -495,7 +483,7 @@ class SceneGraphView(QWidget):
     edge_selected = pyqtSignal(object)  # clic → liste[SceneGraphEdge]
     edge_opened = pyqtSignal(object)    # double-clic sur une arête → SceneGraphEdge
     scenes_selected = pyqtSignal(list)  # sélection (multi) → noms de scènes
-    groups_changed = pyqtSignal()       # un groupe de scènes a été créé (sync project viewer)
+    groups_changed = pyqtSignal()       # un groupe de scènes a été créé (sync Scene library)
     selection_cleared = pyqtSignal()    # aucune carte/arête/groupe active
     group_selected = pyqtSignal(str)    # clic sur un groupe → son inspecteur
     note_selected = pyqtSignal(str)     # clic sur une note → son inspecteur
@@ -525,7 +513,7 @@ class SceneGraphView(QWidget):
 
         self._scene = QGraphicsScene(self)
         self._view = _GraphCanvas(self._scene, self)
-        self._view.setBackgroundBrush(QColor(C.GRAPH_BG))
+        self._view.setBackgroundBrush(QColor(C.BG_DEEP))
         # Table des raccourcis (bas-droite).
         self._hints = ShortcutHints(self._view, scene_graph_hints)
         self._view.clicked.connect(self._on_click)
@@ -540,7 +528,7 @@ class SceneGraphView(QWidget):
         self._view.verticalScrollBar().valueChanged.connect(self._update_minimap)
         self._minimap = _GraphMinimap(self._view)
         # Ctrl+G : ranger les scènes sélectionnées du graphe dans un nouveau
-        # groupe. Même id remappable que le project viewer — un seul geste,
+        # groupe. Même id remappable que la Scene library — un seul geste,
         # deux vues ; n'agit que si la vue (ou un enfant) a le focus.
         self._sc_group = QShortcut(QKeySequence(), self)
         self._sc_group.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
@@ -561,7 +549,7 @@ class SceneGraphView(QWidget):
             shortcut.activated.connect(callback)
             bind(binding_id, shortcut)
             self._graph_shortcuts.append(shortcut)
-        # Sélection croisée avec le project viewer : la sélection Qt de la scène
+        # Sélection croisée avec la Scene library : la sélection Qt de la scène
         # graphique remonte les scènes sélectionnées (rectangle, Ctrl/Shift).
         self._scene.selectionChanged.connect(self._emit_scene_selection)
         # Les arêtes n'empruntent pas le SelectionBus : elles ont leur propre
@@ -766,7 +754,7 @@ class SceneGraphView(QWidget):
             self._emit_selected_edges(item)
         # Un marqueur de cible absente n'ouvre ni ne sélectionne rien.
 
-    # ── Sélection croisée avec le project viewer ──────────────────────
+    # ── Sélection croisée avec la Scene library ──────────────────────
 
     def _emit_scene_selection(self) -> None:
         """Remonte les scènes sélectionnées dans le graphe (sauf pendant un rendu
@@ -814,7 +802,7 @@ class SceneGraphView(QWidget):
 
     def highlight_scenes(self, names) -> None:
         """Sélectionne les cartes de ces scènes — appelé quand la sélection vient
-        du project viewer. Ne réémet pas (`_syncing`)."""
+        de la Scene library. Ne réémet pas (`_syncing`)."""
         wanted = set(names)
         self._syncing = True
         try:
@@ -870,7 +858,7 @@ class SceneGraphView(QWidget):
             menu.addAction(label("scncanvas.graph_create_note"),
                            lambda: self._create_note_at(global_pos))
             if self._folders is not None:
-                menu.addAction(label("assetfind.create_group"), self._group_selected_scenes)
+                menu.addAction(label("assetlibrary.create_group"), self._group_selected_scenes)
         if not menu.isEmpty():
             menu.exec(global_pos)
 
@@ -976,7 +964,7 @@ class SceneGraphView(QWidget):
 
     def _delete_scene(self, name: str) -> None:
         """Supprime une scène (annulable, Ctrl+Z) après confirmation — même
-        commande que le project viewer, poussée dans l'historique partagé."""
+        commande que la Scene library, poussée dans l'historique partagé."""
         from ui.common.asset_kinds import SCENES
         scene = self._scene_by_name(name)
         if scene is None:
@@ -1074,13 +1062,13 @@ class SceneGraphView(QWidget):
         """Range les scènes sélectionnées dans un nouveau groupe, au NIVEAU
         ouvert (leur parent devient le groupe courant). Sans sélection, le groupe
         naît vide — il n'apparaît au graphe qu'une fois peuplé, mais existe dans
-        le project viewer."""
+        la Scene library."""
         if self._folders is None:
             return
         ids = [self._scene_id(i.name) for i in self._scene.selectedItems()
                if isinstance(i, SceneCardItem)]
         self._folders.create_group(
-            "scenes", label("assetfind.group_default_name"), [i for i in ids if i], self._level)
+            "scenes", label("assetlibrary.group_default_name"), [i for i in ids if i], self._level)
         if self._graph is not None:
             self._render(self._graph)
         self.groups_changed.emit()
@@ -1182,7 +1170,7 @@ class SceneGraphView(QWidget):
 
         `state` (positions/présentation du graphe) et `folder_store` (dossiers
         d'assets, dont les groupes de scènes) sont possédés par la fenêtre et
-        PARTAGÉS avec le project viewer — deux instances du même fichier se
+        PARTAGÉS avec la Scene library — deux instances du même fichier se
         désynchroniseraient. Absents (tests isolés), la vue crée `state` elle-même
         et se passe de groupes. Les orphelins sont purgés, puis l'empreinte est
         invalidée pour que le prochain `refresh` re-projette.
@@ -1299,7 +1287,7 @@ class SceneGraphView(QWidget):
         # en ressort (mêmes règles que les cartes, cf. `_recompute_membership`).
         if self._recompute_membership(moved_cards) | self._recompute_group_membership(moved_groups):
             moved = True
-            self.groups_changed.emit()   # le project viewer partage le store
+            self.groups_changed.emit()   # la Scene library partage le store
         if moved and self._graph is not None:
             self._render(self._graph)
 

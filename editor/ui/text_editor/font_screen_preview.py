@@ -8,11 +8,12 @@ from typing import Optional
 
 from PyQt6.QtWidgets import QWidget, QSizePolicy, QMenu, QApplication
 from PyQt6.QtGui import QFont, QImage, QPainter, QPen, QColor, QKeySequence
-from PyQt6.QtCore import Qt, QRect, QPoint, pyqtSignal
+from PyQt6.QtCore import Qt, QRect, QRectF, QPoint, QPointF, pyqtSignal
 
 from core.engine_emulation.text_layout import layout_marked_text, layout_projection_text
 from codegen.font_build import build_font_asset
 from core.font_rasterizer import FontRasterizerError, display_coverage
+from ui.common.canvas_backdrop import paint_backdrop, halo_rect
 from ui.common.theme import C, T, QSS
 from ui.common.labels import label
 from ui.common.backdrop_button import BackdropButton
@@ -44,6 +45,8 @@ class FontScreenPreview(QWidget):
         super().__init__(parent)
         self._font = None
         self._project = None
+        self._halo = None             # position du halo du fond de canvas (coord. widget)
+        self.setMouseTracking(True)
         self._text = ""                 # source balisée, jamais le texte aplati
         self._values: dict = {}
         self._render_fonts: dict[str, object] = {}
@@ -309,7 +312,20 @@ class FontScreenPreview(QWidget):
             return
         super().mousePressEvent(e)
 
+    def _move_halo(self, pos):
+        """Halo du fond de canvas : ne repeint que son carré (voir canvas_backdrop)."""
+        old = self._halo
+        self._halo = QPointF(pos) if pos is not None else None
+        dirty = halo_rect(old, self._halo, 8.0 * self._scale())
+        if dirty is not None:
+            self.update(dirty.toAlignedRect())
+
+    def leaveEvent(self, e):
+        self._move_halo(None)
+        super().leaveEvent(e)
+
     def mouseMoveEvent(self, e):
+        self._move_halo(e.position())
         if self._pan_last is not None and (e.buttons() & Qt.MouseButton.MiddleButton):
             pos = e.position().toPoint()
             self._pan += pos - self._pan_last
@@ -447,8 +463,8 @@ class FontScreenPreview(QWidget):
         bg = self._btn_bg.color()
         ink = self._readable_on(bg)
 
-        p.fillRect(self.rect(), QColor(C.BG_DEEP))
         o = self._origin()
+        paint_backdrop(p, QRectF(self.rect()), 8 * s, QPointF(o), self._halo, tiled=True)
         p.translate(o)
         p.fillRect(QRect(0, 0, w, h), bg)
         p.setPen(QPen(QColor(C.BORDER_MID)))

@@ -78,6 +78,7 @@ class CheckError:
     level:   str   # "error" | "warning"
     message: str
     line:    int = 0   # ligne du script, ou 0 si la faute n'en a pas (le build la rend en `fichier:ligne`)
+    code:    str = ""  # non vide pour une faute de STRUCTURE (cf. STRUCTURE_CODES) : elle se juge sans connaître le projet
 
 
 class _LineStampedErrors(list):
@@ -92,6 +93,17 @@ class _LineStampedErrors(list):
         if not err.line:
             err.line = self._checker._stmt_line
         super().append(err)
+
+
+# Les fautes de structure : le build les refuse, et le diagnostic en direct les montre aussi, car elles ne demandent rien du projet.
+MISPLACED_WAIT = "misplaced_wait"
+STRUCTURE_CODES = frozenset({MISPLACED_WAIT})
+
+
+def structure_errors(script) -> list:
+    """Les fautes de structure d'un script (cf. STRUCTURE_CODES), jugées par le MÊME vérificateur que le build, sur un contexte
+    vide : sans nom de projet à comparer, aucune autre règle ne se prononce, et celle-ci n'en a pas besoin."""
+    return [e for e in check(script, BuildContext(actor_name="")) if e.code in STRUCTURE_CODES]
 
 
 @dataclass
@@ -1551,7 +1563,8 @@ class Checker:
             " another handler. A bounded loop can be split because the number of "
             "turns is known in advance; an `if` would require remembering where to "
             "resume. To wait on a condition, put the condition INSIDE the wait "
-            f"({WAIT_UNTIL_FN}), or declare a second sequence and start it from the `if`."))
+            f"({WAIT_UNTIL_FN}), or declare a second sequence and start it from the `if`.",
+            code=MISPLACED_WAIT))
 
     def _check_for_step(self, s: StmtForNum):
         """Le SENS de la comparaison est décidé au build (`i <= stop` ou

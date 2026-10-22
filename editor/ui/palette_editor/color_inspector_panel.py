@@ -67,7 +67,8 @@ class ColorInspectorPanel(QWidget):
         self._blocking = False
         self.setMinimumWidth(300)
         self.setMaximumWidth(480)
-        self.setStyleSheet(f"background:{C.BG_RAISED}; border-left:1px solid {C.BORDER};")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(f"{type(self).__name__}{{background:{C.BG_PANEL}; border-left:1px solid {C.BORDER};}}")
         self._build()
 
     # ── Construction ──────────────────────────────────────────────

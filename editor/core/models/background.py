@@ -44,10 +44,14 @@ BG_KIND_LABELS = {
 }
 
 
-INPAINT_REMAP_MODES = ("direct", "nearest", "luminance", "optimal", "ramp")
+COLOR_MAPPING_MODES = ("direct", "nearest", "luminance", "optimal", "ramp")
 
 
-def _palette_mapping(source: list, target: list, mode: str) -> list[int]:
+def _read_color_mapping(value) -> str:
+    return value if value in COLOR_MAPPING_MODES else "direct"
+
+
+def _color_mapping(source: list, target: list, mode: str) -> list[int]:
     """Association des 16 index d'une sous-palette 4bpp.
 
     L'index zéro reste transparent. Les distances sont calculées dans l'espace
@@ -468,7 +472,7 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
     tile_palette_overrides: dict = field(default_factory=dict)  # dict[(col,row), position dans added_palettes]
     # Comment les index d'une tuile repeinte sont associés à sa nouvelle palette.
     # "direct" préserve le comportement historique (i -> i).
-    inpaint_mode: str = "direct"
+    color_mapping: str = "direct"
     # Peinture de CASES (niveau éditeur) : un CALQUE par-dessus l'image. Une case peinte montre une tuile pleine de
     # la couleur `color` (index dans la sous-palette `pal`) ; `color` 0 la rend transparente. Effacer une case la
     # retire du dict et rend la tuile initiale. Ni `tileset` ni `tilemap` ne sont touchés : une recompression de
@@ -845,7 +849,7 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
         cette vue effective, exactement comme les tuiles pleines de Paint.
         """
         variants = list(self.tileset)
-        if self.inpaint_mode == "direct" or not self.tile_palette_overrides or self.bpp != 4:
+        if self.color_mapping == "direct" or not self.tile_palette_overrides or self.bpp != 4:
             return variants, {}
         out, mapping_cache = {}, {}
         tw = self.tiles_w or 1
@@ -857,10 +861,10 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
             tid, source, _fh, _fv = unpack_se(se)
             if not (tid < len(self.tileset) and source < len(self.palettes) and target < len(self.palettes)):
                 continue
-            cache_key = (source, target, self.inpaint_mode)
+            cache_key = (source, target, self.color_mapping)
             mapping = mapping_cache.get(cache_key)
             if mapping is None:
-                mapping = _palette_mapping(self.palettes[source], self.palettes[target], self.inpaint_mode)
+                mapping = _color_mapping(self.palettes[source], self.palettes[target], self.color_mapping)
                 mapping_cache[cache_key] = mapping
             variant = "".join(format(mapping[int(v, 16)], "x") for v in self.tileset[tid])
             if variant not in variants:
@@ -933,8 +937,8 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
             s["tile_repaint"] = {
                 f"{c},{r}": v for (c, r), v in self.tile_palette_overrides.items()
             }
-        if self.inpaint_mode != "direct":
-            s["inpaint_mode"] = self.inpaint_mode
+        if self.color_mapping != "direct":
+            s["color_mapping"] = self.color_mapping
         if self.added_palettes:
             s["added_palettes"] = list(self.added_palettes)
         if self.palette_overrides:
@@ -989,7 +993,7 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
             tiles_w=int(d.get("tiles_w", 0) or 0), tiles_h=int(d.get("tiles_h", 0) or 0),
             quantize_method=d.get("quantize_method", d.get("compress_method", "median_cut")),
             tile_palette_overrides=decode_tile_palette_overrides(d.get("tile_repaint")),
-            inpaint_mode=(d.get("inpaint_mode") if d.get("inpaint_mode") in INPAINT_REMAP_MODES else "direct"),
+            color_mapping=_read_color_mapping(d.get("color_mapping", d.get("inpaint_mode"))),   # rétro-compat: ancienne clé "inpaint_mode"
             tile_paint=decode_tile_paint(d.get("tile_paint")),
             diagnostics=dict(d.get("diagnostics") or {}),
             source_stamp=str(d.get("source_stamp", "")),

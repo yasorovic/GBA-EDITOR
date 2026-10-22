@@ -212,7 +212,7 @@ class TextTable(QWidget):
         self._tree = QTreeWidget()
         self._tree.setColumnCount(len(_HEADER_KEYS))
         self._tree.setHeaderLabels([label(k) for k in _HEADER_KEYS])
-        # La table centrale est plate : le classement se fait dans le Finder.
+        # La table centrale est plate : le classement se fait dans le Library.
         # Garder la décoration d'arbre ici réservait inutilement une indentation
         # sur chaque clé et rognait sa fin derrière l'icône de copie.
         self._tree.setRootIsDecorated(False)
@@ -258,7 +258,7 @@ class TextTable(QWidget):
         # monolingue — le cas de tous ceux d'avant la v0.9 — ne voit rien de
         # nouveau. `refresh_languages()` la révèle en même temps que la barre.
         self._tree.setColumnHidden(COL_STATUS, True)
-        # Le rangement appartient exclusivement au Finder : le centre liste
+        # Le rangement appartient exclusivement au Library : le centre liste
         # toujours des entrées, y compris à la racine du projet.
         self._tree.setColumnHidden(COL_PATH, True)
         # Les colonnes restent disponibles pour les filtres et métadonnées ;
@@ -289,7 +289,7 @@ class TextTable(QWidget):
     # ── Barres ────────────────────────────────────────────────────
 
     def _build_bar(self) -> QFrame:
-        hdr = W.finder_bar(label("common.texts"))
+        hdr = W.library_bar(label("common.texts"))
         hl = hdr.layout()
         self._count = QLabel("")
         self._count.setFont(QFont(T.MONO, T.XS))
@@ -430,7 +430,7 @@ class TextTable(QWidget):
         self.refresh()
 
     def set_folder_filter(self, path) -> None:
-        """Limite la liste au dossier choisi dans le Finder des textes."""
+        """Limite la liste au dossier choisi dans le Library des textes."""
         path = tuple(path or ())
         if path != self._folder_filter:
             self._revealed_ids.clear()
@@ -440,7 +440,7 @@ class TextTable(QWidget):
             self._on_sel()
 
     def _update_breadcrumb(self) -> None:
-        """Le chemin est dans le Finder ; le centre le rappelle sans arbre."""
+        """Le chemin est dans le Library ; le centre le rappelle sans arbre."""
         path = self._folder_filter
         self._crumb_bar.setVisible(bool(path))
         if path:
@@ -448,6 +448,34 @@ class TextTable(QWidget):
             self._crumb_count.setText("")
 
     def refresh(self, select_ids: Optional[list[int]] = None):
+        """Reconstruit la table depuis le projet, sélection conservée. Le champ de contenu qui avait le focus le reprend :
+        une reconstruction (renommer une clé range le texte sous un autre dossier) détruit ses éditeurs, et sans cela la
+        frappe qui suit part dans le vide, sans un mot."""
+        focused = self._focused_content()
+        self._rebuild(select_ids)
+        if focused is not None:
+            self._restore_content_focus(*focused)
+
+    def _focused_content(self):
+        """(id du texte, position du curseur) du champ de contenu qui a le focus, ou None."""
+        for tid, row in self._row_by_id.items():
+            entry = self._tree.itemWidget(row, COL_KEY)
+            if entry is not None and entry.edit.hasFocus():
+                return tid, entry.edit.textCursor().position()
+        return None
+
+    def _restore_content_focus(self, tid, position: int) -> None:
+        text = self._project.get_text_by_id(tid) if self._project else None
+        row = self._row_of(text) if text else None
+        entry = self._entry_of(row) if row is not None else None
+        if entry is None:
+            return
+        entry.edit.setFocus()
+        cursor = entry.edit.textCursor()
+        cursor.setPosition(min(position, len(entry.edit.toPlainText())))
+        entry.edit.setTextCursor(cursor)
+
+    def _rebuild(self, select_ids: Optional[list[int]] = None):
         """Reconstruit la table depuis le projet, sélection conservée."""
         if select_ids is None:
             select_ids = [t.id for t in self.selected_texts()]

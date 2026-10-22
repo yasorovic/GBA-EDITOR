@@ -1,4 +1,4 @@
-"""Le dossier virtuel d'un asset (le rangement de l'asset finder) ne dépend pas de l'endroit où son fichier vit."""
+"""Le dossier virtuel d'un asset (le rangement de l'asset library) ne dépend pas de l'endroit où son fichier vit."""
 import json
 import shutil
 from pathlib import Path

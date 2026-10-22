@@ -36,18 +36,18 @@ def _old_layout(root: Path) -> None:
 def test_a_new_project_keeps_nothing_it_edits_under_project(tmp_path: Path):
     project = Project.create(tmp_path / "Game", "Game")
     project.load()
-    for directory in ((project.assets_dir / "scenes"), (project.assets_dir / "prefab"), (project.assets_dir / "ui_layouts"), (project.assets_dir / "music_boxes"),
-                      (project.assets_dir / "jingle_boxes"), (project.assets_dir / "sound_boxes"), (project.assets_dir / "data")):
-        assert directory.parent == project.assets_dir, directory
-    assert (project.assets_dir / "fonts" / "fonts_assets") == (project.assets_dir / "fonts") / "fonts_assets"
-    assert project.texts_file.parent == project.variables_file.parent == project.assets_dir
-    assert project.translation_file("fr") == project.assets_dir / "texts_fr.json"
+    for directory in ((project.user_library_dir / "scenes"), (project.user_library_dir / "prefab"), (project.user_library_dir / "ui_layouts"), (project.user_library_dir / "music_boxes"),
+                      (project.user_library_dir / "jingle_boxes"), (project.user_library_dir / "sound_boxes"), (project.user_library_dir / "data")):
+        assert directory.parent == project.user_library_dir, directory
+    assert (project.user_library_dir / "fonts" / "fonts_assets") == (project.user_library_dir / "fonts") / "fonts_assets"
+    assert project.texts_file.parent == project.variables_file.parent == project.user_library_dir
+    assert project.translation_file("fr") == project.user_library_dir / "texts_fr.json"
 
     project.save_texts()
     project.save_variables()
     on_disk = {p.name for p in project.project_dir.iterdir()} if project.project_dir.exists() else set()
     assert not on_disk & {"scenes", "prefab", "ui_layouts", "texts.json", "variables.json", "data", "fonts_assets"}
-    assert (project.assets_dir / "texts.json").is_file() and (project.assets_dir / "variables.json").is_file()
+    assert (project.user_library_dir / "texts.json").is_file() and (project.user_library_dir / "variables.json").is_file()
 
 
 def test_the_migration_moves_everything_the_author_edits_and_nothing_else(tmp_path: Path):
@@ -90,8 +90,8 @@ def test_the_disk_tab_knows_what_the_author_creates_in_the_editor(tmp_path: Path
     project.save_variables()
     project.load_all_resources()
 
-    nodes = {n.path.relative_to(project.assets_dir).as_posix(): n
-             for n in disk_tree.build_disk_tree(project).walk() if n.path != project.assets_dir}
+    nodes = {n.path.relative_to(project.user_library_dir).as_posix(): n
+             for n in disk_tree.build_disk_tree(project).walk() if n.path != project.user_library_dir}
     assert (nodes["Level.scene"].kind, nodes["Level.scene"].family) == (disk_tree.ASSET, "scenes")
     assert (nodes["texts.json"].kind, nodes["texts.json"].family) == (disk_tree.ASSET, "texts")
     assert (nodes["variables.json"].kind, nodes["variables.json"].family) == (disk_tree.ASSET, "variables")

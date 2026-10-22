@@ -1,4 +1,4 @@
-"""DiskTreeView — l'onglet Disk du project viewer : l'arborescence de `assets/`.
+"""DiskTreeView — l'onglet Disk de la Scene library : l'arborescence de `assets/`.
 
 L'arbre vertical de tout le dossier ; choisir un dossier le montre dans l'onglet Disk
 du panneau du bas (`folder_selected`), qui en affiche le contenu à plat. Le « + » déroule le

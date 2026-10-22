@@ -745,8 +745,13 @@ class UIInspector(QWidget):
             # laisser éditable inviterait à un étirement que le matériel ne sait
             # pas faire. Les presets de PLACEMENT restent actifs (ils ne
             # redimensionnent pas sans `stretch_*`).
+            fixed_size = is_image or not getattr(element, "resizable", True)
             for k in ("w", "h"):
-                self._sp[k].setEnabled(not is_image and getattr(element, "resizable", True))
+                self._sp[k].setEnabled(not fixed_size)
+                # Un champ grisé doit dire pourquoi : l'auteur y cherche le moyen d'élargir un texte qui déborde.
+                self._sp[k].setToolTip(tooltip(
+                    title=label("uiinsp.size_fixed_title"),
+                    body=label("uiinsp.size_fixed_image" if is_image else "uiinsp.size_fixed_text")) if fixed_size else "")
             if is_text:
                 # L'alignement n'a de sens que dans une boîte : une chaîne se
                 # pose en un point, sans rectangle dans lequel se ferrer.
@@ -1453,7 +1458,11 @@ class UIInspector(QWidget):
         if el is None or lay is None or not self._project:
             return ""
         old = el.name
-        applied = self._project.rename_ui_element(lay, el, new_name)
+        from ui.scene_manager.ui_element_name import resolve_ui_element_name
+        chosen = resolve_ui_element_name(self, self._project, lay, el, new_name)
+        if chosen is None:
+            return old                           # l'auteur choisira un autre nom : l'ancien reste affiché
+        applied = self._project.rename_ui_element(lay, el, chosen)
         if applied != old:
             self._persist_all()
             self.renamed.emit(applied)

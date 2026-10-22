@@ -54,7 +54,7 @@ def compatible_files(project, family: str) -> list[Path]:
     """Les fichiers de `assets/` qu'une asset de cette famille peut prendre pour source : ceux dont le format est le
     sien, quel que soit le dossier. Triés par chemin."""
     wanted = {ext.lower() for ext in FAMILY_EXTENSIONS[family]}
-    return sorted((p for p in project.assets_dir.rglob("*") if p.is_file() and p.suffix.lower() in wanted),
+    return sorted((p for p in project.user_library_dir.rglob("*") if p.is_file() and p.suffix.lower() in wanted),
                   key=lambda p: p.as_posix().lower())
 
 

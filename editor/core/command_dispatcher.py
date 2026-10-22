@@ -338,7 +338,7 @@ class CommandDispatcher(EventEmitter):
     # ── Scene ─────────────────────────────────────────────────────
 
     def notify_project_tree_changed(self):
-        """Une scène ou un prefab est né, ou a disparu : les vues qui en dérivent (project viewer, graphe des scènes)
+        """Une scène ou un prefab est né, ou a disparu : les vues qui en dérivent (Scene library, graphe des scènes)
         l'apprennent tout de suite, pas au prochain aller-retour d'écran."""
         self._emit("project_tree_changed")
 
@@ -417,7 +417,7 @@ class CommandDispatcher(EventEmitter):
     def save_palette(self, bank) -> None:
         """Persiste une PaletteBank (l'ajoute au catalogue si nouvelle) et
         notifie les écrans affichant le catalogue — ex. une palette extraite
-        depuis le Sprite Editor doit apparaître dans le Palette Finder sans
+        depuis le Sprite Editor doit apparaître dans le Palette Library sans
         recharger le projet."""
         if not self._project:
             return
@@ -510,7 +510,7 @@ class CommandDispatcher(EventEmitter):
         self._save_scene()
         self._emit("scene_sprites_changed")
         self._emit("actors_list_changed")
-        # Le project viewer (AssetsFinderPanel) et l'arbre de scène montrent
+        # Le Scene library (SceneLibraryPanel) et l'arbre de scène montrent
         # tous deux cet acteur comme instance d'un prefab (icône, badge) —
         # une action lancée depuis ce même badge doit les tenir à jour.
         self._emit("project_tree_changed")
@@ -535,7 +535,7 @@ class CommandDispatcher(EventEmitter):
         prefab.actor.notes = actor.notes
         self.save_prefab(prefab)
         # cf. relink_actor_to_prefab — même badge, même besoin de tenir à
-        # jour le project viewer et l'arbre de scène.
+        # jour la Scene library et l'arbre de scène.
         self._emit("project_tree_changed")
         return True
 
@@ -578,7 +578,7 @@ class CommandDispatcher(EventEmitter):
         actor.prefab_name = name
         self._save_scene()
         self._emit("actors_list_changed")
-        # Nouveau prefab : le project viewer doit le lister sans qu'il faille
+        # Nouveau prefab : la Scene library doit le lister sans qu'il faille
         # rouvrir le projet.
         self._emit("project_tree_changed")
         self._emit("disk_changed")

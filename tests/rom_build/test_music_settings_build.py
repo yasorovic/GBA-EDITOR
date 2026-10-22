@@ -62,10 +62,10 @@ def _wav(path: Path, seconds: float = 3.0) -> None:
 def _project_with_settings(tmp_path) -> Project:
     starter = next(s.id for s in available_starters() if s.builtin)
     project = Project.create(tmp_path / "Neuf", "Neuf", starter)
-    for folder in ((project.assets_dir / "scripts"),):
+    for folder in ((project.user_library_dir / "scripts"),):
         folder.mkdir(parents=True, exist_ok=True)
     project.save()
-    music = project.assets_dir / "music"
+    music = project.user_library_dir / "music"
     music.mkdir(parents=True, exist_ok=True)
     (music / "Theme.it").write_bytes(F.make_it(orders=[0] * 8))
     _wav(music / "Ambient.wav")
@@ -93,8 +93,8 @@ def _project_with_settings(tmp_path) -> Project:
     project.scenes[0].music = "Theme"
 
     # Un script qui surcharge les réglages à l'appel : les six appels doivent compiler ET se lier.
-    (project.assets_dir / "scripts").mkdir(parents=True, exist_ok=True)
-    ((project.assets_dir / "scripts") / "Level.lua").write_text(
+    (project.user_library_dir / "scripts").mkdir(parents=True, exist_ok=True)
+    ((project.user_library_dir / "scripts") / "Level.lua").write_text(
         'function on_update()\n'
         '  music:set_tempo(150)\n'
         '  music:set_pitch(120)\n'
@@ -157,10 +157,10 @@ def test_un_jingle_module_coupe_aux_ordres_produit_une_rom(tmp_path):
     from core.engine_emulation.module_model import ORDER_END, load_module
     starter = next(s.id for s in available_starters() if s.builtin)
     project = Project.create(tmp_path / "Neuf", "Neuf", starter)
-    for folder in ((project.assets_dir / "scripts"),):
+    for folder in ((project.user_library_dir / "scripts"),):
         folder.mkdir(parents=True, exist_ok=True)
     project.save()
-    folder = project.assets_dir / "jingles"
+    folder = project.user_library_dir / "jingles"
     folder.mkdir(parents=True, exist_ok=True)
     source = F.make_it(orders=[0] * 8)
     (folder / "Fanfare.it").write_bytes(source)
@@ -168,8 +168,8 @@ def test_un_jingle_module_coupe_aux_ordres_produit_une_rom(tmp_path):
     fanfare.order_start, fanfare.order_end = 2, 6
     fanfare.music_policy = "duck"
     project.save_jingle(fanfare)
-    (project.assets_dir / "scripts").mkdir(parents=True, exist_ok=True)
-    ((project.assets_dir / "scripts") / "Level.lua").write_text(
+    (project.user_library_dir / "scripts").mkdir(parents=True, exist_ok=True)
+    ((project.user_library_dir / "scripts") / "Level.lua").write_text(
         'function on_update()\n  music:jingle("Fanfare")\nend\n', encoding="utf-8")
     project.scenes[0].script = "assets/scripts/Level.lua"
     project.save()
@@ -190,18 +190,18 @@ def test_un_jingle_module_coupe_aux_ordres_produit_une_rom(tmp_path):
 def _project_with_cut_jingle(tmp_path, **fields) -> Project:
     starter = next(s.id for s in available_starters() if s.builtin)
     project = Project.create(tmp_path / "Neuf", "Neuf", starter)
-    for folder in ((project.assets_dir / "scripts"),):
+    for folder in ((project.user_library_dir / "scripts"),):
         folder.mkdir(parents=True, exist_ok=True)
     project.save()
-    folder = project.assets_dir / "jingles"
+    folder = project.user_library_dir / "jingles"
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "Fanfare.it").write_bytes(F.make_it(orders=[0] * 4))
     fanfare = create(project, "jingles", folder / "Fanfare.it")
     for name, value in fields.items():
         setattr(fanfare, name, value)
     project.save_jingle(fanfare)
-    (project.assets_dir / "scripts").mkdir(parents=True, exist_ok=True)
-    ((project.assets_dir / "scripts") / "Level.lua").write_text('function on_update()\n  music:jingle("Fanfare")\nend\n', encoding="utf-8")
+    (project.user_library_dir / "scripts").mkdir(parents=True, exist_ok=True)
+    ((project.user_library_dir / "scripts") / "Level.lua").write_text('function on_update()\n  music:jingle("Fanfare")\nend\n', encoding="utf-8")
     project.scenes[0].script = "assets/scripts/Level.lua"
     project.save()
     return project

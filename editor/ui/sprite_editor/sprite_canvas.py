@@ -11,8 +11,9 @@ from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QToolButt
 from PyQt6.QtGui import QFont, QColor, QPixmap, QImage, QPainter, QPen, QBrush
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QPointF, QRect, QRectF, QSize
 
-from ui.common.theme import C, T, tint
+from ui.common.theme import C, T, tint, ui_font
 from ui.common.labels import label
+from ui.common.cursor_unit import CursorUnitButton
 from ui.common.tooltip import tooltip
 from ui.common.icons import get as _ico
 from ui.common.palette_bank_strip import PaletteBankStrip
@@ -42,6 +43,7 @@ class SpriteCanvas(QWidget):
     frame_painted      = pyqtSignal()
     selection_reset    = pyqtSignal()   # demande reset de la sélection dans le picker
     hover_changed       = pyqtSignal(object)  # (col, row) survolé, ou None
+    cursor_px_changed   = pyqtSignal(object)  # (x, y) en pixels de l'image survolée, ou None
     brush_picked_up     = pyqtSignal(int)     # nb de tuiles ramassées depuis le canvas
     mode_changed        = pyqtSignal()        # brosse posée/retirée, lecture seule basculée
 
@@ -286,6 +288,13 @@ class SpriteCanvas(QWidget):
         oy = (self.height() - dh) // 2 + self._pan_y
         return zoom, ox, oy, dw, dh
 
+    def _pixel_at(self, pos) -> Optional[tuple[int, int]]:
+        zoom, ox, oy, dw, dh = self._geometry()
+        x, y = pos.x() - ox, pos.y() - oy
+        if x < 0 or y < 0 or x >= dw or y >= dh:
+            return None
+        return int(x // zoom), int(y // zoom)
+
     def _cell_at(self, pos) -> Optional[tuple[int, int]]:
         zoom, ox, oy, dw, dh = self._geometry()
         x, y = pos.x() - ox, pos.y() - oy
@@ -336,6 +345,7 @@ class SpriteCanvas(QWidget):
             self._hover = cell
             self.update()
             self.hover_changed.emit(cell)
+        self.cursor_px_changed.emit(self._pixel_at(e.position()))
         if self._read_only:
             return
         if e.buttons() & Qt.MouseButton.LeftButton and cell:
@@ -360,6 +370,7 @@ class SpriteCanvas(QWidget):
         self._mouse_pos = None
         self.update()
         self.hover_changed.emit(None)
+        self.cursor_px_changed.emit(None)
 
     def wheelEvent(self, e):
         delta = e.angleDelta().y()
@@ -456,7 +467,7 @@ class SpriteCanvas(QWidget):
 
         if not self._frame or not self._sprite:
             painter.setPen(QColor(C.TEXT_MUTED))
-            painter.setFont(QFont(T.UI, T.MD))
+            painter.setFont(ui_font(T.LG))
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter,
                              label("sprframe.select_frame"))
             painter.end()
@@ -663,7 +674,7 @@ class SpriteCanvasPanel(QWidget):
         root.setSpacing(0)
 
         self.canvas = SpriteCanvas()
-        self.canvas.hover_changed.connect(self._on_hover_changed)
+        self.canvas.cursor_px_changed.connect(self._on_cursor_px)
         root.addWidget(self.canvas, 1)
 
         # Bandeau flottant de sélection de palette (bas-centre, même widget que
@@ -690,10 +701,7 @@ class SpriteCanvasPanel(QWidget):
         self._info_lbl.setStyleSheet(_FLOAT_STY)
         self._info_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
-        self._coord_lbl = QLabel("", self)
-        self._coord_lbl.setFont(QFont(T.MONO, T.XS))
-        self._coord_lbl.setStyleSheet(_FLOAT_STY)
-        self._coord_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._coord_lbl = CursorUnitButton(QFont(T.MONO, T.XS), dim=C.TEXT_MUTED, normal=C.TEXT_MUTED, parent=self)
 
         # Bandeau miroir / lecture seule — visible seulement pour une direction
         # miroir (mirror_of défini) : signale que le contenu n'est pas éditable.
@@ -726,9 +734,8 @@ class SpriteCanvasPanel(QWidget):
         self._info_lbl.adjustSize()
         self._reposition_overlays()
 
-    def _on_hover_changed(self, cell):
-        self._coord_lbl.setText(label("sprframe.coord", c=cell[0], r=cell[1]) if cell else "")
-        self._coord_lbl.adjustSize()
+    def _on_cursor_px(self, px):
+        self._coord_lbl.set_position(*(px or (None, None)))
         self._reposition_overlays()
 
     def _reposition_overlays(self):

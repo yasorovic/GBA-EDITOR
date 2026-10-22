@@ -552,7 +552,7 @@ class ProjectRenameMixin:
         propagation sur renommage suit le même régime que les autres références de
         cellule et de balisage : non câblée pour l'instant, à traiter d'un bloc
         avec la bascule des scènes et des layouts vers cette couche. Garder le
-        renommage ici évite que le finder contourne Project et crée une seconde
+        renommage ici évite que la library contourne Project et crée une seconde
         règle le jour où cette propagation arrive.
         """
         new_name = new_name.strip()

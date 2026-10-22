@@ -70,11 +70,11 @@ _SIDECAR_SUFFIXES = frozenset({asset_extensions.SPRITE, asset_extensions.BACKGRO
 _WATCHED_SUFFIXES = _ASSET_SUFFIXES | {_LUA_SUFFIX, _SCENE_SUFFIX} | _SIDECAR_SUFFIXES
 
 
-def _asset_dirs(assets_root: Path) -> list[Path]:
+def _asset_dirs(user_library_root: Path) -> list[Path]:
     """Tous les dossiers de `assets/`, à toute profondeur : un fichier se range où l'auteur veut."""
-    if not assets_root.is_dir():
+    if not user_library_root.is_dir():
         return []
-    return sorted(d for d in assets_root.rglob("*") if d.is_dir())
+    return sorted(d for d in user_library_root.rglob("*") if d.is_dir())
 
 
 class ProjectWatcher(QObject):
@@ -178,8 +178,8 @@ class ProjectWatcher(QObject):
         self._index_files(root)                     # ré-arme les watches tombés
 
     def _watched_dirs(self, project_path: Path) -> list[Path]:
-        assets_root = project_path / "assets"
-        return [assets_root, *_asset_dirs(assets_root)]
+        user_library_root = project_path / "assets"
+        return [user_library_root, *_asset_dirs(user_library_root)]
 
     def unwatch(self):
         self._clear()

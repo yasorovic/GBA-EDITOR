@@ -2,7 +2,7 @@
 
 Un même besoin traverse tout l'éditeur : ranger des assets dans des dossiers que
 l'auteur crée. Les scènes en sont le premier client (les groupes du Graphe et les
-dossiers du project viewer sont LE MÊME objet), mais sprites, prefabs, fonds…
+dossiers de la Scene library sont LE MÊME objet), mais sprites, prefabs, fonds…
 recevront la même capacité. Elle vit donc ici, une fois, indexée par **famille**
 (`scenes`, `sprites`, …) — jamais recopiée par écran.
 
@@ -140,7 +140,7 @@ class AssetFolderStore:
 
         Le nom est rendu unique parmi les dossiers de la famille (`name`,
         `name_2`…) : un groupe naît nommé, sans pop-up. C'est le geste « créer un
-        groupe » partagé par ses deux points d'entrée — le project viewer et le
+        groupe » partagé par ses deux points d'entrée — la Scene library et le
         Graphe — qui ne diffèrent que par leurs membres (une sélection, ou rien)
         et leur parent (le niveau ouvert du Graphe, ou la racine). Chaque membre
         est d'abord retiré de son dossier actuel : un asset n'est membre que d'un

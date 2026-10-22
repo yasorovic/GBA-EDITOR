@@ -21,8 +21,8 @@ Fragments QSS via QSS :
     widget.setStyleSheet(QSS.checkbox)
 
 Hiérarchie de titres (une seule grammaire pour toute l'app) :
-    QSS.title_panel        en-tête de panneau/finder  (dim, uppercase par l'appelant)
-    QSS.title_finder()     titre de section d'un viewer (SCENES, PREFABS…)
+    QSS.title_panel        en-tête de panneau/library  (dim, uppercase par l'appelant)
+    QSS.title_library()     titre de section d'un viewer (SCENES, PREFABS…)
     QSS.title_group        intertitre dans une section de viewer (ACTORS…)
     QSS.title_section()    titre de section d'inspecteur (périwinkle par défaut)
     QSS.label_field        label de champ dans une ligne de formulaire
@@ -118,17 +118,17 @@ class _Spacing:
 
     # Gouttière gauche commune à TOUS les viewers : titre de panneau, titre de
     # section et première colonne d'arbre s'alignent dessus — c'est la ligne
-    # verticale unique qu'on lit du haut en bas d'un finder.
+    # verticale unique qu'on lit du haut en bas d'une library.
     GUTTER = 10
 
     # Retrait du CONTENU d'une section (intertitres, lignes de variables) :
-    # gouttière + chevron + colonne d'icône, soit là où un QTreeWidget de finder
+    # gouttière + chevron + colonne d'icône, soit là où un QTreeWidget de library
     # pose ses items de premier niveau. Sans lui, les listes qui ne sont pas des
     # arbres décrochent de deux ou trois pixels.
     CONTENT = GUTTER + LG + MD
 
-    # Hauteur d'une ligne d'arbre / de liste dans les finders. Centralisée parce
-    # que certains arbres la calculent à la main (assets_finder_panel._Tree._fit).
+    # Hauteur d'une ligne d'arbre / de liste dans les libraries. Centralisée parce
+    # que certains arbres la calculent à la main (scene_library_panel._Tree._fit).
     ROW = 24
 
 
@@ -167,24 +167,30 @@ _DARK = dict(
     BTN_PRIMARY="#3a3a3a", BTN_PRIMARY_HOVER="#4a4a4a", BTN_PRIMARY_PRESSED="#2a2a2a",
     BTN_PRIMARY_DISABLED="#232323", BTN_PRIMARY_TEXT="#f2f2f2",
     SCROLL_HANDLE="#3a3a3a", SCROLL_HANDLE_HOVER="#4c4c4c",
-    CANVAS_BG="#1a1a1a", CHECKER_A="#222222", CHECKER_B="#2a2a2a",
-    GRAPH_BG="#0b0b0b", GRAPH_GRID="#383838",
+    CHECKER_A="#222222", CHECKER_B="#2a2a2a",
+    GRAPH_GRID="#383838",
     SYNTAX_KEYWORD="#c586c0", SYNTAX_API="#4ec9b0", SYNTAX_NUMBER="#b5cea8",
     SYNTAX_STRING="#ce9178", SYNTAX_COMMENT="#6a9955",
     CONSOLE_TEXT="#c8ffc8",   # texte de la console de build
     # Instrument « technique » (barre ROM) : pavés noirs, quadrillage, filet acier.
     TECH_BG="#040a06", TECH_TEXT="#b9f5c9", TECH_GRID="#0d1a11", TECH_OK="#5be08b",
     TECH_OUTLINE="#2f6a44", TECH_BLOCK_BORDER="#1b3a27",
-    HEADER_BG_VALUE=22,    # luminosité (0-255) du fond d'en-tête d'asset
 )
 
 _LIGHT = dict(
     # Le clair reste lumineux, mais les contrôles sont volontairement mats :
     # les splitters noirs portent la structure, pas une accumulation de
     # dégradés ou de cadres contrastés autour de chaque widget.
-    BG_DEEP="#e4e4e4", BG_BASE="#f6f6f6", BG_PANEL="#fdfdfd", BG_RAISED="#ffffff",
-    BG_INPUT="#ffffff", BG_HOVER="#ececec", BG_SEL="#e6e6e6",
-    BORDER="#dcdcdc", BORDER_MID="#c4c4c4", BORDER_DARK="#ebebeb",
+    BG_DEEP="#a0a0a0",
+    BG_BASE="#f0f0f0",
+    BG_PANEL="#cdcdcd",
+    BG_RAISED="#e6e6e6",
+    BG_INPUT="#dcdcdc",
+    BG_HOVER="#d2d2d2",
+    BG_SEL="#f0f0f0",
+    BORDER="#646464",
+    BORDER_MID="#646464",
+    BORDER_DARK="#646464",
     # Les séparateurs de panneaux sont le seul noir affirmé du thème clair.
     # Deux pixels restent visibles et faciles à saisir, sans encadrer chaque
     # widget d'un trait noir.
@@ -193,21 +199,20 @@ _LIGHT = dict(
     ON_ACCENT="#ffffff",
     POWER="#b8860b", ACCENT_RED="#c62828", ACCENT_YLW="#b8860b",
     ACCENT_WARM="#a86a10", ACCENT_COOL="#2f5fc4",
-    TEXT_HI="#1a1a1a", TEXT_NORM="#3a3a3a", TEXT_DIM="#666666", TEXT_MUTED="#8c8c8c",
+    TEXT_HI="#1a1a1a", TEXT_NORM="#3a3a3a", TEXT_DIM="#505050", TEXT_MUTED="#686868",
     TEXT_BASE="#2a2a2a",
     AXIS_X="#b04040", AXIS_Y="#3f68b0", AXIS_Z="#3f8a3f",
     SEL_BG="#e6e6e6", SEL_BORDER="#3a3a3a", SEL_TEXT="#1a1a1a",
     BTN_PRIMARY="#3a3a3a", BTN_PRIMARY_HOVER="#555555", BTN_PRIMARY_PRESSED="#222222",
     BTN_PRIMARY_DISABLED="#c4c4c4", BTN_PRIMARY_TEXT="#ffffff",
     SCROLL_HANDLE="#b0b0b0", SCROLL_HANDLE_HOVER="#909090",
-    CANVAS_BG="#e4e4e4", CHECKER_A="#b4b4b4", CHECKER_B="#9e9e9e",
-    GRAPH_BG="#cfcfcf", GRAPH_GRID="#c4c4c4",
+    CHECKER_A="#b4b4b4", CHECKER_B="#9e9e9e",
+    GRAPH_GRID="#c4c4c4",
     CONSOLE_TEXT="#1f6b3a",
     TECH_BG="#f3fbf5", TECH_TEXT="#0e4023", TECH_GRID="#d3e9da", TECH_OK="#1f9d55",
     TECH_OUTLINE="#3f8a5c", TECH_BLOCK_BORDER="#93c6a5",
     SYNTAX_KEYWORD="#9c2f9a", SYNTAX_API="#0b7a6a", SYNTAX_NUMBER="#2a7a2a",
     SYNTAX_STRING="#a8482a", SYNTAX_COMMENT="#5a8a3a",
-    HEADER_BG_VALUE=240,
 )
 
 
@@ -272,7 +277,7 @@ def _tick_rule() -> str:
 
 # Flèche ▾/▸ de repli des QTreeWidget — le MÊME triangle vectoriel partagé
 # (icons.arrow_icon() / qss_arrow_image(), voir leur commentaire) que
-# FinderSection/_Section utilisent pour LEUR flèche, à la même taille de
+# LibrarySection/_Section utilisent pour LEUR flèche, à la même taille de
 # boîte (ARROW_BOX_PX = T.MD, importé par widgets.py/sidebar_widgets.py) :
 # sinon les flèches de l'appli (en-tête de section vs branche d'arbre) ne se
 # lisent ni comme la même forme ni comme la même taille.
@@ -593,10 +598,10 @@ QListWidget::item:hover:!selected {{
 """
 
     # Liste plate d'un viewer (polices, fonds) — pendant de tree_widget pour
-    # les finders sans hiérarchie : même retrait gauche, même hauteur de ligne,
+    # les libraries sans hiérarchie : même retrait gauche, même hauteur de ligne,
     # même sélection. `accent` teinte la ligne sélectionnée à la couleur de la
-    # contexte d'un finder, si cet écran en a réellement besoin.
-    def finder_list(self, accent: str | None = None) -> str:
+    # contexte d'une library, si cet écran en a réellement besoin.
+    def library_list(self, accent: str | None = None) -> str:
         accent = accent or C.ACCENT
         return f"""
 QListWidget {{
@@ -626,7 +631,7 @@ QListWidget::item:hover:!selected {{
 """
 
     # Barres de défilement fines (verticale + horizontale), poignée grise
-    # Arborescences (finder projet, palettes, sons, textes, sprites)
+    # Arborescences (library projet, palettes, sons, textes, sprites)
     @property
     def tree_widget(self) -> str:
         return f"""
@@ -794,7 +799,7 @@ QToolTip {{
 QMenu {{
     background: {C.BG_RAISED};
     color: {C.TEXT_NORM};
-    border: 1px solid {C.BORDER_MID};
+    border: 1px solid {C.SPLITTER};
     font-family: {T.UI_STACK};
     font-size: {T.MD}px;
     padding: 2px;
@@ -912,7 +917,7 @@ QTabBar::tab:selected {{
     #  style de titre en dehors de ces briques.
     # ──────────────────────────────────────────────────────────────
 
-    # Niveau 1 — en-tête de panneau/finder (« PROJECT VIEWER », « SFX »).
+    # Niveau 1 — en-tête de panneau/library (« SCENE LIBRARY », « SFX »).
     # Discret : le contenu prime, l'en-tête ne fait que ranger.
     @property
     def title_panel(self) -> str:
@@ -920,16 +925,16 @@ QTabBar::tab:selected {{
                 f"font-family: {T.UI_STACK}; font-size: {T.SM}px;"
                 f"font-weight: 600; letter-spacing: 1px;")
 
-    # Niveau 1b — titre de section d'un finder (« SCENES », « PREFABS »).
+    # Niveau 1b — titre de section d'une library (« SCENES », « PREFABS »).
     # Un cran au-dessus de title_panel : dans un viewer, ce sont les sections
     # qui portent la structure. Ni fond ni cadre — la hiérarchie tient à
     # l'espace et à la casse, pas à des bandeaux empilés.
-    def title_finder(self, color: str | None = None) -> str:
+    def title_library(self, color: str | None = None) -> str:
         return (f"color: {color or C.TEXT_NORM}; background: transparent; border: none;"
                 f"font-family: {T.UI_STACK}; font-size: {T.LG}px;"
                 f"font-weight: 600; letter-spacing: 1.2px;")
 
-    # Niveau 1c — intertitre DANS une section de finder (« ACTORS » sous
+    # Niveau 1c — intertitre DANS une section de library (« ACTORS » sous
     # SCRIPTS). Le plus discret : il range, il ne s'annonce pas.
     @property
     def title_group(self) -> str:

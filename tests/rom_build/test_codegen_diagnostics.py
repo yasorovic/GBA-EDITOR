@@ -68,7 +68,7 @@ def _background(project, png: bool = True):
     asset = BackgroundAsset(name="sky", asset="sky.png")
     layer = BackgroundLayer(background_name="sky", bg_slot=0)
     if png:
-        _png((project.assets_dir / "backgrounds") / "sky.png")
+        _png((project.user_library_dir / "backgrounds") / "sky.png")
     return asset, layer
 
 
@@ -168,7 +168,7 @@ def test_un_fond_dont_l_en_tete_grit_manque_ou_deborde_bloque_le_build(project):
     worker, journal = _worker(project)
     asset = BackgroundAsset(name="sky", asset="sky.png")
     layer = BackgroundLayer(background_name="sky", bg_slot=0)
-    _png((project.assets_dir / "backgrounds") / "sky.png", size=(64, 64))
+    _png((project.user_library_dir / "backgrounds") / "sky.png", size=(64, 64))
     project.active_scene.background_layers.append(layer)
     layers = [(asset, layer)]
 
@@ -216,12 +216,12 @@ def test_un_avertissement_du_generateur_nomme_le_script_de_chaque_famille(tmp_pa
     monkeypatch.setattr(lua_compiler, "lua_generate", with_warning)
 
     project = Project.create(tmp_path / "Game", "Game")
-    for folder in ((project.assets_dir / "scripts"), (project.assets_dir / "backgrounds"),):
+    for folder in ((project.user_library_dir / "scripts"), (project.user_library_dir / "backgrounds"),):
         folder.mkdir(parents=True, exist_ok=True)
-    (project.assets_dir / "scripts").mkdir(parents=True, exist_ok=True)
+    (project.user_library_dir / "scripts").mkdir(parents=True, exist_ok=True)
     body = "function on_update()\nend\n"
     for name in ("Hit", "Bullet", "Level", "Cam"):
-        ((project.assets_dir / "scripts") / f"{name}.lua").write_text(body, encoding="utf-8")
+        ((project.user_library_dir / "scripts") / f"{name}.lua").write_text(body, encoding="utf-8")
     scene = project.scenes[0]
     actor = Actor(name="A")
     actor.components = [ScriptComponent(script="assets/scripts/Hit.lua")]

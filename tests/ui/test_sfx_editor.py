@@ -30,7 +30,7 @@ def project(tmp_path) -> Project:
 
 @pytest.fixture
 def editor(qapp, project):
-    sfx = create(project, "sfx", _wav(project.assets_dir / "coin.wav"))
+    sfx = create(project, "sfx", _wav(project.user_library_dir / "coin.wav"))
     widget = SfxEditor()
     widget.resize(700, 300)
     widget.load(project, sfx)
@@ -103,8 +103,8 @@ def test_a_lower_sample_rate_lightens_the_announced_weight(editor, project):
 
 
 def test_an_effect_without_a_readable_file_has_nothing_to_set(qapp, project):
-    sfx = create(project, "sfx", _wav(project.assets_dir / "gone.wav"))
-    (project.assets_dir / "gone.wav").unlink()
+    sfx = create(project, "sfx", _wav(project.user_library_dir / "gone.wav"))
+    (project.user_library_dir / "gone.wav").unlink()
     widget = SfxEditor()
     widget.load(project, sfx)
 
@@ -190,7 +190,7 @@ def test_without_a_track_provider_there_is_no_channel_bar_and_no_scope_switch(ed
 def full_editor(qapp, project):
     from ui.sound_mixer.box_playback import BoxPlayer
     player = BoxPlayer()
-    sfx = create(project, "sfx", _wav(project.assets_dir / "coin.wav"))
+    sfx = create(project, "sfx", _wav(project.user_library_dir / "coin.wav"))
     widget = SfxEditor(player.track_for)
     widget.resize(800, 320)
     widget.set_live_source(lambda frames: None)
@@ -326,7 +326,7 @@ def test_toggling_the_ab_button_tells_the_player_and_loading_another_effect_rese
 
 def test_the_player_plays_the_file_at_its_own_rate_in_the_ab_mode(qapp, project):
     from ui.sound_mixer.box_playback import BoxPlayer
-    sfx = create(project, "sfx", _wav(project.assets_dir / "ab.wav"))
+    sfx = create(project, "sfx", _wav(project.user_library_dir / "ab.wav"))
     sfx.sample_rate = 4000
     player = BoxPlayer()
 
@@ -415,8 +415,8 @@ def test_the_mix_table_is_off_without_an_effect_and_its_fades_need_a_readable_fi
     widget.load(project, None)
     assert not widget.mix_panel.isEnabled()
 
-    sfx = create(project, "sfx", _wav(project.assets_dir / "gone.wav"))
-    (project.assets_dir / "gone.wav").unlink()
+    sfx = create(project, "sfx", _wav(project.user_library_dir / "gone.wav"))
+    (project.user_library_dir / "gone.wav").unlink()
     widget.load(project, sfx)
     mix = widget._mix
 
@@ -459,8 +459,8 @@ def test_the_wave_has_no_trim_handle_any_more_but_still_shows_the_kept_range(edi
 
 
 def test_an_effect_without_a_readable_file_has_no_trim_bar(qapp, project):
-    sfx = create(project, "sfx", _wav(project.assets_dir / "coin.wav"))
-    (project.assets_dir / "coin.wav").write_bytes(b"not a wav")
+    sfx = create(project, "sfx", _wav(project.user_library_dir / "coin.wav"))
+    (project.user_library_dir / "coin.wav").write_bytes(b"not a wav")
     widget = SfxEditor()
     widget.load(project, sfx)
     assert widget._trim_bar.isHidden()

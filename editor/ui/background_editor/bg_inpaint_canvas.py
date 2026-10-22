@@ -12,7 +12,7 @@ le zoom, le pan, la grille et le rendu :
   · fond d'INTERFACE en cadre étirable → guides de coupe glissables (les mêmes
     marges que règlent les champs de l'inspecteur) ;
   · fond ANIMÉ → grille de frames et lecture à la vitesse déclarée ;
-  · n'importe quel fond → fonds animés POSÉS dessus, déposés depuis le finder,
+  · n'importe quel fond → fonds animés POSÉS dessus, déposés depuis la library,
     déplaçables et supprimables, stockés dans le .background de l'hôte.
 
 Composants :
@@ -48,7 +48,7 @@ from core.models.tile_codec import pack_se, unpack_se, hex_to_tile, flip_h, flip
 from core.models.gba_color import bgr555_to_rgb888
 from core.models.resource import MIME_ANIMATED_BG
 from core.models.background import (
-    KIND_UI, KIND_ANIMATED, UI_ROLE_NINE, BackgroundAnimation, INPAINT_REMAP_MODES,
+    KIND_UI, KIND_ANIMATED, UI_ROLE_NINE, BackgroundAnimation, COLOR_MAPPING_MODES,
 )
 from ui.common.theme import C, T, QSS
 from ui.common.palette_bank_strip import PaletteBankStrip
@@ -171,12 +171,12 @@ class BgInpaintController:
         Les deux valent pour n'importe quel fond tuilé 4bpp."""
         self._mode = MODE_PAINT if mode == MODE_PAINT else MODE_INPAINT
 
-    def set_inpaint_mapping(self, mapping: str):
+    def set_color_mapping(self, mapping: str):
         """Choisit comment les index se transforment en changeant de palette."""
-        mapping = mapping if mapping in INPAINT_REMAP_MODES else "direct"
-        if self._ba is None or self._ba.inpaint_mode == mapping:
+        mapping = mapping if mapping in COLOR_MAPPING_MODES else "direct"
+        if self._ba is None or self._ba.color_mapping == mapping:
             return
-        self._ba.inpaint_mode = mapping
+        self._ba.color_mapping = mapping
         self._render_full()
         self._persist()
         self._notify()
@@ -330,7 +330,7 @@ class BgInpaintController:
         # Un mode de correspondance recode les index : la variante de tuile
         # peut être nouvelle, donc un rendu complet est plus sûr qu'un patch
         # qui s'appuierait sur le cache précédent.
-        if self._ba.inpaint_mode == "direct":
+        if self._ba.color_mapping == "direct":
             self._patch(col, row)
 
     def paint_cells(self, cells, erase: bool = False):
@@ -339,7 +339,7 @@ class BgInpaintController:
             return
         for col, row in cells:
             self._write_cell(col, row, erase)
-        if self._ba.inpaint_mode != "direct":
+        if self._ba.color_mapping != "direct":
             self._render_full()
         self._notify()
 
@@ -391,7 +391,7 @@ class BgInpaintController:
             seen.add((c, r))
             self._write_cell(c, r, erase=False)
             stack += [(c + 1, r), (c - 1, r), (c, r + 1), (c, r - 1)]
-        if self._ba.inpaint_mode != "direct":
+        if self._ba.color_mapping != "direct":
             self._render_full()
         self._notify()
 
@@ -401,7 +401,7 @@ class BgInpaintController:
         for r in range(min(r0, r1), max(r0, r1) + 1):
             for c in range(min(c0, c1), max(c0, c1) + 1):
                 self._write_cell(c, r, erase)
-        if self._ba.inpaint_mode != "direct":
+        if self._ba.color_mapping != "direct":
             self._render_full()
         self._notify()
 
@@ -895,7 +895,7 @@ class BgInpaintView(QGraphicsView):
         self._source_pix = QPixmap()
         self._source_pix_key: Optional[tuple] = None
 
-        # Dépôt d'un fond animé venu du finder.
+        # Dépôt d'un fond animé venu de la library.
         self.setAcceptDrops(True)
         # Suppr sur un fond posé : sans focus clavier, la touche n'arriverait
         # jamais jusqu'ici.
@@ -938,8 +938,8 @@ class BgInpaintView(QGraphicsView):
         draw_grid(painter, rect, self._adaptive_step())
 
     def drawForeground(self, painter: QPainter, rect: QRectF):
-        """Le halo de survol, hors du fond mis en cache : il bouge avec le pointeur. Il ne se voit que là où l'image
-        ne couvre rien — comme quand il se tracait sous elle."""
+        """Premier plan de la vue : le halo du fond et la case survolée par l'outil.
+        Hors du fond mis en cache : ils bougent avec le pointeur."""
         if self._hover_scene is None:
             return
         w, h = self._extent()
@@ -947,6 +947,45 @@ class BgInpaintView(QGraphicsView):
         region = QRegion(rect.toAlignedRect()).subtracted(QRegion(QRectF(0, 0, w, h).toAlignedRect()))
         painter.setClipRegion(region)
         draw_grid_halo(painter, rect, self._adaptive_step(), self._hover_scene)
+        painter.restore()
+        self._draw_cell_hover(painter)
+
+    def _hover_cells_rect(self) -> Optional[QRectF]:
+        """Ce que le prochain clic de l'outil touchera : le carré du pinceau (ancré à la grille de
+        sa taille), ou une case 8×8 pour le seau et le rectangle. None hors image ou sans outil de peinture."""
+        if (self._hover_scene is None or self._canvas_mode_size is not None or self._panning
+                or self._tool not in ("brush", "eraser", "fill", "rect")):
+            return None
+        w, h = self._extent()
+        col, row = int(self._hover_scene.x() // 8), int(self._hover_scene.y() // 8)
+        if self._tool == "rect" and self._painting and self._rect_start is not None:
+            # Geste en cours : l'aperçu est le rectangle de cases du départ au curseur,
+            # celui que le relâchement peindra.
+            c0, r0 = self._rect_start
+            col, row = max(0, min(col, w // 8 - 1)), max(0, min(row, h // 8 - 1))
+            return QRectF(min(c0, col) * 8, min(r0, row) * 8,
+                          (abs(col - c0) + 1) * 8, (abs(row - r0) + 1) * 8).intersected(QRectF(0, 0, w, h))
+        size = self._brush_size if self._tool in ("brush", "eraser") else 8
+        cells = size // 8
+        if not (0 <= col * 8 < w and 0 <= row * 8 < h):
+            return None
+        col, row = col - col % cells, row - row % cells
+        return QRectF(col * 8, row * 8, size, size).intersected(QRectF(0, 0, w, h))
+
+    def _draw_cell_hover(self, painter: QPainter):
+        """Contour de la case survolée, comme le pas de snap du canvas de scène : blanc, doublé d'un
+        filet sombre pour rester lisible sur un fond clair."""
+        cell = self._hover_cells_rect()
+        if cell is None:
+            return
+        painter.save()
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        dark = QPen(QColor(0, 0, 0, 170), 0)
+        painter.setPen(dark)
+        painter.drawRect(cell)
+        inset = 1.0 / self._zoom
+        painter.setPen(QPen(QColor(255, 255, 255, 230), 0))
+        painter.drawRect(cell.adjusted(inset, inset, -inset, -inset))
         painter.restore()
 
     def _adaptive_step(self, min_screen_px: float = 8.0) -> float:
@@ -1008,6 +1047,7 @@ class BgInpaintView(QGraphicsView):
 
     def set_tool(self, tool: str):
         self._tool = tool
+        self.viewport().update()      # la case survolée dépend de l'outil
 
     def set_brush_size(self, px: int):
         self._brush_size = px if px in BRUSH_SIZES else BRUSH_SIZES[0]
@@ -1196,6 +1236,9 @@ class BgInpaintView(QGraphicsView):
         Qt à retracer l'image entière, la grille 8×8 et les calques à chaque
         pixel de survol, pour un effet qui ne bouge qu'un halo de quelques
         dizaines de pixels."""
+        if self._painting and self._tool == "rect":
+            self.viewport().update()    # l'aperçu du rectangle s'étend jusqu'à la case de départ
+            return
         radius = max(48.0, 1.5 * self._adaptive_step())
         scene_rect = None
         for pt in (old, new):
@@ -1553,18 +1596,25 @@ BRUSH_SIZES = (8, 16, 32)       # côtés de la brosse en pixels : 1, 2 ou 4 tui
 class BgInpaintToolbar(QFrame):
     tool_changed = pyqtSignal(str)
     mode_changed = pyqtSignal(str)
-    inpaint_mapping_changed = pyqtSignal(str)
+    color_mapping_changed = pyqtSignal(str)
 
-    # (outil, icône, titre, infobulle Inpaint, infobulle Paint) : le geste dépend du mode du pinceau.
-    # « select » vient en premier : c'est lui qui pose l'image dans son canvas (mode Canvas), il n'a pas de mode Paint.
-    _TOOLS = [
-        ("select", "tool_select",        "bginp.select", "bginp.select_tip", "bginp.select_tip"),
-        ("brush",  "tool_inpaint_brush", "bginp.brush", "bginp.brush_tip", "bginp.tile_brush_tip"),
-        ("fill",   "tool_fill",          "bginp.fill", "bginp.fill_tip", "bginp.fill_tip_paint"),
-        ("rect",   "tool_inpaint_rect",  "bginp.rectangle_repaint_an_area", "bginp.rectangle_tip",
-         "bginp.rectangle_tip_paint"),
-        ("eraser", "tool_erase",         "bginp.eraser", "bginp.eraser_tip", "bginp.eraser_tip_paint"),
+    # Deux outils de peinture, chacun avec ses sous-outils : l'Inpainting remplace la palette d'une tuile (avec
+    # son algorithme, « Color mapping »), le Painting pose une couleur en calque. « select » vient en premier : c'est
+    # lui qui pose l'image dans son canvas (mode Canvas). La gomme est à part : elle purge les DEUX calques.
+    # (sous-outil, icône Inpainting, icône Painting, titre, infobulle Inpainting, infobulle Painting)
+    _SUBTOOLS = [
+        ("brush", "tool_inpaint_brush", "tool_tile_brush", "bginp.brush", "bginp.brush_tip", "bginp.tile_brush_tip"),
+        ("rect", "tool_inpaint_rect", "tool_inpaint_rect", "bginp.rectangle_repaint_an_area",
+         "bginp.rectangle_tip", "bginp.rectangle_tip_paint"),
+        ("fill", "tool_fill", "tool_fill", "bginp.fill", "bginp.fill_tip", "bginp.fill_tip_paint"),
     ]
+    # (bouton, mode, titre, infobulle) : les deux outils de peinture.
+    _FAMILIES = [
+        ("inpaint", MODE_INPAINT, "bginp.mode_inpaint", "bginp.mode_inpaint_tip"),
+        ("paint", MODE_PAINT, "bginp.mode_paint", "bginp.mode_paint_tip"),
+    ]
+    _BUTTONS = ("select", "inpaint", "paint", "eraser")
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._dragging = False
@@ -1572,7 +1622,8 @@ class BgInpaintToolbar(QFrame):
         self._current = "brush"
         self._previous = "brush"        # l'outil que « select » rend en le quittant ("" : aucun, un fond qui ne se peint pas)
         self._mode = MODE_INPAINT
-        self._inpaint_mapping = "direct"
+        self._color_mapping = "direct"
+        self._sub = {"inpaint": "brush", "paint": "brush"}    # dernier sous-outil de chaque famille
         self.min_y = 0     # borne haute du drag (la barre du canvas l'occupe)
 
         self.setFixedWidth(46)
@@ -1606,88 +1657,96 @@ class BgInpaintToolbar(QFrame):
 
         self._btns: dict[str, QToolButton] = {}
 
-        for tool_id, icon_key, _title_key, _body_key, _paint_body in self._TOOLS:
+        for key in self._BUTTONS:
             btn = QToolButton()
-            btn.setIcon(_ico(icon_key, COLOR_DEFAULT, COLOR_ACTIVE))
             btn.setIconSize(QSize(24, 24))
             btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
             btn.setCheckable(True)
             btn.setFixedSize(36, 36)
-            # Seul le pinceau porte le choix du mode et de la taille. La gomme n'en a pas : elle purge les DEUX
-            # calques ; fill et rect suivent le mode du pinceau, sans le proposer.
-            if tool_id == "brush":
-                btn.clicked.connect(lambda _=False, t=tool_id: self._show_brush_menu(t))
+            # Les deux outils de peinture ouvrent leur menu de sous-outils ; select et la gomme se choisissent d'un clic.
+            if key in ("inpaint", "paint"):
+                btn.clicked.connect(lambda _=False, f=key: self._show_family_menu(f))
             else:
-                btn.clicked.connect(lambda _=False, t=tool_id: self._set_tool(t))
+                btn.clicked.connect(lambda _=False, t=key: self._set_tool(t))
             layout.addWidget(btn, 0, Qt.AlignmentFlag.AlignHCenter)
-            self._btns[tool_id] = btn
+            self._btns[key] = btn
 
         self._sync_buttons()
         self._refresh_tips()
 
-    def _refresh_tips(self):
-        """Infobulles et icône du pinceau selon le mode : le même outil, deux gestes."""
-        paint = self._mode == MODE_PAINT
-        for tool_id, _icon, title_key, body_key, paint_body in self._TOOLS:
-            shortcut = get_keybindings().resolve("background.tool_brush") if tool_id == "brush" else None
-            self._btns[tool_id].setToolTip(tooltip(
-                title=label(title_key), shortcut=shortcut, body=label(paint_body if paint else body_key)))
-        self._btns["brush"].setIcon(_ico("tool_tile_brush" if paint else "tool_inpaint_brush",
-                                         COLOR_DEFAULT, COLOR_ACTIVE))
+    def _family_icon(self, family: str) -> str:
+        """Icône du bouton d'une famille : celle de son dernier sous-outil."""
+        column = 1 if family == "inpaint" else 2
+        sub = next(t for t in self._SUBTOOLS if t[0] == self._sub[family])
+        return sub[column]
 
-    def _show_brush_menu(self, tool: str):
-        """Dropdown du pinceau : mode (Inpaint / Paint) puis taille, calqué sur `FloatingToolbar` du canvas."""
+    def _refresh_tips(self):
+        """Icônes et infobulles des boutons : chaque famille montre son dernier sous-outil."""
+        self._btns["select"].setIcon(_ico("tool_select", COLOR_DEFAULT, COLOR_ACTIVE))
+        self._btns["select"].setToolTip(tooltip(title=label("bginp.select"), body=label("bginp.select_tip")))
+        self._btns["eraser"].setIcon(_ico("tool_erase", COLOR_DEFAULT, COLOR_ACTIVE))
+        self._btns["eraser"].setToolTip(tooltip(title=label("bginp.eraser"), body=label("bginp.eraser_tip")))
+        for family, mode, title_key, body_key in self._FAMILIES:
+            shortcut = get_keybindings().resolve("background.tool_brush") if mode == self._mode else None
+            self._btns[family].setIcon(_ico(self._family_icon(family), COLOR_DEFAULT, COLOR_ACTIVE))
+            self._btns[family].setToolTip(tooltip(title=label(title_key), shortcut=shortcut, body=label(body_key)))
+
+    def _show_family_menu(self, family: str):
+        """Menu d'un outil de peinture : ses sous-outils, et pour l'Inpainting l'algorithme « Color mapping »."""
         from PyQt6.QtGui import QAction
 
+        mode = next(m for f, m, _t, _b in self._FAMILIES if f == family)
         menu = QMenu(self)
         menu.setFont(QFont(T.UI, T.MD))
         menu.setStyleSheet(f"""
-            QMenu {{ background:{C.BG_RAISED}; color:{C.TEXT_NORM}; border:1px solid {C.BORDER_MID};
+            QMenu {{ background:{C.BG_RAISED}; color:{C.TEXT_NORM}; border:1px solid {C.SPLITTER};
                     border-radius:4px; padding:4px; }}
             QMenu::item {{ padding:5px 14px 5px 8px; border-radius:3px; icon-size:20px; }}
             QMenu::item:selected {{ background:{C.BG_SEL}; color:{C.ACCENT}; }}
             QMenu::item:checked  {{ color:{C.ACCENT}; }}
         """)
-        for mode, icon_key, title_key, body_key in (
-                (MODE_INPAINT, "tool_inpaint_brush", "bginp.mode_inpaint", "bginp.mode_inpaint_tip"),
-                (MODE_PAINT, "tool_tile_brush", "bginp.mode_paint", "bginp.mode_paint_tip")):
+        column = 1 if family == "inpaint" else 2
+        for entry in self._SUBTOOLS:
+            sub, title_key = entry[0], entry[3]
+            tip_key = entry[4] if family == "inpaint" else entry[5]
             action = QAction(label(title_key), self)
-            action.setIcon(_ico(icon_key, COLOR_DEFAULT))
-            action.setToolTip(tooltip(title=label(title_key), body=label(body_key)))
+            action.setIcon(_ico(entry[column], COLOR_DEFAULT))
+            action.setToolTip(tooltip(title=label(title_key), body=label(tip_key)))
             action.setCheckable(True)
-            action.setChecked(mode == self._mode)
-            action.triggered.connect(lambda _=False, m=mode: self._select_mode(m, tool))
+            action.setChecked(self._mode == mode and self._current == sub)
+            action.triggered.connect(lambda _=False, f=family, t=sub: self._select_family_tool(f, t))
             menu.addAction(action)
-        mapping_menu = menu.addMenu(label("bginp.remap_title"))
-        for mapping, key in (
-                ("direct", "bginp.remap_direct"),
-                ("nearest", "bginp.remap_nearest"),
-                ("luminance", "bginp.remap_luminance"),
-                ("optimal", "bginp.remap_optimal"),
-                ("ramp", "bginp.remap_ramp")):
-            action = mapping_menu.addAction(label(key))
-            action.setCheckable(True)
-            action.setChecked(mapping == self._inpaint_mapping)
-            action.triggered.connect(lambda _=False, m=mapping: self._select_inpaint_mapping(m, tool))
+        if family == "inpaint":
+            mapping_menu = menu.addMenu(label("bginp.color_mapping_title"))
+            for mapping, key in (
+                    ("direct", "bginp.color_mapping_direct"),
+                    ("nearest", "bginp.color_mapping_nearest"),
+                    ("luminance", "bginp.color_mapping_luminance"),
+                    ("optimal", "bginp.color_mapping_optimal"),
+                    ("ramp", "bginp.color_mapping_ramp")):
+                action = mapping_menu.addAction(label(key))
+                action.setCheckable(True)
+                action.setChecked(mapping == self._color_mapping)
+                action.triggered.connect(lambda _=False, m=mapping: self._select_color_mapping(m))
 
-        owner = self._btns[tool]
+        owner = self._btns[family]
         self._exec_tool_menu(menu, owner.mapToGlobal(QPoint(owner.width() + 4, 0)), owner)
 
-    def _select_mode(self, mode: str, tool: str):
+    def _select_family_tool(self, family: str, sub: str):
+        mode = next(m for f, m, _t, _b in self._FAMILIES if f == family)
         self.set_mode(mode)
-        self._set_tool(tool)
+        self._set_tool(sub)
 
-    def _select_inpaint_mapping(self, mapping: str, tool: str):
-        self.set_inpaint_mapping(mapping)
-        self.set_mode(MODE_INPAINT)
-        self._set_tool(tool)
+    def _select_color_mapping(self, mapping: str):
+        self.set_color_mapping(mapping)
+        self._select_family_tool("inpaint", self._sub["inpaint"])
 
-    def set_inpaint_mapping(self, mapping: str):
-        mapping = mapping if mapping in INPAINT_REMAP_MODES else "direct"
-        if mapping == self._inpaint_mapping:
+    def set_color_mapping(self, mapping: str):
+        mapping = mapping if mapping in COLOR_MAPPING_MODES else "direct"
+        if mapping == self._color_mapping:
             return
-        self._inpaint_mapping = mapping
-        self.inpaint_mapping_changed.emit(mapping)
+        self._color_mapping = mapping
+        self.color_mapping_changed.emit(mapping)
 
     def set_mode(self, mode: str):
         mode = MODE_PAINT if mode == MODE_PAINT else MODE_INPAINT
@@ -1695,6 +1754,7 @@ class BgInpaintToolbar(QFrame):
             return
         self._mode = mode
         self._refresh_tips()
+        self._sync_buttons()
         self.mode_changed.emit(mode)
 
     @property
@@ -1712,13 +1772,20 @@ class BgInpaintToolbar(QFrame):
         if tool != "select":
             self._previous = tool
         self._current = tool
+        if tool in [t[0] for t in self._SUBTOOLS]:
+            self._sub["paint" if self._mode == MODE_PAINT else "inpaint"] = tool
+            self._refresh_tips()
         self._sync_buttons()
         self.tool_changed.emit(tool)
 
     def _sync_buttons(self):
         """Une seule source de l'état coché, identique au canvas de scène."""
-        for tool_id, button in self._btns.items():
-            button.setChecked(tool_id == self._current)
+        for key, button in self._btns.items():
+            if key in ("select", "eraser"):
+                button.setChecked(key == self._current)
+            else:
+                family_mode = MODE_PAINT if key == "paint" else MODE_INPAINT
+                button.setChecked(self._mode == family_mode and self._current in [t[0] for t in self._SUBTOOLS])
 
     def configure(self, paintable: bool, can_select: bool):
         """Ce que la barre propose pour le fond courant : « select » quand l'image se pose dans un canvas, les outils de
@@ -1907,7 +1974,7 @@ class BgInpaintCanvas(QWidget):
         self._toolbar.tool_changed.connect(self._view.set_tool)
         self._toolbar.tool_changed.connect(self._on_tool_changed)
         self._toolbar.mode_changed.connect(self._on_mode_changed)
-        self._toolbar.inpaint_mapping_changed.connect(self._on_inpaint_mapping_changed)
+        self._toolbar.color_mapping_changed.connect(self._on_color_mapping_changed)
         self._toolbar.raise_()
         brush_shortcut = QShortcut(QKeySequence(), self)
         brush_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
@@ -2473,7 +2540,7 @@ class BgInpaintCanvas(QWidget):
         self.placement_selected.emit(None)   # referme la section PLACEMENT
         self._ctrl.set_context(project, ba)
         if ba:
-            self._toolbar.set_inpaint_mapping(ba.inpaint_mode)
+            self._toolbar.set_color_mapping(ba.color_mapping)
         # Inpainting = tuilé 4bpp uniquement. En 8bpp (une palette 256) et en
         # bitmap (Mode 4) : peinture désactivée, outils de peinture et bande masqués ; la barre reste pour « select »
         # (cf. `BgInpaintToolbar.configure`, appelé par `_refresh_prepare_ui`).
@@ -2533,8 +2600,8 @@ class BgInpaintCanvas(QWidget):
         self._ctrl.set_mode(mode)
         self._reload_strip()      # Paint ne propose que les palettes ajoutées, Inpaint toutes
 
-    def _on_inpaint_mapping_changed(self, mapping: str):
-        self._ctrl.set_inpaint_mapping(mapping)
+    def _on_color_mapping_changed(self, mapping: str):
+        self._ctrl.set_color_mapping(mapping)
 
     def _paintable(self) -> bool:
         ba = self._ba

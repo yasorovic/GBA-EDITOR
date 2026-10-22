@@ -12,7 +12,7 @@ from core.project import Project
 @pytest.fixture
 def project(tmp_path):
     p = Project.create(tmp_path / "Game", "Game")
-    source = p.assets_dir / "audio.wav"
+    source = p.user_library_dir / "audio.wav"
     source.write_bytes(b"audio")  # La résolution ne décode pas les fichiers.
     for store, cls in ((p.sfx, Sfx), (p.music, Music)):
         for name in ("Unused", "First", "Missing", "Second"):

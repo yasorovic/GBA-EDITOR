@@ -27,9 +27,9 @@ from PyQt6.QtWidgets import QApplication
 from core.app_info import APP_NAME
 from core.interface_preferences import interface_theme as _interface_theme
 _LIGHT = _interface_theme() == "light"
-COLOR_DEFAULT = "#666666" if _LIGHT else "#8c8c8c"   # gris neutre
-COLOR_ACTIVE  = "#3a3a3a" if _LIGHT else "#d0d0d0"   # état actif neutre
-COLOR_FOLDER  = "#8a8a8a" if _LIGHT else "#6e6e6e"   # dossier — gris neutre
+COLOR_DEFAULT = "#4a4a4a" if _LIGHT else "#8c8c8c"   # gris neutre
+COLOR_ACTIVE  = "#1f1f1f" if _LIGHT else "#d0d0d0"   # état actif neutre
+COLOR_FOLDER  = "#5c5c5c" if _LIGHT else "#6e6e6e"   # dossier — gris neutre
 
 # Alias de compatibilité : les consommateurs existants continuent à demander
 # une couleur, mais elle est volontairement neutre. Les nouveaux outils ne
@@ -90,6 +90,8 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "tool_inpaint_brush":         ("mdi.image-edit-outline",      "🖼"),
     "tool_inpaint_rect":          ("mdi.select-drag",             "▭"),
     "tool_fill":                  ("mdi.format-color-fill",       "🪣"),
+    # Poignée de réordonnancement d'une ligne (pages d'un texte, boîtes de texte).
+    "drag_grip":                  ("mdi.drag-vertical",           "⋮⋮"),
     "export_png":                 ("mdi.export-variant",          "⇩"),
     # Rôle d'un layer dans le mélange de couleurs — la FORME dit le rôle :
     # hors du mélange, au-dessus (ce qui est mélangé), en dessous (ce avec quoi).
@@ -235,7 +237,7 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "spin_down":             ("mdi.menu-down",               "▼"),
     # Flèches de repli/dépli des arborescences (QTreeWidget::branch) : PAS ici
     # — theme.py les rend via qss_arrow_image() (triangle vectoriel partagé,
-    # cf. plus bas), pour matcher exactement la flèche de FinderSection/
+    # cf. plus bas), pour matcher exactement la flèche de LibrarySection/
     # _Section/_SubSection (icons.arrow_icon()).
     # Data Editor — bandeau TABLE : deux actions "+" distinctes côte à côte,
     # la FORME dit ce qui est ajouté (ligne vs colonne), pas juste "+".
@@ -251,7 +253,7 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "prep_mirror_y":          ("mdi.reflect-vertical",        "⥮"),
     "prep_reset":             ("mdi.backup-restore",          "↺"),
     # LOCATE : montrer un élément dans l'onglet Disk (cf. ui/common/locate_bus.py).
-    # À droite de chaque ligne d'un finder ; le même geste partout.
+    # À droite de chaque ligne d'une library ; le même geste partout.
     "locate":                 ("mdi.crosshairs-gps",          "⌖"),
     # Boutons génériques de barre d'outils (ui/common/widgets.py W.btn_add /
     # W.btn_search) — un `QIcon` recolorable au survol (cf. `_HoverIconButton`),
@@ -425,7 +427,7 @@ def app_icon() -> QIcon:
 
 def folder_icon(expanded: bool, color: str = COLOR_FOLDER) -> QIcon:
     """Icône dossier des arbres : plein replié, filet déplié — la même
-    alternance partout où un dossier peut se déplier (Finder d'assets, arbre
+    alternance partout où un dossier peut se déplier (Library d'assets, arbre
     de scène, arbre de textes)."""
     return get("folder" if expanded else "folder_closed", color)
 
@@ -522,7 +524,7 @@ def qss_image(name: str, color: str = COLOR_DEFAULT,
 # fallback de police ne s'y applique pas hors contexte de widget. On dessine
 # donc la flèche nous-mêmes — un simple triangle plein vectoriel — et
 # arrow_icon() / qss_arrow_image() sont les DEUX SEULS points d'entrée pour
-# cette forme dans toute l'appli : FinderSection, _Section, _SubSection
+# cette forme dans toute l'appli : LibrarySection, _Section, _SubSection
 # (widgets.py / sidebar_widgets.py) et le QSS de QTreeWidget::branch
 # (theme.py) y passent tous, donc un dessin strictement identique partout,
 # sans dépendre d'aucune police.
@@ -594,7 +596,7 @@ def qss_arrow_image(direction: str, color: str = COLOR_DEFAULT) -> str:
 def arrow_icon(direction: str, color: str = COLOR_DEFAULT) -> QIcon:
     """
     QIcon de la même flèche pleine partagée, pour un usage direct sur un
-    QLabel/QPushButton (FinderSection, _Section, _SubSection) — exactement le
+    QLabel/QPushButton (LibrarySection, _Section, _SubSection) — exactement le
     même dessin que qss_arrow_image(), sans passer par le cache disque QSS.
     L'appelant choisit la taille d'affichage via setIconSize()/pixmap(size).
     """

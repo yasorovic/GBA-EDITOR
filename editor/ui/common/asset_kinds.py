@@ -5,12 +5,12 @@ Un seul endroit qui dit, pour chaque famille : où elle vit, comment on la
 renomme, comment on la supprime, comment on en crée une. Les écrans n'en
 choisissent que les familles qui les concernent :
 
-    AssetFinder("Data finder",    [DATA_TABLES])
-    AssetFinder("Project viewer", [SCENES, PREFABS, SCRIPTS])
-    AssetFinder("Sound finder",   [SFX, MUSIC, JINGLES])
+    AssetLibrary("Data library",    [DATA_TABLES])
+    AssetLibrary("Scene library",  [SCENES, PREFABS])
+    AssetLibrary("Sound library",   [SFX, MUSIC, JINGLES])
 
 Avant ce fichier, chaque écran réécrivait ces quatre réponses pour sa propre
-famille — d'où huit panneaux qui divergeaient. Cf. docs/asset-finder.md.
+famille — d'où huit panneaux qui divergeaient. Cf. docs/asset-library.md.
 
 Les renommages passent TOUS par `Project.rename_*` et jamais par le store :
 seul le projet réécrit aussi ce qui cite l'asset par son nom (les scènes, les
@@ -25,7 +25,7 @@ from pathlib import Path
 
 from ui.common.icons import get as _ico, COLOR_DEFAULT
 from ui.common.theme import QSS
-from ui.common.asset_finder import AssetKind, store_nodes, dir_nodes, store_file, own_path
+from ui.common.asset_library import AssetKind, store_nodes, dir_nodes, store_file, own_path
 
 from core.models.unique_name import unique_name
 from core.models.resource import (
@@ -55,7 +55,7 @@ def _renamer(method: str):
 def _store_deleter(attr: str):
     """Bâtit la suppression annulable d'un asset d'un `ResourceStore` (Ctrl+Z).
 
-    Rend la commande SANS la pousser : le finder la pousse seule, ou groupe tout
+    Rend la commande SANS la pousser : la library la pousse seule, ou groupe tout
     un lot dans un seul `MacroCmd` pour un unique Ctrl+Z (cf. AssetKind.delete)."""
     def delete(project, obj):
         return DeleteResourceCmd(getattr(project, attr), obj)
@@ -64,7 +64,7 @@ def _store_deleter(attr: str):
 
 def _store_duplicator(family: str):
     """Bâtit la duplication d'un LOT d'assets d'un `ResourceStore` : une `Duplication` par asset, commandes NON poussées.
-    La copie pointe la même source (cf. core/asset_duplication) ; le finder pousse le lot en une entrée d'historique."""
+    La copie pointe la même source (cf. core/asset_duplication) ; la library pousse le lot en une entrée d'historique."""
     def duplicate(project, objs):
         from core import asset_duplication
         return asset_duplication.duplicate_many(project, family, objs)
@@ -178,7 +178,7 @@ SCRIPTS = AssetKind(
     label_key = 'akind.scripts',
     icon          = "script_lua",
     icon_of       = _script_icon,
-    nodes         = dir_nodes("assets_dir", (".lua", ".c"), prune_empty=True),
+    nodes         = dir_nodes("user_library_dir", (".lua", ".c"), prune_empty=True),
     rename        = _rename_script,
     delete        = lambda project, path: DeleteFileCmd(path),
     delete_prompt = lambda p: label('akind.delete_name_ctrl_z_to_undo', name=p.name),
@@ -196,7 +196,7 @@ SCRIPTS = AssetKind(
 
 
 def _create_blank(project, kind: str, **options):
-    """« + » d'une famille sans source : *Create blank* dans le dossier que l'onglet Disk affiche. Rend l'asset (le finder
+    """« + » d'une famille sans source : *Create blank* dans le dossier que l'onglet Disk affiche. Rend l'asset (la library
     ouvre aussitôt son renommage en place)."""
     from core import asset_creation
     from ui.common.import_folder import import_folder
@@ -213,8 +213,8 @@ def add_script(project, on_created) -> None:
     from core import asset_creation
     from core.command_dispatcher import get_dispatcher
     from ui.common.import_folder import import_folder
-    kind = _menu_choice([(label("assf.script"), lambda: "script", "script_lua"),
-                         (label("assf.behavior_script"), lambda: "behavior", "script_lua")])
+    kind = _menu_choice([(label("scriptlibrary.script"), lambda: "script", "script_lua"),
+                         (label("scriptlibrary.behavior_script"), lambda: "behavior", "script_lua")])
     if kind is None:
         return
     folder = import_folder(project)
@@ -262,7 +262,7 @@ def _relink_action(family: str):
         if not files:
             QMessageBox.information(None, title, label('akind.relink_none'))
             return
-        entries = [(p.relative_to(project.assets_dir).as_posix(), str(p)) for p in files]
+        entries = [(p.relative_to(project.user_library_dir).as_posix(), str(p)) for p in files]
         popup = ScriptPickerPopup(entries, C.ACCENT, new_label=None)
 
         warning = {"backgrounds": "akind.relink_warn_background",
@@ -301,7 +301,7 @@ SPRITES = AssetKind(
     delete        = _store_deleter("sprites"),
     delete_prompt = lambda s: label('akind.delete_sprite_name_ctrl_z_to_undo', name=s.name),
     # Un sprite se crée uniquement par import d'une image : l'écran ouvre le
-    # dialogue (il lui faut un parent), le finder ne fait que le demander.
+    # dialogue (il lui faut un parent), la library ne fait que le demander.
     add_tooltip_key = 'akind.import_a_sprite_sheet',
     actions       = (_relink_action("sprites"),),
     file_of       = store_file("sprites"),
@@ -319,7 +319,7 @@ BACKGROUNDS = AssetKind(
     icon   = "background",
     # `kind` (scene / ui / animated) est le seul axe de rangement que le modèle
     # porte déjà : on s'en sert comme dossier tant que l'utilisateur n'a pas les
-    # siens (cf. docs/asset-finder.md).
+    # siens (cf. docs/asset-library.md).
     nodes  = store_nodes("backgrounds", group_by=lambda bg: getattr(bg, "kind", "")),
     rename = _renamer("rename_background"),
     delete = _store_deleter("backgrounds"),
@@ -451,7 +451,7 @@ def _import_palette(project):
 def _add_palette(project):
     """Le « + » propose la taille et l'import dans un seul menu, plutôt que
     d'enchaîner deux modales avant que la palette existe (cf. la règle « inline
-    plutôt que dialogues ») : la banque naît nommée, et le finder ouvre aussitôt
+    plutôt que dialogues ») : la banque naît nommée, et la library ouvre aussitôt
     son renommage en place."""
     return _menu_choice([
         (label('akind.new_16_color_palette_4bpp'),  lambda: _create_blank(project, "palette", size=16), "palette"),
@@ -485,7 +485,7 @@ PALETTES = AssetKind(
 
 def _add_sound(family: str, tip_key: str):
     """« + » d'un SFX / d'une musique / d'un jingle : un son n'existe pas sans fichier, donc *Create from source* — on choisit
-    le fichier, l'asset naît nommé d'après lui et le finder ouvre son renommage en place."""
+    le fichier, l'asset naît nommé d'après lui et la library ouvre son renommage en place."""
     def add(project):
         from ui.common.source_import import import_from_file
         return import_from_file(project, family, label(tip_key))

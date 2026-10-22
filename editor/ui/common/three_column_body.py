@@ -1,4 +1,4 @@
-"""Le squelette commun des écrans : finder | centre | inspecteur, et sous la
+"""Le squelette commun des écrans : library | centre | inspecteur, et sous la
 colonne centrale un emplacement pour le panneau de build.
 
 Chaque écran refaisait ce `QSplitter` à la main (poignées, stretch, tailles) ; ce

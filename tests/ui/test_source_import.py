@@ -20,7 +20,7 @@ def _wav(path):
 def _project(tmp_path, monkeypatch, history):
     p = Project.create(tmp_path / "Jeu", "Jeu")
     p.load_all_resources()
-    folder = p.assets_dir / "Audio"
+    folder = p.user_library_dir / "Audio"
     folder.mkdir()
     monkeypatch.setattr(import_folder, "_shown_folder", lambda: str(folder))
     monkeypatch.setattr(asset_kinds, "get_history", lambda: history)
@@ -32,7 +32,7 @@ def test_the_plus_of_a_sound_family_imports_a_file_as_one_undoable_gesture(tmp_p
     history = CommandHistory()
     p, folder = _project(tmp_path, monkeypatch, history)
     outside = _wav(tmp_path / "coin.wav")
-    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(outside), ""))
+    monkeypatch.setattr(QFileDialog, "getOpenFileNames", lambda *a, **k: ([str(outside)], ""))
 
     sfx = asset_kinds.SFX.add(p)
 

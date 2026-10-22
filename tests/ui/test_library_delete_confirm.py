@@ -1,4 +1,4 @@
-"""Supprimer depuis un finder : pas de fenêtre pour un asset que rien ne cite (annulable) ; une question quand il est encore utilisé."""
+"""Supprimer depuis une library : pas de fenêtre pour un asset que rien ne cite (annulable) ; une question quand il est encore utilisé."""
 from __future__ import annotations
 
 import pytest
@@ -11,12 +11,12 @@ from core.history import get_history
 def panel(qapp, tmp_path):
     from core.models.scene import Scene
     from core.project import Project
-    from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
+    from ui.scene_manager.scene_library_panel import SceneLibraryPanel
 
     project = Project(tmp_path / "jeu")
     for name in ("Title", "Shop", "Arena"):
         project.scenes.append(Scene(name=name))
-    panel = AssetsFinderPanel()
+    panel = SceneLibraryPanel()
     panel.load_project(project)
     get_history().clear()
     yield panel, project
@@ -25,7 +25,7 @@ def panel(qapp, tmp_path):
 
 def _tree(panel):
     from ui.common.asset_kinds import SCENES
-    return panel._finder._trees[SCENES.label]
+    return panel._library._trees[SCENES.label]
 
 
 def _spy(monkeypatch, answer):

@@ -94,7 +94,7 @@ def drop_verdict(project, paths, target) -> tuple[bool, tuple[Path, str] | None]
     pose l'interface au survol. `possible` : au moins un élément se déplacerait. `refus` : le premier élément
     refusé et son motif, pour le dire à l'auteur ; `None` s'il n'y en a pas (rien à déplacer n'est pas un refus)."""
     project.load_all_resources()
-    assets = project.assets_dir.resolve()
+    assets = project.user_library_dir.resolve()
     target = Path(target)
     if not target.is_dir() or not inside(assets, target):
         return False, ((Path(paths[0]), OUTSIDE) if paths else None)
@@ -108,7 +108,7 @@ def drop_verdict(project, paths, target) -> tuple[bool, tuple[Path, str] | None]
 def move_to_folder(project, paths, target) -> MoveResult:
     """Range `paths` (fichiers et dossiers) dans le dossier `target`. Les chemins que l'asset cite sont réécrits."""
     project.load_all_resources()                       # sans les familles différées, leurs assets pointeraient encore l'ancien chemin
-    assets = project.assets_dir.resolve()
+    assets = project.user_library_dir.resolve()
     result = MoveResult()
     target = Path(target)
     if not target.is_dir() or not inside(assets, target):
@@ -142,7 +142,7 @@ def rename_in_place(project, path, new_name: str) -> Path | None:
     comme à un déplacement. `None` si le nom est invalide ou pris, ou si `path` est `assets/` lui-même, n'en fait pas
     partie, ou est un fichier que le code cherche à un endroit précis. Un nom inchangé rend `path` sans rien toucher."""
     project.load_all_resources()
-    assets = project.assets_dir.resolve()
+    assets = project.user_library_dir.resolve()
     path = Path(path)
     new_name = new_name.strip()
     if (not valid_entry_name(new_name) or not path.exists()

@@ -33,7 +33,7 @@ VOLONTAIREMENT absentes de ce registre, remappables nulle part :
     Listés quand même dans l'écran Réglages via `DISPLAY_ONLY` ci-dessous —
     pour la découvrabilité, pas pour le remappage : lecture seule, aucune
     entrée dans `BINDINGS`/`_BY_ID`.
-  - **Renommer (F2)** (scene_tree_panel.py, asset_finder.py) — le `F2` qui
+  - **Renommer (F2)** (scene_tree_panel.py, asset_library.py) — le `F2` qui
     apparaît dans ces menus est un LIBELLÉ, pas un branchement : Qt déclenche
     déjà l'édition en place via son trigger natif `EditKeyPressed` sur
     QTreeWidget/QListWidget. Le remapper ici changerait le texte affiché sans
@@ -113,7 +113,7 @@ BINDINGS: list[Binding] = [
     # Sound mixer (ui/sound_mixer/sound_panel.py)
     Binding("sound.play_pause", "sound_mixer", "Space"),
 
-    # Scene Manager — project viewer & Graphe des scènes
+    # Scene Manager — Scene library & Graphe des scènes
     Binding("scene.group", "scene_manager", "Ctrl+G"),
     Binding("scene.graph_toggle_minimap", "scene_manager", "H"),
     Binding("scene.graph_search", "scene_manager", "Ctrl+F"),

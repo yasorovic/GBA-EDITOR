@@ -86,8 +86,9 @@ class ProjectPathsMixin:
     # ── Chemins canoniques ────────────────────────────────────────
 
     @property
-    def assets_dir(self) -> Path:
-        """Tout ce que l'auteur manipule : sources brutes (PNG, sons…), assets (scènes, prefabs,
+    def user_library_dir(self) -> Path:
+        """La user library : le dossier `assets/` de l'auteur (son nom pour lui est « assets » et l'onglet « Disk » ;
+        `user_library` est le nom que le code lui donne). Tout ce que l'auteur manipule : sources brutes (PNG, sons…), assets (scènes, prefabs,
         mises en page, boîtes sonores, tables de données, polices logiques…), textes et variables.
         Il l'organise lui-même ; l'éditeur n'y écrit que ce qu'il lui demande."""
         return self.root / "assets"
@@ -101,7 +102,7 @@ class ProjectPathsMixin:
     @property
     def variables_file(self) -> Path:
         """Globals + constants du projet — assets/variables.json, à la racine de `assets/`."""
-        return self.assets_dir / "variables.json"
+        return self.user_library_dir / "variables.json"
 
     @property
     def texts_file(self) -> Path:
@@ -111,7 +112,7 @@ class ProjectPathsMixin:
         on parle de centaines d'entrées courtes, et un traducteur veut tout voir
         d'un coup. Les traductions sont à côté, `texts_<langue>.json`. Ni dans un
         sous-dossier : `assets/data/` est lu comme « une table par fichier »."""
-        return self.assets_dir / "texts.json"
+        return self.user_library_dir / "texts.json"
 
     @property
     def legacy_sound_states_dir(self) -> Path:

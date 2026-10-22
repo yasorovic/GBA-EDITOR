@@ -296,7 +296,7 @@ class MusicMachinePanel(QWidget):
         super().__init__(parent)
         # Toolbar, canvas et aide partagent le fond du canvas : pas d'effet
         # « boîte » autour du graphe, comme dans le graphe de scènes.
-        self.setStyleSheet(f"background:{C.GRAPH_BG};")
+        self.setStyleSheet(f"background:{C.BG_DEEP};")
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(6)

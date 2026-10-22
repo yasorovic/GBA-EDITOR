@@ -46,8 +46,8 @@ def qapp():
 @pytest.fixture(autouse=True)
 def _drain_qt_events():
     """Purge les évènements Qt en attente APRÈS chaque test — en particulier un
-    `QTimer.singleShot(0, ...)` qu'un test aurait programmé (l'AssetFinder en
-    pose un pour différer l'activation d'un asset, cf. `asset_finder.py`) sans
+    `QTimer.singleShot(0, ...)` qu'un test aurait programmé (l'AssetLibrary en
+    pose un pour différer l'activation d'un asset, cf. `asset_library.py`) sans
     le laisser se déclencher lui-même.
 
     Un timer non drainé survit à la fin du test : il reste posé sur la boucle

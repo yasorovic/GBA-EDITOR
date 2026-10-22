@@ -9,8 +9,9 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont, QColor, QPainter, QPen, QPixmap, QBrush
 from PyQt6.QtCore import Qt, pyqtSignal, QRect, QPoint
 
-from ui.common.theme import C, T, QSS
+from ui.common.theme import C, T, QSS, ui_font
 from ui.common.labels import label
+from ui.common.cursor_unit import CursorUnitButton
 from ui.common.tooltip import tooltip
 from ui.common import external_editor
 
@@ -25,6 +26,7 @@ class SpritesheetCanvas(QWidget):
 
     selection_changed = pyqtSignal(list)
     hover_changed      = pyqtSignal(object)  # (col, row) survolé, ou None
+    cursor_px_changed  = pyqtSignal(object)  # (x, y) en pixels de la planche survolée, ou None
 
     MAX_ZOOM = 24
 
@@ -75,6 +77,12 @@ class SpritesheetCanvas(QWidget):
             row = max(0, min(row, self._pixmap.height() // 8 - 1))
         return col, row
 
+    def _pixel_at(self, pos) -> tuple[int, int]:
+        o = self._origin()
+        x = int((pos.x() - o.x()) // self._zoom)
+        y = int((pos.y() - o.y()) // self._zoom)
+        return max(0, min(x, self._pixmap.width() - 1)), max(0, min(y, self._pixmap.height() - 1))
+
     def _adjust_zoom(self, delta: int):
         self._zoom = max(1, min(self.MAX_ZOOM, self._zoom + delta))
         self.update()
@@ -104,6 +112,7 @@ class SpritesheetCanvas(QWidget):
             if cell != self._hover:
                 self._hover = cell
                 self.hover_changed.emit(cell)
+            self.cursor_px_changed.emit(self._pixel_at(e.position()))
         if self._drag_start is None or not (e.buttons() & Qt.MouseButton.LeftButton):
             return
         self._drag_end = self._tile_at(e.position())
@@ -120,6 +129,7 @@ class SpritesheetCanvas(QWidget):
             self._drag_start = None
 
     def leaveEvent(self, e):
+        self.cursor_px_changed.emit(None)
         if self._hover is not None:
             self._hover = None
             self.hover_changed.emit(None)
@@ -155,7 +165,8 @@ class SpritesheetCanvas(QWidget):
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor(C.BG_DEEP))
         if not self._pixmap or self._pixmap.isNull():
-            painter.setPen(QColor(C.TEXT_DIM))
+            painter.setPen(QColor(C.TEXT_MUTED))
+            painter.setFont(ui_font(T.LG))
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter,
                              label("sprsheet.no_png"))
             painter.end()
@@ -224,16 +235,14 @@ class SpritesheetSelector(QWidget):
 
         hdr_lay.addSpacing(12)
 
-        self._coord_lbl = QLabel("")
-        self._coord_lbl.setFont(QFont(T.MONO, T.XS))
-        self._coord_lbl.setStyleSheet(f"color:{C.TEXT_MUTED};background:transparent;")
+        self._coord_lbl = CursorUnitButton(QFont(T.MONO, T.XS), dim=C.TEXT_MUTED, normal=C.TEXT_MUTED)
         hdr_lay.addWidget(self._coord_lbl)
 
         root.addWidget(hdr_w)
 
         self._canvas = SpritesheetCanvas()
         self._canvas.selection_changed.connect(self.selection_changed)
-        self._canvas.hover_changed.connect(self._on_hover_changed)
+        self._canvas.cursor_px_changed.connect(self._on_cursor_px)
         root.addWidget(self._canvas, 1)
 
         # Éditer le PNG source dans un logiciel externe — bouton texte en
@@ -264,8 +273,8 @@ class SpritesheetSelector(QWidget):
         self._btn_edit.move((self.width() - self._btn_edit.width()) // 2, 22 + 8)
         self._btn_edit.raise_()
 
-    def _on_hover_changed(self, cell):
-        self._coord_lbl.setText(label("sprframe.coord", c=cell[0], r=cell[1]) if cell else "")
+    def _on_cursor_px(self, px):
+        self._coord_lbl.set_position(*(px or (None, None)))
 
     def load(self, path: Optional[Path]):
         self._path = path

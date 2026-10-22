@@ -1,4 +1,4 @@
-"""Finder des textes : l'arbre de rangement qui pilote la liste centrale."""
+"""Library des textes : l'arbre de rangement qui pilote la liste centrale."""
 from __future__ import annotations
 import json
 from uuid import uuid4
@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 from core.models.text import moved_text_paths, SEP
 from core.text_sequences import editor_rows, sequences, consumers
 
-from ui.common import finder_fold_state as fold_state, icons
+from ui.common import library_fold_state as fold_state, icons
 from ui.common.labels import label
 from ui.common.theme import C, S, T, QSS
 from ui.common.widgets import W
@@ -23,14 +23,14 @@ _ROLE_VIRTUAL = Qt.ItemDataRole.UserRole + 2
 _TEXT_PATH_MIME = "application/x-gba-text-filing"
 
 
-class _TextFinderTree(QTreeWidget):
+class _TextLibraryTree(QTreeWidget):
     """Le drop demande une commande ; Qt ne déplace jamais ses items seul."""
 
     move_requested = pyqtSignal(object, object)
 
-    def __init__(self, finder):
-        super().__init__(finder)
-        self._finder = finder
+    def __init__(self, library):
+        super().__init__(library)
+        self._library = library
         self._drag_token = uuid4().hex
         self._drop_target = QPersistentModelIndex()
         self.setDragEnabled(True)
@@ -93,7 +93,7 @@ class _TextFinderTree(QTreeWidget):
         except (ValueError, KeyError, TypeError):
             return None
         destination = tuple(item.data(0, _ROLE_PATH) or ())
-        if moved_text_paths(getattr(self._finder._project, 'texts', ()), source, destination):
+        if moved_text_paths(getattr(self._library._project, 'texts', ()), source, destination):
             return tuple(source), destination
         return None
 
@@ -135,15 +135,15 @@ class _TextFinderTree(QTreeWidget):
             return
         event.setDropAction(Qt.DropAction.MoveAction)
         event.accept()
-        # La commande reconstruit le Finder après le retour de l'événement Qt.
+        # La commande reconstruit le Library après le retour de l'événement Qt.
         source, destination = paths
         QTimer.singleShot(0, lambda: self.move_requested.emit(source, destination))
 
 
-class TextFinder(QWidget):
+class TextLibrary(QWidget):
     """Présente le rangement des textes sans dupliquer leur édition.
 
-    Les entrées restent dans la table centrale ; le Finder ne choisit que le
+    Les entrées restent dans la table centrale ; le Library ne choisit que le
     dossier dont on souhaite examiner le contenu.
     """
 
@@ -163,9 +163,15 @@ class TextFinder(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-        root.addWidget(W.finder_bar(label("common.texts")))
+        bar = W.library_bar(label("common.texts"))
+        # Le « + » des autres libraries : sans lui, créer un texte demandait un clic droit sur une ligne de l'arbre.
+        add = W.btn_add(label("txtlib.add_text"))
+        add.clicked.connect(self._create_here)
+        bar.layout().addStretch(1)
+        bar.layout().addWidget(add)
+        root.addWidget(bar)
 
-        self._tree = _TextFinderTree(self)
+        self._tree = _TextLibraryTree(self)
         self._tree.move_requested.connect(self.move_requested.emit)
         self._tree.setHeaderHidden(True)
         self._tree.setRootIsDecorated(True)
@@ -312,6 +318,13 @@ class TextFinder(QWidget):
         if not self._blocking:
             self.path_selected.emit(self.selected_path())
 
+    def _create_here(self) -> None:
+        """Le « + » : un texte dans le dossier choisi (ou, sur un texte, à côté de lui) ; à la racine sans sélection."""
+        item = self._tree.currentItem()
+        path = tuple(item.data(0, _ROLE_PATH) or ()) if item else ()
+        folder = bool(item.data(0, _ROLE_IS_FOLDER)) if item else True
+        self.create_requested.emit(path if folder else path[:-1])
+
     def _context_menu(self, position) -> None:
         item = self._tree.itemAt(position)
         if item is None:
@@ -344,7 +357,7 @@ class TextFinder(QWidget):
             self._begin_rename(item, 0)
 
     def _begin_rename(self, item, _column) -> None:
-        """Même renommage en place que les autres finders, jamais une modale."""
+        """Même renommage en place que les autres libraries, jamais une modale."""
         if item.data(0, _ROLE_VIRTUAL):
             return
         path = tuple(item.data(0, _ROLE_PATH) or ())

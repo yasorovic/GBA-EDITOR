@@ -28,7 +28,7 @@ def project(tmp_path) -> Project:
 
 @pytest.fixture
 def inspector(qapp, project):
-    path = project.assets_dir / "jingles" / "Fanfare.mod"
+    path = project.user_library_dir / "jingles" / "Fanfare.mod"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(F.make_mod())
     project.load()
@@ -81,7 +81,7 @@ def test_the_policy_is_written_once_and_survives_reopening(inspector, project):
 
 def test_loading_another_jingle_does_not_write_anything_back(inspector, project):
     inspector._policy.setCurrentIndex(inspector._policy.findData("pause"))
-    other_path = project.assets_dir / "jingles" / "Chime.mod"
+    other_path = project.user_library_dir / "jingles" / "Chime.mod"
     other_path.write_bytes(F.make_mod())
     other = create(project, "jingles", other_path)
 

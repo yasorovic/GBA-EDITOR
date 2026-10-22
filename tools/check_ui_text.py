@@ -26,7 +26,7 @@ KEY_TABLES = {
     "project_settings_dialog.py": {"_CATEGORY_KEYS": None},
     "rom_budget_bar.py": {"_CATEGORY_KEYS": None},
     "ui_inspector.py": {"_POS_WORD": None},
-    "sprite_finder_panel.py": {"_DIR_LABELS": None},
+    "sprite_library_panel.py": {"_DIR_LABELS": None},
     "font_inspector.py": {"_ADV_ORIGIN": None},
     "languages_card.py": {"_SAME": None},
     "pickers.py": {"_NONE_LABEL": None, "_UI_BANK_AUTO_LABEL": None,
@@ -90,11 +90,11 @@ FIRST = {
     "addItem", "addItems", "setHeaderLabels", "setHorizontalHeaderLabels",
     "section", "muted", "hint", "btn", "btn_accent", "btn_ghost", "btn_add",
     "CollapsibleCard", "QTableWidgetItem",
-    "btn_danger", "pair", "row", "field", "checkbox", "AssetFinder",
+    "btn_danger", "pair", "row", "field", "checkbox", "AssetLibrary",
     "set_add_tooltip", "set_empty_text",
-    "title_panel", "title_group", "finder_bar", "section_bar", "title_section",
+    "title_panel", "title_group", "library_bar", "section_bar", "title_section",
     "empty_state", "btn_search", "search_box", "combobox",
-    "_category_title", "_row", "FinderSection", "QListWidgetItem", "CanvasTopBar",
+    "_category_title", "_row", "LibrarySection", "QListWidgetItem", "CanvasTopBar",
     "_add_empty_row", "_add_section_header",
 }
 

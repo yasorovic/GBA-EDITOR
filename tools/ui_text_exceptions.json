@@ -20,16 +20,6 @@
     "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
   },
   {
-    "file": "editor/ui/common/canvas_top_bar.py",
-    "text": "x:— y:—",
-    "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
-  },
-  {
-    "file": "editor/ui/common/canvas_top_bar.py",
-    "text": "f'x:{x} y:{y}'",
-    "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
-  },
-  {
     "file": "editor/ui/common/notice.py",
     "text": "f'<div style=\"color:{self._color}; width:280px;\">{html}</div>'",
     "reason": "HTML presentation only; the displayed prose is resolved by the catalogue."
@@ -125,7 +115,7 @@
     "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
   },
   {
-    "file": "editor/ui/scene_manager/inspectors/uses_inspectors.py",
+    "file": "editor/ui/common/uses_list.py",
     "text": "v",
     "reason": "Technical identifier, unit, glyph or hardware notation; not prose."
   },

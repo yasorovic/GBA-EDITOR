@@ -233,7 +233,7 @@ def reconcile_font_assets(project):
             continue
         groups.setdefault(font.family_name, []).append(font)
     # Mettre d'abord à jour les assets qui étaient déjà auto-composés. Cela
-    # couvre aussi la dernière face d'une famille supprimée depuis le finder :
+    # couvre aussi la dernière face d'une famille supprimée depuis la library :
     # il est légitime que l'asset logique reste (sa recette de rendu est un
     # réglage de projet), mais il ne doit plus désigner une source disparue.
     groups_by_key = {_family_key(name): (name, fonts) for name, fonts in groups.items()}

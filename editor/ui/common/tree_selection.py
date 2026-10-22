@@ -1,11 +1,11 @@
 """ui/common/tree_selection.py — surlignage par identité dans un QTreeWidget.
 
 Deux arbres de l'éditeur reçoivent une sélection venue d'AILLEURS et doivent la
-refléter sans la réémettre : le project viewer (sélection croisée avec le graphe
+refléter sans la réémettre : la Scene library (sélection croisée avec le graphe
 des scènes) et le Scene Tree Contenu (sélection croisée avec le canvas via le
 bus). Le geste est identique — bloquer les signaux pour ne pas boucler, tout
 désélectionner, cocher les items qui correspondent — seul le CRITÈRE d'identité
-diffère (le finder compare `id(obj)`, le Scene Tree un type de nœud plus l'objet).
+diffère (la library compare `id(obj)`, le Scene Tree un type de nœud plus l'objet).
 On factorise donc le geste et on laisse le critère à l'appelant, via un prédicat.
 """
 from __future__ import annotations
@@ -28,7 +28,7 @@ def highlight_matching(tree: QTreeWidget,
     """Sélectionne, SANS réémettre, les items pour lesquels `predicate` est vrai.
 
     `blockSignals` évite que la sélection reposée ne reparte en boucle vers la vue
-    qui l'a émise (et, pour le project viewer, n'active/charge une scène). Parcours
+    qui l'a émise (et, pour la Scene library, n'active/charge une scène). Parcours
     de haut en bas pour que `scroll_to_first` vise la première correspondance.
 
     L'item COURANT Qt est posé lui aussi (sans toucher à la sélection) : la

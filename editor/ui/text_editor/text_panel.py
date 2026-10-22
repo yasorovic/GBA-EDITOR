@@ -130,7 +130,7 @@ class TextPanel(QWidget):
         self._bench.set_texts([])
 
     def set_folder_filter(self, path) -> None:
-        """Relais du Finder de textes vers la table centrale."""
+        """Relais du Library de textes vers la table centrale."""
         self._table.set_folder_filter(path)
 
     def rename_selected_path(self, level: int, segment: str) -> None:
@@ -139,7 +139,7 @@ class TextPanel(QWidget):
             self._repath(self._selection, level, segment)
 
     def rename_folder(self, path, segment: str) -> None:
-        """Relais du renommage en place demandé depuis le Finder."""
+        """Relais du renommage en place demandé depuis le Library."""
         self._on_group_renamed(path, segment)
 
     def move_path(self, source, destination):
@@ -528,7 +528,7 @@ class TextPanel(QWidget):
     def create_at_path(self, path):
         self._add_text(list(path))
 
-    def delete_from_finder(self, texts):
+    def delete_from_library(self, texts):
         self._delete_texts(texts)
 
     def duplicate_text(self, source):

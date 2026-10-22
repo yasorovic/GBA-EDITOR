@@ -37,7 +37,7 @@ def project(tmp_path) -> Project:
 
 @pytest.fixture
 def coin(project) -> Sfx:
-    return create(project, "sfx", _wav(project.assets_dir / "coin.wav"))
+    return create(project, "sfx", _wav(project.user_library_dir / "coin.wav"))
 
 
 def _side_energy(track) -> tuple[float, float]:

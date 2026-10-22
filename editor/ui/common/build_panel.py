@@ -579,7 +579,7 @@ class ToolchainBar(QFrame):
         self.toolchain = toolchain
         self._in_editor = True
         self.setFixedHeight(28)
-        self.setStyleSheet(f"background:{C.BG_RAISED}; border-bottom:{C.SPLITTER_WIDTH}px solid {C.SPLITTER};")
+        self.setStyleSheet(f"{type(self).__name__}{{background:{C.BG_RAISED}; border-bottom:{C.SPLITTER_WIDTH}px solid {C.SPLITTER};}}")
         layout = QHBoxLayout(self)
         layout.setContentsMargins(10, 0, 10, 0)
         layout.setSpacing(12)

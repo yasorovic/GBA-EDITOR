@@ -56,3 +56,25 @@ def test_focus_entry_construit_la_cible(qapp, tmp_path):
 
     assert table._tree.itemWidget(table._row_of(texts[-1]), COL_KEY) is not None
     table.close()
+
+
+def test_le_champ_de_contenu_garde_le_focus_apres_une_reconstruction(qapp, tmp_path):
+    """Renommer une clé reconstruit la table : la frappe qui suit ne doit pas partir dans le vide."""
+    table, texts = _table(tmp_path, count=3)
+    table.activateWindow()
+    entry = table._entry_of(table._row_of(texts[0]))
+    entry.edit.setFocus()
+    qapp.processEvents()
+    if not entry.edit.hasFocus():
+        table.close()
+        return                                   # fenêtre non activable dans cet environnement : rien à vérifier
+    entry.edit.moveCursor(entry.edit.textCursor().MoveOperation.End)
+    position = entry.edit.textCursor().position()
+
+    texts[1].key = "Other_Place"                 # un autre rangement : la signature change, la table se reconstruit
+    table.refresh()
+
+    rebuilt = table._entry_of(table._row_of(texts[0]))
+    assert rebuilt is not entry and rebuilt.edit.hasFocus()
+    assert rebuilt.edit.textCursor().position() == position
+    table.close()

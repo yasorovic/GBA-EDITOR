@@ -352,7 +352,7 @@ class MusicGraphView(QGraphicsView):
         self.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
-        self.setBackgroundBrush(QColor(C.GRAPH_BG))
+        self.setBackgroundBrush(QColor(C.BG_DEEP))
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setFrameShape(QGraphicsView.Shape.NoFrame)
         self.setAcceptDrops(True)
@@ -626,7 +626,7 @@ class MusicGraphView(QGraphicsView):
             g.transitions, tr, self._after_edit, label="Ajouter une transition"))
         self.select_state(src.state.name)
 
-    # ── Dépôt d'une musique venue du finder ───────────────────────
+    # ── Dépôt d'une musique venue de la library ───────────────────────
 
     def dragEnterEvent(self, e):
         if self._graph is not None and e.mimeData().hasFormat(MIME_MUSIC):

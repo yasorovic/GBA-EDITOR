@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QAbstractItemView,
 )
 from PyQt6.QtGui import QFont, QCursor, QPixmap, QPainter
-from PyQt6.QtCore import Qt, pyqtSignal, QSize
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
 
 from core.models.unique_name import unique_name
 from core.models.resource import MIME_SCRIPT
@@ -198,11 +198,12 @@ class ActorInspector(QWidget):
         # appelle `self._set`, qui garde l'undo et la persistance ; `load()`
         # repeuple d'un coup tous les widgets qu'on lui a confiés.
         self._fields = FieldBinder(self._set)
-        self.setStyleSheet(f"background:{C.BG_DEEP};")
+        self.setStyleSheet(f"background:{C.BG_PANEL};")
 
         scroll = InspectorScrollArea()
+        self._scroll = scroll
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(f"background:{C.BG_DEEP}; border:none;")
+        scroll.setStyleSheet(f"background:{C.BG_PANEL}; border:none;")
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scroll)
@@ -220,7 +221,7 @@ class ActorInspector(QWidget):
         layout.addWidget(self._empty)
 
         self._content = QWidget()
-        self._content.setStyleSheet(f"background:{C.BG_DEEP};")
+        self._content.setStyleSheet(f"background:{C.BG_PANEL};")
         cl = QVBoxLayout(self._content)
         cl.setContentsMargins(0, 0, 0, 0)
         cl.setSpacing(5)
@@ -497,6 +498,7 @@ class ActorInspector(QWidget):
             f"QListWidget::item:hover:!selected{{background:{C.BG_HOVER};}}"
         )
         self._comp_list.currentRowChanged.connect(self._on_component_selected)
+        self._comp_list.itemClicked.connect(lambda _item: self._reveal_components())
         self._comp_list.script_dropped.connect(self._on_script_dropped)
         self._comp_card.body_layout.setContentsMargins(0, 0, 0, 0)
         self._comp_card.body_layout.addWidget(self._comp_list)
@@ -552,7 +554,7 @@ class ActorInspector(QWidget):
 
     # ── Chargement ───────────────────────────────────────────────
 
-    # Couleurs de contexte (cohérentes avec assets_finder_panel et InspectorPanel)
+    # Couleurs de contexte (cohérentes avec scene_library_panel et InspectorPanel)
     _COLOR_ACTOR  = icons.COLOR_ACTOR
     _COLOR_PREFAB = icons.COLOR_PREFAB
     _COLOR_SEL_BG_ACTOR  = C.BG_SEL
@@ -977,7 +979,7 @@ class ActorInspector(QWidget):
         get_dispatcher().save_scene()
         get_dispatcher()._emit("actors_list_changed")
         # cf. relink_actor_to_prefab / expose_actor_to_prefab dans
-        # command_dispatcher.py : même badge, le project viewer doit suivre.
+        # command_dispatcher.py : même badge, la Scene library doit suivre.
         get_dispatcher()._emit("project_tree_changed")
         self.load(self._actor, self._project, self._scene)
         self.changed.emit()
@@ -1070,6 +1072,15 @@ class ActorInspector(QWidget):
             menu.addAction(label(key), lambda t=type_name: self._add_component(t))
         menu.exec(QCursor.pos())
 
+    def _reveal_components(self):
+        """Fait défiler l'inspecteur jusqu'à la carte Components : l'éditeur du composant choisi vit sous les cartes Note et
+        Transform, et sans cela il fallait les replier à la main pour le voir. Appelé sur un geste de l'auteur (clic, ajout),
+        jamais au chargement d'un acteur."""
+        def go():
+            bar = self._scroll.verticalScrollBar()
+            bar.setValue(self._comp_card.mapTo(self._scroll.widget(), self._comp_card.rect().topLeft()).y())
+        QTimer.singleShot(0, go)
+
     def _add_component(self, type_name: str):
         already_shown = displayed_sprite_component(self._actor) is not None
         comp = self._actor.add_component(type_name)
@@ -1096,6 +1107,7 @@ class ActorInspector(QWidget):
         # Retirer temporairement le comp pour que push() puisse l'ajouter via execute()
         self._actor.components.remove(comp)
         get_history().push(cmd)   # execute() le remet + rafraîchit
+        self._reveal_components()
 
     def _on_script_dropped(self, script_rel: str):
         if not self._actor: return

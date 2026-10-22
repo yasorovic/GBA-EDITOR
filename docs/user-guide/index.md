@@ -60,7 +60,12 @@ lance **Build & Run**. Les autres raccourcis peuvent être consultés et personn
 
 Les sections de ressources utilisent le bouton **+**. Selon la famille, il crée une ressource,
 ouvre un choix, ou lance un import. Une ressource nouvelle reçoit un nom provisoire que vous
-pouvez modifier immédiatement ; `F2` renomme également une ressource sélectionnée.
+pouvez modifier immédiatement ; `F2` renomme également une ressource sélectionnée, ou l'état d'animation
+sélectionné dans l'écran Sprite.
+
+Le nom d'une ressource est unique **parmi les ressources du même type** : une musique `village` et un
+décor `village` peuvent coexister, deux décors `village` non. Un nom déjà pris est complété
+(`village_2`). Le **+** d'un import accepte plusieurs fichiers à la fois.
 
 - **Créer** convient aux scènes, prefabs, scripts, palettes, données et entrées audio : la
   ressource naît dans le projet, puis vous la configurez dans l'inspecteur.
@@ -96,6 +101,9 @@ Dans le **Scene Manager**, créez une scène depuis la section **Scenes**. Son c
 l'écran GBA. Ajoutez un acteur avec l'outil d'ajout, puis choisissez un sprite dans l'inspecteur
 de l'acteur. Vous pouvez ensuite le déplacer avec l'outil de sélection, ajouter des collisions
 ou lui attacher un script.
+
+La barre au-dessus de chaque canvas (scène, fond, sprite) affiche la position du curseur. Un clic sur
+cette position la fait passer des **pixels** aux **tuiles** (8 px), dans tous les canvas à la fois.
 
 Le bandeau inférieur montre les ressources matérielles les plus importantes de la scène
 (sprites, coût par ligne, tuiles et palettes). Elles deviennent jaunes puis rouges à

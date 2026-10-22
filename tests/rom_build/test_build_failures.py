@@ -29,13 +29,13 @@ windows_only = pytest.mark.skipif(os.name != "nt", reason="verrou exclusif Windo
 def _projet(tmp_path) -> Project:
     root = tmp_path / "Jeu"
     p = Project.create(root, "Jeu")
-    for folder in ((p.assets_dir / "sprites"), (p.assets_dir / "backgrounds"), (p.assets_dir / "sfx"), (p.assets_dir / "scripts")):
+    for folder in ((p.user_library_dir / "sprites"), (p.user_library_dir / "backgrounds"), (p.user_library_dir / "sfx"), (p.user_library_dir / "scripts")):
         folder.mkdir(parents=True, exist_ok=True)
-    Image.new("RGB", (16, 16), (200, 30, 30)).save((p.assets_dir / "sprites") / "hero.png")
-    Image.new("RGB", (32, 32), (30, 30, 200)).save((p.assets_dir / "backgrounds") / "sky.png")
+    Image.new("RGB", (16, 16), (200, 30, 30)).save((p.user_library_dir / "sprites") / "hero.png")
+    Image.new("RGB", (32, 32), (30, 30, 200)).save((p.user_library_dir / "backgrounds") / "sky.png")
     p = Project.open(root)
     p.load_all_resources()
-    create_all(p, ("sprites", (p.assets_dir / "sprites") / "hero.png"), ("backgrounds", (p.assets_dir / "backgrounds") / "sky.png"))
+    create_all(p, ("sprites", (p.user_library_dir / "sprites") / "hero.png"), ("backgrounds", (p.user_library_dir / "backgrounds") / "sky.png"))
     hero = Actor(name="Hero")
     hero.components.append(SpriteComponent(sprite_name="hero"))
     p.scenes[0].actors.append(hero)
@@ -56,7 +56,7 @@ def test_projet_sain_n_a_pas_d_erreur_d_image(tmp_path):
 
 def test_png_de_sprite_corrompu_est_refuse_en_validation(tmp_path):
     p = _projet(tmp_path)
-    ((p.assets_dir / "sprites") / "hero.png").write_bytes(b"ceci n'est pas un PNG" * 20)
+    ((p.user_library_dir / "sprites") / "hero.png").write_bytes(b"ceci n'est pas un PNG" * 20)
 
     errors = _erreurs(p)
 
@@ -66,7 +66,7 @@ def test_png_de_sprite_corrompu_est_refuse_en_validation(tmp_path):
 
 def test_png_de_fond_corrompu_est_refuse_en_validation(tmp_path):
     p = _projet(tmp_path)
-    ((p.assets_dir / "backgrounds") / "sky.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"tronque")
+    ((p.user_library_dir / "backgrounds") / "sky.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"tronque")
 
     assert any("sky.png" in e and "unreadable" in e for e in _erreurs(p))
 

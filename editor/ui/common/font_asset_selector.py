@@ -85,7 +85,7 @@ class FontAssetSelector(QWidget):
         font = QFont(T.UI, T.MD, QFont.Weight.Bold if bold else QFont.Weight.Normal)
         font.setItalic(italic); button.setFont(font)
         button.setStyleSheet(
-            f"QToolButton{{background:{C.BG_DEEP};color:{C.TEXT_DIM};border:1px solid {C.BORDER};"
+            f"QToolButton{{background:{C.BG_INPUT};color:{C.TEXT_DIM};border:1px solid {C.BORDER};"
             "border-radius:3px;}"
             f"QToolButton:hover{{color:{C.ACCENT};border-color:{C.ACCENT};}}"
             f"QToolButton:checked{{background:{C.BG_SEL};color:{C.ACCENT};border-color:{C.ACCENT};}}"

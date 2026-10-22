@@ -40,7 +40,7 @@ def lua_files(project) -> list[Path]:
 
 
 def _scan(project) -> list[Path]:
-    assets = project.assets_dir
+    assets = project.user_library_dir
     return sorted(assets.rglob("*.lua")) if assets.is_dir() else []
 
 

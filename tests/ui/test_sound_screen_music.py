@@ -32,17 +32,17 @@ from ui.sound_mixer.sound_panel import SoundMixerScreen        # noqa: E402
 @pytest.fixture
 def project(tmp_path) -> Project:
     project = Project.create(tmp_path / "Game", "Game")
-    music = project.assets_dir / "music"
+    music = project.user_library_dir / "music"
     music.mkdir(parents=True, exist_ok=True)
     (music / "Theme.it").write_bytes(F.make_it(orders=[0] * 8))
     t = np.arange(int(44100 * 2.0)) / 44100
     with wave.open(str(music / "Ambient.wav"), "wb") as w:
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(44100)
         w.writeframes((np.sin(2 * np.pi * 300 * t) * 0.5 * 32767).astype("<i2").tobytes())
-    jingles = project.assets_dir / "jingles"
+    jingles = project.user_library_dir / "jingles"
     jingles.mkdir(parents=True, exist_ok=True)
     (jingles / "Fanfare.it").write_bytes(F.make_it())
-    sfx = project.assets_dir / "sfx"
+    sfx = project.user_library_dir / "sfx"
     sfx.mkdir(parents=True, exist_ok=True)
     with wave.open(str(sfx / "Beep.wav"), "wb") as w:
         w.setnchannels(1); w.setsampwidth(1); w.setframerate(8000); w.writeframes(bytes([128]) * 800)
@@ -239,11 +239,11 @@ def test_un_double_clic_remet_le_curseur_au_neutre(screen, project):
     assert fader.value() == 100
 
 
-def test_un_reglage_de_section_est_enregistre_sans_recharger_le_sound_finder(screen, project, monkeypatch):
+def test_un_reglage_de_section_est_enregistre_sans_recharger_le_sound_library(screen, project, monkeypatch):
     theme = project.music.get("Theme")
     screen._on_asset_selected(theme)
     reloads = []
-    monkeypatch.setattr(screen._finder, "refresh", lambda *a, **k: reloads.append(1))
+    monkeypatch.setattr(screen._library, "refresh", lambda *a, **k: reloads.append(1))
     screen._music_editor._table._on_add()                       # une section
     section = theme.sections[0]
     screen._music_editor._table._on_loop(section, False)        # sa case « Loop »

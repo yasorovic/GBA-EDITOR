@@ -1,4 +1,4 @@
-"""LOCATE (onglet Disk) et REVEAL (explorateur) depuis un finder : l'icône à droite de chaque asset,
+"""LOCATE (onglet Disk) et REVEAL (explorateur) depuis une library : l'icône à droite de chaque asset,
 le menu contextuel, et le canal qui mène à la fenêtre."""
 from __future__ import annotations
 
@@ -11,26 +11,26 @@ from ui.common import reveal
 from ui.common.locate_bus import get_locate_bus
 
 
-def _finder(qapp, tmp_path):
+def _library(qapp, tmp_path):
     from core.models.scene import Scene
     from core.project import Project
-    from ui.common.asset_finder import AssetFinder
+    from ui.common.asset_library import AssetLibrary
     from ui.common.asset_kinds import SCENES
 
     project = Project(tmp_path / "jeu")
     scene = Scene(name="Title")
     scene.id = "0123456789ab"
     project.scenes.append(scene)
-    finder = AssetFinder("Finder", [SCENES])
-    finder.resize(320, 240)
-    finder.load_project(project)
-    finder.show()
+    library = AssetLibrary("Library", [SCENES])
+    library.resize(320, 240)
+    library.load_project(project)
+    library.show()
     qapp.processEvents()
-    return finder, project, scene
+    return library, project, scene
 
 
-def _row(finder):
-    tree = finder._trees["Scenes"]
+def _row(library):
+    tree = library._trees["Scenes"]
     return tree, tree.topLevelItem(0)
 
 
@@ -39,8 +39,8 @@ def _cell_center(tree, item, column) -> QPoint:
 
 
 def test_the_locate_icon_sits_in_its_own_column_and_asks_the_bus_for_the_file(qapp, tmp_path):
-    finder, project, scene = _finder(qapp, tmp_path)
-    tree, item = _row(finder)
+    library, project, scene = _library(qapp, tmp_path)
+    tree, item = _row(library)
     heard = []
     get_locate_bus().requested.connect(lambda path, name: heard.append((path, name)))
 
@@ -51,8 +51,8 @@ def test_the_locate_icon_sits_in_its_own_column_and_asks_the_bus_for_the_file(qa
 
 
 def test_a_click_on_the_name_still_selects_and_does_not_locate(qapp, tmp_path):
-    finder, _project, _scene = _finder(qapp, tmp_path)
-    tree, item = _row(finder)
+    library, _project, _scene = _library(qapp, tmp_path)
+    tree, item = _row(library)
     heard = []
     get_locate_bus().requested.connect(lambda path, name: heard.append(name))
 
@@ -62,19 +62,19 @@ def test_a_click_on_the_name_still_selects_and_does_not_locate(qapp, tmp_path):
 
 
 def test_reveal_of_an_asset_shows_its_file_in_the_file_manager(qapp, tmp_path, monkeypatch):
-    finder, project, scene = _finder(qapp, tmp_path)
-    tree, _item = _row(finder)
+    library, project, scene = _library(qapp, tmp_path)
+    tree, _item = _row(library)
     shown = []
-    monkeypatch.setattr("ui.common.asset_finder.reveal_in_file_manager", shown.append)
+    monkeypatch.setattr("ui.common.asset_library.reveal_in_file_manager", shown.append)
 
     tree._reveal_asset(scene)
 
     assert shown == [project.scenes.path_of(scene)]
 
 
-def test_every_family_of_a_finder_can_be_located():
+def test_every_family_of_a_library_can_be_located():
     from ui.common import asset_kinds
-    from ui.common.asset_finder import AssetKind
+    from ui.common.asset_library import AssetKind
 
     kinds = [k for k in vars(asset_kinds).values() if isinstance(k, AssetKind)]
     assert kinds and all(kind.file_of is not None for kind in kinds)

@@ -2,7 +2,7 @@
 ui/text_editor/colors.py — les deux familles de couleur de l'écran Texte.
 
 Point unique : c'est la couleur qui dit lequel des deux concepts on regarde,
-du finder à l'inspecteur.
+de la library à l'inspecteur.
 """
 from ui.common.theme import C
 from ui.common.icons import COLOR_FONT

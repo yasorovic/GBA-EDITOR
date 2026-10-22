@@ -154,7 +154,7 @@ class SceneCardItem(QGraphicsItem):
         self.setToolTip(notes_tooltip(notes))
         # Scène ACTIVE (ouverte dans le canvas 2D) — liseré vertical à gauche,
         # distinct du liseré de sélection (bord accentué) et de la pastille de
-        # départ. Même grammaire que le project viewer : barre gauche = active,
+        # départ. Même grammaire que la Scene library : barre gauche = active,
         # remplissage/bord = sélection (cf. project_ui_conventions).
         self.is_active = is_active
         self._preview_enabled = preview_enabled

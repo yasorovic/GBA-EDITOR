@@ -42,7 +42,7 @@ def _duplicate(project, family, item, history):
 
 def test_the_copy_points_at_the_same_source_with_its_own_settings_and_identity(tmp_path: Path):
     p = _project(tmp_path)
-    folder = p.assets_dir / "Anywhere"
+    folder = p.user_library_dir / "Anywhere"
     source = _wav(folder / "coin.wav")
     original = create(p, "sfx", source)
     original.volume = 40
@@ -63,7 +63,7 @@ def test_the_copy_points_at_the_same_source_with_its_own_settings_and_identity(t
 
 def test_the_copy_survives_reopening_the_project(tmp_path: Path):
     p = _project(tmp_path)
-    original = create(p, "music", _wav(p.assets_dir / "theme.wav"))
+    original = create(p, "music", _wav(p.user_library_dir / "theme.wav"))
     original.add_section(0, 500, "Loop")
     p.music.save(original)
 
@@ -88,7 +88,7 @@ def test_duplicating_a_copy_continues_the_numbering_instead_of_stacking_suffixes
 
 def test_one_undo_removes_the_copy_and_redo_brings_it_back(tmp_path: Path):
     p = _project(tmp_path)
-    original = create(p, "sfx", _wav(p.assets_dir / "coin.wav"))
+    original = create(p, "sfx", _wav(p.user_library_dir / "coin.wav"))
     history = CommandHistory()
 
     copy = _duplicate(p, "sfx", original, history)
@@ -102,7 +102,7 @@ def test_one_undo_removes_the_copy_and_redo_brings_it_back(tmp_path: Path):
 
 def test_a_batch_is_one_history_entry_and_its_copies_do_not_collide(tmp_path: Path):
     p = _project(tmp_path)
-    source = _wav(p.assets_dir / "coin.wav")
+    source = _wav(p.user_library_dir / "coin.wav")
     first = create(p, "sfx", source, "coin")
     second = create(p, "sfx", source, "coin_2")
     history = CommandHistory()
@@ -119,7 +119,7 @@ def test_a_batch_is_one_history_entry_and_its_copies_do_not_collide(tmp_path: Pa
 
 def test_a_sprite_copy_keeps_its_encoding_and_never_shares_the_png(tmp_path: Path):
     p = _project(tmp_path)
-    source = _png(p.assets_dir / "hero.png")
+    source = _png(p.user_library_dir / "hero.png")
     sprite = create(p, "sprites", source)
     sprite.frame_w = 8
 
@@ -136,16 +136,16 @@ def test_a_background_and_a_font_copy_point_at_the_same_image(tmp_path: Path):
     for y in range(14):
         for x in range(16):
             sheet.putpixel((x * 8 + 1, y * 8 + 1), (255, 255, 255))
-    (p.assets_dir / "chunky.png").parent.mkdir(parents=True, exist_ok=True)
-    sheet.save(p.assets_dir / "chunky.png")
-    background = create(p, "backgrounds", _png(p.assets_dir / "sky.png", (32, 32)))
-    font = create(p, "fonts", p.assets_dir / "chunky.png")
+    (p.user_library_dir / "chunky.png").parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(p.user_library_dir / "chunky.png")
+    background = create(p, "backgrounds", _png(p.user_library_dir / "sky.png", (32, 32)))
+    font = create(p, "fonts", p.user_library_dir / "chunky.png")
     history = CommandHistory()
 
     for family, item in (("backgrounds", background), ("fonts", font)):
         copy = _duplicate(p, family, item, history)
         assert copy.asset == item.asset and copy.name == f"{item.name}_2"
-    assert sorted(f.name for f in p.assets_dir.glob("*.png")) == ["chunky.png", "sky.png"]
+    assert sorted(f.name for f in p.user_library_dir.glob("*.png")) == ["chunky.png", "sky.png"]
 
 
 def test_a_palette_copy_gets_its_own_hex_it_never_shares_the_original(tmp_path: Path):
@@ -153,7 +153,7 @@ def test_a_palette_copy_gets_its_own_hex_it_never_shares_the_original(tmp_path: 
     store, bank = blank_assets.build_blank(p, "palette")
     from core.history import CreateAssetCmd
     history = CommandHistory()
-    history.push(CreateAssetCmd(store, bank, (p.assets_dir / "palettes")))
+    history.push(CreateAssetCmd(store, bank, (p.user_library_dir / "palettes")))
 
     copy = _duplicate(p, "palettes", bank, history)
 
@@ -190,7 +190,7 @@ def test_texts_and_variables_are_not_duplicable(tmp_path: Path):
 
 def test_a_script_copy_is_a_new_file_next_to_the_original(tmp_path: Path):
     p = _project(tmp_path)
-    script = p.assets_dir / "Logic" / "boss.lua"
+    script = p.user_library_dir / "Logic" / "boss.lua"
     script.parent.mkdir(parents=True)
     script.write_text("-- @behavior\nreturn {}\n", encoding="utf-8")
     history = CommandHistory()
@@ -206,7 +206,7 @@ def test_a_script_copy_is_a_new_file_next_to_the_original(tmp_path: Path):
 
 def test_a_source_copy_is_a_free_file_next_to_the_original_and_one_undo_removes_it(tmp_path: Path):
     p = _project(tmp_path)
-    folder = p.assets_dir / "Sounds"
+    folder = p.user_library_dir / "Sounds"
     coin = _wav(folder / "coin.wav")
     asset = create(p, "sfx", coin)
     (folder / "coin_2.sfx").write_text("{}", encoding="utf-8")                   # un fichier d'une autre extension prend `coin_2`

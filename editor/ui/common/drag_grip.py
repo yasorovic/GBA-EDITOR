@@ -5,12 +5,13 @@ la ligne d'origine s'atténue : le geste paraît déplacer la ligne elle-même."
 from PyQt6.QtCore import Qt, QPoint, pyqtSignal
 from PyQt6.QtWidgets import QLabel, QGraphicsOpacityEffect
 
+from ui.common import icons
 from ui.common.labels import label
-from ui.common.theme import C
 
 _GHOST_OPACITY = 0.75
 _SOURCE_OPACITY = 0.35
-_START_DISTANCE = 3          # px avant de considérer un clic comme un glissement
+_ICON_PX = 16
+_START_DISTANCE = 3         # px avant de considérer un clic comme un glissement
 
 
 class _Ghost(QLabel):
@@ -31,16 +32,20 @@ class DragGrip(QLabel):
     released = pyqtSignal(int)
 
     def __init__(self, parent=None):
-        super().__init__("⋮⋮", parent)
+        super().__init__(parent)
         self._down = False
         self._press = QPoint()
         self._ghost = None
         self._source = None            # () -> QWidget : ce que le fantôme reproduit
         self._offset = QPoint()
-        self.setFixedWidth(14)
+        self.setFixedWidth(_ICON_PX + 4)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setCursor(Qt.CursorShape.OpenHandCursor)
-        self.setStyleSheet(f"color:{C.TEXT_DIM};background:transparent;")
+        self.setStyleSheet("background:transparent;")
+        pixmap = icons.scaled_pixmap("drag_grip", icons.COLOR_DEFAULT, _ICON_PX,
+                                     self.devicePixelRatioF()).copy()
+        pixmap.setDevicePixelRatio(pixmap.width() / _ICON_PX)   # net en HiDPI, affiché à _ICON_PX
+        self.setPixmap(pixmap)
         self.setToolTip(label("uiinsp.text.page_drag"))
 
     def set_ghost_source(self, source) -> None:

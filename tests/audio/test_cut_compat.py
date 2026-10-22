@@ -117,7 +117,7 @@ def project(tmp_path) -> Project:
 
 
 def _music(project: Project, name: str, orders, loop: bool = True) -> None:
-    path = project.assets_dir / "music" / f"{name}.it"
+    path = project.user_library_dir / "music" / f"{name}.it"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(F.make_it(orders=orders))
     project.music.append(Music(name=name, asset=f"assets/music/{name}.it", loop=loop))

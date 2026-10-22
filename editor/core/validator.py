@@ -545,7 +545,7 @@ def _check_missing_sources(ctx: ValidationContext):
     for missing in missing_sources(p):
         ctx.error(None, f"{FAMILY_LABELS[missing.family]} \"{missing.item.name}\": source file not found "
                         f"({p.asset_rel(missing.path)}) — relink the asset to another file (right-click it "
-                        "in the finder) or delete it.")
+                        "in the library) or delete it.")
 
 
 def _check_unreadable_files(ctx: ValidationContext):
@@ -804,7 +804,7 @@ def _check_text_overflow(ctx: ValidationContext):
                         f"Text '{text.key}'"
                         + (f" (language \"{lbl}\")" if lbl else "")
                         + f" overflows the zone '{region.name}' ({region.w}×{region.h} px, font '{font.name}') — it "
-                          "will be cut at the last glyph that fits. Enlarge the zone,"
+                          f"will be cut at the last glyph that fits. {_widen_advice(region)}"
                           " shorten the text, or split it into two entries.")
 
     # Textes AUTHORÉS : le couple (élément, contenu) est connu sans lire un
@@ -825,7 +825,15 @@ def _check_text_overflow(ctx: ValidationContext):
                             + (f" (language \"{lbl}\")" if lbl else "")
                             + f" overflows the element '{el.name}' ({el.w}×{el.h} px, font "
                               f"'{font.name}') — it will be cut at the last glyph that fits. "
-                              "Enlarge the element in the canvas, or shorten the text.")
+                              f"{_widen_advice(el)} or shorten the text.")
+
+
+def _widen_advice(element) -> str:
+    """Ce qu'on peut faire d'un texte qui déborde. Une chaîne (`Text`) n'a pas de largeur à régler (son rectangle est un fait du build) :
+    la seule issue est la boîte (`Textbox`). Conseiller « agrandir » dirait de régler un champ qui ne bouge pas."""
+    if getattr(element, "resizable", True):
+        return "Enlarge it in the canvas,"
+    return "A Text string has a fixed width: use a Textbox, whose width you can set,"
 
 
 def _check_font_coverage(ctx: ValidationContext):
@@ -1378,6 +1386,7 @@ def _check_scripts_parse(ctx: ValidationContext):
     une ERREUR pour un script attaché (acteur, scène, caméra, prefab) et pour un behavior ;
     pour un fichier attaché à rien, un avertissement : un brouillon ne bloque pas le build."""
     from scripting.parser import parse as lua_parse, LuaParseError
+    from scripting.checker import structure_errors
     from core.script_owners import script_attachments
 
     p = ctx.project
@@ -1411,6 +1420,9 @@ def _check_scripts_parse(ctx: ValidationContext):
         for _node, line in script.stray_statements:
             report(None, f"this statement is outside any function, so it would never "
                          f"run{suffix}", file=path.name, line=line)
+        # Ce que le Build refuse sur la structure (une attente dans un `if`) se voit aussi ici, pas seulement au Build.
+        for error in structure_errors(script):
+            report(None, f"{error.message}{suffix}", file=path.name, line=error.line)
         if blocking and not script.functions:
             # Un script vide (ou réduit à des commentaires) est valide, mais l'acteur qui le porte
             # perd tout son comportement : un avertissement, pas une erreur.

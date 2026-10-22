@@ -13,7 +13,7 @@ from core.project import Project
 @pytest.mark.parametrize("kind", ["sfx", "music", "jingles"])
 def test_sound_rename_updates_every_reference_and_survives_reopening(tmp_path, kind):
     p = Project.create(tmp_path / "Game", "Game")
-    for folder in ((p.assets_dir / "sprites"), (p.assets_dir / "backgrounds"), (p.assets_dir / "sfx"), (p.assets_dir / "scripts")):
+    for folder in ((p.user_library_dir / "sprites"), (p.user_library_dir / "backgrounds"), (p.user_library_dir / "sfx"), (p.user_library_dir / "scripts")):
         folder.mkdir(parents=True, exist_ok=True)
     for store, cls in ((p.sfx, Sfx), (p.music, Music), (p.jingles, Jingle)):
         store.append(cls(name="Old"))
@@ -34,7 +34,7 @@ def test_sound_rename_updates_every_reference_and_survives_reopening(tmp_path, k
     p.data_tables.append(DataTable(name="Audio", columns=[DataColumn("effect", "sfx"),
         DataColumn("track", "music"), DataColumn("label", "text")],
         rows=[{"effect": "Old", "track": "Old", "label": "Old"}, {}]))
-    script = (p.assets_dir / "scripts") / "Sounds.lua"
+    script = (p.user_library_dir / "scripts") / "Sounds.lua"
     script.write_text('function on_start()\n sfx:play("Old")\n music:play("Old")\n music:jingle("Old")\nend\n', encoding="utf-8")
     p.save()
     # Rouvre avant le geste : sprites et modules peuvent encore être différés.

@@ -1,6 +1,6 @@
-"""Supprimer depuis le finder, puis Ctrl+Z : l'arbre doit suivre le modèle.
+"""Supprimer depuis la library, puis Ctrl+Z : l'arbre doit suivre le modèle.
 
-Le finder se rafraîchissait après SA suppression, mais Ctrl+Z passe par
+La library se rafraîchissait après SA suppression, mais Ctrl+Z passe par
 l'historique, qui ne le connaît pas : la ressource revenait dans le projet et
 jamais dans la liste affichée.
 """
@@ -26,14 +26,14 @@ def _names(tree) -> list[str]:
 def panel(qapp, tmp_path, monkeypatch):
     from core.models.scene import Scene
     from core.project import Project
-    from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
+    from ui.scene_manager.scene_library_panel import SceneLibraryPanel
 
     monkeypatch.setattr(QMessageBox, "question",
                         staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes))
     project = Project(tmp_path / "jeu")
     for name in ("Title", "Shop", "Arena"):
         project.scenes.append(Scene(name=name))
-    panel = AssetsFinderPanel()
+    panel = SceneLibraryPanel()
     panel.load_project(project)
     get_history().clear()
     yield panel, project
@@ -42,7 +42,7 @@ def panel(qapp, tmp_path, monkeypatch):
 
 def _tree(panel):
     from ui.common.asset_kinds import SCENES
-    return panel._finder._trees[SCENES.label]
+    return panel._library._trees[SCENES.label]
 
 
 def test_supprimer_puis_annuler_remet_la_scene_dans_l_arbre(panel):

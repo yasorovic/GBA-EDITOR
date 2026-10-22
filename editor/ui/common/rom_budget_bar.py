@@ -61,7 +61,7 @@ _CATEGORY_COLORS: dict[str, str] = {
 # Thème clair : jauge et pavés partagent le même contour foncé ; la jauge a un
 # fond gris et un quadrillage assorti. Le sombre garde ses teintes du thème.
 _FRAME_BORDER = "#8c8c8c" if C.IS_LIGHT else C.BORDER_MID
-_GAUGE_BG = "#d4d4d4" if C.IS_LIGHT else C.BG_BASE
+_GAUGE_BG = C.BG_BASE
 _GAUGE_GRID = "#b4b4b4" if C.IS_LIGHT else C.BORDER_DARK
 
 
@@ -196,7 +196,7 @@ class RomBudgetBar(QWidget):
 
     # Thème clair : pavés d'un gris marqué, texte noir, contour foncé (aspect
     # « instrument »). Le thème sombre garde ses pavés discrets.
-    _BLOCK_BG = "#cfcfcf" if C.IS_LIGHT else C.BG_BASE
+    _BLOCK_BG = C.BG_BASE
     _BLOCK_TEXT = C.TEXT_HI if C.IS_LIGHT else C.TEXT_DIM
     _BLOCK_BORDER = _FRAME_BORDER
     _STYLE_OK   = f"color:{C.ACCENT};"
@@ -212,7 +212,8 @@ class RomBudgetBar(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedHeight(36)
-        self.setStyleSheet(f"background:{C.BG_DEEP}; border-top:1px solid {C.BORDER};")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(f"{type(self).__name__}{{background:{C.BG_DEEP}; border-top:1px solid {C.BORDER};}}")
         self._cartridge_mib = 4
         # Dernier rapport mesuré — conservé à part de la cartouche choisie :
         # changer de cartouche sans rebuilder redessine sur les MÊMES octets,

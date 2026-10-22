@@ -197,9 +197,9 @@ class VarTablePanel(QWidget):
     droit → accès, écriture (globals), Renommer, Array (la valeur devient une
     taille), Persist (SRAM) et Supprimer.
 
-    Pas de header propre : posé via FinderSection.set_widget() pour la même
+    Pas de header propre : posé via LibrarySection.set_widget() pour la même
     apparence (flèche + titre coloré + boutons +/recherche) que les autres
-    finders — le bouton "+" de la section appelle `_add_var()` directement.
+    libraries — le bouton "+" de la section appelle `_add_var()` directement.
     """
     snippet_requested = pyqtSignal(str)
     changed           = pyqtSignal()   # pour notifier le projet de sauvegarder

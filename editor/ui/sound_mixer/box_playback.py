@@ -335,7 +335,7 @@ class BoxPlayer(QObject):
         return self._finish(track, info)
 
     def preview(self, project, asset, section=None) -> bool:
-        """Joue UN asset du Sound finder, hors de toute boîte.
+        """Joue UN asset du Sound library, hors de toute boîte.
 
         Même deck et même sortie que la boîte : ce qu'on entend est rendu
         comme la boîte le rendrait. Un effet joue une fois ; une musique suit

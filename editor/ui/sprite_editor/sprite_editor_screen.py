@@ -16,7 +16,7 @@ from ui.common.theme import C
 from ui.common.three_column_body import ThreeColumnBody
 from core.models.sprite import AnimState, SpriteAsset, StateDirection
 from core.project import Project
-from .sprite_finder_panel import SpriteFinderPanel
+from .sprite_library_panel import SpriteLibraryPanel
 from .sprite_center_panel import SpriteCenterPanel
 from .sprite_right_panel import SpriteRightPanel
 
@@ -25,7 +25,7 @@ class SpriteEditorScreen(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet(f"background:{C.BG_DEEP};")
+        self.setStyleSheet(f"background:{C.BG_PANEL};")
         self._project: Optional[Project] = None
         self._build()
 
@@ -34,7 +34,7 @@ class SpriteEditorScreen(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        self._left   = SpriteFinderPanel()
+        self._left   = SpriteLibraryPanel()
         self._center = SpriteCenterPanel()
         self._right  = SpriteRightPanel()
 
@@ -60,7 +60,7 @@ class SpriteEditorScreen(QWidget):
         self._left.load_project(project)
 
     def reload_image(self):
-        """Un PNG de sprite a changé sur le disque : le centre relit la planche (le finder, lui, restaure
+        """Un PNG de sprite a changé sur le disque : le centre relit la planche (la library, lui, restaure
         sa sélection sans réémettre, donc `load_project` seul laissait l'ancien aperçu)."""
         self._center.reload_image()
 

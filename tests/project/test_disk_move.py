@@ -21,15 +21,15 @@ def _wav(path: Path) -> None:
 
 def _project(tmp_path: Path) -> Project:
     p = Project.create(tmp_path / "Jeu", "Jeu")
-    for folder in ((p.assets_dir / "sprites"), (p.assets_dir / "backgrounds"), (p.assets_dir / "sfx"), (p.assets_dir / "scripts")):
+    for folder in ((p.user_library_dir / "sprites"), (p.user_library_dir / "backgrounds"), (p.user_library_dir / "sfx"), (p.user_library_dir / "scripts")):
         folder.mkdir(parents=True, exist_ok=True)
-    Image.new("RGB", (16, 16), (200, 30, 30)).save((p.assets_dir / "sprites") / "hero.png")
-    _wav((p.assets_dir / "sfx") / "boom.wav")
-    Image.new("RGB", (32, 32), (10, 20, 30)).save((p.assets_dir / "backgrounds") / "sky.png")
+    Image.new("RGB", (16, 16), (200, 30, 30)).save((p.user_library_dir / "sprites") / "hero.png")
+    _wav((p.user_library_dir / "sfx") / "boom.wav")
+    Image.new("RGB", (32, 32), (10, 20, 30)).save((p.user_library_dir / "backgrounds") / "sky.png")
     p = Project.open(p.root)
     p.load_all_resources()
-    create_all(p, ("sprites", (p.assets_dir / "sprites") / "hero.png"), ("sfx", (p.assets_dir / "sfx") / "boom.wav"),
-               ("backgrounds", (p.assets_dir / "backgrounds") / "sky.png"))
+    create_all(p, ("sprites", (p.user_library_dir / "sprites") / "hero.png"), ("sfx", (p.user_library_dir / "sfx") / "boom.wav"),
+               ("backgrounds", (p.user_library_dir / "backgrounds") / "sky.png"))
     return p
 
 
@@ -44,7 +44,7 @@ def _errors(p: Project) -> list[str]:
 
 
 def _folder(p: Project, name: str) -> Path:
-    folder = p.assets_dir / name
+    folder = p.user_library_dir / name
     folder.mkdir()
     return folder
 
@@ -58,7 +58,7 @@ def test_a_sidecar_moves_alone_and_the_asset_is_still_found(tmp_path: Path):
 
     assert result.refused == [] and [new for _, new in result.moved] == [target.resolve() / "boom.sfx"]
     assert not sidecar.exists() and (target / "boom.sfx").is_file()
-    assert ((p.assets_dir / "sfx") / "boom.wav").is_file()                                   # la source n'a pas bougé
+    assert ((p.user_library_dir / "sfx") / "boom.wav").is_file()                                   # la source n'a pas bougé
     reopened = _reopen(p.root)
     assert reopened.sfx.get("boom").asset == "assets/sfx/boom.wav"
     assert not any("source file not found" in e for e in _errors(reopened))
@@ -70,7 +70,7 @@ def test_a_source_moves_and_its_asset_follows(tmp_path: Path):
     identity = boom.id
     target = _folder(p, "Audio")
 
-    result = disk_move.move_to_folder(p, [(p.assets_dir / "sfx") / "boom.wav"], target)
+    result = disk_move.move_to_folder(p, [(p.user_library_dir / "sfx") / "boom.wav"], target)
 
     assert result.refused == []
     assert boom.asset == "assets/Audio/boom.wav"
@@ -82,23 +82,23 @@ def test_a_source_moves_and_its_asset_follows(tmp_path: Path):
 def test_the_sidecar_stays_where_it_is_when_only_its_source_moves(tmp_path: Path):
     p = _project(tmp_path)
     sidecar = p.sfx.path_of(p.sfx.get("boom"))
-    disk_move.move_to_folder(p, [(p.assets_dir / "sfx") / "boom.wav"], _folder(p, "Audio"))
+    disk_move.move_to_folder(p, [(p.user_library_dir / "sfx") / "boom.wav"], _folder(p, "Audio"))
     assert sidecar.is_file()                                                      # réécrit sur place, pas ramené ailleurs
 
 
 def test_a_folder_moves_with_everything_in_it_and_every_path_is_rewritten(tmp_path: Path):
     p = _project(tmp_path)
-    inner = p.assets_dir / "Pack" / "audio"
+    inner = p.user_library_dir / "Pack" / "audio"
     inner.mkdir(parents=True)
-    disk_move.move_to_folder(p, [(p.assets_dir / "sfx") / "boom.wav"], inner)                 # d'abord la source dans Pack/audio
+    disk_move.move_to_folder(p, [(p.user_library_dir / "sfx") / "boom.wav"], inner)                 # d'abord la source dans Pack/audio
     disk_move.move_to_folder(p, [p.sfx.path_of(p.sfx.get("boom"))], inner)
     target = _folder(p, "Archive")
 
-    result = disk_move.move_to_folder(p, [p.assets_dir / "Pack"], target)
+    result = disk_move.move_to_folder(p, [p.user_library_dir / "Pack"], target)
 
     assert result.refused == []
     assert p.sfx.get("boom").asset == "assets/Archive/Pack/audio/boom.wav"
-    assert (target / "Pack" / "audio" / "boom.sfx").is_file() and not (p.assets_dir / "Pack").exists()
+    assert (target / "Pack" / "audio" / "boom.sfx").is_file() and not (p.user_library_dir / "Pack").exists()
     reopened = _reopen(p.root)
     assert reopened.sfx.get("boom").asset == "assets/Archive/Pack/audio/boom.wav"
     assert not any("source file not found" in e for e in _errors(reopened))
@@ -108,7 +108,7 @@ def test_a_sprite_source_moves_and_is_not_re_encoded(tmp_path: Path):
     p = _project(tmp_path)
     hero = p.sprites.get("hero")
     palettes = list(hero.palettes)
-    disk_move.move_to_folder(p, [(p.assets_dir / "sprites") / "hero.png"], _folder(p, "Art"))
+    disk_move.move_to_folder(p, [(p.user_library_dir / "sprites") / "hero.png"], _folder(p, "Art"))
     assert hero.asset == "assets/Art/hero.png" and list(hero.palettes) == palettes
 
 
@@ -118,10 +118,10 @@ def test_a_file_with_the_same_name_is_never_overwritten_and_blocks_only_that_mov
     _wav(target / "boom.wav")                                                     # un homonyme est déjà là
     before = (target / "boom.wav").read_bytes()
 
-    result = disk_move.move_to_folder(p, [(p.assets_dir / "sfx") / "boom.wav", (p.assets_dir / "sprites") / "hero.png"], target)
+    result = disk_move.move_to_folder(p, [(p.user_library_dir / "sfx") / "boom.wav", (p.user_library_dir / "sprites") / "hero.png"], target)
 
-    assert result.refused == [(((p.assets_dir / "sfx") / "boom.wav").resolve(), disk_move.EXISTS)]
-    assert ((p.assets_dir / "sfx") / "boom.wav").is_file() and (target / "boom.wav").read_bytes() == before
+    assert result.refused == [(((p.user_library_dir / "sfx") / "boom.wav").resolve(), disk_move.EXISTS)]
+    assert ((p.user_library_dir / "sfx") / "boom.wav").is_file() and (target / "boom.wav").read_bytes() == before
     assert (target / "hero.png").is_file()                                       # l'autre déplacement a eu lieu
     assert p.sfx.get("boom").asset == "assets/sfx/boom.wav"
 
@@ -139,7 +139,7 @@ def test_a_folder_cannot_be_moved_into_itself(tmp_path: Path):
 
 def test_dropping_into_the_folder_it_is_already_in_does_nothing_and_is_not_a_refusal(tmp_path: Path):
     p = _project(tmp_path)
-    result = disk_move.move_to_folder(p, [(p.assets_dir / "sfx") / "boom.wav"], (p.assets_dir / "sfx"))
+    result = disk_move.move_to_folder(p, [(p.user_library_dir / "sfx") / "boom.wav"], (p.user_library_dir / "sfx"))
     assert result.moved == [] and result.refused == []
 
 
@@ -149,14 +149,14 @@ def test_nothing_leaves_assets_or_moves_assets_itself(tmp_path: Path):
     outside.mkdir()
     (tmp_path / "stray.wav").write_bytes(b"x")
 
-    to_outside = disk_move.move_to_folder(p, [(p.assets_dir / "sfx") / "boom.wav"], outside)
-    from_outside = disk_move.move_to_folder(p, [tmp_path / "stray.wav"], (p.assets_dir / "sfx"))
-    root_itself = disk_move.move_to_folder(p, [p.assets_dir], (p.assets_dir / "sfx"))
+    to_outside = disk_move.move_to_folder(p, [(p.user_library_dir / "sfx") / "boom.wav"], outside)
+    from_outside = disk_move.move_to_folder(p, [tmp_path / "stray.wav"], (p.user_library_dir / "sfx"))
+    root_itself = disk_move.move_to_folder(p, [p.user_library_dir], (p.user_library_dir / "sfx"))
 
     assert [reason for _, reason in to_outside.refused] == [disk_move.OUTSIDE]
     assert [reason for _, reason in from_outside.refused] == [disk_move.OUTSIDE]
     assert [reason for _, reason in root_itself.refused] == [disk_move.OUTSIDE]
-    assert ((p.assets_dir / "sfx") / "boom.wav").is_file() and (tmp_path / "stray.wav").is_file()
+    assert ((p.user_library_dir / "sfx") / "boom.wav").is_file() and (tmp_path / "stray.wav").is_file()
 
 
 def test_what_the_rest_of_the_code_looks_for_at_a_fixed_place_does_not_move(tmp_path: Path):
@@ -180,10 +180,10 @@ def test_the_drag_question_is_answered_without_touching_anything(tmp_path: Path)
     target = _folder(p, "Audio")
     before = sorted(x.relative_to(p.root).as_posix() for x in p.root.rglob("*"))
 
-    movable = disk_move.drop_verdict(p, [(p.assets_dir / "sfx") / "boom.wav"], target)
+    movable = disk_move.drop_verdict(p, [(p.user_library_dir / "sfx") / "boom.wav"], target)
     texts = disk_move.drop_verdict(p, [p.texts_file], target)
-    nothing_to_do = disk_move.drop_verdict(p, [(p.assets_dir / "sfx") / "boom.wav"], (p.assets_dir / "sfx"))
-    mixed = disk_move.drop_verdict(p, [p.texts_file, (p.assets_dir / "sfx") / "boom.wav"], target)
+    nothing_to_do = disk_move.drop_verdict(p, [(p.user_library_dir / "sfx") / "boom.wav"], (p.user_library_dir / "sfx"))
+    mixed = disk_move.drop_verdict(p, [p.texts_file, (p.user_library_dir / "sfx") / "boom.wav"], target)
 
     assert movable == (True, None)
     assert texts == (False, (p.texts_file.resolve(), disk_move.PROTECTED))      # texts.json : on le dit dès le survol
@@ -197,7 +197,7 @@ def test_a_background_image_moves_freely_and_its_asset_keeps_pointing_at_it(tmp_
     sky = p.backgrounds.get("sky")
     target = _folder(p, "Levels")
 
-    result = disk_move.move_to_folder(p, [(p.assets_dir / "backgrounds") / "sky.png"], target)
+    result = disk_move.move_to_folder(p, [(p.user_library_dir / "backgrounds") / "sky.png"], target)
 
     assert result.refused == []
     assert sky.asset == "assets/Levels/sky.png"
@@ -213,7 +213,7 @@ def test_renaming_a_background_does_not_rename_its_image(tmp_path: Path):
 
     p.rename_background(sky, "heaven")
 
-    assert ((p.assets_dir / "backgrounds") / "sky.png").is_file() and sky.asset == "assets/backgrounds/sky.png"
-    assert not ((p.assets_dir / "backgrounds") / "heaven.png").exists()
+    assert ((p.user_library_dir / "backgrounds") / "sky.png").is_file() and sky.asset == "assets/backgrounds/sky.png"
+    assert not ((p.user_library_dir / "backgrounds") / "heaven.png").exists()
     reopened = _reopen(p.root)
     assert [b.name for b in reopened.backgrounds] == ["heaven"]                  # pas de second fond né de l'ancien PNG

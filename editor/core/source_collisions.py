@@ -17,13 +17,16 @@ def collides(source: Path, folder: Path) -> bool:
     return same_name.is_file() and same_name.resolve() != Path(source).resolve()
 
 
-def destination(source: Path, folder: Path, overwrite: bool, taken_stems=None) -> Path:
-    """Où va la copie : le même nom si l'auteur écrase, sinon le premier nom libre (`taken_stems` : les noms de ce lot)."""
+def destination(source: Path, folder: Path, overwrite: bool, taken_names=None) -> Path:
+    """Où va la copie : le même nom si l'auteur écrase, sinon le premier nom libre (`taken_names` : les noms de fichier de
+    ce lot). Seul un fichier de MÊME extension prend le nom : `village.xm` peut côtoyer `village.png`, deux sources de
+    types différents ne se gênent pas et l'asset créé garde le nom que l'auteur a choisi pour son fichier."""
     source, folder = Path(source), Path(folder)
     if overwrite and collides(source, folder):
         return folder / source.name
-    taken = {entry.stem for entry in folder.iterdir()} if folder.is_dir() else set()
-    return folder / f"{unique_name(source.stem, taken | set(taken_stems or ()))}{source.suffix}"
+    names = {entry.name for entry in folder.iterdir()} if folder.is_dir() else set()
+    same_kind = {Path(n).stem for n in names | set(taken_names or ()) if Path(n).suffix.lower() == source.suffix.lower()}
+    return folder / f"{unique_name(source.stem, same_kind)}{source.suffix}"
 
 
 def citing(project, path: Path, exclude=None) -> list[str]:

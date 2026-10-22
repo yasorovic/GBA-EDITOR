@@ -248,7 +248,7 @@ class FloatingToolbar(QFrame):
             QMenu {{
                 background: {C.BG_RAISED};
                 color: {C.TEXT_NORM};
-                border: 1px solid {C.BORDER_MID};
+                border: 1px solid {C.SPLITTER};
                 border-radius: 4px;
                 padding: 4px;
             }}
@@ -293,7 +293,7 @@ class FloatingToolbar(QFrame):
         menu = QMenu(self)
         menu.setFont(QFont(T.UI, T.MD))
         menu.setStyleSheet(f"""
-            QMenu {{ background:{C.BG_RAISED}; color:{C.TEXT_NORM}; border:1px solid {C.BORDER_MID};
+            QMenu {{ background:{C.BG_RAISED}; color:{C.TEXT_NORM}; border:1px solid {C.SPLITTER};
                     border-radius:4px; padding:4px; }}
             QMenu::item {{ padding:5px 14px 5px 8px; border-radius:3px; icon-size:20px; }}
             QMenu::item:selected {{ background:{C.BG_SEL}; color:{C.ACCENT}; }}
@@ -338,7 +338,7 @@ class FloatingToolbar(QFrame):
         menu = QMenu(self)
         menu.setFont(QFont(T.UI, T.MD))
         menu.setStyleSheet(f"""
-            QMenu {{ background:{C.BG_RAISED}; color:{C.TEXT_NORM}; border:1px solid {C.BORDER_MID};
+            QMenu {{ background:{C.BG_RAISED}; color:{C.TEXT_NORM}; border:1px solid {C.SPLITTER};
                     border-radius:4px; padding:4px; }}
             QMenu::item {{ padding:5px 14px 5px 8px; border-radius:3px; icon-size:20px; }}
             QMenu::item:selected {{ background:{C.BG_SEL}; color:{C.ACCENT}; }}

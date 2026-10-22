@@ -1,4 +1,4 @@
-"""Dossiers d'auteur dans le project viewer — capacité générale du AssetFinder,
+"""Dossiers d'auteur dans la Scene library — capacité générale du AssetLibrary,
 dont la famille Scenes est le premier client (store partagé avec le Graphe)."""
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ def _scene(name, **fields):
 
 def test_folded_nodes_range_les_assets_sous_leurs_dossiers():
     from core.asset_folder_store import AssetFolderStore
-    from ui.common.asset_finder import AssetNode, FolderScheme, folded_nodes
+    from ui.common.asset_library import AssetNode, FolderScheme, folded_nodes
     import tempfile
     from pathlib import Path
 
@@ -61,7 +61,7 @@ def _scenes_project(tmp_path):
 
 
 def _folder_items(tree):
-    from ui.common.asset_finder import _ROLE_FOLDER
+    from ui.common.asset_library import _ROLE_FOLDER
     out = []
     stack = [tree.topLevelItem(i) for i in range(tree.topLevelItemCount())]
     while stack:
@@ -75,18 +75,18 @@ def _folder_items(tree):
 def test_le_project_viewer_montre_les_dossiers_de_scenes(qapp, tmp_path):
     from core.asset_folder_store import AssetFolderStore
     from ui.common.asset_kinds import SCENES
-    from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
+    from ui.scene_manager.scene_library_panel import SceneLibraryPanel
 
     project = _scenes_project(tmp_path)
     store = AssetFolderStore(project.root)
     folder = store.create_folder("scenes", "Town")
     store.move_member("scenes", _sid("Shop"), folder.id)
 
-    panel = AssetsFinderPanel()
+    panel = SceneLibraryPanel()
     panel.load_project(project)
     panel.set_folder_store(store)
 
-    tree = panel._finder._trees[SCENES.label]
+    tree = panel._library._trees[SCENES.label]
     folders = _folder_items(tree)
     assert [f.text(0) for f in folders] == ["Town"]
     # La scène Shop est rangée SOUS le dossier ; les autres à la racine.
@@ -114,22 +114,22 @@ def _press(tree, item, modifiers):
 
 
 def test_le_clic_simple_active_mais_la_multi_selection_ne_charge_rien(qapp, tmp_path):
-    """La multi-sélection dans le project viewer n'active (ne charge) plus
+    """La multi-sélection dans la Scene library n'active (ne charge) plus
     chaque scène ; seul un clic simple, résolu sur la sélection STABILISÉE,
     active — et l'émission est différée d'un tour de boucle (cf.
     `_on_selection_set_changed`), d'où les `processEvents()`."""
     from PyQt6.QtCore import Qt as QtNS
     from ui.common.asset_kinds import SCENES
-    from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
+    from ui.scene_manager.scene_library_panel import SceneLibraryPanel
 
     project = _scenes_project(tmp_path)
-    panel = AssetsFinderPanel()
+    panel = SceneLibraryPanel()
     panel.load_project(project)
 
     activated = []
-    panel._finder.selected.connect(lambda label, obj: activated.append(obj.name))
+    panel._library.selected.connect(lambda label, obj: activated.append(obj.name))
 
-    tree = panel._finder._trees[SCENES.label]
+    tree = panel._library._trees[SCENES.label]
     items = [tree.topLevelItem(i) for i in range(tree.topLevelItemCount())]
 
     # Clic simple → activation (une émission).
@@ -153,17 +153,17 @@ def test_maj_clic_selectionne_la_plage_sans_perdre_le_premier(qapp, tmp_path):
     stabilisée (`itemSelectionChanged`), et Qt gère la plage nativement."""
     from PyQt6.QtCore import Qt as QtNS
     from ui.common.asset_kinds import SCENES
-    from ui.common.asset_finder import _ROLE_OBJ
-    from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
+    from ui.common.asset_library import _ROLE_OBJ
+    from ui.scene_manager.scene_library_panel import SceneLibraryPanel
 
     project = _scenes_project(tmp_path)
-    panel = AssetsFinderPanel()
+    panel = SceneLibraryPanel()
     panel.load_project(project)
 
     activated = []
-    panel._finder.selected.connect(lambda label, obj: activated.append(obj.name))
+    panel._library.selected.connect(lambda label, obj: activated.append(obj.name))
 
-    tree = panel._finder._trees[SCENES.label]
+    tree = panel._library._trees[SCENES.label]
     items = [tree.topLevelItem(i) for i in range(tree.topLevelItemCount())]
     assert len(items) >= 3
     names = [it.data(0, _ROLE_OBJ).name for it in items]
@@ -181,14 +181,14 @@ def test_maj_clic_selectionne_la_plage_sans_perdre_le_premier(qapp, tmp_path):
 def test_ctrl_clic_bascule_un_element_sans_toucher_au_reste(qapp, tmp_path):
     from PyQt6.QtCore import Qt as QtNS
     from ui.common.asset_kinds import SCENES
-    from ui.common.asset_finder import _ROLE_OBJ
-    from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
+    from ui.common.asset_library import _ROLE_OBJ
+    from ui.scene_manager.scene_library_panel import SceneLibraryPanel
 
     project = _scenes_project(tmp_path)
-    panel = AssetsFinderPanel()
+    panel = SceneLibraryPanel()
     panel.load_project(project)
 
-    tree = panel._finder._trees[SCENES.label]
+    tree = panel._library._trees[SCENES.label]
     items = [tree.topLevelItem(i) for i in range(tree.topLevelItemCount())]
     assert len(items) >= 3
     names = [it.data(0, _ROLE_OBJ).name for it in items]
@@ -207,15 +207,15 @@ def test_ctrl_clic_bascule_un_element_sans_toucher_au_reste(qapp, tmp_path):
 
 def test_selection_de_scenes_relayee_pour_le_graphe(qapp, tmp_path):
     from ui.common.asset_kinds import SCENES
-    from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
+    from ui.scene_manager.scene_library_panel import SceneLibraryPanel
 
     project = _scenes_project(tmp_path)
-    panel = AssetsFinderPanel()
+    panel = SceneLibraryPanel()
     panel.load_project(project)
     got = []
     panel.scenes_selected.connect(got.append)
 
-    tree = panel._finder._trees[SCENES.label]
+    tree = panel._library._trees[SCENES.label]
     tree.topLevelItem(1).setSelected(True)   # "Shop"
     qapp.processEvents()      # l'émission est différée d'un tour de boucle
 
@@ -225,16 +225,16 @@ def test_selection_de_scenes_relayee_pour_le_graphe(qapp, tmp_path):
 def test_deplacer_une_scene_vers_un_dossier_via_le_store(qapp, tmp_path):
     from core.asset_folder_store import AssetFolderStore
     from ui.common.asset_kinds import SCENES
-    from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
+    from ui.scene_manager.scene_library_panel import SceneLibraryPanel
 
     project = _scenes_project(tmp_path)
     store = AssetFolderStore(project.root)
-    panel = AssetsFinderPanel()
+    panel = SceneLibraryPanel()
     panel.load_project(project)
     panel.set_folder_store(store)
 
-    tree = panel._finder._trees[SCENES.label]
-    scheme = panel._finder.folder_scheme(SCENES.label)
+    tree = panel._library._trees[SCENES.label]
+    scheme = panel._library.folder_scheme(SCENES.label)
     folder = scheme.create("Town", None)
     arena = next(s for s in project.scenes if s.name == "Arena")
     tree._move_to_folder(scheme, arena, folder.id)
@@ -245,11 +245,11 @@ def test_deplacer_une_scene_vers_un_dossier_via_le_store(qapp, tmp_path):
 
 def test_creer_un_groupe_vide_depuis_le_menu_ajout(qapp, tmp_path):
     from core.asset_folder_store import AssetFolderStore
-    from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
+    from ui.scene_manager.scene_library_panel import SceneLibraryPanel
 
     project = _scenes_project(tmp_path)
     store = AssetFolderStore(project.root)
-    panel = AssetsFinderPanel()
+    panel = SceneLibraryPanel()
     panel.load_project(project)
     panel.set_folder_store(store)
     changed = []
@@ -265,15 +265,15 @@ def test_creer_un_groupe_vide_depuis_le_menu_ajout(qapp, tmp_path):
 def test_ctrl_g_groupe_les_scenes_selectionnees(qapp, tmp_path):
     from core.asset_folder_store import AssetFolderStore
     from ui.common.asset_kinds import SCENES
-    from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
+    from ui.scene_manager.scene_library_panel import SceneLibraryPanel
 
     project = _scenes_project(tmp_path)
     store = AssetFolderStore(project.root)
-    panel = AssetsFinderPanel()
+    panel = SceneLibraryPanel()
     panel.load_project(project)
     panel.set_folder_store(store)
 
-    tree = panel._finder._trees[SCENES.label]
+    tree = panel._library._trees[SCENES.label]
     tree.topLevelItem(0).setSelected(True)   # Title
     tree.topLevelItem(2).setSelected(True)   # Arena
     panel._group_selected_scenes()
@@ -285,17 +285,17 @@ def test_ctrl_g_groupe_les_scenes_selectionnees(qapp, tmp_path):
 def test_clic_droit_grouper_range_un_lot(qapp, tmp_path):
     from core.asset_folder_store import AssetFolderStore
     from ui.common.asset_kinds import SCENES
-    from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
+    from ui.scene_manager.scene_library_panel import SceneLibraryPanel
 
     project = _scenes_project(tmp_path)
     store = AssetFolderStore(project.root)
-    panel = AssetsFinderPanel()
+    panel = SceneLibraryPanel()
     panel.load_project(project)
     panel.set_folder_store(store)
     changed = []
     panel.groups_changed.connect(lambda: changed.append(True))
 
-    tree = panel._finder._trees[SCENES.label]
+    tree = panel._library._trees[SCENES.label]
     title = next(s for s in project.scenes if s.name == "Title")
     arena = next(s for s in project.scenes if s.name == "Arena")
     tree._group([title, arena])
@@ -308,17 +308,17 @@ def test_clic_droit_grouper_range_un_lot(qapp, tmp_path):
 def test_multi_deplacer_vers_le_dossier(qapp, tmp_path):
     from core.asset_folder_store import AssetFolderStore
     from ui.common.asset_kinds import SCENES
-    from ui.scene_manager.assets_finder_panel import AssetsFinderPanel
+    from ui.scene_manager.scene_library_panel import SceneLibraryPanel
 
     project = _scenes_project(tmp_path)
     store = AssetFolderStore(project.root)
     folder = store.create_folder("scenes", "Town")
-    panel = AssetsFinderPanel()
+    panel = SceneLibraryPanel()
     panel.load_project(project)
     panel.set_folder_store(store)
 
-    tree = panel._finder._trees[SCENES.label]
-    scheme = panel._finder.folder_scheme(SCENES.label)
+    tree = panel._library._trees[SCENES.label]
+    scheme = panel._library.folder_scheme(SCENES.label)
     title = next(s for s in project.scenes if s.name == "Title")
     arena = next(s for s in project.scenes if s.name == "Arena")
     tree._move_many_to_folder(scheme, [title, arena], folder.id)
@@ -327,24 +327,24 @@ def test_multi_deplacer_vers_le_dossier(qapp, tmp_path):
     assert store.folder_of("scenes", _sid("Arena")) == folder.id
 
 
-def test_un_finder_range_seulement_les_familles_qui_le_declarent(qapp, tmp_path):
+def test_un_library_range_seulement_les_familles_qui_le_declarent(qapp, tmp_path):
     from core.asset_folder_store import AssetFolderStore
-    from ui.common.asset_finder import AssetFinder
+    from ui.common.asset_library import AssetLibrary
     from ui.common.asset_kinds import PREFABS, SCENES
 
     project = _scenes_project(tmp_path)
-    finder = AssetFinder("Finder", [SCENES, PREFABS])
-    finder.load_project(project)
+    library = AssetLibrary("Library", [SCENES, PREFABS])
+    library.load_project(project)
 
-    finder.set_folder_store(AssetFolderStore(project.root))
+    library.set_folder_store(AssetFolderStore(project.root))
 
-    assert finder.folder_scheme(SCENES.label) is not None      # SCENES déclare folder_family
-    assert finder.folder_scheme(PREFABS.label) is None         # PREFABS ne le déclare pas : à plat
+    assert library.folder_scheme(SCENES.label) is not None      # SCENES déclare folder_family
+    assert library.folder_scheme(PREFABS.label) is None         # PREFABS ne le déclare pas : à plat
 
 
 def test_le_scheme_d_une_famille_range_par_id_dans_sa_propre_famille(tmp_path):
     from core.asset_folder_store import AssetFolderStore
-    from ui.common.asset_finder import FolderScheme
+    from ui.common.asset_library import FolderScheme
 
     store = AssetFolderStore(tmp_path)
     sprites = FolderScheme.for_family(store, "sprites")

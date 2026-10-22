@@ -135,7 +135,7 @@ class _Section(QWidget):
 
     def _set_arrow(self, direction: str):
         """direction: "down" (dépliée) ou "right" (repliée) — même triangle
-        vectoriel partagé que FinderSection/QTreeWidget (cf. icons.arrow_icon)."""
+        vectoriel partagé que LibrarySection/QTreeWidget (cf. icons.arrow_icon)."""
         from ui.common import icons
         self._toggle.setIcon(icons.arrow_icon(direction, self._color))
 
@@ -245,7 +245,7 @@ class _SubSection(QWidget):
         root.setSpacing(0)
 
         # En-tête cliquable en une pièce (arrow + icône + titre) — même
-        # grammaire que FinderSection (widgets.py) : un conteneur qui porte le
+        # grammaire que LibrarySection (widgets.py) : un conteneur qui porte le
         # survol/le clic, pas un QPushButton dont l'icône serait disputée
         # entre le dossier et la flèche.
         hdr = QWidget()
@@ -279,7 +279,7 @@ class _SubSection(QWidget):
         hl.addWidget(title_lbl, 1)
 
         # Sans ça, survoler l'icône/le titre enverrait un Leave au conteneur :
-        # survol clignotant (cf. FinderSection, même remarque).
+        # survol clignotant (cf. LibrarySection, même remarque).
         for lbl in (self._arrow_lbl, title_lbl):
             lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         hdr.mousePressEvent = lambda e: self._do_toggle()
@@ -300,7 +300,7 @@ class _SubSection(QWidget):
 
     def _set_arrow(self, direction: str):
         """direction: "down" (dépliée) ou "right" (repliée) — même triangle
-        vectoriel partagé que FinderSection/QTreeWidget (cf. icons.arrow_icon)."""
+        vectoriel partagé que LibrarySection/QTreeWidget (cf. icons.arrow_icon)."""
         from ui.common import icons
         icon = icons.arrow_icon(direction, _C_SUB)
         self._arrow_lbl.setPixmap(icon.pixmap(QSize(T.MD, T.MD)))

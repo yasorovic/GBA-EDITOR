@@ -2,7 +2,7 @@
 
 Lecture seule. Une icône et un nom par entrée, un fil d'ariane (Assets › sfx ›
 platformer) pour savoir où l'on est et remonter ; un double-clic sur un dossier
-y entre. L'arbre vertical de tout `assets/` est l'affaire du project viewer, pas
+y entre. L'arbre vertical de tout `assets/` est l'affaire de la Scene library, pas
 de cette zone horizontale.
 
 La vue ne connaît ni le projet ni le disque : `window.py` lui donne l'arbre
@@ -86,7 +86,7 @@ MIME_DISK_PATHS = "application/x-backstage-disk-paths"
 
 
 # Un prefab ou un layout glissé SEUL depuis le Disk porte en plus le format que le canvas lit déjà
-# pour le même geste depuis le project viewer : le canvas ne connaît pas l'onglet Disk.
+# pour le même geste depuis la Scene library : le canvas ne connaît pas l'onglet Disk.
 _CANVAS_MIMES = {"prefabs": MIME_PREFAB_TEMPLATE, "ui_layouts": MIME_UI_LAYOUT}
 
 

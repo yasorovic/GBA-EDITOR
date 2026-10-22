@@ -142,7 +142,7 @@ class _PillEdit(QLineEdit):
         self.setFont(QFont(T.MONO, T.SM))
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setStyleSheet(
-            f"QLineEdit{{background:{C.BG_RAISED}; color:{C.TEXT_DIM};"
+            f"QLineEdit{{background:{C.BG_INPUT}; color:{C.TEXT_DIM};"
             f"border:1px solid {C.BORDER_MID}; border-radius:9px; padding:2px 4px;}}"
             f"QLineEdit:focus{{color:{C.TEXT_HI}; border-color:{TEXT_COLOR};}}"
         )

@@ -1,4 +1,4 @@
-"""Le drop du Finder passe par une commande et suit les références du texte."""
+"""Le drop du Library passe par une commande et suit les références du texte."""
 import pytest
 from PyQt6.QtCore import QPointF, Qt
 from PyQt6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent, QDragLeaveEvent
@@ -8,7 +8,7 @@ from core.history import get_history
 from core.models.text import MAX_DEPTH, Text, moved_text_paths
 from core.models.ui_region import UILayout, UIText
 from core.project import Project
-from ui.text_editor.text_finder import _ROLE_PATH
+from ui.text_editor.text_library import _ROLE_PATH
 from ui.text_editor.text_editor_screen import TextEditorScreen
 from ui.text_editor.text_panel import TextPanel
 from ui.text_editor.text_table import COL_KEY
@@ -27,7 +27,7 @@ def find_item(tree, path):
     return visit(tree.topLevelItem(0))
 
 
-def test_finder_uses_one_label_per_key_segment(qapp, tmp_path):
+def test_library_uses_one_label_per_key_segment(qapp, tmp_path):
     project = Project(tmp_path / 'game')
     text = project.new_text(content='$score_cpu', path=['SCR_Arena', 'ScoreCpu'])
     screen = TextEditorScreen()
@@ -37,10 +37,10 @@ def test_finder_uses_one_label_per_key_segment(qapp, tmp_path):
         old_key, old_path = text.key, list(text.path)
         screen._texts.rename_key(text, 'scr_arena_score_cpu')
         assert text.path == ['scr', 'arena', 'score', 'cpu']
-        leaf = find_item(screen._text_finder._tree, text.path)
+        leaf = find_item(screen._text_library._tree, text.path)
         assert leaf.text(0) == 'cpu  (1)'
         assert leaf.toolTip(0) == 'scr › arena › score › cpu'
-        screen._text_finder._tree.setCurrentItem(leaf)
+        screen._text_library._tree.setCurrentItem(leaf)
         assert not screen._texts._table._row_of(text).isHidden()
         get_history().undo()
         assert text.key == old_key
@@ -52,43 +52,43 @@ def test_finder_uses_one_label_per_key_segment(qapp, tmp_path):
         get_history().clear()
 
 
-def test_finder_context_menu_targets_clicked_text_and_folder(qapp, tmp_path, monkeypatch):
+def test_library_context_menu_targets_clicked_text_and_folder(qapp, tmp_path, monkeypatch):
     project = Project(tmp_path / 'game')
     first = project.new_text(content='First', path=['Main', 'First'])
     second = project.new_text(content='Second', path=['Main', 'Second'])
-    from ui.text_editor.text_finder import TextFinder
-    finder = TextFinder()
-    finder.load_project(project)
-    finder.resize(300, 400)
-    finder.show()
-    finder._tree.expandAll()
+    from ui.text_editor.text_library import TextLibrary
+    library = TextLibrary()
+    library.load_project(project)
+    library.resize(300, 400)
+    library.show()
+    library._tree.expandAll()
     qapp.processEvents()
     created, duplicated, deleted = [], [], []
-    finder.create_requested.connect(created.append)
-    finder.duplicate_requested.connect(duplicated.append)
-    finder.delete_requested.connect(deleted.append)
+    library.create_requested.connect(created.append)
+    library.duplicate_requested.connect(duplicated.append)
+    library.delete_requested.connect(deleted.append)
 
     wanted = ''
     def choose(menu, *_args):
         next(action for action in menu.actions() if action.text() == wanted).trigger()
     monkeypatch.setattr(QMenu, 'exec', choose)
     try:
-        leaf = find_item(finder._tree, first.path)
-        leaf_pos = finder._tree.visualItemRect(leaf).center()
+        leaf = find_item(library._tree, first.path)
+        leaf_pos = library._tree.visualItemRect(leaf).center()
         wanted = label('common.duplicate')
-        finder._context_menu(leaf_pos)
+        library._context_menu(leaf_pos)
         assert duplicated == [first]
 
         wanted = label('common.create')
-        finder._context_menu(leaf_pos)
+        library._context_menu(leaf_pos)
         assert created == [('Main',)]
 
-        folder = find_item(finder._tree, ['Main'])
+        folder = find_item(library._tree, ['Main'])
         wanted = label('common.delete')
-        finder._context_menu(finder._tree.visualItemRect(folder).center())
+        library._context_menu(library._tree.visualItemRect(folder).center())
         assert deleted == [[first, second]]
     finally:
-        finder.close()
+        library.close()
 
 
 
@@ -101,8 +101,8 @@ def test_hover_preserves_selection_filter_and_editors(qapp, tmp_path, monkeypatc
     screen.load_project(project)
     screen.resize(1200, 700)
     screen.show()
-    panel, finder = screen._texts, screen._text_finder
-    tree = finder._tree
+    panel, library = screen._texts, screen._text_library
+    tree = library._tree
     tree.expandAll()
     source_item = find_item(tree, source.path)
     tree.setCurrentItem(source_item)
@@ -128,7 +128,7 @@ def test_hover_preserves_selection_filter_and_editors(qapp, tmp_path, monkeypatc
             qapp.processEvents()
             assert move.isAccepted()
             assert tree._drop_target == tree.indexFromItem(item)
-        assert finder.selected_path() == tuple(source.path)
+        assert library.selected_path() == tuple(source.path)
         assert source_item.isSelected()
         assert panel._table._folder_filter == tuple(source.path)
         assert panel._table._tree.itemWidget(panel._table._row_of(source), COL_KEY) is card
@@ -146,12 +146,12 @@ def test_hover_preserves_selection_filter_and_editors(qapp, tmp_path, monkeypatc
         QApplication.sendEvent(tree.viewport(), QDragLeaveEvent())
         assert not tree._drop_target.isValid()
         assert calls == []
-        assert finder.selected_path() == tuple(source.path)
+        assert library.selected_path() == tuple(source.path)
     finally:
         screen.close()
 
 
-def test_trash_deletes_its_own_collapsed_text_and_syncs_finder_with_undo(qapp, tmp_path, monkeypatch):
+def test_trash_deletes_its_own_collapsed_text_and_syncs_library_with_undo(qapp, tmp_path, monkeypatch):
     from ui.text_editor.text_panel import QMessageBox
     project = Project(tmp_path / 'game')
     first = project.new_text(content='First', path=['Main', 'First'])
@@ -162,7 +162,7 @@ def test_trash_deletes_its_own_collapsed_text_and_syncs_finder_with_undo(qapp, t
     screen.load_project(project)
     screen.show()
     qapp.processEvents()
-    panel, finder = screen._texts, screen._text_finder
+    panel, library = screen._texts, screen._text_library
     get_history().clear()
     confirmations = []
     def confirm(*args):
@@ -178,17 +178,17 @@ def test_trash_deletes_its_own_collapsed_text_and_syncs_finder_with_undo(qapp, t
         qapp.processEvents()
         assert confirmations and 'second' in confirmations[0][2]
         assert project.texts == [first]
-        assert find_item(finder._tree, second.path) is None
+        assert find_item(library._tree, second.path) is None
         get_history().undo()
         qapp.processEvents()
         assert project.texts == [first, second]
-        assert find_item(finder._tree, second.path) is not None
+        assert find_item(library._tree, second.path) is not None
         restored = panel._table._tree.itemWidget(panel._table._row_of(second), COL_KEY)
         assert restored.field.isHidden()
         get_history().redo()
         qapp.processEvents()
         assert project.texts == [first]
-        assert find_item(finder._tree, second.path) is None
+        assert find_item(library._tree, second.path) is None
     finally:
         screen.close()
         get_history().clear()
@@ -208,15 +208,15 @@ def test_native_drop_rekeys_and_updates_links_then_undo_restores(qapp, tmp_path,
     zone = UIText(name='caption', text_key=old_key)
     layout.elements.append(zone)
     project.ui_layouts.append(layout)
-    (project.assets_dir / "scripts").mkdir(parents=True, exist_ok=True)
-    script = (project.assets_dir / "scripts") / 'main.lua'
+    (project.user_library_dir / "scripts").mkdir(parents=True, exist_ok=True)
+    script = (project.user_library_dir / "scripts") / 'main.lua'
     script.write_text(f'text:draw(0, 0, "{old_key}")\n', encoding='utf-8')
     screen = TextEditorScreen()
     screen.load_project(project)
-    panel, finder = screen._texts, screen._text_finder
+    panel, library = screen._texts, screen._text_library
     screen.resize(1200, 700)
     screen.show()
-    tree = finder._tree
+    tree = library._tree
     tree.expandAll()
     qapp.processEvents()
     get_history().clear()
@@ -244,14 +244,14 @@ def test_native_drop_rekeys_and_updates_links_then_undo_restores(qapp, tmp_path,
         assert source.content == 'Hello' and target.content == 'Other'
         assert zone.text_key == source.key
         assert source.key in script.read_text(encoding='utf-8')
-        assert finder.selected_path() == ('SceneB', leaf)
+        assert library.selected_path() == ('SceneB', leaf)
         assert panel._table.selected_texts() == [source]
         get_history().undo()
         assert source.path == old_path
         assert source.key == old_key
         assert zone.text_key == old_key
         assert old_key in script.read_text(encoding='utf-8')
-        assert finder.selected_path() == tuple(old_path)
+        assert library.selected_path() == tuple(old_path)
         assert not get_history().can_undo
         get_history().redo()
         assert source.path == ['SceneB', leaf]
@@ -306,11 +306,11 @@ def test_a_folder_that_is_a_linked_sequence_gets_the_link_icon(qapp, tmp_path):
     table = DataTable(name='Lines', columns=[DataColumn('line', 'text')])
     project.data_tables.append(table)
     LinkTableCmd(project, table, 'Arena_Box', 'line').execute()
-    from ui.text_editor.text_finder import TextFinder
-    finder = TextFinder()
-    finder.load_project(project)
+    from ui.text_editor.text_library import TextLibrary
+    library = TextLibrary()
+    library.load_project(project)
     try:
-        tree = finder._tree
+        tree = library._tree
         linked, free = find_item(tree, ['Arena', 'Box']), find_item(tree, ['Arena', 'Free'])
         assert linked.icon(0).cacheKey() != free.icon(0).cacheKey()
         linked.setExpanded(not linked.isExpanded())          # replier/déplier garde l'icône
@@ -319,7 +319,7 @@ def test_a_folder_that_is_a_linked_sequence_gets_the_link_icon(qapp, tmp_path):
         table2 = DataTable(name='More', columns=[DataColumn('line', 'text')])
         project.data_tables.append(table2)
         LinkTableCmd(project, table2, 'Arena_Free', 'line').execute()
-        finder.refresh_links()                                # lier à chaud, sans reconstruire l'arbre
+        library.refresh_links()                                # lier à chaud, sans reconstruire l'arbre
         assert free.icon(0).cacheKey() == linked.icon(0).cacheKey()
     finally:
-        finder.close()
+        library.close()

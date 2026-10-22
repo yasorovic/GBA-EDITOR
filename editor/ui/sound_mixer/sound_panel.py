@@ -36,7 +36,7 @@ from core.music_structure import is_wav_asset
 from core.sfx_render import clear_preview_cache
 from ui.sound_mixer.sound_budget_bar import SoundBudgetBar
 from ui.sound_mixer.sound_commands import RenameSoundCmd
-from ui.common.asset_finder import AssetFinder
+from ui.common.asset_library import AssetLibrary
 from ui.common.asset_kinds import SFX, MUSIC, JINGLES
 from core.keybindings import bind
 from core.project import Project
@@ -695,7 +695,7 @@ class _BoxTab(QWidget):
 #  SoundMixerScreen
 # ──────────────────────────────────────────────────────────────────
 class SoundMixerScreen(QWidget):
-    """Écran complet Sound Mixer : SFX + Music (via AssetFinder) + preview."""
+    """Écran complet Sound Mixer : SFX + Music (via AssetLibrary) + preview."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -703,7 +703,7 @@ class SoundMixerScreen(QWidget):
         self._project: Optional[Project] = None
         self._weights: Optional[dict] = None   # poids du dernier build, à la demande
         self._last_selected = None             # cf. _on_state_selected
-        # L'asset du Sound finder que le lecteur jouera à la place de la boîte,
+        # L'asset du Sound library que le lecteur jouera à la place de la boîte,
         # tant qu'on n'a pas touché à la boîte (cf. _disarm_asset).
         self._armed_asset = None
         self._edited_music = None              # l'asset que l'éditeur central montre
@@ -720,13 +720,13 @@ class SoundMixerScreen(QWidget):
         # MusicBox telle que la ROM la résout, pas le fichier sur l'ordinateur.
         self._box_player = BoxPlayer(self)
 
-        # ── Panneau gauche : Sound finder ──────────────────────────
-        # Deux familles dans un seul finder partagé ; c'est le TYPE de l'asset
+        # ── Panneau gauche : Sound library ──────────────────────────
+        # Deux familles dans un seul library partagé ; c'est le TYPE de l'asset
         # reçu qui dit quel inspecteur montrer, pas un signal par famille.
-        self._finder = AssetFinder(label('sndpanel.sound_finder'), [SFX, MUSIC, JINGLES],
+        self._library = AssetLibrary(label('sndpanel.sound_library'), [SFX, MUSIC, JINGLES],
                                    min_width=180, max_width=360)
-        self._finder.selected.connect(lambda _kind, a: self._on_asset_selected(a))
-        self._finder.emptied.connect(self._on_finder_emptied)
+        self._library.selected.connect(lambda _kind, a: self._on_asset_selected(a))
+        self._library.emptied.connect(self._on_library_emptied)
 
         # ── Panneau central : contextes audio (masqué temporairement) ──
         # Les MusicBox/SoundBox/JingleBox restent chargées afin que les projets
@@ -743,7 +743,7 @@ class SoundMixerScreen(QWidget):
         center_layout.setSpacing(0)
         center_layout.addWidget(self._machines_panel, 1)
         # L'éditeur d'une musique ou d'un jingle : la forme d'onde et les sections de boucle. Il prend la
-        # place du graphe masqué quand un module est choisi dans le finder (cf. `_show_music_editor`).
+        # place du graphe masqué quand un module est choisi dans la library (cf. `_show_music_editor`).
         self._music_editor = MusicEditor(self._box_player.track_for,
                                         lambda music: self._sound_weights().get(("music", music.name)))
         self._music_editor.changed.connect(self._on_editor_changed)
@@ -781,7 +781,7 @@ class SoundMixerScreen(QWidget):
         center_layout.addWidget(self._center_filler, 1)
         center_layout.addWidget(self._build_player_bar())
         # Espace lance / arrête l'aperçu, comme le bouton du bandeau. Sur tout l'écran et non sur la
-        # seule colonne centrale : on choisit un asset dans le finder puis on l'écoute sans changer de focus.
+        # seule colonne centrale : on choisit un asset dans la library puis on l'écoute sans changer de focus.
         play_pause = QShortcut(QKeySequence(), self)
         play_pause.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         play_pause.activated.connect(self._btn_rom.toggle)
@@ -863,7 +863,7 @@ class SoundMixerScreen(QWidget):
         right_lay.addWidget(self._sfx_editor.mix_panel)         # au même endroit : une seule des deux tables se montre
         self._music_editor.structure_changed.connect(self._sync_right_column)
 
-        self.body = ThreeColumnBody(self._finder, center, right,
+        self.body = ThreeColumnBody(self._library, center, right,
                                     sizes=(200, 560, 320))
         root.addWidget(self.body, 1)
 
@@ -1211,7 +1211,7 @@ class SoundMixerScreen(QWidget):
         return (self._music_tab, self._sound_tab, self._jingle_tab)
 
     def _on_tab_changed(self, index: int):
-        """Le finder ne montre que ce que l'onglet courant peut résoudre.
+        """La library ne montre que ce que l'onglet courant peut résoudre.
 
         Une action de SoundBox pointe vers un Sfx, une action de JingleBox vers
         un Jingle, un état de MusicBox vers une Music : la banque d'effets n'a
@@ -1221,11 +1221,11 @@ class SoundMixerScreen(QWidget):
         """
         self._disarm_asset()
         if self._machines_panel.isHidden():
-            # Sans éditeur de boîtes, rien ne se dépose : le finder garde ses trois familles.
-            self._finder.show_only(None)
+            # Sans éditeur de boîtes, rien ne se dépose : la library garde ses trois familles.
+            self._library.show_only(None)
         else:
             visible = {0: MUSIC.label, 1: SFX.label, 2: JINGLES.label}
-            self._finder.show_only({visible.get(index, MUSIC.label)})
+            self._library.show_only({visible.get(index, MUSIC.label)})
         if 0 <= index < len(self._context_buttons):
             self._context_buttons[index].setChecked(True)
 
@@ -1269,7 +1269,7 @@ class SoundMixerScreen(QWidget):
             for family, assets in (("sfx", self._project.sfx), ("music", self._project.music),
                                    ("jingles", self._project.jingles)):
                 store.prune(family, {a.id for a in assets})
-        self._finder.set_folder_store(store)
+        self._library.set_folder_store(store)
 
     def load_project(self, project: Project):
         self._disarm_asset()
@@ -1279,7 +1279,7 @@ class SoundMixerScreen(QWidget):
         self._music_editor.flush_pending()      # avant le changement de projet : l'écriture en attente vise l'ancien
         self._project = project
         self._show_music_editor(None)
-        self._finder.load_project(project)
+        self._library.load_project(project)
         self._right_stack.setCurrentIndex(0)
         self._weights = None
         self._state_insp.set_musics([m.name for m in project.music])
@@ -1332,7 +1332,7 @@ class SoundMixerScreen(QWidget):
         elif self._right_stack.currentWidget() is self._state_insp:
             self._right_stack.setCurrentIndex(0)
 
-    # ── Sélection / lecture (relayées depuis le Sound finder) ──────
+    # ── Sélection / lecture (relayées depuis le Sound library) ──────
 
     def select_sound(self, family: str, name: str):
         """Ouvre le son `name` de `family` (« sfx », « music », « jingles ») — navigation entrante depuis l'onglet Disk."""
@@ -1340,7 +1340,7 @@ class SoundMixerScreen(QWidget):
                        "jingles": (JINGLES, self._project.jingles)}[family]
         asset = store.get(name)
         if asset is not None:
-            self._finder.select(kind.label, asset)
+            self._library.select(kind.label, asset)
 
     def _on_asset_selected(self, asset):
         """Un seul point d'entrée pour les deux familles — le type de l'asset
@@ -1371,7 +1371,7 @@ class SoundMixerScreen(QWidget):
             self._on_rom_toggled(True)
 
     def _disarm_asset(self):
-        """Retour à la boîte : le lecteur ne vise plus l'asset du finder."""
+        """Retour à la boîte : le lecteur ne vise plus l'asset de la library."""
         if self._armed_asset is None:
             return
         self._armed_asset = None
@@ -1404,13 +1404,13 @@ class SoundMixerScreen(QWidget):
         self._upper_layout.setStretch(0, 0 if with_sections else 1)
         self._upper_layout.setStretch(2, 1 if with_sections else 0)
 
-    def _on_finder_emptied(self, _kind) -> None:
+    def _on_library_emptied(self, _kind) -> None:
         self._right_stack.setCurrentIndex(0)
         self._show_music_editor(None)
 
     def _on_editor_changed(self) -> None:
         """Une section ou un curseur a bougé dans l'éditeur : on enregistre l'asset, sans réveiller le watcher
-        (même règle que l'inspecteur, cf. `_AssetInspectorBase._persist`). Le Sound finder ne montre ni les
+        (même règle que l'inspecteur, cf. `_AssetInspectorBase._persist`). Le Sound library ne montre ni les
         sections ni le mixage : on ne le recharge pas (il perdrait sa sélection et son défilement)."""
         asset = self._edited_music
         if asset is None or self._project is None:
@@ -1593,4 +1593,4 @@ class SoundMixerScreen(QWidget):
         self._right_stack.setCurrentWidget(self._jingle_insp)
 
     def _on_changed(self):
-        self._finder.refresh()
+        self._library.refresh()

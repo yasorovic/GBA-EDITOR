@@ -187,7 +187,7 @@ class SpriteCenterPanel(QWidget):
         self._sprite_canvas.set_read_only(self._read_only)
         self._sprite_canvas.set_display_flip(*self._flip)
         self._spritesheet.setEnabled(not self._read_only)
-        from ui.sprite_editor.sprite_finder_panel import dir_label
+        from ui.sprite_editor.sprite_library_panel import dir_label
         self._sprite_canvas_panel.set_read_only_banner(
             label("sprctr.mirror_banner", dir=dir_label(sd)) if self._read_only else None)
         self._refresh_canvas()

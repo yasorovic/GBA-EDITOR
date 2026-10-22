@@ -13,7 +13,7 @@ def test_index_refs_reparses_only_changed_scripts(tmp_path, monkeypatch):
     src = 'if self.anim == "%s" then end\n'
     (tmp_path / "a.lua").write_text(src % "k1", encoding="utf-8")
     (tmp_path / "b.lua").write_text(src % "k2", encoding="utf-8")
-    project = SimpleNamespace(assets_dir=tmp_path)
+    project = SimpleNamespace(user_library_dir=tmp_path)
     refactor._INDEX_VALUES.clear()
     first = refactor.index_refs_in_project(project, DOMAIN_ANIM)
     assert set(first) == {"k1", "k2"}

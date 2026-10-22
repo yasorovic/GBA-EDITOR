@@ -8,7 +8,7 @@ from core.project import Project
 
 def test_new_project_declares_player_and_body(tmp_path):
     project = Project.create(tmp_path / "Game", "Game")
-    for folder in ((project.assets_dir / "scripts"),):
+    for folder in ((project.user_library_dir / "scripts"),):
         folder.mkdir(parents=True, exist_ok=True)
     assert project.settings.collision_tags == ["Player", "body"]
     # Écrits sur disque, relus tels quels.
@@ -18,7 +18,7 @@ def test_new_project_declares_player_and_body(tmp_path):
 
 def test_existing_project_without_declared_tags_keeps_none(tmp_path):
     project = Project.create(tmp_path / "Game", "Game")
-    for folder in ((project.assets_dir / "scripts"),):
+    for folder in ((project.user_library_dir / "scripts"),):
         folder.mkdir(parents=True, exist_ok=True)
     project.settings.collision_tags = []
     project.save()
@@ -32,10 +32,10 @@ def test_collision_enter_is_dispatched_to_scene_actor_script(tmp_path):
     from codegen import BuildWorker
 
     project = Project.create(tmp_path / "Game", "Game")
-    for folder in ((project.assets_dir / "scripts"),):
+    for folder in ((project.user_library_dir / "scripts"),):
         folder.mkdir(parents=True, exist_ok=True)
     scene = project.scenes[0]
-    scripts = (project.assets_dir / "scripts")
+    scripts = (project.user_library_dir / "scripts")
     (scripts / "Hit.lua").write_text(
         "function on_collision_enter(other, my_box, other_box)\nend\n", encoding="utf-8")
     for name in ("A", "B"):

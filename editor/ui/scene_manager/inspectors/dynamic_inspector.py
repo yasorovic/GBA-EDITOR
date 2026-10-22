@@ -14,7 +14,7 @@ from .project_inspector import ProjectInspector
 from .script_inspector import ScriptInspector
 from .ui_inspector import UIInspector
 from .ui_node_inspector import UINodeInspector
-from .uses_inspectors import PrefabUsesInspector, ScriptUsesInspector
+from .uses_inspectors import PrefabUsesInspector
 from .edge_inspector import EdgeInspector
 from .group_inspector import GroupInspector
 from .graph_note_inspector import GraphNoteInspector
@@ -52,14 +52,13 @@ class DynamicInspector(QWidget):
     _MODE_ACTOR       = 2
     _MODE_CAMERA      = 3
     _MODE_PREFAB_USES = 4
-    _MODE_SCRIPT_USES = 5
-    _MODE_PROJECT     = 6
-    _MODE_SCRIPT      = 7
-    _MODE_UI          = 8
-    _MODE_UI_NODE     = 9
-    _MODE_EDGE        = 10
-    _MODE_GROUP       = 11
-    _MODE_GRAPH_NOTE  = 12
+    _MODE_PROJECT     = 5
+    _MODE_SCRIPT      = 6
+    _MODE_UI          = 7
+    _MODE_UI_NODE     = 8
+    _MODE_EDGE        = 9
+    _MODE_GROUP       = 10
+    _MODE_GRAPH_NOTE  = 11
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -110,7 +109,6 @@ class DynamicInspector(QWidget):
             self._MODE_ACTOR:       self._make_actor,
             self._MODE_CAMERA:      self._make_camera,
             self._MODE_PREFAB_USES: self._make_prefab_uses,
-            self._MODE_SCRIPT_USES: self._make_script_uses,
             self._MODE_PROJECT:     self._make_project,
             self._MODE_SCRIPT:      self._make_script,
             self._MODE_UI:          self._make_ui,
@@ -120,7 +118,7 @@ class DynamicInspector(QWidget):
             self._MODE_GRAPH_NOTE:  self._make_graph_note,
         }
         self._placeholders: dict[int, QWidget] = {}
-        for _mode in self._factories:            # 1..9, dans l'ordre → index == mode
+        for _mode in self._factories:            # 1..11, dans l'ordre → index == mode
             ph = QWidget()
             self._placeholders[_mode] = ph
             self._stack.addWidget(ph)
@@ -130,7 +128,6 @@ class DynamicInspector(QWidget):
         self._actor_insp = None
         self._camera_insp = None
         self._uses_insp = None
-        self._script_uses_insp = None
         self._project_insp = None
         self._script_insp = None
         self._ui_insp = None
@@ -211,12 +208,6 @@ class DynamicInspector(QWidget):
             lambda path, line: self._script_open_fn(path, line)
             if self._script_open_fn else None)
         self._uses_insp = insp
-        return insp
-
-    def _make_script_uses(self) -> QWidget:
-        insp = ScriptUsesInspector()
-        insp.edit_requested.connect(self._on_script_edit_requested)
-        self._script_uses_insp = insp
         return insp
 
     def _make_project(self) -> QWidget:
@@ -413,7 +404,7 @@ class DynamicInspector(QWidget):
         elif isinstance(obj, Prefab):
             self.show_prefab(obj, self._project)
         elif isinstance(obj, _P):
-            # Un script (.lua) sélectionné dans le Project Viewer — pas de
+            # Un script (.lua) sélectionné dans le Scene library — pas de
             # Resource dédiée, un simple chemin de fichier sur le bus.
             self.show_script(obj, self._project)
 
@@ -506,7 +497,7 @@ class DynamicInspector(QWidget):
         self._stack.setCurrentIndex(self._MODE_CAMERA)
 
     def show_script(self, path, project=None):
-        """Script .lua sélectionné dans le Project Viewer — note libre +
+        """Script .lua sélectionné dans le Scene library — note libre +
         variables exposées (ScriptInspector)."""
         from pathlib import Path as _P
         path = _P(path)
@@ -537,7 +528,7 @@ class DynamicInspector(QWidget):
             return
         self._ensure(self._MODE_GROUP)
         self._group_insp.load(group_id, folders, state, self._project)
-        self._set_header("group", label("assetfind.group"), folder.name, editable=False)
+        self._set_header("group", label("assetlibrary.group"), folder.name, editable=False)
         self._stack.setCurrentIndex(self._MODE_GROUP)
 
     def show_graph_note(self, note_id, state) -> None:
@@ -557,25 +548,6 @@ class DynamicInspector(QWidget):
         self._uses_insp.load(prefab, proj)
         self._set_header("uses", label('dyninsp.instances'), prefab.name if prefab else "")
         self._stack.setCurrentIndex(self._MODE_PREFAB_USES)
-
-    def show_script_uses(self, script_path: str, project=None):
-        proj = project or self._project
-        if not proj:
-            return
-        from pathlib import Path as _P
-        self._ensure(self._MODE_SCRIPT_USES)
-        self._script_uses_insp.load(script_path, proj)
-        self._set_header("script", label('dyninsp.script'), _P(script_path).name)
-        self._stack.setCurrentIndex(self._MODE_SCRIPT_USES)
-
-    def _on_script_edit_requested(self, path: str):
-        """Ouvre le script dans l'éditeur — relayé par window.py via script_opened."""
-        # On émet via un signal dédié ou on passe par le bus.
-        # Ici on utilise directement l'import window pour éviter une dépendance circulaire :
-        # c'est window.py qui connecte script_opened → open_script().
-        # On stocke un callback optionnel.
-        if hasattr(self, "_script_open_fn") and self._script_open_fn:
-            self._script_open_fn(path)
 
     def set_script_open_fn(self, fn):
         """Injecté par window.py pour ouvrir un script depuis un inspecteur.

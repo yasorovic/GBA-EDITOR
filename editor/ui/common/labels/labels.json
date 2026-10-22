@@ -1562,6 +1562,9 @@
     },
     "sprpanel.import_replace_tip": { "text": "Chooses an image, validates it and encodes it for the GBA, then attaches it to the current sprite. The source file is not modified." },
     "sprpanel.import_replace_title": { "text": "Import or replace image" },
+    "sprpanel.extract_created": { "text": "Palette “{name}” created from the image. It is in the Palettes screen." },
+    "sprpanel.extract_updated": { "text": "Palette “{name}” updated from the image. It is in the Palettes screen." },
+    "sprpanel.extract_no_image": { "text": "This sprite has no image file to read a palette from." },
     "sprpanel.extract": {
       "text": "⟐  Extract from PNG"
     },
@@ -1905,6 +1908,7 @@
     "scttree.move_bottom": {
       "text": "Move to bottom"
     },
+    "scttree.ui_drop_other_interface": { "text": "An element cannot be moved into another interface. Add a new element there instead." },
     "scttree.rename_actor": {
       "text": "Rename actor"
     },
@@ -2478,6 +2482,12 @@
     "fsprev.remove_markup": {
       "text": "Remove the markup"
     },
+    "uielemname.taken_title": { "text": "Name already used" },
+    "uielemname.taken_msg": { "text": "An interface element named “{name}” already exists (in “{interface}”). Element names are unique in the whole project, because scripts cite them with interface:get.\n\nYes: use “{suggested}” instead.\nNo: keep the current name and choose another one." },
+    "uiinsp.size_fixed_title": { "text": "Fixed size" },
+    "uiinsp.size_fixed_image": { "text": "An image takes the size of its sprite frame: the hardware cannot stretch it." },
+    "uiinsp.size_fixed_text": { "text": "A Text string is placed at a point and its width is a build detail. To choose a width, use a Textbox." },
+    "txtlib.add_text": { "text": "Add a text in the selected folder" },
     "txtpnl.invalid_key_title": {
       "text": "Invalid key"
     },
@@ -2544,23 +2554,8 @@
     "scred.external_conflict": {
       "text": "⚠ {name} (external conflict)"
     },
-    "scred.no_project_title": {
-      "text": "Project"
-    },
-    "scred.no_project_msg": {
-      "text": "No project loaded."
-    },
     "scred.new_script_title": {
       "text": "New script"
-    },
-    "scred.script_name": {
-      "text": "Script name:"
-    },
-    "scred.file_exists_title": {
-      "text": "File already exists"
-    },
-    "scred.file_exists_msg": {
-      "text": "{name} already exists."
     },
     "scrsb.filter_placeholder": {
       "text": "Type to filter…"
@@ -2652,31 +2647,28 @@
     "vartbl.persist": {
       "text": "Persist (SRAM)"
     },
-    "assf.instantiate_prefab": {
+    "scenelibrary.instantiate_prefab": {
       "text": "Instantiate prefab"
     },
-    "assf.edit_scene": {
+    "scenelibrary.edit_scene": {
       "text": "Edit scene"
     },
-    "assf.edit_prefab": {
+    "scenelibrary.edit_prefab": {
       "text": "Edit prefab"
     },
-    "assf.view_instances": {
+    "scenelibrary.view_instances": {
       "text": "View instances"
     },
-    "assf.edit_script": {
-      "text": "Edit script"
-    },
-    "assf.view_uses": {
-      "text": "View uses"
-    },
-    "assf.script": {
+    "scriptlibrary.script": {
       "text": "Script"
     },
-    "assf.behavior_script": {
+    "scriptlibrary.behavior_script": {
       "text": "Behavior Script"
     },
-    "assf.open_project": {
+    "scriptlibrary.view_uses": {
+      "text": "View uses"
+    },
+    "scenelibrary.open_project": {
       "text": "Open a project"
     },
     "bgedit.images_png": {
@@ -2685,7 +2677,7 @@
     "bginp.remove_this_animation": {
       "text": "Remove this animation"
     },
-    "assetfind.delete_confirm": {
+    "assetlibrary.delete_confirm": {
       "text": "Delete these {n} items?\n(Ctrl+Z to undo)"
     },
     "akind.import_a_palette": {
@@ -3063,13 +3055,14 @@
     "imgpng.replace_sprite": {
       "text": "Replace sprite"
     },
-    "sprfind.delete_state": {
+    "spritelibrary.delete_state": {
       "text": "Delete state"
     },
-    "sprfind.add_state": { "text": "Add animation state" },
-    "sprfind.add_state_tip": { "text": "Creates a new animation state with its own directions, speed, and loop setting." },
-    "sprfind.animation_tree_tip": { "text": "A direction selected here is edited in the frame canvas. A second click on an animation state renames it; a right-click offers deletion." },
-    "sprfind.delete_confirm": {
+    "spritelibrary.add_state": { "text": "Add animation state" },
+    "spritelibrary.add_state_tip": { "text": "Creates a new animation state with its own directions, speed, and loop setting." },
+    "spritelibrary.rename_state": { "text": "Rename state" },
+    "spritelibrary.animation_tree_tip": { "text": "A direction selected here is edited in the frame canvas. **F2** *renames the selected animation state* (so does a second click on it); a right-click offers renaming and deletion." },
+    "spritelibrary.delete_confirm": {
       "text": "Delete state “{name}”?\n(Ctrl+Z to undo)"
     },
     "fontinsp.stats": {
@@ -3087,8 +3080,8 @@
     "app.extension_problems": {
       "text": "{value} problem(s) found while loading extensions:"
     },
-    "bgedit.background_finder": {
-      "text": "Background finder"
+    "bgedit.background_library": {
+      "text": "Background library"
     },
     "bginp.edit_image": {
       "text": "Edit .png"
@@ -3097,9 +3090,9 @@
     "bginp.select": { "text": "Select" },
     "bginp.select_tip": { "text": "Places the image in its canvas. The whole file is shown, dimmed where it falls outside the canvas. Dragging the image moves it; the handles scale it. Shift keeps the proportions, Ctrl snaps to 8 px. Choosing another tool applies, Esc cancels. The image file is never changed." },
     "bgedit.canvas_title": { "text": "Canvas" },
-    "bgedit.canvas_size": { "text": "Canvas size" },
-    "bgedit.canvas_image_pos": { "text": "Image position" },
-    "bgedit.canvas_image_size": { "text": "Image size" },
+    "bgedit.canvas_size": { "text": "Canvas size (px)" },
+    "bgedit.canvas_image_pos": { "text": "Image position (px)" },
+    "bgedit.canvas_image_size": { "text": "Image size (px)" },
     "bgedit.canvas_fit": { "text": "Fit" },
     "bgedit.canvas_fit_tip": { "text": "Fits the whole image inside the canvas, centered." },
     "bgedit.canvas_fill": { "text": "Fill" },
@@ -3267,14 +3260,14 @@
     "wdg.filter_value": {
       "text": "Filter {value}…"
     },
-    "datascr.data_finder": {
-      "text": "Data finder"
+    "datascr.data_library": {
+      "text": "Data library"
     },
-    "palscr.palette_finder": {
-      "text": "Palette finder"
+    "palscr.palette_library": {
+      "text": "Palette library"
     },
-    "assf.project_viewer": {
-      "text": "Project viewer"
+    "scenelibrary.scene_library": {
+      "text": "Scene library"
     },
     "caminsp.margin": {
       "text": "Margin"
@@ -3322,17 +3315,17 @@
     "uinode.bg_slot": {
       "text": "BG slot"
     },
-    "scrfind.script_finder": {
-      "text": "Script finder"
+    "scriptlibrary.script_library": {
+      "text": "Script library"
     },
-    "sndpanel.sound_finder": {
-      "text": "Sound finder"
+    "sndpanel.sound_library": {
+      "text": "Sound library"
     },
-    "sprfind.sprite_finder": {
-      "text": "Sprite finder"
+    "spritelibrary.sprite_library": {
+      "text": "Sprite library"
     },
-    "txtscr.font_finder": {
-      "text": "Font finder"
+    "txtscr.font_library": {
+      "text": "Font library"
     },
     "cvtop.zoom_out": {
       "text": "Zoom out"
@@ -3469,6 +3462,9 @@
     "scncanvas.collisions": {
       "text": "Scene collisions"
     },
+    "scncanvas.clear_collision": { "text": "Clear collision" },
+    "scncanvas.clear_collision_tip": { "text": "Empties the whole collision map of the active scene. **Ctrl+Z** *brings it back.*" },
+    "scncanvas.collision_already_empty": { "text": "The collision map is already empty." },
     "scncanvas.collisions_tip": { "text": "Shows the collision map painted for the active scene." },
     "scncanvas.interface": {
       "text": "Interface elements"
@@ -3483,16 +3479,16 @@
     "bginp.tile_brush_size_tip": { "text": "Paints a {size}×{size} px square aligned to the tile grid." },
     "bginp.tile_color_transparent": { "text": "Transparent (hides the image)" },
     "bginp.tile_color_i": { "text": "Color {i} of the palette" },
-    "bginp.mode_inpaint": { "text": "Inpaint (palette)" },
+    "bginp.mode_inpaint": { "text": "Inpainting (palette)" },
     "bginp.mode_inpaint_tip": { "text": "Repaints the palette of the tiles crossed. The tiles themselves are not changed. Right-click restores the original palette." },
-    "bginp.mode_paint": { "text": "Paint (color)" },
+    "bginp.mode_paint": { "text": "Painting (color)" },
     "bginp.mode_paint_tip": { "text": "Paints a layer over the image: a solid tile of the selected color in each cell crossed. Right-click restores the original tile." },
-    "bginp.remap_title": { "text": "Palette mapping" },
-    "bginp.remap_direct": { "text": "Direct indices" },
-    "bginp.remap_nearest": { "text": "Closest perceived colors" },
-    "bginp.remap_luminance": { "text": "Preserve lightness" },
-    "bginp.remap_optimal": { "text": "Optimal palette match" },
-    "bginp.remap_ramp": { "text": "Hue & saturation ramp" },
+    "bginp.color_mapping_title": { "text": "Color mapping" },
+    "bginp.color_mapping_direct": { "text": "Direct indices" },
+    "bginp.color_mapping_nearest": { "text": "Closest perceived colors" },
+    "bginp.color_mapping_luminance": { "text": "Preserve lightness" },
+    "bginp.color_mapping_optimal": { "text": "Optimal palette match" },
+    "bginp.color_mapping_ramp": { "text": "Hue & saturation ramp" },
     "bginp.fill_tip_paint": { "text": "Fills a contiguous area of identical cells with the selected color." },
     "bginp.rectangle_tip_paint": { "text": "Puts the selected color in every cell of a rectangular area." },
     "bginp.eraser_tip_paint": { "text": "Removes both the palette repaint and the painted color of each 8×8 cell crossed: the original tile and palette come back." },
@@ -3769,6 +3765,8 @@
     "wdg.filter_by_name_2": {
       "text": "Filter by name…"
     },
+    "cvtop.cursor_unit_title": { "text": "Cursor position" },
+    "cvtop.cursor_unit_tip": { "text": "Shown in pixels or in 8 px tiles. **Click** *switches the unit in every canvas.*" },
     "cvtop.fit_to_view": {
       "text": "Fit to view"
     },
@@ -3859,7 +3857,7 @@
     "akind.delete_table_name_ctrl_z_to_undo": {
       "text": "Delete table “{name}”?\n(Ctrl+Z to undo)"
     },
-    "assetfind.delete_name_ctrl_z_to_undo": {
+    "assetlibrary.delete_name_ctrl_z_to_undo": {
       "text": "Delete “{name}”?\n(Ctrl+Z to undo)"
     },
     "asspalview.palette_idx": {
@@ -4014,37 +4012,37 @@
     "akind.import_2": {
       "text": "Import…"
     },
-    "assetfind.add_an_item": {
+    "assetlibrary.add_an_item": {
       "text": "Add an item"
     },
-    "assetfind.rename": {
+    "assetlibrary.rename": {
       "text": "Rename…"
     },
-    "assetfind.new_folder": {
+    "assetlibrary.new_folder": {
       "text": "New folder"
     },
-    "assetfind.new_subfolder": {
+    "assetlibrary.new_subfolder": {
       "text": "New subfolder"
     },
-    "assetfind.folder_default_name": {
+    "assetlibrary.folder_default_name": {
       "text": "Folder"
     },
-    "assetfind.create_group": {
+    "assetlibrary.create_group": {
       "text": "Create group"
     },
-    "assetfind.group": {
+    "assetlibrary.group": {
       "text": "Group"
     },
-    "assetfind.group_default_name": {
+    "assetlibrary.group_default_name": {
       "text": "Group"
     },
-    "assetfind.move_to_folder": {
+    "assetlibrary.move_to_folder": {
       "text": "Move to folder"
     },
-    "assetfind.remove_from_folder": {
+    "assetlibrary.remove_from_folder": {
       "text": "Remove from folder"
     },
-    "assetfind.delete_selection": {
+    "assetlibrary.delete_selection": {
       "singular": "Delete",
       "plural": "Delete {n} items"
     },
@@ -4224,34 +4222,34 @@
       "singular": "{n} font",
       "plural": "{n} fonts"
     },
-    "sprfind.animation_states": {
+    "spritelibrary.animation_states": {
       "text": "Animation states"
     },
-    "sprfind.all_directions": {
+    "spritelibrary.all_directions": {
       "text": "All Directions"
     },
-    "sprfind.north": {
+    "spritelibrary.north": {
       "text": "North"
     },
-    "sprfind.north_east": {
+    "spritelibrary.north_east": {
       "text": "North East"
     },
-    "sprfind.east": {
+    "spritelibrary.east": {
       "text": "East"
     },
-    "sprfind.south_east": {
+    "spritelibrary.south_east": {
       "text": "South East"
     },
-    "sprfind.south": {
+    "spritelibrary.south": {
       "text": "South"
     },
-    "sprfind.south_west": {
+    "spritelibrary.south_west": {
       "text": "South West"
     },
-    "sprfind.west": {
+    "spritelibrary.west": {
       "text": "West"
     },
-    "sprfind.north_west": {
+    "spritelibrary.north_west": {
       "text": "North West"
     },
     "fontinsp.fnt_descriptor": {
@@ -4711,13 +4709,13 @@
     "akind.relink_none": { "text": "No compatible file in the project." },
     "disk.open_assets_tip": { "text": "Opens the assets folder in the file explorer." },
     "common.reveal": { "text": "Reveal" },
-    "assetfind.locate_tip": { "text": "Shows the file of this asset in the Disk tab." },
+    "assetlibrary.locate_tip": { "text": "Shows the file of this asset in the Disk tab." },
     "disk.edit_externally": { "text": "Edit externally" },
     "disk.new_folder": { "text": "New folder" },
     "disk.add_folder_tip": { "text": "Adds to the selected folder: import a file, create an asset, or make a folder." },
     "disk.rename": { "text": "Rename" },
     "disk.rename_refused": { "text": "The item was not renamed: the name is empty, uses a forbidden character or is already taken, or the item is a project table." },
-    "assetfind.deleted": { "singular": "Deleted {n} item. Ctrl+Z undoes.", "plural": "Deleted {n} items. Ctrl+Z undoes." },
+    "assetlibrary.deleted": { "singular": "Deleted {n} item. Ctrl+Z undoes.", "plural": "Deleted {n} items. Ctrl+Z undoes." },
     "disk.deleted": { "singular": "Deleted {n} asset. Ctrl+Z undoes; its source file stays.", "plural": "Deleted {n} assets. Ctrl+Z undoes; their source files stay." },
     "disk.delete_used": { "text": "Still used by:" },
     "disk.plus_tip": { "text": "Adds to the folder shown: import a file, create an asset, or make a folder." },
@@ -4781,8 +4779,8 @@
     "disk.duplicate": { "singular": "Duplicate", "plural": "Duplicate {n} items" },
     "disk.duplicated": { "text": "Created {name}, pointing at the same source." },
     "disk.duplicated_many": { "text": "Created {n} copies." },
-    "assetfind.duplicate_selection": { "singular": "Duplicate", "plural": "Duplicate {n} items" },
-    "assetfind.duplicated": { "singular": "{n} copy created. Ctrl+Z undoes.", "plural": "{n} copies created. Ctrl+Z undoes." },
+    "assetlibrary.duplicate_selection": { "singular": "Duplicate", "plural": "Duplicate {n} items" },
+    "assetlibrary.duplicated": { "singular": "{n} copy created. Ctrl+Z undoes.", "plural": "{n} copies created. Ctrl+Z undoes." },
     "disk.create_refused": { "text": "Nothing was created: {error}" },
     "disk.move_done": { "singular": "Moved {n} item.", "plural": "Moved {n} items." },
     "disk.move_refused_outside": { "text": "{name} was not moved: it or its destination is outside the assets folder." },

@@ -115,7 +115,7 @@ RATE = 8000
 
 
 def _wav(project, name: str, seconds: float = 4.0, family: str = "music"):
-    folder = project.assets_dir / ("jingles" if family == "jingles" else "music")
+    folder = project.user_library_dir / ("jingles" if family == "jingles" else "music")
     folder.mkdir(parents=True, exist_ok=True)
     t = np.arange(int(RATE * seconds)) / RATE
     with wave.open(str(folder / f"{name}.wav"), "wb") as out:
@@ -145,7 +145,7 @@ def test_the_trim_button_is_there_for_a_wav_and_not_for_a_module(editor, project
     editor.load(project, music)
     assert not editor._trim_zone.isHidden() and not editor._trim_btn.isChecked() and editor._trim_bar.isHidden()
 
-    folder = project.assets_dir / "music"
+    folder = project.user_library_dir / "music"
     (folder / "Theme.it").write_bytes(F.make_it(orders=[0] * 4))
     module = create(project, "music", folder / "Theme.it")
     editor.load(project, module)
@@ -221,7 +221,7 @@ def test_a_jingle_wav_gets_its_fades_a_jingle_module_does_not(editor, project):
     editor.load(project, jingle, sections=False)
     assert editor._baked_fades and all(f.isEnabled() for f in editor._faders._fades.values())
 
-    folder = project.assets_dir / "jingles"
+    folder = project.user_library_dir / "jingles"
     (folder / "Tune.it").write_bytes(F.make_it(orders=[0] * 4))
     module = create(project, "jingles", folder / "Tune.it")
     editor.load(project, module, sections=False)

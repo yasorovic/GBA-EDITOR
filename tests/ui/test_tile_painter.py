@@ -328,16 +328,32 @@ def test_restore_original_purges_both_layers_of_a_background_without_image(qapp,
     assert ba.tile_paint == {} and ba.tile_palette_overrides == {} and refreshed
 
 
-def test_only_the_brush_opens_the_mode_menu_and_the_eraser_just_selects(qapp):
+def test_inpainting_and_painting_open_their_menu_and_the_eraser_just_selects(qapp):
     from ui.background_editor.bg_inpaint_canvas import BgInpaintToolbar
     bar = BgInpaintToolbar()
     opened = []
-    bar._show_brush_menu = lambda tool: opened.append(tool)
+    bar._show_family_menu = lambda family: opened.append(family)
 
+    assert list(bar._btns) == ["select", "inpaint", "paint", "eraser"]
     bar._btns["eraser"].click()
     assert opened == [] and bar.current_tool == "eraser"
-    bar._btns["fill"].click()
-    assert opened == [] and bar.current_tool == "fill"
+    bar._btns["inpaint"].click()
+    bar._btns["paint"].click()
+    assert opened == ["inpaint", "paint"]
+
+
+def test_each_painting_tool_remembers_its_own_subtool_and_sets_the_mode(qapp):
+    from ui.background_editor.bg_inpaint_canvas import BgInpaintToolbar
+    bar = BgInpaintToolbar()
+    bar._select_family_tool("paint", "rect")
+    assert bar.mode == "paint" and bar.current_tool == "rect"
+    assert bar._btns["paint"].isChecked() and not bar._btns["inpaint"].isChecked()
+    bar._select_family_tool("inpaint", "fill")
+    assert bar.mode == "inpaint" and bar.current_tool == "fill"
+    assert bar._btns["inpaint"].isChecked() and not bar._btns["paint"].isChecked()
+    assert bar._sub == {"inpaint": "fill", "paint": "rect"}
+    bar._select_color_mapping("luminance")
+    assert bar.mode == "inpaint" and bar.current_tool == "fill"
 
 
 def test_the_palette_strip_keeps_its_width_when_a_palette_is_added_while_shown(qapp):
@@ -450,7 +466,7 @@ def test_save_as_png_never_overwrites_an_existing_source(qapp, tmp_path, monkeyp
     from ui.common.popup import MessageBox as QMessageBox
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
     project, ba, panel = _panel_with_project(tmp_path)
-    taken = project.assets_dir / f"{ba.name}.png"      # le dossier affiché par défaut : la racine de assets/
+    taken = project.user_library_dir / f"{ba.name}.png"      # le dossier affiché par défaut : la racine de assets/
     taken.parent.mkdir(parents=True, exist_ok=True)
     taken.write_bytes(b"not an image of ours")
 
@@ -550,7 +566,7 @@ def test_import_copies_the_png_into_the_shown_folder_and_outside_assets_falls_ba
     from ui.common.import_folder import import_folder, set_shown_folder_provider
     assert import_folder(project) == folder
     set_shown_folder_provider(lambda: str(tmp_path / "elsewhere"))
-    assert import_folder(project) == project.assets_dir
+    assert import_folder(project) == project.user_library_dir
     set_shown_folder_provider(lambda: None)
 
 
@@ -563,7 +579,7 @@ def test_the_transparent_area_is_a_neutral_checker_under_the_image(qapp):
 def test_choosing_a_mode_only_stages_it_until_compress_is_pressed(qapp, tmp_path):
     from PIL import Image
     project, ba, panel = _panel_with_project(tmp_path)
-    png = (project.assets_dir / "backgrounds") / "src.png"
+    png = (project.user_library_dir / "backgrounds") / "src.png"
     png.parent.mkdir(parents=True, exist_ok=True)
     Image.new("P", (16, 16), 0).save(png)
     ba.asset = project.asset_rel(png)
@@ -702,7 +718,7 @@ def test_the_adjust_sliders_sit_above_the_compression_box_and_feed_one_request(q
 def test_the_dither_type_waits_for_compress_like_the_checkbox_and_lands_in_the_compression(qapp, tmp_path):
     from PIL import Image
     project, ba, panel = _panel_with_project(tmp_path)
-    png = (project.assets_dir / "backgrounds") / "d.png"
+    png = (project.user_library_dir / "backgrounds") / "d.png"
     png.parent.mkdir(parents=True, exist_ok=True)
     Image.new("P", (16, 16), 0).save(png)
     ba.asset = project.asset_rel(png)
@@ -743,7 +759,7 @@ def test_no_slider_compresses_by_itself_and_every_reset_only_stages(qapp):
 
 def _bright_png(project):
     from PIL import Image
-    png = (project.assets_dir / "backgrounds") / "bright.png"
+    png = (project.user_library_dir / "backgrounds") / "bright.png"
     png.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", (16, 16), (200, 40, 40)).save(png)
     return png
@@ -821,7 +837,7 @@ def _photo_png(project, name="photo.png"):
     import numpy as np
     from PIL import Image
     rng = np.random.default_rng(5)
-    png = (project.assets_dir / "backgrounds") / name
+    png = (project.user_library_dir / "backgrounds") / name
     png.parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(rng.integers(0, 256, (32, 32, 3), dtype=np.uint8), "RGB").save(png)
     return png
@@ -934,12 +950,12 @@ def test_the_toolbar_and_strips_follow_a_mode_change_applied_by_recompute(qapp, 
     screen._props._apply_axes("bitmap", 8)
     screen._on_run_encoding()
     assert _wait(qapp, lambda: ba.mode == "bitmap" and _idle(screen))
-    assert not canvas._paint_strip.isVisibleTo(canvas) and not canvas._toolbar._btns["brush"].isVisibleTo(canvas._toolbar)
+    assert not canvas._paint_strip.isVisibleTo(canvas) and not canvas._toolbar._btns["inpaint"].isVisibleTo(canvas._toolbar)
 
     screen._props._apply_axes("tiled", 4)
     screen._on_run_encoding()
     assert _wait(qapp, lambda: ba.mode == "tiled" and _idle(screen))
-    assert canvas._paint_strip.isVisibleTo(canvas) and canvas._toolbar._btns["brush"].isVisibleTo(canvas._toolbar)
+    assert canvas._paint_strip.isVisibleTo(canvas) and canvas._toolbar._btns["inpaint"].isVisibleTo(canvas._toolbar)
 
 
 def test_the_status_line_names_the_chosen_layout_and_follows_each_change_of_mode(qapp, tmp_path):
@@ -1048,7 +1064,7 @@ def test_a_bitmap_background_says_its_canvas_in_the_overlay(qapp, tmp_path):
     from core.bg_import import encode_by_mode, prepare_source
     from core.resources.asset_reconciliation import apply_bg_encoding
     project, ba, _panel = _panel_with_project(tmp_path)
-    png = (project.assets_dir / "backgrounds") / "big.png"
+    png = (project.user_library_dir / "backgrounds") / "big.png"
     png.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", (240, 134), (30, 90, 200)).save(png)
     ba.asset = project.asset_rel(png)
@@ -1198,7 +1214,7 @@ def test_the_toolbar_stays_for_a_bitmap_with_the_select_tool_alone(qapp, tmp_pat
     toolbar = canvas._toolbar
     assert not toolbar.isHidden()
     assert not toolbar._btns["select"].isHidden() and toolbar._btns["select"].isEnabled()
-    assert all(toolbar._btns[t].isHidden() for t in ("brush", "fill", "rect", "eraser"))      # rien à peindre
+    assert all(toolbar._btns[t].isHidden() for t in ("inpaint", "paint", "eraser"))      # rien à peindre
     assert toolbar.current_tool == "" and not canvas._view.canvas_mode_active()               # aucun outil choisi d'office
 
 
@@ -1472,7 +1488,7 @@ def test_importing_a_sprite_lands_in_the_shown_folder(qapp, tmp_path, monkeypatc
     folder.mkdir(parents=True)
     source = tmp_path / "outside.png"
     Image.new("RGB", (16, 16), (200, 30, 30)).save(source)
-    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(source), ""))
+    monkeypatch.setattr(QFileDialog, "getOpenFileNames", lambda *a, **k: ([str(source)], ""))
     get_history().clear()
 
     sprite = import_new_sprite(project)

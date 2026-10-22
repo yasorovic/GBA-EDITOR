@@ -40,12 +40,12 @@ backstage/
 │       ├── screens.py               ← le contrat d'un écran (ProjectScreen), le descripteur EditorScreen, `register_screen()`
 │       │                              pour les plugins (cf. « Ajouter un écran »)
 │       ├── common/                  ← transverse : theme.py (C couleurs / T typographie, jamais de valeur en dur),
-│       │                              three_column_body.py (le squelette finder | centre | inspecteur), catalog.py,
+│       │                              three_column_body.py (le squelette library | centre | inspecteur), catalog.py,
 │       │                              labels.py et notice.py (textes de l'éditeur, cf. « Textes de l'ÉDITEUR »), locate_bus.py
 │       │                              (cf. « Locate et Reveal »), panneaux Build et Disk
 │       └── <écran>/                 ← home, scene_manager, sprite_editor, background_editor, palette_editor, data_editor,
 │                                      sound_mixer, script_editor, text_editor : un fichier par sous-zone
-│                                      (`*_finder_panel` | centre | `*_inspector*`), assemblées par `*_screen.py`
+│                                      (`*_library_panel` | centre | `*_inspector*`), assemblées par `*_screen.py`
 │                                      (scene_manager : `inspectors/`, un fichier par classe d'inspecteur, routés par
 │                                      `dynamic_inspector.py` qui construit chaque inspecteur à sa PREMIÈRE venue)
 ├── runtime/                         ← le moteur GBA écrit À LA MAIN, en C. Aucun .py : pour l'éditeur c'est de la DONNÉE,
@@ -119,7 +119,7 @@ Avant de nommer un nouveau type, vérifier que le **même mot** est employé aux
 
 ### Locate et Reveal (deux gestes, deux noms)
 
-**Locate** mène à l'onglet **Disk** de l'éditeur (`ui/common/locate_bus.py` → `window._locate_file`) : l'émetteur dit seulement QUEL fichier, la fenêtre qui possède l'onglet décide comment l'afficher. **Reveal** mène à l'**explorateur du système** (`ui/common/reveal.py`) et n'a pas besoin de la fenêtre. Un finder tient les deux derrière `AssetKind.file_of` : une famille qui le déclare gagne l'icône et les deux entrées de menu, sans autre câblage.
+**Locate** mène à l'onglet **Disk** de l'éditeur (`ui/common/locate_bus.py` → `window._locate_file`) : l'émetteur dit seulement QUEL fichier, la fenêtre qui possède l'onglet décide comment l'afficher. **Reveal** mène à l'**explorateur du système** (`ui/common/reveal.py`) et n'a pas besoin de la fenêtre. Une library tient les deux derrière `AssetKind.file_of` : une famille qui le déclare gagne l'icône et les deux entrées de menu, sans autre câblage.
 
 ### Importer sur un fichier du même nom (une règle, une question)
 
@@ -152,7 +152,9 @@ L'éditeur distingue un **actor** (logique de jeu), un **sprite** (son rendu) et
 ### Règles clés
 
 - **Une extension par type d'asset** : `<nom>.<type>` (`Player.sprite`, `Scene_01.scene`, `Night.palette`…), contenu JSON. La table unique est `core/models/asset_extensions.py` (chaque modèle porte la sienne). Restent en `.json` : `texts.json`, `texts_<langue>.json`, `variables.json`. Le `.hex` d'une palette est sa donnée canonique, que le `.palette` POINTE par son champ `asset`.
-- **`assets/` est le dossier de l'auteur** : TOUT ce qu'il manipule y vit (sources brutes comme les PNG et les sons, scènes, prefabs, mises en page, boîtes sonores, tables, polices logiques, textes, variables), et il l'organise lui-même. `project/` ne garde que l'état interne de l'éditeur, les licences et le README. `build/` est 100 % généré.
+- **`assets/` est le dossier de l'auteur** : TOUT ce qu'il manipule y vit (sources brutes comme les PNG et les sons, scènes, prefabs, mises en page, boîtes sonores, tables, polices logiques, textes, variables), et il l'organise lui-même. `project/` ne garde que l'état interne de l'éditeur, les licences et le README. `build/` est 100 % généré. Pour l'auteur c'est son dossier « assets » et l'onglet « Disk » ; **dans le code, ce dossier s'appelle toujours `user_library`** (`Project.user_library_dir`), jamais « assets » ni « project files ».
+- **Bibliothèques** (`ui/common/asset_library.py` : `AssetLibrary`, un seul composant pour toutes les familles) : la **Scene library** (`ui/scene_manager/scene_library_panel.py`) ne montre que scènes et prefabs, la **Script library** (`ui/script_editor/script_library_panel.py`) les scripts. « Voir les utilisations » d'un script remplace la colonne droite du Script Editor par `ScriptUsesPanel` (`ui/script_editor/script_uses_panel.py`, base `ui/common/uses_list.py`) ; un clic sur une ligne ouvre le Scene Manager sur la cible (`MainWindow._show_script_user`). Dans le code, le dossier de l'auteur est la **user library** (`Project.user_library_dir`) ; pour l'auteur, c'est son dossier « assets » et l'onglet « Disk ».
+- **Lancé avec un fichier**, l'éditeur ouvre un `<Nom>.project` (son dossier), ou un fichier d'asset / un `.lua` (le projet qui le contient, puis le fichier dans son écran : `core/launch_target.py`, `MainWindow.open_asset_file`). Seul `.project` est associé au système ; les extensions d'asset ne le sont pas.
 - **`<Nom>.project`** est le manifeste racine : on le double-clique, et son nom de fichier EST le nom du projet. Config racine uniquement ; `start_scene` (départ du **jeu**) et `last_scene` (dernière scène ouverte dans l'**éditeur**) sont deux champs distincts.
 - **Les assets sont référencés par nom**, jamais par chemin absolu.
 - **Un argument de script qui cite un élément du projet** est déclaré par le `domain` de son `Param` dans `scripting/api.py` : cette table unique sert au checker (valider), au codegen (résoudre en index) et à `refactor.py` (suivre les renommages).

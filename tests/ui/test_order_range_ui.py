@@ -108,7 +108,7 @@ def editor(qapp, project):
 
 
 def _jingle(project, name="Tune", orders=(0, 0, 0, 0)) -> Jingle:
-    folder = project.assets_dir / "jingles"
+    folder = project.user_library_dir / "jingles"
     folder.mkdir(parents=True, exist_ok=True)
     (folder / f"{name}.it").write_bytes(F.make_it(orders=list(orders)))
     return create(project, "jingles", folder / f"{name}.it")
@@ -118,7 +118,7 @@ def test_a_jingle_module_has_the_trim_button_and_a_music_module_does_not(editor,
     editor.load(project, _jingle(project), sections=False)
     assert not editor._trim_zone.isHidden() and not editor._trim_btn.isChecked() and editor._order_bar.isHidden()
 
-    folder = project.assets_dir / "music"
+    folder = project.user_library_dir / "music"
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "Theme.it").write_bytes(F.make_it(orders=[0] * 4))
     editor.load(project, create(project, "music", folder / "Theme.it"))

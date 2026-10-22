@@ -114,8 +114,8 @@ def test_a_migrated_project_opens_with_everything_it_had(tmp_path: Path):
     from core.models.scene import Scene
     project.scenes.save(Scene(name="Level"))
     project.save()
-    assert (project.assets_dir / "Level.scene").is_file()
-    assert not list(project.assets_dir.glob("Level.json"))
+    assert (project.user_library_dir / "Level.scene").is_file()
+    assert not list(project.user_library_dir.glob("Level.json"))
 
     reopened = Project.open(project.root)
     reopened.load_all_resources()

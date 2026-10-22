@@ -126,15 +126,15 @@ def _problems(project: Project, music: Music) -> list[tuple[str, str]]:
 
 
 def _drop(project: Project, filename: str, data: bytes) -> str:
-    path = project.assets_dir / "music" / filename
+    path = project.user_library_dir / "music" / filename
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     return f"assets/music/{filename}"
 
 
 def _drop_wav(project: Project, filename: str, seconds: int) -> None:
-    (project.assets_dir / "music").mkdir(parents=True, exist_ok=True)
-    _wav(project.assets_dir / "music" / filename, seconds)
+    (project.user_library_dir / "music").mkdir(parents=True, exist_ok=True)
+    _wav(project.user_library_dir / "music" / filename, seconds)
 
 
 def _levels(problems) -> list[str]:

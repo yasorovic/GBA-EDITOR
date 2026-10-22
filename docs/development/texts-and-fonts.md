@@ -117,7 +117,7 @@ Il n'existe ni libellé libre, ni clé « automatique » ou « nommée à la mai
 renommer la clé** —
 - **renommer une clé** la change partout où elle est citée (scripts, zones d'interface,
   cellules de table, boîtes et séquences liées) ;
-- **déposer un texte dans un autre dossier**, **renommer un dossier** du Finder ou **éditer un niveau**
+- **déposer un texte dans un autre dossier**, **renommer un dossier** du Library ou **éditer un niveau**
   depuis l'inspecteur calculent les nouvelles clés du lot (`Project.text_path_keys`) et les appliquent
   d'un coup (`rename_text_keys`, échanges compris) ; `SetTextPathCmd` les pose et les restitue à l'undo.
 La même règle vaut partout où un nom devient un chemin : un nom de scène ou de TextBox

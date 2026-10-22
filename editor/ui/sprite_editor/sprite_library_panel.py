@@ -1,4 +1,4 @@
-"""ui/sprite_editor/sprite_finder_panel.py — panneau gauche : liste des sprites + arbre d'animations."""
+"""ui/sprite_editor/sprite_library_panel.py — panneau gauche : liste des sprites + arbre d'animations."""
 from __future__ import annotations
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
@@ -10,12 +10,12 @@ from PyQt6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem,
 )
 from ui.common.popup import MessageBox as QMessageBox
-from PyQt6.QtGui import QFont, QColor
-from PyQt6.QtCore import Qt, pyqtSignal, QSize
+from PyQt6.QtGui import QFont, QColor, QKeySequence, QShortcut
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
 
-from ui.common import finder_fold_state as fold_state
-from ui.common.widgets import W, FinderSection
-from ui.common.asset_finder import AssetFinder
+from ui.common import library_fold_state as fold_state
+from ui.common.widgets import W, LibrarySection
+from ui.common.asset_library import AssetLibrary
 from ui.common.asset_kinds import SPRITES
 from ui.common.theme import C, T, S, QSS
 from ui.common.icons import get as _ico, COLOR_DEFAULT
@@ -29,9 +29,9 @@ from core.command_dispatcher import get_dispatcher
 _PANEL_BG   = f"background:{C.BG_BASE};"
 
 _DIR_LABELS = {
-    0: 'sprfind.all_directions',
-    1: 'sprfind.north',      2: 'sprfind.north_east', 3: 'sprfind.east',      4: 'sprfind.south_east',
-    5: 'sprfind.south',      6: 'sprfind.south_west', 7: 'sprfind.west',      8: 'sprfind.north_west',
+    0: 'spritelibrary.all_directions',
+    1: 'spritelibrary.north',      2: 'spritelibrary.north_east', 3: 'spritelibrary.east',      4: 'spritelibrary.south_east',
+    5: 'spritelibrary.south',      6: 'spritelibrary.south_west', 7: 'spritelibrary.west',      8: 'spritelibrary.north_west',
 }
 
 _DIR_ICON_KEYS = {
@@ -58,7 +58,7 @@ def dir_label(sd: StateDirection) -> str:
 # ── Panneau gauche ─────────────────────────────────────────────────────────────
 
 
-class SpriteFinderPanel(QWidget):
+class SpriteLibraryPanel(QWidget):
     """
     Panneau gauche : liste des sprites (arbre fichiers) + arbre d'animations.
     Sélectionner un sprite charge ses animations dans l'arbre du dessous.
@@ -87,7 +87,7 @@ class SpriteFinderPanel(QWidget):
 
         # ── Sprites : le composant partagé (il porte aussi le bandeau
         #    d'identité du panneau) ──────────────────────────────────
-        self._sprites = AssetFinder(label('sprfind.sprite_finder'), [SPRITES],
+        self._sprites = AssetLibrary(label('spritelibrary.sprite_library'), [SPRITES],
                                     min_width=180, max_width=420)
         self._sprites.selected.connect(lambda _kind, sp: self._on_sprite_chosen(sp))
         self._sprites.add_requested.connect(lambda _label: self._import_sprite())
@@ -95,12 +95,12 @@ class SpriteFinderPanel(QWidget):
         root.addWidget(self._sprites, 1)
 
         # ── Animations ────────────────────────────────────────────
-        # PAS un asset finder : l'arbre montre la structure INTERNE du sprite
+        # PAS une asset library : l'arbre montre la structure INTERNE du sprite
         # choisi (états × directions), pas des assets du projet.
-        sec_anim = FinderSection(label('sprfind.animation_states'))
+        sec_anim = LibrarySection(label('spritelibrary.animation_states'))
         sec_anim.remember_fold("section/sprite_animation_states")
         sec_anim._btn_add.setToolTip(tooltip(
-            title=label('sprfind.add_state'), body=label('sprfind.add_state_tip')
+            title=label('spritelibrary.add_state'), body=label('spritelibrary.add_state_tip')
         ))
         sec_anim.add_clicked.connect(self._on_add_state)
         self._sprites.add_section(sec_anim)
@@ -125,9 +125,12 @@ class SpriteFinderPanel(QWidget):
         self._anim_tree.customContextMenuRequested.connect(self._on_anim_context_menu)
         self._anim_tree.setEditTriggers(QAbstractItemView.EditTrigger.SelectedClicked)
         self._anim_tree.setToolTip(tooltip(
-            title=label('sprfind.animation_states'), body=label('sprfind.animation_tree_tip')
+            title=label('spritelibrary.animation_states'), body=label('spritelibrary.animation_tree_tip')
         ))
         self._anim_tree.itemChanged.connect(self._on_anim_item_text_changed)
+        QShortcut(QKeySequence(Qt.Key.Key_F2), self._anim_tree,
+                  activated=self._rename_current_state,
+                  context=Qt.ShortcutContext.WidgetShortcut)
         sec_anim.set_widget(self._anim_tree)
 
 
@@ -170,7 +173,7 @@ class SpriteFinderPanel(QWidget):
             if item.isExpanded():
                 stack.extend(item.child(n) for n in range(item.childCount()))
         # S.ROW = hauteur d'une ligne dans QSS.tree_widget (même règle que
-        # asset_finder._KindTree._fit).
+        # asset_library._KindTree._fit).
         self._anim_tree.setFixedHeight(max(rows * S.ROW, 4))
 
     def _refresh_anim_tree(self, sprite: Optional[SpriteAsset], select: Any = _KEEP_SELECTION):
@@ -250,7 +253,7 @@ class SpriteFinderPanel(QWidget):
     # ── Slots ─────────────────────────────────────────────────────
 
     def _on_sprite_chosen(self, sp):
-        """Sprite choisi dans le finder partagé."""
+        """Sprite choisi dans la library partagé."""
         self._current_sprite = sp
         # Le sprite actif doit être propagé AVANT que l'arbre d'animations ne
         # sélectionne sa première direction, sinon le panneau central résout
@@ -280,11 +283,13 @@ class SpriteFinderPanel(QWidget):
         if self._project:
             get_dispatcher().save_sprite(self._current_sprite)
         self._refresh_anim_tree(self._current_sprite, select=(new_state, None))
+        # Un état naît nommé d'office et s'ouvre en renommage en place, comme un asset.
+        QTimer.singleShot(0, lambda: self._rename_current_state())
 
-    # ── Sprites : import (le reste est porté par AssetFinder/SPRITES) ──
+    # ── Sprites : import (le reste est porté par AssetLibrary/SPRITES) ──
 
     def _import_sprite(self):
-        """Le « + » du finder délègue ici : le dialogue d'import a besoin d'un
+        """Le « + » de la library délègue ici : le dialogue d'import a besoin d'un
         widget parent, que le composant partagé n'a pas à connaître."""
         from .import_png_dialog import import_new_sprite
         sprite = import_new_sprite(self._project, self)
@@ -308,12 +313,22 @@ class SpriteFinderPanel(QWidget):
             return  # pas de menu sur une direction (gérée via le panneau DIRECTIONS)
         menu = QMenu(self)
         menu.setStyleSheet(QSS.menu)
-        delete_a = menu.addAction(label('sprfind.delete_state'))
+        rename_a = menu.addAction(label('spritelibrary.rename_state'))
+        rename_a.setShortcut("F2")                  # affiché ; géré par le QShortcut de l'arbre
+        delete_a = menu.addAction(label('spritelibrary.delete_state'))
         can_delete = bool(self._current_sprite) and len(self._current_sprite.states) > 1
         delete_a.setEnabled(can_delete)
         act = menu.exec(self._anim_tree.viewport().mapToGlobal(pos))
-        if act == delete_a:
+        if act == rename_a:
+            self._anim_tree.editItem(item, 0)
+        elif act == delete_a:
             self._delete_state(state)
+
+    def _rename_current_state(self):
+        """F2 : renomme l'état de la ligne courante. Sur une direction, c'est son état qui s'édite (seuls les états ont un nom)."""
+        item = self._anim_tree.currentItem()
+        if item is not None:
+            self._anim_tree.editItem(item.parent() or item, 0)
 
     def _on_anim_item_text_changed(self, item: QTreeWidgetItem, _col: int):
         data = item.data(0, Qt.ItemDataRole.UserRole)
@@ -346,7 +361,7 @@ class SpriteFinderPanel(QWidget):
             return
         if QMessageBox.question(
             self, label('common.delete'),
-            label('sprfind.delete_confirm', name=state.name),
+            label('spritelibrary.delete_confirm', name=state.name),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         ) != QMessageBox.StandardButton.Yes:
             return

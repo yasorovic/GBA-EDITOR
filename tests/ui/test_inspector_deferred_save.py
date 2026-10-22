@@ -116,7 +116,7 @@ def test_turning_a_sprite_speed_writes_the_sidecar_once_after_the_gesture(qapp, 
     from asset_fixtures import create
     from ui.sprite_editor.sprite_right_panel import SpriteRightPanel
     from core.models.sprite import AnimState
-    src = project.assets_dir / "hero.png"
+    src = project.user_library_dir / "hero.png"
     src.parent.mkdir(parents=True, exist_ok=True)
     from PyQt6.QtGui import QImage
     image = QImage(32, 16, QImage.Format.Format_ARGB32)

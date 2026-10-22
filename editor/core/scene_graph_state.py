@@ -3,7 +3,7 @@
 Le graphe reste DÉRIVÉ des appels `scene.switch` (cf. `scripting/scene_graph.py`) ;
 ce sidecar ne porte QUE de la présentation : où un nœud est posé. Le **rangement**
 des scènes en groupes n'est pas ici — c'est un dossier d'assets de la famille
-`scenes`, capacité générale partagée avec le project viewer (cf.
+`scenes`, capacité générale partagée avec la Scene library (cf.
 `core/asset_folder_store.py`). Deux mécanismes de dossiers concurrents seraient
 une seconde source de vérité ; il n'y en a qu'un.
 

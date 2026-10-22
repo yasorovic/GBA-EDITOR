@@ -210,7 +210,7 @@ class _Readout(QLineEdit):
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setMinimumWidth(0)
         self.setStyleSheet(
-            f"QLineEdit{{color:{C.TEXT_HI}; background:{C.BG_DEEP}; border:1px solid {C.BORDER_MID};"
+            f"QLineEdit{{color:{C.TEXT_HI}; background:{C.BG_INPUT}; border:1px solid {C.BORDER_MID};"
             f"border-radius:0; padding:1px 2px;}}"
             f"QLineEdit:focus{{border-color:{C.ACCENT};}}"
             f"QLineEdit:disabled{{color:{C.TEXT_MUTED};}}")

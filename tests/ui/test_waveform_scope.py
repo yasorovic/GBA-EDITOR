@@ -186,7 +186,7 @@ def test_le_worker_annule_signale_failed_et_pas_done(qapp, tmp_path):
 def screen(qapp, tmp_path, monkeypatch):
     monkeypatch.setattr(BoxPlayer, "_open_sink", lambda self: None)     # pas de carte son en test
     project = Project.create(tmp_path / "Game", "Game")
-    music = project.assets_dir / "music"
+    music = project.user_library_dir / "music"
     music.mkdir(parents=True, exist_ok=True)
     (music / "Theme.it").write_bytes(F.make_it(orders=[0] * 8))
     create(project, "music", music / "Theme.it")

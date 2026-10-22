@@ -214,11 +214,11 @@ def import_folder(project, shown: str | None) -> Path:
     if shown:
         folder = Path(shown)
         try:
-            folder.resolve().relative_to(project.assets_dir.resolve())
+            folder.resolve().relative_to(project.user_library_dir.resolve())
             return folder
         except ValueError:
             pass
-    return project.assets_dir
+    return project.user_library_dir
 
 
 def create_from_source(project, family: str, paths, folder: Path | None = None, defer_encoding: bool = False) -> Gesture:

@@ -8,7 +8,7 @@ part d'un asset réglé.
 - **La copie** est le sidecar relu : les champs de l'original, son `asset` (la source n'est JAMAIS copiée), un NOUVEL id
   (donné à l'écriture), un nom libre dans son type (`coin`, `coin_2`), et elle est rangée à côté de l'original.
 - **Indépendante** : aucun lien vivant avec l'original.
-- **Annulable** : `Duplication.command` est un `CreateAssetCmd` non poussé ; le finder et l'onglet Disk le poussent, seul
+- **Annulable** : `Duplication.command` est un `CreateAssetCmd` non poussé ; la library et l'onglet Disk le poussent, seul
   ou groupé dans un `MacroCmd` pour un lot.
 - **Une seule exception, la palette** : ses couleurs vivent dans un `.hex` que deux palettes ne peuvent pas partager (cf.
   `asset_creation.palette_is_taken`) ; la copie reçoit donc SON `.hex`, écrit dans le dossier des palettes.
