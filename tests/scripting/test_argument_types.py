@@ -55,6 +55,11 @@ def test_un_appel_de_constructeur_reste_valide():
     assert _errors("self:move(vec2(1, 2), 3)") == []
 
 
+@pytest.mark.parametrize("arg", ["2", "n + 1"])
+def test_actor_get_accepte_un_index(arg):
+    assert _errors(f"local a = actor:get({arg})") == []
+
+
 def test_un_local_peut_masquer_le_nom_du_constructeur():
     assert _errors("local vec2 = 3\n    self:move(self.position, vec2)") == []
 
@@ -137,7 +142,7 @@ def _judges(message: str, name: str) -> bool:
 
 def _module_cases():
     for key, api in RUNTIME_API.items():
-        if "." not in key or ":" in key:
+        if "." not in key or ":" in key or key == "actor.get":   # actor.get accepte aussi un index
             continue
         for i, p in enumerate(api.params):
             yield pytest.param(key, i, id=f"{key}[{p.name}:{p.ptype}]")

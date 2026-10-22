@@ -1265,7 +1265,7 @@ class SceneInspector(QWidget):
         la liste complète. Appelé une seule fois, au premier déploiement."""
         if self._project:
             self._project.load_audio()
-            self._reload_music_combo()
+            self._refresh_music()
 
     def _on_music(self, idx: int):
         if self._blocking or not self._scene: return

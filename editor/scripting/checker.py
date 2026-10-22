@@ -2050,6 +2050,9 @@ class Checker:
         expected, accepted = spec
         if kind[0] in accepted:
             return False
+        # actor:get(i) : nom littéral OU index 1-based dynamique (codegen::_emit_get_actor).
+        if key == "actor.get" and kind[0] == "number":
+            return False
         if param.ptype == "str" and param.domain is not None:
             exemple = _domain_example(param.domain)
             expected = f'a name written as a string ("{exemple}")' if exemple else expected

@@ -1628,7 +1628,9 @@ class InterfaceNode:
     anchor:       str = ANCHOR_SCREEN  # "" = à migrer depuis l'asset
     anchor_actor: str = ""
     target:       str = ""             # "" = dérivée de l'ancrage (cf. resolved_target)
-    bg_slot:      int = 1              # slot BG (0-3) quand la cible résout à BG ; ex-Scene.text_bg
+    bg_slot:      int = 0              # slot BG (0-3) quand la cible résout à BG ; ex-Scene.text_bg.
+                                       # 0 = devant tout : une interface neuve reste visible (un fichier
+                                       # ancien sans la clé garde 1, cf. from_dict)
 
     def to_dict(self) -> dict:
         return {

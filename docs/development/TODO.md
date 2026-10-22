@@ -78,7 +78,7 @@ le moment et le numéro de la première release publique se décident plus tard.
 | Y | Chantier important | Il regroupe |
 | --- | --- | --- |
 | 0.1 | État actuel (base) | tout l'existant, jalons v0.2 à v0.28 (voir le [CHANGELOG](../../changelog/CHANGELOG.md)) |
-| 0.2 | [Mises à jour](#les-mises-à-jour-depuis-la-fenêtre-about) | la fenêtre *Updates*, développée ; reste l'essai sur une vraie release |
+| 0.2 | [Mises à jour](../../changelog/archives/updates-from-about.md) | **livré le 2026-10-22** : la fenêtre *Updates* ; reste à essayer la pop-up au lancement et le téléchargement sur build empaqueté |
 | 0.3 | Assets et disque | [Tout vit dans `assets/`](#tout-ce-que-lauteur-manipule-vit-dans-assets), [Source ≠ asset](#source--asset-larborescence-du-disque-et-lid-stable), [Créer un asset](#créer-un-asset--deux-gestes-aucun-dossier-titulaire), [Finder et Disk](#finder-et-disk--asset-library--et--project-files-), [Une seule règle de nom](#une-seule-règle-de-nom-libre), [Dupliquer un asset](#dupliquer-un-asset-et-régler-sfx-et-jingles) |
 | 0.4 | Texte et données | [Écran Texte](#lécran-texte-nédite-et-ne-range-que-du-contenu), [TextBox](#textbox-plusieurs-entrées-pour-préparer-un-dialogue), [le pont vers les tables](#un-pont-entre-lécran-texte-et-les-tables-de-données-créer-un-dialogue), [écran Données](#lécran-données-une-grille-de-jeu-pas-un-tableur), [briques `Text` et `Textbox`](#briques-de-base-et-assemblages-text-chaîne-et-textbox-boîte) |
 | 0.5 | Fonds | [La compression d'un fond](#la-compression-dun-fond-se-joue-elle-ne-sattend-pas), [le plan de travail](#le-fond-est-un-plan-de-travail-canvas-image-posée-comparaison-sourcecompressé), [l'écran Fond](#lécran-fond-ce-qui-est-livré-le-2026-10-14-et-les-pistes-notées-pour-plus-tard), [préparer une image riche](#piste-préparer-une-image-riche-à-limport-recadrer-et-redimensionner-sans-toucher-au-png) |
@@ -201,104 +201,6 @@ packaging de l'éditeur (`packaging/`, PyInstaller, installateur). C'est précis
 - **Le nom et la marque** : la page produite doit éviter d'afficher « GBA » comme marque (même
   risque Nintendo que celui noté au point « Une licence » de la v1.0) ; à relire à l'étape 5 sur
   les textes de la fenêtre.
-
----
-
-## Les mises à jour depuis la fenêtre About
-
-*Chantier important. Ancien nom : jalon v0.30.*
-
-**Ouvert le 2026-10-20. Conception posée, aucune ligne de code.**
-
-### D'où vient la question
-
-Le développement continu publie des releases (`release.yml` : installateur NSIS, ZIP portable,
-AppImage), mais l'éditeur ne sait pas qu'une version plus récente existe. La fenêtre About envoie
-vers GitHub pour les notes de version, et son rendu est incohérent : le texte des licences, coupé à
-80 colonnes et centré à coups d'espaces, s'affiche en police proportionnelle, donc à la fois centré
-et collé à gauche, avec la moitié droite de la fenêtre vide.
-
-### Ce que ça livre
-
-- **L'écran About garde ses boutons** (décision du 2026-10-21, qui remplace la fenêtre à onglets
-  imaginée d'abord) : *Documentation*, *Release notes*, *Check for updates*, *Report an issue*,
-  *Licenses*. *Release notes* et *Licenses* ouvrent chacune une fenêtre à onglets (`DocumentsDialog`) ;
-  *Check for updates* sera sa propre fenêtre *Updates*.
-- **Release notes** lit le `RELEASE_NOTES.md` livré avec l'application (hors ligne ; les notes de la
-  version en cours seulement, le changelog complet n'est plus livré) ; plus de lien vers
-  GitHub. Rendu Markdown, comme les notices tierces. Les textes de licence passent en police à
-  chasse fixe.
-- **Updates** : un bouton discret « Search for update », qui devient « Update to X » quand une
-  version plus récente existe, avec ses notes au même format.
-- **Une vérification automatique** au démarrage, en tâche de fond, au plus une fois par jour. Hors
-  ligne, elle échoue sans bruit. Une mise à jour disponible se signale par un point discret, sans
-  pop-up.
-- **Une pop-up au lancement, seulement pour une mise à jour importante** (nouvelle fonctionnalité
-  majeure, migration importante, changement d'API) : boutons *Voir*, *Plus tard*, *Ignorer cette
-  version*, une seule fois par version, via le gabarit `ui/common/popup.py`.
-
-### Décisions verrouillées (2026-10-20)
-
-- **Le caractère « important » vient d'un `update.json`** attaché à la release
-  (`{"importance": "major", "reasons": ["feature", "migration", "api"]}`), produit par
-  `release.yml` à partir d'un fichier du dépôt. Pas de marqueur dans le corps de la release.
-- **La vérification automatique est activée par défaut**, avec un réglage pour la couper. Chaque
-  vérification est une requête HTTPS vers GitHub : GitHub voit l'adresse IP de l'utilisateur, la
-  date et un `User-Agent` `Backstage/<version>`. Rien d'autre n'est envoyé (ni identifiant, ni
-  chemin, ni contenu de projet, ni système). Il n'y a pas de serveur à nous, donc pas de
-  télémétrie. L'onglet *Updates* le dit en une phrase.
-- **`/releases/latest` ne convient pas** : il ignore les pré-versions, et nous sommes en `alpha`.
-  On liste `/releases` et on filtre.
-- **L'ordre des versions** suit `X.Y.Z-étiquette`, avec alpha < beta < stable à numéro égal.
-
-### Déroulé
-
-1. **Tranche 0, l'écran About** : **livrée le 2026-10-21** — fenêtres à onglets *Release notes* (le
-   changelog embarqué par `nuitka_build.py`) et *Licenses* en chasse fixe, `LicensesDialog` devenue
-   `DocumentsDialog`. Livré aussi : `core/update_check.py` (ordre des versions, lecture de `/releases`,
-   `User-Agent`).
-2. **Tranche 1 (livrée le 2026-10-21)** : `core/update_check.py` (délai d'un jour),
-   `ui/common/update_checker.py` (état de la session, fil réseau, mémoire d'un lancement à l'autre
-   dans le groupe de réglages `Updates`), vérification au démarrage lancée par `main.py` 5 s après
-   l'affichage, point discret sur *Help ▸ About* et sur la ligne *Check for updates*, fenêtre *Updates*
-   (`ui/common/updates_dialog.py` : notes de la version, « Update to X » qui ouvre la page de la release,
-   case pour couper la vérification automatique, phrase sur ce qui est envoyé).
-3. **Tranche 2 (livrée le 2026-10-21)** : `packaging/update.json` (`importance` `normal` ou `major`,
-   `reasons` parmi `feature`, `migration`, `api`, obligatoire pour `major`), versionné avec
-   `APP_VERSION`, validé par le job `version` de `release.yml` puis attaché à la release. La
-   vérification **automatique** d'une version `major` ouvre une pop-up *View / Later / Ignore this
-   version*, une seule fois par version ; *Ignore* retire le point de cette version. Un
-   `update.json` absent ou illisible côté client = version ordinaire. **À ne pas oublier** : remettre
-   le fichier à `normal` après une version importante.
-4. **Tranche 3, « Update » (décidée et écrite le 2026-10-21, jamais essayée sur une vraie release)** :
-   le bouton télécharge en tâche de fond (barre de progression), vérifie le SHA-256 contre un
-   `SHA256SUMS` publié par `release.yml` (sans lui, rien n'est installé), puis : **installateur
-   Windows** : ferme l'éditeur par son chemin normal (question « enregistrer ? » comprise), lance
-   `setup.exe /S` détaché, qui attend la libération de `Backstage.exe`, installe et relance (drapeau
-   d'environnement `BACKSTAGE_RELAUNCH`, `installer.nsi`) ; **ZIP portable et AppImage** : déposés dans
-   « Téléchargements », dossier ouvert, rien de remplacé (ils ne peuvent pas se remplacer eux-mêmes) ;
-   **lancé depuis les sources** : ouvre la page de la release. Code : `core/update_install.py`.
-5. **À faire avant de s'y fier** : publier une release de test (`0.1.1-alpha`) et dérouler le chemin
-   complet ; compiler `installer.nsi` (non compilé depuis la modification) ; vérifier SmartScreen
-   sur un installateur téléchargé (non signé) ; remplacement automatique du ZIP portable et de
-   l'AppImage, laissé de côté.
-6. **Tests ciblés** : ordre des versions, lecture de `update.json`, délai entre deux vérifications.
-   Pas de suite complète.
-7. **Documentation et traductions** : ARCHITECTURE.md, libellés EN et FR, infobulles selon la
-   charte. Le détail part ensuite dans `changelog/archives/v0.30.md`, une ligne au CHANGELOG et au
-   README.
-
-### Fichiers annoncés (à confirmer en relisant le code)
-
-`ui/common/about_dialog.py`, `core/app_info.py` (adresses), `window.py` (démarrage, signal),
-`packaging/nuitka_build.py`, `.github/workflows/release.yml`, les deux `labels*.json`, ARCHITECTURE.md ;
-création : le module de vérification, l'onglet *Updates*, ses tests.
-
-### Ouvert
-
-- **Jusqu'où va « Update »** (voir le déroulé, point 4).
-- **Le binaire Nuitka sous Linux** : `urllib` en HTTPS y trouve-t-il les certificats ? Non
-  vérifié ; le téléchargement des modèles utilise déjà `urllib` sans que ce point soit testé.
 
 ---
 
@@ -5037,9 +4939,8 @@ ce qui rend sa portée décidable : une capacité s'étend indéfiniment, une ci
 Les chantiers livrés (jalons v0.2 à v0.28) ont leur entrée dans le [CHANGELOG](../../changelog/CHANGELOG.md)
 et leur détail dans [changelog/archives/](../../changelog/archives/) ; ils ne restent pas ici en doublon.
 
-**Trois chantiers importants sont ouverts** : [l'export navigateur](#diffuser-une-rom-dans-le-navigateur-itchio)
-(ouvert le 2026-10-05, aucune ligne de code), [les mises à jour](#les-mises-à-jour-depuis-la-fenêtre-about)
-(ouvert le 2026-10-20, développé, à essayer sur une vraie release) et
+**Deux chantiers importants sont ouverts** : [l'export navigateur](#diffuser-une-rom-dans-le-navigateur-itchio)
+(ouvert le 2026-10-05, aucune ligne de code) et
 [l'interaction avec un acteur](#interagir-avec-un-acteur-on_interact-et-le-composant-interactive)
 (ouvert le 2026-10-21, aucune ligne de code).
 

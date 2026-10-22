@@ -13,14 +13,15 @@ ne touche que la ligne qui le construit. `field` donne le QSpinBox lui-même qua
 """
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QSpinBox, QWidget
 
 from ui.common.theme import C, QSS, T
 
 
-_UNIT_WIDTH = 30     # la largeur du bouton d'unité de `ValueField`
+MIN_SPIN_WIDTH = 56      # quatre chiffres + les flèches : en dessous, la valeur n'est plus lisible
+_UNIT_WIDTH = 30    # la largeur du bouton d'unité de `ValueField`
 
 
 class QuietSpin(QSpinBox):
@@ -29,12 +30,19 @@ class QuietSpin(QSpinBox):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setMinimumWidth(MIN_SPIN_WIDTH)
 
     def wheelEvent(self, event):
         if self.hasFocus():
             super().wheelEvent(event)
         else:
             event.ignore()
+
+    def focusInEvent(self, event):
+        # Le clic qui donne le focus pose le curseur ; la valeur est alors complétée au lieu
+        # d'être remplacée (« 8 » tapé dans « 16 » donne 168). Sélectionner tout après ce clic.
+        super().focusInEvent(event)
+        QTimer.singleShot(0, self.selectAll)
 
 
 class UnitSpin(QWidget):

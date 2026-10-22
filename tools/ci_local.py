@@ -123,10 +123,10 @@ if [ ! -x "$base/venv/bin/python" ]; then
   python3 -m venv "$base/venv" || {{ echo "python3-venv manquant : sudo apt install python3-venv"; exit 1; }}
 fi
 # Dépendances : réinstallées seulement quand la liste a changé.
-stamp="$(cat {shlex.quote(source_in_wsl)}/requirements.txt {shlex.quote(source_in_wsl)}/requirements-dev.txt | md5sum | cut -d' ' -f1)"
+stamp="$(cat {shlex.quote(source_in_wsl)}/docs/development/requirements.txt {shlex.quote(source_in_wsl)}/docs/development/requirements-dev.txt | md5sum | cut -d' ' -f1)"
 if [ "$(cat "$base/requirements.stamp" 2>/dev/null)" != "$stamp" ]; then
   "$base/venv/bin/pip" install --upgrade pip
-  "$base/venv/bin/pip" install -r {shlex.quote(source_in_wsl)}/requirements.txt -r {shlex.quote(source_in_wsl)}/requirements-dev.txt
+  "$base/venv/bin/pip" install -r {shlex.quote(source_in_wsl)}/docs/development/requirements.txt -r {shlex.quote(source_in_wsl)}/docs/development/requirements-dev.txt
   echo "$stamp" > "$base/requirements.stamp"
 fi
 rm -rf "$base/src"; mkdir -p "$base/src"

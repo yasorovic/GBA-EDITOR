@@ -21,7 +21,7 @@ def _normalise(name: str) -> str:
 
 def _requirements() -> list[str]:
     names = []
-    for line in (REPO_DIR / "requirements.txt").read_text(encoding="utf-8").splitlines():
+    for line in (REPO_DIR / "docs" / "development" / "requirements.txt").read_text(encoding="utf-8").splitlines():
         line = line.split("#")[0].strip()
         if line:
             names.append(re.split(r"[<>=!~\[; ]", line, maxsplit=1)[0])

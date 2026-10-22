@@ -100,6 +100,22 @@ def test_interface_qui_partage_son_slot_avec_un_decor(tmp_path):
     assert any("shares its slot" in e for e in _errs(p, _check_bg_text_cbb_conflict))
 
 
+def test_decor_devant_l_interface_est_un_avertissement(tmp_path):
+    from core.validator import _check_decor_in_front_of_ui
+    p = _proj(tmp_path)
+    sc = Scene(name="S", ui_layouts=["hud"],
+               background_layers=[BackgroundLayer(background_name="decor", bg_slot=0)])
+    sc.ui_layouts[0].bg_slot = 1
+    p.scenes.append(sc)
+    ctx = ValidationContext(p)
+    _check_decor_in_front_of_ui(ctx)
+    assert any("front of the interface" in m.message for m in ctx.warnings)
+    sc.background_layers[0].bg_slot = 2
+    ctx = ValidationContext(p)
+    _check_decor_in_front_of_ui(ctx)
+    assert ctx.warnings == []
+
+
 def test_interface_et_decor_sur_slots_distincts_ok(tmp_path):
     p = _proj(tmp_path)
     sc = Scene(name="S", ui_layouts=["hud"],

@@ -264,7 +264,9 @@ end
 
 Une séquence se nomme `on_sequence_<nom>` et se pilote avec `sequence.start`, `sequence.stop` et `sequence.running`. Elle se termine seule à sa dernière ligne.
 
-Écrivez `wait` ou `wait_until` seuls sur leur ligne, au premier niveau de la séquence ou dans une boucle `for` bornée. `wait_until` relit sa condition à chaque frame. Évitez de le placer dans un `if` ou un `while`.
+Écrivez `wait` ou `wait_until` seuls sur leur ligne, au premier niveau de la séquence ou dans une boucle `for` bornée. `wait_until` relit sa condition à chaque frame. Dans un `if` ou un `while`, il est **refusé au Build** (et non au diagnostic en direct). Pour une branche qui attend, écrivez une séquence par branche et lancez celle qu'il faut avec `sequence:start`.
+
+N'écrivez pas de `return` en tête de `on_update` si le script utilise des séquences. L'avancement des séquences est ajouté à la fin de `on_update` dans le C généré : un `return` le saute, et une séquence qui attend (par exemple `wait_until(input:pressed("a"))`) n'est plus évaluée, donc ne se termine jamais. Enveloppez plutôt le travail dans un `if`, ou appelez une fonction seulement quand la condition est remplie.
 
 ## Texte, menus et langue
 

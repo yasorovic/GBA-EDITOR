@@ -261,6 +261,15 @@ def _arrow_rule(selectors: str, name: str, color: str) -> str:
             f"}}")
 
 
+def _tick_rule() -> str:
+    """Coche d'une case cochée. Échelle 1 : le glyphe MDI remplit déjà sa boîte, et agrandi
+    (comme les flèches) il déborde de l'indicateur de 13 px et se fait rogner."""
+    path = _icons.qss_image("checkbox_tick", C.ON_ACCENT, 24, 1.0)
+    if not path:
+        return ""
+    return f"QCheckBox::indicator:checked {{ image: url({path}); }}"
+
+
 # Flèche ▾/▸ de repli des QTreeWidget — le MÊME triangle vectoriel partagé
 # (icons.arrow_icon() / qss_arrow_image(), voir leur commentaire) que
 # FinderSection/_Section utilisent pour LEUR flèche, à la même taille de
@@ -375,6 +384,7 @@ QCheckBox::indicator:checked {{
     background: {C.ACCENT};
     border-color: {C.ACCENT};
 }}
+{_tick_rule()}
 QCheckBox::indicator:hover {{
     border-color: {C.ACCENT};
 }}

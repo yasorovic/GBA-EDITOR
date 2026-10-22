@@ -52,7 +52,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from ui.common.theme import C, T, QSS
-from ui.common.unit_spin import QuietSpin
+from ui.common.unit_spin import QuietSpin, MIN_SPIN_WIDTH
 from core.models.field_value import FieldValue, TILE_SIZE, is_ref_raw
 
 
@@ -230,6 +230,7 @@ class _QuietDoubleSpin(QDoubleSpinBox):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setMinimumWidth(MIN_SPIN_WIDTH)
 
     def wheelEvent(self, e):
         if self.hasFocus():

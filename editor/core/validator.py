@@ -159,6 +159,7 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
     # le contenu du slot varie par scène. À l'utilisateur d'aligner ses
     # palettes par index en amont.
     _check_bg_text_cbb_conflict(ctx)
+    _check_decor_in_front_of_ui(ctx)
     _check_ui_node_slots(ctx)
     _check_ui_element_names_unique(ctx)
     _check_pal_bank_reference(ctx)
@@ -599,6 +600,22 @@ def _check_bg_text_cbb_conflict(ctx: ValidationContext):
                     f"interface (BG{layer.bg_slot}) — its charblock is overwritten by the font "
                     "tiles at build. Change the interface's BG slot or empty this "
                     "layer's image.")
+
+
+def _check_decor_in_front_of_ui(ctx: ValidationContext):
+    """Sur GBA le plus petit numéro de BG est devant. Un décor sur un slot plus petit que
+    celui d'une interface la recouvre en entier : l'interface est invisible en jeu et le
+    canvas, qui suit le même ordre, ne la montre pas non plus."""
+    p = ctx.project
+    for scene in p.scenes:
+        ui_slots = [s for s in p.scene_ui_bg_slots(scene) if s in (0, 1, 2, 3)]
+        for layer in scene.background_layers:
+            front_of = [s for s in ui_slots if layer.background_name and layer.bg_slot < s]
+            if front_of:
+                ctx.warn(None,
+                    f"Scene '{scene.name}': layer BG{layer.bg_slot} ('{layer.background_name}') is drawn in "
+                    f"front of the interface on BG{min(front_of)} (the lowest BG number is in front), "
+                    "which may hide it. Move the decor to a higher BG slot than the interface.")
 
 
 def _check_ui_node_slots(ctx: ValidationContext):

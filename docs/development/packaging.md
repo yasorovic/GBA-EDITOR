@@ -38,7 +38,7 @@ Le poste tourne en Python 3.14, mais la CI **et** le build Nuitka figent 3.12 (b
 ```powershell
 py -3.12 -m venv .venv-build312
 .venv-build312\Scripts\python.exe -m pip install --upgrade pip
-.venv-build312\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
+.venv-build312\Scripts\python.exe -m pip install -r docs/development/requirements.txt -r docs/development/requirements-dev.txt
 ```
 
 Deux variables d'environnement reproduisent la CI ; les omettre change le résultat :

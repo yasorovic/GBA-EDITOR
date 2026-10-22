@@ -2006,6 +2006,7 @@
     "about.check_update": { "text": "Check for updates" },
     "about.checking_update": { "text": "Checking for updates…" },
     "about.up_to_date": { "text": "Up to date" },
+    "about.up_to_date_detail": { "text": "You are running the latest version, {version}." },
     "about.update_available": { "text": "Version {version} is available" },
     "about.update_failed": { "text": "Could not check for updates, retry" },
     "about.report_issue": { "text": "Report an issue" },

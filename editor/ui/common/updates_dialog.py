@@ -15,11 +15,12 @@ from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton, QTextBrowser,
-    QToolButton, QVBoxLayout,
+    QStackedWidget, QToolButton, QVBoxLayout,
 )
 from PyQt6.QtGui import QDesktopServices, QFont
 from PyQt6.QtCore import Qt, QUrl
 
+from core.app_info import APP_VERSION
 from ui.common.labels import label
 from ui.common.theme import C, T
 from ui.common.update_checker import UpdateChecker
@@ -50,7 +51,17 @@ class UpdatesDialog(QDialog):
         self._notes.setOpenExternalLinks(True)
         self._notes.setFrameShape(QFrame.Shape.NoFrame)
         self._notes.setStyleSheet(f"QTextBrowser{{background:{C.BG_PANEL};padding:8px;}}")
-        root.addWidget(self._notes, 1)
+
+        self._detail = QLabel()
+        self._detail.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._detail.setWordWrap(True)
+        self._detail.setStyleSheet(f"color:{C.TEXT_DIM};background:transparent;")
+        # Une seule zone centrale, de taille fixe : les notes s'il y a une version, sinon un
+        # texte centré. Le reste de la fenêtre ne bouge donc jamais d'un état à l'autre.
+        self._body = QStackedWidget()
+        self._body.addWidget(self._detail)
+        self._body.addWidget(self._notes)
+        root.addWidget(self._body, 1)
 
         self._button = QPushButton()
         self._button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -81,6 +92,9 @@ class UpdatesDialog(QDialog):
         privacy.setFont(QFont(T.UI, T.SM))
         privacy.setStyleSheet(f"color:{C.TEXT_DIM};background:transparent;")
         privacy.setVisible(False)
+        retain = privacy.sizePolicy()
+        retain.setRetainSizeWhenHidden(True)   # l'ouvrir ne pousse rien vers le haut
+        privacy.setSizePolicy(retain)
         toggle = QToolButton()
         toggle.setText(label("about.privacy_details"))
         toggle.setCheckable(True)
@@ -121,7 +135,10 @@ class UpdatesDialog(QDialog):
         self._button.setEnabled(not c.checking)
         self._progress.setVisible(c.downloading)
         self._progress.setValue(c.progress)
-        self._notes.setVisible(c.available is not None)
+        self._body.setCurrentWidget(self._notes if c.available else self._detail)
+        self._detail.setText(
+            label("about.up_to_date_detail", version=f"v{APP_VERSION}")
+            if not (c.checking or c.failed) else "")
         if c.checking:
             self._status.setText(label("about.checking_update"))
         elif c.downloading:

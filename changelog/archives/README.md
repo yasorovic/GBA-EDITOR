@@ -65,3 +65,4 @@ Pour un résumé court, voir le [CHANGELOG](../CHANGELOG.md). Pour ce qui reste 
 | [La struct `Actor` allégée](actor-struct-lightening.md) | `g_oam_entries[]` réserve l'OAM, `g_actors[]` ne porte que des acteurs — 1 sprite affiché = 1 slot |
 | [Correctifs trouvés en marchant](fixes-in-passing.md) | Dix bugs réels sans jalon à qui les rattacher, tous corrigés et testés |
 | [L'asset `.music`](music-asset.md) | Sections, boucle surchargée, indépendant du format source ; lecteurs alignés sur la ROM, contrôle `cut_to`, WAV aligné sur le module |
+| [Les mises à jour depuis la fenêtre About](updates-from-about.md) | Vérification au démarrage, fenêtre *Updates*, pop-up pour une version importante, téléchargement vérifié (SHA-256) |

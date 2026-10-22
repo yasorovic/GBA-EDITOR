@@ -20,7 +20,7 @@ from typing import Callable, Any
 from PyQt6.QtWidgets import (
     QWidget, QFrame, QLabel, QPushButton, QToolButton, QCheckBox, QLineEdit, QSpinBox,
     QDoubleSpinBox, QComboBox, QScrollArea, QApplication, QTreeWidget, QTreeWidgetItem,
-    QTableWidget, QHBoxLayout, QVBoxLayout, QSizePolicy, QSpacerItem, QPlainTextEdit,
+    QTableWidget, QHBoxLayout, QVBoxLayout, QBoxLayout, QSizePolicy, QSpacerItem, QPlainTextEdit,
 )
 from PyQt6.QtGui import QFont, QIcon, QColor, QPainter
 from PyQt6.QtCore import Qt, QPoint, QPointF, QSize, pyqtSignal
@@ -50,6 +50,38 @@ BTN_GHOST  = QSS.button_ghost
 BTN_ACCENT = QSS.button_accent_outline
 BTN_DANGER = QSS.toolbutton_danger
 BTN_ICON   = QSS.toolbutton_icon
+
+
+class _WrappingPair(QWidget):
+    """Deux moitiés « AXE [champ] » côte à côte, l'une sous l'autre quand la place manque.
+
+    Sans cela Qt écrase les champs numériques jusqu'à l'illisible : la ligne exige plus que
+    la largeur d'un inspecteur. La largeur minimale annoncée est celle d'UNE moitié, pour que
+    le parent ne force pas la ligne à rester sur un seul rang."""
+
+    def __init__(self):
+        super().__init__()
+        self.setStyleSheet("background:transparent;")
+        self._halves: list[QWidget] = []
+        self._box = QBoxLayout(QBoxLayout.Direction.LeftToRight, self)
+        self._box.setSpacing(4); self._box.setContentsMargins(0, 0, 0, 0)
+
+    def add_half(self, axis_label: QWidget, field: QWidget):
+        half = QWidget()
+        h = QHBoxLayout(half); h.setSpacing(4); h.setContentsMargins(0, 0, 0, 0)
+        h.addWidget(axis_label); h.addWidget(field, 1)
+        self._halves.append(half)
+        self._box.addWidget(half, 1)
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(max(h.minimumSizeHint().width() for h in self._halves),
+                     self._box.minimumSize().height())
+
+    def resizeEvent(self, event):
+        need = sum(h.minimumSizeHint().width() for h in self._halves) + self._box.spacing()
+        self._box.setDirection(QBoxLayout.Direction.LeftToRight if self.width() >= need
+                               else QBoxLayout.Direction.TopToBottom)
+        super().resizeEvent(event)
 
 
 class HoverIconButton(QToolButton):
@@ -345,13 +377,12 @@ class _W:
         Axes colorés (ex: X rouge, Y bleu).
         Retourne (widget1, widget2).
         """
-        inner = QWidget(); inner.setStyleSheet("background:transparent;")
-        r = QHBoxLayout(inner); r.setSpacing(4); r.setContentsMargins(0, 0, 0, 0)
+        inner = _WrappingPair()
         for ax, col, w in ((ax1, color1, widget1), (ax2, color2, widget2)):
             lbl = QLabel(ax); lbl.setFont(_FONT_MONO_AX)
             lbl.setStyleSheet(_LBL_AX_STY.format(c=col))
-            lbl.setFixedWidth(14)
-            r.addWidget(lbl); r.addWidget(w, 1)
+            lbl.setFixedWidth(lbl.fontMetrics().horizontalAdvance("W") + 6)   # « W » gras est la lettre la plus large
+            inner.add_half(lbl, w)
         self.row(row_label, inner, layout, label_width)
         return widget1, widget2
 

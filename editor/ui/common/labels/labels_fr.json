@@ -870,6 +870,7 @@
     "about.check_update": { "text": "Rechercher une mise à jour" },
     "about.checking_update": { "text": "Recherche en cours…" },
     "about.up_to_date": { "text": "À jour" },
+    "about.up_to_date_detail": { "text": "Vous utilisez la dernière version, {version}." },
     "about.update_available": { "text": "La version {version} est disponible" },
     "about.update_failed": { "text": "Recherche impossible, réessayer" },
     "about.report_issue": { "text": "Signaler un problème" },

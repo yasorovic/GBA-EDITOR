@@ -449,7 +449,7 @@ def icon_key(node: disk_tree.DiskNode) -> str:
 def file_icon(node: disk_tree.DiskNode):
     """L'icône d'un fichier ; sa couleur dit la marque (asset, source reliée, source sans
     asset, non géré)."""
-    return icons.get(icon_key(node), mark_color(node.kind))
+    return icons.get(icon_key(node), icon_mark_color(node.kind))
 
 
 def mark_text(node: disk_tree.DiskNode) -> str:
@@ -469,6 +469,17 @@ def mark_color(kind: str) -> str:
     return {disk_tree.ASSET: C.TEXT_HI,
             disk_tree.LINKED_SOURCE: C.TEXT_NORM,
             disk_tree.FREE_SOURCE: C.ACCENT_YLW}.get(kind, C.TEXT_DIM)
+
+
+def icon_mark_color(kind: str) -> str:
+    """La couleur d'une ICÔNE de fichier. Le texte garde `mark_color` : en thème clair il est lu, alors qu'une
+    icône pleine en `TEXT_HI` (#1a1a1a) écrase tout. Même ordre qu'en sombre (asset > source reliée > non géré),
+    en gris plus doux ; la source libre garde son jaune."""
+    if not C.IS_LIGHT:
+        return mark_color(kind)
+    return {disk_tree.ASSET: "#555555",
+            disk_tree.LINKED_SOURCE: "#6f6f6f",
+            disk_tree.FREE_SOURCE: C.ACCENT_YLW}.get(kind, C.TEXT_MUTED)
 
 
 def status_color(node: disk_tree.DiskNode) -> str | None:
