@@ -16,7 +16,7 @@ donne une version `0.Y.0` ; les correctifs et petits chantiers, eux, incrémente
 | Version | Chantier | État |
 | --- | --- | --- |
 | 0.1 | État actuel | Base : tout ce qui est déjà livré |
-| 0.2 | Mises à jour depuis la fenêtre About | Développé, reste à essayer sur une vraie release |
+| 0.2 | Mises à jour depuis la fenêtre About | Livré |
 | 0.3 | Assets et disque | En cours |
 | 0.4 | Texte et données | En cours |
 | 0.5 | Fonds | Conception en cours |
@@ -24,20 +24,7 @@ donne une version `0.Y.0` ; les correctifs et petits chantiers, eux, incrémente
 | 0.7 | Jouer son jeu dans le navigateur (itch.io) | Conception faite, développement non commencé |
 | 1.0.0-stable | Le pipeline 2D complet (affirmation de capacité) | En route |
 
-L'ordre des versions `0.2` à `0.7` peut encore bouger.
-
-### 0.2 : les mises à jour depuis la fenêtre About
-
-L'éditeur sait signaler qu'une version plus récente existe, afficher ses notes de version hors
-ligne et guider l'installation.
-
-- Fait : fenêtre *About* remaniée (*Release notes*, *Licenses*), vérification automatique au
-  démarrage (désactivable), fenêtre *Updates*, avertissement pour une mise à jour importante.
-- Écrit, pas encore éprouvé : le téléchargement et l'installation depuis l'éditeur.
-- Reste à faire : essai complet sur une release de test.
-
-La vérification n'envoie rien d'autre qu'une requête HTTPS vers GitHub. Il n'y a pas de
-télémétrie.
+L'ordre des versions `0.3` à `0.7` peut encore bouger.
 
 ### 0.3 : assets et disque
 
