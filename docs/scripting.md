@@ -2,7 +2,7 @@
 
 Vous avez posé une scène, ajouté un acteur, et vous voulez maintenant lui donner un comportement. Un script peut lancer une animation au démarrage, déplacer un acteur selon les touches, jouer un son ou changer de scène.
 
-> Vous découvrez l'éditeur ? Commencez par le [guide utilisateur](user-guide/) pour créer un projet, vous repérer et importer vos premières ressources.
+> Vous découvrez l'éditeur ? Commencez par le [guide utilisateur](user-guide/index.md) pour créer un projet, vous repérer et importer vos premières ressources.
 
 ## Avant de commencer
 
@@ -153,10 +153,22 @@ Comme `play_anim`, c'est un geste : l'animation repart de son premier état. Les
 ### Décider et répéter
 
 ```lua
-if x > 0 then … elseif x < 0 then … else … end
-while x > 0 do … end
-for i = 1, 10 do … end
-for i = 10, 1, -1 do … end
+if x > 0 then
+    -- Actions si x est positif
+elseif x < 0 then
+    -- Actions si x est négatif
+else
+    -- Actions si x vaut zéro
+end
+while x > 0 do
+    -- Actions à répéter
+end
+for i = 1, 10 do
+    -- Actions pour chaque valeur de i
+end
+for i = 10, 1, -1 do
+    -- Actions dans l'ordre décroissant
+end
 break
 return
 ```

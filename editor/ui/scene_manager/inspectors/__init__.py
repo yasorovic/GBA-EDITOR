@@ -5,8 +5,7 @@ Import de compat :
     from ui.scene_manager.inspectors import DynamicInspector, ActorInspector
 
 Un fichier par classe (actor_inspector.py, scene_inspector.py,
-camera_inspector.py, uses_inspectors.py, dynamic_inspector.py) — voir
-ARCHITECTURE.md pour le détail de la répartition.
+camera_inspector.py, uses_inspectors.py, dynamic_inspector.py).
 """
 
 # Charger les éditeurs built-in dans le registre

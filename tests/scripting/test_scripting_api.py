@@ -4,7 +4,7 @@ du tout.
 Ils ont en commun de ne produire AUCUN message à l'endroit de la faute : une
 API retirée qui continuait de marcher, une constante émise mais introuvable
 dans l'unité de compilation, un réglage nommé retombé sur un entier nu. C'est
-la définition d'un test ici (cf. `tests/` dans ARCHITECTURE) — une erreur
+la définition d'un test ici — une erreur
 silencieuse, pas une exception.
 """
 from __future__ import annotations
@@ -215,8 +215,7 @@ def test_aucune_fonction_de_module_ne_contourne_lacquisition():
     fonction ajoutée au catalogue : rien d'autre ne l'empêche.
 
     `ALLOWED` liste les verbes établis qui GÈRENT, CRÉENT ou ACQUIÈRENT un
-    système singleton ou un pool (cf. ARCHITECTURE, « Module, type,
-    instance ») — le seul cas où un module reçoit légitimement un nom.
+    système singleton ou un pool — le seul cas où un module reçoit légitimement un nom.
     Ajouter une entrée y est une décision consciente, jamais un oubli."""
     from scripting.api import RUNTIME_API, REF_TYPES
 

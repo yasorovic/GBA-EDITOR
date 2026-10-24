@@ -1,0 +1,23 @@
+/* Identité de Backstage ; les couleurs du thème sont définies dans conf.py. */
+article img.backstage-logo {
+  display: block;
+  margin: 0.5rem auto 1.5rem;
+  max-width: 320px;
+  width: 100%;
+}
+
+.sidebar-logo {
+  max-width: 180px;
+}
+
+/* Le lien de section reste discret, accessible au survol et au clavier. */
+article a.headerlink {
+  font-size: 0.7em;
+  opacity: 0;
+}
+
+article :is(h1, h2, h3, h4, h5, h6):hover > a.headerlink,
+article a.headerlink:focus-visible {
+  opacity: 1;
+  visibility: visible;
+}

@@ -199,7 +199,6 @@ class CartridgePreview(QFrame):
         layout.addWidget(self._target)
         views = QHBoxLayout()
         # Parent before visibility; otherwise Qt briefly opens a separate window.
-        # See ARCHITECTURE.md, « Visibilité Qt et micro-fenêtres ».
         self._view_mode = QComboBox(self)
         self._view_mode.addItem(label('cartpreview.assembled'), "assembled")
         if not app_paths.IS_FROZEN:

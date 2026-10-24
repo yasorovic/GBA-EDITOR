@@ -56,7 +56,7 @@ IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 # table de textes, et le checker la valide par le chemin qui valide déjà
 # `text:draw("…")`. La coïncidence des deux listes est vérifiée au build
 # (`validator._check_data_column_types`), pas supposée — ce module ne peut pas
-# importer `scripting` (cf. les couches, ARCHITECTURE.md).
+# importer `scripting`.
 #
 # Les références d'assets graphiques désignent leur rang dans le catalogue du
 # projet ; elles ne sont ni un composant sprite d'acteur ni une couche BG.

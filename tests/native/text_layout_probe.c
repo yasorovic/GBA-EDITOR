@@ -2,8 +2,7 @@
 
    `core/engine_emulation/text_layout.py` rejoue en Python ce que
    `runtime/include/gba_engine.h` fait en C : c'est l'aperçu de l'éditeur qui
-   promet à l'auteur où ses glyphes atterriront. ARCHITECTURE.md le dit sans
-   détour — « DEUX implémentations à tenir d'accord ». Rien, jusqu'ici, ne
+   promet à l'auteur où ses glyphes atterriront. Ce sont DEUX implémentations à tenir d'accord. Rien, jusqu'ici, ne
    vérifiait qu'elles le restaient, et une divergence ne se voit qu'après le
    build, sur la console, comme un décalage que rien n'explique.
 

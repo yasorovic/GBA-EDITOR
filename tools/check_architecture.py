@@ -503,8 +503,7 @@ def main() -> int:
     for titre, n in r.sections:
         print(f"  {'OK ' if not n else 'KO '} {titre}" + (f" ({n})" if n else ""))
     if r.echecs:
-        print(f"\n{len(r.echecs)} probleme(s). Voir ARCHITECTURE.md, section "
-              f"« Sens des dependances ».")
+        print(f"\n{len(r.echecs)} probleme(s).")
         return 1
     print("\nTout est conforme.")
     return 0

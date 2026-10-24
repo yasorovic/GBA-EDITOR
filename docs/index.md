@@ -1,4 +1,26 @@
+![Backstage](assets/backstage-logo.svg){.backstage-logo .only-light}
+![Backstage](assets/backstage-logo-white.svg){.backstage-logo .only-dark}
+
 # Documentation de Backstage
+
+```{toctree}
+:hidden:
+:glob:
+:titlesonly:
+:maxdepth: 1
+
+Vue d'ensemble <user-guide/index>
+Première scène jouable <user-guide/first-playable-scene>
+Décor et collisions <user-guide/decor-and-collision>
+Mouvement de plateforme <user-guide/platformer-movement>
+Collectibles et score <user-guide/collectibles>
+Ennemis et PNJ <user-guide/enemies>
+Interagir avec un acteur <user-guide/interact>
+Boucle de gameplay <user-guide/gameplay-loop>
+Boss <user-guide/boss>
+Caméra <user-guide/camera-follow>
+**
+```
 
 Cette documentation accompagne la création d'un jeu avec Backstage. Commencez par le guide
 utilisateur, puis consultez le guide de scripting lorsque vous souhaitez donner un comportement
@@ -6,7 +28,7 @@ utilisateur, puis consultez le guide de scripting lorsque vous souhaitez donner 
 
 ## Créer votre jeu
 
-- [Guide utilisateur](user-guide/) : créer ou ouvrir un projet, importer des ressources,
+- [Guide utilisateur](user-guide/index.md) : créer ou ouvrir un projet, importer des ressources,
   construire une scène et lancer une première ROM.
 - [Première scène jouable](user-guide/first-playable-scene.md) : importer un sprite, déplacer
   un acteur et tester la ROM.
@@ -26,8 +48,3 @@ utilisateur, puis consultez le guide de scripting lorsque vous souhaitez donner 
 - [Guide de scripting](scripting.md) : écrire le comportement d'un acteur.
 - [Référence de scripting](scripting-reference.md) : vérifier la syntaxe disponible et les
   limites du langage.
-
-## Documentation de développement
-
-Les notes destinées aux personnes qui modifient l'éditeur sont séparées dans
-[development/](development/). Elles ne sont pas nécessaires pour créer un jeu.

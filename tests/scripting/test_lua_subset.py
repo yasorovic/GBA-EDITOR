@@ -9,7 +9,7 @@ supprime :
     appel inconnu partait tel quel — donc un échec au `make`, sur la ligne
     générée et jamais sur sa cause.
 
-C'est la définition d'un test ici (cf. `tests/` dans ARCHITECTURE) : une erreur
+C'est la définition d'un test ici : une erreur
 silencieuse, pas une exception.
 """
 from __future__ import annotations

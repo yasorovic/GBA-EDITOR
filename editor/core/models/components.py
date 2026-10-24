@@ -76,8 +76,8 @@ class SpriteComponent:
     sprite_name: Optional[str] = None   # référence SpriteAsset.name
     initial_state: str = "Idle"         # nom de l'AnimState joué au démarrage
     facing_auto: bool = True            # le regard (facing) suit la dernière direction non nulle
-    # Réserve un des 32 slots de matrice affine OAM de la scène pour ce sprite
-    # (cf. ARCHITECTURE.md « Le modèle affine »), même si rotation/scale valent
+    # Réserve un des 32 slots de matrice affine OAM de la scène pour ce sprite,
+    # même si rotation/scale valent
     # leur défaut. C'est une capacité de RENDU : elle vit donc sur le composant
     # de rendu, et pas sur l'Actor — qui garde son rotation/scale MONDE comme
     # état de jeu, lisible et écrivable par un script dans tous les cas. Sans

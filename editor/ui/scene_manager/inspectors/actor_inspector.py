@@ -423,7 +423,7 @@ class ActorInspector(QWidget):
         # Avec Position : c'est le triplet de pose de l'actor, et c'est de
         # l'état de jeu — un script les lit et les écrit dans tous les cas.
         # Ce qui décide s'ils se VOIENT est la case « Affine transform » du
-        # SpriteComponent (cf. ARCHITECTURE.md « Le modèle affine ») : elle
+        # SpriteComponent : elle
         # réserve le slot de matrice OAM. Ces champs ne sont donc pas grisés
         # quand elle est décochée — ils marchent, ils ne s'affichent pas.
         # int ou variable (degrés) — cf. NumberField.

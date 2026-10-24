@@ -1536,8 +1536,7 @@ def _check_affine_budget(ctx: ValidationContext):
 
 def _check_window_regions(ctx: ValidationContext):
     """Réglé le 2026-08-25 : WIN0/WIN1 sont allouées par intention
-    (`codegen/window_alloc.py`), pas choisies par l'auteur — cf.
-    ARCHITECTURE.md « Windows — le pochoir ».
+    (`codegen/window_alloc.py`), pas choisies par l'auteur.
 
     ① Une scène qui demande plus de deux intentions (cadre de caméra +
       `WindowSlot` nommés) fait échouer le build — ERREUR bloquante, pas un

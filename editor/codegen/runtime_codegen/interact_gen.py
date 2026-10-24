@@ -12,6 +12,7 @@ L'interacteur est un acteur de scène portant le tag d'acteur `Player` (`Actor.i
 """
 from __future__ import annotations
 
+from codegen.runtime_codegen.gen_sprite import follow_facing_lines
 from core.models.components import (
     InteractiveComponent, interactive_box_index, owner_effective_boxes,
 )
@@ -58,11 +59,14 @@ def interact_helper_lines() -> list[str]:
         "    }",
         "    o->l=who->x>>8; o->t=who->y>>8; o->r=o->l+w; o->b=o->t+h;",
         "}",
-        "/* Un mur de la carte de collision entre deux points ? Échantillonné tous les 4 px. */",
-        "static int __attribute__((unused)) ia_line_blocked(int x0,int y0,int x1,int y1){",
+        "/* Un mur de la carte de collision entre deux points ? Échantillonné tous les 4 px. Les points",
+        "   dans la zone visée `z` ne comptent pas : une zone posée sur un mur (panneau encastré) reste",
+        "   atteignable, seul un mur ENTRE l'interacteur et elle l'arrête. */",
+        "static int __attribute__((unused)) ia_line_blocked(int x0,int y0,int x1,int y1,const IaRect* z){",
         "    int dx=x1-x0, dy=y1-y0, ax=dx<0?-dx:dx, ay=dy<0?-dy:dy, n=(ax>ay?ax:ay)/4;",
         "    for(int i=0;i<=n;i++){",
         "        int x=n?x0+dx*i/n:x0, y=n?y0+dy*i/n:y0;",
+        "        if(x>=z->l&&x<z->r&&y>=z->t&&y<z->b) continue;",
         "        if(tile_wall_at(x,y)) return 1;",
         "    }",
         "    return 0;",
@@ -90,7 +94,7 @@ def interact_helper_lines() -> list[str]:
         "        if(aim[k]&&!fx&&!fy) continue;",
         "        if(q->l>=z.r||q->r<=z.l||q->t>=z.b||q->b<=z.t) continue;",
         "        int zcx=(z.l+z.r)>>1, zcy=(z.t+z.b)>>1;",
-        "        if(aim[k]&&ia_line_blocked(wcx,wcy,zcx,zcy)) continue;",
+        "        if(aim[k]&&ia_line_blocked(wcx,wcy,zcx,zcy,&z)) continue;",
         "        int ddx=zcx-wcx, ddy=zcy-wcy, d=ddx*ddx+ddy*ddy;",
         "        if(d<bd){ bd=d; best=k; }",
         "    }",
@@ -143,10 +147,9 @@ def _consumers(p, scene, scene_actors, actor_offset, pi, lua_idx, _def, scene_ac
 
 def _spriteless_facing_lines(first: int, stop: int, step: int) -> list[str]:
     """Le regard d'un interacteur SANS sprite : il n'a pas de tick d'animation (c'est là que le regard
-    d'un acteur se suit, cf. `gen_sprite.direction_lines`), donc la même règle est posée ici —
-    trajectoire depuis la vitesse, regard = dernière direction non nulle."""
-    body = ("_a->dir_x=(_a->vx>0)-(_a->vx<0); _a->dir_y=(_a->vy>0)-(_a->vy<0); "
-            "if(_a->dir_x||_a->dir_y){ _a->facing_x=_a->dir_x; _a->facing_y=_a->dir_y; }")
+    d'un acteur se suit), donc la même règle (`gen_sprite.follow_facing_lines`) est posée ici, sans la
+    condition `facing_auto` (portée par l'entrée OAM qu'il n'a pas)."""
+    body = " ".join(s.strip() for s in follow_facing_lines("(*_a)"))
     if stop - first == 1:
         return [f"    {{ Actor* _a=&g_actors[{first}]; {body} }}"]
     return [f"    for(int _w={first};_w<{stop};_w+={step}){{ Actor* _a=&g_actors[_w]; {body} }}"]

@@ -859,7 +859,7 @@ def _parent_compose_lines(scene_actors: list, actor_offset: int,
     """Recompose, chaque frame, le transform monde des acteurs qui ont un parent.
 
     La formule n'est PAS nouvelle : c'est celle que le modèle affine applique
-    déjà entre un acteur et son sprite (ARCHITECTURE.md, « Le modèle affine »),
+    déjà entre un acteur et son sprite,
     d'un cran plus haut — l'`Actor` parent tenant la place que tenait l'acteur.
         rotation = somme des degrés
         scale    = produit Q8
@@ -1648,8 +1648,7 @@ def _gen_scene_init(
     # gagne, pas de mécanisme séparé). Rien n'est émis si la scène n'a aucune
     # window authorée (display_reset() a déjà tout remis à « aucune window active »).
     #
-    # Rang matériel décidé par l'allocateur (`window_alloc.scene_window_layout`,
-    # cf. ARCHITECTURE.md « Windows — le pochoir ») — ni la caméra ni un
+    # Rang matériel décidé par l'allocateur (`window_alloc.scene_window_layout`) — ni la caméra ni un
     # WindowSlot ne nomme WIN0/WIN1 lui-même. Le validateur fait échouer le
     # build si la scène demande plus de deux intentions ; ce code suppose donc
     # `layout.overflow` vide (déjà vérifié avant d'arriver ici).

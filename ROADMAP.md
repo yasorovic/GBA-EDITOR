@@ -15,19 +15,9 @@ donne une version `0.Y.0` ; les correctifs et petits chantiers, eux, incrémente
 
 | Version | Chantier | État |
 | --- | --- | --- |
-| 0.1 | État actuel | Base : tout ce qui est déjà livré |
-| 0.6 | Interagir avec un objet (`on_interact`) | Conception en cours, développement non commencé |
+| 0.1 | État actuel | Base : tout ce qui est déjà livré, dont les chantiers Mises à jour, Assets et disque, Texte et données, Fonds, Interaction avec un acteur |
 | 0.7 | Jouer son jeu dans le navigateur (itch.io) | Conception faite, développement non commencé |
 | 1.0.0-stable | Le pipeline 2D complet (affirmation de capacité) | En route |
-
-### 0.6 : interagir avec un objet
-
-« Appuyer sur A devant un coffre, un panneau, un personnage » doit se décrire simplement, sans
-script écrit à la main et sans coût pour les objets qui n'en ont pas besoin : un événement
-`on_interact` et un composant `interactive`.
-
-- Le besoin est posé, les modes d'interaction sont à trancher.
-- Reste à faire : tout le développement.
 
 ### 0.7 : jouer son jeu dans le navigateur
 

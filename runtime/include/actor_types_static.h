@@ -186,7 +186,7 @@ typedef struct Actor {
        l'autre. */
     int x, y;               /* position monde, Q8 */
     int vx, vy;             /* vélocité, Q8 */
-    /* Transform MONDE (cf. ARCHITECTURE.md « Le modèle affine »). C'est de
+    /* Transform MONDE. C'est de
        l'ÉTAT DE JEU : toujours lisible et écrivable, avec ou sans slot de
        matrice affine. Ce qui décide s'il se VOIT est `OamEntry.affine_slot`.
 

@@ -140,8 +140,7 @@ class SpriteEditor(BaseComponentEditor):
 
         # ── Affine transform ──────────────────────────────────────
         # La case vit ICI et pas sur l'Actor : réserver un des 32 slots de
-        # matrice affine OAM est une capacité de RENDU (cf. ARCHITECTURE.md
-        # « Le modèle affine »). C'est aussi ce qui la rend décidable sur une
+        # matrice affine OAM est une capacité de RENDU. C'est aussi ce qui la rend décidable sur une
         # racine de prefab, dont cette carte est la seule affichée.
         #
         # Elle commande les trois réglages qui suivent (affichés seulement si cochée) — et, à l'écran

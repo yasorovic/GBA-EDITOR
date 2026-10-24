@@ -5,7 +5,7 @@ trompe d'octave, qui rate la décompression ou qui lit une case de travers rend
 un son — juste pas le bon. Et comme la ROM, elle, est construite par mmutil,
 l'écart ne se voit qu'en comparant à l'oreille ce que l'éditeur joue et ce que
 la console joue. C'est exactement la panne silencieuse que `tests/` existe pour
-attraper (cf. ARCHITECTURE).
+attraper.
 
 D'où la forme de ces tests : le MÊME morceau, écrit dans les quatre formats
 (cf. module_fixtures.py), doit produire la MÊME musique. Un décalage d'octave

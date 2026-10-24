@@ -2,7 +2,7 @@
 
 Les trois ont la même signature : le script traverse le checker sans un mot,
 le codegen émet du C, et gcc parle d'un fichier que l'auteur n'a jamais écrit.
-C'est le piège que ARCHITECTURE.md nomme le plus coûteux de cette chaîne.
+C'est le piège le plus coûteux de cette chaîne.
 
 1. **Un nom NU non déclaré.** `curpos = curpos + 1` émettait
    `curpos = (curpos + 1);` — un identifiant qui n'existe pas. Ce langage n'a

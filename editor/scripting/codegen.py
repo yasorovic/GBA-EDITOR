@@ -911,7 +911,7 @@ class CodeGen:
                 continue
             # Validation basique (mêmes vérifs que les scripts actor/scène/prefab,
             # avec le contexte de l'actor qui inline ce behavior — pas de vérif de
-            # plage sur les globals ici, cf. ARCHITECTURE.md pour les limites connues).
+            # plage sur les globals ici).
             check_ctx = _BuildContext(
                 actor_name   = self.ctx.actor_name,
                 owner_kind   = "behavior",
@@ -948,8 +948,8 @@ class CodeGen:
                 # Le receveur d'un behavior n'est pas forcément nommé `self` :
                 # si son corps touche l'état de l'hôte (un homonyme d'une
                 # variable de tête), c'est SON premier paramètre qui donne
-                # l'instance. Cf. ARCHITECTURE.md pour la limite connue de
-                # cette substitution par nom.
+                # l'instance. Limite connue : cette substitution se fait
+                # par nom.
                 mark = self._open_state_scope()
                 host_file, self._lua_file = self._lua_file, (
                     beh_path.name if self._lua_file else "")

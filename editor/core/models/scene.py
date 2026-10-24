@@ -211,7 +211,7 @@ def _components_with_affine_migrated(d: dict) -> list:
     """Décode `components` en reportant l'ancienne clé `affine_transform`.
 
     Elle vivait sur l'Actor / le Prefab jusqu'au 2026-08-25 ; elle vit désormais
-    sur le SpriteComponent (cf. ARCHITECTURE.md « Le modèle affine »). Relue une
+    sur le SpriteComponent. Relue une
     fois à l'ouverture, elle n'est plus jamais réécrite — un projet enregistré
     depuis cette version ne la porte plus.
 
@@ -295,8 +295,7 @@ class Prefab(Resource, ComponentOwnerMixin):
 
     @property
     def affine_transform(self):
-        """La réservation affine vit sur le SpriteComponent (ARCHITECTURE.md
-        « Le modèle affine ») : un prefab sans sprite n'en a pas."""
+        """La réservation affine vit sur le SpriteComponent : un prefab sans sprite n'en a pas."""
         sc = affine_sprite_component(self.actor)
         return bool(sc and sc.affine_transform)
 
@@ -373,7 +372,7 @@ class Actor(SceneMember, ComponentOwnerMixin):
     # window.OBJ (forme libre, animable). Mode 1 (semi-transparent) suppose le
     # blending, pas encore câblé. Modifiable au runtime par self.obj_mode.
     obj_mode: int = 0
-    # Transformation affine MONDE (cf. ARCHITECTURE.md « Le modèle affine »).
+    # Transformation affine MONDE.
     # C'est de l'ÉTAT DE JEU : un script les lit, les écrit et les relit qu'il y
     # ait un sprite ou non. Ce qui décide si ça se VOIT est ailleurs — la case
     # `affine_transform` du SpriteComponent, qui réserve un des 32 slots de
@@ -537,8 +536,7 @@ def actor_prefab_linked(actor: "Actor", prefab: "Prefab") -> bool:
 @dataclass
 class WindowSlot(SceneMember):
     """Une window matérielle GBA authorée par la scène — une INTENTION nommée,
-    pas un index matériel (révisé le 2026-08-25, cf. `codegen/window_alloc.py`
-    et ARCHITECTURE.md « Windows — le pochoir »). Rectangle en pixels écran,
+    pas un index matériel (révisé le 2026-08-25, cf. `codegen/window_alloc.py`). Rectangle en pixels écran,
     clampé 240×160 par window_set() au runtime (même fonction que l'API Lua
     window.set() — un seul point d'écriture, même principe que la caméra).
 
@@ -587,7 +585,7 @@ class Scene(Resource):
     prefab_pools: dict = field(default_factory=dict)  # dict[str, int]
     # Caméras POSSÉDÉES par cette scène (inline dans le JSON, comme `actors`) —
     # révisé le 2026-08-24 : une caméra n'est plus un asset de projet partagé
-    # entre scènes (cf. models/camera.py, changelog/archives/v0.6.md).
+    # entre scènes (cf. models/camera.py).
     cameras: list = field(default_factory=list)  # list[Camera]
     # Caméra de DÉMARRAGE, par nom — résolue dans `cameras` ci-dessus. "" = la
     # caméra par défaut : fixe à (0,0), sans bornes ni suivi, sans entrée dans

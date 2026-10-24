@@ -58,8 +58,7 @@ class RefType:
     1. UNE ligne dans `REF_TYPE_TABLE` ci-dessous ;
     2. les entrées du catalogue : la fabrique (`ret=<type>`), les méthodes sous
        `"<type>:<méthode>"` et les propriétés sous `"<type>.<champ>"` ;
-    3. les fonctions C qui les portent (prototype GÉNÉRÉ dans `runtime_api.h`, cf.
-       ARCHITECTURE, « Ce que le build vérifie »).
+    3. les fonctions C qui les portent (prototype GÉNÉRÉ dans `runtime_api.h`).
 
     Tout le reste s'en DÉRIVE : le type C d'un `local` qui tient la référence
     (`codegen`), le refus d'une méthode ou d'un champ inconnu (`checker`), la
@@ -243,8 +242,8 @@ class ApiProp:
     """Décrit une PROPRIÉTÉ d'objet — un état intrinsèque lu et écrit par accès
     pointé (`self.position`, `camera.bound`) plutôt que par un appel get/set.
 
-    La frontière est celle de la grammaire (ARCHITECTURE, « La grammaire de
-    l'API ») : ce qui est un état de l'objet (`self.position`)
+    La frontière est celle de la grammaire de
+    l'API : ce qui est un état de l'objet (`self.position`)
     se lit/s'écrit comme un champ ; ce qui est une ACTION (`self:play_anim`)
     reste un appel. Une propriété composite
     (PARAM_VEC2 / PARAM_RECT) est une valeur IMMUABLE : on lit `self.position.x`
@@ -320,8 +319,7 @@ DIRECTIONS: dict[str, tuple[str, int]] = {
     "north_west": ("DIR_NORTH_WEST", 8),
 }
 
-# Les deux SEULS mots-clés fixes de DOMAIN_WIN_REGION (réglé le 2026-08-25,
-# cf. ARCHITECTURE.md « Windows — le pochoir ») : ni géométrie ni rang
+# Les deux SEULS mots-clés fixes de DOMAIN_WIN_REGION (réglé le 2026-08-25) : ni géométrie ni rang
 # disputé, jamais alloués. "win0"/"win1" ont disparu — un rectangle se nomme
 # maintenant comme une caméra (`WindowSlot.name`), résolu par
 # `window_region_constant`/`window_alloc.py`, pas par un enum statique.
@@ -485,7 +483,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
     # précède (self.sprite_scale/sprite_offset/sprite_rotation/pal/visible,
     # math.ease/lerp/rand) — rien qu'un script ne pourrait écrire à la main.
     # `t`/`duration` sont en frames et fournis par l'appelant : sur GBA un
-    # script ne peut pas "attendre" (pas de coroutine, cf. ARCHITECTURE.md),
+    # script ne peut pas "attendre" (pas de coroutine),
     # donc c'est lui qui fait avancer `t` d'une frame à l'autre — dans une
     # variable de tête du script, ou dans une GlobalVar quand plusieurs
     # scripts la regardent. Au-delà de `duration`, l'effet retombe à son état
@@ -1377,7 +1375,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
     # Une région se NOMME (comme une caméra) : "object"/"outside" sont fixes,
     # tout le reste est un WindowSlot du projet, dont le rang matériel est
     # décidé par l'allocateur (réglé le 2026-08-25, plus de "win0"/"win1"
-    # ni d'index brut — cf. ARCHITECTURE.md « Windows — le pochoir »).
+    # ni d'index brut).
     # `window:get(nom)` rend la région ; son état est `visible` (cf. RUNTIME_PROPS), ses
     # réglages des méthodes.
     "window.get": ApiFunc(
@@ -2367,8 +2365,7 @@ def lang_constant(code: str) -> str:
 
 
 def window_region_constant(name: str) -> str:
-    """"object"/"outside" → les deux mots-clés fixes (jamais disputés, cf.
-    ARCHITECTURE.md « Windows — le pochoir »). Tout autre nom → le nom d'un
+    """"object"/"outside" → les deux mots-clés fixes (jamais disputés). Tout autre nom → le nom d'un
     `WindowSlot` du projet, dérivé comme `camera_constant` ('MyPanel' →
     'WIN_MYPANEL') : le rang matériel réel est décidé par l'allocateur
     (`codegen/window_alloc.py`), le `#define` correspondant est émis par

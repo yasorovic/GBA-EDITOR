@@ -1,0 +1,5 @@
+# Dépendances pour construire le site de documentation (voir packaging/DOCUMENTATION.md)
+Sphinx>=8,<9
+myst-parser>=4,<5
+furo>=2024.8.6,<2027
+

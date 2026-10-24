@@ -30,7 +30,7 @@ from scripting.api import DOMAIN_GLOBAL
 class ProjectVariablesMixin:
     # ── I/O variables (globals + constants) ─────────────────────────
     # Assets côté éditeur sans dépendance externe -> assets/variables.json,
-    # pas project.json (config racine uniquement, cf. ARCHITECTURE.md).
+    # pas project.json (config racine uniquement).
 
     def save_variables(self):
         data = {

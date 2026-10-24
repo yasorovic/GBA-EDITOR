@@ -33,8 +33,7 @@ FONT_PAL_BANK = 15
 # Les `slot` émis sont RELATIFS (0 = première tuile du bloc alloué au texte).
 # La base absolue dans le charblock est décidée par scène et posée au runtime
 # par `text_set_tile_base` — cuire une base ici interdirait au texte de
-# partager un charblock avec un fond (cf. ARCHITECTURE.md, « Allocation de la
-# VRAM BG »).
+# partager un charblock avec un fond.
 
 _MAX_INK_COLORS = 15   # index 0 = transparent, restent 1..15
 

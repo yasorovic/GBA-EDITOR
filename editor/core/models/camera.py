@@ -2,7 +2,7 @@
 
 Une caméra APPARTIENT à sa scène (`Scene.cameras`, inline dans le JSON de la
 scène — comme `Actor`/`BackgroundLayer`) : ce n'est plus un asset de projet
-partagé entre scènes (révisé le 2026-08-24, cf. `changelog/archives/v0.6.md`).
+partagé entre scènes (révisé le 2026-08-24).
 
 **Une seule caméra est active à la fois.** La GBA n'a qu'un écran et le
 multijoueur est hors périmètre : une scène peut posséder plusieurs caméras,
@@ -37,8 +37,7 @@ ci-dessus) : découper l'écran est une window matérielle, il n'y en a que deux
 caméra active** (`camera_switch()` la pilote), **WIN1 reste à la scène**
 (`Scene.windows`, panneau Windows). Pas de négociation à l'exécution : une
 seule caméra active à la fois veut dire un seul propriétaire de WIN0. Le vrai
-« écran partagé » (plusieurs caméras actives SIMULTANÉMENT) reste v2.0 — cf.
-ARCHITECTURE.md « Windows — le pochoir ».
+« écran partagé » (plusieurs caméras actives SIMULTANÉMENT) reste v2.0.
 """
 
 from dataclasses import dataclass

@@ -218,19 +218,28 @@ def direction_lines(idx: int, e: int) -> list[str]:
     l'arrêt, pour tout acteur) ; `facing_x/facing_y` est le REGARD (la dernière direction non
     nulle, gardée à l'arrêt), suivi seulement si `facing_auto`. C'est le regard, pas la
     trajectoire, qui choisit la direction de l'animation (le rendu)."""
-    return [
-        f"    g_actors[{idx}].dir_x=(g_actors[{idx}].vx>0)-(g_actors[{idx}].vx<0);",
-        f"    g_actors[{idx}].dir_y=(g_actors[{idx}].vy>0)-(g_actors[{idx}].vy<0);",
-        # Le regard est le VECTEUR entier : après un pas à droite puis un pas vers le haut, il
-        # vaut (0,-1) et non (1,-1).
-        f"    if(g_oam_entries[{e}].facing_auto&&(g_actors[{idx}].dir_x||g_actors[{idx}].dir_y)){{",
-        f"        g_actors[{idx}].facing_x=g_actors[{idx}].dir_x;",
-        f"        g_actors[{idx}].facing_y=g_actors[{idx}].dir_y;",
-        f"    }}",
+    return follow_facing_lines(f"g_actors[{idx}]", f"g_oam_entries[{e}].facing_auto") + [
         # Le côté regardé en X survit à un regard vertical (saut droit) : c'est lui que retient le
         # repli de direction du tick. Une mémoire par axe, à part du vecteur ci-dessus ; un
         # regard écrit par le script compte aussi.
         f"    if(g_actors[{idx}].facing_x) g_oam_entries[{e}].face_x=g_actors[{idx}].facing_x;",
+    ]
+
+
+def follow_facing_lines(a: str, gate: str = "") -> list[str]:
+    """La règle du regard, écrite une seule fois : la trajectoire `dir_x/dir_y` depuis la vitesse de
+    l'acteur `a` (une valeur C : `g_actors[3]`, `(*_a)`), puis le regard = la dernière trajectoire
+    non nulle, si `gate` (une condition C, vide = toujours) est vraie. C'est le VECTEUR entier :
+    après un pas à droite puis un pas vers le haut, il vaut (0,-1) et non (1,-1). Partagée par le
+    tick d'animation et par un interacteur sans sprite (`interact_gen`)."""
+    cond = f"{gate}&&" if gate else ""
+    return [
+        f"    {a}.dir_x=({a}.vx>0)-({a}.vx<0);",
+        f"    {a}.dir_y=({a}.vy>0)-({a}.vy<0);",
+        f"    if({cond}({a}.dir_x||{a}.dir_y)){{",
+        f"        {a}.facing_x={a}.dir_x;",
+        f"        {a}.facing_y={a}.dir_y;",
+        f"    }}",
     ]
 
 
@@ -299,7 +308,7 @@ def anim_tick_lines(idx: int, sym: str, has_frame_sfx: bool = False,
         f"        }}",
         f"        g_oam_entries[{e}].timer++;",
         # self.anim_speed surcharge la vitesse de l'état ; 0 = celle du sprite
-        # (même règle que UIImageInfo.speed, cf. docs/development/ui-elements.md).
+        # (même règle que UIImageInfo.speed).
         f"        int _asp=g_oam_entries[{e}].anim_speed?g_oam_entries[{e}].anim_speed:{sym}_state_speed[_st];",
         f"        if(g_oam_entries[{e}].timer>=_asp){{",
         f"            g_oam_entries[{e}].timer=0;",

@@ -472,8 +472,7 @@ def generate_runtime_api(
                 a.append(f"#define CAM_{c_sym(cam.name).upper()} {i}")
 
     # Constantes WIN_* — le rang matériel (WINR_0/WINR_1) d'un WindowSlot,
-    # décidé par l'allocateur (`window_alloc.py`, cf. ARCHITECTURE.md
-    # « Windows — le pochoir »). Une window n'appartient qu'à une scène, mais
+    # décidé par l'allocateur (`window_alloc.py`). Une window n'appartient qu'à une scène, mais
     # son nom est unique au PROJET (même contrainte que les caméras) : une
     # seule passe sur toutes les scènes suffit à émettre le `#define`.
     from codegen.window_alloc import scene_window_layout

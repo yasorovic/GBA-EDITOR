@@ -78,7 +78,7 @@ jobs:
       - name: Installer les dépendances Python
         run: |
           python -m pip install --upgrade pip
-          pip install -r docs/development/requirements.txt -r docs/development/requirements-dev.txt
+          pip install -r packaging/requirements.txt -r packaging/requirements-dev.txt
 
       - name: Contrôle d'architecture
         run: python tools/check_architecture.py --fresh
@@ -108,7 +108,7 @@ jobs:
       - name: Installer les dépendances Python
         run: |
           python -m pip install --upgrade pip
-          pip install -r docs/development/requirements.txt -r docs/development/requirements-dev.txt
+          pip install -r packaging/requirements.txt -r packaging/requirements-dev.txt
 
       # devkitProUpdater (l'installateur graphique de l'utilisateur) ne fait rien en
       # silencieux (`/S`) : on passe par le dépôt pacman de devkitPro dans le msys2 du
@@ -196,14 +196,14 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: '~\AppData\Local\Nuitka\Nuitka\Cache'
-          key: nuitka-windows-${{ hashFiles('docs/development/requirements.txt', 'packaging/requirements-build.txt') }}-${{ github.sha }}
+          key: nuitka-windows-${{ hashFiles('packaging/requirements.txt', 'packaging/requirements-build.txt') }}-${{ github.sha }}
           restore-keys: |
-            nuitka-windows-${{ hashFiles('docs/development/requirements.txt', 'packaging/requirements-build.txt') }}-
+            nuitka-windows-${{ hashFiles('packaging/requirements.txt', 'packaging/requirements-build.txt') }}-
             nuitka-windows-
 
       - name: Installer les dépendances Python
         run: |
-          pip install -r docs/development/requirements.txt -r packaging/requirements-build.txt
+          pip install -r packaging/requirements.txt -r packaging/requirements-build.txt
 
       # Le runner part d'un Python nu : tout import du code que
       # requirements.txt ne couvre pas échoue ici, avant le build, au lieu
@@ -220,7 +220,7 @@ jobs:
         uses: actions/cache/save@v5
         with:
           path: '~\AppData\Local\Nuitka\Nuitka\Cache'
-          key: nuitka-windows-${{ hashFiles('docs/development/requirements.txt', 'packaging/requirements-build.txt') }}-${{ github.sha }}
+          key: nuitka-windows-${{ hashFiles('packaging/requirements.txt', 'packaging/requirements-build.txt') }}-${{ github.sha }}
 
       # Le binaire LIVRE démarre-t-il, crée-t-il un projet, ouvre-t-il chaque écran,
       # trouve-t-il ses données embarquées ? Les écrans sont importés paresseusement :
@@ -317,14 +317,14 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: ~/.cache/Nuitka
-          key: nuitka-linux-${{ hashFiles('docs/development/requirements.txt', 'packaging/requirements-build.txt') }}-${{ github.sha }}
+          key: nuitka-linux-${{ hashFiles('packaging/requirements.txt', 'packaging/requirements-build.txt') }}-${{ github.sha }}
           restore-keys: |
-            nuitka-linux-${{ hashFiles('docs/development/requirements.txt', 'packaging/requirements-build.txt') }}-
+            nuitka-linux-${{ hashFiles('packaging/requirements.txt', 'packaging/requirements-build.txt') }}-
             nuitka-linux-
 
       - name: Installer les dépendances Python
         run: |
-          pip install -r docs/development/requirements.txt -r packaging/requirements-build.txt
+          pip install -r packaging/requirements.txt -r packaging/requirements-build.txt
 
       - name: Vérifier que requirements.txt couvre tous les imports
         run: python packaging/check_deps.py
@@ -337,7 +337,7 @@ jobs:
         uses: actions/cache/save@v5
         with:
           path: ~/.cache/Nuitka
-          key: nuitka-linux-${{ hashFiles('docs/development/requirements.txt', 'packaging/requirements-build.txt') }}-${{ github.sha }}
+          key: nuitka-linux-${{ hashFiles('packaging/requirements.txt', 'packaging/requirements-build.txt') }}-${{ github.sha }}
 
       # Même vérification que sous Windows, sur le binaire livré. Sous xvfb, avec
       # la vraie plateforme Qt « xcb » : c'est elle qui sera dans l'AppImage.

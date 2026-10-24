@@ -557,8 +557,7 @@ def get_sections(show_extended_audio: bool = True) -> list[dict]:
 def tooltip_parts(entry: dict) -> dict[str, str]:
     """Les MORCEAUX de l'aide brève d'une entrée API : titre, texte, précision.
 
-    Pas de HTML ici : `scripting` est en dessous de `ui` (cf. ARCHITECTURE, « Sens
-    des dépendances »), et c'est l'interface qui compose l'infobulle —
+    Pas de HTML ici : `scripting` est en dessous de `ui`, et c'est l'interface qui compose l'infobulle —
     `tooltip(**tooltip_parts(entry))` (`ui.common.tooltip`)."""
     sig    = entry.get("label", "")
     desc   = entry.get("description", "")

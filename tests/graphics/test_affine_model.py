@@ -1,4 +1,4 @@
-"""Le modèle affine (ARCHITECTURE.md « Le modèle affine ») : la décision vit sur
+"""Le modèle affine : la décision vit sur
 le SPRITE (`SpriteComponent.affine_transform` — réserver un slot de matrice OAM
 est une capacité de rendu), et le rendu compose au runtime le transform MONDE de
 l'actor avec le transform LOCAL du sprite (rotation somme, scale produit, offset

@@ -1,9 +1,8 @@
 """Équivalence entre l'aperçu Python et le moteur C — le test que la
 documentation réclamait sans l'avoir.
 
-ARCHITECTURE.md range `core/engine_emulation/` sous une mise en garde explicite :
-« ce que l'éditeur REFAIT en Python parce que la console le fait en C — DEUX
-implémentations à tenir d'accord ». Le risque n'est pas qu'une des deux soit
+`core/engine_emulation/` est ce que l'éditeur REFAIT en Python parce que la console
+le fait en C : DEUX implémentations à tenir d'accord. Le risque n'est pas qu'une des deux soit
 fausse, c'est qu'elles DÉRIVENT. Et une dérive ne se manifeste ni par une
 exception ni par un test rouge : elle se manifeste par un aperçu qui ne
 correspond plus à la ROM, des mois après le commit qui l'a causée.

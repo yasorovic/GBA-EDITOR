@@ -2,12 +2,11 @@
 
 Source de vérité UNIQUE pour « quelle INTENTION (cadre de caméra, panneau UI
 nommé) reçoit quel rang matériel (`WINR_0`/`WINR_1`) ». Même famille que
-`palette_alloc.py`/`vram_alloc.py` (cf. ARCHITECTURE.md, « Ressources
-matérielles — l'auteur ne les nomme jamais » et « Deux allocateurs, pas un ») :
+`palette_alloc.py`/`vram_alloc.py` :
 résolu au BUILD, en Python, pas à l'exécution — le nombre d'intentions d'une
 scène ne change pas en cours de partie.
 
-Ce que cet allocateur NE couvre PAS, par construction (cf. ARCHITECTURE.md) :
+Ce que cet allocateur NE couvre PAS, par construction :
 `WINR_OBJ` (pas de géométrie, pilotée par `Actor.obj_mode`, jamais disputée)
 et `WINR_OUT` (le complément automatique — personne ne peut le demander). Le
 pool réellement adressable ne contient que DEUX places.

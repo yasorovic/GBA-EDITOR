@@ -850,8 +850,7 @@ static inline int math_atan2(int y, int x) {
 /* Juiciness — effets de feedback sur le sprite (self:squash, self:stretch,
    self:bounce, self:shake, self:flash, self:blink, self:pulse, self:pop,
    self:wobble). Chacun est une fonction PURE de (t, duration, amount) :
-   aucun état caché, aucune coroutine (impossible sur GBA, cf.
-   ARCHITECTURE.md) — c'est l'appelant qui fait avancer `t` d'une frame à
+   aucun état caché, aucune coroutine (impossible sur GBA) — c'est l'appelant qui fait avancer `t` d'une frame à
    l'autre et qui décide où ce compteur vit (une variable de tête du script,
    ou une GlobalVar quand plusieurs scripts la regardent). Au-delà de
    `duration`, chacun retombe à son état neutre (scale 100, offset 0,

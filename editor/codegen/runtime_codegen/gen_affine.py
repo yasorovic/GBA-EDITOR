@@ -19,8 +19,7 @@ def affine_entry(actor, sc, slot: int, force: bool = False, names=None) -> dict 
 
     Retourne None si l'actor ne réserve pas de slot affine.
 
-    La décision est portée par `SpriteComponent.affine_transform` (cf.
-    ARCHITECTURE.md « Le modèle affine ») : coché → un des 32 slots hardware est
+    La décision est portée par `SpriteComponent.affine_transform` : coché → un des 32 slots hardware est
     réservé, même si scale/rotation valent leur défaut. Sans lui, aucun slot
     n'est alloué et le sprite est émis en OAM normale — les champs de transform
     gardent leur valeur, mais rien ne les affiche.
@@ -168,8 +167,7 @@ def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr
     PD=cos/scale_y, évaluée en C avec des Q8).
 
     Composition du transform MONDE de l'actor (self.rotation/self.scale) et du
-    transform LOCAL du sprite (self.sprite_*), cf. ARCHITECTURE.md « Le modèle
-    affine » :
+    transform LOCAL du sprite (self.sprite_*) :
         angle_eff     = rotation + sprite_rot            (somme)
         scale_eff     = scale_x * sprite_scale_x / 256   (produit, Q8)
         centre_eff    = actor.position + R(rotation)·S(scale)·(offset + demi-cadre)

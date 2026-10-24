@@ -69,6 +69,10 @@ int main(void){
     r = interact_pick(&g_actors[0], idx, box, aim, 2, 4);    printf("facing_mur %%d\n", r);
     mk(1, 10, 0, 0, 0, 16, 16, 0);
     r = interact_pick(&g_actors[0], idx, box, hover, 2, 4);  printf("hover_ignore_le_mur %%d\n", r);
+    /* une zone posee SUR un mur (x=19..35) : seul un mur entre les deux arrete la visee */
+    mk(1, 19, 0, 0, 0, 16, 16, 0);
+    g_wall_x0 = 19; g_wall_x1 = 35;
+    r = interact_pick(&g_actors[0], idx, box, aim, 2, 4);    printf("zone_sur_mur %%d\n", r);
     g_wall_x0 = 0; g_wall_x1 = -1;
 
     /* le plus proche l'emporte */
@@ -128,6 +132,10 @@ def test_facing_n_atteint_rien_dans_le_dos_ou_sans_regard(resultats):
 def test_un_mur_arrete_la_visee_mais_pas_le_recouvrement(resultats):
     assert resultats["facing_mur"] == -1
     assert resultats["hover_ignore_le_mur"] == 0
+
+
+def test_une_zone_posee_sur_un_mur_reste_atteignable(resultats):
+    assert resultats["zone_sur_mur"] == 0
 
 
 def test_le_plus_proche_l_emporte_et_l_inactif_est_ignore(resultats):

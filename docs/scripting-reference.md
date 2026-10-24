@@ -41,7 +41,9 @@ Les opérateurs bit à bit servent à cumuler plusieurs drapeaux dans un seul en
 ```lua
 flags = flags | 2                 -- activer le drapeau 2
 flags = flags & ~4                -- désactiver le drapeau 4
-if flags & 1 ~= 0 then … end      -- tester le drapeau 1
+if flags & 1 ~= 0 then            -- tester le drapeau 1
+    -- Actions quand le drapeau 1 est actif
+end
 ```
 
 Ils portent sur des entiers de **32 bits**, la largeur d'un registre de la GBA — pas les 64 bits de Lua 5.3. Les règles qui en découlent :
@@ -110,6 +112,8 @@ end
 ```
 
 C'est ce qui remplace une cascade `if sel == 1 then actor:get("Unit1") elseif …` : `actor:get(sel)` suffit.
+
+`self.direction` est la **trajectoire** : calculée depuis la vitesse, elle retombe à 0 à l'arrêt. `self.facing` est le **regard** : la dernière direction non nulle, conservée à l'arrêt, qui choisit la direction d'animation et la visée d'une interaction. Les deux se lisent et s'écrivent en vecteur ou en boussole (`self.facing = vec2(0, -1)`, `self.facing = "north"`) ; `self.facing_auto` dit si le regard suit le mouvement. Pour réagir à un appui devant un acteur, voir [Faire interagir le joueur avec un acteur](user-guide/interact.md) (`on_interact(who)`).
 
 ## Décor
 

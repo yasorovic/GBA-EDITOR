@@ -1,6 +1,6 @@
 """editor/scripting/expr_types.py — de quel TYPE est une expression Lua.
 
-Le sous-ensemble ne connaît que des scalaires (cf. ARCHITECTURE.md), à deux
+Le sous-ensemble ne connaît que des scalaires, à deux
 exceptions près, et ce module répond pour les deux : les VALEURS COMPOSÉES
 (`vec2`, `vec3`, `rect`) et les RÉFÉRENCES rendues par un appel (`sfx.play`).
 Il s'appelait `vec_types.py` tant qu'il n'y en avait qu'une.
