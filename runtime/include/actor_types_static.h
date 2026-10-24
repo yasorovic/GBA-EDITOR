@@ -78,7 +78,7 @@ typedef struct { int x, y, w, h; } Rect;
 typedef struct AppearanceInit {
     u8 frame_w, frame_h;   /* taille de frame du sprite de cette apparence, en pixels */
     u8 pal_bank;           /* banque OBJ de sa palette */
-    u8 auto_dir;           /* SpriteComponent.auto_dir de cette apparence */
+    u8 facing_auto;        /* SpriteComponent.facing_auto de cette apparence */
 } AppearanceInit;
 
 typedef struct OamEntry {
@@ -135,7 +135,8 @@ typedef struct OamEntry {
        est une fonction C partagée par toutes ses instances. Le matériel
        plafonne un objet à 64 px. */
     u8 frame_w, frame_h;
-    u8 auto_dir;           /* 1 = recalcule dir_x/dir_y depuis vx/vy chaque frame */
+    u8 facing_auto;        /* 1 = Actor.facing_x/facing_y suivent la dernière direction non nulle
+                              (dir_x/dir_y, elles, sont toujours recalculées depuis vx/vy) */
     s8 face_x;             /* dernier dir_x NON nul vu par le tick d'animation : le côté vers lequel
                               l'acteur REGARDE. `dir_x` retombe à 0 à l'arrêt ou en montée droite ;
                               c'est ce côté-là que le repli de direction retient (cf. gen_sprite) */
@@ -203,8 +204,14 @@ typedef struct Actor {
     /* Indice de son entrée dans g_oam_entries[] (cf. l'en-tête ci-dessus), -1 = sans. */
     s16 oam_entry;
     u8 active;             /* 0 = ignoré (update + rendu désactivés) */
-    s8 dir_x;              /* direction X courante : -1 | 0 | 1 */
-    s8 dir_y;              /* direction Y courante : -1 | 0 | 1 */
+    s8 dir_x;              /* TRAJECTOIRE X courante : -1 | 0 | 1 (0 à l'arrêt) */
+    s8 dir_y;              /* TRAJECTOIRE Y courante : -1 | 0 | 1 (0 à l'arrêt) */
+    /* REGARD : la dernière direction non nulle, conservée à l'arrêt (self.facing).
+       Le vecteur entier, pas un côté par axe : après un pas à droite puis un pas vers le
+       haut, l'acteur regarde (0,-1) et non (1,-1). Sert à viser (interactive). Écrits par le
+       tick quand `facing_auto` vaut 1, libres sinon. */
+    s8 facing_x;           /* -1 | 0 | 1 */
+    s8 facing_y;           /* -1 | 0 | 1 */
 
     /* ── collision ↔ CollisionBoxComponent ────────────────────────────── */
     struct {

@@ -152,6 +152,17 @@ class SpriteLibraryPanel(QWidget):
         if sprite is not None:
             self._sprites.select(SPRITES.label, sprite)
 
+    def select_default(self, remembered_name: str = ""):
+        """À l'ouverture de l'écran, un sprite est toujours sélectionné : celui retenu d'une session à l'autre s'il existe
+        encore, sinon le premier de la library. Ne touche à rien quand un sprite est déjà ouvert."""
+        if self._current_sprite is not None or not self._project:
+            return
+        sprite = self._project.sprites.get(remembered_name) if remembered_name else None
+        if sprite is None:
+            sprite = self._sprites.first(SPRITES.label)
+        if sprite is not None:
+            self._sprites.select(SPRITES.label, sprite)
+
     def select_direction(self, state: AnimState, sd: StateDirection):
         """Sélectionne explicitement (state, sd) dans l'arbre — ex: après ajout
         d'une direction depuis le panneau droit, pour que le canvas central

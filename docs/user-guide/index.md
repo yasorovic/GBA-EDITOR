@@ -122,6 +122,7 @@ configurés. L'écran d'accueil et **File → Settings** indiquent où les rense
 - Pour ajouter des objets à ramasser et un score, suivez [Ajouter des collectibles et un score](collectibles.md).
 - Pour créer des PNJ, des dialogues et des adversaires, suivez [Ennemis et PNJ](enemies.md).
 - Pour relier le titre, les niveaux et la victoire, suivez [Construire une boucle de gameplay](gameplay-loop.md).
+- Pour réagir à un appui devant un coffre, un panneau ou un personnage, suivez [Faire interagir le joueur avec un acteur](interact.md).
 - Pour construire un combat plus élaboré, suivez [Créer un boss et sa barre de vie](boss.md).
 - Pour suivre l'acteur dans une grande scène, suivez [Faire suivre l'acteur par une caméra](camera-follow.md).
 - Pour donner une réaction à un acteur, passez au [guide de scripting](../scripting.md).

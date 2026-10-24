@@ -145,7 +145,7 @@ L'éditeur distingue un **actor** (logique de jeu), un **sprite** (son rendu) et
 - **Géométries**, calculées par scène par `codegen/oam_alloc.py` : `g_actors[]` = [acteurs posés][pools : instances × parties] ; `g_oam_entries[]` = [entrées des posés À SPRITE][interface & texte][entrées des pools À SPRITE]. Seul un porteur de sprite (`has_oam_entry`) occupe une entrée ; les autres ont `oam_entry = -1`, et sur un tel acteur `self.frame` ou `self:show()` lisent 0 / n'ont aucun effet. Les pools gardent un indice d'acteur (`POOL_*_START`) et une entrée de départ distincte.
 - **La coupure est const/variable, pas classe/classe** : la **définition** d'un sprite (états, directions, vitesses, boucles) n'est pas une struct mais des tables `static const` en ROM, émises par sprite.
 - **Le background n'a pas de type, parce que le calque EST le matériel** (`layer_show(int bg, …)`, registres ombres `g_bgcnt_sh[4]`) : un type instanciable suggérerait qu'on peut créer un cinquième plan. `BgAnim` et `BgTileAnim` sont des états d'animation.
-- **Les champs se lisent avec le vocabulaire de l'inspecteur** : `Actor` porte `x, y, vx, vy, tag, active, dir_x/y, rotation, scale_x/y` (transform **monde**) et `oam_entry` ; `OamEntry` porte l'affichage (`frame`, `anim_*`, `frame_w/h`, `flip_*`, `pal_bank`, `obj_mode`, `priority`, `screen_space`, `rotation`, `scale_x/y`, `offset_x/y`, `affine_slot`, transform **local**) ; `Actor.collision` porte `grounded, last_x, slope_acc, box_count, boxes[]`.
+- **Les champs se lisent avec le vocabulaire de l'inspecteur** : `Actor` porte `x, y, vx, vy, tag, active, dir_x/y` (trajectoire, 0 à l'arrêt), `facing_x/y` (regard, dernière direction non nulle, qui choisit la direction d'animation), `rotation, scale_x/y` (transform **monde**) et `oam_entry` ; `OamEntry` porte l'affichage (`frame`, `anim_*`, `frame_w/h`, `flip_*`, `pal_bank`, `obj_mode`, `priority`, `screen_space`, `rotation`, `scale_x/y`, `offset_x/y`, `affine_slot`, transform **local**) ; `Actor.collision` porte `grounded, last_x, slope_acc, box_count, boxes[]`.
 - **La surface Lua ne bouge pas** : `self.frame`, `self.anim_length`… passent par les accesseurs de `runtime_api_inline.h`, seul endroit (avec le C émis) qui touche les champs. `api.py`, `codegen.py`, `checker.py` et `expr_types.py` n'émettent que des `&g_actors[ACTOR_*]` et des appels `actor_get/set_*`.
 - **`anim_length` / `anim_loop` / `anim_finished` sont écrites sur `OamEntry`** : `anim_length` est la longueur du bloc de la **direction actuellement jouée** (parcours de `anim_dirs[]` avec repli sur l'omni) que le tick mémoïse et écrit CHAQUE frame (`main_gen._anim_tick_lines`). À chaque tick, un `frame` hors de `[_fs, _fs+_fc)` est ramené à `_fs` : `play_anim` remet `frame` à 0, absolu dans le sheet dédupliqué.
 
@@ -290,6 +290,45 @@ Certains calculs existent **en double, dans deux langages** : où atterrit chaqu
 `ResourceIndex` inventorie chaque collection (`nom → chemin`) sans lire son JSON ; `ResourceStore` matérialise une entrée dans `get(nom)` quand on la demande. `Project.load()` indexe, charge les scènes et précharge seulement les sprites et fonds cités par la scène active ; les écrans Backgrounds, Animations et Sounds demandent leur collection à leur première visite. **Build, validation et opérations transversales appellent `Project.load_all_resources()`** : leur contrat exige une vue complète. La réconciliation des fichiers source reste attachée à la matérialisation de sa collection.
 
 Le point d'entrée **ouvre le projet fenêtre cachée, puis l'affiche déjà dessinée** (le premier `show()` est l'endroit coûteux). Le `DynamicInspector` construit ses sous-inspecteurs à leur première venue, et l'aperçu des boîtes de texte du canvas est pré-chauffé hors écran en partageant une seule allocation de scène (`palette_alloc.scene_layout_cache()`, que le build n'ouvre jamais).
+
+---
+
+## Identité : un en-tête commun, pour les assets et pour ce qui est posé en scène
+
+Tout JSON d'asset et tout élément d'une scène s'ouvre sur les mêmes clés, dans cet ordre :
+
+| Clé | Dans un sidecar d'asset | Dans un élément de scène |
+|---|---|---|
+| `name` | son nom, le stem du fichier | son nom de référence dans la scène (ce que les scripts citent) |
+| `id` | 12 chiffres hexadécimaux, unique dans le projet | idem, unique dans la scène |
+| `source` | facultative : le fichier source (PNG, WAV, `.hex`…), chemin relatif au projet | facultative : l'**id** de l'asset dont il est l'instance |
+
+`source` dit donc toujours une **origine**, un chemin pour un fichier, un id pour une instance. Elle manque quand il n'y en
+a pas (scène, prefab, table de données, acteur posé sans prefab). Les ids n'entrent jamais dans la ROM (`core/models/ids.py`) :
+le nom reste la poignée du code écrit à la main, l'id celle des fichiers de données.
+
+- **Assets** : `Resource.header()` compose l'en-tête, `Resource.body()` le reste, `Resource.from_header()` rend `source` à
+  l'attribut du modèle (`source_field = "asset"` pour sprite, fond, police, palette, sfx, musique, jingle). `ResourceStore.save`
+  écrit `{**header, **body}` et `PaletteStore` suit la même forme : aucun modèle n'écrit lui-même ces clés. L'attribut Python
+  garde son nom (`asset`) ; seule la clé sur disque est `source`. Un sidecar qui dit encore `asset` se lit tel quel.
+- **Éléments de scène** (`core/models/scene_member.py`, `SceneMember`) : acteurs, calques de fond, caméras, fenêtres, interfaces
+  et parties de prefab. `Scene.members()` les liste, `assign_member_ids` donne un id à qui n'en a pas ou porte celui d'un autre
+  (le premier garde le sien), `Scene.ensure_member_names` nomme un calque ou une interface sans nom d'après l'asset qu'il pose.
+- **Nom en mémoire, id sur disque** (`core/scene_sources.py`). `Actor.prefab_name`, `BackgroundLayer.background_name` et
+  `InterfaceNode.layout_name` restent les noms que le build et les inspecteurs lisent. `resolve_scene_sources` (à l'ouverture)
+  fait gagner l'id, `stamp_scene_sources` (appelé par `ResourceStore.before_save` de la collection des scènes) convertit le
+  nom en id avant chaque écriture. Renommer un prefab ne réécrit donc aucune scène.
+- **Exception : les calques de fond** écrivent aussi `background_name`, car le catalogue des fonds est paresseux (cf. plus
+  haut) et retrouver un nom depuis un id obligerait à lire tous les sidecars.
+- **Validation** : `validator._check_scene_sources` bloque le build quand la `source` d'un acteur ou d'une interface ne désigne
+  plus aucun prefab ni aucune mise en page. Une `source` orpheline n'est jamais effacée en silence.
+- **Pas encore** : `Actor.parent`, `Camera.follow_target` et `InterfaceNode.anchor_actor` citent toujours un nom. Un nom OU un id
+  dans l'API Lua est un chantier à part (cf. TODO, « Identité des assets et des membres de scène »).
+
+Les **colonnes de la table de données** citent un asset par son nom dans le JSON et par son rang dans son catalogue en ROM
+(`data_tables.reference_index`). Les types `sprite`, `background` et `prefab` sont des références de catalogue, ni un
+composant d'acteur ni une couche de fond ; `validator._check_data_column_types` vérifie que `COLUMN_REFERENCES`,
+`project.DATA_COLUMN_SOURCES` et les domaines de script s'accordent. Renommer l'asset cité répare les cellules.
 
 ---
 

@@ -53,6 +53,25 @@ def test_les_choix_et_les_references_du_build_utilisent_les_catalogues(project):
     assert any('no sprite named "MissingSprite"' in m.message for m in ctx._msgs)
 
 
+def test_une_colonne_prefab_cite_le_catalogue_des_prefabs(project):
+    from core.models.scene import Prefab
+    for name in ("Bullet", "Coin"):
+        project.prefabs.append(Prefab(name=name))
+    project.data_tables.append(DataTable(name="Loot", columns=[DataColumn("drop", "prefab")],
+                                         rows=[{"drop": "Coin"}, {}]))
+    assert "prefab" in COLUMN_CHOICES
+    assert project.data_column_choices("prefab") == ["Bullet", "Coin"]
+    ctx = ValidationContext(project)
+    _check_data_column_types(ctx)
+    _check_data_tables(ctx)
+    assert not ctx._msgs
+    loot = project.data_tables.get("Loot")
+    code = generate_data_tables_c([loot], reference_index(project))
+    assert "{ 1 }" in code and "drop = Coin" in code and "drop: no reference" in code
+    project.rename_prefab(project.prefabs.get("Coin"), "Gem")
+    assert loot.rows[0]["drop"] == "Gem"
+
+
 @pytest.mark.parametrize("kind,old,new", [("sprite", "Enemy", "Goblin"),
                                           ("background", "Forest", "Woods")])
 def test_renommer_un_asset_repare_et_enregistre_les_cellules(project, kind, old, new):

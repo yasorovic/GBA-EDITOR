@@ -5,7 +5,7 @@ Un acteur affiche UN sprite (une entrée OAM) mais peut en porter plusieurs ;
 par apparence. Un acteur à UNE apparence émet le C d'avant, sans `switch` —
 vérifié aussi octet pour octet sur les projets démo au moment de la refonte."""
 from codegen.runtime_codegen.gen_sprite import (
-    Appearance, anim_tick_lines, anim_tick_variants, oam_write_lines,
+    Appearance, anim_tick_lines, anim_tick_variants, direction_lines, oam_write_lines,
 )
 from core.models.sprite import SpriteAsset
 
@@ -60,22 +60,25 @@ def test_le_tick_d_une_apparence_est_le_bloc_d_avant():
     assert anim_tick_variants(4, 1, [_KW]) == anim_tick_lines(4, entry=1, **_KW)
 
 
-def test_les_quatre_premieres_lignes_du_tick_sont_le_recalcul_de_direction():
+def test_les_premieres_lignes_du_tick_sont_le_recalcul_de_direction():
     """`anim_tick_variants` les partage entre apparences en les découpant : si le
     bloc bouge, ce test l'annonce au lieu de laisser émettre un tick tronqué."""
-    tete = anim_tick_lines(4, entry=1, **_KW)[:4]
-    assert "auto_dir" in tete[0] and "dir_x=" in tete[1] and "dir_y=" in tete[2]
-    assert tete[3].strip() == "}"
+    direction = direction_lines(4, 1)
+    tete = anim_tick_lines(4, entry=1, **_KW)[:len(direction)]
+    assert tete == direction
+    assert "dir_x=" in tete[0] and "dir_y=" in tete[1]                        # la trajectoire
+    assert "facing_auto" in tete[2] and "facing_x=" in tete[3] and "facing_y=" in tete[4]
+    assert tete[5].strip() == "}"
     assert "static const s8 _dlut" not in "\n".join(tete)
 
 
 def test_deux_apparences_partagent_la_direction_et_ont_chacune_leurs_tables():
     code = "\n".join(anim_tick_variants(4, 1, [_KW, {**_KW, "sym": "sprite_Hurt"}]))
-    assert code.count("if(g_oam_entries[1].auto_dir") == 1          # commun, une seule fois
+    assert code.count("if(g_oam_entries[1].facing_auto") == 1          # commun, une seule fois
     assert "switch(g_oam_entries[1].appearance)" in code
     assert "sprite_Hero_state_start" in code and "sprite_Hurt_state_start" in code
     # Chaque apparence choisit sa direction dans SES tables (plus d'étiquette `goto` : le
     # repli est un `if` imbriqué) ; le côté regardé, lui, est mis à jour une seule fois.
     assert "goto" not in code
     assert code.count("int _hd=") == 2
-    assert code.count(".face_x=g_actors[4].dir_x;") == 1
+    assert code.count(".face_x=g_actors[4].facing_x;") == 1

@@ -1,7 +1,7 @@
 """editor/ui/common/palette_swatch.py — Icône QIcon générée depuis une PaletteBank.
 
 Partagé entre l'écran Palette Editor et les widgets de sélection de palette
-(ScriptSlot/ScriptPickerPopup réutilisés en picker de palette).
+(ScriptSlot/AssetPickerPopup réutilisés en picker de palette).
 """
 from __future__ import annotations
 

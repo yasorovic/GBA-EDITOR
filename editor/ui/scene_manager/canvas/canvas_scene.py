@@ -189,9 +189,11 @@ class GBAScene(QGraphicsScene):
             if g:
                 g.setVisible(False)
 
-    def update_actor_boxes(self, actors: list, var_defaults: dict | None = None):
-        """Met à jour les boîtes de collision acteurs affichées."""
-        self._actor_box_overlay.set_actors(actors, var_defaults)
+    def update_actor_boxes(self, actors: list, var_defaults: dict | None = None,
+                           sprites: dict | None = None):
+        """Met à jour les boîtes de collision acteurs affichées. `sprites` : id(acteur) → son sprite
+        affiché, dont le cadre donne la taille de la boîte propre d'un composant Interactive."""
+        self._actor_box_overlay.set_actors(actors, var_defaults, sprites)
 
     def set_collision_view(self, visible: bool):
         """Toggle 'Collisions scène' — indépendant de l'outil CollisionTool."""

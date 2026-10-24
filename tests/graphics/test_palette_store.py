@@ -26,7 +26,7 @@ def test_palette_bank_owns_the_canonical_hex_format():
     bank = PaletteBank.from_hex("Forest", "#000000\n#4EA832\n", {"size": 16})
 
     assert bank.to_hex() == "#000000\n#48A830\n"
-    assert bank.to_metadata_dict() == {"name": "Forest", "size": 16, "asset": ""}
+    assert bank.to_metadata_dict() == {"name": "Forest", "id": "", "size": 16}
 
 
 def test_deleted_hex_is_never_recreated_from_its_sidecar(tmp_path):
@@ -54,9 +54,8 @@ def test_legacy_json_palette_migrates_once_to_hex(tmp_path):
     store.load()
 
     assert (palette_dir / "Legacy.hex").read_text(encoding="utf-8") == "#000000\n#102030\n"
-    assert json.loads((palette_dir / "Legacy.palette").read_text(encoding="utf-8")) == {
-        "name": "Legacy", "size": 16, "asset": "Legacy.hex",
-    }
+    saved = json.loads((palette_dir / "Legacy.palette").read_text(encoding="utf-8"))
+    assert list(saved) == ["name", "id", "source", "size"] and saved["source"] == "Legacy.hex"
 
 
 def test_saving_palette_writes_hex_before_metadata(tmp_path):

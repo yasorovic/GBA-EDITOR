@@ -1621,6 +1621,7 @@ class BgInpaintToolbar(QFrame):
         self._drag_offset = QPoint()
         self._current = "brush"
         self._previous = "brush"        # l'outil que « select » rend en le quittant ("" : aucun, un fond qui ne se peint pas)
+        self._select_first = True       # « select » est l'outil de l'écran à l'entrée : posé au premier fond qui le permet
         self._mode = MODE_INPAINT
         self._color_mapping = "direct"
         self._sub = {"inpaint": "brush", "paint": "brush"}    # dernier sous-outil de chaque famille
@@ -1769,8 +1770,8 @@ class BgInpaintToolbar(QFrame):
     def _set_tool(self, tool: str):
         if tool == "select" and self._current == "select":
             tool = self._previous              # re-cliquer « select » le quitte, comme le bouton qu'il remplace
-        if tool != "select":
-            self._previous = tool
+        if tool not in ("select", "eraser"):
+            self._previous = tool              # la gomme purge les calques : on n'y revient jamais d'office
         self._current = tool
         if tool in [t[0] for t in self._SUBTOOLS]:
             self._sub["paint" if self._mode == MODE_PAINT else "inpaint"] = tool
@@ -1806,6 +1807,9 @@ class BgInpaintToolbar(QFrame):
             self._previous = ""
             if self._current != "select":
                 self._current = ""
+        if can_select and self._select_first:
+            self._select_first = False
+            self._current = "select"
         self._sync_buttons()
         if self._current != before:
             self.tool_changed.emit(self._current)
@@ -1898,10 +1902,12 @@ class BgInpaintCanvas(QWidget):
             self._view.set_grid_visible)
         self._chk_grid.setChecked(True)
         # La taille de la brosse, accessible quel que soit l'outil actif : pinceau, rectangle, gomme.
-        self._brush_size_buttons = self._bar.add_choice(
+        # Un seul bouton : chaque clic passe à la taille suivante, puis revient à la première.
+        self._brush_size_button = self._bar.add_cycle(
+            "tool_tile_brush",
             lambda size: tooltip(title=label('bginp.tile_brush_size', size=size),
                                  body=label('bginp.tile_brush_size_tip', size=size)),
-            list(BRUSH_SIZES), BRUSH_SIZES[0], self._view.set_brush_size)
+            list(BRUSH_SIZES), self._view.set_brush_size)
         # Les PNG sources gardent leur éditeur externe ; le Tile Painter ne
         # dessine que dans un fond vierge, indexé et déjà GBA-compatible.
         # Un bouton texte en surimpression, comme celui de l'écran Animation : « Edit .png », centré sous la barre.

@@ -1358,6 +1358,20 @@ class AssetLibrary(QWidget):
             self._sections[kind_label].set_expanded(True)   # la section repliée cacherait la ressource qu'on montre
         return found
 
+    def first(self, kind_label: str):
+        """Le premier asset de la famille, dans l'ordre où l'arbre l'affiche (dossiers dépliés ou non), ou None."""
+        tree = self._trees.get(kind_label)
+        if tree is None:
+            return None
+        stack = [tree.topLevelItem(n) for n in reversed(range(tree.topLevelItemCount()))]
+        while stack:
+            item = stack.pop()
+            obj = item.data(0, _ROLE_OBJ)
+            if obj is not None:
+                return obj
+            stack.extend(item.child(n) for n in reversed(range(item.childCount())))
+        return None
+
     def current(self, kind_label: str):
         tree = self._trees.get(kind_label)
         item = tree.currentItem() if tree is not None else None

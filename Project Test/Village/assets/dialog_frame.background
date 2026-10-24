@@ -1,0 +1,48 @@
+{
+  "name": "dialog_frame",
+  "id": "fde7916badf6",
+  "kind": "ui",
+  "ui_role": "nine_slice",
+  "slice_left": 8,
+  "slice_right": 8,
+  "slice_top": 8,
+  "slice_bottom": 8,
+  "asset": "assets/dialog_frame.png",
+  "encoded": {
+    "source_stamp": "183:1792527470000000000:f5ac27be31237b52",
+    "encoded_for": "4a2be6414950",
+    "palettes": [
+      ["#000000", "#181828", "#582058", "#B03850", "#E87850", "#F8C870", "#A0F070", "#38B060", "#207078", "#3858C8", "#40A0F0", "#70E8F0", "#F0F0F0", "#90B0C0", "#506880", "#303850"]
+    ],
+    "tileset": [
+      "0111111111dddddd1dffffff1dffffff1dffffff1dffffff1dffffff1dffffff",
+      "11111111ddddddddffffffffffffffffffffffffffffffffffffffffffffffff",
+      "1dffffff1dffffff1dffffff1dffffff1dffffff1dffffff1dffffff1dffffff",
+      "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    ],
+    "tilemap": [
+      [0, 1, 1024],
+      [2, 3, 1026],
+      [2048, 2049, 3072]
+    ],
+    "tiles_w": 3,
+    "tiles_h": 3,
+    "source_palettes": [
+      ["#000000", "#181828", "#582058", "#B03850", "#E87850", "#F8C870", "#A0F070", "#38B060", "#207078", "#3858C8", "#40A0F0", "#70E8F0", "#F0F0F0", "#90B0C0", "#506880", "#303850"]
+    ],
+    "diagnostics": {
+      "src_w": 24,
+      "src_h": 24,
+      "multiple_of_8": true,
+      "tiles_w": 3,
+      "tiles_h": 3,
+      "max_tile_colors": 3,
+      "tiles_reduced": 0,
+      "pre_merge_palettes": 1,
+      "final_palettes": 1,
+      "unique_tiles": 4,
+      "src_indexed": true,
+      "src_colors": 16
+    }
+  }
+}

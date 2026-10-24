@@ -1,5 +1,5 @@
 """editor/ui/common/pickers.py — Slots de sélection réutilisables, construits
-sur le même modèle que le "script selector" (ScriptSlot + ScriptPickerPopup) :
+sur le même modèle que le "script selector" (ScriptSlot + AssetPickerPopup) :
 bouton "+ Choisir..." quand vide, nom + Changer + × quand assigné, popup
 recherche+liste au clic.
 """
@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QToolButton
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QColor, QPainter, QPen
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
 
-from ui.common.widgets import ScriptSlot, ScriptPickerPopup
+from ui.common.widgets import ScriptSlot, AssetPickerPopup
 from ui.common.palette_swatch import bank_icon
 from ui.common.theme import C, T, QSS
 from ui.common import icons
@@ -57,7 +57,7 @@ def palette_picker_slot(
         entries = [(bank.name, bank.name, bank_icon(bank)) for bank in banks]
         if allow_none:
             entries.insert(0, (label(_NONE_LABEL), PALETTE_NONE, None))
-        popup = ScriptPickerPopup(entries, accent, parent=parent, new_label=None)
+        popup = AssetPickerPopup(entries, accent, parent=parent, new_label=None)
 
         def _picked(name: str):
             # Met à jour l'affichage du slot AVANT de notifier l'appelant.
@@ -103,7 +103,7 @@ def ui_pal_bank_slot(
     imbriqué dans un conteneur à fond la prend automatiquement (cf. le chantier
     « la police, une palette d'asset »).
 
-    `ScriptPickerPopup.picked` est typé `str` (chemins de script, son usage
+    `AssetPickerPopup.picked` est typé `str` (chemins de script, son usage
     d'origine) : l'index voyage donc en texte, comme dans `ColorIndexSlot`.
     `compact` conserve le même sélecteur derrière un bouton de barre d'outils."""
     if compact:
@@ -143,7 +143,7 @@ def ui_pal_bank_slot(
         for i in range(16):
             lab, icon = _label_and_icon(i)
             entries.append((lab, str(i), icon))
-        popup = ScriptPickerPopup(entries, accent, parent=parent, new_label=None)
+        popup = AssetPickerPopup(entries, accent, parent=parent, new_label=None)
 
         def _picked(raw: str):
             try:
@@ -214,7 +214,7 @@ def font_picker_slot(
         entries += [(_label(f.name), f.name, icon) for f in fonts]
         if current_name and not any(f.name == current_name for f in fonts):
             entries.append((_label(current_name), current_name, icon))
-        popup = ScriptPickerPopup(entries, accent, parent=parent, new_label=None)
+        popup = AssetPickerPopup(entries, accent, parent=parent, new_label=None)
 
         def _picked(name: str):
             _show(name)   # rafraîchit le label avant de notifier
@@ -248,7 +248,7 @@ def collision_tag_slot(
         entries = [(t, t, icon) for t in tags]
         if current_tag and current_tag not in tags:
             entries.append((current_tag, current_tag, icon))
-        popup = ScriptPickerPopup(entries, accent, parent=parent,
+        popup = AssetPickerPopup(entries, accent, parent=parent,
                                   new_label=label('pick.create_tag_named', name='{name}'),
                                   create_named=True)
 
@@ -290,7 +290,7 @@ def sprite_picker_slot(
 
     def _open_picker():
         entries = [(n, n) for n in sorted(sprite_names)]
-        popup = ScriptPickerPopup(entries, accent, parent=parent, new_label=None)
+        popup = AssetPickerPopup(entries, accent, parent=parent, new_label=None)
 
         def _picked(name: str):
             slot.set_script(name)   # rafraîchit le label avant de notifier
@@ -480,7 +480,7 @@ class ColorIndexSlot(QWidget):
         return out
 
     def _open(self):
-        popup = ScriptPickerPopup(self._entries(), self._accent,
+        popup = AssetPickerPopup(self._entries(), self._accent,
                                   parent=self, new_label=None)
         popup.picked.connect(self._on_picked)
         popup.show_below(self)

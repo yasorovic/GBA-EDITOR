@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from core.models.resource import Resource
+from core.models.scene_member import SceneMember
 from core.models.tile_codec import pack_se, unpack_se
 from core.models.palette import OWN_PAL_BANK
 from core.models.sub_palette import SubPaletteAssetMixin, decode_palette_overrides
@@ -158,7 +159,7 @@ ANIM_MODE_LABELS = {
 
 
 @dataclass
-class BackgroundLayer:
+class BackgroundLayer(SceneMember):
     """Une couche de fond d'une scène : référence un BackgroundAsset (par nom) +
     slot GBA + vitesse de défilement."""
     background_name: str = ""  # nom du BackgroundAsset référencé (= stem du PNG) ;
@@ -187,6 +188,9 @@ class BackgroundLayer:
     # coefficients vivent donc sur la scène — un champ « mode » ici promettrait
     # un réglage que le matériel ne sait pas tenir.
     blend_role:   str   = ""
+    # Son nom de référence dans la scène (l'en-tête commun, cf. scene_member.py) ; vide = donné par la scène
+    # (`Scene.ensure_member_names`). `background_name` reste la référence à l'asset, `source` en est l'id.
+    name:         str   = ""
 
 
 def decode_tile_paint(raw) -> dict:
@@ -444,6 +448,7 @@ class BackgroundAsset(SubPaletteAssetMixin, Resource):
     C'est la SCÈNE qui possède ses layers (Scene.background_layers) et référence
     ce fond par nom — plus de composition multi-layer réutilisable ici."""
     sidecar_extension = asset_extensions.BACKGROUND
+    source_field = "asset"
     name:   str  = "background"
     asset:   str  = ""                              # chemin du PNG relatif au projet (cf. SpriteAsset)
     palettes: list = field(default_factory=list)    # list[list[int]] BGR555 (≤16×≤16)

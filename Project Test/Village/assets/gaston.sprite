@@ -1,0 +1,92 @@
+{
+  "name": "gaston",
+  "id": "0566df853053",
+  "asset": "assets/gaston.png",
+  "frame_w": 16,
+  "frame_h": 16,
+  "source_stamp": "243:1792527469000000000:649db55a0054e6ce",
+  "own_palette": [
+    "#181828",
+    "#F0F0F0",
+    "#F8C870",
+    "#90B0C0",
+    "#3858C8"
+  ],
+  "quantize_method": "median_cut",
+  "palettes": [
+    ["#000000", "#181828", "#F0F0F0", "#F8C870", "#90B0C0", "#3858C8", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"]
+  ],
+  "source_palettes": [
+    ["#000000", "#181828", "#F0F0F0", "#F8C870", "#90B0C0", "#3858C8", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"]
+  ],
+  "states": [
+    {
+      "name": "Idle",
+      "speed": 30,
+      "loop": true,
+      "directions": [
+        {
+          "dir": 0,
+          "frames": [
+            {
+              "tiles": [
+                {
+                  "src_col": 0,
+                  "src_row": 0,
+                  "dst_col": 0,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 1,
+                  "src_row": 0,
+                  "dst_col": 1,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 0,
+                  "src_row": 1,
+                  "dst_col": 0,
+                  "dst_row": 1
+                },
+                {
+                  "src_col": 1,
+                  "src_row": 1,
+                  "dst_col": 1,
+                  "dst_row": 1
+                }
+              ]
+            },
+            {
+              "tiles": [
+                {
+                  "src_col": 2,
+                  "src_row": 0,
+                  "dst_col": 0,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 3,
+                  "src_row": 0,
+                  "dst_col": 1,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 2,
+                  "src_row": 1,
+                  "dst_col": 0,
+                  "dst_row": 1
+                },
+                {
+                  "src_col": 3,
+                  "src_row": 1,
+                  "dst_col": 1,
+                  "dst_row": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

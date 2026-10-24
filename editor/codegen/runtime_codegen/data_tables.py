@@ -67,6 +67,7 @@ def reference_index(p, sound_assets=None) -> dict[str, dict[str, int]]:
         # Références du catalogue d'assets, pas des composants/layers de scène.
         "sprite":  index_of(p.data_column_choices("sprite")),
         "background": index_of(p.data_column_choices("background")),
+        "prefab":  index_of(p.data_column_choices("prefab")),
         # La caméra par DÉFAUT occupe l'entrée 0 et n'a pas de fichier : c'est
         # `project_cameras` qui porte cette convention, pas cette table.
         "camera":  {c.name: i for i, c in enumerate(project_cameras(p)) if c is not None},

@@ -53,7 +53,7 @@ from ui.common.deferred_writes import get_deferred_writes, schedule_save, schedu
 from ui.common.theme import C, T, QSS
 from ui.common.unit_spin import UnitSpin
 from ui.common.responsive import InspectorScrollArea
-from ui.common.widgets import W, CollapsibleCard, ScriptSlot, ScriptPickerPopup
+from ui.common.widgets import W, CollapsibleCard, ScriptSlot, AssetPickerPopup
 from ui.common.notice import note, notice, text
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
@@ -175,7 +175,7 @@ class UIInspector(QWidget):
         # et l'empreinte — il n'offre aucun menu qui la changerait.
 
         # ── Géométrie ─────────────────────────────────────────────
-        geom_card = CollapsibleCard(label("uiinsp.card.geometry"))
+        geom_card = CollapsibleCard(label("uiinsp.card.geometry"), expanded=False)
         self._geom_lbl = geom_card
 
         # Presets de placement — la grille de Godot, adaptée au matériel : poser
@@ -225,7 +225,7 @@ class UIInspector(QWidget):
         # caché reste coché ici (rien ne lui est arrivé), `_visible_why` dit
         # pourquoi il ne s'affiche quand même pas. Un script bascule cette même
         # valeur au runtime via `ui.show(nom, on)` — cf. models/ui_region.py.
-        visible_card = CollapsibleCard(label("uiinsp.card.visibility"))
+        visible_card = CollapsibleCard(label("uiinsp.card.visibility"), expanded=False)
         self._visible = W.checkbox_row(label("uiinsp.visible.label"),
                                        label("uiinsp.visible.sub"), visible_card.body_layout)
         self._visible.toggled.connect(self._on_visible)
@@ -1731,7 +1731,7 @@ class UIInspector(QWidget):
         if self._blocking or not self._project:
             return
         entries = [(t.key, t.key) for t in self._project.texts]
-        popup = ScriptPickerPopup(
+        popup = AssetPickerPopup(
             entries, TEXT_ACCENT, parent=self._text_key,
             new_label=label("uiinsp.text.create_entry"))
         popup.picked.connect(self._on_text_key)

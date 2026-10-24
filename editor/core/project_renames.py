@@ -177,6 +177,7 @@ class ProjectRenameMixin:
                 if touched:
                     self.save_scene(scene)
             refs = self.rename_lua_refs(DOMAIN_PREFAB, old_name, new_name)
+            self._rename_data_asset_refs("prefab", old_name, new_name)
         self._notify_renamed("Prefab", old_name, new_name, refs)
 
     def rename_actor(self, actor, new_name: str, scene: Optional[Scene] = None) -> bool:

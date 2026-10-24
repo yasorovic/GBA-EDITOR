@@ -566,8 +566,9 @@ RUNTIME_API: dict[str, ApiFunc] = {
     # La direction s'écrivait de trois façons pour un seul état (`dir_x`/`dir_y`)
     # : un vec2, une boussole nommée, et un entier 0-8 en lecture. Il n'en reste
     # qu'UNE — la propriété `self.direction` (cf. RUNTIME_PROPS), qui accepte le
-    # vecteur COMME le nom de boussole et se compare aux deux. `self.auto_dir`
-    # est l'état voisin : le calcul automatique depuis la vélocité.
+    # vecteur COMME le nom de boussole et se compare aux deux. `self.facing`
+    # est son voisin (le regard : la dernière direction non nulle) et `self.facing_auto`
+    # son calcul automatique.
     "actor:destroy": ApiFunc(
         lua_name="actor:destroy", c_func="_destroy",  # résolu par codegen
         params=[], self_first=True,
@@ -1778,11 +1779,22 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
             "compared by its name: if self.direction == \"west\". Write the WHOLE "
             "vector — never self.direction.x alone.",
     ),
-    "actor.auto_dir": ApiProp(
-        lua_name="actor.auto_dir", c_getter="actor_get_auto_dir",
-        c_setter="actor_set_auto_dir", ptype=PARAM_BOOL, self_first=True,
-        doc="Computes (true) or not (false) the direction automatically from the "
-            "velocity. When false, self.direction is whatever the script makes of it.",
+    "actor.facing": ApiProp(
+        lua_name="actor.facing", c_getter="actor_get_facing",
+        c_setter="actor_set_facing", ptype=PARAM_VEC2, self_first=True,
+        domain=DOMAIN_DIRECTION,
+        c_getter_named="actor_get_facing_named", c_setter_named="actor_set_facing_named",
+        doc="Where the actor LOOKS: the last non-zero direction, kept when it stops "
+            "(self.direction, the trajectory, falls back to 0). Same two writings as "
+            "self.direction: self.facing = vec2(0, -1) or self.facing = \"north\". "
+            "Followed automatically while self.facing_auto is true. Write the WHOLE vector.",
+    ),
+    "actor.facing_auto": ApiProp(
+        lua_name="actor.facing_auto", c_getter="actor_get_facing_auto",
+        c_setter="actor_set_facing_auto", ptype=PARAM_BOOL, self_first=True,
+        doc="Follows (true) or not (false) the last non-zero direction in self.facing. "
+            "When false, self.facing is whatever the script makes of it. self.direction "
+            "is always computed from the velocity.",
     ),
 
     # ── Actor — collision ──────────────────────────────────────────
@@ -2167,6 +2179,18 @@ EVENT_REGISTRY: dict[str, dict] = {
                                                                   "the other actor"},
         ],
         "c_sig": "void {prefix}_on_collision_exit(Actor* self, Actor* other, u8 my_box, u8 other_box)",
+    },
+    "on_interact": {
+        "icon": "☞",
+        "icon_key": "ev_interact",
+        "stub": "function on_interact(who)\n\nend\n",
+        "desc": "Called when the player interacts with this actor, as set by its Interactive "
+                "component (an input gesture on the \"interact\" input, on its zone).",
+        "params": [
+            {"name": "who", "type": "actor", "description": "The actor that interacts (the "
+                                                            "player)"},
+        ],
+        "c_sig": "void {prefix}_on_interact(Actor* self, Actor* who)",
     },
     "on_destroy": {
         "icon": "✕",

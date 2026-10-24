@@ -771,6 +771,9 @@ class RenameCollisionTagCmd(Command):
 
     def __init__(self, project, old_name: str, new_name: str, persist_fn=None, label: str = ""):
         from core.models.components import CollisionBoxComponent
+        from core.models.settings import RESERVED_COLLISION_TAGS
+        if old_name in RESERVED_COLLISION_TAGS:
+            raise ValueError(f"The collision tag \"{old_name}\" is reserved and cannot be renamed.")
         self._project = project
         self._old = old_name
         self._new = new_name
@@ -818,6 +821,9 @@ class RemoveCollisionTagCmd(Command):
 
     def __init__(self, project, tag_name: str, persist_fn=None, label: str = ""):
         from core.models.components import CollisionBoxComponent
+        from core.models.settings import RESERVED_COLLISION_TAGS
+        if tag_name in RESERVED_COLLISION_TAGS:
+            raise ValueError(f"The collision tag \"{tag_name}\" is reserved and cannot be removed.")
         self._project = project
         self._tag = tag_name
         self.label = label or f"Retirer le tag {tag_name}"

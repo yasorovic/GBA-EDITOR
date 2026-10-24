@@ -649,6 +649,17 @@ class _ActiveSceneTree(_Tree):
 
     # ── Drag & drop : acteurs OU éléments d'UI ────────────────────
 
+    @staticmethod
+    def _accept_drop_handled(event):
+        """Accepte un lâché que le modèle traite LUI-MÊME (l'arbre est repeuplé depuis le modèle).
+
+        Avec l'action « déplacer », Qt retire ensuite de la vue les lignes sélectionnées une fois le glisser fini
+        (`clearOrRemove`) : or la sélection porte alors sur l'arbre repeuplé, donc la ligne qu'on venait de poser sous
+        son parent disparaissait, et le parent n'avait plus de flèche jusqu'au rafraîchissement suivant. L'action
+        « ignorer » dit à Qt qu'il n'a rien à retirer."""
+        event.setDropAction(Qt.DropAction.IgnoreAction)
+        event.accept()
+
     def dropEvent(self, event):
         dragged = self.currentItem()
         target = self.itemAt(event.position().toPoint())
@@ -670,13 +681,13 @@ class _ActiveSceneTree(_Tree):
                 folder_id = (target.data(0, _ROLE_OBJ)
                              if target.data(0, _ROLE_TYPE) == T_FOLDER else None)
                 state.move_member(self._scene.name, member, folder_id)
-                event.accept()
+                self._accept_drop_handled(event)
                 self._panel.refresh()
                 return
 
         if dtype == T_UI_ELEM:
             indicator = self.dropIndicatorPosition()
-            event.accept()
+            self._accept_drop_handled(event)
             self._handle_ui_drop(dragged, target, indicator)
             return
 
@@ -692,14 +703,14 @@ class _ActiveSceneTree(_Tree):
             if target is not None and self.dropIndicatorPosition() == Pos.OnItem:
                 # Lâché SUR un acteur = reparentage, pas un
                 # réordonnancement — Qt ne doit pas y toucher.
-                event.accept()
+                self._accept_drop_handled(event)
                 self._reparent_actor(dragged.data(0, _ROLE_OBJ), target.data(0, _ROLE_OBJ))
                 return
             if target is None:
                 # Lâché hors de tout item : Qt n'a pas de position où
                 # replacer visuellement l'item (rien à indiquer), donc on le
                 # fait nous-même plutôt que de laisser passer à super().
-                event.accept()
+                self._accept_drop_handled(event)
                 self._unparent_actor(dragged.data(0, _ROLE_OBJ))
                 return
             super().dropEvent(event)   # Qt réordonne/redéplace visuellement

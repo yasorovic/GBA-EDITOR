@@ -3,7 +3,7 @@ from __future__ import annotations
 
 
 from . import BaseComponentEditor, register
-from ui.common.widgets import W, ScriptSlot, ScriptPickerPopup
+from ui.common.widgets import W, ScriptSlot, AssetPickerPopup
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 from ui.common.pickers import sprite_picker_slot, palette_picker_slot
@@ -102,7 +102,7 @@ class SpriteEditor(BaseComponentEditor):
             if not sprite:
                 return
             names = [s.name for s in sprite.states] or [comp.initial_state or "Idle"]
-            popup = ScriptPickerPopup(
+            popup = AssetPickerPopup(
                 [(n, n) for n in names], COLOR_SPRITE, parent=self.insp, new_label=None,
             )
             popup.picked.connect(lambda name: _on_state_picked(name))

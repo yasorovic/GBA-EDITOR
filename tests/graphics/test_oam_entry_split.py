@@ -14,7 +14,7 @@ CODEGEN = ROOT / "editor" / "codegen" / "runtime_codegen"
 
 # Les registres OAM et l'animation : à l'entrée OAM, jamais à l'acteur.
 AFFICHAGE = ("frame", "anim_state", "timer", "anim_speed", "anim_length", "anim_loop",
-             "anim_finished", "frame_w", "frame_h", "auto_dir", "visible", "flip_h",
+             "anim_finished", "frame_w", "frame_h", "facing_auto", "visible", "flip_h",
              "flip_v", "pal_bank", "obj_mode", "priority", "screen_space",
              "offset_x", "offset_y", "pivot_x", "pivot_y", "affine_slot")
 
@@ -109,7 +109,8 @@ def test_les_tailles_des_structs_ne_regressent_pas(tmp_path):
     """Mesuré par le compilateur hôte : `int` fait 4 octets sur les deux cibles, et
     le remplissage est le même — la taille GBA suit. Plafonds au 2026-09-25 :
     OamEntry 38 (92 avant ; 32 + `appearance` + `appearance_base`, marches 3a-3c, puis
-    `pivot_x/y` sur 8 bits le 2026-10-04), Actor 68 (96 avant)."""
+    `pivot_x/y` sur 8 bits le 2026-10-04), Actor 72 (96 avant ; 68 jusqu'au 2026-10-24, où
+    `facing_x/y` ajoute 2 octets que l'alignement sur 4 de la struct facture 4)."""
     import os, shutil, subprocess
     import pytest
     cc = os.environ.get("CC") or shutil.which("gcc") or shutil.which("cc") or shutil.which("clang")
@@ -133,4 +134,4 @@ def test_les_tailles_des_structs_ne_regressent_pas(tmp_path):
     assert r.returncode == 0, r.stderr
     oam, actor = map(int, subprocess.run([str(exe)], capture_output=True, text=True,
                                          env=env).stdout.split())
-    assert oam <= 38 and actor <= 68, (oam, actor)
+    assert oam <= 38 and actor <= 72, (oam, actor)

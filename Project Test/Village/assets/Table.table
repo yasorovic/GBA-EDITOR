@@ -1,0 +1,32 @@
+{
+  "name": "Table",
+  "id": "20e2b064c587",
+  "columns": [
+    {
+      "name": "valeur",
+      "type": "bool",
+      "color": ""
+    },
+    {
+      "name": "column_2",
+      "type": "text",
+      "color": ""
+    },
+    {
+      "name": "Sprite",
+      "type": "sprite",
+      "color": ""
+    }
+  ],
+  "rows": [
+    {
+      "Sprite": "gaston",
+      "valeur": true,
+      "column_2": "Table_01"
+    },
+    {
+      "valeur": false,
+      "column_2": "Table_02"
+    }
+  ]
+}

@@ -309,6 +309,13 @@ class TextEditorScreen(QWidget):
             self._set_context(self._CTX_FONT if family == "fonts" else self._CTX_FONT_ASSET)    # la library ne montre que la famille du contexte
             self._fonts.select(kind.label, font)
 
+    def select_text(self, key: str):
+        """Ouvre le texte `key` — navigation entrante (cellule `text` d'une table, onglet Disk)."""
+        text = self._project.get_text(key) if self._project else None
+        if text is not None:
+            self._set_context(self._CTX_TEXT)
+            self._texts.show_text(text)
+
     # ── Contexte ──────────────────────────────────────────────────
 
     def _set_context(self, ctx: int):

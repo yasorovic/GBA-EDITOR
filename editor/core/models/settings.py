@@ -62,6 +62,18 @@ class Language:
 # eux (cf. check_architecture, INTERDITS), d'où le sens des imports.
 BUTTON_NAMES: tuple = ("up", "down", "left", "right", "a", "b", "l", "r", "start", "select")
 
+# L'entrée INTERNE d'interaction (composant `interactive`) : comme les axes "horizontal" et
+# "vertical", elle existe dans tous les projets sans être déclarée, ne se supprime pas et
+# son nom ne se change pas. Son RÉGLAGE, lui, est libre : un accord de boutons
+# (`ProjectSettings.interact_buttons`), A par défaut. Le nom est refusé à toute entrée, axe ou
+# séquence de l'auteur (cf. `core.validator`).
+INTERACT_INPUT_NAME: str = "interact"
+DEFAULT_INTERACT_BUTTONS: tuple = ("a",)
+# La PORTÉE de la visée (mode `facing` du composant Interactive) : de combien de pixels la box de
+# l'interacteur est projetée dans son regard. Un réglage de projet unique.
+DEFAULT_INTERACT_REACH: int = 4
+MAX_INTERACT_REACH: int = 64
+
 
 @dataclass
 class InputBinding:
@@ -178,9 +190,9 @@ class ProjectSettings:
     # Couleur de backdrop par défaut (BGR555) — PAL_BG_RAM[0], affichée quand
     # rien d'opaque n'est dessiné nulle part. Éditée dans le ProjectInspector ;
     # Scene.backdrop_color peut la surcharger par scène.
-    # Gris 50 % (16, 16, 16 en 5 bits) pour un projet NEUF ; le chargement
+    # Gris foncé (50, 50, 50) pour un projet NEUF — 6 en 5 bits par composante ; le chargement
     # (`Project.load`) garde 0 pour un project.json qui n'a pas la clé.
-    backdrop_color: int = 0x4210
+    backdrop_color: int = 0x18C6
     # Nombre d'emplacements de sauvegarde en SRAM. Un réglage et non une valeur
     # libre laissée au script : c'est lui qui BORNE la place occupée, donc ce
     # qui rend la capacité vérifiable au build plutôt qu'à l'exécution.
@@ -262,6 +274,11 @@ class ProjectSettings:
     # Actions nommées du joueur, chacune liée à un accord de boutons (cases
     # à cocher — held/pressed/released/buffered).
     inputs: list = field(default_factory=list)
+    # Le réglage de l'entrée interne `interact` (INTERACT_INPUT_NAME) : un accord, jamais vide
+    # (une entrée sans bouton serait inatteignable). N'est écrit sur le disque que s'il diffère du
+    # défaut : aucun projet existant ne change.
+    interact_buttons: list = field(default_factory=lambda: list(DEFAULT_INTERACT_BUTTONS))
+    interact_reach: int = DEFAULT_INTERACT_REACH
     # Séquences nommées (mini-langage complet — get_sequence).
     sequences: list = field(default_factory=list)
     # Axes déclarés, en plus des deux par défaut ("horizontal"/"vertical", la
@@ -354,7 +371,14 @@ class Constant:
 # pilote, « body » pour tout le reste (le tag par défaut d'une boîte). Posés à
 # la création (`Project.create`) et non à la lecture : un projet existant, dont
 # `collision_tags` est absent, garde exactement les siens.
-DEFAULT_COLLISION_TAGS = ("Player", "body")
+# « Player » et « Interactive » sont RÉSERVÉS (ni renommables ni supprimables, `RenameCollisionTagCmd` et
+# `RemoveCollisionTagCmd` les refusent), recréés dans tout projet qui ne les déclare pas, et toujours listés
+# en tête, dans cet ordre. « Interactive » est le tag de la boîte implicite du composant Interactive. Leurs
+# cases de matrice, elles, restent éditables.
+PLAYER_COLLISION_TAG = "Player"
+INTERACTIVE_COLLISION_TAG = "Interactive"
+RESERVED_COLLISION_TAGS = (PLAYER_COLLISION_TAG, INTERACTIVE_COLLISION_TAG)
+DEFAULT_COLLISION_TAGS = (*RESERVED_COLLISION_TAGS, "body")
 
 
 def pair_key(tag_a: str, tag_b: str) -> str:

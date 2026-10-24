@@ -205,6 +205,7 @@
     "common.error": {
       "text": "Error"
     },
+    "common.none": { "text": "None" },
     "common.none_dash": {
       "text": "(none)"
     },
@@ -734,6 +735,25 @@
     "actorinsp.comp.soundfx": {
       "text": "SoundFX"
     },
+    "actorinsp.comp.interactive": { "text": "Interactive" },
+    "comped.interact_input": { "text": "Input" },
+    "comped.interact_pressed": { "text": "Pressed" },
+    "comped.interact_hold": { "text": "Held" },
+    "comped.interact_released": { "text": "Released" },
+    "comped.interact_input_tip": { "text": "The gesture on the built-in \"interact\" input (Project Settings > Input) that triggers on_interact. Pressed fires on the frame the input goes down, Held once it has been down for the set number of frames, Released when it comes up while the actor is still in the zone." },
+    "comped.interact_hold_frames": { "text": "Hold" },
+    "comped.interact_hold_frames_tip": { "text": "Frames the input must stay down inside the zone." },
+    "comped.interact_area": { "text": "Interaction" },
+    "comped.interact_hover": { "text": "Hover" },
+    "comped.interact_facing": { "text": "Facing" },
+    "comped.interact_area_tip": { "text": "How the player reaches the zone. Hover: the player overlaps it. Facing: the player's box, projected in the direction it looks over the reach set in the project settings and stopped by walls, touches it." },
+    "comped.interact_box": { "text": "Zone" },
+    "comped.interact_own_box": { "text": "Own box ({tag})" },
+    "comped.interact_box_tip": { "text": "Where the zone comes from. The own box is created by the component, with the reserved collision tag; or an existing collision box of this actor, chosen by its tag." },
+    "comped.interact_auto": { "text": "Auto ({n})" },
+    "comped.interact_size_tip": { "text": "Size of the own box in pixels. Auto uses the sprite frame, or 16 x 16 without a sprite." },
+    "projset.reserved_tag_title": { "text": "Reserved tag" },
+    "projset.reserved_tag_tip": { "text": "The editor relies on this tag (Player, Interactive): it cannot be renamed or removed. Its matrix cells stay editable." },
     "actorinsp.comp.script": {
       "text": "Script"
     },
@@ -752,10 +772,13 @@
     "actorinsp.card.components": {
       "text": "Components"
     },
-    "actorinsp.card.children": {
-      "text": "Children"
-    },
     "actorinsp.sprite_preview_tip": { "text": "A click assigns a sprite from the project. The first frame of the initial state is shown." },
+    "actorinsp.card.relations": { "text": "Relations" },
+    "actorinsp.rel.parent": { "text": "Parent" },
+    "actorinsp.rel.children": { "text": "Children" },
+    "actorinsp.rel.parent_tip": { "text": "Opens the parent of this element." },
+    "actorinsp.children_tip": { "text": "The children of this element. For a prefab, its parts, such as the segments of a boss: each part is a full actor with its own sprite, boxes and local transform." },
+    "actorinsp.children_note": { "text": "A double-click opens a child; dragging a prefab part onto another one reparents it. The pool reserves max instances × (1 + parts) entries." },
     "actorinsp.index": {
       "text": "Index: {value}"
     },
@@ -813,13 +836,14 @@
     "actorinsp.parent_missing": {
       "text": "{name}  (not found)"
     },
+    "actorinsp.is_player": { "text": "Player" },
+    "actorinsp.is_player_tip": { "text": "Marks this actor as the one that interacts: only an actor with this tag triggers the Interactive components of the scene. It is an actor tag, not a collision tag. Several actors may carry it." },
     "actorinsp.screen_space": {
       "text": "Screen space"
     },
     "actorinsp.visible": {
       "text": "Visible"
     },
-    "actorinsp.children_tip": { "text": "The children of this prefab, such as the segments of a boss. Each child is a full actor with its own sprite, boxes and local transform." },
     "actorinsp.instance": {
       "text": "◈ Instance of  {name}"
     },
@@ -861,7 +885,7 @@
       "text": "Scene prefabs"
     },
     "sceneinsp.no_scene_prefab": {
-      "text": "No prefab is placed or spawned by this scene's scripts."
+      "text": "No prefab is placed or spawned"
     },
     "sceneinsp.edit_prefab": {
       "text": "Edit prefab"
@@ -1300,9 +1324,9 @@
       "text": "Added palettes and painting will be lost."
     },
     "bgedit.extract": {
-      "text": "⤓  EXTRACT PALETTE"
+      "text": "Extract palette from source"
     },
-    "bgedit.extract_title": { "text": "Extract palettes" },
+    "bgedit.extract_title": { "text": "Extract palette from source" },
     "bgedit.extract_tip": { "text": "Creates shared catalog palettes from the PNG and assigns them to this background. They stay editable in the Palette Editor." },
     "bgedit.extract_warning": { "text": "If these palettes already exist, their colors are replaced." },
     "bgedit.limit_title": {
@@ -1551,6 +1575,7 @@
       "text": "Animation"
     },
     "sprpanel.speed_tip": { "text": "Sets the number of GBA ticks between two frames. A tick lasts 1/60 of a second: 8 = 7.5 fps, 4 = 15 fps, 2 = 30 fps." },
+    "sprpanel.loop_tip": { "text": "Loops the animation: when it reaches the last frame, it starts again." },
     "sprpanel.directions": {
       "text": "Directions"
     },
@@ -1602,6 +1627,9 @@
     "comped.pivot_y_title": { "text": "Pivot point Y" },
     "comped.pivot_x_tip": { "text": "Sets the horizontal position of the pivot, in pixels from the centre of the sprite frame. 0, 0 is the centre. Rotation, scale and flip happen around this point, and it stays fixed on screen. It does not move the sprite: the offset does." },
     "comped.pivot_y_tip": { "text": "Sets the vertical position of the pivot, in pixels from the centre of the sprite frame. 0, 0 is the centre. Rotation, scale and flip happen around this point, and it stays fixed on screen. It does not move the sprite: the offset does." },
+    "comped.collision_blocks_row": { "text": "Blocking" },
+    "comped.collision_blocks": { "text": "Blocks actors" },
+    "comped.collision_blocks_tip": { "text": "Moving actors that have a solid box are pushed out of this box instead of passing through it (a chest, an NPC, a crate). The collision map still has the last word, and the collision matrix decides which tags are stopped. Off by default." },
     "comped.collision_solid": {
       "text": "Solid  (unchecked = Trigger)"
     },
@@ -1814,6 +1842,10 @@
     "datainsp.value": {
       "text": "value"
     },
+    "datagrid.create_reference": { "text": "Create new" },
+    "datainsp.image_size": { "text": "Image: {w} × {h} px" },
+    "datainsp.sound_source": { "text": "Source: {file}" },
+    "datainsp.open_target": { "text": "Open" },
     "datainsp.no_ref": {
       "text": "no reference (emitted as 0)"
     },
@@ -2826,7 +2858,6 @@
     "actorinsp.unlink_title": { "text": "Unlink from the prefab" },
     "actorinsp.expose_new_title": { "text": "Create a prefab from this actor" },
     "actorinsp.parent_note": { "text": "This is not inheritance: to reuse a definition, use a prefab. The parent must be in the same scene, and a cycle is refused at build." },
-    "actorinsp.children_note": { "text": "A double-click edits a child; dragging one onto another child reparents it. The pool reserves max instances × (1 + children) entries." },
     "bglayer.no_palette_tip": { "text": "Uses the colors of the PNG." },
     "caminsp.this_camera": {
       "text": "This camera"
@@ -2876,6 +2907,11 @@
     "inputs.hint": {
       "text": "Name an action and choose the buttons that must be held together. Use it in scripts with input:held(\"name\"), input:pressed(\"name\"), input:released(\"name\"), input:buffered(\"name\", frames). The arrows are the D-pad axes."
     },
+    "inputs.interact_locked": {
+      "text": "Built-in input of the Interactive component: it exists in every project, its name is fixed and it cannot be removed. Only its buttons are yours to choose (A by default). Scripts can read it too: input:pressed(\"interact\")."
+    },
+    "inputs.interact_reach": { "text": "Reach" },
+    "inputs.interact_reach_tip": { "text": "How far, in pixels, the box of the player is projected in the direction it looks to reach an Interactive actor (Facing mode). Walls stop it." },
     "inputs.declare_an_input": {
       "text": "Declare an input"
     },
@@ -3443,6 +3479,8 @@
     "scncanvas.graph_delete_selection_confirm": {
       "text": "Delete the selection: {scenes} scene(s) and {folders} folder(s)? Folders keep their contents; scenes are removed (Ctrl+Z)."
     },
+    "scncanvas.grid_off": { "text": "No grid" },
+    "scncanvas.grid_cycle_tip": { "text": "A click moves to the next state: no grid, 8 px grid, 16 px grid, then back to no grid." },
     "scncanvas.grid_8px": {
       "text": "8 px grid"
     },
@@ -4300,12 +4338,6 @@
     "txtinsp.missing_glyphs": {
       "text": "✕ missing from “{font}”: {glyphs}"
     },
-    "sceneinsp.inherited_transition": {
-      "text": "From project ({transition})"
-    },
-    "sceneinsp.transition_frames": {
-      "text": ", {frames} frames"
-    },
     "scncanvas.deleted_elements": {
       "singular": "Deleted {n} element",
       "plural": "Deleted {n} elements"
@@ -4363,9 +4395,6 @@
     },
     "projinsp.fade_to_white": {
       "text": "Fade to white"
-    },
-    "sceneinsp.from_project": {
-      "text": "From project"
     },
     "projset.project_backdrop_color": {
       "text": "Project backdrop color"
@@ -4664,7 +4693,7 @@
     "datagrid.column_tip": { "text": "A double-click on a name renames it. A right-click changes its type or removes it." },
     "datagrid.text_preview_title": { "text": "Referenced text" },
     "datainsp.type_title": { "text": "Column type" },
-    "datainsp.type_tip": { "text": "Controls the values accepted by this column. Changing it converts existing values." },
+    "datainsp.type_tip": { "text": "Controls the values accepted by this column. Changing it clears the existing values (Undo restores them)." },
     "palgrid.export_title": { "text": "Export palette" },
     "palgrid.reserved_title": { "text": "Reserved color" },
     "colins.hex_title": { "text": "Hexadecimal color" },

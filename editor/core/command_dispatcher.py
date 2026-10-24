@@ -506,6 +506,7 @@ class CommandDispatcher(EventEmitter):
             return False
         actor.components = copy.deepcopy(prefab.actor.components)
         actor.pal_bank = prefab.actor.pal_bank
+        actor.is_player = prefab.actor.is_player
         actor.notes = prefab.actor.notes
         self._save_scene()
         self._emit("scene_sprites_changed")
@@ -532,6 +533,7 @@ class CommandDispatcher(EventEmitter):
             return False
         prefab.actor.components = copy.deepcopy(actor.components)
         prefab.actor.pal_bank = actor.pal_bank
+        prefab.actor.is_player = actor.is_player
         prefab.actor.notes = actor.notes
         self.save_prefab(prefab)
         # cf. relink_actor_to_prefab — même badge, même besoin de tenir à

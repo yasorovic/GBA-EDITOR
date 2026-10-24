@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "scenes": {
+    "Village": {
+      "folders": [],
+      "hidden_members": [
+        "ui:Village"
+      ],
+      "hidden_folders": []
+    },
+    "Maison": {
+      "folders": [],
+      "hidden_members": [
+        "ui:Village"
+      ],
+      "hidden_folders": []
+    }
+  }
+}

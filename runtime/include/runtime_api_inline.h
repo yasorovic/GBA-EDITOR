@@ -377,7 +377,7 @@ static inline void actor_set_appearance(Actor* s, int n) {
     o->appearance = (u8)n;
     o->frame = 0; o->timer = 0; o->anim_state = 0;
     o->frame_w = a->frame_w; o->frame_h = a->frame_h;
-    o->pal_bank = a->pal_bank; o->auto_dir = a->auto_dir;
+    o->pal_bank = a->pal_bank; o->facing_auto = a->facing_auto;
 }
 static inline int actor_get_appearance(const Actor* s) { return actor_oam_entry(s)->appearance; }
 /* État courant, en LECTURE — comparable par son nom (self.anim == "Walk"),
@@ -496,10 +496,17 @@ static inline Vec2 actor_get_sprite_pivot(const Actor* s) {
 /* Direction 8-axes pour l'animation (0=override, 1=N..8=NW) */
 static inline int  actor_get_dir(const Actor* s)          { static const s8 _lut[3][3]={{8,1,2},{7,0,3},{6,5,4}}; return _lut[s->dir_y+1][s->dir_x+1]; }
 static inline void actor_set_dir(Actor* s, int dir)       { static const s8 _dx[]={0,0,1,1,1,0,-1,-1,-1}; static const s8 _dy[]={0,-1,-1,0,1,1,1,0,-1}; if(dir>=0&&dir<=8){s->dir_x=_dx[dir];s->dir_y=_dy[dir];} }
-static inline void actor_set_auto_dir(Actor* s, int v)    { actor_oam_entry(s)->auto_dir=v?1:0; }
-/* La lecture manquait : `auto_dir` s'écrivait sans pouvoir se relire, donc un
-   script qui voulait le basculer devait tenir son propre drapeau à côté. */
-static inline int  actor_get_auto_dir(const Actor* s)     { return actor_oam_entry(s)->auto_dir; }
+static inline void actor_set_facing_auto(Actor* s, int v) { actor_oam_entry(s)->facing_auto=v?1:0; }
+static inline int  actor_get_facing_auto(const Actor* s)  { return actor_oam_entry(s)->facing_auto; }
+
+/* Regard (self.facing) : même écriture à deux portes que la direction, vecteur ou boussole. */
+static inline int  actor_get_facing_named(const Actor* s) { static const s8 _lut[3][3]={{8,1,2},{7,0,3},{6,5,4}}; return _lut[s->facing_y+1][s->facing_x+1]; }
+static inline void actor_set_facing_named(Actor* s, int dir) { static const s8 _dx[]={0,0,1,1,1,0,-1,-1,-1}; static const s8 _dy[]={0,-1,-1,0,1,1,1,0,-1}; if(dir>=0&&dir<=8){s->facing_x=_dx[dir];s->facing_y=_dy[dir];} }
+static inline Vec2 actor_get_facing(const Actor* s) { return (Vec2){ s->facing_x, s->facing_y }; }
+static inline void actor_set_facing(Actor* s, Vec2 v) {
+    s->facing_x = (v.x > 0) - (v.x < 0);   /* clamp à -1/0/1 */
+    s->facing_y = (v.y > 0) - (v.y < 0);
+}
 
 /* Direction : vecteur discret (-1|0|1) indépendant du flip */
 static inline Vec2 actor_get_direction(const Actor* s) {

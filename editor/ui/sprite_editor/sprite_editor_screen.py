@@ -10,8 +10,10 @@ from __future__ import annotations
 
 from typing import Optional
 
+from PyQt6.QtCore import QSettings
 from PyQt6.QtWidgets import QWidget, QHBoxLayout
 
+from core.app_info import APP_NAME
 from ui.common.theme import C
 from ui.common.three_column_body import ThreeColumnBody
 from core.models.sprite import AnimState, SpriteAsset, StateDirection
@@ -55,9 +57,13 @@ class SpriteEditorScreen(QWidget):
         if self._project and self._right._sprite:
             self._center.load_sprite(self._right._sprite, self._project)
 
+    def _selection_key(self) -> str:
+        return f"last_sprite/{self._project.root}"
+
     def load_project(self, project: Project):
         self._project = project
         self._left.load_project(project)
+        self._left.select_default(str(QSettings(APP_NAME, "SpriteEditor").value(self._selection_key(), "")))
 
     def reload_image(self):
         """Un PNG de sprite a changé sur le disque : le centre relit la planche (la library, lui, restaure
@@ -80,6 +86,9 @@ class SpriteEditorScreen(QWidget):
         self._left.select_sprite(name)
 
     def _on_sprite_selected(self, sprite: SpriteAsset):
+        if sprite is not None and self._project is not None:
+            # Préférence d'affichage locale (comme le repli des libraries) : elle suit l'auteur, pas le projet.
+            QSettings(APP_NAME, "SpriteEditor").setValue(self._selection_key(), sprite.name)
         self._center.load_sprite(sprite, self._project)
         self._right.load_sprite(sprite, self._project)
 

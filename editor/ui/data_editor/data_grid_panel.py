@@ -22,20 +22,23 @@ from PyQt6.QtWidgets import (
 )
 from ui.common.popup import MessageBox as QMessageBox
 from PyQt6.QtGui import QColor, QBrush, QPen, QPalette
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QModelIndex, QPersistentModelIndex, QSize
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QModelIndex, QPersistentModelIndex, QSize, QEvent, QTimer
 
 from ui.common.theme import C, T, S, QSS, ui_font
-from ui.common.widgets import W, ScriptPickerPopup
+from ui.common.widgets import W, AssetPickerPopup
 from ui.common.palette_swatch import bank_icon
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 from ui.common import icons
 from ui.common.color_menu import add_color_actions
+from ui.common.asset_kinds import CREATABLE_REFERENCES, create_referenced_asset
+from ui.common.deferred_writes import schedule_unwatched
 
 from core.models.unique_name import unique_name
+from core.models.text import key_from_path
 from core.models.data_table import (DataTable, DataColumn, COLUMN_CHOICES,
                                     COLUMN_REFERENCES)
-from core.history import get_history, RemoveListItemCmd, SetFieldCmd
+from core.history import get_history, RemoveListItemCmd, SetFieldCmd, AddListItemCmd, MacroCmd
 from core.text_sequences import sequences
 from core.text_table_link import (link_state, key_column,
                                   row_changes, LinkTableCmd, UnlinkTableCmd)
@@ -229,7 +232,7 @@ class _CellDelegate(QStyledItemDelegate):
         entries = [(label("common.none_paren"), "", None)]
         project = self._panel._project
         icon = (icons.get(column.type, C.TEXT_DIM) if column.type in
-                {"sprite", "background", "palette", "scene", "camera", "font", "sfx", "music"}
+                {"sprite", "background", "prefab", "palette", "scene", "camera", "font", "sfx", "music"}
                 else None)
         for name in self._panel.choices_for(column):
             entry_icon = icon
@@ -238,8 +241,11 @@ class _CellDelegate(QStyledItemDelegate):
                 if bank:
                     entry_icon = bank_icon(bank)
             entries.append((name, name, entry_icon))
-        popup = ScriptPickerPopup(entries, C.ACCENT, parent=parent, new_label=None)
+        creatable = column.type == "text" or column.type in CREATABLE_REFERENCES
+        popup = AssetPickerPopup(entries, C.ACCENT, parent=parent,
+                                  new_label=label("datagrid.create_reference") if creatable else None)
         popup.setFixedWidth(max(260, min(420, option.rect.width())))
+        popup.new_requested.connect(lambda: self._panel.create_reference(target, column))
 
         def picked(value):
             # Un rechargement de la table invalide l'index : un ancien popup
@@ -384,8 +390,11 @@ class DataGridPanel(QWidget):
         self._header.sectionResized.connect(self._on_section_resized)
         self._tbl.setItemDelegate(_CellDelegate(self))
         self._tbl.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self._tbl.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked
-                                  | QAbstractItemView.EditTrigger.EditKeyPressed)
+        # Un premier clic sélectionne la case, un clic sur la case déjà courante l'édite (`eventFilter`) : Qt n'offre que
+        # `SelectedClicked`, qui compte la LIGNE sélectionnée, pas la case.
+        self._tbl.setEditTriggers(QAbstractItemView.EditTrigger.EditKeyPressed)
+        self._pressed_current = None    # (index persistant, était la case courante) du dernier appui gauche
+        self._tbl.viewport().installEventFilter(self)
         self._tbl.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._tbl.customContextMenuRequested.connect(self._row_menu)
         self._tbl.selectionModel().currentChanged.connect(self._on_current_index)
@@ -401,6 +410,23 @@ class DataGridPanel(QWidget):
         root.addWidget(self._empty)
         self._show_empty(True)
 
+    def eventFilter(self, watched, event):
+        if watched is self._tbl.viewport() and self._table is not None:
+            kind = event.type()
+            if kind in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonDblClick)                     and event.button() == Qt.MouseButton.LeftButton:
+                index = self._tbl.indexAt(event.position().toPoint())
+                # Avant que la vue ne déplace la case courante : c'est ce qui distingue « sélectionner » de « éditer ».
+                self._pressed_current = (QPersistentModelIndex(index),
+                                         index.isValid() and index == self._tbl.currentIndex())
+            elif kind == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton                     and self._pressed_current is not None:
+                pressed, was_current = self._pressed_current
+                self._pressed_current = None
+                index = self._tbl.indexAt(event.position().toPoint())
+                if (was_current and event.modifiers() == Qt.KeyboardModifier.NoModifier
+                        and pressed.isValid() and index.isValid() and index == QModelIndex(pressed)):
+                    QTimer.singleShot(0, lambda: pressed.isValid() and self._tbl.edit(QModelIndex(pressed)))
+        return super().eventFilter(watched, event)
+
     # ── Ce que la grille sait de sa table ─────────────────────────
 
     def column_at(self, index: int) -> Optional[DataColumn]:
@@ -415,6 +441,38 @@ class DataGridPanel(QWidget):
     @property
     def table_name(self) -> str:
         return self._table.name if self._table else ""
+
+    def create_reference(self, target: QPersistentModelIndex, column: DataColumn):
+        """« Create new » du sélecteur d'une cellule : l'élément naît comme depuis sa library, puis la cellule le cite."""
+        if self._project is None or self._table is None or not target.isValid():
+            return
+        if column.type == "text":
+            self._create_text_for(target.row(), column)
+            return
+        name = create_referenced_asset(self._project, column.type)
+        if name and target.isValid():
+            target.model().setData(QModelIndex(target), name, Qt.ItemDataRole.EditRole)
+
+    def _create_text_for(self, row_index: int, column: DataColumn):
+        """Un texte rangé sous le dossier `text` puis le nom de la table (`text_<table>_01`…), cité par la cellule, en UN pas d'historique.
+        La clé est proposée par le rangement, jamais tapée ; le contenu s'écrit ensuite dans l'écran Texte."""
+        project, table = self._project, self._table
+        taken = project.text_keys()
+        number = 1
+        while key_from_path(["text", table.name, f"{number:02d}"], taken=set()) in taken:
+            number += 1
+        text = project.new_text(path=["text", table.name, f"{number:02d}"])
+        row = table.rows[row_index]
+
+        def persist_texts():
+            schedule_unwatched("save_texts", project.save_texts)
+            from core.command_dispatcher import get_dispatcher
+            get_dispatcher().notify_texts_changed()
+
+        add = AddListItemCmd(project.texts, text, persist_fn=persist_texts, label=f"New text {text.key}")
+        write = SetCellCmd(table, row, column.name, table.value(row, column), text.key, self._persist)
+        get_history().push(MacroCmd([add, write], f"{table.name}.{column.name}"))
+        self._after_change()
 
     def _persist(self):
         if self._project and self._table:

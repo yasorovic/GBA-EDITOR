@@ -19,6 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from core.models.input_expression import InputExpressionError, parse_input_expression
+from core.models.settings import DEFAULT_INTERACT_BUTTONS, INTERACT_INPUT_NAME
 
 # Anneau minimal : `released` lit le frame précédent, il en faut donc au moins
 # deux (le courant et celui d'avant).
@@ -124,8 +125,13 @@ def compute_input_layout(p) -> InputLayout:
 
     layout = InputLayout()
 
+    # ── L'entrée interne `interact` — toujours là, avant les accords de l'auteur, qui ne
+    # peuvent pas la redéfinir (le validateur refuse le nom ; ici elle gagne quoi qu'il arrive).
+    interact_buttons = list(getattr(settings, "interact_buttons", None) or DEFAULT_INTERACT_BUTTONS)
+    layout.masks[INTERACT_INPUT_NAME] = _mask_c(interact_buttons)
+
     # ── Accords (InputBinding) — un ET direct des boutons, pas de parseur ──
-    seen_names = set()
+    seen_names = {INTERACT_INPUT_NAME}
     for binding in bindings:
         name = str(getattr(binding, "name", "") or "").strip()
         buttons = list(getattr(binding, "buttons", []) or [])

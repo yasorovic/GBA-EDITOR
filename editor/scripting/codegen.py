@@ -2672,6 +2672,7 @@ class CodeGen:
             sig = sig_tpl.format(prefix=self.ctx.actor_sym)
             sig = sig.replace("Actor* self", "Actor* self __attribute__((unused))")
             sig = sig.replace("Actor* other", "Actor* other __attribute__((unused))")
+            sig = sig.replace("Actor* who", "Actor* who __attribute__((unused))")
             sig = sig.replace("int event_id", "int event_id __attribute__((unused))")
             sig = sig.replace("int value", "int value __attribute__((unused))")
             sig = sig.replace("u8 my_box", "u8 my_box __attribute__((unused))")

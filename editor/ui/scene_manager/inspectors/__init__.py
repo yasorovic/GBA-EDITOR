@@ -13,6 +13,7 @@ ARCHITECTURE.md pour le détail de la répartition.
 from ui.scene_manager.inspectors.component_editors import sprite    # noqa: F401
 from ui.scene_manager.inspectors.component_editors import collision  # noqa: F401
 from ui.scene_manager.inspectors.component_editors import sfx        # noqa: F401
+from ui.scene_manager.inspectors.component_editors import interactive  # noqa: F401
 from ui.scene_manager.inspectors.component_editors import script     # noqa: F401
 
 from ui.scene_manager.inspectors.actor_inspector import ActorInspector, ComponentListWidget

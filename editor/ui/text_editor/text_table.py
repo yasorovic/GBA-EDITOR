@@ -368,7 +368,9 @@ class TextTable(QWidget):
         self._revealed_ids.clear()
         self._apply_filter()
 
-    def focus_entry(self, tid):
+    def focus_entry(self, tid, *, edit: bool = True):
+        """Montre l'entrée au-delà des filtres et la sélectionne ; `edit` lui donne aussi le curseur
+        (création), à éviter quand on ne fait que NAVIGUER vers elle."""
         self._revealed_ids.add(tid)
         self._apply_filter()
         self.select_by_ids([tid])
@@ -378,7 +380,8 @@ class TextTable(QWidget):
             self._tree.scrollToItem(row)
             entry = self._entry_of(row)
             entry.collapse.setChecked(False)
-            entry.edit.setFocus()
+            if edit:
+                entry.edit.setFocus()
             self._materialize_visible()
 
     def refresh_sequence_contexts(self):

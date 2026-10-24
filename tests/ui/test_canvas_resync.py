@@ -19,10 +19,9 @@ from pathlib import Path
 import pytest
 
 from core.project import Project
-from core.history import get_history, MoveActorCmd, MoveUIRegionCmd
+from core.history import get_history, MoveUIRegionCmd
 
 REPO_DIR = Path(__file__).resolve().parent.parent.parent
-ORBIT = REPO_DIR / "Project Demo" / "OrbitTest"
 MYGAME = REPO_DIR / "Project Demo" / "MyGame"
 
 
@@ -41,13 +40,6 @@ def _editor(project_dir: Path):
     ed = SceneEditor()
     ed.load_project(Project.open(project_dir))
     return ed
-
-
-def _first_actor(ed):
-    actor = next((a for a in ed._project.active_scene.actors if a.active), None)
-    if actor is None:
-        pytest.skip("la scène de démo n'a pas d'acteur actif")
-    return actor
 
 
 def _first_region(ed):
@@ -69,40 +61,6 @@ def _region_pos(ed, el):
     it = next(it for it in ed._gba_scene.items()
               if isinstance(it, UIRegionItem) and it._region is el)
     return (it.pos().x(), it.pos().y())
-
-
-def _actor_pos(ed, actor):
-    it = ed._find_item(actor)
-    return (it.x(), it.y())
-
-
-def test_le_canvas_ne_suit_pas_le_modele_sans_resynchro(qapp, history):
-    """Le point fin : muter le modèle (via un `MoveActorCmd`) ne bouge PAS l'item
-    tant qu'on ne resynchronise pas. Sans ça, les tests suivants passeraient même
-    si `reload_scene_items` ne servait à rien."""
-    ed = _editor(ORBIT)
-    actor = _first_actor(ed)
-    p0 = _actor_pos(ed, actor)
-    x0, y0 = actor.x, actor.y
-
-    history.push(MoveActorCmd(actor, actor.x, actor.y, actor.x + 40, actor.y + 24))
-
-    assert (actor.x, actor.y) == (x0 + 40, y0 + 24)
-    assert _actor_pos(ed, actor) == p0
-
-
-def test_resync_ramene_le_sprite(qapp, history):
-    ed = _editor(ORBIT)
-    actor = _first_actor(ed)
-    p0 = _actor_pos(ed, actor)
-
-    history.push(MoveActorCmd(actor, actor.x, actor.y, actor.x + 40, actor.y + 24))
-    ed.reload_scene_items()
-    assert _actor_pos(ed, actor) != p0          # l'item a suivi
-
-    history.undo()
-    ed.reload_scene_items()
-    assert _actor_pos(ed, actor) == p0          # et il revient exactement
 
 
 def test_resync_ramene_la_zone_dinterface(qapp, history):

@@ -24,6 +24,50 @@ from ui.common.cursor_unit import CursorUnitButton
 BAR_HEIGHT = 36
 
 
+class CycleToolButton(QToolButton):
+    """Un bouton, plusieurs états : un clic passe au suivant, le dernier revient à zéro.
+
+    Même apparence que `CanvasTopBar.add_toggle` (l'état coché en est le fond) : l'état 0 est le repos, tout autre état l'allume."""
+
+    state_changed = pyqtSignal(int)
+
+    def __init__(self, states: list, parent=None):
+        super().__init__(parent)
+        self._states = list(states)          # [(clé d'icône, infobulle)]
+        self._state = 0
+        self.setCheckable(True)              # pour le sélecteur :checked ; l'état se pose à la main
+        self.setIconSize(QSize(18, 18))
+        self.setFixedSize(32, 32)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.setStyleSheet(
+            f"QToolButton{{border:1px solid {C.BORDER};background:{C.BG_INPUT};"
+            f"border-radius:4px;padding:0px;margin:0px;}}"
+            f"QToolButton:hover{{background:{C.BG_HOVER};border-color:{C.BORDER_MID};}}"
+            f"QToolButton:checked{{background:{C.BG_SEL};border:1px solid {C.ACCENT};}}"
+        )
+        self.clicked.connect(lambda: self.set_state((self._state + 1) % len(self._states)))
+        self._refresh()
+
+    @property
+    def state(self) -> int:
+        return self._state
+
+    def set_state(self, state: int) -> None:
+        state = state % len(self._states)
+        changed = state != self._state
+        self._state = state
+        self._refresh()
+        if changed:
+            self.state_changed.emit(state)
+
+    def _refresh(self) -> None:
+        icon_key, tip = self._states[self._state]
+        self.setIcon(icons.get(icon_key, icons.COLOR_DEFAULT, C.ACCENT))
+        self.setToolTip(tip)
+        self.setChecked(self._state > 0)
+
+
 class CanvasTopBar(QFrame):
     zoom_step_asked = pyqtSignal(int)   # -1 = dézoomer, +1 = zoomer
     fit_asked = pyqtSignal()
@@ -120,6 +164,17 @@ class CanvasTopBar(QFrame):
         self._extras_at += 1
         return b
 
+    def add_state_toggle(self, states: list, slot=None) -> "CycleToolButton":
+        """Bouton à états inséré dans la zone du milieu, comme `add_toggle` : chaque clic passe à l'état suivant, puis revient au premier.
+        `states` = [(icône, infobulle), …] ; l'état 0 est « inactif » (fond neutre), les autres portent le fond de l'état coché.
+        `slot(état)` est appelé à chaque changement."""
+        b = CycleToolButton(states)
+        if slot is not None:
+            b.state_changed.connect(slot)
+        self._lay.insertWidget(self._extras_at, b)
+        self._extras_at += 1
+        return b
+
     def add_action(self, icon_key: str, tip: str, slot=None) -> QToolButton:
         """Bouton d'action (non cochable) inséré dans la zone du milieu — même
         emplacement que add_toggle, mais pour un geste ponctuel (ex: ouvrir
@@ -165,39 +220,48 @@ class CanvasTopBar(QFrame):
             self._lay.addWidget(s)
         return s
 
-    def add_choice(self, tip_for, values: list, current, slot=None) -> dict:
-        """Petit sélecteur à choix exclusifs (ex : la taille de la brosse), posé dans la zone des extras. `tip_for(valeur)`
-        rend l'infobulle d'un choix ; `slot(valeur)` est appelé à chaque changement. Rend {valeur: bouton}."""
-        from PyQt6.QtWidgets import QButtonGroup
-        group = QButtonGroup(self)
-        group.setExclusive(True)
+    def add_cycle(self, icon_key: str, tip_for, values: list, slot=None) -> QToolButton:
+        """Une icône fixe (non cliquable) suivie d'UN bouton qui fait défiler `values` : un clic passe à la valeur suivante,
+        puis revient à la première après la dernière (ex : la taille de la brosse). `tip_for(valeur)` rend l'infobulle de
+        la valeur affichée ; `slot(valeur)` est appelé à chaque changement. Rend le bouton ; sa valeur courante est
+        `button.property("value")`."""
         box = QFrame()
         box.setStyleSheet("background:transparent; border:none;")
         row = QHBoxLayout(box)
         row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(2)
-        buttons = {}
-        for value in values:
-            b = QToolButton()
+        row.setSpacing(4)
+
+        glyph = QLabel()
+        glyph.setPixmap(icons.get(icon_key, C.TEXT_DIM).pixmap(QSize(16, 16)))
+        glyph.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        row.addWidget(glyph)
+
+        b = QToolButton()
+        b.setFont(self._font)
+        b.setFixedSize(34, 28)
+        b.setCursor(Qt.CursorShape.PointingHandCursor)
+        b.setStyleSheet(
+            f"QToolButton{{border:1px solid {C.BORDER};background:{C.BG_INPUT};color:{C.TEXT_NORM};"
+            f"border-radius:4px;padding:0px;}}"
+            f"QToolButton:hover{{background:{C.BG_HOVER};border-color:{C.BORDER_MID};}}")
+
+        def show_value(value):
+            b.setProperty("value", value)
             b.setText(str(value))
-            b.setFont(self._font)
-            b.setCheckable(True)
-            b.setChecked(value == current)
-            b.setFixedSize(30, 28)
             b.setToolTip(tip_for(value))
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.setStyleSheet(
-                f"QToolButton{{border:1px solid {C.BORDER};background:{C.BG_INPUT};color:{C.TEXT_NORM};"
-                f"border-radius:4px;padding:0px;}}"
-                f"QToolButton:hover{{background:{C.BG_HOVER};border-color:{C.BORDER_MID};}}"
-                f"QToolButton:checked{{background:{C.BG_SEL};border:1px solid {C.ACCENT};color:{C.ACCENT};}}")
+
+        def advance():
+            at = values.index(b.property("value"))
+            value = values[(at + 1) % len(values)]
+            show_value(value)
             if slot is not None:
-                b.clicked.connect(lambda _=False, v=value: slot(v))
-            group.addButton(b)
-            row.addWidget(b)
-            buttons[value] = b
+                slot(value)
+
+        show_value(values[0])
+        b.clicked.connect(advance)
+        row.addWidget(b)
         self.add_widget(box)
-        return buttons
+        return b
 
     def add_widget(self, widget) -> None:
         """Insère un widget quelconque dans la zone des extras (ex: champ de

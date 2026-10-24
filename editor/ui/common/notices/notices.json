@@ -75,12 +75,12 @@
     "collision.x": {
       "tone": "accent",
       "code": "self.collision.x",
-      "text": "Horizontal offset of the hitbox (px)."
+      "text": "Horizontal offset of the hitbox (px), counted from the actor position: the top-left corner of the sprite (the centre of its frame once an affine transform is on). To centre an 8 px box on a 16 px sprite, use 4."
     },
     "collision.y": {
       "tone": "accent",
       "code": "self.collision.y",
-      "text": "Vertical offset of the hitbox (px)."
+      "text": "Vertical offset of the hitbox (px), counted from the actor position: the top-left corner of the sprite (the centre of its frame once an affine transform is on). For feet on a 16 px sprite, use about 10 with a height of 6."
     },
     "collisions.empty": {
       "tone": "info",

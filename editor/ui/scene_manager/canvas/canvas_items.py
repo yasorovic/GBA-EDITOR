@@ -855,11 +855,14 @@ class GridItem(QGraphicsItem):
         return QRectF(0, 0, self._w, self._h)
 
     def paint(self, painter: QPainter, option, widget=None):
+        # Les lignes INVERSENT ce qu'elles recouvrent (mode Difference, trait blanc) : un blanc translucide
+        # disparaissait sur un décor clair, un noir sur un décor sombre ; l'inversion se lit sur les deux.
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Difference)
         # Grille fine 8px
-        pen8 = QPen(QColor(255, 255, 255, 22))
+        pen8 = QPen(QColor(255, 255, 255, 90))
         pen8.setWidth(0)
         # Grille large 16px (toujours visible au-dessus de la fine)
-        pen16 = QPen(QColor(255, 255, 255, 55))
+        pen16 = QPen(QColor(255, 255, 255, 160))
         pen16.setWidth(0)
         # Seules les lignes de la zone EXPOSÉE sont tracées (au glisser d'un
         # item, Qt ne repeint qu'une petite région), et par lots : un appel Qt
@@ -897,6 +900,9 @@ class ActorBoxOverlay(QGraphicsItem):
     _C_TRIGGER = QColor(70, 220, 120, 100)
     _B_SOLID = QColor(255, 90, 90, 240)
     _B_TRIGGER = QColor(90, 240, 140, 240)
+    # La zone d'un composant Interactive (tag réservé) : une teinte à part, ni corps ni capteur.
+    _C_INTERACT = QColor(255, 196, 60, 90)
+    _B_INTERACT = QColor(255, 206, 90, 240)
 
     def __init__(self, canvas_w: int, canvas_h: int, parent=None):
         super().__init__(parent)
@@ -904,16 +910,19 @@ class ActorBoxOverlay(QGraphicsItem):
         self._canvas_h = canvas_h
         self._actors: list = []
         self._var_defaults: dict = {}   # (src, name) -> valeur par défaut (aperçu des refs)
+        self._sprites: dict = {}        # id(acteur) -> son sprite affiché (taille de la boîte propre)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
         self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self.setZValue(160)
         self.setVisible(False)
 
-    def set_actors(self, actors: list, var_defaults: dict | None = None):
+    def set_actors(self, actors: list, var_defaults: dict | None = None, sprites: dict | None = None):
         self._actors = list(actors)
         if var_defaults is not None:
             self._var_defaults = var_defaults
+        if sprites is not None:
+            self._sprites = sprites
         self.setVisible(bool(self._actors))
         self.update()
 
@@ -924,7 +933,8 @@ class ActorBoxOverlay(QGraphicsItem):
         return QRectF(-32768, -32768, 65536, 65536)
 
     def paint(self, painter: QPainter, option, widget=None):
-        from core.models.components import CollisionBoxComponent
+        from core.models.components import owner_effective_boxes
+        from core.models.settings import INTERACTIVE_COLLISION_TAG
         from core.models.field_value import FieldValue
 
         # Un champ peut être une référence de variable : on résout à la valeur
@@ -940,10 +950,13 @@ class ActorBoxOverlay(QGraphicsItem):
 
         pen_s = QPen(self._B_SOLID, 0)
         pen_t = QPen(self._B_TRIGGER, 0)
+        pen_i = QPen(self._B_INTERACT, 0)
         for actor in self._actors:
             at = live.get(id(actor))
-            for comp in actor.components:
-                if not isinstance(comp, CollisionBoxComponent) or not comp.active:
+            # Les boîtes que le build pose : celles de l'auteur, puis la boîte propre du composant
+            # Interactive (la MÊME fonction que le codegen, jamais un repli à part).
+            for comp in owner_effective_boxes(actor, self._sprites.get(id(actor))):
+                if not comp.active:
                     continue
                 if at is not None:
                     ax, ay = round(at.x()), round(at.y())
@@ -954,7 +967,10 @@ class ActorBoxOverlay(QGraphicsItem):
                 y = ay + FieldValue.parse(comp.y).px(resolve)
                 w = FieldValue.parse(comp.w).px(resolve)
                 h = FieldValue.parse(comp.h).px(resolve)
-                if comp.solid:
+                if (comp.tag or "body") == INTERACTIVE_COLLISION_TAG:
+                    painter.fillRect(x, y, w, h, self._C_INTERACT)
+                    painter.setPen(pen_i)
+                elif comp.solid:
                     painter.fillRect(x, y, w, h, self._C_SOLID)
                     painter.setPen(pen_s)
                 else:

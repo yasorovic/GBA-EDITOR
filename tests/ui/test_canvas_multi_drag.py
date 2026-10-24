@@ -18,6 +18,15 @@ from core.project import Project
 DEMO = Path(__file__).resolve().parents[2] / "Project Demo" / "Platformer"
 
 
+@pytest.fixture(autouse=True)
+def _grid_choice_stays_in_the_test(tmp_path, monkeypatch):
+    """La grille retenue d'une session à l'autre ne touche jamais les réglages de l'auteur."""
+    from PyQt6.QtCore import QSettings
+    from ui.scene_manager.scene_canvas import SceneEditor
+    ini = str(tmp_path / "canvas.ini")
+    monkeypatch.setattr(SceneEditor, "_grid_settings", staticmethod(lambda: QSettings(ini, QSettings.Format.IniFormat)))
+
+
 @pytest.fixture
 def editor(qapp, tmp_path):
     if not DEMO.exists():
@@ -123,8 +132,8 @@ def test_une_camera_selectionnee_ne_declenche_une_sauvegarde_que_si_elle_a_bouge
     QApplication.processEvents()
     emitted = []
     editor.scene_changed.connect(lambda: emitted.append(1))
-    editor._chk_grid8.setChecked(True)                    # une repeinture de la scène, sans rien déplacer
-    editor._chk_grid8.setChecked(False)
+    editor._chk_grid.set_state(1)                         # une repeinture de la scène, sans rien déplacer
+    editor._chk_grid.set_state(0)
     QApplication.processEvents()
     editor._on_scene_item_changed()
     assert emitted == []
@@ -190,3 +199,33 @@ def test_defaire_un_renommage_sauvegarde_la_scene_de_l_acteur(editor):
     saved.clear()
     get_history().undo()
     assert saved == [scene]
+
+
+def test_un_seul_bouton_parcourt_pas_de_grille_8_puis_16_et_revient(editor):
+    from PyQt6.QtWidgets import QApplication
+    button, scene = editor._chk_grid, editor._gba_scene
+
+    def grid():
+        item = scene._grid_item
+        return (item.isVisible(), item._cell) if item is not None else (False, None)
+    assert button.state == 0 and not button.isChecked() and grid()[0] is False
+    seen = []
+    for _ in range(4):
+        button.click()
+        QApplication.processEvents()
+        seen.append((button.state, button.isChecked(), grid()))
+    assert [s[0] for s in seen] == [1, 2, 0, 1]
+    assert [s[1] for s in seen] == [True, True, False, True]
+    assert seen[0][2] == (True, 8) and seen[1][2] == (True, 16) and seen[2][2][0] is False
+
+
+def test_la_grille_choisie_revient_a_la_prochaine_ouverture(editor, tmp_path):
+    from ui.scene_manager.scene_canvas import SceneEditor
+    editor._chk_grid.set_state(2)
+    second = SceneEditor()
+    second.show()
+    assert second._chk_grid.state == 2 and second._chk_grid.isChecked()
+    assert second._gba_scene._grid_item is not None and second._gba_scene._grid_item.isVisible()
+    editor._chk_grid.set_state(0)
+    third = SceneEditor()
+    assert third._chk_grid.state == 0

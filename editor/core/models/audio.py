@@ -191,6 +191,7 @@ class _MigrateVolumeMixin:
 @dataclass
 class Sfx(_MigrateVolumeMixin, Resource):
     sidecar_extension = asset_extensions.SFX
+    source_field = "asset"
     name: str = "sfx"
     asset: Optional[str] = None
     volume: int = 100          # POURCENTAGE — cf. _MigrateVolumeMixin
@@ -384,6 +385,7 @@ class MusicCue:
 @dataclass
 class Music(_MigrateVolumeMixin, Resource):
     sidecar_extension = asset_extensions.MUSIC
+    source_field = "asset"
     name: str = "music"
     asset: Optional[str] = None
     loop: bool = True
@@ -495,6 +497,7 @@ class Jingle(Music):
     peut pas diverger de l'emplacement du fichier, et chaque écran, chaque
     contrôle demande l'une ou l'autre famille par son nom."""
     sidecar_extension = asset_extensions.JINGLE
+    source_field = "asset"
     name: str = "jingle"
     # Ce que devient la MUSIQUE pendant que ce jingle sonne (le jingle a sa propre couche : elle ne s'arrête pas d'elle-même).
     # `music_policy` : « mix » (elle continue, le défaut — l'ancien comportement), « duck » (elle descend à `duck_level` %

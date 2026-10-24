@@ -9,6 +9,7 @@ from dataclasses import dataclass, field, fields
 from typing import Optional
 
 from core.models.field_value import FieldValue, Raw, number_raw
+from core.models.settings import INTERACTIVE_COLLISION_TAG
 from core.models.unique_name import unique_name
 
 
@@ -31,6 +32,12 @@ class CollisionBoxComponent:
     solides » — aucune ligne du runtime ne l'a jamais fait, et la v0.6.3 l'a
     découvert en cherchant qui avait droit à la résolution.
 
+    `blocks_actors` est le BLOCAGE entre acteurs, un réglage à part et jamais par défaut : un acteur
+    en mouvement qui a une box `solid` est repoussé hors de toute box `blocks_actors` d'un autre
+    acteur (axe de plus faible pénétration), puis la carte de collision passe en dernier. Un coffre,
+    un PNJ, une caisse le posent ; la matrice de collision décide qui est arrêté par qui. Il ne touche
+    ni la vitesse (le script la possède) ni `grounded`.
+
     Handlers Lua appelés par le runtime C. Ils n'appartiennent PAS à ce
     composant : ce sont des fonctions globales du script de l'actor, et le
     codegen se contente de regarder lesquelles le .lua définit.
@@ -51,8 +58,12 @@ class CollisionBoxComponent:
     id: str = "collision"
     active: bool = True
     solid: bool = True      # arrêté par la carte de collision (cf. docstring)
+    blocks_actors: bool = False   # repousse les acteurs en mouvement qui ont une box solid (cf. docstring)
     tag: str = "body"       # ex: "body", "ground_check", "hitbox", "hurtbox"
-    x: int = 0              # offset relatif au pivot du sprite (pixels)
+    # Offset de la boîte depuis la POSITION DE L'ACTEUR, en pixels : le coin haut-gauche du sprite, ou le centre de son cadre
+    # quand `affine_transform` est actif (l'acteur est alors centré sur le cadre). Ce n'est PAS le pivot du sprite : pour une boîte de
+    # 8 px centrée sur un sprite de 16 px, x vaut 4 (et non -4).
+    x: int = 0
     y: int = 0
     w: int = 16
     h: int = 16
@@ -64,7 +75,7 @@ class SpriteComponent:
     active: bool = True
     sprite_name: Optional[str] = None   # référence SpriteAsset.name
     initial_state: str = "Idle"         # nom de l'AnimState joué au démarrage
-    auto_dir: bool = True               # calcule dir depuis vélocité automatiquement
+    facing_auto: bool = True            # le regard (facing) suit la dernière direction non nulle
     # Réserve un des 32 slots de matrice affine OAM de la scène pour ce sprite
     # (cf. ARCHITECTURE.md « Le modèle affine »), même si rotation/scale valent
     # leur défaut. C'est une capacité de RENDU : elle vit donc sur le composant
@@ -135,6 +146,109 @@ class SoundFxComponent:
     trigger: str = "manual"             # "manual" | SFX_AUTO_TRIGGERS | un nom de bouton/action
 
 
+# ── Interactive ───────────────────────────────────────────────────────
+# `InteractiveComponent` est un système AUTOMATISÉ : il réutilise les blocs que le codegen émet déjà
+# (gestes d'entrée, test de recouvrement par couple de tags) et délivre `on_interact(who)` au script de
+# l'acteur. Deux sélecteurs indépendants, qui se croisent :
+#   saisie      — le GESTE sur l'entrée interne `interact` (Project Settings → Input) ;
+#   interaction — comment l'interacteur (l'acteur portant le tag d'acteur « Player ») atteint la zone.
+INTERACT_INPUT_MODES: tuple[str, ...] = ("pressed", "hold", "released")
+INTERACT_AREA_MODES: tuple[str, ...] = ("hover", "facing")
+# Taille de la boîte implicite quand l'acteur n'a pas de sprite (et que l'auteur n'en impose pas).
+INTERACTIVE_DEFAULT_BOX = 16
+INTERACTIVE_DEFAULT_HOLD = 30
+
+
+@dataclass
+class InteractiveComponent:
+    """Rend un acteur interactif : `on_interact(who)` est appelé sur son script quand l'interacteur
+    fait le geste voulu sur la zone.
+
+    input_mode  : "pressed" (front montant), "hold" (tenu `hold_frames` frames d'affilée dans la zone),
+                  "released" (relâché ALORS QUE l'interacteur est encore dans la zone, sinon rien).
+    interaction : "hover" (l'interacteur recouvre la zone) ou "facing" (sa box, projetée dans son regard
+                  sur la portée réglée dans les settings et arrêtée par les murs, touche la zone).
+    box_tag     : "" = le composant crée sa propre boîte (tag `Interactive`, réservé), sans que l'auteur
+                  en dessine une ; sinon le tag d'une CollisionBoxComponent DÉJÀ présente sur l'acteur.
+    box_w/box_h : taille de la boîte implicite, en pixels ; 0 = automatique (le cadre du sprite, sinon
+                  16×16). Ignorés quand `box_tag` désigne une boîte existante."""
+    id: str = "interactive"
+    active: bool = True
+    input_mode: str = "pressed"
+    hold_frames: int = INTERACTIVE_DEFAULT_HOLD
+    interaction: str = "hover"
+    box_tag: str = ""
+    box_w: int = 0
+    box_h: int = 0
+
+    def __post_init__(self):
+        if self.input_mode not in INTERACT_INPUT_MODES:
+            self.input_mode = "pressed"
+        if self.interaction not in INTERACT_AREA_MODES:
+            self.interaction = "hover"
+        self.hold_frames = max(1, int(self.hold_frames or INTERACTIVE_DEFAULT_HOLD))
+        self.box_w = max(0, int(self.box_w or 0))
+        self.box_h = max(0, int(self.box_h or 0))
+
+
+def interactive_box_size(comp, frame_w: int = 0, frame_h: int = 0) -> tuple[int, int]:
+    """La taille de la boîte implicite d'un composant Interactive, en pixels : la valeur de l'auteur
+    si elle est posée, sinon le cadre du sprite, sinon 16×16.
+
+    UNE fonction pour le canvas et le codegen : le canvas dessine ce que le build émet, jamais un
+    repli à part."""
+    w = comp.box_w or frame_w or INTERACTIVE_DEFAULT_BOX
+    h = comp.box_h or frame_h or INTERACTIVE_DEFAULT_BOX
+    return int(w), int(h)
+
+
+MAX_COLLISION_BOXES = 4      # `MAX_BOXES`, actor_types_static.h
+
+
+def effective_collision_boxes(owner, frame_w: int = 0, frame_h: int = 0, centered: bool = False) -> list:
+    """Les boîtes que le build pose sur un porteur : ses CollisionBoxComponent (au plus MAX_BOXES),
+    PUIS la boîte propre de son composant Interactive actif quand celui-ci n'en désigne pas une
+    existante — tag réservé `Interactive`, taille de `interactive_box_size`, solide et bloquante pour
+    les acteurs en mode `facing` (un obstacle), ni l'un ni l'autre en mode `hover`.
+
+    La source UNIQUE des boîtes d'un porteur : le codegen l'appelle, et le canvas devra l'appeler
+    pour dessiner ce que le build émet. `centered` : le sprite est affine, l'acteur est centré sur
+    son cadre (cf. `center_on_frame`) et la boîte propre l'est donc aussi."""
+    boxes = [c for c in getattr(owner, "components", [])
+             if isinstance(c, CollisionBoxComponent)][:MAX_COLLISION_BOXES]
+    comp = next((c for c in getattr(owner, "components", [])
+                 if isinstance(c, InteractiveComponent) and c.active), None)
+    if comp is not None and not comp.box_tag and len(boxes) < MAX_COLLISION_BOXES:
+        w, h = interactive_box_size(comp, frame_w, frame_h)
+        # En mode `facing`, l'objet est un OBSTACLE contre lequel on s'arrête pour le viser (un coffre, un
+        # panneau) : sa boîte propre bloque les acteurs. En mode `hover`, on doit pouvoir la recouvrir
+        # (une plaque) : elle ne bloque pas.
+        obstacle = comp.interaction == "facing"
+        boxes.append(CollisionBoxComponent(
+            id="interactive", solid=obstacle, blocks_actors=obstacle, tag=INTERACTIVE_COLLISION_TAG,
+            x=-(w // 2) if centered else 0, y=-(h // 2) if centered else 0, w=w, h=h))
+    return boxes
+
+
+def owner_effective_boxes(owner, sprite) -> list:
+    """`effective_collision_boxes` d'un porteur dont le sprite affiché est `sprite` (ou None) : le
+    cadre du sprite donne la taille de la boîte propre, et un sprite affine la centre. L'appel unique
+    du build ET du canvas."""
+    comp = affine_sprite_component(owner)
+    return effective_collision_boxes(
+        owner,
+        sprite.frame_w if sprite else 0,
+        sprite.frame_h if sprite else 0,
+        centered=bool(comp is not None and comp.affine_transform))
+
+
+def interactive_box_index(boxes: list, comp) -> int:
+    """Le rang, dans `boxes` (cf. `effective_collision_boxes`), de la zone du composant : la boîte
+    propre, ou la première boîte portant le tag désigné. -1 si elle n'y est pas."""
+    tag = comp.box_tag or INTERACTIVE_COLLISION_TAG
+    return next((i for i, b in enumerate(boxes) if (b.tag or "body") == tag), -1)
+
+
 @dataclass
 class ScriptComponent:
     id: str = "script"
@@ -149,6 +263,7 @@ COMPONENT_REGISTRY: dict = {
     "collision_box": CollisionBoxComponent,
     "sprite":        SpriteComponent,
     "sound_fx":      SoundFxComponent,
+    "interactive":   InteractiveComponent,
     "script":        ScriptComponent,
 }
 

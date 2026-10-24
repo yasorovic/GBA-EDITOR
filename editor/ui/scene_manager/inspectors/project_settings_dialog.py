@@ -44,7 +44,8 @@ from PyQt6.QtCore import Qt, QEvent, QPointF
 
 from core.models.unique_name import unique_name
 from core.project import Project
-from core.models.settings import Language, InputBinding, InputSequence, pair_key
+from core.models.settings import (Language, InputBinding, InputSequence, pair_key,
+                                  RESERVED_COLLISION_TAGS)
 from core.models.components import CollisionBoxComponent
 from core.history import (get_history, SetFieldCmd, AddListItemCmd,
                           RemoveListItemCmd, RenameCollisionTagCmd,
@@ -499,6 +500,8 @@ class InputsPanel(QWidget):
         self._card.input_added.connect(self._add_input)
         self._card.input_removed.connect(self._remove_input)
         self._card.input_field_changed.connect(self._set_input_field)
+        self._card.interact_buttons_changed.connect(self._set_interact_buttons)
+        self._card.interact_reach_changed.connect(self._set_interact_reach)
         lay.addWidget(self._card)
 
         self._sequences_card = SequencesCard()
@@ -539,6 +542,28 @@ class InputsPanel(QWidget):
             binding, field, old, value,
             label=f"Input.{field}",
             persist_fn=self._refresh_both,
+        ))
+
+    def _set_interact_buttons(self, buttons: list):
+        settings = self._project.settings
+        old = list(settings.interact_buttons)
+        if old == buttons:
+            return
+        get_history().push(SetFieldCmd(
+            settings, "interact_buttons", old, list(buttons),
+            label="Input.interact",
+            persist_fn=self._refresh_both,
+        ))
+
+    def _set_interact_reach(self, reach: int):
+        settings = self._project.settings
+        old = int(settings.interact_reach)
+        if old == reach:
+            return
+        get_history().push(SetFieldCmd(
+            settings, "interact_reach", old, int(reach),
+            label="Input.interact_reach",
+            persist_fn=self._persist,
         ))
 
     def _add_input(self):
@@ -1043,6 +1068,14 @@ class CollisionsPanel(QWidget):
         name.setFont(QFont(T.MONO, T.SM))
         name.setStyleSheet(QSS.lineedit)
         name.setFixedWidth(_TAG_NAME_W)
+        reserved = ta in RESERVED_COLLISION_TAGS
+        if reserved:
+            # Un tag réservé garde son nom : le composant Interactive en dépend. Ses cases de
+            # matrice restent éditables.
+            name.setReadOnly(True)
+            name.setEnabled(False)
+            name.setToolTip(tooltip(title=label('projset.reserved_tag_title'),
+                                    body=label('projset.reserved_tag_tip')))
         name.editingFinished.connect(
             lambda _t=ta, _e=name: self._commit_rename(_t, _e.text()))
         row.addWidget(name)
@@ -1072,6 +1105,7 @@ class CollisionsPanel(QWidget):
             title=label('projset.remove_tag_title'),
             body=label('projset.remove_tag_used', n=n) if n else label('projset.remove_tag_unused')))
         rm.clicked.connect(lambda _c=False, _t=ta: self._remove_tag(_t))
+        rm.setEnabled(not reserved)
         row.addWidget(rm)
 
         row.addStretch(1)
@@ -1102,7 +1136,8 @@ class CollisionsPanel(QWidget):
         if self._blocking:
             return
         new_name = raw.strip()
-        if not new_name or new_name == old_name or new_name in self._all_tags():
+        if (old_name in RESERVED_COLLISION_TAGS or not new_name or new_name == old_name
+                or new_name in self._all_tags()):
             # Nom vide ou déjà pris par un autre tag : on repose l'ancien
             # plutôt que d'écrire deux tags au même endroit.
             self._refresh_matrix()
@@ -1120,6 +1155,8 @@ class CollisionsPanel(QWidget):
         ))
 
     def _remove_tag(self, tag_name: str):
+        if tag_name in RESERVED_COLLISION_TAGS:
+            return
         get_history().push(RemoveCollisionTagCmd(
             self._project, tag_name, persist_fn=self._persist,
         ))

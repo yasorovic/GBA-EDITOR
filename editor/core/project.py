@@ -76,6 +76,7 @@ from core.resources.palette_store import PaletteStore
 from core.resources.deleted_files import DeletedFilesBin
 from core.project_starters import copy_starter, get_starter
 from core import crash_log
+from core.scene_sources import resolve_scene_sources, stamp_scene_sources
 from core.project_paths import (
     ProjectPathsMixin, PROJECT_EXT, PROJECT_FORMAT_VERSION,
     ProjectFileError, ProjectManifestError,
@@ -95,7 +96,9 @@ from core.project_renames import ProjectRenameMixin
 # (`core.models.scene` importe `OWN_PAL_BANK` pour son propre usage ; il ne
 # faut pas le lui emprunter).
 from core.models.settings import (ProjectSettings, GlobalVar, Constant, DEFAULT_COLLISION_TAGS, lang_code,
-                                  Language, InputBinding, InputSequence, InputAxis, InputMovement)
+                                  Language, InputBinding, InputSequence, InputAxis, InputMovement,
+                                  BUTTON_NAMES, DEFAULT_INTERACT_BUTTONS, RESERVED_COLLISION_TAGS,
+                                  DEFAULT_INTERACT_REACH, MAX_INTERACT_REACH)
 from core.models.text import Text
 from core.models.palette import PaletteBank, OWN_PAL_BANK, DEFAULT_UI_PALETTE
 from core.models.sprite import SpriteAsset
@@ -128,6 +131,7 @@ DATA_COLUMN_SOURCES = {
     "region":  lambda p: p.region_names(),
     "sprite":  lambda p: [s.name for s in p.sprites],
     "background": lambda p: [b.name for b in p.backgrounds],
+    "prefab":  lambda p: [pf.name for pf in p.prefabs],
     "image":   lambda p: p.image_names(),
 }
 
@@ -197,6 +201,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         # encore chargé, et l'appelant ne doit pas avoir à le vérifier.
         self.load_warnings: list[str] = []
         self.scenes:      ResourceStore[Scene]       = ResourceStore(self.user_library_dir, Scene)
+        self.scenes.before_save = lambda scene: stamp_scene_sources(self, scene)
         self.sfx:         ResourceStore[Sfx]         = ResourceStore(self.user_library_dir, Sfx)
         self.music:       ResourceStore[Music]       = ResourceStore(self.user_library_dir, Music)
         # Les jingles sont des modules comme les musiques ; c'est leur DOSSIER qui
@@ -986,6 +991,11 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
             # gagne pas de clé, même politique que languages/collisions.
             **({"inputs": [i.to_dict() for i in self.settings.inputs]}
                if self.settings.inputs else {}),
+            # L'entrée interne `interact` : écrite seulement si l'auteur l'a déplacée de A.
+            **({"interact_buttons": list(self.settings.interact_buttons)}
+               if list(self.settings.interact_buttons) != list(DEFAULT_INTERACT_BUTTONS) else {}),
+            **({"interact_reach": int(self.settings.interact_reach)}
+               if int(self.settings.interact_reach) != DEFAULT_INTERACT_REACH else {}),
             **({"input_sequences": [s.to_dict() for s in self.settings.sequences]}
                if self.settings.sequences else {}),
             **({"input_axes": [a.to_dict() for a in self.settings.axes]}
@@ -1097,6 +1107,16 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         self.settings.inputs = [InputBinding.from_dict(x)
                                 for x in (d.get("inputs") or [])
                                 if (x or {}).get("name")]
+        # Un accord vide (ou sans bouton connu) retombe sur le défaut : l'entrée ne doit pas
+        # devenir inatteignable.
+        self.settings.interact_buttons = (
+            [b for b in BUTTON_NAMES if b in (d.get("interact_buttons") or [])]
+            or list(DEFAULT_INTERACT_BUTTONS))
+        try:
+            reach = int(d.get("interact_reach", DEFAULT_INTERACT_REACH))
+        except (TypeError, ValueError):
+            reach = DEFAULT_INTERACT_REACH
+        self.settings.interact_reach = max(0, min(MAX_INTERACT_REACH, reach))
         self.settings.sequences = [InputSequence.from_dict(x)
                                    for x in (d.get("input_sequences") or [])
                                    if (x or {}).get("name")]
@@ -1125,7 +1145,11 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         owners += [ch for pf in self.prefabs for ch in (getattr(pf, "children", []) or [])]
         discovered = {c.tag or "body" for o in owners for c in getattr(o, "components", [])
                      if isinstance(c, CollisionBoxComponent)}
-        declared = list(self.settings.collision_tags)
+        # Les tags réservés existent dans tout projet, même ancien (recréés ici plutôt que migrés), et
+        # passent en tête dans leur ordre : la liste sauvée est triée par ordre alphabétique, ce qui
+        # mettrait « Interactive » avant « Player ».
+        declared = list(RESERVED_COLLISION_TAGS) + [
+            t for t in self.settings.collision_tags if t not in RESERVED_COLLISION_TAGS]
         seen = set(declared)
         extra = sorted(t for t in discovered if t not in seen)
         return declared + extra
@@ -1235,6 +1259,8 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         self.data_tables.load()
         self.prefabs.load()
         self.load_scenes()
+        for scene in self.scenes:
+            resolve_scene_sources(self, scene)
         self.load_active_scene_resources()
         self.load_warnings += self._unreadable_warnings()
 
@@ -1302,6 +1328,9 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         # 2026-09-19) : dérivé, rien à réserver — la première scène d'un projet
         # n'est pas un cas particulier.
         default_scene = Scene(name="Scene_01")
+        # L'acteur de départ porte le tag « Joueur » : c'est lui qui déclenche les composants Interactive
+        # de la scène, sans que l'auteur ait à le cocher pour un premier essai.
+        default_scene.actors.append(Actor(name="Player", is_player=True))
         proj.seed_default_ui_palette(default_scene)
         proj.seed_default_camera(default_scene)
         proj.scenes.append(default_scene)

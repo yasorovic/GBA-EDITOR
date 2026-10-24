@@ -251,7 +251,7 @@
       "text": "Prefabs de la scène"
     },
     "sceneinsp.no_scene_prefab": {
-      "text": "Aucun prefab posé ou instancié par les scripts de cette scène."
+      "text": "Aucun prefab posé ou instancié"
     },
     "sceneinsp.edit_prefab": {
       "text": "Éditer le prefab"
@@ -280,6 +280,7 @@
     "common.error": {
       "text": "Erreur"
     },
+    "common.none": { "text": "Aucun" },
     "common.none_dash": {
       "text": "— aucun —"
     },
@@ -1085,6 +1086,8 @@
     "scncanvas.fit": {
       "text": "Ajuster la scène à la vue"
     },
+    "scncanvas.grid_off": { "text": "Pas de grille" },
+    "scncanvas.grid_cycle_tip": { "text": "Chaque clic passe à l'état suivant : pas de grille, grille de 8 px, grille de 16 px, puis retour à l'absence de grille." },
     "scncanvas.grid_8px": {
       "text": "Grille 8 px"
     },
@@ -1330,9 +1333,9 @@
       "text": "Les palettes ajoutées et la peinture seront perdues."
     },
     "bgedit.extract": {
-      "text": "⤓ EXTRAIRE LES PALETTES"
+      "text": "Extraire la palette de la source"
     },
-    "bgedit.extract_title": { "text": "Extraire les palettes" },
+    "bgedit.extract_title": { "text": "Extraire la palette de la source" },
     "bgedit.extract_tip": { "text": "Crée des palettes de catalogue partagées à partir du PNG et les assigne à ce fond. Elles restent modifiables dans l’éditeur de palettes." },
     "bgedit.extract_warning": { "text": "Si ces palettes existent déjà, leurs couleurs sont remplacées." },
     "bgedit.margin_left": { "text": "Marge gauche" },
@@ -1551,6 +1554,11 @@
     "bgedit.method_max_coverage": {
       "text": "Couverture max"
     },
+    "inputs.interact_locked": {
+      "text": "Entrée interne du composant Interactive : elle existe dans tous les projets, son nom est fixe et elle ne se supprime pas. Seuls ses boutons se règlent (A par défaut). Les scripts peuvent aussi la lire : input:pressed(\"interact\")."
+    },
+    "inputs.interact_reach": { "text": "Portée" },
+    "inputs.interact_reach_tip": { "text": "De combien de pixels la boîte du joueur est projetée dans la direction où il regarde pour atteindre un acteur Interactif (mode Regard). Les murs l'arrêtent." },
     "inputs.hint": {
       "text": "Nomme une action et choisis les boutons à tenir ensemble. Utilisable dans les scripts avec input:held(\"nom\"), input:pressed(\"nom\"), input:released(\"nom\"), input:buffered(\"nom\", frames). Les flèches sont les axes de la croix directionnelle."
     },
@@ -1642,6 +1650,7 @@
     "sprframe.fit": { "text": "Ajuster à la vue" },
     "sprframe.fit_title": { "text": "Ajuster à la vue" },
     "sprpanel.speed_tip": { "text": "Définit le nombre de ticks GBA entre deux images. Un tick dure 1/60 de seconde : 8 = 7,5 i/s, 4 = 15 i/s, 2 = 30 i/s." },
+    "sprpanel.loop_tip": { "text": "Fait boucler l'animation : après la dernière image, elle repart de la première." },
     "sprpanel.import_replace_title": { "text": "Importer ou remplacer l’image" },
     "sprpanel.import_replace_tip": { "text": "Choisit une image, la valide et l’encode pour la GBA, puis l’attache au sprite actif. Le fichier source n’est pas modifié." },
     "sprpanel.extract_title": { "text": "Extraire la palette du PNG" },
@@ -1840,6 +1849,30 @@
     "projset.remove_tag_unused": { "text": "Aucune boîte ne l’utilise." },
     "comped.sfx": { "text": "Effet sonore" },
     "comped.sfx_note": { "text": "Les sons ajoutés depuis l’écran du mixeur apparaissent ici." },
+    "actorinsp.comp.interactive": { "text": "Interactif" },
+    "comped.interact_input": { "text": "Saisie" },
+    "comped.interact_pressed": { "text": "Pressé" },
+    "comped.interact_hold": { "text": "Maintenu" },
+    "comped.interact_released": { "text": "Relâché" },
+    "comped.interact_input_tip": { "text": "Le geste sur l'entrée interne \"interact\" (Project Settings > Input) qui déclenche on_interact. Pressé : à la frame où l'entrée s'abaisse. Maintenu : une fois tenue le nombre de frames réglé. Relâché : quand elle remonte alors que l'acteur est encore dans la zone." },
+    "comped.interact_hold_frames": { "text": "Maintien" },
+    "comped.interact_hold_frames_tip": { "text": "Frames pendant lesquelles l'entrée doit rester enfoncée dans la zone." },
+    "comped.interact_area": { "text": "Interaction" },
+    "comped.interact_hover": { "text": "Survol" },
+    "comped.interact_facing": { "text": "Regard" },
+    "comped.interact_area_tip": { "text": "La façon dont le joueur atteint la zone. Survol : il la recouvre. Regard : sa boîte, projetée dans la direction où il regarde sur la portée réglée dans les settings du projet et arrêtée par les murs, la touche." },
+    "comped.interact_box": { "text": "Zone" },
+    "comped.interact_own_box": { "text": "Boîte propre ({tag})" },
+    "comped.interact_box_tip": { "text": "L'origine de la zone. La boîte propre est créée par le composant, avec le tag de collision réservé ; ou une boîte de collision déjà présente sur cet acteur, choisie par son tag." },
+    "comped.interact_auto": { "text": "Auto ({n})" },
+    "comped.interact_size_tip": { "text": "Taille de la boîte propre en pixels. Auto prend le cadre du sprite, ou 16 x 16 sans sprite." },
+    "projset.reserved_tag_title": { "text": "Tag réservé" },
+    "projset.reserved_tag_tip": { "text": "L'éditeur s'appuie sur ce tag (Player, Interactive) : il ne se renomme ni ne se supprime. Ses cases de matrice restent éditables." },
+    "actorinsp.is_player": { "text": "Joueur" },
+    "actorinsp.is_player_tip": { "text": "Désigne cet acteur comme celui qui interagit : seul un acteur portant ce tag déclenche les composants Interactifs de la scène. C'est un tag d'acteur, pas un tag de collision. Plusieurs acteurs peuvent le porter." },
+    "comped.collision_blocks_row": { "text": "Blocage" },
+    "comped.collision_blocks": { "text": "Bloque les acteurs" },
+    "comped.collision_blocks_tip": { "text": "Les acteurs en mouvement qui ont une boîte solide sont repoussés hors de cette boîte au lieu de la traverser (un coffre, un PNJ, une caisse). La carte de collision garde le dernier mot, et la matrice de collision décide quels tags sont arrêtés. Désactivé par défaut." },
     "comped.trigger": { "text": "Déclencheur" },
     "comped.trigger_tip": { "text": "manual : ne joue rien ; appelez self:play_sfx() depuis un script.\non_spawn : joue au démarrage de l’acteur.\non_destroy : joue juste avant la destruction de l’acteur.\nUn bouton ou une entrée : joue tant que l’acteur est actif et que ce bouton est maintenu." },
     "comped.trigger_note": { "text": "Tous les déclencheurs sauf manual fonctionnent sans script." },
@@ -1891,6 +1924,12 @@
     "bglayer.bottom_tip": { "text": "Le calque du dessus se mélange avec celui-ci, placé derrière lui." },
     "actorinsp.sprite_preview_title": { "text": "Sprite de départ" },
     "actorinsp.sprite_preview_tip": { "text": "Un clic assigne un sprite du projet. La première image de l’état initial est affichée." },
+    "actorinsp.card.relations": { "text": "Relations" },
+    "actorinsp.rel.parent": { "text": "Parent" },
+    "actorinsp.rel.children": { "text": "Enfants" },
+    "actorinsp.rel.parent_tip": { "text": "Ouvre le parent de cet élément." },
+    "actorinsp.children_tip": { "text": "Les enfants de cet élément. Pour un prefab, ses parties, comme les segments d’un boss : chaque partie est un acteur complet, avec son sprite, ses boîtes et sa transformation locale." },
+    "actorinsp.children_note": { "text": "Un double-clic ouvre un enfant ; faire glisser une partie de prefab sur une autre la rattache à celle-ci. Le pool réserve instances maximum × (1 + parties) entrées." },
     "actorinsp.index_title": { "text": "Index de l’acteur" },
     "actorinsp.index_tip": { "text": "Position de l’acteur dans la scène. Elle détermine l’ordre de traitement et de rendu." },
     "actorinsp.relink_title": { "text": "Relier de nouveau au prefab" },
@@ -1905,8 +1944,6 @@
     "actorinsp.expose_new_tip": { "text": "Crée un prefab à partir des composants, de la palette et des notes de cet acteur. Cet acteur en devient la première instance liée." },
     "actorinsp.parent_tip": { "text": "Exprime la position de cet acteur dans le repère de son parent. X/Y, la rotation et l’échelle deviennent locaux, et le sous-arbre du parent le suit. Masquer le parent masque tout son sous-arbre." },
     "actorinsp.parent_note": { "text": "Ce n’est pas de l’héritage : pour réutiliser une définition, utilisez un prefab. Le parent doit être dans la même scène, et un cycle est refusé à la compilation." },
-    "actorinsp.children_tip": { "text": "Les enfants de ce prefab, comme les segments d’un boss. Chaque enfant est un acteur complet, avec son sprite, ses boîtes et sa transformation locale." },
-    "actorinsp.children_note": { "text": "Un double-clic modifie un enfant ; le faire glisser sur un autre enfant le rattache à celui-ci. Le pool réserve instances maximum × (1 + enfants) entrées." },
     "sceneinsp.scroll_h_tip": { "text": "Défilement horizontal" },
     "sceneinsp.scroll_v_tip": { "text": "Défilement vertical" },
     "sceneinsp.backdrop": { "text": "Arrière-plan :" },
@@ -1917,7 +1954,6 @@
     "sceneinsp.backdrop_reset_tip": { "text": "Réutilise la couleur d’arrière-plan définie au niveau du projet." },
     "sceneinsp.transition": { "text": "Transition :" },
     "sceneinsp.transition_tip": { "text": "Choisit le fondu joué à l’ouverture et à la fermeture de cette scène." },
-    "sceneinsp.transition_frames": { "text": ", {frames} images" },
     "sceneinsp.transition_frames_tip": { "text": "Définit la durée de chaque moitié de la transition : sortie, puis entrée." },
     "sceneinsp.transition_duration": { "text": "Durée" },
     "sceneinsp.transition_title": { "text": "Transition" },
@@ -2213,9 +2249,13 @@
     "datainsp.name": { "text": "nom" },
     "datainsp.type": { "text": "type" },
     "datainsp.type_title": { "text": "Type de colonne" },
-    "datainsp.type_tip": { "text": "Détermine les valeurs acceptées par cette colonne. La modifier convertit les valeurs existantes." },
+    "datainsp.type_tip": { "text": "Détermine les valeurs acceptées par cette colonne. La modifier efface les valeurs existantes (Annuler les rétablit)." },
     "datainsp.cell": { "text": "Cellule" },
     "datainsp.value": { "text": "valeur" },
+    "datagrid.create_reference": { "text": "Créer" },
+    "datainsp.image_size": { "text": "Image : {w} × {h} px" },
+    "datainsp.sound_source": { "text": "Source : {file}" },
+    "datainsp.open_target": { "text": "Ouvrir" },
     "datainsp.no_ref": { "text": "Aucune référence." },
     "datainsp.no_named": { "text": "Aucun {type} nommé « {name} » dans le projet." },
     "datainsp.text_content": { "text": "« {content} »" },

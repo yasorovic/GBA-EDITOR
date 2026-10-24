@@ -27,7 +27,7 @@ from ui.common.deferred_writes import schedule_save
 from ui.common.theme import C, T, QSS
 from ui.common.unit_spin import UnitSpin
 from ui.common.responsive import InspectorScrollArea
-from ui.common.widgets import W, ScriptPickerPopup, NotesEdit, CollapsibleCard
+from ui.common.widgets import W, AssetPickerPopup, NotesEdit, CollapsibleCard
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 from ui.common.palette_slot_grid import PaletteSlotGridAsset
@@ -61,12 +61,9 @@ class _LazyPopupCombo(QComboBox):
 
 # ── Transition — libellés ─────────────────────────────────────────
 # Les mêmes mots que l'inspecteur de projet (qui les définit, la transition
-# étant d'abord un réglage de projet), plus l'item d'absence de surcharge. Son
-# libellé dit ce que la scène hérite RÉELLEMENT (cf. _refresh_transition) : un
-# « from project » nu obligerait à aller voir ailleurs ce que ça donne.
-_TRANSITIONS: tuple[tuple[str, str], ...] = (
-    (TRANSITION_INHERIT, 'sceneinsp.from_project'),
-) + TRANSITION_LABELS
+# étant d'abord un réglage de projet). Pas d'item « héritée » : une scène sans
+# surcharge montre la valeur qu'elle obtient réellement (cf. _refresh_transition).
+_TRANSITIONS: tuple[tuple[str, str], ...] = TRANSITION_LABELS
 
 
 def _script_source_line(path: Path, line: int) -> str:
@@ -362,7 +359,7 @@ class SceneInspector(QWidget):
 
         W.separator(mode_inner)
 
-        from ui.common.widgets import ScriptSlot, ScriptPickerPopup  # noqa: F401 (ScriptPickerPopup used later)
+        from ui.common.widgets import ScriptSlot, AssetPickerPopup  # noqa: F401 (AssetPickerPopup used later)
         self._scene_script_slot = ScriptSlot(
             add_label    = label("sceneinsp.script_add"),
             accent_color = icons.COLOR_SCRIPT,
@@ -688,7 +685,7 @@ class SceneInspector(QWidget):
                 label("sceneinsp.no_bitmap_text"))
             return
         entries = [(b.name, b.name) for b in bitmaps]
-        popup = ScriptPickerPopup(entries, icons.COLOR_BACKGROUND, parent=self, new_label=None)
+        popup = AssetPickerPopup(entries, icons.COLOR_BACKGROUND, parent=self, new_label=None)
         popup.picked.connect(self._set_bitmap_bg)
         popup.show_below(self._btn_bitmap_pick)
 
@@ -1209,21 +1206,15 @@ class SceneInspector(QWidget):
     # ── Transition ──────────────────────────────────────────────────
 
     def _refresh_transition(self):
-        """Réaffiche la surcharge — et, sur l'item « From project », CE QUE la
-        scène hérite : sans ça, savoir ce qu'on obtient demande d'aller ouvrir
-        l'inspecteur de projet."""
+        """Réaffiche la transition : la surcharge de la scène, ou, à défaut, celle du projet qu'elle suit — la liste
+        ne montre toujours qu'une valeur réelle."""
         sc, p = self._scene, self._project
         kind = getattr(sc, "transition_kind", TRANSITION_INHERIT)
         st = p.settings if p else None
-        inherited = getattr(st, "transition_kind", EFFECT_NONE) or EFFECT_NONE
-        inh_frames = getattr(st, "transition_frames", 16)
-        trans = label(dict(_TRANSITIONS).get(inherited, inherited))
-        self._combo_trans.setItemText(
-            0, label('sceneinsp.inherited_transition', transition=trans)
-            + (label('sceneinsp.transition_frames', frames=inh_frames) if inherited != EFFECT_NONE else ""))
+        shown = kind if kind != TRANSITION_INHERIT else (getattr(st, "transition_kind", EFFECT_NONE) or EFFECT_NONE)
         self._combo_trans.blockSignals(True)
-        idx = self._combo_trans.findData(kind)
-        self._combo_trans.setCurrentIndex(idx if idx >= 0 else 0)
+        idx = self._combo_trans.findData(shown)
+        self._combo_trans.setCurrentIndex(max(0, idx))
         self._combo_trans.blockSignals(False)
         self._spin_trans.blockSignals(True)
         self._spin_trans.setValue(getattr(sc, "transition_frames", 16))
@@ -1276,7 +1267,7 @@ class SceneInspector(QWidget):
     def _on_transition_kind(self, idx: int):
         if self._blocking or not self._scene: return
         self._set_scene_field("transition_kind",
-                              self._combo_trans.itemData(idx) or TRANSITION_INHERIT,
+                              self._combo_trans.itemData(idx),
                               extra_persist=self._refresh_transition)
         self.changed.emit()
 
@@ -1452,13 +1443,13 @@ class SceneInspector(QWidget):
     def _scene_script_new(self):
         """Ouvre le picker : liste des scripts de scène + bouton Nouveau."""
         if not self._scene or not self._project: return
-        from ui.common.widgets import ScriptPickerPopup
+        from ui.common.widgets import AssetPickerPopup
 
         # Les scripts attachables du projet : le contexte vient de l'attache, pas du dossier
         scripts = [(f.name, str(f.relative_to(self._project.root)).replace("\\", "/"))
                    for f in self._project.script_files()]
 
-        popup = ScriptPickerPopup(scripts, icons.COLOR_SCRIPT, parent=self)
+        popup = AssetPickerPopup(scripts, icons.COLOR_SCRIPT, parent=self)
         popup.picked.connect(self._scene_script_assign)
         popup.new_requested.connect(self._scene_script_create_new)
         popup.show_below(self._scene_script_slot)

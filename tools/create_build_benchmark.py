@@ -118,7 +118,7 @@ def make_sfx(index: int, sfx_dir: Path) -> str:
 def actor(name: str, index: int, sfx_name: str | None) -> dict:
     components = [{
         "component_type": "sprite", "id": "sprite", "active": True,
-        "sprite_name": name, "initial_state": "Idle", "auto_dir": True,
+        "sprite_name": name, "initial_state": "Idle", "facing_auto": True,
         "affine_transform": False, "scale_x": 1.0, "scale_y": 1.0,
         "rotation": 0, "offset_x": 0, "offset_y": 0,
     }]

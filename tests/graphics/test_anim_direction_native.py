@@ -1,7 +1,7 @@
 """Le choix de la direction d'animation, exécuté en C (le vrai bloc émis par `anim_tick_lines`).
 
 Un sprite qui ne dessine que Est et Ouest (le platformer) ne doit jamais afficher la frame 0
-du sheet — celle d'un AUTRE état — quand `auto_dir` lui demande Nord (un saut droit). Le repli,
+du sheet — celle d'un AUTRE état — quand `facing_auto` lui demande Nord (un saut droit). Le repli,
 dans l'état courant : la direction exacte, puis l'omni, puis le côté REGARDÉ (`face_x`, le dernier
 `dir_x` non nul), puis la première direction de l'état."""
 from __future__ import annotations
@@ -22,16 +22,16 @@ JUMPING, W_JUMP, E_JUMP = 2, 14, 15
 SONDE = """
 #include <stdio.h>
 typedef signed char s8; typedef unsigned char u8; typedef short s16;
-typedef struct { int vx, vy; s8 dir_x, dir_y; } A;
-typedef struct { u8 auto_dir, anim_state, anim_loop, anim_finished, anim_speed, anim_length;
+typedef struct { int vx, vy; s8 dir_x, dir_y, facing_x, facing_y; } A;
+typedef struct { u8 facing_auto, anim_state, anim_loop, anim_finished, anim_speed, anim_length;
                  s8 face_x; int frame, timer; } O;
 A g_actors[1]; O g_oam_entries[1];
 %(tables)s
 int main(void) {
     int vx, vy, dx, dy, face, state;
     while (scanf("%%d %%d %%d %%d %%d %%d", &state, &vx, &vy, &dx, &dy, &face) == 6) {
-        g_actors[0].vx = vx; g_actors[0].vy = vy; g_actors[0].dir_x = dx; g_actors[0].dir_y = dy;
-        g_oam_entries[0].auto_dir = 1; g_oam_entries[0].anim_state = state;
+        g_actors[0].vx = vx; g_actors[0].vy = vy; g_actors[0].facing_x = dx; g_actors[0].facing_y = dy;
+        g_oam_entries[0].facing_auto = 1; g_oam_entries[0].anim_state = state;
         g_oam_entries[0].frame = 0;  g_oam_entries[0].face_x = face;
         {
 %(tick)s
@@ -80,7 +80,7 @@ def test_un_saut_lateral_garde_la_frame_du_cote_du_mouvement(sonde):
 
 
 def test_un_saut_droit_garde_le_cote_regarde(sonde):
-    """`auto_dir` met dir_x à 0 : le côté regardé est retenu à part, jamais la frame 0."""
+    """`facing_auto` met dir_x à 0 : le côté regardé est retenu à part, jamais la frame 0."""
     assert sonde(JUMPING, 0, -900, 0, 0, 1) == (E_JUMP, 1)
     assert sonde(JUMPING, 0, -900, 0, 0, -1) == (W_JUMP, -1)
 

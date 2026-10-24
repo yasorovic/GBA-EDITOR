@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea,
+                             QVBoxLayout, QWidget)
 
 from core.scene_graph_state import SceneGraphState
 from core.history import Command, get_history
@@ -38,6 +39,98 @@ class _ScriptTextCmd(Command):
 
     def undo(self):
         self._apply(self._before)
+
+
+class _StartAlignedLineEdit(QLineEdit):
+    """Champ dont le début reste visible tant qu'il n'est pas en cours d'édition.
+
+    Qt laisse sinon le curseur (donc la vue) à la fin du texte, et un texte plus long que le
+    champ apparaît coupé à gauche."""
+
+    def _show_start(self) -> None:
+        if not self.hasFocus():
+            self.setCursorPosition(0)
+
+    def setText(self, text: str) -> None:
+        super().setText(text)
+        self._show_start()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._show_start()
+
+    def focusOutEvent(self, event) -> None:
+        super().focusOutEvent(event)
+        self._show_start()
+
+
+class _CallRow(QFrame):
+    """Une ligne d'appel : repère, `fichier : ligne`, champ Lua éditable, bouton Ouvrir.
+
+    Le nom du fichier est coupé par « ... » (le style de l'application) ; quand la place manque
+    pour un champ lisible, le champ passe seul sur une seconde ligne."""
+
+    _MIN_FIELD_WIDTH = 120
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("callRow")
+        self.setStyleSheet(
+            f"QFrame#callRow{{background:{C.BG_RAISED};border:1px solid {C.BORDER};}}")
+        self.marker = QLabel("•")
+        self.marker.setStyleSheet(f"color:{C.ACCENT};border:none;background:transparent;")
+        self.prefix = QLabel()
+        self.prefix.setFont(QFont(T.CODE, T.SM))
+        self.prefix.setStyleSheet(
+            f"QLabel{{color:{C.TEXT_DIM};background:{C.BG_RAISED};border:1px solid {C.BORDER_MID};padding:3px 5px;}}"
+            f"QLabel:hover{{background:{C.BG_HOVER};border-color:{C.ACCENT};}}")
+        # Minimum nul : le libellé peut rétrécir sous sa largeur naturelle, le style l'abrège.
+        self.prefix.setMinimumWidth(0)
+        self.text = _StartAlignedLineEdit()
+        self.text.setFont(QFont(T.CODE, T.SM))
+        self.text.setStyleSheet(
+            f"QLineEdit{{color:{C.TEXT_NORM};background:{C.BG_INPUT};border:1px solid {C.BORDER_MID};padding:3px 5px;}}"
+            f"QLineEdit:hover{{background:{C.BG_HOVER};border-color:{C.ACCENT};}}"
+            f"QLineEdit:focus{{background:{C.BG_INPUT};border-color:{C.ACCENT};}}")
+        self.open_btn = QPushButton(label("common.open"))
+        self.open_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.open_btn.setStyleSheet(
+            f"QPushButton{{color:{C.TEXT_NORM};background:{C.BG_INPUT};border:1px solid {C.BORDER_MID};padding:3px 10px;}}"
+            f"QPushButton:hover{{background:{C.BG_HOVER};border-color:{C.ACCENT};}}"
+            f"QPushButton:pressed{{color:{C.BG_DEEP};background:{C.ACCENT};}}")
+        self._grid = QGridLayout(self)
+        self._grid.setContentsMargins(9, 7, 7, 7)
+        self._grid.setHorizontalSpacing(8); self._grid.setVerticalSpacing(6)
+        self._wrapped = None
+        self._arrange(False)
+
+    def _arrange(self, wrapped: bool) -> None:
+        if wrapped == self._wrapped:
+            return
+        self._wrapped = wrapped
+        for widget in (self.marker, self.prefix, self.text, self.open_btn):
+            self._grid.removeWidget(widget)
+        for column in range(4):
+            self._grid.setColumnStretch(column, 0)
+        self._grid.addWidget(self.marker, 0, 0)
+        self._grid.addWidget(self.prefix, 0, 1)
+        if wrapped:
+            self._grid.addWidget(self.open_btn, 0, 2)
+            self._grid.addWidget(self.text, 1, 0, 1, 3)
+            self._grid.setColumnStretch(1, 1)
+        else:
+            self._grid.addWidget(self.text, 0, 2)
+            self._grid.addWidget(self.open_btn, 0, 3)
+            self._grid.setColumnStretch(2, 1)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        spacing = self._grid.horizontalSpacing()
+        margins = self._grid.contentsMargins()
+        needed = (self.marker.sizeHint().width() + self.prefix.fontMetrics().horizontalAdvance(self.prefix.text())
+                  + self._MIN_FIELD_WIDTH + self.open_btn.sizeHint().width()
+                  + 3 * spacing + margins.left() + margins.right())
+        self._arrange(self.width() < needed)
 
 
 class EdgeInspector(QWidget):
@@ -168,20 +261,12 @@ class EdgeInspector(QWidget):
                 widget.deleteLater()
 
     def _add_call(self, ref, source: str) -> None:
-        line = QFrame(); line.setCursor(Qt.CursorShape.PointingHandCursor)
-        line.setStyleSheet(f"QFrame{{background:{C.BG_RAISED};border:1px solid {C.BORDER};}} QFrame:hover{{background:{C.BG_HOVER};}}")
-        row = QHBoxLayout(line); row.setContentsMargins(9, 7, 7, 7); row.setSpacing(8)
-        marker = QLabel("•"); marker.setStyleSheet(f"color:{C.ACCENT};")
-        prefix = QLabel(f"{ref.path.name} : {ref.line}")
-        prefix.setFont(QFont(T.CODE, T.SM)); prefix.setStyleSheet(f"color:{C.TEXT_DIM};")
-        text = QLineEdit(source)
-        text.setFont(QFont(T.CODE, T.SM)); text.setStyleSheet(
-            f"QLineEdit{{color:{C.TEXT_NORM};background:{C.BG_INPUT};border:1px solid {C.BORDER_MID};padding:3px 5px;}}"
-            f"QLineEdit:focus{{border-color:{C.ACCENT};}}")
+        line = _CallRow()
+        marker, prefix, text, open_btn = line.marker, line.prefix, line.text, line.open_btn
+        prefix.setText(f"{ref.path.name} : {ref.line}")
+        text.setText(source)
         text.editingFinished.connect(lambda r=ref, field=text: self._save_source_line(r, field))
-        open_btn = QPushButton(label("common.open")); open_btn.setStyleSheet(f"color:{C.ACCENT};background:transparent;border:none;")
         open_btn.clicked.connect(lambda: self.open_ref.emit(ref))
-        row.addWidget(marker); row.addWidget(prefix); row.addWidget(text, 1); row.addWidget(open_btn)
         # Le champ central possède son propre clic et son focus ; seul le bouton
         # explicite « Ouvrir » déclenche la navigation vers le Script Editor.
         self._list.addWidget(line)

@@ -64,3 +64,91 @@ def test_edition_ecrit_dans_le_modele(qapp):
     assert a.visible is False
     assert a.priority == 3
     assert a.rotation == 45
+
+
+# ── Le tag Joueur : une case visible d'emblée, pas cachée dans une carte repliée ──
+
+def test_la_case_joueur_est_visible_sans_rien_deplier(qapp):
+    insp = ActorInspector()
+    insp.resize(380, 900)
+    insp.show()
+    insp.load(Actor(name="Hero"), project=None, scene=None)
+    qapp.processEvents()
+    assert insp._tplayer.isVisible()
+
+
+def test_la_case_joueur_reflete_et_ecrit_le_modele(qapp):
+    insp = ActorInspector()
+    a = Actor(name="Hero", is_player=True)
+    insp.load(a, project=None, scene=None)
+    assert insp._tplayer.isChecked()
+
+    insp._tplayer.setChecked(False)
+    assert a.is_player is False
+
+    insp.load(Actor(name="Coin"), project=None, scene=None)
+    assert not insp._tplayer.isChecked()
+
+
+def _origine(widget, parent):
+    p = widget.mapTo(parent, widget.rect().topLeft())
+    return p.x(), p.y()
+
+
+def test_actif_et_joueur_sont_cote_a_cote_quand_la_place_le_permet(qapp):
+    insp = ActorInspector()
+    insp.resize(600, 900)
+    insp.show()
+    insp.load(Actor(name="Hero"), project=None, scene=None)
+    qapp.processEvents()
+    qapp.processEvents()
+    (ax, ay), (px, py) = _origine(insp._active, insp), _origine(insp._tplayer, insp)
+    assert ay == py and px > ax
+
+
+def test_joueur_passe_sous_actif_quand_la_fenetre_est_etroite(qapp):
+    insp = ActorInspector()
+    insp.resize(200, 900)
+    insp.show()
+    insp.load(Actor(name="Hero"), project=None, scene=None)
+    qapp.processEvents()
+    qapp.processEvents()
+    (ax, ay), (px, py) = _origine(insp._active, insp), _origine(insp._tplayer, insp)
+    assert py > ay and px == ax
+
+
+# ── Un prefab peut être le joueur ──
+
+def test_la_racine_d_un_prefab_peut_etre_cochee_joueur(qapp):
+    from core.models.scene import Prefab
+    insp = ActorInspector()
+    insp.resize(600, 900)
+    insp.show()
+    prefab = Prefab(name="Hero")
+    insp.load_prefab(prefab, project=None, scene=None)
+    qapp.processEvents()
+    assert insp._tplayer.isVisible() and not insp._tplayer.isChecked()
+
+    insp._tplayer.setChecked(True)
+    assert prefab.actor.is_player is True and prefab.is_player is True
+
+
+def test_la_case_joueur_reflete_un_prefab_deja_joueur(qapp):
+    from core.models.scene import Actor, Prefab
+    insp = ActorInspector()
+    insp.load_prefab(Prefab(name="Hero", actor=Actor(name="Hero", is_player=True)),
+                     project=None, scene=None)
+    assert insp._tplayer.isChecked()
+
+
+def test_une_partie_de_prefab_n_a_pas_la_case_joueur(qapp):
+    from core.models.scene import Prefab
+    insp = ActorInspector()
+    insp.resize(600, 900)
+    insp.show()
+    prefab = Prefab(name="Boss")
+    part = Actor(name="Arm")
+    prefab.children.append(part)
+    insp.load_child(part, prefab, project=None, scene=None)
+    qapp.processEvents()
+    assert not insp._tplayer.isVisible()

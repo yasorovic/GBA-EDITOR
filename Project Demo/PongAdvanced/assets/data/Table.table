@@ -9,12 +9,12 @@
     },
     {
       "name": "column",
-      "type": "image",
+      "type": "sprite",
       "color": ""
     },
     {
       "name": "column_2",
-      "type": "int",
+      "type": "palette",
       "color": ""
     },
     {
@@ -25,9 +25,13 @@
   ],
   "rows": [
     {
-      "valeur": "bomb"
+      "valeur": "bomb",
+      "column": "Ball",
+      "column_2": "DMG (GB Default)"
     },
-    {},
+    {
+      "column": "Paddle"
+    },
     {}
   ]
 }

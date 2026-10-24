@@ -1,0 +1,93 @@
+{
+  "name": "lila",
+  "id": "90ea3be2da16",
+  "asset": "assets/lila.png",
+  "frame_w": 16,
+  "frame_h": 16,
+  "source_stamp": "251:1792527469000000000:c0ce38cef31f03f0",
+  "own_palette": [
+    "#181828",
+    "#E87850",
+    "#B03850",
+    "#F8C870",
+    "#38B060",
+    "#A0F070"
+  ],
+  "quantize_method": "median_cut",
+  "palettes": [
+    ["#000000", "#181828", "#E87850", "#B03850", "#F8C870", "#38B060", "#A0F070", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"]
+  ],
+  "source_palettes": [
+    ["#000000", "#181828", "#E87850", "#B03850", "#F8C870", "#38B060", "#A0F070", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"]
+  ],
+  "states": [
+    {
+      "name": "Idle",
+      "speed": 30,
+      "loop": true,
+      "directions": [
+        {
+          "dir": 0,
+          "frames": [
+            {
+              "tiles": [
+                {
+                  "src_col": 0,
+                  "src_row": 0,
+                  "dst_col": 0,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 1,
+                  "src_row": 0,
+                  "dst_col": 1,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 0,
+                  "src_row": 1,
+                  "dst_col": 0,
+                  "dst_row": 1
+                },
+                {
+                  "src_col": 1,
+                  "src_row": 1,
+                  "dst_col": 1,
+                  "dst_row": 1
+                }
+              ]
+            },
+            {
+              "tiles": [
+                {
+                  "src_col": 2,
+                  "src_row": 0,
+                  "dst_col": 0,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 3,
+                  "src_row": 0,
+                  "dst_col": 1,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 2,
+                  "src_row": 1,
+                  "dst_col": 0,
+                  "dst_row": 1
+                },
+                {
+                  "src_col": 3,
+                  "src_row": 1,
+                  "dst_col": 1,
+                  "dst_row": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

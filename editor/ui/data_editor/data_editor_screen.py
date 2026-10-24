@@ -21,12 +21,16 @@ from ui.common.labels import label
 from typing import Optional
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
+from PyQt6.QtCore import pyqtSignal
 
 from ui.common.theme import C
 from ui.common.three_column_body import ThreeColumnBody
 from ui.common.asset_library import AssetLibrary
 from ui.common.asset_kinds import DATA_TABLES
 from core.project import Project
+from core.history import get_history, SetFieldCmd
+from core.command_dispatcher import get_dispatcher
+from ui.common.deferred_writes import schedule_unwatched
 
 from .data_grid_panel import DataGridPanel
 from .data_inspector_panel import DataInspectorPanel
@@ -34,6 +38,8 @@ from .data_inspector_panel import DataInspectorPanel
 
 class DataEditorScreen(QWidget):
     """Écran complet : library + grille + inspecteur."""
+
+    open_requested = pyqtSignal(str, str)   # (famille, nom) : la cellule cite un élément édité ailleurs
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -66,6 +72,8 @@ class DataEditorScreen(QWidget):
         self._grid.cell_selected.connect(self._inspector.set_selection)
         self._grid.table_changed.connect(self._library.refresh)
         self._inspector.type_changed.connect(self._grid.set_column_type)
+        self._inspector.open_requested.connect(self.open_requested)
+        self._inspector.text_edited.connect(self._set_text_content)
 
     # ── Chargement ────────────────────────────────────────────────
 
@@ -74,6 +82,22 @@ class DataEditorScreen(QWidget):
         self._library.load_project(project)
         self._grid.load_project(project)
         self._inspector.load_project(project)
+
+    def _set_text_content(self, text, before: str, after: str):
+        """Le texte cité par la cellule, corrigé dans l'inspecteur : même commande et mêmes effets que depuis l'écran Texte."""
+        if self._project is None:
+            return
+        project = self._project
+
+        def persist():
+            schedule_unwatched("save_texts", project.save_texts)
+            get_dispatcher().notify_texts_changed()
+
+        get_history().push(SetFieldCmd(text, "content", before, after, label=f"Content of {text.key}",
+                                       persist_fn=persist))
+
+    def refresh_text(self):
+        self._inspector.refresh_text()
 
     def select_table(self, name: str):
         """Ouvre la table `name` — navigation entrante depuis un autre écran (onglet Disk)."""

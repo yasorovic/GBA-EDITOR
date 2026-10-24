@@ -45,7 +45,7 @@ from core.project import Project
 from ui.common.theme import C, T, QSS
 from ui.common.responsive import InspectorScrollArea
 from ui.common.icons import COLOR_SCRIPT
-from ui.common.widgets import ScriptSlot, ScriptPickerPopup, CollapsibleCard, NotesEdit, W
+from ui.common.widgets import ScriptSlot, AssetPickerPopup, CollapsibleCard, NotesEdit, W
 from ui.common.notice import notice
 
 _MODES = [
@@ -509,7 +509,7 @@ class CameraInspector(QWidget):
             return
         scripts = [(f.name, str(f.relative_to(self._project.root)).replace("\\", "/"))
                    for f in self._project.script_files()]
-        popup = ScriptPickerPopup(scripts, COLOR_SCRIPT, parent=self)
+        popup = AssetPickerPopup(scripts, COLOR_SCRIPT, parent=self)
         popup.picked.connect(self._script_assign)
         popup.new_requested.connect(self._script_create_new)
         popup.show_below(self._script_slot)

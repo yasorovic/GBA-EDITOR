@@ -256,14 +256,14 @@ def _relink_action(family: str):
         from core import asset_relink
         from core.command_dispatcher import get_dispatcher
         from ui.common.theme import C
-        from ui.common.widgets import ScriptPickerPopup
+        from ui.common.widgets import AssetPickerPopup
         title = label('akind.relink_source_title', name=asset.name)
         files = asset_relink.compatible_files(project, family)
         if not files:
             QMessageBox.information(None, title, label('akind.relink_none'))
             return
         entries = [(p.relative_to(project.user_library_dir).as_posix(), str(p)) for p in files]
-        popup = ScriptPickerPopup(entries, C.ACCENT, new_label=None)
+        popup = AssetPickerPopup(entries, C.ACCENT, new_label=None)
 
         warning = {"backgrounds": "akind.relink_warn_background",
                    "sprites": "akind.relink_warn_image"}.get(family)
@@ -579,6 +579,20 @@ DATA_TABLES = AssetKind(
     file_of       = store_file("data_tables"),
     duplicate     = _store_duplicator("data_tables"),
 )
+
+
+# Types de colonne de référence dont la famille sait se créer d'elle-même (`AssetKind.add`) : le sélecteur d'une cellule
+# propose alors le même « Create new » que le « + » de la library. Un sprite, un fond ou une scène naissent d'une
+# source ou de l'écran qui les édite : `add` n'y suffit pas, ils n'ont donc pas de création ici.
+CREATABLE_REFERENCES = {"palette": PALETTES, "sfx": SFX, "music": MUSIC}
+
+
+def create_referenced_asset(project, column_type: str) -> str:
+    """Crée un asset de la famille citée par `column_type` comme le « + » de sa library, et rend son nom ("" si l'auteur
+    annule ou si la famille ne se crée pas d'elle-même)."""
+    kind = CREATABLE_REFERENCES.get(column_type)
+    asset = kind.add(project) if kind is not None else None
+    return asset.name if asset is not None else ""
 
 
 ALL_KINDS = (

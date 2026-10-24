@@ -42,6 +42,7 @@ class PaletteBank(Resource):
     / active_bg_palettes) ; c'est cette sélection, pas le catalogue, qui
     occupe les banques hardware (physiquement séparées OBJ/BG) au build."""
     sidecar_extension = asset_extensions.PALETTE
+    source_field = "asset"
     name: str = ""
     colors: list[int] = field(default_factory=list)  # valeurs BGR555 GBA
     size: int = 16   # capacité de la palette : 16 (4bpp / une banque) ou 256 (8bpp).
@@ -89,7 +90,7 @@ class PaletteBank(Resource):
     # de l'éditeur dans le sidecar JSON. Ces trois méthodes définissent ce
     # FORMAT de palette, sans savoir où il se trouve sur le disque.
     def to_metadata_dict(self) -> dict:
-        return {"name": self.name, "size": self.size, "asset": self.asset}
+        return {**self.header(), "size": self.size}
 
     def to_hex(self) -> str:
         """Forme canonique : une couleur #RRGGBB par ligne."""
@@ -113,7 +114,7 @@ class PaletteBank(Resource):
         requested_size = (metadata or {}).get("size")
         size = requested_size if requested_size in (16, 256) and len(colors) <= requested_size \
             else (256 if len(colors) > 16 else 16)
-        return cls(name=name, colors=colors, size=size, asset=str((metadata or {}).get("asset") or ""))
+        return cls(name=name, colors=colors, size=size, asset=str((metadata or {}).get("source") or (metadata or {}).get("asset") or ""))
 
 
 # Sentinel Actor/Prefab.pal_bank et BackgroundLayer.pal_bank : "Sans palette"

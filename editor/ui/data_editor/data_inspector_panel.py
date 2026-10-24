@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QComboBox
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QComboBox, QPushButton
 from PyQt6.QtCore import pyqtSignal
 
 from ui.common.theme import C, T, S, QSS
@@ -25,14 +25,25 @@ from ui.common.notice import note
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 
+from .data_cell_preview import CellPreview
 from core.models.data_table import DataColumn, COLUMN_CHOICES, COLUMN_REFERENCES
 from core.project import Project
+
+
+# Type de colonne -> famille d'asset que `Window.open_element` sait ouvrir. Une caméra ou une région
+# n'a pas d'écran propre : leur cellule se décrit, sans bouton.
+OPENABLE_FAMILY = {
+    "text": "texts", "sprite": "sprites", "background": "backgrounds", "prefab": "prefabs", "sfx": "sfx",
+    "music": "music", "scene": "scenes", "font": "fonts", "palette": "palettes",
+}
 
 
 class DataInspectorPanel(QWidget):
     """Colonne sélectionnée + ce que la cellule désigne."""
 
     type_changed = pyqtSignal(object, str)   # (colonne, nouveau type)
+    open_requested = pyqtSignal(str, str)    # (famille, nom) de l'élément cité par la cellule
+    text_edited = pyqtSignal(object, str, str)   # (Text, avant, après) : le contenu du texte cité, corrigé ici
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -76,6 +87,16 @@ class DataInspectorPanel(QWidget):
         self._target.setStyleSheet(f"color:{C.TEXT_DIM}; font-size:{T.SM}px;")
         self._target.setWordWrap(True)
         cell_card.body_layout.addWidget(self._target)
+
+        self._preview = CellPreview()
+        self._preview.text_edited.connect(self.text_edited)
+        cell_card.body_layout.addWidget(self._preview)
+
+        self._open = QPushButton(label("datainsp.open_target"))
+        self._open.setStyleSheet(QSS.button_ghost + f"QPushButton {{ font-size:{T.MD}px; padding:4px 10px; }}")
+        self._open.clicked.connect(self._on_open)
+        cell_card.body_layout.addWidget(self._open)
+        self._open_target: Optional[tuple[str, str]] = None
         root.addWidget(cell_card)
 
         root.addStretch(1)
@@ -89,6 +110,8 @@ class DataInspectorPanel(QWidget):
     def set_selection(self, column: Optional[DataColumn], value):
         self._column = column
         self._updating = True
+        self._open_target = self._openable(column, value)
+        self._open.setVisible(self._open_target is not None)
         if column is None:
             self._name.setText("—")
             self._type.setEnabled(False)
@@ -102,7 +125,26 @@ class DataInspectorPanel(QWidget):
             self._type.setCurrentIndex(self._type.findText(column.type))
             self._value.setText("—" if value is None else str(value))
             self._target.setText(self._describe(column, value))
+        self._preview.show_for(self._project, column, value)
         self._updating = False
+
+    def refresh_text(self):
+        """Le contenu d'un texte a changé hors de cet écran."""
+        self._preview.refresh_text()
+
+    def _openable(self, column: Optional[DataColumn], value) -> Optional[tuple[str, str]]:
+        """(famille, nom) quand la cellule cite un élément qui existe ; sinon rien à ouvrir."""
+        family = OPENABLE_FAMILY.get(column.type) if column is not None else None
+        name = str(value or "").strip()
+        if family is None or not name or self._project is None:
+            return None
+        if name not in self._project.data_column_choices(column.type):
+            return None
+        return family, name
+
+    def _on_open(self):
+        if self._open_target is not None:
+            self.open_requested.emit(*self._open_target)
 
     def _describe(self, column: DataColumn, value) -> str:
         """Ce que la valeur DÉSIGNE — factuel, jamais un commentaire sur la
@@ -118,8 +160,7 @@ class DataInspectorPanel(QWidget):
         if name not in self._project.data_column_choices(column.type):
             return label("datainsp.no_named", type=column.type, name=name)
         if column.type == "text":
-            entry = next((t for t in self._project.texts if t.key == name), None)
-            return label("datainsp.text_content", content=entry.content) if entry else ""
+            return ""      # le contenu s'affiche, et se corrige, dans l'aperçu
         if column.type == "palette":
             bank = self._project.palettes.get(name)
             return label("datainsp.pal_colors", n=bank.size) if bank else ""

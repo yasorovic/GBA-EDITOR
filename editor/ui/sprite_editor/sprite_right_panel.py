@@ -5,12 +5,12 @@ from typing import Optional
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QFrame, QComboBox, QScrollArea
 from PyQt6.QtGui import QFont
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QSize, pyqtSignal
 
 from ui.common.deferred_writes import schedule_save
 from ui.common.theme import C, T
 from ui.common.responsive import InspectorScrollArea
-from ui.common.widgets import W
+from ui.common.widgets import W, CollapsibleCard, HoverIconButton, BTN_ICON
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 from core.models.sprite import AnimFrame, AnimState, SpriteAsset, StateDirection
@@ -68,8 +68,9 @@ class SpriteRightPanel(QWidget):
         content = QWidget()
         content.setStyleSheet(f"background:{C.BG_PANEL};")
         self._content_layout = QVBoxLayout(content)
-        self._content_layout.setContentsMargins(10, 8, 10, 8)
-        self._content_layout.setSpacing(2)
+        # Même gabarit que le SceneInspector et l'inspecteur de fonds : des CollapsibleCard espacées de 6 px.
+        self._content_layout.setContentsMargins(8, 8, 8, 8)
+        self._content_layout.setSpacing(6)
 
         self._build_params()
         self._build_direction()
@@ -79,9 +80,13 @@ class SpriteRightPanel(QWidget):
         scroll.setWidget(content)
         root.addWidget(scroll, 1)
 
+    def _card(self, title: str) -> CollapsibleCard:
+        card = CollapsibleCard(title)
+        self._content_layout.addWidget(card)
+        return card
+
     def _build_params(self):
-        lay = self._content_layout
-        W.section(label("sprpanel.canvas_size"), lay)
+        lay = self._card(label("sprpanel.canvas_size")).body_layout
 
         # Frame W / H
         self._cb_w = QComboBox(); self._cb_w.setFont(QFont(T.MONO, T.SM))
@@ -98,34 +103,37 @@ class SpriteRightPanel(QWidget):
         ))
         W.pair(label("common.frame"), "W", C.AXIS_X, self._cb_w, "H", C.AXIS_Y, self._cb_h, lay)
 
-        W.separator(lay)
-        W.section(label("sprpanel.animation"), lay)
+        lay = self._card(label("sprpanel.animation")).body_layout
 
         self._sp_speed = W.spinbox(8, min_v=1, max_v=120)
         self._sp_speed.setToolTip(tooltip(
             title=label("common.speed"), body=label("sprpanel.speed_tip")
         ))
         self._sp_speed.valueChanged.connect(self._on_speed_changed)
-        W.row(label("common.speed"), self._sp_speed, lay)
 
-        self._chk_loop = W.checkbox_row("", label("common.loop"), lay)
+        # Vitesse + boucle sur UNE ligne : la boucle est une icône cochable (allumée = boucle).
+        self._chk_loop = HoverIconButton("loop", C.TEXT_DIM, C.ACCENT, checked=C.ACCENT)
+        self._chk_loop.setCheckable(True)
+        self._chk_loop.setStyleSheet(BTN_ICON)
+        self._chk_loop.setFixedSize(26, 26)
+        self._chk_loop.setIconSize(QSize(18, 18))
+        self._chk_loop.setToolTip(tooltip(
+            title=label("common.loop"), body=label("sprpanel.loop_tip")
+        ))
         self._chk_loop.setChecked(True)
+        speed_row = W.row(label("common.speed"), self._sp_speed, lay)
+        speed_row.parentWidget().layout().addWidget(self._chk_loop)
         self._chk_loop.toggled.connect(self._on_loop_changed)
 
-        W.separator(lay)
-
     def _build_direction(self):
-        lay = self._content_layout
-        W.section(label("sprpanel.directions"), lay)
+        lay = self._card(label("sprpanel.directions")).body_layout
         self._dir_widget = DirectionWidget()
         self._dir_widget.directions_changed.connect(self._on_directions_changed)
         lay.addWidget(self._dir_widget)
 
     def _build_palette(self):
         from ui.common.palette_slot_grid import PaletteSlotGridAsset
-        lay = self._content_layout
-        W.separator(lay)
-        W.section(label("sprpanel.palette"), lay)
+        lay = self._card(label("sprpanel.palette")).body_layout
 
         # Grille unifiée (modèle scène/background) : les sous-palettes de la
         # PAL_BANK du sprite — dérivées du PNG grisées + overridables, « + » pour

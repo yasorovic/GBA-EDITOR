@@ -11,6 +11,8 @@ from core.models.components import (
 )
 from core.models.background import BackgroundLayer, decode_tile_palette_overrides
 from core.models.camera import Camera
+from core.models.scene_member import SceneMember, assign_member_ids
+from core.models.unique_name import unique_name
 from core.models.field_value import Raw, number_raw
 from core.models.ui_region import InterfaceNode
 
@@ -302,11 +304,20 @@ class Prefab(Resource, ComponentOwnerMixin):
     def notes(self):
         return self.actor.notes
 
+    @property
+    def is_player(self):
+        """Le tag d'acteur « Player » (cf. `Actor.is_player`) : un prefab peut être l'interacteur, et c'est
+        l'un des premiers que l'auteur voudra réutiliser."""
+        return self.actor.is_player
+
     def to_dict(self) -> dict:
+        assign_member_ids(self.children)     # les parties portent leur id comme les acteurs d'une scène
         return {
             "name":             self.name,
             "components":       components_to_list(self.actor.components),
             "pal_bank":         self.actor.pal_bank,
+            # Écrit seulement s'il est posé : un prefab ordinaire ne gagne pas de clé.
+            **({"is_player": True} if self.actor.is_player else {}),
             # Absent tant que le prefab est plat — c'est à dire pour tous ceux
             # d'avant la v0.23.
             **({"children": [c.to_dict() for c in self.children]} if self.children else {}),
@@ -320,6 +331,7 @@ class Prefab(Resource, ComponentOwnerMixin):
             name             = name,
             components       = _components_with_affine_migrated(d),
             pal_bank         = d.get("pal_bank", OWN_PAL_BANK),
+            is_player        = bool(d.get("is_player", False)),
             notes            = d.get("notes", ""),
         )
         return cls(
@@ -343,7 +355,7 @@ class Prefab(Resource, ComponentOwnerMixin):
 # ──────────────────────────────────────────────────────────────────
 
 @dataclass
-class Actor(ComponentOwnerMixin):
+class Actor(SceneMember, ComponentOwnerMixin):
     name: str = "Actor"
     prefab_name: Optional[str] = None
     active: bool = True
@@ -403,12 +415,15 @@ class Actor(ComponentOwnerMixin):
     # dans l'éditeur et initialise dir_x/dir_y de l'Actor au runtime. (0,0)=omni.
     dir_x: int = 0
     dir_y: int = 0
+    # L'INTERACTEUR : seul un acteur portant ce tag déclenche les composants Interactive. C'est un tag
+    # d'ACTEUR, à ne pas confondre avec les tags de collision (ceux des boîtes). Plusieurs acteurs
+    # peuvent le porter (le plus proche d'une zone l'emporte).
+    is_player: bool = False
     notes: str = ""   # note libre utilisateur (éditeur uniquement, jamais compilée)
 
     def to_dict(self) -> dict:
         return {
-            "name":        self.name,
-            "prefab_name": self.prefab_name,
+            **self.member_header(),     # name, id, et source = l'id du prefab d'origine (cf. scene_member.py)
             "active":      self.active,
             "components":  components_to_list(self.components),
             "x":           self.x,
@@ -426,6 +441,8 @@ class Actor(ComponentOwnerMixin):
             # Écrit seulement s'il y a un parent : un acteur ordinaire — c'est
             # à dire tous ceux d'avant la v0.23 — ne gagne pas une clé.
             **({"parent": self.parent} if self.parent else {}),
+            # Écrit seulement s'il est posé : un acteur ordinaire ne gagne pas de clé.
+            **({"is_player": True} if self.is_player else {}),
             "dir_x":       self.dir_x,
             "dir_y":       self.dir_y,
             "notes":       self.notes,
@@ -433,8 +450,9 @@ class Actor(ComponentOwnerMixin):
 
     @classmethod
     def from_dict(cls, d: dict) -> "Actor":
-        return cls(
+        actor = cls(
             name        = d.get("name", "Actor"),
+            # Un acteur d'avant l'en-tête commun nomme son prefab ; `Project.resolve_scene_sources` en tire l'id.
             prefab_name = d.get("prefab_name"),
             active      = d.get("active", True),
             components  = _components_with_affine_migrated(d),
@@ -453,8 +471,22 @@ class Actor(ComponentOwnerMixin):
             parent       = (d.get("parent") or None),
             dir_x       = d.get("dir_x", 0),
             dir_y       = d.get("dir_y", 0),
+            is_player   = bool(d.get("is_player", False)),
             notes       = d.get("notes", ""),
         )
+        actor.read_member_header(d)
+        return actor
+
+
+def _with_member_header(member, d: dict):
+    member.read_member_header(d)
+    return member
+
+
+def _camera_from_dict(d: dict) -> Camera:
+    camera = Camera.from_dict(d)
+    camera.id = str(d.get("id") or "")
+    return camera
 
 
 def actor_descendant_names(actors: list, name: str) -> set:
@@ -503,7 +535,7 @@ def actor_prefab_linked(actor: "Actor", prefab: "Prefab") -> bool:
 # ──────────────────────────────────────────────────────────────────
 
 @dataclass
-class WindowSlot:
+class WindowSlot(SceneMember):
     """Une window matérielle GBA authorée par la scène — une INTENTION nommée,
     pas un index matériel (révisé le 2026-08-25, cf. `codegen/window_alloc.py`
     et ARCHITECTURE.md « Windows — le pochoir »). Rectangle en pixels écran,
@@ -683,11 +715,28 @@ class Scene(Resource):
         while len(self.collision_map) < rows:
             self.collision_map.append([TILE_EMPTY] * cols)
 
+    def members(self) -> list:
+        """Tout ce qui est posé dans la scène et porte un en-tête `name`/`id`/`source`."""
+        return [*self.actors, *self.background_layers, *self.cameras, *self.windows, *self.ui_layouts]
+
+    def ensure_member_names(self) -> None:
+        """Un calque ou une interface sans nom en reçoit un, unique parmi les siens : celui de l'asset qu'il
+        pose, à défaut son rang (`BG0`). Un nom de fenêtre vide reste vide : la fenêtre-objet n'en a pas."""
+        for members, fallback in ((self.background_layers, lambda m: m.background_name or f"BG{m.bg_slot}"),
+                                  (self.ui_layouts, lambda m: m.layout_name or "Interface")):
+            taken = {m.name for m in members if m.name}
+            for member in members:
+                if not member.name:
+                    member.name = unique_name(fallback(member), taken)
+                    taken.add(member.name)
+
     def to_dict(self) -> dict:
+        self.ensure_member_names()
+        assign_member_ids(self.members())
         return {
             "name": self.name,
             "background_layers": [
-                {"background_name": L.background_name, "bg_slot": L.bg_slot,
+                {**L.member_header(), "background_name": L.background_name, "bg_slot": L.bg_slot,
                  "scroll_speed": L.scroll_speed, "pal_bank": L.pal_bank,
                  **({"tile_palette_overrides": {f"{c},{r}": s
                                        for (c, r), s in L.tile_palette_overrides.items()}}
@@ -702,10 +751,10 @@ class Scene(Resource):
             # inertes (même règle que transition_* et music ci-dessous).
             **({"prefab_pools": {k: v for k, v in sorted(self.prefab_pools.items()) if v > 0}}
                if any(v > 0 for v in self.prefab_pools.values()) else {}),
-            "cameras": [c.to_dict() for c in self.cameras],
+            "cameras": [{**c.header(), **c.body()} for c in self.cameras],
             "camera": self.camera,
             "windows": [
-                {"name": ws.name, "is_obj": ws.is_obj, "x": ws.x, "y": ws.y,
+                {**ws.member_header(), "is_obj": ws.is_obj, "x": ws.x, "y": ws.y,
                  "w": ws.w, "h": ws.h, "visible": ws.visible,
                  "layers_shown": ws.layers_shown, "obj_shown": ws.obj_shown}
                 for ws in self.windows
@@ -747,7 +796,8 @@ class Scene(Resource):
     @classmethod
     def from_dict(cls, d: dict) -> "Scene":
         bg_layers = [
-            BackgroundLayer(
+            _with_member_header(BackgroundLayer(
+                name         = str(L.get("name", "")),
                 background_name = L.get("background_name", ""),
                 bg_slot      = L.get("bg_slot", i),
                 scroll_speed = L.get("scroll_speed", 1.0),
@@ -757,7 +807,7 @@ class Scene(Resource):
                 visible      = L.get("visible", True),
                 blend_role   = (L.get("blend_role", "")
                                 if L.get("blend_role", "") in BLEND_ROLES else ""),
-            )
+            ), L)
             for i, L in enumerate(d.get("background_layers", []))
         ]
         actors = [Actor.from_dict(a) for a in d.get("actors", [])]
@@ -771,14 +821,14 @@ class Scene(Resource):
             # carte de budget d'une scène qui ne le spawne pas.
             prefab_pools={str(k): int(v) for k, v in (d.get("prefab_pools") or {}).items()
                           if int(v or 0) > 0},
-            cameras=[Camera.from_dict(c) for c in d.get("cameras", [])],
+            cameras=[_camera_from_dict(c) for c in d.get("cameras", [])],
             # Les anciens champs `cam_*` inline ne sont PAS relus : la maison
             # ne migre pas les formats (cf. core/project.py). Une scène
             # antérieure repart de la caméra par défaut, ce qui était de toute
             # façon le réglage de la quasi-totalité d'entre elles.
             camera=d.get("camera", ""),
             windows=[
-                WindowSlot(
+                _with_member_header(WindowSlot(
                     name=wd.get("name", ""),
                     # `is_obj` prend le relais de l'ancien `region` (region==2
                     # signifiait OBJ) : ni migré ni cassé, juste un défaut qui
@@ -789,7 +839,7 @@ class Scene(Resource):
                     visible=wd.get("visible", False),
                     layers_shown=wd.get("layers_shown", [True, True, True, True]),
                     obj_shown=wd.get("obj_shown", True),
-                )
+                ), wd)
                 for wd in d.get("windows", [])
             ],
             render_mode=int(d.get("render_mode", 0)),
@@ -829,5 +879,7 @@ class Scene(Resource):
                                  if d.get("blend_backdrop_role", "") in BLEND_ROLES else ""),
             notes=d.get("notes", ""),
         )
+        scene.ensure_member_names()
+        assign_member_ids(scene.members())
         scene.ensure_collision_map()
         return scene

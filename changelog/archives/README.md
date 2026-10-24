@@ -48,6 +48,7 @@ Pour un résumé court, voir le [CHANGELOG](../CHANGELOG.md). Pour ce qui reste 
 | --- | --- |
 | [Le gabarit commun des pop-up](common-popups.md) | Messages et confirmations centralisés dans `ui/common`, illustrations et présentation partagées |
 | [La grammaire de la struct `Actor`](actor-struct-grammar.md) | L'API C tient les trois concepts de l'éditeur (acteur/prefab/scène) |
+| [L'identité des assets et des membres de scène](scene-asset-identity.md) | Un en-tête `name` / `id` / `source` pour tout sidecar et tout élément posé en scène ; colonne `prefab` de la table de données |
 | [Les trois couleurs de l'interface](three-colors.md) | Une seule notion de banque de palette en portait trois |
 | [`global.nom` / `const.nom`](global-const.md) | L'accès pointé remplace les accesseurs |
 | [L'identité d'un asset et son fichier](asset-identity.md) | Le nom de fichier fait foi, et un renommage n'est pas une suppression |
@@ -67,3 +68,7 @@ Pour un résumé court, voir le [CHANGELOG](../CHANGELOG.md). Pour ce qui reste 
 | [L'asset `.music`](music-asset.md) | Sections, boucle surchargée, indépendant du format source ; lecteurs alignés sur la ROM, contrôle `cut_to`, WAV aligné sur le module |
 | [Les mises à jour depuis la fenêtre About](updates-from-about.md) | Vérification au démarrage, fenêtre *Updates*, pop-up pour une version importante, téléchargement vérifié (SHA-256) |
 | [Finder et Disk devenus des libraries](finder-to-library.md) | `AssetLibrary`, Scene library (scènes et prefabs), `user_library_dir`, « View uses » d'un script dans le Script Editor |
+| [Les fonds (0.5)](backgrounds.md) | Plan de travail (canvas, image posée), compression qui se joue (service d'encodage, jauges), écran Fond (Inpainting, Painting) ; la comparaison source/compressé est classée à part |
+| [Les inspecteurs en cartes, et les relations parent/enfants](inspector-cards-relations.md) | Même gabarit et même état d'ouverture par défaut pour les inspecteurs Fond, Animations, Acteur, Interface et Scène ; carte *Relations* (acteur, racine de prefab, partie) à la place de *Children* ; outil « select » par défaut sur l'écran Fond ; flèche d'un parent après un glisser |
+| [Texte et données (0.4)](text-and-data.md) | Écran Texte et séquences de dialogue, `Text`/`Textbox` écrits dans le canvas, écran Données de jeu (aperçu, accès à l'élément cité, « Create new » dans une cellule) |
+| [Assets et disque (0.3)](assets-and-disk.md) | `assets/` à l'auteur, ids stables et extension par type d'asset, onglet Disk, *Create from source* / *Create blank*, une seule règle de nom ; les références par id sont sorties vers la TODO |

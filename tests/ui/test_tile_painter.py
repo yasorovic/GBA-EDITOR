@@ -805,6 +805,7 @@ def test_the_screen_shows_the_adjusted_image_in_place_of_the_compressed_render_t
     screen._props._ba = ba
     canvas = screen._canvas
     canvas.load(project, ba)
+    canvas._toolbar.select_brush()           # le mode Canvas (« select ») montre le fichier, pas l'aperçu
 
     screen._on_adjust_preview(BackgroundAdjust(hue=120))
 
@@ -1218,23 +1219,31 @@ def test_the_toolbar_stays_for_a_bitmap_with_the_select_tool_alone(qapp, tmp_pat
     assert toolbar.current_tool == "" and not canvas._view.canvas_mode_active()               # aucun outil choisi d'office
 
 
-def test_select_comes_first_in_the_toolbar_and_a_paintable_background_keeps_its_brush(qapp, tmp_path):
+def test_select_comes_first_in_the_toolbar_and_is_the_tool_on_entering_the_screen(qapp, tmp_path):
     _project, _ba, _screen, canvas = _canvas_on_photo(tmp_path, qapp)
 
     toolbar = canvas._toolbar
     assert list(toolbar._btns)[0] == "select"
-    assert toolbar.current_tool == "brush" and not canvas._view.canvas_mode_active()
-    toolbar.choose_select()
-    assert canvas._view.canvas_mode_active()
+    assert toolbar.current_tool == "select" and canvas._view.canvas_mode_active()      # l'outil par défaut
     toolbar.choose_select()                                                # re-cliquer « select » ne le quitte pas…
     assert canvas._view.canvas_mode_active()
     toolbar._btns["select"].click()                                        # …mais son bouton, si
     assert toolbar.current_tool == "brush" and not canvas._view.canvas_mode_active()
 
 
+def test_leaving_select_never_lands_on_the_eraser(qapp, tmp_path):
+    _project, _ba, _screen, canvas = _canvas_on_photo(tmp_path, qapp)
+    toolbar = canvas._toolbar
+    toolbar._btns["eraser"].click()
+    toolbar.choose_select()
+    toolbar._btns["select"].click()
+    assert toolbar.current_tool == "brush"                                 # la gomme purge les calques : jamais d'office
+
+
 def test_what_falls_outside_the_canvas_stays_visible_dimmed_outside_the_mode_too(qapp, tmp_path):
     """Le passe-partout : sans mode Canvas, le fichier déborde et on le voit, grisé, autour du canvas."""
     _project, ba, screen, canvas = _canvas_on_photo(tmp_path, qapp)
+    canvas._toolbar.select_brush()                                         # hors du mode Canvas
     ba.canvas_size = (16, 32)                                              # un canvas plus étroit que l'image (32×32)
     canvas._refresh_prepare_ui()
     view = canvas._view
@@ -1361,6 +1370,7 @@ def test_choosing_bitmap_makes_the_canvas_card_and_the_window_follow_with_the_ca
 
 def test_choosing_bitmap_outside_the_canvas_mode_moves_the_passe_partout_frame(qapp, tmp_path):
     _project, ba, screen, canvas = _canvas_on_photo(tmp_path, qapp)
+    canvas._toolbar.select_brush()
     assert not canvas._view.canvas_mode_active()
     assert canvas._view.canvas_place.canvas() == (32, 32)
 
@@ -1452,10 +1462,13 @@ def test_the_brush_size_lives_in_the_top_bar_and_drives_the_view(qapp, tmp_path)
     project, ba, screen = _screen_on_photo(tmp_path, qapp)
     canvas = screen._canvas
     assert not hasattr(canvas._toolbar, "size_changed")                 # plus dans le menu du pinceau
-    assert canvas._brush_size_buttons[8].isChecked()
-    canvas._brush_size_buttons[32].click()
-    assert canvas._view._brush_size == 32 and canvas._brush_size_buttons[32].isChecked()
-    assert not canvas._brush_size_buttons[8].isChecked()
+    button = canvas._brush_size_button
+    assert button.text() == "8"
+    seen = []
+    for _ in range(3):
+        button.click()
+        seen.append((button.text(), canvas._view._brush_size))
+    assert seen == [("16", 16), ("32", 32), ("8", 8)]               # un clic avance, après 32 on revient à 8
 
 
 def test_an_encoding_finishing_in_canvas_mode_leaves_the_source_on_screen_until_the_mode_ends(qapp, tmp_path, preparation_tools):

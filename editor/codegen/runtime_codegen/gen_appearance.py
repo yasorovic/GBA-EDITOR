@@ -25,7 +25,7 @@ from core.models.palette import OWN_PAL_BANK
 @dataclass
 class AppearanceLayout:
     """Les lignes de la table d'une scène, et où commence chaque porteur."""
-    rows: list[tuple] = field(default_factory=list)          # (frame_w, frame_h, pal, auto_dir)
+    rows: list[tuple] = field(default_factory=list)          # (frame_w, frame_h, pal, facing_auto)
     actor_base: dict[int, int] = field(default_factory=dict)   # indice d'acteur posé → 1re ligne
     member_base: dict[tuple, int] = field(default_factory=dict)  # (sym du pool, membre) → 1re ligne
 
@@ -36,7 +36,7 @@ def _rows_of(p, owner, obj_layout) -> list[tuple]:
     for comp, sprite in owner_appearances(p, owner):
         own = list(sprite.own_palette) if getattr(sprite, "own_palette", None) else []
         pal = obj_layout.bank_index(getattr(owner, "pal_bank", OWN_PAL_BANK), own) if obj_layout else 0
-        out.append((sprite.frame_w, sprite.frame_h, pal or 0, 1 if getattr(comp, "auto_dir", True) else 0))
+        out.append((sprite.frame_w, sprite.frame_h, pal or 0, 1 if getattr(comp, "facing_auto", True) else 0))
     return out
 
 

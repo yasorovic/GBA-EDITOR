@@ -6,7 +6,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtCore import pyqtSignal
 
 from ui.common.theme import C, T, QSS
-from ui.common.widgets import ScriptSlot, ScriptPickerPopup
+from ui.common.widgets import ScriptSlot, AssetPickerPopup
 from ui.common import icons
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
@@ -25,7 +25,7 @@ def weight_label(weight: int, italic: bool = False) -> str:
 class FontAssetSelector(QWidget):
     """Asset searchable + poids natif, sans inventer de gras artificiel.
 
-    Le choix d'asset réemploie ``ScriptSlot``/``ScriptPickerPopup`` : c'est le
+    Le choix d'asset réemploie ``ScriptSlot``/``AssetPickerPopup`` : c'est le
     picker standard de l'éditeur, avec recherche, plutôt qu'une énième liste
     déroulante qui divergerait de l'expérience des autres assets.
     """
@@ -195,7 +195,7 @@ class FontAssetSelector(QWidget):
         if self._name and self._asset() is None:
             entries.append((label("fontselect.missing", name=self._name), self._name,
                             icons.get("font", C.ACCENT_YLW)))
-        popup = ScriptPickerPopup(entries, C.ACCENT, parent=self, new_label=None)
+        popup = AssetPickerPopup(entries, C.ACCENT, parent=self, new_label=None)
         popup.picked.connect(self._picked)
         popup.show_below(self.font_slot)
 

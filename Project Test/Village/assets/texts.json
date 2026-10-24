@@ -1,0 +1,193 @@
+{
+  "texts": [
+    {
+      "id": "21e3ddbe67f8",
+      "key": "maman_start",
+      "content": "Bien dormi, mon grand ? Mamie Odile a perdu son chat. Va la voir, elle habite à gauche !",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "70fd71577689",
+      "key": "maman_wait",
+      "content": "Elle habite la maison de gauche. Sois gentil avec elle !",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "def328aa26e7",
+      "key": "maman_search",
+      "content": "Pas encore de Minou ? Demande aux voisins, quelqu'un l'a sûrement vu !",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "58d3f2fc8bc7",
+      "key": "maman_end",
+      "content": "Tu as retrouvé Minou ? Je suis si fière de toi, mon grand !",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "23f11928f2cc",
+      "key": "mamie_ask_1",
+      "content": "Oh, mon petit ! Mon chat Minou a disparu ce matin... Peux-tu le chercher ?",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "0494d2093f3c",
+      "key": "mamie_ask_2",
+      "content": "Il adore le poisson. Demande à Lila et à Gaston s'ils l'ont vu !",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "5e90296f38a3",
+      "key": "mamie_wait",
+      "content": "Alors, des nouvelles de Minou ? Lila et Gaston t'aideront, j'en suis sûre.",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "a622c46358a9",
+      "key": "mamie_thanks_1",
+      "content": "Minou ! Mon petit \nMinou ! Tu me l'as\nramené !",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "7ddb8c46a581",
+      "key": "mamie_thanks_2",
+      "content": "Prends cette étoile : tu es le meilleur chercheur du village !",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "d1f18da3497b",
+      "key": "mamie_after",
+      "content": "Minou ronronne sur mes genoux. Merci encore, mon grand !",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "b7f429545cdc",
+      "key": "lila_early",
+      "content": "Bonjour ! Mamie Odile n'a pas l'air bien... Va donc lui parler.",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "1ffea6abdf98",
+      "key": "lila_hint_1",
+      "content": "Salut ! Moi, j'ai vu Minou près du puits ce matin.",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "02a265eaacde",
+      "key": "lila_hint_2",
+      "content": "Mais il a peur des gens. Gaston a peut-être de quoi l'appâter !",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "bb5669f6135b",
+      "key": "lila_wait",
+      "content": "Le puits est tout en bas. Va doucement, il est timide.",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "e1468270a69f",
+      "key": "lila_end",
+      "content": "Minou est rentré ? Youpi ! Tu es un vrai héros !",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "8b090c3c0c8d",
+      "key": "gaston_early",
+      "content": "Bienvenue à la boulangerie ! Reviens quand tu auras faim.",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "88ced2b59e97",
+      "key": "gaston_fish_1",
+      "content": "Le chat de Mamie Odile ? Tiens, j'ai une sardine pour lui !",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "af63d8c64900",
+      "key": "gaston_fish_2",
+      "content": "Tu reçois une sardine.",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "c48185c0589a",
+      "key": "gaston_wait",
+      "content": "Bonne chance ! Le puits est juste en bas, près du chemin.",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "8e98cc9b5f0c",
+      "key": "gaston_end",
+      "content": "Minou est rentré ? Quelle belle histoire pour un lundi matin !",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "02e3f0363d22",
+      "key": "minou_wary",
+      "content": "Miaou ? Le chat te fixe, méfiant. Il a l'air affamé.",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "073517706e0e",
+      "key": "minou_caught_1",
+      "content": "Minou dévore la sardine et ronronne. Tu le prends dans tes bras !",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "86c42ae1647f",
+      "key": "minou_caught_2",
+      "content": "Ramène-le vite à Mamie Odile !",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "7e7ff744355c",
+      "key": "fin_titre",
+      "content": "Le chat de Mamie Odile",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "382a466eb6d5",
+      "key": "fin_merci",
+      "content": "Merci d'avoir joué !",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "c0f4de47e0f4",
+      "key": "Table_01",
+      "content": "",
+      "note": "",
+      "scene": ""
+    },
+    {
+      "id": "7114f5b29608",
+      "key": "Table_02",
+      "content": "",
+      "note": "",
+      "scene": ""
+    }
+  ]
+}

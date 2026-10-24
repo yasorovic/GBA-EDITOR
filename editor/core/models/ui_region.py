@@ -71,6 +71,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from core.models.resource import Resource
+from core.models.scene_member import SceneMember
 from core.models import asset_extensions
 
 TILE = 8
@@ -1617,7 +1618,7 @@ class UILayout(Resource):
 # mais le représentait par un simple nom faute de corps.
 
 @dataclass
-class InterfaceNode:
+class InterfaceNode(SceneMember):
     """Une instance d'un `UILayout` dans une scène : réf de l'asset (par nom) +
     sa cible de rendu propre. Le pendant de `BackgroundLayer` pour l'UI.
 
@@ -1631,9 +1632,11 @@ class InterfaceNode:
     bg_slot:      int = 0              # slot BG (0-3) quand la cible résout à BG ; ex-Scene.text_bg.
                                        # 0 = devant tout : une interface neuve reste visible (un fichier
                                        # ancien sans la clé garde 1, cf. from_dict)
+    name:         str = ""             # nom de référence dans la scène (vide = donné par la scène)
 
     def to_dict(self) -> dict:
         return {
+            **self.member_header(),       # name, id, source = l'id du UILayout
             "layout_name":  self.layout_name,
             "anchor":       self.anchor,
             "anchor_actor": self.anchor_actor,
@@ -1647,13 +1650,16 @@ class InterfaceNode:
         # ramené à `screen` : un nœud nu sauvegardé avant sa première résolution
         # doit rester à migrer, sinon la cible réelle de l'asset serait perdue.
         anchor = d.get("anchor", ANCHOR_SCREEN)
-        return cls(
+        node = cls(
             layout_name  = str(d.get("layout_name", "")),
             anchor       = anchor if (anchor in ANCHORS or anchor == "") else ANCHOR_SCREEN,
             anchor_actor = str(d.get("anchor_actor", "")),
             target       = d.get("target") if d.get("target") in TARGETS else "",
             bg_slot      = int(d.get("bg_slot", 1)),
+            name         = str(d.get("name", "")),
         )
+        node.read_member_header(d)
+        return node
 
 
 class BoundInterface:

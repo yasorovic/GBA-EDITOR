@@ -1,4 +1,4 @@
-"""Le libellé « From project (…) » de l'inspecteur de scène suit le réglage de transition du projet après `refresh_current`."""
+"""La transition affichée par l'inspecteur de scène (sans surcharge) suit le réglage du projet après `refresh_current`."""
 from __future__ import annotations
 
 
@@ -14,9 +14,9 @@ def test_la_transition_heritee_se_relit_apres_un_reglage_du_projet(qapp, tmp_pat
     inspector.set_project(project)
     inspector.show_scene(scene, project)
     combo = inspector._scene_insp._combo_trans
-    before = combo.itemText(0)
+    assert combo.currentData() == "none" and combo.findData("") < 0     # une valeur réelle, pas d'item « héritée »
 
     project.settings.transition_kind = "fade_black"
     inspector.refresh_current()
 
-    assert combo.itemText(0) != before
+    assert combo.currentData() == "fade_black"

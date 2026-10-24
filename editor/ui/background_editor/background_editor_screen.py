@@ -357,7 +357,7 @@ class BgPropertiesPanel(QWidget):
         # dont les réglages en attente sont encodés par le service (bouton « Run encoding » du canvas).
         # La carte CANVAS : la taille du canvas et l'image posée dedans, en chiffres. Modifier un champ ouvre le mode
         # Canvas du canvas central, qui suit tout de suite (cf. BgInpaintCanvas.edit_canvas).
-        self._canvas_card = self._card(label("bgedit.canvas_title"), root)
+        self._canvas_card = self._card(label("bgedit.canvas_title"), root, expanded=False)
         canvas_card = self._canvas_card.body_layout
         self._canvas_spins: dict[str, QSpinBox] = {}
         for row_label, names, lo in ((label("bgedit.canvas_size"), (("canvas_w", "W"), ("canvas_h", "H")), 1),
@@ -403,6 +403,27 @@ class BgPropertiesPanel(QWidget):
             frow.addWidget(b, 1)
         canvas_card.addWidget(fit_host)
         self._canvas_card.setVisible(False)
+        # ── PALETTES, juste sous le canvas : grille unifiée (modèle Scene Inspector). Palettes dérivées
+        #    du PNG grisées + overridables (clic = pointer une banque du catalogue,
+        #    clic droit = restaurer l'origine) ; « + » ajoute une palette du
+        #    catalogue (éditable, clic = remplacer, clic droit = retirer). La
+        #    palette active de PEINTURE se choisit dans la bande en haut du canvas.
+        pal_card = self._card(label("common.palettes"), root, expanded=False)
+        self._pal_grid = PaletteSlotGridAsset(_BG_COLOR)
+        self._pal_grid.scene_add.connect(self._on_pal_add)
+        self._pal_grid.scene_replace.connect(self._on_pal_replace)
+        self._pal_grid.scene_remove.connect(self._on_pal_remove)
+        self._pal_grid.asset_override.connect(self._on_pal_override)
+        self._pal_grid.asset_restore.connect(self._on_pal_restore)
+        pal_card.body_layout.addWidget(self._pal_grid)
+        # Promeut les sous-palettes déduites du PNG en PaletteBank partagées du catalogue (visibles et éditables depuis
+        # le Palette Editor) et les assigne à ce fond.
+        self._btn_extract = self._footer_btn(
+            label("bgedit.extract"),
+            tooltip(title=label("bgedit.extract_title"), body=label("bgedit.extract_tip"),
+                    warning=label("bgedit.extract_warning")))
+        self._btn_extract.clicked.connect(self._on_extract_palette)
+        pal_card.body_layout.addWidget(self._btn_extract)
         # Les ajustements passent avant la compression : ils dirigent ce qu'elle reçoit. Chaque carte se replie
         # d'elle-même (CollapsibleCard) ; son pli suit `_adj_open` / `_tune_open` (cf. `_refresh_tune_visibility`).
         self._adj_card = self._card(label("bgedit.adj_title"), root)
@@ -690,22 +711,8 @@ class BgPropertiesPanel(QWidget):
         for w in self._pl_widgets:
             w.setVisible(False)
 
-        # ── PALETTES : grille unifiée (modèle Scene Inspector). Palettes dérivées
-        #    du PNG grisées + overridables (clic = pointer une banque du catalogue,
-        #    clic droit = restaurer l'origine) ; « + » ajoute une palette du
-        #    catalogue (éditable, clic = remplacer, clic droit = retirer). La
-        #    palette active de PEINTURE se choisit dans la bande en haut du canvas.
-        pal_card = self._card(label("common.palettes"), root)
-        self._pal_grid = PaletteSlotGridAsset(_BG_COLOR)
-        self._pal_grid.scene_add.connect(self._on_pal_add)
-        self._pal_grid.scene_replace.connect(self._on_pal_replace)
-        self._pal_grid.scene_remove.connect(self._on_pal_remove)
-        self._pal_grid.asset_override.connect(self._on_pal_override)
-        self._pal_grid.asset_restore.connect(self._on_pal_restore)
-        pal_card.body_layout.addWidget(self._pal_grid)
-
-        # Ferrés en bas, avec « Extraire les palettes » : les gestes qui portent sur
-        # l'image entière, du plus léger au plus lourd, hors du flux des réglages.
+        # Ferrés en bas : les gestes qui portent sur l'image entière, du plus léger au plus lourd, hors du flux des
+        # réglages.
         root.addStretch()
         self._btn = self._footer_btn(
             label("bgedit.import_replace"),
@@ -721,26 +728,6 @@ class BgPropertiesPanel(QWidget):
         self._btn_restore.clicked.connect(self._on_restore)
         root.addWidget(self._btn_restore)
 
-        # ── EXTRACT PALETTE — ferré en bas de l'inspecteur. Promeut les
-        #    sous-palettes déduites du PNG en PaletteBank partagées du catalogue
-        #    (visibles/éditables depuis le Palette Editor) et les assigne à ce fond.
-        self._btn_extract = QPushButton(label("bgedit.extract"))
-        self._btn_extract.setToolTip(tooltip(
-            title=label("bgedit.extract_title"), body=label("bgedit.extract_tip"),
-            warning=label("bgedit.extract_warning")))
-        self._btn_extract.setFont(QFont(T.UI, T.MD, QFont.Weight.DemiBold))
-        self._btn_extract.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_extract.setFixedHeight(38)
-        self._btn_extract.setStyleSheet(
-            f"QPushButton{{color:{_BG_COLOR}; background:transparent;"
-            f"border:2px solid {_BG_COLOR}; border-radius:5px; letter-spacing:1px;"
-            f"padding:4px 10px;}}"
-            f"QPushButton:hover{{color:{C.BG_DEEP}; background:{_BG_COLOR};}}"
-            f"QPushButton:disabled{{color:{C.TEXT_MUTED}; border-color:{C.BORDER_DARK};"
-            f"background:transparent;}}"
-        )
-        self._btn_extract.clicked.connect(self._on_extract_palette)
-        root.addWidget(self._btn_extract)
         # Deux sorties de l'image telle qu'elle s'affiche : « Save as PNG » la CUIT dans un fichier du projet qui
         # devient la source du fond ; « Export to PNG » la copie où l'auteur veut, sans rien changer.
         png_row = QHBoxLayout(); png_row.setContentsMargins(0, 0, 0, 0); png_row.setSpacing(6)
@@ -820,9 +807,9 @@ class BgPropertiesPanel(QWidget):
                                 (s["pos_x"].value(), s["pos_y"].value(), s["size_w"].value(), s["size_h"].value()))
 
     @staticmethod
-    def _card(title: str, root: QVBoxLayout) -> CollapsibleCard:
+    def _card(title: str, root: QVBoxLayout, expanded: bool = True) -> CollapsibleCard:
         """Une carte repliable posée dans `root` — la même que celles du Scene Inspector."""
-        card = CollapsibleCard(title)
+        card = CollapsibleCard(title, expanded=expanded)
         root.addWidget(card)
         return card
 

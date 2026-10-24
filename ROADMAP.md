@@ -16,42 +16,9 @@ donne une version `0.Y.0` ; les correctifs et petits chantiers, eux, incrémente
 | Version | Chantier | État |
 | --- | --- | --- |
 | 0.1 | État actuel | Base : tout ce qui est déjà livré |
-| 0.2 | Mises à jour depuis la fenêtre About | Livré |
-| 0.3 | Assets et disque | Presque livré |
-| 0.4 | Texte et données | En cours |
-| 0.5 | Fonds | Conception en cours |
 | 0.6 | Interagir avec un objet (`on_interact`) | Conception en cours, développement non commencé |
 | 0.7 | Jouer son jeu dans le navigateur (itch.io) | Conception faite, développement non commencé |
 | 1.0.0-stable | Le pipeline 2D complet (affirmation de capacité) | En route |
-
-L'ordre des versions `0.3` à `0.7` peut encore bouger.
-
-### 0.3 : assets et disque
-
-Tout ce que vous manipulez vit dans le dossier `assets/` du projet, rangé où vous voulez. Un asset
-est indépendant du fichier source dont il vient, se crée de deux façons (depuis une source, ou
-vide), se duplique et se renomme avec une seule règle de nom.
-
-- Livré : identifiants stables, onglet Disk, création d'asset, déplacement des fichiers, une library par famille
-  d'assets, l'ouverture d'un asset passé en argument au lancement.
-- Reste à faire : les références par id (une scène citera un asset par son id plutôt que par son nom).
-
-### 0.4 : texte et données
-
-Écrire et organiser les textes d'un jeu, dont les dialogues, depuis une table de données et des
-boîtes de texte, avec un écran Données pensé pour les besoins d'un jeu plutôt que d'un tableur.
-
-- En cours : boîtes de texte à plusieurs pages, écran Texte, première tranche de l'écran Données.
-- Reste à faire : saisie en série, navigation vers les références, création d'un dialogue depuis le texte.
-
-### 0.5 : fonds
-
-Préparer et comparer un décor pendant l'import : voir ce que la compression change, déplacer
-l'image sur un plan de travail, retoucher les palettes.
-
-- Conception en cours, rien de verrouillé.
-- Livré : deux outils distincts dans l'éditeur de fonds, Inpainting (remplacement de palette) et Painting
-  (tuiles), l'algorithme de redistribution des couleurs s'appelle « Color mapping ».
 
 ### 0.6 : interagir avec un objet
 
@@ -93,5 +60,5 @@ RPG, tactique, gestion). Les versions `0.Y.Z-alpha` avancent vers cet objectif.
 
 Le multijoueur par câble Link, envisagé après `1.0.0-stable` seulement.
 
-Backstage n'est ni un outil de dessin, ni un éditeur de cartes, ni un tracker musical : il
+L'interface graphique de Backstage n'est ni un outil de dessin, ni un éditeur de cartes, ni un tracker musical : il
 importe images et sons, il ne les crée pas.

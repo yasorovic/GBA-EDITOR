@@ -60,10 +60,11 @@ IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 #
 # Les références d'assets graphiques désignent leur rang dans le catalogue du
 # projet ; elles ne sont ni un composant sprite d'acteur ni une couche BG.
+# Un prefab se cite de même, par son rang dans le catalogue des prefabs.
 # L'ancien type `image` désigne un élément d'interface : on continue à le lire,
 # mais on ne le propose plus pour une nouvelle colonne.
 COLUMN_SCALARS = ("int", "bool")
-COLUMN_ASSET_REFERENCES = ("sprite", "background")
+COLUMN_ASSET_REFERENCES = ("sprite", "background", "prefab")
 LEGACY_COLUMN_REFERENCES = ("image",)
 COLUMN_REFERENCES = ("text", "sfx", "music", "scene", "camera", "font",
                      "palette", "region") + COLUMN_ASSET_REFERENCES + LEGACY_COLUMN_REFERENCES

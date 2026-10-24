@@ -30,8 +30,10 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtCore import pyqtSignal, QSize
 
 from core.models.unique_name import unique_name
-from core.models.settings import InputBinding, BUTTON_NAMES
+from core.models.settings import (InputBinding, BUTTON_NAMES, INTERACT_INPUT_NAME,
+                                  MAX_INTERACT_REACH)
 from ui.common.theme import C, T, QSS
+from ui.common.unit_spin import UnitSpin
 from ui.common.widgets import CollapsibleCard, HoverIconButton, W
 
 
@@ -65,6 +67,8 @@ class InputsCard(CollapsibleCard):
     input_added = pyqtSignal()
     input_removed = pyqtSignal(object)                     # InputBinding
     input_field_changed = pyqtSignal(object, str, object)  # (InputBinding, champ, valeur)
+    interact_buttons_changed = pyqtSignal(list)            # le nouvel accord de l'entrée interne
+    interact_reach_changed = pyqtSignal(int)               # la nouvelle portée de la visée, en pixels
 
     def __init__(self, parent=None):
         super().__init__(label('inputs.inputs'), expanded=True, parent=parent)
@@ -125,6 +129,7 @@ class InputsCard(CollapsibleCard):
         self._clear_rows()
         if not self._project:
             return
+        self._rows.addWidget(self._build_interact_row())
         for i, binding in enumerate(self._project.settings.inputs):
             self._rows.addWidget(self._build_row(i, binding))
 
@@ -143,6 +148,21 @@ class InputsCard(CollapsibleCard):
             lambda _i=index, _e=name: self._commit_name(_i, _e.text()))
         row.addWidget(name)
 
+        self._add_button_toggles(
+            row, binding.buttons,
+            lambda on, key, _i=index: self._commit_button(_i, key, on))
+
+        row.addStretch(1)
+        rm = W.btn_danger(label('inputs.remove_this_input'))
+        rm.clicked.connect(lambda _c=False, _i=index: self._remove(_i))
+        row.addWidget(rm)
+        return host
+
+    @staticmethod
+    def _add_button_toggles(row, selected, on_toggle):
+        """Les dix boutons du boîtier en bascules à icône, cochés d'après `selected`.
+        `on_toggle(on, key)` est appelé à chaque bascule : la même rangée sert aux accords
+        déclarés et à la ligne verrouillée de l'entrée interne."""
         tooltips = _button_tooltips()
         for key, icon_key in _BUTTON_ICONS:
             btn = HoverIconButton(icon_key, C.TEXT_DIM, C.TEXT_HI, checked=C.ACCENT)
@@ -161,16 +181,64 @@ class InputsCard(CollapsibleCard):
             btn.setIconSize(QSize(18, 18))
             btn.setFixedSize(26, 26)
             btn.setToolTip(tooltips[key])
-            btn.setChecked(key in binding.buttons)
-            btn.toggled.connect(
-                lambda on, _i=index, _k=key: self._commit_button(_i, _k, on))
+            btn.setChecked(key in selected)
+            btn.toggled.connect(lambda on, _k=key: on_toggle(on, _k))
             row.addWidget(btn)
 
+    def _build_interact_row(self) -> QWidget:
+        """La ligne de l'entrée interne `interact` : son nom est verrouillé, elle ne se retire pas,
+        seul son accord se règle. Un accord vide est refusé : la case qu'on vient de décocher
+        est recochée au rafraîchissement."""
+        host = QWidget()
+        row = QHBoxLayout(host)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        name = QLineEdit(INTERACT_INPUT_NAME)
+        name.setFont(QFont(T.UI, T.SM))
+        name.setStyleSheet(QSS.lineedit)
+        name.setFixedWidth(110)
+        name.setReadOnly(True)
+        name.setEnabled(False)
+        name.setToolTip(label('inputs.interact_locked'))
+        row.addWidget(name)
+        self._add_button_toggles(row, self._project.settings.interact_buttons,
+                                 self._commit_interact_button)
         row.addStretch(1)
-        rm = W.btn_danger(label('inputs.remove_this_input'))
-        rm.clicked.connect(lambda _c=False, _i=index: self._remove(_i))
-        row.addWidget(rm)
+        # La portée de la visée du mode « facing » : un réglage de projet, rangé avec l'entrée qu'il sert.
+        reach_label = QLabel(label('inputs.interact_reach'))
+        reach_label.setFont(QFont(T.UI, T.XS))
+        reach_label.setStyleSheet(f"color:{C.TEXT_MUTED};")
+        row.addWidget(reach_label)
+        reach = UnitSpin()
+        reach.setRange(0, MAX_INTERACT_REACH)
+        reach.setSuffix(" px")
+        reach.setValue(self._project.settings.interact_reach)
+        reach.setToolTip(label('inputs.interact_reach_tip'))
+        reach.valueChanged.connect(self._commit_interact_reach)
+        row.addWidget(reach)
         return host
+
+    def _commit_interact_reach(self, value: int):
+        if self._blocking or not self._project:
+            return
+        if int(value) != int(self._project.settings.interact_reach):
+            self.interact_reach_changed.emit(int(value))
+
+    def _commit_interact_button(self, on: bool, key: str):
+        if self._blocking or not self._project:
+            return
+        buttons = set(self._project.settings.interact_buttons)
+        if on:
+            buttons.add(key)
+        else:
+            buttons.discard(key)
+        ordered = [k for k in BUTTON_NAMES if k in buttons]
+        if ordered == list(self._project.settings.interact_buttons):
+            return
+        if not ordered:
+            self.refresh()      # aucun bouton : l'entrée serait inatteignable, on revient en arrière
+            return
+        self.interact_buttons_changed.emit(ordered)
 
     # ── Mutations — la carte PROPOSE, l'appelant décide ────────────
 
@@ -210,5 +278,5 @@ class InputsCard(CollapsibleCard):
     def free_name(self) -> str:
         """Un nom encore libre, pour un input qu'on vient d'ajouter — il doit
         pouvoir être distingué des autres avant même d'être renommé."""
-        taken = {b.name for b in self._project.settings.inputs}
+        taken = {b.name for b in self._project.settings.inputs} | {INTERACT_INPUT_NAME}
         return unique_name("input", taken)

@@ -1,0 +1,6 @@
+nom	pv	attaque	defense	vitesse
+Slime	12	3	1	4
+Gobelin	20	6	3	6
+Squelette	28	8	5	5
+Orc	45	12	8	3
+Dragon	120	25	18	9

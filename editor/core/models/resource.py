@@ -23,6 +23,31 @@ class Resource:
     # L'extension du fichier où l'asset vit (cf. models/asset_extensions.py) : chaque type d'asset stocké déclare la sienne,
     # le type se lit ainsi dans le nom du fichier. `.json` pour ce qui n'est pas un asset à part entière.
     sidecar_extension = ".json"
+    # Le nom de l'attribut qui porte le chemin du fichier SOURCE (PNG, WAV, .hex…), "" pour un asset qui n'en a pas
+    # (scène, prefab, table). Sur disque il s'écrit toujours `source`, dans l'en-tête.
+    source_field = ""
+
+    def header(self) -> dict:
+        """L'en-tête commun de tout sidecar : `name`, `id`, puis `source` si l'asset en a une. Le seul endroit
+        qui le compose : chaque store l'écrit en tête du JSON, avant le corps propre au type."""
+        head = {"name": self.name, "id": self.id}
+        source = getattr(self, self.source_field, None) if self.source_field else None
+        if source:
+            head["source"] = source
+        return head
+
+    @classmethod
+    def from_header(cls, d: dict) -> dict:
+        """Le dictionnaire du sidecar prêt pour `from_dict` : `source` redevient l'attribut du modèle. Un sidecar
+        d'avant l'en-tête commun, qui disait `asset`, se lit tel quel."""
+        if cls.source_field and "source" in d:
+            d = {k: v for k, v in d.items() if k != "source"} | {cls.source_field: d["source"]}
+        return d
+
+    def body(self) -> dict:
+        """Le corps du sidecar : `to_dict` privé de ce que l'en-tête porte déjà."""
+        skip = {"name", "id", "source", self.source_field}
+        return {k: v for k, v in self.to_dict().items() if k not in skip}
 
     def to_dict(self) -> dict:
         return dataclasses.asdict(self)

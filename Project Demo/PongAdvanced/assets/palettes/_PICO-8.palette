@@ -1,5 +1,6 @@
 {
   "name": "_PICO-8",
-  "size": 16,
-  "asset": "assets/palettes/_PICO-8.hex"
+  "id": "698c7256e932",
+  "source": "assets/palettes/_PICO-8.hex",
+  "size": 16
 }

@@ -192,14 +192,17 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
     _check_affine_budget(ctx)
     _check_data_column_types(ctx)
     _check_data_tables(ctx)
+    _check_scene_sources(ctx)
     _check_screen_space(ctx)
     _check_audio_files(ctx)
     _check_music_structure(ctx)
     _check_music_cut_compat(ctx)
     _check_sound_names_unique(ctx)
+    _check_reserved_input_names(ctx)
     _check_module_channels(ctx)
     _check_sound_boxes(ctx)
     _check_sprite_appearances(ctx)
+    _check_interactive(ctx)
 
     # ── Validateurs plugins ──────────────────────────────────────────
     for fn in _VALIDATORS:
@@ -1212,6 +1215,25 @@ def _check_ui_container_fill(ctx: ValidationContext):
                     DiagnosticTarget("ui_element", el.name, lay.name))
 
 
+def _check_scene_sources(ctx: ValidationContext):
+    """Une `source` est l'id de l'asset dont un membre de scène est l'instance (cf. core/scene_sources.py). Celle
+    qui ne désigne plus rien ne se rattrape pas par le nom : le lien est perdu, et le build ne doit pas faire
+    comme s'il tenait. Seuls les prefabs et les interfaces sont contrôlés, leurs catalogues étant entiers en
+    mémoire ; celui des fonds est paresseux."""
+    p = ctx.project
+    prefab_ids = {pf.id for pf in p.prefabs}
+    layout_ids = {lay.id for lay in p.ui_layouts}
+    for scene in p.scenes:
+        for actor in scene.actors:
+            if actor.source and actor.source not in prefab_ids:
+                ctx.error(None, f"Scene '{scene.name}': actor '{actor.name}' comes from a prefab that no longer "
+                                f"exists (source {actor.source}). Delete the actor or re-link it to a prefab.")
+        for node in scene.ui_layouts:
+            if node.source and node.source not in layout_ids:
+                ctx.error(None, f"Scene '{scene.name}': interface '{node.name}' comes from a layout that no longer "
+                                f"exists (source {node.source}).")
+
+
 def _check_data_column_types(ctx: ValidationContext):
     """Les trois listes qui décrivent un type de colonne doivent s'accorder.
 
@@ -1762,6 +1784,79 @@ def _check_sound_names_unique(ctx: ValidationContext):
             ctx.error(None,
                 f"\"{j.name}\" exists both in assets/music/ and in assets/jingles/ — both "
                 "would become the same constant in the ROM. Rename one of the files.")
+
+
+def _check_interactive(ctx: ValidationContext):
+    """Un composant Interactive désigne une zone qui existe, et tient sur l'acteur.
+
+    - `box_tag` nomme une boîte DÉJÀ posée : sans elle, la zone n'existe pas ;
+    - sans `box_tag`, le composant ajoute SA boîte : il lui faut un emplacement libre (`MAX_BOXES`) ;
+    - un composant sans `on_interact` dans le script de l'acteur ne fait rien (et inversement :
+      un `on_interact` sans composant n'est jamais appelé) — avertissement, le jeu tourne."""
+    from core.models.components import CollisionBoxComponent, InteractiveComponent, ScriptComponent
+    MAX_BOXES = 4      # actor_types_static.h
+    scenes = list(ctx.project.scenes)
+    owners = [(a, a.name) for sc in scenes for a in sc.actors]
+    owners += [(pf, pf.name) for pf in ctx.project.prefabs]
+    for sc in scenes:
+        if (any(isinstance(c, InteractiveComponent) and c.active
+                for a in sc.actors for c in getattr(a, "components", []))
+                and not any(getattr(a, "is_player", False) for a in sc.actors)
+                and not any(getattr(pf, "is_player", False) for pf in ctx.project.prefabs)):
+            ctx.warn(getattr(sc, "name", ""),
+                     "This scene has Interactive actors but no actor tagged Player: nothing can "
+                     "trigger them. Tick \"Player\" on the actor that interacts.")
+    for owner, name in owners:
+        comps = [c for c in getattr(owner, "components", []) if isinstance(c, InteractiveComponent)]
+        boxes = [c for c in getattr(owner, "components", []) if isinstance(c, CollisionBoxComponent)]
+        tags = {c.tag or "body" for c in boxes}
+        script = next((c for c in getattr(owner, "components", [])
+                       if isinstance(c, ScriptComponent) and c.active and c.script), None)
+        handlers = None            # None : le script n'est pas un .lua lisible, on ne conclut rien
+        if script is None:
+            handlers = set()
+        elif hasattr(ctx.project, "asset_abs"):
+            path = ctx.project.asset_abs(script.script)
+            if path and path.suffix.lower() == ".lua":
+                handlers = ctx.script_functions(path)
+        active = [c for c in comps if c.active]
+        if handlers is not None:
+            if active and "on_interact" not in handlers:
+                ctx.warn(name, "Interactive is set but the script has no on_interact(who): the "
+                               "interaction does nothing. Add the handler to the script.")
+            if not active and "on_interact" in handlers:
+                ctx.warn(name, "The script defines on_interact(who) but this actor has no active "
+                               "Interactive component: it is never called. Add the component.")
+        for comp in comps[:1]:
+            if not comp.active:
+                continue
+            if comp.box_tag and comp.box_tag not in tags:
+                ctx.error(name,
+                    f"Interactive uses the box \"{comp.box_tag}\", but this actor has no collision "
+                    "box with that tag. Add the box or choose the own box of the component.")
+            if not comp.box_tag and len(boxes) >= MAX_BOXES:
+                ctx.error(name,
+                    f"Interactive needs a box of its own, but this actor already has {len(boxes)} "
+                    f"collision boxes (the maximum is {MAX_BOXES}). Remove one or pick an existing box.")
+        if len(comps) > 1:
+            ctx.warn(name, "This actor has several Interactive components: only the first is used.")
+
+
+def _check_reserved_input_names(ctx: ValidationContext):
+    """Le nom de l'entrée interne n'appartient pas à l'auteur.
+
+    `interact` existe dans tous les projets (cf. `INTERACT_INPUT_NAME`) : un accord, un axe ou une
+    séquence du même nom serait ou bien ignoré en silence, ou bien lu à la place de l'entrée
+    interne. Le build s'arrête et dit quoi renommer."""
+    from core.models.settings import INTERACT_INPUT_NAME
+    s = ctx.project.settings
+    for kind, items in (("input", s.inputs), ("axis", s.axes), ("sequence", s.sequences)):
+        for item in items:
+            if (item.name or "").strip() == INTERACT_INPUT_NAME:
+                ctx.error(None,
+                    f"The {kind} \"{INTERACT_INPUT_NAME}\" uses a reserved name: it is the "
+                    "built-in input of the Interactive component (Project Settings > Input). "
+                    f"Rename this {kind}.")
 
 
 def _check_module_channels(ctx: ValidationContext):

@@ -105,6 +105,7 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "zoom_in":               ("mdi.magnify-plus-outline",    "⊕"),
     "zoom_out":              ("mdi.magnify-minus-outline",   "⊖"),
     "fit_page":              ("mdi.fit-to-page-outline",     "⊡"),
+    "view_grid_off":         ("mdi.square-outline",          "▢"),
     "view_grid":             ("mdi.grid",                    "▦"),
     "view_grid_large":       ("mdi.grid-large",              "▤"),
     "view_snap":             ("mdi.magnet",                  "⇲"),
@@ -206,6 +207,7 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "ev_collision_enter":    ("mdi.login-variant",           "→"),
     "ev_tile_collide":       ("mdi.grid",                    "▦"),
     "ev_collision_exit":     ("mdi.logout-variant",          "←"),
+    "ev_interact":           ("mdi.hand-pointing-right",     "☞"),
     "ev_destroy":            ("mdi.trash-can-outline",       "✕"),
     # Script Editor — boutons GBA
     "btn_a":                 ("mdi.alpha-a-circle-outline",  "🅐"),
@@ -265,6 +267,9 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "add_menu":               ("mdi.plus",                    "+▾"),
     "remove":                 ("mdi.minus",                   "−"),
     "search":                 ("mdi.magnify",                 "⌕"),
+    "loop":                   ("mdi.repeat",                  "⟲"),
+    # « Rien ici » : cercle barré, pour un emplacement vide (pas un fichier perdu).
+    "empty":                  ("mdi.cancel",                  "⊘"),
     "layout_list":            ("mdi.view-list",               "☰"),
     "sort":                   ("mdi.sort-alphabetical-ascending", "⇅"),
     # Fenêtre « À propos » (ui/common/about_dialog.py)

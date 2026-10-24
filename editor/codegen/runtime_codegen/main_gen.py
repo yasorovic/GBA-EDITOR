@@ -33,6 +33,10 @@ from codegen.font_emit import project_fonts, encodable_project_fonts
 # Émission de la sauvegarde (SRAM) — extraite dans son sous-module (A3). main_gen
 # n'en consomme que le contrôle bloquant et les tables.
 from codegen.runtime_codegen.gen_save import save_fatal, save_lines
+from codegen.runtime_codegen.block_gen import block_helper_lines, block_tick_lines, project_has_blockers
+from codegen.runtime_codegen.interact_gen import (
+    interact_helper_lines, interact_tick_lines, owner_boxes, project_has_interactive,
+)
 # Table des caméras et suivi — extraite (A3). `project_cameras` est RÉ-EXPORTÉ ici :
 # data_tables.py et headers.py l'importent depuis main_gen (l'ordre de vérité de la
 # table runtime). `camera_target_index` reste privé à gen_camera.
@@ -303,7 +307,7 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
         pal = obj_layout.bank_index(getattr(pf, "pal_bank", OWN_PAL_BANK), own) if obj_layout else 0
         if pal is None:
             pal = 0
-        boxes = [c for c in pf.components if isinstance(c, CollisionBoxComponent)][:4]
+        boxes = owner_boxes(pf, sprite)
 
         # pool_init est toujours généré par le transpileur, extern inconditionnel
         L.append(f"extern void {s}_pool_init(Actor* self);")
@@ -315,6 +319,7 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
             ("on_collision_enter", f"extern void {s}_on_collision_enter(Actor* self, Actor* other, u8 my_box, u8 other_box);"),
             ("on_collision_exit",  f"extern void {s}_on_collision_exit(Actor* self, Actor* other, u8 my_box, u8 other_box);"),
             ("on_tile_collide",    f"extern void {s}_on_tile_collide(Actor* self, int normal_x, int normal_y);"),
+            ("on_interact",        f"extern void {s}_on_interact(Actor* self, Actor* who);"),
         ]:
             if _def(s, ev):
                 L.append(sig)
@@ -385,6 +390,9 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
                f"            g_oam_entries[{_e0}].frame_w  = {sprite.frame_w if sprite else 0};",
                f"            g_oam_entries[{_e0}].frame_h  = {sprite.frame_h if sprite else 0};",
                f"            g_oam_entries[{_e0}].anim_state = {_initial_state_rank(*_shown(p, pf))};",
+               # Le regard d'une instance suit son mouvement comme celui d'un acteur de scène
+               # (`facing_auto` du sprite affiché) : un prefab « Player » vise dans son regard.
+               f"            g_oam_entries[{_e0}].facing_auto = {1 if getattr(sp, 'facing_auto', True) else 0};",
                *_appearance_init_lines(p, pf, _e0, "            ",
                                        _alay.member_base.get((pi["sym"], 0)))]
               if _e0 else []),
@@ -1684,7 +1692,7 @@ def _gen_scene_init(
         idx = actor_offset + j
         _e = _lay.placed_entry[j]   # son entrée OAM, -1 = sans sprite : rien à afficher
         s = scene_actor_sym(scene.name, actor.name)
-        boxes = [c for c in actor.components if isinstance(c, CollisionBoxComponent)][:4]
+        boxes = owner_boxes(actor, sprite)
         own = list(sprite.own_palette) if (sprite and getattr(sprite, "own_palette", None)) else []
         pal = obj_layout.bank_index(getattr(actor, "pal_bank", OWN_PAL_BANK), own)
         _lines = [
@@ -1700,7 +1708,10 @@ def _gen_scene_init(
             f"    g_oam_entries[{_e}].pal_bank= {pal if pal is not None else 0};",
             f"    g_oam_entries[{_e}].obj_mode= {int(getattr(actor, 'obj_mode', 0)) & 3};",
             f"    g_oam_entries[{_e}].priority= {_number_c(getattr(actor, 'priority', 0), _var_names(p), mask=3)};",
-            f"    g_oam_entries[{_e}].auto_dir= {1 if getattr(_shown(p, actor)[0], 'auto_dir', True) else 0};",
+            f"    g_oam_entries[{_e}].facing_auto= {1 if getattr(_shown(p, actor)[0], 'facing_auto', True) else 0};",
+            # Le regard de départ est la direction posée dans l'inspecteur.
+            f"    g_actors[{idx}].facing_x= {getattr(actor,'dir_x',0)};",
+            f"    g_actors[{idx}].facing_y= {getattr(actor,'dir_y',0)};",
             # L'état de départ choisi dans l'inspecteur (`initial_state`) : rang dans
             # les états du sprite AFFICHÉ, 0 si le nom n'existe plus.
             f"    g_oam_entries[{_e}].anim_state={_initial_state_rank(*_shown(p, actor))};",
@@ -1876,6 +1887,10 @@ def _gen_scene_tick(
     L += _parent_compose_lines(scene_actors, actor_offset, _lay.placed_entry)
     L += _pool_compose_lines(pi)
 
+    # Blocage entre acteurs : un mobile est repoussé hors des boîtes `blocks_actors`, AVANT la carte de
+    # collision (les murs ont le dernier mot).
+    L += block_tick_lines(p, scene, scene_actors, actor_offset, pi, _shown)
+
     # Résolution contre la carte de collision — pour TOUTE box solide, et non
     # plus seulement pour les acteurs qui définissent `on_tile_collide` : la
     # résolution DÉPLACE l'acteur, le hook ne fait que prévenir. C'est aussi ce
@@ -2003,6 +2018,11 @@ def _gen_scene_tick(
                 L.append(f"            if(g_actors[_pi].active) sfx_play({sfx_sym}, {sfx_vol}, 0);"
                          f"   /* SoundFxComponent : {p2['prefab'].name} */")
         L.append("    }")
+
+    # Interactive : le geste sur l'entrée `interact`, puis l'interacteur atteint le plus proche
+    L += interact_tick_lines(p, scene, scene_actors, actor_offset, pi, lua_idx, _def,
+                             scene_actor_sym, input_layout, _shown,
+                             lambda j: _lay.placed_entry[j])
 
     # on_late_update actors
     if lua_idx:
@@ -2338,10 +2358,12 @@ def generate_main(
                 abs_sp = p.asset_abs(script_path)
                 if abs_sp and abs_sp.suffix.lower() == ".lua":
                     for ev in ("on_start", "on_update", "on_late_update", "on_tile_collide",
-                               "on_collision_enter", "on_collide", "on_collision_exit"):
+                               "on_collision_enter", "on_collide", "on_collision_exit", "on_interact"):
                         if _def(s, ev):
                             if ev == "on_tile_collide":
                                 L.append(f"extern void {s}_{ev}(Actor*,int,int);")
+                            elif ev == "on_interact":
+                                L.append(f"extern void {s}_{ev}(Actor*,Actor*);")
                             elif ev in ("on_collision_enter", "on_collide", "on_collision_exit"):
                                 L.append(f"extern void {s}_{ev}(Actor*,Actor*,u8,u8);")
                             else:
@@ -2421,6 +2443,10 @@ def generate_main(
 
     # ── Tile helpers (dispatch via pointeur) ──────────────────────
     L += _gen_tile_helpers()
+    if project_has_interactive(p):
+        L += interact_helper_lines()
+    if project_has_blockers(p):
+        L += block_helper_lines()
 
     # ── Cmap flat arrays par scène ────────────────────────────────
     for d in all_scene_data:

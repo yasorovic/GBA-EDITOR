@@ -187,6 +187,12 @@ class TextPanel(QWidget):
         added, promoted = self._new_text_after(prefix or text.key, list(anchor))
         self._push_new_text(added, promoted)
 
+    def show_text(self, text) -> None:
+        """Navigation entrante : sélectionne `text` malgré les filtres, sans prendre le curseur.
+        `select_by_ids` ne signale rien, d'où l'appel explicite de la sélection."""
+        self._table.focus_entry(text.id, edit=False)
+        self._on_selection([text])
+
     def _on_selection(self, texts: list):
         # Commiter AVANT de changer d'entrée, sinon la frappe non validée
         # serait attribuée au texte suivant.

@@ -10,10 +10,10 @@ def test_new_project_declares_player_and_body(tmp_path):
     project = Project.create(tmp_path / "Game", "Game")
     for folder in ((project.user_library_dir / "scripts"),):
         folder.mkdir(parents=True, exist_ok=True)
-    assert project.settings.collision_tags == ["Player", "body"]
+    assert project.settings.collision_tags == ["Player", "Interactive", "body"]
     # Écrits sur disque, relus tels quels.
     reopened = Project.open(tmp_path / "Game")
-    assert set(reopened.settings.collision_tags) == {"Player", "body"}
+    assert set(reopened.settings.collision_tags) == {"Player", "body", "Interactive"}
 
 
 def test_existing_project_without_declared_tags_keeps_none(tmp_path):
@@ -35,6 +35,7 @@ def test_collision_enter_is_dispatched_to_scene_actor_script(tmp_path):
     for folder in ((project.user_library_dir / "scripts"),):
         folder.mkdir(parents=True, exist_ok=True)
     scene = project.scenes[0]
+    scene.actors.clear()      # le Player du modèle décalerait les indices que ce test lit
     scripts = (project.user_library_dir / "scripts")
     (scripts / "Hit.lua").write_text(
         "function on_collision_enter(other, my_box, other_box)\nend\n", encoding="utf-8")

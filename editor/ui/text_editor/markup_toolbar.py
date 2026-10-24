@@ -36,7 +36,7 @@ from ui.common import icons
 from ui.common.theme import C
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
-from ui.common.widgets import ScriptPickerPopup
+from ui.common.widgets import AssetPickerPopup
 from ui.text_editor.value_completion import value_names
 
 
@@ -163,7 +163,7 @@ class MarkupToolbar(QFrame):
         entries = [(choice, choice,
                     icons.get("font", C.ACCENT) if name == "font" else None)
                    for choice in choices]
-        popup = ScriptPickerPopup(entries, C.ACCENT, parent=self,
+        popup = AssetPickerPopup(entries, C.ACCENT, parent=self,
                                   new_label=label("mktool.type_by_hand"))
         popup.picked.connect(lambda value:
                              self._insert(name, value, preselect=False))

@@ -71,6 +71,7 @@ class PaletteStore(ResourceStore[PaletteBank]):
         path = self._path(bank.name, folder)
         self._keep_unreadable(path)
         path.parent.mkdir(parents=True, exist_ok=True)
+        self._ensure_id(bank)
         atomic_write(path, project_json.dumps(bank.to_metadata_dict()))
         self.index.record(bank.name, path)
 
@@ -79,7 +80,7 @@ class PaletteStore(ResourceStore[PaletteBank]):
         côté de lui). Une palette dont le `.hex` a disparu n'est pas chargée, et son sidecar n'est pas touché :
         supprimer le fichier source est une intention, pas une panne à réparer."""
         metadata = self._load_metadata(sidecar)
-        cited = metadata.get("asset")
+        cited = metadata.get("source") or metadata.get("asset")   # `asset` : sidecar d'avant l'en-tête commun
         hex_file = self._abs(cited) if isinstance(cited, str) and cited else sidecar.with_suffix(".hex")
         if not hex_file.exists():
             hex_file = self._migrate_colors_in_sidecar(name, sidecar, metadata, hex_file)
@@ -92,15 +93,18 @@ class PaletteStore(ResourceStore[PaletteBank]):
             print(f"[project] palette read error {hex_file.name}: {error}")
             return None
         bank.asset = self._rel(hex_file)
-        if metadata != bank.to_metadata_dict():
-            self._write_sidecar(bank)              # un sidecar d'avant le champ `asset` le reçoit une fois
-        else:
-            self.index.record(name, sidecar)
+        bank.id = str(metadata.get("id") or "")
         for index, existing in enumerate(self.items):
             if existing.name == name:
                 self.items[index] = bank
-                return bank
-        self.items.append(bank)
+                break
+        else:
+            self.items.append(bank)
+        self._ensure_id(bank)
+        if metadata != bank.to_metadata_dict():
+            self._write_sidecar(bank)              # un sidecar d'avant l'en-tête commun (id, source) le reçoit une fois
+        else:
+            self.index.record(name, sidecar)
         return bank
 
     def _migrate_colors_in_sidecar(self, name: str, sidecar: Path, metadata: dict, hex_file: Path) -> Path | None:

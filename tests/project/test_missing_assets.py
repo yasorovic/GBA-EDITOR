@@ -59,7 +59,7 @@ def test_acteur_qui_cite_un_sprite_disparu_est_un_avertissement(tmp_path):
 
 def test_sprite_sans_nom_reste_un_simple_avertissement(tmp_path):
     p = _projet(tmp_path)
-    p.scenes[0].actors[0].components[0].sprite_name = ""
+    next(a for a in p.scenes[0].actors if a.name == "Hero").components[0].sprite_name = ""
     p.save()
 
     _, warnings, errors = _rouvrir_et_valider(p.root)

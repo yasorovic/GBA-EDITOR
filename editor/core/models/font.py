@@ -131,6 +131,7 @@ def _source_format(value) -> str:
 @dataclass
 class Font(Resource):
     sidecar_extension = asset_extensions.FONT
+    source_field = "asset"
     name:  str = "font"
     asset: Optional[str] = None          # planche PNG (relative au projet)
     descriptor: Optional[str] = None     # .fnt BMFont d'origine, si import .fnt

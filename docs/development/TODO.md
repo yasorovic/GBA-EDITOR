@@ -79,9 +79,9 @@ le moment et le numéro de la première release publique se décident plus tard.
 | --- | --- | --- |
 | 0.1 | État actuel (base) | tout l'existant, jalons v0.2 à v0.28 (voir le [CHANGELOG](../../changelog/CHANGELOG.md)) |
 | 0.2 | [Mises à jour](../../changelog/archives/updates-from-about.md) | **livré le 2026-10-22** : la fenêtre *Updates* ; reste à essayer la pop-up au lancement et le téléchargement sur build empaqueté |
-| 0.3 | Assets et disque (presque livré : il reste les références par id) | [Tout vit dans `assets/`](#tout-ce-que-lauteur-manipule-vit-dans-assets), [Source ≠ asset](#source--asset-larborescence-du-disque-et-lid-stable), [Créer un asset](#créer-un-asset--deux-gestes-aucun-dossier-titulaire), [Finder et Disk (livré)](../../changelog/archives/finder-to-library.md), [Une seule règle de nom](#une-seule-règle-de-nom-libre) |
-| 0.4 | Texte et données | [Écran Texte](#lécran-texte-nédite-et-ne-range-que-du-contenu), [TextBox](#textbox-plusieurs-entrées-pour-préparer-un-dialogue), [le pont vers les tables](#un-pont-entre-lécran-texte-et-les-tables-de-données-créer-un-dialogue), [écran Données](#lécran-données-une-grille-de-jeu-pas-un-tableur), [briques `Text` et `Textbox`](#briques-de-base-et-assemblages-text-chaîne-et-textbox-boîte) |
-| 0.5 | Fonds | [La compression d'un fond](#la-compression-dun-fond-se-joue-elle-ne-sattend-pas), [le plan de travail](#le-fond-est-un-plan-de-travail-canvas-image-posée-comparaison-sourcecompressé), [l'écran Fond](#lécran-fond-ce-qui-est-livré-le-2026-10-14-et-les-pistes-notées-pour-plus-tard), [préparer une image riche](#piste-préparer-une-image-riche-à-limport-recadrer-et-redimensionner-sans-toucher-au-png) |
+| 0.3 | [Assets et disque](../../changelog/archives/assets-and-disk.md) | **livré le 2026-10-23** : `assets/` à l'auteur, ids stables, onglet Disk, *Create from source* / *Create blank* ; les références par id en sont sorties, reste le [reliquat](#assets-et-disque-ce-qui-reste-après-la-livraison-de-la-03) |
+| 0.4 | [Texte et données](../../changelog/archives/text-and-data.md) | **livré le 2026-10-23** : écran Texte et séquences de dialogue, `Text`/`Textbox`, écran Données ; reste le [reliquat](#texte-et-données-ce-qui-reste-après-la-livraison-de-la-04) |
+| 0.5 | [Fonds](../../changelog/archives/backgrounds.md) | **livré le 2026-10-23** : le plan de travail (canvas, image posée, Ajuster / Remplir / 1:1), la compression qui se joue, l'écran Fond (Inpainting, Painting) ; reste le [reliquat](#fonds-ce-qui-reste-après-la-livraison-de-la-05), dont la comparaison source/compressé, **non classée** |
 | 0.6 | [Interaction avec un acteur](#interagir-avec-un-acteur-on_interact-et-le-composant-interactive) | `on_interact` et le composant `interactive` |
 | 0.7 | [Export navigateur](#diffuser-une-rom-dans-le-navigateur-itchio) | itch.io, ROM jouable dans le navigateur |
 
@@ -236,26 +236,74 @@ du Lua exécuté pour tous les objets, à chaque frame, pour un événement qui 
   Le nom `interact` est **refusé au build** à toute entrée, axe ou séquence de l'auteur, par le diagnostic
   unique (le même journal que les autres erreurs de build), avec un message qui dit quoi renommer.
 
-### Les modes (proposés, à trancher)
+### Décisions verrouillées (2026-10-23, relecture du code avec l'auteur)
 
-| Mode | Déclenché quand | État runtime | Se règle sur |
-| --- | --- | --- | --- |
-| `press` | l'entrée nommée vient d'être pressée (front montant) **et** l'interacteur recouvre la zone | aucun | l'entrée, la zone |
-| `facing` | comme `press`, et l'interacteur **regarde** l'acteur (`dir_x`/`dir_y`, déjà dans `Actor`) | aucun | l'entrée, la zone |
-| `hold` | l'entrée est tenue `n` frames d'affilée dans la zone (ouvrir un coffre lourd) | aucun : les dix compteurs `u8` de boutons existent déjà (v0.28) | l'entrée, la zone, `n` |
+- **Préalable : deux notions distinctes sur l'acteur.** `dir_x`/`dir_y` est la **trajectoire** (calculée
+  depuis la vitesse, 0 à l'arrêt). `facing_x`/`facing_y` est le **rendu** : la dernière valeur non nulle de
+  la direction, conservée à l'arrêt, sur les deux axes. Le `dir_x` seul ne pouvait pas porter `facing`
+  (il retombe à 0 à l'arrêt, `actor_types_static.h`), et il n'existait aucune mémoire en Y. Les quatre
+  champs sont dans `Actor` (variables de base, lisibles et modifiables à la main par les scripts) ; leur
+  **calcul** seul est conditionnel. `face_x` quitte l'entrée OAM (`gen_sprite.py`) pour devenir
+  `facing_x` de l'acteur.
+- **`auto_dir` devient `facing_auto`** (API, composant sprite, `api_reference.py`, codegen, tests). Le calcul de
+  `facing` n'est compilé que pour un acteur qui le déclare ; celui de `dir` reste compilé **partout, quoi qu'il
+  arrive**, tant qu'il n'existe ni rigid body ni static body qui permettraient de savoir statiquement si un
+  acteur se déplace.
+- **Pas de migration** : aucun utilisateur. Le repli de direction du sprite à l'arrêt peut changer d'affichage
+  (il lira aussi `facing_y`) sans traitement des anciens projets.
+- **Le test de recouvrement se fait par couple de tags**, comme `actors_overlap_mask` : `actors_overlap_boxes`
+  rend le premier couple trouvé et peut prendre la mauvaise box du joueur.
+- **`facing` est une visée, pas un recouvrement** (décidé le 2026-10-24, remplace la règle du signe des
+  centres) : la box de l'interacteur est **projetée dans sa direction de `facing`** sur une portée `reach`
+  (boîte étirée, pas un rayon fin : en diagonale, 8 directions, un rayon passerait entre deux boîtes), et on
+  teste le recouvrement de cette boîte avec la box de la cible. Le joueur arrêté contre un obstacle déclenche
+  donc l'interaction sans marge de portée sur la zone. **Ne traverse pas les murs** : la visée est arrêtée par
+  la carte de collision (`tile_wall_at` échantillonné de la box à la cible, sur la frame d'appui seulement).
+  Un `facing` encore à 0 (jamais posé) n'interagit pas ; le facing initial vient du sélecteur de direction de
+  l'inspecteur, comme `dir_x`/`dir_y`. **`reach`** est un réglage de projet unique (**4 px par défaut**, dans
+  les settings). La box de visée de l'interacteur **se crée automatiquement, même sans boîte de collision**.
+- **Plusieurs cibles ou plusieurs interacteurs au même appui : le plus proche** (le long de la visée en
+  `facing`, écart de centres en `hover`), passe supplémentaire sur la frame d'appui seulement.
+- **`Player` absent ou renommé : recréé** (l'éditeur est mis à jour de force, pas de projet ancien à préserver).
+- **`hold` avec un accord** : le plus petit des compteurs fait foi (proposé, non contesté).
+- **`released`** ne déclenche que si l'interacteur est **encore dans la zone** au relâchement ; sinon aucun
+  événement.
+- **Renommer ou supprimer le tag d'une boîte désignée** met à jour `interactive` : `RenameCollisionTagCmd`,
+  `RemoveCollisionTagCmd` et `rename_lua_refs` le couvrent, annulation comprise.
+- **Le composant a un coût** (une boîte de plus sur l'acteur, un emplacement de `MAX_BOXES`) : normal, il est
+  chiffré au protocole de mesure. Un acteur déjà plein est une erreur de build qui le dit.
+- **Les saisies (`pressed`, `hold`, `released`) lisent l'entrée interne `interact`** (bouton A par défaut,
+  réglable) : ce sont des *gestes*, pas un choix de bouton.
 
-- **La zone** n'est pas une géométrie nouvelle : le composant désigne une `CollisionBoxComponent` de
-  l'acteur par son `tag` (ex. `reach`, `solid=False`). Une zone, une seule source de vérité, déjà
-  dessinée au canvas et déjà lue par `overlaps`.
+### Les deux sélecteurs (précisé le 2026-10-23, remplace la table des trois modes)
+
+`interactive` est un système **automatisé** qui réutilise des blocs déjà émis par le codegen. Deux sélecteurs
+indépendants, qui se croisent :
+
+| Sélecteur | Valeurs | Réutilise |
+| --- | --- | --- |
+| **Saisie** | `pressed` (front montant), `hold` (tenu `n` frames), `released` (relâché) | les gestes d'entrée existants (`input_pressed`, compteurs de boutons v0.28, anneau `released`) |
+| **Interaction** | `hover` : l'interacteur **recouvre** la zone ; `facing` : la box de l'interacteur, **projetée dans son `facing`** sur `reach` et arrêtée par les murs, touche la zone | le test de recouvrement par couple de tags (`hover`), la boîte projetée (`facing`) |
+
+- **La zone** reste une `CollisionBoxComponent`, pas une géométrie nouvelle : une zone, une seule source de
+  vérité, déjà dessinée au canvas. Deux façons de l'obtenir :
+  - **Boîte implicite** : le composant crée lui-même une boîte minimale, sans que l'auteur en dessine une.
+    Taille réglable, **16×16 px par défaut** sans sprite, **la taille du canvas du sprite** sinon ; tag
+    `Interactive`, **réservé et non modifiable**, présent d'office comme `Player` (même casse) ; `solid` à
+    trancher (voir « Ouvert »). Le calcul de la boîte (16×16 ou taille du canvas du sprite) est **une seule
+    fonction**, appelée par le canvas et par le codegen.
+  - **Boîte existante** : si l'acteur en porte déjà une, le composant la désigne par son tag.
 - **Pas de mode `contact`** (décidé le 2026-10-21). Entrer dans une zone sans bouton, c'est
   `on_collision_enter` sur une boîte `solid=False` : même suivi par paire, même masque, déjà livré. Tous les
   modes de `interactive` reposent donc sur une entrée, ce qui est ce que `on_collision_enter` n'exprime pas.
-- **L'interacteur** est désigné par une **étiquette de collision** (par défaut `Player`, déjà dans
-  `DEFAULT_COLLISION_TAGS`), pas « n'importe quel acteur » : c'est ce qui garde le coût linéaire. Ce n'est
-  pas un drapeau nouveau sur l'acteur : l'étiquette existe, elle est portée par une boîte, et **autant
-  d'acteurs que l'on veut peuvent la porter** (plusieurs unités, deux joueurs). `who` est l'acteur dont la
-  boîte étiquetée recouvre la zone. Un second mécanisme « acteur joueur » doublerait la source de vérité.
-- **L'étiquette `Player` est réservée** (décidé le 2026-10-21) : ni renommable, ni supprimable dans
+- **L'interacteur est désigné par le tag d'ACTEUR `Player`** (précisé le 2026-10-24) : seul un acteur portant ce
+  tag déclenche les interactions. **Ce n'est pas le tag de collision `Player`** (celui de
+  `DEFAULT_COLLISION_TAGS`). Constaté dans le code le 2026-10-24 : **la notion de tag d'acteur n'existe pas
+  aujourd'hui** (`Actor` n'a ni groupe ni étiquette, seuls les tags de BOÎTES existent). C'est donc un
+  concept neuf, à définir (voir « Ouvert »). Le coût reste linéaire : un test par interacteur, jamais
+  « n'importe quel acteur ». `who` est l'acteur qui interagit.
+- **Reste de l'ancienne conception, à réviser** : *« l'étiquette de collision `Player` est réservée »*
+  (décidé le 2026-10-21) ne se justifie plus si `interactive` dépend du tag d'acteur. Texte conservé pour mémoire : ni renommable, ni supprimable dans
   *Project Settings → Collisions*, puisque `interactive` en dépend. Aujourd'hui rien ne l'empêche
   (`RenameCollisionTagCmd` et `RemoveCollisionTagCmd` l'acceptent comme n'importe quel tag, et
   `DEFAULT_COLLISION_TAGS` ne la distingue pas de `body`). Le garde-fou se pose **dans les deux
@@ -276,7 +324,7 @@ un bloc par **nom d'entrée distinct** (le patron de `sfx_by_trigger`, `main_gen
 dont le script **définit** `on_interact` y sont appelés (comme pour les événements de collision : le
 codegen regarde quelles fonctions le `.lua` définit).
 
-| Poste | Coût (`press`, `facing`, `hold`) |
+| Poste | Coût (`pressed`, `hold`, `released` ; `hover`, `facing`) |
 | --- | --- |
 | RAM par acteur (`Actor`) | 0 octet |
 | RAM statique | 0 octet |
@@ -286,7 +334,7 @@ codegen regarde quelles fonctions le `.lua` définit).
 | Pool de prefabs | `taille du pool / groupe` tests, seulement sur la frame d'appui |
 
 - **Le gain tient au verrou d'entrée.** Le test de recouvrement n'est évalué que si l'entrée vient d'être
-  pressée. Avec `press`, `facing` et `hold`, 64 coffres ne coûtent qu'un test de masque tant que personne
+  pressée. Avec `pressed`, `hold` et `released`, 64 coffres ne coûtent qu'un test de masque tant que personne
   n'appuie ; le script équivalent écrit à la main paie son `on_update` à chaque frame.
 - **Pas de rejet gratuit.** Le test de recouvrement est le seul filtre spatial : il n'y a pas de grille.
   Le coût d'une frame d'appui croît donc linéairement avec le nombre de consommateurs **actifs** de la scène,
@@ -305,14 +353,68 @@ valeurs mesurées remplaceront le tableau qualitatif ci-dessus, dans cette secti
 
 ### Déroulé (proposé)
 
-1. **L'entrée interne `interact`** : déclarée avec les entrées internes, validée comme nom réservé, listée
+0. **Préalable : le facing de l'acteur** (voir les décisions ci-dessus). **Livré le 2026-10-24, tests ciblés au
+   vert, ROM non rebuildée ni jouée.** `facing_x`/`facing_y` dans `Actor` ; `auto_dir` renommé `facing_auto` ;
+   `dir_x`/`dir_y` recalculés depuis la vitesse à chaque frame (0 à l'arrêt : avant, le calcul ne tournait que
+   si `vx` ou `vy` était non nul, donc `dir` gardait la dernière valeur à l'arrêt) ; le regard est le **vecteur**
+   de la dernière direction non nulle (après droite puis haut : `(0,-1)`) ; **la direction d'animation lit le
+   regard**, plus la trajectoire ; l'API gagne `self.facing` (vecteur ou boussole, comme `self.direction`) et
+   `self.facing_auto` remplace `self.auto_dir`. `face_x` reste dans l'OAM (mémoire du côté pour le repli de
+   rendu, par axe, à part du vecteur) et suit désormais `facing_x`. **`Actor` passe de 68 à 72 octets**
+   (2 octets de champs, 4 facturés par l'alignement) ; le plafond du test est relevé en conséquence.
+   Reste à faire : le projet Platformer écrit `self.direction = vec2(move_dir, 0)` (Player.lua:36) pour piloter
+   l'animation, il doit écrire `self.facing` (démo non modifiée sans accord) ; le calcul du regard est gardé par
+   un drapeau d'exécution (`facing_auto`), pas encore par une compilation conditionnelle.
+1. **L'entrée interne `interact`** (**livrée le 2026-10-24, tests ciblés au vert, pas vérifiée à l'écran** :
+   `ProjectSettings.interact_buttons`, A par défaut, écrit seulement s'il diffère ; masque `interact` toujours dans
+   `compute_input_layout`, donc lisible aussi par `input:pressed("interact")` ; le nom est une erreur de build
+   pour un accord, un axe ou une séquence de l'auteur ; ligne verrouillée en tête de la carte Inputs, un accord
+   vide est refusé ; libellés EN/FR). Non fait : le choix de `interact` dans le déclencheur d'un `SoundFx`,
+   le guide utilisateur. Texte d'origine : déclarée avec les entrées internes, validée comme nom réservé, listée
    (verrouillée) dans *Project Settings → Input → Inputs*. Petit, indépendant, testable seul.
 2. **Le composant** : `InteractiveComponent`, enregistrement, sérialisation, inspecteur
-   (`component_editors/`), menu « + Component », libellés EN et FR.
+   (`component_editors/`), menu « + Component », libellés EN et FR. **Livré le 2026-10-24, tests ciblés au vert,
+   pas vérifié à l'écran** : champs `input_mode` (pressed / hold / released), `hold_frames`, `interaction`
+   (hover / facing), `box_tag` (vide = boîte propre), `box_w`/`box_h` (0 = auto) ; `interactive_box_size`, la
+   fonction unique de la taille implicite (cadre du sprite, sinon 16×16), que l'inspecteur utilise déjà pour
+   écrire « Auto (n) » ; un seul composant par acteur (le menu masque l'entrée) ; le tag de collision
+   **`Interactive`** est réservé (déclaré d'office, recréé dans un projet ancien, `RenameCollisionTagCmd` et
+   `RemoveCollisionTagCmd` le refusent, la matrice grise son nom et sa corbeille, ses cases restent éditables) ;
+   vérifications au build (`_check_interactive` : boîte désignée absente, plus de place pour la boîte propre,
+   plusieurs composants). **Pas encore** : la boîte implicite n'existe ni au canvas ni dans le C émis, rien ne
+   déclenche `on_interact` (étapes 3 et 4), `reach` n'est pas encore dans les settings.
 3. **L'événement** : entrée de `EVENT_REGISTRY`, stub, icône, checker, documentation de l'API
-   (`api_reference.json`).
-4. **Le codegen** : le bloc par entrée dans `main_gen.py`, la variante prefab poolé.
-5. **Les modes** un par un, `press` d'abord (c'est le cas qui rend la mesure utile).
+   (`api_reference.json`). **Livré le 2026-10-24, tests ciblés au vert, ROM non buildée** : `on_interact(who)`
+   dans `EVENT_REGISTRY` (signature C `void {prefix}_on_interact(Actor* self, Actor* who)`, icône `ev_interact`,
+   le checker refuse un paramètre que le moteur ne passe pas), les deux listes d'`extern` de `main_gen.py` la
+   connaissent ; **`interact_reach`** (4 px par défaut, 0 à 64, écrit seulement s'il diffère) est un champ de
+   `ProjectSettings` réglé dans la ligne `interact` de Project Settings → Input ; le build avertit d'un composant
+   Interactive dont le script n'a pas `on_interact`, et d'un `on_interact` sans composant actif. **Rien ne
+   l'appelle encore** : c'est l'étape 4.
+4. **Le codegen** : le bloc par entrée dans `main_gen.py`, la variante prefab poolé. **Livré le 2026-10-24, les
+   trois modes de saisie et les deux d'interaction d'un coup ; un vrai build gcc d'un projet interactif
+   passe (`tests/rom_build/test_interactive_rom.py`, lent) ; pas joué sur console, pas mesuré.**
+   Nouveau module `codegen/runtime_codegen/interact_gen.py` : aides C (`interact_pick`, visée, mur) émises
+   seulement si le projet a un composant actif ; dans la boucle de scène, **un test de geste par (mode,
+   durée)** puis, par interacteur, la recherche du consommateur atteint le plus proche, à partir de tables
+   par geste (acteur, rang de zone, visée, fonction) ; un acteur sans `on_interact` n'entre dans aucune
+   table. `hold` = le plus petit compteur vaut exactement `n` (plafonné à 254, les compteurs saturent à 255) ;
+   `released` = relâché alors que l'interacteur est encore dans la zone. `effective_collision_boxes` pose la
+   boîte propre (`Interactive`, non solide) en dernier sur l'acteur ou le prefab, une seule fonction pour le
+   build et, plus tard, le canvas. **L'interacteur est `Actor.is_player`** (case « Joueur » de l'inspecteur,
+   scènes seulement) ; sa boîte de visée est la première boîte solide active, sinon la première active, sinon le
+   cadre de son sprite. Le build avertit d'une scène à zones sans joueur. **Projet d'essai** : `Project Test/Interact` (joueur, coffre en Pressed + Facing, lampe en Held + Facing, plaque en Released + Hover), généré par le vrai pipeline (création d'assets, composants), qui se valide sans message et se compile en ROM ; jamais joué sur console. **Retouche du 2026-10-24** : un prefab peut être « Player » (case sur sa racine, `Prefab.is_player` sérialisé seulement s'il est posé, repris par l'instanciation, Expose et Relink, pas propagé aux instances déjà posées comme `pal_bank` ; un pool de prefabs Player est parcouru par une boucle) ; un interacteur sans sprite suit son regard dans le bloc Interactive, car le tick d'animation (où se calcule le regard) n'existe que pour un acteur avec sprite ; un prefab poolé reçoit `facing_auto` au spawn comme un acteur de scène (parité : jusqu'ici un acteur poolé n'avait aucun calcul de direction). La case est dans l'inspecteur, sous « Active on start » (elle était dans la carte Transform, repliée par défaut, donc introuvable) ; l'acteur « Player » de la scène de départ d'un projet neuf (`Project.create`) porte le tag.
+   **Finition livrée le 2026-10-24** : la boîte propre est dessinée au canvas, en jaune, avec la MÊME
+   fonction que le build (`owner_effective_boxes`, qui dimensionne d'après le cadre du sprite affiché) ; le
+   guide utilisateur [Faire interagir le joueur avec un acteur](../user-guide/interact.md) est écrit, lié depuis
+   les deux index. Les diagnostics neufs du validateur sont testés mais la référence
+   `tools/diagnostic_coverage_baseline.json` n'est pas relevée (elle ne se relève qu'après une suite complète).
+   **Limites connues** : un joueur dont le sprite est
+   affine garde le cadre non centré pour sa boîte de repli ; un prefab ne se marque pas « joueur » ; la
+   visée d'un joueur de plusieurs boîtes n'utilise que la première solide ; `facing` teste les murs entre
+   centres (une zone qui recouvre déjà le joueur derrière un mur est bloquée).
+5. **Les sélecteurs** un par un, `pressed` + `hover` d'abord (c'est le cas qui rend la mesure utile), puis `facing`,
+   puis `hold` et `released`.
 6. **La mesure**, puis la section « coût » remplacée par les valeurs.
 7. **Documentation** : `docs/user-guide/` (un guide « interagir », qui remplace le recouvrement écrit à la
    main), ARCHITECTURE.md ; le détail part ensuite dans `changelog/archives/v0.31.md`.
@@ -335,13 +437,12 @@ infobulles, ARCHITECTURE.md, `docs/user-guide/`.
   un champ de `ProjectSettings` (`interact_buttons`, défaut `["a"]`), écrit seulement s'il diffère du défaut,
   donc aucun projet existant ne change. Le codegen (`input_layout.py`) le résout comme un accord ordinaire.
   Un accord vide (aucun bouton coché) est refusé à la saisie : l'entrée ne peut pas devenir inatteignable.
-- **Un projet existant sans `Player`** (absent, ou renommé avant ce jalon) : le tag réservé est recréé à
-  l'ouverture, ou `interactive` signale l'étiquette manquante au build ? Un tag renommé ne se reconnaît
-  pas : on ne le devine pas. (Le même problème n'existe plus pour `interact`, interne.)
-- **Plusieurs interacteurs dans la même zone au même appui** : l'entrée est unique (une seule manette),
-  donc qui interagit ? Tous, ou le plus proche du centre de la zone, comme pour les zones qui se recouvrent.
-  Le coût du tableau suppose un interacteur ; il croît linéairement avec leur nombre, sur la frame d'appui.
-- **Plusieurs zones qui se recouvrent** : tous, ou le plus proche (voir le coût).
+- **L'appui qui ferme un dialogue** (point à vérifier au codegen, tranche 4) : `input_pressed` est un état
+  global de la frame, rien ne le consomme, et le bloc `interact` tourne après les `on_update`. À vérifier : qui
+  lit A pour avancer ou fermer une `Textbox` (le moteur, ou le Lua de l'auteur) ? Si c'est le moteur, l'auteur
+  n'y peut rien et il faut une garde.
+- **L'interacteur doit déclarer `facing_auto`** pour le mode `facing` : avertissement au build si un acteur
+  portant la box `Player` n'a pas le calcul de facing.
 - **`who` dans `on_interact`** : retenu comme un `Actor` (voir plus haut). Reste à fixer ce qu'un script
   peut en lire, comme pour le `other` de `on_collision_enter`.
 - **Un délai de rechargement** (empêcher le rebond d'un appui) : probablement un champ `cooldown` en frames,
@@ -403,6 +504,23 @@ stabilisation plutôt que de laisser le choix du jeu de validation ouvert.
 
 Le reste de la version demeure la stabilisation du runtime et de l'éditeur, ainsi que la
 documentation utilisateur.
+
+### Présenter le projet : trois démos jouables (objectif posé le 2026-10-24)
+
+Avant de montrer Backstage à des amis, l'auteur veut **trois démos jouables de bout en bout** : un **jeu
+d'aventure**, un **jeu de plateforme** et la **démo Pong**. Objectif de présentation, pas un jalon de
+version : rien n'est planifié ni chiffré, et l'état de chacune reste à qualifier en la jouant.
+
+| Démo | Point de départ | Ce qui est connu |
+| --- | --- | --- |
+| **Aventure** | `Project Test/Interact` (joueur, coffre, lampe, plaque) ; `Project Test/Village` à relire comme source possible | Le chantier « Interagir avec un acteur » en est la base : composant Interactive, joueur tagué, blocage des obstacles. Il manque ce qui en fait un jeu (dialogues, transitions entre scènes, un but), à choisir. |
+| **Plateforme** | `Project Demo/Platformer` | Dépend du blocage en plateforme (voir « Suite prévue » dans la piste des collisions) dès qu'un acteur sert de sol. |
+| **Pong** | `Project Demo/PongAdvanced`, aussi le modèle téléchargeable | À jouer de bout en bout et à terminer ; le dépôt contient des modifications non committées de l'auteur sur ce projet. |
+
+À décider avant d'ouvrir : ce que chaque démo doit **prouver** (une idée par démo, pas toutes), si elles
+partagent le même thème visuel, et comment les montrer (ROM jouée dans mGBA, ou le paquet web de la v0.29).
+Chaque démo se vérifie **en la jouant**, pas par les tests : les tests actuels n'ont validé que les builds
+et des sondes natives, jamais une partie sur console ou émulateur.
 
 ### Ce qu'une « v1.0-alpha » exige, et qui n'est pas une fonctionnalité
 
@@ -530,115 +648,69 @@ que l'échec intermittent du `make` de devkitPro (`fatal error - add_item`), les
 
 | Piste | Ouvert le | État |
 | --- | --- | --- |
+| Identité des assets et des membres de scène (en-tête `name` / `id` / `source`) | 2026-10-24 | **Première tranche livrée le 2026-10-24**, détail dans [l'archive](../../changelog/archives/scene-asset-identity.md) ; reste le reliquat : nom ou id dans l'API Lua et les champs de l'interface, index `id → nom` des fonds, prefab dérivé d'un prefab ([section](#identité-des-assets-et-des-membres-de-scène-en-tête-name--id--source)) |
+| Texte et données : ce qui reste après la livraison de la 0.4 | 2026-10-23 | **Livré**, détail dans [l'archive](../../changelog/archives/text-and-data.md) ; reste le reliquat : références graphiques non consommées par la ROM, finition de l'interface Texte (Find, code mort), vérifications à la main, test ROM. Voir [ci-dessous](#texte-et-données-ce-qui-reste-après-la-livraison-de-la-04) |
+| Coller un tableau dans la grille (presse-papiers seulement) | 2026-10-23 | **Reporté**, chantier technique sans numéro, pas d'usage constaté ; périmètre retenu : presse-papiers, jamais de fichier. Dépend du stockage des références. Voir [ci-dessous](#coller-un-tableau-dans-la-grille-presse-papiers-seulement) |
+| Le stockage des références dans les cellules (nom ou id) | 2026-10-23 | **À ouvrir**, chantier technique sans numéro, **rien de verrouillé**, code non commencé ; il porte aussi les « références par id » (une scène qui cite un asset par son id), sorties de la 0.3 le 2026-10-23 car elles touchent toutes les scènes. Voir [ci-dessous](#le-stockage-des-références-nom-ou-id-dans-les-cellules) |
+| Une seule navigation « ouvrir cet élément » entre les écrans | 2026-10-23 | **À ouvrir**, chantier technique sans numéro, **rien de verrouillé**, code non commencé ; un point d'entrée unique dans `Window`, `select_text` à ajouter, les « utilisations » à ramener dessus. Voir [ci-dessous](#une-seule-navigation-ouvrir-cet-élément-entre-les-écrans) |
+| Le rôle des collisions contre le mode de résolution physique | 2026-10-23 | **À ouvrir**, réflexion, **rien de verrouillé**, code non commencé ; `solid` ne repousse aucun acteur (seulement la carte de collision) : séparer le rôle d'une box de son mode de résolution (Solid contre Overlap, composants RigidBody / StaticBody / CharacterBody), à trancher avec la section « Physique et collision ». Voir [ci-dessous](#piste-le-rôle-des-collisions-contre-le-mode-de-résolution-physique) |
 | Des cartes de valeurs peintes par l'auteur, lues à l'exécution | 2026-10-23 | **À ouvrir**, réflexion, **rien de verrouillé**, code non commencé ; généraliser la carte de collision en cartes nommées d'entiers (gameplay, pas de rendu), la frontière avec « pas un outil de dessin » est écrite dans la section. Voir [ci-dessous](#piste-des-cartes-de-valeurs-peintes-par-lauteur-lues-à-lexécution) |
 | Une seule primitive pour retenir et rendre des cases de tilemap | 2026-10-23 | **À ouvrir**, réflexion, **rien de verrouillé**, code non commencé ; le fond de conteneur (redessin suivi) et l'image BG (copie des cases) font chacun leur version du même geste, et une API de scripts `layer:save/restore/release` l'exposerait. Voir [ci-dessous](#piste-une-seule-primitive-pour-retenir-et-rendre-des-cases-de-tilemap) |
 | Retours d'un utilisateur sur un petit projet topdown | 2026-10-22 | **Paliers 1 et 2 livrés (2026-10-22), palier 3 en cours (2026-10-23)**. Livré au palier 3 : le Refaire clavier (Ctrl+Y était ambigu sous Windows et ne faisait rien, c'est la vraie cause du « Redo perdu » ; l'annulation du pinceau, elle, est correcte : 16 coups = 16 entrées), le pinceau de collision (trait continu entre deux événements souris, pinceau 16 aligné sur la grille de 16 px), « Effacer la collision » dans la barre du canvas de scène, un glisser d'élément vers une autre interface refusé à voix haute (le déplacement réel entre interfaces reste à décider : cibles BG/OBJ différentes, interface partagée entre scènes), et le diagnostic en direct qui montre une attente dans un `if` (`structure_errors` : le même vérificateur que le Build, sur un contexte vide, limité aux fautes de structure). Écarté : le cadre d'un conteneur qui reste affiché malgré « Shown at scene start » (entre en collision avec le masquage d'un élément dans la scène). Livré ensuite : « Extract from PNG » du sprite dit si la palette est créée ou mise à jour ; le champ largeur d'un `Text` (grisé par construction) dit pourquoi, et le conseil de débordement renvoie vers la `Textbox` ; un « + » dans la bibliothèque de textes ; l'inspecteur d'acteur défile jusqu'à la carte Components quand on clique ou ajoute un composant ; la ligne racine de l'arbre de scène montre l'inspecteur de la scène. Palier 3 clos : une image BG masquée ou déplacée rend ce qu'elle recouvrait (le fond du conteneur) au lieu d'écrire la tuile 0 (`ui_image_snapshot_bg` / `ui_image_clear_bg` dans `gba_engine.h`, 64 cases au plus retenues par image, 2 Ko ; au-delà l'image s'efface comme avant). Vérifié par une sonde native qui pose, masque, repose et déplace une image sur un fond (`tests/native/ui_image_probe.c`, `test_ui_image_hide_native.py`) et par la compilation de vraies ROM, pas jouée sur console. Le fond d'un CONTENEUR (couleur ou nine-slice, écrit en tuiles à l'init) se masque et se remontre avec `hide()`/`show()` : le moteur le retient (`ui_fill_rect_tracked` / `ui_fill_map_tracked`, 8 fonds au plus par scène, index du conteneur émis par `scene_init`), l'efface après le texte et le repose avant lui, et un conteneur caché au départ n'est pas dessiné (`tests/native/ui_fill_probe.c`, `test_ui_container_hide_native.py`). Builds de ROM et suites interface/texte/graphismes au vert, pas joué sur console. Piste notée : une API `layer:save/restore/release` sur un rectangle de tuiles, réutilisant ce mécanisme (pool fixe à dimensionner, cartes streamées à traiter). Palier 4 : interface dessinée dans le canvas, `return` dans `on_update` avec séquences, guide topdown, import d'une planche en N états, zoom de la planche, couleur d'encre. **Décision ouverte** : sprites devant l'interface par défaut (priorité d'un fond UI = son slot, celle d'un acteur = 0). |
 | Le pool ne dépend plus de l'OAM | 2026-10-20 | **Livré pour l'essentiel (2026-10-20)**, pool automatique (8 par défaut) pour un prefab spawné, entrées OAM par priorité (interface, acteurs posés, pools), avertissements OAM et matrices affines, code mort retiré ; reste une liste libre d'entrées, optionnelle (`editor/codegen/improvement.md`). Voir [ci-dessous](#le-pool-ne-dépend-plus-de-loam) |
-| Préparer une image riche à l'import, recadrer, redimensionner | 2026-09-26 | Route vers v1.0-stable, non prioritaire pour l'alpha (décidé le 2026-09-29) ; tranches 4bpp/8bpp livrées, reste la tranche bitmap et la validation à la souris. Voir [ci-dessous](#piste-préparer-une-image-riche-à-limport-recadrer-et-redimensionner-sans-toucher-au-png) |
 | L'API dit tout ce que l'inspecteur règle | 2026-09-23 | **En cours**, tranche 1 (acteur, sprite, collision) livrée le 2026-09-23, sauf `parent` et `sprite_name`, **la collision est rouverte le 2026-09-24** (boîte = référence typée, `collision_box.get_tile`) ; tranches 2 (caméra, scène, calque) et 3 (interface) à suivre. Voir [ci-dessous](#lapi-dit-tout-ce-que-linspecteur-règle) |
 | Piste Collision, un `Contact` d'événement | 2026-09-25 | À ouvrir, non verrouillée (normale acteur↔acteur), extraite de la struct `Actor` allégée, code non commencé. Voir [ci-dessous](#piste-collision-un-contact-dévénement-pas-une--dernière-collision-) |
 | Le cache de scène | 2026-09-16 | À ouvrir. Voir [ci-dessous](#le-cache-de-scène-rouvrir-une-scène-déjà-visitée-sans-tout-redécoder) |
 | Undo/redo des sidecars d'éditeur | Non renseigné | À ouvrir, envisagé pour **V2**, voir [ci-dessous](#undoredo-des-sidecars-déditeur-annuler-la-création-dun-groupe-un-déplacement-de-nœud) |
-| L'écran Texte n'édite et ne range que du contenu | 2026-10-10 | **À ouvrir**, conception proposée, **rien de verrouillé**, code non commencé ; retire l'aperçu écran et édite le contenu dans la table. Remplace « L'atelier Texte réuni » (abandonné). Voir [ci-dessous](#lécran-texte-nédite-et-ne-range-que-du-contenu) |
-| L'écran Données, une grille de jeu, pas un tableur | 2026-10-14 | **En cours, première tranche livrée le 2026-10-17** : grille et barre d'actions revues, couleurs de colonnes, références aux assets sprite/background et sélecteurs filtrables partagés ; reste la saisie en série, la navigation vers les références et la validation d'usage. Voir [ci-dessous](#lécran-données-une-grille-de-jeu-pas-un-tableur) |
 | L'écran Son montre le geste sans recalculer l'onde | 2026-10-12 | **Livré pour l'essentiel (2026-10-12)**, plus aucun rendu pendant qu'un potard est tenu, bascule Onde \| Scope (oscilloscope du mix, tiré du son qui joue), durée sur la règle, barres des canaux qui suivent le volume ; **reste ouvert** : les repères sonores de musique sont **livrés le 2026-10-14** (quatre natures, voir ci-dessous) ; les repères de **jingle** sont livrés le 2026-10-14 (tranche 1, en temps) ; restent l'appel d'événement et les points de sortie pour les music box (**chantier à décider**), un indicateur de marge du mix (proposé, **non décidé**), un scope par canal. Voir [ci-dessous](#lécran-son-montre-le-geste-sans-recalculer-londe) |
-| Un pont entre l'écran Texte et les tables de données, créer un dialogue sans tout renseigner à la main | 2026-10-10 | **À ouvrir**, besoin posé, pistes A (Texte → table) et B (« Nouveau texte » dans la cellule) **retenues**, le reste non verrouillé, code non commencé ; le dialogue reste une table de données (pas d'éditeur de dialogue). Voir [ci-dessous](#un-pont-entre-lécran-texte-et-les-tables-de-données-créer-un-dialogue) |
 | La chaîne `if/elseif` sur une constante devient un `switch` C | 2026-10-06 | Route vers v1.0-stable, non prioritaire pour l'alpha ; piste de réflexion, **rien de verrouillé**, code non commencé, gain de perf non mesuré. Voir [ci-dessous](#piste-la-chaîne-ifelseif-sur-une-constante-devient-un-switch-c) |
 | Les prefabs, l'instance garde ce qu'elle surcharge, le reste suit le prefab | 2026-10-13 | **À ouvrir**, modèle décidé par l'auteur (surcharges par champ), **dix points à trancher** avant d'ouvrir (unité d'une surcharge, structure, sens d'Expose, migration, enfants…), priorité **non arbitrée**, code non commencé. Règle le cas « prefab » de la fluidité des réglages (un seul fichier écrit). Voir [ci-dessous](#les-prefabs-linstance-garde-ce-quelle-surcharge-le-reste-suit-le-prefab) |
 | L'élément d'interface appartient à sa scène, des noms locaux | 2026-10-03 | À ouvrir, priorité non arbitrée ; conception proposée, **aucune décision verrouillée**, code non commencé. Garde-fou en place : un nom en double entre deux layouts est une erreur de build. Voir [ci-dessous](#lélément-dinterface-appartient-à-sa-scène-des-noms-locaux) |
-| Tout ce que l'auteur manipule vit dans `assets/` | 2026-10-10 | **En cours**, scènes, prefabs, mises en page, boîtes sonores, tables de données, polices logiques, textes, variables : de `project/` vers `assets/`. Voir [ci-dessous](#tout-ce-que-lauteur-manipule-vit-dans-assets) |
-| Une seule règle de nom libre | 2026-10-09 | **En cours**, huit règles de suffixe coexistent (`_2`, `_02`, `_copy`, `_1`, `Camera 2`, `axis1`, `Actor_0`, `Palette 2`) ; toutes passent à `coin`, `coin_2`, `coin_3`. Voir [ci-dessous](#une-seule-règle-de-nom-libre) |
-| Source ≠ asset, l'arborescence du disque et l'id stable | 2026-10-09 | **Livré pour l'essentiel (2026-10-11)**, ids dans tous les sidecars, extension par type d'asset, assets et sources rangés où l'on veut sous `assets/` (fonds, palettes, scripts compris), onglet Disk (glisser-déposer, *Create asset*, suppression annulable, détachement complet source ≠ asset) ; **reste** : dossiers virtuels des autres finders (**Sound finder livré le 2026-10-11** : effets, musiques et jingles, dans le store partagé de la session ; sprites, fonds, palettes, tables, polices et prefabs restent à plat), références par id, associations de fichiers (installateur, zip portable, AppImage). Voir [ci-dessous](#source--asset-larborescence-du-disque-et-lid-stable) |
-| Créer un asset : deux gestes, aucun dossier titulaire | 2026-10-19 | **À ouvrir**, principe demandé par l'auteur (*Create from source* et *Create blank*, plus de dossier de famille), contrat proposé, **tranches 1 (`PaletteStore`) et 2 (les deux commandes, onglet Disk) livrées le 2026-10-19**, reste les autres appelants et le retrait des `*_dir`. Voir [ci-dessous](#créer-un-asset--deux-gestes-aucun-dossier-titulaire) |
-| La compression d'un fond se joue, elle ne s'attend pas | 2026-10-14 | **À ouvrir**, analyse du parcours faite (lecture du code, rien mesuré à l'usage), sept frictions relevées, direction non arbitrée entre feedback en direct, perception de la perte et réglage par objectif ; code non commencé. Voir [ci-dessous](#la-compression-dun-fond-se-joue-elle-ne-sattend-pas) |
-| Le fond est un plan de travail, canvas, image posée, comparaison source/compressé | 2026-10-15 | **À ouvrir**, modèle décidé par l'auteur le 2026-10-15 (canvas-size distinct de l'image, image déplaçable qui peut déborder, barre source/compressé, une seule image visible), **six points à vérifier ou trancher** avant de coder (palette indexée préservée, limites du canvas tuilé, miroir dans le canvas, types UI/animé, peintures par tuile), code non commencé. Remplace la piste « un seul espace » de la compression. Voir [ci-dessous](#le-fond-est-un-plan-de-travail-canvas-image-posée-comparaison-sourcecompressé) |
-| Briques de base et assemblages, `Text` (chaîne) et `Textbox` (boîte), écrits directement dans le canvas | 2026-10-14 | **Livré pour l'essentiel (2026-10-14)**, deux types de texte, menu d'ajout en deux familles, `Text` posé en un point et édité sur place avec un curseur clignotant ; **reste** : emprise d'une chaîne qui suit son contenu, sélection non dessinée, vérification à la main et build ROM. Voir [ci-dessous](#briques-de-base-et-assemblages-text-chaîne-et-textbox-boîte) |
-| TextBox, plusieurs entrées pour préparer un dialogue | 2026-10-17 | **Livré pour l’essentiel (2026-10-17)**, pages éditables, aperçu, références et build multi-page, export/mise à jour de Data Table annulables ; **reste** : nommage des layouts partagés, suivi des noms scène/objet, duplication des textes et déplacement des blocs. Voir [ci-dessous](#textbox-plusieurs-entrées-pour-préparer-un-dialogue) |
-| Écran Texte, suites liées aux TextBox et aux tables | 2026-10-17 | **Link/Relink, Apply et +/− livrés**, édition structurelle sur les blocs, état précis et synchronisation fixés en bas. Reste l'export autonome des suites sans TextBox. Voir [ci-dessous](#écran-texte-suites-liées-aux-textbox-et-aux-tables) |
+| Assets et disque : ce qui reste après la livraison de la 0.3 | 2026-10-23 | **Livré**, détail dans [l'archive](../../changelog/archives/assets-and-disk.md) ; reste le reliquat de finition (références par id portées par le stockage des références, outil de benchmark, détails d'import et de Disk, vérification à la main). Voir [ci-dessous](#assets-et-disque-ce-qui-reste-après-la-livraison-de-la-03) |
+| Fonds : ce qui reste après la livraison de la 0.5 | 2026-10-23 | **Classé à part** : la comparaison source/compressé (le « compress view » et la carte d'écart), les trous d'une grande image, la limite du canvas tuilé, le bitmap au-delà de 240×160, le service d'encodage. Voir [ci-dessous](#fonds-ce-qui-reste-après-la-livraison-de-la-05) |
 | La fiabilité du journal de build | 2026-10-03 | **Tranche 1 livrée le 2026-10-03** (aucune erreur avalée, tout script vérifié, fautes injectées) ; **tranche 2 livrée le 2026-10-03** (diagnostic unique, `build.log`, sortie des outils classée) ; reste ouvert : les codes stables, si le besoin apparaît. Voir [ci-dessous](#la-fiabilité-du-journal-de-build) |
 
 ---
 
-## L'écran Données (une grille de jeu, pas un tableur)
+## Identité des assets et des membres de scène (en-tête `name` / `id` / `source`)
 
-### Le problème (2026-10-14)
+**Première tranche livrée le 2026-10-24**, détail dans [l'archive](../../changelog/archives/scene-asset-identity.md) :
+en-tête `name` / `id` / `source` pour tout sidecar et tout élément posé en scène, `source` toujours une origine
+(chemin pour un fichier, id pour une instance), colonne `prefab` de la table de données. Documenté dans ARCHITECTURE.md
+(section « Identité »).
 
-L'écran a la bonne sémantique : une table est typée, ses références sont contrôlées,
-et son rang est l'index que lit `data.Table[i]`. En revanche, ses gestes essentiels restent
-peu découvrables : renommer une colonne demande un double-clic, modifier sa structure ou
-une ligne passe principalement par le clic droit, et l'écran ne rappelle pas assez ce que
-déplacer une ligne implique pour le script.
+**Reliquat ouvert.**
 
-Le but n'est donc pas de fabriquer un tableur. Un tri ou un filtre donnerait à voir un ordre
-différent de celui que le runtime indexe ; des formules changeraient la nature de cette donnée
-`const` en ROM. Le but est une grille compacte qui permet de créer et corriger rapidement des
-données de jeu, tout en rendant leurs contraintes explicites.
+1. **Nom OU id dans l'API Lua et dans les champs de l'interface** (décidé de principe le 2026-10-24, à instruire).
+   `Actor.parent`, `Camera.follow_target` et `InterfaceNode.anchor_actor` citent encore un NOM, et le build, le
+   canvas et les scripts le lisent partout. Autoriser l'un ou l'autre dans `actor:get(...)` et dans les champs
+   éditables ferait survivre un renommage d'acteur à tout ce qui le cite. Les ids de membres sont déjà dans les
+   scènes : ce chantier n'aura aucune donnée à migrer. Questions : comment distinguer un nom d'un id dans un
+   littéral (un nom de 12 chiffres hexadécimaux est déjà interdit pour les variables, cf. `ids.is_id`), et ce que
+   l'autocomplétion propose.
+2. **Les calques de fond écrivent `source` ET `background_name`.** Le catalogue des fonds est paresseux : retrouver
+   un nom depuis un id exigerait de lire tous les sidecars à l'ouverture. Un fond renommé hors de l'éditeur n'est
+   donc rattrapé par son id que s'il est déjà chargé. Sortie possible : un petit index `id → nom` des fonds, sans
+   lire leur contenu. À faire seulement si le cas se présente.
+3. **Un prefab dérivé d'un prefab** pourrait porter l'id du prefab parent dans son `source` (même champ, même
+   sens). Non fait ; à relier à la règle d'héritage parent → enfant.
+4. **`tools/migrate_background_paths.py` lit encore la clé `asset`** : à adapter avant de le relancer.
+5. **Non vérifié à l'écran** : l'éditeur n'a pas été ouvert sur un projet réel après le changement de format. La
+   documentation est à jour (ARCHITECTURE, section « Identité »).
 
-### Livré (2026-10-17)
+## Texte et données : ce qui reste après la livraison de la 0.4
 
-- **Présentation de la grille.** Nom de table, résumé lignes/colonnes et indexation à partir de 1,
-  barre « + Ligne / Dupliquer / Supprimer / + Colonne », en-têtes compacts avec badges de type
-  colorés, alternance discrète des lignes et sélection continue avec repère de cellule active.
-  Les insertions/suppressions au milieu annoncent le décalage des indices Lua.
-- **Couleurs de colonnes.** Le clic droit sur un en-tête reprend les pastilles du menu des
-  dossiers : cinq couleurs et une croix pour revenir au rendu neutre. La couleur habille
-  l'en-tête, est enregistrée dans le fichier `.table` et passe par Annuler/Rétablir ; elle ne
-  change ni les valeurs ni leur émission en ROM. Le widget est partagé avec le menu Disk.
-- **Références graphiques explicites.** Les types proposés comprennent `sprite` et `background`,
-  chacun alimenté par son catalogue d'assets ; les cellules suivent le renommage de l'asset.
-  `image` n'est plus proposé : il désignait un élément d'interface, pas un asset. Les anciennes
-  colonnes de ce type restent lisibles, sans conversion automatique vers une autre référence.
-- **Sélecteurs d'assets filtrables.** Les cellules de référence ouvrent le popup partagé
-  `ScriptPickerPopup` : recherche, icônes et aperçu des palettes, avec un choix « Aucun ».
-  Choisir écrit par l'historique de la grille ; fermer ou appuyer sur Échap conserve la valeur,
-  même si sa cible n'existe plus. Un popup ouvert avant un rechargement ne peut pas écrire
-  dans la nouvelle table. Le filtre porte uniquement sur les choix d'assets, jamais sur les lignes.
+La 0.4 est **livrée** ; sa discussion complète est dans [l'archive](../../changelog/archives/text-and-data.md). Ne restent ici que les fils encore ouverts.
 
-**Vérification.** Tests ciblés de grille, de couleurs (widget partagé, persistance, annulation),
-de références graphiques (catalogues, validation, génération et renommage) et de sélecteur
-(filtre, choix, effacement, fermeture et rechargement). Rendu contrôlé, ouverture clavier et
-Échap vérifiés ; l'usage prolongé sur une table de jeu dense reste à valider.
+### Chantiers techniques nés de la 0.4
 
-### Direction retenue et suite
+[Une seule navigation « ouvrir cet élément »](#une-seule-navigation-ouvrir-cet-élément-entre-les-écrans),
+[le stockage des références](#le-stockage-des-références-nom-ou-id-dans-les-cellules),
+[coller un tableau dans la grille](#coller-un-tableau-dans-la-grille-presse-papiers-seulement) (reporté).
 
-1. **La table dit ce qu'elle est.** L'en-tête central porte le nom, le nombre de lignes et de
-   colonnes, et rappelle que les rangs commencent à 1. Chaque en-tête de colonne affiche un
-   badge discret de type (`int`, `bool`, `text`…).
-2. **Les gestes qui changent la structure sont visibles.** Une barre compacte propose
-   « + Ligne », « Dupliquer », « Supprimer » et « + Colonne ». Le menu contextuel reste un
-   raccourci, pas le seul moyen de découvrir ces actions.
-3. **L'ordre est annoncé là où il compte.** Insérer ou supprimer une ligne hors de la fin
-   avertit que les indices utilisés par les scripts seront décalés. Le rang reste visible à
-   gauche et ne devient jamais un identifiant artificiel.
-4. **La référence reste une valeur contrôlée.** La grille continue à montrer la clé, et le
-   panneau droit montre ce qu'elle désigne. Il peut proposer « Ouvrir le texte » ou l'asset
-   correspondant, sans dupliquer son éditeur dans cet écran.
-5. **La saisie en série est le prochain seuil utile.** Copier/coller TSV, sélection de plage,
-   `Suppr` pour vider une cellule ou une sélection et duplication de ligne apportent un vrai
-   gain dès qu'une table dépasse quelques lignes. Les cellules restent validées par leur type.
+### Écran Données
 
-### À ne pas faire
-
-- Ni tri, ni filtre des lignes : l'ordre affiché doit toujours être l'ordre réel des index Lua.
-  Le filtre du sélecteur de références ne change pas cet ordre.
-- Ni formules, ni calculs de feuille : les tables sont des données authorées, lues en ROM.
-- Ni panneau droit transformé en second éditeur : il explique et mène à la ressource citée ;
-  l'écriture passe toujours par la grille et son historique unique.
-
-### Points restant à vérifier
-
-1. **La confirmation de décalage.** La montrer à chaque insertion/suppression au milieu serait
-   sûre mais possiblement pénible ; une option « ne plus demander pour cette session » peut
-   concilier les deux. À tester sur une table réellement citée par des scripts.
-2. **Le collage.** Définir le comportement face à une référence inconnue, à une cellule hors
-   plage, ou à une valeur entière invalide : prévisualisation, refus atomique, ou collage
-   partiel. La sûreté des données doit primer sur la commodité.
-3. **La place de l'inspecteur.** Le réduire et le garder repliable est probablement plus utile
-   que le supprimer ; à confirmer avec une référence textuelle longue et une table dense.
-4. **Le message de changement de type.** L'interface doit dire la vérité : les valeurs de la
-   colonne sont effacées (et restaurables par Annuler), elles ne sont pas converties.
-
-### Références graphiques : la ROM ne les consomme pas encore (constaté le 2026-10-18)
+#### Références graphiques : la ROM ne les consomme pas encore (constaté le 2026-10-18)
 
 **Le besoin (auteur).** Lier une donnée à un élément visuel, portraits affichés dans un dialogue, tables de monstres.
 Ce que le script en fait reste le choix de l'auteur du jeu.
@@ -659,13 +731,186 @@ en entier ou première frame seulement ; (3) candidats de tailles différentes, 
 fond se copie écran éteint (jusqu'à 32 Ko de tuiles), donc une transition ; (5) budget VRAM et palettes signalés par un
 avertissement, sans bloquer.
 
-### Prochaines étapes
+#### Points restant à vérifier
 
-1. Valider les gestes sur une vraie table de jeu, la place de l'inspecteur et le message de
-   changement de type : il doit annoncer l'effacement des valeurs, restaurables par Annuler.
-2. Sélection de plage, copier/coller TSV et suppression clavier, avec tests de validation.
-3. Navigation vers la ressource référencée, puis recherche / « aller à la ligne » si les
-   tables de projet en justifient le besoin.
+1. **La confirmation de décalage.** La montrer à chaque insertion/suppression au milieu serait sûre mais possiblement pénible ; une option
+   « ne plus demander pour cette session » peut concilier les deux. À tester sur une table réellement citée par des scripts.
+2. **La place de l'inspecteur** avec une référence textuelle longue et une table dense (l'aperçu du texte y est désormais corrigeable).
+3. **Valider les gestes sur une vraie table de jeu** : l'usage prolongé d'une table dense reste à éprouver à la main.
+
+### Texte à l'écran (`Text` et `Textbox`)
+
+#### Ouvert
+
+- **L'emprise d'une chaîne reste fixe** (96×16 au canvas, 80×16 depuis l'arbre) : le build s'en sert
+  pour réserver la VRAM et coupe au-delà, alors que le canvas ne coupe pas. La faire suivre le contenu
+  suppose de mesurer la police au build ; le texte écrit par script n'a pas de contenu connu.
+- Le validateur de débordement mesure encore une chaîne comme une boîte.
+- La sélection de texte (Maj+flèches, glisser) existe dans le champ mais **n'est pas dessinée** ; le
+  glisser est désactivé pendant l'édition.
+- Le curseur d'une boîte alignée au centre ou à droite reste calé à gauche.
+- Pas de `textbox:draw` côté Lua : une boîte et une chaîne s'écrivent par `interface:get(nom):draw`.
+- **Non vérifié à la main** : l'édition en place a été corrigée à trois reprises sur retour de
+  l'auteur (raccourcis, déplacement, focus) ; aucun build ROM complet n'a été fait avec `nowrap`.
+
+### TextBox et séquences
+
+#### Reliquat ouvert
+
+- **Layouts partagés et renommages :** la clé d'une nouvelle page vient du rangement ; renommer une scène ou un objet ne recalcule pas les
+  clés déjà créées. Trancher ce suivi en respectant les clés nommées à la main.
+- **Duplication d'une boîte :** vérifier à l'usage ce que partage la copie (la séquence lue) et décider si elle doit plutôt créer ses
+  propres textes et traductions.
+- **Vérification à la main** de l'en-tête de séquence et de l'inspecteur, et relance du test ROM (devkitPro).
+
+### Écran Texte : la finition de l'interface
+
+Relu dans le code le 2026-10-23. Les blocs éditables et le retrait visible de l'aperçu sont livrés (voir [l'archive](../../changelog/archives/text-and-data.md)) ; restent :
+
+- **Code mort à retirer.** L'atelier (`TextWorkbench`) est masqué dans `TextPanel` mais monte toujours `FontScreenPreview`, son sélecteur de police d'aperçu
+  et le bouton de balisage ; les signaux `preview_font_changed` / `set_font` et les clés `txtwb.show_markup_*`, `txtwb.preview_font_*` vivent encore.
+  Trancher d'abord ce que devient la police de référence pour `missing_chars()` (la « Default Font » du projet ?), puis supprimer et mettre à jour `ARCHITECTURE.md`.
+- **Find (rejoindre le lieu d'usage).** Aucun bouton ni navigation depuis une entrée vers sa scène, son script ou sa table. Le socle existe désormais :
+  `Window.open_element` ; reste l'index des usages à compléter (pages de TextBox, colonnes `text`, layouts partagés) et le contrat (un lieu : direct ; plusieurs :
+  liste ; aucun : « non référencé »).
+- **Prévisualiser une traduction dans le canvas.** `canvas_region_item` lit toujours la langue source (`page.content`) ; une traduction plus longue peut déborder
+  sans signal. Décidé qu'il prévisualisera la langue choisie ; la mesure (où se choisit la langue, mémoire, liseré de troncature, plusieurs langues) n'est pas arrêtée.
+- **Regroupement.** Décidé « par scène » ; les blocs se rangent aujourd'hui par clé (le rangement est la clé). À reprendre ou à abandonner explicitement.
+
+### Vérifications non faites
+
+- Le test ROM `tests/rom_build/test_textbox_pages_rom.py` (lent, devkitPro) est adapté au modèle dérivé mais **non relancé** depuis la refonte.
+- Le contrôle à la main de l'en-tête de séquence, de l'inspecteur de TextBox et des nouveautés de l'écran Données.
+
+---
+
+## Coller un tableau dans la grille (presse-papiers seulement)
+
+**Chantier technique, sans numéro de version, jamais au README ni au CHANGELOG. Reporté le 2026-10-23 : aucun usage constaté pour l'instant.**
+Rien n'est verrouillé au-delà du périmètre ci-dessous ; code non commencé.
+
+### Le besoin, s'il revient
+
+Préparer des monstres, des objets ou des répliques dans un tableur (Excel, LibreOffice, Google Sheets), copier un bloc de cellules et le
+coller d'un coup dans l'écran Données. Le presse-papiers porte alors du texte où les colonnes sont séparées par une tabulation (TSV).
+Il n'existe aujourd'hui ni sélection de plage, ni collage, ni `Suppr` multiple ; le bouton « Supprimer » ne retire que la ligne courante.
+
+### Périmètre retenu (décidé le 2026-10-23)
+
+- **Presse-papiers seulement.** Jamais d'import ni d'export de fichier `.tsv` : un fichier garde des noms d'assets périmés après un
+  renommage, le presse-papiers est consommé aussitôt.
+- **Deux fonctions uniques**, `format_cell(colonne, valeur)` (copie) et `parse_cell(colonne, texte)` (collage), sont le seul endroit qui
+  connaît le format d'échange. Aucun autre code ne le lit. Un changement de stockage des références ne touche qu'elles.
+- **Refus atomique.** Une valeur invalide (entier illisible, nom de texte, sprite ou son inconnu, cellule hors plage) : rien n'est collé,
+  le message nomme la cellule fautive. Un collage réussi est une seule commande annulable.
+- **Les cellules restent validées par leur type** ; les noms se résolvent contre le catalogue du moment (uniques par famille).
+
+### À faire le moment venu
+
+1. Sélection de plage dans la grille, puis `Suppr` pour vider une cellule ou une plage.
+2. Copie (`format_cell`) et collage (`parse_cell`), avec le refus atomique.
+3. Tests : colonnes scalaires, références valides et inconnues, plage hors table, annulation en un pas.
+
+### Dépend de
+
+[Le stockage des références](#le-stockage-des-références-nom-ou-id-dans-les-cellules) : tant que nom ou id n'est pas tranché, `parse_cell`
+et `format_cell` restent l'unique point à adapter, mais le choix doit être fait avant d'écrire du code de collage.
+
+### Ce que ça ne fait pas
+
+Ne change ni le format des projets, ni la ROM. Ne trie ni ne filtre les lignes : le rang reste l'index que lit `data.Table[i]`.
+
+---
+
+## Le stockage des références (nom ou id dans les cellules)
+
+**Chantier technique, sans numéro de version, jamais au README ni au CHANGELOG. Ouvert le 2026-10-23, rien de verrouillé, code non commencé.**
+
+### Constaté dans le code
+
+- Une cellule de référence (`text`, `sprite`, `background`, `sfx`, `palette`…) **stocke le nom** de l'asset (`"line": "scr_arena_textbox_Page01"`
+  dans le `.table`). Le renommage réécrit les cellules (`_rename_data_asset_refs`, `project_renames.py`).
+- Les assets portent déjà un id hexadécimal stable dans leur sidecar. Les « références par id » (une scène citera un
+  asset par son id plutôt que par son nom), sorties de la 0.3 le 2026-10-23, posent la même question que le stockage des cellules : ce chantier les porte.
+- En ROM, une cellule `sprite` ou `background` vaut le **rang** de l'asset dans la liste du projet (`reference_index`). Ce rang change
+  quand on ajoute ou supprime un asset ; c'est sans conséquence tant que la ROM est régénérée, mais un script ne doit pas l'écrire en dur.
+
+### Pourquoi le décider avant d'échanger avec l'extérieur
+
+Un tableur ne connaît ni les ids ni les noms futurs : il ne voit que des chaînes. Tout échange tabulaire (collage TSV, import, export)
+fige un nom qui peut être renommé ensuite. Tant que le stockage n'est pas tranché, aucun format d'échange ne doit s'y appuyer.
+
+### Direction proposée (non verrouillée)
+
+1. **Séparer stockage et échange.** Le stockage (nom aujourd'hui, id demain) est une affaire du modèle ; l'échange est le texte que
+   l'auteur voit dans la cellule.
+2. **Deux fonctions uniques**, `format_cell(colonne, valeur)` et `parse_cell(colonne, texte)`, sont le seul endroit qui connaît le format
+   d'échange. Un changement de stockage ne touche qu'elles.
+3. **Presse-papiers seulement, jamais de fichier `.tsv`** : un fichier garde des noms périmés, le presse-papiers est consommé aussitôt.
+4. **Nom inconnu au collage : refus atomique** (rien n'est collé, la cellule fautive est nommée), annulable en un seul pas.
+5. **Ne pas trancher sous la pression du TSV** : le choix nom ou id appartient au chantier des références par id.
+
+### À trancher
+
+- Le stockage final : le nom (suivi par renommage, comme aujourd'hui) ou l'id (stable, mais illisible dans un `.table` relu par git).
+- Les noms de colonnes de référence côté Lua restent-ils des identifiants lisibles quel que soit le stockage ?
+- Que devient la valeur ROM (rang du catalogue) si l'id devient la clé ?
+
+### Ce que ça ne fait pas
+
+Ne change ni le format actuel des projets, ni la ROM, ni l'écran Données. Le [collage dans la grille](#coller-un-tableau-dans-la-grille-presse-papiers-seulement) en est le premier consommateur, reporté (2026-10-23).
+
+---
+
+## Une seule navigation « ouvrir cet élément » entre les écrans
+
+**Chantier technique, sans numéro de version, jamais au README ni au CHANGELOG. Ouvert le 2026-10-23, rien de verrouillé, code non commencé.**
+
+### D'où vient la question
+
+Le besoin vient de l'écran Données : une cellule `text`, `sprite` ou `background` désigne un élément, et
+l'inspecteur droit le décrit sans permettre d'y aller. La voie évidente existe presque : `Window._open_disk_asset`
+(`window.py`) sait déjà ouvrir l'écran d'une famille d'asset et y sélectionner l'élément (palettes, sons, polices, tables de
+données, sprites, fonds, scènes, prefabs, scripts).
+
+### Constaté dans le code
+
+- **Un point d'entrée utilisable, mais privé.** `_open_disk_asset(family, name, path)` fait `_switch_screen` puis la sélection, après
+  le changement d'écran (`_show_screen` vide le bus de sélection). Aucun écran ne l'appelle directement : il n'est branché qu'à l'onglet Disk.
+- **Plusieurs chemins qui font la même chose.** « Voir les utilisations » d'un script (`ScriptUsesPanel.target_requested` puis
+  `_show_script_user`), la carte USAGE de la palette (`usage_activated` puis `_open_palette_usage`) et le Disk (`_open_disk_asset`)
+  déclarent chacun leur signal et leur gestionnaire. `_open_disk_asset` délègue d'ailleurs à `_open_palette_usage` pour sprites, fonds,
+  scènes et prefabs : la logique est déjà à moitié partagée.
+- **Les textes ne se sélectionnent pas.** La table des familles contient `"texts": ("Texts", None)` : l'écran s'ouvre, rien n'est choisi.
+  Il manque un `select_text(clé)` sur l'écran Texte.
+- **Les tables de données se sélectionnent** (`select_table`), pas encore une ligne ni une cellule.
+
+### Livré le 2026-10-23 (première tranche)
+
+`Window.open_element(famille, nom)` est le point d'entrée public (`_open_disk_asset` le délègue) ; `TextEditorScreen.select_text(clé)`
+sélectionne un texte malgré les filtres, sans lui donner le curseur ; l'inspecteur Données affiche **Ouvrir** quand la cellule cite un
+élément existant (texte, sprite, fond, sfx, musique, scène, police, palette). Test : `tests/ui/test_data_open_reference.py`.
+**Reste** : ramener les « utilisations » (scripts, palettes) sur `open_element`, le retour à l'écran précédent, le contrôle à la main.
+
+### Direction proposée
+
+1. **Un seul point d'entrée public** (par exemple `Window.open_element(family, name)`), qui absorbe `_open_disk_asset` et
+   `_open_palette_usage`. Les écrans émettent une demande `(famille, nom)` et ne connaissent ni les autres écrans ni leurs sélecteurs.
+2. **`select_text(clé)`** sur l'écran Texte : sélectionne l'entrée, déplie son dossier, retire un filtre qui la masquerait.
+3. **Brancher l'écran Données dessus** : « Ouvrir le texte » et « Ouvrir l'asset » dans l'inspecteur droit, sur la cellule active.
+   L'inspecteur explique et mène à la ressource citée, il ne devient pas un second éditeur.
+4. **Ramener les « utilisations » dessus**, écran par écran, sans changer ce que chacun affiche.
+
+### À trancher
+
+- Le retour : faut-il un « revenir à l'écran précédent » après avoir suivi une référence ? Aucun mécanisme n'existe.
+- Une cible disparue (texte supprimé, asset renommé entre-temps) : message dans la barre d'état, comme `disk.no_editor`.
+- Les cibles qui ne sont pas des assets (une page de TextBox, une ligne de table) : le nom suffit-il, ou faut-il un chemin ?
+
+### Ce que ça ne fait pas
+
+- Ne change aucun format de projet, ni le build, ni la ROM.
+- N'ajoute pas de navigation dans l'historique d'annulation : changer d'écran n'est pas une action annulable.
 
 ---
 
@@ -1522,1543 +1767,57 @@ pas changer, à prouver, voir l'ordre ci-dessous.
 
 ---
 
-## Tout ce que l'auteur manipule vit dans `assets/`
+## Assets et disque : ce qui reste après la livraison de la 0.3
 
-### D'où vient la question (2026-10-10)
+La 0.3 est **livrée** ; sa discussion complète est dans [l'archive](../../changelog/archives/assets-and-disk.md). Ne restent ici que
+les fils ouverts, qui ne bloquent rien :
 
-Le chantier « Source ≠ asset » a posé que `assets/` est le dossier de l'auteur, qu'il organise lui-même (modèle Unity /
-Godot / Unreal). Or une partie de ce qu'il manipule vivait encore sous `project/` : l'onglet Disk n'en montrait rien. La
-décision avait été de garder `project/` pour « ce qui n'a pas de source à relier » ; elle est **révisée** : `project/`
-n'est plus pour l'auteur, `assets/` l'est pour tout.
-
-### Décisions verrouillées (2026-10-10)
-
-- **Tout ce que l'auteur a le droit de manipuler passe de `project/` à `assets/`**, sous le MÊME nom de dossier (un seul
-  geste, déplacer sans renommer ; normaliser (`prefab` → `prefabs`…) viendra avec les dossiers librement déplaçables) :
-
-  | Avant | Après |
-  | --- | --- |
-  | `project/scenes/` | `assets/scenes/` |
-  | `project/prefab/` | `assets/prefab/` |
-  | `project/ui_layouts/` | `assets/ui_layouts/` |
-  | `project/music_boxes/`, `jingle_boxes/`, `sound_boxes/` | `assets/music_boxes/`, `jingle_boxes/`, `sound_boxes/` |
-  | `project/data/` (tables de données) | `assets/data/` |
-  | `project/fonts_assets/` (polices logiques) | `assets/fonts_assets/` |
-  | `project/texts.json`, `texts_<langue>.json` | `assets/texts.json`, `assets/texts_<langue>.json` |
-  | `project/variables.json` | `assets/variables.json` |
-
-- **`project/` ne garde que ce qui n'est pas à l'auteur** : `editor/` (positions du Graphe, dossiers virtuels, manifeste de
-  rattrapage, l'état interne de l'éditeur), `licenses/` et `README.md`.
-- Les textes et les variables sont des tables du projet entier, pas des assets nommés : ils se posent à la RACINE de
-  `assets/`, pas dans un sous-dossier. `assets/data/` est lu comme « une table par fichier » et les avalerait.
-- Les projets existants se migrent par `tools/migrate_project_to_assets.py` (comme pour les ids : aucune lecture de
-  l'ancien emplacement dans l'éditeur, le projet n'étant pas diffusé), appliqué aux deux démos et au starter.
-
-### Ce que ça touche
-
-- **Chemins** : les propriétés de `core/project_paths.py` (une dizaine), plus les emplacements écrits en dur, la création
-  des dossiers à l'ouverture (`Project.load`, `Project.create`), la surveillance (`ProjectWatcher`), les traductions
-  (`texts_<langue>.json`), la copie d'un starter.
-- **L'onglet Disk** : ces fichiers y apparaissent ; ils doivent être marqués ASSET (famille, icône) et non « Non géré ».
-- **Tests** : ceux qui construisent un projet à la main ou citent `project/<famille>` (une quinzaine).
-- **Docs** : ARCHITECTURE (la disposition d'un projet), les en-têtes de module qui citent `project/`.
-
-### Ordre d'implémentation
-
-1. Les chemins et leurs utilisateurs (code, surveillance, starters).
-2. L'onglet Disk reconnaît ces familles.
-3. Le script de migration, appliqué aux démos et au starter.
-4. Les tests, les docs, la chasse au code mort.
+- **Les références par id** : sorties de la 0.3, suivies avec [le stockage des références](#le-stockage-des-références-nom-ou-id-dans-les-cellules).
+  Le sidecar porte déjà l'id ; ce sont les données (scènes, cellules) qui citent encore le nom.
+- **`tools/create_build_benchmark.py`** écrit encore dans `project/scenes` et à plat (ancienne disposition).
+- **Imports et dépôts** : l'encodage d'un sprite ou d'un fond remplacé
+  n'est pas dans l'historique (annuler rend le PNG, le rechargement refait l'encodage) ; un dossier déposé garde son suffixe sans question ;
+  une seule réponse vaut pour tout un lot de collisions ; aucun test de l'interface de la boîte de collision.
+- **Disk** : un double-clic dans la vue du bas ne sélectionne pas le dossier dans l'arbre ; les dossiers vides des projets de démo, créés
+  avant que `assets/` devienne vierge.
+- **Dossiers virtuels des autres finders** : seules les familles scènes, SFX, musiques et jingles en ont (`folder_family` dans
+  `asset_kinds.py`, relu le 2026-10-23) ; sprites, fonds, palettes, tables, polices et prefabs restent à plat.
+- **Vérification à la main** de l'ensemble de l'onglet Disk sur un projet réel (déplacements, collisions, annulation).
 
 ---
 
-## Créer un asset : deux gestes, aucun dossier titulaire
-
-### D'où vient la question (2026-10-19)
-
-Créer un asset a deux gestes, **créer depuis une source** et **créer vierge**, et l'onglet Disk les suit déjà
-(`window._disk_create_from_sources`, `_disk_create_blank`, qui passent par `core.asset_creation` /
-`core.blank_assets` puis `CreateAssetCmd`). Mais d'autres chemins font la même chose chacun à sa façon, et quelques
-familles gardent un dossier « à elles ». Deux exceptions justifiaient ces dossiers (les scripts de **behavior** et les
-**palettes**) ; elles sont levées : un behavior se reconnaît à son contenu (`-- @behavior`), une palette pointe son `.hex`
-comme les autres assets pointent leur source. Plus aucune famille n'a de raison d'être titulaire d'un dossier.
-
-### Demandé par l'auteur (2026-10-19)
-
-- **Deux commandes, pas une de plus** : *Create from source* et *Create blank*. Tout écran, tout bouton « + », toute
-  importation y passe.
-- **Plus aucun asset ne possède un dossier.** Un asset naît dans le dossier que l'auteur désigne (celui que l'onglet Disk
-  affiche, sinon la racine de `assets/`), et se range ensuite où il veut.
-
-### Ce que le code dit aujourd'hui (lu le 2026-10-19, rien d'exécuté)
-
-- **`ResourceStore` cherche déjà partout.** Il indexe tout `assets/` par extension (`root`) ; son `dir` ne sert que de
-  **lieu de naissance** par défaut (`resource_store.py`, `_path`). Retirer le dossier de famille ne change donc pas la
-  découverte des assets existants : seulement où naît un asset dont l'appelant n'a pas dit le dossier.
-- **`PaletteStore` est la vraie exception** (`palette_store.py`) : (1) un `.hex` déposé dans `assets/palettes/` devient
-  d'office une palette (`load`, `self.dir.glob("*.hex")`), ce qui contredit « créer est un geste, jamais la conséquence de
-  l'apparition d'un fichier » ; (2) une palette neuve voit son `.hex` posé dans `self.dir` même quand son sidecar part
-  dans un autre dossier (`save`, `hex_path`) : les deux fichiers se séparent dès la naissance.
-- **Les behaviors** : `scripts_behaviors_dir` n'a qu'un lecteur, `script_creation.py`, qui écrit le `.lua` sans passer
-  par l'historique (pas annulable), contrairement à l'onglet Disk (`CreateFileCmd`).
-- **Chemins parallèles** à ramener aux deux commandes : les `add` de `asset_kinds.py` (polices, palettes, sfx / musiques /
-  jingles, tables de données), `script_creation.py` (menu partagé par le Script finder et l'assets finder), l'import de
-  sprite (`import_png_dialog.py`), l'écran Background (import et fond vierge).
-- **Les propriétés `*_dir`** de `project_paths.py` (une quinzaine, dont `palettes_dir`, `font_assets_dir`,
-  `scripts_behaviors_dir`) alimentent `ResourceStore(dir, cls, assets_dir)` dans `Project.__init__`.
-
-### Le contrat proposé (non verrouillé)
-
-- `asset_creation.create_from_source(project, family, paths, folder)` et `asset_creation.create_blank(project, kind, folder)`
-  rendent **une commande annulable** (`CreateAssetCmd`, `CreateFileCmd`, `MacroCmd` pour un lot). `folder` est obligatoire :
-  l'appelant le prend à `import_folder()` s'il n'en a pas d'autre. Le message d'état reste affaire de la fenêtre.
-- Les scripts et les behaviors sont deux types de `create_blank` comme les autres ; `script_creation.py` disparaît.
-- `ResourceStore(root, cls)` : plus de `directory`. Un asset sans dossier donné naît à la racine de `root`.
-- Une palette neuve naît avec son `.hex` **à côté de son sidecar**, dans le même dossier ; plus d'adoption d'un `.hex`
-  déposé à la main (il redevient une source libre, qu'on transforme par *Create from source*).
-- Les propriétés `*_dir` de famille disparaissent, `scripts_behaviors_dir` et `font_assets_dir` comprises.
-
-### Ce que ça touche (à confirmer en lisant le code avant d'ouvrir)
-
-- `core/asset_creation.py`, `core/blank_assets.py`, `core/resources/resource_store.py`, `core/resources/palette_store.py`,
-  `core/project_paths.py`, `core/project.py` (construction des stores, ligne du PNG de fond), `window.py` (callbacks Disk).
-- `ui/common/asset_kinds.py`, `ui/common/asset_finder.py`, `ui/common/script_creation.py` (supprimé),
-  `ui/script_editor/script_finder_panel.py`, `ui/scene_manager/assets_finder_panel.py`, `component_editors/script.py`
-  (non lu), `ui/sprite_editor/import_png_dialog.py`, `ui/background_editor/background_editor_screen.py`.
-- **Tests** : ceux qui construisent un projet à la main et comptent sur `project/<famille>/` ou sur l'adoption d'un `.hex`
-  (palettes). **Docs** : ARCHITECTURE, `docs/development/`, en-têtes de module qui citent un dossier de famille.
-- Les deux démos et les starters ne sont pas réécrits sans accord de l'auteur ; leurs fichiers restent où ils sont.
-
-### Décisions (2026-10-19, de l'auteur)
-
-1. **Les starters et un projet neuf ne livrent plus de dossiers vides par famille** (`sprites/`, `scenes/`…).
-2. **Pas de migration des `.hex`** des démos : ils restent où ils sont. Le starter, lui, livre désormais le `.palette`
-   de chacune de ses palettes (sans quoi elles disparaîtraient avec l'adoption).
-3. **`FontAsset` suit la même règle** : il naît dans le dossier désigné, `font_assets_dir` disparaît avec les autres.
-
-### Livré (2026-10-19)
-
-- **Tranche 1, `PaletteStore`** : plus d'adoption d'un `.hex` déposé à la main (c'est une source libre) ; une palette neuve
-  naît avec son `.hex` à côté de son `.palette`, dans le dossier où elle naît. Tests ciblés verts.
-- **Tranche 2, les deux commandes** : `asset_creation.create_from_source(project, family, paths, folder)` et
-  `create_blank(project, kind, folder)` rendent un `Gesture` dont `command` est UNE commande annulable (un lot de sources =
-  une `MacroCmd`, un script = `CreateFileCmd`). L'onglet Disk les appelle et ne garde que ses messages d'état.
-  L'ancienne création immédiate, sans historique, devient `create_from_source_now` (tests, outils).
-- **Tranche 3a, les scripts** : `script_creation.py` et `scripts_behaviors_dir` supprimés. Le « + » des deux finders appelle
-  `asset_kinds.add_script`, qui passe par `create_blank` dans le dossier que l'onglet Disk affiche (annulable).
-- **Tranche 3b, import de sprite** : `import_new_sprite` copie la source puis appelle `create_from_source` (une seule
-  entrée d'historique).
-- **Tranche 3c, import de fond** : `create_from_source(..., defer_encoding=True)` crée le fond sans l'encoder ; `_import_png`
-  l'appelle, règle le fond puis pousse la commande (annulable) ; annuler annule aussi la compression en cours. La copie du
-  PNG dans le dossier, elle, n'est pas annulée (la source reste une source libre). **Reste** : le fond vierge de l'écran
-  Background (`_create_blank_background` écrit un PNG puis importe).
-- **Tranche 3d, les « + » de `asset_kinds`** : tables de données, palettes (16 / 256 couleurs) et polices logiques passent par
-  `create_blank` (`font_asset` rejoint `BLANK_KINDS`, donc le menu *Create blank* de Disk) ; SFX, musiques et jingles
-  passent par `ui/common/source_import.py` (choisir un fichier, le copier dans le dossier affiché, *Create from source*,
-  une seule entrée d'historique) : **un son ne naît plus sans fichier**. Le sprite utilise le même helper. Reste hors des
-  deux gestes : l'import de palette `.gpl` / `.pal` (il convertit un format étranger, sans pointer sa source).
-
-- **Tranche 3e, les trois chemins hors liste** : (1) le script créé depuis l'inspecteur d'acteur passe par `create_blank`
-  (`name`, `template="actor"`), dans le dossier affiché, annulable (un nom déjà pris est suffixé au lieu de relier l'ancien
-  script) ; (2) un nœud `Interface` est une mise en page vierge plus son nœud de scène, `asset_creation.create_interface`
-  (UNE commande) : « + Interface » de l'arbre la pousse dans l'historique, `_ensure_layout` du canvas l'exécute SANS historique
-  (un undo qui la retirerait casserait les éléments dessinés ensuite) ; (3) scènes et prefabs des « + » passent par
-  `create_blank` (`window._create_blank`), `add_scene` / `add_prefab` du dispatcher sont supprimés. Reste hors des deux
-  gestes : « Expose to prefab » et la copie de prefab (ils partent d'un acteur existant), `save_palette` (palette extraite d'un
-  sprite ou d'un fond).
-
-- **Tranche 4, `ResourceStore(root, cls)` (constatée livrée le 2026-10-22)** : plus aucun store ne reçoit de dossier de famille
-  (`Project` les construit tous sur `user_library_dir`) et les propriétés `*_dir` de famille ont disparu de `project_paths.py`
-  (ne restent que `user_library_dir`, `project_dir`, les dossiers de build et `legacy_sound_states_dir`, lu une fois par la
-  migration des boîtes sonores). Dernier chemin parallèle retiré : le bouton « New script » du Script Editor, qui demandait
-  un nom par une fenêtre et écrivait le fichier à la racine sans historique, appelle maintenant le « + » de la bibliothèque
-  (*Create blank*, dossier affiché par Disk, annulable) ; `ScriptLibraryPanel.set_root` et `_root_scripts_dir` sont supprimés.
-  **Reste** : le fond vierge et l'import `.gpl` / `.pal` ne sont pas des écarts (décidé le 2026-10-22), et
-  `tools/create_build_benchmark.py` écrit encore `project/scenes` (ancienne disposition).
-
-### Ordre d'implémentation (proposé)
-
-1. `PaletteStore` d'abord (l'exception réelle), avec son test : `.hex` à côté du sidecar, plus d'adoption.
-2. `asset_creation` : les deux entrées rendant une commande ; l'onglet Disk les appelle.
-3. Les chemins parallèles, un par un (scripts, sons, tables, polices, palettes, sprite, background).
-4. `ResourceStore(root, cls)` et la suppression des `*_dir` de famille.
-5. Tests, docs, chasse au code mort ; l'ancien code est supprimé avant de dire terminé.
-
-### Ce que ça ne fait pas
-
-- Ne déplace aucun fichier d'un projet existant.
-- N'ajoute aucun type d'asset ni aucun geste de création : il en retire.
-- Ne touche ni à la règle des noms libres (`coin`, `coin_2`) ni au chantier « Finder et Disk » (renommage, [livré](../../changelog/archives/finder-to-library.md)).
-
----
-
-## La compression d'un fond se joue, elle ne s'attend pas
-
-### D'où vient la question (2026-10-14)
-
-L'auteur voudrait que la compression, dans le Background Editor, soit un moment **créatif** plutôt qu'une étape
-barbante : on bouge des potards et on attend. Analyse du parcours faite le même jour, **en lisant le code**
-(`background_editor_screen.py`, `bg_import.py`, `bg_inpaint_canvas.py`). Rien n'a été chronométré ni essayé à la
-souris. Les points 7 et 8 ci-dessous sont à vérifier avant de s'appuyer dessus.
-
-### Le parcours actuel
-
-1. Un fond est sélectionné ; la carte « Compression » est repliée, sauf si l'image « ne tient pas » ou si des réglages
-   existent déjà (`_compression_needs_attention`).
-2. Layout et profondeur sont **mis en attente** (`_staged`), rien ne se compresse.
-3. Les curseurs (palettes, couleurs/palette, couleurs globales, tuiles), la méthode, le dithering et son type se règlent.
-4. Après 300 ms de pause, un encodage complet part en arrière-plan ; le canvas montre le résultat avec un badge
-   « computing » puis « ready » (`_on_compress_preview`, un seul calcul à la fois, le dernier réglage passe après).
-5. « Compress », en bas de l'inspecteur, valide : le résultat du cache (8 entrées), sinon un nouvel encodage.
-
-À garder : non destructif, hors-thread, cache, validation sans recalcul, source jamais touchée.
-
-### Les frictions relevées
-
-1. **Les chiffres ne suivent pas l'aperçu** (la plus grosse). Les overlays d'info (tuiles/budget, palettes) et
-   d'avertissement (`_info_lines`, `_compression_lines`) lisent le fond **déjà compressé**. Le résultat d'aperçu porte
-   pourtant `unique_tiles`, `final_palettes`, `tiles_merged`, `tiles_reduced` : il ne sert qu'à dessiner l'image, puis
-   est jeté. Pour savoir si un réglage tient dans le budget, il faut cliquer sur « Compress ».
-2. **Pas de comparaison avant/après.** L'aperçu remplace le rendu, il ne s'y compare pas (aucun split, bascule ni carte
-   d'écart dans `ui/background_editor/`). L'aperçu exclut aussi les calques de peinture : l'image jugée n'est pas
-   exactement l'image finale.
-3. **Les curseurs parlent la langue de l'encodeur** (`palettes_max`, `colors_per_palette`, `global_colors`,
-   `tile_target`), et leurs liens sont invisibles : le dithering se grise en 4bpp tant que « Global colors » est à Off ;
-   surtout, dès qu'un curseur s'écarte du défaut, `_asks_for_reduction_4bpp` coupe le chemin « indexé direct » qui
-   préservait la palette d'auteur, une **falaise** que l'interface n'annonce pas.
-4. **L'objectif réel n'est pas exprimé.** Nous voulons « que ça tienne sur GBA » (tuiles, 16 palettes, VRAM) avec le
-   moins de dégâts ; seule la cible de tuiles est orientée but. Les diagnostics savent quel levier répare quel problème
-   mais s'affichent en texte jaune sans action. `analyze_tile_colors` (couleurs par tuile, tuiles partagées, palettes
-   nécessaires) est écrit et testé, mais son bouton est masqué (« sert surtout à déboguer »).
-5. **Latence et attente opaques.** Chaque réglage relance un encodage complet depuis zéro ; le cache est exact (clé sur
-   tous les réglages), donc un glissement de curseur le manque presque toujours ; le calcul en cours ne s'annule pas.
-   L'attente n'a qu'un badge et une barre indéterminée, alors que l'encodeur a des étapes nettes (extraction, packing,
-   indexation, dédup, fusion).
-6. **Le geste est dispersé et mal nommé.** Mode en haut, curseurs dans une carte repliée, « Compress » en bas d'un
-   panneau qui défile et visible seulement quand un réglage est en attente. « Compress » est un faux ami : l'aperçu
-   **est** la compression, le bouton la valide. Pas de « revenir au compressé actuel » : « Reset » remet les
-   **défauts**. Deux aperçus de nature différente (ajustements en direct, compression différée) se partagent canvas et
-   badge.
-7. **À vérifier**, ce que devient un réglage en attente quand on change de fond (`_staged` est un état du panneau ;
-   le chemin de rechargement n'a pas été lu).
-8. **Mesuré le 2026-10-14** (`encode_by_mode`, poste de l'auteur, une seule passe, sans l'UI) :
-   - **PNG indexé de pixel art** (démo Platformer 544×224, PongAdvanced 240×160) : de 0,04 à 0,55 s, tous réglages
-     confondus. Le jeu en direct est possible tel quel.
-   - **Photo RGBA 540×540** (`PongAdvanced/assets/backgrounds/untitled.png`, 4561 tuiles uniques) : **4bpp défaut
-     10,7 s** (24 s sous cProfile), 4bpp global 64 + dithering 8,2 s, **4bpp cible 256 tuiles 32 s**, 8bpp 1,7 s.
-   - **Où part le temps** (profil du 4bpp défaut, 24 s) : `_pack_palettes` **13,3 s**, soit plus de la moitié ; or sur une
-     photo il ne sert qu'à compter `pre_merge_palettes`, un chiffre de **diagnostic** (`encode_background`, branche
-     « max_tile_colors > editable »). Le résultat n'alimente pas l'encodage. Avec une cible de tuiles, `_ward_groups`
-     ajoute 13,2 s. Le clustering de palettes (3,5 s) et l'extraction (2,7 s) sont le reste utile.
-   - **Conséquence** : sur une photo, un curseur ne peut pas se jouer en direct (10 à 30 s par réglage, le cache exact
-     ne sert pas). Il y a au moins un gain quasi gratuit (calculer `pre_merge_palettes` à la demande plutôt qu'à chaque
-     encodage) ; au-delà, il faudra un aperçu **dégradé et rapide** (image réduite) distinct de l'encodage final.
-
-9. **Une réduction cachée, relevée le 2026-10-14** (capture de l'auteur : « Image scaled → 240×133 » et « > 256 colors.
-   Reduced to 256 »). Les deux encodeurs **bitmap** (`_encode_background_indexed_bitmap`, `encode_background_bitmap`)
-   ajustent l'image en « contain » dans 240×160 **eux-mêmes**, par-dessus le recadrage et la taille que l'auteur a posés ;
-   et l'import choisit le bitmap tout seul pour une photo (`detect_import_mode`). Un gros fichier est donc rétréci sans que
-   l'auteur l'ait décidé, alors que le recadrage et le redimensionnement existent pour qu'il le décide. Le tuilé, lui, ne
-   redimensionne jamais (il ne fait que remplir jusqu'au multiple de 8). Les 256 couleurs, en revanche, sont la compression
-   elle-même, pas une réduction de géométrie. **Conséquence pour la comparaison à la source** : en bitmap, l'image compressée
-   (240×133) n'a pas la grille de l'image préparée. La carte d'écart par tuile n'a pas de sens tant que cette réduction est
-   cachée dans l'encodeur.
-
-### Le problème de fond (relevé le 2026-10-15, d'après deux captures de l'auteur et la lecture du code)
-
-L'écran mélange **trois images** et ne dit jamais laquelle il montre :
-
-1. **le fichier** de l'auteur (`_src_size`, en pixels du PNG) ;
-2. **l'image préparée**, recadrée, redimensionnée, miroitée, ajustée : ce que l'auteur a décidé (`_prepared_size`) ;
-3. **l'image encodée**, ce que la GBA affichera, avec sa propre géométrie : le tuilé remplit jusqu'au multiple de 8, le
-   bitmap est **ajusté en 240×160** par l'encodeur.
-
-S'y ajoute un quatrième axe, **validé / en attente** (layout et curseurs mis en attente, aperçu non appliqué).
-
-Le canvas montre l'image (3), les outils de préparation travaillent dans l'espace de l'image (2), les avertissements
-décrivent (3) mais ne lisent que l'état **validé**, et chaque outil a reçu sa rustine locale. Ce que ça donne :
-
-- **Redimensionner en bitmap : poignées et image désynchronisées.** `begin_resize(_prepared_size())` pose le cadre à la
-  taille préparée (482×269 sur la capture), alors que `pix_item` dessine l'image encodée (240×134) à l'origine du même
-  repère. Le miroir a eu sa rustine (`set_mirror(..., prepared, display)`, « seul un bitmap est ajusté à l'encodage »),
-  le redimensionnement non.
-- **Le recadrage, lui, remplace la vue par le fichier** (`begin_crop` cache l'image encodée et montre la source) : on
-  change donc de repère en entrant dans l'outil, et le curseur `x:… y:…` change d'unité avec.
-- **Le « W×H » en haut à droite** est un `QLabel` nu (`set_canvas_size`) alimenté par trois sources sans libellé : la taille
-  encodée hors geste, celle du cadre de recadrage (en pixels du fichier) pendant un recadrage, la cible pendant un
-  redimensionnement. Même emplacement, trois sens.
-- **Les avertissements ne suivent pas le layout.** `_info_lines` / `_validation_lines` lisent le fond **validé** ;
-  mettre le layout en attente ne les recalcule pas. L'aperçu les met à jour depuis le 2026-10-14 (tuilé) et le
-  2026-10-15 (bitmap, qui laissait ceux du layout précédent), mais seulement une fois l'aperçu calculé.
-- **L'auteur ne voit jamais son fichier tel quel** : l'import choisit le layout, l'encodeur réduit, et le canvas montre
-  le résultat (« une version tronquée » (auteur, 2026-10-15)) avec des constats qui disent ce que l'encodeur a fait,
-  pas ce que l'auteur doit faire pour que ce soit compatible.
-
-**Piste remplacée le 2026-10-15** par le chantier [Le fond est un plan de travail](#le-fond-est-un-plan-de-travail-canvas-image-posée-comparaison-sourcecompressé), plus radical : l'auteur y pose
-l'image dans un canvas à lui plutôt que de la voir à travers un cadre matériel. Le texte qui suit est l'état de départ.
-
-**Piste (non verrouillée), un seul espace, celui du fichier préparé.** Le canvas montre l'image de l'auteur **entière**,
-à sa taille ; le matériel est un **cadre** posé dessus (240×160 en bitmap, la grille 8×8 en tuilé), le hors-cadre grisé.
-Recadrer et redimensionner agissent dans cet espace et le cadre bouge avec : plus de désynchronisation possible. Les
-constats deviennent une **liste de choses à faire** (« dépasse de 242×109 px → recadrer / ajuster au cadre »), chacune avec
-le geste qui la résout, au lieu d'un compte rendu de l'encodeur. L'encodeur bitmap ne rétrécit plus en douce : ce qui
-dépasse du cadre est ce que le cadre montre, grisé en dehors. À trancher : voir « À trancher avant d'ouvrir », point 5.
-
-### Directions possibles (proposées, rien de verrouillé)
-
-- **Budget en direct** : les jauges tuiles / palettes / VRAM suivent l'aperçu, depuis les diagnostics déjà calculés
-  (friction 1). Le plus petit geste, et il débloque les autres.
-- **Voir la perte** : comparaison curseur ou bascule avec la source, et carte des tuiles sacrifiées (tuiles > 15 couleurs,
-  tuiles fusionnées). Le diagnostic par tuile existe (frictions 2 et 4).
-- **Diagnostics actionnables** : un avertissement devient un bouton qui pose le curseur qui le règle (friction 4).
-- **Réglage par objectif** : « tenir en N tuiles », « garder le plus de couleurs possible », les curseurs passant au
-  second plan (frictions 3 et 4).
-- **Attente racontée** : étapes de l'encodage au lieu d'une barre indéterminée ; annulation du calcul périmé
-  (friction 5).
-
-### Ordre retenu (2026-10-14)
-
-1. **Petits gains de latence**, *livré le 2026-10-14.* `_pack_palettes` teste l'union par différence d'ensembles au
-   lieu de la reconstruire : sortie **identique octet pour octet** sur les cinq fonds de la démo (4bpp, réglage par
-   défaut et réduit, 12 cas comparés par empreinte), `_pack_palettes` passe de 13,3 s à 6,6 s sur la photo. Le calcul de
-   `pre_merge_palettes` n'est **pas** sorti du chemin chaud : il reste la moitié du temps restant.
-2. **Jauges en direct** (friction 1), *livré le 2026-10-14, pas vérifié à la souris.* Quand l'aperçu d'une compression est
-   montré, les overlays du canvas portent **ses** chiffres : tuiles uniques et palettes en jauge de texte (rouge au-delà
-   du budget), « (actuel : N) » à côté, tuiles réduites / fusionnées, et les mêmes avertissements que pour un fond
-   compressé (`_compression_lines_from`, règles uniques). Le fond compressé reprend la main quand l'aperçu disparaît.
-   Bitmap : pas de jauge (ni tuiles ni palettes). Le chiffre d'un aperçu **exclut les calques de peinture**, comme
-   l'image. Pendant le calcul, les chiffres affichés sont ceux de l'état précédent.
-3. **Comparer à l'image source** (frictions 2 et 4), demandé par l'auteur le 2026-10-14 : le diagnostic se lit **contre
-   le fichier source**, pas seulement en chiffres (carte d'écart par tuile, fidélité globale, bascule source/compressé).
-   À concevoir ; le coût dépend de la taille, donc sur photo à calculer sur une version réduite.
-
-### À trancher avant d'ouvrir
-
-1. Par quelle direction commencer (feedback en direct, perception de la perte, ou réglage par objectif) ? *Tranché :
-   jauges en direct d'abord, puis comparaison à la source (voir « Ordre retenu »).*
-2. Le bouton « Compress » change-t-il de nom et de place, puisque l'aperçu est déjà la compression ?
-3. La falaise du chemin « indexé direct » (friction 3) : la signale-t-on, ou change-t-on le comportement ?
-4. Que fait-on du bouton « Analyser » masqué : réintégré dans le tableau de bord, ou retiré ?
-5. ~~Le canvas montre-t-il le fichier préparé entier avec le cadre matériel posé dessus ?~~ **Tranché le 2026-10-15** :
-   un canvas à soi, l'image posée dedans. Voir [Le fond est un plan de travail](#le-fond-est-un-plan-de-travail-canvas-image-posée-comparaison-sourcecompressé).
-   L'encodeur qui ajuste seul est écarté (règle posée, voir friction 9).
-
-### Ce que ça touche (à confirmer en lisant le code avant d'ouvrir)
-
-`editor/ui/background_editor/background_editor_screen.py` (inspecteur, aperçu, cache, `_info_lines`,
-`_compression_lines`), `bg_inpaint_canvas.py` (badge, rendu d'aperçu), `editor/core/bg_import.py` (diagnostics,
-`encode_background`), `labels.json` / `labels_fr.json` (la traduction FR s'ajoute d'office).
-
-### Ce que ça ne fait pas
-
-Ne change ni l'encodeur ni le format du sidecar : c'est un chantier d'interface sur ce que l'encodeur sait déjà dire.
-Pas d'outil de dessin (voir « Jouer avec la compression » plus haut : le jeu reste sur les réglages).
-
----
-
-## Le fond est un plan de travail (canvas, image posée, comparaison source/compressé)
-
-### D'où vient la question (2026-10-15)
-
-Deux captures de l'auteur sur un fond bitmap (« Image scaled → 240×134 », poignées de redimensionnement qui ne
-correspondent pas à l'image) ont montré que l'écran mélange **trois images** (le fichier, l'image préparée, l'image
-encodée) sans dire laquelle il montre ; le détail est dans « Le problème de fond » de [La compression d'un fond se
-joue](#la-compression-dun-fond-se-joue-elle-ne-sattend-pas). Les rustines locales (miroir, recadrage) ne suffisent pas :
-chaque outil a son repère. L'auteur attend qu'à l'import on **voie son fichier**, et qu'on lui dise ce qu'il lui reste
-à faire pour le rendre compatible.
-
-### Le modèle (décidé par l'auteur, 2026-10-15)
-
-À la manière de Photoshop ou d'Affinity, mais **sans jamais plus d'une image à traiter en même temps** :
-
-1. **On importe une image : un asset se crée, c'est un fond.** Un mode par défaut est posé à l'import
-   (`detect_import_mode`) ; l'auteur le change quand il veut (tuilé / bitmap).
-2. **Une nouvelle valeur, la taille du canvas** (*canvas-size*), distincte de la taille de l'image importée et modifiable.
-3. **L'image est posée dans le canvas**, déplaçable librement. Elle peut **déborder** (ce qui dépasse est rogné à
-   l'usage) ou être **plus petite**. L'image entière reste visible, le hors-canvas est grisé : d'un coup d'œil, l'auteur
-   voit que son image est trop grande, puisqu'elle sort du cadre.
-4. **À l'import, tout est déjà réglé** : le mode par défaut, la taille du canvas qui va avec, l'image à sa taille
-   d'origine en (0, 0). Rien n'est rétréci. À partir de là, le plan de travail est prêt à recevoir les gestes de l'auteur.
-5. **Le mode « compress view »** fait apparaître une **barre verticale** sur le plan de travail, sur le modèle des barres
-   de miroir : d'un côté la source, de l'autre la version compressée, à la même grille. C'est ce qui rend enfin
-   possible la comparaison à la source et la carte d'écart par tuile (voir « La compression se joue »).
-6. **Une seule image visible, jamais de panneau de calques.** Les calques existent déjà dans le code (décidé par l'auteur :
-   l'utilisateur ne les voit jamais, et c'est le but). On reste simple : pas de composition de plusieurs images, pas de
-   peinture. La règle « pas un outil de dessin » tient.
-
-**Proposé, non verrouillé** : trois boutons d'aide au placement, **Ajuster** (tout l'image dans le canvas), **Remplir**
-(le canvas entier couvert), **1:1** ; sans eux, une photo de 1000 px s'ouvre sur son coin haut-gauche.
-
-### Ce que ça résout
-
-- **Un seul repère.** Les outils agissent sur l'image là où elle est dessinée, dans l'espace du canvas : la désynchronisation
-  des poignées devient impossible, et le recadrage n'a plus de repère à lui (voir ci-dessous).
-- **Plus de réduction cachée.** Le « contain » 240×160 des deux encodeurs bitmap disparaît : l'encodeur reçoit un canvas
-  qui a déjà la bonne taille.
-- **Une valeur lisible.** La taille du canvas, la taille de l'image et la position sont des champs nommés ; l'étiquette
-  muette du haut à droite disparaît.
-- **Des constats qui se calculent sans encoder** : l'image déborde, ou ne couvre pas le canvas. Ils se recalculent à
-  l'instant du changement de layout, sans attendre un aperçu.
-- **La comparaison à la source** a la même grille des deux côtés.
-- **Moins d'outils.** Recadrer = la fenêtre du canvas sur l'image : l'outil Recadrer se fond dans « déplacer + taille du
-  canvas ». Redimensionner devient l'échelle de l'image.
-
-### Les données et la migration
-
-- Nouveaux champs du sidecar : taille du canvas, position de l'image (entiers), échelle de l'image. Ils remplacent
-  `import_crop` et `import_size`.
-- **Migration sans perte, proposée** : un recadrage `(x, y, w, h)` avec une taille `(W, H)` devient une échelle
-  `W / w`, une position `(−x·échelle, −y·échelle)` et un canvas `W×H`. À vérifier par test : le rendu d'un fond migré est
-  identique, pixel pour pixel, à celui d'avant.
-- L'ordre de `prepare_source` aujourd'hui : recadrer, redimensionner, miroir, ajuster. Demain : mettre à l'échelle,
-  poser dans le canvas, miroir, ajuster.
-
-### À vérifier avant de coder
-
-1. **La palette indexée d'auteur.** Un PNG indexé garde sa palette grâce au chemin « indexé direct » de l'encodeur
-   (`_indexed_direct_source`, non relu à ce jour). Si le canvas est composé en RGBA, ce chemin est perdu : il faut composer
-   en mode `P`, avec l'index de transparence, et rééchantillonner au plus proche voisin comme aujourd'hui.
-2. **Les limites du canvas tuilé.** « Libre » doit tenir dans les limites des cartes de tuiles de la GBA et dans ce que le
-   streaming des fonds sait déjà faire (voir « Background editor », limites Mode 0). Proposé : arrondi à 8, avec un
-   avertissement au-delà de ce qui tient.
-3. **Les fonds de type UI et animé.** Leurs marges (nine-slice) et leur grille de frames dépendent de la géométrie de
-   l'image, et les outils de préparation leur sont déjà fermés (`_prep_available`). Proposé : hors du modèle au début,
-   canvas verrouillé sur l'image.
-4. **Les peintures par tuile** (inpainting, par scène) sont posées sur la grille encodée : déplacer l'image sous elles
-   change ce qu'elles recouvrent, comme le fait déjà un recadrage. À vérifier, pas à craindre.
-5. **Les consommateurs de la taille** : `pixel_size()` (Scene Manager), le placement d'animés, la taille déclarée en ROM.
-   Tous lisent aujourd'hui la taille préparée ; ils doivent lire la taille du canvas.
-
-### À trancher
-
-1. **Le miroir** agit-il dans l'espace de l'image ou dans celui du canvas ? Proposé : le canvas. On réfléchit la
-   composition. (Non tranché explicitement par l'auteur.) --> Dans le canvas, décision tranchée (15/10/26 19h50)
-2. **Passer d'un layout à l'autre** : tuilé → bitmap ramène le canvas à 240×160 et garde la position de l'image par rapport
-   à l'origine ; bitmap → tuilé garde le canvas tel quel. À confirmer --> Existe-t-il des techniques de streaming d'image bitmap ? Comment fonctionne un flux vidéo sur GBA ? Comment fonctionne un aperçu 3D également. On a peut-être des pistes pour étendre l'affichage d'une image bitmap.
-3. **Le canvas change de taille alors qu'un bitmap est fixe** : la taille est-elle simplement grisée, ou masquée ? (l'image déborde du canvas, l'utilisateur peut la repositionner --> Importance de créer un nouvel outil de sélection simple dans la barre d'outils qui deviendra l'outils par défaut de cet écran et qui permettra de simplement déplacer l'image dans le canvas)
-
-### Au-delà de 240×160 : étendre un fond bitmap (étude du 2026-10-16, réponse au point 2)
-
-*Étude seulement : rien n'est codé, rien n'est exécuté sur émulateur.*
-
-**Ce que le matériel offre.** Le Mode 4 a deux pages de 240×160 en 8 bpp (bit 4 de DISPCNT) mais une seule palette,
-partagée entre elles : une palette par image se change donc exactement à la bascule. Le Mode 3 n'a pas de double tampon
-(75 Ko sur 96 Ko). Le Mode 5 en a deux, en 160×128 et 15 bpp, agrandissables par l'affine de BG2. En bitmap il ne reste
-que BG2 (plus de BG0/BG1/BG3 : le texte et l'UI actuels doivent passer par des sprites ou du dessin logiciel) et les
-sprites perdent la moitié de leur VRAM (tuiles 512 à 1023).
-
-**Le double tampon ne fait pas défiler.** Il cache le redessin : on écrit dans la page invisible, puis on bascule au
-VBlank. Le défilement vient d'une **source plus grande que l'écran, gardée en ROM**, dont un DMA copie la fenêtre visible
-vers la page cachée, ligne par ligne avec le stride de la source. Ordre de grandeur (à mesurer) : 38 Ko par image, soit
-40 000 à 80 000 cycles sur les 280 000 d'une image, 60 fps sans décodage CPU tant que la source n'est pas compressée.
-L'affine de BG2 ajoute déplacement sous-pixel, rotation et zoom gratuits, mais seulement à l'intérieur de la page (pas de
-bouclage en bitmap).
-
-**Pourquoi c'est utile malgré les calques tuilés.** Une peinture sans répétition dépasse les 1024 tuiles d'un charblock
-8 bpp : elle ne peut pas défiler en tuilé. Le bitmap fenêtré comble ce cas (grand décor non tuilable). Autres usages du
-double tampon : rendu logiciel (v3.0), transitions et diaporamas (image suivante préparée en arrière-plan), vidéo.
-
-**Vidéo.** Possible mais hors de portée d'un asset ordinaire : un flux séquentiel en ROM (32 Mo max), décodé image par
-image dans l'IWRAM (delta, RLE ou LZ77 BIOS, palette réduite), synchronisé sur l'horloge audio, avec un seul écrivain du
-volume (voir la politique musique des jingles). Il n'entre ni dans la déduplication de tuiles ni dans `palette_alloc` :
-c'est un `kind` à part, qui réserve le fond et la palette de la scène pendant la lecture. Le transcodage se ferait hors
-éditeur (outil externe type ffmpeg, à trancher : vendorisé ou demandé à l'auteur), et le recadrage ou la cadence restent
-des gestes explicites de l'auteur (pas de réduction cachée).
-
-**Ce que le code fait aujourd'hui.** Le bitmap n'existe que dans l'éditeur : `rom_build.py` (lignes 330, 671, 836, 876)
-et `gen_scene_query.py` sautent les fonds bitmap avec un avertissement. Il n'y a ni DISPCNT en Mode 4, ni bascule de
-page, ni blit. La borne 240×160 est `BITMAP_SIZE` (`models/background.py`) et `_require_bitmap_canvas` /
-`encode_by_mode` (`bg_import.py`), qui rognent le surplus.
-
-**Découpage proposé, dans cet ordre.**
-
-| Étape | Contenu | Dépend de |
-| --- | --- | --- |
-| A | Émission ROM d'un bitmap 240×160 statique : buffer 8 bpp, palette de 256 couleurs, DISPCNT Mode 4, `render_mode` de la scène, cap OBJ à partir de la tuile 512 | (à valider sur émulateur d'abord) |
-| B | Bascule de page et rendu hors écran (substrat commun avec le rendu logiciel de la v3.0) | A |
-| C | Canvas bitmap **libre** côté éditeur (par exemple 1024×160), puis blit fenêtré en runtime | A, B |
-| D | Vidéo : flux en ROM, codec, synchronisation audio | A, B |
-
-**Ce qui rouvre une décision.** L'étape C contredit la décision du 2026-10-15 (« un bitmap a un canvas fixe de 240×160 »).
-Elle ne la supprime pas : le canvas serait libre en option, et la fenêtre de 240×160 deviendrait une valeur du runtime.
-Le sidecar porte déjà `canvas_size`. Un buffer 8 bpp de 1024×160 fait 160 Ko en ROM.
-
-**À vérifier avant C.** (1) Si la caméra (v0.6) peut piloter l'origine de la fenêtre comme elle pilote les calques
-tuilés ; ce serait l'intégration la plus propre. (2) Compressé ou non : sous environ 200 Ko décompressé, une
-décompression LZ77 BIOS en EWRAM au chargement de la scène permet un DMA depuis la RAM, plus rapide que depuis la ROM.
-(3) Le coût des sprites et de l'UI en bitmap (BG2 seul).
-
-### Réglages et résultats : l'encodage à la fin (réflexion de l'auteur, 2026-10-15)
-
-Pile voulue : **source** (le PNG) → **préparée** (canvas, échelle, miroir, ajustements, `prepare_source`, en mémoire) →
-**filtre de compression** (réduction de couleurs, fusion de tuiles, dithering) → **encodée** (tuiles, tilemap, palettes,
-buffer bitmap : ce que le build lit). L'encodage appelé à la création d'un asset, avec les réglages par défaut, remplit un
-cache : l'asset est utilisable tout de suite. Ce qui ne va pas, c'est que chaque geste de préparation relance un encodage.
-*Livré le 2026-10-15* : (1) `apply_bg_encoding` ne touche plus à aucun réglage. Le layout se pose par
-`BackgroundAsset.choose_layout` ; (2) le sidecar a deux blocs, `settings` et `encoded` (voir ARCHITECTURE.md), lecture
-tolérante d'un sidecar à plat, démos migrées. *Pas fait, à décider* : un seul geste « Appliquer » qui encode (canvas et miroir
-compris, aujourd'hui commités à la sortie du geste) ; une empreinte réglages + source qui dise si `encoded` est périmé ;
-couper `encode_background` en filtre puis encodage (le chemin « indexé direct » est déjà l'encodage seul) ; les caches par
-étage ; que devient une retouche d'après-encodage (surcharges de palette, peinture) quand un réglage change en amont.
-
-### Décisions, état et reste à faire (point du 2026-10-16)
-
-**Décisions prises**
-
-- **Pas d'« Ajuster » à l'import, jamais de réduction cachée.** Un bitmap a un canvas FIXE de 240×160 : l'image garde sa taille
-  en (0, 0), déborde, le surplus est rogné. Le canvas est une valeur du fond, pas du layout : bitmap → tuilé garde 240×160.
-- **Un encodage ne range que son résultat.** Les réglages (layout, profondeur, méthode, canvas, palettes citées, retouches) sont
-  posés par l'appelant (`choose_layout`), jamais par `apply_bg_encoding`. Le sidecar a deux blocs : `settings` et `encoded`.
-- **Outils gelés le temps du chantier** (`PREPARATION_TOOLS_ENABLED`) : compression, ajustements, miroir. Recadrer et
-  Redimensionner sont supprimés, remplacés par le canvas.
-- **L'outil « select », en tête de la barre flottante, EST le mode Canvas** ; la barre reste pour tous les fonds. Un
-  **passe-partout** permanent garde visible, grisé, ce qui sort du canvas. Choisir un autre outil applique, Échap annule.
-- **Les palettes d'un fond sont des RÉFÉRENCES au catalogue, par nom, jamais des copies.** « + » ajoute une référence ; un
-  override (palette dérivée remplacée par une banque) en est une aussi ; leurs couleurs viennent du catalogue et ne se changent
-  pas depuis le fond ; éditer une banque met à jour les fonds qui la citent ; le renommage les répare.
-- **La peinture de tuiles est un calque attaché au canvas, par case.** Elle ne se pose que sur une palette AJOUTÉE, et se range
-  par la POSITION de cette palette : un encodage qui change les palettes dérivées ne la déplace pas, et ne la perd pas.
-- **L'encodage vise la fin du traitement, en arrière-plan.** Pile : source → préparée → filtre de compression → encodée. Pas
-  d'étapes montrées à l'auteur ; une petite fenêtre d'état (à jour, en attente, en calcul, échec) avec un bouton « Run
-  encoding » à l'état « en attente » ; l'encodage part tout seul quand il est bon marché. En attente, on montre l'image
-  préparée, avec la mention « pas encore le rendu GBA ».
-- **Tests : ciblés en cours de route**, la suite complète seulement à la livraison d'une fonctionnalité.
-
-**Fait (testé en ciblé ; pas essayé à la souris au-delà des premiers essais de l'auteur)**
-
-- Modèle du canvas (`canvas_size`, `image_pos`, `image_size`), `prepare_source`, bitmap sans ajustement caché, canvas bitmap fixe.
-- Mode Canvas : outil « select », poignées (Maj, Ctrl), passe-partout, carte « Canvas » de l'inspecteur (la taille se règle en
-  tuilé et suit le layout CHOISI, avant même la compression ; en bitmap une ligne « fixe ») ; labels FR/EN.
-- Sidecar en deux blocs, lecture tolérante d'un sidecar à plat, `apply_bg_encoding` sans réglage, `choose_layout`.
-- Palettes par référence : `added_palettes` et `palette_overrides` dans `settings` ; `resolve_palettes` recompose le cache
-  `palettes` (dérivées, overrides, ajoutées) après chaque encodage, « + », remplacement, retrait, ou édition d'une banque ;
-  banque disparue = dernières couleurs gardées + avertissement du validateur ; override sans palette dérivée = levé et dit ;
-  usages et renommage au courant ; la bande de peinture ne propose que les palettes ajoutées en Paint ; un fond vierge reçoit
-  d'office la première palette du projet.
-- Retours de l'auteur du 2026-10-16, corrigés : la boîte de compression suit le layout et la profondeur CHOISIS (avant la
-  compression) et se range dans l'ordre où l'encodeur résout (4bpp : global colors → dithering → méthode → colors / palette →
-  palettes → tiles ; 8bpp : méthode → colors → dithering → tiles, un réglage ne refait que ce qui le suit) ; la carte
-  Ajustements se replie ; « Reset » et « Recompute » ; choisir Bitmap (ou Tuilé) fait suivre la carte Canvas, la fenêtre du
-  mode Canvas et le cadre du passe-partout ; le miroir a de nouveau un point sur sa barre, la flèche est décalée.
-
-**Reste à faire**
-
-1. ~~Documentation~~ : ARCHITECTURE.md décrit les palettes par référence (fait le 2026-10-16).
-1 bis. **Trous dans une grande image, constaté le 2026-10-16, SANS solution encore.** Sur une image de 1650×952 (22 798 tuiles
-   uniques), des tuiles noires apparaissent, et le rendu est brouillé par bandes. Deux causes lues dans le code, reproduites sur
-   une image de test : (a) l'index de tuile est codé sur 10 bits (`pack_se`) et tronqué en silence au-delà de 1023. Les index
-   1024, 2048… retombent sur la tuile 0, d'où un trou sur ~1 tuile sur 1024 ; (b) `merge_tiles` ne fait rien au-delà de
-   `MAX_TILES = 6000` tuiles (sa matrice de coûts est carrée), donc « Tiles » est ignoré sans le dire. Notre souhait : une
-   tuile retirée doit être REMPLACÉE par une tuile réutilisée visuellement proche, jamais devenir un trou. Pistes à étudier (rien
-   n'est décidé) : plafond dur à 1024 index dans l'encodeur, passage préalable bon marché qui ramène les tuiles sous 6000 avant
-   la fusion, avertissement clair quand un fond dépasse 64×64 tuiles ou 1024 tuiles uniques. Une couche de fond GBA ne dépasse
-   pas 64×64 tuiles (512 px) : une image de cette taille ne tient pas comme un seul fond, quoi que fasse la fusion.
-2. ~~Inpainting~~ : fait le 2026-10-17, même règle que la peinture. Un repeint ne cible qu'une palette AJOUTÉE et se range par
-   sa POSITION dans `added_palettes` (`BackgroundAsset.repaint_bank` la rend en numéro de banque) ; la bande de peinture ne
-   propose plus que ces palettes, en Inpaint comme en Paint. Le sidecar l'écrit sous `settings.tile_repaint` ; l'ancienne clé
-   `tile_palette_overrides` (des numéros de banque) se relit, position pour une palette ajoutée, **abandon** pour un repeint
-   qui visait une palette dérivée du PNG. Aucune démo n'avait de repeint. Aussi livré : un petit slider du passe-partout dans la
-   barre du canvas (l'intensité du grisé, 59 % par défaut, propre à la session).
-3. **Un seul geste « Appliquer » imperceptible** : un service d'encodage unique (réglages → pause → calcul → validation,
-   le dernier réglage gagne), l'état explicite avec empreinte réglages + source, l'affichage provisoire (image préparée),
-   la fenêtre d'état. À trancher : le seuil de coût « bon marché » (~1,5 s mesuré sur le dernier encodage ?), et le
-   processus de travail séparé, à MESURER d'abord : les boucles Python pures de l'encodeur peuvent saccader l'interface même
-   dans un thread, et un thread ne s'annule pas.
-3 ter. **Plan du service d'encodage unique, décidé le 2026-10-17.** Seuil « bon marché » de l'encodage automatique : **~4 s**
-   (en dessous il part tout seul après la pause, au-dessus l'état reste « en attente » avec un bouton « Run encoding »).
-   **Révisé le 2026-10-17 : seuil éteint par défaut** (`auto_seconds=None`). Bloquer un encodage de 4 s surprenait plus qu'il
-   ne protégeait ; le mécanisme reste pour la phase 5. Le
-   bouton vit dans la fenêtre d'infos du canvas. Phases : 0 mesure (faite, ci-dessous) ; **1 empreinte et état (faite le
-   2026-10-17)** : `encoded.encoded_for`, `encode_settings_fingerprint()`, `encoding_is_current(source_stamp)` ; **2 le service (fait le
-   2026-10-17)** : `ui/background_editor/background_encoding.py` (`EncodingJob`, `BackgroundEncodingService`, `ThreadExecutor`),
-   un seul chemin, le dernier réglage gagne, un calcul à la fois, validation automatique, états à jour / en attente / en calcul /
-   échec, cache de 8 résultats, exécuteur interchangeable ; l'écran n'a plus que `_commit_job` (validation), `_on_encoding_wanted`
-   (curseurs), `_on_run_encoding` (bouton) et `_compress_async` (geste, immédiat) ; l'aperçu non appliqué et son bouton « Compress »
-   sont supprimés ; **3 la ligne d'état (faite le 2026-10-17)** : dans le canvas, au-dessus des infos (`set_encoding_state`), « En attente / Encodage… / Échec » avec le layout voulu, et le bouton **Run encoding** (attente ou échec) ; l'échec se lit en ligne, plus de fenêtre ; tant que le fond n'est pas à jour le canvas montre l'image préparée de ce qui est voulu (badge « pas encore le rendu GBA »), `service.cancel` quand l'auteur revient aux réglages validés ; le bouton « Recompute » et la barre d'attente de l'inspecteur sont retirés ; **4 nettoyage et build (fait le 2026-10-17)** : `_check_background_encoding_current` (validateur) avertit, sans bloquer, qu'un fond dont les réglages ont changé depuis son encodage embarquerait l'ancien résultat ; (ancienne ligne :) la fenêtre d'état et l'affichage provisoire de l'image préparée ; 4 nettoyage des trois anciens
-   chemins, le build qui vérifie l'empreinte, suite complète ; 5 le processus séparé, pour les grandes images.
-3 bis. **Phase 0 mesurée le 2026-10-17** (poste de l'auteur, un `QTimer` de 16 ms sur le thread de l'interface pendant l'encodage,
-   thread Qt contre processus séparé ; rendu non peint, donc un MINIMUM de saccade ; scripts jetables, rien d'écrit dans le projet) :
-
-   | image | réglage | calcul | thread : écart max entre deux ticks | processus : écart max |
-   |---|---|---|---|---|
-   | photo 540×540 (4561 tuiles) | 4bpp défaut | 2,4 s | **99 ms** (4 % de ticks perdus) | 17 ms |
-   | idem | 8bpp | 0,5 s | 21 ms | 17 ms |
-   | idem | 4bpp, cible 256 tuiles | 5,6 s | **81 ms** | 17 ms |
-   | photo 1650×950 (23 167 tuiles) | 4bpp défaut | 14,2 s | **562 ms**, 5 gels > 100 ms (7 % perdus) | 18 ms |
-   | idem | 8bpp | 2,6 s | 59 ms | 17 ms |
-
-   Lecture : (1) l'encodage est bien plus rapide que le 2026-10-14 (photo 540 : 4bpp défaut 10,7 → 2,4 s, cible 256 32 → 5,6 s,
-   8bpp 1,7 → 0,5 s) ; (2) un thread suffit pour une image qui tient dans une couche de fond, un à-coup de ~100 ms au pire ; (3) sur une
-   grande image il fait vraiment saccader (562 ms), parce que l'indexation, la déduplication et le regroupement sont des
-   boucles Python pures qui gardent le verrou ; (4) un processus séparé garde l'interface fluide (≤ 18 ms) pour le MÊME temps de
-   calcul, et le seul moyen d'annuler un calcul de 14 s. Conséquence : bâtir le service avec un exécuteur interchangeable, le
-   thread d'abord, le processus (préchauffé, avec le cache d'étage dedans) ensuite. Pour le seuil « bon marché » : une photo de
-   540 px prend 2,4 s en 4bpp ; un seuil à 1,5 s la mettrait au bouton, à ~4 s au tout-automatique, à trancher.
-4. **Couper `encode_background` en filtre de compression puis encodage** (le chemin « indexé direct » est déjà l'encodage seul,
-   et se réutilise tel quel), puis des caches par étage.
-5. **Dégeler** compression, ajustements et miroir ; miroir dans l'espace du canvas ; mode « compress view » (barre source /
-   compressé) ; constats géométriques en liste de choses à faire ; chasse au code mort (`prep_crop` / `prep_resize` icônes
-   inutilisées, étiquette muette).
-6. **Limite réelle du canvas tuilé** (cartes de tuiles, streaming) : à lire et à poser à la place du garde-fou de 4096 px.
-7. **Sprites** : ils partagent le mécanisme de sous-palettes (`SubPaletteAssetMixin`) et gardent des copies ; non touchés.
-8. **À vérifier à la souris** : le cadrage à l'ouverture du mode Canvas (la vue est mise en page tard), l'empilement
-   passe-partout / grille 8×8 ; l'opacité du grisé est fixe (60 %), réglable plus tard comme dans Blender.
-9. **Données de démo** : la lecture à plat d'un sidecar d'avant les blocs, et celle des anciennes palettes ajoutées en copie, se
-   retirent quand les projets ont été resauvegardés ; `tools/create_build_benchmark.py` écrit encore à plat. Le fond `Background`
-   de PongAdvanced n'a plus ses traits de peinture (cause non établie : effacés dans l'éditeur, ou défaut du script de migration)
-   ; la banque `untitled palette 1`, créée par ce script, n'est plus citée par personne et attend notre accord pour être
-   supprimée. Plus aucun script ne touche aux démos : nous y travaillons dans l'éditeur.
-10. **Suite complète** à lancer quand le chantier est livré.
-
-### Ordre d'implémentation (proposé)
-
-*Étape 3 livrée le 2026-10-15, vérifiée par tests ciblés seulement (rendu hors écran compris), pas encore à la souris :*
-mode Canvas (fichier posé, grisé hors cadre, déplacer / poignées, Maj / Ctrl) et carte « Canvas » de l'inspecteur
-(taille du canvas, position et taille de l'image, Ajuster / Remplir / 1:1). Voir ARCHITECTURE.md. Le plafond des champs
-est 4096 px, un garde-fou : **la limite réelle du canvas tuilé (cartes de tuiles, streaming) reste à lire et à poser**.
-*Retour de l'auteur, 2026-10-15 (premier essai) :* le mode devient l'outil « select », en tête de la barre flottante (qui
-reste visible, même pour un bitmap) ; et ce qui sort du canvas reste TOUJOURS visible, grisé, comme le passe-partout d'une
-caméra de Blender, corrigé le jour même.
-
-1. *Livré le 2026-10-15.* Le modèle (`canvas_size`, `image_pos`, `image_size`) et `prepare_source` qui compose dans le
-   canvas, tests d'identité pixel pour pixel avec l'ancien « recadrer puis redimensionner » (`tests/graphics/test_bg_prepare.py`).
-   **Écart avec le texte plus haut** : `resize(box=)` n'est PAS identique à `crop` puis `resize` (le filtre lit au-delà de
-   la boîte) ; on rogne d'abord. **Migration** : pas de code dans le produit. Il n'y avait que deux sidecars de démo
-   (`Photo1`, `562c…_high`), convertis une fois à la main ; un sidecar qui porterait encore `import_crop` / `import_size`
-   les ignore. Aucun template concerné. Outils Recadrer / Redimensionner et leurs fichiers
-   (`bg_prepare_overlay`, `bg_prepare_geometry`) supprimés ; compression, ajustements et miroir gelés
-   (`PREPARATION_TOOLS_ENABLED`).
-2. *Livré le 2026-10-15.* L'encodeur bitmap cesse d'ajuster. **Décision** : pas d'« Ajuster » à l'import, et
-   un bitmap a un canvas fixe de 240×160 (posé par `encode_by_mode`). L'image garde sa taille en (0, 0) et **déborde**,
-   le surplus est rogné ; plus petite, elle laisse du vide transparent. Aucune erreur à l'import (l'idée d'une erreur
-   franche, écrite plus haut, est abandonnée). Tuilé → bitmap garde donc l'image où elle est. **Le canvas est une valeur du fond, pas du
-   layout** (tranché par l'auteur) : l'encodage d'un bitmap l'ENREGISTRE (`canvas_size` = 240×160, `apply_bg_encoding`),
-   donc **bitmap → tuilé garde 240×160** au lieu de retomber sur la taille de l'image.
-   **Tranché par l'auteur le 2026-10-15 : pas d'« Ajuster » à l'import, même en transition.** L'auteur doit voir
-   l'image qu'il a importée ; tant que l'interface du plan de travail n'existe pas, une photo trop grande en bitmap
-   donne une erreur, et on avance pas à pas. Les fonctions qui ne servent pas ce chantier (à lister avec
-   l'auteur : compression, ajustements, recadrage, redimensionnement, miroir) sont **désactivées temporairement** le temps
-   de bâtir le canvas, valeur distincte de la taille de l'image.
-3. Le canvas : image posée, hors-canvas grisé, déplacement et échelle à la souris, taille du canvas éditable ; les outils
-   Recadrer et Redimensionner s'y fondent.
-4. Le miroir dans l'espace du canvas.
-5. Le mode compress view : la barre source / compressé.
-6. Les constats géométriques (déborde, ne couvre pas) comme liste de choses à faire, chacune avec son geste.
-7. Libellés (FR d'office), docs, chasse au code mort (`import_crop`, `import_size`, l'étiquette muette).
-
-### Ce que ça ne fait pas
-
-Pas de plusieurs images, pas de panneau de calques, pas de peinture. Ne change ni les algorithmes de compression, ni la
-latence des photos, ni les jauges en direct (indépendantes, livrées). Les fonds UI et animés restent hors du modèle dans
-un premier temps.
-
----
-
-## Briques de base et assemblages (`Text` (chaîne) et `Textbox` (boîte))
-
-### D'où vient la question (2026-10-14)
-
-Le menu d'ajout d'interface proposait `Text`, `Container`, `List`, `Image` sur un seul rang. Or trois
-sont des **briques** que le moteur dessine telles quelles (texte, conteneur, image) et deux sont des
-**assemblages** qui rangent selon une règle (la liste se parcourt, la boîte de texte coupe). La
-distinction est celle d'Illustrator : une chaîne se pose en un point, une boîte de texte se dessine
-comme une surface.
-
-### Décisions (2026-10-14, de l'auteur)
-
-- **Deux types, un seul emplacement runtime.** `UIText` = une chaîne (une ligne, jamais coupée ni
-  alignée) ; `UITextbox` = le rectangle est la largeur de coupe. Même entrée de `g_ui_regions` ; seul
-  `UIRegionInfo.nowrap` change le rendu. Ce n'est pas le retour du type « zone de texte » retiré
-  (qui ne différait que par l'écrivain) : ici le comportement du rendu diffère.
-- **Le mot « textbox » est de nouveau permis** (il était exclu du vocabulaire par v0.3.2).
-- **Familles dans le menu** (arbre et toolbar du canvas) : briques = Text, Container, Image ;
-  assemblages = Textbox, List.
-- **Migration** : tout `kind: "text"` d'avant la séparation se relit en boîte (il coupait déjà) ;
-  seule la chaîne écrit un marqueur `point`.
-- **`Text` n'est pas un rectangle redimensionnable** : un clic le pose, le canvas n'en montre que
-  l'origine (une croix) et le texte, sans cadre ni poignées. `Textbox` garde rectangle et poignées.
-- **On écrit dans le canvas**, pour les deux types : double-clic, saisie dessinée avec la police du
-  jeu et un curseur clignotant (un champ Qt invisible ne fait que recevoir le clavier). Clic = replacer
-  le curseur, flèches, début/fin ; Entrée valide une chaîne, Ctrl+Entrée une boîte ; Échap annule ;
-  annulable par l'historique. Un texte lié à la table ne s'édite pas ici.
-
-### Ce que ça touche
-
-`core/models/ui_region.py` (`UITextbox`, `is_text`, `KINDS_BRICK`/`KINDS_ASSEMBLY`), `font_emit.py` et
-`gba_engine.h` (`nowrap`), `scene_tree_panel.py` et `canvas_toolbar.py` (menu), `canvas_region_item.py`
-(point d'origine, édition en place), `ui_inspector.py`, `project_names.py` (une boîte se cite comme
-une chaîne en Lua), tests `tests/interface/test_ui_textbox_type.py`.
-
-### Ouvert
-
-- **L'emprise d'une chaîne reste fixe** (96×16 au canvas, 80×16 depuis l'arbre) : le build s'en sert
-  pour réserver la VRAM et coupe au-delà, alors que le canvas ne coupe pas. La faire suivre le contenu
-  suppose de mesurer la police au build ; le texte écrit par script n'a pas de contenu connu.
-- Le validateur de débordement mesure encore une chaîne comme une boîte.
-- La sélection de texte (Maj+flèches, glisser) existe dans le champ mais **n'est pas dessinée** ; le
-  glisser est désactivé pendant l'édition.
-- Le curseur d'une boîte alignée au centre ou à droite reste calé à gauche.
-- Pas de `textbox:draw` côté Lua : une boîte et une chaîne s'écrivent par `interface:get(nom):draw`.
-- **Non vérifié à la main** : l'édition en place a été corrigée à trois reprises sur retour de
-  l'auteur (raccourcis, déplacement, focus) ; aucun build ROM complet n'a été fait avec `nowrap`.
-
----
-
-## TextBox (plusieurs entrées pour préparer un dialogue)
-
-### État au 2026-10-17 (livré pour l'essentiel)
-
-Les quatre étapes convenues sont implémentées : modèle de pages, blocs dans l'inspecteur,
-prise en compte de toutes les pages au build, puis **Export as table / Update table**.
-Le périmètre demandé (préparer les répliques et les rendre accessibles au script) fonctionne.
-Le chantier reste ici pour les arbitrages de nommage, de duplication des textes et de
-manipulation de l'ordre décrits en fin de section.
-
-### Le parcours livré
-
-- Les TextBox affichent des blocs multi-lignes dans l'inspecteur. Les réglages de police,
-  couleur et alignement sont communs à toutes leurs pages ; `Text` conserve son champ unique.
-- **+** insère une page après le bloc concerné, crée son entrée dans Texte et lui donne le focus.
-  **−** détache une page supplémentaire et conserve son entrée dans Texte. La première page reste.
-- Le bloc actif est entouré de rose et prévisualisé dans le rectangle du canvas. Ce choix est
-  transitoire : il ne change pas la première page enregistrée pour l'affichage initial en jeu.
-- Une boîte vide présente un bloc vide sans créer d'entrée. La première saisie crée l'entrée ;
-  le premier ajout crée les deux pages correspondant aux deux blocs.
-- Le premier geste d'édition, d'ajout ou d'export reprend le contenu historique : une entrée
-  liée reste la même ; un texte local devient une véritable entrée. La simple sélection et
-  l'ouverture du projet ne convertissent rien.
-- La saisie modifie directement l'entrée de Texte. Les traductions restent attachées à son id.
-  Saisie, conversion, ajout, retrait, export et mise à jour de table sont annulables.
-
-### Identités et nommage actuels
-
-`UITextbox.page_ids` conserve l'ordre des références stables ; le contenu reste dans les `Text`.
-La première page est résolue par id, avec `text_key` comme pont de compatibilité pour les
-lecteurs existants. Les numéros attribués ne sont pas réutilisés après un retrait.
-
-Une nouvelle entrée est rangée sous **scène / nom de l'élément TextBox / numéro**, par exemple
-`Village / Dialogue / 01`. Sa clé suit la règle existante de `Text` : segments normalisés,
-séparés par `_`, avec suffixe d'unicité en cas de collision. Une entrée déjà liée conserve son
-identité, son rangement et ses traductions lors de la conversion.
-
-À la création, le contexte vient de la scène ouverte ; les ajouts suivants réutilisent la
-scène d'origine de la première entrée si elle est renseignée. Les règles à affiner pour les
-layouts partagés et les renommages de scène/objet sont listées plus bas.
-
-### Export vers Données (contrat implémenté)
-
-**Export as table** crée une Data Table ordinaire, nommée `<Scène>_<TextBox>` avec suffixe
-si le nom est pris, et une colonne `replique` de type `text`. Les lignes suivent l'ordre des
-pages. Elles contiennent les clés des entrées, jamais une copie des chaînes.
-
-Exemple : `interface:get("Dialogue"):draw(data.Village_Dialogue[1].replique)`.
-Les indices commencent à 1. Le script décide quand avancer et quand terminer le dialogue.
-Une correction du contenu ou d'une traduction est partagée ; elle ne nécessite pas de mise
-à jour de la table tant que les références et l'ordre des pages ne changent pas.
-
-La TextBox mémorise l'id de la table et un jeton d'association, indépendants de son nom.
-**Update table** retrouve les lignes par une identité persistante, pas par leur position :
-les colonnes ajoutées à la main (portrait, son, locuteur…) restent attachées aux bonnes pages.
-
-Avant une mise à jour, un récapitulatif présente les ajouts, retraits, déplacements,
-références de texte rétablies, lignes manquantes recréées et lignes manuelles conservées.
-Annuler ce récapitulatif ne modifie rien ; appliquer crée une seule commande annulable.
-
-| Modification dans Données | Comportement de la mise à jour |
-| --- | --- |
-| Valeur d'une colonne supplémentaire modifiée | Valeur conservée avec sa page |
-| Référence de texte modifiée dans la colonne exportée | Référence de la page rétablie, annoncé dans le récapitulatif |
-| Ligne exportée supprimée | Ligne recréée pour sa page, autres colonnes à leurs valeurs par défaut |
-| Ligne ajoutée manuellement ou dupliquée dans la grille | Ligne conservée à la fin ; une duplication ne copie pas la propriété de l'export |
-| Page détachée de la TextBox | Ligne exportée retirée avec ses autres valeurs, annoncé avant application |
-| Colonne exportée renommée | Lien suivi ; elle reste la colonne propriétaire |
-| Colonne exportée supprimée ou devenue non-`text` | Mise à jour bloquée jusqu'à restauration de la colonne |
-| Table renommée | Association conservée par id |
-| Table supprimée ou indisponible | Nouvel export possible sous une nouvelle identité, sans adopter une table homonyme |
-| Table, boîte ou layout dupliqué | La copie ne conserve pas la propriété de l'export de l'original |
-
-La mise à jour respecte aussi les renommages de clés de texte, y compris lors de son
-annulation/rétablissement. Elle ne recopie jamais automatiquement des cellules de Données
-vers la liste de pages. Ce parcours réutilise le [pont Texte / Données](#un-pont-entre-lécran-texte-et-les-tables-de-données-créer-un-dialogue),
-sans nouvel asset « Dialogue ».
-
-### Build et vérifications réalisées
-
-- Une seule entrée runtime et un seul rectangle réservé par TextBox ; seule la première
-  page est dessinée à l'initialisation. La sélection de l'aperçu n'intervient pas au build.
-- Toutes les pages et traductions alimentent les glyphes, les polices balisées et les
-  diagnostics de débordement/couverture. Une page absente bloque le build avec son numéro.
-- Le budget de glyphes animés prend le **maximum** entre pages et langues, jamais leur somme.
-  Une portée `[font]` sur une page suivante peut imposer une surface composée ; celle-ci
-  reste unique pour la boîte.
-- L'index des usages couvre toutes les pages, les scripts et les cellules `text` des tables.
-  Les cellules suivent les renommages de clés ; les pages conservent leurs références par id.
-- Vérifications du 2026-10-17 : **335 tests passent**, dont un build ROM réel avec devkitPro.
-  Le test ROM utilise le véritable export, renomme table et colonne, puis fait lire la deuxième
-  réplique depuis Lua. Les marqueurs du journal mGBA confirment le démarrage et l'appel de
-  dessin de cette page à la frame 30 ; ce contrôle ne compare pas les pixels de l'écran.
-
-Tests : `tests/text/test_textbox_pages.py`, `tests/text/test_textbox_pages_build.py`,
-`tests/text/test_textbox_table_export.py`, `tests/ui/test_textbox_page_editor.py` et
-`tests/rom_build/test_textbox_pages_rom.py` (lent ; exécution mGBA si son frontend SDL est présent).
-Le modèle et les mécanismes de persistance sont détaillés dans `ARCHITECTURE.md`.
-
-### Reliquat ouvert
-
-Le [chantier des suites dans l’écran Texte](#écran-texte-suites-liées-aux-textbox-et-aux-tables)
-prépare les associations inverses, les états et la synchronisation explicite depuis ce nouvel écran.
-
-- **Layouts partagés :** confirmer à l'usage le contexte de nommage actuel, fondé sur la scène
-  ouverte puis sur l'origine de la première entrée, ou proposer un choix explicite d'origine.
-- **Renommage de scène ou d'objet :** les références restent stables, mais les clés déjà créées
-  ne sont pas recalculées automatiquement d'après ces noms. Trancher ce suivi en respectant
-  les clés nommées manuellement.
-- **Duplication des textes :** une copie de boîte partage actuellement les références de pages,
-  tout en détachant son export. Décider si elle doit plutôt créer ses propres textes et traductions.
-- **Déplacement d'une page existante :** l'ordre est stocké et pris en compte par l'export,
-  mais l'inspecteur ne propose pas encore de geste dédié pour déplacer un bloc ; il permet
-  l'insertion après un bloc et le retrait des pages supplémentaires.
-
-### Hors du périmètre livré
-
-Déroulement automatique du dialogue, passage sur appui, temporisation, effet machine à écrire,
-choix branchés, arbre de conversation et découpage automatique d'un long texte en pages.
-La prévisualisation des traductions dans le canvas reste rattachée au chantier de l'écran Texte.
-
----
-
-## Écran Texte (suites liées aux TextBox et aux tables)
-
-### Demande et état du chantier (2026-10-17)
-
-L'écran Texte est retravaillé en parallèle pour privilégier la création et l'édition du contenu.
-Les entrées partageant un préfixe de clé et un suffixe numérique sont présentées sous un en-tête
-commun. Nous souhaitons ajouter **+ / −** sur ces blocs, puis **Create table / Update table**
-et **Update TextBox**. Avant ces actions, l'écran doit connaître ses cibles réelles et leur état.
-
-**Étape 1 livrée : contexte des liens en lecture seule.** `core/text_sequence_context.py` résout
-les correspondances par ids, ordre et occurrences. L'en-tête affiche la TextBox, la table exportée
-et les écarts observés ; l'infobulle détaille toutes les candidates, leurs scènes et les usages
-en cellules. La table est reconnue par son id et son jeton, puis ses colonne et lignes gérées
-sont vérifiées. Les liens partiels ou multiples ne créent aucune association implicite.
-
-Les filtres conservent le périmètre complet du groupe, trié numériquement comme à l'écran.
-Les notifications d'usages actualisent le contexte sans reconstruire les champs ni déplacer le
-curseur ; la revisite recalcule aussi les références. Aucune écriture, migration ou identité de
-suite n'est créée par cette lecture. Les états décrivent les écarts, sans attribuer de direction
-de mise à jour au groupe visuel. Validation : 77 tests ciblés, dont 20 nouveaux tests de contexte
-et d'intégration, et contrôle visuel du cas réel `SCR_Arena / textbox_2` avec table conforme.
-**Étape 2a livrée : identité persistante et Relink.** `core/text_sequences.py` conserve les
-suites explicitement adoptées dans le champ optionnel `sequences` de `texts.json`, avec ids de
-textes, ordre/occurrences et placements attendus. Link mémorise une suite ; Relink peut adopter
-une correspondance partielle puis réintégrer les entrées choisies en une commande annulable.
-La destination proposée d'un ancien groupe sans historique est indiquée dans l'infobulle ;
-elle est reconstruite depuis l'ordre de la boîte et les conventions des entrées présentes,
-pas présentée comme un ancien rangement récupéré avec certitude.
-
-L'en-tête présente le nombre d'entrées hors du groupe et un bloc repliable avec Retrouver,
-Relink individuel et Relink tout. La suite demeure visible même vidée de toutes ses entrées.
-Le contenu, les traductions et les lignes de table ne sont ni recréés ni supprimés par Relink ;
-les références suivent les renommages de clés habituels. Les filtres restent un affichage.
-L'association de boîte utilise l'id du layout et un `UITextbox.sequence_id` attribué uniquement
-à cette première action ; les duplications détachent ce lien. Renommer le préfixe ou déplacer
-le dossier complet conserve l'identité de suite ; déplacer une feuille crée un écart.
-Un état des références gérées de table est mémorisé, sans les contenus ni les colonnes libres.
-Les collisions de clés et destinations déjà associées sont refusées.
-
-**Apply livré pour les suites liées à une TextBox.** `core/text_sequence_apply.py` prépare un
-plan sans mutation depuis la suite complète, indépendamment des filtres et de la langue.
-Les entrées écartées sortent des projections mais leurs `Text` et traductions restent disponibles.
-Les occurrences sont conservées et les nouvelles entrées du groupe sont ajoutées à la suite.
-Le plan réutilise le rapprochement de lignes de `plan_export(..., text_ids=...)`, sans créer de
-boîte invisible ni dupliquer cet algorithme. La numérotation consommée par une nouvelle page
-est réservée pour les créations suivantes dans l'inspecteur.
-
-**Apply reste dans l’écran Texte, sans fenêtre modale.** Le bouton applique la suite
-complète en un pas d’historique. L’option de création de table, les erreurs et les conflits
-restent dans le bandeau inférieur. Une table liée absente, un lien ambigu ou un schéma invalide
-sont refusés sans redirection ni recréation silencieuse. Un groupe ancien peut être adopté
-explicitement par Apply, puis projeté, en un seul pas d’historique.
-
-Un conflit avec une modification de TextBox ou de références gérées en table demande une case
-explicite dans le bandeau. Cette acceptation est périmée dès que l’état concerné change, même
-si seul un champ libre en table a changé. Contenus et traductions restent compatibles avec
-les mêmes ids. Les références de textes absents sont nommées dans l’écran ; chaque référence
-peut être retirée explicitement et de façon annulable avant Apply.
-L'application et l'undo coordonnent suite, layout et table, en conservant les objets de ligne
-pour les commandes de cellule antérieures. Les autres usages des textes ne sont pas des cibles.
-Les notifications rafraîchissent Données, Disk et le contexte de texte, avec conservation des filtres.
-Validation : 171 tests ciblés, plus contrôle visuel en lecture seule du cas réel de la capture.
-**Commandes +/− et bandeau fixe livrés.** Chaque entrée possède ses contrôles en bas à droite.
-`EditTextSequenceCmd` insère un `Text` vide après l'entrée choisie dans l'ordre de la suite ;
-le champ prend le focus, y compris sous un filtre ou pendant la traduction. L'entrée neuve
-reste temporairement visible sous le filtre sans modifier celui-ci. Une première action peut
-adopter explicitement un groupe libre ou lié. Le compteur `TextSequence.next_number` réserve
-les numéros consommés, même après retrait, Apply et suppression ultérieure d'un texte écarté.
-Apply transmet aussi ce compteur à la TextBox pour ses créations suivantes.
-
-**Révision du 2026-10-17 : liste explicite et retrait prévisible.** À la première
-édition structurelle, la suite conserve sa liste ordonnée indépendamment du classement.
-Les numéros affichés sont les positions continues `#01`, `#02`… ; les clés et ids restent
-stables. Le − retire exactement l'occurrence choisie, sans déplacer le `Text`. Annuler
-restaure sa position. Le + insère après la ligne choisie. Les deux boutons utilisent des
-icônes dans le champ, sur une ligne de contrôles distincte du défilement. La zone de saisie
-s’agrandit avec le contenu jusqu’à une hauteur plafonnée. Le fond utilise `BG_INPUT` et les
-libellés restent transparents, conformément à la charte.
-
-Pour une suite liée, le texte retiré reste disponible pour ses anciennes références jusqu'à
-Apply. Apply actualise les pages et lignes gérées, puis supprime le texte et ses traductions
-s'il n'a plus aucun usage. Les scripts, autres éléments d'interface, autres suites et cellules
-manuelles ou colonnes libres protègent un texte partagé. Le bandeau explique les conservations ;
-les usages sont revérifiés à l'application. Sans destination, un texte exclusif est supprimé
-immédiatement. Les deux opérations sont annulables, données et traductions comprises.
-
-Le Finder et la liste centrale utilisent la même projection des entrées actives et sont
-rafraîchis ensemble à chaque ajout, retrait, undo et redo. Un texte partagé conservé reste
-accessible comme entrée libre, sans déplacement de son rangement. Une suite vide reste
-visible avec un compteur nul et son bouton +. Les anciennes suites sont lues sans migration
-sur ouverture ; leur première édition structurelle rend leur ordre explicite.
-
-Les commandes générales d'ajout/suppression ont quitté la barre supérieure ; Nouveau texte
-reste disponible en bas pour les entrées libres et les projets vides. Le contexte technique
-de correspondance reste consultable en infobulle, sans ligne « Partial correspondence ».
-Le nombre précis d'entrées écartées/à ajouter et les actions Link/Relink/Apply vivent dans un
-bandeau fixé sous la liste et suivent le groupe actif. La liste des entrées écartées se déplie
-dans une zone de défilement plafonnée. Validation de la correction : tests ciblés sur Apply
-direct, les conflits, les références manquantes et la hauteur des champs, avec contrôle visuel
-dans l’écran complet sur une fixture isolée. Reste la création de table autonome sans TextBox.
-
-### Séquences dérivées, liées ou libres (décidé le 2026-10-18 (REMPLACE l'adoption explicite))
-
-L'auteur ne veut jamais « mettre à jour » une table ou une TextBox à la main : la
-synchronisation est **intrinsèque à l'état**. Tout ce qui précède dans ce chantier
-(`TextSequence`, Adopt/Relink/Apply, `sequences` dans `texts.json`, `textbox_export` et
-marqueurs `$editor`, `sequence_id`, `table_export_*`) est **retiré** au profit de ce qui suit.
-
-- **Séquence = dérivée, jamais stockée.** Les textes dont la clé finit par `_<chiffres>`
-  (n'importe quel suffixe : `_1`, `_Page01`, `_007`) et qui partagent le même préfixe forment une
-  séquence à partir de **deux textes**. L'ordre est la valeur numérique du suffixe. Aucune
-  identité, aucun fichier : renommer ou ranger un texte la fait apparaître ou disparaître.
-- **État d'une séquence : liée ou libre**, calculé. *Liée* = au moins un consommateur (une table
-  de l'écran Données dont `text_link.prefix` est ce préfixe ; une TextBox qui la lit). *Libre* =
-  aucun : l'en-tête propose **Link to existing table** et **Create table**.
-- **État d'une table : liée ou libre.** *Liée* = `text_link` posé. *Libre* : l'écran Données
-  propose **Link to text sequence**. Une table liée a ses lignes pilotées par la séquence (une
-  ligne = une clé de la colonne `text`), les autres colonnes sont à l'auteur.
-- **Synchronisation intrinsèque.** Ajouter, retirer, renommer ou réordonner un texte d'une
-  séquence liée réécrit ses consommateurs **dans la même commande** (un seul pas d'historique,
-  Ctrl+Z restitue texte et lignes). Il n'y a ni bouton Update, ni aperçu périmé, ni conflit.
-  Une page retirée emporte sa ligne, colonnes libres comprises.
-- **Ce qui reste du code actuel :** `core/text_table_link.py` (`text_link`, `LinkTableCmd`,
-  `UnlinkTableCmd`), généralisé de `_PageXX` à `_<chiffres>`.
-- **Livré le 2026-10-18 :** dérivation pure (`core/text_sequences.py`) ; tables synchronisées dans
-  l'historique (`after_execute`) ; en-tête Texte lié/libre ; **`page_ids` retiré**, une TextBox
-  suit une séquence par `sequence_prefix` (ou affiche son `text_key`), les pages sont dérivées ;
-  ancien moteur supprimé (adoption, Apply, export de TextBox, ~17 fichiers de tests). Les anciens
-  `page_ids`, `sequences` et `$editor` sont ignorés à la lecture : une boîte multipage d'avant
-  garde son `text_key` et doit être reliée à la main à sa séquence.
-- **Reste :** contrôle visuel de l'en-tête et de l'inspecteur ; test ROM `test_textbox_pages_rom`
-  adapté mais non relancé (devkitPro) ; libellés `txtseq.*` orphelins à purger.
-
-### Le chemin est dérivé de la clé (plus de libellés stockés (décidé le 2026-10-18))
-
-`Text.path` (les libellés des niveaux, avec accents et espaces) dupliquait la clé et se
-désynchronisait dès qu'un renommage ne le recalait pas (Finder à `Page03` pour la clé `Page02`,
-après une renumération). **Il n'est plus stocké** : `Text.path` est une propriété en lecture
-seule, les segments de `key`. `texts.json` n'écrit plus `path` ; un ancien fichier se lit
-sans erreur (le champ est ignoré, sauf pour dériver une clé manquante).
-
-- **Ranger, c'est renommer la clé.** Glisser-déposer, renommer un dossier du Finder, éditer un
-  niveau depuis l'inspecteur : chacun calcule les nouvelles clés (`Project.text_path_keys`) et les
-  applique en un lot (`rename_text_keys`), scripts, cellules de table, boîtes et séquences liées
-  suivent. Plus de renommage « cosmétique » d'un libellé.
-- **Affichage** : le segment tel qu'il est dans la clé. Les libellés libres (`La forêt`) disparaissent ;
-  taper `La forêt` pour un dossier donne le segment `LaForet`.
-- **Retiré** : le champ `path`, `path_from_key`, l'alignement des libellés après chaque renommage,
-  l'ancien `SetTextPathCmd` à deux modes (libellé seul / clé).
-
-### Simplification de la clé (décidée le 2026-10-18)
-
-Deux exceptions retirées, pour qu'il reste un comportement attendu et fiable :
-- **`auto_key` est supprimé** (champ, badge, cadenas, `RelinkTextKeyCmd`, renommage de feuille
-  du Finder qui visait la clé). La clé porte la structure ; renommer un libellé ne la touche
-  jamais ; la renommer ou déposer le texte dans un autre dossier la change partout où elle est
-  citée. Les anciens `texts.json` qui contiennent `auto_key` se lisent sans erreur.
-- **Une page peut apparaître plusieurs fois dans une TextBox.** Aucun besoin n'est présumé :
-  la règle n'a simplement pas de cas particulier. Seule la renumérotation d'un texte partagé
-  reste refusée, puisqu'on ne peut pas renuméroter une même entrée deux fois.
-
-### Constats vérifiés dans le code et le projet de la capture
-
-| Sujet | État actuel |
-| --- | --- |
-| Groupe numéroté | Vue calculée à partir du dossier et du préfixe ; Link/Relink peut désormais lui donner une identité éditoriale persistante |
-| Numérotation | Les suffixes numériques suffisent au regroupement ; ils n'ont pas besoin d'être consécutifs |
-| Ordre à l'écran | Tri numérique pour un groupe libre ; ordre mémorisé de la suite après adoption, occurrences conservées dans le modèle |
-| Bloc et en-tête | `TextEntry` porte un `Text` ; l'en-tête porte le contexte calculé et les actions Link/Relink, l'association persistante reste dans le modèle |
-| Usages | `TextUsageIndex` fournit les scripts, les couples `(layout, élément)` et les cellules `(table, ligne, colonne)`. L'écran affiche des compteurs et détails, sans résoudre un propriétaire de suite |
-| TextBox | `page_ids` donne l'ordre réel des textes par id ; `table_export_id` et `table_export_token` désignent son export |
-| Table exportée | `DataTable.textbox_export` conserve la colonne et les paires `text_id` / `row_id` ; les lignes gérées portent leur marqueur `$editor` |
-| État de mise à jour | `plan_export` sait comparer une table à sa TextBox. Il ne compare pas une suite modifiée dans Texte à une TextBox encore inchangée |
-| Actions de Texte | Le + général crée une entrée dans le rangement sélectionné ; la suppression générale supprime des `Text`. Ni l'une ni l'autre ne modifie les pages d'une TextBox |
-| Rafraîchissement | Usages invalidés puis recalculés paresseusement ; contexte des liens actualisé sans reconstruire les champs, relecture à la revisite et après undo. Aucun historique de synchronisation de suite n'est encore maintenu |
-
-**Cas concret vérifié sans modifier les fichiers :** dans `Project Demo/PongAdvanced`, le groupe
-`scr_arena_textbox_2` contient trois textes. Leurs ids, dans l'ordre affiché, correspondent aux
-pages de `SCR_Arena.layout / textbox_2`. La table `SCR_Arena_textbox_2` porte le même id et le même
-jeton que le lien de la boîte ; ses enregistrements de pages sont cohérents avec les trois ids.
-Les données nécessaires existent donc pour ce cas ; leur exploitation manque à l'écran Texte.
-Ce constat ne permet pas de généraliser à tous les groupes ayant un nom ressemblant à une boîte.
-
-### Les pièges à traiter avant les boutons
-
-- **Un nom n'est pas un lien.** Un groupe peut être sans usage, référencé par plusieurs TextBox,
-  partagé entre scènes ou cité dans plusieurs tables. Une cellule `text` est un usage, pas la
-  preuve que sa table est l'export géré de la boîte.
-- **Le suffixe n'est pas l'ordre de lecture.** Une insertion entre 01 et 02 peut créer la page 04 :
-  la TextBox lit `01, 04, 02, 03`, tandis que le groupe actuel affiche `01, 02, 03, 04`.
-  Renommer ou ranger une entrée peut aussi la faire sortir du regroupement visuel sans changer
-  ses références. Ne jamais renuméroter les clés pour remettre artificiellement ces ordres d'accord.
-- **Les filtres ne définissent pas la suite.** Recherche, dossier, Empty, Unused et langue peuvent
-  ne montrer qu'une partie des membres. Les opérations structurelles doivent porter sur la suite
-  entière, en annonçant leur portée, jamais sur la seule liste des blocs visibles.
-- **Le contenu est déjà partagé.** Modifier une source ou sa traduction ne nécessite aucune copie
-  vers la boîte ou la table. Ce sont les membres et leur ordre qui peuvent diverger.
-- **Un retrait n'est pas une suppression globale.** Réutiliser la suppression générale de Texte
-  pour le − d'une suite pourrait casser une autre boîte, une table ou un script.
-- **Une comparaison ne révèle pas toujours l'intention.** Si la suite et la boîte ont changé
-  séparément depuis leur dernier accord, un simple remplacement perdrait l'un des deux travaux.
-
-### Première étape (résoudre les références et exposer leur état)
-
-Créer une requête métier partagée, indépendante des widgets, par exemple
-`resolve_text_sequence_context(project, text_ids)`. Elle doit conserver l'ordre et les occurrences,
-retourner les candidats et les raisons des états, et ne rien modifier ni enregistrer.
-
-1. Retrouver les TextBox par leurs références effectives : correspondance ordonnée complète,
-   même ensemble dans un autre ordre, recouvrement partiel et usages extérieurs. Pour une boîte,
-   retrouver aussi le layout et toutes les scènes qui l'instancient.
-2. Résoudre la table réellement liée par id et jeton ; vérifier la colonne, les lignes gérées,
-   leurs références et les lignes manuelles. Distinguer cet export des autres usages de table.
-3. Ne désigner une cible unique que lorsqu'elle est établie. Plusieurs candidats restent une
-   liste explicite ; aucune cible ne doit être choisie à partir du nom du groupe.
-4. Fournir un contexte à l'en-tête sans en faire un propriétaire : cibles identifiées, état
-   de chacune, détails consultables et actions permises. Les compteurs d'usage restent distincts.
-
-Les correspondances partielles servent à expliquer et proposer des candidats ; elles ne suffisent
-pas à créer une association persistante. Une première association doit être explicite lorsque les
-références ne la déterminent pas sans ambiguïté. Une entrée utilisée plusieurs fois dans une boîte
-ne doit pas être confondue avec une seule occurrence dans le groupe visuel actuel.
-
-| État à présenter | Signification / conséquence |
-| --- | --- |
-| Sans lien | Textes libres ; création d'une association possible |
-| À jour | Membres, ordre et références de la projection concordent |
-| TextBox à mettre à jour | La suite a changé ; la boîte conserve son dernier état synchronisé |
-| Table à créer / à mettre à jour | Export absent ou projection différente ; les valeurs des colonnes libres ne rendent pas la table « périmée » |
-| Référence indisponible | Boîte, layout, table, colonne ou texte manquant ; proposer une action adaptée |
-| Plusieurs destinations | Choisir la cible concernée avant une opération structurelle |
-| Modifications concurrentes | La suite et sa projection ont changé depuis leur dernier accord ; montrer les différences avant de trancher |
-
-« À mettre à jour » suppose une association et une direction connues. Pour un ancien groupe sans
-historique commun, présenter un écart à résoudre plutôt que prétendre savoir quel côté est récent.
-Les états de TextBox et de table sont indépendants : l'une peut être à jour et l'autre non.
-
-### Modèle retenu (première partie livrée, projections à poursuivre)
-
-**Recommandation : une suite éditoriale persistante et ordonnée**, distincte du simple groupe de
-présentation, identifiée par un id stable et contenant des références de `Text`. Son libellé,
-son préfixe et son rangement ne déterminent pas son identité. Cette donnée reste dans l'éditeur ;
-elle ne constitue ni un nouvel asset Dialogue, ni un moteur de conversation.
-
-Le bouton **Update TextBox** implique que la suite puisse évoluer sans modifier immédiatement
-la boîte. Cette liste et son ordre doivent survivre à une réouverture, y compris sans TextBox.
-Les seules clés numérotées et les compteurs d'usage ne suffisent donc pas à porter ce contrat.
-Une association vers la boîte résiste à son renommage : l'id d'asset du layout et le nouvel
-identifiant opaque `UITextbox.sequence_id` sont mémorisés au moment de l'association explicite.
-La duplication retire cet identifiant sur la copie.
-
-Conserver les derniers états synchronisés des projections pour distinguer une modification d'un
-seul côté d'un conflit. À la reprise des projets existants, préserver les ids de textes, jetons
-et ids de lignes déjà exportées. Ne pas créer de suites en masse à la simple ouverture de l'écran :
-la lecture déduit un contexte ; une première action explicite peut matérialiser la suite.
-
-Pour une suite liée, l'ordre affiché doit suivre cette donnée, et non les suffixes des clés.
-Les groupes libres non matérialisés peuvent garder leur présentation actuelle.
-
-### Contrat proposé pour les actions
-
-- **+ sur un bloc :** créer une nouvelle entrée après celui-ci dans la suite complète, lui donner
-  le focus et préserver toutes les identités existantes. Ce n'est pas un retour à la ligne dans
-  le texte courant. Le compteur de nommage ne doit pas réutiliser les numéros retirés.
-- **− sur un bloc :** retirer son occurrence sans déplacement ; Apply supprime le `Text` et ses traductions s'il n'a plus d'autre usage (révision du 2026-10-17).
-  Les projections deviennent à mettre à jour ; leurs changements ne se font pas en silence.
-- **Create table :** exporter la suite (création depuis une suite sans TextBox encore à faire) ; **Update table :** projeter son ordre
-  et ses références avec le même récapitulatif et la même préservation des colonnes personnalisées
-  que l'export existant. Les lignes manuelles restent traitées selon ce contrat.
-- **Update TextBox :** proposer la liste et l'ordre à appliquer à la cible choisie, sans toucher à
-  son rectangle, sa police ou ses couleurs. Annoncer un éventuel changement de première page,
-  puisque celle-ci constitue l'affichage initial en jeu.
-- Chaque geste est annulable avec ses créations et associations. Apply coordonne explicitement
-  les destinations associées ; l'export depuis l'inspecteur de scène reste un parcours distinct.
-  Une traduction utilise la même structure de suite que
-  la source : ajouter une entrée ne crée pas une structure indépendante pour cette langue.
-
-L'export partage désormais son rapprochement de lignes avec la source ordonnée passée par
-`text_ids`. L'extraction d'un export autonome sans TextBox reste à faire. **Ne pas simuler une boîte
-invisible pour exporter un groupe libre**, et ne pas recopier l'algorithme de rapprochement des
-lignes dans l'écran Texte. Une table projetée depuis la suite ne doit pas rester prisonnière de
-l'ancien ordre d'une TextBox que l'auteur n'a pas encore choisi de mettre à jour.
-
-### Ordre d'implémentation recommandé
-
-1. **Contexte en lecture seule, livré :** requête inverse, état des cibles, branchement à l'en-tête et
-   tests des groupes libres, liés, partiels et ambigus. Aucun +/− structurel à ce stade.
-2. **Identité et ordre, première partie livrée :** modèle de suite, associations stables,
-   état de référence, reprise explicite du cas existant et Relink individuel/en lot.
-3. **Apply, livré pour les suites liées :** plan d'export partagé, aperçu des changements et
-   application aux seules destinations associées, avec comparaison et gestion des conflits.
-   Commandes +/− et bandeau fixe livrés ; reste l'export autonome des suites sans TextBox.
-4. **Réactivité et validation :** invalidations après édition structurelle, commandes de scène,
-   modifications de table, renommage, suppression, watcher et undo/redo. Conserver le focus,
-   le curseur et les filtres lors d'une simple actualisation de l'état.
-
-Les suites sont désormais persistées avec les textes dans `texts.json` ; l'association explicite
-persiste aussi l'identité de boîte dans le layout. Les autres projections passeront par leurs
-commandes de persistance propres. Les notifications actuelles d'usages actualisent aussi le
-contexte de suite ; Apply notifie aussi les différentes destinations après application et undo.
-Validation de l'étape 2a : 139 tests ciblés sur les suites, le contexte, les pages/export,
-les références, l'écran Texte, les déplacements, la sauvegarde de projet et la duplication.
-
-### Critères de validation
-
-- Cas réel `SCR_Arena / textbox_2` : résolution de la boîte et de sa table exportée, état cohérent.
-- Groupe numéroté libre, suffixes troués, clé renommée, entrée rangée ailleurs : aucun lien inventé.
-- Insertion donnant `01, 04, 02, 03` : ordre préservé dans Texte, TextBox et table après mise à jour.
-- Filtres et langues : opérations sur la bonne suite complète, sans perdre les traductions.
-- Plusieurs boîtes/scènes/tables et références répétées : destinations et occurrences explicites.
-- Retrait d'une entrée partagée : aucun `Text` supprimé, autres usages intacts.
-- Création de table sans boîte ; mise à jour de table alors que la boîte est encore en retard.
-- Conservation des portraits/sons/autres colonnes, lignes manuelles et identités de lignes.
-- Modification indépendante dans le Scene Manager ou Données : écart/conflit expliqué ; aucun
-  remplacement silencieux ni aperçu périmé appliqué.
-- Renommage, duplication, cible supprimée, undo/redo, sauvegarde/réouverture et changement d'écran.
-- ROM lisant les répliques de la table exportée ; aucun nouveau déroulement automatique du dialogue.
-
-### Points à trancher avant la deuxième étape
-
-Adopter le modèle de suite proposé et sa place de stockage ; définir l'identité des occurrences
-si une même entrée est répétée ; fixer les associations autorisées et la sélection d'une cible
-parmi plusieurs ; préciser le retrait du dernier bloc et l'emplacement des actions communes dans
-l'en-tête. La direction de synchronisation et la résolution des modifications concurrentes doivent
-être établies avant d'activer Update TextBox ou de changer le propriétaire d'un export existant.
-
----
-
-## Une seule règle de nom libre
-
-### D'où vient la question (2026-10-09)
-
-En préparant le chantier « Source ≠ asset » (un nom d'asset est unique dans le projet, un nom déjà pris est
-suffixé), un balayage du code a trouvé **huit** façons de suffixer un nom déjà pris :
-
-| Règle | Suite | Où |
-| --- | --- | --- |
-| `unique_name` | `coin`, `coin_2`, `coin_3` | scènes, prefabs, scripts, caméras (dispatcher), pistes, variables, dossiers |
-| copies à la main de la même règle | `_2`, `_3` | groupe de dossier, id de composant, table et colonne de données, variable d'export |
-| numéro sur 2 chiffres | `boite_bas`, `boite_bas_02` | éléments d'interface, clés de texte, mise en page renommée ou créée pour une scène |
-| duplicata d'acteur | `Hero_copy`, `Hero_copy2` | `_copy_name` |
-| instance de prefab | `Ball`, `Ball_1`, `Ball_2` | dispatcher |
-| caméra de départ | `Camera`, `Camera 2` | `Project.seed_default_camera` |
-| toujours numéroté, sans séparateur | `axis1`, `input1`, `lang1`, `tag1`, `sequence1`, `Part1` | cartes de l'inspecteur |
-| acteur posé au canvas | `Actor_0`, `Actor_1` | `canvas_tools` |
-| assets, polices, palettes | `Palette`, `Palette 2` | `asset_kinds._unique` |
-
-Deux gestes donnaient deux suites différentes pour le même objet (un acteur depuis l'arbre ou depuis le canvas ;
-une caméra de départ ou ajoutée ensuite).
-
-### Décision (2026-10-09)
-
-**Une seule règle : `base`, puis `base_2`, `base_3`…**, celle de `unique_name`. Elle vit dans
-`core/models/unique_name.py` (couche modèle, sans dépendance), et tout le monde l'appelle. Sont **supprimés**,
-pas conservés à côté : `_copy_name` (un duplicata d'acteur devient `Hero_2`, la distinction « copie » /
-« création » est abandonnée), `unique_region_name` et `unique_element_name`, `asset_kinds._unique`, et chaque
-boucle écrite à la main. Les noms déjà enregistrés dans un projet ne changent pas : seule la suite des
-NOUVEAUX noms change.
-
----
-
-## Source ≠ asset (l'arborescence du disque et l'id stable)
-
-### D'où vient la question (2026-10-09)
-
-L'auteur a rangé ses sons dans une arborescence (`assets/sfx/platformer/wav/…`, 556 fichiers dont 175 `.wav`
-réels). L'éditeur ne la voit pas : la synchronisation fait `glob("*")` à plat
-(`asset_reconciliation.reconcile_sfx_and_music`), et l'identité d'un asset est **le nom du fichier sans
-extension** (`path.stem`). Le sidecar `GOAL.json` porte `"name"` et `"asset"`, aucun id. 10 noms de `.wav`
-apparaissent dans plusieurs dossiers (`coin`, `die`, `fireball`…).
-
-Le but à terme : un dossier `assets/` **vierge** que l'auteur organise comme il veut (modèle Unity / Godot /
-Unreal), puis un clic droit sur une **source** → *Create asset* (l'auteur choisit le type d'asset à en tirer).
-Un script ne référence jamais une source, toujours un asset.
-
-### Ce que font les trois moteurs
-
-Tous séparent l'identité de l'emplacement : Unity un GUID dans un `.meta` voisin du fichier ; Godot le chemin
-`res://` plus, depuis la 4.4, un `uid://` ; Unreal le chemin de package complet. Deux `coin` dans deux dossiers
-ne se heurtent dans aucun des trois, et l'auteur choisit une référence en la sélectionnant plutôt qu'en tapant
-un nom.
-
-### Ce qui existe déjà
-
-| Objet | Identité | Où |
-| --- | --- | --- |
-| Variables | id opaque, nom renommable | `core/models/ids.py`, `project_variables.py` |
-| Textes | id opaque, la clé est proposée | `assets/texts.json`, `project_texts.py` |
-| Dossiers d'assets et de scène, notes du Graphe | id opaque, imbricables (`parent_id`) | `core/asset_folder_store.py`, `core/scene_tree_state.py` |
-| **Assets** (sfx, sprites, fonds, musiques…) | **le nom** | sidecars `*.json` |
-
-`asset_folder_store` range des assets par dossiers d'éditeur. **Ses `members` sont des ids depuis le 2026-10-10**
-(famille Scenes, la seule qui en ait) ; ils étaient des noms, et renommer ou déplacer le fichier d'une scène la
-faisait sortir de son dossier. Le store ne connaît que des clés opaques ; `ResourceStore.id_of(nom)` /
-`name_of(id)` traduisent, et le Graphe (qui pense en noms de carte) ne traduit qu'en deux méthodes
-(`_scene_id`, `_folder_of_scene`). Aucun outil de migration : un `asset-folders.json` d'avant garde des noms que
-`prune` efface à l'ouverture (aucun projet connu n'en portait).
-**Pour étendre à une autre famille :** lui bâtir un `FolderScheme` qui passe `asset.id`, et ne lancer son `prune`
-qu'une fois la famille entièrement chargée. Une famille à chargement différé (sprites, fonds, sons) n'a pas
-tous ses ids tant qu'elle n'est pas lue, et un `prune` anticipé viderait ses dossiers.
-
-### Décisions verrouillées (2026-10-09)
-
-- **Un seul format d'id, partout : 12 chiffres hexadécimaux (48 bits), en chaîne**, tirés par `ids.new_id`
-  avec garde d'unicité. **Livré le 2026-10-09** pour les variables, les textes (et leurs sides), les dossiers
-  (assets et scènes) et les notes du Graphe ; avant, les deux premiers étaient des entiers de 12 chiffres
-  décimaux et les autres un `uuid4().hex` de 32 caractères. Le projet n'étant pas diffusé, aucune lecture de
-  l'ancien format n'est conservée : `tools/migrate_ids_to_hex.py` convertit un projet (réécriture textuelle,
-  idempotente), appliqué aux démos `PongAdvanced` et `Platformer`. Un nom de variable ne peut pas avoir la
-  forme d'un id (`{"var": <id|nom>}` les distingue à cette seule forme). La sauvegarde SRAM garde les 8
-  derniers chiffres de l'id (`save_id32`).
-- **Le sidecar d'un asset porte un `id` opaque** (`ids.new_id`), c'est lui qui est stocké par les références
-  de données. *Pas encore fait*. Seule la forme de l'id est livrée. Le nom reste renommable ; le chemin du fichier
-  source est un simple emplacement. Même règle que les variables et les textes : un id dans les données, un nom lisible dans le Lua.
-
-- **Le nom d'asset est unique parmi les assets de son type** (2026-10-09 ; précisé le 2026-10-22 : un décor et une
-  musique peuvent porter le même nom, la copie d'une source n'est suffixée que face à un fichier de MÊME extension). Il se tranche à la création (*Create asset*
-  propose la stem de la source et refuse ou suffixe un nom déjà pris) ; les SOURCES peuvent être homonymes
-  librement. Le Lua écrit toujours `sfx.play("coin")` et les symboles C n'embarquent aucun nom de dossier.
-- **Deux vues, deux questions, pas de conflit de dossiers** (2026-10-09). L'*asset finder* et les panneaux de
-  famille (Sound…) montrent ce qui EXISTE dans le projet, les assets, rangés par type dans des dossiers
-  virtuels (`asset-folders.json`) ; le panneau Sound reste une liste plate. Un futur onglet **Disk** de la
-  zone Build / debug, façon Unity / Unreal, montrera une représentation fidèle du disque : les vraies
-  arborescences et les SOURCES. C'est là que vit *Create asset* (clic droit sur une source). Un asset n'est pas
-  une source : le même son ne s'affiche donc jamais à deux endroits.
-
-- **L'asset et sa source vivent indépendamment** (2026-10-09), comme dans Unreal et non comme dans Unity (où le
-  `.meta` voyage avec le fichier). L'asset a son propre fichier, avec son `id` ; il ne fait que POINTER sa
-  source (`asset`, un chemin). Déplacer, renommer ou supprimer la source sur le disque ne détruit, ne renomme et
-  ne déplace jamais l'asset : ses références (par id) tiennent.
-
-- **Le fichier de l'asset vit dans le dossier `assets/` de l'auteur** (2026-10-09), comme avant, et non sous
-  `project/`. Il est créé à côté de sa source par défaut, puis l'auteur le déplace où il veut, comme dans Unity.
-  `project/` reste réservé à ce qui n'a pas de fichier source à relier (les scènes : un dossier virtuel
-  suffit à les ranger). Les scènes pourraient, plus tard, vivre elles aussi dans `assets/`.
-
-- **Source déplacée ou absente : *Relink source* et erreur de build** (2026-10-09). L'asset est « sans
-  source » : il reste dans le projet, signalé, et l'auteur le relie à un autre fichier. Le build l'indique comme
-  une erreur claire tant que la source manque (le mécanisme des assets manquants existe déjà). Aucune copie des
-  données importées n'est conservée dans l'asset : la légèreté du projet passe avant l'autonomie de l'asset.
-
-- **Un nom déjà pris est suffixé, comme partout dans l'éditeur** (2026-10-09). Le but est d'éviter la
-  collision de NOM, pas de départager des fichiers : l'éditeur réutilise `unique_name`
-  (`core/command_dispatcher.py`) (`coin`, `coin_2`, `coin_3`…) à *Create asset* comme au scan de `assets/`.
-  Le scan retrouve chaque asset par son `id`, où qu'il soit ; si un fichier copié dans l'Explorateur apporte un
-  nom ou un id déjà pris, il reçoit un nouvel id et un nom suffixé, et le journal le dit. Aucune notion
-  d'« original » ni de date de fichier.
-
-### Ce qu'il faudrait trancher avant d'ouvrir
-
-1. **Source sans asset.** Visible dans l'onglet Disk (grisée si le format n'est pas pris en charge, avec
-   infobulle) ; absente de l'asset finder et du projet tant qu'aucun *Create asset* n'a été fait.
-2. **Migration.** Les sidecars existants restent où ils sont et reçoivent leur id ; `asset-folders.json` passe
-   de membres-par-nom à membres-par-id.
-
-### Ordre d'implémentation (proposé)
-
-1. **Livrée le 2026-10-09.** L'id dans le sidecar + migration, sur les SFX (famille pilote). Rien de visible : le
-   panneau Sound ne change pas. `Sfx.id` (pas encore sur la base `Resource`, pour ne pas écrire un `"id": ""` dans
-   les sidecars des autres familles) ; `asset_reconciliation.assign_sfx_ids` donne un id à ceux qui n'en ont pas et un
-   NOUVEL id au second d'un doublon, au chargement de l'audio ; `sync_sfx_file` et la création depuis le finder en
-   attribuent un d'emblée. Les 5 sidecars de `PongAdvanced` portent leur id. Le reste du chantier (arbre du disque,
-   déplacement libre) reste à faire : `ResourceStore` repère encore un sidecar par son nom, à plat.
-2. **Livrée le 2026-10-09, L'onglet Disk, en lecture seule** (zone Build / debug). Un arbre fidèle du dossier `assets/`, où chaque
-   fichier est marqué : source reconnue sans asset, source déjà reliée à un asset, format non pris en charge. Le
-   comportement ne change pas : la création automatique d'un asset à partir d'un fichier reste active. C'est la
-   tranche qui rend les sources VISIBLES, avant de leur retirer quoi que ce soit.
-   Livré : l'onglet **Disk**, racine **Assets**, dans le panneau Build / debug (les deux, scènes et scripts) ;
-   **vue à plat**, le contenu d'un dossier, une icône et un nom par entrée, un fil d'ariane pour remonter, double-clic
-   pour entrer (le bandeau « Build / Debug » a disparu, Clear a rejoint la barre de la console) ;
-   `core/disk_tree.py` classe chaque fichier, `ui/common/disk_view.py` l'affiche, `Project.source_families()` est la
-   table unique famille → fichiers sources (déjà dupliquée deux fois dans `project.py`). L'arbre se relit à l'ouverture
-   de l'onglet et au bouton Refresh, après `load_all_resources()`. **Constat :** le scan actuel étant plat, un `.wav` posé
-   dans un SOUS-dossier de `sfx/` ressort comme source libre, tandis qu'un `.wav` posé à la racine de `sfx/` devient un
-   asset d'office, la création automatique que la tranche 3 retire.
-3. **La lecture récursive** (ordre choisi le 2026-10-10 : elle passe AVANT *Create asset*). Un sidecar peut vivre dans un
-   sous-dossier de son dossier de famille (`assets/sfx/platformer/wav/coin.json`) : l'index d'un magasin le trouve, et
-   lecture, sauvegarde, suppression et renommage le traitent là où il est, sans le ramener à la racine. Un nouvel asset
-   peut être posé dans un dossier donné. C'est ce qui permettra de créer l'asset à côté de sa source. Deux sidecars de
-   même nom dans deux dossiers : le premier (le moins profond) est lu, l'autre est ignoré et signalé. **Pas encore** :
-   déplacer un asset hors du dossier de sa famille (un sidecar reste dans le dossier de SA famille, `assets/sfx/…`), la
-   création automatique d'un nom suffixé pour le doublon, le suivi en direct des sous-dossiers par le surveillant.
-4. **Livrée le 2026-10-11, *Create asset* au clic droit sur une source, et fin de la création automatique.** `core/asset_creation.py` (un format de source → les types qu'il peut devenir : `.png` sprite / fond / police, `.wav` effet / musique / jingle, `.mod .xm .s3m .it` musique / jingle, `.ttf .otf .fnt` police, `.hex` palette ; l'asset naît À CÔTÉ de sa source, nommé d'après le fichier et unique dans son type), `core/blank_assets.py` (les assets vierges : scène, prefab, mise en page, trois boîtes, table de données, palette ; scripts et behaviors sont des fichiers), `core/disk_commands.py` (importer, déplacer, créer et renommer un dossier, créer un fichier : tous annulables) et `CreateAssetCmd`. Dans l'onglet Disk : un « + » (Import…, Create ▸, New folder) ; un bouton « Create *nom* » quand UNE source libre est sélectionnée (la flèche propose les autres types) ; au clic droit, *Create* sur une source (grisé en multi-sélection, avec la raison) et *Delete* sur des assets. **Supprimer un asset ne supprime plus sa source** ; plus aucun asset ne naît de l'apparition d'un fichier (réconciliation d'ouverture et surveillant), ni ne suit un fichier renommé ; `reconcile_manifest` retiré ; la corbeille ne contient que les fichiers d'asset. **Détachement achevé (2026-10-11) :** `sync_*`, `_relink_source`, `_sourced_by` supprimés ; l'import d'un sprite depuis son finder copie puis crée l'asset en UNE entrée d'historique ; l'inspecteur d'acteur choisit un SPRITE (asset), plus un PNG ; l'appariement des renommages et le signal `asset_renamed` du surveillant sont retirés (un renommage = disparu + apparu) ; supprimer un asset prévient de ce qui le cite encore (`core/asset_usages.py` : composants de sprite, calques de fond, prefabs posés, palettes, scène de départ, scripts, un avertissement, pas un refus). **Création en lot (2026-10-11) :** *Create* n'est plus limité à UNE source, la sélection peut en compter plusieurs, tant que toutes sont des sources et qu'un même type leur convient (`shared_create_options` : l'intersection des types de chacune, dans l'ordre de la première ; plusieurs `.wav` offrent effet / musique / jingle). Le lot est UNE entrée d'historique (`MacroCmd` de `CreateAssetCmd`) ; les noms sont uniques ENTRE EUX aussi (deux `coin.wav` de deux dossiers : `coin`, `coin_2`) ; une source qui ne convient pas est signalée et les autres sont créées. Grisé, avec sa raison : des formats sans type commun (PNG + WAV), ou autre chose que des sources dans la sélection. Le callback `create_from_source` est devenu `create_from_sources(chemins, famille)`. Ancien énoncé :  Les deux vont ensemble :
-   « une source n'est un asset qu'après *Create asset* » n'a de sens que si le geste existe. L'asset est créé à côté de sa
-   source (grâce à la tranche 3). L'import par dialogue (copie d'un fichier venu de l'extérieur, asset créé d'office) reste
-   un second chemin vers le même résultat. Le nom d'asset est tranché ici (règle commune, unique dans le projet).
-5. **L'asset devient indépendant de sa source et librement déplaçable** (découpée le 2026-10-10, une tranche à la fois) :
-   - **5a. Un id dans tous les sidecars.** Le magasin (`ResourceStore`) l'écrit juste après le nom et le relit lui-même :
-     aucun modèle n'a à le porter (une douzaine ont leur propre sérialisation). Attribué à l'enregistrement et au
-     chargement ; deux items qui portent le même id (une copie dans l'Explorateur) : le second en reçoit un nouveau.
-     Remplace `Sfx.id` de la tranche 1. Les palettes (`.hex` + sidecar) viendront à part.
-   - **5b. La source qui manque. Livrée le 2026-10-10.** Une erreur de build, UNE par fichier manquant, pour toutes les
-     familles adossées à un fichier (`core/asset_relink.py`, `validator._check_missing_sources`) : elle remplace les
-     quatre avertissements que sprites, fonds, polices et sons émettaient chacun de leur côté. L'action *Relink source…*
-     du menu du finder relie l'asset à un autre fichier, sans le recréer (nom, id, réglages gardés ; sprites et fonds
-     ré-encodés depuis le nouveau fichier, par asset et non par nom de fichier) ; un fichier qui ne convient pas est
-     refusé, l'asset inchangé. **Limite :** un fond ne se relie qu'à un fichier directement dans `assets/backgrounds/`
-     (son encodage ne retient que le nom du fichier).
-   - **5c. Le déplacement libre sous `assets/`, décidé le 2026-10-10 : une extension par type d'asset.** Le sidecar
-     cesse de s'appeler `<nom>.json` : son extension dit sa famille (`Player.sprite`, `boom.sfx`), le contenu reste du
-     JSON (lisible, diffable, fusionnable). Le balayage global lit donc le TYPE dans le nom du fichier, sans ouvrir son
-     contenu : plus de cache d'empreintes, plus d'étiquette de famille dans le sidecar, et un asset peut vivre n'importe où
-     sous `assets/`. Noms nus (sans préfixe), une table unique `type → extension` (module de nommage), toutes les familles.
-     | Famille | Extension | | Famille | Extension |
-     |---|---|---|---|---|
-     | sprites | `.sprite` | | scènes | `.scene` |
-     | fonds | `.background` | | prefabs | `.prefab` |
-     | effets sonores | `.sfx` | | mises en page d'interface | `.layout` |
-     | musiques | `.music` | | boîtes musique / jingle / sonore | `.musicbox` `.jinglebox` `.soundbox` |
-     | jingles | `.jingle` | | tables de données | `.table` |
-     | polices | `.font` | | assets de police | `.fontasset` |
-     | palettes | `.palette` (le `.hex` reste le format d'échange) | | | |
-     **Restent en `.json`** : `texts.json`, `texts_<langue>.json`, `variables.json` (un fichier pour tout le projet, pas un
-     par asset). Aucune extension de sidecar ne reprend celle d'un format de source (`.png .wav .mod .xm .s3m .it .ttf .otf
-     .fnt .hex .lua`). Trois temps : (1) **livré le 2026-10-10**, module de nommage (`core/models/asset_extensions.py`, une constante `sidecar_extension` par modèle) + `tools/migrate_sidecar_extensions.py`, appliqués aux deux démos et au starter Basic (76 fichiers) ; le surveillant et l'arbre Disk suivent la nouvelle extension ;
-     (2) **livré le 2026-10-10**, chaque magasin cherche ses sidecars sous TOUT `assets/` (`ResourceStore(dossier, classe, racine)` : le dossier de la famille ne sert plus qu'à y faire naître un nouvel asset) ; un asset se lit, s'écrit, se renomme et se supprime là où il est, deux types peuvent partager un dossier et un nom ; un homonyme du même type plus profond est ignoré et signalé, son chemin est donné depuis `assets/` ; les palettes restent dans `assets/palettes/` (leur `.hex` y vit avec elles) ; (3) **livré le 2026-10-10**, déplacer fichiers et dossiers par glisser-déposer dans l'onglet Disk (arbre et vue à plat), `core/disk_move.py` étant la seule écriture. Règles : un sidecar se déplace seul (l'asset pointe sa source par chemin) ; une source citée par un asset se déplace avec mise à jour du chemin de l'asset ; une source libre ou un fichier non géré se déplace librement ; un dossier se déplace avec tout son contenu, chemins des assets réécrits ; rien n'est jamais écrasé (un fichier du même nom à destination = refus, sans rien déplacer) ; pas de déplacement d'un dossier dans lui-même. **Refusés** : textes et variables (un seul fichier pour tout le projet) ; les palettes, les images de fonds et les scripts `.lua` se déplacent désormais (temps 4), un script déplacé voyant réécrites ses attaches dans les scènes, caméras, acteurs et prefabs. Le surveillant est suspendu pendant l'opération : un fichier déplacé n'est jamais pris pour un nouvel import. Au survol, le dossier qui peut recevoir est surligné et les entrées glissées passent à demi transparentes ; un dossier qui ne peut pas recevoir (palettes, textes…) montre le curseur « interdit » et dit pourquoi dans la barre d'état dès le survol, pas seulement au dépôt (`disk_move.drop_verdict`, la même règle que le déplacement). **Temps 4, libres partout (décidé le 2026-10-10, non commencé).** **Modèle (précisé le 2026-10-10) : un asset n'est plus le sidecar d'un fichier source.** C'est un objet à part entière, qui ne fait que POINTER une source par un chemin explicite ; plus aucun lien implicite entre les deux, ni nom commun, ni dossier commun : l'asset ne suit pas sa source (renommée, déplacée), la source ne suit pas son asset. Les conventions qui supposaient ce couplage disparaissent avec *Create asset* : un asset nommé d'après le stem de son fichier, la création automatique à l'apparition d'un fichier, le suivi d'un fichier renommé par le surveillant. Les trois pas ci-dessous se conçoivent dans ce modèle. Lever les derniers refus de `core/disk_move.py`, un par un, chacun avec sa migration, ses tests et le retrait du refus correspondant : (a) **images de fonds, livré le 2026-10-10** (`tools/migrate_background_paths.py` ; `Project.background_image_path` ; renommer un fond ne renomme plus son image ; `disk_move` et `asset_relink` n'ont plus de cas à part ; restent, pour *Create asset*, la création d'un fond à l'apparition d'un PNG dans `assets/backgrounds/` et le raccrochage par le nom) : `BackgroundAsset.asset` passe du seul NOM de fichier à un chemin relatif au projet, comme sprites et sons ; une seule fonction rend le chemin réel de l'image d'un fond et remplace la vingtaine de `background_images_dir / nom` (build, codegen, éditeur de fonds, canvas, inspecteurs, réconciliation) ; la relier à un fichier hors de `assets/backgrounds/` devient possible (`asset_relink`) ; (b) **palettes, livré le 2026-10-10** : le `.palette` cite son `.hex` par un champ `asset` (chemin relatif au projet), les couleurs restent dans le `.hex` et ne sont jamais dupliquées ; l'un et l'autre se rangent où l'on veut sous `assets/` ; les palettes rejoignent `source_families()` (déplacement, relink, source manquante, corbeille : le cas général) ; renommer une palette ne renomme pas son `.hex` ; un `.palette` d'avant le champ le reçoit à la première ouverture (le `.hex` voisin) ; une palette dont le `.hex` a disparu n'est pas chargée et son `.palette` reste intact ; (c) **scripts, option B, livré le 2026-10-10** (`core/lua_scripts.py`, `tools/migrate_behavior_markers.py`, tests `tests/scripting/test_behavior_marker.py`) : le rôle d'un script ne vient plus de son dossier mais de son contenu : une première ligne `-- @behavior` marque un behavior ; `require("behaviors/<nom>")` reste l'appel écrit (le mot `behaviors/` devient un espace de noms, plus un dossier), résolu par NOM parmi les fichiers marqués, où qu'ils soient ; les scripts attachables sont tous les `.lua` non marqués de `assets/` ; deux behaviors de même nom = erreur de build ; « New behavior » écrit le marqueur ; un outil migre les projets d'avant (marqueur ajouté aux fichiers de `scripts/behaviors/`) ; le finder de scripts montre tous les `.lua` de `assets/` (les dossiers sans script sont masqués) ; le surveillant suit les `.lua` de tous les dossiers de `assets/`, les autres sources n'y étant suivies que dans les dossiers de famille. **Ne bougent jamais** : `texts.json`, `texts_<langue>.json`, `variables.json` (un fichier pour tout le projet). **Ensuite, hors de cette
-     tranche :** associations de fichiers (installateur Windows en `HKCU\Software\Classes`, proposition à l'utilisateur
-     pour le zip portable, fichier MIME + `.desktop` pour l'AppImage) et un éditeur qui ouvre un sidecar passé en argument.
-     **Tranché et livré le 2026-10-22, réduit à l'argument** : l'éditeur lancé avec un fichier d'asset (`Hero.sprite`,
-     `Level.scene`…) ou un script `.lua` ouvre le projet qui le contient (premier dossier parent à manifeste) et montre le
-     fichier dans son écran, comme un double-clic de Disk (`core/launch_target.py`, `main.py`, `MainWindow.open_asset_file`).
-     **Aucune association système des extensions d'asset** : `.font`, `.table`, `.scene` sont trop génériques pour qu'on les
-     réclame à l'utilisateur ; seule `.project` reste associée (déjà faite, installateur et MIME).
-   - **Plus tard : les références par id** (une scène qui cite un sprite par son id et non par son nom) : un chantier à
-     part, qui touche toutes les scènes.
-6. Extension aux musiques, jingles, sprites, fonds.
-
-**Livré aussi (2026-10-10) :** l'arbre vertical de tout `assets/` vit dans la colonne de gauche, sous un onglet **Disk**
-à côté de **Project viewer** (qui devient lui-même un onglet : on ne touche pas au mécanisme d'`AssetFinder`). Choisir un
-dossier de l'arbre l'affiche, à plat, dans l'onglet Disk du panneau du bas, comme le fait Unity ; la vue du bas se
-navigue aussi seule (double-clic, fil d'ariane). Le sens inverse (un double-clic en bas qui sélectionne le dossier
-dans l'arbre) n'est pas fait.
-**Un `assets/` vierge, des imports dans le dossier affiché, un surveillant sans dossiers imposés (2026-10-19).** Créer ou ouvrir
-un projet ne crée plus aucun sous-dossier (seulement `assets/`) : chaque écriture crée le dossier qu'elle vise. Tout bouton
-d'import d'un écran (importer un sprite, un fond ; *Save as PNG*) pose le fichier
-dans le dossier que l'onglet Disk affiche (`core/asset_creation.import_folder`, branché une fois par la fenêtre dans
-`ui/common/import_folder.py`), sinon à la racine de `assets/`. Le surveillant suit tous les dossiers sous `assets/` à toute
-profondeur, avec tous les types de fichiers : plus de liste de dossiers de famille ni de `parent.name == "sprites"`. Un
-fichier retouché est relié à ce qui le CITE (fond, sprite, police), un sidecar à son extension. *Reste :* l'import de
-palettes (les `.hex` vivent dans `assets/palettes`), les dossiers vides des projets de démo, créés avant ce changement.
-**Écraser plutôt que suffixer (2026-10-20).** *Import / replace image* créait `hero_2.png` au lieu de remplacer le PNG, et le
-« + » d'un fond écrasait sans rien dire. Cartographie des points d'entrée, puis une règle unique : `core/source_collisions.py`
-(même nom exact = collision ; tout autre nom pris = `unique_name`) et une boîte, `ui/common/import_collision.py` (écraser /
-garder les deux / annuler, avec les assets qui citent le fichier). *Remplacer l'image* (sprite, fond) écrit le fichier choisi
-SUR la source de l'asset (`source_import.replace_source`) et ne demande que si un autre asset la cite ; l'import d'un sprite,
-d'un fond ou d'un son et l'import ou le dépôt de l'onglet Disk posent la question sur collision. `ImportFilesCmd` garde le
-contenu écrasé : annuler le restaure. *Reste :* l'encodage d'un sprite ou d'un fond remplacé n'est pas dans l'historique
-(annuler rend le PNG, pas l'encodage, que le rechargement refait) ; un dossier déposé garde son suffixe sans question ; une
-seule réponse vaut pour tout un lot ; aucun test de l'interface (seul l'annulable de `ImportFilesCmd` est couvert).
-**Un « + » et une loupe sur l'arbre (2026-10-10).** L'onglet n'est plus strictement en lecture seule : le « + » crée un
-vrai dossier sur le disque, dans le dossier choisi (ou la racine), nommé d'office `New folder`, `New folder_2`… puis
-renommé EN PLACE dans l'arbre (pas de fenêtre) ; un nom vide, interdit (`/ \ : * ? " < > |`, point ou espace final) ou
-déjà pris est refusé avec un message et le dossier garde son nom. `core/disk_folders.py` est la seule écriture et refuse
-tout ce qui sort de `assets/`. La loupe filtre l'arbre par nom (`W.filter_tree`, déjà partagé). Un dossier vide n'est pas
-suivi par git tant qu'il ne contient aucun fichier.
-**Renommer depuis les deux vues (2026-10-11).** un clic sur le nom d'une entrée déjà choisie, F2 ou « Rename » au clic droit, dans l'arbre comme dans la vue à plat : un dossier,
-une source ou un script se renomme EN PLACE (`disk_move.rename_in_place`, un déplacement sur place : les assets qui citent le
-chemin le suivent, annulable). Les autres assets gardent leur renommage dans leur écran ; les tables du projet sont refusées.
-**Noms trop longs (2026-10-10).** Un nom passe d'abord à la ligne (deux lignes dans la vue à plat, une dans l'arbre) ; s'il est
-ENCORE trop long, son extension est gardée et le début coupé : `monnomquiestbeaucouptroplong.extension` devient
-`monnomq... .extension` (sur deux lignes, l'extension reste seule sur la seconde). Le retour à la ligne est fait par
-`ui/common/elide_name.py`, pas par Qt : en mode icônes Qt ne coupe qu'aux espaces, donc un nom sans espace n'était jamais
-replié mais abrégé par un « … » qui mangeait l'extension. Même règle dans la vue à plat et dans l'arbre vertical.
-Le retour à la ligne choisit sa coupe dans cet ordre : **juste avant l'extension** (`Falling Asleep` puis `.json`), sinon à une
-**espace** (jamais au milieu d'un mot : `Out of Energy` puis `Game Over.json`), sinon en pleine lettre mais sans laisser une ou
-deux lettres seules sur la seconde ligne (`.jso` / `n`). La largeur dont le texte dispose est demandée au STYLE de Qt (`SE_ItemViewItemText`), pas devinée : une marge devinée un peu
-trop grande, et Qt abrégeait de nouveau le nom déjà coupé (`Vi... .m…`), vu dans l'arbre, avec sa feuille de style.
-**Iconographie et dossiers (2026-10-10).** La vue à plat reprend les icônes de l'éditeur : un fichier relié à un asset
-prend l'icône de sa famille (sprite, fond, effet, musique, jingle, police, palette, script), une source sans asset celle de
-son format (`.wav` effet, `.png` image, les deux formats partagés entre deux familles donnent le cas courant). Un dossier
-**plein** est un dossier où l'on peut descendre ; l'entrée **« ... »**, en filet, est toujours la première hors de la
-racine et remonte d'un niveau ; **à la racine**, où il n'y a rien à remonter, cette place est tenue par une icône de **disque dur**
-nommée `assets`, dont le double-clic ouvre le vrai dossier dans l'explorateur de fichiers du système. `DiskNode.family` porte la famille ; `Project.source_families()` rend `(famille, store,
-fichiers)`. L'onglet Disk est **tout à gauche**, avec une icône de disque (le seul onglet à en avoir une), dans la colonne
-de gauche (avant Project viewer) comme dans le panneau du bas (avant Console).
-
-### Ce que ça ne fait pas
-
-- Ne change ni le runtime C ni le format de la ROM.
-- Ne fait pas de l'éditeur un outil de dessin généraliste (cf. périmètre). Le **Color Tile
-  Painter**, s'il est ouvert, est l'exception volontairement étroite : il sert à poser un fond
-  de prototype en couleurs pleines, pas à retoucher ou illustrer une image.
-
----
-
-## L'écran Texte n'édite et ne range que du contenu
-
-### D'où vient la question (2026-10-10)
-
-L'écran Texte fait aujourd'hui deux métiers : **ranger et écrire** du contenu (la table, la clé, le
-rangement, les langues, la barre de balisage), et **montrer le rendu GBA** de ce contenu (`FontScreenPreview`,
-un écran 240×160 aux vrais glyphes, avec son sélecteur de police et son bouton « Afficher le balisage »).
-Le second brouille le message du premier : l'œil va vers le rectangle noir, pas vers la liste qu'on est venu
-mettre en ordre. Le rendu fidèle a servi à poser le pipeline des polices ; il a un autre lieu naturel (la
-scène, l'écran Police). L'écran Texte ne doit plus chercher qu'**une chose : éditer et ranger le contenu**.
-
-### Le parcours visé (précisé les 2026-10-10 et 2026-10-17)
-
-Deux lieux, deux métiers, et ils ne se recouvrent pas :
-
-- **Le scene canvas règle l'aspect.** C'est là que l'auteur configure une boîte de dialogue, sa police, sa
-  taille, sa couleur, et voit le texte tel qu'il sera. Tout ce qui est apparence vit ici.
-- **L'écran Texte règle ce qui entre dedans.** Le contenu, sa clé, son rangement, ses langues, son balisage.
-  Il ne sait pas dans quelle boîte le texte va tomber ; il n'a donc pas à en montrer le rendu.
-
-Conséquence assumée : **l'écran Texte ne dit pas si un texte est tronqué**, ni s'il déborde de sa boîte. Pas
-dans un premier temps ; si le besoin se fait sentir, ce sera un retour de la scène vers la table (un texte
-signalé depuis son lieu d'usage), pas un rendu recréé dans l'écran Texte.
-
-Ce que le canvas fait déjà (vérifié dans le code, 2026-10-10) : rendu aux vrais glyphes avec le placement du
-moteur, et liseré ambre quand la boîte tronque. Ce qu'il ne fait pas encore : montrer une **traduction**. Il
-n'affiche que la langue source. Décidé qu'il prévisualisera la langue choisie, dans une mesure non définie (voir
-point 4 de « À trancher »).
-
-### Ce que ça change pour l'auteur
-
-- **L'aperçu écran disparaît** de l'atelier : plus de rectangle 240×160, plus de sélecteur de police d'aperçu,
-  plus de bouton « Afficher le balisage » (la source balisée est la seule vue du contenu).
-- **Décision du 2026-10-17 : le contenu occupe la place principale.** Remplacer les lignes
-  compactes `Key / Content / Used` par de grands blocs de texte multi-lignes directement éditables,
-  comme sur la maquette. Le traducteur ou le correcteur doit pouvoir lire et travailler les textes
-  longs sans les retrouver comprimés dans une cellule. Cette direction remplace le délégué de
-  cellule initialement proposé le 2026-10-10.
-- **Regrouper les blocs par scène**, avec un en-tête repliable. Une indication discrète au-dessus
-  du contenu situe l'objet et la scène ; les clés et les informations d'usage ne prennent plus
-  la place du texte. Le traitement des entrées partagées ou sans scène reste à définir.
-- **Alléger les outils autour du contenu.** Garder accessibles langue, balisage, clé et rangement,
-  sans maintenir par principe l'atelier du bas ou l'inspecteur actuels. Leur disposition exacte
-  reste à dessiner ; la priorité est la surface de lecture et d'édition.
-
-### Find (rejoindre le lieu d'usage (décision du 2026-10-17))
-
-Depuis l'écran Texte, un bouton **Find** permet de retrouver un texte dans le projet lorsqu'il
-est référencé : ouvrir la scène concernée et sélectionner/révéler l'élément qui l'utilise.
-La maquette place également une loupe dans l'en-tête de scène pour rejoindre ce contexte.
-L'emplacement exact des actions scène et texte reste à préciser, mais l'accès doit être direct.
-
-- Un seul lieu d'usage : navigation directe vers la cible.
-- Plusieurs lieux : proposition d'une liste de destinations explicites (scène, objet, script ou
-  table selon la référence), sans choisir arbitrairement une scène.
-- Aucune référence : état « non référencé », sans destination inventée.
-
-Les deux derniers comportements sont proposés pour préciser le contrat. Il faudra distinguer
-les références directes d'une TextBox, celles d'un script et celles d'une Data Table : une cellule
-de table identifie un usage, mais ne prouve pas dans quelle scène le script affichera son texte.
-Le bouton s'appuie sur les références réelles, pas seulement sur le nom ou le rangement de l'entrée.
-Compléter l'index des usages si nécessaire, notamment avec toutes les pages des TextBox et les
-colonnes `text` des tables ; gérer aussi les mises en page partagées entre plusieurs scènes.
-
-### Le conflit avec l'ancien chantier
-
-Ce chantier **remplace** « L'atelier Texte réuni, écrire et voir dans un même écran » (2026-09-19), qui
-allait à l'opposé : faire du rendu GBA la surface d'édition (projection source ↔ affichage, caret et
-sélection dessinés par `FontScreenPreview`, vue balisage en police moteur). Cette direction est abandonnée :
-elle aurait fait de l'aperçu la pièce centrale de l'écran, là où l'on veut le retirer. Sa décision verrouillée
-du 2026-09-19 tombe avec elle ; la section qui la portait n'est plus qu'un renvoi ici.
-
-**Constat de code, à dire avant d'ouvrir :** l'ancien chantier était annoncé « aucune étape codée »,
-mais `TextWorkbench` monte déjà `FontScreenPreview` en surface **éditable** (`set_editable(True)`, signaux
-`edited` / `committed`) et y branche `MarkupToolbar`. Le code est donc à mi-chemin d'une direction qu'on
-abandonne : l'état d'arrivée de ce chantier est désormais la liste de blocs éditables décidée le 2026-10-17.
-
-### Ce que ça touche
-
-| Fichier | Sort |
-| --- | --- |
-| `font_screen_preview.py` | **supprimé**, seul `TextWorkbench` le monte |
-| `text_workbench.py` | perd `_build_preview`, le `QSplitter`, `_preview`, le sélecteur de police d'aperçu, `_btn_markup` ; garde l'identité (clé, rangement, langues) et la barre de balisage |
-| `text_table.py` | remplacer la présentation compacte par des blocs multi-lignes regroupés par scène ; préciser si le composant est refondu ou remplacé |
-| `text_panel.py` | reste l'arbitre des modifications annulables ; sélection, regroupement et actions Find |
-| `markup_toolbar.py` | vise le bloc en cours plutôt que `FontScreenPreview`, son contrat (`source()`, `selection_source()`, `replace_source()`) est déjà abstrait ; désactivée hors édition |
-| `text_editor_screen.py`, `text_inspector.py` | `preview_font_changed` / `set_font` : voir « À trancher » |
-| `markup_highlighter.py` | **conservé**, `ui_inspector.py` l'utilise aussi |
-| `tests/ui/test_text_preview_font_assets.py` | retiré avec l'aperçu |
-| `labels.json`, `labels_fr.json` | clés `txtwb.show_markup_*`, `txtwb.preview_font_*` retirées |
-
-`core.text_markup`, `texts.json`, les sides de traduction et la ROM ne bougent pas : c'est un chantier d'**interface**.
-`ScreenTextPreview` (la jauge de longueur de l'inspecteur de script) est un autre composant, il reste.
-Find touche également l'index des usages (`core/project_texts.py`) et la navigation vers les
-scènes, leurs éléments, les scripts et les tables. Vérifier ces points dans le code au démarrage.
-
-### À trancher avant d'ouvrir
-
-1. **Ce que le bloc montre au repos.** La source balisée (ce qu'on édite = ce qu'on lit, balises teintées),
-   ou le texte résolu comme aujourd'hui (plus propre pour parcourir, mais deux représentations du même
-   contenu). Penchant : la source, une seule représentation.
-2. **Dimensionnement des blocs.** Le contenu multi-ligne doit être lisible, décision du 2026-10-17.
-   Fixer la hauteur minimale, un éventuel plafond pour les très longs textes et le comportement
-   sur des centaines d'entrées ; la ligne compacte avec `⏎` n'est plus la cible.
-3. **Ce que devient la police d'aperçu.** Elle alimente encore l'inspecteur (caractères manquants via
-   `missing_chars()`) et la liste des icônes de la barre de balisage. Sans sélecteur : la « Default Font » du
-   projet (v0.9) comme police de référence, ou le sélecteur déménage dans l'inspecteur de droite. Si l'apparence
-   appartient à la scène, la police n'a plus de raison d'être choisie ici : la couverture des glyphes
-   (`missing_chars()`) est-elle encore une question de contenu, ou passe-t-elle aussi à la scène ?
-4. ~~La troncature~~, **tranché le 2026-10-10** : hors de l'écran Texte, pas dans un premier temps (voir « Le
-   parcours visé »). Prémisse **vérifiée dans le code le 2026-10-10** : le scene canvas rend déjà le texte d'une
-   boîte avec les vrais glyphes (`canvas_region_item.py` : `_paint_text` → `layout_text` / `layout_marked_text`,
-   mêmes fonctions que la ROM ; police par `font_emit.scene_default_font`, encre par `font_palette`) et signale
-   déjà la troncature (liseré ambre en bas de la boîte). **Un trou : la langue.** `_text_content` et
-   `_text_source` lisent `t.content`, donc toujours la langue source ; le canvas n'a ni sélecteur de langue ni
-   appel à `Project.text_content(t, lang)`. Une traduction plus longue que l'original peut déborder sans que rien
-   ne le montre, et l'aperçu de l'atelier, qui suivait l'onglet de langue, était le seul endroit où on la voyait
-   dans sa boîte. **Décidé le 2026-10-10 : le canvas prévisualisera la langue choisie.** La **mesure** reste à
-   définir : où se choisit la langue (canvas seul, ou partagée avec l'écran Texte), si elle est mémorisée par
-   scène ou par session, si le liseré ambre de troncature suit la langue affichée, si l'on peut voir plusieurs
-   langues à la fois. Rien de tout cela n'est arrêté. Ce n'est pas un prérequis du retrait de l'aperçu, mais
-   tant que ce n'est pas livré l'auteur qui traduit perd un repère : le dire dans la clôture.
-5. **Édition de la traduction.** Disposer la source en lecture seule à côté ou au-dessus du bloc
-   traduit, en gardant une grande surface d'édition ; fixer la place du sélecteur de langue.
-6. **Regroupement et Find.** Place des textes sans scène et des textes partagés, ordre des pages,
-   gestion des usages indirects et destinations multiples ; fixer le retour vers le texte après navigation.
-
-### Ordre d'implémentation (proposé)
-
-1. **Liste de blocs éditables** : regroupement par scène, contenu multi-ligne et traduction,
-   modifications annulables via `text_panel`, conservation de la recherche et de la sélection.
-2. **Rebrancher `MarkupToolbar`** sur le bloc actif et alléger les panneaux annexes.
-3. **Retirer l'aperçu** : `FontScreenPreview`, splitter, sélecteur, bouton, signaux de police, clés de
-   traduction, test dédié. Trancher le point 3 avant cette étape.
-4. **Chercher le mort** : signaux sans abonné, `set_font` orphelin, helpers de rendu qu'aucun autre écran
-   n'appelle ; mettre à jour `ARCHITECTURE.md` (arbre des fichiers, section de l'écran Texte).
-5. **Find** : indexer les usages nécessaires et câbler les destinations ; vérifier navigation,
-   absence de référence, références multiples, mises en page partagées et pages de dialogue.
-6. Vérifier la lecture et l'édition de textes longs, les traductions, l'annulation et le comportement
-   sur un projet contenant de nombreuses entrées.
-
-### Ce que ça ne fait pas
-
-- Ne retire pas le rendu fidèle de l'éditeur : il reste dans l'écran Police et en scène.
-- Ne change ni `texts.json`, ni le format des traductions, ni la ROM.
-- Dans cet écran, les blocs sont la surface d'édition du contenu ; les TextBox peuvent aussi éditer
-  les mêmes entrées depuis la scène, conformément au chantier des pages de dialogue.
+## Fonds : ce qui reste après la livraison de la 0.5
+
+La 0.5 est **livrée** ; sa discussion complète est dans [l'archive](../../changelog/archives/backgrounds.md). Ne restent ici que
+les fils encore ouverts. **Aucun n'est rattaché à un chantier important** pour l'instant : ils sont classés à part.
+
+### Comparer la source et la version compressée (non classé)
+
+Le « compress view » : une barre verticale posée sur le plan de travail, la source d'un côté, la version compressée de l'autre,
+à la même grille. Elle rend possibles la carte d'écart par tuile et une fidélité globale (voir « Comparer à l'image source »
+dans [l'archive](../../changelog/archives/backgrounds.md#la-compression-dun-fond-se-joue-elle-ne-sattend-pas)). Aucun code de
+comparaison n'existe encore dans `ui/background_editor/`. Sur une photo le coût impose de calculer sur une version réduite.
+
+### Autres fils ouverts
+
+Tous viennent de l'archive, où chacun est décrit avec son contexte ; rien n'y est verrouillé sauf mention.
+
+- **Trous dans une grande image, sans solution.** L'index de tuile est codé sur 10 bits (`pack_se`) et tronqué en silence
+  au-delà de 1023 ; `merge_tiles` ne fait rien au-delà de `MAX_TILES = 6000`. Une tuile retirée doit être remplacée par une
+  tuile visuellement proche, jamais devenir un trou.
+- **La limite réelle du canvas tuilé** (cartes de tuiles, streaming) : à lire et à poser à la place du garde-fou de 4096 px.
+- **Un bitmap plus grand que 240×160** (étude du 2026-10-16, étapes A à D, rien de codé). L'étape C rouvre la décision « un
+  bitmap a un canvas fixe de 240×160 ».
+- **Le service d'encodage** : le processus séparé pour les grandes images (phase 5) ; couper `encode_background` en filtre de
+  compression puis encodage ; les caches par étage ; l'aperçu dégradé rapide pour une photo.
+- **La compression, frictions non reprises** : diagnostics actionnables, réglage par objectif, la falaise du chemin
+  « indexé direct », le bouton « Analyser » masqué (à revérifier dans le code avant de rouvrir).
+- **La tranche bitmap de la compression** (son propre panneau) : pas commencée.
+- **Les pistes de l'écran Fond** : cache de l'aperçu par étape, aperçu avec les calques, mémoire du cache, relink des autres
+  familles, trames ordonnées sans réduction globale, « Save as PNG » hors du 4bpp tuilé, filtres créatifs.
+- **Les sprites** partagent le mécanisme de sous-palettes (`SubPaletteAssetMixin`) et gardent des copies : non touchés.
+- **Données de démo** : la lecture à plat d'un sidecar d'avant les blocs se retire quand les projets ont été resauvegardés ;
+  `tools/create_build_benchmark.py` écrit encore à plat.
 
 ---
 
@@ -3492,93 +2251,6 @@ la hauteur par défaut, la variation et la politique du jingle ; `core/validator
 
 ---
 
-## Un pont entre l'écran Texte et les tables de données (créer un dialogue)
-
-**Parcours livré le 2026-10-17 :** le chantier
-[TextBox à plusieurs entrées](#textbox-plusieurs-entrées-pour-préparer-un-dialogue) fournit
-**Export as table / Update table** depuis la boîte, vers les tables ordinaires et leurs colonnes
-`text`. Le contrat de mise à jour, de conservation des colonnes personnalisées et des lignes
-manuelles est implémenté et décrit dans cette section. Les pistes A et B ci-dessous restent
-des parcours complémentaires.
-
-### D'où vient la question (2026-10-10)
-
-Depuis la v0.21, un dialogue est une **table de données** dont une colonne est de type `text`
-(`data.Dialogues[i].replique`) : le script la parcourt, et la réplique reste traduisible. Le modèle est
-bon ; **la saisie est fastidieuse**. Pour écrire dix répliques, l'auteur doit :
-
-1. créer la table dans l'écran Données et lui ajouter une colonne `text` ;
-2. pour chaque réplique, aller dans l'écran Texte, créer l'entrée, la ranger, lui donner un contenu ;
-3. revenir dans la grille, ouvrir la cellule de la ligne et y choisir la clé au milieu de toutes les autres.
-
-Deux écrans, un aller-retour par réplique, et la clé (qui n'a d'intérêt que pour la machine) au centre du geste.
-L'infobulle de la cellule montre bien le contenu (`_text_preview`), mais seulement une fois la clé posée.
-
-### Le principe
-
-**Le pont ne crée pas de modèle.** Un dialogue n'est ni un nouvel asset ni un nouvel écran : c'est toujours une
-`DataTable` et des `Text`, écrits par les commandes annulables qui existent déjà (`InsertRowCmd`, `SetCellCmd`,
-`CreateTextForElementCmd`…). Le pont est un **geste** qui enchaîne ces écritures, pas une structure de plus. Il
-tient la ligne posée dès la v0.3 : pas d'arbre de conversation, pas de choix branchés, pas d'éditeur de dialogue
-(cf. [Table de textes](ARCHITECTURE.md#textes-du-joueur--table-de-chaînes) et « Ce qui reste au script »).
-
-### Pistes (proposées, non verrouillées)
-
-- **A. Depuis l'écran Texte : « Envoyer vers une table ».** L'auteur sélectionne des textes dans la table
-  (l'ordre de la sélection est l'ordre des lignes), choisit une table de données existante ou en crée une, et
-  chaque texte devient une ligne dont la colonne `text` porte sa clé. C'est le geste de qui écrit d'abord ses
-  répliques puis les assemble.
-- **B. Depuis la grille de données : « Nouveau texte » dans la cellule.** Une cellule de type `text` offre, en
-  tête de sa liste, *Nouveau texte…* : l'entrée est créée à l'instant (clé proposée par le rangement, jamais
-  tapée), rangée sous le nom de la table, et la cellule la référence. C'est le geste de qui construit la
-  conversation ligne à ligne. Le contenu s'écrit ensuite dans l'écran Texte, ou sur place si la cellule le permet.
-- **C. Les deux sens se rejoignent sur le rangement.** Le chemin d'un texte donne sa clé à la création ; si le
-  rangement d'un dialogue porte le nom de sa table, la clé de la réplique `n` se dérive d'elle-même
-  (`<table>_<n>`) et plus personne ne la nomme à la main. Le lien table ↔ rangement reste une convention de
-  création, jamais une contrainte (les deux peuvent diverger ensuite).
-
-**Décidé le 2026-10-10 : A et B, les deux.** A sert à l'écriture, B à l'assemblage. Ordre de livraison proposé :
-**B d'abord** (une entrée de plus dans une liste déroulante qui existe), puis A, qui demande une action de
-sélection multiple vers un écran voisin. C reste une convention de création, à trancher avec les deux.
-
-### Ce que ça touche (provisoire)
-
-| Fichier | Sort |
-| --- | --- |
-| `ui/data_editor/data_grid_panel.py` | `_DataCellDelegate` : l'éditeur de cellule `text` gagne l'entrée « Nouveau texte… » (piste B) |
-| `ui/data_editor/data_commands.py` | une commande qui crée le texte et pose la cellule **dans une seule annulation** |
-| `ui/text_editor/text_panel.py`, `text_table.py` | menu de la sélection : « Envoyer vers une table… » (piste A) |
-| `ui/text_editor/text_commands.py` | `CreateTextForElementCmd` est le modèle à suivre : création d'un texte rangé, clé dérivée |
-| `ui/screens.py` | aucune navigation entre écrans n'existe aujourd'hui : voir « À trancher » |
-
-`core/models/text.py`, `core/models/data_table.py`, le checker, le build et la ROM ne bougent pas.
-
-### À trancher avant d'ouvrir
-
-1. ~~A, B, ou les deux ?~~, **tranché le 2026-10-10 : les deux** (B puis A, voir « Pistes »).
-2. **Le contenu s'écrit où ?** Avec la piste B, l'auteur crée la réplique depuis la grille : l'écrit-il dans la
-   cellule (qui doit alors devenir un petit éditeur de texte) ou est-il renvoyé à l'écran Texte ? C'est la même
-   question que « le contenu s'édite dans la table » du chantier [L'écran Texte n'édite et ne range que du contenu](#lécran-texte-nédite-et-ne-range-que-du-contenu) :
-   les deux chantiers partagent le délégué de contenu et doivent se décider ensemble.
-3. **Aller d'un écran à l'autre.** L'infobulle de la cellule est aujourd'hui la seule jonction. Faut-il un « Ouvrir
-   dans l'écran Texte » (sélection du texte, bascule d'écran) ? Aucun mécanisme de navigation entre écrans n'est
-   encore posé : c'est le coût caché de la piste A comme du point précédent.
-4. **Que contient une ligne de dialogue ?** Une colonne `text` suffit à une réplique ; un dialogue réel veut aussi
-   un locuteur, un portrait, un son. Le pont crée-t-il les colonnes d'un **gabarit** (réplique seule, ou
-   locuteur + réplique), ou laisse-t-il l'auteur les ajouter ? Un gabarit ne doit pas devenir un type « Dialogue ».
-5. **Le rangement du dialogue.** Le nom d'une table est un identifiant (`Dialogues`), un rangement est une liste
-   de libellés libres : la dérivation de la piste C marche-t-elle sans les confondre ?
-6. **Ordre.** Une table a un ordre, la table de textes est triée à l'écran : l'ordre de l'envoi doit être celui de
-   la sélection, pas celui de l'affichage. À vérifier à l'usage.
-
-### Ce que ça ne fait pas
-
-- Ne crée ni asset « Dialogue », ni écran de dialogue, ni arbre de conversation, ni choix branchés.
-- Ne dit rien de l'enchaînement : *quand* une réplique s'affiche reste au script.
-- Ne change ni `texts.json`, ni le format des tables de données, ni la ROM.
-
----
-
 ## Piste (le singleton `mixer`)
 
 **Route vers v1.0-stable, non prioritaire pour la release `-alpha` (extrait de v0.16 le
@@ -3716,178 +2388,7 @@ ou laissé à GCC.
 
 ## Piste (l'atelier Texte réuni, écrire et voir dans un même écran, **ABANDONNÉ**)
 
-**Remplacé le 2026-10-10** par [L'écran Texte n'édite et ne range que du contenu](#lécran-texte-nédite-et-ne-range-que-du-contenu). Ce chantier voulait faire du rendu GBA la surface d'édition (projection source ↔ affichage, vue balisage en police moteur) ; on retire au contraire l'aperçu de l'écran et le contenu s'édite dans la table. Sa décision verrouillée du 2026-09-19 est caduque.
-
-## Piste (préparer une image riche à l'import, recadrer et redimensionner sans toucher au PNG)
-
-**Route vers v1.0-stable, non prioritaire pour la release `-alpha` (décidé le 2026-09-29).** Les tranches
-4bpp et 8bpp sont livrées ; reste la tranche bitmap (son propre panneau, pas commencée) et la validation à la
-souris dans l'éditeur.
-
-### D'où vient la question (2026-09-26)
-
-Une photo de 474×314 importée en tuilé 8bpp donne 2194 tuiles uniques pour un budget de 256 : le
-Background Editor le **dit** (avertissement rouge « Exceeds VRAM ») mais ne laisse rien faire,
-l'auteur n'a que le mode (tuilé/bitmap, profondeur) et un logiciel externe. Et le tuilé tronque
-l'index de tuile à 10 bits (`pack_se`), donc au-delà de 1024 la carte se brouille en silence.
-
-### Le principe
-
-Deux gestes sur la **préparation de la source**, avant l'encodage, portés par le sidecar :
-
-- **Recadrer** (`import_crop`, en pixels de la source) puis **redimensionner** (`import_size`, en
-  pixels de l'image préparée), dans cet ordre ;
-- **Miroir** (`mirror_x`, `mirror_y`) : une barre verticale ou horizontale à poignée centrale, posée
-  par un bouton de l'en-tête du canvas ; le côté gauche (haut) se reflète de l'autre côté. Appliqué
-  après le redimensionnement et **avant** la compression (il peut changer le nombre de tuiles) ;
-- le PNG n'est **jamais** modifié : `prepare_source` produit une image PIL en mémoire, que
-  reçoit `encode_by_mode`, l'unique endroit qui choisit l'encodeur. Tous les chemins qui
-  encodent (recompression de l'inspecteur, import, resynchronisation d'un PNG retouché,
-  réconciliation au chargement) lisent la MÊME préparation, sinon la ROM et l'éditeur
-  divergeraient ;
-- revenir en arrière = effacer la préparation (bouton « Original »), le PNG étant intact.
-
-### Décisions verrouillées (2026-09-26)
-
-- **Barre du canvas** : deux bascules exclusives (Recadrer / Redimensionner) et une action
-  (Original), dans la même `CanvasTopBar` que les autres canvas.
-- **Redimensionner** : libre au pixel ; **Maj** = proportionnel ; **Ctrl** = accroche 8×8.
-- **Recadrer** : libre au pixel ; **Maj** = garde les proportions de l'image d'origine ; **Ctrl**
-  = accroche 8×8.
-- **Rééchantillonnage automatique** : plus proche voisin si le PNG source est indexé (palette
-  préservée), Lanczos sinon, aucun réglage exposé.
-- **Fonds de scène seulement** : un cadre d'UI ou une planche d'animation ont une géométrie qui
-  dépend des pixels d'origine (marges, grille de frames).
-- La taille affichée par le Scene Manager suit la taille **préparée** (`pixel_size()`), plus celle
-  du PNG.
-
-### Mesurer le 4bpp avant d'y passer (2026-09-26)
-
-Bouton « Analyser pour le 4bpp » dans l'inspecteur, sur l'image **préparée**, hors-thread :
-couleurs par tuile (min / moyenne / max et répartition), tuiles qui tiennent en 15 couleurs,
-jeux de couleurs distincts et tuiles qui en partagent un, palettes nécessaires, verdict « sans
-perte » ou non. `bg_import.analyze_tile_colors` réutilise l'extraction et le packing de la
-compression : le chiffre annoncé est celui que la compression trouvera. Les palettes comptées
-sont celles des tuiles qui tiennent, sans la réduction, un minimum, pas une promesse.
-
-### Jouer avec la compression (l'inspecteur contextuel (2026-09-26))
-
-L'auteur règle la compression avec des curseurs et voit le rendu au canvas ; un réglage relance
-l'encodage hors-thread après 250 ms. **L'inspecteur est contextuel** : chaque mode (tuilé
-4bpp / 8bpp, bitmap 8 / 16bpp) a sa boîte de réglages, absente des autres. Aucun refus d'office :
-une image hors budget s'encode quand même, et les mesures disent ce que ça coûte.
-
-**Tranche 1, tuilé 4bpp (livrée).** Réglages portés par le sidecar (`BackgroundAsset.compression`,
-seuls les écarts au défaut sont écrits) :
-
-- **Palettes** (1–16) et **couleurs par palette** (2–15). Sans perte quand l'image le permet (pixel art :
-  packing exact) ; sinon `core/bg_palette_cluster.py` regroupe les tuiles qui se ressemblent, taille une
-  palette par groupe depuis ses pixels réels et affine, l'ancienne méthode (garder les 16 palettes les
-  plus employées, renvoyer le reste au plus proche) laissait l'océan d'une photo sans ses bleus, même
-  au réglage par défaut ;
-- **Couleurs globales** : réduire toute l'image avant le découpage en tuiles. C'est ce qui rend
-  les tuiles voisines compatibles, donc ce qui fait rentrer une photo (le 4bpp par défaut y perd
-  la moitié de l'image) ;
-- **Tuiles** : cible de tuiles uniques ; `core/bg_tile_merge.py` regroupe par **plus faible perte**
-  (agglomération de Ward, coût pondéré par les cases couvertes, distance qui pèse la luminance),
-  garde la tuile la plus centrale de chaque groupe et renvoie les autres cases vers la variante
-  gardée la plus proche. Le premier essai (garder « les plus employées ») écrasait le bas de
-  l'image : sur une photo toutes les tuiles sont employées une fois, et l'égalité tombait sur
-  l'ordre de balayage. Reste à explorer : réutiliser une tuile sous une autre banque de palette ;
-- **Méthode** de réduction dans une tuile, et le **dithering** (agit sur la réduction globale).
-
-**Tranche 2, tuilé 8bpp (livrée).** Même boîte, contextuelle : **Couleurs** de l'unique palette
-(2–255, `palette_colors`), **Tuiles** (la même fusion par plus faible perte, budget 256 par charblock),
-**méthode** de quantification (median-cut, octree, couverture max, quantifieurs de PIL) et
-**dithering**. Le dithering des modes 8bpp et bitmap était sans effet : `Image.quantize(dither=…)`
-ignore l'option tant qu'on ne lui donne pas de palette. Corrigé pour les deux (`_quantize_rgb`),
-test à l'appui. Reste la tranche bitmap : son propre panneau.
-
-### Ce que ça ne fait pas
-
-Pas d'annulation pas-à-pas (Ctrl+Z) : la recompression est asynchrone et « Original » suffit à
-revenir. Pas de réglage de couleurs (le mode et la profondeur existent déjà dans l'inspecteur).
-
-## Chantier produit à planifier (Color Tile Painter : commencer un niveau sans assets)
-
-**Noté le 2026-10-12. Livré pour l'essentiel le 2026-10-14. Voir la section « L'écran Fond », ci-dessous ; le texte qui suit est l'état de départ, gardé pour mémoire.** Un auteur qui arrive sans
-assets ne doit pas être bloqué avant même de pouvoir tester son level design. Ce petit outil lui
-permet de composer vite un fond de prototype, jouable immédiatement, puis de le remplacer ou de
-le retravailler plus tard avec ses vrais visuels.
-
-### Le minimum utile
-
-- Choisir une palette existante, puis une des **16 couleurs** sous forme de pastilles rondes ; la
-  première correspond à la transparence.
-- Peindre sur une grille, par clic ou glisser, avec un pinceau carré aligné sur les tuiles de
-  **8 px, 16 px ou 32 px**. Le pinceau 32 px reste une pose de couleur par cellules de base, pas
-  une image redimensionnée.
-- Créer ou mettre à jour un **BackgroundAsset éditable** : le projet conserve les indices de
-  palette et la grille, pas seulement une image aplatie, afin que l'auteur puisse changer une
-  couleur ou repeindre plus tard.
-- Exporter ce même résultat en **PNG**, pour l'archiver, le partager ou le poursuivre dans un
-  outil graphique externe.
-
-### Décisions déjà claires
-
-- C'est un outil de **blockout**, délibérément limité aux aplats : ni pinceau libre, ni import
-  d'illustration, ni retouche photo. Il ne remet donc pas en cause le refus d'un éditeur d'image
-  généraliste.
-- Le résultat suit le pipeline de fonds existant et ses contraintes GBA (palette indexée,
-  transparence, tuilage) dès la première peinture : pas de conversion opaque au moment du build.
-- Un fond créé ainsi reste un fond normal dans le projet ; l'export PNG est une sortie
-  complémentaire, jamais sa seule forme sauvegardée.
-
-### À trancher au démarrage
-
-- Où placer l'entrée dans l'interface : mode du Background Editor, ou création de fond vierge
-  depuis le navigateur d'assets.
-- Les dimensions initiales et le comportement hors limites (agrandir le canevas, ou demander une
-  taille à la création).
-- L'annulation/historique de peinture, et les raccourcis pour le sélecteur, la gomme et les trois
-  tailles de pinceau.
-
-## L'écran Fond (ce qui est livré le 2026-10-14, et les pistes notées pour plus tard)
-
-**Livré (2026-10-14).** Le Color Tile Painter ci-dessus est devenu un pinceau à deux modes
-(*Inpaint* : surcharge de palette ; *Paint* : couleur posée en CALQUE par-dessus l'image, `BackgroundAsset.tile_paint`, que
-la gomme et le clic droit retirent) ; « Create empty » écrit un vrai PNG indexé transparent dans le dossier affiché par
-l'onglet Disk ; « Save as PNG » cuit tout dans un PNG **indexé par banques** (`core/bg_bake.py` : index = banque × 16 +
-couleur, tRNS) que l'importateur relit à l'identique, banques comprises ; « Export to PNG… » ; « Relink source… » (annulable,
-ré-import natif d'une image) ; deux cartes dans l'inspecteur, *Image adjustments* (teinte, saturation, luminosité,
-contraste : `core/bg_adjust.py`, aperçu en direct) et *Compression* (méthode, curseurs, type de dithering, diffusion ou
-trames ordonnées de Bayer 4×4 / 8×8) ; plus aucun curseur ne compresse : « Compress » est le seul geste, un aperçu de la
-compression se calcule en arrière-plan avec un cache de 8 résultats. Tests : `tests/ui/test_tile_painter.py`,
-`tests/graphics/test_bg_bake.py`, `tests/graphics/test_bg_adjust.py`.
-
-**Pistes notées, rien de décidé ni de codé :**
-
-- **Le cache de l'aperçu par ÉTAPE.** Mesuré : 240×160 ≈ 0,7 s, 512×512 ≈ 2,2 s, 5,8 s avec une cible de tuiles. Le temps part
-  dans l'extraction des couleurs par tuile (ne dépend que de l'image, des ajustements et de « Global colors »), le
-  regroupement des palettes et la fusion des tuiles. Garder chaque étape séparément éviterait de refaire l'extraction quand
-  seuls « Palettes » ou « Colors / palette » bougent. Aujourd'hui seul le résultat final est en cache.
-- **L'aperçu de compression avec les calques.** Il montre l'image seule : la peinture et les surcharges de palette ne s'y
-  voient qu'après « Compress ». Les composer demanderait d'appliquer `tile_paint` au résultat non encore appliqué.
-- **La mémoire du cache.** Huit résultats complets, c'est lourd pour une très grande image : la taille du cache pourrait suivre
-  le poids des résultats.
-- **Le relink des autres familles.** Seul le fond relance l'import natif ; un sprite garde son ré-encodage, et le relien d'un
-  fond reste synchrone (une grande image peut figer l'interface un instant).
-- **Les trames ordonnées sans réduction globale.** En 4bpp, le dithering n'agit que si « Global colors » est au-dessus de Off ;
-  une trame par tuile (sur la réduction à 15 couleurs) n'existe pas.
-- **« Save as PNG » hors du 4bpp tuilé.** Un fond en 8bpp ou en bitmap ne s'écrit qu'en RGBA à l'export, et n'a pas de
-  « Save as ».
-- **Des filtres créatifs de plus**, toujours non destructifs et rangés avec la préparation de la source : remap sur une palette
-  du projet, posterize, pixelate à la tuile, duotone / carte de dégradé. Pas de suite de filtres généraliste (périmètre).
-- **L'aperçu des ajustements est AVANT la réduction de couleurs.** Fiable pour la teinte et la luminosité, approximatif sur une
-  photo ; un aperçu sur image réduite a été écarté (les tuiles et palettes dépendent de la taille réelle).
-- **L'écran Son.** La courbe de polyphonie d'un WAV a disparu au profit de la barre de rognage : le plafond de canaux réduit
-  par les repères (effets, jingles) ne se lit plus nulle part pour un WAV. Le test « pas de défilement » ne couvre que des
-  hauteurs de fenêtre (520 à 1000 px) à 900 px de large.
-- **La suite complète s'arrête vers 80 %** sans message dans `tests/ui` (vue dans `test_music_editor.py` puis
-  `test_asset_finder_folders.py`) ; non élucidé, voir « Pièges de la suite de tests ».
-- **Un défaut corrigé le 2026-10-14** : un PNG indexé prenait toujours le chemin « palette d'auteur gardée » et ignorait donc
-  les curseurs de compression (le nombre de palettes ne bougeait pas). Désormais, dès qu'un curseur de réduction s'écarte du
-  défaut, le packing déduit prend le relais ; le type de dithering seul n'y change rien.
+**Remplacé le 2026-10-10** par [L'écran Texte n'édite et ne range que du contenu](../../changelog/archives/text-and-data.md#lécran-texte-nédite-et-ne-range-que-du-contenu-interface--livré-en-partie). Ce chantier voulait faire du rendu GBA la surface d'édition (projection source ↔ affichage, vue balisage en police moteur) ; on retire au contraire l'aperçu de l'écran et le contenu s'édite dans la table. Sa décision verrouillée du 2026-09-19 est caduque.
 
 ## Piste (la caméra change de cible en jeu, avec une transition)
 
@@ -3949,6 +2450,40 @@ entre-temps), ou garde-t-il son redessin à partir de la source (ce qui existe, 
 **Ordre de travail envisagé.** D'abord confirmer sur une ROM jouée que `hide()` / `show()` d'un conteneur et le masquage d'une image se
 comportent à l'écran comme les sondes natives le disent. Ensuite seulement, une seule primitive (avec sa sonde) sous les deux clients
 existants, puis l'API de scripts.
+
+## Piste (le rôle des collisions contre le mode de résolution physique)
+
+**Premier pas livré le 2026-10-24 : `CollisionBoxComponent.blocks_actors`** (jamais par défaut ; case « Blocks actors » de l'éditeur de boîte ; `codegen/runtime_codegen/block_gen.py`). Un acteur actif en mouvement (vitesse non nulle) qui a une box `solid` est repoussé hors de toute box `blocks_actors` d'un autre acteur, sur l'axe de plus faible pénétration (l'horizontal en cas d'égalité), AVANT la résolution contre la carte (les murs ont le dernier mot) ; la matrice de collision filtre au build ; les pools sont gérés. Le champ est un réglage à part de `solid`, parce que changer le sens de `solid` aurait modifié tous les projets existants (Pong : balle et raquettes ont des boîtes solid par défaut). **Limites assumées** : la position seule est corrigée (ni vitesse ni `grounded`, donc pensé pour une vue de dessus : un platformer qui pose le joueur sur un bloqueur doit remettre sa gravité à zéro lui-même) ; un mobile qui en pousse un autre n'est pas géré ; `blocks_actors` s'écrit sur chaque boîte au prochain enregistrement (la sérialisation des composants est générique). **La boîte propre d'un Interactive en `facing` bloque et est solid par défaut** (un obstacle qu'on vise : coffre, panneau), celle d'un `hover` ni l'un ni l'autre (une plaque se recouvre) ; la table de blocage lit le tag de la boîte (`Interactive` compris), donc la case Player × Interactive de la matrice décide si le coffre arrête le joueur. Reste ouvert, ci-dessous : la taxonomie Solid / Overlap / RigidBody / StaticBody / CharacterBody.
+
+**Suite prévue : le blocage en plateforme (décidé le 2026-10-24 : on le traite avec la démo de plateforme, pas avant).** Aujourd'hui le blocage ne corrige que la position : ni la vitesse ni `grounded`, donc un joueur posé sur un bloqueur doit remettre sa gravité à zéro lui-même, ce que seule une vue de dessus supporte. Conseil retenu : en attendant, faire les sols et les murs d'un platformer avec la carte de collision (elle porte déjà `grounded`, les pentes et la vitesse) et réserver « Blocks actors » aux obstacles de vue de dessus. Quand la démo de plateforme a besoin d'un acteur sur lequel on se pose (caisse, plateforme mobile), une tranche à part, dans cet ordre : (1) **fusionner le blocage dans la passe de `resolve_actor_tiles`** : ce résolveur remet `grounded` à 0 en début de passe et saute tout acteur dont la vitesse est nulle, donc un blocage posé avant lui verrait son `grounded` effacé, et un blocage qui annule la vitesse ferait sauter la résolution des murs ; (2) mettre à 0 la vitesse sur l'axe repoussé et poser `grounded` quand on est repoussé vers le haut, comme le fait la carte ; (3) décider de ce qu'une plateforme mobile emporte avec elle (le porteur suit-il ?) et d'un sol traversable par le bas, avec la taxonomie ci-dessous ; (4) vérifier sur le projet Platformer (`Project Demo/Platformer`, à ne pas modifier sans l'accord de l'auteur), avec un test natif de chaque cas (chute sur une caisse, glissement le long d'un mur, saut depuis une caisse).
+
+
+**Ouverte le 2026-10-23, réflexion, rien de verrouillé, code non commencé.** Née de la conception d'`interactive` : on a découvert
+en relisant le code que `CollisionBoxComponent.solid` ne repousse **aucun acteur**. Il décide d'une seule chose : la box est-elle
+arrêtée par la CARTE de collision (murs, pentes, plafonds) ? Les collisions acteur contre acteur ne le consultent pas, elles
+ne font que signaler le recouvrement. Un coffre ou un PNJ « solide » traverse donc le joueur, et une box `solid` posée contre un
+mur est repoussée par les tuiles.
+
+**À clarifier : séparer le rôle d'une box de la façon dont le moteur résout son contact.**
+
+- **Le rôle** : ce que la box *est* pour le jeu (corps, zone d'interaction, boîte de coup, capteur). Aujourd'hui porté par le tag.
+- **Le mode de résolution** : ce que le moteur *fait* au contact. Aujourd'hui deux valeurs seulement, et mal nommées : `solid` (la
+  carte arrête la box) ou non. Pistes : **Solid** contre **Overlap** (le contact est signalé, jamais résolu), et des composants de corps
+  qui portent la réponse : `RigidBody` (réactif), `StaticBody` (immobile, bloque les autres), `CharacterBody` (se déplace, se bloque,
+  ne réagit pas à l'impulsion).
+
+**Lien avec l'existant.** La section [Physique et collision](#physique-et-collision) (« Plus tard », jamais avant la v2.0) prévoit déjà
+trois types, `rigidbody` / `actor` / `solid`, en remplacement du booléen. Cette piste est la même question vue du côté des composants :
+type de box ou composant de corps ? À trancher ensemble, pas deux fois.
+
+**Pourquoi ça ne peut pas attendre la v2.0.** `interactive` en dépend : tant qu'aucun corps ne bloque le joueur, la zone d'interaction
+se pose sur la box de l'objet sans marge, et le recouvrement est strict (deux boxes seulement adjacentes ne se recouvrent pas). Le jour
+où un `StaticBody` bloquera le joueur, la zone devra dépasser de quelques pixels, sinon le joueur arrêté contre l'obstacle ne
+déclenchera plus rien. À garder en tête quand la taxonomie sera tranchée.
+
+**Ouvert.** Le booléen `solid` change de sens (format de composant, la maison ne migre pas) ; qui possède le mode : la box ou
+l'acteur ; ce qu'un script lit (`collision_box.solid` aujourd'hui) devient quoi ; la boîte implicite d'`interactive` prend quel mode
+(`Overlap`, a priori).
 
 ## Piste (des cartes de valeurs peintes par l'auteur, lues à l'exécution)
 
@@ -5106,6 +3641,36 @@ ce qui rend sa portée décidable : une capacité s'étend indéfiniment, une ci
   la même chose.
 - La cadence visée. 60 fps n'est pas donné ; le jeu de référence tourne dans un budget qu'il
   faudra mesurer plutôt que supposer.
+
+---
+
+## Création de contenu au runtime
+
+**Piste d'évolution, rien n'est tranché ni codé (notée le 2026-10-23).** Étendre l'API de Backstage
+pour que le jeu crée et modifie ses propres ressources pendant son exécution, en exposant les briques
+que l'éditeur utilise déjà.
+
+- **Création d'assets au runtime.** Construire des sprites, des backgrounds, des palettes, des
+  musiques, des sfx et des jingles ; définir leurs états d'animation ; assembler des ressources
+  existantes et les assigner aux acteurs. Distinguer les ressources **partagées** (celles de la ROM,
+  en lecture seule) des **copies modifiables**.
+- **Surface de dessin.** Une surface graphique manipulable par code, utilisable par les sprites ou
+  les décors : dessin au pixel, copie de zones, application de masques, pour produire des effets de
+  dissolution, de dégradation ou de génération procédurale.
+- **Création musicale par code.** Explorer une API pour définir des notes, des rythmes et des
+  séquences, puis les jouer et les transformer pendant l'exécution.
+
+L'ensemble ouvrirait la voie à des jeux au contenu génératif, et à des expériences audiovisuelles où
+image et musique sont créées, synchronisées et transformées par le code, dans l'esprit de la
+demoscene et du live coding, avec des opérations adaptées aux contraintes de la GBA.
+
+**À instruire avant d'ouvrir** (constaté, non décidé) : la VRAM, l'OAM et la palette sont des pools
+fixes, une ressource créée au runtime doit donc passer par les mêmes allocateurs que celles de la
+ROM (`vram_alloc`, `palette_alloc`) et pouvoir échouer proprement ; la surface de dessin a un coût
+mémoire et un coût de copie vers la VRAM à chiffrer ; la frontière « ni outil de dessin, ni
+éditeur de cartes, ni tracker » vise l'**interface graphique** (elle importe images et sons, elle ne
+les crée pas, voir la ROADMAP) ; elle laisse donc la porte ouverte à une **API** que le jeu appelle.
+Reste à tenir cette ligne : l'éditeur ne gagne aucun outil de création, c'est le code du jeu qui crée.
 
 ---
 

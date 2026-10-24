@@ -634,6 +634,7 @@ class MainWindow(QMainWindow):
     def _make_data_editor(self) -> QWidget:
         from ui.data_editor.data_editor_screen import DataEditorScreen
         self._data_editor = DataEditorScreen()
+        self._data_editor.open_requested.connect(self.open_element)
         return self._data_editor
 
     def _make_background_editor(self) -> QWidget:
@@ -831,6 +832,7 @@ class MainWindow(QMainWindow):
         _d.on("texts_changed",         self.scene_editor.refresh_ui_texts)
         _d.on("texts_changed",         self._inspector.refresh_current)
         _d.on("data_tables_changed", lambda: self._call_if_built("_data_editor", "refresh"))
+        _d.on("texts_changed",         lambda: self._call_if_built("_data_editor", "refresh_text"))
         _d.on("flush_script_edits",    lambda: self._call_if_built("_script_editor", "flush_pending_edits"))
         # NB : l'écran Palettes n'a PAS d'abonnement `palettes_changed`. Seuls le
         # Sprite Editor et le Background Editor émettent cet événement (via
@@ -1519,13 +1521,17 @@ class MainWindow(QMainWindow):
         self._open_disk_asset(*target)
 
     def _open_disk_asset(self, family: str, name: str, path: str):
-        """Double-clic sur un asset de l'onglet Disk : l'écran qui l'édite, l'asset choisi. Une famille sans écran dédié
-        (variables, boîtes sonores, layouts d'interface) le dit. La sélection vient APRÈS le changement d'écran, comme
-        pour `_open_palette_usage` : `_show_screen` vide le bus."""
-        if not self.project:
-            return
-        if family == "scripts":
+        """Double-clic sur un asset de l'onglet Disk : voir `open_element`."""
+        if family == "scripts" and self.project:
             self.open_script(Path(path))
+            return
+        self.open_element(family, name)
+
+    def open_element(self, family: str, name: str):
+        """Le point d'entrée unique de la navigation entre écrans : l'écran qui édite `name` (de la famille `family`),
+        l'élément choisi. Une famille sans écran dédié (variables, boîtes sonores, layouts d'interface) le dit. La
+        sélection vient APRÈS le changement d'écran, comme pour `_open_palette_usage` : `_show_screen` vide le bus."""
+        if not self.project:
             return
         by_usage = {"sprites": "sprite", "backgrounds": "background", "scenes": "scene", "prefabs": "prefab"}
         if family in by_usage:
@@ -1539,7 +1545,7 @@ class MainWindow(QMainWindow):
             "jingles":     ("Sounds",   lambda: self._sound_mixer.select_sound(family, name)),
             "fonts":       ("Texts",    lambda: self._text_editor.select_font(family, name)),
             "font_assets": ("Texts",    lambda: self._text_editor.select_font(family, name)),
-            "texts":       ("Texts",    None),
+            "texts":       ("Texts",    lambda: self._text_editor.select_text(name)),
             "data_tables": ("Datas",    lambda: self._data_editor.select_table(name)),
         }
         if family not in targets:

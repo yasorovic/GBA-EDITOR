@@ -137,6 +137,8 @@ class ResourceStore(Generic[T]):
         # {nom du fichier: nom de la copie} des fichiers illisibles qu'une
         # écriture a remplacés : l'original vit dans la copie `.corrupt`.
         self.preserved: dict[str, str] = {}
+        # Appelé avec l'item juste avant qu'il s'écrive : de quoi le mettre d'accord avec le reste du projet.
+        self.before_save = None
 
     # -- accès liste --
     def __iter__(self) -> Iterator[T]:
@@ -248,18 +250,6 @@ class ResourceStore(Generic[T]):
         if not is_id(item.id) or item.id in taken:
             item.id = new_id(taken)
 
-    @staticmethod
-    def _with_id(data: dict, identity: str) -> dict:
-        """`data` avec l'id juste après le nom (ou en tête) : le début d'un sidecar se lit « nom, id »."""
-        out: dict = {}
-        for key, value in data.items():
-            if key == "id":
-                continue
-            out[key] = value
-            if key == "name":
-                out["id"] = identity
-        return out if "id" in out else {"id": identity, **out}
-
     def _repair_ids(self) -> None:
         """Fin d'un chargement complet : un id manquant, invalide ou répété est remplacé, et le sidecar
         réécrit. C'est ce qui donne un id aux assets d'avant, et un nouveau à la copie d'un fichier faite
@@ -328,8 +318,10 @@ class ResourceStore(Generic[T]):
         path = self._path(item.name, folder)
         path.parent.mkdir(parents=True, exist_ok=True)
         self._keep_unreadable(path)
+        if self.before_save is not None:
+            self.before_save(item)
         self._ensure_id(item)
-        atomic_write(path, project_json.dumps(self._with_id(item.to_dict(), item.id)))
+        atomic_write(path, project_json.dumps({**item.header(), **item.body()}))
         self.index.record(item.name, path)
 
     def _keep_unreadable(self, path: Path) -> None:
@@ -394,7 +386,7 @@ class ResourceStore(Generic[T]):
                 continue
             try:
                 d = json.loads(f.read_text(encoding="utf-8"))
-                item = self.cls.from_dict(d)
+                item = self.cls.from_dict(self.cls.from_header(d))
                 item.id = str(d.get("id") or "")
                 # LE NOM DE FICHIER EST L'IDENTITÉ. `save` écrit toujours dans
                 # `<name>.json` : un fichier qui ne porte pas le nom qu'il
@@ -422,7 +414,7 @@ class ResourceStore(Generic[T]):
             return None
         try:
             d = json.loads(path.read_text(encoding="utf-8"))
-            new_item = self.cls.from_dict(d)
+            new_item = self.cls.from_dict(self.cls.from_header(d))
             new_item.id = str(d.get("id") or "")
             self.unreadable.pop(self._key(path), None)
             # Même règle qu'à `load` : le fichier nomme la ressource. Sans ça,

@@ -185,6 +185,7 @@ class SpriteAsset(SubPaletteAssetMixin, Resource):
     des actors avec des hitbox différentes).
     """
     sidecar_extension = asset_extensions.SPRITE
+    source_field = "asset"
     name: str = "sprite"
     asset: Optional[str] = None
     frame_w: int = 16

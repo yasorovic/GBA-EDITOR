@@ -1,0 +1,50 @@
+{
+  "name": "Fin",
+  "id": "9478113656ee",
+  "anchor": "screen",
+  "anchor_actor": "",
+  "target": "",
+  "elements": [
+    {
+      "kind": "textbox",
+      "name": "titre",
+      "parent": "",
+      "visible": true,
+      "text_color": 0,
+      "highlight_color": 0,
+      "priority": -1,
+      "x": 24,
+      "y": 48,
+      "w": 192,
+      "h": 16,
+      "text_key": "",
+      "font_name": "Font8x8 Latin",
+      "font_weight": 400,
+      "font_italic": false,
+      "align": "center",
+      "preview_text": "",
+      "preview_is_literal": true
+    },
+    {
+      "kind": "textbox",
+      "name": "merci",
+      "parent": "",
+      "visible": true,
+      "text_color": 0,
+      "highlight_color": 0,
+      "priority": -1,
+      "x": 48,
+      "y": 72,
+      "w": 144,
+      "h": 16,
+      "text_key": "",
+      "font_name": "Font8x8 Latin",
+      "font_weight": 400,
+      "font_italic": false,
+      "align": "center",
+      "preview_text": "",
+      "preview_is_literal": true
+    }
+  ],
+  "notes": ""
+}

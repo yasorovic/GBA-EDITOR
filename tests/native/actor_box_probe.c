@@ -214,7 +214,7 @@ int main(void) {
     actor_set_appearance(a, 1);                      /* ligne base+1 = lignes[2] */
     printf("appearance_set %d %d %d %d %d %d %d %d\n", actor_get_appearance(a),
            actor_get_anim(a), actor_get_frame(a), actor_get_frame_w(a),
-           actor_get_frame_h(a), actor_get_pal(a), actor_get_auto_dir(a), o->timer);
+           actor_get_frame_h(a), actor_get_pal(a), actor_get_facing_auto(a), o->timer);
     b->oam_entry = -1;
     actor_set_appearance(b, 1);
     printf("appearance_sans_entree %d\n", actor_get_appearance(b));

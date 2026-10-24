@@ -212,16 +212,25 @@ def anim_tables_for(p: Project, sprite: SpriteAsset) -> list[str]:
 
 def direction_lines(idx: int, e: int) -> list[str]:
     """Le recalcul de la direction d'un acteur (`idx`) pour son entrée OAM `e` : commun à
-    toutes ses apparences, émis UNE fois."""
+    toutes ses apparences, émis UNE fois.
+
+    Deux notions : `dir_x/dir_y` est la TRAJECTOIRE (recalculée depuis vx/vy chaque frame, 0 à
+    l'arrêt, pour tout acteur) ; `facing_x/facing_y` est le REGARD (la dernière direction non
+    nulle, gardée à l'arrêt), suivi seulement si `facing_auto`. C'est le regard, pas la
+    trajectoire, qui choisit la direction de l'animation (le rendu)."""
     return [
-        f"    if(g_oam_entries[{e}].auto_dir&&(g_actors[{idx}].vx||g_actors[{idx}].vy)){{",
-        f"        g_actors[{idx}].dir_x=(g_actors[{idx}].vx>0)-(g_actors[{idx}].vx<0);",
-        f"        g_actors[{idx}].dir_y=(g_actors[{idx}].vy>0)-(g_actors[{idx}].vy<0);",
+        f"    g_actors[{idx}].dir_x=(g_actors[{idx}].vx>0)-(g_actors[{idx}].vx<0);",
+        f"    g_actors[{idx}].dir_y=(g_actors[{idx}].vy>0)-(g_actors[{idx}].vy<0);",
+        # Le regard est le VECTEUR entier : après un pas à droite puis un pas vers le haut, il
+        # vaut (0,-1) et non (1,-1).
+        f"    if(g_oam_entries[{e}].facing_auto&&(g_actors[{idx}].dir_x||g_actors[{idx}].dir_y)){{",
+        f"        g_actors[{idx}].facing_x=g_actors[{idx}].dir_x;",
+        f"        g_actors[{idx}].facing_y=g_actors[{idx}].dir_y;",
         f"    }}",
-        # Le côté regardé survit à un `dir_x` retombé à 0 (arrêt, saut droit) : c'est lui
-        # que retient le repli de direction du tick. Hors du `if` d'auto_dir — une
-        # direction écrite par le script compte aussi.
-        f"    if(g_actors[{idx}].dir_x) g_oam_entries[{e}].face_x=g_actors[{idx}].dir_x;",
+        # Le côté regardé en X survit à un regard vertical (saut droit) : c'est lui que retient le
+        # repli de direction du tick. Une mémoire par axe, à part du vecteur ci-dessus ; un
+        # regard écrit par le script compte aussi.
+        f"    if(g_actors[{idx}].facing_x) g_oam_entries[{e}].face_x=g_actors[{idx}].facing_x;",
     ]
 
 
@@ -231,7 +240,7 @@ def anim_tick_lines(idx: int, sym: str, has_frame_sfx: bool = False,
                     has_frame_events: bool = False,
                     actor_sym: str = "",
                     entry: int | None = None,
-                    with_auto_dir: bool = True) -> list[str]:
+                    with_direction: bool = True) -> list[str]:
     """Génère le bloc C de tick d'animation pour un acteur (dans scene_tick).
 
     `has_frame_sfx` dit si le sprite porte des ACTIONS de SoundBox sur ses
@@ -248,16 +257,16 @@ def anim_tick_lines(idx: int, sym: str, has_frame_sfx: bool = False,
     portée LOCALE à ce bloc (un `static` de fonction est légal en C, même
     patron que `_dlut` juste en dessous), plutôt qu'au niveau fichier.
 
-    `with_auto_dir` : le recalcul de la direction est PARTAGÉ entre les apparences,
+    `with_direction` : le recalcul de la direction est PARTAGÉ entre les apparences,
     il n'a pas à être émis dans chacune.
     """
     e = idx if entry is None else entry   # entrée OAM ; `idx` reste l'acteur (vx, vy, dir, événements)
     advance = [
-        # dir_x/dir_y → indice 1-8 (NW=8,N=1,NE=2,W=7,0=0,E=3,SW=6,S=5,SE=4)
+        # facing_x/facing_y → indice 1-8 (NW=8,N=1,NE=2,W=7,0=0,E=3,SW=6,S=5,SE=4)
         f"    {{",
         *([f"        {line}" for line in event_lines] if has_frame_events and event_lines else []),
         f"        static const s8 _dlut[3][3]={{{{8,1,2}},{{7,0,3}},{{6,5,4}}}};",
-        f"        int _ad=_dlut[g_actors[{idx}].dir_y+1][g_actors[{idx}].dir_x+1];",
+        f"        int _ad=_dlut[g_actors[{idx}].facing_y+1][g_actors[{idx}].facing_x+1];",
         f"        int _st=g_oam_entries[{e}].anim_state;",
         f"        int _b={sym}_state_start[_st];",
         # La direction demandée, sinon — dans CET état, jamais ailleurs dans le sheet —
@@ -335,7 +344,7 @@ def anim_tick_lines(idx: int, sym: str, has_frame_sfx: bool = False,
         f"&& (g_oam_entries[{e}].frame - _fs) >= _fc - 1;",
         f"    }}",
     ]
-    return direction_lines(idx, e) + advance if with_auto_dir else advance
+    return direction_lines(idx, e) + advance if with_direction else advance
 
 
 # ── Apparences ────────────────────────────────────────────────────────
@@ -416,7 +425,7 @@ def anim_tick_variants(idx: int, e: int, variants: list) -> list[str]:
             L += [f"    case {n}: break;"]
             continue
         L += [f"    case {n}:",
-              *anim_tick_lines(idx, entry=e, with_auto_dir=False, **kw),
+              *anim_tick_lines(idx, entry=e, with_direction=False, **kw),
               "    break;"]
     L.append("    }")
     return L

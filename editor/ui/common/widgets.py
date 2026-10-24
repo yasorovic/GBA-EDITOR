@@ -764,14 +764,14 @@ class ScriptSlot(QWidget):
         if self._on_clear: self._on_clear()
 
 
-# ── ScriptPickerPopup ─────────────────────────────────────────────────────────
+# ── AssetPickerPopup ─────────────────────────────────────────────────────────
 
 _DEFAULT_NEW_LABEL = object()
 
 
-class ScriptPickerPopup(QFrame):
+class AssetPickerPopup(QFrame):
     """
-    Dropdown flottant pour choisir ou créer un script.
+    Dropdown flottant pour choisir un asset (ou créer un script) : recherche + liste.
 
     Signaux :
         picked(rel_path: str)  — l'utilisateur a sélectionné un script existant

@@ -28,7 +28,8 @@ from core.selection_bus import get_bus, CameraSelection
 from ui.common.theme import T, QSS, C
 from ui.common.palette_bank_strip import PaletteBankStrip
 from ui.common.canvas_top_bar import CanvasTopBar
-from PyQt6.QtCore import QPointF, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QPointF, QSettings, Qt, QTimer, pyqtSignal
+from core.app_info import APP_NAME
 from PyQt6.QtGui import QColor, QFont, QImage, QPixmap
 from PyQt6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
 # Rasterisation des fonds + aperçus — extrait (A3, sous-package canvas/).
@@ -240,14 +241,14 @@ class SceneEditor(QWidget):
         self._bar.set_canvas_size(GBA_W, GBA_H)
 
         # ── Toggles d'affichage iconifiés (remplacent les cases texte) ──
-        self._chk_grid8 = self._bar.add_toggle(
-            "view_grid", tooltip(
-                title=label('scncanvas.grid_8px'), body=label('scncanvas.grid_8px_tip')
-            ), self._on_grid8_toggle)
-        self._chk_grid16 = self._bar.add_toggle(
-            "view_grid_large", tooltip(
-                title=label('scncanvas.grid_16px'), body=label('scncanvas.grid_16px_tip')
-            ), self._on_grid16_toggle)
+        cycle_tip = label('scncanvas.grid_cycle_tip')
+        self._chk_grid = self._bar.add_state_toggle([
+            ("view_grid_off", tooltip(title=label('scncanvas.grid_off'), body=cycle_tip)),
+            ("view_grid", tooltip(title=label('scncanvas.grid_8px'),
+                                  body=f"{label('scncanvas.grid_8px_tip')} {cycle_tip}")),
+            ("view_grid_large", tooltip(title=label('scncanvas.grid_16px'),
+                                        body=f"{label('scncanvas.grid_16px_tip')} {cycle_tip}")),
+        ], self._on_grid_cycle)
         self._chk_snap = self._bar.add_toggle(
             "view_snap", tooltip(
                 title=label('scncanvas.snap'), body=label('scncanvas.snap_tip')
@@ -286,6 +287,7 @@ class SceneEditor(QWidget):
         # ── Canvas ────────────────────────────────────────────────
         self._gba_scene = GBAScene()
         self._gba_view = GBAView(self._gba_scene)
+        self._restore_grid_state()
         self._gba_view.zoom_changed.connect(self._bar.set_zoom)
         self._gba_view.setMouseTracking(True)
         self._gba_scene.selectionChanged.connect(self._on_selection_changed)
@@ -658,19 +660,24 @@ class SceneEditor(QWidget):
     def _update_zoom_label(self):
         self._bar.set_zoom(self._gba_view._zoom)
 
-    def _on_grid8_toggle(self, checked: bool):
-        if checked:
-            self._chk_grid16.blockSignals(True)
-            self._chk_grid16.setChecked(False)
-            self._chk_grid16.blockSignals(False)
-        self._gba_scene.set_grid(checked, cell=8)
+    GRID_CELLS = (0, 8, 16)     # pixels de la maille par état du bouton : 0 = pas de grille
 
-    def _on_grid16_toggle(self, checked: bool):
-        if checked:
-            self._chk_grid8.blockSignals(True)
-            self._chk_grid8.setChecked(False)
-            self._chk_grid8.blockSignals(False)
-        self._gba_scene.set_grid(checked, cell=16)
+    @staticmethod
+    def _grid_settings() -> QSettings:
+        return QSettings(APP_NAME, "SceneCanvas")
+
+    def _on_grid_cycle(self, state: int):
+        cell = self.GRID_CELLS[state]
+        self._gba_scene.set_grid(cell > 0, cell=cell or 8)
+        self._grid_settings().setValue("grid_state", state)      # la grille choisie revient à la prochaine ouverture
+
+    def _restore_grid_state(self):
+        try:
+            state = int(self._grid_settings().value("grid_state", 0))
+        except (TypeError, ValueError):
+            state = 0
+        if 0 < state < len(self.GRID_CELLS):
+            self._chk_grid.set_state(state)
 
     def _on_snap_toggle(self, checked: bool):
         self._gba_scene.set_snap(checked)
@@ -694,9 +701,22 @@ class SceneEditor(QWidget):
         # Valeurs par défaut des variables déclarées — pour dessiner les box
         # dont un champ (x/y/w/h) référence un global/const plutôt qu'un littéral.
         from core.models.field_value import var_defaults_from_project
+        from core.models.components import displayed_sprite_component
         var_defaults = var_defaults_from_project(self._project)
+
+        def sprites_of(actors) -> dict:
+            """id(acteur) → son sprite affiché (le cadre dimensionne la boîte propre d'Interactive)."""
+            out = {}
+            for a in actors:
+                shown = displayed_sprite_component(a)
+                sprite = self._project.get_sprite(shown.sprite_name) if shown else None
+                if sprite is not None:
+                    out[id(a)] = sprite
+            return out
+
         if self._show_all_boxes:
-            self._gba_scene.update_actor_boxes(self._project.active_scene.actors, var_defaults)
+            actors = self._project.active_scene.actors
+            self._gba_scene.update_actor_boxes(actors, var_defaults, sprites_of(actors))
         else:
             # Un acteur sans sprite n'a que sa boîte pour exister à l'écran
             # (un trigger, typiquement) : elle reste visible sans sélection.
@@ -705,7 +725,7 @@ class SceneEditor(QWidget):
                 for item in self._gba_scene._sprite_items
                 if item.isSelected() or item._placeholder
             ]
-            self._gba_scene.update_actor_boxes(actors, var_defaults)
+            self._gba_scene.update_actor_boxes(actors, var_defaults, sprites_of(actors))
 
     # ── Outil actif ───────────────────────────────────────────────
 

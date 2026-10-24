@@ -317,7 +317,7 @@ Le build refuse aussi, avec un message qui nomme la faute :
 - **Un `vec2`, `vec3` ou `rect` utilisé comme un nombre.** Il n'est pas une condition (`if v then` : testez `v.x ~= 0`), ne se nie pas avec `-v` (écrivez `v * -1`) et ne se mêle pas à un entier à l'affectation (`count = v`).
 - **Un tableau utilisé comme valeur** (`n = t`, `t = 5`). On lit et on écrit ses éléments : `t[i]`.
 - **`break` hors d'une boucle**, et **`return` avec une valeur dans un handler**. `return` seul quitte le handler ; seule une fonction privée rend une valeur.
-- **Un paramètre de handler que le moteur ne passe pas** (`on_update(dt)`). Un handler reçoit ses paramètres sous leur nom : `other`, `my_box`, `other_box` pour un contact, `normal_x`, `normal_y` pour `on_tile_collide`. On peut en déclarer moins.
+- **Un paramètre de handler que le moteur ne passe pas** (`on_update(dt)`). Un handler reçoit ses paramètres sous leur nom : `other`, `my_box`, `other_box` pour un contact, `normal_x`, `normal_y` pour `on_tile_collide`, `who` pour `on_interact`. On peut en déclarer moins.
 - **Un export `enum` incohérent** : sans `values`, avec une étiquette en double ou dont le `default` n'en fait pas partie. Un `int` dont le `default` est un texte est refusé de la même façon.
 
 ## Comprendre les erreurs

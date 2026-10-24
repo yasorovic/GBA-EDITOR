@@ -1,0 +1,23 @@
+{
+  "version": 3,
+  "scene_positions": {
+    "Village": [
+      20.0,
+      20.0
+    ],
+    "Maison": [
+      440.0,
+      20.0
+    ],
+    "Fin": [
+      230.0,
+      20.0
+    ]
+  },
+  "missing_positions": {},
+  "scene_previews": {},
+  "edge_styles": {},
+  "edge_notes": {},
+  "groups": {},
+  "notes": {}
+}

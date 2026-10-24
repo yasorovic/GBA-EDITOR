@@ -333,7 +333,7 @@ def test_c_les_drapeaux_du_build(sortie_sonde):
 
 
 def test_activer_une_apparence_repose_les_constantes_du_sprite_d_arrivee(sortie_sonde):
-    """(apparence, état, frame, largeur, hauteur, banque, auto_dir, timer) : ligne
+    """(apparence, état, frame, largeur, hauteur, banque, facing_auto, timer) : ligne
     `base + 1` de la table, animation à zéro."""
     assert sortie_sonde["appearance_set"] == [1, 0, 0, 8, 8, 2, 1, 0]
 

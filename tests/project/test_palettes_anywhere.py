@@ -45,7 +45,7 @@ def test_a_palette_created_from_a_hex_cites_it(tmp_path: Path):
     night = p.palettes.get("Night")
     assert night is not None and night.asset == "assets/palettes/Night.hex"
     sidecar = json.loads(((p.user_library_dir / "palettes") / "Night.palette").read_text())
-    assert sidecar == {"name": "Night", "size": 16, "asset": "assets/palettes/Night.hex"}   # les couleurs restent dans le .hex
+    assert list(sidecar) == ["name", "id", "source", "size"] and sidecar["source"] == "assets/palettes/Night.hex"   # les couleurs restent dans le .hex
 
 
 def test_a_palette_and_its_hex_can_live_in_different_folders(tmp_path: Path):

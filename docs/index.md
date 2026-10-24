@@ -17,6 +17,8 @@ utilisateur, puis consultez le guide de scripting lorsque vous souhaitez donner 
 - [Collectibles et score](user-guide/collectibles.md) : créer un prefab ramassable et afficher
   une valeur globale.
 - [Ennemis et PNJ](user-guide/enemies.md) : écrire des dialogues, créer des ennemis et leurs comportements.
+- [Interagir avec un acteur](user-guide/interact.md) : désigner le joueur, rendre un coffre ou un
+  panneau interactif et choisir le geste.
 - [Boucle de gameplay](user-guide/gameplay-loop.md) : relier les scènes, l'interface et les
   transitions.
 - [Boss](user-guide/boss.md) : construire une hiérarchie d'acteurs et une barre de vie.

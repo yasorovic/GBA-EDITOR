@@ -3,6 +3,12 @@
     "ui.text.key_none": {
       "text": "Texte local · affiché au démarrage de la scène. Créez une entrée pour le partager ou le traduire."
     },
+    "collision.x": {
+      "text": "Décalage horizontal de la boîte (px), compté depuis la position de l’acteur : le coin haut-gauche du sprite (le centre de son cadre dès qu’une transformation affine est activée). Pour centrer une boîte de 8 px sur un sprite de 16 px, saisir 4."
+    },
+    "collision.y": {
+      "text": "Décalage vertical de la boîte (px), compté depuis la position de l’acteur : le coin haut-gauche du sprite (le centre de son cadre dès qu’une transformation affine est activée). Pour les pieds d’un sprite de 16 px, saisir environ 10 avec une hauteur de 6."
+    },
     "toolchain.devkitpro": {
       "text": "La chaîne de compilation (compilateur ARM, grit, maxmod) qui transforme le projet en ROM jouable. Sélectionner le dossier d’installation, en général {windows_path} sous Windows ou {linux_path} sous Linux."
     }

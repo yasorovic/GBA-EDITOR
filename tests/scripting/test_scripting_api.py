@@ -278,7 +278,41 @@ def test_la_direction_se_compare_par_son_nom():
     assert "actor_get_dir(self) == DIR_WEST" in code
 
 
-def test_le_getter_dauto_dir_existe_en_c():
+def test_le_regard_a_les_deux_portes_de_la_direction_et_son_calcul_automatique():
+    """`self.facing` (le regard, dernière direction non nulle) s'écrit et se compare comme
+    `self.direction` (la trajectoire) ; `self.facing_auto` en coupe le suivi."""
+    errs, code = _lua('function on_update(self)\n'
+                      ' self.facing = "north"\n'
+                      ' self.facing = vec2(1, 0)\n'
+                      ' if self.facing == "west" then self.facing_auto = false end\n'
+                      ' self.flip_h = self.facing.x < 0\nend\n')
+    assert [e for e in errs if e.level == "error"] == []
+    assert "actor_set_facing_named(self, DIR_NORTH)" in code
+    assert "actor_set_facing(self, (Vec2){1, 0})" in code
+    assert "actor_get_facing_named(self) == DIR_WEST" in code
+    assert "actor_set_facing_auto(self, 0)" in code
+    assert "actor_get_facing(self).x" in code
+
+
+def test_on_interact_recoit_l_acteur_qui_interagit():
+    """`on_interact(who)` : le C reçoit l'acteur interacteur, le script le lit comme un `other`."""
+    errs, code = _lua("""function on_interact(who)
+    who.position = vec2(0, 0)
+    self:hide()
+end
+""")
+    assert [e for e in errs if e.level == "error"] == []
+    assert "_on_interact(Actor* self, Actor* who)" in code
+
+
+def test_on_interact_refuse_un_parametre_que_le_moteur_ne_passe_pas():
+    errs, _ = _lua("""function on_interact(who, other)
+end
+""")
+    assert any("does not pass" in e.message for e in errs if e.level == "error")
+
+
+def test_le_getter_de_facing_auto_existe_en_c():
     """Une propriété sans lecture n'en est pas une — et le garde-fou des
     prototypes ne voit que ce qui est déjà dans `gba_engine.h`, donc il n'aurait
     pas signalé l'absence de celle-ci."""

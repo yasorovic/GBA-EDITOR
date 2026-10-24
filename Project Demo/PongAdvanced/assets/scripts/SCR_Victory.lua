@@ -38,6 +38,6 @@ function on_update()
     end
 
     if input:pressed("start") then
-        scene:switch("SCR_Main")
+scene:switch("SCR_Main")
     end
 end
