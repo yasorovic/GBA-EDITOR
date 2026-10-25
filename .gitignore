@@ -54,3 +54,9 @@ data-audio-rom-*/
 *.aiff
 # Site de documentation généré par Sphinx (voir docs/conf.py)
 docs/_build/
+
+# Documentation : pages du catalogue Lua API, générées au build (docs/_gen/lua_api.py)
+docs/lua-api/api/
+
+# Documentation : index de recherche des fonctions, généré au build (docs/_gen/lua_api.py)
+docs/_gen_static/

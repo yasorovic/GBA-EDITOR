@@ -107,13 +107,35 @@ On peut aussi adresser un acteur **par son index**, à partir de 1 (comme `data.
 ```lua
 for i = 1, actor:count() do
     local a = actor:get(i)
-    if a ~= nil then a:play_anim("idle") end
+    if a ~= nil then a:hide() end
 end
 ```
 
 C'est ce qui remplace une cascade `if sel == 1 then actor:get("Unit1") elseif …` : `actor:get(sel)` suffit.
 
-`self.direction` est la **trajectoire** : calculée depuis la vitesse, elle retombe à 0 à l'arrêt. `self.facing` est le **regard** : la dernière direction non nulle, conservée à l'arrêt, qui choisit la direction d'animation et la visée d'une interaction. Les deux se lisent et s'écrivent en vecteur ou en boussole (`self.facing = vec2(0, -1)`, `self.facing = "north"`) ; `self.facing_auto` dit si le regard suit le mouvement. Pour réagir à un appui devant un acteur, voir [Faire interagir le joueur avec un acteur](user-guide/interact.md) (`on_interact(who)`).
+**Parcourir les instances d'un prefab.** Pour un prefab que la scène fait naître (`actor:spawn("Bullet", pos)`), dont elle déclare un pool, ou dont elle pose des instances, `actor:count("Bullet")` donne le nombre d'instances **vivantes** et `actor:get("Bullet", i)` la i-ème, à partir de 1 : d'abord les instances posées dans la scène, puis celles nées par `spawn`. Un acteur posé est une instance du prefab tant qu'il en reste **lié** (mêmes composants, même script), qu'il affiche les mêmes sprites et le même Sfx, que le prefab est plat et que l'acteur n'est le parent d'aucun autre acteur posé. Un acteur posé qui s'en écarte reste un acteur à part, sous son nom :
+
+```lua
+for i = 1, actor:count("Bullet") do
+    local b = actor:get("Bullet", i)
+    if b ~= nil then b:hide() end
+end
+```
+
+Détruire une instance en cours de boucle décale les suivantes, comme retirer un élément d'une liste. La référence rendue connaît les animations et les exports du prefab (`b:play_anim("boom")`, `b.speed = 3`). Un nom qui n'est pas un prefab de la scène est refusé au Build.
+
+**Détruit ou désactivé.** `destroy()` supprime l'acteur : son emplacement redevient libre et il ne sera plus rendu par `actor:get`. `deactivate()` le met en sommeil (ni script, ni collision, ni affichage) mais il existe toujours : `actor:get("Porte")` le rend, ce qui permet de le réactiver par `activate()`, et un `spawn` ne prend pas son emplacement.
+
+**Nommer un état d'animation sur un autre acteur.** `boss:play_anim("rage")` se résout au Build dans les sprites de l'acteur visé : le Build doit donc savoir lequel. Cela vaut quand l'acteur est désigné par un nom écrit en toutes lettres, `actor:get("Boss")` ou `actor:spawn("Bullet", pos)` (un prefab est un acteur), tenu dans un `local` du handler. Avec `actor:get(i)`, l'acteur n'est connu qu'au jeu : les méthodes sans nom d'état (`hide`, `move_to`...) restent permises, `play_anim("rage")` est refusé.
+**Garder un acteur d'une image à l'autre.** Une variable en tête de script peut tenir la référence d'un acteur : déclarez-la `local cible = nil`, puis affectez-la dans un handler (`cible = actor:get("Boss")`, `cible = actor:spawn("Bullet", pos)`). Elle se lit comme un acteur (`if cible then cible:hide() end`, `cible.hp`), et vaut `nil` dès que l'acteur est détruit, même si un autre naît ensuite au même emplacement : la référence retient l'acteur, pas la place qu'il occupait. Un acteur seulement désactivé (`deactivate`) reste atteignable. Une variable de tête ne peut pas être *initialisée* par un acteur (la scène n'existe pas encore), et un tableau ne peut pas encore en tenir.
+
+**Lire et écrire les exports d'un autre acteur.** Sur un acteur désigné par son nom, ses `exports` de type `int`, `float`, `bool` ou `enum` se lisent et s'écrivent par leur nom, sans préfixe : `boss.hp = boss.hp - 1`, `boss.state = "RAGE"`, `if boss.state == "RAGE" then ... end`. Une étiquette d'`enum` se vérifie au Build. Un export inconnu est refusé avec la liste de ceux que l'acteur déclare. Seuls les `exports` sont visibles de l'extérieur : les autres variables du script restent privées.
+
+Les autres types s'écrivent chacun à leur façon. Un **vecteur ou un rectangle** se donne par son constructeur et se lit champ par champ : `boss.home = vec2(8, 9)`, `boss.home.x = 3`, `local h = boss.home` puis `h.x`. Faites passer la valeur par un `local` avant de l'utiliser dans un calcul de vecteurs (`boss.home + vec2(1, 1)` n'est pas typé). Une **référence** (`actor_ref`, `scene_ref`, `sfx_ref`) et un **texte** (`string`) s'écrivent et se comparent par leur nom entre guillemets : `boss.target = "Player"`, `if boss.target == "Player" then ... end`. Leur valeur lue n'est qu'un numéro interne : elle ne sert qu'à cette comparaison.
+
+**Un acteur disparu.** Une action sur une référence dont l'acteur a été détruit ou vaut `nil` n'a aucun effet, et ne fait pas planter la ROM : l'appel est sauté (une lecture rend 0). Un build debug l'écrit dans le log mGBA (`warning: hide() skipped, the actor is destroyed, inactive or nil`). Un acteur seulement **désactivé** existe toujours : ses exports se lisent et s'écrivent, et `activate`, `deactivate` et `destroy` s'appliquent ; les autres actions (bouger, animer, afficher) sont sautées tant qu'il dort. Rien n'oblige à tester avant d'appeler, `if boss then` reste le moyen d'éviter ce cas.
+
+`self.direction` est la **trajectoire** : calculée depuis la vitesse, elle retombe à 0 à l'arrêt. `self.facing` est le **regard** : la dernière direction non nulle, conservée à l'arrêt, qui choisit la direction d'animation et la visée d'une interaction. Les deux se lisent et s'écrivent en vecteur ou en boussole (`self.facing = vec2(0, -1)`, `self.facing = "north"`) ; `self.facing_auto` dit si le regard suit le mouvement. Pour réagir à un appui devant un acteur, utilisez l'événement `on_interact(who)`.
 
 ## Décor
 

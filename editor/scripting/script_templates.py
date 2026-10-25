@@ -20,7 +20,7 @@ class ScriptTemplateContext:
     component_labels: list[str] = field(default_factory=list)
     has_sprite: bool = False
     has_sfx: bool = False
-    # Tags des CollisionBox de l'actor — pas un handler par box : le runtime
+    # Tags des CollisionBox de l'actor : pas un handler par box : le runtime
     # n'appelle qu'une paire de handlers par actor, qui reçoit le tag touché.
     collision_tags: list[str] = field(default_factory=list)
 

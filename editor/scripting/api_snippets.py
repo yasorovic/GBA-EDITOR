@@ -1,10 +1,10 @@
-"""scripting/api_snippets.py — fabrique le Lua que l'éditeur INSÈRE, depuis `RUNTIME_API`.
+"""scripting/api_snippets.py : fabrique le Lua que l'éditeur INSÈRE, depuis `RUNTIME_API`.
 
 Point unique de fabrication des snippets. Tant qu'ils étaient écrits en dur dans
 la sidebar, ils pourrissaient à chaque changement de signature sans que rien ne
 le signale : la sidebar proposait encore `scene_goto("X")` et
 `instantiate("X", x, y)`, deux noms qui n'ont **jamais** existé dans le
-catalogue — donc, au clic, du code que le checker refuse. Et l'utilisateur, lui,
+catalogue : donc, au clic, du code que le checker refuse. Et l'utilisateur, lui,
 conclut que l'API est cassée, pas que le bouton est périmé.
 
 Dériver du catalogue rend cette dérive impossible : une signature qui change
@@ -14,9 +14,9 @@ C'est aussi ce qui fait que le réordonnancement d'arguments à venir
 
 Deux entrées distinctes, parce que les deux usages ne veulent pas la même chose :
 
-  `bare()`    — section API : le nom seul, sans argument ni exemple — ce que
+  `bare()`   , section API : le nom seul, sans argument ni exemple, ce que
                 le clic insère, à l'auteur de compléter.
-  `call()`    — section RÉFÉRENCES : l'utilisateur a cliqué sur UN asset précis,
+  `call()`    : section RÉFÉRENCES : l'utilisateur a cliqué sur UN asset précis,
                 donc le nom vient de lui et l'exemple du `doc` serait un
                 contresens (il citerait un autre asset).
 """
@@ -40,9 +40,9 @@ def _fn(name: str) -> ApiFunc | None:
 
 # Le snippet d'une méthode de référence porte le nom de sa SECTION, jamais une variable
 # inventée : `layer:show()`, `tilemap:set_tile()`, `sfx:set_panning()`. L'auteur lit ainsi
-# d'où vient la fonction et comment la préfixer. Ce n'est pas du Lua validé tel quel — la
+# d'où vient la fonction et comment la préfixer. Ce n'est pas du Lua validé tel quel : la
 # référence s'obtient d'abord (`layer:get(0)`, `sfx:play(...)`) et se tient dans une variable
-# —, c'est le préfixe à reconnaître. Il se DÉCLARE avec le type (`api.REF_TYPE_TABLE`) ;
+# :, c'est le préfixe à reconnaître. Il se DÉCLARE avec le type (`api.REF_TYPE_TABLE`) ;
 # seule la section Tilemap, qui partage le type du calque, se distingue ci-dessous.
 _TILEMAP_C_PREFIX = "tilemap_"   # les fonctions C de la section Tilemap, toutes préfixées ainsi
 
@@ -67,7 +67,7 @@ def _lua_str(value: str) -> str:
 
 
 def signature(name: str) -> str:
-    """`interface.draw_text(region, id)` — la forme, pour un libellé de bouton."""
+    """`interface.draw_text(region, id)` : la forme, pour un libellé de bouton."""
     f = _fn(name)
     if f is None:
         return name
@@ -84,7 +84,7 @@ def call(name: str, **by_domain: str) -> str:
     """Appel Lua prêt à insérer, les arguments NOMMÉS remplis par domaine.
 
     Les clés de `by_domain` sont des `DOMAIN_*` : c'est le domaine, et non la
-    position, qui dit où va le nom d'un asset — donc réordonner les paramètres
+    position, qui dit où va le nom d'un asset : donc réordonner les paramètres
     dans `api.py` n'invalide aucun appelant. Un paramètre non fourni devient un
     gabarit : son propre nom, entre guillemets s'il attend une chaîne, pour que
     le snippet reste du Lua valide et visiblement à compléter."""
@@ -102,7 +102,7 @@ def call(name: str, **by_domain: str) -> str:
             # la seconde même où l'utilisateur vient de cliquer pour
             # l'insérer. DOMAIN_WIN_REGION n'y figure PAS depuis le
             # 2026-08-25 (noms de WindowSlot propres au projet, pas un enum
-            # fixe) — il retombe sur le gabarit générique ci-dessous, même
+            # fixe) : il retombe sur le gabarit générique ci-dessous, même
             # traitement que DOMAIN_CAMERA.
             args.append(_lua_str(next(iter(HARDWARE_ENUMS[p.domain]))))
         elif p.ptype in (PARAM_STR, PARAM_STR_LITERAL):
@@ -126,7 +126,7 @@ def element_call(element: str, name: str, **by_domain: str) -> str:
 
 
 def description(name: str) -> str:
-    """Le `doc` sans sa queue d'exemple — celle-ci se montre à part."""
+    """Le `doc` sans sa queue d'exemple : celle-ci se montre à part."""
     f = _fn(name)
     if f is None:
         return ""
@@ -139,7 +139,7 @@ def bare(name: str) -> str:
     `actor:spawn()`, `self:move()`, `collision_box:overlaps()`, et pour une propriété son nom
     seul (`self.active`). Ni argument d'illustration ni valeur d'écriture : le
     clic pose de quoi écrire, l'auteur complète. Un exemple inséré est un exemple
-    à effacer (`actor:spawn("Bullet", vec2(116, 76))` — un acteur qui n'existe
+    à effacer (`actor:spawn("Bullet", vec2(116, 76))` : un acteur qui n'existe
     pas dans son projet), et la doc d'un appel dit déjà comment l'appeler."""
     name = _on_variable(name)
     return name if name in _PROP_NAMES else f"{name}()"
@@ -149,7 +149,7 @@ _PROP_NAMES = frozenset(_on_variable(k) for k in RUNTIME_PROPS)
 
 
 def _param_type(p) -> str:
-    """Type affiché d'un paramètre — « string »/« number » pour les scalaires,
+    """Type affiché d'un paramètre : « string »/« number » pour les scalaires,
     mais un vec2/vec3 garde son type composé : dire « number » pour une
     position tromperait (il faut écrire vec2(x, y))."""
     if p.ptype in (PARAM_STR, PARAM_STR_LITERAL):
@@ -161,7 +161,7 @@ def _param_type(p) -> str:
 
 def _short_type(p, enum) -> str:
     """Type affiché entre parenthèses dans le libellé court d'une propriété,
-    et dans sa bulle : le nom C pour un composite (Vec2/Rect — reconnaissable
+    et dans sa bulle : le nom C pour un composite (Vec2/Rect : reconnaissable
     d'un coup d'œil), « string » pour une énumération matérielle (elle se lit/
     s'écrit par son NOM, cf. `enum` dans l'appelant), le scalaire brut sinon."""
     if enum:
@@ -169,20 +169,25 @@ def _short_type(p, enum) -> str:
     return C_TYPES.get(p.ptype, p.ptype)
 
 
+# Ce que dit chaque composante d'un vec2 / rect dans l'infobulle d'une propriété.
+_FIELD_DOC = {"x": "Horizontal component", "y": "Vertical component",
+              "w": "Width", "h": "Height"}
+
+
 def prop_entry_dict(name: str) -> dict:
     """Entrée au format d'`api_reference.json` pour une PROPRIÉTÉ
-    (`RUNTIME_PROPS`) — même forme que `entry_dict`, pour que `tooltip_parts`
+    (`RUNTIME_PROPS`) : même forme que `entry_dict`, pour que `tooltip_parts`
     n'ait pas à savoir d'où vient l'entrée qu'il affiche.
 
     Le `label` reste COURT (`position(Vec2)`) : le préfixe (`self.`/`camera.`)
     et la forme d'écriture complète (`self.position = vec2(x, y)`) ne
-    manquent pas — ils vivent dans le `snippet` (inséré au clic) et dans la
+    manquent pas : ils vivent dans le `snippet` (inséré au clic) et dans la
     bulle, pas dans le nom du bouton qu'on scanne dans la sidebar."""
     p = RUNTIME_PROPS.get(name)
     fields = VEC_FIELDS.get(p.ptype, ()) if p is not None else ()
     # Une propriété COMPOSITE qui porte aussi des noms (`self.direction`) rend un
     # vec2 : c'est ça qu'il faut annoncer, les noms étant une seconde écriture
-    # décrite dans sa doc — pas son type de retour.
+    # décrite dans sa doc : pas son type de retour.
     enum = (HARDWARE_ENUMS.get(p.domain)
             if p is not None and p.ptype not in VEC_CONSTRUCTORS else None)
     read_only = p is None or p.read_only or p.c_setter is None
@@ -199,13 +204,14 @@ def prop_entry_dict(name: str) -> dict:
         "snippet":     snippet,
         "description": p.doc if p is not None else "",
         # Ce que le label court ne dit plus (peut-on ÉCRIRE cette propriété)
-        # devient son propre champ — `tooltip_parts` l'affiche en badge.
+        # devient son propre champ : `tooltip_parts` l'affiche en badge.
         "access":      "Read Only" if read_only else "Read and Write",
         "params": [
-            {"name": f, "type": "number", "description": ""} for f in fields
+            {"name": f, "type": "number", "description": _FIELD_DOC.get(f, "")}
+            for f in fields
         ],
         # Une propriété d'énumération ne rend pas « int » côté script : elle
-        # rend l'un de ces noms, et c'est ce qu'il faut lire dans l'infobulle —
+        # rend l'un de ces noms, et c'est ce qu'il faut lire dans l'infobulle :
         # plus précis que le « string » du libellé court, qui n'a pas la place.
         "returns":     " | ".join(f'"{v}"' for v in enum) if enum else typ,
         "doc_anchor":  name.replace(":", "-").replace(".", "-"),
@@ -225,7 +231,7 @@ def entry_dict(name: str) -> dict:
         "params": [
             {"name": p.name,
              "type": _param_type(p),
-             "description": ""}
+             "description": p.doc}
             for p in (f.params if f else [])
         ],
         "returns":     ret,

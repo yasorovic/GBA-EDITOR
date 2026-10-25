@@ -38,7 +38,7 @@ def test_pools_partent_apres_les_acteurs_actifs(tmp_path):
     assert lay.placed == 2
     (pool,) = lay.pools
     assert pool.start == 2          # juste après les 2 acteurs, base 0
-    assert pool.size == 4 and lay.used == 6
+    assert pool.size == 4 and lay.table_size == 6
 
 
 def test_chaque_scene_repart_de_zero(tmp_path):
@@ -50,8 +50,8 @@ def test_chaque_scene_repart_de_zero(tmp_path):
     s2.prefab_pools = {"Ball": 8}
     p = _projet(tmp_path, scenes=[s1, s2], prefabs=[ball])
     l1, l2 = scene_oam_layout(p, s1), scene_oam_layout(p, s2)
-    assert l1.pools == [] and l1.used == 1
-    assert l2.pools[0].start == 5 and l2.used == 13
+    assert l1.pools == [] and l1.table_size == 1
+    assert l2.pools[0].start == 5 and l2.table_size == 13
 
 
 # ── Symboles de pool préfixés par la scène ────────────────────────────
@@ -128,7 +128,7 @@ def test_un_acteur_sans_sprite_n_a_pas_d_entree(tmp_path):
     donner_un_sprite(p, b)
     lay = scene_oam_layout(p, scene)
     assert lay.placed == 3 and lay.placed_entry == [0, -1, 1]
-    assert lay.used == 2 and lay.actors == 3
+    assert lay.table_size == 2 and lay.actors == 3
     assert project_actor_count(p) == 3 and project_oam_entry_count(p) == 2
 
 
@@ -149,12 +149,12 @@ def test_un_marqueur_de_prefab_n_a_pas_d_entree(tmp_path):
     assert pool.group == 3 and pool.member_entries == [0, -1, 1]
     assert (pool.size, pool.entry_size) == (6, 4)
     assert (pool.start, pool.entry_start) == (1, 1)
-    assert lay.actors == 7 and lay.used == 5
+    assert lay.actors == 7 and lay.table_size == 5
 
 
-def test_l_interface_s_intercale_dans_l_oam_pas_dans_les_acteurs(tmp_path, monkeypatch):
-    """3 OBJ d'interface entre les posés et les pools : ils occupent des entrées,
-    pas des acteurs. L'interface démarre juste après les posés à sprite."""
+def test_l_interface_n_a_pas_d_etat_d_acteur_elle_tient_le_debut_de_l_oam(tmp_path, monkeypatch):
+    """3 OBJ d'interface : ils tiennent les 3 premiers EMPLACEMENTS de l'OAM, fixes, et ne sont ni
+    des acteurs ni des états d'affichage. Les états des pools suivent ceux des posés."""
     import codegen.oam_alloc as oam_alloc
     monkeypatch.setattr(oam_alloc, "scene_ui_obj_slots", lambda scene, project: 3)
     s = Scene(name="Level", actors=[Actor(name="C"), Actor(name="E0")])
@@ -163,10 +163,10 @@ def test_l_interface_s_intercale_dans_l_oam_pas_dans_les_acteurs(tmp_path, monke
     donner_un_sprite(p, s.actors[1])            # C n'affiche rien
     donner_un_sprite(p, p.prefabs.items[0])
     lay = scene_oam_layout(p, s)
-    assert lay.ui_start == 1
+    assert lay.ui == 3
     (pool,) = lay.pools
-    assert (pool.start, pool.entry_start) == (2, 4)     # 1 posé à sprite + 3 d'UI
-    assert lay.actors == 8 and lay.used == 10
+    assert (pool.start, pool.entry_start) == (2, 1)     # 1 posé à sprite : le pool suit, l'UI n'y est pas
+    assert lay.actors == 8 and lay.table_size == 7 and lay.requested == 10
 
 
 # ── Groupes (prefab à sous-arbre) ─────────────────────────────────────
@@ -192,12 +192,11 @@ def test_les_acteurs_inactifs_ne_sont_pas_comptes(tmp_path):
     assert lay.placed == 1
 
 
-# ── Ordre acteurs → UI → pools (T4) ───────────────────────────────────
+# ── L'interface ne décale rien dans l'espace d'état ────────────────────
 
-def test_ui_obj_pousse_les_pools_apres_la_bande(tmp_path, monkeypatch):
-    """Ordre OAM : acteurs, puis la bande d'interface en sprites, puis les pools. Le poste UI (résolu ailleurs) décale donc le départ des
-    pools de `placed` à `placed + ui` DANS L'OAM ; `g_actors` ne grandit pas (0b :
-    les OBJ d'interface ne sont pas des acteurs), seul `g_oam_entries` le fait."""
+def test_ui_obj_ne_decale_pas_les_etats_des_pools(tmp_path, monkeypatch):
+    """La bande d'interface tient le début de l'OAM matérielle ; `g_actors` ET `g_oam_entries`
+    ne grandissent pas pour elle (les OBJ d'interface ne sont pas des acteurs et n'ont pas d'état)."""
     import codegen.oam_alloc as oa
     monkeypatch.setattr(oa, "scene_ui_obj_slots", lambda scene, project: 5)
     ball = Prefab(name="Ball")
@@ -206,9 +205,9 @@ def test_ui_obj_pousse_les_pools_apres_la_bande(tmp_path, monkeypatch):
     p = _projet(tmp_path, scenes=[scene], prefabs=[ball])
     lay = scene_oam_layout(p, scene)
     assert lay.placed == 2 and lay.ui == 5
-    assert lay.pools[0].entry_start == 7    # 2 acteurs + 5 slots d'UI, côté OAM
-    assert lay.pools[0].start == 2          # …mais côté acteurs, la bande n'existe pas
-    assert lay.used == 11 and project_oam_entry_count(p) == 11
+    assert lay.pools[0].entry_start == 2    # derrière les 2 états des posés, l'UI n'y est pas
+    assert lay.pools[0].start == 2
+    assert lay.table_size == 6 and project_oam_entry_count(p) == 6
     assert project_actor_count(p) == 6
 
 

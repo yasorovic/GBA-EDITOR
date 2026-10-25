@@ -1,0 +1,43 @@
+{
+  "name": "Projectile",
+  "id": "9f0f2cdba271",
+  "components": [
+    {
+      "component_type": "sprite",
+      "id": "sprite",
+      "active": true,
+      "sprite_name": "Projectile",
+      "initial_state": "Idle",
+      "facing_auto": true,
+      "affine_transform": false,
+      "scale_x": 1.0,
+      "scale_y": 1.0,
+      "rotation": 0,
+      "offset_x": 0,
+      "offset_y": 0,
+      "pivot_x": 0,
+      "pivot_y": 0
+    },
+    {
+      "component_type": "collision_box",
+      "id": "zone",
+      "active": true,
+      "solid": false,
+      "blocks_actors": false,
+      "tag": "zone",
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    },
+    {
+      "component_type": "script",
+      "id": "script",
+      "active": true,
+      "script": "assets/scripts/Projectile.lua",
+      "exports_values": {}
+    }
+  ],
+  "pal_bank": -1,
+  "notes": ""
+}

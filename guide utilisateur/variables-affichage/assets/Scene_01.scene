@@ -1,0 +1,56 @@
+{
+  "name": "Scene_01",
+  "id": "83786cfc71bb",
+  "background_layers": [],
+  "actors": [],
+  "cameras": [
+    {
+      "name": "Camera",
+      "id": "b5e81082d9c0",
+      "x": 0,
+      "y": 0,
+      "frame_w": 240,
+      "frame_h": 160,
+      "mode": "fixed",
+      "follow_target": "",
+      "margin_x": 40,
+      "margin_y": 20,
+      "bounds_x": null,
+      "bounds_y": null,
+      "bounds_w": null,
+      "bounds_h": null,
+      "script": "",
+      "notes": ""
+    }
+  ],
+  "camera": "Camera",
+  "windows": [],
+  "render_mode": 0,
+  "scroll_h": true,
+  "scroll_v": true,
+  "script": "assets/scripts/Compteur.lua",
+  "ui_layouts": [
+    {
+      "name": "Scene_01",
+      "id": "6e5a2ed03094",
+      "source": "30a93cd2f154",
+      "layout_name": "Scene_01",
+      "anchor": "screen",
+      "anchor_actor": "",
+      "target": "",
+      "bg_slot": 0
+    }
+  ],
+  "font_name": "",
+  "font_pal_banks": {
+    "": 0
+  },
+  "collision_layer": 0,
+  "collision_map": [],
+  "active_obj_palettes": [],
+  "active_bg_palettes": [
+    "_Microsoft Windows 16"
+  ],
+  "backdrop_color": null,
+  "notes": ""
+}

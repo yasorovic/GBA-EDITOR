@@ -57,7 +57,9 @@ typedef struct {{ int rotation, scale_x, scale_y, flip_h, flip_v, offset_x, offs
                   pivot_x, pivot_y, frame, obj_mode, priority, pal_bank; }} O;
 typedef struct {{ u16 attr0, attr1, attr2, dummy; }} S;
 A g_actors[1]; O g_oam_entries[1]; S shadow_oam[128]; int cam_x = 0, cam_y = 0;
+int g_oam_dropped = 0;
 int main(int c, char** v) {{
+    int _oamn = 0;
     g_actors[0].x = atoi(v[1]) << 8;  g_actors[0].y = atoi(v[2]) << 8;
     g_actors[0].rotation = atoi(v[3]); g_actors[0].scale_x = g_actors[0].scale_y = atoi(v[4]);
     g_oam_entries[0].offset_x = atoi(v[5]); g_oam_entries[0].offset_y = atoi(v[6]);

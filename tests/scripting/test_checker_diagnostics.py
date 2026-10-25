@@ -56,7 +56,7 @@ CASES = [
      "must be a quoted name"),
     ("animation-d-un-autre-acteur",
      'function on_collision_enter(other, my_box, other_box)\n if other.anim == "Walk" then\n end\nend', {},
-     "error", "can only be made on self"),
+     "error", "The build must know which actor this is"),
 ]
 
 

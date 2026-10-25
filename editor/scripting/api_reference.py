@@ -1,4 +1,4 @@
-"""Loader pour api_reference.json — la PRÉSENTATION de l'API (groupes, ordre,
+"""Loader pour api_reference.json : la PRÉSENTATION de l'API (groupes, ordre,
 descriptions rédigées, exemples choisis).
 
 `api.py` reste la source de vérité de ce qui EXISTE ; ce fichier ne décide que
@@ -30,8 +30,10 @@ RELABELED: list[str] = []  # libellé du JSON permuté par rapport au catalogue
 # Catégorie d'accueil des méthodes d'actor ajoutées au catalogue sans avoir été
 # rangées à la main. Les `self:*` sont répartis entre plusieurs catégories
 # (Mouvement, Animation, Position…), donc leur module ne suffit pas à déduire
-# laquelle : on ne devine pas, on les regroupe visiblement.
-_ACTOR_FALLBACK = "Actor"
+# laquelle : on ne devine pas, on les regroupe visiblement. « Instance » : ce sont
+# des gestes sur UN acteur (cycle de vie, état) ; « Actor » ne garde que les
+# fonctions du module `actor` (retrouver, compter, créer).
+_ACTOR_FALLBACK = "Instance"
 _MISC_FALLBACK  = "Other"
 
 # ─── `group` interne des catégories ─────────────────────────────────
@@ -40,7 +42,7 @@ _MISC_FALLBACK  = "Other"
 # le rangement par sections : les trois « grosses parties »
 # Gameplay/Scripting/Hardware ont disparu de la sidebar, remplacées par une
 # navigation unique par NOM (cf. `SECTIONS`). On garde le champ tel quel pour
-# ne pas toucher au JSON — il n'a simplement plus de lecteur.
+# ne pas toucher au JSON : il n'a simplement plus de lecteur.
 GROUP_GAMEPLAY  = "gameplay"
 GROUP_LANGUAGE  = "language"
 GROUP_HARDWARE  = "hardware"
@@ -49,18 +51,18 @@ _FALLBACK_GROUP: dict[str, str] = {
     _MISC_FALLBACK:  GROUP_GAMEPLAY,
 }
 
-# ─── Les sections — une par CHOSE qu'on tient ───────
+# ─── Les sections : une par CHOSE qu'on tient ───────
 # La navigation de la sidebar. Chaque section absorbe plusieurs des 24
 # catégories du catalogue, qui deviennent de simples SOUS-TITRES en son sein
 # (`blend` reste `blend` pour qui le connaît, mais cesse d'être une porte
 # d'entrée). L'ordre ici est l'ordre d'affichage ; une catégorie inconnue de
-# cette table n'est jamais perdue — `get_sections` lui rend sa propre section
+# cette table n'est jamais perdue : `get_sections` lui rend sa propre section
 # en queue.
 # Le premier terme est une CLÉ de label (résolue par l'UI : base anglaise dans
-# labels.json, français dans labels_fr.json) — la sidebar traduit, cette couche
+# labels.json, français dans labels_fr.json) : la sidebar traduit, cette couche
 # ne code pas de texte visible en dur.
 SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("scrsb.sec.actor",   ("Transform", "Movement", "Physics", "CollisionBox", "Collision", "Sprite", "Animation", "Juiciness", "Actor", "Input")),
+    ("scrsb.sec.actor",   ("Actor", "Instance", "Transform", "Movement", "Physics", "CollisionBox", "Collision", "Sprite", "Animation", "Juiciness", "Input")),
     ("scrsb.sec.scene",   ("Scene", "Layer", "Tilemap", "Palette", "Window", "Blend")),
     ("scrsb.sec.camera",  ("Camera",)),
     ("scrsb.sec.sound",   ("Audio",)),
@@ -69,12 +71,12 @@ SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("scrsb.sec.script",  ("Math", "Sequences", "Debug")),
 )
 
-# ─── La couche MOTEUR — repliée sous « Aller plus loin » ────────────
+# ─── La couche MOTEUR : repliée sous « Aller plus loin » ────────────
 # La frontière itération / moteur est une MARQUE sur l'entrée, pas une seconde
 # navigation : dans chaque section, l'itération se montre, le
-# moteur se replie. Elle est PLUS FINE que la catégorie — `sfx.play` est de
+# moteur se replie. Elle est PLUS FINE que la catégorie : `sfx.play` est de
 # l'itération, `sound_box.set_state` du moteur, alors qu'ils partagent « Audio »
-# —, d'où une liste d'entrées et non de catégories. Curée à la main, comme
+# :, d'où une liste d'entrées et non de catégories. Curée à la main, comme
 # `_PROP_HOME` : aucune règle ne la dérive, c'est un choix de mise en rayon.
 # Tout ce qui n'y figure pas est de l'itération (le défaut, le cas courant).
 _ENGINE_KEYS: frozenset[str] = frozenset({
@@ -116,7 +118,7 @@ _DISPLAY_LABELS: dict[str, str] = {
 }
 
 # Où ranger les PROPRIÉTÉS (RUNTIME_PROPS) : contrairement aux fonctions, un
-# module (`self`) ne suffit pas à dire la catégorie — self.position est du
+# module (`self`) ne suffit pas à dire la catégorie : self.position est du
 # Transform, self.velocity de la Physics. Une petite table à jour à la main,
 # le JSON restant lui completé automatiquement (cf. `_reconcile`).
 _PROP_HOME: dict[str, str] = {
@@ -124,9 +126,9 @@ _PROP_HOME: dict[str, str] = {
     "actor.rotation":  "Transform",
     "actor.scale":     "Transform",
     "actor.velocity":  "Physics",
-    "actor.visible":   "Actor",
-    "actor.active":    "Actor",
-    "actor.name":      "Actor",
+    "actor.visible":   "Instance",
+    "actor.active":    "Instance",
+    "actor.name":      "Instance",
     "actor.frame":     "Animation",
     "actor.anim":      "Animation",
     "actor.active_sprite": "Sprite",
@@ -164,7 +166,7 @@ _PROP_HOME: dict[str, str] = {
     "collision_box.offset": "CollisionBox",
     "collision_box.size":   "CollisionBox",
     "collision_box.bounds": "CollisionBox",
-    "actor.screen_space": "Actor",
+    "actor.screen_space": "Transform",
     "actor.affine":    "Sprite",
     "camera.position": "Camera",
     "camera.bound":    "Camera",
@@ -214,25 +216,23 @@ _FUNC_HOME: dict[str, str] = {
     "collision.tile_at": "Collision",
 }
 
-# Dans « Actor », l'ordre du dictionnaire technique ne raconte pas une prise en
-# main : les propriétés sont ajoutées après les méthodes, donc `self.name` se
-# retrouvait tout au fond. Cette petite carte ne déplace aucune entrée ; elle
+# Dans « Actor » et « Instance », l'ordre du dictionnaire technique ne raconte pas
+# une prise en main : les propriétés sont ajoutées après les méthodes, donc `self.name`
+# se retrouvait tout au fond. Cette petite carte ne déplace aucune entrée ; elle
 # pose seulement les repères fondamentaux avant les gestes plus spécialisés.
 # Les futures entrées non listées restent ensuite dans l'ordre du catalogue.
 _ACTOR_ENTRY_ORDER: tuple[str, ...] = (
-    "actor-name",           # qui suis-je ?
-    "actor-get",            # comment pointer un acteur nommé ?
+    "actor-get",            # Actor (module) : comment pointer un acteur nommé ?
     "actor-count",
     "actor-spawn",
-    "actor-active",         # état et cycle de vie
+    "actor-name",           # Instance : qui est-ce ?
+    "actor-active",         # son état et son cycle de vie
     "actor-visible",
     "actor-activate",
     "actor-deactivate",
     "actor-show",
     "actor-hide",
     "actor-destroy",
-    "actor-screen_space",   # réglages et actions moins usuels
-    "actor-activate_sprite",
 )
 _ACTOR_ENTRY_RANK = {anchor: rank for rank, anchor in enumerate(_ACTOR_ENTRY_ORDER)}
 
@@ -349,7 +349,7 @@ def _module_of(name: str) -> str:
 
 
 def _label_params(label: str) -> list[str]:
-    """Noms de paramètres lus dans un libellé, guillemets retirés —
+    """Noms de paramètres lus dans un libellé, guillemets retirés :
     `actor:get("name")` → `["name"]`."""
     inner = label[label.find("(") + 1:label.rfind(")")]
     return [a.strip().strip('"').strip() for a in inner.split(",")] if inner.strip() else []
@@ -360,7 +360,7 @@ def _fix_permuted(entry: dict, name: str) -> dict:
     dans un AUTRE ORDRE que le catalogue.
 
     Restreint aux permutations, volontairement. Un réordonnancement rend le
-    libellé faux — il enseignerait une signature que le compilateur rejette. Un
+    libellé faux : il enseignerait une signature que le compilateur rejette. Un
     simple renommage de paramètre (`n` devenu `frame`) reste juste sur le fond,
     et écraser à cette occasion un libellé rédigé à la main coûterait ses
     exemples choisis (`self.frame = 0` valant mieux que `self.frame = frame`).
@@ -381,7 +381,7 @@ def _fix_permuted(entry: dict, name: str) -> dict:
 
 def _mark_layer(entry: dict, name: str) -> dict:
     """Pose `engine` sur une entrée : vrai pour la couche moteur (`_ENGINE_KEYS`),
-    faux pour l'itération (le défaut). `name` est la clé API — le préfixe du
+    faux pour l'itération (le défaut). `name` est la clé API : le préfixe du
     libellé pour une fonction, la clé pointée pour une propriété (`blend.mode`)."""
     entry["engine"] = name in _ENGINE_KEYS
     if name in _DISPLAY_LABELS:
@@ -403,7 +403,7 @@ def _reconcile(cats: list[dict]) -> list[dict]:
     RELABELED.clear()
     out: list[dict] = []
     described: set[str] = set()
-    # Où vit déjà chaque module — c'est ce qui range une fonction ajoutée sans
+    # Où vit déjà chaque module : c'est ce qui range une fonction ajoutée sans
     # table de correspondance à maintenir. Un module présent dans plusieurs
     # catégories est ambigu : on ne tranche pas à sa place.
     homes: dict[str, set[str]] = {}
@@ -448,7 +448,7 @@ def _reconcile(cats: list[dict]) -> list[dict]:
         cat["entries"].append(_mark_layer(api_snippets.entry_dict(name), name))
 
     # Les PROPRIÉTÉS n'ont pas de libellé de fonction : le filtre STALE ne les
-    # voit pas, et la boucle ci-dessus ne les voit pas non plus — on les ajoute
+    # voit pas, et la boucle ci-dessus ne les voit pas non plus : on les ajoute
     # à part, rangées par `_PROP_HOME`.
     for name in RUNTIME_PROPS:
         target = _PROP_HOME.get(name, _MISC_FALLBACK)
@@ -459,18 +459,18 @@ def _reconcile(cats: list[dict]) -> list[dict]:
             out.append(cat)
         cat["entries"].append(_mark_layer(api_snippets.prop_entry_dict(name), name))
 
-    actor = by_name.get("Actor")
-    if actor is not None:
-        # Le second terme stabilise l'ordre catalogue des entrées non classées.
-        actor["entries"] = sorted(
-            enumerate(actor["entries"]),
-            key=lambda indexed: (_ACTOR_ENTRY_RANK.get(
-                indexed[1].get("doc_anchor", ""), len(_ACTOR_ENTRY_RANK)), indexed[0]),
-        )
-        actor["entries"] = [entry for _, entry in actor["entries"]]
+    for actor in (by_name.get("Actor"), by_name.get("Instance")):
+        if actor is not None:
+            # Le second terme stabilise l'ordre catalogue des entrées non classées.
+            actor["entries"] = sorted(
+                enumerate(actor["entries"]),
+                key=lambda indexed: (_ACTOR_ENTRY_RANK.get(
+                    indexed[1].get("doc_anchor", ""), len(_ACTOR_ENTRY_RANK)), indexed[0]),
+            )
+            actor["entries"] = [entry for _, entry in actor["entries"]]
 
     # Un en-tête sans rien dessous n'apprend rien : les catégories que ni le
-    # catalogue ni les propriétés n'ont remplies disparaissent — après, pour
+    # catalogue ni les propriétés n'ont remplies disparaissent : après, pour
     # n'avoir pas coûté leur place à celles qui se remplissent.
     return [c for c in out if c["entries"]]
 
@@ -485,7 +485,7 @@ def get_categories() -> list[dict]:
 
 
 def get_sections(show_extended_audio: bool = True) -> list[dict]:
-    """`get_categories()`, regroupée en sections — la
+    """`get_categories()`, regroupée en sections : la
     navigation de la sidebar.
 
     Rend, dans l'ordre de `SECTIONS`, une liste de
@@ -496,7 +496,7 @@ def get_sections(show_extended_audio: bool = True) -> list[dict]:
     qui se replie sous « Aller plus loin » ; `iteration` se montre.
 
     Une catégorie hors de `SECTIONS` n'est jamais perdue : elle rend sa propre
-    section en queue — même garantie que `_reconcile`, rien ne disparaît en
+    section en queue : même garantie que `_reconcile`, rien ne disparaît en
     silence.
 
     `show_extended_audio=False` ne concerne que la surface de découverte : le
@@ -557,10 +557,10 @@ def get_sections(show_extended_audio: bool = True) -> list[dict]:
 def tooltip_parts(entry: dict) -> dict[str, str]:
     """Les MORCEAUX de l'aide brève d'une entrée API : titre, texte, précision.
 
-    Pas de HTML ici : `scripting` est en dessous de `ui`, et c'est l'interface qui compose l'infobulle —
+    Pas de HTML ici : `scripting` est en dessous de `ui`, et c'est l'interface qui compose l'infobulle :
     `tooltip(**tooltip_parts(entry))` (`ui.common.tooltip`)."""
     sig    = entry.get("label", "")
     desc   = entry.get("description", "")
     ret    = entry.get("returns", "")
-    access = entry.get("access", "")  # "Read Only" / "Read and Write" — propriétés seulement
+    access = entry.get("access", "")  # "Read Only" / "Read and Write" : propriétés seulement
     return {"title": sig, "body": desc, "note": access or ret}

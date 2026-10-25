@@ -1,5 +1,5 @@
 """
-editor/scripting/codegen.py — Transpileur AST normalisé → C.
+editor/scripting/codegen.py : Transpileur AST normalisé → C.
 
 Reçoit un LuaScript (parser.py) et un CodegenContext (informations de
 build) et produit le source C d'un fichier actor_<Name>.c.
@@ -35,6 +35,7 @@ from .parser import (
 # Les volumes du modèle sont des POURCENTAGES ; chaque appel maxmod a sa
 # propre échelle, et c'est ici qu'on convertit (cf. models/audio.py).
 from core.app_info import APP_NAME
+from codegen.c_names import c_ident
 from core.lua_scripts import require_name
 from core.models.audio import (
     volume_to_effect, volume_to_module, pitch_to_rate, panning_to_hardware,
@@ -68,16 +69,18 @@ from .api import (
 )
 from .checker import check as _lua_check, BuildContext as _BuildContext
 from .expr_types import (VEC_CONSTRUCTORS, VEC_FUNCTIONS, C_TYPES,
-                         infer_vec_type, infer_ref_type, resolve_prop, element_of)
+                         infer_vec_type, infer_ref_type, resolve_prop, element_of,
+                         literal_actor_library, literal_actor_target, EXPORT_SCALARS,
+                         EXPORT_COMPOSITES, EXPORT_NAMED, EXPORT_ACCESSIBLE, held_actor_refs)
 
 
 # ─── Types C des variables exposées (table `exports`) ─────────────
 # Le type déclaré dans le .lua pilote la déclaration C émise. Le moteur est
-# entièrement entier — aucun float dans runtime/ — donc `float` devient un int
+# entièrement entier, aucun float dans runtime/, donc `float` devient un int
 # (le parser tronque déjà les littéraux, cf. ExprNumber). TOUS les types
 # scalaires tombent sur un `int` : un `*_ref` est un index/handle (SFX_*,
 # SCENE_IDX_*, ACTOR_*) et une `string` est un index de la table de textes
-# (TEXT_*, entrée anonyme) — la résolution éditeur/spawn → valeur d'instance
+# (TEXT_*, entrée anonyme) : la résolution éditeur/spawn → valeur d'instance
 # est câblée par le résolveur de lua_compiler (chantier « Les exports de
 # script »). Rien n'est plus déclaré `const char *` : une string qui reste
 # brute ne pourrait alimenter aucun appel du moteur (text.draw prend un index).
@@ -96,6 +99,10 @@ _EXPORT_C_TYPE: dict[str, str] = {
 # résout (export_inits), sinon laissés en commentaire.
 _EXPORT_COMPOSITE = ("vec2", "vec3", "rect")
 
+# Les verbes du CYCLE DE VIE d'un acteur : ils s'appliquent aussi à un acteur désactivé (qu'on réactive,
+# ou qu'on détruit). Tout autre verbe d'acteur agit dans le jeu et exige un acteur actif.
+_LIFECYCLE_VERBS = frozenset({"activate", "deactivate", "destroy"})
+
 # Types d'export réglables par instance (au build pour un posé, au spawn pour un
 # poolé). Tous les types câblés : les scalaires tombent sur un `int`, les
 # composites sur un Vec2/Vec3/Rect. Cf. chantier « Les exports de script ».
@@ -106,16 +113,16 @@ _EXPORT_SETTABLE = frozenset({
 })
 
 # Ce qu'un champ d'état pèse par instance. Tout est aligné sur 4 octets côté
-# ARM, donc la somme des champs est la taille de la structure — ce que le build
+# ARM, donc la somme des champs est la taille de la structure : ce que le build
 # annonce pour un prefab poolé (cf. CodeGen._emit_pool_state).
 _STATE_BYTES = {"vec2": 8, "vec3": 12, "rect": 16}
 
 
-def _export_setter_c_type(export_type: str) -> str:
+def export_setter_c_type(export_type: str) -> str:
     """Type C de l'argument d'un setter de spawn pour cet export : un scalaire
     câblé passe un `int` (index/handle ou entier), un composite passe son
     Vec2/Vec3/Rect. Un seul endroit, partagé par la DÉFINITION du setter (dans
-    le `.c` du prefab) et son EXTERN (dans le `.c` du spawner) — sinon les deux
+    le `.c` du prefab) et son EXTERN (dans le `.c` du spawner) : sinon les deux
     déclarations divergeraient sur le type et le C ne lierait pas."""
     return C_TYPES.get(export_type, "int") if export_type in _EXPORT_COMPOSITE else "int"
 
@@ -132,7 +139,7 @@ class _Step:
     # de passer à la tranche suivante, on incrémente le compteur et on REVIENT
     # en arrière tant qu'il reste des tours. Porté par la tranche plutôt que
     # par une tranche à part, pour que la boucle ne coûte PAS une frame de
-    # plus par tour — un `case` rend la main, donc un `case` de bouclage se
+    # plus par tour : un `case` rend la main, donc un `case` de bouclage se
     # paierait à chaque itération.
     loop_back: Any = None    # _LoopBack | None
 
@@ -142,7 +149,7 @@ class _LoopBack:
     """De quoi refermer une boucle bornée : `for var = start, stop [, step]`.
 
     `stop` est soit un entier écrit en clair (replié à l'émission), soit le
-    nom du champ d'état où sa valeur a été rangée AU DÉBUT de la boucle — Lua
+    nom du champ d'état où sa valeur a été rangée AU DÉBUT de la boucle : Lua
     n'évalue la borne qu'une fois, et la ré-évaluer à chaque tour donnerait un
     comportement différent le jour où elle change en cours de route."""
     var:   str          # champ d'état du compteur
@@ -225,9 +232,9 @@ class CodegenContext:
     Informations fournies par build.py pour la génération du C.
     Permet de résoudre les constantes (ANIM_*, SFX_*…) à la compilation.
     """
-    actor_name:   str            # "Hero" — utilisé comme préfixe C
+    actor_name:   str            # "Hero" : utilisé comme préfixe C
     actor_sym:    str            # "Hero" nettoyé pour C (ex: "Mon_Hero")
-    anim_names:   list[str]      # ["idle", "walk", "attack"] — depuis SpriteAsset
+    anim_names:   list[str]      # ["idle", "walk", "attack"] : depuis SpriteAsset
     sfx_names:    list[str]      # noms des Sfx du projet
     music_names:  list[str]      # noms des modules du projet (musiques ET jingles)
     global_names: set[str]       # noms des variables globales (depuis globals.h)
@@ -237,8 +244,23 @@ class CodegenContext:
     # `self.bras` s'y lit : pour un acteur de scène c'est
     # une constante `&g_actors[ACTOR_*]`, pour la racine d'un prefab poolé un
     # décalage constant dans son groupe (`self + 2`). Résolu au BUILD dans
-    # les deux cas — un enfant se NOMME, il ne se construit pas.
+    # les deux cas : un enfant se NOMME, il ne se construit pas.
     child_refs: dict = field(default_factory=dict)
+    # Les sprites de chaque enfant (`SpriteLibrary`), nom Lua → bibliothèque : l'état cité
+    # dans `self.bras:play_anim("tir")` se range dans le sprite de l'ENFANT.
+    child_sprites: dict = field(default_factory=dict)
+    # Les sprites de l'acteur que `actor:get("X")` (acteurs de la scène) ou `actor:spawn("X")`
+    # (prefabs) désigne par un littéral : nom -> bibliothèque. Un état cité sur la référence
+    # se range dans le sprite de CET acteur.
+    actor_sprites: dict = field(default_factory=dict)
+    prefab_sprites: dict = field(default_factory=dict)
+    # Les exports de chaque acteur posé de la scène : nom -> { export -> {"type", "values"} }.
+    # Ceux des prefabs sont dans `spawn_exports`.
+    actor_exports: dict = field(default_factory=dict)
+    # Les acteurs posés qui sont des INSTANCES d'un modèle (cf. `oam_alloc.model_members`) : nom de
+    # l'acteur -> symbole du modèle. Ils n'ont pas de code à eux : leurs accesseurs d'export sont
+    # ceux du modèle (`<Scène>_<Prefab>_get_<export>`).
+    actor_models: dict = field(default_factory=dict)
     # Parmi `music_names`, les modules de assets/jingles/ : `music.jingle` n'accepte qu'eux.
     jingle_names: list[str] = field(default_factory=list)
     # Les noms de section des musiques, TRIÉS : l'index est la constante `MSEC_*` (cf.
@@ -256,7 +278,7 @@ class CodegenContext:
     # pour un porteur à une apparence : `anim_names` est alors ses états, tels quels.
     anim_maps: list[list[int]] = field(default_factory=list)
     # Famille du PROPRIÉTAIRE du script : "actor" | "prefab" | "scene" | "camera". Elle
-    # décide de tout ce qui dépend d'où le script est attaché — l'existence de `self`
+    # décide de tout ce qui dépend d'où le script est attaché : l'existence de `self`
     # (`has_self`), les événements admis (`KNOWN_EVENTS_BY_KIND`) et, sans `self`, le mot
     # du symbole C émis (`<sym>_scene_on_update` / `<sym>_camera_on_update`). Une caméra a
     # les mêmes points d'entrée qu'une scène et emprunte donc le même chemin.
@@ -264,7 +286,7 @@ class CodegenContext:
     behavior_paths: dict | None = None  # {nom: fichier} des behaviors du projet, pour résoudre les require()
     # Prefab poolé : les variables de tête que le script ÉCRIT deviennent un
     # champ de `g_state_<sym>[]`, une entrée par instance (cf. _emit_pool_state).
-    # `pool_size` ne sert qu'à CHIFFRER ce que cet état coûte — le C émis, lui,
+    # `pool_size` ne sert qu'à CHIFFRER ce que cet état coûte : le C émis, lui,
     # se dimensionne sur `POOL_<SYM>_INSTANCES` (headers.py), pour qu'un écart
     # avec la boucle de pool de main.c soit impossible.
     is_pooled: bool = False
@@ -284,7 +306,7 @@ class CodegenContext:
     # Symbole C de la scène qui compile ce script. Les pools
     # étant per-scène, `actor:spawn("Bullet")` cible `spawn_<Scène>_Bullet` : il
     # faut donc savoir DANS QUELLE scène on compile. "" pour les unités partagées
-    # (caméras) qui ne peuvent pas résoudre une scène — spawn y est refusé.
+    # (caméras) qui ne peuvent pas résoudre une scène : spawn y est refusé.
     scene_sym: str = ""
     scene_names: list[str] = field(default_factory=list)  # noms de scènes du projet
     sfx_component_name: Optional[str] = None  # Sfx lié au SoundFxComponent de cet actor (si présent)
@@ -293,9 +315,9 @@ class CodegenContext:
     # connu au build, pour qu'ils marchent aussi sur un actor SANS script (cf.
     # `SFX_AUTO_TRIGGERS`, core/models/components.py). Seul `self:play_sfx()`
     # (déclenchement manuel depuis un script) reste résolu ici.
-    sfx_volumes: dict = field(default_factory=dict)  # {nom Sfx: volume EN %} — converti à l'émission
+    sfx_volumes: dict = field(default_factory=dict)  # {nom Sfx: volume EN %} : converti à l'émission
     music_info: dict = field(default_factory=dict)
-    jingle_policy: dict = field(default_factory=dict)   # {nom de jingle: (code, niveau 0–1024, remontée en frames)} — cf. `Jingle.runtime_policy`
+    jingle_policy: dict = field(default_factory=dict)   # {nom de jingle: (code, niveau 0-1024, remontée en frames)} : cf. `Jingle.runtime_policy`
     # {nom d'état: rang dans SA boîte}, par famille, et {déclencheur: rang}
     sound_box_states: dict = field(default_factory=dict)
     jingle_box_states: dict = field(default_factory=dict)
@@ -310,31 +332,31 @@ class CodegenContext:
     ui_list_names: list[str] = field(default_factory=list)
     image_names:  list[str] = field(default_factory=list)  # images d'interface (ordre = index dans g_ui_images)
     # TOUS les éléments d'UI, tous types confondus (ordre = index dans la table
-    # de visibilité plate, UIELEM_*) — cf. Project.all_elements.
+    # de visibilité plate, UIELEM_*) : cf. Project.all_elements.
     element_names: list[str] = field(default_factory=list)
     # nom d'élément → type de référence que `interface:get(nom)` rend (`list`, `image`,
-    # `textBox`, `ui_element`) — le même dictionnaire que `BuildContext.ref_kinds` :
+    # `textBox`, `ui_element`) : le même dictionnaire que `BuildContext.ref_kinds` :
     # le type jugé par le checker et la constante émise par le codegen parlent du même élément.
     ref_kinds: Optional[dict] = None
-    # {nom d'image: [noms d'état de SON sprite]} — un état n'a de sens que dans
+    # {nom d'image: [noms d'état de SON sprite]} : un état n'a de sens que dans
     # un sprite, et c'est l'image que le script nomme (cf. api.image_state_constant).
     image_states: dict = field(default_factory=dict)
     # Tables de données : {nom: (noms de colonnes, nombre de lignes)}. Le nombre
     # de lignes sert à `#data.X`, qui est une constante de compilation comme
-    # `#t` sur un tableau — la taille est connue, elle n'est rangée nulle part.
+    # `#t` sur un tableau : la taille est connue, elle n'est rangée nulle part.
     data_tables: dict = field(default_factory=dict)
-    # Sauvegarde — deux faits du projet, portés jusqu'ici pour que le checker des
+    # Sauvegarde : deux faits du projet, portés jusqu'ici pour que le checker des
     # BEHAVIORS (relancé depuis ce contexte-ci) voie ce que voit celui des
     # acteurs. Sans eux, `save:write(7)` passerait dans un behavior et pas dans
     # un script d'acteur, ce qui serait incompréhensible.
     save_slots: Optional[int] = None
     has_persistent: Optional[bool] = None
-    # {nom d'accord : masque C}, dérivé des `InputBinding` du projet — un
+    # {nom d'accord : masque C}, dérivé des `InputBinding` du projet : un
     # simple ET de boutons (cases à cocher), plus de mini-langage ici depuis
     # la décision du 2026-09-27. Les boutons physiques restent
     # résolus par `key_constant`.
     input_masks: dict = field(default_factory=dict)
-    # {nom de séquence : (tables C, longueurs, fenêtre)} — le mini-langage
+    # {nom de séquence : (tables C, longueurs, fenêtre)} : le mini-langage
     # complet reste réservé aux séquences (`InputSequence`), lu par
     # `get_sequence` (cf. `codegen/runtime_codegen/input_layout.py`).
     input_sequences: dict = field(default_factory=dict)
@@ -353,7 +375,7 @@ class CodegenContext:
     @property
     def has_self(self) -> bool:
         """Ce script a-t-il une instance attachée à désigner ? Un acteur ou un prefab, oui ;
-        une scène ou une caméra, non — le C émis n'a alors pas de paramètre `Actor* self`."""
+        une scène ou une caméra, non : le C émis n'a alors pas de paramètre `Actor* self`."""
         return self.owner_kind in OWNER_KINDS_WITH_SELF
 
 
@@ -377,7 +399,7 @@ _LUA_PIECE = re.compile(
 
 def _c_quoted(raw: str) -> str:
     r"""Un littéral Lua (`ExprString.value`, gardé tel qu'écrit : `\n` et `\"` restent des échappements)
-    en chaîne C entre guillemets. Un `"` nu — dans une chaîne Lua à apostrophes — est à échapper. Les échappements que
+    en chaîne C entre guillemets. Un `"` nu, dans une chaîne Lua à apostrophes, est à échapper. Les échappements que
     Lua et C lisent différemment sont réécrits : `\65` est DÉCIMAL en Lua (octal en C), `\xHH`, `\u{…}` et `\z`
     n'ont pas d'équivalent exact en C."""
     def convert(m):
@@ -425,13 +447,13 @@ class CodeGen:
         self._required_behaviors: dict[str, str] = {}  # alias Lua → sym C
         self._helpers: dict[str, LuaFunction] = {}
         self._in_helper = False
-        # Prefab poolé — état par instance : nom Lua → champ de `<sym>State`.
+        # Prefab poolé : état par instance : nom Lua → champ de `<sym>State`.
         # C'est `_state_ref` qui en fait un accès (`_st->fx`), pour que la
         # forme vive à UN endroit. Vide pour un propriétaire unique.
         self._pool_state: dict[str, str] = {}
         self._pool_state_init: str = ""   # « .fx = FX_POP, .fx_t = 0 »
         self.pool_state_bytes: int = 0
-        # Séquences — remplis par `_plan_sequences`, avant toute émission.
+        # Séquences : remplis par `_plan_sequences`, avant toute émission.
         self._seq_plans: list = []                 # list[_SequencePlan], ordre source
         self._plan_of: dict[str, _SequencePlan] = {}   # nom de handler → plan
         # (type C, champ, init) de l'état des séquences. Champs de `<sym>State`
@@ -444,18 +466,29 @@ class CodeGen:
         # C'est ce qui décide de poser `_st` en tête (cf. _close_state_scope).
         self._state_touched: bool = False
         # Tableaux déclarés dans ce script : nom → dimensions. Sert à `#t`, qui
-        # est une constante de compilation — la taille fait partie du type, donc
+        # est une constante de compilation : la taille fait partie du type, donc
         # elle n'est rangée nulle part à l'exécution.
         self._arrays: dict[str, tuple[int, ...]] = {}
         # Locals vec2/vec3 : nom → type. Rempli au fil de l'émission (comme
         # `_arrays` ci-dessus), pour que `_expr` sache émettre `vec2_add(...)`
         # plutôt que `+` sur un `a + b` dont les deux côtés sont des vecteurs.
-        # Cf. scripting/vec_types.py — même règle que checker.py.
+        # Cf. scripting/vec_types.py : même règle que checker.py.
         self._vec_types: dict[str, str] = {}
         # Étiquettes des exports `enum` : l'index de l'étiquette est la valeur C.
         self._enum_exports: dict[str, list[str]] = {}
         # Locals qui tiennent une référence : nom → type (cf. expr_types).
         self._ref_types: dict[str, str] = {}
+        # Sprites de l'acteur que tient une variable locale (`local b = actor:get("X")`).
+        self._ref_libs: dict[str, object] = {}
+        # Idem pour l'identité de cet acteur : ("get" | "spawn", nom), qui donne ses exports.
+        self._ref_targets: dict[str, object] = {}
+        # Accesseurs d'export d'un AUTRE acteur utilisés par ce script : leurs `extern` se posent
+        # en tête de fichier une fois le corps émis, quand on sait lesquels servent.
+        self._export_externs: dict[str, str] = {}
+        # Variables de tête qui tiennent un acteur d'une image à l'autre : stockées en RÉFÉRENCE
+        # (un entier, cf. `actor_ref_make`), lues par `actor_ref_get`.
+        self._held_refs: set[str] = set()
+        self._export_extern_mark = 0
         # Le nom de l'élément d'interface qu'un local tient (cf. expr_types.element_of),
         # ou None s'il en tient plusieurs : l'état d'une image se nomme dans SON sprite.
         self._ref_elements: dict[str, Optional[str]] = {}
@@ -490,6 +523,7 @@ class CodeGen:
         # et `_emit_locals` en a besoin pour le poser au bon endroit (champ de
         # la structure de pool, ou statique de fichier).
         self._script = script
+        self._note_held_refs(script)
         self._enum_exports = {loc.name: list(loc.export_values) for loc in script.locals
                               if loc.export_type == "enum" and loc.export_values}
         self._plan_sequences(script)
@@ -521,7 +555,25 @@ class CodeGen:
         for event in known:
             if event not in defined:
                 self._emit_stub(event)
+        if self._export_externs:
+            self._lines[self._export_extern_mark:self._export_extern_mark] = (
+                [""] + list(self._export_externs.values()))
         return _resolve_line_resets("\n".join(self._lines) + "\n", self.ctx.c_file)
+
+    def _note_held_refs(self, script: LuaScript) -> None:
+        """Les variables de tête qui reçoivent un acteur : typées comme un `local` qui en tient
+        un, avec la bibliothèque et l'identité de l'acteur quand tous leurs affectés sont le
+        même."""
+        for name, values in held_actor_refs(script).items():
+            self._held_refs.add(name)
+            self._ref_types[name] = REF_ACTOR
+            libs = [literal_actor_library(v, self.ctx.actor_sprites, self.ctx.prefab_sprites)
+                    for v in values]
+            targets = {literal_actor_target(v) for v in values}
+            if libs and all(lib is libs[0] and lib is not None for lib in libs):
+                self._ref_libs[name] = libs[0]
+            if len(targets) == 1 and None not in targets:
+                self._ref_targets[name] = next(iter(targets))
 
     def _is_internal_helper(self, fn: LuaFunction) -> bool:
         known = self._known_hooks()
@@ -564,7 +616,7 @@ class CodeGen:
     @staticmethod
     def _literal_int(e) -> Any:
         """La valeur d'un littéral entier, signe compris, sinon None. Même
-        lecture que `checker._literal_int` — un `-1` est un moins unaire posé
+        lecture que `checker._literal_int` : un `-1` est un moins unaire posé
         sur un nombre, pas un nombre négatif, et les deux doivent en tirer la
         même conclusion sous peine de se contredire."""
         if isinstance(e, ExprNumber):
@@ -577,8 +629,8 @@ class CodeGen:
     @staticmethod
     def _block_has_wait(stmts) -> bool:
         """Une attente quelque part dans ce bloc, si profond soit-elle. C'est
-        ce qui distingue une boucle ORDINAIRE — émise telle quelle dans une
-        tranche — d'une boucle qu'il faut dérouler en tranches."""
+        ce qui distingue une boucle ORDINAIRE : émise telle quelle dans une
+        tranche : d'une boucle qu'il faut dérouler en tranches."""
         for s in stmts:
             if wait_call(s) is not None:
                 return True
@@ -596,7 +648,7 @@ class CodeGen:
 
         Récursif, et c'est ce qui rend une boucle imbriquée gratuite : chaque
         niveau referme la sienne sur la dernière tranche de son corps. Une
-        boucle SANS attente n'est pas touchée — elle reste un `for` C ordinaire
+        boucle SANS attente n'est pas touchée : elle reste un `for` C ordinaire
         au milieu d'une tranche, comme avant la v0.23."""
         buf: list = []
 
@@ -641,8 +693,8 @@ class CodeGen:
                     if lit is not None:
                         step_val = int(lit)
                 # Une CHAÎNE et non une seule refermeture : deux boucles
-                # imbriquées se referment sur la même tranche — celle de
-                # l'attente la plus profonde — et c'est la plus INTÉRIEURE qui
+                # imbriquées se referment sur la même tranche : celle de
+                # l'attente la plus profonde : et c'est la plus INTÉRIEURE qui
                 # doit être testée en premier. Écraser au lieu d'empiler
                 # laissait la boucle intérieure sans fin de course.
                 steps[-1].loop_back = (steps[-1].loop_back or []) + [
@@ -688,7 +740,7 @@ class CodeGen:
                         func=ExprName(st.kind), args=[st.arg] if st.arg else []))])
             lifted.reverse()
             # Le compteur d'une boucle bornée (et sa borne calculée) traversent
-            # forcément une attente — c'est la définition même du chantier
+            # forcément une attente : c'est la définition même du chantier
             # v0.23. Ils rejoignent donc l'état, sans passer par l'analyse
             # ci-dessus : celle-ci ne voit que les `local`, et un compteur de
             # `for` n'en est pas un.
@@ -711,14 +763,14 @@ class CodeGen:
                 self._state_extra.append(("int", f"seq_{name}_{loc}", "0"))
 
     def _state_ref(self, field: str) -> str:
-        """Où vit ce morceau d'état — dans le slot de l'instance pour un prefab
+        """Où vit ce morceau d'état : dans le slot de l'instance pour un prefab
         poolé, dans une statique de fichier pour un propriétaire unique.
 
         Côté poolé, l'accès passe par `_st`, un pointeur posé en tête de la
         fonction qui en a besoin (cf. `_close_state_scope`). Écrire
         `g_state_Ball[Ball_pool_slot(self)].fx` à chaque site rendait le C
-        illisible — 38 caractères de machinerie autour du nom que l'auteur a
-        écrit — et laissait gcc recalculer le slot plus souvent que nécessaire
+        illisible : 38 caractères de machinerie autour du nom que l'auteur a
+        écrit : et laissait gcc recalculer le slot plus souvent que nécessaire
         (`sizeof(Actor)` ne vaut pas une puissance de deux : la soustraction de
         pointeurs coûte une division)."""
         if self.ctx.is_pooled:
@@ -749,13 +801,13 @@ class CodeGen:
         self._state_touched = False
 
     def _emit_sequence_statics(self):
-        """L'état des séquences d'un propriétaire NON poolé — une statique par
+        """L'état des séquences d'un propriétaire NON poolé : une statique par
         champ. Pour un prefab poolé, ces mêmes champs sont déjà entrés dans
         `<sym>State` (cf. _emit_pool_state)."""
         if not self._state_extra or self.ctx.is_pooled:
             return
         sym = self.ctx.actor_sym
-        self._w("/* Sequence state — 0 = stopped, 1..N = the current step */")
+        self._w("/* Sequence state: 0 = stopped, 1..N = the current step */")
         for c_type, field, init in self._state_extra:
             self._w(f"static {c_type} {sym}_{field} = {init};")
         self._w("")
@@ -778,15 +830,15 @@ class CodeGen:
         """Le `switch` d'une séquence : un `case` par tranche, dans l'ordre de
         la source, et une tranche par frame.
 
-        Pas de boucle autour du `switch` — chaque case rend la main. Une
+        Pas de boucle autour du `switch` : chaque case rend la main. Une
         séquence à N attentes coûte donc N frames de plus qu'une exécution en
         ligne droite, et ne peut structurellement pas tourner en rond."""
         arg  = "Actor* self" if self.ctx.has_self else "void"
         # Les locals qui traversent une attente sont lus et écrits dans l'état
-        # pour toute la durée de l'émission de cette séquence — y compris leur
+        # pour toute la durée de l'émission de cette séquence : y compris leur
         # `local x = …`, qui devient une simple affectation.
         self._local_state = {loc: f"seq_{plan.name}_{loc}" for loc in plan.lifted}
-        self._w(f"/* Sequence \"{plan.name}\" — one slice per wait, in source order.")
+        self._w(f"/* Sequence \"{plan.name}\" : one slice per wait, in source order.")
         if plan.lifted:
             self._w(f"   Survive the wait: {', '.join(plan.lifted)}. */")
         else:
@@ -820,7 +872,7 @@ class CodeGen:
                 # Refermeture des boucles bornées qui finissent sur cette
                 # tranche : on incrémente le compteur puis on
                 # décide où reprendre. Le SENS de la comparaison vient du signe
-                # du pas, écrit en clair — même règle que pour un `for`
+                # du pas, écrit en clair : même règle que pour un `for`
                 # ordinaire (checker._check_for_step), et pour la même raison :
                 # rien n'est testé à l'exécution qui puisse l'être au build.
                 # De la plus INTÉRIEURE à la plus extérieure : la boucle du
@@ -853,19 +905,19 @@ class CodeGen:
     def _emit_sequence_pump(self):
         """Les séquences avancent à la FIN de `on_update`, dans l'ordre de
         déclaration. Un seul endroit, visible dans le C émis, et rien à ajouter
-        à la boucle de frame de `main.c` — elle appelle déjà `on_update` pour
+        à la boucle de frame de `main.c` : elle appelle déjà `on_update` pour
         chaque propriétaire. Le test sur l'étape évite l'appel quand la
         séquence est arrêtée."""
         if not self._seq_plans:
             return
         arg = "self" if self.ctx.has_self else ""
-        self._w("/* Sequences — in declaration order */")
+        self._w("/* Sequences: in declaration order */")
         for plan in self._seq_plans:
             step_ref = self._state_ref(f"seq_{plan.name}_step")
             self._w(f"if ({step_ref}) {self._sequence_sym(plan)}({arg});")
 
     def _emit_pool_init(self):
-        """Génère void SYM_pool_init(Actor* self) — appelée par spawn avant
+        """Génère void SYM_pool_init(Actor* self) : appelée par spawn avant
         on_start. Une seule affectation de structure : elle couvre les tableaux
         et les vecteurs, qu'un champ à la fois ne saurait pas réinitialiser."""
         sym = self.ctx.actor_sym
@@ -875,7 +927,7 @@ class CodeGen:
         if self._pool_state_init:
             # Littéral composé, et non un `static const` de fichier : l'état de
             # départ cite les constantes du script (`.fx = FX_POP`), qui sont
-            # des variables C — le C n'accepte pas une variable dans
+            # des variables C : le C n'accepte pas une variable dans
             # l'initialiseur d'un objet statique, même déclarée `const`.
             self._state_touched = True
             self._w(f"*_st = ({sym}State){{ {self._pool_state_init} }};")
@@ -910,7 +962,7 @@ class CodeGen:
                 self.warnings.append(msg)
                 continue
             # Validation basique (mêmes vérifs que les scripts actor/scène/prefab,
-            # avec le contexte de l'actor qui inline ce behavior — pas de vérif de
+            # avec le contexte de l'actor qui inline ce behavior : pas de vérif de
             # plage sur les globals ici).
             check_ctx = _BuildContext(
                 actor_name   = self.ctx.actor_name,
@@ -965,7 +1017,7 @@ class CodeGen:
     # ── En-tête ───────────────────────────────────────────────────
 
     def _known_hooks(self) -> list:
-        """Les points d'entrée admis pour ce propriétaire — une scène en a
+        """Les points d'entrée admis pour ce propriétaire : une scène en a
         trois, une caméra deux, un acteur ou un prefab tous ceux de l'acteur (cf. KNOWN_EVENTS_BY_KIND)."""
         return KNOWN_EVENTS_BY_KIND[self.ctx.owner_kind]
 
@@ -973,12 +1025,12 @@ class CodeGen:
         sym = self.ctx.actor_sym
         if not self.ctx.has_self:
             kind = self.ctx.owner_kind
-            self._w(f"/* {sym}.c — {kind} script, generated by {APP_NAME} (do not edit) */")
+            self._w(f"/* {sym}.c : {kind} script, generated by {APP_NAME} (do not edit) */")
         else:
-            self._w(f"/* actor_{sym}.c — generated by {APP_NAME} (do not edit) */")
+            self._w(f"/* actor_{sym}.c : generated by {APP_NAME} (do not edit) */")
         # `runtime_api.h` et non `runtime.h` : c'est l'en-tête généré qui porte
         # la vraie struct Actor et l'API. Le C émis l'incluait autrefois sous le
-        # nom `runtime.h`, que chaque appelant remplaçait ensuite par celui-ci —
+        # nom `runtime.h`, que chaque appelant remplaçait ensuite par celui-ci :
         # un détour dont il ne restait que le nom.
         self._w('#include "runtime_api.h"')
         self._w('#include "globals.h"')
@@ -995,6 +1047,7 @@ class CodeGen:
             self._w("")
             for e in externs:
                 self._w(e)
+        self._export_extern_mark = len(self._lines)   # les accesseurs d'export s'y poseront
         # Forward declarations pour éviter les erreurs d'ordre (ex: destroy appelle on_destroy)
         if self.ctx.has_self:
             self._w("")
@@ -1010,7 +1063,7 @@ class CodeGen:
             if self.ctx.anim_maps:
                 # Plusieurs apparences : le rang d'un état dépend du sprite AFFICHÉ,
                 # inconnu à la compile. La constante est donc une expression qui lit
-                # l'apparence de `self` — `self` existe dans tout script d'acteur, et
+                # l'apparence de `self` : `self` existe dans tout script d'acteur, et
                 # `other:play_anim` est refusé par le checker (domaine du récepteur).
                 rows = ",".join("{" + ",".join(str(v) for v in m) + "}" for m in self.ctx.anim_maps)
                 self._w(f"static const unsigned char {sym}_anim_map"
@@ -1039,20 +1092,20 @@ class CodeGen:
             self._w("/* Music */")
             for i, name in enumerate(self.ctx.music_names):
                 self._w(f"#define {music_constant(name)} {i}")
-        # Constantes de section — l'index est le rang du NOM dans la liste triée des noms
+        # Constantes de section : l'index est le rang du NOM dans la liste triée des noms
         # de section du projet, la même qui clé la table `g_music_sec` de main.c.
         if self.ctx.music_section_names:
             self._w("")
             self._w("/* Music sections (music.set_section) */")
             for i, name in enumerate(self.ctx.music_section_names):
                 self._w(f"#define {music_section_constant(name)} {i}")
-        # Constantes Texte — index dans la table g_texts émise par main_gen
+        # Constantes Texte : index dans la table g_texts émise par main_gen
         if self.ctx.text_keys:
             self._w("")
             self._w("/* Textes */")
             for i, key in enumerate(self.ctx.text_keys):
                 self._w(f"#define {text_constant(key)} {i}")
-        # Constantes Langue — même index que g_texts[lang]/g_lang_font[lang]
+        # Constantes Langue : même index que g_texts[lang]/g_lang_font[lang]
         # (source en 0, puis settings.languages dans l'ordre déclaré). Absent
         # d'un projet monolingue : lang.set/lang.get n'y compilent alors plus,
         # ce qui est le comportement voulu.
@@ -1061,23 +1114,23 @@ class CodeGen:
             self._w("/* Langues */")
             for i, code in enumerate(self.ctx.lang_codes):
                 self._w(f"#define {lang_constant(code)} {i}")
-        # Constantes Police — index dans g_fonts (même ordre que main_gen)
+        # Constantes Police : index dans g_fonts (même ordre que main_gen)
         if self.ctx.font_names:
             self._w("")
             self._w("/* Fonts */")
             for i, name in enumerate(self.ctx.font_names):
                 self._w(f"#define {font_constant(name)} {i}")
-        # Constantes Palette — index dans g_palettes. Le catalogue ENTIER y
+        # Constantes Palette : index dans g_palettes. Le catalogue ENTIER y
         # passe : une palette pèse 32 octets en ROM, là où la réservation des
         # polices coûtait de la mémoire vidéo. Rien à dériver des scripts, donc
-        # aucun risque de réserver trop peu — le piège que `scene_font_names`
+        # aucun risque de réserver trop peu : le piège que `scene_font_names`
         # doit désamorcer n'existe pas ici.
         if self.ctx.palette_names:
             self._w("")
             self._w("/* Palettes */")
             for i, name in enumerate(self.ctx.palette_names):
                 self._w(f"#define {palette_constant(name)} {i}")
-        # Constantes Zone de texte — index dans g_ui_regions. L'espace de noms
+        # Constantes Zone de texte : index dans g_ui_regions. L'espace de noms
         # est le PROJET, pas la mise en page (cf. models/ui_region.py) : c'est
         # ce qui permet à cette table d'être plate, comme celle des textes.
         if self.ctx.region_names:
@@ -1085,7 +1138,7 @@ class CodeGen:
             self._w("/* Text slots */")
             for i, name in enumerate(self.ctx.region_names):
                 self._w(f"#define {region_constant(name)} {i}")
-        # Constantes de LISTE — index dans g_ui_lists. Espace
+        # Constantes de LISTE : index dans g_ui_lists. Espace
         # séparé de REGION_*/UIELEM_* : une liste est un panneau, mais son rang
         # est celui des LISTES, pas celui de tous les éléments.
         if self.ctx.ui_list_names:
@@ -1093,7 +1146,7 @@ class CodeGen:
             self._w("/* Listes d'interface (navigation) */")
             for i, name in enumerate(self.ctx.ui_list_names):
                 self._w(f"#define {ui_list_constant(name)} {i}")
-        # Constantes Image — index dans g_ui_images, même espace de noms projet
+        # Constantes Image : index dans g_ui_images, même espace de noms projet
         # et même raison. Les ÉTATS suivent, indexés par IMAGE : un nom d'état
         # n'existe que dans un sprite, et c'est l'image que le script nomme.
         if self.ctx.image_names:
@@ -1103,7 +1156,7 @@ class CodeGen:
                 self._w(f"#define {image_constant(name)} {i}")
                 for k, st in enumerate(self.ctx.image_states.get(name, [])):
                     self._w(f"#define {image_state_constant(name, st)} {k}")
-        # Constantes d'élément d'UI — index dans la table de visibilité plate,
+        # Constantes d'élément d'UI : index dans la table de visibilité plate,
         # espace SÉPARÉ de REGION_*/IMAGE_* : elle couvre aussi les panels-
         # groupes purs, qui n'y figurent dans aucune des deux autres tables.
         if self.ctx.element_names:
@@ -1118,7 +1171,7 @@ class CodeGen:
     def _emit_locals(self, script: LuaScript):
         # Pré-enregistrer les require() et les exclure des déclarations C. La
         # FORME est reconnue par `parser.require_target`, où vit déjà celle du
-        # tableau — elle était réécrite ici, et une deuxième fois plus bas.
+        # tableau : elle était réécrite ici, et une deuxième fois plus bas.
         non_require = []
         for loc in script.locals:
             target = require_target(loc.value)
@@ -1130,11 +1183,11 @@ class CodeGen:
         # au PREFAB. Un `local FX_POP = 1` qu'aucune ligne n'assigne est une
         # constante : la recopier dans chaque slot du pool ferait payer seize
         # fois une valeur qui ne bouge jamais, et ferait mentir la mesure du
-        # build — qui annoncerait la longueur de l'en-tête du fichier au lieu de
+        # build : qui annoncerait la longueur de l'en-tête du fichier au lieu de
         # l'état. Un acteur de scène n'a qu'une instance : tout y reste partagé.
         #
         # EXCEPTION (chantier « Les exports de script », tranche poolé) : un export
-        # de type réglable est TOUJOURS par instance, même lu seulement — deux
+        # de type réglable est TOUJOURS par instance, même lu seulement : deux
         # spawns du même prefab peuvent lui donner des valeurs différentes. On
         # renonce donc à le fondre en constante (uniformisation décidée avec
         # l'auteur : quelques octets par instance contre un scan inter-script).
@@ -1148,16 +1201,32 @@ class CodeGen:
             state, shared = [], non_require
 
         if shared:
-            self._w("/* Script constants — never assigned, hence shared by all "
+            self._w("/* Script constants: never assigned, hence shared by all "
                     "instances */" if self.ctx.is_pooled
                     else "/* Local variables of this actor */")
             for loc in shared:
                 self._emit_shared_local(loc)
             self._w("")
+            self._emit_export_accessors([loc for loc in shared if loc.export_type in EXPORT_ACCESSIBLE])
         if state or (self.ctx.is_pooled and self._state_extra):
             self._emit_pool_state(state)
         self._emit_sequence_statics()
         self._emit_sequence_decls()
+
+    def _emit_export_accessors(self, exports: list) -> None:
+        """Lecture et écriture des exports scalaires d'un acteur posé, pour les AUTRES scripts :
+        la variable est `static` dans ce fichier, seuls ces deux points d'entrée en sortent.
+        Un acteur posé n'a qu'une instance, d'où l'argument `self` ignoré : la signature est
+        celle d'un prefab poolé, que l'appelant écrit pareil (`<Scène>_<Acteur>_get_<export>`)."""
+        sym = self.ctx.actor_sym
+        for loc in exports:
+            c_type = export_setter_c_type(loc.export_type)
+            self._w(f"{c_type} {sym}_get_{loc.name}(Actor* self __attribute__((unused))) "
+                    f"{{ return {loc.name}; }}")
+            self._w(f"void {sym}_set_{loc.name}(Actor* self __attribute__((unused)), {c_type} v) "
+                    f"{{ {loc.name} = v; }}")
+        if exports:
+            self._w("")
 
     def _emit_shared_local(self, loc: LuaLocal):
         """Un local de tête déclaré au scope FICHIER : une seule copie pour
@@ -1195,16 +1264,14 @@ class CodeGen:
         """L'état par instance d'un prefab poolé : une structure par slot du
         pool, un champ par variable de tête que le script écrit.
 
-        Le pool est une plage contiguë de `g_actors[]` dont les bornes sont des
-        constantes de build (`POOL_<SYM>_START/SIZE/GROUP/INSTANCES`, émises par
-        headers.py) : le slot d'une instance est donc une soustraction de
-        pointeurs, et rien n'a besoin d'être rangé dans la struct `Actor`.
+        Le rang d'une instance dans son modèle est rangé dans l'acteur (`Actor.inst`, posé
+        par le spawn et à l'entrée de scène) : l'état ne suppose plus les instances d'un
+        modèle contiguës dans `g_actors[]`.
 
         La taille vient du #define et non d'un littéral recalculé ici : un écart
         avec la boucle de pool de `main.c` serait un débordement de tableau
-        silencieux. C'est `_INSTANCES` qui la donne, pas `_SIZE` — `_SIZE` compte
-        les entrées de `g_actors` réservées, et une instance segmentée en occupe
-        un GROUPE tout en n'exécutant qu'un script."""
+        silencieux. C'est `_INSTANCES` qui la donne : une instance segmentée occupe un
+        GROUPE d'entrées de `g_actors` tout en n'exécutant qu'un script."""
         sym      = self.ctx.actor_sym
         struct_t = f"{sym}State"
         fields, inits, per_instance = [], [], 0
@@ -1215,7 +1282,7 @@ class CodeGen:
             if (loc.export_type in _EXPORT_COMPOSITE
                     and self.ctx.export_inits.get(loc.name) is not None):
                 # Export composite d'un prefab poolé : type Vec2/Vec3/Rect, valeur
-                # résolue par le template (export_inits). AVANT le test tableau —
+                # résolue par le template (export_inits). AVANT le test tableau :
                 # le défaut de source `{0,0}` passerait pour un `int[2]`. L'init
                 # n'est pas `infer_vec_type(loc.value)` (qui ne reconnaît pas une
                 # table nue) mais le littéral « { x, y } » déjà résolu.
@@ -1265,7 +1332,7 @@ class CodeGen:
         self.pool_state_bytes = per_instance
         self._pool_state_init = ", ".join(inits)
         total = per_instance * self.ctx.pool_size
-        self._w("/* Per-instance state — one field per top-level variable the script")
+        self._w("/* Per-instance state: one field per top-level variable the script")
         self._w(f"   writes, plus the step of each sequence. {per_instance} bytes × "
                 f"{self.ctx.pool_size} instance(s) = {total} bytes. */")
         self._w(f"typedef struct {{")
@@ -1275,24 +1342,25 @@ class CodeGen:
         self._indent -= 1
         self._w(f"}} {struct_t};")
         # Un état par INSTANCE, pas par entrée de `g_actors` :
-        # une instance de prefab segmenté occupe un GROUPE d'entrées — la
-        # racine puis ses parties — mais n'exécute qu'un script, celui de la
+        # une instance de prefab segmenté occupe un GROUPE d'entrées : la
+        # racine puis ses parties : mais n'exécute qu'un script, celui de la
         # racine. Diviser par le groupe ramène `self` à son rang d'instance ;
         # pour un prefab plat, GROUP vaut 1 et le C émis est mot pour mot celui
         # d'avant.
         self._w(f"static {struct_t} g_state_{sym}[POOL_{sym.upper()}_INSTANCES];")
-        self._w(f"static inline int {sym}_pool_slot(Actor* self) {{ "
-                f"return ((int)(self - g_actors) - POOL_{sym.upper()}_START) "
-                f"/ POOL_{sym.upper()}_GROUP; }}")
+        self._w(f"static inline int {sym}_pool_slot(Actor* self) {{ return (int)self->inst; }}")
         # Un setter par export réglable : c'est le SEUL point d'accès de l'état
         # depuis un autre `.c` (le script qui spawne). `g_state`/`pool_slot`
-        # restent privés — le setter, lui, est extern (le spawner le forward-
+        # restent privés : le setter, lui, est extern (le spawner le forward-
         # déclare, cf. `_emit_spawn_setter_externs`). Chantier « Les exports de
         # script », tranche poolé (D2).
         for name, ex_typ in export_fields:
-            arg_t = _export_setter_c_type(ex_typ)
+            arg_t = export_setter_c_type(ex_typ)
             self._w(f"void {sym}_set_{name}(Actor* self, {arg_t} v) {{ "
                     f"g_state_{sym}[{sym}_pool_slot(self)].{name} = v; }}")
+            if ex_typ in EXPORT_ACCESSIBLE:
+                self._w(f"{arg_t} {sym}_get_{name}(Actor* self) {{ "
+                        f"return g_state_{sym}[{sym}_pool_slot(self)].{name}; }}")
         self._w("")
 
     @staticmethod
@@ -1313,9 +1381,9 @@ class CodeGen:
 
         # Valeur d'INSTANCE prioritaire (chantier « Les exports de script ») :
         # lua_compiler a déjà résolu l'override ou le défaut en un initialiseur C
-        # — un entier pour un scalaire (bool/enum → index, string/*_ref → TEXT_*/
+        # : un entier pour un scalaire (bool/enum → index, string/*_ref → TEXT_*/
         # SFX_*/…), un littéral composé « { x, y } » pour un vec2/vec3/rect. Elle
-        # prime sur le défaut déduit ci-dessous — c'est ce qui donne à CET acteur
+        # prime sur le défaut déduit ci-dessous : c'est ce qui donne à CET acteur
         # posé sa valeur propre. Absente = pas un export câblé, ou un prefab poolé
         # sans init (map vide) : on retombe sur le défaut.
         override = self.ctx.export_inits.get(loc.name)
@@ -1328,7 +1396,7 @@ class CodeGen:
         # vec2 sans init ne sait pas s'écrire en scalaire), un scalaire retombe
         # sur son défaut de source.
         if typ in _EXPORT_COMPOSITE:
-            return None, "", (f"type '{typ}' cannot be represented as a C scalar — not "
+            return None, "", (f"type '{typ}' cannot be represented as a C scalar : not "
                               "declared")
 
         init = self._expr(loc.value) if loc.value is not None else None
@@ -1338,17 +1406,17 @@ class CodeGen:
             if init is None:
                 return c_type, "0", ""
             # Un défaut string/nom (string, actor_ref…) non résolu ne peut pas
-            # initialiser un int : on repart de 0. (Chemin quasi mort — le
+            # initialiser un int : on repart de 0. (Chemin quasi mort : le
             # résolveur remplit désormais export_inits pour tout export câblé.)
             if isinstance(loc.value, ExprString):
                 return c_type, "0", f"value '{loc.value.value or 'empty'}' not resolved at build"
             # Les littéraux flottants sont déjà tronqués par le parser
-            # (ExprNumber(int(...)) — le moteur n'a pas de flottants).
+            # (ExprNumber(int(...)) : le moteur n'a pas de flottants).
             return c_type, init, ""
 
         if typ:
             self.warnings.append(
-                f"exports: unknown type '{typ}' for '{loc.name}' — declared as int."
+                f"exports: unknown type '{typ}' for '{loc.name}' : declared as int."
             )
 
         # Vrai `local` (ou export de type inconnu) : déduction depuis la valeur.
@@ -1400,7 +1468,7 @@ class CodeGen:
         return None
 
     def _index(self, e) -> str:
-        """Lua indexe à partir de 1, le C à partir de 0 — la traduction se fait
+        """Lua indexe à partir de 1, le C à partir de 0 : la traduction se fait
         ici, une fois. Un index littéral est replié tout de suite : `t[1]`
         devient `t[0]` et non `t[(1) - 1]`."""
         if isinstance(e, ExprNumber):
@@ -1420,7 +1488,7 @@ class CodeGen:
             sig_tpl = EVENT_C_SIGNATURES.get(fn.name)
             if sig_tpl is None:
                 # PAS static : une fonction personnalisée (ni un hook connu, ni
-                # `EVENT_C_SIGNATURES`) est le point d'entrée d'un EventCall —
+                # `EVENT_C_SIGNATURES`) est le point d'entrée d'un EventCall :
                 # une frame d'animation du sprite de CET actor peut l'appeler
                 # depuis `main.c`, une autre unité de compilation.
                 # Rien ne distingue ici « appelée par une frame » de « jamais
@@ -1475,7 +1543,7 @@ class CodeGen:
             # reste volable par l'effet suivant quand tout est plein (cf.
             # `hold` dans headers.py). C'est la seule décision
             # de tout le générateur qui dépend de la POSITION de l'appel et non
-            # de ce qu'il contient — d'où ce test ici, et pas dans l'émetteur.
+            # de ce qu'il contient : d'où ce test ici, et pas dans l'émetteur.
             if (isinstance(s.call, ExprCall)
                     and self._call_key(s.call.func) == "sfx.play"):
                 self._w(self._emit_sfx_play(s.call.args, hold=False) + ";")
@@ -1490,6 +1558,12 @@ class CodeGen:
                 self._w(f"Actor* {tmp} = {self._emit_actor_spawn(s.call.args)};")
                 self._emit_spawn_setters(tmp, s.call.args[0].value,
                                          self._spawn_table(s.call.args))
+            elif self._live_guard_receiver(s.call) is not None:
+                # Une action sur la référence d'un autre acteur : il a pu disparaître depuis
+                # qu'on l'a obtenu. L'appel est sauté et signalé (log debug), jamais exigé.
+                guard = "actor_exists_warn" if s.call.method in _LIFECYCLE_VERBS else "actor_active_warn"
+                self._w(f'if ({guard}({self._live_guard_receiver(s.call)}, '
+                        f'"{s.call.method}()")) {self._call_expr(s.call)};')
             else:
                 self._w(self._call_expr(s.call) + ";")
 
@@ -1499,10 +1573,10 @@ class CodeGen:
                 receiver, p = prop
                 receiver = self._prop_receiver_c(s.target, receiver, p)
                 if p.c_setter is None:
-                    # lecture seule — le checker a déjà refusé ; on trace plutôt
+                    # lecture seule : le checker a déjà refusé ; on trace plutôt
                     # que d'émettre du C qui ne compile pas.
                     self.warnings.append(
-                        f"{p.lua_name} is read-only — the assignment is ignored.")
+                        f"{p.lua_name} is read-only : the assignment is ignored.")
                     return
                 setter, value = self._prop_write(p, s.value, s.target)
                 c_args = [receiver] if p.self_first else []
@@ -1511,7 +1585,7 @@ class CodeGen:
                 return
             # `self.position.x = v` : un champ d'une propriété composée. Le C n'a
             # que le setter de la valeur ENTIÈRE, donc on lit, on change la
-            # composante, on réécrit — dans un bloc, pour que le temporaire ne
+            # composante, on réécrit : dans un bloc, pour que le temporaire ne
             # survive pas à l'instruction.
             if isinstance(s.target, ExprIndex):
                 owner = resolve_prop(s.target.obj, self._ref_types, self._kinds)
@@ -1523,6 +1597,18 @@ class CodeGen:
                     self._w(f"{{ {C_TYPES[p.ptype]} _field = {self._prop_read(receiver, p)}; "
                             f"_field.{s.target.field} = {self._expr(s.value)}; "
                             f"{p.c_setter}({', '.join(c_args + ['_field'])}); }}")
+                    return
+            if isinstance(s.target, ExprName) and s.target.name in self._held_refs:
+                self._emit_held_ref_write(s.target.name, s.value)
+                return
+            access = self._export_access(s.target)
+            if access is not None:
+                self._emit_export_write(access, s.value)
+                return
+            if isinstance(s.target, ExprIndex):
+                owner = self._export_access(s.target.obj)
+                if owner is not None and owner[2].get("type") in EXPORT_COMPOSITES:
+                    self._emit_export_field_write(owner, s.target.field, s.value)
                     return
             tgt = self._expr(s.target)
             index = self._enum_label_index(s.target, s.value)
@@ -1568,7 +1654,8 @@ class CodeGen:
                 self._w(f"{self._array_decl(s.name, dims)} = "
                         f"{self._array_init(s.value, dims)};")
                 return
-            vt = infer_vec_type(s.value, self._vec_types, self._ref_types, self._kinds) if s.value is not None else None
+            vt = ((infer_vec_type(s.value, self._vec_types, self._ref_types, self._kinds)
+                   or self._export_vec_type(s.value)) if s.value is not None else None)
             if vt:
                 self._vec_types[s.name] = vt
                 self._w(f"{C_TYPES[vt]} {s.name} = {self._expr(s.value)};")
@@ -1580,15 +1667,19 @@ class CodeGen:
                 and isinstance(s.value, ExprCall)
                 and self._call_key(s.value.func) == "actor.get"
             ) or (
-                # `local b = actor:spawn("X", pos)` tient l'instance née — un
+                # `local b = actor:spawn("X", pos)` tient l'instance née : un
                 # `Actor*`, donc `b:set_velocity(...)` chaîne
                 # et `if not b then` teste vraiment le pool plein (NULL).
                 s.value is not None
                 and isinstance(s.value, ExprCall)
                 and self._call_key(s.value.func) == "actor.spawn"
             ) or (
+                # `local b = last` : la variable de tête qui tient une référence se résout en
+                # acteur à la lecture.
+                isinstance(s.value, ExprName) and s.value.name in self._held_refs
+            ) or (
                 # `local bras = self.bras` tient un acteur, exactement comme
-                # `actor:get(...)` — donc un `Actor*` et non un `int`, sans quoi
+                # `actor:get(...)` : donc un `Actor*` et non un `int`, sans quoi
                 # `bras:destroy()` ne compilerait pas.
                 isinstance(s.value, ExprIndex)
                 and isinstance(s.value.obj, ExprName)
@@ -1599,6 +1690,16 @@ class CodeGen:
             # handle, et le nom est retenu : c'est lui qui dira à `_invoke` que
             # `pas:set_volume(80)` est un réglage d'effet et non d'acteur.
             rt = self._note_ref(s.name, s.value)
+            library = literal_actor_library(s.value, self.ctx.actor_sprites, self.ctx.prefab_sprites)
+            if library is not None:
+                self._ref_libs[s.name] = library
+            else:
+                self._ref_libs.pop(s.name, None)
+            target = literal_actor_target(s.value)
+            if target is not None:
+                self._ref_targets[s.name] = target
+            else:
+                self._ref_targets.pop(s.name, None)
             ctype = "Actor*" if is_actor_ref else (REF_TYPE_TABLE[rt].c_type if rt else "int")
             self._w(f"{ctype} {s.name} = {val};")
             # `local b = actor:spawn("X", pos, {k=v})` : écrire les exports de
@@ -1669,7 +1770,7 @@ class CodeGen:
             # Le checker a déjà refusé, et une erreur bloque le build : on
             # n'arrive ici que par le chemin des behaviors, où ses erreurs sont
             # relayées en avertissements. Le trou est alors ÉCRIT dans le C
-            # plutôt que laissé invisible — c'est tout ce que ce fichier peut
+            # plutôt que laissé invisible : c'est tout ce que ce fichier peut
             # faire d'honnête avec un code qu'il ne sait pas traduire.
             self._w(f"/* not translated: {s.node} (line {s.line}) */")
 
@@ -1695,7 +1796,7 @@ class CodeGen:
             return _c_quoted(e.value)
         if isinstance(e, ExprName):
             # Une variable d'une séquence qui traverse une attente vit dans
-            # l'état de cette séquence — et masque un éventuel homonyme de tête,
+            # l'état de cette séquence : et masque un éventuel homonyme de tête,
             # comme un `local` masque en Lua.
             field = self._local_state.get(e.name)
             if field is not None:
@@ -1703,9 +1804,10 @@ class CodeGen:
             # Prefab poolé : une variable de tête écrite par le script vit dans
             # le slot de CETTE instance, pas au scope fichier.
             field = self._pool_state.get(e.name)
-            if field is not None:
-                return self._state_ref(field)
-            return e.name
+            raw = self._state_ref(field) if field is not None else e.name
+            # Une variable de tête qui tient un acteur range une RÉFÉRENCE : on la résout en
+            # `Actor*` (ou nil si l'emplacement a changé de main depuis).
+            return f"actor_ref_get({raw})" if e.name in self._held_refs else raw
         if isinstance(e, ExprIndex):
             # screen.width / screen.height / etc. → littéral C
             if isinstance(e.obj, ExprName) and e.obj.name == "screen":
@@ -1720,6 +1822,17 @@ class CodeGen:
             if prop is not None:
                 receiver, p = prop
                 return self._prop_read(self._prop_receiver_c(e, receiver, p), p)
+            # `boss.hp` : un export d'un autre acteur, connu par son nom.
+            access = self._export_access(e)
+            if access is not None:
+                sym, key, meta, recv = access
+                c_type = export_setter_c_type(meta.get("type"))
+                self._export_externs[f"{sym}_get_{key}"] = (
+                    f"extern {c_type} {sym}_get_{key}(Actor* self);")
+                # Un acteur disparu se lit comme zéro : 0, ou le composite nul `(Vec2){0}`.
+                zero = f"({c_type}){{0}}" if meta.get("type") in EXPORT_COMPOSITES else "0"
+                return (f'(actor_exists_warn({recv}, "reading {key}") ? '
+                        f'{sym}_get_{key}({recv}) : {zero})')
             # `data.Objets` → le tableau const émis par data_tables.c. Ce qui
             # suit (l'indexation puis la colonne) se compose tout seul : le
             # `.champ` ci-dessous et `ExprIndexAt` s'appliquent au résultat,
@@ -1727,7 +1840,7 @@ class CodeGen:
             table = self._data_table_ref(e)
             if table is not None:
                 return f"g_data_{table}"
-            # `global.nom` → la variable C émise par globals.c — NU (scalaire,
+            # `global.nom` → la variable C émise par globals.c : NU (scalaire,
             # chantier global/const) ou base d'une indexation qui se compose toute
             # seule via `ExprIndexAt` (tableau), exactement
             # comme pour une table de données. Le nom du projet se cite en
@@ -1737,7 +1850,7 @@ class CodeGen:
             if (isinstance(e.obj, ExprName) and e.obj.name == "global"
                     and e.field in self.ctx.global_names):
                 return f"g_{e.field}"
-            # `const.nom` → le symbole émis par constants.h — toujours nu, une
+            # `const.nom` → le symbole émis par constants.h : toujours nu, une
             # constante ne s'indexe jamais. Même geste, même garde côté
             # checker (`_check_const_scalar`).
             if (isinstance(e.obj, ExprName) and e.obj.name == "const"
@@ -1746,11 +1859,11 @@ class CodeGen:
             # `self.bras` → l'enfant, désigné par une expression CONSTANTE.
             # Même geste que dans Godot : on tient son parent,
             # on nomme l'enfant. Rien n'est construit, rien n'est cherché au
-            # runtime — c'est un `&g_actors[...]` ou un décalage de groupe.
+            # runtime : c'est un `&g_actors[...]` ou un décalage de groupe.
             if (isinstance(e.obj, ExprName) and e.obj.name == "self"
                     and e.field in (self.ctx.child_refs or {})):
                 return self.ctx.child_refs[e.field]
-            # module.field — retourne le nom composé pour la résolution ultérieure
+            # module.field : retourne le nom composé pour la résolution ultérieure
             return f"{self._expr(e.obj)}.{e.field}"
         if isinstance(e, ExprIndexAt):
             return f"{self._expr(e.obj)}[{self._index(e.index)}]"
@@ -1817,6 +1930,10 @@ class CodeGen:
     # qui le porte.
 
     def _prop_constant(self, p, name: str, access=None) -> str:
+        if p.domain in (DOMAIN_ANIM, DOMAIN_SPRITE_ID) and access is not None:
+            library = self._child_library(access.obj)
+            if library is not None:       # `self.Canon.anim == "tir"` : le sprite de l'enfant
+                return _library_constant(p.domain, library, name, self._expr(access.obj))
         if p.domain == DOMAIN_IMAGE_STATE and access is not None:
             # L'état se nomme dans le sprite de l'image que le RÉCEPTEUR désigne
             # (`IMGST_{image}_{état}`) : le checker a déjà refusé une image inconnue.
@@ -1829,11 +1946,11 @@ class CodeGen:
     def _prop_write(self, p, value, access=None) -> tuple[str, str]:
         """(fonction C d'écriture, valeur C) pour une assignation de propriété.
 
-        Le nom d'une énumération devient sa constante — et, quand la propriété
+        Le nom d'une énumération devient sa constante : et, quand la propriété
         a une porte NOMMÉE distincte (`self.direction`, un vec2 côté calcul mais
         une boussole côté nom), c'est elle qu'on emprunte : `actor_set_dir` prend
         un index 0-8, `actor_set_direction` prend un Vec2. Une propriété, deux
-        écritures, deux fonctions — l'état atteint est le même."""
+        écritures, deux fonctions : l'état atteint est le même."""
         if p.domain is not None and isinstance(value, ExprString):
             return ((p.c_setter_named or p.c_setter),
                     self._prop_constant(p, value.value, access))
@@ -1843,9 +1960,10 @@ class CodeGen:
         """Le récepteur C d'un accès de propriété. Un NOM s'émet tel quel ; un
         récepteur CHAÎNÉ (`actor:get("Foe").velocity`) s'émet par son expression :
         `resolve_prop` n'en rend qu'un libellé, bon pour un message du checker."""
-        c = receiver if isinstance(access.obj, ExprName) else self._expr(access.obj)
+        c = (receiver if isinstance(access.obj, ExprName)
+             and access.obj.name not in self._held_refs else self._expr(access.obj))
         # Une propriété HÉRITÉE (`menu.visible`, de `ui_element`) attend le récepteur de
-        # son parent — la même conversion que pour une méthode héritée.
+        # son parent : la même conversion que pour une méthode héritée.
         if p is not None and "." in p.lua_name:
             owner = p.lua_name.split(".", 1)[0]
             ref = (self._ref_types.get(access.obj.name) if isinstance(access.obj, ExprName)
@@ -1862,15 +1980,96 @@ class CodeGen:
         fn = (p.c_getter_named or p.c_getter) if named else p.c_getter
         return f"{fn}({receiver})" if p.self_first else f"{fn}()"
 
-    def _enum_label_index(self, var, label) -> Optional[int]:
+    def _enum_label_index(self, var, label):
         """`team` / `"BLUE"` → 1, quand `var` est un export `enum` et `label` une
-        de ses étiquettes (le checker a déjà refusé une étiquette inconnue)."""
-        if not (isinstance(var, ExprName) and isinstance(label, ExprString)):
+        de ses étiquettes (le checker a déjà refusé une étiquette inconnue). `var` peut
+        aussi être l'export d'un autre acteur (`boss.state`)."""
+        if not isinstance(label, ExprString):
             return None
-        labels = self._enum_exports.get(var.name)
+        if isinstance(var, ExprName):
+            labels = self._enum_exports.get(var.name)
+        else:
+            access = self._export_access(var)
+            if access is not None and access[2].get("type") in EXPORT_NAMED:
+                # `boss.target == "Player"` : le nom devient sa constante (ACTOR_*, SFX_*...).
+                return self._ref_or_text_literal(access[2]["type"], label.value)
+            labels = (access[2].get("values") if access and access[2].get("type") == "enum"
+                      else None)
         if labels is None or label.value not in labels:
             return None
         return labels.index(label.value)
+
+    def _target_of(self, expr):
+        """("get" | "spawn", nom) de l'acteur que `expr` désigne par un littéral, directement ou
+        par une variable locale qui en tient un ; sinon None."""
+        if isinstance(expr, ExprName):
+            return self._ref_targets.get(expr.name)
+        return literal_actor_target(expr)
+
+    def _export_access(self, expr):
+        """(symbole C du propriétaire, export, méta, récepteur C) quand `expr` désigne un export
+        scalaire d'un acteur connu par son nom (`boss.hp`), sinon None. Le symbole est celui
+        du fichier qui DÉFINIT l'accesseur : `<Scène>_<Acteur>` pour un acteur posé, `<Scène>_<Prefab>`
+        pour un prefab, comme pour les setters de `actor:spawn`."""
+        if not isinstance(expr, ExprIndex):
+            return None
+        target = self._target_of(expr.obj)
+        if target is None:
+            return None
+        kind, name = target
+        metas = self.ctx.actor_exports if kind == "get" else self.ctx.spawn_exports
+        meta = ((metas or {}).get(name) or {}).get(expr.field)
+        if meta is None or meta.get("type") not in EXPORT_ACCESSIBLE:
+            return None
+        from codegen.c_names import sym as c_sym
+        owner = ((self.ctx.actor_models or {}).get(name) if kind == "get" else None)
+        return (owner or f"{self.ctx.scene_sym}_{c_sym(name)}", expr.field, meta, self._expr(expr.obj))
+
+    def _emit_export_write(self, access, value) -> None:
+        """`boss.hp = 3` → le setter de l'acteur, sauté et signalé si l'acteur a disparu."""
+        sym, key, meta, recv = access
+        typ = meta.get("type")
+        c_type = export_setter_c_type(typ)
+        self._export_externs[f"{sym}_set_{key}"] = (
+            f"extern void {sym}_set_{key}(Actor* self, {c_type} v);")
+        if typ == "enum" and isinstance(value, ExprString):
+            labels = meta.get("values") or []
+            cval = str(labels.index(value.value)) if value.value in labels else "0"
+        elif typ in EXPORT_NAMED and isinstance(value, ExprString):
+            cval = self._ref_or_text_literal(typ, value.value)
+        else:
+            cval = self._expr(value)
+        self._w(f'if (actor_exists_warn({recv}, "writing {key}")) {sym}_set_{key}({recv}, {cval});')
+
+    def _emit_held_ref_write(self, name: str, value) -> None:
+        """`last = actor:spawn(...)` sur une variable de tête : on range la RÉFÉRENCE de l'acteur
+        (sa génération y est retenue), `nil` la vide."""
+        field = self._pool_state.get(name)
+        raw = self._state_ref(field) if field is not None else name
+        if isinstance(value, ExprNil):
+            self._w(f"{raw} = 0;")
+        else:
+            self._w(f"{raw} = actor_ref_make({self._expr(value)});")
+
+    def _emit_export_field_write(self, access, field: str, value) -> None:
+        """`boss.tint.x = 3` : le C n'a que le setter de la valeur ENTIÈRE, on lit, on change la
+        composante, on réécrit, dans un bloc pour que le temporaire ne survive pas."""
+        sym, key, meta, recv = access
+        c_type = export_setter_c_type(meta.get("type"))
+        self._export_externs[f"{sym}_get_{key}"] = f"extern {c_type} {sym}_get_{key}(Actor* self);"
+        self._export_externs[f"{sym}_set_{key}"] = (
+            f"extern void {sym}_set_{key}(Actor* self, {c_type} v);")
+        self._w(f'if (actor_exists_warn({recv}, "writing {key}")) '
+                f'{{ {c_type} _field = {sym}_get_{key}({recv}); _field.{field} = {self._expr(value)}; '
+                f'{sym}_set_{key}({recv}, _field); }}')
+
+    def _export_vec_type(self, expr) -> Optional[str]:
+        """`vec2` / `vec3` / `rect` quand `expr` lit un export composite d'un autre acteur : le
+        type d'une variable locale qui le reçoit (`local t = boss.tint`)."""
+        access = self._export_access(expr)
+        if access is not None and access[2].get("type") in EXPORT_COMPOSITES:
+            return access[2]["type"]
+        return None
 
     def _prop_enum_compare(self, e) -> Optional[str]:
         """`blend.mode == "alpha"` → `(blend_get_mode() == BLD_MODE_ALPHA)`, et
@@ -1879,7 +2078,7 @@ class CodeGen:
         Sans ça, la comparaison partirait sur une chaîne C là où le getter rend
         un entier : gcc accepterait le pointeur, et le test serait toujours
         faux. Pire pour `self.direction`, dont le getter ordinaire rend un
-        `Vec2` — que le C ne sait pas comparer du tout. La lecture passe donc
+        `Vec2` : que le C ne sait pas comparer du tout. La lecture passe donc
         par la même porte que l'écriture."""
         if e.op not in ("==", "!="):
             return None
@@ -1911,7 +2110,7 @@ class CodeGen:
         return "/* unhandled call */"
 
     def _invoke(self, e: ExprInvoke) -> str:
-        """var:method(args) — var peut être self, une variable Actor*/référence,
+        """var:method(args) : var peut être self, une variable Actor*/référence,
         OU une expression qui rend directement un actor (`actor:get("X")`,
         `actor:spawn(...)`, `self.<enfant>`) ou une référence (`sfx:play(...)`).
         Ce dernier cas évite d'imposer un local intermédiaire pour chaîner :
@@ -1921,7 +2120,7 @@ class CodeGen:
             ref  = self._ref_types.get(name)
         else:
             # Chaîne directe : on ne l'accepte que si l'expression réceptrice a un
-            # type connu — un actor ou une référence. Sinon le repli `actor_*`
+            # type connu : un actor ou une référence. Sinon le repli `actor_*`
             # plus bas inventerait un appel sur n'importe quelle expression.
             name = None
             ref  = infer_ref_type(e.obj, self._kinds, self._ref_types)
@@ -1929,7 +2128,7 @@ class CodeGen:
                 return "/* invoke on complex expression ignored */"
         # Le NOM écrit sert de clé (type de référence, tables de dispatch) ; ce
         # qui est ÉMIS passe par `_expr`, parce qu'une variable peut vivre
-        # ailleurs que sous son nom — hissée dans l'état d'une séquence qui
+        # ailleurs que sous son nom : hissée dans l'état d'une séquence qui
         # traverse une attente, ou dans le slot d'un prefab poolé. Une expression
         # réceptrice, elle, s'émet directement.
         receiver = self._expr(e.obj)
@@ -1954,12 +2153,42 @@ class CodeGen:
                 return f"/* {name or '?'}:{e.method}(): unknown on a {ref} reference */"
             args = ", ".join(self._expr(a) for a in e.args)
             return f"actor_{e.method}({receiver}, {args})"
-        return self._emit_api_call(api, e.args, receiver=receiver)
+        return self._emit_api_call(api, e.args, receiver=receiver,
+                                   library=self._child_library(e.obj))
+
+    def _live_guard_receiver(self, call) -> Optional[str]:
+        """Le récepteur C d'une action d'acteur posée SEULE sur la référence d'un autre
+        acteur (`boss:move(...)`, `self.Tete:hide()`, `actor:get("X"):hide()`), sinon None.
+        `self`, `other` et `who` sont le contexte du handler, donc toujours vivants. Le récepteur est répété
+        dans le test : seules les formes sans effet (variable, `get`, enfant) sont gardées,
+        jamais `actor:spawn(...)` qui naîtrait deux fois."""
+        if not isinstance(call, ExprInvoke):
+            return None
+        obj = call.obj
+        if isinstance(obj, ExprName):
+            ok = (obj.name not in ("self", "other", "who")
+                  and self._ref_types.get(obj.name) == REF_ACTOR)
+        elif isinstance(obj, ExprCall):
+            ok = self._call_key(obj.func) == "actor.get"
+        else:
+            ok = (isinstance(obj, ExprIndex) and isinstance(obj.obj, ExprName)
+                  and obj.obj.name == "self" and obj.field in (self.ctx.child_refs or {}))
+        return self._expr(obj) if ok else None
+
+    def _child_library(self, expr):
+        """Les sprites de l'acteur que `expr` désigne quand ce n'est pas `self` : un enfant
+        (`self.bras`), un littéral (`actor:get("Boss")`) ou une variable qui en tient un."""
+        if isinstance(expr, ExprName):
+            return self._ref_libs.get(expr.name)
+        if (isinstance(expr, ExprIndex) and isinstance(expr.obj, ExprName)
+                and expr.obj.name == "self"):
+            return (self.ctx.child_sprites or {}).get(expr.field)
+        return literal_actor_library(expr, self.ctx.actor_sprites, self.ctx.prefab_sprites)
 
     def _is_actor_expr(self, expr) -> bool:
         """L'expression rend-elle un `Actor*` ? Mêmes cas que la détection de
         type d'un `local` (actor.get, actor.spawn, `self.<enfant>` d'un prefab
-        segmenté — cf. StmtLocal dans `_emit_block`)."""
+        segmenté : cf. StmtLocal dans `_emit_block`)."""
         if isinstance(expr, ExprCall):
             if self._call_key(expr.func) == "actor.get":
                 return True
@@ -2003,7 +2232,7 @@ class CodeGen:
             return f"{func}({args})"
 
         # Cas spéciaux résolus directement par le codegen (table de dispatch,
-        # cf. _CALL_CUSTOM en bas de fichier — pas d'appel de fonction C simple,
+        # cf. _CALL_CUSTOM en bas de fichier : pas d'appel de fonction C simple,
         # ou arguments C synthétisés depuis le contexte de build).
         custom = _CALL_CUSTOM.get(key) if key else None
         if custom:
@@ -2026,15 +2255,17 @@ class CodeGen:
         return None
 
     def _emit_api_call(self, api: ApiFunc, lua_args: list,
-                       with_self: bool = False, receiver: str | None = None) -> str:
-        """Génère l'appel C en résolvant les args string → constantes."""
+                       with_self: bool = False, receiver: str | None = None,
+                       library=None) -> str:
+        """Génère l'appel C en résolvant les args string → constantes. `library` : les
+        sprites du récepteur quand ce n'est pas `self` (cf. `_child_library`)."""
         c_args = []
         if receiver is not None:
             c_args.append(receiver)
         elif with_self:
             c_args.append("self")
         for param, arg in zip(api.params, lua_args):
-            c_args.append(self._resolve_arg(param, arg))
+            c_args.append(self._resolve_arg(param, arg, receiver, library))
         # Args variadiques : tous ceux qui dépassent les params déclarés
         if api.variadic:
             for extra in lua_args[len(api.params):]:
@@ -2064,7 +2295,7 @@ class CodeGen:
         names = []
         for marker in parse(literal).markers:
             # Les constantes sont cuites dans l'entrée anonyme par font_emit.
-            # Toute autre valeur — locale OU globale — passe par son rang de
+            # Toute autre valeur, locale OU globale, passe par son rang de
             # tampon, afin qu'une locale homonyme puisse masquer la globale.
             if marker.kind == KIND_VALUE and marker.value not in constants \
                     and marker.value not in names:
@@ -2090,7 +2321,7 @@ class CodeGen:
     def _emit_text_box_draw(self, args: list, receiver: str) -> str:
         return self._emit_text_literal(f"{REF_TEXT_BOX}:draw", args, 0, receiver)
 
-    def _resolve_arg(self, param, arg) -> str:
+    def _resolve_arg(self, param, arg, receiver: str = "self", library=None) -> str:
         """Convertit un arg Lua en expression C, résolvant les strings → constantes."""
         from .api import PARAM_STR_LITERAL
         if param.ptype == PARAM_STR_LITERAL:
@@ -2100,11 +2331,13 @@ class CodeGen:
         if not isinstance(arg, ExprString) or param.domain is None:
             return self._expr(arg)
         name = arg.value
+        if library is not None and param.domain in (DOMAIN_ANIM, DOMAIN_SPRITE_ID):
+            return _library_constant(param.domain, library, name, receiver)
         make_constant = _DOMAIN_CONSTANT.get(param.domain)
         if make_constant is None:
             # Domaine sans constante générique : la chaîne part telle quelle.
             # Légitime pour les domaines résolus par un émetteur dédié
-            # (_DOMAIN_EMITTED_ELSEWHERE), qui n'arrivent pas jusqu'ici — et
+            # (_DOMAIN_EMITTED_ELSEWHERE), qui n'arrivent pas jusqu'ici : et
             # c'est `validator._check_api_domains` qui garantit qu'aucun autre
             # domaine ne tombe dans ce cas par oubli.
             return f'"{name}"'
@@ -2127,15 +2360,15 @@ class CodeGen:
         `trigger="on_destroy"` DE LA CIBLE (table indexée par tag, cf.
         `main_gen._sfx_on_destroy_table`) avant de désactiver l'actor.
 
-        Sur QUELQU'UN D'AUTRE — `other:destroy()`, ou `MonBras:destroy()` depuis
-        la v0.23 — le hook SCRIPTÉ n'est pas appelé, et c'est le seul choix
+        Sur QUELQU'UN D'AUTRE : `other:destroy()`, ou `MonBras:destroy()` depuis
+        la v0.23 : le hook SCRIPTÉ n'est pas appelé, et c'est le seul choix
         honnête : le symbole du script de la cible n'est pas connu à ce site
         d'appel (`other` peut être n'importe quel acteur, et un enfant n'a pas
         de script propre). Le C émis appelait jusqu'ici le `on_destroy` de
-        CELUI QUI DÉTRUIT en lui passant l'acteur d'autrui — donc le mauvais
+        CELUI QUI DÉTRUIT en lui passant l'acteur d'autrui : donc le mauvais
         handler, sur la mauvaise cible. Ne rien appeler laisse le hook scripté
         de la cible muet, ce qui est une limite ; appeler le mauvais était un
-        bug. Le SoundFxComponent, lui, JOUE dans les deux cas — c'est piloté
+        bug. Le SoundFxComponent, lui, JOUE dans les deux cas : c'est piloté
         par la donnée du tag, pas par un symbole résolu au build."""
         if receiver != "self":
             return f"actor_destroy_with_sfx({receiver})"
@@ -2147,7 +2380,7 @@ class CodeGen:
 
         Volume lu depuis la ressource Sfx. `hold` dit si l'appelant garde la
         référence : vrai quand l'appel est une VALEUR (`local h = sfx.play…`),
-        faux quand il est posé seul — c'est `_emit_stmt` qui le sait."""
+        faux quand il est posé seul : c'est `_emit_stmt` qui le sait."""
         if not args or not isinstance(args[0], ExprString):
             return "/* sfx:play() : argument invalide */"
         name   = args[0].value
@@ -2157,8 +2390,8 @@ class CodeGen:
     def _percent_arg(self, args: list, fold, to_expr, default: int = 100) -> str:
         """Un pourcentage écrit DANS l'appel → la graduation du registre visé.
 
-        Plié au build quand c'est un littéral — le C reste lisible et l'arrondi
-        est exact — et converti à l'exécution sinon, parce qu'un niveau peut
+        Plié au build quand c'est un littéral : le C reste lisible et l'arrondi
+        est exact : et converti à l'exécution sinon, parce qu'un niveau peut
         venir d'une variable (`global.Volume`). Les deux formes de
         conversion vivent côte à côte dans `models/audio.py`, pour qu'aucune ne
         dérive de l'autre.
@@ -2176,7 +2409,7 @@ class CodeGen:
         return to_expr(self._expr(a))
 
     def _emit_box_overlaps(self, args: list, receiver: str) -> str:
-        """`hb:overlaps(x)` — `x` est un acteur OU une autre boîte, et le C en a
+        """`hb:overlaps(x)` : `x` est un acteur OU une autre boîte, et le C en a
         deux versions : le langage ne type pas ses variables, c'est donc le type
         de référence relevé sur le `local` (ou rendu par l'appel) qui tranche."""
         other = args[0]
@@ -2195,7 +2428,7 @@ class CodeGen:
                 f"{self._percent_arg(args, pitch_to_rate, pitch_to_rate_expr)})")
 
     def _emit_sfx_set_panning(self, args: list, receiver: str) -> str:
-        """Le panning s'écrit −100..+100 et le registre prend 0–255 : ce n'est
+        """Le panning s'écrit −100..+100 et le registre prend 0-255 : ce n'est
         pas une mise à l'échelle mais un décalage autour du centre."""
         return (f"sfx_set_panning({receiver}, "
                 f"{self._percent_arg(args, panning_to_hardware, panning_to_hardware_expr, 0)})")
@@ -2213,7 +2446,7 @@ class CodeGen:
                 f"{self._percent_arg(args, pitch_to_module, pitch_to_module_expr)})")
 
     def _emit_music_fade_in(self, args: list) -> str:
-        """music:fade_in("Name", frames) → music_fade_in(MUSIC_NAME, loop, volume, frames) —
+        """music:fade_in("Name", frames) → music_fade_in(MUSIC_NAME, loop, volume, frames) :
         comme `music.play`, loop et volume lus sur la ressource ; seul le fondu vient de l'appel."""
         if len(args) < 2 or not isinstance(args[0], ExprString):
             return "/* music:fade_in() : argument invalide */"
@@ -2230,7 +2463,7 @@ class CodeGen:
                 f"{self._percent_arg(args, volume_to_module, volume_to_module_expr)})")
 
     def _emit_music_play(self, args: list) -> str:
-        """music:play("Name") → music_play(MUSIC_NAME, loop, volume) — loop/volume lus depuis la ressource Music."""
+        """music:play("Name") → music_play(MUSIC_NAME, loop, volume) : loop/volume lus depuis la ressource Music."""
         if not args or not isinstance(args[0], ExprString):
             return "/* music:play() : argument invalide */"
         name = args[0].value
@@ -2240,7 +2473,7 @@ class CodeGen:
 
     def _emit_music_transition(self, args: list, c_func: str, extra: str = "") -> str:
         """Les deux transitions se traduisent pareil : loop et volume viennent
-        de la RESSOURCE, comme pour `music.play` — un fondu ne change pas ce
+        de la RESSOURCE, comme pour `music.play` : un fondu ne change pas ce
         qu'est la piste d'arrivée, seulement la façon d'y aller."""
         if not args or not isinstance(args[0], ExprString):
             return f"/* {c_func}() : argument invalide */"
@@ -2255,7 +2488,7 @@ class CodeGen:
 
         L'index est le RANG de l'état dans SA boîte : chaque boîte a son propre
         espace de noms, donc deux boîtes peuvent porter « sable » sans que
-        l'appel devienne ambigu — c'est l'appel qui nomme la boîte.
+        l'appel devienne ambigu : c'est l'appel qui nomme la boîte.
         """
         if not args or not isinstance(args[0], ExprString):
             return f"/* {kind}.set_state() : argument invalide */"
@@ -2284,7 +2517,7 @@ class CodeGen:
     def _emit_music_jingle(self, args: list) -> str:
         """music:jingle("Fanfare") → music_jingle(MUSIC_X, volume, policy, level, release).
 
-        `mmSetJingleVolume` partage l'échelle 0–1024 de `mmSetModuleVolume` :
+        `mmSetJingleVolume` partage l'échelle 0-1024 de `mmSetModuleVolume` :
         c'est bien la conversion « module », pas celle d'un effet.
         """
         if not args or not isinstance(args[0], ExprString):
@@ -2304,7 +2537,7 @@ class CodeGen:
 
     def _emit_array_misuse(self, args: list) -> str:
         """`array(n)` DÉCLARE un tableau : il est lu à l'endroit du `local`
-        (cf. `_emit_locals`), et n'arrive ici que s'il a été écrit ailleurs —
+        (cf. `_emit_locals`), et n'arrive ici que s'il a été écrit ailleurs :
         dans un calcul, un argument. Il n'y a rien à émettre pour ça."""
         self.warnings.append("array() declares an array and can only be written in a "
                              "`local`: local bag = array(8).")
@@ -2313,7 +2546,7 @@ class CodeGen:
     def _emit_debug_log(self, args: list) -> str:
         """`debug:log("hp=", hp, " x=", x)` → une séquence d'appels C, un par
         argument (`debug_write_str`/`debug_write_int`), fermée par
-        `debug_flush()` — jamais un unique appel variadique : le moteur
+        `debug_flush()` : jamais un unique appel variadique : le moteur
         n'émet pas de printf. L'opérateur virgule enchaîne
         les appels dans une seule expression, valide en position de
         statement comme n'importe quel autre appel de l'API.
@@ -2321,7 +2554,7 @@ class CodeGen:
         Le C émis ne change pas entre build debug et release : c'est
         `gba_debug.h` qui décide, en fournissant soit les vraies fonctions
         (canal mGBA), soit des stubs `inline` vides hors GBA_DEBUG_BUILD.
-        À -O2 un appel à un stub vide disparaît par inlining — retiré à la
+        À -O2 un appel à un stub vide disparaît par inlining : retiré à la
         compilation, sans qu'aucun drapeau ne soit testé au runtime."""
         calls = []
         for arg in args:
@@ -2334,13 +2567,13 @@ class CodeGen:
 
     def _input_mask_arg(self, args: list) -> str:
         """Le nom cité par `held`/`buffered` (1er arg) : un bouton nu ou un
-        accord déclaré (`InputBinding`) — jamais une séquence, qui n'a plus le
+        accord déclaré (`InputBinding`) : jamais une séquence, qui n'a plus le
         même espace de noms depuis la décision du 2026-09-27."""
         if not args:
             return "0"
         if not isinstance(args[0], ExprString):
             # Nom non littéral : comme tout autre domaine (cf. `_resolve_arg`),
-            # l'expression part telle quelle — ce système est résolu au build,
+            # l'expression part telle quelle : ce système est résolu au build,
             # un nom calculé n'a jamais été un cas supporté.
             return self._expr(args[0])
         name = args[0].value
@@ -2361,7 +2594,7 @@ class CodeGen:
         return f"input_buffered({bit}, {mask}, {frames})"
 
     def _emit_get_sequence(self, args: list) -> str:
-        """`get_sequence(nom)` — une alternance dans l'expression de la
+        """`get_sequence(nom)` : une alternance dans l'expression de la
         séquence développe PLUSIEURS tables (une par alternative), réunies
         par un OU : n'importe laquelle qui matche suffit."""
         name = args[0].value if args and isinstance(args[0], ExprString) else None
@@ -2402,17 +2635,23 @@ class CodeGen:
         from codegen.c_names import sym as c_sym
         if not args:
             return "/* actor:get() : argument invalide */"
+        if len(args) >= 2 and isinstance(args[0], ExprString):
+            # actor:get("Bullet", i) → la i-ème instance VIVANTE du modèle (1-based).
+            pool = self._pool_macro(args[0].value)
+            if pool is None:
+                return "/* actor:get(model, i): a scene is needed */(Actor*)0"
+            return f"actor_model_nth({pool}, {self._index(args[1])})"
         if not isinstance(args[0], ExprString):
             # Index dynamique 1-based → slot 0-based, borné par actor_at.
             return f"actor_at({self._index(args[0])})"
         sym = c_sym(args[0].value)
         # Un acteur appartient à sa scène : le TAG est qualifié par la scène qui
         # compile ce script (« L'acteur appartient à sa scène »). Le nom reste
-        # local — actor:get("curseur") vise LE curseur de CETTE scène.
+        # local : actor:get("curseur") vise LE curseur de CETTE scène.
         scene = self.ctx.scene_sym
         if scene:
             # `actor_live` rend nil si l'acteur a été détruit au runtime
-            # (décision C') — le TAG reste résolu à la compilation.
+            # (décision C') : le TAG reste résolu à la compilation.
             return f"actor_live(&g_actors[ACTOR_{scene.upper()}_{sym.upper()}])"
         # Script PARTAGÉ (caméra, sans scène connue au build) : résolution à
         # l'exécution, dans la scène active, nullable (décisions C/C'). Le NOM
@@ -2421,13 +2660,27 @@ class CodeGen:
 
     def _emit_actor_count(self, args: list) -> str:
         """actor:count() → g_scene_placed : les acteurs posés de la scène active,
-        la borne de actor:get(i) (« L'acteur appartient à sa scène »)."""
+        la borne de actor:get(i) (« L'acteur appartient à sa scène »).
+        actor:count("Bullet") → les instances vivantes de ce modèle, la borne de
+        actor:get("Bullet", i)."""
+        if args and isinstance(args[0], ExprString):
+            pool = self._pool_macro(args[0].value)
+            return f"actor_model_count({pool})" if pool else "0 /* actor:count(model): a scene is needed */"
         return "g_scene_placed"
+
+    def _pool_macro(self, prefab: str):
+        """`g_model_<S>, MODEL_<S>_COUNT` : la table des instances d'un modèle dans la scène qui
+        compile ce script (headers.py, main.c), ou None sans scène (script partagé)."""
+        if not self.ctx.scene_sym:
+            return None
+        from codegen.c_names import sym as c_sym
+        sym = f"{self.ctx.scene_sym}_{c_sym(prefab)}"
+        return f"g_model_{sym}, MODEL_{sym.upper()}_COUNT"
 
     def _emit_layer_get(self, args: list) -> str:
         """layer:get(2) → 2 : le numéro EST la référence (un fond n'a pas d'autre identité que
-        son rang matériel). Une expression passe telle quelle — `for i = 0, 3` sur les fonds
-        est légitime — ; le numéro écrit en clair a déjà été borné par le checker."""
+        son rang matériel). Une expression passe telle quelle : `for i = 0, 3` sur les fonds
+        est légitime : ; le numéro écrit en clair a déjà été borné par le checker."""
         if not args:
             return "0 /* layer:get(): missing number */"
         return self._expr(args[0])
@@ -2440,7 +2693,7 @@ class CodeGen:
 
     def _emit_ui_get(self, args: list) -> str:
         """interface:get("alerte") → UIELEM_ALERTE, ou UILIST_/IMAGE_/REGION_ selon la
-        NATURE de l'élément — résolu à la compilation, comme actor.get. Pas de fonction
+        NATURE de l'élément : résolu à la compilation, comme actor.get. Pas de fonction
         runtime : l'index est la même constante que celle émise en tête de fichier, et
         c'est le type que le checker a jugé (`ref_kinds`) qui dit laquelle : une liste
         est tenue par son index de LISTE, ce que ses propriétés (`menu.index`) attendent."""
@@ -2464,7 +2717,7 @@ class CodeGen:
         return f"{ref} = 1" if ref else "0"
 
     def _emit_sequence_stop(self, args: list) -> str:
-        """0 = arrêtée. Une séquence relancée repart de sa première tranche —
+        """0 = arrêtée. Une séquence relancée repart de sa première tranche :
         l'étape est la seule chose qui dise où elle en était."""
         ref = self._sequence_step_arg(args, "sequence.stop")
         return f"{ref} = 0" if ref else "0"
@@ -2478,7 +2731,7 @@ class CodeGen:
 
         Le pool est per-scène : la fonction de spawn appartient
         à la scène qui compile ce script, d'où le préfixe. Une unité partagée
-        (caméra, `scene_sym` vide) n'a pas de scène à cibler — refusé."""
+        (caméra, `scene_sym` vide) n'a pas de scène à cibler : refusé."""
         if len(args) < 2 or not isinstance(args[0], ExprString):
             return "/* actor.spawn: non-literal prefab name */"
         if not self.ctx.scene_sym:
@@ -2503,7 +2756,7 @@ class CodeGen:
 
     def _spawn_setter_externs(self, script) -> list[str]:
         """Les `extern void <Scène>_<Prefab>_set_<clé>(Actor*, int);` de tous les
-        `actor:spawn("X", pos, {k=v})` du script — dédupliqués. Walk sur les
+        `actor:spawn("X", pos, {k=v})` du script : dédupliqués. Walk sur les
         statements (une table de spawn n'est valide qu'au niveau statement, cf.
         checker), y compris dans les blocs if/while/for."""
         if script is None or not self.ctx.scene_sym:
@@ -2529,7 +2782,7 @@ class CodeGen:
                 if not key or key not in meta or (sym, key) in seen:
                     continue
                 seen.add((sym, key))
-                arg_t = _export_setter_c_type(meta[key].get("type"))
+                arg_t = export_setter_c_type(meta[key].get("type"))
                 out.append(f"extern void {sym}_set_{key}(Actor* self, {arg_t} v);")
 
         def visit(stmts):
@@ -2556,7 +2809,7 @@ class CodeGen:
     @staticmethod
     def _spawn_table(args: list):
         """La table d'exports d'`actor:spawn("X", pos, {k=v})` (3ᵉ argument), ou
-        None. Une table à clés seulement — un tableau positionnel n'en est pas une."""
+        None. Une table à clés seulement : un tableau positionnel n'en est pas une."""
         if len(args) >= 3 and isinstance(args[2], ExprTable) and args[2].keys:
             return args[2]
         return None
@@ -2573,7 +2826,7 @@ class CodeGen:
                 continue
             cval = self._spawn_export_value(prefab_name, key, val)
             if cval is None:
-                continue   # clé inconnue / type non réglable — signalé par le checker
+                continue   # clé inconnue / type non réglable : signalé par le checker
             calls.append(f"{sym}_set_{key}({dest}, {cval});")
         if not calls:
             return
@@ -2592,7 +2845,7 @@ class CodeGen:
             par la scène du spawner ; string → index de texte (TEXT_*, anonyme) ;
           - vec2/vec3/rect → le littéral composé `(Vec2){x, y}` (via _expr).
         None si la clé n'est pas un export réglable du prefab (checker l'aura
-        signalé). Les *_ref/string vides tombent sur 0 — pas de référence."""
+        signalé). Les *_ref/string vides tombent sur 0 : pas de référence."""
         meta = (self.ctx.spawn_exports.get(prefab_name) or {}).get(key)
         if not meta:
             return None
@@ -2613,7 +2866,7 @@ class CodeGen:
         """Un nom d'export `*_ref`/`string` → sa constante C, dans le contexte de
         CE fichier (le posé, le template poolé, ou le spawner). Vide → « 0 ». Les
         macros émises (SFX_*, SCENE_IDX_*, ACTOR_*, TEXT_*) sont toutes en portée
-        ici — l'en-tête du fichier les #define (cf. _emit_header)."""
+        ici : l'en-tête du fichier les #define (cf. _emit_header)."""
         if not name:
             return "0"
         if typ == "sfx_ref":
@@ -2630,7 +2883,7 @@ class CodeGen:
         return text_constant(key)
 
     def _emit_save_read(self, args: list) -> str:
-        """save:read(slot, "nom") → save_read_var(slot, GLOBAL_NOM) — le nom
+        """save:read(slot, "nom") → save_read_var(slot, GLOBAL_NOM) : le nom
         reste un second argument LITTÉRAL ici (pas un accès pointé comme
         `global.nom`) : le premier argument est l'emplacement, pas le
         récepteur, et c'est GLOBAL_NOM (l'id de sauvegarde) qu'il faut, pas
@@ -2645,7 +2898,7 @@ class CodeGen:
 
         Sauf `on_update` quand le script déclare des séquences : c'est là
         qu'elles avancent, et un script peut très bien n'écrire QUE des
-        séquences — le stub porte alors le pompage."""
+        séquences : le stub porte alors le pompage."""
         if event_name == "on_update" and self._seq_plans:
             if not self.ctx.has_self:
                 sig = scene_event_sig(self.ctx.actor_sym, "on_update", self.ctx.owner_kind)
@@ -2688,10 +2941,10 @@ class CodeGen:
         self._lines.append("    " * self._indent + line)
 
 
-# ─── Tables de dispatch — fonctions Lua qui ne se traduisent pas par un
+# ─── Tables de dispatch : fonctions Lua qui ne se traduisent pas par un
 # simple appel de fonction C (expression brute, args synthétisés depuis le
 # contexte de build, émission multi-instructions...). Chaque clé existe
-# aussi dans RUNTIME_API (scripting/api.py) pour la validation/doc — cette
+# aussi dans RUNTIME_API (scripting/api.py) pour la validation/doc : cette
 # table ne gère que la traduction C, à un seul endroit plutôt qu'éparpillée
 # en if/elif dans _invoke/_call.
 
@@ -2699,7 +2952,7 @@ _INVOKE_CUSTOM: dict = {
     # Les trois réglages d'une référence d'effet qui portent un POURCENTAGE :
     # ils passent par un émetteur parce que la valeur change de graduation
     # entre le script et le registre. `:stop()` et `:playing()` n'en ont pas
-    # besoin — ils se traduisent terme à terme depuis le catalogue.
+    # besoin : ils se traduisent terme à terme depuis le catalogue.
     "sfx:set_volume":  CodeGen._emit_sfx_set_volume,
     "sfx:set_pitch":   CodeGen._emit_sfx_set_pitch,
     "sfx:set_panning": CodeGen._emit_sfx_set_panning,
@@ -2726,14 +2979,14 @@ _DOMAIN_CONSTANT: dict = {
     # `held`/`buffered` ont leur propre émetteur (`_input_mask_arg`) pour
     # l'argument optionnel/le bit de tampon, mais lisent le MÊME dict.
     DOMAIN_KEY:     lambda g, name: g.ctx.input_masks.get(name, key_constant(name)),
-    DOMAIN_ACTOR_NAME:     lambda g, name: actor_name_constant(name),
+    DOMAIN_ACTOR_NAME:     lambda g, name: actor_name_constant(name, g.ctx.scene_sym),
     DOMAIN_BOX_TAG: lambda g, name: box_tag_constant(name),
     DOMAIN_SCENE:   lambda g, name: scene_constant(name),
     DOMAIN_LANG:    lambda g, name: lang_constant(name),
     DOMAIN_CAMERA:  lambda g, name: camera_constant(name),
     # Pas `hardware_enum_constant` : depuis le 2026-08-25 la moitié des noms
     # valides (les WindowSlot du projet) n'existe dans aucune table statique
-    # — même mécanique que DOMAIN_CAMERA, dérivée du nom, pas d'une table.
+    # : même mécanique que DOMAIN_CAMERA, dérivée du nom, pas d'une table.
     DOMAIN_WIN_REGION: lambda g, name: window_region_constant(name),
     # Une chaîne qui ne matche aucune clé est un LITTÉRAL (`text.draw` seul le
     # permet, cf. Param.literal_ok) : il a sa propre entrée de table, donc le C
@@ -2744,13 +2997,26 @@ _DOMAIN_CONSTANT: dict = {
     DOMAIN_PALETTE: lambda g, name: palette_constant(name),
     # Énumérations matérielles : la constante C vient de `HARDWARE_ENUMS`, la
     # même table que celle où le checker a validé le nom. Le C généré porte donc
-    # `WINR_OBJ` et non `2` — lisible pour qui relit le build.
+    # `WINR_OBJ` et non `2` : lisible pour qui relit le build.
     DOMAIN_OBJ_MODE:   lambda g, name: hardware_enum_constant(DOMAIN_OBJ_MODE, name),
     DOMAIN_DIRECTION:  lambda g, name: hardware_enum_constant(DOMAIN_DIRECTION, name),
     DOMAIN_BLEND_MODE: lambda g, name: hardware_enum_constant(DOMAIN_BLEND_MODE, name),
     DOMAIN_BLEND_SIDE: lambda g, name: hardware_enum_constant(DOMAIN_BLEND_SIDE, name),
     DOMAIN_EASE:       lambda g, name: hardware_enum_constant(DOMAIN_EASE, name),
 }
+
+def _library_constant(domain: str, library, name: str, receiver: str) -> str:
+    """Le rang de `name` dans les sprites d'un ENFANT, écrit en nombre : il n'a pas de
+    `#define` dans le `.c` du parent, qui ne connaît que ses propres sprites. Un enfant à
+    plusieurs apparences range ses états selon le sprite AFFICHÉ, lu à l'exécution."""
+    if domain == DOMAIN_SPRITE_ID:
+        return str(library.sprite_ids.index(name))
+    k = [c_ident(n) for n in library.anim_names].index(c_ident(name))
+    if not library.anim_maps:
+        return str(k)
+    row = ",".join(str(m[k]) for m in library.anim_maps)
+    return f"((const unsigned char[]){{{row}}})[actor_get_appearance({receiver})]"
+
 
 # Domaines SANS constante générique : leur argument est résolu par un émetteur
 # dédié de `_CALL_CUSTOM` (nom de prefab poolé, actor résolu à la compilation,
@@ -2765,24 +3031,24 @@ _DOMAIN_EMITTED_ELSEWHERE: frozenset = frozenset({
     # d'état, que `_emit_sequence_start/stop/running` écrit ou teste.
     DOMAIN_SEQUENCE,
     # L'état d'une image se résout avec l'image du RÉCEPTEUR (`IMGST_{image}_{état}`),
-    # donc pas depuis le seul littéral — cf. `_prop_constant`.
+    # donc pas depuis le seul littéral : cf. `_prop_constant`.
     DOMAIN_IMAGE_STATE,
     # interface:get("nom") résout directement en UIELEM_<NOM>, comme actor.get résout
-    # DOMAIN_ACTOR — cf. `_emit_ui_get`.
+    # DOMAIN_ACTOR : cf. `_emit_ui_get`.
     DOMAIN_UI_ELEMENT,
     # `get_axis` n'a pas de constante par nom : chaque argument devient une
     # PAIRE d'expressions (masque négatif/positif), assemblées par l'émetteur
     # dédié (`_emit_get_axis`).
     DOMAIN_AXIS,
     # `get_sequence` n'a pas de constante par nom : une alternance dans
-    # l'expression développe plusieurs tables C, réunies par un OU — cf.
+    # l'expression développe plusieurs tables C, réunies par un OU : cf.
     # `_emit_get_sequence`.
     DOMAIN_INPUT_SEQUENCE,
 })
 
 
 def covered_domains() -> frozenset:
-    """Domaines dont le codegen sait quoi faire — constante générique, ou
+    """Domaines dont le codegen sait quoi faire : constante générique, ou
     émetteur dédié. Pendant exact de `checker.covered_domains()`."""
     return frozenset(_DOMAIN_CONSTANT) | _DOMAIN_EMITTED_ELSEWHERE
 
@@ -2793,7 +3059,7 @@ _CALL_CUSTOM: dict = {
     # `pressed`/`released` n'ont plus de cas particulier depuis que les
     # séquences ont quitté leur espace de noms (2026-09-27) : un simple
     # accord, résolu par `_DOMAIN_CONSTANT[DOMAIN_KEY]` comme n'importe quel
-    # bouton — le chemin générique (`_emit_api_call`) suffit.
+    # bouton : le chemin générique (`_emit_api_call`) suffit.
     "input.held":         CodeGen._emit_input_held,
     "input.buffered":     CodeGen._emit_input_buffered,
     "input.get_sequence": CodeGen._emit_get_sequence,
@@ -2834,7 +3100,7 @@ def generate(script: LuaScript, ctx: CodegenContext) -> tuple[str, list[str], in
 
     `warnings` couvre les behaviors requis manquants/invalides, non bloquants
     mais à faire remonter à l'utilisateur. Le troisième terme est ce que
-    l'état de ce script coûte dans UNE instance d'un prefab poolé — 0 partout
+    l'état de ce script coûte dans UNE instance d'un prefab poolé : 0 partout
     ailleurs, un acteur de scène n'ayant qu'une instance et rangeant tout au
     scope fichier. C'est le chiffre que le build annonce."""
     gen = CodeGen(ctx)

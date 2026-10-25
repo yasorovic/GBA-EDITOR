@@ -226,9 +226,10 @@ class GbaStatusBar(QWidget):
                 self._set(key, 0)
             return
 
-        # OAM : ce que la scène DEMANDE (acteurs actifs à apparence, visibles ou non — `visible`
-        # n'est qu'un drapeau d'affichage —, OBJ d'interface, toutes les instances des pools). Au-delà
-        # de 128, le surplus vit sans s'afficher et `_check_actor_budget` l'avertit.
+        # OAM : le plus que la scène puisse afficher (acteurs actifs à apparence, visibles ou non —
+        # `visible` n'est qu'un drapeau d'affichage —, OBJ d'interface, toutes les instances des pools).
+        # Seuls les sprites à l'écran prennent un emplacement à la frame : au-delà de 128, ce n'est un
+        # souci que s'ils sont tous à l'écran en même temps.
         oam_count = scene_oam_layout(project, scene).requested
 
         # Rectangles occupant l'écran : (y, hauteur, coût en cycles par ligne).
@@ -1109,7 +1110,7 @@ class MainWindow(QMainWindow):
         # écrasé, la famille et la graisse passent donc par la feuille du widget.
         self._tb_project_lbl.setStyleSheet(
             f"QPushButton{{color:{C.TEXT_MUTED};background:none;border:none;padding:0 12px;"
-            f"font-family:'{brand_font().family()}';font-size:{T.XL}px;font-weight:400;}}"
+            f"font-family:'{brand_font().family()}';font-size:{T.XL}px;font-weight:700;}}"
             f"QPushButton:hover{{color:{C.TEXT_DIM};}}"
         )
         self._tb_project_lbl.clicked.connect(self._go_home)

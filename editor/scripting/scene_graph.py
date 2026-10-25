@@ -20,7 +20,7 @@ class SceneGraphNode:
     """Une scène déclarée par le projet, dans son ordre de catalogue.
 
     `has_dynamic_exit` retient ce que les arêtes ne peuvent pas dire : la scène
-    contient un ``scene:switch(<calculé>)`` — une cible choisie au runtime, ou un
+    contient un ``scene:switch(<calculé>)`` : une cible choisie au runtime, ou un
     script illisible dont on ne sait rien. C'est le fait que le diagnostic traduit
     en « point de vigilance » ; il ne devient jamais une fausse arête.
     """
@@ -88,7 +88,7 @@ def scene_graph(project) -> SceneGraph:
             # Une cible calculée (`scene:switch(var)`) ou un script illisible ne
             # produit aucune arête, mais reste un fait à signaler : la scène a une
             # sortie qu'on ne sait pas résoudre. Même primitive que la réservation
-            # VRAM des polices — l'ignorance se propage, elle ne se confond pas
+            # VRAM des polices : l'ignorance se propage, elle ne se confond pas
             # avec « aucune sortie ».
             if domain_args_in_text(text, DOMAIN_SCENE)[1]:
                 dynamic.add(scene.name)
@@ -105,7 +105,7 @@ def scene_graph(project) -> SceneGraph:
     return SceneGraph(nodes, edges)
 
 
-# ── Diagnostics de lecture — ce que le graphe sait déjà, gratuitement ──
+# ── Diagnostics de lecture : ce que le graphe sait déjà, gratuitement ──
 #
 # Purement dérivé de la projection : aucune écriture, aucun accès script. Nomme
 # les FAITS (atteignable, cul-de-sac, cible calculée, cible cassée) ; la couleur
@@ -126,9 +126,9 @@ class ExitState(enum.Enum):
     une cible résolue, qui prime sur l'absence de sortie."""
 
     BROKEN = "broken"      # cite un nom qu'aucune scène ne porte
-    DYNAMIC = "dynamic"    # cible calculée / script illisible — point de vigilance
+    DYNAMIC = "dynamic"    # cible calculée / script illisible : point de vigilance
     LITERAL = "literal"    # au moins une cible résolue
-    NONE = "none"          # aucune sortie — cul-de-sac
+    NONE = "none"          # aucune sortie : cul-de-sac
 
 
 @dataclass(frozen=True)
@@ -140,7 +140,7 @@ class NodeDiagnostic:
 def node_diagnostics(graph: SceneGraph) -> dict[str, NodeDiagnostic]:
     """État d'entrée/sortie de chaque scène, dérivé des seules arêtes et du flag
     `has_dynamic_exit`. Les marqueurs de cible absente ne sont pas des nœuds et
-    n'ont pas de diagnostic — leur seule existence EST le signal."""
+    n'ont pas de diagnostic : leur seule existence EST le signal."""
     names = {node.name for node in graph.nodes}
     incoming = {node.name: False for node in graph.nodes}
     literal_out = {node.name: False for node in graph.nodes}

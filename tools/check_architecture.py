@@ -119,15 +119,25 @@ def lignes_type_checking(tree: ast.AST) -> set[int]:
 class Rapport:
     def __init__(self) -> None:
         self.echecs: list[str] = []
-        self.sections: list[tuple[str, int]] = []
+        self.sections: list[tuple[str, int, int]] = []
 
-    def section(self, titre: str, echecs: list[str]) -> None:
-        etat = "OK" if not echecs else f"{len(echecs)} PROBLEME(S)"
+    def section(self, titre: str, echecs: list[str],
+                avertissements: list[str] = ()) -> None:
+        """Les `echecs` font échouer la commande ; les `avertissements` sont
+        affichés mais n'ont aucun effet sur le build ni sur l'exécution."""
+        etat = "OK" if not (echecs or avertissements) else " + ".join(
+            p for p in (f"{len(echecs)} PROBLEME(S)" if echecs else "",
+                        f"{len(avertissements)} AVERTISSEMENT(S)" if avertissements else "") if p)
         print(f"\n=== {titre} : {etat}")
         for e in echecs:
             print(f"    {e}")
+        for a in avertissements:
+            print(f"    (avertissement) {a}")
+            if os.environ.get("GITHUB_ACTIONS"):
+                # Annotation GitHub : jaune dans le résumé du run.
+                print(f"::warning title={titre}::{a}")
         self.echecs += echecs
-        self.sections.append((titre, len(echecs)))
+        self.sections.append((titre, len(echecs), len(avertissements)))
 
 
 def _import_isole(mod: str) -> tuple[str, str]:
@@ -175,7 +185,9 @@ CITATIONS_LABELS = {"label": 0}
 
 
 def controle_catalogue(trees: dict, nom_catalogue: str, citations: dict) -> list:
-    """Toute clé citée existe dans le catalogue, toute entrée est citée. Vaut
+    """Rend (erreurs, avertissements). Toute clé citée doit exister dans le catalogue
+    (erreur : l'écran afficherait la clé brute) ; une entrée citée nulle part est
+    seulement signalée (avertissement : aucun effet sur le build). Vaut
     pour les deux catalogues d'interface (notices, libellés) : même fichier
     `<nom>/<nom>.json`, même grammaire, seule change la table des citations."""
     catalogue = json.loads(
@@ -215,12 +227,13 @@ def controle_catalogue(trees: dict, nom_catalogue: str, citations: dict) -> list
     # pour de bon, elle ne passe simplement pas par l'argument d'un appel. Une clé
     # CONSTRUITE (`label(f"win.{key}_note")`) l'est aussi : elle n'existe jamais
     # entière dans le code, mais sa famille — `win.<quelque chose>_note` — oui.
-    return ([f"{clé} citée en {où} — absente du catalogue"
-             for clé, où in sorted(citees.items()) if clé not in catalogue]
-            + [f"{clé} — dans le catalogue, citée nulle part"
-               for clé in sorted(catalogue)
-               if clé not in littérales
-               and not any(f.fullmatch(clé) for f in familles)])
+    absentes = [f"{clé} citée en {où} — absente du catalogue"
+                for clé, où in sorted(citees.items()) if clé not in catalogue]
+    orphelines = [f"{clé} — dans le catalogue, citée nulle part"
+                  for clé in sorted(catalogue)
+                  if clé not in littérales
+                  and not any(f.fullmatch(clé) for f in familles)]
+    return absentes, orphelines
 
 
 def _famille_de_cles(noeud: ast.JoinedStr):
@@ -480,14 +493,14 @@ def main() -> int:
     # Le contrôle vaut dans les DEUX sens : une entrée que plus personne ne cite
     # est du texte à traduire pour rien.
     r.section("Catalogue de notices",
-              controle_catalogue(trees, "notices", CITATIONS_NOTICES))
+              *controle_catalogue(trees, "notices", CITATIONS_NOTICES))
 
     # ── 8. Catalogue de libellés ↔ code ──────────────────────────
     # Même contrôle, catalogue frère : les libellés d'interface
     # extraits vers labels.json. Une clé mal tapée afficherait la clé brute ;
     # une entrée que plus personne ne cite est du texte à traduire pour rien.
     r.section("Catalogue de libellés",
-              controle_catalogue(trees, "labels", CITATIONS_LABELS))
+              *controle_catalogue(trees, "labels", CITATIONS_LABELS))
 
     from check_ui_text import check as check_ui_text
     r.section("Textes d'interface : structure, paramètres et extraction",
@@ -500,8 +513,9 @@ def main() -> int:
         print("\n=== Ordre d'import : NON TESTE (relancer avec --fresh)")
 
     print("\n" + "-" * 60)
-    for titre, n in r.sections:
-        print(f"  {'OK ' if not n else 'KO '} {titre}" + (f" ({n})" if n else ""))
+    for titre, n, w in r.sections:
+        print(f"  {'KO ' if n else 'WARN' if w else 'OK '} {titre}"
+              + (f" ({n})" if n else f" ({w})" if w else ""))
     if r.echecs:
         print(f"\n{len(r.echecs)} probleme(s).")
         return 1

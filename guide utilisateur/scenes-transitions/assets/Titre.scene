@@ -1,0 +1,56 @@
+{
+  "name": "Titre",
+  "id": "ab1006b79416",
+  "background_layers": [],
+  "actors": [],
+  "cameras": [
+    {
+      "name": "Camera",
+      "id": "66078cbc7191",
+      "x": 0,
+      "y": 0,
+      "frame_w": 240,
+      "frame_h": 160,
+      "mode": "fixed",
+      "follow_target": "",
+      "margin_x": 40,
+      "margin_y": 20,
+      "bounds_x": null,
+      "bounds_y": null,
+      "bounds_w": null,
+      "bounds_h": null,
+      "script": "",
+      "notes": ""
+    }
+  ],
+  "camera": "Camera",
+  "windows": [],
+  "render_mode": 0,
+  "scroll_h": true,
+  "scroll_v": true,
+  "script": "assets/scripts/SceneTitre.lua",
+  "ui_layouts": [
+    {
+      "name": "Titre",
+      "id": "58967b54272c",
+      "source": "c7e87a02fc00",
+      "layout_name": "Titre",
+      "anchor": "screen",
+      "anchor_actor": "",
+      "target": "",
+      "bg_slot": 0
+    }
+  ],
+  "font_name": "",
+  "font_pal_banks": {
+    "": 0
+  },
+  "collision_layer": 0,
+  "collision_map": [],
+  "active_obj_palettes": [],
+  "active_bg_palettes": [
+    "_Microsoft Windows 16"
+  ],
+  "backdrop_color": null,
+  "notes": ""
+}

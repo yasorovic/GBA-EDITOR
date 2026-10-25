@@ -181,7 +181,7 @@ def build_command(version: str, output_dir: Path) -> list[str]:
         f"=ui/common/images/cartridges"
     )
 
-    # Police de marque Sniglet (ui/common/theme.py: brand_font la charge par chemin).
+    # Police de marque Balsamiq Sans (ui/common/theme.py: brand_font la charge par chemin).
     cmd.append(
         f"--include-data-dir={EDITOR_DIR / 'ui' / 'common' / 'fonts'}"
         f"=ui/common/fonts"

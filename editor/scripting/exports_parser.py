@@ -126,7 +126,7 @@ def _parse_entry(entry: str) -> dict | None:
     if lb:
         var["label"] = lb.group(1)
 
-    # default — tout ce qui suit jusqu'à la prochaine clé connue ou fin
+    # default : tout ce qui suit jusqu'à la prochaine clé connue ou fin
     df = re.search(r'\bdefault\s*=\s*((?:\{[^}]*\}|"[^"]*"|[^,]+))', inner)
     if df:
         var["default"] = _parse_value(df.group(1).strip(), var["type"])
@@ -179,13 +179,13 @@ def _parse_value(raw: str, typ: str) -> Any:
             return [float(n) for n in nums[:4]]
         return [0.0, 0.0, 16.0, 16.0]
 
-    # string, enum, *_ref — déséchappe les retours-ligne (strings multi-lignes)
+    # string, enum, *_ref : déséchappe les retours-ligne (strings multi-lignes)
     return raw.strip('"\'').replace('\\n', '\n')
 
 
-# ── Écriture — ajout/retrait d'une déclaration ──────────────────────
+# ── Écriture : ajout/retrait d'une déclaration ──────────────────────
 #  Utilisé par le Script Inspector (section VARIABLES EXPOSÉES) : add_export
-#  écrit une déclaration minimale, valeur par défaut neutre selon le type —
+#  écrit une déclaration minimale, valeur par défaut neutre selon le type :
 #  l'utilisateur affine ensuite min/max/values/default à la main dans le
 #  script si besoin (même esprit que les autres inspecteurs : l'éditeur pose
 #  la structure, pas chaque détail).
@@ -219,7 +219,7 @@ def _lua_literal(value: Any, typ: str) -> str:
     if typ in ("vec2", "vec3", "rect"):
         seq = value if isinstance(value, (list, tuple)) else []
         return "{" + ", ".join(_num(v) for v in seq) + "}"
-    # string, enum, *_ref — échappe les retours-ligne pour rester un littéral
+    # string, enum, *_ref : échappe les retours-ligne pour rester un littéral
     # Lua sur une ligne (déséchappé au parse). Les guillemets nus restent une
     # limite préexistante (non échappés).
     return '"' + str(value).replace('\n', '\\n') + '"'
@@ -227,7 +227,7 @@ def _lua_literal(value: Any, typ: str) -> str:
 
 def add_export(lua_path: Path, name: str, typ: str, label: str | None = None) -> None:
     """Ajoute une nouvelle variable à la table `exports` (la crée si absente,
-    juste après un éventuel bloc @note — cf. scripting/script_notes.py)."""
+    juste après un éventuel bloc @note : cf. scripting/script_notes.py)."""
     if typ not in KNOWN_TYPES:
         raise ValueError(f"Unknown variable type: {typ}")
     text = lua_path.read_text(encoding="utf-8", errors="ignore") if lua_path.exists() else ""
@@ -245,7 +245,7 @@ def add_export(lua_path: Path, name: str, typ: str, label: str | None = None) ->
         start, end = block_range
         entries = _split_entries(text[start:end])
         if any(re.match(rf'^{re.escape(name)}\s*=', e) for e in entries):
-            return   # nom déjà exporté — l'appelant (UI) vérifie l'unicité en amont
+            return   # nom déjà exporté : l'appelant (UI) vérifie l'unicité en amont
         entries.append(new_entry)
         new_inner = "\n" + ",\n".join(f"    {e.strip()}" for e in entries) + ",\n"
         text = text[:start] + new_inner + text[end:]
@@ -305,7 +305,7 @@ def rename_export(lua_path: Path, old_name: str, new_name: str) -> bool:
 
 def _format_entry(name: str, var: dict) -> str:
     """Régénère la déclaration `name = { … }` depuis un dict (type/default/
-    label/min/max/values). Robuste — remplace l'édition regex clé par clé."""
+    label/min/max/values). Robuste : remplace l'édition regex clé par clé."""
     typ = var.get("type", "int")
     if typ not in KNOWN_TYPES:
         typ = "int"
@@ -330,7 +330,7 @@ def _format_entry(name: str, var: dict) -> str:
 def update_export(lua_path: Path, name: str, var: dict) -> bool:
     """Réécrit intégralement la déclaration de la variable `name` depuis `var`
     (le dict issu de parse_exports, avec les champs modifiés). Préserve donc
-    tout ce que l'UI a relu — appeler avec le dict complet, pas partiel."""
+    tout ce que l'UI a relu : appeler avec le dict complet, pas partiel."""
     return _rewrite_entry(lua_path, name, lambda _e: _format_entry(name, var))
 
 

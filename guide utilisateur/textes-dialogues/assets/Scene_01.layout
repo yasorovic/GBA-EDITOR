@@ -1,0 +1,31 @@
+{
+  "name": "Scene_01",
+  "id": "2829ec7bfc00",
+  "anchor": "screen",
+  "anchor_actor": "",
+  "target": "",
+  "elements": [
+    {
+      "kind": "text",
+      "point": true,
+      "name": "Dialogue",
+      "parent": "",
+      "visible": true,
+      "text_color": 0,
+      "highlight_color": 0,
+      "priority": -1,
+      "x": 8,
+      "y": 112,
+      "w": 224,
+      "h": 40,
+      "text_key": "",
+      "font_name": "",
+      "font_weight": 400,
+      "font_italic": false,
+      "align": "left",
+      "preview_text": "",
+      "preview_is_literal": true
+    }
+  ],
+  "notes": ""
+}

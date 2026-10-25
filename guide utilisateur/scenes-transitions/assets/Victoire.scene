@@ -1,0 +1,56 @@
+{
+  "name": "Victoire",
+  "id": "a74c702619d5",
+  "background_layers": [],
+  "actors": [],
+  "cameras": [
+    {
+      "name": "Camera_3",
+      "id": "586076eada5e",
+      "x": 0,
+      "y": 0,
+      "frame_w": 240,
+      "frame_h": 160,
+      "mode": "fixed",
+      "follow_target": "",
+      "margin_x": 40,
+      "margin_y": 20,
+      "bounds_x": null,
+      "bounds_y": null,
+      "bounds_w": null,
+      "bounds_h": null,
+      "script": "",
+      "notes": ""
+    }
+  ],
+  "camera": "Camera_3",
+  "windows": [],
+  "render_mode": 0,
+  "scroll_h": true,
+  "scroll_v": true,
+  "script": "assets/scripts/SceneVictoire.lua",
+  "ui_layouts": [
+    {
+      "name": "Victoire",
+      "id": "d0aa4f54a2ee",
+      "source": "3a73ff6a5097",
+      "layout_name": "Victoire",
+      "anchor": "screen",
+      "anchor_actor": "",
+      "target": "",
+      "bg_slot": 0
+    }
+  ],
+  "font_name": "",
+  "font_pal_banks": {
+    "": 0
+  },
+  "collision_layer": 0,
+  "collision_map": [],
+  "active_obj_palettes": [],
+  "active_bg_palettes": [
+    "_Microsoft Windows 16"
+  ],
+  "backdrop_color": null,
+  "notes": ""
+}

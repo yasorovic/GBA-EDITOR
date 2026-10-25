@@ -87,7 +87,7 @@ def test_deux_apparences_ne_coutent_qu_une_entree(tmp_path):
     scene = Scene(name="S", actors=[hero])
     p = _projet(tmp_path, scenes=[scene])
     lay = scene_oam_layout(p, scene)
-    assert lay.placed_entry == [0] and lay.used == 1
+    assert lay.placed_entry == [0] and lay.table_size == 1
     assert project_oam_entry_count(p) == 1
 
 

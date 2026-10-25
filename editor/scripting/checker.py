@@ -1,5 +1,5 @@
 """
-editor/scripting/checker.py — Vérification sémantique d'un LuaScript.
+editor/scripting/checker.py : Vérification sémantique d'un LuaScript.
 
 Reçoit le LuaScript produit par parser.py et une description du contexte
 de build (nom de l'actor, sprites disponibles, sfx disponibles…).
@@ -54,7 +54,9 @@ from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, REMOVED_EVENTS, KNOWN
 
 from .expr_types import (VEC_FIELDS, VEC_CONSTRUCTORS, VEC_FUNCTIONS, ARITH_TYPES,
                          infer_vec_type, infer_ref_type, resolve_prop,
-                         is_actor_call, chain_label, element_of)
+                         is_actor_call, chain_label, element_of, literal_actor_library,
+                         literal_actor_target, EXPORT_SCALARS, EXPORT_COMPOSITES, EXPORT_NAMED,
+                         EXPORT_ACCESSIBLE, held_actor_refs)
 
 
 # Forme d'une clé de texte : minuscules, chiffres et au moins un souligné.
@@ -135,6 +137,7 @@ class BuildContext:
     music_section_names: list[str] = None  # noms de section des musiques (music.set_section)
     actor_names:  list[str]  = None    # noms des actors de la scène (pour actor.get)
     prefab_names: list[str]  = None    # noms de Prefab du projet (pour actor.spawn)
+    pooled_prefab_names: list[str] = None  # prefabs poolés dans CETTE scène (ils seuls ont un ACTOR_*)
     # Exports par prefab, utilisés pour valider `actor:spawn`.
     spawn_exports: dict      = None
     global_names: list[str]  = None    # noms de GlobalVar déclarées dans le projet
@@ -145,6 +148,16 @@ class BuildContext:
     global_persist: dict[str, bool] = None
     # Enfants du propriétaire, pour valider les accès `self.<enfant>`.
     child_names: list = None
+    # Bibliothèque de sprites de chaque enfant (`SpriteLibrary`) : `self.Canon:play_anim("tir")`
+    # nomme un état du sprite de l'ENFANT, pas de celui qui exécute le script.
+    child_sprites: dict = None
+    # Les sprites de chaque acteur que `actor:get("X")` (acteurs de la scène) ou
+    # `actor:spawn("X")` (prefabs) désigne par un littéral : nom -> `SpriteLibrary`.
+    actor_sprites: dict = None
+    prefab_sprites: dict = None
+    # Les exports de chaque acteur posé de la scène : nom -> { export -> {"type", "values"} }.
+    # Ceux des prefabs sont dans `spawn_exports`.
+    actor_exports: dict = None
     const_names:  list[str]  = None    # noms de Constant déclarées dans le projet
     sfx_component_name: Optional[str] = None  # Sfx lié au SoundFxComponent de cet actor (si présent)
     text_keys:    list[str]  = None    # clés de la table de textes du projet
@@ -202,6 +215,15 @@ class Checker:
         self._enum_exports: dict[str, list[str]] = {}
         # Types de référence des variables locales, pour valider leurs méthodes.
         self._ref_types: dict[str, str] = {}
+        # Sprites de l'acteur que tient une variable locale (`local b = actor:get("X")`).
+        # `None` : plusieurs acteurs possibles, ou on ne sait pas lequel.
+        self._ref_libs: dict[str, object] = {}
+        # Idem pour l'IDENTITÉ de cet acteur : ("get" | "spawn", nom), qui donne ses exports.
+        self._ref_targets: dict[str, object] = {}
+        # Noms des variables de tête, et de celles déclarées DANS un handler : seules les
+        # premières sont partagées d'une image à l'autre (cf. `_check_actor_stored`).
+        self._top_level_names: set[str] = set()
+        self._handler_locals: set[str] = set()
         # Éléments d'interface référencés par les variables locales.
         self._ref_elements: dict[str, Optional[str]] = {}
         # Alias de behaviors importés et fonctions de module autorisés.
@@ -273,14 +295,14 @@ class Checker:
                 "error",
                 "this statement is outside any function, so it would never "
                 "run. At the top of a script only `local` declarations, "
-                "`exports = {...}` and function definitions are allowed — move "
+                "`exports = {...}` and function definitions are allowed: move "
                 "it inside a function.",
                 line))
 
     def _check_self_owner(self, script: LuaScript) -> None:
         """`self` désigne l'instance à laquelle le script est attaché : il n'existe
         que pour un acteur ou un prefab. Une scène et une caméra n'ont pas
-        d'instance, donc `self` y serait sans référent — erreur au build, une
+        d'instance, donc `self` y serait sans référent : erreur au build, une
         seule fois par script, plutôt qu'un C qui ne compile pas."""
         kind = self.ctx.owner_kind
         if not kind or kind in OWNER_KINDS_WITH_SELF:
@@ -289,10 +311,10 @@ class Checker:
             return
         if kind == "behavior":
             conseil = ("A behavior is attached to nothing: the actor it receives is "
-                       "its first parameter, to be named something else — `function "
+                       "its first parameter, to be named something else: `function "
                        "M.update(actor)`.")
         else:
-            conseil = "To act on an actor, refer to it by name — actor:get(\"Name\")."
+            conseil = "To act on an actor, refer to it by name: actor:get(\"Name\")."
         self.errors.append(CheckError(
             "error",
             f"`self` does not exist in a {_OWNER_LABELS.get(kind, kind)} script: it designates the instance the "
@@ -309,7 +331,7 @@ class Checker:
         """Un export est émis comme variable C à NOM NU (chantier « Les exports de
         script, câblés au jeu »). Son nom ne doit donc rien masquer : ni un champ
         FIXE de la struct Actor (`self.position`…), ni un global du projet, ni un
-        namespace/fonction de l'API — sinon le C émis casse ou trompe l'auteur.
+        namespace/fonction de l'API : sinon le C émis casse ou trompe l'auteur.
         C'est la contrepartie du choix du nom nu (pas de préfixe `export.`).
 
         Signale aussi, en avertissement, un export d'un type dont la valeur
@@ -334,7 +356,7 @@ class Checker:
             if why:
                 self.errors.append(CheckError(
                     "error",
-                    f"export \"{name}\": this name is already {why} — pick another one."))
+                    f"export \"{name}\": this name is already {why} : pick another one."))
             if loc.export_type not in KNOWN_EXPORT_TYPES:
                 import difflib
                 close = difflib.get_close_matches(loc.export_type, sorted(KNOWN_EXPORT_TYPES), n=1)
@@ -352,7 +374,7 @@ class Checker:
     def _check_export_values(self, script: LuaScript) -> None:
         """Ce qu'un export déclare doit tenir debout : un `enum` a des étiquettes
         distinctes et son défaut en fait partie ; un `int` n'a pas un texte pour
-        défaut. Avant, tout passait, et le C comparait un index arbitraire — ou
+        défaut. Avant, tout passait, et le C comparait un index arbitraire : ou
         une chaîne, pour un `enum` sans `values`."""
         for loc in script.locals:
             if loc.export_type == "enum":
@@ -360,7 +382,7 @@ class Checker:
                 if not labels:
                     self.errors.append(CheckError(
                         "error",
-                        f"export \"{loc.name}\": an enum needs its labels — "
+                        f"export \"{loc.name}\": an enum needs its labels : "
                         f"values = {{\"A\", \"B\"}}."))
                     continue
                 dups = sorted({x for x in labels if labels.count(x) > 1})
@@ -368,7 +390,7 @@ class Checker:
                     self.errors.append(CheckError(
                         "error",
                         f"export \"{loc.name}\": the label {', '.join(dups)} appears twice in "
-                        f"values — the second one could never be reached."))
+                        f"values : the second one could never be reached."))
                 default = loc.value
                 if isinstance(default, ExprString) and default.value not in labels:
                     self.errors.append(CheckError(
@@ -458,7 +480,7 @@ class Checker:
                     self.errors.append(CheckError(
                         "error",
                         "Recursion is not allowed: " + " → ".join(cycle)
-                        + " — a private function cannot call itself, even through another."))
+                        + ": a private function cannot call itself, even through another."))
                 return
             if name in done:
                 return
@@ -502,7 +524,7 @@ class Checker:
 
     def _collect_arrays(self, script: LuaScript):
         """Relève toutes les déclarations de tableau du script, où qu'elles
-        soient — les locals de tête comme celles d'un corps de handler."""
+        soient : les locals de tête comme celles d'un corps de handler."""
         def note(name: str, value):
             dims = array_dims(value)
             if dims is None:
@@ -532,14 +554,14 @@ class Checker:
             walk(fn.body)
 
     def _collect_local_types(self, script: LuaScript):
-        """Relève le type de chaque `local` du script, où qu'il soit déclaré —
+        """Relève le type de chaque `local` du script, où qu'il soit déclaré :
         même parcours à plat que `_collect_arrays`, dans le même ordre que le
         script : au moment de noter `n = pos + vel`, `pos` et `vel` ont déjà
         été vus si le script les déclare avant.
 
         Deux tables remplies par le MÊME parcours : les valeurs composées
         (vec2/vec3/rect) et les références rendues par un appel (`sfx.play`).
-        Deux natures, mais une seule question — « quel type porte ce nom ? » —
+        Deux natures, mais une seule question, « quel type porte ce nom ? »,
         et deux traversées auraient fini par répondre à des endroits différents.
         """
         def note(name: str, value):
@@ -551,6 +573,9 @@ class Checker:
                     self._ref_elements[name] = None   # deux éléments : on ne conclut rien
                 else:
                     self._ref_elements[name] = element
+            if rt is not None:
+                self._note_ref_library(name, self._literal_library(value))
+                self._note_ref_target(name, literal_actor_target(value))
             vt = infer_vec_type(value, self._vec_types, self._ref_types, self._kinds)
             if vt is None:
                 return
@@ -562,7 +587,14 @@ class Checker:
         def walk(stmts):
             for s in stmts:
                 if isinstance(s, StmtLocalAssign):
+                    self._handler_locals.add(s.name)
                     note(s.name, s.value)
+                elif isinstance(s, StmtAssign) and isinstance(s.target, ExprName):
+                    # `b = actor:get("Y")` apres `local b = actor:get("X")` : plus de
+                    # bibliotheque sure. Une valeur d'une autre nature n'en porte aucune.
+                    if s.target.name in self._ref_libs and not isinstance(s.value, ExprNil):
+                        self._note_ref_library(s.target.name, self._literal_library(s.value))
+                        self._note_ref_target(s.target.name, literal_actor_target(s.value))
                 elif isinstance(s, StmtIf):
                     walk(s.then)
                     for _, b in s.elseifs:
@@ -572,17 +604,133 @@ class Checker:
                     walk(s.body)
 
         for loc in script.locals:
+            self._top_level_names.add(loc.name)
             note(loc.name, loc.value)
+        # Une variable de tête qui reçoit un acteur dans un handler en tient une RÉFÉRENCE
+        # (qui survit à l'image) : typée comme un `local` qui en tient un.
+        for name, values in held_actor_refs(script).items():
+            self._ref_types[name] = REF_ACTOR
+            for value in values:
+                self._note_ref_library(name, self._literal_library(value))
+                self._note_ref_target(name, literal_actor_target(value))
         for fn in script.functions:
             walk(fn.body)
 
+    def _literal_library(self, expr):
+        """Les sprites de l'acteur que `expr` désigne par un littéral (`actor:get("X")`,
+        `actor:spawn("X")`), sinon None."""
+        return literal_actor_library(expr, self.ctx.actor_sprites, self.ctx.prefab_sprites)
+
+    def _note_ref_library(self, name: str, library) -> None:
+        if name in self._ref_libs and self._ref_libs[name] is not library:
+            self._ref_libs[name] = None      # deux acteurs : on ne conclut rien
+        else:
+            self._ref_libs[name] = library
+
+    def _note_ref_target(self, name: str, target) -> None:
+        if name in self._ref_targets and self._ref_targets[name] != target:
+            self._ref_targets[name] = None
+        else:
+            self._ref_targets[name] = target
+
+    def _target_of(self, expr):
+        """("get" | "spawn", nom) de l'acteur que `expr` désigne par un littéral, directement ou
+        par une variable locale qui en tient un ; sinon None."""
+        if isinstance(expr, ExprName):
+            return self._ref_targets.get(expr.name)
+        return literal_actor_target(expr)
+
+    def _exports_of(self, expr):
+        """Les exports lisibles et écrivables de l'acteur que `expr` désigne : { nom -> méta },
+        {} s'il n'en déclare aucun, None si le Build ne sait pas de quel acteur il s'agit."""
+        target = self._target_of(expr)
+        if target is None:
+            return None
+        kind, name = target
+        known = (self.ctx.actor_names if kind == "get" else self.ctx.prefab_names)
+        metas = self.ctx.actor_exports if kind == "get" else self.ctx.spawn_exports
+        if metas is None or known is None or name not in known:
+            return None
+        return dict(metas.get(name) or {})
+
+    def _export_of(self, expr):
+        """(forme écrite, nom, méta) quand `expr` lit un export scalaire d'un acteur connu
+        (`boss.hp`), sinon None."""
+        if not isinstance(expr, ExprIndex):
+            return None
+        exports = self._exports_of(expr.obj)
+        meta = (exports or {}).get(expr.field)
+        if meta is None or meta.get("type") not in EXPORT_ACCESSIBLE:
+            return None
+        shown = expr.obj.name if isinstance(expr.obj, ExprName) else chain_label(expr.obj)
+        return shown, expr.field, meta
+
+    def _check_export_field(self, e) -> bool:
+        """`boss.hp` sur un acteur connu : l'export doit exister et être un scalaire. Rend True
+        quand le champ est jugé ici ; False quand l'acteur n'est pas connu du Build, et que
+        le contrôle ordinaire des champs d'acteur s'applique."""
+        exports = self._exports_of(e.obj)
+        if exports is None:
+            return False
+        shown = e.obj.name if isinstance(e.obj, ExprName) else chain_label(e.obj)
+        meta = exports.get(e.field)
+        if meta is None:
+            offer = ", ".join(k for k, m in exports.items() if m.get("type") in EXPORT_ACCESSIBLE)
+            self.errors.append(CheckError(
+                "error",
+                f"{shown}.{e.field}: no such export on this actor"
+                + (f" (its exports: {offer})." if offer else
+                   " (it declares no export a script can read).")))
+        elif meta.get("type") not in EXPORT_ACCESSIBLE:
+            self.errors.append(CheckError(
+                "error",
+                f"{shown}.{e.field}: an export of type {meta.get('type')} cannot be read or written "
+                "from another script."))
+        return True
+
+    def _check_export_write(self, target, value) -> None:
+        """`boss.state = "RAGE"` : l'étiquette doit exister ; un nombre ne reçoit pas de texte."""
+        found = self._export_of(target)
+        if found is None:
+            return
+        shown, key, meta = found
+        typ = meta.get("type")
+        if typ == "enum":
+            if isinstance(value, ExprString):
+                self._check_label(f"{shown}.{key}", meta.get("values") or [], value.value)
+        elif typ in EXPORT_COMPOSITES:
+            if infer_vec_type(value, self._vec_types, self._ref_types, self._kinds) != typ:
+                self.errors.append(CheckError(
+                    "error", f"{shown}.{key} is a {typ}: assign it a {typ}(...) or a variable of "
+                             f"this type."))
+        elif typ in EXPORT_NAMED:
+            if not isinstance(value, ExprString):
+                self.errors.append(CheckError(
+                    "error", f"{shown}.{key} is a {typ}: assign it a quoted name, resolved at build."))
+            else:
+                self._check_spawn_ref_name(typ, value.value)
+        elif isinstance(value, ExprString):
+            self.errors.append(CheckError(
+                "error", f"{shown}.{key} is a {typ}: assign it a number, not text."))
+
+    def _library_of(self, expr):
+        """Les sprites que le Build connaît pour le récepteur `expr` : un enfant
+        (`self.Canon`), un littéral (`actor:get("Boss"):play_anim(...)`) ou une variable
+        qui en tient un. None si le récepteur est `self` ou si on ne sait pas lequel."""
+        if isinstance(expr, ExprName):
+            return self._ref_libs.get(expr.name)
+        if (isinstance(expr, ExprIndex) and isinstance(expr.obj, ExprName)
+                and expr.obj.name == "self"):
+            return (self.ctx.child_sprites or {}).get(expr.field)
+        return self._literal_library(expr)
+
     def _collect_local_names(self, script: LuaScript):
-        """Les noms qu'un nom NU a le droit de porter — locals (où qu'ils soient
+        """Les noms qu'un nom NU a le droit de porter : locals (où qu'ils soient
         déclarés), table de module, paramètres de handler, variables de boucle.
 
         La lecture vit dans `parser.local_names` : à plat, sans portée, cette
         liste sert à REFUSER, donc trop large ne fait que taire un refus, jamais
-        en inventer un. L'autocomplétion la PROPOSE depuis la même source — d'où l'extraction, pour qu'un seul parcours nourrisse
+        en inventer un. L'autocomplétion la PROPOSE depuis la même source : d'où l'extraction, pour qu'un seul parcours nourrisse
         les deux."""
         self._local_names |= local_names(script)
 
@@ -630,16 +778,16 @@ class Checker:
             self.errors.append(CheckError(
                 "error",
                 f"{ARRAY_CTOR}() for '{name}': one or two sizes expected, written as plain numbers"
-                f" and strictly positive — {ARRAY_CTOR}(8) or {ARRAY_CTOR}(20, 12). The size is part of "
+                f" and strictly positive : {ARRAY_CTOR}(8) or {ARRAY_CTOR}(20, 12). The size is part of "
                 "the type and must be known at build."))
             return
 
         if isinstance(value, ExprTable):
             if dims is None:
                 if value.has_keys:
-                    raison = "a named entry — that is a record, not an array"
+                    raison = "a named entry: that is a record, not an array"
                 elif not value.items:
-                    raison = (("no element — an empty array has no size, write "
+                    raison = (("no element: an empty array has no size, write "
                                f"{ARRAY_CTOR}(n)"))
                 else:
                     raison = "rows of different lengths"
@@ -652,7 +800,7 @@ class Checker:
             if any(isinstance(v, ExprString) for v in elements):
                 self.errors.append(CheckError(
                     "error",
-                    f"'{name}': an array only holds integers — the engine has no string "
+                    f"'{name}': an array only holds integers : the engine has no string "
                     "it can manipulate. For displayable text, use a 'text' column in "
                     "a data table."))
                 return
@@ -695,7 +843,7 @@ class Checker:
             if not (1 <= k <= dims[level]):
                 self.errors.append(CheckError(
                     "error",
-                    f"'{name}[{k}]': out of bounds — this array runs from 1 to "
+                    f"'{name}[{k}]': out of bounds : this array runs from 1 to "
                     f"{dims[level]} (arrays are indexed from 1, as everywhere in Lua)."))
 
     # Tables de données
@@ -711,7 +859,7 @@ class Checker:
     def _check_data_table(self, name: str) -> bool:
         """La table existe-t-elle ? Une table inconnue est une ERREUR : le
         `g_data_*` émis n'existerait pas, et gcc échouerait sur la ligne générée
-        — même sévérité et même raison qu'une scène ou une palette inconnue."""
+        : même sévérité et même raison qu'une scène ou une palette inconnue."""
         if self.ctx.data_tables is None:
             return True
         if name in self.ctx.data_tables:
@@ -723,7 +871,7 @@ class Checker:
         return False
 
     def _check_global_scalar(self, name: str) -> None:
-        """`global.nom` cité SEUL — comme valeur lue, ou comme cible d'une
+        """`global.nom` cité SEUL : comme valeur lue, ou comme cible d'une
         assignation (chantier global/const, remplace global.get/set). Un tableau ne
         s'y prête pas : il n'existe qu'indexé, cf. `_check_global_indexed`."""
         counts = self.ctx.global_counts
@@ -736,16 +884,16 @@ class Checker:
                 "error",
                 f"global.{name}: global variable not found"
                 + (f" (declared in the project: {near})." if near
-                   else " — no global variable is declared in this project.")))
+                   else ": no global variable is declared in this project.")))
             return
         if n > 1:
             self.errors.append(CheckError(
                 "error",
                 f"global.{name} is an ARRAY ({n} cells): it is read and written indexed, "
-                f"never bare — global.{name}[i]."))
+                f"never bare : global.{name}[i]."))
 
     def _check_const_scalar(self, name: str) -> None:
-        """`const.nom` cité seul — la seule forme qui existe, une constante ne
+        """`const.nom` cité seul : la seule forme qui existe, une constante ne
         s'indexe jamais (chantier global/const, remplace const.get)."""
         names = self.ctx.const_names
         if names is None:
@@ -756,7 +904,7 @@ class Checker:
                 "error",
                 f"const.{name}: constant not found"
                 + (f" (declared in the project: {near})." if near
-                   else " — no constant is declared in this project.")))
+                   else ": no constant is declared in this project.")))
 
     # Noms valides hors variable : modules, récepteurs, données et acteurs du projet.
     _NAMESPACES: frozenset = frozenset(API_MODULES) | frozenset({
@@ -779,7 +927,7 @@ class Checker:
         Ce langage n'a pas de variable de script implicite : une valeur qui
         traverse les frames est un `local` de tête, une valeur partagée est
         `global.nom`. Un nom hors des deux ne désignait RIEN et traversait le
-        checker sans un mot — le codegen émettait `curpos = (curpos + 1);`,
+        checker sans un mot : le codegen émettait `curpos = (curpos + 1);`,
         et gcc parlait d'un identifiant inexistant dans un fichier que l'auteur
         n'a jamais écrit. C'est le piège le plus coûteux de cette chaîne.
 
@@ -795,7 +943,7 @@ class Checker:
             self.errors.append(CheckError(
                 "error",
                 f"\"{name}\" is a label of the enum export \"{owner}\": a label is written "
-                f"as text — {owner} == \"{name}\"."))
+                f"as text : {owner} == \"{name}\"."))
             return
         geste = ("is declared as" if ecrit else "is declared as")
         self.errors.append(CheckError(
@@ -860,7 +1008,7 @@ class Checker:
                             for k in RUNTIME_API if k.startswith(f"{owner}:"))
         self.errors.append(CheckError(
             "error",
-            f"Unknown method on a {ref} reference: {shown}() — {holder} a {ref} reference, and its "
+            f"Unknown method on a {ref} reference: {shown}() : {holder} a {ref} reference, and its "
             f"methods are {connues}.{self._ref_hint(ref)}"))
 
     def _unknown_ref_field(self, shown: str, ref: str, field: str) -> None:
@@ -868,22 +1016,22 @@ class Checker:
                            for k in RUNTIME_PROPS if k.startswith(f"{owner}.")) or "none"
         self.errors.append(CheckError(
             "error",
-            f"{shown}.{field}: a {ref} reference has no field \"{field}\" — its fields are: "
+            f"{shown}.{field}: a {ref} reference has no field \"{field}\" : its fields are: "
             f"{champs}.{self._ref_hint(ref)}"))
 
     def _check_const_write(self, target) -> None:
-        """`const.nom = …` — une constante ne s'écrit jamais, c'est ce qui la
+        """`const.nom = …` : une constante ne s'écrit jamais, c'est ce qui la
         distingue d'une variable globale. `_check_expr(target)` valide déjà le
         NOM (via `_check_const_scalar`) ; ne reste que l'écriture elle-même."""
         if (isinstance(target, ExprIndex) and isinstance(target.obj, ExprName)
                 and target.obj.name == "const"):
             self.errors.append(CheckError(
                 "error",
-                f"const.{target.field} = …: a constant is never written — declare a global "
+                f"const.{target.field} = …: a constant is never written : declare a global "
                 "variable if it must change."))
 
     def _check_global_indexed(self, name: str, index) -> None:
-        """`global.nom[i]` — la base d'un tableau. Trois
+        """`global.nom[i]` : la base d'un tableau. Trois
         fautes à dire ici plutôt que sur la ligne C générée : un nom qui
         n'existe pas, un SCALAIRE indexé (`g_score[0]` ne compile pas), et un
         rang hors bornes quand il est écrit en clair. Un index calculé ne se
@@ -899,13 +1047,13 @@ class Checker:
                 "error",
                 f"global.{name}: global variable not found"
                 + (f" (arrays in the project: {near})." if near
-                   else " — no array is declared in this project.")))
+                   else ": no array is declared in this project.")))
             return
         if n <= 1:
             self.errors.append(CheckError(
                 "error",
                 f"global.{name} is a SIMPLE variable, not an array: it is read and "
-                f"written without brackets — global.{name} / global.{name} = …. The indexed "
+                f"written without brackets : global.{name} / global.{name} = …. The indexed "
                 "form is reserved for variables declared with several cells."))
             return
         k = self._literal_int(index)
@@ -914,11 +1062,11 @@ class Checker:
         if not (1 <= k <= n):
             self.errors.append(CheckError(
                 "error",
-                f"global.{name}[{k}]: out of bounds — this array runs from 1 to {n} "
+                f"global.{name}[{k}]: out of bounds : this array runs from 1 to {n} "
                 "(cells are numbered from 1)."))
 
     def _check_data_rows(self, table: str, indices: list):
-        """Une table s'indexe sur UNE dimension — ses lignes — et le rang est
+        """Une table s'indexe sur UNE dimension, ses lignes, et le rang est
         borné comme celui d'un tableau, quand il est écrit en clair."""
         if not self._check_data_table(table) or self.ctx.data_tables is None:
             return
@@ -933,10 +1081,10 @@ class Checker:
         if k is None:
             return
         if not (1 <= k <= rows):
-            borne = (f"from 1 to {rows}" if rows else "empty — no rows")
+            borne = (f"from 1 to {rows}" if rows else "empty: no rows")
             self.errors.append(CheckError(
                 "error",
-                f"data.{table}[{k}]: out of bounds — this table goes {borne} (rows are "
+                f"data.{table}[{k}]: out of bounds : this table goes {borne} (rows are "
                 "numbered from 1)."))
 
     def _check_data_column(self, table: str, column: str):
@@ -971,7 +1119,7 @@ class Checker:
             node = node.obj
 
     def _check_prop_write(self, target, value):
-        """Une propriété s'ÉCRIT par assignation de la valeur entière —
+        """Une propriété s'ÉCRIT par assignation de la valeur entière :
         `self.position = vec2(x, y)`. Un CHAMP d'une valeur composée ne
         s'écrit pas (`self.position.x = 5`) : la valeur est immuable, on
         réassigne l'objet entier. Et une propriété en lecture seule
@@ -983,7 +1131,7 @@ class Checker:
             if p.read_only or p.c_setter is None:
                 self.errors.append(CheckError(
                     "error",
-                    f"{nom} is read-only — it cannot be assigned."))
+                    f"{nom} is read-only : it cannot be assigned."))
                 return
             named = p.domain is not None
             if named and isinstance(value, ExprString):
@@ -1000,12 +1148,12 @@ class Checker:
                         formes += f" or {nom} = \"{exemple}\""
                     self.errors.append(CheckError(
                         "error",
-                        f"{nom} expects a {p.ptype} — {formes} — and received {what}."))
+                        f"{nom} expects a {p.ptype}, {formes}, and received {what}."))
             elif named:
                 self._check_prop_domain_value(receiver, p, value, "=", target)
             return
         # Un CHAMP d'une propriété composée : `self.position.x = 5`. Le codegen
-        # lit la valeur, change la composante et la réécrit — la propriété doit
+        # lit la valeur, change la composante et la réécrit : la propriété doit
         # donc être écrivable. Le champ inconnu est déjà refusé par la lecture
         # de l'expression (`_check_expr`).
         if not isinstance(target, ExprIndex):
@@ -1027,11 +1175,11 @@ class Checker:
         if p.read_only or p.c_setter is None:
             self.errors.append(CheckError(
                 "error",
-                f"{nom} is read-only — {nom}.{target.field} cannot be assigned."))
+                f"{nom} is read-only : {nom}.{target.field} cannot be assigned."))
         elif p.ptype not in VEC_CONSTRUCTORS:
             self.errors.append(CheckError(
                 "error",
-                f"{nom} is not a composite value — it has no field '{target.field}' "
+                f"{nom} is not a composite value : it has no field '{target.field}' "
                 f"to assign."))
         elif (isinstance(value, ExprString)
               or infer_vec_type(value, self._vec_types, self._ref_types, self._kinds) is not None):
@@ -1048,20 +1196,27 @@ class Checker:
         Le NOM est jugé par la table de domaine, exactement comme un ARGUMENT du
         même domaine (`_check_args`) : le domaine décide, pas la position ni la
         nature de ce qui le porte. C'est ce qui fait qu'une énumération
-        matérielle et un espace de noms du projet — `ACTOR_*`, les acteurs et les
-        prefabs — se valident du même geste.
+        matérielle et un espace de noms du projet : `ACTOR_*`, les acteurs et les
+        prefabs : se valident du même geste.
 
         Une expression qui n'est ni un nombre ni une chaîne littérale (une
         variable) passe sans un mot : mêmes limites qu'ailleurs, on ne valide
         que ce qui est écrit en clair."""
         nom = _prop_label(receiver, p)
+        library = self._library_of(access.obj) if access is not None else None
+        if p.domain in _RECEIVER_DOMAINS and isinstance(value, ExprString) and library is not None:
+            # `self.Canon.anim == "tir"`, `boss.anim == "rage"` : l'état se juge dans les
+            # sprites de l'acteur désigné, pas dans ceux de celui qui exécute le script.
+            self._check_library_name(f"{nom} {op} '{value.value}'", p.domain, value.value,
+                                     library, receiver.split('.', 1)[-1])
+            return
         if p.domain in _RECEIVER_DOMAINS and receiver != "self":
             # Le générateur résout ces noms dans le sprite de l'acteur courant.
             self.errors.append(CheckError(
                 "error",
                 f"{nom} {op} ...: \"{p.lua_name.split('.', 1)[1]}\" names an element of the sprite of \"{receiver}\", and it "
                 "is resolved against the sprite of the actor running this script. "
-                "This comparison can only be made on self."))
+                f"{_OTHER_ACTOR_HINT}"))
             return
         if isinstance(value, ExprNumber):
             valides = HARDWARE_ENUMS.get(p.domain)
@@ -1080,17 +1235,17 @@ class Checker:
             check(self, nom, value.value, p, [access.obj] if access is not None else [])
 
     def _check_prop_enum_compare(self, e: ExprBinop) -> bool:
-        """`blend.mode == "alpha"`, `other.name == "Ball"` — une propriété qui
+        """`blend.mode == "alpha"`, `other.name == "Ball"` : une propriété qui
         s'ÉCRIT par un nom se COMPARE par un nom, et une propriété en lecture
         seule qui en porte un ne se lit utilement que comme ça.
 
         Sans ça, la moitié LECTURE retomberait sur l'entier que l'écriture vient
-        justement de supprimer — c'est l'asymétrie qu'avaient `self:set_dir
+        justement de supprimer : c'est l'asymétrie qu'avaient `self:set_dir
         ("north")` et `self:get_dir()` rendant un 0-8 nu.
 
         Rend True quand ce nœud est JUGÉ ici, pour que le contrôle vec ne rejoue
         pas dessus : `self.direction` est un vec2, et comparer un vec2 n'a
-        effectivement pas de sens — sauf justement sous cette forme-là."""
+        effectivement pas de sens : sauf justement sous cette forme-là."""
         if e.op not in ("==", "!="):
             return False
         for side, other in ((e.left, e.right), (e.right, e.left)):
@@ -1117,7 +1272,7 @@ class Checker:
             self.errors.append(CheckError(
                 "error",
                 f"a string cannot be an operand of '{op}': the engine has no string it can "
-                f"manipulate. A name is only accepted where a name is expected — an argument "
+                f"manipulate. A name is only accepted where a name is expected : an argument "
                 f"of the API, a property compared by name (`self.direction == \"west\"`), or "
                 f"the label of an enum export."))
 
@@ -1141,7 +1296,7 @@ class Checker:
     def _check_number_literal(self, e: ExprNumber, negated: bool = False) -> None:
         """Un entier est un registre de 32 bits : un littéral hors de
         -2147483648..2147483647 ne tient pas, et gcc le tronquait sans erreur.
-        Un littéral à virgule est tronqué vers zéro — documenté, mais un `1.5`
+        Un littéral à virgule est tronqué vers zéro : documenté, mais un `1.5`
         qui devient `1` sans un mot surprend, d'où l'avertissement."""
         value = -e.value if negated else e.value
         if not self._INT_MIN <= value <= self._INT_MAX:
@@ -1160,7 +1315,7 @@ class Checker:
     def _check_zero_divisor(self, e: ExprBinop) -> None:
         """`x / 0` et `x % 0` écrits en clair. Sur GBA la division n'a pas
         d'instruction : c'est une fonction de la bibliothèque du compilateur, qui
-        ne s'arrête pas sur un diviseur nul mais rend une valeur sans sens — le
+        ne s'arrête pas sur un diviseur nul mais rend une valeur sans sens : le
         plus grand entier pour un dividende positif, le plus petit pour un
         négatif. Le jeu continue donc avec un nombre faux, sans le dire. Un
         diviseur CALCULÉ ne peut pas être jugé ici."""
@@ -1194,14 +1349,16 @@ class Checker:
 
     def _check_enum_label(self, name: str, label: str) -> None:
         """L'étiquette d'un export `enum` doit être l'une de ses `values`."""
-        valides = self._enum_exports[name]
+        self._check_label(name, self._enum_exports[name], label)
+
+    def _check_label(self, shown: str, valides: list, label: str) -> None:
         if label not in valides:
             self.errors.append(CheckError(
                 "error",
-                f"`{name}` has no label \"{label}\". Its labels are: {', '.join(valides)}."))
+                f"`{shown}` has no label \"{label}\". Its labels are: {', '.join(valides)}."))
 
     def _check_export_enum_compare(self, e: ExprBinop) -> bool:
-        """`team == "RED"` — un export `enum` se compare par son ÉTIQUETTE, que
+        """`team == "RED"` : un export `enum` se compare par son ÉTIQUETTE, que
         le codegen remplace par son index. Rend True quand le nœud est jugé ici."""
         if e.op not in ("==", "!="):
             return False
@@ -1210,6 +1367,15 @@ class Checker:
                     and isinstance(other, ExprString)):
                 self._check_enum_label(side.name, other.value)
                 return True
+            found = self._export_of(side)
+            if found is not None and isinstance(other, ExprString):
+                if found[2].get("type") == "enum":
+                    self._check_label(f"{found[0]}.{found[1]}", found[2].get("values") or [],
+                                      other.value)
+                    return True
+                if found[2].get("type") in EXPORT_NAMED:
+                    self._check_spawn_ref_name(found[2]["type"], other.value)
+                    return True
         return False
 
     def _check_prop_read(self, prop):
@@ -1223,7 +1389,7 @@ class Checker:
                 and not self.ctx.affine_transform):
             self.errors.append(CheckError(
                 "warning",
-                f"{p.lua_name}: this actor's sprite does not have \"Affine transform\" ticked — "
+                f"{p.lua_name}: this actor's sprite does not have \"Affine transform\" ticked : "
                 "no affine matrix slot is reserved at build. The value can be written"
                 " and read back, but nothing shows it on screen."))
 
@@ -1251,7 +1417,7 @@ class Checker:
                 "error",
                 f"Unknown function '{fn.name}': a top-level function is an event handler "
                 f"({', '.join(admitted[:5])}…), a sequence ({SEQUENCE_PREFIX}<name>), or an EventCall named by a frame of "
-                "this actor's sprite. For shared code, use a behavior — a script whose first line is "
+                "this actor's sprite. For shared code, use a behavior: a script whose first line is "
                 "`-- @behavior`, imported with require(\"behaviors/name\").",
             ))
         if seq is not None:
@@ -1332,7 +1498,7 @@ class Checker:
                 f"a {kind} cannot be negated with `-`. Multiply it by -1: `v * -1`."))
         else:
             self.errors.append(CheckError(
-                "error", f"'~' is not defined on a {kind} — it only works on integers."))
+                "error", f"'~' is not defined on a {kind} : it only works on integers."))
 
     def _collect_top_level_kinds(self, script: LuaScript) -> None:
         """Le type (entier / composite) des variables du script déclarées au
@@ -1342,6 +1508,8 @@ class Checker:
         self._top_scalars: set[str] = set()
         self._top_composites: dict[str, str] = {}
         for loc in script.locals:
+            if is_actor_call(loc.value):
+                self.errors.append(CheckError("error", _ACTOR_TOP_INIT.format(name=loc.name)))
             if array_dims(loc.value):
                 continue
             if loc.export_type in VEC_CONSTRUCTORS:
@@ -1355,6 +1523,15 @@ class Checker:
             elif infer_ref_type(loc.value, self._kinds, self._ref_types) is None:
                 self._top_scalars.add(loc.name)
 
+    def _check_actor_stored(self, target, value) -> None:
+        """`list[i] = actor:get(...)` : un élément de tableau est un entier sans type d'acteur.
+        Une variable de tête (`last = actor:spawn(...)`) en tient une, elle, par une référence
+        (cf. `held_actor_refs`) ; un tableau n'en a pas encore la forme."""
+        if not (is_actor_call(value) and isinstance(target, ExprIndexAt)):
+            return
+        name = chain_label(target.obj) if not isinstance(target.obj, ExprName) else target.obj.name
+        self.errors.append(CheckError("error", _ACTOR_STORED.format(name=name)))
+
     def _check_assign_kinds(self, target, value) -> None:
         """Un composite dans un entier (`count = v`), un entier dans un composite
         (`v = 5`), un tableau comme valeur (`n = t`) ou comme cible (`t = 5`) :
@@ -1365,7 +1542,7 @@ class Checker:
             self.errors.append(CheckError(
                 "error",
                 f"`{value.name}` is an array: an array is not a value. Read or write an "
-                f"element — {value.name}[i]."))
+                f"element : {value.name}[i]."))
             return
         if not isinstance(target, ExprName):
             return
@@ -1373,7 +1550,7 @@ class Checker:
         if self._arrays.get(name) is not None:
             self.errors.append(CheckError(
                 "error",
-                f"`{name}` is an array: assign its elements — {name}[i] = value."))
+                f"`{name}` is an array: assign its elements : {name}[i] = value."))
             return
         got = infer_vec_type(value, self._vec_types, self._ref_types, self._kinds)
         if name in self._top_composites:
@@ -1427,7 +1604,7 @@ class Checker:
         """Ce qui rend une attente invalide, dit sur sa ligne.
 
         Deux contrôles, et ils ne portent pas sur la même chose : la FORME de
-        l'appel (un argument, du bon genre), et la question de fond — cette
+        l'appel (un argument, du bon genre), et la question de fond : cette
         condition peut-elle seulement devenir vraie un jour ?"""
         # Les attentes des boucles bornées sont validées comme celles du premier niveau.
         def _waits(stmts):
@@ -1446,7 +1623,7 @@ class Checker:
             if n_args != 1:
                 self.errors.append(CheckError(
                     "error",
-                    f"{kind}() expects exactly one argument, {n_args} given — a duration in "
+                    f"{kind}() expects exactly one argument, {n_args} given : a duration in "
                     f"frames for {WAIT_FN}, a condition for {WAIT_UNTIL_FN}."))
                 continue
             if kind == WAIT_FN:
@@ -1454,12 +1631,12 @@ class Checker:
                     self.errors.append(CheckError(
                         "error",
                         f"{WAIT_FN}(): a duration in frames, written as a plain positive "
-                        f"number — {WAIT_FN}(30). To wait on something other than a "
+                        f"number : {WAIT_FN}(30). To wait on something other than a "
                         f"duration, use {WAIT_UNTIL_FN}(condition)."))
             elif self._condition_is_frozen(arg):
                 self.errors.append(CheckError(
                     "error",
-                    f"{WAIT_UNTIL_FN}() in '{fn.name}': this condition cannot change — it only reads "
+                    f"{WAIT_UNTIL_FN}() in '{fn.name}': this condition cannot change : it only reads "
                     "values that no line of the script assigns. The sequence would "
                     "stop there for good, without any sign in game."))
 
@@ -1467,8 +1644,8 @@ class Checker:
         """La valeur de cette expression est-elle gravée pour toute la partie ?
 
         Vrai seulement quand on en est SÛR : littéraux, et noms de variables
-        qu'aucune ligne du script n'assigne. Tout le reste — un appel d'API, un
-        global, une propriété, une indexation — rend faux, parce qu'on ne sait
+        qu'aucune ligne du script n'assigne. Tout le reste : un appel d'API, un
+        global, une propriété, une indexation : rend faux, parce qu'on ne sait
         pas ce que ça vaudra à la frame suivante. Le contrôle ferme la faute
         bête sans jamais accuser à tort."""
         if isinstance(e, (ExprNumber, ExprBool, ExprNil, ExprString)):
@@ -1514,6 +1691,8 @@ class Checker:
             self._check_data_write(s.target)
             self._check_prop_write(s.target, s.value)
             self._check_assign_kinds(s.target, s.value)
+            self._check_actor_stored(s.target, s.value)
+            self._check_export_write(s.target, s.value)
             self._check_const_write(s.target)
             self._check_global_write_value(s.target, s.value)
             if isinstance(s.target, ExprName):
@@ -1559,7 +1738,7 @@ class Checker:
         self.errors.append(CheckError(
             "error",
             f"{kind}() is written in a sequence ({SEQUENCE_PREFIX}<name>), at the top level or in a "
-            "BOUNDED loop (`for i = 1, n`) — not in an `if`, not in a `while`, not in"
+            "BOUNDED loop (`for i = 1, n`): not in an `if`, not in a `while`, not in"
             " another handler. A bounded loop can be split because the number of "
             "turns is known in advance; an `if` would require remembering where to "
             "resume. To wait on a condition, put the condition INSIDE the wait "
@@ -1574,18 +1753,18 @@ class Checker:
         if s.step is not None and self._literal_int(s.step) is None:
             self.errors.append(CheckError(
                 "error",
-                "for … do: the step must be a plain number — it says whether the loop"
+                "for … do: the step must be a plain number: it says whether the loop"
                 " goes up or down, and that is decided at compile time."))
         elif s.step is not None and self._literal_int(s.step) == 0:
             self.errors.append(CheckError(
                 "error",
-                "for … do: a step of 0 never moves the counter — the loop would never end "
+                "for … do: a step of 0 never moves the counter: the loop would never end "
                 "and the game would freeze."))
 
     def _refuse(self, refusal, node: str, line: int):
         """Dit un refus du sous-ensemble, situé sur sa ligne.
 
-        `refusal` vaut None quand `lua_subset` ne classe pas ce nœud — ce que
+        `refusal` vaut None quand `lua_subset` ne classe pas ce nœud : ce que
         `validator._check_lua_subset` rend impossible au build. Le message de
         secours nomme quand même le nœud : mieux vaut un mot brut que le silence
         d'avant, qui faisait disparaître le code."""
@@ -1601,7 +1780,7 @@ class Checker:
         posés seuls : ni les opérandes d'un calcul, ni les arguments d'un appel
         n'étaient visités, si bien qu'un appel imbriqué échappait à la
         validation. Une erreur de bornes ne peut pas se permettre le même
-        angle mort — `t[9] + 1` doit se voir."""
+        angle mort : `t[9] + 1` doit se voir."""
         if e is None:
             return
         if isinstance(e, ExprUnsupported):
@@ -1655,10 +1834,10 @@ class Checker:
             if self._is_bare_constructor(e):
                 self.errors.append(CheckError(
                     "error",
-                    f"`{e.name}` is a constructor, not a value — write "
+                    f"`{e.name}` is a constructor, not a value : write "
                     f"{e.name}({', '.join(VEC_FIELDS[e.name])})."
                     if e.name in VEC_CONSTRUCTORS else
-                    f"`{e.name}` is a function, not a value — write {e.name}(a, b)."))
+                    f"`{e.name}` is a function, not a value : write {e.name}(a, b)."))
             else:
                 # Un nom nu doit être une variable connue ou un espace de noms.
                 self._check_bare_name(e.name, ecrit=False)
@@ -1675,7 +1854,7 @@ class Checker:
                   and self.ctx.child_names is not None
                   and resolve_prop(e, self._ref_types, self._kinds) is None
                   and e.field in self.ctx.child_names):
-                pass          # `self.bras` — un enfant de cet acteur (v0.23)
+                pass          # `self.bras` : un enfant de cet acteur (v0.23)
             elif isinstance(e.obj, ExprIndexAt):
                 owner = self._data_table_ref(e.obj.obj)
                 if owner is not None:
@@ -1709,7 +1888,9 @@ class Checker:
                         ref, shown = self._ref_types[e.obj.name], e.obj.name
                     else:
                         ref, shown = infer_ref_type(e.obj, self._kinds, self._ref_types), chain_label(e.obj)
-                    if not self._unknown_element(e.obj):
+                    if self._check_export_field(e):
+                        pass
+                    elif not self._unknown_element(e.obj):
                         self._unknown_ref_field(shown, ref, e.field)
                 elif (isinstance(e.obj, ExprName) and e.obj.name not in self._local_names
                       and e.obj.name in API_MODULES and e.field not in module_members(e.obj.name)
@@ -1764,7 +1945,7 @@ class Checker:
         if e.op not in ("+", "-", "*", "/"):
             self.errors.append(CheckError(
                 "error",
-                f"'{e.op}' is not defined on a vec2/vec3 — only +, -, * and / (with "
+                f"'{e.op}' is not defined on a vec2/vec3 : only +, -, * and / (with "
                 "an integer; + and - also with another vector) are."))
             return
         if lt and rt:
@@ -1795,11 +1976,11 @@ class Checker:
         if isinstance(base, ExprName) and base.name in self._arrays:
             return
         if self._data_table_ref(base) is not None:
-            return          # `#data.Objets` — validée par ailleurs
+            return          # `#data.Objets` : validée par ailleurs
         self.errors.append(CheckError(
             "error",
             "'#' only applies to an array declared in this script or to a data table "
-            "— its value is computed at build, not stored in memory."))
+            ": its value is computed at build, not stored in memory."))
 
     # Appels
 
@@ -1828,23 +2009,24 @@ class Checker:
                         self.errors.append(CheckError(
                             "error",
                             f"{shown}(): `{receiver}` is a stateless library, it is called with a"
-                            f" dot — {receiver}.{e.method}(…)."))
+                            f" dot : {receiver}.{e.method}(…)."))
                     else:
                         self.errors.append(CheckError(
                             "error",
-                            f"Unknown method: {shown}() — a \":\" can only designate an "
+                            f"Unknown method: {shown}() : a \":\" can only designate an "
                             "actor method from the catalogue. Check the spelling, or "
                             "see the API: STATE is written as a property "
                             f"({receiver}.field), only an ACTION is a method.",
                         ))
                 else:
-                    self._check_args(key, api, e.args, receiver=receiver)
+                    self._check_args(key, api, e.args, receiver=receiver,
+                                     library=self._library_of(e.obj))
                     if (key == f"{REF_ACTOR}:play_sfx" and receiver == "self"
                             and not self.ctx.sfx_component_name):
                         self.errors.append(CheckError(
                             "warning",
                             "self:play_sfx(): this actor has no SoundFX component (or"
-                            " its Sfx field is empty) — the call will play nothing.",
+                            " its Sfx field is empty): the call will play nothing.",
                         ))
             else:
                 # Le générateur ne gère que les récepteurs composés reconnus.
@@ -1854,7 +2036,10 @@ class Checker:
                             and isinstance(e.obj.obj, ExprName)
                             and e.obj.obj.name == "self")
                 if is_child:
-                    pass
+                    _key, api = self._method_of(None, e.method)
+                    if api is not None:
+                        self._check_args(_key, api, e.args, receiver=f"self.{e.obj.field}",
+                                         library=(self.ctx.child_sprites or {}).get(e.obj.field))
                 elif ref is None and not is_actor_call(e.obj):
                     self.errors.append(CheckError(
                         "error",
@@ -1862,6 +2047,12 @@ class Checker:
                         "`actor.get`/`actor.spawn`, a reference (`sfx.play`, "
                         "`self:collision_box`) or `interface.get` can precede \":\". "
                         "Store it in a `local` first."))
+                elif ref in (None, REF_ACTOR) and self._method_of(ref, e.method)[1] is not None:
+                    # `actor:get("X"):play_anim(…)` : l'acteur visé est connu à l'exécution
+                    # seulement ; ses noms d'état/d'apparence ne se jugent pas ici.
+                    _key, api = self._method_of(ref, e.method)
+                    self._check_args(_key, api, e.args, receiver=chain_label(e.obj),
+                                     library=self._library_of(e.obj))
                 elif self._method_of(ref, e.method)[1] is None:
                     shown = f"{chain_label(e.obj)}:{e.method}"
                     if ref:
@@ -1870,7 +2061,7 @@ class Checker:
                     else:
                         self.errors.append(CheckError(
                             "error",
-                            f"Unknown method: {shown}() — an actor has no such method."))
+                            f"Unknown method: {shown}() : an actor has no such method."))
 
         elif isinstance(e, ExprCall):
             # module:func(args), math.func(args) ou func(args)
@@ -1880,7 +2071,7 @@ class Checker:
             if e.dotted:
                 self.errors.append(CheckError(
                     "error",
-                    f"{key}(…): an engine module is called with \":\" — write "
+                    f"{key}(…): an engine module is called with \":\" : write "
                     f"{module_call_form(key)}(…). The dot remains for a STATE (`camera.bound`, "
                     "`scene.frame`) and for the `math` library."))
             if key in WAIT_FNS:
@@ -1944,7 +2135,7 @@ class Checker:
 
         Il était TOLÉRÉ, au motif que ce pouvait être un helper écrit par
         l'utilisateur. Le motif ne tenait pas : un script ne déclare pas de
-        fonction (cf. lua_subset), et le codegen émettait l'appel tel quel — donc
+        fonction (cf. lua_subset), et le codegen émettait l'appel tel quel : donc
         `math.floor(x)` partait en C avec son point, et la faute ne remontait
         qu'au `make`, sur la ligne générée. Le pendant, côté `.`, de ce que la
         v0.7.4 a fait pour le `:`."""
@@ -1982,7 +2173,7 @@ class Checker:
         if module == "self":
             self.errors.append(CheckError(
                 "error",
-                f"{key}(): an actor method is called with a COLON — "
+                f"{key}(): an actor method is called with a COLON : "
                 f"self:{key.split('.', 1)[1]}(…). A dot designates a property, which cannot be called."))
             return
         if module in self._require_aliases:
@@ -2050,6 +2241,37 @@ class Checker:
             return ref, f"a {ref} reference"
         return None
 
+    def _check_model_instances(self, key: str, args: list) -> bool:
+        """`actor:get("Bullet", i)` et `actor:count("Bullet")` : les instances d'un MODÈLE, un
+        prefab que la scène spawne ou déclare. Rend True quand l'appel est de cette forme (jugé
+        ici) ; False pour les formes ordinaires (`actor:get("Porte")`, `actor:get(i)`,
+        `actor:count()`), que `_check_args` juge."""
+        model_form = len(args) >= 2 if key == "actor.get" else len(args) >= 1
+        if not model_form:
+            return False
+        limit = 2 if key == "actor.get" else 1
+        shape = 'actor:get("Prefab", i)' if key == "actor.get" else 'actor:count("Prefab")'
+        if len(args) > limit:
+            self.errors.append(CheckError(
+                "error", f"{key}(): the instance form is {shape}, {len(args)} arguments given."))
+            return True
+        if self.ctx.owner_kind == "camera":
+            self.errors.append(CheckError(
+                "error", f"{shape}: a camera script has no scene, so no instances to count."))
+            return True
+        if not isinstance(args[0], ExprString):
+            self.errors.append(CheckError(
+                "error", f"{shape}: the first argument is a prefab name written as a string."))
+            return True
+        name = args[0].value
+        pooled = self.ctx.pooled_prefab_names
+        if pooled is not None and name not in pooled:
+            self.errors.append(CheckError(
+                "error",
+                f"{shape}: this scene has no instances of '{name}'. Prefabs with instances here: "
+                f"{', '.join(pooled) or 'none'} (a prefab the scene spawns or declares a pool for)."))
+        return True
+
     def _check_arg_type(self, key: str, param, arg) -> bool:
         """Le type de `arg` est celui que `param` attend. Rend True quand une erreur est posée.
 
@@ -2074,13 +2296,16 @@ class Checker:
             f"{key}(): argument \"{param.name}\" expects {expected}, received {kind[1]}."))
         return True
 
-    def _check_args(self, key: str, api, args: list, receiver: str = "self"):
+    def _check_args(self, key: str, api, args: list, receiver: str = "self", library=None):
         """Vérifie le nombre d'arguments et les valeurs string si possible.
 
         `receiver` ne sert qu'aux domaines dont le nom appartient à l'objet
         APPELÉ et non au script courant (`_RECEIVER_DOMAINS`) : le contexte de
         build décrit l'acteur qui EXÉCUTE, il ne sait rien du sprite d'un
-        `other`."""
+        `other`. `library` est celle d'un ENFANT (`self.Canon`) : ses sprites sont
+        connus au build, le nom se juge contre eux."""
+        if key in ("actor.get", "actor.count") and self._check_model_instances(key, args):
+            return
         expected = len(api.params)
         got      = len(args)
         if api.variadic:
@@ -2122,14 +2347,20 @@ class Checker:
                 ))
                 continue
 
+            if param.domain in _RECEIVER_DOMAINS and library is not None:
+                if isinstance(arg, ExprString):
+                    self._check_library_name(f"{receiver}:{key.split(':')[1]}('{arg.value}')",
+                                             param.domain, arg.value, library,
+                                             receiver.split('.', 1)[-1])
+                continue
+
             if param.domain in _RECEIVER_DOMAINS and receiver != "self":
                 # Ces noms sont résolus dans le sprite de l'acteur courant.
                 self.errors.append(CheckError(
                     "error",
                     f"{receiver}:{key.split(':')[1]}(): \"{param.name}\" names an element of the sprite of \"{receiver}\", and it"
                     " is resolved against the sprite of the actor running this script"
-                    " — the emitted C would cite the wrong resource. This call can "
-                    "only be made on self."))
+                    f" : the emitted C would cite the wrong resource. {_OTHER_ACTOR_HINT}"))
                 continue
 
             if self._check_arg_type(key, param, arg):
@@ -2169,6 +2400,21 @@ class Checker:
             self.errors.append(CheckError(
                 "error", "literal text: at most 4 interpolated values in a literal."))
 
+    def _check_library_name(self, shown: str, domain: str, name: str, library, child: str):
+        """Un état ou un id d'apparence cité sur un ENFANT : il doit exister dans SES
+        sprites, sinon la constante n'existerait pas et gcc s'en plaindrait à la place."""
+        if domain == DOMAIN_ANIM:
+            known, what = library.anim_names, "state"
+            found = c_ident(name) in {c_ident(n) for n in known}
+        else:
+            known, what = library.sprite_ids, "sprite id"
+            found = name in known
+        if not found:
+            self.errors.append(CheckError(
+                "error",
+                f"{shown}: no {what} '{name}' in the sprites of \"{child}\" "
+                f"(available: {', '.join(known) or 'none'})."))
+
     def _check_anim(self, call_key: str, name: str):
         # Les noms d'animation sont comparés sans tenir compte de la casse.
         if (self.ctx.anim_names is not None
@@ -2183,7 +2429,7 @@ class Checker:
 
     def _check_sprite_id(self, call_key: str, name: str):
         """Un id inconnu est une ERREUR : la constante SPRITE_* n'existerait pas, le
-        C ne compilerait pas — autant le dire ici, avec les ids recevables."""
+        C ne compilerait pas : autant le dire ici, avec les ids recevables."""
         if self.ctx.sprite_ids is not None and name not in self.ctx.sprite_ids:
             self.errors.append(CheckError(
                 "error",
@@ -2202,7 +2448,7 @@ class Checker:
         """Un état inconnu est une ERREUR : le codegen n'émettrait aucun appel,
         et la scène resterait muette sans que rien ne l'ait dit.
 
-        La liste est celle de la boîte VISÉE par l'appel — un état de SoundBox
+        La liste est celle de la boîte VISÉE par l'appel : un état de SoundBox
         ne répond pas à `jingle_box.set_state`, et le message le montre en
         n'énumérant que les états recevables."""
         if known is not None and name not in known:
@@ -2216,22 +2462,22 @@ class Checker:
         """Un déclencheur qu'aucune arête n'écoute ne mène nulle part.
 
         AVERTISSEMENT et non erreur : écrire l'appel avant de dessiner l'arête
-        est un ordre de travail légitime, et le jeu tourne — il ne change
+        est un ordre de travail légitime, et le jeu tourne : il ne change
         simplement pas de musique."""
         known = self.ctx.music_box_trigger_names
         if known is not None and name not in known:
             self.errors.append(CheckError(
                 "warning",
-                f"{call_key}('{name}'): no music transition listens to this trigger — the call "
+                f"{call_key}('{name}'): no music transition listens to this trigger : the call "
                 "will do nothing.",
             ))
 
     def _check_music_section(self, call_key: str, name: str):
-        """Une section se nomme dans UNE musique — mais `music.set_section` n'en nomme pas :
+        """Une section se nomme dans UNE musique : mais `music.set_section` n'en nomme pas :
         elle agit sur ce qui joue, que le script ne sait pas. On ne peut donc refuser que ce
         qu'AUCUNE musique du projet ne porte : c'est la faute de frappe, ou la section
         supprimée. Une section qui existe ailleurs mais pas dans la piste en cours ne fait
-        rien à l'exécution — c'est dit dans la doc de l'appel, pas deviné ici.
+        rien à l'exécution : c'est dit dans la doc de l'appel, pas deviné ici.
 
         Erreur, comme pour un état de boîte : la constante `MSEC_*` n'existerait pas."""
         known = self.ctx.music_section_names
@@ -2251,7 +2497,7 @@ class Checker:
         if name in (self.ctx.jingle_names or ()):
             self.errors.append(CheckError(
                 "warning",
-                f"{call_key}('{name}'): '{name}' is a jingle (assets/jingles/) — play it "
+                f"{call_key}('{name}'): '{name}' is a jingle (assets/jingles/) : play it "
                 "with music.jingle, or move the file to assets/music/.",
             ))
         elif name not in self.ctx.music_names:
@@ -2270,7 +2516,7 @@ class Checker:
         if name in self.ctx.music_names:
             self.errors.append(CheckError(
                 "warning",
-                f"{call_key}('{name}'): '{name}' is a music (assets/music/), not a jingle — "
+                f"{call_key}('{name}'): '{name}' is a music (assets/music/), not a jingle : "
                 "move the file to assets/jingles/, or play it with music.play.",
             ))
         else:
@@ -2286,7 +2532,7 @@ class Checker:
 
         Sauf là où un littéral est permis (`text.draw`) : la chaîne résout vers
         une clé si elle en matche une, sinon elle EST le texte. Reste le piège
-        de la faute de frappe — `villag_garde_01` s'afficherait tel quel au
+        de la faute de frappe : `villag_garde_01` s'afficherait tel quel au
         joueur. On ne le signale que si la chaîne a la FORME d'une clé : aucun
         vrai libellé ne ressemble à ça, donc la faute se voit sans faire de
         bruit sur les littéraux légitimes. Même compromis que le silence sur
@@ -2297,7 +2543,7 @@ class Checker:
             if _KEY_SHAPED.match(key):
                 self.errors.append(CheckError(
                     "warning",
-                    f"{call_key}('{key}'): no entry with this name in the table — the text "
+                    f"{call_key}('{key}'): no entry with this name in the table : the text "
                     f"\"{key}\" will be displayed as is. A typo in a key, or an "
                     "intentional literal?",
                 ))
@@ -2318,7 +2564,7 @@ class Checker:
 
     def _check_palette(self, call_key: str, name: str):
         """Une palette inconnue est une ERREUR : le nom devient un `#define
-        PAL_*`, et sans lui le C généré ne compile pas — autant le dire ici,
+        PAL_*`, et sans lui le C généré ne compile pas : autant le dire ici,
         avec la liste, plutôt qu'au `make` sur un identifiant indéfini."""
         if self.ctx.palette_names is not None and name not in self.ctx.palette_names:
             self.errors.append(CheckError(
@@ -2335,7 +2581,7 @@ class Checker:
         tout élément d'une mise en page, quelle que soit sa nature."""
         if self.ctx.element_names is not None and name not in self.ctx.element_names:
             near = (", ".join(sorted(self.ctx.element_names)[:5])
-                    or ("no interface element in the project — draw one in the scene "
+                    or ("no interface element in the project: draw one in the scene "
                         "canvas"))
             self.errors.append(CheckError(
                 "error",
@@ -2343,7 +2589,7 @@ class Checker:
             ))
 
     def _check_image_state(self, call_key: str, state: str, args: list):
-        """L'état d'une image se nomme dans SON sprite — le seul contrôle qui a besoin du
+        """L'état d'une image se nomme dans SON sprite : le seul contrôle qui a besoin du
         RÉCEPTEUR de la propriété (`heart.state = "vide"`), pas seulement de son littéral.
 
         Un état n'existe pas dans l'absolu : il est nommé dans le SpriteAsset que porte
@@ -2387,11 +2633,11 @@ class Checker:
             ))
 
     def _check_global_write_value(self, target, value) -> None:
-        """La VALEUR d'un `global.nom = v` — ce que la cible seule ne dit pas
+        """La VALEUR d'un `global.nom = v` : ce que la cible seule ne dit pas
         (chantier global/const, remplace la valeur d'un `global.set`).
 
         Seule la forme SCALAIRE est bornée ici : une case de tableau
-        (`global.nom[i] = v`) ne l'a jamais été — même geste que le reste du
+        (`global.nom[i] = v`) ne l'a jamais été : même geste que le reste du
         langage, où un index calculé n'est pas plus contrôlé qu'ailleurs. Le
         nom, lui, est vérifié par `_check_global_scalar` (appelé sur cette
         même cible via `_check_expr(s.target)`) ; un nom inconnu n'a pas de
@@ -2406,7 +2652,7 @@ class Checker:
     @staticmethod
     def _literal_int(expr) -> Optional[int]:
         """Valeur entière d'un littéral connu à la compilation, sinon None
-        (variable, expression calculée, etc. — pas de vérif possible)."""
+        (variable, expression calculée, etc. : pas de vérif possible)."""
         if isinstance(expr, ExprNumber):
             return expr.value
         if isinstance(expr, ExprUnop) and expr.op == "-" and isinstance(expr.operand, ExprNumber):
@@ -2426,7 +2672,7 @@ class Checker:
         if not (lo <= val <= hi):
             self.errors.append(CheckError(
                 "warning",
-                f"global.{name} = {val}: value out of range for type '{typ}' ({lo} to {hi}) — "
+                f"global.{name} = {val}: value out of range for type '{typ}' ({lo} to {hi}) : "
                 "it will be truncated/wrapped at build (native GBA/C behaviour); not "
                 "an error, but probably not what was intended.",
             ))
@@ -2434,15 +2680,15 @@ class Checker:
     def _check_save(self, call_key: str, args: list):
         """Le numéro d'emplacement, quand il est écrit en clair.
 
-        Un emplacement hors capacité ne casse rien au runtime — les fonctions
-        rendent 0 — mais un `save:write(1)` dans un projet à un seul emplacement
+        Un emplacement hors capacité ne casse rien au runtime : les fonctions
+        rendent 0 : mais un `save:write(1)` dans un projet à un seul emplacement
         est une sauvegarde qui n'a jamais lieu et ne dit rien. Vérifié seulement
         sur un littéral : un slot calculé (un menu qui compte les emplacements)
         est un usage légitime que le moteur borne déjà."""
         if self.ctx.has_persistent is False:
             self.errors.append(CheckError(
                 "warning",
-                f"{call_key}(): no global variable is marked persistent in this project — the"
+                f"{call_key}(): no global variable is marked persistent in this project : the"
                 " call will save nothing. Tick \"persist\" on the variables to keep."))
         slots = self.ctx.save_slots
         if args:
@@ -2459,7 +2705,7 @@ class Checker:
             if persist is not None and name in persist and not persist[name]:
                 self.errors.append(CheckError(
                     "warning",
-                    f"save:read(..., '{name}'): '{name}' is not ticked \"persist\" — it will "
+                    f"save:read(..., '{name}'): '{name}' is not ticked \"persist\" : it will "
                     "never be in a save file, so the call will always return its "
                     "default value."))
 
@@ -2478,7 +2724,7 @@ class Checker:
     def _check_lang(self, call_key: str, name: str):
         """Même raison que la scène : sans cette langue, le #define LANG_*
         n'existe pas et gcc échoue sur la ligne générée. Une liste VIDE (projet
-        monolingue) refuse tout code — il n'y a rien à choisir."""
+        monolingue) refuse tout code : il n'y a rien à choisir."""
         if self.ctx.lang_codes is not None and name not in self.ctx.lang_codes:
             self.errors.append(CheckError(
                 "error",
@@ -2489,7 +2735,7 @@ class Checker:
     def _check_camera(self, call_key: str, name: str):
         """Même raison que la scène : sans caméra de ce nom, le #define CAM_*
         n'existe pas et gcc échoue sur la ligne générée. `(default)` n'est pas
-        acceptée ici — la caméra par défaut n'a pas de nom, un script qui veut
+        acceptée ici : la caméra par défaut n'a pas de nom, un script qui veut
         y revenir écrit camera.switch sur une caméra qu'il a nommée."""
         if self.ctx.camera_names is not None and name not in self.ctx.camera_names:
             self.errors.append(CheckError(
@@ -2501,7 +2747,7 @@ class Checker:
     def _check_window(self, call_key: str, name: str):
         """DOMAIN_WIN_REGION (réglé le 2026-08-25) : "object"/"outside" sont
         deux mots-clés fixes, jamais disputés (cf. api.WIN_REGIONS) ; tout
-        autre nom doit être un `WindowSlot` du projet — même raison qu'une
+        autre nom doit être un `WindowSlot` du projet : même raison qu'une
         caméra inconnue, le #define WIN_* n'existerait pas et gcc échouerait
         sur la ligne générée plutôt que sur sa cause."""
         if name.lower() in ("object", "outside"):
@@ -2517,7 +2763,7 @@ class Checker:
     def _check_sequence(self, call_key: str, name: str):
         """Une séquence est locale à SON script : la liste de référence est
         celle qu'on vient de collecter, pas une table du projet. Erreur et non
-        avertissement, même raison que partout ailleurs — le codegen émettrait
+        avertissement, même raison que partout ailleurs : le codegen émettrait
         une écriture dans une variable d'état qui n'existe pas."""
         if name not in self._sequences:
             self.errors.append(CheckError(
@@ -2549,7 +2795,7 @@ class Checker:
 
     def _mark_spawn_stmt(self, call) -> None:
         """Note qu'un `actor:spawn(...)` occupe une position STATEMENT autorisée
-        (début de ligne ou `local x = …`) — la table d'exports n'y est permise
+        (début de ligne ou `local x = …`) : la table d'exports n'y est permise
         que là (tranche poolé D2)."""
         if (isinstance(call, ExprCall) and self._call_key(call.func) == "actor.spawn"
                 and self._spawn_call_table(call) is not None):
@@ -2576,7 +2822,7 @@ class Checker:
                 "or as \"local x = actor:spawn(...)\", not in the middle of an "
                 "expression."))
         if not isinstance(args[0], ExprString):
-            return                      # prefab non littéral — signalé par ailleurs
+            return                      # prefab non littéral : signalé par ailleurs
         prefab = args[0].value
         meta = (self.ctx.spawn_exports or {}).get(prefab) \
             if self.ctx.spawn_exports is not None else None
@@ -2630,7 +2876,7 @@ class Checker:
 
     def _check_spawn_ref_name(self, typ: str, name: str) -> None:
         """Un nom de réf vide est neutre (→ 0). Sinon il doit exister dans la
-        liste du domaine, quand le contexte la porte — un nom inconnu émettrait
+        liste du domaine, quand le contexte la porte : un nom inconnu émettrait
         une macro C indéfinie (ACTOR_*/SFX_*/SCENE_IDX_*) au lien."""
         if not name or typ == "string":
             return                          # string : tout texte est admis
@@ -2641,7 +2887,7 @@ class Checker:
             near = ", ".join(table) or "none"
             self.errors.append(CheckError(
                 "warning",
-                f"actor.spawn: \"{name}\" is not a known {typ} ({near})."))
+                f"\"{name}\" is not a known {typ} ({near})."))
 
     def _check_actor(self, call_key: str, name: str):
         if self.ctx.actor_names is not None and name not in self.ctx.actor_names:
@@ -2653,15 +2899,16 @@ class Checker:
 
     def _check_actor_name(self, call_key: str, name: str):
         """L'IDENTITÉ d'un acteur : le nom d'un acteur de la scène ou d'un
-        prefab poolé, les deux seuls à recevoir un `#define ACTOR_*`
+        prefab poolé DANS CETTE SCÈNE, les deux seuls à recevoir un `#define ACTOR_*`
         (cf. codegen/runtime_codegen/headers.py).
 
         Erreur bloquante, comme la scène ou le prefab : sans ce `#define`, le C
         généré cite un identifiant qui n'existe pas. À ne pas confondre avec
         `BOXTAG_*`, qui vient du champ libre `CollisionBoxComponent.tag` et
         n'est, lui, contraint par aucune liste."""
-        connus = list(self.ctx.actor_names or []) + list(self.ctx.prefab_names or [])
-        if self.ctx.actor_names is None and self.ctx.prefab_names is None:
+        prefabs = self.ctx.pooled_prefab_names if self.ctx.pooled_prefab_names is not None             else self.ctx.prefab_names
+        connus = list(self.ctx.actor_names or []) + list(prefabs or [])
+        if self.ctx.actor_names is None and prefabs is None:
             return
         if name not in connus:
             self.errors.append(CheckError(
@@ -2671,7 +2918,7 @@ class Checker:
             ))
 
     def _check_box_tag(self, call_key: str, name: str):
-        """Le tag d'une boîte de collision — `Project.collision_tags()`. Sans lui
+        """Le tag d'une boîte de collision : `Project.collision_tags()`. Sans lui
         le `#define BOXTAG_*` n'existe pas et gcc échoue sur la ligne générée.
         Une faute de frappe échouerait aussi SILENCIEUSEMENT au runtime (une
         boîte absente se lit vide et s'écrit sans effet) : d'où l'erreur ici."""
@@ -2694,7 +2941,7 @@ class Checker:
 
     def _check_axis(self, call_key: str, name: str):
         """`horizontal`/`vertical` (la croix, toujours présents) plus les
-        `InputAxis` déclarés — jamais un nom d'action ou de bouton seul :
+        `InputAxis` déclarés : jamais un nom d'action ou de bouton seul :
         `get_axis` n'a pas la même grammaire que `held`/`pressed`."""
         valid = {"horizontal", "vertical"} | set(self.ctx.axis_names or [])
         if name not in valid:
@@ -2705,7 +2952,7 @@ class Checker:
 
     def _check_sequence_name(self, call_key: str, name: str):
         """`get_sequence` a son propre espace de noms (Project Settings →
-        Input → Séquences) — jamais un bouton ni une action, décision de
+        Input → Séquences) : jamais un bouton ni une action, décision de
         l'auteur du 2026-09-27 : les rôles ne se mélangent plus."""
         valid = set(self.ctx.input_sequence_names or [])
         if name not in valid:
@@ -2716,7 +2963,7 @@ class Checker:
             ))
 
     def _check_frame_literal(self, call_key: str, arg, param_name: str):
-        """Toutes les durées d'input tiennent dans un `u8` (1 à 255 frames) —
+        """Toutes les durées d'input tiennent dans un `u8` (1 à 255 frames) :
         seul un LITTÉRAL se vérifie ici, une variable reste du ressort de
         l'auteur."""
         if isinstance(arg, ExprNumber) and not (1 <= arg.value <= 255):
@@ -2754,7 +3001,7 @@ class Checker:
             if not isinstance(args[1], ExprNumber):
                 self.errors.append(CheckError(
                     "error",
-                    f"{key}(): \"frames\" must be a plain number — the ring depth is "
+                    f"{key}(): \"frames\" must be a plain number : the ring depth is "
                     "computed at build, it cannot depend on a variable."))
             else:
                 self._check_frame_literal(key, args[1], "frames")
@@ -2762,11 +3009,11 @@ class Checker:
     def _check_hw_enum(self, call_key: str, name: str, domain: str):
         """Valeur d'une énumération matérielle FIXE (mode OAM, direction, mode
         et côté de mélange, décroissance). DOMAIN_WIN_REGION n'en fait PAS
-        partie depuis le 2026-08-25 — cf. `_check_window`.
+        partie depuis le 2026-08-25 : cf. `_check_window`.
 
         L'ensemble valide vient de `HARDWARE_ENUMS`, donc du catalogue : cette
         fonction n'énumère rien elle-même et ne périme pas quand une valeur
-        s'ajoute. Erreur bloquante et non avertissement — une valeur inconnue
+        s'ajoute. Erreur bloquante et non avertissement : une valeur inconnue
         produirait du C qui ne compile pas, et la panne apparaîtrait sur la
         ligne générée au lieu de sa cause."""
         valid = HARDWARE_ENUMS.get(domain, {})
@@ -2782,7 +3029,7 @@ class Checker:
 # Un domaine → comment vérifier que le nom cité existe. Table et non chaîne
 # d'`elif` : elle se compare à `ALL_DOMAINS` au build
 # (`validator._check_api_domains`). Un domaine sans entrée ici n'était validé
-# par RIEN, en silence — l'erreur n'apparaissait qu'à la compilation C.
+# par RIEN, en silence : l'erreur n'apparaissait qu'à la compilation C.
 #
 # Signature uniforme (checker, clé d'appel, valeur, param) : seul `_check_text`
 # lit le `param`, mais une signature à géométrie variable redonnerait une table
@@ -2790,7 +3037,7 @@ class Checker:
 #
 # Signature : (checker, clé d'appel, littéral, Param, args de l'appel). Le
 # dernier n'intéresse qu'`image_state`, dont la validité dépend d'un AUTRE
-# argument — mais il est passé à tous plutôt que réservé à celui-là : un
+# argument : mais il est passé à tous plutôt que réservé à celui-là : un
 # contrôle qui aurait besoin du contexte de son appel ne devrait pas avoir à
 # changer le contrat de la table pour l'obtenir.
 _DOMAIN_CHECKS: dict = {
@@ -2840,12 +3087,12 @@ _DOMAIN_CHECKS: dict = {
 # leur domaine, comme les autres. Ce qui reste accroché à un appel précis dans
 # `_check_call_expr` ne porte plus sur un nom : le numéro d'emplacement d'un
 # `save.*` (`global.get`/`set` et `const.get` ont depuis quitté RUNTIME_API,
-# remplacés par l'accès pointé — chantier global/const).
+# remplacés par l'accès pointé : chantier global/const).
 
-# Domaines connus mais délibérément NON validés — la troisième case du contrôle
+# Domaines connus mais délibérément NON validés : la troisième case du contrôle
 # de couverture (`validator._check_api_domains`), qui distingue « traité
 # ailleurs » de « oublié ». Vide aujourd'hui : `tag` l'occupait au motif que
-# `ACTOR_*` serait un espace ouvert, ce qui était faux — l'espace est celui des
+# `ACTOR_*` serait un espace ouvert, ce qui était faux : l'espace est celui des
 # acteurs de scène et des prefabs, parfaitement énumérable, et c'est `BOXTAG_*`
 # (champ libre d'une box de collision) qui ne l'est pas. La case reste, elle
 # n'est pas un oubli : le prochain domaine sans liste de référence s'y range.
@@ -2855,8 +3102,8 @@ _DOMAINS_UNCHECKED: frozenset = frozenset()
 def _prop_label(receiver: str, p) -> str:
     """`self.name` lu sur `other` s'annonce « other.name ».
 
-    Le catalogue range les propriétés d'actor sous la clé `self.<champ>` — une
-    clé, pas une restriction (cf. expr_types.resolve_prop) — et un message qui
+    Le catalogue range les propriétés d'actor sous la clé `self.<champ>` : une
+    clé, pas une restriction (cf. expr_types.resolve_prop) : et un message qui
     reprendrait la clé telle quelle citerait à l'auteur une ligne qu'il n'a pas
     écrite."""
     return f"{receiver}.{p.lua_name.split('.', 1)[1]}"
@@ -2886,12 +3133,29 @@ def _domain_example(domain: Optional[str]) -> Optional[str]:
 # Domaines dont le nom appartient au RÉCEPTEUR de l'appel, pas au script qui
 # l'écrit. `BuildContext` décrit l'acteur qui EXÉCUTE : ses animations, son
 # SoundFX. Un `other:play_anim("walk")` cite donc une ressource que ce script
-# ne peut ni vérifier ni résoudre — cf. `_check_args`.
+# ne peut ni vérifier ni résoudre : cf. `_check_args`.
 _RECEIVER_DOMAINS: frozenset = frozenset({DOMAIN_ANIM, DOMAIN_SPRITE_ID})
+
+_ACTOR_STORED = (
+    "`{name}` cannot hold an actor: an array element is stored as an integer and has no actor "
+    "type. Keep the actor in a variable of its own (`local last = nil` at the top, assigned in a "
+    "handler), or in a `local` inside the handler.")
+
+_ACTOR_TOP_INIT = (
+    "`{name}`: a variable at the top of the script is initialised before the scene exists, so it "
+    "cannot start as an actor. Declare it `local {name} = nil` and assign it in a handler "
+    "(`{name} = actor:get(\"Name\")`); it then keeps the reference from one frame to the next, "
+    "and reads as nil once the actor is destroyed.")
+
+# Ce que l'auteur peut faire quand le Build ne sait pas de quel acteur il parle.
+_OTHER_ACTOR_HINT = (
+    "The build must know which actor this is: reach it by a name written in full "
+    "(`actor:get(\"Name\")`, `actor:spawn(\"Name\", pos)`, or `self.Child`) and keep it in a "
+    "`local`. With `actor:get(i)` or a computed name, the actor is only known at run time.")
 
 
 def covered_domains() -> frozenset:
-    """Domaines dont le checker sait quoi faire — validés, ou explicitement
+    """Domaines dont le checker sait quoi faire : validés, ou explicitement
     laissés de côté.
 
     Rendus par une fonction et non par les tables elles-mêmes : le contrôle

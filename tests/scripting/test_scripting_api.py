@@ -406,7 +406,7 @@ def _tag_lua(src: str):
     code, _, _ = generate(script, CodegenContext(
         actor_name="Ball", actor_sym="Ball", anim_names=[], sfx_names=[],
         music_names=[], global_names=set(), const_names=set(),
-        all_actor_syms=["Ball", "PADDLE_PL"]))
+        all_actor_syms=["Ball", "PADDLE_PL"], scene_sym="Scene_01"))
     return [e.message for e in errors if e.level == "error"], code
 
 
@@ -414,7 +414,20 @@ def test_le_tag_se_compare_par_le_nom_de_lacteur():
     errs, code = _tag_lua('function on_collide(self, other)\n'
                           ' if other.name == "PADDLE_PL" then self:destroy() end\nend\n')
     assert errs == []
-    assert "actor_get_name(other) == ACTOR_PADDLE_PL" in code
+    assert "actor_get_name(other) == ACTOR_SCENE_01_PADDLE_PL" in code
+
+
+def test_le_tag_refuse_un_prefab_non_poole_dans_la_scene():
+    """Sans pool dans la scène, `ACTOR_<scène>_<prefab>` n'existe pas : le checker le dit
+    avant que gcc ne l'écrive."""
+    from scripting.parser import parse
+    from scripting.checker import check, BuildContext
+
+    script = parse('function on_collide(self, other)\n'
+                   ' if other.name == "Bullet" then self:destroy() end\nend\n')
+    errs = check(script, BuildContext(actor_name="Ball", actor_names=["Ball"],
+                                      prefab_names=["Bullet"], pooled_prefab_names=[]))
+    assert any("no actor or prefab named 'Bullet'" in e.message for e in errs)
 
 
 def test_le_tag_accepte_aussi_un_prefab():
@@ -422,7 +435,7 @@ def test_le_tag_accepte_aussi_un_prefab():
     errs, code = _tag_lua('function on_collide(self, other)\n'
                           ' if other.name == "Bullet" then self:destroy() end\nend\n')
     assert errs == []
-    assert "ACTOR_BULLET" in code
+    assert "ACTOR_SCENE_01_BULLET" in code
 
 
 def test_identite_inconnue_refusee():

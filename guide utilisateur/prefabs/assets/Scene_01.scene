@@ -1,0 +1,190 @@
+{
+  "name": "Scene_01",
+  "id": "a383e26f7c40",
+  "background_layers": [],
+  "actors": [
+    {
+      "name": "Lanterne_1",
+      "id": "0d7027b59352",
+      "source": "92c47d48eb2c",
+      "active": true,
+      "components": [
+        {
+          "component_type": "sprite",
+          "id": "sprite",
+          "active": true,
+          "sprite_name": "Lanterne",
+          "initial_state": "Idle",
+          "facing_auto": true,
+          "affine_transform": false,
+          "scale_x": 1.0,
+          "scale_y": 1.0,
+          "rotation": 0,
+          "offset_x": 0,
+          "offset_y": 0,
+          "pivot_x": 0,
+          "pivot_y": 0
+        },
+        {
+          "component_type": "script",
+          "id": "script",
+          "active": true,
+          "script": "assets/scripts/Lanterne.lua",
+          "exports_values": {
+            "periode": 15
+          }
+        }
+      ],
+      "x": 40,
+      "y": 72,
+      "flip_h": false,
+      "flip_v": false,
+      "priority": 0,
+      "pal_bank": -1,
+      "visible": true,
+      "obj_mode": 0,
+      "rotation": 0,
+      "scale_x": 1.0,
+      "scale_y": 1.0,
+      "screen_space": false,
+      "dir_x": 0,
+      "dir_y": 0,
+      "notes": ""
+    },
+    {
+      "name": "Lanterne_2",
+      "id": "919327d5cefe",
+      "source": "92c47d48eb2c",
+      "active": true,
+      "components": [
+        {
+          "component_type": "sprite",
+          "id": "sprite",
+          "active": true,
+          "sprite_name": "Lanterne",
+          "initial_state": "Idle",
+          "facing_auto": true,
+          "affine_transform": false,
+          "scale_x": 1.0,
+          "scale_y": 1.0,
+          "rotation": 0,
+          "offset_x": 0,
+          "offset_y": 0,
+          "pivot_x": 0,
+          "pivot_y": 0
+        },
+        {
+          "component_type": "script",
+          "id": "script",
+          "active": true,
+          "script": "assets/scripts/Lanterne.lua",
+          "exports_values": {
+            "periode": 30
+          }
+        }
+      ],
+      "x": 112,
+      "y": 72,
+      "flip_h": false,
+      "flip_v": false,
+      "priority": 0,
+      "pal_bank": -1,
+      "visible": true,
+      "obj_mode": 0,
+      "rotation": 0,
+      "scale_x": 1.0,
+      "scale_y": 1.0,
+      "screen_space": false,
+      "dir_x": 0,
+      "dir_y": 0,
+      "notes": ""
+    },
+    {
+      "name": "Lanterne_3",
+      "id": "46065a289f78",
+      "source": "92c47d48eb2c",
+      "active": true,
+      "components": [
+        {
+          "component_type": "sprite",
+          "id": "sprite",
+          "active": true,
+          "sprite_name": "Lanterne",
+          "initial_state": "Idle",
+          "facing_auto": true,
+          "affine_transform": false,
+          "scale_x": 1.0,
+          "scale_y": 1.0,
+          "rotation": 0,
+          "offset_x": 0,
+          "offset_y": 0,
+          "pivot_x": 0,
+          "pivot_y": 0
+        },
+        {
+          "component_type": "script",
+          "id": "script",
+          "active": true,
+          "script": "assets/scripts/Lanterne.lua",
+          "exports_values": {
+            "periode": 60
+          }
+        }
+      ],
+      "x": 184,
+      "y": 72,
+      "flip_h": false,
+      "flip_v": false,
+      "priority": 0,
+      "pal_bank": -1,
+      "visible": true,
+      "obj_mode": 0,
+      "rotation": 0,
+      "scale_x": 1.0,
+      "scale_y": 1.0,
+      "screen_space": false,
+      "dir_x": 0,
+      "dir_y": 0,
+      "notes": ""
+    }
+  ],
+  "cameras": [
+    {
+      "name": "Camera",
+      "id": "570c9e4389db",
+      "x": 0,
+      "y": 0,
+      "frame_w": 240,
+      "frame_h": 160,
+      "mode": "fixed",
+      "follow_target": "",
+      "margin_x": 40,
+      "margin_y": 20,
+      "bounds_x": null,
+      "bounds_y": null,
+      "bounds_w": null,
+      "bounds_h": null,
+      "script": "",
+      "notes": ""
+    }
+  ],
+  "camera": "Camera",
+  "windows": [],
+  "render_mode": 0,
+  "scroll_h": true,
+  "scroll_v": true,
+  "script": "",
+  "ui_layouts": [],
+  "font_name": "",
+  "font_pal_banks": {
+    "": 0
+  },
+  "collision_layer": 0,
+  "collision_map": [],
+  "active_obj_palettes": [],
+  "active_bg_palettes": [
+    "_Microsoft Windows 16"
+  ],
+  "backdrop_color": null,
+  "notes": ""
+}

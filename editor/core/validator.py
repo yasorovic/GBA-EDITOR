@@ -1484,13 +1484,13 @@ def _check_behaviors_without_self(ctx: ValidationContext):
 
 
 def _check_actor_budget(ctx: ValidationContext):
-    """Le budget OAM d'une scène : 128 entrées, distribuées par priorité.
+    """Le budget OAM d'une scène : 128 emplacements, dont l'interface prend les premiers.
 
-    Source unique : `scene_oam_layout`, la même que le build. L'interface passe d'abord, puis
-    les acteurs posés, puis les instances de pool. Ce qui ne tient pas n'est PAS écrit hors de
-    `shadow_oam` : l'acteur ou l'instance reçoit `oam_entry = -1` (ou l'entrée poubelle), vit
-    sans s'afficher, et le validateur AVERTIT. Une seule ERREUR reste : l'interface seule
-    dépasse 128, aucune dégradation ne la sauve."""
+    Source unique : `scene_oam_layout`, la même que le build. Les acteurs n'ont pas de
+    plafond d'existence : un sprite prend un emplacement à la frame, seulement s'il est à
+    l'écran, dans l'ordre (posés, puis pools). Une seule ERREUR reste : l'interface seule
+    dépasse 128, aucune dégradation ne la sauve. Un surplus d'acteurs affichés ENSEMBLE ne se
+    voit qu'au jeu : le build debug l'écrit dans le log."""
     from codegen.oam_alloc import scene_oam_layout, OAM_LIMIT
     p = ctx.project
     for scene in p.scenes:
@@ -1499,22 +1499,6 @@ def _check_actor_budget(ctx: ValidationContext):
             ctx.error(None,
                 f"Scene '{scene.name}': the interface alone needs {lay.ui} OAM entries for {OAM_LIMIT} "
                 "available — reduce a background tiling or move a zone to a BG target.")
-        # Priorité : interface, acteurs posés, puis pools. Ce qui ne tient pas vit sans s'afficher.
-        if lay.placed_hidden:
-            ctx.focus(scene)
-            ctx.warn(None,
-                f"Scene '{scene.name}': {lay.placed_hidden} sprite actor(s) have no OAM entry left "
-                f"({lay.placed_entries} actors + {lay.ui} interface fill the {OAM_LIMIT}) — they run but "
-                "are not displayed.")
-        # Un pool ne déborde pas, il reçoit ce qui reste : une instance sans entrée vit (script,
-        # collision) mais n'est pas dessinée. Dit, pas bloquant.
-        for pl in lay.pools:
-            if pl.hidden:
-                ctx.focus(scene)
-                ctx.warn(None,
-                    f"Scene '{scene.name}': pool of '{pl.prefab.name}' has {pl.instances} instance(s) but only "
-                    f"{pl.granted} can be drawn — no OAM entry left for the other {pl.hidden} (they live, "
-                    "but are not displayed). Reduce the pool or free OAM entries.")
         ctx.focus(None)
 
 
@@ -2235,8 +2219,8 @@ def _check_pal_bank_reference(ctx: ValidationContext):
                 continue
             if _slot_missing(active, pb):
                 ctx.warn(None,
-                    f"Prefab '{pf.name}' points to OBJ bank {pb} of scene '{scene.name}' (which spawns"
-                    " it), empty or outside the active selection — its instances will"
+                    f"Prefab '{pf.name}' points to OBJ bank {pb} of scene '{scene.name}' (which has"
+                    " instances of it), empty or outside the active selection — its instances will"
                     " display there with the default content of that slot.")
 
     # ── Layers BG (portés par la scène) ──────────────────────────────

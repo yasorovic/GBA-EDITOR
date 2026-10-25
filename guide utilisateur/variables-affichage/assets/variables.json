@@ -1,0 +1,13 @@
+{
+  "globals": [
+    {
+      "id": "d8d022bac07a",
+      "name": "compteur",
+      "type": "int",
+      "default": 0,
+      "desc": "",
+      "persist": false
+    }
+  ],
+  "constants": []
+}

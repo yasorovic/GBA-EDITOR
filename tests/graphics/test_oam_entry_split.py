@@ -84,7 +84,7 @@ def test_la_table_est_declaree_et_initialisee_avec_son_lien():
     # pour les seuls acteurs qui affichent un sprite…
     assert "g_actors[_i].oam_entry=-1" in source
     # …et le spawn le repose, puisqu'il remet l'acteur à zéro.
-    assert "g_actors[_i] = (Actor){{0}}; g_actors[_i].oam_entry = {_e0 or -1};" in source
+    assert "g_actors[_i].gen = _g + 1; }} g_actors[_i].oam_entry = {_e0 or -1};" in source
 
 
 def test_l_acteur_sans_sprite_a_des_accesseurs_neutres():

@@ -102,6 +102,8 @@ def test_les_verbes_d_un_acteur_se_traduisent_terme_a_terme():
     assert _c_body(body) == [
         "actor_set_visible(self, 0);", "actor_set_visible(self, 1);",
         "actor_set_active(self, 0);", "actor_set_active(self, 1);",
+        # Sur la référence d'un autre acteur : sautée, et dite, s'il n'existe plus.
+        'if (actor_exists_warn(runtime_get_actor(ACTORNAME_FOE), "deactivate()")) '
         "actor_set_active(runtime_get_actor(ACTORNAME_FOE), 0);",
     ]
 

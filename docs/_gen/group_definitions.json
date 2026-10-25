@@ -1,0 +1,91 @@
+{
+  "references": {
+    "actor": {
+      "name": "acteur",
+      "in_rom": "Un pointeur vers l'acteur (`Actor*`)."
+    },
+    "collision_box": {
+      "name": "boîte de collision",
+      "in_rom": "Un entier (`int`) : le rang de la boîte, 0 si elle est absente."
+    },
+    "background_layer": {
+      "name": "fond tuilé",
+      "in_rom": "Un entier (`int`) : le numéro matériel du fond (son `bg_slot`)."
+    },
+    "window_region": {
+      "name": "région de fenêtre",
+      "in_rom": "Un entier (`int`) : le rang de la région (`WINR_*`)."
+    },
+    "sfx": {
+      "name": "effet sonore en cours",
+      "in_rom": "Un identifiant d'effet en cours de lecture (`mm_sfxhand`), celui de maxmod."
+    },
+    "ui_element": {
+      "name": "élément d'interface",
+      "in_rom": "Un entier (`int`) : l'index de l'élément, connu au build."
+    },
+    "image": {
+      "name": "image d'interface",
+      "in_rom": "Un entier (`int`) : l'index de l'image dans la table des images (`g_ui_images`)."
+    },
+    "textBox": {
+      "name": "zone de texte",
+      "in_rom": "Un entier (`int`) : l'index de la zone dans la table des zones de texte (`g_ui_regions`)."
+    }
+  },
+  "groups": {
+    "Transform": {
+      "ref": "actor"
+    },
+    "Movement": {
+      "ref": "actor"
+    },
+    "Physics": {
+      "ref": "actor"
+    },
+    "Sprite": {
+      "ref": "actor"
+    },
+    "Animation": {
+      "ref": "actor"
+    },
+    "Juiciness": {
+      "ref": "actor"
+    },
+    "Actor sound": {
+      "ref": "actor"
+    },
+    "Actor": {
+      "note": "Un prefab est un modèle d'acteur : ses instances sont des acteurs, comme les autres. `actor:spawn` en crée une depuis le pool de la scène, et rend `nil` si ce pool est plein."
+    },
+    "Instance": {
+      "ref": "actor"
+    },
+    "CollisionBox": {
+      "ref": "collision_box"
+    },
+    "Layer": {
+      "ref": "background_layer"
+    },
+    "Tilemap": {
+      "ref": "background_layer"
+    },
+    "Window": {
+      "ref": "window_region"
+    },
+    "Sound effects": {
+      "ref": "sfx"
+    },
+    "UI": {
+      "ref": "ui_element"
+    },
+    "Image": {
+      "ref": "image",
+      "obtained": "`interface:get(name)`, quand l'élément est une image."
+    },
+    "textBox": {
+      "ref": "textBox",
+      "obtained": "`interface:get(name)`, quand l'élément est une zone de texte."
+    }
+  }
+}

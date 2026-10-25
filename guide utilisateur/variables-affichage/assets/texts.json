@@ -1,0 +1,11 @@
+{
+  "texts": [
+    {
+      "id": "ff66ec196ed1",
+      "key": "hud_compteur",
+      "content": "Appuis : $compteur",
+      "note": "",
+      "scene": "Scene_01"
+    }
+  ]
+}

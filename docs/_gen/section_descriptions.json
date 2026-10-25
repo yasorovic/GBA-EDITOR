@@ -1,0 +1,9 @@
+{
+  "scrsb.sec.actor": "Tout ce qu'on fait avec un acteur : où il est, comment il bouge, comment il touche le décor, son apparence, et les boutons de la console qui le pilotent.",
+  "scrsb.sec.scene": "Tout ce que définit l'asset de scène : ses fonds et leurs tuiles, ses palettes, et les fenêtres et mélanges de couleurs qui s'appliquent à l'écran. C'est aussi d'ici qu'on change de scène.",
+  "scrsb.sec.camera": "Le cadrage de la scène : suivre une cible, passer d'une caméra à une autre, faire trembler l'écran.",
+  "scrsb.sec.sound": "Les effets, la musique et les jingles, et les boîtes qui les adaptent à ce qui se passe dans le jeu.",
+  "scrsb.sec.text_ui": "Afficher du texte, choisir la langue et piloter les éléments d'interface : images et zones de texte.",
+  "scrsb.sec.data": "Garder et retrouver des valeurs : les sauvegardes de la cartouche et les tableaux d'entiers.",
+  "scrsb.sec.script": "Les outils du script lui-même : calculs, séquences d'actions dans le temps, journal de débogage."
+}

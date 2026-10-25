@@ -21,7 +21,8 @@ from core.models.scene import Actor
 from core.project import Project
 from codegen.c_names import sym as c_sym
 from codegen.grit_conversion import sprite_unique_frames, seq_key
-from codegen.runtime_codegen.gen_affine import affine_oam_lines_dynamic
+from codegen.runtime_codegen.gen_affine import (
+    affine_oam_lines_dynamic, oam_window_open, oam_window_close)
 
 
 def frame_action_ids(p: Project, sprite: SpriteAsset) -> list[int]:
@@ -392,21 +393,26 @@ def _oam_body_lines(idx: int, e: int, ap: Appearance, aff: Optional[dict],
         f"        int sx=(g_actors[{idx}].x>>8){cx}{ox_s}; int sy=(g_actors[{idx}].y>>8){cy}{oy_s};",
         f"        u16 ti=(u16)({ap.base_tile}+g_oam_entries[{e}].frame*{sp.tiles_per_frame});",
         f"        int fh=g_oam_entries[{e}].flip_h; int fv=g_oam_entries[{e}].flip_v;",
-        f"        shadow_oam[{e}].attr0=(sy&0xFF)|(g_oam_entries[{e}].obj_mode<<10)|({sp.oam_shape}<<14);",
-        f"        shadow_oam[{e}].attr1=(sx&0x1FF)|(fh<<12)|(fv<<13)|({sp.oam_size}<<14);",
-        f"        shadow_oam[{e}].attr2=(ti&0x3FF)|(g_oam_entries[{e}].priority<<10)|(g_oam_entries[{e}].pal_bank<<12);",
+        *oam_window_open(sp.frame_w, sp.frame_h),
+        f"            shadow_oam[_o].attr0=(sy&0xFF)|(g_oam_entries[{e}].obj_mode<<10)|({sp.oam_shape}<<14);",
+        f"            shadow_oam[_o].attr1=(sx&0x1FF)|(fh<<12)|(fv<<13)|({sp.oam_size}<<14);",
+        f"            shadow_oam[_o].attr2=(ti&0x3FF)|(g_oam_entries[{e}].priority<<10)|(g_oam_entries[{e}].pal_bank<<12);",
+        *oam_window_close(),
     ]
 
 
 def oam_write_lines(idx: int, e: int, appearances: list[Appearance],
                     aff: Optional[dict] = None, screen_space: bool = False) -> list[str]:
-    """L'écriture de `shadow_oam[e]` pour l'acteur `idx`, une apparence par cas.
+    """L'écriture OAM de l'acteur `idx`, une apparence par cas.
 
-    `idx` = l'acteur (`g_actors[idx]`, sa position), `e` = son entrée OAM. L'affine
-    appartient à l'ENTRÉE (le slot de matrice est réservé au build) : `aff` est
-    commun à toutes les apparences, chacune n'apportant que sa géométrie."""
+    `idx` = l'acteur (`g_actors[idx]`, sa position), `e` = son ÉTAT d'affichage
+    (`g_oam_entries[e]`). L'emplacement OAM n'est PAS `e` : le sprite prend le prochain libre de
+    la frame (`_oamn`) s'il est actif, visible et à l'écran. Un acteur qui n'écrit rien ne laisse
+    rien : `oam_hide_from` éteint en fin de frame ce que la précédente avait allumé. L'affine
+    appartient à l'ENTRÉE (le slot de matrice est réservé au build) : `aff` est commun à toutes
+    les apparences, chacune n'apportant que sa géométrie."""
     head = f"    if(g_actors[{idx}].active && g_oam_entries[{e}].visible){{"
-    tail = f"    }}else{{ shadow_oam[{e}].attr0=0x0200; }}"
+    tail = "    }"
     if len(appearances) == 1:
         return [head, *_oam_body_lines(idx, e, appearances[0], aff, screen_space), tail]
     cases: list[str] = [f"        switch(g_oam_entries[{e}].appearance){{"]
@@ -415,7 +421,7 @@ def oam_write_lines(idx: int, e: int, appearances: list[Appearance],
                   *_oam_body_lines(idx, e, ap, aff, screen_space),
                   f"        }} break;"]
     # Une apparence inconnue ne dessine rien plutôt que n'importe quoi.
-    cases += [f"        default: shadow_oam[{e}].attr0=0x0200; break;", "        }"]
+    cases += ["        default: break;", "        }"]
     return [head, *cases, tail]
 
 

@@ -73,10 +73,9 @@ def generate_actor_types(p: Project) -> None:
 
     # Un bloc par scène. ACTOR_<Actor> pour ses acteurs ACTIFS (même ordre et même
     # base 0 que ce que `main_gen` pose dans `g_actors` au scene_init), puis
-    # ACTOR_<Scène>_<Prefab> et la géométrie de la plage — POOL_<Scène>_<Prefab>_
-    # START/_SIZE/_GROUP/_INSTANCES. Le script transpilé en a besoin pour
-    # dimensionner son état par instance et retrouver le slot d'un `self`
-    # (`self - &g_actors[START]`) ; compilé PAR scène, il lit ces bornes-ci.
+    # ACTOR_<Scène>_<Prefab>, le nombre d'instances (POOL_<Scène>_<Prefab>_INSTANCES, la taille de
+    # l'état par instance) et la table du modèle (`g_model_<Scène>_<Prefab>`, qui dit où est
+    # chaque instance). Le script transpilé les lit : il est compilé PAR scène.
     for sc in p.scenes:
         lay = scene_oam_layout(p, sc)
         h.append(f"/* ── Scene {sc.name} ─────────────────────────────── */")
@@ -88,15 +87,16 @@ def generate_actor_types(p: Project) -> None:
             i += 1
         for pl in lay.pools:
             u = pl.sym.upper()
-            h.append(f"#define ACTOR_{u} {pl.start}  /* prefab pool start */")
-            h.append(f"#define POOL_{u}_START {pl.start}")
-            # le pool se dit en INSTANCES, le build multiplie par
-            # les parties. _SIZE = entrées de `g_actors` réellement payées ; les
-            # trois autres constantes permettent au C émis de passer de l'une à
-            # l'autre sans recalculer.
-            h.append(f"#define POOL_{u}_SIZE {pl.size}")
-            h.append(f"#define POOL_{u}_GROUP {pl.group}")
+            # L'identité d'un acteur de la réserve (`other.name == "Bullet"`) est le début de sa
+            # plage. Un modèle sans réserve (que des instances posées, chacune sous son nom) n'a
+            # aucun acteur de ce nom : -1 ne vaut jamais un `name`, et ne chevauche pas la plage d'un
+            # autre modèle.
+            h.append(f"#define ACTOR_{u} {pl.start if pl.reserve else -1}  /* prefab pool start */")
+            # Le pool se dit en INSTANCES (la taille de l'état de script) ; la table du modèle
+            # (`g_model_*`, définie dans main.c) donne l'emplacement de chacune.
             h.append(f"#define POOL_{u}_INSTANCES {pl.instances}")
+            h.append(f"#define MODEL_{u}_COUNT {pl.instances}")
+            h.append(f"extern const ModelSlot g_model_{pl.sym}[MODEL_{u}_COUNT];")
 
     # ACTORNAME_* — id de lookup par nom logique (runtime_get_actor, décision C).
     _names = actorname_ids(p)

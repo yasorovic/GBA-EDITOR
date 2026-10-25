@@ -469,3 +469,33 @@ def test_c_wobble_demarre_a_moins_amount_finit_a_zero_et_survit_a_une_duree_null
 def test_c_la_marge_de_suivi_est_bornee_a_la_moitie_de_l_ecran(sortie_sonde):
     assert sortie_sonde["marge"] == [120, 0]
     assert sortie_sonde["marge_y"] == [7, 80]
+
+
+# ── Une référence d'acteur ne désigne plus rien quand l'emplacement change de main ─────────
+
+def test_c_une_reference_resout_tant_que_l_emplacement_n_a_pas_change_de_main(sortie_sonde):
+    assert sortie_sonde["ref_make"] == [1, 0]        # non nulle ; nil -> 0
+    assert sortie_sonde["ref_get"] == [1, 1]
+    assert sortie_sonde["ref_inactif"] == [1]        # désactivé : toujours adressable
+    assert sortie_sonde["ref_indice"] == [1]
+
+
+def test_c_une_reference_perimee_rend_nil_apres_destruction_et_apres_reoccupation(sortie_sonde):
+    assert sortie_sonde["ref_detruit"] == [1]
+    assert sortie_sonde["ref_reoccupe"] == [1]       # ne désigne pas l'occupant suivant
+    assert sortie_sonde["ref_neuve"] == [1, 1]
+
+
+# ── Détruit libère l'emplacement, désactivé le garde ──────────────────────────────────────
+
+def test_c_detruit_libere_l_emplacement_desactive_le_garde(sortie_sonde):
+    assert sortie_sonde["vie_occupes"] == [2, 1]
+    assert sortie_sonde["vie_desactive"] == [1, 2]           # toujours adressable, toujours occupé
+    assert sortie_sonde["vie_detruit"] == [1, 0, 1]          # nil, alive = 0, un de moins
+
+
+def test_c_les_instances_d_un_modele_se_parcourent_par_rang_vivant(sortie_sonde):
+    assert sortie_sonde["vie_nth"] == [1, 1, 1, 1]           # la 1re vivante, puis rien
+    assert sortie_sonde["vie_nth_ordre"] == [1, 1]           # l'ordre est celui des emplacements
+    assert sortie_sonde["vie_groupe"] == [1]                 # la table dit où sont les racines
+    assert sortie_sonde["vie_eclate"] == [1, 1]              # ni contiguës, ni dans l'ordre des emplacements

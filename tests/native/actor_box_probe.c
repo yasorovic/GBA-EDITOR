@@ -301,5 +301,47 @@ int main(void) {
     printf("marge %d %d\n", g_cam_margin_x, g_cam_margin_y);
     camera_set_margin((Vec2){ 7, 500 });
     printf("marge_y %d %d\n", g_cam_margin_x, g_cam_margin_y);
+
+    /* Références d'acteur : l'emplacement change de main, la référence cesse de résoudre. */
+    {
+        Actor *x = &g_actors[0];
+        x->gen = 0; x->active = 1;
+        int h = actor_ref_make(x);
+        printf("ref_make %d %d\n", h != 0, actor_ref_make(0));
+        printf("ref_get %d %d\n", actor_ref_get(h) == x, actor_ref_get(0) == 0);
+        actor_set_active(x, 0);
+        printf("ref_inactif %d\n", actor_ref_get(h) == x);        /* désactivé : adressable */
+        actor_set_active(x, 1);
+        actor_destroy_internal(x);
+        printf("ref_detruit %d\n", actor_ref_get(h) == 0);        /* détruit : plus rien */
+        x->active = 1; x->gen++;                                   /* un spawn y naît */
+        printf("ref_reoccupe %d\n", actor_ref_get(h) == 0);       /* l'ancienne reste périmée */
+        int h2 = actor_ref_make(x);
+        printf("ref_neuve %d %d\n", h2 != h, actor_ref_get(h2) == x);
+        printf("ref_indice %d\n", (actor_ref_make(&g_actors[1]) & 0xFFFF) == 1);
+    }
+
+    /* Cycle de vie d'un emplacement : détruit = libre, désactivé = occupé et adressable. */
+    {
+        Actor *x = &g_actors[0], *y = &g_actors[1];
+        const ModelSlot deux[2] = { {0, 0}, {1, 0} };           /* un modèle de deux instances */
+        const ModelSlot racine[1] = { {0, 0} };                  /* une seule instance */
+        x->alive = 1; x->active = 1; y->alive = 1; y->active = 1;
+        printf("vie_occupes %d %d\n", actor_model_count(deux, 2), actor_live(x) == x);
+        actor_set_active(x, 0);
+        printf("vie_desactive %d %d\n", actor_live(x) == x, actor_model_count(deux, 2));
+        actor_set_active(x, 1);
+        actor_destroy_internal(x);
+        printf("vie_detruit %d %d %d\n", actor_live(x) == 0, x->alive, actor_model_count(deux, 2));
+        printf("vie_nth %d %d %d %d\n", actor_model_nth(deux, 2, 0) == y, actor_model_nth(deux, 2, 1) == 0,
+               actor_model_nth(deux, 2, -1) == 0, actor_model_nth(deux, 2, 5) == 0);
+        x->alive = 1; x->active = 1;                                /* un spawn reprend l'emplacement */
+        printf("vie_nth_ordre %d %d\n", actor_model_nth(deux, 2, 0) == x, actor_model_nth(deux, 2, 1) == y);
+        /* La table dit où sont les instances : ici une seule, dont la racine est l'emplacement 0. */
+        printf("vie_groupe %d\n", actor_model_count(racine, 1));
+        /* Et elles n'ont pas à être contiguës ni dans l'ordre des emplacements. */
+        const ModelSlot eclate[2] = { {1, 0}, {0, 0} };
+        printf("vie_eclate %d %d\n", actor_model_nth(eclate, 2, 0) == y, actor_model_nth(eclate, 2, 1) == x);
+    }
     return 0;
 }

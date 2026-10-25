@@ -1,0 +1,102 @@
+{
+  "name": "Scene_01",
+  "id": "aec2c4c49297",
+  "background_layers": [
+    {
+      "name": "Monde",
+      "id": "678fdfdc53d5",
+      "source": "20d13e12473d",
+      "background_name": "Monde",
+      "bg_slot": 1,
+      "scroll_speed": 1.0,
+      "pal_bank": -1
+    }
+  ],
+  "actors": [
+    {
+      "name": "Hero",
+      "id": "03478f656e7e",
+      "active": true,
+      "components": [
+        {
+          "component_type": "sprite",
+          "id": "sprite",
+          "active": true,
+          "sprite_name": "Hero",
+          "initial_state": "Idle",
+          "facing_auto": true,
+          "affine_transform": false,
+          "scale_x": 1.0,
+          "scale_y": 1.0,
+          "rotation": 0,
+          "offset_x": 0,
+          "offset_y": 0,
+          "pivot_x": 0,
+          "pivot_y": 0
+        },
+        {
+          "component_type": "script",
+          "id": "script",
+          "active": true,
+          "script": "assets/scripts/Hero.lua",
+          "exports_values": {}
+        }
+      ],
+      "x": 40,
+      "y": 192,
+      "flip_h": false,
+      "flip_v": false,
+      "priority": 0,
+      "pal_bank": -1,
+      "visible": true,
+      "obj_mode": 0,
+      "rotation": 0,
+      "scale_x": 1.0,
+      "scale_y": 1.0,
+      "screen_space": false,
+      "is_player": true,
+      "dir_x": 0,
+      "dir_y": 0,
+      "notes": ""
+    }
+  ],
+  "cameras": [
+    {
+      "name": "Joueur",
+      "id": "4ec2b741ecda",
+      "x": 0,
+      "y": 0,
+      "frame_w": 240,
+      "frame_h": 160,
+      "mode": "follow",
+      "follow_target": "Hero",
+      "margin_x": 40,
+      "margin_y": 20,
+      "bounds_x": 0,
+      "bounds_y": 0,
+      "bounds_w": 512,
+      "bounds_h": 256,
+      "script": "",
+      "notes": ""
+    }
+  ],
+  "camera": "Joueur",
+  "windows": [],
+  "render_mode": 0,
+  "scroll_h": true,
+  "scroll_v": true,
+  "script": "",
+  "ui_layouts": [],
+  "font_name": "",
+  "font_pal_banks": {
+    "": 0
+  },
+  "collision_layer": 0,
+  "collision_map": [],
+  "active_obj_palettes": [],
+  "active_bg_palettes": [
+    "_Microsoft Windows 16"
+  ],
+  "backdrop_color": null,
+  "notes": ""
+}

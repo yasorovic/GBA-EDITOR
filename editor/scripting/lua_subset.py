@@ -1,5 +1,5 @@
 """
-editor/scripting/lua_subset.py — ce que le sous-ensemble Lua accepte, et ce
+editor/scripting/lua_subset.py : ce que le sous-ensemble Lua accepte, et ce
 qu'il refuse EN LE DISANT.
 
 Le compilateur ne traduit qu'une partie de Lua. C'était vrai depuis le premier
@@ -10,13 +10,13 @@ non gérée (du C qui ne compile pas, sur la ligne générée, jamais sur sa cau
 
 Ce fichier est la LISTE, et il n'y en a qu'une : le checker s'en sert pour
 refuser, `docs/scripting-reference.md` pour expliquer, et `validator._check_lua_subset` vérifie
-qu'aucun nœud de luaparser n'y manque. Deux listes auraient divergé — c'est
+qu'aucun nœud de luaparser n'y manque. Deux listes auraient divergé : c'est
 exactement ce qui est arrivé entre `api.py` et `api_reference.json`, et le
 remède est le même : une source, des consommateurs.
 
 Trois cases, et le choix entre elles fait partie de l'ajout d'un nœud :
 
-  ACCEPTED    traduit — la forme Lua est celle qu'on écrit
+  ACCEPTED    traduit : la forme Lua est celle qu'on écrit
   REFUSED     non traduit, et la phrase qui dit quoi écrire à la place
   STRUCTURAL  jamais dispatché : lu en place par le nœud qui le porte
 """
@@ -45,7 +45,7 @@ class Refusal:
 
 ACCEPTED: dict[str, str] = {
     # Déclarations et affectations
-    "Function":     "function on_update() … end — un handler d'événement",
+    "Function":     "function on_update() … end: un handler d'événement",
     "LocalAssign":  "local x = 0",
     "Assign":       "x = 1  /  self.position = p  /  t[i] = v",
     # Contrôle
@@ -55,26 +55,26 @@ ACCEPTED: dict[str, str] = {
     "Fornum":       "for i = 1, n do … end  (pas écrit en clair : for i = n, 1, -1)",
     "Break":        "break",
     "Return":       "return  /  return v",
-    "SemiColon":    ";  — ne produit rien, comme en Lua",
+    "SemiColon":    "; : ne produit rien, comme en Lua",
     # Appels
     "Call":         'sfx:play("Bip")  /  vec2(x, y)  /  array(8)',
     "Invoke":       'self:play_anim("walk")',
     # Valeurs
-    "Number":       "12  (entier — un littéral à virgule est tronqué)",
-    "String":       '"un_nom"  — un nom cité du projet ; `text.draw` accepte aussi un texte littéral',
+    "Number":       "12  (entier: un littéral à virgule est tronqué)",
+    "String":       '"un_nom" : un nom cité du projet ; `text.draw` accepte aussi un texte littéral',
     "TrueExpr":     "true",
     "FalseExpr":    "false",
-    "Nil":          "nil  (vaut 0 dans le C émis — cf. « La vérité » ci-dessous)",
+    "Nil":          "nil  (vaut 0 dans le C émis: cf. « La vérité » ci-dessous)",
     "Name":         "x",
     "Index":        "self.position  /  data.Objets  /  t[i]",
-    "Table":        "{1, 2, 4, 8}  — un tableau, et rien d'autre",
+    "Table":        "{1, 2, 4, 8} : un tableau, et rien d'autre",
 
-    # ── La vérité — décision volontaire (2026-09-27), PAS le vrai Lua ──
+    # ── La vérité : décision volontaire (2026-09-27), PAS le vrai Lua ──
     # En vrai Lua, seuls `nil` et `false` sont faux ; `0` est VRAI. Ici,
     # `if`/`while`/`and`/`or`/`not` se traduisent tels quels vers leurs
     # équivalents C (`if`/`while`/`&&`/`||`/`!`) : `0` y est FAUX, comme
     # partout ailleurs dans ce moteur entièrement entier. Assumé pour que
-    # `if not hp then` marche comme on l'attend d'un `hp` qui peut valoir 0 —
+    # `if not hp then` marche comme on l'attend d'un `hp` qui peut valoir 0 :
     # sans ça, un auteur qui connaît le vrai Lua se ferait piéger par un test
     # qui « marche toujours », `0` y étant vrai. `nil` compile vers `0` pour
     # la même raison : une seule notion de « rien/faux », pas deux.
@@ -82,7 +82,7 @@ ACCEPTED: dict[str, str] = {
     "AddOp":              "a + b",
     "SubOp":              "a - b",
     "MultOp":             "a * b",
-    "FloatDivOp":         "a / b  (division ENTIÈRE — le C tronque vers zéro)",
+    "FloatDivOp":         "a / b  (division ENTIÈRE: le C tronque vers zéro)",
     "ModOp":              "a % b",
     "EqToOp":             "a == b",
     "NotEqToOp":          "a ~= b",
@@ -94,8 +94,8 @@ ACCEPTED: dict[str, str] = {
     "OrLoOp":             "a or b",
     "UMinusOp":           "-a",
     "ULNotOp":            "not a",
-    "ULengthOP":          "#t  — constante de compilation, pas une lecture",
-    # Opérateurs binaires (entiers 32 bits, comme le C émis — pas les 64 bits de Lua 5.3)
+    "ULengthOP":          "#t : constante de compilation, pas une lecture",
+    # Opérateurs binaires (entiers 32 bits, comme le C émis : pas les 64 bits de Lua 5.3)
     "BAndOp":             "a & b",
     "BOrOp":              "a | b",
     "BXorOp":             "a ~ b  (xor ; `~=` reste « différent de »)",
@@ -108,7 +108,7 @@ ACCEPTED: dict[str, str] = {
 # ─── Ce qui ne se traduit pas ─────────────────────────────────────
 # Chaque entrée dit POURQUOI (une raison du moteur, jamais « pas implémenté »
 # tout court quand il y en a une) et QUOI ÉCRIRE à la place quand il y a une
-# issue. Là où il n'y en a pas, le refus le dit aussi — croire à une issue
+# issue. Là où il n'y en a pas, le refus le dit aussi : croire à une issue
 # qu'on n'a pas nommée coûte plus cher qu'un « non » clair.
 
 REFUSED: dict[str, Refusal] = {
@@ -128,7 +128,7 @@ REFUSED: dict[str, Refusal] = {
 
     "Goto": Refusal(
         "goto etiquette",
-        "`goto` does not exist. `break` leaves a loop, `return` leaves the handler — "
+        "`goto` does not exist. `break` leaves a loop, `return` leaves the handler: "
         "beyond that, the `if` carries the structure."),
 
     "Label": Refusal(
@@ -161,7 +161,7 @@ REFUSED: dict[str, Refusal] = {
     "AnonymousFunction": Refusal(
         "local f = function() … end",
         "a function is not a value here: it is stored neither in a variable, nor in "
-        "an argument, nor in an array — which only holds integers. So no callbacks "
+        "an argument, nor in an array: which only holds integers. So no callbacks "
         "and no closures; what must trigger later is written with a state and the "
         "`if` that reads it."),
 
@@ -193,7 +193,7 @@ REFUSED: dict[str, Refusal] = {
 
     "FloorDivOp": Refusal(
         "a // b",
-        "`//` does not exist — and has no business here: `/` is ALREADY an integer "
+        "`//` does not exist: and has no business here: `/` is ALREADY an integer "
         "division, truncated toward zero as in C."),
 }
 
@@ -201,7 +201,7 @@ REFUSED: dict[str, Refusal] = {
 # Un `function f() … end` écrit DANS un corps de handler : le nœud est le même
 # que celui d'un handler de premier niveau (`Function`, rangé plus haut dans
 # ACCEPTED), seule sa PLACE change. Son refus ne peut donc pas être indexé par
-# le nom du nœud — c'est le seul de ce cas, et il vit ici plutôt que de forcer
+# le nom du nœud : c'est le seul de ce cas, et il vit ici plutôt que de forcer
 # la table à porter une notion de position pour une entrée.
 NESTED_FUNCTION = Refusal(
     "function f() … end, dans un corps",
@@ -210,7 +210,7 @@ NESTED_FUNCTION = Refusal(
 
 
 # `a, b = b, a` : luaparser produit un `Assign` à plusieurs cibles, le MÊME nœud
-# qu'une affectation simple — son refus ne peut donc pas être indexé par le nom
+# qu'une affectation simple : son refus ne peut donc pas être indexé par le nom
 # du nœud (même cas que NESTED_FUNCTION). Le parser ne lisait que la première
 # cible : la seconde affectation disparaissait, et un échange (`a, b = b, a`)
 # devenait `a = b`, sans un mot.
@@ -225,14 +225,14 @@ MULTI_ASSIGN = Refusal(
 STRUCTURAL: dict[str, str] = {
     # Une entrée de constructeur `{ }` : lue en place par `parser.array_dims`
     # via `Table.fields`, jamais visitée comme une expression à part entière.
-    "Field": "une entrée de { } — lue avec le constructeur qui la porte",
+    "Field": "une entrée de { }: lue avec le constructeur qui la porte",
 }
 
 
 # ─── La bibliothèque standard de Lua ──────────────────────────────
 # Elle n'existe pas ici : le script devient du C, dans une ROM sans allocateur,
 # sans système de fichiers et sans machine virtuelle. Chaque nom courant reçoit
-# donc sa propre phrase — un « fonction inconnue » générique laisserait croire à
+# donc sa propre phrase : un « fonction inconnue » générique laisserait croire à
 # une faute de frappe, alors que le nom est juste et que c'est le monde qui
 # diffère.
 
@@ -260,12 +260,12 @@ STDLIB_MODULES: dict[str, Refusal] = {
     "coroutine": Refusal(
         "coroutine.create(f)",
         "there are no coroutines: the engine calls `on_update` once per frame and "
-        "takes control back. An action spread over time is written with a state — a "
+        "takes control back. An action spread over time is written with a state: a "
         "counter in a variable, and the `if` that reads it."),
     # `debug` n'est plus ici : c'est un vrai module, avec un
     # seul membre (`debug.log`). Un autre membre Lua (`debug.traceback()`
-    # notamment) retombe désormais sur `unknown_member_message` — « le
-    # module `debug` n'a pas de `traceback`. Il offre : log. » — plus
+    # notamment) retombe désormais sur `unknown_member_message` : « le
+    # module `debug` n'a pas de `traceback`. Il offre : log. » : plus
     # précis qu'un refus générique, et ça vient gratuitement du catalogue
     # (api.py) une fois `debug.log` déclaré là.
     "utf8": Refusal(
@@ -287,7 +287,7 @@ STDLIB: dict[str, Refusal] = {
         "print(x)",
         "`print` does not exist: the GBA has no console. Writing to the PLAYER is "
         "done with `text.draw` (a font, an entry of the text table, hence "
-        "translatable). A trace for the DEVELOPER is `debug:log(...)` — it goes out "
+        "translatable). A trace for the DEVELOPER is `debug:log(...)`: it goes out "
         "through the mGBA log, not the game screen, and disappears from release "
         "builds."),
 
@@ -300,17 +300,17 @@ STDLIB: dict[str, Refusal] = {
         "switch(x, { [1] = function() … end })",
         "`switch` does not exist, and its usual Lua form cannot: it passes a table "
         "of functions, and a function is not a value here. A multi-way choice is "
-        "written with `if x == 1 then … elseif x == 2 then … else … end` — the "
+        "written with `if x == 1 then … elseif x == 2 then … else … end`: the "
         "`else` branch plays the part of `default`."),
 
     # ── Itération ─────────────────────────────────────────────────
     "pairs": Refusal(
         "pairs(t)",
         "`pairs` does not exist: there is no Lua table to walk. An array is walked by"
-        " its index — `for i = 1, #t do`."),
+        " its index: `for i = 1, #t do`."),
     "ipairs": Refusal(
         "ipairs(t)",
-        "`ipairs` does not exist: an array is walked by its index — `for i = 1, #t "
+        "`ipairs` does not exist: an array is walked by its index: `for i = 1, #t "
         "do`, and `#t` is known at build."),
     "next": Refusal(
         "next(t)",
@@ -328,7 +328,7 @@ STDLIB: dict[str, Refusal] = {
     "type": Refusal(
         "type(x)",
         "`type` does not exist: there is nothing to query. A value is an integer, a "
-        "vec2/vec3, or an array of integers — and its type is known at build, never "
+        "vec2/vec3, or an array of integers: and its type is known at build, never "
         "at run time."),
     "tostring": Refusal(
         "tostring(x)",
@@ -399,7 +399,7 @@ STDLIB: dict[str, Refusal] = {
         "behavior, at build."),
 
     # ── `math`, le faux ami ───────────────────────────────────────
-    # Le module existe, sous le même nom, avec un AUTRE contenu — le pire cas
+    # Le module existe, sous le même nom, avec un AUTRE contenu : le pire cas
     # possible : celui où l'auteur a raison de ne pas vérifier. Les membres
     # absents qui ont une issue sont nommés ici ; les autres tombent sur
     # `unknown_member_message`, qui liste ce que le module offre vraiment.
@@ -414,7 +414,7 @@ STDLIB: dict[str, Refusal] = {
         "division up, use `(a + b - 1) / b`."),
     "math.random": Refusal(
         "math.random(a, b)",
-        "random draws are written `math.rand(lo, hi)` — this `math` is the engine's, "
+        "random draws are written `math.rand(lo, hi)`: this `math` is the engine's, "
         "not Lua's."),
     "math.randomseed": Refusal(
         "math.randomseed(n)",
@@ -450,7 +450,7 @@ def refusal_for_node(node_name: str) -> Optional[Refusal]:
 
 
 def refusal_for_call(key: str) -> Optional[Refusal]:
-    """Le refus attaché à un appel — par son nom entier (`math.floor`), sinon
+    """Le refus attaché à un appel : par son nom entier (`math.floor`), sinon
     par son MODULE (`string.format` → `string`). Rendre None ne veut pas dire
     « autorisé » : ça veut dire que ce n'est pas un nom de Lua, et c'est alors à
     `unknown_call_message` de le dire."""
@@ -464,7 +464,7 @@ def refusal_for_call(key: str) -> Optional[Refusal]:
 def unknown_member_message(module: str, member: str, offered: list[str]) -> str:
     """Un module du catalogue existe, ce membre non. Lister ce qu'il offre est
     ce qui distingue une faute de frappe d'une fonction de Lua qu'on croyait
-    trouver ici — le cas `math`, où le nom du module est le même et le contenu
+    trouver ici : le cas `math`, où le nom du module est le même et le contenu
     différent."""
     liste = ", ".join(sorted(offered)) or "rien"
     return (f"the module `{module}` has no `{member}`. It offers: {liste}. (These are the engine's "
@@ -474,7 +474,7 @@ def unknown_member_message(module: str, member: str, offered: list[str]) -> str:
 def unknown_call_message(key: str) -> str:
     """Un appel qui n'est ni du catalogue, ni un constructeur du langage, ni un
     behavior importé. Il était TOLÉRÉ jusqu'ici, au motif que ce pouvait être un
-    helper écrit par l'utilisateur — sauf que le codegen l'émettait tel quel
+    helper écrit par l'utilisateur : sauf que le codegen l'émettait tel quel
     (`math.floor(x)` partait en C avec son point), donc la faute ne remontait
     qu'au `make`, sur la ligne générée."""
     if "." in key:
@@ -483,7 +483,7 @@ def unknown_call_message(key: str) -> str:
                 "those of the catalogue (API panel of the Script Editor); a behavior "
                 "is imported with `require(\"behaviors/name\")` and called through its "
                 "alias.")
-    return (f"`{key}()`: unknown function. A script has no functions of its own — the "
+    return (f"`{key}()`: unknown function. A script has no functions of its own : the "
             "possible calls are those of the catalogue, the language constructors "
             "(`vec2`, `vec3`, `rect`, `array`), `require`, and the methods of an "
             "imported behavior.")
@@ -492,7 +492,7 @@ def unknown_call_message(key: str) -> str:
 # ─── Contrôle de couverture ───────────────────────────────────────
 
 def covered_nodes() -> frozenset:
-    """Les nœuds que ce fichier classe — traduits, refusés ou structurels.
+    """Les nœuds que ce fichier classe : traduits, refusés ou structurels.
 
     Rendu par une fonction et non par les tables : le contrôle
     (`validator._check_lua_subset`) demande « ce nœud t'est-il connu ? », pas la

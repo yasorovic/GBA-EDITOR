@@ -1,0 +1,31 @@
+{
+  "name": "Victoire",
+  "id": "3a73ff6a5097",
+  "anchor": "screen",
+  "anchor_actor": "",
+  "target": "",
+  "elements": [
+    {
+      "kind": "text",
+      "point": true,
+      "name": "Message",
+      "parent": "",
+      "visible": true,
+      "text_color": 0,
+      "highlight_color": 0,
+      "priority": -1,
+      "x": 40,
+      "y": 72,
+      "w": 160,
+      "h": 16,
+      "text_key": "",
+      "font_name": "",
+      "font_weight": 400,
+      "font_italic": false,
+      "align": "left",
+      "preview_text": "",
+      "preview_is_literal": true
+    }
+  ],
+  "notes": ""
+}

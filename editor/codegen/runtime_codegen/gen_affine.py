@@ -146,15 +146,29 @@ def compute_affine_info(actor_offset: int, scene_actors: list, pi: list, names=N
         for oam_idx in range(p2["start"], p2["start"] + p2["size"]):
             if slot >= AFFINE_LIMIT:
                 break
-            # Une instance sans entrée OAM ne s'affiche pas : elle ne prend pas de matrice.
-            if p2["entries_per_instance"] and (oam_idx - p2["start"]) // p2["group"] >= p2["granted"]:
-                continue
             entry = affine_entry(pf, sc, slot, names=names)
             if entry:
                 result[oam_idx] = entry
                 slot += 1
 
     return result
+
+
+def oam_window_open(box_w: int, box_h: int) -> list[str]:
+    """Ouvre le bloc qui écrit UN sprite dans l'OAM : seulement s'il touche l'écran, et tant qu'il
+    reste un emplacement. `sx`/`sy` (le coin haut-gauche de sa boîte OAM) et `_oamn` (le prochain
+    emplacement libre de la frame) sont déjà posés par l'appelant ; le sprite écrit en
+    `shadow_oam[_o]`. Le test est EXACT, sans marge : l'OAM boucle sur 256 en Y, un sprite posé
+    hors écran de plus de (256 - 160) pixels reviendrait s'afficher de l'autre côté."""
+    return [
+        f"        if(sx+{box_w}>0&&sx<240&&sy+{box_h}>0&&sy<160){{",
+        "          if(_oamn>=128){ g_oam_dropped++; } else {",
+        "            int _o=_oamn++;",
+    ]
+
+
+def oam_window_close() -> list[str]:
+    return ["          }", "        }"]
 
 
 def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr: str,
@@ -239,7 +253,10 @@ def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr
         f"        shadow_oam[{aslot*4+1}].dummy=(u16)(s16)(_fh?-_pb:_pb);",
         f"        shadow_oam[{aslot*4+2}].dummy=(u16)(s16)(_fv?-_pc:_pc);",
         f"        shadow_oam[{aslot*4+3}].dummy=(u16)(s16)(_fv?-_pd:_pd);",
-        f"        shadow_oam[{e}].attr0=(sy&0xFF)|(1<<8)|(1<<9)|(g_oam_entries[{e}].obj_mode<<10)|({sh}<<14);",
-        f"        shadow_oam[{e}].attr1=(sx&0x1FF)|({aslot}<<9)|({sz}<<14);",
-        f"        shadow_oam[{e}].attr2=(ti&0x3FF)|({priority_expr}<<10)|(g_oam_entries[{e}].pal_bank<<12);",
+        # Boîte OAM en double taille : 2W x 2H.
+        *oam_window_open(2 * W, 2 * H),
+        f"            shadow_oam[_o].attr0=(sy&0xFF)|(1<<8)|(1<<9)|(g_oam_entries[{e}].obj_mode<<10)|({sh}<<14);",
+        f"            shadow_oam[_o].attr1=(sx&0x1FF)|({aslot}<<9)|({sz}<<14);",
+        f"            shadow_oam[_o].attr2=(ti&0x3FF)|({priority_expr}<<10)|(g_oam_entries[{e}].pal_bank<<12);",
+        *oam_window_close(),
     ]

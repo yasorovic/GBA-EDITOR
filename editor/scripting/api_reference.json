@@ -640,7 +640,7 @@
         {
           "label": "music:set_section(\"section\")",
           "snippet": "music:set_section(\"Phase 2\")",
-          "description": "Makes the playing track loop on another section of its own — a boss changing phase: the same song, another part of it. Nothing happens if the playing track has no section by this name. A WAV track has sections too: each one is a part of the track, cut at the nearest line of its module (about 11 ms).",
+          "description": "Makes the playing track loop on another section of its own (a boss changing phase): the same song, another part of it. Nothing happens if the playing track has no section by this name. A WAV track has sections too: each one is a part of the track, cut at the nearest line of its module (about 11 ms).",
           "params": [
             {
               "name": "section",
@@ -653,7 +653,7 @@
         {
           "label": "music:leave_loop()",
           "snippet": "music:leave_loop()",
-          "description": "Lets the playing track leave its loop section: it plays on through the rest of the song — the outro — and then stops. A WAV track does it like a module: what follows its loop section is its outro.",
+          "description": "Lets the playing track leave its loop section: it plays on through the rest of the song (the outro) and then stops. A WAV track does it like a module: what follows its loop section is its outro.",
           "params": [],
           "doc_anchor": "music-leave_loop"
         },
@@ -788,7 +788,7 @@
               "description": "Exact name of the actor, or its 1-based index in the scene"
             }
           ],
-          "returns": "actor — actor reference, or nil if absent/destroyed",
+          "returns": "actor: actor reference, or nil if absent/destroyed",
           "doc_anchor": "actor-get"
         },
         {
@@ -796,7 +796,7 @@
           "snippet": "actor:count()",
           "description": "Returns the number of actors placed in the active scene. Use it as a bound with `actor:get(i)`.",
           "params": [],
-          "returns": "int — number of placed actors",
+          "returns": "int: number of placed actors",
           "doc_anchor": "actor-count"
         },
         {
@@ -815,7 +815,7 @@
               "description": "Position monde en pixels (.x, .y)"
             }
           ],
-          "returns": "number — slot index in g_actors[], or -1 if the pool is full",
+          "returns": "number: slot index in g_actors[], or -1 if the pool is full",
           "doc_anchor": "actor-spawn"
         }
       ]
@@ -863,7 +863,7 @@
               "description": "The name that follows on_sequence_ in the handler name"
             }
           ],
-          "returns": "bool — true if the sequence is running",
+          "returns": "bool: true if the sequence is running",
           "doc_anchor": "sequence-running"
         }
       ]
@@ -883,7 +883,7 @@
               "description": "Slot number, from 0 (their number is set in the project)"
             }
           ],
-          "returns": "number — 1 if the save took place, 0 if the slot does not exist",
+          "returns": "number: 1 if the save took place, 0 if the slot does not exist",
           "doc_anchor": "save-write"
         },
         {
@@ -897,7 +897,7 @@
               "description": "Slot number, from 0"
             }
           ],
-          "returns": "number — 1 if the read took place, 0 otherwise",
+          "returns": "number: 1 if the read took place, 0 otherwise",
           "doc_anchor": "save-load"
         },
         {
@@ -916,7 +916,7 @@
               "description": "Name of a global variable ticked \"persist\""
             }
           ],
-          "returns": "number — the value of the variable in this slot",
+          "returns": "number: the value of the variable in this slot",
           "doc_anchor": "save-read"
         },
         {
@@ -930,7 +930,7 @@
               "description": "Slot number, from 0"
             }
           ],
-          "returns": "number — 1 if the slot holds a save, 0 otherwise",
+          "returns": "number: 1 if the slot holds a save, 0 otherwise",
           "doc_anchor": "save-exists"
         },
         {
@@ -944,7 +944,7 @@
               "description": "Slot number, from 0"
             }
           ],
-          "returns": "number — 1 if the slot exists, 0 otherwise",
+          "returns": "number: 1 if the slot exists, 0 otherwise",
           "doc_anchor": "save-erase"
         }
       ]
@@ -964,7 +964,7 @@
               "description": "Integer value"
             }
           ],
-          "returns": "number — |x|",
+          "returns": "number: |x|",
           "doc_anchor": "math-abs"
         },
         {
@@ -988,7 +988,7 @@
               "description": "Upper bound"
             }
           ],
-          "returns": "number — clamped value",
+          "returns": "number: clamped value",
           "doc_anchor": "math-clamp"
         },
         {
@@ -1002,7 +1002,7 @@
               "description": "Integer value"
             }
           ],
-          "returns": "number — -1, 0 or 1",
+          "returns": "number: -1, 0 or 1",
           "doc_anchor": "math-sign"
         },
         {
@@ -1021,7 +1021,7 @@
               "description": "Second entier"
             }
           ],
-          "returns": "number — min(a, b)",
+          "returns": "number: min(a, b)",
           "doc_anchor": "math-min"
         },
         {
@@ -1040,7 +1040,7 @@
               "description": "Second entier"
             }
           ],
-          "returns": "number — max(a, b)",
+          "returns": "number: max(a, b)",
           "doc_anchor": "math-max"
         },
         {
@@ -1069,7 +1069,7 @@
               "description": "Denominator of the fraction covered"
             }
           ],
-          "returns": "number — interpolated value",
+          "returns": "number: interpolated value",
           "doc_anchor": "math-lerp"
         },
         {
@@ -1103,7 +1103,7 @@
               "description": "Curve: \"in\", \"out\" or \"in_out\""
             }
           ],
-          "returns": "number — interpolated and curved value",
+          "returns": "number: interpolated and curved value",
           "doc_anchor": "math-ease"
         }
       ]
@@ -1140,7 +1140,7 @@
             {
               "name": "name",
               "type": "string",
-              "description": ""
+              "description": "Name of the scene to load"
             }
           ],
           "returns": "",
@@ -1171,7 +1171,7 @@
           "snippet": "lang:get()",
           "description": "Index of the active language. The value 0 is the source language and can be compared to `LANG_<CODE>`.",
           "params": [],
-          "returns": "number — index de langue courant",
+          "returns": "number: current language index",
           "doc_anchor": "lang-get"
         }
       ]
@@ -1219,7 +1219,7 @@
               "description": "Key of the text"
             }
           ],
-          "returns": "number — number of characters",
+          "returns": "number: number of characters",
           "doc_anchor": "text-length"
         },
         {
@@ -1280,7 +1280,7 @@
               "description": "Exact name of the element in the layout"
             }
           ],
-          "returns": "ui_element — reference, or nil if absent",
+          "returns": "ui_element: reference, or nil if absent",
           "doc_anchor": "interface-get"
         },
         {
@@ -1414,12 +1414,12 @@
             {
               "name": "bank",
               "type": "number",
-              "description": ""
+              "description": "Background palette bank (0-15)"
             },
             {
               "name": "p",
               "type": "string",
-              "description": ""
+              "description": "Name of a palette of the project"
             }
           ],
           "returns": "",
@@ -1433,12 +1433,12 @@
             {
               "name": "bank",
               "type": "number",
-              "description": ""
+              "description": "Sprite palette bank (0-15)"
             },
             {
               "name": "p",
               "type": "string",
-              "description": ""
+              "description": "Name of a palette of the project"
             }
           ],
           "returns": "",

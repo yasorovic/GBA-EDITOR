@@ -1,0 +1,162 @@
+{
+  "name": "Barre",
+  "id": "5d62edc53c15",
+  "source": "assets/sprites/Barre.png",
+  "frame_w": 16,
+  "frame_h": 8,
+  "source_stamp": "138:1792938787584160300:866faaa44a80cea3",
+  "own_palette": [
+    "#F0F0F0",
+    "#101018",
+    "#D83030"
+  ],
+  "quantize_method": "median_cut",
+  "palettes": [
+    ["#000000", "#F0F0F0", "#101018", "#D83030", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"]
+  ],
+  "source_palettes": [
+    ["#000000", "#F0F0F0", "#101018", "#D83030", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"]
+  ],
+  "states": [
+    {
+      "name": "vie_0",
+      "speed": 8,
+      "loop": false,
+      "directions": [
+        {
+          "dir": 0,
+          "frames": [
+            {
+              "tiles": [
+                {
+                  "src_col": 0,
+                  "src_row": 0,
+                  "dst_col": 0,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 1,
+                  "src_row": 0,
+                  "dst_col": 1,
+                  "dst_row": 0
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "vie_1",
+      "speed": 8,
+      "loop": false,
+      "directions": [
+        {
+          "dir": 0,
+          "frames": [
+            {
+              "tiles": [
+                {
+                  "src_col": 2,
+                  "src_row": 0,
+                  "dst_col": 0,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 3,
+                  "src_row": 0,
+                  "dst_col": 1,
+                  "dst_row": 0
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "vie_2",
+      "speed": 8,
+      "loop": false,
+      "directions": [
+        {
+          "dir": 0,
+          "frames": [
+            {
+              "tiles": [
+                {
+                  "src_col": 4,
+                  "src_row": 0,
+                  "dst_col": 0,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 5,
+                  "src_row": 0,
+                  "dst_col": 1,
+                  "dst_row": 0
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "vie_3",
+      "speed": 8,
+      "loop": false,
+      "directions": [
+        {
+          "dir": 0,
+          "frames": [
+            {
+              "tiles": [
+                {
+                  "src_col": 6,
+                  "src_row": 0,
+                  "dst_col": 0,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 7,
+                  "src_row": 0,
+                  "dst_col": 1,
+                  "dst_row": 0
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "vie_4",
+      "speed": 8,
+      "loop": false,
+      "directions": [
+        {
+          "dir": 0,
+          "frames": [
+            {
+              "tiles": [
+                {
+                  "src_col": 8,
+                  "src_row": 0,
+                  "dst_col": 0,
+                  "dst_row": 0
+                },
+                {
+                  "src_col": 9,
+                  "src_row": 0,
+                  "dst_col": 1,
+                  "dst_row": 0
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

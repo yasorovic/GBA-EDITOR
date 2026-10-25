@@ -360,7 +360,7 @@ class AnimatedBuildButton(QToolButton):
             p.drawRoundedRect(pill_x, pill_y, pill_w, self._PILL_H, r, r)
 
             p.setPen(QColor(C.TEXT_MUTED) if greyed else QColor("#000000"))
-            p.setFont(brand_font(T.SM, regular=True))
+            p.setFont(brand_font(T.SM))
             p.drawText(text_rect, text_align, label("common.run"))
         elif not self._success:
             # échec figé : pilule pleine rouge, pas de jauge à faire lire.
@@ -368,7 +368,7 @@ class AnimatedBuildButton(QToolButton):
             p.setBrush(QColor(C.ACCENT_RED))
             p.drawRoundedRect(pill_x, pill_y, pill_w, self._PILL_H, r, r)
             p.setPen(QColor("#000000"))
-            p.setFont(brand_font(T.SM, regular=True))
+            p.setFont(brand_font(T.SM))
             p.drawText(text_rect, text_align, label("build.failed_mark"))
         else:
             # en cours : la pilule devient la jauge, remplissage réel du build.

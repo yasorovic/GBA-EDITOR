@@ -1,50 +1,82 @@
-![Backstage](assets/backstage-logo.svg){.backstage-logo .only-light}
-![Backstage](assets/backstage-logo-white.svg){.backstage-logo .only-dark}
-
-# Documentation de Backstage
-
 ```{toctree}
 :hidden:
-:glob:
-:titlesonly:
-:maxdepth: 1
+:maxdepth: 2
 
-Vue d'ensemble <user-guide/index>
-Première scène jouable <user-guide/first-playable-scene>
-Décor et collisions <user-guide/decor-and-collision>
-Mouvement de plateforme <user-guide/platformer-movement>
-Collectibles et score <user-guide/collectibles>
-Ennemis et PNJ <user-guide/enemies>
-Interagir avec un acteur <user-guide/interact>
-Boucle de gameplay <user-guide/gameplay-loop>
-Boss <user-guide/boss>
-Caméra <user-guide/camera-follow>
-**
+About <about/index>
+Getting Started <user-guide/index>
+Guides <guides/index>
+Manual <manual/index>
+Architecture <architecture/index>
+Lua API <lua-api/index>
 ```
 
-Cette documentation accompagne la création d'un jeu avec Backstage. Commencez par le guide
-utilisateur, puis consultez le guide de scripting lorsque vous souhaitez donner un comportement
-à votre jeu.
+```{image} assets/backstage-study.svg
+:class: backstage-home-mascot
+:alt: La mascotte de Backstage, lunettes sur le nez, un livre à la main
+```
 
-## Créer votre jeu
+```{raw} html
+<p class="backstage-home-kicker">Documentation de Backstage</p>
+```
 
-- [Guide utilisateur](user-guide/index.md) : créer ou ouvrir un projet, importer des ressources,
-  construire une scène et lancer une première ROM.
-- [Première scène jouable](user-guide/first-playable-scene.md) : importer un sprite, déplacer
-  un acteur et tester la ROM.
-- [Décor et collisions](user-guide/decor-and-collision.md) : peindre les zones solides et
-  empêcher l'acteur de traverser les murs.
-- [Mouvement de plateforme](user-guide/platformer-movement.md) : ajouter gravité, saut et
-  réglages par acteur.
-- [Collectibles et score](user-guide/collectibles.md) : créer un prefab ramassable et afficher
-  une valeur globale.
-- [Ennemis et PNJ](user-guide/enemies.md) : écrire des dialogues, créer des ennemis et leurs comportements.
-- [Interagir avec un acteur](user-guide/interact.md) : désigner le joueur, rendre un coffre ou un
-  panneau interactif et choisir le geste.
-- [Boucle de gameplay](user-guide/gameplay-loop.md) : relier les scènes, l'interface et les
-  transitions.
-- [Boss](user-guide/boss.md) : construire une hiérarchie d'acteurs et une barre de vie.
-- [Caméra](user-guide/camera-follow.md) : suivre un acteur et borner le défilement de la scène.
-- [Guide de scripting](scripting.md) : écrire le comportement d'un acteur.
-- [Référence de scripting](scripting-reference.md) : vérifier la syntaxe disponible et les
-  limites du langage.
+# Créez votre jeu Game Boy Advance
+
+:::{div} backstage-home-lead
+Backstage est un logiciel libre pour fabriquer des jeux Game Boy Advance depuis une interface visuelle. Vous construisez, il s'occupe de la console.
+:::
+
+::::{div} backstage-home-actions
+:::{button-ref} user-guide/index
+:ref-type: doc
+:class: backstage-btn backstage-btn-primary
+Créer mon premier jeu
+:::
+:::{button-ref} about/index
+:ref-type: doc
+:class: backstage-btn backstage-btn-secondary
+Découvrir Backstage
+:::
+::::
+
+## Aller plus loin
+
+::::{grid} 1 1 3 3
+:gutter: 3
+:class-container: backstage-cards
+
+:::{grid-item-card} Lua API
+:link: lua-api/index
+:link-type: doc
+:class-card: backstage-card backstage-card-purple
+
+Vous savez programmer ? Écrivez le comportement de vos acteurs et parcourez toutes les fonctions disponibles.
+:::
+
+:::{grid-item-card} About
+:link: about/index
+:link-type: doc
+:class-card: backstage-card backstage-card-blue
+
+Ce qu'est Backstage, ce qu'il fait, ce qu'il ne fait pas, et ce que vous avez le droit d'en faire.
+:::
+
+:::{grid-item-card} Architecture
+:link: architecture/index
+:link-type: doc
+:class-card: backstage-card backstage-card-teal
+
+Curieux de la technique ? Comment un projet devient une ROM. Cette section arrive bientôt.
+:::
+::::
+
+```{note}
+Backstage est en alpha : cette documentation grandit avec lui. Le **Manual**, qui décrira l'éditeur écran par écran, arrive bientôt.
+```
+
+## Participer
+
+Backstage est un projet libre, développé en public. Vos retours aident à améliorer la documentation comme le logiciel : une explication qui n'est pas claire, une page introuvable, une fonction qui manque.
+
+- Signalez un problème ou proposez une idée sur le [dépôt GitHub](https://github.com/yasorovic/GBA-EDITOR/issues).
+- Téléchargez la dernière version sur la page des [releases](https://github.com/yasorovic/GBA-EDITOR/releases).
+- Suivez les prochains chantiers dans la [roadmap](https://github.com/yasorovic/GBA-EDITOR/blob/main/ROADMAP.md).

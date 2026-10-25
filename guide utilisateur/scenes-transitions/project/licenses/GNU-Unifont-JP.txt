@@ -1,0 +1,14 @@
+GNU Unifont JP 17.0.04
+======================
+
+Source: https://unifoundry.com/pub/unifont/unifont-17.0.04/font-builds/unifont_jp-17.0.04.otf
+Project: GNU Unifont, maintained by Unifoundry / Paul Hardy.
+
+GNU Unifont 13.0.04 and later is dual-licensed under the SIL Open Font
+License, version 1.1, and the GNU General Public License, version 2 or later,
+with the GNU font embedding exception. This starter relies on the SIL Open
+Font License 1.1 option.
+
+Full license text and the project licensing notice:
+https://unifoundry.com/unifont/index.html
+https://openfontlicense.org/open-font-license-official-text/

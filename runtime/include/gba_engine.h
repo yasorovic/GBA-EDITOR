@@ -4649,12 +4649,26 @@ static void oam_update(void) {
     CpuFastSet(shadow_oam, (void*)OAM, COPY32|(128*sizeof(OBJATTR)/4));
 }
 
+/* Les sprites d'acteurs prennent leur emplacement OAM À LA FRAME, dans l'ordre où le tick les écrit :
+   seuls ceux qui sont à l'écran en occupent un. `g_oam_hw` est le 1er emplacement non écrit à la
+   frame précédente ; `oam_hide_from(n)` éteint ce que la frame courante n'a pas repris. */
+static int g_oam_hw = 0;
+/* Sprites visibles qui n'ont pas trouvé de place cette frame (OAM pleine) : compté par le tick, lu
+   par le build debug qui l'écrit dans le log. */
+static int g_oam_dropped = 0;
+
+static void oam_hide_from(int n) {
+    for (int k = n; k < g_oam_hw; k++) shadow_oam[k].attr0 = 0x0200;   /* bit 9 = objet désactivé */
+    g_oam_hw = n;
+}
+
 static void oam_hide_all(void) {
     for (int i = 0; i < 128; i++) {
         shadow_oam[i].attr0 = 0x0200;
         shadow_oam[i].attr1 = 0;
         shadow_oam[i].attr2 = 0;
     }
+    g_oam_hw = 0;
 }
 
 #endif /* GBA_ENGINE_H */

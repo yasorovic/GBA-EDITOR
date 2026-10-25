@@ -147,6 +147,8 @@ def _sfx_on_destroy_table(p: Project, all_scene_data: list[dict],
             if sfx_sym and sfx_trig == "on_destroy":
                 ids[tag], vols[tag] = sfx_sym, str(sfx_vol)
         for p2 in spi:
+            if not p2["size"]:
+                continue        # un modèle sans réserve n'a pas d'acteur de ce nom
             sfx_sym, sfx_vol, sfx_trig = _sfx_trigger_info(p, p2["prefab"])
             if sfx_sym and sfx_trig == "on_destroy":
                 ids[p2["start"]], vols[p2["start"]] = sfx_sym, str(sfx_vol)
@@ -260,17 +262,30 @@ def _scene_pi(p: Project, scene: Scene) -> list[dict]:
          "entry_start": pl.entry_start, "member_entries": pl.member_entries,
          "entries_per_instance": pl.entries_per_instance,
          "instances": pl.instances, "group": pl.group,
-         # Les `granted` premières instances ont leurs entrées OAM ; les autres vivent sur
-         # l'entrée POUBELLE de la scène (`scratch`), que le writer OAM ne lit jamais.
-         "granted": pl.granted, "scratch": lay.scratch_start}
+         # Les acteurs POSÉS qui sont des instances de ce modèle (indices dans `scene_actors`), chacun
+         # avec son entrée d'état d'affichage. Premières lignes de la table du modèle ; ils gardent leur
+         # emplacement et leur entrée de scène, la réserve occupe les emplacements du pool.
+         "members": list(pl.members),
+         "member_entries_of": [lay.placed_entry[j] for j in pl.members]}
         for pl in lay.pools
     ]
 
 
+def _dispatch_sym(scene, scene_actors: list, pi: list[dict]):
+    """Le symbole C dont le code d'un acteur posé s'appelle : le sien, ou celui de son MODÈLE s'il en est
+    une instance (un membre n'a pas de code à lui). Seuls les APPELS de scripts (événements,
+    collisions, interaction) passent par ici ; `ACTOR_*` et les tables par acteur gardent le nom propre."""
+    models = {scene_actors[j][0].name: pl["sym"] for pl in pi for j in pl["members"]}
+
+    def sym_of(scene_name: str, actor_name: str) -> str:
+        return models.get(actor_name) or scene_actor_sym(scene_name, actor_name)
+    return sym_of
+
+
 def pool_entry_start(pi: dict, inst: int, rank: int) -> int:
-    """Entrée OAM du membre `rank` de l'instance `inst` d'un pool, ou -1 si cette
-    instance n'a pas d'entrée (membre sans sprite, ou instance au-delà de `granted`)."""
-    if rank < 0 or inst >= pi["granted"]:
+    """Entrée d'ÉTAT d'affichage du membre `rank` de l'instance `inst` d'un pool, ou -1 si ce
+    membre n'affiche rien (un marqueur sans sprite)."""
+    if rank < 0:
         return -1
     return pi["entry_start"] + inst * pi["entries_per_instance"] + rank
 
@@ -311,6 +326,15 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
 
         # pool_init est toujours généré par le transpileur, extern inconditionnel
         L.append(f"extern void {s}_pool_init(Actor* self);")
+        # Les instances POSÉES du modèle reçoivent leurs valeurs d'export à l'entrée de scène, par les
+        # setters du modèle (comme une instance née d'un spawn avec une table).
+        if pi["members"]:
+            from codegen.runtime_codegen.lua_compiler import script_exports
+            from core.models.components import ScriptComponent
+            _sc = next((c for c in pf.components if isinstance(c, ScriptComponent)), None)
+            for _name, _meta in (script_exports(p, _sc.script) if _sc and _sc.script else {}).items():
+                from scripting.codegen import export_setter_c_type
+                L.append(f"extern void {s}_set_{_name}(Actor* self, {export_setter_c_type(_meta['type'])} v);")
         for ev, sig in [
             ("on_start",           f"extern void {s}_on_start(Actor* self);"),
             ("on_update",          f"extern void {s}_on_update(Actor* self);"),
@@ -325,6 +349,15 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
                 L.append(sig)
 
         group = pi.get("group", 1)
+        # La table du modèle : l'emplacement de la racine de chaque instance et l'entrée d'état de
+        # ses membres. Le spawn la parcourt, `actor:count/get("M", i)` aussi.
+        L.append(f"const ModelSlot g_model_{s}[MODEL_{s.upper()}_COUNT] = {{")
+        for _j, _ent in zip(pi["members"], pi["member_entries_of"]):
+            L.append(f"    {{{_j}, {_ent}}},   /* posé */")
+        for _n in range(pi["instances"] - len(pi["members"])):
+            _ent = pi["entry_start"] + _n * _epi if _epi else -1
+            L.append(f"    {{{start + _n * group}, {_ent}}},")
+        L.append("};")
         L += [
             # Rend un Actor* sur l'instance née : un handle
             # directement chaînable côté script, et NULL quand le pool est plein —
@@ -337,12 +370,12 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
             # groupe de 1 : la boucle est alors exactement celle d'avant.
             # `_e` avance du nombre d'ENTRÉES de l'instance : les deux espaces
             # (acteurs, entrées OAM) n'ont pas le même pas.
-            f"    for(int _i={start}, _n=0; _i<{start+size}; _i+={group}, _n++) {{",
-            # Une instance sans entrée libre (`_n >= granted`) écrit sur l'entrée POUBELLE :
-            # elle vit, elle n'est jamais dessinée (le writer OAM ne la lit pas).
-            *([f"        int _e = _n < {pi['granted']} ? {pi['entry_start']} + _n*{_epi} : {pi['scratch']};"]
+            f"    for(int _n=0; _n<{pi['instances']}; _n++) {{",
+            f"        int _i = g_model_{s}[_n].slot;",
+            # Chaque instance a SON état d'affichage ; son emplacement OAM est pris à la frame.
+            *([f"        int _e = g_model_{s}[_n].entry;"]
               if _epi else []),
-            f"        if(!g_actors[_i].active) {{",
+            f"        if(!g_actors[_i].alive) {{",
         ]
 
         # Transform affine : `(Actor){0}` remet TOUT à zéro, y compris le slot de
@@ -357,7 +390,10 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
         if _sp_aff:
             L.append(f"            int _aff = g_oam_entries[{_e0}].affine_slot;")
         # L'acteur ET son entrée repartent de zéro ; le lien se repose (-1 : sans sprite).
-        L.append(f"            g_actors[_i] = (Actor){{0}}; g_actors[_i].oam_entry = {_e0 or -1};")
+        # La génération survit à la remise à zéro et avance : une référence rangée sur l'occupant
+        # précédent de cet emplacement ne désigne plus la nouvelle instance.
+        L.append(f"            {{ u8 _g = g_actors[_i].gen; g_actors[_i] = (Actor){{0}}; "
+                 f"g_actors[_i].gen = _g + 1; }} g_actors[_i].oam_entry = {_e0 or -1};")
         if _e0:
             L.append(f"            g_oam_entries[{_e0}] = (OamEntry){{0}};")
         # Échelle neutre par défaut, comme pour les PARTIES plus bas : `(Actor){0}`
@@ -384,7 +420,7 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
             # x/y en Q8 en interne. `x`/`y` ici sont les entiers
             # pixels passés à actor:spawn() par le script — <<8 à l'entrée.
             f"            g_actors[_i].x = x<<8; g_actors[_i].y = y<<8;",
-            f"            g_actors[_i].active   = 1;",
+            f"            g_actors[_i].active   = 1; g_actors[_i].alive = 1; g_actors[_i].inst = _n;",
             *([f"            g_oam_entries[{_e0}].visible = 1;",
                f"            g_oam_entries[{_e0}].pal_bank = {pal};",
                f"            g_oam_entries[{_e0}].frame_w  = {sprite.frame_w if sprite else 0};",
@@ -396,7 +432,10 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
                *_appearance_init_lines(p, pf, _e0, "            ",
                                        _alay.member_base.get((pi["sym"], 0)))]
               if _e0 else []),
-            f"            g_actors[_i].name      = ACTOR_{s.upper()};",
+            # Une instance de la réserve porte l'identité du modèle (début de sa plage) ; l'emplacement
+            # d'un acteur posé, qu'un spawn reprend, garde l'identité de la scène (son indice).
+            (f"            g_actors[_i].name      = _n < {len(pi['members'])} ? _i : ACTOR_{s.upper()};"
+             if pi["members"] else f"            g_actors[_i].name      = ACTOR_{s.upper()};"),
             f"            g_actors[_i].collision.box_count = {len(boxes)};",
         ]
         for bi, cb in enumerate(boxes):
@@ -434,7 +473,7 @@ def _section_spawn(pool_info: list[dict], p: Project, obj_layout,
                 # laisse un scale de ZÉRO, donc une matrice dégénérée si l'OAM
                 # sortait avant le tick qui recompose.
                 f"            g_actors[_i+{k}].scale_x = 256; g_actors[_i+{k}].scale_y = 256;",
-                f"            g_actors[_i+{k}].active   = 1;",
+                f"            g_actors[_i+{k}].active   = 1; g_actors[_i+{k}].alive = 1; g_actors[_i+{k}].inst = _n;",
                 *([f"            g_oam_entries[{_ek}].visible = {1 if getattr(part, 'visible', True) else 0};",
                    f"            g_oam_entries[{_ek}].pal_bank = {p_pal};",
                    f"            g_oam_entries[{_ek}].frame_w  = {p_spr.frame_w if p_spr else 0};",
@@ -982,20 +1021,24 @@ def _pool_compose_lines(pi: list[dict]) -> list[str]:
         rank = {pt.name: k for k, pt in enumerate(parts, start=1)}
         L += [f"    /* {pf.name} — subtree of each instance */",
               f"    for(int _b={start}, _nb=0; _b<{start+size}; _b+={group}, _nb++) {{",
-              *([f"        int _eb = _nb < {p2['granted']} ? {p2['entry_start']} + _nb*{p2['entries_per_instance']}"
-                 f" : {p2['scratch']};"] if p2["entries_per_instance"] else []),
-              # Racine éteinte = groupe RENDU AU POOL. C'est ici, en un seul
-              # endroit, que se tiennent les deux règles : « détruire la racine
-              # détruit le sous-arbre », et « active = false libère tout le
-              # groupe ». Sans cette branche, un boss tué laisserait ses bras
-              # actifs — donc dessinés, et en collision — jusqu'à la fin de la
-              # scène. Le spawn, lui, ne regarde que la racine (il avance d'un
-              # groupe à la fois) : la libérer suffit à rendre l'instance.
-              f"        if(!g_actors[_b].active) {{",
+              *([f"        int _eb = {p2['entry_start']} + _nb*{p2['entries_per_instance']};"]
+                if p2["entries_per_instance"] else []),
+              # C'est ici, en un seul endroit, que se tiennent les deux règles du sous-arbre :
+              # « détruire la racine détruit le sous-arbre » (le groupe est RENDU AU POOL : ses
+              # parties n'existent plus), et « désactiver la racine désactive le sous-arbre » (il
+              # reste occupé, mais n'est ni dessiné ni en collision). Sans cette branche, un boss
+              # tué laisserait ses bras actifs jusqu'à la fin de la scène. Le spawn ne regarde que
+              # la racine (il avance d'un groupe à la fois) : la libérer suffit à rendre l'instance.
+              # Les parties ne suivent pas une RÉACTIVATION de la racine : une partie se réactive
+              # elle-même (`self.Bras:activate()`).
+              f"        if(!g_actors[_b].alive) {{",
               f"            for(int _k=1; _k<{group}; _k++) {{",
-              # `active = 0` suffit à cacher : le writer OAM teste `active && visible`.
-              f"                g_actors[_b+_k].active = 0;",
+              f"                g_actors[_b+_k].active = 0; g_actors[_b+_k].alive = 0;",
               f"            }}",
+              f"            continue;",
+              f"        }}",
+              f"        if(!g_actors[_b].active) {{",
+              f"            for(int _k=1; _k<{group}; _k++) g_actors[_b+_k].active = 0;",
               f"            continue;",
               f"        }}"]
         for k, pt in enumerate(parts, start=1):
@@ -1347,7 +1390,10 @@ def _gen_scene_init(
     L.append(f"    g_scene_placed = {len(scene_actors)};")
     # Tout acteur repart SANS entrée OAM (-1) ; le lien est posé plus bas, pour les
     # seuls acteurs qui affichent un sprite (posés ci-dessous, pools à leur init).
-    L.append("    for(int _i=0; _i<G_ACTOR_COUNT; _i++) { g_actors[_i]=(Actor){0}; g_actors[_i].oam_entry=-1; }")
+    # La génération survit à la remise à zéro et avance : une référence rangée par la scène
+    # précédente ne résout dans aucun emplacement de celle-ci.
+    L.append("    for(int _i=0; _i<G_ACTOR_COUNT; _i++) { u8 _g=g_actors[_i].gen; g_actors[_i]=(Actor){0}; "
+             "g_actors[_i].gen=_g+1; g_actors[_i].oam_entry=-1; }")
     L.append("    for(int _i=0; _i<G_OAM_ENTRY_COUNT; _i++) g_oam_entries[_i]=(OamEntry){0};")
     if _alay.rows:
         L.append(f"    g_appearance_init = {sym}_appearance_init;")
@@ -1687,6 +1733,9 @@ def _gen_scene_init(
         L.append(f"    window_set_obj({region}, {1 if ws.obj_shown else 0});")
         L.append(f"    window_show({region}, {1 if ws.visible else 0});")
     # Init actors
+    # Les acteurs posés qui sont des instances d'un modèle : leur rang dans le modèle (l'indice de leur
+    # état de script). Les membres sont les premières instances ; la réserve du spawn suit.
+    _member_rank = {j: r for pl in pi for r, j in enumerate(pl["members"])}
     for j, (actor, sprite) in enumerate(scene_actors):
         idx = actor_offset + j
         _e = _lay.placed_entry[j]   # son entrée OAM, -1 = sans sprite : rien à afficher
@@ -1699,6 +1748,8 @@ def _gen_scene_init(
             f"    g_actors[{idx}].x       = ({_FV.parse(actor.x, _var_names(p)).c_expr()})<<8;",
             f"    g_actors[{idx}].y       = ({_FV.parse(actor.y, _var_names(p)).c_expr()})<<8;",
             f"    g_actors[{idx}].active  = {1 if actor.visible else 0};",
+            f"    g_actors[{idx}].alive   = 1;",
+            *([f"    g_actors[{idx}].inst    = {_member_rank[j]};"] if j in _member_rank else []),
             f"    g_oam_entries[{_e}].visible = {1 if actor.visible else 0};",
             f"    g_oam_entries[{_e}].flip_h  = {1 if actor.flip_h else 0};",
             f"    g_oam_entries[{_e}].flip_v  = {1 if actor.flip_v else 0};",
@@ -1784,6 +1835,7 @@ def _gen_scene_init(
             L.append(f"    g_actors[{slot}].oam_entry = {_e};")
             L.append(f"    g_actors[{slot}].name = ACTOR_{p2['sym'].upper()};")
             L.append(f"    g_actors[{slot}].active = 0;")
+            L.append(f"    g_actors[{slot}].inst = {len(p2['members']) + _inst};")
             _aff_p = (affine_info or {}).get(slot)
             if _aff_p and _e >= 0:
                 _aslot = _aff_p["slot"]
@@ -1815,9 +1867,24 @@ def _gen_scene_init(
             return True
         return ev in actor_defined_events.get(s, set())
 
+    _dsym = _dispatch_sym(scene, scene_actors, pi)
+    # L'état des instances POSÉES d'un modèle, AVANT tout on_start : l'un peut lire l'autre. Le modèle
+    # remet l'état de départ de son script, puis chaque valeur d'export propre au membre y est posée.
+    if _member_rank:
+        from codegen.runtime_codegen.lua_compiler import member_export_inits
+        from scripting.codegen import export_setter_c_type
+        for j in sorted(lua_idx):
+            if j not in _member_rank:
+                continue
+            actor, _ = scene_actors[j - actor_offset]
+            s = _dsym(scene.name, actor.name)
+            L.append(f"    {s}_pool_init(&g_actors[{j}]);")
+            for name, typ, literal in member_export_inits(p, scene, actor):
+                arg = f"({export_setter_c_type(typ)}){literal}" if literal.startswith("{") else literal
+                L.append(f"    {s}_set_{name}(&g_actors[{j}], {arg});")
     for j in sorted(lua_idx):
         actor, _ = scene_actors[j - actor_offset]
-        s = scene_actor_sym(scene.name, actor.name)
+        s = _dsym(scene.name, actor.name)
         if _def_init(s, "on_start"):
             L.append(f"    {s}_on_start(&g_actors[{j}]);")
     # on_start scene
@@ -1849,7 +1916,15 @@ def _gen_scene_tick(
         input_layout = _cil(p)
     sym = c_sym(scene.name)
     _lay = scene_oam_layout(p, scene)
+    _dsym = _dispatch_sym(scene, scene_actors, pi)
+    # Les boucles de pool ne parcourent que la RÉSERVE : les instances posées d'un modèle sont des
+    # acteurs de la scène, appelés par leur indice avec le code du modèle (`_dsym`). Un modèle sans
+    # réserve n'a donc aucune boucle.
+    pi = [p2 for p2 in pi if p2["size"] > 0]
     L = [f"static void scene_tick_{sym}(void) {{"]
+    # Prochain emplacement OAM libre : après la bande d'interface. Les sprites d'acteurs le
+    # consomment dans l'ordre d'écriture (posés, puis pools), seuls ceux à l'écran en prennent un.
+    L.append(f"    int _oamn = {_lay.ui};")
 
     def _def(s, ev):
         if actor_defined_events is None:
@@ -1864,7 +1939,7 @@ def _gen_scene_tick(
     if lua_idx:
         for j in sorted(lua_idx):
             actor, _ = scene_actors[j - actor_offset]
-            s = scene_actor_sym(scene.name, actor.name)
+            s = _dsym(scene.name, actor.name)
             if _def(s, "on_update"):
                 L.append(f"    if(g_actors[{j}].active) {s}_on_update(&g_actors[{j}]);")
 
@@ -1901,7 +1976,7 @@ def _gen_scene_tick(
             if not has_solid_box(actor):
                 continue
             idx = actor_offset + j
-            s = scene_actor_sym(scene.name, actor.name)
+            s = _dsym(scene.name, actor.name)
             cb = f"{s}_on_tile_collide" if (idx in lua_idx and _def(s, "on_tile_collide")) else "NULL"
             L.append(f"    if(g_actors[{idx}].active) resolve_actor_tiles(&g_actors[{idx}], {cb});")
 
@@ -1953,7 +2028,7 @@ def _gen_scene_tick(
             # `my_box` de l'un est la `other_box` de l'autre.
             pool_reacts = has_col_event(_def, s)
             for ci, (sidx, sactor) in enumerate(col_scene_pf):
-                ss = scene_actor_sym(scene.name, sactor.name)
+                ss = _dsym(scene.name, sactor.name)
                 s_lua = (sidx in lua_idx) and has_col_event(_def, ss)
                 if not pool_reacts and not s_lua:
                     continue
@@ -1974,8 +2049,8 @@ def _gen_scene_tick(
         L.append(f"    static u16 _col_prev[{len(col_pairs)}]={{0}};")
         for pair_idx, (i, j) in enumerate(col_pairs):
             i_lua = i in lua_idx; j_lua = j in lua_idx
-            si = scene_actor_sym(scene.name, scene_actors[i - actor_offset][0].name)
-            sj = scene_actor_sym(scene.name, scene_actors[j - actor_offset][0].name)
+            si = _dsym(scene.name, scene_actors[i - actor_offset][0].name)
+            sj = _dsym(scene.name, scene_actors[j - actor_offset][0].name)
             evs = ("on_collision_enter", "on_collide", "on_collision_exit")
             L += _box_contact_lines(
                 f"&g_actors[{i}]", f"&g_actors[{j}]",
@@ -2020,14 +2095,14 @@ def _gen_scene_tick(
 
     # Interactive : le geste sur l'entrée `interact`, puis l'interacteur atteint le plus proche
     L += interact_tick_lines(p, scene, scene_actors, actor_offset, pi, lua_idx, _def,
-                             scene_actor_sym, input_layout, _shown,
+                             _dsym, input_layout, _shown,
                              lambda j: _lay.placed_entry[j])
 
     # on_late_update actors
     if lua_idx:
         for j in sorted(lua_idx):
             actor, _ = scene_actors[j - actor_offset]
-            s = scene_actor_sym(scene.name, actor.name)
+            s = _dsym(scene.name, actor.name)
             if _def(s, "on_late_update"):
                 L.append(f"    if(g_actors[{j}].active) {s}_on_late_update(&g_actors[{j}]);")
 
@@ -2155,6 +2230,19 @@ def _gen_scene_tick(
     # La navigation AVANT le rendu d'UI : le script a déjà tourné, il a pu
     # poser le nombre d'items ; l'index bouge donc dans la même frame que
     # l'appui, et les rangées se dessinent ensuite avec le bon curseur.
+    L += [
+        "    oam_hide_from(_oamn);",
+        # Des sprites visibles sans place : dit au log debug (retiré en release), une fois par seconde.
+        "    if(g_oam_dropped){",
+        "        if((_g_frame & 63)==0){",
+        '            debug_write_str("warning: ");',
+        "            debug_write_int(g_oam_dropped);",
+        '            debug_write_str(" sprite(s) not drawn, the OAM is full");',
+        "            debug_flush();",
+        "        }",
+        "        g_oam_dropped = 0;",
+        "    }",
+    ]
     L.append("    ui_list_tick();")
     L.append("    ui_image_update();")
     L.append("    text_update();")
@@ -2347,10 +2435,14 @@ def generate_main(
             return True
         return ev in actor_defined_events.get(sym, set())
 
-    for d in all_scene_data:
+    for d, _spi in zip(all_scene_data, scene_pis):
         sc = d["scene"]
         sc_sym = c_sym(sc.name)
+        # Une instance posée d'un modèle n'a pas de code à elle : ses appels vont au modèle.
+        _members = {d["scene_actors"][j][0].name for pl in _spi for j in pl["members"]}
         for actor, _ in d["scene_actors"]:
+            if actor.name in _members:
+                continue
             s = scene_actor_sym(sc.name, actor.name)
             script_path = _actor_script(actor)
             if script_path:
@@ -2652,12 +2744,12 @@ def generate_main(
         if sprite_offsets:
             dispcnt |= 0x1040
 
-        # Base OBJ de la bande d'interface de CETTE scène : juste après ses
-        # acteurs (ordre acteurs → UI → pools). -1 si la scène
-        # n'a aucune UI en sprites. Les pools de `scene_oam_layout` démarrent à
-        # `placed + ui`, donc la bande ne les chevauche jamais.
+        # Base OBJ de la bande d'interface de CETTE scène : le DÉBUT de l'OAM. Les sprites
+        # d'acteurs prennent les emplacements qui suivent, à la frame (cf. `oam_window_open`) ;
+        # la bande ne bouge donc pas, quel que soit le nombre d'acteurs à l'écran. -1 si la
+        # scène n'a aucune UI en sprites.
         _sc_lay = scene_oam_layout(p, sc)
-        sc_obj_oam = _sc_lay.ui_start if _sc_lay.ui else -1
+        sc_obj_oam = 0 if _sc_lay.ui else -1
         if emit and _sc_lay.ui:
             emit("log_line",
                  f"[text] scene '{sc.name}': OBJ OAM band "

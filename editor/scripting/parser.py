@@ -1,5 +1,5 @@
 """
-editor/scripting/parser.py — Parse un script Lua et retourne un AST normalisé.
+editor/scripting/parser.py : Parse un script Lua et retourne un AST normalisé.
 
 On utilise luaparser (luaparser.ast) pour obtenir l'AST brut, puis on
 l'enveloppe dans nos propres noeuds (ScriptAST) pour isoler le reste
@@ -31,7 +31,7 @@ class LuaScript:
     functions:  list[LuaFunction] = field(default_factory=list)   # handlers d'event
     locals:     list[LuaLocal]    = field(default_factory=list)    # local x = val
     # Table de module d'un behavior : le `M` de `local M = {}` … `function
-    # M.update(actor)` … `return M`. C'est une FORME, pas une donnée — elle ne
+    # M.update(actor)` … `return M`. C'est une FORME, pas une donnée : elle ne
     # produit rien en C, les fonctions étant inlinées une à une
     # (codegen._emit_inlined_behaviors). Sans ce repérage, `{}` était lu comme
     # un tableau vide : le template de behavior qu'écrit l'éditeur lui-même
@@ -56,15 +56,15 @@ class LuaFunction:
 class LuaLocal:
     name:    str
     value:   Any      # noeud Expr (peut être None si pas initialisé)
-    # Type déclaré dans la table `exports` ("int", "string", "actor_ref"…) —
+    # Type déclaré dans la table `exports` ("int", "string", "actor_ref"…) :
     # None pour un vrai `local`, dont le type C est alors déduit de la valeur.
     # Cf. scripting/exports_parser.KNOWN_TYPES et codegen._local_decl.
     export_type: Optional[str] = None
-    # Choix d'un export `enum` (étiquettes, dans l'ordre déclaré) — l'index d'une
+    # Choix d'un export `enum` (étiquettes, dans l'ordre déclaré) : l'index d'une
     # étiquette est sa valeur entière au runtime. Vide pour tout autre type. Capté
     # ICI, avec le reste de la déclaration, pour que la résolution des valeurs
     # d'instance (lua_compiler._export_inits) reste sur le MÊME arbre que le
-    # codegen — pas un second parseur (cf. chantier « Les exports de script »).
+    # codegen : pas un second parseur (cf. chantier « Les exports de script »).
     export_values: list = field(default_factory=list)
 
 
@@ -130,13 +130,13 @@ class StmtBreak:
 
 @dataclass
 class StmtUnsupported:
-    """Un statement que ce sous-ensemble ne traduit pas — `repeat`, `for … in`,
+    """Un statement que ce sous-ensemble ne traduit pas : `repeat`, `for … in`,
     `goto`, une fonction imbriquée…
 
     Il est PORTÉ et non jeté. Le rendre `None` (« noeud non géré, silencieux en
     v1 ») faisait disparaître le bloc du jeu sans un mot : ni erreur de checker,
     ni avertissement gcc, juste un corps de boucle qui n'existe plus. Ce que
-    l'auteur écrit se retrouve donc dans l'AST, et c'est le checker qui refuse —
+    l'auteur écrit se retrouve donc dans l'AST, et c'est le checker qui refuse :
     avec la phrase de `lua_subset`. Le parser décrit, il ne juge pas."""
     node: str      # nom du noeud luaparser ("Repeat", "Forin", "Function"…)
     line: int
@@ -174,7 +174,7 @@ class ExprName:
 
 @dataclass
 class ExprIndex:
-    """module.champ — notation POINTÉE uniquement.
+    """module.champ : notation POINTÉE uniquement.
 
     L'indexation par crochets a son propre noeud (`ExprIndexAt`) : les deux
     s'écrivent pareil en Lua mais ne veulent pas dire la même chose ici. Un
@@ -186,7 +186,7 @@ class ExprIndex:
 
 @dataclass
 class ExprIndexAt:
-    """t[i] — indexation par une expression, notation CROCHETS.
+    """t[i] : indexation par une expression, notation CROCHETS.
 
     Deux niveaux imbriqués pour un tableau à deux dimensions : `g[y][x]` est
     `ExprIndexAt(ExprIndexAt(g, y), x)`, exactement comme le C qu'il produit."""
@@ -196,16 +196,16 @@ class ExprIndexAt:
 
 @dataclass
 class ExprTable:
-    """{1, 2, 3} — constructeur de tableau.
+    """{1, 2, 3} : constructeur de tableau.
 
     `items` porte des ExprTable quand le tableau est à deux dimensions
     (`{{1,2},{3,4}}`). `has_keys` retient qu'une entrée était NOMMÉE
-    (`{a = 1}`) : c'est un enregistrement et non un tableau, donc une erreur —
+    (`{a = 1}`) : c'est un enregistrement et non un tableau, donc une erreur :
     mais elle se dit dans le checker, pas ici. Le parser décrit ce qui est
     écrit, il ne juge pas."""
     items:    list[Any] = field(default_factory=list)
     has_keys: bool      = False
-    # Nom de la clé de chaque entrée, ou None si positionnelle — parallèle à
+    # Nom de la clé de chaque entrée, ou None si positionnelle : parallèle à
     # `items`. Retenu pour la table d'exports d'`actor:spawn("X", pos, {k=v})`
     # (chantier « Les exports de script », tranche poolé) ; les tableaux ordinaires
     # n'ont que des entrées positionnelles (keys = [None, …]).
@@ -227,7 +227,7 @@ class ExprCall:
     Un appel de module s'écrit avec « : » (`input:pressed("A")`) : le parseur le ramène à
     la forme `ExprIndex(ExprName(module), func)`, la même que l'ancien point, pour que
     checker, codegen et refactor n'aient qu'une forme à traduire. `dotted` retient que
-    l'auteur a écrit un POINT sur un module qui s'appelle avec « : » — le checker le refuse
+    l'auteur a écrit un POINT sur un module qui s'appelle avec « : » : le checker le refuse
     en disant quoi écrire."""
     func: Any            # ExprName ou ExprIndex
     args: list[Any]
@@ -249,7 +249,7 @@ class ExprUnop:
 
 @dataclass
 class ExprUnsupported:
-    """Une expression que ce sous-ensemble ne traduit pas — `..`, `^`, `//`,
+    """Une expression que ce sous-ensemble ne traduit pas : `..`, `^`, `//`,
     une fonction anonyme, un opérateur binaire…
 
     Même rôle que `StmtUnsupported` côté expressions. Elle remplace le
@@ -263,7 +263,7 @@ class ExprUnsupported:
 # ─── Erreur de parse ───────────────────────────────────────────────
 
 class LuaParseError(Exception):
-    """Une faute de SYNTAXE — le seul refus qui précède le checker.
+    """Une faute de SYNTAXE : le seul refus qui précède le checker.
 
     Porte sa `line` quand on a su la retrouver (cf. `_syntax_message`), pour
     que le build la cite comme le reste (`Titre.lua:2 : …`) au lieu de nommer
@@ -378,7 +378,7 @@ class _Converter:
         # Le nom d'un module de behavior se lit sur les DEUX bouts : `local M =
         # {}` d'un côté, `function M.update(…)` de l'autre. Exiger les deux
         # évite de prendre pour un module un `local t = {}` que l'auteur voulait
-        # tableau — celui-là reste refusé, avec la phrase qui dit `array(n)`.
+        # tableau : celui-là reste refusé, avec la phrase qui dit `array(n)`.
         qualifiers = {fn.name.split(".", 1)[0] for fn in functions if "." in fn.name}
         modules = [loc.name for loc in locals_
                    if loc.name in qualifiers
@@ -425,7 +425,7 @@ class _Converter:
         """(nom, valeur|None) pour chaque cible d'un `local a, b, c = …`, la
         valeur appariée PAR POSITION, None au-delà de la liste fournie : `local
         a, b, c = 1` donne (a, 1), (b, None), (c, None). Un seul appariement pour
-        le top-level et pour les corps de handler — c'est ce qui manquait en
+        le top-level et pour les corps de handler : c'est ce qui manquait en
         corps, où seule la première cible était lue."""
         vals = values or []
         return [
@@ -463,7 +463,7 @@ class _Converter:
                 )
             case "Fornum":
                 # luaparser expose EXACTEMENT (target, start, stop, step, body).
-                # Ces champs étaient lus décalés d'un cran — `start` pris pour la
+                # Ces champs étaient lus décalés d'un cran : `start` pris pour la
                 # variable, `stop` pour la borne de départ, `step` pour la borne
                 # d'arrivée, et le pas jeté. `for i = 1, 10, 2` produisait donc
                 # `for (int i = 10; i <= 2; i += 1)` : un corps de boucle qui ne
@@ -499,7 +499,7 @@ class _Converter:
             case _:
                 # Tout le reste est PORTÉ jusqu'au checker, qui le refuse en
                 # nommant l'issue (cf. StmtUnsupported). Un `Function` arrive
-                # ici quand il est imbriqué dans un corps — au premier niveau,
+                # ici quand il est imbriqué dans un corps : au premier niveau,
                 # c'est `convert_chunk` qui le prend, et il est légitime.
                 return StmtUnsupported(node=t, line=self._line(node))
 
@@ -566,7 +566,7 @@ class _Converter:
                 return self._expr_invoke(node)
             case "Call":
                 return self._expr_call(node)
-            # Noms EXACTS de luaparser — `ULNotOp` et `ULengthOP` (capitale
+            # Noms EXACTS de luaparser : `ULNotOp` et `ULengthOP` (capitale
             # finale comprise), pas `NotOp`/`LenOp`. Écrits de mémoire, ils ne
             # matchaient rien : `not x` retombait sur la branche binaire et
             # levait « 'ULNotOp' object has no attribute 'left' », un message
@@ -579,8 +579,8 @@ class _Converter:
                                  right=self._expr(node.right))
             case _:
                 # Les deux tables ci-dessus sont la LISTE des opérateurs
-                # traduits. Le test qui les remplaçait — « le nom du noeud finit
-                # par Op » — acceptait aussi `^`, `//`, `&`, `<<`, dont le nom
+                # traduits. Le test qui les remplaçait : « le nom du noeud finit
+                # par Op » : acceptait aussi `^`, `//`, `&`, `<<`, dont le nom
                 # de classe partait alors tel quel dans le C : `(a ExpoOp b)`.
                 return ExprUnsupported(node=t, line=self._line(node))
 
@@ -589,7 +589,7 @@ class _Converter:
         method = node.func.id if hasattr(node.func, "id") else str(node.func)
         args   = [self._expr(a) for a in (node.args or [])]
         # `sfx:play("Bip")`, `input:pressed("A")` : la méthode d'un MODULE du moteur. Elle
-        # rejoint la forme d'appel de module — le reste du pipeline ne juge qu'elle.
+        # rejoint la forme d'appel de module : le reste du pipeline ne juge qu'elle.
         if isinstance(obj, ExprName) and obj.name in _module_calls():
             return ExprCall(func=ExprIndex(obj=obj, field=method), args=args)
         return ExprInvoke(obj=obj, method=method, args=args)
@@ -615,7 +615,7 @@ def _module_calls() -> frozenset:
 # Deux façons de déclarer, parce que ce sont deux besoins : `{1, 2, 4, 8}`
 # donne le CONTENU et en déduit la taille, `array(20, 12)` donne la TAILLE et
 # remplit de zéros. La reconnaissance vit ici, avec la forme d'AST qu'elle lit,
-# et le checker comme le codegen l'appellent — ils ont chacun besoin des mêmes
+# et le checker comme le codegen l'appellent : ils ont chacun besoin des mêmes
 # dimensions, pour en faire deux choses différentes.
 
 ARRAY_CTOR = "array"
@@ -660,7 +660,7 @@ def sequence_name(fn_name: str) -> Optional[str]:
 def wait_call(stmt) -> Optional[tuple[str, Any]]:
     """`wait(30)` → ("wait", ExprNumber(30)) ; `wait_until(c)` → ("wait_until", c).
 
-    Une attente n'est un appel que par sa SYNTAXE — la source doit rester du Lua
+    Une attente n'est un appel que par sa SYNTAXE : la source doit rester du Lua
     valide. Elle ne produit aucun appel C : elle coupe la séquence en deux.
     Rend None (et non une erreur) sur un nombre d'arguments fautif : c'est au
     checker de le dire avec les mots qui vont bien."""
@@ -673,7 +673,7 @@ def wait_call(stmt) -> Optional[tuple[str, Any]]:
 
 
 # L'espace de noms des tables AUTHORÉES du projet : `data.Objets[i].prix`.
-# Un nom réservé plutôt qu'un nom global par table — sans lui, une table
+# Un nom réservé plutôt qu'un nom global par table : sans lui, une table
 # nommée `score` masquerait un `local score` du script, et l'auteur n'aurait
 # aucun moyen de savoir lequel des deux il lit.
 DATA_NS = "data"
@@ -686,7 +686,7 @@ def assigned_names(script: LuaScript) -> set[str]:
     `vitesse.x = 0` écrivent bien `trajet` et `vitesse`. Deux consommateurs :
     le codegen sépare l'état d'un prefab poolé (par instance) de ses constantes
     (partagées) ; le checker refuse un `wait_until` dont la condition ne lit que
-    des noms absents d'ici — elle ne pourra jamais devenir vraie."""
+    des noms absents d'ici : elle ne pourra jamais devenir vraie."""
     names: set[str] = set()
 
     def base(target) -> Optional[str]:
@@ -753,12 +753,12 @@ def local_names(script: LuaScript) -> set[str]:
 
 def array_dims(expr) -> Optional[tuple[int, ...]]:
     """Dimensions déclarées par cette expression d'initialisation, ou None si
-    ce n'en est pas une (ou si sa forme est fautive — c'est alors au checker de
+    ce n'en est pas une (ou si sa forme est fautive : c'est alors au checker de
     dire laquelle, avec les mots qui vont bien).
 
     L'ORDRE DES ARGUMENTS EST L'ORDRE DES INDEX : `array(20, 12)` se lit
     `t[1..20][1..12]` et devient `int t[20][12]`. Aucune notion de largeur, de
-    hauteur, de ligne ni de colonne — la déclaration montre déjà l'ordre."""
+    hauteur, de ligne ni de colonne : la déclaration montre déjà l'ordre."""
     if (isinstance(expr, ExprCall)
             and isinstance(expr.func, ExprName)
             and expr.func.name == ARRAY_CTOR):
@@ -836,7 +836,7 @@ def _message_detail(exc) -> tuple[Optional[int], str]:
 
 # False friends of an author coming from ANOTHER language. They are not in
 # `lua_subset.REFUSED`: that one lists AST nodes, and none of these produces
-# one — they prevent the AST from existing. Scanned only AFTER a failure, so
+# one : they prevent the AST from existing. Scanned only AFTER a failure, so
 # never run on a valid script, and never alone: they complete antlr's line.
 _FALSE_FRIENDS: tuple = (
     (r"^\s*(?:if|elseif)\b.*:\s*(?:--.*)?$",
@@ -847,7 +847,7 @@ _FALSE_FRIENDS: tuple = (
      "Lua has no compound assignment: `x += 1` is written `x = x + 1`"),
     (r"\+\+", "Lua has no `++`: write `x = x + 1`"),
     (r"^\s*local\s+\w+\s*:\s*[A-Za-z_]",
-     "Lua has no type annotations: write `local x = 3` — a variable takes the type of "
+     "Lua has no type annotations: write `local x = 3`: a variable takes the type of "
      "its value"),
     (r"!=",   "\"not equal\" is written `~=`, not `!=`"),
     (r"&&",   "\"and\" is written `and`, not `&&`"),
@@ -857,7 +857,7 @@ _FALSE_FRIENDS: tuple = (
     (r"^\s*elif\b",
      "\"else if\" is written `elseif`, as a single word"),
     (r"^\s*else\s+if\b",
-     "`else if` opens a SECOND block that needs its own `end` — "
+     "`else if` opens a SECOND block that needs its own `end`: "
      "`elseif`, as a single word, does not"),
     # A condition that neither ends on an operator nor a comma (it would continue
     # on the next line) and holds no `then`: `if x == 0 self:play_anim("idle")`.
@@ -875,7 +875,7 @@ def _code_lines(source: str) -> list[str]:
     """The source lines with strings and comments removed: a `!=` inside a line
     of dialogue is not a syntax error, and a `#` in a comment is a hash. The
     patterns for a line that is ENTIRELY a comment (`^\\s*#`, `^\\s*//`) are not
-    concerned — those are not Lua comments, precisely."""
+    concerned : those are not Lua comments, precisely."""
     import re
 
     def _code(l: str) -> str:
@@ -909,7 +909,7 @@ _LOCAL_IN_EXPORTS = ("`local` has no place inside `exports = { ... }`: "
 
 
 def _false_friend(source: str, line: Optional[int]) -> tuple[str, Optional[int]]:
-    """(sentence, line where it was found) — searched first ON the line antlr
+    """(sentence, line where it was found) : searched first ON the line antlr
     gives, then in the whole file. The line is returned because it is THE one
     reported: antlr names where it gave up, often below the mistake."""
     import re
@@ -962,7 +962,7 @@ def _syntax_message(source: str, exc) -> tuple[str, Optional[int]]:
         # antlr attend `end` à chaque endroit où seul `end` pouvait suivre. Ce
         # n'est un `end` OUBLIÉ que si le jeton fautif est la fin du fichier :
         # le bloc n'a alors jamais été fermé. Tout autre jeton est une instruction
-        # qui n'a pas sa place là — typiquement le code après un `return`.
+        # qui n'a pas sa place là : typiquement le code après un `return`.
         offending = _offending_text(exc)
         code = _code_lines(source)
         precedente = next((n for n in range(min((line or 1) - 1, len(code)), 0, -1)
@@ -1026,7 +1026,7 @@ def parse(source: str) -> LuaScript:
         raise LuaParseError(msg, line) from e
     # La CONVERSION, elle, n'est pas une faute de syntaxe : une exception ici
     # est un noeud que `_Converter` ne sait pas traiter, pas un script mal
-    # écrit. Le message d'origine reste le plus utile — le déguiser en erreur
+    # écrit. Le message d'origine reste le plus utile : le déguiser en erreur
     # de syntaxe enverrait l'auteur corriger un fichier qui n'a rien.
     try:
         return _Converter(source).convert_chunk(raw)

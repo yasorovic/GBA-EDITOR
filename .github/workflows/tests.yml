@@ -57,5 +57,9 @@ jobs:
       # `cc` existe sur ubuntu-latest : la sonde qui interroge le vrai
       # gba_engine.h compile et s'exécute, donc l'équivalence est réellement
       # vérifiée ici — c'est le seul endroit où elle l'est à coup sûr.
+      # `always()` : un contrôle d'architecture en échec ne doit pas masquer les
+      # tests, on veut tous les échecs d'une poussée d'un coup. Le job reste rouge
+      # si l'une des deux étapes échoue.
       - name: Tests
+        if: always()
         run: python -m pytest tests -q -rs

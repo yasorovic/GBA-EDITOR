@@ -1,4 +1,4 @@
-"""scripting/completion.py — le modèle d'autocomplétion du Script Editor.
+"""scripting/completion.py : le modèle d'autocomplétion du Script Editor.
 
 Une seule question, et sans une ligne de Qt : « curseur ici, texte de la ligne
 avant lui → quels candidats ? ». L'UI (`ui/script_editor/completer.py`) pose la
@@ -6,22 +6,22 @@ question et affiche la réponse ; ce fichier se teste seul, sans écran, comme
 `text_layout` ou le checker.
 
 Tout ce qui suit est **dérivé du catalogue** (`api.py`), jamais une liste écrite
-à la main — même règle et même raison mesurée que `api_snippets` : une liste en
+à la main : même règle et même raison mesurée que `api_snippets` : une liste en
 dur a proposé pendant des mois `scene_goto` et `instantiate`, deux noms qui n'ont
 jamais existé. Une fonction ajoutée à `api.py` obtient sa complétion
 gratuitement ; une fonction retirée perd la sienne, et la complétion ne peut donc
-pas proposer une fonction morte — le seul bug qui compte ici.
+pas proposer une fonction morte : le seul bug qui compte ici.
 
 L'aide d'un candidat est celle de la sidebar : `tooltip_parts()` fournit les mêmes
 morceaux des deux côtés ; l'INTERFACE les compose en infobulle.
 Ce module ne produit aucun HTML : il est en dessous de `ui`.
 
-Périmètre — phase 1, « le catalogue seul » :
+Périmètre : phase 1, « le catalogue seul » :
   - membres après `X.` / `X:` (fonctions, propriétés) ;
   - modules, fonctions globales, constructeurs de langage, mots-clés, handlers ;
   - valeurs d'énumération matérielle dans un argument chaîne (`"alpha"`).
 Les `local`/paramètres en portée (phase 2, l'AST) et les noms d'assets du projet
-dans les arguments chaîne (phase 3) viendront s'y brancher — cf. `_string_arg`.
+dans les arguments chaîne (phase 3) viendront s'y brancher : cf. `_string_arg`.
 """
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ class Candidate:
     """Un candidat de complétion.
 
     `insert` est ce qui remplace le mot en cours de frappe (le membre seul,
-    `play_anim`) — volontairement léger : l'infobulle porte déjà la signature.
+    `play_anim`) : volontairement léger : l'infobulle porte déjà la signature.
     `label` est ce que la liste affiche avec son appelant (`self:play_anim(name)`).
     `tip` : les morceaux de l'infobulle (`title`, `body`, `note`), à composer par
     l'interface avec `ui.common.tooltip.tooltip(**tip)`."""
@@ -87,7 +87,7 @@ def _dotted_index(keys) -> dict[str, list[str]]:
     """{module: [membres]}, pour les clés POINTÉES seulement (`text.draw`), dans
     l'ordre du catalogue. Les clés à DEUX-POINTS en sont exclues à dessein :
     `sfx:stop` n'est pas un membre du module `sfx`, c'est une méthode du TYPE de
-    référence rendu par `sfx.play` — elle ne s'appelle que sur un `local` qui
+    référence rendu par `sfx.play` : elle ne s'appelle que sur un `local` qui
     tient ce handle (phase 2), pas derrière `sfx.`."""
     out: dict[str, list[str]] = {}
     for key in keys:
@@ -99,12 +99,12 @@ def _dotted_index(keys) -> dict[str, list[str]]:
 
 _MODULE_FUNCS = _dotted_index(RUNTIME_API)   # sfx → [play], text → [draw, draw_in, …]
 _MODULE_PROPS = _dotted_index(RUNTIME_PROPS)  # scene → [size, frame], camera → [bound, …]
-# `self:` (méthode) et `self.` (champ) sont deux espaces distincts — la
+# `self:` (méthode) et `self.` (champ) sont deux espaces distincts : la
 # distinction de Lua, celle que le checker fait déjà. Les méthodes viennent des
 # clés à deux-points de `RUNTIME_API` ; les propriétés des clés `self.` de
 # `RUNTIME_PROPS`, rangées ci-dessus.
 _SELF_METHODS = [_split(k)[2] for k in RUNTIME_API if k.startswith("actor:")]
-# Les champs d'un acteur sont sous `actor.` dans le catalogue — et NE sont pas ceux du module
+# Les champs d'un acteur sont sous `actor.` dans le catalogue : et NE sont pas ceux du module
 # `actor` (`actor:get`) : on les sort de `_MODULE_PROPS`.
 _SELF_PROPS   = _MODULE_PROPS.pop("actor", [])
 
@@ -113,15 +113,15 @@ _SELF_PROPS   = _MODULE_PROPS.pop("actor", [])
 # encore `display`/`send`, disparus, et ignorait la moitié des modules vivants).
 MODULES: tuple[str, ...] = tuple(sorted(set(_MODULE_FUNCS) | set(_MODULE_PROPS)))
 
-# Fonctions globales — sans module (`array`).
+# Fonctions globales : sans module (`array`).
 _GLOBAL_FUNCS = [k for k in RUNTIME_API if _split(k)[0] == ""]
 
-# Constructeurs de valeurs composées (`vec2`, `vec3`, `rect`) — leur arité vit
+# Constructeurs de valeurs composées (`vec2`, `vec3`, `rect`) : leur arité vit
 # dans `expr_types`, la seule chose à en dire ici est qu'ils se complètent.
 _CONSTRUCTORS = tuple(VEC_CONSTRUCTORS)
 
 # Les mots-clés proposables. Ce sont ceux du sous-ensemble ACCEPTÉ : `repeat`,
-# `until`, `goto` en sont volontairement absents — `lua_subset` les REFUSE en le
+# `until`, `goto` en sont volontairement absents : `lua_subset` les REFUSE en le
 # disant, et une complétion qui les proposerait enseignerait l'erreur. `require`
 # vit ici : ce n'est pas un mot-clé Lua, mais c'est la seule forme d'import, et
 # on la tape comme un.
@@ -135,7 +135,7 @@ KEYWORDS: tuple[str, ...] = (
 # ─── Infobulles ───────────────────────────────────────────────────
 
 def _catalog_tip(name: str) -> dict[str, str]:
-    """Les morceaux de l'infobulle d'un nom du catalogue — même entrée et mêmes
+    """Les morceaux de l'infobulle d'un nom du catalogue : même entrée et mêmes
     morceaux que la sidebar (`api_snippets` + `tooltip_parts`)."""
     is_prop = name in RUNTIME_PROPS
     entry = (api_snippets.prop_entry_dict(name) if is_prop
@@ -156,7 +156,7 @@ def _event_tip(ev: str) -> dict[str, str]:
 
 def _plain_tip(sig: str, desc: str) -> dict[str, str]:
     """Une aide courte pour ce qui n'est pas dans le catalogue (module,
-    mot-clé, constructeur) — même charpente que `tooltip_parts`."""
+    mot-clé, constructeur) : même charpente que `tooltip_parts`."""
     return {"title": sig, "body": desc}
 
 
@@ -235,7 +235,7 @@ def _in_string(s: str) -> bool:
 
 def _value_candidates(domain: str | None, project_names: dict | None) -> list[Candidate]:
     """Les valeurs valides pour un argument de ce `domain`. Une énumération
-    MATÉRIELLE (ensemble fixe du catalogue) ou un nom d'asset du PROJET — la même
+    MATÉRIELLE (ensemble fixe du catalogue) ou un nom d'asset du PROJET : la même
     question (« que peut valoir cette chaîne ? »), deux sources. Proposer
     exactement ce que le checker accepte tient à ce que `project_names` vienne de
     `project_names.names_by_domain`, sa source à lui aussi (phase 3)."""
@@ -259,7 +259,7 @@ def _value_candidates(domain: str | None, project_names: dict | None) -> list[Ca
 _RE_REF_LOCAL = re.compile(r"\b([A-Za-z_]\w*)\s*=\s*([A-Za-z_][\w.:]*)\s*\(")
 
 # Les domaines qui nomment un élément du sprite du RÉCEPTEUR : sur un autre acteur que
-# `self`, le checker les refuse (`other.anim == …`) — on ne les propose donc pas.
+# `self`, le checker les refuse (`other.anim == …`) : on ne les propose donc pas.
 _SELF_ONLY_DOMAINS = frozenset({DOMAIN_ANIM, DOMAIN_SPRITE_ID})
 
 
@@ -291,7 +291,7 @@ def _string_arg(line_prefix: str, project_names: dict | None,
     """Candidats pour une CHAÎNE en cours de frappe, dans les deux endroits où une
     valeur nommée s'écrit : un argument d'appel (`sfx:play("…`, `layer.set_blend
     ("…`) et l'affectation ou la comparaison d'une propriété (`self.obj_mode ==
-    "…`). La valeur peut être un enum matériel ou un nom du projet — cf.
+    "…`). La valeur peut être un enum matériel ou un nom du projet : cf.
     `_value_candidates`."""
     open_paren = _enclosing_paren(line_prefix)
     if open_paren >= 0:
@@ -369,7 +369,7 @@ def _member_candidates(qual: str, sep: str, project_names: dict | None,
     (l'AST) saura reconnaître."""
     if qual == "self":
         # `self` est l'instance à laquelle le script est attaché : une scène et une
-        # caméra n'en ont pas, le build le refuserait — on ne le propose donc pas.
+        # caméra n'en ont pas, le build le refuserait : on ne le propose donc pas.
         if context in ("scene", "camera"):
             return []
         members = _SELF_METHODS if sep == ":" else _SELF_PROPS
@@ -384,7 +384,7 @@ def _member_candidates(qual: str, sep: str, project_names: dict | None,
             names = _MODULE_FUNCS.get(qual, []) if sep == ":" else _MODULE_PROPS.get(qual, [])
         return sorted((_catalog_candidate(f"{qual}.{m}") for m in names),
                       key=lambda c: c.insert)
-    # `global.nom` / `const.nom` — variables et constantes du projet, lues dans
+    # `global.nom` / `const.nom` : variables et constantes du projet, lues dans
     # `names_by_domain` sous la clé qui EST le qualificateur écrit.
     if sep == "." and qual in ("global", "const"):
         kind_word = "Variable" if qual == "global" else "Constant"
@@ -437,12 +437,12 @@ def _bare_candidates(context: str) -> list[Candidate]:
 # Un nom nu ne se complète que s'il désigne vraiment quelque chose : les `local`,
 # paramètres et variables de boucle du script courant.
 #
-# La lecture est TEXTUELLE, pas l'AST — et à dessein. `parser.local_names` (celle
+# La lecture est TEXTUELLE, pas l'AST : et à dessein. `parser.local_names` (celle
 # du checker) demanderait `luaparser.parse`, ~30 ms sur un petit script et ~190 ms
 # sur un gros ; appelé à chaque frappe, il rendait tout l'éditeur poussif. Une
 # complétion est une SUGGESTION, pas une validation : le balayage ci-dessous coûte
 # des microsecondes et repère les mêmes déclarations. Il peut sur-capturer (un
-# `local` cité dans un commentaire) — une suggestion de trop, sans conséquence —,
+# `local` cité dans un commentaire), une suggestion de trop, sans conséquence,,
 # mais depuis le correctif multi-`local` il ne propose jamais un nom que le checker
 # refuse. Le checker, lui, garde l'AST : c'est lui qui JUGE, pas la complétion.
 #

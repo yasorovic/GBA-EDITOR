@@ -122,13 +122,15 @@ def test_la_taille_du_tableau_vient_du_define_pas_d_un_litteral():
     instance de prefab segmenté occupe un GROUPE d'entrées de `g_actors` (la
     racine puis ses parties) mais n'exécute qu'UN script. `_SIZE` compte les
     entrées réservées, `_INSTANCES` compte les scripts — c'est le second qui
-    dimensionne l'état, et `_GROUP` qui ramène `self` à son rang d'instance."""
+    dimensionne l'état, et `Actor.inst` qui ramène `self` à son rang d'instance."""
     _errs, code, _n = _pooled(
         "local n = 0\nfunction on_update()\n    n = 1\nend\n", pool_size=16)
     assert "g_state_Ball[POOL_BALL_INSTANCES]" in code
     assert "g_state_Ball[16]" not in code
-    assert "(self - g_actors) - POOL_BALL_START" in code
-    assert "/ POOL_BALL_GROUP" in code
+    # Le rang vient de l'acteur lui-même, pas d'un calcul sur sa position dans `g_actors` : les
+    # instances d'un modèle ne sont plus supposées contiguës.
+    assert "Ball_pool_slot(Actor* self) { return (int)self->inst; }" in code
+    assert "POOL_BALL_START" not in code and "POOL_BALL_GROUP" not in code
 
 
 def test_pool_init_repose_l_etat_de_depart_en_un_bloc():

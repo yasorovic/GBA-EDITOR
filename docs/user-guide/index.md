@@ -1,132 +1,48 @@
-# Guide utilisateur
+# Vue d'ensemble
 
 Ce guide explique comment utiliser Backstage pour construire un jeu, sans présumer que vous
-connaissez déjà les formats Game Boy Advance ou le code généré. Les limites de la console sont
-signalées dans l'application quand elles deviennent utiles.
+connaissez déjà les formats Game Boy Advance ou le code généré. Il commence par une visite de
+l'éditeur, de vos fichiers et d'une première scène ; chaque page prend quelques minutes et prépare
+la suivante.
 
-## Le projet en une idée
+```{figure} overview/img/editor-overview.png
+:alt: La fenêtre de Backstage sur le projet Platformer : la scène au centre, les listes à gauche, l'inspecteur à droite.
+:class: backstage-screenshot
 
-Un projet est un dossier autonome. Il contient les ressources de votre jeu (images, sons,
-scripts, scènes, palettes et données) ainsi que les réglages nécessaires pour fabriquer une
-ROM. Vous travaillez toujours dans ce dossier ; l'éditeur enregistre et relie les ressources
-entre elles.
-
-```text
-Créer ou ouvrir un projet → importer ou créer des ressources → construire une scène
-→ ajouter du comportement → Build & Run
+L'écran **Scenes** du projet de démonstration Platformer.
 ```
 
-Vous pouvez faire des allers-retours entre ces étapes. Par exemple, un sprite peut être importé
-après la création d'une scène, et un script peut être ajouté dès que l'acteur existe.
+Backstage fabrique des jeux Game Boy Advance depuis une interface visuelle. Vous importez vos
+images, vos sons et vos textes, vous les assemblez dans des **scènes**, vous ajoutez du
+comportement avec des scripts Lua, puis un seul bouton, **Run**, produit la ROM et la lance dans
+l'émulateur mGBA. L'éditeur s'occupe des contraintes de la console et les signale au fur et à
+mesure.
 
-## Commencer un projet
+## Le parcours
 
-À l'ouverture, l'écran d'accueil propose vos projets récents et des modèles.
-
-1. Cliquez sur **New project**.
-2. Donnez-lui un nom et choisissez son emplacement.
-3. Ouvrez-le : le **Scene Manager** devient l'espace de travail principal.
-
-Le projet de démonstration Pong Advanced, disponible dans l'onglet des modèles, est un bon point de
-départ pour observer une scène, un sprite, un script et du son déjà reliés.
-
-Pour reprendre un projet existant, utilisez **Browse…** depuis l'accueil ou **File → Open
-project**. Ouvrez toujours le dossier racine du projet, pas un sous-dossier `assets`.
-
-## Se repérer dans l'éditeur
-
-La barre de navigation ouvre les écrans spécialisés :
-
-| Écran | Utilité |
-| --- | --- |
-| **Scene Manager** | Construire les scènes, placer les acteurs, collisions et éléments d'interface. |
-| **Backgrounds** | Préparer les décors et les cadres d'interface. |
-| **Sprites** | Découper une planche de sprites et composer les animations. |
-| **Palettes** | Créer, importer et ajuster les couleurs partagées par le jeu. |
-| **Text** | Écrire les textes affichés, préparer les traductions et les polices. |
-| **Sound** | Ajouter les effets sonores, la musique et les transitions. |
-| **Scripts** | Écrire le comportement et consulter l'API disponible. |
-| **Data** | Définir des tableaux de données pour les objets, ennemis ou dialogues. |
-
-Dans la plupart des écrans, la colonne de gauche liste les ressources, la zone centrale sert à
-les modifier ou les prévisualiser, et l'inspecteur à droite règle l'élément sélectionné. Les
-panneaux se redimensionnent en faisant glisser leurs séparateurs.
-
-Quelques raccourcis utiles : `Ctrl+S` enregistre, `Ctrl+Z` annule, `Ctrl+Y` rétablit et `F5`
-lance **Build & Run**. Les autres raccourcis peuvent être consultés et personnalisés dans
-**File → Settings → Shortcuts**.
-
-## Créer, importer, modifier : trois gestes distincts
-
-Les sections de ressources utilisent le bouton **+**. Selon la famille, il crée une ressource,
-ouvre un choix, ou lance un import. Une ressource nouvelle reçoit un nom provisoire que vous
-pouvez modifier immédiatement ; `F2` renomme également une ressource sélectionnée, ou l'état d'animation
-sélectionné dans l'écran Sprite.
-
-Le nom d'une ressource est unique **parmi les ressources du même type** : une musique `village` et un
-décor `village` peuvent coexister, deux décors `village` non. Un nom déjà pris est complété
-(`village_2`). Le **+** d'un import accepte plusieurs fichiers à la fois.
-
-- **Créer** convient aux scènes, prefabs, scripts, palettes, données et entrées audio : la
-  ressource naît dans le projet, puis vous la configurez dans l'inspecteur.
-- **Importer** copie un fichier source dans le dossier du projet et crée ou met à jour la
-  ressource correspondante. L'original, hors du projet, n'est pas modifié.
-- **Modifier** se fait dans l'écran de la ressource ou son inspecteur. Les changements sont
-  enregistrés avec le projet et peuvent généralement être annulés avec `Ctrl+Z`.
-
-Un clic droit sur une ressource donne accès à ses actions utiles, dont renommer, dupliquer quand
-cela a du sens, voir ses utilisations ou supprimer. Supprimer demande confirmation ; si vous
-venez de le faire, `Ctrl+Z` permet de revenir en arrière.
-
-## Importer votre première ressource
-
-Choisissez d'abord le type de ressource plutôt que de copier manuellement des fichiers dans le
-projet : l'éditeur peut ainsi vérifier le format et préparer les métadonnées nécessaires.
-
-| Vous avez… | Ouvrez… | Action |
-| --- | --- | --- |
-| Une planche de personnages ou d'objets en PNG | **Sprites** | Cliquez sur **+**, puis choisissez le PNG. Définissez ensuite la taille des frames et les animations. |
-| Un décor, une image d'interface ou une planche animée PNG | **Backgrounds** | Utilisez le **+** de la section correspondante : décor, interface ou animation. |
-| Une palette `.gpl`, `.pal` ou une liste de couleurs | **Palettes** | Cliquez sur **+**, puis **Import**. |
-| Un effet sonore WAV ou un morceau tracker | **Sound** | Créez l'effet ou la piste avec **+**, sélectionnez-le, puis utilisez **Import** dans l'inspecteur. |
-| Une police PNG, `.fnt`, `.ttf` ou `.otf` | Onglet **Disk** | Importez le fichier (**Import…**), puis faites un clic droit dessus et choisissez **Create** : un fichier déposé dans le projet n'est pas une police tant que vous ne l'avez pas créée. |
-
-Après un import, sélectionnez la ressource dans sa liste : l'inspecteur indique ce qui manque
-éventuellement et les réglages à vérifier. Un avertissement de palette, de format ou de budget
-ne modifie pas le fichier source ; il vous indique simplement ce que la ROM pourra utiliser.
-
-## Construire une première scène
-
-Dans le **Scene Manager**, créez une scène depuis la section **Scenes**. Son canvas représente
-l'écran GBA. Ajoutez un acteur avec l'outil d'ajout, puis choisissez un sprite dans l'inspecteur
-de l'acteur. Vous pouvez ensuite le déplacer avec l'outil de sélection, ajouter des collisions
-ou lui attacher un script.
-
-La barre au-dessus de chaque canvas (scène, fond, sprite) affiche la position du curseur. Un clic sur
-cette position la fait passer des **pixels** aux **tuiles** (8 px), dans tous les canvas à la fois.
-
-Le bandeau inférieur montre les ressources matérielles les plus importantes de la scène
-(sprites, coût par ligne, tuiles et palettes). Elles deviennent jaunes puis rouges à
-l'approche ou au dépassement d'une limite : prenez-les comme un tableau de bord, pas comme une
-étape obligatoire avant de commencer.
-
-Quand votre scène contient au moins ce que vous souhaitez tester, sauvegardez et cliquez sur
-**Build & Run**. L'éditeur génère la ROM puis l'ouvre dans mGBA, si devkitPro et mGBA sont
-configurés. L'écran d'accueil et **File → Settings** indiquent où les renseigner si besoin.
+1. [Se repérer dans l'éditeur](overview/editor-tour.md) : les six zones de la fenêtre, les écrans et les raccourcis.
+2. [Le projet en une idée](overview/project-idea.md) : ressources, acteurs, et les gestes créer, importer, modifier.
+3. [Le dossier assets](overview/assets-folder.md) : où vivent vos fichiers et l'onglet **Disk**.
+4. [Importer votre première ressource](overview/first-import.md) : depuis l'éditeur, ou depuis le dossier assets.
+5. [Construire une première scène](overview/first-scene.md) : créer une scène, placer un acteur, lancer la ROM.
 
 ## Continuer
 
-- Pour obtenir un premier résultat complet, suivez [Créer votre première scène jouable](first-playable-scene.md).
-- Pour ajouter un décor, un sol et des murs, suivez [Ajouter un décor et des collisions](decor-and-collision.md).
-- Pour ajouter gravité et saut, suivez [Créer un mouvement de plateforme](platformer-movement.md).
-- Pour ajouter des objets à ramasser et un score, suivez [Ajouter des collectibles et un score](collectibles.md).
-- Pour créer des PNJ, des dialogues et des adversaires, suivez [Ennemis et PNJ](enemies.md).
-- Pour relier le titre, les niveaux et la victoire, suivez [Construire une boucle de gameplay](gameplay-loop.md).
-- Pour réagir à un appui devant un coffre, un panneau ou un personnage, suivez [Faire interagir le joueur avec un acteur](interact.md).
-- Pour construire un combat plus élaboré, suivez [Créer un boss et sa barre de vie](boss.md).
-- Pour suivre l'acteur dans une grande scène, suivez [Faire suivre l'acteur par une caméra](camera-follow.md).
-- Pour donner une réaction à un acteur, passez au [guide de scripting](../scripting.md).
-- Pour comprendre les messages de compilation, commencez par lire le fichier et la ligne cités
-  dans le panneau de build : l'erreur est généralement reliée à l'élément ou au script concerné.
-- Cette documentation grandira ensuite avec des guides dédiés aux scènes, sprites, décors,
-  texte, son et publication d'une ROM.
+- Pour un premier résultat complet, suivez le tutoriel [Votre première scène jouable](first-playable-scene.md).
+- Pour assembler un jeu entier, suivez [Un mini-jeu de plateforme](mini-game.md).
+- Pour un sujet précis (déplacement, collisions, caméra, prefabs, dialogues, dégâts...), ouvrez le [guide](../guides/index.md) correspondant : chacun se lit seul.
+- Pour écrire du comportement, passez au [guide de scripting](../scripting.md).
+- Pour comprendre une erreur de compilation, lisez d'abord le fichier et la ligne cités dans l'onglet **Diagnostics** : l'erreur est généralement liée à l'élément ou au script concerné.
+
+```{toctree}
+:hidden:
+:maxdepth: 1
+
+Se repérer dans l'éditeur <overview/editor-tour>
+Le projet en une idée <overview/project-idea>
+Le dossier assets <overview/assets-folder>
+Importer une première ressource <overview/first-import>
+Construire une première scène <overview/first-scene>
+Tutoriel : première scène jouable <first-playable-scene>
+Tutoriel : mini-jeu de plateforme <mini-game>
+```

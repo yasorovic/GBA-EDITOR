@@ -1,0 +1,253 @@
+{
+  "name": "Scene_01",
+  "id": "d73cb72ef721",
+  "background_layers": [],
+  "actors": [
+    {
+      "name": "Cible",
+      "id": "1c719c7de69e",
+      "active": true,
+      "components": [
+        {
+          "component_type": "sprite",
+          "id": "sprite",
+          "active": true,
+          "sprite_name": "Cible",
+          "initial_state": "Idle",
+          "facing_auto": true,
+          "affine_transform": false,
+          "scale_x": 1.0,
+          "scale_y": 1.0,
+          "rotation": 0,
+          "offset_x": 0,
+          "offset_y": 0,
+          "pivot_x": 0,
+          "pivot_y": 0
+        },
+        {
+          "component_type": "collision_box",
+          "id": "body",
+          "active": true,
+          "solid": false,
+          "blocks_actors": false,
+          "tag": "body",
+          "x": 0,
+          "y": 0,
+          "w": 16,
+          "h": 16
+        },
+        {
+          "component_type": "script",
+          "id": "script",
+          "active": true,
+          "script": "assets/scripts/Cible.lua",
+          "exports_values": {}
+        }
+      ],
+      "x": 112,
+      "y": 72,
+      "flip_h": false,
+      "flip_v": false,
+      "priority": 0,
+      "pal_bank": -1,
+      "visible": true,
+      "obj_mode": 0,
+      "rotation": 0,
+      "scale_x": 1.0,
+      "scale_y": 1.0,
+      "screen_space": false,
+      "is_player": true,
+      "dir_x": 0,
+      "dir_y": 0,
+      "notes": ""
+    },
+    {
+      "name": "Joueur",
+      "id": "8a3e549c41cc",
+      "active": true,
+      "components": [
+        {
+          "component_type": "sprite",
+          "id": "sprite",
+          "active": true,
+          "sprite_name": "Joueur",
+          "initial_state": "Idle",
+          "facing_auto": true,
+          "affine_transform": false,
+          "scale_x": 1.0,
+          "scale_y": 1.0,
+          "rotation": 0,
+          "offset_x": 0,
+          "offset_y": 0,
+          "pivot_x": 0,
+          "pivot_y": 0
+        },
+        {
+          "component_type": "collision_box",
+          "id": "body",
+          "active": true,
+          "solid": false,
+          "blocks_actors": false,
+          "tag": "body",
+          "x": 0,
+          "y": 0,
+          "w": 16,
+          "h": 16
+        },
+        {
+          "component_type": "collision_box",
+          "id": "pieds",
+          "active": true,
+          "solid": false,
+          "blocks_actors": false,
+          "tag": "pieds",
+          "x": 2,
+          "y": 14,
+          "w": 12,
+          "h": 4
+        },
+        {
+          "component_type": "script",
+          "id": "script",
+          "active": true,
+          "script": "assets/scripts/Joueur.lua",
+          "exports_values": {}
+        }
+      ],
+      "x": 40,
+      "y": 72,
+      "flip_h": false,
+      "flip_v": false,
+      "priority": 0,
+      "pal_bank": -1,
+      "visible": true,
+      "obj_mode": 0,
+      "rotation": 0,
+      "scale_x": 1.0,
+      "scale_y": 1.0,
+      "screen_space": false,
+      "dir_x": 0,
+      "dir_y": 0,
+      "notes": ""
+    },
+    {
+      "name": "Ennemi",
+      "id": "bb4d1bf38e89",
+      "active": true,
+      "components": [
+        {
+          "component_type": "sprite",
+          "id": "sprite",
+          "active": true,
+          "sprite_name": "Ennemi",
+          "initial_state": "Idle",
+          "facing_auto": true,
+          "affine_transform": false,
+          "scale_x": 1.0,
+          "scale_y": 1.0,
+          "rotation": 0,
+          "offset_x": 0,
+          "offset_y": 0,
+          "pivot_x": 0,
+          "pivot_y": 0
+        },
+        {
+          "component_type": "collision_box",
+          "id": "body",
+          "active": true,
+          "solid": false,
+          "blocks_actors": false,
+          "tag": "body",
+          "x": 0,
+          "y": 0,
+          "w": 16,
+          "h": 16
+        },
+        {
+          "component_type": "collision_box",
+          "id": "tete",
+          "active": true,
+          "solid": false,
+          "blocks_actors": false,
+          "tag": "tete",
+          "x": 2,
+          "y": -2,
+          "w": 12,
+          "h": 4
+        },
+        {
+          "component_type": "script",
+          "id": "script",
+          "active": true,
+          "script": "assets/scripts/Ennemi.lua",
+          "exports_values": {}
+        }
+      ],
+      "x": 180,
+      "y": 72,
+      "flip_h": false,
+      "flip_v": false,
+      "priority": 0,
+      "pal_bank": -1,
+      "visible": true,
+      "obj_mode": 0,
+      "rotation": 0,
+      "scale_x": 1.0,
+      "scale_y": 1.0,
+      "screen_space": false,
+      "dir_x": 0,
+      "dir_y": 0,
+      "notes": ""
+    }
+  ],
+  "cameras": [
+    {
+      "name": "Camera",
+      "id": "94ef3b1b73d2",
+      "x": 0,
+      "y": 0,
+      "frame_w": 240,
+      "frame_h": 160,
+      "mode": "fixed",
+      "follow_target": "",
+      "margin_x": 40,
+      "margin_y": 20,
+      "bounds_x": null,
+      "bounds_y": null,
+      "bounds_w": null,
+      "bounds_h": null,
+      "script": "",
+      "notes": ""
+    }
+  ],
+  "camera": "Camera",
+  "windows": [],
+  "render_mode": 0,
+  "scroll_h": true,
+  "scroll_v": true,
+  "script": "",
+  "ui_layouts": [
+    {
+      "name": "Scene_01",
+      "id": "fb577e73f4f3",
+      "source": "89c75a1b870c",
+      "layout_name": "Scene_01",
+      "anchor": "screen",
+      "anchor_actor": "",
+      "target": "",
+      "bg_slot": 0
+    }
+  ],
+  "font_name": "",
+  "font_pal_banks": {
+    "": 0
+  },
+  "collision_layer": 0,
+  "collision_map": [],
+  "active_obj_palettes": [],
+  "active_bg_palettes": [
+    "_Microsoft Windows 16"
+  ],
+  "backdrop_color": null,
+  "notes": ""
+}

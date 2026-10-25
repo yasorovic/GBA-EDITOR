@@ -70,8 +70,8 @@ _BRAND_FONT_DIR = Path(__file__).parent / "fonts"
 _brand_family: str | None = None
 
 
-def brand_font(size: int = T.XL, *, regular: bool = False) -> "QFont":
-    """Sniglet ExtraBold (taille en points, comme `QFont(T.UI, …)`) : la police
+def brand_font(size: int = T.XL) -> "QFont":
+    """Balsamiq Sans Bold (taille en points, comme `QFont(T.UI, …)`) : la police
     de marque — nom du projet, bouton Run, titre de l'écran de crash.
 
     Chargée au premier appel (la QApplication doit exister) : l'écran de crash
@@ -81,13 +81,11 @@ def brand_font(size: int = T.XL, *, regular: bool = False) -> "QFont":
     global _brand_family
     if _brand_family is None:
         _brand_family = T.UI
-        for name in ("Sniglet-Regular.ttf", "Sniglet-ExtraBold.ttf"):
-            font_id = QFontDatabase.addApplicationFont(str(_BRAND_FONT_DIR / name))
-            families = QFontDatabase.applicationFontFamilies(font_id)
-            if families:
-                _brand_family = families[0]   # les deux graisses partagent « Sniglet »
-    return QFont(_brand_family, size,
-                 QFont.Weight.Normal if regular else QFont.Weight.ExtraBold)
+        font_id = QFontDatabase.addApplicationFont(str(_BRAND_FONT_DIR / "BalsamiqSans-Bold.ttf"))
+        families = QFontDatabase.applicationFontFamilies(font_id)
+        if families:
+            _brand_family = families[0]
+    return QFont(_brand_family, size, QFont.Weight.Bold)
 
 
 def ui_font(size: int = T.MD, *, bold: bool = False, family: str | None = None):

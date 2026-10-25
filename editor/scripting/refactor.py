@@ -1,5 +1,5 @@
 """
-editor/scripting/refactor.py — références d'assets dans les scripts Lua.
+editor/scripting/refactor.py : références d'assets dans les scripts Lua.
 
 Renommer une scène, un sfx, un prefab… dans l'éditeur doit mettre à jour les
 scripts qui citent l'ancien nom. `Project.rename_*` répare déjà les références
@@ -9,12 +9,12 @@ SCRIPTS.
 Le repérage est **structurel**, jamais textuel : on relit l'AST luaparser et on
 ne retient que les arguments dont `RUNTIME_API` déclare le domaine (cf.
 api.Param.domain). Conséquence directe : un commentaire qui mentionne "PONG",
-ou un `local titre = "PONG"` sans rapport, ne sont pas touchés — seul
+ou un `local titre = "PONG"` sans rapport, ne sont pas touchés : seul
 `scene:switch("PONG")` l'est. C'est la même table que celle qui pilote le
 checker et le codegen : ajouter un domaine profite aux trois.
 
 La réécriture remplace les littéraux par leur position exacte dans le texte
-source (offsets luaparser), de droite à gauche — le reste du fichier, y compris
+source (offsets luaparser), de droite à gauche : le reste du fichier, y compris
 la mise en forme et les commentaires, est préservé octet pour octet.
 
 Usage :
@@ -44,7 +44,7 @@ except ImportError:                       # même repli que scripting/parser.py
 
 # ── Table domaine → sites d'appel ─────────────────────────────────
 # Construite une fois depuis RUNTIME_API : {clé API: {index arg: domaine}}.
-# Aucune liste de fonctions codée en dur ici — déclarer un `domain` sur un
+# Aucune liste de fonctions codée en dur ici : déclarer un `domain` sur un
 # paramètre suffit à le rendre renommable.
 
 def _reference_sites() -> dict[str, dict[int, str]]:
@@ -68,7 +68,7 @@ class LuaRef:
     line:    int
     start:   int   # offset du littéral dans le texte source, guillemets INCLUS
     stop:    int   # offset du dernier caractère (inclusif, convention luaparser)
-    api_key: str   # "scene.switch", "sfx.play"… — pour l'affichage
+    api_key: str   # "scene.switch", "sfx.play"… : pour l'affichage
 
 
 # ── Repérage ──────────────────────────────────────────────────────
@@ -109,7 +109,7 @@ def _element_of_source(source, elems: dict) -> Optional[str]:
 
 
 def _element_locals(tree) -> dict[str, Optional[str]]:
-    """{variable: élément d'interface} — `local menu = interface:get("Menu")`. Un local
+    """{variable: élément d'interface} : `local menu = interface:get("Menu")`. Un local
     réaffecté à un AUTRE élément vaut None : on ne conclut rien."""
     out: dict[str, Optional[str]] = {}
     for node in _lua_ast.walk(tree):
@@ -142,7 +142,7 @@ def _node_key(node, elems: dict) -> Optional[str]:
 
 
 def _ref_locals(tree) -> dict[str, str]:
-    """{variable: type de référence} — `local hb = self:collision_box("x")` fait
+    """{variable: type de référence} : `local hb = self:collision_box("x")` fait
     de `hb` une `collision_box`. Même relevé que le checker, sur l'AST brut."""
     out: dict[str, str] = {}
     for node in _lua_ast.walk(tree):
@@ -157,7 +157,7 @@ def _ref_locals(tree) -> dict[str, str]:
 
 
 def _iter_prop_refs(tree, text: str, path, domain, value) -> Iterator[LuaRef]:
-    """Les littéraux qu'une PROPRIÉTÉ à domaine se compare à — `hb.tag ==
+    """Les littéraux qu'une PROPRIÉTÉ à domaine se compare à : `hb.tag ==
     "hitbox"`. Ils citent le nom du projet exactement comme l'argument d'une
     fonction, et un renommage qui les oubliait laisserait une comparaison que le
     checker refuse. Seul le type de la variable dit de quelle propriété il
@@ -236,7 +236,7 @@ def iter_refs(text: str, path: Path | None = None,
 
 def rename_in_text(text: str, domain: str, old: str, new: str) -> tuple[str, int]:
     """(texte réécrit, nombre de remplacements). Texte inchangé si le script
-    ne parse pas — mieux vaut une référence non mise à jour, signalée par le
+    ne parse pas : mieux vaut une référence non mise à jour, signalée par le
     checker au build, qu'un fichier corrompu par une substitution à l'aveugle."""
     if old not in text:      # le parse Lua coûte des centaines de ms : un script qui ne cite pas `old` n'a rien à réécrire
         return text, 0
@@ -268,7 +268,7 @@ def script_paths(project) -> list[Path]:
 
 
 def find_refs_in_project(project, domain: str, name: str) -> dict[Path, list[LuaRef]]:
-    """{script: références} — pour une vue « utilisations » ou un aperçu de
+    """{script: références} : pour une vue « utilisations » ou un aperçu de
     renommage. N'écrit rien."""
     found: dict[Path, list[LuaRef]] = {}
     for p in script_paths(project):
@@ -287,7 +287,7 @@ class LuaCallSite:
     """Un appel d'API et les littéraux qu'il pose, RANGÉS PAR DOMAINE.
 
     `iter_refs` rend les références une par une : de quoi renommer, pas de quoi
-    confronter deux arguments du même appel — or « ce texte tient-il dans cette
+    confronter deux arguments du même appel : or « ce texte tient-il dans cette
     zone ? » est exactement une question sur la PAIRE."""
     path:    Path
     api_key: str
@@ -348,7 +348,7 @@ def domain_args_in_text(text: str, domain: str) -> tuple[set[str], bool]:
     Le second booléen est ce qui manque à `iter_refs`, qui ne voit que les
     chaînes littérales : « ce script ne cite aucune police » et « ce script
     choisit sa police au runtime » y sont indiscernables. Pour un renommage
-    l'amalgame est sans conséquence — il n'y a rien à réécrire dans les deux cas.
+    l'amalgame est sans conséquence : il n'y a rien à réécrire dans les deux cas.
     Pour une RÉSERVATION de VRAM il est dangereux : on réserverait trop peu, et
     le texte irait écrire dans les tuiles du décor sans que rien ne le dise.
 
@@ -415,7 +415,7 @@ def _cached_values(path: Path, domain: str) -> list[str]:
 
 
 def _scene_spawn_closure(project, scene) -> tuple[set[Path], set[str]]:
-    """(scripts compilés pour cette scène, prefabs qu'ils spawnent) — point fixe :
+    """(scripts compilés pour cette scène, prefabs qu'ils spawnent) : point fixe :
     le script de la scène, ceux de ses acteurs et de leurs prefabs, ceux des
     prefabs de son pool DÉCLARÉ, puis ceux des prefabs que ces scripts spawnent
     à leur tour. Seuls les noms littéraux sont vus."""
@@ -484,21 +484,21 @@ def index_refs_in_project(project, domain: str) -> dict[str, dict[Path, int]]:
 _INDEX_VALUES: dict[tuple, list[str]] = {}
 
 
-# ── Tables de données, globals, constantes — le second type de site ──
+# ── Tables de données, globals, constantes : le second type de site ──
 #
 # Tout ce qui précède repère une référence dans un ARGUMENT littéral d'appel,
 # et sa table de sites dérive de `RUNTIME_API`. Une table de données, une
 # variable globale ou une constante, elles, se citent comme du CODE :
-# `data.Objets[i].prix`, `global.score`, `const.max` — sans guillemets et sans
+# `data.Objets[i].prix`, `global.score`, `const.max` : sans guillemets et sans
 # appel. Invisibles à
 # `iter_refs`, un renommage les laisserait derrière.
 #
-# Le repérage reste STRUCTUREL — c'est l'AST qui dit quelles occurrences sont
+# Le repérage reste STRUCTUREL : c'est l'AST qui dit quelles occurrences sont
 # des citations, jamais une recherche de texte. Mais la réécriture ne peut pas
 # s'appuyer sur la position du NOM : dans cette version de luaparser, un noeud
 # `Name` ne porte pas d'offsets (`start_char` vaut None). Seuls les noeuds
 # `Index` en ont, et leur tranche se termine par le nom cherché. On relit donc
-# cette tranche et on ne réécrit que si elle finit bien par `.<nom>` — repérage
+# cette tranche et on ne réécrit que si elle finit bien par `.<nom>` : repérage
 # par l'arbre, écriture vérifiée sur le texte.
 
 
@@ -525,7 +525,7 @@ def _table_of(node) -> Optional[str]:
 
 def _tail_span(text: str, node, name: str) -> Optional[tuple[int, int]]:
     """Position du `name` final dans la tranche source de `node`, ou None si la
-    tranche ne se termine pas par `.name` — auquel cas on n'écrit rien."""
+    tranche ne se termine pas par `.name` : auquel cas on n'écrit rien."""
     start, stop = getattr(node, "start_char", None), getattr(node, "stop_char", None)
     if start is None or stop is None:
         return None
@@ -552,7 +552,7 @@ def iter_data_refs(text: str, path: Path | None = None,
         if not isinstance(node, _nodes.Index):
             continue
 
-        # `data.Objets` — la table elle-même.
+        # `data.Objets` : la table elle-même.
         if column is None:
             name = _table_of(node)
             if name and (table is None or name == table):
@@ -562,7 +562,7 @@ def iter_data_refs(text: str, path: Path | None = None,
                                   line=_line(span[0]), start=span[0], stop=span[1])
             continue
 
-        # `data.Objets[…].prix` — la colonne. Le noeud porte le `.prix` ; sous
+        # `data.Objets[…].prix` : la colonne. Le noeud porte le `.prix` ; sous
         # lui, une indexation par crochets, et sous elle la table.
         if node.notation != _nodes.IndexNotation.DOT:
             continue
@@ -581,7 +581,7 @@ def iter_data_refs(text: str, path: Path | None = None,
 
 
 def _rewrite_data_refs(text: str, refs: list[DataRef], new: str) -> tuple[str, int]:
-    """Remplace chaque nom repéré, de droite à gauche — le reste du fichier,
+    """Remplace chaque nom repéré, de droite à gauche : le reste du fichier,
     mise en forme et commentaires compris, est préservé octet pour octet."""
     out = text
     for r in sorted(refs, key=lambda r: r.start, reverse=True):
@@ -606,7 +606,7 @@ def rename_data_column_in_project(project, table: str,
 
 
 def _rename_by_position(project, new: str, find) -> dict[Path, int]:
-    """Cherche puis réécrit, script par script — commun à tout ce qui se
+    """Cherche puis réécrit, script par script : commun à tout ce qui se
     renomme par POSITION plutôt que par littéral (tables de données, globals,
     constantes : `find` rend une liste d'objets `.start`/`.stop`, peu importe
     leur type exact)."""
@@ -625,14 +625,14 @@ def _rename_by_position(project, new: str, find) -> dict[Path, int]:
     return changed
 
 
-# ── Globals et constantes — même second type de site ──────────────
+# ── Globals et constantes : même second type de site ──────────────
 #
 # `global.nom` / `global.nom[i]` / `const.nom` (chantier global/const) : le même
 # repérage que `data.Objets`, un seul niveau de namespace en moins. `_ns_field`
 # est `_table_of` généralisé au namespace ("global" ou "const" au lieu de
 # `DATA_NS` figé) ; `iter_var_refs` couvre les TROIS formes d'un coup, parce
 # que `global.nom[i]` porte le même noeud `Index(global, nom)` QUE `global.nom`
-# nu — seul ce qui l'ENTOURE diffère, pas le noeud à renommer.
+# nu : seul ce qui l'ENTOURE diffère, pas le noeud à renommer.
 
 @dataclass(frozen=True)
 class VarRef:
@@ -682,7 +682,7 @@ def iter_var_refs(text: str, path: Path | None = None,
 def rename_var_in_project(project, ns: str, old: str, new: str) -> dict[Path, int]:
     """Réécrit `global.<old>` (ou `const.<old>`) en `<new>` dans tous les
     scripts, quelle que soit la forme (nue, indexée). `Project.rename_variable`
-    l'appelle EN PLUS de `rename_lua_refs(DOMAIN_GLOBAL, …)` — celui-ci reste
+    l'appelle EN PLUS de `rename_lua_refs(DOMAIN_GLOBAL, …)` : celui-ci reste
     nécessaire pour `save:read(slot, "nom")`, qui cite le nom en chaîne."""
     return _rename_by_position(project, new,
                                lambda text, p: list(iter_var_refs(text, p, ns=ns, name=old)))

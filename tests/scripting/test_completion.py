@@ -220,8 +220,11 @@ _PROJECT = _NS(
 
 
 def _nbd():
+    from unittest import mock
     from scripting.project_names import names_by_domain
-    return names_by_domain(_PROJECT)
+    # La scène factice n'a pas de géométrie OAM : on dit juste que chaque prefab y est poolé.
+    with mock.patch("codegen.oam_alloc.scene_pool_instances", return_value=1):
+        return names_by_domain(_PROJECT)
 
 
 def _refs(prefix):

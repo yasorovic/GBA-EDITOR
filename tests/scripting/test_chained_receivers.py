@@ -19,6 +19,8 @@ refusée par le checker — jamais ignorée, jamais du C invalide.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 
@@ -90,7 +92,7 @@ def test_la_forme_chainee_donne_le_meme_c_que_le_local(chained, local, receiver_
     # La déclaration du local (`Actor* a = …;` / `int b = …;`) disparaît : c'est
     # elle que le chaînage supprime. Ce qui reste est l'usage, où le nom vaut son C.
     usage = [ln for ln in via_local if not ln.endswith(f" {name} = {receiver_c};")]
-    expected = [ln.replace(f"({name}", f"({receiver_c}") for ln in usage]
+    expected = [re.sub(rf"\({name}\b", f"({receiver_c}", ln) for ln in usage]
     assert _c_body(chained) == expected
 
 

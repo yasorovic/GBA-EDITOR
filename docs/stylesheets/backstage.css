@@ -21,3 +21,482 @@ article a.headerlink:focus-visible {
   opacity: 1;
   visibility: visible;
 }
+
+/* Barre latérale : le chevron de dépliage est à gauche du titre. */
+.sidebar-tree label {
+  right: auto;
+  left: 0;
+  background: transparent;
+}
+
+.sidebar-tree .reference,
+.sidebar-tree li.has-children > .reference {
+  padding-left: calc(var(--sidebar-expander-width) + var(--sidebar-item-spacing-horizontal) / 2);
+  padding-right: var(--sidebar-item-spacing-horizontal);
+}
+
+/* Polices (SIL OFL, textes joints dans assets/fonts) : Balsamiq Sans Bold pour les titres, Sniglet pour la marque légère. */
+@font-face {
+  font-family: "Sniglet";
+  font-weight: 400;
+  src: url("fonts/Sniglet-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Balsamiq Sans";
+  font-weight: 700;
+  src: url("fonts/BalsamiqSans-Bold.ttf") format("truetype");
+  font-display: swap;
+}
+
+article :is(h1, h2, h3, h4) {
+  font-family: "Balsamiq Sans", var(--font-stack);
+  font-weight: 700;
+}
+
+/* Couleurs d'accent de la marque, pour les remplissages et les filets (le texte accentué prend le violet en clair, le jaune en sombre : voir conf.py). */
+body {
+  --backstage-accent: #aa50b4;
+  --backstage-yellow: #e7d642;
+  --backstage-blue: #2f6bb4;
+  --backstage-teal: #2faeb4;
+}
+
+/* Accueil : de l'air au-dessus de l'accroche. */
+body:has(.backstage-home-kicker) article {
+  padding-top: 2.5rem;
+}
+
+/* Accueil : une accroche, un bouton principal, puis des cartes sobres. */
+.backstage-home-kicker {
+  margin: 0 0 0.25rem;
+  color: var(--color-brand-content);
+  font-family: "Sniglet", var(--font-stack);
+  font-size: 1.1rem;
+}
+
+body:has(.backstage-home-kicker) article h1 {
+  margin-top: 0;
+  font-size: 2.6rem;
+  line-height: 1.15;
+}
+
+.backstage-home-lead {
+  max-width: 38rem;
+  font-size: 1.15rem;
+}
+
+/* Boutons : aplat, contour épais, texte noir sur la couleur d'accent.
+   Les sélecteurs `article a…` l'emportent sur la couleur et le soulignement des liens du thème. */
+article a.backstage-btn {
+  display: inline-block;
+  margin: 0.5rem 0;
+  padding: 0.5rem 1.2rem;
+  border-radius: 999px;
+  border: 3px solid #000;
+  font-family: "Balsamiq Sans", var(--font-stack);
+  font-weight: 700;
+  font-size: 1.05rem;
+  text-decoration: none;
+}
+
+article a.backstage-btn-primary,
+article a.backstage-btn-primary:visited,
+article a.backstage-btn-primary:hover {
+  background: var(--backstage-yellow);
+  color: #000;
+}
+
+article a.backstage-btn-primary:hover {
+  filter: brightness(1.12);
+}
+
+article a.backstage-btn-secondary,
+article a.backstage-btn-secondary:visited {
+  background: transparent;
+  border-color: var(--color-foreground-primary);
+  color: var(--color-foreground-primary);
+}
+
+article a.backstage-btn-secondary:hover {
+  background: var(--color-background-secondary);
+  color: var(--color-foreground-primary);
+}
+
+/* Cartes : contour noir simple et une barre colorée en haut, une couleur par carte. */
+.backstage-card {
+  --card-accent: var(--backstage-accent);
+  overflow: hidden;
+  border: 2px solid #000;
+  border-radius: 10px;
+  background: var(--color-background-secondary);
+}
+
+.backstage-card::before {
+  content: "";
+  display: block;
+  height: 0.7rem;
+  background: var(--card-accent);
+  border-bottom: 2px solid #000;
+}
+
+.backstage-card-purple { --card-accent: var(--backstage-accent); }
+.backstage-card-blue   { --card-accent: var(--backstage-blue); }
+.backstage-card-teal   { --card-accent: var(--backstage-teal); }
+
+.backstage-card .sd-card-title {
+  font-family: "Balsamiq Sans", var(--font-stack);
+  font-weight: 700;
+  font-size: 1.15rem;
+}
+
+.backstage-card:hover {
+  background: var(--color-background-hover);
+}
+
+.backstage-home-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+}
+
+.backstage-home-actions p {
+  margin: 0;
+}
+
+.backstage-cards.sd-container-fluid {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.backstage-home-mascot {
+  float: right;
+  width: min(220px, 32%);
+  margin: 1.5rem 0 1rem 1.5rem;
+}
+
+/* Captures de l'éditeur : coins arrondis et filet discret, lisibles en clair comme en sombre. */
+img.backstage-screenshot {
+  border-radius: 8px;
+  border: 1px solid var(--color-background-border);
+}
+
+/* Tableaux : contour noir simple, coins arrondis, en-tête en aplat de la couleur d'accent (sans ombre). */
+article table.docutils {
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 2px solid #000;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+article table.docutils th,
+article table.docutils td {
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  border-bottom: 1px solid var(--color-background-border);
+}
+
+article table.docutils tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+article table.docutils thead th {
+  background: var(--backstage-accent);
+  color: #000;
+  border-bottom: 2px solid #000;
+  text-align: left;
+  font-family: "Balsamiq Sans", var(--font-stack);
+  font-weight: 700;
+}
+
+article table.docutils thead th:first-child {
+  border-top-left-radius: 8px;
+}
+
+article table.docutils thead th:last-child {
+  border-top-right-radius: 8px;
+}
+
+article table.docutils tbody tr:last-child td:first-child {
+  border-bottom-left-radius: 8px;
+}
+
+article table.docutils tbody tr:last-child td:last-child {
+  border-bottom-right-radius: 8px;
+}
+
+/* Couleurs de barre des cartes du glossaire (palette de la marque). */
+body {
+  --backstage-orange: #f29a25;
+  --backstage-red: #f23325;
+}
+
+.backstage-card-orange { --card-accent: var(--backstage-orange); }
+.backstage-card-red    { --card-accent: var(--backstage-red); }
+.backstage-card-yellow { --card-accent: var(--backstage-yellow); }
+
+/* Pied de carte (nombre de fonctions) : séparé du texte par un trait noir. */
+.backstage-card .sd-card-footer {
+  background: transparent;
+  border-top: 2px solid #000;
+  color: var(--color-foreground-secondary);
+  font-size: 0.9rem;
+}
+
+/* Barre latérale : les sections de premier niveau sont des boîtes à contour noir ; celle de la page courante est jaune. */
+.sidebar-tree .toctree-l1 > a.reference {
+  display: block;
+  width: auto;
+  margin: 0.3rem 0.75rem;
+  border: 2px solid #000;
+  border-radius: 8px;
+  background: var(--color-background-primary);
+  color: var(--color-foreground-primary);
+  font-weight: 600;
+}
+
+.sidebar-tree .toctree-l1 > label {
+  top: calc(0.3rem + 2px);
+  left: calc(0.75rem + 2px);
+}
+
+.sidebar-tree .toctree-l1.current > a.reference {
+  background: var(--backstage-yellow);
+  color: #000;
+}
+
+.sidebar-tree .toctree-l1.current > label .icon {
+  color: #000;
+}
+
+/* « Sur cette page » : plus de filet, et l'entrée lue est une pastille jaune à contour noir. */
+.toc-tree {
+  border-left: 0;
+}
+
+.toc-tree li > a.reference {
+  display: block;
+  margin: 0.15rem 0;
+  padding: 0.2rem 0.75rem;
+  border: 2px solid transparent;
+  border-radius: 8px;
+}
+
+.toc-tree li.scroll-current > a.reference {
+  background: var(--backstage-yellow);
+  border-color: #000;
+  color: #000;
+  font-weight: 600;
+}
+
+/* Blocs de code : panneau gris (clair en thème clair, sombre en thème sombre), contour noir, bandeau violet avec le nom du langage. */
+body {
+  --backstage-code-bg: #f0f0f0;
+  --backstage-code-hll: #dcdcdc;
+}
+
+body[data-theme="dark"] {
+  --backstage-code-bg: #171717;
+  --backstage-code-hll: #2b2b2b;
+}
+
+@media (prefers-color-scheme: dark) {
+  body:not([data-theme="light"]) {
+    --backstage-code-bg: #171717;
+    --backstage-code-hll: #2b2b2b;
+  }
+}
+
+div[class^="highlight-"] {
+  display: flex;
+  flex-direction: column;
+  margin: 1rem 0;
+  overflow: hidden;
+  border: 2px solid #000;
+  border-radius: 10px;
+  background: var(--backstage-code-bg);
+}
+
+div[class^="highlight-"] > .highlight {
+  margin: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+div[class^="highlight-"]::before {
+  display: block;
+  content: "Code";
+  padding: 0.3rem 1rem;
+  border-bottom: 2px solid #000;
+  background: var(--backstage-accent);
+  color: #000;
+  font-family: "Balsamiq Sans", var(--font-stack);
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+div.highlight-lua::before { content: "Lua"; }
+div.highlight-c::before { content: "C"; }
+div.highlight-python::before { content: "Python"; }
+div.highlight-json::before { content: "JSON"; }
+div.highlight-bash::before,
+div.highlight-console::before,
+div.highlight-shell::before { content: "Shell"; }
+div.highlight-asm::before,
+div.highlight-gas::before { content: "Assembleur"; }
+
+/* Pas de bandeau pour un schéma en texte brut, ni dans un onglet (l'onglet dit déjà le langage). */
+div.highlight-text::before,
+div.highlight-default::before,
+.sd-tab-content div[class^="highlight-"]::before {
+  display: none;
+}
+
+/* Lignes mises en avant : une barre jaune à gauche. */
+.highlight .hll {
+  background: linear-gradient(to right, var(--backstage-yellow) 0 4px, var(--backstage-code-hll) 4px);
+}
+
+/* Bouton « copier » du bloc de code. */
+button.copybtn {
+  color: var(--color-foreground-secondary);
+}
+
+/* Onglets : des pastilles comme dans le menu, l'onglet actif est jaune. */
+.sd-tab-set > label.sd-tab-label {
+  margin: 0 0.5rem 0.75rem 0;
+  padding: 0.2rem 1rem;
+  border: 2px solid #000;
+  border-radius: 999px;
+  background: var(--color-background-primary);
+  color: var(--color-foreground-primary);
+  font-weight: 700;
+}
+
+.sd-tab-set > input:checked + label.sd-tab-label {
+  background: var(--backstage-yellow);
+  border-color: #000;
+  color: #000;
+}
+
+.sd-tab-set > .sd-tab-content {
+  padding: 0;
+  border-top: 0;
+  box-shadow: none;
+}
+
+.sd-tab-set > .sd-tab-content > div[class^="highlight-"] {
+  margin: 0;
+}
+
+/* Bloc « Définition » en tête d'un groupe : ce qu'on manipule, comment l'écrire, d'où ça vient. */
+.backstage-definition {
+  margin: 1rem 0;
+  padding: 0.5rem 1.25rem;
+  border: 2px solid #000;
+  border-radius: 10px;
+  background: var(--color-background-secondary);
+}
+
+.backstage-definition ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.backstage-definition li {
+  margin: 0.4rem 0;
+}
+
+/* Le chevron de dépliage n'a ni fond ni survol de couleur : seule la flèche existe. */
+.sidebar-tree li label,
+.sidebar-tree li.current > label,
+.sidebar-tree li label:hover {
+  background: transparent;
+}
+
+/* Paramètres d'une fiche : un tableau plus discret que le récapitulatif (en-tête neutre, pas violet). */
+article table.backstage-params {
+  width: 100%;
+}
+
+article table.backstage-params thead th {
+  background: var(--color-background-secondary);
+  color: var(--color-foreground-primary);
+}
+
+/* Auto-complétion des fonctions (docs/scripts/lua-search.js) : une liste à contour noir sous le champ de recherche. */
+.sidebar-search-container {
+  position: relative;
+}
+
+.lua-search-results {
+  position: absolute;
+  top: 100%;
+  left: 0.5rem;
+  right: 0.5rem;
+  z-index: 30;
+  max-height: 70vh;
+  margin: 0.25rem 0 0;
+  padding: 0.25rem;
+  overflow-y: auto;
+  list-style: none;
+  border: 2px solid #000;
+  border-radius: 10px;
+  background: var(--color-background-primary);
+}
+
+.lua-search-results[hidden] {
+  display: none;
+}
+
+.lua-search-results li {
+  margin: 0;
+}
+
+.lua-search-results a {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.1rem 0.5rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  color: var(--color-foreground-primary);
+  text-decoration: none;
+}
+
+.lua-search-results a:hover,
+.lua-search-results li.selected a {
+  background: var(--backstage-yellow);
+  color: #000;
+}
+
+.lua-search-name {
+  font-family: var(--font-stack--monospace);
+  font-size: 0.85rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.lua-search-group {
+  font-size: 0.75rem;
+  opacity: 0.75;
+}
+
+.lua-search-desc {
+  grid-column: 1 / -1;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  opacity: 0.85;
+}
+
+/* Un titre en `code` dans « Sur cette page » : pas de fond propre, il prend celui de la pastille. */
+.toc-tree a.reference code,
+.toc-tree a.reference code.literal {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}

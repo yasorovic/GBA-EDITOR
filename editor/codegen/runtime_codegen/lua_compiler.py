@@ -23,11 +23,11 @@ from scripting.codegen import generate as lua_generate, CodegenContext
 from scripting.globals import write_globals
 from scripting.constants import write_constants
 from scripting.project_names import ui_ref_kinds, data_column_kinds
-from scripting.api import LAYERS_BY_MODE, LAYER_NUMBERS
+from scripting.api import LAYERS_BY_MODE, LAYER_NUMBERS, SpriteLibrary
 
 from codegen.c_names import sym as c_sym, scene_actor_sym
 import codegen.build_output as build_output
-from codegen.oam_alloc import scene_pool_instances
+from codegen.oam_alloc import scene_pool_instances, scene_oam_layout
 from codegen.runtime_codegen.input_layout import compute_input_layout
 
 
@@ -123,31 +123,63 @@ def _export_inits(owner, script, resolver) -> dict:
     return out
 
 
+def script_exports(p, script_path) -> dict:
+    """Les exports RÉGLABLES d'un script : nom -> {"type", "values"}. Lus sur l'arbre du script
+    (même source que le reste). Vide si le script manque, n'est pas du Lua ou ne se parse pas."""
+    from scripting.parser import parse as lua_parse
+    if not script_path:
+        return {}
+    sp = p.asset_abs(script_path)
+    if not sp or not sp.exists() or sp.suffix.lower() != ".lua":
+        return {}
+    try:
+        ast = lua_parse(sp.read_text(encoding="utf-8"))
+    except Exception:  # tolerated: a syntax error is reported by the script validator
+        return {}
+    return {loc.name: {"type": loc.export_type, "values": loc.export_values}
+            for loc in ast.locals
+            if loc.export_type in _SETTABLE_EXPORTS}
+
+
 def _spawn_exports_meta(p, prefabs) -> dict:
     """Métadonnées des exports RÉGLABLES de chaque prefab, pour la table de
     `actor:spawn("X", pos, {k=v})` (tranche poolé D2) : nom de prefab → { nom
-    d'export → {"type", "values"} }. Lue sur l'arbre du script (même source que
-    le reste), et servie à TOUS les scripts — n'importe lequel peut spawner.
-    Tous les types câblés sont réglables au spawn (scalaires, refs, vec/rect)."""
-    from scripting.parser import parse as lua_parse
+    d'export → {"type", "values"} }. Servie à TOUS les scripts : n'importe lequel peut
+    spawner. Tous les types câblés sont réglables au spawn (scalaires, refs, vec/rect)."""
     out: dict = {}
     for pf in prefabs:
         sc = next((c for c in pf.components if isinstance(c, ScriptComponent)), None)
-        if not sc or not sc.script:
-            continue
-        sp = p.asset_abs(sc.script)
-        if not sp or not sp.exists() or sp.suffix.lower() != ".lua":
-            continue
-        try:
-            ast = lua_parse(sp.read_text(encoding="utf-8"))
-        except Exception:  # tolerated: a syntax error is reported by the script validator
-            continue
-        meta = {loc.name: {"type": loc.export_type, "values": loc.export_values}
-                for loc in ast.locals
-                if loc.export_type in _SETTABLE_EXPORTS}
+        meta = script_exports(p, sc.script) if sc and sc.script else {}
         if meta:
             out[pf.name] = meta
     return out
+
+
+def member_export_inits(p, scene, actor) -> list:
+    """Les valeurs d'export d'un acteur posé MEMBRE d'un modèle : [(nom, type, initialiseur C)].
+    Le membre n'a pas de code à lui : son état est celui du modèle, posé à l'entrée de scène par les
+    setters du modèle. La valeur d'INSTANCE (`exports_values`) prime sur le défaut du script, comme
+    pour un acteur compilé seul (`_export_inits`)."""
+    script = _actor_script(actor)
+    sp = p.asset_abs(script) if script else None
+    if not sp or not sp.exists() or sp.suffix.lower() != ".lua":
+        return []
+    try:
+        ast = lua_parse(sp.read_text(encoding="utf-8"))
+    except LuaParseError:  # tolerated: a syntax error is reported by the script validator
+        return []
+    text_keys = ([t.key for t in p.build_texts()] if hasattr(p, "build_texts")
+                 else [t.key for t in getattr(p, "texts", [])])
+    inits = _export_inits(actor, ast, _make_export_resolver(p, scene.name, text_keys))
+    types = {loc.name: loc.export_type for loc in ast.locals}
+    return [(name, types[name], literal) for name, literal in inits.items()]
+
+
+def _actor_exports_meta(p, scene_actors) -> dict:
+    """Les exports de chaque acteur POSÉ de la scène : nom -> { nom d'export -> {"type",
+    "values"} }, vide pour un acteur sans export. Un acteur absent du dictionnaire n'est pas
+    dans la scène : c'est ce qui distingue « aucun export » de « acteur inconnu »."""
+    return {a.name: script_exports(p, _actor_script(a)) for a, _ in scene_actors}
 
 
 def _export_c_literal(typ: str, val, values: list) -> str:
@@ -260,6 +292,23 @@ def _child_refs_for_prefab(pf) -> dict:
     l'instance, la racine étant à l'offset 0 (cf. main_gen, `prefab_group`)."""
     return {c.name: f"(self + {k})"
             for k, c in enumerate(getattr(pf, "children", []) or [], start=1)}
+
+
+def _child_sprites(p, children) -> dict:
+    """Les sprites de chaque enfant, nom Lua → `SpriteLibrary` : ce que le checker juge et
+    ce que le codegen range quand un parent pilote un enfant (`self.Canon:play_anim`).
+    `children` : les acteurs enfants (modèle `Actor`)."""
+    out = {}
+    for c in children:
+        apps = owner_appearances(p, c)
+        names, maps = _anim_union(p, c, apps[0][1] if apps else None)
+        out[c.name] = SpriteLibrary(tuple(names), tuple(tuple(m) for m in maps),
+                                    tuple(_sprite_ids(p, c)))
+    return out
+
+
+def _scene_children(actor, scene_actors) -> list:
+    return [a for a, _ in scene_actors if getattr(a, "parent", None) == actor.name]
 
 
 def _project_lists(p):
@@ -390,9 +439,16 @@ def transpile_all(
     # Les prefabs sont poolés au niveau PROJET : `actor:spawn("X")` vise la
     # liste entière, pas ce que la scène courante contient.
     _prefab_names = [pf.name for pf in prefabs]
+    # `other.name == "X"` vise `ACTOR_<scène>_X`, qui n'existe que si la scène poole X.
+    _pooled_prefab_names = [pf.name for pf in prefabs if scene_pool_instances(p, scene, pf) > 0]
     # Exports réglables par prefab (tranche poolé D2) : servis à tous les scripts
     # (ctx codegen ET ctx_check du checker), n'importe lequel peut spawner.
     _spawn_meta = _spawn_exports_meta(p, prefabs)
+    # Les sprites de chaque acteur désignable par un littéral : `actor:get("X")` (acteur de la scène)
+    # et `actor:spawn("X")` (prefab). Un prefab est un acteur, donc une seule sorte de bibliothèque.
+    _actor_libs  = _child_sprites(p, [a for a, _ in scene_actors])
+    _prefab_libs = _child_sprites(p, prefabs)
+    _actor_exports = _actor_exports_meta(p, scene_actors)
     # Résolveur des valeurs d'export → initialiseur C, scopé à CETTE scène : un
     # `actor_ref` se résout en ACTOR_* de la scène de compilation (cf. « L'acteur
     # appartient à sa scène »), une `string` en TEXT_* de la table du build.
@@ -432,7 +488,16 @@ def transpile_all(
 
     parsed_scripts = []
 
+    # Les acteurs posés qui sont des INSTANCES d'un modèle (cf. `oam_alloc.model_members`) n'ont pas de
+    # code à eux : le modèle est compilé une fois (plus bas, avec les prefabs), le membre n'apporte
+    # que ses valeurs. Nom de l'acteur -> symbole du modèle.
+    _lay = scene_oam_layout(p, scene)
+    _posed = [a for a in scene.actors if getattr(a, "active", True)]
+    _actor_models = {_posed[i].name: pl.sym for pl in _lay.pools for i in pl.members}
+
     for actor, sprite in scene_actors:
+        if actor.name in _actor_models:
+            continue
         script_path = _actor_script(actor)
         if not script_path:
             continue
@@ -484,6 +549,7 @@ def transpile_all(
             music_box_trigger_names = _snd_triggers,
             actor_names  = _actor_names,
             prefab_names = _prefab_names,
+            pooled_prefab_names = _pooled_prefab_names,
             global_names = list(global_names) if global_names else None,
             global_types = {g.name: g.type for g in p.globals},
             # sert le checker de save:read('nom') — un nom
@@ -496,6 +562,7 @@ def transpile_all(
             global_counts = {g.name: max(1, int(getattr(g, "count", 1) or 1))
                              for g in p.globals},
             child_names  = list(_child_refs_for_actor(actor, scene_actors, scene.name).keys()),
+            child_sprites = _child_sprites(p, _scene_children(actor, scene_actors)),
             # Une LISTE même vide, jamais None : depuis que `const.nom` est un
             # accès pointé (chantier global/const), c'est le checker seul qui
             # juge de l'existence d'une constante — `None` voudrait dire
@@ -517,6 +584,9 @@ def transpile_all(
             has_persistent = _has_persist,
             data_tables  = _data_tables,
             spawn_exports = _spawn_meta,
+            actor_sprites = _actor_libs,
+            prefab_sprites = _prefab_libs,
+            actor_exports = _actor_exports,
         )
         script, ok = _compile_script(sp, ctx_check, emit)
         if not ok:
@@ -550,6 +620,7 @@ def transpile_all(
                 music_box_trigger_names = _snd_triggers,
                 actor_names  = _actor_names,
             prefab_names = _prefab_names,
+            pooled_prefab_names = _pooled_prefab_names,
                 global_names = list(global_names) if global_names else None,
             global_types = {g.name: g.type for g in p.globals},
             # sert le checker de save:read('nom') — un nom
@@ -577,6 +648,9 @@ def transpile_all(
                 has_persistent = _has_persist,
                 data_tables  = _data_tables,
                 spawn_exports = _spawn_meta,
+                actor_sprites = _actor_libs,
+                prefab_sprites = _prefab_libs,
+                actor_exports = _actor_exports,
             )
             scene_script_ast, ok = _compile_script(sp, ctx_check, emit)
             if not ok:
@@ -598,6 +672,7 @@ def transpile_all(
             lua_file      = sp.name,
             c_file        = f"actor_{s}.c",
             child_refs    = _child_refs_for_actor(actor, scene_actors, scene.name),
+            child_sprites = _child_sprites(p, _scene_children(actor, scene_actors)),
             actor_name    = actor.name,
             actor_sym     = s,
             scene_sym     = c_sym(scene.name),
@@ -641,6 +716,10 @@ def transpile_all(
             data_tables   = _data_tables,
             export_inits  = _export_inits(actor, script, _export_resolver),
             spawn_exports = _spawn_meta,
+            actor_sprites = _actor_libs,
+            prefab_sprites = _prefab_libs,
+            actor_exports = _actor_exports,
+            actor_models = _actor_models,
         )
         c_code, gen_warnings, _ = lua_generate(script, ctx)
         for w in gen_warnings:
@@ -700,6 +779,7 @@ def transpile_all(
             music_box_trigger_names = _snd_triggers,
             actor_names  = _actor_names,
             prefab_names = _prefab_names,
+            pooled_prefab_names = _pooled_prefab_names,
             global_names = list(global_names) if global_names else None,
             global_types = {g.name: g.type for g in p.globals},
             # sert le checker de save:read('nom') — un nom
@@ -712,6 +792,7 @@ def transpile_all(
             global_counts = {g.name: max(1, int(getattr(g, "count", 1) or 1))
                              for g in p.globals},
             child_names  = list(_child_refs_for_prefab(pf).keys()),
+            child_sprites = _child_sprites(p, pf.children or []),
             const_names  = list(const_names),
             sfx_component_name = pf_sfx_comp_name,
             element_names = element_names,
@@ -722,6 +803,9 @@ def transpile_all(
             has_persistent = _has_persist,
             data_tables  = _data_tables,
             spawn_exports = _spawn_meta,
+            actor_sprites = _actor_libs,
+            prefab_sprites = _prefab_libs,
+            actor_exports = _actor_exports,
         )
         pf_ast, ok = _compile_script(sp_path, ctx_check, emit, f"prefab {pf.name}")
         if not ok:
@@ -732,6 +816,7 @@ def transpile_all(
             lua_file      = sp_path.name,
             c_file        = f"actor_{pf_sym}.c",
             child_refs    = _child_refs_for_prefab(pf),
+            child_sprites = _child_sprites(p, pf.children or []),
             actor_name    = pf.name,
             actor_sym     = pf_sym,
             scene_sym     = scene_sym,
@@ -782,6 +867,10 @@ def transpile_all(
             # instance.
             export_inits  = _export_inits(pf, pf_ast, _export_resolver),
             spawn_exports = _spawn_meta,
+            actor_sprites = _actor_libs,
+            prefab_sprites = _prefab_libs,
+            actor_exports = _actor_exports,
+            actor_models = _actor_models,
         )
         pf_c, pf_warnings, pf_state_bytes = lua_generate(pf_ast, ctx_pf)
         for w in pf_warnings:
@@ -846,6 +935,10 @@ def transpile_all(
             has_persistent = _has_persist,
             data_tables   = _data_tables,
             spawn_exports = _spawn_meta,
+            actor_sprites = _actor_libs,
+            prefab_sprites = _prefab_libs,
+            actor_exports = _actor_exports,
+            actor_models = _actor_models,
         )
         c_code, sc_warnings, _ = lua_generate(scene_script_ast, ctx_sc)
         for w in sc_warnings:
@@ -918,6 +1011,9 @@ def transpile_all(
             has_persistent = _has_persist,
             data_tables  = _data_tables,
             spawn_exports = _spawn_meta,
+            actor_sprites = _actor_libs,
+            prefab_sprites = _prefab_libs,
+            actor_exports = _actor_exports,
         )
         cam_ast, ok = _compile_script(sp, ctx_check, emit, f"camera {cam.name}")
         if not ok:
@@ -962,6 +1058,10 @@ def transpile_all(
             has_persistent = _has_persist,
             data_tables   = _data_tables,
             spawn_exports = _spawn_meta,
+            actor_sprites = _actor_libs,
+            prefab_sprites = _prefab_libs,
+            actor_exports = _actor_exports,
+            actor_models = _actor_models,
         )
         cam_c, cam_warnings, _ = lua_generate(cam_ast, ctx_cam)
         for w in cam_warnings:

@@ -29,7 +29,7 @@ def _projet(tmp_path, *, scene: Scene, prefabs=None, sprites=True) -> Project:
 def test_scene_vide_ne_consomme_rien(tmp_path):
     p = _projet(tmp_path, scene=Scene(name="S"))
     lay = scene_oam_layout(p, p.scenes[0])
-    assert lay.placed_entries == 0 and lay.pool_entries == 0 and lay.used == 0
+    assert lay.placed_entries == 0 and lay.pool_entries == 0 and lay.table_size == 0
     assert lay.free == OAM_LIMIT and lay.over_budget is False
 
 
@@ -39,7 +39,7 @@ def test_les_acteurs_poses_sont_comptes(tmp_path):
     lay = scene_oam_layout(p, scene)
     assert lay.placed == 3
     assert lay.placed_entries == 3
-    assert lay.free == OAM_LIMIT - 3
+    assert lay.free == OAM_LIMIT      # aucune interface : tous les emplacements restent aux acteurs
 
 
 # ── Le pool se dit en INSTANCES, se paie en SLOTS ─────────────────────
@@ -61,50 +61,40 @@ def test_un_prefab_a_sous_arbre_coute_instances_x_parties(tmp_path):
     assert scene_oam_layout(p, scene).pool_entries == 12       # 4 × 3
 
 
-# ── Les 128 entrées se distribuent par priorité, rien ne bloque ───────
+# ── Les 128 emplacements se prennent à la frame, rien n'est réservé ───
 
-def test_un_pool_recoit_ce_qui_reste(tmp_path):
+def test_un_pool_garde_toutes_ses_instances_au_dela_de_128(tmp_path):
+    """L'OAM borne ce qui s'AFFICHE ensemble, pas ce qui existe : chaque instance a son état."""
     scene = Scene(name="S", actors=[Actor(name=f"A{i}") for i in range(120)])
     ball = Prefab(name="Ball")
     scene.prefab_pools = {"Ball": 16}                          # 120 + 16 = 136
     p = _projet(tmp_path, scene=scene, prefabs=[ball])
     lay = scene_oam_layout(p, scene)
-    pool = lay.pools[0]
-    assert pool.instances == 16 and pool.granted == 8 and pool.hidden == 8
-    assert lay.used == OAM_LIMIT and lay.over_budget is False
+    assert lay.pools[0].instances == 16 and lay.pools[0].entry_size == 16
+    assert lay.table_size == 136 and lay.over_budget is False
     assert lay.requested == 136                                # la demande reste visible
 
 
-def test_les_acteurs_posés_passent_avant_les_pools(tmp_path):
+def test_tous_les_acteurs_poses_ont_un_etat_au_dela_de_128(tmp_path):
     scene = Scene(name="S", actors=[Actor(name=f"A{i}") for i in range(130)])
     ball = Prefab(name="Ball")
     scene.prefab_pools = {"Ball": 4}
     p = _projet(tmp_path, scene=scene, prefabs=[ball])
     lay = scene_oam_layout(p, scene)
-    assert lay.placed_entries == OAM_LIMIT and lay.placed_hidden == 2
-    assert lay.pools[0].granted == 0 and lay.pools[0].hidden == 4
-    assert lay.placed_entry[:128] == list(range(128)) and lay.placed_entry[128:] == [-1, -1]
+    assert lay.placed_entries == 130
+    assert lay.placed_entry == list(range(130))
+    assert lay.pools[0].entry_start == 130
 
 
-def test_pile_dans_le_budget_rien_n_est_cache(tmp_path):
-    scene = Scene(name="S", actors=[Actor(name=f"A{i}") for i in range(100)])
-    ball = Prefab(name="Ball")
-    scene.prefab_pools = {"Ball": 28}                          # 100 + 28 = 128
-    p = _projet(tmp_path, scene=scene, prefabs=[ball])
-    lay = scene_oam_layout(p, scene)
-    assert lay.used == OAM_LIMIT and lay.free == 0 and lay.pool_hidden == 0 and lay.table_size == OAM_LIMIT
-
-
-def test_une_instance_cachee_ecrit_sur_l_entree_poubelle(tmp_path):
-    """Le tableau d'entrées gagne de quoi absorber UNE instance : elle n'écrit jamais hors tableau."""
+def test_le_tableau_d_etats_n_a_pas_d_entree_poubelle(tmp_path):
+    """Une instance écrit toujours dans SON état : la table fait exactement la somme des états."""
     scene = Scene(name="S", actors=[Actor(name=f"A{i}") for i in range(126)])
     boss = Prefab(name="Boss")
     boss.children = [Actor(name="Arm")]                        # 2 entrées par instance
-    scene.prefab_pools = {"Boss": 3}                           # 2 restantes : 1 instance
+    scene.prefab_pools = {"Boss": 3}
     p = _projet(tmp_path, scene=scene, prefabs=[boss])
     lay = scene_oam_layout(p, scene)
-    assert lay.pools[0].granted == 1 and lay.pools[0].hidden == 2
-    assert lay.scratch_start == OAM_LIMIT and lay.table_size == OAM_LIMIT + 2
+    assert lay.pools[0].entry_size == 6 and lay.table_size == 126 + 6
 
 
 # ── Le poste UI est nul en B1 (décomposition par scène = B2) ──────────
@@ -116,27 +106,27 @@ def test_ui_est_nul_en_b1(tmp_path):
     assert scene_oam_layout(p, scene).ui == 0
 
 
-# ── Le validateur avertit, il ne bloque pas ───────────────────────────
+# ── Le validateur ne bloque que l'interface ───────────────────────────
 
-def test_le_validateur_avertit_d_un_pool_qui_ne_tient_pas(tmp_path):
+def test_le_validateur_se_tait_quand_les_acteurs_depassent_128(tmp_path):
+    """Un surplus d'acteurs n'est un souci qu'à l'écran, au jeu : pas d'avertissement au build."""
     from core.validator import ValidationContext, _check_actor_budget
-    scene = Scene(name="S", actors=[Actor(name=f"A{i}") for i in range(120)])
+    scene = Scene(name="S", actors=[Actor(name=f"A{i}") for i in range(130)])
     scene.prefab_pools = {"Ball": 16}
     p = _projet(tmp_path, scene=scene, prefabs=[Prefab(name="Ball")])
     ctx = ValidationContext(p)
     _check_actor_budget(ctx)
-    assert ctx.errors == []
-    assert len(ctx.warnings) == 1 and "'Ball'" in ctx.warnings[0].message
+    assert ctx.errors == [] and ctx.warnings == []
 
 
-def test_le_validateur_avertit_d_un_acteur_pose_sans_entree(tmp_path):
+def test_le_validateur_refuse_une_interface_qui_depasse_l_oam(tmp_path, monkeypatch):
+    import codegen.oam_alloc as oam_alloc
     from core.validator import ValidationContext, _check_actor_budget
-    scene = Scene(name="S", actors=[Actor(name=f"A{i}") for i in range(130)])
-    p = _projet(tmp_path, scene=scene)
+    monkeypatch.setattr(oam_alloc, "scene_ui_obj_slots", lambda scene, project: 129)
+    p = _projet(tmp_path, scene=Scene(name="S", actors=[Actor(name="A")]))
     ctx = ValidationContext(p)
     _check_actor_budget(ctx)
-    assert ctx.errors == []
-    assert len(ctx.warnings) == 1 and "2 sprite actor" in ctx.warnings[0].message
+    assert len(ctx.errors) == 1 and "interface" in ctx.errors[0].message
 
 
 def test_le_validateur_se_tait_dans_le_budget(tmp_path):
@@ -167,11 +157,11 @@ def test_un_prefab_spawne_sans_pool_declare_prend_le_defaut(tmp_path):
 
 
 def test_le_defaut_ne_depend_pas_de_la_place_oam(tmp_path):
-    """La taille du pool dit combien d'instances VIVENT ; l'OAM dit combien s'affichent."""
-    p, scene, ball = _scene_qui_spawne(tmp_path, actors=125)       # 3 entrées libres
+    """La taille du pool dit combien d'instances VIVENT ; l'OAM dit combien s'affichent ENSEMBLE."""
+    p, scene, ball = _scene_qui_spawne(tmp_path, actors=125)       # 125 acteurs : l'OAM n'y change rien
     assert scene_pool_instances(p, scene, ball) == POOL_DEFAULT_INSTANCES
     pool = scene_oam_layout(p, scene).pools[0]
-    assert pool.granted == 3 and pool.hidden == POOL_DEFAULT_INSTANCES - 3
+    assert pool.instances == pool.entry_size == POOL_DEFAULT_INSTANCES
 
 
 def test_le_pool_declare_garde_la_main(tmp_path):
@@ -209,13 +199,13 @@ def test_le_validateur_avertit_de_matrices_affines_manquantes(tmp_path):
     assert "36 affine matrices" in ctx.warnings[0].message and "last 4" in ctx.warnings[0].message
 
 
-def test_une_instance_cachee_ne_demande_pas_de_matrice(tmp_path):
+def test_chaque_instance_d_etat_demande_sa_matrice(tmp_path):
     from codegen.oam_alloc import scene_affine_requests
-    scene = Scene(name="S", actors=[Actor(name=f"A{i}") for i in range(126)])   # 2 entrées libres
+    scene = Scene(name="S", actors=[Actor(name=f"A{i}") for i in range(126)])
     scene.prefab_pools = {"Ball": 6}
     p = _projet(tmp_path, scene=scene, prefabs=[Prefab(name="Ball")])
     _tout_affine(p)
-    assert scene_affine_requests(p, scene) == 126 + 2          # 2 instances affichées sur 6
+    assert scene_affine_requests(p, scene) == 126 + 6          # une matrice par instance : l'affine reste statique
 
 
 def test_le_validateur_se_tait_sous_32_matrices(tmp_path):

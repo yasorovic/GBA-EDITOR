@@ -1852,9 +1852,6 @@
     "datainsp.no_named": {
       "text": "no {type} named “{name}” in this project"
     },
-    "datainsp.text_content": {
-      "text": "“{content}”"
-    },
     "datainsp.pal_colors": {
       "text": "{n} colors"
     },
@@ -2207,8 +2204,8 @@
       "text": "Build error"
     },
     "win.oam_title": { "text": "OAM (Object Attribute Memory)" },
-    "win.oam_tip": { "text": "OAM is a 1 KiB memory holding 128 sprite entries (OBJ). Each entry holds the position, size and appearance of one hardware sprite.\nCounted here: the entries the build reserves for the active scene. These are its active actors that have a sprite, shown or hidden, its sprite-target interface zones and its prefab pools." },
-    "win.oam_note": { "text": "An actor without a sprite uses no entry. Entries beyond 128 are not drawn, and the build refuses the scene." },
+    "win.oam_tip": { "text": "OAM is a 1 KiB memory holding 128 sprite entries (OBJ). Each entry holds the position, size and appearance of one hardware sprite.\nCounted here: the most the active scene can show at once. These are its active actors that have a sprite, shown or hidden, its sprite-target interface zones and its prefab pools." },
+    "win.oam_note": { "text": "An actor without a sprite uses no entry. At run time, only the sprites on screen take an entry; the surplus beyond 128 on screen is not drawn." },
     "win.cycles_title": { "text": "OBJ cycles per scanline" },
     "win.cycles_tip": { "text": "The GBA has 1210 cycles per scanline to draw sprites. A regular sprite costs about its width in pixels. A rotated or scaled sprite costs twice its width plus 10.\nCounted here: the busiest of the 160 lines of the active scene, from the sprites shown at scene start and the sprite-target text zones." },
     "win.cycles_note": { "text": "Beyond the budget, the sprites that come later in OAM order are not drawn on that line." },
@@ -3529,7 +3526,6 @@
     "bginp.color_mapping_ramp": { "text": "Hue & saturation ramp" },
     "bginp.fill_tip_paint": { "text": "Fills a contiguous area of identical cells with the selected color." },
     "bginp.rectangle_tip_paint": { "text": "Puts the selected color in every cell of a rectangular area." },
-    "bginp.eraser_tip_paint": { "text": "Removes both the palette repaint and the painted color of each 8×8 cell crossed: the original tile and palette come back." },
     "hints.bg.fill_tiles": { "text": "Fills the connected cells with the selected color" },
     "hints.bg.paint_rect_tiles": { "text": "Paints a rectangle with the selected color" },
     "hints.bg.erase_tiles": { "text": "Restores the original tiles" },

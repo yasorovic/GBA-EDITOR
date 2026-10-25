@@ -1,8 +1,8 @@
 """
-scripting/script_notes.py — Note libre utilisateur d'un script.
+scripting/script_notes.py : Note libre utilisateur d'un script.
 
 Convention : un bloc de commentaire Lua tout en tête de fichier, jamais
-exécuté, jamais compilé — mimique les champs `notes` de Scene/Actor/Prefab
+exécuté, jamais compilé : mimique les champs `notes` de Scene/Actor/Prefab
 pour un objet qui n'a pas de sidecar JSON (un script est un simple fichier).
 
     --[[@note
@@ -11,7 +11,7 @@ pour un objet qui n'a pas de sidecar JSON (un script est un simple fichier).
 
 Toujours la toute première chose du fichier (avant la table `exports`,
 cf. scripting/exports_parser.py). read_note()/write_note() ne touchent que ce
-bloc — le reste du script est préservé tel quel.
+bloc : le reste du script est préservé tel quel.
 """
 from __future__ import annotations
 import re

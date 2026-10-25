@@ -14,6 +14,8 @@
 #ifndef RUNTIME_API_INLINE_H
 #define RUNTIME_API_INLINE_H
 
+#include "gba_debug.h"   /* actor_exists_warn, actor_active_warn : le log d'un appel sur un acteur disparu */
+
 /* Les constantes que voient les unités de script — énumérations matérielles
    nommées (modes OAM, directions, blending, ease) ET régions de window
    (`WINR_*`) — ne sont PLUS ici : leurs `#define` sont GÉNÉRÉS dans `runtime_api.h`
@@ -270,11 +272,71 @@ static inline Vec3 vec3_splat(int k) { return (Vec3){ k, k, k }; }
 static inline void actor_set_position(Actor* s, Vec2 p) { s->x=p.x<<8; s->y=p.y<<8; }
 static inline Vec2 actor_get_position(const Actor* s)   { return (Vec2){ s->x>>8, s->y>>8 }; }
 
-/* get_actor rend un acteur VIVANT, ou nil : un acteur détruit au runtime (`self:destroy()` →
-   active=0) n'est plus « là », et le dire au script est une information de
-   gameplay (« ma cible existe-t-elle encore ? »). Le chemin compile-time de
-   get_actor passe donc par ce filtre — coût : un test du drapeau active. */
-static inline Actor* actor_live(Actor* s) { return (s && s->active) ? s : (Actor*)0; }
+/* get_actor rend un acteur qui EXISTE, ou nil : un acteur détruit au runtime (`self:destroy()` →
+   alive=0) n'est plus « là », et le dire au script est une information de
+   gameplay (« ma cible existe-t-elle encore ? »). Un acteur seulement désactivé existe
+   toujours : on l'atteint (pour le réactiver), ses actions sont sautées tant qu'il l'est
+   (cf. `actor_active_warn`). Le chemin compile-time de get_actor passe par ce filtre — coût :
+   un test du drapeau alive. */
+static inline Actor* actor_live(Actor* s) { return (s && s->alive) ? s : (Actor*)0; }
+
+/* Les instances d'un MODÈLE (un prefab dans la scène) se retrouvent par sa table `g_model_*`.
+   `actor:count("Bullet")` compte celles qui existent ; `actor:get("Bullet", i)` rend la i-ème
+   (0-based ici), ou nil. L'indice est celui des instances VIVANTES, dans l'ordre de la table :
+   détruire une instance en cours de boucle décale les suivantes, comme retirer d'une liste. */
+static inline int actor_model_count(const ModelSlot* t, int n) {
+    int c = 0;
+    for (int k = 0; k < n; k++) c += g_actors[t[k].slot].alive;
+    return c;
+}
+static inline Actor* actor_model_nth(const ModelSlot* t, int n, int n0) {
+    if (n0 < 0) return (Actor*)0;
+    for (int k = 0; k < n; k++)
+        if (g_actors[t[k].slot].alive && n0-- == 0) return &g_actors[t[k].slot];
+    return (Actor*)0;
+}
+
+/* Une RÉFÉRENCE d'acteur rangée dans une variable qui survit à l'image (variable de tête d'un script,
+   état d'une instance) est un entier : la génération de l'emplacement (+1, pour que 0 reste « aucun
+   acteur ») dans les 16 bits hauts, son indice dans `g_actors` dans les 16 bits bas. Elle ne
+   résout que tant que l'emplacement n'a pas changé de main : détruit, ré-occupé par un spawn ou
+   quitté avec sa scène, il rend nil. Un acteur désactivé (`deactivate`) résout toujours, il peut
+   être réactivé. */
+static inline int actor_ref_make(const Actor* a) {
+    return a ? ((((int)a->gen + 1) << 16) | (int)(a - g_actors)) : 0;
+}
+static inline Actor* actor_ref_get(int h) {
+    if (!h) return (Actor*)0;
+    Actor* a = &g_actors[h & 0xFFFF];
+    return ((h >> 16) == (int)a->gen + 1) ? a : (Actor*)0;
+}
+
+/* Un script qui agit sur une RÉFÉRENCE d'acteur (`boss:move(...)`, `b:hide()`, `boss.hp`) : l'acteur a pu
+   être détruit ou désactivé depuis qu'on l'a obtenu, ou la référence vaut nil. Rien n'est exigé de
+   l'auteur (il n'est pas obligé de tester) ; l'appel est simplement sauté, et un build DEBUG
+   l'écrit dans le log mGBA. En release `debug_*` est vide : il reste le test du drapeau.
+   Deux exigences, selon ce que l'appel touche :
+     - `actor_exists_warn` : l'acteur EXISTE (alive). Pour ce qui le concerne en tant qu'objet : son
+       état d'export, et son cycle de vie (`activate`, `deactivate`, `destroy` s'appliquent aussi à un
+       acteur désactivé) ;
+     - `actor_active_warn` : l'acteur est de plus ACTIF. Pour tout ce qui agit dans le jeu (bouger,
+       animer, afficher) : un acteur désactivé est en sommeil. */
+static inline int actor_exists_warn(const Actor* a, const char* what) {
+    if (a && a->alive) return 1;
+    debug_write_str("warning: ");
+    debug_write_str(what);
+    debug_write_str(" skipped, the actor is destroyed or nil");
+    debug_flush();
+    return 0;
+}
+static inline int actor_active_warn(const Actor* a, const char* what) {
+    if (a && a->active) return 1;
+    debug_write_str("warning: ");
+    debug_write_str(what);
+    debug_write_str(" skipped, the actor is destroyed, inactive or nil");
+    debug_flush();
+    return 0;
+}
 
 /* get_actor(i) — adressage DYNAMIQUE par index (« L'acteur appartient à sa
    scène »). `i0` est déjà 0-based (le codegen a replié le 1-based du langage,
@@ -518,7 +580,7 @@ static inline void actor_set_direction(Actor* s, Vec2 v) {
 }
 
 /* Activation / destruction */
-static inline void actor_destroy_internal(Actor* s)  { s->active=0; actor_oam_entry(s)->visible=0; }
+static inline void actor_destroy_internal(Actor* s)  { s->active=0; s->alive=0; s->gen++; actor_oam_entry(s)->visible=0; }
 
 /* Input */
 /* Un masque à un bit garde le comportement historique. Avec plusieurs bits,

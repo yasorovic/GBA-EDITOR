@@ -24,7 +24,8 @@ def test_une_apparence_n_emet_ni_switch_ni_lecture_du_champ():
     code = "\n".join(oam_write_lines(3, 1, [Appearance(_sprite(), 8)]))
     assert "switch" not in code and "appearance" not in code
     assert "u16 ti=(u16)(8+g_oam_entries[1].frame*" in code
-    assert "shadow_oam[1].attr0=0x0200;" in code           # branche « caché »
+    # Un acteur qui n'écrit rien ne laisse rien : `oam_hide_from` éteint en fin de frame.
+    assert "attr0=0x0200" not in code
 
 
 def test_deux_apparences_se_choisissent_par_le_champ_de_l_entree():
@@ -36,13 +37,24 @@ def test_deux_apparences_se_choisissent_par_le_champ_de_l_entree():
     assert "u16 ti=(u16)(16+g_oam_entries[1].frame" in code
     assert "-cam_x-2" in code                                # origin_x de la 2e apparence
     # une apparence inconnue ne dessine rien
-    assert "default: shadow_oam[1].attr0=0x0200; break;" in code
+    assert "default: break;" in code
 
 
 def test_l_acteur_et_l_entree_restent_deux_indices_distincts():
     code = "\n".join(oam_write_lines(7, 2, _deux()))
-    assert "g_actors[7].x" in code and "shadow_oam[2]" in code
-    assert "g_actors[2]" not in code and "shadow_oam[7]" not in code
+    assert "g_actors[7].x" in code and "g_oam_entries[2]" in code
+    assert "g_actors[2]" not in code and "g_oam_entries[7]" not in code
+    # L'emplacement OAM n'est PAS l'entrée : il vient du compteur de la frame.
+    assert "shadow_oam[_o]" in code and "shadow_oam[2]" not in code
+
+
+def test_un_sprite_n_est_ecrit_que_s_il_touche_l_ecran_et_s_il_reste_une_place():
+    """Test exact, sans marge : l'OAM boucle sur 256 en Y, une marge ferait revenir un grand
+    sprite posé hors écran de l'autre côté. Les sprites sans place sont comptés, pas écrits."""
+    code = "\n".join(oam_write_lines(0, 0, [Appearance(_sprite(frame_w=16, frame_h=24), 0)]))
+    assert "if(sx+16>0&&sx<240&&sy+24>0&&sy<160){" in code
+    assert "if(_oamn>=128){ g_oam_dropped++; } else {" in code
+    assert "int _o=_oamn++;" in code
 
 
 def test_l_ecran_ne_suit_pas_la_camera():
