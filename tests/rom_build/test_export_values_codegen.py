@@ -69,7 +69,7 @@ def test_poole_init_depuis_le_template(tmp_path):
     code, _w, _n = generate(parse(src), CodegenContext(
         actor_name="Bullet", actor_sym="Arena_Bullet", anim_names=[], sfx_names=[],
         music_names=[], global_names=set(), const_names=set(),
-        all_actor_syms=["Arena_Bullet"], is_pooled=True, pool_size=8,
+        all_actor_syms=["Arena_Bullet"], is_pooled=True,
         export_inits={"hp": "20", "dmg": "5"}))   # valeurs du template prefab
     # Uniformisation T3 : sur un prefab poolé, TOUT export réglable est par
     # instance, même lu seulement (dmg). Les deux sont donc des champs d'état.
@@ -82,7 +82,7 @@ def _gen_pooled(src, **kw):
     from scripting.codegen import generate, CodegenContext
     base = dict(actor_name="Bullet", actor_sym="Arena_Bullet", anim_names=[],
                 sfx_names=[], music_names=[], global_names=set(), const_names=set(),
-                all_actor_syms=["Arena_Bullet"], is_pooled=True, pool_size=8,
+                all_actor_syms=["Arena_Bullet"], is_pooled=True,
                 scene_sym="Arena")
     base.update(kw)
     code, _w, _n = generate(parse(src), CodegenContext(**base))

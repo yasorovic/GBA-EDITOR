@@ -305,11 +305,11 @@ def test_un_prefab_poole_definit_aussi_le_getter_a_cote_du_setter():
     from scripting.codegen import generate, CodegenContext
     ctx = CodegenContext(actor_name="Bullet", actor_sym="Sc_Bullet", anim_names=[], sfx_names=[],
                          music_names=[], global_names=set(), const_names=set(),
-                         all_actor_syms=["Sc_Bullet"], scene_sym="Sc", is_pooled=True, pool_size=4)
+                         all_actor_syms=["Sc_Bullet"], scene_sym="Sc", is_pooled=True)
     code = generate(parse(_EXPORTS_SCRIPT + _src("")), ctx)[0]
     assert "void Sc_Bullet_set_hp(Actor* self, int v)" in code
     assert ("int Sc_Bullet_get_hp(Actor* self) { return "
-            "g_state_Sc_Bullet[Sc_Bullet_pool_slot(self)].hp; }") in code
+            "Sc_Bullet_state(self)->hp; }") in code
 
 
 # ── Exports composites et références ─────────────────────────────────
@@ -360,18 +360,18 @@ def test_un_prefab_poole_definit_le_getter_d_un_composite():
     from scripting.codegen import generate, CodegenContext
     ctx = CodegenContext(actor_name="Bullet", actor_sym="Sc_Bullet", anim_names=[], sfx_names=[],
                          music_names=[], global_names=set(), const_names=set(),
-                         all_actor_syms=["Sc_Bullet"], scene_sym="Sc", is_pooled=True, pool_size=4,
+                         all_actor_syms=["Sc_Bullet"], scene_sym="Sc", is_pooled=True,
                          export_inits={"tint": "{0, 0}"})
     src = 'exports = {\n  tint = { type = "vec2", default = {0, 0} },\n}\n' + _src("")
     code = generate(parse(src), ctx)[0]
     assert "void Sc_Bullet_set_tint(Actor* self, Vec2 v)" in code
     assert ("Vec2 Sc_Bullet_get_tint(Actor* self) { return "
-            "g_state_Sc_Bullet[Sc_Bullet_pool_slot(self)].tint; }") in code
+            "Sc_Bullet_state(self)->tint; }") in code
 
 
 # ── Les instances d'un modèle : actor:count("Bullet"), actor:get("Bullet", i) ────────
 
-_POOL = "g_model_Sc_Bullet, MODEL_SC_BULLET_COUNT"
+_POOL = "g_model_Sc_Bullet, MODEL_SC_BULLET_COUNT, MODELID_SC_BULLET"
 
 
 def test_le_nombre_d_instances_vivantes_d_un_modele():

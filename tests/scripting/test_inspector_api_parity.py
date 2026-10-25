@@ -499,3 +499,11 @@ def test_c_les_instances_d_un_modele_se_parcourent_par_rang_vivant(sortie_sonde)
     assert sortie_sonde["vie_nth_ordre"] == [1, 1]           # l'ordre est celui des emplacements
     assert sortie_sonde["vie_groupe"] == [1]                 # la table dit où sont les racines
     assert sortie_sonde["vie_eclate"] == [1, 1]              # ni contiguës, ni dans l'ordre des emplacements
+
+
+def test_c_le_pool_partage_se_parcourt_par_le_modele_de_chaque_emplacement(sortie_sonde):
+    assert sortie_sonde["pool_modele"] == [1, 1, 0]
+    assert sortie_sonde["pool_nth"] == [1, 1]
+    assert sortie_sonde["pool_mixte"] == [2, 1, 1]       # les posés (la table), puis le pool
+    assert sortie_sonde["pool_hw"] == [0]                # au-delà du plus haut emplacement utilisé : rien
+    assert sortie_sonde["pool_etat"] == [1]              # un bloc d'état par `inst`

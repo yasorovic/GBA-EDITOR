@@ -40,6 +40,8 @@ int  global_read_at (int i, int k)        { (void)i; (void)k; return 0; }
 void global_write_at(int i, int k, int v) { (void)i; (void)k; (void)v; }
 
 Actor g_actors[2];
+u32 g_obj_state[16];
+int g_spool_start = 0, g_spool_end = 0, g_spool_hw = 0, g_spool_entry = -1;
 const AppearanceInit* g_appearance_init;
 OamEntry g_oam_entries[2];   /* l'affichage des acteurs : Actor.oam_entry en est l'indice */
 
@@ -327,21 +329,36 @@ int main(void) {
         const ModelSlot deux[2] = { {0, 0}, {1, 0} };           /* un modèle de deux instances */
         const ModelSlot racine[1] = { {0, 0} };                  /* une seule instance */
         x->alive = 1; x->active = 1; y->alive = 1; y->active = 1;
-        printf("vie_occupes %d %d\n", actor_model_count(deux, 2), actor_live(x) == x);
+        printf("vie_occupes %d %d\n", actor_model_count(deux, 2, 0), actor_live(x) == x);
         actor_set_active(x, 0);
-        printf("vie_desactive %d %d\n", actor_live(x) == x, actor_model_count(deux, 2));
+        printf("vie_desactive %d %d\n", actor_live(x) == x, actor_model_count(deux, 2, 0));
         actor_set_active(x, 1);
         actor_destroy_internal(x);
-        printf("vie_detruit %d %d %d\n", actor_live(x) == 0, x->alive, actor_model_count(deux, 2));
-        printf("vie_nth %d %d %d %d\n", actor_model_nth(deux, 2, 0) == y, actor_model_nth(deux, 2, 1) == 0,
-               actor_model_nth(deux, 2, -1) == 0, actor_model_nth(deux, 2, 5) == 0);
+        printf("vie_detruit %d %d %d\n", actor_live(x) == 0, x->alive, actor_model_count(deux, 2, 0));
+        printf("vie_nth %d %d %d %d\n", actor_model_nth(deux, 2, 0, 0) == y, actor_model_nth(deux, 2, 0, 1) == 0,
+               actor_model_nth(deux, 2, 0, -1) == 0, actor_model_nth(deux, 2, 0, 5) == 0);
         x->alive = 1; x->active = 1;                                /* un spawn reprend l'emplacement */
-        printf("vie_nth_ordre %d %d\n", actor_model_nth(deux, 2, 0) == x, actor_model_nth(deux, 2, 1) == y);
+        printf("vie_nth_ordre %d %d\n", actor_model_nth(deux, 2, 0, 0) == x, actor_model_nth(deux, 2, 0, 1) == y);
         /* La table dit où sont les instances : ici une seule, dont la racine est l'emplacement 0. */
-        printf("vie_groupe %d\n", actor_model_count(racine, 1));
+        printf("vie_groupe %d\n", actor_model_count(racine, 1, 0));
         /* Et elles n'ont pas à être contiguës ni dans l'ordre des emplacements. */
         const ModelSlot eclate[2] = { {1, 0}, {0, 0} };
-        printf("vie_eclate %d %d\n", actor_model_nth(eclate, 2, 0) == y, actor_model_nth(eclate, 2, 1) == x);
+        printf("vie_eclate %d %d\n", actor_model_nth(eclate, 2, 0, 0) == y, actor_model_nth(eclate, 2, 0, 1) == x);
+        /* Le pool PARTAGÉ : les instances d'un modèle se retrouvent à `Actor.model`, pas par la table. */
+        g_spool_start = 0; g_spool_end = 2; g_spool_hw = 2;
+        x->alive = 1; x->model = 3; y->alive = 1; y->model = 4;
+        printf("pool_modele %d %d %d\n", actor_model_count(0, 0, 3), actor_model_count(0, 0, 4), actor_model_count(0, 0, 9));
+        printf("pool_nth %d %d\n", actor_model_nth(0, 0, 4, 0) == y, actor_model_nth(0, 0, 3, 1) == 0);
+        /* Une table de posés ET le pool partagé : les posés d'abord. */
+        const ModelSlot posee[1] = { {1, 0} };
+        printf("pool_mixte %d %d %d\n", actor_model_count(posee, 1, 3), actor_model_nth(posee, 1, 3, 0) == y,
+               actor_model_nth(posee, 1, 3, 1) == x);
+        /* Hors du pool utilisé (au-delà de `g_spool_hw`), rien n'est compté. */
+        g_spool_hw = 1;
+        printf("pool_hw %d\n", actor_model_count(0, 0, 4));
+        /* Le bloc d'état d'un emplacement : un bloc de OBJ_STATE_STRIDE octets par `inst`. */
+        x->inst = 0; y->inst = 1;
+        printf("pool_etat %d\n", (int)((char*)(g_obj_state + (int)y->inst * (OBJ_STATE_STRIDE / 4)) - (char*)g_obj_state) == OBJ_STATE_STRIDE);
     }
     return 0;
 }

@@ -15,6 +15,7 @@
 #define RUNTIME_API_INLINE_H
 
 #include "gba_debug.h"   /* actor_exists_warn, actor_active_warn : le log d'un appel sur un acteur disparu */
+#include "obj_state.h"    /* OBJ_STATE_STRIDE : la taille d'un bloc d'état de script */
 
 /* Les constantes que voient les unités de script — énumérations matérielles
    nommées (modes OAM, directions, blending, ease) ET régions de window
@@ -27,6 +28,10 @@
 
 /* Globaux définis dans main.c, visibles par tous les scripts */
 extern Actor g_actors[];
+/* L'état de script de TOUS les acteurs : un bloc de `OBJ_STATE_STRIDE` octets par emplacement de
+   `g_actors`, à l'indice `Actor.inst`. Chaque script y range sa structure d'état (la plus grande
+   du projet fixe la taille d'un bloc) ; un emplacement n'en porte qu'une à la fois. */
+extern u32 g_obj_state[];
 extern OamEntry g_oam_entries[];
 /* L'entrée OAM qu'un acteur affiche, par le lien `Actor.oam_entry` (cf.
    actor_types_static.h). Seuls les accesseurs de script passent par ici : le C
@@ -280,19 +285,31 @@ static inline Vec2 actor_get_position(const Actor* s)   { return (Vec2){ s->x>>8
    un test du drapeau alive. */
 static inline Actor* actor_live(Actor* s) { return (s && s->alive) ? s : (Actor*)0; }
 
-/* Les instances d'un MODÈLE (un prefab dans la scène) se retrouvent par sa table `g_model_*`.
-   `actor:count("Bullet")` compte celles qui existent ; `actor:get("Bullet", i)` rend la i-ème
-   (0-based ici), ou nil. L'indice est celui des instances VIVANTES, dans l'ordre de la table :
-   détruire une instance en cours de boucle décale les suivantes, comme retirer d'une liste. */
-static inline int actor_model_count(const ModelSlot* t, int n) {
+/* Le pool PARTAGÉ de la scène : les emplacements d'acteurs que n'importe quel modèle simple prend en
+   naissant. Posés par `scene_init` (début, fin, première entrée d'état) ; `g_spool_hw` est le plus haut
+   emplacement utilisé + 1 : les boucles du tick s'arrêtent là au lieu de parcourir tout le pool. */
+extern int g_spool_start, g_spool_end, g_spool_hw, g_spool_entry;
+
+/* Les instances d'un MODÈLE (un prefab dans la scène) se retrouvent par sa table `g_model_*` (les
+   posées, et sa réserve à part s'il en a une) puis, pour un modèle du pool partagé (`model` ≠ 0), par
+   `Actor.model`. `actor:count("Bullet")` compte celles qui existent ; `actor:get("Bullet", i)` rend la
+   i-ème (0-based ici), ou nil. L'indice est celui des instances VIVANTES, dans l'ordre : détruire une
+   instance en cours de boucle décale les suivantes, comme retirer d'une liste. */
+static inline int actor_model_count(const ModelSlot* t, int n, int model) {
     int c = 0;
     for (int k = 0; k < n; k++) c += g_actors[t[k].slot].alive;
+    if (model)
+        for (int k = g_spool_start; k < g_spool_hw; k++)
+            c += g_actors[k].alive && g_actors[k].model == model;
     return c;
 }
-static inline Actor* actor_model_nth(const ModelSlot* t, int n, int n0) {
+static inline Actor* actor_model_nth(const ModelSlot* t, int n, int model, int n0) {
     if (n0 < 0) return (Actor*)0;
     for (int k = 0; k < n; k++)
         if (g_actors[t[k].slot].alive && n0-- == 0) return &g_actors[t[k].slot];
+    if (model)
+        for (int k = g_spool_start; k < g_spool_hw; k++)
+            if (g_actors[k].alive && g_actors[k].model == model && n0-- == 0) return &g_actors[k];
     return (Actor*)0;
 }
 

@@ -79,7 +79,7 @@ def test_les_accesseurs_de_script_passent_par_le_lien():
 
 def test_la_table_est_declaree_et_initialisee_avec_son_lien():
     source = (CODEGEN / "main_gen.py").read_text(encoding="utf-8")
-    assert 'OamEntry g_oam_entries[{n_oam_entries}] EWRAM_DATA;' in source
+    assert 'OamEntry g_oam_entries[{n_oam_entries}] EWRAM_BSS;' in source
     # scene_init remet TOUT acteur à -1 (sans entrée) : le lien se pose ensuite,
     # pour les seuls acteurs qui affichent un sprite…
     assert "g_actors[_i].oam_entry=-1" in source
@@ -110,7 +110,9 @@ def test_les_tailles_des_structs_ne_regressent_pas(tmp_path):
     le remplissage est le même — la taille GBA suit. Plafonds au 2026-09-25 :
     OamEntry 38 (92 avant ; 32 + `appearance` + `appearance_base`, marches 3a-3c, puis
     `pivot_x/y` sur 8 bits le 2026-10-04), Actor 72 (96 avant ; 68 jusqu'au 2026-10-24, où
-    `facing_x/y` ajoute 2 octets que l'alignement sur 4 de la struct facture 4)."""
+    `facing_x/y` ajoute 2 octets que l'alignement sur 4 de la struct facture 4).
+    76 depuis le 2026-10-25 : `gen`, `alive`, `inst` (u16) et `model` (u8), les quatre champs qui
+    rendent un emplacement adressable et partagé (référence, cycle de vie, état de script, pool)."""
     import os, shutil, subprocess
     import pytest
     cc = os.environ.get("CC") or shutil.which("gcc") or shutil.which("cc") or shutil.which("clang")
@@ -134,4 +136,4 @@ def test_les_tailles_des_structs_ne_regressent_pas(tmp_path):
     assert r.returncode == 0, r.stderr
     oam, actor = map(int, subprocess.run([str(exe)], capture_output=True, text=True,
                                          env=env).stdout.split())
-    assert oam <= 38 and actor <= 72, (oam, actor)
+    assert oam <= 38 and actor <= 76, (oam, actor)

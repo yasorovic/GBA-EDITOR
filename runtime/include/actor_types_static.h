@@ -37,6 +37,8 @@ typedef struct { int x, y, w, h; } Rect;
    par le build (`g_model_<Scène>_<Prefab>[]`) : le spawn la parcourt pour trouver un emplacement
    libre, `actor:count("M")` et `actor:get("M", i)` pour parcourir les instances vivantes. */
 typedef struct ModelSlot { u16 slot; s16 entry; } ModelSlot;
+/* Seules les instances POSÉES d'un modèle et celles de sa réserve à part y figurent ; celles qui naissent
+   dans le pool partagé se retrouvent à `Actor.model`. */
 
 /* Deux tables, deux unités :
 
@@ -209,21 +211,25 @@ typedef struct Actor {
     s16 name;              /* ACTOR_* — type de l'acteur (≥ 255 dès qu'un pool est grand) */
     /* Indice de son entrée dans g_oam_entries[] (cf. l'en-tête ci-dessus), -1 = sans. */
     s16 oam_entry;
+    /* L'indice de CET emplacement dans `g_actors[]`, posé une fois à l'entrée de scène : c'est aussi
+       celui de son bloc d'état de script dans `g_obj_state` (cf. runtime_api_inline.h). Il évite la
+       division par la taille d'un `Actor` qu'une soustraction de pointeurs coûterait. */
+    u16 inst;
     u8 active;             /* 0 = ignoré (update + rendu désactivés) */
-    /* L'emplacement est OCCUPÉ : posé par la scène, ou pris par un spawn. Un acteur DÉTRUIT libère
-       son emplacement (alive = 0) ; un acteur seulement DÉSACTIVÉ (active = 0) le garde, reste
-       adressable et peut être réactivé. Seul un emplacement libre est repris par un spawn. */
-    u8 alive;
-    /* Rang de l'acteur dans son MODÈLE (0..instances-1) : l'indice de son état de script
-       (`g_state_<modèle>[inst]`). Posé par le spawn et à l'entrée de scène. Il remplace le calcul
-       `(self - g_actors - début) / groupe`, qui supposait les instances d'un modèle contiguës. */
-    u8 inst;
     /* GÉNÉRATION de l'emplacement : +1 quand l'acteur qui l'occupait est détruit, quand un autre y
        naît, et à chaque entrée de scène. Une référence rangée dans une variable
        (`actor_ref_make`) retient la génération qu'elle a vue ; si l'emplacement a changé de
        main depuis, elle ne désigne plus rien (`actor_ref_get` rend nil) au lieu de désigner
        en silence l'acteur suivant. */
     u8 gen;
+    /* L'emplacement est OCCUPÉ : posé par la scène, ou pris par un spawn. Un acteur DÉTRUIT libère
+       son emplacement (alive = 0) ; un acteur seulement DÉSACTIVÉ (active = 0) le garde, reste
+       adressable et peut être réactivé. Seul un emplacement libre est repris par un spawn. */
+    u8 alive;
+    /* Le MODÈLE d'un acteur né dans le pool partagé (1.. : `MODELID_*`), 0 ailleurs. Un emplacement du
+       pool accueille n'importe quel modèle simple : c'est ce champ qui dit lequel, donc quel code
+       l'anime et quel sprite l'affiche. */
+    u8 model;
     s8 dir_x;              /* TRAJECTOIRE X courante : -1 | 0 | 1 (0 à l'arrêt) */
     s8 dir_y;              /* TRAJECTOIRE Y courante : -1 | 0 | 1 (0 à l'arrêt) */
     /* REGARD : la dernière direction non nulle, conservée à l'arrêt (self.facing).

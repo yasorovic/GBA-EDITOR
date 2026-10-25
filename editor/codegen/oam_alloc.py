@@ -27,8 +27,9 @@ de `actor_budget` (disparu depuis). `oam_alloc` est la géométrie ; `headers` e
 
 Deux unités à ne pas confondre, converties ici :
 
-  - un pool se DÉCLARE en instances (`Scene.prefab_pools`), ou s'alloue tout seul
-    (`POOL_DEFAULT_INSTANCES`) pour un prefab que les scripts de la scène spawnent ;
+  - une réserve à part se DÉCLARE en instances (`Scene.prefab_pools`), ou s'alloue toute seule
+    (`POOL_DEFAULT_INSTANCES`) pour un prefab que les scripts de la scène spawnent et qui ne peut pas
+    entrer dans le pool partagé (`is_plain_model`) ; tous les autres naissent dans ce pool ;
   - un pool se PAIE en slots — instances × parties, un prefab à sous-arbre
     occupant un groupe contigu par instance.
 
@@ -43,7 +44,8 @@ from typing import Optional
 
 from codegen.c_names import sym as c_sym
 from codegen.grit_conversion import count_frames
-from core.models.components import displayed_sprite_component, sprite_components
+from core.models.components import (displayed_sprite_component, sprite_components,
+                                    InteractiveComponent, CollisionBoxComponent)
 from core.models.scene import actor_prefab_linked
 from core.models.scene import Scene
 from core.project import Project
@@ -54,10 +56,21 @@ OAM_LIMIT = 128
 # Les matrices affines de l'OAM : 32 par scène (matériel).
 AFFINE_LIMIT = 32
 
-# Taille du pool qu'une scène obtient pour un prefab qu'elle spawne sans l'avoir déclaré.
-# Elle dit combien d'instances peuvent VIVRE (slots d'acteurs, état de script, état d'affichage),
-# pas combien s'affichent : les emplacements OAM s'attribuent à la frame.
+# Taille du pool qu'une scène obtient pour un prefab qu'elle spawne sans l'avoir déclaré, quand ce
+# prefab ne peut pas entrer dans le pool partagé (cf. `is_plain_model`).
 POOL_DEFAULT_INSTANCES = 8
+
+# Le nombre d'acteurs qu'une scène peut contenir EN TOUT : les acteurs posés, puis tout ce qui naît en
+# cours de partie. Un seul pool, partagé par tous les modèles, dont la taille est ce qui reste. La valeur
+# est une décision du build, pas de l'auteur : la RAM de la GBA est fixe, et seuls 128 sprites
+# s'affichent à la fois, mais rien n'oblige la valeur à rester celle-ci. Elle vit ICI, en un seul
+# endroit : `scene_object_capacity` pourra la calculer de la mémoire que le jeu laisse libre.
+OBJECT_CAPACITY = 512
+
+
+def scene_object_capacity(project, scene: Scene) -> int:
+    """Les emplacements d'acteurs de cette scène, posés compris."""
+    return OBJECT_CAPACITY
 
 
 def owner_appearances(project, owner) -> list[tuple]:
@@ -140,6 +153,25 @@ def model_members(project, posed: list) -> dict:
             continue
         out.setdefault(pf.name, []).append(i)
     return out
+
+
+def is_plain_model(prefab) -> bool:
+    """Ce prefab peut-il vivre dans le pool PARTAGÉ ? Un emplacement du pool accueille n'importe quel
+    modèle : tout ce que le build écrivait pour lui à des emplacements connus doit alors se décider à
+    l'exécution, par le modèle de l'emplacement. Les modèles simples (une balle, une pièce, un
+    ennemi) y passent ; ceux qui demandent encore des emplacements fixes gardent une réserve à eux :
+
+      - un sous-arbre (les parties occupent des emplacements contigus) ;
+      - une matrice affine (le matériel n'en offre que 32, attribuées au build) ;
+      - un interacteur, un consommateur d'interaction ou un bloqueur (leurs tables sont de build)."""
+    if getattr(prefab, "children", None) or prefab.affine_transform or getattr(prefab, "is_player", False):
+        return False
+    for c in prefab.components:
+        if isinstance(c, InteractiveComponent) and c.active:
+            return False
+        if isinstance(c, CollisionBoxComponent) and c.active and c.blocks_actors:
+            return False
+    return True
 
 
 def declared_pool_instances(scene: Scene, prefab) -> int:
@@ -249,11 +281,16 @@ class PoolSlot:
     # scène, cf. `model_members`) : leurs emplacements et leurs entrées sont ceux de la scène. Ils
     # sont les premières instances ; la réserve, que le spawn remplit, est le reste.
     members: list[int] = field(default_factory=list)
+    # Un modèle du pool PARTAGÉ n'a pas de réserve à lui : ses instances nées en jeu prennent n'importe quel
+    # emplacement libre du pool de la scène (`OamLayout.shared`), et se reconnaissent à `Actor.model`.
+    shared: bool = False
+    model_id: int = 0      # 1.. parmi les modèles du pool partagé ; 0 pour une réserve à soi
 
     @property
     def reserve(self) -> int:
-        """Les instances que le spawn peut faire naître : celles qui ne sont pas posées."""
-        return self.instances - len(self.members)
+        """Les instances que le spawn peut faire naître DANS UNE RÉSERVE À ELLE : celles qui ne sont pas
+        posées. Nulle pour un modèle du pool partagé."""
+        return 0 if self.shared else self.instances - len(self.members)
 
     @property
     def size(self) -> int:
@@ -269,6 +306,22 @@ class PoolSlot:
         """Entrées d'état réservées pour la réserve : les parties qui affichent un sprite, de
         chaque instance. Celles des membres posés sont déjà comptées avec les acteurs posés."""
         return self.reserve * self.entries_per_instance
+
+
+@dataclass
+class SharedPool:
+    """Le pool partagé d'une scène : les emplacements d'acteurs qui restent après les posés et les réserves
+    à part, pris par n'importe quel modèle simple qui naît. `entries` états d'affichage (un par emplacement),
+    ou 0 si aucun de ces modèles n'affiche rien."""
+    start: int
+    size: int
+    entry_start: int
+    entries: int
+    models: list      # list[PoolSlot], dans l'ordre du catalogue ; `model_id` = rang + 1
+
+    @property
+    def end(self) -> int:
+        return self.start + self.size
 
 
 @dataclass
@@ -288,6 +341,8 @@ class OamLayout:
     placed_entry: list[int]  # par acteur posé : son entrée d'état, ou -1 (sans sprite)
     ui: int                  # emplacements OBJ d'interface, au début de l'OAM
     pools: list[PoolSlot]
+    shared: Optional[SharedPool] = None
+    capacity: int = OBJECT_CAPACITY
 
     @property
     def placed_entries(self) -> int:
@@ -295,13 +350,18 @@ class OamLayout:
 
     @property
     def pool_slots(self) -> int:
-        """Acteurs que les pools réservent (g_actors[])."""
-        return sum(pl.size for pl in self.pools)
+        """Acteurs que les pools réservent (g_actors[]) : les réserves à part, puis le pool partagé."""
+        return sum(pl.size for pl in self.pools) + (self.shared.size if self.shared else 0)
 
     @property
     def pool_entries(self) -> int:
         """Entrées d'état des pools (g_oam_entries[])."""
-        return sum(pl.entry_size for pl in self.pools)
+        return sum(pl.entry_size for pl in self.pools) + (self.shared.entries if self.shared else 0)
+
+    @property
+    def fixed_actors(self) -> int:
+        """Acteurs dont la place est fixée avant le pool partagé : les posés et les réserves à part."""
+        return self.placed + sum(pl.size for pl in self.pools)
 
     @property
     def table_size(self) -> int:
@@ -329,6 +389,11 @@ class OamLayout:
         """L'interface seule dépasse l'OAM — le seul cas qu'aucune dégradation ne sauve : les
         acteurs, eux, ne prennent que les emplacements qui restent, à la frame."""
         return self.ui > OAM_LIMIT
+
+    @property
+    def over_capacity(self) -> bool:
+        """Les acteurs posés et les réserves à part dépassent à eux seuls les emplacements de la scène."""
+        return self.fixed_actors > self.capacity
 
     def pool_for(self, prefab) -> Optional[PoolSlot]:
         """Le PoolSlot de ce prefab dans cette scène, ou None si non déclaré."""
@@ -371,10 +436,17 @@ def scene_oam_layout(project, scene: Scene) -> OamLayout:
                 (POOL_DEFAULT_INSTANCES if pf.name in spawned else 0) for pf in project.prefabs}
     members = model_members(project, posed)
 
+    capacity = scene_object_capacity(project, scene)
+    # Les modèles qui naissent dans le pool PARTAGÉ : simples, et que la scène spawne ou déclare.
+    shared_names = [pf.name for pf in project.prefabs
+                    if is_plain_model(pf) and (pf.name in spawned or declared_pool_instances(scene, pf) > 0)]
+
     pools: list[PoolSlot] = []
     actor_off = placed                 # espace des acteurs
     entry_off = rank                   # espace des états : après ceux des posés
     for pf in project.prefabs:
+        if pf.name in shared_names:
+            continue                   # après les réserves à part (cf. plus bas)
         placed_members = members.get(pf.name, [])
         n = reserves[pf.name] + len(placed_members)
         if n <= 0:
@@ -390,8 +462,29 @@ def scene_oam_layout(project, scene: Scene) -> OamLayout:
         actor_off += pl.size
         entry_off += pl.entry_size
 
+    shared = None
+    if shared_names:
+        size = max(capacity - actor_off, 0)
+        shows = any(shapes[n][1] for n in shared_names)
+        shared_models = []
+        for pf in project.prefabs:
+            if pf.name not in shared_names:
+                continue
+            pref = c_sym(pf.name)
+            placed_members = members.get(pf.name, [])
+            shared_models.append(PoolSlot(
+                prefab=pf, prefab_sym=pref, sym=f"{scene_sym}_{pref}",
+                start=actor_off, entry_start=entry_off,
+                instances=len(placed_members) + size,
+                group=1, member_entries=shapes[pf.name][0], members=placed_members,
+                shared=True, model_id=len(shared_models) + 1,
+            ))
+        shared = SharedPool(start=actor_off, size=size, entry_start=entry_off,
+                            entries=size if shows else 0, models=shared_models)
+        pools += shared_models
+
     return OamLayout(scene=scene, scene_sym=scene_sym, placed=placed,
-                     placed_entry=placed_entry, ui=ui, pools=pools)
+                     placed_entry=placed_entry, ui=ui, pools=pools, shared=shared, capacity=capacity)
 
 
 def scene_affine_requests(project, scene: Scene) -> int:

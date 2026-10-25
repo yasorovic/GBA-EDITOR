@@ -113,7 +113,7 @@ end
 
 C'est ce qui remplace une cascade `if sel == 1 then actor:get("Unit1") elseif …` : `actor:get(sel)` suffit.
 
-**Parcourir les instances d'un prefab.** Pour un prefab que la scène fait naître (`actor:spawn("Bullet", pos)`), dont elle déclare un pool, ou dont elle pose des instances, `actor:count("Bullet")` donne le nombre d'instances **vivantes** et `actor:get("Bullet", i)` la i-ème, à partir de 1 : d'abord les instances posées dans la scène, puis celles nées par `spawn`. Un acteur posé est une instance du prefab tant qu'il en reste **lié** (mêmes composants, même script), qu'il affiche les mêmes sprites et le même Sfx, que le prefab est plat et que l'acteur n'est le parent d'aucun autre acteur posé. Un acteur posé qui s'en écarte reste un acteur à part, sous son nom :
+**Parcourir les instances d'un prefab.** Pour un prefab que la scène fait naître (`actor:spawn("Bullet", pos)`), ou dont elle pose des instances, `actor:count("Bullet")` donne le nombre d'instances **vivantes** et `actor:get("Bullet", i)` la i-ème, à partir de 1 : d'abord les instances posées dans la scène, puis celles nées par `spawn`. Un acteur posé est une instance du prefab tant qu'il en reste **lié** (mêmes composants, même script), qu'il affiche les mêmes sprites et le même Sfx, que le prefab est plat et que l'acteur n'est le parent d'aucun autre acteur posé. Un acteur posé qui s'en écarte reste un acteur à part, sous son nom :
 
 ```lua
 for i = 1, actor:count("Bullet") do

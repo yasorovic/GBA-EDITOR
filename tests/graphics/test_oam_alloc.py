@@ -18,6 +18,14 @@ from codegen.oam_alloc import (
 )
 
 
+def _a_part(nom: str) -> Prefab:
+    """Un prefab qui garde sa réserve À LUI : un interacteur n'entre pas dans le pool partagé
+    (`oam_alloc.is_plain_model`), donc il se dimensionne par `Scene.prefab_pools`."""
+    pf = Prefab(name=nom)
+    pf.actor.is_player = True
+    return pf
+
+
 def _projet(tmp_path, *, scenes, prefabs=None, sprites=True) -> Project:
     p = Project(tmp_path)
     p.scenes.items = list(scenes)
@@ -30,7 +38,7 @@ def _projet(tmp_path, *, scenes, prefabs=None, sprites=True) -> Project:
 # ── Base 0 par scène ──────────────────────────────────────────────────
 
 def test_pools_partent_apres_les_acteurs_actifs(tmp_path):
-    ball = Prefab(name="Ball")
+    ball = _a_part("Ball")
     scene = Scene(name="S", actors=[Actor(name="A"), Actor(name="B")])
     scene.prefab_pools = {"Ball": 4}
     p = _projet(tmp_path, scenes=[scene], prefabs=[ball])
@@ -44,7 +52,7 @@ def test_pools_partent_apres_les_acteurs_actifs(tmp_path):
 def test_chaque_scene_repart_de_zero(tmp_path):
     """Deux scènes, deux plages qui partent chacune de leur propre base 0 —
     aucune ne porte les acteurs de l'autre."""
-    ball = Prefab(name="Ball")
+    ball = _a_part("Ball")
     s1 = Scene(name="Menu", actors=[Actor(name="Cursor")])
     s2 = Scene(name="Level", actors=[Actor(name=f"E{i}") for i in range(5)])
     s2.prefab_pools = {"Ball": 8}
@@ -57,7 +65,7 @@ def test_chaque_scene_repart_de_zero(tmp_path):
 # ── Symboles de pool préfixés par la scène ────────────────────────────
 
 def test_symbole_de_pool_prefixe_par_la_scene(tmp_path):
-    ball = Prefab(name="Ball")
+    ball = _a_part("Ball")
     s1 = Scene(name="Menu"); s1.prefab_pools = {"Ball": 2}
     s2 = Scene(name="Level"); s2.prefab_pools = {"Ball": 2}
     p = _projet(tmp_path, scenes=[s1, s2], prefabs=[ball])
@@ -71,7 +79,7 @@ def test_pas_de_repli_sur_max_instances(tmp_path):
     """Un prefab qu'aucune scène ne déclare n'est plus poolé. Le champ hérité
     `Prefab.max_instances` a été RETIRÉ en T7 : le pool ne vit que sur la scène,
     et un prefab non déclaré n'a aucune plage."""
-    ball = Prefab(name="Ball")
+    ball = _a_part("Ball")
     assert not hasattr(ball, "max_instances")     # le champ n'existe plus
     scene = Scene(name="S")
     p = _projet(tmp_path, scenes=[scene], prefabs=[ball])
@@ -80,7 +88,7 @@ def test_pas_de_repli_sur_max_instances(tmp_path):
 
 
 def test_une_scene_ne_paie_que_ce_qu_elle_declare(tmp_path):
-    ball = Prefab(name="Ball")
+    ball = _a_part("Ball")
     s1 = Scene(name="Menu")                          # ne spawne rien
     s2 = Scene(name="Level"); s2.prefab_pools = {"Ball": 10}
     p = _projet(tmp_path, scenes=[s1, s2], prefabs=[ball])
@@ -91,7 +99,7 @@ def test_une_scene_ne_paie_que_ce_qu_elle_declare(tmp_path):
 # ── g_actors = MAX des scènes, pas la somme ───────────────────────────
 
 def test_taille_g_actors_est_le_max_pas_la_somme(tmp_path):
-    ball = Prefab(name="Ball")
+    ball = _a_part("Ball")
     s1 = Scene(name="Menu", actors=[Actor(name="Cursor")])          # used 1
     s2 = Scene(name="Level", actors=[Actor(name=f"E{i}") for i in range(4)])
     s2.prefab_pools = {"Ball": 6}                                   # used 10
@@ -110,7 +118,7 @@ def test_sans_interface_les_deux_tables_ont_la_meme_taille(tmp_path):
     tables se dimensionnent pareil et le décalage des pools est nul."""
     s = Scene(name="Level", actors=[Actor(name=f"E{i}") for i in range(4)])
     s.prefab_pools = {"Ball": 6}
-    p = _projet(tmp_path, scenes=[s], prefabs=[Prefab(name="Ball")])
+    p = _projet(tmp_path, scenes=[s], prefabs=[_a_part("Ball")])
     assert project_oam_entry_count(p) == project_actor_count(p) == 10
     pool = scene_oam_layout(p, s).pools[0]
     assert pool.entry_start == pool.start == 4
@@ -135,8 +143,8 @@ def test_un_acteur_sans_sprite_n_a_pas_d_entree(tmp_path):
 def test_un_marqueur_de_prefab_n_a_pas_d_entree(tmp_path):
     """Racine + point de tir (sans sprite) + bras : 3 acteurs par instance, mais
     2 entrées OAM. L'entrée d'un membre = début de l'instance + son rang."""
-    boss = Prefab(name="Boss")
-    muzzle, arm = Prefab(name="Muzzle"), Prefab(name="Arm")
+    boss = _a_part("Boss")
+    muzzle, arm = _a_part("Muzzle"), _a_part("Arm")
     boss.children = [muzzle, arm]
     scene = Scene(name="S", actors=[Actor(name="Hero")])
     scene.prefab_pools = {"Boss": 2}
@@ -159,7 +167,7 @@ def test_l_interface_n_a_pas_d_etat_d_acteur_elle_tient_le_debut_de_l_oam(tmp_pa
     monkeypatch.setattr(oam_alloc, "scene_ui_obj_slots", lambda scene, project: 3)
     s = Scene(name="Level", actors=[Actor(name="C"), Actor(name="E0")])
     s.prefab_pools = {"Ball": 6}
-    p = _projet(tmp_path, scenes=[s], prefabs=[Prefab(name="Ball")], sprites=False)
+    p = _projet(tmp_path, scenes=[s], prefabs=[_a_part("Ball")], sprites=False)
     donner_un_sprite(p, s.actors[1])            # C n'affiche rien
     donner_un_sprite(p, p.prefabs.items[0])
     lay = scene_oam_layout(p, s)
@@ -172,7 +180,7 @@ def test_l_interface_n_a_pas_d_etat_d_acteur_elle_tient_le_debut_de_l_oam(tmp_pa
 # ── Groupes (prefab à sous-arbre) ─────────────────────────────────────
 
 def test_prefab_a_sous_arbre_occupe_un_groupe_par_instance(tmp_path):
-    boss = Prefab(name="Boss")
+    boss = _a_part("Boss")
     boss.children = [Actor(name="ArmL"), Actor(name="ArmR")]   # groupe = 3
     scene = Scene(name="S"); scene.prefab_pools = {"Boss": 4}
     p = _projet(tmp_path, scenes=[scene], prefabs=[boss])
@@ -199,7 +207,7 @@ def test_ui_obj_ne_decale_pas_les_etats_des_pools(tmp_path, monkeypatch):
     ne grandissent pas pour elle (les OBJ d'interface ne sont pas des acteurs et n'ont pas d'état)."""
     import codegen.oam_alloc as oa
     monkeypatch.setattr(oa, "scene_ui_obj_slots", lambda scene, project: 5)
-    ball = Prefab(name="Ball")
+    ball = _a_part("Ball")
     scene = Scene(name="S", actors=[Actor(name="A"), Actor(name="B")])
     scene.prefab_pools = {"Ball": 4}
     p = _projet(tmp_path, scenes=[scene], prefabs=[ball])
@@ -214,7 +222,7 @@ def test_ui_obj_ne_decale_pas_les_etats_des_pools(tmp_path, monkeypatch):
 # ── Déterminisme ──────────────────────────────────────────────────────
 
 def test_layout_deterministe(tmp_path):
-    ball, boss = Prefab(name="Ball"), Prefab(name="Boss")
+    ball, boss = _a_part("Ball"), _a_part("Boss")
     scene = Scene(name="S", actors=[Actor(name="A")])
     scene.prefab_pools = {"Ball": 3, "Boss": 2}
     p = _projet(tmp_path, scenes=[scene], prefabs=[ball, boss])

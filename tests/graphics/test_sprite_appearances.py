@@ -99,7 +99,9 @@ def test_les_parties_de_prefab_ont_aussi_des_apparences(tmp_path):
     scene.prefab_pools = {"Boss": 3}
     p = _projet(tmp_path, scenes=[scene], prefabs=[boss])
     (pool,) = scene_oam_layout(p, scene).pools
-    assert pool.member_entries == [0] and pool.entry_size == 3
+    # Deux apparences, UNE entrée d'état : le modèle partage le pool de la scène, une entrée par emplacement.
+    assert pool.member_entries == [0] and pool.entries_per_instance == 1
+    assert pool.shared and scene_oam_layout(p, scene).shared.entries > 0
 
 
 # ── Validation ────────────────────────────────────────────────────────

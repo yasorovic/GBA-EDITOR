@@ -18,7 +18,7 @@ from __future__ import annotations
 import pytest
 
 
-def _gen(src: str, pooled: bool = False, pool_size: int = 8):
+def _gen(src: str, pooled: bool = False):
     """Parse + check + génère, pour un acteur nommé Hero."""
     from scripting.parser import parse
     from scripting.checker import check, BuildContext
@@ -31,7 +31,7 @@ def _gen(src: str, pooled: bool = False, pool_size: int = 8):
     code, _warnings, state_bytes = generate(script, CodegenContext(
         actor_name="Hero", actor_sym="Hero", anim_names=["idle"], sfx_names=[],
         music_names=[], global_names=set(), const_names=set(),
-        all_actor_syms=["Hero"], is_pooled=pooled, pool_size=pool_size))
+        all_actor_syms=["Hero"], is_pooled=pooled))
     return errors, code, state_bytes
 
 
@@ -202,13 +202,13 @@ function on_sequence_a()
     wait(10)
     self.position = vec2(depart, 0)
 end
-""", pooled=True, pool_size=8)
+""", pooled=True)
     assert "static int Hero_seq_a_step" not in code
     assert "int seq_a_step;" in code
     assert "int seq_a_timer;" in code
     assert "int seq_a_depart;" in code
     assert "_st->seq_a_step" in code
-    assert "HeroState* _st = &g_state_Hero[Hero_pool_slot(self)];" in code
+    assert "HeroState* _st = Hero_state(self);" in code
     # trois entiers d'état, aucune variable de tête
     assert state_bytes == 12
 

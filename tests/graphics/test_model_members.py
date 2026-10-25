@@ -15,9 +15,11 @@ from oam_fixtures import tout_afficher, donner_un_sprite
 from codegen.oam_alloc import scene_oam_layout, model_members
 
 
-def _projet(tmp_path, *, n=3, reserve=0, script=True):
-    """Un prefab `Coin` et `n` acteurs posés qui en sont des copies liées."""
+def _projet(tmp_path, *, n=3, reserve=0, script=True, a_part=False):
+    """Un prefab `Coin` et `n` acteurs posés qui en sont des copies liées. `a_part` : un interacteur,
+    qui n'entre pas dans le pool partagé et garde une réserve à lui (`oam_alloc.is_plain_model`)."""
     coin = Prefab(name="Coin")
+    coin.actor.is_player = a_part
     if script:
         coin.actor.components.append(ScriptComponent(script="assets/coin.lua"))
     scene = Scene(name="S")
@@ -42,7 +44,7 @@ def test_les_copies_liees_rejoignent_le_modele(tmp_path):
 
 
 def test_la_reserve_s_ajoute_aux_membres(tmp_path):
-    p, scene, _coin = _projet(tmp_path, n=2, reserve=5)
+    p, scene, _coin = _projet(tmp_path, n=2, reserve=5, a_part=True)
     lay = scene_oam_layout(p, scene)
     (pool,) = lay.pools
     assert (pool.instances, pool.reserve, len(pool.members)) == (7, 5, 2)
@@ -113,9 +115,9 @@ def test_les_exports_d_un_membre_sont_ceux_de_son_acteur(tmp_path):
 
 def test_la_table_du_modele_commence_par_ses_membres(tmp_path):
     from codegen.runtime_codegen.main_gen import _scene_pi, _section_spawn
-    p, scene, _coin = _projet(tmp_path, n=2, reserve=2)
+    p, scene, _coin = _projet(tmp_path, n=2, reserve=2, a_part=True)
     code = "\n".join(_section_spawn(_scene_pi(p, scene), p, None))
-    assert "const ModelSlot g_model_S_Coin[MODEL_S_COIN_COUNT] = {" in code
+    assert "const ModelSlot g_model_S_Coin[4] = {" in code
     posed, reserve = code.index("{0, 0},   /* posé */"), code.index("{2, 2},\n")
     assert code.index("{1, 1},   /* posé */") > posed and reserve > posed
 
@@ -133,12 +135,12 @@ def test_les_appels_de_code_d_un_membre_vont_au_modele(tmp_path):
 def test_l_identite_du_modele_sans_reserve_ne_vaut_aucun_nom(tmp_path):
     """`other.name == "Coin"` ne doit pas chevaucher la plage d'un autre modèle."""
     from codegen.runtime_codegen.headers import generate_actor_types
-    p, scene, _coin = _projet(tmp_path, n=2)
+    p, scene, _coin = _projet(tmp_path, n=2, a_part=True)
     p.src_dir.mkdir(parents=True, exist_ok=True)
     generate_actor_types(p)
     text = (p.src_dir / "actor_types.h").read_text(encoding="utf-8")
     assert "#define ACTOR_S_COIN -1" in text
-    assert "#define MODEL_S_COIN_COUNT 2" in text and "#define POOL_S_COIN_INSTANCES 2" in text
+    assert "#define MODEL_S_COIN_COUNT 2" in text and "#define MODELID_S_COIN 0" in text
 
 
 def test_un_spawn_qui_reprend_l_emplacement_d_un_membre_lui_garde_son_identite(tmp_path):

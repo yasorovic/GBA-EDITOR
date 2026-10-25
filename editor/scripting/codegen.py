@@ -6,8 +6,8 @@ build) et produit le source C d'un fichier actor_<Name>.c.
 
 Règles de génération :
   - Variables locales top-level  → static <type> <name>; (scope fichier)
-  - … sauf dans un prefab poolé, où celles que le script ÉCRIT deviennent un
-    champ de g_state_<sym>[], une entrée par instance du pool
+  - … sauf pour le script d'un prefab, où celles que le script ÉCRIT deviennent un
+    champ de sa structure d'état, rangée dans le bloc de l'emplacement (g_obj_state)
   - Variables globales (globals.h) → accès direct par nom
   - self:method(args)  → actor_method(self, args) via RUNTIME_API
   - module.func(args)  → func_c(args) via RUNTIME_API
@@ -284,13 +284,9 @@ class CodegenContext:
     # les mêmes points d'entrée qu'une scène et emprunte donc le même chemin.
     owner_kind: str = "actor"
     behavior_paths: dict | None = None  # {nom: fichier} des behaviors du projet, pour résoudre les require()
-    # Prefab poolé : les variables de tête que le script ÉCRIT deviennent un
-    # champ de `g_state_<sym>[]`, une entrée par instance (cf. _emit_pool_state).
-    # `pool_size` ne sert qu'à CHIFFRER ce que cet état coûte : le C émis, lui,
-    # se dimensionne sur `POOL_<SYM>_INSTANCES` (headers.py), pour qu'un écart
-    # avec la boucle de pool de main.c soit impossible.
+    # Prefab : les variables de tête que le script ÉCRIT deviennent un champ de sa structure d'état,
+    # rangée dans le bloc de l'emplacement de chaque instance (cf. _emit_pool_state).
     is_pooled: bool = False
-    pool_size: int = 0
     # Valeurs d'export résolues PAR INSTANCE (chantier « Les exports de script »).
     # nom d'export → initialiseur C déjà prêt, calculé par lua_compiler : l'override
     # d'instance (`ScriptComponent.exports_values`) s'il existe, sinon le `default`
@@ -763,16 +759,14 @@ class CodeGen:
                 self._state_extra.append(("int", f"seq_{name}_{loc}", "0"))
 
     def _state_ref(self, field: str) -> str:
-        """Où vit ce morceau d'état : dans le slot de l'instance pour un prefab
-        poolé, dans une statique de fichier pour un propriétaire unique.
+        """Où vit ce morceau d'état : dans le bloc de l'emplacement de l'instance pour un prefab,
+        dans une statique de fichier pour un propriétaire unique.
 
-        Côté poolé, l'accès passe par `_st`, un pointeur posé en tête de la
+        Côté prefab, l'accès passe par `_st`, un pointeur posé en tête de la
         fonction qui en a besoin (cf. `_close_state_scope`). Écrire
-        `g_state_Ball[Ball_pool_slot(self)].fx` à chaque site rendait le C
-        illisible : 38 caractères de machinerie autour du nom que l'auteur a
-        écrit : et laissait gcc recalculer le slot plus souvent que nécessaire
-        (`sizeof(Actor)` ne vaut pas une puissance de deux : la soustraction de
-        pointeurs coûte une division)."""
+        `Ball_state(self)->fx` à chaque site laissait gcc recalculer le bloc plus souvent que
+        nécessaire ; `Actor.inst` évite en plus la division par `sizeof(Actor)`, qui n'est pas une
+        puissance de deux, qu'une soustraction de pointeurs coûterait."""
         if self.ctx.is_pooled:
             self._state_touched = True
             return f"_st->{field}"
@@ -797,7 +791,7 @@ class CodeGen:
         self._lines.insert(
             mark,
             "    " * self._indent
-            + f"{sym}State* _st = &g_state_{sym}[{sym}_pool_slot({receiver})];")
+            + f"{sym}State* _st = {sym}_state({receiver});")
         self._state_touched = False
 
     def _emit_sequence_statics(self):
@@ -1331,36 +1325,35 @@ class CodeGen:
             return
         self.pool_state_bytes = per_instance
         self._pool_state_init = ", ".join(inits)
-        total = per_instance * self.ctx.pool_size
         self._w("/* Per-instance state: one field per top-level variable the script")
-        self._w(f"   writes, plus the step of each sequence. {per_instance} bytes × "
-                f"{self.ctx.pool_size} instance(s) = {total} bytes. */")
+        self._w(f"   writes, plus the step of each sequence. {per_instance} bytes per instance, kept in the "
+                "block of the actor's slot (g_obj_state). */")
         self._w(f"typedef struct {{")
         self._indent += 1
         for f in fields:
             self._w(f)
         self._indent -= 1
         self._w(f"}} {struct_t};")
-        # Un état par INSTANCE, pas par entrée de `g_actors` :
-        # une instance de prefab segmenté occupe un GROUPE d'entrées : la
-        # racine puis ses parties : mais n'exécute qu'un script, celui de la
-        # racine. Diviser par le groupe ramène `self` à son rang d'instance ;
-        # pour un prefab plat, GROUP vaut 1 et le C émis est mot pour mot celui
-        # d'avant.
-        self._w(f"static {struct_t} g_state_{sym}[POOL_{sym.upper()}_INSTANCES];")
-        self._w(f"static inline int {sym}_pool_slot(Actor* self) {{ return (int)self->inst; }}")
+        # L'état d'une instance vit dans le BLOC de son emplacement (`g_obj_state`, un bloc de
+        # `OBJ_STATE_STRIDE` octets par entrée de `g_actors`) : aucun tableau par modèle, donc aucun
+        # nombre d'instances à connaître ici. Le plus grand état du projet fixe la taille d'un bloc ; un
+        # état plus grand serait refusé à la compilation C, avec cette ligne.
+        self._w(f'_Static_assert(sizeof({struct_t}) <= OBJ_STATE_STRIDE, '
+                f'"{sym}: the script state does not fit in an object state block");')
+        self._w(f"static inline {struct_t}* {sym}_state(Actor* self) {{ "
+                f"return ({struct_t}*)(g_obj_state + (int)self->inst * (OBJ_STATE_STRIDE / 4)); }}")
         # Un setter par export réglable : c'est le SEUL point d'accès de l'état
-        # depuis un autre `.c` (le script qui spawne). `g_state`/`pool_slot`
-        # restent privés : le setter, lui, est extern (le spawner le forward-
+        # depuis un autre `.c` (le script qui spawne). `<sym>_state` reste privé :
+        # le setter, lui, est extern (le spawner le forward-
         # déclare, cf. `_emit_spawn_setter_externs`). Chantier « Les exports de
         # script », tranche poolé (D2).
         for name, ex_typ in export_fields:
             arg_t = export_setter_c_type(ex_typ)
             self._w(f"void {sym}_set_{name}(Actor* self, {arg_t} v) {{ "
-                    f"g_state_{sym}[{sym}_pool_slot(self)].{name} = v; }}")
+                    f"{sym}_state(self)->{name} = v; }}")
             if ex_typ in EXPORT_ACCESSIBLE:
                 self._w(f"{arg_t} {sym}_get_{name}(Actor* self) {{ "
-                        f"return g_state_{sym}[{sym}_pool_slot(self)].{name}; }}")
+                        f"return {sym}_state(self)->{name}; }}")
         self._w("")
 
     @staticmethod
@@ -2669,13 +2662,14 @@ class CodeGen:
         return "g_scene_placed"
 
     def _pool_macro(self, prefab: str):
-        """`g_model_<S>, MODEL_<S>_COUNT` : la table des instances d'un modèle dans la scène qui
-        compile ce script (headers.py, main.c), ou None sans scène (script partagé)."""
+        """`g_model_<S>, MODEL_<S>_COUNT, MODELID_<S>` : la table des instances posées (et de réserve) d'un
+        modèle, leur nombre, et son identité dans le pool partagé (0 s'il n'y est pas), dans la scène
+        qui compile ce script (headers.py, main.c), ou None sans scène (script partagé)."""
         if not self.ctx.scene_sym:
             return None
         from codegen.c_names import sym as c_sym
         sym = f"{self.ctx.scene_sym}_{c_sym(prefab)}"
-        return f"g_model_{sym}, MODEL_{sym.upper()}_COUNT"
+        return f"g_model_{sym}, MODEL_{sym.upper()}_COUNT, MODELID_{sym.upper()}"
 
     def _emit_layer_get(self, args: list) -> str:
         """layer:get(2) → 2 : le numéro EST la référence (un fond n'a pas d'autre identité que

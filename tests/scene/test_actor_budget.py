@@ -15,6 +15,14 @@ from codegen.oam_alloc import (
 )
 
 
+def _a_part(nom: str) -> Prefab:
+    """Un prefab qui garde sa réserve À LUI : un interacteur n'entre pas dans le pool partagé
+    (`oam_alloc.is_plain_model`), donc il se dimensionne par `Scene.prefab_pools`."""
+    pf = Prefab(name=nom)
+    pf.actor.is_player = True
+    return pf
+
+
 def _projet(tmp_path, *, scene: Scene, prefabs=None, sprites=True) -> Project:
     p = Project(tmp_path)
     p.scenes.items = [scene]
@@ -45,7 +53,7 @@ def test_les_acteurs_poses_sont_comptes(tmp_path):
 # ── Le pool se dit en INSTANCES, se paie en SLOTS ─────────────────────
 
 def test_un_prefab_plat_coute_une_instance_un_slot(tmp_path):
-    ball = Prefab(name="Ball")
+    ball = _a_part("Ball")
     scene = Scene(name="S")
     scene.prefab_pools = {"Ball": 4}
     p = _projet(tmp_path, scene=scene, prefabs=[ball])
@@ -53,7 +61,7 @@ def test_un_prefab_plat_coute_une_instance_un_slot(tmp_path):
 
 
 def test_un_prefab_a_sous_arbre_coute_instances_x_parties(tmp_path):
-    boss = Prefab(name="Boss")
+    boss = _a_part("Boss")
     boss.children = [Actor(name="ArmL"), Actor(name="ArmR")]   # 1 racine + 2 = 3
     scene = Scene(name="S")
     scene.prefab_pools = {"Boss": 4}
@@ -66,7 +74,7 @@ def test_un_prefab_a_sous_arbre_coute_instances_x_parties(tmp_path):
 def test_un_pool_garde_toutes_ses_instances_au_dela_de_128(tmp_path):
     """L'OAM borne ce qui s'AFFICHE ensemble, pas ce qui existe : chaque instance a son état."""
     scene = Scene(name="S", actors=[Actor(name=f"A{i}") for i in range(120)])
-    ball = Prefab(name="Ball")
+    ball = _a_part("Ball")
     scene.prefab_pools = {"Ball": 16}                          # 120 + 16 = 136
     p = _projet(tmp_path, scene=scene, prefabs=[ball])
     lay = scene_oam_layout(p, scene)
@@ -77,7 +85,7 @@ def test_un_pool_garde_toutes_ses_instances_au_dela_de_128(tmp_path):
 
 def test_tous_les_acteurs_poses_ont_un_etat_au_dela_de_128(tmp_path):
     scene = Scene(name="S", actors=[Actor(name=f"A{i}") for i in range(130)])
-    ball = Prefab(name="Ball")
+    ball = _a_part("Ball")
     scene.prefab_pools = {"Ball": 4}
     p = _projet(tmp_path, scene=scene, prefabs=[ball])
     lay = scene_oam_layout(p, scene)
@@ -89,7 +97,7 @@ def test_tous_les_acteurs_poses_ont_un_etat_au_dela_de_128(tmp_path):
 def test_le_tableau_d_etats_n_a_pas_d_entree_poubelle(tmp_path):
     """Une instance écrit toujours dans SON état : la table fait exactement la somme des états."""
     scene = Scene(name="S", actors=[Actor(name=f"A{i}") for i in range(126)])
-    boss = Prefab(name="Boss")
+    boss = _a_part("Boss")
     boss.children = [Actor(name="Arm")]                        # 2 entrées par instance
     scene.prefab_pools = {"Boss": 3}
     p = _projet(tmp_path, scene=scene, prefabs=[boss])
@@ -113,7 +121,7 @@ def test_le_validateur_se_tait_quand_les_acteurs_depassent_128(tmp_path):
     from core.validator import ValidationContext, _check_actor_budget
     scene = Scene(name="S", actors=[Actor(name=f"A{i}") for i in range(130)])
     scene.prefab_pools = {"Ball": 16}
-    p = _projet(tmp_path, scene=scene, prefabs=[Prefab(name="Ball")])
+    p = _projet(tmp_path, scene=scene, prefabs=[_a_part("Ball")])
     ctx = ValidationContext(p)
     _check_actor_budget(ctx)
     assert ctx.errors == [] and ctx.warnings == []
@@ -141,7 +149,7 @@ def test_le_validateur_se_tait_dans_le_budget(tmp_path):
 # ── Le pool d'un prefab spawné s'alloue tout seul ─────────────────────
 
 def _scene_qui_spawne(tmp_path, *, actors=0, declared=None):
-    ball = Prefab(name="Ball")
+    ball = _a_part("Ball")
     scene = Scene(name="S", script="assets/s.lua", actors=[Actor(name=f"A{i}") for i in range(actors)])
     scene.prefab_pools = dict(declared or {})
     p = _projet(tmp_path, scene=scene, prefabs=[ball])
@@ -190,7 +198,7 @@ def test_le_validateur_avertit_de_matrices_affines_manquantes(tmp_path):
     from core.validator import ValidationContext, _check_affine_budget
     scene = Scene(name="S", actors=[Actor(name=f"A{i}") for i in range(30)])
     scene.prefab_pools = {"Ball": 6}                           # 30 + 6 = 36 matrices pour 32
-    p = _projet(tmp_path, scene=scene, prefabs=[Prefab(name="Ball")])
+    p = _projet(tmp_path, scene=scene, prefabs=[_a_part("Ball")])
     _tout_affine(p)
     ctx = ValidationContext(p)
     _check_affine_budget(ctx)
@@ -203,7 +211,7 @@ def test_chaque_instance_d_etat_demande_sa_matrice(tmp_path):
     from codegen.oam_alloc import scene_affine_requests
     scene = Scene(name="S", actors=[Actor(name=f"A{i}") for i in range(126)])
     scene.prefab_pools = {"Ball": 6}
-    p = _projet(tmp_path, scene=scene, prefabs=[Prefab(name="Ball")])
+    p = _projet(tmp_path, scene=scene, prefabs=[_a_part("Ball")])
     _tout_affine(p)
     assert scene_affine_requests(p, scene) == 126 + 6          # une matrice par instance : l'affine reste statique
 

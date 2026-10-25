@@ -655,8 +655,8 @@ RUNTIME_API: dict[str, ApiFunc] = {
         # que le checker l'accepte ; sa validation dédiée vit dans _check_spawn_table.
         variadic=True,
         ret="actor",   # rend l'instance née, ou nil si le pool est plein
-        doc=("Instantiates a pooled prefab at `position` (a vec2) and returns the new "
-             "instance, or nil if the pool is full. An optional table sets its "
+        doc=("Instantiates a prefab at `position` (a vec2) and returns the new "
+             "instance, or nil if the scene has no free actor slot. An optional table sets its "
              "exports: actor:spawn(\"Bullet\", pos, { speed = 8, team = \"RED\" }); absent"
              " keys keep the prefab's value. Ex: local b = actor:spawn(\"Bullet\", "
              "vec2(116, 76)); if b then b:set_velocity(0, -2) end. A state name on the "

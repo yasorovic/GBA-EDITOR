@@ -155,6 +155,37 @@ def _spawn_exports_meta(p, prefabs) -> dict:
     return out
 
 
+def _state_sizes_path(p) -> Path:
+    return p.src_dir / "obj_state_sizes.json"
+
+
+def write_state_sizes(p, scene, sizes: dict) -> None:
+    """Range les tailles d'état de script (octets par instance) des modèles de CETTE scène. Le bloc d'état
+    d'un emplacement doit contenir le plus gros : `main_gen` lit toutes les scènes (`read_state_stride`) et
+    fixe `OBJ_STATE_STRIDE` une fois, pour tout le projet. La scène remplace sa propre entrée."""
+    import json
+    path = _state_sizes_path(p)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except ValueError:  # tolerated: a corrupt cache is rebuilt from the scenes compiled after it
+        data = {}
+    data[scene.name] = sizes
+    build_output.write(path, json.dumps(data, indent=1, sort_keys=True))
+
+
+def read_state_stride(p) -> int:
+    """La taille d'un bloc d'état de script : le plus gros état des modèles compilés, arrondi au mot, 4
+    octets au moins (un tableau de taille nulle ne compile pas)."""
+    import json
+    path = _state_sizes_path(p)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except ValueError:  # tolerated: a corrupt cache reads as no state, the C compiler then refuses a too big one
+        data = {}
+    biggest = max((b for sizes in data.values() for b in sizes.values()), default=0)
+    return max(4, (biggest + 3) // 4 * 4)
+
+
 def member_export_inits(p, scene, actor) -> list:
     """Les valeurs d'export d'un acteur posé MEMBRE d'un modèle : [(nom, type, initialiseur C)].
     Le membre n'a pas de code à lui : son état est celui du modèle, posé à l'entrée de scène par les
@@ -734,7 +765,7 @@ def transpile_all(
     # `actor_<Scène>_<Prefab>.c`, `POOL_<Scène>_<Prefab>_*` et `spawn_<Scène>_
     # <Prefab>` concordent. Le total EWRAM ci-dessous est celui de CETTE scène.
     scene_sym = c_sym(scene.name)
-    pool_state_total = 0
+    state_sizes: dict = {}
     for pf in prefabs:
         pf_instances = scene_pool_instances(p, scene, pf)
         # Un prefab qu'aucune scène ne déclare n'émet rien, mais son script est quand même
@@ -838,7 +869,6 @@ def transpile_all(
             behavior_paths = lua_scripts.behavior_paths(p),
             owner_kind    = "prefab",
             is_pooled     = True,
-            pool_size     = pf_instances,
             scene_names   = _scene_names,
             sfx_component_name = pf_sfx_comp_name,
             sfx_volumes   = sfx_volumes,
@@ -878,18 +908,13 @@ def transpile_all(
         out_pf = p.src_dir / f"actor_{pf_sym}.c"
         build_output.write(out_pf, pf_c)
         emit("log_line", f"[lua->c] prefab {pf.name} -> {out_pf.name}")
-        # Ce que l'état de script de ce prefab occupe en EWRAM. Le chiffre est
-        # dit et non plafonné : le plafond de huit entiers
-        # qu'il remplace était arbitraire, et la ressource ici est arbitrable.
-        pool_state_total += pf_state_bytes * pf_instances
+        # Ce que l'état de script de ce modèle pèse PAR INSTANCE. Le bloc d'état de chaque emplacement
+        # prend la taille du plus gros (cf. `write_state_sizes`) : le total se dit au `main.c`.
         if pf_state_bytes:
-            emit("log_line",
-                 f"[ewram] prefab {pf.name}: script state {pf_state_bytes} bytes × {pf_instances} instance(s) = "
-                 f"{pf_state_bytes * pf_instances} bytes")
+            state_sizes[pf_sym] = pf_state_bytes
+            emit("log_line", f"[ewram] prefab {pf.name}: script state {pf_state_bytes} bytes per instance")
 
-    if pool_state_total:
-        emit("log_line",
-             f"[ewram] script state of the pooled prefabs: {pool_state_total} bytes")
+    write_state_sizes(p, scene, state_sizes)
 
     # Génération C — script de scène
     if scene_script_ast and scene_script_file:

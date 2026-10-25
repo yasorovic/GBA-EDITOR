@@ -1499,6 +1499,10 @@ def _check_actor_budget(ctx: ValidationContext):
             ctx.error(None,
                 f"Scene '{scene.name}': the interface alone needs {lay.ui} OAM entries for {OAM_LIMIT} "
                 "available — reduce a background tiling or move a zone to a BG target.")
+        if lay.over_capacity:
+            ctx.error(None,
+                f"Scene '{scene.name}': {lay.fixed_actors} actors are placed or reserved for the "
+                f"{lay.capacity} a scene holds — nothing is left for the ones that are born during play.")
         ctx.focus(None)
 
 

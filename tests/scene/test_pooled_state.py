@@ -20,7 +20,7 @@ from __future__ import annotations
 import pytest
 
 
-def _pooled(src: str, pool_size: int = 16):
+def _pooled(src: str):
     """Parse + check + génère le C d'un prefab poolé nommé Ball."""
     from scripting.parser import parse
     from scripting.checker import check, BuildContext
@@ -32,7 +32,7 @@ def _pooled(src: str, pool_size: int = 16):
     code, _warnings, state_bytes = generate(script, CodegenContext(
         actor_name="Ball", actor_sym="Ball", anim_names=[], sfx_names=[],
         music_names=[], global_names=set(), const_names=set(),
-        all_actor_syms=["Ball"], is_pooled=True, pool_size=pool_size))
+        all_actor_syms=["Ball"], is_pooled=True))
     return errors, code, state_bytes
 
 
@@ -49,7 +49,7 @@ def test_une_variable_ecrite_vit_dans_le_slot_de_l_instance():
         "end\n")
     assert "static int compteur" not in code
     assert "_st->compteur = (_st->compteur + 1);" in code
-    assert "BallState* _st = &g_state_Ball[Ball_pool_slot(self)];" in code
+    assert "BallState* _st = Ball_state(self);" in code
 
 
 def _champs(code: str) -> list[str]:
@@ -113,24 +113,16 @@ def test_les_types_autrefois_refuses_sont_des_champs(decl, champ, octets):
 # ── La forme du C émis ────────────────────────────────────────────
 
 
-def test_la_taille_du_tableau_vient_du_define_pas_d_un_litteral():
-    """`main.c` boucle sur la plage du pool avec ses propres bornes. Si le
-    tableau d'état était dimensionné par un littéral recalculé ici, un écart
-    entre les deux serait un débordement muet.
-
-    La constante est `POOL_<SYM>_INSTANCES` et non `_SIZE` : depuis la v0.23 une
-    instance de prefab segmenté occupe un GROUPE d'entrées de `g_actors` (la
-    racine puis ses parties) mais n'exécute qu'UN script. `_SIZE` compte les
-    entrées réservées, `_INSTANCES` compte les scripts — c'est le second qui
-    dimensionne l'état, et `Actor.inst` qui ramène `self` à son rang d'instance."""
+def test_l_etat_vit_dans_le_bloc_de_l_emplacement_pas_dans_un_tableau_du_modele():
+    """L'état d'une instance est rangé dans le BLOC de son emplacement (`g_obj_state`, indexé par
+    `Actor.inst`) : aucun tableau par modèle, donc aucun nombre d'instances à connaître ici et aucun écart
+    possible avec la boucle de `main.c`. Un état plus grand que le bloc est refusé à la compilation C."""
     _errs, code, _n = _pooled(
-        "local n = 0\nfunction on_update()\n    n = 1\nend\n", pool_size=16)
-    assert "g_state_Ball[POOL_BALL_INSTANCES]" in code
-    assert "g_state_Ball[16]" not in code
-    # Le rang vient de l'acteur lui-même, pas d'un calcul sur sa position dans `g_actors` : les
-    # instances d'un modèle ne sont plus supposées contiguës.
-    assert "Ball_pool_slot(Actor* self) { return (int)self->inst; }" in code
-    assert "POOL_BALL_START" not in code and "POOL_BALL_GROUP" not in code
+        "local n = 0\nfunction on_update()\n    n = 1\nend\n")
+    assert ("static inline BallState* Ball_state(Actor* self) { return (BallState*)(g_obj_state + "
+            "(int)self->inst * (OBJ_STATE_STRIDE / 4)); }") in code
+    assert '_Static_assert(sizeof(BallState) <= OBJ_STATE_STRIDE' in code
+    assert "g_state_Ball" not in code and "POOL_BALL" not in code
 
 
 def test_pool_init_repose_l_etat_de_depart_en_un_bloc():
@@ -163,12 +155,12 @@ def test_l_etat_de_depart_peut_citer_une_constante_du_script():
 
 def test_sans_etat_rien_n_est_emis():
     """Un prefab dont le script n'écrit aucune variable de tête ne doit
-    produire ni structure, ni tableau, ni fonction de slot — `pool_slot` sans
-    appelant, c'est un -Wunused-function à chaque build."""
+    produire ni structure, ni accesseur d'état — un `Ball_state` sans appelant,
+    c'est un -Wunused-function à chaque build."""
     _errs, code, state_bytes = _pooled(
         "local SEUIL = 10\nfunction on_update()\n    self:move(1, 0)\nend\n")
     assert "BallState" not in code
-    assert "Ball_pool_slot" not in code
+    assert "Ball_state" not in code
     assert state_bytes == 0
     assert "void Ball_pool_init(Actor* self) {" in code
 

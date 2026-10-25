@@ -27,14 +27,15 @@ end
 Le projectile avance vers la droite et se détruit en sortant de la scène (`scene.size.w` est la
 largeur de la scène).
 
-## 2. Réserver des instances dans le pool
+## 2. Rien à réserver
 
-Les acteurs créés au vol viennent d'un **pool** réservé à l'avance. Dans l'inspecteur de la scène, réservez des instances de
-`Projectile` dans le pool de prefabs. Sans cette réserve, `actor:spawn` ne peut pas créer de
-projectile.
+Les acteurs créés au vol naissent dans un **pool partagé par toute la scène** : 512 emplacements en tout,
+acteurs posés compris, et n'importe quel prefab y prend la première place libre. Il n'y a donc rien à régler
+par prefab. Un projectile détruit rend sa place aux suivants.
 
-Prévoyez le nombre maximal de projectiles vivants en même temps. Quand le pool est plein, `spawn`
-ne crée rien et renvoie `nil`.
+Quand la scène est pleine, `spawn` ne crée rien et renvoie `nil`. Un prefab qui demande encore des
+emplacements fixes (un interacteur, un prefab à parties ou à rotation, un prefab qui bloque d'autres
+acteurs) garde une réserve de 8 instances.
 
 ## 3. Créer l'acteur depuis un script
 
@@ -67,7 +68,7 @@ des exports du prefab. La table s'écrit en début de ligne ou dans un `local x 
 ## 5. Tester
 
 Lancez **Run** : la tourelle tire à intervalle régulier et les projectiles disparaissent à la
-sortie de la scène. Si rien n'apparaît, vérifiez d'abord la réserve du pool.
+sortie de la scène. Si rien n'apparaît, vérifiez d'abord le nom du prefab dans `actor:spawn`.
 
 ## À savoir
 
