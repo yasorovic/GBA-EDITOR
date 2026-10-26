@@ -1,4 +1,5 @@
 import pytest
+from PyQt6.QtCore import Qt
 
 from core.history import get_history
 from core.project import Project
@@ -137,24 +138,19 @@ def test_rom_refresh_and_undo_preserve_experimental_preview(qapp, tmp_path):
     panel.close()
 
 
-def test_distributed_versions_expose_only_supported_sram(qapp, tmp_path, monkeypatch):
-    from core import app_paths
+def test_the_selector_lists_every_save_type_and_greys_out_the_ones_the_engine_cannot_write(qapp, tmp_path):
     from ui.common.cartridge_preview import save_preview_profiles
 
-    monkeypatch.setattr(app_paths, "IS_FROZEN", True)
-    assert [p.key for p in save_preview_profiles()] == ["sram"]
+    profiles = save_preview_profiles()
+    assert {p.key for p in profiles if p.functional} == {"sram"}
     panel = BuildPanel(Project(tmp_path))
-    assert panel._combo_save_preview.count() == 1
-    assert panel._combo_save_preview.parentWidget().isHidden()
-    preview = panel._cartridge_preview
-    preview.set_profile("flash_rtc", 131072)
-    assert preview.profile_id == "sram"
-    assert preview.capacity == 32768
-    assert preview._diagram.isHidden()
-    assert preview._view_mode.count() == 1
-    assert preview._view_mode.isHidden()
-    preview._side.setCurrentIndex(1)
-    assert not preview._photo.pixmap.isNull()
+    combo = panel._combo_save_preview
+    assert combo.count() == len(profiles)
+    for row, profile in enumerate(profiles):
+        assert combo.model().item(row).isEnabled() == profile.functional
+        assert bool(combo.itemData(row, Qt.ItemDataRole.ToolTipRole)) == (not profile.functional)
+    assert combo.currentData() == "sram"
+    assert not combo.parentWidget().isHidden()
     panel.close()
 
 

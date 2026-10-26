@@ -215,13 +215,14 @@ typedef struct Actor {
        celui de son bloc d'état de script dans `g_obj_state` (cf. runtime_api_inline.h). Il évite la
        division par la taille d'un `Actor` qu'une soustraction de pointeurs coûterait. */
     u16 inst;
-    u8 active;             /* 0 = ignoré (update + rendu désactivés) */
     /* GÉNÉRATION de l'emplacement : +1 quand l'acteur qui l'occupait est détruit, quand un autre y
        naît, et à chaque entrée de scène. Une référence rangée dans une variable
        (`actor_ref_make`) retient la génération qu'elle a vue ; si l'emplacement a changé de
        main depuis, elle ne désigne plus rien (`actor_ref_get` rend nil) au lieu de désigner
-       en silence l'acteur suivant. */
-    u8 gen;
+       en silence l'acteur suivant. 16 bits : une référence périmée ne redevient valide qu'après
+       65 536 générations de son emplacement (256 avec un octet). */
+    u16 gen;
+    u8 active;             /* 0 = ignoré (update + rendu désactivés) */
     /* L'emplacement est OCCUPÉ : posé par la scène, ou pris par un spawn. Un acteur DÉTRUIT libère
        son emplacement (alive = 0) ; un acteur seulement DÉSACTIVÉ (active = 0) le garde, reste
        adressable et peut être réactivé. Seul un emplacement libre est repris par un spawn. */
@@ -263,6 +264,38 @@ typedef struct Actor {
         CollisionBox boxes[MAX_BOXES];
     } collision;
 } Actor;
+
+/* ── Parcours du pool partagé ─────────────────────────────────────────────────────────────────────────
+   `g_alive_bits` : un bit par emplacement de `g_actors`, à 1 tant que son occupant est VIVANT. Posé par
+   le spawn (`pool_bit_set`), effacé par `actor_destroy_internal` (`pool_bit_clear`), remis à zéro par
+   `scene_init`. Seuls les emplacements du pool partagé (au-delà de `g_spool_start`) y figurent.
+
+   `POOL_EACH(v)` remplace `for(int v = g_spool_start; v < g_spool_hw; v++)` : même ordre, même borne relue
+   à chaque tour, mais un bloc de 32 emplacements dont aucun n'est vivant est sauté d'un seul test. Dans un
+   bloc occupé le parcours reste linéaire et les corps de boucle gardent leurs tests `alive` / `active`.
+   `continue` marche ; un `break` hors d'un `switch` ne sort que du bloc courant. */
+extern int g_spool_start, g_spool_hw;
+extern u32 g_alive_bits[];
+/* Ce qui rend `actor:get("Balle", i)` et `actor:count("Balle")` rapides dans une boucle : `g_alive_epoch` avance à CHAQUE
+   changement de vie d'un emplacement (naissance, destruction, entrée de scène), et `g_nth` retient la dernière réponse avec
+   l'époque où elle a été donnée. Tant que l'époque n'a pas bougé, le i-ème suivant se cherche à partir du précédent et le
+   nombre n'est pas recompté ; dès qu'un acteur naît ou meurt (y compris au milieu de la boucle) le curseur est ignoré et
+   la recherche repart du début, comme avant : la réponse est toujours celle d'un parcours complet. */
+typedef struct {
+    u32 epoch;                          /* époque du dernier `get` */
+    int model, rank, slot;              /* son modèle, son rang parmi les vivants du pool, son emplacement */
+    u32 count_epoch;                    /* époque du dernier `count` */
+    int count_model, count;             /* son modèle et son résultat (la part du pool) */
+} PoolCursor;
+extern PoolCursor g_nth;
+extern u32 g_alive_epoch;
+#define POOL_EACH(v) \
+    for(int _pw_ = g_spool_start >> 5; _pw_ <= ((g_spool_hw - 1) >> 5); _pw_++) \
+        if(g_alive_bits[_pw_]) \
+            for(int v = ((_pw_ << 5) < g_spool_start ? g_spool_start : (_pw_ << 5)), _pe_ = (_pw_ << 5) + 32; \
+                v < _pe_ && v < g_spool_hw; v++)
+static inline void pool_bit_set(int k)   { g_alive_epoch++; if (k >= g_spool_start) g_alive_bits[k >> 5] |= (1u << (k & 31)); }
+static inline void pool_bit_clear(int k) { g_alive_epoch++; g_alive_bits[k >> 5] &= ~(1u << (k & 31)); }
 
 /* Masques boutons */
 #define BTN_A      0x0001

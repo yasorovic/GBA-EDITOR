@@ -1,7 +1,7 @@
 """Le pool PARTAGÉ d'une scène : un seul tas d'emplacements pour tous les modèles qui y naissent.
 
 Plus de réserve par prefab : tout modèle que la scène spawne (plat, à parties, affine, interacteur, bloqueur)
-naît dans les emplacements qui restent après les acteurs posés, 512 en tout par scène (`OBJECT_CAPACITY`).
+naît dans les emplacements qui restent après les acteurs posés, `OBJECT_CAPACITY` en tout par scène.
 """
 from __future__ import annotations
 
@@ -9,9 +9,8 @@ from core.models.scene import Actor, Prefab, Scene
 from core.project import Project
 from core.models.components import SpriteComponent
 from oam_fixtures import tout_afficher, SPRITE
-from codegen.oam_alloc import (
-    OBJECT_CAPACITY, scene_oam_layout, project_actor_count, project_oam_entry_count,
-)
+from codegen.oam_alloc import OBJECT_CAPACITY, scene_oam_layout
+from codegen.oam_budget import project_actor_count, project_oam_entry_count
 
 
 def _scene_qui_spawne(tmp_path, *, actors=2, prefabs=("Bullet",), affines=()):
@@ -99,22 +98,31 @@ def test_la_capacite_se_decide_en_un_seul_endroit(tmp_path, monkeypatch):
 # ── Le C émis ─────────────────────────────────────────────────────────
 
 def test_le_spawn_prend_le_premier_emplacement_libre_du_pool(tmp_path):
-    from codegen.runtime_codegen.main_gen import _scene_pi, _section_spawn
+    from codegen.runtime_codegen.gen_pool import scene_pi, section_spawn
     p, scene = _scene_qui_spawne(tmp_path)
-    code = "\n".join(_section_spawn(_scene_pi(p, scene), p, None))
+    code = "\n".join(section_spawn(scene_pi(p, scene), p, None))
     # La recherche part du curseur, pas du début du pool : un spawn ne parcourt pas les emplacements pleins.
     assert "int _k=g_spool_free;" in code and "while(_k<g_spool_end && g_actors[_k].alive) _k++;" in code
     assert "if(_k+1>g_spool_hw) g_spool_hw=_k+1;" in code and "g_spool_free=_k+1;" in code
     assert "g_actors[_i].model    = 1;" in code and "g_actors[_i].inst = _i;" in code
 
 
+def test_une_naissance_pose_son_bit_de_vie(tmp_path):
+    """Les boucles du tick sautent les blocs de 32 emplacements sans vivant (`POOL_EACH`) : une naissance doit poser
+    le bit de l'emplacement, sinon l'instance vivrait sans jamais être parcourue."""
+    from codegen.runtime_codegen.gen_pool import scene_pi, section_spawn
+    p, scene = _scene_qui_spawne(tmp_path)
+    code = "\n".join(section_spawn(scene_pi(p, scene), p, None))
+    assert code.index("g_actors[_i].alive = 1;") < code.index("pool_bit_set(_i);")
+
+
 def test_la_boucle_du_tick_choisit_le_code_par_le_modele(tmp_path):
     from codegen.runtime_codegen import shared_pool_gen
-    from codegen.runtime_codegen.main_gen import _scene_pi
+    from codegen.runtime_codegen.gen_pool import scene_pi
     p, scene = _scene_qui_spawne(tmp_path, prefabs=("Bullet", "Coin"))
-    pi = _scene_pi(p, scene)
+    pi = scene_pi(p, scene)
     code = "\n".join(shared_pool_gen.hook_lines(pi, "on_update", lambda sym, ev: sym.endswith("Bullet")))
-    assert "for(int _pk=g_spool_start; _pk<g_spool_hw; _pk++)" in code
+    assert "POOL_EACH(_pk)" in code
     assert "switch(_a->model)" in code
     assert "case 1: S_Bullet_on_update(_a); break;" in code
     assert "S_Coin_on_update" not in code                     # ce modèle n'a pas de on_update
@@ -123,14 +131,15 @@ def test_la_boucle_du_tick_choisit_le_code_par_le_modele(tmp_path):
 
 def test_l_ecriture_oam_du_pool_garde_les_constantes_de_chaque_modele(tmp_path):
     from codegen.runtime_codegen import shared_pool_gen
-    from codegen.runtime_codegen.gen_sprite import Appearance, oam_write_lines
-    from codegen.runtime_codegen.main_gen import _scene_pi
+    from codegen.runtime_codegen.gen_sprite import Appearance, anim_tick_variants, oam_write_lines
+    from codegen.runtime_codegen.gen_pool import scene_pi
     from core.models.sprite import SpriteAsset
     p, scene = _scene_qui_spawne(tmp_path, prefabs=("Bullet", "Coin"))
-    pi = _scene_pi(p, scene)
+    pi = scene_pi(p, scene)
     bases = {"Bullet": 0, "Coin": 16}
-    code = "\n".join(shared_pool_gen.oam_lines(
-        pi, lambda owner: [Appearance(SpriteAsset(name=owner.name, asset="a.png"), bases[owner.name])],
+    code = "\n".join(shared_pool_gen.anim_oam_lines(
+        pi, lambda owner, sym: [None], anim_tick_variants,
+        lambda owner: [Appearance(SpriteAsset(name=owner.name, asset="a.png"), bases[owner.name])],
         oam_write_lines))
     assert "int _pe=g_spool_entry+(_pk-g_spool_start);" in code
     assert "case 1: {" in code and "case 2: {" in code
@@ -140,9 +149,9 @@ def test_l_ecriture_oam_du_pool_garde_les_constantes_de_chaque_modele(tmp_path):
 
 
 def test_la_scene_pose_le_pool_et_une_scene_sans_pool_le_vide(tmp_path):
-    from codegen.runtime_codegen.main_gen import _scene_pi
+    from codegen.runtime_codegen.gen_pool import scene_pi
     p, scene = _scene_qui_spawne(tmp_path, actors=3)
-    (shared,) = [m for m in _scene_pi(p, scene) if m["shared"]]
+    (shared,) = [m for m in scene_pi(p, scene) if m["shared"]]
     assert shared["spool"]["start"] == 3 and shared["spool"]["end"] == OBJECT_CAPACITY
     assert shared["spool"]["entries"] == OBJECT_CAPACITY - 3
 
@@ -150,17 +159,41 @@ def test_la_scene_pose_le_pool_et_une_scene_sans_pool_le_vide(tmp_path):
 def test_les_instances_du_pool_animent_leur_sprite_par_le_modele(tmp_path):
     from codegen.runtime_codegen import shared_pool_gen
     from codegen.runtime_codegen.gen_sprite import anim_tick_variants
-    from codegen.runtime_codegen.main_gen import _scene_pi
+    from codegen.runtime_codegen.gen_pool import scene_pi
     p, scene = _scene_qui_spawne(tmp_path, prefabs=("Bullet", "Coin"))
-    pi = _scene_pi(p, scene)
+    pi = scene_pi(p, scene)
     variants = {"Bullet": [dict(sym="sprite_Bullet")], "Coin": [None]}      # Coin : un sprite fixe
-    code = "\n".join(shared_pool_gen.anim_lines(pi, lambda owner, sym: variants[owner.name], anim_tick_variants))
-    assert "for(int _pk=g_spool_start; _pk<g_spool_hw; _pk++){" in code
+    from codegen.runtime_codegen.gen_sprite import oam_write_lines
+    code = "\n".join(shared_pool_gen.anim_oam_lines(
+        pi, lambda owner, sym: variants[owner.name], anim_tick_variants, lambda owner: [], oam_write_lines))
+    assert "POOL_EACH(_pk){" in code
     assert "int _pe=g_spool_entry+(_pk-g_spool_start);" in code
     assert "case 1: {" in code and "case 2:" not in code                  # seul le modèle animé a un cas
     assert "g_oam_entries[_pe].timer++;" in code and "g_actors[_pk].facing_y" in code
     assert "sprite_Bullet_state_start" in code
-    assert shared_pool_gen.anim_lines(pi, lambda owner, sym: [None], anim_tick_variants) == []
+    assert shared_pool_gen.anim_oam_lines(
+        pi, lambda owner, sym: [None], anim_tick_variants, lambda owner: [], oam_write_lines) == []
+
+
+def test_l_animation_et_l_ecriture_oam_du_pool_tiennent_dans_une_seule_boucle(tmp_path):
+    """Les deux passes sont fusionnées : un seul parcours du pool, et dans le cas d'un type d'emplacement le tick
+    d'animation précède l'écriture OAM (qui lit la frame qu'il vient de poser)."""
+    from codegen.runtime_codegen import shared_pool_gen
+    from codegen.runtime_codegen.gen_sprite import Appearance, anim_tick_variants, oam_write_lines
+    from codegen.runtime_codegen.gen_pool import scene_pi
+    from core.models.sprite import SpriteAsset
+    p, scene = _scene_qui_spawne(tmp_path, prefabs=("Bullet", "Coin"))
+    pi = scene_pi(p, scene)
+    variants = {"Bullet": [dict(sym="sprite_Bullet")], "Coin": [None]}
+    code = "\n".join(shared_pool_gen.anim_oam_lines(
+        pi, lambda owner, sym: variants[owner.name], anim_tick_variants,
+        lambda owner: [Appearance(SpriteAsset(name=owner.name, asset="a.png"), 0)], oam_write_lines))
+    assert code.count("POOL_EACH(") == 1
+    assert "if(!_a->active) continue;" in code
+    bullet = code[code.index("case 1: {"):code.index("case 2: {")]
+    assert bullet.index("g_oam_entries[_pe].timer++;") < bullet.index("shadow_oam[_o].attr0")   # animer, puis écrire
+    coin = code[code.index("case 2: {"):]
+    assert "timer++" not in coin and "shadow_oam[_o].attr0" in coin                              # sprite fixe : écrit seulement
 
 
 # ── Blocage et interaction des instances du pool ──────────────────────
@@ -188,28 +221,30 @@ def _scene_blocage(tmp_path):
 
 def test_les_bloqueurs_et_les_mobiles_du_pool_se_decident_par_le_modele(tmp_path):
     from codegen.runtime_codegen.block_gen import block_tick_lines
-    from codegen.runtime_codegen.main_gen import _scene_pi, _shown
+    from codegen.runtime_codegen.gen_pool import scene_pi
+    from codegen.runtime_codegen.gen_sprite import shown
     p, scene = _scene_blocage(tmp_path)
-    pi = _scene_pi(p, scene)
+    pi = scene_pi(p, scene)
     ids = {m["prefab"].name: m["model_id"] for m in pi if m["shared"]}
-    code = "\n".join(block_tick_lines(p, scene, [(a, None) for a in scene.actors], 0, pi, _shown))
+    code = "\n".join(block_tick_lines(p, scene, [(a, None) for a in scene.actors], 0, pi, shown))
     # le héros né est repoussé par le mur né (modèle) ET par le rocher posé (emplacement)
     assert f"case {ids['Hero']}: {{" in code and f"case {ids['Wall']}:" not in code     # le mur n'est pas un mobile
     assert f"static const u8 _bk_pm[]={{{ids['Wall']}}};" in code
     assert "static const u16 _bk_idx[]={0};" in code
     assert "actors_resolve_blocks_pool(_a,_bk_pm,_bk_pb,1);" in code
-    assert "for(int _bm=g_spool_start;_bm<g_spool_hw;_bm++){" in code
+    assert "POOL_EACH(_bm){" in code
 
 
 def test_sans_instance_du_pool_qui_bloque_aucun_appel_au_pool(tmp_path):
     from codegen.runtime_codegen.block_gen import block_tick_lines
-    from codegen.runtime_codegen.main_gen import _scene_pi, _shown
+    from codegen.runtime_codegen.gen_pool import scene_pi
+    from codegen.runtime_codegen.gen_sprite import shown
     p, scene = _scene_blocage(tmp_path)
     p.prefabs.items = [pf for pf in p.prefabs.items if pf.name == "Hero"]      # plus de mur né
     (tmp_path / "assets" / "s.lua").write_text('function on_update()\n    actor:spawn("Hero", vec2(0, 0))\nend\n',
                                                encoding="utf-8")
-    pi = _scene_pi(p, scene)
-    code = "\n".join(block_tick_lines(p, scene, [(a, None) for a in scene.actors], 0, pi, _shown))
+    pi = scene_pi(p, scene)
+    code = "\n".join(block_tick_lines(p, scene, [(a, None) for a in scene.actors], 0, pi, shown))
     assert "actors_resolve_blocks_pool" not in code and "actors_resolve_blocks(_a,_bk_idx" in code
 
 
@@ -217,7 +252,8 @@ def test_l_interaction_cherche_les_consommateurs_nes_et_reconnait_les_interacteu
     from types import SimpleNamespace
     from codegen.c_names import scene_actor_sym
     from codegen.runtime_codegen.interact_gen import interact_tick_lines
-    from codegen.runtime_codegen.main_gen import _scene_pi, _shown
+    from codegen.runtime_codegen.gen_pool import scene_pi
+    from codegen.runtime_codegen.gen_sprite import shown
     from core.models.components import CollisionBoxComponent, InteractiveComponent
     hero, chest = Prefab(name="Hero"), Prefab(name="Chest")
     hero.actor.components.append(CollisionBoxComponent(solid=True, w=16, h=16))
@@ -233,11 +269,11 @@ def test_l_interaction_cherche_les_consommateurs_nes_et_reconnait_les_interacteu
     (tmp_path / "assets" / "s.lua").write_text(
         'function on_update()\n    actor:spawn("Hero", vec2(0, 0))\n    actor:spawn("Chest", vec2(0, 0))\nend\n',
         encoding="utf-8")
-    pi = _scene_pi(p, scene)
+    pi = scene_pi(p, scene)
     ids = {m["prefab"].name: m["model_id"] for m in pi if m["shared"]}
     code = "\n".join(interact_tick_lines(
         p, scene, [(a, None) for a in scene.actors], 0, pi, set(), lambda sym, ev: True, scene_actor_sym,
-        SimpleNamespace(masks={"interact": "KEY_A"}), _shown, lambda j: 0))
+        SimpleNamespace(masks={"interact": "KEY_A"}), shown, lambda j: 0))
     top = max(ids.values()) + 1
     assert f"static const u8 _ia_pbox[{top}]=" in code and f"static const u8 _ia_paim[{top}]=" in code
     assert f"static void (*const _ia_pfn[{top}])(Actor*,Actor*)=" in code and "S_Chest_on_interact" in code
@@ -281,55 +317,81 @@ def test_un_modele_a_parties_prend_une_identite_par_emplacement_de_son_groupe(tm
 
 
 def test_le_spawn_d_un_groupe_cherche_une_serie_libre_et_type_chaque_partie(tmp_path):
-    from codegen.runtime_codegen.main_gen import _scene_pi, _section_spawn
+    from codegen.runtime_codegen.gen_pool import scene_pi, section_spawn
     p, scene = _scene_boss(tmp_path)
-    code = "\n".join(_section_spawn(_scene_pi(p, scene), p, None))
+    code = "\n".join(section_spawn(scene_pi(p, scene), p, None))
     boss = code[code.index("Actor* spawn_S_Boss"):]
     assert "while(_k<g_spool_end && !spool_slot_free(_k)) _k++;" in boss          # une partie détruite garde sa place
     assert "if(_k+3>g_spool_end) { _k=g_spool_end; break; }" in boss
     assert "while(_j<3 && spool_slot_free(_k+_j)) _j++;" in boss and "if(_k+3>g_spool_hw) g_spool_hw=_k+3;" in boss
     assert "g_actors[_i].model    = 2;" in boss
-    assert "g_actors[_i+1].model    = 3;" in boss and "g_actors[_i+2].model    = 4;" in boss
-    assert "g_oam_entries[_e+1] = (OamEntry){0};" in boss         # la partie k : l'entrée de son emplacement, `_e + k`
+    assert "int _s1 = group_slot(_i, 1);" in boss and "int _s2 = group_slot(_i, 2);" in boss
+    assert "g_actors[_s1].model    = 3;" in boss and "g_actors[_s2].model    = 4;" in boss
+    assert "g_oam_entries[group_entry(_e, 1)] = (OamEntry){0};" in boss    # la partie k : l'entrée de son emplacement
+    assert "pool_bit_set(_s1);" in boss and "pool_bit_set(_s2);" in boss    # chaque partie naît vivante pour POOL_EACH
+    # L'hypothèse de contiguïté d'un groupe ne s'écrit qu'à un endroit (`group_slot`, `group_entry`) : plus de `_i+k`.
+    assert "_i+1" not in boss and "_i+2" not in boss and "_e+1" not in boss
     plat = code[code.index("Actor* spawn_S_Bullet"):code.index("Actor* spawn_S_Boss")]
     assert "spool_slot_free(_k+_j)" not in plat and "g_spool_free=_k+1;" in plat
     assert "!spool_slot_free(_k)" in plat                      # un modèle plat respecte aussi les groupes vivants
 
 
 def test_la_scene_sans_modele_a_parties_garde_le_test_simple(tmp_path):
-    from codegen.runtime_codegen.main_gen import _scene_pi, _section_spawn
+    from codegen.runtime_codegen.gen_pool import scene_pi, section_spawn
     p, scene = _scene_qui_spawne(tmp_path)
-    code = "\n".join(_section_spawn(_scene_pi(p, scene), p, None))
+    code = "\n".join(section_spawn(scene_pi(p, scene), p, None))
     assert "spool_slot_free" not in code and "while(_k<g_spool_end && g_actors[_k].alive) _k++;" in code
 
 
 def test_la_composition_des_parties_parcourt_les_racines_vivantes_du_pool(tmp_path):
-    from codegen.runtime_codegen.main_gen import _scene_pi, _pool_compose_lines
+    from codegen.runtime_codegen.gen_pool import scene_pi, pool_compose_lines
     p, scene = _scene_boss(tmp_path)
-    code = "\n".join(_pool_compose_lines(_scene_pi(p, scene)))
-    assert "for(int _b=g_spool_start; _b<g_spool_hw; _b++) {" in code
+    code = "\n".join(pool_compose_lines(scene_pi(p, scene)))
+    assert "POOL_EACH(_b) {" in code
     assert "if(g_actors[_b].model!=2||!g_actors[_b].alive) continue;" in code
     assert "int _eb = g_spool_entry + (_b - g_spool_start);" in code
-    assert "g_actors[_b+1].x" in code and "g_actors[_b+2].x" in code
-    assert "g_oam_entries[_eb+1].visible" in code                  # la partie k : l'entrée de son emplacement
-    assert "g_actors[_b+_k].alive = 0" not in code                 # la libération du groupe est celle de destroy
+    assert "int _s1 = group_slot(_b, 1), _s2 = group_slot(_b, 2);" in code
+    assert "g_actors[_s1].x" in code and "g_actors[_s2].x" in code
+    assert "g_oam_entries[group_entry(_eb, 1)].visible" in code    # la partie k : l'entrée de son emplacement
+    assert "_b+1" not in code and "_b+2" not in code and "_eb+1" not in code     # contiguïté : seulement dans group_slot / group_entry
+    assert "alive = 0" not in code                                 # la libération du groupe est celle de destroy
 
 
 def test_chaque_type_d_emplacement_a_son_cas_d_affichage_et_ses_collisions(tmp_path):
     from codegen.runtime_codegen import shared_pool_gen
-    from codegen.runtime_codegen.gen_sprite import Appearance, oam_write_lines
-    from codegen.runtime_codegen.main_gen import _scene_pi
+    from codegen.runtime_codegen.gen_sprite import Appearance, anim_tick_variants, oam_write_lines
+    from codegen.runtime_codegen.gen_pool import scene_pi
     from core.models.sprite import SpriteAsset
     p, scene = _scene_boss(tmp_path)
-    pi = _scene_pi(p, scene)
-    code = "\n".join(shared_pool_gen.oam_lines(
-        pi, lambda owner: [Appearance(SpriteAsset(name=owner.name, asset="a.png"), 0)], oam_write_lines))
+    pi = scene_pi(p, scene)
+    code = "\n".join(shared_pool_gen.anim_oam_lines(
+        pi, lambda owner, sym: [None], anim_tick_variants,
+        lambda owner: [Appearance(SpriteAsset(name=owner.name, asset="a.png"), 0)], oam_write_lines))
     assert "case 1: {" in code and "case 2: {" in code and "case 3: {" in code and "case 4:" not in code   # le marqueur n'affiche rien
-    from codegen.runtime_codegen.main_gen import _box_contact_lines
+    from codegen.runtime_codegen.interact_gen import box_contact_lines
     from core.models.components import CollisionBoxComponent
     boxed = [(0, scene.actors[0])]
     scene.actors[0].components.append(CollisionBoxComponent(w=8, h=8))
     col = "\n".join(shared_pool_gen.collision_lines(
         pi, 100, boxed, lambda pf, a: True, lambda sym, ev: sym.endswith("Boss") and ev == "on_collision_enter",
-        lambda sym, ev: True, lambda scn, name: f"{scn}_{name}", {0}, "S", _box_contact_lines))
+        lambda sym, ev: True, lambda scn, name: f"{scn}_{name}", {0}, "S", box_contact_lines))
     assert "case 2: case 3: case 4: {" in col     # une partie réagit avec le script de sa racine
+
+
+def test_un_prefab_ne_sans_script_n_appelle_pas_pool_init(tmp_path):
+    """`pool_init` sort du script Lua du prefab : sans script, le spawn n'en déclare ni n'en appelle (l'édition de
+    liens échouait sur le symbole absent)."""
+    from codegen.runtime_codegen.gen_pool import scene_pi, section_spawn
+    p, scene = _scene_qui_spawne(tmp_path)
+    code = "\n".join(section_spawn(scene_pi(p, scene), p, None))
+    assert "Actor* spawn_S_Bullet" in code and "pool_init" not in code
+
+
+def test_un_prefab_ne_avec_script_lua_appelle_pool_init(tmp_path):
+    from core.models.components import ScriptComponent
+    from codegen.runtime_codegen.gen_pool import scene_pi, section_spawn
+    p, scene = _scene_qui_spawne(tmp_path)
+    (tmp_path / "assets" / "bullet.lua").write_text("function on_update()\nend\n", encoding="utf-8")
+    p.prefabs.items[0].actor.components.append(ScriptComponent(script="assets/bullet.lua"))
+    code = "\n".join(section_spawn(scene_pi(p, scene), p, None))
+    assert "extern void S_Bullet_pool_init(Actor* self);" in code and "S_Bullet_pool_init(&g_actors[_i]);" in code

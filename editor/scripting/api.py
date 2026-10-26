@@ -269,6 +269,9 @@ class ApiProp:
     c_getter_named: Optional[str] = None
     c_setter_named: Optional[str] = None
     doc:        str = ""
+    # Le type de RÉFÉRENCE que la propriété rend quand elle désigne un autre objet (`a.parent` : un acteur, ou nil). Vide pour
+    # une valeur (`position`, `visible`). C'est ce qui fait de `other.parent.position` une chaîne typée.
+    ref:        Optional[str] = None
 
 
 # ─── Énumérations matérielles : un nom, pas un nombre ─────────────
@@ -687,6 +690,16 @@ RUNTIME_API: dict[str, ApiFunc] = {
              " Ex: for i=1,actor:count() do local a=actor:get(i) ... end. "
              "actor:count(\"Bullet\") is the number of LIVE instances of a prefab this scene "
              "spawns: the bound of actor:get(\"Bullet\", i)."),
+    ),
+    # Même forme que `count` (sans paramètre déclaré) : un paramètre de domaine prefab ferait passer un script qui ne fait que
+    # `clear` pour un script qui FAIT NAÎTRE le prefab, et la scène lui réserverait un pool. Le nom est jugé par le vérificateur.
+    "actor.clear": ApiFunc(
+        lua_name="actor.clear", c_func="_actor_clear",   # résolu par codegen
+        params=[], variadic=True, ret="int",
+        doc=("Destroys every LIVE instance of a prefab this scene spawns or declares (the placed ones "
+             "included) and returns how many. The parts of an instance go with it. As with other:destroy(), "
+             "the scripted on_destroy() of each is not called; a SoundFX set to play on destroy does. "
+             "Ex: actor:clear(\"Bullet\")"),
     ),
 
     # ── Éléments d'interface, typés ─────────
@@ -1677,6 +1690,24 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
             "its prefab. It is what lets you recognise who you touch. Ex: if "
             "other.name == \"Ball\" then self:destroy() end. Not to be confused "
             "with `tag`, which belongs to collision boxes.",
+    ),
+
+    # ── Actor : navigation dans un acteur à parties ─────────────────
+    # Une RELATION lue sans argument : un état, donc une propriété (cf. `ApiProp`). Elle rend un autre acteur de la même
+    # instance, ou nil : le résultat se teste (`if p then`) comme celui d'un `actor:get`, et s'enchaîne (`other.parent.position`).
+    "actor.parent": ApiProp(
+        lua_name="actor.parent", c_getter="actor_parent", ptype=PARAM_INT,
+        self_first=True, read_only=True, ref=REF_ACTOR,
+        doc="The part this actor hangs from (read-only): the root of its prefab, or another part. nil for "
+            "a root, for a destroyed actor and when the parent part was destroyed. For an actor placed in the "
+            "scene it is its scene parent. Ex: local boss = other.parent; if boss then boss:hide() end",
+    ),
+    "actor.root": ApiProp(
+        lua_name="actor.root", c_getter="actor_root", ptype=PARAM_INT,
+        self_first=True, read_only=True, ref=REF_ACTOR,
+        doc="The root of the instance this actor belongs to (read-only): the actor itself for a root. nil for a "
+            "destroyed actor. On a part touched in a collision it gives the whole instance. "
+            "Ex: local boss = other.root; if boss then boss:hide() end",
     ),
 
     # ── Actor : animation ──────────────────────────────────────────

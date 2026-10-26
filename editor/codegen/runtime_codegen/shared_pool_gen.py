@@ -3,15 +3,16 @@
 Un emplacement du pool accueille n'importe quel modèle simple (`oam_alloc.is_plain_model`) : le build ne
 peut donc plus dérouler, modèle par modèle, des boucles sur des emplacements qu'il connaît. Chaque
 passe du tick (mise à jour, tuiles, collisions, écriture OAM) devient UNE boucle sur les emplacements
-utilisés (de `g_spool_start` à `g_spool_hw`, le plus haut utilisé), avec un `switch` sur `Actor.model` :
-le code du modèle est appelé, ou ses constantes de sprite sont écrites, par le cas qui le concerne.
+utilisés (`POOL_EACH` : de `g_spool_start` à `g_spool_hw`, le plus haut utilisé, en sautant les blocs de 32
+emplacements sans vivant), avec un `switch` sur `Actor.model` : le code du modèle est appelé, ou ses constantes
+de sprite sont écrites, par le cas qui le concerne.
 
 Un modèle à PARTIES occupe un groupe d'emplacements contigus : `Actor.model` y est un TYPE d'emplacement, la
 racine portant l'identité du modèle (`model_id`) et sa partie k cette identité + k. Les scripts, la résolution
 contre la carte et le Sfx ne concernent que la racine ; l'animation, l'affichage et les collisions ont un cas
 par type (une partie réagit avec le script de sa racine, comme dans une réserve à part).
 
-`pi` est la liste des pools de la scène (`main_gen._scene_pi`) ; seuls ceux qui portent `shared`
+`pi` est la liste des pools de la scène (`gen_pool.scene_pi`) ; seuls ceux qui portent `shared`
 comptent ici. Les fonctions reçoivent les générateurs de `main_gen` dont elles ont besoin plutôt que de
 l'importer : ce module est sa dépendance, pas l'inverse."""
 from __future__ import annotations
@@ -27,15 +28,12 @@ def owners(m: dict) -> list:
     return [m["prefab"], *(getattr(m["prefab"], "children", None) or [])]
 
 
-def _loop(body: list[str], *, active_only: bool = True, entry: bool = False) -> list[str]:
-    """Une boucle sur les emplacements utilisés du pool, `_a` étant l'acteur courant (et `_pe` son état
-    d'affichage si `entry`)."""
-    head = ["    for(int _pk=g_spool_start; _pk<g_spool_hw; _pk++){",
+def _loop(body: list[str], *, active_only: bool = True) -> list[str]:
+    """Une boucle sur les emplacements utilisés du pool, `_a` étant l'acteur courant."""
+    head = ["    POOL_EACH(_pk){",
             "        Actor* _a=&g_actors[_pk];"]
     if active_only:
         head.append("        if(!_a->active) continue;")
-    if entry:
-        head.append("        int _pe=g_spool_entry+(_pk-g_spool_start);")
     return head + ["        switch(_a->model){", *body, "        default: break;", "        }", "    }"]
 
 
@@ -101,8 +99,8 @@ def collision_lines(pi: list[dict], size: int, col_scene: list, can_collide, has
     return [
         "    {",
         f"        static u16 _pcol[{size}][{width}] EWRAM_BSS;   /* recouvrement de la frame précédente */",
-        f"        static u8 _pcol_gen[{size}] EWRAM_BSS;          /* à quel occupant il appartient */",
-        "        for(int _pk=g_spool_start; _pk<g_spool_hw; _pk++){",
+        f"        static u16 _pcol_gen[{size}] EWRAM_BSS;          /* à quel occupant il appartient */",
+        "        POOL_EACH(_pk){",
         "            Actor* _a=&g_actors[_pk];",
         "            if(!_a->active) continue;",
         "            int _sl=_pk-g_spool_start;",
@@ -118,47 +116,48 @@ def collision_lines(pi: list[dict], size: int, col_scene: list, can_collide, has
 
 def sfx_lines(model: dict, sfx_sym, sfx_vol) -> list[str]:
     """Le Sfx d'un modèle du pool partagé, joué pour chacune de ses instances actives."""
-    return [f"        for(int _pi=g_spool_start; _pi<g_spool_hw; _pi++)",
+    return [f"        POOL_EACH(_pi)",
             f"            if(g_actors[_pi].active && g_actors[_pi].model=={model['model_id']}) "
             f"sfx_play({sfx_sym}, {sfx_vol}, 0);   /* SoundFxComponent : {model['prefab'].name} */"]
 
 
-def anim_lines(pi: list[dict], anim_variants, anim_tick_variants) -> list[str]:
-    """Le tick d'animation des instances du pool partagé : une boucle, et les tables de sprite de chaque
-    type d'emplacement dans son cas. `_pk` est l'acteur, `_pe` son état d'affichage (un par emplacement).
-    Un porteur dont aucune apparence n'a d'état à animer n'a pas de cas."""
-    cases = []
+def anim_oam_lines(pi: list[dict], anim_variants, anim_tick_variants, appearances, oam_write_lines,
+                   affine_of=None) -> list[str]:
+    """L'animation puis l'écriture OAM des instances du pool partagé : UNE boucle, et dans chaque cas d'un type
+    d'emplacement le tick d'animation de son porteur, puis ses constantes de sprite. `_pk` est l'acteur, `_pe` son
+    état d'affichage (un par emplacement). Un porteur dont aucune apparence n'a d'état à animer n'a pas de tick, un
+    porteur qui n'affiche rien n'écrit rien ; un type sans l'un ni l'autre n'a pas de cas.
+
+    Les deux passes tenaient dans deux boucles successives ; les fusionner ne change rien parce que chacune ne lit et
+    n'écrit que l'état de son propre emplacement (l'écriture OAM lit la frame que l'animation vient de poser, du même
+    emplacement) : l'ordre des entrées de `shadow_oam` reste celui des emplacements. L'écriture OAM est déjà gardée
+    par `active`, donc le `continue` d'un acteur inactif ne retire rien.
+
+    `anim_variants(porteur, symbole)` : les apparences à animer, ou `[None]` si aucune n'a d'état ; `appearances(porteur)`
+    : les apparences à écrire ; `affine_of(modèle, porteur)` : l'entrée affine DYNAMIQUE du porteur (une matrice prise à
+    la frame), ou None."""
+    cases: dict[int, list[str]] = {}
     for m in shared_models(pi):
         for k, owner in enumerate(owners(m)):
             if m["member_entries"][k] < 0:
-                continue
+                continue                # ce porteur n'a pas d'entrée : ni animation ni affichage
+            body: list[str] = []
             variants = anim_variants(owner, m["sym"])
-            if not any(v is not None for v in variants):
-                continue
-            cases += [f"        case {m['model_id'] + k}: {{", *anim_tick_variants("_pk", "_pe", variants),
-                      "        } break;"]
-    if not cases:
-        return []
-    return _loop(cases, entry=True)
-
-
-def oam_lines(pi: list[dict], appearances, oam_write_lines, affine_of=None) -> list[str]:
-    """L'écriture OAM des instances du pool partagé : une boucle, et les constantes de sprite de chaque
-    type d'emplacement dans son cas. `_pk` est l'acteur, `_pe` son état d'affichage (un par emplacement).
-    `affine_of(modèle, porteur)` : l'entrée affine DYNAMIQUE du porteur (une matrice prise à la frame), ou None."""
-    cases = []
-    for m in shared_models(pi):
-        for k, owner in enumerate(owners(m)):
-            if m["member_entries"][k] < 0:
-                continue                # ce porteur n'affiche rien
+            if any(v is not None for v in variants):
+                body += ["        {", *anim_tick_variants("_pk", "_pe", variants), "        }"]
             apps = appearances(owner)
-            if not apps:
-                continue
-            aff = affine_of(m, owner) if affine_of else None
-            cases += [f"        case {m['model_id'] + k}: {{", *oam_write_lines("_pk", "_pe", apps, aff=aff),
-                      "        } break;"]
+            if apps:
+                aff = affine_of(m, owner) if affine_of else None
+                body += ["        {", *oam_write_lines("_pk", "_pe", apps, aff=aff), "        }"]
+            if body:
+                cases[m["model_id"] + k] = body
     if not cases:
         return []
-    return ["    for(int _pk=g_spool_start; _pk<g_spool_hw; _pk++){",
+    lines: list[str] = []
+    for type_id in sorted(cases):
+        lines += [f"        case {type_id}: {{", *cases[type_id], "        } break;"]
+    return ["    POOL_EACH(_pk){",
+            "        Actor* _a=&g_actors[_pk];",
+            "        if(!_a->active) continue;",
             "        int _pe=g_spool_entry+(_pk-g_spool_start);",
-            "        switch(g_actors[_pk].model){", *cases, "        default: break;", "        }", "    }"]
+            "        switch(_a->model){", *lines, "        default: break;", "        }", "    }"]

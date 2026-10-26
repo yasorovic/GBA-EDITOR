@@ -36,11 +36,10 @@ class _Forme:
 
 
 def _sinus_du_moteur() -> str:
-    """`SIN_LUT`, `gba_sin` et `gba_cos` tels que le moteur les écrit."""
+    """`SIN_LUT`, la réduction d'angle, `gba_sin`/`gba_cos`/`gba_sincos` et la matrice, tels que le moteur les écrit."""
     texte = RUNTIME.read_text(encoding="utf-8")
     debut = texte.index("static const s16 SIN_LUT")
-    fin = texte.index("static inline int gba_cos")
-    fin = texte.index("\n", fin)
+    fin = texte.index("/* fin de la trigonométrie du moteur */")
     return texte[debut:fin]
 
 
@@ -50,13 +49,13 @@ def _source_sonde() -> str:
     return f"""
 #include <stdio.h>
 #include <stdlib.h>
-typedef short s16; typedef unsigned short u16;
+typedef short s16; typedef unsigned short u16; typedef signed char s8; typedef unsigned char u8;
 {_sinus_du_moteur()}
 typedef struct {{ int x, y, rotation, scale_x, scale_y; }} A;
 typedef struct {{ int rotation, scale_x, scale_y, flip_h, flip_v, offset_x, offset_y,
                   pivot_x, pivot_y, frame, obj_mode, priority, pal_bank; }} O;
 typedef struct {{ u16 attr0, attr1, attr2, dummy; }} S;
-A g_actors[1]; O g_oam_entries[1]; S shadow_oam[128]; int cam_x = 0, cam_y = 0;
+A g_actors[1]; O g_oam_entries[1]; S shadow_oam[128]; int cam_x = 0, cam_y = 0; AffCache g_aff_cache[1];
 int g_oam_dropped = 0;
 int main(int c, char** v) {{
     int _oamn = 0;

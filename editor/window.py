@@ -23,7 +23,8 @@ from ui.common.tooltip import tooltip
 
 from codegen import BuildWorker
 from core.models.components import affine_sprite_component, displayed_sprite_component
-from codegen.oam_alloc import project_obj_tiles, scene_affine_requests, scene_oam_layout
+from codegen.oam_alloc import scene_oam_layout
+from codegen.oam_budget import project_obj_tiles, scene_affine_requests
 from codegen.rom_report import RomReport
 from ui.common.stack_gauge import StackGauge
 from ui.scene_manager.scene_canvas import SceneEditor

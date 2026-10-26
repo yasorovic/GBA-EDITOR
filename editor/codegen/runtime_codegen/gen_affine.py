@@ -7,10 +7,10 @@ cycle). `affine_entry`/`compute_affine_info` rendent de la donnée ; seul
 """
 from __future__ import annotations
 
-from codegen.oam_alloc import AFFINE_LIMIT
+from codegen.oam_budget import AFFINE_LIMIT
 from codegen.runtime_codegen.gen_scene_query import parent_depths
 from core.models.components import affine_sprite_component
-from core.models.field_value import FieldValue, number_c, number_value
+from core.models.field_value import FieldValue, number_c, number_value, var_names_from_project as _var_names
 
 
 def affine_entry(actor, sc, slot: int, force: bool = False, names=None) -> dict | None:
@@ -142,6 +142,20 @@ def compute_affine_info(actor_offset: int, scene_actors: list, names=None) -> di
     return result
 
 
+def scene_has_affine(scene_actors: list, pi: list) -> bool:
+    """La scène a-t-elle un sprite affine, posé (`SpriteComponent.affine_transform`) ou né (un modèle dont la racine
+    l'est) ? C'est ce qui lui vaut un cache de calcul (`AffCache`) et la matrice dynamique."""
+    for actor, _sprite in scene_actors:
+        sc = affine_sprite_component(actor)
+        if sc and sc.affine_transform:
+            return True
+    for m in pi:
+        sc = affine_sprite_component(m["prefab"])
+        if m.get("shared") and sc and sc.affine_transform:
+            return True
+    return False
+
+
 def oam_window_open(box_w: int, box_h: int) -> list[str]:
     """Ouvre le bloc qui écrit UN sprite dans l'OAM : seulement s'il touche l'écran, et tant qu'il
     reste un emplacement. `sx`/`sy` (le coin haut-gauche de sa boîte OAM) et `_oamn` (le prochain
@@ -213,21 +227,15 @@ def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr
         f"{pad}shadow_oam[{base + '+2' if dynamic else aslot * 4 + 2}].dummy=(u16)(s16)(_fv?-_pc:_pc);",
         f"{pad}shadow_oam[{base + '+3' if dynamic else aslot * 4 + 3}].dummy=(u16)(s16)(_fv?-_pd:_pd);",
     ]
+    key = ["_ac->rot==_arot", "_ac->srot==_srot", "_ac->asx==_asx", "_ac->asy==_asy", "_ac->ssx==_ssx",
+           "_ac->ssy==_ssy", "_ac->lx==_lx", "_ac->ly==_ly", "_ac->px==_px", "_ac->py==_py", "_ac->fl==_fl"]
     return [
         # Transform monde + local composés
         f"        int _arot=g_actors[{idx}].rotation;",
         f"        int _srot=g_oam_entries[{e}].rotation;",
-        f"        int _ang=_arot+_srot; int _cosA=gba_cos(_ang); int _sinA=gba_sin(_ang);",
         f"        int _asx=g_actors[{idx}].scale_x; int _asy=g_actors[{idx}].scale_y;",
         f"        int _ssx=g_oam_entries[{e}].scale_x; int _ssy=g_oam_entries[{e}].scale_y;",
-        f"        int _sxq=_asx*_ssx/256; int _syq=_asy*_ssy/256;",
         f"        int _fh=g_oam_entries[{e}].flip_h; int _fv=g_oam_entries[{e}].flip_v;",
-        f"        int _sxs=_fh?-_sxq:_sxq; int _sys=_fv?-_syq:_syq;",
-        # Matrice 8.8 (base, sans flip)
-        f"        int _pa=_sxq?_cosA*256/_sxq:0; int _pb=_sxq?_sinA*256/_sxq:0;",
-        f"        int _pc=_syq?-_sinA*256/_syq:0; int _pd=_syq?_cosA*256/_syq:0;",
-        f"        if(!_pa&&!_pb){{_pa=1;}}",
-        f"        if(!_pc&&!_pd){{_pd=1;}}",
         # Le cadre est un corps RIGIDE accroché à l'actor : le point P du cadre
         # (offset + demi-cadre + pivot, repère local de l'actor) est transformé par
         # la matrice de l'ACTOR en entier, demi-cadre compris :
@@ -238,9 +246,37 @@ def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr
         # Le flip du SPRITE n'y entre pas : il retourne la texture sur place.
         f"        int _px=g_oam_entries[{e}].pivot_x; int _py=g_oam_entries[{e}].pivot_y;",
         f"        int _lx=g_oam_entries[{e}].offset_x+{W // 2}+_px; int _ly=g_oam_entries[{e}].offset_y+{H // 2}+_py;",
-        f"        int _acos=gba_cos(_arot); int _asin=gba_sin(_arot);",
-        f"        int _ofx=(_acos*_asx*_lx - _asin*_asy*_ly)/65536;",
-        f"        int _ofy=(_asin*_asx*_lx + _acos*_asy*_ly)/65536;",
+        # Tout ce qui suit jusqu'à la position ne dépend que de ces entrées : si aucune n'a changé depuis l'image
+        # précédente, les résultats sont relus (cf. `AffCache`). Un sprite dont la rotation ou l'échelle bouge à chaque
+        # image ne range rien (`_stb` faux) : ranger coûterait plus que ce que la relecture ne rend jamais.
+        f"        AffCache* _ac=&g_aff_cache[{e}]; int _fl=0x80|_fh|(_fv<<1);",
+        "        int _stb=(_ac->vrot==_arot&&_ac->vsx==_asx&&_ac->vsy==_asy);",
+        "        _ac->vrot=_arot; _ac->vsx=_asx; _ac->vsy=_asy;",
+        "        int _pa,_pb,_pc,_pd,_ofx,_ofy,_u,_v;",
+        f"        if(_stb&&{'&&'.join(key)}){{",
+        "            _pa=_ac->pa; _pb=_ac->pb; _pc=_ac->pc; _pd=_ac->pd;",
+        "            _ofx=_ac->ofx; _ofy=_ac->ofy; _u=_ac->u; _v=_ac->v;",
+        "        } else {",
+        "            int _ang=_arot+_srot; int _sinA,_cosA; gba_sincos(_ang,&_sinA,&_cosA);",
+        # Sans rotation locale, l'angle de l'actor est l'angle total : un seul sinus/cosinus.
+        "            int _asin,_acos; if(!_srot){_asin=_sinA;_acos=_cosA;} else gba_sincos(_arot,&_asin,&_acos);",
+        "            int _sxq=_asx*_ssx/256; int _syq=_asy*_ssy/256;",
+        "            int _sxs=_fh?-_sxq:_sxq; int _sys=_fv?-_syq:_syq;",
+        # Matrice 8.8 (base, sans flip)
+        "            gba_affine_matrix(_cosA,_sinA,_sxq,_syq,&_pa,&_pb,&_pc,&_pd);",
+        "            _ofx=(_acos*_asx*_lx - _asin*_asy*_ly)/65536;",
+        "            _ofy=(_asin*_asx*_lx + _acos*_asy*_ly)/65536;",
+        # Le POINT DE PIVOT de l'auteur (`pivot`, depuis le centre du cadre) : P reste FIXE à l'écran et le centre se
+        # place à P - M·pivot (M = rotation·échelle·flip).
+        "            _u=(_cosA*_sxs*_px)/65536-(_sinA*_sys*_py)/65536;",
+        "            _v=(_sinA*_sxs*_px)/65536+(_cosA*_sys*_py)/65536;",
+        "            if(_stb){",
+        "                _ac->rot=_arot; _ac->srot=_srot; _ac->asx=_asx; _ac->asy=_asy; _ac->ssx=_ssx; _ac->ssy=_ssy;",
+        "                _ac->lx=_lx; _ac->ly=_ly; _ac->px=_px; _ac->py=_py; _ac->fl=_fl;",
+        "                _ac->pa=_pa; _ac->pb=_pb; _ac->pc=_pc; _ac->pd=_pd;",
+        "                _ac->ofx=_ofx; _ac->ofy=_ofy; _ac->u=_u; _ac->v=_v;",
+        "            }",
+        "        }",
         # Position. Le matériel pivote toujours sur le CENTRE de la texture
         # (Tonc, obj_aff_*) : la boîte OAM (double taille) est centrée dessus. Le
         # POINT DE PIVOT de l'auteur (`pivot`, depuis le centre du cadre) est
@@ -248,8 +284,6 @@ def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr
         # à P - M·pivot (M = rotation·échelle·flip). Pivot (0,0) : le centre est
         # en `actor + R·S·(offset + demi-cadre)`, le comportement natif.
         f"        int _ocx=({base_x})+_ofx; int _ocy=({base_y})+_ofy;",
-        f"        int _u=(_cosA*_sxs*_px)/65536-(_sinA*_sys*_py)/65536;",
-        f"        int _v=(_sinA*_sxs*_px)/65536+(_cosA*_sys*_py)/65536;",
         f"        int sx=_ocx-{W}-_u; int sy=_ocy-{H}-_v;",
         f"        u16 ti=(u16)({bt}+g_oam_entries[{e}].frame*{tpf});",
         *([] if dynamic else matrix),
@@ -262,4 +296,38 @@ def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr
         f"            shadow_oam[_o].attr1=(sx&0x1FF)|({'_as' if dynamic else aslot}<<9)|({sz}<<14);",
         f"            shadow_oam[_o].attr2=(ti&0x3FF)|({priority_expr}<<10)|(g_oam_entries[{e}].pal_bank<<12);",
         *oam_window_close(),
+    ]
+
+
+def pool_affine(p, root, owner):
+    """L'entrée affine d'un porteur (la racine ou une partie) d'un modèle NÉ, ou None.
+
+    Un modèle est affine quand sa racine l'est ; chaque porteur de son groupe qui affiche un sprite prend alors
+    une matrice, mais aucune n'est réservée au build : elle est attribuée à la frame, quand le sprite est
+    dessiné (`dynamic`, cf. `gen_affine.affine_oam_lines_dynamic`). Les valeurs de départ sont celles du sprite
+    PROPRE du porteur (décalages, pivot, rotation et échelle locales)."""
+    sc_root = affine_sprite_component(root)
+    if not (sc_root and sc_root.affine_transform):
+        return None
+    sc = affine_sprite_component(owner)
+    if sc is None:
+        return None
+    entry = affine_entry(owner, sc, 0, force=True, names=_var_names(p))
+    entry = dict(entry, dynamic=True)
+    del entry["slot"]
+    return entry
+
+
+def affine_init_lines(entry: dict, e: str, indent: str) -> list[str]:
+    """L'état d'affichage affine d'un sprite né : « il a une matrice » (le numéro est celui de la frame, posé à
+    l'affichage), puis sa rotation, son échelle, son décalage et son pivot locaux."""
+    return [
+        f"{indent}g_oam_entries[{e}].affine_slot = 0;",
+        f"{indent}g_oam_entries[{e}].rotation   = {entry['sprite_rotation']};",
+        f"{indent}g_oam_entries[{e}].scale_x = {entry['sprite_scale_x']};",
+        f"{indent}g_oam_entries[{e}].scale_y = {entry['sprite_scale_y']};",
+        f"{indent}g_oam_entries[{e}].offset_x     = {entry['offset_x']};",
+        f"{indent}g_oam_entries[{e}].offset_y     = {entry['offset_y']};",
+        f"{indent}g_oam_entries[{e}].pivot_x      = {entry['pivot_x']};",
+        f"{indent}g_oam_entries[{e}].pivot_y      = {entry['pivot_y']};",
     ]

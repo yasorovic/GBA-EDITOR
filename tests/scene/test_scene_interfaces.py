@@ -150,14 +150,14 @@ def test_migration_deux_scenes_partagent_un_layout_deux_slots():
 def test_routage_emis_par_noeud(tmp_path):
     """`scene_init` installe le routage de rendu : une réinit puis, par zone BG,
     son slot — celui du NŒUD, pas un slot de scène unique."""
-    from codegen.runtime_codegen.main_gen import _gen_ui_routes
+    from codegen.runtime_codegen.gen_ui_scene import gen_ui_routes
     p = Project(tmp_path)
     hud = UILayout(name="hud", target=TARGET_BG)
     hud.elements.append(UIText(name="score"))
     p.ui_layouts.append(hud)
     sc = Scene(name="Jeu", ui_layouts=["hud"])
     sc.ui_layouts[0].bg_slot = 2
-    lines = _gen_ui_routes(p, sc)
+    lines = gen_ui_routes(p, sc)
     assert any("scene_routes_reset()" in l for l in lines)
     # `score` est la région 0 de `all_regions`, routée vers le slot 2 du nœud.
     assert any("scene_route_region(0, 2)" in l for l in lines)
@@ -191,8 +191,8 @@ def test_deux_noeuds_deux_slots_dans_une_scene(tmp_path):
     sc.ui_layouts[0].bg_slot = 0
     sc.ui_layouts[1].bg_slot = 2
     assert p.scene_ui_bg_slots(sc) == [0, 2]
-    from codegen.runtime_codegen.main_gen import _gen_ui_routes
-    joined = "\n".join(_gen_ui_routes(p, sc))
+    from codegen.runtime_codegen.gen_ui_scene import gen_ui_routes
+    joined = "\n".join(gen_ui_routes(p, sc))
     assert "scene_route_region(0, 0)" in joined   # ta → BG0
     assert "scene_route_region(1, 2)" in joined   # tb → BG2
 

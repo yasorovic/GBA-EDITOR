@@ -117,7 +117,7 @@ def interact_helper_lines() -> list[str]:
         "        if(ia_reach(&w,&s,fx,fy,t,box[k],aim[k],&d)&&d<bd){ bd=d; best=k; }",
         "    }",
         "    if(pbox)",
-        "        for(int sl=g_spool_start;sl<g_spool_hw;sl++){",
+        "        POOL_EACH(sl){",
         "            const Actor* t=&g_actors[sl];",
         "            if(!t->active||t==who||pbox[t->model]==255) continue;",
         "            if(ia_reach(&w,&s,fx,fy,t,pbox[t->model],paim[t->model],&d)&&d<bd){ bd=d; best=-2-sl; }",
@@ -231,7 +231,7 @@ def interact_tick_lines(p, scene, scene_actors, actor_offset, pi, lua_idx, _def,
             L += _spriteless_facing_lines(first, stop, step)
         if pool_spriteless:
             body = " ".join(s.strip() for s in follow_facing_lines("(*_a)"))
-            L += ["    for(int _w=g_spool_start;_w<g_spool_hw;_w++){",
+            L += ["    POOL_EACH(_w){",
                   f"        Actor* _a=&g_actors[_w]; if(!{model_is(pool_spriteless, '(*_a)')}) continue;",
                   f"        {body}", "    }"]
     L.append("    /* Interactive : une table par geste, la recherche seulement quand le geste a lieu */")
@@ -267,8 +267,52 @@ def interact_tick_lines(p, scene, scene_actors, actor_offset, pi, lua_idx, _def,
                       "            if(!g_actors[_w].active) continue;",
                       *dispatch("&g_actors[_w]", "            ", n, bool(pool_items)), "        }"]
         if pool_players:
-            L += ["        for(int _w=g_spool_start;_w<g_spool_hw;_w++){",
+            L += ["        POOL_EACH(_w){",
                   f"            if(!g_actors[_w].active||!{model_is(pool_players, 'g_actors[_w]')}) continue;",
                   *dispatch("&g_actors[_w]", "            ", n, bool(pool_items)), "        }"]
         L.append("    }")
+    return L
+
+
+def box_contact_lines(a_expr: str, b_expr: str, active: str, prev: str,
+                       events_a: list, events_b: list, indent: str) -> list[str]:
+    """Les contacts d'UNE paire d'acteurs, un par couple de TAGS de boxes.
+
+    `actors_overlap_mask` rend un bit par couple de tags en contact ; `prev` en
+    garde le souvenir d'une frame à l'autre. Un contact qui naît appelle
+    `on_collision_enter`, un contact qui dure `on_collide`, un contact qui se
+    défait `on_collision_exit` — chacun avec les tags de CE couple. Une paire
+    d'acteurs porte donc plusieurs contacts à la fois (pieds contre tête ET corps
+    contre corps) sans que le premier masque les suivants.
+
+    `events_a` / `events_b` : (événement, fonction C) que reçoit chaque côté ;
+    `my_box` d'un côté est la `other_box` de l'autre."""
+    def calls(event: str) -> list[str]:
+        out = []
+        for ev, fn in events_a:
+            if ev == event:
+                out.append(f"{fn}({a_expr},{b_expr},_ta,_tb);")
+        for ev, fn in events_b:
+            if ev == event:
+                out.append(f"{fn}({b_expr},{a_expr},_tb,_ta);")
+        return out
+
+    i = indent
+    L = [
+        f"{i}{{ u16 _cur=({active})?actors_overlap_mask({a_expr},{b_expr}):0; u16 _prv={prev};",
+        f"{i}  if(_cur|_prv)",
+        f"{i}  for(u8 _bi=0;_bi<MAX_BOXES;_bi++) for(u8 _bj=0;_bj<MAX_BOXES;_bj++){{",
+        f"{i}      u16 _m=(u16)(1u<<(_bi*MAX_BOXES+_bj));",
+        f"{i}      u8 _c=(_cur&_m)!=0, _p=(_prv&_m)!=0;",
+        f"{i}      if(!_c&&!_p) continue;",
+        f"{i}      u8 _ta=({a_expr})->collision.boxes[_bi].tag, _tb=({b_expr})->collision.boxes[_bj].tag;",
+        f"{i}      (void)_ta; (void)_tb;",
+    ]
+    for cond, event in (("_c&&!_p", "on_collision_enter"),
+                        ("_c&&_p", "on_collide"),
+                        ("!_c&&_p", "on_collision_exit")):
+        cs = calls(event)
+        if cs:
+            L.append(f"{i}      if({cond}){{ " + " ".join(cs) + " }")
+    L += [f"{i}  }}", f"{i}  {prev}=_cur; }}"]
     return L

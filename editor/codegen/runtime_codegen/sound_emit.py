@@ -28,6 +28,8 @@ from core.models.audio import volume_to_effect, volume_to_module
 from core.music_structure import music_info_row   # une seule définition, que l'aperçu lit aussi
 from core.models.sound_box import KIND_SOUND, KIND_JINGLE, TRANSITION_CUT
 from codegen.c_names import module_constant
+from core.models.scene import Scene
+from core.project import Project
 
 
 def _sfx_const(name: str) -> str:
@@ -735,3 +737,54 @@ def music_start_lines(p) -> list[str]:
         "                   g_music_box_state[g_music_box_state_cur][1],",
         "                   g_music_box_state[g_music_box_state_cur][2]);",
     ]
+
+
+def scene_music_lines(p: Project, scene: Scene, sound_assets: dict | None) -> list[str]:
+    """L'appel musical de `scene_init`, ou rien du tout.
+
+    Les trois valeurs de `Scene.music` (cf. models/scene.py) :
+      - `MUSIC_INHERIT` — **rien n'est émis**. « Ne touche pas à ce qui joue »
+        doit être littéralement gratuit, c'est le cas par défaut et de loin le
+        plus fréquent.
+      - `MUSIC_NONE`    — silence déclaré.
+      - un nom          — la piste.
+
+    Pas de « ne redémarre pas si c'est déjà la même ». La tentation est réelle
+    (douze salles qui nomment le même thème le relanceraient douze fois), mais
+    `MUSIC_INHERIT` répond DÉJÀ à ce besoin : on nomme le thème dans la salle où
+    il commence, les autres héritent. Retenir la piste courante en plus
+    demanderait un état que `music:play()` appelé depuis un script ne mettrait
+    pas à jour — il suffirait d'un script pour le désynchroniser, et la scène
+    déclarative se tairait alors sans raison visible. Un second mécanisme pour
+    un problème déjà résolu, et faux par-dessus le marché.
+    """
+    from core.models.scene import MUSIC_INHERIT, MUSIC_NONE
+    want = getattr(scene, "music", MUSIC_INHERIT) or MUSIC_INHERIT
+    if want == MUSIC_INHERIT:
+        return []
+    if want == MUSIC_NONE:
+        return ["    music_stop();   /* silence declared by the scene */"]
+    in_rom = {m.name: m for m, _ in (sound_assets or {}).get("music", [])}
+    music = in_rom.get(want)
+    if music is None:
+        # Le validateur a déjà nommé le problème ; ici on ne PEUT pas émettre
+        # MOD_X, la constante n'existe pas dans soundbank.h et la compilation C
+        # échouerait sur un message bien moins clair.
+        return [f"    /* music \"{want}\" absent from the ROM — silent scene */"]
+    from core.models.audio import volume_to_module
+    loop = 1 if getattr(music, "loop", True) else 0
+    # `volume` est un POURCENTAGE ; mmSetModuleVolume attend 0–1024.
+    vol  = volume_to_module(int(getattr(music, "volume", 100)))
+    return [f"    music_play({module_constant(want)}, {loop}, {vol});"]
+
+
+def sound_box_lines(p, sound_assets) -> list[str]:
+    """Les boîtes à état sonores, avant les scene_init et les scene_tick : le stepper d'animation lit
+    `g_sound_box_action[]` pour résoudre l'action d'une frame."""
+    # La hauteur courante de chaque effet — déclarée `extern` dans runtime_api.h, définie ici comme les
+    # autres états d'un événement en cours. 1024 = hauteur normale ; `sfx_play` la repose à chaque lecture.
+    L = ["mm_hword g_sfx_rate[16] = {1024,1024,1024,1024,1024,1024,1024,1024,"
+         "1024,1024,1024,1024,1024,1024,1024,1024};", ""]
+    L += sfx_default_tables(sound_assets)
+    L += emit(p)
+    return L

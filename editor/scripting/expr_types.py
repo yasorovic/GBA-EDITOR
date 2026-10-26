@@ -33,7 +33,7 @@ deux fichiers : un nom réutilisé avec deux types différents n'est pas
 démêlé, il retombe sur `None`)."""
 
 from __future__ import annotations
-from typing import Optional
+from typing import NamedTuple, Optional
 
 from .parser import (ExprName, ExprIndex, ExprIndexAt, ExprCall, ExprInvoke, ExprBinop,
                      ExprString, DATA_NS, StmtAssign, StmtLocalAssign, StmtIf, StmtWhile,
@@ -83,6 +83,11 @@ def _call_key(func_expr) -> Optional[str]:
     return None
 
 
+# Les noms qui précèdent un point sans désigner un acteur : les modules à propriétés propres (`camera`, `scene`) et les espaces de
+# noms du projet (`global.<variable>`, `const.<constante>`, `data.<table>`, `screen.<mesure>`).
+_NOT_ACTORS = frozenset({"camera", "scene", "global", "const", "data", "screen"})
+
+
 def resolve_prop(expr, ref_types: Optional[dict[str, str]] = None,
                  ref_kinds: Optional[dict[str, str]] = None
                  ) -> Optional[tuple[str, ApiProp]]:
@@ -121,16 +126,32 @@ def resolve_prop(expr, ref_types: Optional[dict[str, str]] = None,
     if prop is not None:
         return receiver, prop
     # Tout autre nom est un ACTEUR : `self`, `other`, un acteur de la scène. Ses champs sont
-    # ceux du type `actor` (`_ACTOR_PROP_FIELDS`), sauf pour les modules qui ont les leurs.
-    if receiver not in ("camera", "scene"):
+    # ceux du type `actor` (`_ACTOR_PROP_FIELDS`), sauf pour les espaces de noms qui n'en sont pas :
+    # `global.frame`, `global.parent` sont des globales du projet, pas des propriétés d'un acteur.
+    if receiver not in _NOT_ACTORS:
         prop = _ACTOR_PROP_FIELDS.get(field)
         if prop is not None:
             return receiver, prop
     return None
 
 
-def is_actor_call(expr) -> bool:
-    """`actor:get("X")` / `actor:spawn(...)` : un appel qui REND un acteur."""
+# Les propriétés d'acteur qui rendent un AUTRE acteur de la même instance (`a.parent`, `a.root`), ou nil : celles du catalogue
+# qui déclarent `ref = acteur`. Une seule source, le catalogue.
+ACTOR_NAV_PROPS = frozenset(name.rsplit(".", 1)[1] for name, prop in RUNTIME_PROPS.items()
+                            if name.startswith(f"{REF_ACTOR}.") and prop.ref == REF_ACTOR)
+
+
+def is_actor_call(expr, actor_names=frozenset()) -> bool:
+    """`actor:get("X")` / `actor:spawn(...)` / `a.parent` / `a.root` : une expression qui REND un acteur. `a.parent` ne se
+    reconnaît qu'à son récepteur : `self`, `other`, `who`, un nom que le script tient pour un acteur (`actor_names`), ou
+    une autre expression qui rend un acteur ; `global.parent` ou `data.Table[1].parent` n'en sont pas."""
+    if isinstance(expr, ExprIndex):
+        if expr.field not in ACTOR_NAV_PROPS:
+            return False
+        obj = expr.obj
+        if isinstance(obj, ExprName):
+            return obj.name in ("self", "other", "who") or obj.name in actor_names
+        return is_actor_call(obj, actor_names)
     return (isinstance(expr, ExprCall)
             and _call_key(expr.func) in ("actor.get", "actor.spawn"))
 
@@ -143,6 +164,43 @@ EXPORT_SCALARS = frozenset({"int", "float", "bool", "enum"})
 EXPORT_COMPOSITES = frozenset({"vec2", "vec3", "rect"})
 EXPORT_NAMED = frozenset({"string", "actor_ref", "scene_ref", "sfx_ref"})
 EXPORT_ACCESSIBLE = EXPORT_SCALARS | EXPORT_COMPOSITES | EXPORT_NAMED
+
+
+class ChildRef(NamedTuple):
+    """Une partie nommée depuis une référence : `kind` ("spawn" : prefab, "get" : acteur posé), `owner` (le prefab ou l'acteur),
+    `name` (la partie) et `spec` : son rang dans le groupe pour un prefab (int), l'expression C de son adresse pour un acteur
+    posé (str, une constante du build)."""
+    kind: str
+    owner: str
+    name: str
+    spec: object
+
+
+class RefEnv(dict):
+    """L'environnement de typage : nom -> type de référence (`ref_types`), tenu par le checker et par le codegen. Il porte aussi
+    `child_of`, le prédicat « cette expression est-elle une partie d'une instance connue (`boss.Canon`) ? » : seuls ces deux
+    modules savent quel acteur une variable désigne, et c'est ce qui fait de `boss.Canon` un acteur pour `infer_ref_type`
+    (donc pour ses propriétés et ses méthodes : `boss.Canon.position`, `boss.Canon:hide()`). None hors build."""
+    child_of = None
+
+
+def child_of_ref(expr, target_of, prefab_children, actor_children=None):
+    """`boss.Canon` -> ChildRef quand `boss` désigne par un littéral une instance d'un PREFAB (une variable qui tient
+    `actor:spawn("Boss")` ou `actor:get("Boss", i)`, ou l'appel lui-même) ou un acteur POSÉ de la scène (`actor:get("Boss")`)
+    qui a une partie de ce nom. Rien pour `self` (ses enfants sont ceux du script courant) ni pour un acteur dont on ne connaît
+    pas l'identité (`other`, `actor:get(i)`). `target_of(obj)` rend ("get" | "spawn", nom) ou None ; `prefab_children`,
+    {prefab: {partie: rang}} ; `actor_children`, {acteur posé: {enfant: expression C}}."""
+    if not isinstance(expr, ExprIndex) or isinstance(expr.obj, ExprName) and expr.obj.name in ("self", "other", "who"):
+        return None
+    target = target_of(expr.obj)
+    if not target:
+        return None
+    kind, name = target
+    if kind == "spawn":
+        rank = ((prefab_children or {}).get(name) or {}).get(expr.field)
+        return ChildRef("spawn", name, expr.field, rank) if rank else None
+    ref = ((actor_children or {}).get(name) or {}).get(expr.field)
+    return ChildRef("get", name, expr.field, ref) if ref else None
 
 
 def literal_actor_target(expr):
@@ -182,14 +240,18 @@ def held_actor_refs(script) -> dict:
     top = {loc.name for loc in script.locals}
     declared: set = set()
     assigned: dict = {}
+    holders: set = set()        # les noms que le script voit tenir un acteur : `other.root` ne se reconnaît qu'avec eux
 
     def walk(stmts):
         for s in stmts or []:
             if isinstance(s, StmtLocalAssign):
                 declared.add(s.name)
+                if is_actor_call(s.value, holders):
+                    holders.add(s.name)
             elif (isinstance(s, StmtAssign) and isinstance(s.target, ExprName)
-                  and is_actor_call(s.value)):
+                  and is_actor_call(s.value, holders)):
                 assigned.setdefault(s.target.name, []).append(s.value)
+                holders.add(s.target.name)
             elif isinstance(s, StmtIf):
                 walk(s.then)
                 for _cond, body in s.elseifs:
@@ -213,6 +275,9 @@ def chain_label(obj) -> str:
         return f"data.{cell[0]}[…].{cell[1]}"
     if isinstance(obj, ExprInvoke):
         return f"{obj.method}(…)"
+    if isinstance(obj, ExprIndex):
+        base = obj.obj.name if isinstance(obj.obj, ExprName) else chain_label(obj.obj)
+        return f"{base}.{obj.field}"
 
     key = _call_key(obj.func) if isinstance(obj, ExprCall) else None
     return f"{key or '…'}(…)"
@@ -341,6 +406,14 @@ def _data_cell(expr) -> Optional[tuple[str, str]]:
     return None
 
 
+def _is_actor_receiver(obj, ref_kinds, ref_types) -> bool:
+    """Le récepteur d'un `.parent` / `.root` est-il un acteur ? `self`, `other`, `who`, une variable typée acteur, ou une expression
+    qui en rend un (`actor:get("Boss")`, `boss.Canon`, `other.parent`)."""
+    if isinstance(obj, ExprName):
+        return obj.name in ("self", "other", "who") or (ref_types or {}).get(obj.name) == REF_ACTOR
+    return infer_ref_type(obj, ref_kinds, ref_types) == REF_ACTOR
+
+
 def infer_ref_type(expr, ref_kinds: Optional[dict[str, str]] = None,
                    ref_types: Optional[dict[str, str]] = None) -> Optional[str]:
     """Le type de référence que rend `expr`, ou None.
@@ -359,7 +432,12 @@ def infer_ref_type(expr, ref_kinds: Optional[dict[str, str]] = None,
         # Une cellule de table de données d'une colonne de RÉFÉRENCE (`region`, `image`) : son
         # entier est l'index de la zone ou de l'image, donc exactement le handle du type.
         cell = _data_cell(expr)
-        return (ref_kinds or {}).get(data_column_key(*cell)) if cell else None
+        if cell:
+            return (ref_kinds or {}).get(data_column_key(*cell))
+        if expr.field in ACTOR_NAV_PROPS and _is_actor_receiver(expr.obj, ref_kinds, ref_types):
+            return REF_ACTOR                                 # `other.parent`, `boss.Canon.root`
+        child_of = getattr(ref_types, "child_of", None)
+        return REF_ACTOR if child_of is not None and child_of(expr) else None
     if isinstance(expr, ExprInvoke):
         # Une méthode qui s'écrit sur une RÉFÉRENCE peut en rendre une autre :
         # `interface:get("Menu"):row(1)` est une zone de texte, `menu:row(1)` aussi quand

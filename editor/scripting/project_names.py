@@ -71,7 +71,7 @@ def anim_names_of_script(project, path) -> list[str]:
     """Les états d'animation que ce script peut nommer : ceux des sprites de tous les
     acteurs et prefabs auxquels il est attaché, dans l'ordre de première apparition.
     Même source que le `BuildContext` du checker (`owner_appearances`)."""
-    from codegen.oam_alloc import owner_appearances
+    from codegen.actor_appearance import owner_appearances
     names: list[str] = []
     for owner in actors_and_prefabs_of_script(project, path):
         for _comp, sprite in owner_appearances(project, owner):

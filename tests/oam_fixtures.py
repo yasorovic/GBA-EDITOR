@@ -1,7 +1,7 @@
 """Fabriques partagées des tests de géométrie OAM.
 
 Depuis la marche 0b de « La struct Actor allégée », seul un porteur de SPRITE
-occupe une entrée OAM (`oam_alloc.has_oam_entry`). Un test qui compte des
+occupe une entrée OAM (`actor_appearance.has_oam_entry`). Un test qui compte des
 entrées doit donc dire lesquels des acteurs affichent quelque chose."""
 from __future__ import annotations
 

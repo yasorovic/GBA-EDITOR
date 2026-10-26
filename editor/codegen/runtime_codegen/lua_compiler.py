@@ -12,7 +12,7 @@ from typing import Optional
 from core.models.components import ScriptComponent
 from core.models.sprite import SpriteAsset
 from core.models.components import affine_sprite_component
-from codegen.oam_alloc import owner_appearances
+from codegen.actor_appearance import owner_appearances
 from core.models.scene import Actor, Scene
 from core.project import Project
 from core import lua_scripts
@@ -123,6 +123,18 @@ def _export_inits(owner, script, resolver) -> dict:
     return out
 
 
+def prefab_lua_script(p, pf):
+    """Le chemin du script Lua d'un prefab, ou None s'il n'en a pas (ou s'il n'est pas du Lua). Seul un prefab
+    qui en a un est transpilé en `actor_<Scène>_<Prefab>.c`, donc seul lui définit `<sym>_pool_init`."""
+    sc = next((c for c in pf.components if isinstance(c, ScriptComponent)), None)
+    if not sc or not sc.script:
+        return None
+    path = p.asset_abs(sc.script)
+    if not path or not path.exists() or path.suffix.lower() != ".lua":
+        return None
+    return path
+
+
 def script_exports(p, script_path) -> dict:
     """Les exports RÉGLABLES d'un script : nom -> {"type", "values"}. Lus sur l'arbre du script
     (même source que le reste). Vide si le script manque, n'est pas du Lua ou ne se parse pas."""
@@ -173,17 +185,38 @@ def write_state_sizes(p, scene, sizes: dict) -> None:
     build_output.write(path, json.dumps(data, indent=1, sort_keys=True))
 
 
-def read_state_stride(p) -> int:
-    """La taille d'un bloc d'état de script : le plus gros état des modèles compilés, arrondi au mot, 4
-    octets au moins (un tableau de taille nulle ne compile pas)."""
+def _read_state_sizes(p) -> dict:
+    """{scène: {symbole du modèle: octets d'état par instance}} de tout le projet, tel que `write_state_sizes` l'a rangé."""
     import json
     path = _state_sizes_path(p)
     try:
-        data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     except ValueError:  # tolerated: a corrupt cache reads as no state, the C compiler then refuses a too big one
-        data = {}
-    biggest = max((b for sizes in data.values() for b in sizes.values()), default=0)
+        return {}
+
+
+def read_state_stride(p) -> int:
+    """La taille d'un bloc d'état de script : le plus gros état des modèles compilés, arrondi au mot, 4
+    octets au moins (un tableau de taille nulle ne compile pas)."""
+    biggest = max((b for sizes in _read_state_sizes(p).values() for b in sizes.values()), default=0)
     return max(4, (biggest + 3) // 4 * 4)
+
+
+def state_cost_line(p, slots: int) -> str | None:
+    """La ligne de journal qui dit ce que l'état de script COÛTE vraiment : le bloc de chaque emplacement a la taille du plus
+    gros état du projet, et les `slots` emplacements le paient tous. `[ewram] prefab X: … per instance` ne dit que le
+    prix d'une instance, ce qui sous-estime le total d'un facteur `slots`. Dit aussi quel modèle fixe la taille et ce que
+    les autres demandent, pour que l'auteur sache ce qu'un seul gros état fait payer aux autres. None sans aucun état."""
+    entries = [(b, scene, sym) for scene, sizes in _read_state_sizes(p).items() for sym, b in sizes.items() if b]
+    if not entries:
+        return None
+    biggest, scene, sym = max(entries)
+    others = max((b for b, s, y in entries if (s, y) != (scene, sym)), default=0)
+    prefix = f"{c_sym(scene)}_"
+    name = sym[len(prefix):] if sym.startswith(prefix) else sym
+    stride = read_state_stride(p)
+    return (f"[ewram] script state: {stride} bytes x {slots} slots = {stride * slots / 1024:.1f} KiB, "
+            f"set by prefab {name} (scene {scene}); the other prefabs need at most {others} bytes")
 
 
 def member_export_inits(p, scene, actor) -> list:
@@ -319,10 +352,16 @@ def _child_refs_for_actor(actor, scene_actors, scene_name) -> dict:
 
 
 def _child_refs_for_prefab(pf) -> dict:
-    """Les enfants d'un PREFAB : un décalage constant dans le groupe de
-    l'instance, la racine étant à l'offset 0 (cf. main_gen, `prefab_group`)."""
-    return {c.name: f"(self + {k})"
+    """Les enfants d'un PREFAB : la partie k du groupe de l'instance, la racine étant la partie 0
+    (`group_part`, runtime_api_inline.h ; le rang est une constante du build)."""
+    return {c.name: f"group_part(self, {k})"
             for k, c in enumerate(getattr(pf, "children", []) or [], start=1)}
+
+
+def _child_ranks_for_prefab(pf) -> dict:
+    """Le rang de chaque partie d'un PREFAB dans le groupe de l'instance (la racine est le rang 0) : nom -> rang. C'est ce qui
+    permet à `boss.Canon` d'atteindre la partie depuis une RÉFÉRENCE au prefab, là où `self.Canon` n'existe que dans son script."""
+    return {c.name: k for k, c in enumerate(getattr(pf, "children", []) or [], start=1)}
 
 
 def _child_sprites(p, children) -> dict:
@@ -479,6 +518,13 @@ def transpile_all(
     # et `actor:spawn("X")` (prefab). Un prefab est un acteur, donc une seule sorte de bibliothèque.
     _actor_libs  = _child_sprites(p, [a for a, _ in scene_actors])
     _prefab_libs = _child_sprites(p, prefabs)
+    _prefab_child_ranks = {pf.name: _child_ranks_for_prefab(pf) for pf in prefabs if getattr(pf, "children", None)}
+    _prefab_child_libs = {pf.name: _child_sprites(p, pf.children) for pf in prefabs if getattr(pf, "children", None)}
+    # Les enfants de scène de chaque acteur posé : `actor:get("Boss").Canon` s'y résout au build (adresse constante).
+    _actor_children = {a.name: _child_refs_for_actor(a, scene_actors, scene.name)
+                       for a, _ in scene_actors if _scene_children(a, scene_actors)}
+    _actor_child_libs = {a.name: _child_sprites(p, _scene_children(a, scene_actors))
+                         for a, _ in scene_actors if _scene_children(a, scene_actors)}
     _actor_exports = _actor_exports_meta(p, scene_actors)
     # Résolveur des valeurs d'export → initialiseur C, scopé à CETTE scène : un
     # `actor_ref` se résout en ACTOR_* de la scène de compilation (cf. « L'acteur
@@ -519,7 +565,7 @@ def transpile_all(
 
     parsed_scripts = []
 
-    # Les acteurs posés qui sont des INSTANCES d'un modèle (cf. `oam_alloc.model_members`) n'ont pas de
+    # Les acteurs posés qui sont des INSTANCES d'un modèle (cf. `pool_model.model_members`) n'ont pas de
     # code à eux : le modèle est compilé une fois (plus bas, avec les prefabs), le membre n'apporte
     # que ses valeurs. Nom de l'acteur -> symbole du modèle.
     _lay = scene_oam_layout(p, scene)
@@ -617,6 +663,10 @@ def transpile_all(
             spawn_exports = _spawn_meta,
             actor_sprites = _actor_libs,
             prefab_sprites = _prefab_libs,
+            prefab_children = _prefab_child_ranks,
+            prefab_child_sprites = _prefab_child_libs,
+            actor_children = _actor_children,
+            actor_child_sprites = _actor_child_libs,
             actor_exports = _actor_exports,
         )
         script, ok = _compile_script(sp, ctx_check, emit)
@@ -681,6 +731,10 @@ def transpile_all(
                 spawn_exports = _spawn_meta,
                 actor_sprites = _actor_libs,
                 prefab_sprites = _prefab_libs,
+                prefab_children = _prefab_child_ranks,
+                prefab_child_sprites = _prefab_child_libs,
+                actor_children = _actor_children,
+                actor_child_sprites = _actor_child_libs,
                 actor_exports = _actor_exports,
             )
             scene_script_ast, ok = _compile_script(sp, ctx_check, emit)
@@ -749,6 +803,10 @@ def transpile_all(
             spawn_exports = _spawn_meta,
             actor_sprites = _actor_libs,
             prefab_sprites = _prefab_libs,
+            prefab_children = _prefab_child_ranks,
+            prefab_child_sprites = _prefab_child_libs,
+            actor_children = _actor_children,
+            actor_child_sprites = _actor_child_libs,
             actor_exports = _actor_exports,
             actor_models = _actor_models,
         )
@@ -775,11 +833,8 @@ def transpile_all(
                                not any(scene_has_model(p, s, pf) for s in p.scenes)):
             continue
         pf_sym = f"{scene_sym}_{c_sym(pf.name)}"
-        sc = next((c for c in pf.components if isinstance(c, ScriptComponent)), None)
-        if not sc or not sc.script:
-            continue
-        sp_path = p.asset_abs(sc.script)
-        if not sp_path or not sp_path.exists() or sp_path.suffix.lower() != ".lua":
+        sp_path = prefab_lua_script(p, pf)
+        if sp_path is None:
             continue
         # Les états viennent des SpriteAsset que les composants citent, comme pour un acteur :
         # un SpriteComponent ne porte pas `states`, il référence un asset.
@@ -835,6 +890,10 @@ def transpile_all(
             spawn_exports = _spawn_meta,
             actor_sprites = _actor_libs,
             prefab_sprites = _prefab_libs,
+            prefab_children = _prefab_child_ranks,
+            prefab_child_sprites = _prefab_child_libs,
+            actor_children = _actor_children,
+            actor_child_sprites = _actor_child_libs,
             actor_exports = _actor_exports,
         )
         pf_ast, ok = _compile_script(sp_path, ctx_check, emit, f"prefab {pf.name}")
@@ -898,6 +957,10 @@ def transpile_all(
             spawn_exports = _spawn_meta,
             actor_sprites = _actor_libs,
             prefab_sprites = _prefab_libs,
+            prefab_children = _prefab_child_ranks,
+            prefab_child_sprites = _prefab_child_libs,
+            actor_children = _actor_children,
+            actor_child_sprites = _actor_child_libs,
             actor_exports = _actor_exports,
             actor_models = _actor_models,
         )
@@ -908,7 +971,7 @@ def transpile_all(
         build_output.write(out_pf, pf_c)
         emit("log_line", f"[lua->c] prefab {pf.name} -> {out_pf.name}")
         # Ce que l'état de script de ce modèle pèse PAR INSTANCE. Le bloc d'état de chaque emplacement
-        # prend la taille du plus gros (cf. `write_state_sizes`) : le total se dit au `main.c`.
+        # prend la taille du plus gros (cf. `write_state_sizes`) : le total se dit au `main.c` (`state_cost_line`).
         if pf_state_bytes:
             state_sizes[pf_sym] = pf_state_bytes
             emit("log_line", f"[ewram] prefab {pf.name}: script state {pf_state_bytes} bytes per instance")
@@ -961,6 +1024,10 @@ def transpile_all(
             spawn_exports = _spawn_meta,
             actor_sprites = _actor_libs,
             prefab_sprites = _prefab_libs,
+            prefab_children = _prefab_child_ranks,
+            prefab_child_sprites = _prefab_child_libs,
+            actor_children = _actor_children,
+            actor_child_sprites = _actor_child_libs,
             actor_exports = _actor_exports,
             actor_models = _actor_models,
         )
@@ -1037,6 +1104,10 @@ def transpile_all(
             spawn_exports = _spawn_meta,
             actor_sprites = _actor_libs,
             prefab_sprites = _prefab_libs,
+            prefab_children = _prefab_child_ranks,
+            prefab_child_sprites = _prefab_child_libs,
+            actor_children = _actor_children,
+            actor_child_sprites = _actor_child_libs,
             actor_exports = _actor_exports,
         )
         cam_ast, ok = _compile_script(sp, ctx_check, emit, f"camera {cam.name}")
@@ -1084,6 +1155,10 @@ def transpile_all(
             spawn_exports = _spawn_meta,
             actor_sprites = _actor_libs,
             prefab_sprites = _prefab_libs,
+            prefab_children = _prefab_child_ranks,
+            prefab_child_sprites = _prefab_child_libs,
+            actor_children = _actor_children,
+            actor_child_sprites = _actor_child_libs,
             actor_exports = _actor_exports,
             actor_models = _actor_models,
         )

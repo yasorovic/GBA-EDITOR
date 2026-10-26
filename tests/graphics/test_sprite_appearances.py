@@ -3,10 +3,9 @@
 Une apparence = un `SpriteComponent` ; `active` est le sélecteur (au plus un actif).
 Tout est résident : les sprites de toutes les apparences sont chargés, et leurs
 palettes propres réservées. Une entrée OAM existe dès qu'une apparence existe."""
-from codegen.oam_alloc import (
-    has_oam_entry, initial_appearance, owner_appearances, project_oam_entry_count,
-    scene_oam_layout,
-)
+from codegen.actor_appearance import has_oam_entry, initial_appearance, owner_appearances
+from codegen.oam_alloc import scene_oam_layout
+from codegen.oam_budget import project_oam_entry_count
 from core.models.components import (
     SpriteComponent, affine_sprite_component, displayed_sprite_component,
     sprite_components,

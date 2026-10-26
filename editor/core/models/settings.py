@@ -210,6 +210,12 @@ class ProjectSettings:
     # de la console s'arrête à 32 Mio). Sert de plafond au rapport de poids
     # affiché en fin de build (cf. codegen/rom_report.py).
     cartridge_mib: int = 4
+    # Temps d'accès de la ROM posés au démarrage (cf. codegen/memory_timing.py) : cycles du premier accès (N), des
+    # accès suivants (S), et tampon de lecture anticipée. Le défaut est le réglage des jeux commerciaux ; un projet
+    # d'avant ce réglage tournait au BIOS (4/2 sans prefetch) sans que personne l'ait choisi, et gagne donc en vitesse.
+    rom_wait_first: int = 3
+    rom_wait_second: int = 1
+    rom_prefetch: bool = True
     # Taux d'échantillonnage cible des effets, en Hz — le DÉFAUT du projet,
     # qu'un Sfx peut surcharger (cf. Sfx.sample_rate). 0 = on garde le taux du
     # fichier source. C'est bien le défaut : ré-échantillonner d'office

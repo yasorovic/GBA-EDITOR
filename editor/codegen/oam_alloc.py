@@ -40,113 +40,28 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
+from codegen.actor_appearance import has_oam_entry
 from codegen.c_names import sym as c_sym
-from codegen.grit_conversion import count_frames
-from core.models.components import affine_sprite_component, displayed_sprite_component, sprite_components
-from core.models.scene import actor_prefab_linked
+from codegen.pool_model import model_members, prefab_group
+from codegen.ui_obj_budget import scene_ui_obj_slots
 from core.models.scene import Scene
-from core.project import Project
 
 # Les 128 entrées de l'OAM. Le seul plafond du fichier, et il vient du matériel.
 OAM_LIMIT = 128
 
-# Les matrices affines de l'OAM : 32 par scène (matériel).
-AFFINE_LIMIT = 32
-
 # Le nombre d'acteurs qu'une scène peut contenir EN TOUT : les acteurs posés, puis tout ce qui naît en
 # cours de partie. Un seul pool, partagé par tous les modèles, dont la taille est ce qui reste. La valeur
-# est une décision du build, pas de l'auteur : la RAM de la GBA est fixe, et seuls 128 sprites
-# s'affichent à la fois, mais rien n'oblige la valeur à rester celle-ci. Elle vit ICI, en un seul
-# endroit : `scene_object_capacity` pourra la calculer de la mémoire que le jeu laisse libre.
-OBJECT_CAPACITY = 512
+# est une décision du build, pas de l'auteur, et elle est bornée par le CPU, pas par la RAM : mesuré,
+# environ 300 instances scriptées et animées tiennent dans une image, et seuls 128 sprites s'affichent à
+# la fois. À 256 emplacements le pool prend environ 30 Ko d'EWRAM sur 256 Ko ; la RAM n'est donc pas ce qui
+# limite, et le build se contente de CONTRÔLER après le lien qu'il reste `rom_report.EWRAM_MARGIN` de marge.
+# Elle vit ICI, en un seul endroit (`scene_object_capacity`).
+OBJECT_CAPACITY = 256
 
 
 def scene_object_capacity(project, scene: Scene) -> int:
     """Les emplacements d'acteurs de cette scène, posés compris."""
     return OBJECT_CAPACITY
-
-
-def owner_appearances(project, owner) -> list[tuple]:
-    """Les apparences RÉELLES d'un porteur (acteur, prefab, partie de prefab) :
-    [(SpriteComponent, SpriteAsset)] dans l'ordre de ses composants, pour ceux
-    dont le sprite existe et a une image. Un composant vide ou orphelin n'est pas
-    une apparence — il n'a rien à afficher, donc rien à charger en VRAM."""
-    out = []
-    for c in sprite_components(owner):
-        sprite = project.get_sprite(c.sprite_name) if c.sprite_name else None
-        if sprite and sprite.asset:
-            out.append((c, sprite))
-    return out
-
-
-def initial_appearance(project, owner) -> int:
-    """Rang (dans `owner_appearances`) de l'apparence affichée au départ, ou -1 si
-    aucun composant n'est actif : l'entrée existe alors, mais cachée."""
-    shown = displayed_sprite_component(owner)
-    for n, (c, _sprite) in enumerate(owner_appearances(project, owner)):
-        if c is shown:
-            return n
-    return -1
-
-
-def has_oam_entry(project, owner) -> bool:
-    """Ce porteur peut-il afficher un sprite ? Seul un porteur d'AU MOINS UNE
-    apparence occupe une entrée de `g_oam_entries[]` (marche 0b) : un contrôleur,
-    un déclencheur ou un marqueur (point de tir, ancre de hitbox) n'en réserve
-    aucune. Un porteur dont aucune apparence n'est active en réserve une, cachée
-    (marche 3) : activer une apparence plus tard ne doit pas demander de slot.
-    Le writer OAM et le budget lisent CE prédicat — jamais chacun le sien."""
-    return bool(owner_appearances(project, owner))
-
-
-def prefab_group(prefab) -> int:
-    """Entrées de `g_actors` qu'occupe UNE instance : la racine plus ses
-    parties. Un prefab plat vaut 1.
-
-    C'est ICI que le calcul vit."""
-    return 1 + len(getattr(prefab, "children", []) or [])
-
-
-def _sprite_key(owner) -> list:
-    """Les sprites qu'un acteur ou un prefab affiche, dans l'ordre de ses composants : ce que ses
-    noms d'état (`play_anim("walk")`) résolvent en constantes, donc ce qui décide du C."""
-    return [c.sprite_name for c in sprite_components(owner)]
-
-
-def _sfx_key(owner) -> tuple:
-    comp = owner.get_component("sound_fx")
-    return (bool(comp and comp.active), getattr(comp, "sfx_name", "") if comp else "")
-
-
-def model_members(project, posed: list) -> dict:
-    """Quels acteurs POSÉS rejoignent le modèle de leur prefab : nom de prefab -> indices dans
-    `posed`. Un membre PARTAGE le code du modèle (compilé une fois) et n'a que ses valeurs
-    d'instance. Il doit donc être sur le même chemin de compilation que lui :
-
-      - le prefab est plat (l'instanciation d'un sous-arbre en scène n'existe pas) ;
-      - l'acteur est « lié » (`actor_prefab_linked` : mêmes composants, même `.lua`) ET affiche les
-        mêmes sprites, même Sfx (les noms d'état se résolvent dans le sprite) ;
-      - il n'est le parent d'aucun autre acteur posé (`self.Enfant` se résout au build, dans l'acteur) ;
-      - son script est du Lua (un script C natif se copie tel quel).
-
-    Les autres acteurs, dérivés du prefab ou non, restent des singletons : chacun son code."""
-    by_name = {pf.name: pf for pf in project.prefabs}
-    parents = {getattr(a, "parent", None) for a in posed} - {None, ""}
-    out: dict = {}
-    for i, a in enumerate(posed):
-        pf = by_name.get(getattr(a, "prefab_name", None) or "")
-        if pf is None or getattr(pf, "children", None) or a.name in parents:
-            continue
-        if not actor_prefab_linked(a, pf):
-            continue
-        if _sprite_key(a) != _sprite_key(pf) or _sfx_key(a) != _sfx_key(pf):
-            continue
-        script = pf.get_component("script")
-        if script and script.active and script.script and not script.script.lower().endswith(".lua"):
-            continue
-        out.setdefault(pf.name, []).append(i)
-    return out
-
 
 def scene_has_model(project, scene: Scene, prefab) -> bool:
     """Ce prefab a-t-il un modèle dans CETTE scène : il y naît (un script le spawne), ou des acteurs
@@ -160,63 +75,6 @@ def project_has_model(project, prefab) -> bool:
     per-scène (`scene_oam_layout`)."""
     return any(scene_has_model(project, s, prefab) for s in project.scenes)
 
-
-def scene_ui_obj_slots(scene: Scene, project) -> int:
-    """Entrées OAM que les OBJ d'INTERFACE de cette scène consomment — bandes de
-    texte en cible OBJ, images d'UI, fonds de conteneur en sprites. Posé ENTRE les acteurs et les pools : le build réserve la bande
-    OBJ juste après les acteurs, et `scene_oam_layout` fait donc démarrer les
-    pools à `placed + ui`.
-
-    Défensif : un projet à demi chargé (asset manquant) ne doit pas faire
-    tomber le budget — 0 alors, le poste UI reste sûrement sous-compté plutôt
-    que de lever."""
-    try:
-        return int(scene_obj_ui_slots(project, scene) or 0)
-    except Exception:  # tolerated: half-loaded project: the validator reports the missing asset
-        return 0
-
-
-def layout_obj_budget_resolved(p: Project, lay) -> dict:
-    """Le budget OBJ d'UNE mise en page, noms d'asset résolus.
-
-    `layout_obj_budget` (modèle) ne résout ni les sprites ni la table de textes :
-    c'est ici, qui les connaît, de fournir les frames, les tailles de frame et
-    les glyphes animés — sous-réserver ferait écrire une image dans les tuiles de
-    la suivante. Source unique lue par `gen_text.obj_text_alloc` (placement des zones) ET
-    `scene_obj_ui_slots` (le pic OBJ d'une scène), pour que les
-    deux comptent EXACTEMENT la même chose."""
-    from core.models.ui_region import layout_obj_budget
-    frames, sizes = {}, {}
-    for im in lay.images:
-        sprite = p.get_sprite(getattr(im, "sprite_name", "") or "")
-        if sprite is not None and sprite.asset:
-            frames[im.name] = count_frames(p, sprite)
-            sizes[im.name] = (int(getattr(sprite, "frame_w", 0) or 0),
-                              int(getattr(sprite, "frame_h", 0) or 0))
-    return layout_obj_budget(lay, image_frames=frames, image_frame_size=sizes,
-                             animated_by_name=p.layout_animated_glyphs(lay))
-
-
-def scene_obj_ui_slots(p: Project, scene) -> int:
-    """Slots OAM que l'interface en sprites de CETTE scène occupe — son pic. C'est le poste « UI » du budget OAM par scène
-    (`oam_alloc.scene_ui_obj_slots`), et la largeur de la bande OBJ que
-    `scene_init` réserve juste après les acteurs (ordre acteurs → UI → pools).
-
-    Max sur les mises en page que la scène référence : une seule bande OBJ est
-    active à la fois (base unique, `text_obj_set_base`), donc c'est la plus
-    gourmande qui commande — exactement le `max` que le build calculait
-    globalement avant, restreint à la scène. Les mises en page sont lues via leur
-    ASSET brut (`bound.layout`), même résolution que `gen_text.obj_text_alloc`, pour que la
-    largeur réservée et le placement des zones concordent au slot près."""
-    peak = 0
-    seen = set()
-    for bound in p.scene_ui_layouts(scene):
-        lay = getattr(bound, "layout", bound)
-        if id(lay) in seen:
-            continue
-        seen.add(id(lay))
-        peak = max(peak, layout_obj_budget_resolved(p, lay)["oam"])
-    return peak
 
 
 @dataclass
@@ -418,74 +276,3 @@ def scene_oam_layout(project, scene: Scene) -> OamLayout:
 
     return OamLayout(scene=scene, scene_sym=scene_sym, placed=placed,
                      placed_entry=placed_entry, ui=ui, pools=pools, shared=shared, capacity=capacity)
-
-
-def scene_affine_requests(project, scene: Scene) -> int:
-    """Matrices affines que les acteurs POSÉS de la scène demandent — avant le plafond de `AFFINE_LIMIT`.
-
-    Une matrice se réserve à la main (`SpriteComponent.affine_transform`), donc elle se compte : un acteur
-    actif qui la coche en réserve une. Un enfant sans transform propre PARTAGE celle de son parent et ne
-    coûte rien. `compute_affine_info` s'arrête en silence à 32 ; ce compte, lui, continue, pour que le
-    dépassement se voie. Les instances NÉES n'en réservent pas : elles prennent à la frame celles que les
-    posés laissent libres."""
-    n = 0
-    for a in scene.actors:
-        if a.active:
-            sc = affine_sprite_component(a)
-            n += bool(sc and sc.affine_transform)
-    return n
-
-
-def project_obj_tiles(project) -> tuple[int, int]:
-    """(tuiles OBJ occupées, plafond) — la VRAM des sprites telle que le build la pose.
-
-    Contrairement à l'OAM, la VRAM OBJ n'est PAS per-scène : les tuiles de tous
-    les sprites du projet sont résidentes et partagées (`main_gen` : union des
-    acteurs de chaque scène, des apparences supplémentaires, des prefabs poolés
-    et des images d'interface, dédupliquée par sprite, toutes frames comprises).
-    Cette fonction rejoue exactement cette union ; `obj_tiles_used` fait le
-    comptage, pour que la barre d'état et le build ne puissent pas diverger.
-
-    Le plafond est celui du matériel : 1024 tuiles 4bpp, ramené à 512 dès qu'une
-    scène est en mode bitmap (3-5), la VRAM BG empiétant sur l'espace sprite.
-    Les zones de texte en sprites ajoutent leur bande, comme au build."""
-    from codegen.runtime_codegen.gen_scene_query import obj_tiles_used, ui_image_sprites
-    pairs: list = []
-    for scene in project.scenes:
-        for actor in scene.actors:
-            if actor.active:
-                pairs += [(actor, sp) for _c, sp in owner_appearances(project, actor)]
-    for prefab in project.prefabs:
-        if not project_has_model(project, prefab):
-            continue
-        for owner in [prefab, *(getattr(prefab, "children", []) or [])]:
-            pairs += [(owner, sp) for _c, sp in owner_appearances(project, owner)]
-    pairs += ui_image_sprites(project)
-
-    used = obj_tiles_used(project, pairs)
-    if any(scene_obj_ui_slots(project, s) > 0 for s in project.scenes):
-        used += max((place["tile_rel"] + place["tiles"]
-                     for lay in getattr(project, "ui_layouts", [])
-                     for place in layout_obj_budget_resolved(project, lay)["place"].values()),
-                    default=0)
-    cap = 512 if any(getattr(s, "render_mode", 0) in (3, 4, 5) for s in project.scenes) else 1024
-    return used, cap
-
-
-def project_oam_entry_count(project) -> int:
-    """Taille de `g_oam_entries[]` : la scène la plus gourmande (MAX, pas somme).
-
-    Une seule scène est vivante à la fois et chaque `scene_init` repart de la
-    base 0 : dimensionner sur le max suffit, la somme des unions faisait payer à
-    la scène de menu les slots des balles du niveau d'action.
-    Plancher à 1 — un `OamEntry g_oam_entries[0]` ne compile pas."""
-    return max((scene_oam_layout(project, sc).table_size for sc in project.scenes),
-               default=0) or 1
-
-
-def project_actor_count(project) -> int:
-    """Taille de `g_actors[]`, même règle (MAX des scènes, plancher à 1) mais
-    sur les seuls ACTEURS : les OBJ d'interface occupent `g_oam_entries[]`, pas
-    `g_actors[]` (marche 0b de « La struct Actor allégée »)."""
-    return max((scene_oam_layout(project, sc).actors for sc in project.scenes),
-               default=0) or 1

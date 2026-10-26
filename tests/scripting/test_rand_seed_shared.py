@@ -14,11 +14,12 @@ def test_seed_is_extern_in_header():
 
 
 def test_seed_is_defined_in_main_c_generator():
-    src = (APP_DIR / "editor" / "codegen" / "runtime_codegen" / "main_gen.py").read_text(encoding="utf-8")
+    src = (APP_DIR / "editor" / "codegen" / "runtime_codegen" / "gen_globals.py").read_text(encoding="utf-8")
     assert '"u32   _g_rand_seed' in src
 
 
 def test_seed_is_stirred_once_at_first_button_press():
-    src = (APP_DIR / "editor" / "codegen" / "runtime_codegen" / "main_gen.py").read_text(encoding="utf-8")
+    codegen = APP_DIR / "editor" / "codegen" / "runtime_codegen"
+    src = (codegen / "gen_globals.py").read_text(encoding="utf-8")
     assert "u32   _g_rand_ticks" in src and "int   _g_rand_seeded" in src
-    assert "if(!_g_rand_seeded && _g_keys_pressed)" in src
+    assert "if(!_g_rand_seeded && _g_keys_pressed)" in (codegen / "gen_main_loop.py").read_text(encoding="utf-8")

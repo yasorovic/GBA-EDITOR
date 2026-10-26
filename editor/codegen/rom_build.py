@@ -34,7 +34,8 @@ from codegen.grit_conversion import (
 from codegen.palette_alloc import (
     scene_bank_layout, effective_palette_colors, ui_image_sprite_pools,
 )
-from codegen.oam_alloc import scene_has_model, project_has_model, owner_appearances
+from codegen.actor_appearance import owner_appearances
+from codegen.oam_alloc import scene_has_model, project_has_model
 from core.models.components import displayed_sprite_component
 from core.app_paths import RUNTIME_DIR
 from codegen.runtime_codegen.headers import generate_actor_types, generate_runtime_api
@@ -574,6 +575,13 @@ class BuildWorker(EventEmitter, threading.Thread):
             self._emit("log_line", f"  {line}")
 
     def _run_cmd(self, cmd, prefix, cwd=None, env=None) -> bool:
+        proc = self._capture_cmd(cmd, prefix, cwd, env)
+        return proc is not None and self._report_cmd(proc, prefix)
+
+    def _capture_cmd(self, cmd, prefix, cwd=None, env=None):
+        """Lance l'outil et rend son résultat SANS en rendre compte (cf. `_report_cmd`), ou None si l'outil n'a pas pu
+        tourner (la raison est alors déjà dite). Séparé de `_run_cmd` pour qu'un échec attendu puisse être rejoué
+        (cf. `_step_make` : l'IWRAM qui déborde se corrige par un second `make`)."""
         self._emit("log_line",f"{prefix} {' '.join(str(c) for c in cmd)}")
         try:
             # `errors="replace"` : les outils écrivent des chemins dans leur
@@ -592,36 +600,40 @@ class BuildWorker(EventEmitter, threading.Thread):
                                        f"({attempt}/{_TOOL_START_RETRIES})")
                 time.sleep(0.5 * attempt)
                 proc = run_tool(cmd, cwd=str(cwd) if cwd else None, env=env, timeout=_TOOL_TIMEOUT_SECONDS)
-            failed = proc.returncode != 0
-            for line in proc.stdout.splitlines():
-                self._emit("log_line", f"  {line}")
-            for line in proc.stderr.splitlines():
-                self._emit_tool_line(line, prefix.strip("[]"), failed)
-            if failed:
-                # La sortie des outils est longue ; la ligne qui dit QUELLE étape
-                # a échoué, et avec quel code, ferme le bloc.
-                self._emit("diagnostic", build_error(
-                    f"failed (code {proc.returncode})", prefix.strip("[]")))
-                if any("objcopy" in line and any(s in line for s in _ROM_LOCK_SIGNS)
-                       for line in proc.stderr.splitlines()):
-                    self._emit("diagnostic", build_error(
-                        "the ROM could not be overwritten: it is probably still open in an emulator. "
-                        "Close it, then run the build again.", prefix.strip("[]")))
-            return not failed
+            return proc
         except subprocess.TimeoutExpired:
             self._emit("diagnostic", build_error(
                 f"no answer after {_TOOL_TIMEOUT_SECONDS // 60} minutes: the tool was stopped", prefix.strip("[]")))
-            return False
+            return None
         except FileNotFoundError as e:
             self._emit("diagnostic", build_error(f"not found: {e}", prefix.strip("[]")))
-            return False
+            return None
         except OSError as e:
             # L'outil n'a pas pu démarrer (dossier de travail refusé, chemin trop
             # long : WinError 267…). Un message, pas une trace de « erreur
             # inattendue » (cf. `path_too_long_message` pour le cas prévisible).
             self._emit("diagnostic", build_error(f"could not start the tool: {e}",
                                                   prefix.strip("[]")))
-            return False
+            return None
+
+    def _report_cmd(self, proc, prefix) -> bool:
+        """Rend compte d'un outil déjà lancé : sa sortie, et l'erreur qui ferme le bloc s'il a échoué."""
+        failed = proc.returncode != 0
+        for line in proc.stdout.splitlines():
+            self._emit("log_line", f"  {line}")
+        for line in proc.stderr.splitlines():
+            self._emit_tool_line(line, prefix.strip("[]"), failed)
+        if failed:
+            # La sortie des outils est longue ; la ligne qui dit QUELLE étape
+            # a échoué, et avec quel code, ferme le bloc.
+            self._emit("diagnostic", build_error(
+                f"failed (code {proc.returncode})", prefix.strip("[]")))
+            if any("objcopy" in line and any(s in line for s in _ROM_LOCK_SIGNS)
+                   for line in proc.stderr.splitlines()):
+                self._emit("diagnostic", build_error(
+                    "the ROM could not be overwritten: it is probably still open in an emulator. "
+                    "Close it, then run the build again.", prefix.strip("[]")))
+        return not failed
 
     def _make_env(self) -> dict:
         env = tool_environment()
@@ -1091,9 +1103,72 @@ class BuildWorker(EventEmitter, threading.Thread):
         # Repli à 1 si la plateforme ne sait pas dire combien de cœurs elle a —
         # `-j` sans nombre lancerait un job par cible, sans aucune borne.
         jobs = os.cpu_count() or 1
-        return self._run_cmd(
-            [str(make), f"-j{jobs}"], "[make]", cwd=p.build_dir, env=env
-        )
+        return self._make_fitting_iwram(p, make, jobs, env)
+
+    # ── Le code chaud en IWRAM ────────────────────────────────────
+
+    _IWRAM_FIT_ATTEMPTS = 3
+
+    def _make_fitting_iwram(self, p: Project, make, jobs: int, env: dict) -> bool:
+        """`make`, puis, si le code du tick que le générateur a mis en IWRAM (`iwram_plan`) y prend trop de place, un
+        second `make` où les phases les moins précieuses restent en ROM. Seul `main.o` est recompilé. Le cas ordinaire
+        ne compile qu'une fois : le plan de départ tient presque toujours."""
+        import codegen.iwram_plan as iwram_plan
+        from codegen.rom_report import read_ram_use
+        extra = ""
+        modes: dict | None = None
+        proc = None
+        for attempt in range(self._IWRAM_FIT_ATTEMPTS):
+            attempt_env = dict(env)
+            attempt_env["IWRAM_CFLAGS"] = extra            # main.o seul : cf. runtime/Makefile
+            proc = self._capture_cmd([str(make), f"-j{jobs}"], "[make]", cwd=p.build_dir, env=attempt_env)
+            if proc is None:
+                return False
+            main_c = p.src_dir / "main.c"
+            if modes is None and main_c.exists():
+                modes = iwram_plan.read_modes(main_c.read_text(encoding="utf-8", errors="replace"))
+            if not modes or not any(mode != iwram_plan.ROM for mode in modes.values()):
+                break
+            failed = proc.returncode != 0
+            if failed and not iwram_plan.overflowed(proc.stdout + proc.stderr):
+                break                                  # une autre panne : elle sera dite telle quelle
+            plan = self._iwram_plan(p, modes, proc, read_ram_use)
+            if plan is None or not plan.changed:
+                break                                  # tient, ou rien de plus à retirer
+            modes = plan.modes
+            extra = (extra + " " + iwram_plan.cflags(plan)).strip()
+            self._emit("log_line", "[iwram] the tick code placed in IWRAM does not fit with the "
+                                   f"{iwram_plan.IWRAM_STACK_RESERVE // 1024} KiB kept for the stack: "
+                                   + ", ".join(f"{scene}.{phase}" for scene, phase in plan.dropped)
+                                   + " stay in ROM")
+            (p.build_dir / "obj" / "main.o").unlink(missing_ok=True)       # main.c ne change pas : make ne le referait pas
+        ok = self._report_cmd(proc, "[make]")
+        if ok and modes:
+            placed = sorted(f"{scene}.{phase}" for (scene, phase), mode in modes.items() if mode != 0)
+            if placed:
+                self._emit("log_line", "[iwram] tick code in IWRAM (ARM): " + ", ".join(placed))
+        return ok
+
+    def _iwram_plan(self, p: Project, modes: dict, proc, read_ram_use):
+        """Le plan corrigé, ou None si le lien tient dans l'IWRAM (réserve de pile comprise)."""
+        import codegen.iwram_plan as iwram_plan
+        nm, size = self.toolchain.resolve_binutil("nm"), self.toolchain.resolve_binutil("size")
+        main_o = p.build_dir / "obj" / "main.o"
+        if not nm or not size or not main_o.exists():
+            return None
+        listing = run_tool([str(nm), "-S", main_o.name], cwd=str(main_o.parent), env=tool_environment())
+        sizes = iwram_plan.read_sizes(listing.stdout)
+        placed = sum(sizes.get(key, 0) for key, mode in modes.items() if mode != iwram_plan.ROM)
+        if proc.returncode == 0:
+            _ewram, iwram, _sections = read_ram_use(size, p.build_dir / "rom.elf")
+            if iwram + iwram_plan.IWRAM_STACK_RESERVE <= iwram_plan.IWRAM_TOTAL:
+                return None
+            static = iwram - placed
+        else:
+            reports = [run_tool([str(size), "-A", o.name], cwd=str(o.parent), env=tool_environment()).stdout
+                       for o in sorted((p.build_dir / "obj").glob("*.o"))]
+            static = iwram_plan.static_from_objects(reports, placed)
+        return iwram_plan.make_plan(modes, sizes, static)
 
     # ── Étape 4b : ce que la ROM pèse ─────────────────────────────
 
@@ -1129,6 +1204,10 @@ class BuildWorker(EventEmitter, threading.Thread):
         if report.over_capacity:
             self._emit("diagnostic", build_warning(
                 "the ROM exceeds the declared cartridge capacity.", "weight"))
+        if report.ewram_tight:
+            self._emit("diagnostic", build_warning(
+                f"only {report.ewram_free // 1024} KiB of EWRAM stay free after the link: the heap (music "
+                "buffers) and anything the game adds may not fit.", "weight"))
 
     # ── Étape 5 : mgba ────────────────────────────────────────────
 

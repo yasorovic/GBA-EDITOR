@@ -11,10 +11,9 @@ from __future__ import annotations
 from core.models.scene import Actor, Prefab, Scene
 from core.project import Project
 from oam_fixtures import tout_afficher, donner_un_sprite, faire_naitre
-from codegen.oam_alloc import (
-    OAM_LIMIT, OBJECT_CAPACITY, scene_oam_layout, project_actor_count, project_oam_entry_count,
-    scene_has_model, prefab_group,
-)
+from codegen.oam_alloc import OAM_LIMIT, OBJECT_CAPACITY, scene_oam_layout, scene_has_model
+from codegen.oam_budget import project_actor_count, project_oam_entry_count
+from codegen.pool_model import prefab_group
 
 
 def _projet(tmp_path, *, scenes, prefabs=None, sprites=True) -> Project:

@@ -71,7 +71,8 @@ from .checker import check as _lua_check, BuildContext as _BuildContext
 from .expr_types import (VEC_CONSTRUCTORS, VEC_FUNCTIONS, C_TYPES,
                          infer_vec_type, infer_ref_type, resolve_prop, element_of,
                          literal_actor_library, literal_actor_target, EXPORT_SCALARS,
-                         EXPORT_COMPOSITES, EXPORT_NAMED, EXPORT_ACCESSIBLE, held_actor_refs)
+                         EXPORT_COMPOSITES, EXPORT_NAMED, EXPORT_ACCESSIBLE, held_actor_refs,
+                         ACTOR_NAV_PROPS, child_of_ref, RefEnv)
 
 
 # ─── Types C des variables exposées (table `exports`) ─────────────
@@ -254,10 +255,17 @@ class CodegenContext:
     # se range dans le sprite de CET acteur.
     actor_sprites: dict = field(default_factory=dict)
     prefab_sprites: dict = field(default_factory=dict)
+    # Les parties de chaque prefab segmenté : prefab -> { partie -> rang dans le groupe }, et leurs sprites. `boss.Canon`
+    # (`boss` tenant une instance de ce prefab) s'y résout au build, comme `self.Canon` pour le script du prefab.
+    prefab_children: dict = field(default_factory=dict)
+    prefab_child_sprites: dict = field(default_factory=dict)
+    # Idem pour les acteurs POSÉS qui ont des enfants de scène : acteur -> { enfant -> expression C de son adresse }, et leurs sprites.
+    actor_children: dict = field(default_factory=dict)
+    actor_child_sprites: dict = field(default_factory=dict)
     # Les exports de chaque acteur posé de la scène : nom -> { export -> {"type", "values"} }.
     # Ceux des prefabs sont dans `spawn_exports`.
     actor_exports: dict = field(default_factory=dict)
-    # Les acteurs posés qui sont des INSTANCES d'un modèle (cf. `oam_alloc.model_members`) : nom de
+    # Les acteurs posés qui sont des INSTANCES d'un modèle (cf. `pool_model.model_members`) : nom de
     # l'acteur -> symbole du modèle. Ils n'ont pas de code à eux : leurs accesseurs d'export sont
     # ceux du modèle (`<Scène>_<Prefab>_get_<export>`).
     actor_models: dict = field(default_factory=dict)
@@ -307,7 +315,7 @@ class CodegenContext:
     scene_names: list[str] = field(default_factory=list)  # noms de scènes du projet
     sfx_component_name: Optional[str] = None  # Sfx lié au SoundFxComponent de cet actor (si présent)
     # Les triggers AUTOMATIQUES (on_spawn/on_destroy/un nom de bouton ou
-    # d'action) ne passent plus par ici : `main_gen.py` les injecte directement au site d'appel
+    # d'action) ne passent plus par ici : `runtime_codegen` les injecte directement au site d'appel
     # connu au build, pour qu'ils marchent aussi sur un actor SANS script (cf.
     # `SFX_AUTO_TRIGGERS`, core/models/components.py). Seul `self:play_sfx()`
     # (déclenchement manuel depuis un script) reste résolu ici.
@@ -473,7 +481,8 @@ class CodeGen:
         # Étiquettes des exports `enum` : l'index de l'étiquette est la valeur C.
         self._enum_exports: dict[str, list[str]] = {}
         # Locals qui tiennent une référence : nom → type (cf. expr_types).
-        self._ref_types: dict[str, str] = {}
+        self._ref_types: dict[str, str] = RefEnv()
+        self._ref_types.child_of = lambda expr: self._child_of(expr) is not None
         # Sprites de l'acteur que tient une variable locale (`local b = actor:get("X")`).
         self._ref_libs: dict[str, object] = {}
         # Idem pour l'identité de cet acteur : ("get" | "spawn", nom), qui donne ses exports.
@@ -1574,7 +1583,8 @@ class CodeGen:
                 setter, value = self._prop_write(p, s.value, s.target)
                 c_args = [receiver] if p.self_first else []
                 c_args.append(value)
-                self._w(f"{setter}({', '.join(c_args)});")
+                guard = self._prop_guard(s.target.obj, receiver, p, "setting")
+                self._w(f"{'if (' + guard + ') ' if guard else ''}{setter}({', '.join(c_args)});")
                 return
             # `self.position.x = v` : un champ d'une propriété composée. Le C n'a
             # que le setter de la valeur ENTIÈRE, donc on lit, on change la
@@ -1587,7 +1597,9 @@ class CodeGen:
                     receiver, p = owner
                     receiver = self._prop_receiver_c(s.target.obj, receiver, p)
                     c_args = [receiver] if p.self_first else []
-                    self._w(f"{{ {C_TYPES[p.ptype]} _field = {self._prop_read(receiver, p)}; "
+                    guard = self._prop_guard(s.target.obj.obj, receiver, p, "setting")
+                    self._w(f"{'if (' + guard + ') ' if guard else ''}"
+                            f"{{ {C_TYPES[p.ptype]} _field = {self._prop_read(receiver, p)}; "
                             f"_field.{s.target.field} = {self._expr(s.value)}; "
                             f"{p.c_setter}({', '.join(c_args + ['_field'])}); }}")
                     return
@@ -1683,12 +1695,12 @@ class CodeGen:
             # handle, et le nom est retenu : c'est lui qui dira à `_invoke` que
             # `pas:set_volume(80)` est un réglage d'effet et non d'acteur.
             rt = self._note_ref(s.name, s.value)
-            library = literal_actor_library(s.value, self.ctx.actor_sprites, self.ctx.prefab_sprites)
+            library = self._literal_library(s.value)
             if library is not None:
                 self._ref_libs[s.name] = library
             else:
                 self._ref_libs.pop(s.name, None)
-            target = literal_actor_target(s.value)
+            target = self._target_of(s.value) if not isinstance(s.value, ExprName) else literal_actor_target(s.value)
             if target is not None:
                 self._ref_targets[s.name] = target
             else:
@@ -1814,7 +1826,17 @@ class CodeGen:
             prop = resolve_prop(e, self._ref_types, self._kinds)
             if prop is not None:
                 receiver, p = prop
-                return self._prop_read(self._prop_receiver_c(e, receiver, p), p)
+                recv_c = self._prop_receiver_c(e, receiver, p)
+                read = self._prop_read(recv_c, p)
+                guard = self._prop_guard(e.obj, recv_c, p, "reading")
+                return f"({guard} ? {read} : {self._prop_zero(p)})" if guard else read
+            # `boss.Canon` : une partie de l'instance que `boss` tient. Nil si la référence est nil/périmée ou si la
+            # partie a été détruite : `actor_child` ne fabrique jamais un pointeur à partir de NULL.
+            child = self._child_of(e)
+            if child is not None:
+                if child.kind == "spawn":
+                    return f"actor_child({self._expr(e.obj)}, {child.spec})"
+                return f"actor_placed_child({self._expr(e.obj)}, {child.spec})"
             # `boss.hp` : un export d'un autre acteur, connu par son nom.
             access = self._export_access(e)
             if access is not None:
@@ -1973,6 +1995,30 @@ class CodeGen:
         fn = (p.c_getter_named or p.c_getter) if named else p.c_getter
         return f"{fn}({receiver})" if p.self_first else f"{fn}()"
 
+    def _nullable_actor(self, obj) -> bool:
+        """Le récepteur d'une propriété peut-il valoir nil ? Une variable qui tient un acteur, `actor:get`, `parent()` /
+        `root()`, une partie nommée depuis une référence. `self`, `other`, `who` (le contexte du handler) et les enfants de
+        `self` (une adresse du build) ne le sont jamais."""
+        if isinstance(obj, ExprIndex) and isinstance(obj.obj, ExprName) and obj.obj.name == "self":
+            return False
+        return self._guardable_actor(obj)
+
+    def _prop_guard(self, obj, receiver: str, p, what: str) -> Optional[str]:
+        """Le test de vie à poser devant la lecture ou l'écriture de la propriété `p` d'un acteur que `obj` désigne, ou None.
+        Les ACTIONS d'un acteur disparu sont sautées ; ses propriétés l'étaient mal : lire `s->oam_entry` à l'adresse 0, puis
+        écrire `g_oam_entries[cette valeur]`. Même règle qu'un export : une lecture rend 0, une écriture est sautée, et un build
+        debug le dit dans le log (`warning: reading position skipped, the actor is destroyed or nil`)."""
+        if p.ref:
+            return None                       # `a.parent` / `a.root` : `actor_parent(NULL)` rend déjà nil
+        if not (p.lua_name.startswith("actor.") and p.self_first and p.getter_expr is None and self._nullable_actor(obj)):
+            return None
+        return f'actor_exists_warn({receiver}, "{what} {p.lua_name.split(".", 1)[1]}")'
+
+    @staticmethod
+    def _prop_zero(p) -> str:
+        """La valeur d'une propriété qu'on n'a pas pu lire : 0, ou le composite nul `(Vec2){0}`."""
+        return f"({C_TYPES[p.ptype]}){{0}}" if p.ptype in VEC_CONSTRUCTORS else "0"
+
     def _enum_label_index(self, var, label):
         """`team` / `"BLUE"` → 1, quand `var` est un export `enum` et `label` une
         de ses étiquettes (le checker a déjà refusé une étiquette inconnue). `var` peut
@@ -1997,7 +2043,14 @@ class CodeGen:
         par une variable locale qui en tient un ; sinon None."""
         if isinstance(expr, ExprName):
             return self._ref_targets.get(expr.name)
+        child = self._child_of(expr)
+        if child is not None and child.kind == "get":
+            return ("get", child.name)          # `chef.Bras` est l'acteur posé « Bras » : on connaît son identité
         return literal_actor_target(expr)
+
+    def _child_of(self, expr):
+        """(prefab, partie, rang) quand `expr` est `boss.Canon` sur une instance de prefab connue, sinon None."""
+        return child_of_ref(expr, self._target_of, self.ctx.prefab_children, self.ctx.actor_children)
 
     def _export_access(self, expr):
         """(symbole C du propriétaire, export, méta, récepteur C) quand `expr` désigne un export
@@ -2087,6 +2140,9 @@ class CodeGen:
                 continue
             const = self._prop_constant(p, other.value, prop_side)
             read  = self._prop_read(receiver, p, named=True)
+            guard = self._prop_guard(prop_side.obj, receiver, p, "reading")
+            if guard:
+                read = f"({guard} ? {read} : 0)"
             left  = read  if prop_side is e.left else const
             right = const if prop_side is e.left else read
             return f"({left} {e.op} {right})"
@@ -2158,15 +2214,24 @@ class CodeGen:
         if not isinstance(call, ExprInvoke):
             return None
         obj = call.obj
+        return self._expr(obj) if self._guardable_actor(obj) else None
+
+    def _guardable_actor(self, obj) -> bool:
+        """Le récepteur peut-il être répété dans le test de vie sans effet de bord ? Une variable qui tient un acteur,
+        `actor:get`, un enfant de `self`, et `parent()` / `root()` de l'un d'eux ou de `self` / `other` / `who` : ces
+        deux-là peuvent rendre nil, c'est justement ce que le garde attrape."""
         if isinstance(obj, ExprName):
-            ok = (obj.name not in ("self", "other", "who")
-                  and self._ref_types.get(obj.name) == REF_ACTOR)
-        elif isinstance(obj, ExprCall):
-            ok = self._call_key(obj.func) == "actor.get"
-        else:
-            ok = (isinstance(obj, ExprIndex) and isinstance(obj.obj, ExprName)
-                  and obj.obj.name == "self" and obj.field in (self.ctx.child_refs or {}))
-        return self._expr(obj) if ok else None
+            return (obj.name not in ("self", "other", "who")
+                    and self._ref_types.get(obj.name) == REF_ACTOR)
+        if isinstance(obj, ExprCall):
+            return self._call_key(obj.func) == "actor.get"
+        if isinstance(obj, ExprIndex) and obj.field in ACTOR_NAV_PROPS:
+            base = obj.obj                                   # `other.parent` : nil possible, et sans effet de bord
+            return (isinstance(base, ExprName) and base.name in ("self", "other", "who")) or self._guardable_actor(base)
+        if self._child_of(obj) is not None:
+            return self._guardable_actor(obj.obj)          # `boss.Canon` : pur tant que `boss` l'est
+        return (isinstance(obj, ExprIndex) and isinstance(obj.obj, ExprName)
+                and obj.obj.name == "self" and obj.field in (self.ctx.child_refs or {}))
 
     def _child_library(self, expr):
         """Les sprites de l'acteur que `expr` désigne quand ce n'est pas `self` : un enfant
@@ -2176,6 +2241,15 @@ class CodeGen:
         if (isinstance(expr, ExprIndex) and isinstance(expr.obj, ExprName)
                 and expr.obj.name == "self"):
             return (self.ctx.child_sprites or {}).get(expr.field)
+        return self._literal_library(expr)
+
+    def _literal_library(self, expr):
+        """Les sprites de l'acteur qu'`expr` désigne par un littéral (`actor:get("X")`, `actor:spawn("X")`) ou par une
+        partie de prefab connue (`boss.Canon`), sinon None."""
+        child = self._child_of(expr)
+        if child is not None:
+            libs = self.ctx.prefab_child_sprites if child.kind == "spawn" else self.ctx.actor_child_sprites
+            return ((libs or {}).get(child.owner) or {}).get(child.name)
         return literal_actor_library(expr, self.ctx.actor_sprites, self.ctx.prefab_sprites)
 
     def _is_actor_expr(self, expr) -> bool:
@@ -2351,7 +2425,7 @@ class CodeGen:
         """`self:destroy()` → appelle on_destroy() (le hook SCRIPTÉ) puis
         `actor_destroy_with_sfx()`, qui joue le SoundFxComponent en
         `trigger="on_destroy"` DE LA CIBLE (table indexée par tag, cf.
-        `main_gen._sfx_on_destroy_table`) avant de désactiver l'actor.
+        `gen_sfx_trigger.sfx_on_destroy_table`) avant de désactiver l'actor.
 
         Sur QUELQU'UN D'AUTRE : `other:destroy()`, ou `MonBras:destroy()` depuis
         la v0.23 : le hook SCRIPTÉ n'est pas appelé, et c'est le seul choix
@@ -2660,6 +2734,12 @@ class CodeGen:
             pool = self._pool_macro(args[0].value)
             return f"actor_model_count({pool})" if pool else "0 /* actor:count(model): a scene is needed */"
         return "g_scene_placed"
+
+    def _emit_actor_clear(self, args: list) -> str:
+        """actor:clear("Bullet") → actor_model_clear(<table des posés>, <nombre>, <identité dans le pool>) : détruit
+        toutes les instances vivantes du modèle et rend leur nombre. Le nom est jugé par le vérificateur."""
+        pool = self._pool_macro(args[0].value) if args and isinstance(args[0], ExprString) else None
+        return f"actor_model_clear({pool})" if pool else "0 /* actor:clear(model): a scene is needed */"
 
     def _pool_macro(self, prefab: str):
         """`g_model_<S>, MODEL_<S>_COUNT, MODELID_<S>` : la table des instances posées (et de réserve) d'un
@@ -3059,6 +3139,7 @@ _CALL_CUSTOM: dict = {
     "input.get_sequence": CodeGen._emit_get_sequence,
     "input.get_axis":     CodeGen._emit_get_axis,
     "actor.count": CodeGen._emit_actor_count,
+    "actor.clear": CodeGen._emit_actor_clear,
     "save.read":   CodeGen._emit_save_read,
     "actor.spawn": CodeGen._emit_actor_spawn,
     "text.draw": CodeGen._emit_text_draw,

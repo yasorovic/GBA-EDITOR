@@ -12,7 +12,8 @@ from core.models.components import ScriptComponent
 from core.models.scene import Actor, Prefab, Scene
 from core.project import Project
 from oam_fixtures import tout_afficher, donner_un_sprite, faire_naitre
-from codegen.oam_alloc import scene_oam_layout, model_members, OBJECT_CAPACITY
+from codegen.oam_alloc import scene_oam_layout, OBJECT_CAPACITY
+from codegen.pool_model import model_members
 
 
 def _projet(tmp_path, *, n=3, spawned=False, script=True):
@@ -113,19 +114,19 @@ def test_les_exports_d_un_membre_sont_ceux_de_son_acteur(tmp_path):
 
 
 def test_la_table_du_modele_commence_par_ses_membres(tmp_path):
-    from codegen.runtime_codegen.main_gen import _scene_pi, _section_spawn
+    from codegen.runtime_codegen.gen_pool import scene_pi, section_spawn
     p, scene, _coin = _projet(tmp_path, n=2, spawned=True)
-    code = "\n".join(_section_spawn(_scene_pi(p, scene), p, None))
+    code = "\n".join(section_spawn(scene_pi(p, scene), p, None))
     assert "const ModelSlot g_model_S_Coin[2] = {" in code
     assert code.index("{1, 1},   /* posé */") > code.index("{0, 0},   /* posé */")
 
 
 def test_les_appels_de_code_d_un_membre_vont_au_modele(tmp_path):
-    from codegen.runtime_codegen.main_gen import _scene_pi, _dispatch_sym
+    from codegen.runtime_codegen.gen_pool import scene_pi, dispatch_sym
     p, scene, _coin = _projet(tmp_path, n=2)
     singleton = Actor(name="Door")
     scene.actors.append(singleton)
-    sym_of = _dispatch_sym(scene, [(a, None) for a in scene.actors], _scene_pi(p, scene))
+    sym_of = dispatch_sym(scene, [(a, None) for a in scene.actors], scene_pi(p, scene))
     assert sym_of("S", "C0") == "S_Coin" and sym_of("S", "C1") == "S_Coin"
     assert sym_of("S", "Door") == "S_Door"
 
@@ -143,14 +144,28 @@ def test_l_identite_du_modele_sans_spawn_ne_vaut_aucun_nom(tmp_path):
 
 def test_un_spawn_qui_reprend_l_emplacement_d_un_membre_lui_garde_son_identite(tmp_path):
     """`name` indexe la table des Sfx de destruction : -1 (le modèle sans réserve) en sortirait."""
-    from codegen.runtime_codegen.main_gen import _scene_pi, _section_spawn
+    from codegen.runtime_codegen.gen_pool import scene_pi, section_spawn
     p, scene, _coin = _projet(tmp_path, n=2, spawned=True)
-    code = "\n".join(_section_spawn(_scene_pi(p, scene), p, None))
+    code = "\n".join(section_spawn(scene_pi(p, scene), p, None))
     assert "g_actors[_i].name      = _n < 2 ? _i : ACTOR_S_COIN;" in code
 
 
 def test_un_modele_sans_spawn_n_ecrit_pas_de_sfx_de_destruction_a_son_nom(tmp_path):
-    from codegen.runtime_codegen.main_gen import _scene_pi, _sfx_on_destroy_table
+    from codegen.runtime_codegen.gen_pool import scene_pi
+    from codegen.runtime_codegen.gen_sfx_trigger import sfx_on_destroy_table
     p, scene, _coin = _projet(tmp_path, n=2)
     d = {"scene": scene, "scene_actors": [(a, None) for a in scene.actors]}
-    _sfx_on_destroy_table(p, [d], [_scene_pi(p, scene)])      # ne lève pas (indice hors table)
+    sfx_on_destroy_table(p, [d], [scene_pi(p, scene)])      # ne lève pas (indice hors table)
+
+
+def test_un_acteur_pose_du_meme_nom_que_son_prefab_garde_sa_constante(tmp_path):
+    """Une instance liée porte par défaut le nom de son prefab (`Player`). La constante `ACTOR_<Scène>_PLAYER` désigne alors
+    l'acteur posé : la redéfinir en -1 (« modèle sans spawn ») faisait lire `g_actors[-1]` à `actor:get("Player")`."""
+    from codegen.runtime_codegen.headers import generate_actor_types
+    p, scene, _coin = _projet(tmp_path, n=2)
+    scene.actors[0].name = "Coin"                     # le même nom que le prefab
+    p.src_dir.mkdir(parents=True, exist_ok=True)
+    generate_actor_types(p)
+    text = (p.src_dir / "actor_types.h").read_text(encoding="utf-8")
+    assert text.count("#define ACTOR_S_COIN ") == 1 and "#define ACTOR_S_COIN 0" in text
+    assert "#define MODEL_S_COIN_COUNT 2" in text            # le modèle existe toujours, sans constante en double

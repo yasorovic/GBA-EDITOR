@@ -120,15 +120,15 @@ def test_oam_dynamic_compose_monde_local_et_offset():
     # Composition : la rotation effective est la SOMME monde+local
     assert "int _ang=_arot+_srot;" in lines
     # Offset transformé par la matrice de l'ACTOR (hérarchie)
-    assert "int _ofx=(_acos*_asx*" in lines
-    assert "int _ofy=(_asin*_asx*" in lines
+    assert "_ofx=(_acos*_asx*" in lines
+    assert "_ofy=(_asin*_asx*" in lines
     # L'offset ne s'inverse pas avec le flip du sprite (le flip retourne la
     # texture, il ne déplace pas le cadre).
     assert "_asxs" not in lines
     # Point de pivot depuis le centre du cadre : P reste fixe, le centre se place
     # à P - M·pivot. Pivot (0,0) = le centre ne bouge pas (GBA native).
     assert "int _px=g_oam_entries[7].pivot_x; int _py=g_oam_entries[7].pivot_y;" in lines
-    assert "int _u=(_cosA*_sxs*_px)/65536-(_sinA*_sys*_py)/65536;" in lines
+    assert "_u=(_cosA*_sxs*_px)/65536-(_sinA*_sys*_py)/65536;" in lines
     # Le demi-cadre (offset + 4 + pivot) passe DANS la matrice de l'actor ; la boîte
     # OAM est en double taille, donc son coin est le centre moins la taille du cadre.
     assert "int _lx=g_oam_entries[7].offset_x+4+_px;" in lines

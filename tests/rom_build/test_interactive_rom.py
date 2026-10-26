@@ -81,7 +81,7 @@ def test_un_prefab_joueur_poole_interagit_par_une_boucle(tmp_path):
     from core.models.scene import Prefab
     projet = _projet(tmp_path)
     heros = Prefab(name="Hero2", actor=Actor(name="Hero2", is_player=True))
-    # Un prefab poolé a besoin d'un script : `pool_init` en sort (sans lui, l'édition de liens échoue).
+    # Le héros a un script (`on_interact` en sort) ; un prefab sans script naît aussi, sans `pool_init`.
     (projet.user_library_dir / "scripts" / "Hero2.lua").write_text(HERO, encoding="utf-8")
     heros.actor.components = [CollisionBoxComponent(id="body", tag="body", solid=True),
                               ScriptComponent(script="assets/scripts/Hero2.lua")]

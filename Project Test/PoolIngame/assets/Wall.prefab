@@ -29,13 +29,6 @@
       "y": 0,
       "w": 16,
       "h": 16
-    },
-    {
-      "component_type": "script",
-      "id": "script",
-      "active": true,
-      "script": "assets/scripts/Wall.lua",
-      "exports_values": {}
     }
   ],
   "pal_bank": -1,

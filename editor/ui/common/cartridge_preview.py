@@ -29,13 +29,13 @@ class SavePreviewProfile:
     capacities: tuple[int, ...]
     battery: str = "none"
     rtc: bool = False
-    release_ready: bool = False
+    functional: bool = False      # le moteur sait l'écrire ; sinon le sélecteur le montre grisé
 
 
 SAVE_PREVIEW_PROFILES = (
     SavePreviewProfile("none", "cartpreview.profile_none", "", (0,)),
     SavePreviewProfile("sram", "cartpreview.profile_sram", "cartpreview.profile_sram",
-                       (32768,), battery="save", release_ready=True),
+                       (32768,), battery="save", functional=True),
     SavePreviewProfile("eeprom", "cartpreview.profile_eeprom", "cartpreview.profile_eeprom",
                        (512, 8192)),
     SavePreviewProfile("flash", "cartpreview.profile_flash", "cartpreview.profile_flash",
@@ -48,8 +48,8 @@ SAVE_PREVIEW_PROFILES = (
 
 
 def save_preview_profiles():
-    """Unimplemented profiles are available only when running from source."""
-    return tuple(p for p in SAVE_PREVIEW_PROFILES if p.release_ready or not app_paths.IS_FROZEN)
+    """Every profile, the ones the engine cannot write yet included: the selector greys those out."""
+    return SAVE_PREVIEW_PROFILES
 
 
 def save_capacity_text(size):

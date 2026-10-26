@@ -129,6 +129,8 @@ _PROP_HOME: dict[str, str] = {
     "actor.visible":   "Instance",
     "actor.active":    "Instance",
     "actor.name":      "Instance",
+    "actor.parent":    "Instance",
+    "actor.root":      "Instance",
     "actor.frame":     "Animation",
     "actor.anim":      "Animation",
     "actor.active_sprite": "Sprite",
@@ -225,6 +227,7 @@ _ACTOR_ENTRY_ORDER: tuple[str, ...] = (
     "actor-get",            # Actor (module) : comment pointer un acteur nommé ?
     "actor-count",
     "actor-spawn",
+    "actor-clear",
     "actor-name",           # Instance : qui est-ce ?
     "actor-active",         # son état et son cycle de vie
     "actor-visible",

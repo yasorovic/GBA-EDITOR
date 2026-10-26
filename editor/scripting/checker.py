@@ -56,7 +56,7 @@ from .expr_types import (VEC_FIELDS, VEC_CONSTRUCTORS, VEC_FUNCTIONS, ARITH_TYPE
                          infer_vec_type, infer_ref_type, resolve_prop,
                          is_actor_call, chain_label, element_of, literal_actor_library,
                          literal_actor_target, EXPORT_SCALARS, EXPORT_COMPOSITES, EXPORT_NAMED,
-                         EXPORT_ACCESSIBLE, held_actor_refs)
+                         EXPORT_ACCESSIBLE, held_actor_refs, child_of_ref, RefEnv)
 
 
 # Forme d'une clé de texte : minuscules, chiffres et au moins un souligné.
@@ -155,6 +155,11 @@ class BuildContext:
     # `actor:spawn("X")` (prefabs) désigne par un littéral : nom -> `SpriteLibrary`.
     actor_sprites: dict = None
     prefab_sprites: dict = None
+    # Les parties de chaque prefab segmenté : prefab -> { partie -> rang }, et leurs sprites (cf. CodegenContext).
+    prefab_children: dict = None
+    prefab_child_sprites: dict = None
+    actor_children: dict = None
+    actor_child_sprites: dict = None
     # Les exports de chaque acteur posé de la scène : nom -> { export -> {"type", "values"} }.
     # Ceux des prefabs sont dans `spawn_exports`.
     actor_exports: dict = None
@@ -214,7 +219,8 @@ class Checker:
         # Étiquettes des exports `enum`, dans l'ordre déclaré : l'index est la valeur.
         self._enum_exports: dict[str, list[str]] = {}
         # Types de référence des variables locales, pour valider leurs méthodes.
-        self._ref_types: dict[str, str] = {}
+        self._ref_types: dict[str, str] = RefEnv()
+        self._ref_types.child_of = lambda expr: self._child_of(expr) is not None
         # Sprites de l'acteur que tient une variable locale (`local b = actor:get("X")`).
         # `None` : plusieurs acteurs possibles, ou on ne sait pas lequel.
         self._ref_libs: dict[str, object] = {}
@@ -575,7 +581,7 @@ class Checker:
                     self._ref_elements[name] = element
             if rt is not None:
                 self._note_ref_library(name, self._literal_library(value))
-                self._note_ref_target(name, literal_actor_target(value))
+                self._note_ref_target(name, self._target_of(value))
             vt = infer_vec_type(value, self._vec_types, self._ref_types, self._kinds)
             if vt is None:
                 return
@@ -619,6 +625,10 @@ class Checker:
     def _literal_library(self, expr):
         """Les sprites de l'acteur que `expr` désigne par un littéral (`actor:get("X")`,
         `actor:spawn("X")`), sinon None."""
+        child = self._child_of(expr)
+        if child is not None:
+            libs = self.ctx.prefab_child_sprites if child.kind == "spawn" else self.ctx.actor_child_sprites
+            return ((libs or {}).get(child.owner) or {}).get(child.name)
         return literal_actor_library(expr, self.ctx.actor_sprites, self.ctx.prefab_sprites)
 
     def _note_ref_library(self, name: str, library) -> None:
@@ -638,7 +648,14 @@ class Checker:
         par une variable locale qui en tient un ; sinon None."""
         if isinstance(expr, ExprName):
             return self._ref_targets.get(expr.name)
+        child = self._child_of(expr)
+        if child is not None and child.kind == "get":
+            return ("get", child.name)          # `chef.Bras` est l'acteur posé « Bras » : on connaît son identité
         return literal_actor_target(expr)
+
+    def _child_of(self, expr):
+        """(prefab, partie, rang) quand `expr` est `boss.Canon` sur une instance de prefab connue, sinon None."""
+        return child_of_ref(expr, self._target_of, self.ctx.prefab_children, self.ctx.actor_children)
 
     def _exports_of(self, expr):
         """Les exports lisibles et écrivables de l'acteur que `expr` désigne : { nom -> méta },
@@ -1859,6 +1876,8 @@ class Checker:
                 owner = self._data_table_ref(e.obj.obj)
                 if owner is not None:
                     self._check_data_column(owner, e.field)
+            elif resolve_prop(e, self._ref_types, self._kinds) is None and self._child_of(e) is not None:
+                pass          # `boss.Canon` : une partie de l'instance que `boss` tient (le prefab est connu au build)
             else:
                 prop = resolve_prop(e, self._ref_types, self._kinds)
                 if prop is not None:
@@ -2242,15 +2261,19 @@ class Checker:
         return None
 
     def _check_model_instances(self, key: str, args: list) -> bool:
-        """`actor:get("Bullet", i)` et `actor:count("Bullet")` : les instances d'un MODÈLE, un
+        """`actor:get("Bullet", i)`, `actor:count("Bullet")` et `actor:clear("Bullet")` : les instances d'un MODÈLE, un
         prefab que la scène spawne ou déclare. Rend True quand l'appel est de cette forme (jugé
         ici) ; False pour les formes ordinaires (`actor:get("Porte")`, `actor:get(i)`,
         `actor:count()`), que `_check_args` juge."""
-        model_form = len(args) >= 2 if key == "actor.get" else len(args) >= 1
+        model_form = len(args) >= 2 if key == "actor.get" else (len(args) >= 1 or key == "actor.clear")
         if not model_form:
             return False
         limit = 2 if key == "actor.get" else 1
-        shape = 'actor:get("Prefab", i)' if key == "actor.get" else 'actor:count("Prefab")'
+        shape = {"actor.get": 'actor:get("Prefab", i)', "actor.count": 'actor:count("Prefab")',
+                 "actor.clear": 'actor:clear("Prefab")'}[key]
+        if not args:
+            self.errors.append(CheckError("error", f"{shape}: the prefab name is missing."))
+            return True
         if len(args) > limit:
             self.errors.append(CheckError(
                 "error", f"{key}(): the instance form is {shape}, {len(args)} arguments given."))
@@ -2304,7 +2327,7 @@ class Checker:
         build décrit l'acteur qui EXÉCUTE, il ne sait rien du sprite d'un
         `other`. `library` est celle d'un ENFANT (`self.Canon`) : ses sprites sont
         connus au build, le nom se juge contre eux."""
-        if key in ("actor.get", "actor.count") and self._check_model_instances(key, args):
+        if key in ("actor.get", "actor.count", "actor.clear") and self._check_model_instances(key, args):
             return
         expected = len(api.params)
         got      = len(args)

@@ -143,17 +143,24 @@ def _write_on_reference(entries: list[dict]) -> str:
 
 
 def _factories(sections: list[dict]) -> dict[str, list[str]]:
-    """Pour chaque type de référence, les fonctions du catalogue qui en rendent une."""
-    from scripting.api import RUNTIME_API, REF_TYPE_TABLE, canonical_key
+    """Pour chaque type de référence, les fonctions et les propriétés du catalogue qui en rendent une (`actor:get(...)`,
+    `self.parent`)."""
+    from scripting.api import RUNTIME_API, RUNTIME_PROPS, REF_TYPE_TABLE, canonical_key
 
     found: dict[str, list[str]] = {}
     for section in sections:
         for layer in ("iteration", "engine"):
             for g in section[layer]:
                 for e in g["entries"]:
-                    api = RUNTIME_API.get(canonical_key(e["label"].split("(")[0].strip()))
-                    if api is not None and api.ret in REF_TYPE_TABLE:
-                        found.setdefault(api.ret, []).append(f"`{e['label']}`")
+                    nom = e["label"].split("(")[0].strip()
+                    # une propriété s'affiche sans récepteur (`parent(int)`) : elle se cherche sous `self.`
+                    key = canonical_key(nom if (":" in nom or "." in nom) else f"self.{nom}")
+                    api, prop = RUNTIME_API.get(key), RUNTIME_PROPS.get(key)
+                    rendu = api.ret if api is not None else (prop.ref if prop is not None else None)
+                    if rendu in REF_TYPE_TABLE:
+                        # une propriété s'écrit avec son récepteur, sans son type : `self.parent`
+                        ecrit = e["label"] if api is not None else (nom if ("." in nom or ":" in nom) else f"self.{nom}")
+                        found.setdefault(rendu, []).append(f"`{ecrit}`")
     return found
 
 

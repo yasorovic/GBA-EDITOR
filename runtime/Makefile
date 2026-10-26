@@ -42,6 +42,11 @@ CFLAGS    := $(ARCH) \
              -I$(DEVKITPRO)/libgba/include \
              -I$(DEVKITPRO)/maxmod/include \
              $(EXTRA_CFLAGS)
+# Le plan IWRAM du tick (cf. codegen/iwram_plan.py) ne concerne que main.c : le passer par EXTRA_CFLAGS changerait
+# `cflags.txt` et recompilerait tous les objets. Ces drapeaux-ci ne vont qu'à main.o.
+IWRAM_CFLAGS ?=
+$(BUILD)/main.o: CFLAGS += $(IWRAM_CFLAGS)
+
 # EXTRA_CFLAGS vient de l'environnement (cf. rom_build.py::_make_env) — c'est
 # là que passe -DGBA_DEBUG_BUILD. En son absence, `debug.*`
 # n'entre jamais dans la ROM : la définition dépend d'un define, pas d'un

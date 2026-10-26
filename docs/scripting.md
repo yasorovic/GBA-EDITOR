@@ -112,6 +112,44 @@ Ce raccourci convient à un projet dans une seule langue. Pour un texte à tradu
 
 Le panneau **API** du Script Editor donne la liste complète des fonctions et propriétés disponibles, avec leurs arguments.
 
+### Atteindre un autre acteur
+
+`actor:get("Nom")` rend un acteur de la scène par son nom, ou `nil` s'il n'existe plus : testez le résultat avant d'agir dessus. Un acteur qui a disparu ne fait jamais planter la ROM, l'action est simplement sautée.
+
+```lua
+function on_update()
+    local porte = actor:get("Porte")
+    if porte then porte:hide() end
+end
+```
+
+Un prefab qui naît en cours de jeu se garde de la même façon : `actor:spawn("Balle", self.position)` rend l'instance, ou `nil` quand la scène n'a plus de place. Pour détruire d'un coup toutes les instances d'un prefab, `actor:clear("Balle")` le fait et rend leur nombre. Pour les parcourir, comptez-les puis demandez la i-ème :
+
+```lua
+function on_update()
+    for i = 1, actor:count("Balle") do
+        local b = actor:get("Balle", i)
+        if b then b:hide() end
+    end
+end
+```
+
+Un acteur peut être composé de plusieurs pièces : un boss et son canon, par exemple. Depuis une référence à l'instance, une pièce se **nomme** (`boss.Canon`, dont on peut lire ou écrire les propriétés : `boss.Canon.rotation = 90`) ; depuis une pièce, on **remonte** avec `parent`, la pièce dont elle dépend, et `root`, l'instance entière (deux propriétés en lecture seule). Les deux rendent `nil` quand il n'y a rien à rendre, par exemple le parent d'une racine.
+
+```lua
+function on_update()
+    local boss = actor:get("Boss")
+    if boss then boss.Canon:play_anim("tir") end
+end
+
+function on_collision_enter(other)
+    local touche = other.root   -- `other` peut être un bras : on touche l'instance entière
+    if touche then touche:hide() end
+end
+```
+
+Le Build connaît les pièces d'un prefab quand l'acteur est désigné par son nom (`actor:get("Boss")`, `actor:spawn("Boss", pos)`). Avec `actor:get(i)` ou `other`, l'acteur n'est connu qu'au jeu : on ne nomme pas ses pièces, mais `parent` et `root` marchent. Une variable qui désigne un acteur connu doit désigner le même acteur dans tout le script : si `boss` tient `actor:get("Boss")` dans un handler, donnez un autre nom (`touche`, `cible`) à une variable qui tient autre chose ailleurs. Le détail (garder une pièce d'une image à l'autre, les acteurs posés qui ont un parent de scène, les états d'animation d'une pièce) est dans le guide [Parenté et accesseurs](guides/parente-accesseurs.md).
+
 ### Réagir aux boutons
 
 `input:pressed("a")` lit un bouton directement. Pour un combo tenu ensemble, déclarez une **action** dans Project Settings → Input → Inputs : des cases à cocher, comme pour un bouton (`dash = right + a`). Le script cite alors le NOM de l'action, exactement comme un bouton :

@@ -3,7 +3,7 @@
 Un porteur (acteur, partie de prefab) peut avoir plusieurs apparences ; une seule est
 affichée (`OamEntry.appearance`). Activer l'une pose sur l'entrée OAM ce qui dépend du
 sprite d'arrivée — tailles de frame, banque de palette, direction auto — et que
-l'init n'a posé que pour l'apparence de DÉPART (cf. `main_gen._appearance_init_lines`).
+l'init n'a posé que pour l'apparence de DÉPART (cf. `appearance_init_lines`).
 
 Ces constantes vivent dans une table ROM PAR SCÈNE (`g_appearance_init`, cf.
 `AppearanceInit` dans actor_types_static.h) : la banque de palette est un fait de la
@@ -18,8 +18,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from codegen.c_names import sym as c_sym
-from codegen.oam_alloc import owner_appearances
+from codegen.actor_appearance import owner_appearances
 from core.models.palette import OWN_PAL_BANK
+from codegen.actor_appearance import initial_appearance
 
 
 @dataclass
@@ -67,3 +68,22 @@ def appearance_table_lines(scene_sym: str, lay: AppearanceLayout) -> list[str]:
         return []
     body = ",".join(f"{{{w},{h},{pal},{ad}}}" for w, h, pal, ad in lay.rows)
     return [f"static const AppearanceInit {c_sym(scene_sym)}_appearance_init[{len(lay.rows)}] = {{{body}}};"]
+
+
+def appearance_init_lines(p, owner, entry_expr: str, indent: str, base=None) -> list[str]:
+    """Ce que l'init pose pour choisir l'apparence de départ : son rang quand ce
+    n'est pas 0 (la RAM démarre à 0), l'entrée CACHÉE si aucune n'est active, et la
+    1re ligne de ses constantes d'activation (`base`, cf. gen_appearance) pour un
+    porteur à plusieurs apparences."""
+    apps = owner_appearances(p, owner)
+    n = initial_appearance(p, owner)
+    out = []
+    if base is not None:
+        # `base + 1` : 0 = « rien à activer » (un porteur mono-apparence, dont
+        # `actor_set_appearance` doit rester sans effet).
+        out.append(f"{indent}g_oam_entries[{entry_expr}].appearance_base = {base + 1};")
+    if len(apps) > 1 and n > 0:
+        out.append(f"{indent}g_oam_entries[{entry_expr}].appearance = {n};")
+    if apps and n < 0:
+        out.append(f"{indent}g_oam_entries[{entry_expr}].visible = 0;")
+    return out

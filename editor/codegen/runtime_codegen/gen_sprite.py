@@ -23,6 +23,7 @@ from codegen.c_names import sym as c_sym
 from codegen.grit_conversion import sprite_unique_frames, seq_key
 from codegen.runtime_codegen.gen_affine import (
     affine_oam_lines_dynamic, oam_window_open, oam_window_close)
+from codegen.actor_appearance import initial_appearance, owner_appearances
 
 
 def frame_action_ids(p: Project, sprite: SpriteAsset) -> list[int]:
@@ -460,3 +461,52 @@ def anim_tick_variants(idx: int, e: int, variants: list) -> list[str]:
               "    break;"]
     L.append("    }")
     return L
+
+
+def appearances(p, owner, sprite_offsets: dict) -> list:
+    """Les `Appearance` d'un porteur, pour l'émission du writer OAM."""
+    return [Appearance(sp, sprite_offsets.get(sp.name, 0),
+                       getattr(c, "origin_x", 0), getattr(c, "origin_y", 0))
+            for c, sp in owner_appearances(p, owner)]
+
+
+def anim_variants(p, owner, owner_sym: str) -> list:
+    """Les arguments de `anim_tick_lines` de chaque apparence d'un porteur (None : une apparence fixe,
+    rien à animer). `owner_sym` est le préfixe C de ses fonctions de script (`<Scène>_<Acteur>`, ou
+    `<Scène>_<Prefab>` pour un prefab né), que les événements de frame appellent."""
+    variants = []
+    for _c, sprite in owner_appearances(p, owner):
+        if not sprite.states:
+            variants.append(None)
+            continue
+        # Le test d'effet par frame n'est émis que si le sprite en porte :
+        # même source de vérité que la table, `sprite_unique_frames`.
+        _has_fx = any(a >= 0 for a in frame_action_ids(p, sprite))
+        _has_dfx = any(s != "-1" for s, _v in frame_sfx_syms(p, sprite))
+        _evt_lines, _has_evt = actor_frame_event_lines(p, owner, sprite, owner_sym)
+        variants.append(dict(
+            sym=f"sprite_{c_sym(sprite.name)}", has_frame_sfx=_has_fx,
+            has_frame_direct_sfx=_has_dfx, event_lines=_evt_lines,
+            has_frame_events=_has_evt, actor_sym=owner_sym))
+    return variants
+
+
+def shown(p, owner):
+    """(composant, sprite) de l'apparence dont les constantes d'INITIALISATION
+    valent pour l'entrée : l'apparence affichée au départ, à défaut la première.
+    (None, None) sans apparence. Les autres apparences reposent leurs propres
+    constantes à leur activation (3c)."""
+    apps = owner_appearances(p, owner)
+    if not apps:
+        return None, None
+    n = initial_appearance(p, owner)
+    return apps[max(n, 0)]
+
+
+def initial_state_rank(comp, sprite) -> int:
+    """Rang de `comp.initial_state` dans les états de `sprite` (0 par défaut)."""
+    name = getattr(comp, "initial_state", None)
+    for i, st in enumerate(getattr(sprite, "states", None) or []):
+        if st.name == name:
+            return i
+    return 0

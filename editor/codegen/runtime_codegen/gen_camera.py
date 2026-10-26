@@ -83,3 +83,39 @@ def camera_follow_lines(p, scene, scene_actors: list, actor_offset: int) -> list
     if not cases:
         return []
     return ["    switch(g_cam_active){"] + cases + ["        default: break;", "    }"]
+
+
+def camera_table_lines(p) -> list[str]:
+    """Les `extern` des scripts de caméra et la table `g_cam_table` du projet."""
+    L: list[str] = []
+    # ── Caméras du projet ────────────────────────────────────────
+    # Une caméra est une DONNÉE : la table ci-dessous en est la forme runtime,
+    # l'entrée 0 étant toujours la caméra par défaut (fixe à l'origine, sans
+    # bornes) — celle qu'obtient une scène qui n'en désigne aucune, sans
+    # qu'aucun fichier n'ait à exister.
+    cams = project_cameras(p)
+    for cam in cams[1:]:
+        if getattr(cam, "script", ""):
+            cs = camera_sym(cam.name)
+            L += [
+                f"extern void {cs}_camera_on_start(void);",
+                f"extern void {cs}_camera_on_update(void);",
+            ]
+    L.append(f"const Camera g_cam_table[{len(cams)}] = {{")
+    for cam in cams:
+        if cam is None:
+            # 240,160 = plein écran = WIN0 éteinte (frame_w/h), pas 0,0 qui
+            # donnerait un cadre nul — cf. Camera.frame_w/h.
+            L.append("    { 0, 40, 20, 0, 0, 0, 0, 0, 0, 240, 160, NULL, NULL },   /* (default) */")
+            continue
+        cs = camera_sym(cam.name)
+        hooks = (f"{cs}_camera_on_start, {cs}_camera_on_update"
+                 if getattr(cam, "script", "") else "NULL, NULL")
+        L.append(f"    {{ {cam.mode_id()}, {cam.px('margin_x', p)}, {cam.px('margin_y', p)}, "
+                 f"{cam.px('x', p)}, {cam.px('y', p)}, "
+                 f"{cam.px('bounds_x', p)}, {cam.px('bounds_y', p)}, "
+                 f"{cam.px('bounds_w', p)}, {cam.px('bounds_h', p)}, "
+                 f"{cam.px('frame_w', p)}, {cam.px('frame_h', p)}, {hooks} }},"
+                 f"   /* {cam.name} — {cam.mode} */")
+    L += ["};", ""]
+    return L

@@ -103,7 +103,8 @@ def test_etat_absent_du_prefab_spawne_refuse():
 def test_lecture_de_l_etat_d_un_acteur_emise_par_son_rang():
     code = _c('local boss = actor:get("Boss")\n'
               'if boss and boss.anim == "rage" then self:destroy() end')
-    assert "(actor_get_anim(boss) == 1)" in code
+    # La lecture d'une propriété sur une référence qui peut valoir nil est gardée : elle rend 0 si l'acteur a disparu.
+    assert '((actor_exists_warn(boss, "reading anim") ? actor_get_anim(boss) : 0) == 1)' in code
 
 
 def test_lecture_d_un_etat_absent_refusee():

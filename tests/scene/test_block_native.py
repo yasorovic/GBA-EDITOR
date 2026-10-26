@@ -21,6 +21,9 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
 Actor g_actors[8];
 int g_spool_start = 0, g_spool_hw = 0;
+u32 g_alive_bits[1];
+u32 g_alive_epoch;
+PoolCursor g_nth;
 %(helpers)s
 
 /* Un acteur actif en (x, y) pixels, vitesse (vx, vy), une boîte (w x h) en (0, 0). */
@@ -82,6 +85,7 @@ int main(void){
         mk(3, 50, 50, 0, 0, 16, 16, 0); g_actors[3].model = 7;
         mk(4, 50, 50, 0, 0, 16, 16, 0); g_actors[4].model = 9;     /* un autre modèle : traversé */
         g_spool_start = 3; g_spool_hw = 5;
+        pool_bit_set(3); pool_bit_set(4);
         mk(0, 40, 52, 256, 0, 16, 16, 1);
         actors_resolve_blocks_pool(&g_actors[0], pm, pb, 1);   report("pool_gauche", 0);
         mk(0, 40, 52, 256, 0, 16, 16, 1); g_actors[3].model = 9;

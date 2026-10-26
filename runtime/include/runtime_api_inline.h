@@ -62,6 +62,13 @@ extern const AppearanceInit* g_appearance_init;
 extern Actor* runtime_get_actor(int name_id);
 /* Nombre d'acteurs POSÉS de la scène active — la borne de get_actor(i). */
 extern int g_scene_placed;
+/* La hiérarchie des acteurs POSÉS : `g_placed_parent[s]` est l'emplacement du parent de scène de l'acteur posé `s`, ou -1.
+   Posée par `scene_init` (nulle quand la scène n'a aucun parent) ; indexée par emplacement, donc valable pour les
+   emplacements `[0, g_scene_placed)`. Le pool, lui, a ses parties (`g_spool_part`, `g_spool_parent`). */
+extern const s16 *g_placed_parent;
+static inline int placed_parent_slot(int slot) {
+    return (g_placed_parent && slot < g_scene_placed) ? g_placed_parent[slot] : -1;
+}
 extern u32   _g_keys_held;
 extern u32   _g_keys_pressed;
 
@@ -287,7 +294,8 @@ static inline Actor* actor_live(Actor* s) { return (s && s->alive) ? s : (Actor*
 
 /* Le pool PARTAGÉ de la scène : les emplacements d'acteurs que n'importe quel modèle simple prend en
    naissant. Posés par `scene_init` (début, fin, première entrée d'état) ; `g_spool_hw` est le plus haut
-   emplacement utilisé + 1 : les boucles du tick s'arrêtent là au lieu de parcourir tout le pool.
+   emplacement utilisé + 1 : les boucles du tick (`POOL_EACH`, actor_types_static.h) s'arrêtent là au lieu de
+   parcourir tout le pool, et sautent les blocs de 32 emplacements sans vivant (`g_alive_bits`).
    `g_spool_free` est le curseur du spawn : aucun emplacement libre en dessous. Le spawn cherche à partir
    de lui (au lieu de parcourir le pool depuis le début à chaque naissance) ; une destruction le ramène
    en arrière, un spawn l'avance. */
@@ -298,17 +306,69 @@ extern int g_spool_start, g_spool_end, g_spool_hw, g_spool_entry, g_spool_free;
    du modèle, sa partie k cette identité + k. Deux tables par type d'emplacement, posées par `scene_init`
    (nulles pour une scène sans modèle à parties) :
      g_spool_grp[type]  = taille du groupe pour la RACINE d'un modèle à parties, 0 ailleurs ;
-     g_spool_part[type] = rang de la partie (k), 0 pour une racine ou un modèle plat. */
-extern const u8 *g_spool_grp, *g_spool_part;
+     g_spool_part[type] = rang de la partie (k), 0 pour une racine ou un modèle plat ;
+     g_spool_parent[type] = rang de la partie PARENTE d'une partie (0 = la racine). */
+extern const u8 *g_spool_grp, *g_spool_part, *g_spool_parent;
+
+/* OÙ EST LA PARTIE k D'UN GROUPE ? Aujourd'hui à `racine + k` : un groupe est une série contiguë d'emplacements,
+   et l'entrée d'état d'une partie suit son emplacement (une entrée par emplacement du pool). Ces quatre fonctions sont
+   le SEUL endroit qui le sait : le runtime et le C émis n'écrivent plus `+ k` ni `- rang`. Des groupes non contigus ne
+   changeraient qu'elles et l'allocateur de spawn.
+     group_slot(r, k)       emplacement de la partie k du groupe dont la racine est l'emplacement r (k = 0 : la racine) ;
+     group_entry(e, k)      entrée d'état de la partie k, `e` étant celle de la racine ;
+     group_part(a, k)       l'acteur de la partie k du groupe de la racine `a` (pointeur, sans lecture : `self.Canon`) ;
+     group_root_slot(s)     emplacement de la racine du groupe de l'emplacement s (lui-même pour une racine ou un modèle plat). */
+static inline int group_slot(int root, int k)              { return root + k; }
+static inline int group_entry(int root_entry, int k)       { return root_entry + k; }
+static inline Actor* group_part(Actor* root, int k)        { return root + k; }
+static inline int group_root_slot(int slot) {
+    return slot - (g_spool_part ? g_spool_part[g_actors[slot].model] : 0);
+}
+
+/* `boss.Canon` sur une RÉFÉRENCE : la partie k du groupe de `root`, ou nil si la référence est nil/périmée ou si la partie a été
+   détruite. À la différence de `group_part` (pour `self`, jamais nil), elle ne fabrique pas un pointeur à partir de NULL. */
+static inline Actor* actor_child(Actor* root, int k) {
+    Actor* c = root ? group_part(root, k) : (Actor*)0;
+    return (c && c->alive) ? c : (Actor*)0;
+}
+
+/* `a.root` et `a.parent` (propriétés en lecture seule du catalogue). nil si `a` est nil ou détruit.
+   Un acteur du POOL : la racine de son groupe (elle-même pour une racine ou un modèle plat), et sa partie parente (la racine ou
+   une autre partie, `g_spool_parent`), nil pour une racine ou quand cette partie a été détruite.
+   Un acteur POSÉ : son parent de scène (`g_placed_parent`), et le sommet de la chaîne pour la racine ; nil si ce parent, ou ce
+   sommet, a été détruit (détruire un parent posé ne détruit pas ses enfants). */
+static inline Actor* actor_root(Actor* a) {
+    if (!a || !a->alive) return (Actor*)0;
+    int s = a->inst;
+    if (s < g_scene_placed) {
+        for (int p = placed_parent_slot(s); p >= 0; p = placed_parent_slot(s)) s = p;
+        return g_actors[s].alive ? &g_actors[s] : (Actor*)0;
+    }
+    return &g_actors[group_root_slot(s)];
+}
+static inline Actor* actor_parent(Actor* a) {
+    if (!a || !a->alive) return (Actor*)0;
+    if (a->inst < g_scene_placed) {
+        int p = placed_parent_slot(a->inst);
+        return (p >= 0 && g_actors[p].alive) ? &g_actors[p] : (Actor*)0;
+    }
+    if (!g_spool_part || !g_spool_part[a->model]) return (Actor*)0;
+    Actor* p = &g_actors[group_slot(group_root_slot(a->inst), g_spool_parent[a->model])];
+    return p->alive ? p : (Actor*)0;
+}
+
+/* `boss.Bras` quand `boss` est un acteur POSÉ de la scène : le bras est un autre acteur posé, à une adresse que le build connaît.
+   nil si la référence à `boss` est nil, ou si le bras a été détruit. */
+static inline Actor* actor_placed_child(Actor* parent, Actor* child) {
+    return (parent && child->alive) ? child : (Actor*)0;
+}
 
 /* L'emplacement `k` du pool est-il libre pour un spawn ? Un acteur DÉTRUIT (alive = 0) libère le sien, sauf une
    PARTIE détruite dont la racine vit encore : elle reste dans son groupe, qui n'est rendu qu'avec la racine. */
 static inline int spool_slot_free(int k) {
     if (g_actors[k].alive) return 0;
-    if (g_spool_part) {
-        int r = g_spool_part[g_actors[k].model];
-        if (r && g_actors[k - r].alive) return 0;
-    }
+    int root = group_root_slot(k);
+    if (root != k && g_actors[root].alive) return 0;
     return 1;
 }
 
@@ -320,34 +380,61 @@ static inline int spool_slot_free(int k) {
 static inline int actor_model_count(const ModelSlot* t, int n, int model) {
     int c = 0;
     for (int k = 0; k < n; k++) c += g_actors[t[k].slot].alive;
-    if (model)
-        for (int k = g_spool_start; k < g_spool_hw; k++)
-            c += g_actors[k].alive && g_actors[k].model == model;
+    if (model) {
+        /* La part du pool ne se recompte que si quelqu'un est né ou mort depuis la dernière fois : une boucle
+           `for i = 1, actor:count("Balle")` relit sa borne à chaque tour. */
+        if (g_nth.count_epoch != g_alive_epoch || g_nth.count_model != model) {
+            int pc = 0;
+            POOL_EACH(k)
+                pc += g_actors[k].alive && g_actors[k].model == model;
+            g_nth.count_epoch = g_alive_epoch; g_nth.count_model = model; g_nth.count = pc;
+        }
+        c += g_nth.count;
+    }
     return c;
 }
 static inline Actor* actor_model_nth(const ModelSlot* t, int n, int model, int n0) {
     if (n0 < 0) return (Actor*)0;
     for (int k = 0; k < n; k++)
         if (g_actors[t[k].slot].alive && n0-- == 0) return &g_actors[t[k].slot];
-    if (model)
-        for (int k = g_spool_start; k < g_spool_hw; k++)
-            if (g_actors[k].alive && g_actors[k].model == model && n0-- == 0) return &g_actors[k];
+    if (!model) return (Actor*)0;
+    /* `n0` est maintenant le rang demandé parmi les instances du pool. Le même rang qu'à l'appel précédent rend le même
+       acteur ; le rang suivant se cherche à partir de son emplacement : une boucle en avançant de 1 coûte un parcours du
+       pool en tout, et non un par tour. Un changement de vie depuis (époque) ou un autre modèle : parcours complet. */
+    if (g_nth.epoch == g_alive_epoch && g_nth.model == model) {
+        if (n0 == g_nth.rank) return &g_actors[g_nth.slot];
+        if (n0 == g_nth.rank + 1) {
+            for (int k = g_nth.slot + 1; k < g_spool_hw; k++)
+                if (g_actors[k].alive && g_actors[k].model == model) {
+                    g_nth.rank = n0; g_nth.slot = k;
+                    return &g_actors[k];
+                }
+            return (Actor*)0;
+        }
+    }
+    int rank = n0;
+    POOL_EACH(k)
+        if (g_actors[k].alive && g_actors[k].model == model && rank-- == 0) {
+            g_nth.epoch = g_alive_epoch; g_nth.model = model; g_nth.rank = n0; g_nth.slot = k;
+            return &g_actors[k];
+        }
     return (Actor*)0;
 }
 
 /* Une RÉFÉRENCE d'acteur rangée dans une variable qui survit à l'image (variable de tête d'un script,
-   état d'une instance) est un entier : la génération de l'emplacement (+1, pour que 0 reste « aucun
-   acteur ») dans les 16 bits hauts, son indice dans `g_actors` dans les 16 bits bas. Elle ne
-   résout que tant que l'emplacement n'a pas changé de main : détruit, ré-occupé par un spawn ou
+   état d'une instance) est un entier : la génération de l'emplacement dans les 16 bits hauts, son
+   indice dans `g_actors` PLUS UN dans les 16 bits bas (pour que 0 reste « aucun acteur », quelle que soit
+   la génération). Le bit de signe peut donc être pris : on ne compare une référence qu'à 0, jamais à un ordre.
+   Elle ne résout que tant que l'emplacement n'a pas changé de main : détruit, ré-occupé par un spawn ou
    quitté avec sa scène, il rend nil. Un acteur désactivé (`deactivate`) résout toujours, il peut
    être réactivé. */
 static inline int actor_ref_make(const Actor* a) {
-    return a ? ((((int)a->gen + 1) << 16) | (int)(a - g_actors)) : 0;
+    return a ? (int)(((u32)a->gen << 16) | (u32)(a - g_actors + 1)) : 0;
 }
 static inline Actor* actor_ref_get(int h) {
     if (!h) return (Actor*)0;
-    Actor* a = &g_actors[h & 0xFFFF];
-    return ((h >> 16) == (int)a->gen + 1) ? a : (Actor*)0;
+    Actor* a = &g_actors[(h & 0xFFFF) - 1];
+    return (((u32)h >> 16) == a->gen) ? a : (Actor*)0;
 }
 
 /* Un script qui agit sur une RÉFÉRENCE d'acteur (`boss:move(...)`, `b:hide()`, `boss.hp`) : l'acteur a pu
@@ -527,15 +614,67 @@ static const s16 SIN_LUT[91] = {
     243, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 254,
     255, 255, 255, 256, 256, 256, 256,
 };
-/* La table couvre 0..90° ; les trois autres quadrants s'en déduisent par symétrie. */
-static inline int gba_sin(int deg) {
-    deg = ((deg % 360) + 360) % 360;
+/* Un angle en degrés ramené à [0, 360) SANS division : le moteur est compilé en Thumb, qui n'a pas de multiplication
+   longue, donc `% 360` devient un appel de bibliothèque de plusieurs dizaines de cycles — et une rotation qu'un script
+   incrémente à chaque image sort vite de [0, 360). Au-delà de ±46 000 degrés (le produit déborderait), le reste
+   se fait à l'ancienne. */
+static inline int gba_norm_deg(int deg) {
+    if ((unsigned)deg < 360u) return deg;
+    if (deg > -46000 && deg < 46000) {
+        deg -= ((deg * 46603) >> 24) * 360;              /* 46603 = 2^24 / 360 */
+        while (deg < 0) deg += 360;
+        while (deg >= 360) deg -= 360;
+        return deg;
+    }
+    deg %= 360;
+    return deg < 0 ? deg + 360 : deg;
+}
+/* La table couvre 0..90° ; les trois autres quadrants s'en déduisent par symétrie. `deg` est dans [0, 360). */
+static inline int gba_sin_n(int deg) {
     int neg = deg >= 180;
     if (neg) deg -= 180;
     if (deg > 90) deg = 180 - deg;
     return neg ? -SIN_LUT[deg] : SIN_LUT[deg];
 }
-static inline int gba_cos(int deg) { return gba_sin(deg + 90); }
+static inline int gba_sin(int deg) { return gba_sin_n(gba_norm_deg(deg)); }
+static inline int gba_cos(int deg) { return gba_sin_n(gba_norm_deg(deg + 90)); }
+/* Sinus ET cosinus d'un même angle, réduit une seule fois. */
+static inline void gba_sincos(int deg, int* s, int* c) {
+    deg = gba_norm_deg(deg);
+    *s = gba_sin_n(deg);
+    *c = gba_sin_n(deg >= 270 ? deg - 270 : deg + 90);
+}
+/* La matrice affine 8.8 d'un sprite (PA = cos / échelle x, PB = sin / échelle x, PC = -sin / échelle y, PD =
+   cos / échelle y), `sxq`/`syq` en Q8 (256 = ×1). Les seules divisions par une variable sont l'inverse de chaque
+   échelle (2^22 / s, en Q14) : une seule quand l'échelle est la même sur les deux axes, aucune à l'échelle 1,0. Le
+   produit cos × inverse tient en 31 bits (256 × 2^22 au plus). */
+static inline void gba_affine_matrix(int cosA, int sinA, int sxq, int syq, int* pa, int* pb, int* pc, int* pd) {
+    int isx = sxq == 256 ? 16384 : (sxq ? 4194304 / sxq : 0);
+    int isy = syq == sxq ? isx : (syq == 256 ? 16384 : (syq ? 4194304 / syq : 0));
+    *pa = cosA * isx / 16384;  *pb = sinA * isx / 16384;
+    *pc = -sinA * isy / 16384; *pd = cosA * isy / 16384;
+    if (!*pa && !*pb) *pa = 1;
+    if (!*pc && !*pd) *pd = 1;
+}
+/* Le calcul affine d'un sprite, mémoïsé PAR ENTRÉE D'AFFICHAGE (`g_aff_cache[entrée]`, défini dans main.c quand le projet a
+   un sprite affine). La clé est ce dont le résultat dépend, tel que le C de rendu le lit : rotation et échelle de l'acteur,
+   rotation et échelle locales du sprite, centre du cadre (`lx`, `ly` = décalage + demi-cadre + pivot), pivot et flips. Un sprite
+   dont rien de cela n'a bougé depuis l'image précédente relit les huit résultats au lieu de refaire sinus, cosinus, inverses
+   et produits. La clé est comparée en entier, jamais résumée : un résultat périmé ne peut pas sortir. `fl` vaut 0 tant que
+   l'entrée n'a rien rangé, 0x80 plus les flips ensuite.
+
+   Ranger coûte (une vingtaine d'écritures) : un sprite dont la rotation ou l'échelle change à CHAQUE image ne le fait donc
+   pas. `vrot`, `vsx`, `vsy` retiennent ces trois valeurs de l'image précédente (trois écritures, toujours) ; on ne range
+   et on ne relit qu'à partir de la deuxième image où elles sont restées les mêmes. */
+typedef struct AffCache {
+    s16 vrot, vsx, vsy;                 /* rotation et échelle de l'acteur à l'image précédente */
+    s16 rot, srot, asx, asy, ssx, ssy, lx, ly;
+    s8 px, py;
+    u8 fl;
+    s16 pa, pb, pc, pd;                 /* la matrice, avant le flip */
+    s16 ofx, ofy, u, v;                 /* le décalage du cadre tourné et le recentrage sur le pivot */
+} AffCache;
+/* fin de la trigonométrie du moteur */
 
 /* Un matrix slot est réservé au build quand « Affine transform » est coché sur
    le OamEntry (cf. main_gen._compute_affine_info) ; sprite.affine_slot
@@ -620,13 +759,13 @@ static inline void actor_set_direction(Actor* s, Vec2 v) {
 
 /* Activation / destruction */
 static inline void actor_destroy_internal(Actor* s)  {
-    s->active=0; s->alive=0; s->gen++; actor_oam_entry(s)->visible=0;
+    s->active=0; s->alive=0; s->gen++; actor_oam_entry(s)->visible=0; pool_bit_clear(s->inst);
     if (g_spool_grp) {
         /* Détruire la racine d'un modèle à parties détruit le sous-arbre : le groupe entier est rendu au pool. */
         int g = g_spool_grp[s->model];
         for (int k = 1; k < g; k++) {
-            Actor* c = s + k;
-            c->active = 0; c->alive = 0; c->gen++; c->model = 0; actor_oam_entry(c)->visible = 0;
+            Actor* c = group_part(s, k);
+            c->active = 0; c->alive = 0; c->gen++; c->model = 0; actor_oam_entry(c)->visible = 0; pool_bit_clear(c->inst);
         }
     }
     if ((int)s->inst >= g_spool_start && (int)s->inst < g_spool_free) g_spool_free = s->inst;   /* l'emplacement redevient le premier libre */

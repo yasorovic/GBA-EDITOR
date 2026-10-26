@@ -61,7 +61,7 @@ def test_aucun_emetteur_n_ecrit_l_affichage_sur_g_actors():
     l'acteur : on interdit donc l'écriture elle-même, pas seulement le résultat."""
     motif = re.compile(
         r"g_actors\[[^\]]+\]\.(sprite\b|" + "|".join(AFFICHAGE) + r")\b")
-    for nom in ("main_gen.py", "gen_affine.py", "gen_sprite.py"):
+    for nom in ("main_gen.py", "gen_pool.py", "gen_affine.py", "gen_sprite.py"):
         source = (CODEGEN / nom).read_text(encoding="utf-8")
         trouves = motif.findall(source)
         assert not trouves, f"{nom} : g_actors[..].{trouves[0]}"
@@ -78,13 +78,15 @@ def test_les_accesseurs_de_script_passent_par_le_lien():
 
 
 def test_la_table_est_declaree_et_initialisee_avec_son_lien():
-    source = (CODEGEN / "main_gen.py").read_text(encoding="utf-8")
+    source = (CODEGEN / "gen_globals.py").read_text(encoding="utf-8")
     assert 'OamEntry g_oam_entries[{n_oam_entries}] EWRAM_BSS;' in source
     # scene_init remet TOUT acteur à -1 (sans entrée) : le lien se pose ensuite,
     # pour les seuls acteurs qui affichent un sprite…
-    assert "g_actors[_i].oam_entry=-1" in source
+    init = (CODEGEN / "gen_scene_init.py").read_text(encoding="utf-8")
+    assert "g_actors[_i].oam_entry=-1" in init
     # …et le spawn le repose, puisqu'il remet l'acteur à zéro.
-    assert "g_actors[_i].gen = _g + 1; }} g_actors[_i].oam_entry = {_e0 or -1};" in source
+    spawn = (CODEGEN / "gen_pool.py").read_text(encoding="utf-8")
+    assert "g_actors[_i].gen = _g + 1; }} g_actors[_i].oam_entry = {_e0 or -1};" in spawn
 
 
 def test_l_acteur_sans_sprite_a_des_accesseurs_neutres():
@@ -112,7 +114,8 @@ def test_les_tailles_des_structs_ne_regressent_pas(tmp_path):
     `pivot_x/y` sur 8 bits le 2026-10-04), Actor 72 (96 avant ; 68 jusqu'au 2026-10-24, où
     `facing_x/y` ajoute 2 octets que l'alignement sur 4 de la struct facture 4).
     76 depuis le 2026-10-25 : `gen`, `alive`, `inst` (u16) et `model` (u8), les quatre champs qui
-    rendent un emplacement adressable et partagé (référence, cycle de vie, état de script, pool)."""
+    rendent un emplacement adressable et partagé (référence, cycle de vie, état de script, pool). `gen` passe à 16 bits
+    le 2026-10-26 sans changer la taille : le remplissage l'absorbe (mesuré, 76 avant et après)."""
     import os, shutil, subprocess
     import pytest
     cc = os.environ.get("CC") or shutil.which("gcc") or shutil.which("cc") or shutil.which("clang")

@@ -1,6 +1,6 @@
 """tools/run_pool_ingame.py — joue le scénario de `Project Test/PoolIngame` dans mGBA et rend son verdict.
 
-    python tools/run_pool_ingame.py [--mgba CHEMIN] [--seconds 15]
+    python tools/run_pool_ingame.py [--project PoolIngame|PoolPlaced] [--mgba CHEMIN] [--seconds 15]
 
 Copie le projet dans un dossier temporaire (le build ne touche jamais le projet source), le construit comme
 l'éditeur, lance `mgba-sdl -l 8` pendant quelques secondes, puis lit les lignes PASS / FAIL que le scénario
@@ -23,7 +23,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "editor"))
 
-SOURCE = ROOT / "Project Test" / "PoolIngame"
 MGBA_PAR_DEFAUT = r"C:\Program Files\mGBA\mgba-sdl.exe"
 
 
@@ -43,13 +42,14 @@ def construire(projet: Path) -> bool:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--project", default="PoolIngame", help="dossier de Project Test à jouer (PoolIngame, PoolPlaced)")
     ap.add_argument("--mgba", default=MGBA_PAR_DEFAUT)
     ap.add_argument("--seconds", type=int, default=15)
     args = ap.parse_args()
 
     with tempfile.TemporaryDirectory(prefix="pool_ingame_") as tmp:
-        copie = Path(tmp) / "PoolIngame"
-        shutil.copytree(SOURCE, copie, ignore=shutil.ignore_patterns("build"))
+        copie = Path(tmp) / args.project
+        shutil.copytree(ROOT / "Project Test" / args.project, copie, ignore=shutil.ignore_patterns("build"))
         if not construire(copie):
             print("Build en échec.")
             return 1

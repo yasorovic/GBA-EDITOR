@@ -19,6 +19,9 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 Actor g_actors[8];
 OamEntry g_oam_entries[8];
 int g_spool_start = 0, g_spool_hw = 0;
+u32 g_alive_bits[1];
+u32 g_alive_epoch;
+PoolCursor g_nth;
 static int g_wall_x0 = 0, g_wall_x1 = -1;       /* un mur vertical : x dans [x0, x1], tout y */
 static int tile_wall_at(int px, int py){ (void)py; return px >= g_wall_x0 && px <= g_wall_x1; }
 %(helpers)s
@@ -98,6 +101,7 @@ int main(void){
         mk(3, 10, 0, 0, 0, 16, 16, 0); g_actors[3].model = 1;     /* recouvre le joueur, mais n'est pas un consommateur */
         mk(4, 30, 0, 0, 0, 16, 16, 0); g_actors[4].model = 2;     /* un consommateur en visée, trop loin */
         g_spool_start = 3; g_spool_hw = 5;
+        pool_bit_set(3); pool_bit_set(4);
         g_actors[0].facing_x = 1;
         r = interact_pick(&g_actors[0], idx, box, hover, 2, pbox, paim, 4);  printf("pool_hors_portee %%d\n", r);
         mk(4, 19, 0, 0, 0, 16, 16, 0); g_actors[4].model = 2;

@@ -7,11 +7,9 @@ vivant (navigation), `g_ui_elements` (visibilité). Plus les deux
 index qui font le lien nom→index avec le C de script : `ui_element_index`
 (`UIELEM_*`) et `region_actor_index` (zones ancrées sur un acteur).
 
-Ce qui touche à la COMPOSITION de texte (region_is_composited, scene_region_*,
-_gen_ui_texts, _obj_text_alloc) reste dans main_gen, en attendant `gen_text` :
-c'est de l'analyse texte, pas de la table d'interface. `_ui_images_lines` reste
-aussi côté main_gen — c'est de la glue qui a besoin de `_obj_text_alloc`, et qui
-appelle `emit_ui_images_c` d'ici.
+Ce qui touche à la COMPOSITION de texte (region_is_composited, scene_region_*, gen_ui_texts,
+obj_text_alloc) vit dans `gen_text` ; l'interface d'UNE scène dans `scene_init` (images, routes de
+rendu) vit dans `gen_ui_scene`, qui appelle `emit_ui_images_c` d'ici.
 """
 from __future__ import annotations
 

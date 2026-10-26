@@ -334,10 +334,19 @@ extern void global_write(int i, int v);
 extern int  global_read_at (int i, int k);
 extern void global_write_at(int i, int k, int v);
 
-/* Waitstates SRAM à 8 cycles — la valeur sûre pour toutes les cartouches.
-   Appelée une fois par main() avant toute lecture. */
-static void sram_init(void) {
-    REG_WAITCNT = (REG_WAITCNT & ~3) | 3;
+/* Les temps d'accès mémoire de la cartouche (REG_WAITCNT), posés une fois par main() avant toute lecture. La valeur est
+   calculée à la génération (codegen/memory_timing.py) d'après les réglages du projet :
+
+     SRAM : 8 cycles, la valeur sûre pour toutes les cartouches.
+     ROM : premier accès (N) et accès suivants (S) de WS0, WS1 le reprenant au-delà de 16 Mio, plus le tampon de lecture
+       anticipée (prefetch). Le réglage des jeux commerciaux est 3/1 avec prefetch. Après le BIOS la ROM est à 4/2 sans
+       prefetch, et le moteur, compilé en Thumb et exécuté DEPUIS la ROM, va alors presque deux fois moins vite (mesuré
+       sous mGBA : 4,87 ms contre 2,48 ms par image sur un banc de 30 sprites affines).
+
+   Sont écrits la SRAM, WS0, WS1 et le prefetch (0x40FF) ; WS2 et les bits en lecture seule restent comme le BIOS les laisse. */
+#define WAITCNT_WRITE_MASK 0x40FF
+static void memory_timing_init(unsigned short waitcnt) {
+    REG_WAITCNT = (REG_WAITCNT & ~WAITCNT_WRITE_MASK) | waitcnt;
 }
 
 static unsigned int sram_get32(int off) {

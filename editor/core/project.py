@@ -966,6 +966,9 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
             "transition_kind":   self.settings.transition_kind,
             "transition_frames": self.settings.transition_frames,
             "cartridge_mib":     self.settings.cartridge_mib,
+            "rom_wait_first":    self.settings.rom_wait_first,
+            "rom_wait_second":   self.settings.rom_wait_second,
+            "rom_prefetch":      self.settings.rom_prefetch,
             "sfx_sample_rate":   self.settings.sfx_sample_rate,
             "sound_channels":    self.settings.sound_channels,
             "debug_build":       self.settings.debug_build,
@@ -1053,6 +1056,10 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         from codegen.rom_report import CARTRIDGE_SIZES_MIB, DEFAULT_CARTRIDGE_MIB
         cart = int(d.get("cartridge_mib", DEFAULT_CARTRIDGE_MIB))
         self.settings.cartridge_mib = cart if cart in CARTRIDGE_SIZES_MIB else DEFAULT_CARTRIDGE_MIB
+        from codegen.memory_timing import normalised as _rom_timing
+        s = self.settings
+        s.rom_wait_first, s.rom_wait_second, s.rom_prefetch = _rom_timing(
+            d.get("rom_wait_first", 3), d.get("rom_wait_second", 1), d.get("rom_prefetch", True))
         self.settings.sfx_sample_rate = max(0, int(d.get("sfx_sample_rate", 0)))
         # Antérieur à la v0.8.8 : les 8 canaux qui étaient en dur dans le
         # codegen. Borné par le matériel — le masque de canaux de maxmod est un

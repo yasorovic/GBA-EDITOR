@@ -29,7 +29,7 @@ largeur de la scène).
 
 ## 2. Rien à réserver
 
-Les acteurs créés au vol naissent dans un **pool partagé par toute la scène** : 512 emplacements en tout,
+Les acteurs créés au vol naissent dans un **pool partagé par toute la scène** : 256 emplacements en tout,
 acteurs posés compris, et n'importe quel prefab y prend la première place libre. Il n'y a donc rien à régler
 par prefab. Un projectile détruit rend sa place aux suivants.
 

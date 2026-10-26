@@ -10,9 +10,8 @@ from __future__ import annotations
 from core.models.scene import Actor, Prefab, Scene
 from core.project import Project
 from oam_fixtures import tout_afficher, faire_naitre
-from codegen.oam_alloc import (
-    OAM_LIMIT, OBJECT_CAPACITY, scene_oam_layout, scene_has_model, scene_ui_obj_slots,
-)
+from codegen.oam_alloc import OAM_LIMIT, OBJECT_CAPACITY, scene_oam_layout, scene_has_model
+from codegen.ui_obj_budget import scene_ui_obj_slots
 
 
 def _projet(tmp_path, *, scene: Scene, prefabs=None, sprites=True) -> Project:
@@ -173,7 +172,7 @@ def test_le_validateur_avertit_de_matrices_affines_manquantes(tmp_path):
 def test_les_instances_nees_ne_reservent_pas_de_matrice(tmp_path):
     """Les matrices des acteurs posés sont réservées au build ; une instance née prend, à la frame, une de celles
     qui restent : elle n'entre pas dans la demande du build."""
-    from codegen.oam_alloc import scene_affine_requests
+    from codegen.oam_budget import scene_affine_requests
     scene = Scene(name="S", actors=[Actor(name=f"A{i}") for i in range(26)])
     faire_naitre(tmp_path, scene, "Ball")
     p = _projet(tmp_path, scene=scene, prefabs=[Prefab(name="Ball")])

@@ -149,12 +149,66 @@ class BuildPanel(QWidget):
             lambda i: self._set_setting("cartridge_mib", int(self._combo_cart.itemData(i) or 4)))
         _row(label('projset.cartridge'), self._combo_cart, controls, stretch=False)
 
+        # ── Temps d'accès de la ROM : deux préréglages, et les champs du registre en mode avancé ──
+        from codegen import memory_timing
+        self._combo_timing = QComboBox()
+        self._combo_timing.setFont(QFont(T.UI, T.MD))
+        self._combo_timing.setStyleSheet(QSS.combobox)
+        self._combo_timing.addItem(label('projset.rom_timing_fast'), "fast")
+        self._combo_timing.addItem(label('projset.rom_timing_compatible'), "compatible")
+        self._combo_timing.addItem(label('projset.rom_timing_advanced'), memory_timing.CUSTOM)
+        self._combo_timing.setToolTip(tooltip(
+            title=label('projset.rom_timing_title'), body=label('projset.rom_timing_tip'),
+            note=label('projset.rom_timing_note')))
+        self._combo_timing.activated.connect(self._pick_timing)
+        _row(label('projset.rom_timing'), self._combo_timing, controls, stretch=False)
+
+        self._timing_advanced = QWidget()
+        adv = QVBoxLayout(self._timing_advanced)
+        adv.setContentsMargins(0, 0, 0, 0)
+        adv.setSpacing(6)
+        self._combo_wait_first = QComboBox()
+        self._combo_wait_first.setFont(QFont(T.UI, T.MD))
+        self._combo_wait_first.setStyleSheet(QSS.combobox)
+        for n in memory_timing.FIRST_ACCESS:
+            self._combo_wait_first.addItem(str(n), n)
+        self._combo_wait_first.setToolTip(tooltip(
+            title=label('projset.rom_wait_first'), body=label('projset.rom_wait_first_tip')))
+        self._combo_wait_first.activated.connect(self._pick_wait_first)
+        _row(label('projset.rom_wait_first'), self._combo_wait_first, adv, stretch=False)
+        self._combo_wait_second = QComboBox()
+        self._combo_wait_second.setFont(QFont(T.UI, T.MD))
+        self._combo_wait_second.setStyleSheet(QSS.combobox)
+        self._combo_wait_second.setToolTip(tooltip(
+            title=label('projset.rom_wait_second'), body=label('projset.rom_wait_second_tip')))
+        self._combo_wait_second.activated.connect(self._pick_wait_second)
+        _row(label('projset.rom_wait_second'), self._combo_wait_second, adv, stretch=False)
+        self._chk_prefetch = QCheckBox(label('projset.rom_prefetch'))
+        self._chk_prefetch.setFont(QFont(T.UI, T.MD))
+        self._chk_prefetch.setToolTip(tooltip(
+            title=label('projset.rom_prefetch'), body=label('projset.rom_prefetch_tip')))
+        self._chk_prefetch.toggled.connect(self._pick_prefetch)
+        adv.addWidget(self._chk_prefetch)
+        self._timing_wide_note = QLabel(label('projset.rom_timing_wide'))
+        self._timing_wide_note.setWordWrap(True)
+        self._timing_wide_note.setFont(QFont(T.UI, T.SM))
+        self._timing_wide_note.setStyleSheet(f"color:{C.TEXT_DIM};")
+        self._timing_wide_note.setMaximumWidth(240)
+        adv.addWidget(self._timing_wide_note)
+        controls.addWidget(self._timing_advanced)
+        self._advanced_timing = False     # choix de l'auteur dans cette session : montre les champs même sur un préréglage
+
         # Session-only exploration: never written to project settings or passed to codegen.
         self._combo_save_preview = QComboBox()
         self._combo_save_preview.setFont(QFont(T.UI, T.SM))
         self._combo_save_preview.setStyleSheet(QSS.combobox)
         for profile in save_preview_profiles():
             self._combo_save_preview.addItem(label(profile.title_key), profile.key)
+            if not profile.functional:
+                row = self._combo_save_preview.count() - 1
+                self._combo_save_preview.model().item(row).setEnabled(False)
+                self._combo_save_preview.setItemData(
+                    row, label('cartpreview.not_writable'), Qt.ItemDataRole.ToolTipRole)
         self._combo_save_preview.setCurrentIndex(self._combo_save_preview.findData("sram"))
         self._combo_save_capacity = QComboBox()
         self._combo_save_capacity.setFont(QFont(T.UI, T.SM))
@@ -215,6 +269,55 @@ class BuildPanel(QWidget):
         self._combo_cart.setCurrentIndex(idx if idx >= 0 else 0)
         self._combo_cart.blockSignals(False)
         self._cartridge_preview.set_target(self._combo_cart.currentData())
+        self._refresh_timing()
+
+    def _refresh_timing(self):
+        from codegen import memory_timing
+        s = self._project.settings
+        preset = memory_timing.preset_of(s.rom_wait_first, s.rom_wait_second, s.rom_prefetch)
+        advanced = self._advanced_timing or preset == memory_timing.CUSTOM
+        widgets = (self._combo_timing, self._combo_wait_first, self._combo_wait_second, self._chk_prefetch)
+        for w in widgets:
+            w.blockSignals(True)
+        self._combo_timing.setCurrentIndex(self._combo_timing.findData(memory_timing.CUSTOM if advanced else preset))
+        self._combo_wait_first.setCurrentIndex(self._combo_wait_first.findData(s.rom_wait_first))
+        self._combo_wait_second.clear()
+        for n in memory_timing.second_choices(s.rom_wait_first):
+            self._combo_wait_second.addItem(str(n), n)
+        self._combo_wait_second.setCurrentIndex(self._combo_wait_second.findData(s.rom_wait_second))
+        self._chk_prefetch.setChecked(s.rom_prefetch)
+        for w in widgets:
+            w.blockSignals(False)
+        self._timing_advanced.setVisible(advanced)
+        self._timing_wide_note.setVisible(s.cartridge_mib > memory_timing.WS0_WINDOW_MIB)
+
+    def _set_timing(self, first: int, second: int, prefetch: bool):
+        self._set_setting("rom_wait_first", first)
+        self._set_setting("rom_wait_second", second)
+        self._set_setting("rom_prefetch", prefetch)
+
+    def _pick_timing(self, _index: int):
+        from codegen import memory_timing
+        key = self._combo_timing.currentData()
+        self._advanced_timing = key == memory_timing.CUSTOM
+        if self._advanced_timing:
+            self._refresh_timing()
+        else:
+            self._set_timing(*memory_timing.preset_values(key))
+
+    def _pick_wait_first(self, _index: int):
+        from codegen import memory_timing
+        s = self._project.settings
+        first = int(self._combo_wait_first.currentData())
+        choices = memory_timing.second_choices(first)
+        second = s.rom_wait_second if s.rom_wait_second in choices else choices[0]   # 2 cycles ne suit qu'un premier accès plus lent
+        self._set_timing(first, second, s.rom_prefetch)
+
+    def _pick_wait_second(self, _index: int):
+        self._set_setting("rom_wait_second", int(self._combo_wait_second.currentData()))
+
+    def _pick_prefetch(self, checked: bool):
+        self._set_setting("rom_prefetch", bool(checked))
 
     def _refresh_save_preview(self):
         profile = next(p for p in save_preview_profiles()

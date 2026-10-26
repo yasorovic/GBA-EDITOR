@@ -115,7 +115,7 @@ def test_un_element_d_interface_chaine_emet_l_appel():
 def test_un_champ_compose_se_lit_sur_une_propriete_chainee():
     """`.x` se compose sur le résultat du getter, comme sur un nom."""
     assert _c_body('local px = actor:get("Foe").position.x') == [
-        f"int px = actor_get_position({_FOE}).x;"]
+        f'int px = (actor_exists_warn({_FOE}, "reading position") ? actor_get_position({_FOE}) : (Vec2){{0}}).x;']
 
 
 def test_une_comparaison_de_domaine_sur_recepteur_chaine():

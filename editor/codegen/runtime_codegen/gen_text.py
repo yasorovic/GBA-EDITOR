@@ -9,7 +9,7 @@ Extrait de `main_gen` (A3), au-dessus de la couche de requêtes. Trois familles 
 
 Dépend vers le bas : `font_emit`, `gen_scene_query` (scene_ui_images), `gen_ui`
 (region_actor_index/ui_element_index), `gen_palette` (palettes_lines),
-`oam_alloc` (layout_obj_budget_resolved) et le modèle. Aucun n'importe ce module — pas de
+`ui_obj_budget` (layout_obj_budget_resolved) et le modèle. Aucun n'importe ce module — pas de
 cycle. `_declared_lang_codes`/`_emit_font_subsets` restent privés (consommés que
 d'ici). `region_ink_bank`/`region_is_composited` sont relus par l'éditeur
 (inspecteur, canvas), d'où leur nom public.
@@ -20,7 +20,7 @@ from core.project import Project
 from core.diagnostic import build_error, build_warning
 from core.models.ui_region import region_fill_container
 from codegen.c_names import sym as c_sym
-from codegen.oam_alloc import layout_obj_budget_resolved
+from codegen.ui_obj_budget import layout_obj_budget_resolved
 from codegen.font_emit import project_fonts, encodable_project_fonts
 from codegen.runtime_codegen.gen_scene_query import scene_ui_images
 from codegen.runtime_codegen.gen_ui import region_actor_index, ui_element_index
@@ -267,7 +267,7 @@ def _emit_font_subsets(p, encoded: list, emit=None) -> list[str]:
     Émis ici parce que c'est le seul endroit qui tient les polices ENCODÉES : un
     sous-ensemble parle en index de glyphe encodé, pas en glyphe de la planche.
     Le nom des descripteurs est mémorisé sur la scène, relu par
-    `_gen_scene_init` pour poser les `text_set_subset`.
+    `gen_scene_init` pour poser les `text_set_subset`.
 
     Pas de sous-ensemble pour une police composée (elle ne charge aucun glyphe)
     ni pour une scène indécidable (police entière, déjà réservée).

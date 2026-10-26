@@ -73,7 +73,7 @@ def block_helper_lines() -> list[str]:
         "    for(int i=0;i<a->collision.box_count;i++){",
         "        const CollisionBox* m=&a->collision.boxes[i];",
         "        if(!m->active||!m->solid) continue;",
-        "        for(int s=g_spool_start;s<g_spool_hw;s++){",
+        "        POOL_EACH(s){",
         "            const Actor* t=&g_actors[s];",
         "            if(t==a||!t->active) continue;",
         "            for(int k=0;k<n;k++){",
@@ -172,7 +172,7 @@ def block_tick_lines(p, scene, scene_actors, actor_offset, pi, shown) -> list[st
             cases += [f"        case {m['model_id']}: {{", *tables(entries, pool_entries, "            "),
                       *calls(entries, pool_entries, "_a", "            "), "        } break;"]
     if cases:
-        L += ["    for(int _bm=g_spool_start;_bm<g_spool_hw;_bm++){",
+        L += ["    POOL_EACH(_bm){",
               "        Actor* _a=&g_actors[_bm];",
               "        switch(_a->model){", *cases, "        default: break;", "        }", "    }"]
     if L:

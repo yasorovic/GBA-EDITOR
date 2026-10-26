@@ -279,7 +279,7 @@ def test_un_texte_ancre_sur_un_acteur_ne_le_suivra_pas(project):
 
 def test_une_image_sans_banque_libre_avertit_et_retombe_sur_la_banque_zero(project, monkeypatch):
     from codegen import palette_alloc
-    from codegen.runtime_codegen import main_gen
+    from codegen.runtime_codegen import gen_ui_scene
     from core.models.ui_region import UIImage
 
     class NoBank:
@@ -291,7 +291,7 @@ def test_une_image_sans_banque_libre_avertit_et_retombe_sur_la_banque_zero(proje
     scene._ui_images = [{"index": 0, "sprite": SpriteAsset(name="Hero", asset="hero.png"),
                          "bg": False, "el": UIImage(name="icon", sprite_name="Hero")}]
     journal = Journal()
-    main_gen._gen_ui_images(project, scene, 0, {}, journal)
+    gen_ui_scene.gen_ui_images(project, scene, 0, {}, journal)
     assert _warned(journal, "no free bank for the palette")
 
 
@@ -348,3 +348,31 @@ def test_le_main_demarre_sur_la_scene_choisie_et_en_liste_deux(project):
     assert "g_next_scene = 1;" in text
     assert "scene_init_Second, scene_tick_Second" in text
     assert "g_scene_vtable[2] = {" in text
+
+
+def test_le_tick_est_decoupe_en_quatre_phases_et_un_repartiteur(project):
+    from codegen.runtime_codegen import main_gen
+    assert main_gen.generate_main(project, _scene_data(project), None, [], [], Journal()) is True
+    text = (project.src_dir / "main.c").read_text(encoding="utf-8")
+    sym = "Scene_01" if "scene_tick_Scene_01(void)" in text else None
+    assert sym, "le tick de la scène par défaut"
+    for phase in ("hooks", "physics", "late", "render"):
+        assert f"BS_ATTR_{sym}_{phase} static void scene_tick_{sym}_{phase}(void) {{" in text
+        assert f"#define BS_IWRAM_{sym}_{phase} " in text
+    # le répartiteur les appelle dans l'ordre ; seule `render` possède l'état de l'OAM
+    corps = text[text.index(f"static void scene_tick_{sym}(void) {{"):]
+    assert corps.index("_hooks();") < corps.index("_physics();") < corps.index("_late();") < corps.index("_render();")
+    render = text[text.index(f"static void scene_tick_{sym}_render(void) {{"):text.index(f"static void scene_tick_{sym}(void) {{")]
+    assert "int _oamn" in render and "oam_update();" in render
+    hooks = text[text.index(f"static void scene_tick_{sym}_hooks(void) {{"):text.index(f"static void scene_tick_{sym}_physics(void) {{")]
+    assert "_oamn" not in hooks
+
+
+def test_une_phase_part_en_iwram_en_arm_ou_reste_en_rom_selon_le_define(project):
+    from codegen.runtime_codegen import main_gen
+    main_gen.generate_main(project, _scene_data(project), None, [], [], Journal())
+    text = (project.src_dir / "main.c").read_text(encoding="utf-8")
+    assert '#define BS_ATTR_Scene_01_render __attribute__((noinline, section(".iwram"), target("arm"), long_call))' in text
+    # `-DBS_IWRAM_<scène>_<phase>=0` (le plan, cf. iwram_plan) l'emporte sur le mode de départ : le #ifndef le respecte
+    assert "#ifndef BS_IWRAM_Scene_01_render\n#define BS_IWRAM_Scene_01_render 2" in text
+    assert "#if BS_IWRAM_Scene_01_render == 2" in text

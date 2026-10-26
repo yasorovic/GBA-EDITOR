@@ -16,7 +16,8 @@ from codegen.c_names import sym as c_sym, scene_actor_sym
 from core.app_paths import RUNTIME_DIR
 import codegen.build_output as build_output
 from codegen.runtime_codegen.gen_camera import project_cameras
-from codegen.oam_alloc import scene_oam_layout, project_actor_count, project_oam_entry_count
+from codegen.oam_alloc import scene_oam_layout
+from codegen.oam_budget import project_actor_count, project_oam_entry_count
 
 
 def actorname_ids(p: Project) -> dict:
@@ -80,9 +81,11 @@ def generate_actor_types(p: Project) -> None:
         lay = scene_oam_layout(p, sc)
         h.append(f"/* ── Scene {sc.name} ─────────────────────────────── */")
         i = 0
+        placed_names = set()
         for actor in sc.actors:
             if not getattr(actor, "active", True):
                 continue
+            placed_names.add(f"ACTOR_{scene_actor_sym(sc.name, actor.name).upper()}")
             h.append(f"#define ACTOR_{scene_actor_sym(sc.name, actor.name).upper()} {i}")
             i += 1
         for pl in lay.pools:
@@ -91,9 +94,11 @@ def generate_actor_types(p: Project) -> None:
                 # Un modèle du pool partagé n'a pas de plage à lui. Son identité (`other.name == "Bullet"`)
                 # est un nombre qui ne désigne aucun emplacement posé : le début du pool plus son rang.
                 h.append(f"#define ACTOR_{u} {lay.shared.start + pl.model_id - 1}  /* shared pool model */")
-            else:
+            elif f"ACTOR_{u}" not in placed_names:
                 # Un modèle que la scène ne fait pas naître (que des instances posées, chacune sous son nom) n'a
                 # aucun acteur de ce nom : -1 ne vaut jamais un `name`, et ne chevauche pas l'identité d'un autre modèle.
+                # Quand un acteur posé porte le MÊME nom que son prefab (le cas par défaut d'une instance liée), c'est
+                # lui qui garde la constante : la redéfinir en -1 faisait pointer `actor:get("Player")` hors de `g_actors`.
                 h.append(f"#define ACTOR_{u} -1  /* placed instances only */")
             # Les instances qu'une table donne (`g_model_*`, définie dans main.c) : les posées. Celles qui
             # naissent dans le pool partagé se retrouvent à `Actor.model` (`MODELID_*`).
@@ -375,7 +380,7 @@ def generate_runtime_api(
     # elle vit ici, pas dans le fichier statique partagé entre tous les
     # projets. Les deux tableaux sont DÉFINIS dans main.c (même patron que
     # g_sfx_rate), indexés par `Actor.tag` — même TAG que actor_types.h,
-    # cf. main_gen._sfx_on_destroy_table. `self:destroy()` ET `other:destroy()`
+    # cf. gen_sfx_trigger.sfx_on_destroy_table. `self:destroy()` ET `other:destroy()`
     # passent tous les deux par ce wrapper (scripting/codegen.py,
     # `_emit_destroy`) : c'est le SEUL endroit commun aux deux, la cible d'un
     # `other:destroy()` n'étant pas un symbole connu au build.
@@ -395,6 +400,17 @@ def generate_runtime_api(
         "    int id = g_sfx_on_destroy_id[s->name];",
         "    if(id >= 0) sfx_play(id, g_sfx_on_destroy_vol[s->name], 0);",
         "    actor_destroy_internal(s);",
+        "}",
+        # `actor:clear("Balle")` : toutes les instances vivantes d'un modèle, posées puis du pool. Détruire une racine rend
+        # son groupe ; les parties, d'un autre type d'emplacement, ne sont pas visitées deux fois.
+        "static inline int actor_model_clear(const ModelSlot* t, int n, int model){",
+        "    int c = 0;",
+        "    for(int k = 0; k < n; k++)",
+        "        if(g_actors[t[k].slot].alive){ actor_destroy_with_sfx(&g_actors[t[k].slot]); c++; }",
+        "    if(model)",
+        "        POOL_EACH(k)",
+        "            if(g_actors[k].alive && g_actors[k].model == model){ actor_destroy_with_sfx(&g_actors[k]); c++; }",
+        "    return c;",
         "}",
     ]
 

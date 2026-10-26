@@ -100,7 +100,7 @@ def make_placeholder_pixmap() -> QPixmap:
 #  choisi pour le confort de l'édition.
 #
 #  Priorité GBA = bg_slot directement pour un fond ET pour le layer d'UI
-#  (0 = devant, 3 = derrière — cf. `main_gen._gen_scene_init`, le commentaire
+#  (0 = devant, 3 = derrière — cf. `gen_scene_init`, le commentaire
 #  au-dessus de `bg_cnt_set`). Un acteur (OBJ) porte sa PROPRE priorité
 #  (`Actor.priority`, 0-3, mêmes bornes) — et à priorité ÉGALE entre un OBJ et
 #  un BG, c'est l'OBJ qui passe DEVANT (règle documentée du hardware GBA, pas

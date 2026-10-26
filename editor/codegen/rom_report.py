@@ -119,6 +119,22 @@ class RomReport:
         return self.rom_bytes > self.cartridge_bytes
 
     @property
+    def ewram_free(self) -> int:
+        """EWRAM que les données statiques laissent libre (le tas, donc la musique, s'y prend)."""
+        return _EWRAM[1] - self.ewram_bytes
+
+    @property
+    def ewram_tight(self) -> bool:
+        """Moins que la marge à garder : le prochain poste mémoire du jeu risque de ne plus tenir."""
+        return self.ewram_bytes > 0 and self.ewram_free < EWRAM_MARGIN
+
+    @property
+    def iwram_tight(self) -> bool:
+        """Le code placé en IWRAM et les données ne laissent pas sa réserve à la pile (cf. `iwram_plan`)."""
+        from codegen.iwram_plan import IWRAM_STACK_RESERVE
+        return self.iwram_bytes > 0 and self.iwram_bytes + IWRAM_STACK_RESERVE > _IWRAM[1]
+
+    @property
     def fill_ratio(self) -> float:
         return self.rom_bytes / self.cartridge_bytes if self.cartridge_bytes else 0.0
 
@@ -182,6 +198,11 @@ def read_sections(size_tool: Path, elf: Path) -> dict[str, int]:
 # Fenêtres d'adresses du matériel : le linker place chaque section d'après elles.
 _EWRAM = (0x02000000, 256 * 1024)
 _IWRAM = (0x03000000, 32 * 1024)
+
+# Ce que l'EWRAM doit garder de libre après le lien : le tas (les tampons de maxmod, `92 × canaux + 1056` octets,
+# soit 4 Ko au pire) et un reste pour ce que le jeu pourrait encore prendre. Le contrôle est fait après le lien, sur la
+# mémoire réellement occupée : la capacité du pool (`oam_alloc.OBJECT_CAPACITY`) ne se calcule pas de la RAM libre.
+EWRAM_MARGIN = 16 * 1024
 
 
 def read_ram_use(size_tool: Path, elf: Path) -> tuple[int, int, dict[str, int]]:
@@ -421,6 +442,18 @@ def format_report(report: RomReport) -> list[str]:
         over = report.rom_bytes - report.cartridge_bytes
         lines.append(f"  OVER by {kio(over)} — this ROM does not fit "
                      f"on a {cap_mib} MiB cartridge.")
+
+    if report.ewram_bytes:
+        lines.append(f"  EWRAM — {kio(report.ewram_bytes)} / {_EWRAM[1] // 1024} KiB, "
+                     f"{kio(report.ewram_free)} free")
+        if report.ewram_tight:
+            lines.append(f"  EWRAM is tight: less than {EWRAM_MARGIN // 1024} KiB stay free for the heap "
+                         "(music buffers) and what the game may still add.")
+    if report.iwram_bytes:
+        lines.append(f"  IWRAM — {kio(report.iwram_bytes)} / {_IWRAM[1] // 1024} KiB (code and data; the stack comes on top)")
+        if report.iwram_tight:
+            from codegen.iwram_plan import IWRAM_STACK_RESERVE
+            lines.append(f"  IWRAM is tight: less than {IWRAM_STACK_RESERVE // 1024} KiB stay free for the stack.")
 
     sb = report.soundbank
     if sb:

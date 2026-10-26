@@ -47,6 +47,32 @@ ceux du parent : ici `tir` doit exister sur le sprite du canon. Le nom est réso
 ne coûte rien. Un nom qui n'est ni une propriété de l'acteur ni un enfant est refusé au Build, avec
 la liste des enfants disponibles.
 
+### Atteindre une partie depuis une référence
+
+`self.Canon` ne se lit que dans le script du prefab. Depuis un autre script, la partie se nomme sur la référence à l'instance, quand le Build sait de quel prefab il s'agit :
+
+```lua
+local boss = actor:spawn("Boss", vec2(120, 80))
+if boss then
+    boss.Canon:play_anim("tir")     -- l'état se juge dans les sprites du canon
+    local voyant = boss.Voyant
+    if voyant then voyant:hide() end
+end
+```
+
+La partie vaut `nil` si `boss` a disparu ou si cette partie a été détruite, donc le test habituel suffit. Ses propriétés s'enchaînent (`boss.Canon.position`, `boss.Canon.rotation = 90`) : si la partie a disparu, la lecture rend 0 et l'écriture est sautée. Pour un acteur posé, c'est pareil : `actor:get("Chef").Bras` est l'enfant de scène `Bras` (et `bras.Pointe` son propre enfant). `actor:get(i)` et `other` ne désignent aucun acteur ou prefab connu au Build : leurs parties ne se nomment pas.
+
+### Remonter vers la racine
+
+`a.root` rend l'instance entière et `a.parent` la partie dont `a` dépend (la racine, ou une autre partie), ou `nil`. Ce sont des propriétés en lecture seule, qui s'enchaînent (`other.parent.position`). Pour un acteur posé, `a.parent` est son parent de scène et `a.root` le sommet de sa chaîne :
+
+```lua
+function on_collision_enter(other)
+    local boss = other.root       -- other peut être un bras : on touche le boss
+    if boss then boss:hide() end
+end
+```
+
 ## 3. Les autres accesseurs
 
 Le même principe, nommer ce qu'on veut atteindre, vaut pour tous les éléments du jeu.

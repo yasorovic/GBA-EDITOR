@@ -4,7 +4,7 @@ hardware GBA, jamais un empilement choisi pour le confort de l'édition.
 Avant ce correctif, un acteur (OBJ) avait un zValue fixe (10) et une zone
 d'interface un zValue fixe (120) : l'acteur passait donc TOUJOURS sous
 l'interface dans le canvas, quelle que soit la priorité réelle — le contraire
-de ce que montre la ROM dès que l'UI vit sur un BG ≠ 0 (cf. `_gen_scene_init`,
+de ce que montre la ROM dès que l'UI vit sur un BG ≠ 0 (cf. `gen_scene_init`,
 « Priorité GBA = bg_slot directement », et la règle documentée du hardware :
 à priorité ÉGALE, l'OBJ passe devant le BG).
 """

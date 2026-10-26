@@ -7,7 +7,7 @@ celle-ci est un no-op (255). La complétion propose donc l'union."""
 from __future__ import annotations
 
 from codegen.runtime_codegen.lua_compiler import _anim_union
-from codegen.oam_alloc import owner_appearances
+from codegen.actor_appearance import owner_appearances
 from core.models.components import ScriptComponent, SpriteComponent
 from core.models.scene import Actor, Prefab, Scene
 from core.models.sprite import AnimState, SpriteAsset

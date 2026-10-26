@@ -19,6 +19,8 @@ from core.models.components import CollisionBoxComponent
 from codegen.grit_conversion import (bg_layer_sym, bg_layer_sym_for,
                                      bg_map_geometry, bg_map_sbb_count,
                                      count_frames)
+from core.models.scene import Actor
+from typing import Optional
 
 
 def parent_depths(scene_actors: list) -> tuple[dict, list]:
@@ -110,7 +112,7 @@ def scene_has_cmap(scene) -> bool:
 def has_col_event(defined, sym: str) -> bool:
     """Ce script réagit-il à une collision ? `defined` est le prédicat local
     `_def(symbole, événement)` de la génération de scène (il rend True quand le
-    script n'a pas été analysé, cf. `_gen_scene_tick`)."""
+    script n'a pas été analysé, cf. `gen_scene_tick`)."""
     return bool(defined(sym, "on_collision_enter") or defined(sym, "on_collide")
                 or defined(sym, "on_collision_exit"))
 
@@ -336,3 +338,35 @@ def ui_item_geometry(el, sprite, frames: int = 1) -> dict:
     return image_geometry(el, frames,
                           int(getattr(sprite, "frame_w", 0) or 0),
                           int(getattr(sprite, "frame_h", 0) or 0))
+
+
+def actor_script(actor: Actor) -> Optional[str]:
+    comp = actor.get_component("script")
+    return comp.script if comp and comp.active else None
+
+
+def lua_actor_indices(p, scene_actors: list, offset: int) -> set[int]:
+    """Indices (GLOBAUX) des acteurs d'une scène dont le script est du Lua."""
+    idx: set[int] = set()
+    for j, (actor, _) in enumerate(scene_actors):
+        sp_path = actor_script(actor)
+        abs_sp = p.asset_abs(sp_path) if sp_path else None
+        if abs_sp and abs_sp.suffix.lower() == ".lua":
+            idx.add(offset + j)
+    return idx
+
+
+def collision_pairs(p, scene_actors: list, offset: int, lua_idx: set[int]) -> list[tuple[int, int]]:
+    """Les paires d'acteurs qui PEUVENT se rencontrer, dont l'un au moins est scripté en Lua.
+
+    La matrice de collision retire ici les paires qui ne peuvent PAS se rencontrer — « les projectiles du
+    joueur ignorent ceux du boss ». Elles ne coûtent alors plus rien : c'était le seul poste qui grandissait
+    en CARRÉ, en taille de ROM comme en temps de frame, et précisément dans la salle la plus chargée."""
+    sa = scene_actors
+    return [
+        (offset + ii, offset + jj)
+        for ii in range(len(sa))
+        for jj in range(ii + 1, len(sa))
+        if ((offset + ii) in lua_idx or (offset + jj) in lua_idx)
+        and actors_can_collide(p, sa[ii][0], sa[jj][0])
+    ]
