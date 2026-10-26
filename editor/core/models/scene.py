@@ -248,12 +248,9 @@ class Prefab(Resource, ComponentOwnerMixin):
     # template — jamais posé nulle part — et ne sont jamais sérialisés ici
     # (cf. to_dict) : c'est le TYPE qui est réutilisé, pas le sens de la pose.
     actor: "Actor" = field(default_factory=lambda: Actor(name="Prefab"))
-    # (Le pool se déclare sur la SCÈNE — `Scene.prefab_pools` —
-    # parce que combien d'exemplaires vivent en même temps est une propriété du
-    # niveau, pas du template. L'ancien champ `Prefab.max_instances` a été retiré
-    # en T7 : la compilation par scène l'a rendu inerte — plus aucun repli ne le
-    # lisait — et le garder aurait laissé croire qu'il pilotait encore un pool.
-    # `from_dict` ignore la clé si un vieux projet la porte encore.)
+    # (Combien d'exemplaires vivent en même temps ne se règle plus : tous les modèles que la scène fait naître
+    # partagent un seul pool (`codegen/oam_alloc.py`). Les anciens champs `Prefab.max_instances` et
+    # `Scene.prefab_pools` sont ignorés par `from_dict` si un vieux projet les porte encore.)
     # Le SOUS-ARBRE du template : un prefab est un arbre, pas
     # un objet plat — c'est ce que le `PackedScene` de Godot a de bon, et on
     # n'en prend que ceci. Une chenille à cinq anneaux ou un mini-boss segmenté
@@ -575,14 +572,6 @@ class Scene(Resource):
     # un BackgroundAsset (sidecar de compression) par son nom d'image.
     background_layers: list = field(default_factory=list)  # list[BackgroundLayer]
     actors: list = field(default_factory=list)  # list[Actor], inline dans le JSON
-    # Les pools de CETTE scène : nom de Prefab → nombre d'INSTANCES simultanées.
-    # Le budget, lui, se paie en SLOTS — un prefab à sous-arbre coûte
-    # instances × parties (v0.23). C'est `codegen/oam_alloc.py` qui fait la
-    # conversion, en un seul endroit.
-    #
-    # Remplace `Prefab.max_instances` : combien d'exemplaires vivent en même
-    # temps est une propriété du NIVEAU, pas du template.
-    prefab_pools: dict = field(default_factory=dict)  # dict[str, int]
     # Caméras POSSÉDÉES par cette scène (inline dans le JSON, comme `actors`) —
     # révisé le 2026-08-24 : une caméra n'est plus un asset de projet partagé
     # entre scènes (cf. models/camera.py).
@@ -744,11 +733,6 @@ class Scene(Resource):
                 for L in self.background_layers
             ],
             "actors": [a.to_dict() for a in self.actors],
-            # Absents tant que la scène n'a rien réglé : une scène qui n'a
-            # jamais ouvert la carte Actor budget ne gagne pas deux clés
-            # inertes (même règle que transition_* et music ci-dessous).
-            **({"prefab_pools": {k: v for k, v in sorted(self.prefab_pools.items()) if v > 0}}
-               if any(v > 0 for v in self.prefab_pools.values()) else {}),
             "cameras": [{**c.header(), **c.body()} for c in self.cameras],
             "camera": self.camera,
             "windows": [
@@ -814,11 +798,6 @@ class Scene(Resource):
             name=d.get("name", "Scene"),
             background_layers=bg_layers,
             actors=actors,
-            # Les valeurs nulles ne sont pas retenues : un pool à 0 est un pool
-            # qui n'existe pas, et le garder ferait apparaître le prefab dans la
-            # carte de budget d'une scène qui ne le spawne pas.
-            prefab_pools={str(k): int(v) for k, v in (d.get("prefab_pools") or {}).items()
-                          if int(v or 0) > 0},
             cameras=[_camera_from_dict(c) for c in d.get("cameras", [])],
             # Les anciens champs `cam_*` inline ne sont PAS relus : la maison
             # ne migre pas les formats (cf. core/project.py). Une scène

@@ -155,8 +155,8 @@ def names_by_domain(project, scene=None) -> dict[str, list[str]]:
     # prefabs poolés dans cette scène, comme `Checker._check_actor_name`.
     pooled = out[DOMAIN_PREFAB]
     if sc is not None and hasattr(project, "prefabs"):
-        from codegen.oam_alloc import scene_pool_instances
-        pooled = [pf.name for pf in project.prefabs if scene_pool_instances(project, sc, pf) > 0]
+        from codegen.oam_alloc import scene_has_model
+        pooled = [pf.name for pf in project.prefabs if scene_has_model(project, sc, pf)]
     out[DOMAIN_ACTOR_NAME] = out.get(DOMAIN_ACTOR, []) + pooled
 
     return {dom: names for dom, names in out.items() if names}

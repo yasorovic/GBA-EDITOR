@@ -287,8 +287,30 @@ static inline Actor* actor_live(Actor* s) { return (s && s->alive) ? s : (Actor*
 
 /* Le pool PARTAGÉ de la scène : les emplacements d'acteurs que n'importe quel modèle simple prend en
    naissant. Posés par `scene_init` (début, fin, première entrée d'état) ; `g_spool_hw` est le plus haut
-   emplacement utilisé + 1 : les boucles du tick s'arrêtent là au lieu de parcourir tout le pool. */
-extern int g_spool_start, g_spool_end, g_spool_hw, g_spool_entry;
+   emplacement utilisé + 1 : les boucles du tick s'arrêtent là au lieu de parcourir tout le pool.
+   `g_spool_free` est le curseur du spawn : aucun emplacement libre en dessous. Le spawn cherche à partir
+   de lui (au lieu de parcourir le pool depuis le début à chaque naissance) ; une destruction le ramène
+   en arrière, un spawn l'avance. */
+extern int g_spool_start, g_spool_end, g_spool_hw, g_spool_entry, g_spool_free;
+
+/* Un modèle à PARTIES occupe un groupe d'emplacements contigus (le script atteint la partie k par
+   `self + k`). `Actor.model` dit alors AUSSI quelle partie l'emplacement occupe : la racine porte l'identité
+   du modèle, sa partie k cette identité + k. Deux tables par type d'emplacement, posées par `scene_init`
+   (nulles pour une scène sans modèle à parties) :
+     g_spool_grp[type]  = taille du groupe pour la RACINE d'un modèle à parties, 0 ailleurs ;
+     g_spool_part[type] = rang de la partie (k), 0 pour une racine ou un modèle plat. */
+extern const u8 *g_spool_grp, *g_spool_part;
+
+/* L'emplacement `k` du pool est-il libre pour un spawn ? Un acteur DÉTRUIT (alive = 0) libère le sien, sauf une
+   PARTIE détruite dont la racine vit encore : elle reste dans son groupe, qui n'est rendu qu'avec la racine. */
+static inline int spool_slot_free(int k) {
+    if (g_actors[k].alive) return 0;
+    if (g_spool_part) {
+        int r = g_spool_part[g_actors[k].model];
+        if (r && g_actors[k - r].alive) return 0;
+    }
+    return 1;
+}
 
 /* Les instances d'un MODÈLE (un prefab dans la scène) se retrouvent par sa table `g_model_*` (les
    posées, et sa réserve à part s'il en a une) puis, pour un modèle du pool partagé (`model` ≠ 0), par
@@ -597,7 +619,18 @@ static inline void actor_set_direction(Actor* s, Vec2 v) {
 }
 
 /* Activation / destruction */
-static inline void actor_destroy_internal(Actor* s)  { s->active=0; s->alive=0; s->gen++; actor_oam_entry(s)->visible=0; }
+static inline void actor_destroy_internal(Actor* s)  {
+    s->active=0; s->alive=0; s->gen++; actor_oam_entry(s)->visible=0;
+    if (g_spool_grp) {
+        /* Détruire la racine d'un modèle à parties détruit le sous-arbre : le groupe entier est rendu au pool. */
+        int g = g_spool_grp[s->model];
+        for (int k = 1; k < g; k++) {
+            Actor* c = s + k;
+            c->active = 0; c->alive = 0; c->gen++; c->model = 0; actor_oam_entry(c)->visible = 0;
+        }
+    }
+    if ((int)s->inst >= g_spool_start && (int)s->inst < g_spool_free) g_spool_free = s->inst;   /* l'emplacement redevient le premier libre */
+}
 
 /* Input */
 /* Un masque à un bit garde le comportement historique. Avec plusieurs bits,

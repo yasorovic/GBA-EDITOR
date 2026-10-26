@@ -12,6 +12,7 @@ from core.models.components import (
     sprite_components,
 )
 from core.models.scene import Actor, Prefab, Scene
+from oam_fixtures import faire_naitre
 from core.models.sprite import SpriteAsset
 from core.project import Project
 
@@ -96,7 +97,7 @@ def test_les_parties_de_prefab_ont_aussi_des_apparences(tmp_path):
     boss.components.append(SpriteComponent(id="s0", sprite_name="A", active=True))
     boss.components.append(SpriteComponent(id="s1", sprite_name="B", active=False))
     scene = Scene(name="S")
-    scene.prefab_pools = {"Boss": 3}
+    faire_naitre(tmp_path, scene, "Boss")
     p = _projet(tmp_path, scenes=[scene], prefabs=[boss])
     (pool,) = scene_oam_layout(p, scene).pools
     # Deux apparences, UNE entrée d'état : le modèle partage le pool de la scène, une entrée par emplacement.

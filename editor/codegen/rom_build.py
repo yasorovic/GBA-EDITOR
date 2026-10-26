@@ -34,7 +34,7 @@ from codegen.grit_conversion import (
 from codegen.palette_alloc import (
     scene_bank_layout, effective_palette_colors, ui_image_sprite_pools,
 )
-from codegen.oam_alloc import scene_pool_instances, prefab_pool_instances, owner_appearances
+from codegen.oam_alloc import scene_has_model, project_has_model, owner_appearances
 from core.models.components import displayed_sprite_component
 from core.app_paths import RUNTIME_DIR
 from codegen.runtime_codegen.headers import generate_actor_types, generate_runtime_api
@@ -303,7 +303,7 @@ class BuildWorker(EventEmitter, threading.Thread):
             # Prefab sprites (communs à toutes les scènes)
             prefab_actor_sprites: list[tuple[Actor, Optional[SpriteAsset]]] = []
             for pf in self.project.prefabs:
-                if prefab_pool_instances(self.project, pf) <= 0:
+                if not project_has_model(self.project, pf):
                     continue
                 # Toutes les apparences de la racine sont résidentes (marche 3).
                 for _c, _pf_sprite in owner_appearances(p, pf):
@@ -1000,7 +1000,7 @@ class BuildWorker(EventEmitter, threading.Thread):
         for d in all_scene_data:
             scene_sym = c_sym(d["scene"].name)
             for pf in self.project.prefabs:
-                if scene_pool_instances(self.project, d["scene"], pf) <= 0:
+                if not scene_has_model(self.project, d["scene"], pf):
                     continue
                 sc = next((c for c in pf.components if isinstance(c, ScriptComponent)), None)
                 if sc and sc.script:

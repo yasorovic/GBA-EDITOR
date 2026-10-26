@@ -39,9 +39,10 @@ void global_write(int i, int v) { (void)i; (void)v; }
 int  global_read_at (int i, int k)        { (void)i; (void)k; return 0; }
 void global_write_at(int i, int k, int v) { (void)i; (void)k; (void)v; }
 
-Actor g_actors[2];
+Actor g_actors[8];
 u32 g_obj_state[16];
-int g_spool_start = 0, g_spool_end = 0, g_spool_hw = 0, g_spool_entry = -1;
+int g_spool_start = 0, g_spool_end = 0, g_spool_hw = 0, g_spool_entry = -1, g_spool_free = 0;
+const u8 *g_spool_grp = 0, *g_spool_part = 0;
 const AppearanceInit* g_appearance_init;
 OamEntry g_oam_entries[2];   /* l'affichage des acteurs : Actor.oam_entry en est l'indice */
 
@@ -359,6 +360,22 @@ int main(void) {
         /* Le bloc d'état d'un emplacement : un bloc de OBJ_STATE_STRIDE octets par `inst`. */
         x->inst = 0; y->inst = 1;
         printf("pool_etat %d\n", (int)((char*)(g_obj_state + (int)y->inst * (OBJ_STATE_STRIDE / 4)) - (char*)g_obj_state) == OBJ_STATE_STRIDE);
+        /* Un modèle à PARTIES : la racine (type 2) a un groupe de 3 aux emplacements 2..4, ses parties les types 3 et 4. */
+        {
+            static const u8 grp[5] = {0, 0, 3, 0, 0}, part[5] = {0, 0, 0, 1, 2};
+            g_spool_grp = grp; g_spool_part = part;
+            g_spool_start = 2; g_spool_end = 8; g_spool_hw = 5; g_spool_free = 5;
+            for (int i = 0; i < 8; i++) { g_actors[i] = (Actor){0}; g_actors[i].inst = i; }
+            for (int i = 2; i < 5; i++) { g_actors[i].alive = 1; g_actors[i].active = 1; g_actors[i].model = i; }
+            printf("grp_occupe %d %d %d %d\n", spool_slot_free(2), spool_slot_free(3), spool_slot_free(4), spool_slot_free(5));
+            actor_destroy_internal(&g_actors[3]);        /* une partie détruite : le groupe la garde */
+            printf("grp_partie %d %d %d\n", g_actors[3].alive, spool_slot_free(3), g_spool_free);
+            actor_destroy_internal(&g_actors[2]);        /* la racine : tout le groupe est rendu */
+            printf("grp_racine %d %d %d %d %d\n", spool_slot_free(2), spool_slot_free(3), spool_slot_free(4),
+                   g_actors[4].alive, g_actors[4].model);
+            printf("grp_curseur %d\n", g_spool_free);
+            g_spool_grp = 0; g_spool_part = 0;
+        }
     }
     return 0;
 }

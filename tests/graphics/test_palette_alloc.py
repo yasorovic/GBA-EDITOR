@@ -21,6 +21,7 @@ from core.models.palette import OWN_PAL_BANK, PaletteBank, RESERVED_SLOT_COLOR
 from core.models.scene import Scene
 from core.palette_presets import DEFAULT_PAL_BANK_COLORS
 from core.project import Project
+from oam_fixtures import faire_naitre
 from codegen.palette_alloc import (
     SceneBankLayout, scene_bank_layout, _find_free_block, _own_bank_content,
     _sprite_bank_content,
@@ -190,9 +191,9 @@ def test_pool_palette_propre_reservee_par_scene(projet):
     bullet.actor.components = [SpriteComponent(sprite_name="BulletSpr")]
     projet.prefabs.items = [spark, bullet]
 
-    fount = Scene(name="Fountain"); fount.prefab_pools = {"Spark": 4}
-    play  = Scene(name="Play");     play.prefab_pools  = {"Bullet": 4}
-    menu  = Scene(name="Menu")
+    fount, play, menu = Scene(name="Fountain"), Scene(name="Play"), Scene(name="Menu")
+    faire_naitre(projet.root, fount, "Spark")
+    faire_naitre(projet.root, play, "Bullet")
     projet.scenes.items = [fount, play, menu]
 
     lf = scene_bank_layout(projet, fount, "obj")
@@ -217,7 +218,8 @@ def test_pool_palette_propre_dedup_avec_un_acteur(projet):
     pf = Prefab(name="Bullet"); pf.actor.components = [SpriteComponent(sprite_name="Shared")]
     projet.prefabs.items = [pf]
     a = Actor(name="Hero"); a.components = [SpriteComponent(sprite_name="Shared")]
-    scene = Scene(name="S", actors=[a]); scene.prefab_pools = {"Bullet": 2}
+    scene = Scene(name="S", actors=[a])
+    faire_naitre(projet.root, scene, "Bullet")
     projet.scenes.items = [scene]
 
     lay = scene_bank_layout(projet, scene, "obj")

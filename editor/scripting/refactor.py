@@ -433,9 +433,6 @@ def _scene_spawn_closure(project, scene) -> tuple[set[Path], set[str]]:
         add_script(a)
         if getattr(a, "prefab_name", "") in prefab_by_name:
             add_script(prefab_by_name[a.prefab_name])
-    for name in scene.prefab_pools:
-        if name in prefab_by_name:
-            add_script(prefab_by_name[name])
     spawned: set[str] = set()
     todo = list(scripts)
     while todo:

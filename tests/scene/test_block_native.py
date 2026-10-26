@@ -20,6 +20,7 @@ typedef unsigned char u8; typedef signed char s8;
 typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
 Actor g_actors[8];
+int g_spool_start = 0, g_spool_hw = 0;
 %(helpers)s
 
 /* Un acteur actif en (x, y) pixels, vitesse (vx, vy), une boîte (w x h) en (0, 0). */
@@ -74,6 +75,26 @@ int main(void){
         const u16 moi[] = {0}; const u8 b0[] = {0};
         mk(0, 40, 52, 256, 0, 16, 16, 1);
         actors_resolve_blocks(&g_actors[0], moi, b0, 1);  report("soi_meme", 0);
+    }
+
+    {   /* Le pool PARTAGÉ : un bloqueur né à l'emplacement 3 (modèle 7, boîte 0), un autre modèle à l'emplacement 4. */
+        const u8 pm[] = {7}, pb[] = {0};
+        mk(3, 50, 50, 0, 0, 16, 16, 0); g_actors[3].model = 7;
+        mk(4, 50, 50, 0, 0, 16, 16, 0); g_actors[4].model = 9;     /* un autre modèle : traversé */
+        g_spool_start = 3; g_spool_hw = 5;
+        mk(0, 40, 52, 256, 0, 16, 16, 1);
+        actors_resolve_blocks_pool(&g_actors[0], pm, pb, 1);   report("pool_gauche", 0);
+        mk(0, 40, 52, 256, 0, 16, 16, 1); g_actors[3].model = 9;
+        actors_resolve_blocks_pool(&g_actors[0], pm, pb, 1);   report("pool_autre_modele", 0);
+        g_actors[3].model = 7; g_actors[3].active = 0;
+        mk(0, 40, 52, 256, 0, 16, 16, 1);
+        actors_resolve_blocks_pool(&g_actors[0], pm, pb, 1);   report("pool_inactif", 0);
+        g_actors[3].active = 1; g_spool_hw = 3;
+        mk(0, 40, 52, 256, 0, 16, 16, 1);
+        actors_resolve_blocks_pool(&g_actors[0], pm, pb, 1);   report("pool_hors_hw", 0);
+        g_spool_hw = 5;
+        mk(3, 40, 52, 0, 0, 16, 16, 1); g_actors[3].model = 7; g_actors[3].vx = 256;   /* un bloqueur ne se bloque pas lui-même */
+        actors_resolve_blocks_pool(&g_actors[3], pm, pb, 1);   report("pool_soi_meme", 3);
     }
     return 0;
 }
@@ -221,3 +242,11 @@ def test_le_projet_declare_un_bloqueur_pour_les_aides_c():
     assert project_has_blockers(SimpleNamespace(scenes=[scene], prefabs=[])) is True
     scene = SimpleNamespace(actors=[_coffre("hover")])
     assert project_has_blockers(SimpleNamespace(scenes=[scene], prefabs=[])) is False
+
+
+def test_une_instance_du_pool_bloque_par_son_modele(resultats):
+    assert resultats["pool_gauche"] == (34, 52)          # repoussé à gauche du bloqueur : 50 - 16
+    assert resultats["pool_autre_modele"] == (40, 52)    # un autre modèle ne bloque pas
+    assert resultats["pool_inactif"] == (40, 52)
+    assert resultats["pool_hors_hw"] == (40, 52)         # au-delà du plus haut emplacement utilisé : ignoré
+    assert resultats["pool_soi_meme"] == (40, 52)

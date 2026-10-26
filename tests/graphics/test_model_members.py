@@ -11,20 +11,19 @@ import copy
 from core.models.components import ScriptComponent
 from core.models.scene import Actor, Prefab, Scene
 from core.project import Project
-from oam_fixtures import tout_afficher, donner_un_sprite
-from codegen.oam_alloc import scene_oam_layout, model_members
+from oam_fixtures import tout_afficher, donner_un_sprite, faire_naitre
+from codegen.oam_alloc import scene_oam_layout, model_members, OBJECT_CAPACITY
 
 
-def _projet(tmp_path, *, n=3, reserve=0, script=True, a_part=False):
-    """Un prefab `Coin` et `n` acteurs posés qui en sont des copies liées. `a_part` : un interacteur,
-    qui n'entre pas dans le pool partagé et garde une réserve à lui (`oam_alloc.is_plain_model`)."""
+def _projet(tmp_path, *, n=3, spawned=False, script=True):
+    """Un prefab `Coin` et `n` acteurs posés qui en sont des copies liées. `spawned` : un script de la scène fait
+    aussi naître des `Coin`, qui prennent leurs emplacements dans le pool partagé."""
     coin = Prefab(name="Coin")
-    coin.actor.is_player = a_part
     if script:
         coin.actor.components.append(ScriptComponent(script="assets/coin.lua"))
     scene = Scene(name="S")
-    if reserve:
-        scene.prefab_pools = {"Coin": reserve}
+    if spawned:
+        faire_naitre(tmp_path, scene, "Coin")
     p = Project(tmp_path)
     p.scenes.items = [scene]
     p.prefabs.items = [coin]
@@ -39,19 +38,19 @@ def test_les_copies_liees_rejoignent_le_modele(tmp_path):
     p, scene, _coin = _projet(tmp_path, n=3)
     assert model_members(p, scene.actors) == {"Coin": [0, 1, 2]}
     (pool,) = scene_oam_layout(p, scene).pools
-    assert pool.members == [0, 1, 2]
-    assert pool.instances == 3 and pool.reserve == 0 and pool.size == 0
+    assert pool.members == [0, 1, 2] and not pool.shared       # aucun spawn : que ses instances posées
+    assert scene_oam_layout(p, scene).shared is None
 
 
-def test_la_reserve_s_ajoute_aux_membres(tmp_path):
-    p, scene, _coin = _projet(tmp_path, n=2, reserve=5, a_part=True)
+def test_les_instances_nees_s_ajoutent_aux_membres(tmp_path):
+    p, scene, _coin = _projet(tmp_path, n=2, spawned=True)
     lay = scene_oam_layout(p, scene)
     (pool,) = lay.pools
-    assert (pool.instances, pool.reserve, len(pool.members)) == (7, 5, 2)
-    # Seule la réserve prend des emplacements d'acteurs et des états : les membres ont ceux de la scène.
-    assert pool.size == 5 and pool.start == 2
-    assert pool.entry_size == 5 and pool.entry_start == 2
-    assert lay.actors == 2 + 5 and lay.table_size == 2 + 5
+    assert pool.shared and len(pool.members) == 2
+    # Seul le pool partagé prend des emplacements d'acteurs et des états : les membres ont ceux de la scène.
+    assert lay.shared.start == 2 and lay.shared.size == OBJECT_CAPACITY - 2
+    assert lay.shared.entry_start == 2 and lay.shared.entries == lay.shared.size
+    assert lay.actors == OBJECT_CAPACITY
 
 
 def test_un_acteur_qui_derive_du_script_reste_un_singleton(tmp_path):
@@ -115,11 +114,10 @@ def test_les_exports_d_un_membre_sont_ceux_de_son_acteur(tmp_path):
 
 def test_la_table_du_modele_commence_par_ses_membres(tmp_path):
     from codegen.runtime_codegen.main_gen import _scene_pi, _section_spawn
-    p, scene, _coin = _projet(tmp_path, n=2, reserve=2, a_part=True)
+    p, scene, _coin = _projet(tmp_path, n=2, spawned=True)
     code = "\n".join(_section_spawn(_scene_pi(p, scene), p, None))
-    assert "const ModelSlot g_model_S_Coin[4] = {" in code
-    posed, reserve = code.index("{0, 0},   /* posé */"), code.index("{2, 2},\n")
-    assert code.index("{1, 1},   /* posé */") > posed and reserve > posed
+    assert "const ModelSlot g_model_S_Coin[2] = {" in code
+    assert code.index("{1, 1},   /* posé */") > code.index("{0, 0},   /* posé */")
 
 
 def test_les_appels_de_code_d_un_membre_vont_au_modele(tmp_path):
@@ -132,10 +130,10 @@ def test_les_appels_de_code_d_un_membre_vont_au_modele(tmp_path):
     assert sym_of("S", "Door") == "S_Door"
 
 
-def test_l_identite_du_modele_sans_reserve_ne_vaut_aucun_nom(tmp_path):
-    """`other.name == "Coin"` ne doit pas chevaucher la plage d'un autre modèle."""
+def test_l_identite_du_modele_sans_spawn_ne_vaut_aucun_nom(tmp_path):
+    """`other.name == "Coin"` ne doit pas chevaucher l'identité d'un autre modèle."""
     from codegen.runtime_codegen.headers import generate_actor_types
-    p, scene, _coin = _projet(tmp_path, n=2, a_part=True)
+    p, scene, _coin = _projet(tmp_path, n=2)
     p.src_dir.mkdir(parents=True, exist_ok=True)
     generate_actor_types(p)
     text = (p.src_dir / "actor_types.h").read_text(encoding="utf-8")
@@ -146,12 +144,12 @@ def test_l_identite_du_modele_sans_reserve_ne_vaut_aucun_nom(tmp_path):
 def test_un_spawn_qui_reprend_l_emplacement_d_un_membre_lui_garde_son_identite(tmp_path):
     """`name` indexe la table des Sfx de destruction : -1 (le modèle sans réserve) en sortirait."""
     from codegen.runtime_codegen.main_gen import _scene_pi, _section_spawn
-    p, scene, _coin = _projet(tmp_path, n=2, reserve=1)
+    p, scene, _coin = _projet(tmp_path, n=2, spawned=True)
     code = "\n".join(_section_spawn(_scene_pi(p, scene), p, None))
     assert "g_actors[_i].name      = _n < 2 ? _i : ACTOR_S_COIN;" in code
 
 
-def test_un_modele_sans_reserve_n_ecrit_pas_de_sfx_de_destruction_a_son_nom(tmp_path):
+def test_un_modele_sans_spawn_n_ecrit_pas_de_sfx_de_destruction_a_son_nom(tmp_path):
     from codegen.runtime_codegen.main_gen import _scene_pi, _sfx_on_destroy_table
     p, scene, _coin = _projet(tmp_path, n=2)
     d = {"scene": scene, "scene_actors": [(a, None) for a in scene.actors]}

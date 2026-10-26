@@ -71,11 +71,12 @@ def _offset_value(raw, names):
     return fv.c_expr() if fv.is_ref else fv.px()
 
 
-def compute_affine_info(actor_offset: int, scene_actors: list, pi: list, names=None) -> dict:
+def compute_affine_info(actor_offset: int, scene_actors: list, names=None) -> dict:
     """
-    Retourne {oam_idx: entry} pour tout actor dont le SpriteComponent a
+    Retourne {oam_idx: entry} pour tout actor POSÉ dont le SpriteComponent a
     `affine_transform` coché.
-    Limité à 32 slots (contrainte hardware GBA OAM).
+    Limité à 32 slots (contrainte hardware GBA OAM). Les instances nées dans le pool n'ont pas de
+    slot réservé ici : elles prennent les matrices que les posés laissent libres, à la frame.
     """
     result: dict = {}
     slot = 0
@@ -138,19 +139,6 @@ def compute_affine_info(actor_offset: int, scene_actors: list, pi: list, names=N
             if entry:
                 result[oam] = entry
 
-    for p2 in pi:
-        pf = p2["prefab"]
-        sc = affine_sprite_component(pf)
-        if not sc:
-            continue
-        for oam_idx in range(p2["start"], p2["start"] + p2["size"]):
-            if slot >= AFFINE_LIMIT:
-                break
-            entry = affine_entry(pf, sc, slot, names=names)
-            if entry:
-                result[oam_idx] = entry
-                slot += 1
-
     return result
 
 
@@ -195,8 +183,15 @@ def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr
     s'exercent autour du POINT DE PIVOT (`sprite.pivot_x/y`, depuis le centre
     du cadre ; (0,0) = le centre, comme sur GBA native).
 
-    `screen_space` retire la soustraction de caméra (cf. Actor.screen_space)."""
-    aslot = aff["slot"]
+    `screen_space` retire la soustraction de caméra (cf. Actor.screen_space).
+
+    Une entrée `aff["dynamic"]` n'a pas de matrice réservée au build : le sprite prend la PROCHAINE matrice
+    libre de la frame (`_affn`, posé au début du tick après les matrices fixes des acteurs posés) quand il est
+    dessiné, comme il prend le prochain emplacement d'OAM. Ses matrices s'écrivent donc dans la fenêtre, et
+    `OamEntry.affine_slot` retient celle de cette frame. L'appelant a déjà vérifié qu'il en reste
+    (cf. `gen_sprite._oam_body_lines`)."""
+    dynamic = bool(aff.get("dynamic"))
+    aslot = None if dynamic else aff["slot"]
     W, H   = sprite.frame_w, sprite.frame_h
     sh, sz = sprite.oam_shape, sprite.oam_size
     tpf    = sprite.tiles_per_frame
@@ -210,6 +205,14 @@ def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr
     base_x = f"(g_actors[{idx}].x>>8)" + ("" if screen_space else "-cam_x")
     base_y = f"(g_actors[{idx}].y>>8)" + ("" if screen_space else "-cam_y")
 
+    pad = "            " if dynamic else "        "
+    base = "_as*4" if dynamic else None
+    matrix = [
+        f"{pad}shadow_oam[{base + '+0' if dynamic else aslot * 4 + 0}].dummy=(u16)(s16)(_fh?-_pa:_pa);",
+        f"{pad}shadow_oam[{base + '+1' if dynamic else aslot * 4 + 1}].dummy=(u16)(s16)(_fh?-_pb:_pb);",
+        f"{pad}shadow_oam[{base + '+2' if dynamic else aslot * 4 + 2}].dummy=(u16)(s16)(_fv?-_pc:_pc);",
+        f"{pad}shadow_oam[{base + '+3' if dynamic else aslot * 4 + 3}].dummy=(u16)(s16)(_fv?-_pd:_pd);",
+    ]
     return [
         # Transform monde + local composés
         f"        int _arot=g_actors[{idx}].rotation;",
@@ -249,14 +252,14 @@ def affine_oam_lines_dynamic(idx: int, aff: dict, sprite, bt: int, priority_expr
         f"        int _v=(_sinA*_sxs*_px)/65536+(_cosA*_sys*_py)/65536;",
         f"        int sx=_ocx-{W}-_u; int sy=_ocy-{H}-_v;",
         f"        u16 ti=(u16)({bt}+g_oam_entries[{e}].frame*{tpf});",
-        f"        shadow_oam[{aslot*4+0}].dummy=(u16)(s16)(_fh?-_pa:_pa);",
-        f"        shadow_oam[{aslot*4+1}].dummy=(u16)(s16)(_fh?-_pb:_pb);",
-        f"        shadow_oam[{aslot*4+2}].dummy=(u16)(s16)(_fv?-_pc:_pc);",
-        f"        shadow_oam[{aslot*4+3}].dummy=(u16)(s16)(_fv?-_pd:_pd);",
+        *([] if dynamic else matrix),
         # Boîte OAM en double taille : 2W x 2H.
         *oam_window_open(2 * W, 2 * H),
+        *([ "            int _as=_affn++;",
+            f"            g_oam_entries[{e}].affine_slot=_as;",
+            *matrix] if dynamic else []),
         f"            shadow_oam[_o].attr0=(sy&0xFF)|(1<<8)|(1<<9)|(g_oam_entries[{e}].obj_mode<<10)|({sh}<<14);",
-        f"            shadow_oam[_o].attr1=(sx&0x1FF)|({aslot}<<9)|({sz}<<14);",
+        f"            shadow_oam[_o].attr1=(sx&0x1FF)|({'_as' if dynamic else aslot}<<9)|({sz}<<14);",
         f"            shadow_oam[_o].attr2=(ti&0x3FF)|({priority_expr}<<10)|(g_oam_entries[{e}].pal_bank<<12);",
         *oam_window_close(),
     ]

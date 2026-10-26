@@ -105,7 +105,8 @@ def _actor_script_functions(p: Project, actor: Actor) -> set[str]:
     return _actor_fn_cache[key]
 
 
-def actor_frame_event_lines(p: Project, actor: Actor, sprite: SpriteAsset) -> tuple[list[str], bool]:
+def actor_frame_event_lines(p: Project, actor: Actor, sprite: SpriteAsset,
+                            owner_sym: str) -> tuple[list[str], bool]:
     """Table de pointeurs de fonction EventCall pour CET actor — PAS pour son sprite : contrairement à `frame_action_ids`/
     `frame_sfx_syms`, la cible d'un EventCall est une fonction du script de
     l'actor, donc deux actors qui partagent le même sprite peuvent résoudre
@@ -116,11 +117,14 @@ def actor_frame_event_lines(p: Project, actor: Actor, sprite: SpriteAsset) -> tu
     Un event qui ne correspond à aucune fonction déclarée dans le script
     résout vers NULL — averti par le validateur (`_check_frame_events`),
     silencieux ici comme les deux autres emplacements plutôt que de casser
-    le lien."""
+    le lien.
+
+    `owner_sym` : le préfixe C des fonctions de son script (`<Scène>_<Acteur>`), celui que le tick de
+    `anim_tick_lines` relit sous `actor_sym`."""
     declared = _actor_script_functions(p, actor)
     if not declared:
         return [], False
-    asym = c_sym(actor.name)
+    asym = owner_sym
     _, ordered = sprite_unique_frames(sprite)
     entries: list[str] = []
     used: set[str] = set()
@@ -381,6 +385,18 @@ def _signed_offset(v: int) -> str:
 def _oam_body_lines(idx: int, e: int, ap: Appearance, aff: Optional[dict],
                     screen_space: bool) -> list[str]:
     """Le corps d'écriture OAM d'UNE apparence (l'intérieur du `if` actif)."""
+    if aff and aff.get("dynamic"):
+        # Pas de matrice réservée : tant qu'il en reste, le sprite prend la prochaine ; sinon il s'affiche SANS
+        # rotation ni échelle (comme avant pour le 33e), et le tick le dit une fois par seconde.
+        return ["        if(_affn>=32) {",
+                "            g_affine_dropped++;",
+                f"            g_oam_entries[{e}].affine_slot=-1;",
+                *_oam_body_lines(idx, e, ap, None, screen_space),
+                "        } else {",
+                *affine_oam_lines_dynamic(idx, aff, ap.sprite, ap.base_tile,
+                                          f"g_oam_entries[{e}].priority",
+                                          screen_space=screen_space, entry=e),
+                "        }"]
     if aff:
         return affine_oam_lines_dynamic(idx, aff, ap.sprite, ap.base_tile,
                                         f"g_oam_entries[{e}].priority",

@@ -17,6 +17,7 @@ from core.models.scene import BLEND_ALPHA, BLEND_TOP, Actor, Scene
 from core.models.sprite import SpriteAsset
 from core.project import Project
 from core.validator import ValidationContext
+from oam_fixtures import faire_naitre
 
 
 @pytest.fixture
@@ -168,7 +169,7 @@ def test_une_banque_de_palette_inexistante_avertit_pour_acteur_prefab_et_fond(pr
     prefab.actor.pal_bank = 3
     prefab.actor.components = [SpriteComponent(sprite_name="Hero")]
     project.prefabs.append(prefab)
-    scene.prefab_pools = {"Bullet": 1}
+    faire_naitre(project.root, scene, "Bullet")
     scene.background_layers.append(BackgroundLayer(background_name="sky", bg_slot=0, pal_bank=4))
     found = run(project, validator._check_pal_bank_reference)
     assert says(found, "warning", "Actor 'A' points to OBJ bank 5")

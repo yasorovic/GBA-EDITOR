@@ -22,6 +22,7 @@ from core.models.components import CollisionBoxComponent, SpriteComponent
 from core.models.scene import Actor, Prefab, Scene
 from core.project import Project
 from codegen.runtime_codegen.headers import generate_actor_types
+from oam_fixtures import faire_naitre
 
 
 def _box(tag: str, active: bool = True) -> CollisionBoxComponent:
@@ -39,9 +40,8 @@ def _projet(tmp_path: Path) -> Project:
     balle = Prefab(name="Ball")
     balle.actor.components = [SpriteComponent(), _box("body")]
     p.prefabs.items = [balle]
-    # Le pool se déclare sur la SCÈNE depuis la v0.17 (plus de repli
-    # `max_instances`) : c'est ce qui rend `Ball` réellement poolé.
-    scene.prefab_pools = {"Ball": 4}
+    # La scène fait naître `Ball` : c'est ce qui lui donne un modèle dans la scène.
+    faire_naitre(p.root, scene, "Ball")
     return p
 
 

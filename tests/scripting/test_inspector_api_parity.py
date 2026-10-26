@@ -507,3 +507,10 @@ def test_c_le_pool_partage_se_parcourt_par_le_modele_de_chaque_emplacement(sorti
     assert sortie_sonde["pool_mixte"] == [2, 1, 1]       # les posés (la table), puis le pool
     assert sortie_sonde["pool_hw"] == [0]                # au-delà du plus haut emplacement utilisé : rien
     assert sortie_sonde["pool_etat"] == [1]              # un bloc d'état par `inst`
+
+
+def test_c_un_groupe_garde_sa_partie_detruite_et_rend_tout_avec_sa_racine(sortie_sonde):
+    assert sortie_sonde["grp_occupe"] == [0, 0, 0, 1]      # le groupe est occupé, l'emplacement suivant libre
+    assert sortie_sonde["grp_partie"] == [0, 0, 3]         # la partie détruite n'est PAS libre ; le curseur recule jusqu'à elle
+    assert sortie_sonde["grp_racine"] == [1, 1, 1, 0, 0]   # la racine détruite rend le groupe, parties effacées
+    assert sortie_sonde["grp_curseur"] == [2]

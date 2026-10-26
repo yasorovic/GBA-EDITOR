@@ -87,7 +87,9 @@ def test_un_prefab_joueur_poole_interagit_par_une_boucle(tmp_path):
                               ScriptComponent(script="assets/scripts/Hero2.lua")]
     projet.prefabs.append(heros)
     projet.prefabs.save(heros, None)
-    projet.scenes[0].prefab_pools = {"Hero2": 2}
+    (projet.user_library_dir / "scripts" / "Naissance.lua").write_text(
+        'function on_update()\n    actor:spawn("Hero2", vec2(0, 0))\nend\n', encoding="utf-8")
+    projet.scenes[0].script = "assets/scripts/Naissance.lua"
     projet.save()
 
     worker = BuildWorker(Project.open(projet.root), Toolchain())

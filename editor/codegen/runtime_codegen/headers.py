@@ -92,14 +92,12 @@ def generate_actor_types(p: Project) -> None:
                 # est un nombre qui ne désigne aucun emplacement posé : le début du pool plus son rang.
                 h.append(f"#define ACTOR_{u} {lay.shared.start + pl.model_id - 1}  /* shared pool model */")
             else:
-                # L'identité d'un acteur de la réserve (`other.name == "Bullet"`) est le début de sa
-                # plage. Un modèle sans réserve (que des instances posées, chacune sous son nom) n'a
-                # aucun acteur de ce nom : -1 ne vaut jamais un `name`, et ne chevauche pas la plage
-                # d'un autre modèle.
-                h.append(f"#define ACTOR_{u} {pl.start if pl.reserve else -1}  /* prefab pool start */")
-            # Les instances qu'une table donne (`g_model_*`, définie dans main.c) : les posées, puis la
-            # réserve à part. Celles du pool partagé se retrouvent à `Actor.model` (`MODELID_*`).
-            h.append(f"#define MODEL_{u}_COUNT {len(pl.members) + pl.reserve}")
+                # Un modèle que la scène ne fait pas naître (que des instances posées, chacune sous son nom) n'a
+                # aucun acteur de ce nom : -1 ne vaut jamais un `name`, et ne chevauche pas l'identité d'un autre modèle.
+                h.append(f"#define ACTOR_{u} -1  /* placed instances only */")
+            # Les instances qu'une table donne (`g_model_*`, définie dans main.c) : les posées. Celles qui
+            # naissent dans le pool partagé se retrouvent à `Actor.model` (`MODELID_*`).
+            h.append(f"#define MODEL_{u}_COUNT {len(pl.members)}")
             h.append(f"#define MODELID_{u} {pl.model_id}")
             h.append(f"extern const ModelSlot g_model_{pl.sym}[];")
 

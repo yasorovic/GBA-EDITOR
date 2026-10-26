@@ -30,3 +30,15 @@ def tout_afficher(project) -> None:
         donner_un_sprite(project, pf)
         for part in getattr(pf, "children", []) or []:
             donner_un_sprite(project, part)
+
+
+def faire_naitre(chemin, scene, *noms) -> None:
+    """Un script de scène qui spawne chacun des prefabs `noms` : ils naissent dans le pool partagé de la scène.
+    `chemin` : le dossier du projet (le script s'écrit dans ses `assets/`)."""
+    from pathlib import Path
+    dossier = Path(chemin) / "assets"
+    dossier.mkdir(parents=True, exist_ok=True)
+    scene.script = f"assets/{scene.name}.lua"
+    (dossier / f"{scene.name}.lua").write_text(
+        "function on_update()\n" + "".join(f'    actor:spawn("{n}", vec2(0, 0))\n' for n in noms) + "end\n",
+        encoding="utf-8")

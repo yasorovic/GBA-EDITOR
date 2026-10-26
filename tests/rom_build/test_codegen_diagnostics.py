@@ -229,7 +229,9 @@ def test_un_avertissement_du_generateur_nomme_le_script_de_chaque_famille(tmp_pa
     prefab = Prefab(name="Bullet")
     prefab.actor.components = [ScriptComponent(script="assets/scripts/Bullet.lua")]
     project.prefabs.append(prefab)
-    scene.prefab_pools = {"Bullet": 1}
+    # La scène fait naître la balle : c'est ce qui lui donne un modèle (et fait compiler son script).
+    ((project.user_library_dir / "scripts") / "Level.lua").write_text(
+        'function on_update()\n    actor:spawn("Bullet", vec2(0, 0))\nend\n', encoding="utf-8")
     scene.script = "assets/scripts/Level.lua"
     scene.cameras.append(Camera(name="Cam", script="assets/scripts/Cam.lua"))
     project.save()

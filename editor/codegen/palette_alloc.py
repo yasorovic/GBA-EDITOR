@@ -24,7 +24,7 @@ from typing import Optional
 from core.models.palette import OWN_PAL_BANK
 from core.models.scene import Scene, scene_font_pal_bank
 from core.project import Project
-from codegen.oam_alloc import scene_pool_instances
+from codegen.oam_alloc import scene_has_model
 from core.models.gba_color import extract_palette_from_image
 from core.models.gba_color import RESERVED_SLOT_COLOR
 from core.palette_presets import DEFAULT_PAL_BANK_COLORS
@@ -252,7 +252,7 @@ def _scene_prefab_own_palettes(p: Project, scene: Scene) -> list[list[int]]:
                 out.append(cols)
 
     for pf in p.prefabs:
-        if scene_pool_instances(p, scene, pf) <= 0:
+        if not scene_has_model(p, scene, pf):
             continue
         _add(pf)
         for part in (getattr(pf, "children", []) or []):

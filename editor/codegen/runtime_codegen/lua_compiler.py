@@ -27,7 +27,7 @@ from scripting.api import LAYERS_BY_MODE, LAYER_NUMBERS, SpriteLibrary
 
 from codegen.c_names import sym as c_sym, scene_actor_sym
 import codegen.build_output as build_output
-from codegen.oam_alloc import scene_pool_instances, scene_oam_layout
+from codegen.oam_alloc import scene_has_model, scene_oam_layout
 from codegen.runtime_codegen.input_layout import compute_input_layout
 
 
@@ -471,7 +471,7 @@ def transpile_all(
     # liste entière, pas ce que la scène courante contient.
     _prefab_names = [pf.name for pf in prefabs]
     # `other.name == "X"` vise `ACTOR_<scène>_X`, qui n'existe que si la scène poole X.
-    _pooled_prefab_names = [pf.name for pf in prefabs if scene_pool_instances(p, scene, pf) > 0]
+    _pooled_prefab_names = [pf.name for pf in prefabs if scene_has_model(p, scene, pf)]
     # Exports réglables par prefab (tranche poolé D2) : servis à tous les scripts
     # (ctx codegen ET ctx_check du checker), n'importe lequel peut spawner.
     _spawn_meta = _spawn_exports_meta(p, prefabs)
@@ -767,13 +767,12 @@ def transpile_all(
     scene_sym = c_sym(scene.name)
     state_sizes: dict = {}
     for pf in prefabs:
-        pf_instances = scene_pool_instances(p, scene, pf)
-        # Un prefab qu'aucune scène ne déclare n'émet rien, mais son script est quand même
+        # Un prefab qu'aucune scène ne fait naître n'émet rien, mais son script est quand même
         # VÉRIFIÉ — une fois, par la première scène : sinon ses fautes sémantiques (un nom qui
-        # ne désigne rien, un appel inconnu) ne sortiraient qu'au jour où une scène le déclare.
-        check_only = pf_instances <= 0
+        # ne désigne rien, un appel inconnu) ne sortiraient qu'au jour où une scène le fait naître.
+        check_only = not scene_has_model(p, scene, pf)
         if check_only and not (scene is p.scenes[0] and
-                               all(scene_pool_instances(p, s, pf) <= 0 for s in p.scenes)):
+                               not any(scene_has_model(p, s, pf) for s in p.scenes)):
             continue
         pf_sym = f"{scene_sym}_{c_sym(pf.name)}"
         sc = next((c for c in pf.components if isinstance(c, ScriptComponent)), None)

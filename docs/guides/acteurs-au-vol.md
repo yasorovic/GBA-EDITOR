@@ -33,9 +33,11 @@ Les acteurs créés au vol naissent dans un **pool partagé par toute la scène*
 acteurs posés compris, et n'importe quel prefab y prend la première place libre. Il n'y a donc rien à régler
 par prefab. Un projectile détruit rend sa place aux suivants.
 
-Quand la scène est pleine, `spawn` ne crée rien et renvoie `nil`. Un prefab qui demande encore des
-emplacements fixes (un interacteur, un prefab à parties ou à rotation, un prefab qui bloque d'autres
-acteurs) garde une réserve de 8 instances.
+Quand la scène est pleine, `spawn` ne crée rien et renvoie `nil`. Un interacteur, un objet à interaction,
+un prefab qui bloque d'autres acteurs et un prefab à parties naissent aussi dans ce pool (les parties d'une
+instance occupent des emplacements contigus : il faut une série libre de la taille du groupe). Un prefab à
+rotation y naît aussi : ses 32 matrices sont prises à chaque image par les sprites dessinés, les suivants
+s'affichent sans rotation.
 
 ## 3. Créer l'acteur depuis un script
 

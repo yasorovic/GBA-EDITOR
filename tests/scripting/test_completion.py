@@ -223,7 +223,7 @@ def _nbd():
     from unittest import mock
     from scripting.project_names import names_by_domain
     # La scène factice n'a pas de géométrie OAM : on dit juste que chaque prefab y est poolé.
-    with mock.patch("codegen.oam_alloc.scene_pool_instances", return_value=1):
+    with mock.patch("codegen.oam_alloc.scene_has_model", return_value=True):
         return names_by_domain(_PROJECT)
 
 

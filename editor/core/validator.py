@@ -1501,15 +1501,22 @@ def _check_actor_budget(ctx: ValidationContext):
                 "available — reduce a background tiling or move a zone to a BG target.")
         if lay.over_capacity:
             ctx.error(None,
-                f"Scene '{scene.name}': {lay.fixed_actors} actors are placed or reserved for the "
+                f"Scene '{scene.name}': {lay.placed} actors are placed for the "
                 f"{lay.capacity} a scene holds — nothing is left for the ones that are born during play.")
+        # `Actor.model` est un octet : 255 types d'emplacement par scène (un par prefab, plus un par partie).
+        from scripting.refactor import scene_spawned_prefabs
+        born = {pl.prefab.name for pl in lay.pools if pl.shared}
+        for name in sorted(scene_spawned_prefabs(p, scene) - born):
+            ctx.error(None,
+                f"Scene '{scene.name}': prefab '{name}' is spawned but cannot be born — the 255 actor "
+                "types of a scene (one per prefab, plus one per part) are taken.")
         ctx.focus(None)
 
 
 def _check_affine_budget(ctx: ValidationContext):
-    """Les 32 matrices affines d'une scène : acteurs posés d'abord, puis instances de pool
-    (`compute_affine_info` les attribue dans cet ordre). Au-delà, les derniers sprites s'affichent
-    SANS rotation ni échelle — sans un mot au build avant cet avertissement."""
+    """Les 32 matrices affines d'une scène : celles des acteurs posés sont réservées au build
+    (`compute_affine_info`), les instances nées prennent à la frame celles qui restent. Au-delà de 32 posés, les
+    derniers s'affichent SANS rotation ni échelle — sans un mot au build avant cet avertissement."""
     from codegen.oam_alloc import scene_affine_requests, AFFINE_LIMIT
     for scene in ctx.project.scenes:
         n = scene_affine_requests(ctx.project, scene)
@@ -1518,7 +1525,7 @@ def _check_affine_budget(ctx: ValidationContext):
             ctx.warn(None,
                 f"Scene '{scene.name}': {n} affine matrices requested for {AFFINE_LIMIT} available — the last "
                 f"{n - AFFINE_LIMIT} sprite(s) are drawn without rotation or scale. Untick \"Affine transform\" "
-                "on some sprites, or reduce a pool.")
+                "on some sprites.")
     ctx.focus(None)
 
 
@@ -2172,7 +2179,7 @@ def _check_pal_bank_reference(ctx: ValidationContext):
     - prefabs -> active_obj_palettes de CHAQUE scène qui les poole ;
     - layers  -> active_bg_palettes de chaque scène utilisant le background."""
     from core.models.palette import OWN_PAL_BANK
-    from codegen.oam_alloc import scene_pool_instances
+    from codegen.oam_alloc import scene_has_model
     p = ctx.project
 
     def _slot_missing(active: list, slot: int) -> bool:
@@ -2213,7 +2220,7 @@ def _check_pal_bank_reference(ctx: ValidationContext):
     for scene in p.scenes:
         active = getattr(scene, "active_obj_palettes", [])
         for pf in p.prefabs:
-            if scene_pool_instances(p, scene, pf) <= 0:
+            if not scene_has_model(p, scene, pf):
                 continue
             pb = getattr(pf, "pal_bank", OWN_PAL_BANK)
             if pb == OWN_PAL_BANK:
