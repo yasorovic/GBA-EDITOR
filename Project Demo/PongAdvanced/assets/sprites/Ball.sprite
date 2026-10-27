@@ -1,7 +1,7 @@
 {
   "name": "Ball",
   "id": "da99c2e0d6dd",
-  "asset": "assets/sprites/Ball.png",
+  "source": "assets/sprites/Ball.png",
   "frame_w": 8,
   "frame_h": 8,
   "source_stamp": "252:1790795624430914300:cef2955aecb434b8",

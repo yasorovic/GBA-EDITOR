@@ -22,7 +22,7 @@ Lua API <lua-api/index>
 # Créez votre jeu Game Boy Advance
 
 :::{div} backstage-home-lead
-Backstage est un logiciel libre pour fabriquer des jeux Game Boy Advance depuis une interface visuelle. Vous construisez, il s'occupe de la console.
+Backstage est un logiciel libre pour fabriquer des jeux Game Boy Advance depuis une interface visuelle. Créez, construisez, Backstage s'occupe de la technique.
 :::
 
 ::::{div} backstage-home-actions
@@ -75,7 +75,7 @@ Backstage est en alpha : cette documentation grandit avec lui. Le **Manual**, qu
 
 ## Participer
 
-Backstage est un projet libre, développé en public. Vos retours aident à améliorer la documentation comme le logiciel : une explication qui n'est pas claire, une page introuvable, une fonction qui manque.
+Backstage est un projet libre, développé en public. Vos retours aident à améliorer la documentation comme le logiciel : une explication n'est pas claire, une page introuvable, une fonction qui manque.
 
 - Signalez un problème ou proposez une idée sur le [dépôt GitHub](https://github.com/yasorovic/GBA-EDITOR/issues).
 - Téléchargez la dernière version sur la page des [releases](https://github.com/yasorovic/GBA-EDITOR/releases).

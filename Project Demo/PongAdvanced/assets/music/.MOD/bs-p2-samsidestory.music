@@ -1,7 +1,7 @@
 {
   "name": "bs-p2-samsidestory",
   "id": "8a39d106a7cb",
-  "asset": "assets/music/.MOD/bs-p2-samsidestory.mod",
+  "source": "assets/music/.MOD/bs-p2-samsidestory.mod",
   "loop": true,
   "volume": 100,
   "unit": "order",

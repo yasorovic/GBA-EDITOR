@@ -162,6 +162,9 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "disk":                  ("mdi.harddisk",                "▭"),
     "sprite":                ("mdi.image-outline",           "▧"),
     "background":            ("mdi.image-multiple-outline",  "▥"),
+    # Un calque de fond dont le fond n'existe plus (ou dont l'image a disparu) : distinct de « empty », qui est
+    # un emplacement volontairement vide.
+    "background_missing":    ("mdi.image-broken-variant",    "▥"),
     "palette":               ("mdi.palette-outline",         "◐"),
     # Rôles communs aux sélecteurs de couleurs dans tout l'éditeur.
     "bank":                  ("mdi.palette-outline",         "◐"),

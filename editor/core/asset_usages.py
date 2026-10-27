@@ -63,6 +63,13 @@ def usages(project, family: str, item) -> list[str]:
             for layer in scene.background_layers:
                 if layer.background_name == name:
                     found.append(f'scene "{scene.name}": background layer {layer.bg_slot}')
+        for layout in project.ui_layouts:           # un cadre nine-slice ou un fond de zone d'interface
+            if any(getattr(el, "fill_asset", "") == name for el in layout.elements):
+                found.append(f'interface "{layout.name}"')
+    elif family == "fonts":
+        for asset in project.font_assets:
+            if any(name in names for names in asset.sources.values()):
+                found.append(f'font asset "{asset.name}"')
     elif family == "prefabs":
         for scene in project.scenes:
             for actor in scene.actors:
@@ -74,7 +81,7 @@ def usages(project, family: str, item) -> list[str]:
         if getattr(project.settings, "start_scene", "") == name:
             found.append("project start scene")
 
-    if family in ("sfx", "music", "jingles", "scenes", "prefabs", "sprites", "data_tables", "music_boxes",
+    if family in ("sfx", "music", "jingles", "scenes", "prefabs", "sprites", "backgrounds", "data_tables", "music_boxes",
                   "jingle_boxes", "sound_boxes", "ui_layouts"):
         pattern = (re.compile(r"\bdata\." + re.escape(name) + r"\b") if family == "data_tables" else _quoted(name))
         for path, text in _script_texts(project):

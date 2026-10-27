@@ -1,7 +1,7 @@
 {
   "name": "lava",
   "id": "5d157af2ad64",
-  "asset": "assets/sfx/action/fx-wav/lava.wav",
+  "source": "assets/sfx/action/fx-wav/lava.wav",
   "volume": 100,
   "sample_rate": 0,
   "trim_start": 0,

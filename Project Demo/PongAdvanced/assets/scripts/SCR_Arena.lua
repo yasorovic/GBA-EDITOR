@@ -3,25 +3,26 @@
 local shown_player = -1
 local shown_cpu = -1
 
+local playerscoring = interface:get("PlayerScoring")     
+local cpuscoring =  interface:get("cpuScoring")
+
 function on_start()
-    music_box:trigger("to_arena")
+    --music_box:trigger("to_arena")
     global.score_player = 10
     global.score_cpu = 10
 end
 
 -- On ne redessine que lorsqu'un score change : le texte est effacé d'abord, pour
 -- qu'un « 10 » devenu « 9 » ne laisse pas son « 0 » derrière lui.
--- Les scores sont des textes de l'écran Text (et non des littéraux) : c'est ce qui
--- donne à chaque langue — le japonais et sa police — les chiffres à charger.
 function on_late_update()
     if global.score_player ~= shown_player then
         shown_player = global.score_player
-        text:clear(9, 1, 2, 1)
-        text:draw(9, 1, "scr_score_player")
+        playerscoring:clear()
+        playerscoring:draw("$score_player")
     end
     if global.score_cpu ~= shown_cpu then
         shown_cpu = global.score_cpu
-        text:clear(19, 1, 2, 1)
-        text:draw(19, 1, "scr_score_cpu")
+        cpuscoring:clear()
+        cpuscoring:draw("$score_cpu")
     end
 end

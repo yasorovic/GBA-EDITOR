@@ -1,7 +1,7 @@
 {
   "name": "The Sad Truth",
   "id": "d0b8f423ea93",
-  "asset": "assets/jingles/The Sad Truth.mod",
+  "source": "assets/jingles/The Sad Truth.mod",
   "loop": true,
   "volume": 100,
   "unit": "order",

@@ -1,7 +1,7 @@
 {
   "name": "bs-p2-1-u",
   "id": "721848eef196",
-  "asset": "assets/music/.MOD/bs-p2-1-u.mod",
+  "source": "assets/music/.MOD/bs-p2-1-u.mod",
   "loop": true,
   "volume": 62,
   "unit": "order",

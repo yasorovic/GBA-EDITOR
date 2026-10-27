@@ -2110,6 +2110,18 @@ class BgInpaintCanvas(QWidget):
         return bool(ba and not ba.is_ui and not ba.is_animated and ba.asset
                     and (ba.tileset or ba.bitmap) and self._src_size[0])
 
+    def _canvas_available(self) -> bool:
+        """Le canvas se règle pour les fonds de scène ET d'interface (les animés ont leur grille de frames)."""
+        ba = self._ba
+        return bool(ba and not ba.is_animated and ba.asset and (ba.tileset or ba.bitmap) and self._src_size[0])
+
+    def _snap_canvas(self, canvas: tuple, current: tuple) -> tuple:
+        """Un fond d'interface a un canvas multiple de 8 (le nine-slice découpe en tuiles) : un axe que l'auteur change
+        est arrondi au-dessus. Un axe laissé tel quel reste ce qu'il est (l'image d'origine est rembourrée à l'encodage)."""
+        if self._ba and self._ba.is_ui:
+            return tuple(int(v) if int(v) == int(c) else -(-int(v) // 8) * 8 for v, c in zip(canvas, current))
+        return tuple(canvas)
+
     def _read_source_size(self) -> tuple:
         path = self._source_png_path()
         if path is None or not path.exists():
@@ -2174,9 +2186,10 @@ class BgInpaintCanvas(QWidget):
         self._btn_prep_reset.setEnabled(ok and self._mirror()[:2] != (None, None))
         # Le mode Canvas n'est pas gelé : c'est lui qu'on bâtit. La barre flottante reste, pour « select », même quand le
         # fond ne se peint pas.
-        if not available:
+        canvas_ok = self._canvas_available()
+        if not canvas_ok:
             self._cancel_canvas_mode()
-        self._toolbar.configure(paintable=self._paintable(), can_select=available)
+        self._toolbar.configure(paintable=self._paintable(), can_select=canvas_ok)
         self._sync_paint_widgets(self._paintable())
         if not self._view.canvas_mode_active():
             self._refresh_overflow()
@@ -2185,7 +2198,7 @@ class BgInpaintCanvas(QWidget):
     def _refresh_overflow(self):
         """Le passe-partout : ce qui sort du canvas reste visible, grisé."""
         path = self._source_png_path()
-        if self._ba and self._prep_available() and path is not None:
+        if self._ba and self._canvas_available() and path is not None:
             canvas, rect = self._canvas_values()
             self._view.set_overflow(path, canvas, rect)
         else:
@@ -2265,7 +2278,7 @@ class BgInpaintCanvas(QWidget):
         return bool(self._ba and self._layout() != "bitmap")
 
     def _emit_canvas_state(self):
-        if not (self._ba and self._prep_available()):
+        if not (self._ba and self._canvas_available()):
             self.canvas_state.emit(None, None, (0, 0), False)
             return
         if self._view.canvas_mode_active():
@@ -2281,7 +2294,7 @@ class BgInpaintCanvas(QWidget):
 
     def _set_canvas_mode(self, on: bool):
         if on:
-            if self._view.canvas_mode_active() or not (self._ba and self._prep_available()):
+            if self._view.canvas_mode_active() or not (self._ba and self._canvas_available()):
                 return
             canvas, rect = self._canvas_values()
             if not self._view.begin_canvas_mode(self._source_png_path(), canvas, rect):
@@ -2305,14 +2318,22 @@ class BgInpaintCanvas(QWidget):
         self._canvas_cancelled = not accept
         self._toolbar.leave_select()
 
+    def _commit_canvas_mode(self):
+        """Quitte le mode Canvas EN appliquant ce qui est réglé (autre fond choisi : l'auteur n'a pas à valider d'abord)."""
+        if self._view.canvas_mode_active():
+            self._canvas_cancelled = False
+            self._toolbar.leave_select()
+            self._set_canvas_mode(False)
+
     def _cancel_canvas_mode(self):
-        """Quitte le mode Canvas sans rien appliquer (autre fond choisi, outil devenu indisponible)."""
+        """Quitte le mode Canvas sans rien appliquer (outil devenu indisponible)."""
         if self._view.canvas_mode_active():
             self._canvas_cancelled = True
             self._toolbar.leave_select()
             self._set_canvas_mode(False)      # la barre n'a rien émis si « select » n'était pas son outil courant
 
     def _apply_canvas(self, canvas: tuple, rect: tuple):
+        canvas = self._snap_canvas(canvas, self._canvas_values()[0])
         if (tuple(canvas), tuple(rect)) == self._canvas_values():
             return
         # Le passe-partout montre déjà le nouveau placement pendant que le fond se recompresse.
@@ -2332,7 +2353,8 @@ class BgInpaintCanvas(QWidget):
             self._toolbar.choose_select()
             if not self._view.canvas_mode_active():
                 return
-        canvas = tuple(canvas) if self._canvas_editable() else self._view.canvas_place.canvas()
+        shown = self._view.canvas_place.canvas()
+        canvas = self._snap_canvas(canvas, shown) if self._canvas_editable() else shown
         self._view.set_canvas_geometry(canvas, rect)
         self._bar.set_canvas_size(*canvas)
         self._emit_canvas_state()
@@ -2538,7 +2560,7 @@ class BgInpaintCanvas(QWidget):
         self.placements_changed.emit()
 
     def load(self, project, ba):
-        self._cancel_canvas_mode()          # avant de changer de fond : rien n'est appliqué
+        self._commit_canvas_mode()          # avant de changer de fond : ce qui est réglé s'applique à l'ANCIEN
         self._tiled_canvas = None
         self._ba = ba
         self._project = project

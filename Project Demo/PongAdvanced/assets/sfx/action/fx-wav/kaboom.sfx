@@ -1,7 +1,7 @@
 {
   "name": "kaboom",
   "id": "dec5e5dcb8b6",
-  "asset": "assets/sfx/action/fx-wav/kaboom.wav",
+  "source": "assets/sfx/action/fx-wav/kaboom.wav",
   "volume": 100,
   "sample_rate": 0,
   "trim_start": 0,

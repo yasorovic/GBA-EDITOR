@@ -1,7 +1,7 @@
 {
   "name": "sword",
   "id": "35db552ccb2c",
-  "asset": "assets/sfx/action/fx-wav/sword.wav",
+  "source": "assets/sfx/action/fx-wav/sword.wav",
   "volume": 100,
   "sample_rate": 0,
   "trim_start": 0,

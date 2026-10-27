@@ -1,7 +1,7 @@
 {
   "name": "charge_up",
   "id": "232086a8ff30",
-  "asset": "assets/sfx/action/fx-wav/charge_up.wav",
+  "source": "assets/sfx/action/fx-wav/charge_up.wav",
   "volume": 100,
   "sample_rate": 0,
   "trim_start": 0,

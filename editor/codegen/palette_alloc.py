@@ -102,6 +102,12 @@ class SceneBankLayout:
         key = _bg_palettes_key(ba)
         return self._bg_block.get(key)
 
+    def bg_overflowed(self, ba) -> bool:
+        """Le bloc de palettes de ce fond compressé n'a trouvé aucune place : le build le pose à l'offset 0
+        (`bg_block_offset(...) or 0`) et ses tuiles lisent les banques 0.. telles que la scène les remplit."""
+        key = _bg_palettes_key(ba)
+        return key in self._bg_block and self._bg_block[key] is None
+
     def bank_count(self) -> int:
         """Nombre de banques réellement occupées (référencées + propres)."""
         return sum(1 for c in self.slot_colors if c)

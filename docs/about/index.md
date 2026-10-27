@@ -9,28 +9,22 @@ L'écosystème GBA <ecosystem>
 Licence <license>
 ```
 
-**Backstage est un environnement de création visuel pour réaliser des jeux Game Boy Advance et les compiler en ROMs `.gba`.**
-
-Le projet réunit dans un même espace les étapes qui relient vos images, vos sons et vos idées à un jeu jouable. Il s'adresse aux créateurs qui souhaitent travailler visuellement tout en gardant la possibilité de programmer leurs propres systèmes de jeu.
-
 ## Pourquoi Backstage ?
 
-La GBA ne lit pas une image comme un ordinateur. Un décor devient des tuiles de 8 × 8 pixels, un personnage est découpé en sprites, les couleurs sont rangées par palettes (le plus souvent de 16 couleurs), et tout cela se partage une mémoire vidéo de 96 Ko. Sans outil, on convertit ses images à la main, on compte ses tuiles et on tient à jour la carte de la mémoire.
+La GBA ne lit pas une image comme un ordinateur.
 
-Backstage prend en charge ce travail. Vous importez une image ordinaire : l'éditeur la convertit, range ses couleurs dans les palettes de la console, place ses tuiles dans la mémoire vidéo, et affiche l'état des budgets (sprites, tuiles, palettes) pendant que vous composez la scène. Vous pensez en acteurs, en décors et en animations ; les numéros de palette, les emplacements mémoire et les registres restent calculés pour vous.
+Un décor devient des tuiles de 8×8 pixels, un personnage est découpé en sprites, les couleurs sont rangées par palettes, et tout cela se partage une mémoire vidéo de 96 Ko. 
 
-Ce que l'éditeur montre est ce que la ROM produit : le canvas et le Build appellent le même code, de sorte qu'une scène ne se comporte pas autrement sur la console que dans l'éditeur. Les scripts sont vérifiés avant le Build : une fonction inconnue, un nom d'acteur mal écrit ou une écriture que la console ne peut pas exécuter sont signalés avec leur ligne, plutôt que de planter la ROM.
+Sans outil, on convertit ses images à la main, on compte ses tuiles et on tient à jour la carte de la mémoire.
 
-**Backstage n'est pas un outil de dessin, un éditeur de cartes ni un tracker musical.** Il importe ce que vous créez dans vos autres outils (images, musiques, sons) et se charge de le faire entrer dans la console. Ce que vous y construisez, ce sont des acteurs, des scènes, des caméras, des textes, des sons et des données, auxquels vous donnez un comportement. Un inventaire, une quête ou un combat n'existent pas tout faits : ce sont des systèmes que vous concevez avec ces briques.
-
-**Le travail visuel et la programmation se complètent.** L'éditeur sert à composer et à régler ; les scripts décrivent ce qui se passe pendant le jeu. Des notions de programmation sont utiles pour aller au-delà des comportements déjà disponibles.
+Derrière ce projet, il y a la volonté de réduire les frictions rencontrés lors de la conception d'un programme destiné à des contraintes matérielles fortes. C'est aussi l'occasion de réfléchir, de proposer de nouveaux outils et d'explorer de nouvelles façon de faire du jeu.
 
 ## Comment ça marche
 
 Un jeu Backstage se construit en quatre gestes, que vous pouvez enchaîner dans l'ordre qui vous convient :
 
 1. **Importer** vos ressources : sprites, décors, palettes, polices, sons. Les images sont converties au format de la console à l'import.
-2. **Construire** des scènes : placer les acteurs, dessiner les zones solides, régler la caméra et l'interface.
+2. **Construire** des scènes : placer les acteurs, dessiner les collisions, régler la caméra et l'interface.
 3. **Donner vie** au jeu : associer des comportements aux acteurs et écrire vos scripts.
 4. **Tester** : lancer **Build & Run** pour compiler une ROM `.gba` et l'ouvrir dans mGBA.
 

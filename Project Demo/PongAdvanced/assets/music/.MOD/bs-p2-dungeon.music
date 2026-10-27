@@ -1,7 +1,7 @@
 {
   "name": "bs-p2-dungeon",
   "id": "3a3d1e8b2748",
-  "asset": "assets/music/.MOD/bs-p2-dungeon.mod",
+  "source": "assets/music/.MOD/bs-p2-dungeon.mod",
   "loop": true,
   "volume": 40,
   "unit": "order",

@@ -320,8 +320,8 @@ class UIRegionItem(QGraphicsRectItem):
         bg = get_bg(getattr(self._region, "fill_asset", ""))
         if bg is None or not getattr(bg, "asset", ""):
             return None, bg
-        path = self._project.background_image_path(bg)
-        return QPixmap(str(path)), bg
+        from ui.scene_manager.canvas.canvas_raster import encoded_pixmap
+        return encoded_pixmap(bg) or QPixmap(str(self._project.background_image_path(bg))), bg
 
     def _load_image_frame(self):
         """QPixmap de la 1re frame de l'état déclaré par un `UIImage`, ou None.
@@ -375,7 +375,8 @@ class UIRegionItem(QGraphicsRectItem):
         bg = get_bg(getattr(self._region, "fill_asset", ""))
         if bg is None or not getattr(bg, "asset", ""):
             return None
-        return QPixmap(str(self._project.background_image_path(bg)))
+        from ui.scene_manager.canvas.canvas_raster import encoded_pixmap
+        return encoded_pixmap(bg) or QPixmap(str(self._project.background_image_path(bg)))
 
     def _paint_background(self, painter):
         """Peint le background à taille NATURELLE, calé en haut-gauche, ROGNÉ en

@@ -16,6 +16,7 @@ Usage :
     "scene_sprites_changed"        — recréer les sprites canvas
     "actors_list_changed"          — rafraîchir la liste actors
     "bg_slot_changed"  (int slot)  — rafraîchir un BG slot précis
+    "ui_background_changed"         — un fond d'interface a changé : redessiner les zones d'interface
     "inpaint_layer_changed" (int slot)      — layer BG peint actif
     "bg_layer_visibility"    (int, bool)     — visibilité viewport d'un layer BG
     "status_message"   (str msg)   — afficher dans la barre de statut
@@ -450,6 +451,8 @@ class CommandDispatcher(EventEmitter):
         inpainting, recompression). N'affecte pas la sauvegarde elle-même."""
         if not self._project or not self._project.active_scene:
             return
+        if ba.is_ui:
+            self._emit("ui_background_changed")      # un cadre ou un fond de zone : les zones d'interface le redessinent
         for layer in self._project.active_scene.background_layers:
             if layer.background_name == ba.name:
                 self._emit("bg_slot_changed", layer.bg_slot)

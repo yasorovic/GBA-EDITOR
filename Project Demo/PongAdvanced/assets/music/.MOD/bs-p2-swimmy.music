@@ -1,7 +1,7 @@
 {
   "name": "bs-p2-swimmy",
   "id": "cebd3023dc2e",
-  "asset": "assets/music/.MOD/bs-p2-swimmy.mod",
+  "source": "assets/music/.MOD/bs-p2-swimmy.mod",
   "loop": true,
   "volume": 74,
   "unit": "order",

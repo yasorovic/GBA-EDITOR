@@ -161,6 +161,7 @@ def validate_project(project: "Project") -> tuple[list[ValidationMessage], list[
     _check_bg_text_cbb_conflict(ctx)
     _check_decor_in_front_of_ui(ctx)
     _check_ui_node_slots(ctx)
+    _check_text_zone_in_container(ctx)
     _check_ui_element_names_unique(ctx)
     _check_pal_bank_reference(ctx)
     _check_background_palette_refs(ctx)
@@ -540,15 +541,17 @@ def _check_translation_files(ctx: ValidationContext):
 
 def _check_missing_sources(ctx: ValidationContext):
     """Un asset dont le fichier source a disparu (déplacé, renommé, supprimé hors de l'éditeur) reste dans
-    le projet SANS source : une ERREUR, une seule par fichier, qui dit comment la réparer. Elle remplace
-    les avertissements que chaque famille émettait de son côté — le build ne livre pas un jeu amputé, et
-    ne le dit pas quatre fois."""
+    le projet SANS source : une ERREUR si le jeu le cite (le build ne livre pas un jeu amputé), un simple
+    AVERTISSEMENT si rien ne le cite (le build ne le lit pas). Une seule par fichier, qui dit comment la
+    réparer. Elle remplace les avertissements que chaque famille émettait de son côté."""
     from core.asset_relink import FAMILY_LABELS, missing_sources
+    from core.asset_usages import usages
     p = ctx.project
     for missing in missing_sources(p):
-        ctx.error(None, f"{FAMILY_LABELS[missing.family]} \"{missing.item.name}\": source file not found "
-                        f"({p.asset_rel(missing.path)}) — relink the asset to another file (right-click it "
-                        "in the library) or delete it.")
+        report = ctx.error if usages(p, missing.family, missing.item) else ctx.warn
+        report(None, f"{FAMILY_LABELS[missing.family]} \"{missing.item.name}\": source file not found "
+                     f"({p.asset_rel(missing.path)}) — relink the asset to another file (right-click it "
+                     "in the library) or delete it.")
 
 
 def _check_unreadable_files(ctx: ValidationContext):
@@ -650,6 +653,35 @@ def _check_ui_node_slots(ctx: ValidationContext):
                     f"Scene '{scene.name}': interface '{name}' targets slot BG{node.bg_slot}, which is "
                     f"unavailable in video mode {rm} (allowed slots: {list(valid)}). Choose a "
                     "valid slot in the node inspector.")
+
+
+def _check_text_zone_in_container(ctx: ValidationContext):
+    """Une zone de texte posée dans un container à fond image doit tenir DANS ce container.
+
+    Le build ne lie une zone à son fond que si elle y tient (`scene_region_backdrops`) ; sinon
+    elle retombe sur la banque de sa police : l'encre sort dans une palette qui n'est pas celle
+    du cadre (souvent invisible) et l'effacement de la zone déborde sur les tuiles voisines."""
+    from codegen.runtime_codegen.gen_text import scene_image_fills, scene_region_backdrops
+    from core.models.ui_region import is_text, region_fill_container, FILL_NINE, FILL_BG
+    p = ctx.project
+    for scene in p.scenes:
+        ifills, _ = scene_image_fills(p, scene)
+        if not ifills:
+            continue
+        bound = {rb["name"] for rb in scene_region_backdrops(p, scene, ifills)}
+        placed = {f["name"] for f in ifills}
+        for lay, el in p.scene_ui_slots(scene):
+            if not is_text(el) or el.name in bound:
+                continue
+            container = region_fill_container(lay, el)
+            if (container is None or container.name not in placed
+                    or getattr(container, "fill_kind", "") not in (FILL_NINE, FILL_BG)):
+                continue
+            ctx.warn(None,
+                f"Scene '{scene.name}': text zone '{el.name}' ({el.w}x{el.h} px) does not fit inside "
+                f"its container '{container.name}' ({container.w}x{container.h} px), so its ink "
+                "uses the font palette instead of the frame's and may be invisible. Shrink the "
+                "zone or enlarge the container.")
 
 
 def _check_ui_element_names_unique(ctx: ValidationContext):

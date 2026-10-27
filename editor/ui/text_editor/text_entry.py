@@ -5,10 +5,11 @@ from PyQt6.QtCore import QEvent, Qt, pyqtSignal, QSize, QTimer
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QFrame, QHBoxLayout, QVBoxLayout, QLineEdit, QLabel, QToolButton,
-    QTextEdit, QApplication, QSizePolicy, QPushButton,
+    QTextEdit, QSizePolicy, QPushButton,
 )
 
 from ui.common import icons
+from ui.common.copy_button import CopyButton
 from ui.common.drag_grip import DragGrip
 from ui.common.labels import label
 from ui.text_editor.sequence_table_bar import SequenceTableBar
@@ -75,13 +76,8 @@ class TextEntry(QFrame):
             header.addStretch(1)
         else:
             self.number.hide()
-        copy = QToolButton()
-        copy.setIcon(icons.get("copy", C.TEXT_DIM))
-        copy.setStyleSheet(BTN_ICON)
-        copy.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        copy.setToolTip(label("txtwb.key_title"))
-        copy.clicked.connect(lambda: QApplication.clipboard().setText(self._text.key))
-        header.addWidget(copy)
+        self._copy_btn = CopyButton(lambda: self._text.key, label("txtwb.key_title"))
+        header.addWidget(self._copy_btn)
         self.used = QLabel()
         self.used.setTextFormat(Qt.TextFormat.PlainText)
         self.used.setStyleSheet(f"color:{C.TEXT_DIM};")

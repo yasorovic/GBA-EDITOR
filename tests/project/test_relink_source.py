@@ -39,23 +39,46 @@ def _errors(root: Path) -> list[str]:
     return [str(m) for m in validate_project(project)[1]]
 
 
+def _warnings(root: Path) -> list[str]:
+    project = Project.open(root)
+    project.load_all_resources()
+    return [str(m) for m in validate_project(project)[0]]
+
+
 def test_a_source_that_is_there_is_not_an_error(tmp_path: Path):
     p = _project(tmp_path)
     assert asset_relink.missing_sources(p) == []
     assert not any("source file not found" in e for e in _errors(p.root))
 
 
-def test_each_missing_source_is_ONE_error_whatever_the_family(tmp_path: Path):
+def test_each_missing_source_is_ONE_warning_when_nothing_cites_the_asset(tmp_path: Path):
     p = _project(tmp_path)
     ((p.user_library_dir / "sprites") / "hero.png").unlink()
     ((p.user_library_dir / "sfx") / "boom.wav").unlink()
     ((p.user_library_dir / "backgrounds") / "sky.png").unlink()
 
-    errors = [e for e in _errors(p.root) if "source file not found" in e]
+    warnings = [e for e in _warnings(p.root) if "source file not found" in e]
 
-    assert len(errors) == 3                                                    # une par fichier, pas quatre messages par famille
+    assert not any("source file not found" in e for e in _errors(p.root))      # le build ne lit pas ce que rien ne cite
+    assert len(warnings) == 3                                                  # une par fichier, pas quatre messages par famille
     for family, name in (("Sprite", "hero"), ("SFX", "boom"), ("Background", "sky")):
-        assert any(f'{family} "{name}"' in e and "relink" in e for e in errors), (family, name)
+        assert any(f'{family} "{name}"' in e and "relink" in e for e in warnings), (family, name)
+
+
+def test_a_missing_source_is_an_error_once_the_game_cites_the_asset(tmp_path: Path):
+    from core.models.background import BackgroundLayer
+    from core.models.scene import Scene
+    p = _project(tmp_path)
+    p.scenes.append(Scene(name="Level", background_layers=[BackgroundLayer(background_name="sky", bg_slot=0)]))
+    p.save()
+    ((p.user_library_dir / "backgrounds") / "sky.png").unlink()
+    ((p.user_library_dir / "sfx") / "boom.wav").unlink()
+
+    errors = [e for e in _errors(p.root) if "source file not found" in e]
+    warnings = [e for e in _warnings(p.root) if "source file not found" in e]
+
+    assert len(errors) == 1 and 'Background "sky"' in errors[0]               # cité par une scène : bloquant
+    assert len(warnings) == 1 and 'SFX "boom"' in warnings[0]                 # jamais cité : un avertissement
 
 
 def test_relinking_a_sound_keeps_its_name_and_id_and_clears_the_error(tmp_path: Path):

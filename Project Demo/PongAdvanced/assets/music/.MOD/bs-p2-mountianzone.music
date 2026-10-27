@@ -1,7 +1,7 @@
 {
   "name": "bs-p2-mountianzone",
   "id": "5f79e32bef92",
-  "asset": "assets/music/.MOD/bs-p2-mountianzone.mod",
+  "source": "assets/music/.MOD/bs-p2-mountianzone.mod",
   "loop": true,
   "volume": 15,
   "unit": "order",

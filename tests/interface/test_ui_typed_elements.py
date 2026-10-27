@@ -62,6 +62,21 @@ def test_la_constante_emise_suit_la_nature():
     ]
 
 
+def test_un_local_de_tete_qui_tient_une_zone_se_traduit_comme_dans_un_handler():
+    """`local box = interface:get("Box")` en tête de fichier : `box:clear()` est une méthode de
+    zone, pas d'acteur (le codegen retombait sur `actor_clear`)."""
+    from scripting.parser import parse
+    from scripting.codegen import generate, CodegenContext
+    src = ('local box = interface:get("Box")\n'
+           'function on_update()\nbox:clear()\nbox:draw("hello")\nend\n')
+    ctx = CodegenContext(actor_name="Sc", actor_sym="Sc", anim_names=[], sfx_names=[],
+                         music_names=[], global_names=set(), const_names=set(),
+                         all_actor_syms=[], owner_kind="scene", text_keys=["hello"],
+                         element_names=list(KINDS), ref_kinds=KINDS)
+    code, _, _ = generate(parse(src), ctx)
+    assert "text_clear_in(box);" in code and "actor_clear" not in code
+
+
 # ── Les membres d'un type ne sont pas ceux d'un autre ──────────────────────
 
 def test_un_membre_d_un_autre_type_est_refuse_en_nommant_ceux_du_type():

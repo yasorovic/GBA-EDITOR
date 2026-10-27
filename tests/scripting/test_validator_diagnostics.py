@@ -41,8 +41,16 @@ def says(found, level: str, fragment: str) -> bool:
 
 def test_un_sprite_dont_le_png_manque_est_une_erreur_une_seule_fois(project):
     """Le fichier introuvable est signalé UNE fois, en erreur, au niveau du projet — plus par l'acteur qui
-    cite le sprite, qui répétait le même constat en avertissement."""
+    cite le sprite, qui répétait le même constat en avertissement. Un sprite que rien ne cite n'est qu'un
+    avertissement : le build ne le lit pas."""
     project.sprites.append(SpriteAsset(name="Hero", asset="assets/sprites/gone.png"))
+    unused = run(project, validator._check_missing_sources)
+    assert says(unused, "warning", 'Sprite "Hero": source file not found') and not says(unused, "error", "not found")
+    scene = Scene(name="Level")
+    actor = Actor(name="A")
+    actor.components = [SpriteComponent(sprite_name="Hero")]
+    scene.actors.append(actor)
+    project.scenes.append(scene)
     assert says(run(project, validator._check_missing_sources), "error", 'Sprite "Hero": source file not found')
     per_actor = run(project, validator._check_sprite, Actor(name="A"), SpriteComponent(sprite_name="Hero"))
     assert not says(per_actor, "warning", "not found") and not says(per_actor, "error", "not found")

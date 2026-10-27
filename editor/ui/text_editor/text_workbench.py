@@ -33,17 +33,18 @@ from __future__ import annotations
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
-    QTextEdit, QLineEdit, QComboBox, QToolButton, QApplication,
+    QTextEdit, QLineEdit, QComboBox, QToolButton,
     QSplitter, QTabBar,
 )
 from PyQt6.QtGui import QFont
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal
 
 from core.models.text import MAX_DEPTH, SEP
 from core.text_markup import parse, resolve
 from ui.common.theme import C, T, QSS
 from ui.common.widgets import BTN_ICON
 from ui.common import icons
+from ui.common.copy_button import CopyButton
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
 from ui.text_editor.colors import TEXT_COLOR
@@ -217,14 +218,10 @@ class TextWorkbench(QWidget):
             title=label("txtwb.key_title"), body=label("txtwb.key_tip")))
         hl.addWidget(self._key_edit)
 
-        self._btn_copy = QToolButton()
-        self._btn_copy.setFixedSize(22, 22)
-        self._btn_copy.setStyleSheet(BTN_ICON)
-        self._btn_copy.setIcon(icons.get("copy", C.TEXT_DIM))
-        self._btn_copy.setToolTip(tooltip(
-            title=label("txtwb.copy_key_title"), body=label("txtwb.copy_tip"),
-        ))
-        self._btn_copy.clicked.connect(self._copy_key)
+        self._btn_copy = CopyButton(
+            self._key_to_copy,
+            tooltip(title=label("txtwb.copy_key_title"), body=label("txtwb.copy_tip")),
+            size=22)
         hl.addWidget(self._btn_copy)
 
         sep = QFrame()
@@ -605,11 +602,6 @@ class TextWorkbench(QWidget):
         self._key_edit.setText(self._texts[0].key if self._texts else "")
         self._blocking = False
 
-    def _copy_key(self):
-        """Copie la clé dans le presse-papier (à coller dans un script)."""
-        if len(self._texts) != 1:
-            return
-        QApplication.clipboard().setText(self._texts[0].key)
-        self._btn_copy.setIcon(icons.get("copied", C.ACCENT))
-        QTimer.singleShot(
-            900, lambda: self._btn_copy.setIcon(icons.get("copy", C.TEXT_DIM)))
+    def _key_to_copy(self):
+        """La clé à coller dans un script ; None tant que la sélection n'est pas UNE entrée."""
+        return self._texts[0].key if len(self._texts) == 1 else None

@@ -1,7 +1,7 @@
 {
   "name": "screw",
   "id": "726864eca684",
-  "asset": "assets/sfx/action/fx-wav/screw.wav",
+  "source": "assets/sfx/action/fx-wav/screw.wav",
   "volume": 100,
   "sample_rate": 0,
   "trim_start": 0,

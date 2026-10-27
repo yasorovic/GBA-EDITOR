@@ -1,7 +1,7 @@
 {
   "name": "Battle Motif",
   "id": "33e24c8979b7",
-  "asset": "assets/jingles/Battle Motif.mod",
+  "source": "assets/jingles/Battle Motif.mod",
   "loop": true,
   "volume": 100,
   "unit": "order",

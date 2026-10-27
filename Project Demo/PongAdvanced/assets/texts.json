@@ -29,13 +29,6 @@
       "scene": "SCR_Victory"
     },
     {
-      "id": "79021d015201",
-      "key": "scr_score_player",
-      "content": "[font=Font8x8 Latin]$score_player[/font]",
-      "note": "",
-      "scene": "SCR_Arena"
-    },
-    {
       "id": "209ef2e2628b",
       "key": "scr_score_cpu",
       "content": "[font=Font8x8 Latin]$score_cpu[/font]",
@@ -43,65 +36,9 @@
       "scene": "SCR_Arena"
     },
     {
-      "id": "027a4282b4bd",
-      "key": "scr_arena_textbox_Page01",
-      "content": "grzerfnhfhjnbntrsdrfg",
-      "note": "",
-      "scene": ""
-    },
-    {
-      "id": "7cfef9929af3",
-      "key": "scr_arena_textbox_Page03",
-      "content": "tretrhvdgfherfh\nhrtehrtehr",
-      "note": "",
-      "scene": ""
-    },
-    {
-      "id": "34befefa272f",
-      "key": "scr_arena_textbox_Page04",
-      "content": "frezrgrhgrherth\nhrthtrhe\nherthrthr",
-      "note": "",
-      "scene": ""
-    },
-    {
-      "id": "f885614f7f6c",
-      "key": "scr_arena_textbox_Page02",
-      "content": "zfzergrhgrhtjnyt",
-      "note": "",
-      "scene": ""
-    },
-    {
-      "id": "56452ba8e8d2",
-      "key": "scr_arena_text_2",
-      "content": "vergzesrg $score_cpu ",
-      "note": "",
-      "scene": ""
-    },
-    {
-      "id": "e7064ba3dbba",
-      "key": "scr_arena_text_1",
-      "content": "grezgrzgr",
-      "note": "",
-      "scene": ""
-    },
-    {
-      "id": "207eb1e6b2fd",
-      "key": "scr_score_player_2",
-      "content": "",
-      "note": "",
-      "scene": ""
-    },
-    {
-      "id": "b1943ec2db45",
-      "key": "scr_text_1",
-      "content": "",
-      "note": "",
-      "scene": ""
-    },
-    {
-      "id": "ed62e57515fb",
-      "key": "scr_text_2",
-      "content": "",
+      "id": "34ae0789b075",
+      "key": "scr_score_player",
+      "content": "[font=Font8x8 Latin]$score_player[/font]",
       "note": "",
       "scene": ""
     }

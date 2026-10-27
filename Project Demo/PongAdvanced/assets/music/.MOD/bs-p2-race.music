@@ -1,7 +1,7 @@
 {
   "name": "bs-p2-race",
   "id": "1b6abca4f07e",
-  "asset": "assets/music/.MOD/bs-p2-race.mod",
+  "source": "assets/music/.MOD/bs-p2-race.mod",
   "loop": true,
   "volume": 100,
   "unit": "order",

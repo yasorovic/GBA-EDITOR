@@ -1,7 +1,7 @@
 {
   "name": "Falling Asleep",
   "id": "9ee893efd737",
-  "asset": "assets/jingles/Falling Asleep.mod",
+  "source": "assets/jingles/Falling Asleep.mod",
   "loop": true,
   "volume": 100,
   "unit": "order",

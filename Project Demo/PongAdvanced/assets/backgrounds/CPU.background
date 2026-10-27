@@ -1,0 +1,92 @@
+{
+  "name": "CPU",
+  "id": "f0079f7e6fb8",
+  "source": "assets/backgrounds/CPU.png",
+  "kind": "ui",
+  "ui_role": "background",
+  "slice_left": 8,
+  "slice_right": 10,
+  "slice_top": 8,
+  "slice_bottom": 8,
+  "settings": {
+    "canvas_size": [
+      48,
+      48
+    ],
+    "image_pos": [
+      0,
+      -23
+    ],
+    "image_size": [
+      48,
+      71
+    ],
+    "compression": {
+      "palettes_max": 1,
+      "global_colors": 256
+    }
+  },
+  "encoded": {
+    "source_stamp": "1368:1793084564644364800:43b2a20dca1c1955",
+    "encoded_for": "44ccd7cfe900",
+    "palettes": [
+      ["#000000", "#F8F8F8", "#E0E0E0", "#B0B0B0", "#808080", "#585858", "#505050", "#484848", "#383838", "#303030", "#282828", "#202020", "#181818", "#101010", "#080808", "#000000"]
+    ],
+    "tileset": [
+      "feebaaaafeebaaaafeebaaaafeebaaaafeebaaaafeebaaaafeebaaaafeebaaaa",
+      "aaaaaaaaaaaaaabbaaabd966aaaa6433aaa52111ab921134ab61125aab51126a",
+      "aaaaaaaabaaabbbb8bda767734774333113421112144211465a6212488952112",
+      "aaaaaaaabaaabbbb8bdc8668345a433411143113411331133113311322243113",
+      "aaaaaaaaaabbbaaaba8669aad84336aae83114aae83114aaf83114aab62115aa",
+      "aaab86cbaaab86cbaaab86cbaaab86cbaaab86cbaaab86cbaaab86cbaaab86cb",
+      "feebaaaafeebaaaafeebaaaafeebaaaafeebaaaafeebaaaafeebaaaafeebaabb",
+      "ab821134aba42111aaaa4332aaaac965aaaaaaaaaaaaaabbaaaaaaaabbbbbbbb",
+      "32442112113421153457333a8cc98679aaaaaaaaaaaabbbaaaaaaaaabbbbbbbb",
+      "345b4112889b8311ccbab643aaaaabdaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbb",
+      "431118ba111139ba33447aaa67bcbaaaaaaaaaaabbaaaaaaaaaaaaaabbbbbbbb",
+      "aaab86cbaaab86cbaaab86cbaaab86cbaaab86cbaaab86cbaaab86cbbaab86cb",
+      "feebabccfeebacddfeebacdefeebacdffeebacdefeebacdefeebacdefeebacde",
+      "ccccccccdccccccceeeeeeeeffffffffffffffffffffffffffffffffffffffff",
+      "cccccccccccccccceeeeeeeeffffffffffffffffffffffffffffffffffffffff",
+      "ccbb86cbcbbb86cbcbbb86cbdbab86cbdbab86cbdbab86cbdbab86cbdbab86cb",
+      "feebacdefeebacdefeebacdefeebacdefeebacdefeebacdefeebacdefeebacde",
+      "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "dbab86cbdbab86cbdbab86cbdbab86cbdbab86cbdbab86cbdbab86cbdbab86cb",
+      "feebacdefeebacdefeebacdefeebacdefeebacdefeebacdefeebacdefeebacdc",
+      "ffffffffffffffffffffffffffffffffffffffffffffffffeeeeeeeecccccccc",
+      "dbab86cbdbab86cbdbab86cbdbab86cbdbab86cbdbab86cbcbab86cbbbab86cb",
+      "feebabccfeebabbbfeebaaaafeebabbbfeedddddfeeeeeeeffffffffffffffff",
+      "ccccccccbbbbbbbbaaaaaaaabbbbbbbbddddddddeeeeeeeeffffffffffffffff",
+      "bbab86cbbbab97cbaaab86cbbbab97cbdddddbbbeeeeeeccfffffeeeffffffff"
+    ],
+    "tilemap": [
+      [0, 1, 2, 3, 4, 5],
+      [6, 7, 8, 9, 10, 11],
+      [12, 13, 14, 14, 14, 15],
+      [16, 17, 17, 17, 17, 18],
+      [19, 20, 20, 20, 20, 21],
+      [22, 23, 23, 23, 23, 24]
+    ],
+    "tiles_w": 6,
+    "tiles_h": 6,
+    "source_palettes": [
+      ["#000000", "#F8F8F8", "#E0E0E0", "#B0B0B0", "#808080", "#585858", "#505050", "#484848", "#383838", "#303030", "#282828", "#202020", "#181818", "#101010", "#080808", "#000000"]
+    ],
+    "diagnostics": {
+      "src_w": 48,
+      "src_h": 48,
+      "multiple_of_8": true,
+      "tiles_w": 6,
+      "tiles_h": 6,
+      "max_tile_colors": 24,
+      "tiles_reduced": 6,
+      "pre_merge_palettes": 3,
+      "final_palettes": 1,
+      "unique_tiles": 25,
+      "tiles_merged": 0,
+      "src_indexed": false,
+      "src_colors": 30,
+      "src_capped": false
+    }
+  }
+}

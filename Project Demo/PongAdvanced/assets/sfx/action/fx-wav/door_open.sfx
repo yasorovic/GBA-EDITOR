@@ -1,7 +1,7 @@
 {
   "name": "door_open",
   "id": "d9f61f39b7b5",
-  "asset": "assets/sfx/action/fx-wav/door_open.wav",
+  "source": "assets/sfx/action/fx-wav/door_open.wav",
   "volume": 100,
   "sample_rate": 0,
   "trim_start": 0,

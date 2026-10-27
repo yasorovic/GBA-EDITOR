@@ -810,6 +810,7 @@ class MainWindow(QMainWindow):
         _d.on("cameras_list_changed",  self.scene_tree_panel.refresh)
         _d.on("cameras_list_changed",  self.scene_editor.refresh_cameras)
         _d.on("bg_slot_changed",       self.scene_editor.refresh_bg)
+        _d.on("ui_background_changed", self.scene_editor._reload_ui_regions)
         _d.on("inpaint_layer_changed", self.scene_editor.set_inpaint_layer)
         _d.on("bg_layer_visibility",    self.scene_editor.set_layer_visible)
         _d.on("windows_changed",        self.scene_editor.refresh_windows)

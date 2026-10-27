@@ -1,7 +1,7 @@
 {
   "name": "bs-p2-1-uNoDrum",
   "id": "5df2c3c63530",
-  "asset": "assets/music/.MOD/bs-p2-1-uNoDrum.mod",
+  "source": "assets/music/.MOD/bs-p2-1-uNoDrum.mod",
   "loop": true,
   "volume": 66,
   "unit": "order",

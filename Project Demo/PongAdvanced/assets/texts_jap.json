@@ -16,7 +16,7 @@
     {
       "id": "ca536f594a09",
       "key": "scr_victory_victory",
-      "source": "VICTORY",
+      "source": "$score_cpu",
       "content": "勝利"
     },
     {
@@ -26,14 +26,8 @@
       "content": "敗北"
     },
     {
-      "id": "79021d015201",
-      "key": "scr_arena_score_player",
-      "source": "[font=Font8x8 Latin]$score_player[/font]",
-      "content": "[font=Font8x8 Latin]$score_player[/font]"
-    },
-    {
       "id": "209ef2e2628b",
-      "key": "scr_arena_score_cpu",
+      "key": "scr_score_cpu",
       "source": "[font=Font8x8 Latin]$score_cpu[/font]",
       "content": "[font=Font8x8 Latin]$score_cpu[/font]"
     }

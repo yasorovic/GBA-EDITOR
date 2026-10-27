@@ -764,8 +764,10 @@ class SceneInspector(QWidget):
             if layer.background_name:
                 ba = self._project.get_background(layer.background_name)
                 ap = self._project.background_image_path(ba, layer.background_name)
-                if ap.exists():
+                if ba is not None and ap.exists():
                     row.set_asset(str(ap))
+                else:
+                    row.set_missing(layer.background_name)      # choisi, mais le fond ou son image n'existe plus
             row.set_speed(layer.scroll_speed)
             current_pal_name = (
                 active_names[layer.pal_bank]

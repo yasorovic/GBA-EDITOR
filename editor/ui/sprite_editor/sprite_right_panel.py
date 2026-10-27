@@ -233,6 +233,9 @@ class SpriteRightPanel(QWidget):
     def load_sprite(self, sprite: SpriteAsset, project: Project):
         self._project = project
         self._sprite  = sprite
+        if sprite is None:                  # sélection vidée : les gestionnaires testent déjà `_sprite`
+            self._state = None
+            return
         self._state   = sprite.states[0] if sprite.states else None
         self._blocking = True
 

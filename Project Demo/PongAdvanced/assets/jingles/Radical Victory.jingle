@@ -1,7 +1,7 @@
 {
   "name": "Radical Victory",
   "id": "31321945d292",
-  "asset": "assets/jingles/Radical Victory.mod",
+  "source": "assets/jingles/Radical Victory.mod",
   "loop": true,
   "volume": 100,
   "unit": "order",

@@ -111,15 +111,19 @@ class SpriteCenterPanel(QWidget):
         self._sprite_canvas.set_own_palette(getattr(sprite, "own_palette", []))
         self._anim_timer.stop()
         self._sprite_canvas_panel.toolbar.btn_play.setChecked(False)
-        self._sprite_canvas_panel.set_info(
-            tiles=sprite.tiles_per_frame * sum(
-                len(sd.frames)
-                for s in sprite.states
-                for sd in s.directions
-                if sd.mirror_of is None
-            ),
-            unique=sprite.tiles_per_frame,
-        )
+        if sprite is None:                  # sélection vidée : plus de sprite, le reste du panneau teste déjà `_sprite`
+            self._state = self._sd = None
+            self._sprite_canvas_panel.set_info(tiles=0, unique=0)
+        else:
+            self._sprite_canvas_panel.set_info(
+                tiles=sprite.tiles_per_frame * sum(
+                    len(sd.frames)
+                    for s in sprite.states
+                    for sd in s.directions
+                    if sd.mirror_of is None
+                ),
+                unique=sprite.tiles_per_frame,
+            )
         self._spritesheet.load(self._abs_path())
         self._load_paint_strip()
 

@@ -1,7 +1,7 @@
 {
   "name": "bump",
   "id": "c7dfcdfcfac7",
-  "asset": "assets/sfx/action/fx-wav/bump.wav",
+  "source": "assets/sfx/action/fx-wav/bump.wav",
   "volume": 100,
   "sample_rate": 0,
   "trim_start": 0,

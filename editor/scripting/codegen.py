@@ -529,6 +529,10 @@ class CodeGen:
         # la structure de pool, ou statique de fichier).
         self._script = script
         self._note_held_refs(script)
+        # Un `local` de tête qui tient une référence (`interface:get`, `sfx.play`) est typé
+        # comme dans le checker : sans cela, `zone:clear()` retombait sur une méthode d'acteur.
+        for loc in script.locals:
+            self._note_ref(loc.name, loc.value)
         self._enum_exports = {loc.name: list(loc.export_values) for loc in script.locals
                               if loc.export_type == "enum" and loc.export_values}
         self._plan_sequences(script)

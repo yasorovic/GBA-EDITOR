@@ -1,7 +1,7 @@
 {
   "name": "wave_beam",
   "id": "8260c7d5f235",
-  "asset": "assets/sfx/action/fx-wav/wave_beam.wav",
+  "source": "assets/sfx/action/fx-wav/wave_beam.wav",
   "volume": 100,
   "sample_rate": 0,
   "trim_start": 0,

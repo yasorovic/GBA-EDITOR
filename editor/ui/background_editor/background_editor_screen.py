@@ -796,6 +796,8 @@ class BgPropertiesPanel(QWidget):
         for name, sp in self._canvas_spins.items():
             sp.blockSignals(True)
             sp.setValue(values[name])
+            if name.startswith("canvas_"):
+                sp.setSingleStep(8 if self._ba is not None and self._ba.is_ui else 1)      # un fond d'interface : multiples de 8
             sp.blockSignals(False)
         self._canvas_size_host.setVisible(canvas_editable)
         self._canvas_fixed.setVisible(not canvas_editable)
@@ -2116,7 +2118,7 @@ class BackgroundEditorScreen(QWidget):
         self._compress_async(
             ba, self._project.background_image_path(ba), token,
             ba.quantize_method, ba.dither,
-            then=lambda: self._resync(ba),
+            then=lambda: self._resync(ba) if self._props._ba is ba else None,      # un autre fond a pu être choisi depuis
             prep=prep)
 
     def _job_from_settings(self, ba, settings: dict) -> EncodingJob:
@@ -2298,6 +2300,11 @@ class BackgroundEditorScreen(QWidget):
             # Sans encodage : il se fait plus bas, hors-thread. La commande n'est poussée qu'une fois le fond réglé.
             gesture = asset_creation.create_from_source(self._project, "backgrounds", [dst], defer_encoding=True)
             ba = gesture.items[0]
+        else:
+            # Le fichier d'un fond existant a été écrasé : canvas, pose et overrides se disaient pour l'ANCIENNE image
+            # (comme `_on_replace`).
+            ba.canvas_size = ba.image_pos = ba.image_size = None
+            ba.palette_overrides = {}
         # Le type vient du « + » sur lequel on a cliqué : la section où l'auteur
         # range l'image dit son emploi mieux que n'importe quelle heuristique
         # (rien dans les pixels ne distingue un cadre de dialogue d'un décor).

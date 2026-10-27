@@ -1,7 +1,7 @@
 {
   "name": "fire_shot",
   "id": "d0f2d45702db",
-  "asset": "assets/sfx/action/fx-wav/fire_shot.wav",
+  "source": "assets/sfx/action/fx-wav/fire_shot.wav",
   "volume": 100,
   "sample_rate": 0,
   "trim_start": 0,

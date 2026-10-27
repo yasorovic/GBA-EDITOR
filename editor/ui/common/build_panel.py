@@ -135,6 +135,21 @@ class DiagnosticsView(QWidget):
             title=label('build.refresh_title'), body=label('build.refresh_tip')))
         self._btn_refresh.clicked.connect(lambda: self.refresh_requested.emit())
         h.addWidget(self._btn_refresh)
+        # Une vraie icône (pas un caractère de police, dont le glyphe de repli change et se rogne) et une largeur
+        # fixe, celle du plus long des deux textes : le bouton ne bouge pas quand il passe de « Copy » à « Copied ».
+        self._btn_copy = bar_button(label('build.copy'))
+        self._rest_copy_icon()
+        metrics = self._btn_copy.fontMetrics()
+        self._btn_copy.setFixedWidth(
+            max(metrics.horizontalAdvance(label('build.copy')), metrics.horizontalAdvance(label('build.copied')))
+            + self._btn_copy.iconSize().width() + 28)
+        self._btn_copy.setToolTip(tooltip(title=label('build.copy_title'), body=label('build.copy_tip')))
+        self._btn_copy.clicked.connect(self._copy_all)
+        self._copy_restore = QTimer(self)             # enfant de la vue : il disparaît avec elle
+        self._copy_restore.setSingleShot(True)
+        self._copy_restore.setInterval(1500)
+        self._copy_restore.timeout.connect(self._rest_copy_button)
+        h.addWidget(self._btn_copy)
         self._summary = QLabel("—")
         self._summary.setFont(QFont(T.UI, T.SM))
         self._summary.setStyleSheet(f"color:{C.TEXT_MUTED};")
@@ -168,6 +183,27 @@ class DiagnosticsView(QWidget):
         else:
             self._summary.setText(
                 label('build.counts', value=len(warnings), value_2=len(errors)))
+
+    def text_for_clipboard(self) -> str:
+        """Une ligne par message, dans l'ordre affiché (erreurs d'abord), au format du journal de build."""
+        return "\n".join(m.console_line() for m in self._msgs)
+
+    def _copy_all(self):
+        """Copie toute la liste dans le presse-papiers ; le bouton le confirme un instant."""
+        from PyQt6.QtWidgets import QApplication
+        from ui.common import icons
+        QApplication.clipboard().setText(self.text_for_clipboard())
+        self._btn_copy.setText(label('build.copied'))
+        self._btn_copy.setIcon(icons.get("copied", C.ACCENT))
+        self._copy_restore.start()
+
+    def _rest_copy_icon(self):
+        from ui.common import icons
+        self._btn_copy.setIcon(icons.get("copy", C.TEXT_DIM))
+
+    def _rest_copy_button(self):
+        self._btn_copy.setText(label('build.copy'))
+        self._rest_copy_icon()
 
     def _on_row(self, item):
         i = self._list.row(item)

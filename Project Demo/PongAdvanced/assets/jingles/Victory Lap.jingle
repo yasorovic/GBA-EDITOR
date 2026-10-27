@@ -1,7 +1,7 @@
 {
   "name": "Victory Lap",
   "id": "631a3a0a3cb3",
-  "asset": "assets/jingles/Victory Lap.mod",
+  "source": "assets/jingles/Victory Lap.mod",
   "loop": true,
   "volume": 100,
   "unit": "order",

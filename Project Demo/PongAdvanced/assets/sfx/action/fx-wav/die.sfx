@@ -1,7 +1,7 @@
 {
   "name": "die",
   "id": "d1c418d94913",
-  "asset": "assets/sfx/action/fx-wav/die.wav",
+  "source": "assets/sfx/action/fx-wav/die.wav",
   "volume": 100,
   "sample_rate": 0,
   "trim_start": 0,

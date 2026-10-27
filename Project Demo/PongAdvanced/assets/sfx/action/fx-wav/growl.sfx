@@ -1,7 +1,7 @@
 {
   "name": "growl",
   "id": "915d9f7f6e0c",
-  "asset": "assets/sfx/action/fx-wav/growl.wav",
+  "source": "assets/sfx/action/fx-wav/growl.wav",
   "volume": 100,
   "sample_rate": 0,
   "trim_start": 0,

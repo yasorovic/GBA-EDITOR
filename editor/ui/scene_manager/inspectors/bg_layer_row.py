@@ -12,6 +12,7 @@ lui. Seule celle-ci vivait, et son unique client est l'inspecteur de scène —
 d'où sa place ici."""
 from ui.common.labels import label
 from ui.common.tooltip import tooltip
+from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtWidgets import (
@@ -91,9 +92,7 @@ class BgLayerRow(QFrame):
             f"background:{C.BG_INPUT};border:1px solid {C.BORDER_MID};border-radius:2px;"
             f"color:{C.TEXT_MUTED};font-size:14px;"
         )
-        self._thumb.setText("🖼")
-        self._thumb.setToolTip(tooltip(
-            title=label('bglayer.image_title'), body=label('bglayer.image_tip')))
+        self._show_empty()
         self._thumb.setCursor(Qt.CursorShape.PointingHandCursor)
         self._thumb.mousePressEvent = lambda e: self._open_dialog()
 
@@ -307,22 +306,43 @@ class BgLayerRow(QFrame):
         popup.picked.connect(lambda name: self.asset_changed.emit(self.slot_index, name))
         popup.show_below(self._thumb)
 
+    # Trois états de la vignette : l'APERÇU d'un fond, « vide » (aucun fond choisi), « introuvable » (un fond est
+    # choisi, mais il n'existe plus ou son image a disparu).
+
+    def _show_glyph(self, icon: str, color: str) -> None:
+        from ui.common.icons import get as _ico
+        self._thumb.setPixmap(_ico(icon, color).pixmap(QSize(22, 22)))
+        self._thumb.setText("")
+
+    def _show_empty(self) -> None:
+        self._show_glyph("empty", C.TEXT_MUTED)
+        self._thumb.setToolTip(tooltip(title=label('bglayer.empty_title'), body=label('bglayer.empty_tip')))
+
+    def set_missing(self, name: str) -> None:
+        """Le fond `name` est choisi mais introuvable : une icône d'image brisée, en rouge ; « × » reste là pour vider."""
+        self._path = ""
+        self._show_glyph("background_missing", C.ACCENT_RED)
+        self._thumb.setToolTip(tooltip(title=label('bglayer.missing_title'), body=label('bglayer.missing_tip', name=name)))
+        self._btn_clear.setVisible(True)
+
     def set_asset(self, path: str):
         self._path = path
         px = QPixmap(path)
-        if not px.isNull():
-            self._thumb.setPixmap(
-                px.scaled(46, 30,
-                          Qt.AspectRatioMode.KeepAspectRatio,
-                          Qt.TransformationMode.SmoothTransformation)
-            )
-            self._thumb.setText("")
+        if px.isNull():                       # un fichier illisible vaut un fond introuvable
+            self.set_missing(Path(path).stem)
+            return
+        self._thumb.setPixmap(
+            px.scaled(46, 30,
+                      Qt.AspectRatioMode.KeepAspectRatio,
+                      Qt.TransformationMode.SmoothTransformation)
+        )
+        self._thumb.setText("")
+        self._thumb.setToolTip(tooltip(title=label('bglayer.image_title'), body=label('bglayer.image_tip')))
         self._btn_clear.setVisible(True)
 
     def clear_asset(self):
         self._path = ""
-        self._thumb.setPixmap(QPixmap())
-        self._thumb.setText("🖼")
+        self._show_empty()
         self._btn_clear.setVisible(False)
 
     def set_speed(self, value: float):

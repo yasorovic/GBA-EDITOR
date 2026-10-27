@@ -1,7 +1,7 @@
 {
   "name": "ui1",
   "id": "3d73eaf01f2a",
-  "asset": "assets/sfx/action/fx-wav/ui1.wav",
+  "source": "assets/sfx/action/fx-wav/ui1.wav",
   "volume": 100,
   "sample_rate": 0,
   "trim_start": 0,

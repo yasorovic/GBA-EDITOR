@@ -1,7 +1,7 @@
 {
   "name": "Battle Encounter",
   "id": "2e4ad9f425d0",
-  "asset": "assets/jingles/Battle Encounter.mod",
+  "source": "assets/jingles/Battle Encounter.mod",
   "loop": false,
   "volume": 100,
   "unit": "order",

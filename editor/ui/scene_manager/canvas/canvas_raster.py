@@ -45,22 +45,31 @@ class BgLayerRaster:
 
     TILE = 8
 
-    def __init__(self, compiled: dict, bank_rgb_for):
-        # compiled     : {tiles_w, tiles_h, tileset(list[hex]), tilemap(list[SE]),
-        #                 palettes(list[list[int]] BGR555)} — palettes d'origine.
-        # bank_rgb_for : callable(slot:int) -> list[(r,g,b)] (16) | None, banque
-        #                active de la scène pour un override.
+    _EMPTY_BANK = [(0, 0, 0)] * 16        # une banque jamais copiée dans PAL_BG_RAM : du noir
+
+    def __init__(self, compiled: dict, bank_rgb_for, hardware_banks: Optional[list] = None):
+        # compiled       : {tiles_w, tiles_h, tileset(list[hex]), tilemap(list[SE]),
+        #                   palettes(list[list[int]] BGR555)} — palettes d'origine.
+        # bank_rgb_for   : callable(slot:int) -> list[(r,g,b)] (16) | None, banque
+        #                  active de la scène pour un override.
+        # hardware_banks : les 16 banques de PAL_BG_RAM telles que la ROM les remplit (list[16 de [(r,g,b)]*16 | None]),
+        #                  donné SEULEMENT quand le bloc de palettes du fond n'a pas trouvé de place : le build lit alors
+        #                  les banques 0.. au lieu de celles du fond, et le canvas montre la même chose.
         self.tiles_w = compiled["tiles_w"]
         self.tiles_h = compiled["tiles_h"]
         self._tilemap = list(compiled["tilemap"])
         self._bpp = compiled.get("bpp", 4)
+        self._hardware = hardware_banks
         if self._bpp == 8:
             # 8bpp : tuiles en octets, UNE palette de 256 couleurs (pas de banques,
             # pas d'override de scène — cf. _pal_for).
             from core.models.gba_color import bgr555_to_rgb888
             self._tiles = [hex_to_tile8(t) for t in compiled["tileset"]]
-            pal = compiled["palettes"][0] if compiled["palettes"] else []
-            self._pal_rgb = [[bgr555_to_rgb888(c) for c in pal]]
+            if hardware_banks is not None:           # PAL_BG_RAM telle quelle : l'index de pixel lit les 256 entrées
+                self._pal_rgb = [[c for bank in hardware_banks for c in (bank or self._EMPTY_BANK)]]
+            else:
+                pal = compiled["palettes"][0] if compiled["palettes"] else []
+                self._pal_rgb = [[bgr555_to_rgb888(c) for c in pal]]
         else:
             self._tiles = [hex_to_tile(t) for t in compiled["tileset"]]
             self._pal_rgb = [_pal_to_rgb16(pal) for pal in compiled["palettes"]]
@@ -104,6 +113,8 @@ class BgLayerRaster:
             if bank:
                 return bank
         _, pb = self._cell_grid(cell)
+        if self._hardware is not None and self._bpp != 8:
+            return (self._hardware[pb] if pb < 16 else None) or self._EMPTY_BANK     # la banque `pb` de la ROM
         return self._pal_rgb[pb] if pb < len(self._pal_rgb) else self._pal_rgb[0]
 
     # ── Composition ───────────────────────────────────────────────
@@ -143,6 +154,19 @@ def _pil_to_qimage(img) -> QImage:
                   QImage.Format.Format_RGBA8888).copy()
 
 
+def _hardware_banks(p: Project, scene, ba) -> Optional[list]:
+    """Les banques de PAL_BG_RAM comme la ROM les remplira, quand le fond `ba` n'a pas trouvé de bloc libre dans la scène
+    (cf. `SceneBankLayout.bg_overflowed`) ; None sinon — le fond se rend alors avec ses propres palettes. Le canvas et le
+    build ne montrent ainsi jamais deux choses différentes."""
+    if ba is None or ba.mode == "bitmap":
+        return None
+    from codegen.palette_alloc import scene_bank_layout
+    layout = scene_bank_layout(p, scene, "bg")
+    if not layout.bg_overflowed(ba):
+        return None
+    return [_pal_to_rgb16(colors) if colors else None for colors in layout.slot_colors]
+
+
 def build_bg_raster(p: Project, scene, layer, ap) -> Optional["BgLayerRaster"]:
     """Construit le `BgLayerRaster` d'un layer depuis sa palette d'origine
     (représentation compressée de l'asset). Peignable pour TOUT layer ayant une
@@ -165,7 +189,7 @@ def build_bg_raster(p: Project, scene, layer, ap) -> Optional["BgLayerRaster"]:
         b = resolve_palette_bank(p, scene.active_bg_palettes, slot)
         return _pal_to_rgb16(b.colors) if b and b.colors else None
 
-    raster = BgLayerRaster(compiled, _bank_rgb_for)
+    raster = BgLayerRaster(compiled, _bank_rgb_for, _hardware_banks(p, scene, ba))
     raster.render(getattr(layer, "tile_palette_overrides", {}) or {})
     return raster
 
@@ -186,6 +210,15 @@ def bg_pixmap(p: Project, scene, layer, ap) -> Optional[QPixmap]:
     if raster is not None:
         return raster.to_pixmap()
     return QPixmap(str(ap))
+
+
+def encoded_pixmap(ba) -> Optional[QPixmap]:
+    """Le fond tel que l'encodage le porte (canvas, pose, taille, rembourrage à 8 compris) : ce que la ROM affichera, et
+    non le PNG brut. None tant que rien n'est compressé."""
+    if ba is None or not (ba.tileset or ba.bitmap):
+        return None
+    from core.bg_bake import render_rgba
+    return QPixmap.fromImage(_pil_to_qimage(render_rgba(ba)))
 
 
 def bitmap_pixmap(ba) -> Optional[QPixmap]:

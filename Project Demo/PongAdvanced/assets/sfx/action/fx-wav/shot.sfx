@@ -1,7 +1,7 @@
 {
   "name": "shot",
   "id": "a6ab495f308a",
-  "asset": "assets/sfx/action/fx-wav/shot.wav",
+  "source": "assets/sfx/action/fx-wav/shot.wav",
   "volume": 100,
   "sample_rate": 0,
   "trim_start": 0,

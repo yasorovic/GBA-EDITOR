@@ -1,7 +1,7 @@
 {
   "name": "bs-p2-greenhatwake",
   "id": "da9576d0cb1d",
-  "asset": "assets/music/.MOD/bs-p2-greenhatwake.mod",
+  "source": "assets/music/.MOD/bs-p2-greenhatwake.mod",
   "loop": true,
   "volume": 100,
   "unit": "order",

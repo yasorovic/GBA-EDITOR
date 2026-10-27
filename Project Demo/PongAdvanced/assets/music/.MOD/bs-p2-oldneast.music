@@ -1,7 +1,7 @@
 {
   "name": "bs-p2-oldneast",
   "id": "ea91125b8989",
-  "asset": "assets/music/.MOD/bs-p2-oldneast.mod",
+  "source": "assets/music/.MOD/bs-p2-oldneast.mod",
   "loop": true,
   "volume": 54,
   "unit": "order",

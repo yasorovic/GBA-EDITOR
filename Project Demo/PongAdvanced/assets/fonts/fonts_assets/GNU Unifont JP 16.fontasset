@@ -1,17 +1,7 @@
 {
   "name": "GNU Unifont JP 16",
   "id": "28f1c26c0d5b",
-  "sources": {
-    "regular": [
-      "unifont-jp-17.0.04"
-    ]
-  },
-  "faces": [
-    {
-      "source_name": "unifont-jp-17.0.04",
-      "weight": 400
-    }
-  ],
+  "sources": {},
   "auto_family": "Unifont-JP",
   "pixel_height": 16,
   "line_height": 16,

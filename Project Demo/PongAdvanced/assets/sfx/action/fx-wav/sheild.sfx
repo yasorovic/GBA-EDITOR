@@ -1,7 +1,7 @@
 {
   "name": "sheild",
   "id": "50ec8ce78dcb",
-  "asset": "assets/sfx/action/fx-wav/sheild.wav",
+  "source": "assets/sfx/action/fx-wav/sheild.wav",
   "volume": 100,
   "sample_rate": 0,
   "trim_start": 0,

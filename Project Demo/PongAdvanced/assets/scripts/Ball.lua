@@ -1,6 +1,12 @@
 -- La balle : physique, rebonds, décompte des points, effets et musique.
 -- Les scores DESCENDENT : chaque camp part de 10, marquer retire un point au
 -- compteur de celui qui marque, et le premier à zéro gagne.
+--
+-- Les murs haut et bas sont ceux de la carte de collision de la scène. La balle
+-- les SONDE avant de bouger (collision:tile_at, un pixel devant son bord d'attaque)
+-- et rebondit à leur contact : si elle y entrait, le moteur résoudrait d'abord
+-- l'axe X dans le mur, annulerait sa vitesse horizontale et la décalerait de côté.
+-- Les bords gauche et droit de l'écran sont les buts (test sur la position).
 
 local speed = 512        -- vitesse horizontale, Q8 (512 = 2 px/frame)
 local serve_dir = 1      -- sens du service : 1 = vers la droite, -1 = vers la gauche
@@ -34,6 +40,37 @@ function place_ball(direction)
     if music_level > 1 then
         music_box:trigger("slow_down")
         music_level = 1
+    end
+end
+
+-- Son et effet d'un rebond sur le mur haut ou bas.
+function wall_bounce()
+    sfx:play("WALLBOUNCE")
+    fx = FX_SQUASH
+    fx_t = 0
+end
+
+-- Un but : side = -1 si la balle sort à gauche (le joueur a laissé passer,
+-- l'adversaire marque), 1 si elle sort à droite (le joueur marque).
+function goal_scored(side)
+    if side < 0 then
+        global.score_cpu = global.score_cpu - 1
+        if global.score_cpu <= 0 then
+            global.winner = 1
+            scene:switch("SCR_Victory")
+            return
+        end
+        sfx:play("GoalTaken")
+        place_ball(-1)
+    else
+        global.score_player = global.score_player - 1
+        if global.score_player <= 0 then
+            global.winner = 0
+            scene:switch("SCR_Victory")
+            return
+        end
+        sfx:play("GOAL")
+        place_ball(1)
     end
 end
 
@@ -82,49 +119,34 @@ function on_update()
         return
     end
 
-    self:apply_velocity()
+    -- Mur haut ou bas : on sonde le pixel juste devant le bord d'attaque de la balle
+    -- (8 px de haut), à la distance qu'elle va parcourir cette image (arrondie au-dessus).
+    -- Vers le bas, on sonde un pixel de plus : une balle posée pile sur le mur (sans le
+    -- pénétrer) serait immobilisée par le moteur, sans rebond, et glisserait le long du mur.
     local pos = self.position
     local vel = self.velocity
-
-    -- Rebond sur le haut et le bas de l'écran
-    if pos.y < 0 then
-        self.position = vec2(pos.x, 0)
-        self.velocity = vec2(vel.x, math.abs(vel.y))
-        sfx:play("WALLBOUNCE")
-        fx = FX_SQUASH
-        fx_t = 0
-    end
-    if pos.y > 152 then
-        self.position = vec2(pos.x, 152)
-        self.velocity = vec2(vel.x, -math.abs(vel.y))
-        sfx:play("WALLBOUNCE")
-        fx = FX_SQUASH
-        fx_t = 0
-    end
-
-    -- Sortie à gauche : le joueur a laissé passer, l'adversaire marque
-    if pos.x < -8 then
-        global.score_cpu = global.score_player - 1
-        if global.score_cpu <= 0 then
-            global.winner = 1
-            scene:switch("SCR_Victory")
-            return
+    if vel.y ~= 0 then
+        local ahead = (math.abs(vel.y) + 255) / 256
+        local probe_y = pos.y - ahead
+        if vel.y > 0 then
+            probe_y = pos.y + 8 + ahead
         end
-        sfx:play("GoalTaken")
-        place_ball(-1)
+        if collision:tile_at(pos.x + 4, probe_y) ~= 0 then
+            self.velocity = vec2(vel.x, 0 - vel.y)
+            wall_bounce()
+        end
+    end
+
+    self:apply_velocity()
+
+    -- Les bords gauche et droit de l'écran sont les buts : la balle fait 8 px de large.
+    pos = self.position
+    if pos.x <= 0 then
+        goal_scored(-1)
         return
     end
-
-    -- Sortie à droite : l'adversaire a laissé passer, le joueur marque
-    if pos.x > 240 then
-        global.score_player = global.score_cpu - 1
-        if global.score_player <= 0 then
-            global.winner = 0
-            scene:switch("SCR_Victory")
-            return
-        end
-        sfx:play("GOAL")
-        place_ball(1)
+    if pos.x >= 232 then
+        goal_scored(1)
         return
     end
 

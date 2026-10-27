@@ -1,4 +1,4 @@
--- Raquette du joueur : haut / bas, bornée à l'écran (160 px - 32 px de raquette).
+-- Raquette du joueur : haut / bas, arrêtée par les murs de la carte de collision.
 -- Au choc avec la balle, elle s'écrase en largeur (stretch) et part un peu de
 -- travers (wobble). Les deux effets écrivent des canaux différents du sprite :
 -- ils partagent le même compteur, et chacun retombe seul au neutre passé sa
@@ -6,16 +6,19 @@
 local hit_t = 99   -- au-delà des deux durées : aucun effet au démarrage
 
 function on_update()
-    local y = self.position.y
+    local dy = 0
 
     if input:held("up") then
-        y = y - 2
+        dy = dy - 2
     end
     if input:held("down") then
-        y = y + 2
+        dy = dy + 2
     end
 
-    self.position = vec2(self.position.x, math.clamp(y, 0, 128))
+    -- Déplacement physique : la carte de collision arrête la raquette contre les
+    -- murs haut et bas (self.position la téléporterait à travers).
+    self.velocity = vec2(0, dy * 256)
+    self:apply_velocity()
 
     if hit_t < 99 then
         hit_t = hit_t + 1

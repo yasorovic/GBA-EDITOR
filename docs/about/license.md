@@ -1,7 +1,5 @@
 # Licence
 
-Trois questions reviennent toujours : *que puis-je faire avec Backstage ?*, *que puis-je faire de mon jeu ?* et *qu'y a-t-il d'autre dans la boîte ?* Cette page répond aux trois, simplement. Les textes légaux, eux, font foi : chaque réponse renvoie vers eux.
-
 ```{note}
 Cette page explique, elle ne remplace pas les textes de licence et n'est pas un conseil juridique. En cas de doute sur un projet commercial, demandez conseil à une personne compétente.
 ```

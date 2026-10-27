@@ -1224,6 +1224,27 @@ class _PrioritySceneTree(_Tree):
         self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.itemClicked.connect(self._on_click)
+        # L'arbre est reconstruit à chaque geste : l'ouverture de chaque nœud est retenue ici, par clé stable, pour
+        # que seul ce que l'auteur ouvre (ou le récepteur d'un dépôt) change d'état.
+        self._expanded: dict[tuple, bool] = {}
+        self.itemExpanded.connect(lambda item: self._expanded.__setitem__(self._node_key(item), True))
+        self.itemCollapsed.connect(lambda item: self._expanded.__setitem__(self._node_key(item), False))
+
+    @staticmethod
+    def _node_key(item) -> tuple:
+        """Identité d'un nœud qui survit à la reconstruction (les objets Qt, eux, sont recréés)."""
+        kind = item.data(0, _ROLE_TYPE)
+        obj = item.data(0, _ROLE_OBJ)
+        if kind == T_PRIORITY_GROUP:
+            return (kind, *item.data(0, _ROLE_PATH))
+        if kind == T_UI_LAYOUT:
+            return (kind, getattr(obj, "layout_name", ""))
+        if kind == T_UI_ELEM:
+            return (kind, getattr(item.data(0, _ROLE_PATH), "name", ""), getattr(obj, "name", ""))
+        return (kind, id(obj))
+
+    def _open(self, item, default: bool) -> None:
+        item.setExpanded(self._expanded.get(self._node_key(item), default))
 
     def _populate(self, project: Project, scene: Scene | None):
         self._scene = scene
@@ -1267,7 +1288,9 @@ class _PrioritySceneTree(_Tree):
                         # la vue Priorité ne prétend pas que les enfants sont des
                         # backgrounds.
                         self._populate_bg_ui(group, project, scene, slot)
-                        group.setExpanded(True)
+                        self._open(group, True)
+                if kind == "obj":
+                    self._open(group, False)
         self.blockSignals(False)
         self._fit()
 
@@ -1320,8 +1343,8 @@ class _PrioritySceneTree(_Tree):
                 item.setForeground(0, QColor(_TEXT))
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsDragEnabled)
                 items[element.name] = item
-                item.setExpanded(True)
-            root.setExpanded(True)
+                self._open(item, True)
+            self._open(root, True)
 
     def _on_click(self, item, _col):
         typ = item.data(0, _ROLE_TYPE)
@@ -1337,32 +1360,52 @@ class _PrioritySceneTree(_Tree):
             if kind == "bg" and not item.isDisabled():
                 get_bus().select(BackgroundLayerSelection(self._scene, slot))
 
-    def dropEvent(self, event):
-        dragged = self.currentItem()
-        target = self.itemAt(event.position().toPoint())
+    def _drop_host(self, dragged, target):
+        """`(groupe récepteur, genre, slot)` si `dragged` peut être déposé sur `target`, sinon None. Un acteur ne se
+        range que sous un OBJ, un nœud Interface que sous un Background disponible et autre que le sien."""
         dtype = dragged.data(0, _ROLE_TYPE) if dragged is not None else None
         if (dragged is None or dtype not in (T_ACTOR, T_UI_LAYOUT)
                 or target is None or self._scene is None):
-            event.ignore()
-            return
+            return None
         host = target if target.data(0, _ROLE_TYPE) == T_PRIORITY_GROUP else target.parent()
         # Un élément d'UI (T_UI_ELEM) a pour parent son nœud, pas un groupe : sa
         # remontée s'arrête donc ici, il ne déplace jamais de slot.
         if host is None or host.data(0, _ROLE_TYPE) != T_PRIORITY_GROUP:
+            return None
+        kind, dest = host.data(0, _ROLE_PATH)
+        if dtype == T_UI_LAYOUT:
+            if kind != "bg" or host.isDisabled():
+                return None
+            node = getattr(dragged.data(0, _ROLE_OBJ), "node", None)       # BoundInterface
+            if node is None or int(getattr(node, "bg_slot", -1)) == dest:
+                return None
+        elif kind != "obj":
+            return None
+        return host, kind, dest
+
+    def dragMoveEvent(self, event):
+        """Le curseur dit « interdit » dès qu'on survole un récepteur qui refuserait le dépôt (un acteur sur un
+        Background, une Interface sur un OBJ), au lieu de laisser relâcher pour ne rien voir arriver."""
+        super().dragMoveEvent(event)
+        if self._drop_host(self.currentItem(), self.itemAt(event.position().toPoint())) is None:
+            event.ignore()
+
+    def dropEvent(self, event):
+        dragged = self.currentItem()
+        target = self.itemAt(event.position().toPoint())
+        resolved = self._drop_host(dragged, target)
+        if resolved is None:
             event.ignore()
             return
-        kind, dest = host.data(0, _ROLE_PATH)
+        host, kind, dest = resolved
+        dtype = dragged.data(0, _ROLE_TYPE)
+        # Seul le récepteur s'ouvre : le reste de l'arbre garde l'état que l'auteur lui a donné.
+        self._expanded[self._node_key(host)] = True
 
         # ── Nœud Interface déposé sur un Background : changer son slot BG ──
         if dtype == T_UI_LAYOUT:
-            if kind != "bg" or host.isDisabled():
-                event.ignore()
-                return
             bound = dragged.data(0, _ROLE_OBJ)          # BoundInterface
-            node = getattr(bound, "node", None)
-            if node is None or int(getattr(node, "bg_slot", -1)) == dest:
-                event.ignore()
-                return
+            node = bound.node
 
             def persist_slot():
                 get_dispatcher().save_scene()
@@ -1377,9 +1420,6 @@ class _PrioritySceneTree(_Tree):
             return
 
         priority = dest
-        if kind != "obj":
-            event.ignore()
-            return
         actor = dragged.data(0, _ROLE_OBJ)
         before = target.data(0, _ROLE_OBJ) if target.data(0, _ROLE_TYPE) == T_ACTOR else None
         old_order = list(self._scene.actors)

@@ -300,10 +300,10 @@ class BuildPanel(QWidget):
         from codegen import memory_timing
         key = self._combo_timing.currentData()
         self._advanced_timing = key == memory_timing.CUSTOM
-        if self._advanced_timing:
-            self._refresh_timing()
-        else:
+        if not self._advanced_timing:
             self._set_timing(*memory_timing.preset_values(key))
+        # Le changement de valeurs rafraîchit déjà ; quand elles sont déjà celles du préréglage, rien ne le fait.
+        self._refresh_timing()
 
     def _pick_wait_first(self, _index: int):
         from codegen import memory_timing

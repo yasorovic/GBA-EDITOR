@@ -40,3 +40,16 @@ def test_un_reglage_hors_prereglage_ouvre_le_mode_avance(qapp, tmp_path):
     assert panel._combo_timing.currentData() == "custom"
     assert not panel._timing_advanced.isHidden()
     panel.close()
+
+
+def test_quitter_le_mode_avance_sur_un_prereglage_deja_actif_replie_les_champs(qapp, tmp_path):
+    project = Project(tmp_path)
+    panel = BuildPanel(project)
+    panel._combo_timing.setCurrentIndex(panel._combo_timing.findData("custom"))
+    panel._pick_timing(0)
+    assert not panel._timing_advanced.isHidden()
+    panel._combo_timing.setCurrentIndex(panel._combo_timing.findData("fast"))
+    panel._pick_timing(0)          # les valeurs sont déjà celles de "fast" : aucune écriture ne rafraîchit
+    assert _triplet(project) == (3, 1, True)
+    assert panel._timing_advanced.isHidden()
+    panel.close()
