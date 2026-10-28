@@ -1,5 +1,6 @@
 {
   "name": "DMG (GB Default)",
-  "size": 16,
-  "asset": "assets/palettes/DMG (GB Default).hex"
+  "id": "9a453b061978",
+  "source": "assets/palettes/DMG (GB Default).hex",
+  "size": 16
 }

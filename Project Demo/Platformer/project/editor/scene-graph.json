@@ -2,16 +2,8 @@
   "version": 3,
   "scene_positions": {
     "Scene_01": [
-      20.0,
-      20.0
-    ],
-    "Scene": [
-      480.0,
-      80.0
-    ],
-    "Scene_2": [
-      280.0,
-      80.0
+      200.0,
+      -40.0
     ]
   },
   "missing_positions": {},

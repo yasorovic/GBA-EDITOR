@@ -1,8 +1,8 @@
 # Vue d'ensemble
 
 Ce guide explique comment utiliser Backstage pour construire un jeu, sans présumer que vous
-connaissez déjà les formats Game Boy Advance ou le code généré. Il commence par une visite de
-l'éditeur, de vos fichiers et d'une première scène ; chaque page prend quelques minutes et prépare
+connaissez déjà les formats Game Boy Advance ou le code généré. Il commence par un projet de démonstration à
+modifier, puis par une visite de l'éditeur, de vos fichiers et d'une première scène ; chaque page prend quelques minutes et prépare
 la suivante.
 
 ```{figure} overview/img/editor-overview.png
@@ -20,11 +20,12 @@ mesure.
 
 ## Le parcours
 
-1. [Se repérer dans l'éditeur](overview/editor-tour.md) : les six zones de la fenêtre, les écrans et les raccourcis.
-2. [Le projet en une idée](overview/project-idea.md) : ressources, acteurs, et les gestes créer, importer, modifier.
-3. [Le dossier assets](overview/assets-folder.md) : où vivent vos fichiers et l'onglet **Disk**.
-4. [Importer votre première ressource](overview/first-import.md) : depuis l'éditeur, ou depuis le dossier assets.
-5. [Construire une première scène](overview/first-scene.md) : créer une scène, placer un acteur, lancer la ROM.
+1. [Premiers pas](first-steps.md) : ouvrir le projet Platformer, le lancer, changer la vitesse du personnage, varier un ennemi.
+2. [Se repérer dans l'éditeur](overview/editor-tour.md) : les six zones de la fenêtre, les écrans et les raccourcis.
+3. [Le projet en une idée](overview/project-idea.md) : ressources, acteurs, et les gestes créer, importer, modifier.
+4. [Le dossier assets](overview/assets-folder.md) : où vivent vos fichiers et l'onglet **Disk**.
+5. [Importer votre première ressource](overview/first-import.md) : depuis l'éditeur, ou depuis le dossier assets.
+6. [Construire une première scène](overview/first-scene.md) : créer une scène, placer un acteur, lancer la ROM.
 
 ## Continuer
 
@@ -38,6 +39,7 @@ mesure.
 :hidden:
 :maxdepth: 1
 
+Premiers pas <first-steps>
 Se repérer dans l'éditeur <overview/editor-tour>
 Le projet en une idée <overview/project-idea>
 Le dossier assets <overview/assets-folder>

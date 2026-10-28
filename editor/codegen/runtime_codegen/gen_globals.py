@@ -99,6 +99,7 @@ def globals_lines(p, all_scene_data: list[dict], scene_pis: list, n_actors: int,
         "const u8 *g_spool_grp = 0, *g_spool_part = 0, *g_spool_parent = 0;",
         "int   g_affine_dropped = 0;   /* instances affines dessinées sans matrice (les 32 sont prises) */",
         "int   g_next_scene    = -1;",
+        "int   g_scene_force    = 0;   /* scene:switch() raised: reinitialise even the current scene */",
         "",
     ]
     return L

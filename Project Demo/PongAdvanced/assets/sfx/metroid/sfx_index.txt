@@ -1,1 +1,0 @@
-Index of Sounds in mtrd.sav:0 Ê ÊShot1 Ê ÊFeet2 Ê ÊJump3 Ê ÊRoll up4 Ê ÊUnroll5 Ê ÊOpen door6 Ê ÊClose door7 Ê ÊHurt8 Ê ÊKill enemy9 Ê ÊBomb blow10 ÊBomb lay11 ÊIce beam12 Ê Wave beam13 Ê Fire blast14 ÊLava damage15 Ê Low health16 ÊHealth up17 Ê Power up18 ÊMissile19 Ê Big Êexplosion20 Ê Boss growl??

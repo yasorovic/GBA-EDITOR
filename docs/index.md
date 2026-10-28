@@ -57,7 +57,7 @@ Vous savez programmer ? Écrivez le comportement de vos acteurs et parcourez tou
 :link-type: doc
 :class-card: backstage-card backstage-card-blue
 
-Ce qu'est Backstage, ce qu'il fait, ce qu'il ne fait pas, et ce que vous avez le droit d'en faire.
+Ce qu'est Backstage, ce qu'il fait, ce qu'il ne fait pas, et ce que vous avez le droit d'en faire. Cette section arrive bientôt.
 :::
 
 :::{grid-item-card} Architecture

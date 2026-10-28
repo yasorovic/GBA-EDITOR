@@ -148,7 +148,7 @@ function on_collision_enter(other)
 end
 ```
 
-Le Build connaît les pièces d'un prefab quand l'acteur est désigné par son nom (`actor:get("Boss")`, `actor:spawn("Boss", pos)`). Avec `actor:get(i)` ou `other`, l'acteur n'est connu qu'au jeu : on ne nomme pas ses pièces, mais `parent` et `root` marchent. Une variable qui désigne un acteur connu doit désigner le même acteur dans tout le script : si `boss` tient `actor:get("Boss")` dans un handler, donnez un autre nom (`touche`, `cible`) à une variable qui tient autre chose ailleurs. Le détail (garder une pièce d'une image à l'autre, les acteurs posés qui ont un parent de scène, les états d'animation d'une pièce) est dans le guide [Parenté et accesseurs](guides/parente-accesseurs.md).
+Le Build connaît les pièces d'un prefab quand l'acteur est désigné par son nom (`actor:get("Boss")`, `actor:spawn("Boss", pos)`). Avec `actor:get(i)` ou `other`, l'acteur n'est connu qu'au jeu : on ne nomme pas ses pièces, mais `parent` et `root` marchent. Une variable qui désigne un acteur connu doit désigner le même acteur dans tout le script : si `boss` tient `actor:get("Boss")` dans un handler, donnez un autre nom (`touche`, `cible`) à une variable qui tient autre chose ailleurs. Le détail (garder une pièce d'une image à l'autre, les acteurs posés qui ont un parent de scène, les états d'animation d'une pièce) est dans le guide [Parenté et accesseurs](guides/organiser/parente-accesseurs.md).
 
 ### Réagir aux boutons
 

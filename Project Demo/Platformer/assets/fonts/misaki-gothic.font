@@ -1,7 +1,7 @@
 {
   "name": "misaki-gothic",
   "id": "2aea7d912d0d",
-  "asset": "assets/fonts/misaki-gothic.ttf",
+  "source": "assets/fonts/misaki-gothic.ttf",
   "source_format": "ttf",
   "cell_w": 8,
   "cell_h": 8,

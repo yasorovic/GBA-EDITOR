@@ -1,0 +1,58 @@
+{
+  "name": "Player",
+  "id": "f2c45d362310",
+  "components": [
+    {
+      "component_type": "sprite",
+      "id": "sprite",
+      "active": true,
+      "sprite_name": "Player",
+      "initial_state": "Idle",
+      "facing_auto": true,
+      "affine_transform": true,
+      "scale_x": 1.0,
+      "scale_y": 1.0,
+      "rotation": 0,
+      "offset_x": -16,
+      "offset_y": -16,
+      "pivot_x": 0,
+      "pivot_y": 0
+    },
+    {
+      "component_type": "collision_box",
+      "id": "Body",
+      "active": true,
+      "solid": false,
+      "blocks_actors": false,
+      "tag": "player",
+      "x": -13,
+      "y": -13,
+      "w": 26,
+      "h": 23
+    },
+    {
+      "component_type": "script",
+      "id": "script",
+      "active": true,
+      "script": "assets/scripts/Player.lua",
+      "exports_values": {
+        "gravity": 60,
+        "jump_force": 1024
+      }
+    },
+    {
+      "component_type": "collision_box",
+      "id": "Feet",
+      "active": true,
+      "solid": true,
+      "blocks_actors": false,
+      "tag": "Feet",
+      "x": -7,
+      "y": 11,
+      "w": 17,
+      "h": 4
+    }
+  ],
+  "pal_bank": -1,
+  "notes": "Player"
+}

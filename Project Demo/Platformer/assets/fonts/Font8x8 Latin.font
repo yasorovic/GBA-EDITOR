@@ -1,7 +1,7 @@
 {
   "name": "Font8x8 Latin",
   "id": "37d7fa57ff2b",
-  "asset": "assets/fonts/font8x8-latin.png",
+  "source": "assets/fonts/font8x8-latin.png",
   "source_format": "png",
   "cell_w": 8,
   "cell_h": 8,

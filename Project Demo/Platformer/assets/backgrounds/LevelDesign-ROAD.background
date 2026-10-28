@@ -1,7 +1,7 @@
 {
   "name": "LevelDesign-ROAD",
   "id": "01878838ed55",
-  "asset": "assets/backgrounds/LevelDesign-ROAD.png",
+  "source": "assets/backgrounds/LevelDesign-ROAD.png",
   "encoded": {
     "source_stamp": "1608:1791322620871991800:665e788c726406dc",
     "palettes": [

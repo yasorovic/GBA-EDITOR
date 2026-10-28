@@ -60,6 +60,6 @@ chaque image. Choisissez le numéro du calque qui porte votre décor. Lancez **R
 - Le numéro donné à `layer:get` est celui du calque dans l'inspecteur de la scène (de 0 à 3), pas le nom de
   l'image.
 - Pour que les acteurs ne traversent pas le décor, il faut aussi peindre une carte de collision : voir
-  [Décors et collisions](../decors-collisions.md).
+  [Collisions](../acteurs/collisions.md).
 - Les fonctions disponibles sur un calque sont dans le [groupe Layer](../../lua-api/api/scene/layer.md) du
   catalogue de l'API.

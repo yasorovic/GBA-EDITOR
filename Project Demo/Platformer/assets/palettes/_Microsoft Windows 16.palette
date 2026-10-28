@@ -1,5 +1,6 @@
 {
   "name": "_Microsoft Windows 16",
-  "size": 16,
-  "asset": "assets/palettes/_Microsoft Windows 16.hex"
+  "id": "3516972c3217",
+  "source": "assets/palettes/_Microsoft Windows 16.hex",
+  "size": 16
 }

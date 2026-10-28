@@ -451,7 +451,9 @@ def generate_runtime_api(
         a += [
             "",
             "extern int g_next_scene;",
-            "static inline void scene_switch(int idx){ g_next_scene = idx; }",
+            "extern int g_scene_force;",
+            # Le drapeau fait rejouer scene_init quand idx est la scène courante (rechargement).
+            "static inline void scene_switch(int idx){ g_next_scene = idx; g_scene_force = 1; }",
         ]
 
     # Constantes LAYER_* — un fond posé dans une scène (bg_slot 0-3), adressable

@@ -33,7 +33,7 @@ Choisissez son sprite dans l'inspecteur, puis déplacez-le avec l'outil de séle
 
 Un décor se place par les calques **BG0** à **BG3** de l'inspecteur de la scène. Chaque calque
 reçoit un background importé depuis l'écran **Backgrounds**. Le guide
-[Décors et collisions](../../guides/decors-collisions.md) détaille ce geste.
+[Collisions](../../guides/acteurs/collisions.md) détaille ce geste.
 
 ## 4. Surveiller le budget matériel
 

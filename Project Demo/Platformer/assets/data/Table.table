@@ -4,23 +4,28 @@
   "columns": [
     {
       "name": "valeur",
-      "type": "bool"
+      "type": "bool",
+      "color": ""
     },
     {
       "name": "column",
-      "type": "music"
+      "type": "music",
+      "color": ""
     },
     {
       "name": "column_2",
-      "type": "scene"
+      "type": "scene",
+      "color": ""
     },
     {
       "name": "column_3",
-      "type": "int"
+      "type": "int",
+      "color": ""
     },
     {
       "name": "column_5",
-      "type": "int"
+      "type": "int",
+      "color": ""
     }
   ],
   "rows": [

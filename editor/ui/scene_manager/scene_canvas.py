@@ -834,13 +834,9 @@ class SceneEditor(QWidget):
 
     # ── Chargement projet ─────────────────────────────────────────
 
-    def load_project(self, project: Project):
-        self._project = project
-        self._raw_sprite.clear()
-
-        scene = project.active_scene
-
-        # Calculer la taille du canvas à partir des BG PNG réels
+    def _fit_canvas_to_backgrounds(self, scene):
+        """Cale le canvas (et la carte de collision) sur le plus grand fond de la scène."""
+        project = self._project
         max_w, max_h = GBA_W, GBA_H
         for layer in (scene.background_layers if scene else []):
             if not layer.background_name:
@@ -861,15 +857,22 @@ class SceneEditor(QWidget):
 
         # Clamper au plafond monde (32767, coordonnées s16 de la caméra) — pas à
         # 512 : une carte plus grande est streamée au build, pas interdite.
-        self._canvas_w = min(max_w, MAX_CANVAS_W)
-        self._canvas_h = min(max_h, MAX_CANVAS_H)
-        self._gba_scene.resize_canvas(self._canvas_w, self._canvas_h)
-        self._bar.set_canvas_size(self._canvas_w, self._canvas_h)
+        w, h = min(max_w, MAX_CANVAS_W), min(max_h, MAX_CANVAS_H)
+        self._canvas_w, self._canvas_h = w, h
+        self._gba_scene.resize_canvas(w, h)
+        self._bar.set_canvas_size(w, h)
 
-        # Collision map
         if scene:
-            scene.ensure_collision_map(self._canvas_w, self._canvas_h)
+            scene.ensure_collision_map(w, h)
             self._gba_scene.collision_overlay.load(scene.collision_map)
+
+    def load_project(self, project: Project):
+        self._project = project
+        self._raw_sprite.clear()
+
+        scene = project.active_scene
+
+        self._fit_canvas_to_backgrounds(scene)
 
         # Backdrop (sous tous les layers)
         self.refresh_backdrop()
@@ -1494,6 +1497,8 @@ class SceneEditor(QWidget):
         if not self._project or not self._project.active_scene:
             return
         scene = self._project.active_scene
+        # Un fond remplacé peut changer la taille de la scène : le canvas la suit.
+        self._fit_canvas_to_backgrounds(scene)
         shown = set()
         for layer in scene.background_layers:
             if not layer.background_name:

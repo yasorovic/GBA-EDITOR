@@ -1,5 +1,6 @@
 {
   "name": "_Commodore 64",
-  "size": 16,
-  "asset": "assets/palettes/_Commodore 64.hex"
+  "id": "bd504d41d2d7",
+  "source": "assets/palettes/_Commodore 64.hex",
+  "size": 16
 }

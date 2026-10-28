@@ -1,3 +1,4 @@
+.
 # Roadmap
 
 Les prochains gros chantiers de Backstage et où ils en sont. Ce document décrit des intentions,
@@ -10,16 +11,28 @@ pas des promesses : l'ordre et le contenu peuvent bouger au fil des retours.
 
 Il n'y a pas encore de release publique : la version du logiciel est `0.1.x-alpha`. Le moment et le
 numéro de la première release publique seront décidés plus tard ; l'alpha dure jusqu'à la première
-version stable, `1.0.0-stable`. Chaque chantier important
-donne une version `0.Y.0` ; les correctifs et petits chantiers, eux, incrémentent le dernier chiffre.
+version stable, `1.0.0-stable`.
 
-| Version | Chantier | État |
-| --- | --- | --- |
-| 0.1 | État actuel | Base : tout ce qui est déjà livré, dont les chantiers Mises à jour, Assets et disque, Texte et données, Fonds, Interaction avec un acteur |
-| 0.7 | Jouer son jeu dans le navigateur (itch.io) | Conception faite, développement non commencé |
-| 1.0.0-stable | Le pipeline 2D complet (affirmation de capacité) | En route |
+Une étape de la roadmap porte un nom, pas un numéro : l'ordre des sorties dépend de l'avancement, pas
+d'un plan. Le numéro `0.Y.0` n'est attribué qu'à la sortie (voir [Workflow de release](#workflow-de-release)).
 
-### 0.7 : jouer son jeu dans le navigateur
+| Étape | État |
+| --- | --- |
+| Jouer son jeu dans le navigateur (itch.io) | Conception faite, développement non commencé |
+| Le pipeline 2D complet (`1.0.0-stable`, affirmation de capacité) | En route |
+
+### Workflow de release
+
+- Chaque étape se développe dans un worktree et une branche qui portent son nom, sans numéro
+  (`navigateur`, `mises-a-jour`).
+- La version de `editor/core/app_info.py` ne change pas pendant le développement de l'étape.
+- Au merge dans `main`, l'étape prend le `Y` suivant (`0.Y.0`, le dernier chiffre revient à 0) : le
+  commit de release met à jour `APP_VERSION`, le CHANGELOG et le tag. Deux étapes menées en parallèle
+  prennent leur numéro dans l'ordre où elles sont mergées.
+- Le nom de l'étape reste dans le CHANGELOG, qui relie chaque numéro à son contenu.
+- Les correctifs et petits chantiers qui suivent incrémentent le dernier chiffre.
+
+### Jouer son jeu dans le navigateur
 
 Un jeu fini doit pouvoir se jouer sans installer d'émulateur. Cette version ajoute un outil qui
 prend une ROM `.gba` et produit un dossier web prêt à être envoyé sur itch.io, avec un émulateur

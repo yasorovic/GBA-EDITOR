@@ -12,12 +12,12 @@ reste une identité, pas un rang). Pour ce qui reste à faire, voir [ROADMAP.md]
 
 *Le compteur repart de zéro, voir la note ci-dessus.*
 
-Créez un jeu Game Boy Advance de bout en bout depuis l'éditeur, puis compilez-le en ROM `.gba`.
+Créer un jeu Game Boy Advance de bout en bout depuis l'éditeur, puis le compiler en ROM `.gba`.
 Cette première version réunit tout ce qui a été livré jusqu'ici (jalons v0.2 à v0.28, puis les chantiers
 importants 0.2 à 0.6, livrés avant toute release publique) :
 
 - **Scènes et décors** : placement des acteurs, collisions et pentes, caméra, fonds animés,
-  palettes, polices et sprites importés depuis vos images.
+  palettes, polices et sprites importés depuis des images.
 - **Scripts** : un Lua simplifié traduit en C, avec complétion, diagnostics et références
   à l'API vérifiées à la construction.
 - **Son et texte** : musique par scène, effets, jingles, textes traduisibles, dialogues
@@ -26,7 +26,7 @@ importants 0.2 à 0.6, livrés avant toute release publique) :
   personnalisés, projets lisibles par git.
 - **Éditeur** : graphe des scènes, éditeur traduit, fenêtre *Updates* qui signale les
   nouvelles versions (vérification désactivable).
-- **Assets et disque** : tout ce que vous manipulez vit dans `assets/`, rangé où vous voulez, avec
+- **Assets et disque** : tout ce qui est manipulé vit dans `assets/`, rangé où l'on veut, avec
   l'onglet Disk ; un asset se crée depuis une source ou vide, et se duplique.
 - **Texte et données** : l'écran Texte et ses séquences de dialogue, `Text` et `Textbox` écrits dans
   le canvas, l'écran Données pensé pour un jeu.
@@ -38,71 +38,71 @@ importants 0.2 à 0.6, livrés avant toute release publique) :
 
 ## v0.2 - Gestion des palettes de couleurs
 
-Centralisez les palettes du projet et recolorez vos décors sans modifier les images sources.
+Centraliser les palettes du projet et recolorer les décors sans modifier les images sources.
 Un écran dédié permet de créer, importer et ajuster les couleurs.
 
 
 ## v0.3 - Background vivant, texte et interface in-game
 
-Affichez les textes et l'interface de votre jeu avec vos propres polices. Pilotez les
+Afficher les textes et l'interface du jeu avec ses propres polices. Piloter les
 calques du décor, les fenêtres et les mélanges de couleurs depuis les scripts.
 
 
 ## v0.4 - Animation de décor
 
-Animez les éléments du décor et changez les palettes pendant le jeu. Les animations
+Animer les éléments du décor et changer les palettes pendant le jeu. Les animations
 préparées dans l'éditeur sont intégrées à la ROM.
 
 
 ## v0.5 - Sauvegarde (SRAM)
 
-Enregistrez la progression du joueur dans des emplacements de sauvegarde. Les données
+Enregistrer la progression du joueur dans des emplacements de sauvegarde. Les données
 restent lisibles lorsque les variables du jeu évoluent.
 
 
 ## v0.6 - Polish de la boucle de jeu
 
-Affinez les déplacements avec le suivi de caméra, les collisions sur les pentes et
-les transformations de sprites. Ajoutez des fondus, secousses et effets visuels pour
+Affiner les déplacements avec le suivi de caméra, les collisions sur les pentes et
+les transformations de sprites. Ajouter des fondus, secousses et effets visuels pour
 renforcer les actions du jeu.
 
 
 ## v0.7 - Structures de données
 
-Organisez les données du jeu dans des tableaux et écrivez des actions successives
+Organiser les données du jeu dans des tableaux et écrire des actions successives
 avec des attentes. Les constructions Lua non prises en charge sont signalées
 à la ligne concernée.
 
 
 ## v0.8 - Son : la musique par scène, les transitions, le mixage
 
-Associez une musique à chaque scène et réglez les transitions, jingles et effets
+Associer une musique à chaque scène et régler les transitions, jingles et effets
 depuis l'écran de mixage. Seules les musiques utilisées sont intégrées à la ROM.
 
 
 ## v0.9 - Traduction des jeux créés avec l'éditeur
 
-Traduisez les textes du jeu et permettez au joueur de changer de langue. Une police
+Traduire les textes du jeu et permettre au joueur de changer de langue. Une police
 de remplacement affiche les caractères absents de la police active.
 
 
 ## v0.10 - Distribution Linux
 
-Utilisez l'éditeur sous Linux grâce au paquet AppImage. Sous Linux comme sous Windows,
+Utiliser l'éditeur sous Linux grâce au paquet AppImage. Sous Linux comme sous Windows,
 un double-clic sur le fichier `.project` ouvre le projet.
 
 
 ## v0.11 - Traduction de l'éditeur (infra)
 
-Choisissez la langue de l'éditeur au démarrage. Les libellés et messages sont regroupés
+Choisir la langue de l'éditeur au démarrage. Les libellés et messages sont regroupés
 pour faciliter leur traduction, avec des aides présentées de façon cohérente.
 La traduction française reste à venir.
 
 
 ## v0.12 - Vue d'ensemble (graphe des scènes)
 
-Visualisez les scènes et leurs transitions dans un graphe. Regroupez les scènes,
-modifiez la destination d'une transition par glisser-déposer et ouvrez le script
+Visualiser les scènes et leurs transitions dans un graphe. Regrouper les scènes,
+modifier la destination d'une transition par glisser-déposer et ouvrir le script
 correspondant d'un double-clic.
 
 
@@ -110,19 +110,19 @@ correspondant d'un double-clic.
 
 *Livrée le 2026-08-20.*
 
-Suivez les messages de débogage et le coût du jeu en temps de calcul et en sprites
-dans mGBA. Basculez entre les modes Debug et Release depuis le projet.
+Suivre les messages de débogage et le coût du jeu en temps de calcul et en sprites
+dans mGBA. Basculer entre les modes Debug et Release depuis le projet.
 
 
 ## v0.15 - Visibilité des éléments d'interface
 
-Affichez ou masquez les textes, panneaux et images depuis l'éditeur ou les scripts.
+Afficher ou masquer les textes, panneaux et images depuis l'éditeur ou les scripts.
 Masquer un panneau masque aussi tous ses éléments enfants.
 
 
 ## v0.16 - L'API : la règle de construction, et le rangement
 
-Retrouvez les commandes de script dans huit rubriques centrées sur les objets du jeu.
+Retrouver les commandes de script dans huit rubriques centrées sur les objets du jeu.
 Des noms et des actions communs rendent l'API plus cohérente à apprendre et à utiliser.
 
 
@@ -130,7 +130,7 @@ Des noms et des actions communs rendent l'API plus cohérente à apprendre et à
 
 *Livrée le 2026-09-19.*
 
-Réglez le nombre d'instances de chaque prefab scène par scène. Chaque scène réserve
+Régler le nombre d'instances de chaque prefab scène par scène. Chaque scène réserve
 uniquement les ressources dont elle a besoin, avec un contrôle du budget de sprites
 avant la compilation.
 
@@ -139,15 +139,15 @@ avant la compilation.
 
 *Livrée le 2026-09-20, première tranche.*
 
-Affichez une valeur locale directement dans un texte écrit dans le script, par exemple
-les points de vie. Vous évitez de créer une variable globale pour un affichage ponctuel.
+Afficher une valeur locale directement dans un texte écrit dans le script, par exemple
+les points de vie. Cela évite de créer une variable globale pour un affichage ponctuel.
 
 
 ## v0.19 - Le sous-pixel
 
 *Livrée le 2026-08-20.*
 
-Réglez les mouvements avec une précision inférieure au pixel. Accélérations, sauts et
+Régler les mouvements avec une précision inférieure au pixel. Accélérations, sauts et
 reculs conservent leur précision lors des collisions.
 
 
@@ -155,7 +155,7 @@ reculs conservent leur précision lors des collisions.
 
 *Livrée le 2026-08-20.*
 
-Sauvegardez des collections d'états, comme les coffres ouverts, dans une seule variable
+Sauvegarder des collections d'états, comme les coffres ouverts, dans une seule variable
 globale à plusieurs cases. Le stockage compact limite la place occupée dans la sauvegarde.
 
 
@@ -163,7 +163,7 @@ globale à plusieurs cases. Le stockage compact limite la place occupée dans la
 
 *Livrée le 2026-08-21.*
 
-Pilotez les dialogues depuis une table de données. Un script peut parcourir les
+Piloter les dialogues depuis une table de données. Un script peut parcourir les
 répliques d'une conversation, qui restent traduisibles.
 
 
@@ -171,23 +171,23 @@ répliques d'une conversation, qui restent traduisibles.
 
 *Livrée le 2026-09-05.*
 
-Créez des menus en liste ou en grille avec navigation et curseur gérés par le moteur.
-Affichez un menu et son sous-menu ensemble, puis choisissez lequel reçoit les commandes.
+Créer des menus en liste ou en grille avec navigation et curseur gérés par le moteur.
+Afficher un menu et son sous-menu ensemble, puis choisir lequel reçoit les commandes.
 
 
 ## v0.23 - Ce qu'un boss demande
 
 *Livrée le 2026-08-21.*
 
-Construisez des acteurs composés, comme un boss dont les parties se déplacent ensemble.
-Répétez des actions avec des attentes et filtrez les collisions entre catégories d'acteurs.
+Construire des acteurs composés, comme un boss dont les parties se déplacent ensemble.
+Répéter des actions avec des attentes et filtrer les collisions entre catégories d'acteurs.
 
 
 ## v0.24 - Le projet à l'échelle d'une équipe
 
 *Livrée le 2026-09-19.*
 
-Travaillez à plusieurs avec des fichiers plus faciles à comparer dans Git. Le
+Travailler à plusieurs avec des fichiers plus faciles à comparer dans Git. Le
 chargement à la demande et la réutilisation des conversions accélèrent le travail :
 sur le projet mesuré, une compilation sans changement passe de 13,7 à 4,2 secondes.
 
@@ -196,7 +196,7 @@ sur le projet mesuré, une compilation sans changement passe de 13,7 à 4,2 seco
 
 *Livrée le 2026-09-03.*
 
-Ancrez un groupe d'interface à l'écran, au monde ou à un acteur. Réglez son mode de
+Ancrer un groupe d'interface à l'écran, au monde ou à un acteur. Régler son mode de
 rendu une seule fois pour tous ses textes et images, par exemple un HUD fixe ou
 une bulle qui suit un personnage.
 
@@ -205,8 +205,8 @@ une bulle qui suit un personnage.
 
 *Livrée le 2026-09-12.*
 
-Importez des polices PNG, BMFont, TTF ou OTF et réglez leur rendu avec un aperçu
-commun aux écrans d'édition. Adaptez la police à chaque langue tout en conservant
+Importer des polices PNG, BMFont, TTF ou OTF et régler leur rendu avec un aperçu
+commun aux écrans d'édition. Adapter la police à chaque langue tout en conservant
 les couleurs choisies.
 
 
@@ -214,7 +214,7 @@ les couleurs choisies.
 
 *Livrée le 2026-09-07.*
 
-Écrivez vos scripts avec des suggestions de commandes, variables et noms du projet
+Écrire les scripts avec des suggestions de commandes, variables et noms du projet
 sous le curseur. Les propositions suivent l'API disponible et affichent l'aide associée.
 
 
@@ -222,7 +222,7 @@ sous le curseur. Les propositions suivent l'API disponible et affichent l'aide a
 
 *Livrée le 2026-09-27.*
 
-Définissez des combinaisons de boutons, des séquences et des axes dans les réglages
-du projet. Réutilisez ces commandes par leur nom dans les scripts, avec gestion
+Définir des combinaisons de boutons, des séquences et des axes dans les réglages
+du projet. Réutiliser ces commandes par leur nom dans les scripts, avec gestion
 des appuis longs et du tampon de saisie.
 

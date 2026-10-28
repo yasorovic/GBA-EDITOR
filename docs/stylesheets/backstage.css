@@ -124,6 +124,59 @@ article a.backstage-btn-secondary:hover {
   color: var(--color-foreground-primary);
 }
 
+/* Pages précédente / suivante : deux boutons, comme ceux de l'accueil.
+   « Suivant » est jaune à contour noir (bouton principal), « Précédent » est contouré (bouton secondaire). */
+.related-pages {
+  gap: 1rem;
+  margin-top: 2.5rem;
+}
+
+.related-pages a {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: 12px;
+  text-decoration: none;
+}
+
+.related-pages a.next-page {
+  border: 3px solid #000;
+  background: var(--backstage-yellow);
+  color: #000;
+}
+
+.related-pages a.prev-page {
+  border: 3px solid var(--color-foreground-primary);
+  background: transparent;
+  color: var(--color-foreground-primary);
+}
+
+.related-pages a.next-page:hover {
+  filter: brightness(1.12);
+}
+
+.related-pages a.prev-page:hover {
+  background: var(--color-background-secondary);
+}
+
+.related-pages a .page-info .context,
+.related-pages a:hover .page-info .context,
+.related-pages a .page-info .title,
+.related-pages a:hover .page-info .title {
+  color: inherit;
+  text-decoration: none;
+}
+
+.related-pages .title {
+  font-family: "Balsamiq Sans", var(--font-stack);
+  font-weight: 700;
+}
+
+.related-pages .furo-related-icon {
+  color: inherit;
+}
+
 /* Cartes : contour noir simple et une barre colorée en haut, une couleur par carte. */
 .backstage-card {
   --card-accent: var(--backstage-accent);

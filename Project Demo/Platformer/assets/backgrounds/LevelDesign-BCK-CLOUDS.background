@@ -1,7 +1,7 @@
 {
   "name": "LevelDesign-BCK-CLOUDS",
   "id": "253d83dc5849",
-  "asset": "assets/backgrounds/LevelDesign-BCK-CLOUDS.png",
+  "source": "assets/backgrounds/LevelDesign-BCK-CLOUDS.png",
   "settings": {
     "added_palettes": [
       "DMG (GB Default)"

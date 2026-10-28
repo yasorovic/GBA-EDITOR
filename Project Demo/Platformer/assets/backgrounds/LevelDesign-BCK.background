@@ -1,7 +1,7 @@
 {
   "name": "LevelDesign-BCK",
   "id": "da407693005f",
-  "asset": "assets/backgrounds/LevelDesign-BCK.png",
+  "source": "assets/backgrounds/LevelDesign-BCK.png",
   "encoded": {
     "source_stamp": "1472:1791320494592405400:0ce21076635808ce",
     "palettes": [

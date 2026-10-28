@@ -1,7 +1,7 @@
 {
   "name": "Collectible",
   "id": "0ea3932e13db",
-  "asset": "assets/sprites/Collectible.png",
+  "source": "assets/sprites/Collectible.png",
   "frame_w": 16,
   "frame_h": 16,
   "source_stamp": "322:1791121272695618900:cc258dba0efae084",

@@ -51,8 +51,8 @@ Le fond est l'image importée. Le calque est la façon dont une scène l'emploie
 :gutter: 3
 :class-container: backstage-cards
 
-:::{grid-item-card} Décors et collisions
-:link: ../decors-collisions
+:::{grid-item-card} Collisions
+:link: ../acteurs/collisions
 :link-type: doc
 :class-card: backstage-card backstage-card-teal
 
@@ -67,5 +67,4 @@ Peindre la carte de collision pour que les acteurs ne traversent plus les murs.
 Importer un décor <importer-un-decor>
 Qu'est-ce qu'une tilemap ? <tilemap>
 Fond et calque <fond-et-calque>
-Décors et collisions <../decors-collisions>
 ```

@@ -1,7 +1,7 @@
 {
   "name": "Player",
   "id": "98b8f0d91f5b",
-  "asset": "assets/sprites/Player.png",
+  "source": "assets/sprites/Player.png",
   "frame_w": 32,
   "frame_h": 32,
   "source_stamp": "1049:1791068463656443600:9c428fff5155f044",

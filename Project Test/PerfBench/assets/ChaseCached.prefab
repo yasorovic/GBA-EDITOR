@@ -1,0 +1,31 @@
+{
+  "name": "ChaseCached",
+  "id": "b0c0d1ec7002",
+  "components": [
+    {
+      "component_type": "sprite",
+      "id": "sprite",
+      "active": true,
+      "sprite_name": "Voyant",
+      "initial_state": "Idle",
+      "facing_auto": true,
+      "affine_transform": false,
+      "scale_x": 1.0,
+      "scale_y": 1.0,
+      "rotation": 0,
+      "offset_x": 0,
+      "offset_y": 0,
+      "pivot_x": 0,
+      "pivot_y": 0
+    },
+    {
+      "component_type": "script",
+      "id": "script",
+      "active": true,
+      "script": "assets/scripts/ChaseCached.lua",
+      "exports_values": {}
+    }
+  ],
+  "pal_bank": -1,
+  "notes": ""
+}

@@ -1,7 +1,7 @@
 {
   "name": "Demon",
   "id": "76dad6d42ac5",
-  "asset": "assets/sprites/Demon.png",
+  "source": "assets/sprites/Demon.png",
   "frame_w": 32,
   "frame_h": 32,
   "source_stamp": "952:1791342608871250500:9f6180ec96dd9633",

@@ -1,12 +1,12 @@
 exports = {
-    move_speed = { type = "int", default = 2, label = "Vitesse", min = 0, max = 8 },
-    gravity = { type = "int", default = 9, label = "Gravité", min = 0, max = 256 },
-    jump_force ={ type = "int", default = 900, label = "Force de saut", min = 0, max = 2048 },
+    move_speed = { type = "int", default = 2, label = "Speed", min = 0, max = 8 },
+    gravity = { type = "int", default = 9, label = "Gravity", min = 0, max = 256 },
+    jump_force ={ type = "int", default = 900, label = "Jump Force", min = 0, max = 2048 },
 }
 
 function on_start()
 	self:play_anim("idle")
-	self.auto_dir = false
+	self.facing_auto = true
     
 end
 
@@ -35,10 +35,4 @@ function on_update()
     
     if x_speed then self.direction = vec2(move_dir, 0) end
     
-end
-
-function on_collision_enter(other, my_box, other_box)
-end
-
-function on_collision_exit(other, my_box, other_box)
 end

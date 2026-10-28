@@ -82,9 +82,9 @@ l'acteur sur les deux axes.
 Un sprite importé, une scène, un acteur, un script, une ROM : c'est la boucle de base de
 Backstage. Pour aller plus loin, ouvrez le guide dont vous avez besoin :
 
-- [Déplacer un acteur](../guides/deplacer-acteur.md) : un vecteur de direction, une vitesse
+- [Déplacer un acteur](../guides/acteurs/deplacer-acteur.md) : un vecteur de direction, une vitesse
   réglable dans l'inspecteur.
-- [Décors et collisions](../guides/decors-collisions.md) : un décor, un sol et des murs.
+- [Collisions](../guides/acteurs/collisions.md) : un décor, un sol et des murs.
 - Tous les [guides](../guides/index.md), ou l'enchaînement complet de
   [Un mini-jeu de plateforme](mini-game.md).
 
