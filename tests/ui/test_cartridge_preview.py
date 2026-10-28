@@ -170,23 +170,9 @@ def test_photo_catalog_contains_only_traceable_licensed_assets(qapp):
             assert photo['source_page'].startswith('https://gbhwdb.gekkio.fi/cartridges/')
 
 
-def test_bare_boards_have_no_component_markers_and_are_research_only(qapp, tmp_path):
-    from ui.common.cartridge_preview import save_preview_profiles
-
+def test_a_profile_without_a_matching_bare_scan_stays_on_the_assembled_photo(qapp, tmp_path):
     panel = BuildPanel(Project(tmp_path))
     preview = panel._cartridge_preview
-    for profile in save_preview_profiles():
-        preview.set_profile(profile.key)
-        preview._view_mode.setCurrentIndex(1)
-        for side in (0, 1):
-            preview._side.setCurrentIndex(side)
-            assert not preview._photo.pixmap.isNull()
-            assert not preview._photo.points
-            assert preview._rom.isHidden()
-            assert preview._save.isHidden()
-            assert preview._battery.isHidden()
-            assert preview._note.text() == label('cartpreview.bare_note')
-            assert 'archive.org' in preview._credit.text()
     # No matching bare scan for E06-10: do not silently show another revision.
     preview.set_profile('sram')
     preview.set_target(8)

@@ -17,6 +17,8 @@ from ui.common.tooltip_controller import TooltipContent, set_tooltip_provider
 
 
 _IMAGES = Path(__file__).parent / "images" / "cartridges"
+# Bare-board scans: not shipped, only present in a development checkout.
+_BARE_SCANS = app_paths.APP_DIR / "internal" / "research" / "cartridges"
 _LICENSE = "https://creativecommons.org/licenses/by-sa/4.0/"
 _CATALOG = json.loads((_IMAGES / "photo-catalog.json").read_text(encoding="utf-8"))
 
@@ -266,7 +268,7 @@ class CartridgePreview(QFrame):
             key = profile.key
         specimen = _CATALOG[key]
         board, reference_mib = specimen["board"], specimen["rom_mib"]
-        bare_available = not app_paths.IS_FROZEN and "bare" in specimen
+        bare_available = not app_paths.IS_FROZEN and "bare" in specimen and _BARE_SCANS.is_dir()
         if self._view_mode.count() > 1:
             self._view_mode.model().item(1).setEnabled(bare_available)
         if not bare_available and self._view_mode.currentData() == "bare":
@@ -276,7 +278,7 @@ class CartridgePreview(QFrame):
         bare = bare_available and self._view_mode.currentData() == "bare"
         side = self._side.currentData()
         source = specimen["bare"][side] if bare else specimen["photos"][side]
-        filename = (app_paths.APP_DIR / "research" / "cartridges" / source["relative_path"]
+        filename = (_BARE_SCANS / source["relative_path"]
                     if bare else _IMAGES / source["file"])
         points = specimen["points"] if not bare and side == "front" else ()
         self._photo.set_board(filename, points, self._component_tooltips(profile))

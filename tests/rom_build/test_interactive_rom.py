@@ -101,7 +101,7 @@ def test_un_prefab_joueur_poole_interagit_par_une_boucle(tmp_path):
 
     assert verdict == [True], [d.message for d in diagnostics if d.level == "error"]
     main_c = next((projet.root / "build").rglob("main.c")).read_text(encoding="utf-8")
-    assert "for(int _w=" in main_c and "interact_pick(&g_actors[_w]" in main_c
+    assert "POOL_EACH(_w)" in main_c and "interact_pick(&g_actors[_w]" in main_c
     # Sans sprite, pas de tick d'animation : le regard de l'interacteur se suit dans le bloc Interactive.
     assert "_a->facing_x=_a->dir_x" in main_c
 
