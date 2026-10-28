@@ -2,14 +2,7 @@
 
 **Créez des jeux Game Boy Advance depuis une interface visuelle, puis compilez-les en véritables ROMs `.gba`.**
 
-Backstage réunit scènes, sprites, collisions, son et scripts dans un même projet. Les scripts utilisent une syntaxe Lua simplifiée, traduite en C au Build, pour produire des jeux jouables sur émulateur et sur console.
-
-## Ce que vous pouvez faire
-
-- Construire des scènes, placer les acteurs, collisions, caméra et interface.
-- Importer et préparer sprites, décors, palettes, polices et sons.
-- Écrire le comportement du jeu avec des scripts simples, ou réutiliser des behaviors.
-- Compiler, vérifier et lancer votre ROM avec **Build & Run**.
+Backstage est un logiciel de création de jeu spécialisé pour la Gameboy Advance. Les scripts utilisent une syntaxe Lua simplifiée, traduite en C au Build, pour produire des jeux jouables sur émulateur et sur console.
 
 ## Commencer
 
