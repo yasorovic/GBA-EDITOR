@@ -3,8 +3,9 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
-# Backstage — artefacts de build uniquement (générés à chaque build)
+# Artefacts de build uniquement (générés à chaque build)
 Project Demo/*/build/
+Project Test/
 
 # Sortie du build Nuitka — 180 Mo, régénérée par packaging/nuitka_build.py
 build-out/
