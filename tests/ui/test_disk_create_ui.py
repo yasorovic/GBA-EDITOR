@@ -219,3 +219,19 @@ def test_a_project_json_offers_edit_externally_to_the_text_editor(qapp):
         assert all(a.text() != "Edit externally" for a in menu.actions())
 
 
+
+
+def test_a_new_folder_is_chosen_and_open_for_naming_in_the_view_that_made_it(qapp):
+    from PyQt6.QtWidgets import QAbstractItemView, QLineEdit
+    view, spy = _view(qapp)
+    tree = _tree()
+    tree.children[0].children.append(disk_tree.DiskNode("New folder", BASE / "Art" / "New folder", disk_tree.FOLDER))
+    view.set_tree(tree)                                                    # on reste dans « Art »
+
+    view.begin_rename_path(str(BASE / "Art" / "New folder"))
+    qapp.processEvents()
+
+    assert [i.text() for i in view._list.selectedItems()] == ["New folder"]
+    assert view._list.state() == QAbstractItemView.State.EditingState
+    editor = view._list.findChild(QLineEdit)
+    assert editor is not None and editor.height() <= 22                  # une boîte à la taille du nom, pas d'un formulaire

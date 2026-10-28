@@ -8,7 +8,7 @@ from PyQt6.QtGui import QImage, QPainter
 
 from core.project import Project
 
-DEMO = Path(__file__).resolve().parent.parent.parent / "Project Demo" / "PongAdvanced"
+DEMO = Path(__file__).resolve().parent.parent.parent / "Project Demo" / "Platformer"
 
 
 def _textbox_item(tmp_path):
@@ -17,7 +17,7 @@ def _textbox_item(tmp_path):
     from ui.scene_manager.scene_canvas import SceneEditor
     from ui.scene_manager.canvas.canvas_region_item import UIRegionItem
     project = Project.open(DEMO)
-    project.set_active_scene([s.name for s in project.scenes].index("SCR_Arena"))
+    project.set_active_scene([s.name for s in project.scenes].index("Scene_01"))
     editor = SceneEditor()
     editor.load_project(project)
     # Une chaîne (`Text` ponctuel) ne se coupe pas : sa largeur n'entre pas dans la clé, seules les boîtes la changent.

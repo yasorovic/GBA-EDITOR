@@ -453,11 +453,11 @@
     "home.template.extracting": {
       "text": "Extracting…"
     },
-    "home.template.pong.name": {
-      "text": "Pong Advanced"
+    "home.template.platformer.name": {
+      "text": "Platformer"
     },
-    "home.template.pong.description": {
-      "text": "Complete game (scenes, sprites, scripts, music)."
+    "home.template.platformer.description": {
+      "text": "Complete game (scenes, sprites, scripts, music, sound effects)."
     },
     "home.status.configure": {
       "text": "Configure manually"

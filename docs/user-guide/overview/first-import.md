@@ -42,16 +42,23 @@ projet, puis vous décidez **ce qu'il devient**.
 1. **Faites entrer le fichier.** Copiez-le dans le dossier `assets/` (par l'explorateur du
    système) ou, dans l'onglet **Disk**, utilisez **Import...** ou glissez-déposez le fichier. Il
    apparaît avec un point jaune : c'est une source sans ressource.
-2. **Créez la ressource.** Faites un clic droit sur le fichier et choisissez **Create**, puis la
+2. **Créez la ressource.** Faites un clic droit sur le fichier et choisissez **Create as**, puis la
    famille voulue (**Sprite**, **Background**, **Sound effect**, **Music**, **Font**,
    **Palette**...). Le menu ne propose que les familles possibles pour ce format. La ressource naît
    à côté de sa source.
+
+```{figure} img/disk-create-as.png
+:alt: L'onglet Disk avec une source à point jaune sélectionnée et le menu clic droit Create as : Sprite, Background, Font.
+:class: backstage-screenshot
+
+Clic droit sur une source : **Create as** propose les familles possibles pour ce fichier.
+```
 
 Sélectionner plusieurs sources du même format permet d'en créer plusieurs ressources en un geste.
 
 ```{note}
 Une police se prépare toujours par ce chemin : un fichier PNG, `.fnt`, `.ttf` ou `.otf`
-déposé dans le projet n'est pas une police tant que vous ne l'avez pas créée avec **Create**.
+déposé dans le projet n'est pas une police tant que vous ne l'avez pas créée avec **Create as**.
 ```
 
 ## Vérifier l'import
@@ -63,4 +70,4 @@ modifie pas le fichier source ; il indique seulement ce que la ROM pourra utilis
 Si un fichier de même nom existe déjà dans le dossier, l'éditeur demande s'il faut écraser, garder
 les deux ou annuler. Tout autre nom déjà pris est complété (`coin_2`) sans question.
 
-Suite : [Construire une première scène](first-scene.md).
+Suite : [Tutoriel : votre première scène jouable](../first-playable-scene.md).

@@ -1,0 +1,15 @@
+{
+  "name": "sfx_coin",
+  "id": "bcb3e6204fbc",
+  "source": "assets/Sound/sfx_coin.wav",
+  "volume": 100,
+  "sample_rate": 0,
+  "trim_start": 0,
+  "trim_end": 0,
+  "pitch": 100,
+  "panning": 0,
+  "pitch_variation": 0,
+  "fade_out": 0,
+  "fade_in": 0,
+  "protected": false
+}

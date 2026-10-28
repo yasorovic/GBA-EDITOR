@@ -47,12 +47,12 @@ gauche, l'espace de travail au centre, les réglages à droite.
 | **Scripts** | Écrire le comportement en Lua et consulter l'API disponible. |
 | **Datas** | Définir des tableaux de données pour les objets, ennemis ou dialogues. |
 
-```{figure} img/animations-screen.png
-:alt: L'écran Animations : la liste des sprites, le canvas de la frame, la planche et l'inspecteur.
+```{figure} img/backgrounds-screen.png
+:alt: L'écran Backgrounds sur le décor Level : la bibliothèque des fonds, l'image au centre et l'inspecteur.
 :class: backstage-screenshot
 
-L'écran **Animations** reprend la même disposition : la liste des sprites à gauche, le travail
-au centre, l'inspecteur à droite.
+L'écran **Backgrounds** reprend la même disposition : la bibliothèque à gauche, le travail au centre,
+l'inspecteur à droite.
 ```
 
 ## Gestes de base
@@ -66,4 +66,4 @@ au centre, l'inspecteur à droite.
   (8 px), dans tous les canvas à la fois.
 - Les autres raccourcis se consultent et se personnalisent dans **File → Settings → Shortcuts**.
 
-Suite : [Le projet en une idée](project-idea.md).
+Suite : [Comprendre un projet](understanding-a-project.md).

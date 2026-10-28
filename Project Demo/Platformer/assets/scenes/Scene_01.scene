@@ -364,8 +364,8 @@
           "exports_values": {}
         }
       ],
-      "x": 456,
-      "y": 32,
+      "x": 449,
+      "y": 31,
       "flip_h": false,
       "flip_v": false,
       "priority": 0,
@@ -383,6 +383,7 @@
     {
       "name": "Guard",
       "id": "9666aedf58f6",
+      "source": "b8a29dca3925",
       "active": true,
       "components": [
         {
@@ -465,6 +466,7 @@
   "render_mode": 0,
   "transition_kind": "fade_black",
   "transition_frames": 16,
+  "music": "theme_platformer",
   "scroll_h": true,
   "scroll_v": true,
   "script": "",

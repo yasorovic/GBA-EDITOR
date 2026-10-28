@@ -17,10 +17,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from PyQt6.QtCore import QMimeData, QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QMimeData, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QKeySequence, QPainter, QPen, QShortcut
 from PyQt6.QtWidgets import (
-    QApplication, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMenu, QPushButton, QTabWidget,
+    QApplication, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu, QPushButton, QTabWidget,
     QSlider, QVBoxLayout, QWidget,
 )
 
@@ -125,7 +125,7 @@ class DiskCallbacks:
     import_files: Callable[[str], None]                 # dossier de destination
     import_paths: Callable[[list, str], None]           # ([fichier], dossier) : des fichiers déposés depuis l'explorateur
     create_blank: Callable[[str, str], None]            # (type, dossier)
-    new_folder: Callable[[str], None]                   # dossier parent
+    new_folder: Callable[[str], str | None]             # dossier parent -> chemin du dossier créé
     blank_kinds: list = field(default_factory=list)     # [(type, mot)] dans l'ordre du menu
     edit_externally: Callable[[Path], None] | None = None   # ouvre un .json dans l'éditeur de texte réglé ; sans elle, pas d'entrée
     duplicate_items: Callable[[list], None] | None = None   # [DiskNode] : une copie de chaque asset, en UNE entrée d'historique
@@ -251,16 +251,25 @@ def add_asset_actions(menu: QMenu, nodes: list, callbacks: DiskCallbacks,
             lambda _=False: callbacks.delete_items(removable))
 
 
-def add_folder_actions(menu: QMenu, folder: str, callbacks: DiskCallbacks) -> None:
+def add_folder_actions(menu: QMenu, folder: str, callbacks: DiskCallbacks,
+                       on_created: Callable[[str], None] | None = None) -> None:
     """Importer, créer un asset vierge, faire un dossier — dans `folder`. Le « + » de la vue à plat, celui de
-    l'arbre et le clic droit sur le vide partagent ce menu : une seule définition de ce qu'on crée sur le disque."""
+    l'arbre et le clic droit sur le vide partagent ce menu : une seule définition de ce qu'on crée sur le disque.
+    `on_created` : la vue qui a ouvert le menu, à qui revient le dossier neuf (pour le choisir et le nommer)."""
     menu.addAction(_icon("import"), label('disk.import')).triggered.connect(lambda _=False: callbacks.import_files(folder))
     sub = menu.addMenu(_icon("add"), label('disk.create_menu'))
     for kind, word in callbacks.blank_kinds:
         sub.addAction(_icon(_BLANK_ICONS.get(kind, "add")), word).triggered.connect(
             lambda _=False, k=kind: callbacks.create_blank(k, folder))
     menu.addSeparator()
-    menu.addAction(_icon("folder"), label('disk.new_folder')).triggered.connect(lambda _=False: callbacks.new_folder(folder))
+    menu.addAction(_icon("folder"), label('disk.new_folder')).triggered.connect(
+        lambda _=False: _new_folder(folder, callbacks, on_created))
+
+
+def _new_folder(parent: str, callbacks: DiskCallbacks, on_created: Callable[[str], None] | None) -> None:
+    created = callbacks.new_folder(parent)
+    if created and on_created is not None:
+        on_created(created)
 
 
 # Les critères de tri de l'onglet Disk. Les dossiers passent toujours avant les fichiers ; le critère
@@ -299,13 +308,14 @@ def show_sort_menu(parent: QWidget, button, current: str, on_pick: Callable[[str
     menu.exec(button.mapToGlobal(button.rect().bottomLeft()))
 
 
-def show_plus_menu(parent: QWidget, button, folder: str | None, callbacks: DiskCallbacks | None) -> None:
+def show_plus_menu(parent: QWidget, button, folder: str | None, callbacks: DiskCallbacks | None,
+                   on_created: Callable[[str], None] | None = None) -> None:
     """Le menu du « + » de l'onglet Disk, déroulé sous `button`, pour créer dans `folder`."""
     if callbacks is None or folder is None:
         return
     menu = QMenu(parent)
     menu.setStyleSheet(QSS.menu)
-    add_folder_actions(menu, folder, callbacks)
+    add_folder_actions(menu, folder, callbacks, on_created)
     menu.exec(button.mapToGlobal(button.rect().bottomLeft()))
 
 
@@ -324,6 +334,20 @@ class DragDimDelegate(ElidedNameDelegate):
     def __init__(self, lines: int = 1, parent=None, node_role=_NODE_ROLE):
         super().__init__(lines, parent)
         self._node_role = node_role
+
+    def createEditor(self, parent, option, index):
+        """Le renommage en place : une boîte à la taille du nom (celle de la liste), pas celle d'un champ de formulaire."""
+        editor = super().createEditor(parent, option, index)
+        if isinstance(editor, QLineEdit):
+            editor.setStyleSheet(f"QLineEdit{{padding:0px 2px;font-family:{T.UI};font-size:{T.SM}px;}}")
+        return editor
+
+    def updateEditorGeometry(self, editor, option, index):
+        """Qt donne à l'éditeur la hauteur des deux lignes du nom de la grille ; une ligne suffit à la saisie."""
+        super().updateEditorGeometry(editor, option, index)
+        rect = editor.geometry()
+        rect.setHeight(min(rect.height(), option.fontMetrics.height() + 6))
+        editor.setGeometry(rect)
 
     def paint(self, painter, option, index):
         if index.data(_HEADER_ROLE):
@@ -915,7 +939,7 @@ class DiskView(QWidget):
 
     def _show_plus_menu(self) -> None:
         """Le « + » : importer un fichier, créer un asset vierge, faire un dossier — dans le dossier affiché."""
-        show_plus_menu(self, self._btn_plus, self._shown_folder(), self._callbacks)
+        show_plus_menu(self, self._btn_plus, self._shown_folder(), self._callbacks, self.begin_rename_path)
 
     def _sync_create_button(self) -> None:
         """« Create » suit la sélection : des sources qui peuvent devenir un même type, sinon rien."""
@@ -956,7 +980,7 @@ class DiskView(QWidget):
         if item is None:                      # le vide : les actions du « + », dans le dossier affiché
             folder = self._shown_folder()
             if folder is not None:
-                add_folder_actions(menu, folder, self._callbacks)
+                add_folder_actions(menu, folder, self._callbacks, self.begin_rename_path)
         else:
             add_asset_actions(menu, nodes, self._callbacks, self.begin_rename)
             if len(nodes) == 1:
@@ -968,11 +992,21 @@ class DiskView(QWidget):
 
     def begin_rename(self, node: disk_tree.DiskNode) -> None:
         """L'entrée de `node` devient une ligne éditable ; le nouveau nom part en `rename_requested` à la validation."""
+        self.begin_rename_path(node.path)
+
+    def begin_rename_path(self, path) -> None:
+        """Comme `begin_rename`, pour l'entrée de `path` (un dossier qui vient d'être créé) : elle porte la sélection."""
+        path = Path(path)
         item = next((self._list.item(row) for row in range(self._list.count())
-                     if getattr(self._list.item(row).data(_NODE_ROLE), "path", None) == node.path), None)
+                     if getattr(self._list.item(row).data(_NODE_ROLE), "path", None) == path), None)
         if item is not None and item.flags() & Qt.ItemFlag.ItemIsEditable:
+            self._list.clearSelection()
             self._list.setCurrentItem(item)
-            self._list.editItem(item)
+            item.setSelected(True)
+            self._list.scrollToItem(item)
+            # Après la fin du clic (ou la fermeture du menu) : le focus lui revient, et un éditeur ouvert
+            # pendant ce temps se refermerait aussitôt (même raison que dans l'arbre).
+            QTimer.singleShot(0, lambda: self._list.editItem(item))
 
     def _on_item_changed(self, item: QListWidgetItem) -> None:
         """Le nom validé dans l'éditeur ; un nom inchangé (ou Échap) ne demande rien."""

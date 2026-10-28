@@ -189,6 +189,9 @@ class GBAView(GridBackdropViewMixin, QGraphicsView):
     def resizeEvent(self, e):
         super().resizeEvent(e)
         self._update_pan_area()
+        # La zone défilable dépend de la taille de la vue et Qt recentre le défilement : le fond en cache
+        # (la grille) serait décalé, puis seules des bandes en seraient repeintes — la grille se déchire.
+        self.resetCachedContent()
 
     def _apply_zoom(self):
         # Le point de la scène sous le curseur (ou au centre de la vue) reste à

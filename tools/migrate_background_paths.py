@@ -4,7 +4,7 @@ Avant : `BackgroundAsset.asset` ne retenait que le NOM du fichier, retrouvé dan
 Après : comme les sprites et les sons, il porte le chemin de l'image relatif au projet, et l'image peut
 être rangée où l'on veut sous `assets/`.
 
-    python tools/migrate_background_paths.py "Project Demo/PongAdvanced" "Project Demo/Platformer"
+    python tools/migrate_background_paths.py "Project Test/PongAdvanced" "Project Demo/Platformer"
     python tools/migrate_background_paths.py --dry-run <projet>
 
 Ce qui change : le champ `asset` de chaque `*.background` sous `assets/` dont la valeur n'est qu'un nom de

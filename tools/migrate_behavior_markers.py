@@ -4,7 +4,7 @@ Avant : un script était un behavior parce qu'il vivait dans `assets/scripts/beh
 Après : son rôle vient de son contenu — la première ligne `-- @behavior` — et il se range où l'on veut
 (cf. `core/lua_scripts.py`). `require("behaviors/<nom>")` ne change pas : il se résout par nom.
 
-    python tools/migrate_behavior_markers.py "Project Demo/PongAdvanced" "Project Demo/Platformer"
+    python tools/migrate_behavior_markers.py "Project Test/PongAdvanced" "Project Demo/Platformer"
     python tools/migrate_behavior_markers.py --dry-run <projet>
 
 Ce qui change : chaque `.lua` de `assets/scripts/behaviors/` qui ne commence pas déjà par le marqueur le reçoit

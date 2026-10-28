@@ -350,7 +350,7 @@ class DiskTreeView(QWidget):
         """Le « + » : le même menu que celui de la vue à plat (importer, créer un asset vierge, un dossier),
         dans le dossier choisi. Le filtre est levé : un dossier neuf ne le satisfait jamais."""
         self._btn_search.setChecked(False)
-        show_plus_menu(self, self._btn_add, self._target_folder(), self._callbacks)
+        show_plus_menu(self, self._btn_add, self._target_folder(), self._callbacks, self.begin_rename)
 
     def _begin_rename_node(self, node: disk_tree.DiskNode) -> None:
         if node is not self._root:

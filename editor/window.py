@@ -1465,15 +1465,15 @@ class MainWindow(QMainWindow):
         self._refresh_disk()
 
     def _create_disk_folder(self, parent: str):
-        """Le « + » de l'arbre : crée le dossier sur le disque (annulable), puis laisse l'auteur le nommer."""
+        """Le « + » d'une vue Disk : crée le dossier sur le disque (annulable) et rend son chemin ; la vue qui l'a
+        demandé le choisit et laisse l'auteur le nommer."""
         if not self.project:
-            return
+            return None
         from core.disk_commands import CreateFolderCmd
         command = CreateFolderCmd(Path(parent), label('disk.new_folder'), self.project.user_library_dir,
                                   around=self._watcher.suspended)
         self._disk_push(command)
-        if command.created is not None:
-            self.disk_tree_view.begin_rename(str(command.created))
+        return str(command.created) if command.created is not None else None
 
     def _rename_disk_item(self, path: str, new_name: str):
         """Un dossier, une source ou un script renommé EN PLACE dans l'arbre ou la vue à plat (annulable). Les

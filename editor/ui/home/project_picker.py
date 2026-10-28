@@ -232,7 +232,7 @@ class _TemplateItem(QWidget):
 
     download_requested = pyqtSignal(object)  # ProjectTemplate
     _TEXT_KEYS = {
-        "pong": ("home.template.pong.name", "home.template.pong.description"),
+        "platformer": ("home.template.platformer.name", "home.template.platformer.description"),
     }
 
     def __init__(self, template: ProjectTemplate, downloaded: bool, parent=None):

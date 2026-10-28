@@ -27,7 +27,7 @@ html_favicon = "assets/backstage-icon.svg"
 (Path(__file__).resolve().parent / "_gen_static").mkdir(exist_ok=True)
 html_static_path = ["assets", "stylesheets", "scripts", "_gen_static"]
 html_css_files = ["backstage.css"]
-html_js_files = [("lua-search.js", {"defer": "defer"}), ("toc-spy.js", {"defer": "defer"})]
+html_js_files = [("lua-search.js", {"defer": "defer"}), ("toc-spy.js", {"defer": "defer"}), ("download-links.js", {"defer": "defer"}), ("image-zoom.js", {"defer": "defer"})]
 # Couleurs d'accentuation (palette de la marque, jamais pour les fonds). Le jaune du schéma sert au logo, pas ici.
 _ACCENTS = {
     "purple": (170, 80, 180),

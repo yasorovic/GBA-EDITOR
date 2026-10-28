@@ -611,11 +611,11 @@
     "home.template.extracting": {
       "text": "Extraction…"
     },
-    "home.template.pong.name": {
-      "text": "Pong Advanced"
+    "home.template.platformer.name": {
+      "text": "Platformer"
     },
-    "home.template.pong.description": {
-      "text": "Jeu complet — scènes, sprites, scripts et musique."
+    "home.template.platformer.description": {
+      "text": "Jeu complet : scènes, sprites, scripts, musique et effets sonores."
     },
     "home.new.name": {
       "text": "Nom du projet"

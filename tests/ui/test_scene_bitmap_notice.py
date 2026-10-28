@@ -8,7 +8,7 @@ import pytest
 
 from core.project import Project
 
-PONG = Path(__file__).resolve().parent.parent.parent / "Project Demo" / "PongAdvanced"
+PONG = Path(__file__).resolve().parent.parent.parent / "Project Test" / "PongAdvanced"
 
 
 def _editor_with_bitmap_layer():

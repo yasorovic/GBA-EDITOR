@@ -52,6 +52,8 @@ data-audio-rom-*/
 *.flac
 *.aif
 *.aiff
+# Exception : les SFX de la démo Platformer (quelques Ko, nos propres sons) restent suivis.
+!Project Demo/Platformer/assets/Sound/*.wav
 # Site de documentation généré par Sphinx (voir docs/conf.py)
 docs/_build/
 

@@ -1,21 +1,25 @@
 # Premiers pas
 
-Cette page fait découvrir Backstage à partir d'un jeu qui existe déjà : le projet de démonstration
-**Platformer**. L'idée est d'obtenir un résultat visible en quelques minutes : lancer le jeu, changer
-la vitesse du personnage, en faire un second ennemi réglé autrement. Les notions (scène, acteur,
-ressource) sont détaillées dans les pages suivantes ; ici, on touche d'abord.
+Cette page part d'un jeu qui existe déjà, le projet de démonstration **Platformer** : lancez-le, changez la vitesse du personnage, puis faites-en un second ennemi réglé autrement. Les notions de scène, d'acteur et de ressource viennent ensuite.
 
 **Ce qu'il vous faut :** Backstage installé, ainsi que devkitPro et mGBA, configurés dans
 **File → Settings**.
 
 ## 1. Ouvrir le projet de démonstration
 
-Le projet Platformer se trouve dans le dépôt de Backstage, dossier
-[`Project Demo/Platformer`](https://github.com/yasorovic/GBA-EDITOR/tree/main/Project%20Demo/Platformer).
-Copiez ce dossier où vous voulez : vous allez le modifier, et une copie évite d'abîmer l'original.
+::::{div} backstage-side-figure
+Sur l'écran d'accueil, ouvrez l'onglet **Templates** et cliquez sur **Download** à côté de
+**Platformer**. Le projet est copié dans votre dossier de projets : vous pouvez le modifier sans
+risque. Le bouton devient **✓ Downloaded** ; double-cliquez sur l'entrée pour ouvrir le projet, qui
+s'affiche sur l'écran **Scenes**.
 
-Sur l'écran d'accueil de Backstage, cliquez sur **Browse…** et choisissez le dossier copié. Le projet
-s'ouvre sur l'écran **Scenes**.
+```{figure} img/first-steps-templates.png
+:alt: L'onglet Templates de l'écran d'accueil, avec le projet Platformer et son bouton Download.
+:class: backstage-screenshot
+
+L'onglet **Templates** de l'écran d'accueil.
+```
+::::
 
 ```{figure} img/first-steps-scene.png
 :alt: L'écran Scenes du projet Platformer, avec le personnage sélectionné.
@@ -26,15 +30,16 @@ Le projet Platformer ouvert. Le personnage vert, sélectionné, est l'acteur `Pl
 
 ## 2. Lancer le jeu
 
-Cliquez sur **Run** (`F5`). Backstage construit la ROM et l'ouvre dans mGBA. Déplacez le personnage
+Cliquez sur le bouton **Run** (`F5`). 
+
+Backstage construit la ROM et l'ouvre dans mGBA. Déplacez le personnage
 avec les flèches, sautez avec la touche **A** de la console (réglable dans
 **Project Settings → Input**), ramassez les pièces : le score s'affiche en haut de l'écran.
-
-Fermez mGBA pour revenir à l'éditeur.
+.
 
 ## 3. Faire le tour des écrans
 
-La barre du haut ouvre les écrans du projet. Trois suffisent pour comprendre ce que contient ce jeu.
+La barre du haut ouvre les écrans du projet.
 
 - **Scenes** : la scène `Scene_01`. À gauche, la liste de ses acteurs (le joueur, les pièces, la porte,
   le garde). Au centre, le niveau. À droite, l'inspecteur de l'élément sélectionné.
@@ -71,22 +76,42 @@ fois plus vite. Essayez aussi **Jump Force** pour changer la hauteur du saut.
 Ces réglages s'appellent des **exports**. Le script les déclare en tête de fichier, et l'inspecteur les
 affiche automatiquement. Quiconque règle le jeu n'a pas besoin d'ouvrir le code.
 
-## 5. Un second garde, réglé autrement
+## 5. Un second garde, en version fantôme
 
-Le garde (le personnage bleu) patrouille d'un mur à l'autre. Son script `Guard_Patrol.lua` expose deux
-exports : **Vitesse** et **Sens** (`1` vers la droite, `-1` vers la gauche).
+Le garde patrouille d'un mur à l'autre. Son script `Guard_Patrol.lua` expose deux
+variables : **Vitesse** et **Sens** (`1` vers la droite, `-1` vers la gauche).
 
 Pour en faire un modèle réutilisable, sélectionnez `Guard` et cliquez sur **Expose to prefab** dans
 l'inspecteur, puis nommez le prefab `Guard`. L'acteur de la scène devient une **instance** de ce
-prefab, que l'on retrouve dans la section **Prefabs** de la **Scene library**.
+prefab. Le prefab est aussi un fichier : il apparaît dans l'onglet **Disk**, au bas de la fenêtre.
 
-Ajoutez une seconde instance depuis cette section, placez-la ailleurs dans le niveau, et réglez sa
-**Vitesse** à `2` et son **Sens** à `-1`. Les deux gardes partagent le même sprite et le même
-script, mais chacun a ses propres valeurs. Modifier ensuite le prefab (par exemple son sprite) change
-tous les gardes d'un coup.
+```{figure} img/first-steps-disk.png
+:alt: L'onglet Disk du panneau du bas : le dossier assets, ses sous-dossiers et les prefabs Collectible, Guard et Player.
+:class: backstage-screenshot
+
+L'onglet **Disk** montre le contenu du dossier `assets`, prefabs compris.
+```
+
+Glissez `Guard.prefab` depuis l'onglet **Disk** vers la scène pour poser une seconde instance, et
+placez-la ailleurs dans le niveau. Les deux gardes partagent le même sprite et le même script, mais
+chacun peut avoir ses propres réglages : réglez **Vitesse** à `2` et **Sens** à `-1` sur la nouvelle
+instance.
+
+Pour en faire une version fantôme, changez aussi ses couleurs. Sélectionnez la nouvelle instance,
+ouvrez la section **Components** de l'inspecteur et cliquez sur **Sprite [sprite]** : le champ
+**Palette** liste les palettes du projet. Choisissez-en une autre que `DMG (GB Default)`, `_PICO-8`
+par exemple : seul ce garde change de couleurs, l'autre garde la sienne.
+
+```{figure} img/first-steps-guard-palette.png
+:alt: L'inspecteur de la seconde instance du garde, avec le composant Sprite et son champ Palette.
+:class: backstage-screenshot
+
+Le composant **Sprite** de l'instance : le champ **Palette** change les couleurs du garde.
+```
 
 C'est tout l'intérêt d'un prefab : écrire le comportement une fois, puis varier les copies par leurs
-exports. Le guide [Prefabs et instances](../guides/organiser/prefabs.md) détaille ce geste.
+réglages. Modifier ensuite le prefab (par exemple son sprite) change tous les gardes d'un coup. Le
+guide [Prefabs et instances](../guides/organiser/prefabs.md) détaille ce geste.
 
 ## 6. Lire un script
 
@@ -111,5 +136,5 @@ Le guide de scripting, plus loin, explique chacune de ces lignes.
 ## Et ensuite
 
 - Pour comprendre les zones de la fenêtre et les gestes de base : [Se repérer dans l'éditeur](overview/editor-tour.md).
-- Pour construire votre propre scène : [Construire une première scène](overview/first-scene.md).
+- Pour construire votre propre scène : [Tutoriel : première scène jouable](first-playable-scene.md).
 - Pour approfondir un sujet vu ici : [Déplacer un acteur](../guides/acteurs/deplacer-acteur.md), [Prefabs et instances](../guides/organiser/prefabs.md).
