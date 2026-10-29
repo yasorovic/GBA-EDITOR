@@ -14,7 +14,15 @@ name: Release builds
 on:
   release:
     types: [published]
+  # Sans `tag` : un build de test, rien n'est publié. Avec `tag` (celui d'une release DÉJÀ publiée,
+  # ex. 0.1.0-alpha) : le même build, puis ses fichiers sont attachés à cette release. Pratique
+  # pour rejouer une release après avoir corrigé le workflow, sans toucher au tag ni à la release.
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag d'une release existante à laquelle attacher les fichiers (vide : build de test)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -36,7 +44,7 @@ jobs:
         env:
           # Par l'environnement, pas collé dans le script : un tag contenant `"` ou `$(…)`
           # s'exécuterait sinon dans le job.
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
           FILE_VERSION="$(python3 packaging/nuitka_build.py --print-version)"
           if [ -n "$TAG" ] && [ "${TAG#v}" != "$FILE_VERSION" ]; then
@@ -595,7 +603,7 @@ jobs:
             packages/*.rpm
 
   publish:
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' || inputs.tag != ''
     needs: [tests, windows-installer, windows-portable, linux-appimage, linux-packages]
     runs-on: ubuntu-24.04
     permissions:
@@ -636,5 +644,5 @@ jobs:
       - name: Attacher les artefacts à la release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: gh release upload "$TAG" artifacts/* packaging/update.json packaging/linux/install.sh --clobber --repo "${{ github.repository }}"
