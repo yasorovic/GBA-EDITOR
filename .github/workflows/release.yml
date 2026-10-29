@@ -175,7 +175,10 @@ jobs:
 
   # Les builds n'attendent pas `tests` : ils tournent en parallèle, et seul `publish`
   # exige que les tests soient verts. Rien ne part en release sur un échec.
-  build-windows:
+  # Deux compilations Nuitka (`compile-windows`, `compile-linux`), puis quatre livrables
+  # qui les reprennent par artefact : installateur et portable Windows, AppImage et
+  # paquets .deb/.rpm Linux.
+  compile-windows:
     needs: [version]
     runs-on: windows-latest
     # Nuitka compile en C : nettement plus long que l'ancien build
@@ -235,12 +238,52 @@ jobs:
           if (Test-Path $report) { Get-Content $report }
           if ($p.ExitCode -ne 0) { throw "smoke test du binaire en échec (code $($p.ExitCode))" }
 
+      # Le dossier compilé est la matière commune des deux livrables Windows : il part en
+      # artefact intermédiaire, repris par `windows-installer` et `windows-portable`
+      # (une seule compilation, qui prend des heures, pour les deux).
+      - uses: actions/upload-artifact@v6
+        with:
+          name: dist-windows
+          path: build-out/Backstage
+          retention-days: 1
+
+  windows-portable:
+    needs: [version, compile-windows]
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist-windows
+          path: build-out/Backstage
+
       - name: ZIP portable
         shell: pwsh
         run: |
           $version = "${{ needs.version.outputs.version }}"
           Compress-Archive -Path "build-out\Backstage" `
                            -DestinationPath "Backstage-$version-windows-portable.zip"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: windows-portable
+          path: Backstage-*-windows-portable.zip
+
+  windows-installer:
+    needs: [version, compile-windows]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist-windows
+          path: build-out/Backstage
 
       - name: Construire l'installateur NSIS
         shell: pwsh
@@ -278,8 +321,6 @@ jobs:
           $version = "${{ needs.version.outputs.version }}"
           ./packaging/windows/test_installer.ps1 -Installer (Join-Path $PWD "Backstage-$version-windows-setup.exe") -Version $version
 
-      # Deux sorties séparées : on peut récupérer l'installateur ou la version
-      # portable sans télécharger l'autre.
       # archive: false (upload-artifact v7+) : le .exe est déposé tel quel, sans zip
       # autour. L'artefact porte alors le nom du fichier, pas `name`.
       - uses: actions/upload-artifact@v7
@@ -287,12 +328,7 @@ jobs:
           archive: false
           path: Backstage-*-windows-setup.exe
 
-      - uses: actions/upload-artifact@v6
-        with:
-          name: windows-portable
-          path: Backstage-*-windows-portable.zip
-
-  build-linux-appimage:
+  compile-linux:
     needs: [version]
     # Version figée, pas `ubuntu-latest` : l'AppImage exige au moins la glibc du
     # runner qui la construit. 22.04 (glibc 2.35) couvre aussi Debian 12 et
@@ -355,16 +391,6 @@ jobs:
           cat smoke-report.txt || true
           exit "${status:-0}"
 
-      - name: Récupérer appimagetool
-        run: |
-          # Version numérotée (1.9.1), pas `continuous` : ce tag est reconstruit en amont et son empreinte changerait.
-          # Empreinte épinglée, comme celles de devkitPro et mGBA dans installer.nsi :
-          # un fichier remplacé en amont fait échouer le build au lieu de partir en release.
-          curl -fL -o appimagetool \
-            https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
-          echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  appimagetool" | sha256sum -c -
-          chmod +x appimagetool
-
       - name: Assembler l'AppDir
         run: |
           mkdir -p AppDir/usr/bin
@@ -424,6 +450,50 @@ jobs:
           mkdir -p AppDir/usr/share/mime/packages
           cp packaging/linux/backstage-project.xml AppDir/usr/share/mime/packages/backstage-project.xml
 
+      - name: Archiver l'AppDir
+        run: tar -cf appdir.tar AppDir
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: dist-linux-appdir
+          path: appdir.tar
+          retention-days: 1
+
+  # Version figée comme `compile-linux` : l'AppImage exige au moins la glibc du runner.
+  linux-appimage:
+    needs: [version, compile-linux]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Bibliothèques système (xcb, EGL) et xvfb
+        run: |
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
+          sudo apt-get install -y \
+            xvfb libegl1 libopengl0 libxkbcommon0 libxkbcommon-x11-0 libxcb-cursor0 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-xkb1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xfixes0 \
+            libxcb-xinerama0 libnss3 libxdamage1 libfontconfig1 libpulse0
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist-linux-appdir
+          path: .
+
+      # tar et non un dossier brut : l'artefact est zippé, ce qui perdrait les droits
+      # d'exécution et les liens symboliques de l'AppDir.
+      - name: Extraire l'AppDir
+        run: tar -xf appdir.tar
+
+      - name: Récupérer appimagetool
+        run: |
+          # Version numérotée (1.9.1), pas `continuous` : ce tag est reconstruit en amont et son empreinte changerait.
+          # Empreinte épinglée, comme celles de devkitPro et mGBA dans installer.nsi :
+          # un fichier remplacé en amont fait échouer le build au lieu de partir en release.
+          curl -fL -o appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+          echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  appimagetool" | sha256sum -c -
+          chmod +x appimagetool
+
       - name: Construire l'AppImage
         run: |
           # --appimage-extract-and-run évite la dépendance à libfuse2, absente
@@ -457,6 +527,32 @@ jobs:
         with:
           name: linux-appimage
           path: "*.AppImage.tar.gz"
+
+  linux-packages:
+    needs: [version, compile-linux]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Bibliothèques système (xcb, EGL) et xvfb
+        run: |
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
+          sudo apt-get install -y \
+            xvfb libegl1 libopengl0 libxkbcommon0 libxkbcommon-x11-0 libxcb-cursor0 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-xkb1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xfixes0 \
+            libxcb-xinerama0 libnss3 libxdamage1 libfontconfig1 libpulse0
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist-linux-appdir
+          path: .
+
+      # tar et non un dossier brut : l'artefact est zippé, ce qui perdrait les droits
+      # d'exécution et les liens symboliques de l'AppDir.
+      - name: Extraire l'AppDir
+        run: tar -xf appdir.tar
 
       # Paquets .deb et .rpm, construits depuis le même AppDir que l'AppImage (mêmes libs,
       # même exclusion de la glibc). fpm est épinglé : une version qui change ses options
@@ -497,7 +593,7 @@ jobs:
 
   publish:
     if: github.event_name == 'release'
-    needs: [tests, build-windows, build-linux-appimage]
+    needs: [tests, windows-installer, windows-portable, linux-appimage, linux-packages]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
