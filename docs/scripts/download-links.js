@@ -3,7 +3,7 @@
 // Sans réseau ou sans release, les boutons gardent leur lien vers la page des releases.
 (function () {
   var API = "https://api.github.com/repos/yasorovic/GBA-EDITOR/releases/latest";
-  var SUFFIXES = { windows: "-windows-setup.exe", "windows-portable": "-windows-portable.zip", linux: "-x86_64.AppImage.tar.gz", "linux-deb": "-amd64.deb", "linux-rpm": "-x86_64.rpm" };
+  var SUFFIXES = { windows: "-windows-setup.exe", "windows-portable": "-windows-portable.zip", linux: "-x86_64.AppImage.tar.gz", "linux-deb": "-amd64.deb" };
 
   function init() {
     var links = document.querySelectorAll("[data-download]");
