@@ -297,10 +297,13 @@ jobs:
             $candidate = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
             if (Test-Path $candidate) { $makensis = $candidate }
           }
-          if (-not $makensis) {
+          # Le flux community.chocolatey.org répond parfois 504 : quelques essais espacés
+          # avant de renoncer, plutôt qu'une release perdue sur une erreur passagère.
+          for ($attempt = 1; -not $makensis -and $attempt -le 5; $attempt++) {
             choco install nsis -y --no-progress
             $candidate = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
             if (Test-Path $candidate) { $makensis = $candidate }
+            elseif ($attempt -lt 5) { Write-Host "choco a échoué (essai $attempt sur 5), nouvel essai dans 20 s"; Start-Sleep -Seconds 20 }
           }
           if (-not $makensis) { throw "makensis introuvable même après installation via choco" }
 
