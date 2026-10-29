@@ -2,6 +2,7 @@
 
 import queue
 import sys
+import time
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
@@ -18,8 +19,9 @@ from PyQt6.QtGui import QGuiApplication
 
 from ui.common.theme import C, T, QSS, brand_font
 from ui.common.labels import label
-from ui.common import import_folder
+from ui.common import import_folder, icons
 from ui.common.tooltip import tooltip
+from ui.common.action_list_popup import ActionListPopup
 
 from codegen import BuildWorker
 from core.models.components import affine_sprite_component, displayed_sprite_component
@@ -508,7 +510,7 @@ class MainWindow(QMainWindow):
         d.location_activated.connect(self._open_build_location)
         d.actor_activated.connect(self._select_actor_by_name)
         d.element_activated.connect(self._select_ui_element)
-        panel.disk.refresh_requested.connect(self._refresh_disk)
+        panel.disk.refresh_requested.connect(self._rescan_and_refresh_disk)
         panel.disk.move_requested.connect(self._move_disk_items)
         panel.disk.asset_open_requested.connect(self._open_disk_asset)
         panel.disk.actor_dropped.connect(self._export_actor_to_disk)
@@ -1079,16 +1081,25 @@ class MainWindow(QMainWindow):
             f"QToolButton:disabled{{color:{C.TEXT_MUTED};}}"
         )
         self._btn_undo = QToolButton()
-        self._btn_undo.setText(label("win.undo"))
-        self._btn_undo.setFont(QFont(T.UI, T.MD))
+        self._btn_undo.setIcon(icons.get("undo", C.TEXT_DIM))
         self._btn_undo.setStyleSheet(_undo_redo_style)
         self._btn_undo.setEnabled(False)
         self._btn_undo.clicked.connect(self._do_undo)
         tb.addWidget(self._btn_undo)
 
+        # Entre les deux : la liste des actions de l'écran affiché ; une ligne cliquée défait ou rejoue jusqu'à elle.
+        self._btn_action_list = QToolButton()
+        self._btn_action_list.setIcon(icons.get("action_list", C.TEXT_DIM))
+        self._btn_action_list.setStyleSheet(_undo_redo_style)
+        self._btn_action_list.setToolTip(tooltip(title=label("win.action_list_title"),
+                                                 body=label("win.action_list_tip")))
+        self._btn_action_list.clicked.connect(self._open_action_list)
+        self._action_list = ActionListPopup(self)
+        self._action_list.picked.connect(self._jump_history)
+        tb.addWidget(self._btn_action_list)
+
         self._btn_redo = QToolButton()
-        self._btn_redo.setText(label("win.redo"))
-        self._btn_redo.setFont(QFont(T.UI, T.MD))
+        self._btn_redo.setIcon(icons.get("redo", C.TEXT_DIM))
         self._btn_redo.setStyleSheet(_undo_redo_style)
         self._btn_redo.setEnabled(False)
         self._btn_redo.clicked.connect(self._do_redo)
@@ -1199,6 +1210,8 @@ class MainWindow(QMainWindow):
         # Démarrage paresseux : l'écran est construit maintenant s'il ne l'était
         # pas — c'est sa première visite.
         get_deferred_writes().flush()       # ce qu'on règle ici s'écrit avant qu'on le quitte : l'autre écran lit le disque
+        if self.project:
+            self._watcher.rescan()          # ce qui a changé dehors depuis la dernière visite (sur deux écrans, le retour du focus ne vient pas)
         self._ensure_screen(index)
         self._move_build_panel_to(index)
         # Revisite ? On le capture AVANT `_load_screen_for_project`, qui ajoute
@@ -1382,7 +1395,7 @@ class MainWindow(QMainWindow):
         contient (scènes, prefabs), le second ce que le disque contient."""
         self.scene_library_panel.hide_title()
         self.disk_tree_view = DiskTreeView()
-        self.disk_tree_view.refresh_requested.connect(self._refresh_disk)
+        self.disk_tree_view.refresh_requested.connect(self._rescan_and_refresh_disk)
         self.disk_tree_view.folder_selected.connect(self._show_disk_folder)
         self.disk_tree_view.rename_requested.connect(self._rename_disk_item)
         self.disk_tree_view.move_requested.connect(self._move_disk_items)
@@ -1827,6 +1840,16 @@ class MainWindow(QMainWindow):
         from core.disk_tree import build_disk_tree
         self.project.load_all_resources()
         self._show_disk(build_disk_tree(self.project))
+
+    def _rescan_and_refresh_disk(self):
+        """Le bouton Refresh de l'onglet Disk, et son ouverture : rattrape d'abord ce qui a changé sur le disque
+        (`ProjectWatcher.rescan`, le même chemin qu'au retour du focus), puis relit l'arbre. Sur deux écrans,
+        l'éditeur reste actif quand l'auteur retouche une image dehors : le retour du focus ne vient jamais.
+        Le rattrapage n'est PAS dans `_refresh_disk` : le watcher l'appelle lui-même (`_on_source_files_changed`)."""
+        if not self.project or self._disk_refresh_suspended:
+            return
+        self._watcher.rescan()
+        self._refresh_disk()
 
     def _show_disk(self, tree):
         if (view := getattr(self, "disk_tree_view", None)) is not None:
@@ -2283,6 +2306,26 @@ class MainWindow(QMainWindow):
             tooltip(title=label("win.redo_tip", label=rl), shortcut="Ctrl+Y") if rl
             else tooltip(title=label("win.redo_none")))
 
+    def _open_action_list(self):
+        """Ouvre la liste des actions sous le bouton. La pile est celle de l'écran affiché : `_show_screen` la vide à
+        chaque changement d'écran, donc la liste ne propose jamais de défaire un geste fait ailleurs."""
+        self._action_list.set_entries(self._history.undo_labels, self._history.redo_labels)
+        btn = self._btn_action_list
+        self._action_list.move(btn.mapToGlobal(btn.rect().bottomLeft()))
+        self._action_list.show()
+
+    def _jump_history(self, steps: int):
+        """Défait (`steps` < 0) ou rejoue (`steps` > 0) `abs(steps)` actions d'un coup, puis rafraîchit l'écran UNE
+        fois : rafraîchir à chaque pas rechargerait la scène autant de fois."""
+        last = None
+        for _ in range(abs(steps)):
+            last = self._history.undo() if steps < 0 else self._history.redo()
+            if last is None:
+                break
+        if last is not None:
+            self._status.showMessage(label("win.undone" if steps < 0 else "win.redone", label=last), 2000)
+            self._flush_after_undo_redo()
+
     def _do_undo(self):
         lbl = self._history.undo()
         if lbl:
@@ -2326,6 +2369,28 @@ class MainWindow(QMainWindow):
         self._reload_actor_inspector()
 
     # ── Réactivité fichiers externes ─────────────────────────────
+
+    _RESCAN_ON_ENTER_MIN_S = 1.0     # écart minimal entre deux rattrapages au survol
+    _last_enter_rescan = 0.0
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        self._rescan_on_pointer_return()
+
+    def _rescan_on_pointer_return(self):
+        """La souris revient sur la fenêtre : rattrape ce qui a changé dehors, comme au retour du focus.
+
+        Sur deux écrans, l'auteur retouche un fichier dans un autre logiciel sans que l'éditeur cesse d'être actif :
+        `_on_application_state_changed` ne part jamais. Deux garde-fous : un écart minimal (la souris entre et sort
+        de la fenêtre sans arrêt), et rien tant qu'une modification est en attente, car `rescan()` lève la suppression
+        du watcher et prendrait une écriture interne de la rafale en cours pour une modification externe."""
+        if not self.project or self._has_pending_changes():
+            return
+        now = time.monotonic()
+        if now - self._last_enter_rescan < self._RESCAN_ON_ENTER_MIN_S:
+            return
+        self._last_enter_rescan = now
+        self._watcher.rescan()
 
     def _on_application_state_changed(self, state):
         if state == Qt.ApplicationState.ApplicationActive and self.project:

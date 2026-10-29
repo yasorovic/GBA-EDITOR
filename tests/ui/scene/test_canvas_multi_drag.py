@@ -156,7 +156,8 @@ def test_renommer_un_acteur_est_annulable_et_refuse_un_nom_pris(editor):
 
 
 def test_une_commande_deja_executee_respecte_le_plafond_de_l_historique(editor):
-    from core.history import _MAX_HISTORY, Command
+    from core.history import Command
+    from core.interface_preferences import undo_depth
 
     class Noop(Command):
         label = "noop"
@@ -164,9 +165,9 @@ def test_une_commande_deja_executee_respecte_le_plafond_de_l_historique(editor):
         def undo(self): pass
 
     history = get_history()
-    for _ in range(_MAX_HISTORY + 20):
+    for _ in range(undo_depth() + 20):
         history.push_executed(Noop())
-    assert len(history._undo) == _MAX_HISTORY
+    assert len(history._undo) == undo_depth()
 
 
 def test_un_enfant_selectionne_avec_son_parent_ne_bouge_pas_deux_fois(editor):

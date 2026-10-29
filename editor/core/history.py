@@ -11,7 +11,8 @@ Règles :
   - Les commandes sur un même (objet, champ) consécutives sont fusionnées
     (évite 100 entrées pour un drag de SpinBox).
   - Le stack redo est vidé dès qu'une nouvelle commande est poussée.
-  - Max 200 commandes gardées (mémoire bornée).
+  - Le nombre de commandes gardées est une préférence de la machine
+    (`interface_preferences.undo_depth`), lue par `trim()` seul.
 """
 
 from __future__ import annotations
@@ -21,10 +22,10 @@ from typing import Any, Optional, TYPE_CHECKING
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
+from core.interface_preferences import undo_depth
+
 if TYPE_CHECKING:
     from core.models.scene import Actor, Scene
-
-_MAX_HISTORY = 200
 
 
 # ── Commande abstraite ─────────────────────────────────────────────
@@ -1245,8 +1246,14 @@ class CommandHistory(QObject):
         self._executed(cmd)
         self._undo.append(cmd)
         self._redo.clear()
-        if len(self._undo) > _MAX_HISTORY:
-            self._undo = self._undo[-_MAX_HISTORY:]
+        self.trim()
+
+    def trim(self):
+        """Ramène la pile d'annulation à la profondeur réglée : les plus anciennes entrées partent. Appelée à chaque
+        ajout, et par les réglages quand la profondeur baisse."""
+        limit = undo_depth()
+        if len(self._undo) > limit:
+            self._undo = self._undo[-limit:]
         self.changed.emit()
 
     def push(self, cmd: Command):
@@ -1263,21 +1270,14 @@ class CommandHistory(QObject):
         self._executed(cmd)
         self._undo.append(cmd)
         self._redo.clear()
-
-        # Borner la mémoire
-        if len(self._undo) > _MAX_HISTORY:
-            self._undo = self._undo[-_MAX_HISTORY:]
-
-        self.changed.emit()
+        self.trim()
 
     def push_executed(self, cmd: Command):
         """Enregistre une commande dont l'effet est DÉJÀ posé (un glisser, un coup de pinceau) : pas de `execute()`,
-        mais la même pile — vidage du refaire, plafond `_MAX_HISTORY` — que `push`."""
+        mais la même pile — vidage du refaire, profondeur réglée — que `push`."""
         self._undo.append(cmd)
         self._redo.clear()
-        if len(self._undo) > _MAX_HISTORY:
-            self._undo = self._undo[-_MAX_HISTORY:]
-        self.changed.emit()
+        self.trim()
 
     def undo(self) -> Optional[str]:
         """Annule la dernière commande. Retourne son label ou None."""
@@ -1328,6 +1328,16 @@ class CommandHistory(QObject):
     @property
     def undo_label(self) -> str:
         return self._undo[-1].label if self._undo else ""
+
+    @property
+    def undo_labels(self) -> list[str]:
+        """Ce que Undo peut défaire, la plus récente en premier."""
+        return [cmd.label for cmd in reversed(self._undo)]
+
+    @property
+    def redo_labels(self) -> list[str]:
+        """Ce que Redo peut rejouer, la prochaine à rejouer en premier."""
+        return [cmd.label for cmd in reversed(self._redo)]
 
     @property
     def redo_label(self) -> str:

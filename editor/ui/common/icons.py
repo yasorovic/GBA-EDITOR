@@ -275,6 +275,10 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "empty":                  ("mdi.cancel",                  "⊘"),
     "layout_list":            ("mdi.view-list",               "☰"),
     "sort":                   ("mdi.sort-alphabetical-ascending", "⇅"),
+    # Barre du haut : annuler, rétablir, et la liste de ce qui peut être annulé.
+    "undo":                   ("mdi.undo",                    "↩"),
+    "redo":                   ("mdi.redo",                    "↪"),
+    "action_list":            ("mdi.history",                 "⏱"),
     # Fenêtre « À propos » (ui/common/about_dialog.py)
     "open_external":          ("mdi.open-in-new",             "↗"),
     "docs":                   ("mdi.book-open-variant",       "▤"),

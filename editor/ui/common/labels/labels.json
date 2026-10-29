@@ -287,6 +287,12 @@
     "settings.interface.language": {
       "text": "Language"
     },
+    "settings.interface.undo_depth": {
+      "text": "Undo depth"
+    },
+    "settings.interface.undo_depth_note": {
+      "text": "How many actions Undo keeps for the open screen. A brush stroke counts as one; lowering the value drops the oldest actions at once."
+    },
     "settings.interface.scale": {
       "text": "Scale"
     },
@@ -2092,11 +2098,11 @@
     "win.window_title": {
       "text": "{app_name} ({name})"
     },
-    "win.undo": {
-      "text": "↩ Undo"
+    "win.action_list_title": {
+      "text": "Action list"
     },
-    "win.redo": {
-      "text": "↪ Redo"
+    "win.action_list_tip": {
+      "text": "Lists the actions of this screen, the most recent first. Clicking one undoes, or redoes, everything up to it."
     },
     "win.undo_tip": {
       "text": "Undo: {label}"
@@ -4757,7 +4763,7 @@
     "disk.unsupported": { "text": "Not managed" },
     "disk.counts": { "text": "{assets} assets · {sources} sources without asset" },
     "disk.refresh_title": { "text": "Refresh the disk view" },
-    "disk.refresh_tip": { "text": "Reads the assets folder again and updates this tree." },
+    "disk.refresh_tip": { "text": "Reads the assets folder again, picks up files changed outside the editor, and updates this view." },
     "disk.up_tip": { "text": "Goes back to the parent folder." },
     "akind.relink_source": { "text": "Relink source…" },
     "akind.relink_source_title": { "text": "Relink source — {name}" },

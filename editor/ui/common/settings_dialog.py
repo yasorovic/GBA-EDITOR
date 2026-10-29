@@ -58,10 +58,12 @@ from core.interface_preferences import (
     tips_shown, set_tips_shown, interface_language, set_interface_language,
     interface_theme, set_interface_theme,
     interface_scale_percent, set_interface_scale_percent, SCALE_CHOICES,
+    undo_depth, set_undo_depth, UNDO_DEPTH_RANGE,
 )
+from core.history import get_history
 from core.toolchain import Toolchain, DEVKITPRO_URL, MGBA_URL, DEVKITPRO_OK, DEVKITPRO_INCOMPLETE
 from core.external_tools import ExternalTools, TOOL_KINDS
-from ui.common.widgets import CollapsibleCard
+from ui.common.widgets import CollapsibleCard, W
 from core.keybindings import (
     get_keybindings, Binding, BINDINGS, DISPLAY_ONLY,
 )
@@ -432,7 +434,28 @@ class InterfacePanel(QWidget):
         self._chk_tips.toggled.connect(self._on_toggled)
         lay.addWidget(self._chk_tips)
 
+        undo_row = QHBoxLayout()
+        undo_label = QLabel(label("settings.interface.undo_depth"))
+        undo_label.setFont(QFont(T.UI, T.MD))
+        undo_label.setFixedWidth(140)
+        self._undo_depth = W.spinbox(undo_depth(), *UNDO_DEPTH_RANGE)
+        self._undo_depth.valueChanged.connect(self._on_undo_depth_changed)
+        undo_row.addWidget(undo_label)
+        undo_row.addWidget(self._undo_depth)
+        undo_row.addStretch()
+        lay.addLayout(undo_row)
+
+        undo_note = QLabel(label("settings.interface.undo_depth_note"))
+        undo_note.setFont(QFont(T.UI, T.SM))
+        undo_note.setStyleSheet(f"color:{C.TEXT_DIM};")
+        undo_note.setWordWrap(True)
+        lay.addWidget(undo_note)
+
         lay.addStretch()
+
+    def _on_undo_depth_changed(self, depth: int):
+        set_undo_depth(depth)
+        get_history().trim()        # une profondeur qui baisse raccourcit la pile tout de suite
 
     def _on_toggled(self, value: bool):
         set_tips_shown(bool(value))

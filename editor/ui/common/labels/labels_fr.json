@@ -416,6 +416,12 @@
     "settings.interface.scale": {
       "text": "Échelle"
     },
+    "settings.interface.undo_depth": {
+      "text": "Profondeur d'annulation"
+    },
+    "settings.interface.undo_depth_note": {
+      "text": "Nombre d'actions que Annuler garde pour l'écran ouvert. Un trait de pinceau compte pour une ; baisser la valeur supprime tout de suite les plus anciennes."
+    },
     "settings.interface.scale_restart": {
       "text": "Le changement d’échelle s’appliquera au prochain démarrage de {app_name}."
     },
@@ -2133,6 +2139,8 @@
     "sndpanel.jinglebox_empty": { "text": "Une JingleBox indique vers quel module pointe chaque action de jingle, état par état. Un jingle se superpose à la musique, il ne la remplace pas." },
     "sndpanel.soundbox_empty": { "text": "Une SoundBox indique vers quel effet pointe chaque action, état par état. Le même cycle de marche sonne sur le sable ou le gravier sans être créé deux fois." },
     "backdrop.tip": { "text": "Fait défiler les fonds d’épreuve : l’actuel est {name}, le suivant est {next}." },
+    "win.action_list_title": { "text": "Liste des actions" },
+    "win.action_list_tip": { "text": "Liste les actions de cet écran, la plus récente en premier. Cliquer sur l'une défait, ou rejoue, tout jusqu'à elle." },
     "win.undo_tip": { "text": "Annuler : {label}" },
     "win.undo_none": { "text": "Rien à annuler" },
     "win.redo_tip": { "text": "Rétablir : {label}" },
@@ -2354,7 +2362,7 @@
     "disk.unsupported": { "text": "Non géré" },
     "disk.counts": { "text": "{assets} assets · {sources} sources sans asset" },
     "disk.refresh_title": { "text": "Actualiser la vue du disque" },
-    "disk.refresh_tip": { "text": "Relit le dossier assets et met cet arbre à jour." },
+    "disk.refresh_tip": { "text": "Relit le dossier assets, prend en compte les fichiers modifiés hors de l'éditeur et met cette vue à jour." },
     "disk.up_tip": { "text": "Revient au dossier parent." },
     "akind.relink_source": { "text": "Relier à une autre source…" },
     "akind.relink_source_title": { "text": "Relier la source — {name}" },

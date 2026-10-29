@@ -46,9 +46,13 @@ _DEFAULTS = {
     "disk_preview_collapsed": False,
     # Unité de la position du curseur dans les canvas : "px" ou "tile" (réversible d'un clic).
     "cursor_unit": "px",
+    # Combien d'actions Annuler garde. Un trait de pinceau compte pour une entrée : une longue séance de peinture
+    # remplit vite la pile.
+    "undo_depth": 200,
 }
 
 SCALE_CHOICES = (75, 100, 125, 150)
+UNDO_DEPTH_RANGE = (10, 256)
 
 _cache: dict | None = None
 
@@ -120,6 +124,19 @@ def cursor_unit() -> str:
 
 def set_cursor_unit(unit: str):
     _load()["cursor_unit"] = "tile" if unit == "tile" else "px"
+    _save()
+
+
+def undo_depth() -> int:
+    """Nombre d'actions que la pile d'annulation garde, borné à `UNDO_DEPTH_RANGE`."""
+    value = _load().get("undo_depth", _DEFAULTS["undo_depth"])
+    low, high = UNDO_DEPTH_RANGE
+    return value if isinstance(value, int) and low <= value <= high else _DEFAULTS["undo_depth"]
+
+
+def set_undo_depth(depth: int):
+    low, high = UNDO_DEPTH_RANGE
+    _load()["undo_depth"] = max(low, min(high, int(depth)))
     _save()
 
 
