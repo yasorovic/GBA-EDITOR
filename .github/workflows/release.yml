@@ -7,7 +7,7 @@ name: Release builds
 # de release (les artefacts restent alors dans l'onglet Actions).
 #
 # Trois plateformes : l'installateur NSIS + le ZIP portable Windows, et
-# l'AppImage Linux avec ses paquets .deb et .rpm (+ install.sh, joint à la release). La vraie distribution de test est le runner ubuntu-22.04
+# l'AppImage Linux avec son paquet .deb (+ install.sh, joint à la release). La vraie distribution de test est le runner ubuntu-22.04
 # (figé : il fixe la glibc minimale de l'AppImage) : un `workflow_dispatch`
 # produit l'AppImage en artefact (onglet Actions) sans publier de release, pour
 # la valider avant un vrai tag.
@@ -185,7 +185,7 @@ jobs:
   # exige que les tests soient verts. Rien ne part en release sur un échec.
   # Deux compilations Nuitka (`compile-windows`, `compile-linux`), puis quatre livrables
   # qui les reprennent par artefact : installateur et portable Windows, AppImage et
-  # paquets .deb/.rpm Linux.
+  # paquet .deb Linux.
   compile-windows:
     needs: [version]
     runs-on: windows-latest
@@ -565,12 +565,11 @@ jobs:
       - name: Extraire l'AppDir
         run: tar -xf appdir.tar
 
-      # Paquets .deb et .rpm, construits depuis le même AppDir que l'AppImage (mêmes libs,
+      # Paquet .deb, construit depuis le même AppDir que l'AppImage (mêmes libs,
       # même exclusion de la glibc). fpm est épinglé : une version qui change ses options
       # casserait le build sans prévenir.
-      - name: Construire les paquets .deb et .rpm
+      - name: Construire le paquet .deb
         run: |
-          sudo apt-get install -y rpm
           sudo gem install fpm -v 1.15.1 --no-document
           VERSION="${{ needs.version.outputs.version }}"
           sh packaging/linux/build_packages.sh AppDir "$VERSION" packages
@@ -578,7 +577,7 @@ jobs:
 
       # Le .deb est INSTALLÉ pour de vrai sur le runner, puis le binaire installé est lancé :
       # le lanceur /usr/bin/backstage, /opt/backstage et les fichiers du bureau sont ceux
-      # d'un utilisateur. Le .rpm, lui, ne peut qu'être listé ici (pas de dnf sur ubuntu).
+      # d'un utilisateur.
       - name: Tester le paquet .deb
         run: |
           VERSION="${{ needs.version.outputs.version }}"
@@ -590,7 +589,6 @@ jobs:
           test -f /usr/share/mime/packages/backstage-project.xml
           xvfb-run -a backstage --smoke-test="$PWD/smoke-deb.txt" || status=$?
           cat smoke-deb.txt || true
-          rpm -qpl "packages/Backstage-${VERSION}-x86_64.rpm" | grep -q '^/opt/backstage/Backstage$'
           sudo apt-get remove -y backstage
           test ! -e /opt/backstage/Backstage
           exit "${status:-0}"
@@ -600,7 +598,6 @@ jobs:
           name: linux-packages
           path: |
             packages/*.deb
-            packages/*.rpm
 
   publish:
     if: github.event_name == 'release' || inputs.tag != ''

@@ -6,7 +6,9 @@
 testpaths = ["tests"]
 addopts = "-q -rs -m 'not slow'"
 markers = [
-    "slow: construit un vrai projet de bout en bout (quelques minutes) ; exclus par défaut, `pytest -m slow` les lance",
+    "slow: construit un vrai projet de bout en bout avec devkitPro (quelques minutes) ; exclus par défaut, `pytest -m slow` les lance",
+    "native: compile et exécute une sonde C avec le compilateur de la machine (posé par tests/conftest.py)",
+    "ui: instancie de vrais widgets Qt hors écran (posé par tests/conftest.py)",
 ]
 
 # Ruff ne lit que les erreurs qui plantent à coup sûr (syntaxe, comparaisons et

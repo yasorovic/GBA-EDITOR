@@ -43,7 +43,7 @@ def test_wav_metadata_and_bounded_waveform(qapp, tmp_path, width, channels):
 
 @pytest.mark.parametrize('kind', ['mod', 'xm', 's3m', 'it'])
 def test_tracker_structure_without_rendering_audio(qapp, tmp_path, kind):
-    fixtures = runpy.run_path(str(Path(__file__).parents[1] / 'audio' / 'module_fixtures.py'))
+    fixtures = runpy.run_path(str(Path(__file__).parents[2] / 'audio' / 'module_fixtures.py'))
     path = tmp_path / f'track.{kind}'
     path.write_bytes(fixtures[f'make_{kind}']())
     result = resource_preview(None, _node(path), True)
@@ -126,7 +126,7 @@ def test_tracker_player_uses_unmodified_source_and_shuts_down(qapp, tmp_path):
 def test_existing_module_engine_accepts_source_preview_project(qapp, tmp_path, monkeypatch):
     from core.models.audio import Music
     from ui.sound_mixer.box_playback import BoxPlayer
-    fixtures = runpy.run_path(str(Path(__file__).parents[1] / 'audio' / 'module_fixtures.py'))
+    fixtures = runpy.run_path(str(Path(__file__).parents[2] / 'audio' / 'module_fixtures.py'))
     path = tmp_path / 'track.mod'
     path.write_bytes(fixtures['make_mod']())
     player = BoxPlayer()
@@ -140,7 +140,7 @@ def test_existing_module_engine_accepts_source_preview_project(qapp, tmp_path, m
 def test_enlarged_wav_and_tracker_previews_do_not_autoplay(qapp, tmp_path):
     path = tmp_path / 'beep.wav'
     _wav(path)
-    fixtures = runpy.run_path(str(Path(__file__).parents[1] / 'audio' / 'module_fixtures.py'))
+    fixtures = runpy.run_path(str(Path(__file__).parents[2] / 'audio' / 'module_fixtures.py'))
     module = tmp_path / 'track.mod'
     module.write_bytes(fixtures['make_mod']())
     panel = DiskPreviewPanel()

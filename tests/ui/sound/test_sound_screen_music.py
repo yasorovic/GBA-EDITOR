@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 from PyQt6.QtWidgets import QApplication
 
-REPO_DIR = Path(__file__).resolve().parents[2]
+REPO_DIR = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_DIR / "tests"))
 sys.path.insert(0, str(REPO_DIR / "tests" / "audio"))
 

@@ -2,7 +2,7 @@
 # Installe la dernière version de Backstage depuis les releases GitHub :
 #   curl -fsSL https://raw.githubusercontent.com/yasorovic/GBA-EDITOR/main/packaging/linux/install.sh | sh
 #
-# Debian/Ubuntu : paquet .deb. Fedora/RHEL/openSUSE : paquet .rpm. Autres distributions :
+# Debian/Ubuntu : paquet .deb. Autres distributions :
 # l'AppImage, posée dans ~/.local/bin. Le fichier téléchargé est vérifié contre SHA256SUMS.
 # Variable BACKSTAGE_VERSION (ex. 0.30.0-alpha) : installe cette version au lieu de la dernière.
 set -eu
@@ -36,13 +36,10 @@ fi
 KIND=appimage
 case " $ID_LIKE_ALL " in
     *" debian "*|*" ubuntu "*) command -v apt-get >/dev/null 2>&1 && KIND=deb ;;
-    *" fedora "*|*" rhel "*|*" centos "*|*" suse "*|*" opensuse "*)
-        if command -v dnf >/dev/null 2>&1 || command -v zypper >/dev/null 2>&1; then KIND=rpm; fi ;;
 esac
 
 case "$KIND" in
     deb) FILE="Backstage-${VERSION}-amd64.deb" ;;
-    rpm) FILE="Backstage-${VERSION}-x86_64.rpm" ;;
     *)   FILE="Backstage-${VERSION}-x86_64.AppImage.tar.gz" ;;
 esac
 
@@ -70,14 +67,6 @@ sha256sum -c expected >/dev/null || die "empreinte SHA-256 invalide pour $FILE."
 case "$KIND" in
     deb)
         $SUDO apt-get install -y "./$FILE"
-        ;;
-    rpm)
-        if command -v dnf >/dev/null 2>&1; then
-            $SUDO dnf install -y "./$FILE"
-        else
-            # Le paquet n'est pas signé.
-            $SUDO zypper --non-interactive --no-gpg-checks install "./$FILE"
-        fi
         ;;
     appimage)
         mkdir -p "$HOME/.local/bin"

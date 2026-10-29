@@ -4,9 +4,43 @@ name: Tests
 # release.yml, qui n'agit qu'au moment de publier. C'est la différence entre un
 # garde-fou et un constat : une régression doit se voir au commit qui la crée,
 # pas des semaines plus tard au moment d'empaqueter.
+#
+# Les pushs qui ne touchent que de la prose (docs/, README, ROADMAP, changelog…) ne
+# lancent pas les tests : docs.yml construit et publie le site de son côté. Les motifs
+# sont ordonnés, un motif positif placé après une exclusion réintègre le fichier : les
+# deux fichiers de docs/ que des tests lisent vraiment restent donc couverts
+# (tests/docs/test_lua_api_pages.py, tests/scripting/test_lua_subset.py). Un commit qui
+# mêle doc et code lance toujours les tests. La liste est écrite deux fois : GitHub
+# n'accepte pas `paths-ignore` avec réintégration, et on évite les ancres YAML.
 on:
   push:
+    paths:
+      - "**"
+      - "!docs/**"
+      - "!README.md"
+      - "!ROADMAP.md"
+      - "!RELEASE_NOTES.md"
+      - "!THIRD-PARTY-NOTICES.md"
+      - "!AGENTS.md"
+      - "!changelog/**"
+      - "!licenses/**"
+      - "!.github/workflows/docs.yml"
+      - "docs/_gen/**"
+      - "docs/scripting-reference.md"
   pull_request:
+    paths:
+      - "**"
+      - "!docs/**"
+      - "!README.md"
+      - "!ROADMAP.md"
+      - "!RELEASE_NOTES.md"
+      - "!THIRD-PARTY-NOTICES.md"
+      - "!AGENTS.md"
+      - "!changelog/**"
+      - "!licenses/**"
+      - "!.github/workflows/docs.yml"
+      - "docs/_gen/**"
+      - "docs/scripting-reference.md"
   workflow_dispatch:
 
 permissions:

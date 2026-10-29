@@ -1,10 +1,10 @@
 #!/bin/sh
-# Construit Backstage-<version>-amd64.deb et Backstage-<version>-x86_64.rpm depuis
+# Construit Backstage-<version>-amd64.deb depuis
 # l'AppDir déjà assemblé par la CI (release.yml) : l'éditeur Nuitka, les libs xcb
 # copiées et la glibc exclue sont donc EXACTEMENT ceux de l'AppImage.
 #
 # Usage : build_packages.sh <AppDir> <version> <dossier de sortie>
-# Prérequis : fpm (gem) et rpmbuild.
+# Prérequis : fpm (gem).
 set -eu
 
 APPDIR="$1"
@@ -14,7 +14,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(mktemp -d)"
 trap 'rm -rf "$ROOT"' EXIT
 
-# 0.30.0-alpha -> 0.30.0~alpha : le "-" sépare version et révision chez dpkg et rpm,
+# 0.30.0-alpha -> 0.30.0~alpha : le "-" sépare version et révision chez dpkg,
 # et "~" fait trier une préversion AVANT la version finale.
 PKGVER="$(printf '%s' "$VERSION" | sed 's/-/~/')"
 
@@ -45,5 +45,3 @@ COMMON="--name backstage --version $PKGVER --input-type dir \
 # Les paquets ne tirent pas devkitPro : backstage-setup-devkitpro s'en charge.
 eval fpm $COMMON --output-type deb --architecture amd64 --depends "'libc6 (>= 2.35)'" \
     --package "$OUT/Backstage-${VERSION}-amd64.deb" opt usr
-eval fpm $COMMON --output-type rpm --depends "'glibc >= 2.35'" --architecture x86_64 \
-    --package "$OUT/Backstage-${VERSION}-x86_64.rpm" opt usr

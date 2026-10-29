@@ -8,7 +8,7 @@ from PyQt6.QtGui import QImage, QPainter
 
 from core.project import Project
 
-DEMO = Path(__file__).resolve().parent.parent.parent / "Project Demo" / "Platformer"
+DEMO = Path(__file__).resolve().parent.parent.parent.parent / "Project Demo" / "Platformer"
 
 
 def _textbox_item(tmp_path):

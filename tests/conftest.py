@@ -36,6 +36,27 @@ def _tests_never_write_the_real_crash_log(tmp_path, monkeypatch):
     monkeypatch.setattr(crash_log, "_shown_summaries", set())
 
 
+# ── Marqueurs de coût ─────────────────────────────────────────────────────────
+#
+# Deux marqueurs se posent d'après ce que le test utilise, pas d'après son dossier : un test qui
+# change de dossier ou un nouveau test qui compile une sonde les reçoit sans que personne y pense.
+#   ui     : le test demande `qapp`, ou vit sous tests/ui (certains créent leur propre QApplication).
+#   native : le module cherche le compilateur de la machine (`compilateur_hote`, ou l'un des deux
+#            équivalents locaux). Le marqueur vaut pour le module entier.
+# `slow` (build devkitPro) reste posé à la main sur les tests concernés.
+# Paliers : `-m "not ui and not native"` = logique pure, en secondes ; défaut = tout sauf `slow`.
+
+_HOST_COMPILER_NAMES = ("compilateur_hote", "_compilateur_hote", "_host_gcc")
+
+
+def pytest_collection_modifyitems(items):
+    for item in items:
+        if "qapp" in item.fixturenames or "ui" in item.path.parts:
+            item.add_marker(pytest.mark.ui)
+        if any(hasattr(item.module, name) for name in _HOST_COMPILER_NAMES):
+            item.add_marker(pytest.mark.native)
+
+
 # ── Couverture des diagnostics (cf. tools/diagnostic_coverage.py) ─────────────
 #
 # Chaque run note les lignes qui construisent un diagnostic. À la fin d'un run COMPLET, un

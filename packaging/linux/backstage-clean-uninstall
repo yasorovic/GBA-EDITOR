@@ -1,7 +1,7 @@
 #!/bin/sh
-# Désinstallation propre de Backstage : retire le paquet (.deb/.rpm) ou l'AppImage posée
+# Désinstallation propre de Backstage : retire le paquet .deb ou l'AppImage posée
 # par install.sh, PUIS la configuration et les fichiers temporaires de l'utilisateur.
-# Installé en /usr/bin/backstage-clean-uninstall par les paquets .deb et .rpm.
+# Installé en /usr/bin/backstage-clean-uninstall par le paquet .deb.
 #
 # Ne supprime JAMAIS les projets (~/BackstageProjects), ni devkitPro (/opt/devkitpro) ni
 # mGBA : outils indépendants, que d'autres programmes peuvent utiliser.
@@ -41,12 +41,8 @@ fi
 # Le paquet, selon le gestionnaire qui l'a installé.
 if command -v dpkg >/dev/null 2>&1 && dpkg -s backstage >/dev/null 2>&1; then
     $SUDO apt-get purge -y backstage
-elif command -v rpm >/dev/null 2>&1 && rpm -q backstage >/dev/null 2>&1; then
-    if command -v dnf >/dev/null 2>&1; then $SUDO dnf remove -y backstage
-    elif command -v zypper >/dev/null 2>&1; then $SUDO zypper --non-interactive remove backstage
-    else $SUDO rpm -e backstage; fi
 fi
-# L'AppImage posée par install.sh (distributions sans .deb ni .rpm).
+# L'AppImage posée par install.sh (distributions sans .deb).
 rm -f "$USER_HOME/.local/bin/Backstage.AppImage"
 
 # Deux casses : config_dir() écrit en minuscules, les QSettings en « Backstage ».

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PyQt6.QtGui import QKeySequence
 
-WINDOW = Path(__file__).resolve().parents[2] / "editor" / "window.py"
+WINDOW = Path(__file__).resolve().parents[3] / "editor" / "window.py"
 
 
 def test_les_raccourcis_globaux_d_historique_ont_des_touches_distinctes(qapp):

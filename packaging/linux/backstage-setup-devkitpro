@@ -1,6 +1,6 @@
 #!/bin/sh
 # Installe devkitPro (groupe gba-dev), la chaîne d'outils qui compile la ROM.
-# Installé en /usr/bin/backstage-setup-devkitpro par les paquets .deb et .rpm.
+# Installé en /usr/bin/backstage-setup-devkitpro par le paquet .deb.
 # Mêmes commandes que core/toolchain.py (_LINUX_INSTALL_COMMANDS) : si l'une change,
 # changer l'autre.
 set -eu

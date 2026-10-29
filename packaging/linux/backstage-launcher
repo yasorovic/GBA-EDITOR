@@ -1,5 +1,5 @@
 #!/bin/sh
-# Lanceur installé en /usr/bin/backstage par les paquets .deb et .rpm. Équivalent
+# Lanceur installé en /usr/bin/backstage par le paquet .deb. Équivalent
 # de AppRun pour une installation système : l'éditeur et ses bibliothèques vivent
 # dans /opt/backstage (copie de AppDir/usr/bin, cf. build_packages.sh).
 HERE=/opt/backstage

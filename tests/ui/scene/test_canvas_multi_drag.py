@@ -15,7 +15,7 @@ from PyQt6.QtTest import QTest
 from core.history import get_history
 from core.project import Project
 
-DEMO = Path(__file__).resolve().parents[2] / "Project Demo" / "Platformer"
+DEMO = Path(__file__).resolve().parents[3] / "Project Demo" / "Platformer"
 
 
 @pytest.fixture(autouse=True)

@@ -7,7 +7,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-REPO_DIR = Path(__file__).resolve().parents[2]
+REPO_DIR = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_DIR / "editor"))
 
 from ui.common.unit_spin import UnitSpin                      # noqa: E402

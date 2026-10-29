@@ -5,7 +5,7 @@ import pytest
 
 from core.project import Project
 
-DEMO = Path(__file__).resolve().parent.parent.parent / "Project Demo" / "Platformer"
+DEMO = Path(__file__).resolve().parent.parent.parent.parent / "Project Demo" / "Platformer"
 
 
 def test_populate_fits_once_and_still_sizes_the_tree(qapp):

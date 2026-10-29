@@ -14,7 +14,7 @@ import pytest
 from PyQt6.QtCore import QPoint, Qt
 from PyQt6.QtTest import QTest
 
-REPO_DIR = Path(__file__).resolve().parents[2]
+REPO_DIR = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_DIR / "tests"))
 sys.path.insert(0, str(REPO_DIR / "tests" / "audio"))
 

@@ -21,7 +21,7 @@ import pytest
 from core.project import Project
 from core.history import get_history, MoveUIRegionCmd
 
-REPO_DIR = Path(__file__).resolve().parent.parent.parent
+REPO_DIR = Path(__file__).resolve().parent.parent.parent.parent
 MYGAME = REPO_DIR / "Project Demo" / "MyGame"
 
 
