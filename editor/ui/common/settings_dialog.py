@@ -220,8 +220,11 @@ class ToolchainsPanel(QWidget):
         self._dkp_install.setText(label("settings.toolchains.install_gba"))
         self._last_check = time.strftime("%H:%M:%S")
         self._refresh_status()
-        if self._toolchain.devkitpro_state != DEVKITPRO_OK:
-            self._dkp_log.appendPlainText(label("settings.toolchains.install_gba_failed"))
+        # pacman termine par « il n'y a rien à faire » quand tout est déjà là : sans ligne de
+        # conclusion, cette sortie ressemble à un échec.
+        done = self._toolchain.devkitpro_state == DEVKITPRO_OK
+        self._dkp_log.appendPlainText(label("settings.toolchains.install_gba_done" if done
+                                            else "settings.toolchains.install_gba_failed"))
 
     def _refresh_status(self):
         """Détecté, incomplet ou introuvable, et le lien pour l'obtenir, sous chaque champ."""

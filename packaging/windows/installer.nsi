@@ -154,8 +154,8 @@ LangString FINISH_TITLE ${LANG_FRENCH}  "${APP_NAME} est installé"
 LangString FINISH_TITLE ${LANG_ENGLISH} "${APP_NAME} is installed"
 LangString FINISH_TEXT ${LANG_FRENCH}  "${APP_NAME} est installé."
 LangString FINISH_TEXT ${LANG_ENGLISH} "${APP_NAME} is installed."
-LangString FINISH_TEXT_DEVKITPRO ${LANG_FRENCH}  "${APP_NAME} est installé.$\r$\n$\r$\nL'assistant d'installation devkitPro continuera dans sa propre fenêtre. Lancez ${APP_NAME} une fois cette installation terminée."
-LangString FINISH_TEXT_DEVKITPRO ${LANG_ENGLISH} "${APP_NAME} is installed.$\r$\n$\r$\nThe devkitPro installation wizard will continue in its own window. Start ${APP_NAME} once it has finished."
+LangString FINISH_TEXT_DEVKITPRO ${LANG_FRENCH}  "${APP_NAME} est installé.$\r$\n$\r$\nL'assistant d'installation devkitPro continuera dans sa propre fenêtre. Quand il se ferme, ${APP_NAME} finalise l'installation (environ une minute) puis se lance tout seul."
+LangString FINISH_TEXT_DEVKITPRO ${LANG_ENGLISH} "${APP_NAME} is installed.$\r$\n$\r$\nThe devkitPro installation wizard will continue in its own window. When it closes, ${APP_NAME} finishes the installation (about a minute) and then starts by itself."
 LangString FINISH_LINK ${LANG_FRENCH}  "Installer devkitPro (nécessaire pour fabriquer des ROMs)"
 LangString FINISH_LINK ${LANG_ENGLISH} "Install devkitPro (required to build ROMs)"
 LangString MSG_APP_RUNNING ${LANG_FRENCH}  "${APP_NAME} est en cours d'exécution. Fermez-le, puis cliquez sur Réessayer."
@@ -503,7 +503,7 @@ Function .onGUIEnd
     ExecShell "runas" "$DevkitproInstaller"
     ; En arriere-plan, sans fenetre : attend la fin du Updater, puis installe les paquets
     ; GBA s'il ne l'a pas fait (journal : %TEMP%\BackstageSetup\finish_devkitpro.log).
-    ExecShell "open" "powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${TOOLS_DIR}\finish_devkitpro.ps1"' SW_HIDE
+    ExecShell "open" "powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${TOOLS_DIR}\finish_devkitpro.ps1" -AppExe "$INSTDIR\${APP_EXE}"' SW_HIDE
   devkitpro_launch_done:
 FunctionEnd
 
