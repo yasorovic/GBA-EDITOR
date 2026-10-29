@@ -24,14 +24,26 @@ on:
         required: false
         default: ""
 
+# Deux chemins pour livrer, selon qu'un build existe déjà pour le commit du tag :
+#   - un `workflow_dispatch` SANS tag (le « pré-build ») compile et teste tout, et laisse les
+#     livrables en artefacts. À lancer dès que le correctif est sur main, pendant qu'on le valide ;
+#   - la release (ou un `workflow_dispatch` AVEC tag) cherche ce pré-build (job `prebuilt`) et
+#     `publish` reprend ses artefacts tels quels : livrer prend quelques minutes, pas la
+#     compilation. Sans pré-build complet pour ce commit, tout se compile comme avant.
+# Les tests, eux, ne tournent que si tests.yml n'a pas déjà un run vert pour ce commit exact.
 permissions:
   contents: read
+  # Lister les runs de tests.yml et de ce workflow, et télécharger leurs artefacts.
+  actions: read
 
 jobs:
   version:
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.v.outputs.version }}
+      # Le commit du tag (celui qui part en release), pas celui de la branche d'un
+      # `workflow_dispatch` : c'est lui qu'on cherche dans les runs de tests et de pré-build.
+      sha: ${{ steps.v.outputs.sha }}
     steps:
       - uses: actions/checkout@v5
 
@@ -45,6 +57,9 @@ jobs:
           # Par l'environnement, pas collé dans le script : un tag contenant `"` ou `$(…)`
           # s'exécuterait sinon dans le job.
           TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DEFAULT_SHA: ${{ github.sha }}
         run: |
           FILE_VERSION="$(python3 packaging/nuitka_build.py --print-version)"
           if [ -n "$TAG" ] && [ "${TAG#v}" != "$FILE_VERSION" ]; then
@@ -52,6 +67,12 @@ jobs:
             exit 1
           fi
           echo "version=$FILE_VERSION" >> "$GITHUB_OUTPUT"
+          if [ -n "$TAG" ]; then
+            SHA="$(gh api "repos/$REPO/commits/$TAG" --jq .sha)"
+          else
+            SHA="$DEFAULT_SHA"
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
       # `packaging/update.json` dit si cette version mérite une pop-up au lancement
       # (cf. core/update_check.py) ; un fichier invalide échoue ici, avant la compilation.
@@ -64,35 +85,97 @@ jobs:
   # Les mêmes contrôles que `tests.yml`, rejoués sur le commit EXACT du tag publié : une CI
   # verte sur une poussée antérieure ne dit rien du commit qui part en release. Un échec ici
   # arrête tout, avant les ~heures de compilation de l'éditeur.
+  #
+  # Si tests.yml a DÉJÀ un run vert pour ce commit exact (le cas courant : on a poussé, la CI a
+  # tourné), on ne les rejoue pas : le job réussit aussitôt. Sans run vert (commit de doc seule
+  # que le filtre de chemins a écarté, CI jamais lancée), ils tournent ici, en parallèle des
+  # compilations. Les étapes suivantes portent la même condition.
   tests:
+    needs: [version]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       QT_QPA_PLATFORM: offscreen
       GBA_TESTS_REQUIRE_NATIVE: "1"
     steps:
-      - uses: actions/checkout@v5
+      - id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ needs.version.outputs.sha }}
+        run: |
+          id="$(gh run list --repo "$REPO" --workflow tests.yml --commit "$SHA" --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          if [ -n "$id" ]; then
+            echo "green=true" >> "$GITHUB_OUTPUT"
+            echo "Tests déjà verts pour $SHA (run $id) : non rejoués."
+          else
+            echo "green=false" >> "$GITHUB_OUTPUT"
+            echo "Aucun run vert de tests.yml pour $SHA : les tests tournent ici."
+          fi
 
-      - uses: actions/setup-python@v6
+      - if: steps.gate.outputs.green != 'true'
+        uses: actions/checkout@v5
+
+      - if: steps.gate.outputs.green != 'true'
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
 
       - name: Installer les bibliothèques Qt
+        if: steps.gate.outputs.green != 'true'
         run: |
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
           sudo apt-get install -y --no-install-recommends             libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 libpulse0
 
       - name: Installer les dépendances Python
+        if: steps.gate.outputs.green != 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r packaging/requirements.txt -r packaging/requirements-dev.txt
 
       - name: Contrôle d'architecture
+        if: steps.gate.outputs.green != 'true'
         run: python tools/check_architecture.py --fresh
 
       - name: Tests
+        if: steps.gate.outputs.green != 'true'
         run: python -m pytest tests -q -rs
+
+  # Un build déjà fait pour CE commit ? Sans tag, c'est le pré-build lui-même : rien à chercher.
+  # Avec tag, on cherche un `workflow_dispatch` de ce workflow, sur le commit du tag, dont les
+  # quatre livrables existent encore (les artefacts expirent). Le run n'a pas besoin d'avoir
+  # fini « vert » : un job annexe (windows-rom-build) peut échouer sans toucher aux livrables,
+  # qui ne sont déposés qu'après leurs smoke tests et leurs tests d'installation.
+  prebuilt:
+    needs: [version]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      run_id: ${{ steps.find.outputs.run_id }}
+    steps:
+      - id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ needs.version.outputs.sha }}
+          VERSION: ${{ needs.version.outputs.version }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          [ -n "$TAG" ] || { echo "Pas de tag : ce run compile."; exit 0; }
+          for id in $(gh run list --repo "$REPO" --workflow release.yml --event workflow_dispatch --commit "$SHA" --limit 20 --json databaseId --jq '.[].databaseId'); do
+            names="$(gh api "repos/$REPO/actions/runs/$id/artifacts" --paginate --jq '.artifacts[] | select(.expired | not) | .name')"
+            complete=1
+            for wanted in windows-portable linux-appimage linux-packages "Backstage-$VERSION-windows-setup.exe"; do
+              echo "$names" | grep -qxF "$wanted" || complete=0
+            done
+            if [ "$complete" = 1 ]; then
+              echo "Pré-build réutilisé : run $id (commit $SHA)."
+              echo "run_id=$id" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "Aucun pré-build complet pour $SHA : compilation normale."
 
   # Le build de ROM sous Windows : msys2 de devkitPro, chemins C:\devkitPro, limite de
   # 260 caractères, relance de `make` — du code qui ne tournait que sur le poste de
@@ -187,7 +270,10 @@ jobs:
   # qui les reprennent par artefact : installateur et portable Windows, AppImage et
   # paquet .deb Linux.
   compile-windows:
-    needs: [version]
+    needs: [version, prebuilt]
+    # Un pré-build complet existe pour ce commit : on ne recompile pas. Les livrables qui
+    # reprennent cette compilation (installateur, portable) sont alors sautés d'office.
+    if: needs.prebuilt.outputs.run_id == ''
     runs-on: windows-latest
     # Nuitka compile en C : nettement plus long que l'ancien build
     # PyInstaller (qui ne faisait qu'assembler des .pyc).
@@ -340,7 +426,8 @@ jobs:
           path: Backstage-*-windows-setup.exe
 
   compile-linux:
-    needs: [version]
+    needs: [version, prebuilt]
+    if: needs.prebuilt.outputs.run_id == ''
     # Version figée, pas `ubuntu-latest` : l'AppImage exige au moins la glibc du
     # runner qui la construit. 22.04 (glibc 2.35) couvre aussi Debian 12 et
     # RHEL 9 ; `latest` (24.04, glibc 2.39) les exclurait.
@@ -599,12 +686,23 @@ jobs:
           path: |
             packages/*.deb
 
+  # Les livrables viennent soit de ce run (compilation normale), soit du pré-build trouvé par
+  # `prebuilt` : `run-id` désigne alors ce run-là. `!cancelled()` parce que, avec un pré-build,
+  # les quatre jobs de livrables sont SAUTÉS, et un `needs` sauté ferait sauter `publish` aussi.
   publish:
-    if: github.event_name == 'release' || inputs.tag != ''
-    needs: [tests, windows-installer, windows-portable, linux-appimage, linux-packages]
+    if: >-
+      !cancelled() && (github.event_name == 'release' || inputs.tag != '')
+      && needs.tests.result == 'success'
+      && (needs.prebuilt.outputs.run_id != ''
+          || (needs.windows-installer.result == 'success'
+              && needs.windows-portable.result == 'success'
+              && needs.linux-appimage.result == 'success'
+              && needs.linux-packages.result == 'success'))
+    needs: [tests, prebuilt, windows-installer, windows-portable, linux-appimage, linux-packages]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v5
 
@@ -616,21 +714,29 @@ jobs:
           pattern: Backstage-*-windows-setup.exe
           merge-multiple: true
           path: artifacts
+          run-id: ${{ needs.prebuilt.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
 
       - uses: actions/download-artifact@v8
         with:
           name: windows-portable
           path: artifacts
+          run-id: ${{ needs.prebuilt.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
 
       - uses: actions/download-artifact@v8
         with:
           name: linux-appimage
           path: artifacts
+          run-id: ${{ needs.prebuilt.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
 
       - uses: actions/download-artifact@v8
         with:
           name: linux-packages
           path: artifacts
+          run-id: ${{ needs.prebuilt.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
 
       # L'éditeur vérifie son téléchargement contre ce fichier (core/update_install.py) :
       # une release sans SHA256SUMS ne peut pas être installée depuis l'éditeur.
