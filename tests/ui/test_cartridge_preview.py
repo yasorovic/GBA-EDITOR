@@ -242,9 +242,13 @@ def test_numbered_markers_have_distinct_complementary_help_at_every_photo_size(q
     panel.close()
 
 
-def test_reverse_and_bare_photos_do_not_reuse_front_marker_help(qapp, tmp_path):
+def test_reverse_and_bare_photos_do_not_reuse_front_marker_help(qapp, tmp_path, monkeypatch):
+    from ui.common import cartridge_preview
     from ui.common.tooltip_controller import resolve_tooltip
 
+    # Les scans « nus » vivent dans internal/ (hors git) : sans ce dossier, la vue « bare » n'est
+    # pas proposée et le test ne vérifierait rien. Un dossier quelconque suffit à l'activer.
+    monkeypatch.setattr(cartridge_preview, '_BARE_SCANS', tmp_path)
     panel = BuildPanel(Project(tmp_path))
     preview = panel._cartridge_preview
     preview.set_profile('sram')
