@@ -9,10 +9,10 @@ Si ce n'est pas déjà fait, téléchargez Backstage !
 
 ```{raw} html
 <p class="backstage-downloads">
-  <a class="backstage-download backstage-download-blue" data-download="windows" href="https://github.com/yasorovic/GBA-EDITOR/releases/latest"><strong>Windows</strong><span>.exe</span></a>
-  <a class="backstage-download backstage-download-orange" data-download="linux-deb" href="https://github.com/yasorovic/GBA-EDITOR/releases/latest"><strong>Linux</strong><span>.deb</span></a>
-  <a class="backstage-download backstage-download-blue" data-download="windows-portable" href="https://github.com/yasorovic/GBA-EDITOR/releases/latest"><strong>Windows (portable)</strong><span>.zip</span></a>
-  <a class="backstage-download backstage-download-orange" data-download="linux" href="https://github.com/yasorovic/GBA-EDITOR/releases/latest"><strong>Linux</strong><span>.AppImage</span></a>
+  <a class="backstage-download backstage-download-blue" data-download="windows" href="https://github.com/yasorovic/GBA-EDITOR/releases"><strong>Windows</strong><span>.exe</span></a>
+  <a class="backstage-download backstage-download-orange" data-download="linux-deb" href="https://github.com/yasorovic/GBA-EDITOR/releases"><strong>Linux</strong><span>.deb</span></a>
+  <a class="backstage-download backstage-download-blue" data-download="windows-portable" href="https://github.com/yasorovic/GBA-EDITOR/releases"><strong>Windows (portable)</strong><span>.zip</span></a>
+  <a class="backstage-download backstage-download-orange" data-download="linux" href="https://github.com/yasorovic/GBA-EDITOR/releases"><strong>Linux</strong><span>.AppImage</span></a>
 </p>
 ```
 
@@ -22,7 +22,7 @@ Si ce n'est pas déjà fait, téléchargez Backstage !
 (`.deb`, ou AppImage à défaut) :
 
 ```bash
-curl -fsSL https://github.com/yasorovic/GBA-EDITOR/releases/latest/download/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/yasorovic/GBA-EDITOR/main/packaging/linux/install.sh | sh
 ```
 
 Le lanceur s'appelle ensuite `backstage`. Pour installer le paquet `.deb` téléchargé à la main :

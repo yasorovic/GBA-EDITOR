@@ -1,6 +1,6 @@
 #!/bin/sh
 # Installe la dernière version de Backstage depuis les releases GitHub :
-#   curl -fsSL https://github.com/yasorovic/GBA-EDITOR/releases/latest/download/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/yasorovic/GBA-EDITOR/main/packaging/linux/install.sh | sh
 #
 # Debian/Ubuntu : paquet .deb. Fedora/RHEL/openSUSE : paquet .rpm. Autres distributions :
 # l'AppImage, posée dans ~/.local/bin. Le fichier téléchargé est vérifié contre SHA256SUMS.
@@ -16,10 +16,12 @@ die() { echo "Erreur : $*" >&2; exit 1; }
 
 if [ -n "${BACKSTAGE_VERSION:-}" ]; then
     VERSION="$BACKSTAGE_VERSION"
-    TAG="v$VERSION"
+    # Le tag est la version, avec ou sans "v" devant (release.yml accepte les deux).
+    TAG="$VERSION"
+    curl -fsSI "https://github.com/$REPO/releases/download/$TAG/SHA256SUMS" >/dev/null 2>&1 || TAG="v$VERSION"
 else
-    # Le tag est la version précédée de "v" (release.yml l'exige).
-    TAG="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
+    # La liste, pas `releases/latest` : celui-ci ignore les pré-releases (alpha, beta).
+    TAG="$(curl -fsSL "https://api.github.com/repos/$REPO/releases?per_page=1" \
         | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1)"
     [ -n "$TAG" ] || die "impossible de trouver la dernière release."
     VERSION="${TAG#v}"
