@@ -252,7 +252,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: dist-windows
           path: build-out/Backstage
@@ -280,7 +280,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: dist-windows
           path: build-out/Backstage
@@ -477,7 +477,7 @@ jobs:
             libxcb-render-util0 libxcb-shape0 libxcb-xfixes0 \
             libxcb-xinerama0 libnss3 libxdamage1 libfontconfig1 libpulse0
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: dist-linux-appdir
           path: .
@@ -547,7 +547,7 @@ jobs:
             libxcb-render-util0 libxcb-shape0 libxcb-xfixes0 \
             libxcb-xinerama0 libnss3 libxdamage1 libfontconfig1 libpulse0
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: dist-linux-appdir
           path: .
@@ -606,23 +606,23 @@ jobs:
       # Les trois artefacts tombent à plat dans le même dossier (chacun ne
       # contient que des fichiers, pas de sous-arbre), pour un seul upload.
       # Artefact non zippé : nommé d'après le fichier (version comprise), d'où le motif.
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: Backstage-*-windows-setup.exe
           merge-multiple: true
           path: artifacts
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: windows-portable
           path: artifacts
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: linux-appimage
           path: artifacts
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: linux-packages
           path: artifacts
