@@ -2,8 +2,8 @@
 // Les noms des fichiers contiennent la version : le lien direct ne peut donc pas être fixe.
 // Sans réseau ou sans release, les boutons gardent leur lien vers la page des releases.
 (function () {
-  var API = "https://api.github.com/repos/victor3x0/GBA-EDITOR/releases/latest";
-  var SUFFIXES = { windows: "-windows-setup.exe", linux: "-x86_64.AppImage.tar.gz" };
+  var API = "https://api.github.com/repos/yasorovic/GBA-EDITOR/releases/latest";
+  var SUFFIXES = { windows: "-windows-setup.exe", "windows-portable": "-windows-portable.zip", linux: "-x86_64.AppImage.tar.gz", "linux-deb": "-amd64.deb", "linux-rpm": "-x86_64.rpm" };
 
   function init() {
     var links = document.querySelectorAll("[data-download]");

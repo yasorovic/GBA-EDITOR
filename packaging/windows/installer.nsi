@@ -132,6 +132,8 @@ VIAddVersionKey "LegalCopyright"  "${PUBLISHER}"
 !insertmacro MUI_PAGE_FINISH
 
 !insertmacro MUI_UNPAGE_CONFIRM
+; Une case, decochee par defaut : la desinstallation propre (cf. UnClean).
+!insertmacro MUI_UNPAGE_COMPONENTS
 !insertmacro MUI_UNPAGE_INSTFILES
 
 ; La premiere langue declaree est celle par defaut.
@@ -152,8 +154,8 @@ LangString FINISH_TITLE ${LANG_FRENCH}  "${APP_NAME} est installé"
 LangString FINISH_TITLE ${LANG_ENGLISH} "${APP_NAME} is installed"
 LangString FINISH_TEXT ${LANG_FRENCH}  "${APP_NAME} est installé."
 LangString FINISH_TEXT ${LANG_ENGLISH} "${APP_NAME} is installed."
-LangString FINISH_TEXT_DEVKITPRO ${LANG_FRENCH}  "${APP_NAME} est installé.$\r$\n$\r$\nL'assistant d'installation devkitPro continuera dans sa propre fenêtre."
-LangString FINISH_TEXT_DEVKITPRO ${LANG_ENGLISH} "${APP_NAME} is installed.$\r$\n$\r$\nThe devkitPro installation wizard will continue in its own window."
+LangString FINISH_TEXT_DEVKITPRO ${LANG_FRENCH}  "${APP_NAME} est installé.$\r$\n$\r$\nL'assistant d'installation devkitPro continuera dans sa propre fenêtre. Lancez ${APP_NAME} une fois cette installation terminée."
+LangString FINISH_TEXT_DEVKITPRO ${LANG_ENGLISH} "${APP_NAME} is installed.$\r$\n$\r$\nThe devkitPro installation wizard will continue in its own window. Start ${APP_NAME} once it has finished."
 LangString FINISH_LINK ${LANG_FRENCH}  "Installer devkitPro (nécessaire pour fabriquer des ROMs)"
 LangString FINISH_LINK ${LANG_ENGLISH} "Install devkitPro (required to build ROMs)"
 LangString MSG_APP_RUNNING ${LANG_FRENCH}  "${APP_NAME} est en cours d'exécution. Fermez-le, puis cliquez sur Réessayer."
@@ -473,6 +475,11 @@ Function FinishShow
   StrCmp $DevkitproInstaller "" finish_no_wizard
   SendMessage $mui.FinishPage.Text ${WM_SETTEXT} 0 "STR:$(FINISH_TEXT_DEVKITPRO)"
   ShowWindow $mui.FinishPage.Link ${SW_HIDE}
+  ; Pas de lancement automatique : l'application demarrerait pendant que l'assistant
+  ; devkitPro travaille encore et annoncerait « paquets manquants ». Decochee PUIS
+  ; cachee (la case cachee garde son etat, et c'est lui qui est lu a la fermeture).
+  ${NSD_Uncheck} $mui.FinishPage.Run
+  ShowWindow $mui.FinishPage.Run ${SW_HIDE}
   Goto finish_done
   finish_no_wizard:
     StrCmp $DevkitproDetected "1" 0 finish_done
@@ -533,7 +540,8 @@ Function un.PurgeInstallDir
   Pop $0
 FunctionEnd
 
-Section "Uninstall"
+Section "un.${APP_NAME}" UnApp
+  SectionIn RO
   ; Garde-fou : $INSTDIR vient du registre ou d'une saisie utilisateur, et
   ; on s'apprete a faire un RMDir /r dessus. On ne touche a rien si le
   ; dossier ne contient pas l'executable attendu.
@@ -564,5 +572,43 @@ Section "Uninstall"
   ; Volontairement conserves : les projets de l'utilisateur
   ; (%USERPROFILE%\BackstageProjects) et sa configuration toolchain
   ; (%APPDATA%\Backstage). Une desinstallation ne doit pas detruire le
-  ; travail de l'utilisateur ni ses chemins devkitPro/mGBA.
+  ; travail de l'utilisateur ni ses chemins devkitPro/mGBA. Seule la case
+  ; « desinstallation propre » (UnClean) retire la configuration.
 SectionEnd
+
+; Desinstallation propre, decochee par defaut (et donc jamais en mode silencieux) :
+; retire tout ce que Backstage a pose en local, SAUF les projets de l'utilisateur
+; (%USERPROFILE%\BackstageProjects), qu'aucune option ne touche. devkitPro et mGBA
+; restent aussi : ce sont des outils independants, que d'autres programmes peuvent utiliser.
+; Les chemins sont ceux du code : core/app_paths.py (config_dir), update_install.py,
+; icons.py et sfx_render.py (dossiers temporaires), et le dossier plugins\ de l'installation.
+Section /o "un.Clean" UnClean
+  ; Une variable vide donnerait "\Backstage" : on ne supprime rien dans ce cas.
+  StrCmp $APPDATA "" +2
+    RMDir /r "$APPDATA\${APP_KEY}"
+  StrCmp $TEMP "" +5
+    RMDir /r "$TEMP\${APP_KEY}Update"
+    RMDir /r "$TEMP\backstage_icons"
+    RMDir /r "$TEMP\backstage_sfx_preview"
+    RMDir /r "$TEMP\BackstageSetup"
+  ; Les plugins deposes par l'utilisateur dans l'installation. RMDir (sans /r) retire
+  ; ensuite le dossier d'installation s'il est vide, et le laisse sinon.
+  RMDir /r "$INSTDIR\plugins"
+  RMDir "$INSTDIR"
+SectionEnd
+
+LangString UN_CLEAN_NAME ${LANG_FRENCH}  "Désinstallation propre"
+LangString UN_CLEAN_NAME ${LANG_ENGLISH} "Clean uninstall"
+LangString DESC_UnApp ${LANG_FRENCH}  "Retire l'éditeur, ses raccourcis et ses clés de registre. Vos projets et vos réglages sont conservés."
+LangString DESC_UnApp ${LANG_ENGLISH} "Removes the editor, its shortcuts and its registry keys. Your projects and settings are kept."
+LangString DESC_UnClean ${LANG_FRENCH}  "Supprime aussi la configuration de ${APP_NAME} (%APPDATA%\${APP_KEY}), ses fichiers temporaires et le dossier plugins. Vos projets (%USERPROFILE%\BackstageProjects), devkitPro et mGBA ne sont jamais supprimés."
+LangString DESC_UnClean ${LANG_ENGLISH} "Also deletes the ${APP_NAME} configuration (%APPDATA%\${APP_KEY}), its temporary files and the plugins folder. Your projects (%USERPROFILE%\BackstageProjects), devkitPro and mGBA are never deleted."
+
+Function un.onInit
+  SectionSetText ${UnClean} "$(UN_CLEAN_NAME)"
+FunctionEnd
+
+!insertmacro MUI_UNFUNCTION_DESCRIPTION_BEGIN
+  !insertmacro MUI_DESCRIPTION_TEXT ${UnApp}   $(DESC_UnApp)
+  !insertmacro MUI_DESCRIPTION_TEXT ${UnClean} $(DESC_UnClean)
+!insertmacro MUI_UNFUNCTION_DESCRIPTION_END

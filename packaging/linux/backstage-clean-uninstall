@@ -1,0 +1,56 @@
+#!/bin/sh
+# Désinstallation propre de Backstage : retire le paquet (.deb/.rpm) ou l'AppImage posée
+# par install.sh, PUIS la configuration et les fichiers temporaires de l'utilisateur.
+# Installé en /usr/bin/backstage-clean-uninstall par les paquets .deb et .rpm.
+#
+# Ne supprime JAMAIS les projets (~/BackstageProjects), ni devkitPro (/opt/devkitpro) ni
+# mGBA : outils indépendants, que d'autres programmes peuvent utiliser.
+#
+# Usage : backstage-clean-uninstall [--yes]
+# Les chemins sont ceux du code : core/app_paths.py (config_dir), les QSettings (APP_NAME en
+# majuscule initiale), update_install.py, icons.py et sfx_render.py (dossiers temporaires).
+set -eu
+
+ASSUME_YES=0
+case "${1:-}" in --yes|-y) ASSUME_YES=1 ;; esac
+
+# Lancé par sudo, $HOME serait celui de root : on vise l'utilisateur qui a lancé sudo.
+if [ "$(id -u)" -eq 0 ]; then
+    [ -n "${SUDO_USER:-}" ] || { echo "Lancez ce script sans sudo : il l'utilise lui-même pour retirer le paquet."; exit 1; }
+    USER_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
+    SUDO=""
+else
+    USER_HOME="$HOME"
+    SUDO="sudo"
+fi
+[ -n "$USER_HOME" ] && [ -d "$USER_HOME" ] || { echo "Dossier personnel introuvable."; exit 1; }
+CONFIG_HOME="${XDG_CONFIG_HOME:-$USER_HOME/.config}"
+TMP="${TMPDIR:-/tmp}"
+
+echo "Seront supprimés :"
+echo "  - le paquet backstage (ou l'AppImage ~/.local/bin/Backstage.AppImage)"
+echo "  - $CONFIG_HOME/backstage et $CONFIG_HOME/Backstage (configuration)"
+echo "  - $TMP/BackstageUpdate, $TMP/backstage_icons, $TMP/backstage_sfx_preview"
+echo "Ne seront PAS touchés : $USER_HOME/BackstageProjects, /opt/devkitpro, mGBA."
+if [ "$ASSUME_YES" -ne 1 ]; then
+    printf "Continuer ? [o/N] "
+    read -r answer
+    case "$answer" in o|O|y|Y|oui|yes) ;; *) echo "Annulé."; exit 0 ;; esac
+fi
+
+# Le paquet, selon le gestionnaire qui l'a installé.
+if command -v dpkg >/dev/null 2>&1 && dpkg -s backstage >/dev/null 2>&1; then
+    $SUDO apt-get purge -y backstage
+elif command -v rpm >/dev/null 2>&1 && rpm -q backstage >/dev/null 2>&1; then
+    if command -v dnf >/dev/null 2>&1; then $SUDO dnf remove -y backstage
+    elif command -v zypper >/dev/null 2>&1; then $SUDO zypper --non-interactive remove backstage
+    else $SUDO rpm -e backstage; fi
+fi
+# L'AppImage posée par install.sh (distributions sans .deb ni .rpm).
+rm -f "$USER_HOME/.local/bin/Backstage.AppImage"
+
+# Deux casses : config_dir() écrit en minuscules, les QSettings en « Backstage ».
+rm -rf "$CONFIG_HOME/backstage" "$CONFIG_HOME/Backstage"
+rm -rf "$TMP/BackstageUpdate" "$TMP/backstage_icons" "$TMP/backstage_sfx_preview"
+
+echo "Backstage est désinstallé. Vos projets sont intacts."

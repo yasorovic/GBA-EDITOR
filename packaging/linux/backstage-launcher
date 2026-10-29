@@ -1,0 +1,12 @@
+#!/bin/sh
+# Lanceur installé en /usr/bin/backstage par les paquets .deb et .rpm. Équivalent
+# de AppRun pour une installation système : l'éditeur et ses bibliothèques vivent
+# dans /opt/backstage (copie de AppDir/usr/bin, cf. build_packages.sh).
+HERE=/opt/backstage
+# Les libs xcb que Nuitka n'embarque pas sont posées à côté de l'exe : LD_LIBRARY_PATH
+# est la seule voie qui couvre les dlopen du plugin Qt. La valeur d'origine est gardée :
+# les outils lancés par l'éditeur (make, gcc, mGBA) ne doivent pas charger NOS
+# bibliothèques (cf. core/tool_process.py).
+export BACKSTAGE_ORIG_LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="$HERE${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+exec "$HERE/Backstage" "$@"

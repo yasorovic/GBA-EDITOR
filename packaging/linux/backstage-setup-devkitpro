@@ -1,0 +1,45 @@
+#!/bin/sh
+# Installe devkitPro (groupe gba-dev), la chaîne d'outils qui compile la ROM.
+# Installé en /usr/bin/backstage-setup-devkitpro par les paquets .deb et .rpm.
+# Mêmes commandes que core/toolchain.py (_LINUX_INSTALL_COMMANDS) : si l'une change,
+# changer l'autre.
+set -eu
+
+DEVKITPRO_URL="https://devkitpro.org/wiki/Getting_Started"
+
+if [ -x /opt/devkitpro/devkitARM/bin/arm-none-eabi-gcc ]; then
+    echo "devkitPro est déjà installé dans /opt/devkitpro."
+    exit 0
+fi
+
+# Le script officiel ne sait configurer que le dépôt apt (Debian, Ubuntu et dérivées).
+if ! command -v apt-get >/dev/null 2>&1; then
+    echo "Cette commande ne couvre que Debian/Ubuntu."
+    echo "Sur les autres distributions, suivez : $DEVKITPRO_URL"
+    echo "Puis indiquez le dossier d'installation dans Backstage : File > Settings."
+    exit 1
+fi
+
+if [ "$(id -u)" -eq 0 ]; then
+    SUDO=""
+else
+    command -v sudo >/dev/null 2>&1 || { echo "sudo est requis (ou lancez ce script en root)."; exit 1; }
+    SUDO="sudo"
+fi
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+cd "$WORK"
+
+echo "Téléchargement du script officiel de devkitPro..."
+if command -v wget >/dev/null 2>&1; then
+    wget -q https://apt.devkitpro.org/install-devkitpro-pacman
+else
+    curl -fsSL -o install-devkitpro-pacman https://apt.devkitpro.org/install-devkitpro-pacman
+fi
+chmod +x ./install-devkitpro-pacman
+$SUDO ./install-devkitpro-pacman
+$SUDO dkp-pacman -S --noconfirm gba-dev
+
+echo
+echo "devkitPro est installé dans /opt/devkitpro (détecté automatiquement par Backstage)."

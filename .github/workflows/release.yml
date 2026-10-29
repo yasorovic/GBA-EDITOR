@@ -7,7 +7,7 @@ name: Release builds
 # de release (les artefacts restent alors dans l'onglet Actions).
 #
 # Trois plateformes : l'installateur NSIS + le ZIP portable Windows, et
-# l'AppImage Linux. La vraie distribution de test est le runner ubuntu-22.04
+# l'AppImage Linux avec ses paquets .deb et .rpm (+ install.sh, joint à la release). La vraie distribution de test est le runner ubuntu-22.04
 # (figé : il fixe la glibc minimale de l'AppImage) : un `workflow_dispatch`
 # produit l'AppImage en artefact (onglet Actions) sans publier de release, pour
 # la valider avant un vrai tag.
@@ -278,12 +278,19 @@ jobs:
           $version = "${{ needs.version.outputs.version }}"
           ./packaging/windows/test_installer.ps1 -Installer (Join-Path $PWD "Backstage-$version-windows-setup.exe") -Version $version
 
+      # Deux sorties séparées : on peut récupérer l'installateur ou la version
+      # portable sans télécharger l'autre.
+      # archive: false (upload-artifact v7+) : le .exe est déposé tel quel, sans zip
+      # autour. L'artefact porte alors le nom du fichier, pas `name`.
+      - uses: actions/upload-artifact@v7
+        with:
+          archive: false
+          path: Backstage-*-windows-setup.exe
+
       - uses: actions/upload-artifact@v6
         with:
-          name: windows
-          path: |
-            Backstage-*-windows-setup.exe
-            Backstage-*-windows-portable.zip
+          name: windows-portable
+          path: Backstage-*-windows-portable.zip
 
   build-linux-appimage:
     needs: [version]
@@ -451,6 +458,43 @@ jobs:
           name: linux-appimage
           path: "*.AppImage.tar.gz"
 
+      # Paquets .deb et .rpm, construits depuis le même AppDir que l'AppImage (mêmes libs,
+      # même exclusion de la glibc). fpm est épinglé : une version qui change ses options
+      # casserait le build sans prévenir.
+      - name: Construire les paquets .deb et .rpm
+        run: |
+          sudo apt-get install -y rpm
+          sudo gem install fpm -v 1.15.1 --no-document
+          VERSION="${{ needs.version.outputs.version }}"
+          sh packaging/linux/build_packages.sh AppDir "$VERSION" packages
+          ls -l packages
+
+      # Le .deb est INSTALLÉ pour de vrai sur le runner, puis le binaire installé est lancé :
+      # le lanceur /usr/bin/backstage, /opt/backstage et les fichiers du bureau sont ceux
+      # d'un utilisateur. Le .rpm, lui, ne peut qu'être listé ici (pas de dnf sur ubuntu).
+      - name: Tester le paquet .deb
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          sudo apt-get install -y "./packages/Backstage-${VERSION}-amd64.deb"
+          test -x /usr/bin/backstage
+          test -x /usr/bin/backstage-setup-devkitpro
+          test -x /usr/bin/backstage-clean-uninstall
+          test -f /usr/share/applications/backstage.desktop
+          test -f /usr/share/mime/packages/backstage-project.xml
+          xvfb-run -a backstage --smoke-test="$PWD/smoke-deb.txt" || status=$?
+          cat smoke-deb.txt || true
+          rpm -qpl "packages/Backstage-${VERSION}-x86_64.rpm" | grep -q '^/opt/backstage/Backstage$'
+          sudo apt-get remove -y backstage
+          test ! -e /opt/backstage/Backstage
+          exit "${status:-0}"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: linux-packages
+          path: |
+            packages/*.deb
+            packages/*.rpm
+
   publish:
     if: github.event_name == 'release'
     needs: [tests, build-windows, build-linux-appimage]
@@ -460,16 +504,28 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Les deux artefacts tombent à plat dans le même dossier (chacun ne
+      # Les trois artefacts tombent à plat dans le même dossier (chacun ne
       # contient que des fichiers, pas de sous-arbre), pour un seul upload.
+      # Artefact non zippé : nommé d'après le fichier (version comprise), d'où le motif.
       - uses: actions/download-artifact@v7
         with:
-          name: windows
+          pattern: Backstage-*-windows-setup.exe
+          merge-multiple: true
+          path: artifacts
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: windows-portable
           path: artifacts
 
       - uses: actions/download-artifact@v7
         with:
           name: linux-appimage
+          path: artifacts
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: linux-packages
           path: artifacts
 
       # L'éditeur vérifie son téléchargement contre ce fichier (core/update_install.py) :
@@ -482,4 +538,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$TAG" artifacts/* packaging/update.json --clobber --repo "${{ github.repository }}"
+        run: gh release upload "$TAG" artifacts/* packaging/update.json packaging/linux/install.sh --clobber --repo "${{ github.repository }}"
