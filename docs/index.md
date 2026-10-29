@@ -2,12 +2,12 @@
 :hidden:
 :maxdepth: 2
 
-About <about/index>
 Getting Started <user-guide/index>
 Guides <guides/index>
 Manual <manual/index>
 Architecture <architecture/index>
 Lua API <lua-api/index>
+About <about/index>
 ```
 
 ```{image} assets/backstage-study.svg
