@@ -32,16 +32,17 @@ Portée des catégories, volontairement inégale (2026-08-23) :
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QApplication, QDialog, QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
     QStackedWidget, QLabel, QLineEdit, QPushButton, QFileDialog,
     QFrame, QGridLayout, QKeySequenceEdit, QScrollArea,
-    QCheckBox, QComboBox, QMainWindow,
+    QCheckBox, QComboBox, QMainWindow, QPlainTextEdit,
 )
 from PyQt6.QtGui import QFont, QKeySequence
-from PyQt6.QtCore import Qt, QProcess
+from PyQt6.QtCore import Qt, QProcess, QThread, pyqtSignal
 
 from ui.common.theme import C, T, QSS
 from ui.common.install_commands import InstallCommands
@@ -97,7 +98,7 @@ def _path_row(parent_layout, label_text: str, initial: str,
 
 
 def _tool_help(parent_layout, tool: str,
-               action: QPushButton | None = None) -> tuple[QLabel, InstallCommands]:
+               action: QWidget | None = None) -> tuple[QLabel, InstallCommands]:
     """Sous le champ de la ligne qui vient d'être ajoutée (`_path_row`) : une ligne
     de statut (détecté ou non, et le lien), les commandes d'installation de `tool`
     (Linux ; rien pour un outil qui a son propre installateur) et le bouton
@@ -127,10 +128,27 @@ def _category_title(text: str) -> QLabel:
 
 # ── Toolchains ──────────────────────────────────────────────────────────
 
+class _GbaPackagesThread(QThread):
+    """`Toolchain.install_gba_packages` hors du fil de l'interface : pacman dure une minute."""
+    line = pyqtSignal(str)
+
+    def __init__(self, toolchain: Toolchain):
+        super().__init__()
+        self._toolchain = toolchain
+
+    def run(self):
+        self._toolchain.install_gba_packages(self.line.emit)
+
+
+# Sans parent : fermer les réglages en pleine installation ne doit pas détruire un QThread en cours.
+_running_installs: set[_GbaPackagesThread] = set()
+
+
 class ToolchainsPanel(QWidget):
     def __init__(self, toolchain: Toolchain, parent=None):
         super().__init__(parent)
         self._toolchain = toolchain
+        self._last_check = ""
         lay = QVBoxLayout(self)
         lay.setSpacing(14)
         lay.addWidget(_category_title(label("settings.cat.toolchains")))
@@ -150,7 +168,25 @@ class ToolchainsPanel(QWidget):
         self._dkp_check.setToolTip(tooltip(title=label("settings.toolchains.check"),
                                            body=label("settings.toolchains.check_tip")))
         self._dkp_check.clicked.connect(self._recheck)
-        self._dkp_status, self._dkp_commands = _tool_help(lay, "devkitPro", self._dkp_check)
+        # Windows : le devkitPro Updater échoue parfois sans message à installer les paquets
+        # GBA (cf. Toolchain.install_gba_packages). Ce bouton les installe, sortie à l'écran.
+        self._dkp_install = QPushButton(label("settings.toolchains.install_gba"))
+        self._dkp_install.setStyleSheet(QSS.button_ghost)
+        self._dkp_install.setToolTip(tooltip(title=label("settings.toolchains.install_gba"),
+                                             body=label("settings.toolchains.install_gba_tip")))
+        self._dkp_install.clicked.connect(self._install_gba)
+        actions = QWidget()
+        actions_row = QHBoxLayout(actions)
+        actions_row.setContentsMargins(0, 0, 0, 0)
+        actions_row.addWidget(self._dkp_check)
+        actions_row.addWidget(self._dkp_install)
+        self._dkp_status, self._dkp_commands = _tool_help(lay, "devkitPro", actions)
+        self._dkp_log = QPlainTextEdit()
+        self._dkp_log.setReadOnly(True)
+        self._dkp_log.setFont(QFont(T.MONO, T.SM))
+        self._dkp_log.setMaximumHeight(160)
+        self._dkp_log.hide()
+        lay.addWidget(self._dkp_log)
         self._mgba_edit = _path_row(lay, "mgba", str(toolchain.mgba_path or ""),
                                     self._browse_mgba)
         self._mgba_edit.editingFinished.connect(self._commit_mgba)
@@ -163,13 +199,36 @@ class ToolchainsPanel(QWidget):
 
     def _recheck(self):
         self._toolchain.recheck()
+        # Le résultat peut être identique au précédent : l'heure prouve que la détection a eu lieu.
+        self._last_check = time.strftime("%H:%M:%S")
         self._refresh_status()
+
+    def _install_gba(self):
+        self._dkp_install.setEnabled(False)
+        self._dkp_install.setText(label("settings.toolchains.install_gba_running"))
+        self._dkp_log.clear()
+        self._dkp_log.show()
+        thread = _GbaPackagesThread(self._toolchain)
+        thread.line.connect(self._dkp_log.appendPlainText)
+        thread.finished.connect(lambda: _running_installs.discard(thread))
+        thread.finished.connect(self._on_install_done)
+        _running_installs.add(thread)
+        thread.start()
+
+    def _on_install_done(self):
+        self._dkp_install.setEnabled(True)
+        self._dkp_install.setText(label("settings.toolchains.install_gba"))
+        self._last_check = time.strftime("%H:%M:%S")
+        self._refresh_status()
+        if self._toolchain.devkitpro_state != DEVKITPRO_OK:
+            self._dkp_log.appendPlainText(label("settings.toolchains.install_gba_failed"))
 
     def _refresh_status(self):
         """Détecté, incomplet ou introuvable, et le lien pour l'obtenir, sous chaque champ."""
         dkp_state = self._toolchain.devkitpro_state
         incomplete = dkp_state == DEVKITPRO_INCOMPLETE
         self._dkp_check.setVisible(incomplete)
+        self._dkp_install.setVisible(incomplete and self._toolchain.msys2_bash() is not None)
         for status, commands, state, link, url in (
             (self._dkp_status, self._dkp_commands, dkp_state,
              label("settings.toolchains.devkitpro_link"), DEVKITPRO_URL),
@@ -190,6 +249,9 @@ class ToolchainsPanel(QWidget):
                         else "settings.toolchains.incomplete_hint")
             hint = (f'<br><span style="color:{C.TEXT_DIM};">{label(hint_key)}</span>'
                     if state == DEVKITPRO_INCOMPLETE else "")
+            if status is self._dkp_status and self._last_check:
+                hint += (f'<br><span style="color:{C.TEXT_DIM};">'
+                         f'{label("settings.toolchains.checked", time=self._last_check)}</span>')
             status.setText(
                 f'<span style="color:{colour};">{"✓" if ok else "✗"} {text}</span>'
                 f'&nbsp;&nbsp;·&nbsp;&nbsp;<a href="{url}" style="color:{C.ACCENT_COOL};">{link}</a>{hint}')

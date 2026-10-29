@@ -3,6 +3,8 @@ introuvable. L'état « incomplet » est celui d'un devkitPro dont les paquets G
 pas été téléchargés : il demande de vérifier l'installation, pas de chercher le dossier."""
 from __future__ import annotations
 
+import pytest
+
 from core import toolchain as tc
 
 
@@ -52,3 +54,54 @@ def test_un_outil_propre_a_devkitpro_sans_dossier_est_incomplet(monkeypatch, tmp
 def test_ni_dossier_ni_outil_est_introuvable(monkeypatch, tmp_path):
     t = _toolchain(monkeypatch, tmp_path, set(), folder=False)
     assert t.devkitpro_state == tc.DEVKITPRO_MISSING
+
+
+class _FakeProcess:
+    def __init__(self, code, lines):
+        self._code, self.stdout = code, iter(lines)
+
+    def wait(self):
+        return self._code
+
+
+def _with_msys2(monkeypatch, tmp_path, codes):
+    """Un MSYS2 factice sous tmp_path, et un `Popen` qui rend ces codes de sortie, un par essai."""
+    found = {"make"}
+    t = _toolchain(monkeypatch, tmp_path, found)
+    bash = tmp_path / "msys2" / "usr" / "bin" / "bash.exe"
+    bash.parent.mkdir(parents=True)
+    bash.write_text("")
+    launched = []
+    results = iter(codes)
+
+    def fake_popen(cmd, **kwargs):
+        launched.append(cmd)
+        code = next(results)
+        if code == 0:
+            found.update({"grit", "arm-none-eabi-gcc"})     # pacman a posé les outils
+        return _FakeProcess(code, ["installing grit\n", "\n"])
+
+    monkeypatch.setattr(tc.subprocess, "Popen", fake_popen)
+    return t, launched
+
+
+def test_installation_des_paquets_gba_reessaie_puis_s_arrete_au_succes(monkeypatch, tmp_path):
+    t, launched = _with_msys2(monkeypatch, tmp_path, [1, 0])
+    lines = []
+    assert t.install_gba_packages(lines.append) is True
+    assert len(launched) == 2
+    assert launched[0][1:] == ["-lc", tc.GBA_PACKAGES_COMMAND]
+    assert lines == ["installing grit", "Attempt 2 of 3", "installing grit"]   # lignes vides ignorées
+
+
+def test_installation_des_paquets_gba_abandonne_apres_les_essais(monkeypatch, tmp_path):
+    t, launched = _with_msys2(monkeypatch, tmp_path, [1, 1, 1])
+    assert t.install_gba_packages(lambda line: None) is False
+    assert len(launched) == 3
+
+
+def test_installation_des_paquets_gba_sans_msys2_ne_lance_rien(monkeypatch, tmp_path):
+    t = _toolchain(monkeypatch, tmp_path, {"make"})
+    monkeypatch.setattr(tc.subprocess, "Popen", lambda *a, **k: pytest.fail("pas de processus attendu"))
+    assert t.msys2_bash() is None
+    assert t.install_gba_packages(lambda line: None) is False

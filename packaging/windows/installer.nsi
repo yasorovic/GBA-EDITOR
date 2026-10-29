@@ -316,6 +316,11 @@ Section "devkitPro (GBA)" SecDevkitpro
   ; Lance par .onGUIEnd, eleve (UAC) : il s'installe dans C:\devkitPro. Son
   ; assistant propose GBA Development, a cocher puis a suivre dans sa fenetre.
   StrCpy $DevkitproInstaller "${TOOLS_DIR}\${DEVKITPRO_FILE}"
+  ; Le Updater echoue parfois, sans message, a installer les paquets GBA : ce script,
+  ; lance en meme temps (cf. .onGUIEnd), les reinstalle une fois le Updater termine.
+  SetOutPath "${TOOLS_DIR}"
+  File "finish_devkitpro.ps1"
+  SetOutPath "$INSTDIR"
   Goto devkitpro_done
   devkitpro_failed:
     MessageBox MB_OK|MB_ICONEXCLAMATION "devkitPro : $(MSG_DOWNLOAD_FAILED)"
@@ -496,6 +501,9 @@ Function .onGUIEnd
   mgba_launch_done:
   StrCmp $DevkitproInstaller "" devkitpro_launch_done
     ExecShell "runas" "$DevkitproInstaller"
+    ; En arriere-plan, sans fenetre : attend la fin du Updater, puis installe les paquets
+    ; GBA s'il ne l'a pas fait (journal : %TEMP%\BackstageSetup\finish_devkitpro.log).
+    ExecShell "open" "powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${TOOLS_DIR}\finish_devkitpro.ps1"' SW_HIDE
   devkitpro_launch_done:
 FunctionEnd
 

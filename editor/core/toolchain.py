@@ -10,9 +10,11 @@ import json
 from core.resources.resource_store import read_config_json
 import os
 import shutil
+import subprocess
 from pathlib import Path
 
 from core.app_paths import IS_LINUX, IS_WINDOWS, config_dir
+from core.tool_process import tool_environment
 
 
 # Fichier de config persistant
@@ -95,6 +97,10 @@ DEVKITPRO_TOOLS = ("grit", "make", "arm-none-eabi-gcc")
 DEVKITPRO_OK = "ok"
 DEVKITPRO_INCOMPLETE = "incomplete"
 DEVKITPRO_MISSING = "missing"
+
+# Ce que `install_gba_packages` lance dans le MSYS2 de devkitPro. Le script
+# packaging/windows/finish_devkitpro.ps1 lance la même commande : si l'une change, changer l'autre.
+GBA_PACKAGES_COMMAND = "pacman -S --noconfirm --needed gba-dev"
 
 
 class Toolchain:
@@ -348,6 +354,40 @@ class Toolchain:
         if found_own_tool or self._devkitpro_folder_found():
             return DEVKITPRO_INCOMPLETE
         return DEVKITPRO_MISSING
+
+    def msys2_bash(self) -> Path | None:
+        """Le `bash` du MSYS2 que l'installateur devkitPro pose sous Windows, ou None."""
+        root = self.devkitpro_root
+        if root and (bash := root / "msys2" / "usr" / "bin" / "bash.exe").is_file():
+            return bash
+        return None
+
+    def install_gba_packages(self, on_line, attempts: int = 3) -> bool:
+        """Installe le groupe `gba-dev` dans le MSYS2 de devkitPro (Windows), sortie ligne
+        à ligne vers `on_line`, jusqu'à `attempts` essais. Vrai si devkitPro est complet.
+
+        Le devkitPro Updater enchaîne la mise à jour du cœur de MSYS2 et cette installation
+        dans un même processus ; la seconde étape échoue sans message, sur une installation
+        neuve. Relancée ensuite, la même commande passe, sans droits administrateur. Les
+        paquets déjà téléchargés sont réutilisés d'un essai à l'autre."""
+        bash = self.msys2_bash()
+        if bash is None:
+            return False
+        for attempt in range(1, attempts + 1):
+            if attempt > 1:
+                on_line(f"Attempt {attempt} of {attempts}")
+            proc = subprocess.Popen(
+                [str(bash), "-lc", GBA_PACKAGES_COMMAND],
+                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                env=tool_environment(), text=True, encoding="utf-8", errors="replace",
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            for line in proc.stdout:
+                if line.strip():
+                    on_line(line.rstrip())
+            if proc.wait() == 0:
+                break
+        self.recheck()
+        return self.devkitpro_state == DEVKITPRO_OK
 
     def _devkitpro_folder_found(self) -> bool:
         bases = [self.devkitpro_path] if self.devkitpro_path else []

@@ -245,7 +245,12 @@
       "text": "Not detected"
     },
     "settings.toolchains.incomplete": { "text": "Incomplete: {tools} not found" },
-    "settings.toolchains.incomplete_hint": { "text": "The devkitPro folder is there, but some packages are not. Run the devkitPro Updater and tick GBA Development, then check again." },
+    "settings.toolchains.checked": { "text": "Last check at {time}" },
+    "settings.toolchains.install_gba": { "text": "Install GBA packages" },
+    "settings.toolchains.install_gba_tip": { "text": "Runs pacman in the devkitPro MSYS2 to install the gba-dev group (devkitARM, grit, libgba), retrying on failure. Needs no administrator rights." },
+    "settings.toolchains.install_gba_running": { "text": "Installing..." },
+    "settings.toolchains.install_gba_failed": { "text": "The installation failed: the output above gives the reason." },
+    "settings.toolchains.incomplete_hint": { "text": "The devkitPro folder is there, but some packages are not. Click Install GBA packages, or run the devkitPro Updater and tick GBA Development, then check again." },
     "settings.toolchains.incomplete_hint_linux": { "text": "The devkitPro folder is there, but some packages are not. Install them with the commands below, then check again." },
     "install.heading": { "text": "Install {tool} on Debian / Ubuntu" },
     "install.copy": { "text": "Copy" },
