@@ -33,8 +33,12 @@ Unicode true
 ; $MgbaInstaller : l'installateur officiel de mGBA telecharge, a lancer quand cet
 ; assistant se ferme (cf. .onGUIEnd) ; "" si l'outil n'est pas demande, si le
 ; telechargement a echoue ou si l'installation est annulee.
-; $ToolchainSetup : "1" quand install_devkitpro.ps1 doit se lancer a la fermeture.
+; $ToolchainSetup : "" (devkitPro non demande), "1" (install_devkitpro.ps1 tourne en arriere-plan,
+; cf. StartToolchain), "ok" ou "failed" une fois fini. $ToolchainBar et $ToolchainLabel : la
+; seconde barre de progression et son texte, ajoutes a la page d'installation (cf. InstFilesShow).
 Var OldVersion
+Var ToolchainBar
+Var ToolchainLabel
 ; $InstallMode : "" (aucune installation), "update" (version plus ancienne),
 ; "same" (meme version) ou "downgrade" (version plus recente deja installee).
 Var InstallMode
@@ -120,11 +124,13 @@ VIAddVersionKey "LegalCopyright"  "${PUBLISHER}"
 ; sur $INSTDIR, qui ne doit jamais etre un dossier partage (D:\Games, Documents...).
 !define MUI_PAGE_CUSTOMFUNCTION_LEAVE DirectoryLeave
 !insertmacro MUI_PAGE_DIRECTORY
+; La page d'installation recoit une seconde barre, celle des dependances (devkitPro).
+!define MUI_PAGE_CUSTOMFUNCTION_SHOW InstFilesShow
 !insertmacro MUI_PAGE_INSTFILES
 ; devkitPro et mGBA ne sont pas embarques : ce sont des cases a cocher qui les
-; telechargent (cf. SecDevkitpro, SecMgba), puis leur installation se lance
-; quand cet assistant se ferme (cf. .onGUIEnd). Le texte de la page de fin le dit
-; quand devkitPro est demande (cf. FinishShow) ; le lien reste pour qui l'a decoche.
+; telechargent. devkitPro s'installe PENDANT cet assistant (cf. StartToolchain, SecDevkitpro) :
+; sa barre est sous celle de Backstage. mGBA se lance quand l'assistant se ferme (cf. .onGUIEnd).
+; Le lien de la page de fin reste pour qui a decoche devkitPro ou dont l'installation a echoue.
 !define MUI_FINISHPAGE_TEXT "$(FINISH_TEXT)"
 !define MUI_FINISHPAGE_LINK "$(FINISH_LINK)"
 !define MUI_FINISHPAGE_LINK_LOCATION "https://devkitpro.org/wiki/Getting_Started"
@@ -155,10 +161,20 @@ LangString FINISH_TITLE ${LANG_FRENCH}  "${APP_NAME} est installé"
 LangString FINISH_TITLE ${LANG_ENGLISH} "${APP_NAME} is installed"
 LangString FINISH_TEXT ${LANG_FRENCH}  "${APP_NAME} est installé."
 LangString FINISH_TEXT ${LANG_ENGLISH} "${APP_NAME} is installed."
-LangString FINISH_TEXT_DEVKITPRO ${LANG_FRENCH}  "${APP_NAME} est installé.$\r$\n$\r$\nLa chaîne GBA (devkitPro) s'installe maintenant dans une petite fenêtre, en quelques minutes. ${APP_NAME} se lancera ensuite tout seul."
-LangString FINISH_TEXT_DEVKITPRO ${LANG_ENGLISH} "${APP_NAME} is installed.$\r$\n$\r$\nThe GBA toolchain (devkitPro) is now installing in a small window, which takes a few minutes. ${APP_NAME} will then start by itself."
 LangString FINISH_LINK ${LANG_FRENCH}  "Installer devkitPro (nécessaire pour fabriquer des ROMs)"
 LangString FINISH_LINK ${LANG_ENGLISH} "Install devkitPro (required to build ROMs)"
+LangString TC_WAITING ${LANG_FRENCH}  "Chaîne GBA (devkitPro) : préparation..."
+LangString TC_WAITING ${LANG_ENGLISH} "GBA toolchain (devkitPro): preparing..."
+LangString TC_DOWNLOAD ${LANG_FRENCH}  "Chaîne GBA (devkitPro) : téléchargement de $R4 ($R5/$R6)"
+LangString TC_DOWNLOAD ${LANG_ENGLISH} "GBA toolchain (devkitPro): downloading $R4 ($R5/$R6)"
+LangString TC_EXTRACT ${LANG_FRENCH}  "Chaîne GBA (devkitPro) : installation de $R4 ($R5/$R6)"
+LangString TC_EXTRACT ${LANG_ENGLISH} "GBA toolchain (devkitPro): installing $R4 ($R5/$R6)"
+LangString TC_DONE ${LANG_FRENCH}  "Chaîne GBA (devkitPro) : installée."
+LangString TC_DONE ${LANG_ENGLISH} "GBA toolchain (devkitPro): installed."
+LangString TC_FAILED ${LANG_FRENCH}  "Chaîne GBA (devkitPro) : l'installation a échoué."
+LangString TC_FAILED ${LANG_ENGLISH} "GBA toolchain (devkitPro): the installation failed."
+LangString MSG_TOOLCHAIN_FAILED ${LANG_FRENCH}  "l'installation a échoué (connexion absente, fichier inattendu ou Windows trop ancien). ${APP_NAME} est installé quand même, mais ne pourra pas construire de ROM : le lien de la page de fin et les réglages de ${APP_NAME} permettent de l'installer à la main."
+LangString MSG_TOOLCHAIN_FAILED ${LANG_ENGLISH} "the installation failed (no connection, unexpected file or Windows too old). ${APP_NAME} is installed anyway but cannot build a ROM yet: the link on the last page and ${APP_NAME}'s settings let you install it by hand."
 LangString MSG_APP_RUNNING ${LANG_FRENCH}  "${APP_NAME} est en cours d'exécution. Fermez-le, puis cliquez sur Réessayer."
 LangString MSG_APP_RUNNING ${LANG_ENGLISH} "${APP_NAME} is running. Close it, then click Retry."
 
@@ -226,6 +242,8 @@ FunctionEnd
 Section "${APP_NAME}" SecApp
   SectionIn RO
 
+  ; Les dependances telechargent pendant que les fichiers de Backstage se copient.
+  Call StartToolchain
   Call CleanPreviousInstall
   SetOutPath "$INSTDIR"
   File /r "${SRCDIR}\*"
@@ -311,15 +329,148 @@ SectionEnd
   Pop $0
 !macroend
 
+!define TOOLCHAIN_PROGRESS "${TOOLS_DIR}\toolchain_progress.txt"
+
+; Attend la fin du script en suivant son fichier d'avancement : la seconde barre et son texte
+; avancent pendant que la copie de Backstage (SecApp) puis les autres sections se deroulent. Un
+; echec ne fait pas echouer l'installation de Backstage : on le dit, et le lien de la page de
+; fin reste visible. Au plus 20 minutes.
 Section "devkitPro (GBA)" SecDevkitpro
-  IfSilent devkitpro_done
+  StrCmp $ToolchainSetup "1" 0 devkitpro_done
+  StrCpy $R9 0
+  devkitpro_poll:
+    Sleep 400
+    IntOp $R9 $R9 + 1
+    IntCmp $R9 3000 devkitpro_timeout
+    ClearErrors
+    FileOpen $R0 "${TOOLCHAIN_PROGRESS}" r
+    IfErrors devkitpro_poll
+    FileRead $R0 $R1
+    FileClose $R0
+    ${WordFind} $R1 "|" "+1" $R2        ; pourcentage
+    ${WordFind} $R1 "|" "+2" $R3        ; etape
+    StrCmp $R2 "" devkitpro_poll
+    StrCmp $R2 "-1" devkitpro_failed
+    StrCmp $R3 "done" devkitpro_ok
+    ${WordFind} $R1 "|" "+3" $R4        ; nom du paquet
+    ${WordFind} $R1 "|" "+4" $R5        ; numero
+    ${WordFind} $R1 "|" "+5" $R6        ; total
+    StrCmp $ToolchainBar "" +2
+      SendMessage $ToolchainBar ${PBM_SETPOS} $R2 0
+    StrCmp $R3 "extract" 0 +3
+      StrCpy $R7 "$(TC_EXTRACT)"
+      Goto devkitpro_text
+    StrCpy $R7 "$(TC_DOWNLOAD)"
+    devkitpro_text:
+    StrCmp $ToolchainLabel "" +2
+      SendMessage $ToolchainLabel ${WM_SETTEXT} 0 "STR:$R7"
+    Goto devkitpro_poll
+  devkitpro_ok:
+    StrCmp $ToolchainBar "" +2
+      SendMessage $ToolchainBar ${PBM_SETPOS} 100 0
+    StrCmp $ToolchainLabel "" +2
+      SendMessage $ToolchainLabel ${WM_SETTEXT} 0 "STR:$(TC_DONE)"
+    DetailPrint "devkitPro : OK"
+    StrCpy $ToolchainSetup "ok"
+    Goto devkitpro_done
+  devkitpro_timeout:
+    ; Le script ne repond plus : on l'arrete par le fichier d'annulation, qu'il surveille.
+    FileOpen $R0 "${TOOLCHAIN_PROGRESS}.cancel" w
+    FileClose $R0
+  devkitpro_failed:
+    StrCmp $ToolchainLabel "" +2
+      SendMessage $ToolchainLabel ${WM_SETTEXT} 0 "STR:$(TC_FAILED)"
+    DetailPrint "devkitPro : $R1"
+    StrCpy $ToolchainSetup "failed"
+    MessageBox MB_OK|MB_ICONEXCLAMATION "devkitPro : $(MSG_TOOLCHAIN_FAILED)"
+  devkitpro_done:
+SectionEnd
+
+; Appele au debut de SecApp : depose le script et son manifeste, et le lance en arriere-plan, sans
+; fenetre. Il ecrit son avancement dans TOOLCHAIN_PROGRESS ("pourcentage|etape|nom|numero|total").
+Function StartToolchain
+  IfSilent start_done
+  SectionGetFlags ${SecDevkitpro} $0
+  IntOp $0 $0 & ${SF_SELECTED}
+  IntCmp $0 0 start_done
   SetOutPath "${TOOLS_DIR}"
   File "install_devkitpro.ps1"
   File "devkitpro_manifest.json"
-  SetOutPath "$INSTDIR"
+  Delete "${TOOLCHAIN_PROGRESS}"
+  Delete "${TOOLCHAIN_PROGRESS}.cancel"
+  ExecShell "open" "powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${TOOLS_DIR}\install_devkitpro.ps1" -ProgressFile "${TOOLCHAIN_PROGRESS}"' SW_HIDE
   StrCpy $ToolchainSetup "1"
-  devkitpro_done:
-SectionEnd
+  SetOutPath "$INSTDIR"
+  start_done:
+FunctionEnd
+
+; Descend le controle de la page $R0 d'identifiant ID de $R6 pixels, a taille egale (KEEP = 1) ou
+; en perdant autant de hauteur (KEEP = 0, pour le journal). N'utilise que $1 a $5 et $9 (les $R sont
+; les mesures de la barre 1, voir InstFilesShow).
+!macro ShiftControl ID KEEP
+  GetDlgItem $1 $R0 ${ID}
+  System::Call '*(i 0, i 0, i 0, i 0) p .r9'
+  System::Call 'user32::GetWindowRect(p r1, p r9)'
+  System::Call 'user32::MapWindowPoints(p 0, p R0, p r9, i 2)'
+  System::Call '*$9(i .r2, i .r3, i .r4, i .r5)'
+  System::Free $9
+  IntOp $4 $4 - $2          ; largeur
+  IntOp $5 $5 - $3          ; hauteur
+  !if ${KEEP} == 0
+    IntOp $5 $5 - $R6
+  !endif
+  IntOp $3 $3 + $R6
+  System::Call 'user32::SetWindowPos(p r1, p 0, i r2, i r3, i r4, i r5, i 4)'
+!macroend
+
+; Page d'installation : une seconde barre sous celle de Backstage, avec son texte, pour les
+; dependances. Les controles de la page (barre 1004, journal 1016, bouton details 1027) sont
+; deplaces vers le bas de la place qu'il faut. Rien n'est ajoute si devkitPro n'est pas demande.
+; $R0 la page, $R2 gauche et $R3 bas de la barre 1, $R4 largeur, $R5 hauteur, $R6 place prise.
+Function InstFilesShow
+  IfSilent show_done
+  SectionGetFlags ${SecDevkitpro} $0
+  IntOp $0 $0 & ${SF_SELECTED}
+  IntCmp $0 0 show_done
+  Push $R0
+  Push $R2
+  Push $R3
+  Push $R4
+  Push $R5
+  Push $R6
+  FindWindow $R0 "#32770" "" $HWNDPARENT
+  GetDlgItem $1 $R0 1004
+  System::Call '*(i 0, i 0, i 0, i 0) p .r9'
+  System::Call 'user32::GetWindowRect(p r1, p r9)'
+  System::Call 'user32::MapWindowPoints(p 0, p R0, p r9, i 2)'
+  System::Call '*$9(i .r2, i .r3, i .r4, i .r5)'
+  System::Free $9
+  IntOp $R4 $4 - $2
+  IntOp $R5 $5 - $3
+  StrCpy $R2 $2
+  StrCpy $R3 $5
+  IntOp $R6 $R5 + 32        ; texte (16) + barre + marges
+  !insertmacro ShiftControl 1016 0
+  !insertmacro ShiftControl 1027 1
+  IntOp $3 $R3 + 8          ; haut du texte
+  System::Call 'user32::CreateWindowEx(i 0, t "STATIC", t "", i 0x50000000, i R2, i r3, i R4, i 16, p R0, p 0, p 0, p 0) p .r9'
+  StrCpy $ToolchainLabel $9
+  GetDlgItem $1 $R0 1006
+  SendMessage $1 ${WM_GETFONT} 0 0 $1
+  SendMessage $ToolchainLabel ${WM_SETFONT} $1 1
+  SendMessage $ToolchainLabel ${WM_SETTEXT} 0 "STR:$(TC_WAITING)"
+  IntOp $3 $3 + 18          ; haut de la seconde barre
+  System::Call 'user32::CreateWindowEx(i 0, t "msctls_progress32", t "", i 0x50000001, i R2, i r3, i R4, i R5, p R0, p 0, p 0, p 0) p .r9'
+  StrCpy $ToolchainBar $9
+  SendMessage $ToolchainBar ${PBM_SETRANGE32} 0 100
+  Pop $R6
+  Pop $R5
+  Pop $R4
+  Pop $R3
+  Pop $R2
+  Pop $R0
+  show_done:
+FunctionEnd
 
 Section "mGBA" SecMgba
   IfSilent mgba_done
@@ -466,42 +617,31 @@ Function WelcomeShow
   welcome_done:
 FunctionEnd
 
-; Page de fin. Si l'installation de devkitPro va se lancer, on le dit et le lien est inutile.
-; Sinon le lien n'est utile que si devkitPro n'etait pas deja la : on le cache quand
-; il y est (rien a installer). Il reste donc pour qui a decoche la case.
+; Page de fin. Le lien d'installation de devkitPro n'est utile que s'il n'y est pas deja, ni installe
+; par cet assistant : on le cache dans ces deux cas. Il reste donc pour qui a decoche la case, ou dont
+; l'installation a echoue.
 Function FinishShow
-  StrCmp $ToolchainSetup "" finish_no_wizard
-  SendMessage $mui.FinishPage.Text ${WM_SETTEXT} 0 "STR:$(FINISH_TEXT_DEVKITPRO)"
-  ShowWindow $mui.FinishPage.Link ${SW_HIDE}
-  ; Pas de lancement automatique : l'application demarrerait pendant que
-  ; devkitPro s'installe encore et annoncerait « paquets manquants ». Decochee PUIS
-  ; cachee (la case cachee garde son etat, et c'est lui qui est lu a la fermeture).
-  ${NSD_Uncheck} $mui.FinishPage.Run
-  ShowWindow $mui.FinishPage.Run ${SW_HIDE}
-  Goto finish_done
-  finish_no_wizard:
-    StrCmp $DevkitproDetected "1" 0 finish_done
+  StrCmp $ToolchainSetup "ok" finish_hide_link
+  StrCmp $DevkitproDetected "1" finish_hide_link finish_done
+  finish_hide_link:
     ShowWindow $mui.FinishPage.Link ${SW_HIDE}
   finish_done:
 FunctionEnd
 
-; Les installations des outils se lancent ICI, quand cet assistant se ferme : un seul
-; assistant a l'ecran a la fois. mGBA d'abord (silencieux, quelques secondes), puis
-; devkitPro dans sa petite fenetre de progression. Aucun n'est attendu.
+; L'installation de mGBA se lance ICI, quand cet assistant se ferme : un seul assistant a l'ecran a la
+; fois (celle de devkitPro, elle, s'est faite pendant l'assistant). Elle n'est pas attendue.
 Function .onGUIEnd
   StrCmp $MgbaInstaller "" mgba_launch_done
     ExecShell "open" "$MgbaInstaller" '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /DIR="$LOCALAPPDATA\mGBA"' SW_HIDE
   mgba_launch_done:
-  StrCmp $ToolchainSetup "" devkitpro_launch_done
-    ; Sans fenetre console ; le script montre la sienne, lance Backstage a la fin
-    ; (journal : %TEMP%\BackstageSetup\install_devkitpro.log).
-    ExecShell "open" "powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${TOOLS_DIR}\install_devkitpro.ps1" -AppExe "$INSTDIR\${APP_EXE}"' SW_HIDE
-  devkitpro_launch_done:
 FunctionEnd
 
 ; Installation annulee (OnAbort, via MUI_CUSTOMFUNCTION_ABORT) ou en echec : rien ne doit se lancer a la fermeture.
 Function OnAbort
   StrCpy $MgbaInstaller ""
+  StrCmp $ToolchainSetup "1" 0 +3
+    FileOpen $0 "${TOOLCHAIN_PROGRESS}.cancel" w
+    FileClose $0
   StrCpy $ToolchainSetup ""
 FunctionEnd
 

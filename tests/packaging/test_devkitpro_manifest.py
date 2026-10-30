@@ -89,3 +89,15 @@ def test_le_script_linux_et_le_paquet_deb_livrent_la_liste():
     build = (LINUX_PACKAGES.parent / "build_packages.sh").read_text(encoding="utf-8")
     assert "devkitpro_packages.txt" in build
     assert (LINUX_PACKAGES.parent / "backstage-setup-devkitpro").read_bytes().count(b"\r") == 0
+
+
+def test_l_installateur_suit_l_avancement_du_script():
+    """La seconde barre de l'assistant lit le fichier que le script ecrit : les deux doivent
+    s'accorder sur son nom, sur son format (pourcentage|etape|...) et sur l'annulation."""
+    nsi = (PACKAGING / "installer.nsi").read_text(encoding="utf-8-sig")
+    script = (PACKAGING / "install_devkitpro.ps1").read_text(encoding="utf-8-sig")
+    assert '-ProgressFile "${TOOLCHAIN_PROGRESS}"' in nsi
+    assert "[string]$ProgressFile" in script
+    for step in ("|download|", "|extract|", "100|done", "-1|error|"):
+        assert step in script, step
+    assert '"${TOOLCHAIN_PROGRESS}.cancel"' in nsi and '"$ProgressFile.cancel"' in script
