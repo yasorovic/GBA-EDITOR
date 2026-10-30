@@ -325,12 +325,12 @@ class ActorInspector(QWidget):
         self._btn_expose.clicked.connect(self._expose_to_prefab)
         pb_layout.addWidget(self._btn_expose)
         btn_unlink = QPushButton("×")
-        btn_unlink.setFont(QFont(T.UI, T.MD))
-        btn_unlink.setFixedSize(18, 18)
+        btn_unlink.setFont(QFont(T.UI, T.XL, QFont.Weight.Bold))
+        btn_unlink.setFixedSize(22, 22)
         btn_unlink.setToolTip(tooltip(
             title=label("actorinsp.unlink_title"), body=label("actorinsp.unlink_tip")))
         btn_unlink.setStyleSheet(
-            f"QPushButton{{color:{C.TEXT_MUTED};background:transparent;border:none;}}"
+            f"QPushButton{{color:{C.TEXT_HI};background:transparent;border:none;padding:0;}}"
             f"QPushButton:hover{{color:{C.ACCENT_RED};}}"
         )
         btn_unlink.clicked.connect(self._unlink_prefab)
@@ -1094,6 +1094,8 @@ class ActorInspector(QWidget):
         if not self._actor:
             return
         self._actor.prefab_name = None
+        # Le prefab peut avoir été supprimé : `stamp_scene_sources` n'efface pas une source qui ne désigne plus rien.
+        self._actor.source = ""
         get_dispatcher().save_scene()
         get_dispatcher()._emit("actors_list_changed")
         # cf. relink_actor_to_prefab / expose_actor_to_prefab dans

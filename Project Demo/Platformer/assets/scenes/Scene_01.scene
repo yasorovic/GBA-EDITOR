@@ -383,7 +383,6 @@
     {
       "name": "Guard",
       "id": "9666aedf58f6",
-      "source": "b8a29dca3925",
       "active": true,
       "components": [
         {
