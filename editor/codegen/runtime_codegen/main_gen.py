@@ -16,6 +16,7 @@ from codegen.palette_alloc import scene_bank_layout
 from codegen.oam_budget import project_actor_count, project_oam_entry_count
 from codegen.ui_obj_budget import scene_obj_ui_slots
 from codegen.runtime_codegen.physics.blocks import block_helper_lines, project_has_blockers
+from codegen.runtime_codegen.physics.budget import physics_budget_line
 from codegen.runtime_codegen.gen_affine import compute_affine_info
 from codegen.runtime_codegen.gen_camera import camera_table_lines
 from codegen.runtime_codegen.gen_declarations import extern_lines, include_lines
@@ -102,6 +103,8 @@ def generate_main(
     # lues de `scene_oam_layout`. Chaque scène ne porte que les pools qu'elle
     # déclare, à leur place dans SA fenêtre.
     scene_pis = [scene_pi(p, d["scene"]) for d in all_scene_data]
+    for scene in all_scenes:
+        emit("log_line", physics_budget_line(p, scene))
 
     # ── Sprites : union de toutes les scènes ──────────────────────
     all_sprite_pairs: list = []
