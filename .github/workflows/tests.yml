@@ -96,4 +96,6 @@ jobs:
       # si l'une des deux étapes échoue.
       - name: Tests
         if: always()
-        run: python -m pytest tests -q -rs
+        # -vv : pyproject.toml pose déjà -q, qu'un -v seul annulerait. Un plantage de Qt (segfault) ne
+        # nomme pas le test ; le dernier nom du journal le désigne.
+        run: python -m pytest tests -rs -vv

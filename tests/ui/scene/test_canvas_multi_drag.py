@@ -27,6 +27,18 @@ def _grid_choice_stays_in_the_test(tmp_path, monkeypatch):
     monkeypatch.setattr(SceneEditor, "_grid_settings", staticmethod(lambda: QSettings(ini, QSettings.Format.IniFormat)))
 
 
+def _dispose(*editors):
+    """Ferme et détruit les éditeurs du test. Un éditeur laissé affiché, avec ses sprites sélectionnés, est
+    repeint à la purge d'évènements qui suit un test, pendant que le ramasse-miettes l'emporte : c'est ce
+    qui faisait planter la CI sous Linux, dans `_paint_markers`."""
+    from PyQt6.QtCore import QEvent
+    from PyQt6.QtWidgets import QApplication
+    for ed in editors:
+        ed.close()
+        ed.deleteLater()
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
 @pytest.fixture
 def editor(qapp, tmp_path):
     if not DEMO.exists():
@@ -42,6 +54,7 @@ def editor(qapp, tmp_path):
     get_history().clear()
     yield ed
     get_history().clear()
+    _dispose(ed)
 
 
 def _hit_point(view, item):
@@ -224,9 +237,13 @@ def test_la_grille_choisie_revient_a_la_prochaine_ouverture(editor, tmp_path):
     from ui.scene_manager.scene_canvas import SceneEditor
     editor._chk_grid.set_state(2)
     second = SceneEditor()
-    second.show()
-    assert second._chk_grid.state == 2 and second._chk_grid.isChecked()
-    assert second._gba_scene._grid_item is not None and second._gba_scene._grid_item.isVisible()
-    editor._chk_grid.set_state(0)
-    third = SceneEditor()
-    assert third._chk_grid.state == 0
+    third = None
+    try:
+        second.show()
+        assert second._chk_grid.state == 2 and second._chk_grid.isChecked()
+        assert second._gba_scene._grid_item is not None and second._gba_scene._grid_item.isVisible()
+        editor._chk_grid.set_state(0)
+        third = SceneEditor()
+        assert third._chk_grid.state == 0
+    finally:
+        _dispose(*[e for e in (second, third) if e is not None])

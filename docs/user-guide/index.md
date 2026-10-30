@@ -18,7 +18,10 @@ Si ce n'est pas déjà fait, téléchargez Backstage !
 
 ::::{dropdown} Linux command lines
 
-**Installer.** Une seule commande télécharge et installe la dernière version adaptée à la distribution
+:::{rubric} Installer
+:::
+
+Une seule commande télécharge et installe la dernière version adaptée à la distribution
 (`.deb`, ou AppImage à défaut) :
 
 ```bash
@@ -33,7 +36,10 @@ sudo apt install ./Backstage-<version>-amd64.deb
 
 L'AppImage s'utilise sans installation : extrayez l'archive `.tar.gz`, puis lancez le fichier `.AppImage`.
 
-**Installer devkitPro.** Avec le paquet `.deb` ou le script `install.sh`, une seule commande suffit :
+:::{rubric} Installer devkitPro
+:::
+
+Avec le paquet `.deb` ou le script `install.sh`, une seule commande suffit :
 
 ```bash
 backstage-setup-devkitpro
@@ -48,7 +54,10 @@ sudo ./install-devkitpro-pacman
 sudo dkp-pacman -S gba-dev
 ```
 
-**Désinstaller.** Avec le paquet `.deb`, la commande suivante retire Backstage, sa configuration et ses
+:::{rubric} Désinstaller
+:::
+
+Avec le paquet `.deb`, la commande suivante retire Backstage, sa configuration et ses
 fichiers temporaires (elle demande confirmation avant) :
 
 ```bash

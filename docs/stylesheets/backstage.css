@@ -401,6 +401,35 @@ div.highlight-shell::before { content: "Shell"; }
 div.highlight-asm::before,
 div.highlight-gas::before { content: "Assembleur"; }
 
+/* Commandes shell : un bandeau neutre et mince (le texte qui les introduit compte plus que le bloc), les lignes longues passent à la ligne. */
+div.highlight-bash::before,
+div.highlight-console::before,
+div.highlight-shell::before {
+  padding: 0.1rem 0.9rem;
+  border-bottom: 1px solid var(--color-background-border);
+  background: var(--backstage-code-hll);
+  color: var(--color-foreground-secondary);
+  font-family: var(--font-stack);
+  font-weight: 400;
+  font-size: 0.7rem;
+}
+
+div.highlight-bash pre,
+div.highlight-console pre,
+div.highlight-shell pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Titre d'étape (directive rubric) : il porte l'idée, le bloc de code n'est que l'illustration. */
+article p.rubric {
+  margin: 1.75rem 0 0.5rem;
+  font-family: "Balsamiq Sans", var(--font-stack);
+  font-weight: 700;
+  font-size: 1.2rem;
+  text-transform: none;
+}
+
 /* Pas de bandeau pour un schéma en texte brut, ni dans un onglet (l'onglet dit déjà le langage). */
 div.highlight-text::before,
 div.highlight-default::before,
