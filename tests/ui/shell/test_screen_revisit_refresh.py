@@ -58,7 +58,9 @@ def _make_window(screen):
         _screen_stack=_Recorder(),
         _history=_Recorder(),
         _bus=_Recorder(),
+        rescans=[],
     )
+    win._watcher = SimpleNamespace(rescan=lambda: win.rescans.append(1))
     win._ensure_screen = lambda index: screen
     win._move_build_panel_to = lambda index: None   # le panneau de build n'est pas l'objet du test
     win._load_screen_for_project = MainWindow._load_screen_for_project.__get__(win)
@@ -80,6 +82,7 @@ def test_refresh_appele_en_revisite_pas_a_la_premiere_visite():
 
     MainWindow._show_screen(win, 0)
     assert (screen.loaded, screen.refreshed) == (1, 2)
+    assert len(win.rescans) == 3                # chaque changement d'écran rattrape d'abord le disque
 
 
 def test_pas_de_refresh_sans_projet():
@@ -92,6 +95,7 @@ def test_pas_de_refresh_sans_projet():
     MainWindow._show_screen(win, 0)
     MainWindow._show_screen(win, 0)
     assert (screen.loaded, screen.refreshed) == (0, 0)
+    assert win.rescans == []                    # pas de projet : rien à rattraper
 
 
 # ── Ce que `refresh()` relit, écran par écran ─────────────────────────────

@@ -30,9 +30,10 @@ Unicode true
 !insertmacro VersionCompare
 
 ; $OldVersion : la version deja installee ("" s'il n'y en a pas), lue au demarrage.
-; $DevkitproInstaller, $MgbaInstaller : les installateurs officiels telecharges, a
-; lancer quand cet assistant se ferme (cf. .onGUIEnd) ; "" si l'outil n'est pas
-; demande, si le telechargement a echoue ou si l'installation est annulee.
+; $MgbaInstaller : l'installateur officiel de mGBA telecharge, a lancer quand cet
+; assistant se ferme (cf. .onGUIEnd) ; "" si l'outil n'est pas demande, si le
+; telechargement a echoue ou si l'installation est annulee.
+; $ToolchainSetup : "1" quand install_devkitpro.ps1 doit se lancer a la fermeture.
 Var OldVersion
 ; $InstallMode : "" (aucune installation), "update" (version plus ancienne),
 ; "same" (meme version) ou "downgrade" (version plus recente deja installee).
@@ -40,7 +41,7 @@ Var InstallMode
 ; "1" si devkitPro est deja la (meme test que la case a cocher) : le lien
 ; d'installation de la page de fin n'a alors rien a proposer.
 Var DevkitproDetected
-Var DevkitproInstaller
+Var ToolchainSetup
 Var MgbaInstaller
 Var Relaunch
 
@@ -121,7 +122,7 @@ VIAddVersionKey "LegalCopyright"  "${PUBLISHER}"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 ; devkitPro et mGBA ne sont pas embarques : ce sont des cases a cocher qui les
-; telechargent (cf. SecDevkitpro, SecMgba), puis leurs installateurs se lancent
+; telechargent (cf. SecDevkitpro, SecMgba), puis leur installation se lance
 ; quand cet assistant se ferme (cf. .onGUIEnd). Le texte de la page de fin le dit
 ; quand devkitPro est demande (cf. FinishShow) ; le lien reste pour qui l'a decoche.
 !define MUI_FINISHPAGE_TEXT "$(FINISH_TEXT)"
@@ -154,8 +155,8 @@ LangString FINISH_TITLE ${LANG_FRENCH}  "${APP_NAME} est installé"
 LangString FINISH_TITLE ${LANG_ENGLISH} "${APP_NAME} is installed"
 LangString FINISH_TEXT ${LANG_FRENCH}  "${APP_NAME} est installé."
 LangString FINISH_TEXT ${LANG_ENGLISH} "${APP_NAME} is installed."
-LangString FINISH_TEXT_DEVKITPRO ${LANG_FRENCH}  "${APP_NAME} est installé.$\r$\n$\r$\nL'assistant d'installation devkitPro continuera dans sa propre fenêtre. Quand il se ferme, ${APP_NAME} finalise l'installation (environ une minute) puis se lance tout seul."
-LangString FINISH_TEXT_DEVKITPRO ${LANG_ENGLISH} "${APP_NAME} is installed.$\r$\n$\r$\nThe devkitPro installation wizard will continue in its own window. When it closes, ${APP_NAME} finishes the installation (about a minute) and then starts by itself."
+LangString FINISH_TEXT_DEVKITPRO ${LANG_FRENCH}  "${APP_NAME} est installé.$\r$\n$\r$\nLa chaîne GBA (devkitPro) s'installe maintenant dans une petite fenêtre, en quelques minutes. ${APP_NAME} se lancera ensuite tout seul."
+LangString FINISH_TEXT_DEVKITPRO ${LANG_ENGLISH} "${APP_NAME} is installed.$\r$\n$\r$\nThe GBA toolchain (devkitPro) is now installing in a small window, which takes a few minutes. ${APP_NAME} will then start by itself."
 LangString FINISH_LINK ${LANG_FRENCH}  "Installer devkitPro (nécessaire pour fabriquer des ROMs)"
 LangString FINISH_LINK ${LANG_ENGLISH} "Install devkitPro (required to build ROMs)"
 LangString MSG_APP_RUNNING ${LANG_FRENCH}  "${APP_NAME} est en cours d'exécution. Fermez-le, puis cliquez sur Réessayer."
@@ -275,26 +276,28 @@ SectionEnd
 
 ; --- Outils externes : telecharges au moment de l'installation ---
 ;
-; Ni devkitPro ni mGBA ne sont embarques : le premier est un telechargeur de
-; paquets (il a besoin d'Internet de toute facon), le second pese 16 Mo et n'est
-; pas le notre. On recupere l'installateur OFFICIEL et on verifie son empreinte
-; SHA-256 (epinglee ci-dessous : mGBA n'est pas signe, l'empreinte est alors la
-; seule garantie). On ne le LANCE PAS pendant cette installation : deux assistants
-; a la fois, c'etait deroutant. Les sections gardent seulement le chemin ; c'est
-; .onGUIEnd qui lance les installateurs quand cet assistant se ferme, sans
-; l'attendre. L'application redetecte ses outils au demarrage, avant un build et
-; au retour de focus.
+; Ni devkitPro ni mGBA ne sont embarques : le premier pese plus de 100 Mo, le second
+; 16 Mo et n'est pas le notre.
+;  - mGBA : on recupere l'installateur OFFICIEL et on verifie son empreinte SHA-256
+;    (epinglee ci-dessous : mGBA n'est pas signe, l'empreinte est alors la seule
+;    garantie). On ne le LANCE PAS pendant cette installation : deux assistants a la
+;    fois, c'etait deroutant. La section garde seulement le chemin ; c'est .onGUIEnd
+;    qui le lance quand cet assistant se ferme, sans l'attendre.
+;  - devkitPro : la section ne telecharge rien. Elle depose install_devkitpro.ps1 et
+;    devkitpro_manifest.json (les paquets, leurs URL et leurs empreintes epinglees),
+;    que .onGUIEnd lance a la fermeture : le script telecharge, verifie et extrait
+;    les paquets dans %LOCALAPPDATA%\Backstage\devkitPro, sans droits administrateur.
+; L'application redetecte ses outils au demarrage, avant un build et au retour de focus.
 ;
 ; Jamais en mode silencieux (/S, la CI) : pas de reseau, pas d'assistant.
 ; Un echec ne fait pas echouer l'installation de Backstage : on le dit, et les
 ; liens restent dans les reglages.
 !define TOOLS_DIR "$TEMP\BackstageSetup"
+; Le dossier de la chaine GBA que Backstage installe lui-meme (core/toolchain.py:
+; MANAGED_DEVKITPRO). Ce n'est jamais C:\devkitPro, que la desinstallation ne touche pas.
+!define TOOLCHAIN_DIR "$LOCALAPPDATA\${APP_KEY}\devkitPro"
 
-!define DEVKITPRO_URL  "https://github.com/devkitPro/installer/releases/download/v3.0.3/devkitProUpdater-3.0.3.exe"
-!define DEVKITPRO_FILE "devkitProUpdater-3.0.3.exe"
-!define DEVKITPRO_SHA  "038a99dc84f1ca0b52e9e0e074a94a3b0672e6d7bf0988563f0ab0812dcbb38d"
-
-!define MGBA_URL       "https://github.com/mgba-emu/mgba/releases/download/0.10.5/mGBA-0.10.5-win64-installer.exe"
+!define MGBA_URL      "https://github.com/mgba-emu/mgba/releases/download/0.10.5/mGBA-0.10.5-win64-installer.exe"
 !define MGBA_FILE      "mGBA-0.10.5-win64-installer.exe"
 !define MGBA_SHA       "edd0454b8fe69f20dc2f0b47f2cfc32a14e3848550762ffbb3d782e649669c6b"
 
@@ -310,20 +313,11 @@ SectionEnd
 
 Section "devkitPro (GBA)" SecDevkitpro
   IfSilent devkitpro_done
-  DetailPrint "$(MSG_DOWNLOADING) devkitPro"
-  !insertmacro FetchVerified "${DEVKITPRO_URL}" "${DEVKITPRO_FILE}" "${DEVKITPRO_SHA}"
-  StrCmp $0 "0" 0 devkitpro_failed
-  ; Lance par .onGUIEnd, eleve (UAC) : il s'installe dans C:\devkitPro. Son
-  ; assistant propose GBA Development, a cocher puis a suivre dans sa fenetre.
-  StrCpy $DevkitproInstaller "${TOOLS_DIR}\${DEVKITPRO_FILE}"
-  ; Le Updater echoue parfois, sans message, a installer les paquets GBA : ce script,
-  ; lance en meme temps (cf. .onGUIEnd), les reinstalle une fois le Updater termine.
   SetOutPath "${TOOLS_DIR}"
-  File "finish_devkitpro.ps1"
+  File "install_devkitpro.ps1"
+  File "devkitpro_manifest.json"
   SetOutPath "$INSTDIR"
-  Goto devkitpro_done
-  devkitpro_failed:
-    MessageBox MB_OK|MB_ICONEXCLAMATION "devkitPro : $(MSG_DOWNLOAD_FAILED)"
+  StrCpy $ToolchainSetup "1"
   devkitpro_done:
 SectionEnd
 
@@ -472,16 +466,15 @@ Function WelcomeShow
   welcome_done:
 FunctionEnd
 
-; Page de fin. Si l'assistant devkitPro va se lancer, on le dit et le lien est inutile.
+; Page de fin. Si l'installation de devkitPro va se lancer, on le dit et le lien est inutile.
 ; Sinon le lien n'est utile que si devkitPro n'etait pas deja la : on le cache quand
-; il y est (rien a installer). Il reste donc pour qui a decoche la case, ou dont le
-; telechargement a echoue, sans devkitPro.
+; il y est (rien a installer). Il reste donc pour qui a decoche la case.
 Function FinishShow
-  StrCmp $DevkitproInstaller "" finish_no_wizard
+  StrCmp $ToolchainSetup "" finish_no_wizard
   SendMessage $mui.FinishPage.Text ${WM_SETTEXT} 0 "STR:$(FINISH_TEXT_DEVKITPRO)"
   ShowWindow $mui.FinishPage.Link ${SW_HIDE}
-  ; Pas de lancement automatique : l'application demarrerait pendant que l'assistant
-  ; devkitPro travaille encore et annoncerait « paquets manquants ». Decochee PUIS
+  ; Pas de lancement automatique : l'application demarrerait pendant que
+  ; devkitPro s'installe encore et annoncerait « paquets manquants ». Decochee PUIS
   ; cachee (la case cachee garde son etat, et c'est lui qui est lu a la fermeture).
   ${NSD_Uncheck} $mui.FinishPage.Run
   ShowWindow $mui.FinishPage.Run ${SW_HIDE}
@@ -492,30 +485,29 @@ Function FinishShow
   finish_done:
 FunctionEnd
 
-; Les installateurs des outils se lancent ICI, quand cet assistant se ferme : un seul
+; Les installations des outils se lancent ICI, quand cet assistant se ferme : un seul
 ; assistant a l'ecran a la fois. mGBA d'abord (silencieux, quelques secondes), puis
-; devkitPro avec son interface. Aucun n'est attendu.
+; devkitPro dans sa petite fenetre de progression. Aucun n'est attendu.
 Function .onGUIEnd
   StrCmp $MgbaInstaller "" mgba_launch_done
     ExecShell "open" "$MgbaInstaller" '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /DIR="$LOCALAPPDATA\mGBA"' SW_HIDE
   mgba_launch_done:
-  StrCmp $DevkitproInstaller "" devkitpro_launch_done
-    ExecShell "runas" "$DevkitproInstaller"
-    ; En arriere-plan, sans fenetre : attend la fin du Updater, puis installe les paquets
-    ; GBA s'il ne l'a pas fait (journal : %TEMP%\BackstageSetup\finish_devkitpro.log).
-    ExecShell "open" "powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${TOOLS_DIR}\finish_devkitpro.ps1" -AppExe "$INSTDIR\${APP_EXE}"' SW_HIDE
+  StrCmp $ToolchainSetup "" devkitpro_launch_done
+    ; Sans fenetre console ; le script montre la sienne, lance Backstage a la fin
+    ; (journal : %TEMP%\BackstageSetup\install_devkitpro.log).
+    ExecShell "open" "powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${TOOLS_DIR}\install_devkitpro.ps1" -AppExe "$INSTDIR\${APP_EXE}"' SW_HIDE
   devkitpro_launch_done:
 FunctionEnd
 
 ; Installation annulee (OnAbort, via MUI_CUSTOMFUNCTION_ABORT) ou en echec : rien ne doit se lancer a la fermeture.
 Function OnAbort
   StrCpy $MgbaInstaller ""
-  StrCpy $DevkitproInstaller ""
+  StrCpy $ToolchainSetup ""
 FunctionEnd
 
 Function .onInstFailed
   StrCpy $MgbaInstaller ""
-  StrCpy $DevkitproInstaller ""
+  StrCpy $ToolchainSetup ""
 FunctionEnd
 
 
@@ -523,8 +515,8 @@ LangString DESC_SecApp     ${LANG_FRENCH}  "L'éditeur et ses fichiers."
 LangString DESC_SecApp     ${LANG_ENGLISH} "The editor and its files."
 LangString DESC_SecDesktop ${LANG_FRENCH}  "Ajouter une icône sur le Bureau."
 LangString DESC_SecDesktop ${LANG_ENGLISH} "Add a shortcut on the Desktop."
-LangString DESC_SecDevkitpro ${LANG_FRENCH}  "Télécharge l'installateur officiel de devkitPro (nécessaire pour fabriquer des ROMs). Une connexion Internet est requise."
-LangString DESC_SecDevkitpro ${LANG_ENGLISH} "Downloads the official devkitPro installer (required to build ROMs). An Internet connection is required."
+LangString DESC_SecDevkitpro ${LANG_FRENCH}  "Télécharge et installe la chaîne GBA de devkitPro (nécessaire pour fabriquer des ROMs), dans un dossier propre à ${APP_NAME}. Une connexion Internet est requise."
+LangString DESC_SecDevkitpro ${LANG_ENGLISH} "Downloads and installs the devkitPro GBA toolchain (required to build ROMs), in a folder of its own for ${APP_NAME}. An Internet connection is required."
 LangString DESC_SecMgba    ${LANG_FRENCH}  "Télécharge et installe l'émulateur mGBA, qui ouvre la ROM depuis l'éditeur. Internet requis."
 LangString DESC_SecMgba    ${LANG_ENGLISH} "Downloads and installs the mGBA emulator, which opens the ROM from the editor. Internet required."
 LangString MSG_DOWNLOADING ${LANG_FRENCH}  "Téléchargement de"
@@ -577,6 +569,14 @@ Section "un.${APP_NAME}" UnApp
     DeleteRegKey HKCU "Software\Classes\.project"
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
 
+  ; La chaine GBA que Backstage a installee lui-meme. Le fichier backstage-toolchain.json
+  ; prouve que le dossier est le notre ; sans lui on n'y touche pas. C:\devkitPro n'est
+  ; jamais concerne : ce n'est pas ce dossier.
+  IfFileExists "${TOOLCHAIN_DIR}\backstage-toolchain.json" 0 +2
+    RMDir /r "${TOOLCHAIN_DIR}"
+  RMDir /r "${TOOLCHAIN_DIR}.partial"
+  RMDir "$LOCALAPPDATA\${APP_KEY}"
+
   ; Volontairement conserves : les projets de l'utilisateur
   ; (%USERPROFILE%\BackstageProjects) et sa configuration toolchain
   ; (%APPDATA%\Backstage). Une desinstallation ne doit pas detruire le
@@ -586,8 +586,10 @@ SectionEnd
 
 ; Desinstallation propre, decochee par defaut (et donc jamais en mode silencieux) :
 ; retire tout ce que Backstage a pose en local, SAUF les projets de l'utilisateur
-; (%USERPROFILE%\BackstageProjects), qu'aucune option ne touche. devkitPro et mGBA
-; restent aussi : ce sont des outils independants, que d'autres programmes peuvent utiliser.
+; (%USERPROFILE%\BackstageProjects), qu'aucune option ne touche. Un devkitPro installe par
+; ailleurs (C:\devkitPro) et mGBA restent aussi : ce sont des outils independants, que
+; d'autres programmes peuvent utiliser. La chaine GBA posee par Backstage part, elle, des
+; la desinstallation ordinaire (cf. UnApp).
 ; Les chemins sont ceux du code : core/app_paths.py (config_dir), update_install.py,
 ; icons.py et sfx_render.py (dossiers temporaires), et le dossier plugins\ de l'installation.
 Section /o "un.Clean" UnClean
@@ -607,8 +609,8 @@ SectionEnd
 
 LangString UN_CLEAN_NAME ${LANG_FRENCH}  "Désinstallation propre"
 LangString UN_CLEAN_NAME ${LANG_ENGLISH} "Clean uninstall"
-LangString DESC_UnApp ${LANG_FRENCH}  "Retire l'éditeur, ses raccourcis et ses clés de registre. Vos projets et vos réglages sont conservés."
-LangString DESC_UnApp ${LANG_ENGLISH} "Removes the editor, its shortcuts and its registry keys. Your projects and settings are kept."
+LangString DESC_UnApp ${LANG_FRENCH}  "Retire l'éditeur, ses raccourcis, ses clés de registre et la chaîne GBA qu'il a installée. Vos projets et vos réglages sont conservés."
+LangString DESC_UnApp ${LANG_ENGLISH} "Removes the editor, its shortcuts, its registry keys and the GBA toolchain it installed. Your projects and settings are kept."
 LangString DESC_UnClean ${LANG_FRENCH}  "Supprime aussi la configuration de ${APP_NAME} (%APPDATA%\${APP_KEY}), ses fichiers temporaires et le dossier plugins. Vos projets (%USERPROFILE%\BackstageProjects), devkitPro et mGBA ne sont jamais supprimés."
 LangString DESC_UnClean ${LANG_ENGLISH} "Also deletes the ${APP_NAME} configuration (%APPDATA%\${APP_KEY}), its temporary files and the plugins folder. Your projects (%USERPROFILE%\BackstageProjects), devkitPro and mGBA are never deleted."
 

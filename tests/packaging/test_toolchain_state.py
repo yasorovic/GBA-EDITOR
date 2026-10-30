@@ -71,6 +71,7 @@ def _with_msys2(monkeypatch, tmp_path, codes):
     bash = tmp_path / "msys2" / "usr" / "bin" / "bash.exe"
     bash.parent.mkdir(parents=True)
     bash.write_text("")
+    (bash.parent / "pacman.exe").write_text("")
     launched = []
     results = iter(codes)
 
@@ -103,5 +104,16 @@ def test_installation_des_paquets_gba_abandonne_apres_les_essais(monkeypatch, tm
 def test_installation_des_paquets_gba_sans_msys2_ne_lance_rien(monkeypatch, tmp_path):
     t = _toolchain(monkeypatch, tmp_path, {"make"})
     monkeypatch.setattr(tc.subprocess, "Popen", lambda *a, **k: pytest.fail("pas de processus attendu"))
+    assert t.msys2_bash() is None
+    assert t.install_gba_packages(lambda line: None) is False
+
+
+def test_msys2_reduit_de_backstage_sans_pacman_n_offre_pas_l_installation_des_paquets(monkeypatch, tmp_path):
+    """La chaîne posée par l'installateur de Backstage a bash et make, pas pacman : le bouton
+    « Installer les paquets GBA » n'y réparerait rien."""
+    t = _toolchain(monkeypatch, tmp_path, {"make"})
+    bash = tmp_path / "msys2" / "usr" / "bin" / "bash.exe"
+    bash.parent.mkdir(parents=True)
+    bash.write_text("")
     assert t.msys2_bash() is None
     assert t.install_gba_packages(lambda line: None) is False

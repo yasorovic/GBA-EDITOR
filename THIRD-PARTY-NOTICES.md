@@ -148,19 +148,28 @@ photos de référence figurent dans `ui/common/images/cartridges/README.md`
 licence et empreinte. Les scans de cartes nues utilisés en développement restent
 dans le dossier de recherche et ne sont pas redistribués.
 
-## Chaîne de compilation (non redistribuée)
+## Chaîne de compilation (téléchargée, non redistribuée)
 
-L'éditeur ne redistribue **pas** ces outils : il détecte une installation
-existante sur la machine et les appelle. Ils ne sont donc inclus dans aucun artefact
-publié ici. Ils sont mentionnés parce qu'ils comptent pour l'utilisateur.
+Aucun de ces outils n'est inclus dans un artefact publié ici. L'éditeur détecte une
+installation existante sur la machine et les appelle ; l'installateur Windows, lui,
+peut les télécharger au moment de l'installation, depuis un miroir
+(`github.com/yasorovic/backstage-toolchain`, copies exactes des paquets officiels de devkitPro et
+de MSYS2, dont il garde l'origine), dans `%LOCALAPPDATA%\Backstage\devkitPro`. Chaque archive est
+épinglée (version, URL et empreinte SHA-256) dans `packaging/windows/devkitpro_manifest.json` ;
+une archive dont l'empreinte diffère n'est jamais installée. Les textes de licence de chaque
+paquet sont installés avec lui (`licenses/` et `msys2/usr/share/licenses/`), et leurs sources sont
+publiées par leurs projets (`github.com/devkitPro/pacman-packages` et
+`github.com/msys2/MSYS2-packages`). Aucun BIOS ni contenu Nintendo n'est concerné.
 
 | Outil | Rôle |
 | --- | --- |
-| devkitARM, grit (devkitPro) | compilation ARM et conversion des images : outils, ils n'entrent pas dans la ROM |
+| devkitARM (gcc, binutils, newlib), grit, mmutil, bin2s, gbafix (devkitPro) | compilation ARM, conversion des images et du son : outils, ils n'entrent pas dans la ROM |
 | libgba, maxmod (devkitPro) | **liées dans la ROM de l'utilisateur** (`-lgba -lmm`) |
+| make, bash, coreutils, msys2-runtime et leurs bibliothèques (MSYS2) | lancent le Makefile du runtime (`make`, `sh`, `mkdir`, `rm`) : outils, ils n'entrent pas dans la ROM |
 | mGBA | émulateur, lancé pour tester |
 
 `libgba` et `maxmod` finissent dans la ROM produite : leurs conditions
-s'appliquent donc à celui qui publie le jeu, pas à cet éditeur. Elles sont
-permissives et compatibles avec une distribution commerciale ; les termes
-exacts sont à consulter auprès de devkitPro.
+s'appliquent donc à celui qui publie le jeu, pas à cet éditeur. `libgba` est sous LGPL avec
+une exception écrite par ses auteurs : le lien statique d'une application ne la rend pas
+dérivée et n'oblige pas à fournir son code. `maxmod` est sous licence ISC. Les textes
+exacts sont ceux de `libgba_license.txt` et `maxmod_license.txt`, installés avec les paquets.

@@ -56,8 +56,17 @@ def install_commands(tool: str) -> list[str]:
     s'obtient autrement (mGBA) ou que le système n'est pas encore pris en charge."""
     return list(_LINUX_INSTALL_COMMANDS.get(tool, [])) if IS_LINUX else []
 
+# La chaîne GBA que l'installateur de Backstage pose lui-même (packaging/windows/
+# install_devkitpro.ps1, TOOLCHAIN_DIR de installer.nsi), sans droits administrateur. Elle passe
+# avant un C:\devkitPro : Backstage l'a épinglée, il sait donc ce qu'elle contient.
+_MANAGED_DEVKITPRO = (
+    [Path(os.environ["LOCALAPPDATA"]) / "Backstage" / "devkitPro"]
+    if os.environ.get("LOCALAPPDATA") else []
+)
+
 # Emplacements Windows typiques
 _WIN_DEFAULTS = [
+    *_MANAGED_DEVKITPRO,
     Path("C:/devkitPro"),
     Path("D:/devkitPro"),
     Path(os.environ.get("PROGRAMFILES", "C:/Program Files")) / "devkitPro",
@@ -83,8 +92,10 @@ _MGBA_UNIX_GLOBS = [
     *(f"/opt/{pattern}" for pattern in ("mGBA*.AppImage", "mgba*.AppImage", "mgba/mgba*")),
 ]
 
-# Emplacements Linux/macOS typiques
+# Emplacements Linux/macOS typiques. Le premier est celui de packaging/linux/backstage-setup-devkitpro :
+# la chaîne épinglée de Backstage, sans droits administrateur, avant un /opt/devkitpro.
 _UNIX_DEFAULTS = [
+    Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "Backstage" / "devkitPro",
     Path("/opt/devkitpro"),
     Path.home() / "devkitpro",
     Path("/usr/local/devkitpro"),
@@ -98,8 +109,8 @@ DEVKITPRO_OK = "ok"
 DEVKITPRO_INCOMPLETE = "incomplete"
 DEVKITPRO_MISSING = "missing"
 
-# Ce que `install_gba_packages` lance dans le MSYS2 de devkitPro. Le script
-# packaging/windows/finish_devkitpro.ps1 lance la même commande : si l'une change, changer l'autre.
+# Ce que `install_gba_packages` lance dans le MSYS2 d'un devkitPro installé par l'installateur
+# officiel de devkitPro (celui de Backstage n'a pas de pacman : cf. `msys2_bash`).
 GBA_PACKAGES_COMMAND = "pacman -S --noconfirm --needed gba-dev"
 
 
@@ -356,10 +367,16 @@ class Toolchain:
         return DEVKITPRO_MISSING
 
     def msys2_bash(self) -> Path | None:
-        """Le `bash` du MSYS2 que l'installateur devkitPro pose sous Windows, ou None."""
+        """Le `bash` du MSYS2 que l'installateur officiel de devkitPro pose sous Windows, ou None.
+
+        Le MSYS2 réduit de Backstage a un `bash` mais pas de `pacman` : `install_gba_packages`
+        n'y a rien à faire, la réparation y est de relancer l'installateur de Backstage."""
         root = self.devkitpro_root
-        if root and (bash := root / "msys2" / "usr" / "bin" / "bash.exe").is_file():
-            return bash
+        if root is None:
+            return None
+        bin_dir = root / "msys2" / "usr" / "bin"
+        if (bin_dir / "bash.exe").is_file() and (bin_dir / "pacman.exe").is_file():
+            return bin_dir / "bash.exe"
         return None
 
     def install_gba_packages(self, on_line, attempts: int = 3) -> bool:

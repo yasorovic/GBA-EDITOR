@@ -1,0 +1,15 @@
+# devkitPro toolchain pinned for the Backstage Linux setup (x86_64), read by backstage-setup-devkitpro.
+# One package per line: name version sha256 size url (the mirror github.com/yasorovic/backstage-toolchain). Archives are pacman packages: the content of
+# opt/devkitpro/ is unpacked into the toolchain root. To bump a version, change version, sha256, size
+# and url together, then run tests/packaging/test_devkitpro_manifest.py.
+devkitarm-gcc 16.1.0-1 289be1a7a42321e02d8dad037acfdfbbe73cfe283b685b4d3860a2e946ea92d0 90042388 https://github.com/yasorovic/backstage-toolchain/releases/download/v1/linux-devkitarm-gcc-16.1.0-1-x86_64.pkg.tar.zst
+devkitarm-binutils 2.46.0-1 fbca692c5b30008bef6b54c6b6cb48b6a03a656d7cc07beafa4dc7fdaa5838cf 4595113 https://github.com/yasorovic/backstage-toolchain/releases/download/v1/linux-devkitarm-binutils-2.46.0-1-x86_64.pkg.tar.zst
+grit 0.10.0-1 b97c7f57c175a57f646bf9bcbfb18985b8411b31a92b00c5c3e961894e60e466 2726277 https://github.com/yasorovic/backstage-toolchain/releases/download/v1/linux-grit-0.10.0-1-x86_64.pkg.tar.zst
+mmutil 1.10.1-1 10bf04752d75159ab940bf4b880ef8f7ec676f1ecb7045354c76fb052c412ddb 71296 https://github.com/yasorovic/backstage-toolchain/releases/download/v1/linux-mmutil-1.10.1-1-x86_64.pkg.tar.xz
+general-tools 1.4.4-1 b6b59bd3d22d4f83a7f0668f749df7cf97b1f05083031e629d43ca4f4377c7b5 30402 https://github.com/yasorovic/backstage-toolchain/releases/download/v1/linux-general-tools-1.4.4-1-x86_64.pkg.tar.zst
+gba-tools 1.2.0-1 9f3bb4feaa5c4d04b294531df9404ed4acea4f73461a45001e5dff598e800de8 27824 https://github.com/yasorovic/backstage-toolchain/releases/download/v1/linux-gba-tools-1.2.0-1-x86_64.pkg.tar.xz
+devkitarm-newlib 4.6.0.20260123-5 d314c644c143bd5b104bd82cdc27602f6449cf907cb9c37ccfb8c0707182f89d 1712846 https://github.com/yasorovic/backstage-toolchain/releases/download/v1/devkitarm-newlib-4.6.0.20260123-5-any.pkg.tar.zst
+devkitarm-crtls 1.2.6-1 65faf10f62c219a1a8a3a182b0c4c56da7992599035ea32b3d79e39e79f964bb 20799 https://github.com/yasorovic/backstage-toolchain/releases/download/v1/devkitarm-crtls-1.2.6-1-any.pkg.tar.zst
+devkitarm-rules 1.6.0-4 35023b2b5f07a2dcfb600063854c712206341fb5df3ffbaf8ff825d3cbc15fcc 7834 https://github.com/yasorovic/backstage-toolchain/releases/download/v1/devkitarm-rules-1.6.0-4-any.pkg.tar.zst
+libgba 0.5.4-1 64d2a274ea7c1a9f7705a75cf3b0b937678fb0b10c468eb6b37ce00e3fbb6125 134492 https://github.com/yasorovic/backstage-toolchain/releases/download/v1/libgba-0.5.4-1-any.pkg.tar.zst
+maxmod-gba 1.0.15-1 30c3bf3e3be69efb121bd2aaacb9a00ee51dfebe1dbb3884ee32a569aa8476f2 18860 https://github.com/yasorovic/backstage-toolchain/releases/download/v1/maxmod-gba-1.0.15-1-any.pkg.tar.xz

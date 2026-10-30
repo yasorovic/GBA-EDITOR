@@ -1,0 +1,167 @@
+{
+  "comment": "devkitPro toolchain pinned for the Backstage Windows installer. 'url' is the mirror (github.com/yasorovic/backstage-toolchain, byte-for-byte copies); 'origin' is where the package officially comes from. Each archive is a pacman package: 'devkitpro' ones unpack from opt/devkitpro into the toolchain root, 'msys2' ones into <root>/msys2 (make, sh, mkdir, rm for the runtime Makefile). To bump a version: publish the new archives in a new release of the mirror, then update version, url, origin, sha256 and size together and run tests/packaging/test_devkitpro_manifest.py.",
+  "packages": [
+    {
+      "name": "devkitarm-gcc",
+      "version": "16.1.0-1",
+      "layout": "devkitpro",
+      "url": "https://github.com/yasorovic/backstage-toolchain/releases/download/v1/windows-devkitarm-gcc-16.1.0-1-x86_64.pkg.tar.zst",
+      "sha256": "e88fd817412cd026fa50bf92ad40db04e03aed0253bd9f3bca77e28a86db0f6b",
+      "size": 87000286,
+      "origin": "https://pkg.devkitpro.org/packages/windows/x86_64/devkitarm-gcc-16.1.0-1-x86_64.pkg.tar.zst"
+    },
+    {
+      "name": "devkitarm-binutils",
+      "version": "2.46.0-1",
+      "layout": "devkitpro",
+      "url": "https://github.com/yasorovic/backstage-toolchain/releases/download/v1/windows-devkitarm-binutils-2.46.0-1-x86_64.pkg.tar.zst",
+      "sha256": "d19277f5ae8d7967fdef316faa6129fde44053a3fdf2057890148398d167e966",
+      "size": 4457601,
+      "origin": "https://pkg.devkitpro.org/packages/windows/x86_64/devkitarm-binutils-2.46.0-1-x86_64.pkg.tar.zst"
+    },
+    {
+      "name": "devkitarm-newlib",
+      "version": "4.6.0.20260123-5",
+      "layout": "devkitpro",
+      "url": "https://github.com/yasorovic/backstage-toolchain/releases/download/v1/devkitarm-newlib-4.6.0.20260123-5-any.pkg.tar.zst",
+      "sha256": "d314c644c143bd5b104bd82cdc27602f6449cf907cb9c37ccfb8c0707182f89d",
+      "size": 1712846,
+      "origin": "https://pkg.devkitpro.org/packages/devkitarm-newlib-4.6.0.20260123-5-any.pkg.tar.zst"
+    },
+    {
+      "name": "devkitarm-crtls",
+      "version": "1.2.6-1",
+      "layout": "devkitpro",
+      "url": "https://github.com/yasorovic/backstage-toolchain/releases/download/v1/devkitarm-crtls-1.2.6-1-any.pkg.tar.zst",
+      "sha256": "65faf10f62c219a1a8a3a182b0c4c56da7992599035ea32b3d79e39e79f964bb",
+      "size": 20799,
+      "origin": "https://pkg.devkitpro.org/packages/devkitarm-crtls-1.2.6-1-any.pkg.tar.zst"
+    },
+    {
+      "name": "devkitarm-rules",
+      "version": "1.6.0-4",
+      "layout": "devkitpro",
+      "url": "https://github.com/yasorovic/backstage-toolchain/releases/download/v1/devkitarm-rules-1.6.0-4-any.pkg.tar.zst",
+      "sha256": "35023b2b5f07a2dcfb600063854c712206341fb5df3ffbaf8ff825d3cbc15fcc",
+      "size": 7834,
+      "origin": "https://pkg.devkitpro.org/packages/devkitarm-rules-1.6.0-4-any.pkg.tar.zst"
+    },
+    {
+      "name": "libgba",
+      "version": "0.5.4-1",
+      "layout": "devkitpro",
+      "url": "https://github.com/yasorovic/backstage-toolchain/releases/download/v1/libgba-0.5.4-1-any.pkg.tar.zst",
+      "sha256": "64d2a274ea7c1a9f7705a75cf3b0b937678fb0b10c468eb6b37ce00e3fbb6125",
+      "size": 134492,
+      "origin": "https://pkg.devkitpro.org/packages/libgba-0.5.4-1-any.pkg.tar.zst"
+    },
+    {
+      "name": "maxmod-gba",
+      "version": "1.0.15-1",
+      "layout": "devkitpro",
+      "url": "https://github.com/yasorovic/backstage-toolchain/releases/download/v1/maxmod-gba-1.0.15-1-any.pkg.tar.xz",
+      "sha256": "30c3bf3e3be69efb121bd2aaacb9a00ee51dfebe1dbb3884ee32a569aa8476f2",
+      "size": 18860,
+      "origin": "https://pkg.devkitpro.org/packages/maxmod-gba-1.0.15-1-any.pkg.tar.xz"
+    },
+    {
+      "name": "grit",
+      "version": "0.10.0-1",
+      "layout": "devkitpro",
+      "url": "https://github.com/yasorovic/backstage-toolchain/releases/download/v1/windows-grit-0.10.0-1-x86_64.pkg.tar.zst",
+      "sha256": "f3478fd5650033d1b806b013ff18ce18e24a1ff327e62ca427007df897aa497b",
+      "size": 2953448,
+      "origin": "https://pkg.devkitpro.org/packages/windows/x86_64/grit-0.10.0-1-x86_64.pkg.tar.zst"
+    },
+    {
+      "name": "mmutil",
+      "version": "1.10.1-1",
+      "layout": "devkitpro",
+      "url": "https://github.com/yasorovic/backstage-toolchain/releases/download/v1/windows-mmutil-1.10.1-1-x86_64.pkg.tar.xz",
+      "sha256": "1132f29b46b32d791c395fb0be547a8dc9839f636df0385bd81697f2a926aa72",
+      "size": 157848,
+      "origin": "https://pkg.devkitpro.org/packages/windows/x86_64/mmutil-1.10.1-1-x86_64.pkg.tar.xz"
+    },
+    {
+      "name": "general-tools",
+      "version": "1.4.4-1",
+      "layout": "devkitpro",
+      "url": "https://github.com/yasorovic/backstage-toolchain/releases/download/v1/windows-general-tools-1.4.4-1-x86_64.pkg.tar.zst",
+      "sha256": "a0fcea1a26c4f472c2ac98c409847dbec9d8e86ed82cd8b02131454f63d239f1",
+      "size": 100546,
+      "origin": "https://pkg.devkitpro.org/packages/windows/x86_64/general-tools-1.4.4-1-x86_64.pkg.tar.zst"
+    },
+    {
+      "name": "gba-tools",
+      "version": "1.2.0-2",
+      "layout": "devkitpro",
+      "url": "https://github.com/yasorovic/backstage-toolchain/releases/download/v1/windows-gba-tools-1.2.0-2-x86_64.pkg.tar.xz",
+      "sha256": "de5b20caf36ee9f983b0b66cb8cd82b53e2cb4d32a6a702f61960a82450df503",
+      "size": 105052,
+      "origin": "https://pkg.devkitpro.org/packages/windows/x86_64/gba-tools-1.2.0-2-x86_64.pkg.tar.xz"
+    },
+    {
+      "name": "msys2-runtime",
+      "version": "3.6.11-4",
+      "layout": "msys2",
+      "url": "https://github.com/yasorovic/backstage-toolchain/releases/download/v1/msys2-msys2-runtime-3.6.11-4-x86_64.pkg.tar.zst",
+      "sha256": "7b1c4b625483ceff9a87f2dfcf3659704dc3da655a0ad414ecb7d9175e7d3ba0",
+      "size": 2068768,
+      "origin": "https://repo.msys2.org/msys/x86_64/msys2-runtime-3.6.11-4-x86_64.pkg.tar.zst"
+    },
+    {
+      "name": "bash",
+      "version": "5.3.20-2",
+      "layout": "msys2",
+      "url": "https://github.com/yasorovic/backstage-toolchain/releases/download/v1/msys2-bash-5.3.20-2-x86_64.pkg.tar.zst",
+      "sha256": "0951e809c552dd7dd2835df1b2d590822187f14e717d809e942e4eb677d0adfd",
+      "size": 2579823,
+      "origin": "https://repo.msys2.org/msys/x86_64/bash-5.3.20-2-x86_64.pkg.tar.zst"
+    },
+    {
+      "name": "make",
+      "version": "4.4.1-2",
+      "layout": "msys2",
+      "url": "https://github.com/yasorovic/backstage-toolchain/releases/download/v1/msys2-make-4.4.1-2-x86_64.pkg.tar.zst",
+      "sha256": "2408af61717dae87b00c855b132769a125c708907fc94a46bb16dae076113e5c",
+      "size": 519783,
+      "origin": "https://repo.msys2.org/msys/x86_64/make-4.4.1-2-x86_64.pkg.tar.zst"
+    },
+    {
+      "name": "coreutils",
+      "version": "8.32-5",
+      "layout": "msys2",
+      "url": "https://github.com/yasorovic/backstage-toolchain/releases/download/v1/msys2-coreutils-8.32-5-x86_64.pkg.tar.zst",
+      "sha256": "62dfee1c39fd15f99c39802b35e82643bc14fffc16d6c76d4001caa385ec77e3",
+      "size": 2755209,
+      "origin": "https://repo.msys2.org/msys/x86_64/coreutils-8.32-5-x86_64.pkg.tar.zst"
+    },
+    {
+      "name": "libintl",
+      "version": "0.22.5-1",
+      "layout": "msys2",
+      "url": "https://github.com/yasorovic/backstage-toolchain/releases/download/v1/msys2-libintl-0.22.5-1-x86_64.pkg.tar.zst",
+      "sha256": "336d66b9d95cf9c1804958f8e260762a3e83bf158ed5981f783bc772a31073cf",
+      "size": 50537,
+      "origin": "https://repo.msys2.org/msys/x86_64/libintl-0.22.5-1-x86_64.pkg.tar.zst"
+    },
+    {
+      "name": "libiconv",
+      "version": "1.18-1",
+      "layout": "msys2",
+      "url": "https://github.com/yasorovic/backstage-toolchain/releases/download/v1/msys2-libiconv-1.18-1-x86_64.pkg.tar.zst",
+      "sha256": "9e298b072b86fa7f4ba4d8c00176b80fb5ab2c5eae2b9dc05e781ae4958efb77",
+      "size": 726928,
+      "origin": "https://repo.msys2.org/msys/x86_64/libiconv-1.18-1-x86_64.pkg.tar.zst"
+    },
+    {
+      "name": "gcc-libs",
+      "version": "13.4.0-1",
+      "layout": "msys2",
+      "url": "https://github.com/yasorovic/backstage-toolchain/releases/download/v1/msys2-gcc-libs-13.4.0-1-x86_64.pkg.tar.zst",
+      "sha256": "3dfd7663495e17ec10df44a9fa431c4849d96ed1cc6e1cf3dd145ad5ce5d38bd",
+      "size": 993409,
+      "origin": "https://repo.msys2.org/msys/x86_64/gcc-libs-13.4.0-1-x86_64.pkg.tar.zst"
+    }
+  ]
+}

@@ -1,45 +1,98 @@
 #!/bin/sh
-# Installe devkitPro (groupe gba-dev), la chaîne d'outils qui compile la ROM.
-# Installé en /usr/bin/backstage-setup-devkitpro par le paquet .deb.
-# Mêmes commandes que core/toolchain.py (_LINUX_INSTALL_COMMANDS) : si l'une change,
-# changer l'autre.
+# Installe la chaîne GBA (devkitPro) que Backstage utilise pour compiler la ROM, dans un dossier
+# propre à l'utilisateur : aucun droit administrateur, aucun dépôt apt. Installé en
+# /usr/bin/backstage-setup-devkitpro par le paquet .deb, avec devkitpro_packages.txt
+# (/usr/share/backstage).
+#
+# devkitpro_packages.txt épingle chaque archive (version, URL, SHA-256) : une archive dont
+# l'empreinte diffère n'est jamais extraite. Les archives sont des paquets pacman ;
+# le contenu de opt/devkitpro/ va à la racine du dossier. L'installation se fait dans
+# <racine>.partial, renommé à la fin : une installation interrompue ne laisse rien à moitié posé.
+# Le dossier est celui que core/toolchain.py (_MANAGED_DEVKITPRO) cherche en premier.
+#
+# Si devkitPro est déjà dans /opt/devkitpro (installation par dkp-pacman), on n'y touche pas.
+# --force refait l'installation même si elle est à jour.
 set -eu
 
-DEVKITPRO_URL="https://devkitpro.org/wiki/Getting_Started"
+HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/Backstage/devkitPro"
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/Backstage/devkitpro-packages"
+PARTIAL="$ROOT.partial"
+FORCE=0
+[ "${1:-}" = "--force" ] && FORCE=1
 
-if [ -x /opt/devkitpro/devkitARM/bin/arm-none-eabi-gcc ]; then
-    echo "devkitPro est déjà installé dans /opt/devkitpro."
+die() { echo "Erreur : $*" >&2; exit 1; }
+
+# Le fichier des paquets : à côté du script (dépôt, AppImage) ou dans /usr/share (paquet .deb).
+PACKAGES=""
+for candidate in "$HERE/devkitpro_packages.txt" "$HERE/../share/backstage/devkitpro_packages.txt"; do
+    [ -r "$candidate" ] && { PACKAGES="$candidate"; break; }
+done
+[ -n "$PACKAGES" ] || die "devkitpro_packages.txt est introuvable."
+
+if [ "$FORCE" -eq 0 ] && [ -x /opt/devkitpro/devkitARM/bin/arm-none-eabi-gcc ]; then
+    echo "devkitPro est déjà installé dans /opt/devkitpro : Backstage l'utilise tel quel."
     exit 0
 fi
 
-# Le script officiel ne sait configurer que le dépôt apt (Debian, Ubuntu et dérivées).
-if ! command -v apt-get >/dev/null 2>&1; then
-    echo "Cette commande ne couvre que Debian/Ubuntu."
-    echo "Sur les autres distributions, suivez : $DEVKITPRO_URL"
-    echo "Puis indiquez le dossier d'installation dans Backstage : File > Settings."
+FINGERPRINT="$(sha256sum "$PACKAGES" | cut -d' ' -f1)"
+if [ "$FORCE" -eq 0 ] && [ -x "$ROOT/devkitARM/bin/arm-none-eabi-gcc" ] \
+        && grep -q "\"manifest\": \"$FINGERPRINT\"" "$ROOT/backstage-toolchain.json" 2>/dev/null; then
+    echo "La chaîne GBA est déjà à jour dans $ROOT."
+    exit 0
+fi
+
+# tar lit le zstd et le xz en les confiant à leur programme : sans lui, il échoue sans dire pourquoi.
+missing=""
+for tool in tar sha256sum zstd xz; do
+    command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
+done
+command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1 || missing="$missing curl"
+if [ -n "$missing" ]; then
+    echo "Outils manquants :$missing" >&2
+    echo "Sur Debian/Ubuntu : sudo apt install tar coreutils zstd xz-utils curl" >&2
     exit 1
 fi
 
-if [ "$(id -u)" -eq 0 ]; then
-    SUDO=""
-else
-    command -v sudo >/dev/null 2>&1 || { echo "sudo est requis (ou lancez ce script en root)."; exit 1; }
-    SUDO="sudo"
-fi
+fetch() {
+    if command -v curl >/dev/null 2>&1; then curl -fsSL -o "$2" "$1"
+    else wget -q -O "$2" "$1"; fi
+}
 
-WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
-cd "$WORK"
+mkdir -p "$CACHE"
+rm -rf "$PARTIAL"
+mkdir -p "$PARTIAL"
+trap 'rm -rf "$PARTIAL"' EXIT
 
-echo "Téléchargement du script officiel de devkitPro..."
-if command -v wget >/dev/null 2>&1; then
-    wget -q https://apt.devkitpro.org/install-devkitpro-pacman
-else
-    curl -fsSL -o install-devkitpro-pacman https://apt.devkitpro.org/install-devkitpro-pacman
-fi
-chmod +x ./install-devkitpro-pacman
-$SUDO ./install-devkitpro-pacman
-$SUDO dkp-pacman -S --noconfirm gba-dev
+grep -v '^#' "$PACKAGES" | while read -r name version sha size url; do
+    [ -n "$name" ] || continue
+    file="$CACHE/${url##*/}"
+    ok=0
+    for attempt in 1 2 3; do
+        if [ ! -f "$file" ]; then
+            echo "Téléchargement de $name $version..."
+            fetch "$url" "$file" || { rm -f "$file"; sleep 3; continue; }
+        fi
+        if [ "$(sha256sum "$file" | cut -d' ' -f1)" = "$sha" ]; then ok=1; break; fi
+        echo "  empreinte invalide pour $name, nouvel essai" >&2
+        rm -f "$file"
+    done
+    [ "$ok" -eq 1 ] || die "$name $version n'a pas pu être téléchargé, ou son empreinte SHA-256 ne correspond pas."
+    tar -xf "$file" -C "$PARTIAL" --strip-components=2 opt/devkitpro \
+        || die "$name n'a pas pu être extrait."
+done
+
+# Une chaîne incomplète ne doit pas passer pour une chaîne installée.
+for tool in devkitARM/bin/arm-none-eabi-gcc tools/bin/grit tools/bin/mmutil tools/bin/bin2s \
+            libgba/lib/libgba.a libgba/lib/libmm.a; do
+    [ -e "$PARTIAL/$tool" ] || die "$tool manque après l'extraction."
+done
+
+printf '{ "manifest": "%s" }\n' "$FINGERPRINT" > "$PARTIAL/backstage-toolchain.json"
+rm -rf "$ROOT"
+mv "$PARTIAL" "$ROOT"
+trap - EXIT
 
 echo
-echo "devkitPro est installé dans /opt/devkitpro (détecté automatiquement par Backstage)."
+echo "La chaîne GBA est installée dans $ROOT (détectée automatiquement par Backstage)."
+command -v make >/dev/null 2>&1 || echo "Note : make est requis pour compiler (sudo apt install make)."

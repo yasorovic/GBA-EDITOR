@@ -24,6 +24,9 @@ cp -r "$APPDIR/usr/bin/." "$ROOT/opt/backstage/"
 install -m 755 "$HERE/backstage-launcher" "$ROOT/usr/bin/backstage"
 install -m 755 "$HERE/backstage-setup-devkitpro" "$ROOT/usr/bin/backstage-setup-devkitpro"
 install -m 755 "$HERE/backstage-clean-uninstall" "$ROOT/usr/bin/backstage-clean-uninstall"
+# La liste épinglée que backstage-setup-devkitpro lit (à côté de /usr/bin : ../share/backstage).
+mkdir -p "$ROOT/usr/share/backstage"
+install -m 644 "$HERE/devkitpro_packages.txt" "$ROOT/usr/share/backstage/devkitpro_packages.txt"
 install -m 644 "$HERE/../icon.png" "$ROOT/usr/share/pixmaps/backstage.png"
 # Hors AppImage, l'icône n'est plus un fichier "icon" à la racine : elle est cherchée par
 # son nom dans le thème, ici /usr/share/pixmaps/backstage.png. Le lanceur s'appelle backstage.
