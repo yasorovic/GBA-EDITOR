@@ -110,7 +110,7 @@ def resultats(tmp_path_factory):
     compilateur = compilateur_hote()
     if compilateur is None:
         pytest.skip("aucun compilateur C hôte ; le blocage est vérifié en CI")
-    from codegen.runtime_codegen.block_gen import block_helper_lines
+    from codegen.runtime_codegen.physics.blocks import block_helper_lines
     dossier = tmp_path_factory.mktemp("block")
     (dossier / "probe.c").write_text(SONDE % {"helpers": "\n".join(block_helper_lines())}, encoding="utf-8")
     binaire = dossier / "probe"
@@ -168,7 +168,7 @@ def _projet(paires_desactivees=()):
 
 
 def _lignes(p, acteurs):
-    from codegen.runtime_codegen.block_gen import block_tick_lines
+    from codegen.runtime_codegen.physics.blocks import block_tick_lines
     return block_tick_lines(p, None, _scene(*acteurs), 0, [], lambda _p, _o: (None, None))
 
 
@@ -179,6 +179,16 @@ def test_le_mobile_recoit_la_table_des_boites_bloquantes():
     assert "static const u16 _bk_idx[]={1};" in lignes
     assert "actors_resolve_blocks(&g_actors[0],_bk_idx,_bk_box,1);" in lignes
     # Le coffre n'a pas de boîte solide : il n'est pas un mobile.
+    assert "g_actors[1]," not in lignes
+
+
+def test_un_static_body_bloque_sans_devenir_un_mobile():
+    from core.models.components import PhysicsBodyComponent
+    hero = _acteur("Hero", tag="Player")
+    mur = _acteur("Wall", tag="body", blocks_actors=True, solid=False)
+    mur.components.append(PhysicsBodyComponent(mode="static"))
+    lignes = "\n".join(_lignes(_projet(), [hero, mur]))
+    assert "static const u16 _bk_idx[]={1};" in lignes
     assert "g_actors[1]," not in lignes
 
 
@@ -198,11 +208,13 @@ def test_la_matrice_de_collision_laisse_passer_un_couple_desactive():
 
 def test_le_blocage_est_refuse_par_defaut_et_survit_a_la_serialisation():
     from core.models.components import components_from_list, components_to_list
-    assert CollisionBoxComponent().blocks_actors is False
-    (relu,) = components_from_list(components_to_list([CollisionBoxComponent(blocks_actors=True)]))
-    assert relu.blocks_actors is True
+    assert CollisionBoxComponent().response == "sensor"
+    serialise = components_to_list([CollisionBoxComponent(blocks_actors=True)])
+    assert serialise[0]["response"] == "block" and "blocks_actors" not in serialise[0]
+    (relu,) = components_from_list(serialise)
+    assert relu.response == "block"
     ancien = {"component_type": "collision_box", "id": "b", "solid": True, "tag": "body"}
-    assert components_from_list([ancien])[0].blocks_actors is False
+    assert components_from_list([ancien])[0].response == "sensor"
 
 
 # ── La boîte propre d'un Interactive en `facing` bloque, en `hover` non ──
@@ -241,7 +253,7 @@ def test_la_case_de_matrice_player_interactive_decide_si_le_coffre_arrete():
 
 
 def test_le_projet_declare_un_bloqueur_pour_les_aides_c():
-    from codegen.runtime_codegen.block_gen import project_has_blockers
+    from codegen.runtime_codegen.physics.blocks import project_has_blockers
     scene = SimpleNamespace(actors=[_coffre("facing")])
     assert project_has_blockers(SimpleNamespace(scenes=[scene], prefabs=[])) is True
     scene = SimpleNamespace(actors=[_coffre("hover")])

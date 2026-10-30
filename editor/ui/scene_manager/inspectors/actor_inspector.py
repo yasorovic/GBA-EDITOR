@@ -37,6 +37,7 @@ from ui.common import icons
 COMPONENT_LABEL_KEYS = {
     "sprite":        "common.sprite",
     "collision_box": "actorinsp.comp.collision",
+    "physics_body": "actorinsp.comp.physics_body",
     "sound_fx":      "actorinsp.comp.soundfx",
     "interactive":   "actorinsp.comp.interactive",
     "script":        "actorinsp.comp.script",

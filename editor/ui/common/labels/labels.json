@@ -746,6 +746,10 @@
     "actorinsp.comp.collision": {
       "text": "Collision"
     },
+    "actorinsp.comp.physics_body": { "text": "Physics body" },
+    "comped.physics_mode": { "text": "Mode" },
+    "comped.physics_character": { "text": "Character" },
+    "comped.physics_static": { "text": "Static" },
     "actorinsp.comp.soundfx": {
       "text": "SoundFX"
     },
@@ -1641,11 +1645,11 @@
     "comped.pivot_y_title": { "text": "Pivot point Y" },
     "comped.pivot_x_tip": { "text": "Sets the horizontal position of the pivot, in pixels from the centre of the sprite frame. 0, 0 is the centre. Rotation, scale and flip happen around this point, and it stays fixed on screen. It does not move the sprite: the offset does." },
     "comped.pivot_y_tip": { "text": "Sets the vertical position of the pivot, in pixels from the centre of the sprite frame. 0, 0 is the centre. Rotation, scale and flip happen around this point, and it stays fixed on screen. It does not move the sprite: the offset does." },
-    "comped.collision_blocks_row": { "text": "Blocking" },
-    "comped.collision_blocks": { "text": "Blocks actors" },
-    "comped.collision_blocks_tip": { "text": "Moving actors that have a solid box are pushed out of this box instead of passing through it (a chest, an NPC, a crate). The collision map still has the last word, and the collision matrix decides which tags are stopped. Off by default." },
+    "comped.collision_blocks_row": { "text": "Response" },
+    "comped.collision_blocks": { "text": "Block" },
+    "comped.collision_blocks_tip": { "text": "Block pushes a moving Character out of this box (a chest, an NPC, a crate). Sensor only reports contact events. The collision matrix decides which tags meet." },
     "comped.collision_solid": {
-      "text": "Solid  (unchecked = Trigger)"
+      "text": "Collides with map"
     },
     "comped.trig_manual": {
       "text": "manual"

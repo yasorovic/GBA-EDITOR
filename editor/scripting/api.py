@@ -1968,7 +1968,8 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
         lua_name="collision_box.solid", c_getter="collision_box_get_solid",
         c_setter="collision_box_set_solid", ptype=PARAM_BOOL, self_first=True,
         doc="Stopped by the collision map (true) or a simple trigger (false). Ex: "
-            "hb.solid = false to pass through walls.",
+            "Set hb.solid = false to pass through walls. This affects the collision map only; "
+            "Block or Sensor controls actor-to-actor response.",
     ),
     "collision_box.offset": ApiProp(
         lua_name="collision_box.offset", c_getter="collision_box_get_offset",
@@ -2210,7 +2211,7 @@ EVENT_REGISTRY: dict[str, dict] = {
         "icon": "←",
         "icon_key": "ev_collision_exit",
         "stub": "function on_collision_exit(other, my_box, other_box)\n\nend\n",
-        "desc": "First frame without contact after a collision.",
+        "desc": "First frame without contact after a collision. A destroyed actor cancels its contacts silently.",
         "params": [
             {"name": "other",     "type": "actor", "description": "Reference to the "
                                                                   "actor that moved "

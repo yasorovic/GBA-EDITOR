@@ -8,18 +8,20 @@ from codegen.c_names import scene_actor_sym, sym as c_sym
 from codegen.iwram_plan import TICK_PHASES
 from codegen.oam_alloc import scene_oam_layout
 from codegen.runtime_codegen import shared_pool_gen
-from codegen.runtime_codegen.block_gen import block_tick_lines
+from codegen.runtime_codegen.physics.blocks import block_tick_lines
 from codegen.runtime_codegen.gen_affine import pool_affine
 from codegen.runtime_codegen.gen_camera import camera_follow_lines
 from codegen.runtime_codegen.gen_pool import dispatch_sym, parent_compose_lines, pool_compose_lines
 from codegen.runtime_codegen.gen_scene_query import (
-    actors_can_collide, has_col_event, has_solid_box, scene_anim_descriptors, scene_has_cmap,
+    actors_can_collide, has_col_event, scene_anim_descriptors, scene_has_cmap,
 )
 from codegen.runtime_codegen.gen_sfx_trigger import sfx_trigger_info
 from codegen.runtime_codegen.gen_sprite import (
     anim_tick_variants, anim_variants, appearances, oam_write_lines, shown,
 )
-from codegen.runtime_codegen.interact_gen import box_contact_lines, interact_tick_lines
+from codegen.runtime_codegen.interact_gen import interact_tick_lines
+from codegen.runtime_codegen.physics.contacts import box_contact_lines
+from codegen.runtime_codegen.physics.body import uses_character_solver
 from core.models.components import affine_sprite_component
 from core.models.scene import Scene
 from core.project import Project
@@ -107,14 +109,14 @@ def gen_scene_tick(
     if scene_has_cmap(scene):
         for j in range(len(scene_actors)):
             actor, _ = scene_actors[j]
-            if not has_solid_box(actor):
+            if not uses_character_solver(actor):
                 continue
             idx = actor_offset + j
             s = _dsym(scene.name, actor.name)
             cb = f"{s}_on_tile_collide" if (idx in lua_idx and _def(s, "on_tile_collide")) else "NULL"
             L.append(f"    if(g_actors[{idx}].active) resolve_actor_tiles(&g_actors[{idx}], {cb});")
 
-        L += shared_pool_gen.tile_lines(pi, _def, has_solid_box)
+        L += shared_pool_gen.tile_lines(pi, _def, uses_character_solver)
 
     # Pool→scene collisions
     col_scene = [

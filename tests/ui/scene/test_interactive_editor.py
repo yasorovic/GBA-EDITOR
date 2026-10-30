@@ -96,9 +96,9 @@ def test_la_boite_de_collision_a_sa_case_de_blocage(qapp):
     layout = QVBoxLayout(host)
     CollisionEditor(insp).build(comp, lambda lab, w: W.row(lab, w, layout), layout)
 
-    case = next(c for c in host.findChildren(QCheckBox) if c.text() == "Blocks actors")
+    case = next(c for c in host.findChildren(QCheckBox) if c.text() == "Block")
     assert not case.isChecked()                    # jamais par défaut
     case.setChecked(True)
-    assert ("blocks_actors", True) in written and comp.blocks_actors is True
-    insp._field_syncers["blocks_actors"](False)
+    assert ("response", "block") in written and comp.response == "block"
+    insp._field_syncers["response"]("sensor")
     assert not case.isChecked()                    # le syncer repeuple sans écrire

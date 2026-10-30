@@ -1,10 +1,10 @@
-"""runtime_codegen/gen_tile_collision.py — les fonctions C de collision de tuiles (carte de collision, pentes)."""
+"""Émission du Character solver : carte de collision, murs et pentes."""
 from __future__ import annotations
 
 
 
 
-def gen_tile_helpers() -> list[str]:
+def character_solver_lines() -> list[str]:
     """Lecture de la carte de collision, et résolution d'un acteur contre elle.
 
     La table de profils est ÉMISE depuis `core.models.collision_tiles`, la même

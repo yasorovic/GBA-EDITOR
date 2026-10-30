@@ -1,8 +1,8 @@
-"""Le blocage entre acteurs, côté C : une boîte `blocks_actors` arrête les acteurs en mouvement.
+"""Le blocage entre acteurs, côté C : une boîte de réponse `block` arrête les acteurs en mouvement.
 
 Un MOBILE est un acteur actif dont la vitesse n'est pas nulle (le critère de la résolution contre la
 carte : l'acteur déplacé par `self.velocity` est « conduit », un acteur téléporté ne l'est pas) et qui
-porte une box `solid`. Un BLOQUEUR est une box `blocks_actors` d'un autre acteur. Le mobile est repoussé
+porte une box `solid`. Un BLOQUEUR est une box de réponse `block` d'un autre acteur. Le mobile est repoussé
 hors de la box qu'il recouvre, sur l'axe de plus faible pénétration ; il glisse donc le long d'un
 obstacle quand il le heurte en diagonale.
 
@@ -17,9 +17,9 @@ utilisés du pool pour trouver ceux qui en sont. Un mobile né dans le pool est 
 """
 from __future__ import annotations
 
-from core.models.components import CollisionBoxComponent
+from core.models.components import COLLISION_RESPONSE_BLOCK, CollisionBoxComponent
 from core.models.settings import tags_collide
-from codegen.runtime_codegen.gen_scene_query import has_solid_box
+from codegen.runtime_codegen.physics.body import is_character_body
 from codegen.runtime_codegen.interact_gen import owner_boxes
 from codegen.runtime_codegen.shared_pool_gen import shared_models
 
@@ -30,7 +30,7 @@ def project_has_blockers(p) -> bool:
     from core.models.components import InteractiveComponent
     owners = [a for sc in getattr(p, "scenes", []) or [] for a in sc.actors]
     owners += list(getattr(p, "prefabs", []) or [])
-    return any((isinstance(c, CollisionBoxComponent) and c.active and c.blocks_actors)
+    return any((isinstance(c, CollisionBoxComponent) and c.active and c.response == COLLISION_RESPONSE_BLOCK)
                or (isinstance(c, InteractiveComponent) and c.active and c.interaction == "facing"
                    and not c.box_tag)
                for o in owners for c in getattr(o, "components", []))
@@ -41,7 +41,7 @@ def block_helper_lines() -> list[str]:
     return [
         "/* ── Blocage entre acteurs : repousser un mobile hors des boîtes qui bloquent ───────",
         "   `idx[k]` / `box[k]` : l'acteur et le rang de la k-ième boîte bloquante. Un mobile (actif, vitesse",
-        "   non nulle) est repoussé, pour chacune de ses boîtes solid, de la pénétration minimale, sur",
+        "   non nulle) est repoussé, pour chacune de ses boîtes de carte, de la pénétration minimale, sur",
         "   l'axe le plus court (l'horizontal en cas d'égalité). La position garde sa fraction (Q8). */",
         "static void __attribute__((unused)) block_push(Actor* a,const CollisionBox* m,const Actor* t,const CollisionBox* b){",
         "    int ml=(a->x>>8)+m->x, mt=(a->y>>8)+m->y, mr=ml+m->w, mb=mt+m->h;",
@@ -92,11 +92,11 @@ def _blocking_boxes(owner, sprite) -> list[tuple[int, str]]:
     """(rang, tag) de chacune des boîtes bloquantes de ce porteur, parmi les boîtes que le build pose
     dessus (la boîte propre d'un Interactive en `facing` comprise)."""
     return [(i, b.tag or "body") for i, b in enumerate(owner_boxes(owner, sprite))
-            if isinstance(b, CollisionBoxComponent) and b.active and b.blocks_actors]
+            if isinstance(b, CollisionBoxComponent) and b.active and b.response == COLLISION_RESPONSE_BLOCK]
 
 
-def _solid_tags(owner, sprite) -> list[str]:
-    """Les tags des boîtes solid d'un mobile possible : ce sont elles que le blocage repousse."""
+def _character_collider_tags(owner, sprite) -> list[str]:
+    """Les tags des boîtes de carte d'un Character : elles portent aussi sa forme de blocage héritée."""
     return [b.tag or "body" for b in owner_boxes(owner, sprite)
             if isinstance(b, CollisionBoxComponent) and b.solid]
 
@@ -119,7 +119,8 @@ def block_tick_lines(p, scene, scene_actors, actor_offset, pi, shown) -> list[st
         return []
 
     def can_stop(mover_owner, mover_sprite, tag):
-        return any(tags_collide(p.settings, m, tag) for m in _solid_tags(mover_owner, mover_sprite))
+        return any(tags_collide(p.settings, m, tag)
+                   for m in _character_collider_tags(mover_owner, mover_sprite))
 
     def table(mover_owner, mover_sprite):
         """Les boîtes qui peuvent arrêter ce mobile : celles dont le tag rencontre un des siens dans la
@@ -159,12 +160,12 @@ def block_tick_lines(p, scene, scene_actors, actor_offset, pi, shown) -> list[st
         L.append("    }")
 
     for j, (actor, sprite) in enumerate(scene_actors):
-        if has_solid_box(actor):
+        if is_character_body(actor):
             emit(str(actor_offset + j), table(actor, sprite), pool_table(actor, sprite))
     # Les mobiles du pool partagé : une boucle sur les emplacements utilisés, les tables de chaque modèle dans son cas.
     cases = []
     for m in shared:
-        if not has_solid_box(m["prefab"]):
+        if not is_character_body(m["prefab"]):
             continue
         sp = shown(p, m["prefab"])[1]
         entries, pool_entries = table(m["prefab"], sp), pool_table(m["prefab"], sp)

@@ -93,15 +93,6 @@ def actors_can_collide(p, a, b) -> bool:
     return any(tags_collide(p.settings, x, y) for x in ta for y in tb)
 
 
-def has_solid_box(owner) -> bool:
-    """Cet acteur (ou prefab) a-t-il une box PHYSIQUE ?
-
-    C'est ce qui lui donne droit à la résolution contre la carte de collision —
-    la définition que le modèle donne déjà de `solid` (cf. components.py)."""
-    return any(getattr(c, "solid", False) and hasattr(c, "w")
-               for c in getattr(owner, "components", []))
-
-
 def scene_has_cmap(scene) -> bool:
     """Carte de collision réellement peuplée — une grille de zéros n'est pas une
     carte, et n'a rien à faire heurter."""

@@ -15,7 +15,7 @@ from core.project import Project
 from codegen.palette_alloc import scene_bank_layout
 from codegen.oam_budget import project_actor_count, project_oam_entry_count
 from codegen.ui_obj_budget import scene_obj_ui_slots
-from codegen.runtime_codegen.block_gen import block_helper_lines, project_has_blockers
+from codegen.runtime_codegen.physics.blocks import block_helper_lines, project_has_blockers
 from codegen.runtime_codegen.gen_affine import compute_affine_info
 from codegen.runtime_codegen.gen_camera import camera_table_lines
 from codegen.runtime_codegen.gen_declarations import extern_lines, include_lines
@@ -35,7 +35,7 @@ from codegen.runtime_codegen.gen_scene_switch import (
 from codegen.runtime_codegen.gen_scene_tick import gen_scene_tick
 from codegen.runtime_codegen.gen_sprite import anim_tables_for
 from codegen.runtime_codegen.gen_text import fonts_and_texts_lines, obj_text_alloc, scene_text_reservation
-from codegen.runtime_codegen.gen_tile_collision import gen_tile_helpers
+from codegen.runtime_codegen.physics.character import character_solver_lines
 from codegen.runtime_codegen.gen_ui import emit_ui_elements_c, emit_ui_lists_c
 from codegen.runtime_codegen.gen_ui_scene import obj_text_band, text_actor_accessor_lines, ui_images_lines
 from codegen.runtime_codegen.gen_vram_layout import apply_vram_layout, log_vram_layout
@@ -173,8 +173,8 @@ def generate_main(
     # GLOBAL_*, et le pilote appelle global_read/global_write.
     L += save_lines(p, emit)
 
-    # ── Tile helpers (dispatch via pointeur) ──────────────────────
-    L += gen_tile_helpers()
+    # ── Character solver (dispatch via pointeur) ──────────────────
+    L += character_solver_lines()
     if project_has_interactive(p):
         L += interact_helper_lines()
     if project_has_blockers(p):

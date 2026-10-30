@@ -67,18 +67,18 @@ class CollisionEditor(BaseComponentEditor):
         W.row(label("common.mode"), mode_lbl, layout)
 
         # ── Blocage entre acteurs ─────────────────────────────────
-        # Un réglage à part de « Solid » (qui ne parle que de la carte) et jamais par défaut : cocher
-        # ici repousse les acteurs en mouvement qui ont une boîte solide.
+        # Une réponse à part de « Solid » (qui ne parle que de la carte) : Block repousse le Character
+        # mobile, Sensor ne fait que signaler le contact.
         chk_blocks = QCheckBox(label("comped.collision_blocks"))
         chk_blocks.setFont(QFont(T.UI, T.SM))
         chk_blocks.setStyleSheet(f"color:{C.TEXT_NORM}; background:transparent;")
-        chk_blocks.setChecked(bool(getattr(comp, "blocks_actors", False)))
+        chk_blocks.setChecked(getattr(comp, "response", "sensor") == "block")
         chk_blocks.setToolTip(tooltip(title=label("comped.collision_blocks"),
                                       body=label("comped.collision_blocks_tip")))
         W.row(label("comped.collision_blocks_row"), chk_blocks, layout)
-        chk_blocks.toggled.connect(lambda v: self.set_field(comp, "blocks_actors", bool(v)))
-        self.register_syncer("blocks_actors", lambda v, w=chk_blocks: (
-            w.blockSignals(True), w.setChecked(bool(v)), w.blockSignals(False)))
+        chk_blocks.toggled.connect(lambda v: self.set_field(comp, "response", "block" if v else "sensor"))
+        self.register_syncer("response", lambda v, w=chk_blocks: (
+            w.blockSignals(True), w.setChecked(v == "block"), w.blockSignals(False)))
 
         # ── AABB — champs px/tile ou référence de variable ────────
         # Les valeurs peuvent être un littéral (px/tile) ou pointer une

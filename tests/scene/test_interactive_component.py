@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.models.components import (
-    INTERACTIVE_DEFAULT_BOX, CollisionBoxComponent, InteractiveComponent, COMPONENT_REGISTRY,
+    INTERACTIVE_DEFAULT_BOX, CollisionBoxComponent, InteractiveComponent, PhysicsBodyComponent, COMPONENT_REGISTRY,
     component_type_name, components_from_list, components_to_list, interactive_box_size,
 )
 from core.models.settings import (
@@ -23,6 +23,12 @@ def test_les_valeurs_par_defaut():
     assert c.hold_frames >= 1
     assert COMPONENT_REGISTRY["interactive"] is InteractiveComponent
     assert component_type_name(c) == "interactive"
+
+
+def test_le_corps_physique_est_serialize_comme_un_composant_leger():
+    c = PhysicsBodyComponent(mode="static")
+    (relu,) = components_from_list(components_to_list([c]))
+    assert relu == c and COMPONENT_REGISTRY["physics_body"] is PhysicsBodyComponent
 
 
 def test_aller_retour_de_la_serialisation():

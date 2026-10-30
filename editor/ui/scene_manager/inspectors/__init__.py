@@ -11,6 +11,7 @@ camera_inspector.py, uses_inspectors.py, dynamic_inspector.py).
 # Charger les éditeurs built-in dans le registre
 from ui.scene_manager.inspectors.component_editors import sprite    # noqa: F401
 from ui.scene_manager.inspectors.component_editors import collision  # noqa: F401
+from ui.scene_manager.inspectors.component_editors import physics_body  # noqa: F401
 from ui.scene_manager.inspectors.component_editors import sfx        # noqa: F401
 from ui.scene_manager.inspectors.component_editors import interactive  # noqa: F401
 from ui.scene_manager.inspectors.component_editors import script     # noqa: F401

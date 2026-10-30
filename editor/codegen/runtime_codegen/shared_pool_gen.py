@@ -52,11 +52,11 @@ def hook_lines(pi: list[dict], event: str, has_event) -> list[str]:
     return _loop(cases) if cases else []
 
 
-def tile_lines(pi: list[dict], has_event, has_solid_box) -> list[str]:
-    """La résolution contre la carte de collision, pour les modèles qui ont une boîte solide."""
+def tile_lines(pi: list[dict], has_event, uses_character_solver) -> list[str]:
+    """La résolution contre la carte de collision, pour les seuls Character bodies."""
     cases = []
     for m in shared_models(pi):
-        if not has_solid_box(m["prefab"]):
+        if not uses_character_solver(m["prefab"]):
             continue
         cb = f"{m['sym']}_on_tile_collide" if has_event(m["sym"], "on_tile_collide") else "NULL"
         cases.append(f"        case {m['model_id']}: resolve_actor_tiles(_a, {cb}); break;")

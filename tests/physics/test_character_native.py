@@ -66,9 +66,9 @@ def resultats(tmp_path_factory):
     compilateur = compilateur_hote()
     if compilateur is None:
         pytest.skip("aucun compilateur C hôte ; la collision est vérifiée en CI")
-    from codegen.runtime_codegen.gen_tile_collision import gen_tile_helpers
+    from codegen.runtime_codegen.physics.character import character_solver_lines
     dossier = tmp_path_factory.mktemp("tuiles")
-    (dossier / "probe.c").write_text(SONDE % {"helpers": "\n".join(gen_tile_helpers())}, encoding="utf-8")
+    (dossier / "probe.c").write_text(SONDE % {"helpers": "\n".join(character_solver_lines())}, encoding="utf-8")
     binaire = dossier / "probe"
     construit = subprocess.run([compilateur, "-std=gnu11", "-O0", "-w", "-I", str(INCLUDE),
                                 "-o", str(binaire), str(dossier / "probe.c")],

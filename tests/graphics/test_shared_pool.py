@@ -220,7 +220,7 @@ def _scene_blocage(tmp_path):
 
 
 def test_les_bloqueurs_et_les_mobiles_du_pool_se_decident_par_le_modele(tmp_path):
-    from codegen.runtime_codegen.block_gen import block_tick_lines
+    from codegen.runtime_codegen.physics.blocks import block_tick_lines
     from codegen.runtime_codegen.gen_pool import scene_pi
     from codegen.runtime_codegen.gen_sprite import shown
     p, scene = _scene_blocage(tmp_path)
@@ -236,7 +236,7 @@ def test_les_bloqueurs_et_les_mobiles_du_pool_se_decident_par_le_modele(tmp_path
 
 
 def test_sans_instance_du_pool_qui_bloque_aucun_appel_au_pool(tmp_path):
-    from codegen.runtime_codegen.block_gen import block_tick_lines
+    from codegen.runtime_codegen.physics.blocks import block_tick_lines
     from codegen.runtime_codegen.gen_pool import scene_pi
     from codegen.runtime_codegen.gen_sprite import shown
     p, scene = _scene_blocage(tmp_path)
@@ -368,7 +368,7 @@ def test_chaque_type_d_emplacement_a_son_cas_d_affichage_et_ses_collisions(tmp_p
         pi, lambda owner, sym: [None], anim_tick_variants,
         lambda owner: [Appearance(SpriteAsset(name=owner.name, asset="a.png"), 0)], oam_write_lines))
     assert "case 1: {" in code and "case 2: {" in code and "case 3: {" in code and "case 4:" not in code   # le marqueur n'affiche rien
-    from codegen.runtime_codegen.interact_gen import box_contact_lines
+    from codegen.runtime_codegen.physics.contacts import box_contact_lines
     from core.models.components import CollisionBoxComponent
     boxed = [(0, scene.actors[0])]
     scene.actors[0].components.append(CollisionBoxComponent(w=8, h=8))
