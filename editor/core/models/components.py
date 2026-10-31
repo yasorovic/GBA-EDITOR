@@ -5,6 +5,7 @@ Chaque composant a un `id` (label libre, unique au sein de l'actor)
 et un flag `active` pour le désactiver sans le retirer."""
 
 import dataclasses
+import math
 from dataclasses import dataclass, field, fields
 from typing import Optional
 
@@ -19,16 +20,22 @@ COLLISION_RESPONSES: tuple[str, ...] = (
     COLLISION_RESPONSE_BLOCK,
     COLLISION_RESPONSE_SENSOR,
 )
-PHYSICS_BODY_CHARACTER = "character"
-PHYSICS_BODY_STATIC = "static"
-PHYSICS_BODY_KINEMATIC = "kinematic"
-PHYSICS_BODY_RIGID = "rigid"
+PHYSICS_BODY_STATIC = "StaticBody"
+PHYSICS_BODY_CHARACTER = "CharacterBody"
+PHYSICS_BODY_KINEMATIC = "KinematicBody"
+PHYSICS_BODY_RIGID = "RigidBody"
 PHYSICS_BODY_MODES: tuple[str, ...] = (
-    PHYSICS_BODY_CHARACTER,
     PHYSICS_BODY_STATIC,
+    PHYSICS_BODY_CHARACTER,
     PHYSICS_BODY_KINEMATIC,
     PHYSICS_BODY_RIGID,
 )
+_LEGACY_PHYSICS_BODY_MODES: dict[str, str] = {
+    "static": PHYSICS_BODY_STATIC,
+    "character": PHYSICS_BODY_CHARACTER,
+    "kinematic": PHYSICS_BODY_KINEMATIC,
+    "rigid": PHYSICS_BODY_RIGID,
+}
 
 
 @dataclass
@@ -94,19 +101,39 @@ class CollisionBoxComponent:
 class PhysicsBodyComponent:
     """Le comportement physique de l'acteur, indépendant de ses colliders.
 
-    `character` est conduit explicitement par son script. `kinematic` applique
-    sa vélocité à chaque frame. `rigid` fait de même après la gravité de scène.
-    Ces trois modes résolvent carte et `block`; `static` ne se déplace pas et
-    ne sert que de géométrie. Les acteurs hérités sans composant gardent le
-    comportement Character quand ils possèdent une boîte `solid`.
+    `CharacterBody` est conduit explicitement par son script, est arrêté sur la
+    normale des contacts Block et ne reçoit aucune impulsion. `KinematicBody`
+    applique sa vélocité à chaque frame, pousse les corps dynamiques et
+    transporte ceux qui reposent dessus. `RigidBody` applique sa vélocité après
+    la gravité de scène. Ces trois modes résolvent carte et `block`;
+    `StaticBody` n'intègre aucun mouvement et ne reçoit aucune impulsion. La
+    position de son Actor reste néanmoins écrivable : la modifier téléporte sa
+    géométrie, sans lui donner une vitesse. Les acteurs hérités sans composant
+    gardent le comportement CharacterBody quand ils possèdent une boîte
+    `solid`. Pour un `RigidBody`, `mass` répartit les impulsions entre deux
+    corps, `gravity_scale` module la gravité de scène et `can_sleep` autorise
+    la règle de sommeil de la scène. Ces valeurs sont intégrées au code généré
+    et n'ajoutent aucun champ à l'Actor runtime. `collider_id` relie le corps à
+    sa CollisionBox physique. Une valeur vide conserve provisoirement la
+    sélection historique des boîtes `solid`.
     """
     id: str = "physics_body"
     active: bool = True
     mode: str = PHYSICS_BODY_CHARACTER
+    collider_id: str = ""
+    mass: float = 1.0
+    gravity_scale: float = 1.0
+    can_sleep: bool = True
 
     def __post_init__(self):
+        self.mode = _LEGACY_PHYSICS_BODY_MODES.get(self.mode, self.mode)
+        self.collider_id = str(self.collider_id or "")
         if self.mode not in PHYSICS_BODY_MODES:
             raise ValueError(f"unknown physics body mode {self.mode!r}, expected one of {PHYSICS_BODY_MODES}")
+        if not math.isfinite(self.mass) or not 0.1 <= self.mass <= 100.0:
+            raise ValueError("physics body mass must be between 0.1 and 100")
+        if not math.isfinite(self.gravity_scale) or not -8.0 <= self.gravity_scale <= 8.0:
+            raise ValueError("physics body gravity scale must be between -8 and 8")
 
 
 @dataclass

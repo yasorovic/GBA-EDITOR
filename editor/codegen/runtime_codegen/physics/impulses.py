@@ -1,26 +1,28 @@
 """Solveur d'impulsions minimal pour les corps Rigid poses dans une scene.
 
-Cette premiere tranche ne gere que la normale du contact, avec une masse identique pour tous les
-Rigid, sans restitution ni friction. Un Static a une masse inverse nulle. Les paires sont connues au
+Cette tranche ne gere que la normale du contact, avec une masse configurable par Rigid, sans
+restitution ni friction. Static, Character et Kinematic ont une masse inverse nulle. Les paires sont connues au
 build, filtrees par les tags et parcourues plusieurs fois pour stabiliser les petites piles.
 """
 from __future__ import annotations
 
 from core.models.components import (
-    COLLISION_RESPONSE_BLOCK,
+    PHYSICS_BODY_CHARACTER,
+    PHYSICS_BODY_KINEMATIC,
     PHYSICS_BODY_RIGID,
     PHYSICS_BODY_STATIC,
     CollisionBoxComponent,
 )
 from core.models.settings import tags_collide
-from codegen.runtime_codegen.interact_gen import owner_boxes
-from codegen.runtime_codegen.physics.body import physics_body_mode
+from codegen.runtime_codegen.physics.body import (
+    physics_blocker_entries, physics_body, physics_body_mode, physics_collider_entries,
+)
 
 
 def impulse_helper_lines() -> list[str]:
     """Aide C du solveur : correction de position puis impulsion normale."""
     return [
-        "typedef struct { u16 a,b; u8 box_a,box_b,rigid; } RigidPair;",
+        "typedef struct { u16 a,b,inv_mass_a,inv_mass_b; u8 box_a,box_b; } RigidPair;",
         "static void __attribute__((unused)) rigid_pair_resolve(const RigidPair* p){",
         "    Actor* a=&g_actors[p->a]; Actor* b=&g_actors[p->b];",
         "    if(!a->active||!b->active||p->box_a>=a->collision.box_count||p->box_b>=b->collision.box_count) return;",
@@ -34,32 +36,31 @@ def impulse_helper_lines() -> list[str]:
         "    int px=left<right?-left:right, py=up<down?-up:down;",
         "    int apx=px<0?-px:px, apy=py<0?-py:py;",
         "    int axis_x=apx<=apy, push=axis_x?px:py, correction=push<<8;",
-        "    int both=(p->rigid&3)==3;",
-        "    if(both){ int half=correction/2; if(axis_x){ a->x+=half; b->x-=correction-half; }",
-        "              else { a->y+=half; b->y-=correction-half; } }",
-        "    else if(p->rigid&1){ if(axis_x) a->x+=correction; else a->y+=correction; }",
-        "    else { if(axis_x) b->x-=correction; else b->y-=correction; }",
+        "    int total=p->inv_mass_a+p->inv_mass_b;",
+        "    int correction_a=(correction*p->inv_mass_a)/total, correction_b=correction-correction_a;",
+        "    if(axis_x){ a->x+=correction_a; b->x-=correction_b; }",
+        "    else { a->y+=correction_a; b->y-=correction_b; }",
         "    int normal=push<0?-1:1;",
         "    int va=axis_x?a->vx:a->vy, vb=axis_x?b->vx:b->vy;",
         "    int relative=(va-vb)*normal;",
         "    if(relative<0){",
-        "        int impulse=(-relative)/(both?2:1);",
-        "        if(p->rigid&1){ if(axis_x) a->vx+=impulse*normal; else a->vy+=impulse*normal; }",
-        "        if(p->rigid&2){ if(axis_x) b->vx-=impulse*normal; else b->vy-=impulse*normal; }",
+        "        int impulse_a=(-relative*p->inv_mass_a)/total, impulse_b=-relative-impulse_a;",
+        "        if(axis_x){ a->vx+=impulse_a*normal; b->vx-=impulse_b*normal; }",
+        "        else { a->vy+=impulse_a*normal; b->vy-=impulse_b*normal; }",
         "    }",
         "}",
         "",
     ]
 
 
-def _boxes(owner, sprite) -> list[tuple[int, CollisionBoxComponent]]:
-    return [(rank, box) for rank, box in enumerate(owner_boxes(owner, sprite))
-            if isinstance(box, CollisionBoxComponent) and box.active]
+def _physical_boxes(owner, sprite) -> list[tuple[int, CollisionBoxComponent]]:
+    return [(rank, box) for rank, box in physics_collider_entries(owner, sprite)
+            if box.active]
 
 
 def impulse_tick_lines(p, scene, scene_actors, actor_offset: int) -> list[str]:
-    """Table des contraintes Rigid/Static et Rigid/Rigid d'une scene."""
-    rows: list[tuple[int, int, int, int, int]] = []
+    """Contraintes d'un Rigid contre les corps poses qui ne recoivent pas son impulsion."""
+    rows: list[tuple[int, int, int, int, int, int]] = []
     for ia, (actor_a, sprite_a) in enumerate(scene_actors):
         mode_a = physics_body_mode(actor_a)
         for ib in range(ia + 1, len(scene_actors)):
@@ -67,29 +68,36 @@ def impulse_tick_lines(p, scene, scene_actors, actor_offset: int) -> list[str]:
             mode_b = physics_body_mode(actor_b)
             if PHYSICS_BODY_RIGID not in (mode_a, mode_b):
                 continue
-            if mode_a not in (PHYSICS_BODY_RIGID, PHYSICS_BODY_STATIC):
+            supported = (PHYSICS_BODY_RIGID, PHYSICS_BODY_STATIC,
+                         PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC)
+            if mode_a not in supported:
                 continue
-            if mode_b not in (PHYSICS_BODY_RIGID, PHYSICS_BODY_STATIC):
+            if mode_b not in supported:
                 continue
-            rigid = (1 if mode_a == PHYSICS_BODY_RIGID else 0) | (2 if mode_b == PHYSICS_BODY_RIGID else 0)
-            for rank_a, box_a in _boxes(actor_a, sprite_a):
-                for rank_b, box_b in _boxes(actor_b, sprite_b):
-                    a_hits_b = (mode_a == PHYSICS_BODY_RIGID and box_a.solid
-                                and box_b.response == COLLISION_RESPONSE_BLOCK)
-                    b_hits_a = (mode_b == PHYSICS_BODY_RIGID and box_b.solid
-                                and box_a.response == COLLISION_RESPONSE_BLOCK)
-                    if not (a_hits_b or b_hits_a):
-                        continue
-                    if not tags_collide(p.settings, box_a.tag or "body", box_b.tag or "body"):
-                        continue
-                    rows.append((actor_offset + ia, actor_offset + ib, rank_a, rank_b, rigid))
+            body_a = physics_body(actor_a)
+            body_b = physics_body(actor_b)
+            inv_mass_a = max(1, round(256 / body_a.mass)) if mode_a == PHYSICS_BODY_RIGID else 0
+            inv_mass_b = max(1, round(256 / body_b.mass)) if mode_b == PHYSICS_BODY_RIGID else 0
+            pairs: dict[tuple[int, int], tuple[CollisionBoxComponent, CollisionBoxComponent]] = {}
+            if mode_a == PHYSICS_BODY_RIGID:
+                for rank_a, box_a in _physical_boxes(actor_a, sprite_a):
+                    for rank_b, box_b in physics_blocker_entries(actor_b, sprite_b):
+                        pairs[(rank_a, rank_b)] = (box_a, box_b)
+            if mode_b == PHYSICS_BODY_RIGID:
+                for rank_a, box_a in physics_blocker_entries(actor_a, sprite_a):
+                    for rank_b, box_b in _physical_boxes(actor_b, sprite_b):
+                        pairs[(rank_a, rank_b)] = (box_a, box_b)
+            for (rank_a, rank_b), (box_a, box_b) in pairs.items():
+                if tags_collide(p.settings, box_a.tag or "body", box_b.tag or "body"):
+                    rows.append((actor_offset + ia, actor_offset + ib,
+                                 inv_mass_a, inv_mass_b, rank_a, rank_b))
     if not rows:
         return []
     iterations = scene.effective_physics_simulation(p.settings)[0]
     lines = [
-        "    /* Impulsions Rigid : masses egales, sans rebond ni friction. */",
+        "    /* Impulsions Rigid : masses Q8, sans rebond ni friction. */",
         f"    static const RigidPair _rigid_pairs[{len(rows)}]={{",
-        *[f"        {{{a},{b},{ba},{bb},{rigid}}}," for a, b, ba, bb, rigid in rows],
+        *[f"        {{{a},{b},{ma},{mb},{ba},{bb}}}," for a, b, ma, mb, ba, bb in rows],
         "    };",
         f"    for(u8 _it=0;_it<{iterations};_it++)",
         f"        for(u8 _k=0;_k<{len(rows)};_k++) rigid_pair_resolve(&_rigid_pairs[_k]);",

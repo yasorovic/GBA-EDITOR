@@ -103,10 +103,12 @@ _MODULE_PROPS = _dotted_index(RUNTIME_PROPS)  # scene → [size, frame], camera 
 # distinction de Lua, celle que le checker fait déjà. Les méthodes viennent des
 # clés à deux-points de `RUNTIME_API` ; les propriétés des clés `self.` de
 # `RUNTIME_PROPS`, rangées ci-dessus.
-_SELF_METHODS = [_split(k)[2] for k in RUNTIME_API if k.startswith("actor:")]
+_SELF_METHODS = [_split(k)[2] for k, f in RUNTIME_API.items()
+                 if k.startswith("actor:") and not f.legacy]
 # Les champs d'un acteur sont sous `actor.` dans le catalogue : et NE sont pas ceux du module
 # `actor` (`actor:get`) : on les sort de `_MODULE_PROPS`.
-_SELF_PROPS   = _MODULE_PROPS.pop("actor", [])
+_SELF_PROPS   = [m for m in _MODULE_PROPS.pop("actor", [])
+                 if not RUNTIME_PROPS[f"actor.{m}"].legacy]
 
 # Les modules du catalogue, source unique aussi pour la coloration syntaxique
 # (`lua_editor.py` la lit d'ici, au lieu d'une liste tenue à la main qui citait

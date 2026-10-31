@@ -18,6 +18,7 @@ from codegen.ui_obj_budget import scene_obj_ui_slots
 from codegen.runtime_codegen.physics.blocks import block_helper_lines, project_has_blockers
 from codegen.runtime_codegen.physics.budget import physics_budget_line
 from codegen.runtime_codegen.physics.impulses import impulse_helper_lines
+from codegen.runtime_codegen.physics.kinematic import kinematic_helper_lines, project_has_kinematic
 from codegen.runtime_codegen.gen_affine import compute_affine_info
 from codegen.runtime_codegen.gen_camera import camera_table_lines
 from codegen.runtime_codegen.gen_declarations import extern_lines, include_lines
@@ -179,6 +180,8 @@ def generate_main(
 
     # ── Character solver (dispatch via pointeur) ──────────────────
     L += character_solver_lines()
+    if project_has_kinematic(p):
+        L += kinematic_helper_lines()
     if project_has_interactive(p):
         L += interact_helper_lines()
     if project_has_blockers(p):

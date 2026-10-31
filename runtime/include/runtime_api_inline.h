@@ -534,6 +534,7 @@ static inline void actor_move_to(Actor* s, Vec2 target, int speed) {
    avant cette version doit être migré : c'est la rupture assumée qui rend le
    sous-pixel utilisable sans un second nom (self.velocity_q8) à côté du
    premier. */
+static inline Actor* actor_get_physics_body(Actor* s) { return s; }
 static inline void actor_set_velocity(Actor* s, Vec2 v) {
     s->vx=v.x; s->vy=v.y; if(v.x||v.y) s->physics_sleep=0;
 }

@@ -126,6 +126,8 @@ _PROP_HOME: dict[str, str] = {
     "actor.rotation":  "Transform",
     "actor.scale":     "Transform",
     "actor.velocity":  "Physics",
+    "physics_body.velocity": "Physics",
+    "physics_body.grounded": "Physics",
     "actor.visible":   "Instance",
     "actor.active":    "Instance",
     "actor.name":      "Instance",
@@ -193,6 +195,9 @@ _FUNC_HOME: dict[str, str] = {
     # La vélocité est un état de Physics ; l'appliquer est le geste qui le
     # transforme en déplacement, pas une opération générique d'Actor.
     "actor:apply_velocity": "Physics",
+    "actor:physics_body": "Physics",
+    "physics_body:add_velocity": "Physics",
+    "physics_body:apply_velocity": "Physics",
     "actor:collision_box":     "CollisionBox",
     "collision_box:overlaps": "CollisionBox",
     "actor:activate_sprite": "Sprite",
@@ -436,7 +441,7 @@ def _reconcile(cats: list[dict]) -> list[dict]:
 
     by_name = {c["name"]: c for c in out}
     for name in RUNTIME_API:
-        if name in described:
+        if name in described or RUNTIME_API[name].legacy:
             continue
         candidates = homes.get(_module_of(name), set())
         target = (_FUNC_HOME[name] if name in _FUNC_HOME
@@ -454,6 +459,8 @@ def _reconcile(cats: list[dict]) -> list[dict]:
     # voit pas, et la boucle ci-dessus ne les voit pas non plus : on les ajoute
     # à part, rangées par `_PROP_HOME`.
     for name in RUNTIME_PROPS:
+        if RUNTIME_PROPS[name].legacy:
+            continue
         target = _PROP_HOME.get(name, _MISC_FALLBACK)
         cat = by_name.get(target)
         if cat is None:

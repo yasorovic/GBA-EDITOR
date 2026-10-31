@@ -26,7 +26,7 @@ def test_les_valeurs_par_defaut():
 
 
 def test_le_corps_physique_est_serialize_comme_un_composant_leger():
-    c = PhysicsBodyComponent(mode="static")
+    c = PhysicsBodyComponent(mode="StaticBody")
     (relu,) = components_from_list(components_to_list([c]))
     assert relu == c and COMPONENT_REGISTRY["physics_body"] is PhysicsBodyComponent
 

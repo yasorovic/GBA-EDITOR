@@ -483,6 +483,8 @@ def _check_components(ctx: ValidationContext, owner, components):
             _check_sprite(ctx, owner, comp)
         elif ctype == "collision_box":
             _check_collision(ctx, owner, comp)
+        elif ctype == "physics_body":
+            _check_physics_body(ctx, owner, comp)
         elif ctype == "script":
             _check_script(ctx, owner, comp)
 
@@ -518,6 +520,18 @@ def _check_collision(ctx, actor, comp):
         ctx.error(actor,
                   f"CollisionBox '{comp.tag}': zero width or height ({comp.w}×{comp.h}) — invisible "
                   "hitbox.")
+
+
+def _check_physics_body(ctx, owner, comp):
+    """Une relation explicite doit désigner exactement une boîte du même Actor."""
+    if not comp.collider_id:
+        return
+    from core.models.components import CollisionBoxComponent
+    matches = [box for box in getattr(owner, "components", [])
+               if isinstance(box, CollisionBoxComponent) and box.id == comp.collider_id]
+    if len(matches) != 1:
+        ctx.error(owner, f"PhysicsBody uses CollisionBox id '{comp.collider_id}', but this actor "
+                  f"contains {len(matches)} matching boxes. Choose an existing unique CollisionBox.")
 
 
 def _check_script(ctx, actor, comp):

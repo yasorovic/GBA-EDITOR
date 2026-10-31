@@ -17,20 +17,21 @@ vers le bas à chaque frame :
 local gravite = 24
 
 function on_update()
-    self.velocity = vec2(input:get_axis("horizontal") * 2 * 256, self.velocity.y + gravite)
-    self:apply_velocity()
+    local body = self:physics_body()
+    body.velocity = vec2(input:get_axis("horizontal") * 2 * 256, body.velocity.y + gravite)
+    body:apply_velocity()
 end
 ```
 
-`gravite` s'exprime dans la même échelle que `self.velocity` (`256` vaut 1 pixel par frame). Ici,
+`gravite` s'exprime dans la même échelle que `body.velocity` (`256` vaut 1 pixel par frame). Ici,
 `24` ajoute une petite vitesse vers le bas à chaque frame. Quand la boîte touche le sol peint, le
 moteur annule la vitesse verticale et l'acteur reste posé.
 
-Pour un jeu vu de dessus, vous n'avez pas besoin de gravité : un simple `self.velocity` suffit.
+Pour un jeu vu de dessus, vous n'avez pas besoin de gravité : une simple `body.velocity` suffit.
 
 ## 2. Savoir si l'acteur est au sol
 
-Après la résolution des collisions, le moteur met à jour `self.grounded` : `true` quand la boîte
+Après la résolution des collisions, le moteur met à jour `body.grounded` : `true` quand la boîte
 solide repose sur le sol, `false` dans les airs. Cette propriété empêche de sauter à chaque frame :
 le joueur ne saute que depuis le sol.
 
@@ -45,15 +46,16 @@ exports = {
 local gravite = 24
 
 function on_update()
+    local body = self:physics_body()
     local vitesse_x = input:get_axis("horizontal") * vitesse * 256
-    local vitesse_y = self.velocity.y + gravite
+    local vitesse_y = body.velocity.y + gravite
 
-    if self.grounded and input:pressed("a") then
+    if body.grounded and input:pressed("a") then
         vitesse_y = -force_saut
     end
 
-    self.velocity = vec2(vitesse_x, vitesse_y)
-    self:apply_velocity()
+    body.velocity = vec2(vitesse_x, vitesse_y)
+    body:apply_velocity()
 end
 ```
 
@@ -77,5 +79,5 @@ Lancez **Run**, déplacez l'acteur avec gauche et droite, puis appuyez sur `A` :
 - les murs peints l'arrêtent.
 
 Si le saut ne fonctionne pas, vérifiez que la boîte est en mode **Solid** et que le sol est bien
-peint. `self.grounded` décrit la fin de la frame précédente : juste après avoir quitté une
+peint. `body.grounded` décrit la fin de la frame précédente : juste après avoir quitté une
 plateforme, il peut rester vrai une frame.

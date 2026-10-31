@@ -51,38 +51,39 @@ int main(void){
     mk(1, 50, 50, 0, 0, 16, 16, 0); mk(2, 200, 200, 0, 0, 16, 16, 0);
 
     mk(0, 40, 52, 256, 0, 16, 16, 1);                          /* vient de la gauche : 6 px dedans */
-    actors_resolve_blocks(&g_actors[0], idx, box, 2);  report("gauche", 0);
+    actors_resolve_blocks(&g_actors[0], 1, idx, box, 2);  report("gauche", 0);
     mk(0, 60, 52, -256, 0, 16, 16, 1);                         /* vient de la droite : 6 px dedans */
-    actors_resolve_blocks(&g_actors[0], idx, box, 2);  report("droite", 0);
+    actors_resolve_blocks(&g_actors[0], 1, idx, box, 2);  report("droite", 0);
     mk(0, 52, 40, 0, 256, 16, 16, 1);                          /* vient du haut */
-    actors_resolve_blocks(&g_actors[0], idx, box, 2);  report("haut", 0);
+    actors_resolve_blocks(&g_actors[0], 1, idx, box, 2);  report("haut", 0);
+    report_motion("character_stop", 0);
     mk(0, 52, 60, 0, -256, 16, 16, 1);                         /* vient du bas */
-    actors_resolve_blocks(&g_actors[0], idx, box, 2);  report("bas", 0);
+    actors_resolve_blocks(&g_actors[0], 1, idx, box, 2);  report("bas", 0);
     mk(0, 38, 40, 256, 256, 16, 16, 1);                        /* coin : 4 px en x, 6 px en y -> glisse en x */
-    actors_resolve_blocks(&g_actors[0], idx, box, 2);  report("coin", 0);
+    actors_resolve_blocks(&g_actors[0], 1, idx, box, 2);  report("coin", 0);
 
     mk(0, 40, 52, 0, 0, 16, 16, 1);                            /* sans vitesse : téléporté, laissé */
-    actors_resolve_blocks(&g_actors[0], idx, box, 2);  report("immobile", 0);
-    mk(0, 40, 52, 256, 0, 16, 16, 0);                          /* sans boîte solide : laissé */
-    actors_resolve_blocks(&g_actors[0], idx, box, 2);  report("non_solide", 0);
+    actors_resolve_blocks(&g_actors[0], 1, idx, box, 2);  report("immobile", 0);
+    mk(0, 40, 52, 256, 0, 16, 16, 0);                          /* sans forme de corps : laissé */
+    actors_resolve_blocks(&g_actors[0], 0, idx, box, 2);  report("non_solide", 0);
     mk(0, 10, 10, 256, 0, 16, 16, 1);                          /* loin : laissé */
-    actors_resolve_blocks(&g_actors[0], idx, box, 2);  report("loin", 0);
+    actors_resolve_blocks(&g_actors[0], 1, idx, box, 2);  report("loin", 0);
 
     mk(0, 40, 52, 256, 0, 16, 16, 1); g_actors[1].active = 0;  /* bloqueur inactif : traversé */
-    actors_resolve_blocks(&g_actors[0], idx, box, 2);  report("inactif", 0);
+    actors_resolve_blocks(&g_actors[0], 1, idx, box, 2);  report("inactif", 0);
     g_actors[1].active = 1; g_actors[1].collision.boxes[0].active = 0;   /* boîte inactive : traversée */
     mk(0, 40, 52, 256, 0, 16, 16, 1);
-    actors_resolve_blocks(&g_actors[0], idx, box, 2);  report("boite_inactive", 0);
+    actors_resolve_blocks(&g_actors[0], 1, idx, box, 2);  report("boite_inactive", 0);
     g_actors[1].collision.boxes[0].active = 1;
 
     mk(0, 40, 52, 256, 0, 16, 16, 1); g_actors[0].x += 128;    /* la fraction (1/2 px) survit */
-    actors_resolve_blocks(&g_actors[0], idx, box, 2);
+    actors_resolve_blocks(&g_actors[0], 1, idx, box, 2);
     printf("fraction %%d\n", g_actors[0].x & 255);
 
     {   /* un acteur ne se bloque pas lui-même */
         const u16 moi[] = {0}; const u8 b0[] = {0};
         mk(0, 40, 52, 256, 0, 16, 16, 1);
-        actors_resolve_blocks(&g_actors[0], moi, b0, 1);  report("soi_meme", 0);
+        actors_resolve_blocks(&g_actors[0], 1, moi, b0, 1);  report("soi_meme", 0);
     }
 
     {   /* Le pool PARTAGÉ : un bloqueur né à l'emplacement 3 (modèle 7, boîte 0), un autre modèle à l'emplacement 4. */
@@ -92,22 +93,22 @@ int main(void){
         g_spool_start = 3; g_spool_hw = 5;
         pool_bit_set(3); pool_bit_set(4);
         mk(0, 40, 52, 256, 0, 16, 16, 1);
-        actors_resolve_blocks_pool(&g_actors[0], pm, pb, 1);   report("pool_gauche", 0);
+        actors_resolve_blocks_pool(&g_actors[0], 1, pm, pb, 1);   report("pool_gauche", 0);
         mk(0, 40, 52, 256, 0, 16, 16, 1); g_actors[3].model = 9;
-        actors_resolve_blocks_pool(&g_actors[0], pm, pb, 1);   report("pool_autre_modele", 0);
+        actors_resolve_blocks_pool(&g_actors[0], 1, pm, pb, 1);   report("pool_autre_modele", 0);
         g_actors[3].model = 7; g_actors[3].active = 0;
         mk(0, 40, 52, 256, 0, 16, 16, 1);
-        actors_resolve_blocks_pool(&g_actors[0], pm, pb, 1);   report("pool_inactif", 0);
+        actors_resolve_blocks_pool(&g_actors[0], 1, pm, pb, 1);   report("pool_inactif", 0);
         g_actors[3].active = 1; g_spool_hw = 3;
         mk(0, 40, 52, 256, 0, 16, 16, 1);
-        actors_resolve_blocks_pool(&g_actors[0], pm, pb, 1);   report("pool_hors_hw", 0);
+        actors_resolve_blocks_pool(&g_actors[0], 1, pm, pb, 1);   report("pool_hors_hw", 0);
         g_spool_hw = 5;
         mk(3, 40, 52, 0, 0, 16, 16, 1); g_actors[3].model = 7; g_actors[3].vx = 256;   /* un bloqueur ne se bloque pas lui-même */
-        actors_resolve_blocks_pool(&g_actors[3], pm, pb, 1);   report("pool_soi_meme", 3);
+        actors_resolve_blocks_pool(&g_actors[3], 1, pm, pb, 1);   report("pool_soi_meme", 3);
     }
 
     {   /* Rigid au-dessus d'un Static : toute la correction et l'impulsion vont au Rigid. */
-        const RigidPair pair = {0, 1, 0, 0, 1};
+        const RigidPair pair = {0, 1, 256, 0, 0, 0};
         mk(0, 50, 40, 0, 256, 16, 16, 1);
         mk(1, 50, 50, 0, 0, 16, 16, 0);
         rigid_pair_resolve(&pair);
@@ -115,12 +116,37 @@ int main(void){
     }
 
     {   /* Deux Rigid de même masse partagent correction et vitesse normale. */
-        const RigidPair pair = {0, 1, 0, 0, 3};
+        const RigidPair pair = {0, 1, 256, 256, 0, 0};
         mk(0, 50, 40, 0, 256, 16, 16, 1);
         mk(1, 50, 50, 0, 0, 16, 16, 1);
         rigid_pair_resolve(&pair);
         report_motion("rigid_rigid_a", 0);
         report_motion("rigid_rigid_b", 1);
+    }
+
+    {   /* Le corps deux fois plus lourd ne prend qu'un tiers de la correction. */
+        const RigidPair pair = {0, 1, 256, 128, 0, 0};
+        mk(0, 50, 40, 0, 256, 16, 16, 1);
+        mk(1, 50, 50, 0, 0, 16, 16, 1);
+        rigid_pair_resolve(&pair);
+        report_motion("rigid_mass_light", 0);
+        report_motion("rigid_mass_heavy", 1);
+    }
+
+    {   /* Une plateforme déplace une seule fois le corps posé sur son ancienne face supérieure. */
+        int carry_x=0, carry_y=0; u8 carried=0, ground=0;
+        mk(0, 52, 50, 512, 0, 16, 16, 0);
+        mk(1, 54, 34, 0, 0, 8, 16, 1);
+        kinematic_carry(&g_actors[0], &g_actors[1], 0, 0, 50<<8, 50<<8,
+                        &carried, &carry_x, &carry_y, &ground);
+        report("kinematic_rider", 1);
+        printf("kinematic_delta %%d %%d %%d %%d\n", carry_x, carry_y, carried, ground);
+
+        carry_x=carry_y=0; carried=ground=0;
+        mk(1, 54, 34, 0, -256, 8, 16, 1);
+        kinematic_carry(&g_actors[0], &g_actors[1], 0, 0, 50<<8, 50<<8,
+                        &carried, &carry_x, &carry_y, &ground);
+        report("kinematic_jump", 1);
     }
     return 0;
 }
@@ -134,8 +160,9 @@ def resultats(tmp_path_factory):
         pytest.skip("aucun compilateur C hôte ; le blocage est vérifié en CI")
     from codegen.runtime_codegen.physics.blocks import block_helper_lines
     from codegen.runtime_codegen.physics.impulses import impulse_helper_lines
+    from codegen.runtime_codegen.physics.kinematic import kinematic_helper_lines
     dossier = tmp_path_factory.mktemp("block")
-    helpers = block_helper_lines() + impulse_helper_lines()
+    helpers = block_helper_lines() + impulse_helper_lines() + kinematic_helper_lines()
     (dossier / "probe.c").write_text(SONDE % {"helpers": "\n".join(helpers)}, encoding="utf-8")
     binaire = dossier / "probe"
     construit = subprocess.run([compilateur, "-std=gnu11", "-O0", "-w", "-I", str(INCLUDE),
@@ -152,6 +179,10 @@ def test_un_mobile_est_repousse_hors_de_la_boite_par_l_axe_le_plus_court(resulta
     assert resultats["droite"] == (66, 52)       # 50 + 16
     assert resultats["haut"] == (52, 34)
     assert resultats["bas"] == (52, 66)
+
+
+def test_un_character_annule_sa_vitesse_sur_la_normale_bloquee(resultats):
+    assert resultats["character_stop"] == (52, 34, 0, 0)
 
 
 def test_en_diagonale_le_mobile_glisse_le_long_de_l_obstacle(resultats):
@@ -178,6 +209,17 @@ def test_un_rigid_s_arrete_sur_un_static_et_deux_rigid_partagent_l_impulsion(res
     assert resultats["rigid_static"] == (50, 34, 0, 0)
     assert resultats["rigid_rigid_a"] == (50, 37, 0, 128)
     assert resultats["rigid_rigid_b"] == (50, 53, 0, 128)
+
+
+def test_la_masse_repartit_la_correction_sans_changer_la_vitesse_commune(resultats):
+    assert resultats["rigid_mass_light"] == (50, 36, 0, 86)
+    assert resultats["rigid_mass_heavy"] == (50, 52, 0, 86)
+
+
+def test_un_kinematic_transporte_un_corps_pose_mais_pas_un_corps_qui_saute(resultats):
+    assert resultats["kinematic_rider"] == (56, 34)
+    assert resultats["kinematic_delta"] == (512, 0, 1, 1)
+    assert resultats["kinematic_jump"] == (54, 34)
 
 
 # ── Ce que le générateur émet ─────────────────────────────────────────
@@ -213,7 +255,7 @@ def test_le_mobile_recoit_la_table_des_boites_bloquantes():
     coffre = _acteur("Chest", tag="body", response="block", solid=False)
     lignes = "\n".join(_lignes(_projet(), [hero, coffre]))
     assert "static const u16 _bk_idx[]={1};" in lignes
-    assert "actors_resolve_blocks(&g_actors[0],_bk_idx,_bk_box,1);" in lignes
+    assert "actors_resolve_blocks(&g_actors[0],1,_bk_idx,_bk_box,1);" in lignes
     # Le coffre n'a pas de boîte solide : il n'est pas un mobile.
     assert "g_actors[1]," not in lignes
 
@@ -222,7 +264,7 @@ def test_un_static_body_bloque_sans_devenir_un_mobile():
     from core.models.components import PhysicsBodyComponent
     hero = _acteur("Hero", tag="Player")
     mur = _acteur("Wall", tag="body", response="block", solid=False)
-    mur.components.append(PhysicsBodyComponent(mode="static"))
+    mur.components.append(PhysicsBodyComponent(mode="StaticBody"))
     lignes = "\n".join(_lignes(_projet(), [hero, mur]))
     assert "static const u16 _bk_idx[]={1};" in lignes
     assert "g_actors[1]," not in lignes
@@ -233,21 +275,110 @@ def test_un_rigid_pose_passe_par_la_table_d_impulsions_et_non_le_blocage_histori
     from codegen.runtime_codegen.physics.impulses import impulse_tick_lines
     from core.models.scene import Scene
     rigid = _acteur("Crate", tag="body", response="block")
-    rigid.components.append(PhysicsBodyComponent(mode="rigid"))
+    rigid.components.append(PhysicsBodyComponent(mode="RigidBody"))
     sol = _acteur("Floor", tag="body", response="block", solid=False)
-    sol.components.append(PhysicsBodyComponent(mode="static"))
+    sol.components.append(PhysicsBodyComponent(mode="StaticBody"))
 
     assert not any("actors_resolve_blocks(&g_actors[0]" in line
                    for line in _lignes(_projet(), [rigid, sol]))
     lignes = "\n".join(_lignes_impulsions(_projet(), [rigid, sol]))
     assert "static const RigidPair _rigid_pairs[1]" in lignes
-    assert "{0,1,0,0,1}" in lignes
+    assert "{0,1,256,0,0,0}" in lignes
     assert "_it<4" in lignes
 
     six_passes = "\n".join(impulse_tick_lines(
         _projet(), Scene(name="Physics", physics_gravity_override=True,
                          physics_solver_iterations=6), _scene(rigid, sol), 0))
     assert "_it<6" in six_passes
+
+
+def test_la_table_encode_la_masse_inverse_de_chaque_rigid():
+    from core.models.components import PhysicsBodyComponent
+    light = _acteur("Light", tag="body", response="block")
+    light.components.append(PhysicsBodyComponent(mode="RigidBody", mass=0.5))
+    heavy = _acteur("Heavy", tag="body", response="block")
+    heavy.components.append(PhysicsBodyComponent(mode="RigidBody", mass=2.0))
+
+    lignes = "\n".join(_lignes_impulsions(_projet(), [light, heavy]))
+
+    assert "{0,1,512,128,0,0}" in lignes
+
+
+def test_un_kinematic_est_une_masse_infinie_pour_un_rigid():
+    from core.models.components import PhysicsBodyComponent
+    platform = _acteur("Platform", tag="body", response="block")
+    platform.components.append(PhysicsBodyComponent(mode="KinematicBody"))
+    rigid = _acteur("Crate", tag="body", response="block")
+    rigid.components.append(PhysicsBodyComponent(mode="RigidBody", mass=2.0))
+
+    lignes = "\n".join(_lignes_impulsions(_projet(), [platform, rigid]))
+
+    assert "{0,1,0,128,0,0}" in lignes
+
+
+def test_un_character_est_une_masse_infinie_pour_un_rigid():
+    from core.models.components import PhysicsBodyComponent
+    character = _acteur("Hero", tag="body", response="block")
+    character.components.append(PhysicsBodyComponent(mode="CharacterBody"))
+    rigid = _acteur("Crate", tag="body", response="block")
+    rigid.components.append(PhysicsBodyComponent(mode="RigidBody"))
+
+    lignes = "\n".join(_lignes_impulsions(_projet(), [character, rigid]))
+
+    assert "{0,1,0,256,0,0}" in lignes
+
+
+def test_un_kinematic_n_est_repousse_que_par_un_static():
+    from core.models.components import PhysicsBodyComponent
+    platform = _acteur("Platform", tag="body", response="block")
+    platform.components.append(PhysicsBodyComponent(mode="KinematicBody"))
+    character = _acteur("Character", tag="body", response="block", solid=False)
+    character.components.append(PhysicsBodyComponent(mode="CharacterBody"))
+    wall = _acteur("Wall", tag="body", response="block", solid=False)
+    wall.components.append(PhysicsBodyComponent(mode="StaticBody"))
+
+    lignes = "\n".join(_lignes(_projet(), [platform, character, wall]))
+
+    assert "static const u16 _bk_idx[]={2};" in lignes
+    assert "static const u16 _bk_idx[]={1,2};" not in lignes
+
+
+def test_la_relation_du_body_restreint_forme_mobile_et_bloqueur():
+    from core.models.components import PhysicsBodyComponent
+    hero = Actor(name="Hero", components=[
+        CollisionBoxComponent(id="hurt", tag="Hurt", solid=True),
+        CollisionBoxComponent(id="body", tag="Player", solid=True),
+        PhysicsBodyComponent(mode="CharacterBody", collider_id="body"),
+    ])
+    wall = Actor(name="Wall", components=[
+        CollisionBoxComponent(id="sensor", tag="Ignored", response="block"),
+        CollisionBoxComponent(id="shape", tag="body", response="block"),
+        PhysicsBodyComponent(mode="StaticBody", collider_id="shape"),
+    ])
+
+    lignes = "\n".join(_lignes(_projet(), [hero, wall]))
+
+    assert "actors_resolve_blocks(&g_actors[0],2,_bk_idx,_bk_box,1);" in lignes
+    assert "static const u8 _bk_box[]={1};" in lignes
+
+
+def test_la_relation_du_body_restreint_les_paires_d_impulsion():
+    from core.models.components import PhysicsBodyComponent
+    rigid = Actor(name="Crate", components=[
+        CollisionBoxComponent(id="sensor", tag="Ignored", solid=True),
+        CollisionBoxComponent(id="shape", tag="body", solid=True),
+        PhysicsBodyComponent(mode="RigidBody", collider_id="shape"),
+    ])
+    wall = Actor(name="Wall", components=[
+        CollisionBoxComponent(id="sensor", tag="Ignored", response="block"),
+        CollisionBoxComponent(id="shape", tag="body", response="block"),
+        PhysicsBodyComponent(mode="StaticBody", collider_id="shape"),
+    ])
+
+    lignes = "\n".join(_lignes_impulsions(_projet(), [rigid, wall]))
+
+    assert "{0,1,256,0,1,1}" in lignes
+    assert "_rigid_pairs[1]" in lignes
 
 
 def test_sans_bloqueur_rien_n_est_emis():
@@ -296,7 +427,7 @@ def test_un_coffre_facing_arrete_le_joueur_sans_boite_dessinee_par_l_auteur():
     hero = _acteur("Hero", tag="Player")
     lignes = "\n".join(_lignes(_projet(), [hero, _coffre("facing")]))
     assert "static const u16 _bk_idx[]={1};" in lignes and "static const u8 _bk_box[]={0};" in lignes
-    assert "actors_resolve_blocks(&g_actors[0],_bk_idx,_bk_box,1);" in lignes
+    assert "actors_resolve_blocks(&g_actors[0],1,_bk_idx,_bk_box,1);" in lignes
 
 
 def test_une_plaque_hover_n_arrete_personne():

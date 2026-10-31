@@ -231,7 +231,7 @@ def test_les_bloqueurs_et_les_mobiles_du_pool_se_decident_par_le_modele(tmp_path
     assert f"case {ids['Hero']}: {{" in code and f"case {ids['Wall']}:" not in code     # le mur n'est pas un mobile
     assert f"static const u8 _bk_pm[]={{{ids['Wall']}}};" in code
     assert "static const u16 _bk_idx[]={0};" in code
-    assert "actors_resolve_blocks_pool(_a,_bk_pm,_bk_pb,1);" in code
+    assert "actors_resolve_blocks_pool(_a,1,_bk_pm,_bk_pb,1);" in code
     assert "POOL_EACH(_bm){" in code
 
 
@@ -245,7 +245,7 @@ def test_sans_instance_du_pool_qui_bloque_aucun_appel_au_pool(tmp_path):
                                                encoding="utf-8")
     pi = scene_pi(p, scene)
     code = "\n".join(block_tick_lines(p, scene, [(a, None) for a in scene.actors], 0, pi, shown))
-    assert "actors_resolve_blocks_pool" not in code and "actors_resolve_blocks(_a,_bk_idx" in code
+    assert "actors_resolve_blocks_pool" not in code and "actors_resolve_blocks(_a,1,_bk_idx" in code
 
 
 def test_l_interaction_cherche_les_consommateurs_nes_et_reconnait_les_interacteurs_nes(tmp_path):

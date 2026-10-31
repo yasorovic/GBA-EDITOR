@@ -128,5 +128,5 @@ def test_un_acteur_bloquant_se_compile_et_repousse_le_joueur(tmp_path):
     main_c = next((projet.root / "build").rglob("main.c")).read_text(encoding="utf-8")
     h, c = scene.actors.index(heros), scene.actors.index(coffre)       # le Player du modèle prend le rang 0
     assert f"static const u16 _bk_idx[]={{{c}}};" in main_c
-    assert f"actors_resolve_blocks(&g_actors[{h}],_bk_idx,_bk_box,1);" in main_c
+    assert f"actors_resolve_blocks(&g_actors[{h}],1,_bk_idx,_bk_box,1);" in main_c
     assert "static void __attribute__((unused)) actors_resolve_blocks(" in main_c

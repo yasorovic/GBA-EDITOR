@@ -36,6 +36,7 @@ PARAM_RECT         = "rect"
 # Types de référence renvoyés par les appels et utilisés avec `:`.
 REF_SFX = "sfx"                   # un effet EN TRAIN de jouer : un mm_sfxhand
 REF_COLLISION_BOX = "collision_box"  # une boîte de collision d'un acteur : un rang, 0 = absente
+REF_PHYSICS_BODY = "physics_body"    # l'état physique d'un acteur : le même Actor* sous une API dédiée
 REF_UI_ELEMENT = "ui_element"     # un élément d'interface : son index, connu au build
 # Les éléments d'interface héritent de `ui_element`.
 REF_IMAGE = "image"               # un sprite à état : son index dans `g_ui_images`
@@ -84,6 +85,9 @@ class RefType:
 REF_TYPE_TABLE: dict[str, RefType] = {
     REF_SFX: RefType(c_type="mm_sfxhand", prefix="sfx"),
     REF_COLLISION_BOX: RefType(c_type="int", prefix="collision_box"),
+    REF_PHYSICS_BODY: RefType(
+        c_type="Actor*", prefix="body",
+        hint="A PhysicsBody is acquired from its actor: `local body = self:physics_body()`."),
     # Le conteneur utilise les capacités de son type de base.
     REF_UI_ELEMENT: RefType(
         c_type="int", prefix="element", ui_kind="container", constant="UIELEM_",
@@ -237,6 +241,7 @@ class ApiFunc:
     # Le type de retour dépend du premier nom littéral, par exemple avec `interface.get`.
     ret_by_name: bool = False
     doc:       str = ""
+    legacy:    bool = False                    # compatible au build, masqué des nouvelles suggestions
 
 
 @dataclass
@@ -272,6 +277,7 @@ class ApiProp:
     # Le type de RÉFÉRENCE que la propriété rend quand elle désigne un autre objet (`a.parent` : un acteur, ou nil). Vide pour
     # une valeur (`position`, `visible`). C'est ce qui fait de `other.parent.position` une chaîne typée.
     ref:        Optional[str] = None
+    legacy:     bool = False                    # compatible au build, masqué des nouvelles suggestions
 
 
 # ─── Énumérations matérielles : un nom, pas un nombre ─────────────
@@ -429,33 +435,47 @@ RUNTIME_API: dict[str, ApiFunc] = {
     ),
 
     # ── Physics : vélocité stockée sur l'actor ────────────────────────
-    # La vélocité est un état : la propriété `self.velocity` (cf. RUNTIME_PROPS).
+    # La vélocité est un état : la propriété `body.velocity` (cf. RUNTIME_PROPS).
     # Seul l'ACCUMUL reste un appel : add_velocity est une action, pas une
     # affectation d'état.
+    "actor:physics_body": ApiFunc(
+        lua_name="actor:physics_body", c_func="actor_get_physics_body",
+        params=[], ret=REF_PHYSICS_BODY, self_first=True,
+        doc="The typed PhysicsBody view of this actor. Keep the returned reference to read "
+            "or change its velocity and grounded state. Ex: local body = self:physics_body()",
+    ),
+    f"{REF_PHYSICS_BODY}:add_velocity": ApiFunc(
+        lua_name="physics_body:add_velocity", c_func="actor_add_velocity",
+        params=[Param("dv", PARAM_VEC2)], self_first=True,
+        doc="Adds `dv` (a vec2, in Q8: 256 = 1 px/frame) to this body's velocity.",
+    ),
+    f"{REF_PHYSICS_BODY}:apply_velocity": ApiFunc(
+        lua_name="physics_body:apply_velocity", c_func="actor_apply_velocity",
+        params=[], self_first=True,
+        doc="Applies this CharacterBody's Q8 velocity while keeping sub-pixel movement.",
+    ),
+
+    # Compatibilité de transition. Les nouveaux scripts passent par
+    # `self:physics_body()` afin que l'Actor ne porte plus directement l'API physique.
     "actor:add_velocity": ApiFunc(
         lua_name="actor:add_velocity", c_func="actor_add_velocity",
         params=[Param("dv", PARAM_VEC2)],
         self_first=True,
-        doc="Adds `dv` (a vec2, in Q8: 256 = 1 px/frame) to the current velocity. "
-            "Useful for acceleration or gravity, frame after frame.",
+        doc="Legacy shortcut for `self:physics_body():add_velocity(dv)`.", legacy=True,
     ),
-    # Le pendant manquant de self.velocity depuis que sa réponse à « comment
-    # l'auteur exprime une vélocité fractionnaire » est « self.velocity devient Q8 » : sans cet appel, un
+    # Le pendant de body.velocity : sans cet appel, un
     # sous-pixel accumulé n'a nulle part où s'appliquer : self.position ne
     # rend et n'accepte que des pixels entiers, donc `self.position =
-    # self.position + self.velocity` n'a plus de sens dimensionnel. C'est lui
+    # self.position + body.velocity` n'a plus de sens dimensionnel. C'est lui
     # qui possède l'accumulateur (littéralement s->x/s->y en Q8), pas un
     # nouveau champ caché sur l'Actor.
     "actor:apply_velocity": ApiFunc(
         lua_name="actor:apply_velocity", c_func="actor_apply_velocity",
         params=[], self_first=True,
-        doc="Adds the current velocity (self.velocity) to the position of a Character, keeping the "
-            "sub-pixel from one frame to the next: replaces `self.position = "
-            "self.position + self.velocity`, which mixed two scales since "
-            "self.velocity became Q8. self.position still only returns whole pixels.",
+        doc="Legacy shortcut for `self:physics_body():apply_velocity()`.", legacy=True,
     ),
 
-    # self.grounded (lecture seule) : cf. RUNTIME_PROPS : « y a-t-il un sol
+    # body.grounded (lecture seule) : cf. RUNTIME_PROPS : « y a-t-il un sol
     # sous les pieds » est une requête pure sans argument, donc de l'état.
 
     # ── Animation ─────────────────────────────────────────────────
@@ -1589,7 +1609,7 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
         lua_name="actor.position", c_getter="actor_get_position",
         c_setter="actor_set_position", ptype=PARAM_VEC2, self_first=True,
         doc="World position of the actor (a vec2, .x/.y), in whole PIXELS, always, "
-            "even on an actor that accumulates sub-pixel via self:apply_velocity(). "
+            "even on an actor that accumulates sub-pixel via body:apply_velocity(). "
             "self.position = vec2(x, y) teleports it instantly and clears the "
             "accumulated sub-pixel.",
     ),
@@ -1653,16 +1673,28 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
     # ── Actor : physique ───────────────────────────────────────────
     # unité Q8 (256 = 1 px), pas des pixels : la
     # rupture assumée qui rend le sous-pixel utilisable sans un second nom
-    # (self.velocity_q8) à côté de self.velocity. 128 = un demi-pixel/frame,
+    # 128 = un demi-pixel/frame,
     # 256 = un pixel/frame, 384 = un pixel et demi/frame. self.position, elle,
     # reste en pixels (décision verrouillée, inchangée).
+    f"{REF_PHYSICS_BODY}.velocity": ApiProp(
+        lua_name="physics_body.velocity", c_getter="actor_get_velocity",
+        c_setter="actor_set_velocity", ptype=PARAM_VEC2, self_first=True,
+        doc="Velocity of this body (a vec2, .x/.y), in Q8: 256 = 1 pixel/frame, 128 ="
+            " half a pixel/frame. Kinematic and Rigid bodies apply it automatically; a Character "
+            "uses body:apply_velocity() to keep sub-pixel movement.",
+    ),
+    f"{REF_PHYSICS_BODY}.grounded": ApiProp(
+        lua_name="physics_body.grounded", c_getter="actor_on_ground", ptype=PARAM_BOOL,
+        self_first=True, read_only=True,
+        doc="True if this body was resting on the collision map at the end of the previous "
+            "frame, slopes included. Read-only.",
+    ),
+
+    # Compatibilité de transition pour les scripts existants.
     "actor.velocity": ApiProp(
         lua_name="actor.velocity", c_getter="actor_get_velocity",
         c_setter="actor_set_velocity", ptype=PARAM_VEC2, self_first=True,
-        doc="Velocity of the actor (a vec2, .x/.y), in Q8: 256 = 1 pixel/frame, 128 ="
-            " half a pixel/frame. Kinematic and Rigid bodies apply it automatically; a Character "
-            "uses self:apply_velocity() to keep the sub-pixel from one frame to the next "
-            "(self.position only returns whole pixels).",
+        doc="Legacy shortcut for `self:physics_body().velocity`.", legacy=True,
     ),
 
     # ── Actor : état général ───────────────────────────────────────
@@ -1752,7 +1784,7 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
         ptype=PARAM_BOOL, self_first=True, read_only=True,
         doc="True if the current animation state does NOT loop and has reached its "
             "last frame (self.anim_length). Stays true until the state changes "
-            "(self:play_anim), just as self.grounded stays true until the actor "
+            "(self:play_anim), just as body.grounded stays true until the actor "
             "leaves the ground. Always false for a looping state. Read-only.",
     ),
     "actor.frame_w": ApiProp(
@@ -1843,9 +1875,7 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
     "actor.grounded": ApiProp(
         lua_name="actor.grounded", c_getter="actor_on_ground", ptype=PARAM_BOOL,
         self_first=True, read_only=True,
-        doc="True if a solid box was resting on the ground at the end of the previous"
-            " frame, slopes included. Requires a collision map in the scene. "
-            "Read-only.",
+        doc="Legacy shortcut for `self:physics_body().grounded`.", legacy=True,
     ),
     "actor.box_count": ApiProp(
         lua_name="actor.box_count", c_getter="actor_get_box_count", ptype=PARAM_INT,
@@ -1962,7 +1992,7 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
         ptype=PARAM_BOOL, self_first=True, read_only=True,
         doc="Was this box resting on the ground at the end of the previous frame "
             "(slopes included)? Always false for a non-solid box: the collision map "
-            "ignores it. `self.grounded` is the OR over all the boxes of the actor. "
+            "ignores it. `body.grounded` is the OR over all the boxes of the actor. "
             "Read-only."),
     "collision_box.solid": ApiProp(
         lua_name="collision_box.solid", c_getter="collision_box_get_solid",

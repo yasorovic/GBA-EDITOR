@@ -52,17 +52,11 @@
       "group": "gameplay",
       "entries": [
         {
-          "label": "self:add_velocity(dv)",
-          "snippet": "self:add_velocity(dv)",
-          "description": "Adds `dv` (a vec2) to the current velocity. To accumulate an acceleration or gravity frame after frame. Ex: self:add_velocity(vec2(0, 1))",
-          "params": [
-            {
-              "name": "dv",
-              "type": "vec2",
-              "description": "Added to the velocity (.x, .y)"
-            }
-          ],
-          "doc_anchor": "self-add_velocity"
+          "label": "self:physics_body()",
+          "snippet": "self:physics_body()",
+          "description": "Returns the actor's typed PhysicsBody view. Keep it in a local variable to read or change velocity and grounded state.",
+          "params": [],
+          "doc_anchor": "actor-physics_body"
         }
       ]
     },

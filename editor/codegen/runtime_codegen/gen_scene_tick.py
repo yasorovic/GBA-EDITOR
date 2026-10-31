@@ -21,10 +21,13 @@ from codegen.runtime_codegen.gen_sprite import (
 )
 from codegen.runtime_codegen.interact_gen import interact_tick_lines
 from codegen.runtime_codegen.physics.contacts import box_contact_lines
-from codegen.runtime_codegen.physics.body import uses_character_solver
+from codegen.runtime_codegen.physics.body import (
+    physics_body_mode, physics_collider_mask, uses_character_solver,
+)
 from codegen.runtime_codegen.physics.impulses import impulse_tick_lines
+from codegen.runtime_codegen.physics.kinematic import kinematic_tick_parts
 from codegen.runtime_codegen.physics.motion import physics_motion_lines, physics_sleep_lines
-from core.models.components import affine_sprite_component
+from core.models.components import PHYSICS_BODY_KINEMATIC, affine_sprite_component
 from core.models.scene import Scene
 from core.project import Project
 from codegen.iwram_plan import iwram_macros
@@ -96,6 +99,9 @@ def gen_scene_tick(
     # parent, et l'enfant doit suivre DANS la même frame — et AVANT la
     # collision et l'émission OAM, qui lisent la position monde recomposée.
     L = phases["physics"]
+    kinematic_before, kinematic_after, kinematic_deltas = kinematic_tick_parts(
+        p, scene_actors, actor_offset)
+    L += kinematic_before
     L += physics_motion_lines(scene, p.settings, scene_actors, actor_offset, pi)
     L += parent_compose_lines(scene_actors, actor_offset, _lay.placed_entry)
     L += pool_compose_lines(pi)
@@ -103,6 +109,21 @@ def gen_scene_tick(
     # Blocage entre acteurs : un mobile est repoussé hors des boîtes de réponse `block`, AVANT la carte de
     # collision (les murs ont le dernier mot).
     L += block_tick_lines(p, scene, scene_actors, actor_offset, pi, shown)
+
+    # Le trajet final de la plateforme doit être connu avant de transporter ce qui repose dessus.
+    # La carte et les Static peuvent avoir raccourci le mouvement demandé.
+    if scene_has_cmap(scene):
+        for j, (actor, _sprite) in enumerate(scene_actors):
+            if physics_body_mode(actor) != PHYSICS_BODY_KINEMATIC:
+                continue
+            idx = actor_offset + j
+            s = _dsym(scene.name, actor.name)
+            cb = f"{s}_on_tile_collide" if (idx in lua_idx and _def(s, "on_tile_collide")) else "NULL"
+            mask = physics_collider_mask(actor, _sprite, map_only=True)
+            if mask:
+                L.append(f"    if(g_actors[{idx}].active) resolve_actor_tiles(&g_actors[{idx}], {mask}, {cb});")
+
+    L += kinematic_after
     L += impulse_tick_lines(p, scene, scene_actors, actor_offset)
 
     # Résolution contre la carte de collision — pour TOUTE box solide, et non
@@ -112,15 +133,36 @@ def gen_scene_tick(
     # Rien n'est émis si la scène n'a pas de carte : il n'y aurait rien à heurter.
     if scene_has_cmap(scene):
         for j in range(len(scene_actors)):
-            actor, _ = scene_actors[j]
-            if not uses_character_solver(actor):
+            actor, sprite = scene_actors[j]
+            if not uses_character_solver(actor, sprite):
+                continue
+            mask = physics_collider_mask(actor, sprite, map_only=True)
+            if physics_body_mode(actor) == PHYSICS_BODY_KINEMATIC:
                 continue
             idx = actor_offset + j
             s = _dsym(scene.name, actor.name)
             cb = f"{s}_on_tile_collide" if (idx in lua_idx and _def(s, "on_tile_collide")) else "NULL"
-            L.append(f"    if(g_actors[{idx}].active) resolve_actor_tiles(&g_actors[{idx}], {cb});")
+            if idx not in kinematic_deltas:
+                L.append(f"    if(g_actors[{idx}].active) resolve_actor_tiles(&g_actors[{idx}], {mask}, {cb});")
+                continue
+            dx, dy, ground = kinematic_deltas[idx]
+            L += [
+                f"    if(g_actors[{idx}].active){{",
+                f"        int _kin_ovx=g_actors[{idx}].vx,_kin_ovy=g_actors[{idx}].vy;",
+                f"        int _kin_ivx=_kin_ovx+{dx},_kin_ivy=_kin_ovy+{dy};",
+                f"        g_actors[{idx}].vx=_kin_ivx; g_actors[{idx}].vy=_kin_ivy;",
+                f"        resolve_actor_tiles(&g_actors[{idx}], {mask}, {cb});",
+                f"        g_actors[{idx}].vx=(_kin_ivx&&!g_actors[{idx}].vx)?0:_kin_ovx;",
+                f"        g_actors[{idx}].vy=(_kin_ivy&&!g_actors[{idx}].vy)?0:_kin_ovy;",
+                f"        if({ground}){{ g_actors[{idx}].collision.grounded=1;",
+                f"            for(u8 _kb=0;_kb<MAX_BOXES;_kb++) if({ground}&(1u<<_kb)) "
+                f"g_actors[{idx}].collision.boxes[_kb].grounded=1; }}",
+                "    }",
+            ]
 
-        L += shared_pool_gen.tile_lines(pi, _def, uses_character_solver)
+        L += shared_pool_gen.tile_lines(
+            pi, _def, lambda owner: (physics_collider_mask(owner, map_only=True)
+                                     if uses_character_solver(owner) else 0))
 
     L += physics_sleep_lines(scene, p.settings, scene_actors, actor_offset, pi)
 

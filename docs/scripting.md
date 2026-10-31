@@ -11,13 +11,14 @@ Vous avez posé une scène, ajouté un acteur, et vous voulez maintenant lui don
 Les calculs utilisent des entiers. Il n'y a pas de nombre à virgule dans le jeu, car une émulation flottante coûterait des centaines de cycles par opération. Lorsque vous avez besoin d'une valeur entre deux pixels, gardez une valeur mise à l'échelle :
 
 ```lua
-self.velocity = vec2(384, 0) -- 384 = 1,5 pixel par frame ; 256 = 1 pixel
-self:apply_velocity()
+local body = self:physics_body()
+body.velocity = vec2(384, 0) -- 384 = 1,5 pixel par frame ; 256 = 1 pixel
+body:apply_velocity()
 ```
 
-`self.position` est exprimée en pixels, tandis que `self.velocity` utilise cette échelle plus précise. Pour vos propres calculs, choisissez aussi une échelle, par exemple 100 pour des pourcentages, et conservez-la jusqu'au dernier calcul.
+`self.position` est exprimée en pixels, tandis que `body.velocity` utilise cette échelle plus précise. Pour vos propres calculs, choisissez aussi une échelle, par exemple 100 pour des pourcentages, et conservez-la jusqu'au dernier calcul.
 
-`self.position` **téléporte** l'acteur : la carte de collision n'est pas consultée, il traverse les murs et n'est pas remonté sur une pente. Pour un déplacement physique (murs, pentes, sol, `on_tile_collide`), donnez une vitesse avec `self.velocity` puis appelez `self:apply_velocity()` : la carte ne résout qu'un acteur dont la vitesse est non nulle.
+`self.position` **téléporte** l'acteur : la carte de collision n'est pas consultée, il traverse les murs et n'est pas remonté sur une pente. Pour un déplacement physique (murs, pentes, sol, `on_tile_collide`), obtenez `local body = self:physics_body()`, donnez-lui une vitesse, puis appelez `body:apply_velocity()`.
 
 ## Votre premier script
 
@@ -155,7 +156,7 @@ Le Build connaît les pièces d'un prefab quand l'acteur est désigné par son n
 `input:pressed("a")` lit un bouton directement. Pour un combo tenu ensemble, déclarez une **action** dans Project Settings → Input → Inputs : des cases à cocher, comme pour un bouton (`dash = right + a`). Le script cite alors le NOM de l'action, exactement comme un bouton :
 
 ```lua
-if input:pressed("dash") then self:apply_velocity() end
+if input:pressed("dash") then self:physics_body():apply_velocity() end
 ```
 
 `input:held("nom", frames)` répond vrai à partir d'un appui de cette durée (tir chargé). `input:released("nom")` répond vrai au relâchement (saut à hauteur variable). `input:get_axis("horizontal", "vertical")` rend un `vec2` : la croix existe toujours, même sans axe déclaré.
@@ -170,10 +171,10 @@ if input:get_sequence("quarter_circle") then self:play_anim("special") end
 
 ```lua
 -- Piège : buffered() s'évalue avant le `and`, donc consomme l'appui même en l'air.
-if input:buffered("jump", 6) and self.grounded then saute() end
+if input:buffered("jump", 6) and self:physics_body().grounded then saute() end
 
 -- Correct : le court-circuit du `and` n'évalue buffered() qu'au sol.
-if self.grounded and input:buffered("jump", 6) then saute() end
+if self:physics_body().grounded and input:buffered("jump", 6) then saute() end
 ```
 
 ### Changer d'apparence
@@ -245,10 +246,11 @@ end
 
 function on_update()
     local move_dir = input:get_axis("horizontal")
+    local body = self:physics_body()
 
     -- Exclusif : déduit de la physique à chaque frame.
-    if not self.grounded then
-        if self.velocity.y < 0 then locomotion = "JUMP" else locomotion = "FALL" end
+    if not body.grounded then
+        if body.velocity.y < 0 then locomotion = "JUMP" else locomotion = "FALL" end
     elseif move_dir ~= 0 then
         locomotion = "RUN"
     else

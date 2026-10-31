@@ -1,7 +1,7 @@
 """Mouvement automatique des KinematicBody et RigidBody."""
 from __future__ import annotations
 
-from codegen.runtime_codegen.physics.body import physics_body_mode
+from codegen.runtime_codegen.physics.body import physics_body, physics_body_mode
 from codegen.runtime_codegen.shared_pool_gen import shared_models
 from core.models.components import PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID
 
@@ -42,15 +42,23 @@ def physics_motion_lines(scene, project_settings, scene_actors, actor_offset: in
     lines: list[str] = []
     for index, (actor, _sprite) in enumerate(scene_actors):
         mode = physics_body_mode(actor)
-        move = _move_lines(f"&g_actors[{actor_offset + index}]", mode, gx, gy,
-                           damping_retain, max_fall, sleep_frames, "        ")
+        body = physics_body(actor)
+        body_gx = round(gx * body.gravity_scale) if body and mode == PHYSICS_BODY_RIGID else gx
+        body_gy = round(gy * body.gravity_scale) if body and mode == PHYSICS_BODY_RIGID else gy
+        body_sleep = sleep_frames if body is None or body.can_sleep else 0
+        move = _move_lines(f"&g_actors[{actor_offset + index}]", mode, body_gx, body_gy,
+                           damping_retain, max_fall, body_sleep, "        ")
         if move:
             lines += [f"    if(g_actors[{actor_offset + index}].active){{", *move, "    }"]
 
     cases = []
     for model in shared_models(pi):
         mode = physics_body_mode(model["prefab"])
-        move = _move_lines("_a", mode, gx, gy, damping_retain, max_fall, sleep_frames, "            ")
+        body = physics_body(model["prefab"])
+        body_gx = round(gx * body.gravity_scale) if body and mode == PHYSICS_BODY_RIGID else gx
+        body_gy = round(gy * body.gravity_scale) if body and mode == PHYSICS_BODY_RIGID else gy
+        body_sleep = sleep_frames if body is None or body.can_sleep else 0
+        move = _move_lines("_a", mode, body_gx, body_gy, damping_retain, max_fall, body_sleep, "            ")
         if move:
             cases += [f"        case {model['model_id']}: {{", *move, "        } break;"]
     if cases:
@@ -82,13 +90,16 @@ def physics_sleep_lines(scene, project_settings, scene_actors, actor_offset: int
 
     lines: list[str] = []
     for index, (actor, _sprite) in enumerate(scene_actors):
-        if physics_body_mode(actor) == PHYSICS_BODY_RIGID:
+        body = physics_body(actor)
+        if physics_body_mode(actor) == PHYSICS_BODY_RIGID and (body is None or body.can_sleep):
             target = f"&g_actors[{actor_offset + index}]"
             lines += [f"    if(({target})->active){{", *update(target, "        "), "    }"]
 
     cases = []
     for model in shared_models(pi):
-        if physics_body_mode(model["prefab"]) == PHYSICS_BODY_RIGID:
+        body = physics_body(model["prefab"])
+        if (physics_body_mode(model["prefab"]) == PHYSICS_BODY_RIGID
+                and (body is None or body.can_sleep)):
             cases += [f"        case {model['model_id']}: {{", *update("_a", "            "), "        } break;"]
     if cases:
         lines += ["    POOL_EACH(_ps){", "        Actor* _a=&g_actors[_ps];",

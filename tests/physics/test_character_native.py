@@ -39,7 +39,7 @@ static void report(const char* nom, Actor* a){
     printf("%%s %%d %%d %%d %%d %%d\n", nom, a->x >> 8, a->y >> 8, a->vx, a->vy, a->collision.grounded);
 }
 /* Ce que fait `actor:apply_velocity()` puis le tick. */
-static void frame(Actor* a){ a->x += a->vx; a->y += a->vy; resolve_actor_tiles(a, 0); }
+static void frame(Actor* a){ a->x += a->vx; a->y += a->vy; resolve_actor_tiles(a, 1, 0); }
 
 int main(void){
     for(int tx = 0; tx < 8; tx++) carte[5 * 8 + tx] = 1;

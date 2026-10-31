@@ -17,9 +17,9 @@ def _actor(name, *, mode=None, response="sensor"):
 def test_le_bilan_compte_les_capacites_du_pool_et_les_contacts(monkeypatch):
     from codegen.runtime_codegen.physics import budget
 
-    hero = _actor("Hero", mode="character")
-    wall = _actor("Wall", mode="static", response="block")
-    bullet = _actor("Bullet", mode="character")
+    hero = _actor("Hero", mode="CharacterBody")
+    wall = _actor("Wall", mode="StaticBody", response="block")
+    bullet = _actor("Bullet", mode="CharacterBody")
     scene = SimpleNamespace(name="Level", actors=[hero, wall])
     layout = SimpleNamespace(placed=2, pool_slots=5, actors=7,
                              pools=[SimpleNamespace(prefab=bullet, shared=True)])
