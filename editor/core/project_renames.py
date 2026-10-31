@@ -23,6 +23,8 @@ puisque `project.py` l'importe pour composer la classe.
 from contextlib import contextmanager
 from typing import Optional
 
+from core.disk_folders import valid_entry_name
+from core.project_paths import PROJECT_EXT
 from core.models.audio import Jingle, Music
 from core.models.background import BackgroundAsset
 from core.models.components import SpriteComponent, ScriptComponent, SoundFxComponent
@@ -121,6 +123,26 @@ class ProjectRenameMixin:
                 self.save_settings()
             refs = self.rename_lua_refs(DOMAIN_SCENE, old_name, new_name)
         self._notify_renamed("Scene", old_name, new_name, refs)
+
+    def rename_project(self, new_name: str) -> str:
+        """Renomme le projet. Son nom EST celui du manifeste `<Nom>.project` (cf. `save_settings`) :
+        c'est le fichier qui change de nom, le dossier reste où il est. Rend le nom appliqué,
+        l'ancien quand le nouveau est refusé (vide, interdit sur disque, déjà pris)."""
+        old_name = self.settings.name
+        new_name = new_name.strip()
+        if new_name == old_name or not valid_entry_name(new_name):
+            return old_name
+        source = self.project_file
+        target = self.root / f"{new_name}{PROJECT_EXT}"
+        if target.exists() and not (source.exists() and target.samefile(source)):   # samefile : changer la casse seule
+            return old_name
+        with self._renaming():
+            if source.exists():
+                source.rename(target)
+            self.settings.name = new_name
+            self.save_settings()     # projet d'avant v0.10 : écrit le .project et retire project.json
+        self._notify_renamed("Project", old_name, new_name)
+        return new_name
 
     def rename_camera(self, scene: Scene, camera, new_name: str):
         """Renomme une caméra POSSÉDÉE par `scene` et répare ce qui la cite :

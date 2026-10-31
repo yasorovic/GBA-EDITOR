@@ -46,8 +46,10 @@ class DynamicInspector(QWidget):
     edge_presentation_changed = pyqtSignal(object)
     edge_script_changed = pyqtSignal()
     groups_changed = pyqtSignal()
+    # Le nom du projet change depuis l'en-tête : la fenêtre et la barre d'outils l'affichent aussi.
+    project_renamed = pyqtSignal()
 
-    _MODE_EMPTY       = 0
+    _MODE_EMPTY      = 0
     _MODE_SCENE       = 1
     _MODE_ACTOR       = 2
     _MODE_CAMERA      = 3
@@ -274,7 +276,7 @@ class DynamicInspector(QWidget):
     # Kinds dont le NOM se change dans l'en-tête. Les éléments d'interface en
     # font partie depuis que leur inspecteur n'a plus de champ « Name » : le nom
     # se change là où il s'affiche, comme pour une scène ou un acteur.
-    _RENAMABLE = ("scene", "actor", "prefab", "camera", "script_asset",
+    _RENAMABLE = ("project", "scene", "actor", "prefab", "camera", "script_asset",
                   "ui_text", "ui_textbox", "ui_container", "ui_list", "ui_image", "ui_element",
                   "ui_layout")
 
@@ -285,7 +287,12 @@ class DynamicInspector(QWidget):
         self._header_mode = kind
 
     def _on_header_rename(self, new_name: str):
-        if self._header_mode == "scene":
+        if self._header_mode == "project":
+            if self._project:
+                # Le nom réellement appliqué : refusé (vide, caractère interdit, déjà pris), l'ancien reste affiché.
+                self._header.set_name(self._project.rename_project(new_name))
+                self.project_renamed.emit()
+        elif self._header_mode == "scene":
             scene = self._scene_insp._scene
             project = self._scene_insp._project
             if scene and project and new_name != scene.name:
@@ -453,6 +460,8 @@ class DynamicInspector(QWidget):
         elif self._stack.currentIndex() == self._MODE_PROJECT:
             # Compteurs d'assets + liste des scènes du sélecteur de démarrage
             self._project_insp.load(self._project)
+            if self._project:
+                self._header.set_name(self._project.settings.name)   # renommé depuis Project Settings
         elif self._stack.currentIndex() == self._MODE_UI and self._ui_insp is not None:
             insp = self._ui_insp
             if insp._layout_asset is not None and insp._element is not None:

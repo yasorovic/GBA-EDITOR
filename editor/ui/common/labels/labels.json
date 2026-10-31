@@ -2991,6 +2991,8 @@
     "projset.drag_to_reorder": { "text": "Reorder by dragging" },
     "projinsp.start_scene_title": { "text": "Start scene" },
     "projinsp.start_scene_note": { "text": "It is independent of the scene open in the editor." },
+    "projset.project_name_title": { "text": "Project name" },
+    "projset.project_name_tip": { "text": "Names the project and its .project file. The project folder keeps its name." },
     "projset.backdrop_title": { "text": "Project backdrop color" },
     "projset.backdrop_note": { "text": "Every scene that does not set its own backdrop inherits it. The value is quantized to the GBA’s BGR555 color format." },
     "projset.cartridge_title": { "text": "Cartridge size" },
@@ -4246,6 +4248,12 @@
     },
     "langcard.font_replacements": { "singular": "{n} font replacement.", "plural": "{n} font replacements." },
     "langcard.no_font_replacement": { "text": "No font replacement: this language uses the fonts of the project." },
+    "projset.general": {
+      "text": "General"
+    },
+    "projset.project_name": {
+      "text": "Name"
+    },
     "projset.build": {
       "text": "Build"
     },

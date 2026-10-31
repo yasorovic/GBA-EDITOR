@@ -1830,6 +1830,8 @@
     "projinsp.start_scene_title": { "text": "Scène de démarrage" },
     "projinsp.start_scene_tip": { "text": "Première scène chargée au démarrage de la ROM." },
     "projinsp.start_scene_note": { "text": "Elle ne dépend pas de la scène ouverte dans l’éditeur." },
+    "projset.project_name_title": { "text": "Nom du projet" },
+    "projset.project_name_tip": { "text": "Nomme le projet et son fichier .project. Le dossier du projet garde son nom." },
     "projset.backdrop_title": { "text": "Couleur d’arrière-plan du projet" },
     "projset.backdrop_tip": { "text": "Définit l’index 0 de la palette de fond. Elle est affichée partout où aucun calque ni sprite ne dessine, y compris à travers une fenêtre qui masque tout." },
     "projset.backdrop_note": { "text": "Toutes les scènes qui n’ont pas leur propre couleur d’arrière-plan en héritent. La valeur est quantifiée au format de couleur BGR555 de la GBA." },
