@@ -19,6 +19,7 @@ comme l'ancienne surveillance ne l'exigeait pas.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
 # Un identifiant C précédé de non-mot, suivi d'une parenthèse ouvrante.
 _CALL = r"(?<![\w])%s\s*\("
@@ -74,16 +75,24 @@ def build_prototype_block(engine_src: str, names) -> tuple[list[str], list[str]]
     deuxième retour liste les noms PRÉSENTS dans le moteur mais que l'extracteur
     n'a pas su lire — un cas qui ne doit pas exister (0 aujourd'hui), et que le
     build signale plutôt que d'émettre un header incomplet."""
+    decls, unparsed = _prototype_block(engine_src, tuple(sorted(set(names))))
+    return list(decls), list(unparsed)
+
+
+@lru_cache(maxsize=4)
+def _prototype_block(engine_src: str, names: tuple[str, ...]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Le calcul de `build_prototype_block`, gardé par CONTENU (le moteur et les noms décident seuls du résultat) : il
+    coûtait environ 1,6 s à chaque build pour un bloc qui ne change qu'avec `gba_engine.h`."""
     src = _strip_comments(engine_src)
     decls: list[str] = []
     unparsed: list[str] = []
-    for name in sorted(set(names)):
+    for name in names:
         d = extract_prototype(src, name)
         if d:
             decls.append(f"extern {d};")
         elif re.search(_CALL % re.escape(name), src):
             unparsed.append(name)
-    return decls, unparsed
+    return tuple(decls), tuple(unparsed)
 
 
 def build_enum_defines() -> list[str]:

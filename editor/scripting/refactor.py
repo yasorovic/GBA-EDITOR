@@ -33,7 +33,7 @@ from core.resources.resource_store import atomic_write
 from .api import (RUNTIME_API, RUNTIME_PROPS, REF_TYPES, REF_ACTOR, PARAM_STR, DOMAIN_UI_ELEMENT,
                   DOMAIN_PREFAB, MODULE_CALLS)
 
-from .parser import DATA_NS
+from .parser import DATA_NS, raw_tree
 
 try:
     from luaparser import ast as _lua_ast, astnodes as _nodes
@@ -200,7 +200,7 @@ def iter_refs(text: str, path: Path | None = None,
     if not _LUAPARSER_OK:
         return
     try:
-        tree = _lua_ast.parse(text)
+        tree = raw_tree(text)
     except Exception:  # tolerated: unparsable script: the validator reports it, nothing is rewritten
         return   # script non parsable : aucune réécriture (cf. rename_in_text)
 
@@ -306,7 +306,7 @@ def iter_call_sites(text: str, path: Path | None = None,
     if not _LUAPARSER_OK:
         return
     try:
-        tree = _lua_ast.parse(text)
+        tree = raw_tree(text)
     except Exception:  # tolerated: unparsable script: the validator reports it, nothing is rewritten
         return
 
@@ -358,7 +358,7 @@ def domain_args_in_text(text: str, domain: str) -> tuple[set[str], bool]:
     if not _LUAPARSER_OK:
         return set(), True
     try:
-        tree = _lua_ast.parse(text)
+        tree = raw_tree(text)
     except Exception:  # tolerated: unparsable script: the validator reports it, nothing is rewritten
         return set(), True
 
@@ -538,7 +538,7 @@ def iter_data_refs(text: str, path: Path | None = None,
     if not _LUAPARSER_OK:
         return
     try:
-        tree = _lua_ast.parse(text)
+        tree = raw_tree(text)
     except Exception:  # tolerated: unparsable script: the validator reports it, nothing is rewritten
         return
 
@@ -659,7 +659,7 @@ def iter_var_refs(text: str, path: Path | None = None,
     if not _LUAPARSER_OK:
         return
     try:
-        tree = _lua_ast.parse(text)
+        tree = raw_tree(text)
     except Exception:  # tolerated: unparsable script: the validator reports it, nothing is rewritten
         return
 

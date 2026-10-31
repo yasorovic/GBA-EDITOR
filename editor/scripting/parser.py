@@ -9,6 +9,7 @@ fichier doit changer.
 
 from __future__ import annotations
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any, Optional
 
 
@@ -1012,6 +1013,14 @@ def _syntax_message(source: str, exc) -> tuple[str, Optional[int]]:
 
 # ─── Point d'entrée public ────────────────────────────────────────
 
+@lru_cache(maxsize=256)
+def raw_tree(source: str):
+    """L'arbre luaparser brut de `source`, gardé par CONTENU : le validateur, le compilateur, le calcul des entrées et le
+    refactor relisent les mêmes scripts à chaque build, et le texte seul décide de l'arbre. L'arbre est partagé : le lire,
+    ne jamais le modifier. Une erreur de syntaxe n'est pas gardée (elle est relevée à chaque appel)."""
+    return _lua_ast.parse(source)
+
+
 def parse(source: str) -> LuaScript:
     """
     Parse le source Lua et retourne un LuaScript normalisé.
@@ -1020,7 +1029,7 @@ def parse(source: str) -> LuaScript:
     if not _LUAPARSER_OK:
         raise LuaParseError("luaparser is not installed (pip install luaparser)")
     try:
-        raw = _lua_ast.parse(source)
+        raw = raw_tree(source)
     except Exception as e:
         msg, line = _syntax_message(source, e)
         raise LuaParseError(msg, line) from e
