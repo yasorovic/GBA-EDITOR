@@ -46,6 +46,16 @@ if support then
 end
 ```
 
+## Matériaux physiques des boîtes
+
+Chaque `CollisionBox` porte provisoirement ses propres coefficients de restitution et de friction, de
+`0` à `1`. La restitution décide du rebond et le contact conserve la valeur la plus élevée. La friction
+ralentit le glissement tangent et le contact emploie la moyenne géométrique des deux valeurs.
+
+Ces coefficients sont combinés au build puis écrits dans les paires physiques de la scène. Ils n'ajoutent
+donc aucun état à l'`Actor` au runtime. Ce placement sur `CollisionBox` est temporaire : un futur
+`PhysicsMaterialComponent` pourra regrouper des surfaces réutilisables si le projet en a réellement besoin.
+
 ## 3. Ajouter l'impulsion de saut
 
 ```lua

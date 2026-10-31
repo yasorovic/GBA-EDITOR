@@ -1681,6 +1681,10 @@
     "comped.collision_solid": {
       "text": "Collides with map"
     },
+    "comped.collision_restitution": { "text": "Restitution" },
+    "comped.collision_restitution_tip": { "text": "Bounciness of this CollisionBox. The contact keeps the higher coefficient." },
+    "comped.collision_friction": { "text": "Friction" },
+    "comped.collision_friction_tip": { "text": "Tangential slowdown of this CollisionBox. The contact uses the geometric mean of both coefficients." },
     "comped.trig_manual": {
       "text": "manual"
     },

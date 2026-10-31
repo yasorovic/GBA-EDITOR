@@ -133,6 +133,22 @@ int main(void){
         report_motion("rigid_mass_heavy", 1);
     }
 
+    {   /* Une restitution maximale inverse la vitesse normale du Rigid. */
+        const RigidPair pair = {0, 1, 256, 0, 256, 0, 0, 0};
+        mk(0, 50, 40, 0, 256, 16, 16, 1);
+        mk(1, 50, 50, 0, 0, 16, 16, 0);
+        rigid_pair_resolve(&pair);
+        report_motion("rigid_bounce", 0);
+    }
+
+    {   /* Une friction maximale arrête la vitesse tangentielle contre un Static. */
+        const RigidPair pair = {0, 1, 256, 0, 0, 256, 0, 0};
+        mk(0, 50, 40, 256, 0, 16, 16, 1);
+        mk(1, 50, 50, 0, 0, 16, 16, 0);
+        rigid_pair_resolve(&pair);
+        report_motion("rigid_friction", 0);
+    }
+
     {   /* Une plateforme déplace une seule fois le corps posé sur son ancienne face supérieure. */
         int carry_x=0, carry_y=0; u8 carried=0;
         mk(0, 52, 50, 512, 0, 16, 16, 0);
@@ -223,6 +239,11 @@ def test_la_masse_repartit_la_correction_sans_changer_la_vitesse_commune(resulta
     assert resultats["rigid_mass_heavy"] == (50, 52, 0, 86)
 
 
+def test_restitution_et_friction_modifient_la_vitesse_du_contact(resultats):
+    assert resultats["rigid_bounce"] == (50, 34, 0, -256)
+    assert resultats["rigid_friction"] == (50, 34, 0, 0)
+
+
 def test_un_kinematic_transporte_un_corps_pose_mais_pas_un_corps_qui_saute(resultats):
     assert resultats["kinematic_rider"] == (56, 34)
     assert resultats["kinematic_delta"] == (512, 0, 1)
@@ -291,7 +312,7 @@ def test_un_rigid_pose_passe_par_la_table_d_impulsions_et_non_le_blocage_histori
                    for line in _lignes(_projet(), [rigid, sol]))
     lignes = "\n".join(_lignes_impulsions(_projet(), [rigid, sol]))
     assert "static const RigidPair _rigid_pairs[1]" in lignes
-    assert "{0,1,256,0,0,0}" in lignes
+    assert "{0,1,256,0,0,0,0,0}" in lignes
     assert "_it<4" in lignes
 
     six_passes = "\n".join(impulse_tick_lines(
@@ -309,7 +330,19 @@ def test_la_table_encode_la_masse_inverse_de_chaque_rigid():
 
     lignes = "\n".join(_lignes_impulsions(_projet(), [light, heavy]))
 
-    assert "{0,1,512,128,0,0}" in lignes
+    assert "{0,1,512,128,0,0,0,0}" in lignes
+
+
+def test_la_table_cuit_les_materiaux_du_contact():
+    from core.models.components import PhysicsBodyComponent
+    rigid = _acteur("Ball", tag="body", response="block", restitution=0.25, friction=0.25)
+    rigid.components.append(PhysicsBodyComponent(mode="RigidBody"))
+    wall = _acteur("Wall", tag="body", response="block", restitution=0.75, friction=1.0)
+    wall.components.append(PhysicsBodyComponent(mode="StaticBody"))
+
+    lignes = "\n".join(_lignes_impulsions(_projet(), [rigid, wall]))
+
+    assert "{0,1,256,0,192,128,0,0}" in lignes
 
 
 def test_un_kinematic_est_une_masse_infinie_pour_un_rigid():
@@ -321,7 +354,7 @@ def test_un_kinematic_est_une_masse_infinie_pour_un_rigid():
 
     lignes = "\n".join(_lignes_impulsions(_projet(), [platform, rigid]))
 
-    assert "{0,1,0,128,0,0}" in lignes
+    assert "{0,1,0,128,0,0,0,0}" in lignes
 
 
 def test_un_character_est_une_masse_infinie_pour_un_rigid():
@@ -333,7 +366,7 @@ def test_un_character_est_une_masse_infinie_pour_un_rigid():
 
     lignes = "\n".join(_lignes_impulsions(_projet(), [character, rigid]))
 
-    assert "{0,1,0,256,0,0}" in lignes
+    assert "{0,1,0,256,0,0,0,0}" in lignes
 
 
 def test_un_kinematic_n_est_repousse_que_par_un_static():
@@ -385,7 +418,7 @@ def test_la_relation_du_body_restreint_les_paires_d_impulsion():
 
     lignes = "\n".join(_lignes_impulsions(_projet(), [rigid, wall]))
 
-    assert "{0,1,256,0,1,1}" in lignes
+    assert "{0,1,256,0,0,0,1,1}" in lignes
     assert "_rigid_pairs[1]" in lignes
 
 

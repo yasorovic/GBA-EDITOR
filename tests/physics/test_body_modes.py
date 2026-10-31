@@ -75,6 +75,19 @@ def test_une_valeur_inconnue_est_refusee_au_lieu_d_etre_remplacee():
         PhysicsBodyComponent(mode="RigidBody", mass=0)
     with pytest.raises(ValueError, match="gravity scale"):
         PhysicsBodyComponent(mode="RigidBody", gravity_scale=9)
+    with pytest.raises(ValueError, match="restitution"):
+        CollisionBoxComponent(restitution=1.1)
+    with pytest.raises(ValueError, match="friction"):
+        CollisionBoxComponent(friction=-0.1)
+
+
+def test_les_materiaux_de_collision_sont_serialises_sur_la_boite():
+    from core.models.components import components_from_list, components_to_list
+
+    data = components_to_list([CollisionBoxComponent(restitution=0.75, friction=0.25)])
+    (reloaded,) = components_from_list(data)
+
+    assert (reloaded.restitution, reloaded.friction) == (0.75, 0.25)
 
 
 def test_les_anciens_noms_sont_relus_puis_serialises_avec_les_noms_canoniques():

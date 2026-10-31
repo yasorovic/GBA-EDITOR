@@ -80,6 +80,18 @@ class CollisionEditor(BaseComponentEditor):
         self.register_syncer("response", lambda v, w=chk_blocks: (
             w.blockSignals(True), w.setChecked(v == "block"), w.blockSignals(False)))
 
+        restitution = W.double_spinbox(comp.restitution, 0.0, 1.0, 0.05, 2)
+        restitution.setObjectName("collisionRestitution")
+        restitution.setToolTip(tooltip(title=label("comped.collision_restitution"),
+                                       body=label("comped.collision_restitution_tip")))
+        W.row(label("comped.collision_restitution"), restitution, layout)
+
+        friction = W.double_spinbox(comp.friction, 0.0, 1.0, 0.05, 2)
+        friction.setObjectName("collisionFriction")
+        friction.setToolTip(tooltip(title=label("comped.collision_friction"),
+                                    body=label("comped.collision_friction_tip")))
+        W.row(label("comped.collision_friction"), friction, layout)
+
         # ── AABB — champs px/tile ou référence de variable ────────
         # Les valeurs peuvent être un littéral (px/tile) ou pointer une
         # variable déclarée (global g_<nom> / constante CONST_<NOM>).
@@ -108,4 +120,8 @@ class CollisionEditor(BaseComponentEditor):
         chk_solid.toggled.connect(_on_solid)
         self.register_syncer("solid", lambda v, w=chk_solid: (
             w.blockSignals(True), w.setChecked(bool(v)), w.blockSignals(False)))
+        restitution.valueChanged.connect(lambda v: self.set_field(comp, "restitution", float(v)))
+        friction.valueChanged.connect(lambda v: self.set_field(comp, "friction", float(v)))
+        self.register_syncer("restitution", lambda v, w=restitution: w.setValue(float(v)))
+        self.register_syncer("friction", lambda v, w=friction: w.setValue(float(v)))
 

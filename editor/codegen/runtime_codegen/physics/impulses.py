@@ -1,10 +1,13 @@
 """Solveur d'impulsions minimal pour les corps Rigid poses dans une scene.
 
-Cette tranche ne gere que la normale du contact, avec une masse configurable par Rigid, sans
-restitution ni friction. Static, Character et Kinematic ont une masse inverse nulle. Les paires sont connues au
-build, filtrees par les tags et parcourues plusieurs fois pour stabiliser les petites piles.
+Le solveur applique la normale et le tangent du contact, avec une masse configurable par Rigid. La restitution
+et la friction des CollisionBox sont combinees au build. Static, Character et Kinematic ont une masse inverse
+nulle. Les paires sont connues au build, filtrees par les tags et parcourues plusieurs fois pour stabiliser les
+petites piles.
 """
 from __future__ import annotations
+
+import math
 
 from core.models.components import (
     PHYSICS_BODY_CHARACTER,
@@ -20,9 +23,9 @@ from codegen.runtime_codegen.physics.body import (
 
 
 def impulse_helper_lines() -> list[str]:
-    """Aide C du solveur : correction de position puis impulsion normale."""
+    """Aide C du solveur : correction de position, impulsion normale et friction."""
     return [
-        "typedef struct { u16 a,b,inv_mass_a,inv_mass_b; u8 box_a,box_b; } RigidPair;",
+        "typedef struct { u16 a,b,inv_mass_a,inv_mass_b,restitution,friction; u8 box_a,box_b; } RigidPair;",
         "static void __attribute__((unused)) rigid_pair_resolve(const RigidPair* p){",
         "    Actor* a=&g_actors[p->a]; Actor* b=&g_actors[p->b];",
         "    if(!a->active||!b->active||p->box_a>=a->collision.box_count||p->box_b>=b->collision.box_count) return;",
@@ -44,10 +47,16 @@ def impulse_helper_lines() -> list[str]:
         "    int va=axis_x?a->vx:a->vy, vb=axis_x?b->vx:b->vy;",
         "    int relative=(va-vb)*normal;",
         "    if(relative<0){",
-        "        int impulse_a=(-relative*p->inv_mass_a)/total, impulse_b=-relative-impulse_a;",
+        "        int impulse=(-relative*(256+p->restitution))/256;",
+        "        int impulse_a=(impulse*p->inv_mass_a)/total, impulse_b=impulse-impulse_a;",
         "        if(axis_x){ a->vx+=impulse_a*normal; b->vx-=impulse_b*normal; }",
         "        else { a->vy+=impulse_a*normal; b->vy-=impulse_b*normal; }",
         "    }",
+        "    int tangent=axis_x?a->vy-b->vy:a->vx-b->vx;",
+        "    int friction=(tangent*p->friction)/256;",
+        "    int friction_a=(-friction*p->inv_mass_a)/total, friction_b=-friction-friction_a;",
+        "    if(axis_x){ a->vy+=friction_a; b->vy-=friction_b; }",
+        "    else { a->vx+=friction_a; b->vx-=friction_b; }",
         "}",
         "",
     ]
@@ -58,9 +67,16 @@ def _physical_boxes(owner, sprite) -> list[tuple[int, CollisionBoxComponent]]:
             if box.active]
 
 
+def _contact_material(a: CollisionBoxComponent, b: CollisionBoxComponent) -> tuple[int, int]:
+    """Les coefficients Q8 d'un contact, cuits plutôt que recombinés en ROM."""
+    restitution = round(max(a.restitution, b.restitution) * 256)
+    friction = math.isqrt(round(a.friction * 256) * round(b.friction * 256))
+    return restitution, friction
+
+
 def impulse_tick_lines(p, scene, scene_actors, actor_offset: int) -> list[str]:
     """Contraintes d'un Rigid contre les corps poses qui ne recoivent pas son impulsion."""
-    rows: list[tuple[int, int, int, int, int, int]] = []
+    rows: list[tuple[int, int, int, int, int, int, int, int]] = []
     for ia, (actor_a, sprite_a) in enumerate(scene_actors):
         mode_a = physics_body_mode(actor_a)
         for ib in range(ia + 1, len(scene_actors)):
@@ -89,15 +105,17 @@ def impulse_tick_lines(p, scene, scene_actors, actor_offset: int) -> list[str]:
                         pairs[(rank_a, rank_b)] = (box_a, box_b)
             for (rank_a, rank_b), (box_a, box_b) in pairs.items():
                 if tags_collide(p.settings, box_a.tag or "body", box_b.tag or "body"):
+                    restitution, friction = _contact_material(box_a, box_b)
                     rows.append((actor_offset + ia, actor_offset + ib,
-                                 inv_mass_a, inv_mass_b, rank_a, rank_b))
+                                 inv_mass_a, inv_mass_b, restitution, friction, rank_a, rank_b))
     if not rows:
         return []
     iterations = scene.effective_physics_simulation(p.settings)[0]
     lines = [
-        "    /* Impulsions Rigid : masses Q8, sans rebond ni friction. */",
+        "    /* Impulsions Rigid : masses et materiaux Q8. */",
         f"    static const RigidPair _rigid_pairs[{len(rows)}]={{",
-        *[f"        {{{a},{b},{ma},{mb},{ba},{bb}}}," for a, b, ma, mb, ba, bb in rows],
+        *[f"        {{{a},{b},{ma},{mb},{re},{fr},{ba},{bb}}},"
+          for a, b, ma, mb, re, fr, ba, bb in rows],
         "    };",
         f"    for(u8 _it=0;_it<{iterations};_it++)",
         f"        for(u8 _k=0;_k<{len(rows)};_k++) rigid_pair_resolve(&_rigid_pairs[_k]);",

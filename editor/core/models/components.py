@@ -84,6 +84,8 @@ class CollisionBoxComponent:
     solid: bool = True      # arrêté par la carte de collision (cf. docstring)
     response: str = COLLISION_RESPONSE_SENSOR   # "block" ou "sensor" (cf. docstring)
     tag: str = "body"       # ex: "body", "ground_check", "hitbox", "hurtbox"
+    restitution: float = 0.0
+    friction: float = 0.0
     # Offset de la boîte depuis la POSITION DE L'ACTEUR, en pixels : le coin haut-gauche du sprite, ou le centre de son cadre
     # quand `affine_transform` est actif (l'acteur est alors centré sur le cadre). Ce n'est PAS le pivot du sprite : pour une boîte de
     # 8 px centrée sur un sprite de 16 px, x vaut 4 (et non -4).
@@ -95,6 +97,10 @@ class CollisionBoxComponent:
     def __post_init__(self):
         if self.response not in COLLISION_RESPONSES:
             raise ValueError(f"unknown collision response {self.response!r}, expected one of {COLLISION_RESPONSES}")
+        if not math.isfinite(self.restitution) or not 0.0 <= self.restitution <= 1.0:
+            raise ValueError("collision restitution must be between 0 and 1")
+        if not math.isfinite(self.friction) or not 0.0 <= self.friction <= 1.0:
+            raise ValueError("collision friction must be between 0 and 1")
 
 
 @dataclass
