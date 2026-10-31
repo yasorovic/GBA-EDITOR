@@ -34,11 +34,8 @@ Unicode true
 ; assistant se ferme (cf. .onGUIEnd) ; "" si l'outil n'est pas demande, si le
 ; telechargement a echoue ou si l'installation est annulee.
 ; $ToolchainSetup : "" (devkitPro non demande), "1" (install_devkitpro.ps1 tourne en arriere-plan,
-; cf. StartToolchain), "ok" ou "failed" une fois fini. $ToolchainBar et $ToolchainLabel : la
-; seconde barre de progression et son texte, ajoutes a la page d'installation (cf. InstFilesShow).
+; cf. StartToolchain), "ok" ou "failed" une fois fini.
 Var OldVersion
-Var ToolchainBar
-Var ToolchainLabel
 ; $InstallMode : "" (aucune installation), "update" (version plus ancienne),
 ; "same" (meme version) ou "downgrade" (version plus recente deja installee).
 Var InstallMode
@@ -124,8 +121,6 @@ VIAddVersionKey "LegalCopyright"  "${PUBLISHER}"
 ; sur $INSTDIR, qui ne doit jamais etre un dossier partage (D:\Games, Documents...).
 !define MUI_PAGE_CUSTOMFUNCTION_LEAVE DirectoryLeave
 !insertmacro MUI_PAGE_DIRECTORY
-; La page d'installation recoit une seconde barre, celle des dependances (devkitPro).
-!define MUI_PAGE_CUSTOMFUNCTION_SHOW InstFilesShow
 !insertmacro MUI_PAGE_INSTFILES
 ; devkitPro et mGBA ne sont pas embarques : ce sont des cases a cocher qui les
 ; telechargent. devkitPro s'installe PENDANT cet assistant (cf. StartToolchain, SecDevkitpro) :
@@ -239,11 +234,81 @@ Function CleanPreviousInstall
 FunctionEnd
 
 
+; Chemins communs a l'installation des outils (sections et fonctions plus bas).
+!define TOOLS_DIR "$TEMP\BackstageSetup"
+; Le dossier de la chaine GBA que Backstage installe lui-meme (core/toolchain.py:
+; MANAGED_DEVKITPRO). Ce n'est jamais C:\devkitPro, que la desinstallation ne touche pas.
+!define TOOLCHAIN_DIR "$LOCALAPPDATA\${APP_KEY}\devkitPro"
+!define TOOLCHAIN_PROGRESS "${TOOLS_DIR}\toolchain_progress.txt"
+
+; --- La chaine GBA s'installe AVANT Backstage ---
+; Section cachee ("-" au debut du nom), la premiere : l'assistant montre d'abord la chaine GBA, puis
+; Backstage. Elle lance install_devkitpro.ps1 (cf. StartToolchain) et suit son fichier d'avancement
+; ("pourcentage|etape|nom|numero|total") ; la barre de la page avance avec le pourcentage et le texte
+; d'etat dit l'etape (DetailPrint). Quand elle finit, la barre repart de zero pour la copie de Backstage.
+; Un echec ne fait pas echouer l'installation de Backstage : on le dit, et le lien de la page de fin
+; reste visible. Au plus 20 minutes.
+Section "-Chaine GBA" SecToolchainFirst
+  Call StartToolchain
+  StrCmp $ToolchainSetup "1" 0 toolchain_done
+  ; La barre native a sa propre echelle (PB_RANGE) : on la lit au lieu de la supposer.
+  FindWindow $R8 "#32770" "" $HWNDPARENT
+  GetDlgItem $R8 $R8 1004
+  SendMessage $R8 ${PBM_GETRANGE} 0 0 $R7
+  SendMessage $R8 ${PBM_SETPOS} 0 0
+  DetailPrint "$(TC_WAITING)"
+  StrCpy $0 ""
+  StrCpy $R9 0
+  toolchain_poll:
+    Sleep 400
+    IntOp $R9 $R9 + 1
+    IntCmp $R9 3000 toolchain_timeout
+    ClearErrors
+    FileOpen $R0 "${TOOLCHAIN_PROGRESS}" r
+    IfErrors toolchain_poll
+    FileRead $R0 $R1
+    FileClose $R0
+    ${WordFind} $R1 "|" "+1" $R2        ; pourcentage
+    ${WordFind} $R1 "|" "+2" $R3        ; etape
+    StrCmp $R2 "" toolchain_poll
+    StrCmp $R2 "-1" toolchain_failed
+    StrCmp $R3 "done" toolchain_ok
+    ${WordFind} $R1 "|" "+3" $R4        ; nom du paquet
+    ${WordFind} $R1 "|" "+4" $R5        ; numero
+    ${WordFind} $R1 "|" "+5" $R6        ; total
+    IntOp $1 $R2 * $R7
+    IntOp $1 $1 / 100
+    SendMessage $R8 ${PBM_SETPOS} $1 0
+    ; Le texte ne change qu'avec l'etape ou le paquet : DetailPrint ajoute aussi une ligne au journal.
+    StrCpy $1 "$R3|$R4"
+    StrCmp $0 $1 toolchain_poll
+    StrCpy $0 $1
+    StrCmp $R3 "extract" 0 +3
+      DetailPrint "$(TC_EXTRACT)"
+      Goto toolchain_poll
+    DetailPrint "$(TC_DOWNLOAD)"
+    Goto toolchain_poll
+  toolchain_ok:
+    DetailPrint "$(TC_DONE)"
+    StrCpy $ToolchainSetup "ok"
+    Goto toolchain_reset
+  toolchain_timeout:
+    ; Le script ne repond plus : on l'arrete par le fichier d'annulation, qu'il surveille.
+    FileOpen $R0 "${TOOLCHAIN_PROGRESS}.cancel" w
+    FileClose $R0
+  toolchain_failed:
+    DetailPrint "$(TC_FAILED)"
+    DetailPrint "$R1"
+    StrCpy $ToolchainSetup "failed"
+    MessageBox MB_OK|MB_ICONEXCLAMATION "devkitPro : $(MSG_TOOLCHAIN_FAILED)"
+  toolchain_reset:
+    SendMessage $R8 ${PBM_SETPOS} 0 0
+  toolchain_done:
+SectionEnd
+
 Section "${APP_NAME}" SecApp
   SectionIn RO
 
-  ; Les dependances telechargent pendant que les fichiers de Backstage se copient.
-  Call StartToolchain
   Call CleanPreviousInstall
   SetOutPath "$INSTDIR"
   File /r "${SRCDIR}\*"
@@ -310,10 +375,6 @@ SectionEnd
 ; Jamais en mode silencieux (/S, la CI) : pas de reseau, pas d'assistant.
 ; Un echec ne fait pas echouer l'installation de Backstage : on le dit, et les
 ; liens restent dans les reglages.
-!define TOOLS_DIR "$TEMP\BackstageSetup"
-; Le dossier de la chaine GBA que Backstage installe lui-meme (core/toolchain.py:
-; MANAGED_DEVKITPRO). Ce n'est jamais C:\devkitPro, que la desinstallation ne touche pas.
-!define TOOLCHAIN_DIR "$LOCALAPPDATA\${APP_KEY}\devkitPro"
 
 !define MGBA_URL      "https://github.com/mgba-emu/mgba/releases/download/0.10.5/mGBA-0.10.5-win64-installer.exe"
 !define MGBA_FILE      "mGBA-0.10.5-win64-installer.exe"
@@ -329,61 +390,10 @@ SectionEnd
   Pop $0
 !macroend
 
-!define TOOLCHAIN_PROGRESS "${TOOLS_DIR}\toolchain_progress.txt"
 
-; Attend la fin du script en suivant son fichier d'avancement : la seconde barre et son texte
-; avancent pendant que la copie de Backstage (SecApp) puis les autres sections se deroulent. Un
-; echec ne fait pas echouer l'installation de Backstage : on le dit, et le lien de la page de
-; fin reste visible. Au plus 20 minutes.
+; La case « devkitPro » de la page des composants ne fait rien ici : c'est la section cachee
+; "-Chaine GBA", placee AVANT Backstage (cf. plus haut), qui lit son etat.
 Section "devkitPro (GBA)" SecDevkitpro
-  StrCmp $ToolchainSetup "1" 0 devkitpro_done
-  StrCpy $R9 0
-  devkitpro_poll:
-    Sleep 400
-    IntOp $R9 $R9 + 1
-    IntCmp $R9 3000 devkitpro_timeout
-    ClearErrors
-    FileOpen $R0 "${TOOLCHAIN_PROGRESS}" r
-    IfErrors devkitpro_poll
-    FileRead $R0 $R1
-    FileClose $R0
-    ${WordFind} $R1 "|" "+1" $R2        ; pourcentage
-    ${WordFind} $R1 "|" "+2" $R3        ; etape
-    StrCmp $R2 "" devkitpro_poll
-    StrCmp $R2 "-1" devkitpro_failed
-    StrCmp $R3 "done" devkitpro_ok
-    ${WordFind} $R1 "|" "+3" $R4        ; nom du paquet
-    ${WordFind} $R1 "|" "+4" $R5        ; numero
-    ${WordFind} $R1 "|" "+5" $R6        ; total
-    StrCmp $ToolchainBar "" +2
-      SendMessage $ToolchainBar ${PBM_SETPOS} $R2 0
-    StrCmp $R3 "extract" 0 +3
-      StrCpy $R7 "$(TC_EXTRACT)"
-      Goto devkitpro_text
-    StrCpy $R7 "$(TC_DOWNLOAD)"
-    devkitpro_text:
-    StrCmp $ToolchainLabel "" +2
-      SendMessage $ToolchainLabel ${WM_SETTEXT} 0 "STR:$R7"
-    Goto devkitpro_poll
-  devkitpro_ok:
-    StrCmp $ToolchainBar "" +2
-      SendMessage $ToolchainBar ${PBM_SETPOS} 100 0
-    StrCmp $ToolchainLabel "" +2
-      SendMessage $ToolchainLabel ${WM_SETTEXT} 0 "STR:$(TC_DONE)"
-    DetailPrint "devkitPro : OK"
-    StrCpy $ToolchainSetup "ok"
-    Goto devkitpro_done
-  devkitpro_timeout:
-    ; Le script ne repond plus : on l'arrete par le fichier d'annulation, qu'il surveille.
-    FileOpen $R0 "${TOOLCHAIN_PROGRESS}.cancel" w
-    FileClose $R0
-  devkitpro_failed:
-    StrCmp $ToolchainLabel "" +2
-      SendMessage $ToolchainLabel ${WM_SETTEXT} 0 "STR:$(TC_FAILED)"
-    DetailPrint "devkitPro : $R1"
-    StrCpy $ToolchainSetup "failed"
-    MessageBox MB_OK|MB_ICONEXCLAMATION "devkitPro : $(MSG_TOOLCHAIN_FAILED)"
-  devkitpro_done:
 SectionEnd
 
 ; Appele au debut de SecApp : depose le script et son manifeste, et le lance en arriere-plan, sans
@@ -402,74 +412,6 @@ Function StartToolchain
   StrCpy $ToolchainSetup "1"
   SetOutPath "$INSTDIR"
   start_done:
-FunctionEnd
-
-; Descend le controle de la page $R0 d'identifiant ID de $R6 pixels, a taille egale (KEEP = 1) ou
-; en perdant autant de hauteur (KEEP = 0, pour le journal). N'utilise que $1 a $5 et $9 (les $R sont
-; les mesures de la barre 1, voir InstFilesShow).
-!macro ShiftControl ID KEEP
-  GetDlgItem $1 $R0 ${ID}
-  System::Call '*(i 0, i 0, i 0, i 0) p .r9'
-  System::Call 'user32::GetWindowRect(p r1, p r9)'
-  System::Call 'user32::MapWindowPoints(p 0, p R0, p r9, i 2)'
-  System::Call '*$9(i .r2, i .r3, i .r4, i .r5)'
-  System::Free $9
-  IntOp $4 $4 - $2          ; largeur
-  IntOp $5 $5 - $3          ; hauteur
-  !if ${KEEP} == 0
-    IntOp $5 $5 - $R6
-  !endif
-  IntOp $3 $3 + $R6
-  System::Call 'user32::SetWindowPos(p r1, p 0, i r2, i r3, i r4, i r5, i 4)'
-!macroend
-
-; Page d'installation : une seconde barre sous celle de Backstage, avec son texte, pour les
-; dependances. Les controles de la page (barre 1004, journal 1016, bouton details 1027) sont
-; deplaces vers le bas de la place qu'il faut. Rien n'est ajoute si devkitPro n'est pas demande.
-; $R0 la page, $R2 gauche et $R3 bas de la barre 1, $R4 largeur, $R5 hauteur, $R6 place prise.
-Function InstFilesShow
-  IfSilent show_done
-  SectionGetFlags ${SecDevkitpro} $0
-  IntOp $0 $0 & ${SF_SELECTED}
-  IntCmp $0 0 show_done
-  Push $R0
-  Push $R2
-  Push $R3
-  Push $R4
-  Push $R5
-  Push $R6
-  FindWindow $R0 "#32770" "" $HWNDPARENT
-  GetDlgItem $1 $R0 1004
-  System::Call '*(i 0, i 0, i 0, i 0) p .r9'
-  System::Call 'user32::GetWindowRect(p r1, p r9)'
-  System::Call 'user32::MapWindowPoints(p 0, p R0, p r9, i 2)'
-  System::Call '*$9(i .r2, i .r3, i .r4, i .r5)'
-  System::Free $9
-  IntOp $R4 $4 - $2
-  IntOp $R5 $5 - $3
-  StrCpy $R2 $2
-  StrCpy $R3 $5
-  IntOp $R6 $R5 + 32        ; texte (16) + barre + marges
-  !insertmacro ShiftControl 1016 0
-  !insertmacro ShiftControl 1027 1
-  IntOp $3 $R3 + 8          ; haut du texte
-  System::Call 'user32::CreateWindowEx(i 0, t "STATIC", t "", i 0x50000000, i R2, i r3, i R4, i 16, p R0, p 0, p 0, p 0) p .r9'
-  StrCpy $ToolchainLabel $9
-  GetDlgItem $1 $R0 1006
-  SendMessage $1 ${WM_GETFONT} 0 0 $1
-  SendMessage $ToolchainLabel ${WM_SETFONT} $1 1
-  SendMessage $ToolchainLabel ${WM_SETTEXT} 0 "STR:$(TC_WAITING)"
-  IntOp $3 $3 + 18          ; haut de la seconde barre
-  System::Call 'user32::CreateWindowEx(i 0, t "msctls_progress32", t "", i 0x50000001, i R2, i r3, i R4, i R5, p R0, p 0, p 0, p 0) p .r9'
-  StrCpy $ToolchainBar $9
-  SendMessage $ToolchainBar ${PBM_SETRANGE32} 0 100
-  Pop $R6
-  Pop $R5
-  Pop $R4
-  Pop $R3
-  Pop $R2
-  Pop $R0
-  show_done:
 FunctionEnd
 
 Section "mGBA" SecMgba

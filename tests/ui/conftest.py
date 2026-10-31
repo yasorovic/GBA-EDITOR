@@ -56,10 +56,24 @@ def _drain_qt_events():
     potentiellement dans un tout autre fichier de test, sur des widgets que
     Python n'a gardés en vie QUE parce que la fermeture du timer les référence
     encore. Ça s'est vu planter (accès mémoire invalide) plusieurs dizaines de
-    tests plus loin, sans rapport apparent avec la cause réelle."""
+    tests plus loin, sans rapport apparent avec la cause réelle.
+
+    Les fenêtres que le test a laissées affichées sont CACHÉES avant cette purge : une vue Qt
+    encore visible est repeinte par `processEvents()`, pendant que le ramasse-miettes libère ses
+    objets (la scène avant la vue, par exemple), et la repeinture d'un sprite sélectionné touche
+    alors de la mémoire libérée (segfault dans `_paint_markers`, vu en CI sous Linux sur
+    `test_canvas_actor_leaves`). Cacher ne détruit rien et n'exécute pas de `closeEvent`."""
+    app = QApplication.instance()
+    existing = set(app.topLevelWidgets()) if app is not None else set()
     yield
     app = QApplication.instance()
     if app is not None:
+        for window in app.topLevelWidgets():
+            if window not in existing:
+                try:
+                    window.hide()
+                except RuntimeError:       # déjà détruite côté C++ : rien à cacher
+                    pass
         # Les écritures différées d'un test partent AVEC lui, pas au hasard d'un test suivant (cf. `deferred_writes`).
         if get_deferred_writes().has_pending():
             get_deferred_writes().flush()
