@@ -72,3 +72,27 @@ def test_kinematic_et_rigid_emettent_un_mouvement_automatique_et_la_gravite():
     assert "actor_apply_velocity(&g_actors[4]);" in lines
     assert "(&g_actors[5])->vx+=64; (&g_actors[5])->vy+=128;" in lines
     assert "actor_apply_velocity(&g_actors[5]);" in lines
+
+
+def test_un_rigid_applique_damping_vitesse_maximale_et_sommeil_de_scene():
+    from types import SimpleNamespace
+    from codegen.runtime_codegen.physics.motion import physics_motion_lines, physics_sleep_lines
+    from core.models.scene import Scene
+
+    rigid = _actor("Crate", mode="rigid")
+    scene = Scene(name="Inherited")
+    settings = SimpleNamespace(
+        physics_gravity_x=0.0, physics_gravity_y=0.5,
+        physics_linear_damping=0.25, physics_max_fall_speed=3.0,
+        physics_sleep_enabled=True, physics_sleep_threshold=0.05,
+        physics_sleep_frames=20, physics_solver_iterations=4,
+    )
+    motion = "\n".join(physics_motion_lines(scene, settings, [(rigid, None)], 2, []))
+    sleep = "\n".join(physics_sleep_lines(scene, settings, [(rigid, None)], 2, []))
+
+    assert "physics_sleep<20" in motion
+    assert "->vy+=128" in motion
+    assert "->vy*192" in motion
+    assert "->vy>768" in motion
+    assert "physics_sleep++" in sleep
+    assert "->vy<= 13" in sleep

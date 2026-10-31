@@ -17,9 +17,6 @@ from codegen.runtime_codegen.interact_gen import owner_boxes
 from codegen.runtime_codegen.physics.body import physics_body_mode
 
 
-IMPULSE_ITERATIONS = 4
-
-
 def impulse_helper_lines() -> list[str]:
     """Aide C du solveur : correction de position puis impulsion normale."""
     return [
@@ -60,7 +57,7 @@ def _boxes(owner, sprite) -> list[tuple[int, CollisionBoxComponent]]:
             if isinstance(box, CollisionBoxComponent) and box.active]
 
 
-def impulse_tick_lines(p, scene_actors, actor_offset: int) -> list[str]:
+def impulse_tick_lines(p, scene, scene_actors, actor_offset: int) -> list[str]:
     """Table des contraintes Rigid/Static et Rigid/Rigid d'une scene."""
     rows: list[tuple[int, int, int, int, int]] = []
     for ia, (actor_a, sprite_a) in enumerate(scene_actors):
@@ -88,12 +85,13 @@ def impulse_tick_lines(p, scene_actors, actor_offset: int) -> list[str]:
                     rows.append((actor_offset + ia, actor_offset + ib, rank_a, rank_b, rigid))
     if not rows:
         return []
+    iterations = scene.effective_physics_simulation(p.settings)[0]
     lines = [
         "    /* Impulsions Rigid : masses egales, sans rebond ni friction. */",
         f"    static const RigidPair _rigid_pairs[{len(rows)}]={{",
         *[f"        {{{a},{b},{ba},{bb},{rigid}}}," for a, b, ba, bb, rigid in rows],
         "    };",
-        f"    for(u8 _it=0;_it<{IMPULSE_ITERATIONS};_it++)",
+        f"    for(u8 _it=0;_it<{iterations};_it++)",
         f"        for(u8 _k=0;_k<{len(rows)};_k++) rigid_pair_resolve(&_rigid_pairs[_k]);",
     ]
     return lines

@@ -239,6 +239,7 @@ typedef struct Actor {
        tick quand `facing_auto` vaut 1, libres sinon. */
     s8 facing_x;           /* -1 | 0 | 1 */
     s8 facing_y;           /* -1 | 0 | 1 */
+    u8 physics_sleep;      /* frames sous le seuil de sommeil du RigidBody */
 
     /* ── collision ↔ CollisionBoxComponent ────────────────────────────── */
     struct {

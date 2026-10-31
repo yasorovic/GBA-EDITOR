@@ -964,6 +964,18 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
             **({"physics_gravity_x": self.settings.physics_gravity_x,
                  "physics_gravity_y": self.settings.physics_gravity_y}
                if (self.settings.physics_gravity_x or self.settings.physics_gravity_y) else {}),
+            **({"physics_solver_iterations": self.settings.physics_solver_iterations,
+                "physics_max_fall_speed": self.settings.physics_max_fall_speed,
+                "physics_linear_damping": self.settings.physics_linear_damping,
+                "physics_sleep_enabled": self.settings.physics_sleep_enabled,
+                "physics_sleep_threshold": self.settings.physics_sleep_threshold,
+                "physics_sleep_frames": self.settings.physics_sleep_frames}
+               if (self.settings.physics_solver_iterations != 4
+                   or self.settings.physics_max_fall_speed != 8.0
+                   or self.settings.physics_linear_damping
+                   or not self.settings.physics_sleep_enabled
+                   or self.settings.physics_sleep_threshold != 0.05
+                   or self.settings.physics_sleep_frames != 30) else {}),
             "backdrop_color": self.settings.backdrop_color,
             "save_slots":  self.settings.save_slots,
             "transition_kind":   self.settings.transition_kind,
@@ -1045,6 +1057,13 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         # changement pour leurs RigidBody.
         self.settings.physics_gravity_x = float(d.get("physics_gravity_x", 0.0))
         self.settings.physics_gravity_y = float(d.get("physics_gravity_y", 0.0))
+        self.settings.physics_solver_iterations = max(1, min(8, int(d.get("physics_solver_iterations", 4))))
+        self.settings.physics_max_fall_speed = max(0.0, float(d.get("physics_max_fall_speed", 8.0)))
+        self.settings.physics_linear_damping = max(
+            0.0, min(1.0, float(d.get("physics_linear_damping", 0.0))))
+        self.settings.physics_sleep_enabled = bool(d.get("physics_sleep_enabled", True))
+        self.settings.physics_sleep_threshold = max(0.0, float(d.get("physics_sleep_threshold", 0.05)))
+        self.settings.physics_sleep_frames = max(1, min(255, int(d.get("physics_sleep_frames", 30))))
         # `palette_auto_import_enabled` des anciens project.json est ignoré :
         # le réservoir auto-import est abandonné, la clé
         # disparaît du fichier à la prochaine sauvegarde.

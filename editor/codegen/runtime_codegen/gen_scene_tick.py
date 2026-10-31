@@ -23,7 +23,7 @@ from codegen.runtime_codegen.interact_gen import interact_tick_lines
 from codegen.runtime_codegen.physics.contacts import box_contact_lines
 from codegen.runtime_codegen.physics.body import uses_character_solver
 from codegen.runtime_codegen.physics.impulses import impulse_tick_lines
-from codegen.runtime_codegen.physics.motion import physics_motion_lines
+from codegen.runtime_codegen.physics.motion import physics_motion_lines, physics_sleep_lines
 from core.models.components import affine_sprite_component
 from core.models.scene import Scene
 from core.project import Project
@@ -103,7 +103,7 @@ def gen_scene_tick(
     # Blocage entre acteurs : un mobile est repoussé hors des boîtes de réponse `block`, AVANT la carte de
     # collision (les murs ont le dernier mot).
     L += block_tick_lines(p, scene, scene_actors, actor_offset, pi, shown)
-    L += impulse_tick_lines(p, scene_actors, actor_offset)
+    L += impulse_tick_lines(p, scene, scene_actors, actor_offset)
 
     # Résolution contre la carte de collision — pour TOUTE box solide, et non
     # plus seulement pour les acteurs qui définissent `on_tile_collide` : la
@@ -121,6 +121,8 @@ def gen_scene_tick(
             L.append(f"    if(g_actors[{idx}].active) resolve_actor_tiles(&g_actors[{idx}], {cb});")
 
         L += shared_pool_gen.tile_lines(pi, _def, uses_character_solver)
+
+    L += physics_sleep_lines(scene, p.settings, scene_actors, actor_offset, pi)
 
     # Pool→scene collisions
     col_scene = [

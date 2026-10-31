@@ -204,7 +204,8 @@ def _lignes(p, acteurs):
 
 def _lignes_impulsions(p, acteurs):
     from codegen.runtime_codegen.physics.impulses import impulse_tick_lines
-    return impulse_tick_lines(p, _scene(*acteurs), 0)
+    from core.models.scene import Scene
+    return impulse_tick_lines(p, Scene(name="Physics"), _scene(*acteurs), 0)
 
 
 def test_le_mobile_recoit_la_table_des_boites_bloquantes():
@@ -229,6 +230,8 @@ def test_un_static_body_bloque_sans_devenir_un_mobile():
 
 def test_un_rigid_pose_passe_par_la_table_d_impulsions_et_non_le_blocage_historique():
     from core.models.components import PhysicsBodyComponent
+    from codegen.runtime_codegen.physics.impulses import impulse_tick_lines
+    from core.models.scene import Scene
     rigid = _acteur("Crate", tag="body", response="block")
     rigid.components.append(PhysicsBodyComponent(mode="rigid"))
     sol = _acteur("Floor", tag="body", response="block", solid=False)
@@ -240,6 +243,11 @@ def test_un_rigid_pose_passe_par_la_table_d_impulsions_et_non_le_blocage_histori
     assert "static const RigidPair _rigid_pairs[1]" in lignes
     assert "{0,1,0,0,1}" in lignes
     assert "_it<4" in lignes
+
+    six_passes = "\n".join(impulse_tick_lines(
+        _projet(), Scene(name="Physics", physics_gravity_override=True,
+                         physics_solver_iterations=6), _scene(rigid, sol), 0))
+    assert "_it<6" in six_passes
 
 
 def test_sans_bloqueur_rien_n_est_emis():

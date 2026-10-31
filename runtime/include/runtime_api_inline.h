@@ -281,7 +281,9 @@ static inline Vec3 vec3_splat(int k) { return (Vec3){ k, k, k }; }
    besoin de sous-pixel n'en entend jamais parler. L'écriture perd donc toute
    fraction sous-pixel accumulée (ex: par self:apply_velocity()) — c'est
    attendu d'un appel qui dit « l'acteur est ICI, au pixel », pas « avance ». */
-static inline void actor_set_position(Actor* s, Vec2 p) { s->x=p.x<<8; s->y=p.y<<8; }
+static inline void actor_set_position(Actor* s, Vec2 p) {
+    s->x=p.x<<8; s->y=p.y<<8; s->physics_sleep=0;
+}
 static inline Vec2 actor_get_position(const Actor* s)   { return (Vec2){ s->x>>8, s->y>>8 }; }
 
 /* get_actor rend un acteur qui EXISTE, ou nil : un acteur détruit au runtime (`self:destroy()` →
@@ -502,6 +504,7 @@ static inline void actor_move(Actor* s, Vec2 dir, int speed) {
     int dx = dir.x, dy = dir.y;
     int mag = isqrt(dx*dx + dy*dy);
     if (mag == 0) return;
+    s->physics_sleep = 0;
     s->x += dx * (speed<<8) / mag;
     s->y += dy * (speed<<8) / mag;
 }
@@ -515,6 +518,7 @@ static inline void actor_move_to(Actor* s, Vec2 target, int speed) {
     int dx = target.x - cx, dy = target.y - cy;
     int dist = isqrt(dx*dx + dy*dy);
     if (speed < 0) speed = 0;   /* vitesse négative : sur place, et jamais dist == 0 en diviseur */
+    if (speed > 0) s->physics_sleep = 0;
     if (dist <= speed) { s->x = target.x<<8; s->y = target.y<<8; return; }
     s->x += (dx * speed / dist) << 8;
     s->y += (dy * speed / dist) << 8;
@@ -530,8 +534,12 @@ static inline void actor_move_to(Actor* s, Vec2 target, int speed) {
    avant cette version doit être migré : c'est la rupture assumée qui rend le
    sous-pixel utilisable sans un second nom (self.velocity_q8) à côté du
    premier. */
-static inline void actor_set_velocity(Actor* s, Vec2 v) { s->vx=v.x; s->vy=v.y; }
-static inline void actor_add_velocity(Actor* s, Vec2 dv){ s->vx+=dv.x; s->vy+=dv.y; }
+static inline void actor_set_velocity(Actor* s, Vec2 v) {
+    s->vx=v.x; s->vy=v.y; if(v.x||v.y) s->physics_sleep=0;
+}
+static inline void actor_add_velocity(Actor* s, Vec2 dv){
+    s->vx+=dv.x; s->vy+=dv.y; if(dv.x||dv.y) s->physics_sleep=0;
+}
 static inline Vec2 actor_get_velocity(const Actor* s)    { return (Vec2){ s->vx, s->vy }; }
 /* Applique la vélocité Q8 stockée à la position Q8 stockée — l'accumulateur
    sous-pixel est LITTÉRALEMENT s->x/s->y, donc rien à reporter ailleurs

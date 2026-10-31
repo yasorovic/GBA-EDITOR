@@ -893,10 +893,20 @@
     "sceneinsp.card.physics": {
       "text": "Physics"
     },
-    "sceneinsp.physics_use_project": { "text": "Use project gravity" },
-    "sceneinsp.physics_use_project_tip": { "text": "Uses the gravity defined in Project Settings. Unchecking it creates a value specific to this scene." },
+    "sceneinsp.physics_use_project": { "text": "Use project physics settings" },
+    "sceneinsp.physics_use_project_tip": { "text": "Uses gravity and simulation defaults from Project Settings. Unchecking it creates values specific to this scene." },
     "sceneinsp.physics_gravity": { "text": "Gravity:" },
     "sceneinsp.physics_gravity_tip": { "text": "Acceleration applied to RigidBody actors, in pixels per frame squared. Character and Kinematic actors ignore it." },
+    "sceneinsp.physics_solver_iterations": { "text": "Solver passes:" },
+    "sceneinsp.physics_solver_iterations_tip": { "text": "Number of passes over Rigid contacts. More passes stabilize stacks but cost more CPU time." },
+    "sceneinsp.physics_max_fall_speed": { "text": "Max fall speed:" },
+    "sceneinsp.physics_max_fall_speed_tip": { "text": "Maximum downward RigidBody speed in pixels per frame. Zero leaves it unlimited." },
+    "sceneinsp.physics_linear_damping": { "text": "Linear damping:" },
+    "sceneinsp.physics_linear_damping_tip": { "text": "Share of RigidBody velocity removed every frame. Zero preserves velocity; one removes it entirely." },
+    "sceneinsp.physics_sleep": { "text": "Put resting RigidBody actors to sleep" },
+    "sceneinsp.physics_sleep_tip": { "text": "Stops simulating a RigidBody after its velocity stays below the threshold for the chosen number of frames. A new velocity wakes it." },
+    "sceneinsp.physics_sleep_threshold_prefix": { "text": "Threshold " },
+    "sceneinsp.physics_sleep_frames_prefix": { "text": "After " },
     "sceneinsp.card.bg": {
       "text": "Background layers"
     },
@@ -4280,7 +4290,18 @@
     },
     "projset.physics_gravity": { "text": "Default gravity" },
     "projset.physics_gravity_tip": { "text": "Acceleration applied to RigidBody actors in scenes that use the project gravity." },
-    "projset.physics_gravity_hint": { "text": "Scenes inherit this value until they define their own gravity." },
+    "projset.physics_gravity_hint": { "text": "Scenes inherit this value until they define their own physics settings." },
+    "projset.physics_simulation": { "text": "Simulation defaults" },
+    "projset.physics_solver_iterations": { "text": "Solver passes" },
+    "projset.physics_solver_iterations_tip": { "text": "Default number of passes over Rigid contacts. More passes stabilize stacks but cost more CPU time." },
+    "projset.physics_max_fall_speed": { "text": "Max fall speed" },
+    "projset.physics_max_fall_speed_tip": { "text": "Default maximum downward RigidBody speed in pixels per frame. Zero leaves it unlimited." },
+    "projset.physics_linear_damping": { "text": "Linear damping" },
+    "projset.physics_linear_damping_tip": { "text": "Default share of RigidBody velocity removed every frame. Zero preserves velocity; one removes it entirely." },
+    "projset.physics_sleep": { "text": "Put resting RigidBody actors to sleep by default" },
+    "projset.physics_sleep_tip": { "text": "Default sleep rule for scenes. A scene can override the threshold and delay with its other physics settings." },
+    "projset.physics_sleep_threshold_prefix": { "text": "Threshold " },
+    "projset.physics_sleep_frames_prefix": { "text": "After " },
     "projinsp.count_scenes": {
       "singular": "{n} scene",
       "plural": "{n} scenes"

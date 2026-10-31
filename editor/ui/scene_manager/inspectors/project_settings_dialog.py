@@ -18,7 +18,7 @@ porte SAUF l'identité du projet :
     (placeholder, cf. `InputsCard` — rien ne les consomme encore).
   - **Languages** — déclaration des langues, reprend `LanguagesCard` telle
     quelle.
-  - **Physics & Collisions** : gravité par défaut, tags et matrice de filtrage.
+  - **Physics & Collisions** : simulation par défaut, tags et matrice de filtrage.
 
 Ce qui RESTE dans `ProjectInspector` (panneau latéral du Scene Manager, visible
 en permanence quand rien n'est sélectionné) : auteur, version, scène de
@@ -982,7 +982,7 @@ class _TagHeaderLabel(QWidget):
 
 
 class PhysicsCollisionsPanel(QWidget):
-    """Gravité du projet et matrice triangulaire entre tags de boxes — cf.
+    """Simulation par défaut du projet et matrice triangulaire entre tags de boxes — cf.
     ProjectSettings.collision_disabled_pairs. Cochée = les deux tags se
     rencontrent, ce qui est le défaut : la matrice ne stocke que les
     exceptions.
@@ -1038,7 +1038,7 @@ class PhysicsCollisionsPanel(QWidget):
             spin.setToolTip(tooltip(title=label('projset.physics_gravity'),
                                     body=label('projset.physics_gravity_tip')))
             spin.valueChanged.connect(
-                lambda value, name=field: self._set_gravity(name, float(value)))
+                lambda value, name=field: self._set_physics(name, float(value)))
             gravity_row.addWidget(spin)
         gravity_row.addStretch()
         lay.addWidget(gravity_host)
@@ -1048,6 +1048,84 @@ class PhysicsCollisionsPanel(QWidget):
         gravity_hint.setFont(QFont(T.UI, T.SM))
         gravity_hint.setStyleSheet(f"color:{C.TEXT_DIM};")
         lay.addWidget(gravity_hint)
+
+        simulation_title = QLabel(label('projset.physics_simulation'))
+        simulation_title.setFont(QFont(T.UI, T.MD, QFont.Weight.DemiBold))
+        simulation_title.setStyleSheet(f"color:{C.TEXT_HI}; margin-top:6px;")
+        lay.addWidget(simulation_title)
+
+        def simulation_row(key: str, control: QWidget):
+            host = QWidget(); row = QHBoxLayout(host)
+            row.setContentsMargins(0, 0, 0, 0); row.setSpacing(8)
+            title = QLabel(label(key)); title.setFont(QFont(T.UI, T.SM))
+            title.setStyleSheet(f"color:{C.TEXT_DIM};"); title.setFixedWidth(150)
+            row.addWidget(title); row.addWidget(control); row.addStretch()
+            lay.addWidget(host)
+
+        self._spin_physics_iterations = QSpinBox()
+        self._spin_physics_iterations.setRange(1, 8)
+        self._spin_physics_iterations.setFont(QFont(T.MONO, T.SM))
+        self._spin_physics_iterations.setStyleSheet(QSS.spinbox)
+        self._spin_physics_iterations.setToolTip(tooltip(
+            title=label('projset.physics_solver_iterations'),
+            body=label('projset.physics_solver_iterations_tip')))
+        self._spin_physics_iterations.valueChanged.connect(
+            lambda value: self._set_physics("physics_solver_iterations", int(value)))
+        simulation_row('projset.physics_solver_iterations', self._spin_physics_iterations)
+
+        self._spin_physics_max_fall = QDoubleSpinBox()
+        self._spin_physics_max_fall.setRange(0.0, 64.0)
+        self._spin_physics_max_fall.setSingleStep(0.25); self._spin_physics_max_fall.setDecimals(2)
+        self._spin_physics_max_fall.setSuffix(" px/f")
+        self._spin_physics_max_fall.setFont(QFont(T.MONO, T.SM)); self._spin_physics_max_fall.setStyleSheet(QSS.spinbox)
+        self._spin_physics_max_fall.setToolTip(tooltip(
+            title=label('projset.physics_max_fall_speed'),
+            body=label('projset.physics_max_fall_speed_tip')))
+        self._spin_physics_max_fall.valueChanged.connect(
+            lambda value: self._set_physics("physics_max_fall_speed", float(value)))
+        simulation_row('projset.physics_max_fall_speed', self._spin_physics_max_fall)
+
+        self._spin_physics_damping = QDoubleSpinBox()
+        self._spin_physics_damping.setRange(0.0, 1.0)
+        self._spin_physics_damping.setSingleStep(0.01); self._spin_physics_damping.setDecimals(2)
+        self._spin_physics_damping.setFont(QFont(T.MONO, T.SM)); self._spin_physics_damping.setStyleSheet(QSS.spinbox)
+        self._spin_physics_damping.setToolTip(tooltip(
+            title=label('projset.physics_linear_damping'),
+            body=label('projset.physics_linear_damping_tip')))
+        self._spin_physics_damping.valueChanged.connect(
+            lambda value: self._set_physics("physics_linear_damping", float(value)))
+        simulation_row('projset.physics_linear_damping', self._spin_physics_damping)
+
+        self._chk_physics_sleep = QCheckBox(label('projset.physics_sleep'))
+        self._chk_physics_sleep.setFont(QFont(T.UI, T.SM))
+        self._chk_physics_sleep.setToolTip(tooltip(
+            title=label('projset.physics_sleep'), body=label('projset.physics_sleep_tip')))
+        self._chk_physics_sleep.toggled.connect(
+            lambda value: self._set_physics("physics_sleep_enabled", bool(value)))
+        lay.addWidget(self._chk_physics_sleep)
+
+        sleep_host = QWidget(); sleep_row = QHBoxLayout(sleep_host)
+        sleep_row.setContentsMargins(0, 0, 0, 0); sleep_row.setSpacing(8)
+        self._spin_physics_sleep_threshold = QDoubleSpinBox()
+        self._spin_physics_sleep_threshold.setRange(0.0, 4.0)
+        self._spin_physics_sleep_threshold.setSingleStep(0.01)
+        self._spin_physics_sleep_threshold.setDecimals(2)
+        self._spin_physics_sleep_threshold.setPrefix(label('projset.physics_sleep_threshold_prefix'))
+        self._spin_physics_sleep_threshold.setSuffix(" px/f")
+        self._spin_physics_sleep_frames = QSpinBox()
+        self._spin_physics_sleep_frames.setRange(1, 255)
+        self._spin_physics_sleep_frames.setPrefix(label('projset.physics_sleep_frames_prefix'))
+        self._spin_physics_sleep_frames.setSuffix(" f")
+        for spin in (self._spin_physics_sleep_threshold, self._spin_physics_sleep_frames):
+            spin.setFont(QFont(T.MONO, T.SM)); spin.setStyleSheet(QSS.spinbox)
+            spin.setToolTip(tooltip(
+                title=label('projset.physics_sleep'), body=label('projset.physics_sleep_tip')))
+            sleep_row.addWidget(spin)
+        self._spin_physics_sleep_threshold.valueChanged.connect(
+            lambda value: self._set_physics("physics_sleep_threshold", float(value)))
+        self._spin_physics_sleep_frames.valueChanged.connect(
+            lambda value: self._set_physics("physics_sleep_frames", int(value)))
+        sleep_row.addStretch(); lay.addWidget(sleep_host)
 
         W.separator(lay)
         collisions_title = QLabel(label('projset.collisions'))
@@ -1099,10 +1177,10 @@ class PhysicsCollisionsPanel(QWidget):
         self._indicator.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self._indicator.hide()
 
-        self._refresh_gravity()
+        self._refresh_physics()
         self._refresh_matrix()
 
-    def _refresh_gravity(self):
+    def _refresh_physics(self):
         settings = self._project.settings
         for spin, value in (
             (self._spin_gravity_x, settings.physics_gravity_x),
@@ -1112,13 +1190,28 @@ class PhysicsCollisionsPanel(QWidget):
             spin.setValue(float(value))
             spin.blockSignals(False)
 
-    def _set_gravity(self, field: str, value: float):
+        controls = (
+            (self._spin_physics_iterations, settings.physics_solver_iterations),
+            (self._spin_physics_max_fall, settings.physics_max_fall_speed),
+            (self._spin_physics_damping, settings.physics_linear_damping),
+            (self._chk_physics_sleep, settings.physics_sleep_enabled),
+            (self._spin_physics_sleep_threshold, settings.physics_sleep_threshold),
+            (self._spin_physics_sleep_frames, settings.physics_sleep_frames),
+        )
+        for control, value in controls:
+            control.blockSignals(True)
+            control.setChecked(value) if isinstance(control, QCheckBox) else control.setValue(value)
+            control.blockSignals(False)
+        self._spin_physics_sleep_threshold.setEnabled(settings.physics_sleep_enabled)
+        self._spin_physics_sleep_frames.setEnabled(settings.physics_sleep_enabled)
+
+    def _set_physics(self, field: str, value):
         if self._blocking or getattr(self._project.settings, field) == value:
             return
 
         def persist():
             _save_settings_soon(self._project)
-            self._refresh_gravity()
+            self._refresh_physics()
 
         get_history().push(SetFieldCmd(
             self._project.settings, field, getattr(self._project.settings, field), value,

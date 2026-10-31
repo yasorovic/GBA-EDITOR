@@ -191,6 +191,12 @@ class ProjectSettings:
     # surcharger explicitement ; zéro garde le comportement historique.
     physics_gravity_x: float = 0.0
     physics_gravity_y: float = 0.0
+    physics_solver_iterations: int = 4
+    physics_max_fall_speed: float = 8.0
+    physics_linear_damping: float = 0.0
+    physics_sleep_enabled: bool = True
+    physics_sleep_threshold: float = 0.05
+    physics_sleep_frames: int = 30
     # Couleur de backdrop par défaut (BGR555) — PAL_BG_RAM[0], affichée quand
     # rien d'opaque n'est dessiné nulle part. Éditée dans le ProjectInspector ;
     # Scene.backdrop_color peut la surcharger par scène.
