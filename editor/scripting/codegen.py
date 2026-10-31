@@ -2229,6 +2229,10 @@ class CodeGen:
                     and self._ref_types.get(obj.name) == REF_ACTOR)
         if isinstance(obj, ExprCall):
             return self._call_key(obj.func) == "actor.get"
+        if isinstance(obj, ExprIndex):
+            prop = resolve_prop(obj, self._ref_types, self._kinds)
+            if prop is not None and prop[1].ref == REF_ACTOR:
+                return True
         if isinstance(obj, ExprIndex) and obj.field in ACTOR_NAV_PROPS:
             base = obj.obj                                   # `other.parent` : nil possible, et sans effet de bord
             return (isinstance(base, ExprName) and base.name in ("self", "other", "who")) or self._guardable_actor(base)

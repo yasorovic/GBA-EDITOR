@@ -218,4 +218,106 @@ def test_le_transport_kinematic_est_prepare_sans_etat_runtime():
 
     assert "_kin_old_x_4=g_actors[4].x" in code
     assert "kinematic_carry(&g_actors[4],&g_actors[5]" in code
-    assert deltas == {5: ("_kin_dx_5", "_kin_dy_5", "_kin_ground_5")}
+    assert "_kin_ground" not in code
+    assert deltas == {5: ("_kin_dx_5", "_kin_dy_5")}
+
+
+def test_un_character_transporte_ne_declenche_l_ecrasement_que_sur_un_static():
+    from types import SimpleNamespace
+    from codegen.runtime_codegen.physics.kinematic import kinematic_crush_pairs
+
+    platform = _actor("Platform", mode="KinematicBody")
+    platform.components[0].response = "block"
+    rider = _actor("Rider", mode="CharacterBody")
+    wall = _actor("Wall", mode="StaticBody")
+    wall.components[0].response = "block"
+    project = SimpleNamespace(settings=SimpleNamespace(
+        collision_disabled_pairs=[], collision_tags=[]))
+
+    assert kinematic_crush_pairs(project, [(platform, None), (rider, None), (wall, None)], 4) == {
+        5: [(0, 6, 0)],
+    }
+
+
+def test_le_tick_emet_on_crushed_pour_un_obstacle_static(tmp_path):
+    from codegen.c_names import scene_actor_sym
+    from codegen.runtime_codegen.gen_scene_tick import gen_scene_tick
+    from core.project import Project
+
+    project = Project.create(tmp_path / "Crush", "Crush")
+    scene = project.active_scene
+    platform = _actor("Platform", mode="KinematicBody")
+    platform.components[0].response = "block"
+    rider = _actor("Rider", mode="CharacterBody")
+    wall = _actor("Wall", mode="StaticBody")
+    wall.components[0].response = "block"
+    scene.actors = [platform, rider, wall]
+    actors = [(actor, None) for actor in scene.actors]
+    symbol = scene_actor_sym(scene.name, rider.name)
+
+    code = "\n".join(gen_scene_tick(
+        project, scene, 0, [], actors, {1}, [], {}, {}, [],
+        actor_defined_events={symbol: {"on_crushed"}},
+    ))
+
+    assert f"{symbol}_on_crushed(&g_actors[1],&g_actors[2])" in code
+
+
+def test_le_tick_emet_on_crushed_pour_la_carte_sans_static(tmp_path):
+    from codegen.c_names import scene_actor_sym
+    from codegen.runtime_codegen.gen_scene_tick import gen_scene_tick
+    from core.project import Project
+
+    project = Project.create(tmp_path / "CrushMap", "CrushMap")
+    scene = project.active_scene
+    scene.collision_map = [[1]]
+    platform = _actor("Platform", mode="KinematicBody")
+    platform.components[0].response = "block"
+    rider = _actor("Rider", mode="CharacterBody")
+    scene.actors = [platform, rider]
+    actors = [(actor, None) for actor in scene.actors]
+    symbol = scene_actor_sym(scene.name, rider.name)
+
+    code = "\n".join(gen_scene_tick(
+        project, scene, 0, [], actors, {1}, [], {}, {}, [],
+        actor_defined_events={symbol: {"on_crushed"}},
+    ))
+
+    assert f"{symbol}_on_crushed(&g_actors[1],0)" in code
+
+
+def test_le_support_final_relit_static_et_kinematic():
+    from types import SimpleNamespace
+    from codegen.runtime_codegen.physics.support import support_tick_lines
+
+    character = _actor("Hero", mode="CharacterBody")
+    static = _actor("Floor", mode="StaticBody")
+    static.components[0].response = "block"
+    platform = _actor("Platform", mode="KinematicBody")
+    platform.components[0].response = "block"
+    project = SimpleNamespace(settings=SimpleNamespace(
+        collision_disabled_pairs=[], collision_tags=[]))
+
+    code = "\n".join(support_tick_lines(
+        project, [(character, None), (static, None), (platform, None)], 3))
+
+    assert "g_actor_support[3]=0" in code
+    assert "actor_support_test(&g_actors[3],0,&g_actors[4],0)" in code
+    assert "actor_support_test(&g_actors[3],0,&g_actors[5],0)" in code
+
+
+def test_l_etat_de_support_est_en_ewram_sans_grossir_actor(tmp_path):
+    from types import SimpleNamespace
+    from core.project import Project
+    from codegen.runtime_codegen.gen_globals import globals_lines
+
+    project = Project.create(tmp_path / "Support", "Support")
+    character = _actor("Hero", mode="CharacterBody")
+    static = _actor("Floor", mode="StaticBody")
+    project.active_scene.actors = [character, static]
+    lines = globals_lines(project, [], [], 6, 1, SimpleNamespace(
+        buffered_bits={}, seq_table_defs={}, ring_depth=1))
+    code = "\n".join(lines)
+
+    assert "u16 g_actor_support_store[6] EWRAM_BSS;" in code
+    assert "u16 *g_actor_support=g_actor_support_store;" in code

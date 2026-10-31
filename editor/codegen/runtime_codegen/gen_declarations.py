@@ -80,12 +80,12 @@ def extern_lines(p, all_scene_data: list[dict], scene_pis: list, actor_defined_e
             if script_path:
                 abs_sp = p.asset_abs(script_path)
                 if abs_sp and abs_sp.suffix.lower() == ".lua":
-                    for ev in ("on_start", "on_update", "on_late_update", "on_tile_collide",
+                    for ev in ("on_start", "on_update", "on_late_update", "on_tile_collide", "on_crushed",
                                "on_collision_enter", "on_collide", "on_collision_exit", "on_interact"):
                         if _def(s, ev):
                             if ev == "on_tile_collide":
                                 L.append(f"extern void {s}_{ev}(Actor*,int,int);")
-                            elif ev == "on_interact":
+                            elif ev in ("on_interact", "on_crushed"):
                                 L.append(f"extern void {s}_{ev}(Actor*,Actor*);")
                             elif ev in ("on_collision_enter", "on_collide", "on_collision_exit"):
                                 L.append(f"extern void {s}_{ev}(Actor*,Actor*,u8,u8);")

@@ -434,6 +434,9 @@ def infer_ref_type(expr, ref_kinds: Optional[dict[str, str]] = None,
         cell = _data_cell(expr)
         if cell:
             return (ref_kinds or {}).get(data_column_key(*cell))
+        prop = resolve_prop(expr, ref_types, ref_kinds)
+        if prop is not None and prop[1].ref in REF_TYPES:
+            return prop[1].ref
         if expr.field in ACTOR_NAV_PROPS and _is_actor_receiver(expr.obj, ref_kinds, ref_types):
             return REF_ACTOR                                 # `other.parent`, `boss.Canon.root`
         child_of = getattr(ref_types, "child_of", None)

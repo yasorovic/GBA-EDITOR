@@ -32,8 +32,19 @@ Pour un jeu vu de dessus, vous n'avez pas besoin de gravité : une simple `body.
 ## 2. Savoir si l'acteur est au sol
 
 Après la résolution des collisions, le moteur met à jour `body.grounded` : `true` quand la boîte
-solide repose sur le sol, `false` dans les airs. Cette propriété empêche de sauter à chaque frame :
-le joueur ne saute que depuis le sol.
+solide repose sur la carte de collision, un StaticBody ou un KinematicBody posé, `false` dans les
+airs. Cette propriété empêche de sauter à chaque frame : le joueur ne saute que depuis le sol.
+
+`body.support` donne l'Actor du StaticBody ou KinematicBody qui porte actuellement le personnage.
+Il vaut `nil` quand le personnage repose sur la carte ou se trouve dans les airs. Vous pouvez ainsi
+identifier une plateforme particulière sans refaire un test de collision :
+
+```lua
+local support = self:physics_body().support
+if support then
+    -- support est une référence d'Actor
+end
+```
 
 ## 3. Ajouter l'impulsion de saut
 

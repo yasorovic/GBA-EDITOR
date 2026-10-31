@@ -6,6 +6,7 @@ from core.models.components import (
     PHYSICS_BODY_CHARACTER,
     PHYSICS_BODY_KINEMATIC,
     PHYSICS_BODY_RIGID,
+    PHYSICS_BODY_STATIC,
 )
 from core.models.settings import tags_collide
 from codegen.runtime_codegen.physics.body import physics_body_mode, physics_collider_entries
@@ -21,7 +22,7 @@ def kinematic_helper_lines() -> list[str]:
     """Aide C : applique une seule fois le déplacement réel de la plateforme au passager."""
     return [
         "static void __attribute__((unused)) kinematic_carry(Actor* k,Actor* a,u8 kb,u8 ab,",
-        "        int old_x,int old_y,u8* carried,int* carry_x,int* carry_y,u8* ground_mask){",
+        "        int old_x,int old_y,u8* carried,int* carry_x,int* carry_y){",
         "    if(*carried||!k->active||!a->active||kb>=k->collision.box_count||ab>=a->collision.box_count) return;",
         "    const CollisionBox* p=&k->collision.boxes[kb]; const CollisionBox* b=&a->collision.boxes[ab];",
         "    if(!p->active||!b->active) return;",
@@ -29,8 +30,7 @@ def kinematic_helper_lines() -> list[str]:
         "    int pl=(old_x>>8)+p->x,pr=pl+p->w,pt=(old_y>>8)+p->y;",
         "    int al=(a->x>>8)+b->x,ar=al+b->w,abottom=(a->y>>8)+b->y+b->h;",
         "    if(abottom!=pt||al>=pr||ar<=pl||a->vy<0) return;",
-        "    a->x+=dx; a->y+=dy; *carry_x+=dx; *carry_y+=dy; *ground_mask|=(u8)(1u<<ab); *carried=1;",
-        "    a->collision.grounded=1; a->collision.boxes[ab].grounded=1;",
+        "    a->x+=dx; a->y+=dy; *carry_x+=dx; *carry_y+=dy; *carried=1;",
         "}",
         "",
     ]
@@ -49,7 +49,7 @@ def _body_boxes(owner, sprite) -> list[tuple[int, str]]:
 
 def kinematic_tick_parts(
         p, scene_actors, actor_offset: int,
-) -> tuple[list[str], list[str], dict[int, tuple[str, str, str]]]:
+) -> tuple[list[str], list[str], dict[int, tuple[str, str]]]:
     """Instantanés avant mouvement, transport après résolution, puis deltas par passager."""
     groups: dict[tuple[int, int], list[tuple[int, int]]] = {}
     for ki, (kinematic, kinematic_sprite) in enumerate(scene_actors):
@@ -74,7 +74,6 @@ def kinematic_tick_parts(
     )]
     after = [line for ti in target_indices for line in (
         f"    int _kin_dx_{ti}=0,_kin_dy_{ti}=0;",
-        f"    u8 _kin_ground_{ti}=0;",
     )]
     for (ki, ti), pairs in groups.items():
         carried = f"_kin_carried_{ki}_{ti}"
@@ -82,8 +81,26 @@ def kinematic_tick_parts(
         for kb, ab in pairs:
             after.append(
                 f"    kinematic_carry(&g_actors[{ki}],&g_actors[{ti}],{kb},{ab},"
-                f"_kin_old_x_{ki},_kin_old_y_{ki},&{carried},&_kin_dx_{ti},&_kin_dy_{ti},"
-                f"&_kin_ground_{ti});")
-    deltas = {ti: (f"_kin_dx_{ti}", f"_kin_dy_{ti}", f"_kin_ground_{ti}")
+                f"_kin_old_x_{ki},_kin_old_y_{ki},&{carried},&_kin_dx_{ti},&_kin_dy_{ti});")
+    deltas = {ti: (f"_kin_dx_{ti}", f"_kin_dy_{ti}")
               for ti in target_indices}
     return before, after, deltas
+
+
+def kinematic_crush_pairs(p, scene_actors, actor_offset: int) -> dict[int, list[tuple[int, int, int]]]:
+    """Les StaticBody qui peuvent coincer un Character transporte."""
+    statics = []
+    for si, (owner, sprite) in enumerate(scene_actors):
+        if physics_body_mode(owner) == PHYSICS_BODY_STATIC:
+            statics.extend((actor_offset + si, sb, tag)
+                           for sb, tag in _block_boxes(owner, sprite))
+
+    pairs: dict[int, list[tuple[int, int, int]]] = {}
+    for ci, (character, sprite) in enumerate(scene_actors):
+        if physics_body_mode(character) != PHYSICS_BODY_CHARACTER:
+            continue
+        for cb, ctag in _body_boxes(character, sprite):
+            for si, sb, stag in statics:
+                if tags_collide(p.settings, ctag, stag):
+                    pairs.setdefault(actor_offset + ci, []).append((cb, si, sb))
+    return pairs

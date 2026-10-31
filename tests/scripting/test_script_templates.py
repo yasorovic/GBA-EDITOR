@@ -51,3 +51,10 @@ def test_event_stubs_are_minimal_and_valid_for_an_actor():
         assert not [error for error in check(parse(source), BuildContext(
             actor_name="Actor", owner_kind="actor",
         )) if error.level == "error"]
+
+
+def test_l_evenement_d_ecrasement_recoit_un_obstacle_optionnel():
+    meta = EVENT_REGISTRY["on_crushed"]
+
+    assert meta["stub"] == "function on_crushed(obstacle)\n\nend\n"
+    assert meta["c_sig"] == "void {prefix}_on_crushed(Actor* self, Actor* obstacle)"

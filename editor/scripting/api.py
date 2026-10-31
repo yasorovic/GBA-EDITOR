@@ -1686,8 +1686,14 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
     f"{REF_PHYSICS_BODY}.grounded": ApiProp(
         lua_name="physics_body.grounded", c_getter="actor_on_ground", ptype=PARAM_BOOL,
         self_first=True, read_only=True,
-        doc="True if this body was resting on the collision map at the end of the previous "
-            "frame, slopes included. Read-only.",
+        doc="True if this body was resting on the collision map, a StaticBody, or a "
+            "KinematicBody at the end of the previous frame. Read-only.",
+    ),
+    f"{REF_PHYSICS_BODY}.support": ApiProp(
+        lua_name="physics_body.support", c_getter="actor_get_support", ptype=PARAM_INT,
+        self_first=True, read_only=True, ref=REF_ACTOR,
+        doc="Actor currently supporting this CharacterBody, or nil when grounded on the "
+            "collision map or in the air. Read-only.",
     ),
 
     # Compatibilité de transition pour les scripts existants.
@@ -2236,6 +2242,16 @@ EVENT_REGISTRY: dict[str, dict] = {
                                                                "direction of the hit"},
         ],
         "c_sig": "void {prefix}_on_tile_collide(Actor* self, int normal_x, int normal_y)",
+    },
+    "on_crushed": {
+        "icon": "▣",
+        "icon_key": "ev_crushed",
+        "stub": "function on_crushed(obstacle)\n\nend\n",
+        "desc": "Called every frame when a moving KinematicBody pushes this CharacterBody into an obstacle. obstacle is nil for the collision map.",
+        "params": [
+            {"name": "obstacle", "type": "actor", "description": "StaticBody causing the crush, or nil for the collision map"},
+        ],
+        "c_sig": "void {prefix}_on_crushed(Actor* self, Actor* obstacle)",
     },
     "on_collision_exit": {
         "icon": "←",

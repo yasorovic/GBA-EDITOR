@@ -134,19 +134,26 @@ int main(void){
     }
 
     {   /* Une plateforme déplace une seule fois le corps posé sur son ancienne face supérieure. */
-        int carry_x=0, carry_y=0; u8 carried=0, ground=0;
+        int carry_x=0, carry_y=0; u8 carried=0;
         mk(0, 52, 50, 512, 0, 16, 16, 0);
         mk(1, 54, 34, 0, 0, 8, 16, 1);
         kinematic_carry(&g_actors[0], &g_actors[1], 0, 0, 50<<8, 50<<8,
-                        &carried, &carry_x, &carry_y, &ground);
+                        &carried, &carry_x, &carry_y);
         report("kinematic_rider", 1);
-        printf("kinematic_delta %%d %%d %%d %%d\n", carry_x, carry_y, carried, ground);
+        printf("kinematic_delta %%d %%d %%d\n", carry_x, carry_y, carried);
 
-        carry_x=carry_y=0; carried=ground=0;
+        carry_x=carry_y=0; carried=0;
         mk(1, 54, 34, 0, -256, 8, 16, 1);
         kinematic_carry(&g_actors[0], &g_actors[1], 0, 0, 50<<8, 50<<8,
-                        &carried, &carry_x, &carry_y, &ground);
+                        &carried, &carry_x, &carry_y);
         report("kinematic_jump", 1);
+
+        carry_x=carry_y=0; carried=0;
+        mk(0, 50, 52, 0, 512, 16, 16, 0);
+        mk(1, 54, 34, 0, 0, 8, 16, 1);
+        kinematic_carry(&g_actors[0], &g_actors[1], 0, 0, 50<<8, 50<<8,
+                        &carried, &carry_x, &carry_y);
+        report("kinematic_rider_vertical", 1);
     }
     return 0;
 }
@@ -218,8 +225,9 @@ def test_la_masse_repartit_la_correction_sans_changer_la_vitesse_commune(resulta
 
 def test_un_kinematic_transporte_un_corps_pose_mais_pas_un_corps_qui_saute(resultats):
     assert resultats["kinematic_rider"] == (56, 34)
-    assert resultats["kinematic_delta"] == (512, 0, 1, 1)
+    assert resultats["kinematic_delta"] == (512, 0, 1)
     assert resultats["kinematic_jump"] == (54, 34)
+    assert resultats["kinematic_rider_vertical"] == (54, 36)
 
 
 # ── Ce que le générateur émet ─────────────────────────────────────────

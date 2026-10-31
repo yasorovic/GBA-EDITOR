@@ -28,6 +28,7 @@
 
 /* Globaux définis dans main.c, visibles par tous les scripts */
 extern Actor g_actors[];
+extern u16 *g_actor_support;
 /* L'état de script de TOUS les acteurs : un bloc de `OBJ_STATE_STRIDE` octets par emplacement de
    `g_actors`, à l'indice `Actor.inst`. Chaque script y range sa structure d'état (la plus grande
    du projet fixe la taille d'un bloc) ; un emplacement n'en porte qu'une à la fois. */
@@ -1279,7 +1280,16 @@ extern int save_read_var(int slot, int idx);
    s'exécute après les `on_update`. C'est le contrat normal d'un état de
    collision, et le seul possible : pendant `on_update`, l'acteur n'a pas encore
    fini de bouger. */
-static inline int actor_on_ground(const Actor*a) { return a->collision.grounded; }
+static inline Actor* actor_get_support(const Actor* a) {
+    if (!a || !a->alive || !a->active || !g_actor_support) return (Actor*)0;
+    u16 ref = g_actor_support[a->inst];
+    if (!ref) return (Actor*)0;
+    Actor* support = &g_actors[ref - 1];
+    return support->alive && support->active ? support : (Actor*)0;
+}
+static inline int actor_on_ground(const Actor*a) {
+    return a && (a->collision.grounded || actor_get_support(a));
+}
 
 /* ── Inspecteur → API : ce que l'éditeur règle, le script le lit ────────────
    Lecture seule : ces deux drapeaux sont fixés au build (le C de rendu émis

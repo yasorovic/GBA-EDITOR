@@ -25,9 +25,10 @@ from codegen.runtime_codegen.physics.body import (
     physics_body_mode, physics_collider_mask, uses_character_solver,
 )
 from codegen.runtime_codegen.physics.impulses import impulse_tick_lines
-from codegen.runtime_codegen.physics.kinematic import kinematic_tick_parts
+from codegen.runtime_codegen.physics.kinematic import kinematic_crush_pairs, kinematic_tick_parts
 from codegen.runtime_codegen.physics.motion import physics_motion_lines, physics_sleep_lines
-from core.models.components import PHYSICS_BODY_KINEMATIC, affine_sprite_component
+from codegen.runtime_codegen.physics.support import support_tick_lines
+from core.models.components import PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC, affine_sprite_component
 from core.models.scene import Scene
 from core.project import Project
 from codegen.iwram_plan import iwram_macros
@@ -124,6 +125,28 @@ def gen_scene_tick(
                 L.append(f"    if(g_actors[{idx}].active) resolve_actor_tiles(&g_actors[{idx}], {mask}, {cb});")
 
     L += kinematic_after
+    crush_pairs = kinematic_crush_pairs(p, scene_actors, actor_offset)
+    crush_handlers = {}
+    for idx in kinematic_deltas:
+        actor, _sprite = scene_actors[idx - actor_offset]
+        s = _dsym(scene.name, actor.name)
+        if (physics_body_mode(actor) != PHYSICS_BODY_CHARACTER
+                or not (idx in lua_idx and _def(s, "on_crushed"))):
+            continue
+        L.append(f"    u8 _kin_crushed_{idx}=0;")
+        crush_handlers[idx] = s
+    for idx, pairs in crush_pairs.items():
+        if idx not in crush_handlers:
+            continue
+        dx, dy = kinematic_deltas[idx]
+        s = crush_handlers[idx]
+        for cb, si, sb in pairs:
+            L += [f"    if(!_kin_crushed_{idx}&&({dx}||{dy})&&g_actors[{idx}].active&&g_actors[{si}].active",
+                  f"       &&g_actors[{idx}].collision.boxes[{cb}].active&&g_actors[{si}].collision.boxes[{sb}].active",
+                  f"       &&box_overlap(g_actors[{idx}].x>>8,g_actors[{idx}].y>>8,&g_actors[{idx}].collision.boxes[{cb}],",
+                  f"                      g_actors[{si}].x>>8,g_actors[{si}].y>>8,&g_actors[{si}].collision.boxes[{sb}])){{",
+                  f"        {s}_on_crushed(&g_actors[{idx}],&g_actors[{si}]); _kin_crushed_{idx}=1;",
+                  "    }"]
     L += impulse_tick_lines(p, scene, scene_actors, actor_offset)
 
     # Résolution contre la carte de collision — pour TOUTE box solide, et non
@@ -145,24 +168,26 @@ def gen_scene_tick(
             if idx not in kinematic_deltas:
                 L.append(f"    if(g_actors[{idx}].active) resolve_actor_tiles(&g_actors[{idx}], {mask}, {cb});")
                 continue
-            dx, dy, ground = kinematic_deltas[idx]
+            dx, dy = kinematic_deltas[idx]
+            crushed = idx in crush_handlers
             L += [
                 f"    if(g_actors[{idx}].active){{",
                 f"        int _kin_ovx=g_actors[{idx}].vx,_kin_ovy=g_actors[{idx}].vy;",
                 f"        int _kin_ivx=_kin_ovx+{dx},_kin_ivy=_kin_ovy+{dy};",
                 f"        g_actors[{idx}].vx=_kin_ivx; g_actors[{idx}].vy=_kin_ivy;",
                 f"        resolve_actor_tiles(&g_actors[{idx}], {mask}, {cb});",
+                *([f"        if(!_kin_crushed_{idx}&&(({dx}&&!g_actors[{idx}].vx)||({dy}&&!g_actors[{idx}].vy))) "
+                   f"{s}_on_crushed(&g_actors[{idx}],0);"] if crushed else []),
                 f"        g_actors[{idx}].vx=(_kin_ivx&&!g_actors[{idx}].vx)?0:_kin_ovx;",
                 f"        g_actors[{idx}].vy=(_kin_ivy&&!g_actors[{idx}].vy)?0:_kin_ovy;",
-                f"        if({ground}){{ g_actors[{idx}].collision.grounded=1;",
-                f"            for(u8 _kb=0;_kb<MAX_BOXES;_kb++) if({ground}&(1u<<_kb)) "
-                f"g_actors[{idx}].collision.boxes[_kb].grounded=1; }}",
                 "    }",
             ]
 
         L += shared_pool_gen.tile_lines(
             pi, _def, lambda owner: (physics_collider_mask(owner, map_only=True)
                                      if uses_character_solver(owner) else 0))
+
+    L += support_tick_lines(p, scene_actors, actor_offset)
 
     L += physics_sleep_lines(scene, p.settings, scene_actors, actor_offset, pi)
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from codegen.runtime_codegen.gen_affine import scene_has_affine
 from codegen.runtime_codegen.gen_sfx_trigger import sfx_on_destroy_table
+from codegen.runtime_codegen.physics.support import project_has_supports
 
 
 def globals_lines(p, all_scene_data: list[dict], scene_pis: list, n_actors: int, n_oam_entries: int,
@@ -17,6 +18,8 @@ def globals_lines(p, all_scene_data: list[dict], scene_pis: list, n_actors: int,
     # au code et aux petits états runtime.
     L += [
         f"Actor g_actors[{n_actors}] EWRAM_BSS;",
+        f"u16 g_actor_support_store[{n_actors if project_has_supports(p) else 1}] EWRAM_BSS;",
+        f"u16 *g_actor_support={'g_actor_support_store' if project_has_supports(p) else '0'};",
         # Un bit par emplacement : les blocs de 32 sans vivant sont sautés par POOL_EACH (actor_types_static.h).
         f"u32 g_alive_bits[{max(1, (n_actors + 31) // 32)}];",
         # Époque des changements de vie et curseur de `actor:get(nom, i)` (actor_types_static.h).

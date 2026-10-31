@@ -277,7 +277,9 @@ def test_le_corps_physique_est_une_reference_typee_de_l_actor():
             "body.velocity = vec2(128, 256)\n"
             "body:add_velocity(vec2(0, 16))\n"
             "body:apply_velocity()\n"
-            "local grounded = body.grounded")
+            "local grounded = body.grounded\n"
+            "local support = body.support\n"
+            "if support then support:hide() end")
     assert _actor_errors(body) == []
     assert _c_body(body) == [
         "Actor* body = actor_get_physics_body(self);",
@@ -285,6 +287,23 @@ def test_le_corps_physique_est_une_reference_typee_de_l_actor():
         "actor_add_velocity(body, (Vec2){0, 16});",
         "actor_apply_velocity(body);",
         "int grounded = actor_on_ground(body);",
+        "Actor* support = actor_get_support(body);",
+        "if (support) {",
+        "if (actor_active_warn(support, \"hide()\")) actor_set_visible(support, 0);",
+        "}",
+    ]
+
+
+def test_un_support_utilise_directement_est_protege_contre_nil():
+    body = ("local body = self:physics_body()\n"
+            "if body.support then body.support:hide() end")
+    assert _actor_errors(body) == []
+    assert _c_body(body) == [
+        "Actor* body = actor_get_physics_body(self);",
+        "if (actor_get_support(body)) {",
+        "if (actor_active_warn(actor_get_support(body), \"hide()\")) "
+        "actor_set_visible(actor_get_support(body), 0);",
+        "}",
     ]
 
 
