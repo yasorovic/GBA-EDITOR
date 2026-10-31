@@ -26,7 +26,7 @@ packaging, qui n'ont pas les dépendances de l'éditeur.
 
 APP_NAME = "Backstage"
 APP_AUTHOR = "Yasorovic"
-APP_VERSION = "0.1.0-alpha"
+APP_VERSION = "0.1.1-alpha"
 
 # Adresses publiques du produit. Le code qui les lit sait s'en passer si l'une
 # est VIDE (le menu « Documentation » ou l'onglet « Modèles » ne s'affichent
