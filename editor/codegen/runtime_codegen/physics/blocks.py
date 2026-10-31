@@ -17,9 +17,11 @@ utilisés du pool pour trouver ceux qui en sont. Un mobile né dans le pool est 
 """
 from __future__ import annotations
 
-from core.models.components import COLLISION_RESPONSE_BLOCK, CollisionBoxComponent
+from core.models.components import (
+    COLLISION_RESPONSE_BLOCK, PHYSICS_BODY_RIGID, CollisionBoxComponent,
+)
 from core.models.settings import tags_collide
-from codegen.runtime_codegen.physics.body import uses_character_solver
+from codegen.runtime_codegen.physics.body import physics_body_mode, uses_character_solver
 from codegen.runtime_codegen.interact_gen import owner_boxes
 from codegen.runtime_codegen.shared_pool_gen import shared_models
 
@@ -162,7 +164,10 @@ def block_tick_lines(p, scene, scene_actors, actor_offset, pi, shown) -> list[st
 
     for j, (actor, sprite) in enumerate(scene_actors):
         if uses_character_solver(actor):
-            emit(str(actor_offset + j), table(actor, sprite), pool_table(actor, sprite))
+            # Les paires posees Rigid/Static et Rigid/Rigid appartiennent au solveur d'impulsions.
+            # shortcut: les contacts d'un Rigid pose avec le pool restent sur le solveur historique.
+            placed = [] if physics_body_mode(actor) == PHYSICS_BODY_RIGID else table(actor, sprite)
+            emit(str(actor_offset + j), placed, pool_table(actor, sprite))
     # Les mobiles du pool partagé : une boucle sur les emplacements utilisés, les tables de chaque modèle dans son cas.
     cases = []
     for m in shared:

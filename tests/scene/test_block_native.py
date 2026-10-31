@@ -39,6 +39,10 @@ static void mk(int i, int x, int y, int vx, int vy, int w, int h, int solid){
 static void report(const char* nom, int i){
     printf("%%s %%d %%d\n", nom, g_actors[i].x >> 8, g_actors[i].y >> 8);
 }
+static void report_motion(const char* nom, int i){
+    printf("%%s %%d %%d %%d %%d\n", nom, g_actors[i].x >> 8, g_actors[i].y >> 8,
+           g_actors[i].vx, g_actors[i].vy);
+}
 
 int main(void){
     const u16 idx[] = {1, 2};
@@ -101,6 +105,23 @@ int main(void){
         mk(3, 40, 52, 0, 0, 16, 16, 1); g_actors[3].model = 7; g_actors[3].vx = 256;   /* un bloqueur ne se bloque pas lui-même */
         actors_resolve_blocks_pool(&g_actors[3], pm, pb, 1);   report("pool_soi_meme", 3);
     }
+
+    {   /* Rigid au-dessus d'un Static : toute la correction et l'impulsion vont au Rigid. */
+        const RigidPair pair = {0, 1, 0, 0, 1};
+        mk(0, 50, 40, 0, 256, 16, 16, 1);
+        mk(1, 50, 50, 0, 0, 16, 16, 0);
+        rigid_pair_resolve(&pair);
+        report_motion("rigid_static", 0);
+    }
+
+    {   /* Deux Rigid de même masse partagent correction et vitesse normale. */
+        const RigidPair pair = {0, 1, 0, 0, 3};
+        mk(0, 50, 40, 0, 256, 16, 16, 1);
+        mk(1, 50, 50, 0, 0, 16, 16, 1);
+        rigid_pair_resolve(&pair);
+        report_motion("rigid_rigid_a", 0);
+        report_motion("rigid_rigid_b", 1);
+    }
     return 0;
 }
 """
@@ -112,8 +133,10 @@ def resultats(tmp_path_factory):
     if compilateur is None:
         pytest.skip("aucun compilateur C hôte ; le blocage est vérifié en CI")
     from codegen.runtime_codegen.physics.blocks import block_helper_lines
+    from codegen.runtime_codegen.physics.impulses import impulse_helper_lines
     dossier = tmp_path_factory.mktemp("block")
-    (dossier / "probe.c").write_text(SONDE % {"helpers": "\n".join(block_helper_lines())}, encoding="utf-8")
+    helpers = block_helper_lines() + impulse_helper_lines()
+    (dossier / "probe.c").write_text(SONDE % {"helpers": "\n".join(helpers)}, encoding="utf-8")
     binaire = dossier / "probe"
     construit = subprocess.run([compilateur, "-std=gnu11", "-O0", "-w", "-I", str(INCLUDE),
                                 "-o", str(binaire), str(dossier / "probe.c")],
@@ -151,6 +174,12 @@ def test_la_fraction_de_la_position_survit_et_on_ne_se_bloque_pas_soi_meme(resul
     assert resultats["soi_meme"] == (40, 52)
 
 
+def test_un_rigid_s_arrete_sur_un_static_et_deux_rigid_partagent_l_impulsion(resultats):
+    assert resultats["rigid_static"] == (50, 34, 0, 0)
+    assert resultats["rigid_rigid_a"] == (50, 37, 0, 128)
+    assert resultats["rigid_rigid_b"] == (50, 53, 0, 128)
+
+
 # ── Ce que le générateur émet ─────────────────────────────────────────
 
 def _scene(*acteurs):
@@ -173,6 +202,11 @@ def _lignes(p, acteurs):
     return block_tick_lines(p, None, _scene(*acteurs), 0, [], lambda _p, _o: (None, None))
 
 
+def _lignes_impulsions(p, acteurs):
+    from codegen.runtime_codegen.physics.impulses import impulse_tick_lines
+    return impulse_tick_lines(p, _scene(*acteurs), 0)
+
+
 def test_le_mobile_recoit_la_table_des_boites_bloquantes():
     hero = _acteur("Hero", tag="Player")
     coffre = _acteur("Chest", tag="body", response="block", solid=False)
@@ -191,6 +225,21 @@ def test_un_static_body_bloque_sans_devenir_un_mobile():
     lignes = "\n".join(_lignes(_projet(), [hero, mur]))
     assert "static const u16 _bk_idx[]={1};" in lignes
     assert "g_actors[1]," not in lignes
+
+
+def test_un_rigid_pose_passe_par_la_table_d_impulsions_et_non_le_blocage_historique():
+    from core.models.components import PhysicsBodyComponent
+    rigid = _acteur("Crate", tag="body", response="block")
+    rigid.components.append(PhysicsBodyComponent(mode="rigid"))
+    sol = _acteur("Floor", tag="body", response="block", solid=False)
+    sol.components.append(PhysicsBodyComponent(mode="static"))
+
+    assert not any("actors_resolve_blocks(&g_actors[0]" in line
+                   for line in _lignes(_projet(), [rigid, sol]))
+    lignes = "\n".join(_lignes_impulsions(_projet(), [rigid, sol]))
+    assert "static const RigidPair _rigid_pairs[1]" in lignes
+    assert "{0,1,0,0,1}" in lignes
+    assert "_it<4" in lignes
 
 
 def test_sans_bloqueur_rien_n_est_emis():

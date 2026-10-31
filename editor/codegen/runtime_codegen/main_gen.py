@@ -17,6 +17,7 @@ from codegen.oam_budget import project_actor_count, project_oam_entry_count
 from codegen.ui_obj_budget import scene_obj_ui_slots
 from codegen.runtime_codegen.physics.blocks import block_helper_lines, project_has_blockers
 from codegen.runtime_codegen.physics.budget import physics_budget_line
+from codegen.runtime_codegen.physics.impulses import impulse_helper_lines
 from codegen.runtime_codegen.gen_affine import compute_affine_info
 from codegen.runtime_codegen.gen_camera import camera_table_lines
 from codegen.runtime_codegen.gen_declarations import extern_lines, include_lines
@@ -182,6 +183,7 @@ def generate_main(
         L += interact_helper_lines()
     if project_has_blockers(p):
         L += block_helper_lines()
+        L += impulse_helper_lines()
 
     # ── Cartes de collision et palettes, par scène ────────────────
     L += scene_data_lines(p, all_scene_data)

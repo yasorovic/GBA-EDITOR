@@ -22,6 +22,7 @@ from codegen.runtime_codegen.gen_sprite import (
 from codegen.runtime_codegen.interact_gen import interact_tick_lines
 from codegen.runtime_codegen.physics.contacts import box_contact_lines
 from codegen.runtime_codegen.physics.body import uses_character_solver
+from codegen.runtime_codegen.physics.impulses import impulse_tick_lines
 from codegen.runtime_codegen.physics.motion import physics_motion_lines
 from core.models.components import affine_sprite_component
 from core.models.scene import Scene
@@ -102,6 +103,7 @@ def gen_scene_tick(
     # Blocage entre acteurs : un mobile est repoussé hors des boîtes de réponse `block`, AVANT la carte de
     # collision (les murs ont le dernier mot).
     L += block_tick_lines(p, scene, scene_actors, actor_offset, pi, shown)
+    L += impulse_tick_lines(p, scene_actors, actor_offset)
 
     # Résolution contre la carte de collision — pour TOUTE box solide, et non
     # plus seulement pour les acteurs qui définissent `on_tile_collide` : la
