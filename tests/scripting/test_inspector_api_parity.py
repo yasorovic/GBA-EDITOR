@@ -533,3 +533,13 @@ def test_c_un_groupe_garde_sa_partie_detruite_et_rend_tout_avec_sa_racine(sortie
     assert sortie_sonde["ref_zero"] == [1, 1]         # génération 0, emplacement 0 : ce n'est pas « aucun acteur »
     assert sortie_sonde["grp_bits_partie"] == [(1 << 2) | (1 << 4)]   # emplacements 2 et 4 vivants, 3 détruit
     assert sortie_sonde["grp_bits_racine"] == [0]
+
+
+def test_c_une_paire_appelle_enter_collide_exit_dans_l_ordre_avec_les_bons_tags(sortie_sonde):
+    """`contact_pair_run` remplace le bloc de C recopié par paire : même vie d'un contact, une seule copie du code."""
+    assert sortie_sonde["contact_1"] == [1, 0, 0, 1]          # enter des deux côtés qui y répondent
+    assert sortie_sonde["contact_2"] == [1, 1, 0, 1]          # collide : seul le côté A y répond
+    assert sortie_sonde["contact_tags"] == [1, 0]             # my_box (A) puis other_box (B)
+    assert sortie_sonde["contact_3"] == [1, 1, 1, 1]          # exit
+    assert sortie_sonde["contact_4"] == [1, 1, 1, 1]          # rien de plus une fois éloignés
+    assert sortie_sonde["contact_5"] == [1, 1, 1, 1]          # un côté inactif ne touche pas

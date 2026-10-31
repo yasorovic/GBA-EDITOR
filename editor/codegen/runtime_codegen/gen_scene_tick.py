@@ -134,19 +134,24 @@ def gen_scene_tick(
             scene.name, box_contact_lines)
 
     # AABB collisions scène
+    # Une table de paires et une boucle : le code des contacts (`contact_pair_run`) n'est pas recopié par paire.
     if col_pairs:
-        L.append(f"    static u16 _col_prev[{len(col_pairs)}]={{0}};")
-        for pair_idx, (i, j) in enumerate(col_pairs):
-            i_lua = i in lua_idx; j_lua = j in lua_idx
-            si = _dsym(scene.name, scene_actors[i - actor_offset][0].name)
-            sj = _dsym(scene.name, scene_actors[j - actor_offset][0].name)
-            evs = ("on_collision_enter", "on_collide", "on_collision_exit")
-            L += box_contact_lines(
-                f"&g_actors[{i}]", f"&g_actors[{j}]",
-                f"g_actors[{i}].active&&g_actors[{j}].active", f"_col_prev[{pair_idx}]",
-                [(ev, f"{si}_{ev}") for ev in evs if i_lua and _def(si, ev)],
-                [(ev, f"{sj}_{ev}") for ev in evs if j_lua and _def(sj, ev)],
-                "    ")
+        evs = ("on_collision_enter", "on_collide", "on_collision_exit")
+
+        def handlers(k: int) -> str:
+            s = _dsym(scene.name, scene_actors[k - actor_offset][0].name)
+            return "{" + ",".join(f"{s}_{ev}" if k in lua_idx and _def(s, ev) else "0" for ev in evs) + "}"
+
+        # Une paire dont aucun côté n'a de handler ne produit rien (et `_col_prev` n'est lu que par `contact_pair_run`) : elle
+        # n'entre pas dans la table.
+        rows = [(i, j, handlers(i), handlers(j)) for i, j in col_pairs]
+        rows = [r for r in rows if r[2] != "{0,0,0}" or r[3] != "{0,0,0}"]
+        if rows:
+            L.append(f"    static u16 _col_prev[{len(rows)}]={{0}};")
+            L.append(f"    static const ContactPair _col_pairs[{len(rows)}]={{")
+            L += [f"        {{{i},{j},{a},{b}}}," for i, j, a, b in rows]
+            L += ["    };",
+                  f"    for(u8 _k=0;_k<{len(rows)};_k++) contact_pair_run(&_col_pairs[_k],&_col_prev[_k]);"]
 
     # Déclencheurs SoundFx par nom d'input (2026-09-27) : les events de script
     # on_button_* ont disparu (un script écrit `if input:pressed(nom) then`

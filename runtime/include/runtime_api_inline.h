@@ -950,13 +950,21 @@ static inline int actors_overlap_boxes(const Actor*a, const Actor*b,
    Bit (i*MAX_BOXES+j) = boxes i de `a` et j de `b`, canoniques. Pieds contre
    tête ET corps contre corps sont donc deux contacts distincts, suivis chacun
    d'une frame à l'autre — le premier ne masque plus le second. */
+/* Le test des boîtes et la boucle des paires tournent à chaque image pour chaque paire : leurs quelques centaines d'octets
+   valent l'IWRAM (ARM, sans temps d'attente). Hors GBA (sondes natives), la fonction reste ordinaire. */
+#ifdef __arm__
+#define BS_ATTR_IWRAM __attribute__((noinline, section(".iwram"), target("arm"), long_call))
+#else
+#define BS_ATTR_IWRAM __attribute__((noinline))
+#endif
 _Static_assert(MAX_BOXES * MAX_BOXES <= 16, "actors_overlap_mask tient sur 16 bits");
 static inline int _box_canonical(const Actor*a, int i) {
     for (int k=0; k<i; k++)
         if (a->collision.boxes[k].tag == a->collision.boxes[i].tag) return k;
     return i;
 }
-static inline u16 actors_overlap_mask(const Actor*a, const Actor*b) {
+BS_ATTR_IWRAM
+static u16 actors_overlap_mask(const Actor*a, const Actor*b) {
     u16 m = 0;
     for (int i=0; i<a->collision.box_count; i++) {
         if (!a->collision.boxes[i].active) continue;
@@ -967,6 +975,32 @@ static inline u16 actors_overlap_mask(const Actor*a, const Actor*b) {
                 m |= (u16)(1u << (_box_canonical(a,i)*MAX_BOXES + _box_canonical(b,j)));
     }
     return m;
+}
+
+/* Une paire d'acteurs de la scène dont les contacts préviennent des scripts. Le générateur écrit une table `const` de ces
+   paires et une boucle qui appelle `contact_pair_run` : le code des contacts existe une seule fois, il ne se recopie pas
+   par paire. Les trois fonctions de chaque côté sont dans l'ordre enter, collide, exit ; NULL si le script n'y répond pas. */
+typedef void (*ContactFn)(Actor*, Actor*, u8, u8);
+typedef struct { u8 a, b; ContactFn on_a[3], on_b[3]; } ContactPair;
+
+/* `prev` garde d'une frame à l'autre les couples de tags en contact (cf. `actors_overlap_mask`) : un contact qui naît appelle
+   enter, un qui dure collide, un qui se défait exit, chacun avec les tags de CE couple. */
+BS_ATTR_IWRAM
+static void contact_pair_run(const ContactPair* c, u16* prev) {
+    Actor *a = &g_actors[c->a], *b = &g_actors[c->b];
+    u16 cur = (a->active && b->active) ? actors_overlap_mask(a, b) : 0;
+    u16 prv = *prev;
+    if (cur | prv)
+        for (u8 bi = 0; bi < MAX_BOXES; bi++) for (u8 bj = 0; bj < MAX_BOXES; bj++) {
+            u16 m = (u16)(1u << (bi * MAX_BOXES + bj));
+            u8 now = (cur & m) != 0, was = (prv & m) != 0;
+            if (!now && !was) continue;
+            u8 ta = a->collision.boxes[bi].tag, tb = b->collision.boxes[bj].tag;
+            u8 event = now ? (was ? 1 : 0) : 2;           /* enter : naît ; collide : dure ; exit : se défait */
+            if (c->on_a[event]) c->on_a[event](a, b, ta, tb);
+            if (c->on_b[event]) c->on_b[event](b, a, tb, ta);
+        }
+    *prev = cur;
 }
 
 /* Rétrocompatibilité — teste sans récupérer les tags */

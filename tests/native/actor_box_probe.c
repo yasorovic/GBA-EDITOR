@@ -82,6 +82,18 @@ static void vec(const char *nom, Vec2 v) {
     printf("%s %d %d\n", nom, v.x, v.y);
 }
 
+/* Les contacts d'une paire d'acteurs : enter, collide, exit, et un côté B qui ne répond qu'à enter. */
+static int s_ev_a[3], s_ev_b[3];
+static u8 s_tag_a, s_tag_b;
+static void a_enter(Actor *s, Actor *o, u8 m, u8 t)   { (void)s; (void)o; s_ev_a[0]++; s_tag_a = m; s_tag_b = t; }
+static void a_collide(Actor *s, Actor *o, u8 m, u8 t) { (void)s; (void)o; (void)m; (void)t; s_ev_a[1]++; }
+static void a_exit(Actor *s, Actor *o, u8 m, u8 t)    { (void)s; (void)o; (void)m; (void)t; s_ev_a[2]++; }
+static void b_enter(Actor *s, Actor *o, u8 m, u8 t)   { (void)s; (void)o; (void)m; (void)t; s_ev_b[0]++; }
+static void contact_frame(const char *nom, const ContactPair *paire, u16 *prev) {
+    contact_pair_run(paire, prev);
+    printf("%s %d %d %d %d\n", nom, s_ev_a[0], s_ev_a[1], s_ev_a[2], s_ev_b[0]);
+}
+
 int main(void) {
     Actor *a = &g_actors[0];
     Actor *b = &g_actors[1];
@@ -494,6 +506,24 @@ int main(void) {
         g_placed_parent = 0;                                   /* sans table : chaque posé est sa propre racine */
         printf("pose_sans_table %d %d\n", actor_parent(&g_actors[4]) == 0, actor_root(&g_actors[4]) == &g_actors[4]);
         g_scene_placed = 0;
+    }
+
+    /* Une paire en contact : enter à la naissance, collide tant qu'elle dure, exit quand elle se défait, rien quand elle est
+       éloignée ou qu'un côté est inactif. Les tags arrivent du bon côté (my_box d'abord). */
+    {
+        for (int i = 0; i < 2; i++) { g_actors[i] = (Actor){0}; g_actors[i].active = 1; g_actors[i].collision.box_count = 1; }
+        g_actors[0].collision.boxes[0] = (CollisionBox){ 0, 0, 16, 16, 1, 1, TAG_HIT };
+        g_actors[1].collision.boxes[0] = (CollisionBox){ 0, 0, 16, 16, 1, 1, TAG_BODY };
+        static const ContactPair paire = { 0, 1, { a_enter, a_collide, a_exit }, { b_enter, 0, 0 } };
+        u16 prev = 0;
+        contact_frame("contact_1", &paire, &prev);            /* superposés : enter */
+        contact_frame("contact_2", &paire, &prev);            /* ça dure : collide */
+        printf("contact_tags %d %d\n", s_tag_a, s_tag_b);
+        g_actors[1].x = 100 << 8;
+        contact_frame("contact_3", &paire, &prev);            /* éloignés : exit */
+        contact_frame("contact_4", &paire, &prev);            /* rien de plus */
+        g_actors[1].x = 0; g_actors[1].active = 0;
+        contact_frame("contact_5", &paire, &prev);            /* un côté inactif : pas de contact */
     }
     return 0;
 }
