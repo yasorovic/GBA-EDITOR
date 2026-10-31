@@ -734,7 +734,7 @@ class CollisionPaintCmd(Command):
 def _collision_tag_owners(project):
     """Tous les acteurs/prefabs porteurs d'un CollisionBoxComponent — la même
     liste que la matrice de collision parcourt pour découvrir ses tags
-    (cf. project_settings_dialog.CollisionsPanel)."""
+    (cf. project_settings_dialog.PhysicsCollisionsPanel)."""
     return [a for sc in project.scenes for a in sc.actors] + list(project.prefabs) + [
         ch for pf in project.prefabs for ch in (getattr(pf, "children", []) or [])]
 

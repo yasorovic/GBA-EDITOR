@@ -15,10 +15,11 @@ def _move_lines(target: str, mode: str, gravity_x: int, gravity_y: int, indent: 
     return []
 
 
-def physics_motion_lines(scene, scene_actors, actor_offset: int, pi: list[dict]) -> list[str]:
+def physics_motion_lines(scene, project_settings, scene_actors, actor_offset: int, pi: list[dict]) -> list[str]:
     """Le pas automatique, après les scripts et avant toute résolution de collision."""
-    gx = round(float(getattr(scene, "physics_gravity_x", 0.0)) * 256)
-    gy = round(float(getattr(scene, "physics_gravity_y", 0.0)) * 256)
+    gravity_x, gravity_y = scene.effective_physics_gravity(project_settings)
+    gx = round(gravity_x * 256)
+    gy = round(gravity_y * 256)
     lines: list[str] = []
     for index, (actor, _sprite) in enumerate(scene_actors):
         mode = physics_body_mode(actor)

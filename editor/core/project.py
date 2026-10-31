@@ -961,6 +961,9 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
             "last_scene":  self.settings.last_scene,
             "author":      self.settings.author,
             "version":     self.settings.version,
+            **({"physics_gravity_x": self.settings.physics_gravity_x,
+                 "physics_gravity_y": self.settings.physics_gravity_y}
+               if (self.settings.physics_gravity_x or self.settings.physics_gravity_y) else {}),
             "backdrop_color": self.settings.backdrop_color,
             "save_slots":  self.settings.save_slots,
             "transition_kind":   self.settings.transition_kind,
@@ -1038,6 +1041,10 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         self.settings.last_scene  = d.get("last_scene", self.settings.start_scene)
         self.settings.author      = d.get("author", "")
         self.settings.version     = d.get("version", "0.1")
+        # Absente sur les anciens projets : aucune accélération, donc aucun
+        # changement pour leurs RigidBody.
+        self.settings.physics_gravity_x = float(d.get("physics_gravity_x", 0.0))
+        self.settings.physics_gravity_y = float(d.get("physics_gravity_y", 0.0))
         # `palette_auto_import_enabled` des anciens project.json est ignoré :
         # le réservoir auto-import est abandonné, la clé
         # disparaît du fichier à la prochaine sauvegarde.
@@ -1136,7 +1143,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
 
     def collision_tags(self) -> list:
         """Tags de collision du projet, DÉCLARÉS d'abord (dans leur ordre —
-        celui que Project Settings > Collisions laisse glisser-déposer),
+        celui que Project Settings > Physics & Collisions laisse glisser-déposer),
         puis ceux seulement TROUVÉS sur un CollisionBoxComponent (actif ou non : un script peut l'allumer)
         (scènes, prefabs, ET parties de prefabs), triés, à la suite.
 

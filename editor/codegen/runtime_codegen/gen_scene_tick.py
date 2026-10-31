@@ -95,7 +95,7 @@ def gen_scene_tick(
     # parent, et l'enfant doit suivre DANS la même frame — et AVANT la
     # collision et l'émission OAM, qui lisent la position monde recomposée.
     L = phases["physics"]
-    L += physics_motion_lines(scene, scene_actors, actor_offset, pi)
+    L += physics_motion_lines(scene, p.settings, scene_actors, actor_offset, pi)
     L += parent_compose_lines(scene_actors, actor_offset, _lay.placed_entry)
     L += pool_compose_lines(pi)
 

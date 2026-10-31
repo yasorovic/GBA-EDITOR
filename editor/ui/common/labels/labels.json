@@ -890,6 +890,13 @@
     "sceneinsp.card.mode": {
       "text": "Scene mode"
     },
+    "sceneinsp.card.physics": {
+      "text": "Physics"
+    },
+    "sceneinsp.physics_use_project": { "text": "Use project gravity" },
+    "sceneinsp.physics_use_project_tip": { "text": "Uses the gravity defined in Project Settings. Unchecking it creates a value specific to this scene." },
+    "sceneinsp.physics_gravity": { "text": "Gravity:" },
+    "sceneinsp.physics_gravity_tip": { "text": "Acceleration applied to RigidBody actors, in pixels per frame squared. Character and Kinematic actors ignore it." },
     "sceneinsp.card.bg": {
       "text": "Background layers"
     },
@@ -4268,6 +4275,12 @@
     "projset.collisions": {
       "text": "Collisions"
     },
+    "projset.physics_collisions": {
+      "text": "Physics & Collisions"
+    },
+    "projset.physics_gravity": { "text": "Default gravity" },
+    "projset.physics_gravity_tip": { "text": "Acceleration applied to RigidBody actors in scenes that use the project gravity." },
+    "projset.physics_gravity_hint": { "text": "Scenes inherit this value until they define their own gravity." },
     "projinsp.count_scenes": {
       "singular": "{n} scene",
       "plural": "{n} scenes"

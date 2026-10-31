@@ -6,7 +6,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QComboBox,
     QScrollArea, QPushButton, QMenu, QToolButton, QSpinBox, QDoubleSpinBox,
-    QLineEdit,
+    QLineEdit, QCheckBox,
 )
 from ui.common.popup import MessageBox as QMessageBox
 from PyQt6.QtGui import QFont, QColor
@@ -20,7 +20,7 @@ from ui.scene_manager.inspectors.bg_layer_row import BgLayerRow
 from ui.scene_manager.inspectors.project_inspector import TRANSITION_LABELS
 from core.history import (
     get_history, Command, SetFieldCmd, SwapFieldCmd, AddListItemCmd,
-    RemoveListItemCmd, SetSceneModeCmd,
+    RemoveListItemCmd, SetSceneModeCmd, MacroCmd,
 )
 from core.command_dispatcher import get_dispatcher
 from ui.common.deferred_writes import schedule_save
@@ -258,27 +258,6 @@ class SceneInspector(QWidget):
         self._chk_scroll_v.toggled.connect(self._on_scroll_changed)
         param_inner.addLayout(scroll_row)
 
-        # ── Gravité de simulation ─────────────────────────────────
-        gravity_row = QHBoxLayout(); gravity_row.setSpacing(6)
-        lbl_gravity = QLabel(label("sceneinsp.physics_gravity"))
-        lbl_gravity.setFont(QFont(T.UI, T.SM)); lbl_gravity.setStyleSheet(f"color:{C.TEXT_DIM};")
-        lbl_gravity.setFixedWidth(70)
-        gravity_row.addWidget(lbl_gravity)
-        self._spin_gravity_x = QDoubleSpinBox(); self._spin_gravity_y = QDoubleSpinBox()
-        for spin, axis in ((self._spin_gravity_x, "X"), (self._spin_gravity_y, "Y")):
-            spin.setRange(-8.0, 8.0); spin.setSingleStep(0.05); spin.setDecimals(2)
-            spin.setPrefix(f"{axis} "); spin.setSuffix(" px/f²")
-            spin.setFont(QFont(T.MONO, T.SM)); spin.setStyleSheet(QSS.spinbox)
-            spin.setToolTip(tooltip(title=label("sceneinsp.physics_gravity"),
-                                    body=label("sceneinsp.physics_gravity_tip")))
-            gravity_row.addWidget(spin)
-        gravity_row.addStretch()
-        self._spin_gravity_x.valueChanged.connect(
-            lambda v: self._set_scene_field("physics_gravity_x", float(v)))
-        self._spin_gravity_y.valueChanged.connect(
-            lambda v: self._set_scene_field("physics_gravity_y", float(v)))
-        param_inner.addLayout(gravity_row)
-
         # ── Backdrop ──────────────────────────────────────────────
         # Couleur de l'index 0 de PAL_BG_RAM : ce que le hardware affiche là où
         # AUCUN layer ni sprite ne dessine — donc aussi ce qui apparaît dans une
@@ -394,6 +373,39 @@ class SceneInspector(QWidget):
         mode_inner.addWidget(self._scene_script_slot)
 
         cl.addWidget(mode_card)
+
+        # ── Carte Physics ─────────────────────────────────────────
+        physics_card = CollapsibleCard(label("sceneinsp.card.physics"))
+        physics_inner = physics_card.body_layout
+        self._chk_physics_project = QCheckBox(label("sceneinsp.physics_use_project"))
+        self._chk_physics_project.setFont(QFont(T.UI, T.SM))
+        self._chk_physics_project.setToolTip(tooltip(
+            title=label("sceneinsp.physics_use_project"),
+            body=label("sceneinsp.physics_use_project_tip")))
+        self._chk_physics_project.toggled.connect(self._on_physics_project_toggled)
+        physics_inner.addWidget(self._chk_physics_project)
+
+        gravity_row = QHBoxLayout(); gravity_row.setSpacing(6)
+        lbl_gravity = QLabel(label("sceneinsp.physics_gravity"))
+        lbl_gravity.setFont(QFont(T.UI, T.SM)); lbl_gravity.setStyleSheet(f"color:{C.TEXT_DIM};")
+        lbl_gravity.setFixedWidth(70)
+        gravity_row.addWidget(lbl_gravity)
+        self._spin_gravity_x = QDoubleSpinBox(); self._spin_gravity_y = QDoubleSpinBox()
+        for spin, axis, field in (
+            (self._spin_gravity_x, "X", "physics_gravity_x"),
+            (self._spin_gravity_y, "Y", "physics_gravity_y"),
+        ):
+            spin.setRange(-8.0, 8.0); spin.setSingleStep(0.05); spin.setDecimals(2)
+            spin.setPrefix(f"{axis} "); spin.setSuffix(" px/f²")
+            spin.setFont(QFont(T.MONO, T.SM)); spin.setStyleSheet(QSS.spinbox)
+            spin.setToolTip(tooltip(title=label("sceneinsp.physics_gravity"),
+                                    body=label("sceneinsp.physics_gravity_tip")))
+            spin.valueChanged.connect(
+                lambda value, name=field: self._on_physics_gravity(name, float(value)))
+            gravity_row.addWidget(spin)
+        gravity_row.addStretch()
+        physics_inner.addLayout(gravity_row)
+        cl.addWidget(physics_card)
 
         # ── Carte Background Asset ────────────────────────────────
         bg_card = CollapsibleCard(label("sceneinsp.card.bg"))
@@ -548,8 +560,7 @@ class SceneInspector(QWidget):
         self._notes_edit.set_text_silent(getattr(scene, "notes", ""))
         self._chk_scroll_h.setChecked(scene.scroll_h)
         self._chk_scroll_v.setChecked(scene.scroll_v)
-        self._spin_gravity_x.setValue(scene.physics_gravity_x)
-        self._spin_gravity_y.setValue(scene.physics_gravity_y)
+        self._refresh_physics()
         self._refresh_scroll_speeds()
         self._refresh_scene_script_label()
         self._palette_view_pending = True
@@ -565,6 +576,58 @@ class SceneInspector(QWidget):
         self._refresh_transition()
         self._refresh_music()
         self._blocking = False
+
+    def _refresh_physics(self):
+        if not self._scene:
+            return
+        inherited = not self._scene.physics_gravity_override
+        settings = self._project.settings if self._project else None
+        gravity_x, gravity_y = self._scene.effective_physics_gravity(settings)
+        self._chk_physics_project.blockSignals(True)
+        self._chk_physics_project.setChecked(inherited)
+        self._chk_physics_project.blockSignals(False)
+        for spin, value in ((self._spin_gravity_x, gravity_x),
+                            (self._spin_gravity_y, gravity_y)):
+            spin.blockSignals(True)
+            spin.setValue(value)
+            spin.setEnabled(not inherited)
+            spin.blockSignals(False)
+
+    def _persist_and_refresh_physics(self):
+        self._persist()
+        self._refresh_physics()
+
+    def _on_physics_project_toggled(self, use_project: bool):
+        if self._blocking or not self._scene:
+            return
+        if use_project:
+            fields = [("physics_gravity_override", False)]
+        else:
+            settings = self._project.settings if self._project else None
+            gravity_x, gravity_y = self._scene.effective_physics_gravity(settings)
+            fields = [
+                ("physics_gravity_x", gravity_x),
+                ("physics_gravity_y", gravity_y),
+                ("physics_gravity_override", True),
+            ]
+        commands = [
+            SetFieldCmd(self._scene, field, getattr(self._scene, field), value,
+                        label=f"{self._scene.name}.{field}")
+            for field, value in fields if getattr(self._scene, field) != value
+        ]
+        if not commands:
+            self._refresh_physics()
+            return
+        commands[-1]._persist = self._persist_and_refresh_physics
+        get_history().push(commands[0] if len(commands) == 1
+                           else MacroCmd(commands, "Gravité de la scène"))
+        self.changed.emit()
+
+    def _on_physics_gravity(self, field: str, value: float):
+        if self._blocking or not self._scene or not self._scene.physics_gravity_override:
+            return
+        self._set_scene_field(field, value, extra_persist=self._refresh_physics)
+        self.changed.emit()
 
     def _on_palette_card_toggled(self, expanded: bool) -> None:
         """Construit la vue coûteuse seulement quand l'auteur la consulte."""

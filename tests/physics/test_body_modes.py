@@ -58,12 +58,15 @@ def test_une_valeur_inconnue_est_refusee_au_lieu_d_etre_remplacee():
 def test_kinematic_et_rigid_emettent_un_mouvement_automatique_et_la_gravite():
     from types import SimpleNamespace
     from codegen.runtime_codegen.physics.motion import physics_motion_lines
+    from core.models.scene import Scene
 
     character = _actor("Hero", mode="character")
     kinematic = _actor("Lift", mode="kinematic")
     rigid = _actor("Crate", mode="rigid")
-    scene = SimpleNamespace(physics_gravity_x=0.25, physics_gravity_y=0.5)
-    lines = "\n".join(physics_motion_lines(scene, [(character, None), (kinematic, None), (rigid, None)], 3, []))
+    scene = Scene(name="Platform")
+    settings = SimpleNamespace(physics_gravity_x=0.25, physics_gravity_y=0.5)
+    lines = "\n".join(physics_motion_lines(
+        scene, settings, [(character, None), (kinematic, None), (rigid, None)], 3, []))
 
     assert "g_actors[3]" not in lines       # Character reste piloté explicitement par son script.
     assert "actor_apply_velocity(&g_actors[4]);" in lines

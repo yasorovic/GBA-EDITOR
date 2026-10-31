@@ -26,7 +26,7 @@ class CollisionEditor(BaseComponentEditor):
         # CET acteur (utile avec plusieurs CollisionBoxComponent, ex.
         # "head_hurtbox" / "body_hurtbox") ; le tag est le GROUPE de
         # collision, partagé entre acteurs, celui que lit la matrice de
-        # Project Settings > Collisions et que le codegen émet en
+        # Project Settings > Physics & Collisions et que le codegen émet en
         # BOXTAG_<TAG> (cf. codegen/runtime_codegen/headers.py). Les deux
         # étaient confondus avant le tag registry (2026-08-25) — plus
         # aujourd'hui, chacun peut varier indépendamment.

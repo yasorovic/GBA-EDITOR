@@ -18,7 +18,7 @@ porte SAUF l'identité du projet :
     (placeholder, cf. `InputsCard` — rien ne les consomme encore).
   - **Languages** — déclaration des langues, reprend `LanguagesCard` telle
     quelle.
-  - **Collisions** — matrice triangulaire de tags qui s'ignorent, tags renommables/déclarables/retirables en place.
+  - **Physics & Collisions** : gravité par défaut, tags et matrice de filtrage.
 
 Ce qui RESTE dans `ProjectInspector` (panneau latéral du Scene Manager, visible
 en permanence quand rien n'est sélectionné) : auteur, version, scène de
@@ -37,7 +37,7 @@ from ui.common.tooltip import tooltip
 from PyQt6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QListWidget, QListWidgetItem, QStackedWidget, QScrollArea,
-    QLineEdit, QComboBox, QSpinBox, QCheckBox, QPushButton, QColorDialog,
+    QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QCheckBox, QPushButton, QColorDialog,
 )
 from PyQt6.QtGui import QFont, QColor, QPainter, QFontMetrics
 from PyQt6.QtCore import Qt, QEvent, QPointF
@@ -981,8 +981,8 @@ class _TagHeaderLabel(QWidget):
         p.drawText(0, 0, self._text)
 
 
-class CollisionsPanel(QWidget):
-    """Matrice triangulaire entre tags de boxes — cf.
+class PhysicsCollisionsPanel(QWidget):
+    """Gravité du projet et matrice triangulaire entre tags de boxes — cf.
     ProjectSettings.collision_disabled_pairs. Cochée = les deux tags se
     rencontrent, ce qui est le défaut : la matrice ne stocke que les
     exceptions.
@@ -1011,7 +1011,49 @@ class CollisionsPanel(QWidget):
 
         lay = QVBoxLayout(self)
         lay.setSpacing(10)
-        lay.addWidget(_category_title(label('projset.collisions')))
+        lay.addWidget(_category_title(label('projset.physics_collisions')))
+
+        gravity_title = QLabel(label('projset.physics_gravity'))
+        gravity_title.setFont(QFont(T.UI, T.MD, QFont.Weight.DemiBold))
+        gravity_title.setStyleSheet(f"color:{C.TEXT_HI};")
+        lay.addWidget(gravity_title)
+
+        gravity_host = QWidget()
+        gravity_row = QHBoxLayout(gravity_host)
+        gravity_row.setContentsMargins(0, 0, 0, 0)
+        gravity_row.setSpacing(8)
+        self._spin_gravity_x = QDoubleSpinBox()
+        self._spin_gravity_y = QDoubleSpinBox()
+        for spin, axis, field in (
+            (self._spin_gravity_x, "X", "physics_gravity_x"),
+            (self._spin_gravity_y, "Y", "physics_gravity_y"),
+        ):
+            spin.setRange(-8.0, 8.0)
+            spin.setSingleStep(0.05)
+            spin.setDecimals(2)
+            spin.setPrefix(f"{axis} ")
+            spin.setSuffix(" px/f²")
+            spin.setFont(QFont(T.MONO, T.SM))
+            spin.setStyleSheet(QSS.spinbox)
+            spin.setToolTip(tooltip(title=label('projset.physics_gravity'),
+                                    body=label('projset.physics_gravity_tip')))
+            spin.valueChanged.connect(
+                lambda value, name=field: self._set_gravity(name, float(value)))
+            gravity_row.addWidget(spin)
+        gravity_row.addStretch()
+        lay.addWidget(gravity_host)
+
+        gravity_hint = QLabel(label('projset.physics_gravity_hint'))
+        gravity_hint.setWordWrap(True)
+        gravity_hint.setFont(QFont(T.UI, T.SM))
+        gravity_hint.setStyleSheet(f"color:{C.TEXT_DIM};")
+        lay.addWidget(gravity_hint)
+
+        W.separator(lay)
+        collisions_title = QLabel(label('projset.collisions'))
+        collisions_title.setFont(QFont(T.UI, T.MD, QFont.Weight.DemiBold))
+        collisions_title.setStyleSheet(f"color:{C.TEXT_HI};")
+        lay.addWidget(collisions_title)
 
         # Ce qu'il faut FAIRE ici (niveau 1, il change avec l'état de la
         # matrice) et ce que la matrice VEUT DIRE (niveau 3 : une notion, la
@@ -1057,7 +1099,31 @@ class CollisionsPanel(QWidget):
         self._indicator.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self._indicator.hide()
 
+        self._refresh_gravity()
         self._refresh_matrix()
+
+    def _refresh_gravity(self):
+        settings = self._project.settings
+        for spin, value in (
+            (self._spin_gravity_x, settings.physics_gravity_x),
+            (self._spin_gravity_y, settings.physics_gravity_y),
+        ):
+            spin.blockSignals(True)
+            spin.setValue(float(value))
+            spin.blockSignals(False)
+
+    def _set_gravity(self, field: str, value: float):
+        if self._blocking or getattr(self._project.settings, field) == value:
+            return
+
+        def persist():
+            _save_settings_soon(self._project)
+            self._refresh_gravity()
+
+        get_history().push(SetFieldCmd(
+            self._project.settings, field, getattr(self._project.settings, field), value,
+            label=f"Projet.{field}", persist_fn=persist,
+        ))
 
     # ── Découverte des tags ──────────────────────────────────────
 
@@ -1388,9 +1454,9 @@ class ProjectSettingsDialog(QDialog):
     """Colonne de catégories à gauche, panneau à droite — même squelette que
     SettingsDialog (ui/common/settings_dialog.py)."""
 
-    _CATEGORY_KEYS = {'Build': 'projset.build', 'Visual': 'projset.visual', 'Sound': 'projset.sound', 'Input': 'projset.input', 'Languages': 'projset.languages', 'Collisions': 'projset.collisions'}
+    _CATEGORY_KEYS = {'Build': 'projset.build', 'Visual': 'projset.visual', 'Sound': 'projset.sound', 'Input': 'projset.input', 'Languages': 'projset.languages', 'Physics & Collisions': 'projset.physics_collisions'}
 
-    _CATEGORIES = ("Build", "Visual", "Sound", "Input", "Languages", "Collisions")
+    _CATEGORIES = ("Build", "Visual", "Sound", "Input", "Languages", "Physics & Collisions")
 
     def __init__(self, project: Project, initial_category: str = "Build", parent=None):
         super().__init__(parent)
@@ -1413,7 +1479,7 @@ class ProjectSettingsDialog(QDialog):
         self._stack = QStackedWidget()
         panels = [
             BuildPanel(project), VisualPanel(project), SoundPanel(project),
-            InputsPanel(project), LanguagesPanel(project), CollisionsPanel(project),
+            InputsPanel(project), LanguagesPanel(project), PhysicsCollisionsPanel(project),
         ]
         for panel in panels:
             scroll = QScrollArea()
