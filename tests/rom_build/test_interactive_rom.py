@@ -114,7 +114,7 @@ def test_un_acteur_bloquant_se_compile_et_repousse_le_joueur(tmp_path):
     coffre = next(a for a in scene.actors if a.name == "Chest")
     heros.components.append(ScriptComponent(script="assets/scripts/Hero2.lua"))
     (projet.user_library_dir / "scripts" / "Hero2.lua").write_text(HERO, encoding="utf-8")
-    coffre.components.append(CollisionBoxComponent(id="body", tag="body", solid=False, blocks_actors=True))
+    coffre.components.append(CollisionBoxComponent(id="body", tag="body", solid=False, response="block"))
     projet.save()
 
     worker = BuildWorker(Project.open(projet.root), Toolchain())

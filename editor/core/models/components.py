@@ -21,7 +21,14 @@ COLLISION_RESPONSES: tuple[str, ...] = (
 )
 PHYSICS_BODY_CHARACTER = "character"
 PHYSICS_BODY_STATIC = "static"
-PHYSICS_BODY_MODES: tuple[str, ...] = (PHYSICS_BODY_CHARACTER, PHYSICS_BODY_STATIC)
+PHYSICS_BODY_KINEMATIC = "kinematic"
+PHYSICS_BODY_RIGID = "rigid"
+PHYSICS_BODY_MODES: tuple[str, ...] = (
+    PHYSICS_BODY_CHARACTER,
+    PHYSICS_BODY_STATIC,
+    PHYSICS_BODY_KINEMATIC,
+    PHYSICS_BODY_RIGID,
+)
 
 
 @dataclass
@@ -45,9 +52,8 @@ class CollisionBoxComponent:
 
     `response` est la réponse entre acteurs, indépendante de la carte : `"block"` repousse un
     Character mobile hors de cette boîte, `"sensor"` ne fait que produire les événements de contact.
-    La matrice de collision décide dans les deux cas quels tags se rencontrent. `blocks_actors` reste
-    un alias de compatibilité pour les projets et les extensions existants, mais les nouvelles scènes
-    sauvegardent `response`.
+    La matrice de collision décide dans les deux cas quels tags se rencontrent. L'ancien champ
+    `blocks_actors` n'existe plus : un projet qui le porte encore le perd à la lecture (rupture assumée).
 
     Handlers Lua appelés par le runtime C. Ils n'appartiennent PAS à ce
     composant : ce sont des fonctions globales du script de l'actor, et le
@@ -69,7 +75,7 @@ class CollisionBoxComponent:
     id: str = "collision"
     active: bool = True
     solid: bool = True      # arrêté par la carte de collision (cf. docstring)
-    blocks_actors: bool = False   # repousse les acteurs en mouvement qui ont une box solid (cf. docstring)
+    response: str = COLLISION_RESPONSE_SENSOR   # "block" ou "sensor" (cf. docstring)
     tag: str = "body"       # ex: "body", "ground_check", "hitbox", "hurtbox"
     # Offset de la boîte depuis la POSITION DE L'ACTEUR, en pixels : le coin haut-gauche du sprite, ou le centre de son cadre
     # quand `affine_transform` est actif (l'acteur est alors centré sur le cadre). Ce n'est PAS le pivot du sprite : pour une boîte de
@@ -79,25 +85,20 @@ class CollisionBoxComponent:
     w: int = 16
     h: int = 16
 
-    @property
-    def response(self) -> str:
-        """Réponse explicite entre acteurs. `blocks_actors` reste l'ancien nom compatible."""
-        return COLLISION_RESPONSE_BLOCK if self.blocks_actors else COLLISION_RESPONSE_SENSOR
-
-    @response.setter
-    def response(self, value: str) -> None:
-        self.blocks_actors = value == COLLISION_RESPONSE_BLOCK
+    def __post_init__(self):
+        if self.response not in COLLISION_RESPONSES:
+            raise ValueError(f"unknown collision response {self.response!r}, expected one of {COLLISION_RESPONSES}")
 
 
 @dataclass
 class PhysicsBodyComponent:
     """Le comportement physique de l'acteur, indépendant de ses colliders.
 
-    `character` est conduit par sa vélocité, résout la carte et peut être
-    repoussé par une réponse `block`. `static` ne se déplace pas par solveur :
-    ses colliders servent seulement de géométrie de scène. Les acteurs hérités
-    sans ce composant gardent temporairement le comportement Character quand
-    ils possèdent une boîte `solid`.
+    `character` est conduit explicitement par son script. `kinematic` applique
+    sa vélocité à chaque frame. `rigid` fait de même après la gravité de scène.
+    Ces trois modes résolvent carte et `block`; `static` ne se déplace pas et
+    ne sert que de géométrie. Les acteurs hérités sans composant gardent le
+    comportement Character quand ils possèdent une boîte `solid`.
     """
     id: str = "physics_body"
     active: bool = True
@@ -105,7 +106,7 @@ class PhysicsBodyComponent:
 
     def __post_init__(self):
         if self.mode not in PHYSICS_BODY_MODES:
-            self.mode = PHYSICS_BODY_CHARACTER
+            raise ValueError(f"unknown physics body mode {self.mode!r}, expected one of {PHYSICS_BODY_MODES}")
 
 
 @dataclass
@@ -264,7 +265,8 @@ def effective_collision_boxes(owner, frame_w: int = 0, frame_h: int = 0, centere
         # (une plaque) : elle ne bloque pas.
         obstacle = comp.interaction == "facing"
         boxes.append(CollisionBoxComponent(
-            id="interactive", solid=obstacle, blocks_actors=obstacle, tag=INTERACTIVE_COLLISION_TAG,
+            id="interactive", solid=obstacle,
+            response=COLLISION_RESPONSE_BLOCK if obstacle else COLLISION_RESPONSE_SENSOR, tag=INTERACTIVE_COLLISION_TAG,
             x=-(w // 2) if centered else 0, y=-(h // 2) if centered else 0, w=w, h=h))
     return boxes
 
@@ -318,16 +320,10 @@ def component_type_name(comp) -> str:
 
 def components_to_list(components: list) -> list[dict]:
     """Sérialise une liste de Component polymorphes (utilisé par Actor ET Prefab)."""
-    result = []
-    for comp in components:
-        data = dataclasses.asdict(comp)
-        if isinstance(comp, CollisionBoxComponent):
-            # `blocks_actors` était le nom de transition. On lit toujours les
-            # anciens projets, mais un nouveau fichier porte le contrat stable.
-            data.pop("blocks_actors")
-            data["response"] = comp.response
-        result.append({"component_type": component_type_name(comp), **data})
-    return result
+    return [
+        {"component_type": component_type_name(c), **dataclasses.asdict(c)}
+        for c in components
+    ]
 
 
 # Migration à la lecture : `SoundFxComponent.trigger` visait un des dix
@@ -350,8 +346,6 @@ def components_from_list(data: list) -> list:
         klass = COMPONENT_REGISTRY.get(type_name)
         if not klass:
             continue
-        if klass is CollisionBoxComponent and "response" in cd:
-            cd["blocks_actors"] = cd.pop("response") == COLLISION_RESPONSE_BLOCK
         valid = {f.name for f in fields(klass)}
         comp = klass(**{k: v for k, v in cd.items() if k in valid})
         if isinstance(comp, SoundFxComponent) and comp.trigger in _LEGACY_SFX_TRIGGERS:

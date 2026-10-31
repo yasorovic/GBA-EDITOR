@@ -145,6 +145,7 @@ def character_solver_lines() -> list[str]:
         "        a->collision.last_x=a->x>>8; a->collision.slope_acc=0;",
         "        return;",
         "    }",
+        "    debug_physics_character_test();",
         "    /* the Actor's x/y are in Q8 (256 = 1 px), but ALL the",
         "       geometry below (tiles, boxes, slopes) is in pixels, unchanged",
         "       since v0.6.3 — rounding is done ONCE on entry (_px/_py) and",

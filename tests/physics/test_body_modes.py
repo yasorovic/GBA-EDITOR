@@ -12,12 +12,14 @@ def _actor(name: str, solid: bool = True, mode: str | None = None) -> Actor:
 
 
 def test_les_scenes_heritent_du_character_et_les_modes_explicites_l_emportent():
-    from codegen.runtime_codegen.physics.body import is_character_body
+    from codegen.runtime_codegen.physics.body import is_character_body, uses_character_solver
 
     assert is_character_body(_actor("Legacy"))
     assert is_character_body(_actor("Hero", mode="character"))
     assert not is_character_body(_actor("Wall", mode="static"))
     assert not is_character_body(_actor("Sensor", solid=False))
+    assert uses_character_solver(_actor("Lift", mode="kinematic"))
+    assert uses_character_solver(_actor("Crate", mode="rigid"))
 
 
 def test_le_tick_du_pool_n_emet_le_solveur_de_carte_que_pour_les_characters():
@@ -39,3 +41,31 @@ def test_le_tick_du_pool_n_emet_le_solveur_de_carte_que_pour_les_characters():
     assert "case 1: resolve_actor_tiles" in lines
     assert "case 2: resolve_actor_tiles" in lines
     assert "case 3: resolve_actor_tiles" not in lines
+
+
+def test_une_valeur_inconnue_est_refusee_au_lieu_d_etre_remplacee():
+    import pytest
+    from core.models.components import components_from_list
+
+    with pytest.raises(ValueError, match="physics body mode"):
+        PhysicsBodyComponent(mode="orbital")
+    with pytest.raises(ValueError, match="collision response"):
+        CollisionBoxComponent(response="trigger")
+    with pytest.raises(ValueError, match="collision response"):
+        components_from_list([{"component_type": "collision_box", "response": "trigger"}])
+
+
+def test_kinematic_et_rigid_emettent_un_mouvement_automatique_et_la_gravite():
+    from types import SimpleNamespace
+    from codegen.runtime_codegen.physics.motion import physics_motion_lines
+
+    character = _actor("Hero", mode="character")
+    kinematic = _actor("Lift", mode="kinematic")
+    rigid = _actor("Crate", mode="rigid")
+    scene = SimpleNamespace(physics_gravity_x=0.25, physics_gravity_y=0.5)
+    lines = "\n".join(physics_motion_lines(scene, [(character, None), (kinematic, None), (rigid, None)], 3, []))
+
+    assert "g_actors[3]" not in lines       # Character reste piloté explicitement par son script.
+    assert "actor_apply_velocity(&g_actors[4]);" in lines
+    assert "(&g_actors[5])->vx+=64; (&g_actors[5])->vy+=128;" in lines
+    assert "actor_apply_velocity(&g_actors[5]);" in lines

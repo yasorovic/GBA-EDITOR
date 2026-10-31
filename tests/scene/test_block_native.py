@@ -19,6 +19,7 @@ SONDE = r"""
 typedef unsigned char u8; typedef signed char s8;
 typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
+#include "gba_debug.h"
 Actor g_actors[8];
 int g_spool_start = 0, g_spool_hw = 0;
 u32 g_alive_bits[1];
@@ -174,7 +175,7 @@ def _lignes(p, acteurs):
 
 def test_le_mobile_recoit_la_table_des_boites_bloquantes():
     hero = _acteur("Hero", tag="Player")
-    coffre = _acteur("Chest", tag="body", blocks_actors=True, solid=False)
+    coffre = _acteur("Chest", tag="body", response="block", solid=False)
     lignes = "\n".join(_lignes(_projet(), [hero, coffre]))
     assert "static const u16 _bk_idx[]={1};" in lignes
     assert "actors_resolve_blocks(&g_actors[0],_bk_idx,_bk_box,1);" in lignes
@@ -185,7 +186,7 @@ def test_le_mobile_recoit_la_table_des_boites_bloquantes():
 def test_un_static_body_bloque_sans_devenir_un_mobile():
     from core.models.components import PhysicsBodyComponent
     hero = _acteur("Hero", tag="Player")
-    mur = _acteur("Wall", tag="body", blocks_actors=True, solid=False)
+    mur = _acteur("Wall", tag="body", response="block", solid=False)
     mur.components.append(PhysicsBodyComponent(mode="static"))
     lignes = "\n".join(_lignes(_projet(), [hero, mur]))
     assert "static const u16 _bk_idx[]={1};" in lignes
@@ -199,7 +200,7 @@ def test_sans_bloqueur_rien_n_est_emis():
 def test_la_matrice_de_collision_laisse_passer_un_couple_desactive():
     from core.models.settings import pair_key
     hero = _acteur("Hero", tag="Player")
-    coffre = _acteur("Chest", tag="body", blocks_actors=True)
+    coffre = _acteur("Chest", tag="body", response="block")
     passe = _lignes(_projet([pair_key("Player", "body")]), [hero, coffre])
     assert not any("actors_resolve_blocks(&g_actors[0]" in l for l in passe)
     bloque = _lignes(_projet(), [hero, coffre])
@@ -209,8 +210,8 @@ def test_la_matrice_de_collision_laisse_passer_un_couple_desactive():
 def test_le_blocage_est_refuse_par_defaut_et_survit_a_la_serialisation():
     from core.models.components import components_from_list, components_to_list
     assert CollisionBoxComponent().response == "sensor"
-    serialise = components_to_list([CollisionBoxComponent(blocks_actors=True)])
-    assert serialise[0]["response"] == "block" and "blocks_actors" not in serialise[0]
+    serialise = components_to_list([CollisionBoxComponent(response="block")])
+    assert serialise[0]["response"] == "block"
     (relu,) = components_from_list(serialise)
     assert relu.response == "block"
     ancien = {"component_type": "collision_box", "id": "b", "solid": True, "tag": "body"}
@@ -229,9 +230,9 @@ def _coffre(interaction):
 def test_la_boite_propre_d_un_interactive_facing_est_un_obstacle():
     from core.models.components import effective_collision_boxes
     (obstacle,) = effective_collision_boxes(_coffre("facing"))
-    assert obstacle.blocks_actors is True and obstacle.solid is True and obstacle.tag == "Interactive"
+    assert obstacle.response == "block" and obstacle.solid is True and obstacle.tag == "Interactive"
     (plaque,) = effective_collision_boxes(_coffre("hover"))
-    assert plaque.blocks_actors is False and plaque.solid is False      # on doit pouvoir la recouvrir
+    assert plaque.response == "sensor" and plaque.solid is False      # on doit pouvoir la recouvrir
 
 
 def test_un_coffre_facing_arrete_le_joueur_sans_boite_dessinee_par_l_auteur():

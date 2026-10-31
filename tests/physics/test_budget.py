@@ -34,3 +34,4 @@ def test_le_bilan_compte_les_capacites_du_pool_et_les_contacts(monkeypatch):
     assert result.pool_contact_masks == 10   # 5 slots × Hero/Wall
     assert result.contact_bytes == 22 and result.blocker_boxes == 1
     assert "contacts 11 masks (22 B)" in budget.physics_budget_line(project, scene)
+    assert "debug work: Character≤6, contact≤11" in budget.physics_budget_line(project, scene)

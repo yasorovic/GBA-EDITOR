@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QComboBox,
-    QScrollArea, QPushButton, QMenu, QToolButton, QSpinBox,
+    QScrollArea, QPushButton, QMenu, QToolButton, QSpinBox, QDoubleSpinBox,
     QLineEdit,
 )
 from ui.common.popup import MessageBox as QMessageBox
@@ -257,6 +257,27 @@ class SceneInspector(QWidget):
         self._chk_scroll_h.toggled.connect(self._on_scroll_changed)
         self._chk_scroll_v.toggled.connect(self._on_scroll_changed)
         param_inner.addLayout(scroll_row)
+
+        # ── Gravité de simulation ─────────────────────────────────
+        gravity_row = QHBoxLayout(); gravity_row.setSpacing(6)
+        lbl_gravity = QLabel(label("sceneinsp.physics_gravity"))
+        lbl_gravity.setFont(QFont(T.UI, T.SM)); lbl_gravity.setStyleSheet(f"color:{C.TEXT_DIM};")
+        lbl_gravity.setFixedWidth(70)
+        gravity_row.addWidget(lbl_gravity)
+        self._spin_gravity_x = QDoubleSpinBox(); self._spin_gravity_y = QDoubleSpinBox()
+        for spin, axis in ((self._spin_gravity_x, "X"), (self._spin_gravity_y, "Y")):
+            spin.setRange(-8.0, 8.0); spin.setSingleStep(0.05); spin.setDecimals(2)
+            spin.setPrefix(f"{axis} "); spin.setSuffix(" px/f²")
+            spin.setFont(QFont(T.MONO, T.SM)); spin.setStyleSheet(QSS.spinbox)
+            spin.setToolTip(tooltip(title=label("sceneinsp.physics_gravity"),
+                                    body=label("sceneinsp.physics_gravity_tip")))
+            gravity_row.addWidget(spin)
+        gravity_row.addStretch()
+        self._spin_gravity_x.valueChanged.connect(
+            lambda v: self._set_scene_field("physics_gravity_x", float(v)))
+        self._spin_gravity_y.valueChanged.connect(
+            lambda v: self._set_scene_field("physics_gravity_y", float(v)))
+        param_inner.addLayout(gravity_row)
 
         # ── Backdrop ──────────────────────────────────────────────
         # Couleur de l'index 0 de PAL_BG_RAM : ce que le hardware affiche là où
@@ -527,6 +548,8 @@ class SceneInspector(QWidget):
         self._notes_edit.set_text_silent(getattr(scene, "notes", ""))
         self._chk_scroll_h.setChecked(scene.scroll_h)
         self._chk_scroll_v.setChecked(scene.scroll_v)
+        self._spin_gravity_x.setValue(scene.physics_gravity_x)
+        self._spin_gravity_y.setValue(scene.physics_gravity_y)
         self._refresh_scroll_speeds()
         self._refresh_scene_script_label()
         self._palette_view_pending = True

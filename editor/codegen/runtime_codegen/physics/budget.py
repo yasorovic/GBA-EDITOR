@@ -80,4 +80,5 @@ def physics_budget_line(project, scene) -> str:
     b = scene_physics_budget(project, scene)
     return (f"[physics] {scene.name}: actors {b.actor_slots} ({b.placed_actors} placed + {b.pool_slots} pool), "
             f"colliders {b.collider_slots} max, Characters {b.character_slots}, "
-            f"contacts {b.contact_masks} masks ({b.contact_bytes} B), blocks {b.blocker_boxes}")
+            f"contacts {b.contact_masks} masks ({b.contact_bytes} B), blocks {b.blocker_boxes}; "
+            f"debug work: Character≤{b.character_slots}, contact≤{b.contact_masks}")

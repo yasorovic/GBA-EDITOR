@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from core.models.components import COLLISION_RESPONSE_BLOCK, CollisionBoxComponent
 from core.models.settings import tags_collide
-from codegen.runtime_codegen.physics.body import is_character_body
+from codegen.runtime_codegen.physics.body import uses_character_solver
 from codegen.runtime_codegen.interact_gen import owner_boxes
 from codegen.runtime_codegen.shared_pool_gen import shared_models
 
@@ -62,6 +62,7 @@ def block_helper_lines() -> list[str]:
         "            if(t==a||!t->active||box[k]>=t->collision.box_count) continue;",
         "            const CollisionBox* b=&t->collision.boxes[box[k]];",
         "            if(!b->active) continue;",
+        "            debug_physics_block_test();",
         "            block_push(a,m,t,b);",
         "        }",
         "    }",
@@ -79,7 +80,7 @@ def block_helper_lines() -> list[str]:
         "            for(int k=0;k<n;k++){",
         "                if(t->model!=model[k]||box[k]>=t->collision.box_count) continue;",
         "                const CollisionBox* b=&t->collision.boxes[box[k]];",
-        "                if(b->active) block_push(a,m,t,b);",
+        "                if(b->active){ debug_physics_block_test(); block_push(a,m,t,b); }",
         "            }",
         "        }",
         "    }",
@@ -95,8 +96,8 @@ def _blocking_boxes(owner, sprite) -> list[tuple[int, str]]:
             if isinstance(b, CollisionBoxComponent) and b.active and b.response == COLLISION_RESPONSE_BLOCK]
 
 
-def _character_collider_tags(owner, sprite) -> list[str]:
-    """Les tags des boîtes de carte d'un Character : elles portent aussi sa forme de blocage héritée."""
+def _map_collider_tags(owner, sprite) -> list[str]:
+    """Les tags des boîtes de carte d'un corps mobile : elles portent sa forme de blocage."""
     return [b.tag or "body" for b in owner_boxes(owner, sprite)
             if isinstance(b, CollisionBoxComponent) and b.solid]
 
@@ -120,7 +121,7 @@ def block_tick_lines(p, scene, scene_actors, actor_offset, pi, shown) -> list[st
 
     def can_stop(mover_owner, mover_sprite, tag):
         return any(tags_collide(p.settings, m, tag)
-                   for m in _character_collider_tags(mover_owner, mover_sprite))
+                   for m in _map_collider_tags(mover_owner, mover_sprite))
 
     def table(mover_owner, mover_sprite):
         """Les boîtes qui peuvent arrêter ce mobile : celles dont le tag rencontre un des siens dans la
@@ -160,12 +161,12 @@ def block_tick_lines(p, scene, scene_actors, actor_offset, pi, shown) -> list[st
         L.append("    }")
 
     for j, (actor, sprite) in enumerate(scene_actors):
-        if is_character_body(actor):
+        if uses_character_solver(actor):
             emit(str(actor_offset + j), table(actor, sprite), pool_table(actor, sprite))
     # Les mobiles du pool partagé : une boucle sur les emplacements utilisés, les tables de chaque modèle dans son cas.
     cases = []
     for m in shared:
-        if not is_character_body(m["prefab"]):
+        if not uses_character_solver(m["prefab"]):
             continue
         sp = shown(p, m["prefab"])[1]
         entries, pool_entries = table(m["prefab"], sp), pool_table(m["prefab"], sp)

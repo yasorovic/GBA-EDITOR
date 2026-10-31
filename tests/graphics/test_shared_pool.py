@@ -203,11 +203,11 @@ def _scene_blocage(tmp_path):
     un acteur posé qui bloque aussi."""
     from core.models.components import CollisionBoxComponent
     wall, hero = Prefab(name="Wall"), Prefab(name="Hero")
-    wall.actor.components.append(CollisionBoxComponent(blocks_actors=True, solid=False, w=16, h=16))
+    wall.actor.components.append(CollisionBoxComponent(response="block", solid=False, w=16, h=16))
     hero.actor.components.append(CollisionBoxComponent(solid=True, w=16, h=16))
     hero.actor.is_player = True
     scene = Scene(name="S", script="assets/s.lua",
-                  actors=[Actor(name="Rock", components=[CollisionBoxComponent(blocks_actors=True, solid=False, w=16, h=16)])])
+                  actors=[Actor(name="Rock", components=[CollisionBoxComponent(response="block", solid=False, w=16, h=16)])])
     p = Project(tmp_path)
     p.scenes.items = [scene]
     p.prefabs.items = [wall, hero]

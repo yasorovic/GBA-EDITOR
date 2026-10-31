@@ -22,6 +22,7 @@ def box_contact_lines(a_expr: str, b_expr: str, active: str, prev: str,
 
     i = indent
     lines = [
+        f"{i}if({active}) debug_physics_contact_test();",
         f"{i}{{ u16 _cur=({active})?actors_overlap_mask({a_expr},{b_expr}):0; u16 _prv={prev};",
         f"{i}  if(_cur|_prv)",
         f"{i}  for(u8 _bi=0;_bi<MAX_BOXES;_bi++) for(u8 _bj=0;_bj<MAX_BOXES;_bj++){{",

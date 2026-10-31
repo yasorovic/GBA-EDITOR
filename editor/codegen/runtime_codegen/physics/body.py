@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from core.models.components import (
-    PHYSICS_BODY_CHARACTER, CollisionBoxComponent, PhysicsBodyComponent,
+    PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID,
+    CollisionBoxComponent, PhysicsBodyComponent,
 )
 
 
@@ -28,5 +29,12 @@ def is_character_body(owner) -> bool:
 
 
 def uses_character_solver(owner) -> bool:
-    """Le seul prédicat qui autorise la résolution Character contre la carte."""
-    return is_character_body(owner) and has_map_collider(owner)
+    """Les corps mobiles qui utilisent la résolution actuelle contre la carte."""
+    return physics_body_mode(owner) in (
+        PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID,
+    ) and has_map_collider(owner)
+
+
+def physics_body_needs_motion(owner) -> bool:
+    """Kinematic et Rigid déplacent leur vélocité sans appel Lua explicite."""
+    return physics_body_mode(owner) in (PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID)

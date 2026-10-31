@@ -20,6 +20,7 @@ SONDE = r"""
 typedef unsigned char u8; typedef signed char s8;
 typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
+#include "gba_debug.h"
 %(helpers)s
 
 /* 8 x 6 tuiles : un sol plein sur la dernière rangée (y = 40), un mur plein sur la colonne 6 (x = 48). */

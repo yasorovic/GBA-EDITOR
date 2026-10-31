@@ -449,7 +449,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
     "actor:apply_velocity": ApiFunc(
         lua_name="actor:apply_velocity", c_func="actor_apply_velocity",
         params=[], self_first=True,
-        doc="Adds the current velocity (self.velocity) to the position, keeping the "
+        doc="Adds the current velocity (self.velocity) to the position of a Character, keeping the "
             "sub-pixel from one frame to the next: replaces `self.position = "
             "self.position + self.velocity`, which mixed two scales since "
             "self.velocity became Q8. self.position still only returns whole pixels.",
@@ -1660,9 +1660,9 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
         lua_name="actor.velocity", c_getter="actor_get_velocity",
         c_setter="actor_set_velocity", ptype=PARAM_VEC2, self_first=True,
         doc="Velocity of the actor (a vec2, .x/.y), in Q8: 256 = 1 pixel/frame, 128 ="
-            " half a pixel/frame. Does not move by itself: self:apply_velocity() "
-            "adds it to the position, keeping the sub-pixel from one frame to the "
-            "next (self.position only returns whole pixels).",
+            " half a pixel/frame. Kinematic and Rigid bodies apply it automatically; a Character "
+            "uses self:apply_velocity() to keep the sub-pixel from one frame to the next "
+            "(self.position only returns whole pixels).",
     ),
 
     # ── Actor : état général ───────────────────────────────────────

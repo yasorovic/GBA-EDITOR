@@ -22,6 +22,7 @@ from codegen.runtime_codegen.gen_sprite import (
 from codegen.runtime_codegen.interact_gen import interact_tick_lines
 from codegen.runtime_codegen.physics.contacts import box_contact_lines
 from codegen.runtime_codegen.physics.body import uses_character_solver
+from codegen.runtime_codegen.physics.motion import physics_motion_lines
 from core.models.components import affine_sprite_component
 from core.models.scene import Scene
 from core.project import Project
@@ -94,10 +95,11 @@ def gen_scene_tick(
     # parent, et l'enfant doit suivre DANS la même frame — et AVANT la
     # collision et l'émission OAM, qui lisent la position monde recomposée.
     L = phases["physics"]
+    L += physics_motion_lines(scene, scene_actors, actor_offset, pi)
     L += parent_compose_lines(scene_actors, actor_offset, _lay.placed_entry)
     L += pool_compose_lines(pi)
 
-    # Blocage entre acteurs : un mobile est repoussé hors des boîtes `blocks_actors`, AVANT la carte de
+    # Blocage entre acteurs : un mobile est repoussé hors des boîtes de réponse `block`, AVANT la carte de
     # collision (les murs ont le dernier mot).
     L += block_tick_lines(p, scene, scene_actors, actor_offset, pi, shown)
 

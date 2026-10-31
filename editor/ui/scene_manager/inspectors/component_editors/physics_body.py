@@ -13,6 +13,8 @@ class PhysicsBodyEditor(BaseComponentEditor):
         labels = {
             "character": label("comped.physics_character"),
             "static": label("comped.physics_static"),
+            "kinematic": label("comped.physics_kinematic"),
+            "rigid": label("comped.physics_rigid"),
         }
         for value in PHYSICS_BODY_MODES:
             mode.addItem(labels[value], value)

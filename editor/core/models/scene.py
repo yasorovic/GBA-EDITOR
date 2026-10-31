@@ -634,6 +634,11 @@ class Scene(Resource):
     collision_layer: int = 0  # index BG (0-3) portant la carte de collisions
     # Grille de collision en tiles 8×8 — list[row][col] de TILE_* constants
     collision_map: list = field(default_factory=list)
+    # Règle de simulation de la scène, en pixels par frame². Elle reste nulle
+    # tant qu'aucun RigidBody ne l'utilise : Character et les anciens projets
+    # gardent donc exactement leur comportement.
+    physics_gravity_x: float = 0.0
+    physics_gravity_y: float = 0.0
     # Palettes actives de cette scène — noms référençant project.obj_palettes/
     # bg_palettes (catalogue illimité). Ordre = index de banque hardware
     # (slot 0 = 1er élément). Actor/Prefab.pal_bank indexe dans CETTE liste,
@@ -761,6 +766,9 @@ class Scene(Resource):
                if self.font_pal_banks else {}),
             "collision_layer": self.collision_layer,
             "collision_map": self.collision_map,
+            **({"physics_gravity_x": self.physics_gravity_x,
+                 "physics_gravity_y": self.physics_gravity_y}
+               if self.physics_gravity_x or self.physics_gravity_y else {}),
             "active_obj_palettes": self.active_obj_palettes,
             "active_bg_palettes": self.active_bg_palettes,
             "backdrop_color": self.backdrop_color,
@@ -841,6 +849,8 @@ class Scene(Resource):
             font_pal_banks=_font_pal_banks_from_dict(d),
             collision_layer=d.get("collision_layer", 0),
             collision_map=d.get("collision_map", []),
+            physics_gravity_x=float(d.get("physics_gravity_x", 0.0)),
+            physics_gravity_y=float(d.get("physics_gravity_y", 0.0)),
             active_obj_palettes=d.get("active_obj_palettes", []),
             active_bg_palettes=d.get("active_bg_palettes", []),
             backdrop_color=d.get("backdrop_color"),
