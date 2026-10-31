@@ -42,6 +42,7 @@ from typing import Optional
 
 from codegen.actor_appearance import has_oam_entry
 from codegen.c_names import sym as c_sym
+from codegen.layout_cache import layout_memo
 from codegen.pool_model import model_members, prefab_group
 from codegen.ui_obj_budget import scene_ui_obj_slots
 from core.models.scene import Scene
@@ -208,7 +209,13 @@ def scene_oam_layout(project, scene: Scene) -> OamLayout:
     restent cohérents sans se coordonner.
 
     Ordre des pools = ordre du catalogue `project.prefabs` (stable), pour que
-    l'offset d'un pool ne dépende que de la scène, jamais de l'ordre d'appel."""
+    l'offset d'un pool ne dépende que de la scène, jamais de l'ordre d'appel.
+
+    Mémoïsée à portée de contexte (cf. `layout_cache`) : le résultat est partagé, le lire sans le modifier."""
+    return layout_memo("oam", (project, scene), lambda: _compute_oam_layout(project, scene))
+
+
+def _compute_oam_layout(project, scene: Scene) -> OamLayout:
     scene_sym = c_sym(scene.name)
     posed = [a for a in scene.actors if getattr(a, "active", True)]
     ui = scene_ui_obj_slots(scene, project)

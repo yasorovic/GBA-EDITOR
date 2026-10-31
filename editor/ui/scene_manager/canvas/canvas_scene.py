@@ -534,9 +534,9 @@ class GBAScene(QGraphicsScene):
         # cache pour sa vie, et `scene_layout_cache` fait PARTAGER une seule
         # allocation de scène — sans quoi ce coût (lourd : résolution des
         # palettes de police) retombe au PREMIER paint, région par région, et
-        # fige l'affichage initial de la scène. Le build n'entre jamais dans ce
-        # contexte : il recalcule, aucun risque de périmé.
-        from codegen.palette_alloc import scene_layout_cache
+        # fige l'affichage initial de la scène. Le build ouvre son propre contexte
+        # (cf. `BuildWorker.run`) : celui-ci ne vit que le temps de ce pré-chauffage.
+        from codegen.layout_cache import scene_layout_cache
         with scene_layout_cache():
             for it in self._ui_region_items:
                 try:

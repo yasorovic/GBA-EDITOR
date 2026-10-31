@@ -350,9 +350,17 @@ def _check_api_prototypes(ctx: ValidationContext):
     # constantes présentes des deux côtés (les autres n'ont qu'une source, api.py).
     from scripting.api import hardware_enum_defines
 
+    # Un index du moteur en UNE passe, première occurrence gagnante : une regex par constante et par fonction relisait
+    # l'en-tête entier à chaque nom (une centaine de fois chacune).
+    engine_defines: dict[str, int] = {}
+    for m in re.finditer(r"^\s*#\s*define\s+(\w+)\s+(-?\d+)\b", eng, re.M):
+        engine_defines.setdefault(m.group(1), int(m.group(2)))
+    engine_decls: dict[str, str] = {}
+    for m in re.finditer(r"^\s*(?:void|int)\s+(\w+)\s*\(([^)]*)\)\s*;", eng, re.M):
+        engine_decls.setdefault(m.group(1), m.group(2))
+
     def engine_value(name: str):
-        m = re.search(r"^\s*#\s*define\s+" + re.escape(name) + r"\s+(-?\d+)\b", eng, re.M)
-        return int(m.group(1)) if m else None
+        return engine_defines.get(name)
 
     mismatched = []
     for sym, value in hardware_enum_defines():
@@ -376,11 +384,9 @@ def _check_api_prototypes(ctx: ValidationContext):
     # renommage — `layer.show(n, on)` en Lua contre `layer_show(bg, on)` en C, où
     # « n » parle d'un numéro de layer côté script — est délibéré et sans effet.
     def c_params(fn: str) -> list[str] | None:
-        m = re.search(r"^\s*(?:void|int)\s+" + re.escape(fn) + r"\s*\(([^)]*)\)\s*;",
-                      eng, re.M)
-        if not m:
+        if fn not in engine_decls:
             return None
-        a = m.group(1).strip()
+        a = engine_decls[fn].strip()
         if a in ("", "void"):
             return []
         return [p.strip().split()[-1].lstrip("*") for p in a.split(",")]
