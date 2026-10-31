@@ -17,8 +17,11 @@ Thumb) ; le compilateur le reçoit par `-DBS_IWRAM_<scène>_<phase>=<mode>`.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 IWRAM_TOTAL = 32 * 1024
 # La pile et ce que le jeu pourrait encore prendre : jamais mangés par le code placé. La pile descend depuis le haut de l'IWRAM
@@ -57,6 +60,17 @@ def read_modes(main_c: str) -> dict[tuple[str, str], int]:
 def read_sizes(nm_output: str) -> dict[tuple[str, str], int]:
     """La taille compilée de chaque phase, d'après `nm -S main.o` : {(scène, phase): octets}."""
     return {(m.group(2), m.group(3)): int(m.group(1), 16) for m in _SYMBOL.finditer(nm_output)}
+
+
+_IWRAM_START, _IWRAM_END = 0x03000000, 0x04000000
+_SYMBOL_AT = re.compile(r"^([0-9a-fA-F]+)\s+[0-9a-fA-F]+\s+[tT]\s+scene_tick_(\w+?)_(hooks|physics|late|render)$", re.M)
+
+
+def read_placed(nm_output: str) -> set[tuple[str, str]]:
+    """Les phases que le lien a réellement posées en IWRAM, d'après `nm -S rom.elf` : {(scène, phase)} dont l'adresse
+    tombe dans l'IWRAM. C'est le binaire qui répond, pas le plan."""
+    return {(m.group(2), m.group(3)) for m in _SYMBOL_AT.finditer(nm_output)
+            if _IWRAM_START <= int(m.group(1), 16) < _IWRAM_END}
 
 
 @dataclass
@@ -116,9 +130,42 @@ def overflowed(link_output: str) -> bool:
     return bool(re.search(r"region .iwram. overflowed|not within region .iwram.", link_output))
 
 
+def dropped_cflags(dropped: list[tuple[str, str]]) -> str:
+    return " ".join(f"-D{macro_name(scene, phase)}={ROM}" for scene, phase in dropped)
+
+
 def cflags(plan: Plan) -> str:
     """Les `-D` qui imposent le plan au compilateur : seulement les phases renvoyées en ROM."""
-    return " ".join(f"-D{macro_name(scene, phase)}={ROM}" for scene, phase in plan.dropped)
+    return dropped_cflags(plan.dropped)
+
+
+# ── Mémoire du plan entre deux builds ────────────────────────────────────────────────────────────────────────────────
+# Un plan mesuré n'est valable que pour le C qu'il a mesuré : l'empreinte couvre tout ce que `make` compile.
+
+def fingerprint(directories: list[Path], salt: str = "") -> str:
+    """Empreinte du C que `make` compile (`.c`, `.h`, `.s` des dossiers donnés) et de `salt` (options, Makefile)."""
+    digest = hashlib.sha1(salt.encode("utf-8"))
+    for directory in directories:
+        for path in sorted(directory.glob("*")):
+            if path.suffix in (".c", ".h", ".s") and path.is_file():
+                digest.update(path.name.encode("utf-8"))
+                digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def load_memo(path: Path, current: str) -> list[tuple[str, str]] | None:
+    """Les phases renvoyées en ROM par le dernier build qui tenait, ou None si rien n'est mémorisé pour cette empreinte."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if data["fingerprint"] != current:
+            return None
+        return [(scene, phase) for scene, phase in data["dropped"]]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def save_memo(path: Path, current: str, dropped: list[tuple[str, str]]) -> None:
+    path.write_text(json.dumps({"fingerprint": current, "dropped": [list(key) for key in dropped]}), encoding="utf-8")
 
 
 def iwram_macros(sym: str, phases: dict[str, list[str]]) -> list[str]:

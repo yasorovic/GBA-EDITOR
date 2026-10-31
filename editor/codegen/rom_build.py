@@ -221,6 +221,7 @@ class BuildWorker(EventEmitter, threading.Thread):
             BuildWorker._mgba_proc = None
 
             p = self.project
+            build_started = time.monotonic()
             self._open_build_log(p)
 
             if not p.scenes:
@@ -511,7 +512,10 @@ class BuildWorker(EventEmitter, threading.Thread):
                            f"[gen] {build_output.written} file(s) written, {build_output.skipped} unchanged")
                 asset_cache.save()
             if ok:
+                self._emit("log_line", f"[time] generation (validation to main.c): {time.monotonic() - build_started:.1f} s")
+                make_started = time.monotonic()
                 ok = self._step_make(p)
+                self._emit("log_line", f"[time] make, all attempts: {time.monotonic() - make_started:.1f} s")
             if ok: self._emit("progress", 0.97)
             # Le rapport de poids vient APRÈS le make : il se lit sur la ROM et
             # sur l'ELF, pas sur le projet. Et avant mGBA, pour que les chiffres
@@ -522,6 +526,7 @@ class BuildWorker(EventEmitter, threading.Thread):
                 ok = self._step_launch_mgba(p)
             if ok: self._emit("progress", 1.0)
 
+            self._emit("log_line", f"[time] build total: {time.monotonic() - build_started:.1f} s")
             self._emit("finished", ok)
 
         except OSError as e:
@@ -1107,46 +1112,80 @@ class BuildWorker(EventEmitter, threading.Thread):
 
     # ── Le code chaud en IWRAM ────────────────────────────────────
 
-    _IWRAM_FIT_ATTEMPTS = 3
+    _IWRAM_FIT_REVISIONS = 3         # révisions du plan permises ; chacune est suivie de son `make`
 
     def _make_fitting_iwram(self, p: Project, make, jobs: int, env: dict) -> bool:
         """`make`, puis, si le code du tick que le générateur a mis en IWRAM (`iwram_plan`) y prend trop de place, un
-        second `make` où les phases les moins précieuses restent en ROM. Seul `main.o` est recompilé. Le cas ordinaire
-        ne compile qu'une fois : le plan de départ tient presque toujours."""
+        nouveau `make` où les phases les moins précieuses restent en ROM. Seul `main.o` est recompilé. Le cas ordinaire
+        ne compile qu'une fois : le plan de départ tient presque toujours. Un plan révisé est toujours compilé : le
+        dernier `make` est celui qui suit la dernière révision, et le bilan se lit sur l'ELF qu'il a produit."""
         import codegen.iwram_plan as iwram_plan
         from codegen.rom_report import read_ram_use
-        extra = ""
+        main_c = p.src_dir / "main.c"
         modes: dict | None = None
+        if main_c.exists():
+            modes = iwram_plan.read_modes(main_c.read_text(encoding="utf-8", errors="replace"))
+        # Un build ordinaire ne cherche pas de nouveau un placement déjà mesuré : si le C est celui du dernier build qui
+        # tenait, on repart de ses retraits. La mesure d'après `make` reste faite, elle valide ou révise ce départ.
+        makefile = p.build_dir / "Makefile"
+        memo_path = p.build_dir / "iwram_plan.json"
+        stamp = iwram_plan.fingerprint([p.src_dir, p.grit_out_dir],
+                                       env.get("EXTRA_CFLAGS", "") + (makefile.read_text(errors="replace")
+                                                                       if makefile.exists() else ""))
+        dropped_all = iwram_plan.load_memo(memo_path, stamp)
+        main_o = p.build_dir / "obj" / "main.o"
+        if dropped_all is None:
+            dropped_all = []
+            main_o.unlink(missing_ok=True)             # compilé avec un autre plan, ou avec un autre C : make ne le saurait pas
+        elif modes:
+            modes = {key: (iwram_plan.ROM if key in dropped_all else mode) for key, mode in modes.items()}
+            self._emit("log_line", f"[iwram] plan reused from the last build ({len(dropped_all)} phase(s) in ROM)")
+        extra = iwram_plan.dropped_cflags(dropped_all)
+        settled = False
         proc = None
-        for attempt in range(self._IWRAM_FIT_ATTEMPTS):
+        for attempt in range(self._IWRAM_FIT_REVISIONS + 1):
             attempt_env = dict(env)
             attempt_env["IWRAM_CFLAGS"] = extra            # main.o seul : cf. runtime/Makefile
+            started = time.monotonic()
             proc = self._capture_cmd([str(make), f"-j{jobs}"], "[make]", cwd=p.build_dir, env=attempt_env)
+            self._emit("log_line", f"[time] make #{attempt + 1}: {time.monotonic() - started:.1f} s")
             if proc is None:
                 return False
-            main_c = p.src_dir / "main.c"
-            if modes is None and main_c.exists():
-                modes = iwram_plan.read_modes(main_c.read_text(encoding="utf-8", errors="replace"))
             if not modes or not any(mode != iwram_plan.ROM for mode in modes.values()):
+                settled = proc.returncode == 0         # rien en IWRAM : rien à planifier
                 break
             failed = proc.returncode != 0
             if failed and not iwram_plan.overflowed(proc.stdout + proc.stderr):
                 break                                  # une autre panne : elle sera dite telle quelle
             plan = self._iwram_plan(p, modes, proc, read_ram_use)
             if plan is None or not plan.changed:
+                settled = plan is None
                 break                                  # tient, ou rien de plus à retirer
+            if attempt == self._IWRAM_FIT_REVISIONS:
+                self._emit("log_line", "[iwram] the tick code placed in IWRAM still does not fit with the stack "
+                                       f"reserve after {self._IWRAM_FIT_REVISIONS} revisions")
+                break
             modes = plan.modes
-            extra = (extra + " " + iwram_plan.cflags(plan)).strip()
+            dropped_all = dropped_all + plan.dropped
+            extra = iwram_plan.dropped_cflags(dropped_all)
             self._emit("log_line", "[iwram] the tick code placed in IWRAM does not fit with the "
                                    f"{iwram_plan.IWRAM_STACK_RESERVE // 1024} KiB kept for the stack: "
                                    + ", ".join(f"{scene}.{phase}" for scene, phase in plan.dropped)
                                    + " stay in ROM")
-            (p.build_dir / "obj" / "main.o").unlink(missing_ok=True)       # main.c ne change pas : make ne le referait pas
+            main_o.unlink(missing_ok=True)             # main.c ne change pas : make ne le referait pas
         ok = self._report_cmd(proc, "[make]")
+        if ok and settled:
+            iwram_plan.save_memo(memo_path, stamp, dropped_all)
+        else:
+            memo_path.unlink(missing_ok=True)
         if ok and modes:
-            placed = sorted(f"{scene}.{phase}" for (scene, phase), mode in modes.items() if mode != 0)
-            if placed:
-                self._emit("log_line", "[iwram] tick code in IWRAM (ARM): " + ", ".join(placed))
+            # Le bilan se lit sur l'ELF lié, jamais sur le plan en mémoire.
+            nm, elf = self.toolchain.resolve_binutil("nm"), p.build_dir / "rom.elf"
+            if nm and elf.exists():
+                listing = run_tool([str(nm), "-S", elf.name], cwd=str(elf.parent), env=tool_environment())
+                placed = sorted(f"{scene}.{phase}" for scene, phase in iwram_plan.read_placed(listing.stdout))
+                if placed:
+                    self._emit("log_line", "[iwram] tick code in IWRAM (ARM): " + ", ".join(placed))
         return ok
 
     def _iwram_plan(self, p: Project, modes: dict, proc, read_ram_use):

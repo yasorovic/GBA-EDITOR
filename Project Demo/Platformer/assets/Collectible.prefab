@@ -23,7 +23,7 @@
       "id": "collision",
       "active": true,
       "solid": false,
-      "blocks_actors": false,
+      "response": "sensor",
       "tag": "body",
       "x": 4,
       "y": 4,
