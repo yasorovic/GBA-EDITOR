@@ -277,41 +277,11 @@ def gen_scene_tick(
         lambda owner: appearances(p, owner, sprite_offsets), oam_write_lines,
         lambda m, owner: pool_affine(p, m["prefab"], owner))
 
-    # Après les scripts, avant le flush OAM : une lecture démarrée pendant le
-    # tick avance dès cette frame, et les sprites des glyphes animés sont posés
-    # avant d'être copiés en OAM.
-    # La navigation AVANT le rendu d'UI : le script a déjà tourné, il a pu
-    # poser le nombre d'items ; l'index bouge donc dans la même frame que
-    # l'appui, et les rangées se dessinent ensuite avec le bon curseur.
-    L += [
-        "    oam_hide_from(_oamn);",
-        # Des sprites visibles sans place : dit au log debug (retiré en release), une fois par seconde.
-        "    if(g_oam_dropped){",
-        "        if((_g_frame & 63)==0){",
-        '            debug_write_str("warning: ");',
-        "            debug_write_int(g_oam_dropped);",
-        '            debug_write_str(" sprite(s) not drawn, the OAM is full");',
-        "            debug_flush();",
-        "        }",
-        "        g_oam_dropped = 0;",
-        "    }",
-        *([
-            # Des instances affines sans matrice (les 32 sont prises) : dessinées SANS rotation ni échelle.
-            "    if(g_affine_dropped){",
-            "        if((_g_frame & 63)==0){",
-            '            debug_write_str("warning: ");',
-            "            debug_write_int(g_affine_dropped);",
-            '            debug_write_str(" sprite(s) drawn without rotation or scale, the 32 affine matrices are taken");',
-            "            debug_flush();",
-            "        }",
-            "        g_affine_dropped = 0;",
-            "    }",
-        ] if _born_affine else []),
-    ]
-    L.append("    ui_list_tick();")
-    L.append("    ui_image_update();")
-    L.append("    text_update();")
-    L.append("    oam_update();")
+    # Après les scripts, avant le flush OAM : une lecture démarrée pendant le tick avance dès cette frame, et les
+    # sprites des glyphes animés sont posés avant d'être copiés en OAM. La navigation vient AVANT le rendu d'UI : le
+    # script a déjà tourné, l'index bouge dans la même frame que l'appui. Cette fin est la même pour toutes les
+    # scènes : `scene_render_end` (cf. `gen_globals`) la porte en un seul exemplaire.
+    L.append("    scene_render_end(_oamn);")
     out: list[str] = iwram_macros(sym, phases)
     for name in TICK_PHASES:
         out += [f"BS_ATTR_{sym}_{name} static void scene_tick_{sym}_{name}(void) {{", *phases[name], "}", ""]
