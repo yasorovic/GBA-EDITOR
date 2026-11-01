@@ -30,7 +30,8 @@ from ui.common.tooltip import tooltip
 from ui.sound_mixer.section_colors import section_color
 
 _RULER = 16
-_CUE_LANE = 18        # la voie des repères, entre la règle et les sections
+_START_HALF = 5       # la demi-largeur de la poignée de départ (celle de la règle de l'onde)
+_CUE_LANE = 18       # la voie des repères, entre la règle et les sections
 _BAND = 20
 _CELL = 28
 _LEAD_W = 14           # la largeur d'une case d'amorce : réduite, et barrée
@@ -54,6 +55,7 @@ class OrderStrip(QWidget):
     cue_context_requested = pyqtSignal(object, int, object)   # (le repère visé ou None, la position, où ouvrir le menu)
     cue_moving = pyqtSignal(object, int)                      # (le repère, sa nouvelle position) pendant le glisser
     cue_moved = pyqtSignal()                                  # le drapeau est lâché
+    start_requested = pyqtSignal(float, bool)                 # (position, Maj enfoncé) : la poignée de départ, glissée sur la règle
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -75,6 +77,8 @@ class OrderStrip(QWidget):
         self._drag_edge: str | None = None
         self._cues: list = []
         self._drag_cue = None
+        self._start = 0.0                        # la poignée de départ de la lecture, dans l'unité de la piste (fraction d'ordre, ou ms)
+        self._drag_start = False
 
     # ── Ce qu'on lui donne ────────────────────────────────────────
 
@@ -114,6 +118,13 @@ class OrderStrip(QWidget):
             fraction = 0.0
         if order != self._playhead or fraction != self._playhead_fraction:
             self._playhead, self._playhead_fraction = order, fraction
+            self.update()
+
+    def set_start(self, position: float) -> None:
+        """La poignée de départ : la même que celle de la règle de l'onde, posée à `position` (un ordre à la fraction
+        près, ou des millisecondes pour un WAV)."""
+        if position != self._start:
+            self._start = position
             self.update()
 
     def set_playhead_ms(self, ms: float) -> None:
@@ -235,6 +246,12 @@ class OrderStrip(QWidget):
         band = self._band_of(section)
         return band is not None and band.width() >= 3 * _PLAY_W and band.left() + _EDGE_INSET <= x < band.left() + _PLAY_W
 
+    def _start_x(self) -> float:
+        return min(max(self._x(min(self._start, self._extent)), _START_HALF + 0.5), self.width() - _START_HALF - 0.5)
+
+    def _on_start(self, x: float, y: float) -> bool:
+        return bool(self._table) and y < _RULER and abs(x - self._start_x()) <= _START_HALF + 2
+
     def _flag_rect(self, cue) -> QRectF:
         """Le drapeau d'un repère : sa hampe est à la position, la bannière flotte à droite."""
         return QRectF(self._x(cue.position), _RULER + 1, _CUE_FLAG_W, _CUE_LANE - 3)
@@ -270,6 +287,9 @@ class OrderStrip(QWidget):
         if e.button() != Qt.MouseButton.LeftButton or not self._table:
             return
         x = e.position().x()
+        if self._on_start(x, e.position().y()):                   # la règle : seule la poignée de départ se saisit
+            self._drag_start = True
+            return
         if e.position().y() < self._bands_top():                  # la voie des repères : un drapeau se saisit, le vide ne fait rien
             cue = self._cue_at(x, e.position().y())
             if cue is not None:
@@ -303,6 +323,12 @@ class OrderStrip(QWidget):
         self._set_selection(i, i + 1)
 
     def mouseMoveEvent(self, e):
+        if self._drag_start:
+            x = e.position().x()
+            shift = bool(e.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+            position = self._position_at(x) if self._timed else self._position_f(x)
+            self.start_requested.emit(max(0.0, min(float(self._extent), float(position))), shift)
+            return
         if self._drag_cue is not None:
             position = self._cue_position_at(e.position().x())
             if position is not None and position != self._drag_cue.position:
@@ -320,7 +346,10 @@ class OrderStrip(QWidget):
             return
         if self._anchor is None:
             x = e.position().x()
-            cue = self._cue_at(x, e.position().y()) if self._table and e.position().y() < self._bands_top() else None
+            if self._on_start(x, e.position().y()):
+                self.setCursor(Qt.CursorShape.SizeHorCursor)
+                return
+            cue =self._cue_at(x, e.position().y()) if self._table and e.position().y() < self._bands_top() else None
             if cue is not None:
                 self.setCursor(Qt.CursorShape.SizeHorCursor)
                 self.setToolTip(self.cue_tip(cue))
@@ -342,6 +371,7 @@ class OrderStrip(QWidget):
         self._set_selection(lo, hi + 1)
 
     def mouseReleaseEvent(self, _e):
+        self._drag_start = False
         if self._drag_cue is not None:
             self._drag_cue = None
             self.cue_moved.emit()
@@ -376,6 +406,20 @@ class OrderStrip(QWidget):
         for cue in self._cues:
             self._paint_cue(p, cue)
         self._paint_selection_and_playhead(p)
+        self._paint_start(p)
+
+    def _paint_start(self, p: QPainter) -> None:
+        """La poignée de départ : même repère que sur la règle de l'onde, et son filet pointillé à travers la structure."""
+        x = self._start_x()
+        faint = QColor(C.ACCENT); faint.setAlpha(110)
+        p.setPen(QPen(faint, 1, Qt.PenStyle.DashLine))
+        p.drawLine(QPointF(x, _RULER), QPointF(x, self._cells_top() + _CELL))
+        p.setPen(QPen(QColor(C.BG_BASE), 1))
+        p.setBrush(QColor(C.ACCENT))
+        p.drawPolygon(QPolygonF([QPointF(x - _START_HALF, 2), QPointF(x + _START_HALF, 2),
+                                 QPointF(x + _START_HALF, _RULER - 8), QPointF(x, _RULER - 1),
+                                 QPointF(x - _START_HALF, _RULER - 8)]))
+        p.setBrush(Qt.BrushStyle.NoBrush)
 
     def _paint_cell(self, p: QPainter, rect: QRectF, is_pattern: bool) -> None:
         p.fillRect(rect.adjusted(0, 0, -1, 0), QColor(C.BG_INPUT if is_pattern else C.BG_DEEP))

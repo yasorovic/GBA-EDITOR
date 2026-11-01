@@ -49,8 +49,8 @@ from .module_model import (
 )
 from .mod_file import note_to_period
 
-GBA_MIX_RATE = 13379          # Hz — taux « qualité standard » des presets maxmod GBA
-ROM_MIXER_RATE = 15768        # Hz — le mixeur « 16 kHz » de maxmod, tel qu'il tourne vraiment sur la console
+ROM_MIXER_RATE = 15768        # Hz — le mixeur « 16 kHz » de maxmod (celui de `mmInitDefault`), tel qu'il tourne sur la console
+GBA_MIX_RATE = ROM_MIXER_RATE # l'aperçu rend et joue au taux de la console : un seul taux, pas de conversion entre les deux
 AMIGA_PAL_CLOCK = 7093789.2   # Hz — horloge de référence période → fréquence
 _MAX_VISITED = 256 * 256 + 1  # anti-boucle infinie : une table de 256 ordres de 256 lignes au plus, donc jamais atteint
                               # par un morceau qui finit (un WAV de 12 min en a 65 536 ; 4 096 le coupait à 47 s)

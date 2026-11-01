@@ -147,3 +147,20 @@ def test_la_tete_de_lecture_se_situe_sur_le_rendu_entier():
     seconds = track.song_seconds(int(GBA_MIX_RATE * 1.0) - 1, GBA_MIX_RATE)
     assert abs(seconds - 1.0) < 0.05
     assert abs(track.total_seconds(GBA_MIX_RATE) - whole.shape[0] / GBA_MIX_RATE) < 1e-6
+
+
+def test_une_tete_posee_apres_la_section_n_est_pas_ramenee_a_son_debut():
+    """Aperçu : le curseur posé au-delà de la section de boucle fait jouer à partir de là, pas depuis la section."""
+    track = StreamTrack(_mod(), GBA_MIX_RATE, loop_orders=(2, 5))
+    deck = MusicDeck(GBA_MIX_RATE)
+    deck.play(track, MODULE_FULL, loop=False)
+    frame = round(GBA_MIX_RATE / 60)
+    deck.pull(frame)
+    deck.seek_to_row(6, 0)
+    seen: list = []
+    for _ in range(40):
+        deck.pull(frame)
+        order = track.order_at(deck.position)
+        if not seen or seen[-1] != order:
+            seen.append(order)
+    assert 6 in seen and not set(seen[seen.index(6):]) & {2, 3, 4}

@@ -182,6 +182,7 @@ class MusicDeck:
         self._music_vol = MODULE_FULL    # `g_music_vol` : le dernier niveau DEMANDÉ
         self._ended = False              # module non bouclé arrivé au bout
         self._loop_in = False            # `g_mloop_in` : on est entré dans la section
+        self._past_loop = False          # aperçu seulement : la tête a été posée après la section, qui ne la rappelle pas
 
         # L'état de transition — les `g_mtr_*` du runtime, mot pour mot.
         self._mode = _NONE
@@ -314,6 +315,7 @@ class MusicDeck:
         self._loop = loop or track.forces_loop
         self._ended = False
         self._loop_in = False
+        self._past_loop = False
         self._mode = _NONE
 
     # ── L'horloge ─────────────────────────────────────────────────
@@ -408,6 +410,8 @@ class MusicDeck:
         start, end = track.loop_orders
         order = track.order_at(self._pos)
         if order >= end:
+            if self._past_loop:
+                return
             self._jump_to_order(start)
             self._loop_in = True
         elif order >= start:
@@ -475,6 +479,9 @@ class MusicDeck:
         if self._track is not None and not self._ended:
             self._jump_to_order(order, row)
             self._loop_in = False
+            loop = self._track.loop_orders
+            # Une tête posée après la section de boucle y joue jusqu'au bout du morceau, au lieu d'être ramenée au début de la section.
+            self._past_loop = loop is not None and order >= loop[1]
 
     def _jump_to_order(self, order: int, row: int = 0):
         """`mmPosition(order)`."""
@@ -538,6 +545,7 @@ class MusicDeck:
                     parts.append(np.zeros((need, 2), dtype=np.int16))
                     break
                 rewinds += 1
+                self._past_loop = False
                 self._pos = track.rewind()
                 continue
             take = min(need, total - self._pos)
