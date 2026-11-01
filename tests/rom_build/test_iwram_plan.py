@@ -56,6 +56,14 @@ def test_la_place_sans_lien_se_compte_dans_les_objets_moins_le_code_deja_place()
     assert ip.static_from_objects(objets, placed=5000) == 1500 + ip.LIBRARIES_IWRAM_ESTIMATE
 
 
+def test_le_lien_qui_deborde_dit_au_moins_ce_que_l_iwram_prend():
+    assert ip.overflow_used("ld.exe: region `iwram' overflowed by 120 bytes") == 32 * 1024 + 120
+    sortie = ("ld.exe: address 0x3008360 of rom.elf section `.data' is not within region `iwram'\n"
+              "ld.exe: address 0x3008368 of rom.elf section `.fini_array' is not within region `iwram'")
+    assert ip.overflow_used(sortie) == 0x8368
+    assert ip.overflow_used("undefined reference to `foo'") == 0
+
+
 def test_un_lien_qui_deborde_de_l_iwram_se_reconnait():
     assert ip.overflowed("ld.exe: region `iwram' overflowed by 120 bytes")
     assert ip.overflowed("ld.exe: address 0x300968c of rom.elf section `.init_array' is not within region `iwram'")

@@ -1217,6 +1217,9 @@ class BuildWorker(EventEmitter, threading.Thread):
             reports = [run_tool([str(size), "-A", o.name], cwd=str(o.parent), env=tool_environment()).stdout
                        for o in sorted((p.build_dir / "obj").glob("*.o"))]
             static = iwram_plan.static_from_objects(reports, placed)
+            # L'estimation des bibliothèques peut conclure que ça tient quand le lien vient de dire le contraire : ce que
+            # le lien a mesuré l'emporte, sinon rien ne serait retiré et le build échouerait.
+            static = max(static, iwram_plan.overflow_used(proc.stdout + proc.stderr) - placed)
         return iwram_plan.make_plan(modes, sizes, static)
 
     # ── Étape 4b : ce que la ROM pèse ─────────────────────────────

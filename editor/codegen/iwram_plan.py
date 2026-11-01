@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 IWRAM_TOTAL = 32 * 1024
+IWRAM_BASE = 0x03000000
 # La pile et ce que le jeu pourrait encore prendre : jamais mangés par le code placé. La pile descend depuis le haut de l'IWRAM
 # (juste sous les piles d'interruption) ; 4 Ko couvrent l'appel d'un script depuis le tick avec de la marge.
 IWRAM_STACK_RESERVE = 4 * 1024
@@ -128,6 +129,18 @@ def static_from_objects(size_outputs: list[str], placed: int) -> int:
 def overflowed(link_output: str) -> bool:
     """Le lien a-t-il échoué parce que l'IWRAM déborde ?"""
     return bool(re.search(r"region .iwram. overflowed|not within region .iwram.", link_output))
+
+
+def overflow_used(link_output: str) -> int:
+    """Ce que le lien dit de l'IWRAM prise, en octets : au moins la taille de la région plus ce qui en dépasse, ou l'adresse
+    de la première section hors région. Une borne basse, mais vraie, là où `static_from_objects` estime les bibliothèques ; 0 si le
+    message ne dit rien."""
+    used = 0
+    for over in re.findall(r"region .iwram. overflowed by (\d+) bytes", link_output):
+        used = max(used, IWRAM_TOTAL + int(over))
+    for addr in re.findall(r"address 0x([0-9a-fA-F]+) of \S+ section \S+ is not within region .iwram.", link_output):
+        used = max(used, int(addr, 16) - IWRAM_BASE)
+    return used
 
 
 def dropped_cflags(dropped: list[tuple[str, str]]) -> str:
