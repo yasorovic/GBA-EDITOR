@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 from PyQt6.QtWidgets import QCheckBox, QComboBox, QDoubleSpinBox, QVBoxLayout, QWidget
 
-from core.models.components import CollisionBoxComponent, PhysicsBodyComponent
+from core.models.components import CollisionShapeComponent, PhysicsBodyComponent
 from core.models.scene import Actor
 from ui.common.notice import NoteLine
 from ui.common.widgets import ScriptSlot, W
@@ -14,8 +14,8 @@ def test_l_editeur_affiche_et_ecrit_les_quatre_noms_canoniques(qapp):
     written = []
     comp = PhysicsBodyComponent(collider_id="feet")
     actor = Actor(name="Hero", components=[
-        CollisionBoxComponent(id="body", tag="Body"),
-        CollisionBoxComponent(id="feet", tag="Feet"),
+        CollisionShapeComponent(id="body", tag="Body"),
+        CollisionShapeComponent(id="feet", tag="Feet"),
         comp,
     ])
 

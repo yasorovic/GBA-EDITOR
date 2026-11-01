@@ -35,7 +35,7 @@ PARAM_RECT         = "rect"
 
 # Types de référence renvoyés par les appels et utilisés avec `:`.
 REF_SFX = "sfx"                   # un effet EN TRAIN de jouer : un mm_sfxhand
-REF_COLLISION_BOX = "collision_box"  # une boîte de collision d'un acteur : un rang, 0 = absente
+REF_COLLISION_SHAPE = "collision_shape"  # une boîte de collision d'un acteur : un rang, 0 = absente
 REF_PHYSICS_BODY = "physics_body"    # l'état physique d'un acteur : le même Actor* sous une API dédiée
 REF_UI_ELEMENT = "ui_element"     # un élément d'interface : son index, connu au build
 # Les éléments d'interface héritent de `ui_element`.
@@ -84,7 +84,7 @@ class RefType:
 
 REF_TYPE_TABLE: dict[str, RefType] = {
     REF_SFX: RefType(c_type="mm_sfxhand", prefix="sfx"),
-    REF_COLLISION_BOX: RefType(c_type="int", prefix="collision_box"),
+    REF_COLLISION_SHAPE: RefType(c_type="int", prefix="collision_shape"),
     REF_PHYSICS_BODY: RefType(
         c_type="Actor*", prefix="body",
         hint="A PhysicsBody is acquired from its actor: `local body = self:physics_body()`."),
@@ -629,36 +629,36 @@ RUNTIME_API: dict[str, ApiFunc] = {
     ),
 
     # ── Boîtes de collision : une référence typée ───────────────────
-    # Ce que l'inspecteur du CollisionBoxComponent règle (actif, solide, décalage,
+    # Ce que l'inspecteur du CollisionShapeComponent règle (actif, solide, décalage,
     # taille) est vivant au runtime : la résolution contre la carte et le test de
     # chevauchement lisent ces mêmes champs à chaque frame. La boîte est un objet
     # à part entière : on la demande à l'acteur par son tag, on la tient dans une
     # variable, et ses champs sont des PROPRIÉTÉS (cf. RUNTIME_PROPS, clés
-    # `collision_box.*`), ses actions des MÉTHODES (`collision_box:*`). Le tag est
+    # `collision_shape.*`), ses actions des MÉTHODES (`collision_shape:*`). Le tag est
     # la clé : le lire n'a de sens que pour comparer.
-    "actor:collision_box": ApiFunc(
-        lua_name="actor:collision_box", c_func="actor_get_box",
-        params=[Param("tag", PARAM_STR, DOMAIN_BOX_TAG, doc="Tag of the box, as set in its CollisionBoxComponent")],
-        ret=REF_COLLISION_BOX, self_first=True,
-        doc="The collision box of this actor carrying this tag. Returns nil if the "
+    "actor:collision_shape": ApiFunc(
+        lua_name="actor:collision_shape", c_func="actor_get_box",
+        params=[Param("tag", PARAM_STR, DOMAIN_BOX_TAG, doc="Tag of the box, as set in its CollisionShapeComponent")],
+        ret=REF_COLLISION_SHAPE, self_first=True,
+        doc="The collision shape of this actor carrying this tag. Returns nil if the "
             "actor has none: `if hb then` tests it. Ex: local hb = "
-            "self:collision_box(\"hitbox\")",
+            "self:collision_shape(\"hitbox\")",
     ),
-    f"{REF_COLLISION_BOX}:overlaps": ApiFunc(
-        lua_name="collision_box:overlaps", c_func="collision_box_overlaps_actor",
-        params=[Param("other", PARAM_ACTOR, doc="An actor, or another collision box")], ret="bool", self_first=True,
+    f"{REF_COLLISION_SHAPE}:overlaps": ApiFunc(
+        lua_name="collision_shape:overlaps", c_func="collision_shape_overlaps_actor",
+        params=[Param("other", PARAM_ACTOR, doc="An actor, or another collision shape")], ret="bool", self_first=True,
         doc="Does this box overlap `other`? `other` is an actor (any of its active "
             "boxes) or another box (only that one). An inactive box overlaps nobody. "
             "Ex: if hb:overlaps(other) then ... end",
     ),
-    f"{REF_COLLISION_BOX}:activate": ApiFunc(
-        lua_name="collision_box:activate", c_func="collision_box_set_active",
+    f"{REF_COLLISION_SHAPE}:activate": ApiFunc(
+        lua_name="collision_shape:activate", c_func="collision_shape_set_active",
         params=[], self_first=True, fixed_args=(1,),
         doc="Puts the box back in play: it collides with the map and the other boxes "
             "again. Ex: hb:activate()",
     ),
-    f"{REF_COLLISION_BOX}:deactivate": ApiFunc(
-        lua_name="collision_box:deactivate", c_func="collision_box_set_active",
+    f"{REF_COLLISION_SHAPE}:deactivate": ApiFunc(
+        lua_name="collision_shape:deactivate", c_func="collision_shape_set_active",
         params=[], self_first=True, fixed_args=(0,),
         doc="Takes the box out of play: it no longer collides with anything, without "
             "being destroyed. Ex: hb:deactivate()",
@@ -1281,7 +1281,7 @@ RUNTIME_API: dict[str, ApiFunc] = {
     # : la scène expose son état en propriétés.
 
     # ── Collision du monde ──────────────────────────────────────────
-    # La carte appartient à la scène, pas à une CollisionBox. La forme module
+    # La carte appartient à la scène, pas à une CollisionShape. La forme module
     # est donc la porte normale ; l'ancienne méthode de boîte ci-dessous reste
     # uniquement pour les scripts déjà écrits.
     "collision.tile_at": ApiFunc(
@@ -1292,9 +1292,9 @@ RUNTIME_API: dict[str, ApiFunc] = {
             "custom movement.",
     ),
 
-    # ── Compatibilité CollisionBox ─────────────────────────────────
-    f"{REF_COLLISION_BOX}:get_collision_tile": ApiFunc(
-        lua_name="collision_box:get_collision_tile", c_func="collision_box_get_collision_tile",
+    # ── Compatibilité CollisionShape ─────────────────────────────────
+    f"{REF_COLLISION_SHAPE}:get_collision_tile": ApiFunc(
+        lua_name="collision_shape:get_collision_tile", c_func="collision_shape_get_collision_tile",
         params=[Param("x", PARAM_INT, doc="World position, in pixels"), Param("y", PARAM_INT, doc="World position, in pixels")], ret="int", self_first=True,
         doc="Legacy form of collision:tile_at(x, y). The point is absolute and does "
             "not depend on this box; migrate new scripts to collision:tile_at. "
@@ -1689,10 +1689,10 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
         doc="True if this body was resting on the collision map, a StaticBody, or a "
             "KinematicBody at the end of the previous frame. Read-only.",
     ),
-    f"{REF_PHYSICS_BODY}.support": ApiProp(
-        lua_name="physics_body.support", c_getter="actor_get_support", ptype=PARAM_INT,
+    f"{REF_PHYSICS_BODY}.floor": ApiProp(
+        lua_name="physics_body.floor", c_getter="actor_get_floor", ptype=PARAM_INT,
         self_first=True, read_only=True, ref=REF_ACTOR,
-        doc="Actor currently supporting this CharacterBody, or nil when grounded on the "
+        doc="Actor currently acting as the floor for this CharacterBody, or nil when grounded on the "
             "collision map or in the air. Read-only.",
     ),
 
@@ -1727,7 +1727,7 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
         doc="Name of this actor (read-only): the name of its scene actor or of "
             "its prefab. It is what lets you recognise who you touch. Ex: if "
             "other.name == \"Ball\" then self:destroy() end. Not to be confused "
-            "with `tag`, which belongs to collision boxes.",
+            "with `tag`, which belongs to collision shapes.",
     ),
 
     # ── Actor : navigation dans un acteur à parties ─────────────────
@@ -1886,23 +1886,23 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
     "actor.box_count": ApiProp(
         lua_name="actor.box_count", c_getter="actor_get_box_count", ptype=PARAM_INT,
         self_first=True, read_only=True,
-        doc="Number of collision boxes of this actor, active or not (fixed at build, "
+        doc="Number of collision shapes of this actor, active or not (fixed at build, "
             "read-only). The boxes themselves are requested by their tag: "
-            "self:collision_box(\"hitbox\").",
+            "self:collision_shape(\"hitbox\").",
     ),
 
-    # ── La boîte de collision (référence `collision_box`) ──────────
-    # Clés `collision_box.<champ>` : le récepteur est une VARIABLE qui tient la
+    # ── La boîte de collision (référence `collision_shape`) ──────────
+    # Clés `collision_shape.<champ>` : le récepteur est une VARIABLE qui tient la
     # référence (`hb.solid`), pas un module. `expr_types.resolve_prop` les
     # résout d'après le type que porte le `local`.
-    "collision_box.tag": ApiProp(
-        lua_name="collision_box.tag", c_getter="collision_box_get_tag",
+    "collision_shape.tag": ApiProp(
+        lua_name="collision_shape.tag", c_getter="collision_shape_get_tag",
         ptype=PARAM_INT, self_first=True, read_only=True, domain=DOMAIN_BOX_TAG,
         doc="The tag of this box: the key that designated it. Read-only; used to "
             "compare: hb.tag == \"hitbox\".",
     ),
-    "collision_box.active": ApiProp(
-        lua_name="collision_box.active", c_getter="collision_box_get_active",
+    "collision_shape.active": ApiProp(
+        lua_name="collision_shape.active", c_getter="collision_shape_get_active",
         ptype=PARAM_BOOL, self_first=True, read_only=True,
         doc="Is the box in play? When inactive, it collides with neither the map nor "
             "the other boxes. Read-only: hb:activate() / hb:deactivate() write it. It"
@@ -1993,38 +1993,38 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
         doc="Is the element displayed? Takes its parents into account: a child of a "
             "hidden container is not. Read-only: :show() / :hide() write it.",
     ),
-    "collision_box.is_grounded": ApiProp(
-        lua_name="collision_box.is_grounded", c_getter="collision_box_get_grounded",
+    "collision_shape.is_grounded": ApiProp(
+        lua_name="collision_shape.is_grounded", c_getter="collision_shape_get_grounded",
         ptype=PARAM_BOOL, self_first=True, read_only=True,
         doc="Was this box resting on the ground at the end of the previous frame "
             "(slopes included)? Always false for a non-solid box: the collision map "
             "ignores it. `body.grounded` is the OR over all the boxes of the actor. "
             "Read-only."),
-    "collision_box.solid": ApiProp(
-        lua_name="collision_box.solid", c_getter="collision_box_get_solid",
-        c_setter="collision_box_set_solid", ptype=PARAM_BOOL, self_first=True,
+    "collision_shape.solid": ApiProp(
+        lua_name="collision_shape.solid", c_getter="collision_shape_get_solid",
+        c_setter="collision_shape_set_solid", ptype=PARAM_BOOL, self_first=True,
         doc="Stopped by the collision map (true) or a simple trigger (false). Ex: "
             "Set hb.solid = false to pass through walls. This affects the collision map only; "
             "Block or Sensor controls actor-to-actor response.",
     ),
-    "collision_box.offset": ApiProp(
-        lua_name="collision_box.offset", c_getter="collision_box_get_offset",
-        c_setter="collision_box_set_offset", ptype=PARAM_VEC2, self_first=True,
+    "collision_shape.offset": ApiProp(
+        lua_name="collision_shape.offset", c_getter="collision_shape_get_offset",
+        c_setter="collision_shape_set_offset", ptype=PARAM_VEC2, self_first=True,
         doc="Offset of the box relative to the sprite's pivot, in pixels (−128 to "
             "127, clamped). Immutable value: hb.offset = vec2(8, -4).",
     ),
-    "collision_box.size": ApiProp(
-        lua_name="collision_box.size", c_getter="collision_box_get_size",
-        c_setter="collision_box_set_size", ptype=PARAM_VEC2, self_first=True,
+    "collision_shape.size": ApiProp(
+        lua_name="collision_shape.size", c_getter="collision_shape_get_size",
+        c_setter="collision_shape_set_size", ptype=PARAM_VEC2, self_first=True,
         doc="Width and height of the box, in pixels (0 to 255, clamped). A hitbox "
             "that grows: hb.size = vec2(12 + t, 8).",
     ),
-    "collision_box.bounds": ApiProp(
-        lua_name="collision_box.bounds", c_getter="collision_box_get_bounds",
+    "collision_shape.bounds": ApiProp(
+        lua_name="collision_shape.bounds", c_getter="collision_shape_get_bounds",
         ptype=PARAM_RECT, self_first=True, read_only=True,
         doc="The rectangle of the box in WORLD coordinates (actor position + offset +"
             " size), in pixels. Read-only: it is what detection compares, and what is"
-            " passed to collision_box.get_tile.",
+            " passed to collision_shape.get_tile.",
     ),
 
     # ── Actor : réglages d'inspecteur fixés au build (lecture seule) ─
@@ -2207,9 +2207,9 @@ EVENT_REGISTRY: dict[str, dict] = {
         "params": [
             {"name": "other",     "type": "actor", "description": "Reference to the "
                                                                   "actor in contact"},
-            {"name": "my_box",    "type": "int",   "description": "My collision box"
+            {"name": "my_box",    "type": "int",   "description": "My collision shape"
                                                                   " involved"},
-            {"name": "other_box", "type": "int",   "description": "The collision box of "
+            {"name": "other_box", "type": "int",   "description": "The collision shape of "
                                                                   "the other actor"},
         ],
         "c_sig": "void {prefix}_on_collide(Actor* self, Actor* other, u8 my_box, u8 other_box)",
@@ -2223,9 +2223,9 @@ EVENT_REGISTRY: dict[str, dict] = {
             {"name": "other",     "type": "actor", "description": "Reference to the "
                                                                   "actor entering "
                                                                   "into contact"},
-            {"name": "my_box",    "type": "int",   "description": "My collision box"
+            {"name": "my_box",    "type": "int",   "description": "My collision shape"
                                                                   " involved"},
-            {"name": "other_box", "type": "int",   "description": "The collision box of "
+            {"name": "other_box", "type": "int",   "description": "The collision shape of "
                                                                   "the other actor"},
         ],
         "c_sig": "void {prefix}_on_collision_enter(Actor* self, Actor* other, u8 my_box, u8 other_box)",
@@ -2262,9 +2262,9 @@ EVENT_REGISTRY: dict[str, dict] = {
             {"name": "other",     "type": "actor", "description": "Reference to the "
                                                                   "actor that moved "
                                                                   "away"},
-            {"name": "my_box",    "type": "int",   "description": "My collision box"
+            {"name": "my_box",    "type": "int",   "description": "My collision shape"
                                                                   " involved"},
-            {"name": "other_box", "type": "int",   "description": "The collision box of "
+            {"name": "other_box", "type": "int",   "description": "The collision shape of "
                                                                   "the other actor"},
         ],
         "c_sig": "void {prefix}_on_collision_exit(Actor* self, Actor* other, u8 my_box, u8 other_box)",
@@ -2297,7 +2297,7 @@ EVENT_C_SIGNATURES: dict[str, str] = {k: v["c_sig"] for k, v in EVENT_REGISTRY.i
 
 # Les événements de contact reçoivent DEUX boîtes : `my_box` (sur `self`) et `other_box` (sur
 # `other`). Le C les passe en tag (`u8`) ; le script les tient comme des références
-# `collision_box`, `other_box.tag == "Player"`, `my_box:overlaps(other_box)`,, le codegen
+# `collision_shape`, `other_box.tag == "Player"`, `my_box:overlaps(other_box)`,, le codegen
 # posant la référence en tête de fonction (`actor_get_box(<propriétaire>, tag)`).
 COLLISION_EVENTS = ("on_collide", "on_collision_enter", "on_collision_exit")
 BOX_PARAMS = (("my_box", "self"), ("other_box", "other"))   # (nom du paramètre, acteur qui la porte)

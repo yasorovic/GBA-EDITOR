@@ -50,7 +50,7 @@ from .api import (RUNTIME_API, RUNTIME_PROPS, REMOVED_API, REMOVED_EVENTS, KNOWN
                   DOMAIN_BLEND_MODE, DOMAIN_BLEND_SIDE, DOMAIN_EASE, HARDWARE_ENUMS,
                   API_MODULES, module_members, REF_TYPES, REF_TYPE_TABLE,
                   ref_member, ref_lineage, REF_ACTOR, STATELESS_MODULES, module_call_form, LAYER_NUMBERS,
-                  modernize_message, REF_COLLISION_BOX, COLLISION_EVENTS, BOX_PARAMS, EVENT_REGISTRY)
+                  modernize_message, REF_COLLISION_SHAPE, COLLISION_EVENTS, BOX_PARAMS, EVENT_REGISTRY)
 
 from .expr_types import (VEC_FIELDS, VEC_CONSTRUCTORS, VEC_FUNCTIONS, ARITH_TYPES,
                          infer_vec_type, infer_ref_type, resolve_prop,
@@ -129,7 +129,7 @@ class BuildContext:
     # Codes des langues déclarées. Une liste vide interdit `lang.set` et `lang.get`.
     lang_codes:   list[str]  = None
     camera_names: list[str]  = None    # noms de caméras du projet (pour camera.switch)
-    box_tag_names: list[str] = None    # tags de boîtes de collision du projet (self:collision_box…)
+    box_tag_names: list[str] = None    # tags de boîtes de collision du projet (self:collision_shape…)
     window_names: list[str]  = None    # noms de WindowSlot du projet (pour window.*)
     sound_box_state_names: list[str]  = None  # états des SoundBox du projet
     jingle_box_state_names: list[str] = None  # états des JingleBox du projet
@@ -1451,7 +1451,7 @@ class Checker:
         box_params = ([n for n, _ in BOX_PARAMS if n in fn.params]
                       if fn.name in COLLISION_EVENTS else [])
         for name in box_params:
-            self._ref_types[name] = REF_COLLISION_BOX
+            self._ref_types[name] = REF_COLLISION_SHAPE
         self._check_block(fn.body, seq_top=seq is not None)
         for name in box_params:
             self._ref_types.pop(name, None)
@@ -1883,20 +1883,20 @@ class Checker:
                 if prop is not None:
                     # Un accès de propriété ; le champ suivant est validé plus haut.
                     self._check_prop_read(prop)
-                elif (isinstance(e.obj, ExprIndex) and e.obj.field == "collision_box"
+                elif (isinstance(e.obj, ExprIndex) and e.obj.field == "collision_shape"
                       and isinstance(e.obj.obj, ExprName)):
                     # Un acteur peut avoir plusieurs boîtes de collision.
                     self.errors.append(CheckError(
                         "error",
-                        f"{e.obj.obj.name}.collision_box is not a field. Use the box the contact "
-                        "handler gives you (`other_box.tag`), or `self:collision_box(\"tag\")`."))
+                        f"{e.obj.obj.name}.collision_shape is not a field. Use the box the contact "
+                        "handler gives you (`other_box.tag`), or `self:collision_shape(\"tag\")`."))
                 elif (e.field == "tag" and isinstance(e.obj, ExprName)
                       and e.obj.name not in self._ref_types and e.obj.name not in API_MODULES):
                     # `tag` est désormais une propriété des boîtes de collision.
                     self.errors.append(CheckError(
                         "error",
                         f"{e.obj.name}.tag: the identity of an actor is now `{e.obj.name}.name`. "
-                        "`tag` is reserved for collision boxes (`other_box.tag`)."))
+                        "`tag` is reserved for collision shapes (`other_box.tag`)."))
                 elif ((isinstance(e.obj, ExprName)
                        and e.obj.name in self._ref_types)
                       or (isinstance(e.obj, (ExprCall, ExprInvoke, ExprIndex))
@@ -2064,7 +2064,7 @@ class Checker:
                         "error",
                         f"{e.method}() cannot be called on this result: only a name, "
                         "`actor.get`/`actor.spawn`, a reference (`sfx.play`, "
-                        "`self:collision_box`) or `interface.get` can precede \":\". "
+                        "`self:collision_shape`) or `interface.get` can precede \":\". "
                         "Store it in a `local` first."))
                 elif ref in (None, REF_ACTOR) and self._method_of(ref, e.method)[1] is not None:
                     # `actor:get("X"):play_anim(…)` : l'acteur visé est connu à l'exécution
@@ -2927,7 +2927,7 @@ class Checker:
 
         Erreur bloquante, comme la scène ou le prefab : sans ce `#define`, le C
         généré cite un identifiant qui n'existe pas. À ne pas confondre avec
-        `BOXTAG_*`, qui vient du champ libre `CollisionBoxComponent.tag` et
+        `BOXTAG_*`, qui vient du champ libre `CollisionShapeComponent.tag` et
         n'est, lui, contraint par aucune liste."""
         prefabs = self.ctx.pooled_prefab_names if self.ctx.pooled_prefab_names is not None             else self.ctx.prefab_names
         connus = list(self.ctx.actor_names or []) + list(prefabs or [])
@@ -2948,7 +2948,7 @@ class Checker:
         if self.ctx.box_tag_names is not None and name not in self.ctx.box_tag_names:
             self.errors.append(CheckError(
                 "error",
-                f"{call_key}('{name}'): no collision box with tag '{name}' in the project. Known "
+                f"{call_key}('{name}'): no collision shape with tag '{name}' in the project. Known "
                 f"tags: {', '.join(self.ctx.box_tag_names) or 'none'}.",
             ))
 
@@ -3142,7 +3142,7 @@ _PARAM_TYPE_RULES: dict = {
     "bool":        ("a boolean (true or false)", {"bool"}),
     "str":         ("a string", {"string"}),
     "str_literal": ("a string", {"string"}),
-    "actor":       ("an actor (or a collision box)", {"actor", REF_COLLISION_BOX}),
+    "actor":       ("an actor (or a collision shape)", {"actor", REF_COLLISION_SHAPE}),
 }
 
 

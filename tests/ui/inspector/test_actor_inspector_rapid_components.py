@@ -17,7 +17,7 @@ def test_des_ajouts_enchaines_sans_pause_sont_tous_pris(qapp, tmp_path):
     get_history().clear()
     before = len(actor.components)
 
-    for type_name in ("sprite", "collision_box", "sprite", "collision_box"):
+    for type_name in ("sprite", "collision_shape", "sprite", "collision_shape"):
         insp._add_component(type_name)
 
     kinds = [type(c).__name__ for c in actor.components[before:]]

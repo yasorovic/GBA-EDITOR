@@ -1,7 +1,7 @@
 """Solveur d'impulsions minimal pour les corps Rigid poses dans une scene.
 
 Le solveur applique la normale et le tangent du contact, avec une masse configurable par Rigid. La restitution
-et la friction des CollisionBox sont combinees au build. Static, Character et Kinematic ont une masse inverse
+et la friction des PhysicMaterial des CollisionShape sont combinees au build. Static, Character et Kinematic ont une masse inverse
 nulle. Les paires sont connues au build, filtrees par les tags et parcourues plusieurs fois pour stabiliser les
 petites piles.
 """
@@ -14,7 +14,9 @@ from core.models.components import (
     PHYSICS_BODY_KINEMATIC,
     PHYSICS_BODY_RIGID,
     PHYSICS_BODY_STATIC,
-    CollisionBoxComponent,
+    CollisionShapeComponent,
+    collision_shapes_collide,
+    shape_material,
 )
 from core.models.settings import tags_collide
 from codegen.runtime_codegen.physics.body import (
@@ -29,8 +31,8 @@ def impulse_helper_lines() -> list[str]:
         "static void __attribute__((unused)) rigid_pair_resolve(const RigidPair* p){",
         "    Actor* a=&g_actors[p->a]; Actor* b=&g_actors[p->b];",
         "    if(!a->active||!b->active||p->box_a>=a->collision.box_count||p->box_b>=b->collision.box_count) return;",
-        "    const CollisionBox* ca=&a->collision.boxes[p->box_a];",
-        "    const CollisionBox* cb=&b->collision.boxes[p->box_b];",
+        "    const CollisionShape* ca=&a->collision.boxes[p->box_a];",
+        "    const CollisionShape* cb=&b->collision.boxes[p->box_b];",
         "    if(!ca->active||!cb->active) return;",
         "    int al=(a->x>>8)+ca->x, at=(a->y>>8)+ca->y, ar=al+ca->w, ab=at+ca->h;",
         "    int bl=(b->x>>8)+cb->x, bt=(b->y>>8)+cb->y, br=bl+cb->w, bb=bt+cb->h;",
@@ -62,15 +64,16 @@ def impulse_helper_lines() -> list[str]:
     ]
 
 
-def _physical_boxes(owner, sprite) -> list[tuple[int, CollisionBoxComponent]]:
+def _physical_boxes(owner, sprite) -> list[tuple[int, CollisionShapeComponent]]:
     return [(rank, box) for rank, box in physics_collider_entries(owner, sprite)
             if box.active]
 
 
-def _contact_material(a: CollisionBoxComponent, b: CollisionBoxComponent) -> tuple[int, int]:
+def _contact_material(owner_a, a: CollisionShapeComponent, owner_b, b: CollisionShapeComponent) -> tuple[int, int]:
     """Les coefficients Q8 d'un contact, cuits plutôt que recombinés en ROM."""
-    restitution = round(max(a.restitution, b.restitution) * 256)
-    friction = math.isqrt(round(a.friction * 256) * round(b.friction * 256))
+    material_a, material_b = shape_material(owner_a, a), shape_material(owner_b, b)
+    restitution = round(max(material_a.restitution, material_b.restitution) * 256)
+    friction = math.isqrt(round(material_a.friction * 256) * round(material_b.friction * 256))
     return restitution, friction
 
 
@@ -94,7 +97,7 @@ def impulse_tick_lines(p, scene, scene_actors, actor_offset: int) -> list[str]:
             body_b = physics_body(actor_b)
             inv_mass_a = max(1, round(256 / body_a.mass)) if mode_a == PHYSICS_BODY_RIGID else 0
             inv_mass_b = max(1, round(256 / body_b.mass)) if mode_b == PHYSICS_BODY_RIGID else 0
-            pairs: dict[tuple[int, int], tuple[CollisionBoxComponent, CollisionBoxComponent]] = {}
+            pairs: dict[tuple[int, int], tuple[CollisionShapeComponent, CollisionShapeComponent]] = {}
             if mode_a == PHYSICS_BODY_RIGID:
                 for rank_a, box_a in _physical_boxes(actor_a, sprite_a):
                     for rank_b, box_b in physics_blocker_entries(actor_b, sprite_b):
@@ -104,8 +107,9 @@ def impulse_tick_lines(p, scene, scene_actors, actor_offset: int) -> list[str]:
                     for rank_b, box_b in _physical_boxes(actor_b, sprite_b):
                         pairs[(rank_a, rank_b)] = (box_a, box_b)
             for (rank_a, rank_b), (box_a, box_b) in pairs.items():
-                if tags_collide(p.settings, box_a.tag or "body", box_b.tag or "body"):
-                    restitution, friction = _contact_material(box_a, box_b)
+                if (tags_collide(p.settings, box_a.tag or "body", box_b.tag or "body")
+                        and collision_shapes_collide(box_a, box_b)):
+                    restitution, friction = _contact_material(actor_a, box_a, actor_b, box_b)
                     rows.append((actor_offset + ia, actor_offset + ib,
                                  inv_mass_a, inv_mass_b, restitution, friction, rank_a, rank_b))
     if not rows:

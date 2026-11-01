@@ -46,7 +46,7 @@ from core.models.unique_name import unique_name
 from core.project import Project
 from core.models.settings import (Language, InputBinding, InputSequence, pair_key,
                                   RESERVED_COLLISION_TAGS)
-from core.models.components import CollisionBoxComponent
+from core.models.components import CollisionShapeComponent
 from core.history import (get_history, SetFieldCmd, AddListItemCmd,
                           RemoveListItemCmd, RenameCollisionTagCmd,
                           RemoveCollisionTagCmd)
@@ -988,7 +988,7 @@ class PhysicsCollisionsPanel(QWidget):
     exceptions.
 
     Les tags qui peuplent lignes et colonnes viennent de DEUX sources
-    réunies (`_all_tags`) : ceux TROUVÉS sur un CollisionBoxComponent
+    réunies (`_all_tags`) : ceux TROUVÉS sur un CollisionShapeComponent
     (scènes et prefabs), et ceux DÉCLARÉS explicitement dans
     `ProjectSettings.collision_tags` — un tag qu'on veut réserver et régler
     avant même de l'assigner à un acteur. Renommer une ligne renomme le tag
@@ -1229,14 +1229,14 @@ class PhysicsCollisionsPanel(QWidget):
         return self._project.collision_tags()
 
     def _tag_usage(self, tag_name: str) -> int:
-        """Combien de CollisionBoxComponent portent ce tag, EXPLICITEMENT ou
+        """Combien de CollisionShapeComponent portent ce tag, EXPLICITEMENT ou
         par défaut vide — ce que `RemoveCollisionTagCmd` va faire retomber à
         « body ». Sert au bouton × pour prévenir plutôt que surprendre."""
         p = self._project
         owners = [a for sc in p.scenes for a in sc.actors] + list(p.prefabs)
         owners += [ch for pf in p.prefabs for ch in (getattr(pf, "children", []) or [])]
         return sum(1 for o in owners for c in getattr(o, "components", [])
-                  if isinstance(c, CollisionBoxComponent) and (c.tag or "body") == tag_name)
+                  if isinstance(c, CollisionShapeComponent) and (c.tag or "body") == tag_name)
 
     def _free_tag_name(self) -> str:
         taken = set(self._all_tags())

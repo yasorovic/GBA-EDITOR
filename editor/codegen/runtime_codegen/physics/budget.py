@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from codegen.oam_alloc import scene_oam_layout
 from codegen.runtime_codegen.gen_scene_query import actors_can_collide
 from codegen.runtime_codegen.physics.body import uses_character_solver
-from core.models.components import CollisionBoxComponent, MAX_COLLISION_BOXES
+from core.models.components import CollisionShapeComponent, MAX_COLLISION_SHAPES
 
 
 @dataclass(frozen=True)
@@ -31,12 +31,12 @@ class PhysicsBudget:
 
 
 def _has_collider(owner) -> bool:
-    return any(isinstance(c, CollisionBoxComponent) for c in getattr(owner, "components", []))
+    return any(isinstance(c, CollisionShapeComponent) for c in getattr(owner, "components", []))
 
 
 def _blocker_count(owner) -> int:
     return sum(1 for c in getattr(owner, "components", [])
-               if isinstance(c, CollisionBoxComponent) and c.active and c.response == "block")
+               if isinstance(c, CollisionShapeComponent) and c.active and c.response == "block")
 
 
 def scene_physics_budget(project, scene) -> PhysicsBudget:
@@ -67,7 +67,7 @@ def scene_physics_budget(project, scene) -> PhysicsBudget:
         placed_actors=len(placed),
         pool_slots=layout.pool_slots,
         actor_slots=layout.actors,
-        collider_slots=layout.actors * MAX_COLLISION_BOXES,
+        collider_slots=layout.actors * MAX_COLLISION_SHAPES,
         character_slots=character_slots,
         placed_contact_masks=placed_masks,
         pool_contact_masks=pool_masks,

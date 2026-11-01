@@ -28,7 +28,7 @@
 
 /* Globaux définis dans main.c, visibles par tous les scripts */
 extern Actor g_actors[];
-extern u16 *g_actor_support;
+extern u16 *g_actor_floor;
 /* L'état de script de TOUS les acteurs : un bloc de `OBJ_STATE_STRIDE` octets par emplacement de
    `g_actors`, à l'indice `Actor.inst`. Chaque script y range sa structure d'état (la plus grande
    du projet fixe la taille d'un bloc) ; un emplacement n'en porte qu'une à la fois. */
@@ -924,9 +924,9 @@ static inline Vec2 input_get_vector(int mask_neg_x, int mask_pos_x,
     return v;
 }
 
-/* Collision AABB — teste une paire de CollisionBox dans l'espace monde */
-static inline int box_overlap(int ax, int ay, const CollisionBox*ba,
-                               int bx, int by, const CollisionBox*bb) {
+/* Collision AABB — teste une paire de CollisionShape dans l'espace monde */
+static inline int box_overlap(int ax, int ay, const CollisionShape*ba,
+                               int bx, int by, const CollisionShape*bb) {
     int alx=ax+(int)ba->x, aly=ay+(int)ba->y;
     int blx=bx+(int)bb->x, bly=by+(int)bb->y;
     return (alx < blx+(int)bb->w) && (alx+(int)ba->w > blx) &&
@@ -974,15 +974,17 @@ static inline int _box_canonical(const Actor*a, int i) {
     return i;
 }
 BS_ATTR_IWRAM
-static u16 actors_overlap_mask(const Actor*a, const Actor*b) {
+static u16 actors_overlap_mask(const Actor*a, const Actor*b,u16 allowed) {
     u16 m = 0;
     for (int i=0; i<a->collision.box_count; i++) {
         if (!a->collision.boxes[i].active) continue;
-        for (int j=0; j<b->collision.box_count; j++)
-            if (b->collision.boxes[j].active &&
+        for (int j=0; j<b->collision.box_count; j++) {
+            int ci=_box_canonical(a,i), cj=_box_canonical(b,j);
+            if ((allowed & (1u << (ci*MAX_BOXES+cj))) && b->collision.boxes[j].active &&
                 box_overlap(a->x>>8,a->y>>8,&a->collision.boxes[i],
                             b->x>>8,b->y>>8,&b->collision.boxes[j]))
-                m |= (u16)(1u << (_box_canonical(a,i)*MAX_BOXES + _box_canonical(b,j)));
+                m |= (u16)(1u << (ci*MAX_BOXES+cj));
+        }
     }
     return m;
 }
@@ -991,14 +993,14 @@ static u16 actors_overlap_mask(const Actor*a, const Actor*b) {
    paires et une boucle qui appelle `contact_pair_run` : le code des contacts existe une seule fois, il ne se recopie pas
    par paire. Les trois fonctions de chaque côté sont dans l'ordre enter, collide, exit ; NULL si le script n'y répond pas. */
 typedef void (*ContactFn)(Actor*, Actor*, u8, u8);
-typedef struct { u8 a, b; ContactFn on_a[3], on_b[3]; } ContactPair;
+typedef struct { u8 a, b; u16 allowed; ContactFn on_a[3], on_b[3]; } ContactPair;
 
 /* `prev` garde d'une frame à l'autre les couples de tags en contact (cf. `actors_overlap_mask`) : un contact qui naît appelle
    enter, un qui dure collide, un qui se défait exit, chacun avec les tags de CE couple. */
 BS_ATTR_IWRAM
 static void contact_pair_run(const ContactPair* c, u16* prev) {
     Actor *a = &g_actors[c->a], *b = &g_actors[c->b];
-    u16 cur = (a->active && b->active) ? actors_overlap_mask(a, b) : 0;
+    u16 cur = (a->active && b->active) ? actors_overlap_mask(a, b, c->allowed) : 0;
     u16 prv = *prev;
     if (cur | prv)
         for (u8 bi = 0; bi < MAX_BOXES; bi++) for (u8 bj = 0; bj < MAX_BOXES; bj++) {
@@ -1280,15 +1282,15 @@ extern int save_read_var(int slot, int idx);
    s'exécute après les `on_update`. C'est le contrat normal d'un état de
    collision, et le seul possible : pendant `on_update`, l'acteur n'a pas encore
    fini de bouger. */
-static inline Actor* actor_get_support(const Actor* a) {
-    if (!a || !a->alive || !a->active || !g_actor_support) return (Actor*)0;
-    u16 ref = g_actor_support[a->inst];
+static inline Actor* actor_get_floor(const Actor* a) {
+    if (!a || !a->alive || !a->active || !g_actor_floor) return (Actor*)0;
+    u16 ref = g_actor_floor[a->inst];
     if (!ref) return (Actor*)0;
-    Actor* support = &g_actors[ref - 1];
-    return support->alive && support->active ? support : (Actor*)0;
+    Actor* floor = &g_actors[ref - 1];
+    return floor->alive && floor->active ? floor : (Actor*)0;
 }
 static inline int actor_on_ground(const Actor*a) {
-    return a && (a->collision.grounded || actor_get_support(a));
+    return a && (a->collision.grounded || actor_get_floor(a));
 }
 
 /* ── Inspecteur → API : ce que l'éditeur règle, le script le lit ────────────
@@ -1300,10 +1302,10 @@ static inline int actor_get_screen_space(const Actor* s) { return actor_oam_entr
 static inline int actor_get_affine(const Actor* s)       { return actor_oam_entry(s)->affine_slot >= 0; }
 static inline int actor_get_box_count(const Actor* s)    { return s->collision.box_count; }
 
-/* ── Boîtes de collision — la référence `collision_box` ─────────────────────
+/* ── Boîtes de collision — la référence `collision_shape` ─────────────────────
    Une boîte est nommée par son tag (BOXTAG_*, le champ « Tag » du
-   CollisionBoxComponent), et un script la tient dans une variable :
-   `local hb = self:collision_box("hitbox")`. La référence est un ENTIER — le
+   CollisionShapeComponent), et un script la tient dans une variable :
+   `local hb = self:collision_shape("hitbox")`. La référence est un ENTIER — le
    rang de l'acteur dans g_actors, puis celui de la boîte, plus un — parce que
    0 doit dire « pas de boîte » (`if not hb`), comme la référence d'un effet
    sonore. Une boîte absente se lit vide et s'écrit sans effet (même politique
@@ -1315,67 +1317,67 @@ static inline int actor_get_box(const Actor* s, int tag) {
             return (int)(s - g_actors) * MAX_BOXES + i + 1;
     return 0;
 }
-static inline CollisionBox* _box_of(int h)    { return h ? &g_actors[(h-1)/MAX_BOXES].collision.boxes[(h-1)%MAX_BOXES] : 0; }
+static inline CollisionShape* _box_of(int h)    { return h ? &g_actors[(h-1)/MAX_BOXES].collision.boxes[(h-1)%MAX_BOXES] : 0; }
 static inline Actor*        _box_owner(int h) { return &g_actors[(h-1)/MAX_BOXES]; }
 
-static inline int collision_box_get_tag(int h)    { const CollisionBox* b = _box_of(h); return b ? b->tag : 0; }
-static inline int collision_box_get_active(int h) { const CollisionBox* b = _box_of(h); return b ? b->active : 0; }
-static inline void collision_box_set_active(int h, int on) {
-    CollisionBox* b = _box_of(h);
+static inline int collision_shape_get_tag(int h)    { const CollisionShape* b = _box_of(h); return b ? b->tag : 0; }
+static inline int collision_shape_get_active(int h) { const CollisionShape* b = _box_of(h); return b ? b->active : 0; }
+static inline void collision_shape_set_active(int h, int on) {
+    CollisionShape* b = _box_of(h);
     if (b) b->active = on ? 1 : 0;
 }
-static inline int collision_box_get_grounded(int h) { const CollisionBox* b = _box_of(h); return b ? b->grounded : 0; }
+static inline int collision_shape_get_grounded(int h) { const CollisionShape* b = _box_of(h); return b ? b->grounded : 0; }
 /* La carte de collision à un point MONDE. Le point ne dépend pas de la boîte : elle sert
    de porte d'entrée (une boîte absente répond 0, comme toute lecture d'une boîte absente). */
-static inline int collision_box_get_collision_tile(int h, int x, int y) {
+static inline int collision_shape_get_collision_tile(int h, int x, int y) {
     return h ? collision_map_tile(x, y) : 0;
 }
-static inline int collision_box_get_solid(int h)  { const CollisionBox* b = _box_of(h); return b ? b->solid : 0; }
-static inline void collision_box_set_solid(int h, int on) {
-    CollisionBox* b = _box_of(h);
+static inline int collision_shape_get_solid(int h)  { const CollisionShape* b = _box_of(h); return b ? b->solid : 0; }
+static inline void collision_shape_set_solid(int h, int on) {
+    CollisionShape* b = _box_of(h);
     if (b) b->solid = on ? 1 : 0;
 }
-static inline Vec2 collision_box_get_offset(int h) {
-    const CollisionBox* b = _box_of(h);
+static inline Vec2 collision_shape_get_offset(int h) {
+    const CollisionShape* b = _box_of(h);
     return b ? (Vec2){ b->x, b->y } : (Vec2){ 0, 0 };
 }
-static inline Vec2 collision_box_get_size(int h) {
-    const CollisionBox* b = _box_of(h);
+static inline Vec2 collision_shape_get_size(int h) {
+    const CollisionShape* b = _box_of(h);
     return b ? (Vec2){ b->w, b->h } : (Vec2){ 0, 0 };
 }
-/* x/y tiennent dans un s8, w/h dans un u8 (cf. CollisionBox) : bornés ici, un
+/* x/y tiennent dans un s8, w/h dans un u8 (cf. CollisionShape) : bornés ici, un
    script ne peut pas corrompre la boîte voisine par débordement. */
-static inline void collision_box_set_offset(int h, Vec2 v) {
-    CollisionBox* b = _box_of(h);
+static inline void collision_shape_set_offset(int h, Vec2 v) {
+    CollisionShape* b = _box_of(h);
     if (!b) return;
     b->x = (s8)(v.x < -128 ? -128 : v.x > 127 ? 127 : v.x);
     b->y = (s8)(v.y < -128 ? -128 : v.y > 127 ? 127 : v.y);
 }
-static inline void collision_box_set_size(int h, Vec2 v) {
-    CollisionBox* b = _box_of(h);
+static inline void collision_shape_set_size(int h, Vec2 v) {
+    CollisionShape* b = _box_of(h);
     if (!b) return;
     b->w = (u8)(v.x < 0 ? 0 : v.x > 255 ? 255 : v.x);
     b->h = (u8)(v.y < 0 ? 0 : v.y > 255 ? 255 : v.y);
 }
 /* Le rectangle MONDE, en pixels : position de l'acteur + décalage + taille. */
-static inline Rect collision_box_get_bounds(int h) {
-    const CollisionBox* b = _box_of(h);
+static inline Rect collision_shape_get_bounds(int h) {
+    const CollisionShape* b = _box_of(h);
     if (!b) return (Rect){ 0, 0, 0, 0 };
     const Actor* o = _box_owner(h);
     return (Rect){ (o->x>>8) + b->x, (o->y>>8) + b->y, b->w, b->h };
 }
 /* Deux boîtes se chevauchent-elles ? Une boîte inactive ne touche personne. */
-static inline int collision_box_overlaps_box(int h, int other) {
-    const CollisionBox* a = _box_of(h);
-    const CollisionBox* b = _box_of(other);
+static inline int collision_shape_overlaps_box(int h, int other) {
+    const CollisionShape* a = _box_of(h);
+    const CollisionShape* b = _box_of(other);
     if (!a || !b || !a->active || !b->active) return 0;
     const Actor* oa = _box_owner(h);
     const Actor* ob = _box_owner(other);
     return box_overlap(oa->x>>8, oa->y>>8, a, ob->x>>8, ob->y>>8, b);
 }
 /* ... ou l'une des boîtes actives de cet acteur ? */
-static inline int collision_box_overlaps_actor(int h, const Actor* other) {
-    const CollisionBox* a = _box_of(h);
+static inline int collision_shape_overlaps_actor(int h, const Actor* other) {
+    const CollisionShape* a = _box_of(h);
     if (!a || !a->active || !other) return 0;
     const Actor* oa = _box_owner(h);
     for (int j = 0; j < other->collision.box_count; j++)

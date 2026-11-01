@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from PyQt6.QtWidgets import QComboBox, QSpinBox, QVBoxLayout, QWidget
 
-from core.models.components import CollisionBoxComponent, InteractiveComponent
+from core.models.components import CollisionShapeComponent, InteractiveComponent
 from ui.common.widgets import W
 from ui.common.unit_spin import UnitSpin
 from ui.scene_manager.inspectors.component_editors.interactive import InteractiveEditor
@@ -33,7 +33,7 @@ def _combos(host):
 
 
 def test_l_editeur_propose_les_deux_selecteurs_et_la_zone(qapp):
-    host, _ = _build(InteractiveComponent(), boxes=[CollisionBoxComponent(tag="reach")])
+    host, _ = _build(InteractiveComponent(), boxes=[CollisionShapeComponent(tag="reach")])
     saisie, interaction, zone = _combos(host)
     assert [saisie.itemData(i) for i in range(saisie.count())] == ["pressed", "hold", "released"]
     assert [interaction.itemData(i) for i in range(interaction.count())] == ["hover", "facing"]
@@ -62,7 +62,7 @@ def test_le_maintien_n_apparait_que_pour_hold(qapp):
 
 def test_la_taille_n_apparait_que_pour_la_boite_propre(qapp):
     comp = InteractiveComponent()
-    host, _ = _build(comp, boxes=[CollisionBoxComponent(tag="reach")])
+    host, _ = _build(comp, boxes=[CollisionShapeComponent(tag="reach")])
     zone = _combos(host)[2]
     largeur = host.findChildren(QSpinBox)[1]
     assert not largeur.isHidden()
@@ -74,7 +74,7 @@ def test_la_taille_n_apparait_que_pour_la_boite_propre(qapp):
 # ── Collision : la case « Bloque les acteurs » ──
 
 def test_la_boite_de_collision_a_sa_case_de_blocage(qapp):
-    from PyQt6.QtWidgets import QCheckBox, QDoubleSpinBox
+    from PyQt6.QtWidgets import QCheckBox, QSpinBox
     from ui.scene_manager.inspectors.component_editors.collision import CollisionEditor
 
     class _Inspecteur(QWidget):
@@ -91,7 +91,7 @@ def test_la_boite_de_collision_a_sa_case_de_blocage(qapp):
         setattr(c, field, value)
 
     insp._set_comp = set_comp
-    comp = CollisionBoxComponent()
+    comp = CollisionShapeComponent()
     host = QWidget()
     layout = QVBoxLayout(host)
     CollisionEditor(insp).build(comp, lambda lab, w: W.row(lab, w, layout), layout)
@@ -103,8 +103,28 @@ def test_la_boite_de_collision_a_sa_case_de_blocage(qapp):
     insp._field_syncers["response"]("sensor")
     assert not case.isChecked()                    # le syncer repeuple sans écrire
 
-    restitution = host.findChild(QDoubleSpinBox, "collisionRestitution")
-    friction = host.findChild(QDoubleSpinBox, "collisionFriction")
-    restitution.setValue(0.75)
-    friction.setValue(0.25)
+    layer = host.findChild(QSpinBox, "collisionLayer")
+    mask = host.findChild(QSpinBox, "collisionMask")
+    layer.setValue(2)
+    mask.setValue(4)
+    assert ("layer", 2) in written and ("mask", 4) in written
+
+
+def test_le_materiau_physique_ecrit_son_rebond_et_son_frottement(qapp):
+    from PyQt6.QtWidgets import QDoubleSpinBox
+    from core.models.components import PhysicMaterialComponent
+    from ui.scene_manager.inspectors.component_editors.physic_material import PhysicMaterialEditor
+
+    insp = QWidget()
+    insp._project = SimpleNamespace(globals=[], constants=[])
+    insp._field_syncers = {}
+    written = []
+    insp._set_comp = lambda c, field, value: (written.append((field, value)), setattr(c, field, value))
+    comp = PhysicMaterialComponent()
+    host = QWidget()
+    layout = QVBoxLayout(host)
+    PhysicMaterialEditor(insp).build(comp, lambda lab, w: W.row(lab, w, layout), layout)
+
+    host.findChild(QDoubleSpinBox, "materialRestitution").setValue(0.75)
+    host.findChild(QDoubleSpinBox, "materialFriction").setValue(0.25)
     assert ("restitution", 0.75) in written and ("friction", 0.25) in written

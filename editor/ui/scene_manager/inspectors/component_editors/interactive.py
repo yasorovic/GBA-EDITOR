@@ -4,7 +4,7 @@ from __future__ import annotations
 from PyQt6.QtWidgets import QComboBox, QSpinBox
 
 from core.models.components import (
-    INTERACT_AREA_MODES, INTERACT_INPUT_MODES, CollisionBoxComponent, InteractiveComponent,
+    INTERACT_AREA_MODES, INTERACT_INPUT_MODES, CollisionShapeComponent, InteractiveComponent,
     displayed_sprite_component, interactive_box_size,
 )
 from core.models.settings import INTERACTIVE_COLLISION_TAG
@@ -32,7 +32,7 @@ def _owner_box_tags(owner) -> list[str]:
     """Les tags des boîtes que l'acteur porte déjà, sans doublon, dans l'ordre."""
     tags: list[str] = []
     for c in getattr(owner, "components", []):
-        if isinstance(c, CollisionBoxComponent):
+        if isinstance(c, CollisionShapeComponent):
             tag = c.tag or "body"
             if tag not in tags:
                 tags.append(tag)

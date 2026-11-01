@@ -743,16 +743,22 @@
     },
     "uiinsp.img.play_tip": { "text": "A frozen image costs no per-frame work and never rewrites the tilemap. It is the right default for a static HUD icon." },
     "uiinsp.bank_inherited_tip": { "text": "This text sits in a filled container, so it reads its ink from the bank of the container." },
-    "actorinsp.comp.collision": {
-      "text": "Collision"
+    "actorinsp.comp.collision_shape": {
+      "text": "Collision shape"
     },
     "actorinsp.comp.physics_body": { "text": "Physics body" },
+    "actorinsp.comp.physic_material": { "text": "Physic material" },
+    "comped.collision_material": { "text": "Material" },
+    "comped.collision_choose_material": { "text": "Choose a PhysicMaterial..." },
+    "comped.collision_material_tip": { "text": "PhysicMaterial giving this shape its restitution and friction. Empty: no bounce, no friction." },
+    "comped.collision_material_none": { "text": "Default (no bounce, no friction)" },
+    "comped.collision_material_missing": { "text": "Missing PhysicMaterial [{name}]" },
     "comped.physics_mode": { "text": "Mode" },
     "comped.physics_collider": { "text": "Physics collider" },
-    "comped.physics_choose_collider": { "text": "Choose a CollisionBox..." },
-    "comped.physics_collider_tip": { "text": "CollisionBox used as this body’s physical shape. Once selected, the other boxes remain available for contacts and sensors but are not used to resolve this body." },
+    "comped.physics_choose_collider": { "text": "Choose a CollisionShape..." },
+    "comped.physics_collider_tip": { "text": "CollisionShape used as this body’s physical shape. Once selected, the other boxes remain available for contacts and sensors but are not used to resolve this body." },
     "comped.physics_collider_legacy": { "text": "Automatic · existing map colliders" },
-    "comped.physics_collider_missing": { "text": "Missing CollisionBox [{name}]" },
+    "comped.physics_collider_missing": { "text": "Missing CollisionShape [{name}]" },
     "comped.physics_character": { "text": "CharacterBody" },
     "comped.physics_static": { "text": "StaticBody" },
     "comped.physics_kinematic": { "text": "KinematicBody" },
@@ -780,7 +786,7 @@
     "comped.interact_area_tip": { "text": "How the player reaches the zone. Hover: the player overlaps it. Facing: the player's box, projected in the direction it looks over the reach set in the project settings and stopped by walls, touches it." },
     "comped.interact_box": { "text": "Zone" },
     "comped.interact_own_box": { "text": "Own box ({tag})" },
-    "comped.interact_box_tip": { "text": "Where the zone comes from. The own box is created by the component, with the reserved collision tag; or an existing collision box of this actor, chosen by its tag." },
+    "comped.interact_box_tip": { "text": "Where the zone comes from. The own box is created by the component, with the reserved collision tag; or an existing collision shape of this actor, chosen by its tag." },
     "comped.interact_auto": { "text": "Auto ({n})" },
     "comped.interact_size_tip": { "text": "Size of the own box in pixels. Auto uses the sprite frame, or 16 x 16 without a sprite." },
     "projset.reserved_tag_title": { "text": "Reserved tag" },
@@ -1667,6 +1673,10 @@
     "comped.tag": {
       "text": "Tag"
     },
+      "comped.collision_layer": { "text": "Layers" },
+      "comped.collision_layer_tip": { "text": "Collision categories as a 16-bit mask. Each enabled bit is a layer this CollisionShape belongs to." },
+      "comped.collision_mask": { "text": "Collision mask" },
+      "comped.collision_mask_tip": { "text": "Collision categories this CollisionShape can meet. A contact needs both masks to accept the other layer." },
     "comped.offset": {
       "text": "Offset"
     },
@@ -1681,10 +1691,10 @@
     "comped.collision_solid": {
       "text": "Collides with map"
     },
-    "comped.collision_restitution": { "text": "Restitution" },
-    "comped.collision_restitution_tip": { "text": "Bounciness of this CollisionBox. The contact keeps the higher coefficient." },
-    "comped.collision_friction": { "text": "Friction" },
-    "comped.collision_friction_tip": { "text": "Tangential slowdown of this CollisionBox. The contact uses the geometric mean of both coefficients." },
+    "comped.material_restitution": { "text": "Restitution" },
+    "comped.material_restitution_tip": { "text": "Bounciness of this material. The contact keeps the higher coefficient." },
+    "comped.material_friction": { "text": "Friction" },
+    "comped.material_friction_tip": { "text": "Tangential slowdown of this material. The contact uses the geometric mean of both coefficients." },
     "comped.trig_manual": {
       "text": "manual"
     },
@@ -1739,7 +1749,7 @@
     "comped.affine": {
       "text": "Affine transform"
     },
-    "comped.affine_tip": { "text": "Reserves one of the 32 affine slots for this sprite, even at identity. The sprite can then rotate and scale around the centre of its frame, and the three local settings below apply on top of the transform of the actor. Ticking the box centres the actor on the frame: the offset becomes minus half the frame size, and collision boxes still at 0, 0 follow." },
+    "comped.affine_tip": { "text": "Reserves one of the 32 affine slots for this sprite, even at identity. The sprite can then rotate and scale around the centre of its frame, and the three local settings below apply on top of the transform of the actor. Ticking the box centres the actor on the frame: the offset becomes minus half the frame size, and collision shapes still at 0, 0 follow." },
     "comped.scale_x_tip": { "text": "Sets the local X scale, multiplied by the scale of the actor. The sprite scales around the pivot point. A negative value mirrors it around that point." },
     "comped.scale_y_tip": { "text": "Sets the local Y scale, multiplied by the scale of the actor. The sprite scales around the pivot point. A negative value mirrors it around that point." },
     "comped.rotation_tip": { "text": "Sets the local rotation in degrees, added to the rotation of the actor." },
@@ -3561,9 +3571,9 @@
     },
     "scncanvas.snap_tip": { "text": "Aligns actors and interface elements to the active grid while moving them." },
     "scncanvas.actor_boxes": {
-      "text": "Actor collision boxes"
+      "text": "Actor collision shapes"
     },
-    "scncanvas.actor_boxes_tip": { "text": "Shows the collision boxes of every actor in the active scene." },
+    "scncanvas.actor_boxes_tip": { "text": "Shows the collision shapes of every actor in the active scene." },
     "scncanvas.collisions": {
       "text": "Scene collisions"
     },

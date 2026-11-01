@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.models.components import (
-    INTERACTIVE_DEFAULT_BOX, CollisionBoxComponent, InteractiveComponent, PhysicsBodyComponent, COMPONENT_REGISTRY,
+    INTERACTIVE_DEFAULT_BOX, CollisionShapeComponent, InteractiveComponent, PhysicsBodyComponent, COMPONENT_REGISTRY,
     component_type_name, components_from_list, components_to_list, interactive_box_size,
 )
 from core.models.settings import (
@@ -117,12 +117,12 @@ def test_une_boite_designee_doit_exister_sur_l_acteur(tmp_path):
     absent = _forme(_messages([InteractiveComponent(box_tag="reach")], tmp_path=tmp_path))
     assert len(absent) == 1 and absent[0][0] == "error" and "reach" in absent[0][1]
     present = _forme(_messages([InteractiveComponent(box_tag="reach"),
-                                CollisionBoxComponent(tag="reach")], tmp_path=tmp_path))
+                                CollisionShapeComponent(tag="reach")], tmp_path=tmp_path))
     assert present == []
 
 
 def test_la_boite_propre_exige_un_emplacement_libre(tmp_path):
-    pleins = [CollisionBoxComponent(id=f"c{i}", tag=f"t{i}") for i in range(4)]
+    pleins = [CollisionShapeComponent(id=f"c{i}", tag=f"t{i}") for i in range(4)]
     assert len(_forme(_messages([InteractiveComponent(), *pleins], tmp_path=tmp_path))) == 1
     assert _forme(_messages([InteractiveComponent(), *pleins[:3]], tmp_path=tmp_path)) == []
     assert _forme(_messages([InteractiveComponent(box_tag="t0"), *pleins], tmp_path=tmp_path)) == []
@@ -169,22 +169,22 @@ def test_le_tag_joueur_survit_a_la_serialisation():
 
 
 def test_les_boites_effectives_ajoutent_la_boite_propre_en_dernier():
-    from core.models.components import effective_collision_boxes, interactive_box_index
-    owner = SimpleNamespace(components=[CollisionBoxComponent(tag="body"), InteractiveComponent()])
-    boxes = effective_collision_boxes(owner, 24, 32)
+    from core.models.components import effective_collision_shapes, interactive_box_index
+    owner = SimpleNamespace(components=[CollisionShapeComponent(tag="body"), InteractiveComponent()])
+    boxes = effective_collision_shapes(owner, 24, 32)
     assert [b.tag for b in boxes] == ["body", "Interactive"]
     assert (boxes[1].w, boxes[1].h, boxes[1].solid) == (24, 32, False)
     assert interactive_box_index(boxes, owner.components[1]) == 1
-    centree = effective_collision_boxes(owner, 24, 32, centered=True)
+    centree = effective_collision_shapes(owner, 24, 32, centered=True)
     assert (centree[1].x, centree[1].y) == (-12, -16)
 
 
 def test_une_boite_designee_n_ajoute_rien():
-    from core.models.components import effective_collision_boxes, interactive_box_index
+    from core.models.components import effective_collision_shapes, interactive_box_index
     comp = InteractiveComponent(box_tag="reach")
-    owner = SimpleNamespace(components=[CollisionBoxComponent(tag="body"),
-                                        CollisionBoxComponent(tag="reach"), comp])
-    boxes = effective_collision_boxes(owner)
+    owner = SimpleNamespace(components=[CollisionShapeComponent(tag="body"),
+                                        CollisionShapeComponent(tag="reach"), comp])
+    boxes = effective_collision_shapes(owner)
     assert [b.tag for b in boxes] == ["body", "reach"]
     assert interactive_box_index(boxes, comp) == 1
     assert interactive_box_index(boxes, InteractiveComponent(box_tag="absent")) == -1

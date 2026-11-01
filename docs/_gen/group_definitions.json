@@ -4,7 +4,7 @@
       "name": "acteur",
       "in_rom": "Un pointeur vers l'acteur (`Actor*`)."
     },
-    "collision_box": {
+    "collision_shape": {
       "name": "boîte de collision",
       "in_rom": "Un entier (`int`) : le rang de la boîte, 0 si elle est absente."
     },
@@ -61,8 +61,8 @@
     "Instance": {
       "ref": "actor"
     },
-    "CollisionBox": {
-      "ref": "collision_box"
+    "CollisionShape": {
+      "ref": "collision_shape"
     },
     "Layer": {
       "ref": "background_layer"

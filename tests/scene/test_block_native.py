@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from core.models.components import CollisionBoxComponent
+from core.models.components import CollisionShapeComponent
 from core.models.scene import Actor
 from native_toolchain import compilateur_hote, environnement
 
@@ -33,7 +33,7 @@ static void mk(int i, int x, int y, int vx, int vy, int w, int h, int solid){
     *a = (Actor){0};
     a->active = 1; a->x = x << 8; a->y = y << 8; a->vx = vx; a->vy = vy;
     a->collision.box_count = 1;
-    CollisionBox* b = &a->collision.boxes[0];
+    CollisionShape* b = &a->collision.boxes[0];
     b->w = w; b->h = h; b->solid = solid; b->active = 1;
 }
 static void report(const char* nom, int i){
@@ -257,9 +257,13 @@ def _scene(*acteurs):
     return [(a, None) for a in acteurs]
 
 
-def _acteur(nom, **boite):
+def _acteur(nom, restitution=None, friction=None, **boite):
     a = Actor(name=nom)
-    a.components = [CollisionBoxComponent(id="b", **boite)]
+    a.components = [CollisionShapeComponent(id="b", **boite)]
+    if restitution is not None or friction is not None:
+        from core.models.components import PhysicMaterialComponent
+        a.components.append(PhysicMaterialComponent(id="m", restitution=restitution or 0.0, friction=friction or 0.0))
+        a.components[0].material_id = "m"
     return a
 
 
@@ -387,13 +391,13 @@ def test_un_kinematic_n_est_repousse_que_par_un_static():
 def test_la_relation_du_body_restreint_forme_mobile_et_bloqueur():
     from core.models.components import PhysicsBodyComponent
     hero = Actor(name="Hero", components=[
-        CollisionBoxComponent(id="hurt", tag="Hurt", solid=True),
-        CollisionBoxComponent(id="body", tag="Player", solid=True),
+        CollisionShapeComponent(id="hurt", tag="Hurt", solid=True),
+        CollisionShapeComponent(id="body", tag="Player", solid=True),
         PhysicsBodyComponent(mode="CharacterBody", collider_id="body"),
     ])
     wall = Actor(name="Wall", components=[
-        CollisionBoxComponent(id="sensor", tag="Ignored", response="block"),
-        CollisionBoxComponent(id="shape", tag="body", response="block"),
+        CollisionShapeComponent(id="sensor", tag="Ignored", response="block"),
+        CollisionShapeComponent(id="shape", tag="body", response="block"),
         PhysicsBodyComponent(mode="StaticBody", collider_id="shape"),
     ])
 
@@ -406,13 +410,13 @@ def test_la_relation_du_body_restreint_forme_mobile_et_bloqueur():
 def test_la_relation_du_body_restreint_les_paires_d_impulsion():
     from core.models.components import PhysicsBodyComponent
     rigid = Actor(name="Crate", components=[
-        CollisionBoxComponent(id="sensor", tag="Ignored", solid=True),
-        CollisionBoxComponent(id="shape", tag="body", solid=True),
+        CollisionShapeComponent(id="sensor", tag="Ignored", solid=True),
+        CollisionShapeComponent(id="shape", tag="body", solid=True),
         PhysicsBodyComponent(mode="RigidBody", collider_id="shape"),
     ])
     wall = Actor(name="Wall", components=[
-        CollisionBoxComponent(id="sensor", tag="Ignored", response="block"),
-        CollisionBoxComponent(id="shape", tag="body", response="block"),
+        CollisionShapeComponent(id="sensor", tag="Ignored", response="block"),
+        CollisionShapeComponent(id="shape", tag="body", response="block"),
         PhysicsBodyComponent(mode="StaticBody", collider_id="shape"),
     ])
 
@@ -436,14 +440,40 @@ def test_la_matrice_de_collision_laisse_passer_un_couple_desactive():
     assert any("actors_resolve_blocks(&g_actors[0]" in l for l in bloque)
 
 
+def test_les_couches_et_masques_eliminent_les_paires_physiques_au_build():
+    hero = _acteur("Hero", tag="Player", layer=0b0001, mask=0b0010)
+    coffre = _acteur("Chest", tag="body", response="block", layer=0b0100, mask=0b0001)
+
+    assert _lignes(_projet(), [hero, coffre]) == []
+
+    coffre.components[0].mask = 0b0001
+    coffre.components[0].layer = 0b0010
+    assert "actors_resolve_blocks(&g_actors[0]" in "\n".join(_lignes(_projet(), [hero, coffre]))
+
+
+def test_le_masque_de_contact_est_cuit_par_couple_de_boites():
+    from codegen.runtime_codegen.gen_scene_query import collision_pair_mask
+
+    left = Actor(name="Left", components=[
+        CollisionShapeComponent(id="visible", tag="first", layer=1, mask=2),
+        CollisionShapeComponent(id="hidden", tag="second", layer=4, mask=8),
+    ])
+    right = Actor(name="Right", components=[
+        CollisionShapeComponent(id="target", tag="first", layer=2, mask=1),
+        CollisionShapeComponent(id="other", tag="second", layer=8, mask=4),
+    ])
+
+    assert collision_pair_mask(left, right, _projet().settings) == 0b100001
+
+
 def test_le_blocage_est_refuse_par_defaut_et_survit_a_la_serialisation():
     from core.models.components import components_from_list, components_to_list
-    assert CollisionBoxComponent().response == "sensor"
-    serialise = components_to_list([CollisionBoxComponent(response="block")])
+    assert CollisionShapeComponent().response == "sensor"
+    serialise = components_to_list([CollisionShapeComponent(response="block")])
     assert serialise[0]["response"] == "block"
     (relu,) = components_from_list(serialise)
     assert relu.response == "block"
-    ancien = {"component_type": "collision_box", "id": "b", "solid": True, "tag": "body"}
+    ancien = {"component_type": "collision_shape", "id": "b", "solid": True, "tag": "body"}
     assert components_from_list([ancien])[0].response == "sensor"
 
 
@@ -457,10 +487,10 @@ def _coffre(interaction):
 
 
 def test_la_boite_propre_d_un_interactive_facing_est_un_obstacle():
-    from core.models.components import effective_collision_boxes
-    (obstacle,) = effective_collision_boxes(_coffre("facing"))
+    from core.models.components import effective_collision_shapes
+    (obstacle,) = effective_collision_shapes(_coffre("facing"))
     assert obstacle.response == "block" and obstacle.solid is True and obstacle.tag == "Interactive"
-    (plaque,) = effective_collision_boxes(_coffre("hover"))
+    (plaque,) = effective_collision_shapes(_coffre("hover"))
     assert plaque.response == "sensor" and plaque.solid is False      # on doit pouvoir la recouvrir
 
 

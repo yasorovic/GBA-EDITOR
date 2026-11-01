@@ -61,7 +61,7 @@
       ]
     },
     {
-      "name": "CollisionBox",
+      "name": "CollisionShape",
       "group": "gameplay",
       "entries": []
     },

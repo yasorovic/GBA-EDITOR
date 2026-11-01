@@ -1,11 +1,12 @@
-"""Éditeur du CollisionBoxComponent."""
+"""Éditeur du CollisionShapeComponent."""
 from __future__ import annotations
 
 from PyQt6.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QWidget
 from PyQt6.QtGui import QFont
 
 from . import BaseComponentEditor, register
-from ui.common.widgets import W
+from ui.common import icons
+from ui.common.widgets import AssetPickerPopup, ScriptSlot, W
 from ui.common.notice import notice
 from ui.common.tooltip import tooltip
 from ui.common.labels import label
@@ -13,9 +14,10 @@ from ui.common.theme import C, T
 from ui.common.pickers import collision_tag_slot
 from ui.common.icons import COLOR_SPRITE
 from core.history import get_history, AddListItemCmd
+from core.models.components import PhysicMaterialComponent
 
 
-@register("collision_box")
+@register("collision_shape")
 class CollisionEditor(BaseComponentEditor):
 
     def build(self, comp, row, layout):
@@ -23,7 +25,7 @@ class CollisionEditor(BaseComponentEditor):
 
         # ── Tag ─────────────────────────────────────────────────────
         # Distinct de l'"id" de la meta_bar : l'id distingue les boxes de
-        # CET acteur (utile avec plusieurs CollisionBoxComponent, ex.
+        # CET acteur (utile avec plusieurs CollisionShapeComponent, ex.
         # "head_hurtbox" / "body_hurtbox") ; le tag est le GROUPE de
         # collision, partagé entre acteurs, celui que lit la matrice de
         # Project Settings > Physics & Collisions et que le codegen émet en
@@ -53,6 +55,18 @@ class CollisionEditor(BaseComponentEditor):
         self.register_syncer("tag", lambda v, w=tag_slot: w.set_script(str(v) or "body"))
         W.row(label("comped.tag"), tag_slot, layout)
 
+        layer = W.spinbox(comp.layer, 1, 65535)
+        layer.setObjectName("collisionLayer")
+        layer.setToolTip(tooltip(title=label("comped.collision_layer"),
+                                 body=label("comped.collision_layer_tip")))
+        W.row(label("comped.collision_layer"), layer, layout)
+
+        mask = W.spinbox(comp.mask, 0, 65535)
+        mask.setObjectName("collisionMask")
+        mask.setToolTip(tooltip(title=label("comped.collision_mask"),
+                                body=label("comped.collision_mask_tip")))
+        W.row(label("comped.collision_mask"), mask, layout)
+
         # ── Mode Solid / Trigger ──────────────────────────────────
         chk_solid = QCheckBox()
         chk_solid.setChecked(is_solid)
@@ -80,17 +94,38 @@ class CollisionEditor(BaseComponentEditor):
         self.register_syncer("response", lambda v, w=chk_blocks: (
             w.blockSignals(True), w.setChecked(v == "block"), w.blockSignals(False)))
 
-        restitution = W.double_spinbox(comp.restitution, 0.0, 1.0, 0.05, 2)
-        restitution.setObjectName("collisionRestitution")
-        restitution.setToolTip(tooltip(title=label("comped.collision_restitution"),
-                                       body=label("comped.collision_restitution_tip")))
-        W.row(label("comped.collision_restitution"), restitution, layout)
+        # ── Matériau : un PhysicMaterialComponent du même acteur, désigné par son id ──
+        owner = getattr(self.insp, "_actor", None)
+        materials = [c for c in getattr(owner, "components", []) if isinstance(c, PhysicMaterialComponent)]
+        material_icon = icons.get("view_collision", C.TEXT_DIM)
+        material = ScriptSlot(add_label=label("comped.collision_choose_material"),
+                              accent_color=C.ACCENT, show_clear=True)
+        material.setToolTip(tooltip(title=label("comped.collision_material"),
+                                    body=label("comped.collision_material_tip")))
 
-        friction = W.double_spinbox(comp.friction, 0.0, 1.0, 0.05, 2)
-        friction.setObjectName("collisionFriction")
-        friction.setToolTip(tooltip(title=label("comped.collision_friction"),
-                                    body=label("comped.collision_friction_tip")))
-        W.row(label("comped.collision_friction"), friction, layout)
+        def show_material(value):
+            if next((m for m in materials if m.id == value), None) is not None:
+                material.set_script(value, icon=material_icon)
+            elif value:
+                material.set_script(label("comped.collision_material_missing", name=value))
+            else:
+                material.set_script(label("comped.collision_material_none"), icon=material_icon)
+
+        def open_material_picker():
+            entries = [(m.id, m.id, material_icon) for m in materials]
+            popup = AssetPickerPopup(entries, C.ACCENT, parent=material, new_label=None)
+            popup.picked.connect(lambda value: (
+                self.set_field(comp, "material_id", value), show_material(value)))
+            popup.show_below(material)
+
+        material.set_callbacks(
+            on_add=open_material_picker,
+            on_open=open_material_picker,
+            on_clear=lambda: (self.set_field(comp, "material_id", ""), show_material("")),
+        )
+        W.row(label("comped.collision_material"), material, layout)
+        show_material(comp.material_id)
+        self.register_syncer("material_id", show_material)
 
         # ── AABB — champs px/tile ou référence de variable ────────
         # Les valeurs peuvent être un littéral (px/tile) ou pointer une
@@ -120,8 +155,8 @@ class CollisionEditor(BaseComponentEditor):
         chk_solid.toggled.connect(_on_solid)
         self.register_syncer("solid", lambda v, w=chk_solid: (
             w.blockSignals(True), w.setChecked(bool(v)), w.blockSignals(False)))
-        restitution.valueChanged.connect(lambda v: self.set_field(comp, "restitution", float(v)))
-        friction.valueChanged.connect(lambda v: self.set_field(comp, "friction", float(v)))
-        self.register_syncer("restitution", lambda v, w=restitution: w.setValue(float(v)))
-        self.register_syncer("friction", lambda v, w=friction: w.setValue(float(v)))
+        layer.valueChanged.connect(lambda v: self.set_field(comp, "layer", int(v)))
+        mask.valueChanged.connect(lambda v: self.set_field(comp, "mask", int(v)))
+        self.register_syncer("layer", lambda v, w=layer: w.setValue(int(v)))
+        self.register_syncer("mask", lambda v, w=mask: w.setValue(int(v)))
 

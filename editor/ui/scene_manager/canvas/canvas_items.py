@@ -891,7 +891,7 @@ class GridItem(QGraphicsItem):
 
 class ActorBoxOverlay(QGraphicsItem):
     """
-    Dessine les CollisionBoxComponent des acteurs passés via set_actors().
+    Dessine les CollisionShapeComponent des acteurs passés via set_actors().
     Solid → rouge,  trigger → vert.
     z=160 (au-dessus des sprites, sous la caméra).
     """

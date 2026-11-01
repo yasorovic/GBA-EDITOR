@@ -13,7 +13,7 @@ from codegen.runtime_codegen.gen_affine import pool_affine
 from codegen.runtime_codegen.gen_camera import camera_follow_lines
 from codegen.runtime_codegen.gen_pool import dispatch_sym, parent_compose_lines, pool_compose_lines
 from codegen.runtime_codegen.gen_scene_query import (
-    actors_can_collide, has_col_event, scene_anim_descriptors, scene_has_cmap,
+    actors_can_collide, collision_pair_mask, has_col_event, scene_anim_descriptors, scene_has_cmap,
 )
 from codegen.runtime_codegen.gen_sfx_trigger import sfx_trigger_info
 from codegen.runtime_codegen.gen_sprite import (
@@ -27,7 +27,7 @@ from codegen.runtime_codegen.physics.body import (
 from codegen.runtime_codegen.physics.impulses import impulse_tick_lines
 from codegen.runtime_codegen.physics.kinematic import kinematic_crush_pairs, kinematic_tick_parts
 from codegen.runtime_codegen.physics.motion import physics_motion_lines, physics_sleep_lines
-from codegen.runtime_codegen.physics.support import support_tick_lines
+from codegen.runtime_codegen.physics.floor import floor_tick_lines
 from core.models.components import PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC, affine_sprite_component
 from core.models.scene import Scene
 from core.project import Project
@@ -187,7 +187,7 @@ def gen_scene_tick(
             pi, _def, lambda owner: (physics_collider_mask(owner, map_only=True)
                                      if uses_character_solver(owner) else 0))
 
-    L += support_tick_lines(p, scene_actors, actor_offset)
+    L += floor_tick_lines(p, scene_actors, actor_offset)
 
     L += physics_sleep_lines(scene, p.settings, scene_actors, actor_offset, pi)
 
@@ -202,7 +202,8 @@ def gen_scene_tick(
         L += shared_pool_gen.collision_lines(
             pi, _sh["spool"]["end"] - _sh["spool"]["start"], col_scene,
             lambda pf, a: actors_can_collide(p, pf, a), _def, has_col_event, _dsym, lua_idx,
-            scene.name, box_contact_lines)
+            scene.name, box_contact_lines,
+            lambda pf, a: collision_pair_mask(pf, a, p.settings))
 
     # AABB collisions scène
     # Une table de paires et une boucle : le code des contacts (`contact_pair_run`) n'est pas recopié par paire.
@@ -215,12 +216,14 @@ def gen_scene_tick(
 
         # Une paire dont aucun côté n'a de handler ne produit rien (et `_col_prev` n'est lu que par `contact_pair_run`) : elle
         # n'entre pas dans la table.
-        rows = [(i, j, handlers(i), handlers(j)) for i, j in col_pairs]
-        rows = [r for r in rows if r[2] != "{0,0,0}" or r[3] != "{0,0,0}"]
+        rows = [(i, j, collision_pair_mask(scene_actors[i - actor_offset][0],
+                                            scene_actors[j - actor_offset][0], p.settings),
+                 handlers(i), handlers(j)) for i, j in col_pairs]
+        rows = [r for r in rows if r[3] != "{0,0,0}" or r[4] != "{0,0,0}"]
         if rows:
             L.append(f"    static u16 _col_prev[{len(rows)}]={{0}};")
             L.append(f"    static const ContactPair _col_pairs[{len(rows)}]={{")
-            L += [f"        {{{i},{j},{a},{b}}}," for i, j, a, b in rows]
+            L += [f"        {{{i},{j},{allowed},{a},{b}}}," for i, j, allowed, a, b in rows]
             L += ["    };",
                   f"    for(u8 _k=0;_k<{len(rows)};_k++) contact_pair_run(&_col_pairs[_k],&_col_prev[_k]);"]
 

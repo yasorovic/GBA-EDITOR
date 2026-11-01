@@ -4,7 +4,7 @@ from __future__ import annotations
 from core.models.components import (
     COLLISION_RESPONSE_BLOCK,
     PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID,
-    CollisionBoxComponent, PhysicsBodyComponent, owner_effective_boxes,
+    CollisionShapeComponent, PhysicsBodyComponent, owner_effective_boxes,
 )
 
 
@@ -14,15 +14,15 @@ def physics_body(owner) -> PhysicsBodyComponent | None:
                  if isinstance(c, PhysicsBodyComponent) and c.active), None)
 
 
-def physics_collider_entries(owner, sprite=None) -> list[tuple[int, CollisionBoxComponent]]:
+def physics_collider_entries(owner, sprite=None) -> list[tuple[int, CollisionShapeComponent]]:
     """Les formes du corps dans la table runtime.
 
-    Une relation explicite désigne exactement une CollisionBox par son id. Une
+    Une relation explicite désigne exactement une CollisionShape par son id. Une
     relation vide conserve provisoirement les boîtes `solid` historiques afin
     que les projets existants ne changent pas de comportement au chargement.
     """
     boxes = [box for box in getattr(owner, "components", [])
-             if isinstance(box, CollisionBoxComponent)][:4]
+             if isinstance(box, CollisionShapeComponent)][:4]
     body = physics_body(owner)
     if body is not None and body.collider_id:
         return [(rank, box) for rank, box in enumerate(boxes)
@@ -41,14 +41,14 @@ def physics_collider_mask(owner, sprite=None, *, map_only: bool = False) -> int:
                if not map_only or box.solid)
 
 
-def physics_blocker_entries(owner, sprite=None) -> list[tuple[int, CollisionBoxComponent]]:
+def physics_blocker_entries(owner, sprite=None) -> list[tuple[int, CollisionShapeComponent]]:
     """Boîtes Block offertes aux autres corps, restreintes par la relation explicite."""
     body = physics_body(owner)
     boxes = (physics_collider_entries(owner, sprite)
              if body is not None and body.collider_id
              else list(enumerate(owner_effective_boxes(owner, sprite))))
     return [(rank, box) for rank, box in boxes
-            if isinstance(box, CollisionBoxComponent) and box.active
+            if isinstance(box, CollisionShapeComponent) and box.active
             and box.response == COLLISION_RESPONSE_BLOCK]
 
 

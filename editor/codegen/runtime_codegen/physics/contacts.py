@@ -3,7 +3,7 @@ from __future__ import annotations
 
 
 def box_contact_lines(a_expr: str, b_expr: str, active: str, prev: str,
-                      events_a: list, events_b: list, indent: str) -> list[str]:
+                      events_a: list, events_b: list, indent: str, allowed: int = 0xFFFF) -> list[str]:
     """Les contacts d'UNE paire d'acteurs, un par couple de tags de colliders.
 
     `actors_overlap_mask` rend un bit par couple de tags en contact ; `prev` en
@@ -23,7 +23,7 @@ def box_contact_lines(a_expr: str, b_expr: str, active: str, prev: str,
     i = indent
     lines = [
         f"{i}if({active}) debug_physics_contact_test();",
-        f"{i}{{ u16 _cur=({active})?actors_overlap_mask({a_expr},{b_expr}):0; u16 _prv={prev};",
+        f"{i}{{ u16 _cur=({active})?actors_overlap_mask({a_expr},{b_expr},{allowed}):0; u16 _prv={prev};",
         f"{i}  if(_cur|_prv)",
         f"{i}  for(u8 _bi=0;_bi<MAX_BOXES;_bi++) for(u8 _bj=0;_bj<MAX_BOXES;_bj++){{",
         f"{i}      u16 _m=(u16)(1u<<(_bi*MAX_BOXES+_bj));",

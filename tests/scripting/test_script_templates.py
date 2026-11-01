@@ -18,7 +18,7 @@ def test_event_template_is_minimal_and_valid(kind, owner_kind):
         kind=kind,
         name="Example",
         actor_name="Actor",
-        component_labels=["Sprite", "CollisionBox(body)"],
+        component_labels=["Sprite", "CollisionShape(body)"],
         has_sprite=True,
         has_sfx=True,
         collision_tags=["body"],

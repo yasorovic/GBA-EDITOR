@@ -65,7 +65,7 @@ def tile_lines(pi: list[dict], has_event, map_collider_mask) -> list[str]:
 
 
 def collision_lines(pi: list[dict], size: int, col_scene: list, can_collide, has_event, has_col_event,
-                    dispatch_sym, lua_idx: set, scene_name: str, contact_lines) -> list[str]:
+                    dispatch_sym, lua_idx: set, scene_name: str, contact_lines, collision_mask=None) -> list[str]:
     """Les contacts des instances du pool partagé avec les acteurs posés qui ont une boîte.
 
     Une collision a DEUX côtés, et chacun apprend la nouvelle dans son propre script (comme la boucle
@@ -90,7 +90,8 @@ def collision_lines(pi: list[dict], size: int, col_scene: list, can_collide, has
                 "_a", f"&g_actors[{sidx}]", f"g_actors[{sidx}].active", f"_pcol[_sl][{ci}]",
                 [(ev, f"{fn}_{ev}") for ev, fn in ev_pool],
                 [(ev, f"{fn}_{ev}") for ev, fn in ev_scene],
-                "                ")
+                "                ",
+                collision_mask(m["prefab"], sactor) if collision_mask else 0xFFFF)
             width = max(width, ci + 1)
         if body:
             labels = " ".join(f"case {m['model_id'] + k}:" for k in range(m["group"]))

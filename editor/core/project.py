@@ -1163,7 +1163,7 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
     def collision_tags(self) -> list:
         """Tags de collision du projet, DÉCLARÉS d'abord (dans leur ordre —
         celui que Project Settings > Physics & Collisions laisse glisser-déposer),
-        puis ceux seulement TROUVÉS sur un CollisionBoxComponent (actif ou non : un script peut l'allumer)
+        puis ceux seulement TROUVÉS sur un CollisionShapeComponent (actif ou non : un script peut l'allumer)
         (scènes, prefabs, ET parties de prefabs), triés, à la suite.
 
         Source unique pour ses TROIS lecteurs : le sélecteur de tag du
@@ -1173,11 +1173,11 @@ class Project(ProjectPathsMixin, ProjectVariablesMixin, ProjectTextsMixin,
         collecte, limitée aux acteurs de SCÈNE : un tag porté seulement par un
         prefab poolé n'avait pas de constante, et `spawn_<Prefab>()` — qui
         l'écrit dans `boxes[].tag` — ne compilait pas."""
-        from core.models.components import CollisionBoxComponent
+        from core.models.components import CollisionShapeComponent
         owners = [a for sc in self.scenes for a in sc.actors] + list(self.prefabs)
         owners += [ch for pf in self.prefabs for ch in (getattr(pf, "children", []) or [])]
         discovered = {c.tag or "body" for o in owners for c in getattr(o, "components", [])
-                     if isinstance(c, CollisionBoxComponent)}
+                     if isinstance(c, CollisionShapeComponent)}
         # Les tags réservés existent dans tout projet, même ancien (recréés ici plutôt que migrés), et
         # passent en tête dans leur ordre : la liste sauvée est triée par ordre alphabétique, ce qui
         # mettrait « Interactive » avant « Player ».

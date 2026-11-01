@@ -155,7 +155,7 @@ def _reset_lines(p, scene, sym: str, scene_actors: list, actor_offset: int, alay
     # précédente ne résout dans aucun emplacement de celle-ci.
     L.append("    for(int _i=0; _i<G_ACTOR_COUNT; _i++) { u16 _g=g_actors[_i].gen; g_actors[_i]=(Actor){0}; "
              "g_actors[_i].gen=_g+1; g_actors[_i].oam_entry=-1; g_actors[_i].inst=_i; "
-             "if(g_actor_support) g_actor_support[_i]=0; }")
+             "if(g_actor_floor) g_actor_floor[_i]=0; }")
     L.append("    for(int _i=0; _i<(G_ACTOR_COUNT+31)/32; _i++) g_alive_bits[_i]=0;")
     L.append("    g_alive_epoch++;")
     L.append("    for(int _i=0; _i<G_OAM_ENTRY_COUNT; _i++) g_oam_entries[_i]=(OamEntry){0};")

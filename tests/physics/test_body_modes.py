@@ -1,11 +1,13 @@
 """Contrat d'intégration des modes physiques dans le C émis."""
 
-from core.models.components import CollisionBoxComponent, PhysicsBodyComponent
+from types import SimpleNamespace
+
+from core.models.components import CollisionShapeComponent, PhysicMaterialComponent, PhysicsBodyComponent
 from core.models.scene import Actor
 
 
 def _actor(name: str, solid: bool = True, mode: str | None = None) -> Actor:
-    actor = Actor(name=name, components=[CollisionBoxComponent(solid=solid)])
+    actor = Actor(name=name, components=[CollisionShapeComponent(solid=solid)])
     if mode is not None:
         actor.components.append(PhysicsBodyComponent(mode=mode))
     return actor
@@ -68,26 +70,63 @@ def test_une_valeur_inconnue_est_refusee_au_lieu_d_etre_remplacee():
     with pytest.raises(ValueError, match="physics body mode"):
         PhysicsBodyComponent(mode="orbital")
     with pytest.raises(ValueError, match="collision response"):
-        CollisionBoxComponent(response="trigger")
+        CollisionShapeComponent(response="trigger")
     with pytest.raises(ValueError, match="collision response"):
-        components_from_list([{"component_type": "collision_box", "response": "trigger"}])
+        components_from_list([{"component_type": "collision_shape", "response": "trigger"}])
     with pytest.raises(ValueError, match="mass"):
         PhysicsBodyComponent(mode="RigidBody", mass=0)
     with pytest.raises(ValueError, match="gravity scale"):
         PhysicsBodyComponent(mode="RigidBody", gravity_scale=9)
     with pytest.raises(ValueError, match="restitution"):
-        CollisionBoxComponent(restitution=1.1)
+        PhysicMaterialComponent(restitution=1.1)
     with pytest.raises(ValueError, match="friction"):
-        CollisionBoxComponent(friction=-0.1)
+        PhysicMaterialComponent(friction=-0.1)
+    with pytest.raises(ValueError, match="layer"):
+        CollisionShapeComponent(layer=0)
+    with pytest.raises(ValueError, match="mask"):
+        CollisionShapeComponent(mask=65536)
 
 
-def test_les_materiaux_de_collision_sont_serialises_sur_la_boite():
-    from core.models.components import components_from_list, components_to_list
+def test_le_materiau_physique_est_un_composant_designe_par_la_forme():
+    from core.models.components import components_from_list, components_to_list, shape_material
 
-    data = components_to_list([CollisionBoxComponent(restitution=0.75, friction=0.25)])
-    (reloaded,) = components_from_list(data)
+    owner = SimpleNamespace(components=[
+        CollisionShapeComponent(id="body", material_id="rubber"),
+        PhysicMaterialComponent(id="rubber", restitution=0.75, friction=0.25)])
+    shape, material = components_from_list(components_to_list(owner.components))
 
-    assert (reloaded.restitution, reloaded.friction) == (0.75, 0.25)
+    assert shape.material_id == "rubber"
+    assert (material.restitution, material.friction) == (0.75, 0.25)
+    assert shape_material(owner, shape) is owner.components[1]
+    assert shape_material(owner, CollisionShapeComponent()).restitution == 0.0
+    owner.components[1].active = False
+    assert shape_material(owner, shape).friction == 0.0
+
+
+def test_une_ancienne_boite_avec_materiau_est_scindee_a_la_lecture():
+    from core.models.components import components_from_list
+
+    material, shape = components_from_list([
+        {"component_type": "collision_box", "id": "body", "restitution": 0.5, "friction": 0.25}])
+
+    assert isinstance(shape, CollisionShapeComponent) and shape.material_id == material.id
+    assert (material.restitution, material.friction) == (0.5, 0.25)
+    (plain,) = components_from_list([{"component_type": "collision_box", "id": "body"}])
+    assert isinstance(plain, CollisionShapeComponent) and plain.material_id == ""
+
+
+def test_les_couches_et_masques_de_collision_sont_serialises_et_reciproques():
+    from core.models.components import collision_shapes_collide, components_from_list, components_to_list
+
+    left = CollisionShapeComponent(layer=0b0010, mask=0b0100)
+    right = CollisionShapeComponent(layer=0b0100, mask=0b0010)
+    hidden = CollisionShapeComponent(layer=0b1000, mask=0b0010)
+    data = components_to_list([left])[0]
+    (reloaded,) = components_from_list([data])
+
+    assert (reloaded.layer, reloaded.mask) == (0b0010, 0b0100)
+    assert collision_shapes_collide(left, right)
+    assert not collision_shapes_collide(left, hidden)
 
 
 def test_les_anciens_noms_sont_relus_puis_serialises_avec_les_noms_canoniques():
@@ -118,8 +157,8 @@ def test_le_body_serialise_sa_relation_de_collider_et_n_utilise_qu_elle():
     from core.models.components import components_from_list, components_to_list
 
     actor = Actor(name="Hero", components=[
-        CollisionBoxComponent(id="hurt", solid=True),
-        CollisionBoxComponent(id="feet", solid=True),
+        CollisionShapeComponent(id="hurt", solid=True),
+        CollisionShapeComponent(id="feet", solid=True),
         PhysicsBodyComponent(mode="CharacterBody", collider_id="feet"),
     ])
     body = actor.components[-1]
@@ -136,7 +175,7 @@ def test_une_relation_de_collider_absente_est_refusee_par_la_validation():
     from core.validator import _check_physics_body
 
     actor = Actor(name="Hero", components=[
-        CollisionBoxComponent(id="body"),
+        CollisionShapeComponent(id="body"),
         PhysicsBodyComponent(collider_id="missing"),
     ])
     errors = []
@@ -144,7 +183,7 @@ def test_une_relation_de_collider_absente_est_refusee_par_la_validation():
                         actor, actor.components[-1])
 
     assert len(errors) == 1
-    assert "missing" in errors[0] and "unique CollisionBox" in errors[0]
+    assert "missing" in errors[0] and "unique CollisionShape" in errors[0]
 
 
 def test_kinematic_et_rigid_emettent_un_mouvement_automatique_et_la_gravite():
@@ -299,9 +338,9 @@ def test_le_tick_emet_on_crushed_pour_la_carte_sans_static(tmp_path):
     assert f"{symbol}_on_crushed(&g_actors[1],0)" in code
 
 
-def test_le_support_final_relit_static_et_kinematic():
+def test_le_floor_final_relit_static_et_kinematic():
     from types import SimpleNamespace
-    from codegen.runtime_codegen.physics.support import support_tick_lines
+    from codegen.runtime_codegen.physics.floor import floor_tick_lines
 
     character = _actor("Hero", mode="CharacterBody")
     static = _actor("Floor", mode="StaticBody")
@@ -311,20 +350,20 @@ def test_le_support_final_relit_static_et_kinematic():
     project = SimpleNamespace(settings=SimpleNamespace(
         collision_disabled_pairs=[], collision_tags=[]))
 
-    code = "\n".join(support_tick_lines(
+    code = "\n".join(floor_tick_lines(
         project, [(character, None), (static, None), (platform, None)], 3))
 
-    assert "g_actor_support[3]=0" in code
-    assert "actor_support_test(&g_actors[3],0,&g_actors[4],0)" in code
-    assert "actor_support_test(&g_actors[3],0,&g_actors[5],0)" in code
+    assert "g_actor_floor[3]=0" in code
+    assert "actor_floor_test(&g_actors[3],0,&g_actors[4],0)" in code
+    assert "actor_floor_test(&g_actors[3],0,&g_actors[5],0)" in code
 
 
-def test_l_etat_de_support_est_en_ewram_sans_grossir_actor(tmp_path):
+def test_l_etat_de_floor_est_en_ewram_sans_grossir_actor(tmp_path):
     from types import SimpleNamespace
     from core.project import Project
     from codegen.runtime_codegen.gen_globals import globals_lines
 
-    project = Project.create(tmp_path / "Support", "Support")
+    project = Project.create(tmp_path / "Floor", "Floor")
     character = _actor("Hero", mode="CharacterBody")
     static = _actor("Floor", mode="StaticBody")
     project.active_scene.actors = [character, static]
@@ -332,5 +371,5 @@ def test_l_etat_de_support_est_en_ewram_sans_grossir_actor(tmp_path):
         buffered_bits={}, seq_table_defs={}, ring_depth=1))
     code = "\n".join(lines)
 
-    assert "u16 g_actor_support_store[6] EWRAM_BSS;" in code
-    assert "u16 *g_actor_support=g_actor_support_store;" in code
+    assert "u16 g_actor_floor_store[6] EWRAM_BSS;" in code
+    assert "u16 *g_actor_floor=g_actor_floor_store;" in code

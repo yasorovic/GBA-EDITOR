@@ -1,7 +1,7 @@
 """Les tags de collision d'un projet neuf, et le dispatch de collision du générateur."""
 from pathlib import Path
 
-from core.models.components import CollisionBoxComponent, ScriptComponent
+from core.models.components import CollisionShapeComponent, ScriptComponent
 from core.models.scene import Actor
 from core.project import Project
 
@@ -41,7 +41,7 @@ def test_collision_enter_is_dispatched_to_scene_actor_script(tmp_path):
         "function on_collision_enter(other, my_box, other_box)\nend\n", encoding="utf-8")
     for name in ("A", "B"):
         actor = Actor(name=name)
-        actor.components = [CollisionBoxComponent(w=8, h=8),
+        actor.components = [CollisionShapeComponent(w=8, h=8),
                             ScriptComponent(script="assets/scripts/Hit.lua")]
         scene.actors.append(actor)
     project.save()
@@ -53,5 +53,5 @@ def test_collision_enter_is_dispatched_to_scene_actor_script(tmp_path):
 
     main_c = (Path(project.root) / "build" / "src" / "main.c").read_text(encoding="utf-8")
     # la paire (0, 1) est une ligne de la table des contacts : les handlers de A puis ceux de B
-    assert (f"{{0,1,{{{scene.name}_A_on_collision_enter,0,0}},"
+    assert (f"{{0,1,1,{{{scene.name}_A_on_collision_enter,0,0}},"
             f"{{{scene.name}_B_on_collision_enter,0,0}}}}") in main_c

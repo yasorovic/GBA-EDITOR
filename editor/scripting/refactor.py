@@ -142,8 +142,8 @@ def _node_key(node, elems: dict) -> Optional[str]:
 
 
 def _ref_locals(tree) -> dict[str, str]:
-    """{variable: type de référence} : `local hb = self:collision_box("x")` fait
-    de `hb` une `collision_box`. Même relevé que le checker, sur l'AST brut."""
+    """{variable: type de référence} : `local hb = self:collision_shape("x")` fait
+    de `hb` une `collision_shape`. Même relevé que le checker, sur l'AST brut."""
     out: dict[str, str] = {}
     for node in _lua_ast.walk(tree):
         if not isinstance(node, (_nodes.LocalAssign, _nodes.Assign)):

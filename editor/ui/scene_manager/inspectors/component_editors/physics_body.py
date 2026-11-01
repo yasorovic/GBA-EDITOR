@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import QCheckBox, QComboBox
 
 from core.models.components import (
     PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_MODES,
-    PHYSICS_BODY_RIGID, PHYSICS_BODY_STATIC, CollisionBoxComponent,
+    PHYSICS_BODY_RIGID, PHYSICS_BODY_STATIC, CollisionShapeComponent,
 )
 from ui.common import icons
 from ui.common.labels import label
@@ -31,7 +31,7 @@ class PhysicsBodyEditor(BaseComponentEditor):
 
         owner = getattr(self.insp, "_actor", None)
         colliders = [c for c in getattr(owner, "components", [])
-                     if isinstance(c, CollisionBoxComponent)]
+                     if isinstance(c, CollisionShapeComponent)]
         collider_icon = icons.get("view_collision", C.TEXT_DIM)
         collider = ScriptSlot(add_label=label("comped.physics_choose_collider"),
                               accent_color=C.ACCENT, show_clear=True)

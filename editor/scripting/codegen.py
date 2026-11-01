@@ -59,7 +59,7 @@ from .api import (
     DOMAIN_TEXT, DOMAIN_FONT, DOMAIN_IMAGE_STATE,
     DOMAIN_PALETTE, DOMAIN_UI_ELEMENT, ui_list_constant,
     ref_member, ref_upcast, ref_constant, REF_ACTOR, REF_UI_ELEMENT, REF_TEXT_BOX,
-    REF_COLLISION_BOX, COLLISION_EVENTS, BOX_PARAMS,
+    REF_COLLISION_SHAPE, COLLISION_EVENTS, BOX_PARAMS,
     DOMAIN_PREFAB, DOMAIN_ACTOR, DOMAIN_GLOBAL, DOMAIN_SEQUENCE,
     anim_constant, sprite_id_constant, sfx_constant, music_constant, key_constant, actor_name_constant, scene_constant,
     text_constant, font_constant, region_constant, anon_text_key, palette_constant,
@@ -1513,7 +1513,7 @@ class CodeGen:
             for name, owner in BOX_PARAMS:
                 if name in fn.params:
                     self._w(f"int {name} __attribute__((unused)) = actor_get_box({owner}, {name}_tag);")
-                    self._ref_types[name] = REF_COLLISION_BOX
+                    self._ref_types[name] = REF_COLLISION_SHAPE
         mark = self._open_state_scope()
         self._emit_block(fn.body)
         if fn.name == "on_update":
@@ -2488,10 +2488,10 @@ class CodeGen:
         deux versions : le langage ne type pas ses variables, c'est donc le type
         de référence relevé sur le `local` (ou rendu par l'appel) qui tranche."""
         other = args[0]
-        is_box = (infer_ref_type(other, self._kinds, self._ref_types) == "collision_box"
+        is_box = (infer_ref_type(other, self._kinds, self._ref_types) == "collision_shape"
                   or (isinstance(other, ExprName)
-                      and self._ref_types.get(other.name) == "collision_box"))
-        fn = "collision_box_overlaps_box" if is_box else "collision_box_overlaps_actor"
+                      and self._ref_types.get(other.name) == "collision_shape"))
+        fn = "collision_shape_overlaps_box" if is_box else "collision_shape_overlaps_actor"
         return f"{fn}({receiver}, {self._expr(other)})"
 
     def _emit_sfx_set_volume(self, args: list, receiver: str) -> str:
@@ -3038,7 +3038,7 @@ _INVOKE_CUSTOM: dict = {
     "sfx:set_volume":  CodeGen._emit_sfx_set_volume,
     "sfx:set_pitch":   CodeGen._emit_sfx_set_pitch,
     "sfx:set_panning": CodeGen._emit_sfx_set_panning,
-    "collision_box:overlaps": CodeGen._emit_box_overlaps,
+    "collision_shape:overlaps": CodeGen._emit_box_overlaps,
     "actor:destroy":  CodeGen._emit_destroy,
     "actor:play_sfx": CodeGen._emit_play_sfx,
     # Le littéral d'un texte pose ses `$locale` avant l'appel (cf. `_emit_text_literal`).

@@ -7,6 +7,7 @@ from core.models.components import (
     PHYSICS_BODY_KINEMATIC,
     PHYSICS_BODY_RIGID,
     PHYSICS_BODY_STATIC,
+    collision_shapes_collide,
 )
 from core.models.settings import tags_collide
 from codegen.runtime_codegen.physics.body import physics_body_mode, physics_collider_entries
@@ -24,7 +25,7 @@ def kinematic_helper_lines() -> list[str]:
         "static void __attribute__((unused)) kinematic_carry(Actor* k,Actor* a,u8 kb,u8 ab,",
         "        int old_x,int old_y,u8* carried,int* carry_x,int* carry_y){",
         "    if(*carried||!k->active||!a->active||kb>=k->collision.box_count||ab>=a->collision.box_count) return;",
-        "    const CollisionBox* p=&k->collision.boxes[kb]; const CollisionBox* b=&a->collision.boxes[ab];",
+        "    const CollisionShape* p=&k->collision.boxes[kb]; const CollisionShape* b=&a->collision.boxes[ab];",
         "    if(!p->active||!b->active) return;",
         "    int dx=k->x-old_x,dy=k->y-old_y; if(!dx&&!dy) return;",
         "    int pl=(old_x>>8)+p->x,pr=pl+p->w,pt=(old_y>>8)+p->y;",
@@ -36,14 +37,14 @@ def kinematic_helper_lines() -> list[str]:
     ]
 
 
-def _block_boxes(owner, sprite) -> list[tuple[int, str]]:
-    return [(rank, box.tag or "body") for rank, box in physics_collider_entries(owner, sprite)
+def _block_boxes(owner, sprite) -> list[tuple[int, object]]:
+    return [(rank, box) for rank, box in physics_collider_entries(owner, sprite)
             if box.active
             and box.response == COLLISION_RESPONSE_BLOCK]
 
 
-def _body_boxes(owner, sprite) -> list[tuple[int, str]]:
-    return [(rank, box.tag or "body") for rank, box in physics_collider_entries(owner, sprite)
+def _body_boxes(owner, sprite) -> list[tuple[int, object]]:
+    return [(rank, box) for rank, box in physics_collider_entries(owner, sprite)
             if box.active]
 
 
@@ -58,9 +59,10 @@ def kinematic_tick_parts(
         for ti, (target, target_sprite) in enumerate(scene_actors):
             if ti == ki or physics_body_mode(target) not in (PHYSICS_BODY_CHARACTER, PHYSICS_BODY_RIGID):
                 continue
-            pairs = [(kb, ab) for kb, ktag in _block_boxes(kinematic, kinematic_sprite)
-                     for ab, atag in _body_boxes(target, target_sprite)
-                     if tags_collide(p.settings, ktag, atag)]
+            pairs = [(kb, ab) for kb, kbox in _block_boxes(kinematic, kinematic_sprite)
+                     for ab, abox in _body_boxes(target, target_sprite)
+                     if (tags_collide(p.settings, kbox.tag or "body", abox.tag or "body")
+                         and collision_shapes_collide(kbox, abox))]
             if pairs:
                 groups[(actor_offset + ki, actor_offset + ti)] = pairs
     if not groups:
@@ -92,15 +94,16 @@ def kinematic_crush_pairs(p, scene_actors, actor_offset: int) -> dict[int, list[
     statics = []
     for si, (owner, sprite) in enumerate(scene_actors):
         if physics_body_mode(owner) == PHYSICS_BODY_STATIC:
-            statics.extend((actor_offset + si, sb, tag)
-                           for sb, tag in _block_boxes(owner, sprite))
+            statics.extend((actor_offset + si, sb, box)
+                           for sb, box in _block_boxes(owner, sprite))
 
     pairs: dict[int, list[tuple[int, int, int]]] = {}
     for ci, (character, sprite) in enumerate(scene_actors):
         if physics_body_mode(character) != PHYSICS_BODY_CHARACTER:
             continue
-        for cb, ctag in _body_boxes(character, sprite):
-            for si, sb, stag in statics:
-                if tags_collide(p.settings, ctag, stag):
+        for cb, cbox in _body_boxes(character, sprite):
+            for si, sb, sbox in statics:
+                if (tags_collide(p.settings, cbox.tag or "body", sbox.tag or "body")
+                        and collision_shapes_collide(cbox, sbox)):
                     pairs.setdefault(actor_offset + ci, []).append((cb, si, sb))
     return pairs

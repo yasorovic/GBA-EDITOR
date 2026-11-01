@@ -35,26 +35,41 @@ Après la résolution des collisions, le moteur met à jour `body.grounded` : `t
 solide repose sur la carte de collision, un StaticBody ou un KinematicBody posé, `false` dans les
 airs. Cette propriété empêche de sauter à chaque frame : le joueur ne saute que depuis le sol.
 
-`body.support` donne l'Actor du StaticBody ou KinematicBody qui porte actuellement le personnage.
+`body.floor` donne l'Actor du StaticBody ou KinematicBody qui porte actuellement le personnage.
 Il vaut `nil` quand le personnage repose sur la carte ou se trouve dans les airs. Vous pouvez ainsi
 identifier une plateforme particulière sans refaire un test de collision :
 
 ```lua
-local support = self:physics_body().support
-if support then
-    -- support est une référence d'Actor
+local floor = self:physics_body().floor
+if floor then
+    -- floor est une référence d'Actor
 end
 ```
 
-## Matériaux physiques des boîtes
+## Matériaux physiques
 
-Chaque `CollisionBox` porte provisoirement ses propres coefficients de restitution et de friction, de
-`0` à `1`. La restitution décide du rebond et le contact conserve la valeur la plus élevée. La friction
-ralentit le glissement tangent et le contact emploie la moyenne géométrique des deux valeurs.
+Un `PhysicMaterialComponent` porte une restitution et une friction, de `0` à `1`. Une `CollisionShape`
+le désigne par son id (champ « Matériau ») : sans désignation, elle n'a ni rebond ni frottement. La
+restitution décide du rebond et le contact conserve la valeur la plus élevée. La friction ralentit le
+glissement tangent et le contact emploie la moyenne géométrique des deux valeurs.
 
 Ces coefficients sont combinés au build puis écrits dans les paires physiques de la scène. Ils n'ajoutent
-donc aucun état à l'`Actor` au runtime. Ce placement sur `CollisionBox` est temporaire : un futur
-`PhysicsMaterialComponent` pourra regrouper des surfaces réutilisables si le projet en a réellement besoin.
+donc aucun état à l'`Actor` au runtime. Plusieurs formes d'un même acteur peuvent partager un matériau.
+
+## Couches et masques de collision
+
+Une `CollisionShape` porte aussi des **couches** et un **masque de collision**, chacun sur 16 bits. Une
+boîte peut appartenir à plusieurs couches. Elle rencontre une autre boîte seulement si son masque accepte
+une couche de l'autre, et réciproquement. Les valeurs par défaut, couche `1` et masque `65535`, conservent
+le comportement historique : toutes les boîtes se rencontrent.
+
+Les couches et masques s'ajoutent à la matrice de tags de **Project Settings > Physics & Collisions** : les
+deux filtres doivent accepter le contact. Le build calcule les couples de boîtes autorisés et ne les émet
+pas dans les tables de contacts, de blocage, de contact au sol ou d'impulsions. Ils n'ajoutent donc aucun champ à
+l'`Actor` ni de lecture dynamique de couches ou de masques dans la ROM.
+
+Les méthodes Lua de requête géométrique, telles que `collision_shape:overlaps`, restent des tests de forme
+explicites. Elles ne sont pas des événements automatiques et ne consultent pas ces filtres.
 
 ## 3. Ajouter l'impulsion de saut
 

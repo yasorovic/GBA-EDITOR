@@ -63,8 +63,8 @@ Chaque boîte porte un **Tag** (`body`, `hitbox`...). Un script demande la boît
 tag, la garde dans une variable, puis lit ou change ses champs pendant le jeu :
 
 ```lua
-local corps = self:collision_box("body")       -- nil si l'acteur n'a pas de boîte de ce tag
-local frappe = self:collision_box("hitbox")
+local corps = self:collision_shape("body")       -- nil si l'acteur n'a pas de boîte de ce tag
+local frappe = self:collision_shape("hitbox")
 
 frappe.offset = vec2(8, -4)                    -- décalage par rapport au pivot du sprite
 frappe.size = vec2(20, 8)                      -- une zone d'attaque qui s'allonge
@@ -85,7 +85,7 @@ Deux actions complètent la boîte :
 
 ```lua
 if frappe:overlaps(ennemi) then ... end        -- touche-t-elle N'IMPORTE QUELLE boîte active de cet acteur ?
-if frappe:overlaps(ennemi:collision_box("body")) then ... end   -- ... ou celle-là seulement ?
+if frappe:overlaps(ennemi:collision_shape("body")) then ... end   -- ... ou celle-là seulement ?
 
 local sol = corps:get_collision_tile(corps.bounds.x, corps.bounds.y + corps.bounds.h)
 ```

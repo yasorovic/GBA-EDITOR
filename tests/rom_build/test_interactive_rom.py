@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from codegen import BuildWorker
-from core.models.components import CollisionBoxComponent, InteractiveComponent, ScriptComponent
+from core.models.components import CollisionShapeComponent, InteractiveComponent, ScriptComponent
 from core.models.scene import Actor
 from core.project import Project
 from core.toolchain import DEVKITPRO_OK, Toolchain
@@ -37,7 +37,7 @@ def _projet(tmp_path) -> Project:
     (scripts / "Sign.lua").write_text(SIGN, encoding="utf-8")
 
     joueur = Actor(name="Hero", x=40, y=40, is_player=True)
-    joueur.components = [CollisionBoxComponent(id="body", tag="body", solid=True)]
+    joueur.components = [CollisionShapeComponent(id="body", tag="body", solid=True)]
 
     coffre = Actor(name="Chest", x=50, y=40)
     coffre.components = [
@@ -46,7 +46,7 @@ def _projet(tmp_path) -> Project:
     ]
     panneau = Actor(name="Sign", x=80, y=40)
     panneau.components = [
-        CollisionBoxComponent(id="reach", tag="reach", solid=False),
+        CollisionShapeComponent(id="reach", tag="reach", solid=False),
         InteractiveComponent(input_mode="hold", hold_frames=20, interaction="facing", box_tag="reach"),
         ScriptComponent(script="assets/scripts/Sign.lua"),
     ]
@@ -83,7 +83,7 @@ def test_un_prefab_joueur_poole_interagit_par_une_boucle(tmp_path):
     heros = Prefab(name="Hero2", actor=Actor(name="Hero2", is_player=True))
     # Le héros a un script (`on_interact` en sort) ; un prefab sans script naît aussi, sans `pool_init`.
     (projet.user_library_dir / "scripts" / "Hero2.lua").write_text(HERO, encoding="utf-8")
-    heros.actor.components = [CollisionBoxComponent(id="body", tag="body", solid=True),
+    heros.actor.components = [CollisionShapeComponent(id="body", tag="body", solid=True),
                               ScriptComponent(script="assets/scripts/Hero2.lua")]
     projet.prefabs.append(heros)
     projet.prefabs.save(heros, None)
@@ -114,7 +114,7 @@ def test_un_acteur_bloquant_se_compile_et_repousse_le_joueur(tmp_path):
     coffre = next(a for a in scene.actors if a.name == "Chest")
     heros.components.append(ScriptComponent(script="assets/scripts/Hero2.lua"))
     (projet.user_library_dir / "scripts" / "Hero2.lua").write_text(HERO, encoding="utf-8")
-    coffre.components.append(CollisionBoxComponent(id="body", tag="body", solid=False, response="block"))
+    coffre.components.append(CollisionShapeComponent(id="body", tag="body", solid=False, response="block"))
     projet.save()
 
     worker = BuildWorker(Project.open(projet.root), Toolchain())

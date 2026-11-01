@@ -9,7 +9,7 @@ from codegen.oam_alloc import scene_oam_layout
 from codegen.runtime_codegen.gen_appearance import appearance_layout
 from codegen.runtime_codegen.gen_scene_query import parent_depths
 from codegen.runtime_codegen.interact_gen import owner_boxes
-from core.models.components import CollisionBoxComponent
+from core.models.components import CollisionShapeComponent
 from core.models.field_value import (
     FieldValue as _FV, number_value as _number_value, var_names_from_project as _var_names,
 )
@@ -257,7 +257,7 @@ def section_spawn(pool_info: list[dict], p: Project, obj_layout,
             p_pal = (obj_layout.bank_index(getattr(part, "pal_bank", OWN_PAL_BANK), p_own)
                      if obj_layout else 0) or 0
             p_boxes = [c for c in part.components
-                       if isinstance(c, CollisionBoxComponent)][:4]
+                       if isinstance(c, CollisionShapeComponent)][:4]
             _ek = _E(k)      # None : la partie est un marqueur, sans entrée OAM
             L += [
                 f"            int _s{k} = group_slot(_i, {k});",

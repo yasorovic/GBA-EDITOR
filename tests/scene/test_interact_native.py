@@ -32,7 +32,7 @@ static void mk(int i, int x, int y, int bx, int by, int w, int h, int solid){
     *a = (Actor){0};
     a->active = 1; a->x = x << 8; a->y = y << 8; a->oam_entry = -1;
     a->collision.box_count = 1;
-    CollisionBox* b = &a->collision.boxes[0];
+    CollisionShape* b = &a->collision.boxes[0];
     b->x = bx; b->y = by; b->w = w; b->h = h; b->solid = solid; b->active = 1;
 }
 

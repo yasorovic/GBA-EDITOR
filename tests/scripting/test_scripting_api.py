@@ -685,7 +685,7 @@ def test_tag_d_un_acteur_guide_vers_name():
     assert any("other.name" in e for e in errs)
 
 
-def test_collision_box_n_est_pas_un_champ_d_acteur():
+def test_collision_shape_n_est_pas_un_champ_d_acteur():
     errs, _ = _tag_lua('function on_collide(self, other)\n'
-                       ' if other.collision_box.tag == "Player" then end\nend\n')
+                       ' if other.collision_shape.tag == "Player" then end\nend\n')
     assert any("other_box.tag" in e for e in errs)

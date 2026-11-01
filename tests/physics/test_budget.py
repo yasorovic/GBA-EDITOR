@@ -1,12 +1,12 @@
 """Le bilan physique reflète les capacités réservées par la scène."""
 from types import SimpleNamespace
 
-from core.models.components import CollisionBoxComponent, PhysicsBodyComponent
+from core.models.components import CollisionShapeComponent, PhysicsBodyComponent
 from core.models.scene import Actor
 
 
 def _actor(name, *, mode=None, response="sensor"):
-    box = CollisionBoxComponent()
+    box = CollisionShapeComponent()
     box.response = response
     components = [box]
     if mode:

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from core.models.components import (
     COLLISION_RESPONSE_BLOCK, PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID,
-    PHYSICS_BODY_STATIC, CollisionBoxComponent,
+    PHYSICS_BODY_STATIC, CollisionShapeComponent, collision_shapes_collide,
 )
 from core.models.settings import tags_collide
 from codegen.runtime_codegen.physics.body import (
@@ -35,7 +35,7 @@ def project_has_blockers(p) -> bool:
     from core.models.components import InteractiveComponent
     owners = [a for sc in getattr(p, "scenes", []) or [] for a in sc.actors]
     owners += list(getattr(p, "prefabs", []) or [])
-    return any((isinstance(c, CollisionBoxComponent) and c.active and c.response == COLLISION_RESPONSE_BLOCK)
+    return any((isinstance(c, CollisionShapeComponent) and c.active and c.response == COLLISION_RESPONSE_BLOCK)
                or (isinstance(c, InteractiveComponent) and c.active and c.interaction == "facing"
                    and not c.box_tag)
                for o in owners for c in getattr(o, "components", []))
@@ -49,7 +49,7 @@ def block_helper_lines() -> list[str]:
         "   non nulle) est repoussé, pour chacune de ses boîtes de carte, de la pénétration minimale, sur",
         "   l'axe le plus court (l'horizontal en cas d'égalité). La position garde sa fraction (Q8) et la",
         "   composante de vitesse sur cet axe est annulée. */",
-        "static void __attribute__((unused)) block_push(Actor* a,const CollisionBox* m,const Actor* t,const CollisionBox* b){",
+        "static void __attribute__((unused)) block_push(Actor* a,const CollisionShape* m,const Actor* t,const CollisionShape* b){",
         "    int ml=(a->x>>8)+m->x, mt=(a->y>>8)+m->y, mr=ml+m->w, mb=mt+m->h;",
         "    int bl=(t->x>>8)+b->x, bt=(t->y>>8)+b->y, br=bl+b->w, bb=bt+b->h;",
         "    if(ml>=br||mr<=bl||mt>=bb||mb<=bt) return;",
@@ -62,12 +62,12 @@ def block_helper_lines() -> list[str]:
         "static void __attribute__((unused)) actors_resolve_blocks(Actor* a,u8 body_mask,const u16* idx,const u8* box,int n){",
         "    if(!a->active||(!a->vx&&!a->vy)) return;",
         "    for(int i=0;i<a->collision.box_count;i++){",
-        "        const CollisionBox* m=&a->collision.boxes[i];",
+        "        const CollisionShape* m=&a->collision.boxes[i];",
         "        if(!(body_mask&(1u<<i))||!m->active) continue;",
         "        for(int k=0;k<n;k++){",
         "            const Actor* t=&g_actors[idx[k]];",
         "            if(t==a||!t->active||box[k]>=t->collision.box_count) continue;",
-        "            const CollisionBox* b=&t->collision.boxes[box[k]];",
+        "            const CollisionShape* b=&t->collision.boxes[box[k]];",
         "            if(!b->active) continue;",
         "            debug_physics_block_test();",
         "            block_push(a,m,t,b);",
@@ -79,14 +79,14 @@ def block_helper_lines() -> list[str]:
         "static void __attribute__((unused)) actors_resolve_blocks_pool(Actor* a,u8 body_mask,const u8* model,const u8* box,int n){",
         "    if(!a->active||(!a->vx&&!a->vy)) return;",
         "    for(int i=0;i<a->collision.box_count;i++){",
-        "        const CollisionBox* m=&a->collision.boxes[i];",
+        "        const CollisionShape* m=&a->collision.boxes[i];",
         "        if(!(body_mask&(1u<<i))||!m->active) continue;",
         "        POOL_EACH(s){",
         "            const Actor* t=&g_actors[s];",
         "            if(t==a||!t->active) continue;",
         "            for(int k=0;k<n;k++){",
         "                if(t->model!=model[k]||box[k]>=t->collision.box_count) continue;",
-        "                const CollisionBox* b=&t->collision.boxes[box[k]];",
+        "                const CollisionShape* b=&t->collision.boxes[box[k]];",
         "                if(b->active){ debug_physics_block_test(); block_push(a,m,t,b); }",
         "            }",
         "        }",
@@ -96,16 +96,15 @@ def block_helper_lines() -> list[str]:
     ]
 
 
-def _blocking_boxes(owner, sprite) -> list[tuple[int, str]]:
+def _blocking_boxes(owner, sprite) -> list[tuple[int, CollisionShapeComponent]]:
     """(rang, tag) de chacune des boîtes bloquantes de ce porteur, parmi les boîtes que le build pose
     dessus (la boîte propre d'un Interactive en `facing` comprise)."""
-    return [(rank, box.tag or "body")
+    return [(rank, box)
             for rank, box in physics_blocker_entries(owner, sprite)]
 
 
-def _body_collider_tags(owner, sprite) -> list[str]:
-    """Les tags des boîtes explicitement reliées au corps mobile."""
-    return [box.tag or "body" for _rank, box in physics_collider_entries(owner, sprite)]
+def _body_colliders(owner, sprite) -> list[CollisionShapeComponent]:
+    return [box for _rank, box in physics_collider_entries(owner, sprite)]
 
 
 def block_tick_lines(p, scene, scene_actors, actor_offset, pi, shown) -> list[str]:
@@ -117,31 +116,32 @@ def block_tick_lines(p, scene, scene_actors, actor_offset, pi, shown) -> list[st
     # Les bloqueurs : (indice d'acteur, rang de boîte, tag de la boîte, mode du porteur).
     blockers = []
     for j, (actor, sprite) in enumerate(scene_actors):
-        for rank, tag in _blocking_boxes(actor, sprite):
-            blockers.append((actor_offset + j, rank, tag, physics_body_mode(actor)))
+        for rank, box in _blocking_boxes(actor, sprite):
+            blockers.append((actor_offset + j, rank, box, physics_body_mode(actor)))
     # Les bloqueurs du pool partagé : (identité du modèle, rang de boîte, tag, mode du porteur).
-    pool_blockers = [(m["model_id"], rank, tag, physics_body_mode(m["prefab"])) for m in shared
-                     for rank, tag in _blocking_boxes(m["prefab"], shown(p, m["prefab"])[1])]
+    pool_blockers = [(m["model_id"], rank, box, physics_body_mode(m["prefab"])) for m in shared
+                     for rank, box in _blocking_boxes(m["prefab"], shown(p, m["prefab"])[1])]
     if not blockers and not pool_blockers:
         return []
 
-    def can_stop(mover_owner, mover_sprite, tag):
-        return any(tags_collide(p.settings, m, tag)
-                   for m in _body_collider_tags(mover_owner, mover_sprite))
+    def can_stop(mover_owner, mover_sprite, blocker):
+        return any(tags_collide(p.settings, mover.tag or "body", blocker.tag or "body")
+                   and collision_shapes_collide(mover, blocker)
+                   for mover in _body_colliders(mover_owner, mover_sprite))
 
     def table(mover_owner, mover_sprite):
         """Les boîtes qui peuvent arrêter ce mobile : celles dont le tag rencontre un des siens dans la
         matrice de collision (le tag de la boîte propre d'un Interactive compris)."""
         mode = physics_body_mode(mover_owner)
-        return [(i, r) for i, r, tag, blocker_mode in blockers
+        return [(i, r) for i, r, blocker, blocker_mode in blockers
                 if (mode != PHYSICS_BODY_KINEMATIC or blocker_mode == PHYSICS_BODY_STATIC)
-                and can_stop(mover_owner, mover_sprite, tag)]
+                and can_stop(mover_owner, mover_sprite, blocker)]
 
     def pool_table(mover_owner, mover_sprite):
         mode = physics_body_mode(mover_owner)
-        return [(m, r) for m, r, tag, blocker_mode in pool_blockers
+        return [(m, r) for m, r, blocker, blocker_mode in pool_blockers
                 if (mode != PHYSICS_BODY_KINEMATIC or blocker_mode == PHYSICS_BODY_STATIC)
-                and can_stop(mover_owner, mover_sprite, tag)]
+                and can_stop(mover_owner, mover_sprite, blocker)]
 
     L: list[str] = []
 

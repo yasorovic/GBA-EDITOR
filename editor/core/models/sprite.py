@@ -180,7 +180,7 @@ class SpriteAsset(SubPaletteAssetMixin, Resource):
     Stocké dans project/sprites/{name}.json
     Référencé par nom depuis Actor.sprite_name.
 
-    Pas de collision ici : la hitbox est portée par CollisionBoxComponent
+    Pas de collision ici : la hitbox est portée par CollisionShapeComponent
     sur l'Actor, pas par le sprite (un même sprite peut être utilisé par
     des actors avec des hitbox différentes).
     """
