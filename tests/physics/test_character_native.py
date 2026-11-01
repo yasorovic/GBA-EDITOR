@@ -23,6 +23,7 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "gba_debug.h"
 %(helpers)s
 
+u8 *g_drop_through = 0;
 /* 8 x 6 tuiles : un sol plein sur la dernière rangée (y = 40), un mur plein sur la colonne 6 (x = 48). */
 static u8 carte[8 * 6];
 

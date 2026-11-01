@@ -20,6 +20,8 @@ body:apply_velocity()
 
 `self.position` **téléporte** l'acteur : la carte de collision n'est pas consultée, il traverse les murs et n'est pas remonté sur une pente. Pour un déplacement physique (murs, pentes, sol, `on_tile_collide`), obtenez `local body = self:physics_body()`, donnez-lui une vitesse, puis appelez `body:apply_velocity()`.
 
+`self:physics_body()` ne rend jamais `nil` : l'acteur doit porter un composant PhysicsBody, sinon le build refuse l'appel. Le corps n'expose pas son mode (Static, Kinematic, Character…) : il se règle dans l'inspecteur, pas dans le script.
+
 ## Votre premier script
 
 ### 1. Créez et attachez le script

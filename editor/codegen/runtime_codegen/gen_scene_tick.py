@@ -22,7 +22,7 @@ from codegen.runtime_codegen.gen_sprite import (
 from codegen.runtime_codegen.interact_gen import interact_tick_lines
 from codegen.runtime_codegen.physics.contacts import box_contact_lines
 from codegen.runtime_codegen.physics.body import (
-    physics_body_mode, physics_collider_mask, uses_character_solver,
+    physics_body_mode, physics_collider_mask, project_has_one_way, uses_character_solver,
 )
 from codegen.runtime_codegen.physics.impulses import impulse_tick_lines
 from codegen.runtime_codegen.physics.kinematic import kinematic_crush_pairs, kinematic_tick_parts
@@ -187,7 +187,12 @@ def gen_scene_tick(
             pi, _def, lambda owner: (physics_collider_mask(owner, map_only=True)
                                      if uses_character_solver(owner) else 0))
 
-    L += floor_tick_lines(p, scene_actors, actor_offset)
+    L += floor_tick_lines(p, scene_actors, actor_offset, scene)
+
+    # `physics_body:drop_through(n)` : un compteur par emplacement, lu par les faces à sens unique de cette phase
+    # puis décompté ici, après elles : appelé pendant `on_update`, il compte donc cette frame-ci.
+    if project_has_one_way(p):
+        L.append("    if(g_drop_through) for(int _d=0;_d<G_ACTOR_COUNT;_d++) if(g_drop_through[_d]) g_drop_through[_d]--;")
 
     L += physics_sleep_lines(scene, p.settings, scene_actors, actor_offset, pi)
 

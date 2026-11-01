@@ -55,6 +55,8 @@ class GBAScene(QGraphicsScene):
         self._active_item = None
         self._snap = False
         self._collision_view = False  # toggle "Collisions scène"
+        self._collision_index_view = False  # toggle "Index des tuiles de collision"
+        self._collision_normals_view = False  # toggle "Normales de collision"
         self._setup_border()
         self._collision_overlay = CollisionOverlay()
         self.addItem(self._collision_overlay)
@@ -198,8 +200,26 @@ class GBAScene(QGraphicsScene):
     def set_collision_view(self, visible: bool):
         """Toggle 'Collisions scène' — indépendant de l'outil CollisionTool."""
         self._collision_view = visible
-        self._collision_overlay.setVisible(visible)
+        self._sync_collision_overlay()
         self._collision_overlay.update()
+
+    def _sync_collision_overlay(self):
+        """La carte est visible dès qu'une des trois vues la demande : collisions, index ou normales."""
+        self._collision_overlay.setVisible(
+            self._collision_view or self._collision_index_view or self._collision_normals_view)
+
+    def set_collision_index_view(self, visible: bool):
+        """Toggle 'Index des tuiles' : écrit l'index de chaque tuile de collision. Il rend la carte visible, et la
+        rend à son état (le toggle « Collisions scène ») en s'éteignant."""
+        self._collision_index_view = visible
+        self._collision_overlay.set_show_indices(visible)
+        self._sync_collision_overlay()
+
+    def set_collision_normals_view(self, visible: bool):
+        """Toggle 'Normales de collision' : trace la normale de chaque surface. Même règle de visibilité que l'index."""
+        self._collision_normals_view = visible
+        self._collision_overlay.set_show_normals(visible)
+        self._sync_collision_overlay()
 
     def set_ui_elements_view(self, visible: bool):
         """Toggle 'Interface elements' — zones/conteneurs/textes de la mise en

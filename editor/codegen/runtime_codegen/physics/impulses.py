@@ -21,6 +21,7 @@ from core.models.components import (
 from core.models.settings import tags_collide
 from codegen.runtime_codegen.physics.body import (
     physics_blocker_entries, physics_body, physics_body_mode, physics_collider_entries,
+    shape_one_way_dir,
 )
 
 
@@ -149,9 +150,12 @@ def impulse_tick_lines(p, scene, scene_actors, actor_offset: int) -> list[str]:
             if mode_a == PHYSICS_BODY_RIGID:
                 for rank_a, box_a in _physical_boxes(actor_a, sprite_a):
                     for rank_b, box_b in physics_blocker_entries(actor_b, sprite_b):
-                        pairs[(rank_a, rank_b)] = (box_a, box_b)
+                        if not shape_one_way_dir(box_b, scene, p.settings):     # une face à sens unique n'a pas de rebond
+                            pairs[(rank_a, rank_b)] = (box_a, box_b)
             if mode_b == PHYSICS_BODY_RIGID:
                 for rank_a, box_a in physics_blocker_entries(actor_a, sprite_a):
+                    if shape_one_way_dir(box_a, scene, p.settings):
+                        continue
                     for rank_b, box_b in _physical_boxes(actor_b, sprite_b):
                         pairs[(rank_a, rank_b)] = (box_a, box_b)
             for (rank_a, rank_b), (box_a, box_b) in pairs.items():

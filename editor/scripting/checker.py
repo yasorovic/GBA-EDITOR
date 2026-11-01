@@ -130,6 +130,8 @@ class BuildContext:
     lang_codes:   list[str]  = None
     camera_names: list[str]  = None    # noms de caméras du projet (pour camera.switch)
     box_tag_names: list[str] = None    # tags de boîtes de collision du projet (self:collision_shape…)
+    # Le propriétaire porte-t-il un PhysicsBody ? `None` relâche le contrôle de `self:physics_body()`.
+    has_physics_body: bool = None
     window_names: list[str]  = None    # noms de WindowSlot du projet (pour window.*)
     sound_box_state_names: list[str]  = None  # états des SoundBox du projet
     jingle_box_state_names: list[str] = None  # états des JingleBox du projet
@@ -2040,6 +2042,13 @@ class Checker:
                 else:
                     self._check_args(key, api, e.args, receiver=receiver,
                                      library=self._library_of(e.obj))
+                    if (key == f"{REF_ACTOR}:physics_body" and receiver == "self"
+                            and self.ctx.has_physics_body is False):
+                        self.errors.append(CheckError(
+                            "error",
+                            "self:physics_body(): this actor has no PhysicsBody component, so "
+                            "there is no body to return (it never returns nil). Add a "
+                            "PhysicsBody component to the actor."))
                     if (key == f"{REF_ACTOR}:play_sfx" and receiver == "self"
                             and not self.ctx.sfx_component_name):
                         self.errors.append(CheckError(

@@ -1687,6 +1687,14 @@
     "comped.pivot_y_tip": { "text": "Sets the vertical position of the pivot, in pixels from the centre of the sprite frame. 0, 0 is the centre. Rotation, scale and flip happen around this point, and it stays fixed on screen. It does not move the sprite: the offset does." },
     "comped.collision_blocks_row": { "text": "Response" },
     "comped.collision_blocks": { "text": "Block" },
+    "comped.collision_one_way": { "text": "One-way" },
+    "comped.collision_one_way_tip": { "text": "Makes a Block box stop only a body that comes from the side its face looks to; the other sides can be crossed. Against gravity is the usual platform. Applies to Block boxes of StaticBody and KinematicBody." },
+    "comped.one_way_off": { "text": "Off" },
+    "comped.one_way_gravity": { "text": "Against gravity" },
+    "comped.one_way_up": { "text": "Up" },
+    "comped.one_way_down": { "text": "Down" },
+    "comped.one_way_left": { "text": "Left" },
+    "comped.one_way_right": { "text": "Right" },
     "comped.collision_blocks_tip": { "text": "Block pushes a moving Character out of this box (a chest, an NPC, a crate). Sensor only reports contact events. The collision matrix decides which tags meet." },
     "comped.collision_solid": {
       "text": "Collides with map"
@@ -3577,6 +3585,10 @@
     "scncanvas.collisions": {
       "text": "Scene collisions"
     },
+    "scncanvas.collision_index": { "text": "Collision tile index" },
+    "scncanvas.collision_index_tip": { "text": "Writes the type index of each collision tile on the canvas: the value the runtime reads from the collision map." },
+    "scncanvas.collision_normals": { "text": "Collision normals" },
+    "scncanvas.collision_normals_tip": { "text": "Draws the normal of each collision surface as a line from the centre of its face, pointing away from the material." },
     "scncanvas.clear_collision": { "text": "Clear collision" },
     "scncanvas.clear_collision_tip": { "text": "Empties the whole collision map of the active scene. **Ctrl+Z** *brings it back.*" },
     "scncanvas.collision_already_empty": { "text": "The collision map is already empty." },
@@ -3843,6 +3855,14 @@
       "text": "Ceiling slope"
     },
     "cvtool.ceiling_slope_tip": { "text": "Paints an inverted floor slope as a triangle." },
+    "cvtool.oneway_up": { "text": "One-way face: up" },
+    "cvtool.oneway_up_tip": { "text": "Paints a flat face that carries from above and can be crossed from below and from the sides." },
+    "cvtool.oneway_down": { "text": "One-way face: down" },
+    "cvtool.oneway_down_tip": { "text": "Paints a flat face that carries from below and can be crossed from above and from the sides." },
+    "cvtool.oneway_left": { "text": "One-way face: left" },
+    "cvtool.oneway_left_tip": { "text": "Paints a flat face that stops from the left and can be crossed from the right, above and below." },
+    "cvtool.oneway_right": { "text": "One-way face: right" },
+    "cvtool.oneway_right_tip": { "text": "Paints a flat face that stops from the right and can be crossed from the left, above and below." },
     "cvtool.brush": {
       "text": "Brush"
     },
@@ -4941,6 +4961,7 @@
     "hints.scene.erase_actor": { "text": "Deletes the actor under the cursor" },
     "hints.scene.paint_solid": { "text": "Paints solid collision tiles" },
     "hints.scene.erase_tiles": { "text": "Erases collision tiles" },
+    "hints.scene.paint_oneway": { "text": "Paints one-way collision faces" },
     "hints.scene.draw_slope": { "text": "Draws a slope between two tiles" },
     "hints.scene.erase_slope": { "text": "Erases the tiles along the line" },
     "hints.scene.inpaint_paint": { "text": "Paints the active bank on tiles" },

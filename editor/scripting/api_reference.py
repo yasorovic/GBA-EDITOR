@@ -199,6 +199,7 @@ _FUNC_HOME: dict[str, str] = {
     "actor:physics_body": "Physics",
     "physics_body:add_velocity": "Physics",
     "physics_body:apply_velocity": "Physics",
+    "physics_body:drop_through": "Physics",
     "actor:collision_shape":     "CollisionShape",
     "collision_shape:overlaps": "CollisionShape",
     "actor:activate_sprite": "Sprite",

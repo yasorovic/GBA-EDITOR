@@ -23,6 +23,14 @@ Lire les touches, transformer une direction en mouvement, régler la vitesse dan
 Peindre la carte de collision, donner une boîte à un acteur, ne plus traverser les murs.
 :::
 
+:::{grid-item-card} Types de tuile de collision
+:link: types-de-tuile-collision
+:link-type: doc
+:class-card: backstage-card backstage-card-purple
+
+Les 26 index de la carte de collision, les vues index et normales, les faces à sens unique.
+:::
+
 :::{grid-item-card} Gravité et saut
 :link: gravite-saut
 :link-type: doc
@@ -46,6 +54,7 @@ Suivre un acteur dans une scène plus grande que l'écran.
 
 Déplacer un acteur <deplacer-acteur>
 Collisions <collisions>
+Types de tuile de collision <types-de-tuile-collision>
 Gravité et saut <gravite-saut>
 Caméra <camera>
 ```

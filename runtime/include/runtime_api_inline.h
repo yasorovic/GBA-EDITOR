@@ -29,6 +29,7 @@
 /* Globaux définis dans main.c, visibles par tous les scripts */
 extern Actor g_actors[];
 extern u16 *g_actor_floor;
+extern u8 *g_drop_through;   /* frames restantes où un corps ignore les faces à sens unique, par `Actor.inst` */
 /* L'état de script de TOUS les acteurs : un bloc de `OBJ_STATE_STRIDE` octets par emplacement de
    `g_actors`, à l'indice `Actor.inst`. Chaque script y range sa structure d'état (la plus grande
    du projet fixe la taille d'un bloc) ; un emplacement n'en porte qu'une à la fois. */
@@ -543,6 +544,11 @@ static inline void actor_add_velocity(Actor* s, Vec2 dv){
     s->vx+=dv.x; s->vy+=dv.y; if(dv.x||dv.y) s->physics_sleep=0;
 }
 static inline Vec2 actor_get_velocity(const Actor* s)    { return (Vec2){ s->vx, s->vy }; }
+/* `physics_body:drop_through(n)` : ignorer les faces à sens unique (carte et acteurs) pendant `n` frames, celle de
+   l'appel comprise. Sans effet dans un projet qui n'en a aucune (`g_drop_through` est alors nul). */
+static inline void actor_drop_through(Actor* s, int frames){
+    if (g_drop_through) g_drop_through[s->inst] = frames < 0 ? 0 : (frames > 255 ? 255 : (u8)frames);
+}
 /* Applique la vélocité Q8 stockée à la position Q8 stockée — l'accumulateur
    sous-pixel est LITTÉRALEMENT s->x/s->y, donc rien à reporter ailleurs
    (contrairement à slope_acc, qui corrige une AUTRE fraction : le cosinus de
@@ -767,15 +773,27 @@ static inline void actor_set_direction(Actor* s, Vec2 v) {
     s->dir_y = (v.y > 0) - (v.y < 0);
 }
 
+/* Les tables par emplacement qui vivent hors d'`Actor` (floor, drop_through, ancre de repos Rigid) : un emplacement
+   les rend à zéro quand son occupant s'en va, pour que le suivant, posé ou né, parte comme un emplacement neuf.
+   `scene_init` les remet à zéro pour tous les emplacements avec cette même fonction. */
+extern int g_rigid_rest[][2];
+static inline void actor_slot_tables_clear(int k) {
+    if (g_actor_floor) g_actor_floor[k] = 0;
+    if (g_drop_through) g_drop_through[k] = 0;
+    g_rigid_rest[k][0] = 0; g_rigid_rest[k][1] = 0;
+}
+
 /* Activation / destruction */
 static inline void actor_destroy_internal(Actor* s)  {
     s->active=0; s->alive=0; s->gen++; actor_oam_entry(s)->visible=0; pool_bit_clear(s->inst);
+    actor_slot_tables_clear(s->inst);
     if (g_spool_grp) {
         /* Détruire la racine d'un modèle à parties détruit le sous-arbre : le groupe entier est rendu au pool. */
         int g = g_spool_grp[s->model];
         for (int k = 1; k < g; k++) {
             Actor* c = group_part(s, k);
             c->active = 0; c->alive = 0; c->gen++; c->model = 0; actor_oam_entry(c)->visible = 0; pool_bit_clear(c->inst);
+            actor_slot_tables_clear(c->inst);
         }
     }
     if ((int)s->inst >= g_spool_start && (int)s->inst < g_spool_free) g_spool_free = s->inst;   /* l'emplacement redevient le premier libre */

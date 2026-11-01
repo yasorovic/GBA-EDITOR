@@ -1,8 +1,11 @@
 """Requêtes sur les corps physiques, sans état runtime supplémentaire."""
 from __future__ import annotations
 
+from core.models.collision_tiles import (
+    ONEWAY_DOWN, ONEWAY_LEFT, ONEWAY_NONE, ONEWAY_RIGHT, ONEWAY_UP,
+)
 from core.models.components import (
-    COLLISION_RESPONSE_BLOCK,
+    COLLISION_RESPONSE_BLOCK, ONE_WAY_GRAVITY, ONE_WAY_OFF,
     PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID,
     CollisionShapeComponent, PhysicsBodyComponent, owner_effective_boxes,
 )
@@ -50,6 +53,49 @@ def physics_blocker_entries(owner, sprite=None) -> list[tuple[int, CollisionShap
     return [(rank, box) for rank, box in boxes
             if isinstance(box, CollisionShapeComponent) and box.active
             and box.response == COLLISION_RESPONSE_BLOCK]
+
+
+_ONE_WAY_FIXED = {"up": ONEWAY_UP, "down": ONEWAY_DOWN, "left": ONEWAY_LEFT, "right": ONEWAY_RIGHT}
+
+
+def gravity_normal(scene, project_settings) -> int:
+    """La normale d'une surface qui PORTE sous la gravité de la scène : l'opposé de son axe dominant
+    (`ONEWAY_*`). 0 sans gravité."""
+    gx, gy = scene.effective_physics_gravity(project_settings)
+    if gx == 0 and gy == 0:
+        return ONEWAY_NONE
+    if abs(gx) > abs(gy):
+        return ONEWAY_LEFT if gx > 0 else ONEWAY_RIGHT
+    return ONEWAY_DOWN if gy < 0 else ONEWAY_UP
+
+
+def support_normal(scene, project_settings) -> int:
+    """Le côté du contact qui produit `grounded` et `floor`, pour toute la scène.
+
+    La gravité du moteur ne touche que les Rigid : un Character écrit sa propre vélocité, donc ses projets laissent
+    la gravité de la scène à zéro. Sans gravité déclarée, l'appui reste donc le bas (le comportement d'avant)."""
+    return gravity_normal(scene, project_settings) or ONEWAY_UP
+
+
+def shape_one_way_dir(box, scene, project_settings) -> int:
+    """Le sens de la face d'une forme (`ONEWAY_*` : 1 haut, 2 bas, 3 gauche, 4 droite), 0 sans sens unique.
+
+    `gravity` est la normale d'appui de LA SCÈNE (`support_normal`) : connue au build, donc cuite, et la même forme
+    change de face d'une scène à l'autre si leur gravité diffère. Sans gravité, le haut."""
+    mode = getattr(box, "one_way", ONE_WAY_OFF)
+    if mode == ONE_WAY_OFF:
+        return ONEWAY_NONE
+    if mode != ONE_WAY_GRAVITY:
+        return _ONE_WAY_FIXED[mode]
+    return support_normal(scene, project_settings)
+
+
+def project_has_one_way(p) -> bool:
+    """Une forme à sens unique quelque part : les aides C n'en sont émises que dans ce cas."""
+    owners = [a for sc in getattr(p, "scenes", []) or [] for a in sc.actors]
+    owners += list(getattr(p, "prefabs", []) or [])
+    return any(isinstance(c, CollisionShapeComponent) and c.active and c.one_way != ONE_WAY_OFF
+               for o in owners for c in getattr(o, "components", []))
 
 
 def has_map_collider(owner, sprite=None) -> bool:

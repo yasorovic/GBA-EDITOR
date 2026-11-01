@@ -1,6 +1,8 @@
 """Émission du Character solver : carte de collision, murs et pentes."""
 from __future__ import annotations
 
+from codegen.runtime_codegen.physics.oneway import oneway_common_lines
+
 
 
 
@@ -11,9 +13,13 @@ def character_solver_lines() -> list[str]:
     géométrie que celle dont le canvas tire ses polygones : la physique du jeu
     et le dessin de l'éditeur ne peuvent pas diverger."""
     from core.models.collision_tiles import (
-        TILE_COUNT, kind_of, column_surfaces, speed_scale,
+        TILE_COUNT, kind_of, column_surfaces, speed_scale, oneway_dir,
     )
     L = [
+        "extern u8 *g_drop_through;",
+        "/* Côté du contact qui porte, pour la scène : 1 bas, 2 haut, 3 droite, 4 gauche (la normale de la surface qui",
+        "   porte est l'opposé). `grounded` est le contact de CE côté, pas forcément celui du bas. */",
+        "static u8 g_support_normal=1;",
         "static const u8 *g_active_cmap = NULL;",
         "static int g_cmap_w = 0, g_cmap_h = 0;",
         "#define TILE_SIZE 8",
@@ -30,6 +36,7 @@ def character_solver_lines() -> list[str]:
         "#define TK_SOLID 1",
         "#define TK_FLOOR 2",
         "#define TK_CEIL  3",
+        "#define TK_ONEWAY 4",
     ]
     kinds = ", ".join(str(kind_of(t)) for t in range(TILE_COUNT))
     L.append(f"static const u8 g_tile_kind[{TILE_COUNT}] = {{ {kinds} }};")
@@ -40,6 +47,10 @@ def character_solver_lines() -> list[str]:
     # u16 et non u8 : « plat » vaut 256, qui ne tient pas dans un octet.
     scales = ", ".join(str(speed_scale(t)) for t in range(TILE_COUNT))
     L.append(f"static const u16 g_tile_scale[{TILE_COUNT}] = {{ {scales} }};")
+    # Sens de la face d'une tuile à sens unique : 0 aucune, 1 haut, 2 bas,
+    # 3 gauche, 4 droite. Émis comme le reste depuis `collision_tiles.py`.
+    oneway = ", ".join(str(oneway_dir(t)) for t in range(TILE_COUNT))
+    L.append(f"static const u8 g_tile_oneway[{TILE_COUNT}] = {{ {oneway} }};")
     L.append(f"static const u8 g_tile_surface[{TILE_COUNT}][TILE_SIZE] = {{")
     for t in range(TILE_COUNT):
         row = ", ".join(f"{v}" for v in column_surfaces(t))
@@ -125,6 +136,34 @@ def character_solver_lines() -> list[str]:
         "    }",
         "    return -1;",
         "}",
+        *oneway_common_lines(),
+        "/* One-way faces. `dir` is the NORMAL of the face: 1 up, 2 down, 3 left, 4 right.",
+        "   A face is a line, at the top (up, left) or at the far edge (down, right) of",
+        "   its tile. [lo,hi] is the range of coordinates the box edge swept this frame",
+        "   along that axis, [c0,c1] the span of the box on the other axis. Returns the",
+        "   coordinate of the first face met in the direction of travel, -1 if none.",
+        "   The caller decides WHETHER the move crosses against the normal; this only",
+        "   finds the face. */",
+        "static int oneway_hit(int dir,int lo,int hi,int c0,int c1){",
+        "    if(!g_active_cmap||lo>hi) return -1;",
+        "    int vert=dir<=2, off=(dir==2||dir==4)?TILE_SIZE:0;",
+        "    int t0=(lo-off+TILE_SIZE-1)>>3, t1=(hi-off)>>3;",
+        "    int k0=c0>>3, k1=c1>>3;",
+        "    int n=vert?g_cmap_h:g_cmap_w, m=vert?g_cmap_w:g_cmap_h;",
+        "    if(t0<0) t0=0;",
+        "    if(t1>=n) t1=n-1;",
+        "    if(k0<0) k0=0;",
+        "    if(k1>=m) k1=m-1;",
+        "    int asc=(dir&1), eo=asc?lo:hi;   /* the edge BEFORE the move: the swept range starts there */",
+        "    for(int i=0;i<=t1-t0;i++){",
+        "        int t=asc?t0+i:t1-i;",
+        "        for(int k=k0;k<=k1;k++){",
+        "            int tile=vert?g_active_cmap[t*g_cmap_w+k]:g_active_cmap[k*g_cmap_w+t];",
+        "            if(g_tile_oneway[tile]==dir&&oneway_open(dir,eo,t*TILE_SIZE+off)) return t*TILE_SIZE+off;",
+        "        }",
+        "    }",
+        "    return -1;",
+        "}",
         "typedef void (*TileCollideCb)(Actor*,int,int);",
         "/* Resolution of an actor against the map.",
         "   The order is the rule: X first — slopes do not obstruct it —",
@@ -142,6 +181,7 @@ def character_solver_lines() -> list[str]:
         "static void __attribute__((unused)) resolve_actor_tiles(Actor*a,u8 body_mask,TileCollideCb cb){",
         "    if(!g_active_cmap) return;",
         "    if(!body_mask) return;",
+        "    int drop=g_drop_through&&g_drop_through[a->inst];",
         "    if(a->vx==0&&a->vy==0){",
         "        a->collision.last_x=a->x>>8; a->collision.slope_acc=0;",
         "        return;",
@@ -209,6 +249,7 @@ def character_solver_lines() -> list[str]:
         "        CollisionShape*b=&a->collision.boxes[i];",
         "        if(!(body_mask&(1u<<i))||!b->solid||!b->active) continue;",
         "        int left,right,top,bot;",
+        "        int hb=0,ht=0,hl=0,hr=0;   /* contacts de cette boîte : bas, haut, gauche, droite */",
         "        /* ── X: only solid blocks push ───────────── */",
         "        if(a->vx!=0){",
         "            left=_px+(int)b->x; right=left+(int)b->w-1;",
@@ -218,13 +259,22 @@ def character_solver_lines() -> list[str]:
         "                for(int cpy=top;cpy<=bot&&!hit;cpy+=TILE_SIZE) hit=tile_wall_at(right,cpy);",
         "                if(!hit) hit=tile_wall_at(right,bot);",
         "                if(hit){_px=(right/TILE_SIZE)*TILE_SIZE-(int)b->x-(int)b->w;",
-        "                    a->vx=0; if(cb)cb(a,1,0);}",
+        "                    a->vx=0; hr=1; if(cb)cb(a,1,0);}",
         "            }else{",
         "                for(int cpy=top;cpy<=bot&&!hit;cpy+=TILE_SIZE) hit=tile_wall_at(left,cpy);",
         "                if(!hit) hit=tile_wall_at(left,bot);",
         "                if(hit){_px=(left/TILE_SIZE+1)*TILE_SIZE-(int)b->x;",
-        "                    a->vx=0; if(cb)cb(a,-1,0);}",
+        "                    a->vx=0; hl=1; if(cb)cb(a,-1,0);}",
         "            }",
+        "        }",
+        "        /* ── X: one-way faces. Stops only a box that was entirely on the",
+        "           open side of the face LAST frame and crosses it this frame. ── */",
+        "        if(!drop&&a->vx>0){",
+        "            int f=oneway_hit(3,a->collision.last_x+(int)b->x+(int)b->w,_px+(int)b->x+(int)b->w,_oy+(int)b->y,_oy+(int)b->y+(int)b->h-1);",
+        "            if(f>=0){_px=f-(int)b->x-(int)b->w; a->vx=0; hr=1; if(cb)cb(a,1,0);}",
+        "        }else if(!drop&&a->vx<0){",
+        "            int f=oneway_hit(4,_px+(int)b->x,a->collision.last_x+(int)b->x,_oy+(int)b->y,_oy+(int)b->y+(int)b->h-1);",
+        "            if(f>=0){_px=f-(int)b->x; a->vx=0; hl=1; if(cb)cb(a,-1,0);}",
         "        }",
         "        /* ── Ceiling: the LOWEST surface stops the head ─ */",
         "        left=_px+(int)b->x; right=left+(int)b->w-1;",
@@ -236,7 +286,7 @@ def character_solver_lines() -> list[str]:
         "                int cy=tile_ceil_at(cpx,top);",
         "                if(cy>c) c=cy;",
         "            }",
-        "            if(c>=0&&top<c){_py=c-(int)b->y; a->vy=0; if(cb)cb(a,0,-1);}",
+        "            if(c>=0&&top<c){_py=c-(int)b->y; a->vy=0; ht=1; if(cb)cb(a,0,-1);}",
         "        }",
         "        /* ── Floor: the HIGHEST surface carries the actor ───── */",
         "        top=_py+(int)b->y; bot=top+(int)b->h-1;",
@@ -253,7 +303,7 @@ def character_solver_lines() -> list[str]:
         "                   ceiling — the author painted a slope, we climb it. */",
         "                _py=g-(int)b->y-(int)b->h;",
         "                if(a->vy>0) a->vy=0;",
-        "                a->collision.grounded=b->grounded=1; if(cb)cb(a,0,1);",
+        "                hb=1; if(cb)cb(a,0,1);",
         "            }else if(feet==g){",
         "                /* Right on the surface: on the ground, and a downward",
         "                   velocity makes no sense any more — without this it "
@@ -261,15 +311,27 @@ def character_solver_lines() -> list[str]:
         "                   frame and the actor crosses the floor again before being",
         "                   pushed back. */",
         "                if(a->vy>0) a->vy=0;",
-        "                a->collision.grounded=b->grounded=1;",
+        "                hb=1;",
         "            }else if(was_grounded&&a->vy>=0&&g-feet<=moved*2+1){",
         "                /* Sticking on the way down: the maximum gap that a 63°",
         "                   slope can open for this movement. Without it, every",
         "                   descent takes off and falls back, hence jitters. */",
         "                _py=g-(int)b->y-(int)b->h;",
-        "                a->collision.grounded=b->grounded=1;",
+        "                hb=1;",
         "            }",
         "        }",
+        "        /* ── Y: one-way faces, after the map has had its say ── */",
+        "        left=_px+(int)b->x; right=left+(int)b->w-1;",
+        "        if(!drop&&_py>=_oy){",
+        "            int f=oneway_hit(1,_oy+(int)b->y+(int)b->h,_py+(int)b->y+(int)b->h,left,right);",
+        "            if(f>=0){_py=f-(int)b->y-(int)b->h; if(a->vy>0) a->vy=0; hb=1; if(cb)cb(a,0,1);}",
+        "        }",
+        "        if(!drop&&_py<=_oy){",
+        "            int f=oneway_hit(2,_py+(int)b->y,_oy+(int)b->y,left,right);",
+        "            if(f>=0){_py=f-(int)b->y; if(a->vy<0) a->vy=0; ht=1; if(cb)cb(a,0,-1);}",
+        "        }",
+        "        /* `grounded` : le contact du côté qui porte (bas sous la gravité habituelle). */",
+        "        if(g_support_normal==1?hb:g_support_normal==2?ht:g_support_normal==3?hr:hl) a->collision.grounded=b->grounded=1;",
         "    }",
         "    a->collision.last_x=_px;",
         "    a->x=(_px<<8)|_fx; a->y=(_py<<8)|_fy;",

@@ -1121,6 +1121,10 @@
     "scncanvas.collisions": {
       "text": "Collisions de la scène"
     },
+    "scncanvas.collision_index": { "text": "Index des tuiles de collision" },
+    "scncanvas.collision_index_tip": { "text": "Écrit sur le canvas l'index de type de chaque tuile de collision : la valeur que le runtime lit dans la carte de collision." },
+    "scncanvas.collision_normals": { "text": "Normales de collision" },
+    "scncanvas.collision_normals_tip": { "text": "Trace la normale de chaque surface de collision, depuis le centre de sa face et dans le sens opposé à la matière." },
     "scncanvas.clear_collision": { "text": "Effacer la collision" },
     "scncanvas.clear_collision_tip": { "text": "Vide toute la carte de collision de la scène active. **Ctrl+Z** *la rend.*" },
     "scncanvas.collision_already_empty": { "text": "La carte de collision est déjà vide." },
@@ -1167,6 +1171,14 @@
       "text": "Pente de plafond"
     },
     "cvtool.ceiling_slope_tip": { "text": "Peint une pente de sol inversée sous forme de triangle." },
+    "cvtool.oneway_up": { "text": "Face à sens unique : haut" },
+    "cvtool.oneway_up_tip": { "text": "Peint une face plate qui porte par le dessus et se traverse par le dessous et par les côtés." },
+    "cvtool.oneway_down": { "text": "Face à sens unique : bas" },
+    "cvtool.oneway_down_tip": { "text": "Peint une face plate qui porte par le dessous et se traverse par le dessus et par les côtés." },
+    "cvtool.oneway_left": { "text": "Face à sens unique : gauche" },
+    "cvtool.oneway_left_tip": { "text": "Peint une face plate qui arrête par la gauche et se traverse par la droite, le dessus et le dessous." },
+    "cvtool.oneway_right": { "text": "Face à sens unique : droite" },
+    "cvtool.oneway_right_tip": { "text": "Peint une face plate qui arrête par la droite et se traverse par la gauche, le dessus et le dessous." },
     "cvtool.scene_inpainting": {
       "text": "Recolorer les palettes du fond"
     },
@@ -1914,6 +1926,14 @@
     "actorinsp.is_player_tip": { "text": "Désigne cet acteur comme celui qui interagit : seul un acteur portant ce tag déclenche les composants Interactifs de la scène. C'est un tag d'acteur, pas un tag de collision. Plusieurs acteurs peuvent le porter." },
     "comped.collision_blocks_row": { "text": "Réponse" },
     "comped.collision_blocks": { "text": "Bloquer" },
+    "comped.collision_one_way": { "text": "Sens unique" },
+    "comped.collision_one_way_tip": { "text": "Fait arrêter par une boîte Bloquer seulement un corps qui vient du côté vers lequel regarde sa face ; les autres côtés se traversent. Contre la gravité donne la plateforme habituelle. S'applique aux boîtes Bloquer d'un StaticBody et d'un KinematicBody." },
+    "comped.one_way_off": { "text": "Aucun" },
+    "comped.one_way_gravity": { "text": "Contre la gravité" },
+    "comped.one_way_up": { "text": "Haut" },
+    "comped.one_way_down": { "text": "Bas" },
+    "comped.one_way_left": { "text": "Gauche" },
+    "comped.one_way_right": { "text": "Droite" },
     "comped.collision_blocks_tip": { "text": "Bloquer repousse un Character en mouvement hors de cette boîte (un coffre, un PNJ, une caisse). Sans cette case, la boîte est un capteur : elle signale seulement les contacts. La matrice de collision décide quels tags se rencontrent." },
     "comped.collision_solid": { "text": "Collision avec la carte" },
       "comped.collision_layer": { "text": "Couches" },
@@ -2545,6 +2565,7 @@
     "hints.scene.erase_actor": { "text": "Supprime l’acteur sous le curseur" },
     "hints.scene.paint_solid": { "text": "Peint des tuiles de collision pleines" },
     "hints.scene.erase_tiles": { "text": "Efface des tuiles de collision" },
+    "hints.scene.paint_oneway": { "text": "Peint des faces de collision à sens unique" },
     "hints.scene.draw_slope": { "text": "Trace une pente entre deux tuiles" },
     "hints.scene.erase_slope": { "text": "Efface les tuiles le long du trait" },
     "hints.scene.inpaint_paint": { "text": "Peint la banque active sur des tuiles" },

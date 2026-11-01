@@ -362,6 +362,32 @@ def test_le_floor_final_relit_static_et_kinematic():
     assert "actor_floor_test(&g_actors[3],0,&g_actors[5],0)" in code
 
 
+def test_le_floor_final_d_un_rigid_relit_static_character_et_rigid():
+    from types import SimpleNamespace
+    from codegen.runtime_codegen.physics.floor import floor_tick_lines
+
+    crate = _actor("Crate", mode="RigidBody")
+    static = _actor("Floor", mode="StaticBody")
+    static.components[0].response = "block"
+    hero = _actor("Hero", mode="CharacterBody")
+    hero.components[0].response = "block"
+    other = _actor("Other", mode="RigidBody")
+    other.components[0].response = "block"
+    project = SimpleNamespace(settings=SimpleNamespace(
+        collision_disabled_pairs=[], collision_tags=[]))
+
+    code = "\n".join(floor_tick_lines(
+        project, [(crate, None), (static, None), (hero, None), (other, None)], 0))
+
+    assert "g_actor_floor[0]=0" in code
+    assert "actor_floor_test(&g_actors[0],0,&g_actors[1],0)" in code
+    assert "actor_floor_test(&g_actors[0],0,&g_actors[2],0)" in code
+    assert "actor_floor_test(&g_actors[0],0,&g_actors[3],0)" in code
+    # Le Character ne se pose toujours pas sur un Rigid ni sur un autre Character.
+    assert "actor_floor_test(&g_actors[2],0,&g_actors[0],0)" not in code
+    assert "actor_floor_test(&g_actors[2],0,&g_actors[3],0)" not in code
+
+
 def test_l_etat_de_floor_est_en_ewram_sans_grossir_actor(tmp_path):
     from types import SimpleNamespace
     from core.project import Project

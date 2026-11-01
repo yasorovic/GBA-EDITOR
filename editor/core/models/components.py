@@ -20,6 +20,12 @@ COLLISION_RESPONSES: tuple[str, ...] = (
     COLLISION_RESPONSE_BLOCK,
     COLLISION_RESPONSE_SENSOR,
 )
+# Sens unique d'une forme de réponse `block` : la face qu'elle offre n'arrête un corps que s'il vient du côté de
+# sa normale. `gravity` = l'opposé de la gravité de la scène (la plateforme classique, « le haut » sous gravité
+# vers le bas) ; les quatre autres fixent la normale, indépendamment de la gravité.
+ONE_WAY_OFF = "off"
+ONE_WAY_GRAVITY = "gravity"
+ONE_WAY_MODES: tuple[str, ...] = (ONE_WAY_OFF, ONE_WAY_GRAVITY, "up", "down", "left", "right")
 COLLISION_LAYER_BITS = 16
 COLLISION_ALL_LAYERS = (1 << COLLISION_LAYER_BITS) - 1
 PHYSICS_BODY_STATIC = "StaticBody"
@@ -89,6 +95,7 @@ class CollisionShapeComponent:
     layer: int = 1            # bits de catégories émises au build
     mask: int = COLLISION_ALL_LAYERS  # couches qu'elle accepte de rencontrer
     material_id: str = ""   # id d'un PhysicMaterialComponent du même acteur ; vide = matériau par défaut
+    one_way: str = ONE_WAY_OFF   # face à sens unique (cf. ONE_WAY_MODES) ; sans effet si la réponse est `sensor`
     # Offset de la boîte depuis la POSITION DE L'ACTEUR, en pixels : le coin haut-gauche du sprite, ou le centre de son cadre
     # quand `affine_transform` est actif (l'acteur est alors centré sur le cadre). Ce n'est PAS le pivot du sprite : pour une boîte de
     # 8 px centrée sur un sprite de 16 px, x vaut 4 (et non -4).
@@ -105,6 +112,8 @@ class CollisionShapeComponent:
         if not isinstance(self.mask, int) or not 0 <= self.mask <= COLLISION_ALL_LAYERS:
             raise ValueError("collision mask must be a 16-bit mask")
         self.material_id = str(self.material_id or "")
+        if self.one_way not in ONE_WAY_MODES:
+            raise ValueError(f"unknown one_way mode {self.one_way!r}, expected one of {ONE_WAY_MODES}")
 
 
 @dataclass

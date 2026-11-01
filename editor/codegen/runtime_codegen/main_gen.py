@@ -16,6 +16,7 @@ from codegen.palette_alloc import scene_bank_layout
 from codegen.oam_budget import project_actor_count, project_oam_entry_count
 from codegen.ui_obj_budget import scene_obj_ui_slots
 from codegen.runtime_codegen.physics.blocks import block_helper_lines, project_has_blockers
+from codegen.runtime_codegen.physics.body import project_has_one_way
 from codegen.runtime_codegen.physics.budget import physics_budget_line
 from codegen.runtime_codegen.physics.impulses import impulse_helper_lines
 from codegen.runtime_codegen.physics.kinematic import kinematic_helper_lines, project_has_kinematic
@@ -188,7 +189,7 @@ def generate_main(
     if project_has_interactive(p):
         L += interact_helper_lines()
     if project_has_blockers(p):
-        L += block_helper_lines()
+        L += block_helper_lines(project_has_one_way(p))
         L += impulse_helper_lines()
 
     # ── Cartes de collision et palettes, par scène ────────────────

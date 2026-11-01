@@ -60,6 +60,16 @@ TILE_SLOPE_R_STEEP_LO_INV = 19  # ~63° plafond descendant L→R, tile haut (gra
 TILE_SLOPE_L_STEEP_HI_INV = 20  # ~63° plafond montant  L→R, tile bas  (petit triangle droit)
 TILE_SLOPE_L_STEEP_LO_INV = 21  # ~63° plafond montant  L→R, tile haut (grand quadrilatère droit)
 
+# Tuiles à SENS UNIQUE : une face plate qu'on ne franchit que dans un sens. Le nom
+# dit la NORMALE, le côté d'où l'on vient se poser : ONEWAY_UP se traverse par
+# en dessous et par les côtés, et porte par le dessus (la plateforme classique).
+# Quatre tuiles et non une : la gravité a quatre sens, et « le haut » n'est pas
+# toujours l'axe Y négatif.
+TILE_ONEWAY_UP    = 22   # face en HAUT de la tuile
+TILE_ONEWAY_DOWN  = 23   # face en BAS de la tuile
+TILE_ONEWAY_LEFT  = 24   # face sur le bord GAUCHE
+TILE_ONEWAY_RIGHT = 25   # face sur le bord DROIT
+
 COLLISION_TILE_SIZE = 8   # pixels par tile de collision
 
 # ──────────────────────────────────────────────────────────────────
@@ -70,6 +80,16 @@ KIND_EMPTY   = 0   # rien
 KIND_SOLID   = 1   # plein : le SEUL type qui repousse horizontalement
 KIND_FLOOR   = 2   # matière sous la droite — on marche dessus
 KIND_CEILING = 3   # matière au-dessus — on s'y cogne la tête
+KIND_ONEWAY  = 4   # face plate franchissable dans un sens (cf. `oneway_normal`)
+
+# Sens de la normale d'une tuile à sens unique, tel que le runtime le lit :
+# 0 aucune, 1 haut, 2 bas, 3 gauche, 4 droite.
+ONEWAY_NONE, ONEWAY_UP, ONEWAY_DOWN, ONEWAY_LEFT, ONEWAY_RIGHT = 0, 1, 2, 3, 4
+_ONEWAY_DIR = {
+    TILE_ONEWAY_UP: ONEWAY_UP, TILE_ONEWAY_DOWN: ONEWAY_DOWN,
+    TILE_ONEWAY_LEFT: ONEWAY_LEFT, TILE_ONEWAY_RIGHT: ONEWAY_RIGHT,
+}
+ONEWAY_STRIP = 2   # épaisseur DESSINÉE de la face, en pixels (la collision est la ligne)
 
 # (y en x=0, y en x=8, famille). Le sens de la droite n'a pas d'importance :
 # seuls comptent le côté plein et les deux ordonnées.
@@ -101,6 +121,11 @@ _GEOMETRY: dict[int, tuple[int, int, int]] = {
     TILE_SLOPE_R_STEEP_LO_INV: (16, 0, KIND_CEILING),
     TILE_SLOPE_L_STEEP_HI_INV: (-8, 8, KIND_CEILING),
     TILE_SLOPE_L_STEEP_LO_INV: (0, 16, KIND_CEILING),
+
+    TILE_ONEWAY_UP:    (0, 0, KIND_ONEWAY),
+    TILE_ONEWAY_DOWN:  (0, 0, KIND_ONEWAY),
+    TILE_ONEWAY_LEFT:  (0, 0, KIND_ONEWAY),
+    TILE_ONEWAY_RIGHT: (0, 0, KIND_ONEWAY),
 }
 
 TILE_COUNT = len(_GEOMETRY)
@@ -108,6 +133,11 @@ TILE_COUNT = len(_GEOMETRY)
 
 def kind_of(tile: int) -> int:
     return _GEOMETRY.get(tile, (0, 0, KIND_EMPTY))[2]
+
+
+def oneway_dir(tile: int) -> int:
+    """Le sens de la face d'une tuile à sens unique (`ONEWAY_*`), 0 pour les autres."""
+    return _ONEWAY_DIR.get(tile, ONEWAY_NONE)
 
 
 def surface_y(tile: int, x: int) -> int:
@@ -119,10 +149,36 @@ def surface_y(tile: int, x: int) -> int:
     y0, y1, kind = _GEOMETRY.get(tile, (0, 0, KIND_EMPTY))
     if kind == KIND_SOLID:
         return 0                    # matière du haut au bas : surface au sommet
-    if kind == KIND_EMPTY:
-        return COLLISION_TILE_SIZE
+    if kind in (KIND_EMPTY, KIND_ONEWAY):
+        return COLLISION_TILE_SIZE      # la face à sens unique n'est pas une surface de marche
     y = y0 + ((y1 - y0) * x) // COLLISION_TILE_SIZE
     return max(0, min(COLLISION_TILE_SIZE, y))
+
+
+def surface_normal(tile: int) -> tuple[float, float, float, float] | None:
+    """Le point milieu de la surface d'une tuile et sa normale unitaire : `(x, y, nx, ny)`, repère de la tuile (y vers le
+    bas), la normale sortant de la matière. `None` pour une tuile vide ou pleine : les faces d'un bloc plein dépendent de
+    ses voisines, c'est à l'appelant de les poser.
+
+    Pour une pente, le point est le milieu de la partie de la droite qui traverse la tuile (une pente raide n'en
+    traverse que la moitié). Pour une face à sens unique, c'est le centre de sa face et la normale est son sens."""
+    y0, y1, kind = _GEOMETRY.get(tile, (0, 0, KIND_EMPTY))
+    T = COLLISION_TILE_SIZE
+    if kind == KIND_ONEWAY:
+        n = oneway_dir(tile)
+        return {ONEWAY_UP: (T / 2, 0, 0, -1), ONEWAY_DOWN: (T / 2, T, 0, 1),
+                ONEWAY_LEFT: (0, T / 2, -1, 0), ONEWAY_RIGHT: (T, T / 2, 1, 0)}[n]
+    if kind not in (KIND_FLOOR, KIND_CEILING):
+        return None
+    dy = y1 - y0
+    lo, hi = 0.0, 1.0
+    if dy:
+        ta, tb = (0 - y0) / dy, (T - y0) / dy
+        lo, hi = max(lo, min(ta, tb)), min(hi, max(ta, tb))
+    t = (lo + hi) / 2
+    nx, ny = (dy, -T) if kind == KIND_FLOOR else (-dy, T)
+    length = (nx * nx + ny * ny) ** 0.5
+    return (T * t, y0 + dy * t, nx / length, ny / length)
 
 
 def speed_scale(tile: int) -> int:
@@ -159,6 +215,17 @@ def polygon(tile: int) -> list[tuple[int, int]]:
         return []
     if kind == KIND_SOLID:
         return [(0, 0), (T, 0), (T, T), (0, T)]
+    if kind == KIND_ONEWAY:
+        # Seule la bande côté face est dessinée : la matière n'existe que sur la
+        # face, le reste de la tuile se traverse.
+        n, w = oneway_dir(tile), ONEWAY_STRIP
+        if n == ONEWAY_UP:
+            return [(0, 0), (T, 0), (T, w), (0, w)]
+        if n == ONEWAY_DOWN:
+            return [(0, T - w), (T, T - w), (T, T), (0, T)]
+        if n == ONEWAY_LEFT:
+            return [(0, 0), (w, 0), (w, T), (0, T)]
+        return [(T - w, 0), (T, 0), (T, T), (T - w, T)]
 
     def line_y(x: float) -> float:
         return y0 + (y1 - y0) * x / T

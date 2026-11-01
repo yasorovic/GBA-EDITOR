@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from codegen.runtime_codegen.gen_affine import scene_has_affine
 from codegen.runtime_codegen.gen_sfx_trigger import sfx_on_destroy_table
+from codegen.runtime_codegen.physics.body import project_has_one_way
 from codegen.runtime_codegen.physics.floor import project_has_floors
 
 
@@ -20,6 +21,9 @@ def globals_lines(p, all_scene_data: list[dict], scene_pis: list, n_actors: int,
         f"Actor g_actors[{n_actors}] EWRAM_BSS;",
         f"u16 g_actor_floor_store[{n_actors if project_has_floors(p) else 1}] EWRAM_BSS;",
         f"u16 *g_actor_floor={'g_actor_floor_store' if project_has_floors(p) else '0'};",
+        # `physics_body:drop_through(n)` : frames restantes pendant lesquelles un corps ignore les faces à sens unique.
+        f"u8 g_drop_store[{n_actors if project_has_one_way(p) else 1}] EWRAM_BSS;",
+        f"u8 *g_drop_through={'g_drop_store' if project_has_one_way(p) else '0'};",
         # Position de chaque Rigid à la frame précédente (Q8), pour lire son repos sur le déplacement (physics/motion.py).
         f"s32 g_rigid_rest[{n_actors}][2] EWRAM_BSS;",
         # Un bit par emplacement : les blocs de 32 sans vivant sont sautés par POOL_EACH (actor_types_static.h).

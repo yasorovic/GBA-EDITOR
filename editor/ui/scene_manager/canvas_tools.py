@@ -18,7 +18,18 @@ from core.models.unique_name import unique_name
 from abc import ABC
 from typing import TYPE_CHECKING, Optional
 
-from core.models.collision_tiles import TILE_EMPTY, TILE_SOLID
+from core.models.collision_tiles import (
+    TILE_EMPTY, TILE_ONEWAY_DOWN, TILE_ONEWAY_LEFT, TILE_ONEWAY_RIGHT,
+    TILE_ONEWAY_UP, TILE_SOLID,
+)
+
+# Un mode de pinceau à sens unique = une tuile : le nom du mode dit la normale.
+_ONEWAY_BRUSHES = {
+    "collision_oneway_up": TILE_ONEWAY_UP,
+    "collision_oneway_down": TILE_ONEWAY_DOWN,
+    "collision_oneway_left": TILE_ONEWAY_LEFT,
+    "collision_oneway_right": TILE_ONEWAY_RIGHT,
+}
 from core.collision_slopes import SLOPE_MODES, slope_tiles_for
 from PyQt6.QtCore import QPointF, Qt
 from PyQt6.QtGui import QBrush, QColor, QPen
@@ -165,6 +176,7 @@ class EraseTool(BaseTool):
 class CollisionTool(BaseTool):
     """
     mode : "collision_8" | "collision_16" | "collision_slope" | "collision_slope_inv"
+           | "collision_oneway_up" | "..._down" | "..._left" | "..._right"
 
     Clic gauche = peindre / appliquer.
     Clic droit = effacer (TILE_EMPTY).
@@ -195,7 +207,8 @@ class CollisionTool(BaseTool):
             ov.set_preview(None)
             ov.set_hover(None)
             sc = self._view.scene()
-            keep_visible = getattr(sc, "_collision_view", False)
+            keep_visible = (getattr(sc, "_collision_view", False) or getattr(sc, "_collision_index_view", False)
+                            or getattr(sc, "_collision_normals_view", False))
             if not keep_visible:
                 ov.setVisible(False)
 
@@ -220,6 +233,9 @@ class CollisionTool(BaseTool):
         elif self._mode == "collision_16":
             self._paint_brush(pos, 2)
             self._dirty = True
+        elif self._mode in _ONEWAY_BRUSHES:
+            self._paint_brush(pos, 1)
+            self._dirty = True
         return True
 
     def on_move(self, pos: QPointF, e) -> bool:
@@ -236,6 +252,8 @@ class CollisionTool(BaseTool):
             self._paint_brush(pos, 1)
         elif self._mode == "collision_16" and active:
             self._paint_brush(pos, 2)
+        elif self._mode in _ONEWAY_BRUSHES and active:
+            self._paint_brush(pos, 1)
         elif self._mode in SLOPE_MODES and self._slope_start and self._paint_mode:
             sc, sr = self._slope_start
             ec, er = ov.scene_to_tile(pos.x(), pos.y())
@@ -332,7 +350,7 @@ class CollisionTool(BaseTool):
 
     def _paint_cell(self, col: int, row: int, brush_tiles: int):
         ov = self._view.collision_overlay
-        new_type = TILE_SOLID if self._paint_mode else TILE_EMPTY
+        new_type = _ONEWAY_BRUSHES.get(self._mode, TILE_SOLID) if self._paint_mode else TILE_EMPTY
         for dr in range(brush_tiles):
             for dc in range(brush_tiles):
                 c, r = col + dc, row + dr

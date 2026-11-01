@@ -40,6 +40,9 @@ int  global_read_at (int i, int k)        { (void)i; (void)k; return 0; }
 void global_write_at(int i, int k, int v) { (void)i; (void)k; (void)v; }
 
 Actor g_actors[64];
+u16 *g_actor_floor = 0;
+u8 *g_drop_through = 0;
+int g_rigid_rest[64][2];
 u32 g_obj_state[16];
 int g_spool_start = 0, g_spool_end = 0, g_spool_hw = 0, g_spool_entry = -1, g_spool_free = 0;
 u32 g_alive_bits[16];
@@ -506,6 +509,23 @@ int main(void) {
         g_placed_parent = 0;                                   /* sans table : chaque posé est sa propre racine */
         printf("pose_sans_table %d %d\n", actor_parent(&g_actors[4]) == 0, actor_root(&g_actors[4]) == &g_actors[4]);
         g_scene_placed = 0;
+    }
+
+    /* Les tables par emplacement hors d'Actor (floor, drop_through, ancre Rigid) : la destruction les rend à zéro, celles
+       des autres emplacements ne bougent pas. */
+    {
+        static u16 sol[64]; static u8 chute[64];
+        g_actor_floor = sol; g_drop_through = chute;
+        for (int i = 0; i < 3; i++) {
+            g_actors[i] = (Actor){0}; g_actors[i].inst = i; g_actors[i].alive = 1; g_actors[i].active = 1;
+            sol[i] = 7; chute[i] = 9; g_rigid_rest[i][0] = 100 + i; g_rigid_rest[i][1] = 200 + i;
+        }
+        actor_destroy_internal(&g_actors[1]);
+        printf("tables_detruit %d %d %d %d\n", sol[1], chute[1], g_rigid_rest[1][0], g_rigid_rest[1][1]);
+        printf("tables_voisins %d %d %d %d\n", sol[0], chute[2], g_rigid_rest[0][0], g_rigid_rest[2][1]);
+        g_actor_floor = 0; g_drop_through = 0;                   /* projet sans floor ni sens unique : pas d'écriture */
+        actor_destroy_internal(&g_actors[2]);
+        printf("tables_sans_floor %d\n", g_rigid_rest[2][0]);
     }
 
     /* Une paire en contact : enter à la naissance, collide tant qu'elle dure, exit quand elle se défait, rien quand elle est

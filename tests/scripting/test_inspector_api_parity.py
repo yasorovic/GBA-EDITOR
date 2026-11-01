@@ -251,6 +251,13 @@ def sortie_sonde(tmp_path_factory):
     return {l.split()[0]: [int(v) for v in l.split()[1:]] for l in run.stdout.splitlines()}
 
 
+def test_c_la_destruction_remet_les_tables_par_emplacement_a_zero(sortie_sonde):
+    """floor, drop_through et ancre de repos Rigid vivent hors d'`Actor` : un emplacement repris repart à zéro."""
+    assert sortie_sonde["tables_detruit"] == [0, 0, 0, 0]
+    assert sortie_sonde["tables_voisins"] == [7, 9, 100, 202]        # les autres emplacements ne bougent pas
+    assert sortie_sonde["tables_sans_floor"] == [0]                  # sans floor ni sens unique, l'ancre est remise à zéro
+
+
 def test_c_la_bonne_boite_repond(sortie_sonde):
     """La référence est un rang (acteur × MAX_BOXES + boîte + 1), 0 = absente."""
     assert sortie_sonde["refs"] == [1, 2, 0, 5]

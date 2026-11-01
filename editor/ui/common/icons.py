@@ -64,6 +64,10 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "tool_collision_16":     ("mdi.border-all",              "■"),
     "tool_collision_slope":      ("mdi.trending-up",             "◥"),
     "tool_collision_slope_inv":  ("mdi.trending-down",           "◣"),
+    "tool_collision_oneway_up": ("mdi.arrow-collapse-up", "↑"),
+    "tool_collision_oneway_down": ("mdi.arrow-collapse-down", "↓"),
+    "tool_collision_oneway_left": ("mdi.arrow-collapse-left", "←"),
+    "tool_collision_oneway_right": ("mdi.arrow-collapse-right", "→"),
     "tool_palette":          ("mdi.palette-outline",         "◐"),
     # Zone de texte : un rectangle qui contient du texte — l'outil délimite une
     # surface, il ne saisit pas de texte (celui-ci vient de la table).
@@ -111,6 +115,8 @@ _REGISTRY: dict[str, tuple[str, str]] = {
     "view_snap":             ("mdi.magnet",                  "⇲"),
     "view_boxes":            ("mdi.account-box",             "▭"),
     "view_collision":        ("mdi.wall",                    "▨"),
+    "view_collision_index":  ("mdi.numeric",                 "#"),
+    "view_collision_normals": ("mdi.arrow-up-bold-outline",  "↑"),
     "view_notes":            ("mdi.note-text-outline",       "▤"),
     "view_minimap":          ("mdi.map-outline",             "▧"),
     # Table des raccourcis flottante (ui/common/shortcut_hints.py)

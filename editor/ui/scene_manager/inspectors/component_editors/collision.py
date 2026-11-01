@@ -1,7 +1,7 @@
 """Éditeur du CollisionShapeComponent."""
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QWidget
+from PyQt6.QtWidgets import QCheckBox, QComboBox, QHBoxLayout, QLabel, QWidget
 from PyQt6.QtGui import QFont
 
 from . import BaseComponentEditor, register
@@ -14,7 +14,7 @@ from ui.common.theme import C, T
 from ui.common.pickers import collision_tag_slot
 from ui.common.icons import COLOR_SPRITE
 from core.history import get_history, AddListItemCmd
-from core.models.components import PhysicMaterialComponent
+from core.models.components import ONE_WAY_MODES, PhysicMaterialComponent
 
 
 @register("collision_shape")
@@ -93,6 +93,18 @@ class CollisionEditor(BaseComponentEditor):
         chk_blocks.toggled.connect(lambda v: self.set_field(comp, "response", "block" if v else "sensor"))
         self.register_syncer("response", lambda v, w=chk_blocks: (
             w.blockSignals(True), w.setChecked(v == "block"), w.blockSignals(False)))
+
+        # ── Sens unique : la face n'arrête que le corps venu du côté de sa normale ──
+        one_way = QComboBox()
+        for value in ONE_WAY_MODES:
+            one_way.addItem(label(f"comped.one_way_{value}"), value)
+        one_way.setCurrentIndex(max(0, one_way.findData(comp.one_way)))
+        one_way.setToolTip(tooltip(title=label("comped.collision_one_way"),
+                                   body=label("comped.collision_one_way_tip")))
+        W.row(label("comped.collision_one_way"), one_way, layout)
+        one_way.currentIndexChanged.connect(lambda _: self.set_field(comp, "one_way", one_way.currentData()))
+        self.register_syncer("one_way", lambda v, w=one_way: (
+            w.blockSignals(True), w.setCurrentIndex(max(0, w.findData(v))), w.blockSignals(False)))
 
         # ── Matériau : un PhysicMaterialComponent du même acteur, désigné par son id ──
         owner = getattr(self.insp, "_actor", None)

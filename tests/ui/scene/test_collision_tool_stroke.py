@@ -115,3 +115,20 @@ def test_effacer_toute_la_collision_est_une_entree_d_historique_qui_la_rend(qapp
     history.undo()
     assert _solid(view) == {(0, 0), (3, 1), (5, 3)}
     history.clear()
+
+
+def test_un_pinceau_a_sens_unique_pose_sa_tuile_et_le_clic_droit_l_efface(qapp):
+    from core.models.collision_tiles import TILE_ONEWAY_LEFT, TILE_ONEWAY_UP
+
+    for mode, tuile in (("collision_oneway_up", TILE_ONEWAY_UP), ("collision_oneway_left", TILE_ONEWAY_LEFT)):
+        view = _View()
+        tool = CollisionTool(view, mode)
+        tool.on_press(QPointF(12, 4), _Event())
+        tool.on_move(QPointF(28, 4), _Event())
+        tool.on_release(QPointF(28, 4), _Event())
+        assert {c: t for c, t in view.collision_overlay.tiles.items()} == {(1, 0): tuile, (2, 0): tuile, (3, 0): tuile}
+
+        erase = Qt.MouseButton.RightButton
+        tool.on_press(QPointF(12, 4), _Event(erase, erase))
+        tool.on_release(QPointF(12, 4), _Event(erase, erase))
+        assert view.collision_overlay.tile_at(1, 0) == TILE_EMPTY

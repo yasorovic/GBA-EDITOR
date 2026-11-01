@@ -71,6 +71,30 @@ class FloatingToolbar(QFrame):
             'cvtool.ceiling_slope',
             'cvtool.ceiling_slope_tip',
         ),
+        (
+            "collision_oneway_up",
+            "tool_collision_oneway_up",
+            'cvtool.oneway_up',
+            'cvtool.oneway_up_tip',
+        ),
+        (
+            "collision_oneway_down",
+            "tool_collision_oneway_down",
+            'cvtool.oneway_down',
+            'cvtool.oneway_down_tip',
+        ),
+        (
+            "collision_oneway_left",
+            "tool_collision_oneway_left",
+            'cvtool.oneway_left',
+            'cvtool.oneway_left_tip',
+        ),
+        (
+            "collision_oneway_right",
+            "tool_collision_oneway_right",
+            'cvtool.oneway_right',
+            'cvtool.oneway_right_tip',
+        ),
     ]
 
     # Sous-outils inpainting de scène — (id, icon_key, label, tooltip)

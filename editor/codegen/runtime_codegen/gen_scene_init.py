@@ -20,6 +20,7 @@ from codegen.runtime_codegen.gen_scene_query import scene_anim_descriptors, scen
 from codegen.runtime_codegen.gen_sfx_trigger import sfx_trigger_info
 from codegen.runtime_codegen.gen_sprite import initial_state_rank, shown
 from codegen.runtime_codegen.gen_ui_scene import scene_ui_lines
+from codegen.runtime_codegen.physics.body import support_normal
 from codegen.runtime_codegen.gen_vram_layout import layer_base_bank
 from codegen.runtime_codegen.interact_gen import owner_boxes
 from codegen.runtime_codegen.sound_emit import scene_music_lines
@@ -139,6 +140,8 @@ def _reset_lines(p, scene, sym: str, scene_actors: list, actor_offset: int, alay
     L.append(f"    g_scene_w = {_sw}; g_scene_h = {_sh};")
     L.append(f"    g_scene_scroll_h = {int(bool(scene.scroll_h))}; g_scene_scroll_v = {int(bool(scene.scroll_v))};")
     L.append(f"    g_scene_collision_layer = {int(scene.collision_layer)};")
+    # Le côté du contact qui produit `grounded` (cf. physics/body.py, `support_normal`).
+    L.append(f"    g_support_normal = {support_normal(scene, p.settings)};")
     # Acteurs POSÉS de cette scène, dans l'ordre d'authoring — la borne de
     # `actor:get(i)`/`actor:count()`. Les slots [0, placed) tiennent exactement ces
     # acteurs ; les pools spawnés vivent après et ne sont pas comptés ici.
@@ -155,8 +158,7 @@ def _reset_lines(p, scene, sym: str, scene_actors: list, actor_offset: int, alay
     # précédente ne résout dans aucun emplacement de celle-ci.
     L.append("    for(int _i=0; _i<G_ACTOR_COUNT; _i++) { u16 _g=g_actors[_i].gen; g_actors[_i]=(Actor){0}; "
              "g_actors[_i].gen=_g+1; g_actors[_i].oam_entry=-1; g_actors[_i].inst=_i; "
-             "if(g_actor_floor) g_actor_floor[_i]=0; "
-             "g_rigid_rest[_i][0]=0; g_rigid_rest[_i][1]=0; }")
+             "actor_slot_tables_clear(_i); }")
     L.append("    for(int _i=0; _i<(G_ACTOR_COUNT+31)/32; _i++) g_alive_bits[_i]=0;")
     L.append("    g_alive_epoch++;")
     L.append("    for(int _i=0; _i<G_OAM_ENTRY_COUNT; _i++) g_oam_entries[_i]=(OamEntry){0};")

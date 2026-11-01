@@ -441,13 +441,21 @@ RUNTIME_API: dict[str, ApiFunc] = {
     "actor:physics_body": ApiFunc(
         lua_name="actor:physics_body", c_func="actor_get_physics_body",
         params=[], ret=REF_PHYSICS_BODY, self_first=True,
-        doc="The typed PhysicsBody view of this actor. Keep the returned reference to read "
-            "or change its velocity and grounded state. Ex: local body = self:physics_body()",
+        doc="The typed PhysicsBody view of this actor. Never nil: the build refuses the call on "
+            "an actor without a PhysicsBody component. The body mode is not exposed. Keep the "
+            "returned reference to read or change its velocity and grounded state. "
+            "Ex: local body = self:physics_body()",
     ),
     f"{REF_PHYSICS_BODY}:add_velocity": ApiFunc(
         lua_name="physics_body:add_velocity", c_func="actor_add_velocity",
         params=[Param("dv", PARAM_VEC2)], self_first=True,
         doc="Adds `dv` (a vec2, in Q8: 256 = 1 px/frame) to this body's velocity.",
+    ),
+    f"{REF_PHYSICS_BODY}:drop_through": ApiFunc(
+        lua_name="physics_body:drop_through", c_func="actor_drop_through",
+        params=[Param("frames", PARAM_INT)], self_first=True,
+        doc="Makes this body ignore one-way faces (collision map tiles and actor shapes) for `frames` frames, "
+            "the calling frame included. Ex: body:drop_through(8) to step down through a platform.",
     ),
     f"{REF_PHYSICS_BODY}:apply_velocity": ApiFunc(
         lua_name="physics_body:apply_velocity", c_func="actor_apply_velocity",
@@ -1687,7 +1695,9 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
         lua_name="physics_body.grounded", c_getter="actor_on_ground", ptype=PARAM_BOOL,
         self_first=True, read_only=True,
         doc="True if this body was resting on the collision map, a StaticBody, or a "
-            "KinematicBody at the end of the previous frame. Read-only.",
+            "KinematicBody at the end of the previous frame, on the side gravity pulls it towards "
+            "(below under the usual downward gravity, to the right under a rightward one). A scene with "
+            "no gravity keeps the bottom as the supporting side. Read-only.",
     ),
     f"{REF_PHYSICS_BODY}.floor": ApiProp(
         lua_name="physics_body.floor", c_getter="actor_get_floor", ptype=PARAM_INT,
