@@ -956,7 +956,9 @@ static inline int _box_canonical(const Actor*a, int i) {
         if (a->collision.boxes[k].tag == a->collision.boxes[i].tag) return k;
     return i;
 }
-static inline u16 actors_overlap_mask(const Actor*a, const Actor*b) {
+/* Hors ligne : deux boucles imbriquées, appelée une fois par paire de collision du tick. Inlinée, elle était recopiée
+   dans chaque paire (environ 400 octets de plus chacune) pour un gain de 0,6 µs par paire. */
+static __attribute__((noinline)) u16 actors_overlap_mask(const Actor*a, const Actor*b) {
     u16 m = 0;
     for (int i=0; i<a->collision.box_count; i++) {
         if (!a->collision.boxes[i].active) continue;
