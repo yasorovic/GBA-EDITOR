@@ -1,6 +1,7 @@
 """Requêtes sur les corps physiques, sans état runtime supplémentaire."""
 from __future__ import annotations
 
+from core.models.collision_tiles import oneway_dir
 from core.models.collision_tiles import (
     ONEWAY_DOWN, ONEWAY_LEFT, ONEWAY_NONE, ONEWAY_RIGHT, ONEWAY_UP,
 )
@@ -90,12 +91,30 @@ def shape_one_way_dir(box, scene, project_settings) -> int:
     return support_normal(scene, project_settings)
 
 
+def scene_one_way_tile_dirs(scene) -> frozenset[int]:
+    """Les sens (`ONEWAY_*`) des tuiles à sens unique que la carte de collision de cette scène contient."""
+    return frozenset(oneway_dir(tile) for row in getattr(scene, "collision_map", None) or [] for tile in row
+                     ) - {ONEWAY_NONE}
+
+
+def project_one_way_tile_dirs(p) -> frozenset[int]:
+    """Les sens (`ONEWAY_*`) des tuiles à sens unique que les cartes de collision du projet contiennent."""
+    return frozenset().union(*(scene_one_way_tile_dirs(sc) for sc in getattr(p, "scenes", []) or []))
+
+
+def project_has_one_way_tiles(p) -> bool:
+    """Une tuile à sens unique dans la carte de collision d'une scène."""
+    return bool(project_one_way_tile_dirs(p))
+
+
 def project_has_one_way(p) -> bool:
-    """Une forme à sens unique quelque part : les aides C n'en sont émises que dans ce cas."""
+    """Une face à sens unique quelque part, forme d'acteur ou tuile de carte : les aides C et la table de `drop_through`
+    n'en sont émises que dans ce cas."""
     owners = [a for sc in getattr(p, "scenes", []) or [] for a in sc.actors]
     owners += list(getattr(p, "prefabs", []) or [])
-    return any(isinstance(c, CollisionShapeComponent) and c.active and c.one_way != ONE_WAY_OFF
-               for o in owners for c in getattr(o, "components", []))
+    return project_has_one_way_tiles(p) or any(
+        isinstance(c, CollisionShapeComponent) and c.active and c.one_way != ONE_WAY_OFF
+        for o in owners for c in getattr(o, "components", []))
 
 
 def has_map_collider(owner, sprite=None) -> bool:

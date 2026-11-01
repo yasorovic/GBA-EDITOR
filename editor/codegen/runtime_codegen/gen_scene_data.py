@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from codegen.c_names import sym as c_sym
 from codegen.palette_alloc import scene_bank_layout
+from codegen.runtime_codegen.physics.body import scene_one_way_tile_dirs
+from core.models.collision_tiles import oneway_dir
 from codegen.runtime_codegen.gen_palette import scene_bg_palette_words, scene_obj_palette_words
 
 
@@ -29,6 +31,15 @@ def scene_data_lines(p, all_scene_data: list[dict]) -> list[str]:
                 "};",
                 "",
             ]
+            if scene_one_way_tile_dirs(sc):
+                # Quels sens de face portent chaque rangée et chaque colonne (bit `1<<sens`) : `oneway_hit` saute sans
+                # lire la carte toute ligne qui n'en a pas.
+                rows_ow = [sum(1 << d for d in {oneway_dir(v) for v in row} if d) for row in cmap]
+                cols_ow = [sum(1 << d for d in {oneway_dir(row[c]) for row in cmap if c < len(row)} if d)
+                           for c in range(cols)]
+                L += [f"static const u8 g_cmow_rows_{sym}[{rows}] = {{{', '.join(map(str, rows_ow))}}};",
+                      f"static const u8 g_cmow_cols_{sym}[{cols}] = {{{', '.join(map(str, cols_ow))}}};",
+                      ""]
 
     # ── Palettes OBJ actives par scène (16 banques x 16 couleurs, résolues
     #    depuis Scene.active_obj_palettes -> project.palettes) ────────────

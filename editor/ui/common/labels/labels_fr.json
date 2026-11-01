@@ -1927,7 +1927,7 @@
     "comped.collision_blocks_row": { "text": "Réponse" },
     "comped.collision_blocks": { "text": "Bloquer" },
     "comped.collision_one_way": { "text": "Sens unique" },
-    "comped.collision_one_way_tip": { "text": "Fait arrêter par une boîte Bloquer seulement un corps qui vient du côté vers lequel regarde sa face ; les autres côtés se traversent. Contre la gravité donne la plateforme habituelle. S'applique aux boîtes Bloquer d'un StaticBody et d'un KinematicBody." },
+    "comped.collision_one_way_tip": { "text": "Fait arrêter par une boîte Bloquer seulement un corps qui vient du côté vers lequel regarde sa face ; les autres côtés se traversent. Contre la gravité donne la plateforme habituelle. Demande la réponse Bloquer : une boîte capteur n'a rien à franchir." },
     "comped.one_way_off": { "text": "Aucun" },
     "comped.one_way_gravity": { "text": "Contre la gravité" },
     "comped.one_way_up": { "text": "Haut" },

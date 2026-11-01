@@ -24,8 +24,9 @@ def globals_lines(p, all_scene_data: list[dict], scene_pis: list, n_actors: int,
         # `physics_body:drop_through(n)` : frames restantes pendant lesquelles un corps ignore les faces à sens unique.
         f"u8 g_drop_store[{n_actors if project_has_one_way(p) else 1}] EWRAM_BSS;",
         f"u8 *g_drop_through={'g_drop_store' if project_has_one_way(p) else '0'};",
+        "u8 g_drop_live;   /* un compteur de g_drop_through est non nul : le décompte ne tourne que dans ce cas */",
         # Position de chaque Rigid à la frame précédente (Q8), pour lire son repos sur le déplacement (physics/motion.py).
-        f"s32 g_rigid_rest[{n_actors}][2] EWRAM_BSS;",
+        f"int g_rigid_rest[{n_actors}][2] EWRAM_BSS;",
         # Un bit par emplacement : les blocs de 32 sans vivant sont sautés par POOL_EACH (actor_types_static.h).
         f"u32 g_alive_bits[{max(1, (n_actors + 31) // 32)}];",
         # Époque des changements de vie et curseur de `actor:get(nom, i)` (actor_types_static.h).

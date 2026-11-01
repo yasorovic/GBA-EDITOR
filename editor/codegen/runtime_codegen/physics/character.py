@@ -6,22 +6,107 @@ from codegen.runtime_codegen.physics.oneway import oneway_common_lines
 
 
 
-def character_solver_lines() -> list[str]:
+def _one_way_scan_lines() -> list[str]:
+    """La recherche d'une face à sens unique dans la carte : la condition partagée, puis `oneway_hit`."""
+    return [
+        *oneway_common_lines(),
+        "/* One-way faces. `dir` is the NORMAL of the face: 1 up, 2 down, 3 left, 4 right.",
+        "   A face is a line, at the top (up, left) or at the far edge (down, right) of",
+        "   its tile. [lo,hi] is the range of coordinates the box edge swept this frame",
+        "   along that axis, [c0,c1] the span of the box on the other axis. Returns the",
+        "   coordinate of the first face met in the direction of travel, -1 if none.",
+        "   The caller decides WHETHER the move crosses against the normal; this only",
+        "   finds the face. */",
+        "/* Toujours inlinée : `dir` est une constante à chaque appel, la direction se replie à la compilation. Une",
+        "   rangée (face verticale) ou une colonne (face horizontale) que `g_ow_rows` / `g_ow_cols` déclarent sans",
+        "   face de ce sens n'est pas lue. */",
+        "static inline __attribute__((always_inline)) int oneway_hit(int dir,int lo,int hi,int c0,int c1){",
+        "    if(!(g_ow_any&(1u<<dir))||lo>hi) return -1;",
+        "    int vert=dir<=2, off=(dir==2||dir==4)?TILE_SIZE:0;",
+        "    int t0=(lo-off+TILE_SIZE-1)>>3, t1=(hi-off)>>3;",
+        "    int n=vert?g_cmap_h:g_cmap_w;",
+        "    if(t0<0) t0=0;",
+        "    if(t1>=n) t1=n-1;",
+        "    const u8* tab=vert?g_ow_rows:g_ow_cols;",
+        "    int asc=(dir&1), eo=asc?lo:hi;   /* the edge BEFORE the move: the swept range starts there */",
+        "    for(int i=0;i<=t1-t0;i++){",
+        "        int t=asc?t0+i:t1-i;",
+        "        if(tab&&!(tab[t]&(1u<<dir))) continue;",
+        "        /* Seule une ligne qui peut porter une face arrive ici : les colonnes ne sont bornées qu'à ce moment. */",
+        "        if(!g_active_cmap) return -1;",
+        "        int k0=c0>>3, k1=c1>>3, m=vert?g_cmap_w:g_cmap_h;",
+        "        if(k0<0) k0=0;",
+        "        if(k1>=m) k1=m-1;",
+        "        int ks=vert?1:g_cmap_w, ts=vert?g_cmap_w:1;",
+        "        const u8* q=g_active_cmap+t*ts+k0*ks;",
+        "        for(int k=k0;k<=k1;k++,q+=ks)",
+        "            if(g_tile_oneway[*q]==dir&&oneway_open(dir,eo,t*TILE_SIZE+off)) return t*TILE_SIZE+off;",
+        "    }",
+        "    return -1;",
+        "}",
+    ]
+
+
+def _one_way_x_lines(dirs) -> list[str]:
+    """Résolution horizontale des faces gauche (3) et droite (4) présentes dans les cartes, dans la boucle des boîtes."""
+    L = ["        /* ── X: one-way faces. Stops only a box that was entirely on the",
+         "           open side of the face LAST frame and crosses it this frame. ── */"]
+    if 3 in dirs:
+        L += ["        if(!drop&&a->vx>0){",
+              "            int f=oneway_hit(3,a->collision.last_x+(int)b->x+(int)b->w,_px+(int)b->x+(int)b->w,_oy+(int)b->y,_oy+(int)b->y+(int)b->h-1);",
+              "            if(f>=0){_px=f-(int)b->x-(int)b->w; a->vx=0; hr=1; if(cb)cb(a,1,0);}",
+              "        }"]
+    if 4 in dirs:
+        L += ["        if(!drop&&a->vx<0){",
+              "            int f=oneway_hit(4,_px+(int)b->x,a->collision.last_x+(int)b->x,_oy+(int)b->y,_oy+(int)b->y+(int)b->h-1);",
+              "            if(f>=0){_px=f-(int)b->x; a->vx=0; hl=1; if(cb)cb(a,-1,0);}",
+              "        }"]
+    return L
+
+
+def _one_way_y_lines(dirs) -> list[str]:
+    """Résolution verticale des faces haut (1) et bas (2) présentes dans les cartes, après la carte."""
+    L = ["        /* ── Y: one-way faces, after the map has had its say ── */",
+         "        left=_px+(int)b->x; right=left+(int)b->w-1;"]
+    if 1 in dirs:
+        L += ["        if(!drop&&_py>=_oy){",
+              "            int f=oneway_hit(1,_oy+(int)b->y+(int)b->h,_py+(int)b->y+(int)b->h,left,right);",
+              "            if(f>=0){_py=f-(int)b->y-(int)b->h; if(a->vy>0) a->vy=0; hb=1; if(cb)cb(a,0,1);}",
+              "        }"]
+    if 2 in dirs:
+        L += ["        if(!drop&&_py<=_oy){",
+              "            int f=oneway_hit(2,_py+(int)b->y,_oy+(int)b->y,left,right);",
+              "            if(f>=0){_py=f-(int)b->y; if(a->vy<0) a->vy=0; ht=1; if(cb)cb(a,0,-1);}",
+              "        }"]
+    return L
+
+
+def character_solver_lines(one_way_tiles=frozenset()) -> list[str]:
     """Lecture de la carte de collision, et résolution d'un acteur contre elle.
+
+    `one_way_tiles` : les sens (1 haut, 2 bas, 3 gauche, 4 droite) des tuiles à sens unique que les cartes du projet
+    contiennent, ou `True` pour tous. Une passe n'est émise que pour un sens présent : chacune coûte à chaque boîte et à
+    chaque frame, même quand la carte ne contient aucune face de ce sens.
 
     La table de profils est ÉMISE depuis `core.models.collision_tiles`, la même
     géométrie que celle dont le canvas tire ses polygones : la physique du jeu
     et le dessin de l'éditeur ne peuvent pas diverger."""
+    dirs = {1, 2, 3, 4} if one_way_tiles is True else set(one_way_tiles or ())
     from core.models.collision_tiles import (
         TILE_COUNT, kind_of, column_surfaces, speed_scale, oneway_dir,
     )
     L = [
-        "extern u8 *g_drop_through;",
+        *(["extern u8 *g_drop_through;"] if dirs else []),
         "/* Côté du contact qui porte, pour la scène : 1 bas, 2 haut, 3 droite, 4 gauche (la normale de la surface qui",
         "   porte est l'opposé). `grounded` est le contact de CE côté, pas forcément celui du bas. */",
         "static u8 g_support_normal=1;",
         "static const u8 *g_active_cmap = NULL;",
         "static int g_cmap_w = 0, g_cmap_h = 0;",
+        "/* Faces à sens unique de la carte active : `g_ow_any` a le bit `1<<sens` des sens présents, `g_ow_rows` et",
+        "   `g_ow_cols` le même masque par rangée et par colonne (NULL : pas de table, on lit la carte). Posés à",
+        "   l'entrée de scène ; par défaut tout est à lire. */",
+        "static u8 g_ow_any = 0x1E;",
+        "static const u8 *g_ow_rows = NULL, *g_ow_cols = NULL;",
         "#define TILE_SIZE 8",
         "",
         "/* Tile type profile — EMITTED from core/models/collision_tiles.py,",
@@ -136,34 +221,7 @@ def character_solver_lines() -> list[str]:
         "    }",
         "    return -1;",
         "}",
-        *oneway_common_lines(),
-        "/* One-way faces. `dir` is the NORMAL of the face: 1 up, 2 down, 3 left, 4 right.",
-        "   A face is a line, at the top (up, left) or at the far edge (down, right) of",
-        "   its tile. [lo,hi] is the range of coordinates the box edge swept this frame",
-        "   along that axis, [c0,c1] the span of the box on the other axis. Returns the",
-        "   coordinate of the first face met in the direction of travel, -1 if none.",
-        "   The caller decides WHETHER the move crosses against the normal; this only",
-        "   finds the face. */",
-        "static int oneway_hit(int dir,int lo,int hi,int c0,int c1){",
-        "    if(!g_active_cmap||lo>hi) return -1;",
-        "    int vert=dir<=2, off=(dir==2||dir==4)?TILE_SIZE:0;",
-        "    int t0=(lo-off+TILE_SIZE-1)>>3, t1=(hi-off)>>3;",
-        "    int k0=c0>>3, k1=c1>>3;",
-        "    int n=vert?g_cmap_h:g_cmap_w, m=vert?g_cmap_w:g_cmap_h;",
-        "    if(t0<0) t0=0;",
-        "    if(t1>=n) t1=n-1;",
-        "    if(k0<0) k0=0;",
-        "    if(k1>=m) k1=m-1;",
-        "    int asc=(dir&1), eo=asc?lo:hi;   /* the edge BEFORE the move: the swept range starts there */",
-        "    for(int i=0;i<=t1-t0;i++){",
-        "        int t=asc?t0+i:t1-i;",
-        "        for(int k=k0;k<=k1;k++){",
-        "            int tile=vert?g_active_cmap[t*g_cmap_w+k]:g_active_cmap[k*g_cmap_w+t];",
-        "            if(g_tile_oneway[tile]==dir&&oneway_open(dir,eo,t*TILE_SIZE+off)) return t*TILE_SIZE+off;",
-        "        }",
-        "    }",
-        "    return -1;",
-        "}",
+        *(_one_way_scan_lines() if dirs else []),
         "typedef void (*TileCollideCb)(Actor*,int,int);",
         "/* Resolution of an actor against the map.",
         "   The order is the rule: X first — slopes do not obstruct it —",
@@ -181,7 +239,7 @@ def character_solver_lines() -> list[str]:
         "static void __attribute__((unused)) resolve_actor_tiles(Actor*a,u8 body_mask,TileCollideCb cb){",
         "    if(!g_active_cmap) return;",
         "    if(!body_mask) return;",
-        "    int drop=g_drop_through&&g_drop_through[a->inst];",
+        *(["    int drop=g_drop_through&&g_drop_through[a->inst];"] if dirs else []),
         "    if(a->vx==0&&a->vy==0){",
         "        a->collision.last_x=a->x>>8; a->collision.slope_acc=0;",
         "        return;",
@@ -267,15 +325,7 @@ def character_solver_lines() -> list[str]:
         "                    a->vx=0; hl=1; if(cb)cb(a,-1,0);}",
         "            }",
         "        }",
-        "        /* ── X: one-way faces. Stops only a box that was entirely on the",
-        "           open side of the face LAST frame and crosses it this frame. ── */",
-        "        if(!drop&&a->vx>0){",
-        "            int f=oneway_hit(3,a->collision.last_x+(int)b->x+(int)b->w,_px+(int)b->x+(int)b->w,_oy+(int)b->y,_oy+(int)b->y+(int)b->h-1);",
-        "            if(f>=0){_px=f-(int)b->x-(int)b->w; a->vx=0; hr=1; if(cb)cb(a,1,0);}",
-        "        }else if(!drop&&a->vx<0){",
-        "            int f=oneway_hit(4,_px+(int)b->x,a->collision.last_x+(int)b->x,_oy+(int)b->y,_oy+(int)b->y+(int)b->h-1);",
-        "            if(f>=0){_px=f-(int)b->x; a->vx=0; hl=1; if(cb)cb(a,-1,0);}",
-        "        }",
+        *(_one_way_x_lines(dirs) if dirs & {3, 4} else []),
         "        /* ── Ceiling: the LOWEST surface stops the head ─ */",
         "        left=_px+(int)b->x; right=left+(int)b->w-1;",
         "        top =_py+(int)b->y; bot  =top +(int)b->h-1;",
@@ -320,16 +370,7 @@ def character_solver_lines() -> list[str]:
         "                hb=1;",
         "            }",
         "        }",
-        "        /* ── Y: one-way faces, after the map has had its say ── */",
-        "        left=_px+(int)b->x; right=left+(int)b->w-1;",
-        "        if(!drop&&_py>=_oy){",
-        "            int f=oneway_hit(1,_oy+(int)b->y+(int)b->h,_py+(int)b->y+(int)b->h,left,right);",
-        "            if(f>=0){_py=f-(int)b->y-(int)b->h; if(a->vy>0) a->vy=0; hb=1; if(cb)cb(a,0,1);}",
-        "        }",
-        "        if(!drop&&_py<=_oy){",
-        "            int f=oneway_hit(2,_py+(int)b->y,_oy+(int)b->y,left,right);",
-        "            if(f>=0){_py=f-(int)b->y; if(a->vy<0) a->vy=0; ht=1; if(cb)cb(a,0,-1);}",
-        "        }",
+        *(_one_way_y_lines(dirs) if dirs & {1, 2} else []),
         "        /* `grounded` : le contact du côté qui porte (bas sous la gravité habituelle). */",
         "        if(g_support_normal==1?hb:g_support_normal==2?ht:g_support_normal==3?hr:hl) a->collision.grounded=b->grounded=1;",
         "    }",

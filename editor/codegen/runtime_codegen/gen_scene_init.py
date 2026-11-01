@@ -16,6 +16,7 @@ from codegen.runtime_codegen.gen_camera import scene_camera_index
 from codegen.runtime_codegen.gen_palette import resolve_backdrop_color
 from codegen.runtime_codegen.gen_pool import dispatch_sym, placed_parent_table
 from codegen.runtime_codegen.gen_scene_display import scene_display_lines
+from codegen.runtime_codegen.physics.body import scene_one_way_tile_dirs
 from codegen.runtime_codegen.gen_scene_query import scene_anim_descriptors, scene_has_cmap, scene_world_size
 from codegen.runtime_codegen.gen_sfx_trigger import sfx_trigger_info
 from codegen.runtime_codegen.gen_sprite import initial_state_rank, shown
@@ -207,8 +208,14 @@ def _scene_state_lines(scene, sym: str, cam_idx: int) -> list[str]:
         L.append(f"    g_active_cmap = g_cmap_{sym};")
         L.append(f"    g_cmap_w = CMAP_W_{sym.upper()};")
         L.append(f"    g_cmap_h = CMAP_H_{sym.upper()};")
+        dirs = scene_one_way_tile_dirs(scene)
+        if dirs:
+            mask = sum(1 << d for d in dirs)
+            L.append(f"    g_ow_any = {mask}; g_ow_rows = g_cmow_rows_{sym}; g_ow_cols = g_cmow_cols_{sym};")
+        else:
+            L.append("    g_ow_any = 0; g_ow_rows = NULL; g_ow_cols = NULL;")
     else:
-        L.append("    g_active_cmap = NULL; g_cmap_w = 0; g_cmap_h = 0;")
+        L.append("    g_active_cmap = NULL; g_cmap_w = 0; g_cmap_h = 0; g_ow_any = 0;")
     return L
 
 

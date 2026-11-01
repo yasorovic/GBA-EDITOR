@@ -418,6 +418,7 @@ def _check_each_scene(ctx: ValidationContext):
             ctx.warn(None, "The scene has no actor, script or interface: it will do nothing.")
         _check_actors(ctx)
         _check_backgrounds(ctx)
+        _check_collision_map(ctx)
         _check_frame_events(ctx)
     ctx.focus(None)
 
@@ -521,6 +522,24 @@ def _check_collision(ctx, actor, comp):
         ctx.error(actor,
                   f"CollisionShape '{comp.tag}': zero width or height ({comp.w}×{comp.h}) — invisible "
                   "hitbox.")
+    # Une face à sens unique est une face qui BLOQUE dans un sens : sur un capteur, il n'y a rien à franchir.
+    from core.models.components import COLLISION_RESPONSE_BLOCK, ONE_WAY_OFF
+    if getattr(comp, "one_way", ONE_WAY_OFF) != ONE_WAY_OFF and comp.response != COLLISION_RESPONSE_BLOCK:
+        ctx.warn(actor, f"CollisionShape '{comp.tag}': One-way is set but the response is not Block, so it has no "
+                        "effect. Set the response to Block, or turn One-way off.")
+
+
+def _check_collision_map(ctx):
+    """Un type de tuile inconnu dans la carte de la scène : le runtime lit des tables de `TILE_COUNT` entrées par
+    ce type, donc une valeur hors de 0 à `TILE_COUNT - 1` lirait au-delà (aucun message, un comportement au hasard)."""
+    from core.models.collision_tiles import TILE_COUNT
+    bad = [(col, row, tile) for row, line in enumerate(getattr(ctx.scene, "collision_map", None) or [])
+           for col, tile in enumerate(line)
+           if not isinstance(tile, int) or isinstance(tile, bool) or not 0 <= tile < TILE_COUNT]
+    if bad:
+        col, row, tile = bad[0]
+        ctx.error(None, f"Collision map: {len(bad)} tile(s) have an unknown type (first: {tile!r} at column {col}, "
+                        f"row {row}). Valid types are 0 to {TILE_COUNT - 1}: repaint or erase them.")
 
 
 def _check_physics_body(ctx, owner, comp):

@@ -16,7 +16,7 @@ from codegen.palette_alloc import scene_bank_layout
 from codegen.oam_budget import project_actor_count, project_oam_entry_count
 from codegen.ui_obj_budget import scene_obj_ui_slots
 from codegen.runtime_codegen.physics.blocks import block_helper_lines, project_has_blockers
-from codegen.runtime_codegen.physics.body import project_has_one_way
+from codegen.runtime_codegen.physics.body import project_has_one_way, project_one_way_tile_dirs
 from codegen.runtime_codegen.physics.budget import physics_budget_line
 from codegen.runtime_codegen.physics.impulses import impulse_helper_lines
 from codegen.runtime_codegen.physics.kinematic import kinematic_helper_lines, project_has_kinematic
@@ -181,7 +181,7 @@ def generate_main(
     L += save_lines(p, emit)
 
     # ── Character solver (dispatch via pointeur) ──────────────────
-    L += character_solver_lines()
+    L += character_solver_lines(project_one_way_tile_dirs(p))
     if project_has_kinematic(p):
         L += kinematic_helper_lines()
     if project_has_floors(p):

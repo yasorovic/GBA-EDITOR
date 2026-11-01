@@ -101,7 +101,7 @@ def gen_scene_tick(
     # collision et l'émission OAM, qui lisent la position monde recomposée.
     L = phases["physics"]
     kinematic_before, kinematic_after, kinematic_deltas = kinematic_tick_parts(
-        p, scene_actors, actor_offset)
+        p, scene_actors, actor_offset, scene)
     L += kinematic_before
     L += physics_motion_lines(scene, p.settings, scene_actors, actor_offset, pi)
     L += parent_compose_lines(scene_actors, actor_offset, _lay.placed_entry)
@@ -192,7 +192,8 @@ def gen_scene_tick(
     # `physics_body:drop_through(n)` : un compteur par emplacement, lu par les faces à sens unique de cette phase
     # puis décompté ici, après elles : appelé pendant `on_update`, il compte donc cette frame-ci.
     if project_has_one_way(p):
-        L.append("    if(g_drop_through) for(int _d=0;_d<G_ACTOR_COUNT;_d++) if(g_drop_through[_d]) g_drop_through[_d]--;")
+        L.append("    if(g_drop_live){ g_drop_live=0; for(int _d=0;_d<G_ACTOR_COUNT;_d++) "
+                 "if(g_drop_through[_d]&&--g_drop_through[_d]) g_drop_live=1; }")
 
     L += physics_sleep_lines(scene, p.settings, scene_actors, actor_offset, pi)
 

@@ -376,3 +376,21 @@ def test_une_phase_part_en_iwram_en_arm_ou_reste_en_rom_selon_le_define(project)
     # `-DBS_IWRAM_<scène>_<phase>=0` (le plan, cf. iwram_plan) l'emporte sur le mode de départ : le #ifndef le respecte
     assert "#ifndef BS_IWRAM_Scene_01_render\n#define BS_IWRAM_Scene_01_render 2" in text
     assert "#if BS_IWRAM_Scene_01_render == 2" in text
+
+
+def test_une_scene_a_faces_a_sens_unique_publie_ses_tables_de_rangees_et_de_colonnes(project):
+    from codegen.runtime_codegen import main_gen
+    from core.models.scene import Scene
+    first, second = project.active_scene, Scene(name="Second")
+    project.scenes.append(second)
+    first.collision_map = [[0, 0, 0], [0, 22, 0], [1, 1, 1]]   # 22 : face haut, 1 : plein
+    second.collision_map = [[1, 1], [1, 1]]
+    data = [{"scene": s, "bg_pairs": [], "scene_actors": [], "extra_sprites": [], "prefab_sprites": []}
+            for s in (first, second)]
+    assert main_gen.generate_main(project, data, None, [], [], Journal()) is True
+    text = (project.src_dir / "main.c").read_text(encoding="utf-8")
+    # le bit est `1 << sens` : le haut (1) donne 2
+    assert "g_cmow_rows_Scene_01[3] = {0, 2, 0}" in text and "g_cmow_cols_Scene_01[3] = {0, 2, 0}" in text
+    assert "g_ow_any = 2; g_ow_rows = g_cmow_rows_Scene_01; g_ow_cols = g_cmow_cols_Scene_01;" in text
+    assert "g_cmow_rows_Second" not in text
+    assert "g_ow_any = 0; g_ow_rows = NULL; g_ow_cols = NULL;" in text

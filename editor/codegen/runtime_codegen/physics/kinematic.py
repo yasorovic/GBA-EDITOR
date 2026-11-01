@@ -10,7 +10,10 @@ from core.models.components import (
     collision_shapes_collide,
 )
 from core.models.settings import tags_collide
-from codegen.runtime_codegen.physics.body import physics_body_mode, physics_collider_entries
+from core.models.collision_tiles import ONEWAY_UP
+from codegen.runtime_codegen.physics.body import (
+    physics_body_mode, physics_collider_entries, support_normal,
+)
 
 
 def project_has_kinematic(p) -> bool:
@@ -33,6 +36,25 @@ def kinematic_helper_lines() -> list[str]:
         "    if(abottom!=pt||al>=pr||ar<=pl||a->vy<0) return;",
         "    a->x+=dx; a->y+=dy; *carry_x+=dx; *carry_y+=dy; *carried=1;",
         "}",
+        "/* Le même transport pour un côté d'appui `n` quelconque (1 bas, 2 haut, 3 droite, 4 gauche) : le passager repose",
+        "   sur la face de la plateforme qui regarde la gravité, telle qu'elle était AVANT son déplacement, et ne s'en",
+        "   éloigne pas (vitesse de sens contraire). `kinematic_carry` ci-dessus reste le cas du bas. */",
+        "static void __attribute__((unused)) kinematic_carry_n(Actor* k,Actor* a,u8 kb,u8 ab,",
+        "        int old_x,int old_y,u8* carried,int* carry_x,int* carry_y,u8 n){",
+        "    if(*carried||!k->active||!a->active||kb>=k->collision.box_count||ab>=a->collision.box_count) return;",
+        "    const CollisionShape* p=&k->collision.boxes[kb]; const CollisionShape* b=&a->collision.boxes[ab];",
+        "    if(!p->active||!b->active) return;",
+        "    int dx=k->x-old_x,dy=k->y-old_y; if(!dx&&!dy) return;",
+        "    int pl=(old_x>>8)+p->x,pr=pl+p->w,pt=(old_y>>8)+p->y,pb=pt+p->h;",
+        "    int al=(a->x>>8)+b->x,ar=al+b->w,at=(a->y>>8)+b->y,abt=at+b->h;",
+        "    int rests;",
+        "    if(n==1) rests=abt==pt&&al<pr&&ar>pl&&a->vy>=0;",
+        "    else if(n==2) rests=at==pb&&al<pr&&ar>pl&&a->vy<=0;",
+        "    else if(n==3) rests=ar==pl&&at<pb&&abt>pt&&a->vx>=0;",
+        "    else rests=al==pr&&at<pb&&abt>pt&&a->vx<=0;",
+        "    if(!rests) return;",
+        "    a->x+=dx; a->y+=dy; *carry_x+=dx; *carry_y+=dy; *carried=1;",
+        "}",
         "",
     ]
 
@@ -49,9 +71,13 @@ def _body_boxes(owner, sprite) -> list[tuple[int, object]]:
 
 
 def kinematic_tick_parts(
-        p, scene_actors, actor_offset: int,
+        p, scene_actors, actor_offset: int, scene=None,
 ) -> tuple[list[str], list[str], dict[int, tuple[str, str]]]:
-    """Instantanés avant mouvement, transport après résolution, puis deltas par passager."""
+    """Instantanés avant mouvement, transport après résolution, puis deltas par passager.
+
+    Le passager repose sur la face de la plateforme qui regarde la gravité de la scène (`support_normal`) : le dessus
+    sous la gravité habituelle, le dessous sous une gravité vers le haut, un côté sous une gravité latérale."""
+    normal = support_normal(scene, p.settings) if scene is not None else ONEWAY_UP
     groups: dict[tuple[int, int], list[tuple[int, int]]] = {}
     for ki, (kinematic, kinematic_sprite) in enumerate(scene_actors):
         if physics_body_mode(kinematic) != PHYSICS_BODY_KINEMATIC:
@@ -81,9 +107,10 @@ def kinematic_tick_parts(
         carried = f"_kin_carried_{ki}_{ti}"
         after.append(f"    u8 {carried}=0;")
         for kb, ab in pairs:
+            tail = f"_kin_old_x_{ki},_kin_old_y_{ki},&{carried},&_kin_dx_{ti},&_kin_dy_{ti}"
             after.append(
-                f"    kinematic_carry(&g_actors[{ki}],&g_actors[{ti}],{kb},{ab},"
-                f"_kin_old_x_{ki},_kin_old_y_{ki},&{carried},&_kin_dx_{ti},&_kin_dy_{ti});")
+                f"    kinematic_carry(&g_actors[{ki}],&g_actors[{ti}],{kb},{ab},{tail});" if normal == ONEWAY_UP else
+                f"    kinematic_carry_n(&g_actors[{ki}],&g_actors[{ti}],{kb},{ab},{tail},{normal});")
     deltas = {ti: (f"_kin_dx_{ti}", f"_kin_dy_{ti}")
               for ti in target_indices}
     return before, after, deltas

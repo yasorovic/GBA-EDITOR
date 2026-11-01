@@ -91,7 +91,10 @@ local sol = corps:get_collision_tile(corps.bounds.x, corps.bounds.y + corps.boun
 ```
 
 `boite:get_collision_tile(x, y)` interroge la carte à une position du monde, en pixels (absolue, elle
-ne dépend pas de la boîte) et rend le type de la tuile (0 = vide). Une boîte inactive ne touche
+ne dépend pas de la boîte) et rend l'index de type de la tuile (0 = vide, 1 = plein, 2 à 21 = pentes,
+22 à 25 = faces à sens unique ; le tableau complet est dans
+[Types de tuile de collision](types-de-tuile-collision.md)). Une face à sens unique se lit comme une
+tuile non nulle, au même titre qu'un bloc plein : comparez l'index pour les distinguer. Une boîte inactive ne touche
 personne. Un tag que le projet ne connaît pas est refusé au Build. Une boîte que l'acteur n'a pas
 donne `nil` : testez-la avec `if boite then`. `self.box_count` donne le nombre de boîtes de l'acteur.
 

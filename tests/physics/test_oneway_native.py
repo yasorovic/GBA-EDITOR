@@ -48,6 +48,15 @@ int main(void){
     /* gauche : colonne 6 (face x = 48), rangées 0 à 3 ; droite : colonne 8 (face x = 72) */
     for(int ty = 0; ty < 4; ty++){ carte[ty * 10 + 6] = 24; carte[ty * 10 + 8] = 25; }
     g_active_cmap = carte; g_cmap_w = 10; g_cmap_h = 8;
+#ifdef AVEC_TABLES
+    /* Les tables que le build émet : un bit (1 << sens) par rangée et par colonne qui porte une face. */
+    static u8 rangees[8], colonnes[10];
+    for(int ty = 0; ty < 8; ty++) for(int tx = 0; tx < 10; tx++){
+        int sens = g_tile_oneway[carte[ty * 10 + tx]];
+        if(sens){ rangees[ty] |= 1 << sens; colonnes[tx] |= 1 << sens; }
+    }
+    g_ow_rows = rangees; g_ow_cols = colonnes; g_ow_any = 0x1E;
+#endif
     Actor a;
 
     a = mk(16, 16, 0, 1024);  frame(&a); report("haut_atterrit", &a);
@@ -63,16 +72,17 @@ int main(void){
 """
 
 
-@pytest.fixture(scope="module")
-def resultats(tmp_path_factory):
+@pytest.fixture(scope="module", params=["lecture_de_la_carte", "tables_de_rangees"])
+def resultats(tmp_path_factory, request):
     compilateur = compilateur_hote()
     if compilateur is None:
         pytest.skip("aucun compilateur C hôte ; la collision est vérifiée en CI")
     from codegen.runtime_codegen.physics.character import character_solver_lines
     dossier = tmp_path_factory.mktemp("sens_unique")
-    (dossier / "probe.c").write_text(SONDE % {"helpers": "\n".join(character_solver_lines())}, encoding="utf-8")
+    (dossier / "probe.c").write_text(SONDE % {"helpers": "\n".join(character_solver_lines(True))}, encoding="utf-8")
     binaire = dossier / "probe"
     construit = subprocess.run([compilateur, "-std=gnu11", "-O0", "-w", "-I", str(INCLUDE),
+                                *(["-DAVEC_TABLES"] if request.param == "tables_de_rangees" else []),
                                 "-o", str(binaire), str(dossier / "probe.c")],
                                capture_output=True, text=True, env=environnement(compilateur))
     assert construit.returncode == 0, construit.stderr
@@ -113,3 +123,13 @@ def test_une_face_bas_arrete_l_acteur_qui_monte_dessous(resultats):
 
 def test_une_face_bas_se_traverse_par_dessus(resultats):
     assert resultats["bas_traverse_par_dessus"] == (40, 9, 0, 1024, 0)
+
+
+def test_une_passe_n_est_emise_que_pour_un_sens_present_dans_les_cartes():
+    from codegen.runtime_codegen.physics.character import character_solver_lines
+    aucune = "\n".join(character_solver_lines())
+    haut = "\n".join(character_solver_lines({1}))
+    tout = "\n".join(character_solver_lines(True))
+    assert "oneway_hit" not in aucune and "oneway_hit(1," in haut
+    assert "oneway_hit(2," not in haut and "oneway_hit(3," not in haut and "oneway_hit(4," not in haut
+    assert all(f"oneway_hit({n}," in tout for n in (1, 2, 3, 4))

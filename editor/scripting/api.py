@@ -1295,9 +1295,10 @@ RUNTIME_API: dict[str, ApiFunc] = {
     "collision.tile_at": ApiFunc(
         lua_name="collision.tile_at", c_func="collision_map_tile",
         params=[Param("x", PARAM_INT, doc="World position, in pixels"), Param("y", PARAM_INT, doc="World position, in pixels")], ret="int",
-        doc="Type of the collision-map tile at world position (x, y), in pixels. "
-            "0 = empty (or off the map). Useful for triggers, spawn zones and "
-            "custom movement.",
+        doc="Type index of the collision-map tile at world position (x, y), in pixels: "
+            "0 = empty (or off the map), 1 = solid block, 2 to 21 = slopes, 22 to 25 = one-way "
+            "faces. The Collision tile types page lists every index; a one-way tile reads as "
+            "non-zero like a solid one. Useful for triggers, spawn zones and custom movement.",
     ),
 
     # ── Compatibilité CollisionShape ─────────────────────────────────

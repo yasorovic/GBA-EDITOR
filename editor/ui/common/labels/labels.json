@@ -1688,7 +1688,7 @@
     "comped.collision_blocks_row": { "text": "Response" },
     "comped.collision_blocks": { "text": "Block" },
     "comped.collision_one_way": { "text": "One-way" },
-    "comped.collision_one_way_tip": { "text": "Makes a Block box stop only a body that comes from the side its face looks to; the other sides can be crossed. Against gravity is the usual platform. Applies to Block boxes of StaticBody and KinematicBody." },
+    "comped.collision_one_way_tip": { "text": "Makes a Block box stop only a body that comes from the side its face looks to; the other sides can be crossed. Against gravity is the usual platform. Needs the Block response: a Sensor box has nothing to cross." },
     "comped.one_way_off": { "text": "Off" },
     "comped.one_way_gravity": { "text": "Against gravity" },
     "comped.one_way_up": { "text": "Up" },

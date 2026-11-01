@@ -86,7 +86,7 @@ def physics_sleep_lines(scene, project_settings, scene_actors, actor_offset: int
 
     def update(target: str, indent: str) -> list[str]:
         return [
-            f"{indent}{{ s32* _r=g_rigid_rest[({target})->inst]; int _dx=({target})->x-_r[0], _dy=({target})->y-_r[1];",
+            f"{indent}{{ int* _r=g_rigid_rest[({target})->inst]; int _dx=({target})->x-_r[0], _dy=({target})->y-_r[1];",
             f"{indent}  if(_dx<= {radius}&&_dx>=-{radius}&&_dy<= {radius}&&_dy>=-{radius}){{",
             f"{indent}      if(({target})->physics_sleep<{frames}) ({target})->physics_sleep++;",
             f"{indent}      if(({target})->physics_sleep>={frames}) "

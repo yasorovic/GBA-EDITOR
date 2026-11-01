@@ -181,7 +181,7 @@ def test_la_carte_et_les_acteurs_partagent_une_seule_condition_de_traversee(tmp_
         pytest.skip("aucun compilateur C hôte ; le blocage est vérifié en CI")
     from codegen.runtime_codegen.physics.blocks import block_helper_lines
     from codegen.runtime_codegen.physics.character import character_solver_lines
-    probe = SONDE.split("%(helpers)s")[0] + "\n".join(character_solver_lines() + block_helper_lines(one_way=True))
+    probe = SONDE.split("%(helpers)s")[0] + "\n".join(character_solver_lines(True) + block_helper_lines(one_way=True))
     probe += "\nint main(void){ return oneway_open(1, 4, 4) && !oneway_open(1, 5, 4) && oneway_open(2, 5, 4) ? 0 : 1; }\n"
     (tmp_path / "probe.c").write_text(probe, encoding="utf-8")
     construit = subprocess.run([compilateur, "-std=gnu11", "-O0", "-w", "-I", str(INCLUDE),

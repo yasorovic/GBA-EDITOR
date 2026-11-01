@@ -30,6 +30,7 @@
 extern Actor g_actors[];
 extern u16 *g_actor_floor;
 extern u8 *g_drop_through;   /* frames restantes où un corps ignore les faces à sens unique, par `Actor.inst` */
+extern u8 g_drop_live;       /* au moins un compteur ci-dessus est non nul : le décompte de la frame ne tourne que alors */
 /* L'état de script de TOUS les acteurs : un bloc de `OBJ_STATE_STRIDE` octets par emplacement de
    `g_actors`, à l'indice `Actor.inst`. Chaque script y range sa structure d'état (la plus grande
    du projet fixe la taille d'un bloc) ; un emplacement n'en porte qu'une à la fois. */
@@ -547,7 +548,7 @@ static inline Vec2 actor_get_velocity(const Actor* s)    { return (Vec2){ s->vx,
 /* `physics_body:drop_through(n)` : ignorer les faces à sens unique (carte et acteurs) pendant `n` frames, celle de
    l'appel comprise. Sans effet dans un projet qui n'en a aucune (`g_drop_through` est alors nul). */
 static inline void actor_drop_through(Actor* s, int frames){
-    if (g_drop_through) g_drop_through[s->inst] = frames < 0 ? 0 : (frames > 255 ? 255 : (u8)frames);
+    if (g_drop_through) { g_drop_through[s->inst] = frames < 0 ? 0 : (frames > 255 ? 255 : (u8)frames); g_drop_live = 1; }
 }
 /* Applique la vélocité Q8 stockée à la position Q8 stockée — l'accumulateur
    sous-pixel est LITTÉRALEMENT s->x/s->y, donc rien à reporter ailleurs
