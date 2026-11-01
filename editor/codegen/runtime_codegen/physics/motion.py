@@ -22,8 +22,9 @@ def _move_lines(target: str, mode: str, gravity_x: int, gravity_y: int,
             body.append(f"{indent}if(({target})->vy>{max_fall}) ({target})->vy={max_fall};")
         body.append(f"{indent}actor_apply_velocity({target});")
         if sleep_frames:
+            # Le compteur ne se remet pas à zéro ici : une vitesse résiduelle sous le seuil ne doit pas empêcher le sommeil.
+            # `physics_sleep_lines` le remet à zéro quand la vitesse dépasse le seuil, et l'API de script quand elle l'écrit.
             return [f"{indent}if(({target})->physics_sleep<{sleep_frames}||({target})->vx||({target})->vy){{",
-                    f"{indent}    if(({target})->vx||({target})->vy) ({target})->physics_sleep=0;",
                     *[f"    {line}" for line in body], f"{indent}}}"]
         return body
     return []
@@ -71,21 +72,26 @@ def physics_motion_lines(scene, project_settings, scene_actors, actor_offset: in
 
 
 def physics_sleep_lines(scene, project_settings, scene_actors, actor_offset: int, pi: list[dict]) -> list[str]:
-    """Endort les Rigid restés sous le seuil après toutes les résolutions."""
+    """Endort les Rigid qui sont restés dans un rayon de `seuil x délai` autour d'une position d'ancrage.
+
+    Le repos se lit sur la position, pas sur la vitesse : une pile de corps garde une vitesse résiduelle (la gravité
+    ajoutée à chaque frame) que la correction de position, en pixels entiers, annule par à-coups, et ni la vitesse ni le
+    déplacement d'une frame à l'autre ne la verraient au repos. L'ancre vit dans `g_rigid_rest`, indexée par emplacement;
+    elle est reprise à la position courante dès que le corps en sort, ce qui remet le compteur à zéro."""
     _iterations, _max_fall, _damping, enabled, sleep_threshold, frames = (
         scene.effective_physics_simulation(project_settings))
     if not enabled:
         return []
-    threshold = round(sleep_threshold * 256)
+    radius = round(sleep_threshold * 256) * frames
 
     def update(target: str, indent: str) -> list[str]:
         return [
-            f"{indent}if(({target})->vx<= {threshold}&&({target})->vx>=-{threshold}&&"
-            f"({target})->vy<= {threshold}&&({target})->vy>=-{threshold}){{",
-            f"{indent}    if(({target})->physics_sleep<{frames}) ({target})->physics_sleep++;",
-            f"{indent}    if(({target})->physics_sleep>={frames}) "
+            f"{indent}{{ s32* _r=g_rigid_rest[({target})->inst]; int _dx=({target})->x-_r[0], _dy=({target})->y-_r[1];",
+            f"{indent}  if(_dx<= {radius}&&_dx>=-{radius}&&_dy<= {radius}&&_dy>=-{radius}){{",
+            f"{indent}      if(({target})->physics_sleep<{frames}) ({target})->physics_sleep++;",
+            f"{indent}      if(({target})->physics_sleep>={frames}) "
             f"{{ ({target})->vx=0; ({target})->vy=0; }}",
-            f"{indent}}}else ({target})->physics_sleep=0;",
+            f"{indent}  }}else {{ _r[0]=({target})->x; _r[1]=({target})->y; ({target})->physics_sleep=0; }} }}",
         ]
 
     lines: list[str] = []

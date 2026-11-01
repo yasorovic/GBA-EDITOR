@@ -923,7 +923,7 @@
     "sceneinsp.physics_linear_damping": { "text": "Linear damping:" },
     "sceneinsp.physics_linear_damping_tip": { "text": "Share of RigidBody velocity removed every frame. Zero preserves velocity; one removes it entirely." },
     "sceneinsp.physics_sleep": { "text": "Put resting RigidBody actors to sleep" },
-    "sceneinsp.physics_sleep_tip": { "text": "Stops simulating a RigidBody after its velocity stays below the threshold for the chosen number of frames. A new velocity wakes it." },
+    "sceneinsp.physics_sleep_tip": { "text": "Stops simulating a RigidBody once it stays within threshold x frames pixels of the same spot for the chosen number of frames. A hit that moves it further, or a new velocity written by a script, wakes it." },
     "sceneinsp.physics_sleep_threshold_prefix": { "text": "Threshold " },
     "sceneinsp.physics_sleep_frames_prefix": { "text": "After " },
     "sceneinsp.card.bg": {

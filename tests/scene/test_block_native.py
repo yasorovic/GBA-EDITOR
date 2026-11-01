@@ -20,6 +20,7 @@ typedef unsigned char u8; typedef signed char s8;
 typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
 #include "gba_debug.h"
+#define BS_ATTR_IWRAM __attribute__((noinline))   /* hors GBA : fonction ordinaire (cf. runtime_api_inline.h) */
 Actor g_actors[8];
 int g_spool_start = 0, g_spool_hw = 0;
 u32 g_alive_bits[1];
@@ -148,6 +149,7 @@ int main(void){
         rigid_pair_resolve(&pair);
         report_motion("rigid_friction", 0);
     }
+
 
     {   /* Une plateforme déplace une seule fois le corps posé sur son ancienne face supérieure. */
         int carry_x=0, carry_y=0; u8 carried=0;
@@ -323,6 +325,25 @@ def test_un_rigid_pose_passe_par_la_table_d_impulsions_et_non_le_blocage_histori
         _projet(), Scene(name="Physics", physics_gravity_override=True,
                          physics_solver_iterations=6), _scene(rigid, sol), 0))
     assert "_it<6" in six_passes
+
+
+def test_plus_de_255_paires_rigid_utilisent_des_compteurs_16_bits_et_le_rejet_par_rectangles():
+    from core.models.components import PhysicsBodyComponent
+    crates = []
+    for i in range(24):                 # 24 Rigid : 276 paires, au-delà de ce qu'un compteur u8 peut parcourir
+        crate = _acteur(f"Crate{i}", tag="body", response="block")
+        crate.components.append(PhysicsBodyComponent(mode="RigidBody"))
+        crates.append(crate)
+    lignes = "\n".join(_lignes_impulsions(_projet(), crates))
+    assert "static const RigidPair _rigid_pairs[276]" in lignes
+    assert "u8 _k" not in lignes
+    # Les rectangles sont relevés une fois, et seules les paires retenues par la première passe sont rejouées.
+    assert lignes.count("rigid_side_rect(") == 1
+    assert "static s16 _rigid_rect[24][5];" in lignes
+    assert "u16 _live_n=rigid_pairs_scan(_rigid_pairs,_rigid_pair_sides,_rigid_rect,276,_rigid_live,30);" in lignes
+    assert "for(u8 _it=1;_it<4;_it++)" in lignes
+    # Une paire dont les deux côtés sont au repos (StaticBody ou Rigid endormi) n'est pas rejouée.
+    assert "rigid_side_rect(_rigid_sides[_s][0],_rigid_sides[_s][1],_rigid_sides[_s][2],30,_rigid_rect[_s]);" in lignes
 
 
 def test_la_table_encode_la_masse_inverse_de_chaque_rigid():

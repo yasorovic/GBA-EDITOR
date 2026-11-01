@@ -2033,7 +2033,7 @@
     "sceneinsp.physics_linear_damping": { "text": "Damping linéaire :" },
     "sceneinsp.physics_linear_damping_tip": { "text": "Part de la vitesse des RigidBody retirée à chaque frame. Zéro conserve la vitesse, un la retire entièrement." },
     "sceneinsp.physics_sleep": { "text": "Endormir les RigidBody au repos" },
-    "sceneinsp.physics_sleep_tip": { "text": "Arrête de simuler un RigidBody lorsque sa vitesse reste sous le seuil pendant le nombre de frames choisi. Une nouvelle vitesse le réveille." },
+    "sceneinsp.physics_sleep_tip": { "text": "Arrête de simuler un RigidBody lorsqu'il reste dans un rayon de seuil x frames pixels autour du même point pendant le nombre de frames choisi. Un choc qui le déplace plus loin, ou une vitesse écrite par un script, le réveille." },
     "sceneinsp.physics_sleep_threshold_prefix": { "text": "Seuil " },
     "sceneinsp.physics_sleep_frames_prefix": { "text": "Après " },
     "sceneinsp.card.physics": { "text": "Physique" },

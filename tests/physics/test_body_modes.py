@@ -226,7 +226,11 @@ def test_un_rigid_applique_damping_vitesse_maximale_et_sommeil_de_scene():
     assert "->vy*192" in motion
     assert "->vy>768" in motion
     assert "physics_sleep++" in sleep
-    assert "->vy<= 13" in sleep
+    # Le repos se lit sur la position : rayon = seuil (13 en Q8) x délai (20 frames), autour d'une ancre par emplacement.
+    assert "_dy<= 260&&_dy>=-260" in sleep
+    assert "g_rigid_rest[(&g_actors[2])->inst]" in sleep
+    assert "_r[0]=(&g_actors[2])->x; _r[1]=(&g_actors[2])->y; (&g_actors[2])->physics_sleep=0;" in sleep
+    assert "->vy<= 13" not in sleep
 
 
 def test_un_rigid_module_sa_gravite_et_peut_refuser_le_sommeil():

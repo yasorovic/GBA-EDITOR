@@ -225,7 +225,7 @@ def gen_scene_tick(
             L.append(f"    static const ContactPair _col_pairs[{len(rows)}]={{")
             L += [f"        {{{i},{j},{allowed},{a},{b}}}," for i, j, allowed, a, b in rows]
             L += ["    };",
-                  f"    for(u8 _k=0;_k<{len(rows)};_k++) contact_pair_run(&_col_pairs[_k],&_col_prev[_k]);"]
+                  f"    for(u16 _k=0;_k<{len(rows)};_k++) contact_pair_run(&_col_pairs[_k],&_col_prev[_k]);"]
 
     # Déclencheurs SoundFx par nom d'input (2026-09-27) : les events de script
     # on_button_* ont disparu (un script écrit `if input:pressed(nom) then`
