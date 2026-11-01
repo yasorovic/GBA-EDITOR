@@ -38,11 +38,23 @@
 #define MGBA_DEBUG_SEND     0x0100
 #define MGBA_DEBUG_LEVEL_INFO 3
 
+<<<<<<< HEAD
 static char _debug_buf[256];
 static int  _debug_len = 0;
 static int  _debug_physics_characters = 0;
 static int  _debug_physics_blocks = 0;
 static int  _debug_physics_contacts = 0;
+=======
+/* Un seul tampon pour tout le jeu : défini dans main.c (qui pose GBA_ENGINE_IMPL), simplement
+ * déclaré ailleurs. En `static`, chaque fichier d'acteur qui inlinait `debug_flush` (via
+ * `actor_exists_warn`) en gardait une copie de 260 octets d'IWRAM. */
+extern char _debug_buf[256];
+extern int  _debug_len;
+#ifdef GBA_ENGINE_IMPL
+char _debug_buf[256];
+int  _debug_len = 0;
+#endif
+>>>>>>> 8f25fc5 (Noyau de rendu partagé)
 
 static inline void debug_init(void) {
     MGBA_DEBUG_ENABLE = 0xC0DE;
