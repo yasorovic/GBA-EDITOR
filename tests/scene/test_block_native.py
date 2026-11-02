@@ -282,7 +282,7 @@ def _lignes(p, acteurs):
 def _lignes_impulsions(p, acteurs):
     from codegen.runtime_codegen.physics.impulses import impulse_tick_lines
     from core.models.scene import Scene
-    return impulse_tick_lines(p, Scene(name="Physics"), _scene(*acteurs), 0)
+    return impulse_tick_lines(p, Scene(name="Physics"), _scene(*acteurs), 0, [], None)
 
 
 def test_le_mobile_recoit_la_table_des_boites_bloquantes():
@@ -323,7 +323,7 @@ def test_un_rigid_pose_passe_par_la_table_d_impulsions_et_non_le_blocage_histori
 
     six_passes = "\n".join(impulse_tick_lines(
         _projet(), Scene(name="Physics", physics_gravity_override=True,
-                         physics_solver_iterations=6), _scene(rigid, sol), 0))
+                         physics_solver_iterations=6), _scene(rigid, sol), 0, [], None))
     assert "_it<6" in six_passes
 
 

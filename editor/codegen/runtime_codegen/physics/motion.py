@@ -6,7 +6,7 @@ from codegen.runtime_codegen.shared_pool_gen import shared_models
 from core.models.components import PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_RIGID
 
 
-def _move_lines(target: str, mode: str, gravity_x: int, gravity_y: int,
+def _move_lines(target: str, mode: str, gravity_x: int | str, gravity_y: int | str,
                 damping_retain: int, max_fall: int, sleep_frames: int,
                 indent: str) -> list[str]:
     if mode == PHYSICS_BODY_KINEMATIC:
@@ -30,11 +30,25 @@ def _move_lines(target: str, mode: str, gravity_x: int, gravity_y: int,
     return []
 
 
-def physics_motion_lines(scene, project_settings, scene_actors, actor_offset: int, pi: list[dict]) -> list[str]:
-    """Le pas automatique, après les scripts et avant toute résolution de collision."""
+def physics_motion_lines(scene, project_settings, scene_actors, actor_offset: int, pi: list[dict],
+                         dynamic_gravity: bool = False) -> list[str]:
+    """Le pas automatique, après les scripts et avant toute résolution de collision.
+
+    `dynamic_gravity` : un script écrit `scene.gravity` (cf. `project_sets_gravity`), la gravité se lit donc dans
+    `g_gravity_x/y` au lieu d'être une constante de la scène."""
     gravity_x, gravity_y = scene.effective_physics_gravity(project_settings)
     gx = round(gravity_x * 256)
     gy = round(gravity_y * 256)
+
+    def gravity_terms(body, mode):
+        scale = body.gravity_scale if body and mode == PHYSICS_BODY_RIGID else 1.0
+        if not dynamic_gravity:
+            return round(gx * scale), round(gy * scale)
+        if scale == 1.0:
+            return "g_gravity_x", "g_gravity_y"
+        k = round(scale * 256)
+        return f"(g_gravity_x*{k})/256", f"(g_gravity_y*{k})/256"
+
     _iterations, max_fall_speed, damping, sleep_enabled, _sleep_threshold, sleep_delay = (
         scene.effective_physics_simulation(project_settings))
     damping_retain = round((1.0 - damping) * 256)
@@ -44,8 +58,7 @@ def physics_motion_lines(scene, project_settings, scene_actors, actor_offset: in
     for index, (actor, _sprite) in enumerate(scene_actors):
         mode = physics_body_mode(actor)
         body = physics_body(actor)
-        body_gx = round(gx * body.gravity_scale) if body and mode == PHYSICS_BODY_RIGID else gx
-        body_gy = round(gy * body.gravity_scale) if body and mode == PHYSICS_BODY_RIGID else gy
+        body_gx, body_gy = gravity_terms(body, mode)
         body_sleep = sleep_frames if body is None or body.can_sleep else 0
         move = _move_lines(f"&g_actors[{actor_offset + index}]", mode, body_gx, body_gy,
                            damping_retain, max_fall, body_sleep, "        ")
@@ -56,8 +69,7 @@ def physics_motion_lines(scene, project_settings, scene_actors, actor_offset: in
     for model in shared_models(pi):
         mode = physics_body_mode(model["prefab"])
         body = physics_body(model["prefab"])
-        body_gx = round(gx * body.gravity_scale) if body and mode == PHYSICS_BODY_RIGID else gx
-        body_gy = round(gy * body.gravity_scale) if body and mode == PHYSICS_BODY_RIGID else gy
+        body_gx, body_gy = gravity_terms(body, mode)
         body_sleep = sleep_frames if body is None or body.can_sleep else 0
         move = _move_lines("_a", mode, body_gx, body_gy, damping_retain, max_fall, body_sleep, "            ")
         if move:

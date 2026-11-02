@@ -87,6 +87,22 @@ extern int g_scene_w, g_scene_h;   /* taille du monde de la scène (px), posée 
    côté script — le suivi émis en a fait un choix de build. */
 extern int g_scene_scroll_h, g_scene_scroll_v;
 extern int g_scene_collision_layer;   /* index BG (0-3) portant la carte de collision */
+/* Gravité de la scène en Q8 (256 = 1 px/frame²), posée par scene_init puis modifiable par script (`scene.gravity`).
+   `g_support_normal` est le côté d'appui qui en découle : 1 bas, 2 haut, 3 droite, 4 gauche (axe dominant ; le bas sans
+   gravité, comme avant). Un seul endroit le recalcule : scene_set_gravity. */
+extern int g_gravity_x, g_gravity_y;
+extern u8 g_support_normal;
+extern int g_spool_start, g_spool_hw;
+static inline Vec2 scene_get_gravity(void) { return (Vec2){ g_gravity_x, g_gravity_y }; }
+static inline void scene_set_gravity(Vec2 g) {
+    int ax = g.x < 0 ? -g.x : g.x, ay = g.y < 0 ? -g.y : g.y;
+    if (g.x != g_gravity_x || g.y != g_gravity_y) {   /* un Rigid endormi doit tomber dans la nouvelle gravité */
+        for (int i = 0; i < g_scene_placed; i++) g_actors[i].physics_sleep = 0;
+        for (int i = g_spool_start; i < g_spool_hw; i++) g_actors[i].physics_sleep = 0;
+    }
+    g_gravity_x = g.x; g_gravity_y = g.y;
+    g_support_normal = ax > ay ? (g.x > 0 ? 3 : 4) : (g.y < 0 ? 2 : 1);
+}
 static inline void camera_set_position(Vec2 p)  { cam_x=p.x; cam_y=p.y; }
 static inline Vec2 camera_get_position(void)     { return (Vec2){ cam_x, cam_y }; }
 
@@ -546,9 +562,18 @@ static inline void actor_add_velocity(Actor* s, Vec2 dv){
 }
 static inline Vec2 actor_get_velocity(const Actor* s)    { return (Vec2){ s->vx, s->vy }; }
 /* `physics_body:drop_through(n)` : ignorer les faces à sens unique (carte et acteurs) pendant `n` frames, celle de
-   l'appel comprise. Sans effet dans un projet qui n'en a aucune (`g_drop_through` est alors nul). */
+   l'appel comprise. Sans effet dans un projet qui n'en a aucune (`g_drop_through` est alors nul).
+   L'appel retire aussi le contact au sol : un acteur immobile n'est pas relu par la carte (`grounded` garde sa valeur) et
+   un script qui n'applique la gravité qu'en l'air ne le ferait jamais tomber ; sans contact il tombe dès la frame suivante,
+   et un sol plein sous lui le reprend aussitôt. */
 static inline void actor_drop_through(Actor* s, int frames){
-    if (g_drop_through) { g_drop_through[s->inst] = frames < 0 ? 0 : (frames > 255 ? 255 : (u8)frames); g_drop_live = 1; }
+    if (!g_drop_through) return;
+    g_drop_through[s->inst] = frames < 0 ? 0 : (frames > 255 ? 255 : (u8)frames); g_drop_live = 1;
+    if (frames > 0) {
+        s->collision.grounded = 0;
+        for (int i = 0; i < s->collision.box_count; i++) s->collision.boxes[i].grounded = 0;
+        if (g_actor_floor) g_actor_floor[s->inst] = 0;
+    }
 }
 /* Applique la vélocité Q8 stockée à la position Q8 stockée — l'accumulateur
    sous-pixel est LITTÉRALEMENT s->x/s->y, donc rien à reporter ailleurs

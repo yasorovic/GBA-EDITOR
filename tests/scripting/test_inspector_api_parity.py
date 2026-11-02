@@ -550,3 +550,12 @@ def test_c_une_paire_appelle_enter_collide_exit_dans_l_ordre_avec_les_bons_tags(
     assert sortie_sonde["contact_3"] == [1, 1, 1, 1]          # exit
     assert sortie_sonde["contact_4"] == [1, 1, 1, 1]          # rien de plus une fois éloignés
     assert sortie_sonde["contact_5"] == [1, 1, 1, 1]          # un côté inactif ne touche pas
+
+
+def test_c_scene_gravity_choisit_le_cote_d_appui_et_reveille_les_rigid(sortie_sonde):
+    """`scene.gravity` : l'axe dominant donne le côté d'appui (1 bas, 2 haut, 3 droite, 4 gauche), le bas sans gravité
+    ou à égalité ; un Rigid endormi est réveillé quand la gravité change, pas quand elle est réécrite à l'identique."""
+    assert sortie_sonde["gravite_reveil"] == [0, 0]
+    assert sortie_sonde["gravite_inchangee"] == [30]
+    assert sortie_sonde["gravite_normales"] == [2, 3, 4, 1, 1, 2, 1]
+    assert sortie_sonde["gravite_lue"] == [-12, 34]

@@ -52,14 +52,26 @@ def hook_lines(pi: list[dict], event: str, has_event) -> list[str]:
     return _loop(cases) if cases else []
 
 
-def tile_lines(pi: list[dict], has_event, map_collider_mask) -> list[str]:
-    """La résolution contre la carte de collision, pour les seuls Character bodies."""
+def tile_lines(pi: list[dict], has_event, map_collider_mask, carried=frozenset()) -> list[str]:
+    """La résolution contre la carte de collision, pour les seuls Character bodies.
+
+    `carried` : les modèles dont une instance peut être portée par une plateforme Kinematic. Comme pour un acteur posé
+    porté, le déplacement de la plateforme (`_kin_pd`, cf. `physics.kinematic`) s'ajoute à la vitesse le temps de la
+    résolution, puis la vitesse propre est restaurée."""
     cases = []
     for m in shared_models(pi):
         mask = map_collider_mask(m["prefab"])
         if not mask:
             continue
         cb = f"{m['sym']}_on_tile_collide" if has_event(m["sym"], "on_tile_collide") else "NULL"
+        if m["model_id"] in carried:
+            cases.append(
+                f"        case {m['model_id']}: {{ int _kin_i=_pk-g_spool_start; int _kin_ovx=_a->vx,_kin_ovy=_a->vy;\n"
+                "            int _kin_ivx=_kin_ovx+_kin_pd[_kin_i][0],_kin_ivy=_kin_ovy+_kin_pd[_kin_i][1];\n"
+                "            _a->vx=_kin_ivx; _a->vy=_kin_ivy;\n"
+                f"            resolve_actor_tiles(_a, {mask}, {cb});\n"
+                "            _a->vx=(_kin_ivx&&!_a->vx)?0:_kin_ovx; _a->vy=(_kin_ivy&&!_a->vy)?0:_kin_ovy; } break;")
+            continue
         cases.append(f"        case {m['model_id']}: resolve_actor_tiles(_a, {mask}, {cb}); break;")
     return _loop(cases) if cases else []
 

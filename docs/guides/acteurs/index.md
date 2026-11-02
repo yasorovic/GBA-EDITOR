@@ -31,6 +31,14 @@ Peindre la carte de collision, donner une boîte à un acteur, ne plus traverser
 Les 26 index de la carte de collision, les vues index et normales, les faces à sens unique.
 :::
 
+:::{grid-item-card} Corps physiques
+:link: corps-physiques
+:link-type: doc
+:class-card: backstage-card backstage-card-purple
+
+Les quatre modes de corps, la gravité de la scène, les plateformes mobiles, les caisses et les sols à sens unique.
+:::
+
 :::{grid-item-card} Gravité et saut
 :link: gravite-saut
 :link-type: doc
@@ -56,5 +64,6 @@ Déplacer un acteur <deplacer-acteur>
 Collisions <collisions>
 Types de tuile de collision <types-de-tuile-collision>
 Gravité et saut <gravite-saut>
+Corps physiques <corps-physiques>
 Caméra <camera>
 ```

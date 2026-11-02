@@ -2131,6 +2131,15 @@ RUNTIME_PROPS: dict[str, ApiProp] = {
             "the \"collision layer\" radio button of the inspector. Read-only: the map "
             "is chosen at build. Ex: layer:get(scene.collision_layer):hide()",
     ),
+    "scene.gravity": ApiProp(
+        lua_name="scene.gravity", c_getter="scene_get_gravity", c_setter="scene_set_gravity", ptype=PARAM_VEC2,
+        doc="Gravity of the scene (a vec2, .x/.y), in Q8: 256 = 1 pixel/frame². It starts at the scene's own gravity "
+            "(the project default or the scene override). Writing it changes the gravity of every RigidBody (scaled "
+            "by its gravity_scale) and the side a body rests on: grounded, floor and the carrying of a "
+            "KinematicBody follow the dominant axis (the bottom when the gravity is zero). A one-way face set to "
+            "`gravity` keeps the direction it had when the scene started. A CharacterBody applies no gravity of "
+            "its own: read it here to apply it. Ex: scene.gravity = vec2(0, 0 - 64)",
+    ),
     "scene.size": ApiProp(
         lua_name="scene.size", c_getter="", ptype=PARAM_RECT, read_only=True,
         getter_expr="(Rect){0, 0, g_scene_w, g_scene_h}",
@@ -2465,8 +2474,10 @@ def box_tag_constant(tag: str) -> str:
 
 
 def scene_constant(scene_name: str) -> str:
-    """'Victory' → 'SCENE_IDX_VICTORY'"""
-    return f"SCENE_IDX_{c_ident(scene_name)}"
+    """'Victory' → 'SCENE_IDX_VICTORY' : EXACTEMENT la dérivation du `#define` émis par
+    codegen/runtime_codegen/headers.py (`c_sym(nom).upper()`) : `c_ident` diffère
+    de `c_sym` sur un nom de scène qui commence par un chiffre."""
+    return f"SCENE_IDX_{c_sym(scene_name).upper()}"
 
 
 def camera_constant(camera_name: str) -> str:

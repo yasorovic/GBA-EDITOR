@@ -12,8 +12,9 @@ from core.models.components import (
 from core.models.settings import tags_collide
 from core.models.collision_tiles import ONEWAY_UP
 from codegen.runtime_codegen.physics.body import (
-    physics_body_mode, physics_collider_entries, support_normal,
+    physics_body_mode, physics_collider_entries, project_sets_gravity, support_normal,
 )
+from codegen.runtime_codegen.shared_pool_gen import shared_models
 
 
 def project_has_kinematic(p) -> bool:
@@ -70,47 +71,140 @@ def _body_boxes(owner, sprite) -> list[tuple[int, object]]:
             if box.active]
 
 
+def _carry_pairs(p, kinematic, kinematic_sprite, target, target_sprite) -> list[tuple[int, int]]:
+    """Les couples (rang de la boîte de la plateforme, rang de celle du passager) qui peuvent se porter."""
+    if physics_body_mode(target) not in (PHYSICS_BODY_CHARACTER, PHYSICS_BODY_RIGID):
+        return []
+    return [(kb, ab) for kb, kbox in _block_boxes(kinematic, kinematic_sprite)
+            for ab, abox in _body_boxes(target, target_sprite)
+            if (tags_collide(p.settings, kbox.tag or "body", abox.tag or "body")
+                and collision_shapes_collide(kbox, abox))]
+
+
+def _carry_groups(p, scene_actors, actor_offset: int, pi, shown):
+    """Qui porte qui : (posé/posé, posé/pool, pool/posé, pool/pool). Un modèle du pool est désigné par son identité
+    (`model_id`) : ses emplacements ne sont connus qu'à l'exécution.
+
+    Clés : (acteur plateforme, acteur passager), (acteur plateforme, modèle passager), (modèle plateforme, acteur
+    passager), (modèle plateforme, modèle passager) ; valeur : les couples de boîtes."""
+    placed = [(i, owner, sprite) for i, (owner, sprite) in enumerate(scene_actors)]
+    pool = [(m["model_id"], m["prefab"], shown(p, m["prefab"])[1]) for m in shared_models(pi)] if shown else []
+    is_k = lambda owner: physics_body_mode(owner) == PHYSICS_BODY_KINEMATIC
+    pp: dict = {}
+    for ki, kinematic, ks in placed:
+        if not is_k(kinematic):
+            continue
+        for ti, target, ts in placed:
+            if ti != ki and (pairs := _carry_pairs(p, kinematic, ks, target, ts)):
+                pp[(actor_offset + ki, actor_offset + ti)] = pairs
+    pool_passenger: dict = {}
+    pool_platform_placed: dict = {}
+    pool_platform_pool: dict = {}
+    for ki, kinematic, ks in placed:
+        if is_k(kinematic):
+            for mid, target, ts in pool:
+                if pairs := _carry_pairs(p, kinematic, ks, target, ts):
+                    pool_passenger[(actor_offset + ki, mid)] = pairs
+    for mk, kinematic, ks in pool:
+        if not is_k(kinematic):
+            continue
+        for ti, target, ts in placed:
+            if pairs := _carry_pairs(p, kinematic, ks, target, ts):
+                pool_platform_placed[(mk, actor_offset + ti)] = pairs
+        for mt, target, ts in pool:
+            if mt != mk and (pairs := _carry_pairs(p, kinematic, ks, target, ts)):
+                pool_platform_pool[(mk, mt)] = pairs
+    return pp, pool_passenger, pool_platform_placed, pool_platform_pool
+
+
+def pool_carried_models(p, scene_actors, actor_offset: int, pi, shown) -> set[int]:
+    """Les modèles du pool dont une instance peut être portée par une plateforme : leur résolution contre la carte
+    reçoit alors le déplacement de la plateforme, comme celle d'un passager posé (cf. `shared_pool_gen.tile_lines`)."""
+    _pp, pool_passenger, _kp, kk = _carry_groups(p, scene_actors, actor_offset, pi, shown)
+    return {mid for _ki, mid in pool_passenger} | {mt for _mk, mt in kk}
+
+
 def kinematic_tick_parts(
-        p, scene_actors, actor_offset: int, scene=None,
+        p, scene_actors, actor_offset: int, scene=None, pi=(), shown=None,
 ) -> tuple[list[str], list[str], dict[int, tuple[str, str]]]:
-    """Instantanés avant mouvement, transport après résolution, puis deltas par passager.
+    """Instantanés avant mouvement, transport après résolution, puis deltas par passager posé.
 
     Le passager repose sur la face de la plateforme qui regarde la gravité de la scène (`support_normal`) : le dessus
-    sous la gravité habituelle, le dessous sous une gravité vers le haut, un côté sous une gravité latérale."""
+    sous la gravité habituelle, le dessous sous une gravité vers le haut, un côté sous une gravité latérale.
+
+    Plateformes et passagers peuvent être posés ou nés dans le pool partagé (`pi`, `shown`). Le delta d'un passager
+    posé est une paire de locales ; celui d'un passager du pool vit dans `_kin_pd`, une ligne par emplacement, que
+    `shared_pool_gen.tile_lines` ajoute à sa vitesse pour sa résolution contre la carte."""
     normal = support_normal(scene, p.settings) if scene is not None else ONEWAY_UP
-    groups: dict[tuple[int, int], list[tuple[int, int]]] = {}
-    for ki, (kinematic, kinematic_sprite) in enumerate(scene_actors):
-        if physics_body_mode(kinematic) != PHYSICS_BODY_KINEMATIC:
-            continue
-        for ti, (target, target_sprite) in enumerate(scene_actors):
-            if ti == ki or physics_body_mode(target) not in (PHYSICS_BODY_CHARACTER, PHYSICS_BODY_RIGID):
-                continue
-            pairs = [(kb, ab) for kb, kbox in _block_boxes(kinematic, kinematic_sprite)
-                     for ab, abox in _body_boxes(target, target_sprite)
-                     if (tags_collide(p.settings, kbox.tag or "body", abox.tag or "body")
-                         and collision_shapes_collide(kbox, abox))]
-            if pairs:
-                groups[(actor_offset + ki, actor_offset + ti)] = pairs
-    if not groups:
+    # Un script écrit `scene.gravity` : le côté d'appui se lit à l'exécution, quel que soit celui du départ.
+    dynamic = project_sets_gravity(p)
+    groups, pool_passenger, pool_platform_placed, pool_platform_pool = _carry_groups(
+        p, scene_actors, actor_offset, pi, shown)
+    if not (groups or pool_passenger or pool_platform_placed or pool_platform_pool):
         return [], [], {}
 
-    kinematic_indices = sorted({ki for ki, _ in groups})
-    target_indices = sorted({ti for _, ti in groups})
+    def carry(platform: str, passenger: str, kb: int, ab: int, old_x: str, old_y: str, carried: str,
+              dx: str, dy: str) -> str:
+        tail = f"{old_x},{old_y},{carried},{dx},{dy}"
+        if normal == ONEWAY_UP and not dynamic:
+            return f"kinematic_carry({platform},{passenger},{kb},{ab},{tail});"
+        return f"kinematic_carry_n({platform},{passenger},{kb},{ab},{tail},{'g_support_normal' if dynamic else normal});"
+
+    spool = shared_models(pi)[0]["spool"] if (pool_passenger or pool_platform_placed or pool_platform_pool) else None
+    size = spool["end"] - spool["start"] if spool else 0
+    kinematic_indices = sorted({ki for ki, _ in groups} | {ki for ki, _ in pool_passenger})
+    target_indices = sorted({ti for _, ti in groups} | {ti for _, ti in pool_platform_placed})
+    pool_platforms = sorted({mk for mk, _ in pool_platform_placed} | {mk for mk, _ in pool_platform_pool})
     before = [line for ki in kinematic_indices for line in (
         f"    int _kin_old_x_{ki}=g_actors[{ki}].x;",
         f"    int _kin_old_y_{ki}=g_actors[{ki}].y;",
     )]
+    if pool_platforms:
+        before += [f"    static int _kin_po[{size}][2] EWRAM_BSS;       /* position d'avant mouvement des plateformes du pool */",
+                   "    POOL_EACH(_kk){",
+                   "        switch(g_actors[_kk].model){",
+                   *[f"        case {mk}:" for mk in pool_platforms],
+                   "            _kin_po[_kk-g_spool_start][0]=g_actors[_kk].x; _kin_po[_kk-g_spool_start][1]=g_actors[_kk].y; break;",
+                   "        default: break;",
+                   "        }",
+                   "    }"]
     after = [line for ti in target_indices for line in (
         f"    int _kin_dx_{ti}=0,_kin_dy_{ti}=0;",
     )]
+    if pool_passenger or pool_platform_pool:
+        after += [f"    static int _kin_pd[{size}][2] EWRAM_BSS;       /* déplacement porté, par emplacement du pool */",
+                  "    for(int _kz=0;_kz<g_spool_hw-g_spool_start;_kz++) _kin_pd[_kz][0]=_kin_pd[_kz][1]=0;"]
     for (ki, ti), pairs in groups.items():
         carried = f"_kin_carried_{ki}_{ti}"
         after.append(f"    u8 {carried}=0;")
         for kb, ab in pairs:
-            tail = f"_kin_old_x_{ki},_kin_old_y_{ki},&{carried},&_kin_dx_{ti},&_kin_dy_{ti}"
-            after.append(
-                f"    kinematic_carry(&g_actors[{ki}],&g_actors[{ti}],{kb},{ab},{tail});" if normal == ONEWAY_UP else
-                f"    kinematic_carry_n(&g_actors[{ki}],&g_actors[{ti}],{kb},{ab},{tail},{normal});")
+            after.append("    " + carry(f"&g_actors[{ki}]", f"&g_actors[{ti}]", kb, ab, f"_kin_old_x_{ki}",
+                                         f"_kin_old_y_{ki}", f"&{carried}", f"&_kin_dx_{ti}", f"&_kin_dy_{ti}"))
+    for (ki, mid), pairs in pool_passenger.items():
+        after += ["    POOL_EACH(_ps){",
+                  f"        if(g_actors[_ps].model!={mid}) continue;",
+                  "        u8 _pc=0; int* _pd=_kin_pd[_ps-g_spool_start];",
+                  *["        " + carry(f"&g_actors[{ki}]", "&g_actors[_ps]", kb, ab, f"_kin_old_x_{ki}",
+                                       f"_kin_old_y_{ki}", "&_pc", "&_pd[0]", "&_pd[1]") for kb, ab in pairs],
+                  "    }"]
+    for (mk, ti), pairs in pool_platform_placed.items():
+        after += ["    POOL_EACH(_ks){",
+                  f"        if(g_actors[_ks].model!={mk}) continue;",
+                  "        u8 _kc=0; int* _po=_kin_po[_ks-g_spool_start];",
+                  *["        " + carry("&g_actors[_ks]", f"&g_actors[{ti}]", kb, ab, "_po[0]", "_po[1]", "&_kc",
+                                       f"&_kin_dx_{ti}", f"&_kin_dy_{ti}") for kb, ab in pairs],
+                  "    }"]
+    for (mk, mt), pairs in pool_platform_pool.items():
+        after += ["    POOL_EACH(_ks){",
+                  f"        if(g_actors[_ks].model!={mk}) continue;",
+                  "        int* _po=_kin_po[_ks-g_spool_start];",
+                  "        POOL_EACH(_ps){",
+                  f"            if(g_actors[_ps].model!={mt}) continue;",
+                  "            u8 _kc=0; int* _pd=_kin_pd[_ps-g_spool_start];",
+                  *["            " + carry("&g_actors[_ks]", "&g_actors[_ps]", kb, ab, "_po[0]", "_po[1]", "&_kc",
+                                           "&_pd[0]", "&_pd[1]") for kb, ab in pairs],
+                  "        }",
+                  "    }"]
     deltas = {ti: (f"_kin_dx_{ti}", f"_kin_dy_{ti}")
               for ti in target_indices}
     return before, after, deltas

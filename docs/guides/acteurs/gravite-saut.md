@@ -9,23 +9,30 @@ une boîte **Collision** en mode **Solid** et un script. Ces deux éléments se 
 
 ## 1. Ajouter la gravité
 
-La carte de collision arrête l'acteur contre un mur, un sol ou un plafond, mais elle n'ajoute pas
-de gravité : un acteur immobile dans les airs y reste. Pour la gravité, ajoutez une accélération
-vers le bas à chaque frame :
+La carte de collision arrête l'acteur contre un mur, un sol ou un plafond, mais un `CharacterBody` ne
+reçoit aucune gravité automatique : un acteur immobile dans les airs y reste. La gravité se règle une
+fois pour le projet (**Game > Project Settings > Physics & Collisions**, en pixels par frame au carré) et
+peut être remplacée par scène. Le script la lit dans `scene.gravity` et l'ajoute à chaque frame
+quand l'acteur est en l'air :
 
 ```lua
-local gravite = 24
-
 function on_update()
     local body = self:physics_body()
-    body.velocity = vec2(input:get_axis("horizontal") * 2 * 256, body.velocity.y + gravite)
+    local g = scene.gravity                      -- la gravité de la scène, en Q8
+
+    local vitesse_y = body.velocity.y
+    if not body.grounded then vitesse_y = vitesse_y + g.y end
+
+    body.velocity = vec2(input:get_axis("horizontal") * 2 * 256, vitesse_y)
     body:apply_velocity()
 end
 ```
 
-`gravite` s'exprime dans la même échelle que `body.velocity` (`256` vaut 1 pixel par frame). Ici,
-`24` ajoute une petite vitesse vers le bas à chaque frame. Quand la boîte touche le sol peint, le
-moteur annule la vitesse verticale et l'acteur reste posé.
+`scene.gravity` s'exprime dans la même échelle que `body.velocity` : `256` vaut 1 pixel par frame (une
+gravité de `0,25` px/frame² vaut donc `64`). Quand la boîte touche le sol peint, le moteur annule la
+vitesse verticale et l'acteur reste posé. Tous les acteurs d'une scène suivent ainsi la même gravité,
+et une scène peut en avoir une autre (une scène lunaire, par exemple) sans toucher aux scripts. Voir
+[Corps physiques](corps-physiques.md).
 
 Pour un jeu vu de dessus, vous n'avez pas besoin de gravité : une simple `body.velocity` suffit.
 
@@ -35,7 +42,8 @@ Après la résolution des collisions, le moteur met à jour `body.grounded` : `t
 solide repose sur la carte de collision, un StaticBody ou un KinematicBody posé, `false` dans les
 airs. Cette propriété empêche de sauter à chaque frame : le joueur ne saute que depuis le sol.
 
-`body.floor` donne l'Actor du StaticBody ou KinematicBody qui porte actuellement le personnage.
+`body.floor` donne l'Actor qui porte actuellement le personnage (StaticBody, KinematicBody, ou un autre corps
+sur lequel il repose).
 Il vaut `nil` quand le personnage repose sur la carte ou se trouve dans les airs. Vous pouvez ainsi
 identifier une plateforme particulière sans refaire un test de collision :
 
@@ -79,12 +87,12 @@ exports = {
     force_saut = { type = "int", default = 900, label = "Force du saut", min = 0, max = 2048 },
 }
 
-local gravite = 24
-
 function on_update()
     local body = self:physics_body()
+    local g = scene.gravity
     local vitesse_x = input:get_axis("horizontal") * vitesse * 256
-    local vitesse_y = body.velocity.y + gravite
+    local vitesse_y = body.velocity.y
+    if not body.grounded then vitesse_y = vitesse_y + g.y end
 
     if body.grounded and input:pressed("a") then
         vitesse_y = -force_saut
@@ -101,9 +109,10 @@ l'augmente ensuite chaque frame jusqu'au prochain contact avec le sol.
 ## 4. Comprendre les valeurs
 
 `256` vaut 1 pixel par frame : une force de saut de `900` correspond à une impulsion d'environ
-3,5 pixels par frame vers le haut. **Vitesse** et **Force du saut** sont exposées dans l'inspecteur
-parce qu'elles changent souvent d'un personnage à l'autre. `gravite` reste une variable `local` :
-c'est une règle commune. Exposez-la si certains acteurs doivent tomber différemment.
+3,5 pixels par frame vers le haut. Le saut monte d'environ `force² / (2 × gravité)` : avec une gravité de
+`64` (0,25 px/frame²), une force de `1024` donne environ 32 pixels de hauteur, et la même force sous une
+gravité quatre fois plus faible monte quatre fois plus haut. **Vitesse** et **Force du saut** sont exposées
+dans l'inspecteur parce qu'elles changent souvent d'un personnage à l'autre ; la gravité vient de la scène.
 
 ## 5. Tester
 
@@ -115,5 +124,6 @@ Lancez **Run**, déplacez l'acteur avec gauche et droite, puis appuyez sur `A` :
 - les murs peints l'arrêtent.
 
 Si le saut ne fonctionne pas, vérifiez que la boîte est en mode **Solid** et que le sol est bien
-peint. `body.grounded` décrit la fin de la frame précédente : juste après avoir quitté une
+peint. Si l'acteur reste dans les airs au départ, vérifiez la gravité du projet et de la scène : à `0`, `scene.gravity`
+rend `0` et rien ne le fait tomber. `body.grounded` décrit la fin de la frame précédente : juste après avoir quitté une
 plateforme, il peut rester vrai une frame.

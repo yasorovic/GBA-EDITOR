@@ -1,6 +1,9 @@
 """Requêtes sur les corps physiques, sans état runtime supplémentaire."""
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 from core.models.collision_tiles import oneway_dir
 from core.models.collision_tiles import (
     ONEWAY_DOWN, ONEWAY_LEFT, ONEWAY_NONE, ONEWAY_RIGHT, ONEWAY_UP,
@@ -76,6 +79,20 @@ def support_normal(scene, project_settings) -> int:
     La gravité du moteur ne touche que les Rigid : un Character écrit sa propre vélocité, donc ses projets laissent
     la gravité de la scène à zéro. Sans gravité déclarée, l'appui reste donc le bas (le comportement d'avant)."""
     return gravity_normal(scene, project_settings) or ONEWAY_UP
+
+
+_GRAVITY_WRITE = re.compile(r"\bscene\.gravity\s*=")
+
+
+def project_sets_gravity(p) -> bool:
+    """Un script du projet écrit `scene.gravity`.
+
+    Seulement dans ce cas, la gravité des Rigid, le côté d'appui du sol et le transport des plateformes se lisent à
+    l'exécution (`g_gravity_x/y`, `g_support_normal`) : sans écriture, le C émis reste celui d'avant, gravité et côté
+    d'appui cuits par scène."""
+    library = getattr(p, "user_library_dir", None)
+    return library is not None and any(_GRAVITY_WRITE.search(path.read_text(encoding="utf-8", errors="replace"))
+                                       for path in Path(library).rglob("*.lua"))
 
 
 def shape_one_way_dir(box, scene, project_settings) -> int:

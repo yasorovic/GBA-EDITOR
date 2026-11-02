@@ -143,6 +143,9 @@ def _reset_lines(p, scene, sym: str, scene_actors: list, actor_offset: int, alay
     L.append(f"    g_scene_collision_layer = {int(scene.collision_layer)};")
     # Le côté du contact qui produit `grounded` (cf. physics/body.py, `support_normal`).
     L.append(f"    g_support_normal = {support_normal(scene, p.settings)};")
+    # La gravité de la scène en Q8 : lue par `scene.gravity` et, si un script l'écrit, par le mouvement des Rigid.
+    _gx, _gy = scene.effective_physics_gravity(p.settings)
+    L.append(f"    g_gravity_x = {round(_gx * 256)}; g_gravity_y = {round(_gy * 256)};")
     # Acteurs POSÉS de cette scène, dans l'ordre d'authoring — la borne de
     # `actor:get(i)`/`actor:count()`. Les slots [0, placed) tiennent exactement ces
     # acteurs ; les pools spawnés vivent après et ne sont pas comptés ici.

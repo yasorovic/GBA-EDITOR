@@ -24,6 +24,7 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 %(helpers)s
 
 u8 *g_drop_through = 0;
+u8 g_support_normal = 1;
 /* 10 x 8 tuiles (80 x 64 px), vide hors des faces posées plus bas. */
 static u8 carte[10 * 8];
 

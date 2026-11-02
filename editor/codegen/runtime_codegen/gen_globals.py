@@ -100,6 +100,9 @@ def globals_lines(p, all_scene_data: list[dict], scene_pis: list, n_actors: int,
         # Défilement autorisé par la scène courante — lu par `scene.scroll_h/v`.
         "int   g_scene_scroll_h = 1, g_scene_scroll_v = 0;",
         "int   g_scene_collision_layer = 0;",
+        # Gravité de la scène courante (Q8) et côté d'appui qui en découle : cf. runtime_api_inline.h, `scene_set_gravity`.
+        "int   g_gravity_x = 0, g_gravity_y = 0;",
+        "u8    g_support_normal = 1;",
         "int   g_current_scene = -1;",
         "int   g_scene_placed = 0;   /* actors placed in the active scene "
         "(actor:get(i)) */",

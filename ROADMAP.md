@@ -18,6 +18,7 @@ d'un plan. Le numéro `0.Y.0` n'est attribué qu'à la sortie (voir [Workflow de
 
 | Étape | État |
 | --- | --- |
+| Le moteur physique 2D | Développé, en vérification avant la fusion |
 | Jouer son jeu dans le navigateur (itch.io) | Conception faite, développement non commencé |
 | Le pipeline 2D complet (`1.0.0-stable`, affirmation de capacité) | En route |
 
@@ -31,6 +32,22 @@ d'un plan. Le numéro `0.Y.0` n'est attribué qu'à la sortie (voir [Workflow de
   prennent leur numéro dans l'ordre où elles sont mergées.
 - Le nom de l'étape reste dans le CHANGELOG, qui relie chaque numéro à son contenu.
 - Les correctifs et petits chantiers qui suivent incrémentent le dernier chiffre.
+
+### Le moteur physique 2D
+
+Des corps qui tombent, se portent, se poussent et s'empilent, sans écrire la physique à la main.
+Chaque acteur reçoit un mode (statique, personnage, cinématique, rigide), la gravité se règle pour le
+projet puis par scène, et le moteur prend en charge les plateformes mobiles qui portent un personnage,
+les caisses qui s'empilent et s'endorment, les sols qu'on traverse par en dessous, les matériaux
+(rebond, frottement) et les couches de collision. Un acteur créé par un script se comporte comme un
+acteur posé dans la scène.
+
+- Fait : les quatre modes de corps, la gravité héritée ou surchargée, les impulsions et le sommeil des
+  corps rigides, le transport par plateforme, les faces à sens unique et la descente à travers elles, la
+  parité entre acteurs posés et créés par script (testée), un banc de six scènes jouables et le guide
+  utilisateur.
+- Reste à faire : la vérification sur mGBA et la mesure du coût en charge, l'événement d'écrasement pour un
+  personnage créé par script, un plafond de vitesse de chute pour les personnages, puis la fusion dans `main`.
 
 ### Jouer son jeu dans le navigateur
 

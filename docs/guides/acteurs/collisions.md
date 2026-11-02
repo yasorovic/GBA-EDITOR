@@ -105,4 +105,5 @@ donne `nil` : testez-la avec `if boite then`. `self.box_count` donne le nombre d
 - le script utilise-t-il `body.velocity` puis `body:apply_velocity()`, et non une affectation à
   `self.position` ?
 
-Pour ajouter gravité et saut, voir [Gravité et saut](gravite-saut.md).
+Pour ajouter gravité et saut, voir [Gravité et saut](gravite-saut.md). Pour les plateformes mobiles, les
+caisses qui tombent et les sols qu'on traverse par en dessous, voir [Corps physiques](corps-physiques.md).

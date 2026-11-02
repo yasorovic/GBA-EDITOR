@@ -22,10 +22,10 @@ from codegen.runtime_codegen.gen_sprite import (
 from codegen.runtime_codegen.interact_gen import interact_tick_lines
 from codegen.runtime_codegen.physics.contacts import box_contact_lines
 from codegen.runtime_codegen.physics.body import (
-    physics_body_mode, physics_collider_mask, project_has_one_way, uses_character_solver,
+    physics_body_mode, physics_collider_mask, project_has_one_way, project_sets_gravity, uses_character_solver,
 )
 from codegen.runtime_codegen.physics.impulses import impulse_tick_lines
-from codegen.runtime_codegen.physics.kinematic import kinematic_crush_pairs, kinematic_tick_parts
+from codegen.runtime_codegen.physics.kinematic import kinematic_crush_pairs, kinematic_tick_parts, pool_carried_models
 from codegen.runtime_codegen.physics.motion import physics_motion_lines, physics_sleep_lines
 from codegen.runtime_codegen.physics.floor import floor_tick_lines
 from core.models.components import PHYSICS_BODY_CHARACTER, PHYSICS_BODY_KINEMATIC, affine_sprite_component
@@ -101,9 +101,9 @@ def gen_scene_tick(
     # collision et l'émission OAM, qui lisent la position monde recomposée.
     L = phases["physics"]
     kinematic_before, kinematic_after, kinematic_deltas = kinematic_tick_parts(
-        p, scene_actors, actor_offset, scene)
+        p, scene_actors, actor_offset, scene, pi, shown)
     L += kinematic_before
-    L += physics_motion_lines(scene, p.settings, scene_actors, actor_offset, pi)
+    L += physics_motion_lines(scene, p.settings, scene_actors, actor_offset, pi, project_sets_gravity(p))
     L += parent_compose_lines(scene_actors, actor_offset, _lay.placed_entry)
     L += pool_compose_lines(pi)
 
@@ -147,7 +147,7 @@ def gen_scene_tick(
                   f"                      g_actors[{si}].x>>8,g_actors[{si}].y>>8,&g_actors[{si}].collision.boxes[{sb}])){{",
                   f"        {s}_on_crushed(&g_actors[{idx}],&g_actors[{si}]); _kin_crushed_{idx}=1;",
                   "    }"]
-    L += impulse_tick_lines(p, scene, scene_actors, actor_offset)
+    L += impulse_tick_lines(p, scene, scene_actors, actor_offset, pi, shown)
 
     # Résolution contre la carte de collision — pour TOUTE box solide, et non
     # plus seulement pour les acteurs qui définissent `on_tile_collide` : la
@@ -185,9 +185,10 @@ def gen_scene_tick(
 
         L += shared_pool_gen.tile_lines(
             pi, _def, lambda owner: (physics_collider_mask(owner, map_only=True)
-                                     if uses_character_solver(owner) else 0))
+                                     if uses_character_solver(owner) else 0),
+            pool_carried_models(p, scene_actors, actor_offset, pi, shown))
 
-    L += floor_tick_lines(p, scene_actors, actor_offset, scene)
+    L += floor_tick_lines(p, scene_actors, actor_offset, scene, pi, shown)
 
     # `physics_body:drop_through(n)` : un compteur par emplacement, lu par les faces à sens unique de cette phase
     # puis décompté ici, après elles : appelé pendant `on_update`, il compte donc cette frame-ci.

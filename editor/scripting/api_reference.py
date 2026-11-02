@@ -179,6 +179,7 @@ _PROP_HOME: dict[str, str] = {
     "camera.frame":    "Camera",
     "camera.name":     "Camera",
     "scene.size":      "Scene",
+    "scene.gravity":   "Physics",
     "scene.frame":     "Scene",
     "scene.scroll_h":  "Scene",
     "scene.scroll_v":  "Scene",

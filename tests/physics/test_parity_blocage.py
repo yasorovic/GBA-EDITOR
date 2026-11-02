@@ -45,6 +45,7 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
 #include "gba_debug.h"
 u8 *g_drop_through = 0;
+u8 g_support_normal = 1;
 Actor g_actors[4];
 int g_spool_start, g_spool_hw;
 u32 g_alive_bits[1], g_alive_epoch;

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from core.models.collision_tiles import ONEWAY_NONE, ONEWAY_UP
 from core.models.components import (
+    ONE_WAY_GRAVITY,
+    ONE_WAY_OFF,
     PHYSICS_BODY_CHARACTER,
     PHYSICS_BODY_KINEMATIC,
     PHYSICS_BODY_RIGID,
@@ -10,10 +12,12 @@ from core.models.components import (
     collision_shapes_collide,
 )
 from core.models.settings import tags_collide
+from codegen.runtime_codegen.shared_pool_gen import shared_models
 from codegen.runtime_codegen.physics.body import (
     physics_blocker_entries,
     physics_body_mode,
     physics_collider_entries,
+    project_sets_gravity,
     shape_one_way_dir,
     support_normal,
 )
@@ -62,41 +66,94 @@ def floor_helper_lines() -> list[str]:
     ]
 
 
-def floor_tick_lines(p, scene_actors, actor_offset: int, scene=None) -> list[str]:
+def floor_tick_lines(p, scene_actors, actor_offset: int, scene=None, pi=(), shown=None) -> list[str]:
     """Actualise le contact au sol apres toutes les corrections de position de la frame.
 
     Un CharacterBody repose sur un StaticBody ou un KinematicBody. Un RigidBody repose aussi sur un Character ou un
-    autre Rigid : le solveur d'impulsions le laisse exactement au contact, sans produire lui-meme de contact au sol."""
+    autre Rigid : le solveur d'impulsions le laisse exactement au contact, sans produire lui-meme de contact au sol.
+
+    Le corps et son appui peuvent etre poses ou nes dans le pool partage (`pi`, `shown`) : un corps du pool est parcouru
+    avec les emplacements utilises, et ses appuis du pool sont ceux des emplacements de chaque modele. Le premier appui
+    qui porte l'emporte, les appuis poses d'abord (comme l'ordre de la scene entre poses)."""
     n = support_normal(scene, p.settings) if scene is not None else ONEWAY_UP
-    floors = []
-    for si, (owner, sprite) in enumerate(scene_actors):
+    # Un script écrit `scene.gravity` : le côté d'appui se lit à l'exécution (`g_support_normal`). Une face à sens
+    # unique de direction fixe ne compte alors que tant que le côté d'appui est le sien ; une face en mode `gravity`
+    # garde la direction cuite au départ de la scène (ses blocages le sont aussi), donc reste un sol.
+    dynamic = project_sets_gravity(p)
+    pool = [(m["model_id"], m["prefab"], shown(p, m["prefab"])[1]) for m in shared_models(pi)] if shown else []
+
+    def supports(owner, sprite) -> list[tuple[int, object, int, int, bool]]:
+        """(rang de boite, boite, mode, garde, sens unique) de chaque face qui peut porter, ou rien."""
         mode = physics_body_mode(owner)
         if mode not in (PHYSICS_BODY_STATIC, PHYSICS_BODY_KINEMATIC, PHYSICS_BODY_CHARACTER, PHYSICS_BODY_RIGID):
-            continue
+            return []
+        out = []
         for sb, box in physics_blocker_entries(owner, sprite):
-            # Une face à sens unique ne porte que par sa face d'appui : les autres ne sont pas un sol.
-            if scene is not None and shape_one_way_dir(box, scene, p.settings) not in (ONEWAY_NONE, n):
-                continue
-            floors.append((actor_offset + si, sb, box, mode))
+            guard = 0
+            face = ONEWAY_NONE
+            if scene is not None:
+                face = shape_one_way_dir(box, scene, p.settings)
+                if dynamic and box.one_way not in (ONE_WAY_OFF, ONE_WAY_GRAVITY):
+                    guard = face
+                # Une face à sens unique ne porte que par sa face d'appui : les autres ne sont pas un sol.
+                elif face not in (ONEWAY_NONE, n):
+                    continue
+            out.append((sb, box, mode, guard, face != ONEWAY_NONE))
+        return out
+
+    # Les appuis : (acteur posé ou None, modèle du pool ou None, rang, boîte, mode, garde).
+    floors = [(actor_offset + si, None, sb, box, mode, guard, oneway)
+              for si, (owner, sprite) in enumerate(scene_actors)
+              for sb, box, mode, guard, oneway in supports(owner, sprite)]
+    floors += [(None, model, sb, box, mode, guard, oneway)
+               for model, owner, sprite in pool for sb, box, mode, guard, oneway in supports(owner, sprite)]
+
+    def tests(body_ref: str, owner, sprite, body_actor: int | None, body_model: int | None, pad: str) -> list[str]:
+        """Les tests de contact d'un corps (posé ou emplacement du pool) contre tous ses appuis possibles."""
+        mode = physics_body_mode(owner)
+        out = []
+        for cb, box in physics_collider_entries(owner, sprite):
+            for si, model, sb, floor, floor_mode, guard, oneway in floors:
+                if ((si is not None and si == body_actor)
+                        or not (mode == PHYSICS_BODY_RIGID or floor_mode in (PHYSICS_BODY_STATIC, PHYSICS_BODY_KINEMATIC))
+                        or not tags_collide(p.settings, box.tag or "body", floor.tag or "body")
+                        or not collision_shapes_collide(box, floor)):
+                    continue
+                inner = pad + ("" if si is not None else "    ")
+                if dynamic:
+                    call = f"actor_floor_test_n({body_ref},{cb},%s,{sb},g_support_normal);"
+                    call = f"if(g_support_normal=={guard}) {call}" if guard else call
+                elif n == ONEWAY_UP:
+                    call = f"actor_floor_test({body_ref},{cb},%s,{sb});"
+                else:
+                    call = f"actor_floor_test_n({body_ref},{cb},%s,{sb},{n});"
+                if oneway:      # `drop_through` : un corps qui descend à travers les faces à sens unique n'y repose plus
+                    call = f"if(!(g_drop_through&&g_drop_through[({body_ref})->inst])) {call}"
+                if si is not None:
+                    out.append(f"{pad}" + call % f"&g_actors[{si}]")
+                else:      # un appui du pool : chaque emplacement utilisé de son modèle
+                    out += [f"{pad}POOL_EACH(_fs){{",
+                            f"{inner}if(g_actors[_fs].model!={model}{'||_fs==_fp' if model == body_model else ''}) continue;",
+                            f"{inner}" + call % "&g_actors[_fs]",
+                            f"{pad}}}"]
+        return out
 
     lines: list[str] = []
     for ci, (owner, sprite) in enumerate(scene_actors):
-        mode = physics_body_mode(owner)
-        if mode not in (PHYSICS_BODY_CHARACTER, PHYSICS_BODY_RIGID):
+        if physics_body_mode(owner) not in (PHYSICS_BODY_CHARACTER, PHYSICS_BODY_RIGID):
             continue
         idx = actor_offset + ci
         lines.append(f"    g_actor_floor[{idx}]=0;")
-        pairs = [(cb, si, sb) for cb, box in physics_collider_entries(owner, sprite)
-                 for si, sb, floor, floor_mode in floors
-                 if si != idx
-                 and (mode == PHYSICS_BODY_RIGID or floor_mode in (PHYSICS_BODY_STATIC, PHYSICS_BODY_KINEMATIC))
-                 and tags_collide(p.settings, box.tag or "body", floor.tag or "body")
-                 and collision_shapes_collide(box, floor)]
-        lines.extend(
-            f"    actor_floor_test(&g_actors[{idx}],{cb},&g_actors[{si}],{sb});" if n == ONEWAY_UP else
-            f"    actor_floor_test_n(&g_actors[{idx}],{cb},&g_actors[{si}],{sb},{n});"
-            for cb, si, sb in pairs
-        )
+        lines += tests(f"&g_actors[{idx}]", owner, sprite, idx, None, "    ")
+    cases = []
+    for model, owner, sprite in pool:
+        if physics_body_mode(owner) not in (PHYSICS_BODY_CHARACTER, PHYSICS_BODY_RIGID):
+            continue
+        cases += [f"        case {model}: {{", "            g_actor_floor[_fp]=0;",
+                  *tests("_a", owner, sprite, None, model, "            "), "        } break;"]
+    if cases:
+        lines += ["    POOL_EACH(_fp){", "        Actor* _a=&g_actors[_fp];", "        switch(_a->model){", *cases,
+                  "        default: break;", "        }", "    }"]
     if lines:
-        lines.insert(0, "    /* Contact au sol final des CharacterBody et RigidBody sur les corps poses */")
+        lines.insert(0, "    /* Contact au sol final des CharacterBody et RigidBody sur les corps poses ou nes dans le pool */")
     return lines

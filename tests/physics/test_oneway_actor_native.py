@@ -30,6 +30,7 @@ u32 g_alive_epoch;
 PoolCursor g_nth;
 static u8 drop_store[8];
 u8 *g_drop_through = drop_store;
+u8 g_support_normal = 1;
 %(helpers)s
 
 static void mk(int i, int x, int y, int vx, int vy, int w, int h){

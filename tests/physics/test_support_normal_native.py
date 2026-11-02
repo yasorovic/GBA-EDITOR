@@ -22,6 +22,7 @@ typedef unsigned short u16; typedef short s16; typedef unsigned int u32;
 #include "actor_types_static.h"
 #include "gba_debug.h"
 u8 *g_drop_through = 0;
+u8 g_support_normal = 1;
 %(helpers)s
 
 /* 8 x 6 tuiles : sol plein sur la rangée 5 (y = 40), mur plein sur la colonne 6 (x = 48), plafond plein sur la

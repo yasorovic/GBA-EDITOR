@@ -42,6 +42,8 @@ void global_write_at(int i, int k, int v) { (void)i; (void)k; (void)v; }
 Actor g_actors[64];
 u16 *g_actor_floor = 0;
 u8 *g_drop_through = 0;
+u8 g_support_normal = 1;
+int g_gravity_x = 0, g_gravity_y = 0;
 int g_rigid_rest[64][2];
 u32 g_obj_state[16];
 int g_spool_start = 0, g_spool_end = 0, g_spool_hw = 0, g_spool_entry = -1, g_spool_free = 0;
@@ -544,6 +546,29 @@ int main(void) {
         contact_frame("contact_4", &paire, &prev);            /* rien de plus */
         g_actors[1].x = 0; g_actors[1].active = 0;
         contact_frame("contact_5", &paire, &prev);            /* un côté inactif : pas de contact */
+    }
+    {   /* scene.gravity : le côté d'appui suit l'axe dominant (le bas sans gravité ou à égalité), et un Rigid endormi
+           reprend sa chute seulement si la gravité change. */
+        g_scene_placed = 2;
+        g_actors[0].physics_sleep = 30; g_actors[1].physics_sleep = 30;
+        scene_set_gravity((Vec2){ 0, 64 });
+        printf("gravite_reveil %d %d\n", g_actors[0].physics_sleep, g_actors[1].physics_sleep);
+        g_actors[0].physics_sleep = 30;
+        scene_set_gravity((Vec2){ 0, 64 });
+        printf("gravite_inchangee %d\n", g_actors[0].physics_sleep);
+        int n[7];
+        scene_set_gravity((Vec2){ 0, -64 });   n[0] = g_support_normal;
+        scene_set_gravity((Vec2){ 64, 0 });    n[1] = g_support_normal;
+        scene_set_gravity((Vec2){ -64, 0 });   n[2] = g_support_normal;
+        scene_set_gravity((Vec2){ 0, 64 });    n[3] = g_support_normal;
+        scene_set_gravity((Vec2){ 50, 50 });   n[4] = g_support_normal;
+        scene_set_gravity((Vec2){ -30, -50 }); n[5] = g_support_normal;
+        scene_set_gravity((Vec2){ 0, 0 });     n[6] = g_support_normal;
+        printf("gravite_normales %d %d %d %d %d %d %d\n", n[0], n[1], n[2], n[3], n[4], n[5], n[6]);
+        scene_set_gravity((Vec2){ -12, 34 });
+        Vec2 lue = scene_get_gravity();
+        printf("gravite_lue %d %d\n", lue.x, lue.y);
+        g_scene_placed = 0;
     }
     return 0;
 }
