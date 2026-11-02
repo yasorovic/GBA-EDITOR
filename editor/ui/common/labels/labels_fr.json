@@ -395,6 +395,10 @@
     "settings.toolchains.pick_mgba": {
       "text": "Exécutable mgba"
     },
+    "settings.toolchains.mgba_keys_title": { "text": "Clavier mGBA" },
+    "settings.toolchains.mgba_keys_hint": { "text": "Touches écrites dans la configuration de mGBA à chaque lancement depuis l’éditeur. Une touche donnée à un deuxième bouton échange les deux." },
+    "settings.toolchains.mgba_key_waiting": { "text": "Appuyer sur une touche…" },
+    "settings.toolchains.mgba_keys_reset": { "text": "Touches par défaut" },
     "settings.theme.dark": {
       "text": "Sombre"
     },
@@ -1308,6 +1312,7 @@
     "hints.bg.fill_tiles": { "text": "Remplit les cases connexes avec la couleur choisie" },
     "hints.bg.paint_rect_tiles": { "text": "Peint un rectangle avec la couleur choisie" },
     "hints.bg.erase_tiles": { "text": "Rend les tuiles initiales" },
+    "hints.bg.clear_rect_tiles": { "text": "Met un rectangle à l’index 0 (transparent)" },
     "hints.bg.erase_all": { "text": "Rend les tuiles et palettes d’origine" },
     "bginp.brush_tip": { "text": "Recolore la palette de chaque tuile de 8 × 8 traversée. Les pixels de l’image ne sont pas modifiés." },
     "bginp.fill": {

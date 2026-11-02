@@ -16,12 +16,12 @@ _TITLES = {
 _ROWS = {
     "brush": [(mouse("left_drag"), "hints.bg.paint"), (mouse("right_drag"), "hints.bg.erase")],
     "fill": [(mouse("left_click"), "hints.bg.fill")],
-    "rect": [(mouse("left_drag"), "hints.bg.paint_rect")],
+    "rect": [(mouse("left_drag"), "hints.bg.paint_rect"), (mouse("right_drag"), "hints.bg.erase")],
     "eraser": [(mouse("left_drag"), "hints.bg.erase_all")],
     # Mode Paint du pinceau : `<outil>_paint`, mêmes outils, geste « poser une couleur ».
     "brush_paint": [(mouse("left_drag"), "hints.bg.paint_tiles"), (mouse("right_drag"), "hints.bg.erase_tiles")],
     "fill_paint": [(mouse("left_click"), "hints.bg.fill_tiles")],
-    "rect_paint": [(mouse("left_drag"), "hints.bg.paint_rect_tiles")],
+    "rect_paint": [(mouse("left_drag"), "hints.bg.paint_rect_tiles"), (mouse("right_drag"), "hints.bg.clear_rect_tiles")],
     "eraser_paint": [(mouse("left_drag"), "hints.bg.erase_all")],
     # L'outil « select » est le mode Canvas : poser l'image dans le canvas.
     "select": [

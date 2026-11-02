@@ -188,8 +188,8 @@ def test_paint_fill_rect_and_eraser_write_the_layer(qapp):
     ctrl.begin_stroke()
     ctrl.fill(0, 0)                                                  # fond vierge : tout l'écran
     assert len(ba.tile_paint) == ba.tiles_w * ba.tiles_h
-    ctrl.paint_rect(2, 2, 3, 3, erase=True)                          # la gomme rend les cases à l'image
-    assert (2, 2) not in ba.tile_paint and (3, 3) not in ba.tile_paint and (4, 4) in ba.tile_paint
+    ctrl.paint_rect(2, 2, 3, 3, erase=True)                          # le clic droit du rectangle : index 0 (transparent)
+    assert ba.tile_paint[(2, 2)][0] == 0 and ba.tile_paint[(3, 3)][0] == 0 and ba.tile_paint[(4, 4)][0] != 0
     assert ba.tile_palette_overrides == {}
 
 

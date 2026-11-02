@@ -25,6 +25,7 @@ from typing import Optional
 from core import crash_log
 from core.events import EventEmitter
 from core.toolchain import Toolchain
+from core.mgba_keys import mgba_config_file, write_keys
 from core.tool_process import run_tool, tool_environment
 from codegen.grit_conversion import (
     GritBackground, GritSprites, MmutilAudio,
@@ -1270,6 +1271,13 @@ class BuildWorker(EventEmitter, threading.Thread):
         mgba = self.toolchain.resolve_mgba()
         if not mgba:
             self._emit("diagnostic", build_error("not found", "mgba")); return False
+        if keys := self.toolchain.mgba_keys:
+            config_file = mgba_config_file(mgba)
+            try:
+                if config_file is not None:
+                    write_keys(config_file, keys)
+            except OSError as exc:
+                self._emit("diagnostic", build_warning(f"mGBA key bindings not written: {exc}", "mgba"))
         BuildWorker._mgba_proc = subprocess.Popen([str(mgba), str(p.rom_path)],
                                                   env=tool_environment())
         self._emit("log_line","[mgba] launched")

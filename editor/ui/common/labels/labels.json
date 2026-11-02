@@ -269,6 +269,10 @@
     "settings.toolchains.pick_mgba": {
       "text": "mgba executable"
     },
+    "settings.toolchains.mgba_keys_title": { "text": "mGBA keyboard" },
+    "settings.toolchains.mgba_keys_hint": { "text": "Keys written to the mGBA configuration at each launch from the editor. A key given to a second button swaps the two." },
+    "settings.toolchains.mgba_key_waiting": { "text": "Press a key…" },
+    "settings.toolchains.mgba_keys_reset": { "text": "Default keys" },
     "settings.theme.dark": {
       "text": "Dark"
     },
@@ -3563,6 +3567,7 @@
     "hints.bg.fill_tiles": { "text": "Fills the connected cells with the selected color" },
     "hints.bg.paint_rect_tiles": { "text": "Paints a rectangle with the selected color" },
     "hints.bg.erase_tiles": { "text": "Restores the original tiles" },
+    "hints.bg.clear_rect_tiles": { "text": "Sets a rectangle to index 0 (transparent)" },
     "hints.bg.erase_all": { "text": "Restores the original tiles and palettes" },
     "bginp.run_encoding": { "text": "Recompute" },
     "bginp.run_encoding_tip": { "text": "Encodes the settings shown now, even when the background is up to date or the encoding is slow." },

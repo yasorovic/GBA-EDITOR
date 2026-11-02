@@ -396,11 +396,16 @@ class BgInpaintController:
         self._notify()
 
     def paint_rect(self, c0: int, r0: int, c1: int, r1: int, erase: bool = False):
+        """Rectangle de cases. `erase` : en Inpaint la palette d'origine revient ; en Paint les cases prennent l'index 0
+        (transparent), la tuile de l'image ne réapparaît pas."""
         if not self.paintable:
             return
         for r in range(min(r0, r1), max(r0, r1) + 1):
             for c in range(min(c0, c1), max(c0, c1) + 1):
-                self._write_cell(c, r, erase)
+                if erase and self._mode == MODE_PAINT:
+                    self.paint_tile(c, r, 0)
+                else:
+                    self._write_cell(c, r, erase)
         if self._ba.color_mapping != "direct":
             self._render_full()
         self._notify()
@@ -1276,7 +1281,7 @@ class BgInpaintView(QGraphicsView):
             e.accept()
             return
         if (e.button() == Qt.MouseButton.RightButton and self._ctrl.paintable
-                and self._tool in ("brush", "eraser") and not self._painting):
+                and self._tool in ("brush", "eraser", "rect") and not self._painting):
             # Clic droit = gomme : en Paint la tuile initiale revient, en Inpaint la palette d'origine.
             self._erase_gesture = True
             self._handle_press(e)
@@ -1411,7 +1416,7 @@ class BgInpaintView(QGraphicsView):
             if self._tool == "rect" and self._rect_start is not None:
                 c, r = self._cell_at(e)
                 c0, r0 = self._rect_start
-                self._ctrl.paint_rect(c0, r0, c, r)
+                self._ctrl.paint_rect(c0, r0, c, r, erase=self._erase_gesture)
                 self._rect_start = None
             self._ctrl.end_stroke()
             self._painting = False

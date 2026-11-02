@@ -63,6 +63,7 @@ from core.interface_preferences import (
 from core.history import get_history
 from core.toolchain import Toolchain, DEVKITPRO_URL, MGBA_URL, DEVKITPRO_OK, DEVKITPRO_INCOMPLETE
 from core.external_tools import ExternalTools, TOOL_KINDS
+from core.mgba_keys import DEFAULT_KEYS, GBA_BUTTONS
 from ui.common.widgets import CollapsibleCard, W
 from core.keybindings import (
     get_keybindings, Binding, BINDINGS, DISPLAY_ONLY,
@@ -146,6 +147,49 @@ class _GbaPackagesThread(QThread):
 _running_installs: set[_GbaPackagesThread] = set()
 
 
+class _KeyCaptureButton(QPushButton):
+    """Montre une touche ; un clic, puis la touche pressée la remplace (Échap annule). Le code est un `Qt.Key`."""
+    key_chosen = pyqtSignal(int)
+
+    _MODIFIERS = (Qt.Key.Key_Shift, Qt.Key.Key_Control, Qt.Key.Key_Alt, Qt.Key.Key_Meta)
+
+    def __init__(self, code: int, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet(QSS.button_ghost)
+        self._code = code
+        self._waiting = False
+        self.set_key(code)
+        self.clicked.connect(self._start)
+
+    def set_key(self, code: int):
+        self._code = code
+        self._waiting = False
+        self.setText(QKeySequence(code).toString() or str(code))
+
+    def _start(self):
+        self._waiting = True
+        self.setText(label("settings.toolchains.mgba_key_waiting"))
+        self.setFocus()
+
+    def keyPressEvent(self, e):
+        if not self._waiting:
+            super().keyPressEvent(e)
+            return
+        key = e.key()
+        if key in self._MODIFIERS:
+            return
+        if key == Qt.Key.Key_Escape:
+            self.set_key(self._code)
+        else:
+            self.key_chosen.emit(int(key))
+        e.accept()
+
+    def focusOutEvent(self, e):
+        if self._waiting:
+            self.set_key(self._code)
+        super().focusOutEvent(e)
+
+
 class ToolchainsPanel(QWidget):
     def __init__(self, toolchain: Toolchain, parent=None):
         super().__init__(parent)
@@ -193,11 +237,58 @@ class ToolchainsPanel(QWidget):
                                     self._browse_mgba)
         self._mgba_edit.editingFinished.connect(self._commit_mgba)
         self._mgba_status, self._mgba_commands = _tool_help(lay, "mGBA")
+        self._build_mgba_keys(lay)
         lay.addStretch()
         # Une seule astuce, en bas de page, pour les deux outils.
         tip("toolchain.devkitpro", lay,
             windows_path="<b>C:\\devkitPro</b>", linux_path="<b>/opt/devkitpro</b>")
         self._refresh_status()
+
+    def _build_mgba_keys(self, lay: QVBoxLayout):
+        """Une grille de boutons, un par bouton de la GBA : un clic, puis la touche voulue."""
+        lay.addWidget(_category_title(label("settings.toolchains.mgba_keys_title")))
+        note = QLabel(label("settings.toolchains.mgba_keys_hint"))
+        note.setFont(QFont(T.UI, T.SM))
+        note.setStyleSheet(f"color:{C.TEXT_DIM};")
+        note.setWordWrap(True)
+        lay.addWidget(note)
+        keys = {**DEFAULT_KEYS, **self._toolchain.mgba_keys}
+        grid = QGridLayout()
+        self._key_buttons: dict[str, _KeyCaptureButton] = {}
+        for i, (name, text) in enumerate(GBA_BUTTONS):
+            caption = QLabel(text)
+            caption.setFont(QFont(T.UI, T.MD))
+            button = _KeyCaptureButton(keys[name])
+            button.key_chosen.connect(lambda code, n=name: self._set_mgba_key(n, code))
+            self._key_buttons[name] = button
+            grid.addWidget(caption, i // 2, (i % 2) * 2)
+            grid.addWidget(button, i // 2, (i % 2) * 2 + 1)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(3, 1)
+        lay.addLayout(grid)
+        reset = QPushButton(label("settings.toolchains.mgba_keys_reset"))
+        reset.setStyleSheet(QSS.button_ghost)
+        reset.clicked.connect(self._reset_mgba_keys)
+        row = QHBoxLayout()
+        row.addWidget(reset)
+        row.addStretch()
+        lay.addLayout(row)
+
+    def _set_mgba_key(self, name: str, code: int):
+        keys = {**DEFAULT_KEYS, **self._toolchain.mgba_keys}
+        other = next((n for n, c in keys.items() if c == code and n != name), None)
+        if other is not None:
+            keys[other] = keys[name]
+        keys[name] = code
+        self._apply_mgba_keys(keys)
+
+    def _reset_mgba_keys(self):
+        self._apply_mgba_keys(dict(DEFAULT_KEYS))
+
+    def _apply_mgba_keys(self, keys: dict[str, int]):
+        self._toolchain.mgba_keys = keys
+        for name, button in self._key_buttons.items():
+            button.set_key(keys[name])
 
     def _recheck(self):
         self._toolchain.recheck()

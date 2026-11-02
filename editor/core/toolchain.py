@@ -178,6 +178,16 @@ class Toolchain:
         self.save()
         self.recheck()
 
+    @property
+    def mgba_keys(self) -> dict[str, int]:
+        """Les touches choisies pour mGBA (bouton → code Qt.Key), vide tant que l'utilisateur n'a rien choisi."""
+        return {name: int(code) for name, code in self._config.get("mgba_keys", {}).items()}
+
+    @mgba_keys.setter
+    def mgba_keys(self, keys: dict[str, int]):
+        self._config["mgba_keys"] = dict(keys)
+        self.save()
+
     # ── Résolution des exécutables ────────────────────────────────
 
     def resolve_grit(self) -> Path | None:
