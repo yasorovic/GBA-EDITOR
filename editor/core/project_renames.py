@@ -48,18 +48,21 @@ class ProjectRenameMixin:
         if not new_name or new_name == bg.name:
             return
         old_name = bg.name
-        # Le fichier image ne bouge pas : l'asset le POINTE, il n'en est plus le sidecar.
-        self.backgrounds.rename(bg, new_name)
-        # Met à jour les layers des scènes qui référencent ce fond par nom.
-        for scene in self.scenes:
-            touched = False
-            for L in scene.background_layers:
-                if L.background_name == old_name:
-                    L.background_name = new_name
-                    touched = True
-            if touched:
-                self.save_scene(scene)
-        self._rename_data_asset_refs("background", old_name, new_name)
+        # Le sidecar est réécrit sous son nouveau nom : sans la portée de renommage, le surveillant y voit un
+        # sidecar modifié hors de l'éditeur et recharge l'écran, dont la sélection retombe sur le premier fond.
+        with self._renaming():
+            # Le fichier image ne bouge pas : l'asset le POINTE, il n'en est plus le sidecar.
+            self.backgrounds.rename(bg, new_name)
+            # Met à jour les layers des scènes qui référencent ce fond par nom.
+            for scene in self.scenes:
+                touched = False
+                for L in scene.background_layers:
+                    if L.background_name == old_name:
+                        L.background_name = new_name
+                        touched = True
+                if touched:
+                    self.save_scene(scene)
+            self._rename_data_asset_refs("background", old_name, new_name)
         self._notify_renamed("Background", old_name, new_name)
 
     def rename_sprite(self, sprite: SpriteAsset, new_name: str):
