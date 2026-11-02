@@ -147,49 +147,6 @@ class _GbaPackagesThread(QThread):
 _running_installs: set[_GbaPackagesThread] = set()
 
 
-class _KeyCaptureButton(QPushButton):
-    """Montre une touche ; un clic, puis la touche pressée la remplace (Échap annule). Le code est un `Qt.Key`."""
-    key_chosen = pyqtSignal(int)
-
-    _MODIFIERS = (Qt.Key.Key_Shift, Qt.Key.Key_Control, Qt.Key.Key_Alt, Qt.Key.Key_Meta)
-
-    def __init__(self, code: int, parent=None):
-        super().__init__(parent)
-        self.setStyleSheet(QSS.button_ghost)
-        self._code = code
-        self._waiting = False
-        self.set_key(code)
-        self.clicked.connect(self._start)
-
-    def set_key(self, code: int):
-        self._code = code
-        self._waiting = False
-        self.setText(QKeySequence(code).toString() or str(code))
-
-    def _start(self):
-        self._waiting = True
-        self.setText(label("settings.toolchains.mgba_key_waiting"))
-        self.setFocus()
-
-    def keyPressEvent(self, e):
-        if not self._waiting:
-            super().keyPressEvent(e)
-            return
-        key = e.key()
-        if key in self._MODIFIERS:
-            return
-        if key == Qt.Key.Key_Escape:
-            self.set_key(self._code)
-        else:
-            self.key_chosen.emit(int(key))
-        e.accept()
-
-    def focusOutEvent(self, e):
-        if self._waiting:
-            self.set_key(self._code)
-        super().focusOutEvent(e)
-
-
 class ToolchainsPanel(QWidget):
     def __init__(self, toolchain: Toolchain, parent=None):
         super().__init__(parent)
@@ -245,7 +202,7 @@ class ToolchainsPanel(QWidget):
         self._refresh_status()
 
     def _build_mgba_keys(self, lay: QVBoxLayout):
-        """Une grille de boutons, un par bouton de la GBA : un clic, puis la touche voulue."""
+        """Le même gabarit que les raccourcis : un nom, un champ de touche, un ↺ qui rend la touche d'origine."""
         lay.addWidget(_category_title(label("settings.toolchains.mgba_keys_title")))
         note = QLabel(label("settings.toolchains.mgba_keys_hint"))
         note.setFont(QFont(T.UI, T.SM))
@@ -254,41 +211,65 @@ class ToolchainsPanel(QWidget):
         lay.addWidget(note)
         keys = {**DEFAULT_KEYS, **self._toolchain.mgba_keys}
         grid = QGridLayout()
-        self._key_buttons: dict[str, _KeyCaptureButton] = {}
-        for i, (name, text) in enumerate(GBA_BUTTONS):
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(4)
+        grid.setColumnStretch(0, 1)
+        self._key_edits: dict[str, QKeySequenceEdit] = {}
+        for row, (name, text) in enumerate(GBA_BUTTONS):
             caption = QLabel(text)
             caption.setFont(QFont(T.UI, T.MD))
-            button = _KeyCaptureButton(keys[name])
-            button.key_chosen.connect(lambda code, n=name: self._set_mgba_key(n, code))
-            self._key_buttons[name] = button
-            grid.addWidget(caption, i // 2, (i % 2) * 2)
-            grid.addWidget(button, i // 2, (i % 2) * 2 + 1)
-        grid.setColumnStretch(1, 1)
-        grid.setColumnStretch(3, 1)
+            grid.addWidget(caption, row, 0)
+            edit = QKeySequenceEdit(QKeySequence(keys[name]))
+            edit.setFont(_field_font())
+            edit.setFixedWidth(150)
+            edit.setStyleSheet(QSS.lineedit)     # sans lui, le champ n'a ni cadre ni fond : il ne se reconnaît pas
+            edit.setMaximumSequenceLength(1)
+            edit.keySequenceChanged.connect(lambda seq, n=name: self._on_mgba_key_edited(n, seq))
+            edit.editingFinished.connect(self._show_mgba_keys)
+            grid.addWidget(edit, row, 1)
+            self._key_edits[name] = edit
+            reset_btn = QPushButton("↺")
+            reset_btn.setFixedWidth(26)
+            reset_btn.setToolTip(tooltip(
+                title=label("settings.shortcuts.reset_title"),
+                body=label("settings.shortcuts.reset_to", default=QKeySequence(DEFAULT_KEYS[name]).toString())))
+            reset_btn.clicked.connect(lambda _=False, n=name: self._reset_mgba_key(n))
+            grid.addWidget(reset_btn, row, 2)
         lay.addLayout(grid)
-        reset = QPushButton(label("settings.toolchains.mgba_keys_reset"))
-        reset.setStyleSheet(QSS.button_ghost)
-        reset.clicked.connect(self._reset_mgba_keys)
-        row = QHBoxLayout()
-        row.addWidget(reset)
-        row.addStretch()
-        lay.addLayout(row)
+        reset_all = QPushButton(label("settings.toolchains.mgba_keys_reset"))
+        reset_all.setStyleSheet(QSS.button_ghost)
+        reset_all.clicked.connect(lambda: self._apply_mgba_keys(dict(DEFAULT_KEYS)))
+        footer = QHBoxLayout()
+        footer.addStretch()
+        footer.addWidget(reset_all)
+        lay.addLayout(footer)
 
-    def _set_mgba_key(self, name: str, code: int):
+    def _on_mgba_key_edited(self, name: str, seq: QKeySequence):
+        """Seul le code de la touche compte : mGBA ne stocke pas de modificateur. Une touche déjà prise par un
+        autre bouton lui est reprise : les deux s'échangent."""
         keys = {**DEFAULT_KEYS, **self._toolchain.mgba_keys}
+        if seq.isEmpty():
+            return        # Qt vide le champ en début de saisie ; `editingFinished` remet la touche si rien n'est venu
+        code = seq[0].key().value
         other = next((n for n, c in keys.items() if c == code and n != name), None)
         if other is not None:
             keys[other] = keys[name]
         keys[name] = code
         self._apply_mgba_keys(keys)
 
-    def _reset_mgba_keys(self):
-        self._apply_mgba_keys(dict(DEFAULT_KEYS))
+    def _reset_mgba_key(self, name: str):
+        self._on_mgba_key_edited(name, QKeySequence(DEFAULT_KEYS[name]))
 
     def _apply_mgba_keys(self, keys: dict[str, int]):
         self._toolchain.mgba_keys = keys
-        for name, button in self._key_buttons.items():
-            button.set_key(keys[name])
+        self._show_mgba_keys()
+
+    def _show_mgba_keys(self):
+        keys = {**DEFAULT_KEYS, **self._toolchain.mgba_keys}
+        for name, edit in self._key_edits.items():
+            edit.blockSignals(True)
+            edit.setKeySequence(QKeySequence(keys[name]))
+            edit.blockSignals(False)
 
     def _recheck(self):
         self._toolchain.recheck()
